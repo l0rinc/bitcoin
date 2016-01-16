@@ -139,6 +139,9 @@ bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_dat
     for (const CTxOut& txout : tx.vout) {
         if (!::IsStandard(txout.scriptPubKey, whichType)) {
             reason = "scriptpubkey";
+            if (whichType == TxoutType::WITNESS_UNKNOWN) {
+                reason += "-unknown-witnessversion";
+            }
             return false;
         }
 
@@ -229,31 +232,31 @@ TxValidationState ValidateInputsStandardness(const CTransaction& tx, const CCoin
         std::vector<std::vector<unsigned char> > vSolutions;
         TxoutType whichType = Solver(prev.scriptPubKey, vSolutions);
         if (whichType == TxoutType::NONSTANDARD) {
-            state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-nonstandard-inputs", strprintf("input %u script unknown", i));
+            state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-input-script-unknown", strprintf("input %u script unknown", i));
             return state;
         } else if (whichType == TxoutType::WITNESS_UNKNOWN) {
             // WITNESS_UNKNOWN failures are typically also caught with a policy
             // flag in the script interpreter, but it can be helpful to catch
             // this type of NONSTANDARD transaction earlier in transaction
             // validation.
-            state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-nonstandard-inputs", strprintf("input %u witness program is undefined", i));
+            state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-input-witness-unknown", strprintf("input %u witness program is undefined", i));
             return state;
         } else if (whichType == TxoutType::SCRIPTHASH) {
             std::vector<std::vector<unsigned char> > stack;
             ScriptError serror;
             // convert the scriptSig into a stack, so we can inspect the redeemScript
             if (!EvalScript(stack, tx.vin[i].scriptSig, SCRIPT_VERIFY_NONE, BaseSignatureChecker(), SigVersion::BASE, &serror)) {
-                state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-nonstandard-inputs", strprintf("p2sh scriptsig malformed (input %u: %s)", i, ScriptErrorString(serror)));
+                state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-input-scriptsig-failure", strprintf("p2sh scriptsig malformed (input %u: %s)", i, ScriptErrorString(serror)));
                 return state;
             }
             if (stack.empty()) {
-                state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-nonstandard-inputs", strprintf("input %u P2SH redeemscript missing", i));
+                state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-input-scriptcheck-missing", strprintf("input %u P2SH redeemscript missing", i));
                 return state;
             }
             CScript subscript(stack.back().begin(), stack.back().end());
             unsigned int sigop_count = subscript.GetSigOpCount(true);
             if (sigop_count > MAX_P2SH_SIGOPS) {
-                state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-nonstandard-inputs", strprintf("p2sh redeemscript sigops exceed limit (input %u: %u > %u)", i, sigop_count, MAX_P2SH_SIGOPS));
+                state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-input-scriptcheck-sigops", strprintf("p2sh redeemscript sigops exceed limit (input %u: %u > %u)", i, sigop_count, MAX_P2SH_SIGOPS));
                 return state;
             }
         }
