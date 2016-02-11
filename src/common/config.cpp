@@ -248,6 +248,19 @@ bool ArgsManager::ReadConfigFiles(std::string& error, bool ignore_invalid_keys)
         error = strprintf("specified data directory \"%s\" does not exist.", GetArg("-datadir", ""));
         return false;
     }
+
+    const auto rwconf_path{AbsPathForConfigVal(*this, GetPathArg("-confrw", BITCOIN_RW_CONF_FILENAME))};
+    {
+        LOCK(cs_args);
+        m_rwconf_path = rwconf_path;
+    }
+    std::ifstream rwconf_stream{rwconf_path.std_path()};
+    if (rwconf_stream.good()) {
+        if (!ReadConfigStream(rwconf_stream, fs::PathToString(rwconf_path), error, ignore_invalid_keys, &m_settings.rw_config)) {
+            return false;
+        }
+    }
+
     return true;
 }
 

@@ -15,6 +15,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
 #include <map>
 #include <optional>
 #include <sstream>
@@ -638,6 +639,42 @@ BOOST_AUTO_TEST_CASE(util_ReadConfigStreamSettingsTarget)
     test_args.LockSettings([&](const common::Settings& settings) {
         BOOST_CHECK(settings.ro_config.empty());
     });
+}
+
+BOOST_AUTO_TEST_CASE(util_ModifyRWConfigFileOnArgsManager)
+{
+    TestArgsManager args;
+    args.ForceSetArg("-datadir", fs::PathToString(m_path_root));
+    args.ForceSetArg("-confrw", "test_rw.conf");
+
+    std::string error;
+    BOOST_REQUIRE(args.ReadConfigFiles(error, /*ignore_invalid_keys=*/true));
+    BOOST_CHECK_EQUAL(error, "");
+
+    const fs::path rw_path{args.GetRWConfigFilePath()};
+    args.ModifyRWConfigFile("foo", "bar");
+    {
+        std::ifstream input{rw_path.std_path()};
+        BOOST_REQUIRE(input.good());
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        BOOST_CHECK_EQUAL(buffer.str(), "foo=bar\n");
+    }
+
+    args.ModifyRWConfigFile("foo", "baz");
+    {
+        std::ifstream input{rw_path.std_path()};
+        BOOST_REQUIRE(input.good());
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        BOOST_CHECK_EQUAL(buffer.str(), "foo=baz\n");
+    }
+
+    args.EraseRWConfigFile();
+    fs::path reset_path{rw_path};
+    reset_path += ".reset";
+    BOOST_CHECK(!fs::exists(rw_path));
+    BOOST_CHECK(fs::exists(reset_path));
 }
 
 BOOST_AUTO_TEST_CASE(util_GetArg)
