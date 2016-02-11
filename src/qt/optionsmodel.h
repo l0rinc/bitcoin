@@ -80,6 +80,7 @@ public:
         Server,                 // bool
         EnablePSBTControls,     // bool
         MaskValues,             // bool
+        maxuploadtarget,
         OptionIDRowCount,
     };
 
