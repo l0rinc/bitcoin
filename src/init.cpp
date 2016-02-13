@@ -749,7 +749,7 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
                              MAX_OP_RETURN_RELAY),
                    ArgsManager::ALLOW_ANY, OptionsCategory::NODE_RELAY);
     argsman.AddArg("-mempoolfullrbf", strprintf("Accept transaction replace-by-fee without requiring replaceability signaling (default: %u)", DEFAULT_MEMPOOL_FULL_RBF), ArgsManager::ALLOW_ANY, OptionsCategory::NODE_RELAY);
-    argsman.AddArg("-mempoolreplacement", strprintf("Enable transaction replacement in the memory pool (default: %u)", DEFAULT_ENABLE_REPLACEMENT), ArgsManager::ALLOW_ANY, OptionsCategory::NODE_RELAY);
+    argsman.AddArg("-mempoolreplacement", strprintf("Enable transaction replacement in the memory pool (\"fee,-optin\" = ignore opt-out flag, default: %u)", DEFAULT_ENABLE_REPLACEMENT), ArgsManager::ALLOW_ANY, OptionsCategory::NODE_RELAY);
     argsman.AddArg("-permitbaremultisig", strprintf("Relay transactions creating non-P2SH multisig outputs (default: %u)", DEFAULT_PERMIT_BAREMULTISIG), ArgsManager::ALLOW_ANY,
                    OptionsCategory::NODE_RELAY);
     argsman.AddArg("-minrelaytxfee=<amt>", strprintf("Fees (in %s/kvB) smaller than this are considered zero fee for relaying, mining and transaction creation (default: %s)",
@@ -993,6 +993,8 @@ bool AppInitBasicSetup(const ArgsManager& args, std::atomic<int>& exit_status)
     return true;
 }
 
+static bool gReplacementHonourOptOut;  // FIXME: Get rid of this
+
 bool AppInitParameterInteraction(const ArgsManager& args)
 {
     const CChainParams& chainparams = Params();
@@ -1176,11 +1178,23 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     }
 
     gEnableReplacement = args.GetBoolArg("-mempoolreplacement", DEFAULT_ENABLE_REPLACEMENT);
+    gReplacementHonourOptOut = !args.GetBoolArg("-mempoolfullrbf", DEFAULT_MEMPOOL_FULL_RBF);
     if ((!gEnableReplacement) && args.IsArgSet("-mempoolreplacement")) {
         // Minimal effort at forwards compatibility
         std::string replacement_opt = args.GetArg("-mempoolreplacement", "");  // default is impossible
-        std::vector<std::string> replacement_modes = util::SplitString(replacement_opt, ",");
+        std::vector<std::string> replacement_modes = util::SplitString(replacement_opt, ",+");
         gEnableReplacement = (std::find(replacement_modes.begin(), replacement_modes.end(), "fee") != replacement_modes.end());
+        if (gEnableReplacement) {
+            for (auto& opt : replacement_modes) {
+                if (opt == "optin") {
+                    gReplacementHonourOptOut = true;
+                } else if (opt == "-optin") {
+                    gReplacementHonourOptOut = false;
+                }
+            }
+        } else {
+            gReplacementHonourOptOut = true;
+        }
     }
 
     // Prevent setting deployment parameters on mainnet.
@@ -1429,6 +1443,7 @@ static ChainstateLoadResult InitAndLoadChainstate(
 
     CTxMemPool::Options mempool_opts{
         .check_ratio = chainparams.DefaultConsistencyChecks() ? 1 : 0,
+        .full_rbf = !gReplacementHonourOptOut,
         .signals = node.validation_signals.get(),
     };
     Assert(ApplyArgsManOptions(args, chainparams, mempool_opts)); // no error can happen, already checked in AppInitParameterInteraction
