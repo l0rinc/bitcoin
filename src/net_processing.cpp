@@ -537,6 +537,7 @@ public:
     bool GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) const override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
     std::vector<node::TxOrphanage::OrphanInfo> GetOrphanTransactions() override EXCLUSIVE_LOCKS_REQUIRED(!m_tx_download_mutex);
     PeerManagerInfo GetInfo() const override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
+    void LimitOrphanTxSize(uint32_t nMaxOrphans) override EXCLUSIVE_LOCKS_REQUIRED(!m_tx_download_mutex);
     std::vector<PrivateBroadcast::TxBroadcastInfo> GetPrivateBroadcastInfo() const override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
     std::vector<CTransactionRef> AbortPrivateBroadcast(const uint256& id) override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
     void SendPings() override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
@@ -1898,6 +1899,13 @@ std::vector<node::TxOrphanage::OrphanInfo> PeerManagerImpl::GetOrphanTransaction
     return m_txdownloadman.GetOrphanTransactions();
 }
 
+void PeerManagerImpl::LimitOrphanTxSize(uint32_t nMaxOrphans)
+{
+    LOCK(g_msgproc_mutex);
+    LOCK2(cs_main, m_tx_download_mutex);
+    m_txdownloadman.SetMaxOrphanTxs(nMaxOrphans);
+}
+
 PeerManagerInfo PeerManagerImpl::GetInfo() const
 {
     return PeerManagerInfo{
@@ -2130,7 +2138,7 @@ PeerManagerImpl::PeerManagerImpl(CConnman& connman, AddrMan& addrman,
       m_banman(banman),
       m_chainman(chainman),
       m_mempool(pool),
-      m_txdownloadman(node::TxDownloadOptions{pool, m_rng, opts.deterministic_rng}),
+      m_txdownloadman(node::TxDownloadOptions{.m_mempool = pool, .m_rng = m_rng, .m_max_orphan_txs = opts.max_orphan_txs, .m_deterministic_txrequest = opts.deterministic_rng}),
       m_warnings{warnings},
       m_opts{opts}
 {

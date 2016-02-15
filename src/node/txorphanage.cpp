@@ -17,6 +17,7 @@
 #include <boost/multi_index/tag.hpp>
 #include <boost/multi_index_container.hpp>
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <unordered_map>
@@ -227,6 +228,7 @@ public:
     bool EraseTx(const Wtxid& wtxid) override;
     void EraseForPeer(NodeId peer) override;
     void EraseForBlock(const CBlock& block) override;
+    void LimitOrphans(Count max_orphans) override;
     std::vector<std::pair<Wtxid, NodeId>> AddChildrenToWorkSet(const CTransaction& tx, FastRandomContext& rng) override;
     bool HaveTxToReconsider(NodeId peer) override;
     std::vector<CTransactionRef> GetChildrenFromSamePeer(const CTransactionRef& parent, NodeId nodeid) const override;
@@ -527,6 +529,19 @@ void TxOrphanageImpl::LimitOrphans()
 
     const auto remaining_unique_orphans{CountUniqueOrphans()};
     LogDebug(BCLog::TXPACKAGES, "orphanage overflow, removed %u tx (%u announcements)\n", original_unique_txns - remaining_unique_orphans, num_erased);
+}
+
+void TxOrphanageImpl::LimitOrphans(TxOrphanage::Count max_orphans)
+{
+    unsigned int num_erased{0};
+    while (CountUniqueOrphans() > max_orphans && !m_orphans.empty()) {
+        const auto oldest = std::min_element(m_orphans.begin(), m_orphans.end(), [](const auto& left, const auto& right) {
+            return left.m_entry_sequence < right.m_entry_sequence;
+        });
+        if (!Assume(oldest != m_orphans.end())) break;
+        num_erased += EraseTxInternal(oldest->m_tx->GetWitnessHash()) ? 1 : 0;
+    }
+    if (num_erased > 0) LogDebug(BCLog::TXPACKAGES, "orphanage count limit, removed %u tx\n", num_erased);
 }
 
 std::vector<std::pair<Wtxid, NodeId>> TxOrphanageImpl::AddChildrenToWorkSet(const CTransaction& tx, FastRandomContext& rng)

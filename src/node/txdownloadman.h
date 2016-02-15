@@ -41,6 +41,8 @@ struct TxDownloadOptions {
     const CTxMemPool& m_mempool;
     /** RNG provided by caller. */
     FastRandomContext& m_rng;
+    /** Maximum number of transactions allowed in orphanage. */
+    uint32_t m_max_orphan_txs{100};
     /** Instantiate TxRequestTracker as deterministic (used for tests). */
     bool m_deterministic_txrequest{false};
 };
@@ -171,6 +173,8 @@ public:
 
     /** Wrapper for TxOrphanage::GetOrphanTransactions */
     std::vector<TxOrphanage::OrphanInfo> GetOrphanTransactions() const;
+
+    void SetMaxOrphanTxs(uint32_t max_orphan_txs);
 };
 } // namespace node
 #endif // BITCOIN_NODE_TXDOWNLOADMAN_H
