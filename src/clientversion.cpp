@@ -62,11 +62,15 @@ std::string FormatFullVersion()
 /**
  * Format the subversion field according to BIP 14 spec (https://github.com/bitcoin/bips/blob/master/bip-0014.mediawiki)
  */
-std::string FormatSubVersion(const std::string& name, int nClientVersion, const std::vector<std::string>& comments)
+std::string FormatSubVersion(const std::string& name, int nClientVersion, const std::vector<std::string>& comments, const bool base_name_only)
 {
     std::string comments_str;
     if (!comments.empty()) comments_str = strprintf("(%s)", Join(comments, "; "));
-    return strprintf("/%s:%s%s/", name, FormatVersion(nClientVersion), comments_str);
+    std::string ua = strprintf("/%s:%s%s/", name, FormatVersion(nClientVersion), comments_str);
+    if (!base_name_only) {
+        ua += "Knots:20250205/";
+    }
+    return ua;
 }
 
 int64_t g_software_expiry{DEFAULT_SOFTWARE_EXPIRY};

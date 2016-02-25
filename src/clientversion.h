@@ -33,7 +33,7 @@ extern const std::string UA_NAME;
 
 
 std::string FormatFullVersion();
-std::string FormatSubVersion(const std::string& name, int nClientVersion, const std::vector<std::string>& comments);
+std::string FormatSubVersion(const std::string& name, int nClientVersion, const std::vector<std::string>& comments, bool base_name_only = false);
 
 static constexpr int64_t SECONDS_PER_WEEK = 604800;
 static constexpr int64_t SECONDS_PER_YEAR = 31558060;

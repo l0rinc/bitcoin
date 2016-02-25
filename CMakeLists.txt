@@ -26,7 +26,7 @@ get_directory_property(precious_variables CACHE_VARIABLES)
 #=============================
 # Project / Package metadata
 #=============================
-set(CLIENT_NAME "Bitcoin Core")
+set(CLIENT_NAME "Bitcoin Knots")
 set(CLIENT_VERSION_MAJOR 31)
 set(CLIENT_VERSION_MINOR 99)
 set(CLIENT_VERSION_BUILD 0)
@@ -55,7 +55,7 @@ set(CMAKE_TRY_COMPILE_PLATFORM_VARIABLES
 project(BitcoinCore
   VERSION ${CLIENT_VERSION_MAJOR}.${CLIENT_VERSION_MINOR}.${CLIENT_VERSION_BUILD}
   DESCRIPTION "Bitcoin client software"
-  HOMEPAGE_URL "https://bitcoincore.org/"
+  HOMEPAGE_URL "https://bitcoinknots.org/"
   LANGUAGES NONE
 )
 
@@ -66,7 +66,7 @@ endif()
 
 set(COPYRIGHT_HOLDERS "The %s developers")
 set(COPYRIGHT_HOLDERS_FINAL "The ${CLIENT_NAME} developers")
-set(CLIENT_BUGREPORT "https://github.com/bitcoin/bitcoin/issues")
+set(CLIENT_BUGREPORT "https://github.com/bitcoinknots/bitcoin/issues")
 
 #=============================
 # Language setup
