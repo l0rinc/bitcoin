@@ -876,12 +876,17 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
 
     // MAX_OP_RETURN_RELAY-byte TxoutType::NULL_DATA (standard)
     g_mempool_opts.permitbaredatacarrier = true;
-    t.vout[0].scriptPubKey = CScript() << OP_RETURN << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3804678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38"_hex;
-    BOOST_CHECK_EQUAL(83, t.vout[0].scriptPubKey.size());
-    CheckIsStandard(t, /*max_op_return_relay=*/83);
+    t.vout[0].scriptPubKey = CScript() << OP_RETURN;
+    while (t.vout[0].scriptPubKey.size() < MAX_OP_RETURN_RELAY) {
+        t.vout[0].scriptPubKey << OP_0;
+    }
+    BOOST_CHECK_EQUAL(MAX_OP_RETURN_RELAY, t.vout[0].scriptPubKey.size());
+    CheckIsStandard(t);
 
-    // Non-standard if max_op_return_relay datacarrier arg is one less
-    CheckIsNotStandard(t, "datacarrier", /*max_op_return_relay=*/82);
+    // MAX_OP_RETURN_RELAY+1-byte TxoutType::NULL_DATA (non-standard)
+    t.vout[0].scriptPubKey << OP_0;
+    BOOST_CHECK_EQUAL(MAX_OP_RETURN_RELAY + 1, t.vout[0].scriptPubKey.size());
+    CheckIsNotStandard(t, "scriptpubkey");
 
     // Data payload can be encoded in any way...
     t.vout[0].scriptPubKey = CScript() << OP_RETURN << ""_hex;
