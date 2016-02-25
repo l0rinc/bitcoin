@@ -894,6 +894,8 @@ BOOST_AUTO_TEST_CASE(blockmaxsize_mining_options)
 
 BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
 {
+    gArgs.ForceSetArg("-blockprioritysize", "0");
+
     auto mining{MakeMining()};
     BOOST_REQUIRE(mining);
 
