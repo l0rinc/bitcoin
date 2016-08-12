@@ -29,6 +29,7 @@
 #include <qt/splashscreen.h>
 #include <qt/utilitydialog.h>
 #include <qt/winshutdownmonitor.h>
+#include <stats/stats.h>
 #include <uint256.h>
 #include <util/btcsignals.h>
 #include <util/exception.h>
@@ -643,6 +644,9 @@ int GuiMain(int argc, char* argv[])
     // Allow parameter interaction before we create the options model
     app.parameterSetup();
     GUIUtil::LogQtInfo();
+
+    // Enable mempool stats by default
+    gArgs.SoftSetBoolArg("-statsenable", true);
 
     if (gArgs.GetBoolArg("-splash", DEFAULT_SPLASHSCREEN) && !gArgs.GetBoolArg("-min", false))
         app.createSplashScreen(networkStyle.data());
