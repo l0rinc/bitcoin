@@ -801,6 +801,9 @@ std::string ArgsManager::GetHelpMessage() const
             case OptionsCategory::CLI_COMMANDS:
                 usage += HelpMessageGroup("CLI Commands:");
                 break;
+            case OptionsCategory::STATS:
+                usage += HelpMessageGroup("Statistic options:");
+                break;
             case OptionsCategory::COMMAND_OPTIONS:
             case OptionsCategory::HIDDEN:
                 break;

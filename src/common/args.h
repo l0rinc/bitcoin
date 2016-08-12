@@ -67,6 +67,7 @@ enum class OptionsCategory {
     REGISTER_COMMANDS,
     CLI_COMMANDS,
     IPC,
+    STATS,
 
     // Specific to one or more commands (OptionsCategory::COMMANDS)
     // These are only included in help with their associated commands.
