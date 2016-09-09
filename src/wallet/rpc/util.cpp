@@ -69,17 +69,40 @@ std::shared_ptr<CWallet> GetWalletForJSONRPCRequest(const JSONRPCRequest& reques
     CHECK_NONFATAL(request.mode == JSONRPCRequest::EXECUTE);
     WalletContext& context = EnsureWalletContext(request.context);
 
-    if (auto wallet_name{GetWalletNameFromJSONRPCRequest(request)}) {
-        std::shared_ptr<CWallet> pwallet{GetWallet(context, *wallet_name)};
-        if (!pwallet) throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Requested wallet does not exist or is not loaded");
+    std::string authorized_wallet_name;
+    const bool have_wallet_restriction{GetWalletRestrictionFromJSONRPCRequest(request, authorized_wallet_name)};
+
+    const auto requested_wallet_name{GetWalletNameFromJSONRPCRequest(request)};
+
+    std::shared_ptr<CWallet> pwallet;
+    size_t count{0};
+
+    if (!have_wallet_restriction) {
+        // Any wallet is permitted; select by endpoint, or use the sole wallet
+        if (requested_wallet_name) {
+            pwallet = GetWallet(context, *requested_wallet_name);
+        } else {
+            auto wallet = GetDefaultWallet(context, count);
+            if (wallet) pwallet = wallet;
+        }
+    } else if (authorized_wallet_name == "-") {
+        // Block wallet access always
+    } else if (!requested_wallet_name || *requested_wallet_name == authorized_wallet_name) {
+        // Select specifically the authorized wallet
+        pwallet = GetWallet(context, authorized_wallet_name);
+    }
+
+    if (pwallet) {
         return pwallet;
     }
 
-    size_t count{0};
-    auto wallet = GetDefaultWallet(context, count);
-    if (wallet) return wallet;
-
-    if (count == 0) {
+    if (requested_wallet_name) {
+        throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Requested wallet does not exist or is not loaded");
+    }
+    const bool no_wallet_available{have_wallet_restriction ?
+        (authorized_wallet_name == "-" || !GetWallet(context, authorized_wallet_name)) :
+        count == 0};
+    if (no_wallet_available) {
         throw JSONRPCError(
             RPC_WALLET_NOT_FOUND, "No wallet is loaded. Load a wallet using loadwallet or create a new one with createwallet. (Note: A default wallet is no longer automatically created)");
     }
