@@ -71,6 +71,25 @@ class WalletLabelsTest(BitcoinTestFramework):
 
         self.log.info("getnewaddress label parameter handling test completed successfully")
 
+    def test_sort_multisig(self, node):
+        node.importprivkey("cSJUMwramrFYHKPfY77FH94bv4Q5rwUCyfD6zX3kLro4ZcWsXFEM")
+        node.importprivkey("cSpQbSsdKRmxaSWJ3TckCFTrksXNPbh8tfeZESGNQekkVxMbQ77H")
+        node.importprivkey("cRNbfcJgnvk2QJEVbMsxzoprotm1cy3kVA2HoyjSs3ss5NY5mQqr")
+
+        addresses = [
+            "muRmfCwue81ZT9oc3NaepefPscUHtP5kyC",
+            "n12RzKwqWPPA4cWGzkiebiM7Gu6NXUnDW8",
+            "n2yWMtx8jVbo8wv9BK2eN1LdbaakgKL3Mt",
+        ]
+
+        sorted_default = node.addmultisigaddress(2, addresses, "sort-test", 'legacy')
+        sorted_false = node.addmultisigaddress(2, addresses, "sort-test", 'legacy', False)
+        sorted_true = node.addmultisigaddress(2, addresses, "sort-test", 'legacy', True)
+
+        assert_equal(sorted_default, sorted_false)
+        assert_equal("2N6dne8yzh13wsRJxCcMgCYNeN9fxKWNHt8", sorted_default['address'])
+        assert_equal("2MsJ2YhGewgDPGEQk4vahGs4wRikJXpRRtU", sorted_true['address'])
+
     def run_test(self):
         # Check that there's no UTXO on the node
         node = self.nodes[0]
@@ -181,6 +200,9 @@ class WalletLabelsTest(BitcoinTestFramework):
 
         self.invalid_label_name_test()
         self.test_label_named_parameter_handling()
+
+        if not self.options.descriptors:
+            self.test_sort_multisig(node)
 
         if self.options.descriptors:
             # This is a descriptor wallet test because of segwit v1+ addresses
