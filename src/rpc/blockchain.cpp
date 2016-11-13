@@ -3,6 +3,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <rpc/blockchain.h>
 
 #include <blockfilter.h>
@@ -24,6 +26,7 @@
 #include <index/coinstatsindex.h>
 #include <interfaces/mining.h>
 #include <kernel/coinstats.h>
+#include <key_io.h>
 #include <logging/timer.h>
 #include <net.h>
 #include <net_processing.h>
@@ -33,11 +36,14 @@
 #include <node/utxo_snapshot.h>
 #include <node/warnings.h>
 #include <primitives/transaction.h>
+#include <policy/policy.h>
 #include <rpc/rawtransaction_util.h>
 #include <rpc/server.h>
 #include <rpc/server_util.h>
 #include <rpc/util.h>
 #include <script/descriptor.h>
+#include <script/sign.h>
+#include <script/solver.h>
 #include <serialize.h>
 #include <streams.h>
 #include <sync.h>
@@ -50,6 +56,16 @@
 #include <util/fs.h>
 #include <util/strencodings.h>
 #include <util/syserror.h>
+
+#ifdef ENABLE_WALLET
+#include <interfaces/wallet.h>
+#include <wallet/coincontrol.h>
+#include <wallet/fees.h>
+#include <wallet/rpc/util.h>
+#include <wallet/types.h>
+#include <wallet/wallet.h>
+#endif
+
 #include <util/translation.h>
 #include <validation.h>
 #include <validationinterface.h>
@@ -60,9 +76,11 @@
 #include <condition_variable>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -2487,6 +2505,164 @@ bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& 
 }
 } // namespace
 
+#ifdef ENABLE_WALLET
+static RPCMethod sweepprivkeys()
+{
+    return RPCMethod{
+        "sweepprivkeys",
+        "\nSends bitcoins controlled by private keys to a new address in the local wallet.\n",
+        {
+            {"options", RPCArg::Type::OBJ, RPCArg::Optional::NO, "",
+                {
+                    {"privkeys", RPCArg::Type::ARR, RPCArg::Optional::NO, "An array of WIF private keys",
+                        {
+                            {"privkey", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "A WIF private key"},
+                        }},
+                    {"label", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Label for received bitcoins"},
+                },
+                RPCArgOptions{.oneline_description="options"}},
+        },
+        RPCResult{RPCResult::Type::STR_HEX, "", "The transaction id."},
+        RPCExamples{""},
+        [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    NodeContext& node = EnsureAnyNodeContext(request.context);
+
+    JSONRPCRequest wallet_req = request;
+    CHECK_NONFATAL(node.wallet_loader);
+    CHECK_NONFATAL(node.wallet_loader->context());
+    wallet_req.context = node.wallet_loader->context();
+    std::shared_ptr<wallet::CWallet> const wallet = wallet::GetWalletForJSONRPCRequest(wallet_req);
+    if (!wallet) return UniValue::VNULL;
+    wallet::CWallet* const pwallet = wallet.get();
+
+    std::set<CScript> needles;
+    wallet::CCoinControl coin_control;
+    FillableSigningProvider temp_keystore;
+    CMutableTransaction tx;
+    std::string label;
+    CAmount total_in{0};
+    for (const std::string& optname : request.params[0].getKeys()) {
+        const UniValue& optval = request.params[0][optname];
+        if (optname == "privkeys") {
+            const UniValue& privkeys = optval.get_array();
+            for (size_t privkey_i = 0; privkey_i < privkeys.size(); ++privkey_i) {
+                const CKey key{DecodeSecret(privkeys[privkey_i].get_str())};
+                if (!key.IsValid()) {
+                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key encoding");
+                }
+                const CPubKey pubkey{key.GetPubKey()};
+                CHECK_NONFATAL(key.VerifyPubKey(pubkey));
+
+                temp_keystore.AddKey(key);
+                CScript script{GetScriptForDestination(PKHash(pubkey.GetID()))};
+                if (!script.empty()) {
+                    needles.insert(script);
+                }
+                script = GetScriptForRawPubKey(pubkey);
+                if (!script.empty()) {
+                    needles.insert(script);
+                }
+            }
+        } else if (optname == "label") {
+            label = wallet::LabelFromValue(optval.get_str());
+        } else {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Unrecognised option '%s'", optname));
+        }
+    }
+
+    std::unique_ptr<wallet::ReserveDestination> reservedest;
+    CTxDestination dest;
+    {
+        LOCK(pwallet->cs_wallet);
+
+        reservedest = std::make_unique<wallet::ReserveDestination>(pwallet, pwallet->TransactionChangeType(pwallet->m_default_change_type, std::vector<wallet::CRecipient>{}));
+        auto op_dest = reservedest->GetReservedDestination(/*internal=*/false);
+        if (!op_dest) {
+            throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, util::ErrorString(op_dest).original);
+        }
+        dest = *op_dest;
+    }
+
+    std::vector<CTxOut> input_txos;
+    {
+        std::map<COutPoint, Coin> coins;
+        {
+            std::unique_ptr<CCoinsViewCursor> pcursor;
+            {
+                ChainstateManager& chainman = EnsureAnyChainman(request.context);
+                LOCK(cs_main);
+                if (node.mempool) {
+                    node.mempool->FindScriptPubKey(needles, coins);
+                }
+                Chainstate& active_chainstate = chainman.ActiveChainstate();
+                active_chainstate.ForceFlushStateToDisk(/*wipe_cache=*/false);
+                pcursor = CHECK_NONFATAL(active_chainstate.CoinsDB().Cursor());
+            }
+            std::atomic<int> scan_progress;
+            const std::atomic<bool> should_abort{false};
+            int64_t count;
+            if (!FindScriptPubKey(scan_progress, should_abort, count, pcursor.get(), needles, coins, node.rpc_interruption_point)) {
+                throw JSONRPCError(RPC_MISC_ERROR, "UTXO FindScriptPubKey failed");
+            }
+        }
+
+        for (const auto& [outpoint, coin] : coins) {
+            const CTxOut& txo = coin.out;
+            tx.vin.emplace_back(outpoint.hash, outpoint.n);
+            input_txos.push_back(txo);
+            total_in += txo.nValue;
+        }
+    }
+
+    if (total_in == 0) {
+        throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "No value to sweep");
+    }
+
+    tx.vout.emplace_back(total_in, GetScriptForDestination(dest));
+
+    while (true) {
+        if (IsDust(tx.vout[0], pwallet->chain().relayDustFee())) {
+            throw JSONRPCError(RPC_VERIFY_REJECTED, "Swept value would be dust");
+        }
+        for (size_t input_index = 0; input_index < tx.vin.size(); ++input_index) {
+            const auto& utxo = input_txos[input_index];
+            SignatureData sig_data;
+            MutableTransactionSignatureCreator creator(tx, input_index, utxo.nValue, {.sighash_type = SIGHASH_ALL});
+            if (!ProduceSignature(temp_keystore, creator, utxo.scriptPubKey, sig_data)) {
+                throw JSONRPCError(RPC_MISC_ERROR, "Failed to sign");
+            }
+            UpdateInput(tx.vin.at(input_index), sig_data);
+        }
+        const int64_t tx_vsize{GetVirtualTransactionSize(CTransaction(tx))};
+        const CAmount fee_needed{GetMinimumFee(*wallet, tx_vsize, coin_control, nullptr /* FeeCalculation */)};
+        const CAmount total_out{tx.vout[0].nValue};
+        if (fee_needed <= total_in - total_out) {
+            break;
+        }
+        if (fee_needed >= total_in) {
+            throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Insufficient funds for fees");
+        }
+        tx.vout[0].nValue = total_in - fee_needed;
+    }
+
+    CTransactionRef final_tx{MakeTransactionRef(std::move(tx))};
+    pwallet->SetAddressBook(dest, label, wallet::AddressPurpose::RECEIVE);
+
+    std::string err_string;
+    const node::TransactionError err{BroadcastTransaction(node, final_tx, err_string, pwallet->m_default_max_tx_fee, /*relay=*/true, /*wait_callback=*/true)};
+    if (err != node::TransactionError::OK) {
+        pwallet->DelAddressBook(dest);
+        throw JSONRPCTransactionError(err, err_string);
+    }
+    reservedest->KeepDestination();
+
+    return final_tx->GetHash().GetHex();
+},
+    };
+}
+#endif // ENABLE_WALLET
+
 /** RAII object to prevent concurrency issue when scanning the txout set */
 static std::atomic<int> g_scan_progress;
 static std::atomic<bool> g_scan_in_progress;
@@ -4042,6 +4218,10 @@ void RegisterBlockchainRPCCommands(CRPCTable& t)
         {"blockchain", &waitforblockheight},
         {"hidden", &syncwithvalidationinterfacequeue},
         {"hidden", &getblocklocations},
+
+#ifdef ENABLE_WALLET
+        {"wallet", &sweepprivkeys},
+#endif
     };
     for (const auto& c : commands) {
         t.appendCommand(c.name, &c);

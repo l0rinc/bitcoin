@@ -130,6 +130,7 @@ BASE_SCRIPTS = [
     'wallet_address_types.py',
     'p2p_orphan_handling.py',
     'wallet_basic.py',
+    'wallet_sweepprivkeys.py',
     'feature_maxtipage.py',
     'wallet_multiwallet.py',
     'wallet_multiwallet.py --usecli',
