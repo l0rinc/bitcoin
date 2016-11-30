@@ -4,9 +4,9 @@
 
 #include <bitcoin-build-config.h> // IWYU pragma: keep
 
-#if HAVE_IOPRIO_SYSCALL
-
 #include <util/ioprio.h>
+
+#if HAVE_IOPRIO_SYSCALL
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
@@ -36,4 +36,20 @@ int ioprio_set_idle() {
     return ioprio_set(7 | (IOPRIO_CLASS_IDLE << IOPRIO_CLASS_SHIFT));
 }
 
-#endif // HAVE_IOPRIO_SYSCALL
+#elif HAVE_IOPOLICY
+
+#include <sys/resource.h>
+
+int ioprio_get() {
+    return getiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD);
+}
+
+int ioprio_set(const int ioprio) {
+    return setiopolicy_np(IOPOL_TYPE_DISK, IOPOL_SCOPE_THREAD, ioprio);
+}
+
+int ioprio_set_idle() {
+    return ioprio_set(IOPOL_UTILITY);
+}
+
+#endif
