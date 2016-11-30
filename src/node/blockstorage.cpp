@@ -30,6 +30,7 @@
 #include <util/check.h>
 #include <util/expected.h>
 #include <util/fs.h>
+#include <util/ioprio.h>
 #include <util/overflow.h>
 #include <util/signalinterrupt.h>
 #include <util/strencodings.h>
@@ -1126,19 +1127,19 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
     return true;
 }
 
-bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::optional<uint256>& expected_hash) const
+bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::optional<uint256>& expected_hash, const bool lowprio) const
 {
     block.SetNull();
 
     // Open history file to read
-    std::vector<uint8_t> block_data;
-    if (!ReadRawBlock(block_data, pos)) {
+    auto block_data{ReadRawBlock(pos, /*block_part=*/std::nullopt, /*lowprio=*/lowprio)};
+    if (!block_data) {
         return false;
     }
 
     try {
         // Read block
-        SpanReader{block_data} >> TX_WITH_WITNESS(block);
+        SpanReader{*block_data} >> TX_WITH_WITNESS(block);
     } catch (const std::exception& e) {
         LogError("Deserialize or I/O error - %s at %s while reading block", e.what(), pos.ToString());
         return false;
@@ -1167,13 +1168,13 @@ bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::o
     return true;
 }
 
-bool BlockManager::ReadBlock(CBlock& block, const CBlockIndex& index) const
+bool BlockManager::ReadBlock(CBlock& block, const CBlockIndex& index, const bool lowprio) const
 {
     const FlatFilePos block_pos{WITH_LOCK(cs_main, return index.GetBlockPos())};
-    return ReadBlock(block, block_pos, index.GetBlockHash());
+    return ReadBlock(block, block_pos, index.GetBlockHash(), /*lowprio=*/lowprio);
 }
 
-BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& pos, std::optional<std::pair<size_t, size_t>> block_part) const
+BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& pos, std::optional<std::pair<size_t, size_t>> block_part, const bool lowprio) const
 {
     if (pos.nPos < STORAGE_HEADER_BYTES) {
         // If nPos is less than STORAGE_HEADER_BYTES, we can't read the header that precedes the block data
@@ -1182,6 +1183,8 @@ BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& p
         LogError("Failed for %s while reading raw block storage header", pos.ToString());
         return util::Unexpected{ReadRawError::IO};
     }
+    IOPRIO_IDLER(lowprio);
+
     AutoFile filein{OpenBlockFile({pos.nFile, pos.nPos - STORAGE_HEADER_BYTES}, /*fReadOnly=*/true)};
     if (filein.IsNull()) {
         LogError("OpenBlockFile failed for %s while reading raw block", pos.ToString());
@@ -1244,7 +1247,7 @@ FlatFilePos BlockManager::WriteBlock(const CBlock& block, int nHeight)
 
         // Write index header
         fileout << GetParams().MessageStart() << block_size;
-        pos.nPos += BLOCK_SERIALIZATION_HEADER_SIZE;
+        pos.nPos += STORAGE_HEADER_BYTES;
         // Write block
         fileout << TX_WITH_WITNESS(block);
     }
