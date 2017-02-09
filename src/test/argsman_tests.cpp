@@ -677,6 +677,37 @@ BOOST_AUTO_TEST_CASE(util_ModifyRWConfigFileOnArgsManager)
     BOOST_CHECK(fs::exists(reset_path));
 }
 
+BOOST_AUTO_TEST_CASE(util_RWConfigHasPruneOption)
+{
+    TestArgsManager args;
+    args.SetupArgs({{"-prune", ArgsManager::ALLOW_ANY}});
+    args.ForceSetArg("-datadir", fs::PathToString(m_path_root));
+    args.ForceSetArg("-confrw", "test_prune_rw.conf");
+
+    std::string error;
+    BOOST_REQUIRE(args.ReadConfigFiles(error));
+    BOOST_CHECK_EQUAL(error, "");
+    BOOST_CHECK(!args.RWConfigHasPruneOption());
+
+    const fs::path rw_path{args.GetRWConfigFilePath()};
+    {
+        std::ofstream output{rw_path.std_path()};
+        output << "prune=1907\n";
+    }
+
+    BOOST_REQUIRE(args.ReadConfigFiles(error));
+    BOOST_CHECK_EQUAL(error, "");
+    BOOST_CHECK(args.RWConfigHasPruneOption());
+
+    fs::remove(rw_path);
+    BOOST_REQUIRE(args.ReadConfigFiles(error));
+    BOOST_CHECK_EQUAL(error, "");
+    BOOST_CHECK(!args.RWConfigHasPruneOption());
+
+    args.ModifyRWConfigFile("prune", "1908");
+    BOOST_CHECK(args.RWConfigHasPruneOption());
+}
+
 BOOST_AUTO_TEST_CASE(util_GetArg)
 {
     TestArgsManager testArgs;

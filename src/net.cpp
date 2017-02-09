@@ -3564,7 +3564,7 @@ bool CConnman::InitBinds(const Options& options)
                 bool fRet = uiInterface.ThreadSafeQuestion(
                     strprintf(_("Do you want to use the standard network port for %s (port %s) instead?"), CLIENT_NAME, defaultPort),
                     strprintf(_("Listen on port %s failed."), GetListenPort()).translated,
-                    "", CClientUIInterface::MSG_INFORMATION | CClientUIInterface::MODAL | CClientUIInterface::BTN_OK | CClientUIInterface::BTN_ABORT);
+                    CClientUIInterface::MSG_INFORMATION | CClientUIInterface::MODAL | CClientUIInterface::BTN_OK | CClientUIInterface::BTN_ABORT);
 
                 if (fRet) {
                     // FIXME: Unbind IPv6 on the other port

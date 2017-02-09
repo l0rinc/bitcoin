@@ -143,6 +143,7 @@ bool ArgsManager::ReadConfigFiles(std::string& error, bool ignore_invalid_keys)
         LOCK(cs_args);
         m_settings.ro_config.clear();
         m_settings.rw_config.clear();
+        m_rwconf_had_prune_option = false;
         m_config_sections.clear();
         const auto conf_val = GetPathArg_("-conf", BITCOIN_CONF_FILENAME);
         m_config_path = (conf_val.is_absolute() || conf_val.empty()) ? conf_val : fsbridge::AbsPathJoin(GetDataDir(/*net_specific=*/false), conf_val);
@@ -258,6 +259,10 @@ bool ArgsManager::ReadConfigFiles(std::string& error, bool ignore_invalid_keys)
     if (rwconf_stream.good()) {
         if (!ReadConfigStream(rwconf_stream, fs::PathToString(rwconf_path), error, ignore_invalid_keys, &m_settings.rw_config)) {
             return false;
+        }
+        {
+            LOCK(cs_args);
+            m_rwconf_had_prune_option = m_settings.rw_config.count("prune");
         }
     }
 

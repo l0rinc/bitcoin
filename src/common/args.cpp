@@ -962,6 +962,12 @@ fs::path ArgsManager::GetRWConfigFilePath() const
     return *Assert(m_rwconf_path);
 }
 
+bool ArgsManager::RWConfigHasPruneOption() const
+{
+    LOCK(cs_args);
+    return m_rwconf_had_prune_option;
+}
+
 ChainType ArgsManager::GetChainType() const
 {
     std::variant<ChainType, std::string> arg = GetChainArg();
@@ -1232,6 +1238,7 @@ void ArgsManager::ModifyRWConfigFile(const std::map<std::string, std::string>& s
     fs::path rwconf_path{GetRWConfigFilePath()};
     fs::path rwconf_new_path{rwconf_path};
     rwconf_new_path += ".new";
+    const bool update_settings_file{!IsArgNegated("-settings")};
     try {
         fs::remove(rwconf_new_path);
         std::ofstream streamRWConfigOut(rwconf_new_path.std_path(), std::ios_base::out | std::ios_base::trunc);
@@ -1250,14 +1257,22 @@ void ArgsManager::ModifyRWConfigFile(const std::map<std::string, std::string>& s
         fs::remove(rwconf_new_path);
         throw std::ios_base::failure(strprintf("Failed to replace %s", fs::PathToString(rwconf_new_path)));
     }
-    for (const auto& setting_change : settings_to_change) {
-        m_settings.rw_config[setting_change.first] = {setting_change.second};
-    }
-    if (!IsArgNegated("-settings")) {
-        // Also save to settings.json for Core (0.21+) compatibility
+    {
+        LOCK(cs_args);
         for (const auto& setting_change : settings_to_change) {
-            m_settings.rw_settings[setting_change.first] = setting_change.second;
+            m_settings.rw_config[setting_change.first] = {setting_change.second};
         }
+        if (update_settings_file) {
+            // Also save to settings.json for Core (0.21+) compatibility
+            for (const auto& setting_change : settings_to_change) {
+                m_settings.rw_settings[setting_change.first] = setting_change.second;
+            }
+        }
+        if (settings_to_change.count("prune")) {
+            m_rwconf_had_prune_option = true;
+        }
+    }
+    if (update_settings_file) {
         WriteSettingsFile();
     }
 }

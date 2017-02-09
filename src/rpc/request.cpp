@@ -122,7 +122,7 @@ AuthCookieResult GenerateAuthCookie(const std::optional<fs::perms>& cookie_perms
     } catch (const fs::filesystem_error&) {
         // ignore
     }
-    file.open(filepath_tmp);
+    file.open(filepath_tmp.std_path());
     if (!file.is_open()) {
         LogWarning("Unable to open cookie authentication file %s for writing", fs::PathToString(filepath_tmp));
         return AuthCookieResult::Error;
@@ -187,7 +187,7 @@ void DeleteAuthCookie()
             fs::remove(GetAuthCookieFile());
         }
     } catch (const fs::filesystem_error& e) {
-        LogPrintf("%s: Unable to remove random auth cookie file %s: %s\n", __func__, fs::PathToString(e.path1()), fsbridge::get_filesystem_error_message(e));
+        LogWarning("%s: Unable to remove random auth cookie file %s: %s", __func__, fs::PathToString(e.path1()), fsbridge::get_filesystem_error_message(e));
     }
 }
 

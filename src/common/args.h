@@ -158,6 +158,7 @@ private:
     std::list<SectionInfo> m_config_sections GUARDED_BY(cs_args);
     std::optional<fs::path> m_config_path GUARDED_BY(cs_args);
     std::optional<fs::path> m_rwconf_path GUARDED_BY(cs_args);
+    bool m_rwconf_had_prune_option GUARDED_BY(cs_args){false};
     mutable fs::path m_cached_blocks_path GUARDED_BY(cs_args);
     mutable fs::path m_cached_datadir_path GUARDED_BY(cs_args);
     mutable fs::path m_cached_network_datadir_path GUARDED_BY(cs_args);
@@ -206,6 +207,7 @@ public:
     fs::path GetRWConfigFilePath() const EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
     [[nodiscard]] bool ReadConfigFiles(std::string& error, bool ignore_invalid_keys = false) EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
 
+    bool RWConfigHasPruneOption() const EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
     void ModifyRWConfigFile(const std::map<std::string, std::string>& settings_to_change) EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
     void ModifyRWConfigFile(const std::string& setting_to_change, const std::string& new_value) EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
     void EraseRWConfigFile() EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
