@@ -63,20 +63,14 @@ std::optional<std::string> GetEntriesForConflicts(const CTransaction& tx,
                                                   const ignore_rejects_type& ignore_rejects)
 {
     AssertLockHeld(pool.cs);
-    const uint256 txid = tx.GetHash();
-    uint64_t nConflictingCount = 0;
-    for (const auto& mi : iters_conflicting) {
-        nConflictingCount += mi->GetCountWithDescendants();
-        // Rule #5: don't consider replacing more than MAX_REPLACEMENT_CANDIDATES
-        // entries from the mempool. This potentially overestimates the number of actual
-        // descendants (i.e. if multiple conflicts share a descendant, it will be counted multiple
-        // times), but we just want to be conservative to avoid doing too much work.
-        if (nConflictingCount > MAX_REPLACEMENT_CANDIDATES && !ignore_rejects.count("too-many-replacements") && !ignore_rejects.count("too many potential replacements")) {
-            return strprintf("rejecting replacement %s; too many potential replacements (%d > %d)",
-                             txid.ToString(),
-                             nConflictingCount,
-                             MAX_REPLACEMENT_CANDIDATES);
-        }
+    // Rule #5: don't consider replacements that conflict directly with more
+    // than MAX_REPLACEMENT_CANDIDATES distinct clusters.
+    const auto num_clusters{pool.GetUniqueClusterCount(iters_conflicting)};
+    if (num_clusters > MAX_REPLACEMENT_CANDIDATES && !ignore_rejects.count("too-many-replacements") && !ignore_rejects.count("too many potential replacements")) {
+        return strprintf("rejecting replacement %s; too many conflicting clusters (%u > %d)",
+                         tx.GetHash().ToString(),
+                         num_clusters,
+                         MAX_REPLACEMENT_CANDIDATES);
     }
     // Calculate the set of all transactions that would have to be evicted.
     for (CTxMemPool::txiter it : iters_conflicting) {
@@ -88,15 +82,36 @@ std::optional<std::string> GetEntriesForConflicts(const CTransaction& tx,
 }
 
 std::optional<std::string> EntriesAndTxidsDisjoint(const CTxMemPool::setEntries& ancestors,
-                                                   const std::set<Txid>& direct_conflicts,
-                                                   const Txid& txid)
+                                                   const std::map<Txid, bool>& direct_conflicts,
+                                                   const Txid& txid, bool* const out_violates_policy)
 {
     for (CTxMemPool::txiter ancestorIt : ancestors) {
         const Txid& hashAncestor = ancestorIt->GetTx().GetHash();
-        if (direct_conflicts.contains(hashAncestor)) {
+        const auto& conflictit = direct_conflicts.find(hashAncestor);
+        if (conflictit != direct_conflicts.end()) {
+            if (!conflictit->second /* mere SPK conflict, NOT invalid */) {
+                if (out_violates_policy) *out_violates_policy = true;
+                continue;
+            }
             return strprintf("%s spends conflicting transaction %s",
                              txid.ToString(),
                              hashAncestor.ToString());
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> PaysMoreThanConflicts(const CTxMemPool::setEntries& iters_conflicting,
+                                                 CFeeRate replacement_feerate,
+                                                 const Txid& txid)
+{
+    for (const auto& mi : iters_conflicting) {
+        CFeeRate old_feerate(mi->GetModifiedFee(), mi->GetTxSize());
+        if (replacement_feerate <= old_feerate) {
+            return strprintf("rejecting replacement %s; new feerate %s <= old feerate %s",
+                             txid.ToString(),
+                             replacement_feerate.ToString(),
+                             old_feerate.ToString());
         }
     }
     return std::nullopt;

@@ -15,6 +15,7 @@
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -80,11 +81,20 @@ std::optional<std::string> GetEntriesForConflicts(const CTransaction& tx, CTxMem
  * @param[in]   direct_conflicts    Set of txids corresponding to the mempool conflicts
  *                                  (candidates to be replaced).
  * @param[in]   txid                Transaction ID, included in the error message if violation occurs.
- * @returns error message if the sets intersect, std::nullopt if they are disjoint.
+ * @param[out]  out_violates_policy Assigned to true if there are any policy-only conflicts.
+ * @returns error message if the sets intersect (consensus-only conflicts), std::nullopt if they are disjoint or only intersect on policy matters.
  */
 std::optional<std::string> EntriesAndTxidsDisjoint(const CTxMemPool::setEntries& ancestors,
-                                                   const std::set<Txid>& direct_conflicts,
-                                                   const Txid& txid);
+                                                   const std::map<Txid, bool>& direct_conflicts,
+                                                   const Txid& txid, bool* out_violates_policy);
+
+/** Check that the feerate of the replacement transaction(s) is higher than the feerate of each
+ * of the transactions in iters_conflicting.
+ * @param[in]   iters_conflicting  The set of mempool entries.
+ * @returns error message if fees insufficient, otherwise std::nullopt.
+ */
+std::optional<std::string> PaysMoreThanConflicts(const CTxMemPool::setEntries& iters_conflicting,
+                                                 CFeeRate replacement_feerate, const Txid& txid);
 
 /** The replacement transaction must pay more fees than the original transactions. The additional
  * fees must pay for the replacement's bandwidth at or above the incremental relay feerate.
