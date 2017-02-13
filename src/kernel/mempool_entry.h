@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <set>
 
@@ -34,6 +35,15 @@ struct LockPoints {
     // values are still valid even after a reorg.
     CBlockIndex* maxInputBlock{nullptr};
 };
+
+enum MemPool_SPK_State {
+    MSS_UNSEEN  = 0,
+    MSS_SPENT   = 1,
+    MSS_CREATED = 2,
+    MSS_BOTH    = 3,
+};
+
+typedef std::map<uint160, enum MemPool_SPK_State> SPKStates_t;
 
 struct CompareIteratorByHash {
     // SFINAE for T where T is either a pointer type (e.g., a txiter) or a reference_wrapper<T>
@@ -136,6 +146,8 @@ public:
     bool GetSpendsCoinbase() const { return spendsCoinbase; }
 
     mutable size_t idx_randomized; //!< Index in mempool's txns_randomized
+
+    SPKStates_t mapSPK;
 };
 
 using CTxMemPoolEntryRef = CTxMemPoolEntry::CTxMemPoolEntryRef;

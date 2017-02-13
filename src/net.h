@@ -998,6 +998,7 @@ public:
             case ConnectionType::OUTBOUND_FULL_RELAY:
             case ConnectionType::BLOCK_RELAY:
             case ConnectionType::ADDR_FETCH:
+            case ConnectionType::PRIVATE_BROADCAST:
                 return true;
         } // no default case, so the compiler can warn about missing cases
 
@@ -1139,6 +1140,7 @@ public:
         bool m_i2p_accept_incoming;
         bool whitelist_forcerelay = DEFAULT_WHITELISTFORCERELAY;
         bool whitelist_relay = DEFAULT_WHITELISTRELAY;
+        bool m_capture_messages = false;
         bool disable_v1conn_clearnet = false;
     };
 
@@ -1177,6 +1179,7 @@ public:
         m_onion_binds = connOptions.onion_binds;
         whitelist_forcerelay = connOptions.whitelist_forcerelay;
         whitelist_relay = connOptions.whitelist_relay;
+        m_capture_messages = connOptions.m_capture_messages;
         disable_v1conn_clearnet = connOptions.disable_v1conn_clearnet;
     }
 
@@ -1665,6 +1668,9 @@ private:
 
     unsigned int nSendBufferMaxSize{0};
     unsigned int nReceiveFloodSize{0};
+
+    /** flag for whether messages are captured */
+    bool m_capture_messages{false};
 
     std::vector<ListenSocket> vhListenSocket;
     std::atomic<bool> fNetworkActive{true};

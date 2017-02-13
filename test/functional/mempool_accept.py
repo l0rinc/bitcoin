@@ -94,6 +94,15 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal(DEFAULT_MIN_RELAY_TX_FEE) / COIN)
         assert_equal(node.getmempoolinfo()['incrementalrelayfee'], Decimal(DEFAULT_INCREMENTAL_RELAY_FEE) / COIN)
 
+        self.log.info('Check -spkreuse=0 rejects duplicate output scriptPubKeys')
+        tx = self.wallet.create_self_transfer_multi(num_outputs=2)['tx']
+        raw_tx_spkreuse = tx.serialize().hex()
+        assert_equal(node.testmempoolaccept([raw_tx_spkreuse])[0]['allowed'], True)
+        self.restart_node(0, extra_args=self.extra_args[0] + ['-spkreuse=0', '-persistmempool=0'])
+        assert_equal(node.testmempoolaccept([raw_tx_spkreuse])[0]['reject-reason'], 'txn-spk-reused-twinoutputs')
+        assert_equal(node.getmempoolinfo()['size'], self.mempool_size)
+        self.restart_node(0, extra_args=self.extra_args[0])
+
         self.log.info('Should not accept garbage to testmempoolaccept')
         assert_raises_rpc_error(-3, 'JSON value of type string is not of expected type array', lambda: node.testmempoolaccept(rawtxs='ff00baar'))
         assert_raises_rpc_error(-8, 'Array must contain between 1 and 25 transactions.', lambda: node.testmempoolaccept(rawtxs=['ff22']*26))

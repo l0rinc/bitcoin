@@ -78,8 +78,13 @@ static constexpr unsigned int MAX_STANDARD_SCRIPTSIG_SIZE{1650};
  * only increase the dust limit after prior releases were already not creating
  * outputs below the new threshold */
 static constexpr unsigned int DUST_RELAY_TX_FEE{3000};
+static const std::string DEFAULT_SPKREUSE{"allow"};
 /** Default for -minrelaytxfee, minimum relay fee for transactions */
 static constexpr unsigned int DEFAULT_MIN_RELAY_TX_FEE{100};
+/** Maximum number of transactions per cluster (default) */
+static constexpr unsigned int DEFAULT_CLUSTER_LIMIT{64};
+/** Maximum size of cluster in virtual kilobytes */
+static constexpr unsigned int DEFAULT_CLUSTER_SIZE_LIMIT_KVB{101};
 /** Default for -limitancestorcount, max number of in-mempool ancestors */
 static constexpr unsigned int DEFAULT_ANCESTOR_LIMIT{25};
 /** Default for -limitdescendantcount, max number of in-mempool descendants */

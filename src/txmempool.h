@@ -18,6 +18,7 @@
 #include <policy/packages.h>
 #include <primitives/transaction.h>
 #include <primitives/transaction_identifier.h>
+#include <script/script.h>
 #include <sync.h>
 #include <txgraph.h>
 #include <util/feefrac.h>
@@ -97,6 +98,8 @@ public:
         return a.GetTime() < b.GetTime();
     }
 };
+
+uint160 ScriptHashkey(const CScript& script);
 
 // Multi_index tag names
 struct entry_time {};
@@ -271,6 +274,7 @@ public:
     int64_t GetAncestorCount(const CTxMemPoolEntry &e) const { LOCK(cs); return m_txgraph->GetAncestors(e, TxGraph::Level::MAIN).size(); }
     std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> GetChildren(const CTxMemPoolEntry &entry) const;
     std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> GetParents(const CTxMemPoolEntry &entry) const;
+    SPKStates_t mapUsedSPK;
 
 private:
     std::vector<indexed_transaction_set::const_iterator> GetSortedScoreWithTopology() const EXCLUSIVE_LOCKS_REQUIRED(cs);
@@ -689,11 +693,11 @@ public:
 
         void Apply() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
+        CTxMemPool* m_pool;
+        CTxMemPool::indexed_transaction_set m_to_add;
     private:
         void ProcessDependencies();
 
-        CTxMemPool* m_pool;
-        CTxMemPool::indexed_transaction_set m_to_add;
         std::vector<CTxMemPool::txiter> m_entry_vec; // track the added transactions' insertion order
         // map from the m_to_add index to the ancestors for the transaction
         std::map<CTxMemPool::txiter, CTxMemPool::setEntries, CompareIteratorByHash> m_ancestors;
