@@ -717,6 +717,14 @@ BOOST_AUTO_TEST_CASE(util_GetArg)
     BOOST_CHECK_EQUAL(testArgs.GetArg("pritest4", "default"), "b");
 }
 
+BOOST_AUTO_TEST_CASE(util_ForceSetArgInt64)
+{
+    TestArgsManager args;
+    args.ForceSetArg("-value", int64_t{-123});
+    BOOST_CHECK_EQUAL(args.GetArg("-value", "unset"), "-123");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-value", 0), -123);
+}
+
 BOOST_AUTO_TEST_CASE(util_AddCommand)
 {
     enum TestFail { SUCCESS,
