@@ -24,6 +24,24 @@ class WalletSweepPrivKeysTest(BitcoinTestFramework):
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
 
+    def assert_sweep(self, key, label):
+        node = self.nodes[0]
+        sweep_txid = node.sweepprivkeys({"privkeys": [key.privkey], "label": label})
+        assert_equal(sweep_txid in node.getrawmempool(), True)
+
+        sweep_tx = node.getrawtransaction(sweep_txid, True)
+        assert_equal(len(sweep_tx["vin"]), 1)
+        assert_equal(len(sweep_tx["vout"]), 1)
+        assert_greater_than(sweep_tx["vout"][0]["value"], Decimal("0.999"))
+
+        wallet_tx = node.gettransaction(sweep_txid)
+        receive_details = [detail for detail in wallet_tx["details"] if detail["category"] == "receive"]
+        assert_equal(len(receive_details), 1)
+        assert_equal(receive_details[0]["label"], label)
+        assert_greater_than(receive_details[0]["amount"], Decimal("0.999"))
+
+        return sweep_txid
+
     def run_test(self):
         node = self.nodes[0]
         self.generate(node, COINBASE_MATURITY + 1)
@@ -33,26 +51,22 @@ class WalletSweepPrivKeysTest(BitcoinTestFramework):
         empty_key = get_generate_key()
         assert_raises_rpc_error(-6, "No value to sweep", node.sweepprivkeys, {"privkeys": [empty_key.privkey]})
 
-        self.log.info("Sweep a funded P2PKH key into the local wallet")
-        funded_key = get_generate_key()
-        node.sendtoaddress(funded_key.p2pkh_addr, Decimal("1"))
+        self.log.info("Sweep an unconfirmed P2PKH output from the mempool")
+        mempool_key = get_generate_key()
+        node.sendtoaddress(mempool_key.p2pkh_addr, Decimal("1"))
+        mempool_sweep_txid = self.assert_sweep(mempool_key, "swept from mempool")
         self.generate(node, 1)
+        assert_equal(node.gettransaction(mempool_sweep_txid)["confirmations"], 1)
+        assert_raises_rpc_error(-6, "No value to sweep", node.sweepprivkeys, {"privkeys": [mempool_key.privkey]})
 
-        sweep_txid = node.sweepprivkeys({"privkeys": [funded_key.privkey], "label": "swept"})
-        assert_equal(sweep_txid in node.getrawmempool(), True)
-        sweep_tx = node.getrawtransaction(sweep_txid, True)
-        assert_equal(len(sweep_tx["vin"]), 1)
-        assert_equal(len(sweep_tx["vout"]), 1)
-        assert_greater_than(sweep_tx["vout"][0]["value"], Decimal("0.999"))
-
+        self.log.info("Sweep a confirmed P2PKH output from the UTXO set")
+        confirmed_key = get_generate_key()
+        node.sendtoaddress(confirmed_key.p2pkh_addr, Decimal("1"))
         self.generate(node, 1)
-        wallet_tx = node.gettransaction(sweep_txid)
-        receive_details = [detail for detail in wallet_tx["details"] if detail["category"] == "receive"]
-        assert_equal(len(receive_details), 1)
-        assert_equal(receive_details[0]["label"], "swept")
-        assert_greater_than(receive_details[0]["amount"], Decimal("0.999"))
-
-        assert_raises_rpc_error(-6, "No value to sweep", node.sweepprivkeys, {"privkeys": [funded_key.privkey]})
+        confirmed_sweep_txid = self.assert_sweep(confirmed_key, "swept from chain")
+        self.generate(node, 1)
+        assert_equal(node.gettransaction(confirmed_sweep_txid)["confirmations"], 1)
+        assert_raises_rpc_error(-6, "No value to sweep", node.sweepprivkeys, {"privkeys": [confirmed_key.privkey]})
 
 
 if __name__ == '__main__':
