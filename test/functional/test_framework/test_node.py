@@ -161,7 +161,10 @@ class TestNode():
                 self.args.append(f"-ipcbind=unix:{self.ipc_socket_path}")
 
         if self.version is None:
-            self.args.append("-walletimplicitsegwit")
+            self.args += [
+                "-softwareexpiry=0",
+                "-walletimplicitsegwit",
+            ]
 
         if self.version_is_at_least(190000):
             self.args.append("-logthreadnames")

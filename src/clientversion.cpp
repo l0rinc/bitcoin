@@ -6,9 +6,11 @@
 
 #include <clientversion.h>
 
+#include <common/args.h>
 #include <tinyformat.h>
 #include <util/string.h>
 
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -67,4 +69,13 @@ std::string FormatSubVersion(const std::string& name, int nClientVersion, const 
     std::string comments_str;
     if (!comments.empty()) comments_str = strprintf("(%s)", Join(comments, "; "));
     return strprintf("/%s:%s%s/", name, FormatVersion(nClientVersion), comments_str);
+}
+
+bool IsThisSoftwareExpired(int64_t nTime)
+{
+    int64_t nSoftwareExpiry = gArgs.GetIntArg("-softwareexpiry", DEFAULT_SOFTWARE_EXPIRY);
+    if (nSoftwareExpiry <= 0) {
+        nSoftwareExpiry = std::numeric_limits<int64_t>::max();
+    }
+    return (nTime > nSoftwareExpiry);
 }
