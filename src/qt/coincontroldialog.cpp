@@ -59,6 +59,13 @@ CoinControlDialog::CoinControlDialog(CCoinControl& coin_control, WalletModel* _m
     lockAction = contextMenu->addAction(tr("L&ock unspent"), this, &CoinControlDialog::lockCoin);
     unlockAction = contextMenu->addAction(tr("&Unlock unspent"), this, &CoinControlDialog::unlockCoin);
     connect(ui->treeWidget, &QWidget::customContextMenuRequested, this, &CoinControlDialog::showMenu);
+    connect(ui->treeWidget, &QTreeWidget::itemSelectionChanged, this, &CoinControlDialog::updateLabelSelected);
+    connect(copyAddressAction, &QAction::triggered, this, &CoinControlDialog::copyAddress);
+    connect(copyLabelAction, &QAction::triggered, this, &CoinControlDialog::copyLabel);
+    connect(copyAmountAction, &QAction::triggered, this, &CoinControlDialog::copyAmount);
+    connect(copyTransactionHashAction, &QAction::triggered, this, &CoinControlDialog::copyTransactionHash);
+    connect(lockAction, &QAction::triggered, this, &CoinControlDialog::lockCoin);
+    connect(unlockAction, &QAction::triggered, this, &CoinControlDialog::unlockCoin);
 
     // clipboard actions
     QAction *clipboardQuantityAction = new QAction(tr("Copy quantity"), this);
@@ -134,6 +141,19 @@ CoinControlDialog::~CoinControlDialog()
     settings.setValue("nCoinControlSortOrder", (int)sortOrder);
 
     delete ui;
+}
+
+void CoinControlDialog::setModel(WalletModel *_model)
+{
+    this->model = _model;
+
+    if(_model && _model->getOptionsModel() && _model->getAddressTableModel())
+    {
+        updateView();
+        updateLabelLocked();
+        updateLabelSelected();
+        CoinControlDialog::updateLabels(_model, this);
+    }
 }
 
 // ok button
@@ -366,7 +386,16 @@ void CoinControlDialog::updateLabelLocked()
     else ui->labelLocked->setVisible(false);
 }
 
-void CoinControlDialog::updateLabels(CCoinControl& m_coin_control, WalletModel *model, QDialog* dialog)
+// shows count of selected outputs
+void CoinControlDialog::updateLabelSelected()
+{
+    QList<QTreeWidgetItem *> selected = ui->treeWidget->selectedItems();
+    int count = selected.size();
+    ui->labelSelected->setVisible(count > 0);
+    ui->labelSelected->setText(tr("(%1 selected)").arg(count));
+}
+
+void CoinControlDialog::updateLabels(WalletModel *model, QDialog* dialog)
 {
     if (!model)
         return;
