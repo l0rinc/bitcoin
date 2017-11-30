@@ -17,3 +17,56 @@ ad431ff5d18d1f76b43aef98d9e67019bb9824f2	Enable non-linear network traffic graph
 f9d9a1d1cfd08096aa4f734e8d9134eac80e6e9b	Bugfix: GUI/QRImageWidget: Correctly calculate sizes	2	no	possible	consider	no	applied	
 91d24c84ba4bc929df96ffd46c591ad3a92757bd	Bugfix: GUI/QRImageWidget: If text won't fit, split across multiple lines	1	no	possible	consider	no	applied	
 4c5143d56c98d4f9f961059692f155bbe2248c44	GUI/QRImageWidget: Allow image to grow up to 25% wider to accomidate single-line text	1	no	no	unlikely	no	applied	
+41ff6c343e9d2badad55d8edd755492d86f65d20	Bugfix: Skip tests for tools not being built	2	no	possible	consider	no	applied_manual	
+49287e0ab4ad51d7a40cb9b6990a34a218b58c98	contrib/init: (OpenRC) use -daemonwait to wait for startup completion	1	no	no	unlikely	no	applied	
+89cb2b6d91e927307d2ed8e3bfc8c5739025979d	contrib/init: (OpenRC) use ${SVCNAME} in BITCOIND_PIDFILE default	2	no	no	unlikely	no	applied	
+5e04731447b0290d4a3cf9c6b400508359188629	rpc: add period_start to version bits statistics	2	no	no	unlikely	no	applied	
+33258aef4cb661c7f8bb09f7ee5944b5c30e3ea5	GUI: Alt-P shortcut key for paste button in Open URI dialog	1	no	no	unlikely	no	applied	
+c22bbba96891c03607715dafffdcb609858fb61b	GUI: Peers: When sorting by address, sort by network first	1	no	no	unlikely	no	applied	
+4d5beb29126b7933d48453d330e42bf04483dfe6	gui: avoid unclean exit due to permissions issues when setting start on system startup	1	no	no	unlikely	no	applied	
+f77451c8c11b9d41f5b6fa8659d947b0c99051e7	qt: Fix shortcut ambiguities	1	no	no	unlikely	no	applied	
+5fde8fbe0850218403c54d0cee04ecb2f36d79a0	qt: Add colon to third party URLS data field	1	no	no	unlikely	no	applied	
+b0c8dfaca2ccd8d4f100ad325cebd038f988cc52	rpc: Don't FlushStateToDisk when pruneblockchain(0)	1	no	no	no	no	applied	
+df874f848a42f3bb7a7c4a7afd6431f1007de4a2	net: Ensure CNode.cleanSubVer is always assigned before nVersion	1	no	no	no	no	applied	
+238f042ff2ca377edac61fdb925f266aacf1bd52	Bugfix: GUI: Peers: If subversion is actually blank, show blank	1	no	possible	consider	no	applied	
+35fbd4886e4abde98fd07fa4f89beea8b4efc47b	Bugfix: GUI: Peers: When selecting a new peer, reset fields to N/A before loading data	3	no	possible	consider	no	applied	
+cfe5bbe6ccd4cac703e3a6d28f05b05c562a54e3	Bugfix: GUI: Peers: Peers without any permissions are "None", not "N/A"	2	no	possible	consider	no	applied	
+d8434da3c14ed6723d86ef2cd266008d366e1413	Allow configuring target block time for a signet	4	review	no	consider	no	applied	
+be3ae51ece862fc072d2574c34c808315ebdbff9	rpc: make importaddress compatible with descriptors wallet	7	review	no	consider	no	applied	
+4436094508e7d9c4be81d055eb09a323beca41a8	GUI: Initialise DBus notifications in another thread	2	no	no	unlikely	no	applied	
+e9f3b5ff6de57a7ba1c313a4fb7c6522782ccf38	Bugfix: GUI: When restoring table columns, still set their minimum column width and stretch on last section	2	no	possible	consider	no	applied	
+a3dbdda92248ddfe7e864be7fbc6a898bc85c34b	Revert "qt: Move transactionView properties settings to constructor"	1	no	no	unlikely	no	applied	
+379728eeab1f924b1330c0f7c94e5ac3664df2ac	Revert "qt: Move recentRequestsView properties settings to constructor"	1	no	no	unlikely	no	applied	
+8e428cc1188568aaeeaeb8f1f4498ae5b738a5e2	Revert "qt: Drop buggy TableViewLastColumnResizingFixer class"	6	no	no	unlikely	no	applied	
+2b67ea465c72461eca7d07897b6476f583bf9a19	Bugfix: net_processing: Restore "Already requested" error for FetchBlock	1	no	possible	consider	no	applied	
+d7e08d408c34b9ffbd5475d3c351fdec3087cc5a	QA: rpc_getblockfrompeer: Test that a non-existent peer generates an error, even if we already have the block	1	no	no	unlikely	no	applied	
+017ab85cecc7252bc2dc8e6bc6c7456ecef83389	QA: rpc_getblockfrompeer: Test specific error for trying to fetch from peer twice	1	no	no	unlikely	no	applied	
+610dcbabe4055b9b90ba41cbde08e98146461a1a	GUI: Pass PlatformStyle through ClientModel into PeerTableModel	7	no	no	unlikely	no	applied	
+c592f7cf16919a497165b0555d91ec3f283232be	GUI: Peers: Add direction table column before "Address" with arrow	4	no	no	unlikely	no	applied	
+727a2f83cca477ee812f976dd6bf108674b54eb6	GUI: Make Peers table aware of runtime palette change	3	no	no	unlikely	no	applied	
+656ac00d1e29da2c018628bbc96597c6b34a5d45	GUI: Peers: Update table column widths and labels	2	no	no	unlikely	no	applied	
+89b43dd8d898d070d9a7f809bdd77d4305791e9a	Revert "gui: peersWidget - ResizeToContents Age and IP/Netmask columns"	1	no	no	unlikely	no	applied	
+dc97030bfc997471de9af75382ef96d8d55e187c	wallet: allow external_signer flag toggle	3	no	no	unlikely	no	applied	
+6925c383d30b8112bf464c30170c9834ede4089f	Wallet/RPC: setwalletflag: Warn about wallet reload required to toggle external signer flag	1	no	no	no	no	applied	
+3ad197c5c692450a30fedec5e4d432ea00da73c1	Restore ability to display addresses in GUI	5	no	no	unlikely	no	applied	
+8070c3feb75b11068ca928f8fd55969dcbb40f39	rpc: Add min_conf option to fundrawtransaction and walletcreatefundedpsbt [as deprecated]	1	no	no	no	no	applied	
+af7c9d152aa27e0925f592cf823052a9e4538946	qa: Test fundrawtransaction and walletcreatefundedpsbt with min_conf	2	no	no	unlikely	no	applied	
+a16d1512f468de18ec1a856eddc4a41ceff5c705	RPC/Wallet: Check for negative min_conf in FundTransaction	1	no	no	no	no	applied	
+5ed6ea5f315f90d01edb4b3dbec06ab87ac11f4a	RPC: Backward compatibility with Knots 0.19-0.21.0 validateaddress (address_type param and error_index output)	2	no	no	unlikely	no	applied	
+ef1c43e51dfc6493ccbfcd0637f130750a41c6f0	RPC/blockchain: Add getblockfrompeer nodeid alias for backward compatibility	2	no	no	no	no	applied	
+42b25bbd9397b8b2fe16f8f2e70547a04543eb16	fix: unnecessary continuation after finding mutation	1	review	no	consider	no	applied	
+48c91aabdb8a4128aab71b0c3766b91975d14ac8	validateaddress: Strictly check value of deprecated address_type parameter	2	no	no	unlikely	no	applied	
+7115f632a26b0875628e7a3382d7846d5d98b568	RPC/output_script: validateaddress: Correct error code for erroneous deprecated address_type value	2	no	no	unlikely	no	applied	
+70dcdd7aa7f9093c6faac84760db8ccc95090209	Wallet: Avoid using change types newer than user's preferred address type	3	no	no	unlikely	no	applied	
+1128a6bfffc7676e11f0a367a6558721ec1fb45e	Refactor: GUI: Make `modernize-use-default-member-init` happy with `columnResizingFixer`	2	no	no	unlikely	no	applied	
+c2612273ef0b3ef127ba03c87f2a3303f0b9d299	RPC: Support specifying different types for param aliases	2	no	no	no	no	applied	
+2fcf74eb45bab8d9215d079f652923c4cdf656a6	RPC/Net: Allow addconnection on non-regtest networks	1	no	no	no	no	applied	
+577c04c80e2da144145f822f101648e7e59fb9d5	Bugfix: util: Correctly handle Number value types in GetArg/GetBoolArg	2	no	possible	consider	no	applied	
+9b9b8a52fda60ae15abba600f196b6c36fec8a10	util: Add a ForceSetArgV that can handle non-strings	2	no	no	no	no	applied	
+ba16f9c966615752a6137796442e6eaac1ed57ee	interfaces/chain: Provide a way to ask the user a question during init	2	no	no	no	no	applied	
+afb41baa06cc9c8997ca5a4b3e4d8b85f432d346	Bugfix: GUI: Allow the user to start anyway when loading a wallet errors	1	no	possible	consider	no	applied	
+ae1ddc9f1d442aea6b766467fdae1a4c29c9b2cc	scripted-diff: test: rename `strCmd` to `command`	2	no	no	no	no	applied	
+f1e300838a8423eb9f496cb234b44fe062b7a7c3	Support multiple -*notify commands	4	no	no	no	no	applied	
+c0a914fc7d31512015aad83c9874cb5d6f6c373a	init: Optimise -startupnotify slightly	1	no	no	no	no	applied	
+e5160731d27d111a40334c864818fc35356a2103	RPC/Wallet: Convert walletprocesspsbt to use options parameter	4	no	no	unlikely	no	applied	
+e4acb761d42cbd658f9ddc4d5d3eabdb5ecd4650	dumpmasterprivkey command	3	no	no	unlikely	no	applied	

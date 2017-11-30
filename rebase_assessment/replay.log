@@ -112,3 +112,339 @@ hint: You can instead skip this commit with "git cherry-pick --skip".
 hint: To abort and get back to the state before "git cherry-pick",
 hint: run "git cherry-pick --abort".
 hint: Disable this message with "git config set advice.mergeConflict false"
+[knots-replayed-on-origin-master 34d8c209d8] Bugfix: Skip tests for tools not being built
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Sep 18 16:54:48 2021 +0000
+ 5 files changed, 1656 insertions(+)
+ create mode 100644 rebase_assessment/commit_assessments.tsv
+ create mode 100644 rebase_assessment/commit_queue.txt
+ create mode 100644 rebase_assessment/replay.log
+ create mode 100755 test/util/test_runner.py
+Auto-merging contrib/init/bitcoind.openrc
+[knots-replayed-on-origin-master 18a6422187] contrib/init: (OpenRC) use -daemonwait to wait for startup completion
+ Author: Matt Whitlock <bitcoin@mattwhitlock.name>
+ Date: Fri Jan 14 03:10:26 2022 -0500
+ 1 file changed, 33 insertions(+), 15 deletions(-)
+Auto-merging contrib/init/bitcoind.openrc
+[knots-replayed-on-origin-master 652713f664] contrib/init: (OpenRC) use ${SVCNAME} in BITCOIND_PIDFILE default
+ Author: Matt Whitlock <bitcoin@mattwhitlock.name>
+ Date: Fri Jan 14 03:21:29 2022 -0500
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+Auto-merging src/rpc/blockchain.cpp
+Auto-merging test/functional/rpc_blockchain.py
+[knots-replayed-on-origin-master a9b3ca146d] rpc: add period_start to version bits statistics
+ Author: Sjors Provoost <sjors@sprovoost.nl>
+ Date: Fri May 21 17:46:20 2021 +0200
+ 2 files changed, 11 insertions(+), 6 deletions(-)
+[knots-replayed-on-origin-master 9295b39f95] GUI: Alt-P shortcut key for paste button in Open URI dialog
+ Author: Emil Engler <me@emilengler.com>
+ Date: Fri May 29 11:07:15 2020 +0200
+ 1 file changed, 3 insertions(+)
+Auto-merging src/qt/peertablesortproxy.cpp
+[knots-replayed-on-origin-master 7c2e0957ea] GUI: Peers: When sorting by address, sort by network first
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Oct 8 04:12:19 2021 +0000
+ 1 file changed, 3 insertions(+)
+Auto-merging src/qt/guiutil.cpp
+[knots-replayed-on-origin-master 91a20c8397] gui: avoid unclean exit due to permissions issues when setting start on system startup
+ Author: mruddy <6440430+mruddy@users.noreply.github.com>
+ Date: Wed Apr 27 08:32:42 2022 -0400
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+Auto-merging src/qt/forms/optionsdialog.ui
+[knots-replayed-on-origin-master a8737067c3] qt: Fix shortcut ambiguities
+ Author: shaavan <shaavan.github@gmail.com>
+ Date: Thu Jul 21 23:17:44 2022 +0530
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+Auto-merging src/qt/forms/optionsdialog.ui
+[knots-replayed-on-origin-master 6a9d15d314] qt: Add colon to third party URLS data field
+ Author: shaavan <shaavan.github@gmail.com>
+ Date: Sat Aug 13 20:40:40 2022 +0530
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging src/rpc/blockchain.cpp
+[knots-replayed-on-origin-master b64293c94d] rpc: Don't FlushStateToDisk when pruneblockchain(0)
+ Author: MarcoFalke <falke.marco@gmail.com>
+ Date: Thu Jan 12 03:32:11 2017 +0100
+ 1 file changed, 4 insertions(+)
+Auto-merging src/net_processing.cpp
+[knots-replayed-on-origin-master d795d51d7c] net: Ensure CNode.cleanSubVer is always assigned before nVersion
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Nov 4 21:25:51 2022 +0000
+ 1 file changed, 21 insertions(+), 13 deletions(-)
+Auto-merging src/qt/rpcconsole.cpp
+[knots-replayed-on-origin-master e135e5d663] Bugfix: GUI: Peers: If subversion is actually blank, show blank
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Nov 4 21:27:24 2022 +0000
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+Auto-merging src/qt/forms/debugwindow.ui
+Auto-merging src/qt/rpcconsole.cpp
+Auto-merging src/qt/rpcconsole.h
+[knots-replayed-on-origin-master c661b90e22] Bugfix: GUI: Peers: When selecting a new peer, reset fields to N/A before loading data
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Nov 4 21:48:57 2022 +0000
+ 3 files changed, 16 insertions(+), 2 deletions(-)
+Auto-merging src/qt/rpcconsole.cpp
+Auto-merging src/qt/rpcconsole.h
+[knots-replayed-on-origin-master fa268636f3] Bugfix: GUI: Peers: Peers without any permissions are "None", not "N/A"
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Nov 4 21:49:42 2022 +0000
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+Auto-merging src/chainparams.cpp
+Auto-merging src/chainparamsbase.cpp
+Auto-merging src/kernel/chainparams.cpp
+Auto-merging src/kernel/chainparams.h
+[knots-replayed-on-origin-master 9ef73dd949] Allow configuring target block time for a signet
+ Author: benthecarman <benthecarman@live.com>
+ Date: Mon Apr 10 20:56:45 2023 -0500
+ 4 files changed, 12 insertions(+), 1 deletion(-)
+Auto-merging src/script/descriptor.cpp
+Auto-merging src/script/descriptor.h
+Auto-merging src/wallet/rpc/backup.cpp
+Auto-merging test/functional/test_framework/test_node.py
+Auto-merging test/functional/wallet_basic.py
+Auto-merging test/functional/wallet_descriptor.py
+Auto-merging test/functional/wallet_labels.py
+[knots-replayed-on-origin-master 1dcb0e6877] rpc: make importaddress compatible with descriptors wallet
+ Author: furszy <matiasfurszyfer@protonmail.com>
+ Date: Fri Feb 3 10:17:19 2023 -0300
+ 7 files changed, 572 insertions(+), 28 deletions(-)
+Auto-merging src/qt/notificator.cpp
+Auto-merging src/qt/notificator.h
+[knots-replayed-on-origin-master 18d929f750] GUI: Initialise DBus notifications in another thread
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Mon Dec 14 20:37:00 2020 +0000
+ 2 files changed, 42 insertions(+), 9 deletions(-)
+Auto-merging src/qt/receivecoinsdialog.cpp
+Auto-merging src/qt/transactionview.cpp
+[knots-replayed-on-origin-master 5758827543] Bugfix: GUI: When restoring table columns, still set their minimum column width and stretch on last section
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Jun 24 02:18:42 2021 +0000
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+Auto-merging src/qt/transactionview.cpp
+[knots-replayed-on-origin-master 2e13329d72] Revert "qt: Move transactionView properties settings to constructor"
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Sep 6 03:22:50 2022 +0000
+ 1 file changed, 18 insertions(+), 16 deletions(-)
+Auto-merging src/qt/receivecoinsdialog.cpp
+[knots-replayed-on-origin-master 0297c1bb6b] Revert "qt: Move recentRequestsView properties settings to constructor"
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Sep 6 07:16:21 2022 +0000
+ 1 file changed, 15 insertions(+), 15 deletions(-)
+Auto-merging src/qt/guiutil.cpp
+Auto-merging src/qt/guiutil.h
+Auto-merging src/qt/receivecoinsdialog.cpp
+Auto-merging src/qt/receivecoinsdialog.h
+Auto-merging src/qt/transactionview.cpp
+Auto-merging src/qt/transactionview.h
+[knots-replayed-on-origin-master 500e6fc992] Revert "qt: Drop buggy TableViewLastColumnResizingFixer class"
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Sep 6 07:17:48 2022 +0000
+ 6 files changed, 182 insertions(+), 4 deletions(-)
+Auto-merging src/net_processing.cpp
+[knots-replayed-on-origin-master 0946c66e3a] Bugfix: net_processing: Restore "Already requested" error for FetchBlock
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sun Jul 9 01:05:30 2023 +0000
+ 1 file changed, 19 insertions(+), 3 deletions(-)
+Auto-merging test/functional/rpc_getblockfrompeer.py
+[knots-replayed-on-origin-master 16982bec98] QA: rpc_getblockfrompeer: Test that a non-existent peer generates an error, even if we already have the block
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Mon Nov 22 02:21:49 2021 +0000
+ 1 file changed, 3 insertions(+)
+Auto-merging test/functional/rpc_getblockfrompeer.py
+[knots-replayed-on-origin-master 75ebcabf8e] QA: rpc_getblockfrompeer: Test specific error for trying to fetch from peer twice
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sun Jul 9 00:41:44 2023 +0000
+ 1 file changed, 8 insertions(+)
+Auto-merging src/qt/bitcoin.cpp
+Auto-merging src/qt/clientmodel.cpp
+Auto-merging src/qt/clientmodel.h
+Auto-merging src/qt/peertablemodel.cpp
+Auto-merging src/qt/peertablemodel.h
+Auto-merging src/qt/test/addressbooktests.cpp
+Auto-merging src/qt/test/wallettests.cpp
+[knots-replayed-on-origin-master c4b664057c] GUI: Pass PlatformStyle through ClientModel into PeerTableModel
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Mon Jan 18 16:13:22 2021 +0000
+ 7 files changed, 17 insertions(+), 18 deletions(-)
+Auto-merging src/qt/peertablemodel.cpp
+Auto-merging src/qt/peertablemodel.h
+Auto-merging src/qt/rpcconsole.cpp
+Auto-merging src/qt/rpcconsole.h
+[knots-replayed-on-origin-master 3bdea02532] GUI: Peers: Add direction table column before "Address" with arrow
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sun Jan 17 17:40:22 2021 +0000
+ 4 files changed, 113 insertions(+), 10 deletions(-)
+Auto-merging src/qt/peertablemodel.cpp
+Auto-merging src/qt/peertablemodel.h
+Auto-merging src/qt/rpcconsole.cpp
+[knots-replayed-on-origin-master 5bf0e9fa3b] GUI: Make Peers table aware of runtime palette change
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Mon Jun 21 23:53:00 2021 +0000
+ 3 files changed, 18 insertions(+)
+Auto-merging src/qt/peertablemodel.h
+Auto-merging src/qt/rpcconsole.cpp
+[knots-replayed-on-origin-master 2ee22c8e20] GUI: Peers: Update table column widths and labels
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sun Jan 17 17:41:24 2021 +0000
+ 2 files changed, 11 insertions(+), 2 deletions(-)
+Auto-merging src/qt/rpcconsole.cpp
+[knots-replayed-on-origin-master 07e6448050] Revert "gui: peersWidget - ResizeToContents Age and IP/Netmask columns"
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed Nov 30 03:46:49 2022 +0000
+ 1 file changed, 2 deletions(-)
+Auto-merging src/wallet/rpc/wallet.cpp
+Auto-merging src/wallet/wallet.h
+Auto-merging test/functional/wallet_signer.py
+[knots-replayed-on-origin-master 5f667cb469] wallet: allow external_signer flag toggle
+ Author: Sjors Provoost <sjors@sprovoost.nl>
+ Date: Wed May 12 11:49:47 2021 +0200
+ 3 files changed, 21 insertions(+), 1 deletion(-)
+Auto-merging src/wallet/rpc/wallet.cpp
+[knots-replayed-on-origin-master cf4269fc36] Wallet/RPC: setwalletflag: Warn about wallet reload required to toggle external signer flag
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed Jul 19 22:29:50 2023 +0000
+ 1 file changed, 1 insertion(+)
+Auto-merging src/qt/forms/optionsdialog.ui
+Auto-merging src/qt/optionsdialog.cpp
+Auto-merging src/qt/optionsmodel.cpp
+Auto-merging src/qt/optionsmodel.h
+Auto-merging src/qt/transactiontablemodel.cpp
+[knots-replayed-on-origin-master 685baccf74] Restore ability to display addresses in GUI
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Mar 6 15:10:25 2015 +0000
+ 5 files changed, 25 insertions(+), 1 deletion(-)
+Auto-merging src/wallet/rpc/spend.cpp
+[knots-replayed-on-origin-master f51e9cefef] rpc: Add min_conf option to fundrawtransaction and walletcreatefundedpsbt [as deprecated]
+ Author: João Barbosa <joao.paulo.barbosa@gmail.com>
+ Date: Fri Nov 2 14:18:15 2018 +0000
+ 1 file changed, 43 insertions(+), 34 deletions(-)
+Auto-merging test/functional/rpc_psbt.py
+Auto-merging test/functional/wallet_fundrawtransaction.py
+[knots-replayed-on-origin-master bc889755bb] qa: Test fundrawtransaction and walletcreatefundedpsbt with min_conf
+ Author: João Barbosa <joao.paulo.barbosa@gmail.com>
+ Date: Tue Dec 4 16:12:07 2018 +0000
+ 2 files changed, 12 insertions(+), 1 deletion(-)
+Auto-merging src/wallet/rpc/spend.cpp
+[knots-replayed-on-origin-master 464dd7b274] RPC/Wallet: Check for negative min_conf in FundTransaction
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Jun 9 16:59:44 2022 +0000
+ 1 file changed, 5 insertions(+)
+Auto-merging src/rpc/output_script.cpp
+Auto-merging test/functional/rpc_invalid_address_message.py
+[knots-replayed-on-origin-master 7c71fdaecc] RPC: Backward compatibility with Knots 0.19-0.21.0 validateaddress (address_type param and error_index output)
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Jun 26 18:13:04 2021 +0000
+ 2 files changed, 10 insertions(+)
+Auto-merging src/rpc/blockchain.cpp
+Auto-merging src/rpc/client.cpp
+[knots-replayed-on-origin-master 70f4037cc3] RPC/blockchain: Add getblockfrompeer nodeid alias for backward compatibility
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu May 19 23:04:00 2022 +0000
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+Auto-merging src/consensus/merkle.cpp
+[knots-replayed-on-origin-master 6822014d7a] fix: unnecessary continuation after finding mutation
+ Author: Kratos <52678073+Xnork@users.noreply.github.com>
+ Date: Fri Sep 8 00:09:19 2023 -0300
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+Auto-merging src/rpc/output_script.cpp
+Auto-merging test/functional/rpc_invalid_address_message.py
+[knots-replayed-on-origin-master c079f072b7] validateaddress: Strictly check value of deprecated address_type parameter
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue May 10 00:52:07 2022 +0000
+ 2 files changed, 14 insertions(+), 1 deletion(-)
+Auto-merging src/rpc/output_script.cpp
+Auto-merging test/functional/rpc_invalid_address_message.py
+[knots-replayed-on-origin-master 7d2acd47e4] RPC/output_script: validateaddress: Correct error code for erroneous deprecated address_type value
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Sep 29 16:10:39 2023 +0000
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+Auto-merging src/wallet/test/util.cpp
+Auto-merging src/wallet/wallet.cpp
+Auto-merging test/functional/wallet_taproot.py
+[knots-replayed-on-origin-master d2c279a2df] Wallet: Avoid using change types newer than user's preferred address type
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed May 18 02:10:52 2022 +0000
+ 3 files changed, 15 insertions(+), 1 deletion(-)
+Auto-merging src/qt/receivecoinsdialog.cpp
+Auto-merging src/qt/receivecoinsdialog.h
+[knots-replayed-on-origin-master 91d28b850b] Refactor: GUI: Make `modernize-use-default-member-init` happy with `columnResizingFixer`
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Oct 10 01:55:29 2023 +0000
+ 2 files changed, 1 insertion(+), 2 deletions(-)
+Auto-merging src/rpc/util.cpp
+Auto-merging src/rpc/util.h
+[knots-replayed-on-origin-master fd1aac451a] RPC: Support specifying different types for param aliases
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Jul 29 03:54:17 2021 +0000
+ 2 files changed, 35 insertions(+), 7 deletions(-)
+Auto-merging src/rpc/net.cpp
+[knots-replayed-on-origin-master 209f3809a9] RPC/Net: Allow addconnection on non-regtest networks
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Jun 26 16:02:33 2021 +0000
+ 1 file changed, 4 deletions(-)
+Auto-merging src/common/args.cpp
+Auto-merging src/test/getarg_tests.cpp
+[knots-replayed-on-origin-master fd63de0dee] Bugfix: util: Correctly handle Number value types in GetArg/GetBoolArg
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed Mar 9 16:59:50 2022 +0000
+ 2 files changed, 21 insertions(+), 9 deletions(-)
+Auto-merging src/common/args.cpp
+Auto-merging src/common/args.h
+[knots-replayed-on-origin-master 831f03fb57] util: Add a ForceSetArgV that can handle non-strings
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Jan 4 18:48:28 2022 +0000
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+Auto-merging src/interfaces/chain.h
+Auto-merging src/node/interfaces.cpp
+[knots-replayed-on-origin-master 99cd979e05] interfaces/chain: Provide a way to ask the user a question during init
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed Mar 3 01:03:32 2021 +0000
+ 2 files changed, 6 insertions(+)
+Auto-merging src/wallet/load.cpp
+[knots-replayed-on-origin-master d64605445f] Bugfix: GUI: Allow the user to start anyway when loading a wallet errors
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed Mar 3 01:04:01 2021 +0000
+ 1 file changed, 28 insertions(+), 4 deletions(-)
+Auto-merging src/node/kernel_notifications.cpp
+Auto-merging src/wallet/wallet.cpp
+[knots-replayed-on-origin-master fcb03ca216] scripted-diff: test: rename `strCmd` to `command`
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed Dec 27 20:17:57 2023 +0000
+ 2 files changed, 13 insertions(+), 13 deletions(-)
+Auto-merging src/init.cpp
+Auto-merging src/node/kernel_notifications.cpp
+Auto-merging src/wallet/wallet.cpp
+Auto-merging src/wallet/wallet.h
+[knots-replayed-on-origin-master 6a5d17f3c7] Support multiple -*notify commands
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Dec 17 18:49:40 2021 +0000
+ 4 files changed, 147 insertions(+), 35 deletions(-)
+Auto-merging src/init.cpp
+[knots-replayed-on-origin-master 22246be05e] init: Optimise -startupnotify slightly
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Oct 10 01:45:03 2023 +0000
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging src/rpc/client.cpp
+Auto-merging src/wallet/rpc/spend.cpp
+Auto-merging test/functional/rpc_help.py
+Auto-merging test/functional/rpc_psbt.py
+[knots-replayed-on-origin-master 4d7489e41c] RPC/Wallet: Convert walletprocesspsbt to use options parameter
+ Author: Andrew Chow <achow101-github@achow101.com>
+ Date: Tue Jul 20 21:24:56 2021 -0400
+ 4 files changed, 67 insertions(+), 20 deletions(-)
+Auto-merging src/wallet/rpc/backup.cpp
+Auto-merging src/wallet/rpc/wallet.cpp
+Auto-merging test/functional/wallet_hd.py
+[knots-replayed-on-origin-master a758b12909] dumpmasterprivkey command
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Nov 21 03:34:14 2020 +0000
+ 3 files changed, 892 insertions(+), 1 deletion(-)
+Auto-merging src/wallet/rpc/backup.cpp
+CONFLICT (modify/delete): test/functional/wallet_dump.py deleted in HEAD and modified in 2504a07906 (Bugfix: RPC/Wallet: dumpwallet should include hdkeypath metadata outside of comment).  Version 2504a07906 (Bugfix: RPC/Wallet: dumpwallet should include hdkeypath metadata outside of comment) of test/functional/wallet_dump.py left in tree.
+error: could not apply 2504a07906... Bugfix: RPC/Wallet: dumpwallet should include hdkeypath metadata outside of comment
+hint: After resolving the conflicts, mark them with
+hint: "git add/rm <pathspec>", then run
+hint: "git cherry-pick --continue".
+hint: You can instead skip this commit with "git cherry-pick --skip".
+hint: To abort and get back to the state before "git cherry-pick",
+hint: run "git cherry-pick --abort".
+hint: Disable this message with "git config set advice.mergeConflict false"
