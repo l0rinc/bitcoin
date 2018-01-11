@@ -160,6 +160,9 @@ class TestNode():
                 self.ipc_socket_path = Path(self.ipc_tmp_dir.name) / "node.sock"
                 self.args.append(f"-ipcbind=unix:{self.ipc_socket_path}")
 
+        if self.version is None:
+            self.args.append("-walletimplicitsegwit")
+
         if self.version_is_at_least(190000):
             self.args.append("-logthreadnames")
         if self.version_is_at_least(219900):

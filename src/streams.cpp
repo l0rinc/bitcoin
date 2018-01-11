@@ -104,7 +104,7 @@ void AutoFile::write(std::span<const std::byte> src)
     } else {
         std::array<std::byte, 4096> buf;
         while (src.size()) {
-            auto buf_now{Span{buf}.first(std::min<size_t>(src.size(), buf.size()))};
+            auto buf_now{std::span{buf}.first(std::min<size_t>(src.size(), buf.size()))};
             std::copy_n(src.begin(), buf_now.size(), buf_now.begin());
             write_buffer(buf_now);
             src = src.subspan(buf_now.size());
@@ -115,13 +115,14 @@ void AutoFile::write(std::span<const std::byte> src)
 void AutoFile::write_buffer(std::span<std::byte> src)
 {
     if (!m_file) throw std::ios_base::failure("AutoFile::write_buffer: file handle is nullptr");
-    if (m_xor.size()) {
+    if (m_obfuscation) {
         if (!m_position) throw std::ios_base::failure("AutoFile::write_buffer: obfuscation position unknown");
-        util::Xor(src, m_xor, *m_position); // obfuscate in-place
+        m_obfuscation(src, *m_position); // obfuscate in-place
     }
     if (std::fwrite(src.data(), 1, src.size(), m_file) != src.size()) {
         throw std::ios_base::failure("AutoFile::write_buffer: write failed");
     }
+    m_was_written = true;
     if (m_position) *m_position += src.size();
 }
 

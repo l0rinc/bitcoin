@@ -9,7 +9,9 @@
 #include <serialize.h>
 #include <span.h>
 #include <support/allocators/zeroafterfree.h>
-#include <util/fs_helpers.h>
+#include <util/check.h>
+#include <util/log.h>
+#include <util/obfuscation.h>
 #include <util/overflow.h>
 #include <util/syserror.h>
 
@@ -466,11 +468,6 @@ public:
     /** Wrapper around TruncateFile(). */
     bool Truncate(unsigned size);
 
-    void AdviseSequential()
-    {
-        ::AdviseSequential(m_file);
-    }
-
     //! Write a mutable buffer more efficiently than write(), obfuscating the buffer in-place.
     void write_buffer(std::span<std::byte> src);
 
@@ -559,17 +556,6 @@ public:
     {
         if (nRewindIn >= nBufSize)
             throw std::ios_base::failure("Rewind limit must be less than buffer size");
-        m_src.AdviseSequential();
-    }
-
-    ~BufferedFile() { fclose(); }
-
-    int fclose()
-    {
-        if (auto rel{m_src.release()}) {
-            return CloseAndUncache(rel);
-        }
-        return m_src.fclose();
     }
 
     //! check whether we're at the end of the source file
@@ -674,7 +660,7 @@ public:
         requires std::is_rvalue_reference_v<S&&>
         : m_src{stream}, m_buf(size), m_buf_pos{size} {}
 
-    void read(Span<std::byte> dst)
+    void read(std::span<std::byte> dst)
     {
         if (const auto available{std::min(dst.size(), m_buf.size() - m_buf_pos)}) {
             std::copy_n(m_buf.begin() + m_buf_pos, available, dst.begin());

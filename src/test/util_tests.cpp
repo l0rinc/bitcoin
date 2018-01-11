@@ -1573,6 +1573,55 @@ BOOST_AUTO_TEST_CASE(message_sign)
     // TODO: BECH32M
 }
 
+BOOST_AUTO_TEST_CASE(outputtype_implicit_segwit)
+{
+    const std::array<unsigned char, 32> privkey_bytes{
+        0xD9, 0x7F, 0x51, 0x08, 0xF1, 0x1C, 0xDA, 0x6E,
+        0xEE, 0xBA, 0xAA, 0x42, 0x0F, 0xEF, 0x07, 0x26,
+        0xB1, 0xF8, 0x98, 0x06, 0x0B, 0x98, 0x48, 0x9F,
+        0xA3, 0x09, 0x84, 0x63, 0xC0, 0x03, 0x28, 0x66};
+
+    struct ImplicitSegwitRestorer {
+        bool saved;
+        ~ImplicitSegwitRestorer() { g_implicit_segwit = saved; }
+    } restorer{g_implicit_segwit};
+
+    CKey key;
+    key.Set(privkey_bytes.begin(), privkey_bytes.end(), true);
+    BOOST_REQUIRE(key.IsValid());
+    const CPubKey pubkey{key.GetPubKey()};
+
+    const CScript witprog{GetScriptForDestination(WitnessV0KeyHash(pubkey))};
+
+    g_implicit_segwit = true;
+    auto implicit_dests{GetAllDestinationsForKey(pubkey)};
+    BOOST_REQUIRE_EQUAL(implicit_dests.size(), 3U);
+    BOOST_CHECK_EQUAL(EncodeDestination(implicit_dests[0]), "15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs");
+    BOOST_CHECK_EQUAL(EncodeDestination(implicit_dests[1]), "35uijJkf4rcCnGzEZsn12YJenTHToDKpr2");
+    BOOST_CHECK_EQUAL(EncodeDestination(implicit_dests[2]), "bc1q9cy7s7nmzah0m6mt2ftmu6x723esjxqkkl4wsw");
+
+    FillableSigningProvider implicit_provider;
+    BOOST_REQUIRE(implicit_provider.AddKeyPubKey(key, pubkey));
+    CScript stored_script;
+    BOOST_CHECK(implicit_provider.GetCScript(CScriptID(witprog), stored_script));
+    BOOST_CHECK(stored_script == witprog);
+
+    g_implicit_segwit = false;
+    auto explicit_dests{GetAllDestinationsForKey(pubkey)};
+    BOOST_REQUIRE_EQUAL(explicit_dests.size(), 1U);
+    BOOST_CHECK_EQUAL(EncodeDestination(explicit_dests[0]), "15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs");
+
+    FillableSigningProvider explicit_provider;
+    BOOST_REQUIRE(explicit_provider.AddKeyPubKey(key, pubkey));
+    BOOST_CHECK(!explicit_provider.GetCScript(CScriptID(witprog), stored_script));
+
+    CKey uncompressed_key;
+    uncompressed_key.Set(privkey_bytes.begin(), privkey_bytes.end(), false);
+    BOOST_REQUIRE(uncompressed_key.IsValid());
+    g_implicit_segwit = true;
+    BOOST_CHECK_EQUAL(GetAllDestinationsForKey(uncompressed_key.GetPubKey()).size(), 1U);
+}
+
 BOOST_AUTO_TEST_CASE(message_verify)
 {
     BOOST_CHECK_EQUAL(
