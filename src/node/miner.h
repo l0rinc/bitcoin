@@ -47,6 +47,8 @@ struct CBlockTemplate
     std::vector<CAmount> vTxFees;
     // Sigops per transaction, not including coinbase transaction (unlike CBlock::vtx).
     std::vector<int64_t> vTxSigOpsCost;
+    // Coin-age priorities per transaction, not including coinbase transaction.
+    std::vector<double> vTxPriorities;
     /* A vector of package fee rates, ordered by the sequence in which
      * packages are selected for inclusion in the block template.*/
     std::vector<FeePerVSize> m_package_feerates;
@@ -104,7 +106,7 @@ private:
     /** Clear the block's state and prepare for assembling a new block */
     void resetBlock();
     /** Add a tx to the block */
-    void AddToBlock(const CTxMemPoolEntry& entry);
+    void AddToBlock(const CTxMemPool& mempool, const CTxMemPoolEntry& entry) EXCLUSIVE_LOCKS_REQUIRED(mempool.cs);
 
     // Methods for how to add transactions to a block.
     /** Add high coin-age-priority transactions before chunk feerate selection. */

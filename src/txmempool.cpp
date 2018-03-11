@@ -694,10 +694,6 @@ void CTxMemPool::FindScriptPubKey(const std::set<CScript>& needles, std::map<COu
     }
 }
 
-static TxMempoolInfo GetInfo(CTxMemPool::indexed_transaction_set::const_iterator it) {
-    return TxMempoolInfo{it->GetSharedTx(), it->GetTime(), it->GetFee(), it->GetTxSize(), it->GetModifiedFee() - it->GetFee()};
-}
-
 std::vector<CTxMemPoolEntryRef> CTxMemPool::entryAll() const
 {
     AssertLockHeld(cs);
@@ -749,41 +745,44 @@ CTransactionRef CTxMemPool::get(const Wtxid& hash) const
     return it->GetSharedTx();
 }
 
-void CTxMemPool::PrioritiseTransaction(const Txid& hash, const CAmount& nFeeDelta)
+void CTxMemPool::PrioritiseTransaction(const Txid& hash, double dPriorityDelta, const CAmount& nFeeDelta)
 {
     {
         LOCK(cs);
-        CAmount &delta = mapDeltas[hash];
-        delta = SaturatingAdd(delta, nFeeDelta);
+        auto& deltas{mapDeltas[hash]};
+        deltas.first += dPriorityDelta;
+        deltas.second = SaturatingAdd(deltas.second, nFeeDelta);
         txiter it = mapTx.find(hash);
         if (it != mapTx.end()) {
-            // PrioritiseTransaction calls stack on previous ones. Set the new
-            // transaction fee to be current modified fee + feedelta.
-            it->UpdateModifiedFee(nFeeDelta);
-            m_txgraph->SetTransactionFee(*it, it->GetModifiedFee());
-            ++nTransactionsUpdated;
+            if (nFeeDelta != 0) {
+                mapTx.modify(it, [&nFeeDelta](CTxMemPoolEntry& e) { e.UpdateModifiedFee(nFeeDelta); });
+                m_txgraph->SetTransactionFee(*it, it->GetModifiedFee());
+            }
+            if (dPriorityDelta != 0.0 || nFeeDelta != 0) ++nTransactionsUpdated;
         }
-        if (delta == 0) {
+        if (deltas.first == 0. && deltas.second == 0) {
             mapDeltas.erase(hash);
             LogInfo("PrioritiseTransaction: %s (%sin mempool) delta cleared\n", hash.ToString(), it == mapTx.end() ? "not " : "");
         } else {
-            LogInfo("PrioritiseTransaction: %s (%sin mempool) fee += %s, new delta=%s\n",
+            LogInfo("PrioritiseTransaction: %s (%sin mempool) priority += %f, fee += %s, new delta=%s\n",
                       hash.ToString(),
                       it == mapTx.end() ? "not " : "",
+                      dPriorityDelta,
                       FormatMoney(nFeeDelta),
-                      FormatMoney(delta));
+                      FormatMoney(deltas.second));
         }
     }
 }
 
-void CTxMemPool::ApplyDelta(const Txid& hash, CAmount &nFeeDelta) const
+void CTxMemPool::ApplyDeltas(const Txid& hash, double &dPriorityDelta, CAmount &nFeeDelta) const
 {
     AssertLockHeld(cs);
-    std::map<Txid, CAmount>::const_iterator pos = mapDeltas.find(hash);
+    const auto pos{mapDeltas.find(hash)};
     if (pos == mapDeltas.end())
         return;
-    const CAmount &delta = pos->second;
-    nFeeDelta += delta;
+    const auto& deltas{pos->second};
+    dPriorityDelta += deltas.first;
+    nFeeDelta += deltas.second;
 }
 
 void CTxMemPool::ClearPrioritisation(const Txid& hash)
@@ -803,7 +802,7 @@ std::vector<CTxMemPool::delta_info> CTxMemPool::GetPrioritisedTransactions() con
         const bool in_mempool{iter != mapTx.end()};
         std::optional<CAmount> modified_fee;
         if (in_mempool) modified_fee = iter->GetModifiedFee();
-        result.emplace_back(delta_info{in_mempool, delta, modified_fee, txid});
+        result.emplace_back(delta_info{in_mempool, delta.first, delta.second, modified_fee, txid});
     }
     return result;
 }
@@ -1136,8 +1135,9 @@ CTxMemPool::ChangeSet::TxHandle CTxMemPool::ChangeSet::StageAddition(const CTran
     m_dependencies_processed = false;
 
     auto newit = m_to_add.emplace(tx, fee, time, entry_priority, entry_height, entry_sequence, in_chain_input_value, spends_coinbase, sigops_cost, lp).first;
+    double priority_delta{0.};
     CAmount delta{0};
-    m_pool->ApplyDelta(tx->GetHash(), delta);
+    m_pool->ApplyDeltas(tx->GetHash(), priority_delta, delta);
 
     FeePerWeight feerate(fee, GetSigOpsAdjustedWeight(GetTransactionWeight(*tx), sigops_cost, ::nBytesPerSigOp));
     m_pool->m_txgraph->AddTransaction(const_cast<CTxMemPoolEntry&>(*newit), feerate);

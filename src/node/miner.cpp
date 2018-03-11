@@ -280,7 +280,7 @@ bool BlockAssembler::TestChunkTransactions(const std::vector<CTxMemPoolEntryRef>
     return true;
 }
 
-void BlockAssembler::AddToBlock(const CTxMemPoolEntry& entry)
+void BlockAssembler::AddToBlock(const CTxMemPool& mempool, const CTxMemPoolEntry& entry)
 {
     pblocktemplate->block.vtx.emplace_back(entry.GetSharedTx());
     pblocktemplate->vTxFees.push_back(entry.GetFee());
@@ -294,11 +294,16 @@ void BlockAssembler::AddToBlock(const CTxMemPoolEntry& entry)
     nFees += entry.GetFee();
     m_in_block.insert(entry.GetTx().GetHash());
 
+    double priority{entry.GetPriority(nHeight)};
+    CAmount dummy_fee_delta{0};
+    mempool.ApplyDeltas(entry.GetTx().GetHash(), priority, dummy_fee_delta);
+    pblocktemplate->vTxPriorities.push_back(priority);
+
     if (*m_options.print_modified_fee) {
         LogInfo("priority %.1f fee rate %s txid %s\n",
-                  entry.GetPriority(nHeight),
-                  CFeeRate(entry.GetModifiedFee(), entry.GetTxSize()).ToString(),
-                  entry.GetTx().GetHash().ToString());
+                priority,
+                CFeeRate(entry.GetModifiedFee(), entry.GetTxSize()).ToString(),
+                entry.GetTx().GetHash().ToString());
     }
 }
 
@@ -335,14 +340,21 @@ void BlockAssembler::addPriorityTxs(const CTxMemPool& mempool)
         *m_options.block_max_size)};
     if (priority_size == 0) return;
 
+    auto priority_with_delta{[this, &mempool](const CTxMemPoolEntry& entry) {
+        double priority{entry.GetPriority(nHeight)};
+        CAmount dummy_fee_delta{0};
+        mempool.ApplyDeltas(entry.GetTx().GetHash(), priority, dummy_fee_delta);
+        return priority;
+    }};
+
     std::vector<CTxMemPool::txiter> priority_entries;
     priority_entries.reserve(mempool.mapTx.size());
     for (auto it{mempool.mapTx.begin()}; it != mempool.mapTx.end(); ++it) {
         priority_entries.push_back(it);
     }
-    std::sort(priority_entries.begin(), priority_entries.end(), [this](CTxMemPool::txiter a, CTxMemPool::txiter b) {
-        const double a_priority{a->GetPriority(nHeight)};
-        const double b_priority{b->GetPriority(nHeight)};
+    std::sort(priority_entries.begin(), priority_entries.end(), [&priority_with_delta](CTxMemPool::txiter a, CTxMemPool::txiter b) {
+        const double a_priority{priority_with_delta(*a)};
+        const double b_priority{priority_with_delta(*b)};
         if (a_priority != b_priority) return a_priority > b_priority;
         if (a->GetModifiedFee() != b->GetModifiedFee()) return a->GetModifiedFee() > b->GetModifiedFee();
         return a->GetTx().GetHash() < b->GetTx().GetHash();
@@ -351,7 +363,7 @@ void BlockAssembler::addPriorityTxs(const CTxMemPool& mempool)
     uint64_t priority_block_size{nBlockSize};
     for (CTxMemPool::txiter it : priority_entries) {
         const CTxMemPoolEntry& entry{*it};
-        const double priority{entry.GetPriority(nHeight)};
+        const double priority{priority_with_delta(entry)};
         if (priority <= MINIMUM_TX_PRIORITY) break;
         if (m_in_block.contains(entry.GetTx().GetHash())) continue;
         if (HasUnconfirmedParentsNotInBlock(mempool, entry)) continue;
@@ -360,7 +372,7 @@ void BlockAssembler::addPriorityTxs(const CTxMemPool& mempool)
         if (priority_block_size + tx_size >= *m_options.block_max_size) continue;
         if (!TestPriorityTransaction(entry)) continue;
 
-        AddToBlock(entry);
+        AddToBlock(mempool, entry);
         priority_block_size += tx_size;
         if (priority_block_size >= priority_size) break;
     }
@@ -436,7 +448,7 @@ void BlockAssembler::addChunks()
             // This chunk will fit, so add it to the block.
             nConsecutiveFailed = 0;
             for (const auto& tx : selected_transactions) {
-                AddToBlock(tx);
+                AddToBlock(*m_mempool, tx.get());
             }
             pblocktemplate->m_package_feerates.emplace_back(chunk_feerate_vsize);
         }

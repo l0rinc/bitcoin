@@ -8,7 +8,10 @@ from decimal import Decimal
 
 from test_framework.blocktools import NORMAL_GBT_REQUEST_PARAMS
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.util import assert_greater_than
+from test_framework.util import (
+    assert_equal,
+    assert_greater_than,
+)
 from test_framework.wallet import MiniWallet
 
 
@@ -25,7 +28,10 @@ class MiningCoinAgePriorityTest(BitcoinTestFramework):
         self.supports_cli = False
 
     def template_txids(self):
-        return [tx["txid"] for tx in self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)["transactions"]]
+        return [tx["txid"] for tx in self.block_template()["transactions"]]
+
+    def block_template(self):
+        return self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
 
     def run_test(self):
         node = self.nodes[0]
@@ -52,6 +58,25 @@ class MiningCoinAgePriorityTest(BitcoinTestFramework):
         )
 
         self.log.info("Coin-age priority area mines the older zero-fee spend first")
+        txids = self.template_txids()
+        assert txids.index(old_free_tx["txid"]) < txids.index(recent_fee_tx["txid"])
+
+        self.log.info("Priority deltas adjust coin-age priority mining order")
+        priority_delta = 10**12
+        node.prioritisetransaction(txid=recent_fee_tx["txid"], priority_delta=priority_delta)
+        prioritised = node.getprioritisedtransactions()[recent_fee_tx["txid"]]
+        assert_equal(prioritised["priority_delta"], priority_delta)
+        assert_equal(prioritised["fee_delta"], 0)
+        assert_equal(prioritised["in_mempool"], True)
+
+        template = self.block_template()
+        txids = [tx["txid"] for tx in template["transactions"]]
+        assert txids.index(recent_fee_tx["txid"]) < txids.index(old_free_tx["txid"])
+        template_entry = {tx["txid"]: tx for tx in template["transactions"]}
+        assert_greater_than(template_entry[recent_fee_tx["txid"]]["priority"], template_entry[old_free_tx["txid"]]["priority"])
+
+        node.prioritisetransaction(txid=recent_fee_tx["txid"], priority_delta=-priority_delta)
+        assert_equal(node.getprioritisedtransactions(), {})
         txids = self.template_txids()
         assert txids.index(old_free_tx["txid"]) < txids.index(recent_fee_tx["txid"])
 

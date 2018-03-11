@@ -2659,7 +2659,7 @@ static RPCMethod sweepprivkeys()
     pwallet->SetAddressBook(dest, label, wallet::AddressPurpose::RECEIVE);
 
     std::string err_string;
-    const node::TransactionError err{BroadcastTransaction(node, final_tx, err_string, pwallet->m_default_max_tx_fee, /*relay=*/true, /*wait_callback=*/true)};
+    const node::TransactionError err{BroadcastTransaction(node, final_tx, err_string, pwallet->m_default_max_tx_fee, node::TxBroadcast::MEMPOOL_AND_BROADCAST_TO_ALL, /*wait_callback=*/true)};
     if (err != node::TransactionError::OK) {
         pwallet->DelAddressBook(dest);
         throw JSONRPCTransactionError(err, err_string);

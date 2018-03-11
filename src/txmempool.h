@@ -307,7 +307,7 @@ private:
 
 public:
     indirectmap<COutPoint, txiter> mapNextTx GUARDED_BY(cs);
-    std::map<Txid, CAmount> mapDeltas GUARDED_BY(cs);
+    std::map<Txid, std::pair<double, CAmount>> mapDeltas GUARDED_BY(cs);
 
     using Options = kernel::MemPoolOptions;
 
@@ -363,15 +363,18 @@ public:
     void UpdateDynamicDustFeerate();
 
     /** Affect CreateNewBlock prioritisation of transactions */
-    void PrioritiseTransaction(const Txid& hash, const CAmount& nFeeDelta);
-    void ApplyDelta(const Txid& hash, CAmount &nFeeDelta) const EXCLUSIVE_LOCKS_REQUIRED(cs);
+    void PrioritiseTransaction(const Txid& hash, double dPriorityDelta, const CAmount& nFeeDelta);
+    void PrioritiseTransaction(const Txid& hash, const CAmount& nFeeDelta) { PrioritiseTransaction(hash, 0., nFeeDelta); }
+    void ApplyDeltas(const Txid& hash, double &dPriorityDelta, CAmount &nFeeDelta) const EXCLUSIVE_LOCKS_REQUIRED(cs);
     void ClearPrioritisation(const Txid& hash) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     struct delta_info {
         /** Whether this transaction is in the mempool. */
         const bool in_mempool;
+        /** The priority delta added using PrioritiseTransaction(). */
+        const double priority_delta;
         /** The fee delta added using PrioritiseTransaction(). */
-        const CAmount delta;
+        const CAmount fee_delta;
         /** The modified fee (base fee + delta) of this entry. Only present if in_mempool=true. */
         std::optional<CAmount> modified_fee;
         /** The prioritised transaction's txid. */

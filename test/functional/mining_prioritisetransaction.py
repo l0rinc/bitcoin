@@ -33,8 +33,9 @@ class PrioritiseTransactionTest(BitcoinTestFramework):
 
     def clear_prioritisation(self, node):
         for txid, info in node.getprioritisedtransactions().items():
-            delta = info["fee_delta"]
-            node.prioritisetransaction(txid, 0, -delta)
+            priority_delta = info.get("priority_delta", 0)
+            fee_delta = info["fee_delta"]
+            node.prioritisetransaction(txid, -priority_delta, -fee_delta)
         assert_equal(node.getprioritisedtransactions(), {})
 
     def test_large_fee_bump(self):
@@ -205,8 +206,6 @@ class PrioritiseTransactionTest(BitcoinTestFramework):
 
         # Test `prioritisetransaction` required parameters
         assert_raises_rpc_error(-1, "prioritisetransaction", self.nodes[0].prioritisetransaction)
-        assert_raises_rpc_error(-1, "prioritisetransaction", self.nodes[0].prioritisetransaction, '')
-        assert_raises_rpc_error(-1, "prioritisetransaction", self.nodes[0].prioritisetransaction, '', 0)
 
         # Test `prioritisetransaction` invalid extra parameters
         assert_raises_rpc_error(-1, "prioritisetransaction", self.nodes[0].prioritisetransaction, '', 0, 0, 0)
@@ -219,10 +218,9 @@ class PrioritiseTransactionTest(BitcoinTestFramework):
         assert_raises_rpc_error(-8, "txid must be of length 64 (not 3, for 'foo')", self.nodes[0].prioritisetransaction, txid='foo', fee_delta=0)
         assert_raises_rpc_error(-8, "txid must be hexadecimal string (not 'Zd1d4e24ed99057e84c3f80fd8fbec79ed9e1acee37da269356ecea000000000')", self.nodes[0].prioritisetransaction, txid='Zd1d4e24ed99057e84c3f80fd8fbec79ed9e1acee37da269356ecea000000000', fee_delta=0)
 
-        # Test `prioritisetransaction` invalid `dummy`
+        # Test `prioritisetransaction` invalid `priority_delta`
         txid = '1d1d4e24ed99057e84c3f80fd8fbec79ed9e1acee37da269356ecea000000000'
         assert_raises_rpc_error(-3, "JSON value of type string is not of expected type number", self.nodes[0].prioritisetransaction, txid, 'foo', 0)
-        assert_raises_rpc_error(-8, "Priority is no longer supported, dummy argument to prioritisetransaction must be 0.", self.nodes[0].prioritisetransaction, txid, 1, 0)
 
         # Test `prioritisetransaction` invalid `fee_delta`
         assert_raises_rpc_error(-3, "JSON value of type string is not of expected type number", self.nodes[0].prioritisetransaction, txid=txid, fee_delta='foo')

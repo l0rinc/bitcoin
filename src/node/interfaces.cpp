@@ -600,7 +600,7 @@ public:
     CBlockLocator getTipLocator() override
     {
         LOCK(::cs_main);
-        return chainman().ActiveChain().GetLocator();
+        return GetLocator(chainman().ActiveChain().Tip());
     }
     CBlockLocator getActiveChainLocator(const uint256& block_hash) override
     {
@@ -819,7 +819,7 @@ public:
     void initWarning(const bilingual_str& message) override { InitWarning(message); }
     void initError(const bilingual_str& message) override { InitError(message); }
     bool initQuestion(const bilingual_str& message, const bilingual_str& non_interactive_message, const bilingual_str& caption, unsigned int style) override {
-        return uiInterface.ThreadSafeQuestion(message, non_interactive_message.translated, caption.translated, style);
+        return uiInterface.ThreadSafeQuestion(message, non_interactive_message.translated, style);
     }
     void showProgress(const std::string& title, int progress, bool resume_possible) override
     {
@@ -941,6 +941,11 @@ public:
     const std::vector<int64_t>& getTxSigops() const override
     {
         return m_block_template->vTxSigOpsCost;
+    }
+
+    const std::vector<double>& getTxCoinAgePriorities() const override
+    {
+        return m_block_template->vTxPriorities;
     }
 
     const node::CoinbaseTx& getCoinbaseTx() const override

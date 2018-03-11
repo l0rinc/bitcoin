@@ -160,6 +160,61 @@ BOOST_AUTO_TEST_CASE(MempoolUpdateDependentPriorities)
     BOOST_CHECK_EQUAL((*child_entry)->GetPriority(/*currentHeight=*/103), static_cast<double>(input_value) / modified_size);
 }
 
+BOOST_AUTO_TEST_CASE(MempoolPriorityAndFeeDeltas)
+{
+    CMutableTransaction tx;
+    tx.vin.emplace_back(Txid::FromUint256(uint256::ONE), 0);
+    tx.vout.emplace_back(COIN, CScript() << OP_TRUE);
+    const Txid txid{tx.GetHash()};
+
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    TestMemPoolEntryHelper entry;
+    TryAddToMempool(pool, entry.Fee(5000).FromTx(tx));
+
+    const unsigned int transactions_updated{pool.GetTransactionsUpdated()};
+    constexpr double priority_delta{123.5};
+    constexpr CAmount fee_delta{2000};
+    pool.PrioritiseTransaction(txid, priority_delta, fee_delta);
+    BOOST_CHECK_EQUAL(pool.GetTransactionsUpdated(), transactions_updated + 1);
+
+    {
+        LOCK(pool.cs);
+        double applied_priority{0.0};
+        CAmount applied_fee{0};
+        pool.ApplyDeltas(txid, applied_priority, applied_fee);
+        BOOST_CHECK_EQUAL(applied_priority, priority_delta);
+        BOOST_CHECK_EQUAL(applied_fee, fee_delta);
+
+        const auto iter{pool.GetIter(txid)};
+        BOOST_REQUIRE(iter);
+        BOOST_CHECK_EQUAL((*iter)->GetModifiedFee(), 7000);
+    }
+
+    const auto prioritised{pool.GetPrioritisedTransactions()};
+    BOOST_REQUIRE_EQUAL(prioritised.size(), 1);
+    BOOST_CHECK(prioritised.front().in_mempool);
+    BOOST_CHECK_EQUAL(prioritised.front().priority_delta, priority_delta);
+    BOOST_CHECK_EQUAL(prioritised.front().fee_delta, fee_delta);
+    BOOST_REQUIRE(prioritised.front().modified_fee);
+    BOOST_CHECK_EQUAL(*prioritised.front().modified_fee, 7000);
+    BOOST_CHECK(prioritised.front().txid == txid);
+
+    pool.PrioritiseTransaction(txid, -priority_delta, -fee_delta);
+    BOOST_CHECK(pool.GetPrioritisedTransactions().empty());
+    {
+        LOCK(pool.cs);
+        double applied_priority{0.0};
+        CAmount applied_fee{0};
+        pool.ApplyDeltas(txid, applied_priority, applied_fee);
+        BOOST_CHECK_EQUAL(applied_priority, 0.0);
+        BOOST_CHECK_EQUAL(applied_fee, 0);
+
+        const auto iter{pool.GetIter(txid)};
+        BOOST_REQUIRE(iter);
+        BOOST_CHECK_EQUAL((*iter)->GetModifiedFee(), 5000);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
 {
     // Test CTxMemPool::remove functionality
