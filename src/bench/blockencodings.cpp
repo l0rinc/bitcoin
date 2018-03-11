@@ -30,7 +30,9 @@
 static void AddTx(const CTransactionRef& tx, const CAmount& fee, CTxMemPool& pool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, pool.cs)
 {
     LockPoints lp;
-    TryAddToMempool(pool, CTxMemPoolEntry(tx, fee, /*time=*/0, /*entry_height=*/1, /*entry_sequence=*/0, /*spends_coinbase=*/false, /*sigops_cost=*/4, lp));
+    TryAddToMempool(pool, CTxMemPoolEntry(tx, fee, /*time=*/0, /*entry_priority=*/0.0, /*entry_height=*/1,
+                                          /*entry_sequence=*/0, /*in_chain_input_value=*/0,
+                                          /*spends_coinbase=*/false, /*sigops_cost=*/4, lp));
 }
 
 namespace {

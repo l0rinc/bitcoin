@@ -28,6 +28,10 @@ struct MemPoolOptions;
 
 /** Default for -blockmaxsize, which controls the maximum serialized size of block the mining code will create. */
 static constexpr unsigned int DEFAULT_BLOCK_MAX_SIZE{MAX_BLOCK_SERIALIZED_SIZE};
+/** Default for -blockprioritysize, maximum space for zero/low-fee transactions **/
+static constexpr unsigned int DEFAULT_BLOCK_PRIORITY_SIZE{100000};
+/** Minimum priority for transactions to be accepted into the priority area **/
+static constexpr double MINIMUM_TX_PRIORITY{COIN * 144.0 / 250.0};
 /** Default for -blockmaxweight, which controls the range of block weights the mining code will create **/
 static constexpr unsigned int DEFAULT_BLOCK_MAX_WEIGHT{MAX_BLOCK_WEIGHT};
 /** Default for BlockCreateOptions.block_reserved_size **/
@@ -199,9 +203,15 @@ bool IsWitnessStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs,
 bool SpendsNonAnchorWitnessProg(const CTransaction& tx, const CCoinsViewCache& prevouts);
 
 /** Compute the virtual transaction size (weight reinterpreted as bytes). */
+int64_t GetSigOpsAdjustedWeight(int64_t weight, int64_t sigop_cost, unsigned int bytes_per_sigop);
 int64_t GetVirtualTransactionSize(int64_t nWeight, int64_t nSigOpCost, unsigned int bytes_per_sigop);
 int64_t GetVirtualTransactionSize(const CTransaction& tx, int64_t nSigOpCost, unsigned int bytes_per_sigop);
 int64_t GetVirtualTransactionInputSize(const CTxIn& tx, int64_t nSigOpCost, unsigned int bytes_per_sigop);
+
+static inline FeePerVSize ToFeePerVSize(FeePerWeight feerate)
+{
+    return {feerate.fee, (feerate.size + WITNESS_SCALE_FACTOR - 1) / WITNESS_SCALE_FACTOR};
+}
 
 static inline int64_t GetVirtualTransactionSize(const CTransaction& tx)
 {

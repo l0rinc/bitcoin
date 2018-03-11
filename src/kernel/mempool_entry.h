@@ -8,6 +8,7 @@
 #include <consensus/amount.h>
 #include <consensus/validation.h>
 #include <core_memusage.h>
+#include <policy/coin_age_priority.h>
 #include <policy/policy.h>
 #include <policy/settings.h>
 #include <primitives/transaction.h>
@@ -15,6 +16,8 @@
 #include <util/overflow.h>
 #include <util/time.h>
 
+#include <cassert>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -86,16 +89,22 @@ private:
     const size_t nUsageSize;        //!< ... and total memory usage
     const int64_t nTime;            //!< Local time when entering the mempool
     const uint64_t entry_sequence;  //!< Sequence number used to determine whether this transaction is too recent for relay
+    const double entryPriority;     //!< Priority when entering the mempool
     const unsigned int entryHeight; //!< Chain height when entering the mempool
+    double cachedPriority;          //!< Last calculated priority
+    unsigned int cachedHeight;      //!< Height at which priority was last calculated
+    CAmount inChainInputValue;      //!< Sum of all txin values that are already in blockchain
     const bool spendsCoinbase;      //!< keep track of transactions that spend a coinbase
     const int64_t sigOpCost;        //!< Total sigop cost
+    const size_t nModSize;          //!< Cached modified size for priority
     mutable CAmount m_modified_fee; //!< Used for determining the priority of the transaction for mining in a block
     mutable LockPoints lockPoints;  //!< Track the height and time at which tx was final
 
 public:
     virtual ~CTxMemPoolEntry() = default;
     CTxMemPoolEntry(const CTransactionRef& tx, CAmount fee,
-                    int64_t time, unsigned int entry_height, uint64_t entry_sequence,
+                    int64_t time, double entry_priority, unsigned int entry_height, uint64_t entry_sequence,
+                    CAmount in_chain_input_value,
                     bool spends_coinbase,
                     int64_t sigops_cost, LockPoints lp)
         : tx{tx},
@@ -104,11 +113,20 @@ public:
           nUsageSize{RecursiveDynamicUsage(tx)},
           nTime{time},
           entry_sequence{entry_sequence},
+          entryPriority{entry_priority},
           entryHeight{entry_height},
+          cachedPriority{entry_priority},
+          // Since entries arrive *after* the tip's height, their entry priority is for the height+1
+          cachedHeight{entry_height + 1},
+          inChainInputValue{in_chain_input_value},
           spendsCoinbase{spends_coinbase},
           sigOpCost{sigops_cost},
+          nModSize{CalculateModifiedSize(*tx, GetTxSize())},
           m_modified_fee{nFee},
-          lockPoints{lp} {}
+          lockPoints{lp} {
+            CAmount nValueIn = tx->GetValueOut() + nFee;
+            assert(inChainInputValue <= nValueIn);
+        }
 
     CTxMemPoolEntry& operator=(const CTxMemPoolEntry&) = delete;
     CTxMemPoolEntry(CTxMemPoolEntry&&) = default;
@@ -116,6 +134,18 @@ public:
 
     const CTransaction& GetTx() const { return *this->tx; }
     CTransactionRef GetSharedTx() const { return this->tx; }
+    double GetStartingPriority() const {return entryPriority; }
+    std::pair<double, CAmount> GetInternalCoinAgePriorityCache() const { return {cachedPriority, inChainInputValue}; }
+    /**
+     * Fast calculation of priority as update from cached value, but only valid if
+     * currentHeight is greater than last height it was recalculated.
+     */
+    double GetPriority(unsigned int currentHeight) const;
+    /**
+     * Recalculate the cached priority as of currentHeight and adjust inChainInputValue by
+     * valueInCurrentBlock which represents input that was just added to or removed from the blockchain.
+     */
+    void UpdateCachedPriority(unsigned int currentHeight, CAmount valueInCurrentBlock);
     const CAmount& GetFee() const { return nFee; }
     int32_t GetTxSize() const
     {

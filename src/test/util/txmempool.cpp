@@ -38,7 +38,9 @@ CTxMemPoolEntry TestMemPoolEntryHelper::FromTx(const CMutableTransaction& tx) co
 
 CTxMemPoolEntry TestMemPoolEntryHelper::FromTx(const CTransactionRef& tx) const
 {
-    return CTxMemPoolEntry{tx, nFee, TicksSinceEpoch<std::chrono::seconds>(time), nHeight, m_sequence, spendsCoinbase, sigOpCost, lp};
+    const double dPriority = 0;
+    const CAmount inChainValue = 0;
+    return CTxMemPoolEntry{tx, nFee, TicksSinceEpoch<std::chrono::seconds>(time), dPriority, nHeight, m_sequence, inChainValue, spendsCoinbase, sigOpCost, lp};
 }
 
 std::optional<std::string> CheckPackageMempoolAcceptResult(const Package& txns,
@@ -214,10 +216,12 @@ void CheckMempoolTRUCInvariants(const CTxMemPool& tx_pool)
 
 void TryAddToMempool(CTxMemPool& tx_pool, const CTxMemPoolEntry& entry)
 {
+    const auto entry_coin_age_priority_info = entry.GetInternalCoinAgePriorityCache();
     LOCK2(cs_main, tx_pool.cs);
     auto changeset = tx_pool.GetChangeSet();
     changeset->StageAddition(entry.GetSharedTx(), entry.GetFee(),
-            entry.GetTime().count(), entry.GetHeight(), entry.GetSequence(),
+            entry.GetTime().count(), /*entry_priority=*/entry_coin_age_priority_info.first, entry.GetHeight(), entry.GetSequence(),
+            /*in_chain_input_value=*/entry_coin_age_priority_info.second,
             entry.GetSpendsCoinbase(), entry.GetSigOpCost(), entry.GetLockPoints());
     if (changeset->CheckMemPoolPolicyLimits()) changeset->Apply();
 }
@@ -249,7 +253,8 @@ void MockMempoolMinFee(const CFeeRate& target_feerate, CTxMemPool& mempool)
     {
         auto changeset = mempool.GetChangeSet();
         changeset->StageAddition(tx, /*fee=*/tx_fee,
-                /*time=*/0, /*entry_height=*/1, /*entry_sequence=*/0,
+                /*time=*/0, /*entry_priority=*/0.0, /*entry_height=*/1, /*entry_sequence=*/0,
+                /*in_chain_input_value=*/0,
                 /*spends_coinbase=*/true, /*sigops_cost=*/1, lp);
         changeset->Apply();
     }

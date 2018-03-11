@@ -4,6 +4,7 @@
 
 #include <common/system.h>
 #include <node/mempool_args.h>
+#include <policy/coin_age_priority.h>
 #include <policy/policy.h>
 #include <test/util/time.h>
 #include <test/util/txmempool.h>
@@ -89,6 +90,74 @@ BOOST_AUTO_TEST_CASE(MempoolLookupTest)
 
     // Lookup by Wtxid
     BOOST_CHECK(pool.get(CTransaction(tx).GetWitnessHash()));
+}
+
+BOOST_AUTO_TEST_CASE(MempoolCoinAgePriorityCache)
+{
+    constexpr CAmount input_value{10 * COIN};
+
+    CMutableTransaction tx;
+    tx.vin.resize(1);
+    tx.vin[0].scriptSig = CScript() << std::vector<unsigned char>(110, 0);
+    tx.vout.emplace_back(input_value, CScript() << OP_TRUE);
+    const auto tx_ref{MakeTransactionRef(tx)};
+
+    const int64_t sigops_cost{4};
+    const int32_t tx_size{static_cast<int32_t>(GetVirtualTransactionSize(GetTransactionWeight(*tx_ref), sigops_cost, ::nBytesPerSigOp))};
+    const unsigned int modified_size{CalculateModifiedSize(*tx_ref, tx_size)};
+    BOOST_CHECK_LT(modified_size, static_cast<unsigned int>(tx_size));
+
+    const double starting_priority{ComputePriority(*tx_ref, input_value, tx_size)};
+    CTxMemPoolEntry entry{tx_ref, /*fee=*/0, /*time=*/0, starting_priority, /*entry_height=*/100, /*entry_sequence=*/0,
+                          input_value, /*spends_coinbase=*/false, sigops_cost, LockPoints{}};
+
+    BOOST_CHECK_EQUAL(entry.GetStartingPriority(), starting_priority);
+    BOOST_CHECK_EQUAL(entry.GetPriority(/*currentHeight=*/101), starting_priority);
+
+    const double priority_after_two_blocks{starting_priority + (2.0 * input_value) / modified_size};
+    BOOST_CHECK_EQUAL(entry.GetPriority(/*currentHeight=*/103), priority_after_two_blocks);
+
+    entry.UpdateCachedPriority(/*currentHeight=*/103, /*valueInCurrentBlock=*/5 * COIN);
+    BOOST_CHECK_EQUAL(entry.GetPriority(/*currentHeight=*/103), priority_after_two_blocks);
+    BOOST_CHECK_EQUAL(entry.GetInternalCoinAgePriorityCache().second, 15 * COIN);
+    BOOST_CHECK_EQUAL(entry.GetPriority(/*currentHeight=*/104), priority_after_two_blocks + (15.0 * COIN) / modified_size);
+}
+
+BOOST_AUTO_TEST_CASE(MempoolUpdateDependentPriorities)
+{
+    constexpr CAmount input_value{10 * COIN};
+
+    CMutableTransaction parent_tx;
+    parent_tx.vin.resize(1);
+    parent_tx.vin[0].scriptSig = CScript() << OP_1;
+    parent_tx.vout.emplace_back(input_value, CScript() << OP_TRUE);
+
+    CMutableTransaction child_tx;
+    child_tx.vin.resize(1);
+    child_tx.vin[0].prevout = COutPoint{parent_tx.GetHash(), 0};
+    child_tx.vin[0].scriptSig = CScript() << OP_2;
+    child_tx.vout.emplace_back(input_value, CScript() << OP_TRUE);
+    const auto child_tx_ref{MakeTransactionRef(child_tx)};
+    const unsigned int modified_size{CalculateModifiedSize(*child_tx_ref, GetVirtualTransactionSize(*child_tx_ref))};
+
+    CTxMemPool& test_pool{*Assert(m_node.mempool)};
+    TestMemPoolEntryHelper entry;
+    TryAddToMempool(test_pool, entry.Fee(0).FromTx(child_tx));
+
+    LOCK2(::cs_main, test_pool.cs);
+    const auto child_entry{test_pool.GetIter(child_tx.GetHash())};
+    BOOST_REQUIRE(child_entry);
+    BOOST_CHECK_EQUAL((*child_entry)->GetPriority(/*currentHeight=*/102), 0);
+
+    const CTransaction parent{parent_tx};
+    test_pool.UpdateDependentPriorities(parent, /*nBlockHeight=*/101, /*addToChain=*/true);
+    BOOST_CHECK_EQUAL((*child_entry)->GetPriority(/*currentHeight=*/101), 0);
+    BOOST_CHECK_EQUAL((*child_entry)->GetInternalCoinAgePriorityCache().second, input_value);
+    BOOST_CHECK_EQUAL((*child_entry)->GetPriority(/*currentHeight=*/102), static_cast<double>(input_value) / modified_size);
+
+    test_pool.UpdateDependentPriorities(parent, /*nBlockHeight=*/102, /*addToChain=*/false);
+    BOOST_CHECK_EQUAL((*child_entry)->GetInternalCoinAgePriorityCache().second, 0);
+    BOOST_CHECK_EQUAL((*child_entry)->GetPriority(/*currentHeight=*/103), static_cast<double>(input_value) / modified_size);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
@@ -195,7 +264,7 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     tx1.vout.resize(1);
     tx1.vout[0].scriptPubKey = CScript() << OP_1 << OP_EQUAL;
     tx1.vout[0].nValue = 10 * COIN;
-    AddToMempool(pool, entry.Fee(1000LL).FromTx(tx1));
+    TryAddToMempool(pool, entry.Fee(1000LL).FromTx(tx1));
 
     CMutableTransaction tx2 = CMutableTransaction();
     tx2.vin.resize(1);
@@ -203,7 +272,7 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     tx2.vout.resize(1);
     tx2.vout[0].scriptPubKey = CScript() << OP_2 << OP_EQUAL;
     tx2.vout[0].nValue = 10 * COIN;
-    AddToMempool(pool, entry.Fee(500LL).FromTx(tx2));
+    TryAddToMempool(pool, entry.Fee(500LL).FromTx(tx2));
 
     pool.TrimToSize(pool.DynamicMemoryUsage()); // should do nothing
     BOOST_CHECK(pool.exists(tx1.GetHash()));
@@ -221,7 +290,7 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     tx3.vout.resize(1);
     tx3.vout[0].scriptPubKey = CScript() << OP_3 << OP_EQUAL;
     tx3.vout[0].nValue = 10 * COIN;
-    AddToMempool(pool, entry.Fee(2000LL).FromTx(tx3));
+    TryAddToMempool(pool, entry.Fee(2000LL).FromTx(tx3));
 
     pool.TrimToSize(pool.DynamicMemoryUsage() * 3 / 4); // tx3 should pay for tx2 (CPFP)
     BOOST_CHECK(!pool.exists(tx1.GetHash()));
@@ -284,10 +353,10 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     tx7.vout[1].scriptPubKey = CScript() << OP_7 << OP_EQUAL;
     tx7.vout[1].nValue = 10 * COIN;
 
-    AddToMempool(pool, entry.Fee(700LL).FromTx(tx4));
-    AddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
-    AddToMempool(pool, entry.Fee(110LL).FromTx(tx6));
-    AddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
+    TryAddToMempool(pool, entry.Fee(700LL).FromTx(tx4));
+    TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
+    TryAddToMempool(pool, entry.Fee(110LL).FromTx(tx6));
+    TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
 
     // From the topology above, tx7 must be sorted last, so it should
     // definitely evicted first if we must trim. tx4 should definitely remain
@@ -297,9 +366,9 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     BOOST_CHECK(pool.exists(tx4.GetHash()));
     BOOST_CHECK(!pool.exists(tx7.GetHash()));
 
-    if (!pool.exists(GenTxid::Txid(tx5.GetHash())))
-        AddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
-    AddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
+    if (!pool.exists(tx5.GetHash()))
+        TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
+    TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
 
     if (!pool.exists(tx5.GetHash()))
         TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
@@ -307,8 +376,8 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
         TryAddToMempool(pool, entry.Fee(110LL).FromTx(tx6));
     TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
 
-    AddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
-    AddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
+    TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
+    TryAddToMempool(pool, entry.Fee(900LL).FromTx(tx7));
 
     std::vector<CTransactionRef> vtx;
     FakeNodeClock clock{42s};

@@ -118,6 +118,7 @@ void BlockAssembler::resetBlock()
     // These counters do not include coinbase tx
     nBlockTx = 0;
     nFees = 0;
+    m_in_block.clear();
 }
 
 std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
@@ -150,6 +151,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
 
     if (m_mempool) {
         LOCK(m_mempool->cs);
+        addPriorityTxs(*m_mempool);
         m_mempool->StartBlockBuilding();
         addChunks();
         m_mempool->StopBlockBuilding();
@@ -290,11 +292,77 @@ void BlockAssembler::AddToBlock(const CTxMemPoolEntry& entry)
     ++nBlockTx;
     nBlockSigOpsCost += entry.GetSigOpCost();
     nFees += entry.GetFee();
+    m_in_block.insert(entry.GetTx().GetHash());
 
     if (*m_options.print_modified_fee) {
-        LogInfo("fee rate %s txid %s\n",
+        LogInfo("priority %.1f fee rate %s txid %s\n",
+                  entry.GetPriority(nHeight),
                   CFeeRate(entry.GetModifiedFee(), entry.GetTxSize()).ToString(),
                   entry.GetTx().GetHash().ToString());
+    }
+}
+
+bool BlockAssembler::HasUnconfirmedParentsNotInBlock(const CTxMemPool& mempool, const CTxMemPoolEntry& entry) const
+{
+    AssertLockHeld(mempool.cs);
+    for (const auto& parent : mempool.GetParents(entry)) {
+        if (!m_in_block.contains(parent.get().GetTx().GetHash())) return true;
+    }
+    return false;
+}
+
+bool BlockAssembler::TestPriorityTransaction(const CTxMemPoolEntry& entry) const
+{
+    if (!IsFinalTx(entry.GetTx(), nHeight, m_lock_time_cutoff)) return false;
+
+    // block_max_weight and block_max_size have been flattened before block assembly limit checks.
+    Assert(m_options.block_max_weight);
+    Assert(m_options.block_max_size);
+    if (nBlockWeight + entry.GetTxWeight() >= *m_options.block_max_weight) return false;
+    if (nBlockSigOpsCost + entry.GetSigOpCost() >= MAX_BLOCK_SIGOPS_COST) return false;
+    if (nBlockSize + GetSerializeSize(TX_WITH_WITNESS(entry.GetTx())) >= *m_options.block_max_size) return false;
+    return true;
+}
+
+void BlockAssembler::addPriorityTxs(const CTxMemPool& mempool)
+{
+    AssertLockHeld(mempool.cs);
+
+    Assert(m_options.block_max_size);
+    const int64_t priority_size_arg{gArgs.GetIntArg("-blockprioritysize", DEFAULT_BLOCK_PRIORITY_SIZE)};
+    const uint64_t priority_size{std::min<uint64_t>(
+        std::max<int64_t>(0, priority_size_arg),
+        *m_options.block_max_size)};
+    if (priority_size == 0) return;
+
+    std::vector<CTxMemPool::txiter> priority_entries;
+    priority_entries.reserve(mempool.mapTx.size());
+    for (auto it{mempool.mapTx.begin()}; it != mempool.mapTx.end(); ++it) {
+        priority_entries.push_back(it);
+    }
+    std::sort(priority_entries.begin(), priority_entries.end(), [this](CTxMemPool::txiter a, CTxMemPool::txiter b) {
+        const double a_priority{a->GetPriority(nHeight)};
+        const double b_priority{b->GetPriority(nHeight)};
+        if (a_priority != b_priority) return a_priority > b_priority;
+        if (a->GetModifiedFee() != b->GetModifiedFee()) return a->GetModifiedFee() > b->GetModifiedFee();
+        return a->GetTx().GetHash() < b->GetTx().GetHash();
+    });
+
+    uint64_t priority_block_size{nBlockSize};
+    for (CTxMemPool::txiter it : priority_entries) {
+        const CTxMemPoolEntry& entry{*it};
+        const double priority{entry.GetPriority(nHeight)};
+        if (priority <= MINIMUM_TX_PRIORITY) break;
+        if (m_in_block.contains(entry.GetTx().GetHash())) continue;
+        if (HasUnconfirmedParentsNotInBlock(mempool, entry)) continue;
+
+        const uint64_t tx_size{GetSerializeSize(TX_WITH_WITNESS(entry.GetTx()))};
+        if (priority_block_size + tx_size >= *m_options.block_max_size) continue;
+        if (!TestPriorityTransaction(entry)) continue;
+
+        AddToBlock(entry);
+        priority_block_size += tx_size;
+        if (priority_block_size >= priority_size) break;
     }
 }
 
@@ -312,11 +380,31 @@ void BlockAssembler::addChunks()
     selected_transactions.reserve(MAX_CLUSTER_COUNT_LIMIT);
     FeePerWeight chunk_feerate;
 
+    auto filter_selected_transactions = [&]() {
+        selected_transactions.erase(std::remove_if(selected_transactions.begin(), selected_transactions.end(), [&](const auto& tx) {
+            return m_in_block.contains(tx.get().GetTx().GetHash());
+        }), selected_transactions.end());
+
+        FeePerWeight adjusted_feerate;
+        for (const auto& tx : selected_transactions) {
+            adjusted_feerate += FeePerWeight{tx.get().GetModifiedFee(), tx.get().GetAdjustedWeight()};
+        }
+        return adjusted_feerate;
+    };
+
     // This fills selected_transactions
     chunk_feerate = m_mempool->GetBlockBuilderChunk(selected_transactions);
-    FeePerVSize chunk_feerate_vsize = ToFeePerVSize(chunk_feerate);
 
     while (selected_transactions.size() > 0) {
+        chunk_feerate = filter_selected_transactions();
+        if (selected_transactions.empty()) {
+            m_mempool->IncludeBuilderChunk();
+            selected_transactions.clear();
+            chunk_feerate = m_mempool->GetBlockBuilderChunk(selected_transactions);
+            continue;
+        }
+
+        FeePerVSize chunk_feerate_vsize = ToFeePerVSize(chunk_feerate);
         // Check to see if min fee rate is still respected.
         if (ByRatio{chunk_feerate_vsize} < ByRatio{m_options.block_min_fee_rate->GetFeePerVSize()}) {
             // Everything else we might consider has a lower feerate
@@ -355,7 +443,6 @@ void BlockAssembler::addChunks()
 
         selected_transactions.clear();
         chunk_feerate = m_mempool->GetBlockBuilderChunk(selected_transactions);
-        chunk_feerate_vsize = ToFeePerVSize(chunk_feerate);
     }
 }
 

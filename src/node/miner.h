@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -71,6 +72,7 @@ private:
     uint64_t nBlockTx;
     uint64_t nBlockSigOpsCost;
     CAmount nFees;
+    std::set<Txid> m_in_block;
 
     // Chain context for the block
     int nHeight;
@@ -105,11 +107,17 @@ private:
     void AddToBlock(const CTxMemPoolEntry& entry);
 
     // Methods for how to add transactions to a block.
+    /** Add high coin-age-priority transactions before chunk feerate selection. */
+    void addPriorityTxs(const CTxMemPool& mempool) EXCLUSIVE_LOCKS_REQUIRED(mempool.cs);
     /** Add transactions based on chunk feerate
       *
       * @pre BlockAssembler::m_mempool must not be nullptr
     */
     void addChunks() EXCLUSIVE_LOCKS_REQUIRED(m_mempool->cs);
+
+    // helper functions for addPriorityTxs()
+    bool TestPriorityTransaction(const CTxMemPoolEntry& entry) const;
+    bool HasUnconfirmedParentsNotInBlock(const CTxMemPool& mempool, const CTxMemPoolEntry& entry) const EXCLUSIVE_LOCKS_REQUIRED(mempool.cs);
 
     // helper functions for addChunks()
     /** Test if a new chunk would "fit" in the block */

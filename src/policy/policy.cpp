@@ -489,7 +489,7 @@ std::pair<CScript, unsigned int> GetScriptForTransactionInput(CScript prevScript
         return std::make_pair(p2sh ? prevScript : txin.scriptSig, WITNESS_SCALE_FACTOR);
     }
 
-    Span stack{txin.scriptWitness.stack};
+    std::span stack{txin.scriptWitness.stack};
 
     if (witnessversion == 0 && witnessprogram.size() == WITNESS_V0_SCRIPTHASH_SIZE) {
         if (stack.empty()) return std::make_pair(CScript(), 0);  // invalid

@@ -21,6 +21,7 @@ public:
     }
 };
 
-[[nodiscard]] CTxMemPoolEntry ConsumeTxMemPoolEntry(FuzzedDataProvider& fuzzed_data_provider, const CTransaction& tx, uint32_t max_height=std::numeric_limits<uint32_t>::max()) noexcept;
+[[nodiscard]] bool SanityCheckForConsumeTxMemPoolEntry(const CTransaction& tx) noexcept;
+[[nodiscard]] CTxMemPoolEntry ConsumeTxMemPoolEntry(FuzzedDataProvider& fuzzed_data_provider, const CTransaction& tx) noexcept;
 
 #endif // BITCOIN_TEST_FUZZ_UTIL_MEMPOOL_H

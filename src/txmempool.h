@@ -53,8 +53,16 @@ static constexpr std::chrono::minutes DYNAMIC_DUST_FEERATE_UPDATE_INTERVAL{15};
 /** Fake height value used in Coin to signify they are only in the memory pool (since 0.8) */
 static const uint32_t MEMPOOL_HEIGHT = 0x7FFFFFFF;
 
-inline int64_t maxmempoolMinimumBytes(const int64_t descendant_size_vbytes) {
-    return descendant_size_vbytes * 40;
+/** How much linearization cost required for TxGraph clusters to have
+ * "acceptable" quality, if they cannot be optimally linearized with less cost. */
+static constexpr uint64_t ACCEPTABLE_COST = 75'000;
+
+/** How much work we ask TxGraph to do after a mempool change occurs (either
+ * due to a changeset being applied, a new block being found, or a reorg). */
+static constexpr uint64_t POST_CHANGE_COST = 5 * ACCEPTABLE_COST;
+
+inline int64_t maxmempoolMinimumBytes(const int64_t cluster_size_vbytes) {
+    return cluster_size_vbytes * 40;
 }
 
 /**
@@ -345,6 +353,12 @@ public:
      * the tx is not dependent on other mempool transactions to be included in a block.
      */
     bool HasNoInputsOf(const CTransaction& tx) const EXCLUSIVE_LOCKS_REQUIRED(cs);
+    /**
+     * Update all transactions in the mempool which depend on tx to recalculate their priority
+     * and adjust the input value that will age to reflect that the inputs from this transaction have
+     * either just been added to the chain or just been removed.
+     */
+    void UpdateDependentPriorities(const CTransaction &tx, unsigned int nBlockHeight, bool addToChain);
 
     void UpdateDynamicDustFeerate();
 
@@ -654,8 +668,7 @@ public:
 
         using TxHandle = CTxMemPool::txiter;
 
-        TxHandle StageAddition(const CTransactionRef& tx, CAmount fee, int64_t time, unsigned int entry_height, uint64_t entry_sequence, bool spends_coinbase, int64_t sigops_cost, LockPoints lp);
-
+        TxHandle StageAddition(const CTransactionRef& tx, const CAmount fee, int64_t time, double entry_priority, unsigned int entry_height, uint64_t entry_sequence, CAmount in_chain_input_value, bool spends_coinbase, int64_t sigops_cost, LockPoints lp);
         void StageRemoval(CTxMemPool::txiter it);
 
         const CTxMemPool::setEntries& GetRemovals() const { return m_to_remove; }
