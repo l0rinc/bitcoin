@@ -76,6 +76,7 @@ public:
         DatabaseCache,          // int
         ExternalSignerPath,     // QString
         SpendZeroConfChange,    // bool
+        addresstype,            // QString
         Listen,                 // bool
         Server,                 // bool
         EnablePSBTControls,     // bool

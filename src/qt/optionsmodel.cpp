@@ -21,9 +21,14 @@
 #include <node/caches.h>
 #include <node/chainstatemanager_args.h>
 #include <node/context.h>
+#include <outputtype.h>
 #include <util/string.h>
 #include <validation.h>
 #include <wallet/wallet.h>
+
+#ifdef ENABLE_WALLET
+#include <interfaces/wallet.h>
+#endif
 
 #include <QDebug>
 #include <QLatin1Char>
@@ -501,6 +506,11 @@ QVariant OptionsModel::getOption(OptionID option, const std::string& suffix) con
         return QString::fromStdString(SettingToString(setting(), ""));
     case SubFeeFromAmount:
         return m_sub_fee_from_amount;
+    case addresstype:
+    {
+        const OutputType default_address_type = ParseOutputType(gArgs.GetArg("-addresstype", "")).value_or(wallet::DEFAULT_ADDRESS_TYPE);
+        return QString::fromStdString(FormatOutputType(default_address_type));
+    }
 #endif
     case DisplayUnit:
         return QVariant::fromValue(m_display_bitcoin_unit);
@@ -693,6 +703,26 @@ bool OptionsModel::setOption(OptionID option, const QVariant& value, const std::
         m_sub_fee_from_amount = value.toBool();
         settings.setValue("SubFeeFromAmount", m_sub_fee_from_amount);
         break;
+    case addresstype:
+    {
+        const std::string newvalue_str = value.toString().toStdString();
+        const OutputType oldvalue = ParseOutputType(gArgs.GetArg("-addresstype", "")).value_or(wallet::DEFAULT_ADDRESS_TYPE);
+        const OutputType newvalue = ParseOutputType(newvalue_str).value_or(oldvalue);
+        if (newvalue != oldvalue) {
+            gArgs.ModifyRWConfigFile("addresstype", newvalue_str);
+            gArgs.ForceSetArg("-addresstype", newvalue_str);
+            for (auto& wallet_interface : m_node.walletLoader().getWallets()) {
+                wallet::CWallet *wallet;
+                if (wallet_interface && (wallet = wallet_interface->wallet())) {
+                    wallet->m_default_address_type = newvalue;
+                } else {
+                    setRestartRequired(true);
+                    continue;
+                }
+            }
+        }
+        break;
+    }
 #endif
     case DisplayUnit:
         setDisplayUnit(value);
