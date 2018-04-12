@@ -379,7 +379,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "echojson", 9, "arg9" },
     { "rescanblockchain", 0, "start_height"},
     { "rescanblockchain", 1, "stop_height"},
-    { "createwallet", 0, "wallet_name", ParamFormat::STRING },
+    { "setscriptthreadsenabled", 0, "state"},
     { "createwallet", 1, "disable_private_keys"},
     { "createwallet", 2, "blank"},
     { "createwallet", 3, "passphrase", ParamFormat::STRING },

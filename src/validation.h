@@ -1377,9 +1377,7 @@ public:
     //! header in our block-index not known to be invalid, recalculate it.
     void RecalculateBestHeader() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
-    //! Returns how many blocks the best header is ahead of the current tip,
-    //! or nullopt if the best header does not extend the tip.
-    std::optional<int> BlocksAheadOfTip() const LOCKS_EXCLUDED(::cs_main);
+    bool m_script_check_queue_enabled{true};
 
     CCheckQueue<CScriptCheck>& GetCheckQueue() { return m_script_check_queue; }
 
