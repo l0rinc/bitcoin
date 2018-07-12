@@ -4,6 +4,7 @@
 
 #include <dbwrapper.h>
 
+#include <leveldb/c.h>
 #include <leveldb/cache.h>
 #include <leveldb/db.h>
 #include <leveldb/env.h>
@@ -32,6 +33,7 @@
 #include <cstdio>
 #include <memory>
 #include <optional>
+#include <tinyformat.h>
 #include <utility>
 
 static auto CharCast(const std::byte* data) { return reinterpret_cast<const char*>(data); }
@@ -51,6 +53,21 @@ static void HandleError(const leveldb::Status& status)
     LogError("%s", errmsg);
     LogInfo("You can use -debug=leveldb to get more complete diagnostic messages");
     throw dbwrapper_error(errmsg);
+}
+
+util::Result<void> dbwrapper_SanityCheck()
+{
+    unsigned long header_version = (leveldb::kMajorVersion << 16) | leveldb::kMinorVersion;
+    unsigned long library_version = (leveldb_major_version() << 16) | leveldb_minor_version();
+
+    if (header_version != library_version) {
+        return util::Error{Untranslated(strprintf("Compiled with LevelDB %d.%d, but linked with LevelDB %d.%d (incompatible).",
+            leveldb::kMajorVersion, leveldb::kMinorVersion,
+            leveldb_major_version(), leveldb_minor_version()
+        ))};
+    }
+
+    return {};
 }
 
 class CBitcoinLevelDBLogger : public leveldb::Logger {

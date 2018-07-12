@@ -13,6 +13,7 @@
 #include <util/check.h>
 #include <util/fs.h>
 #include <util/obfuscation.h>
+#include <util/result.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -26,6 +27,8 @@
 namespace leveldb {
 class Env;
 } // namespace leveldb
+
+[[nodiscard]] util::Result<void> dbwrapper_SanityCheck();
 
 static const size_t DBWRAPPER_PREALLOC_KEY_SIZE = 64;
 static const size_t DBWRAPPER_PREALLOC_VALUE_SIZE = 1024;
