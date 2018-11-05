@@ -64,6 +64,13 @@ struct BlockCreateOptions {
      */
     std::optional<uint64_t> block_max_weight{};
     /**
+     * Maximum serialized block size, defaults to -blockmaxsize.
+     *
+     * Providing a value causes the block assembler to account for transaction
+     * serialized sizes in addition to weight.
+     */
+    std::optional<uint64_t> block_max_size{};
+    /**
      * The maximum additional sigops which the pool will add in coinbase
      * transaction outputs.
      */

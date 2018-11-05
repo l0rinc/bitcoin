@@ -45,6 +45,16 @@ Result<void> CheckMiningOptions(BlockCreateOptions options, bool use_argnames)
                                             use_argnames ? "-blockmaxweight" : "block_max_weight",
                                             *options.block_max_weight, MAX_BLOCK_WEIGHT))};
     }
+    if (*options.block_max_size < 1000) {
+        return Error{Untranslated(strprintf("%s (%d) is lower than minimum safety value of (%d)",
+                                            use_argnames ? "-blockmaxsize" : "block_max_size",
+                                            *options.block_max_size, 1000))};
+    }
+    if (*options.block_max_size > MAX_BLOCK_SERIALIZED_SIZE) {
+        return Error{Untranslated(strprintf("%s (%d) exceeds consensus maximum block serialized size (%d)",
+                                            use_argnames ? "-blockmaxsize" : "block_max_size",
+                                            *options.block_max_size, MAX_BLOCK_SERIALIZED_SIZE))};
+    }
     if (*options.block_reserved_weight > *options.block_max_weight) {
         return Error{Untranslated(strprintf("%s (%d) exceeds %s (%d)",
                                             use_argnames ? "-blockreservedweight" : "block_reserved_weight",
@@ -72,7 +82,12 @@ Result<BlockCreateOptions> ReadMiningArgs(const ArgsManager& args)
     if (const auto arg{args.GetBoolArg("-printpriority")}) options.print_modified_fee = *arg;
 
     options.block_reserved_weight = args.GetArg<uint64_t>("-blockreservedweight");
+    const bool block_max_weight_set{args.IsArgSet("-blockmaxweight")};
     options.block_max_weight = args.GetArg<uint64_t>("-blockmaxweight");
+    options.block_max_size = args.GetArg<uint64_t>("-blockmaxsize");
+    if (options.block_max_size && !block_max_weight_set && *options.block_max_size <= MAX_BLOCK_SERIALIZED_SIZE) {
+        options.block_max_weight = *options.block_max_size * WITNESS_SCALE_FACTOR;
+    }
 
     if (auto result{CheckMiningOptions(options, /*use_argnames=*/true)}; !result) return Error{util::ErrorString(result)};
     return options;
@@ -83,7 +98,11 @@ BlockCreateOptions FlattenMiningOptions(BlockCreateOptions options)
     if (!options.block_min_fee_rate) options.block_min_fee_rate = CFeeRate{DEFAULT_BLOCK_MIN_TX_FEE};
     if (!options.print_modified_fee) options.print_modified_fee = DEFAULT_PRINT_MODIFIED_FEE;
     if (!options.block_reserved_weight) options.block_reserved_weight = DEFAULT_BLOCK_RESERVED_WEIGHT;
+    if (!options.block_max_weight && options.block_max_size && *options.block_max_size <= MAX_BLOCK_SERIALIZED_SIZE) {
+        options.block_max_weight = *options.block_max_size * WITNESS_SCALE_FACTOR;
+    }
     if (!options.block_max_weight) options.block_max_weight = DEFAULT_BLOCK_MAX_WEIGHT;
+    if (!options.block_max_size) options.block_max_size = DEFAULT_BLOCK_MAX_SIZE;
     return options;
 }
 
@@ -93,6 +112,7 @@ BlockCreateOptions MergeMiningOptions(BlockCreateOptions x, const BlockCreateOpt
     if (!x.print_modified_fee) x.print_modified_fee = y.print_modified_fee;
     if (!x.block_reserved_weight) x.block_reserved_weight = y.block_reserved_weight;
     if (!x.block_max_weight) x.block_max_weight = y.block_max_weight;
+    if (!x.block_max_size) x.block_max_size = y.block_max_size;
     return x;
 }
 

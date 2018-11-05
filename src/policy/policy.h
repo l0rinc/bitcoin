@@ -21,6 +21,8 @@ class CCoinsViewCache;
 class CFeeRate;
 class CScript;
 
+/** Default for -blockmaxsize, which controls the maximum serialized size of block the mining code will create. */
+static constexpr unsigned int DEFAULT_BLOCK_MAX_SIZE{MAX_BLOCK_SERIALIZED_SIZE};
 /** Default for -blockmaxweight, which controls the range of block weights the mining code will create **/
 static constexpr unsigned int DEFAULT_BLOCK_MAX_WEIGHT{MAX_BLOCK_WEIGHT};
 /** Default for -blockreservedweight **/

@@ -55,6 +55,7 @@ using interfaces::BlockTemplate;
 using interfaces::Mining;
 using node::BlockAssembler;
 using node::BlockCreateOptions;
+using node::FlattenMiningOptions;
 
 namespace miner_tests {
 struct MinerTestingSetup : public TestingSetup {
@@ -790,6 +791,32 @@ void MinerTestingSetup::TestPrioritisedMining(const CScript& scriptPubKey, const
 }
 
 // NOTE: These tests rely on CreateNewBlock doing its own self-validation!
+BOOST_AUTO_TEST_CASE(blockmaxsize_mining_options)
+{
+    const auto size_only_options{FlattenMiningOptions({
+        .block_max_size = 10'000,
+    })};
+    BOOST_REQUIRE(size_only_options.block_max_size);
+    BOOST_REQUIRE(size_only_options.block_max_weight);
+    BOOST_CHECK_EQUAL(*size_only_options.block_max_size, 10'000U);
+    BOOST_CHECK_EQUAL(*size_only_options.block_max_weight, 10'000U * WITNESS_SCALE_FACTOR);
+
+    const auto size_and_weight_options{FlattenMiningOptions({
+        .block_max_weight = 50'000,
+        .block_max_size = 10'000,
+    })};
+    BOOST_REQUIRE(size_and_weight_options.block_max_weight);
+    BOOST_CHECK_EQUAL(*size_and_weight_options.block_max_weight, 50'000U);
+
+    auto low_size{node::CheckMiningOptions({.block_max_size = 999}, /*use_argnames=*/false)};
+    BOOST_REQUIRE(!low_size);
+    BOOST_CHECK_EQUAL(util::ErrorString(low_size), "block_max_size (999) is lower than minimum safety value of (1000)");
+
+    auto high_size{node::CheckMiningOptions({.block_max_size = MAX_BLOCK_SERIALIZED_SIZE + 1}, /*use_argnames=*/false)};
+    BOOST_REQUIRE(!high_size);
+    BOOST_CHECK_EQUAL(util::ErrorString(high_size), "block_max_size (4000001) exceeds consensus maximum block serialized size (4000000)");
+}
+
 BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
 {
     auto mining{MakeMining()};

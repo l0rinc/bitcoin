@@ -76,6 +76,7 @@ class MiningTest(BitcoinTestFramework):
         assert_equal(mining_info['blocks'], 200)
         assert_equal(mining_info['currentblocktx'], 0)
         assert_equal(mining_info['currentblockweight'], DEFAULT_BLOCK_RESERVED_WEIGHT)
+        assert 'currentblocksize' not in mining_info
 
         self.log.info('test blockversion')
         self.restart_node(0, extra_args=[f'-mocktime={t}', '-blockversion=1337'])
@@ -289,6 +290,10 @@ class MiningTest(BitcoinTestFramework):
         assert_equal(len(response["transactions"]), expected_tx_count)
         total_weight = sum(transaction["weight"] for transaction in response["transactions"])
         assert_greater_than_or_equal(expected_weight, total_weight)
+        return response
+
+    def get_block_template_accounted_size(self, block_template):
+        return 1000 + sum(len(transaction["data"]) // 2 for transaction in block_template["transactions"])
 
     def test_block_max_weight(self):
         self.log.info("Testing default and custom -blockmaxweight startup options.")
@@ -319,6 +324,17 @@ class MiningTest(BitcoinTestFramework):
             expected_tx_count=LARGE_TXS_COUNT,
             expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT,
         )
+
+        self.log.info("Testing custom -blockmaxsize startup option.")
+        custom_block_size = 10_000
+        self.restart_node(0, extra_args=[f"-blockmaxsize={custom_block_size}"])
+        block_template = self.verify_block_template(
+            expected_tx_count=2,
+            expected_weight=custom_block_size * WITNESS_SCALE_FACTOR - DEFAULT_BLOCK_RESERVED_WEIGHT,
+        )
+        accounted_size = self.get_block_template_accounted_size(block_template)
+        assert_greater_than_or_equal(custom_block_size, accounted_size)
+        assert_equal(self.nodes[0].getmininginfo()["currentblocksize"], accounted_size)
 
         # Test block template creation with custom -blockmaxweight
         custom_block_weight = MAX_BLOCK_WEIGHT - 2000
@@ -399,6 +415,7 @@ class MiningTest(BitcoinTestFramework):
         assert_equal(mining_info['chain'], self.chain)
         assert 'currentblocktx' not in mining_info
         assert 'currentblockweight' not in mining_info
+        assert 'currentblocksize' not in mining_info
         assert_equal(mining_info['bits'], nbits_str(REGTEST_N_BITS))
         assert_equal(mining_info['target'], target_str(REGTEST_TARGET))
         # We don't care about precision, round to avoid mismatch under Valgrind:
