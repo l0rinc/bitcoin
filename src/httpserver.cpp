@@ -214,9 +214,9 @@ struct HTTPBindAddress {
 static bool IsIgnoredDefaultBindError(int err)
 {
 #ifdef WIN32
-    return err == WSAEADDRNOTAVAIL || err == WSAEAFNOSUPPORT;
+    return err == WSAEADDRNOTAVAIL || err == WSAEAFNOSUPPORT || err == WSAEOPNOTSUPP;
 #else
-    return err == EADDRNOTAVAIL || err == ENOENT || err == EAFNOSUPPORT;
+    return err == EADDRNOTAVAIL || err == ENOENT || err == EAFNOSUPPORT || err == EOPNOTSUPP;
 #endif
 }
 
