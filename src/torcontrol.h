@@ -8,11 +8,17 @@
 #ifndef BITCOIN_TORCONTROL_H
 #define BITCOIN_TORCONTROL_H
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <netaddress.h>
 #include <util/fs.h>
 #include <util/sock.h>
 #include <util/threadinterrupt.h>
+#ifdef ENABLE_TOR_SUBPROCESS
+#include <util/subprocess.h>
+#endif
 
+#include <atomic>
 #include <cstdint>
 #include <deque>
 #include <functional>
@@ -24,6 +30,7 @@
 constexpr uint16_t DEFAULT_TOR_SOCKS_PORT{9050};
 constexpr int DEFAULT_TOR_CONTROL_PORT = 9051;
 extern const std::string DEFAULT_TOR_CONTROL;
+extern const std::string DEFAULT_TOR_EXECUTE;
 static const bool DEFAULT_LISTEN_ONION = true;
 
 /** Tor control reply code. Ref: https://spec.torproject.org/control-spec/replies.html */
@@ -56,6 +63,7 @@ class TorControlConnection
 {
 public:
     typedef std::function<void(TorControlConnection &,const TorControlReply &)> ReplyHandlerCB;
+    static void IgnoreReplyHandler(TorControlConnection &, const TorControlReply &);
 
     /** Create a new TorControlConnection.
      */
@@ -78,7 +86,7 @@ public:
      * A trailing CRLF is automatically added.
      * Return true on success.
      */
-    bool Command(const std::string &cmd, const ReplyHandlerCB& reply_handler);
+    bool Command(const std::string &cmd, const ReplyHandlerCB& reply_handler = IgnoreReplyHandler);
 
     /**
      * Check if the connection is established.
@@ -122,7 +130,7 @@ private:
 class TorController
 {
 public:
-    TorController(const std::string& tor_control_center, const CService& target);
+    TorController(const std::string& tor_control_center, const CService& target, const std::string& execute = DEFAULT_TOR_EXECUTE);
     TorController() : m_conn(m_interrupt) {
         // Used for testing only.
     }
@@ -139,12 +147,18 @@ public:
 private:
     CThreadInterrupt m_interrupt;
     std::thread m_thread;
-    const std::string m_tor_control_center;
+    const std::string m_connect_tor_control_center;
+    std::string m_current_tor_control_center;
     TorControlConnection m_conn;
     std::string m_private_key;
     std::string m_service_id;
+    bool m_try_exec{true};
     std::atomic<bool> m_reconnect;
     std::chrono::duration<double> m_reconnect_timeout;
+    std::string m_execute{DEFAULT_TOR_EXECUTE};
+#ifdef ENABLE_TOR_SUBPROCESS
+    std::unique_ptr<subprocess::Popen> m_process;
+#endif
     CService m_service;
     const CService m_target;
     /** Cookie for SAFECOOKIE auth */
@@ -170,6 +184,8 @@ public:
     void connected_cb(TorControlConnection& conn);
     /** Callback after connection lost or failed connection attempt */
     void disconnected_cb(TorControlConnection& conn);
+
+    std::string LaunchTor();
 };
 
 #endif // BITCOIN_TORCONTROL_H

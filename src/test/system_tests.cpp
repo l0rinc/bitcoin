@@ -15,13 +15,15 @@
 #include <iostream>
 #include <string_view>
 
-#ifdef ENABLE_EXTERNAL_SIGNER
+#if defined(ENABLE_EXTERNAL_SIGNER) || defined(ENABLE_TOR_SUBPROCESS)
 #include <util/subprocess.h>
-#endif // ENABLE_EXTERNAL_SIGNER
+#endif
 
 #include <boost/test/unit_test.hpp>
 
+#include <chrono>
 #include <string>
+#include <thread>
 
 namespace {
 // When set in the environment, test_bitcoin acts as a mock subprocess for the
@@ -53,6 +55,11 @@ const bool g_maybe_run_mock_dispatcher_before_main{[]() {
         std::cout << s << std::endl;
         std::_Exit(EXIT_SUCCESS);
     }
+    if (n == "sleep_forever") {
+        while (true) {
+            std::this_thread::sleep_for(std::chrono::hours{1});
+        }
+    }
     std::cerr << "Unknown mock process: " << n << std::endl;
     std::_Exit(EXIT_FAILURE);
 }()};
@@ -60,7 +67,7 @@ const bool g_maybe_run_mock_dispatcher_before_main{[]() {
 
 BOOST_FIXTURE_TEST_SUITE(system_tests, BasicTestingSetup)
 
-#ifdef ENABLE_EXTERNAL_SIGNER
+#if defined(ENABLE_EXTERNAL_SIGNER) || defined(ENABLE_TOR_SUBPROCESS)
 
 static std::vector<std::string> mock_executable(const std::string& name)
 {
@@ -71,6 +78,10 @@ static std::vector<std::string> mock_executable(const std::string& name)
 #endif
     return {boost::unit_test::framework::master_test_suite().argv[0]};
 }
+
+#endif
+
+#ifdef ENABLE_EXTERNAL_SIGNER
 
 BOOST_AUTO_TEST_CASE(run_command)
 {
@@ -128,5 +139,29 @@ BOOST_AUTO_TEST_CASE(run_command)
     }
 }
 #endif // ENABLE_EXTERNAL_SIGNER
+
+#if defined(ENABLE_EXTERNAL_SIGNER) || defined(ENABLE_TOR_SUBPROCESS)
+
+BOOST_AUTO_TEST_CASE(subprocess_poll_and_kill)
+{
+    auto poll_until_exit = [](subprocess::Popen& process) {
+        int ret{-1};
+        for (int i{0}; i < 100 && ret == -1; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{10});
+            ret = process.poll();
+        }
+        return ret;
+    };
+
+    subprocess::Popen exited{mock_executable("valid_json")};
+    BOOST_CHECK_EQUAL(poll_until_exit(exited), 0);
+
+    subprocess::Popen sleeper{mock_executable("sleep_forever")};
+    BOOST_CHECK_EQUAL(sleeper.poll(), -1);
+    sleeper.kill();
+    BOOST_CHECK_EQUAL(poll_until_exit(sleeper), 9);
+}
+
+#endif
 
 BOOST_AUTO_TEST_SUITE_END()

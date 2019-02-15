@@ -4,7 +4,10 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test torcontrol functionality with a mock Tor control server."""
 from contextlib import contextmanager
+import os
+from pathlib import Path
 import socket
+import sys
 import threading
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -256,12 +259,101 @@ class TorControlTest(BitcoinTestFramework):
 
         mock_tor.stop()
 
+    def test_tor_subprocess(self):
+        self.log.info("Test launching a private Tor subprocess")
+
+        fake_tor_script = Path(self.options.tmpdir) / "fake_tor.py"
+        fake_tor_log = Path(self.options.tmpdir) / "fake_tor_commands.log"
+        fake_tor_script.write_text("""#!/usr/bin/env python3
+from pathlib import Path
+import socket
+import sys
+
+def read_controlport_path(torrc_path):
+    for line in Path(torrc_path).read_text().splitlines():
+        if line.startswith("ControlPortWriteToFile "):
+            return Path(line.split(" ", 1)[1])
+    raise SystemExit("missing ControlPortWriteToFile")
+
+if len(sys.argv) != 4 or sys.argv[1] != "-f":
+    raise SystemExit("usage: fake_tor.py -f TORRC LOG")
+
+controlport_file = read_controlport_path(sys.argv[2])
+log_path = Path(sys.argv[3])
+log_path.write_text("")
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+sock.bind(("127.0.0.1", 0))
+sock.listen(1)
+controlport_file.parent.mkdir(parents=True, exist_ok=True)
+controlport_file.write_text(f"PORT=127.0.0.1:{sock.getsockname()[1]}\\n")
+
+owned = False
+conn, _ = sock.accept()
+with conn:
+    buf = b""
+    while True:
+        data = conn.recv(1024)
+        if not data:
+            break
+        buf += data
+        while b"\\r\\n" in buf:
+            line, buf = buf.split(b"\\r\\n", 1)
+            command = line.decode("utf-8").strip()
+            if not command:
+                continue
+            with log_path.open("a") as log:
+                log.write(command + "\\n")
+            if command == "PROTOCOLINFO 1":
+                response = (
+                    "250-PROTOCOLINFO 1\\r\\n"
+                    "250-AUTH METHODS=NULL\\r\\n"
+                    "250-VERSION Tor=\\\"fake\\\"\\r\\n"
+                    "250 OK\\r\\n"
+                )
+            elif command in ("AUTHENTICATE", "TAKEOWNERSHIP"):
+                owned = owned or command == "TAKEOWNERSHIP"
+                response = "250 OK\\r\\n"
+            elif command.startswith("ADD_ONION"):
+                response = (
+                    "250-ServiceID=testserviceid1234567890123456789012345678901234567890123456\\r\\n"
+                    "250 OK\\r\\n"
+                )
+            elif command == "SIGNAL SHUTDOWN":
+                conn.sendall(b"250 OK\\r\\n")
+                raise SystemExit(0)
+            else:
+                response = "510 Unrecognized command\\r\\n"
+            conn.sendall(response.encode("utf-8"))
+
+if owned:
+    raise SystemExit(0)
+""")
+        os.chmod(fake_tor_script, 0o755)
+
+        self.restart_node(0, extra_args=[
+            f"-torcontrol=127.0.0.1:{self.next_port()}",
+            "-listenonion=1",
+            "-debug=tor",
+            f"-torexecute={sys.executable} {fake_tor_script} {fake_tor_log}",
+        ])
+
+        self.wait_until(lambda: fake_tor_log.exists() and "ADD_ONION" in fake_tor_log.read_text(), timeout=15)
+        commands = fake_tor_log.read_text().splitlines()
+        assert_equal(commands[0], "PROTOCOLINFO 1")
+        assert "TAKEOWNERSHIP" in commands
+        assert not any(command.startswith("GETINFO") for command in commands)
+
+        self.stop_node(0)
+
     def run_test(self):
         self.test_basic()
         self.test_partial_data()
         self.test_pow_fallback()
         self.test_oversized_line()
         self.test_overmany_lines()
+        self.test_tor_subprocess()
 
 
 if __name__ == '__main__':
