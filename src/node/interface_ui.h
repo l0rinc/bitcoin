@@ -82,6 +82,9 @@ public:
     /** Network activity state changed. */
     btcsignals::signal<void(bool networkActive)> NotifyNetworkActiveChanged;
 
+    /** Network local addresses changed. */
+    btcsignals::signal<void()> NotifyNetworkLocalChanged;
+
     /**
      * Status bar alerts changed.
      */

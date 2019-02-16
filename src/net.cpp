@@ -292,14 +292,20 @@ bool AddLocal(const CService& addr_, int nScore, bool add_even_if_unreachable)
         LogInfo("AddLocal(%s,%i)\n", addr.ToStringAddrPort(), nScore);
     }
 
+    bool fAlready;
     {
         LOCK(g_maplocalhost_mutex);
         const auto [it, is_newly_added] = mapLocalHost.emplace(addr, LocalServiceInfo());
+        fAlready = !is_newly_added;
         LocalServiceInfo &info = it->second;
         if (is_newly_added || nScore >= info.nScore) {
             info.nScore = SaturatingAdd(nScore, is_newly_added ? 0 : 1);
             info.nPort = addr.GetPort();
         }
+    }
+
+    if (!fAlready) {
+        uiInterface.NotifyNetworkLocalChanged();
     }
 
     return true;
@@ -312,12 +318,17 @@ bool AddLocal(const CNetAddr& addr, int nScore, bool add_even_if_unreachable)
 
 void RemoveLocal(const CService& addr)
 {
-    LOCK(g_maplocalhost_mutex);
-    if (fLogIPs) {
-        LogInfo("RemoveLocal(%s)\n", addr.ToStringAddrPort());
+    bool removed;
+    {
+        LOCK(g_maplocalhost_mutex);
+        if (fLogIPs) {
+            LogInfo("RemoveLocal(%s)\n", addr.ToStringAddrPort());
+        }
+        removed = mapLocalHost.erase(addr) != 0;
     }
-
-    mapLocalHost.erase(addr);
+    if (removed) {
+        uiInterface.NotifyNetworkLocalChanged();
+    }
 }
 
 /** vote for a local address */
