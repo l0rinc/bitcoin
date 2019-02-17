@@ -285,7 +285,8 @@ bool AddLocal(const CService& addr_, int nScore, bool add_even_if_unreachable)
     if (!fDiscover && nScore < LOCAL_MANUAL)
         return false;
 
-    if (!g_reachable_nets.Contains(addr) && !add_even_if_unreachable)
+    // IPv4 and IPv6 cannot be connected to unless their networks are reachable, but Tor is not necessarily bidirectional
+    if (!g_reachable_nets.Contains(addr) && !add_even_if_unreachable && !addr.IsTor())
         return false;
 
     if (fLogIPs) {
