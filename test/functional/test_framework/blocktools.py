@@ -36,6 +36,7 @@ from .script import (
     CScriptNum,
     CScriptOp,
     OP_0,
+    OP_DROP,
     OP_RETURN,
     OP_TRUE,
 )
@@ -45,7 +46,10 @@ from .script_util import (
     keys_to_multisig_script,
     script_to_p2wsh_script,
 )
-from .util import assert_equal
+from .util import (
+    assert_equal,
+    assert_greater_than,
+)
 
 MAX_BLOCK_SIGOPS = 20000
 MAX_BLOCK_SIGOPS_WEIGHT = MAX_BLOCK_SIGOPS * WITNESS_SCALE_FACTOR
@@ -194,7 +198,8 @@ def create_coinbase(height, pubkey=None, *, script_pubkey=None, extra_output_scr
     elif script_pubkey is not None:
         coinbaseoutput.scriptPubKey = script_pubkey
     else:
-        coinbaseoutput.scriptPubKey = CScript([OP_TRUE])
+        # Use two OP_TRUEs and an OP_DROP to ensure we're always > 64 bytes in non-witness size
+        coinbaseoutput.scriptPubKey = CScript([OP_TRUE, OP_TRUE, OP_DROP])
     coinbase.vout = [coinbaseoutput]
     if extra_output_script is not None:
         coinbaseoutput2 = CTxOut()
@@ -290,6 +295,16 @@ class TestFrameworkBlockTools(unittest.TestCase):
         assert_equal(CScriptNum.decode(block.vtx[0].vin[0].scriptSig), 200)
 
     def test_create_coinbase(self):
-        height = 20
-        coinbase_tx = create_coinbase(height=height)
-        assert_equal(CScriptNum.decode(coinbase_tx.vin[0].scriptSig), height)
+        for height in [1, 16, 17, 127, 128, 255, 256, 32767, 32768]:
+            with self.subTest(height=height):
+                coinbase_tx = create_coinbase(height=height)
+                script_sig = coinbase_tx.vin[0].scriptSig
+                # Heights up to 16 are encoded as OP_1 through OP_16, which iterating a CScript decodes, and
+                # larger ones as a single CScriptNum push.
+                coinbase_height = next(iter(script_sig)) if height <= 16 else CScriptNum.decode(script_sig)
+                assert_equal(coinbase_height, height)
+                # The defaults satisfy the BIP54 coinbase rules: locked to the previous height, with a
+                # non-final sequence and a serialized size above the forbidden 64 bytes.
+                assert_equal(coinbase_tx.nLockTime, height - 1)
+                assert_equal(coinbase_tx.vin[0].nSequence, MAX_SEQUENCE_NONFINAL)
+                assert_greater_than(len(coinbase_tx.serialize_without_witness()), 64)
