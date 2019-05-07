@@ -18,6 +18,7 @@
 #include <vector>
 
 #include <QObject>
+#include <QValidator>
 
 enum class OutputType;
 
@@ -233,6 +234,18 @@ public Q_SLOTS:
     void updateAddressBook(const QString &address, const QString &label, bool isMine, wallet::AddressPurpose purpose, int status);
     /* Current, immature or unconfirmed balance might have changed - emit 'balanceChanged' if so */
     void pollBalanceChanged();
+};
+
+class BitcoinAddressUnusedInWalletValidator : public QValidator
+{
+    Q_OBJECT
+
+    const WalletModel& m_wallet_model;
+
+public:
+    explicit BitcoinAddressUnusedInWalletValidator(const WalletModel&, QObject *parent=nullptr);
+
+    State validate(QString &input, int &pos) const override;
 };
 
 #endif // BITCOIN_QT_WALLETMODEL_H
