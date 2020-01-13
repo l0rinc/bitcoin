@@ -73,6 +73,7 @@ public:
         MaskValues,             // bool
         maxuploadtarget,
         peerbloomfilters,       // bool
+        peerblockfilters,       // bool
         OptionIDRowCount,
     };
 
