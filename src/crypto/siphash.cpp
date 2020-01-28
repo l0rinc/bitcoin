@@ -2,10 +2,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <crypto/common.h>
 #include <crypto/siphash.h>
 
-#include <uint256.h>
-
+#include <algorithm>
 #include <bit>
 #include <cassert>
 #include <span>
@@ -19,13 +19,21 @@
     v2 = std::rotl(v2, 32); \
 } while (0)
 
-CSipHasher::CSipHasher(uint64_t k0, uint64_t k1) : m_state{k0, k1} {}
+CSipHasher::CSipHasher(uint64_t k0, uint64_t k1)
+{
+    v[0] = 0x736f6d6570736575ULL ^ k0;
+    v[1] = 0x646f72616e646f6dULL ^ k1;
+    v[2] = 0x6c7967656e657261ULL ^ k0;
+    v[3] = 0x7465646279746573ULL ^ k1;
+    count = 0;
+    tail = 0;
+}
 
 CSipHasher& CSipHasher::Write(uint64_t data)
 {
     uint64_t v0 = m_state.v[0], v1 = m_state.v[1], v2 = m_state.v[2], v3 = m_state.v[3];
 
-    assert(m_count % 8 == 0);
+    assert((count & 0x07) == 0);
 
     v3 ^= data;
     SIPROUND;
@@ -41,31 +49,57 @@ CSipHasher& CSipHasher::Write(uint64_t data)
     return *this;
 }
 
-CSipHasher& CSipHasher::Write(std::span<const unsigned char> data)
-{
-    uint64_t v0 = m_state.v[0], v1 = m_state.v[1], v2 = m_state.v[2], v3 = m_state.v[3];
-    uint64_t t = m_tmp;
-    uint8_t c = m_count;
 
-    while (data.size() > 0) {
-        t |= uint64_t{data.front()} << (8 * (c % 8));
-        c++;
-        if ((c & 7) == 0) {
-            v3 ^= t;
+/// Load a uint64_t from 0 to 7 bytes.
+inline uint64_t ReadU64ByLenLE(const unsigned char* data, size_t len)
+{
+    assert(len < 8);
+    uint64_t out = 0;
+    for (size_t i = 0; i < len; ++i) {
+        out |= (uint64_t)data[i] << (i * 8);
+    }
+    return out;
+}
+
+CSipHasher& CSipHasher::Write(Span<const unsigned char> data)
+{
+    uint64_t v0 = v[0], v1 = v[1], v2 = v[2], v3 = v[3];
+    auto ntail = count & 0x07;
+    count += data.size();
+
+    size_t needed = 0;
+
+    if (ntail != 0) {
+        needed = 8 - ntail;
+        tail |= ReadU64ByLenLE(data.data(), std::min(data.size(), needed)) << 8 * ntail;
+        if (data.size() < needed) {
+            return *this;
+        } else {
+            v3 ^= tail;
             SIPROUND;
             SIPROUND;
-            v0 ^= t;
-            t = 0;
+            v0 ^= tail;
         }
-        data = data.subspan(1);
     }
 
-    m_state.v[0] = v0;
-    m_state.v[1] = v1;
-    m_state.v[2] = v2;
-    m_state.v[3] = v3;
-    m_count = c;
-    m_tmp = t;
+    size_t len = data.size() - needed;
+    auto left = len & 0x07;
+
+    auto i = needed;
+    while (i < len - left) {
+        uint64_t mi = ReadLE64(data.data() + i);
+        v3 ^= mi;
+        SIPROUND;
+        SIPROUND;
+        v0 ^= mi;
+        i += 8;
+    }
+
+    v[0] = v0;
+    v[1] = v1;
+    v[2] = v2;
+    v[3] = v3;
+    tail = ReadU64ByLenLE(data.data() + i, left);
 
     return *this;
 }
@@ -74,12 +108,14 @@ uint64_t CSipHasher::Finalize() const
 {
     uint64_t v0 = m_state.v[0], v1 = m_state.v[1], v2 = m_state.v[2], v3 = m_state.v[3];
 
-    uint64_t t = m_tmp | (((uint64_t)m_count) << 56);
+
+    uint64_t t = tail | (((uint64_t)count) << 56);
 
     v3 ^= t;
     SIPROUND;
     SIPROUND;
     v0 ^= t;
+
     v2 ^= 0xFF;
     SIPROUND;
     SIPROUND;

@@ -14,7 +14,10 @@ class uint256;
 /** Shared SipHash internal state v[0..3], initialized from (k0, k1). */
 class SipHashState
 {
-    static constexpr uint64_t C0{0x736f6d6570736575ULL}, C1{0x646f72616e646f6dULL}, C2{0x6c7967656e657261ULL}, C3{0x7465646279746573ULL};
+private:
+    uint64_t v[4];
+    uint64_t tail; // bytes that weren't processed yet.
+    uint8_t count;  // total amount of bytes inputted.
 
 public:
     explicit SipHashState(uint64_t k0, uint64_t k1) noexcept : v{C0 ^ k0, C1 ^ k1, C2 ^ k0, C3 ^ k1} {}
