@@ -177,7 +177,12 @@ option(WITH_USDT "Enable tracepoints for Userspace, Statically Defined Tracing."
 
 cmake_dependent_option(WITH_QRENCODE "Enable QR code support." ON "BUILD_GUI" OFF)
 cmake_dependent_option(WITH_DBUS "Enable DBus support." ON "NOT CMAKE_SYSTEM_NAME MATCHES \"(Windows|Darwin)\" AND BUILD_GUI" OFF)
-
+cmake_dependent_option(WITH_TASKBAR_PROGRESS
+  "Enable GUI taskbar progress."
+  ON
+  "CMAKE_SYSTEM_NAME STREQUAL \"Windows\" AND BUILD_GUI AND WITH_QT_VERSION STREQUAL \"5\""
+  OFF
+)
 option(BUILD_BENCH "Build bench_bitcoin executable." OFF)
 option(BUILD_FUZZ_BINARY "Build fuzz binary." OFF)
 option(BUILD_FOR_FUZZING "Build for fuzzing. Enabling this will disable all other targets and override BUILD_FUZZ_BINARY." OFF)
@@ -319,6 +324,10 @@ if(BUILD_GUI)
   if(WITH_DBUS)
     list(APPEND qt_components DBus)
     set(USE_DBUS TRUE)
+  endif()
+  if(WITH_TASKBAR_PROGRESS)
+    list(APPEND qt_components WinExtras)
+    set(BITCOIN_QT_WIN_TASKBAR TRUE)
   endif()
   if(BUILD_GUI_TESTS)
     list(APPEND qt_components Test)
