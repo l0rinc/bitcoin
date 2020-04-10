@@ -137,6 +137,7 @@ bool ArgsManager::ReadConfigFiles(std::string& error, bool ignore_invalid_keys)
     {
         LOCK(cs_args);
         m_settings.ro_config.clear();
+        m_settings.rw_config.clear();
         m_config_sections.clear();
         const auto conf_val = GetPathArg_("-conf", BITCOIN_CONF_FILENAME);
         m_config_path = (conf_val.is_absolute() || conf_val.empty()) ? conf_val : fsbridge::AbsPathJoin(GetDataDir(/*net_specific=*/false), conf_val);
