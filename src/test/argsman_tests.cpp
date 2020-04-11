@@ -13,9 +13,11 @@
 #include <util/strencodings.h>
 
 #include <array>
-#include <optional>
 #include <cstdint>
 #include <cstring>
+#include <map>
+#include <optional>
+#include <sstream>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -608,6 +610,34 @@ BOOST_AUTO_TEST_CASE(util_ReadConfigStream)
     BOOST_CHECK(test_args.GetArgs("-d").size() == 0);
     BOOST_CHECK(test_args.GetArgs("-ccc").size() == 1);
     BOOST_CHECK(test_args.GetArg("-h", "xxx") == "0");
+}
+
+BOOST_AUTO_TEST_CASE(util_ReadConfigStreamSettingsTarget)
+{
+    TestArgsManager test_args;
+    test_args.SetupArgs({
+        {"-foo", ArgsManager::ALLOW_ANY},
+        {"-bar", ArgsManager::ALLOW_ANY},
+    });
+
+    std::istringstream stream{
+        "foo=alpha\n"
+        "[regtest]\n"
+        "bar=beta\n"};
+    std::string error;
+    std::map<std::string, std::vector<common::SettingsValue>> target;
+
+    BOOST_REQUIRE(test_args.ReadConfigStream(stream, "target.conf", error, false, &target));
+    BOOST_CHECK_EQUAL(error, "");
+    BOOST_REQUIRE_EQUAL(target.size(), 2);
+    BOOST_REQUIRE_EQUAL(target.at("foo").size(), 1);
+    BOOST_REQUIRE_EQUAL(target.at("bar").size(), 1);
+    BOOST_CHECK_EQUAL(target.at("foo").front().get_str(), "alpha");
+    BOOST_CHECK_EQUAL(target.at("bar").front().get_str(), "beta");
+
+    test_args.LockSettings([&](const common::Settings& settings) {
+        BOOST_CHECK(settings.ro_config.empty());
+    });
 }
 
 BOOST_AUTO_TEST_CASE(util_GetArg)
