@@ -364,3 +364,8 @@ void StopHTTPRPC()
         UnregisterHTTPHandler("/wallet/", false);
     }
 }
+
+const std::set<std::string>& GetWhitelistedRpcs(const std::string& user_name)
+{
+    return g_rpc_whitelist.at(user_name);
+}
