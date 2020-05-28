@@ -13,6 +13,7 @@
 #include <common/url.h>
 #include <compat/compat.h>
 #include <compat/stdin.h>
+#include <consensus/amount.h>
 #include <interfaces/init.h>
 #include <interfaces/ipc.h>
 #include <interfaces/rpc.h>
@@ -1349,6 +1350,25 @@ static void ParseError(const UniValue& error, std::string& strPrint, int& nRet)
         strPrint = "error: " + error.write();
     }
     nRet = abs(error["code"].getInt<int>());
+}
+
+static CAmount AmountFromValue(const UniValue& value)
+{
+    CAmount amount{0};
+    if (!ParseFixedPoint(value.getValStr(), 8, &amount))
+        throw std::runtime_error("Invalid amount");
+    if (!MoneyRange(amount))
+        throw std::runtime_error("Amount out of range");
+    return amount;
+}
+
+static UniValue ValueFromAmount(const CAmount& amount)
+{
+    bool sign{amount < 0};
+    int64_t n_abs{sign ? -amount : amount};
+    int64_t quotient{n_abs / COIN};
+    int64_t remainder{n_abs % COIN};
+    return UniValue(UniValue::VNUM, strprintf("%s%d.%08d", sign ? "-" : "", quotient, remainder));
 }
 
 /**
