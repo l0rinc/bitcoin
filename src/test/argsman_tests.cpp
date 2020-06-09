@@ -670,6 +670,13 @@ BOOST_AUTO_TEST_CASE(util_ModifyRWConfigFileOnArgsManager)
         BOOST_CHECK_EQUAL(buffer.str(), "foo=baz\n");
     }
 
+    args.ModifyRWConfigFile("rwonly", "1", /*also_settings_json=*/false);
+    args.LockSettings([&](const common::Settings& settings) {
+        BOOST_REQUIRE_EQUAL(settings.rw_config.count("rwonly"), 1);
+        BOOST_CHECK_EQUAL(settings.rw_config.at("rwonly").front().get_str(), "1");
+        BOOST_CHECK(!settings.rw_settings.contains("rwonly"));
+    });
+
     args.EraseRWConfigFile();
     fs::path reset_path{rw_path};
     reset_path += ".reset";

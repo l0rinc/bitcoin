@@ -1233,12 +1233,12 @@ void ModifyRWConfigStream(std::istream& stream_in, std::ostream& stream_out, con
     }
 }
 
-void ArgsManager::ModifyRWConfigFile(const std::map<std::string, std::string>& settings_to_change)
+void ArgsManager::ModifyRWConfigFile(const std::map<std::string, std::string>& settings_to_change, const bool also_settings_json)
 {
     fs::path rwconf_path{GetRWConfigFilePath()};
     fs::path rwconf_new_path{rwconf_path};
     rwconf_new_path += ".new";
-    const bool update_settings_file{!IsArgNegated("-settings")};
+    const bool update_settings_file{also_settings_json && !IsArgNegated("-settings")};
     try {
         fs::remove(rwconf_new_path);
         std::ofstream streamRWConfigOut(rwconf_new_path.std_path(), std::ios_base::out | std::ios_base::trunc);
@@ -1277,11 +1277,11 @@ void ArgsManager::ModifyRWConfigFile(const std::map<std::string, std::string>& s
     }
 }
 
-void ArgsManager::ModifyRWConfigFile(const std::string& setting_to_change, const std::string& new_value)
+void ArgsManager::ModifyRWConfigFile(const std::string& setting_to_change, const std::string& new_value, const bool also_settings_json)
 {
     std::map<std::string, std::string> settings_to_change;
     settings_to_change[setting_to_change] = new_value;
-    ModifyRWConfigFile(settings_to_change);
+    ModifyRWConfigFile(settings_to_change, also_settings_json);
 }
 
 void ArgsManager::EraseRWConfigFile()

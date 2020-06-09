@@ -208,8 +208,8 @@ public:
     [[nodiscard]] bool ReadConfigFiles(std::string& error, bool ignore_invalid_keys = false) EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
 
     bool RWConfigHasPruneOption() const EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
-    void ModifyRWConfigFile(const std::map<std::string, std::string>& settings_to_change) EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
-    void ModifyRWConfigFile(const std::string& setting_to_change, const std::string& new_value) EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
+    void ModifyRWConfigFile(const std::map<std::string, std::string>& settings_to_change, bool also_settings_json = true) EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
+    void ModifyRWConfigFile(const std::string& setting_to_change, const std::string& new_value, bool also_settings_json = true) EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
     void EraseRWConfigFile() EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
 
     /**
