@@ -301,6 +301,19 @@ class MultiWalletTest(BitcoinTestFramework):
         assert_equal(batch[0]["result"]["chain"], self.chain)
         assert_equal(batch[1]["result"]["walletname"], "w1")
 
+        self.log.info('Test per-wallet setfeerate and settxfee calls')
+        assert_equal(w1.getwalletinfo()['paytxfee'], 0)
+        assert_equal(w2.getwalletinfo()['paytxfee'], 0)
+        w2.setfeerate(200)
+        assert_equal(w1.getwalletinfo()['paytxfee'], 0)
+        assert_equal(w2.getwalletinfo()['paytxfee'], Decimal('0.00200000'))
+        w2.settxfee(0.001)
+        assert_equal(w1.getwalletinfo()['paytxfee'], 0)
+        assert_equal(w2.getwalletinfo()['paytxfee'], Decimal('0.00100000'))
+        w1.setfeerate(30)
+        assert_equal(w1.getwalletinfo()['paytxfee'], Decimal('0.00030000'))
+        assert_equal(w2.getwalletinfo()['paytxfee'], Decimal('0.00100000'))
+
     def test_loading(self, node, wallet_names):
         self.log.info("Test dynamic wallet loading")
 

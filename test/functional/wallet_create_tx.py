@@ -85,6 +85,7 @@ class CreateTxWalletTest(BitcoinTestFramework):
         # More than 10kB of outputs, so that we hit -maxtxfee with a high feerate
         outputs = {self.nodes[0].getnewaddress(address_type='bech32'): 0.000025 for _ in range(400)}
         raw_tx = self.nodes[0].createrawtransaction(inputs=[], outputs=outputs)
+        msg = "Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)"
 
         for fee_setting in ['-minrelaytxfee=0.01', '-mintxfee=0.01']:
             self.log.info('Check maxtxfee in combination with {}'.format(fee_setting))
@@ -115,6 +116,12 @@ class CreateTxWalletTest(BitcoinTestFramework):
             "Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)",
             lambda: self.nodes[0].fundrawtransaction(hexstring=raw_tx, options={'fee_rate': fee_rate_sats_per_vb}),
         )
+
+        self.log.info('Check maxtxfee in combination with setfeerate (sat/vB)')
+        self.nodes[0].setfeerate(1000)
+        assert_raises_rpc_error(-6, msg, self.nodes[0].sendmany, dummy="", amounts=outputs)
+        assert_raises_rpc_error(-4, msg, self.nodes[0].fundrawtransaction, hexstring=raw_tx)
+        self.nodes[0].setfeerate(0)
 
     def test_create_too_long_mempool_chain(self):
         self.log.info('Check too-long mempool chain error')
