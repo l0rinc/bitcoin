@@ -437,6 +437,122 @@ RPCMethod sendmany()
     };
 }
 
+RPCMethod setfeerate()
+{
+    return RPCMethod{
+        "setfeerate",
+        "\nSet the transaction fee rate in " + CURRENCY_ATOM + "/vB for this wallet.\n"
+        "Overrides the global -paytxfee configuration option. Like -paytxfee, it is not persisted after bitcoind shutdown/restart.\n"
+        "Can be deactivated by passing 0 as the fee rate, in which case automatic fee selection will be used by default.\n",
+        {
+            {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "The transaction fee rate in " + CURRENCY_ATOM + "/vB to set (0 to unset)"},
+        },
+        RPCResult{
+            RPCResult::Type::OBJ, "", "",
+            {
+                {RPCResult::Type::STR, "wallet_name", "Name of the wallet the fee rate setting applies to"},
+                {RPCResult::Type::NUM, "fee_rate", "Fee rate in " + CURRENCY_ATOM + "/vB for the wallet after this operation"},
+                {RPCResult::Type::STR, "result", /* optional */ true, "Description of result, if successful"},
+                {RPCResult::Type::STR, "error", /* optional */ true, "Description of error, if any"},
+            },
+        },
+        RPCExamples{
+            ""
+            "\nSet a fee rate of 1 " + CURRENCY_ATOM + "/vB\n"
+            + HelpExampleCli("setfeerate", "1") +
+            "\nSet a fee rate of 3.141 " + CURRENCY_ATOM + "/vB\n"
+            + HelpExampleCli("setfeerate", "3.141") +
+            "\nSet a fee rate of 7.75 " + CURRENCY_ATOM + "/vB with named arguments\n"
+            + HelpExampleCli("-named setfeerate", "amount=\"7.75\"") +
+            "\nSet a fee rate of 25 " + CURRENCY_ATOM + "/vB with the RPC\n"
+            + HelpExampleRpc("setfeerate", "25")
+        },
+        [](const RPCMethod&, const JSONRPCRequest& request) -> UniValue {
+            std::shared_ptr<CWallet> const rpc_wallet{GetWalletForJSONRPCRequest(request)};
+            if (!rpc_wallet) return UniValue::VNULL;
+            CWallet& wallet = *rpc_wallet;
+
+            LOCK(wallet.cs_wallet);
+            const CFeeRate amount{AmountFromValue(request.params[0]), COIN /* sat/vB */};
+            const CFeeRate relay_min_feerate{wallet.chain().relayMinFee().GetFeePerK()};
+            const CFeeRate wallet_min_feerate{wallet.m_min_fee.GetFeePerK()};
+            const CFeeRate wallet_max_feerate{wallet.m_default_max_tx_fee, 1000 /* BTC/kvB */};
+            const CFeeRate zero{CFeeRate{0}};
+            const std::string amount_str{amount.ToString(FeeRateFormat::SAT_VB)};
+            const std::string current_setting{strprintf("The current setting of %s for this wallet remains unchanged.", wallet.m_pay_tx_fee == zero ? "0 (unset)" : wallet.m_pay_tx_fee.ToString(FeeRateFormat::SAT_VB))};
+            std::string result, error;
+
+            if (amount == zero) {
+                if (request.params[0].get_real() != 0) throw JSONRPCError(RPC_TYPE_ERROR, "Invalid amount");
+                wallet.m_pay_tx_fee = amount;
+                result = "Fee rate for transactions with this wallet successfully unset. By default, automatic fee selection will be used.";
+            } else if (amount < relay_min_feerate) {
+                error = strprintf("The requested fee rate of %s cannot be less than the minimum relay fee rate of %s. %s", amount_str, relay_min_feerate.ToString(FeeRateFormat::SAT_VB), current_setting);
+            } else if (amount < wallet_min_feerate) {
+                error = strprintf("The requested fee rate of %s cannot be less than the wallet min fee rate of %s. %s", amount_str, wallet_min_feerate.ToString(FeeRateFormat::SAT_VB), current_setting);
+            } else if (amount > wallet_max_feerate) {
+                error = strprintf("The requested fee rate of %s cannot be greater than the wallet max fee rate of %s. %s", amount_str, wallet_max_feerate.ToString(FeeRateFormat::SAT_VB), current_setting);
+            } else {
+                wallet.m_pay_tx_fee = amount;
+                result = "Fee rate for transactions with this wallet successfully set to " + amount_str;
+            }
+            CHECK_NONFATAL(result.empty() != error.empty());
+
+            UniValue obj{UniValue::VOBJ};
+            obj.pushKV("wallet_name", wallet.GetName());
+            obj.pushKV("fee_rate", ValueFromFeeRate(wallet.m_pay_tx_fee));
+            if (error.empty()) {
+                obj.pushKV("result", result);
+            } else {
+                obj.pushKV("error", error);
+            }
+            return obj;
+        },
+    };
+}
+
+RPCMethod settxfee()
+{
+    return RPCMethod{"settxfee",
+                "\nSet the transaction fee rate in " + CURRENCY_UNIT + "/kvB for this wallet. Overrides the global -paytxfee command line parameter.\n"
+                "Can be deactivated by passing 0 as the fee. In that case automatic fee selection will be used by default.\n",
+                {
+                    {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "The transaction fee rate in " + CURRENCY_UNIT + "/kvB"},
+                },
+                RPCResult{
+                    RPCResult::Type::BOOL, "", "Returns true if successful"
+                },
+                RPCExamples{
+                    HelpExampleCli("settxfee", "0.00001")
+            + HelpExampleRpc("settxfee", "0.00001")
+                },
+        [](const RPCMethod&, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return UniValue::VNULL;
+
+    LOCK(pwallet->cs_wallet);
+
+    CAmount nAmount = AmountFromValue(request.params[0]);
+    CFeeRate tx_fee_rate(nAmount, 1000);
+    CFeeRate max_tx_fee_rate(pwallet->m_default_max_tx_fee, 1000);
+    if (tx_fee_rate == CFeeRate(0)) {
+        // automatic selection
+    } else if (tx_fee_rate < pwallet->chain().relayMinFee()) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("txfee cannot be less than min relay tx fee (%s)", pwallet->chain().relayMinFee().ToString()));
+    } else if (tx_fee_rate < pwallet->m_min_fee) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("txfee cannot be less than wallet min fee (%s)", pwallet->m_min_fee.ToString()));
+    } else if (tx_fee_rate > max_tx_fee_rate) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("txfee cannot be more than wallet max tx fee (%s)", max_tx_fee_rate.ToString()));
+    }
+
+    pwallet->m_pay_tx_fee = tx_fee_rate;
+    return true;
+},
+    };
+}
+
+
 // Only includes key documentation where the key is snake_case in all RPC methods. MixedCase keys can be added later.
 static std::vector<RPCArg> FundTxDoc(bool solving_data = true)
 {
