@@ -45,10 +45,10 @@ class ToolWalletTest(BitcoinTestFramework):
             assert_equal(p.poll(), 1)
             assert error in stderr.strip()
 
-    def assert_tool_output(self, output, *args):
+    def assert_tool_output(self, output, *args, stderr=''):
         p = self.bitcoin_wallet_process(*args)
         stdout, stderr = p.communicate()
-        assert_equal(stderr, '')
+        assert_equal(stderr, stderr)
         assert_equal(stdout, output)
         assert_equal(p.poll(), 0)
 
@@ -119,10 +119,12 @@ class ToolWalletTest(BitcoinTestFramework):
         args.append("createfromdump")
 
         load_output = ""
-        self.assert_tool_output(load_output, *args)
+        if file_format is not None and file_format != dump_data["format"]:
+            load_output += "Warning: Dumpfile wallet format \"{}\" does not match command line specified format \"{}\".\n".format(dump_data["format"], file_format)
+        self.assert_tool_output('', *args, stderr=load_output)
         assert (self.nodes[0].wallets_path / wallet_name).is_dir()
 
-        self.assert_tool_output("The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n", '-wallet={}'.format(wallet_name), '-dumpfile={}'.format(rt_dumppath), 'dump')
+        self.assert_tool_output('', '-wallet={}'.format(wallet_name), '-dumpfile={}'.format(rt_dumppath), 'dump', stderr="The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n")
 
         wallet_dat = self.nodes[0].wallets_path / wallet_name / "wallet.dat"
         self.assert_is_sqlite(wallet_dat)
@@ -257,7 +259,7 @@ class ToolWalletTest(BitcoinTestFramework):
 
         self.log.info('Checking basic dump')
         wallet_dump = self.nodes[0].datadir_path / "wallet.dump"
-        self.assert_tool_output('The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n', '-wallet=todump', '-dumpfile={}'.format(wallet_dump), 'dump')
+        self.assert_tool_output('', '-wallet=todump', '-dumpfile={}'.format(wallet_dump), 'dump', stderr='The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n')
 
         dump_data = self.read_dump(wallet_dump)
         orig_dump = dump_data.copy()
@@ -378,6 +380,25 @@ class ToolWalletTest(BitcoinTestFramework):
         ''')
         self.assert_tool_output(expected_output, "-wallet=conflicts", "info")
 
+    def test_dump_endianness(self):
+        self.log.info("Testing dumps of the same contents with different BDB endianness")
+
+        self.start_node(0)
+        self.nodes[0].createwallet("endian")
+        self.stop_node(0)
+
+        wallet_dump = self.nodes[0].datadir_path / "endian.dump"
+        self.assert_tool_output('', "-wallet=endian", f"-dumpfile={wallet_dump}", "dump", stderr="The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n")
+        expected_dump = self.read_dump(wallet_dump)
+
+        self.do_tool_createfromdump("native_endian", "endian.dump", "bdb")
+        native_dump = self.read_dump(self.nodes[0].datadir_path / "rt-native_endian.dump")
+        self.assert_dump(expected_dump, native_dump)
+
+        self.do_tool_createfromdump("other_endian", "endian.dump", "bdb_swap")
+        other_dump = self.read_dump(self.nodes[0].datadir_path / "rt-other_endian.dump")
+        self.assert_dump(expected_dump, other_dump)
+
     def test_dump_very_large_records(self):
         self.log.info("Test that wallets with large records are successfully dumped")
 
@@ -406,7 +427,7 @@ class ToolWalletTest(BitcoinTestFramework):
         self.stop_node(0)
 
         wallet_dump = self.nodes[0].datadir_path / "bigrecords.dump"
-        self.assert_tool_output("The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n", "-wallet=bigrecords", f"-dumpfile={wallet_dump}", "dump")
+        self.assert_tool_output('', "-wallet=bigrecords", f"-dumpfile={wallet_dump}", "dump", stderr="The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n")
         dump = self.read_dump(wallet_dump)
         for k,v in dump.items():
             if tx["hex"] in v:
@@ -426,11 +447,49 @@ class ToolWalletTest(BitcoinTestFramework):
     def test_no_create_unnamed(self):
         self.log.info("Test that unnamed (default) wallets cannot be created")
 
-        self.assert_raises_tool_error("Wallet name cannot be empty", "-wallet=", "create")
-        assert not (self.nodes[0].wallets_path / "wallet.dat").exists()
+        # File can be dumped after reload it normally
+        self.start_node(0)
+        self.nodes[0].loadwallet("unclean_lsn")
+        self.stop_node(0)
+        self.assert_tool_output('', "-wallet=unclean_lsn", f"-dumpfile={wallet_dump}", "dump", stderr="The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n")
 
-        self.assert_raises_tool_error("Wallet name cannot be empty", "-wallet=", "-dumpfile=wallet.dump", "createfromdump")
-        assert not (self.nodes[0].wallets_path / "wallet.dat").exists()
+    def test_compare_legacy_dump_with_framework_bdb_parser(self):
+        self.log.info("Verify that legacy wallet database dump matches the one from the test framework's BDB parser")
+        wallet_name = "bdb_ro_test"
+        self.start_node(0)
+        # add some really large labels (above twice the largest valid page size) to create BDB overflow pages
+        self.nodes[0].createwallet(wallet_name)
+        wallet_rpc = self.nodes[0].get_wallet_rpc(wallet_name)
+        generated_labels = {}
+        for i in range(10):
+            address = getnewdestination()[2]
+            large_label = ''.join([random.choice(string.ascii_letters) for _ in range(150000)])
+            wallet_rpc.setlabel(address, large_label)
+            generated_labels[address] = large_label
+        # fill the keypool to create BDB internal pages
+        wallet_rpc.keypoolrefill(1000)
+        self.stop_node(0)
+
+        wallet_dumpfile = self.nodes[0].datadir_path / "bdb_ro_test.dump"
+        self.assert_tool_output('', "-wallet={}".format(wallet_name), "-dumpfile={}".format(wallet_dumpfile), "dump", stderr="The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n")
+
+        expected_dump = self.read_dump(wallet_dumpfile)
+        # remove extra entries from wallet tool dump that are not actual key/value pairs from the database
+        del expected_dump['BITCOIN_CORE_WALLET_DUMP']
+        del expected_dump['format']
+        del expected_dump['checksum']
+        bdb_ro_parser_dump_raw = dump_bdb_kv(self.nodes[0].wallets_path / wallet_name / "wallet.dat")
+        bdb_ro_parser_dump = OrderedDict()
+        assert any([len(bytes.fromhex(value)) >= 150000 for value in expected_dump.values()])
+        for key, value in sorted(bdb_ro_parser_dump_raw.items()):
+            bdb_ro_parser_dump[key.hex()] = value.hex()
+        assert_equal(bdb_ro_parser_dump, expected_dump)
+
+        # check that all labels were created with the correct address
+        for address, label in generated_labels.items():
+            key_bytes = b'\x04name' + ser_string(address.encode())
+            assert key_bytes in bdb_ro_parser_dump_raw
+            assert_equal(bdb_ro_parser_dump_raw[key_bytes], ser_string(label.encode()))
 
     def run_test(self):
         self.wallet_path = self.nodes[0].wallets_path / self.default_wallet_name / self.wallet_data_filename
