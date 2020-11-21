@@ -992,6 +992,13 @@ RPCMethod walletdisplayaddress();
 #endif // ENABLE_EXTERNAL_SIGNER
 
 // backup
+RPCMethod dumpprivkey();
+RPCMethod dumpmasterprivkey();
+RPCMethod importprivkey();
+RPCMethod importaddress();
+RPCMethod importpubkey();
+RPCMethod dumpwallet();
+RPCMethod importwallet();
 RPCMethod importprunedfunds();
 RPCMethod removeprunedfunds();
 RPCMethod importdescriptors();
@@ -1052,6 +1059,9 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &createwallet},
         {"wallet", &createwalletdescriptor},
         {"wallet", &restorewallet},
+        {"wallet", &dumpprivkey},
+        {"wallet", &dumpmasterprivkey},
+        {"wallet", &dumpwallet},
         {"wallet", &encryptwallet},
         {"wallet", &exportwatchonlywallet},
         {"wallet", &getaddressesbylabel},
@@ -1065,8 +1075,12 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &gettransaction},
         {"wallet", &getbalances},
         {"wallet", &getwalletinfo},
+        {"wallet", &importaddress},
         {"wallet", &importdescriptors},
+        {"wallet", &importprivkey},
         {"wallet", &importprunedfunds},
+        {"wallet", &importpubkey},
+        {"wallet", &importwallet},
         {"wallet", &keypoolrefill},
         {"wallet", &listaddressgroupings},
         {"wallet", &listdescriptors},
@@ -1095,6 +1109,7 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &sendall},
         {"wallet", &unloadwallet},
         {"wallet", &walletcreatefundedpsbt},
+
 #ifdef ENABLE_EXTERNAL_SIGNER
         {"wallet", &walletdisplayaddress},
 #endif // ENABLE_EXTERNAL_SIGNER
