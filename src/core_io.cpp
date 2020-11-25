@@ -11,6 +11,7 @@
 #include <consensus/validation.h>
 #include <crypto/hex_base.h>
 #include <key_io.h>
+#include <policy/feerate.h>
 #include <prevector.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
@@ -291,6 +292,11 @@ UniValue ValueFromAmount(const CAmount amount)
     }
     return UniValue(UniValue::VNUM,
             strprintf("%s%d.%08d", amount < 0 ? "-" : "", quotient, remainder));
+}
+
+UniValue ValueFromFeeRate(const CFeeRate& fee_rate)
+{
+    return UniValue(UniValue::VNUM, fee_rate.SatsToString());
 }
 
 std::string FormatScript(const CScript& script)
