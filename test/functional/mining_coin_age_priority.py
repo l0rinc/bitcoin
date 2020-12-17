@@ -75,6 +75,19 @@ class MiningCoinAgePriorityTest(BitcoinTestFramework):
         template_entry = {tx["txid"]: tx for tx in template["transactions"]}
         assert_greater_than(template_entry[recent_fee_tx["txid"]]["priority"], template_entry[old_free_tx["txid"]]["priority"])
 
+        self.log.info("Priority deltas persist across restart")
+        self.restart_node(0, extra_args=[
+            "-minrelaytxfee=0",
+            "-blockmintxfee=0",
+            "-blockprioritysize=1000000",
+            "-persistmempool=1",
+        ])
+        node = self.nodes[0]
+        prioritised = node.getprioritisedtransactions()[recent_fee_tx["txid"]]
+        assert_equal(prioritised["priority_delta"], priority_delta)
+        txids = self.template_txids()
+        assert txids.index(recent_fee_tx["txid"]) < txids.index(old_free_tx["txid"])
+
         node.prioritisetransaction(txid=recent_fee_tx["txid"], priority_delta=-priority_delta)
         assert_equal(node.getprioritisedtransactions(), {})
         txids = self.template_txids()
