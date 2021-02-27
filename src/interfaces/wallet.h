@@ -51,6 +51,7 @@ struct WalletContext;
 
 enum class WalletBackupFormat {
     Raw,   // Literal db copy
+    DbDump,  // DumpWallet plaintext low-level db dump
 };
 
 namespace interfaces {
