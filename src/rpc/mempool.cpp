@@ -20,6 +20,7 @@
 #include <policy/rbf.h>
 #include <policy/settings.h>
 #include <primitives/transaction.h>
+#include <rpc/mempool.h>
 #include <rpc/server.h>
 #include <rpc/server_util.h>
 #include <rpc/util.h>
@@ -32,6 +33,7 @@
 #include <util/vector.h>
 
 #include <map>
+#include <optional>
 #include <string_view>
 #include <utility>
 
@@ -1037,7 +1039,7 @@ static RPCMethod gettxspendingprevout()
     };
 }
 
-UniValue MempoolInfoToJSON(const CTxMemPool& pool)
+UniValue MempoolInfoToJSON(const CTxMemPool& pool, const std::optional<MempoolHistogramFeeRates>& histogram_floors)
 {
     // Make sure this call is atomic in the pool.
     LOCK(pool.cs);
@@ -1060,14 +1062,60 @@ UniValue MempoolInfoToJSON(const CTxMemPool& pool)
     if (IsDeprecatedRPCEnabled("fullrbf")) {
         ret.pushKV("fullrbf", true);
     }
+    if (histogram_floors) {
+        const MempoolHistogramFeeRates& floors{histogram_floors.value()};
+
+        std::vector<uint64_t> sizes(floors.size(), 0);
+        std::vector<uint64_t> count(floors.size(), 0);
+        std::vector<CAmount> fees(floors.size(), 0);
+
+        for (const CTxMemPoolEntry& e : pool.mapTx) {
+            const CAmount fee{e.GetFee()};
+            const uint32_t size{uint32_t(e.GetTxSize())};
+            const CAmount fee_rate{CFeeRate{fee, size}.GetFee(1)};
+
+            for (size_t i = floors.size(); i-- > 0;) {
+                if (fee_rate >= floors[i]) {
+                    sizes[i] += size;
+                    ++count[i];
+                    fees[i] += fee;
+                    break;
+                }
+            }
+        }
+
+        CAmount total_fees{0};
+        UniValue groups(UniValue::VOBJ);
+        for (size_t i = 0; i < floors.size(); ++i) {
+            UniValue info_sub(UniValue::VOBJ);
+            info_sub.pushKV("size", sizes.at(i));
+            info_sub.pushKV("count", count.at(i));
+            info_sub.pushKV("fees", fees.at(i));
+            info_sub.pushKV("from", floors.at(i));
+
+            total_fees += fees.at(i);
+            groups.pushKV(ToString(floors.at(i)), info_sub);
+        }
+
+        UniValue info(UniValue::VOBJ);
+        info.pushKV("fee_rate_groups", groups);
+        info.pushKV("total_fees", total_fees);
+        ret.pushKV("fee_histogram", info);
+    }
     return ret;
 }
 
 static RPCMethod getmempoolinfo()
 {
     return RPCMethod{"getmempoolinfo",
-        "Returns details on the active state of the TX memory pool.",
-        {},
+        "Returns details on the active state of the TX memory pool.\n",
+        {
+            {"fee_histogram", RPCArg::Type::ARR, RPCArg::Optional::OMITTED, "Fee statistics grouped by fee rate ranges",
+                {
+                    {"fee_rate", RPCArg::Type::NUM, RPCArg::Optional::NO, "Fee rate (in " + CURRENCY_ATOM + "/vB) to group the fees by"},
+                },
+            },
+        },
         RPCResult{
             RPCResult::Type::OBJ, "", "",
             [](){
@@ -1087,6 +1135,19 @@ static RPCMethod getmempoolinfo()
                     {RPCResult::Type::NUM, "limitclustercount", "Maximum number of transactions that can be in a cluster (configured by -limitclustercount)"},
                     {RPCResult::Type::NUM, "limitclustersize", "Maximum size of a cluster in virtual bytes (configured by -limitclustersize)"},
                     {RPCResult::Type::BOOL, "optimal", "If the mempool is in a known-optimal transaction ordering"},
+                    {RPCResult::Type::OBJ, "fee_histogram", /*optional=*/true, "",
+                        {
+                            {RPCResult::Type::OBJ_DYN, "fee_rate_groups", "",
+                            {
+                                {RPCResult::Type::OBJ, "<fee_rate_group>", "Fee rate group named by its lower bound (in " + CURRENCY_ATOM + "/vB), identical to the \"from\" field below",
+                                {
+                                    {RPCResult::Type::NUM, "size", "Cumulative size of all transactions in the fee rate group (in vBytes)"},
+                                    {RPCResult::Type::NUM, "count", "Number of transactions in the fee rate group"},
+                                    {RPCResult::Type::NUM, "fees", "Cumulative fees of all transactions in the fee rate group (in " + CURRENCY_ATOM + ")"},
+                                    {RPCResult::Type::NUM, "from", "Group contains transactions with fee rates equal or greater than this value (in " + CURRENCY_ATOM + "/vB)"},
+                                }}}},
+                            {RPCResult::Type::NUM, "total_fees", "Total available fees in mempool (in " + CURRENCY_ATOM + ")"},
+                        }},
                 };
                 if (IsDeprecatedRPCEnabled("fullrbf")) {
                     list.emplace_back(RPCResult::Type::BOOL, "fullrbf", "True if the mempool accepts RBF without replaceability signaling inspection (DEPRECATED)");
@@ -1095,12 +1156,38 @@ static RPCMethod getmempoolinfo()
             }()
             },
         RPCExamples{
-            HelpExampleCli("getmempoolinfo", "")
-            + HelpExampleRpc("getmempoolinfo", "")
+            HelpExampleCli("getmempoolinfo", "") +
+            HelpExampleCli("getmempoolinfo", R"("[0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 17, 20, 25, 30, 40, 50, 60, 70, 80, 100, 120, 140, 170, 200]")") +
+            HelpExampleRpc("getmempoolinfo", "") +
+            HelpExampleRpc("getmempoolinfo", R"([0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 17, 20, 25, 30, 40, 50, 60, 70, 80, 100, 120, 140, 170, 200])")
         },
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
-    return MempoolInfoToJSON(EnsureAnyMemPool(request.context));
+    MempoolHistogramFeeRates histogram_floors;
+    std::optional<MempoolHistogramFeeRates> histogram_floors_opt{std::nullopt};
+
+    if (!request.params[0].isNull()) {
+        const UniValue histogram_floors_univalue{request.params[0].get_array()};
+
+        if (histogram_floors_univalue.empty()) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid number of parameters");
+        }
+
+        for (size_t i = 0; i < histogram_floors_univalue.size(); ++i) {
+            const int64_t value{histogram_floors_univalue[i].getInt<int64_t>()};
+
+            if (value < 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Non-negative values are expected");
+            } else if (i > 0 && histogram_floors.back() >= value) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Strictly increasing values are expected");
+            }
+
+            histogram_floors.push_back(value);
+        }
+        histogram_floors_opt = std::move(histogram_floors);
+    }
+
+    return MempoolInfoToJSON(EnsureAnyMemPool(request.context), histogram_floors_opt);
 },
     };
 }
