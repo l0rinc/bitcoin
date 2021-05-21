@@ -1336,12 +1336,15 @@ static void SoftForkDescPushBack(const CBlockIndex* blockindex, UniValue& softfo
     // BIP9 signalling status, if applicable
     if (info.stats.has_value()) {
         UniValue statsUV(UniValue::VOBJ);
-        statsUV.pushKV("period", info.stats->period);
-        statsUV.pushKV("elapsed", info.stats->elapsed);
-        statsUV.pushKV("count", info.stats->count);
-        if (info.stats->threshold > 0 || info.stats->possible) {
-            statsUV.pushKV("threshold", info.stats->threshold);
-            statsUV.pushKV("possible", info.stats->possible);
+        std::vector<bool> signals;
+        BIP9Stats statsStruct = g_versionbitscache.Statistics(blockindex, consensusParams, id, &signals);
+        statsUV.pushKV("period", statsStruct.period);
+        statsUV.pushKV("period_start", blockindex->nHeight + 1 - statsStruct.elapsed);
+        statsUV.pushKV("elapsed", statsStruct.elapsed);
+        statsUV.pushKV("count", statsStruct.count);
+        if (ThresholdState::LOCKED_IN != current_state) {
+            statsUV.pushKV("threshold", statsStruct.threshold);
+            statsUV.pushKV("possible", statsStruct.possible);
         }
         bip9.pushKV("statistics", std::move(statsUV));
 
@@ -1490,6 +1493,7 @@ const std::vector<RPCResult> RPCHelpForDeployment{
         {RPCResult::Type::OBJ, "statistics", /*optional=*/true, "numeric statistics about signalling for a softfork (only for \"started\" and \"locked_in\" status)",
         {
             {RPCResult::Type::NUM, "period", "the length in blocks of the signalling period"},
+            {RPCResult::Type::NUM, "period_start", "height of the first block of this signalling period"},
             {RPCResult::Type::NUM, "threshold", /*optional=*/true, "the number of blocks with the version bit set required to activate the feature (only for \"started\" status)"},
             {RPCResult::Type::NUM, "elapsed", "the number of blocks elapsed since the beginning of the current period"},
             {RPCResult::Type::NUM, "count", "the number of blocks with the version bit set in the current period"},
