@@ -4104,6 +4104,25 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams))
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-diffbits", "incorrect proof of work");
 
+    // Check against checkpoints
+    if (chainman.m_options.checkpoints_enabled) {
+        // Don't accept any forks from the main chain prior to last checkpoint.
+        // GetLastCheckpoint finds the last checkpoint in MapCheckpoints that's in our
+        // BlockIndex().
+        const auto& checkpoint_data = chainman.GetParams().Checkpoints();
+        const CBlockIndex* pcheckpoint = blockman.GetLastCheckpoint(checkpoint_data);
+        if (pcheckpoint && nHeight < pcheckpoint->nHeight) {
+            LogPrintf("ERROR: %s: forked chain older than last checkpoint (height %d)\n", __func__, nHeight);
+            return state.Invalid(BlockValidationResult::BLOCK_CHECKPOINT, "bad-fork-prior-to-checkpoint");
+        }
+
+        // Check that the block chain matches the known block chain up to a checkpoint
+        if (!checkpoint_data.CheckBlock(nHeight, block.GetHash())) {
+            LogPrintf("ERROR: %s: rejected by checkpoint lock-in at %d\n", __func__, nHeight);
+            return state.Invalid(BlockValidationResult::BLOCK_CHECKPOINT, "checkpoint-mismatch");
+        }
+    }
+
     // Check timestamp against prev
     if (block.GetBlockTime() <= pindexPrev->GetMedianTimePast())
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-too-old", "block's timestamp is too early");
