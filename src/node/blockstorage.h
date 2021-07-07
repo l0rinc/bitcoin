@@ -148,6 +148,8 @@ struct CBlockIndexHeightOnlyComparator {
 };
 
 struct PruneLockInfo {
+    /// Arbitrary human-readable description of the lock purpose
+    std::string desc;
     /// Height of earliest block that should be kept and not pruned
     int height_first{std::numeric_limits<int>::max()};
     /// Height of latest block that should be kept and not pruned
@@ -460,6 +462,7 @@ public:
     //! Check whether the block associated with this index entry is pruned or not.
     bool IsBlockPruned(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
+    bool PruneLockExists(const std::string& name) const SHARED_LOCKS_REQUIRED(::cs_main);
     //! Create or update a prune lock identified by its name
     void UpdatePruneLock(const std::string& name, const PruneLockInfo& lock_info) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
