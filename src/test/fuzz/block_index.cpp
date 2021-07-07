@@ -13,6 +13,8 @@
 #include <util/byte_units.h>
 #include <validation.h>
 
+#include <unordered_map>
+
 using kernel::CBlockFileInfo;
 
 namespace {
@@ -92,7 +94,8 @@ FUZZ_TARGET(block_index, .init = init_block_index)
     }
 
     // Store these files and blocks in the block index. It should not fail.
-    block_index.WriteBatchSync(files_info, files_count - 1, blocks_info);
+    const std::unordered_map<std::string, node::PruneLockInfo> prune_locks;
+    block_index.WriteBatchSync(files_info, files_count - 1, blocks_info, prune_locks);
 
     // We should be able to read every block file info we stored. Its value should correspond to
     // what we stored above.

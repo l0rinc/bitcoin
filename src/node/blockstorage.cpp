@@ -57,6 +57,7 @@ static constexpr uint8_t DB_BLOCK_INDEX{'b'};
 static constexpr uint8_t DB_FLAG{'F'};
 static constexpr uint8_t DB_REINDEX_FLAG{'R'};
 static constexpr uint8_t DB_LAST_BLOCK{'l'};
+static constexpr uint8_t DB_PRUNE_LOCK{'L'};
 // Keys used in previous version that might still be found in the DB:
 // BlockTreeDB::DB_TXINDEX_BLOCK{'T'};
 // BlockTreeDB::DB_TXINDEX{'t'}
@@ -86,7 +87,7 @@ bool BlockTreeDB::ReadLastBlockFile(int& nFile)
     return Read(DB_LAST_BLOCK, nFile);
 }
 
-void BlockTreeDB::WriteBatchSync(const std::vector<std::pair<int, const CBlockFileInfo*>>& fileInfo, int nLastFile, const std::vector<const CBlockIndex*>& blockinfo)
+void BlockTreeDB::WriteBatchSync(const std::vector<std::pair<int, const CBlockFileInfo*>>& fileInfo, int nLastFile, const std::vector<const CBlockIndex*>& blockinfo, const std::unordered_map<std::string, node::PruneLockInfo>& prune_locks)
 {
     CDBBatch batch(*this);
     for (const auto& [file, info] : fileInfo) {
@@ -96,7 +97,41 @@ void BlockTreeDB::WriteBatchSync(const std::vector<std::pair<int, const CBlockFi
     for (const CBlockIndex* bi : blockinfo) {
         batch.Write(std::make_pair(DB_BLOCK_INDEX, bi->GetBlockHash()), CDiskBlockIndex{bi});
     }
+    for (const auto& prune_lock : prune_locks) {
+        if (prune_lock.second.temporary) continue;
+        batch.Write(std::make_pair(DB_PRUNE_LOCK, prune_lock.first), prune_lock.second);
+    }
     WriteBatch(batch, true);
+}
+
+void BlockTreeDB::WritePruneLock(const std::string& name, const node::PruneLockInfo& lock_info)
+{
+    if (lock_info.temporary) return;
+    Write(std::make_pair(DB_PRUNE_LOCK, name), lock_info);
+}
+
+void BlockTreeDB::DeletePruneLock(const std::string& name)
+{
+    Erase(std::make_pair(DB_PRUNE_LOCK, name));
+}
+
+bool BlockTreeDB::LoadPruneLocks(std::unordered_map<std::string, node::PruneLockInfo>& prune_locks, const util::SignalInterrupt& interrupt) {
+    std::unique_ptr<CDBIterator> pcursor(NewIterator());
+    for (pcursor->Seek(DB_PRUNE_LOCK); pcursor->Valid(); pcursor->Next()) {
+        if (interrupt) return false;
+
+        std::pair<uint8_t, std::string> key;
+        if ((!pcursor->GetKey(key)) || key.first != DB_PRUNE_LOCK) break;
+
+        node::PruneLockInfo& lock_info = prune_locks[key.second];
+        if (!pcursor->GetValue(lock_info)) {
+            LogError("%s: failed to %s prune lock '%s'\n", __func__, "read", key.second);
+            return false;
+        }
+        lock_info.temporary = false;
+    }
+
+    return true;
 }
 
 void BlockTreeDB::WriteFlag(const std::string& name, bool fValue)
@@ -308,10 +343,10 @@ bool BlockManager::DoPruneLocksForbidPruning(const CBlockFileInfo& block_file_in
 {
     AssertLockHeld(cs_main);
     for (const auto& prune_lock : m_prune_locks) {
-        if (prune_lock.second.height_first == std::numeric_limits<int>::max()) continue;
+        if (prune_lock.second.height_first == std::numeric_limits<uint64_t>::max()) continue;
         // Remove the buffer and one additional block here to get actual height that is outside of the buffer
-        const unsigned int lock_height{(unsigned)std::max(1, prune_lock.second.height_first - PRUNE_LOCK_BUFFER - 1)};
-        const unsigned int lock_height_last{(unsigned)std::max(1, SaturatingAdd(prune_lock.second.height_last, PRUNE_LOCK_BUFFER))};
+        const uint64_t lock_height{(prune_lock.second.height_first <= PRUNE_LOCK_BUFFER + 1) ? 1 : (prune_lock.second.height_first - PRUNE_LOCK_BUFFER - 1)};
+        const uint64_t lock_height_last{SaturatingAdd(prune_lock.second.height_last, static_cast<uint64_t>(PRUNE_LOCK_BUFFER))};
         if (block_file_info.nHeightFirst > lock_height_last) continue;
         if (block_file_info.nHeightLast <= lock_height) continue;
         // TODO: Check each block within the file against the prune_lock range
@@ -440,15 +475,27 @@ bool BlockManager::PruneLockExists(const std::string& name) const {
     return m_prune_locks.count(name);
 }
 
-void BlockManager::UpdatePruneLock(const std::string& name, const PruneLockInfo& lock_info) {
+bool BlockManager::UpdatePruneLock(const std::string& name, const PruneLockInfo& lock_info, const bool sync) {
     AssertLockHeld(::cs_main);
-    m_prune_locks[name] = lock_info;
+    if (sync) {
+        m_block_tree_db->WritePruneLock(name, lock_info);
+    }
+    PruneLockInfo& stored_lock_info = m_prune_locks[name];
+    if (lock_info.temporary && !stored_lock_info.temporary) {
+        // Erase non-temporary lock from disk
+        m_block_tree_db->DeletePruneLock(name);
+    }
+    stored_lock_info = lock_info;
+    return true;
 }
 
 bool BlockManager::DeletePruneLock(const std::string& name)
 {
     AssertLockHeld(::cs_main);
-    return m_prune_locks.erase(name) > 0;
+    const bool existed{m_prune_locks.erase(name) > 0};
+    // Since there is no reasonable expectation for any follow-up to this prune lock, ensure it gets committed to disk immediately.
+    m_block_tree_db->DeletePruneLock(name);
+    return existed;
 }
 
 CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)
@@ -473,6 +520,8 @@ bool BlockManager::LoadBlockIndex(const std::optional<uint256>& snapshot_blockha
             GetConsensus(), [this](const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return this->InsertBlockIndex(hash); }, m_interrupt)) {
         return false;
     }
+
+    if (!m_block_tree_db->LoadPruneLocks(m_prune_locks, m_interrupt)) return false;
 
     if (snapshot_blockhash) {
         const std::optional<AssumeutxoData> maybe_au_data = GetParams().AssumeutxoForBlockhash(*snapshot_blockhash);
@@ -572,7 +621,7 @@ void BlockManager::WriteBlockIndexDB()
         m_dirty_blockindex.erase(it++);
     }
     int max_blockfile{this->MaxBlockfileNum()};
-    m_block_tree_db->WriteBatchSync(vFiles, max_blockfile, vBlocks);
+    m_block_tree_db->WriteBatchSync(vFiles, max_blockfile, vBlocks, m_prune_locks);
 }
 
 bool BlockManager::LoadBlockIndexDB(const std::optional<uint256>& snapshot_blockhash)
