@@ -318,6 +318,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "getblockstats", 0, "hash_or_height", ParamFormat::JSON_OR_STRING },
     { "getblockstats", 1, "stats" },
     { "getblockfileinfo", 0, "file_number" },
+    { "setprunelock", 1, "lock_info" },
     { "pruneblockchain", 0, "height" },
     { "keypoolrefill", 0, "newsize" },
     { "getmempoolinfo", 0, "fee_histogram" },
