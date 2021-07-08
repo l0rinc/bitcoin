@@ -37,6 +37,8 @@ Documentation for C++ subprocessing library.
 #define BITCOIN_UTIL_SUBPROCESS_H
 
 #include <util/check.h>
+#include <util/fs.h>
+#include <util/strencodings.h>
 #include <util/syserror.h>
 
 #include <algorithm>
@@ -533,6 +535,20 @@ namespace util
  */
 
 /*!
+ * Option to close all file descriptors
+ * when the child process is spawned.
+ * The close fd list does not include
+ * input/output/error if they are explicitly
+ * set as part of the Popen arguments.
+ *
+ * Default value is false.
+ */
+struct close_fds {
+  explicit close_fds(bool c): close_all(c) {}
+  bool close_all = false;
+};
+
+/*!
  * Base class for all arguments involving string value.
  */
 struct string_arg
@@ -729,6 +745,7 @@ struct ArgumentDeducer
   void set_option(input&& inp);
   void set_option(output&& out);
   void set_option(error&& err);
+  void set_option(close_fds&& cfds);
 
 private:
   Popen* popen_ = nullptr;
@@ -1014,6 +1031,8 @@ private:
   int child_pid_ = -1;
 #endif
 
+  bool close_fds_ = false;
+
   std::string exe_name_;
 
   // Command provided as sequence
@@ -1257,6 +1276,9 @@ namespace detail {
     if (err.rd_ch_ != -1) popen_->stream_.err_read_ = err.rd_ch_;
   }
 
+  inline void ArgumentDeducer::set_option(close_fds&& cfds) {
+    popen_->close_fds_ = cfds.close_all;
+  }
 
 #ifndef WIN32
   inline void Child::execute_child() {
@@ -1301,7 +1323,26 @@ namespace detail {
         subprocess_close(stream.write_to_parent_);
 
       if (stream.err_write_ != -1 && stream.err_write_ > 2)
-        subprocess_close(stream.err_write_);
+        close(stream.err_write_);
+
+      // Close all the inherited fd's except the error write pipe
+      if (parent_->close_fds_) {
+        try {
+            std::vector<int> fds_to_close;
+            for (const auto& it : fs::directory_iterator("/proc/self/fd")) {
+                const auto fd{ToIntegral<int>(it.path().filename().native())};
+                if (!fd) continue;
+                if (*fd <= 2) continue;  // leave std{in,out,err} alone
+                if (*fd == err_wr_pipe_) continue;
+                fds_to_close.push_back(*fd);
+            }
+            for (const int fd : fds_to_close) {
+                close(fd);
+            }
+        } catch (...) {
+            // TODO: maybe log this - but we're in a child process, so maybe non-trivial!
+        }
+      }
 
       // Replace the current image with the executable
       sys_ret = execvp(parent_->exe_name_.c_str(), parent_->cargv_.data());
