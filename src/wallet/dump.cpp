@@ -181,6 +181,23 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
         error = strprintf(_("Error: Dumpfile specifies an unsupported database format (%s). Only sqlite database dumps are supported"), format_value);
         return false;
     }
+    if (file_format.starts_with("bdb") || format_value.starts_with("bdb")) {
+        warnings.push_back(_("Warning: BDB-backed wallets have a wallet id that is not currently restored."));
+    }
+    DatabaseFormat data_format;
+    if (file_format == "bdb") {
+        data_format = DatabaseFormat::BERKELEY;
+    } else if (file_format == "sqlite") {
+        data_format = DatabaseFormat::SQLITE;
+    } else if (file_format == "bdb_swap") {
+        data_format = DatabaseFormat::BERKELEY_SWAP;
+    } else {
+        error = strprintf(_("Unknown wallet file format \"%s\" provided. Please provide one of \"bdb\" or \"sqlite\"."), file_format);
+        return false;
+    }
+    if (file_format != format_value) {
+        warnings.push_back(strprintf(_("Warning: Dumpfile wallet format \"%s\" does not match command line specified format \"%s\"."), format_value, file_format));
+    }
     std::string format_hasher_line = strprintf("%s,%s\n", format_key, format_value);
     hasher << std::span{format_hasher_line};
 
