@@ -532,7 +532,7 @@ public:
     /** Implement PeerManager */
     void StartScheduledTasks(CScheduler& scheduler) override;
     void CheckForStaleTipAndEvictPeers() override;
-    util::Expected<void, std::string> FetchBlock(NodeId peer_id, const CBlockIndex& block_index) override
+    util::Expected<void, std::string> FetchBlock(NodeId peer_id, const uint256& hash, const CBlockIndex* block_index) override
         EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
     bool GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) const override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
     std::vector<node::TxOrphanage::OrphanInfo> GetOrphanTransactions() override EXCLUSIVE_LOCKS_REQUIRED(!m_tx_download_mutex);
@@ -2002,7 +2002,7 @@ bool PeerManagerImpl::BlockRequestAllowed(const CBlockIndex& block_index)
            (GetBlockProofEquivalentTime(*m_chainman.m_best_header, block_index, *m_chainman.m_best_header, m_chainparams.GetConsensus()) < STALE_RELAY_AGE_LIMIT);
 }
 
-util::Expected<void, std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, const CBlockIndex& block_index)
+util::Expected<void, std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, const uint256& hash, const CBlockIndex* block_index)
 {
     if (m_chainman.m_blockman.LoadingBlocks()) return util::Unexpected{"Loading blocks ..."};
 
@@ -2019,15 +2019,16 @@ util::Expected<void, std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, co
     // Ignore pre-segwit peers
     if (!CanServeWitnesses(*peer)) return util::Unexpected{"Pre-SegWit peer"};
 
-    const uint256& hash{block_index.GetBlockHash()};
-
     if (IsBlockRequestedFromPeer(hash, peer_id)) return util::Unexpected{"Already requested from this peer"};
 
-    // Forget about all prior requests
-    RemoveBlockRequest(hash, std::nullopt);
+    // Mark block as in-flight unless we don't have the header.
+    if (block_index != nullptr) {
+        // Forget about all prior requests
+        RemoveBlockRequest(hash, std::nullopt);
 
-    // Mark block as in-flight
-    Assume(BlockRequested(peer_id, block_index));
+        // Mark block as in-flight
+        Assume(BlockRequested(peer_id, *block_index));
+    }
 
     // Construct message to request the block
     std::vector<CInv> invs{CInv(MSG_BLOCK | MSG_WITNESS_FLAG, hash)};
@@ -2043,6 +2044,12 @@ util::Expected<void, std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, co
     LogDebug(BCLog::NET, "Requesting block %s from peer=%d\n",
                  hash.ToString(), peer_id);
     return {};
+}
+
+util::Expected<void, std::string> PeerManager::FetchBlock(NodeId peer_id, const CBlockIndex& block_index)
+{
+    const uint256& hash{block_index.GetBlockHash()};
+    return FetchBlock(peer_id, hash, &block_index);
 }
 
 std::unique_ptr<PeerManager> PeerManager::make(CConnman& connman, AddrMan& addrman,
