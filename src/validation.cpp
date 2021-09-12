@@ -54,6 +54,7 @@
 #include <util/fs.h>
 #include <util/fs_helpers.h>
 #include <util/hasher.h>
+#include <util/ioprio.h>
 #include <util/log.h>
 #include <util/mempressure.h>
 #include <util/moneystr.h>
@@ -5173,6 +5174,8 @@ void ChainstateManager::LoadExternalBlockFile(
 
     int nLoaded = 0;
     try {
+        IOPRIO_IDLER(/*lowprio=*/true);
+
         BufferedFile blkdat{file_in, 2 * MAX_BLOCK_SERIALIZED_SIZE, MAX_BLOCK_SERIALIZED_SIZE + 8};
         // nRewind indicates where to resume scanning in case something goes wrong,
         // such as a block fails to deserialize.
