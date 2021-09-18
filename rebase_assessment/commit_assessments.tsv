@@ -1,0 +1,19 @@
+commit	subject	files_changed	consensus_risk	serious_bugfix	cherry_pick_to_core	suspicious_activity	replay_result	notes
+a40890485f483753f2c063dadacf184643cfae67	Multiselect in coincontrol treewidget and display selected count	4	no	no	unlikely	no	applied	
+48b4612cca15b1aa3aa621fd7f0968ed626f54b2	GUI/CoinControl: Remove selection-only counter and minimise diff	4	no	no	unlikely	no	applied	
+3cf4f0e4c797aa092d37f11d5dde30dbdab3583c	GUI: Restore "request payment" button text	2	no	no	unlikely	no	applied	
+0e9e25ade0ca5a524626e7dcb6e81311d1759f4d	Bugfix: GUI: Disable editing of sending addresses	3	no	possible	consider	no	applied	
+59f52de21f907c906b93e9069e030ba21a752ea5	qt: Add -guisettingsdir option	2	no	no	unlikely	no	applied	
+f66053ea85cd7760a2cf4ed73bc622c2e348801e	Enlarge Network Traffic Graph	1	no	no	unlikely	no	applied	
+befa6e0dafed7711de5f6bda645657af06468048	Bugfix: GUI/Addressbook: Drop confusing message about signed messages	1	no	possible	consider	no	applied	
+5321a6a55a334b84b7ef633524056b9498a340f2	wallet: Preserve unsupported key origin flags	1	no	no	no	no	applied	
+b6d70ddc06eb5b42be7426e1efb79f7dc0576629	Network Graph layout	1	no	no	unlikely	no	applied	
+06ec7f56dfb8d29b8aacccc4c0206ee029a075af	test: Support -cli tests using external bitcoin-cli	1	no	no	unlikely	no	applied	
+6600eecd04a9cbd26985a9325f13ca01774593a0	[Qt] support for persisted rpc console history	1	no	no	unlikely	no	applied	
+ec076f45dfeb3be6bfbc2cee854a32c4acbc45a0	Qt/RPCConsole: Refactor RPCConsole::WriteCommandHistory out of ~RPCConsole	2	no	no	unlikely	no	applied	
+0cd5fc301d6742db88d47a46088003e846f7862d	Qt/RPCConsole: If filtered commands are found in history at startup, erase them best we can	1	no	no	unlikely	no	applied	
+8864a1f790e6c3ba0abe28933ad2cb99ede5a423	Network Graph - Create y_value function	2	no	no	unlikely	no	applied	
+ad431ff5d18d1f76b43aef98d9e67019bb9824f2	Enable non-linear network traffic graph	2	no	no	unlikely	no	applied	
+f9d9a1d1cfd08096aa4f734e8d9134eac80e6e9b	Bugfix: GUI/QRImageWidget: Correctly calculate sizes	2	no	possible	consider	no	applied	
+91d24c84ba4bc929df96ffd46c591ad3a92757bd	Bugfix: GUI/QRImageWidget: If text won't fit, split across multiple lines	1	no	possible	consider	no	applied	
+4c5143d56c98d4f9f961059692f155bbe2248c44	GUI/QRImageWidget: Allow image to grow up to 25% wider to accomidate single-line text	1	no	no	unlikely	no	applied	

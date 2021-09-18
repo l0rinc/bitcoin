@@ -1,0 +1,114 @@
+Auto-merging src/qt/coincontroldialog.cpp
+Auto-merging src/qt/coincontroldialog.h
+Auto-merging src/qt/coincontroltreewidget.cpp
+Auto-merging src/qt/forms/coincontroldialog.ui
+[knots-replayed-on-origin-master fabdddcc4a] Multiselect in coincontrol treewidget and display selected count
+ Author: Andras Elso <elso.andras@gmail.com>
+ Date: Wed Nov 22 10:16:32 2017 +0000
+ 4 files changed, 42 insertions(+), 5 deletions(-)
+Auto-merging src/qt/coincontroldialog.cpp
+Auto-merging src/qt/coincontroldialog.h
+Auto-merging src/qt/coincontroltreewidget.cpp
+Auto-merging src/qt/forms/coincontroldialog.ui
+[knots-replayed-on-origin-master 697d181306] GUI/CoinControl: Remove selection-only counter and minimise diff
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Apr 4 09:54:32 2019 +0000
+ 4 files changed, 2 insertions(+), 20 deletions(-)
+Auto-merging src/qt/addressbookpage.cpp
+Auto-merging src/qt/forms/receivecoinsdialog.ui
+[knots-replayed-on-origin-master d5ceb66571] GUI: Restore "request payment" button text
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sun Apr 21 02:19:18 2019 +0000
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+Auto-merging src/qt/addresstablemodel.cpp
+Auto-merging src/qt/editaddressdialog.cpp
+Auto-merging src/qt/forms/addressbookpage.ui
+[knots-replayed-on-origin-master 5f03d80dfe] Bugfix: GUI: Disable editing of sending addresses
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Feb 22 04:48:22 2020 +0000
+ 3 files changed, 3 insertions(+), 4 deletions(-)
+Auto-merging doc/files.md
+Auto-merging src/qt/bitcoin.cpp
+[knots-replayed-on-origin-master 7dc6582b38] qt: Add -guisettingsdir option
+ Author: Emil Engler <me@emilengler.com>
+ Date: Sat Nov 30 01:08:03 2019 +0100
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+Auto-merging src/qt/forms/debugwindow.ui
+[knots-replayed-on-origin-master 5337ebdd04] Enlarge Network Traffic Graph
+ Author: git <git@gits-Air.deepspace.dynalias.org>
+ Date: Mon Sep 14 17:21:44 2020 -0400
+ 1 file changed, 210 insertions(+), 194 deletions(-)
+Auto-merging src/qt/addressbookpage.cpp
+[knots-replayed-on-origin-master 092d10a3fe] Bugfix: GUI/Addressbook: Drop confusing message about signed messages
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Jan 2 16:45:27 2021 +0000
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging src/wallet/walletdb.h
+[knots-replayed-on-origin-master 688c7d90cb] wallet: Preserve unsupported key origin flags
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Oct 29 21:05:46 2019 +0000
+ 1 file changed, 4 insertions(+)
+Auto-merging src/qt/forms/debugwindow.ui
+[knots-replayed-on-origin-master 990ec2b68e] Network Graph layout
+ Author: @RandyMcMillan <randy.lee.mcmillan@gmail.com>
+ Date: Mon Sep 14 17:21:44 2020 -0400
+ 1 file changed, 223 insertions(+), 251 deletions(-)
+Auto-merging test/functional/test_framework/test_framework.py
+[knots-replayed-on-origin-master 6d89d1ce62] test: Support -cli tests using external bitcoin-cli
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Jan 12 13:31:40 2019 +0000
+ 1 file changed, 6 insertions(+), 12 deletions(-)
+Auto-merging src/qt/rpcconsole.cpp
+[knots-replayed-on-origin-master 025c1d9661] [Qt] support for persisted rpc console history
+ Author: Jonas Schnelli <jonas.schnelli@include7.ch>
+ Date: Fri Mar 13 21:51:27 2015 +0100
+ 1 file changed, 20 insertions(+)
+Auto-merging src/qt/rpcconsole.cpp
+Auto-merging src/qt/rpcconsole.h
+[knots-replayed-on-origin-master 3c783f1cee] Qt/RPCConsole: Refactor RPCConsole::WriteCommandHistory out of ~RPCConsole
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Oct 4 04:22:11 2016 +0000
+ 2 files changed, 14 insertions(+), 7 deletions(-)
+Auto-merging src/qt/rpcconsole.cpp
+[knots-replayed-on-origin-master e2fe0f4807] Qt/RPCConsole: If filtered commands are found in history at startup, erase them best we can
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Oct 4 04:39:58 2016 +0000
+ 1 file changed, 26 insertions(+), 1 deletion(-)
+Auto-merging src/qt/trafficgraphwidget.cpp
+Auto-merging src/qt/trafficgraphwidget.h
+[knots-replayed-on-origin-master c2a29eebb0] Network Graph - Create y_value function
+ Author: R E Broadley <github.com@esuza.com>
+ Date: Thu Dec 2 13:27:34 2021 +0100
+ 2 files changed, 12 insertions(+), 5 deletions(-)
+Auto-merging src/qt/trafficgraphwidget.cpp
+Auto-merging src/qt/trafficgraphwidget.h
+[knots-replayed-on-origin-master cbba5888f6] Enable non-linear network traffic graph
+ Author: R E Broadley <github.com@esuza.com>
+ Date: Mon Nov 15 15:22:05 2021 +0100
+ 2 files changed, 28 insertions(+), 14 deletions(-)
+Auto-merging src/qt/qrimagewidget.cpp
+Auto-merging src/qt/qrimagewidget.h
+[knots-replayed-on-origin-master 9239472e44] Bugfix: GUI/QRImageWidget: Correctly calculate sizes
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Mon Dec 13 05:56:44 2021 +0000
+ 2 files changed, 21 insertions(+), 16 deletions(-)
+Auto-merging src/qt/qrimagewidget.cpp
+[knots-replayed-on-origin-master 127f940476] Bugfix: GUI/QRImageWidget: If text won't fit, split across multiple lines
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Mon Dec 13 06:19:21 2021 +0000
+ 1 file changed, 22 insertions(+), 6 deletions(-)
+Auto-merging src/qt/qrimagewidget.cpp
+[knots-replayed-on-origin-master 85af0cbd30] GUI/QRImageWidget: Allow image to grow up to 25% wider to accomidate single-line text
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Mon Dec 13 06:19:49 2021 +0000
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+Auto-merging test/config.ini.in
+CONFLICT (modify/delete): test/util/test_runner.py deleted in HEAD and modified in 41ff6c343e (Bugfix: Skip tests for tools not being built).  Version 41ff6c343e (Bugfix: Skip tests for tools not being built) of test/util/test_runner.py left in tree.
+error: could not apply 41ff6c343e... Bugfix: Skip tests for tools not being built
+hint: After resolving the conflicts, mark them with
+hint: "git add/rm <pathspec>", then run
+hint: "git cherry-pick --continue".
+hint: You can instead skip this commit with "git cherry-pick --skip".
+hint: To abort and get back to the state before "git cherry-pick",
+hint: run "git cherry-pick --abort".
+hint: Disable this message with "git config set advice.mergeConflict false"
