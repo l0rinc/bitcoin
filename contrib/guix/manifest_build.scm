@@ -7,6 +7,8 @@
              (gnu packages cross-base)
              (gnu packages gawk)
              (gnu packages gcc)
+             ((gnu packages image) #:select (libicns librsvg))
+             ((gnu packages imagemagick) #:select (imagemagick))
              ((gnu packages installers) #:select (nsis-x86_64))
              ((gnu packages linux) #:select (linux-libre-headers-6.1))
              (gnu packages llvm)
@@ -277,6 +279,9 @@ chain for " target " development."))
         cmake-minimal
         gnu-make
         ninja
+        imagemagick
+        libicns
+        librsvg
         ;; Scripting
         python-minimal ;; (3.11)
         ;; Git
