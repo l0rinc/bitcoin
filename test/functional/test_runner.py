@@ -176,6 +176,7 @@ BASE_SCRIPTS = [
     'wallet_gethdkeys.py',
     'wallet_createwalletdescriptor.py',
     'wallet_exported_watchonly.py',
+    'feature_fee_estimates_persist.py',
     'interface_zmq.py',
     'rpc_invalid_address_message.py',
     'rpc_validateaddress.py',

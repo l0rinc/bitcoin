@@ -960,19 +960,20 @@ void CBlockPolicyEstimator::Flush() {
     FlushFeeEstimates();
 }
 
-void CBlockPolicyEstimator::FlushFeeEstimates()
+bool CBlockPolicyEstimator::FlushFeeEstimates() const
 {
     AutoFile est_file{fsbridge::fopen(m_estimation_filepath, "wb")};
     if (est_file.IsNull() || !Write(est_file)) {
         LogWarning("Failed to write fee estimates to %s. Continue anyway.", fs::PathToString(m_estimation_filepath));
         (void)est_file.fclose();
-        return;
+        return false;
     }
     if (est_file.fclose() != 0) {
         LogWarning("Failed to close fee estimates file %s: %s. Continuing anyway.", fs::PathToString(m_estimation_filepath), SysErrorString(errno));
-        return;
+        return false;
     }
     LogDebug(BCLog::ESTIMATEFEE, "Flushed fee estimates to %s.", fs::PathToString(m_estimation_filepath));
+    return true;
 }
 
 bool CBlockPolicyEstimator::Write(AutoFile& fileout) const
