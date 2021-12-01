@@ -129,22 +129,15 @@ std::optional<int64_t> ParseISO8601DateTime(std::string_view str)
     return int64_t{TicksSinceEpoch<std::chrono::seconds>(tp)};
 }
 
-std::string FormatRFC1123DateTime(int64_t time)
-{
-    if (time < -62167219200 || 253402300799 < time) {
-        // 4-digit year, so only support years 0 to 9999
-        return "";
-    }
-    const std::chrono::sys_seconds secs{std::chrono::seconds{time}};
-    const auto days{std::chrono::floor<std::chrono::days>(secs)};
-    const auto w{days.time_since_epoch().count() % 7}; // will be in the range [-6, 6]
-    std::string_view weekday{weekdays.at(w >= 0 ? w : w + 7)};
-    const std::chrono::year_month_day ymd{days};
-    std::string_view month{months.at(unsigned{ymd.month()} - 1)};
-    const std::chrono::hh_mm_ss hms{secs - days};
-    // examples: Mon, 27 Jul 2009 12:28:53 GMT
-    //           Fri, 31 May 2024 19:18:04 GMT
-    return strprintf("%03s, %02u %03s %04i %02i:%02i:%02i GMT", weekday, unsigned{ymd.day()}, month, signed{ymd.year()}, hms.hours().count(), hms.minutes().count(), hms.seconds().count());
+std::string FormatISO8601Time(int64_t nTime) {
+    struct tm ts;
+    time_t time_val = nTime;
+#ifdef HAVE_GMTIME_R
+    gmtime_r(&time_val, &ts);
+#else
+    gmtime_s(&ts, &time_val);
+#endif
+    return strprintf("%02i:%02i:%02iZ", ts.tm_hour, ts.tm_min, ts.tm_sec);
 }
 
 struct timeval MillisToTimeval(int64_t nTimeout)
