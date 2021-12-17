@@ -764,9 +764,8 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
 #if HAVE_SYSTEM
 static void StartupNotify(const ArgsManager& args)
 {
-    std::string cmd = args.GetArg("-startupnotify", "");
-    if (!cmd.empty()) {
-        std::thread t(runCommand, cmd);
+    for (std::string command : args.GetArgs("-startupnotify")) {
+        std::thread t(runCommand, command);
         t.detach(); // thread runs free
     }
 }
@@ -2028,14 +2027,17 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 #endif
 
 #if HAVE_SYSTEM
-    const std::string block_notify = args.GetArg("-blocknotify", "");
-    if (!block_notify.empty()) {
-        uiInterface.NotifyBlockTip.connect([block_notify](SynchronizationState sync_state, const CBlockIndex& block, double /* verification_progress */) {
+    if (args.IsArgSet("-blocknotify")) {
+        auto blocknotify_commands = args.GetArgs("-blocknotify");
+        uiInterface.NotifyBlockTip.connect([blocknotify_commands](SynchronizationState sync_state, const CBlockIndex& block, double /* verification_progress */) {
             if (sync_state != SynchronizationState::POST_INIT) return;
-            std::string command = block_notify;
-            ReplaceAll(command, "%s", block.GetBlockHash().GetHex());
-            std::thread t(runCommand, command);
-            t.detach(); // thread runs free
+            const std::string blockhash_hex = block.GetBlockHash().GetHex();
+            for (std::string command : blocknotify_commands) {
+                ReplaceAll(command, "%s", blockhash_hex);
+
+                std::thread t(runCommand, command);
+                t.detach(); // thread runs free
+            }
         });
     }
 #endif
