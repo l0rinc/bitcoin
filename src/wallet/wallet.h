@@ -673,6 +673,8 @@ public:
     bool ShouldResend() const;
     void ResubmitWalletTransactions(node::TxBroadcast broadcast_method, bool force);
 
+    CAmount GetLegacyBalance(const isminefilter& filter, int minDepth) const;
+
     OutputType TransactionChangeType(const std::optional<OutputType>& change_type, const std::vector<CRecipient>& vecSend) const;
 
     /** Fetch the inputs and sign with SIGHASH_ALL. */
