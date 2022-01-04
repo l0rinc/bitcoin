@@ -354,7 +354,8 @@ public:
 
     // Forces an arg setting. Called by SoftSetArg() if the arg hasn't already
     // been set. Also called directly in testing.
-    void ForceSetArg(const std::string& strArg, const std::string& strValue) EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
+    void ForceSetArg(const std::string& arg, const std::string& value) EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
+    void ForceSetArgV(const std::string& arg, const common::SettingsValue& value) EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
 
     /**
      * Returns the appropriate chain type from the program arguments.
