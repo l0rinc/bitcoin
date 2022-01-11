@@ -138,7 +138,7 @@ private:
     bool bDisplayAddresses;
     QString strThirdPartyTxUrls;
     FontChoice m_font_money{FontChoiceAbstract::EmbeddedFont};
-    FontChoice m_font_qrcodes{FontChoiceAbstract::BestSystemFont};
+    FontChoice m_font_qrcodes{FontChoiceAbstract::EmbeddedFont};
     bool m_peers_tab_alternating_row_colors;
     bool fCoinControlFeatures;
     bool m_sub_fee_from_amount;
