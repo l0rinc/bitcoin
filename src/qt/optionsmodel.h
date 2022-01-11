@@ -64,6 +64,7 @@ public:
         ThirdPartyTxUrls,       // QString
         Language,               // QString
         FontForMoney,           // FontChoice
+        FontForQRCodes,         // FontChoice
         PeersTabAlternatingRowColors, // bool
         CoinControlFeatures,    // bool
         SubFeeFromAmount,       // bool
@@ -107,6 +108,7 @@ public:
     bool getDisplayAddresses() const { return bDisplayAddresses; }
     QString getThirdPartyTxUrls() const { return strThirdPartyTxUrls; }
     QFont getFontForMoney() const;
+    FontChoice getFontChoiceForQRCodes() const { return m_font_qrcodes; }
     bool getPeersTabAlternatingRowColors() const { return m_peers_tab_alternating_row_colors; }
     bool getCoinControlFeatures() const { return fCoinControlFeatures; }
     bool getSubFeeFromAmount() const { return m_sub_fee_from_amount; }
@@ -136,6 +138,7 @@ private:
     bool bDisplayAddresses;
     QString strThirdPartyTxUrls;
     FontChoice m_font_money{FontChoiceAbstract::EmbeddedFont};
+    FontChoice m_font_qrcodes{FontChoiceAbstract::BestSystemFont};
     bool m_peers_tab_alternating_row_colors;
     bool fCoinControlFeatures;
     bool m_sub_fee_from_amount;
@@ -159,6 +162,7 @@ Q_SIGNALS:
     void coinControlFeaturesChanged(bool);
     void showTrayIconChanged(bool);
     void fontForMoneyChanged(const QFont&);
+    void fontForQRCodesChanged(const FontChoice&);
     void peersTabAlternatingRowColorsChanged(bool);
 };
 
