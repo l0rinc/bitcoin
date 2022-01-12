@@ -252,3 +252,110 @@ a2225405a53c8a1d0c1a081f8c3afd82ae6ae400	net: Remove forcedinbound limit antifea
 86a3ce62096b2faefd01366a6f300fff6f8b9c0b	[doc] update man pages for 29.0rc1	6	no	no	unlikely	no	applied	
 21f423939e521aa61b96689b9f8ee61c59abf5eb	[examples] generate example bitcoin.conf	1	no	no	unlikely	no	applied	
 47e2fa86dc5433852fd9e5050a23de2accfdca8d	[doc] release notes link for 29.0	1	no	no	unlikely	no	applied	
+4e438d326ea55ac0f98f89e41e69b56354e801e7	build: use make < 3.82 syntax for define directive	2	no	no	unlikely	no	applied_manual	
+472d582bfec4dcdecb5f4d9bbbe41ea7961ca62b	[build] bump to 29.0rc2	1	no	no	no	no	applied	
+8082f88d1a434b3ba1018c6592affe759d53df48	[doc] update man pages for 29.0rc2	6	no	no	unlikely	no	applied	
+74df31cb0bdef9cce31ae62ed71a1e386cba0274	[doc] update example bitcoin.conf with missing options	1	no	no	unlikely	no	applied	
+7c05ef567328031641b7197b30508d0989bd15a7	[build] bump to 29.0rc3	1	no	no	no	no	applied	
+f80ab9a5d8cd5418655fe1a6f01c77926e2cc2e5	[doc] update man pages for 29.0rc3	6	no	no	unlikely	no	applied	
+a7b4350e2147e3699dcf3b4edafdf007ed6673b9	Revert "Use more specific path when including `memenv.h` header"	2	no	no	no	no	applied	
+c244d6306821d0ba25be15102a156f8be17c2d1c	crypto/sha256: Use pragmas to enforce necessary intrinsics for GCC and Clang	3	no	no	no	no	applied	
+4d9aff4d0b26350b1a3984146876ab6dd501c5ac	cmake: For intrinsics checks, use pragmas to explicitly enable them for GCC and Clang if possible	1	no	no	no	no	applied	
+57becdf59e55b686d05c7497908310c132edc2fd	http: Fail initialization when any bind fails	2	no	no	unlikely	no	applied	
+c89da5080b0854bc1227a46fa9baf8e720b2d1d3	httpserver: Clone evhttp_bind_socket_with_handle locally	1	no	no	no	no	applied	
+a4c8d3fd17907e0baac4383c0bcad3e9f8af7748	httpserver: Preserve socket error from listen across closesocket cleanup	1	no	no	no	no	applied	
+22544f94ee4a73d785585b424fb12270c518369c	httpserver: Collapse bind_socket into my_bind_socket_with_handle	1	no	no	no	no	applied	
+a12268e51aa16abc4676b16b8e2f304826cc5f4f	httpserver: Collapse make_addrinfo into my_bind_socket_with_handle	1	no	no	no	no	applied	
+e849d70691b2b58000be3081b67396cce6c19418	httpserver: Only make a single bind_socket_ai call from my_bind_socket_with_handle	1	no	no	no	no	applied	
+a229993220296426678593a8508e1a4f84c70746	httpserver: Collapse bind_socket_ai into my_bind_socket_with_handle	1	no	no	no	no	applied	
+582e28daf89794b3fa91f8c67396fa2727daee4a	httpserver: Adapt my_bind_socket_with_handle to local code style	1	no	no	no	no	applied	
+682d31cb2fc185ac1ba23abc2452f530de972ee3	httpserver: Simplify my_bind_socket_with_handle	1	no	no	no	no	applied	
+abdc85c2afcda02e1bca6cf562038a9a8fc336d9	httpserver: Check for and tolerate more possible system limitations	1	no	no	no	no	applied	
+fbe185ce7a76e3c8d36042df27f9a34ec9a95cff	Bugfix: httpserver: Close listen socket if we fail to make an evhttp handle	1	no	possible	consider	no	applied	
+fc1d58d4d037d2468077871d0cfb88b2bdd9a75d	httpserver: Workaround libevent bug by tolerating specific failure to support IPv6 binds (for default bind only)	1	no	no	no	no	applied	
+fe3bba8c29d183e4186a4994fc5bfabd7d822793	SanitizeString: Support optional escaping of disallowed characters	2	no	no	no	no	applied	
+b9d2634b81dba44d1ea9c5a8d5a8ba80700588ab	net_processing: Escape rather than remove any printable characters in UAs	3	no	no	no	no	applied	
+97130ac516ffe729153122aacd0b8a23e0650100	Try to use posix_fadvise with CBufferedFile	3	no	no	no	no	applied	
+549717f0a8a583f625948c78af77e87af6885d5a	fs_helpers: Guard _POSIX_C_SOURCE check within #ifdef	1	no	no	no	no	applied	
+916c1b855eccb75dc65ece1f9c02aa3d89685d65	The three arguments -nohelp, -noh, and -no? were previously silently accepted and interpreted as -help, -h, and -? respectively. As negating these arguments is meaningless, this is now blocked and properly communicated to the user.	2	no	no	no	no	applied	
+1c4d2d54d892f4f1f6e7607083736de76dd0901a	Bugfix: ZMQ: Leave notifiers intact rather than shut them down if they fail a notification once	1	no	possible	consider	no	applied	
+268fb1e0e373ffa83c9fd014f2c50f7d03c275c3	Bugfix: ZMQ: Don't try to use zmq_strerror when reading block from disk fails	1	no	possible	consider	no	applied	
+ba28af94bd5ca4fead299641657cf59fc13ec658	ZMQ: If reading block from disk fails, log the block hash	1	no	no	no	no	applied	
+050f4bbce9fd2f3e4b00b4c2c83475ef74e2e9f2	Diff-minimise	1	no	no	no	no	applied	
+2677bec14d1cee9e379b6845e944bf61c8456ab4	Diff-minimise	2	no	no	unlikely	no	applied	
+ca4a9cfecda0a35ac93de36ae552dc89b3790391	GUI: Treat assumed-confirmed txs as unconfirmed	1	no	no	unlikely	no	applied	
+c2b631708bd07a0f697a1f54bd48b9343689ff47	GUI: Treat assumed-confirmed txs as unconfirmed also in TransactionDesc	1	no	no	unlikely	no	applied	
+c89db663a42e6c075d6dd0e0cb7cdc350b829986	RPC/Wallet: Move wtx "confirmations" to "confirmations_assumed" if assumeutxo is applicable	1	no	no	no	review	applied	
+abdcbf48f4734f82143cd0f137c6717605648769	RPC/blockchain: gettxout: Move "confirmations" to "confirmations_assumed" when assumeutxo is applicable	1	no	no	no	review	applied	
+7a832effaa6d0da338bfb22c13b0cf2665bd940b	RPC/rawtransaction: getrawtransaction: Move "confirmations" to "confirmations_assumed" when assumeutxo is applicable	1	no	no	no	review	applied	
+9f6d3fbe78eaa1ab558e0cf439687b9f850bae22	Bugfix: RPC: Check for blank rpcauth on a per-param basis	1	no	possible	consider	no	applied	
+39bde96b6dfc6add6f74059ce53047883a651a39	QA: rpc_users: Test blank rpcauth in combination with non-blank	1	no	no	unlikely	no	applied	
+51588287fb5eeb5b161a856191c731d9e2ebb20d	QA: rpc_users: Test behaviour of -norpcauth	1	no	no	unlikely	no	applied	
+d469848b6f4f89d0c781ffc04da96c723fe1babd	cmake: Add unsupported `WITH_SYSTEM_LEVELDB` option	3	no	no	no	no	applied	
+0186d199a3dd405dce0862df51e6ccff947ea832	init: Sanity check LevelDB build/runtime versions	3	review	no	consider	no	applied	
+f2ac68746b20ba7bbf96315451ddbb2b9b5cab43	Use internal LevelDB test interface to bump LevelDB mmap limit up to 4096 like Bitcoin Core's fork	1	no	no	no	no	applied	
+d22a914b5604baa0250de4084d6954f5e186c528	QA/sanity_tests: Run dbwrapper_SanityCheck	1	no	no	no	no	applied	
+80cda0d5d6f788f6493f7514cb31ce1d8b828e20	dbwrapper: Return util::Result for SanityCheck	4	review	no	consider	no	applied	
+7e75b074b2e7e7efdbf3c34c9edde9e9f06d8d3c	cmake: Add unsupported `WITH_SYSTEM_LIBSECP256K1` option	2	no	no	no	no	applied	
+b13efc347e76c668c24bb82c3732bdc869ff651c	cmake: Check for necessary libsecp256k1 modules	1	no	no	no	no	applied	
+8fbdf93878fbedf7d183b2ebde5a0ce485b66bd4	Sanity check to detect LLVM bug 96267	3	review	no	consider	no	applied	
+15609dca5aea51b371fead8f863f348333e07749	build: Abstract release tarball generation to a utility script make_release_tarball	2	no	no	unlikely	no	applied	
+9a517f47ddbc1a43146c0748948f7a5c70006ff4	build: Micromanage tar when generating source tarball	2	no	no	unlikely	no	applied	
+bac3477e7c426053fbf22cbc8e8e7212bfc7c09c	Remove embedded libminisketch (and its tests/fuzz) from build	3	no	no	no	no	applied	
+6b29300f7068bde452f0b084d353510984a8ec43	guix: Exclude minisketch files from release tarball	1	no	no	unlikely	no	applied	
+e49dfac324193d4ae08b822f432fc4f5ccdf8802	rpccookieperms: Set permissions on temporary file, prior to writing the cookie	1	no	no	no	no	applied	
+83c29e97020b3bae884d6dc6a6d1c2df0cfc5ee3	script: Return total sum of input amounts from SignTransaction when available	6	review	no	consider	no	applied	
+6ea56f2c1ae4f2df5c9b48bd04851cb52675dfda	wallet: Show fee in results for signrawtransaction* when known	4	no	no	no	no	applied	
+8a18d12a902af941e808d3d469f36ae52c5e4343	wallet: Display fee rate in signrawtransaction*	3	no	no	no	no	applied	
+8bf1fed8415c699b1ac440f63e7f53b923e17b50	test: add test to segwit tests for fee rate when signing raw tx	1	no	no	unlikely	no	applied	
+c6c88992ea5649aeb613af934026b4520cb4a183	Introduce fee histogram in getmempoolinfo RPC command	4	no	no	no	no	applied	
+029d0411c54d91e1c837bdc487c777fcd1c44469	test: Add mempool fee histogram test coverage	2	no	no	unlikely	no	applied	
+0e10d83c991737205b041fb51328cb51f920cb3e	RPC/blockchain: Consider ancestor, descendant, and combined fee rates for histogram in getmempoolinfo	2	no	no	unlikely	no	applied	
+dc4052ed8602546ca37eef7b3919b70eda7365c1	Bugfix: QA: Ensure mempool_fee_histogram can adapt to feerate rounding correctly	1	no	possible	consider	no	applied	
+824fd5c175ea813f92f60cfa9cfe566298ea82c1	RPC/blockchain: getmempoolinfo: Enable specifying with_fee_histogram as a boolean to use a sensible default set of fee rate levels	4	no	no	unlikely	no	applied	
+6ab57096c135f7abe32029ca093d7c24364a811c	Add mempool/fee_histogram option to rest API	1	no	no	no	no	applied	
+4068d6fe6bfe13246f1eaf76237cd6b469697ee9	RPC/mempool: Add "to" (end of range) field to fee histogram	2	no	no	unlikely	no	applied	
+ec34e9a424122d7d99bf9bb579c27aae10e37d79	RPC/blockchain: getmempoolinfo: Return fee_histogram in older format (only)	2	no	no	unlikely	no	applied	
+e888c5d1c1fa248c5783b1ef88a5e19486d91f87	Bugfix: RPC/blockchain: Correct type of "to_feerate" result in getmempoolinfo fee histogram	1	no	possible	consider	no	applied	
+1a829d20e12810a1b22359af1a5cf189024c8fb2	RPC/mempool: Skip result type checks for fee_histogram in getmempoolinfo	1	no	no	no	no	applied	
+a822d5bda8c136e1e149330f4ee5554bf5124786	Bugfix: QA: Ensure mempool_fee_histogram expected feerates rounded down	1	no	possible	consider	no	applied	
+e9ce90337a6f4c281285d57c29a0e529a6c84f1d	Bugfix: RPC/blockchain: Actually round feerates down for getmempoolinfo fee histograms	2	no	possible	consider	no	applied	
+0697e9577877e2cdf2e9a9199f1aef87d9a5047f	QA: interface_rest: Check /mempool/info/with_fee_histogram matches RPC	1	no	no	unlikely	no	applied	
+85c8d477b069bfd1de5c5e90dba70389efa77a08	RPC/Mempool: Avoid extra decrement of unsigned below 0 when building fee histogram	1	no	no	no	no	applied	
+f818d33bd5b73d07b8a6a5e66c9c825888e21af5	Bugfix: QA: mempool_fee_histogram: Compare to actual vsize/fee rather than hard-coding a particular constant	1	no	possible	consider	no	applied	
+0c963ae2c193ee5f9e6485c30010f9c1482cc813	Add -uaappend option to append a literal string to user agent	1	no	no	no	no	applied	
+b6ca5e9f0c94c14c71a0bdf63d124f516712f053	QA: Test -uaappend	1	no	no	unlikely	no	applied	
+8ee12141570140f56f5cfefd793825a8787656a6	Roll back (tip - 1) prune locks when doing a reorg	1	review	no	consider	no	applied	
+0b4bd4e1340798c3ac798aacb76fbeb8de9776cf	Move prune lock checking into BlockManager	4	review	no	consider	no	applied	
+f4b3368b13529db4cf7aa3233316f9d58370e1dd	blockstorage: Add height_last to PruneLockInfo	2	no	no	no	no	applied	
+b4e1c9614e9dcda1ee6518d2209a35ae826533be	Add internal interfaces for prune locks	4	no	no	no	no	applied	
+4822c21812b0cd8f33421b4b9275dbb810d99747	Support for persisting prune locks in blocks/index db	6	review	no	consider	no	applied	
+b64d1e9b7b254312cb3d71b2dad7cc44b432c125	RPC: blockchain: Add listprunelocks and setprunelock methods	3	no	no	no	no	applied	
+196b501198d0d1b51eb96df57f379558583775e0	QA: Test prune locks via RPC	1	no	no	unlikely	no	applied	
+ef060ac6a5c49f256b4c26eead9a463c15511e18	RPC/Blockchain: Optimise setprunelock "delete all" slightly	1	no	no	no	no	applied	
+1d1c92d40d912f9a9f714ba5f785b824040afc04	Bugfix: QA/fuzz: Add listprunelocks and setprunelock to RPC_COMMANDS_SAFE_FOR_FUZZING	1	no	possible	consider	no	applied	
+162f0dba2f203ecb4509840a8616bd635af4ef0d	Bugfix: RPC: blockchain: Actually include "temporary" flag in listprunelocks result	2	no	possible	consider	no	applied	
+a7a205dc7d4e224ad2786311323a11e788208c09	rpc: Support -rpcauthfile argument	2	no	no	no	no	applied	
+8d26afaf5d512174654b91160f9c181b42d55a48	rpcauth.py: Combine rpcauth parameter in common	1	no	no	unlikely	no	applied	
+edb3686495cb1af56c280fcf5f39ab933d68a85b	rpcauth: Support storing credentials in a file	1	no	no	unlikely	no	applied	
+d797e00345a4c5b3193a2585ea41e7fc877c0267	Bugfix: rpcauth: Specify encoding for output file	1	no	possible	consider	no	applied	
+a34ee591e3b0a1b9dd80996949e0283557431e2a	rpcauthfile: Support multiple lines each with a different auth config	2	no	no	unlikely	no	applied	
+0545fb92154578fa281892928151b539d3fbd0bb	QA: rpc_users: Add tests for rpcauthfile	1	no	no	unlikely	no	applied	
+6d5fadc1ba3a0bf4dbead2026b54ce51f4110c3c	Bugfix: httprpc: Allow a blank -rpcauth or -rpcauthfile to void all prior such options of its own kind	1	no	possible	consider	no	applied	
+3af4b08cc19d5c2a86be0c903f001bf0e2b33428	httprpc: Optimise -rpcauthfile loading slightly	1	no	no	no	no	applied	
+32f13406288a0888aeaf3b3364cd61c9a29547e5	Revert "Bugfix: httprpc: Allow a blank -rpcauth or -rpcauthfile to void all prior such options of its own kind"	1	no	possible	consider	no	applied	
+a5e24757585a94ac2e79718859d8aadf7cb2f005	Ignore -rpcauthfile params if -norpcauth is used	2	no	no	unlikely	no	applied	
+f2e5b295320da417311d7569f623f036eb6280bb	GUI: Intro: Output a std::unique_ptr<Intro> from Intro::showIfNeeded	3	no	no	unlikely	no	applied	
+e1e2ca9786d675414e03d1d87c41433b3d532285	GUI: Intro: Have user choose assumevalid	5	no	no	unlikely	review	applied	
+7445c5b786999958ed382249f1f81f454934ad18	validation: Make LimitMempoolSize public	2	review	no	consider	no	applied	
+f3dceb936e48a54f39e95f0e461904c20fc6d3ae	Abstract minimum maxmempool to maxmempoolMinimumBytes function (in txmempool)	2	no	no	no	no	applied	
+771e99c7466c1aab11fec5e0bbc966b9f92c7b15	Add maxmempool RPC	4	no	no	no	no	applied	
+e3d45ed80998987a87e7cf6166ff9e58a81b77e7	util: Add "importfromcoldcard" command to bitcoin-wallet tool	4	no	no	no	no	applied	
+0b7664c0380aad43bdbe8bacd194c287e9fc78cf	wallettool: Add experimental warning to importfromcoldcard command	1	no	no	no	no	applied	
+b55d758d0df540798c96e7185b8e92e320cd93e8	Add formatBytesps function	2	no	no	unlikely	no	applied	
+4315bbfb13a7999f6c6a2853c79487afe9107217	Show ToolTip on Network Traffic graph	4	no	no	unlikely	no	applied	
+703f5c57ca7c63381db937488ea859c2dce819f7	GUI: Fix nits in traffic graph tooltip	2	no	no	unlikely	no	applied	
+02f94a1025cb46dd829d2f954b318ed741553b49	refactor: FormatISO8601Time without gmtime*	1	no	no	no	no	applied	
+17a4115654747ef08d168da70ccd9bb49216813d	Revert "gui: fix misleading signmessage error with segwit"	2	no	no	unlikely	no	applied	
+6e937e04ba6ace1a9f36573606e87486faf62aaa	verifymessage: Implement BIP 137 for Segwit support	3	no	no	unlikely	no	applied	
+567a2962f383646ac41316fa4dbc8bd7c599084c	verifymessage: Allow legacy signed messages to validate for Segwit (Electrum compatibility)	2	no	no	unlikely	no	applied	
