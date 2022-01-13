@@ -1712,6 +1712,10 @@ bool GenericTransactionSignatureChecker<T>::CheckECDSASignature(const std::vecto
     int nHashType = vchSig.back();
     vchSig.pop_back();
 
+    if (m_require_sighash_all && nHashType != SIGHASH_ALL) {
+        return false;
+    }
+
     // Witness sighashes need the amount.
     if (sigversion == SigVersion::WITNESS_V0 && amount < 0) return HandleMissingData(m_mdb);
 
@@ -1740,6 +1744,9 @@ bool GenericTransactionSignatureChecker<T>::CheckSchnorrSignature(std::span<cons
     uint8_t hashtype = SIGHASH_DEFAULT;
     if (sig.size() == 65) {
         hashtype = SpanPopBack(sig);
+        if (m_require_sighash_all && hashtype != SIGHASH_ALL) {
+            return set_error(serror, SCRIPT_ERR_SIG_HASHTYPE);
+        }
         if (hashtype == SIGHASH_DEFAULT) return set_error(serror, SCRIPT_ERR_SCHNORR_SIG_HASHTYPE);
     }
     uint256 sighash;
