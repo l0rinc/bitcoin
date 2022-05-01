@@ -75,8 +75,10 @@ The option to set the PUB socket's outbound message high water mark
 
     -zmqpubhashtxhwm=n
     -zmqpubhashblockhwm=n
+    -zmqpubhashwallettxhwm=n
     -zmqpubrawblockhwm=n
     -zmqpubrawtxhwm=n
+    -zmqpubrawwallettxhwm=n
     -zmqpubsequencehwm=n
 
 The high water mark value must be an integer greater than or equal to 0.
@@ -91,14 +93,13 @@ For instance:
 
 `bitcoin node` or `bitcoin gui` can also be substituted for `bitcoind`.
 
-For wallet transaction notifications (both hash and tx), the
-topic also indicate if the transaction came from a block
-or mempool. If originated from mempool `-mempool` postfix
-will be added to the topic, for block `-block` postfix will
-be added. Because zeromq is using prefix matching for topics
-you can subscribe to `rawwallettx` (or `hashwallettx`) to get
-both notifications. If you only want one type of notification
-subscribe to either `rawwallettx-mempool` or `rawwallettx-block`.
+For wallet transaction notifications (both hashwallettx and rawwallettx), the
+topic also indicates if the transaction came from a block or mempool. If
+originated from mempool `-mempool` postfix will be added to the topic, for
+block `-block` postfix will be added. Because zeromq is using prefix matching
+for topics you can subscribe to `rawwallettx` (or `hashwallettx`) to get both
+notifications. If you only want one type of notification subscribe to either
+`rawwallettx-mempool` or `rawwallettx-block`.
 
 The topics are:
 
@@ -147,20 +148,16 @@ body part of the message is the serialized block.
 
 #### hashblock
 
-Notifies when the chain tip is updated. When assumeutxo is in use, this notification will
-not be issued for historical blocks connected to the background validation chainstate. The
-body part of the message is the 32-byte block hash in reversed byte order.
 
-#### sequence
+`rawwallettx`: Identical to `rawtx`, except only when transactions are added (or updated) in an open wallet. Full topic is either `rawwallettx-block` for transactions in a block, or `rawwallettx-mempool` otherwise.
 
-The 8-byte LE uints correspond to _mempool sequence number_ and the types of bodies are:
+    | rawwallettx-<"block" or "mempool"> | <serialized transaction> | <uint32 sequence number in Little Endian>
 
-   - `C` : block with this hash connected
-   - `D` : block with this hash disconnected
-   - `R` : transaction with this hash removed from mempool for non-block inclusion reason
-   - `A` : transaction with this hash added to mempool
+`hashwallettx`: Identical to `hashtx`, except only when transactions are added (or updated) in an open wallet. Full topic is either `hashwallettx-block` for transactions in a block, or `hashwallettx-mempool` otherwise.
 
-### Implementing ZMQ client
+    | hashwallettx-<"block" or "mempool"> | <32-byte transaction hash in Little Endian> | <uint32 sequence number in Little Endian>
+
+**_NOTE:_**  Note that the 32-byte hashes are in Little Endian and not in the Big Endian format that the RPC interface and block explorers use to display transaction and block hashes.
 
 ZeroMQ endpoint specifiers for TCP (and others) are documented in the
 [ZeroMQ API](https://libzmq.readthedocs.io/en/zeromq4-x/).
