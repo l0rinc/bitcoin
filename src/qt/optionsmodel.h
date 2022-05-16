@@ -12,8 +12,11 @@
 
 #include <QAbstractListModel>
 #include <QFont>
+#include <QString>
 
-#include <cassert>
+#include <assert.h>
+#include <map>
+#include <utility>
 #include <variant>
 
 struct bilingual_str;
@@ -25,6 +28,8 @@ class Node;
 
 extern const char *DEFAULT_GUI_PROXY_HOST;
 static constexpr uint16_t DEFAULT_GUI_PROXY_PORT = 9050;
+
+std::pair<QString, QString> GetOutputTypeDescription(const OutputType type);
 
 /** Interface from Qt to configuration data structure for Bitcoin client.
    To Qt, the options are presented as a list with the different options
