@@ -17,6 +17,8 @@
 #include <variant>
 
 struct bilingual_str;
+enum class OutputType;
+
 namespace interfaces {
 class Node;
 }
@@ -161,6 +163,7 @@ private:
 Q_SIGNALS:
     void displayUnitChanged(BitcoinUnit unit);
     void coinControlFeaturesChanged(bool);
+    void addresstypeChanged(OutputType);
     void showTrayIconChanged(bool);
     void fontForMoneyChanged(const QFont&);
     void fontForQRCodesChanged(const FontChoice&);
