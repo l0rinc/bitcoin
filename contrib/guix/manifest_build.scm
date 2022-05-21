@@ -7,7 +7,8 @@
              (gnu packages cross-base)
              (gnu packages gawk)
              (gnu packages gcc)
-             ((gnu packages image) #:select (libicns librsvg))
+             ((gnu packages gnome) #:select (librsvg-2.40))
+             ((gnu packages image) #:select (libicns))
              ((gnu packages imagemagick) #:select (imagemagick))
              ((gnu packages installers) #:select (nsis-x86_64))
              ((gnu packages linux) #:select (linux-libre-headers-6.1))
@@ -281,7 +282,7 @@ chain for " target " development."))
         ninja
         imagemagick
         libicns
-        librsvg
+        librsvg-2.40
         ;; Scripting
         python-minimal ;; (3.11)
         ;; Git
