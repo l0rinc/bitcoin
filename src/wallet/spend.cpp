@@ -444,6 +444,9 @@ CoinsResult AvailableCoins(const CWallet& wallet,
         bool tx_from_me = CachedTxIsFromMe(wallet, wtx);
 
         std::unique_ptr<SigningProvider> provider = wallet.GetSolvingProvider(output.scriptPubKey);
+        if (coinControl && coinControl->m_segwit_inputs_only && !IsSegWitOutput(*provider, output.scriptPubKey)) {
+            continue;
+        }
 
         int input_bytes = CalculateMaximumSignedInputSize(output, COutPoint(), provider.get(), can_grind_r, coinControl);
         // Because CalculateMaximumSignedInputSize infers a solvable descriptor to get the satisfaction size,
