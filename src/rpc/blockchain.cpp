@@ -2531,7 +2531,7 @@ static RPCMethod sweepprivkeys()
     JSONRPCRequest wallet_req = request;
     CHECK_NONFATAL(node.wallet_loader);
     CHECK_NONFATAL(node.wallet_loader->context());
-    wallet_req.context = node.wallet_loader->context();
+    node.wallet_loader->assignContextHACK(wallet_req.context);
     std::shared_ptr<wallet::CWallet> const wallet = wallet::GetWalletForJSONRPCRequest(wallet_req);
     if (!wallet) return UniValue::VNULL;
     wallet::CWallet* const pwallet = wallet.get();
