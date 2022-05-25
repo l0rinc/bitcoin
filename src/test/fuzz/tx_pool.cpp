@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chain.h>
+#include <clientversion.h>
 #include <coins.h>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
@@ -169,7 +170,7 @@ void MockTime(FuzzedDataProvider& fuzzed_data_provider, const Chainstate& chains
 {
     const auto time = ConsumeTime(fuzzed_data_provider,
                                   chainstate.m_chain.Tip()->GetMedianTimePast() + 1,
-                                  std::numeric_limits<decltype(chainstate.m_chain.Tip()->nTime)>::max());
+                                  DEFAULT_SOFTWARE_EXPIRY - 1);
     SetMockTime(time);
 }
 
