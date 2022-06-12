@@ -1322,6 +1322,8 @@ bool CheckHostPortOptions(const ArgsManager& args) {
         {"-zmqpubrawblock",  true,                false},
         {"-zmqpubrawtx",     true,                false},
         {"-zmqpubsequence",  true,                false},
+        {"-zmqpubhashwallettx", true,             false},
+        {"-zmqpubrawwallettx",  true,             false},
     }) {
         for (const std::string& param_value : args.GetArgs(param_name)) {
             const std::string param_value_hostport{
