@@ -8,7 +8,7 @@
 #include <leveldb/db.h>
 #include <leveldb/env.h>
 #include <leveldb/filter_policy.h>
-#include <leveldb/helpers/memenv/memenv.h>
+#include <memenv.h>
 #include <leveldb/iterator.h>
 #include <leveldb/options.h>
 #include <leveldb/slice.h>
