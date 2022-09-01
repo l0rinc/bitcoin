@@ -169,9 +169,9 @@ RPCMethod getbalance()
                 "The available balance is what the wallet considers currently spendable, and is\n"
                 "thus affected by options which limit spendability such as -spendzeroconfchange.\n",
                 {
-                    {"dummy", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Remains for backward compatibility. Must be excluded or set to \"*\"."},
-                    {"minconf", RPCArg::Type::NUM, RPCArg::Default{0}, "Only include transactions confirmed at least this many times."},
-                    {"include_watchonly", RPCArg::Type::BOOL, RPCArg::Default{false}, "No longer used"},
+                    {"dummy|account", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Remains for backward compatibility. Must be excluded or set to \"*\"."},
+                    {"minconf", RPCArg::Type::NUM, RPCArg::Default{1}, "Only include transactions confirmed at least this many times. (Requires dummy=\"*\")"},
+                    {"include_watchonly", RPCArg::Type::BOOL, RPCArg::DefaultHint{"true for watch-only wallets, otherwise false"}, "Also include balance in watch-only addresses (see 'importaddress')"},
                     {"avoid_reuse", RPCArg::Type::BOOL, RPCArg::Default{true}, "(only available if avoid_reuse wallet flag is set) Do not include balance in dirty outputs; addresses are considered dirty if they have previously been used in a transaction."},
                 },
                 RPCResult{
@@ -200,13 +200,45 @@ RPCMethod getbalance()
         throw JSONRPCError(RPC_METHOD_DEPRECATED, "dummy first argument must be excluded or set to \"*\".");
     }
 
-    const auto min_depth{self.Arg<int>("minconf")};
+    const auto min_depth{dummy_value ? self.Arg<int>("minconf") : 0};
 
     bool avoid_reuse = GetAvoidReuseFlag(*pwallet, request.params[3]);
 
     const auto bal = GetBalance(*pwallet, min_depth, avoid_reuse);
 
-    return ValueFromAmount(bal.m_mine_trusted);
+    if (dummy_value) {
+        isminefilter filter = ISMINE_SPENDABLE;
+        if (include_watchonly) filter = filter | ISMINE_WATCH_ONLY;
+        return ValueFromAmount(pwallet->GetLegacyBalance(filter, min_depth));
+    }
+
+    if (!request.params[1].isNull()) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "getbalance minconf option is only currently supported if dummy is set to \"*\"");
+    }
+    return ValueFromAmount(bal.m_mine_trusted + (include_watchonly ? bal.m_watchonly_trusted : 0));
+},
+    };
+}
+
+RPCHelpMan getunconfirmedbalance()
+{
+    return RPCHelpMan{"getunconfirmedbalance",
+                "DEPRECATED\nIdentical to getbalances().mine.untrusted_pending\n",
+                {},
+                RPCResult{RPCResult::Type::NUM, "", "The balance"},
+                RPCExamples{""},
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    const std::shared_ptr<const CWallet> pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return UniValue::VNULL;
+
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    LOCK(pwallet->cs_wallet);
+
+    return ValueFromAmount(GetBalance(*pwallet).m_mine_untrusted_pending);
 },
     };
 }
