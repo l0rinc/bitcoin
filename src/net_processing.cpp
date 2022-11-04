@@ -3704,6 +3704,10 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         // Change version
         const int greatest_common_version = std::min(nVersion, pfrom.AdvertisedVersion());
         pfrom.SetCommonVersion(greatest_common_version);
+        {
+            LOCK(pfrom.m_subver_mutex);
+            pfrom.cleanSubVer = cleanSubVer;
+        }
         pfrom.nVersion = nVersion;
 
         pfrom.m_has_all_wanted_services = HasAllDesirableServiceFlags(nServices);
@@ -3761,19 +3765,23 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             MakeAndPushMessage(pfrom, NetMsgType::SENDADDRV2);
         }
 
-        if (greatest_common_version >= WTXID_RELAY_VERSION && m_txreconciliation) {
-            // Per BIP-330, we announce txreconciliation support if:
-            // - protocol version per the peer's VERSION message supports WTXID_RELAY;
-            // - transaction relay is supported per the peer's VERSION message
-            // - this is not a block-relay-only connection and not a feeler
-            // - this is not an addr fetch connection;
-            // - we are not in -blocksonly mode.
-            const auto* tx_relay = peer.GetTxRelay();
-            if (tx_relay && WITH_LOCK(tx_relay->m_bloom_filter_mutex, return tx_relay->m_relay_txs) &&
-                !pfrom.IsAddrFetchConn() && !m_opts.ignore_incoming_txs) {
-                const uint64_t recon_salt = m_txreconciliation->PreRegisterPeer(pfrom.GetId());
-                MakeAndPushMessage(pfrom, NetMsgType::SENDTXRCNCL,
-                                   TXRECONCILIATION_VERSION, recon_salt);
+        m_connman.PushMessage(&pfrom, msg_maker.Make(NetMsgType::VERACK));
+
+        pfrom.m_has_all_wanted_services = HasAllDesirableServiceFlags(nServices);
+        peer->m_their_services = nServices;
+        pfrom.SetAddrLocal(addrMe);
+        peer->m_starting_height = starting_height;
+
+        // We only initialize the m_tx_relay data structure if:
+        // - this isn't an outbound block-relay-only connection; and
+        // - fRelay=true or we're offering NODE_BLOOM to this peer
+        //   (NODE_BLOOM means that the peer may turn on tx relay later)
+        if (!pfrom.IsBlockOnlyConn() &&
+            (fRelay || (peer->m_our_services & NODE_BLOOM))) {
+            auto* const tx_relay = peer->SetTxRelay();
+            {
+                LOCK(tx_relay->m_bloom_filter_mutex);
+                tx_relay->m_relay_txs = fRelay; // set to true after we get the first filter* message
             }
         }
 
