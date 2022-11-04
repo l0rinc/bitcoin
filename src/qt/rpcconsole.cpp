@@ -1257,7 +1257,7 @@ void RPCConsole::updateDetailWidget()
     }
     ui->peerNetwork->setText(GUIUtil::NetworkToQString(stats->nodeStats.m_network));
     if (stats->nodeStats.m_permission_flags == NetPermissionFlags::None) {
-        ui->peerPermissions->setText(ts.na);
+        ui->peerPermissions->setText(ts.no_permissions);
     } else {
         QStringList permissions;
         for (const auto& permission : NetPermissions::ToStrings(stats->nodeStats.m_permission_flags)) {
