@@ -128,6 +128,9 @@ class DisconnectBanTest(BitcoinTestFramework):
         self.log.info("disconnectnode: fail to disconnect when calling with junk address")
         assert_raises_rpc_error(-29, "Node not found in connected nodes", self.nodes[0].disconnectnode, address="221B Baker Street")
 
+        self.log.info("disconnectnode: fail to disconnect when calling with invalid subnet")
+        assert_raises_rpc_error(-8, "Invalid subnet", self.nodes[0].disconnectnode, address="1.2.3.0/24\0")
+
         self.log.info("disconnectnode: successfully disconnect node by address")
         address1 = self.nodes[0].getpeerinfo()[0]['addr']
         self.nodes[0].disconnectnode(address=address1)
@@ -144,6 +147,10 @@ class DisconnectBanTest(BitcoinTestFramework):
         self.nodes[0].disconnectnode(nodeid=id1)
         self.wait_until(lambda: len(self.nodes[1].getpeerinfo()) == 1, timeout=10)
         assert id1 not in [node['id'] for node in self.nodes[0].getpeerinfo()]
+
+        self.log.info("disconnectnode: successfully disconnect node by subnet")
+        self.nodes[0].disconnectnode(address='127.0.0.1/24')
+        self.wait_until(lambda: len(self.nodes[0].getpeerinfo()) == 0, timeout=10)
 
 if __name__ == '__main__':
     DisconnectBanTest(__file__).main()
