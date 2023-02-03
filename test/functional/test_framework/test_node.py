@@ -954,3 +954,63 @@ class TestNodeCLI():
             return json.loads(cli_stdout, parse_float=decimal.Decimal)
         except (json.JSONDecodeError, decimal.InvalidOperation):
             return cli_stdout.rstrip("\n")
+
+class RPCOverloadWrapper():
+    def __init__(self, rpc, cli=False, descriptors=False):
+        self.rpc = rpc
+        self.is_cli = cli
+        self.descriptors = descriptors
+
+    def __getattr__(self, name):
+        return getattr(self.rpc, name)
+
+    def createwallet_passthrough(self, *args, **kwargs):
+        return self.__getattr__("createwallet")(*args, **kwargs)
+
+    def createwallet(self, wallet_name, disable_private_keys=None, blank=None, passphrase='', avoid_reuse=None, descriptors=None, load_on_startup=None, external_signer=None):
+        if descriptors is None:
+            descriptors = self.descriptors
+        return self.__getattr__('createwallet')(wallet_name, disable_private_keys, blank, passphrase, avoid_reuse, descriptors, load_on_startup, external_signer)
+
+    def importprivkey(self, privkey, label=None, rescan=None):
+        wallet_info = self.getwalletinfo()
+        if 'descriptors' not in wallet_info or ('descriptors' in wallet_info and not wallet_info['descriptors']):
+            return self.__getattr__('importprivkey')(privkey, label, rescan)
+        desc = descsum_create('combo(' + privkey + ')')
+        req = [{
+            'desc': desc,
+            'timestamp': 0 if rescan else 'now',
+            'label': label if label else ''
+        }]
+        import_res = self.importdescriptors(req)
+        if not import_res[0]['success']:
+            raise JSONRPCException(import_res[0]['error'])
+
+    def addmultisigaddress(self, nrequired, keys, label=None, address_type=None):
+        wallet_info = self.getwalletinfo()
+        if 'descriptors' not in wallet_info or ('descriptors' in wallet_info and not wallet_info['descriptors']):
+            return self.__getattr__('addmultisigaddress')(nrequired, keys, label, address_type)
+        cms = self.createmultisig(nrequired, keys, address_type)
+        req = [{
+            'desc': cms['descriptor'],
+            'timestamp': 0,
+            'label': label if label else ''
+        }]
+        import_res = self.importdescriptors(req)
+        if not import_res[0]['success']:
+            raise JSONRPCException(import_res[0]['error'])
+        return cms
+
+    def importpubkey(self, pubkey, label=None, rescan=None):
+        wallet_info = self.getwalletinfo()
+        if 'descriptors' not in wallet_info or ('descriptors' in wallet_info and not wallet_info['descriptors']):
+            return self.__getattr__('importpubkey')(pubkey, label, rescan)
+        desc = descsum_create('combo(' + pubkey + ')')
+        req = [{
+            'desc': desc,
+            'timestamp': 0 if rescan else 'now',
+            'label': label if label else ''
+        }]
+        import_res = self.importdescriptors(req)
+        if not import_res[0]['success']:
+            raise JSONRPCException(import_res[0]['error'])

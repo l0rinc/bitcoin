@@ -37,6 +37,322 @@
 using interfaces::FoundBlock;
 
 namespace wallet {
+std::string static EncodeDumpString(const std::string &str) {
+    std::stringstream ret;
+    for (const unsigned char c : str) {
+        if (c <= 32 || c >= 128 || c == '%') {
+            ret << '%' << HexStr({&c, 1});
+        } else {
+            ret << c;
+        }
+    }
+    return ret.str();
+}
+
+static std::string DecodeDumpString(const std::string &str) {
+    std::stringstream ret;
+    for (unsigned int pos = 0; pos < str.length(); pos++) {
+        unsigned char c = str[pos];
+        if (c == '%' && pos+2 < str.length()) {
+            c = (((str[pos+1]>>6)*9+((str[pos+1]-'0')&15)) << 4) |
+                ((str[pos+2]>>6)*9+((str[pos+2]-'0')&15));
+            pos += 2;
+        }
+        ret << c;
+    }
+    return ret.str();
+}
+
+static bool GetWalletAddressesForKey(const LegacyScriptPubKeyMan* spk_man, const CWallet& wallet, const CKeyID& keyid, std::string& strAddr, std::string& strLabel) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
+{
+    bool fLabelFound = false;
+    CKey key;
+    spk_man->GetKey(keyid, key);
+    for (const auto& dest : GetAllDestinationsForKey(key.GetPubKey())) {
+        const auto* address_book_entry = wallet.FindAddressBookEntry(dest);
+        if (address_book_entry) {
+            if (!strAddr.empty()) {
+                strAddr += ",";
+            }
+            strAddr += EncodeDestination(dest);
+            strLabel = EncodeDumpString(address_book_entry->GetLabel());
+            fLabelFound = true;
+        }
+    }
+    if (!fLabelFound) {
+        strAddr = EncodeDestination(GetDestinationForKey(key.GetPubKey(), wallet.m_default_address_type));
+    }
+    return fLabelFound;
+}
+
+static const int64_t TIMESTAMP_MIN = 0;
+
+static void RescanWallet(CWallet& wallet, const WalletRescanReserver& reserver, int64_t time_begin = TIMESTAMP_MIN, bool update = true)
+{
+    int64_t scanned_time = wallet.RescanFromTime(time_begin, reserver, update);
+    if (wallet.IsAbortingRescan()) {
+        throw JSONRPCError(RPC_MISC_ERROR, "Rescan aborted by user.");
+    } else if (scanned_time > time_begin) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Rescan was unable to fully rescan the blockchain. Some transactions may be missing.");
+    }
+}
+
+static void EnsureBlockDataFromTime(const CWallet& wallet, int64_t timestamp)
+{
+    auto& chain{wallet.chain()};
+    if (!chain.havePruned()) {
+        return;
+    }
+
+    int height{0};
+    const bool found{chain.findFirstBlockWithTimeAndHeight(timestamp - TIMESTAMP_WINDOW, 0, FoundBlock().height(height))};
+
+    uint256 tip_hash{WITH_LOCK(wallet.cs_wallet, return wallet.GetLastBlockHash())};
+    if (found && !chain.hasBlocks(tip_hash, height)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Pruned blocks from height %d required to import keys. Use RPC call getblockchaininfo to determine your pruned height.", height));
+    }
+}
+
+RPCMethod importprivkey()
+{
+    return RPCMethod{"importprivkey",
+                "\nAdds a private key (as returned by dumpprivkey) to your wallet. Requires a new wallet backup.\n"
+                "Hint: use importmulti to import more than one private key.\n"
+            "\nNote: This call can take over an hour to complete if rescan is true, during that time, other rpc calls\n"
+            "may report that the imported key exists but related transactions are still missing, leading to temporarily incorrect/bogus balances and unspent outputs until rescan completes.\n"
+            "The rescan parameter can be set to false if the key was never used to create transactions. If it is set to false,\n"
+            "but the key was used to create transactions, rescanblockchain needs to be called with the appropriate block range.\n"
+            "Note: Use \"getwalletinfo\" to query the scanning progress.\n"
+            "Note: This command is only compatible with legacy wallets. Use \"importdescriptors\" with \"combo(X)\" for descriptor wallets.\n",
+                {
+                    {"privkey", RPCArg::Type::STR, RPCArg::Optional::NO, "The private key (see dumpprivkey)"},
+                    {"label", RPCArg::Type::STR, RPCArg::DefaultHint{"current label if address exists, otherwise \"\""}, "An optional label"},
+                    {"rescan", RPCArg::Type::BOOL, RPCArg::Default{true}, "Scan the chain and mempool for wallet transactions."},
+                },
+                RPCResult{RPCResult::Type::NONE, "", ""},
+                RPCExamples{
+            "\nDump a private key\n"
+            + HelpExampleCli("dumpprivkey", "\"myaddress\"") +
+            "\nImport the private key with rescan\n"
+            + HelpExampleCli("importprivkey", "\"mykey\"") +
+            "\nImport using a label and without rescan\n"
+            + HelpExampleCli("importprivkey", "\"mykey\" \"testing\" false") +
+            "\nImport using default blank label and without rescan\n"
+            + HelpExampleCli("importprivkey", "\"mykey\" \"\" false") +
+            "\nAs a JSON-RPC call\n"
+            + HelpExampleRpc("importprivkey", "\"mykey\", \"testing\", false")
+                },
+        [&](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return UniValue::VNULL;
+
+    if (pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Cannot import private keys to a wallet with private keys disabled");
+    }
+
+    EnsureLegacyScriptPubKeyMan(*pwallet, true);
+
+    WalletRescanReserver reserver(*pwallet);
+    bool fRescan = true;
+    {
+        LOCK(pwallet->cs_wallet);
+
+        EnsureWalletIsUnlocked(*pwallet);
+
+        std::string strSecret = request.params[0].get_str();
+        const std::string strLabel{LabelFromValue(request.params[1])};
+
+        // Whether to perform rescan after import
+        if (!request.params[2].isNull())
+            fRescan = request.params[2].get_bool();
+
+        if (fRescan && pwallet->chain().havePruned()) {
+            // Exit early and print an error.
+            // If a block is pruned after this check, we will import the key(s),
+            // but fail the rescan with a generic error.
+            throw JSONRPCError(RPC_WALLET_ERROR, "Rescan is disabled when blocks are pruned");
+        }
+
+        if (fRescan && !reserver.reserve()) {
+            throw JSONRPCError(RPC_WALLET_ERROR, "Wallet is currently rescanning. Abort existing rescan or wait.");
+        }
+
+        CKey key = DecodeSecret(strSecret);
+        if (!key.IsValid()) throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key encoding");
+
+        CPubKey pubkey = key.GetPubKey();
+        CHECK_NONFATAL(key.VerifyPubKey(pubkey));
+        CKeyID vchAddress = pubkey.GetID();
+        {
+            pwallet->MarkDirty();
+
+            // We don't know which corresponding address will be used;
+            // label all new addresses, and label existing addresses if a
+            // label was passed.
+            for (const auto& dest : GetAllDestinationsForKey(pubkey)) {
+                if (!request.params[1].isNull() || !pwallet->FindAddressBookEntry(dest)) {
+                    pwallet->SetAddressBook(dest, strLabel, AddressPurpose::RECEIVE);
+                }
+            }
+
+            // Use timestamp of 1 to scan the whole chain
+            if (!pwallet->ImportPrivKeys({{vchAddress, key}}, 1)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Error adding key to wallet");
+            }
+
+            // Add the wpkh script for this key if possible
+            if (pubkey.IsCompressed()) {
+                pwallet->ImportScripts({GetScriptForDestination(WitnessV0KeyHash(vchAddress))}, /*timestamp=*/0);
+            }
+        }
+    }
+    if (fRescan) {
+        RescanWallet(*pwallet, reserver);
+    }
+
+    return UniValue::VNULL;
+},
+    };
+}
+
+static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, const int64_t timestamp) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
+
+RPCMethod importaddress()
+{
+    return RPCMethod{"importaddress",
+            "\nAdds an address or script (in hex) that can be watched as if it were in your wallet but cannot be used to spend. Requires a new wallet backup.\n"
+            "\nNote: This call can take over an hour to complete if rescan is true, during that time, other rpc calls\n"
+            "may report that the imported address exists but related transactions are still missing, leading to temporarily incorrect/bogus balances and unspent outputs until rescan completes.\n"
+            "The rescan parameter can be set to false if the key was never used to create transactions. If it is set to false,\n"
+            "but the key was used to create transactions, rescanblockchain needs to be called with the appropriate block range.\n"
+            "If you have the full public key, you should call importpubkey instead of this.\n"
+            "Hint: use importmulti to import more than one address.\n"
+            "\nNote: If you import a non-standard raw script in hex form, outputs sending to it will be treated\n"
+            "as change, and not show up in many RPCs.\n"
+            "Note: Use \"getwalletinfo\" to query the scanning progress.\n"
+            "Note: For descriptor wallets, this command will create new descriptor/s, and only works if the wallet has private keys disabled.\n",
+                {
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The Bitcoin address (or hex-encoded script)"},
+                    {"label", RPCArg::Type::STR, RPCArg::Default{""}, "An optional label"},
+                    {"rescan", RPCArg::Type::BOOL, RPCArg::Default{true}, "Scan the chain and mempool for wallet transactions."},
+                    {"p2sh", RPCArg::Type::BOOL, RPCArg::Default{false}, "Add the P2SH version of the script as well"},
+                },
+                RPCResult{RPCResult::Type::NONE, "", ""},
+                RPCExamples{
+            "\nImport an address with rescan\n"
+            + HelpExampleCli("importaddress", "\"myaddress\"") +
+            "\nImport using a label without rescan\n"
+            + HelpExampleCli("importaddress", "\"myaddress\" \"testing\" false") +
+            "\nAs a JSON-RPC call\n"
+            + HelpExampleRpc("importaddress", "\"myaddress\", \"testing\", false")
+                },
+        [&](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return UniValue::VNULL;
+
+    // Use legacy spkm only if the wallet does not support descriptors.
+    bool use_legacy = !pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS);
+    if (!use_legacy) {
+        // We don't allow mixing watch-only descriptors with spendable ones.
+        if (!pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+            throw JSONRPCError(RPC_WALLET_ERROR, "Cannot import address in wallet with private keys enabled. "
+                                                 "Create wallet with no private keys to watch specific addresses/scripts");
+        }
+    } else {
+        // In case the wallet is blank
+        EnsureLegacyScriptPubKeyMan(*pwallet, /*also_create=*/true);
+    }
+
+    const std::string strLabel{LabelFromValue(request.params[1])};
+
+    // Whether to perform rescan after import
+    bool fRescan = true;
+    if (!request.params[2].isNull())
+        fRescan = request.params[2].get_bool();
+
+    if (fRescan && pwallet->chain().havePruned()) {
+        // Exit early and print an error.
+        // If a block is pruned after this check, we will import the key(s),
+        // but fail the rescan with a generic error.
+        throw JSONRPCError(RPC_WALLET_ERROR, "Rescan is disabled when blocks are pruned");
+    }
+
+    WalletRescanReserver reserver(*pwallet);
+    if (fRescan && !reserver.reserve()) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Wallet is currently rescanning. Abort existing rescan or wait.");
+    }
+
+    // Whether to import a p2sh version, too
+    bool fP2SH = false;
+    if (!request.params[3].isNull())
+        fP2SH = request.params[3].get_bool();
+
+    // Import descriptor helper function
+    const auto& import_descriptor = [pwallet](const std::string& desc, const std::string label) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet) {
+        UniValue data(UniValue::VType::VOBJ);
+        data.pushKV("desc", AddChecksum(desc));
+        if (!label.empty()) data.pushKV("label", label);
+        const UniValue& ret = ProcessDescriptorImport(*pwallet, data, /*timestamp=*/1);
+        if (ret.exists("error")) throw ret["error"];
+    };
+
+    {
+        LOCK(pwallet->cs_wallet);
+
+        const std::string& address = request.params[0].get_str();
+        CTxDestination dest = DecodeDestination(address);
+        if (IsValidDestination(dest)) {
+            if (fP2SH) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Cannot use the p2sh flag with an address - use a script instead");
+            }
+
+            pwallet->MarkDirty();
+
+            if (use_legacy) {
+                if (OutputTypeFromDestination(dest) == OutputType::BECH32M) {
+                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Bech32m addresses cannot be imported into legacy wallets");
+                }
+                pwallet->ImportScriptPubKeys(strLabel, {GetScriptForDestination(dest)}, /*have_solving_data=*/false, /*apply_label=*/true, /*timestamp=*/1);
+            } else {
+                import_descriptor("addr(" + address + ")", strLabel);
+            }
+        } else if (IsHex(request.params[0].get_str())) {
+            const std::string& hex = request.params[0].get_str();
+
+            if (use_legacy) {
+                std::vector<unsigned char> data(ParseHex(hex));
+                CScript redeem_script(data.begin(), data.end());
+                std::set<CScript> scripts = {redeem_script};
+                pwallet->ImportScripts(scripts, /*timestamp=*/0);
+                if (fP2SH) {
+                    scripts.insert(GetScriptForDestination(ScriptHash(redeem_script)));
+                }
+                pwallet->ImportScriptPubKeys(strLabel, scripts, /*have_solving_data=*/false, /*apply_label=*/true, /*timestamp=*/1);
+            } else {
+                // P2SH Not allowed. Can't detect inner P2SH function from a raw hex.
+                if (fP2SH) throw JSONRPCError(RPC_WALLET_ERROR, "P2SH import feature disabled for descriptors' wallet. "
+                                                                "Use 'importdescriptors' to specify inner P2SH function");
+
+                // Import descriptors
+                import_descriptor("raw(" + hex + ")", strLabel);
+            }
+        } else {
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address or script");
+        }
+    }
+    if (fRescan)
+    {
+        RescanWallet(*pwallet, reserver);
+        pwallet->ResubmitWalletTransactions(/*relay=*/false, /*force=*/true);
+    }
+
+    return UniValue::VNULL;
+},
+    };
+}
+
 RPCMethod importprunedfunds()
 {
     return RPCMethod{

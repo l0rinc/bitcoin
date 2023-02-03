@@ -182,32 +182,33 @@ class WalletLabelsTest(BitcoinTestFramework):
         self.invalid_label_name_test()
         self.test_label_named_parameter_handling()
 
-        # This is a descriptor wallet test because of segwit v1+ addresses
-        self.log.info('Check watchonly labels')
-        node.createwallet(wallet_name='watch_only', disable_private_keys=True)
-        wallet_watch_only = node.get_wallet_rpc('watch_only')
-        BECH32_VALID = {
-            '✔️_VER15_PROG40': 'bcrt10qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqxkg7fn',
-            '✔️_VER16_PROG03': 'bcrt1sqqqqq8uhdgr',
-            '✔️_VER16_PROB02': 'bcrt1sqqqq4wstyw',
-        }
-        BECH32_INVALID = {
-            '❌_VER15_PROG41': 'bcrt1sqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqajlxj8',
-            '❌_VER16_PROB01': 'bcrt1sqq5r4036',
-        }
-        for l in BECH32_VALID:
-            ad = BECH32_VALID[l]
-            import_res = wallet_watch_only.importdescriptors([{"desc": descsum_create(f"addr({ad})"), "timestamp": "now", "label": l}])
-            assert_equal(import_res[0]["success"], True)
-            self.generatetoaddress(node, 1, ad)
-            assert_equal(wallet_watch_only.getaddressesbylabel(label=l), {ad: {'purpose': 'receive'}})
-            assert_equal(wallet_watch_only.getreceivedbylabel(label=l), 0)
-        for l in BECH32_INVALID:
-            ad = BECH32_INVALID[l]
-            import_res = wallet_watch_only.importdescriptors([{"desc": descsum_create(f"addr({ad})"), "timestamp": "now", "label": l}])
-            assert_equal(import_res[0]["success"], False)
-            assert_equal(import_res[0]["error"]["code"], -5)
-            assert_equal(import_res[0]["error"]["message"], "Address is not valid")
+        if self.options.descriptors:
+            # This is a descriptor wallet test because of segwit v1+ addresses
+            self.log.info('Check watchonly labels')
+            node.createwallet(wallet_name='watch_only', disable_private_keys=True)
+            wallet_watch_only = node.get_wallet_rpc('watch_only')
+            BECH32_VALID = {
+                '✔️_VER15_PROG40': 'bcrt10qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqxkg7fn',
+                '✔️_VER16_PROG03': 'bcrt1sqqqqq8uhdgr',
+                '✔️_VER16_PROB02': 'bcrt1sqqqq4wstyw',
+            }
+            BECH32_INVALID = {
+                '❌_VER15_PROG41': 'bcrt1sqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqajlxj8',
+                '❌_VER16_PROB01': 'bcrt1sqq5r4036',
+            }
+            for l in BECH32_VALID:
+                ad = BECH32_VALID[l]
+                wallet_watch_only.importaddress(label=l, rescan=False, address=ad)
+                self.generatetoaddress(node, 1, ad)
+                assert_equal(wallet_watch_only.getaddressesbylabel(label=l), {ad: {'purpose': 'receive'}})
+                assert_equal(wallet_watch_only.getreceivedbylabel(label=l), 0)
+            for l in BECH32_INVALID:
+                ad = BECH32_INVALID[l]
+                assert_raises_rpc_error(
+                    -5,
+                    "Invalid Bitcoin address or script",
+                    lambda: wallet_watch_only.importaddress(label=l, rescan=False, address=ad),
+                )
 
 
 class Label:
