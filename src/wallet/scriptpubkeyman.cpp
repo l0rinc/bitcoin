@@ -344,6 +344,22 @@ SigningResult LegacyDataSPKM::SignMessage(const MessageSignatureFormat format, c
     return SigningResult::SIGNING_FAILED;
 }
 
+bool LegacyDataSPKM::IsKeyActive(const CScript& script) const
+{
+    LOCK(cs_KeyStore);
+
+    if (!IsMine(script)) return false;
+
+    for (const auto& key_id : GetAffectedKeys(script, *this)) {
+        const auto it = mapKeyMetadata.find(key_id);
+        if (it == mapKeyMetadata.end()) return false;
+
+        if (!it->second.hd_seed_id.IsNull() && it->second.hd_seed_id == m_hd_chain.seed_id) return true;
+    }
+
+    return false;
+}
+
 bool LegacyDataSPKM::LoadKey(const CKey& key, const CPubKey &pubkey)
 {
     return AddKeyPubKeyInner(key, pubkey);
