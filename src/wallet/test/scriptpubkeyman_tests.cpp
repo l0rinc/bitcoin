@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <addresstype.h>
 #include <key.h>
 #include <key_io.h>
 #include <test/util/common.h>
@@ -48,6 +49,64 @@ BOOST_AUTO_TEST_CASE(desc_spkm_topup_fail)
     BOOST_CHECK_EXCEPTION(
         CreateDescriptor(keystore, "wpkh(" + EncodeExtPubKey(extkey.Neuter()) + "/*h)", /*success=*/true),
         std::runtime_error, HasReason("Could not top up scriptPubKeys"));
+}
+
+BOOST_AUTO_TEST_CASE(Descriptor_IsKeyActive)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    {
+        LOCK(wallet.cs_wallet);
+        wallet.LoadMinVersion(FEATURE_LATEST);
+        wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
+        wallet.m_keypool_size = 10;
+        wallet.SetupDescriptorScriptPubKeyMans();
+    }
+    auto* spkm{dynamic_cast<DescriptorScriptPubKeyMan*>(wallet.GetScriptPubKeyMan(OutputType::BECH32, /*internal=*/false))};
+    BOOST_REQUIRE(spkm != nullptr);
+
+    auto scripts1{spkm->GetScriptPubKeys()};
+    BOOST_CHECK_EQUAL(scripts1.size(), 10);
+    for (const CScript& script : scripts1) {
+        BOOST_CHECK(spkm->IsKeyActive(script));
+    }
+
+    auto dest1{spkm->GetNewDestination(OutputType::BECH32)};
+    BOOST_REQUIRE(dest1);
+    CScript script{GetScriptForDestination(*dest1)};
+    BOOST_CHECK(spkm->IsKeyActive(script));
+
+    auto scripts2{spkm->GetScriptPubKeys()};
+    BOOST_CHECK_EQUAL(scripts2.size(), 10);
+
+    {
+        LOCK(spkm->cs_desc_man);
+        WalletDescriptor descriptor{spkm->GetWalletDescriptor()};
+        FlatSigningProvider provider;
+        std::vector<CScript> scripts3;
+        BOOST_REQUIRE(descriptor.descriptor->ExpandFromCache(/*pos=*/5, descriptor.cache, scripts3, provider));
+
+        BOOST_CHECK_EQUAL(scripts3.size(), 1);
+        spkm->MarkUnusedAddresses(scripts3.front());
+    }
+
+    auto scripts4{spkm->GetScriptPubKeys()};
+    BOOST_CHECK_EQUAL(scripts4.size(), 16);
+    for (const CScript& script : scripts4) {
+        BOOST_CHECK(spkm->IsKeyActive(script));
+    }
+
+    {
+        LOCK(wallet.cs_wallet);
+        wallet.SetupDescriptorScriptPubKeyMans();
+    }
+
+    for (const CScript& script : scripts4) {
+        BOOST_CHECK(spkm->IsKeyActive(script));
+
+        CTxDestination dest;
+        BOOST_REQUIRE(ExtractDestination(script, dest));
+        BOOST_CHECK(!wallet.IsDestinationActive(dest));
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()
