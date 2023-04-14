@@ -25,11 +25,62 @@ class KeyPoolTest(BitcoinTestFramework):
 
     def run_test(self):
         nodes = self.nodes
+        addrs = []
+        for desc in nodes[0].listdescriptors()["descriptors"]:
+            if desc["active"] and not desc["internal"] and desc["desc"].startswith("wpkh"):
+                addrs = nodes[0].deriveaddresses(descriptor=desc["desc"], range=[0, 9])
+                break
+        assert_equal(len(addrs), 10)
+
+        addr0 = addrs[0]
+        addr9 = addrs[9]
+
+        addr0_before_getting_data = nodes[0].getaddressinfo(addr0)
+        assert addr0_before_getting_data["ismine"]
+        assert addr0_before_getting_data["isactive"]
+
         addr_before_encrypting = nodes[0].getnewaddress()
         addr_before_encrypting_data = nodes[0].getaddressinfo(addr_before_encrypting)
+        assert_equal(addr0, addr_before_encrypting)
+        assert addr_before_encrypting_data["ismine"]
+        assert addr_before_encrypting_data["isactive"]
+
+        addr9_before_encrypting_data = nodes[0].getaddressinfo(addr9)
+        assert addr9_before_encrypting_data["ismine"]
+        assert addr9_before_encrypting_data["isactive"]
+
+        nodes[0].importdescriptors([{
+            "desc": descsum_create("addr(bcrt1q95gp4zeaah3qcerh35yhw02qeptlzasdtst55v)"),
+            "timestamp": "now",
+        }])
+        import_addr_data = nodes[0].getaddressinfo("bcrt1q95gp4zeaah3qcerh35yhw02qeptlzasdtst55v")
+        assert not import_addr_data["ismine"]
+        assert not import_addr_data["isactive"]
+
+        import_pub_desc = descsum_create("wpkh(02f893ca95b0d55b4ce4e72ae94982eb679158cb2ebc120ff62c17fedfd1f0700e)")
+        import_pub_addr = nodes[0].deriveaddresses(import_pub_desc)[0]
+        nodes[0].importdescriptors([{
+            "desc": import_pub_desc,
+            "timestamp": "now",
+        }])
+        import_pub_data = nodes[0].getaddressinfo(import_pub_addr)
+        assert not import_pub_data["ismine"]
+        assert not import_pub_data["isactive"]
+
+        nodes[0].importdescriptors([{
+            "desc": descsum_create("wpkh(cPMX7v5CNV1zCphFSq2hnR5rCjzAhA1GsBfD1qrJGdj4QEfu38Qx)"),
+            "timestamp": "now",
+        }])
+        import_priv_data = nodes[0].getaddressinfo("bcrt1qa985v5d53qqtrfujmzq2zrw3r40j6zz4ns02kj")
+        assert import_priv_data["ismine"]
+        assert not import_priv_data["isactive"]
 
         # Encrypt wallet and wait to terminate
         nodes[0].encryptwallet('test')
+        addr9_after_encrypting_data = nodes[0].getaddressinfo(addr9)
+        assert addr9_after_encrypting_data["ismine"]
+        assert not addr9_after_encrypting_data["isactive"]
+
         # Import hardened derivation only descriptors
         nodes[0].walletpassphrase('test', 10)
         nodes[0].importdescriptors([
