@@ -1541,7 +1541,13 @@ private:
      */
     bool AlreadyConnectedToAddress(const CNetAddr& addr) const EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex);
 
-    bool AttemptToEvictConnection() EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex);
+    /**
+     * Attempt to disconnect a connected peer.
+     * Used to make room for new inbound connections, returns true if successful.
+     * @param[in] force     Try to evict a random inbound ban-able peer if
+     *                      all connections are otherwise protected.
+     */
+    bool AttemptToEvictConnection(bool force) EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex);
 
     /**
      * Open a new P2P connection.
