@@ -709,6 +709,7 @@ void BlockManager::CleanupBlockRevFiles() const
 CBlockFileInfo* BlockManager::GetBlockFileInfo(size_t n)
 {
     AssertLockHeld(::cs_main);
+    if (n >= m_blockfile_info.size()) return nullptr;
     return &m_blockfile_info.at(n);
 }
 

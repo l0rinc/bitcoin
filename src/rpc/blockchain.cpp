@@ -3655,6 +3655,52 @@ return RPCMethod{
     };
 }
 
+static RPCHelpMan getblockfileinfo()
+{
+    return RPCHelpMan{
+            "getblockfileinfo",
+            "Retrieves information about a certain block file.",
+            {
+                {"file_number", RPCArg::Type::NUM, RPCArg::Optional::NO, "block file number"},
+            },
+            RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "blocks_num", "the number of blocks stored in the file"},
+                        {RPCResult::Type::NUM, "lowest_block", "the height of the lowest block inside the file"},
+                        {RPCResult::Type::NUM, "highest_block", "the height of the highest block inside the file"},
+                        {RPCResult::Type::NUM, "data_size", "the number of used bytes in the block file"},
+                        {RPCResult::Type::NUM, "undo_size", "the number of used bytes in the undo file"},
+                    }
+            },
+            RPCExamples{ HelpExampleCli("getblockfileinfo", "0") },
+            [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue {
+                NodeContext& node = EnsureAnyNodeContext(request.context);
+                ChainstateManager& chainman = EnsureChainman(node);
+
+                int block_num = request.params[0].getInt<int>();
+                if (block_num < 0) throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid block number");
+
+                CBlockFileInfo info;
+                {
+                    LOCK(cs_main);
+                    CBlockFileInfo* file_info = chainman.m_blockman.GetBlockFileInfo(block_num);
+                    if (!file_info) throw JSONRPCError(RPC_INVALID_PARAMETER, "block file not found");
+                    info = *file_info;
+                }
+
+                UniValue result(UniValue::VOBJ);
+                result.pushKV("blocks_num", info.nBlocks);
+                result.pushKV("lowest_block", info.nHeightFirst);
+                result.pushKV("highest_block", info.nHeightLast);
+                result.pushKV("data_size", info.nSize);
+                result.pushKV("undo_size", info.nUndoSize);
+
+                return result;
+            }
+    };
+}
+
 static RPCHelpMan getblocklocations()
 {
     return RPCHelpMan{"getblocklocations",
@@ -3754,6 +3800,7 @@ void RegisterBlockchainRPCCommands(CRPCTable& t)
         {"blockchain", &dumptxoutset},
         {"blockchain", &loadtxoutset},
         {"blockchain", &getchainstates},
+        {"hidden", &getblockfileinfo},
         {"hidden", &invalidateblock},
         {"hidden", &reconsiderblock},
         {"blockchain", &waitfornewblock},
