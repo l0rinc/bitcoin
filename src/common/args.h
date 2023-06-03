@@ -384,7 +384,7 @@ public:
     /**
      * Add many hidden arguments
      */
-    void AddHiddenArgs(const std::vector<std::string>& args) EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
+    void AddHiddenArgs(const std::vector<std::string>& args, unsigned int flags = ArgsManager::ALLOW_ANY) EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
 
     /**
      * Clear available arguments

@@ -253,6 +253,22 @@ BOOST_AUTO_TEST_CASE(util_ParseInvalidParameters)
     BOOST_CHECK_EQUAL(error, "Invalid parameter -test.registered");
 }
 
+BOOST_AUTO_TEST_CASE(util_ParseNegatedHelpParameters)
+{
+    const auto check_negated_help = [](const char* arg, const char* expected_error) {
+        TestArgsManager test;
+        SetupHelpOptions(test);
+        const char* argv[] = {"ignored", arg};
+        std::string error;
+        BOOST_CHECK(!test.ParseParameters(2, argv, error));
+        BOOST_CHECK_EQUAL(error, expected_error);
+    };
+
+    check_negated_help("-nohelp", "Negating of -help is meaningless and therefore forbidden");
+    check_negated_help("-noh", "Negating of -h is meaningless and therefore forbidden");
+    check_negated_help("-no?", "Negating of -? is meaningless and therefore forbidden");
+}
+
 static void TestParse(const std::string& str, bool expected_bool, int64_t expected_int)
 {
     TestArgsManager test;

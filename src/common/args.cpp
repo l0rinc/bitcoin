@@ -702,10 +702,10 @@ void ArgsManager::AddArg(const std::string& name, const std::string& help, unsig
     }
 }
 
-void ArgsManager::AddHiddenArgs(const std::vector<std::string>& names)
+void ArgsManager::AddHiddenArgs(const std::vector<std::string>& names, unsigned int flags)
 {
     for (const std::string& name : names) {
-        AddArg(name, "", ArgsManager::ALLOW_ANY, OptionsCategory::HIDDEN);
+        AddArg(name, "", flags, OptionsCategory::HIDDEN);
     }
 }
 
@@ -835,8 +835,8 @@ bool HelpRequested(const ArgsManager& args)
 
 void SetupHelpOptions(ArgsManager& args)
 {
-    args.AddArg("-help", "Print this help message and exit (also -h or -?)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
-    args.AddHiddenArgs({"-h", "-?"});
+    args.AddArg("-help", "Print this help message and exit (also -h or -?)", ArgsManager::DISALLOW_NEGATION, OptionsCategory::OPTIONS);
+    args.AddHiddenArgs({"-h", "-?"}, ArgsManager::DISALLOW_NEGATION);
 }
 
 std::string HelpMessageGroup(const std::string &message) {
