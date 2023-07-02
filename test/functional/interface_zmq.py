@@ -206,6 +206,17 @@ class ZMQTest (BitcoinTestFramework):
         address = f"tcp://127.0.0.1:{self.zmq_port_base}"
 
         if unix:
+            self.log.info("Test native ipc:// ZMQ address")
+            ipc_scheme_path = os.path.join(self.options.tmpdir, "zmq_ipc_scheme.sock")
+            ipc_scheme_address = f"ipc://{ipc_scheme_path}"
+            self.restart_node(0, [f"-zmqpubrawtx={ipc_scheme_address}"])
+            assert_equal(self.nodes[0].getzmqnotifications(), [
+                {"type": "pubrawtx", "address": ipc_scheme_address, "hwm": 1000},
+            ])
+            self.restart_node(0)
+            if os.path.exists(ipc_scheme_path):
+                os.unlink(ipc_scheme_path)
+
             # Use the shortest temp path possible since paths may have as little as 92-char limit
             socket_path = tempfile.NamedTemporaryFile().name
             address = f"ipc://{socket_path}"
