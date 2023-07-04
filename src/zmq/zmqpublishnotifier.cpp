@@ -235,7 +235,7 @@ bool CZMQPublishRawBlockNotifier::NotifyBlock(const CBlockIndex *pindex)
 
     std::vector<std::byte> block{};
     if (!m_get_block_by_index(block, *pindex)) {
-        zmqError("Can't read block from disk");
+        LogDebug(BCLog::ZMQ, "Error: Can't read block from disk\n");
         return false;
     }
 
