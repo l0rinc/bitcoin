@@ -26,6 +26,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 using http_bitcoin::HTTPRequest;
@@ -269,7 +270,7 @@ static bool InitRPCAuthentication()
 
         std::string user;
         std::string pass;
-        switch (GenerateAuthCookie(cookie_perms, user, pass)) {
+        switch (GenerateAuthCookie(cookie_perms, cookie_perms_arg.has_value(), user, pass)) {
         case AuthCookieResult::Error:
             return false;
         case AuthCookieResult::Disabled:

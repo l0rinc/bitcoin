@@ -16,6 +16,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 /**
@@ -98,6 +99,7 @@ static fs::path GetAuthCookieFile(bool temp=false)
 static std::optional<std::string> g_generated_cookie;
 
 AuthCookieResult GenerateAuthCookie(const std::optional<fs::perms>& cookie_perms,
+                                    bool cookie_perms_set_by_arg,
                                     std::string& user,
                                     std::string& pass)
 {
@@ -141,7 +143,9 @@ AuthCookieResult GenerateAuthCookie(const std::optional<fs::perms>& cookie_perms
 
     g_generated_cookie = cookie;
     LogInfo("Generated RPC authentication cookie %s\n", fs::PathToString(filepath));
-    LogInfo("Permissions used for cookie: %s\n", PermsToSymbolicString(fs::status(filepath).permissions()));
+    LogInfo("Permissions used for cookie%s: %s\n",
+              cookie_perms_set_by_arg ? " (set by -rpccookieperms)" : "",
+              PermsToSymbolicString(fs::status(filepath).permissions()));
 
     user = COOKIEAUTH_USER;
     pass = rand_pwd_hex;
