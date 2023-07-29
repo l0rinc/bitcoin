@@ -52,11 +52,31 @@ const std::vector<std::string> CONNECTION_TYPE_DOC{
         "outbound-full-relay (default automatic connections)",
         "block-relay-only (does not relay transactions or addresses)",
         "inbound (initiated by the peer)",
-        "manual (added via addnode RPC or -addnode/-connect configuration options)",
+        "manual (added via addnode RPC or -addnode/-connect configuration options; protected from DoS disconnection and not required to be full nodes as other outbound peers are)",
         "addr-fetch (short-lived automatic connection for soliciting addresses)",
         "feeler (short-lived automatic connection for testing addresses)",
         "private-broadcast (short-lived automatic connection for broadcasting privacy-sensitive transactions)"
 };
+
+ConnectionType ConnectionTypeFromValue(const UniValue& uv)
+{
+    const std::string& s{uv.get_str()};
+    if (s == "inbound") {
+        return ConnectionType::INBOUND;
+    } else if (s == "manual") {
+        return ConnectionType::MANUAL;
+    } else if (s == "feeler") {
+        return ConnectionType::FEELER;
+    } else if (s == "outbound-full-relay") {
+        return ConnectionType::OUTBOUND_FULL_RELAY;
+    } else if (s == "block-relay-only") {
+        return ConnectionType::BLOCK_RELAY;
+    } else if (s == "addr-fetch") {
+        return ConnectionType::ADDR_FETCH;
+    }
+
+    throw JSONRPCError(RPC_INVALID_PARAMETER, "Unknown connection type " + s);
+}
 
 const std::vector<std::string> TRANSPORT_TYPE_DOC{
     "detecting (peer could be v1 or v2)",
@@ -322,14 +342,14 @@ static RPCMethod addnode()
         "addnode",
         "Attempts to add or remove a node from the addnode list.\n"
                 "Or try a connection to a node once.\n"
-                "Nodes added using addnode (or -connect) are protected from DoS disconnection and are not required to be\n"
-                "full nodes/support SegWit as other outbound peers are (though such peers will not be synced from).\n" +
+                +
                 strprintf("Addnode connections are limited to %u at a time", MAX_ADDNODE_CONNECTIONS) +
                 " and are counted separately from the -maxconnections limit.\n",
                 {
                     {"node", RPCArg::Type::STR, RPCArg::Optional::NO, "The IP address/hostname optionally followed by :port of the peer to connect to"},
                     {"command", RPCArg::Type::STR, RPCArg::Optional::NO, "'add' to add a node to the list, 'remove' to remove a node from the list, 'onetry' to try a connection to the node once"},
                     {"v2transport", RPCArg::Type::BOOL, RPCArg::DefaultHint{"set by -v2transport"}, "Attempt to connect using BIP324 v2 transport protocol (ignored for 'remove' command)"},
+                    {"connection_type", RPCArg::Type::STR, RPCArg::Default{"manual"}, "Type of connection: \n" + Join(CONNECTION_TYPE_DOC, ",\n") + "\nOnly supported for command \"onetry\" for now."},
                 },
                 RPCResult{RPCResult::Type::NONE, "", ""},
                 RPCExamples{
@@ -350,6 +370,13 @@ static RPCMethod addnode()
     const auto node_arg{self.Arg<std::string_view>("node")};
     bool node_v2transport = connman.GetLocalServices() & NODE_P2P_V2;
     bool use_v2transport = self.MaybeArg<bool>("v2transport").value_or(node_v2transport);
+    ConnectionType connection_type = ConnectionType::MANUAL;
+    if (!request.params[3].isNull()) {
+        if (command == "remove") {
+            throw std::runtime_error(self.ToString());
+        }
+        connection_type = ConnectionTypeFromValue(request.params[3]);
+    }
 
     if (use_v2transport && !node_v2transport) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Error: v2transport requested but not enabled (see -v2transport)");
@@ -362,7 +389,7 @@ static RPCMethod addnode()
                                       /*fCountFailure=*/false,
                                       /*grant_outbound=*/{},
                                       /*pszDest=*/std::string{node_arg}.c_str(),
-                                      /*conn_type=*/ConnectionType::MANUAL,
+                                      /*conn_type=*/connection_type,
                                       /*use_v2transport=*/use_v2transport,
                                       /*proxy_override=*/std::nullopt);
         return UniValue::VNULL;
@@ -370,7 +397,11 @@ static RPCMethod addnode()
 
     if (command == "add")
     {
-        if (!connman.AddNode({std::string{node_arg}, use_v2transport})) {
+        if (connection_type != ConnectionType::MANUAL) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "connection_type != manual is only supported for the \"onetry\" command for now");
+        }
+
+        if (!connman.AddNode({node_arg, use_v2transport})) {
             throw JSONRPCError(RPC_CLIENT_NODE_ALREADY_ADDED, "Error: Node already added");
         }
     }
