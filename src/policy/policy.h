@@ -178,7 +178,7 @@ TxValidationState ValidateInputsStandardness(const CTransaction& tx, const CCoin
 *
 * Also enforce a maximum stack item size limit and no annexes for tapscript spends.
 */
-bool IsWitnessStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs);
+bool IsWitnessStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs, const std::string& reason_prefix, std::string& out_reason, const ignore_rejects_type& ignore_rejects=empty_ignore_rejects);
 /**
  * Check whether this transaction spends any witness program but P2A, including not-yet-defined ones.
  * May return `false` early for consensus-invalid transactions.

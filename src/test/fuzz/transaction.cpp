@@ -87,7 +87,8 @@ FUZZ_TARGET(transaction, .init = initialize_transaction)
 
     const CCoinsViewCache coins_view_cache{&CoinsViewEmpty::Get()};
     (void)ValidateInputsStandardness(tx, coins_view_cache);
-    (void)IsWitnessStandard(tx, coins_view_cache);
+    std::string reject_reason;
+    (void)IsWitnessStandard(tx, coins_view_cache, "fuzz", reject_reason);
 
     if (tx.ComputeTotalSize() < 250'000) { // Avoid high memory usage (with msan) due to json encoding
         {

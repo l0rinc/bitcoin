@@ -364,7 +364,8 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 (void)GetTransactionSigOpCost(transaction, coins_view_cache, flags);
             },
             [&] {
-                (void)IsWitnessStandard(CTransaction{random_mutable_transaction}, coins_view_cache);
+                std::string reason;
+                (void)IsWitnessStandard(CTransaction{random_mutable_transaction}, coins_view_cache, "bad-witness-", reason);
             });
     }
 
