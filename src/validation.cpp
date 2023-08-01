@@ -921,7 +921,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     }
 
     if (m_pool.m_opts.require_standard) {
-        state = ValidateInputsStandardness(tx, m_view);
+        state = ValidateInputsStandardness(tx, m_view, ignore_rejects);
         if (state.IsInvalid()) {
             return false;
         }
