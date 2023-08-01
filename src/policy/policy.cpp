@@ -77,7 +77,11 @@ std::vector<uint32_t> GetDust(const CTransaction& tx, CFeeRate dust_relay_rate)
     return dust_outputs;
 }
 
-bool IsStandard(const CScript& scriptPubKey, TxoutType& whichType)
+/**
+ * Note this must assign whichType even if returning false, in case
+ * IsStandardTx ignores the "scriptpubkey" rejection.
+ */
+bool IsStandard(const CScript& scriptPubKey, const std::optional<unsigned>& max_datacarrier_bytes, TxoutType& whichType)
 {
     std::vector<std::vector<unsigned char> > vSolutions;
     whichType = Solver(scriptPubKey, vSolutions);
@@ -97,11 +101,27 @@ bool IsStandard(const CScript& scriptPubKey, TxoutType& whichType)
     return true;
 }
 
-bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_datacarrier_bytes, bool permit_bare_multisig, const CFeeRate& dust_relay_fee, std::string& reason)
-{
-    if (tx.version > TX_MAX_STANDARD_VERSION || tx.version < TX_MIN_STANDARD_VERSION) {
-        reason = "version";
+static inline bool MaybeReject_(std::string& out_reason, const std::string& reason, const std::string& reason_prefix, const ignore_rejects_type& ignore_rejects) {
+    if (ignore_rejects.count(reason_prefix + reason)) {
         return false;
+    }
+
+    out_reason = reason_prefix + reason;
+    return true;
+}
+
+#define MaybeReject(reason)  do {  \
+    if (MaybeReject_(out_reason, reason, reason_prefix, ignore_rejects)) {  \
+        return false;  \
+    }  \
+} while(0)
+
+bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_datacarrier_bytes, bool permit_bare_multisig, const CFeeRate& dust_relay_fee, std::string& out_reason, const ignore_rejects_type& ignore_rejects)
+{
+    const std::string reason_prefix;
+
+    if (tx.version > TX_MAX_STANDARD_VERSION || tx.version < 1) {
+        MaybeReject("version");
     }
 
     // Extremely large transactions with lots of inputs can cost the network
@@ -110,8 +130,7 @@ bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_dat
     // to MAX_STANDARD_TX_WEIGHT mitigates CPU exhaustion attacks.
     unsigned int sz = GetTransactionWeight(tx);
     if (sz > MAX_STANDARD_TX_WEIGHT) {
-        reason = "tx-size";
-        return false;
+        MaybeReject("tx-size");
     }
 
     for (const CTxIn& txin : tx.vin)
@@ -125,72 +144,41 @@ bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_dat
         // 20-of-20 CHECKMULTISIG scriptPubKey, though such a scriptPubKey
         // is not considered standard.
         if (txin.scriptSig.size() > MAX_STANDARD_SCRIPTSIG_SIZE) {
-            reason = "scriptsig-size";
-            return false;
+            MaybeReject("scriptsig-size");
         }
         if (!txin.scriptSig.IsPushOnly()) {
-            reason = "scriptsig-not-pushonly";
-            return false;
+            MaybeReject("scriptsig-not-pushonly");
         }
     }
 
     unsigned int datacarrier_bytes_left = max_datacarrier_bytes.value_or(0);
     TxoutType whichType;
     for (const CTxOut& txout : tx.vout) {
-        if (!::IsStandard(txout.scriptPubKey, whichType)) {
-            reason = "scriptpubkey";
+        if (!::IsStandard(txout.scriptPubKey, max_datacarrier_bytes, whichType)) {
             if (whichType == TxoutType::WITNESS_UNKNOWN) {
-                reason += "-unknown-witnessversion";
+                MaybeReject("scriptpubkey-unknown-witnessversion");
+            } else {
+                MaybeReject("scriptpubkey");
             }
-            return false;
         }
 
         if (whichType == TxoutType::NULL_DATA) {
-            unsigned int size = txout.scriptPubKey.size();
-            if (size > datacarrier_bytes_left) {
-                reason = "datacarrier";
-                return false;
-            }
-            datacarrier_bytes_left -= size;
-        } else if ((whichType == TxoutType::MULTISIG) && (!permit_bare_multisig)) {
-            reason = "bare-multisig";
-            return false;
+            nDataOut++;
+            continue;
+        }
+        else if ((whichType == TxoutType::MULTISIG) && (!permit_bare_multisig)) {
+            MaybeReject("bare-multisig");
         }
     }
 
     // Only MAX_DUST_OUTPUTS_PER_TX dust is permitted(on otherwise valid ephemeral dust)
     if (GetDust(tx, dust_relay_fee).size() > MAX_DUST_OUTPUTS_PER_TX) {
-        reason = "dust";
-        return false;
+        MaybeReject("dust");
     }
 
-    return true;
-}
-
-/**
- * Check the total number of non-witness sigops across the whole transaction, as per BIP54.
- */
-static bool CheckSigopsBIP54(const CTransaction& tx, const CCoinsViewCache& inputs)
-{
-    Assert(!tx.IsCoinBase());
-
-    unsigned int sigops{0};
-    for (const auto& txin: tx.vin) {
-        const auto& prev_txo{inputs.AccessCoin(txin.prevout).out};
-
-        // Unlike the existing block wide sigop limit which counts sigops present in the block
-        // itself (including the scriptPubKey which is not executed until spending later), BIP54
-        // counts sigops in the block where they are potentially executed (only).
-        // This means sigops in the spent scriptPubKey count toward the limit.
-        // `fAccurate` means correctly accounting sigops for CHECKMULTISIGs(VERIFY) with 16 pubkeys
-        // or fewer. This method of accounting was introduced by BIP16, and BIP54 reuses it.
-        // The GetSigOpCount call on the previous scriptPubKey counts both bare and P2SH sigops.
-        sigops += txin.scriptSig.GetSigOpCount(/*fAccurate=*/true);
-        sigops += prev_txo.scriptPubKey.GetSigOpCount(txin.scriptSig);
-
-        if (sigops > MAX_TX_LEGACY_SIGOPS) {
-            return false;
-        }
+    // only one OP_RETURN txout is permitted
+    if (nDataOut > 1) {
+        MaybeReject("multi-op-return");
     }
 
     return true;
