@@ -199,8 +199,10 @@ bool OptionsModel::Init(bilingual_str& error)
         out = unit;
         return true;
     };
-    if (!unit_set_to_variant(m_display_bitcoin_unit, settings.value("DisplayBitcoinUnit"))) {
-        m_display_bitcoin_unit = BitcoinUnit::BTC;
+    if (!unit_set_to_variant(m_display_bitcoin_unit, settings.value("DisplayBitcoinUnitKnots"))) {
+        if (!unit_set_to_variant(m_display_bitcoin_unit, settings.value("DisplayBitcoinUnit"))) {
+            m_display_bitcoin_unit = BitcoinUnit::BTC;
+        }
     }
 
     if (!settings.contains("bDisplayAddresses"))
@@ -742,7 +744,12 @@ void OptionsModel::setDisplayUnit(const QVariant& new_unit)
     if (new_unit.isNull() || new_unit.value<BitcoinUnit>() == m_display_bitcoin_unit) return;
     m_display_bitcoin_unit = new_unit.value<BitcoinUnit>();
     QSettings settings;
-    settings.setValue("DisplayBitcoinUnit", QVariant::fromValue(m_display_bitcoin_unit));
+    if (BitcoinUnits::numsys(m_display_bitcoin_unit) == BitcoinUnit::BTC) {
+        settings.setValue("DisplayBitcoinUnit", QVariant::fromValue(m_display_bitcoin_unit));
+        settings.remove("DisplayBitcoinUnitKnots");
+    } else {
+        settings.setValue("DisplayBitcoinUnitKnots", QVariant::fromValue(m_display_bitcoin_unit));
+    }
     Q_EMIT displayUnitChanged(m_display_bitcoin_unit);
 }
 
