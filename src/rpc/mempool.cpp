@@ -1231,6 +1231,12 @@ UniValue MempoolInfoToJSON(const CTxMemPool& pool, const std::optional<MempoolHi
     ret.pushKV("limitclustersize", pool.m_opts.limits.cluster_size_vbytes);
     ret.pushKV("optimal", pool.m_txgraph->DoWork(0)); // 0 work is a quick check for known optimality
     ret.pushKV("fullrbf", (pool.m_opts.rbf_policy == RBFPolicy::Always));
+    switch (pool.m_opts.rbf_policy) {
+    case RBFPolicy::Never : ret.pushKV("rbf_policy", "never"); break;
+    case RBFPolicy::OptIn : ret.pushKV("rbf_policy", "optin"); break;
+    case RBFPolicy::Always: ret.pushKV("rbf_policy", "always"); break;
+    }
+
     if (histogram_floors) {
         const MempoolHistogramFeeRates& floors{histogram_floors.value()};
 
@@ -1314,6 +1320,7 @@ static RPCMethod getmempoolinfo()
                     {RPCResult::Type::NUM, "incrementalrelayfee", "minimum fee rate increment for mempool limiting or replacement in " + CURRENCY_UNIT + "/kvB"},
                     {RPCResult::Type::NUM, "unbroadcastcount", "Current number of transactions that haven't passed initial broadcast yet"},
                     {RPCResult::Type::BOOL, "fullrbf", "True if the mempool accepts RBF without replaceability signaling inspection"},
+                    {RPCResult::Type::STR, "rbf_policy", "Policy used for replacing conflicting transactions by fee (one of: never, optin, always)"},
                     {RPCResult::Type::BOOL, "permitbaremultisig", "True if the mempool accepts transactions with bare multisig outputs"},
                     {RPCResult::Type::NUM, "maxdatacarriersize", "Maximum number of bytes that can be used by OP_RETURN outputs in the mempool"},
                     {RPCResult::Type::NUM, "limitclustercount", "Maximum number of transactions that can be in a cluster (configured by -limitclustercount)"},
