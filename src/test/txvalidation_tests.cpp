@@ -13,6 +13,7 @@
 #include <script/script.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
+#include <test/util/transaction_utils.h>
 #include <test/util/txmempool.h>
 #include <validation.h>
 

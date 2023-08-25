@@ -523,7 +523,7 @@ std::pair<CMutableTransaction, CAmount> TestChain100Setup::CreateValidTransactio
     if (feerate.has_value()) {
         assert(fee_output.has_value());
         assert(fee_output.value() < mempool_txn.vout.size());
-        CAmount target_fee = feerate.value().GetFee(GetVirtualTransactionSize(CTransaction{mempool_txn}));
+        CAmount target_fee = feerate.value().GetFee(GetVirtualTransactionSize(CTransaction{mempool_txn}, 0, 0));
         CAmount deduction = target_fee - current_fee;
         if (deduction > 0) {
             // Only deduct fee if there's anything to deduct. If the caller has put more fees than

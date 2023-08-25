@@ -841,3 +841,89 @@ hint: You can instead skip this commit with "git cherry-pick --skip".
 hint: To abort and get back to the state before "git cherry-pick",
 hint: run "git cherry-pick --abort".
 hint: Disable this message with "git config set advice.mergeConflict false"
+[knots-replayed-on-origin-master f2dac5ebaa] wallet, rpc: add anti-fee-sniping to `send` and `sendall`
+ Author: ishaanam <ishaana.misra@gmail.com>
+ Date: Sun Nov 26 13:08:56 2023 -0500
+ 5 files changed, 801 insertions(+), 1 deletion(-)
+ create mode 100755 test/functional/wallet_import_rescan.py
+Auto-merging src/wallet/receive.cpp
+Auto-merging src/wallet/wallet.h
+[knots-replayed-on-origin-master d2a33953a4] Revert "wallet: Remove unused GetLegacyBalance" (complex)
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sun Jan 2 01:52:59 2022 +0000
+ 2 files changed, 74 insertions(+)
+Auto-merging src/wallet/receive.cpp
+[knots-replayed-on-origin-master 58e90f86d7] Bugfix: wallet: GetLegacyBalance: Rather than include two conflicting unconfirmed transactions in the same balance, only include such transactions when they are in our mempool (which cannot have conflicts)
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed Mar 9 18:52:09 2022 +0000
+ 1 file changed, 12 insertions(+)
+Auto-merging src/wallet/db.cpp
+[knots-replayed-on-origin-master ae4e048c04] wallet: let ListWalletDir do not iterate trough our blocksdata.
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Nov 24 18:36:00 2023 +0000
+ 1 file changed, 35 insertions(+), 1 deletion(-)
+Auto-merging src/rpc/blockchain.cpp
+[knots-replayed-on-origin-master c807ac7169] rpc: getblock fixups
+ Author: Jon Atack <jon@atack.com>
+ Date: Wed Mar 30 23:52:04 2022 +0200
+ 1 file changed, 12 insertions(+), 20 deletions(-)
+Auto-merging src/rpc/rawtransaction.cpp
+[knots-replayed-on-origin-master 578d5868c3] rpc: getrawtransaction fixups
+ Author: Jon Atack <jon@atack.com>
+ Date: Wed Mar 30 23:54:17 2022 +0200
+ 1 file changed, 6 insertions(+), 8 deletions(-)
+Auto-merging src/rpc/rawtransaction.cpp
+[knots-replayed-on-origin-master f35504c713] rpc: decodepsbt fixups
+ Author: Jon Atack <jon@atack.com>
+ Date: Thu Mar 31 01:38:42 2022 +0200
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+Auto-merging src/rpc/rawtransaction.cpp
+[knots-replayed-on-origin-master 76a49dd6db] rpc: decodescript fixups
+ Author: Jon Atack <jon@atack.com>
+ Date: Thu Mar 31 01:41:30 2022 +0200
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+Auto-merging src/rpc/blockchain.cpp
+[knots-replayed-on-origin-master 62f484d218] rpc: gettxout fixups
+ Author: Jon Atack <jon@atack.com>
+ Date: Thu Mar 31 01:49:09 2022 +0200
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging src/rpc/blockchain.cpp
+Auto-merging src/rpc/rawtransaction.cpp
+[knots-replayed-on-origin-master 37d9ba19b2] Minimise (diff & string changes)
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Apr 14 00:40:49 2022 +0000
+ 2 files changed, 18 insertions(+), 19 deletions(-)
+Auto-merging src/init.cpp
+Auto-merging test/functional/feature_config_args.py
+[knots-replayed-on-origin-master 917ef09274] Allow acceptstalefeeestimates on all networks
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Aug 30 17:28:45 2024 +0000
+ 2 files changed, 4 deletions(-)
+Auto-merging src/bench/mempool_eviction.cpp
+Auto-merging src/bench/mempool_stress.cpp
+Auto-merging src/interfaces/chain.h
+Auto-merging src/policy/policy.h
+Auto-merging src/qt/transactiondesc.cpp
+Auto-merging src/qt/walletmodeltransaction.cpp
+Auto-merging src/qt/walletmodeltransaction.h
+Auto-merging src/rpc/mempool.cpp
+Auto-merging src/test/fuzz/mini_miner.cpp
+Auto-merging src/test/fuzz/transaction.cpp
+Auto-merging src/test/mempool_tests.cpp
+Auto-merging src/test/miniminer_tests.cpp
+Auto-merging src/test/policyestimator_tests.cpp
+Auto-merging src/test/txpackage_tests.cpp
+Auto-merging src/test/txvalidation_tests.cpp
+Auto-merging src/test/util/setup_common.cpp
+Auto-merging src/test/util/transaction_utils.h
+Auto-merging src/wallet/feebumper.cpp
+Auto-merging src/wallet/spend.h
+CONFLICT (modify/delete): src/wallet/test/fuzz/notifications.cpp deleted in HEAD and modified in 4b3cc3d48e (policy: Delete buggy GetVirtualTransactionSize(CTransaction&)).  Version 4b3cc3d48e (policy: Delete buggy GetVirtualTransactionSize(CTransaction&)) of src/wallet/test/fuzz/notifications.cpp left in tree.
+error: could not apply 4b3cc3d48e... policy: Delete buggy GetVirtualTransactionSize(CTransaction&)
+hint: After resolving the conflicts, mark them with
+hint: "git add/rm <pathspec>", then run
+hint: "git cherry-pick --continue".
+hint: You can instead skip this commit with "git cherry-pick --skip".
+hint: To abort and get back to the state before "git cherry-pick",
+hint: run "git cherry-pick --abort".
+hint: Disable this message with "git config set advice.mergeConflict false"

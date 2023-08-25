@@ -129,3 +129,14 @@ c05c0506f2fa6f85923b754b3285018b73872720	Change the BuildFilterElements default 
 cc050ebafc9140a854595991ff4b77fe538230e9	Act on review	1	no	no	no	no	applied	
 ee629e7448b5dcbcc4eaeed4bb845123e76712b2	QA: blockfilter_tests: Diff-minimise	1	no	no	no	no	applied	
 b85232d74623959a8afd0afe605e5c5c218a0a87	Only enable basic blockfilterindex if enabled with type omitted	1	no	no	no	no	applied	
+6825ae0c786dc5647395380ffee7977d90df64e6	wallet, rpc: add anti-fee-sniping to `send` and `sendall`	5	no	no	unlikely	no	applied_manual	
+ee5c7aa786cdc9e2d9928596264ef2bd1180d361	Revert "wallet: Remove unused GetLegacyBalance" (complex)	2	no	no	no	no	applied	
+14bf4726c472f53867fd5354ae6b2204bc6d1507	Bugfix: wallet: GetLegacyBalance: Rather than include two conflicting unconfirmed transactions in the same balance, only include such transactions when they are in our mempool (which cannot have conflicts)	1	no	possible	consider	no	applied	
+283cd1f0650b18a39253dead2f9345142a1211db	wallet: let ListWalletDir do not iterate trough our blocksdata.	1	no	no	no	no	applied	
+20130089e3981685cae31289872058e938d36b16	rpc: getblock fixups	1	no	possible	consider	no	applied	
+8765a4ce0ee62f0e327707731bff0c6a169db1a8	rpc: getrawtransaction fixups	1	no	possible	consider	no	applied	
+6e9506fe316ef9fd0e4166616ae424f29dc40e72	rpc: decodepsbt fixups	1	no	possible	consider	no	applied	
+c57b199cc8dd395707ef35eac3fb2b780d104835	rpc: decodescript fixups	1	no	possible	consider	no	applied	
+6bdd9e209820256eb2759f76757a5a1379d9e36a	rpc: gettxout fixups	1	no	possible	consider	no	applied	
+35cdcb3309d3ab4042e75cef74ee718dde43929a	Minimise (diff & string changes)	2	no	no	no	no	applied	
+a303cde2fd11b4d60e7674ecf2a8ada1c0c33ca6	Allow acceptstalefeeestimates on all networks	2	no	no	unlikely	no	applied	
