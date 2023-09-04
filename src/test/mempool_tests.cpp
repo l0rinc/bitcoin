@@ -110,7 +110,7 @@ BOOST_AUTO_TEST_CASE(MempoolCoinAgePriorityCache)
     const double starting_priority{ComputePriority2(input_value, modified_size)};
     CTxMemPoolEntry entry{tx_ref, /*fee=*/0, /*time=*/0, /*entry_height=*/100, /*entry_sequence=*/0,
                           CoinAgeCache{.inputs_coin_age = input_value, .in_chain_input_value = input_value},
-                          /*spends_coinbase=*/false, sigops_cost, LockPoints{}};
+                          /*spends_coinbase=*/false, /*extra_weight=*/0, sigops_cost, LockPoints{}};
 
     BOOST_CHECK_EQUAL(entry.GetStartingPriority(), starting_priority);
     BOOST_CHECK_EQUAL(entry.GetPriority(/*currentHeight=*/101), starting_priority);
@@ -159,6 +159,30 @@ BOOST_AUTO_TEST_CASE(MempoolUpdateDependentPriorities)
     test_pool.UpdateDependentPriorities(parent, /*nBlockHeight=*/102, /*addToChain=*/false);
     BOOST_CHECK_EQUAL((*child_entry)->GetInternalCoinAgeCache().in_chain_input_value, 0);
     BOOST_CHECK_EQUAL((*child_entry)->GetPriority(/*currentHeight=*/103), static_cast<double>(input_value) / modified_size);
+}
+
+BOOST_AUTO_TEST_CASE(MempoolEntryExtraWeight)
+{
+    CMutableTransaction tx;
+    tx.vin.resize(1);
+    tx.vout.emplace_back(1 * COIN, CScript() << OP_TRUE);
+    const auto tx_ref{MakeTransactionRef(tx)};
+
+    static constexpr int32_t extra_weight{400};
+    static constexpr int64_t sigops_cost{4};
+    CTxMemPoolEntry base_entry{tx_ref, /*fee=*/0, /*time=*/0, /*entry_height=*/1, /*entry_sequence=*/0,
+                               COIN_AGE_CACHE_ZERO, /*spends_coinbase=*/false, /*extra_weight=*/0,
+                               sigops_cost, LockPoints{}};
+    CTxMemPoolEntry weighted_entry{tx_ref, /*fee=*/0, /*time=*/0, /*entry_height=*/1, /*entry_sequence=*/0,
+                                   COIN_AGE_CACHE_ZERO, /*spends_coinbase=*/false, extra_weight,
+                                   sigops_cost, LockPoints{}};
+
+    BOOST_CHECK_EQUAL(weighted_entry.GetTxWeight(), base_entry.GetTxWeight());
+    BOOST_CHECK_EQUAL(weighted_entry.GetExtraWeight(), extra_weight);
+    BOOST_CHECK_EQUAL(weighted_entry.GetTxSize(), GetVirtualTransactionSize(GetTransactionWeight(*tx_ref) + extra_weight, sigops_cost, ::nBytesPerSigOp));
+    BOOST_CHECK_EQUAL(weighted_entry.GetAdjustedWeight(), GetSigOpsAdjustedWeight(GetTransactionWeight(*tx_ref) + extra_weight, sigops_cost, ::nBytesPerSigOp));
+    BOOST_CHECK_GT(weighted_entry.GetTxSize(), base_entry.GetTxSize());
+    BOOST_CHECK_GT(weighted_entry.GetAdjustedWeight(), base_entry.GetAdjustedWeight());
 }
 
 BOOST_AUTO_TEST_CASE(MempoolPriorityAndFeeDeltas)

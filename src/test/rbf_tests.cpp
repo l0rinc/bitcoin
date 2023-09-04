@@ -37,6 +37,30 @@ static inline CTransactionRef make_tx(const std::vector<CTransactionRef>& inputs
     return MakeTransactionRef(tx);
 }
 
+// Make two child transactions from parent, which must have at least two outputs.
+static inline std::pair<CTransactionRef, CTransactionRef> make_two_siblings(const CTransactionRef parent,
+                                      const std::vector<CAmount>& output_values)
+{
+    assert(parent->vout.size() >= 2);
+
+    CMutableTransaction tx1;
+    tx1.vin.resize(1);
+    tx1.vout.resize(output_values.size());
+    tx1.vin[0].prevout.hash = parent->GetHash();
+    tx1.vin[0].prevout.n = 0;
+    tx1.vin[0].scriptWitness.stack.emplace_back(10);
+
+    for (size_t i = 0; i < output_values.size(); ++i) {
+        tx1.vout[i].scriptPubKey = CScript() << OP_11 << OP_EQUAL;
+        tx1.vout[i].nValue = output_values[i];
+    }
+
+    CMutableTransaction tx2{tx1};
+    tx2.vin[0].prevout.n = 1;
+
+    return std::make_pair(MakeTransactionRef(tx1), MakeTransactionRef(tx2));
+}
+
 static CTransactionRef add_descendants(const CTransactionRef& tx, int32_t num_descendants, CTxMemPool& pool)
     EXCLUSIVE_LOCKS_REQUIRED(::cs_main, pool.cs)
 {
@@ -63,7 +87,7 @@ static CTransactionRef add_descendant_to_parents(const std::vector<CTransactionR
     TestMemPoolEntryHelper entry;
     // Assumes this isn't already spent in mempool
     auto child_tx = make_tx(/*inputs=*/parents, /*output_values=*/{50 * CENT});
-    AddToMempool(pool, entry.FromTx(child_tx));
+    TryAddToMempool(pool, entry.FromTx(child_tx));
     // Return last created tx
     return child_tx;
 }
@@ -77,13 +101,13 @@ static std::pair<CTransactionRef, CTransactionRef> add_children_to_parent(const 
     TestMemPoolEntryHelper entry;
     // Assumes this isn't already spent in mempool
     auto children_tx = make_two_siblings(/*parent=*/parent, /*output_values=*/{50 * CENT});
-    AddToMempool(pool, entry.FromTx(children_tx.first));
-    AddToMempool(pool, entry.FromTx(children_tx.second));
+    TryAddToMempool(pool, entry.FromTx(children_tx.first));
+    TryAddToMempool(pool, entry.FromTx(children_tx.second));
     return children_tx;
 }
 
 static CTxMemPool::ChangeSet::TxHandle RBFTestStageAddition(CTxMemPool::ChangeSet& changeset, const CTransactionRef& tx, const CAmount fee) {
-    return changeset.StageAddition(tx, fee, 0, 1, 0, COIN_AGE_CACHE_ZERO, false, 4, LockPoints());
+    return changeset.StageAddition(tx, fee, 0, 1, 0, COIN_AGE_CACHE_ZERO, false, /*extra_weight=*/0, 4, LockPoints());
 }
 
 BOOST_FIXTURE_TEST_CASE(rbf_helper_functions, TestChain100Setup)
@@ -386,6 +410,7 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
     TestMemPoolEntryHelper entry;
 
     const CAmount low_fee{CENT/100};
+    const CAmount normal_fee{CENT/10};
     const CAmount high_fee{CENT};
 
     // low -> high -> medium fee transactions that would result in two chunks together since they
@@ -459,7 +484,7 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
 
     // third transaction causes the topology check to fail
     const auto normal_tx = make_tx(/*inputs=*/ {high_tx}, /*output_values=*/ {995 * CENT});
-    AddToMempool(pool, entry.Fee(normal_fee).FromTx(normal_tx));
+    TryAddToMempool(pool, entry.Fee(normal_fee).FromTx(normal_tx));
     const auto entry_normal = pool.GetIter(normal_tx->GetHash()).value();
 
     {
@@ -543,7 +568,7 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
 
     // Add another descendant to conflict_1, making the cluster size > 2 should fail at this point.
     const auto conflict_1_grand_child = make_tx(/*inputs=*/{conflict_1_child}, /*output_values=*/ {995 * CENT});
-    AddToMempool(pool, entry.Fee(high_fee).FromTx(conflict_1_grand_child));
+    TryAddToMempool(pool, entry.Fee(high_fee).FromTx(conflict_1_grand_child));
     const auto conflict_1_grand_child_entry = pool.GetIter(conflict_1_child->GetHash()).value();
 
     {
