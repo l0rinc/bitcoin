@@ -371,7 +371,7 @@ public:
         LOCK(::cs_main);
         return chainman().ActiveChainstate().CoinsTip().GetCoin(output);
     }
-    TransactionError broadcastTransaction(CTransactionRef tx, CAmount max_tx_fee, std::string& err_string) override
+    TransactionError broadcastTransaction(CTransactionRef tx, const std::variant<CAmount, CFeeRate>& max_tx_fee, std::string& err_string) override
     {
         return BroadcastTransaction(*m_context,
                                     std::move(tx),
