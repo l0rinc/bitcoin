@@ -109,31 +109,10 @@ static RPCMethod sendrawtransaction()
 
             const CFeeRate max_raw_tx_fee_rate{ParseFeeRate(self.Arg<UniValue>("maxfeerate"))};
 
-            // BUG: The virtual size here currently fails to consider sigops, which could potentially result in an incorrectly-low max_raw_tx_fee
-            int64_t virtual_size = GetVirtualTransactionSize(*tx, 0, 0 /* BUG */);
-            CAmount max_raw_tx_fee = max_raw_tx_fee_rate.GetFee(virtual_size);
-
             std::string err_string;
             AssertLockNotHeld(cs_main);
             NodeContext& node = EnsureAnyNodeContext(request.context);
-            const bool private_broadcast_enabled{gArgs.GetBoolArg("-privatebroadcast", DEFAULT_PRIVATE_BROADCAST)};
-            if (private_broadcast_enabled &&
-                !g_reachable_nets.Contains(NET_ONION) &&
-                !g_reachable_nets.Contains(NET_I2P)) {
-                throw JSONRPCError(RPC_MISC_ERROR,
-                                   "-privatebroadcast is enabled, but none of the Tor or I2P networks is "
-                                   "reachable. Maybe the location of the Tor proxy couldn't be retrieved "
-                                   "from the Tor daemon at startup. Check whether the Tor daemon is running "
-                                   "and that -torcontrol, -torpassword and -i2psam are configured properly.");
-            }
-            const auto method = private_broadcast_enabled ? node::TxBroadcast::NO_MEMPOOL_PRIVATE_BROADCAST
-                                                          : node::TxBroadcast::MEMPOOL_AND_BROADCAST_TO_ALL;
-            const TransactionError err = BroadcastTransaction(node,
-                                                              tx,
-                                                              err_string,
-                                                              max_raw_tx_fee,
-                                                              method,
-                                                              /*wait_callback=*/true);
+            const TransactionError err = BroadcastTransaction(node, tx, err_string, max_raw_tx_fee_rate, /*relay=*/true, /*wait_callback=*/true);
             if (TransactionError::OK != err) {
                 throw JSONRPCTransactionError(err, err_string);
             }
