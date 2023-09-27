@@ -22,19 +22,23 @@ import sys
 from typing import Optional
 
 
-def call_with_auth(node, user, password, method="getbestblockhash"):
+def call_with_auth(node, user, password, *, uripath='/', method='getbestblockhash'):
     url = urllib.parse.urlparse(node.url)
     headers = {"Authorization": "Basic " + str_to_b64str('{}:{}'.format(user, password))}
 
     conn = http.client.HTTPConnection(url.hostname, url.port)
     conn.connect()
-    conn.request('POST', '/', f'{{"method": "{method}"}}', headers)
+    conn.request('POST', uripath, f'{{"method": "{method}"}}', headers)
     resp = conn.getresponse()
+    resp.data = resp.read()
     conn.close()
     return resp
 
 
 class HTTPBasicsTest(BitcoinTestFramework):
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
+
     def set_test_params(self):
         self.num_nodes = 2
         self.supports_cli = False
@@ -83,15 +87,39 @@ class HTTPBasicsTest(BitcoinTestFramework):
         lines = p.stdout.read().splitlines()
         self.authinfo.append((username, lines[1]))
 
+        def gen_userpass(username_prefix, wallet_restrictions=None, *, username=None):
+            if username is None:
+                username = username_prefix + '_' + ''.join(SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(10))
+            p = subprocess.Popen([sys.executable, gen_rpcauth, username], stdout=subprocess.PIPE, text=True)
+            lines = p.stdout.read().splitlines()
+            assert "\n" not in lines[1]
+            assert lines[1][:8] == 'rpcauth='
+            config_line = lines[1]
+            self.authinfo.append((username, lines[3], wallet_restrictions))
+            if not (wallet_restrictions is None):
+                config_line += ":" + wallet_restrictions
+            return config_line + "\n"
+
         # Hand-generated rpcauthfile with one entry and no newline
-        username = 'rpcauth_nonewline_' + ''.join(SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(10))
-        p = subprocess.Popen([sys.executable, gen_rpcauth, username], stdout=subprocess.PIPE, text=True)
-        lines = p.stdout.read().splitlines()
-        assert "\n" not in lines[1]
-        assert lines[1][:8] == 'rpcauth='
         with open(Path(self.options.tmpdir) / 'rpcauth_nonewline', "a", encoding='utf8') as f:
-            f.write(lines[1][8:])
-        self.authinfo.append((username, lines[3]))
+            f.write(gen_userpass('rpcauth_nonewline')[8:-1])
+
+        if self.is_wallet_compiled():
+            # Hand-generated rpcauthfile with wallet restrictions
+            with open(Path(self.options.tmpdir) / 'rpcauth_walletrestricted', "a", encoding='utf8') as f:
+                f.write(gen_userpass('rpcauth_walletrestricted_allow_all', '')[8:])
+                f.write(gen_userpass('rpcauth_walletrestricted_allow_none', '-')[8:])
+                f.write(gen_userpass('rpcauth_walletrestricted_allow_one', 'limitedwallet1')[8:])
+                # Use the same usernames with different passwords and wallet restrictions.
+                shared_allow_all = 'rpcauth_walletrestricted_allow_all_' + ''.join(SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(10))
+                f.write(gen_userpass('', '', username=shared_allow_all)[8:])
+                f.write(gen_userpass('', 'limitedwallet1', username=shared_allow_all)[8:])
+                f.write(gen_userpass('', 'limitedwallet2', username=shared_allow_all)[8:])
+                f.write(gen_userpass('', '-', username=shared_allow_all)[8:])
+                shared_allow_one = 'rpcauth_walletrestricted_allow_one_' + ''.join(SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(10))
+                f.write(gen_userpass('', 'limitedwallet1', username=shared_allow_one)[8:])
+                f.write(gen_userpass('', 'limitedwallet2', username=shared_allow_one)[8:])
+                f.write(gen_userpass('', '-', username=shared_allow_one)[8:])
 
         self.stop_nodes()
         with open(self.nodes[0].datadir_path / "bitcoin.conf", "a", encoding="utf8") as f:
@@ -101,13 +129,28 @@ class HTTPBasicsTest(BitcoinTestFramework):
             f.write("rpcauthfile=rpcauth_single\n")
             f.write("rpcauthfile=rpcauth_multi\n")
             f.write("rpcauthfile=rpcauth_nonewline\n")
+            if self.is_wallet_compiled():
+                f.write("rpcauthfile=rpcauth_walletrestricted\n")
+                f.write(gen_userpass('rpcauth_walletrestricted2_allow_all', ''))
+                f.write(gen_userpass('rpcauth_walletrestricted2_allow_none', '-'))
+                f.write(gen_userpass('rpcauth_walletrestricted2_allow_one', 'limitedwallet1'))
+                # Use the same usernames with different passwords and wallet restrictions.
+                shared_allow_all = 'rpcauth_walletrestricted2_allow_all_' + ''.join(SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(10))
+                f.write(gen_userpass('', '', username=shared_allow_all))
+                f.write(gen_userpass('', 'limitedwallet1', username=shared_allow_all))
+                f.write(gen_userpass('', 'limitedwallet2', username=shared_allow_all))
+                f.write(gen_userpass('', '-', username=shared_allow_all))
+                shared_allow_one = 'rpcauth_walletrestricted2_allow_one_' + ''.join(SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(10))
+                f.write(gen_userpass('', 'limitedwallet1', username=shared_allow_one))
+                f.write(gen_userpass('', 'limitedwallet2', username=shared_allow_one))
+                f.write(gen_userpass('', '-', username=shared_allow_one))
         with open(self.nodes[1].datadir_path / "bitcoin.conf", "a", encoding="utf8") as f:
             f.write("rpcuser={}\n".format(self.rpcuser))
             f.write("rpcpassword={}\n".format(self.rpcpassword))
         self.start_nodes()
 
-    def test_auth(self, node, user, password):
-        self.log.info('Correct...')
+    def test_auth(self, node, user, password, wallet_restrictions=None):
+        self.log.info('Correct... %s (wallet_restrictions=%s)' % (user, wallet_restrictions))
         assert_equal(200, call_with_auth(node, user, password).status)
 
         self.log.info('Wrong...')
@@ -118,6 +161,17 @@ class HTTPBasicsTest(BitcoinTestFramework):
 
         self.log.info('Wrong...')
         assert_equal(401, call_with_auth(node, user + 'wrong', password + 'wrong').status)
+
+        if not (wallet_restrictions is None):
+            for n in range(1, 3):
+                wallet_name = f'limitedwallet{n}'
+                self.log.info(f'{wallet_name}...')
+                resp = call_with_auth(node, user, password, uripath=f'/wallet/{wallet_name}', method='getwalletinfo')
+                if wallet_restrictions in ('', f'{wallet_name}'):
+                    assert_equal(200, resp.status)
+                else:
+                    assert_equal(500, resp.status)
+                    assert b'"Requested wallet does not exist or is not loaded"' in resp.data
 
     def test_rpccookieperms(self):
         p = {
@@ -207,6 +261,10 @@ class HTTPBasicsTest(BitcoinTestFramework):
         self.log.info('Check correctness of the rpcauth config option')
         url = urllib.parse.urlparse(self.nodes[0].url)
 
+        if self.is_wallet_compiled():
+            self.nodes[0].createwallet('limitedwallet1')
+            self.nodes[0].createwallet('limitedwallet2')
+
         self.test_auth(self.nodes[0], url.username, url.password)
         self.test_auth(self.nodes[0], 'rt', self.rtpassword)
         self.test_auth(self.nodes[0], 'rt2', self.rt2password)
@@ -231,33 +289,33 @@ class HTTPBasicsTest(BitcoinTestFramework):
         assert_equal(200, call_with_auth(self.nodes[0], 'def', 'abc').status)
         assert_equal(200, call_with_auth(self.nodes[0], 'rt', self.rtpassword).status)
         for info in self.authinfo:
-            assert_equal(200, call_with_auth(self.nodes[0], *info).status)
+            assert_equal(200, call_with_auth(self.nodes[0], *info[:2]).status)
 
         self.log.info('Check -norpcauth disables all previous -rpcauth* params')
         self.restart_node(0, extra_args=[rpcauth_def, '-norpcauth'])
         assert_equal(401, call_with_auth(self.nodes[0], 'def', 'abc').status)
         assert_equal(401, call_with_auth(self.nodes[0], 'rt', self.rtpassword).status)
         for info in self.authinfo:
-            assert_equal(401, call_with_auth(self.nodes[0], *info).status)
+            assert_equal(401, call_with_auth(self.nodes[0], *info[:2]).status)
 
         self.log.info('Check -norpcauth can be reversed with -rpcauth')
         self.restart_node(0, extra_args=[rpcauth_def, '-norpcauth', '-rpcauth'])
         # FIXME: assert_equal(200, call_with_auth(self.nodes[0], 'def', 'abc').status)
         assert_equal(200, call_with_auth(self.nodes[0], 'rt', self.rtpassword).status)
         for info in self.authinfo:
-            assert_equal(200, call_with_auth(self.nodes[0], *info).status)
+            assert_equal(200, call_with_auth(self.nodes[0], *info[:2]).status)
 
         self.log.info('Check -norpcauth followed by a specific -rpcauth=* restores config file -rpcauth=* values too')
         self.restart_node(0, extra_args=[rpcauth_def, '-norpcauth', rpcauth_abc])
         assert_equal(401, call_with_auth(self.nodes[0], 'def', 'abc').status)
         assert_equal(200, call_with_auth(self.nodes[0], 'rt', self.rtpassword).status)
         for info in self.authinfo:
-            assert_equal(200, call_with_auth(self.nodes[0], *info).status)
+            assert_equal(200, call_with_auth(self.nodes[0], *info[:2]).status)
         self.restart_node(0, extra_args=[rpcauth_def, '-norpcauth', '-rpcauth='])
         assert_equal(401, call_with_auth(self.nodes[0], 'def', 'abc').status)
         assert_equal(200, call_with_auth(self.nodes[0], 'rt', self.rtpassword).status)
         for info in self.authinfo:
-            assert_equal(200, call_with_auth(self.nodes[0], *info).status)
+            assert_equal(200, call_with_auth(self.nodes[0], *info[:2]).status)
 
         self.log.info('Check -rpcauth are validated')
         self.stop_node(0)
