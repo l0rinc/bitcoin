@@ -1031,6 +1031,7 @@ static RPCMethod setprunelock()
             // Delete all
             success = true;
             std::vector<std::string> all_ids;
+            all_ids.reserve(blockman->m_prune_locks.size());
             for (const auto& prune_lock : blockman->m_prune_locks) {
                 all_ids.push_back(prune_lock.first);
             }
