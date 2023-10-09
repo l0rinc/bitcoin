@@ -1614,15 +1614,25 @@ void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRe
 
 void CWallet::blockConnected(const ChainstateRole& role, const interfaces::BlockInfo& block)
 {
-    if (role.historical) {
-        return;
-    }
     assert(block.data);
     LOCK(cs_wallet);
 
-    // Update the best block in memory first. This will set the best block's height, which is
-    // needed by MarkConflicted.
-    SetLastBlockProcessedInMem(block.height, block.hash);
+    switch (role) {
+        case ChainstateRole::BACKGROUND:
+            m_background_validation_height = block.height;
+            return;
+        case ChainstateRole::ASSUMEDVALID:
+            if (m_background_validation_height == -1) {
+                m_background_validation_height = 0;
+            }
+            break;
+        case ChainstateRole::NORMAL:
+            m_background_validation_height = -1;
+            break;
+    } // no default case, so the compiler can warn about missing cases
+
+    m_last_block_processed_height = block.height;
+    m_last_block_processed = block.hash;
 
     // No need to scan block if it was created before the wallet birthday.
     // Uses chain max time and twice the grace period to adjust time for block time variability.
