@@ -36,6 +36,7 @@
 #include <node/peerman_args.h>
 #include <node/warnings.h>
 #include <noui.h>
+#include <policy/coin_age_priority.h>
 #include <policy/feerate.h>
 #include <policy/policy.h>
 #include <pow.h>
@@ -306,7 +307,6 @@ ChainTestingSetup::ChainTestingSetup(const ChainType chainType, TestOpts opts)
             .chainparams = chainparams,
             .datadir = m_args.GetDataDirNet(),
             .check_block_index = 1,
-            .checkpoints_enabled = false,
             .notifications = *m_node.notifications,
             .signals = m_node.validation_signals.get(),
             // Use no worker threads while fuzzing to avoid non-determinism
@@ -577,6 +577,8 @@ CMutableTransaction TestChain100Setup::CreateValidMempoolTransaction(CTransactio
 
 std::vector<CTransactionRef> TestChain100Setup::PopulateMempool(FastRandomContext& det_rand, size_t num_transactions, bool submit)
 {
+    auto& active_chainstate = m_node.chainman->ActiveChainstate();
+    const auto height = active_chainstate.m_chain.Height();
     std::vector<CTransactionRef> mempool_transactions;
     std::deque<std::pair<COutPoint, CAmount>> unspent_prevouts, undo_info;
     std::transform(m_coinbase_txns.begin(), m_coinbase_txns.end(), std::back_inserter(unspent_prevouts),
@@ -606,11 +608,13 @@ std::vector<CTransactionRef> TestChain100Setup::PopulateMempool(FastRandomContex
         bool success{true};
         if (submit) {
             LOCK2(cs_main, m_node.mempool->cs);
+            CAmount in_chain_input_value;
+            double dPriority = GetPriority(*ptx, active_chainstate.CoinsTip(), height + 1, in_chain_input_value);
             LockPoints lp;
             auto changeset = m_node.mempool->GetChangeSet();
             changeset->StageAddition(ptx, /*fee=*/(total_in - num_outputs * amount_per_output),
-                    /*time=*/0, /*entry_priority=*/0, /*entry_height=*/1, /*entry_sequence=*/0,
-                    /*in_chain_input_value=*/0,
+                    /*time=*/0, /*entry_priority=*/ dPriority, /*entry_height=*/ height, /*entry_sequence=*/0,
+                    /*in_chain_input_value=*/ in_chain_input_value,
                     /*spends_coinbase=*/false, /*sigops_cost=*/4, lp);
             if (changeset->CheckMemPoolPolicyLimits()) {
                 changeset->Apply();
