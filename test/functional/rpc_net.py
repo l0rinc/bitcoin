@@ -167,6 +167,7 @@ class NetTest(BitcoinTestFramework):
                 "minfeefilter": Decimal("0E-8"),
                 "network": "not_publicly_routable",
                 "permissions": [],
+                "forced_inbound": False,
                 "presynced_headers": -1,
                 "relaytxes": False,
                 "inv_to_send": 0,
