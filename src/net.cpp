@@ -1781,7 +1781,6 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
     AssertLockNotHeld(m_nodes_mutex);
 
     int nInbound = 0;
-    int nForced{0};
 
     const bool inbound_onion = std::find(m_onion_binds.begin(), m_onion_binds.end(), addr_bind) != m_onion_binds.end();
 
@@ -1793,7 +1792,6 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
         LOCK(m_nodes_mutex);
         for (const CNode* pnode : m_nodes) {
             if (pnode->IsInboundConn()) nInbound++;
-            if (pnode->m_forced_inbound) nForced++;
         }
     }
 
@@ -1834,12 +1832,6 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
     bool forced{false};
     if (nInbound >= m_max_inbound)
     {
-        // Protect from force evicting everyone
-        if (nForced >= MAX_FORCED_INBOUND_CONNECTIONS) {
-            LogPrint(BCLog::NET, "connection from %s dropped (too many forced inbound)\n", addr.ToStringAddrPort());
-            return;
-        }
-
         // If the inbound connection attempt is granted ForceInbound permission, try a little harder
         // to make room by evicting a peer we may not have otherwise evicted.
         if (!AttemptToEvictConnection(NetPermissions::HasFlag(permission_flags, NetPermissionFlags::ForceInbound))) {

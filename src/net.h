@@ -91,8 +91,6 @@ static constexpr bool DEFAULT_PRIVATE_BROADCAST{false};
 static const int NUM_FDS_MESSAGE_CAPTURE = 1;
 /** Interval for ASMap Health Check **/
 static constexpr std::chrono::hours ASMAP_HEALTH_CHECK_INTERVAL{24};
-/** Maximum number of forced inbound connections **/
-static const int MAX_FORCED_INBOUND_CONNECTIONS{8};
 
 static constexpr bool DEFAULT_FORCEDNSSEED{false};
 static constexpr bool DEFAULT_DNSSEED{true};
