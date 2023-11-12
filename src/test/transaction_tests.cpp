@@ -775,6 +775,11 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
 
     CheckIsStandard(t);
 
+    g_script_size_policy_limit = static_cast<unsigned int>(t.vout[0].scriptPubKey.size() - 1);
+    CheckIsNotStandard(t, "scriptpubkey-size");
+    g_script_size_policy_limit = DEFAULT_SCRIPT_SIZE_POLICY_LIMIT;
+    CheckIsStandard(t);
+
     t.nLockTime = 21;
     g_mempool_opts.reject_parasites = false;
     CheckIsStandard(t);
@@ -946,6 +951,10 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     // OP_PUSHDATA2 with len (3 bytes) + data (1647 bytes) = 1650 bytes
     t.vin[0].scriptSig = CScript() << std::vector<unsigned char>(1647, 0); // 1650
     CheckIsStandard(t);
+
+    g_script_size_policy_limit = MAX_STANDARD_SCRIPTSIG_SIZE - 1;
+    CheckIsNotStandard(t, "scriptsig-size");
+    g_script_size_policy_limit = DEFAULT_SCRIPT_SIZE_POLICY_LIMIT;
 
     t.vin[0].scriptSig = CScript() << std::vector<unsigned char>(1648, 0); // 1651
     CheckIsNotStandard(t, "scriptsig-size");
