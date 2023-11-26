@@ -70,3 +70,62 @@ f1e300838a8423eb9f496cb234b44fe062b7a7c3	Support multiple -*notify commands	4	no
 c0a914fc7d31512015aad83c9874cb5d6f6c373a	init: Optimise -startupnotify slightly	1	no	no	no	no	applied	
 e5160731d27d111a40334c864818fc35356a2103	RPC/Wallet: Convert walletprocesspsbt to use options parameter	4	no	no	unlikely	no	applied	
 e4acb761d42cbd658f9ddc4d5d3eabdb5ecd4650	dumpmasterprivkey command	3	no	no	unlikely	no	applied	
+2504a07906308ddc103f763abc4a06f87c895b3e	Bugfix: RPC/Wallet: dumpwallet should include hdkeypath metadata outside of comment	2	no	possible	consider	no	applied_manual	
+66a0e619dd0b3758c2db58fa436acce7296f922e	Bugfix: RPC/Wallet: dumpwallet should include hdseedid metadata	1	no	possible	consider	no	applied	
+7022a6ca05300d24cfea7bf771b59e5325eb5cc8	GUI: Accept Ctrl-D as a shortcut to close the RPC console	1	no	no	unlikely	no	applied	
+84afd82ac5bfa370d03fd652f84c9c56b9a0acb0	Bugfix: devtools/symbol-check: Check PE libraries case-insensitively	1	no	possible	consider	no	applied	
+8d40addbd259176ddddab8eaf21aceca435234c8	rpc: validate fee estimation mode case insensitive	2	no	no	unlikely	no	applied	
+be8ae64b82e2c5b003a8703668ce1751442288e4	rpc: validate conf_target is set alongside estimate_mode	2	no	no	unlikely	no	applied	
+fc7954a1488b815dac4311b5a461fe5bf2a20b19	Wallet: Keep track of what addresses are used in wallet transactions (memory only)	3	no	no	no	no	applied	
+022887d933db47227db5dddb75cc6377b4c1b889	Wallet: Add fairly-efficient [negative] check that an address is not known to be used	2	no	no	no	no	applied	
+a00bc6f395ecd2f9657b9edd4c9c77883a0dc718	RPC/Wallet: Add "use_txids" to output of getaddressinfo	2	no	no	unlikely	no	applied	
+aebfd947d20dc13d920a919e2ac147be1d7390c6	RPC/blockchain: Restore ability for pruned nodes to getblockfrompeer future blocks	2	no	no	unlikely	no	applied	
+98ca8bc71ec2dcaabfc57f1e2b7b279f95728af7	QA: wallet_taproot: Workaround fee estimation limitation for sendall cleanup as well	1	no	no	unlikely	no	applied	
+d206f2b726468c85fbc835c19d0830c7c7c068ab	QA: wallet_taproot: Ensure transaction created by sendall has enough fee to get into the mempool	1	no	no	unlikely	no	applied	
+a8b4eb70c0591e8b0ecfcc9c6ac8cb7de7c8cf06	Wallet: Increase default confirmation target to 144	1	no	no	no	no	applied	
+f8fec8f26dda1bcbc2d3832bcd5568d5176be099	p2p, bugfix: detect addnode cjdns peers in GetAddedNodeInfo()	1	no	possible	consider	no	skipped_empty_or_duplicate	
+ca1300fbc5ac61e0117851e58c06f6dcecb62d0c	test: add GetAddedNodeInfo() CJDNS regression unit test	1	no	no	no	no	skipped_empty_or_duplicate	
+28823f30dc1a865cd44a6b7598ea968f92b75c56	p2p, bugfix: correctly detect CJDNS addnode entries in AddNode()	1	no	possible	consider	no	applied	
+be4541abe5969ff4b4a26c983d024006f2cec94b	test: AddNode() CJDNS regression unit tests	1	no	no	no	no	applied	
+88fe778d9d377b5819c51839bdd842912162230d	BufferedFile: fclose at destruction	2	no	no	no	no	applied	
+82908e28a587db3a3f0c56c07b73ca2aa9bcfd38	interfaces/wallet: Add checkAddressForUsage and findAddressUsage	2	no	no	no	no	applied	
+86c5b4f00a122230055c98ebbf49d0ba0f19127c	GUI: Add GUIUtil::dateStr	2	no	no	unlikely	no	applied	
+08ce9ecf4568fcaf1000ff108a6065a36e08ac2d	GUI: SendConfirmationDialog: Defer button setup until exec	2	no	no	unlikely	no	applied	
+0ba948aa4f91b8a03a34eb2b9cf372e89f21d5df	GUI: SendConfirmationDialog: Enable changing the actual buttons used	4	no	no	unlikely	no	applied	
+42e4f1324655615fdacef45d43c1be89032b4d3c	GUI: WalletModel: Wrap checkAddressForUsage and findAddressUsage	2	no	no	unlikely	no	applied	
+4b943c42fd50aa566af6c7891fe1ff55c101a69d	GUI: QValidatedLineEdit: Add support for a warning-but-valid state	3	no	no	unlikely	no	applied	
+bde17b613840b3643e0c8b1b772bf4fdafb55d94	GUI: Implement BitcoinAddressUnusedInWalletValidator	2	no	no	unlikely	no	applied	
+668e18bf70b9c0232b2a7cf16490ba5308f01bfb	GUI: Use warning indicator for send coins entries with reused addresses	1	no	no	unlikely	no	applied	
+25ea55c25d7ff3e51752dfc3ea6817e7a1562e4c	GUI: Add a warning prompt when sending to an already-used address	5	no	no	unlikely	no	applied	
+8463aef09fe4c6e3806e3b8a4c967c297302b96f	Optimized siphash implementation	2	no	no	no	no	applied	
+21a3dd41987abe4652a78c8cce5f9d98796447cc	Diff-minimise	2	no	no	no	no	applied	
+9166bb76d5cbef95d37503485dd0f33c1ea5feb0	qt: Add "Alternating Row Color" settings for the Peers Tab	7	no	no	unlikely	no	applied	
+d1815ce04df2097f18200f40650694e0ddfef52c	Diff-minimise	2	no	no	unlikely	no	applied	
+52ecf5b65ec43b3d0ab45cf07854794604194c2f	GUI: Enable customisation of QR Code font	7	no	no	unlikely	no	applied	
+2393def608de4e95001aa3d1a8018ea884a8663d	GUI: Change default QR Code font to embedded	1	no	no	unlikely	no	applied	
+6d2bc57f0e2a053eb7907e0718c6d6f96120fb0c	rpc, p2p: allow `disconnectnode` with subnet	1	no	no	no	no	applied	
+dc36f2b555df243d1b784ce1d360287119541b16	test: add coverage for `subnet` in `disconnectnode` RPC	1	no	no	unlikely	no	applied	
+12a8863b80590dd606e10e0fa13763e658d9c540	QA: p2p_disconnect_ban: Explicitly select nodes for test, and reconnect after disconnecting	1	no	no	unlikely	no	applied	
+7e3988fe54967a04bd3d18867c7d278f3b530d15	RPC/net: disconnectnode: Support disconnecting by IP (without a port)	2	no	no	unlikely	no	applied	
+0c38bbd194e2314d3bf8ff3c2e50db46da7dfc38	QA: wallet_reindex: Use `importdescriptors` directly rather than abusing test_framework's `importaddress` wrapper	1	no	no	unlikely	no	applied	
+816d59c61a0df22e2da9c42d01d76b499e88026d	Diff-minimise	2	no	no	unlikely	no	applied	
+f72496a06a9999f3f703d842d610f5b670d89efa	Keep ProcessDescriptorImport exported for bitcoin-wallet importfromcoldcard	1	no	no	no	no	applied	
+7df9ede91c914c4afbcf51b6d6743e651e20fef4	GUI: Support returning positions from BitcoinAddress{Entry,Check}Validator::validate	2	no	no	unlikely	no	applied	
+f87f5dcfea72b8b51328e1491c165ac2f24ae015	GUI: Point out position of invalid characters in Bech32 addresses	2	no	no	unlikely	no	applied	
+2b7b7b23ff46d6285a614a165654d94219d25838	GUI: Choose colour for incorrect characters in address based on user theme	1	no	no	unlikely	no	applied	
+3b761c44eb825a4ba39e722b53a215f6c362dd25	Diff-minimise	1	no	no	unlikely	no	applied	
+fe21e5bc03a88dd048a80363c088ea13a5e370f5	GUI: setWalletActionsEnabled: Keep historyAction disabled if privacy mode is already on	1	no	no	unlikely	no	applied	
+8fb8c3a1f798b85235b01a7ab30c6c0ee77c6967	Revert "Remove -feefilter option"	3	no	no	no	no	applied	
+e981b95fb61315271221f4dc342a4b69cae41d4d	doc: Move -feefilter option to correct category	1	no	no	no	no	applied	
+2f7b38db868c8d87bf860b3a4ef505f29114d19a	RPC: add transaction hash to mempool entry output	2	no	no	unlikely	no	applied	
+e2358f135eaff20769ff1bb6df726ea2baf28e34	Add Neutrino filter for p2wpkh script types	2	no	no	no	no	applied	
+07f650094314d13ab15cf63de91588ea6cb095a4	Add possible values to cli description	1	no	no	no	no	applied	
+bc26ff972a57185a4c9cef81e81f2a8a89d55e06	Apply suggestions from code review	2	no	no	no	no	applied	
+bf2306334aa470e413d54d671d272de7618d0618	Adding tests for p2wpkh filter type	1	no	no	no	no	applied	
+a86d1d41db0a1f2ec818e455598580802d87a422	Make the filter element for witness ver0	3	no	no	no	no	applied	
+4cf9f24adc9fb0d8a513e08a93d1cea02d3ed7af	Act on review	2	no	no	no	no	applied	
+812f2100448e9a6c53e9a535eb7b6aac5eaf86bc	Move the filter logic to a single method named BuildFilterElements	1	no	no	no	no	applied	
+c05c0506f2fa6f85923b754b3285018b73872720	Change the BuildFilterElements default args	1	no	no	no	no	applied	
+cc050ebafc9140a854595991ff4b77fe538230e9	Act on review	1	no	no	no	no	applied	
+ee629e7448b5dcbcc4eaeed4bb845123e76712b2	QA: blockfilter_tests: Diff-minimise	1	no	no	no	no	applied	
+b85232d74623959a8afd0afe605e5c5c218a0a87	Only enable basic blockfilterindex if enabled with type omitted	1	no	no	no	no	applied	

@@ -104,7 +104,7 @@ static UniValue FinishTransaction(const std::shared_ptr<CWallet> pwallet, const 
 
     for (const CTxIn& tx_in : rawTx.vin) {
         // Checks sequence values consistent with DiscourageFeeSniping
-        can_anti_fee_snipe = can_anti_fee_snipe && (tx_in.nSequence == CTxIn::MAX_SEQUENCE_NONFINAL || tx_in.nSequence == MAX_BIP125_RBF_SEQUENCE);
+        can_anti_fee_snipe &= (tx_in.nSequence == CTxIn::MAX_SEQUENCE_NONFINAL || tx_in.nSequence == MAX_BIP125_RBF_SEQUENCE);
     }
 
     if (can_anti_fee_snipe) {

@@ -448,3 +448,396 @@ hint: You can instead skip this commit with "git cherry-pick --skip".
 hint: To abort and get back to the state before "git cherry-pick",
 hint: run "git cherry-pick --abort".
 hint: Disable this message with "git config set advice.mergeConflict false"
+[knots-replayed-on-origin-master 423f7b5957] Bugfix: RPC/Wallet: dumpwallet should include hdkeypath metadata outside of comment
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Nov 30 20:21:24 2017 +0000
+ 4 files changed, 619 insertions(+), 1 deletion(-)
+ create mode 100755 test/functional/wallet_dump.py
+Auto-merging src/wallet/rpc/backup.cpp
+[knots-replayed-on-origin-master ee024fcdac] Bugfix: RPC/Wallet: dumpwallet should include hdseedid metadata
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Nov 30 20:26:44 2017 +0000
+ 1 file changed, 3 insertions(+)
+Auto-merging src/qt/rpcconsole.cpp
+[knots-replayed-on-origin-master cfa65eb7ae] GUI: Accept Ctrl-D as a shortcut to close the RPC console
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Jan 3 20:58:55 2020 +0000
+ 1 file changed, 3 insertions(+)
+Auto-merging contrib/guix/symbol-check.py
+[knots-replayed-on-origin-master bab7a04727] Bugfix: devtools/symbol-check: Check PE libraries case-insensitively
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed Jul 28 23:16:34 2021 +0000
+ 1 file changed, 4 insertions(+), 7 deletions(-)
+Auto-merging src/wallet/rpc/spend.cpp
+Auto-merging test/functional/wallet_send.py
+[knots-replayed-on-origin-master 8268658282] rpc: validate fee estimation mode case insensitive
+ Author: Torkel Rogstad <torkel@rogstad.io>
+ Date: Thu Jan 4 11:24:07 2024 +0100
+ 2 files changed, 37 insertions(+), 2 deletions(-)
+Auto-merging src/wallet/rpc/spend.cpp
+Auto-merging test/functional/wallet_send.py
+[knots-replayed-on-origin-master b74dfce58a] rpc: validate conf_target is set alongside estimate_mode
+ Author: Torkel Rogstad <torkel@rogstad.io>
+ Date: Mon Jan 15 08:35:45 2024 +0100
+ 2 files changed, 17 insertions(+), 3 deletions(-)
+Auto-merging src/wallet/wallet.cpp
+Auto-merging src/wallet/wallet.h
+Auto-merging src/wallet/wallettool.cpp
+[knots-replayed-on-origin-master 55e0cb2691] Wallet: Keep track of what addresses are used in wallet transactions (memory only)
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Mon Dec 18 02:13:47 2023 +0000
+ 3 files changed, 41 insertions(+), 47 deletions(-)
+Auto-merging src/wallet/wallet.cpp
+Auto-merging src/wallet/wallet.h
+[knots-replayed-on-origin-master 4d55c8f3b7] Wallet: Add fairly-efficient [negative] check that an address is not known to be used
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Aug 12 20:52:10 2021 +0000
+ 2 files changed, 40 insertions(+)
+Auto-merging src/wallet/rpc/addresses.cpp
+Auto-merging test/functional/wallet_basic.py
+[knots-replayed-on-origin-master e0de6d77a0] RPC/Wallet: Add "use_txids" to output of getaddressinfo
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sun May 5 04:10:54 2019 +0000
+ 2 files changed, 23 insertions(+)
+Auto-merging src/rpc/blockchain.cpp
+Auto-merging test/functional/rpc_getblockfrompeer.py
+[knots-replayed-on-origin-master 43347f597e] RPC/blockchain: Restore ability for pruned nodes to getblockfrompeer future blocks
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Jul 8 23:39:10 2023 +0000
+ 2 files changed, 8 insertions(+), 6 deletions(-)
+Auto-merging test/functional/wallet_taproot.py
+[knots-replayed-on-origin-master 4eac69ae4a] QA: wallet_taproot: Workaround fee estimation limitation for sendall cleanup as well
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Sep 21 16:52:39 2023 +0000
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging test/functional/wallet_taproot.py
+[knots-replayed-on-origin-master 6e769e03df] QA: wallet_taproot: Ensure transaction created by sendall has enough fee to get into the mempool
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Nov 4 15:26:03 2023 +0000
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging src/wallet/wallet.h
+[knots-replayed-on-origin-master 69a0ae5602] Wallet: Increase default confirmation target to 144
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Mar 1 22:19:47 2018 +0000
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging src/net.cpp
+On branch knots-replayed-on-origin-master
+Your branch is ahead of 'origin/master' by 84 commits.
+  (use "git push" to publish your local commits)
+
+You are currently cherry-picking commit f8fec8f26d.
+  (all conflicts fixed: run "git cherry-pick --continue")
+  (use "git cherry-pick --skip" to skip this patch)
+  (use "git cherry-pick --abort" to cancel the cherry-pick operation)
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   rebase_assessment/commit_assessments.tsv
+	modified:   rebase_assessment/replay.log
+
+no changes added to commit (use "git add" and/or "git commit -a")
+The previous cherry-pick is now empty, possibly due to conflict resolution.
+If you wish to commit it anyway, use:
+
+    git commit --allow-empty
+
+Otherwise, please use 'git cherry-pick --skip'
+Auto-merging src/test/net_peer_connection_tests.cpp
+On branch knots-replayed-on-origin-master
+Your branch is ahead of 'origin/master' by 84 commits.
+  (use "git push" to publish your local commits)
+
+You are currently cherry-picking commit ca1300fbc5.
+  (all conflicts fixed: run "git cherry-pick --continue")
+  (use "git cherry-pick --skip" to skip this patch)
+  (use "git cherry-pick --abort" to cancel the cherry-pick operation)
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   rebase_assessment/commit_assessments.tsv
+	modified:   rebase_assessment/replay.log
+
+no changes added to commit (use "git add" and/or "git commit -a")
+The previous cherry-pick is now empty, possibly due to conflict resolution.
+If you wish to commit it anyway, use:
+
+    git commit --allow-empty
+
+Otherwise, please use 'git cherry-pick --skip'
+Auto-merging src/net.cpp
+[knots-replayed-on-origin-master 8b379d480c] p2p, bugfix: correctly detect CJDNS addnode entries in AddNode()
+ Author: Jon Atack <jon@atack.com>
+ Date: Tue Nov 14 21:12:34 2023 -0600
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+Auto-merging src/test/net_peer_connection_tests.cpp
+[knots-replayed-on-origin-master e2fdb962be] test: AddNode() CJDNS regression unit tests
+ Author: Jon Atack <jon@atack.com>
+ Date: Wed Nov 15 13:12:28 2023 -0600
+ 1 file changed, 9 insertions(+)
+Auto-merging src/streams.h
+Auto-merging src/test/fuzz/buffered_file.cpp
+[knots-replayed-on-origin-master 049cb429f9] BufferedFile: fclose at destruction
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sun Mar 10 17:54:26 2024 +0000
+ 2 files changed, 8 insertions(+)
+Auto-merging src/interfaces/wallet.h
+Auto-merging src/wallet/interfaces.cpp
+[knots-replayed-on-origin-master d98ff6ae1e] interfaces/wallet: Add checkAddressForUsage and findAddressUsage
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue May 7 13:15:46 2019 +0000
+ 2 files changed, 33 insertions(+), 2 deletions(-)
+Auto-merging src/qt/guiutil.cpp
+Auto-merging src/qt/guiutil.h
+[knots-replayed-on-origin-master 347b8b80e5] GUI: Add GUIUtil::dateStr
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed May 8 19:49:40 2019 +0000
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+Auto-merging src/qt/sendcoinsdialog.cpp
+Auto-merging src/qt/sendcoinsdialog.h
+[knots-replayed-on-origin-master 8e9a07fdfc] GUI: SendConfirmationDialog: Defer button setup until exec
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Aug 12 21:42:50 2021 +0000
+ 2 files changed, 9 insertions(+), 7 deletions(-)
+Auto-merging src/qt/sendcoinsdialog.cpp
+Auto-merging src/qt/sendcoinsdialog.h
+Auto-merging src/qt/test/wallettests.cpp
+Auto-merging src/qt/walletmodel.cpp
+[knots-replayed-on-origin-master 86924f0b89] GUI: SendConfirmationDialog: Enable changing the actual buttons used
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Aug 29 00:39:48 2019 +0000
+ 4 files changed, 55 insertions(+), 6 deletions(-)
+Auto-merging src/qt/walletmodel.cpp
+Auto-merging src/qt/walletmodel.h
+[knots-replayed-on-origin-master 6307c8bf5d] GUI: WalletModel: Wrap checkAddressForUsage and findAddressUsage
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue May 7 13:15:59 2019 +0000
+ 2 files changed, 20 insertions(+)
+Auto-merging src/qt/guiconstants.h
+Auto-merging src/qt/qvalidatedlineedit.cpp
+Auto-merging src/qt/qvalidatedlineedit.h
+[knots-replayed-on-origin-master 3dfea7ebfb] GUI: QValidatedLineEdit: Add support for a warning-but-valid state
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue May 7 12:26:12 2019 +0000
+ 3 files changed, 52 insertions(+), 6 deletions(-)
+Auto-merging src/qt/walletmodel.cpp
+Auto-merging src/qt/walletmodel.h
+[knots-replayed-on-origin-master 0a9cfddc75] GUI: Implement BitcoinAddressUnusedInWalletValidator
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue May 7 13:26:26 2019 +0000
+ 2 files changed, 28 insertions(+)
+Auto-merging src/qt/sendcoinsentry.cpp
+[knots-replayed-on-origin-master 5a16273ce6] GUI: Use warning indicator for send coins entries with reused addresses
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue May 7 16:03:09 2019 +0000
+ 1 file changed, 6 insertions(+)
+Auto-merging src/qt/sendcoinsdialog.cpp
+Auto-merging src/qt/sendcoinsdialog.h
+Auto-merging src/qt/sendcoinsentry.cpp
+Auto-merging src/qt/sendcoinsentry.h
+Auto-merging src/qt/test/wallettests.cpp
+[knots-replayed-on-origin-master babfaca643] GUI: Add a warning prompt when sending to an already-used address
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed May 8 21:34:13 2019 +0000
+ 5 files changed, 107 insertions(+), 17 deletions(-)
+Auto-merging src/crypto/siphash.cpp
+Auto-merging src/crypto/siphash.h
+[knots-replayed-on-origin-master 9395ea1f87] Optimized siphash implementation
+ Author: Elichai Turkel <elichai.turkel@gmail.com>
+ Date: Tue Jan 28 18:50:00 2020 +0200
+ 2 files changed, 64 insertions(+), 25 deletions(-)
+Auto-merging src/crypto/siphash.cpp
+Auto-merging src/crypto/siphash.h
+[knots-replayed-on-origin-master 807a1f654b] Diff-minimise
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Dec 12 23:35:05 2023 +0000
+ 2 files changed, 9 insertions(+), 11 deletions(-)
+Auto-merging src/qt/forms/debugwindow.ui
+Auto-merging src/qt/forms/optionsdialog.ui
+Auto-merging src/qt/optionsdialog.cpp
+Auto-merging src/qt/optionsmodel.cpp
+Auto-merging src/qt/optionsmodel.h
+Auto-merging src/qt/rpcconsole.cpp
+Auto-merging src/qt/rpcconsole.h
+[knots-replayed-on-origin-master 2132575eae] qt: Add "Alternating Row Color" settings for the Peers Tab
+ Author: Hennadii Stepanov <32963518+hebasto@users.noreply.github.com>
+ Date: Sat May 1 16:40:28 2021 +0300
+ 7 files changed, 40 insertions(+), 8 deletions(-)
+Auto-merging src/qt/forms/debugwindow.ui
+Auto-merging src/qt/forms/optionsdialog.ui
+[knots-replayed-on-origin-master b1c3ad5d3e] Diff-minimise
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Dec 6 03:28:50 2022 +0000
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+Auto-merging src/qt/forms/optionsdialog.ui
+Auto-merging src/qt/optionsdialog.cpp
+Auto-merging src/qt/optionsmodel.cpp
+Auto-merging src/qt/optionsmodel.h
+Auto-merging src/qt/qrimagewidget.cpp
+Auto-merging src/qt/qrimagewidget.h
+Auto-merging src/qt/receiverequestdialog.cpp
+[knots-replayed-on-origin-master d59782bf04] GUI: Enable customisation of QR Code font
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Jan 11 01:26:16 2022 +0000
+ 7 files changed, 83 insertions(+), 9 deletions(-)
+Auto-merging src/qt/optionsmodel.h
+[knots-replayed-on-origin-master 291908dce6] GUI: Change default QR Code font to embedded
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Jan 11 01:39:45 2022 +0000
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging src/rpc/net.cpp
+[knots-replayed-on-origin-master 398ef27873] rpc, p2p: allow `disconnectnode` with subnet
+ Author: brunoerg <brunoely.gc@gmail.com>
+ Date: Thu Nov 24 10:52:11 2022 -0300
+ 1 file changed, 12 insertions(+), 3 deletions(-)
+Auto-merging test/functional/p2p_disconnect_ban.py
+[knots-replayed-on-origin-master 6e6071b4af] test: add coverage for `subnet` in `disconnectnode` RPC
+ Author: brunoerg <brunoely.gc@gmail.com>
+ Date: Thu Nov 24 10:52:32 2022 -0300
+ 1 file changed, 7 insertions(+)
+Auto-merging test/functional/p2p_disconnect_ban.py
+[knots-replayed-on-origin-master b3dbf4e307] QA: p2p_disconnect_ban: Explicitly select nodes for test, and reconnect after disconnecting
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri May 17 16:34:04 2024 +0000
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+Auto-merging src/rpc/net.cpp
+Auto-merging test/functional/p2p_disconnect_ban.py
+[knots-replayed-on-origin-master be3bfd6a6f] RPC/net: disconnectnode: Support disconnecting by IP (without a port)
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri May 17 16:51:21 2024 +0000
+ 2 files changed, 18 insertions(+), 5 deletions(-)
+Auto-merging test/functional/wallet_reindex.py
+[knots-replayed-on-origin-master e648310e9b] QA: wallet_reindex: Use `importdescriptors` directly rather than abusing test_framework's `importaddress` wrapper
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Mar 2 13:36:02 2024 +0000
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+Auto-merging src/wallet/rpc/backup.cpp
+Auto-merging test/functional/test_framework/test_node.py
+[knots-replayed-on-origin-master b7766b5bfd] Diff-minimise
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Jul 27 18:41:51 2023 +0000
+ 2 files changed, 46 insertions(+), 15 deletions(-)
+Auto-merging src/wallet/rpc/backup.cpp
+[knots-replayed-on-origin-master 278e34c6b5] Keep ProcessDescriptorImport exported for bitcoin-wallet importfromcoldcard
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Jul 27 18:57:20 2023 +0000
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging src/qt/bitcoinaddressvalidator.cpp
+Auto-merging src/qt/bitcoinaddressvalidator.h
+[knots-replayed-on-origin-master 00e2622d37] GUI: Support returning positions from BitcoinAddress{Entry,Check}Validator::validate
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Feb 13 00:26:10 2020 +0000
+ 2 files changed, 23 insertions(+), 10 deletions(-)
+Auto-merging src/qt/qvalidatedlineedit.cpp
+Auto-merging src/qt/qvalidatedlineedit.h
+[knots-replayed-on-origin-master 071aa43370] GUI: Point out position of invalid characters in Bech32 addresses
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Feb 13 02:24:11 2020 +0000
+ 2 files changed, 43 insertions(+), 9 deletions(-)
+Auto-merging src/qt/qvalidatedlineedit.cpp
+[knots-replayed-on-origin-master 9226a223c0] GUI: Choose colour for incorrect characters in address based on user theme
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed May 22 00:28:27 2024 +0000
+ 1 file changed, 28 insertions(+), 2 deletions(-)
+Auto-merging src/qt/qvalidatedlineedit.cpp
+[knots-replayed-on-origin-master 7970cef806] Diff-minimise
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue May 10 01:33:33 2022 +0000
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+Auto-merging src/qt/bitcoingui.cpp
+[knots-replayed-on-origin-master ede586a7ec] GUI: setWalletActionsEnabled: Keep historyAction disabled if privacy mode is already on
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue May 28 20:07:38 2024 +0000
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging src/init.cpp
+Auto-merging src/net_processing.cpp
+Auto-merging src/validation.h
+[knots-replayed-on-origin-master 068879b2fd] Revert "Remove -feefilter option"
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Oct 5 19:17:27 2021 +0000
+ 3 files changed, 8 insertions(+), 4 deletions(-)
+Auto-merging src/init.cpp
+[knots-replayed-on-origin-master 92485edc00] doc: Move -feefilter option to correct category
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed May 8 15:35:14 2024 +0000
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging src/rpc/mempool.cpp
+Auto-merging test/functional/feature_segwit.py
+[knots-replayed-on-origin-master a9cbff6721] RPC: add transaction hash to mempool entry output
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Sep 2 17:30:25 2017 +0000
+ 2 files changed, 11 insertions(+), 9 deletions(-)
+Auto-merging src/blockfilter.cpp
+Auto-merging src/blockfilter.h
+[knots-replayed-on-origin-master c102b1a996] Add Neutrino filter for p2wpkh script types
+ Author: dangershony <dan.gershony@gmail.com>
+ Date: Thu Feb 27 19:07:58 2020 +0100
+ 2 files changed, 48 insertions(+), 1 deletion(-)
+Auto-merging src/rpc/blockchain.cpp
+[knots-replayed-on-origin-master c007457181] Add possible values to cli description
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Sep 30 19:40:28 2021 +0000
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging src/blockfilter.cpp
+Auto-merging src/blockfilter.h
+[knots-replayed-on-origin-master 44f6391fbe] Apply suggestions from code review
+ Author: Dan Gershony <dan.gershony@gmail.com>
+ Date: Fri Feb 28 15:49:23 2020 +0100
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+Auto-merging src/test/blockfilter_tests.cpp
+[knots-replayed-on-origin-master c6a8f5e408] Adding tests for p2wpkh filter type
+ Author: dangershony <dan.gershony@gmail.com>
+ Date: Fri Feb 28 17:21:48 2020 +0100
+ 1 file changed, 77 insertions(+), 4 deletions(-)
+Auto-merging src/blockfilter.cpp
+Auto-merging src/blockfilter.h
+Auto-merging src/test/blockfilter_tests.cpp
+[knots-replayed-on-origin-master 5350312bd5] Make the filter element for witness ver0
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Sep 30 19:49:26 2021 +0000
+ 3 files changed, 30 insertions(+), 25 deletions(-)
+Auto-merging src/blockfilter.cpp
+Auto-merging src/test/blockfilter_tests.cpp
+[knots-replayed-on-origin-master c70269cc34] Act on review
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Sep 30 19:51:35 2021 +0000
+ 2 files changed, 10 insertions(+), 16 deletions(-)
+Auto-merging src/blockfilter.cpp
+[knots-replayed-on-origin-master 04bd99c798] Move the filter logic to a single method named BuildFilterElements
+ Author: dangershony <dan.gershony@gmail.com>
+ Date: Mon Mar 2 13:28:44 2020 +0000
+ 1 file changed, 21 insertions(+), 35 deletions(-)
+Auto-merging src/blockfilter.cpp
+[knots-replayed-on-origin-master 140ef02454] Change the BuildFilterElements default args
+ Author: dangershony <dan.gershony@gmail.com>
+ Date: Mon Mar 2 21:38:56 2020 +0000
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+Auto-merging src/blockfilter.cpp
+[knots-replayed-on-origin-master 8a33cdcd40] Act on review
+ Author: dangershony <dan.gershony@gmail.com>
+ Date: Wed Mar 4 21:10:07 2020 +0000
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+Auto-merging src/test/blockfilter_tests.cpp
+[knots-replayed-on-origin-master 0ea22289dc] QA: blockfilter_tests: Diff-minimise
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed Mar 4 19:07:11 2020 +0000
+ 1 file changed, 4 insertions(+), 5 deletions(-)
+Auto-merging src/init.cpp
+[knots-replayed-on-origin-master 7635987d24] Only enable basic blockfilterindex if enabled with type omitted
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed Mar 4 19:17:15 2020 +0000
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+Auto-merging src/wallet/rpc/spend.cpp
+Auto-merging src/wallet/spend.cpp
+Auto-merging src/wallet/spend.h
+CONFLICT (modify/delete): test/functional/wallet_import_rescan.py deleted in HEAD and modified in 6825ae0c78 (wallet, rpc: add anti-fee-sniping to `send` and `sendall`).  Version 6825ae0c78 (wallet, rpc: add anti-fee-sniping to `send` and `sendall`) of test/functional/wallet_import_rescan.py left in tree.
+Auto-merging test/functional/wallet_rescan_unconfirmed.py
+error: could not apply 6825ae0c78... wallet, rpc: add anti-fee-sniping to `send` and `sendall`
+hint: After resolving the conflicts, mark them with
+hint: "git add/rm <pathspec>", then run
+hint: "git cherry-pick --continue".
+hint: You can instead skip this commit with "git cherry-pick --skip".
+hint: To abort and get back to the state before "git cherry-pick",
+hint: run "git cherry-pick --abort".
+hint: Disable this message with "git config set advice.mergeConflict false"
