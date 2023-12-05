@@ -21,6 +21,7 @@
 #include <policy/settings.h>
 #include <primitives/transaction.h>
 #include <rpc/mempool.h>
+#include <rpc/rawtransaction.h>
 #include <rpc/server.h>
 #include <rpc/server_util.h>
 #include <rpc/util.h>
@@ -684,6 +685,96 @@ static RPCMethod maxmempool()
     return NullUniValue;
 }
     };
+}
+
+static RPCMethod listmempooltransactions()
+{
+    return RPCMethod{"listmempooltransactions",
+        "\nReturns all transactions in the mempool. Can be filtered by mempool_sequence\n"
+        "\nAllows for syncing with current mempool entries via polling (not zmq).",
+        {
+            {"start_sequence", RPCArg::Type::NUM, RPCArg::Default{0}, "The mempool_sequence to start the results to. Defaults to 0 (zero, all transactions)."},
+            {"verbose", RPCArg::Type::BOOL, RPCArg::Default{false}, "True for a json object, false for array of transaction ids"},
+        },
+        {
+            RPCResult{"for verbose = false",
+                RPCResult::Type::OBJ, "", "",
+                {
+                    {RPCResult::Type::NUM, "mempool_sequence", "The current max mempool sequence value."},
+                    {RPCResult::Type::ARR, "txs", "",
+                    {
+                        {RPCResult::Type::OBJ, "", "",
+                        {
+                            {RPCResult::Type::NUM, "entry_sequence", "The mempool sequence value for this transaction entry."},
+                            {RPCResult::Type::STR_HEX, "txid", "The transaction id"},
+                        }},
+                    }},
+                }},
+            RPCResult{"for verbose = true",
+                RPCResult::Type::OBJ, "", "",
+                {
+                    {RPCResult::Type::NUM, "mempool_sequence", "The current max mempool sequence value."},
+                    {RPCResult::Type::ARR, "txs", "",
+                    {
+                        {RPCResult::Type::OBJ, "", "",
+                        {
+                            Cat<std::vector<RPCResult>>(
+                                {
+                                    {RPCResult::Type::NUM, "entry_sequence", "The mempool sequence value for this transaction entry."},
+                                },
+                                DecodeTxDoc(/*txid_field_doc=*/"The transaction id of the mempool transaction")),
+                        }},
+                    }},
+                }},
+        },
+        RPCExamples{
+            HelpExampleCli("listmempooltransactions", "true")
+            + HelpExampleRpc("listmempooltransactions", "true")
+        },
+        [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    uint64_t start_mempool_sequence{0};
+    if (!request.params[0].isNull()) {
+        start_mempool_sequence = request.params[0].getInt<uint64_t>();
+    }
+
+    bool verbose{false};
+    if (!request.params[1].isNull()) {
+        verbose = request.params[1].get_bool();
+    }
+
+    return MempoolTxsToJSON(EnsureAnyMemPool(request.context), verbose, start_mempool_sequence);
+},
+    };
+}
+
+UniValue MempoolTxsToJSON(const CTxMemPool& pool, bool verbose, uint64_t sequence_start)
+{
+    LOCK(pool.cs);
+
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("mempool_sequence", pool.GetSequence());
+
+    UniValue txs(UniValue::VARR);
+    for (const CTxMemPoolEntry& entry : pool.mapTx) {
+        if (entry.GetSequence() < sequence_start) {
+            continue;
+        }
+
+        UniValue txentry(UniValue::VOBJ);
+        txentry.pushKV("entry_sequence", entry.GetSequence());
+
+        if (verbose) {
+            TxToUniv(entry.GetTx(), /*block_hash=*/uint256::ZERO, /*entry=*/txentry, /*include_hex=*/false);
+        } else {
+            txentry.pushKV("txid", entry.GetTx().GetHash().ToString());
+        }
+
+        txs.push_back(txentry);
+    }
+
+    result.pushKV("txs", txs);
+    return result;
 }
 
 static RPCMethod getrawmempool()
@@ -1680,6 +1771,7 @@ void RegisterMempoolRPCCommands(CRPCTable& t)
         {"blockchain", &maxmempool},
         {"hidden", &getorphantxs},
         {"rawtransactions", &submitpackage},
+        {"rawtransactions", &listmempooltransactions},
     };
     for (const auto& c : commands) {
         t.appendCommand(c.name, &c);
