@@ -16,8 +16,8 @@ class SipHashState
 {
 private:
     uint64_t v[4];
-    uint64_t tail; // bytes that weren't processed yet.
-    uint8_t count;  // total amount of bytes inputted.
+    uint64_t tmp;
+    uint8_t count; // Only the low 8 bits of the input size matter.
 
 public:
     explicit SipHashState(uint64_t k0, uint64_t k1) noexcept : v{C0 ^ k0, C1 ^ k1, C2 ^ k0, C3 ^ k1} {}
