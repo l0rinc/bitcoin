@@ -247,6 +247,12 @@ struct CAddressBookData
      */
     std::optional<std::string> label;
 
+    /** Whether address is the destination of any wallet transation.
+     * Unlike other fields in address data struct, the used value is determined
+     * at runtime and not serialized as part of address data.
+     */
+    bool m_used{false};
+
     /**
      * Address purpose which was originally recorded for payment protocol
      * support but now serves as a cached IsMine value. Wallet code should
@@ -342,6 +348,9 @@ private:
     TxSpends mapTxSpends GUARDED_BY(cs_wallet);
     void AddToSpends(const COutPoint& outpoint, const Txid& txid) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void AddToSpends(const CWalletTx& wtx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+
+    void InitialiseAddressBookUsed() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void UpdateAddressBookUsed(const CWalletTx&) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /**
      * Add a transaction to the wallet, or update it.  confirm.block_* should
@@ -804,6 +813,8 @@ public:
     bool IsFromMe(const CTransaction& tx) const;
     CAmount GetDebit(const CTransaction& tx) const;
 
+    enum class do_init_used_flag { Init, Skip };
+    DBErrors LoadWallet(const do_init_used_flag do_init_used_flag_val = do_init_used_flag::Init);
     DBErrors PopulateWalletFromDB(bilingual_str& error, std::vector<bilingual_str>& warnings);
 
     /** Erases the provided transactions from the wallet. */

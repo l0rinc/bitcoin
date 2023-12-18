@@ -829,6 +829,23 @@ void CWallet::AddToSpends(const CWalletTx& wtx)
         AddToSpends(txin.prevout, wtx.GetHash());
 }
 
+void CWallet::InitialiseAddressBookUsed()
+{
+    for (const auto& entry : mapWallet) {
+        const CWalletTx& wtx = entry.second;
+        UpdateAddressBookUsed(wtx);
+    }
+}
+
+void CWallet::UpdateAddressBookUsed(const CWalletTx& wtx)
+{
+    for (const auto& output : wtx.tx->vout) {
+        CTxDestination dest;
+        if (!ExtractDestination(output.scriptPubKey, dest)) continue;
+        m_address_book[dest].m_used = true;
+    }
+}
+
 bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
 {
     // Only descriptor wallets can be encrypted
@@ -1080,6 +1097,7 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
 
         // Update birth time when tx time is older than it.
         MaybeUpdateBirthTime(wtx.GetTxTime());
+        UpdateAddressBookUsed(wtx);
     }
 
     if (!fInsertedNew)
@@ -2401,7 +2419,7 @@ void CWallet::CommitTransaction(
     }
 }
 
-DBErrors CWallet::PopulateWalletFromDB(bilingual_str& error, std::vector<bilingual_str>& warnings)
+DBErrors CWallet::LoadWallet(const do_init_used_flag do_init_used_flag_val)
 {
     LOCK(cs_wallet);
 
@@ -2414,6 +2432,16 @@ DBErrors CWallet::PopulateWalletFromDB(bilingual_str& error, std::vector<bilingu
         assert(m_internal_spk_managers.empty());
     }
 
+    if (nLoadWalletRet == DBErrors::LOAD_OK && do_init_used_flag_val == do_init_used_flag::Init) {
+        InitialiseAddressBookUsed();
+    }
+
+    return nLoadWalletRet;
+}
+
+DBErrors CWallet::PopulateWalletFromDB(bilingual_str& error, std::vector<bilingual_str>& warnings)
+{
+    const auto nLoadWalletRet{LoadWallet()};
     const auto wallet_file = m_database->Filename();
     switch (nLoadWalletRet) {
     case DBErrors::LOAD_OK:
