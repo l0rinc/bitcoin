@@ -297,7 +297,7 @@ static bool InitRPCAuthentication()
         g_rpcauth.push_back({user, salt, hash});
     }
 
-    if (!(gArgs.GetArgs("-rpcauth").empty() && gArgs.GetArgs("-rpcauthfile").empty())) {
+    if (!(gArgs.IsArgNegated("-rpcauth") || (gArgs.GetArgs("-rpcauth").empty() && gArgs.GetArgs("-rpcauthfile").empty()))) {
         LogInfo("Using rpcauth authentication.\n");
         for (const std::string& rpcauth : gArgs.GetArgs("-rpcauth")) {
             if (rpcauth.empty()) continue;
