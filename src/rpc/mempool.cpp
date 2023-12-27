@@ -14,7 +14,7 @@
 #include <index/txospenderindex.h>
 #include <kernel/mempool_entry.h>
 #include <net_processing.h>
-#include <netbase.h>
+#include <node/context.h>
 #include <node/mempool_persist_args.h>
 #include <node/types.h>
 #include <policy/rbf.h>
@@ -26,11 +26,13 @@
 #include <rpc/util.h>
 #include <txmempool.h>
 #include <univalue.h>
+#include <util/any.h>
 #include <util/fs.h>
 #include <util/moneystr.h>
 #include <util/strencodings.h>
 #include <util/time.h>
 #include <util/vector.h>
+#include <validation.h>
 
 #include <limits>
 #include <map>
@@ -647,6 +649,40 @@ static RPCMethod getmempoolfeeratediagram()
             }
             return result;
         }
+    };
+}
+
+static RPCMethod maxmempool()
+{
+    return RPCMethod{"maxmempool",
+        "\nSets the allocated memory for the memory pool.\n",
+        {
+            {"megabytes", RPCArg::Type::NUM, RPCArg::Optional::NO, "The memory allocated in MB"},
+        },
+        RPCResult{RPCResult::Type::NONE, "", ""},
+        RPCExamples{HelpExampleCli("maxmempool", "150") + HelpExampleRpc("maxmempool", "150")},
+        [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    const int64_t nSize{request.params[0].getInt<int32_t>()};
+    const int64_t nMempoolSizeMax{nSize * 1'000'000};
+
+    CTxMemPool& mempool{EnsureAnyMemPool(request.context)};
+    LOCK2(::cs_main, mempool.cs);
+
+    const int64_t nMempoolSizeMin{maxmempoolMinimumBytes(mempool.m_opts.limits.descendant_size_vbytes)};
+    if (nMempoolSizeMax < 0 || nMempoolSizeMax < nMempoolSizeMin) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("MaxMempool size %d is too small", nSize));
+    }
+    mempool.m_opts.max_size_bytes = nMempoolSizeMax;
+
+    auto node_context = util::AnyPtr<NodeContext>(request.context);
+    if (node_context && node_context->chainman) {
+        Chainstate& active_chainstate = node_context->chainman->ActiveChainstate();
+        LimitMempoolSize(mempool, active_chainstate.CoinsTip());
+    }
+
+    return NullUniValue;
+}
     };
 }
 
@@ -1641,6 +1677,7 @@ void RegisterMempoolRPCCommands(CRPCTable& t)
         {"blockchain", &getrawmempool},
         {"blockchain", &importmempool},
         {"blockchain", &savemempool},
+        {"blockchain", &maxmempool},
         {"hidden", &getorphantxs},
         {"rawtransactions", &submitpackage},
     };
