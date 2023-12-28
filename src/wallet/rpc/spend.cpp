@@ -1787,7 +1787,7 @@ RPCMethod walletprocesspsbt()
     bool sign = true;
     bool bip32derivs = true;
     bool finalize = true;
-    int nHashType = ParseSighashString(NullUniValue); // Use ParseSighashString default
+    std::optional<int> nHashType = ParseSighashString(NullUniValue); // Use ParseSighashString default
     if (request.params[1].isBool() || request.params[1].isNull()) {
         // Old style positional parameters
         sign = request.params[1].isNull() ? true : request.params[1].get_bool();
