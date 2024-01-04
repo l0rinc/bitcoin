@@ -2512,7 +2512,7 @@ static RPCMethod sweepprivkeys()
         "sweepprivkeys",
         "\nSends bitcoins controlled by private keys to a new address in the local wallet.\n",
         {
-            {"options", RPCArg::Type::OBJ, RPCArg::Optional::NO, "",
+            {"options", RPCArg::Type::OBJ_NAMED_PARAMS, RPCArg::Optional::NO, "",
                 {
                     {"privkeys", RPCArg::Type::ARR, RPCArg::Optional::NO, "An array of WIF private keys",
                         {

@@ -26,7 +26,7 @@ class WalletSweepPrivKeysTest(BitcoinTestFramework):
 
     def assert_sweep(self, key, label):
         node = self.nodes[0]
-        sweep_txid = node.sweepprivkeys({"privkeys": [key.privkey], "label": label})
+        sweep_txid = node.sweepprivkeys(privkeys=[key.privkey], label=label)
         assert_equal(sweep_txid in node.getrawmempool(), True)
 
         sweep_tx = node.getrawtransaction(sweep_txid, True)
