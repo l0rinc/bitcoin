@@ -2905,13 +2905,16 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
 
     std::vector<bilingual_str> warning_messages;
     if (!m_chainman.IsInitialBlockDownload()) {
-        auto bits = m_chainman.m_versionbitscache.CheckUnknownActivations(pindexNew, m_chainman.GetParams());
-        for (auto [bit, active] : bits) {
-            const bilingual_str warning = strprintf(_("Unknown new rules activated (versionbit %i)"), bit);
-            if (active) {
-                m_chainman.GetNotifications().warningSet(kernel::Warning::UNKNOWN_NEW_RULES_ACTIVATED, warning);
-            } else {
-                warning_messages.push_back(warning);
+        const CBlockIndex* pindex = pindexNew;
+        for (int bit = 0; bit < VERSIONBITS_NUM_BITS; bit++) {
+            WarningBitsConditionChecker checker(m_chainman, bit);
+            ThresholdState state = checker.GetStateFor(pindex, m_chainman.GetConsensus(), m_chainman.m_warningcache.at(bit));
+            if (state == ThresholdState::ACTIVE || state == ThresholdState::LOCKED_IN) {
+                const bilingual_str warning = strprintf(_("Unknown new rules activated (versionbit %i)"), bit);
+                {
+                    m_chainman.GetNotifications().warningSet(kernel::Warning::UNKNOWN_NEW_RULES_ACTIVATED, warning);
+                    warning_messages.push_back(warning);
+                }
             }
         }
     }
