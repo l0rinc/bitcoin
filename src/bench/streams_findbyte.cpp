@@ -16,7 +16,8 @@
 static void FindByte(benchmark::Bench& bench)
 {
     const auto testing_setup{MakeNoLogFileContext<const BasicTestingSetup>(ChainType::REGTEST)};
-    AutoFile file{fsbridge::fopen(testing_setup->m_path_root / "streams_tmp", "w+b")};
+    const fs::path path{testing_setup->m_path_root / "streams_tmp"};
+    AutoFile file{fsbridge::fopen(path, "w+b")};
     const size_t file_size = 200;
     uint8_t data[file_size] = {0};
     data[file_size - 1] = 1;
@@ -27,7 +28,9 @@ static void FindByte(benchmark::Bench& bench)
     bench.setup([&] { bf.SetPos(0); })
         .run([&] { bf.FindByte(std::byte(1)); });
 
+    // Cleanup
     assert(file.fclose() == 0);
+    fs::remove(path);
 }
 
 BENCHMARK(FindByte);
