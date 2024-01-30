@@ -16,6 +16,18 @@ bool PrivateBroadcast::Add(const CTransactionRef& tx) EXCLUSIVE_LOCKS_REQUIRED(!
     return inserted;
 }
 
+std::optional<size_t> PrivateBroadcast::Remove(const CTransactionRef& tx) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
+{
+    LOCK(m_mutex);
+    auto iters = Find(tx->GetHash());
+    if (iters && iters->by_txid->second.tx->GetWitnessHash() == tx->GetWitnessHash()) {
+        m_by_txid.erase(iters->by_txid);
+        const auto handle{m_by_priority.extract(iters->by_priority)};
+        return handle.key().num_broadcasted;
+    }
+    return std::nullopt;
+}
+
 std::optional<CTransactionRef> PrivateBroadcast::GetTxForBroadcast() EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
