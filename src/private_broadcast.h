@@ -20,6 +20,7 @@
 /**
  * Store a list of transactions to be broadcast privately. Supports the following operations:
  * - Add a new transaction
+ * - Remove a transaction
  * - Pick a transaction for sending to one recipient
  * - Query which transaction has been picked for sending to a given recipient node
  * - Mark that a confirmation of reception for a transaction by a given recipient node
@@ -37,7 +38,17 @@ public:
     bool Add(const CTransactionRef& tx) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
 
     /**
-     * Pick the transaction that has been sent fewest times and least recently.
+     * Forget a transaction.
+     * @param[in] tx Transaction to forget.
+     * @return The number of times the transaction was sent if the transaction existed
+     * and was removed, otherwise empty optional (the transaction was not in the storage).
+     */
+    std::optional<size_t> Remove(const CTransactionRef& tx)
+        EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
+
+    /**
+     * Pick the transaction with the fewest send attempts, and confirmations,
+     * and oldest send/confirm times.
      * @param[in] will_send_to_nodeid Will remember that the returned transaction
      * was picked for sending to this node.
      * @return Most urgent transaction or nullopt if there are no transactions.
