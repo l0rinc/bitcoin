@@ -8,6 +8,10 @@
 #include <algorithm>
 #include <tuple>
 
+/// If a transaction is not received back from the network for this duration
+/// after it is broadcast, then we consider it stale / for rebroadcasting.
+static constexpr auto STALE_DURATION{1min};
+
 bool PrivateBroadcast::Add(const CTransactionRef& tx) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
@@ -76,6 +80,20 @@ bool PrivateBroadcast::DidNodeConfirmReception(const NodeId& nodeid)
         return tx_and_status.value().send_status.confirmed.has_value();
     }
     return false;
+}
+
+std::vector<CTransactionRef> PrivateBroadcast::GetStale() const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
+{
+    LOCK(m_mutex);
+    const auto stale_time{NodeClock::now() - STALE_DURATION};
+    std::vector<CTransactionRef> stale;
+    for (const auto& [tx, send_status] : m_transactions) {
+        const Priority p{DerivePriority(send_status)};
+        if (p.last_confirmed < stale_time) {
+            stale.push_back(tx);
+        }
+    }
+    return stale;
 }
 
 std::strong_ordering PrivateBroadcast::Priority::operator<=>(const Priority& other) const
