@@ -1088,7 +1088,9 @@ UniValue MempoolInfoToJSON(const CTxMemPool& pool, const std::optional<MempoolHi
 
             const CAmount fee_rate{std::max(std::min(dfpb, tfpb), std::min(fpb, afpb))};
 
-            for (size_t i = floors.size(); i-- > 0;) {
+            // Distribute fee rates
+            for (size_t i = floors.size(); i > 0;) {
+                --i;
                 if (fee_rate >= floors[i]) {
                     sizes[i] += size;
                     ++count[i];
