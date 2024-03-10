@@ -6,11 +6,9 @@
 
 #include <clientversion.h>
 
-#include <common/args.h>
 #include <tinyformat.h>
 #include <util/string.h>
 
-#include <limits>
 #include <string>
 #include <vector>
 
@@ -71,11 +69,12 @@ std::string FormatSubVersion(const std::string& name, int nClientVersion, const 
     return strprintf("/%s:%s%s/", name, FormatVersion(nClientVersion), comments_str);
 }
 
+int64_t g_software_expiry{DEFAULT_SOFTWARE_EXPIRY};
+
 bool IsThisSoftwareExpired(int64_t nTime)
 {
-    int64_t nSoftwareExpiry = gArgs.GetIntArg("-softwareexpiry", DEFAULT_SOFTWARE_EXPIRY);
-    if (nSoftwareExpiry <= 0) {
-        nSoftwareExpiry = std::numeric_limits<int64_t>::max();
+    if (g_software_expiry <= 0) {
+        return false;
     }
-    return (nTime > nSoftwareExpiry);
+    return (nTime > g_software_expiry);
 }
