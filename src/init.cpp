@@ -107,6 +107,7 @@
 #include <algorithm>
 #include <any>
 #include <cerrno>
+#include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -174,6 +175,9 @@ static constexpr bool DEFAULT_PROXYRANDOMIZE{true};
 static constexpr bool DEFAULT_REST_ENABLE{false};
 static constexpr bool DEFAULT_I2P_ACCEPT_INCOMING{true};
 static constexpr bool DEFAULT_STOPAFTERBLOCKIMPORT{false};
+
+//! Check if initial sync is done with no change in block height or queued downloads every 30s
+static constexpr auto SYNC_CHECK_INTERVAL{std::chrono::seconds{30}};
 
 #ifdef WIN32
 // Win32 LevelDB doesn't use filedescriptors, and the ones used for
@@ -1221,6 +1225,44 @@ bool AppInitLockDirectories()
         return false;
     }
     return true;
+}
+
+/**
+ * Once initial block sync is finished and no change in block height or queued downloads,
+ * sync utxo state to protect against data loss
+ */
+static void SyncCoinsTipAfterChainSync(const NodeContext& node)
+{
+    LOCK(node.chainman->GetMutex());
+    if (node.chainman->IsInitialBlockDownload()) {
+        LogDebug(BCLog::COINDB, "Node is still in IBD, rescheduling post-IBD chainstate disk sync...\n");
+        node.scheduler->scheduleFromNow([&node] {
+            SyncCoinsTipAfterChainSync(node);
+        }, SYNC_CHECK_INTERVAL);
+        return;
+    }
+
+    static auto last_chain_height{-1};
+    const auto current_height{node.chainman->ActiveHeight()};
+    if (last_chain_height != current_height) {
+        LogDebug(BCLog::COINDB, "Chain height updated since last check, rescheduling post-IBD chainstate disk sync...\n");
+        last_chain_height = current_height;
+        node.scheduler->scheduleFromNow([&node] {
+            SyncCoinsTipAfterChainSync(node);
+        }, SYNC_CHECK_INTERVAL);
+        return;
+    }
+
+    if (node.peerman->GetNumberOfPeersWithValidatedDownloads() > 0) {
+        LogDebug(BCLog::COINDB, "Still downloading blocks from peers, rescheduling post-IBD chainstate disk sync...\n");
+        node.scheduler->scheduleFromNow([&node] {
+            SyncCoinsTipAfterChainSync(node);
+        }, SYNC_CHECK_INTERVAL);
+        return;
+    }
+
+    LogDebug(BCLog::COINDB, "Finished syncing to tip, syncing chainstate to disk\n");
+    node.chainman->ActiveChainstate().CoinsTip().Sync();
 }
 
 bool AppInitInterfaces(NodeContext& node)
@@ -2366,6 +2408,12 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 #if HAVE_SYSTEM
     StartupNotify(args);
 #endif
+
+    if (node.chainman->IsInitialBlockDownload()) {
+        node.scheduler->scheduleFromNow([&node] {
+            SyncCoinsTipAfterChainSync(node);
+        }, SYNC_CHECK_INTERVAL);
+    }
 
     return true;
 }
