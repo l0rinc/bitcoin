@@ -160,5 +160,53 @@ class ChainTiebreaksTest(BitcoinTestFramework):
         self.test_chain_split_from_disk()
 
 
+        # Invalidate blocks to start fresh on the next test
+        node.invalidateblock(blocks[0].hash)
+
+    def test_chain_split_from_disk(self):
+        node = self.nodes[0]
+        peer = node.add_p2p_connection(P2PDataStore())
+
+        self.log.info('Precomputing blocks')
+        #
+        #      A1
+        #     /
+        #   G
+        #     \
+        #      A2
+        #
+        blocks = []
+
+        # Construct two blocks building from genesis.
+        start_height = node.getblockcount()
+        genesis_block = node.getblock(node.getblockhash(start_height))
+        prev_time = genesis_block["time"]
+
+        for i in range(0, 2):
+            blocks.append(create_block(
+                hashprev=int(genesis_block["hash"], 16),
+                tmpl={"height": start_height + 1,
+                # Make sure each block has a different hash.
+                "curtime": prev_time + i + 1,
+                }
+            ))
+            blocks[-1].solve()
+
+        # Send blocks and test the last one is not connected
+        self.log.info('Send A1 and A2. Make sure that only the former connects')
+        peer.send_blocks_and_test([blocks[0]], node, success=True)
+        peer.send_blocks_and_test([blocks[1]], node, success=False)
+
+        self.log.info('Restart the node and check that the best tip before restarting matched the ones afterwards')
+        # Restart and check enough times for this to eventually fail if the logic is broken
+        for _ in range(10):
+            self.restart_node(0)
+            assert_equal(blocks[0].hash, node.getbestblockhash())
+
+    def run_test(self):
+        self.test_chain_split_in_memory()
+        self.test_chain_split_from_disk()
+
+
 if __name__ == '__main__':
     ChainTiebreaksTest(__file__).main()
