@@ -14,6 +14,7 @@
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <test/util/script.h>
+#include <test/util/mining.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
@@ -39,6 +40,7 @@ std::deque<COutPoint> g_available_coins;
 void initialize_miner()
 {
     static const auto testing_setup = MakeNoLogFileContext<const TestingSetup>();
+    MineBlock(testing_setup->m_node, {.coinbase_output_script = CScript() << OP_FALSE});
     for (uint32_t i = 0; i < uint32_t{100}; ++i) {
         g_available_coins.emplace_back(Txid::FromUint256(uint256::ZERO), i);
     }
