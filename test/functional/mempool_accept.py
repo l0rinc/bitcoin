@@ -55,6 +55,9 @@ from test_framework.wallet import MiniWallet
 from test_framework.wallet_util import generate_keypair
 
 
+DEFAULT_DUST_RELAY_TX_FEE = 3000
+
+
 class MempoolAcceptanceTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
@@ -93,6 +96,20 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         # Settings are listed in BTC/kvB
         assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal(DEFAULT_MIN_RELAY_TX_FEE) / COIN)
         assert_equal(node.getmempoolinfo()['incrementalrelayfee'], Decimal(DEFAULT_INCREMENTAL_RELAY_FEE) / COIN)
+        assert_equal(node.getmempoolinfo()['dustrelayfee'], Decimal(DEFAULT_DUST_RELAY_TX_FEE) / COIN)
+        assert_equal(node.getmempoolinfo()['dustrelayfeefloor'], Decimal(DEFAULT_DUST_RELAY_TX_FEE) / COIN)
+        assert_equal(node.getmempoolinfo()['dustdynamic'], 'off')
+
+        self.log.info("Check -dustdynamic modes reported by getmempoolinfo")
+        self.restart_node(0, extra_args=self.extra_args[0] + ['-dustdynamic=mempool:250', '-dustrelayfee=0.00001000', '-persistmempool=0'])
+        node = self.nodes[0]
+        assert_equal(node.getmempoolinfo()['dustrelayfeefloor'], Decimal(1000) / COIN)
+        assert_equal(node.getmempoolinfo()['dustdynamic'], 'mempool:250')
+        self.restart_node(0, extra_args=self.extra_args[0] + ['-dustdynamic=target:2', '-persistmempool=0'])
+        node = self.nodes[0]
+        assert_equal(node.getmempoolinfo()['dustdynamic'], 'target:2')
+        self.restart_node(0, extra_args=self.extra_args[0])
+        node = self.nodes[0]
 
         self.log.info('Check -spkreuse=0 rejects duplicate output scriptPubKeys')
         tx = self.wallet.create_self_transfer_multi(num_outputs=2)['tx']
