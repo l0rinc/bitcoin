@@ -48,6 +48,8 @@ class ValidationSignals;
 
 struct bilingual_str;
 
+static constexpr std::chrono::minutes DYNAMIC_DUST_FEERATE_UPDATE_INTERVAL{15};
+
 /** Fake height value used in Coin to signify they are only in the memory pool (since 0.8) */
 static const uint32_t MEMPOOL_HEIGHT = 0x7FFFFFFF;
 
@@ -343,6 +345,8 @@ public:
      * the tx is not dependent on other mempool transactions to be included in a block.
      */
     bool HasNoInputsOf(const CTransaction& tx) const EXCLUSIVE_LOCKS_REQUIRED(cs);
+
+    void UpdateDynamicDustFeerate();
 
     /** Affect CreateNewBlock prioritisation of transactions */
     void PrioritiseTransaction(const Txid& hash, const CAmount& nFeeDelta);

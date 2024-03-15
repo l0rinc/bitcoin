@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <common/system.h>
+#include <node/mempool_args.h>
 #include <policy/policy.h>
 #include <test/util/time.h>
 #include <test/util/txmempool.h>
@@ -23,6 +24,31 @@ class MemPoolTest final : public CTxMemPool
 public:
     using CTxMemPool::GetMinFee;
 };
+
+BOOST_AUTO_TEST_CASE(MempoolDustDynamicParse)
+{
+    static constexpr unsigned int max_target{1008};
+
+    auto off{ParseDustDynamicOpt("off", max_target)};
+    BOOST_REQUIRE(off);
+    BOOST_CHECK_EQUAL(*off, 0);
+    auto zero{ParseDustDynamicOpt("0", max_target)};
+    BOOST_REQUIRE(zero);
+    BOOST_CHECK_EQUAL(*zero, 0);
+    auto target{ParseDustDynamicOpt("target:6", max_target)};
+    BOOST_REQUIRE(target);
+    BOOST_CHECK_EQUAL(*target, -6);
+    auto mempool{ParseDustDynamicOpt("mempool:250", max_target)};
+    BOOST_REQUIRE(mempool);
+    BOOST_CHECK_EQUAL(*mempool, 250);
+
+    BOOST_CHECK(!ParseDustDynamicOpt("target:1", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("target:1009", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("target:x", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("mempool:0", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("mempool:x", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("unknown", max_target));
+}
 
 BOOST_AUTO_TEST_CASE(MempoolLookupTest)
 {
