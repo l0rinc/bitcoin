@@ -86,19 +86,20 @@ if any(verstr.endswith('-dirty') for (_, verstr, _, _) in versions):
     print('To properly generate man pages, please commit your changes (or discard them), rebuild, then run this script again.')
     print()
 
-with tempfile.NamedTemporaryFile('w', suffix='.h2m') as footer:
-    # Create copyright footer, and write it to a temporary include file.
-    # Copyright is the same for all binaries, so just use the first.
-    footer.write('[COPYRIGHT]\n')
-    footer.write('\n'.join(versions[0][2]).strip())
-    # Create SEE ALSO section
-    footer.write('\n[SEE ALSO]\n')
-    footer.write(', '.join(s.rpartition('/')[2] + '(1)' for s in BINARIES))
-    footer.write('\n')
-    footer.flush()
+basename_binaries = tuple(s.rpartition('/')[2] for s in BINARIES)
 
-    # Call the binaries through help2man to produce a manual page for each of them.
-    for (abspath, verstr, _, is_qt) in versions:
+for (abspath, verstr, copyright, is_qt) in versions:
+    with tempfile.NamedTemporaryFile('w', suffix='.h2m') as footer:
+        # Create copyright footer, and write it to a temporary include file.
+        footer.write('[COPYRIGHT]\n')
+        footer.write('\n'.join(copyright).strip())
+        # Create SEE ALSO section
+        footer.write('\n[SEE ALSO]\n')
+        footer.write(', '.join(s + "(1)" for s in basename_binaries if not abspath.endswith("/" + s)))
+        footer.write('\n')
+        footer.flush()
+
+        # Call the binary through help2man to produce its manual page.
         outname = os.path.join(mandir, os.path.basename(abspath) + '.1')
         help_option = '--help-option=--help' + (' --lang=en' if is_qt else '')
         print(f'Generating {outname}…')
