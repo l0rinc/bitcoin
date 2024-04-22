@@ -31,17 +31,32 @@ BOOST_AUTO_TEST_CASE(MempoolDustDynamicParse)
 
     auto off{ParseDustDynamicOpt("off", max_target)};
     BOOST_REQUIRE(off);
-    BOOST_CHECK_EQUAL(*off, 0);
+    BOOST_CHECK_EQUAL(off->first, 0);
+    BOOST_CHECK_EQUAL(off->second, DEFAULT_DUST_RELAY_MULTIPLIER);
     auto zero{ParseDustDynamicOpt("0", max_target)};
     BOOST_REQUIRE(zero);
-    BOOST_CHECK_EQUAL(*zero, 0);
+    BOOST_CHECK_EQUAL(zero->first, 0);
+    BOOST_CHECK_EQUAL(zero->second, DEFAULT_DUST_RELAY_MULTIPLIER);
     auto target{ParseDustDynamicOpt("target:6", max_target)};
     BOOST_REQUIRE(target);
-    BOOST_CHECK_EQUAL(*target, -6);
+    BOOST_CHECK_EQUAL(target->first, -6);
+    BOOST_CHECK_EQUAL(target->second, DEFAULT_DUST_RELAY_MULTIPLIER);
+    auto target_half{ParseDustDynamicOpt("0.5*target:6", max_target)};
+    BOOST_REQUIRE(target_half);
+    BOOST_CHECK_EQUAL(target_half->first, -6);
+    BOOST_CHECK_EQUAL(target_half->second, 500);
     auto mempool{ParseDustDynamicOpt("mempool:250", max_target)};
     BOOST_REQUIRE(mempool);
-    BOOST_CHECK_EQUAL(*mempool, 250);
+    BOOST_CHECK_EQUAL(mempool->first, 250);
+    BOOST_CHECK_EQUAL(mempool->second, DEFAULT_DUST_RELAY_MULTIPLIER);
+    auto mempool_precise{ParseDustDynamicOpt("10.001*mempool:250", max_target)};
+    BOOST_REQUIRE(mempool_precise);
+    BOOST_CHECK_EQUAL(mempool_precise->first, 250);
+    BOOST_CHECK_EQUAL(mempool_precise->second, 10001);
 
+    BOOST_CHECK(!ParseDustDynamicOpt("0*target:6", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("0.0001*target:6", max_target));
+    BOOST_CHECK(!ParseDustDynamicOpt("x*target:6", max_target));
     BOOST_CHECK(!ParseDustDynamicOpt("target:1", max_target));
     BOOST_CHECK(!ParseDustDynamicOpt("target:1009", max_target));
     BOOST_CHECK(!ParseDustDynamicOpt("target:x", max_target));

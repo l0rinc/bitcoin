@@ -114,6 +114,12 @@ BOOST_AUTO_TEST_CASE(GetFeeTest)
     feeRate = CFeeRate(0);
     BOOST_CHECK(feeRate * 5 == CFeeRate(0));
     BOOST_CHECK(5 * feeRate == CFeeRate(0));
+
+    // check division operator
+    feeRate = CFeeRate(1000);
+    BOOST_CHECK(feeRate / 2 == CFeeRate(500));
+    BOOST_CHECK_EQUAL((feeRate / 3).GetFee(3000), CAmount(1000));
+    BOOST_CHECK((CFeeRate(3000) * 500) / 1000 == CFeeRate(1500));
 }
 
 BOOST_AUTO_TEST_CASE(BinaryOperatorTest)

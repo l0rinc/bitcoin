@@ -104,10 +104,10 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         self.restart_node(0, extra_args=self.extra_args[0] + ['-dustdynamic=mempool:250', '-dustrelayfee=0.00001000', '-persistmempool=0'])
         node = self.nodes[0]
         assert_equal(node.getmempoolinfo()['dustrelayfeefloor'], Decimal(1000) / COIN)
-        assert_equal(node.getmempoolinfo()['dustdynamic'], 'mempool:250')
-        self.restart_node(0, extra_args=self.extra_args[0] + ['-dustdynamic=target:2', '-persistmempool=0'])
+        assert_equal(node.getmempoolinfo()['dustdynamic'], '3*mempool:250')
+        self.restart_node(0, extra_args=self.extra_args[0] + ['-dustdynamic=0.5*target:2', '-persistmempool=0'])
         node = self.nodes[0]
-        assert_equal(node.getmempoolinfo()['dustdynamic'], 'target:2')
+        assert_equal(node.getmempoolinfo()['dustdynamic'], '0.5*target:2')
         self.restart_node(0, extra_args=self.extra_args[0])
         node = self.nodes[0]
 
