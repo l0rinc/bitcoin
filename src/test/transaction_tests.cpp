@@ -775,6 +775,14 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
 
     CheckIsStandard(t);
 
+    t.nLockTime = 21;
+    g_mempool_opts.reject_parasites = false;
+    CheckIsStandard(t);
+    g_mempool_opts.reject_parasites = true;
+    CheckIsNotStandard(t, "parasite-cat21");
+    g_mempool_opts.reject_parasites = false;
+    t.nLockTime = 0;
+
     g_mempool_opts.permitephemeral_anchor = true;
     g_mempool_opts.permitephemeral_dust = true;
     g_mempool_opts.permitephemeral_send = true;
