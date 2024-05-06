@@ -792,6 +792,10 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
                    DEFAULT_PRIVATE_BROADCAST),
                    ArgsManager::ALLOW_ANY,
                    OptionsCategory::NODE_RELAY);
+    argsman.AddArg("-rejecttokens",
+                   strprintf("Refuse to relay or mine transactions involving non-bitcoin tokens (default: %u)",
+                             DEFAULT_REJECT_TOKENS),
+                   ArgsManager::ALLOW_ANY, OptionsCategory::NODE_RELAY);
     argsman.AddArg("-spkreuse=<policy>", strprintf("Either \"allow\" to relay/mine transactions reusing addresses or other pubkey scripts, or \"conflict\" to treat them as exclusive prior to being mined (default: %s)", DEFAULT_SPKREUSE), ArgsManager::ALLOW_ANY, OptionsCategory::NODE_RELAY);
     argsman.AddArg("-whitelistforcerelay", strprintf("Add 'forcerelay' permission to whitelisted peers with default permissions. This will relay transactions even if the transactions were already in the mempool. (default: %d)", DEFAULT_WHITELISTFORCERELAY), ArgsManager::ALLOW_ANY, OptionsCategory::NODE_RELAY);
     argsman.AddArg("-whitelistrelay", strprintf("Add 'relay' permission to whitelisted peers with default permissions. This will accept relayed transactions even when not relaying transactions (default: %d)", DEFAULT_WHITELISTRELAY), ArgsManager::ALLOW_ANY, OptionsCategory::NODE_RELAY);
@@ -2559,7 +2563,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         scheduler.scheduleFromNow([&node] {
             auto msg = _("This software is expired, and may be out of consensus. You must choose to upgrade or override this expiration.");
             node.chainman->GetNotifications().warningSet(kernel::Warning::SOFTWARE_EXPIRY, msg, /*update=*/ true);
-            uiInterface.ThreadSafeMessageBox(msg, "Error", CClientUIInterface::ICON_ERROR | CClientUIInterface::BTN_OK);
+            uiInterface.ThreadSafeMessageBox(msg, CClientUIInterface::ICON_ERROR | CClientUIInterface::BTN_OK);
         }, std::chrono::seconds{std::max<int64_t>(2, g_software_expiry - GetTime())});
     }
 

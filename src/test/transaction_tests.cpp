@@ -856,6 +856,14 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     t.vout[0].scriptPubKey = CScript() << OP_RETURN;
     CheckIsStandard(t);
 
+    // Runes-style OP_RETURN outputs are rejected when token filtering is enabled.
+    t.vout[0].scriptPubKey = CScript() << OP_RETURN << OP_13 << OP_0;
+    g_mempool_opts.reject_tokens = false;
+    CheckIsStandard(t);
+    g_mempool_opts.reject_tokens = true;
+    CheckIsNotStandard(t, "tokens-runes");
+    g_mempool_opts.reject_tokens = false;
+
     // Multiple TxoutType::NULL_DATA are permitted
     t.vout.resize(2);
     t.vout[0].scriptPubKey = CScript() << OP_RETURN << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38"_hex;
