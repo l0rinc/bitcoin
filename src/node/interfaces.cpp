@@ -943,19 +943,9 @@ public:
         return m_block_template->vTxSigOpsCost;
     }
 
-    CTransactionRef getCoinbaseTx() const override
+    const node::CoinbaseTx& getCoinbaseTx() const override
     {
-        return m_block_template->block.vtx[0];
-    }
-
-    const std::vector<unsigned char>& getCoinbaseCommitment() const override
-    {
-        return m_block_template->vchCoinbaseCommitment;
-    }
-
-    int getWitnessCommitmentIndex() const override
-    {
-        return GetWitnessCommitmentIndex(m_block_template->block);
+        return m_block_template->m_coinbase_tx;
     }
 
     std::vector<uint256> getCoinbaseMerklePath() const override

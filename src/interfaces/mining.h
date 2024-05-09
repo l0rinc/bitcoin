@@ -39,9 +39,8 @@ public:
     virtual const std::vector<CAmount>& getTxFees() const = 0;
     virtual const std::vector<int64_t>& getTxSigops() const = 0;
 
-    virtual CTransactionRef getCoinbaseTx() const = 0;
-    virtual const std::vector<unsigned char>& getCoinbaseCommitment() const = 0;
-    virtual int getWitnessCommitmentIndex() const = 0;
+    /** Return fields needed to construct a coinbase transaction */
+    virtual const node::CoinbaseTx& getCoinbaseTx() const = 0;
 
     /**
      * Compute merkle path to the coinbase transaction
