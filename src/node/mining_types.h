@@ -101,6 +101,8 @@ struct BlockCreateOptions {
      * Should only be disabled for tests / benchmarks.
      */
     bool test_block_validity{true};
+
+    BlockCreateOptions Clamped() const;
 };
 
 struct BlockWaitOptions {

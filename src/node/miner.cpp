@@ -103,12 +103,7 @@ BlockAssembler::BlockAssembler(Chainstate& chainstate,
     : chainparams{chainstate.m_chainman.GetParams()},
       m_mempool{options.use_mempool ? mempool : nullptr},
       m_chainstate{chainstate},
-      m_options{[&] {
-          if (auto result{CheckMiningOptions(options, /*use_argnames=*/false)}; !result) {
-              throw std::runtime_error(util::ErrorString(result).original);
-          }
-          return FlattenMiningOptions(std::move(options));
-      }()}
+      m_options{options.Clamped()}
 {
     m_account_block_size = *Assert(m_options.block_max_size) < MAX_BLOCK_SERIALIZED_SIZE;
 }

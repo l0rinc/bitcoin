@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -26,6 +27,15 @@ using util::Error;
 using util::Result;
 
 namespace node {
+
+BlockCreateOptions BlockCreateOptions::Clamped() const
+{
+    BlockCreateOptions options{*this};
+    if (auto result{CheckMiningOptions(options, /*use_argnames=*/false)}; !result) {
+        throw std::runtime_error(util::ErrorString(result).original);
+    }
+    return FlattenMiningOptions(std::move(options));
+}
 
 Result<void> CheckMiningOptions(BlockCreateOptions options, bool use_argnames)
 {
