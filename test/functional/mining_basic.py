@@ -294,11 +294,11 @@ class MiningTest(BitcoinTestFramework):
                 fee_rate=fee_rate,
             )
 
-    def verify_block_template(self, expected_tx_count, expected_weight):
+    def verify_block_template(self, expected_tx_count, expected_weight, template_request=None):
         """
         Create a block template and check that it satisfies the expected transaction count and total weight.
         """
-        response = self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
+        response = self.nodes[0].getblocktemplate(template_request or NORMAL_GBT_REQUEST_PARAMS)
         self.log.info(f"Testing block template: contains {expected_tx_count} transactions, and total weight <= {expected_weight}")
         assert_equal(len(response["transactions"]), expected_tx_count)
         total_weight = sum(transaction["weight"] for transaction in response["transactions"])
@@ -338,8 +338,38 @@ class MiningTest(BitcoinTestFramework):
             expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT,
         )
 
-        self.log.info("Testing custom -blockmaxsize startup option.")
+        self.log.info("Testing getblocktemplate block assembly option overrides.")
         custom_block_size = 10_000
+        block_template = self.verify_block_template(
+            expected_tx_count=2,
+            expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT,
+            template_request={**NORMAL_GBT_REQUEST_PARAMS, "blockmaxsize": custom_block_size},
+        )
+        assert_greater_than_or_equal(custom_block_size, self.get_block_template_accounted_size(block_template))
+
+        custom_block_weight = MAX_BLOCK_WEIGHT - 2000
+        self.verify_block_template(
+            expected_tx_count=11,
+            expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT - 2000,
+            template_request={**NORMAL_GBT_REQUEST_PARAMS, "blockmaxweight": custom_block_weight},
+        )
+
+        block_template = self.nodes[0].getblocktemplate({**NORMAL_GBT_REQUEST_PARAMS, "minfeerate": 10_000})
+        assert_equal(len(block_template["transactions"]), 0)
+
+        assert_raises_rpc_error(
+            -8,
+            "block_max_size (999) is lower than minimum safety value of (1000)",
+            self.nodes[0].getblocktemplate,
+            {**NORMAL_GBT_REQUEST_PARAMS, "blockmaxsize": 999},
+        )
+
+        self.verify_block_template(
+            expected_tx_count=LARGE_TXS_COUNT,
+            expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT,
+        )
+
+        self.log.info("Testing custom -blockmaxsize startup option.")
         self.restart_node(0, extra_args=[f"-blockmaxsize={custom_block_size}"])
         block_template = self.verify_block_template(
             expected_tx_count=2,
@@ -361,7 +391,6 @@ class MiningTest(BitcoinTestFramework):
         assert_equal(self.nodes[0].getmininginfo()["currentblocksize"], accounted_size)
 
         # Test block template creation with custom -blockmaxweight
-        custom_block_weight = MAX_BLOCK_WEIGHT - 2000
         # Reducing the weight by 2000 units will prevent 1 large transaction from fitting into the block.
         self.restart_node(0, extra_args=[f"-blockmaxweight={custom_block_weight}"])
 

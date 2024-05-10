@@ -83,6 +83,7 @@ using interfaces::BlockRef;
 using interfaces::BlockTemplate;
 using interfaces::Mining;
 using node::BlockAssembler;
+using node::BlockCreateOptions;
 using node::GetMinimumTime;
 using node::NodeContext;
 using node::RegenerateCommitments;
@@ -663,9 +664,11 @@ static RPCMethod getblocktemplate()
             {"template_request", RPCArg::Type::OBJ, RPCArg::Optional::NO, "Format of the template",
             {
                 {"mode", RPCArg::Type::STR, /* treat as named arg */ RPCArg::Optional::OMITTED, "This must be set to \"template\", \"proposal\" (see BIP 23), or omitted"},
+                {"blockmaxsize", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "limit returned block to specified size (disables template cache)"},
+                {"blockmaxweight", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "limit returned block to specified weight (disables template cache)"},
                 {"capabilities", RPCArg::Type::ARR, /* treat as named arg */ RPCArg::Optional::OMITTED, "A list of strings",
                 {
-                    {"str", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "client side supported feature, 'longpoll', 'coinbasevalue', 'proposal', 'serverlist', 'workid'"},
+                    {"str", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "client side supported feature, 'longpoll', 'coinbasevalue', 'proposal', 'skip_validity_test', 'serverlist', 'workid'"},
                 }},
                 {"rules", RPCArg::Type::ARR, RPCArg::Optional::NO, "A list of strings",
                 {
@@ -673,6 +676,7 @@ static RPCMethod getblocktemplate()
                     {"str", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "other client side supported softfork deployment"},
                 }},
                 {"longpollid", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "delay processing request until the result would vary significantly from the \"longpollid\" of a prior template"},
+                {"minfeerate", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "only include transactions with a minimum sats/vbyte (disables template cache)"},
                 {"data", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "proposed block data to check, encoded in hexadecimal; valid only for mode=\"proposal\""},
             },
             },
@@ -746,6 +750,10 @@ static RPCMethod getblocktemplate()
     ChainstateManager& chainman = EnsureChainman(node);
     Mining& miner = EnsureMining(node);
 
+    BlockCreateOptions options{node.mining_args.Clamped()};
+    const BlockCreateOptions options_def{options};
+    bool bypass_cache{false};
+
     std::string strMode = "template";
     UniValue lpval = NullUniValue;
     std::set<std::string> setClientRules;
@@ -792,6 +800,33 @@ static RPCMethod getblocktemplate()
             for (unsigned int i = 0; i < aClientRules.size(); ++i) {
                 const UniValue& v = aClientRules[i];
                 setClientRules.insert(v.get_str());
+            }
+        }
+
+        if (!oparam["blockmaxsize"].isNull()) {
+            options.block_max_size = oparam["blockmaxsize"].getInt<uint64_t>();
+        }
+        if (!oparam["blockmaxweight"].isNull()) {
+            options.block_max_weight = oparam["blockmaxweight"].getInt<uint64_t>();
+        }
+        if (!oparam["minfeerate"].isNull()) {
+            options.block_min_fee_rate = CFeeRate{AmountFromValue(oparam["minfeerate"]), COIN /* sat/vB */};
+        }
+        if (auto result{node::CheckMiningOptions(options, /*use_argnames=*/false)}; !result) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, util::ErrorString(result).original);
+        }
+        options = node::FlattenMiningOptions(std::move(options));
+        bypass_cache |= !(options == options_def);
+
+        // NOTE: Intentionally not setting bypass_cache for skip_validity_test since _using_ the cache is fine
+        const UniValue& client_caps = oparam.find_value("capabilities");
+        if (client_caps.isArray()) {
+            for (unsigned int i = 0; i < client_caps.size(); ++i) {
+                const UniValue& v = client_caps[i];
+                if (!v.isStr()) continue;
+                if (v.get_str() == "skip_validity_test") {
+                    options.test_block_validity = false;
+                }
             }
         }
     }
@@ -897,8 +932,19 @@ static RPCMethod getblocktemplate()
     static int64_t time_start;
     static std::unique_ptr<BlockTemplate> block_template;
     if (!pindexPrev || pindexPrev->GetBlockHash() != tip ||
+        bypass_cache ||
         (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - time_start > 5))
     {
+        if (bypass_cache || !options.test_block_validity) {
+            // Create one-off template unrelated to cache
+            const auto tx_update_counter = mempool.GetTransactionsUpdated();
+            CBlockIndex* const local_pindexPrev = chainman.m_blockman.LookupBlockIndex(tip);
+            auto tmpl = miner.createNewBlock2(options);
+            CHECK_NONFATAL(tmpl);
+            return TemplateToJSON(consensusParams, chainman, &*tmpl, local_pindexPrev, setClientRules, tx_update_counter);
+        }
+        CHECK_NONFATAL(options == options_def);
+
         // Clear pindexPrev so future calls make a new block, despite any failures from here on
         pindexPrev = nullptr;
 

@@ -103,6 +103,8 @@ struct BlockCreateOptions {
     bool test_block_validity{true};
 
     BlockCreateOptions Clamped() const;
+
+    friend bool operator==(const BlockCreateOptions& a, const BlockCreateOptions& b) noexcept = default;
 };
 
 struct BlockWaitOptions {
