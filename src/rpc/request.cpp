@@ -144,7 +144,7 @@ AuthCookieResult GenerateAuthCookie(const std::optional<fs::perms>& cookie_perms
     g_generated_cookie = cookie;
     LogInfo("Generated RPC authentication cookie %s\n", fs::PathToString(filepath));
     LogInfo("Permissions used for cookie%s: %s\n",
-              cookie_perms_set_by_arg ? " (set by -rpccookieperms)" : "",
+              (cookie_perms && cookie_perms_set_by_arg) ? " (set by -rpccookieperms)" : "",
               PermsToSymbolicString(fs::status(filepath).permissions()));
 
     user = COOKIEAUTH_USER;
