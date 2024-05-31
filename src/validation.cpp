@@ -1044,6 +1044,66 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         if (!args.m_allow_carveouts) {
             return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "too-long-mempool-chain", error_message);
         }
+
+        // Contracting/payment channels CPFP carve-out:
+        // If the new transaction is relatively small (up to 40k weight)
+        // and has at most one ancestor (ie ancestor limit of 2, including
+        // the new transaction), allow it if its parent has exactly the
+        // descendant limit descendants. The transaction also cannot be TRUC,
+        // as its topology restrictions do not allow a second child.
+        //
+        // This allows protocols which rely on distrusting counterparties
+        // being able to broadcast descendants of an unconfirmed transaction
+        // to be secure by simply only having two immediately-spendable
+        // outputs - one for each counterparty. For more info on the uses for
+        // this, see https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2018-November/016518.html
+        CTxMemPool::Limits cpfp_carve_out_limits{
+            .ancestor_count = 2,
+            .ancestor_size_vbytes = maybe_rbf_limits.ancestor_size_vbytes,
+            .descendant_count = maybe_rbf_limits.descendant_count + 1,
+            .descendant_size_vbytes = maybe_rbf_limits.descendant_size_vbytes + EXTRA_DESCENDANT_TX_SIZE_LIMIT,
+        };
+        if (ws.m_vsize > EXTRA_DESCENDANT_TX_SIZE_LIMIT || ws.m_ptx->version == TRUC_VERSION) {
+            return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "too-long-mempool-chain", error_message);
+        }
+        if (auto ancestors_retry{m_subpackage.m_changeset->CalculateMemPoolAncestors(ws.m_tx_handle, cpfp_carve_out_limits)}) {
+            ws.m_ancestors = std::move(*ancestors_retry);
+        } else {
+            return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "too-long-mempool-chain", error_message);
+        }
+    }
+
+    if (const auto err{SingleTRUCChecks(m_pool, ws.m_ptx, "truc-", reason, ws.m_parents, ws.m_conflicts, ws.m_vsize)}) {
+        // Single transaction contexts only.
+        if (args.m_allow_sibling_eviction && err->second != nullptr) {
+            // We should only be considering where replacement is considered valid as well.
+            Assume(args.m_allow_replacement);
+
+            // Potential sibling eviction. Add the sibling to our list of mempool conflicts to be
+            // included in RBF checks.
+            ws.m_conflicts.insert(err->second->GetHash());
+            // Adding the sibling to m_iters_conflicting here means that it doesn't count towards
+            // RBF Carve Out above. This is correct, since removing to-be-replaced transactions from
+            // the descendant count is done separately in SingleTRUCChecks for TRUC transactions.
+            ws.m_iters_conflicting.insert(m_pool.GetIter(err->second->GetHash()).value());
+            ws.m_sibling_eviction = true;
+            // The sibling will be treated as part of the to-be-replaced set in ReplacementChecks.
+            // Note that we are not checking whether it opts in to replaceability via BIP125 or TRUC
+            // (which is normally done in PreChecks). However, the only way a TRUC transaction can
+            // have a non-TRUC and non-BIP125 descendant is due to a reorg.
+        } else {
+            return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, reason, err->first);
+        }
+    }
+
+    // A transaction that spends outputs that would be replaced by it is invalid. Now
+    // that we have the set of all ancestors we can detect this
+    // pathological case by making sure ws.m_conflicts and ws.m_ancestors don't
+    // intersect.
+    if (const auto err_string{EntriesAndTxidsDisjoint(ws.m_ancestors, ws.m_conflicts, hash)}) {
+        // We classify this as a consensus error because a transaction depending on something it
+        // conflicts with would be inconsistent.
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-spends-conflicting-tx", *err_string);
     }
 
     // We want to detect conflicts in any tx in a package to trigger package RBF logic
@@ -1605,9 +1665,10 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptMultipleTransactionsInternal(con
 
     // At this point we have all in-mempool parents, and we know every transaction's vsize.
     // Run the TRUC checks on the package.
+    std::string reason;
     for (Workspace& ws : workspaces) {
-        if (auto err{PackageTRUCChecks(m_pool, ws.m_ptx, ws.m_vsize, txns, ws.m_parents)}) {
-            package_state.Invalid(PackageValidationResult::PCKG_POLICY, "TRUC-violation", err.value());
+        if (auto err{PackageTRUCChecks(m_pool, ws.m_ptx, ws.m_vsize, "truc-", reason, txns, ws.m_parents)}) {
+            package_state.Invalid(PackageValidationResult::PCKG_POLICY, reason, err.value());
             return PackageMempoolAcceptResult(package_state, {});
         }
     }

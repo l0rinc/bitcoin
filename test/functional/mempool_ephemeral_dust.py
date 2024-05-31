@@ -357,6 +357,10 @@ class EphemeralDustTest(BitcoinTestFramework):
         # Test that dusty tx being reorged back into mempool doesn't invalidate descendants
         # whether they spend dust or not
 
+        # TRUC transactions restriction for ephemeral dust disallows further spends of ancestor chains
+        child_tx = self.wallet.create_self_transfer_multi(utxos_to_spend=sweep_tx["new_utxos"], version=3)
+        assert_raises_rpc_error(-26, "truc-ancestors-toomany", self.nodes[0].sendrawtransaction, child_tx["hex"])
+
         # Mine the parent transaction only while preparing a fork
         fork_blocks = create_empty_fork(self.nodes[0])
         self.generateblock(self.nodes[0], self.wallet.get_address(), [dusty_tx["hex"]], sync_fun=self.no_op)
