@@ -1073,7 +1073,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         }
     }
 
-    if (const auto err{SingleTRUCChecks(m_pool, ws.m_ptx, "truc-", reason, ws.m_parents, ws.m_conflicts, ws.m_vsize)}) {
+    if (const auto err{SingleTRUCChecks(m_pool, ws.m_ptx, "truc-", reason, ignore_rejects, ws.m_parents, ws.m_conflicts, ws.m_vsize)}) {
         // Single transaction contexts only.
         if (args.m_allow_sibling_eviction && err->second != nullptr) {
             // We should only be considering where replacement is considered valid as well.
@@ -1667,7 +1667,7 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptMultipleTransactionsInternal(con
     // Run the TRUC checks on the package.
     std::string reason;
     for (Workspace& ws : workspaces) {
-        if (auto err{PackageTRUCChecks(m_pool, ws.m_ptx, ws.m_vsize, "truc-", reason, txns, ws.m_parents)}) {
+        if (auto err{PackageTRUCChecks(m_pool, ws.m_ptx, ws.m_vsize, "truc-", reason, args.m_ignore_rejects, txns, ws.m_parents)}) {
             package_state.Invalid(PackageValidationResult::PCKG_POLICY, reason, err.value());
             return PackageMempoolAcceptResult(package_state, {});
         }
