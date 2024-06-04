@@ -61,6 +61,22 @@ class MempoolTRUC(BitcoinTestFramework):
             self.nodes[0].submitblock(block.serialize().hex())
         assert_equal(self.nodes[0].getbestblockhash(), fork_blocks[-1].hash_hex)
 
+    def test_truc_policy_option(self):
+        node = self.nodes[0]
+        self.log.info("Test -mempooltruc option parsing")
+        for extra_args, expected_policy in [
+            ([], "enforce"),
+            (["-mempooltruc=reject"], "reject"),
+            (["-mempooltruc=0"], "reject"),
+            (["-mempooltruc=accept"], "accept"),
+            (["-mempooltruc=-enforce"], "accept"),
+            (["-mempooltruc=enforce"], "enforce"),
+            (["-mempooltruc=1"], "enforce"),
+        ]:
+            self.restart_node(0, extra_args=extra_args)
+            assert_equal(node.getmempoolinfo()["truc_policy"], expected_policy)
+        self.restart_node(0)
+
     @cleanup()
     def test_truc_max_vsize(self):
         node = self.nodes[0]
@@ -691,6 +707,7 @@ class MempoolTRUC(BitcoinTestFramework):
         node = self.nodes[0]
         self.wallet = MiniWallet(node)
         self.generate(self.wallet, 200)
+        self.test_truc_policy_option()
         self.test_truc_max_vsize()
         self.test_truc_acceptance()
         self.test_truc_replacement()
