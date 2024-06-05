@@ -105,6 +105,8 @@ uint160 ScriptHashkey(const CScript& script);
 struct entry_time {};
 struct index_by_wtxid {};
 
+class CBlockPolicyEstimator;
+
 /**
  * Information about a mempool transaction.
  */
