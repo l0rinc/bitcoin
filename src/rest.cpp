@@ -1188,6 +1188,7 @@ static const struct {
       {"/rest/tx/", rest_tx},
       {"/rest/block/notxdetails/", rest_block_notxdetails},
       {"/rest/block/", rest_block_extended},
+      {"/rest/blockpart/", rest_block_part},
       {"/rest/blockfilter/", rest_block_filter},
       {"/rest/blockfilterheaders/", rest_filter_header},
       {"/rest/chaininfo", rest_chaininfo},
@@ -1198,6 +1199,7 @@ static const struct {
       {"/rest/deploymentinfo/", rest_deploymentinfo},
       {"/rest/deploymentinfo", rest_deploymentinfo},
       {"/rest/blockhashbyheight/", rest_blockhash_by_height},
+      {"/rest/spenttxouts/", rest_spent_txouts},
 };
 
 void StartREST(const std::any& context)
