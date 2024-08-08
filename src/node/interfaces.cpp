@@ -915,7 +915,7 @@ class BlockTemplateImpl : public BlockTemplate
 {
 public:
     explicit BlockTemplateImpl(BlockCreateOptions create_options,
-                               std::unique_ptr<CBlockTemplate> block_template,
+                               std::shared_ptr<CBlockTemplate> block_template,
                                const NodeContext& node) : m_create_options(std::move(create_options)),
                                                           m_block_template(std::move(block_template)),
                                                           m_node(node)
@@ -987,7 +987,7 @@ public:
 
     const BlockCreateOptions m_create_options;
 
-    const std::unique_ptr<CBlockTemplate> m_block_template;
+    const std::shared_ptr<CBlockTemplate> m_block_template;
 
     bool m_interrupt_wait{false};
     ChainstateManager& chainman() { return *Assert(m_node.chainman); }

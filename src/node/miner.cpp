@@ -121,13 +121,13 @@ void BlockAssembler::resetBlock()
     m_in_block.clear();
 }
 
-std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
+std::shared_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
 {
     const auto time_start{SteadyClock::now()};
 
     resetBlock();
 
-    pblocktemplate.reset(new CBlockTemplate());
+    pblocktemplate = std::make_shared<CBlockTemplate>();
     CBlock* const pblock = &pblocktemplate->block; // pointer for convenience
 
     // Add dummy coinbase tx as first transaction. It is skipped by the
@@ -539,10 +539,10 @@ void InterruptWait(KernelNotifications& kernel_notifications, bool& interrupt_wa
     kernel_notifications.m_tip_block_cv.notify_all();
 }
 
-std::unique_ptr<CBlockTemplate> WaitAndCreateNewBlock(ChainstateManager& chainman,
+std::shared_ptr<CBlockTemplate> WaitAndCreateNewBlock(ChainstateManager& chainman,
                                                       KernelNotifications& kernel_notifications,
                                                       CTxMemPool* mempool,
-                                                      const std::unique_ptr<CBlockTemplate>& block_template,
+                                                      const std::shared_ptr<CBlockTemplate>& block_template,
                                                       const BlockWaitOptions& wait_options,
                                                       const BlockCreateOptions& create_options,
                                                       bool& interrupt_wait)
