@@ -27,6 +27,7 @@ class BlockValidationState;
 class CBlock;
 class CBlockIndex;
 struct CBlockLocator;
+namespace node { struct CBlockTemplate; }
 enum class MemPoolRemovalReason;
 struct RemovedMempoolTransactionInfo;
 struct NewMempoolTransactionInfo;
@@ -158,6 +159,8 @@ protected:
      * has been received and connected to the headers tree, though not validated yet.
      */
     virtual void NewPoWValidBlock(const CBlockIndex *pindex, const std::shared_ptr<const CBlock>& block) {};
+
+    virtual void NewBlockTemplate(const std::shared_ptr<node::CBlockTemplate>& blocktemplate) {}
     /**
      * Notifies the validation interface that it is being unregistered
      */
@@ -235,6 +238,7 @@ public:
     void ChainStateFlushed(const kernel::ChainstateRole&, const CBlockLocator&);
     void BlockChecked(const std::shared_ptr<const CBlock>&, const BlockValidationState&);
     void NewPoWValidBlock(const CBlockIndex *, const std::shared_ptr<const CBlock>&);
+    void NewBlockTemplate(const std::shared_ptr<node::CBlockTemplate>& blocktemplate);
 };
 
 #endif // BITCOIN_VALIDATIONINTERFACE_H

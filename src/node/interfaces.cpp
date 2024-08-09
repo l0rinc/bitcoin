@@ -975,6 +975,7 @@ public:
                                                   m_block_template,
                                                   /*wait_options=*/options,
                                                   /*create_options=*/m_create_options,
+                                                  /*node=*/m_node,
                                                   /*interrupt_wait=*/m_interrupt_wait);
         if (new_template) return std::make_unique<BlockTemplateImpl>(m_create_options, std::move(new_template), m_node);
         return nullptr;
@@ -1052,6 +1053,7 @@ public:
                                                        chainman().ActiveChainstate(),
                                                        m_node.mempool.get(),
                                                        create_options,
+                                                       m_node,
                                                    }.CreateNewBlock(),
                                                    m_node);
     }

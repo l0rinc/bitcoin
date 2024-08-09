@@ -36,6 +36,7 @@
 #include <util/strencodings.h>
 #include <util/translation.h>
 #include <validation.h>
+#include <validationinterface.h>
 #include <versionbits.h>
 
 #include <boost/test/unit_test.hpp>
@@ -58,6 +59,15 @@ using node::BlockCreateOptions;
 using node::FlattenMiningOptions;
 
 namespace miner_tests {
+class NewBlockTemplateCatcher final : public CValidationInterface
+{
+public:
+    std::shared_ptr<node::CBlockTemplate> m_template;
+
+protected:
+    void NewBlockTemplate(const std::shared_ptr<node::CBlockTemplate>& blocktemplate) override { m_template = blocktemplate; }
+};
+
 struct MinerTestingSetup : public TestingSetup {
     void TestPackageSelection(const CScript& scriptPubKey, const std::vector<CTransactionRef>& txFirst) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     void TestBasicMining(const CScript& scriptPubKey, const std::vector<CTransactionRef>& txFirst, int baseheight) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
@@ -93,6 +103,24 @@ struct MinerTestingSetup : public TestingSetup {
 } // namespace miner_tests
 
 BOOST_FIXTURE_TEST_SUITE(miner_tests, MinerTestingSetup)
+
+BOOST_AUTO_TEST_CASE(CreateNewBlock_signals_template)
+{
+    auto catcher{std::make_shared<NewBlockTemplateCatcher>()};
+    m_node.validation_signals->RegisterSharedValidationInterface(catcher);
+
+    auto mining{MakeMining()};
+    auto block_template{mining->createNewBlock({
+        .coinbase_output_script = CScript{} << OP_TRUE,
+    }, /*cooldown=*/false)};
+    BOOST_REQUIRE(block_template);
+
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    BOOST_REQUIRE(catcher->m_template);
+    BOOST_CHECK_EQUAL(catcher->m_template->block.GetHash().ToString(), block_template->getBlock().GetHash().ToString());
+
+    m_node.validation_signals->UnregisterSharedValidationInterface(catcher);
+}
 
 static CFeeRate blockMinFeeRate = CFeeRate(DEFAULT_BLOCK_MIN_TX_FEE);
 
@@ -221,6 +249,7 @@ void MinerTestingSetup::TestPackageSelection(const CScript& scriptPubKey, const 
         m_node.chainman->ActiveChainstate(),
         &tx_mempool,
         MergeMiningOptions(options, m_node.mining_args),
+        m_node,
     }.CreateNewBlock()->m_package_feerates;
     BOOST_CHECK(block_package_feerates.size() == 2);
 

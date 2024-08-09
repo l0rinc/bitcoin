@@ -16,6 +16,7 @@
 #include <consensus/validation.h>
 #include <interfaces/types.h>
 #include <node/blockstorage.h>
+#include <node/context.h>
 #include <node/kernel_notifications.h>
 #include <node/mining_args.h>
 #include <node/mining_types.h>
@@ -99,10 +100,12 @@ void RegenerateCommitments(CBlock& block, ChainstateManager& chainman)
 
 BlockAssembler::BlockAssembler(Chainstate& chainstate,
                                const CTxMemPool* mempool,
-                               BlockCreateOptions options)
+                               Options options,
+                               const NodeContext& node)
     : chainparams{chainstate.m_chainman.GetParams()},
       m_mempool{options.use_mempool ? mempool : nullptr},
       m_chainstate{chainstate},
+      m_node{node},
       m_options{options.Clamped()}
 {
     m_account_block_size = *Assert(m_options.block_max_size) < MAX_BLOCK_SERIALIZED_SIZE;
@@ -243,6 +246,8 @@ std::shared_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
              Ticks<MillisecondsDouble>(time_1 - time_start),
              Ticks<MillisecondsDouble>(time_2 - time_1),
              Ticks<MillisecondsDouble>(time_2 - time_start));
+
+    if (m_node.validation_signals) m_node.validation_signals->NewBlockTemplate(pblocktemplate);
 
     return std::move(pblocktemplate);
 }
@@ -545,6 +550,7 @@ std::shared_ptr<CBlockTemplate> WaitAndCreateNewBlock(ChainstateManager& chainma
                                                       const std::shared_ptr<CBlockTemplate>& block_template,
                                                       const BlockWaitOptions& wait_options,
                                                       const BlockCreateOptions& create_options,
+                                                      const NodeContext& node,
                                                       bool& interrupt_wait)
 {
     // Delay calculating the current template fees, just in case a new block
@@ -605,7 +611,8 @@ std::shared_ptr<CBlockTemplate> WaitAndCreateNewBlock(ChainstateManager& chainma
             auto new_tmpl{BlockAssembler{
                 chainman.ActiveChainstate(),
                 mempool,
-                create_options
+                create_options,
+                node,
                 }.CreateNewBlock()};
 
             // If the tip changed, return the new template regardless of its fees.
