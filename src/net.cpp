@@ -2567,6 +2567,11 @@ bool CConnman::MultipleManualOrFullOutboundConns(Network net) const
     return m_network_conn_counts[net] > 1;
 }
 
+bool CConnman::DisableV1OnClearnet(Network net) const
+{
+    return disable_v1conn_clearnet && (net == NET_IPV4 || net == NET_IPV6);
+}
+
 bool CConnman::MaybePickPreferredNetwork(std::optional<Network>& network)
 {
     AssertLockNotHeld(m_nodes_mutex);
