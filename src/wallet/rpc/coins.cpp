@@ -204,8 +204,6 @@ RPCMethod getbalance()
 
     bool avoid_reuse = GetAvoidReuseFlag(*pwallet, request.params[3]);
 
-    const auto bal = GetBalance(*pwallet, min_depth, avoid_reuse);
-
     if (dummy_value) {
         isminefilter filter = ISMINE_SPENDABLE;
         if (include_watchonly) filter = filter | ISMINE_WATCH_ONLY;
@@ -215,6 +213,9 @@ RPCMethod getbalance()
     if (!request.params[1].isNull()) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "getbalance minconf option is only currently supported if dummy is set to \"*\"");
     }
+
+    const auto bal = GetBalance(*pwallet, min_depth, avoid_reuse);
+
     return ValueFromAmount(bal.m_mine_trusted + (include_watchonly ? bal.m_watchonly_trusted : 0));
 },
     };
