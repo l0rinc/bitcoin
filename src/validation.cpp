@@ -2564,16 +2564,16 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // TODO: Remove BIP30 checking from block height 1,983,702 on, once we have a
     // consensus change that ensures coinbases at those heights cannot
     // duplicate earlier coinbases.
-    if (fEnforceBIP30 || pindex->nHeight >= BIP34_IMPLIES_BIP30_LIMIT) {
-        for (const auto& tx : block.vtx) {
-            for (size_t o = 0; o < tx->vout.size(); o++) {
-                if (view.HaveCoin(COutPoint(tx->GetHash(), o))) {
-                    LogPrintf("ERROR: ConnectBlock(): tried to overwrite transaction\n");
-                    return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-BIP30");
-                }
-            }
-        }
-    }
+//    if (fEnforceBIP30 || pindex->nHeight >= BIP34_IMPLIES_BIP30_LIMIT) {
+//        for (const auto& tx : block.vtx) {
+//            for (size_t o = 0; o < tx->vout.size(); o++) {
+//                if (view.HaveCoin(COutPoint(tx->GetHash(), o))) {
+//                    LogPrintf("ERROR: ConnectBlock(): tried to overwrite transaction\n");
+//                    return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-BIP30");
+//                }
+//            }
+//        }
+//    }
 
     // Enforce BIP68 (sequence locks)
     int nLockTimeFlags = 0;
