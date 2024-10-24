@@ -30,18 +30,51 @@ BOOST_AUTO_TEST_CASE(dbwrapper)
 {
     // Perform tests both obfuscated and non-obfuscated.
     for (const bool obfuscate : {false, true}) {
-        fs::path ph = m_args.GetDataDirBase() / (obfuscate ? "dbwrapper_obfuscate_true" : "dbwrapper_obfuscate_false");
-        CDBWrapper dbw({.path = ph, .cache_bytes = 1 << 20, .memory_only = true, .wipe_data = false, .obfuscate = obfuscate});
-        uint8_t key{'k'};
-        uint256 in = m_rng.rand256();
-        uint256 res;
+        constexpr size_t CACHE_SIZE{1_MiB};
+        const fs::path path{m_args.GetDataDirBase() / "dbwrapper"};
 
-        // Ensure that we're doing real obfuscation when obfuscate=true
-        BOOST_CHECK(obfuscate != is_null_key(dbwrapper_private::GetObfuscateKey(dbw)));
+        std::vector<uint8_t> obfuscation_key{};
+        std::vector<std::pair<uint8_t, uint256>> key_values{};
 
-        BOOST_CHECK(dbw.Write(key, in));
-        BOOST_CHECK(dbw.Read(key, res));
-        BOOST_CHECK_EQUAL(res.ToString(), in.ToString());
+        // Write values
+        {
+            CDBWrapper dbw{{.path = path, .cache_bytes = CACHE_SIZE, .wipe_data = true, .obfuscate = obfuscate}};
+            BOOST_CHECK_EQUAL(obfuscate, !dbw.IsEmpty());
+
+            // Ensure that we're doing real obfuscation when obfuscate=true
+            BOOST_CHECK(obfuscate != is_null_key(dbwrapper_private::GetObfuscateKey(dbw)));
+
+            obfuscation_key = dbwrapper_private::GetObfuscateKey(dbw);
+
+            for (uint8_t k{0}; k < 10; ++k) {
+                uint8_t key{k};
+                uint256 value{m_rng.rand256()};
+                BOOST_CHECK(dbw.Write(key, value));
+                key_values.emplace_back(key, value);
+            }
+        }
+
+        // Verify that the obfuscation key is never obfuscated
+        {
+            CDBWrapper dbw{{.path = path, .cache_bytes = CACHE_SIZE, .obfuscate = false}};
+            BOOST_CHECK(obfuscation_key == dbwrapper_private::GetObfuscateKey(dbw));
+        }
+
+        // Read back the values
+        {
+            CDBWrapper dbw{{.path = path, .cache_bytes = CACHE_SIZE, .obfuscate = obfuscate}};
+
+            // Ensure obfuscation is read back correctly
+            BOOST_CHECK(obfuscate != is_null_key(dbwrapper_private::GetObfuscateKey(dbw)));
+            BOOST_CHECK(obfuscation_key == dbwrapper_private::GetObfuscateKey(dbw));
+
+            // Verify all written values
+            for (const auto& [key, expected_value] : key_values) {
+                uint256 read_value{};
+                BOOST_CHECK(dbw.Read(key, read_value));
+                BOOST_CHECK_EQUAL(read_value.ToString(), expected_value.ToString());
+            }
+        }
     }
 }
 
