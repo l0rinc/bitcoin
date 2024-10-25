@@ -1,79 +1,394 @@
-Bitcoin Core integration/staging tree
-=====================================
+## Bitcoin Core contributions
 
-https://bitcoincore.org
+### Key Bitcoin Core Pull Requests
 
-For an immediately usable, binary version of the Bitcoin Core software, see
-https://bitcoincore.org/en/download/.
+Since February 2024, I have authored [various pull requests](https://github.com/bitcoin/bitcoin/pulls?q=author%3Al0rinc+is%3Amerged+sort%3Aupdated-desc) in Bitcoin Core, and also reviewed other PRs via review, testing, and follow-up PRs. Highlights include:
+* Optimizations (achieving a >20% cumulative IBD speedup)
+  * [`precalculate SipHash constant salt XORs`](https://github.com/bitcoin/bitcoin/pull/30442)
+  * [`[IBD] coins: reduce lookups in dbcache layer propagation`](https://github.com/bitcoin/bitcoin/pull/33602)
+  * [`merkle: pre-reserve leaves to prevent reallocs with odd vtx count`](https://github.com/bitcoin/bitcoin/pull/32497)
+  * [`[IBD] batch block reads/writes during AutoFile serialization`](https://github.com/bitcoin/bitcoin/pull/31551)
+  * [`[IBD] prevector: store P2WSH/P2TR/P2PK scripts inline`](https://github.com/bitcoin/bitcoin/pull/32279)
+  * [`[IBD] multi-byte block obfuscation`](https://github.com/bitcoin/bitcoin/pull/31144#issue-2610689777)
+  * [`[IBD] coins: increase default UTXO flush batch size to 32 MiB`](https://github.com/bitcoin/bitcoin/pull/31645)
+  * [`[IBD] specialize block serialization`](https://github.com/bitcoin/bitcoin/pull/31868)
+  * [`[IBD] specialize CheckBlock's input & coinbase checks`](https://github.com/bitcoin/bitcoin/pull/31682)
+  * [`optimization: Moved repeated -printpriority fetching out of AddToBlock`](https://github.com/bitcoin/bitcoin/pull/30324#pullrequestreview-2150128035)
+  * [`optimization: Reduce cache lookups in CCoinsViewCache::FetchCoin`](https://github.com/bitcoin/bitcoin/pull/30326#pullrequestreview-2161585202)
+  * [`optimization: reserve memory allocation for transaction inputs/outputs`](https://github.com/bitcoin/bitcoin/pull/30093#discussion_r1599564471)
+  * [`log: avoid collecting GetSerializeSize data when compact block logging is disabled`](https://github.com/bitcoin/bitcoin/pull/33738)
+  * [`net processing: Add ibd check before processing block for txdownloadman`](https://github.com/bitcoin/bitcoin/pull/34054)
 
-What is Bitcoin Core?
----------------------
+* Refactoring and code quality improvements
+  * [`merkle: migrate path arg to reference and drop unused args`](https://github.com/bitcoin/bitcoin/pull/33805)
+  * [`script: remove dead code in CountWitnessSigOps`](https://github.com/bitcoin/bitcoin/pull/33786)
+  * [`refactor: remove dead branches in SingletonClusterImpl`](https://github.com/bitcoin/bitcoin/pull/33768)
+  * [`refactor: Allow CScript's operator<< to accept spans, not just vectors`](https://github.com/bitcoin/bitcoin/pull/30765/files#diff-e20339c384d6f19b519ea2de7f4ba4fed92a36d66a80f0339b09927c3fa38d6dR73-R77)
+  * [`refactor: Preallocate result in TryParseHex to avoid resizing`](https://github.com/bitcoin/bitcoin/pull/29458#pullrequestreview-1898513246)
+  * [`refactor: Reduce memory copying operations in bech32 encoding`](https://github.com/bitcoin/bitcoin/pull/29607#issuecomment-2105655507)
+  * [`refactor: prohibit direct flags access in CCoinsCacheEntry and remove invalid tests`](https://github.com/bitcoin/bitcoin/pull/30906)
+  * [`refactor: use original log string when no suspicious chars found`](https://github.com/bitcoin/bitcoin/pull/31923)
+  * [`refactor: modernize outdated trait patterns using helper aliases (C++14/C++17)`](https://github.com/bitcoin/bitcoin/pull/31904)
+  * [`refactor: inline UndoWriteToDisk and WriteBlockToDisk to reduce serialization calls`](https://github.com/bitcoin/bitcoin/pull/31490)
+  * [`refactor: migrate bool GetCoin to return optional<Coin>`](https://github.com/bitcoin/bitcoin/pull/30849/files#diff-a8f78513bc27f9bf679eead54819a8e5be720401c6ae40858da226a66ca002e2R149-R154)
+  * [`coins: warn on shutdown for big UTXO set flushes`](https://github.com/bitcoin/bitcoin/pull/31534)
+  * [`log: print reason when writing chainstate`](https://github.com/bitcoin/bitcoin/pull/32404)
+  * [`refactor: reenable implicit-integer-sign-change check for serialize.h`](https://github.com/bitcoin/bitcoin/pull/32296)
+  * [`refactor: unify container presence checks`](https://github.com/bitcoin/bitcoin/pull/33192)
+  * [`refactor: enable readability-container-contains clang-tidy rule`](https://github.com/bitcoin/bitcoin/pull/34095)
+  * [`kernel: revert accidentally removed copyright header`](https://github.com/bitcoin/bitcoin/pull/34105)
+  * [`blocks: force hash validations on disk read`](https://github.com/bitcoin/bitcoin/pull/32638)
+  * [`coins: replace manual CDBBatch size estimation with LevelDB's native ApproximateSize`](https://github.com/bitcoin/bitcoin/pull/32185)
+  * [`refactor: throw std::string_view instead of const char* in constexpr/consteval functions`](https://github.com/bitcoin/bitcoin/pull/33569)
+  * [`log: print every script verification state change`](https://github.com/bitcoin/bitcoin/pull/33336)
+  * [`blocks: add -reobfuscate-blocks arg to xor existing blk/rev on startup`](https://github.com/bitcoin/bitcoin/pull/33324)
+  * [`refactor: inline constant return values from dbwrapper write methods`](https://github.com/bitcoin/bitcoin/pull/33042)
+  * [`coins: use number of dirty cache entries in flush warnings/logs`](https://github.com/bitcoin/bitcoin/pull/33512)
+  * [`validation: do not wipe utxo cache for stats/scans/snapshots`](https://github.com/bitcoin/bitcoin/pull/33680)
+  * [`coins: fix cachedCoinsUsage accounting in CCoinsViewCache`](https://github.com/bitcoin/bitcoin/pull/32313)
+  * [`blocks: avoid recomputing block header hash in ReadBlock`](https://github.com/bitcoin/bitcoin/pull/32487)
+  * [`mempool: Avoid needless vtx iteration during IBD`](https://github.com/bitcoin/bitcoin/pull/32827)
+  * [`refactor: avoid possible UB from std::distance for nullptr args`](https://github.com/bitcoin/bitcoin/pull/34161)
+  * [`policy/refactor: remove constant parameter from IsWellFormedPackage`](https://github.com/bitcoin/bitcoin/pull/34177)
+  * [`coins/refactor: enforce GetCoin() returns only unspent coins`](https://github.com/bitcoin/bitcoin/pull/34207)
+  * [`validation: cache tip recency for lock-free IsInitialBlockDownload()`](https://github.com/bitcoin/bitcoin/pull/34253)
+  * [`validation: follow-up nits for lock-free IsInitialBlockDownload()`](https://github.com/bitcoin/bitcoin/pull/34443)
+  * [`rpc: make uptime monotonic across NTP jumps`](https://github.com/bitcoin/bitcoin/pull/34328)
+  * [`rpc: uptime should begin on application start`](https://github.com/bitcoin/bitcoin/pull/34437)
+  * [`psbt: Fix PSBTInputSignedAndVerified bounds assert`](https://github.com/bitcoin/bitcoin/pull/34272)
+  * [`net: avoid unconditional privatebroadcast logging (+ warn for debug logs)`](https://github.com/bitcoin/bitcoin/pull/34267)
+  * [`ThreadPool follow-ups, proactive shutdown and HasReason dependency cleanup`](https://github.com/bitcoin/bitcoin/pull/34562)
 
-Bitcoin Core connects to the Bitcoin peer-to-peer network to download and fully
-validate blocks and transactions. It also includes a wallet and graphical user
-interface, which can be optionally built.
+* Test and infrastructure changes
+  * [`randomenv: Fix MinGW dllimport warning for environ`](https://github.com/bitcoin/bitcoin/pull/33570)
+  * [`log: reduce excessive "rolling back/forward" messages during block replay`](https://github.com/bitcoin/bitcoin/pull/33443)
+  * [`build: optimize .h generation in GenerateHeaderFrom{Raw,Json}.cmake`](https://github.com/bitcoin/bitcoin/pull/30888#pullrequestreview-2302909740)
+  * [`test: support std::optional in BOOST_CHECK_* and increase FromUserHex fuzz feature coverage`](https://github.com/bitcoin/bitcoin/pull/30618#pullrequestreview-2277400199)
+  * [`test: Validate oversized transactions or without inputs`](https://github.com/bitcoin/bitcoin/pull/29862#discussion_r1643298389)
+  * [`test: generalize HasReason and use it in FailFmtWithError`](https://github.com/bitcoin/bitcoin/pull/30921)
+  * [`fuzz: exercise ComputeMerkleRoot without mutated parameter`](https://github.com/bitcoin/bitcoin/pull/34050)
+  * [`fuzz: provide more realistic values to the base58(check) decoders`](https://github.com/bitcoin/bitcoin/pull/31917)
+  * [`build: Use character literals for generated json headers to avoid narrowing`](https://github.com/bitcoin/bitcoin/pull/31547)
+  * [`test: avoid stack overflow in FindChallenges via manual iteration`](https://github.com/bitcoin/bitcoin/pull/32351)
+  * [`test/refactor: use test deque to avoid quadratic iteration`](https://github.com/bitcoin/bitcoin/pull/33313)
+  * [`qa: Require --exclude for each excluded test`](https://github.com/bitcoin/bitcoin/pull/34168)
+  * [`bench/test: clarify merkle bench and witness test intent`](https://github.com/bitcoin/bitcoin/pull/34376)
+  * [`ci: remove commit count limit from test-each-commit and fail fast`](https://github.com/bitcoin/bitcoin/pull/34383)
+  * [`consensus/test/doc: cover errors in CheckTxInputs with unit tests`](https://github.com/bitcoin/bitcoin/pull/34469)
+  * [`fuzz: keep coins_view fuzzers within caller contracts`](https://github.com/bitcoin/bitcoin/pull/34655)
 
-Further information about Bitcoin Core is available in the [doc folder](/doc).
+* Documentation and usability changes
+  * [`coins: warn on oversized -dbcache`](https://github.com/bitcoin/bitcoin/pull/33333)
+  * [`doc: update documentation and scripts related to build directories`](https://github.com/bitcoin/bitcoin/pull/30741#pullrequestreview-2268432242)
+  * [`doc: fix a few likely documentation typos related to CMake migration`](https://github.com/bitcoin/bitcoin/pull/30734)
+  * [`doc: replace -? with -h and -help`](https://github.com/bitcoin/bitcoin/pull/31118#pullrequestreview-2381587440)
+  * [`doc: Fix invalid txid in gettransaction RPC example`](https://github.com/bitcoin/bitcoin/pull/31610)
+  * [`doc: shallow clone qa-assets`](https://github.com/bitcoin/bitcoin/pull/32083)
+  * [`doc: update translation generation cmake example`](https://github.com/bitcoin/bitcoin/pull/31731)
+  * [`stabilize translations by reverting old ids by text content`](https://github.com/bitcoin/bitcoin/pull/33270)
+  * [`assumevalid: log every script validation state change`](https://github.com/bitcoin/bitcoin/pull/32975)
+  * [`log: show reindex progress in ImportBlocks`](https://github.com/bitcoin/bitcoin/pull/33353)
+  * [`doc: fix arg name hints so bugprone can validate them`](https://github.com/bitcoin/bitcoin/pull/34397)
+  * [`doc: clarify confusing git range-diff add/delete output`](https://github.com/bitcoin/bitcoin/pull/34656)
 
-License
--------
+### Appendix
 
-Bitcoin Core is released under the terms of the MIT license. See [COPYING](COPYING) for more
-information or see https://opensource.org/license/MIT.
+<details>
+<summary>225 Merged Commits</summary>
 
-Development Process
--------------------
+> git --no-pager log upstream/master --author="lorinc" --no-merges --pretty=format:"%h %ad %s" --date=format:"%Y-%m-%d" --abbrev=10
 
-The `master` branch is regularly built (see `doc/build-*.md` for instructions) and tested, but it is not guaranteed to be
-completely stable. [Tags](https://github.com/bitcoin/bitcoin/tags) are created
-regularly from release branches to indicate new official, stable release versions of Bitcoin Core.
+* [2026-02-23 doc: clarify `git range-diff` add/delete output](https://github.com/bitcoin/bitcoin/commit/45133c589a)
+* [2026-02-22 util: introduce `TrySub` to prevent unsigned underflow](https://github.com/bitcoin/bitcoin/commit/b8fa6f0f70)
+* [2026-02-22 fuzz: prevent invalid `FRESH` entries and surface `BatchWrite` errors](https://github.com/bitcoin/bitcoin/commit/3281824ecf)
+* [2026-02-22 fuzz: make `AddCoins` query view for overwrites](https://github.com/bitcoin/bitcoin/commit/d7e0d510f2)
+* [2026-02-22 fuzz: avoid invalid `AddCoin` overwrites](https://github.com/bitcoin/bitcoin/commit/780f460635)
+* [2026-02-20 Add functional test exercising tx downloadman recently confirmed filter](https://github.com/bitcoin/bitcoin/commit/ce8b692897)
+* [2026-02-17 test: cleanup, block threads via semaphore instead of shared_future](https://github.com/bitcoin/bitcoin/commit/9ff1e82e7d)
+* [2026-02-10 test: cleanup, use HasReason in threadpool_tests.cpp](https://github.com/bitcoin/bitcoin/commit/ce2a984ee3)
+* [2026-02-03 ci: fail fast in test-each-commit script](https://github.com/bitcoin/bitcoin/commit/eb510f8678)
+* [2026-02-02 consensus/doc: explain `GetValueOut()` precondition](https://github.com/bitcoin/bitcoin/commit/8c03318387)
+* [2026-01-31 consensus/test: add out-of-range output unit tests for `CTransaction::GetValueOut`](https://github.com/bitcoin/bitcoin/commit/232a2bce90)
+* [2026-01-31 consensus/test: add `MoneyRange` unit tests for `CheckTxInputs`](https://github.com/bitcoin/bitcoin/commit/aa87aae14f)
+* [2026-01-31 consensus/doc: explain unreachable `bad-txns-fee-outofrange` check](https://github.com/bitcoin/bitcoin/commit/82ef92c8d0)
+* [2026-01-29 validation: follow-up nits for lock-free `IsInitialBlockDownload()`](https://github.com/bitcoin/bitcoin/commit/eeb4d28148)
+* [2026-01-28 fix: uptime RPC returns 0 on first call](https://github.com/bitcoin/bitcoin/commit/e67a676df9)
+* [2026-01-26 ci: remove commit count limit from `test-each-commit`](https://github.com/bitcoin/bitcoin/commit/04c4d71008)
+* [2026-01-24 doc: fix invalid arg name hints for bugprone validation](https://github.com/bitcoin/bitcoin/commit/a73a3ec553)
+* [2026-01-21 bench/test: clarify merkle bench and witness test intent](https://github.com/bitcoin/bitcoin/commit/8b9d30e3fa)
+* [2026-01-20 coins: replace `std::distance` with unambiguous pointer subtraction](https://github.com/bitcoin/bitcoin/commit/477c5504e0)
+* [2026-01-19 util: add `TicksSeconds`](https://github.com/bitcoin/bitcoin/commit/a9440b1595)
+* [2026-01-19 rpc: make `uptime` monotonic across NTP jumps](https://github.com/bitcoin/bitcoin/commit/14f99cfe53)
+* [2026-01-13 psbt: Fix `PSBTInputSignedAndVerified` bounds `assert`](https://github.com/bitcoin/bitcoin/commit/2f5b1c5f80)
+* [2026-01-13 net: move `privatebroadcast` logs to debug category](https://github.com/bitcoin/bitcoin/commit/31b771a942)
+* [2026-01-13 init: log that additional logs may contain privacy-sensitive information](https://github.com/bitcoin/bitcoin/commit/c7028d3368)
+* [2026-01-13 doc: fix `-logips` description to clarify that non-debug logs can also contain IP addresses](https://github.com/bitcoin/bitcoin/commit/b39291f4cd)
+* [2026-01-12 validation: invert `m_cached_finished_ibd` to `m_cached_is_ibd`](https://github.com/bitcoin/bitcoin/commit/8d531c6210)
+* [2026-01-11 validation: make `IsInitialBlockDownload()` lock-free](https://github.com/bitcoin/bitcoin/commit/557b41a38c)
+* [2026-01-11 test: cover IBD exit conditions](https://github.com/bitcoin/bitcoin/commit/8be54e3b19)
+* [2026-01-11 chain: add `CChain::IsTipRecent` helper](https://github.com/bitcoin/bitcoin/commit/b9c0ab3b75)
+* [2026-01-03 txdb: assert `CCoinsViewDB::GetCoin` only returns unspent coins](https://github.com/bitcoin/bitcoin/commit/ee1e40f580)
+* [2025-12-28 policy: remove constant parameter from `IsWellFormedPackage`](https://github.com/bitcoin/bitcoin/commit/658d38106a)
+* [2025-12-18 refactor: enable `readability-container-contains` clang-tidy rule](https://github.com/bitcoin/bitcoin/commit/1e94e562f7)
+* [2025-12-18 kernel: revert accidentally removed copyright header](https://github.com/bitcoin/bitcoin/commit/85314dc0bf)
+* [2025-12-18 Fix compilation for old Boost versions](https://github.com/bitcoin/bitcoin/commit/fd9f1accbd)
+* [2025-12-11 fuzz: exercise `ComputeMerkleRoot` without mutated parameter](https://github.com/bitcoin/bitcoin/commit/7e9de20c0c)
+* [2025-11-22 validation: pre-reserve leaves to prevent reallocs with odd vtx count](https://github.com/bitcoin/bitcoin/commit/3dd815f048)
+* [2025-11-22 test: adjust `ComputeMerkleRoot` tests](https://github.com/bitcoin/bitcoin/commit/f0a2183108)
+* [2025-11-06 merkle: remove unused `mutated` arg from `BlockWitnessMerkleRoot`](https://github.com/bitcoin/bitcoin/commit/24ed820d4f)
+* [2025-11-05 merkle: remove unused `proot` and `pmutated` args from `MerkleComputation`](https://github.com/bitcoin/bitcoin/commit/63d640fa6a)
+* [2025-11-05 merkle: migrate `path` arg of `MerkleComputation` to a reference](https://github.com/bitcoin/bitcoin/commit/be270551df)
+* [2025-11-04 refactor: remove dead code in `CountWitnessSigOps`](https://github.com/bitcoin/bitcoin/commit/24bcad3d4d)
+* [2025-11-03 refactor: remove dead branches in `SingletonClusterImpl`](https://github.com/bitcoin/bitcoin/commit/2d23820ee1)
+* [2025-11-01 refactor: rename `FlushStateMode::ALWAYS` to `FORCE_FLUSH`](https://github.com/bitcoin/bitcoin/commit/7099e93d0a)
+* [2025-10-31 refactor: rename `CTransaction::GetTotalSize` to signal that it's not cached](https://github.com/bitcoin/bitcoin/commit/1658b8f82b)
+* [2025-10-31 log,net: avoid `ComputeTotalSize` when logging is disabled](https://github.com/bitcoin/bitcoin/commit/babfda332b)
+* [2025-10-31 log,blocks: avoid `ComputeTotalSize` and `GetHash` work when logging is disabled](https://github.com/bitcoin/bitcoin/commit/969c840db5)
+* [2025-10-07 randomenv: Fix MinGW dllimport warning for `environ`](https://github.com/bitcoin/bitcoin/commit/9610b0d1e2)
+* [2025-09-30 refactor: extract shared `SipHash` state into `SipHashState`](https://github.com/bitcoin/bitcoin/commit/6eb5ba5691)
+* [2025-09-30 optimization: migrate `SipHashUint256` to `PresaltedSipHasher`](https://github.com/bitcoin/bitcoin/commit/9ca52a4cbe)
+* [2025-09-30 optimization: cache `PresaltedSipHasher` in `CBlockHeaderAndShortTxIDs`](https://github.com/bitcoin/bitcoin/commit/118d22ddb4)
+* [2025-09-30 fuzz: call `EmplaceCoinInternalDANGER` as well in `SimulationTest`](https://github.com/bitcoin/bitcoin/commit/7e52b1b945)
+* [2025-09-19 test: split out `system_ram_tests` to signal when total ram cannot be determined](https://github.com/bitcoin/bitcoin/commit/56791b5829)
+* [2025-09-19 log: reduce excessive messages during block replay](https://github.com/bitcoin/bitcoin/commit/1fc7a81f1f)
+* [2025-09-18 log: split assumevalid ancestry-failure-reason message](https://github.com/bitcoin/bitcoin/commit/45bd891465)
+* [2025-09-16 log: reword `signature validations` to `script verification` in `assumevalid` log](https://github.com/bitcoin/bitcoin/commit/91ac64b0a6)
+* [2025-09-14 test: add assumevalid scenarios scaffold](https://github.com/bitcoin/bitcoin/commit/4fad4e992c)
+* [2025-09-14 system: add helper for fetching total system memory](https://github.com/bitcoin/bitcoin/commit/6c720459be)
+* [2025-09-14 refactor: untangle assumevalid decision branches](https://github.com/bitcoin/bitcoin/commit/f2ea6f04e7)
+* [2025-09-07 validation: log initial script verification state](https://github.com/bitcoin/bitcoin/commit/9bc298556c)
+* [2025-09-07 log: separate script verification reasons](https://github.com/bitcoin/bitcoin/commit/6c13a38ab5)
+* [2025-09-06 coins: warn on oversized -dbcache](https://github.com/bitcoin/bitcoin/commit/168360f4ae)
+* [2025-09-04 validation: don't reallocate cache for short-lived CCoinsViewCache](https://github.com/bitcoin/bitcoin/commit/0ac969cddf)
+* [2025-09-04 test/refactor: use test deque to avoid quadratic iteration](https://github.com/bitcoin/bitcoin/commit/75e6984ec8)
+* [2025-09-01 coins: reduce lookups in dbcache layer propagation](https://github.com/bitcoin/bitcoin/commit/c8f5e446dc)
+* [2025-09-01 clang-format: regenerate configs](https://github.com/bitcoin/bitcoin/commit/13f36c020f)
+* [2025-08-27 refactor: Extract default batch size into kernel](https://github.com/bitcoin/bitcoin/commit/8bbb7b8bf8)
+* [2025-08-27 coins: increase default `dbbatchsize` to 32 MiB](https://github.com/bitcoin/bitcoin/commit/b6f8c48946)
+* [2025-08-19 doc: unify `datacarriersize` warning with release notes](https://github.com/bitcoin/bitcoin/commit/2885bd0e1c)
+* [2025-08-14 refactor: unify container presence checks - trivial counts](https://github.com/bitcoin/bitcoin/commit/039307554e)
+* [2025-08-07 test: use local `CBlockIndex` in block read hash mismatch test to avoid data race](https://github.com/bitcoin/bitcoin/commit/cb173b8e93)
+* [2025-07-30 refactor: unify container presence checks - non-trivial counts](https://github.com/bitcoin/bitcoin/commit/d9319b06cf)
+* [2025-07-30 refactor: unify container presence checks - find](https://github.com/bitcoin/bitcoin/commit/8bb9219b63)
+* [2025-07-24 test: add coverage for -netinfo header and local services](https://github.com/bitcoin/bitcoin/commit/721a051320)
+* [2025-07-23 doc: unify `developer-notes` and `productivity` header styles](https://github.com/bitcoin/bitcoin/commit/26a3730711)
+* [2025-07-23 doc: remove manual TOCs](https://github.com/bitcoin/bitcoin/commit/ddab466e0d)
+* [2025-07-23 doc: fix a few obvious typos in the affected files](https://github.com/bitcoin/bitcoin/commit/ca38cf701d)
+* [2025-07-22 test: merge xor_roundtrip_random_chunks and xor_bytes_reference](https://github.com/bitcoin/bitcoin/commit/a17d8202c3)
+* [2025-07-22 test: make `obfuscation_serialize` more thorough](https://github.com/bitcoin/bitcoin/commit/2dea045425)
+* [2025-07-22 refactor: write `Obfuscation` object when new key is generated in dbwrapper](https://github.com/bitcoin/bitcoin/commit/13f00345c0)
+* [2025-07-22 refactor: standardize obfuscation memory alignment](https://github.com/bitcoin/bitcoin/commit/86e3a0a8cb)
+* [2025-07-22 refactor: simplify `Obfuscation::HexKey`](https://github.com/bitcoin/bitcoin/commit/298bf95105)
+* [2025-07-22 refactor: rename `OBFUSCATION_KEY_KEY`](https://github.com/bitcoin/bitcoin/commit/e5b1b7c557)
+* [2025-07-22 refactor: inline constant return value of `TxIndex::DB::WriteTxs`](https://github.com/bitcoin/bitcoin/commit/d1847cf5b5)
+* [2025-07-22 refactor: inline constant return value of `CDBWrapper::WriteBatch`](https://github.com/bitcoin/bitcoin/commit/50b63a5698)
+* [2025-07-22 refactor: inline constant return value of `CDBWrapper::Write`](https://github.com/bitcoin/bitcoin/commit/cdab9480e9)
+* [2025-07-22 refactor: inline constant return value of `CDBWrapper::Erase` and `BlockTreeDB::WriteReindexing`](https://github.com/bitcoin/bitcoin/commit/e030240e90)
+* [2025-07-22 refactor: inline constant return value of `BlockTreeDB::WriteBatchSync` and `BlockManager::WriteBlockIndexDB` and `BlockTreeDB::WriteFlag`](https://github.com/bitcoin/bitcoin/commit/743abbcbde)
+* [2025-07-21 refactor: modernize `CScriptBase` definition](https://github.com/bitcoin/bitcoin/commit/65ac7f6d4d)
+* [2025-07-19 test: revive `getcoinscachesizestate`](https://github.com/bitcoin/bitcoin/commit/554befd873)
+* [2025-07-19 refactor: modernize `LargeCoinsCacheThreshold`](https://github.com/bitcoin/bitcoin/commit/64ed0fa6b7)
+* [2025-07-19 refactor: extract `LargeCoinsCacheThreshold` from `GetCoinsCacheSizeState`](https://github.com/bitcoin/bitcoin/commit/1b40dc02a6)
+* [2025-07-16 test: make sure dbwrapper obfuscation key is never obfuscated](https://github.com/bitcoin/bitcoin/commit/a5141cd39e)
+* [2025-07-16 test: compare util::Xor with randomized inputs against simple impl](https://github.com/bitcoin/bitcoin/commit/618a30e326)
+* [2025-07-15 refactor: commit to 8 byte obfuscation keys](https://github.com/bitcoin/bitcoin/commit/54ab0bd64c)
+* [2025-07-15 random: add fixed-size `std::array` generation](https://github.com/bitcoin/bitcoin/commit/7aa557a37b)
+* [2025-07-14 assumevalid: log every script validation state change](https://github.com/bitcoin/bitcoin/commit/fab2980bdc)
+* [2025-07-05 refactor: move `util::Xor` to `Obfuscation().Xor`](https://github.com/bitcoin/bitcoin/commit/377aab8e5a)
+* [2025-07-05 refactor: encapsulate `vector`/`array` keys into `Obfuscation`](https://github.com/bitcoin/bitcoin/commit/478d40afc6)
+* [2025-07-02 optimization: migrate fixed-size obfuscation from `std::vector<std::byte>` to `uint64_t`](https://github.com/bitcoin/bitcoin/commit/e7114fc6dc)
+* [2025-06-29 mempool: Avoid expensive loop in `removeForBlock` during IBD](https://github.com/bitcoin/bitcoin/commit/41ad2be434)
+* [2025-06-10 logs: show reindex progress in `ImportBlocks`](https://github.com/bitcoin/bitcoin/commit/d7de5b109f)
+* [2025-05-28 test/bench: verify hash in `ComputeFilter` reads](https://github.com/bitcoin/bitcoin/commit/2371b9f4ee)
+* [2025-05-28 net: assert block hash in `ProcessGetBlockData` and `ProcessMessage`](https://github.com/bitcoin/bitcoin/commit/5d235d50d6)
+* [2025-05-28 blockstorage: make block read hash checks explicit](https://github.com/bitcoin/bitcoin/commit/9341b5333a)
+* [2025-05-22 optimization: peel align-head and unroll body to 64 bytes](https://github.com/bitcoin/bitcoin/commit/248b6a27c3)
+* [2025-05-14 refactor: use consistent size type for serialization template parameters](https://github.com/bitcoin/bitcoin/commit/5827e93507)
+* [2025-05-14 bench: make `MerkleRoot` benchmark more representative](https://github.com/bitcoin/bitcoin/commit/7fd47e0e56)
+* [2025-05-12 test: exercise `ReadBlock` hash‑mismatch path](https://github.com/bitcoin/bitcoin/commit/2bf173210f)
+* [2025-05-12 node: avoid recomputing block hash in `ReadBlock`](https://github.com/bitcoin/bitcoin/commit/09ee8b7f27)
+* [2025-05-02 log: print reason for why should_write was triggered in `FlushStateToDisk`](https://github.com/bitcoin/bitcoin/commit/53e9b71b2f)
+* [2025-04-28 refactor: simplify repeated comparisons in `FindChallenges`](https://github.com/bitcoin/bitcoin/commit/e400ac5352)
+* [2025-04-28 refactor: Fix Sonar rule `cpp:S4998` - avoid unique_ptr const& as parameter](https://github.com/bitcoin/bitcoin/commit/7e8ef959d0)
+* [2025-04-25 test: remove old recursive `FindChallenges_recursive` implementation](https://github.com/bitcoin/bitcoin/commit/f670836112)
+* [2025-04-25 test: avoid stack overflow in `FindChallenges` via manual iteration](https://github.com/bitcoin/bitcoin/commit/b80d0bdee4)
+* [2025-04-25 scripted-diff: unify xor-vs-obfuscation nomenclature](https://github.com/bitcoin/bitcoin/commit/0b8bec8aa6)
+* [2025-04-22 refactor: extract `STATIC_SIZE` constant to prevector](https://github.com/bitcoin/bitcoin/commit/756da2a994)
+* [2025-04-20 refactor: remove redundant usage tracking from `CoinsViewCacheCursor`](https://github.com/bitcoin/bitcoin/commit/39cf8bb3d0)
+* [2025-04-19 ci: re-enable all benchmark runs](https://github.com/bitcoin/bitcoin/commit/c1f458aaa0)
+* [2025-04-19 bench: ensure wallet migration benchmark runs exactly once](https://github.com/bitcoin/bitcoin/commit/cad39f86fb)
+* [2025-04-19 bench: clean up migrated descriptor wallets via loader teardown](https://github.com/bitcoin/bitcoin/commit/1da11dbc44)
+* [2025-04-18 refactor: assert newly-created parent cache entry has zero memory usage](https://github.com/bitcoin/bitcoin/commit/67cff8bec9)
+* [2025-04-18 coins: only adjust `cachedCoinsUsage` on `EmplaceCoinInternalDANGER` insert](https://github.com/bitcoin/bitcoin/commit/24d861da78)
+* [2025-04-18 coins: fix `cachedCoinsUsage` accounting to prevent underflow](https://github.com/bitcoin/bitcoin/commit/d7c9d6c291)
+* [2025-04-17 refactor: re-enable UBSan implicit-sign-change in serialize.h](https://github.com/bitcoin/bitcoin/commit/516f0689b5)
+* [2025-04-15 test: assert `CScript` allocation characteristics](https://github.com/bitcoin/bitcoin/commit/52121506b2)
+* [2025-04-07 Narrow scope of undofile write to avoid possible resource management issue](https://github.com/bitcoin/bitcoin/commit/6640dd52c9)
+* [2025-04-05 refactor: prepare mempool_persist for obfuscation key change](https://github.com/bitcoin/bitcoin/commit/fa5d296e3b)
+* [2025-04-05 refactor: prepare `DBWrapper` for obfuscation key change](https://github.com/bitcoin/bitcoin/commit/6bbf2d9311)
+* [2025-04-01 refactor: Remove manual CDBBatch size estimation](https://github.com/bitcoin/bitcoin/commit/e419b0e17f)
+* [2025-04-01 refactor: Delegate to LevelDB for CDBBatch size estimation](https://github.com/bitcoin/bitcoin/commit/8b5e19d8b5)
+* [2025-04-01 Coins: Add `kHeader` to `CDBBatch::size_estimate`](https://github.com/bitcoin/bitcoin/commit/751077c6e2)
+* [2025-03-27 prevector: store `P2WSH`/`P2TR`/`P2PK` scripts inline](https://github.com/bitcoin/bitcoin/commit/d5104cfbae)
+* [2025-03-26 refactor: clear up blockstorage/streams in preparation for optimization](https://github.com/bitcoin/bitcoin/commit/056cb3c0d2)
+* [2025-03-26 optimization: bulk serialization writes in `WriteBlockUndo` and `WriteBlock`](https://github.com/bitcoin/bitcoin/commit/8d801e3efb)
+* [2025-03-26 optimization: bulk serialization reads in `UndoRead`, `ReadBlock`](https://github.com/bitcoin/bitcoin/commit/520965e293)
+* [2025-03-25 fuzz: extract unsequenced operations with side-effects](https://github.com/bitcoin/bitcoin/commit/b1de59e896)
+* [2025-03-17 doc: shallow clone qa-assets](https://github.com/bitcoin/bitcoin/commit/6f9f415a4f)
+* [2025-03-14 scripted-diff: shorten BLOCK_SERIALIZATION_HEADER_SIZE constant](https://github.com/bitcoin/bitcoin/commit/a4de160492)
+* [2025-03-14 refactor: rename leftover WriteBlockBench](https://github.com/bitcoin/bitcoin/commit/c77e3107b8)
+* [2025-03-14 refactor: collect block read operations into try block](https://github.com/bitcoin/bitcoin/commit/3197155f91)
+* [2025-03-06 makeseeds: regex improvements](https://github.com/bitcoin/bitcoin/commit/236687083f)
+* [2025-02-20 fuzz: make sure DecodeBase58(Check) is called with valid values more often](https://github.com/bitcoin/bitcoin/commit/d5537c18a9)
+* [2025-02-20 fuzz: Always restrict base conversion input lengths](https://github.com/bitcoin/bitcoin/commit/bad1433ef2)
+* [2025-02-19 scripted-diff: modernize outdated trait patterns - values](https://github.com/bitcoin/bitcoin/commit/ab2b67fce2)
+* [2025-02-19 scripted-diff: modernize outdated trait patterns - types](https://github.com/bitcoin/bitcoin/commit/8327889f35)
+* [2025-02-19 refactor: modernize remaining outdated trait patterns](https://github.com/bitcoin/bitcoin/commit/4cd95a2921)
+* [2025-02-13 cleanup: remove unused `ser_writedata16be` and `ser_readdata16be`](https://github.com/bitcoin/bitcoin/commit/0431a690c3)
+* [2025-02-01 test: rename k1/k2 to k0/k1 in `SipHash` consistency tests](https://github.com/bitcoin/bitcoin/commit/9f9eb7fbc0)
+* [2025-02-01 refactor: extract `SipHash` C0-C3 constants to class scope](https://github.com/bitcoin/bitcoin/commit/20330548cf)
+* [2025-02-01 optimization: introduce `PresaltedSipHasher` for repeated hashing](https://github.com/bitcoin/bitcoin/commit/ec11b9fede)
+* [2025-01-24 log: unify error messages for (read/write)[undo]block](https://github.com/bitcoin/bitcoin/commit/67fcc64802)
+* [2025-01-24 doc: update translation generation cmake example](https://github.com/bitcoin/bitcoin/commit/758a93d621)
+* [2025-01-09 scripted-diff: rename block and undo functions for consistency](https://github.com/bitcoin/bitcoin/commit/223081ece6)
+* [2025-01-09 refactor,bench: rename bench/readblock.cpp to bench/readwriteblock.cpp](https://github.com/bitcoin/bitcoin/commit/34f9a0157a)
+* [2025-01-09 bench: add SaveBlockBench](https://github.com/bitcoin/bitcoin/commit/86b85bb11f)
+* [2025-01-07 init,log: Unify block index and chainstate loading log line](https://github.com/bitcoin/bitcoin/commit/e04be3731f)
+* [2024-12-27 fuzz: Add fuzzing for max_ret_len in DecodeBase58/DecodeBase58Check](https://github.com/bitcoin/bitcoin/commit/f919d919eb)
+* [2024-12-20 build: Use character literals for generated headers to avoid narrowing](https://github.com/bitcoin/bitcoin/commit/63b6b638aa)
+* [2024-12-18 refactor,blocks: remove costly asserts and modernize affected logs](https://github.com/bitcoin/bitcoin/commit/baaa3b2846)
+* [2024-12-18 refactor,blocks: inline `WriteBlockToDisk`](https://github.com/bitcoin/bitcoin/commit/dfb2f9d004)
+* [2024-12-18 refactor,blocks: inline `UndoWriteToDisk`](https://github.com/bitcoin/bitcoin/commit/42bc491465)
+* [2024-12-18 refactor,blocks: deduplicate block's serialized size calculations](https://github.com/bitcoin/bitcoin/commit/fa39f27a0f)
+* [2024-12-18 coins: warn on shutdown for big UTXO set flushes](https://github.com/bitcoin/bitcoin/commit/5709718b83)
+* [2024-12-06 bench: make ObfuscationBench more representative](https://github.com/bitcoin/bitcoin/commit/972697976c)
+* [2024-11-24 refactor: Fix remaining clang-tidy performance-unnecessary-copy-initialization errors](https://github.com/bitcoin/bitcoin/commit/3305972f7b)
+* [2024-11-18 refactor: Reserve vectors in fuzz tests](https://github.com/bitcoin/bitcoin/commit/11f3bc229c)
+* [2024-11-18 refactor: Preallocate PrevectorFillVector(In)Direct without vector resize](https://github.com/bitcoin/bitcoin/commit/152fefe7a2)
+* [2024-11-17 refactor: Fix remaining clang-tidy performance-inefficient-vector errors](https://github.com/bitcoin/bitcoin/commit/a774c7a339)
+* [2024-10-31 coins, refactor: Make AddFlags, SetDirty, SetFresh static](https://github.com/bitcoin/bitcoin/commit/fc8c282022)
+* [2024-10-31 coins, refactor: Assume state after SetClean in AddFlags to prevent dangling pointers](https://github.com/bitcoin/bitcoin/commit/6b733699cf)
+* [2024-10-21 Change default help arg to `-help` and mention `-h` and `-?` as alternatives](https://github.com/bitcoin/bitcoin/commit/33a28e252a)
+* [2024-10-19 doc: replace `-?` with `-h` for bench_bitcoin help](https://github.com/bitcoin/bitcoin/commit/f0130ab1a1)
+* [2024-09-18 test: Validate error messages on fail](https://github.com/bitcoin/bitcoin/commit/c0b4b2c1ee)
+* [2024-09-18 test: generalize HasReason and use it in FailFmtWithError](https://github.com/bitcoin/bitcoin/commit/6c3c619b35)
+* [2024-09-18 test, refactor: Compact ccoins_access and ccoins_spend](https://github.com/bitcoin/bitcoin/commit/50cce20013)
+* [2024-09-17 test, refactor: Remove remaining unbounded flags from coins_tests](https://github.com/bitcoin/bitcoin/commit/0a159f0914)
+* [2024-09-16 test, refactor: Migrate GetCoinsMapEntry to return MaybeCoin](https://github.com/bitcoin/bitcoin/commit/ca74aa7490)
+* [2024-09-15 test: Group values and states in tests into CoinEntry wrappers](https://github.com/bitcoin/bitcoin/commit/d5f8d607ab)
+* [2024-09-13 coins, refactor: Split up AddFlags to remove invalid states](https://github.com/bitcoin/bitcoin/commit/cd0498eabc)
+* [2024-09-13 coins, refactor: Remove direct GetFlags access](https://github.com/bitcoin/bitcoin/commit/15aaa81c38)
+* [2024-09-12 build: Minimize I/O operations in GenerateHeaderFromRaw.cmake](https://github.com/bitcoin/bitcoin/commit/aa003d1568)
+* [2024-09-12 build: Minimize I/O operations in GenerateHeaderFromJson.cmake](https://github.com/bitcoin/bitcoin/commit/2a581144f2)
+* [2024-09-10 prevector: avoid GCC bogus warnings in insert method](https://github.com/bitcoin/bitcoin/commit/c78d8ff4cb)
+* [2024-09-09 Replace CScript _hex_v_u8 appends with _hex](https://github.com/bitcoin/bitcoin/commit/5e190cd11f)
+* [2024-09-09 Allow CScript's operator<< to accept spans, not just vectors](https://github.com/bitcoin/bitcoin/commit/cac846c2fb)
+* [2024-09-08 refactor: Return optional of Coin in GetCoin](https://github.com/bitcoin/bitcoin/commit/46dfbf169b)
+* [2024-09-08 refactor: Remove unrealistic simulation state](https://github.com/bitcoin/bitcoin/commit/e31bfb26c2)
+* [2024-09-07 refactor: Rely on returned value of GetCoin instead of parameter](https://github.com/bitcoin/bitcoin/commit/4feaa28728)
+* [2024-09-01 Use BOOST_CHECK_EQUAL for optional, arith_uint256, uint256, uint160](https://github.com/bitcoin/bitcoin/commit/19947863e1)
+* [2024-09-01 Add std::optional support to Boost's equality check](https://github.com/bitcoin/bitcoin/commit/743ac30e34)
+* [2024-08-29 test: Fuzz Base32/Base58/Base64 roundtrip conversions](https://github.com/bitcoin/bitcoin/commit/635bc58f46)
+* [2024-08-29 test: Extend base58_encode_decode.json with edge cases](https://github.com/bitcoin/bitcoin/commit/5dd3a0d8a8)
+* [2024-08-28 util: Add consteval ""_hex[_v][_u8] literals](https://github.com/bitcoin/bitcoin/commit/5b74a849cf)
+* [2024-08-28 Update spelling.ignore-words](https://github.com/bitcoin/bitcoin/commit/837fbca036)
+* [2024-08-28 doc: Prepend 'build/' to binary paths under 'src/' in docs](https://github.com/bitcoin/bitcoin/commit/6a68343ffb)
+* [2024-08-28 Compare FromUserHex result against other hex validators and parsers](https://github.com/bitcoin/bitcoin/commit/1eac96a503)
+* [2024-08-22 doc: Update documentation generation example in developer-notes.md](https://github.com/bitcoin/bitcoin/commit/91b3bc2b9c)
+* [2024-08-22 doc: fix a few simple codespell warnings](https://github.com/bitcoin/bitcoin/commit/f9a08f35a5)
+* [2024-08-18 Remove unused src_dir param from run_tests](https://github.com/bitcoin/bitcoin/commit/2ad560139b)
+* [2024-08-18 Fix a few likely documentation typos](https://github.com/bitcoin/bitcoin/commit/7ee5c3c5b2)
+* [2024-08-18 Extend possible debugging fixes with file-name-only](https://github.com/bitcoin/bitcoin/commit/1b0b9b4c78)
+* [2024-08-18 Add gdb and lldb links to debugging troubleshooting](https://github.com/bitcoin/bitcoin/commit/cb7c5ca824)
+* [2024-08-10 Split out bech32 separator char to header](https://github.com/bitcoin/bitcoin/commit/c1a5d5c100)
+* [2024-08-10 Fuzz HRP of bech32 as well](https://github.com/bitcoin/bitcoin/commit/9b7023d31a)
+* [2024-07-22 Fix lint-spelling warnings](https://github.com/bitcoin/bitcoin/commit/bccfca0382)
+* [2024-06-30 Moved the repeated -printpriority fetching out of AddToBlock](https://github.com/bitcoin/bitcoin/commit/323ce30308)
+* [2024-06-27 Refactor SipHash_32b benchmark to improve accuracy and avoid optimization issues](https://github.com/bitcoin/bitcoin/commit/42066f45ff)
+* [2024-06-23 Reduce cache lookups in CCoinsViewCache::FetchCoin](https://github.com/bitcoin/bitcoin/commit/204ca67bba)
+* [2024-06-18 Replace hard-coded constant in test](https://github.com/bitcoin/bitcoin/commit/969e047cfb)
+* [2024-05-13 Reserve space for transaction outputs in CreateTransactionInternal](https://github.com/bitcoin/bitcoin/commit/c76aaaf900)
+* [2024-05-13 Reserve space for transaction inputs in CreateTransactionInternal](https://github.com/bitcoin/bitcoin/commit/ec585f11c3)
+* [2024-04-24 Validate oversized transaction](https://github.com/bitcoin/bitcoin/commit/327a31d1a4)
+* [2024-04-12 Validate transaction without inputs](https://github.com/bitcoin/bitcoin/commit/1984187840)
+* [2024-04-12 Use SCRIPT_VERIFY_NONE instead of hard-coded 0 in transaction_tests](https://github.com/bitcoin/bitcoin/commit/c3a8843189)
+* [2024-04-10 test: Add padding tests for Base32/Base64](https://github.com/bitcoin/bitcoin/commit/ae40cf1a8e)
+* [2024-04-09 Change MAC_OSX macro to __APPLE__ in crypto package](https://github.com/bitcoin/bitcoin/commit/a71eadf66b)
+* [2024-03-09 Reserve hrp memory in Decode and LocateErrors](https://github.com/bitcoin/bitcoin/commit/d5ece3c4b5)
+* [2024-03-09 refactor: replace hardcoded numbers](https://github.com/bitcoin/bitcoin/commit/7f3f6c6dc8)
+* [2024-03-09 Reduce memory copying operations in bech32 encode](https://github.com/bitcoin/bitcoin/commit/07f64177a4)
+* [2024-03-09 Preallocate addresses in GetAddr based on nNodes](https://github.com/bitcoin/bitcoin/commit/66082ca348)
+* [2024-03-08 Reserve memory for ToLower/ToUpper conversions](https://github.com/bitcoin/bitcoin/commit/6f2f4a4d09)
+* [2024-02-25 Preallocate result in `TryParseHex` to avoid resizing](https://github.com/bitcoin/bitcoin/commit/a19235c14b)
+* [2024-02-23 Fix CI-detected codespell warnings](https://github.com/bitcoin/bitcoin/commit/b03b20685a)
+* [2024-02-20 Add benchmark for TryParseHex](https://github.com/bitcoin/bitcoin/commit/b7489ecb52)
+* [2024-02-19 build: Replace MAC_OSX macro with existing __APPLE__](https://github.com/bitcoin/bitcoin/commit/6c6b2442ed)
 
-The https://github.com/bitcoin-core/gui repository is used exclusively for the
-development of the GUI. Its master branch is identical in all monotree
-repositories. Release branches and tags do not exist, so please do not fork
-that repository unless it is for development reasons.
+</details>
 
-The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)
-and useful hints for developers can be found in [doc/developer-notes.md](doc/developer-notes.md).
+<details>
+<summary>59 Merged Co-authored Commits</summary>
 
-Testing
--------
+> git --no-pager log upstream/master --grep="Co-authored-by:.*lorinc" --regexp-ignore-case --no-merges --pretty=format:"%h %ad %s" --date=format:"%Y-%m-%d" --abbrev=10
 
-Testing and code review is the bottleneck for development; we get more pull
-requests than we can review and test on short notice. Please be patient and help out by testing
-other people's pull requests, and remember this is a security-critical project where any mistake might cost people
-lots of money.
+* [2026-02-11 coins: introduce CoinsViewOverlay](https://github.com/bitcoin/bitcoin/commit/67c0d1798e)
+* [2026-02-11 coins: don't mutate main cache when connecting block](https://github.com/bitcoin/bitcoin/commit/73e99a5966)
+* [2026-02-09 Fixup TODO comment in feature_dbcrash.py; remove unnecessary sleep](https://github.com/bitcoin/bitcoin/commit/fa8c89511d)
+* [2026-02-03 fuzz: move backend mutating block to end of coins_view](https://github.com/bitcoin/bitcoin/commit/86eda88c8e)
+* [2026-01-31 fuzz: add target for CoinsViewOverlay](https://github.com/bitcoin/bitcoin/commit/cae6d895f8)
+* [2026-01-25 coins: use hashBlock setter internally for CCoinsViewCache methods](https://github.com/bitcoin/bitcoin/commit/041758f5ed)
+* [2026-01-24 validation: reuse same CCoinsViewCache for every ConnectBlock call](https://github.com/bitcoin/bitcoin/commit/44b4ee194d)
+* [2026-01-24 coins: introduce CCoinsViewCache::ResetGuard](https://github.com/bitcoin/bitcoin/commit/8fb6043231)
+* [2026-01-24 coins: add Reset on CCoinsViewCache](https://github.com/bitcoin/bitcoin/commit/8dd9200fc9)
+* [2026-01-17 test: Cover getprivatebroadcastinfo in p2p_private_broadcast](https://github.com/bitcoin/bitcoin/commit/15dff452eb)
+* [2026-01-17 test: Cover abortprivatebroadcast in p2p_private_broadcast](https://github.com/bitcoin/bitcoin/commit/c3378be10b)
+* [2026-01-17 rpc: Add abortprivatebroadcast](https://github.com/bitcoin/bitcoin/commit/557260ca14)
+* [2026-01-17 net: Add PrivateBroadcast::GetBroadcastInfo](https://github.com/bitcoin/bitcoin/commit/5e64982541)
+* [2026-01-03 test: do not return spent coins from `CCoinsViewTest::GetCoin`](https://github.com/bitcoin/bitcoin/commit/3e4155fcef)
+* [2026-01-03 refactor(miniscript): Make fields non-const & private](https://github.com/bitcoin/bitcoin/commit/c6f798b222)
+* [2026-01-03 fuzz: keep `coinscache_sim` backend free of spent coins](https://github.com/bitcoin/bitcoin/commit/eec551aaf1)
+* [2026-01-03 coins: assume `GetCoin` only returns unspent coins](https://github.com/bitcoin/bitcoin/commit/2ee7f9b259)
+* [2026-01-02 qa: Require `--exclude` for each excluded test](https://github.com/bitcoin/bitcoin/commit/c5825d4b7f)
+* [2025-12-26 fuzz: pass coins_view_cache to TestCoinsView in coins_view](https://github.com/bitcoin/bitcoin/commit/89824fb27b)
+* [2025-12-24 coins: add PeekCoin()](https://github.com/bitcoin/bitcoin/commit/69b01af0eb)
+* [2025-12-12 refactor: Add compile-time-checked hex txid](https://github.com/bitcoin/bitcoin/commit/5ac3579520)
+* [2025-11-28 net processing: Check if we are in ibd before processing block for txdownloadman](https://github.com/bitcoin/bitcoin/commit/e5f0613503)
+* [2025-10-12 refactor: Let CCoinsViewCache::BatchWrite return void](https://github.com/bitcoin/bitcoin/commit/6da6f503a6)
+* [2025-06-25 test(miniscript): Prove avoidance of stack overflow](https://github.com/bitcoin/bitcoin/commit/964c44cdcd)
+* [2025-01-21 validation: Use dirty entry count in flush warnings and disk space checks](https://github.com/bitcoin/bitcoin/commit/afb1bc120e)
+* [2025-01-21 coins: Keep track of number of dirty entries in `CCoinsViewCache`](https://github.com/bitcoin/bitcoin/commit/b413491a1c)
+* [2024-08-08 validation: do not wipe utxo cache for stats/scans/snapshots](https://github.com/bitcoin/bitcoin/commit/c6ca2b85a3)
+* [2023-12-14 init: introduce a new option to enable/disable private broadcast](https://github.com/bitcoin/bitcoin/commit/94aaa5d31b)
+* [2025-12-06 rest: allow reading partial block data from storage](https://github.com/bitcoin/bitcoin/commit/07135290c1)
+* [2025-12-06 blockstorage: allow reading partial block data from storage](https://github.com/bitcoin/bitcoin/commit/4e2af1c065)
+* [2025-12-03 blockstorage: return an error code from `ReadRawBlock()`](https://github.com/bitcoin/bitcoin/commit/f2fd1aa21c)
+* [2025-09-26 doc: Remove no longer correct comment](https://github.com/bitcoin/bitcoin/commit/5c16e4631c)
+* [2025-09-25 qa: Only complain about expected messages that were not found](https://github.com/bitcoin/bitcoin/commit/a1f7623020)
+* [2025-09-20 qa: Replace always-escaped regexps with "X in Y"](https://github.com/bitcoin/bitcoin/commit/a9021101dc)
+* [2025-08-19 refactor(headerssync): Extract test constants ahead of breakup into functions](https://github.com/bitcoin/bitcoin/commit/a4ac9915a9)
+* [2025-08-05 refactor: remove redundant locator cleanup in BaseIndex::Init()](https://github.com/bitcoin/bitcoin/commit/facd01e6ff)
+* [2025-08-04 depgraph: add memory usage control (feature)](https://github.com/bitcoin/bitcoin/commit/bb5cb222ae)
+* [2025-07-25 log: avoid double hashing in SourceLocationHasher](https://github.com/bitcoin/bitcoin/commit/b8e92fb3d4)
+* [2025-07-18 log: remove const qualifier from arguments in LogPrintFormatInternal](https://github.com/bitcoin/bitcoin/commit/5f70bc80df)
+* [2025-05-03 validation: periodically flush dbcache during reindex-chainstate](https://github.com/bitcoin/bitcoin/commit/84820561dc)
+* [2025-02-16 netinfo: return local services in the default report](https://github.com/bitcoin/bitcoin/commit/4489ab526a)
+* [2024-12-06 test: Prove+document ConstevalFormatString/tinyformat parity](https://github.com/bitcoin/bitcoin/commit/533013cba2)
+* [2024-12-05 util: detect and warn when using exFAT on macOS](https://github.com/bitcoin/bitcoin/commit/db3228042b)
+* [2024-12-05 test: Add missing %c character test](https://github.com/bitcoin/bitcoin/commit/c93bf0e6e2)
+* [2024-10-28 util: Support dynamic width & precision in ConstevalFormatString](https://github.com/bitcoin/bitcoin/commit/184f34f2d0)
+* [2024-09-08 validation: add randomness to periodic write interval](https://github.com/bitcoin/bitcoin/commit/e976bd3045)
+* [2024-09-08 refactor: replace m_last_write with m_next_write](https://github.com/bitcoin/bitcoin/commit/2e2f410681)
+* [2024-08-21 test refactor: util_tests - parse_hex clean up](https://github.com/bitcoin/bitcoin/commit/dc5f6f6812)
+* [2024-08-03 bench: add benchmark for signing with a taptweak](https://github.com/bitcoin/bitcoin/commit/f14900b6e4)
+* [2024-07-30 feefrac: support both rounding up and down for Evaluate](https://github.com/bitcoin/bitcoin/commit/0c6bcfd8f7)
+* [2024-07-24 doc: Update for CMake-based build system](https://github.com/bitcoin/bitcoin/commit/6ce50fd9d0)
+* [2024-07-21 tests: add key tweak smoke test](https://github.com/bitcoin/bitcoin/commit/5d507a0091)
+* [2024-07-17 fuzz: Speed up PickValue in txorphan](https://github.com/bitcoin/bitcoin/commit/fa33a63bd9)
+* [2024-07-17 coins: pass linked list of flagged entries to BatchWrite](https://github.com/bitcoin/bitcoin/commit/7825b8b9ae)
+* [2024-06-28 test: add cache entry linked list tests](https://github.com/bitcoin/bitcoin/commit/a14edada8a)
+* [2024-06-28 refactor: encapsulate flags access for dirty and fresh checks](https://github.com/bitcoin/bitcoin/commit/df34a94e57)
+* [2024-06-28 coins: track flagged cache entries in linked list](https://github.com/bitcoin/bitcoin/commit/24ce37cb86)
+* [2024-04-20 test: Add unit tests for urlDecode](https://github.com/bitcoin/bitcoin/commit/46bc6c2aaa)
+* [2024-03-09 refactor: replace hardcoded numbers](https://github.com/bitcoin/bitcoin/commit/7f3f6c6dc8)
 
-### Automated Testing
-
-Developers are strongly encouraged to write [unit tests](src/test/README.md) for new code, and to
-submit new unit tests for old code. Unit tests can be compiled and run
-(assuming they weren't disabled during the generation of the build system) with: `ctest`. Further details on running
-and extending unit tests can be found in [/src/test/README.md](/src/test/README.md).
-
-There are also [regression and integration tests](/test), written
-in Python.
-These tests can be run (if the [test dependencies](/test) are installed) with: `build/test/functional/test_runner.py`
-(assuming `build` is your build directory).
-
-The CI (Continuous Integration) systems make sure that every pull request is tested on Windows, Linux, and macOS.
-The CI must pass on all commits before merge to avoid unrelated CI failures on new pull requests.
-
-### Manual Quality Assurance (QA) Testing
-
-Changes should be tested by somebody other than the developer who wrote the
-code. This is especially important for large or high-risk changes. It is useful
-to add a test plan to the pull request description if testing the changes is
-not straightforward.
-
-Translations
-------------
-
-Changes to translations as well as new translations can be submitted to
-[Bitcoin Core's Transifex page](https://explore.transifex.com/bitcoin/bitcoin/).
-
-Translations are periodically pulled from Transifex and merged into the git repository. See the
-[translation process](doc/translation_process.md) for details on how this works.
-
-**Important**: We do not accept translation changes as GitHub pull requests because the next
-pull from Transifex would automatically overwrite them again.
+</details>
