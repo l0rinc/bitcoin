@@ -402,6 +402,14 @@ public:
     bool HaveCoinInCache(const COutPoint &outpoint) const;
 
     /**
+     * Retrieves the coin from the cache even if it is spent, without calling
+     * the backing CCoinsView if no coin exists.
+     * Used in InputFetcher to make sure we do not add a coin from the backing
+     * view when it is spent in the cache but not yet flushed to the parent.
+     */
+    std::optional<Coin> GetPossiblySpentCoinFromCache(const COutPoint &outpoint) const;
+
+    /**
      * Return a reference to Coin in the cache, or coinEmpty if not found. This is
      * more efficient than GetCoin.
      *
@@ -423,7 +431,7 @@ public:
      * Emplace a coin into cacheCoins without performing any checks, marking
      * the emplaced coin as dirty.
      *
-     * NOT FOR GENERAL USE. Used only when loading coins from a UTXO snapshot.
+     * NOT FOR GENERAL USE. Used only when loading coins from a UTXO snapshot and in the InputFetcher.
      * @sa ChainstateManager::PopulateAndValidateSnapshot()
      */
     void EmplaceCoinInternalDANGER(COutPoint&& outpoint, Coin&& coin);
@@ -473,6 +481,14 @@ public:
     //!
     //! See: https://stackoverflow.com/questions/42114044/how-to-release-unordered-map-memory
     void ReallocateCache();
+
+    /**
+     * Reserve enough space in the cache so the underlying unordered_map will
+     * not have to rehash unless capacity is exceeded.
+     */
+    void Reserve(size_t capacity) {
+        cacheCoins.reserve(capacity);
+    }
 
     //! Run an internal sanity check on the cache data structure. */
     void SanityCheck() const;
