@@ -21,7 +21,8 @@ class UniValue;
 struct bilingual_str;
 
 namespace wallet {
-class LegacyScriptPubKeyMan;
+class LegacyDataSPKM;
+using LegacyScriptPubKeyMan = LegacyDataSPKM;
 enum class DatabaseStatus;
 struct WalletContext;
 
@@ -48,6 +49,8 @@ std::string EnsureUniqueWalletName(const JSONRPCRequest& request, std::optional<
 
 void EnsureWalletIsUnlocked(const CWallet&);
 WalletContext& EnsureWalletContext(const std::any& context);
+LegacyScriptPubKeyMan& EnsureLegacyScriptPubKeyMan(CWallet& wallet, bool also_create = false);
+const LegacyScriptPubKeyMan& EnsureConstLegacyScriptPubKeyMan(const CWallet& wallet);
 
 bool GetAvoidReuseFlag(const CWallet& wallet, const UniValue& param);
 std::string LabelFromValue(const UniValue& value);

@@ -98,6 +98,27 @@ WalletContext& EnsureWalletContext(const std::any& context)
     return *wallet_context;
 }
 
+LegacyScriptPubKeyMan& EnsureLegacyScriptPubKeyMan(CWallet& wallet, bool also_create)
+{
+    LegacyScriptPubKeyMan* spk_man{wallet.GetLegacyDataSPKM()};
+    if (!spk_man && also_create) {
+        spk_man = wallet.GetOrCreateLegacyDataSPKM();
+    }
+    if (!spk_man) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Only legacy wallets are supported by this command");
+    }
+    return *spk_man;
+}
+
+const LegacyScriptPubKeyMan& EnsureConstLegacyScriptPubKeyMan(const CWallet& wallet)
+{
+    const LegacyScriptPubKeyMan* spk_man{wallet.GetLegacyDataSPKM()};
+    if (!spk_man) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Only legacy wallets are supported by this command");
+    }
+    return *spk_man;
+}
+
 std::string LabelFromValue(const UniValue& value)
 {
     static const std::string empty_string;
