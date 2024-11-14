@@ -762,7 +762,7 @@ std::vector<std::pair<std::string, bool>> RPCMethod::GetArgNames() const
 size_t RPCMethod::GetParamIndex(std::string_view key) const
 {
     auto it{std::find_if(
-        m_args.begin(), m_args.end(), [&key](const auto& arg) { return arg.GetName() == key;}
+        m_args.begin(), m_args.end(), [&key](const auto& arg) { return arg.GetFirstName() == key;}
     )};
 
     CHECK_NONFATAL(it != m_args.end());  // TODO: ideally this is checked at compile time
