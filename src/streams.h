@@ -164,7 +164,8 @@ public:
     explicit DataStream() = default;
     explicit DataStream(Span<const uint8_t> sp) : DataStream{AsBytes(sp)} {}
     explicit DataStream(Span<const value_type> sp) : vch(sp.data(), sp.data() + sp.size()) {}
-
+    explicit DataStream(size_type n) { reserve(n); }
+    
     std::string str() const
     {
         return std::string{UCharCast(data()), UCharCast(data() + size())};
