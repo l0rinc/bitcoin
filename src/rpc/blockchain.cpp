@@ -364,19 +364,17 @@ static RPCMethod waitfornewblock()
     // one and wait for the tip to be different from this value. This mode is
     // less reliable because if the tip changed between waitfornewblock calls,
     // it will need to change a second time before this call returns.
-    BlockRef current_block{CHECK_NONFATAL(miner.getTip()).value()};
+    auto block{CHECK_NONFATAL(miner.getTip()).value()};
 
     uint256 tip_hash{request.params[1].isNull()
-        ? current_block.hash
+        ? block.hash
         : ParseHashV(request.params[1], "current_tip")};
 
-    // If the user provided an invalid current_tip then this call immediately
-    // returns the current tip.
-    std::optional<BlockRef> block = timeout ? miner.waitTipChanged(tip_hash, std::chrono::milliseconds(timeout)) :
-                                              miner.waitTipChanged(tip_hash);
-
-    // Return current block upon shutdown
-    if (block) current_block = *block;
+    if (IsRPCRunning()) {
+        // If the user provided an invalid current_tip then this call immediately
+        // returns the current tip.
+        block = timeout ? miner.waitTipChanged(tip_hash, std::chrono::milliseconds(timeout)) : miner.waitTipChanged(tip_hash);
+    }
 
     UniValue ret(UniValue::VOBJ);
     ret.pushKV("hash", current_block.hash.GetHex());
