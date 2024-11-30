@@ -1036,6 +1036,8 @@ private:
   int child_pid_ = -1;
 #endif
 
+  bool child_created_ = false;
+
   bool close_fds_ = false;
 
   std::string exe_name_;
@@ -1043,10 +1045,6 @@ private:
   // Command provided as sequence
   std::vector<std::string> vargs_;
   std::vector<char*> cargv_;
-
-  bool child_created_ = false;
-  // Pid of the child process
-  int child_pid_ = -1;
 
   int retcode_ = -1;
 };
@@ -1119,7 +1117,7 @@ inline int Popen::poll() noexcept(false)
 
   return retcode_;
 #else
-  if (child_pid_ == -1) return -1;
+  if (!child_created_) return -1;
 
   int status;
 
