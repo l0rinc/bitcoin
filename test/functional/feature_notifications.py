@@ -67,6 +67,7 @@ class NotificationsTest(BitcoinTestFramework):
             f"-blocknotify=echo > \"{os.path.join(self.blocknotify_dir, '%s')}\"",
             f"-shutdownnotify=echo > \"{self.shutdownnotify_file}\"",
         ], [
+            "-blockversion=211",
             f"-walletnotify=echo %h_%b > {walletnotify_path}",
         ]]
         self.wallet_names = [self.default_wallet_name, self.wallet]
@@ -202,6 +203,22 @@ class NotificationsTest(BitcoinTestFramework):
 
         self.wait_until(lambda: os.path.isfile(self.alertnotify_file), timeout=10)
         self.wait_until(self.large_work_invalid_chain_warning_in_alert_file, timeout=10)
+
+        # Mine 51 unknown-version blocks. -alertnotify should trigger on the 51st.
+        self.log.info("test -alertnotify")
+        self.generatetoaddress(self.nodes[1], 51, ADDRESS_BCRT1_UNSPENDABLE)
+
+        # Give bitcoind 10 seconds to write the alert notification
+        self.wait_until(lambda: len(os.listdir(self.alertnotify_dir)), timeout=10)
+
+        for notify_file in os.listdir(self.alertnotify_dir):
+            os.remove(os.path.join(self.alertnotify_dir, notify_file))
+
+        # Mine more up-version blocks, should not get more alerts:
+        self.generatetoaddress(self.nodes[1], 2, ADDRESS_BCRT1_UNSPENDABLE)
+
+        self.log.info("-alertnotify should not continue notifying for more unknown version blocks")
+        assert_equal(len(os.listdir(self.alertnotify_dir)), 0)
 
         self.log.info("test -shutdownnotify")
         self.stop_nodes()
