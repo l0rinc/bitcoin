@@ -4,6 +4,7 @@
 
 #include <bench/bench.h>
 #include <random.h>
+#include <streams.h>
 #include <util/obfuscation.h>
 
 #include <cstddef>
@@ -14,13 +15,13 @@ static void ObfuscationBench(benchmark::Bench& bench)
 {
     FastRandomContext frc{/*fDeterministic=*/true};
     auto data{frc.randbytes<std::byte>(1024)};
-    const Obfuscation obfuscation{frc.randbytes<Obfuscation::KEY_SIZE>()};
+    const auto key{frc.randbytes<Obfuscation::KEY_SIZE>()};
 
     size_t offset{0};
     bench.batch(data.size()).unit("byte").run([&] {
-        obfuscation(data, offset++); // mutated differently each time
+        util::Xor(data, key, offset++); // mutated differently each time
         ankerl::nanobench::doNotOptimizeAway(data);
     });
 }
 
-BENCHMARK(ObfuscationBench);
+BENCHMARK(ObfuscationBench, benchmark::PriorityLevel::HIGH);
