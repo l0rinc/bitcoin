@@ -10,15 +10,18 @@
 #include <cstddef>
 #include <vector>
 
-static void Xor(benchmark::Bench& bench)
+static void ObfuscationBench(benchmark::Bench& bench)
 {
     FastRandomContext frc{/*fDeterministic=*/true};
     auto data{frc.randbytes<std::byte>(1024)};
-    auto key{frc.randbytes<std::byte>(31)};
 
+    const auto key_bytes{frc.randbytes<sizeof(uint64_t)>()};
+
+    size_t offset{0};
     bench.batch(data.size()).unit("byte").run([&] {
-        util::Xor(data, key);
+        util::Xor(data, key_bytes, offset++); // mutated differently each time
+        ankerl::nanobench::doNotOptimizeAway(data);
     });
 }
 
-BENCHMARK(Xor, benchmark::PriorityLevel::HIGH);
+BENCHMARK(ObfuscationBench, benchmark::PriorityLevel::HIGH);
