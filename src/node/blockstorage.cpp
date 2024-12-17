@@ -671,7 +671,10 @@ CBlockFileInfo* BlockManager::GetBlockFileInfo(size_t n)
 
 bool BlockManager::ReadBlockUndo(CBlockUndo& blockundo, const CBlockIndex& index) const
 {
-    const FlatFilePos pos{WITH_LOCK(::cs_main, return index.GetUndoPos())};
+    FlatFilePos pos{WITH_LOCK(::cs_main, return index.GetUndoPos())};
+    if (pos.nPos < BLOCK_SERIALIZATION_HEADER_SIZE) return false;
+    uint32_t undo_size;
+    pos.nPos -= sizeof undo_size;
 
     // Open history file to read
     AutoFile filein{OpenUndoFile(pos, true)};
@@ -680,21 +683,27 @@ bool BlockManager::ReadBlockUndo(CBlockUndo& blockundo, const CBlockIndex& index
         return false;
     }
 
-    // Read block
-    uint256 hashChecksum;
-    HashVerifier verifier{filein}; // Use HashVerifier as reserializing may lose data, c.f. commit d342424301013ec47dc146a4beb49d5c9319d80a
     try {
+        // Read block
+        filein >> undo_size;
+        if (undo_size > MAX_SIZE) throw std::runtime_error{strprintf("Refusing to read undo data of size: %d", undo_size)};
+
+        std::vector<uint8_t> mem(undo_size);
+        filein >> Span{mem};
+
+        SpanReader reader{mem};
+        HashVerifier verifier{reader}; // Use HashVerifier as reserializing may lose data, c.f. commit d342424301013ec47dc146a4beb49d5c9319d80a
         verifier << index.pprev->GetBlockHash();
         verifier >> blockundo;
-        filein >> hashChecksum;
-    } catch (const std::exception& e) {
-        LogError("%s: Deserialize or I/O error - %s at %s\n", __func__, e.what(), pos.ToString());
-        return false;
-    }
 
-    // Verify checksum
-    if (hashChecksum != verifier.GetHash()) {
-        LogError("%s: Checksum mismatch at %s\n", __func__, pos.ToString());
+        uint256 hashChecksum;
+        filein >> hashChecksum;
+        if (hashChecksum != verifier.GetHash()) {
+            LogError("Checksum mismatch at %s", pos.ToString());
+            return false;
+        }
+    } catch (const std::exception& e) {
+        LogError("Deserialize or I/O error - %s at %s", e.what(), pos.ToString());
         return false;
     }
 
@@ -995,34 +1004,43 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
     return true;
 }
 
-bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos) const
+bool BlockManager::ReadBlock(CBlock& block, FlatFilePos pos) const
 {
     block.SetNull();
+
+    if (pos.nPos < BLOCK_SERIALIZATION_HEADER_SIZE) return false;
+    uint32_t blk_size;
+    pos.nPos -= sizeof blk_size;
 
     // Open history file to read
     AutoFile filein{OpenBlockFile(pos, true)};
     if (filein.IsNull()) {
-        LogError("%s: OpenBlockFile failed for %s\n", __func__, pos.ToString());
+        LogError("OpenBlockFile failed for %s", pos.ToString());
         return false;
     }
 
-    // Read block
     try {
-        filein >> TX_WITH_WITNESS(block);
+        // Read block
+        filein >> blk_size;
+        if (blk_size > MAX_SIZE) throw std::runtime_error{strprintf("Refusing to read block of size: %d", blk_size)};
+
+        std::vector<uint8_t> mem(blk_size);
+        filein >> Span{mem};
+        SpanReader(mem) >> TX_WITH_WITNESS(block);
     } catch (const std::exception& e) {
-        LogError("%s: Deserialize or I/O error - %s at %s\n", __func__, e.what(), pos.ToString());
+        LogError("Deserialize or I/O error - %s at %s", e.what(), pos.ToString());
         return false;
     }
 
     // Check the header
     if (!CheckProofOfWork(block.GetHash(), block.nBits, GetConsensus())) {
-        LogError("%s: Errors in block header at %s\n", __func__, pos.ToString());
+        LogError("Errors in block header at %s", pos.ToString());
         return false;
     }
 
     // Signet only: check block solution
     if (GetConsensus().signet_blocks && !CheckSignetBlockSolution(block, GetConsensus())) {
-        LogError("%s: Errors in block solution at %s\n", __func__, pos.ToString());
+        LogError("Errors in block solution at %s", pos.ToString());
         return false;
     }
 
