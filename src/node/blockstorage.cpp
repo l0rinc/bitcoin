@@ -960,23 +960,34 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
             return false;
         }
         // Open history file to append
-        AutoFile fileout{OpenUndoFile(pos)};
+        AutoFile fileout{m_undo_file_seq.Open(pos, false), {}}; // We'll obfuscate ourselves
         if (fileout.IsNull()) {
             LogError("OpenUndoFile failed");
             return FatalError(m_opts.notifications, state, _("Failed to write undo data."));
         }
 
-        // Write index header
-        fileout << GetParams().MessageStart() << blockundo_size;
-        // Write undo data
+        {
+            // Write index header
+            DataStream header;
+            header.reserve(BLOCK_SERIALIZATION_HEADER_SIZE);
+            header << GetParams().MessageStart() << blockundo_size;
+            util::Xor(header, m_xor_key, pos.nPos);
+            fileout.write(header);
+        }
         pos.nPos += BLOCK_SERIALIZATION_HEADER_SIZE;
-        fileout << blockundo;
+        {
+            // Calculate checksum
+            HashWriter hasher{};
+            hasher << block.pprev->GetBlockHash();
+            hasher << blockundo;
 
-        // Calculate & write checksum
-        HashWriter hasher{};
-        hasher << block.pprev->GetBlockHash();
-        hasher << blockundo;
-        fileout << hasher.GetHash();
+            // Write undo data & checksum
+            DataStream undo_data;
+            undo_data.reserve(blockundo_size + sizeof(uint256));
+            undo_data << blockundo << hasher.GetHash();
+            util::Xor(undo_data, m_xor_key, pos.nPos);
+            fileout.write(undo_data);
+        }
 
         // rev files are written in block height order, whereas blk files are written as blocks come in (often out of order)
         // we want to flush the rev (undo) file once we've written the last block, which is indicated by the last height
@@ -1114,18 +1125,31 @@ FlatFilePos BlockManager::WriteBlock(const CBlock& block, int nHeight)
         LogError("FindNextBlockPos failed");
         return FlatFilePos();
     }
-    AutoFile fileout{OpenBlockFile(pos)};
+    AutoFile fileout{m_block_file_seq.Open(pos, false), {}}; // We'll obfuscate ourselves
     if (fileout.IsNull()) {
         LogError("OpenBlockFile failed");
         m_opts.notifications.fatalError(_("Failed to write block."));
         return FlatFilePos();
     }
 
-    // Write index header
-    fileout << GetParams().MessageStart() << block_size;
-    // Write block
+    {
+        // Write index header
+        DataStream header;
+        header.reserve(BLOCK_SERIALIZATION_HEADER_SIZE);
+        header << GetParams().MessageStart() << block_size;
+        util::Xor(header, m_xor_key, pos.nPos);
+        fileout.write(header);
+    }
     pos.nPos += BLOCK_SERIALIZATION_HEADER_SIZE;
-    fileout << TX_WITH_WITNESS(block);
+    {
+        // Write block
+        DataStream block_data;
+        block_data.reserve(block_size);
+        block_data << TX_WITH_WITNESS(block);
+        util::Xor(block_data, m_xor_key, pos.nPos);
+        fileout.write(block_data);
+    }
+
     return pos;
 }
 
