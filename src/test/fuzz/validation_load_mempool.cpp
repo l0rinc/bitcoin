@@ -39,9 +39,13 @@ void initialize_validation_load_mempool()
 FUZZ_TARGET(validation_load_mempool, .init = initialize_validation_load_mempool)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
-    FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
+    size_t size = buffer.size();
+    FuzzedDataProvider fuzzed_data_provider{buffer.data(), size};
+    assert(size == buffer.size());
     SetMockTime(ConsumeTime(fuzzed_data_provider));
+    assert(size == buffer.size());
     FuzzedFileProvider fuzzed_file_provider{fuzzed_data_provider};
+    assert(size == buffer.size());
 
     bilingual_str error;
     CTxMemPool pool{MemPoolOptionsForTest(g_setup->m_node), error};
@@ -50,13 +54,20 @@ FUZZ_TARGET(validation_load_mempool, .init = initialize_validation_load_mempool)
     auto& chainstate{static_cast<DummyChainState&>(g_setup->m_node.chainman->ActiveChainstate())};
     chainstate.SetMempool(&pool);
 
+    assert(size == buffer.size());
+    bool should_fail = buffer.size() < sizeof(uint64_t) + Obfuscation::SIZE_BYTES; // Inputs smaller than 9 bytes should fail
     auto fuzzed_fopen = [&](const fs::path&, const char*) {
         return fuzzed_file_provider.open();
     };
-    (void)LoadMempool(pool, MempoolPath(g_setup->m_args), chainstate,
-                      {
-                          .mockable_fopen_function = fuzzed_fopen,
-                      });
+    try {
+        (void)LoadMempool(pool, MempoolPath(g_setup->m_args), chainstate,
+                          {
+                              .mockable_fopen_function = fuzzed_fopen,
+                          });
+        assert(!should_fail);
+    } catch (...) {
+        assert(should_fail);
+    }
     pool.SetLoadTried(true);
     (void)DumpMempool(pool, MempoolPath(g_setup->m_args), fuzzed_fopen, true);
 }
