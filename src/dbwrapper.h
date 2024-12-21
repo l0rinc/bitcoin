@@ -18,7 +18,6 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
-#include <vector>
 
 static const size_t DBWRAPPER_PREALLOC_KEY_SIZE = 64;
 static const size_t DBWRAPPER_PREALLOC_VALUE_SIZE = 1024;
@@ -63,8 +62,7 @@ namespace dbwrapper_private {
  * Database obfuscation should be considered an implementation detail of the
  * specific database.
  */
-const std::vector<unsigned char>& GetObfuscation(const CDBWrapper &w);
-
+Obfuscation GetObfuscation(const CDBWrapper&);
 }; // namespace dbwrapper_private
 
 bool DestroyDB(const std::string& path_str);
@@ -166,7 +164,7 @@ public:
     template<typename V> bool GetValue(V& value) {
         try {
             DataStream ssValue{GetValueImpl()};
-            ssValue.Obfuscate(dbwrapper_private::GetObfuscation(parent));
+            dbwrapper_private::GetObfuscation(parent)(ssValue);
             ssValue >> value;
         } catch (const std::exception&) {
             return false;
@@ -179,7 +177,7 @@ struct LevelDBContext;
 
 class CDBWrapper
 {
-    friend const std::vector<unsigned char>& dbwrapper_private::GetObfuscation(const CDBWrapper &w);
+    friend Obfuscation dbwrapper_private::GetObfuscation(const CDBWrapper&);
 private:
     //! holds all leveldb-specific fields of this class
     std::unique_ptr<LevelDBContext> m_db_context;
@@ -188,12 +186,7 @@ private:
     std::string m_name;
 
     //! a key used for optional XOR-obfuscation of the database
-    std::vector<unsigned char> m_obfuscation;
-
-    //! the length of the obfuscate key in number of bytes
-    static const unsigned int OBFUSCATION_SIZE_BYTES;
-
-    std::vector<unsigned char> CreateObfuscation() const;
+    Obfuscation m_obfuscation{0};
 
     //! path to filesystem storage
     const fs::path m_path;
@@ -210,7 +203,7 @@ public:
     // Prefixed with null character to avoid collisions with other keys
     //
     // We must use a string constructor which specifies length so that we copy past the null-terminator.
-    static constexpr std::string OBFUSCATION_KEY{"\000obfuscate_key", 14};
+    inline static const std::string OBFUSCATION_KEY{"\000obfuscate_key", 14};
 
     CDBWrapper(const DBParams& params);
     ~CDBWrapper();
@@ -230,7 +223,7 @@ public:
         }
         try {
             DataStream ssValue{MakeByteSpan(*strValue)};
-            ssValue.Obfuscate(m_obfuscation);
+            m_obfuscation(ssValue);
             ssValue >> value;
         } catch (const std::exception&) {
             return false;
