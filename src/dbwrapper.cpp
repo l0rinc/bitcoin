@@ -173,7 +173,7 @@ void CDBBatch::Clear()
 void CDBBatch::WriteImpl(std::span<const std::byte> key, DataStream& ssValue)
 {
     leveldb::Slice slKey(CharCast(key.data()), key.size());
-    ssValue.Obfuscate(dbwrapper_private::GetObfuscation(parent));
+    dbwrapper_private::GetObfuscation(parent)(ssValue);
     leveldb::Slice slValue(CharCast(ssValue.data()), ssValue.size());
     m_impl_batch->batch.Put(slKey, slValue);
 }
@@ -249,21 +249,22 @@ CDBWrapper::CDBWrapper(const DBParams& params)
     }
 
     {
-        m_obfuscation = std::vector<uint8_t>(OBFUSCATION_SIZE_BYTES, '\000'); // Needed for unobfuscated Read() below
-        const bool key_missing{!Read(OBFUSCATION_KEY, m_obfuscation)};
+        assert(m_obfuscation == 0); // Needed for unobfuscated Read() below
+        std::vector<uint8_t> obfuscation_key_vector(Obfuscation::SIZE_BYTES, '\000');
+        const bool key_missing{!Read(OBFUSCATION_KEY, obfuscation_key_vector)};
         if (key_missing && params.obfuscate && IsEmpty()) {
             // Initialize non-degenerate obfuscation if it won't upset existing, non-obfuscated data.
-            std::vector<uint8_t> new_key(OBFUSCATION_SIZE_BYTES);
+            std::vector<uint8_t> new_key(Obfuscation::SIZE_BYTES);
             GetRandBytes(new_key);
 
             // Write `new_key` so we don't obfuscate the key with itself
             Write(OBFUSCATION_KEY, new_key);
-            m_obfuscation = std::move(new_key);
+            obfuscation_key_vector = std::move(new_key);
 
-            LogPrintf("Wrote new obfuscate key for %s: %s\n", fs::PathToString(params.path), HexStr(m_obfuscation));
+            LogPrintf("Wrote new obfuscate key for %s: %s\n", fs::PathToString(params.path), HexStr(obfuscation_key_vector));
         }
-
-        LogPrintf("Using obfuscation key for %s: %s\n", fs::PathToString(params.path), HexStr(m_obfuscation));
+        LogPrintf("Using obfuscation key for %s: %s\n", fs::PathToString(params.path), HexStr(obfuscation_key_vector));
+        m_obfuscation = obfuscation_key_vector;
     }
 }
 
@@ -307,19 +308,6 @@ size_t CDBWrapper::DynamicMemoryUsage() const
         return 0;
     }
     return parsed.value();
-}
-
-const unsigned int CDBWrapper::OBFUSCATION_SIZE_BYTES = 8;
-
-/**
- * Returns a string (consisting of 8 random bytes) suitable for use as an
- * obfuscating XOR key.
- */
-std::vector<unsigned char> CDBWrapper::CreateObfuscation() const
-{
-    std::vector<uint8_t> ret(OBFUSCATION_SIZE_BYTES);
-    GetRandBytes(ret);
-    return ret;
 }
 
 std::optional<std::string> CDBWrapper::ReadImpl(std::span<const std::byte> key) const
@@ -404,7 +392,5 @@ void CDBIterator::SeekToFirst() { m_impl_iter->iter->SeekToFirst(); }
 void CDBIterator::Next() { m_impl_iter->iter->Next(); }
 
 namespace dbwrapper_private {
-
-const std::vector<unsigned char>& GetObfuscation(const CDBWrapper &w) { return w.m_obfuscation; }
-
+Obfuscation GetObfuscation(const CDBWrapper& w) { return w.m_obfuscation; }
 } // namespace dbwrapper_private
