@@ -9,20 +9,11 @@
 #include <util/string.h>
 
 #include <memory>
+#include <ranges>
 
 #include <boost/test/unit_test.hpp>
 
 using util::ToString;
-
-// Test if a string consists entirely of null characters
-static bool is_null_key(const std::vector<unsigned char>& key) {
-    bool isnull = true;
-
-    for (unsigned int i = 0; i < key.size(); i++)
-        isnull &= (key[i] == '\x00');
-
-    return isnull;
-}
 
 BOOST_FIXTURE_TEST_SUITE(dbwrapper_tests, BasicTestingSetup)
 
@@ -33,7 +24,7 @@ BOOST_AUTO_TEST_CASE(dbwrapper)
         constexpr size_t CACHE_SIZE{1_MiB};
         const fs::path path{m_args.GetDataDirBase() / "dbwrapper"};
 
-        std::vector<uint8_t> obfuscation_key{};
+        uint64_t obfuscation_key{};
         std::vector<std::pair<uint8_t, uint256>> key_values{};
 
         // Write values
@@ -42,9 +33,9 @@ BOOST_AUTO_TEST_CASE(dbwrapper)
             BOOST_CHECK_EQUAL(obfuscate, !dbw.IsEmpty());
 
             // Ensure that we're doing real obfuscation when obfuscate=true
-            BOOST_CHECK(obfuscate != is_null_key(dbwrapper_private::GetObfuscation(dbw)));
+            BOOST_CHECK_EQUAL(obfuscate, dbwrapper_private::GetObfuscation(dbw));
 
-            obfuscation_key = dbwrapper_private::GetObfuscation(dbw);
+            obfuscation_key = dbwrapper_private::GetObfuscation(dbw).Key();
 
             for (uint8_t k{0}; k < 10; ++k) {
                 uint8_t key{k};
@@ -57,7 +48,7 @@ BOOST_AUTO_TEST_CASE(dbwrapper)
         // Verify that the obfuscation key is never obfuscated
         {
             CDBWrapper dbw{{.path = path, .cache_bytes = CACHE_SIZE, .obfuscate = false}};
-            BOOST_CHECK(obfuscation_key == dbwrapper_private::GetObfuscation(dbw));
+            BOOST_CHECK_EQUAL(obfuscation_key, dbwrapper_private::GetObfuscation(dbw).Key());
         }
 
         // Read back the values
@@ -65,8 +56,8 @@ BOOST_AUTO_TEST_CASE(dbwrapper)
             CDBWrapper dbw{{.path = path, .cache_bytes = CACHE_SIZE, .obfuscate = obfuscate}};
 
             // Ensure obfuscation is read back correctly
-            BOOST_CHECK(obfuscate != is_null_key(dbwrapper_private::GetObfuscation(dbw)));
-            BOOST_CHECK(obfuscation_key == dbwrapper_private::GetObfuscation(dbw));
+            BOOST_CHECK_EQUAL(obfuscate, dbwrapper_private::GetObfuscation(dbw));
+            BOOST_CHECK_EQUAL(obfuscation_key, dbwrapper_private::GetObfuscation(dbw).Key());
 
             // Verify all written values
             for (const auto& [key, expected_value] : key_values) {
@@ -90,7 +81,7 @@ BOOST_AUTO_TEST_CASE(dbwrapper_basic_data)
         bool res_bool;
 
         // Ensure that we're doing real obfuscation when obfuscate=true
-        BOOST_CHECK(obfuscate != is_null_key(dbwrapper_private::GetObfuscation(dbw)));
+        BOOST_CHECK_EQUAL(obfuscate, dbwrapper_private::GetObfuscation(dbw));
 
         //Simulate block raw data - "b + block hash"
         std::string key_block = "b" + m_rng.rand256().ToString();
@@ -149,13 +140,13 @@ BOOST_AUTO_TEST_CASE(dbwrapper_basic_data)
         std::string file_option_tag = "F";
         uint8_t filename_length = m_rng.randbits(8);
         std::string filename = "randomfilename";
-        std::string key_file_option = strprintf("%s%01x%s", file_option_tag,filename_length,filename);
+        std::string key_file_option = strprintf("%s%01x%s", file_option_tag, filename_length, filename);
 
         bool in_file_bool = m_rng.randbool();
         BOOST_CHECK(dbw.Write(key_file_option, in_file_bool));
         BOOST_CHECK(dbw.Read(key_file_option, res_bool));
         BOOST_CHECK_EQUAL(res_bool, in_file_bool);
-   }
+    }
 }
 
 // Test batch operations
@@ -264,8 +255,8 @@ BOOST_AUTO_TEST_CASE(existing_data_no_obfuscate)
     BOOST_CHECK(odbw.Read(key, res2));
     BOOST_CHECK_EQUAL(res2.ToString(), in.ToString());
 
-    BOOST_CHECK(!odbw.IsEmpty()); // There should be existing data
-    BOOST_CHECK(is_null_key(dbwrapper_private::GetObfuscation(odbw))); // The key should be an empty string
+    BOOST_CHECK(!odbw.IsEmpty());                          // There should be existing data
+    BOOST_CHECK(!dbwrapper_private::GetObfuscation(odbw)); // The key should be an empty string
 
     uint256 in2 = m_rng.rand256();
     uint256 res3;
@@ -302,7 +293,7 @@ BOOST_AUTO_TEST_CASE(existing_data_reindex)
     // Check that the key/val we wrote with unobfuscated wrapper doesn't exist
     uint256 res2;
     BOOST_CHECK(!odbw.Read(key, res2));
-    BOOST_CHECK(!is_null_key(dbwrapper_private::GetObfuscation(odbw)));
+    BOOST_CHECK(dbwrapper_private::GetObfuscation(odbw));
 
     uint256 in2 = m_rng.rand256();
     uint256 res3;

@@ -17,11 +17,11 @@ static void ObfuscationBench(benchmark::Bench& bench)
     constexpr size_t bytes{10_MiB};
     auto test_data{rng.randbytes<std::byte>(bytes)};
 
-    const std::vector obfuscation{rng.randbytes<std::byte>(8)};
+    const Obfuscation obfuscation{rng.rand64()};
 
     size_t offset{0};
     bench.batch(bytes / 1_MiB).unit("MiB").run([&] {
-        util::Obfuscation(test_data, obfuscation, offset++);
+        obfuscation(test_data, offset++);
         ankerl::nanobench::doNotOptimizeAway(test_data);
     });
 }
