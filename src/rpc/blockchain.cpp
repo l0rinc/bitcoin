@@ -3616,7 +3616,7 @@ static RPCMethod dumptxoutset()
     const fs::path path = fsbridge::AbsPathJoin(args.GetDataDirNet(), fs::u8path(self.Arg<std::string_view>("path")));
     const auto path_info{fs::status(path)};
     // Write to a temporary path and then move into `path` on completion
-    // to avoid confusion due to an interruption. If a named pipe passed, write directly to it.
+    // to avoid confusion due to an interruption. If a named pipe is passed, write directly to it.
     const fs::path temppath = fs::is_fifo(path_info) ? path : path + ".incomplete";
 
     if (fs::exists(path_info) && !fs::is_fifo(path_info)) {

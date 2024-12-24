@@ -4,6 +4,11 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the generation of UTXO snapshots using `dumptxoutset`."""
 
+import hashlib
+import os
+import subprocess
+import sys
+
 from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -92,6 +97,43 @@ class DumptxoutsetTest(BitcoinTestFramework):
         assert_equal(out["txoutset_hash"], "771d773b5c27b6f35f598ce764652a2cf28fbc268341eb1827844e416c629c7d")
         assert_equal(out["nchaintx"], 101)
 
+    def test_dump_fifo(self, expected_digest):
+        if not hasattr(os, "mkfifo"):
+            self.log.info("Skipping dumptxoutset named pipe test; FIFOs are unavailable")
+            return
+
+        self.log.info("Test dumptxoutset writing to a named pipe")
+        node = self.nodes[0]
+        fifo_path = node.chain_path / "fifo_txoutset.dat"
+        incomplete_path = fifo_path.parent / (fifo_path.name + ".incomplete")
+        os.mkfifo(fifo_path)
+
+        reader = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "import pathlib, sys; sys.stdout.buffer.write(pathlib.Path(sys.argv[1]).read_bytes())",
+                str(fifo_path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            out = node.dumptxoutset(path=str(fifo_path), type="latest")
+            fifo_bytes, stderr = reader.communicate(timeout=10)
+        finally:
+            if reader.poll() is None:
+                reader.kill()
+                reader.communicate()
+            fifo_path.unlink()
+
+        assert_equal(reader.returncode, 0)
+        assert_equal(stderr, b"")
+        assert not incomplete_path.exists()
+        assert_equal(out["path"], str(fifo_path))
+        assert_equal(out["coins_written"], 100)
+        assert_equal(hashlib.sha256(fifo_bytes).hexdigest(), expected_digest)
+
     def run_test(self):
         """Test a trivial usage of the dumptxoutset RPC command."""
         node = self.nodes[0]
@@ -100,6 +142,7 @@ class DumptxoutsetTest(BitcoinTestFramework):
         self.generate(node, COINBASE_MATURITY)
 
         self.test_dump_file("no_option", {}, "e8c59b1bc1f19061c67eb7a392f4ea17eea83af58646ea2909e270546699c36c")
+        self.test_dump_fifo("e8c59b1bc1f19061c67eb7a392f4ea17eea83af58646ea2909e270546699c36c")
         self.test_dump_file("all_data", {"format": ()})
         self.test_dump_file("partial_data_1", {"format": ("txid",)})
         self.test_dump_file("partial_data_order", {"format": ("height", "vout")})
