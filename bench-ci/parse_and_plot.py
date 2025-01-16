@@ -8,15 +8,20 @@ import matplotlib.pyplot as plt
 
 def parse_updatetip_line(line):
     match = re.match(
-        r'^([\d\-:TZ]+) UpdateTip: new best.+height=(\d+).+tx=(\d+).+cache=([\d.]+)MiB\((\d+)txo\)',
+        r'^([\d\-:TZ]+) UpdateTip: new best.+height=(\d+).+tx=(\d+).+cache=([\d.]+)MiB\((\d+)txo\).+mem=(\d+)MiB',
         line
     )
     if not match:
         return None
-    iso_str, height_str, tx_str, cache_size_mb_str, cache_coins_count_str = match.groups()
-    parsed_datetime = datetime.datetime.strptime(iso_str, "%Y-%m-%dT%H:%M:%SZ")
-    return parsed_datetime, int(height_str), int(tx_str), float(cache_size_mb_str), int(cache_coins_count_str)
-
+    iso_str, height_str, tx_str, cache_size_mb_str, cache_coins_count_str, mem_str = match.groups()
+    return (
+        datetime.datetime.strptime(iso_str, "%Y-%m-%dT%H:%M:%SZ"),
+        int(height_str),
+        int(tx_str),
+        float(cache_size_mb_str),
+        int(cache_coins_count_str),
+        int(mem_str),
+    )
 
 def parse_leveldb_compact_line(line):
     match = re.match(r'^([\d\-:TZ]+) \[leveldb] Compacting.*files', line)
@@ -127,13 +132,14 @@ if __name__ == "__main__":
     os.makedirs(png_dir, exist_ok=True)
 
     update_tip_data, leveldb_compact_data, leveldb_gen_table_data, validation_txadd_data, coindb_write_batch_data, coindb_commit_data = parse_log_file(log_file)
-    times, heights, tx_counts, cache_size, cache_count = zip(*update_tip_data)
+    times, heights, tx_counts, cache_size, cache_count, mem_size = zip(*update_tip_data)
     float_minutes = [(t - times[0]).total_seconds() / 60 for t in times]
 
     generate_plot(float_minutes, heights, "Elapsed minutes", "Block Height", "Block Height vs Time", os.path.join(png_dir, "height_vs_time.png"))
     generate_plot(heights, cache_size, "Block Height", "Cache Size (MiB)", "Cache Size vs Block Height", os.path.join(png_dir, "cache_vs_height.png"))
     generate_plot(float_minutes, cache_size, "Elapsed minutes", "Cache Size (MiB)", "Cache Size vs Time", os.path.join(png_dir, "cache_vs_time.png"))
     generate_plot(heights, tx_counts, "Block Height", "Transaction Count", "Transactions vs Block Height", os.path.join(png_dir, "tx_vs_height.png"))
+    generate_plot(heights, mem_size, "Block Height", "Total Memory (MiB)", "Memory vs Block Height", os.path.join(png_dir, "mem_vs_height.png"))
     generate_plot(times, cache_count, "Block Height", "Coins Cache Size", "Coins Cache Size vs Time", os.path.join(png_dir, "coins_cache_vs_time.png"))
 
     # LevelDB Compaction and Generated Tables
