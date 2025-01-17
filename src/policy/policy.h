@@ -25,6 +25,8 @@ class CScript;
 static constexpr unsigned int DEFAULT_BLOCK_MAX_SIZE{MAX_BLOCK_SERIALIZED_SIZE};
 /** Default for -blockmaxweight, which controls the range of block weights the mining code will create **/
 static constexpr unsigned int DEFAULT_BLOCK_MAX_WEIGHT{MAX_BLOCK_WEIGHT};
+/** Default for BlockCreateOptions.block_reserved_size **/
+static constexpr unsigned int DEFAULT_BLOCK_RESERVED_SIZE{1000};
 /** Default for -blockreservedweight **/
 static constexpr unsigned int DEFAULT_BLOCK_RESERVED_WEIGHT{8000};
 /** Default sigops cost to reserve for coinbase transaction outputs when creating block templates. */

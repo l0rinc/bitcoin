@@ -55,6 +55,8 @@ try:
 except ModuleNotFoundError:
     pass
 
+MAX_BLOCK_SERIALIZED_SIZE = 4_000_000
+
 
 class IPCMiningTest(BitcoinTestFramework):
 
@@ -365,9 +367,18 @@ class IPCMiningTest(BitcoinTestFramework):
             await assert_create_new_block_fails(ctx, mining, opts,
                 f"coinbase_output_max_additional_sigops ({MAX_BLOCK_SIGOPS_COST + 1}) exceeds consensus maximum block sigops cost ({MAX_BLOCK_SIGOPS_COST})")
 
+        async def async_routine_check_reserved_size_limit():
+            self.log.debug("Enforce reserved serialized size limit for IPC clients too")
+            ctx, mining = await make_mining_ctx(self)
+            opts = self.capnp_modules['mining'].BlockCreateOptions()
+            opts.blockReservedSize = MAX_BLOCK_SERIALIZED_SIZE
+            await assert_create_new_block_fails(ctx, mining, opts,
+                f"block_reserved_size ({MAX_BLOCK_SERIALIZED_SIZE}) exceeds maximum reserved block serialized size ({MAX_BLOCK_SERIALIZED_SIZE - 1000})")
+
         asyncio.run(capnp.run(async_routine()))
         asyncio.run(capnp.run(async_routine_check_max_reserved_weight()))
         asyncio.run(capnp.run(async_routine_check_sigops_limit()))
+        asyncio.run(capnp.run(async_routine_check_reserved_size_limit()))
         self.restart_node(0)
         self.connect_nodes(0, 1)
         self.miniwallet.rescan_utxos()

@@ -40,6 +40,11 @@ Result<void> CheckMiningOptions(BlockCreateOptions options, bool use_argnames)
                                             use_argnames ? "-blockreservedweight" : "block_reserved_weight",
                                             *options.block_reserved_weight, MAX_BLOCK_WEIGHT))};
     }
+    if (options.block_reserved_size > MAX_BLOCK_SERIALIZED_SIZE - 1000) {
+        return Error{Untranslated(strprintf("%s (%d) exceeds maximum reserved block serialized size (%d)",
+                                            "block_reserved_size", options.block_reserved_size,
+                                            MAX_BLOCK_SERIALIZED_SIZE - 1000))};
+    }
     if (*options.block_max_weight > MAX_BLOCK_WEIGHT) {
         return Error{Untranslated(strprintf("%s (%d) exceeds consensus maximum block weight (%d)",
                                             use_argnames ? "-blockmaxweight" : "block_max_weight",

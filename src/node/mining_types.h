@@ -47,6 +47,11 @@ struct BlockCreateOptions {
      */
     std::optional<bool> print_modified_fee{};
     /**
+     * The default reserved size for the fixed-size block header,
+     * transaction count and coinbase transaction.
+     */
+    uint64_t block_reserved_size{DEFAULT_BLOCK_RESERVED_SIZE};
+    /**
      * The default reserved weight for the fixed-size block header,
      * transaction count and coinbase transaction. Minimum: 2000 weight units
      * (MINIMUM_BLOCK_RESERVED_WEIGHT).

@@ -117,7 +117,7 @@ void BlockAssembler::resetBlock()
 {
     // Reserve space for fixed-size block header, txs count, and coinbase tx.
     nBlockWeight = *Assert(m_options.block_reserved_weight);
-    nBlockSize = 1000;
+    nBlockSize = m_options.block_reserved_size;
     nBlockSigOpsCost = m_options.coinbase_output_max_additional_sigops;
 
     // These counters do not include coinbase tx
@@ -342,7 +342,7 @@ void BlockAssembler::addChunks()
             Assert(m_options.block_max_weight);
             if (nConsecutiveFailed > MAX_CONSECUTIVE_FAILURES &&
                     (nBlockWeight + BLOCK_FULL_ENOUGH_WEIGHT_DELTA > *m_options.block_max_weight ||
-                     (m_account_block_size && nBlockSize + 1000 > *Assert(m_options.block_max_size)))) {
+                     (m_account_block_size && nBlockSize + m_options.block_reserved_size > *Assert(m_options.block_max_size)))) {
                 // Give up if we're close to full and haven't succeeded in a while
                 return;
             }

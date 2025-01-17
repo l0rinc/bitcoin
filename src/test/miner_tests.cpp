@@ -808,6 +808,12 @@ BOOST_AUTO_TEST_CASE(blockmaxsize_mining_options)
     BOOST_REQUIRE(size_and_weight_options.block_max_weight);
     BOOST_CHECK_EQUAL(*size_and_weight_options.block_max_weight, 50'000U);
 
+    const auto reserved_size_options{FlattenMiningOptions({
+        .block_reserved_size = 2'000,
+        .block_max_size = 10'000,
+    })};
+    BOOST_CHECK_EQUAL(reserved_size_options.block_reserved_size, 2'000U);
+
     auto low_size{node::CheckMiningOptions({.block_max_size = 999}, /*use_argnames=*/false)};
     BOOST_REQUIRE(!low_size);
     BOOST_CHECK_EQUAL(util::ErrorString(low_size), "block_max_size (999) is lower than minimum safety value of (1000)");
@@ -815,6 +821,10 @@ BOOST_AUTO_TEST_CASE(blockmaxsize_mining_options)
     auto high_size{node::CheckMiningOptions({.block_max_size = MAX_BLOCK_SERIALIZED_SIZE + 1}, /*use_argnames=*/false)};
     BOOST_REQUIRE(!high_size);
     BOOST_CHECK_EQUAL(util::ErrorString(high_size), "block_max_size (4000001) exceeds consensus maximum block serialized size (4000000)");
+
+    auto high_reserved_size{node::CheckMiningOptions({.block_reserved_size = MAX_BLOCK_SERIALIZED_SIZE}, /*use_argnames=*/false)};
+    BOOST_REQUIRE(!high_reserved_size);
+    BOOST_CHECK_EQUAL(util::ErrorString(high_reserved_size), "block_reserved_size (4000000) exceeds maximum reserved block serialized size (3999000)");
 }
 
 BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
