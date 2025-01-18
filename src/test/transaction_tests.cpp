@@ -1048,4 +1048,116 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     CheckIsNotStandard(t, "dust");
 }
 
+BOOST_AUTO_TEST_CASE(test_uint256_sorting)
+{
+    // Sorting
+    std::vector original{
+        uint256{1},
+        uint256{2},
+        uint256{3}
+    };
+
+    std::vector shuffled{original};
+    std::ranges::shuffle(shuffled, FastRandomContext());
+    std::sort(shuffled.begin(), shuffled.end());
+
+    BOOST_CHECK_EQUAL_COLLECTIONS(original.begin(), original.end(), shuffled.begin(), shuffled.end());
+
+    // Operators
+    constexpr auto a{uint256{1}},
+                   b{uint256{2}},
+                   c{uint256{3}};
+
+    BOOST_CHECK(a == a);
+    BOOST_CHECK(a == uint256{1});
+    BOOST_CHECK(b == b);
+    BOOST_CHECK(c == c);
+    BOOST_CHECK(a != b);
+    BOOST_CHECK(a != uint256{10});
+    BOOST_CHECK(a != c);
+    BOOST_CHECK(b != c);
+
+    BOOST_CHECK(a < b);
+    BOOST_CHECK(a < uint256{10});
+    BOOST_CHECK(b < c);
+    BOOST_CHECK(a < c);
+}
+
+BOOST_AUTO_TEST_CASE(test_transaction_identifier_sorting)
+{
+    std::vector original{
+        Txid::FromUint256(uint256{1}),
+        Txid::FromUint256(uint256{2}),
+        Txid::FromUint256(uint256{3})
+    };
+
+    std::vector shuffled{original};
+    std::ranges::shuffle(shuffled, FastRandomContext());
+    std::sort(shuffled.begin(), shuffled.end());
+
+    BOOST_CHECK_EQUAL_COLLECTIONS(original.begin(), original.end(), shuffled.begin(), shuffled.end());
+
+    // Operators
+    const auto a(Txid::FromUint256(uint256{1})),
+               b(Txid::FromUint256(uint256{2})),
+               c(Txid::FromUint256(uint256{3}));
+
+    BOOST_CHECK(a == uint256{1});
+
+    BOOST_CHECK(a == a);
+    BOOST_CHECK(a == Txid::FromUint256(uint256{1}));
+    BOOST_CHECK(b == b);
+    BOOST_CHECK(c == c);
+    BOOST_CHECK(a != b);
+    BOOST_CHECK(a != Txid::FromUint256(uint256{10}));
+    BOOST_CHECK(a != c);
+    BOOST_CHECK(b != c);
+
+    BOOST_CHECK(a < b);
+    BOOST_CHECK(a < Txid::FromUint256(uint256{10}));
+    BOOST_CHECK(b < c);
+    BOOST_CHECK(a < c);
+}
+
+BOOST_AUTO_TEST_CASE(test_coutpoint_sorting)
+{
+    // Sorting
+    std::vector original{
+        COutPoint(Txid::FromUint256(uint256{1}), 1),
+        COutPoint(Txid::FromUint256(uint256{1}), 2),
+        COutPoint(Txid::FromUint256(uint256{1}), 3),
+        COutPoint(Txid::FromUint256(uint256{2}), 1),
+        COutPoint(Txid::FromUint256(uint256{2}), 2),
+        COutPoint(Txid::FromUint256(uint256{2}), 3),
+        COutPoint(Txid::FromUint256(uint256{3}), 1),
+        COutPoint(Txid::FromUint256(uint256{3}), 2),
+        COutPoint(Txid::FromUint256(uint256{3}), 3)
+    };
+
+    std::vector shuffled{original};
+    std::ranges::shuffle(shuffled, FastRandomContext());
+    std::sort(shuffled.begin(), shuffled.end());
+
+    BOOST_CHECK_EQUAL_COLLECTIONS(original.begin(), original.end(), shuffled.begin(), shuffled.end());
+
+    // Operators
+    const auto a{COutPoint(Txid::FromUint256(uint256{1}), 1)},
+               b{COutPoint(Txid::FromUint256(uint256{1}), 2)},
+               c{COutPoint(Txid::FromUint256(uint256{2}), 1)};
+
+    BOOST_CHECK(a == a);
+    BOOST_CHECK(a == COutPoint(Txid::FromUint256(uint256{1}), 1));
+    BOOST_CHECK(b == b);
+    BOOST_CHECK(c == c);
+    BOOST_CHECK(a != b);
+    BOOST_CHECK(a != COutPoint(Txid::FromUint256(uint256{1}), 10));
+    BOOST_CHECK(a != c);
+    BOOST_CHECK(b != c);
+
+    BOOST_CHECK(a < b);
+    BOOST_CHECK(a < COutPoint(Txid::FromUint256(uint256{1}), 10));
+    BOOST_CHECK(b < c);
+    BOOST_CHECK(a < c);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
