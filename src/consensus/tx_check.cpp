@@ -43,11 +43,14 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-inputs-duplicate");
         }
     } else if (tx.vin.size() >= 3) {
-        std::set<COutPoint> vInOutPoints;
+        std::vector<COutPoint> vInOutPoints;
+        vInOutPoints.reserve(tx.vin.size());
         for (const auto& txin : tx.vin) {
-            if (!vInOutPoints.insert(txin.prevout).second) [[unlikely]] {
-                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-inputs-duplicate");
-            }
+            vInOutPoints.push_back(txin.prevout);
+        }
+        std::sort(vInOutPoints.begin(), vInOutPoints.end());
+        if (std::ranges::adjacent_find(vInOutPoints) != vInOutPoints.end()) [[unlikely]] {
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-inputs-duplicate");
         }
     }
 
