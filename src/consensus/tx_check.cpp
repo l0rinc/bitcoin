@@ -39,13 +39,15 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
     // Failure to run this check will result in either a crash or an inflation bug, depending on the implementation of
     // the underlying coins database.
     if (tx.vin.size() == 2) {
-        if (tx.vin[0].prevout == tx.vin[1].prevout) return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-inputs-duplicate");
+        if (tx.vin[0].prevout == tx.vin[1].prevout) [[unlikely]] return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-inputs-duplicate");
     } else if (tx.vin.size() >= 3) {
-        std::set<COutPoint> vInOutPoints;
+        std::vector<COutPoint> vInOutPoints;
+        vInOutPoints.reserve(tx.vin.size());
         for (const auto& txin : tx.vin) {
-            if (!vInOutPoints.insert(txin.prevout).second)
-                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-inputs-duplicate");
+            vInOutPoints.push_back(txin.prevout);
         }
+        std::sort(vInOutPoints.begin(), vInOutPoints.end());
+        if (std::ranges::adjacent_find(vInOutPoints) != vInOutPoints.end()) [[unlikely]] return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-inputs-duplicate");
     }
 
     if (tx.IsCoinBase())
