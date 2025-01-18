@@ -61,11 +61,7 @@ public:
      * @note Does NOT match the ordering on the corresponding \ref
      *       base_uint::CompareTo, which starts comparing from the end.
      */
-    constexpr int Compare(const base_blob& other) const { return std::memcmp(m_data.data(), other.m_data.data(), WIDTH); }
-
-    friend constexpr bool operator==(const base_blob& a, const base_blob& b) { return a.Compare(b) == 0; }
-    friend constexpr bool operator!=(const base_blob& a, const base_blob& b) { return a.Compare(b) != 0; }
-    friend constexpr bool operator<(const base_blob& a, const base_blob& b) { return a.Compare(b) < 0; }
+    auto operator<=>(const base_blob&) const = default;
 
     /** @name Hex representation
      *

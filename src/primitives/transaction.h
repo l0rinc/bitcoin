@@ -41,20 +41,7 @@ public:
     void SetNull() { hash.SetNull(); n = NULL_INDEX; }
     bool IsNull() const { return (hash.IsNull() && n == NULL_INDEX); }
 
-    friend bool operator<(const COutPoint& a, const COutPoint& b)
-    {
-        return std::tie(a.hash, a.n) < std::tie(b.hash, b.n);
-    }
-
-    friend bool operator==(const COutPoint& a, const COutPoint& b)
-    {
-        return (a.hash == b.hash && a.n == b.n);
-    }
-
-    friend bool operator!=(const COutPoint& a, const COutPoint& b)
-    {
-        return !(a == b);
-    }
+    auto operator<=>(const COutPoint&) const = default;
 
     std::string ToString() const;
 };

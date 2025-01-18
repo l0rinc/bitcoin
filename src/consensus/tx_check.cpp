@@ -46,7 +46,7 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
         for (const auto& txin : tx.vin) {
             vInOutPoints.push_back(txin.prevout);
         }
-        std::sort(vInOutPoints.begin(), vInOutPoints.end());
+        std::ranges::sort(vInOutPoints);
         if (std::ranges::adjacent_find(vInOutPoints) != vInOutPoints.end()) [[unlikely]] return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-inputs-duplicate");
     }
 
