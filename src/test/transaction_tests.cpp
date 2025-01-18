@@ -417,9 +417,39 @@ BOOST_AUTO_TEST_CASE(basic_transaction_tests)
     TxValidationState state;
     BOOST_CHECK_MESSAGE(CheckTransaction(CTransaction(tx), state) && state.IsValid(), "Simple deserialized transaction should be valid.");
 
-    // Check that duplicate txins fail
-    tx.vin.push_back(tx.vin[0]);
-    BOOST_CHECK_MESSAGE(!CheckTransaction(CTransaction(tx), state) || !state.IsValid(), "Transaction with duplicate txins should be invalid.");
+    // Add duplicate input
+    tx.vin.emplace_back(tx.vin[0]);
+    std::ranges::shuffle(tx.vin, m_rng);
+    BOOST_CHECK_MESSAGE(!CheckTransaction(CTransaction(tx), state) || !state.IsValid(), "Transaction with 2 duplicate txins should be invalid.");
+
+    // ... and a valid input to trigger the other validation branch
+    tx.vin.emplace_back(COutPoint(Txid::FromUint256(uint256{1}), 1));
+    std::ranges::shuffle(tx.vin, m_rng);
+    BOOST_CHECK_MESSAGE(!CheckTransaction(CTransaction(tx), state) || !state.IsValid(), "Transaction with 3 inputs (2 valid, 1 duplicate) should be invalid.");
+
+    // Randomized testing against the previous implementation
+    auto reference_duplicate_check{[](const std::vector<CTxIn>& vin) {
+        std::set<COutPoint> vInOutPoints;
+        for (const auto& txin : vin) {
+            if (!vInOutPoints.insert(txin.prevout).second) return false;
+        }
+        return true;
+    }};
+    std::vector<Txid> hashes;
+    std::vector<uint32_t> ns;
+    for (int i = 0; i < 10; ++i) {
+        hashes.emplace_back(Txid::FromUint256(m_rng.rand256()));
+        ns.emplace_back(m_rng.rand32());
+    }
+    for (int i{0}; i < 20; ++i) {
+        tx.vin.clear();
+        for (int j{0}, num_inputs{1 + m_rng.randrange(uint8_t{5})}; j < num_inputs; ++j) {
+            if (COutPoint outpoint(hashes[m_rng.randrange(hashes.size())], ns[m_rng.randrange(ns.size())]); !outpoint.IsNull()) {
+                tx.vin.emplace_back(outpoint);
+            }
+        }
+        BOOST_CHECK_EQUAL(CheckTransaction(CTransaction(tx), state), reference_duplicate_check(tx.vin));
+    }
 }
 
 BOOST_AUTO_TEST_CASE(test_Get)
