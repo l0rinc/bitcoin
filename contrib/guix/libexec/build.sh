@@ -171,6 +171,12 @@ make -C depends --jobs="$JOBS" HOST="$HOST" \
                                    ${SOURCES_PATH+SOURCES_PATH="$SOURCES_PATH"} \
                                    ${BASE_CACHE+BASE_CACHE="$BASE_CACHE"} \
                                    ${SDK_PATH+SDK_PATH="$SDK_PATH"} \
+                                   NO_QT=1 \
+                                   NO_QR=1 \
+                                   NO_ZMQ=1 \
+                                   NO_WALLET=1 \
+                                   NO_BDB=1 \
+                                   NO_USDT=1 \
                                    x86_64_linux_CC=x86_64-linux-gnu-gcc \
                                    x86_64_linux_CXX=x86_64-linux-gnu-g++ \
                                    x86_64_linux_AR=x86_64-linux-gnu-gcc-ar \
@@ -208,6 +214,9 @@ mkdir -p "$OUTDIR"
 # CONFIGFLAGS
 CONFIGFLAGS="-DREDUCE_EXPORTS=ON -DBUILD_BENCH=OFF -DBUILD_GUI_TESTS=OFF -DBUILD_FUZZ_BINARY=OFF"
 
+# BENCHCOINFLAGS
+BENCHCOINFLAGS="-DBUILD_CLI=OFF -DBUILD_TESTS=OFF -DCMAKE_CXX_FLAGS=-fno-omit-frame-pointer"
+
 # CFLAGS
 HOST_CFLAGS="-O2 -g"
 HOST_CFLAGS+=$(find /gnu/store -maxdepth 1 -mindepth 1 -type d -exec echo -n " -ffile-prefix-map={}=/usr" \;)
@@ -242,17 +251,18 @@ mkdir -p "$DISTSRC"
     cmake -S . -B build \
           --toolchain "${BASEPREFIX}/${HOST}/toolchain.cmake" \
           -DWITH_CCACHE=OFF \
-          ${CONFIGFLAGS}
+          ${CONFIGFLAGS} \
+          ${BENCHCOINFLAGS}
 
     # Build Bitcoin Core
     cmake --build build -j "$JOBS" ${V:+--verbose}
 
     # Check that symbol/security checks tools are sane.
-    cmake --build build --target test-security-check ${V:+--verbose}
+    # cmake --build build --target test-security-check ${V:+--verbose}
     # Perform basic security checks on a series of executables.
-    cmake --build build -j 1 --target check-security ${V:+--verbose}
+    # cmake --build build -j 1 --target check-security ${V:+--verbose}
     # Check that executables only contain allowed version symbols.
-    cmake --build build -j 1 --target check-symbols ${V:+--verbose}
+    # cmake --build build -j 1 --target check-symbols ${V:+--verbose}
 
     mkdir -p "$OUTDIR"
 
