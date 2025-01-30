@@ -837,6 +837,16 @@ BOOST_AUTO_TEST_CASE(blockmaxsize_mining_options)
     BOOST_CHECK_EQUAL(*clamped_size_only_options.block_max_size, 10'000U);
     BOOST_CHECK_EQUAL(*clamped_size_only_options.block_max_weight, MAX_BLOCK_WEIGHT);
 
+    auto mining{MakeMining()};
+    BOOST_REQUIRE(mining);
+    const BlockCreateOptions original_mining_args{m_node.mining_args};
+    m_node.mining_args.block_max_size = 999;
+    BOOST_CHECK_EXCEPTION(mining->createNewBlock({}, /*cooldown=*/false),
+                          std::runtime_error,
+                          HasReason("block_max_size (999) is lower than minimum safety value of (1000)"));
+    BOOST_REQUIRE(mining->createNewBlock2(BlockCreateOptions{}.Clamped()));
+    m_node.mining_args = original_mining_args;
+
     auto low_size{node::CheckMiningOptions({.block_max_size = 999}, /*use_argnames=*/false)};
     BOOST_REQUIRE(!low_size);
     BOOST_CHECK_EQUAL(util::ErrorString(low_size).original, "block_max_size (999) is lower than minimum safety value of (1000)");

@@ -1037,6 +1037,11 @@ public:
             if (!CooldownIfHeadersAhead(chainman(), notifications(), *maybe_tip, m_interrupt_mining)) return {};
         }
         const BlockCreateOptions create_options{MergeMiningOptions(options, m_node.mining_args)};
+        return createNewBlock2(create_options);
+    }
+
+    std::unique_ptr<BlockTemplate> createNewBlock2(const BlockCreateOptions& create_options) override
+    {
         return std::make_unique<BlockTemplateImpl>(create_options,
                                                    BlockAssembler{
                                                        chainman().ActiveChainstate(),
