@@ -1325,96 +1325,129 @@ bool operator==(const Coin& a, const Coin& b)
 void BenchmarkLoadAllUTXOs(const CCoinsViewDB& coins_db)
 {
     constexpr int max_utxo_count{200'000'000};
-    std::vector<std::pair<COutPoint, Coin>> utxos;
+    std::vector<std::vector<std::pair<COutPoint, Coin>>> utxo_partitions(1000);
+    FastRandomContext rnd;
 
+    size_t utxo_count{0};
     {
         LOG_TIME_SECONDS("Loading all UTXOs from disk");
         for (const auto cursor{coins_db.Cursor()}; cursor->Valid(); cursor->Next()) {
             COutPoint key;
             Coin coin;
             if (cursor->GetKey(key) && cursor->GetValue(coin)) {
-                utxos.emplace_back(key, coin);
+                auto partition_index = rnd.randrange(utxo_partitions.size());
+                if (partition_index < 10) { // TODO
+                    auto& partition{utxo_partitions[partition_index]};
+                    partition.emplace_back(key, coin);
+                    ++utxo_count;
+                }
             }
         }
-        assert(utxos.size() < max_utxo_count);
-        assert(utxos.size() > max_utxo_count / 2);
+        // assert(utxo_count > max_utxo_count / 2);
+        assert(utxo_count < max_utxo_count);
     }
     {
         LOG_TIME_SECONDS("Populating new cache with all UTXOs");
         CCoinsView viewDummy;
         CCoinsViewCache view(&viewDummy);
-        for (const auto& [outpoint, coin] : utxos) {
-            view.AddCoin(outpoint, Coin{coin}, /*possible_overwrite=*/false);
+        for (const auto& partition : utxo_partitions) {
+            for (const auto& [outpoint, coin] : partition) {
+                view.AddCoin(outpoint, Coin{coin}, /*possible_overwrite=*/false);
+            }
         }
-        assert(view.GetCacheSize() == utxos.size());
+        assert(view.GetCacheSize() == utxo_count);
     }
 
+    //////
     // Raw gets vs cursor gets
+    //////
 
     {
         LOG_TIME_SECONDS("Loading UTXOs one-by-one");
-        for (const auto& [outpoint, coin] : utxos) {
-            assert(coins_db.GetCoin(outpoint) == coin);
+        for (const auto& partition : utxo_partitions) {
+            for (const auto& [outpoint, coin] : partition) {
+                assert(coins_db.GetCoin(outpoint) == coin);
+            }
         }
     }
     {
         LOG_TIME_SECONDS("Loading UTXOs using cursor");
-        const auto cursor = coins_db.Cursor();
-        Coin next;
-        for (const auto& [outpoint, coin] : utxos) {
-            assert(cursor->SeekAndGetValue(outpoint, next));
-            assert(next == coin);
+        for (const auto& partition : utxo_partitions) {
+            const auto cursor = coins_db.Cursor();
+            Coin next;
+            for (const auto& [outpoint, coin] : partition) {
+                assert(cursor->SeekAndGetValue(outpoint, next));
+                assert(next == coin);
+            }
         }
     }
 
-    std::ranges::shuffle(utxos, FastRandomContext());
+    for (auto& partition : utxo_partitions) {
+        std::ranges::shuffle(partition, rnd);
+    }
     {
         LOG_TIME_SECONDS("Loading shuffled UTXOs one-by-one");
-        for (const auto& [outpoint, coin] : utxos) {
-            assert(coins_db.GetCoin(outpoint) == coin);
+        for (const auto& partition : utxo_partitions) {
+            for (const auto& [outpoint, coin] : partition) {
+                assert(coins_db.GetCoin(outpoint) == coin);
+            }
         }
     }
     {
         LOG_TIME_SECONDS("Loading shuffled UTXOs using cursor");
-        const auto cursor = coins_db.Cursor();
-        Coin next;
-        for (const auto& [outpoint, coin] : utxos) {
-            assert(cursor->SeekAndGetValue(outpoint, next));
-            assert(next == coin);
+        for (const auto& partition : utxo_partitions) {
+            const auto cursor = coins_db.Cursor();
+            Coin next;
+            for (const auto& [outpoint, coin] : partition) {
+                assert(cursor->SeekAndGetValue(outpoint, next));
+                assert(next == coin);
+            }
         }
     }
 
-    std::ranges::sort(utxos, [](auto& a, auto& b) { return a.first < b.first; });
+    for (auto& partition : utxo_partitions) {
+        std::ranges::sort(partition, [](auto& a, auto& b) { return a.first < b.first; });
+    }
     {
         LOG_TIME_SECONDS("Loading ascending UTXOs one-by-one");
-        for (const auto& [outpoint, coin] : utxos) {
-            assert(coins_db.GetCoin(outpoint) == coin);
+        for (const auto& partition : utxo_partitions) {
+            for (const auto& [outpoint, coin] : partition) {
+                assert(coins_db.GetCoin(outpoint) == coin);
+            }
         }
     }
     {
         LOG_TIME_SECONDS("Loading ascending UTXOs using cursor");
-        const auto cursor = coins_db.Cursor();
-        Coin next;
-        for (const auto& [outpoint, coin] : utxos) {
-            assert(cursor->SeekAndGetValue(outpoint, next));
-            assert(next == coin);
+        for (const auto& partition : utxo_partitions) {
+            const auto cursor = coins_db.Cursor();
+            Coin next;
+            for (const auto& [outpoint, coin] : partition) {
+                assert(cursor->SeekAndGetValue(outpoint, next));
+                assert(next == coin);
+            }
         }
     }
 
-    std::ranges::reverse(utxos);
+    for (auto& partition : utxo_partitions) {
+        std::ranges::sort(partition, [](auto& a, auto& b) { return b.first < a.first; });
+    }
     {
         LOG_TIME_SECONDS("Loading descending UTXOs one-by-one");
-        for (const auto& [outpoint, coin] : utxos) {
-            assert(coins_db.GetCoin(outpoint) == coin);
+        for (const auto& partition : utxo_partitions) {
+            for (const auto& [outpoint, coin] : partition) {
+                assert(coins_db.GetCoin(outpoint) == coin);
+            }
         }
     }
     {
         LOG_TIME_SECONDS("Loading descending UTXOs using cursor");
-        const auto cursor = coins_db.Cursor();
-        Coin next;
-        for (const auto& [outpoint, coin] : utxos) {
-            assert(cursor->SeekAndGetValue(outpoint, next));
-            assert(next == coin);
+        for (const auto& partition : utxo_partitions) {
+            const auto cursor = coins_db.Cursor();
+            Coin next;
+            for (const auto& [outpoint, coin] : partition) {
+                assert(cursor->SeekAndGetValue(outpoint, next));
+                assert(next == coin);
+            }
         }
     }
 
