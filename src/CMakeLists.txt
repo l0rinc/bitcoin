@@ -448,6 +448,10 @@ if(BUILD_GUI)
 endif()
 
 
+if(BUILD_BITCOINCONSENSUS_LIB)
+  add_subdirectory(consensus)
+endif()
+
 if(BUILD_KERNEL_LIB)
   add_subdirectory(kernel)
   if (BUILD_KERNEL_TEST)

@@ -17,8 +17,8 @@ export CI_LIMIT_STACK_SIZE=1
 export DOWNLOAD_PREVIOUS_RELEASES=true
 # Use -Werror as the CMake version does not support CMAKE_COMPILE_WARNING_AS_ERROR
 export BITCOIN_CONFIG="\
- --preset=dev-mode \
- -DREDUCE_EXPORTS=ON \
+ -DWITH_ZMQ=ON -DBUILD_GUI=ON -DREDUCE_EXPORTS=ON \
+ -DBUILD_BITCOINCONSENSUS_LIB=OFF \
  -DCMAKE_BUILD_TYPE=Debug \
  -DCMAKE_C_FLAGS='-funsigned-char -Werror' \
  -DCMAKE_C_FLAGS_DEBUG='-g2 -O2' \

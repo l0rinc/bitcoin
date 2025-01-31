@@ -2,6 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <addresstype.h>
 #include <bench/bench.h>
 #include <coins.h>
@@ -9,6 +11,9 @@
 #include <policy/policy.h>
 #include <primitives/transaction.h>
 #include <pubkey.h>
+#if defined(HAVE_CONSENSUS_LIB)
+#include <script/bitcoinconsensus.h>
+#endif
 #include <script/interpreter.h>
 #include <script/script.h>
 #include <script/script_error.h>
@@ -16,6 +21,7 @@
 #include <script/signingprovider.h>
 #include <script/verify_flags.h>
 #include <span.h>
+#include <streams.h>
 #include <test/util/transaction_utils.h>
 #include <uint256.h>
 #include <util/check.h>
@@ -102,6 +108,17 @@ static void VerifyScriptBench(benchmark::Bench& bench, ScriptType script_type)
             &err);
         assert(err == SCRIPT_ERR_OK);
         assert(success);
+
+#if defined(HAVE_CONSENSUS_LIB)
+        DataStream stream;
+        stream << TX_WITH_WITNESS(txSpend);
+        int csuccess = bitcoinconsensus_verify_script_with_amount(
+            txCredit.vout[0].scriptPubKey.data(),
+            txCredit.vout[0].scriptPubKey.size(),
+            txCredit.vout[0].nValue,
+            (const unsigned char*)stream.data(), stream.size(), 0, flags, nullptr);
+        assert(csuccess == 1);
+#endif
     });
 }
 
