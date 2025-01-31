@@ -314,15 +314,15 @@ mkdir -p "$DISTSRC"
     (
         cd installed
 
-        case "$HOST" in
-            *darwin*) ;;
-            *)
-                # Split binaries from their debug symbols
-                {
-                    find "${DISTNAME}/bin" -type f -executable -print0
-                } | xargs -0 -P"$JOBS" -I{} "${DISTSRC}/build/split-debug.sh" {} {} {}.dbg
-                ;;
-        esac
+        # case "$HOST" in
+        #     *darwin*) ;;
+        #     *)
+        #         # Split binaries from their debug symbols
+        #         {
+        #             find "${DISTNAME}/bin" -type f -executable -print0
+        #         } | xargs -0 -P"$JOBS" -I{} "${DISTSRC}/build/split-debug.sh" {} {} {}.dbg
+        #         ;;
+        # esac
 
         case "$HOST" in
             *mingw*)
