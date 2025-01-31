@@ -4179,7 +4179,7 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
         // Check timestamp for the first block of each difficulty adjustment
         // interval, except the genesis block.
         if (nHeight % consensusParams.DifficultyAdjustmentInterval() == 0) {
-            if (block.GetBlockTime() < pindexPrev->GetBlockTime() - MAX_TIMEWARP) {
+            if (block.GetBlockTime() < pindexPrev->GetBlockTime() - MAX_TIMEWARP_BIP94) {
                 return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-timewarp-attack", "block's timestamp is too early on diff adjustment block");
             }
         }
