@@ -123,10 +123,12 @@ public:
      */
     virtual std::optional<BlockRef> waitTipChanged(uint256 current_tip, MillisecondsDouble timeout = MillisecondsDouble::max()) = 0;
 
-   /**
+    /**
      * Construct a new block template. createNewBlock merges provided options
      * with node mining options. createNewBlock2 uses the provided options as
      * complete.
+     *
+     * During node initialization, createNewBlock waits until the tip is connected.
      *
      * @param[in] options options for creating the block
      * @param[in] cooldown wait for tip to be connected and IBD to complete.
