@@ -294,7 +294,7 @@ static void SaltedOutpointHasherBench_create_set(benchmark::Bench& bench)
         for (const auto& outpoint : outpoints) {
             set.emplace(outpoint);
         }
-        ankerl::nanobench::doNotOptimizeAway(set);
+        ankerl::nanobench::doNotOptimizeAway(set.size());
     });
 }
 
