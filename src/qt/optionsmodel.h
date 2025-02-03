@@ -93,6 +93,7 @@ public:
         limitdescendantcount,
         limitdescendantsize,
         rejectbaremultisig,     // bool
+        datacarriersize,
         OptionIDRowCount,
     };
 
