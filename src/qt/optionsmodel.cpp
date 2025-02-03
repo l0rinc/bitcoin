@@ -26,6 +26,7 @@
 #include <node/context.h>
 #include <outputtype.h>
 #include <policy/settings.h>
+#include <util/moneystr.h> // for FormatMoney
 #include <util/string.h>
 #include <validation.h>
 #include <wallet/wallet.h>
@@ -646,6 +647,8 @@ QVariant OptionsModel::getOption(OptionID option, const std::string& suffix) con
         return qlonglong(std::chrono::duration_cast<std::chrono::hours>(node().mempool().m_opts.expiry).count());
     case rejectunknownscripts:
         return node().mempool().m_opts.require_standard;
+    case minrelaytxfee:
+        return qlonglong(node().mempool().m_opts.min_relay_feerate.GetFeePerK());
     case bytespersigop:
         return nBytesPerSigOp;
     case bytespersigopstrict:
@@ -1053,6 +1056,13 @@ bool OptionsModel::setOption(OptionID option, const QVariant& value, const std::
         }
         break;
     }
+    case minrelaytxfee:
+        if (changed()) {
+            CAmount nNv = value.toLongLong();
+            gArgs.ModifyRWConfigFile("minrelaytxfee", FormatMoney(nNv));
+            node().mempool().m_opts.min_relay_feerate = CFeeRate(nNv);
+        }
+        break;
     case bytespersigop:
         if (changed()) {
             gArgs.ModifyRWConfigFile("bytespersigop", value.toString().toStdString());
