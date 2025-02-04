@@ -762,7 +762,9 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     CKey key = GenerateRandomKey();
     t.vout[0].scriptPubKey = GetScriptForDestination(PKHash(key.GetPubKey()));
 
-    constexpr auto CheckIsStandard = [](const auto& t, const unsigned int max_op_return_relay = MAX_OP_RETURN_RELAY) {
+    g_mempool_opts.permit_bare_pubkey = true;
+
+    constexpr auto CheckIsStandard = [](const auto& t) {
         std::string reason;
         BOOST_CHECK(IsStandardTx(CTransaction{t}, g_mempool_opts, reason));
         BOOST_CHECK(reason.empty());
