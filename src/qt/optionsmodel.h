@@ -96,6 +96,7 @@ public:
         limitancestorsize,
         limitdescendantcount,
         limitdescendantsize,
+        rejectbarepubkey,       // bool
         rejectbaremultisig,     // bool
         maxscriptsize,
         datacarriercost,        // double
