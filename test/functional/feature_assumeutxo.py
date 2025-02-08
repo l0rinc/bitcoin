@@ -474,6 +474,20 @@ class AssumeutxoTest(BitcoinTestFramework):
 
         check_dump_output(dump_output)
 
+        assumed_tx_height = START_HEIGHT
+        assumed_tx_block_hash = blocks[assumed_tx_height].hash
+        assumed_txid = n0.getblock(assumed_tx_block_hash, verbosity=2)['tx'][0]['txid']
+
+        def check_getrawtransaction_assumed_confirmations(node):
+            tx = node.getrawtransaction(assumed_txid, 1, assumed_tx_block_hash)
+            assert_equal(tx['confirmations'], 0)
+            assert_equal(tx['confirmations_assumed'], 1 + SNAPSHOT_BASE_HEIGHT - assumed_tx_height)
+
+        def check_getrawtransaction_validated_confirmations(node):
+            tx = node.getrawtransaction(assumed_txid, 1, assumed_tx_block_hash)
+            assert_equal(tx['confirmations'], 1 + FINAL_HEIGHT - assumed_tx_height)
+            assert 'confirmations_assumed' not in tx
+
         # Mine more blocks on top of the snapshot that n1 hasn't yet seen. This
         # will allow us to test n1's sync-to-tip on top of a snapshot.
         self.generate(n0, nblocks=100, sync_fun=self.no_op)
@@ -752,6 +766,9 @@ class AssumeutxoTest(BitcoinTestFramework):
         assert_equal(snapshot['snapshot_blockhash'], dump_output['base_hash'])
         assert_equal(snapshot['validated'], False)
 
+        self.log.info("Check that getrawtransaction separates assumed confirmations")
+        check_getrawtransaction_assumed_confirmations(n2)
+
         self.log.info("Check that loading the snapshot again will fail because there is already an active snapshot.")
         msg = "Unable to load UTXO snapshot: Can't activate a snapshot-based chainstate more than once"
         assert_raises_rpc_error(-32603, msg, n2.loadtxoutset, dump_output['path'])
@@ -777,6 +794,9 @@ class AssumeutxoTest(BitcoinTestFramework):
             'txindex': COMPLETE_IDX,
         }
         self.wait_until(lambda: n2.getindexinfo() == completed_idx_state)
+
+        self.log.info("Check that getrawtransaction reports validated confirmations after background validation")
+        check_getrawtransaction_validated_confirmations(n2)
 
         for i in (0, 2):
             n = self.nodes[i]
