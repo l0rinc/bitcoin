@@ -139,7 +139,7 @@ public:
     /** Creates new signatures and adds them to the transaction. Returns whether all inputs were signed */
     virtual bool SignTransaction(CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, bilingual_str>& input_errors, std::optional<CAmount>* inputs_amount_sum = nullptr) const { return false; }
     /** Sign a message with the given script */
-    virtual SigningResult SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const { return SigningResult::SIGNING_FAILED; };
+    virtual SigningResult SignMessage(const MessageSignatureFormat format, const std::string& message, const CTxDestination& address, std::string& str_sig) const { return SigningResult::SIGNING_FAILED; };
     /** Adds script and derivation path information to a PSBT, and optionally signs it. */
     virtual std::optional<common::PSBTError> FillPSBT(PartiallySignedTransaction& psbt, const PrecomputedTransactionData& txdata, const common::PSBTFillOptions& options, int* n_signed = nullptr) const { return common::PSBTError::UNSUPPORTED; }
 
@@ -213,6 +213,7 @@ public:
 
     // ScriptPubKeyMan overrides
     bool CheckDecryptionKey(const CKeyingMaterial& master_key) override;
+    SigningResult SignMessage(const MessageSignatureFormat format, const std::string& message, const CTxDestination& address, std::string& str_sig) const override;
     std::unordered_set<CScript, SaltedSipHasher> GetScriptPubKeys() const override;
     std::unique_ptr<SigningProvider> GetSolvingProvider(const CScript& script) const override;
     uint256 GetID() const override { return uint256::ONE; }
@@ -395,7 +396,7 @@ public:
     std::unique_ptr<FlatSigningProvider> GetSigningProvider(const CPubKey& pubkey) const;
 
     bool SignTransaction(CMutableTransaction& tx, const std::map<COutPoint, Coin>& coins, int sighash, std::map<int, bilingual_str>& input_errors, std::optional<CAmount>* inputs_amount_sum = nullptr) const override;
-    SigningResult SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const override;
+    SigningResult SignMessage(const MessageSignatureFormat format, const std::string& message, const CTxDestination& address, std::string& str_sig) const override;
     std::optional<common::PSBTError> FillPSBT(PartiallySignedTransaction& psbt, const PrecomputedTransactionData& txdata, const common::PSBTFillOptions& options, int* n_signed = nullptr) const override;
 
     uint256 GetID() const override;

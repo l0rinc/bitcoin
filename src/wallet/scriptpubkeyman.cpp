@@ -216,7 +216,7 @@ SigningResult ScriptPubKeyMan::SignMessageBIP322(MessageSignatureFormat format, 
 
     // Sign the transaction
     std::map<int, bilingual_str> errors;
-    if (!::SignTransaction(to_sign, keystore, coins, SIGHASH_ALL, errors)) {
+    if (!::SignTransaction(to_sign, keystore, coins, {.sighash_type = SIGHASH_ALL}, errors)) {
         // TODO: this may be a multisig which successfully signed but needed additional signatures
         return SigningResult::SIGNING_FAILED;
     }
@@ -319,6 +319,29 @@ bool LegacyDataSPKM::CanProvide(const CScript& script, SignatureData& sigdata)
         }
         return false;
     }
+}
+
+SigningResult LegacyDataSPKM::SignMessage(const MessageSignatureFormat format, const std::string& message, const CTxDestination& address, std::string& str_sig) const
+{
+    if (format != MessageSignatureFormat::LEGACY) {
+        return SignMessageBIP322(format, this, message, address, str_sig);
+    }
+
+    const PKHash* pkhash = std::get_if<PKHash>(&address);
+    if (!pkhash) {
+        return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
+    }
+
+    CKey key;
+    if (!GetKey(ToKeyID(*pkhash), key)) {
+        return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
+    }
+
+    if (MessageSign(key, message, str_sig)) {
+        return SigningResult::OK;
+    }
+
+    return SigningResult::SIGNING_FAILED;
 }
 
 bool LegacyDataSPKM::LoadKey(const CKey& key, const CPubKey &pubkey)
@@ -1379,15 +1402,24 @@ bool DescriptorScriptPubKeyMan::SignTransaction(CMutableTransaction& tx, const s
     return ::SignTransaction(tx, keys.get(), coins, {.sighash_type = sighash}, input_errors, inputs_amount_sum);
 }
 
-SigningResult DescriptorScriptPubKeyMan::SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const
+SigningResult DescriptorScriptPubKeyMan::SignMessage(const MessageSignatureFormat format, const std::string& message, const CTxDestination& address, std::string& str_sig) const
 {
-    std::unique_ptr<FlatSigningProvider> keys = GetSigningProvider(GetScriptForDestination(pkhash), true);
+    std::unique_ptr<FlatSigningProvider> keys = GetSigningProvider(GetScriptForDestination(address), true);
     if (!keys) {
         return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
     }
 
+    if (format != MessageSignatureFormat::LEGACY) {
+        return SignMessageBIP322(format, keys.get(), message, address, str_sig);
+    }
+
+    const PKHash* pkhash = std::get_if<PKHash>(&address);
+    if (!pkhash) {
+        return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
+    }
+
     CKey key;
-    if (!keys->GetKey(ToKeyID(pkhash), key)) {
+    if (!keys->GetKey(ToKeyID(*pkhash), key)) {
         return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
     }
 
