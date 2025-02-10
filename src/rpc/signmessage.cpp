@@ -54,7 +54,6 @@ static RPCMethod verifymessage()
             case MessageVerificationResult::ERR_PUBKEY_NOT_RECOVERED:
             case MessageVerificationResult::ERR_NOT_SIGNED:
                 return false;
-            case MessageVerificationResult::OK_TIMELOCKED:
             case MessageVerificationResult::OK:
                 return true;
             }
