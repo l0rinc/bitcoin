@@ -388,6 +388,27 @@ void BlockManager::FindFilesToPruneManual(
         chain.GetRole(), last_block_can_prune, count);
 }
 
+uint64_t BlockManager::GetPruneTargetForChainstate(const Chainstate& chain, ChainstateManager& chainman) const
+{
+    const auto number_of_chainstates{chainman.HistoricalChainstate() ? 2 : 1};
+    const uint64_t min_overall_target{MIN_DISK_SPACE_FOR_BLOCK_FILES * number_of_chainstates};
+    auto target = std::max(min_overall_target, GetPruneTarget());
+    uint64_t target_boost{0};
+    if (m_opts.prune_target_during_init > -1 && chainman.IsInitialBlockDownload()) {
+        const uint64_t prune_during_init{static_cast<uint64_t>(m_opts.prune_target_during_init)};
+        if (prune_during_init <= target) {
+            target = std::max(min_overall_target, prune_during_init);
+        } else if (chain.GetRole().validated) {
+            // Only the background/normal gets the benefit
+            // NOTE: This assumes only one such chainstate exists
+            target_boost = prune_during_init - target;
+        }
+    }
+    // Distribute our -prune budget over all chainstates.
+    target = (target / number_of_chainstates) + target_boost;
+    return target;
+}
+
 void BlockManager::FindFilesToPrune(
     std::set<int>& setFilesToPrune,
     int last_prune,
@@ -395,16 +416,7 @@ void BlockManager::FindFilesToPrune(
     ChainstateManager& chainman)
 {
     LOCK(::cs_main);
-    // Compute `target` value with maximum size (in bytes) of blocks below the
-    // `last_prune` height which should be preserved and not pruned. The
-    // `target` value will be derived from the -prune preference provided by the
-    // user. If there is a historical chainstate being used to populate indexes
-    // and validate the snapshot, the target is divided by two so half of the
-    // block storage will be reserved for the historical chainstate, and the
-    // other half will be reserved for the most-work chainstate.
-    const int num_chainstates{chainman.HistoricalChainstate() ? 2 : 1};
-    const auto target = std::max(
-        MIN_DISK_SPACE_FOR_BLOCK_FILES, GetPruneTarget() / num_chainstates);
+    const auto target{GetPruneTargetForChainstate(chain, chainman)};
     const uint64_t target_sync_height = chainman.m_best_header->nHeight;
 
     if (chain.m_chain.Height() < 0 || target == 0) {

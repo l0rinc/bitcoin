@@ -5,11 +5,14 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <clientversion.h>
+#include <common/args.h>
+#include <node/blockmanager_args.h>
 #include <node/blockstorage.h>
 #include <node/context.h>
 #include <node/kernel_notifications.h>
 #include <script/solver.h>
 #include <primitives/block.h>
+#include <util/byte_units.h>
 #include <util/chaintype.h>
 #include <validation.h>
 
@@ -17,6 +20,11 @@
 #include <test/util/common.h>
 #include <test/util/logging.h>
 #include <test/util/setup_common.h>
+
+#include <initializer_list>
+#include <limits>
+#include <string>
+#include <utility>
 
 using kernel::CBlockFileInfo;
 using node::STORAGE_HEADER_BYTES;
@@ -26,6 +34,57 @@ using node::MAX_BLOCKFILE_SIZE;
 
 // use BasicTestingSetup here for the data directory configuration, setup, and cleanup
 BOOST_FIXTURE_TEST_SUITE(blockmanager_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(blockmanager_args_prune_during_init)
+{
+    KernelNotifications notifications{Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings)};
+    const auto make_options = [&] {
+        return BlockManager::Options{
+            .chainparams = Params(),
+            .blocks_dir = m_args.GetBlocksDirPath(),
+            .notifications = notifications,
+            .block_tree_db_params = DBParams{
+                .path = m_args.GetDataDirNet() / "blocks" / "index",
+                .cache_bytes = 0,
+            },
+        };
+    };
+
+    const auto apply_args = [&](const std::initializer_list<std::pair<std::string, std::string>>& args) {
+        ArgsManager argsman;
+        for (const auto& [name, value] : args) {
+            argsman.ForceSetArg(name, value);
+        }
+
+        auto opts{make_options()};
+        const auto result{node::ApplyArgsManOptions(argsman, opts)};
+        BOOST_REQUIRE(result);
+        return std::pair{opts.prune_target, opts.prune_target_during_init};
+    };
+
+    BOOST_CHECK_EQUAL(apply_args({{"-prune", "550"}}).first, 550_MiB);
+    BOOST_CHECK_EQUAL(apply_args({{"-prune", "550"}}).second, -1);
+
+    const auto pruned_during_init{apply_args({{"-prune", "550"}, {"-pruneduringinit", "1000"}})};
+    BOOST_CHECK_EQUAL(pruned_during_init.first, 550_MiB);
+    BOOST_CHECK_EQUAL(pruned_during_init.second, 1000_MiB);
+
+    BOOST_CHECK_EQUAL(
+        apply_args({{"-prune", "550"}, {"-pruneduringinit", "1"}}).second,
+        std::numeric_limits<int64_t>::max());
+
+    const auto check_invalid = [&](const std::initializer_list<std::pair<std::string, std::string>>& args) {
+        ArgsManager argsman;
+        for (const auto& [name, value] : args) {
+            argsman.ForceSetArg(name, value);
+        }
+        auto opts{make_options()};
+        BOOST_CHECK(!node::ApplyArgsManOptions(argsman, opts));
+    };
+
+    check_invalid({{"-prune", "550"}, {"-pruneduringinit", "-2"}});
+    check_invalid({{"-prune", "550"}, {"-pruneduringinit", "2"}});
+}
 
 BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
 {
