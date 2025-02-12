@@ -2993,9 +2993,15 @@ static void UpdateTipLog(
     const std::string& prefix,
     const std::string& warning_messages) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
 {
-
     AssertLockHeld(::cs_main);
-    LogPrintf("%s%s: new best=%s height=%d version=0x%08x log2_work=%f tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)%s\n",
+
+    int stored_blocks{0}, stored_undos{0};
+    for (const auto& block_index : chainman.m_blockman.m_block_index | std::views::values) {
+        stored_blocks += !!(block_index.nStatus & BLOCK_HAVE_DATA);
+        stored_undos += !!(block_index.nStatus & BLOCK_HAVE_UNDO);
+    }
+
+    LogInfo("%s%s: new best=%s height=%d version=0x%08x log2_work=%f tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo) stored_blocks=%d stored_undos=%d%s",
         prefix, func_name,
         tip->GetBlockHash().ToString(), tip->nHeight, tip->nVersion,
         log(tip->nChainWork.getdouble()) / log(2.0), tip->m_chain_tx_count,
@@ -3003,6 +3009,8 @@ static void UpdateTipLog(
         chainman.GuessVerificationProgress(tip),
         coins_tip.DynamicMemoryUsage() * (1.0 / (1 << 20)),
         coins_tip.GetCacheSize(),
+        stored_blocks,
+        stored_undos,
         !warning_messages.empty() ? strprintf(" warning='%s'", warning_messages) : "");
 }
 
