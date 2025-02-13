@@ -83,6 +83,16 @@ public:
         }
         nPos += src.size();
     }
+    void write(std::byte val)
+    {
+        assert(nPos <= vchData.size());
+        if (nPos < vchData.size()) {
+            vchData[nPos] = static_cast<unsigned char>(val);
+        } else {
+            vchData.push_back(static_cast<unsigned char>(val));
+        }
+        nPos++;
+    }
     template <typename T>
     VectorWriter& operator<<(const T& obj)
     {
@@ -180,6 +190,7 @@ public:
     const_iterator end() const                       { return vch.end(); }
     iterator end()                                   { return vch.end(); }
     size_type size() const                           { return vch.size() - m_read_pos; }
+    size_type capacity() const                       { return vch.capacity(); }
     bool empty() const                               { return vch.size() == m_read_pos; }
     void resize(size_type n, value_type c = value_type{}) { vch.resize(n + m_read_pos, c); }
     void reserve(size_type n)                        { vch.reserve(n + m_read_pos); }
@@ -253,6 +264,11 @@ public:
     {
         // Write to the end of the buffer
         vch.insert(vch.end(), src.begin(), src.end());
+    }
+    void write(value_type val)
+    {
+        // Push single value to the end of the buffer
+        vch.push_back(val);
     }
 
     template<typename T>
@@ -452,6 +468,7 @@ public:
     void read(Span<std::byte> dst);
     void ignore(size_t nSize);
     void write(Span<const std::byte> src);
+    void write(std::byte src);
 
     template <typename T>
     AutoFile& operator<<(const T& obj)

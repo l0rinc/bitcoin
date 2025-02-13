@@ -101,7 +101,10 @@ void AutoFile::write(Span<const std::byte> src)
         }
     }
 }
-
+void AutoFile::write(std::byte val)
+{
+    write(Span{&val, 1});
+}
 bool AutoFile::Commit()
 {
     return ::FileCommit(m_file);

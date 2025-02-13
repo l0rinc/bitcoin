@@ -107,6 +107,10 @@ public:
     {
         ctx.Write(UCharCast(src.data()), src.size());
     }
+    void write(std::byte src)
+    {
+        ctx.Write(UCharCast(&src), 1);
+    }
 
     /** Compute the double-SHA256 hash of all data written to this object.
      *
@@ -193,6 +197,10 @@ public:
     {
         m_source.write(src);
         HashWriter::write(src);
+    }
+    void write(std::byte src)
+    {
+        write(Span{&src, 1});
     }
 
     template <typename T>

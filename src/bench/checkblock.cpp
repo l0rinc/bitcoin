@@ -42,6 +42,7 @@ static void SerializeBlock(benchmark::Bench& bench) {
         DataStream output_stream(benchmark::data::block413567.size());
         output_stream << TX_WITH_WITNESS(block);
         assert(output_stream.size() == benchmark::data::block413567.size());
+        assert(output_stream.capacity() == benchmark::data::block413567.size());
     });
 }
 
