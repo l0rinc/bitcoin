@@ -738,17 +738,16 @@ template<typename Stream, typename K, typename T, typename Pred, typename A> voi
 template<typename Stream, typename K, typename Pred, typename A> void Serialize(Stream& os, const std::set<K, Pred, A>& m);
 template<typename Stream, typename K, typename Pred, typename A> void Unserialize(Stream& is, std::set<K, Pred, A>& m);
 
-/**
- * shared_ptr
- */
-template<typename Stream, typename T> void Serialize(Stream& os, const std::shared_ptr<const T>& p);
-template<typename Stream, typename T> void Unserialize(Stream& os, std::shared_ptr<const T>& p);
+template <typename P>
+concept SmartPointer =
+    std::same_as<P, std::shared_ptr<const typename P::element_type>> ||
+    std::same_as<P, std::unique_ptr<const typename P::element_type>>;
 
 /**
- * unique_ptr
+ * shared_ptr and unique_ptr
  */
-template<typename Stream, typename T> void Serialize(Stream& os, const std::unique_ptr<const T>& p);
-template<typename Stream, typename T> void Unserialize(Stream& os, std::unique_ptr<const T>& p);
+template<typename Stream, SmartPointer Ptr> void Serialize(Stream& s, const Ptr& p);
+template<typename Stream, SmartPointer Ptr> void Unserialize(Stream& s, Ptr& p);
 
 
 /**
@@ -964,35 +963,22 @@ void Unserialize(Stream& is, std::set<K, Pred, A>& m)
 
 
 /**
- * unique_ptr
+ * unique_ptr and shared_ptr
  */
-template<typename Stream, typename T> void
-Serialize(Stream& os, const std::unique_ptr<const T>& p)
-{
-    Serialize(os, *p);
+template<typename Stream, SmartPointer Ptr>
+void Serialize(Stream& s, const Ptr& p) {
+    Serialize(s, *p);
 }
 
-template<typename Stream, typename T>
-void Unserialize(Stream& is, std::unique_ptr<const T>& p)
-{
-    p.reset(new T(deserialize, is));
-}
-
-
-
-/**
- * shared_ptr
- */
-template<typename Stream, typename T> void
-Serialize(Stream& os, const std::shared_ptr<const T>& p)
-{
-    Serialize(os, *p);
-}
-
-template<typename Stream, typename T>
-void Unserialize(Stream& is, std::shared_ptr<const T>& p)
-{
-    p = std::make_shared<const T>(deserialize, is);
+template<typename Stream, SmartPointer Ptr>
+void Unserialize(Stream& s, Ptr& p) {
+    using T = typename Ptr::element_type;
+    if constexpr (std::is_same_v<Ptr, std::unique_ptr<const T>>) {
+        p.reset(new T(deserialize, s));
+    } else {
+        static_assert(std::is_same_v<Ptr, std::shared_ptr<const T>>);
+        p = std::make_shared<const T>(deserialize, s);
+    }
 }
 
 /**
