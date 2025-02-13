@@ -253,14 +253,14 @@ template<class T>
 concept CharNotInt8 = std::same_as<T, char> && !std::same_as<T, int8_t>;
 
 template <typename T>
-concept SerializableByteOrIntegral = std::is_same_v<T, std::byte> ||
-    (std::is_integral_v<T> && !std::is_same_v<T, bool> && !std::is_same_v<T, char>);
+concept SerializableByteOrIntegralOrBool = std::is_same_v<T, std::byte> ||
+    (std::is_integral_v<T> && !std::is_same_v<T, char>);
 
 template <typename Stream, CharNotInt8 V> void Serialize(Stream&, V) = delete; // char serialization forbidden. Use uint8_t or int8_t
-template <typename Stream, SerializableByteOrIntegral T> void Serialize(Stream& s, T a)
+template <typename Stream, SerializableByteOrIntegralOrBool T> void Serialize(Stream& s, T a)
 {
     if constexpr (sizeof(T) == 1) {
-        ser_writedata8(s, static_cast<uint8_t>(a));   // (u)int8_t or std::byte
+        ser_writedata8(s, static_cast<uint8_t>(a));   // (u)int8_t or std::byte or bool
     } else if constexpr (sizeof(T) == 2) {
         ser_writedata16(s, static_cast<uint16_t>(a)); // (u)int16_t
     } else if constexpr (sizeof(T) == 4) {
@@ -276,10 +276,10 @@ template <typename Stream, BasicByte B, std::size_t N> void Serialize(Stream& s,
 template <typename Stream, BasicByte B> void Serialize(Stream& s, Span<B> span) { s.write(AsBytes(span)); }
 
 template <typename Stream, CharNotInt8 V> void Unserialize(Stream&, V) = delete; // char serialization forbidden. Use uint8_t or int8_t
-template <typename Stream, SerializableByteOrIntegral T> void Unserialize(Stream& s, T& a)
+template <typename Stream, SerializableByteOrIntegralOrBool T> void Unserialize(Stream& s, T& a)
 {
     if constexpr (sizeof(T) == 1) {
-        a = static_cast<T>(ser_readdata8(s));  // (u)int8_t or std::byte
+        a = static_cast<T>(ser_readdata8(s));  // (u)int8_t or std::byte or bool
     } else if constexpr (sizeof(T) == 2) {
         a = static_cast<T>(ser_readdata16(s)); // (u)int16_t
     } else if constexpr (sizeof(T) == 4) {
@@ -293,9 +293,6 @@ template <typename Stream, BasicByte B, int N> void Unserialize(Stream& s, B (&a
 template <typename Stream, BasicByte B, std::size_t N> void Unserialize(Stream& s, std::array<B, N>& a) { s.read(MakeWritableByteSpan(a)); }
 template <typename Stream, BasicByte B, std::size_t N> void Unserialize(Stream& s, std::span<B, N> span) { s.read(std::as_writable_bytes(span)); }
 template <typename Stream, BasicByte B> void Unserialize(Stream& s, Span<B> span) { s.read(AsWritableBytes(span)); }
-
-template <typename Stream> inline void Serialize(Stream& s, bool a) { uint8_t f = a; ser_writedata8(s, f); }
-template <typename Stream> inline void Unserialize(Stream& s, bool& a) { uint8_t f = ser_readdata8(s); a = f; }
 // clang-format on
 
 
