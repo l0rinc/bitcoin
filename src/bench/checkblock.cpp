@@ -25,7 +25,6 @@ static void SizeComputerBlock(benchmark::Bench& bench) {
     CBlock block;
     DataStream(benchmark::data::block413567) >> TX_WITH_WITNESS(block);
 
-    // Create output stream and verify first serialization matches input
     bench.unit("block").run([&] {
         SizeComputer size_computer;
         size_computer << TX_WITH_WITNESS(block);
