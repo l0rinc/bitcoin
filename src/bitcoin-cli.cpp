@@ -679,10 +679,8 @@ public:
             }
         }
 
-        // Report local services, addresses, ports, and scores.
-        if (!DetailsRequested()) {
-            result += strprintf("\n\nLocal services: %s", ServicesList(networkinfo["localservicesnames"]));
-        }
+        // Report local addresses, ports, and scores.
+        result += strprintf("\n\nLocal services: %s", ServicesList(networkinfo["localservicesnames"]));
         result += "\n\nLocal addresses";
         const std::vector<UniValue>& local_addrs{networkinfo["localaddresses"].getValues()};
         if (local_addrs.empty()) {
