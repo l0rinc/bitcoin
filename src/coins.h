@@ -300,6 +300,8 @@ struct CoinsViewCacheCursor
     }
 
     inline bool WillErase(CoinsCachePair& current) const noexcept { return m_will_erase || current.second.coin.IsSpent(); }
+    size_t GetDirtyCount() const { return m_dirty; }
+    CCoinsMap& GetCoinsMap() const { return m_map; }
 private:
     size_t& m_usage;
     size_t& m_dirty;
