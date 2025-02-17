@@ -131,7 +131,7 @@ bool CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& hashB
         }
         count++;
     }
-    // std::ranges::sort(unspent_dirty_outpoints, [](const auto& a, const auto& b) { return b < a; });
+    std::ranges::sort(unspent_dirty_outpoints, [](const auto& a, const auto& b) { return b < a; });
     CCoinsMap& coins_map{cursor.GetCoinsMap()};
     for (const auto& outpoint : unspent_dirty_outpoints) {
         auto& entry{coins_map.at(outpoint)};
