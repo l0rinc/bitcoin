@@ -16,6 +16,7 @@
 #include <concepts>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
 #include <ios>
 #include <limits>
 #include <map>
@@ -413,9 +414,29 @@ struct CheckVarIntMode {
     }
 };
 
+inline static std::map<std::string, uint64_t> g_hist_get_size;
+inline static std::map<std::string, uint64_t> g_hist_write;
+inline static std::map<std::string, uint64_t> g_hist_read;
+
+inline void OverwriteHistogramFile(const char* filename, const std::map<std::string, uint64_t>& hist)
+{
+    std::ofstream out(filename, std::ios::trunc);
+    if (!out.is_open()) return;
+    for (auto& [value, count] : hist) {
+        if (!value.empty()) {
+            out << value << " " << count << "\n";
+        }
+    }
+}
+
 template<VarIntMode Mode, typename I>
 inline unsigned int GetSizeOfVarInt(I n)
 {
+    ++g_hist_get_size[std::to_string(n)];
+    if (++g_hist_get_size[""] % 1000 == 0) {
+        OverwriteHistogramFile("varint_getsize.log", g_hist_get_size);
+    }
+
     CheckVarIntMode<Mode, I>();
     int nRet = 0;
     while(true) {
@@ -433,6 +454,11 @@ inline void WriteVarInt(SizeComputer& os, I n);
 template<typename Stream, VarIntMode Mode, typename I>
 void WriteVarInt(Stream& os, I n)
 {
+    ++g_hist_write[std::to_string(n)];
+    if (++g_hist_write[""] % 1000 == 0) {
+        OverwriteHistogramFile("varint_write.log", g_hist_write);
+    }
+
     CheckVarIntMode<Mode, I>();
     unsigned char tmp[(sizeof(n)*8+6)/7];
     int len=0;
@@ -465,6 +491,10 @@ I ReadVarInt(Stream& is)
             }
             n++;
         } else {
+            ++g_hist_read[std::to_string(n)];
+            if (++g_hist_read[""] % 1000 == 0) {
+                OverwriteHistogramFile("varint_read.log", g_hist_read);
+            }
             return n;
         }
     }
