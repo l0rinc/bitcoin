@@ -358,23 +358,13 @@ static RPCMethod waitfornewblock()
     NodeContext& node = EnsureAnyNodeContext(request.context);
     Mining& miner = EnsureMining(node);
 
-    // If the caller provided a current_tip value, pass it to waitTipChanged().
-    //
-    // If the caller did not provide a current tip hash, call getTip() to get
-    // one and wait for the tip to be different from this value. This mode is
-    // less reliable because if the tip changed between waitfornewblock calls,
-    // it will need to change a second time before this call returns.
-    auto block{CHECK_NONFATAL(miner.getTip()).value()};
+    // Abort if RPC came out of warmup too early
+    BlockRef current_block{CHECK_NONFATAL(miner.getTip()).value()};
+    std::optional<BlockRef> block = timeout ? miner.waitTipChanged(current_block.hash, std::chrono::milliseconds(timeout)) :
+                                              miner.waitTipChanged(current_block.hash);
 
-    uint256 tip_hash{request.params[1].isNull()
-        ? block.hash
-        : ParseHashV(request.params[1], "current_tip")};
-
-    if (IsRPCRunning()) {
-        // If the user provided an invalid current_tip then this call immediately
-        // returns the current tip.
-        block = timeout ? miner.waitTipChanged(tip_hash, std::chrono::milliseconds(timeout)) : miner.waitTipChanged(tip_hash);
-    }
+    // Return current block upon shutdown
+    if (block) current_block = *block;
 
     UniValue ret(UniValue::VOBJ);
     ret.pushKV("hash", current_block.hash.GetHex());

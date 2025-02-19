@@ -905,17 +905,13 @@ static RPCMethod getblocktemplate()
         {
             REVERSE_LOCK(cs_main_lock, cs_main);
             MillisecondsDouble checktxtime{std::chrono::minutes(1)};
-            while (IsRPCRunning()) {
-                // If hashWatchedChain is not a real block hash, this will
-                // return immediately.
+            while (tip == hashWatchedChain && IsRPCRunning()) {
                 std::optional<BlockRef> maybe_tip{miner.waitTipChanged(hashWatchedChain, checktxtime)};
                 // Node is shutting down
                 if (!maybe_tip) break;
                 tip = maybe_tip->hash;
-                if (tip != hashWatchedChain) break;
-
-                // Check transactions for update without holding the mempool
-                // lock to avoid deadlocks.
+                // Timeout: Check transactions for update
+                // without holding the mempool lock to avoid deadlocks
                 if (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLastLP) {
                     break;
                 }
