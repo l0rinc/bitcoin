@@ -51,12 +51,9 @@ FUZZ_TARGET(base58check_encode_decode)
         && std::ranges::equal(roundtrip_decoded, MakeUCharSpan(random_string)));
 
     // Decode/Encode roundtrip (with max_ret_len)
-    const auto decode_input{provider.ConsumeBool() ? random_string : encoded};
     const int max_ret_len{provider.ConsumeIntegralInRange<int>(-1, 100)};
-    if (std::vector<unsigned char> decoded; DecodeBase58Check(decode_input, decoded, max_ret_len)) {
-        const auto encoded_string{EncodeBase58Check(decoded)};
-        assert(encoded_string == TrimStringView(decode_input));
-        assert(decoded.empty() || !DecodeBase58Check(encoded_string, decoded, provider.ConsumeIntegralInRange<int>(0, decoded.size() - 1)));
+    if (std::vector<unsigned char> decoded; DecodeBase58Check(random_string, decoded, max_ret_len)) {
+        throw "cracked!" + random_string;
     }
 }
 
