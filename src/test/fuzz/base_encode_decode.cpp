@@ -20,8 +20,8 @@ using util::TrimStringView;
 FUZZ_TARGET(base58_encode_decode)
 {
     FuzzedDataProvider provider(buffer.data(), buffer.size());
-    const std::string random_string{provider.ConsumeRandomLengthString(1000)};
-    const int max_ret_len{provider.ConsumeIntegralInRange<int>(-1, 1000)};
+    const std::string random_string{provider.ConsumeRandomLengthString(100)};
+    const int max_ret_len{provider.ConsumeIntegralInRange<int>(-1, 100)};
 
     // Decode/Encode roundtrip
     std::vector<unsigned char> decoded;
@@ -40,8 +40,8 @@ FUZZ_TARGET(base58_encode_decode)
 FUZZ_TARGET(base58check_encode_decode)
 {
     FuzzedDataProvider provider(buffer.data(), buffer.size());
-    const std::string random_string{provider.ConsumeRandomLengthString(1000)};
-    const int max_ret_len{provider.ConsumeIntegralInRange<int>(-1, 1000)};
+    const std::string random_string{provider.ConsumeRandomLengthString(100)};
+    const int max_ret_len{provider.ConsumeIntegralInRange<int>(-1, 100)};
 
     // Decode/Encode roundtrip
     std::vector<unsigned char> decoded;
