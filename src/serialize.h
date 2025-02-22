@@ -26,6 +26,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <util/check.h>
 
 /**
  * The maximum size of a serialized object in bytes or number of elements
@@ -447,6 +448,7 @@ unsigned int GetSizeOfVarInt(I n)
 
 inline void WriteVarUInt32(Span<std::byte> out, uint32_t n)
 {
+    // Assert(out.size() == GetVarUInt32Size(n));
     if (out.size() == 1) {
         out[0] = static_cast<std::byte>(n);
     } else if (out.size() == 2) {
@@ -481,6 +483,7 @@ inline void ReadVarUInt32(const Span<const std::byte> in, uint32_t& n)
         n = ((n + 1) << 7) | static_cast<uint8_t>(in[in.size() - 1]);
     }
     assert(in.size() == GetVarUInt32Size(n));
+    // TODO check that reserializing it would still result in the same
 }
 
 template<typename I>

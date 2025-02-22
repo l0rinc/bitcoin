@@ -28,41 +28,30 @@ static constexpr uint8_t DB_COIN{'C'};
 static constexpr uint8_t DB_BEST_BLOCK{'B'};
 static constexpr uint8_t DB_HEAD_BLOCKS{'H'};
 
-struct CoinEntry {
-    COutPoint* outpoint;
-    uint8_t key;
-    explicit CoinEntry(const COutPoint* ptr) : outpoint(const_cast<COutPoint*>(ptr)), key(DB_COIN)  {}
-
-    SERIALIZE_METHODS(CoinEntry, obj) { READWRITE(obj.key, obj.outpoint->hash, VARINT(obj.outpoint->n)); }
-};
-
 static constexpr size_t SerializedSize(const COutPoint& op) noexcept
 {
-    return 1 + sizeof(uint256) + GetVarUInt32Size(op.n);
+    return 1 + uint256::size() + GetVarUInt32Size(op.n);
 }
 
-inline size_t WriteCOutPoint(Span<std::byte> out, const COutPoint& op) noexcept
+inline Span<std::byte> WriteCOutPoint(Span<std::byte> out, const COutPoint& op) noexcept
 {
-    const size_t size{SerializedSize(op)};
-    assert(out.size() >= size);
-
+    out = out.first(SerializedSize(op));
     out[0] = std::byte{DB_COIN};
-    std::memcpy(&out[1], op.hash.begin(), sizeof(uint256));
-    WriteVarUInt32(out.subspan(1 + sizeof(uint256)), op.n);
-
-    return size;
+    std::memcpy(&out[1], op.hash.begin(), uint256::size());
+    WriteVarUInt32(out.subspan(1 + uint256::size()), op.n);
+    return out;
 }
 
 inline void ReadCOutPoint(Span<const std::byte> in, COutPoint& op)
 {
-    assert(!in.empty());
+    // Assert(!in.empty());
     assert(static_cast<uint8_t>(in[0]) == DB_COIN);
     in = in.subspan(1);
 
-    assert(in.size() >= sizeof(uint256));
-    op.hash = Txid::FromUint256(uint256({reinterpret_cast<const uint8_t*>(in.begin()), sizeof(uint256)}));
+    // Assert(in.size() >= uint256::size());
+    op.hash = Txid::FromUint256(uint256({reinterpret_cast<const uint8_t*>(in.begin()), uint256::size()}));
 
-    ReadVarUInt32(in.subspan(sizeof(uint256)), op.n);
+    ReadVarUInt32(in.subspan(uint256::size()), op.n);
 }
 
 //! User-controlled performance and debug options.
