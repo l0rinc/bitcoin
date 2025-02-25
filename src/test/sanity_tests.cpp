@@ -12,7 +12,7 @@ BOOST_FIXTURE_TEST_SUITE(sanity_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(basic_sanity)
 {
-  BOOST_CHECK_MESSAGE(bool(dbwrapper_SanityCheck()), "leveldb sanity test");
+  BOOST_CHECK_MESSAGE(bool(dbwrapper_SanityCheck()), "dbwrapper sanity test");
   BOOST_CHECK_MESSAGE(ECC_InitSanityCheck() == true, "secp256k1 sanity test");
 }
 
