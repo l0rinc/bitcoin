@@ -231,7 +231,7 @@ void WalletFrame::gotoLoadPSBT(bool from_clipboard)
 
     auto dlg = new PSBTOperationsDialog(this, currentWalletModel(), clientModel);
     dlg->openWithPSBT(*psbt_res);
-    GUIUtil::ShowModalDialogAsynchronously(dlg);
+    GUIUtil::ShowModalDialogAsynchronously(dlg, Qt::NonModal);
 }
 
 void WalletFrame::encryptWallet()
