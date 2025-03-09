@@ -57,6 +57,7 @@ class SizeComputer;
 template<typename T>
 concept ContainsStream = requires(T t) { t.GetStream(); };
 
+//! Check if type wraps a SizeComputer by inspecting the return type of GetStream().
 template<typename T>
 concept ContainsSizeComputer = ContainsStream<T> &&
     std::is_same_v<std::remove_reference_t<decltype(std::declval<T>().GetStream())>, SizeComputer>;
@@ -1173,6 +1174,12 @@ public:
     {
         m_size += src.size();
     }
+    template <std::size_t Extent>
+        requires(Extent != std::dynamic_extent)
+    void write(std::span<const std::byte, Extent>)
+    {
+        m_size += Extent;
+    }
 
     /** Pretend this many bytes are written, without specifying them. */
     void seek(uint64_t num)
@@ -1224,6 +1231,18 @@ public:
     template <typename U> ParamsStream& operator>>(U&& obj) { ::Unserialize(*this, obj); return *this; }
     void write(std::span<const std::byte> src) { GetStream().write(src); }
     void read(std::span<std::byte> dst) { GetStream().read(dst); }
+    template <std::size_t Extent>
+        requires(Extent != std::dynamic_extent)
+    void write(std::span<const std::byte, Extent> src)
+    {
+        GetStream().write(src);
+    }
+    template <std::size_t Extent>
+        requires(Extent != std::dynamic_extent)
+    void read(std::span<std::byte, Extent> dst)
+    {
+        GetStream().read(dst);
+    }
     void ignore(size_t num) { GetStream().ignore(num); }
     bool empty() const { return GetStream().empty(); }
     size_t size() const { return GetStream().size(); }
