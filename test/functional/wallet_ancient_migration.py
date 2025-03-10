@@ -10,7 +10,10 @@ from decimal import Decimal
 from pathlib import Path
 import shutil
 
-from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.blocktools import (
+    COINBASE_MATURITY,
+    CONSENSUS_CLEANUP_NEVER_ACTIVE,
+)
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
@@ -110,8 +113,9 @@ class WalletAncientMigrationTest(BitcoinTestFramework):
         assert_greater_than(len(change_addresses), 0)
         assert_greater_than(len(all_addresses), 0)
 
-        # Sync blocks to modern node via RPC (avoids filesystem copy and reindex)
-        self.start_node(new_node_idx)
+        # Sync blocks to modern node via RPC (avoids filesystem copy and reindex).
+        # Disable the consensus cleanup as the old node does not set the coinbase nLockTime to block height - 1.
+        self.start_node(new_node_idx, extra_args=[CONSENSUS_CLEANUP_NEVER_ACTIVE])
         dumb_sync_blocks(src=old_node, dst=new_node)
 
         if passphrase is None:

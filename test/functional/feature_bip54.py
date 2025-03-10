@@ -351,8 +351,8 @@ class Bip54Test(BitcoinTestFramework):
         assert_raises_rpc_error(-25, "time-timewarp-attack", self.timewarp_attack, node, fork_height=cc_dep["since"])
         assert_raises_rpc_error(-25, "time-negative-interval", self.murch_zawy_attack, node, fork_height=cc_dep["since"] - 1)
         # - Refuse blocks with a coinbase not timelocked to the block height, or with its timelock disabled
-        assert_equal(self.submit_nontimelocked_cb(node), None) # TODO: The coinbase must enforce its height timelock
-        assert_equal(self.submit_final_sequence_cb(node), None) # TODO: The coinbase must enforce its height timelock
+        assert_equal(self.submit_nontimelocked_cb(node), "bad-cb-locktime")
+        assert_equal(self.submit_final_sequence_cb(node), "bad-cb-sequence")
         # - Refuse a block containing a 64-byte transaction
         assert_equal(self.submit_block_64byte(node), None) # TODO: Transactions with exactly 64 non-witness bytes must be invalid
         # - Even if that is the coinbase transaction

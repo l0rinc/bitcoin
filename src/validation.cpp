@@ -4246,6 +4246,8 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
                                       pindexPrev->GetMedianTimePast() :
                                       block.GetBlockTime()};
 
+    const bool enforce_bip54{DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)};
+
     // Check that all transactions are finalized
     for (const auto& tx : block.vtx) {
         if (!IsFinalTx(*tx, nHeight, nLockTimeCutoff)) {
@@ -4260,6 +4262,17 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
         if (block.vtx[0]->vin[0].scriptSig.size() < expect.size() ||
             !std::equal(expect.begin(), expect.end(), block.vtx[0]->vin[0].scriptSig.begin())) {
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-height", "block height mismatch in coinbase");
+        }
+    }
+
+    // Make sure the coinbase transaction is timelocked to the block's height.
+    if (nHeight > 0 && enforce_bip54) {
+        if (block.vtx[0]->nLockTime != static_cast<uint32_t>(nHeight - 1)) {
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-locktime", "block height mismatch in coinbase nLockTime");
+        }
+        // A final input sequence disables nLockTime, so require a non-final value.
+        if (block.vtx[0]->vin[0].nSequence == CTxIn::SEQUENCE_FINAL) {
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-sequence", "coinbase input nSequence is final");
         }
     }
 

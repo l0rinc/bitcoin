@@ -42,6 +42,7 @@ FUZZ_TARGET(utxo_total_supply)
         {
             .extra_args = {
                 "-testactivationheight=bip34@2",
+                "-vbparams=consensuscleanup:-2:0", // Preserve duplicate coinbases across heights
             },
         },
     };

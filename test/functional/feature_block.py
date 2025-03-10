@@ -12,6 +12,7 @@ from test_framework.blocktools import (
     create_coinbase,
     create_tx_with_script,
     get_legacy_sigopcount_block,
+    CONSENSUS_CLEANUP_NEVER_ACTIVE,
     MAX_BLOCK_SIGOPS,
     N_BITS,
 )
@@ -844,6 +845,10 @@ class FullBlockTest(BitcoinTestFramework):
         self.send_blocks([b60], True)
         self.save_spendable_output()
 
+        # Disable the consensus cleanup for the BIP30 checks.
+        self.restart_node(0, self.extra_args[0] + [CONSENSUS_CLEANUP_NEVER_ACTIVE])
+        self.reconnect_p2p()
+
         # Test BIP30 (reject duplicate)
         #
         # -> b39 (11) -> b42 (12) -> b43 (13) -> b53 (14) -> b55 (15) -> b57 (16) -> b60 ()
@@ -885,6 +890,10 @@ class FullBlockTest(BitcoinTestFramework):
         self.send_blocks([b_spend_dup_cb, b_dup_2], success=True)
         # The duplicate has less confirmations
         assert_equal(self.nodes[0].gettxout(txid=duplicate_tx.txid_hex, n=0)['confirmations'], 1)
+
+        # Re-enable the consensus cleanup now that BIP30 checks were performed.
+        self.restart_node(0)
+        self.reconnect_p2p()
 
         # Test tx.isFinal is properly rejected (not an exhaustive tx.isFinal test, that should be in data-driven transaction tests)
         #

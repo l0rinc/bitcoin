@@ -6,6 +6,7 @@
 
 from test_framework.blocktools import (
     COINBASE_MATURITY,
+    CONSENSUS_CLEANUP_NEVER_ACTIVE,
     create_coinbase,
     create_block,
     add_witness_commitment,
@@ -1424,6 +1425,9 @@ class TaprootTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
+        # The BIP341 test vectors are generated from a fixed coinbase whose sequence is final, which BIP54 forbids.
+        # Disable the consensus cleanup to keep the published vectors reproducible.
+        self.extra_args = [[CONSENSUS_CLEANUP_NEVER_ACTIVE]]
 
     def block_submit(self, node, txs, msg, err_msg, cb_pubkey=None, fees=0, sigops_weight=0, witness=False, accept=False):
 

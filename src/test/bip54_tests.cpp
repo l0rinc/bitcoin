@@ -1319,7 +1319,7 @@ BOOST_AUTO_TEST_CASE(bip54_coinbase)
 
         // Without BIP54, only the pre-existing transaction finality rules restrict these coinbases. With it, the new
         // coinbase restrictions apply too, and some of the test vectors demonstrate finality is still enforced.
-        for (const bool bip54_active : {false}) {
+        for (const bool bip54_active : {false, true}) {
             TestingSetup test_setup{ChainType::MAIN, BIP54TestOpts(bip54_active)};
             const bool valid{bip54_active ? test["valid"].get_bool() : valid_without_bip54};
             BlockValidationState state;
