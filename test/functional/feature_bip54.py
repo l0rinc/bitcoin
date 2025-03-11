@@ -354,9 +354,9 @@ class Bip54Test(BitcoinTestFramework):
         assert_equal(self.submit_nontimelocked_cb(node), "bad-cb-locktime")
         assert_equal(self.submit_final_sequence_cb(node), "bad-cb-sequence")
         # - Refuse a block containing a 64-byte transaction
-        assert_equal(self.submit_block_64byte(node), None) # TODO: Transactions with exactly 64 non-witness bytes must be invalid
+        assert_equal(self.submit_block_64byte(node), "bad-txns-size")
         # - Even if that is the coinbase transaction
-        assert_equal(self.submit_block_64byte_coinbase(node), None) # TODO: Transactions with exactly 64 non-witness bytes must be invalid
+        assert_equal(self.submit_block_64byte_coinbase(node), "bad-txns-size")
 
 if __name__ == "__main__":
     Bip54Test(__file__).main()

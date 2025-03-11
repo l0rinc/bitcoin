@@ -1468,9 +1468,9 @@ BOOST_FIXTURE_TEST_CASE(bip54_txsize, TestChain100Setup)
     for (const auto& test_case: test_vectors) {
         BlockValidationState state;
         const bool res{AcceptBlocks(*m_node.chainman, {CreateBlock({CMutableTransaction{test_case.tx}}, CScript{} << OP_TRUE)}, state)};
-        BOOST_CHECK_MESSAGE(res, test_case.comment); // TODO: Under BIP54, validity must match the vectors.
+        BOOST_CHECK_MESSAGE(res == test_case.valid, test_case.comment);
         if (!test_case.valid) {
-            BOOST_CHECK_MESSAGE(state.GetRejectReason() == "", test_case.comment); // TODO: A BIP54 size violation must report bad-txns-size
+            BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-txns-size", test_case.comment);
         }
     }
 
