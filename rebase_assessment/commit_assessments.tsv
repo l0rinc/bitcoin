@@ -209,3 +209,46 @@ eea8588f070917cb68f08c92877f8cb726b7d1dd	RPC/rawtx: descriptorprocesspsbt: Conve
 9a798150979dbecfdad2ab094a48ae7b744f35b7	net_permissions: Include "addr" permission on implicit whitelist entries	2	no	no	unlikely	no	applied	
 75b826c7294f7ddd66b2c5c1d1966f7f238632ee	Enforce checkpoints at their specific block height	3	review	no	consider	review	applied	
 c06b4194b3e27eaa1c0e45e1c643c0abafcb9f3a	QA: Check that a few defined mainchain checkpoints are working	1	no	no	no	review	applied	
+0fcc5ed47de88f583329bd6895ba84d8500052ea	QA: Functional test for checkpoint enforcement	1	no	no	unlikely	review	applied_manual	
+b2221bd0ae291c43288e8c414a853072a2b5bd43	GUI: Adjust recommended # of blocks confirmed to 16	2	no	no	unlikely	no	applied	
+17966748271f7820c287d0cadb06df65fed14862	Revert "guix: temporarily disable powerpcle taget"	1	no	no	unlikely	no	applied	
+620e79b72f6dd6eb0bd2798c4da893081d8e7f39	RPC: Add getblocklocations call	4	no	no	unlikely	no	applied	
+91c9e1463915e734ba3a87b77e28b28378e46756	Bugfix: RPC/blockchain: Hold cs_main for CBlockIndex access as needed to avoid races in getblocklocations	1	no	possible	consider	no	applied	
+32c2b6e32693dd185b2298e72c26e8e50dc51c2d	RPC/Blockchain: Bugfix: Correct getblocklocations example RPC method name	1	no	possible	consider	no	applied	
+e56f5e725544336ce2d47ff7c30abfe88d1a70c7	Bugfix: RPC/Blockchain: Correct getblocklocations return type	1	no	possible	consider	no	applied	
+e1a10af807d6252951920c4f6de4648734ec2f88	Bugfix: QA/fuzz: Add getblocklocations to RPC_COMMANDS_SAFE_FOR_FUZZING	1	no	possible	consider	no	applied	
+099f47c89f9a9d4e8d0705c969ba6a73b27116da	QA: rpc_getblocklocations: Support for testing with blocksxor enabled	1	no	no	unlikely	no	applied	
+020f2ab02845bba48a337e37da431e8de8bd4700	RPC: introduce 'getblockfileinfo' RPC command	4	no	no	no	no	applied	
+b5764509d07ff42498d5c5376837ea09d01b0ca3	test: rpc_getblockfrompeer.py, remove magic numbers usage	1	no	no	unlikely	no	applied	
+af6f73734e2ed2efab306851e27363b5b7579582	QA: tool_cli_bash_completion: Whitespace linter fix	1	no	no	unlikely	no	applied	
+c22a69eed1bbb126bdd5d3b7593f2afb46dfb4ec	RPC: addmultisigaddress / createmultisig: parameterize _createmultisig_redeemScript to allow sorting of public keys (BIP67)	11	review	no	consider	no	applied	
+88e4bd655a05eb0620a720db0b8c62918cedd1de	RPC: Use options object rather than adding a "sort" boolean for multisig methods	6	no	no	unlikely	no	applied	
+93ece76021c4e51dd6a09fd26f7ba88d26c2994b	script: GetScriptForRawPubKey: More efficient key-encoding loop	1	review	no	consider	no	applied	
+b73523bdb2266ffff2f8fc829de9eccbc99d0f49	doc/bips: Add BIP 67	1	no	no	unlikely	no	applied	
+647fd47dfe1f86cd122e6c307f0198bf4c11292f	Ensure whilst sorting only compressed public keys are used	2	no	no	no	no	applied	
+949e953d9343be7b667af24c01d8693053463bd4	Add more tests to sort_multisig.py / wallet_labels.py	2	no	no	unlikely	no	applied	
+355ca0d57505012df4c6550dc23e2117db95a151	script: Optimise GetScriptForMultisig slightly	1	review	no	consider	no	applied	
+ecd45f5e6c969a068b093742702410e946f3e816	QA: rpc_sort_multisig: Rename variables to avoid keyword conflict with `sorted`	1	no	no	unlikely	no	applied	
+30d940a219e0ea23ec53c9be077b5cbb7520735d	RPC: createmultisig/addmultisigaddress: Support named args for options	4	no	no	unlikely	no	applied	
+2f1bf089f7540356daf8c88ab81341d1248ad81b	validation: sync utxo state after block sync	3	no	no	no	no	applied	
+bbcec3aed748fdf59da76151d7d2f6f09b98635a	test: add test for SyncCoinsTipAfterChainSync	2	no	no	unlikely	no	applied	
+12c22b8235c7672c32448990e32f2f5ce1eea3aa	rpc: implement getgeneralinfo	3	no	no	unlikely	no	applied	
+47e4c8fbc6d4d9b01f9465ca5ef5b352740462ab	QA: Actually check getgeneralinfo results are correct	1	no	no	unlikely	no	applied	
+550f67c5d16ceac4c3da7a0775a601121383b2c2	Bugfix: QA: rpc_getgeneralinfo: Adapt test for startuptime ignoring mocktime	1	no	possible	consider	no	applied	
+60f1178c6bbbfc88af86c11ca17ffe5d3a19dc49	Bugfix: QA/fuzz: Add getgeneralinfo to RPC_COMMANDS_SAFE_FOR_FUZZING	1	no	possible	consider	no	applied	
+2c172d3a0d656e0d8a3e41d26eaa548fd772b6eb	RPC: Add getrpcwhitelist method	6	no	no	unlikely	no	applied	
+42d2ea53e840a0d93de5882068998cc9f599ee71	RPC: getrpcwhitelist: Return methods as a JSON Object for future expansion to sub-call permissions	2	no	no	unlikely	no	applied	
+441df44731881d3f2c4a9fee1594ba1145cbc160	Bugfix: RPC: Correct types in getrpcwhitelist RPC docs	1	no	possible	consider	no	applied	
+4432c6b5b7c8d113b354e9b1ec74591bfc24f1fd	RPC: getrpcwhitelist: Return all methods (or none) if no explicit whitelist defined	3	no	no	unlikely	no	applied	
+a13f2b66f400c94ef0f15af2c3ccdffab85edaf8	Bugfix: QA/fuzz: Add getrpcwhitelist to RPC_COMMANDS_SAFE_FOR_FUZZING	1	no	possible	consider	no	applied	
+3abda6a0017cabe6b542e7c7d3abcd2db998cbab	Bugfix: QA: test_node: Ensure debug.log exists at start of assert_debug_log	1	no	possible	consider	no	applied	
+87f2141bda041e78d85617a3f1270c9f88351f08	GUI: BitcoinAddressCheckValidator: Avoid hiding standard validate method signature needlessly	1	no	no	unlikely	no	applied	
+90676086b1c61963652928e2e80120b8365facae	fixup! test: cover ForceInbound permission success even when connections are full	1	no	no	unlikely	no	applied	
+2b3e19e9e854722b7bb04d11a579dc9df9435bda	net: only allow 8 simultaneous forced inbound connections	3	no	no	unlikely	no	applied	
+b0d90d28854ec5c98a25f804e2f6a19be596ec6a	net: add forced_inbound to getpeerinfo	5	no	no	unlikely	no	applied	
+a2225405a53c8a1d0c1a081f8c3afd82ae6ae400	net: Remove forcedinbound limit antifeature	3	no	no	unlikely	no	applied	
+7cefd1a42cef52afdad25e4fb39ad9ffb4ec437d	GUI: Make various dialogs less modal	5	no	no	unlikely	no	applied	
+95c21b1fdd14f89d762b46b0162bd2fcca1e5a93	[build] bump version to 29.0rc1	1	no	no	no	no	applied	
+86a3ce62096b2faefd01366a6f300fff6f8b9c0b	[doc] update man pages for 29.0rc1	6	no	no	unlikely	no	applied	
+21f423939e521aa61b96689b9f8ee61c59abf5eb	[examples] generate example bitcoin.conf	1	no	no	unlikely	no	applied	
+47e2fa86dc5433852fd9e5050a23de2accfdca8d	[doc] release notes link for 29.0	1	no	no	unlikely	no	applied	

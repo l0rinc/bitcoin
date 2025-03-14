@@ -1370,3 +1370,267 @@ hint: You can instead skip this commit with "git cherry-pick --skip".
 hint: To abort and get back to the state before "git cherry-pick",
 hint: run "git cherry-pick --abort".
 hint: Disable this message with "git config set advice.mergeConflict false"
+[knots-replayed-on-origin-master 1db9803234] QA: Functional test for checkpoint enforcement
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Jun 10 22:48:14 2021 +0000
+ 3 files changed, 756 insertions(+)
+ create mode 100755 test/functional/p2p_dos_header_tree.py
+Auto-merging src/qt/transactionrecord.h
+Auto-merging src/qt/transactiontablemodel.cpp
+[knots-replayed-on-origin-master 23f2e79c4d] GUI: Adjust recommended # of blocks confirmed to 16
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Feb 8 22:39:21 2025 +0000
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+Auto-merging contrib/guix/guix-build
+[knots-replayed-on-origin-master 6dbb69a5a7] Revert "guix: temporarily disable powerpcle taget"
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Feb 14 20:46:08 2025 +0000
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+Auto-merging src/rpc/blockchain.cpp
+Auto-merging src/rpc/client.cpp
+Auto-merging test/functional/test_runner.py
+[knots-replayed-on-origin-master 19644886eb] RPC: Add getblocklocations call
+ Author: Roman Zeyde <me@romanzey.de>
+ Date: Tue Aug 11 17:57:17 2020 +0300
+ 4 files changed, 146 insertions(+)
+ create mode 100755 test/functional/rpc_getblocklocations.py
+Auto-merging src/rpc/blockchain.cpp
+[knots-replayed-on-origin-master 8ac2b783b1] Bugfix: RPC/blockchain: Hold cs_main for CBlockIndex access as needed to avoid races in getblocklocations
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue May 17 08:13:17 2022 +0000
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+Auto-merging src/rpc/blockchain.cpp
+[knots-replayed-on-origin-master 39d4fa3cb1] RPC/Blockchain: Bugfix: Correct getblocklocations example RPC method name
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed Nov 16 03:41:37 2022 +0000
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging src/rpc/blockchain.cpp
+[knots-replayed-on-origin-master ab9568a52a] Bugfix: RPC/Blockchain: Correct getblocklocations return type
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Jul 27 00:29:33 2023 +0000
+ 1 file changed, 7 insertions(+), 4 deletions(-)
+Auto-merging src/test/fuzz/rpc.cpp
+[knots-replayed-on-origin-master a71a430fd3] Bugfix: QA/fuzz: Add getblocklocations to RPC_COMMANDS_SAFE_FOR_FUZZING
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Oct 10 00:29:48 2023 +0000
+ 1 file changed, 1 insertion(+)
+[knots-replayed-on-origin-master f5de8e8fba] QA: rpc_getblocklocations: Support for testing with blocksxor enabled
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sun Feb 16 16:12:56 2025 +0000
+ 1 file changed, 13 insertions(+), 10 deletions(-)
+Auto-merging src/node/blockstorage.cpp
+Auto-merging src/rpc/blockchain.cpp
+Auto-merging src/rpc/client.cpp
+Auto-merging src/test/fuzz/rpc.cpp
+[knots-replayed-on-origin-master 897bc0061c] RPC: introduce 'getblockfileinfo' RPC command
+ Author: furszy <matiasfurszyfer@protonmail.com>
+ Date: Fri May 26 17:44:10 2023 -0300
+ 4 files changed, 44 insertions(+), 1 deletion(-)
+Auto-merging test/functional/rpc_getblockfrompeer.py
+[knots-replayed-on-origin-master f382959a60] test: rpc_getblockfrompeer.py, remove magic numbers usage
+ Author: furszy <matiasfurszyfer@protonmail.com>
+ Date: Fri May 26 17:58:14 2023 -0300
+ 1 file changed, 31 insertions(+), 9 deletions(-)
+[knots-replayed-on-origin-master 6aab8eab93] QA: tool_cli_bash_completion: Whitespace linter fix
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Mon Feb 17 15:48:13 2025 +0000
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Auto-merging src/rpc/client.cpp
+Auto-merging src/rpc/output_script.cpp
+Auto-merging src/rpc/util.cpp
+Auto-merging src/rpc/util.h
+Auto-merging src/script/solver.cpp
+Auto-merging src/script/solver.h
+Auto-merging src/wallet/rpc/addresses.cpp
+Auto-merging test/functional/test_framework/test_node.py
+Auto-merging test/functional/test_runner.py
+Auto-merging test/functional/wallet_labels.py
+[knots-replayed-on-origin-master b8cda5e943] RPC: addmultisigaddress / createmultisig: parameterize _createmultisig_redeemScript to allow sorting of public keys (BIP67)
+ Author: Thomas Kerin <me@thomaskerin.io>
+ Date: Tue Nov 8 14:36:19 2016 +0000
+ 11 files changed, 130 insertions(+), 19 deletions(-)
+ create mode 100755 test/functional/rpc_sort_multisig.py
+Auto-merging src/rpc/client.cpp
+Auto-merging src/rpc/output_script.cpp
+Auto-merging src/wallet/rpc/addresses.cpp
+Auto-merging test/functional/test_framework/test_node.py
+Auto-merging test/functional/wallet_labels.py
+[knots-replayed-on-origin-master 72d9315f42] RPC: Use options object rather than adding a "sort" boolean for multisig methods
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Feb 4 20:40:40 2017 +0000
+ 6 files changed, 110 insertions(+), 30 deletions(-)
+Auto-merging src/script/solver.cpp
+[knots-replayed-on-origin-master e26d1d860f] script: GetScriptForRawPubKey: More efficient key-encoding loop
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Feb 4 20:43:46 2017 +0000
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+Auto-merging doc/bips.md
+[knots-replayed-on-origin-master 8f8346a11f] doc/bips: Add BIP 67
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Feb 4 20:46:28 2017 +0000
+ 1 file changed, 1 insertion(+)
+Auto-merging src/rpc/output_script.cpp
+Auto-merging src/wallet/rpc/addresses.cpp
+[knots-replayed-on-origin-master 29f129d661] Ensure whilst sorting only compressed public keys are used
+ Author: Thomas Kerin <thomas.kerin@bitmaintech.com>
+ Date: Sat Sep 30 14:02:18 2017 +0200
+ 2 files changed, 6 insertions(+)
+Auto-merging test/functional/wallet_labels.py
+[knots-replayed-on-origin-master 56574d8a75] Add more tests to sort_multisig.py / wallet_labels.py
+ Author: Thomas Kerin <thomas.kerin@bitmaintech.com>
+ Date: Sat Sep 30 14:52:55 2017 +0200
+ 2 files changed, 64 insertions(+), 1 deletion(-)
+Auto-merging src/script/solver.cpp
+[knots-replayed-on-origin-master 0e25413bec] script: Optimise GetScriptForMultisig slightly
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Oct 10 01:59:36 2023 +0000
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+[knots-replayed-on-origin-master d835ce622e] QA: rpc_sort_multisig: Rename variables to avoid keyword conflict with `sorted`
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Jan 4 21:14:42 2024 +0000
+ 1 file changed, 24 insertions(+), 24 deletions(-)
+Auto-merging src/rpc/client.cpp
+Auto-merging src/rpc/output_script.cpp
+Auto-merging src/wallet/rpc/addresses.cpp
+[knots-replayed-on-origin-master b8704d9a22] RPC: createmultisig/addmultisigaddress: Support named args for options
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Thu Jan 4 21:10:13 2024 +0000
+ 4 files changed, 11 insertions(+), 5 deletions(-)
+Auto-merging src/init.cpp
+Auto-merging src/net_processing.cpp
+Auto-merging src/net_processing.h
+[knots-replayed-on-origin-master 68a9bdee43] validation: sync utxo state after block sync
+ Author: Andrew Toth <andrewstoth@gmail.com>
+ Date: Wed Mar 13 13:48:28 2024 -0400
+ 3 files changed, 54 insertions(+), 22 deletions(-)
+Auto-merging test/functional/test_runner.py
+[knots-replayed-on-origin-master a4e0aea7a8] test: add test for SyncCoinsTipAfterChainSync
+ Author: Andrew Toth <andrewstoth@gmail.com>
+ Date: Wed Mar 13 15:52:42 2024 -0400
+ 2 files changed, 146 insertions(+)
+ create mode 100755 test/functional/feature_sync_coins_tip_after_chain_sync.py
+Auto-merging src/rpc/node.cpp
+Auto-merging test/functional/test_runner.py
+[knots-replayed-on-origin-master 7b6ea14c6b] rpc: implement getgeneralinfo
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sat Jul 29 23:57:01 2023 +0000
+ 3 files changed, 69 insertions(+), 1 deletion(-)
+ create mode 100755 test/functional/rpc_getgeneralinfo.py
+[knots-replayed-on-origin-master 92cb5556c5] QA: Actually check getgeneralinfo results are correct
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue May 10 02:33:58 2022 +0000
+ 1 file changed, 27 insertions(+), 7 deletions(-)
+[knots-replayed-on-origin-master 0dbbf829a5] Bugfix: QA: rpc_getgeneralinfo: Adapt test for startuptime ignoring mocktime
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Sep 22 19:20:20 2023 +0000
+ 1 file changed, 4 insertions(+), 6 deletions(-)
+Auto-merging src/test/fuzz/rpc.cpp
+[knots-replayed-on-origin-master d3b31e56c4] Bugfix: QA/fuzz: Add getgeneralinfo to RPC_COMMANDS_SAFE_FOR_FUZZING
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Oct 10 00:30:11 2023 +0000
+ 1 file changed, 1 insertion(+)
+Auto-merging src/httprpc.cpp
+Auto-merging src/httprpc.h
+Auto-merging src/rpc/server.cpp
+Auto-merging test/functional/test_runner.py
+Auto-merging test/lint/lint-circular-dependencies.py
+[knots-replayed-on-origin-master 48a168d5b7] RPC: Add getrpcwhitelist method
+ Author: Harris <brakmic@gmail.com>
+ Date: Mon May 4 20:33:52 2020 +0200
+ 6 files changed, 118 insertions(+)
+ create mode 100755 test/functional/rpc_getrpcwhitelist.py
+Auto-merging src/rpc/server.cpp
+[knots-replayed-on-origin-master 3b230f25f8] RPC: getrpcwhitelist: Return methods as a JSON Object for future expansion to sub-call permissions
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sun May 31 00:23:48 2020 +0000
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+Auto-merging src/rpc/server.cpp
+[knots-replayed-on-origin-master 9d0ebde85f] Bugfix: RPC: Correct types in getrpcwhitelist RPC docs
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sun Oct 1 20:32:23 2023 +0000
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+Auto-merging src/httprpc.cpp
+Auto-merging src/httprpc.h
+[knots-replayed-on-origin-master 2bb819aa12] RPC: getrpcwhitelist: Return all methods (or none) if no explicit whitelist defined
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Sep 29 13:01:25 2023 +0000
+ 3 files changed, 19 insertions(+), 3 deletions(-)
+Auto-merging src/test/fuzz/rpc.cpp
+[knots-replayed-on-origin-master 731d727b01] Bugfix: QA/fuzz: Add getrpcwhitelist to RPC_COMMANDS_SAFE_FOR_FUZZING
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Tue Oct 10 00:31:00 2023 +0000
+ 1 file changed, 1 insertion(+)
+Auto-merging test/functional/test_framework/test_node.py
+[knots-replayed-on-origin-master 1a3cbb9136] Bugfix: QA: test_node: Ensure debug.log exists at start of assert_debug_log
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Mon Feb 24 19:06:24 2025 +0000
+ 1 file changed, 6 insertions(+)
+Auto-merging src/qt/bitcoinaddressvalidator.h
+[knots-replayed-on-origin-master 20414cec94] GUI: BitcoinAddressCheckValidator: Avoid hiding standard validate method signature needlessly
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Sun Feb 23 01:07:10 2025 +0000
+ 1 file changed, 1 insertion(+)
+Auto-merging test/functional/p2p_eviction.py
+[knots-replayed-on-origin-master eb4726e0aa] fixup! test: cover ForceInbound permission success even when connections are full
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Feb 28 04:23:10 2025 +0000
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+Auto-merging src/net.cpp
+Auto-merging src/net.h
+Auto-merging test/functional/p2p_eviction.py
+[knots-replayed-on-origin-master 3d9cc1775e] net: only allow 8 simultaneous forced inbound connections
+ Author: Matthew Zipkin <pinheadmz@gmail.com>
+ Date: Fri Jul 28 14:47:27 2023 -0400
+ 3 files changed, 36 insertions(+), 10 deletions(-)
+Auto-merging src/net.cpp
+Auto-merging src/net.h
+Auto-merging src/rpc/net.cpp
+Auto-merging test/functional/p2p_eviction.py
+Auto-merging test/functional/rpc_net.py
+[knots-replayed-on-origin-master d63cc31a9e] net: add forced_inbound to getpeerinfo
+ Author: Matthew Zipkin <pinheadmz@gmail.com>
+ Date: Thu Nov 9 11:14:38 2023 -0500
+ 5 files changed, 13 insertions(+), 1 deletion(-)
+Auto-merging src/net.cpp
+Auto-merging src/net.h
+Auto-merging test/functional/p2p_eviction.py
+[knots-replayed-on-origin-master c30c448987] net: Remove forcedinbound limit antifeature
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Fri Nov 10 19:58:15 2023 +0000
+ 3 files changed, 21 deletions(-)
+Auto-merging src/qt/addressbookpage.cpp
+Auto-merging src/qt/bitcoingui.cpp
+Auto-merging src/qt/guiutil.cpp
+Auto-merging src/qt/guiutil.h
+Auto-merging src/qt/walletframe.cpp
+[knots-replayed-on-origin-master 99e98f6d23] GUI: Make various dialogs less modal
+ Author: Luke Dashjr <luke-jr+git@utopios.org>
+ Date: Wed Mar 5 03:07:53 2025 +0000
+ 5 files changed, 8 insertions(+), 7 deletions(-)
+Auto-merging CMakeLists.txt
+[knots-replayed-on-origin-master b421c8398a] [build] bump version to 29.0rc1
+ Author: glozow <gloriajzhao@gmail.com>
+ Date: Wed Mar 12 10:53:10 2025 -0400
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+[knots-replayed-on-origin-master 37542873d2] [doc] update man pages for 29.0rc1
+ Author: glozow <gloriajzhao@gmail.com>
+ Date: Wed Mar 12 14:21:57 2025 -0400
+ 6 files changed, 2244 insertions(+), 18 deletions(-)
+[knots-replayed-on-origin-master 0293a5f704] [examples] generate example bitcoin.conf
+ Author: glozow <gloriajzhao@gmail.com>
+ Date: Wed Mar 12 14:23:01 2025 -0400
+ 1 file changed, 633 insertions(+), 1 deletion(-)
+[knots-replayed-on-origin-master 93118d34a5] [doc] release notes link for 29.0
+ Author: glozow <gloriajzhao@gmail.com>
+ Date: Wed Mar 12 14:24:08 2025 -0400
+ 1 file changed, 1 insertion(+)
+ create mode 100644 doc/release-notes.md
+CONFLICT (modify/delete): depends/packages/libmultiprocess.mk deleted in HEAD and modified in 4e438d326e (build: use make < 3.82 syntax for define directive).  Version 4e438d326e (build: use make < 3.82 syntax for define directive) of depends/packages/libmultiprocess.mk left in tree.
+error: could not apply 4e438d326e... build: use make < 3.82 syntax for define directive
+hint: After resolving the conflicts, mark them with
+hint: "git add/rm <pathspec>", then run
+hint: "git cherry-pick --continue".
+hint: You can instead skip this commit with "git cherry-pick --skip".
+hint: To abort and get back to the state before "git cherry-pick",
+hint: run "git cherry-pick --abort".
+hint: Disable this message with "git config set advice.mergeConflict false"
