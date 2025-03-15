@@ -1665,8 +1665,14 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     }
 #endif
 
-    LogInfo("Loading IBD Booster hints bitmap...");
-    g_ibd_booster_hints.Load("./booster.bin"); // TODO: add -ibdboosterfile parameter
+    if (args.IsArgSet("-ibdboosterfile")) {
+        fs::path path = fs::absolute(args.GetPathArg("-ibdboosterfile"));
+        if (!fs::exists(path)) {
+            return InitError(Untranslated("Provided IBD Booster file doesn't exist"));
+        }
+        LogInfo("Loading IBD Booster hints bitmap file...");
+        g_ibd_booster_hints.Load(path.utf8string());
+    }
 
     // ********************************************************* Step 7: load block chain
 
