@@ -1768,8 +1768,14 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     }
 #endif
 
-    LogInfo("Loading SwiftSync hints bitmap...");
-    g_swiftsync_hints.Load("./booster.bin"); // TODO: add -swiftsyncfile parameter
+    if (args.IsArgSet("-swiftsyncfile")) {
+        fs::path path = fs::absolute(args.GetPathArg("-swiftsyncfile"));
+        if (!fs::exists(path)) {
+            return InitError(Untranslated("Provided SwiftSync file doesn't exist"));
+        }
+        LogInfo("Loading SwiftSync hints bitmap file...");
+        g_swiftsync_hints.Load(path.utf8string());
+    }
 
     // ********************************************************* Step 7: load block chain
 
