@@ -2945,7 +2945,8 @@ bool Chainstate::FlushStateToDisk(
             }
             // Flush the chainstate (which may refer to block index entries).
             const auto empty_cache{(mode == FlushStateMode::ALWAYS) || fCacheLarge || fCacheCritical};
-            if (empty_cache ? !CoinsTip().Flush() : !CoinsTip().Sync()) {
+            bool reallocate_cache{true}; // TODO based on coins_mem_usage?
+            if (empty_cache ? !CoinsTip().Flush(reallocate_cache) : !CoinsTip().Sync()) {
                 return FatalError(m_chainman.GetNotifications(), state, _("Failed to write to coin database."));
             }
             m_last_flush = nNow;
@@ -5861,7 +5862,7 @@ static void FlushSnapshotToDisk(CCoinsViewCache& coins_cache, bool snapshot_load
                   coins_cache.DynamicMemoryUsage() / (1000 * 1000)),
         BCLog::LogFlags::ALL);
 
-    coins_cache.Flush();
+    coins_cache.Flush(/*reallocate_cache=*/true);
 }
 
 struct StopHashingException : public std::exception
