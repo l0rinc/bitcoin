@@ -139,19 +139,20 @@ BOOST_AUTO_TEST_CASE(getcoinscachesizestate)
             CoinsCacheSizeState::OK);
     }
 
-    // Flushing the view does take us back to OK because ReallocateCache() is called
+    // Flushing the view doesn't take us back to OK because cacheCoins has
+    // preallocated memory that doesn't get reclaimed even after flush.
 
     BOOST_CHECK_EQUAL(
         chainstate.GetCoinsCacheSizeState(MAX_COINS_CACHE_BYTES, 0),
         CoinsCacheSizeState::CRITICAL);
 
     view.SetBestBlock(m_rng.rand256());
-    BOOST_CHECK(view.Flush(/*reallocate_cache=*/true));
+    BOOST_CHECK(view.Flush());
     print_view_mem_usage(view);
 
     BOOST_CHECK_EQUAL(
         chainstate.GetCoinsCacheSizeState(MAX_COINS_CACHE_BYTES, 0),
-        CoinsCacheSizeState::OK);
+        CoinsCacheSizeState::CRITICAL);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

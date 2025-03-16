@@ -74,7 +74,7 @@ FUZZ_TARGET(coins_view, .init = initialize_coins_view)
                 assert(expected_code_path);
             },
             [&] {
-                assert(coins_view_cache.Flush(/*reallocate_cache=*/fuzzed_data_provider.ConsumeBool()));
+                assert(coins_view_cache.Flush());
             },
             [&] {
                 (void)coins_view_cache.Sync();

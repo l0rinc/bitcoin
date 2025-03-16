@@ -247,14 +247,11 @@ bool CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &ha
     return true;
 }
 
-bool CCoinsViewCache::Flush(bool reallocate_cache) {
+bool CCoinsViewCache::Flush() {
     auto cursor{CoinsViewCacheCursor(cachedCoinsUsage, m_sentinel, cacheCoins, /*will_erase=*/true)};
     bool fOk = base->BatchWrite(cursor, hashBlock);
     if (fOk) {
         cacheCoins.clear();
-        if (reallocate_cache) {
-            ReallocateCache();
-        }
     }
     cachedCoinsUsage = 0;
     return fOk;
@@ -308,15 +305,10 @@ void CCoinsViewCache::ReallocateCache()
 {
     // Cache should be empty when we're calling this.
     assert(cacheCoins.size() == 0);
-    auto current_bucket_count = cacheCoins.bucket_count();
     cacheCoins.~CCoinsMap();
     m_cache_coins_memory_resource.~CCoinsMapMemoryResource();
     ::new (&m_cache_coins_memory_resource) CCoinsMapMemoryResource{};
     ::new (&cacheCoins) CCoinsMap{0, SaltedOutpointHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
-
-    // After a flush all the cacheCoins's memory has now been freed. It is likely that the map gets full again so flush is necessary, and it will
-    // happen around the same memory usage. So we can already reserve the bucket array to the previous size, reducing the number of rehashes needed.
-    cacheCoins.reserve(current_bucket_count);
 }
 
 void CCoinsViewCache::SanityCheck() const

@@ -2945,8 +2945,7 @@ bool Chainstate::FlushStateToDisk(
             }
             // Flush the chainstate (which may refer to block index entries).
             const auto empty_cache{(mode == FlushStateMode::ALWAYS) || fCacheLarge || fCacheCritical};
-            bool reallocate_cache{true}; // TODO based on coins_mem_usage?
-            if (empty_cache ? !CoinsTip().Flush(reallocate_cache) : !CoinsTip().Sync()) {
+            if (empty_cache ? !CoinsTip().Flush() : !CoinsTip().Sync()) {
                 return FatalError(m_chainman.GetNotifications(), state, _("Failed to write to coin database."));
             }
             m_last_flush = nNow;
@@ -3082,7 +3081,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
             LogError("DisconnectTip(): DisconnectBlock %s failed\n", pindexDelete->GetBlockHash().ToString());
             return false;
         }
-        bool flushed = view.Flush(/*reallocate_cache=*/false);
+        bool flushed = view.Flush();
         assert(flushed);
     }
     LogDebug(BCLog::BENCH, "- Disconnect block: %.2fms\n",
@@ -3215,7 +3214,7 @@ bool Chainstate::ConnectTip(BlockValidationState& state, CBlockIndex* pindexNew,
                  Ticks<MillisecondsDouble>(time_3 - time_2),
                  Ticks<SecondsDouble>(m_chainman.time_connect_total),
                  Ticks<MillisecondsDouble>(m_chainman.time_connect_total) / m_chainman.num_blocks_total);
-        bool flushed = view.Flush(/*reallocate_cache=*/false);
+        bool flushed = view.Flush();
         assert(flushed);
     }
     const auto time_4{SteadyClock::now()};
@@ -4968,7 +4967,7 @@ bool Chainstate::ReplayBlocks()
     }
 
     cache.SetBestBlock(pindexNew->GetBlockHash());
-    cache.Flush(/*reallocate_cache=*/false);
+    cache.Flush();
     m_chainman.GetNotifications().progress(bilingual_str{}, 100, false);
     return true;
 }
@@ -5598,6 +5597,10 @@ bool Chainstate::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
     } else {
         // Otherwise, flush state to disk and deallocate the in-memory coins map.
         ret = FlushStateToDisk(state, FlushStateMode::ALWAYS);
+        if (coinstip_size < old_coinstip_size) {
+            // Reallocation is required when downsizing since we can't shrink the cache.
+            CoinsTip().ReallocateCache();
+        }
     }
     return ret;
 }
@@ -5862,7 +5865,7 @@ static void FlushSnapshotToDisk(CCoinsViewCache& coins_cache, bool snapshot_load
                   coins_cache.DynamicMemoryUsage() / (1000 * 1000)),
         BCLog::LogFlags::ALL);
 
-    coins_cache.Flush(/*reallocate_cache=*/true);
+    coins_cache.Flush();
 }
 
 struct StopHashingException : public std::exception
