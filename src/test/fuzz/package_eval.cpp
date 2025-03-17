@@ -202,6 +202,7 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
     // All RBF-spendable outpoints outside of the unsubmitted package
     std::set<COutPoint> mempool_outpoints;
     std::unordered_map<COutPoint, CAmount, SaltedOutpointHasher> outpoints_value;
+    outpoints_value.reserve(g_outpoints_coinbase_init_mature.size());
     for (const auto& outpoint : g_outpoints_coinbase_init_mature) {
         Assert(mempool_outpoints.insert(outpoint).second);
         outpoints_value[outpoint] = 50 * COIN;
@@ -226,6 +227,7 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
 
         // Make small packages
         const auto num_txs = outpoint_to_rbf ? 1 : fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 4);
+        txs.reserve(num_txs);
 
         std::set<COutPoint> package_outpoints;
         while (txs.size() < num_txs) {
@@ -357,6 +359,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
     // All RBF-spendable outpoints outside of the unsubmitted package
     std::set<COutPoint> mempool_outpoints;
     std::unordered_map<COutPoint, CAmount, SaltedOutpointHasher> outpoints_value;
+    outpoints_value.reserve(g_outpoints_coinbase_init_mature.size());
     for (const auto& outpoint : g_outpoints_coinbase_init_mature) {
         Assert(mempool_outpoints.insert(outpoint).second);
         outpoints_value[outpoint] = 50 * COIN;
@@ -378,6 +381,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
 
         // Make packages of 1-to-26 transactions
         const auto num_txs = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 26);
+        txs.reserve(num_txs);
         std::set<COutPoint> package_outpoints;
         while (txs.size() < num_txs) {
             // Create transaction to add to the mempool
