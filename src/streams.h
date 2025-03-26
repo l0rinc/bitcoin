@@ -467,6 +467,8 @@ public:
     }
 };
 
+using BufferData = std::vector<std::byte>;
+
 /** Wrapper around an AutoFile& that implements a ring buffer to
  *  deserialize from. It guarantees the ability to rewind a given number of bytes.
  *
@@ -481,7 +483,7 @@ private:
     uint64_t m_read_pos{0}; //!< how many bytes have been read from this
     uint64_t nReadLimit;  //!< up to which position we're allowed to read
     uint64_t nRewind;     //!< how many bytes we guarantee to rewind
-    std::vector<std::byte> vchBuf; //!< the buffer
+    BufferData vchBuf;
 
     //! read data from the source to fill the buffer
     bool Fill() {
@@ -611,6 +613,47 @@ public:
             buf_offset += inc;
             if (buf_offset >= vchBuf.size()) buf_offset = 0;
         }
+    }
+};
+
+/**
+ * Wrapper that buffers reads from an underlying stream.
+ * Requires underlying stream to support read() and detail_fread() calls
+ * to support fixed-size and variable-sized reads, respectively.
+ */
+template <typename S>
+class BufferedReader
+{
+    S& m_src;
+    BufferData m_buf;
+    size_t m_buf_pos;
+
+public:
+    explicit BufferedReader(S&& stream, size_t size = 1 << 16)
+        requires std::is_rvalue_reference_v<S&&>
+        : m_src{stream}, m_buf(size), m_buf_pos{size} {}
+
+    void read(std::span<std::byte> dst)
+    {
+        if (const auto available{std::min(dst.size(), m_buf.size() - m_buf_pos)}) {
+            std::copy_n(m_buf.begin() + m_buf_pos, available, dst.begin());
+            m_buf_pos += available;
+            dst = dst.subspan(available);
+        }
+        if (dst.size()) {
+            assert(m_buf_pos == m_buf.size());
+            m_src.read(dst);
+
+            m_buf_pos = 0;
+            m_buf.resize(m_src.detail_fread(m_buf));
+        }
+    }
+
+    template <typename T>
+    BufferedReader& operator>>(T&& obj)
+    {
+        Unserialize(*this, obj);
+        return *this;
     }
 };
 
