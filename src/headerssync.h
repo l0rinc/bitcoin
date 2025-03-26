@@ -207,7 +207,7 @@ private:
 
     /** In REDOWNLOAD, check a header's commitment (if applicable) and add to
      * buffer for later processing */
-    bool ValidateAndStoreRedownloadedHeader(const CBlockHeader& header);
+    bool ValidateAndStoreRedownloadedHeader(const CBlockHeader& header, bool from_cache);
 
     /** Return a set of headers that satisfy our proof-of-work threshold */
     std::vector<CBlockHeader> PopHeadersReadyForAcceptance();
