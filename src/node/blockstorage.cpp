@@ -1132,14 +1132,14 @@ bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::o
     block.SetNull();
 
     // Open history file to read
-    const auto block_data{ReadRawBlock(pos)};
-    if (!block_data) {
+    std::vector<uint8_t> block_data;
+    if (!ReadRawBlock(block_data, pos)) {
         return false;
     }
 
     try {
         // Read block
-        SpanReader{*block_data} >> TX_WITH_WITNESS(block);
+        SpanReader{block_data} >> TX_WITH_WITNESS(block);
     } catch (const std::exception& e) {
         LogError("Deserialize or I/O error - %s at %s while reading block", e.what(), pos.ToString());
         return false;
