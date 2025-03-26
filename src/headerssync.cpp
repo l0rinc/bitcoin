@@ -83,10 +83,12 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessNextHeaders(const
         // threshold (at which point m_download_state is updated to REDOWNLOAD).
         ret.success = ValidateAndStoreHeadersCommitments(received_headers);
         if (ret.success) {
-            if (full_headers_message || m_download_state == State::REDOWNLOAD) {
-                // A full headers message means the peer may have more to give us;
-                // also if we just switched to REDOWNLOAD then we need to re-request
+            if (m_download_state == State::REDOWNLOAD) {
+                // If we just switched to REDOWNLOAD then we need to re-request
                 // headers from the beginning.
+                ret.request_more = true;
+            } else if (full_headers_message) {
+                // A full headers message means the peer may have more to give us.
                 ret.request_more = true;
             } else {
                 Assume(m_download_state == State::PRESYNC);
