@@ -942,11 +942,12 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
 
         {
             // Open history file to append
-            AutoFile fileout{OpenUndoFile(pos)};
-            if (fileout.IsNull()) {
+            AutoFile file{OpenUndoFile(pos)};
+            if (file.IsNull()) {
                 LogError("OpenUndoFile failed for %s while writing", pos.ToString());
                 return FatalError(m_opts.notifications, state, _("Failed to write undo data."));
             }
+            BufferedWriter fileout{file};
 
             // Write index header
             fileout << GetParams().MessageStart() << blockundo_size;
@@ -958,7 +959,7 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
                 // Write undo data & checksum
                 fileout << blockundo << hasher.GetHash();
             }
-            fileout.fclose(); // Make sure `AutoFile` goes out of scope before we call `FlushUndoFile`
+            fileout.flush(); // Make sure `AutoFile`/`BufferedWriter` go out of scope before we call `FlushUndoFile`
         }
 
         // rev files are written in block height order, whereas blk files are written as blocks come in (often out of order)
@@ -1086,12 +1087,13 @@ FlatFilePos BlockManager::WriteBlock(const CBlock& block, int nHeight)
         LogError("FindNextBlockPos failed for %s while writing", pos.ToString());
         return FlatFilePos();
     }
-    AutoFile fileout{OpenBlockFile(pos)};
-    if (fileout.IsNull()) {
+    AutoFile file{OpenBlockFile(pos)};
+    if (file.IsNull()) {
         LogError("OpenBlockFile failed for %s while writing", pos.ToString());
         m_opts.notifications.fatalError(_("Failed to write block."));
         return FlatFilePos();
     }
+    BufferedWriter fileout{file};
 
     // Write index header
     fileout << GetParams().MessageStart() << block_size;
