@@ -1160,11 +1160,11 @@ static TxoutType GetTxoutType(const CScript& output_script)
 
 BOOST_AUTO_TEST_CASE(script_size_and_capacity_test)
 {
-    BOOST_CHECK_EQUAL(sizeof(prevector<CScriptBase::STATIC_SIZE, uint8_t>), 32);
-    BOOST_CHECK_EQUAL(sizeof(CScriptBase), 32);
+    BOOST_CHECK_EQUAL(sizeof(prevector<34, uint8_t>), sizeof(prevector<CScriptBase::STATIC_SIZE, uint8_t>));
+    BOOST_CHECK_EQUAL(sizeof(CScriptBase), 40);
     BOOST_CHECK_NE(sizeof(CScriptBase), sizeof(prevector<CScriptBase::STATIC_SIZE + 1, uint8_t>)); // CScriptBase size should be set to avoid wasting space in padding
-    BOOST_CHECK_EQUAL(sizeof(CScript), 32);
-    BOOST_CHECK_EQUAL(sizeof(CTxOut), 40);
+    BOOST_CHECK_EQUAL(sizeof(CScript), 40);
+    BOOST_CHECK_EQUAL(sizeof(CTxOut), 48);
 
     CKey dummy_key;
     dummy_key.MakeNewKey(true);
@@ -1205,31 +1205,31 @@ BOOST_AUTO_TEST_CASE(script_size_and_capacity_test)
         BOOST_CHECK_EQUAL(script.allocated_memory(), 0);
     }
 
-    // P2WSH needs extra allocation
+    // P2WSH has direct allocation
     {
         const auto script{GetScriptForDestination(WitnessV0ScriptHash{CScript{} << OP_TRUE})};
         BOOST_CHECK(script.IsPayToWitnessScriptHash());
         BOOST_CHECK_EQUAL(script.size(), 34);
-        BOOST_CHECK_EQUAL(script.capacity(), 34);
-        BOOST_CHECK_EQUAL(script.allocated_memory(), 34);
+        BOOST_CHECK_EQUAL(script.capacity(), CScriptBase::STATIC_SIZE);
+        BOOST_CHECK_EQUAL(script.allocated_memory(), 0);
     }
 
-    // P2TR needs extra allocation
+    // P2TR has direct allocation
     {
         const auto script{GetScriptForDestination(WitnessV1Taproot{XOnlyPubKey{CPubKey{dummy_key.GetPubKey()}}})};
         BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::WITNESS_V1_TAPROOT);
         BOOST_CHECK_EQUAL(script.size(), 34);
-        BOOST_CHECK_EQUAL(script.capacity(), 34);
-        BOOST_CHECK_EQUAL(script.allocated_memory(), 34);
+        BOOST_CHECK_EQUAL(script.capacity(), CScriptBase::STATIC_SIZE);
+        BOOST_CHECK_EQUAL(script.allocated_memory(), 0);
     }
 
-    // P2PK needs extra allocation
+    // P2PK has direct allocation
     {
         const auto script{GetScriptForRawPubKey(CPubKey{dummy_key.GetPubKey()})};
         BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEY);
         BOOST_CHECK_EQUAL(script.size(), 35);
-        BOOST_CHECK_EQUAL(script.capacity(), 35);
-        BOOST_CHECK_EQUAL(script.allocated_memory(), 35);
+        BOOST_CHECK_EQUAL(script.capacity(), CScriptBase::STATIC_SIZE);
+        BOOST_CHECK_EQUAL(script.allocated_memory(), 0);
     }
 
     // MULTISIG needs extra allocation
