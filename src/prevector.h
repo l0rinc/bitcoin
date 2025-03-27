@@ -12,7 +12,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
-#include <logging.h>
 #include <type_traits>
 #include <utility>
 
@@ -473,8 +472,6 @@ public:
     }
 
     ~prevector() {
-        LogInfo("prevector final size %d capacity %d", size(), capacity());
-
         if (!is_direct()) {
             free(_union.indirect_contents.indirect);
             _union.indirect_contents.indirect = nullptr;
