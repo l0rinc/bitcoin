@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Bitcoin Core developers
+// Copyright (c) 2022-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -29,9 +29,9 @@ HeadersSyncState::HeadersSyncState(NodeId id, const Consensus::Params& consensus
     m_id(id), m_consensus_params(consensus_params),
     m_chain_start(chain_start),
     m_minimum_required_work(minimum_required_work),
-    m_current_chain_work(chain_start->nChainWork),
-    m_last_header_received(m_chain_start->GetBlockHeader()),
-    m_current_height(chain_start->nHeight)
+    m_presync_chain_work(chain_start->nChainWork),
+    m_presync_last_header_received(m_chain_start->GetBlockHeader()),
+    m_presync_height(chain_start->nHeight)
 {
     // Estimate the number of blocks that could possibly exist on the peer's
     // chain *right now* using 6 blocks/second (fastest blockrate given the MTP
@@ -43,7 +43,7 @@ HeadersSyncState::HeadersSyncState(NodeId id, const Consensus::Params& consensus
     // could try again, if necessary, to sync a longer chain).
     m_max_commitments = 6*(Ticks<std::chrono::seconds>(NodeClock::now() - NodeSeconds{std::chrono::seconds{chain_start->GetMedianTimePast()}}) + MAX_FUTURE_BLOCK_TIME) / HEADER_COMMITMENT_PERIOD;
 
-    LogDebug(BCLog::NET, "Initial headers sync started with peer=%d: height=%i, max_commitments=%i, min_work=%s\n", m_id, m_current_height, m_max_commitments, m_minimum_required_work.ToString());
+    LogDebug(BCLog::NET, "Initial headers sync started with peer=%d: height=%i, max_commitments=%i, min_work=%s\n", m_id, m_presync_height, m_max_commitments, m_minimum_required_work.ToString());
 }
 
 /** Free any memory in use, and mark this object as no longer usable. This is
@@ -53,12 +53,12 @@ void HeadersSyncState::Finalize()
 {
     Assume(m_download_state != State::FINAL);
     ClearShrink(m_header_commitments);
-    m_last_header_received.SetNull();
+    m_presync_last_header_received.SetNull();
     ClearShrink(m_redownloaded_headers);
     m_redownload_buffer_last_hash.SetNull();
     m_redownload_buffer_first_prev_hash.SetNull();
     m_process_all_remaining_headers = false;
-    m_current_height = 0;
+    m_presync_height = 0;
 
     m_download_state = State::FINAL;
 }
@@ -93,7 +93,7 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessNextHeaders(const
                 // If we're in PRESYNC and we get a non-full headers
                 // message, then the peer's chain has ended and definitely doesn't
                 // have enough work, so we can stop our sync.
-                LogDebug(BCLog::NET, "Initial headers sync aborted with peer=%d: incomplete headers message at height=%i (presync phase)\n", m_id, m_current_height);
+                LogDebug(BCLog::NET, "Initial headers sync aborted with peer=%d: incomplete headers message at height=%i (presync phase)\n", m_id, m_presync_height);
             }
         }
     } else if (m_download_state == State::REDOWNLOAD) {
@@ -146,12 +146,12 @@ bool HeadersSyncState::ValidateAndStoreHeadersCommitments(const std::vector<CBlo
     Assume(m_download_state == State::PRESYNC);
     if (m_download_state != State::PRESYNC) return false;
 
-    if (headers[0].hashPrevBlock != m_last_header_received.GetHash()) {
+    if (headers[0].hashPrevBlock != m_presync_last_header_received.GetHash()) {
         // Somehow our peer gave us a header that doesn't connect.
         // This might be benign -- perhaps our peer reorged away from the chain
         // they were on. Give up on this sync for now (likely we will start a
         // new sync with a new starting point).
-        LogDebug(BCLog::NET, "Initial headers sync aborted with peer=%d: non-continuous headers at height=%i (presync phase)\n", m_id, m_current_height);
+        LogDebug(BCLog::NET, "Initial headers sync aborted with peer=%d: non-continuous headers at height=%i (presync phase)\n", m_id, m_presync_height);
         return false;
     }
 
@@ -163,14 +163,14 @@ bool HeadersSyncState::ValidateAndStoreHeadersCommitments(const std::vector<CBlo
         }
     }
 
-    if (m_current_chain_work >= m_minimum_required_work) {
+    if (m_presync_chain_work >= m_minimum_required_work) {
         m_redownloaded_headers.clear();
         m_redownload_buffer_last_height = m_chain_start->nHeight;
         m_redownload_buffer_first_prev_hash = m_chain_start->GetBlockHash();
         m_redownload_buffer_last_hash = m_chain_start->GetBlockHash();
         m_redownload_chain_work = m_chain_start->nChainWork;
         m_download_state = State::REDOWNLOAD;
-        LogDebug(BCLog::NET, "Initial headers sync transition with peer=%d: reached sufficient work at height=%i, redownloading from height=%i\n", m_id, m_current_height, m_redownload_buffer_last_height);
+        LogDebug(BCLog::NET, "Initial headers sync transition with peer=%d: reached sufficient work at height=%i, redownloading from height=%i\n", m_id, m_presync_height, m_redownload_buffer_last_height);
     }
     return true;
 }
@@ -180,7 +180,7 @@ bool HeadersSyncState::ValidateAndProcessSingleHeader(const CBlockHeader& curren
     Assume(m_download_state == State::PRESYNC);
     if (m_download_state != State::PRESYNC) return false;
 
-    int next_height = m_current_height + 1;
+    int next_height = m_presync_height + 1;
 
     // Verify that the difficulty isn't growing too fast; an adversary with
     // limited hashing capability has a greater chance of producing a high
@@ -188,7 +188,7 @@ bool HeadersSyncState::ValidateAndProcessSingleHeader(const CBlockHeader& curren
     // so don't let anyone give a chain that would violate the difficulty
     // adjustment maximum.
     if (!PermittedDifficultyTransition(m_consensus_params, next_height,
-                m_last_header_received.nBits, current.nBits)) {
+                m_presync_last_header_received.nBits, current.nBits)) {
         LogDebug(BCLog::NET, "Initial headers sync aborted with peer=%d: invalid difficulty transition at height=%i (presync phase)\n", m_id, next_height);
         return false;
     }
@@ -206,9 +206,9 @@ bool HeadersSyncState::ValidateAndProcessSingleHeader(const CBlockHeader& curren
         }
     }
 
-    m_current_chain_work += GetBlockProof(CBlockIndex(current));
-    m_last_header_received = current;
-    m_current_height = next_height;
+    m_presync_chain_work += GetBlockProof(CBlockIndex(current));
+    m_presync_last_header_received = current;
+    m_presync_height = next_height;
 
     return true;
 }
@@ -304,7 +304,7 @@ CBlockLocator HeadersSyncState::NextHeadersRequestLocator() const
 
     if (m_download_state == State::PRESYNC) {
         // During pre-synchronization, we continue from the last header received.
-        locator.push_back(m_last_header_received.GetHash());
+        locator.push_back(m_presync_last_header_received.GetHash());
     }
 
     if (m_download_state == State::REDOWNLOAD) {
