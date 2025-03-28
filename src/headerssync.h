@@ -15,6 +15,7 @@
 #include <util/hasher.h>
 
 #include <deque>
+#include <optional>
 #include <vector>
 
 // A compressed CBlockHeader, which leaves out the prevhash
@@ -40,7 +41,8 @@ struct CompressedHeader {
         nNonce = header.nNonce;
     }
 
-    CBlockHeader GetFullHeader(const uint256& hash_prev_block) {
+    CBlockHeader GetFullHeader(const uint256& hash_prev_block) const
+    {
         CBlockHeader ret;
         ret.nVersion = nVersion;
         ret.hashPrevBlock = hash_prev_block;
@@ -134,9 +136,12 @@ public:
      * consensus_params: parameters needed for difficulty adjustment validation
      * chain_start: best known fork point that the peer's headers branch from
      * minimum_required_work: amount of chain work required to accept the chain
+     * cache_size: Number of headers to cache in order to avoid re-downloading.
+     *             If unset it be configured depending on available RAM.
      */
     HeadersSyncState(NodeId id, const Consensus::Params& consensus_params,
-            const CBlockIndex* chain_start, const arith_uint256& minimum_required_work);
+            const CBlockIndex* chain_start, const arith_uint256& minimum_required_work,
+            std::optional<size_t> cache_size);
 
     /** Result data structure for ProcessNextHeaders. */
     struct ProcessingResult {
@@ -241,6 +246,11 @@ private:
 
     /** Height of m_presync_last_header_received */
     int64_t m_presync_height{0};
+
+    /** During phase 1 (PRESYNC), we cache received headers so we don't have to
+     *  re-download all of them in phase 2 (REDOWNLOAD). */
+    std::vector<CompressedHeader> m_headers_cache;
+    const size_t m_headers_cache_max;
 
     /** During phase 2 (REDOWNLOAD), we buffer redownloaded headers in memory
      *  until enough commitments have been verified; those are stored in
