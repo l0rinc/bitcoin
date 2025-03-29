@@ -166,6 +166,10 @@ void CDBBatch::Clear()
 {
     m_impl_batch->batch.Clear();
 }
+void CDBBatch::Reserve(size_t size) const
+{
+    m_impl_batch->batch.Reserve(size);
+}
 size_t CDBBatch::ApproximateSize() const
 {
     return m_impl_batch->batch.ApproximateSize();

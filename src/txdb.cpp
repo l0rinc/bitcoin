@@ -92,6 +92,7 @@ std::vector<uint256> CCoinsViewDB::GetHeadBlocks() const {
 
 bool CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlock) {
     CDBBatch batch(*m_db);
+    batch.Reserve(m_options.batch_write_bytes);
 
     size_t count = 0;
     size_t changed = 0;
