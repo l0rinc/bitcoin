@@ -167,6 +167,10 @@ void CDBBatch::Clear()
     m_impl_batch->batch.Clear();
     size_estimate = 0;
 }
+size_t CDBBatch::ApproximateSize() const
+{
+    return m_impl_batch->batch.ApproximateSize();
+}
 
 void CDBBatch::WriteImpl(std::span<const std::byte> key, DataStream& ssValue)
 {

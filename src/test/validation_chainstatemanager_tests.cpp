@@ -787,7 +787,7 @@ util::Result<Options> SetOptsFromArgs(ArgsManager& args_man, Options opts,
     if (!args_man.ParseParameters(argv.size(), argv.data(), error)) {
         return util::Error{Untranslated("ParseParameters failed with error: " + error)};
     }
-    const auto result{node::ApplyArgsManOptions(args_man, opts)};
+    const auto result{node::ApplyArgsManOptions(args_man, opts, 0)};
     if (!result) return util::Error{util::ErrorString(result)};
     return opts;
 }

@@ -22,7 +22,7 @@
 #include <string>
 
 namespace node {
-util::Result<void> ApplyArgsManOptions(const ArgsManager& args, ChainstateManager::Options& opts)
+util::Result<void> ApplyArgsManOptions(const ArgsManager& args, ChainstateManager::Options& opts, size_t coins)
 {
     if (auto value{args.GetIntArg("-checkblockindex")}) {
         // Interpret bare -checkblockindex argument as 1 instead of 0.
@@ -48,7 +48,7 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& args, ChainstateManage
     if (auto value{args.GetIntArg("-maxtipage")}) opts.max_tip_age = std::chrono::seconds{*value};
 
     ReadDatabaseArgs(args, opts.coins_db);
-    ReadCoinsViewArgs(args, opts.coins_view);
+    ReadCoinsViewArgs(args, opts.coins_view, coins);
 
     int script_threads = args.GetIntArg("-par", DEFAULT_SCRIPTCHECK_THREADS);
     if (script_threads <= 0) {

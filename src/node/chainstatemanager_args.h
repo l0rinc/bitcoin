@@ -14,7 +14,7 @@ class ArgsManager;
 static constexpr int DEFAULT_SCRIPTCHECK_THREADS{0};
 
 namespace node {
-[[nodiscard]] util::Result<void> ApplyArgsManOptions(const ArgsManager& args, ChainstateManager::Options& opts);
+[[nodiscard]] util::Result<void> ApplyArgsManOptions(const ArgsManager& args, ChainstateManager::Options& opts, size_t coins);
 } // namespace node
 
 #endif // BITCOIN_NODE_CHAINSTATEMANAGER_ARGS_H

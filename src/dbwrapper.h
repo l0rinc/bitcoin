@@ -95,6 +95,7 @@ public:
     explicit CDBBatch(const CDBWrapper& _parent);
     ~CDBBatch();
     void Clear();
+    size_t ApproximateSize() const;
 
     template <typename K, typename V>
     void Write(const K& key, const V& value)

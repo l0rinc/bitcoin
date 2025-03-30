@@ -12,12 +12,14 @@
 #include <random.h>
 #include <serialize.h>
 #include <uint256.h>
+#include <util/byte_units.h>
 #include <util/vector.h>
 
 #include <cassert>
 #include <cstdlib>
 #include <iterator>
 #include <utility>
+#include <node/caches.h>
 
 static constexpr uint8_t DB_COIN{'C'};
 static constexpr uint8_t DB_BEST_BLOCK{'B'};
@@ -92,6 +94,12 @@ std::vector<uint256> CCoinsViewDB::GetHeadBlocks() const {
 
 bool CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlock) {
     CDBBatch batch(*m_db);
+    const size_t batch_write_bytes = Assert(m_options.batch_write_bytes); // TODO estimate based on dirty values instead
+
+    LogInfo("CCoinsViewDB::BatchWrite batch_write_bytes = %s",  batch_write_bytes);
+
+    size_t total_byte_count = 0;
+    size_t batch_count = 0;
     size_t count = 0;
     size_t changed = 0;
     assert(!hashBlock.IsNull());
@@ -127,8 +135,10 @@ bool CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashB
         }
         count++;
         it = cursor.NextAndMaybeErase(*it);
-        if (batch.SizeEstimate() > m_options.batch_write_bytes) {
-            LogDebug(BCLog::COINDB, "Writing partial batch of %.2f MiB\n", batch.SizeEstimate() * (1.0 / 1048576.0));
+        if (batch.SizeEstimate() > batch_write_bytes) {
+            LogInfo("Writing partial batch of %.2f MiB\n", batch.SizeEstimate() * (1.0 / 1048576.0));
+            batch_count++;
+            total_byte_count += batch.ApproximateSize();
             m_db->WriteBatch(batch);
             batch.Clear();
             if (m_options.simulate_crash_ratio) {
@@ -145,9 +155,15 @@ bool CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashB
     batch.Erase(DB_HEAD_BLOCKS);
     batch.Write(DB_BEST_BLOCK, hashBlock);
 
-    LogDebug(BCLog::COINDB, "Writing final batch of %.2f MiB\n", batch.SizeEstimate() * (1.0 / 1048576.0));
+    LogInfo("Writing final batch of %.2f MiB\n", batch.SizeEstimate() * (1.0 / 1048576.0));
+    batch_count++;
+    total_byte_count += batch.ApproximateSize();
     bool ret = m_db->WriteBatch(batch);
     LogDebug(BCLog::COINDB, "Committed %u changed transaction outputs (out of %u) to coin database...\n", (unsigned int)changed, (unsigned int)count);
+
+    LogInfo("CCoinsViewDB::BatchWrite flushed in batch_count = %s", batch_count);
+    LogInfo("CCoinsViewDB::BatchWrite batch.ApproximateSize = %s", total_byte_count);
+
     return ret;
 }
 

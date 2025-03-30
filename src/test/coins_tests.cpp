@@ -20,6 +20,7 @@
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
+#include <node/coins_view_args.h>
 
 using namespace util::hex_literals;
 
@@ -1072,6 +1073,19 @@ BOOST_AUTO_TEST_CASE(coins_resource_is_used)
     }
 
     PoolResourceTester::CheckAllDataAccountedFor(resource);
+}
+
+BOOST_AUTO_TEST_CASE(db_batch_sizes)
+{
+    BOOST_CHECK_EQUAL(node::GetDefaultDbBatchSize(4_MiB), 8'500'456);
+    BOOST_CHECK_EQUAL(node::GetDefaultDbBatchSize(10_MiB), 8'668'228);
+    BOOST_CHECK_EQUAL(node::GetDefaultDbBatchSize(45_MiB), 9'646'899);
+    BOOST_CHECK_EQUAL(node::GetDefaultDbBatchSize(100_MiB), 11'184'810);
+    BOOST_CHECK_EQUAL(node::GetDefaultDbBatchSize(450_MiB), 20'971'520);
+    BOOST_CHECK_EQUAL(node::GetDefaultDbBatchSize(1000_MiB), 36'350'634);
+    BOOST_CHECK_EQUAL(node::GetDefaultDbBatchSize(4500_MiB), 134'217'728);
+    BOOST_CHECK_EQUAL(node::GetDefaultDbBatchSize(10000_MiB), 276'824'064);
+    BOOST_CHECK_EQUAL(node::GetDefaultDbBatchSize(45000_MiB), 276'824'064);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
