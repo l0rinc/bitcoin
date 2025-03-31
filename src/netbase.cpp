@@ -814,7 +814,7 @@ std::unique_ptr<Sock> ConnectThroughProxy(const Proxy& proxy,
     }
 
     // do socks negotiation
-    if (proxy.m_tor_stream_isolation) {
+    if (proxy.m_randomize_credentials) {
         static TorStreamIsolationCredentialsGenerator generator;
         ProxyCredentials random_auth{generator.Generate()};
         if (!Socks5(dest, port, &random_auth, *sock)) {
