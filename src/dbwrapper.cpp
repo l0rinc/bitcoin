@@ -208,6 +208,7 @@ CDBBatch::~CDBBatch() = default;
 void CDBBatch::Clear()
 {
     m_impl_batch->batch.Clear();
+    assert(m_impl_batch->batch.ApproximateSize() == kHeader);
     assert(m_key_scratch.empty());
     assert(m_value_scratch.empty());
 }
