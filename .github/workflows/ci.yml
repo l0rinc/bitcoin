@@ -233,6 +233,11 @@ jobs:
           py -3 --version
           bash --version
 
+      - name: Apply vcpkg workarounds
+        run: |
+          # Workaround for libevent, which requires CMake 3.1 but is incompatible with CMake >= 4.0.
+          sed -i '1s/^/set(ENV{CMAKE_POLICY_VERSION_MINIMUM} 3.5)\n/' "${VCPKG_INSTALLATION_ROOT}/scripts/ports.cmake"
+
       - name: Restore vcpkg downloads cache
         id: vcpkg-downloads-cache
         uses: actions/cache/restore@v5
