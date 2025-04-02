@@ -73,6 +73,8 @@ GUI dependencies:
 Bitcoin Core includes a GUI built with the cross-platform Qt Framework. To compile the GUI, we need to install
 the necessary parts of Qt, the libqrencode and pass `-DBUILD_GUI=ON`. Skip if you don't intend to use the GUI.
 
+For Qt 6.5 and later, the xcb cursor runtime package must be installed (`libxcb-cursor0` on Debian/Ubuntu, `xcb-util-cursor` on Fedora).
+
 Additionally, install the Qt Wayland platform plugin for modern desktop environments.
 
 The GUI will be able to encode addresses in QR codes and requires libqrencode.
