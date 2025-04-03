@@ -39,6 +39,23 @@ if(GIT_EXECUTABLE)
     ERROR_QUIET
   )
   if(IS_INSIDE_WORK_TREE)
+    # Ensure this script belongs to the repository being queried.
+    execute_process(
+      COMMAND ${GIT_EXECUTABLE} status --porcelain -uall --ignored cmake/script/GenerateBuildInfo.cmake
+      WORKING_DIRECTORY ${WORKING_DIR}
+      RESULT_VARIABLE SCRIPT_STATUS_EXITCODE
+      OUTPUT_VARIABLE SCRIPT_STATUS
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET
+    )
+    if(SCRIPT_STATUS_EXITCODE)
+      set(IS_INSIDE_WORK_TREE 0)
+    elseif(SCRIPT_STATUS MATCHES "\\?")
+      set(IS_INSIDE_WORK_TREE 0)
+    endif()
+  endif()
+
+  if(IS_INSIDE_WORK_TREE)
     # Clean 'dirty' status of touched files that haven't been modified.
     execute_process(
       COMMAND ${GIT_EXECUTABLE} diff
