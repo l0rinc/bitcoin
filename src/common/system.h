@@ -9,6 +9,7 @@
 #include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 // Application startup time (used for uptime calculation)
@@ -28,5 +29,7 @@ void runCommand(const std::string& strCommand);
  * @note This does count virtual cores, such as those provided by HyperThreading.
  */
 int GetNumCores();
+
+std::optional<size_t> GetFreeRAM();
 
 #endif // BITCOIN_COMMON_SYSTEM_H
