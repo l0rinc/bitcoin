@@ -87,21 +87,6 @@ EXTENDED_SCRIPTS = [
     'feature_dbcrash.py',
     'feature_index_prune.py',
     'wallet_pruning.py --legacy-wallet',
-]
-
-BASE_SCRIPTS = [
-    # Scripts that are run by default.
-    # Longest test should go first, to favor running tests in parallel
-    # vv Tests less than 5m vv
-    'feature_fee_estimation.py',
-    'feature_taproot.py',
-    'feature_block.py',
-    'mempool_ephemeral_dust.py',
-    'wallet_conflicts.py --legacy-wallet',
-    'wallet_conflicts.py --descriptors',
-    'p2p_opportunistic_1p1c.py',
-    'p2p_node_network_limited.py --v1transport',
-    'p2p_node_network_limited.py --v2transport',
     # vv Tests less than 2m vv
     'mining_getblocktemplate_longpoll.py',
     'p2p_segwit.py',
@@ -416,6 +401,21 @@ BASE_SCRIPTS = [
     'p2p_seednode.py',
     # Don't append tests at the end to avoid merge conflicts
     # Put them in a random line within the section that fits their approximate run-time
+]
+
+BASE_SCRIPTS = [
+    # Scripts that are run by default.
+    # Longest test should go first, to favor running tests in parallel
+    # vv Tests less than 5m vv
+    'feature_fee_estimation.py',
+    'feature_taproot.py',
+    'feature_block.py',
+    'mempool_ephemeral_dust.py',
+    'wallet_conflicts.py --legacy-wallet',
+    'wallet_conflicts.py --descriptors',
+    'p2p_opportunistic_1p1c.py',
+    'p2p_node_network_limited.py --v1transport',
+    'p2p_node_network_limited.py --v2transport',
 ]
 
 # Place EXTENDED_SCRIPTS first since it has the 3 longest running tests
