@@ -4,6 +4,8 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test running bitcoind with the -rpcbind and -rpcallowip options."""
 
+import socket
+
 from test_framework.netutil import all_interfaces, addr_to_hex, get_bind_addrs, test_ipv6_local
 from test_framework.test_framework import BitcoinTestFramework, SkipTest
 from test_framework.test_node import ErrorMatch
@@ -56,6 +58,24 @@ class RPCBindTest(BitcoinTestFramework):
         init_error = 'Error: Invalid port specified in -rpcbind: '
         for addr in addresses:
             self.nodes[0].assert_start_raises_init_error(base_args + [f'-rpcbind={addr}'], init_error + f"'{addr}'")
+
+    def run_partial_bind_failure_test(self):
+        '''
+        Occupy one explicitly configured RPC bind address and verify that
+        startup fails even when another configured bind address would succeed.
+        '''
+        self.log.info('Explicit rpcbind failure aborts startup')
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(('127.0.0.1', self.defaultport))
+            sock.listen()
+            self.nodes[0].assert_start_raises_init_error([
+                '-disablewallet',
+                '-nolisten',
+                '-rpcallowip=127.0.0.1',
+                '-rpcbind=127.0.0.1',
+                f'-rpcbind=127.0.0.1:{rpc_port(1)}',
+            ], 'Error: Unable to bind all endpoints for RPC server')
 
     def run_allowip_test(self, allow_ips, rpchost, rpcport):
         '''
@@ -119,6 +139,8 @@ class RPCBindTest(BitcoinTestFramework):
 
         if not self.options.run_nonloopback:
             self._run_loopback_tests()
+            if not self.options.run_ipv6:
+                self.run_partial_bind_failure_test()
             if self.options.run_ipv4:
                 self.run_invalid_bind_test(['127.0.0.1'], ['127.0.0.1:notaport', '127.0.0.1:-18443', '127.0.0.1:0', '127.0.0.1:65536'])
             if self.options.run_ipv6:
