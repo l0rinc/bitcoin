@@ -9,6 +9,7 @@
 #include <util/string.h>
 
 #include <memory>
+#include <ranges>
 
 #include <boost/test/unit_test.hpp>
 
@@ -28,20 +29,53 @@ BOOST_FIXTURE_TEST_SUITE(dbwrapper_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(dbwrapper)
 {
-    // Perform tests both obfuscated and non-obfuscated.
+    // Perform tests both obfuscated and non-obfuscated
     for (const bool obfuscate : {false, true}) {
-        fs::path ph = m_args.GetDataDirBase() / (obfuscate ? "dbwrapper_obfuscate_true" : "dbwrapper_obfuscate_false");
-        CDBWrapper dbw({.path = ph, .cache_bytes = 1 << 20, .memory_only = true, .wipe_data = false, .obfuscate = obfuscate});
-        uint8_t key{'k'};
-        uint256 in = m_rng.rand256();
-        uint256 res;
+        constexpr size_t CACHE_SIZE{1_MiB};
+        const fs::path path{m_args.GetDataDirBase() / "dbwrapper"};
 
-        // Ensure that we're doing real obfuscation when obfuscate=true
-        BOOST_CHECK(obfuscate != is_null_key(dbwrapper_private::GetObfuscateKey(dbw)));
+        std::vector<uint8_t> obfuscation_key{};
+        std::vector<std::pair<uint8_t, uint256>> key_values{};
 
-        BOOST_CHECK(dbw.Write(key, in));
-        BOOST_CHECK(dbw.Read(key, res));
-        BOOST_CHECK_EQUAL(res.ToString(), in.ToString());
+        // Write values
+        {
+            CDBWrapper dbw{{.path = path, .cache_bytes = CACHE_SIZE, .wipe_data = true, .obfuscate = obfuscate}};
+            BOOST_CHECK_EQUAL(obfuscate, !dbw.IsEmpty());
+
+            // Ensure that we're doing real obfuscation when obfuscate=true
+            BOOST_CHECK_EQUAL(obfuscate, !is_null_key(dbwrapper_private::GetObfuscateKey(dbw)));
+
+            obfuscation_key = dbwrapper_private::GetObfuscateKey(dbw);
+
+            for (uint8_t k{0}; k < 10; ++k) {
+                uint8_t key{k};
+                uint256 value{m_rng.rand256()};
+                BOOST_CHECK(dbw.Write(key, value));
+                key_values.emplace_back(key, value);
+            }
+        }
+
+        // Verify that the obfuscation key is never obfuscated
+        {
+            CDBWrapper dbw{{.path = path, .cache_bytes = CACHE_SIZE, .obfuscate = false}};
+            BOOST_CHECK(obfuscation_key == dbwrapper_private::GetObfuscateKey(dbw));
+        }
+
+        // Read back the values
+        {
+            CDBWrapper dbw{{.path = path, .cache_bytes = CACHE_SIZE, .obfuscate = obfuscate}};
+
+            // Ensure obfuscation is read back correctly
+            BOOST_CHECK_EQUAL(obfuscate, !is_null_key(dbwrapper_private::GetObfuscateKey(dbw)));
+            BOOST_CHECK(obfuscation_key == dbwrapper_private::GetObfuscateKey(dbw));
+
+            // Verify all written values
+            for (const auto& [key, expected_value] : key_values) {
+                uint256 read_value{};
+                BOOST_CHECK(dbw.Read(key, read_value));
+                BOOST_CHECK_EQUAL(read_value.ToString(), expected_value.ToString());
+            }
+        }
     }
 }
 
@@ -116,13 +150,13 @@ BOOST_AUTO_TEST_CASE(dbwrapper_basic_data)
         std::string file_option_tag = "F";
         uint8_t filename_length = m_rng.randbits(8);
         std::string filename = "randomfilename";
-        std::string key_file_option = strprintf("%s%01x%s", file_option_tag,filename_length,filename);
+        std::string key_file_option = strprintf("%s%01x%s", file_option_tag, filename_length, filename);
 
         bool in_file_bool = m_rng.randbool();
         BOOST_CHECK(dbw.Write(key_file_option, in_file_bool));
         BOOST_CHECK(dbw.Read(key_file_option, res_bool));
         BOOST_CHECK_EQUAL(res_bool, in_file_bool);
-   }
+    }
 }
 
 // Test batch operations
@@ -231,7 +265,7 @@ BOOST_AUTO_TEST_CASE(existing_data_no_obfuscate)
     BOOST_CHECK(odbw.Read(key, res2));
     BOOST_CHECK_EQUAL(res2.ToString(), in.ToString());
 
-    BOOST_CHECK(!odbw.IsEmpty()); // There should be existing data
+    BOOST_CHECK(!odbw.IsEmpty());                                       // There should be existing data
     BOOST_CHECK(is_null_key(dbwrapper_private::GetObfuscateKey(odbw))); // The key should be an empty string
 
     uint256 in2 = m_rng.rand256();
@@ -284,24 +318,24 @@ BOOST_AUTO_TEST_CASE(iterator_ordering)
 {
     fs::path ph = m_args.GetDataDirBase() / "iterator_ordering";
     CDBWrapper dbw({.path = ph, .cache_bytes = 1 << 20, .memory_only = true, .wipe_data = false, .obfuscate = false});
-    for (int x=0x00; x<256; ++x) {
+    for (int x = 0x00; x < 256; ++x) {
         uint8_t key = x;
-        uint32_t value = x*x;
+        uint32_t value = x * x;
         if (!(x & 1)) BOOST_CHECK(dbw.Write(key, value));
     }
 
     // Check that creating an iterator creates a snapshot
     std::unique_ptr<CDBIterator> it(const_cast<CDBWrapper&>(dbw).NewIterator());
 
-    for (unsigned int x=0x00; x<256; ++x) {
+    for (unsigned int x = 0x00; x < 256; ++x) {
         uint8_t key = x;
-        uint32_t value = x*x;
+        uint32_t value = x * x;
         if (x & 1) BOOST_CHECK(dbw.Write(key, value));
     }
 
     for (const int seek_start : {0x00, 0x80}) {
         it->Seek((uint8_t)seek_start);
-        for (unsigned int x=seek_start; x<255; ++x) {
+        for (unsigned int x = seek_start; x < 255; ++x) {
             uint8_t key;
             uint32_t value;
             BOOST_CHECK(it->Valid());
@@ -328,7 +362,7 @@ struct StringContentsSerializer {
     StringContentsSerializer() = default;
     explicit StringContentsSerializer(const std::string& inp) : str(inp) {}
 
-    template<typename Stream>
+    template <typename Stream>
     void Serialize(Stream& s) const
     {
         for (size_t i = 0; i < str.size(); i++) {
@@ -336,7 +370,7 @@ struct StringContentsSerializer {
         }
     }
 
-    template<typename Stream>
+    template <typename Stream>
     void Unserialize(Stream& s)
     {
         str.clear();
@@ -357,7 +391,7 @@ BOOST_AUTO_TEST_CASE(iterator_string_ordering)
             std::string key{ToString(x)};
             for (int z = 0; z < y; ++z)
                 key += key;
-            uint32_t value = x*x;
+            uint32_t value = x * x;
             BOOST_CHECK(dbw.Write(StringContentsSerializer{key}, value));
         }
     }
