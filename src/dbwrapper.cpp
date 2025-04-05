@@ -248,24 +248,23 @@ CDBWrapper::CDBWrapper(const DBParams& params)
         LogPrintf("Finished database compaction of %s\n", fs::PathToString(params.path));
     }
 
-    // The base-case obfuscation key, which is a noop.
-    m_obfuscation = std::vector<unsigned char>(OBFUSCATION_SIZE_BYTES, '\000');
+    {
+        m_obfuscation = std::vector<uint8_t>(OBFUSCATION_SIZE_BYTES, '\000'); // Needed for unobfuscated Read() below
+        const bool key_missing{!Read(OBFUSCATION_KEY, m_obfuscation)};
+        if (key_missing && params.obfuscate && IsEmpty()) {
+            // Initialize non-degenerate obfuscation if it won't upset existing, non-obfuscated data.
+            std::vector<uint8_t> new_key(OBFUSCATION_SIZE_BYTES);
+            GetRandBytes(new_key);
 
-    bool key_exists = Read(OBFUSCATION_KEY, m_obfuscation);
+            // Write `new_key` so we don't obfuscate the key with itself
+            Write(OBFUSCATION_KEY, new_key);
+            m_obfuscation = std::move(new_key);
 
-    if (!key_exists && params.obfuscate && IsEmpty()) {
-        // Initialize non-degenerate obfuscation if it won't upset
-        // existing, non-obfuscated data.
-        std::vector<unsigned char> new_key = CreateObfuscation();
+            LogPrintf("Wrote new obfuscate key for %s: %s\n", fs::PathToString(params.path), HexStr(m_obfuscation));
+        }
 
-        // Write `new_key` so we don't obfuscate the key with itself
-        Write(OBFUSCATION_KEY, new_key);
-        m_obfuscation = new_key;
-
-        LogPrintf("Wrote new obfuscate key for %s: %s\n", fs::PathToString(params.path), HexStr(m_obfuscation));
+        LogPrintf("Using obfuscation key for %s: %s\n", fs::PathToString(params.path), HexStr(m_obfuscation));
     }
-
-    LogPrintf("Using obfuscation key for %s: %s\n", fs::PathToString(params.path), HexStr(m_obfuscation));
 }
 
 CDBWrapper::~CDBWrapper()
@@ -309,12 +308,6 @@ size_t CDBWrapper::DynamicMemoryUsage() const
     }
     return parsed.value();
 }
-
-// Prefixed with null character to avoid collisions with other keys
-//
-// We must use a string constructor which specifies length so that we copy
-// past the null-terminator.
-const std::string CDBWrapper::OBFUSCATION_KEY("\000obfuscate_key", 14);
 
 const unsigned int CDBWrapper::OBFUSCATION_SIZE_BYTES = 8;
 
@@ -412,9 +405,6 @@ void CDBIterator::Next() { m_impl_iter->iter->Next(); }
 
 namespace dbwrapper_private {
 
-const std::vector<unsigned char>& GetObfuscation(const CDBWrapper &w)
-{
-    return w.m_obfuscation;
-}
+const std::vector<unsigned char>& GetObfuscation(const CDBWrapper &w) { return w.m_obfuscation; }
 
 } // namespace dbwrapper_private
