@@ -2,7 +2,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <common/args.h>
 #include <dbwrapper.h>
+#include <node/database_args.h>
 #include <test/util/common.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
@@ -18,6 +20,25 @@
 using util::ToString;
 
 BOOST_FIXTURE_TEST_SUITE(dbwrapper_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(dbwrapper_read_database_args_dbfilesize)
+{
+    ArgsManager args;
+    args.AddArg("-dbfilesize", "Target database file size.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+
+    DBOptions default_options;
+    node::ReadDatabaseArgs(args, default_options);
+    BOOST_CHECK(!default_options.max_file_size.has_value());
+
+    const char* argv[]{"ignored", "-dbfilesize=64"};
+    std::string error;
+    BOOST_REQUIRE(args.ParseParameters(2, argv, error));
+
+    DBOptions options;
+    node::ReadDatabaseArgs(args, options);
+    BOOST_REQUIRE(options.max_file_size.has_value());
+    BOOST_CHECK_EQUAL(*options.max_file_size, 64_MiB);
+}
 
 BOOST_AUTO_TEST_CASE(dbwrapper)
 {

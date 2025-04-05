@@ -38,6 +38,8 @@ static const size_t DBWRAPPER_MAX_FILE_SIZE{32_MiB};
 struct DBOptions {
     //! Compact database on startup.
     bool force_compact = false;
+    //! Target size of files.
+    std::optional<size_t> max_file_size{};
 };
 
 //! Application-specific storage settings.
