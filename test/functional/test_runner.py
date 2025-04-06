@@ -659,7 +659,7 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
             test_results.append(test_result)
             done_str = f"{len(test_results)}/{test_count} - {BOLD[1]}{test_result.name}{BOLD[0]}"
             if test_result.status == "Passed":
-                logging.debug("%s passed, Duration: %s s" % (done_str, test_result.time))
+                logging.debug("%s passed, duration: %s s" % (done_str, test_result.time))
             elif test_result.status == "Skipped":
                 logging.debug(f"{done_str} skipped ({skip_reason})")
             else:
