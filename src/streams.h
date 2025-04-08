@@ -673,7 +673,7 @@ class BufferedWriter
     size_t m_buf_pos{0};
 
 public:
-    explicit BufferedWriter(S& stream, size_t size = 1 << 20) : m_dst{stream}, m_buf(size) {}
+    explicit BufferedWriter(S& stream, size_t size = 1 << 19) : m_dst{stream}, m_buf(size) {}
 
     ~BufferedWriter() { flush(); }
 
