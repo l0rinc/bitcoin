@@ -172,6 +172,11 @@ class HTTPBasicsTest(BitcoinTestFramework):
                 else:
                     assert_equal(500, resp.status)
                     assert b'"Requested wallet does not exist or is not loaded"' in resp.data
+            if wallet_restrictions:
+                self.log.info('importmempool...')
+                resp = call_with_auth(node, user, password, method='importmempool')
+                assert_equal(404, resp.status)
+                assert b'"Method not available for wallet-restricted RPC users"' in resp.data
 
     def test_rpccookieperms(self):
         p = {

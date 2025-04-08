@@ -490,6 +490,7 @@ static std::vector<RPCResult> MempoolEntryDescription()
         RPCResult{RPCResult::Type::NUM, "descendantsize", "virtual transaction size of in-mempool descendants (including this one)"},
         RPCResult{RPCResult::Type::NUM, "ancestorcount", "number of in-mempool ancestor transactions (including this one)"},
         RPCResult{RPCResult::Type::NUM, "ancestorsize", "virtual transaction size of in-mempool ancestors (including this one)"},
+        RPCResult{RPCResult::Type::NUM, "chunkweight", "sigops-adjusted weight (as defined in BIP 141 and modified by '-bytespersigop') of this transaction's chunk"},
         RPCResult{RPCResult::Type::STR_HEX, "hash", "hash of entire serialized transaction"},
         RPCResult{RPCResult::Type::STR_HEX, "wtxid", "hash of serialized transaction, including witness data"},
         RPCResult{RPCResult::Type::OBJ, "fees", "",
@@ -510,6 +511,47 @@ static std::vector<RPCResult> MempoolEntryDescription()
     return list;
 }
 
+void AppendChunkInfo(UniValue& all_chunks, FeePerWeight chunk_feerate, std::vector<const CTxMemPoolEntry*> chunk_txs)
+{
+    UniValue chunk(UniValue::VOBJ);
+    chunk.pushKV("chunkfee", ValueFromAmount(chunk_feerate.fee));
+    chunk.pushKV("chunkweight", chunk_feerate.size);
+    UniValue chunk_txids(UniValue::VARR);
+    for (const auto& chunk_tx : chunk_txs) {
+        chunk_txids.push_back(chunk_tx->GetTx().GetHash().ToString());
+    }
+    chunk.pushKV("txs", std::move(chunk_txids));
+    all_chunks.push_back(std::move(chunk));
+}
+
+static void clusterToJSON(const CTxMemPool& pool, UniValue& info, std::vector<const CTxMemPoolEntry*> cluster) EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
+{
+    AssertLockHeld(pool.cs);
+    int total_weight{0};
+    for (const auto& tx : cluster) {
+        total_weight += tx->GetAdjustedWeight();
+    }
+    info.pushKV("clusterweight", total_weight);
+    info.pushKV("txcount", cluster.size());
+
+    FeePerWeight current_chunk_feerate = pool.GetMainChunkFeerate(*cluster[0]);
+    std::vector<const CTxMemPoolEntry*> current_chunk;
+    current_chunk.reserve(cluster.size());
+
+    UniValue all_chunks(UniValue::VARR);
+    for (const auto& tx : cluster) {
+        if (current_chunk_feerate.size == 0) {
+            AppendChunkInfo(all_chunks, pool.GetMainChunkFeerate(*current_chunk[0]), current_chunk);
+            current_chunk.clear();
+            current_chunk_feerate = pool.GetMainChunkFeerate(*tx);
+        }
+        current_chunk.push_back(tx);
+        current_chunk_feerate.size -= tx->GetAdjustedWeight();
+    }
+    AppendChunkInfo(all_chunks, pool.GetMainChunkFeerate(*current_chunk[0]), current_chunk);
+    info.pushKV("chunks", std::move(all_chunks));
+}
+
 static void entryToJSON(const CTxMemPool& pool, UniValue& info, const CTxMemPoolEntry& e, const int next_block_height) EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
 {
     AssertLockHeld(pool.cs);
@@ -523,12 +565,14 @@ static void entryToJSON(const CTxMemPool& pool, UniValue& info, const CTxMemPool
     info.pushKV("height", (int)e.GetHeight());
     info.pushKV("startingpriority", e.GetStartingPriority());
     info.pushKV("currentpriority", e.GetPriority(next_block_height));
-    info.pushKV("descendantcount", e.GetCountWithDescendants());
-    info.pushKV("descendantsize", e.GetSizeWithDescendants());
-    info.pushKV("ancestorcount", e.GetCountWithAncestors());
-    info.pushKV("ancestorsize", e.GetSizeWithAncestors());
+    info.pushKV("descendantcount", descendant_count);
+    info.pushKV("descendantsize", descendant_size);
+    info.pushKV("ancestorcount", ancestor_count);
+    info.pushKV("ancestorsize", ancestor_size);
     info.pushKV("wtxid", e.GetTx().GetWitnessHash().ToString());
     info.pushKV("hash", info["wtxid"]);
+    auto feerate = pool.GetMainChunkFeerate(e);
+    info.pushKV("chunkweight", feerate.size);
 
     UniValue fees(UniValue::VOBJ);
     fees.pushKV("base", ValueFromAmount(e.GetFee()));
@@ -675,7 +719,7 @@ static RPCMethod maxmempool()
     CTxMemPool& mempool{EnsureAnyMemPool(request.context)};
     LOCK2(::cs_main, mempool.cs);
 
-    const int64_t nMempoolSizeMin{maxmempoolMinimumBytes(mempool.m_opts.limits.descendant_size_vbytes)};
+    const int64_t nMempoolSizeMin{maxmempoolMinimumBytes(mempool.m_opts.limits.cluster_size_vbytes)};
     if (nMempoolSizeMax < 0 || nMempoolSizeMax < nMempoolSizeMin) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("MaxMempool size %d is too small", nSize));
     }
@@ -893,7 +937,7 @@ static RPCMethod getmempoolancestors()
             const CTxMemPoolEntry &e = *ancestorIt;
             UniValue info(UniValue::VOBJ);
             entryToJSON(mempool, info, e, next_block_height);
-            o.pushKV(_hash.ToString(), std::move(info));
+            o.pushKV(e.GetTx().GetHash().ToString(), std::move(info));
         }
         return o;
     }
@@ -963,7 +1007,7 @@ static RPCMethod getmempooldescendants()
             const CTxMemPoolEntry &e = *descendantIt;
             UniValue info(UniValue::VOBJ);
             entryToJSON(mempool, info, e, next_block_height);
-            o.pushKV(_hash.ToString(), std::move(info));
+            o.pushKV(e.GetTx().GetHash().ToString(), std::move(info));
         }
         return o;
     }
@@ -1248,8 +1292,10 @@ UniValue MempoolInfoToJSON(const CTxMemPool& pool, const std::optional<MempoolHi
             const CAmount fee{e.GetFee()};
             const uint32_t size{uint32_t(e.GetTxSize())};
 
-            const CAmount afees{e.GetModFeesWithAncestors()}, dfees{e.GetModFeesWithDescendants()};
-            const uint32_t asize{uint32_t(e.GetSizeWithAncestors())}, dsize{uint32_t(e.GetSizeWithDescendants())};
+            const auto ancestor_data{pool.CalculateAncestorData(e)};
+            const auto descendant_data{pool.CalculateDescendantData(e)};
+            const CAmount afees{std::get<2>(ancestor_data)}, dfees{std::get<2>(descendant_data)};
+            const uint32_t asize{uint32_t(std::get<1>(ancestor_data))}, dsize{uint32_t(std::get<1>(descendant_data))};
 
             // Do not use CFeeRate here, since it rounds up, and this should be rounding down
             const CAmount fpb{fee / size};     // Fee rate per byte
@@ -1419,6 +1465,8 @@ static RPCMethod importmempool()
         RPCResult{RPCResult::Type::OBJ, "", "", std::vector<RPCResult>{}},
         RPCExamples{HelpExampleCli("importmempool", "/path/to/mempool.dat") + HelpExampleRpc("importmempool", "/path/to/mempool.dat")},
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
+            EnsureNotWalletRestricted(request);
+
             const NodeContext& node{EnsureAnyNodeContext(request.context)};
 
             CTxMemPool& mempool{EnsureMemPool(node)};
