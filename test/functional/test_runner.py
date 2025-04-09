@@ -109,19 +109,6 @@ BASE_SCRIPTS = [
     'feature_assumeutxo.py',
     'mempool_updatefromblock.py',
     'mempool_persist.py --descriptors',
-    # Don't append tests at the end to avoid merge conflicts
-    # Put them in a random line within the section that fits their approximate run-time
-]
-
-# Place EXTENDED_SCRIPTS first since it has the 3 longest running tests
-ALL_SCRIPTS = EXTENDED_SCRIPTS + BASE_SCRIPTS
-
-NON_SCRIPTS = [
-    # These are python files that live in the functional tests directory, but are not test scripts.
-    "combine_logs.py",
-    "create_cache.py",
-    "test_runner.py",
-
     # vv Tests less than 60s vv
     'rpc_psbt.py --legacy-wallet',
     'rpc_psbt.py --descriptors',
@@ -145,6 +132,18 @@ NON_SCRIPTS = [
     'wallet_basic.py --legacy-wallet',
     'wallet_basic.py --descriptors',
     'feature_maxtipage.py',
+    # Don't append tests at the end to avoid merge conflicts
+    # Put them in a random line within the section that fits their approximate run-time
+]
+
+# Place EXTENDED_SCRIPTS first since it has the 3 longest running tests
+ALL_SCRIPTS = EXTENDED_SCRIPTS + BASE_SCRIPTS
+
+NON_SCRIPTS = [
+    # These are python files that live in the functional tests directory, but are not test scripts.
+    "combine_logs.py",
+    "create_cache.py",
+    "test_runner.py",
     'wallet_multiwallet.py --legacy-wallet',
     'wallet_multiwallet.py --descriptors',
     'wallet_multiwallet.py --usecli',
