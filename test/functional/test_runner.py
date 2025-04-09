@@ -132,6 +132,18 @@ BASE_SCRIPTS = [
     'wallet_basic.py --legacy-wallet',
     'wallet_basic.py --descriptors',
     'feature_maxtipage.py',
+    # Don't append tests at the end to avoid merge conflicts
+    # Put them in a random line within the section that fits their approximate run-time
+]
+
+# Place EXTENDED_SCRIPTS first since it has the 3 longest running tests
+ALL_SCRIPTS = EXTENDED_SCRIPTS + BASE_SCRIPTS
+
+NON_SCRIPTS = [
+    # These are python files that live in the functional tests directory, but are not test scripts.
+    "combine_logs.py",
+    "create_cache.py",
+    "test_runner.py",
     'wallet_multiwallet.py --legacy-wallet',
     'wallet_multiwallet.py --descriptors',
     'wallet_multiwallet.py --usecli',
@@ -414,18 +426,6 @@ BASE_SCRIPTS = [
     'wallet_migration.py',
     'p2p_ibd_txrelay.py',
     'p2p_seednode.py',
-    # Don't append tests at the end to avoid merge conflicts
-    # Put them in a random line within the section that fits their approximate run-time
-]
-
-# Place EXTENDED_SCRIPTS first since it has the 3 longest running tests
-ALL_SCRIPTS = EXTENDED_SCRIPTS + BASE_SCRIPTS
-
-NON_SCRIPTS = [
-    # These are python files that live in the functional tests directory, but are not test scripts.
-    "combine_logs.py",
-    "create_cache.py",
-    "test_runner.py",
 ]
 
 def main():
