@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Bitcoin Core developers
+// Copyright (c) 2022-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,6 +15,7 @@
 #include <util/hasher.h>
 
 #include <deque>
+#include <optional>
 #include <vector>
 
 // A compressed CBlockHeader, which leaves out the prevhash
@@ -40,7 +41,8 @@ struct CompressedHeader {
         nNonce = header.nNonce;
     }
 
-    CBlockHeader GetFullHeader(const uint256& hash_prev_block) {
+    CBlockHeader GetFullHeader(const uint256& hash_prev_block) const
+    {
         CBlockHeader ret;
         ret.nVersion = nVersion;
         ret.hashPrevBlock = hash_prev_block;
@@ -119,13 +121,13 @@ public:
     State GetState() const { return m_download_state; }
 
     /** Return the height reached during the PRESYNC phase */
-    int64_t GetPresyncHeight() const { return m_current_height; }
+    int64_t GetPresyncHeight() const { return m_presync_height; }
 
     /** Return the block timestamp of the last header received during the PRESYNC phase. */
-    uint32_t GetPresyncTime() const { return m_last_header_received.nTime; }
+    uint32_t GetPresyncTime() const { return m_presync_last_header_received.nTime; }
 
     /** Return the amount of work in the chain received during the PRESYNC phase. */
-    arith_uint256 GetPresyncWork() const { return m_current_chain_work; }
+    arith_uint256 GetPresyncWork() const { return m_presync_chain_work; }
 
     /** Construct a HeadersSyncState object representing a headers sync via this
      *  download-twice mechanism).
@@ -134,9 +136,12 @@ public:
      * consensus_params: parameters needed for difficulty adjustment validation
      * chain_start: best known fork point that the peer's headers branch from
      * minimum_required_work: amount of chain work required to accept the chain
+     * cache_size: Number of headers to cache in order to avoid re-downloading.
+     *             If unset it be configured depending on available RAM.
      */
     HeadersSyncState(NodeId id, const Consensus::Params& consensus_params,
-            const CBlockIndex* chain_start, const arith_uint256& minimum_required_work);
+            const CBlockIndex* chain_start, const arith_uint256& minimum_required_work,
+            std::optional<size_t> cache_size);
 
     /** Result data structure for ProcessNextHeaders. */
     struct ProcessingResult {
@@ -202,7 +207,7 @@ private:
 
     /** In REDOWNLOAD, check a header's commitment (if applicable) and add to
      * buffer for later processing */
-    bool ValidateAndStoreRedownloadedHeader(const CBlockHeader& header);
+    bool ValidateAndStoreRedownloadedHeader(const CBlockHeader& header, bool from_cache);
 
     /** Return a set of headers that satisfy our proof-of-work threshold */
     std::vector<CBlockHeader> PopHeadersReadyForAcceptance();
@@ -221,7 +226,7 @@ private:
     const arith_uint256 m_minimum_required_work;
 
     /** Work that we've seen so far on the peer's chain */
-    arith_uint256 m_current_chain_work;
+    arith_uint256 m_presync_chain_work;
 
     /** m_hasher is a salted hasher for making our 1-bit commitments to headers we've seen. */
     const SaltedTxidHasher m_hasher;
@@ -237,10 +242,15 @@ private:
     uint64_t m_max_commitments{0};
 
     /** Store the latest header received while in PRESYNC (initialized to m_chain_start) */
-    CBlockHeader m_last_header_received;
+    CBlockHeader m_presync_last_header_received;
 
-    /** Height of m_last_header_received */
-    int64_t m_current_height{0};
+    /** Height of m_presync_last_header_received */
+    int64_t m_presync_height{0};
+
+    /** During phase 1 (PRESYNC), we cache received headers so we don't have to
+     *  re-download all of them in phase 2 (REDOWNLOAD). */
+    std::vector<CompressedHeader> m_headers_cache;
+    const size_t m_headers_cache_max;
 
     /** During phase 2 (REDOWNLOAD), we buffer redownloaded headers in memory
      *  until enough commitments have been verified; those are stored in
