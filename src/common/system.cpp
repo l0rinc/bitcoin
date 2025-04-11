@@ -11,11 +11,21 @@
 #include <util/string.h>
 #include <util/time.h>
 
-#ifndef WIN32
-#include <sys/stat.h>
-#else
+#ifdef WIN32
 #include <compat/compat.h>
 #include <codecvt>
+#include <windows.h>
+#include <psapi.h>
+#else
+#include <sys/stat.h>
+#if defined(__linux__)
+#include <sys/sysinfo.h>
+#elif defined(__APPLE__)
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#elif defined(HAVE_SYSCTL)
+#include <sys/sysctl.h>
+#endif
 #endif
 
 #ifdef HAVE_MALLOPT_ARENA_MAX
@@ -109,4 +119,53 @@ int GetNumCores()
 int64_t GetStartupTime()
 {
     return nStartupTime;
+}
+
+std::optional<size_t> GetFreeRAM()
+{
+#if defined(__linux__)
+    struct sysinfo info;
+    if (sysinfo(&info) != EXIT_SUCCESS) {
+        return std::nullopt;
+    }
+
+    return info.freeram;
+#elif defined(__APPLE__)
+    mach_port_t host_port = mach_host_self();
+    mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+    vm_statistics64_data_t vm;
+
+    vm_size_t page_size = 0;
+    if (host_page_size(host_port, &page_size) != KERN_SUCCESS) {
+        return std::nullopt;
+    }
+
+    if (host_statistics64(host_port, HOST_VM_INFO, (host_info64_t)&vm, &count) != KERN_SUCCESS) {
+        return std::nullopt;
+    }
+
+    return vm.free_count * page_size;
+#elif defined(WIN32)
+    PERFORMANCE_INFORMATION info;
+    if (!GetPerformanceInfo(&info, sizeof(info))) {
+        return std::nullopt;
+    }
+
+    return info.PhysicalAvailable * info.PageSize;
+#elif defined(HAVE_SYSCTL)
+#   if defined(CTL_VM)
+    const int mib[] = { CTL_VM, VM_STAT };
+    vm_stat vm;
+    size_t size = sizeof(vm);
+    if (sysctl(mib, sizeof(mib) / sizeof(*mib), &vm, &size, nullptr, 0) != EXIT_SUCCESS) {
+        return std::nullopt;
+    }
+
+    return (vm.v_free_count + vm.v_cache_count) * vm.v_page_size;
+#   else
+#       error "sysctl but CTL_VM not implemented for platform"
+#   endif
+#else
+#   error "Unimplemented platform"
+#endif
 }

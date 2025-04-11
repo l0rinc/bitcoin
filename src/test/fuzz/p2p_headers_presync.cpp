@@ -30,6 +30,7 @@ public:
     {
         PeerManager::Options peerman_opts;
         node::ApplyArgsManOptions(*m_node.args, peerman_opts);
+        // TODO: Find way to reset peerman_opts.headerssync_cache_bytes based off FuzzedDataProvider.
         peerman_opts.max_headers_result = FUZZ_MAX_HEADERS_RESULTS;
         m_node.peerman = PeerManager::make(*m_node.connman, *m_node.addrman,
                                            m_node.banman.get(), *m_node.chainman,
