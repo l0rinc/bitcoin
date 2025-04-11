@@ -63,9 +63,7 @@ void HeadersSyncState::Finalize()
     m_state = State::FINAL;
 }
 
-/** Process the next batch of headers received from our peer.
- *  Validate and store commitments, and compare total chainwork to our target to
- *  see if we can switch to REDOWNLOAD mode.  */
+/** Process the next batch of headers received from our peer. */
 HeadersSyncState::ProcessingResult HeadersSyncState::ProcessNextHeaders(const
         std::vector<CBlockHeader>& received_headers, const bool full_headers_message)
 {
@@ -74,66 +72,91 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessNextHeaders(const
     Assume(!received_headers.empty());
     if (received_headers.empty()) return ret;
 
-    Assume(m_state != State::FINAL);
-    if (m_state == State::FINAL) return ret;
-
-    if (m_state == State::PRESYNC) {
-        // During PRESYNC, we minimally validate block headers and
-        // occasionally add commitments to them, until we reach our work
-        // threshold (at which point m_state is updated to REDOWNLOAD).
-        ret.success = ValidateAndStoreHeadersCommitments(received_headers);
-        if (ret.success) {
-            if (full_headers_message || m_state == State::REDOWNLOAD) {
-                // A full headers message means the peer may have more to give us;
-                // also if we just switched to REDOWNLOAD then we need to re-request
-                // headers from the beginning.
-                ret.request_more = true;
-            } else {
-                Assume(m_state == State::PRESYNC);
-                // If we're in PRESYNC and we get a non-full headers
-                // message, then the peer's chain has ended and definitely doesn't
-                // have enough work, so we can stop our sync.
-                LogDebug(BCLog::NET, "Initial headers sync aborted with peer=%d: incomplete headers message at height=%i (presync phase)\n", m_id, m_presync_height);
-            }
-        }
-    } else if (m_state == State::REDOWNLOAD) {
-        // During REDOWNLOAD, we compare our stored commitments to what we
-        // receive, and add headers to our redownload buffer. When the buffer
-        // gets big enough (meaning that we've checked enough commitments),
-        // we'll return a batch of headers to the caller for processing.
-        ret.success = true;
-        for (const auto& hdr : received_headers) {
-            if (!ValidateAndStoreRedownloadedHeader(hdr)) {
-                // Something went wrong -- the peer gave us an unexpected chain.
-                // We could consider looking at the reason for failure and
-                // punishing the peer, but for now just give up on sync.
-                ret.success = false;
-                break;
-            }
-        }
-
-        if (ret.success) {
-            // Return any headers that are ready for acceptance.
-            ret.pow_validated_headers = PopHeadersReadyForAcceptance();
-
-            // If we hit our target blockhash, then all remaining headers will be
-            // returned and we can clear any leftover internal state.
-            if (m_redownloaded_headers.empty() && m_process_all_remaining_headers) {
-                LogDebug(BCLog::NET, "Initial headers sync complete with peer=%d: releasing all at height=%i (redownload phase)\n", m_id, m_redownload_buffer_last_height);
-            } else if (full_headers_message) {
-                // If the headers message is full, we need to request more.
-                ret.request_more = true;
-            } else {
-                // For some reason our peer gave us a high-work chain, but is now
-                // declining to serve us that full chain again. Give up.
-                // Note that there's no more processing to be done with these
-                // headers, so we can still return success.
-                LogDebug(BCLog::NET, "Initial headers sync aborted with peer=%d: incomplete headers message at height=%i (redownload phase)\n", m_id, m_redownload_buffer_last_height);
-            }
-        }
+    switch (m_state) {
+    case State::PRESYNC:
+        ret = ProcessPresync(received_headers, full_headers_message);
+        break;
+    case State::REDOWNLOAD:
+        ret = ProcessRedownload(received_headers, full_headers_message);
+        break;
+    case State::FINAL:
+        Assume(false); // Should never be called again after entering FINAL.
+        return ret;
     }
 
     if (!(ret.success && ret.request_more)) Finalize();
+    return ret;
+}
+
+HeadersSyncState::ProcessingResult HeadersSyncState::ProcessPresync(const
+    std::vector<CBlockHeader>& received_headers, const bool full_headers_message)
+{
+    Assert(m_state == State::PRESYNC);
+    ProcessingResult ret;
+
+    // During PRESYNC, we minimally validate block headers and
+    // occasionally add commitments to them, until we reach our work
+    // threshold (at which point m_state is updated to REDOWNLOAD).
+    ret.success = ValidateAndStoreHeadersCommitments(received_headers);
+    if (!ret.success) {
+        return ret;
+    }
+
+    if (full_headers_message || m_state == State::REDOWNLOAD) {
+        // A full headers message means the peer may have more to give us;
+        // also if we just switched to REDOWNLOAD then we need to re-request
+        // headers from the beginning.
+        ret.request_more = true;
+    } else {
+        Assume(m_state == State::PRESYNC);
+        // If we're in PRESYNC and we get a non-full headers
+        // message, then the peer's chain has ended and definitely doesn't
+        // have enough work, so we can stop our sync.
+        LogDebug(BCLog::NET, "Initial headers sync aborted with peer=%d: incomplete headers message at height=%i (presync phase)\n", m_id, m_presync_height);
+    }
+
+    return ret;
+}
+
+HeadersSyncState::ProcessingResult HeadersSyncState::ProcessRedownload(const
+    std::vector<CBlockHeader>& received_headers, const bool full_headers_message)
+{
+    Assert(m_state == State::REDOWNLOAD);
+    ProcessingResult ret;
+
+    // During REDOWNLOAD, we compare our stored commitments to what we
+    // receive, and add headers to our redownload buffer. When the buffer
+    // gets big enough (meaning that we've checked enough commitments),
+    // we'll return a batch of headers to the caller for processing.
+    ret.success = true;
+    for (const auto& hdr : received_headers) {
+        if (!ValidateAndStoreRedownloadedHeader(hdr)) {
+            // Something went wrong -- the peer gave us an unexpected chain.
+            // We could consider looking at the reason for failure and
+            // punishing the peer, but for now just give up on sync.
+            ret.success = false;
+            return ret;
+        }
+    }
+
+    // Return any headers that are ready for acceptance.
+    ret.pow_validated_headers = PopHeadersReadyForAcceptance();
+
+    // If we hit our target blockhash, then all remaining headers will be
+    // returned and we can clear any leftover internal state.
+    if (m_redownloaded_headers.empty() && m_process_all_remaining_headers) {
+        LogDebug(BCLog::NET, "Initial headers sync complete with peer=%d: releasing all at height=%i (redownload phase)\n", m_id, m_redownload_buffer_last_height);
+    } else if (full_headers_message) {
+        // If the headers message is full, we need to request more.
+        ret.request_more = true;
+    } else {
+        // For some reason our peer gave us a high-work chain, but is now
+        // declining to serve us that full chain again. Give up.
+        // Note that there's no more processing to be done with these
+        // headers, so we can still return success.
+        LogDebug(BCLog::NET, "Initial headers sync aborted with peer=%d: incomplete headers message at height=%i (redownload phase)\n", m_id, m_redownload_buffer_last_height);
+    }
+
     return ret;
 }
 
