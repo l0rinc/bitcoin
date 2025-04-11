@@ -56,6 +56,7 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
                                      PeerManager::Options{
                                          .reconcile_txs = true,
                                          .deterministic_rng = true,
+                                         .headerssync_cache_bytes = fuzzed_data_provider.ConsumeIntegralInRange(0, 20 << 20), // Up to 20MiB
                                      });
     connman.SetMsgProc(peerman.get());
 

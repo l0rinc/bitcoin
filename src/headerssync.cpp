@@ -3,11 +3,15 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <headerssync.h>
+
+#include <common/system.h>
 #include <logging.h>
 #include <pow.h>
 #include <util/check.h>
 #include <util/time.h>
 #include <util/vector.h>
+
+#include <algorithm>
 
 // The two constants below are computed using the simulation script in
 // contrib/devtools/headerssync-params.py.
@@ -23,15 +27,34 @@ constexpr size_t REDOWNLOAD_BUFFER_SIZE{14827}; // 14827/624 = ~23.8 commitments
 // re-calculate parameters if we compress further)
 static_assert(sizeof(CompressedHeader) == 48);
 
+static size_t ComputeHeadersCacheMax(const CBlockIndex* chain_start, const std::optional<size_t> cache_bytes, size_t element_size)
+{
+    if (cache_bytes) {
+        return *cache_bytes / element_size;
+    }
+
+    return std::min<size_t>(
+        // 1.1 - Account for 10% more blocks than one every 10min.
+        1.1f * ((NodeClock::now() - NodeSeconds{std::chrono::seconds{chain_start->GetMedianTimePast()}}) / 10min),
+        std::max(
+            // Lower limit
+            REDOWNLOAD_BUFFER_SIZE,
+            // Upper limit - We try to make sure not to use more than 10% of
+            // available RAM for the headers cache.
+            (GetFreeRAM().value_or(0) / 10) / element_size));
+}
+
 HeadersSyncState::HeadersSyncState(NodeId id, const Consensus::Params& consensus_params,
-        const CBlockIndex* chain_start, const arith_uint256& minimum_required_work) :
+        const CBlockIndex* chain_start, const arith_uint256& minimum_required_work,
+        const std::optional<size_t> cache_bytes) :
     m_commit_offset(FastRandomContext().randrange<unsigned>(HEADER_COMMITMENT_PERIOD)),
     m_id(id), m_consensus_params(consensus_params),
     m_chain_start(chain_start),
     m_minimum_required_work(minimum_required_work),
     m_presync_chain_work(chain_start->nChainWork),
     m_presync_last_header_received(m_chain_start->GetBlockHeader()),
-    m_presync_height(chain_start->nHeight)
+    m_presync_height(chain_start->nHeight),
+    m_headers_cache_max(ComputeHeadersCacheMax(chain_start, cache_bytes, sizeof(decltype(m_headers_cache)::value_type)))
 {
     // Estimate the number of blocks that could possibly exist on the peer's
     // chain *right now* using 6 blocks/second (fastest blockrate given the MTP
@@ -43,7 +66,10 @@ HeadersSyncState::HeadersSyncState(NodeId id, const Consensus::Params& consensus
     // could try again, if necessary, to sync a longer chain).
     m_max_commitments = 6*(Ticks<std::chrono::seconds>(NodeClock::now() - NodeSeconds{std::chrono::seconds{chain_start->GetMedianTimePast()}}) + MAX_FUTURE_BLOCK_TIME) / HEADER_COMMITMENT_PERIOD;
 
-    LogDebug(BCLog::NET, "Initial headers sync started with peer=%d: height=%i, max_commitments=%i, min_work=%s\n", m_id, m_presync_height, m_max_commitments, m_minimum_required_work.ToString());
+    // Pre-allocate a possibly large chunk of memory.
+    m_headers_cache.reserve(m_headers_cache_max);
+
+    LogDebug(BCLog::NET, "Initial headers sync started with peer=%d: height=%i, max_commitments=%i, min_work=%s, cache=%d headers (%.1f MiB)", m_id, m_presync_height, m_max_commitments, m_minimum_required_work.ToString(), m_headers_cache_max, (m_headers_cache_max * sizeof(decltype(m_headers_cache)::value_type)) / (1024.0f * 1024.0f));
 }
 
 /** Free any memory in use, and mark this object as no longer usable. This is
@@ -54,6 +80,7 @@ void HeadersSyncState::Finalize()
     Assume(m_state != State::FINAL);
     ClearShrink(m_header_commitments);
     m_presync_last_header_received.SetNull();
+    std::vector<CompressedHeader>{}.swap(m_headers_cache);
     ClearShrink(m_redownloaded_headers);
     m_redownload_buffer_last_hash.SetNull();
     m_redownload_buffer_first_prev_hash.SetNull();
@@ -103,9 +130,30 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessPresync(const
     }
 
     if (m_state == State::REDOWNLOAD) {
-        // If we just switched to REDOWNLOAD then we need to re-request
-        // headers from the beginning.
-        ret.request_more = true;
+        if (m_presync_last_header_received.GetHash() == m_redownload_buffer_last_hash) {
+            // If we already had a big enough m_headers_cache that it was
+            // sufficient to reach m_minimum_required_work and therefore we
+            // already filled the redownload buffer, then we don't need to
+            // request more headers.
+            // This will make us switch state again to FINAL at the end of
+            // ProcessNextHeaders().
+            Assume(m_presync_height <= static_cast<int64_t>(m_headers_cache_max));
+            Assume(m_presync_chain_work >= m_minimum_required_work);
+            ret.request_more = false;
+
+            // Having already reached sufficient work implies we *need to*
+            // return all remaining headers in PopHeadersReadyForAcceptance()
+            // below before switching to FINAL at the end of
+            // ProcessNextHeaders() which will clear all buffers.
+            Assume(m_process_all_remaining_headers);
+        } else {
+            // If we just switched to REDOWNLOAD and m_headers_cache was
+            // insufficient to store all headers, we need to re-request
+            // headers.
+            ret.request_more = true;
+        }
+
+        ret.pow_validated_headers = PopHeadersReadyForAcceptance();
     } else if (full_headers_message) {
         // A full headers message means the peer may have more to give us.
         ret.request_more = true;
@@ -194,7 +242,28 @@ bool HeadersSyncState::ValidateAndStoreHeadersCommitments(const std::vector<CBlo
         m_redownload_buffer_first_prev_hash = m_chain_start->GetBlockHash();
         m_redownload_buffer_last_hash = m_chain_start->GetBlockHash();
         m_redownload_chain_work = m_chain_start->nChainWork;
+
+        // Need to switch state before reading from m_headers_cache since we are
+        // calling ValidateAndStoreRedownloadedHeader() which requires it.
         m_state = State::REDOWNLOAD;
+
+        if (!m_headers_cache.empty()) {
+            uint256 prev_hash{m_chain_start->GetBlockHash()};
+            for (const auto& compressed_header : m_headers_cache) {
+                const CBlockHeader header{compressed_header.GetFullHeader(prev_hash)};
+                if (!ValidateAndStoreRedownloadedHeader(header)) {
+                    return false;
+                }
+                prev_hash = header.GetHash();
+            }
+
+            // Could check if m_headers_cache.back() exists within the headers
+            // parameter to this method, and call ValidateAndStoreRedownloadedHeader()
+            // on any that didn't fit in the cache. Avoided to rein in complexity.
+            LogDebug(BCLog::NET, "Populated %d headers from cache.", m_headers_cache.size());
+            m_headers_cache.clear();
+        }
+
         LogDebug(BCLog::NET, "Initial headers sync transition with peer=%d: reached sufficient work at height=%i, redownloading from height=%i\n", m_id, m_presync_height, m_redownload_buffer_last_height);
     }
     return true;
@@ -234,6 +303,10 @@ bool HeadersSyncState::ValidateAndProcessSingleHeader(const CBlockHeader& curren
     m_presync_chain_work += GetBlockProof(CBlockIndex(current));
     m_presync_last_header_received = current;
     m_presync_height = next_height;
+
+    if (m_headers_cache.size() < m_headers_cache_max) {
+        m_headers_cache.emplace_back(current);
+    }
 
     return true;
 }
