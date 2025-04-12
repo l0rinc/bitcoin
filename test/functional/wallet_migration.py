@@ -156,11 +156,13 @@ class WalletMigrationTest(BitcoinTestFramework):
         assert os.path.exists(migrate_info['backup_path'])
         if wallet_name == "":
             backup_prefix = "default_wallet"
+            expected_backup_dir = self.master_node.wallets_path
         else:
             backup_prefix = os.path.basename(os.path.realpath(self.old_node.wallets_path / wallet_name))
+            expected_backup_dir = Path(wallet_name) if os.path.isabs(wallet_name) else self.master_node.wallets_path / wallet_name
 
         backup_filename = f"{backup_prefix}_{mocked_time}.legacy.bak"
-        expected_backup_path = self.master_node.wallets_path / backup_filename
+        expected_backup_path = expected_backup_dir / backup_filename
         assert_equal(str(expected_backup_path), migrate_info['backup_path'])
         assert {"name": backup_filename} not in self.master_node.listwalletdir()["wallets"]
 
@@ -728,7 +730,7 @@ class WalletMigrationTest(BitcoinTestFramework):
         assert Path(master_path / "wallet.dat").exists()
 
         backup_prefix = "default_wallet" if is_default else os.path.basename(os.path.abspath(master_path))
-        backup_path = self.master_node.wallets_path / f"{backup_prefix}_{mocked_time}.legacy.bak"
+        backup_path = master_path / f"{backup_prefix}_{mocked_time}.legacy.bak"
         assert backup_path.exists()
 
         self.assert_is_bdb(wallet_name)

@@ -4485,6 +4485,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
     // cases, but in the case where the wallet name is a path to a data file,
     // the name of the data file is used, and in the case where the wallet name
     // is blank, "default_wallet" is used.
+    fs::path this_wallet_dir = fs::absolute(fs::PathFromString(local_wallet->GetDatabase().Filename())).parent_path();
     const std::string backup_prefix = wallet_name.empty() ? MigrationPrefixName(*local_wallet) : [&] {
         // fs::weakly_canonical resolves relative specifiers and remove trailing slashes.
         const auto legacy_wallet_path = fs::weakly_canonical(GetWalletDir() / fs::PathFromString(wallet_name));
@@ -4492,7 +4493,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
     }();
 
     fs::path backup_filename = fs::PathFromString(strprintf("%s_%d.legacy.bak", backup_prefix, GetTime()));
-    fs::path backup_path = fsbridge::AbsPathJoin(GetWalletDir(), backup_filename);
+    fs::path backup_path = this_wallet_dir / backup_filename;
     if (!local_wallet->BackupWallet(fs::PathToString(backup_path))) {
         return util::Error{_("Error: Unable to make a backup of your wallet")};
     }
