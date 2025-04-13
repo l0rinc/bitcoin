@@ -22,7 +22,7 @@ target_link_libraries(test_bitcoin-qt
   test_util
   bitcoin_node
   Boost::headers
-  Qt6::Test
+  "Qt${WITH_QT_VERSION}::Test"
 )
 
 import_plugins(test_bitcoin-qt)
@@ -40,7 +40,7 @@ add_test(NAME test_bitcoin-qt
   COMMAND test_bitcoin-qt
 )
 if(WIN32 AND VCPKG_TARGET_TRIPLET)
-  set(plugin_path "$<SHELL_PATH:$<PATH:GET_PARENT_PATH,$<PATH:GET_PARENT_PATH,$<TARGET_PROPERTY:Qt6::QWindowsIntegrationPlugin,LOCATION_$<CONFIG>>>>>")
+  set(plugin_path "$<SHELL_PATH:$<PATH:GET_PARENT_PATH,$<PATH:GET_PARENT_PATH,$<TARGET_PROPERTY:Qt${WITH_QT_VERSION}::QWindowsIntegrationPlugin,LOCATION_$<CONFIG>>>>>")
   set_property(TEST test_bitcoin-qt APPEND PROPERTY
     ENVIRONMENT_MODIFICATION
       # On Windows, vcpkg configures Qt with `-opengl dynamic`, which makes
