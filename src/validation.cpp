@@ -11,7 +11,6 @@
 #include <chain.h>
 #include <checkqueue.h>
 #include <clientversion.h>
-#include <common/system.h>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
 #include <consensus/merkle.h>
@@ -56,6 +55,7 @@
 #include <util/fs_helpers.h>
 #include <util/hasher.h>
 #include <util/log.h>
+#include <util/mempressure.h>
 #include <util/moneystr.h>
 #include <util/rbf.h>
 #include <util/result.h>

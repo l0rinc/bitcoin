@@ -4,7 +4,6 @@
 //
 #include <chain.h>
 #include <chainparams.h>
-#include <common/system.h>
 #include <coins.h>
 #include <consensus/amount.h>
 #include <consensus/validation.h>
@@ -22,6 +21,7 @@
 #include <tinyformat.h>
 #include <uint256.h>
 #include <util/check.h>
+#include <util/mempressure.h>
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
