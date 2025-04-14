@@ -7,6 +7,7 @@
 
 #include <common/system.h>
 
+#include <util/byte_units.h>
 #include <util/log.h>
 #include <util/string.h>
 #include <util/time.h>
@@ -128,7 +129,7 @@ std::optional<size_t> GetTotalRAM()
     return std::nullopt;
 }
 
-size_t g_low_memory_threshold = 10 * 1024 * 1024 /* 10 MB */;
+size_t g_low_memory_threshold{64_MiB};
 
 bool SystemNeedsMemoryReleased()
 {
