@@ -122,7 +122,7 @@ public:
     virtual void resetSettings() = 0;
 
     //! Map port.
-    virtual void mapPort(bool enable) = 0;
+    virtual void mapPort(bool use_pcp) = 0;
 
     //! Get proxy.
     virtual std::optional<Proxy> getProxy(Network net) = 0;
