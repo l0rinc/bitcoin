@@ -989,15 +989,10 @@ bool AppInitParameterInteraction(const ArgsManager& args)
 
     // also see: InitParameterInteraction()
 
-    // We removed checkpoints but keep the option to warn users who still have it in their config.
-    if (args.IsArgSet("-checkpoints")) {
-        InitWarning(_("Option '-checkpoints' is set but checkpoints were removed. This option has no effect."));
-    }
-    if (args.IsArgSet("-limitancestorsize")) {
-        InitWarning(_("Option '-limitancestorsize' is given but ancestor size limits have been replaced with cluster size limits (see -limitclustersize). This option has no effect."));
-    }
-    if (args.IsArgSet("-limitdescendantsize")) {
-        InitWarning(_("Option '-limitdescendantsize' is given but descendant size limits have been replaced with cluster size limits (see -limitclustersize). This option has no effect."));
+    // We drop UPnP support but kept the arg as hidden for now to display a friendlier error to user who have the
+    // option in their config. TODO: remove (here and above) for version 30.0.
+    if (args.IsArgSet("-upnp")) {
+        InitWarning(_("Option '-upnp' is set but UPnP support was dropped in version 29.0. Consider using '-natpmp' instead."));
     }
 
     // Error if network-specific options (-addnode, -connect, etc) are
