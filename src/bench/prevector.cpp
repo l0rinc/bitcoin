@@ -30,22 +30,22 @@ template <typename T>
 static void PrevectorDestructor(benchmark::Bench& bench)
 {
     bench.batch(2).run([&] {
-        prevector<SCRIPT_BASE_SIZE, T> t0;
-        prevector<SCRIPT_BASE_SIZE, T> t1;
-        t0.resize(SCRIPT_BASE_SIZE);
-        t1.resize(SCRIPT_BASE_SIZE + 1);
+        prevector<CScriptBase::STATIC_SIZE, T> t0;
+        prevector<CScriptBase::STATIC_SIZE, T> t1;
+        t0.resize(CScriptBase::STATIC_SIZE);
+        t1.resize(CScriptBase::STATIC_SIZE + 1);
     });
 }
 
 template <typename T>
 static void PrevectorClear(benchmark::Bench& bench)
 {
-    prevector<SCRIPT_BASE_SIZE, T> t0;
-    prevector<SCRIPT_BASE_SIZE, T> t1;
+    prevector<CScriptBase::STATIC_SIZE, T> t0;
+    prevector<CScriptBase::STATIC_SIZE, T> t1;
     bench.batch(2).run([&] {
-        t0.resize(SCRIPT_BASE_SIZE);
+        t0.resize(CScriptBase::STATIC_SIZE);
         t0.clear();
-        t1.resize(SCRIPT_BASE_SIZE + 1);
+        t1.resize(CScriptBase::STATIC_SIZE + 1);
         t1.clear();
     });
 }
@@ -53,12 +53,12 @@ static void PrevectorClear(benchmark::Bench& bench)
 template <typename T>
 static void PrevectorResize(benchmark::Bench& bench)
 {
-    prevector<SCRIPT_BASE_SIZE, T> t0;
-    prevector<SCRIPT_BASE_SIZE, T> t1;
+    prevector<CScriptBase::STATIC_SIZE, T> t0;
+    prevector<CScriptBase::STATIC_SIZE, T> t1;
     bench.batch(4).run([&] {
-        t0.resize(SCRIPT_BASE_SIZE);
+        t0.resize(CScriptBase::STATIC_SIZE);
         t0.resize(0);
-        t1.resize(SCRIPT_BASE_SIZE + 1);
+        t1.resize(CScriptBase::STATIC_SIZE + 1);
         t1.resize(0);
     });
 }
@@ -67,8 +67,8 @@ template <typename T>
 static void PrevectorDeserialize(benchmark::Bench& bench)
 {
     DataStream s0{};
-    prevector<SCRIPT_BASE_SIZE, T> t0;
-    t0.resize(SCRIPT_BASE_SIZE);
+    prevector<CScriptBase::STATIC_SIZE, T> t0;
+    t0.resize(CScriptBase::STATIC_SIZE);
     for (auto x = 0; x < 900; ++x) {
         s0 << t0;
     }
@@ -77,7 +77,7 @@ static void PrevectorDeserialize(benchmark::Bench& bench)
         s0 << t0;
     }
     bench.batch(1000).run([&] {
-        prevector<SCRIPT_BASE_SIZE, T> t1;
+        prevector<CScriptBase::STATIC_SIZE, T> t1;
         for (auto x = 0; x < 1000; ++x) {
             s0 >> t1;
         }
@@ -89,7 +89,7 @@ template <typename T>
 static void PrevectorFillVectorDirect(benchmark::Bench& bench)
 {
     bench.run([&] {
-        std::vector<prevector<SCRIPT_BASE_SIZE, T>> vec;
+        std::vector<prevector<CScriptBase::STATIC_SIZE, T>> vec;
         vec.reserve(260);
         for (size_t i = 0; i < 260; ++i) {
             vec.emplace_back();
@@ -102,11 +102,11 @@ template <typename T>
 static void PrevectorFillVectorIndirect(benchmark::Bench& bench)
 {
     bench.run([&] {
-        std::vector<prevector<SCRIPT_BASE_SIZE, T>> vec;
+        std::vector<prevector<CScriptBase::STATIC_SIZE, T>> vec;
         vec.reserve(260);
         for (size_t i = 0; i < 260; ++i) {
             // force allocation
-            vec.emplace_back(SCRIPT_BASE_SIZE + 1, T{});
+            vec.emplace_back(CScriptBase::STATIC_SIZE + 1, T{});
         }
     });
 }

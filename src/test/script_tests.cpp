@@ -1151,6 +1151,97 @@ BOOST_AUTO_TEST_CASE(script_CHECKMULTISIG23)
     BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_INVALID_STACK_OPERATION, ScriptErrorString(err));
 }
 
+/** Return the TxoutType of a script without exposing Solver details. */
+static TxoutType GetTxoutType(const CScript& output_script)
+{
+    std::vector<std::vector<uint8_t>> unused;
+    return Solver(output_script, unused);
+}
+
+BOOST_AUTO_TEST_CASE(script_size_and_capacity_test)
+{
+    BOOST_CHECK_EQUAL(sizeof(prevector<CScriptBase::STATIC_SIZE, uint8_t>), 32);
+    BOOST_CHECK_EQUAL(sizeof(CScriptBase), 32);
+    BOOST_CHECK_NE(sizeof(CScriptBase), sizeof(prevector<CScriptBase::STATIC_SIZE + 1, uint8_t>)); // CScriptBase size should be set to avoid wasting space in padding
+    BOOST_CHECK_EQUAL(sizeof(CScript), 32);
+    BOOST_CHECK_EQUAL(sizeof(CTxOut), 40);
+
+    CKey dummy_key;
+    dummy_key.MakeNewKey(true);
+
+    // Small OP_RETURN has direct allocation
+    {
+        const auto script{CScript() << OP_RETURN << std::vector<uint8_t>(10, 0xaa)};
+        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::NULL_DATA);
+        BOOST_CHECK_EQUAL(script.size(), 12);
+        BOOST_CHECK_EQUAL(script.capacity(), CScriptBase::STATIC_SIZE);
+        BOOST_CHECK_EQUAL(script.allocated_memory(), 0);
+    }
+
+    // P2WPKH has direct allocation
+    {
+        const auto script{GetScriptForDestination(WitnessV0KeyHash{PKHash{CKeyID{CPubKey{dummy_key.GetPubKey()}.GetID()}}})};
+        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::WITNESS_V0_KEYHASH);
+        BOOST_CHECK_EQUAL(script.size(), 22);
+        BOOST_CHECK_EQUAL(script.capacity(), CScriptBase::STATIC_SIZE);
+        BOOST_CHECK_EQUAL(script.allocated_memory(), 0);
+    }
+
+    // P2SH has direct allocation
+    {
+        const auto script{GetScriptForDestination(ScriptHash{CScript{} << OP_TRUE})};
+        BOOST_CHECK(script.IsPayToScriptHash());
+        BOOST_CHECK_EQUAL(script.size(), 23);
+        BOOST_CHECK_EQUAL(script.capacity(), CScriptBase::STATIC_SIZE);
+        BOOST_CHECK_EQUAL(script.allocated_memory(), 0);
+    }
+
+    // P2PKH has direct allocation
+    {
+        const auto script{GetScriptForDestination(PKHash{CKeyID{CPubKey{dummy_key.GetPubKey()}.GetID()}})};
+        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEYHASH);
+        BOOST_CHECK_EQUAL(script.size(), 25);
+        BOOST_CHECK_EQUAL(script.capacity(), CScriptBase::STATIC_SIZE);
+        BOOST_CHECK_EQUAL(script.allocated_memory(), 0);
+    }
+
+    // P2WSH needs extra allocation
+    {
+        const auto script{GetScriptForDestination(WitnessV0ScriptHash{CScript{} << OP_TRUE})};
+        BOOST_CHECK(script.IsPayToWitnessScriptHash());
+        BOOST_CHECK_EQUAL(script.size(), 34);
+        BOOST_CHECK_EQUAL(script.capacity(), 34);
+        BOOST_CHECK_EQUAL(script.allocated_memory(), 34);
+    }
+
+    // P2TR needs extra allocation
+    {
+        const auto script{GetScriptForDestination(WitnessV1Taproot{XOnlyPubKey{CPubKey{dummy_key.GetPubKey()}}})};
+        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::WITNESS_V1_TAPROOT);
+        BOOST_CHECK_EQUAL(script.size(), 34);
+        BOOST_CHECK_EQUAL(script.capacity(), 34);
+        BOOST_CHECK_EQUAL(script.allocated_memory(), 34);
+    }
+
+    // P2PK needs extra allocation
+    {
+        const auto script{GetScriptForRawPubKey(CPubKey{dummy_key.GetPubKey()})};
+        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEY);
+        BOOST_CHECK_EQUAL(script.size(), 35);
+        BOOST_CHECK_EQUAL(script.capacity(), 35);
+        BOOST_CHECK_EQUAL(script.allocated_memory(), 35);
+    }
+
+    // MULTISIG needs extra allocation
+    {
+        const auto script{GetScriptForMultisig(1, std::vector{2, CPubKey{dummy_key.GetPubKey()}})};
+        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::MULTISIG);
+        BOOST_CHECK_EQUAL(script.size(), 71);
+        BOOST_CHECK_EQUAL(script.capacity(), 103);
+        BOOST_CHECK_EQUAL(script.allocated_memory(), 103);
+    }
+}
+
 /* Wrapper around ProduceSignature to combine two scriptsigs */
 SignatureData CombineSignatures(const CTxOut& txout, const CMutableTransaction& tx, const SignatureData& scriptSig1, const SignatureData& scriptSig2)
 {
