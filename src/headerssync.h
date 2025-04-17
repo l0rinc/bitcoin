@@ -183,6 +183,11 @@ protected:
     const unsigned m_commit_offset;
 
 private:
+    ProcessingResult ProcessPresync(const std::vector<CBlockHeader>&
+            received_headers, bool full_headers_message);
+    ProcessingResult ProcessRedownload(const std::vector<CBlockHeader>&
+            received_headers, bool full_headers_message);
+
     /** Clear out all download state that might be in progress (freeing any used
      * memory), and mark this object as no longer usable.
      */
