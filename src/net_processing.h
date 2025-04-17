@@ -7,6 +7,7 @@
 #define BITCOIN_NET_PROCESSING_H
 
 #include <net.h>
+#include <optional>
 #include <txorphanage.h>
 #include <validationinterface.h>
 
@@ -78,6 +79,8 @@ public:
         //! Number of headers sent in one getheaders message result (this is
         //! a test-only option).
         uint32_t max_headers_result{MAX_HEADERS_RESULTS};
+        //! Size of HeadersSyncState headers cache.
+        std::optional<size_t> headerssync_cache_bytes;
     };
 
     static std::unique_ptr<PeerManager> make(CConnman& connman, AddrMan& addrman,
