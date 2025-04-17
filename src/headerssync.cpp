@@ -3,6 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <headerssync.h>
+
+#include <common/system.h>
 #include <logging.h>
 #include <pow.h>
 #include <util/check.h>
@@ -37,7 +39,12 @@ size_t ComputeHeadersCacheSize(const std::optional<size_t> cache_bytes, const CB
     return std::min<size_t>(
         // 1.1 - Account for 10% more blocks to account for increasing hash rate squeezing the block interval.
         1.1f * ((NodeClock::now() - NodeSeconds{std::chrono::seconds{chain_start->GetMedianTimePast()}}) / consensus_params.PowTargetSpacing()),
-        REDOWNLOAD_BUFFER_SIZE);
+        std::max(
+            // Lower limit
+            REDOWNLOAD_BUFFER_SIZE,
+            // Upper limit - We try to make sure not to use more than 10% of
+            // available RAM for the headers cache.
+            (GetFreeRAM().value_or(0) / 10) / ELEMENT_SIZE));
 }
 
 HeadersSyncState::HeadersSyncState(NodeId id, const Consensus::Params& consensus_params,

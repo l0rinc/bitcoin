@@ -255,7 +255,7 @@ private:
     /** Height of m_presync_last_header_received */
     int64_t m_presync_height{0};
 
-    /** During phase 1 (PRESYNC), we cache a limited amount of received headers so
+    /** During phase 1 (PRESYNC), we cache a reasonable amount of received headers so
      * we only have to re-download those which don't fit in phase 2 (REDOWNLOAD). */
     std::vector<CompressedHeader> m_headers_cache;
 
