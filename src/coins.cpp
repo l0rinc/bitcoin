@@ -110,10 +110,19 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possi
            (bool)it->second.coin.IsCoinBase());
 }
 
-void CCoinsViewCache::EmplaceCoinInternalDANGER(COutPoint&& outpoint, Coin&& coin) {
-    cachedCoinsUsage += coin.DynamicMemoryUsage();
+void CCoinsViewCache::EmplaceCoinInternalDANGER(COutPoint&& outpoint, Coin&& coin)
+{
     auto [it, inserted] = cacheCoins.try_emplace(std::move(outpoint), std::move(coin));
-    if (inserted) CCoinsCacheEntry::SetDirty(*it, m_sentinel);
+    if (inserted) {
+        CCoinsCacheEntry::SetDirty(*it, m_sentinel);
+    } else {
+        const size_t usage{it->second.coin.DynamicMemoryUsage()};
+        assert(cachedCoinsUsage >= usage);
+        cachedCoinsUsage -= usage;
+
+        it->second.coin = std::move(coin);
+    }
+    cachedCoinsUsage += it->second.coin.DynamicMemoryUsage();
 }
 
 void AddCoins(CCoinsViewCache& cache, const CTransaction &tx, int nHeight, bool check_for_overwrite) {
