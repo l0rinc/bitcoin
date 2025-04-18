@@ -90,15 +90,15 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possi
     bool inserted;
     std::tie(it, inserted) = cacheCoins.emplace(std::piecewise_construct, std::forward_as_tuple(outpoint), std::tuple<>());
     bool fresh = false;
+    if (!possible_overwrite && !it->second.coin.IsSpent()) { // check before any other partial state change
+        throw std::logic_error("Attempted to overwrite an unspent coin (when possible_overwrite is false)");
+    }
     if (!inserted) {
         const size_t usage{it->second.coin.DynamicMemoryUsage()};
         assert(cachedCoinsUsage >= usage);
         cachedCoinsUsage -= usage;
     }
     if (!possible_overwrite) {
-        if (!it->second.coin.IsSpent()) {
-            throw std::logic_error("Attempted to overwrite an unspent coin (when possible_overwrite is false)");
-        }
         // If the coin exists in this cache as a spent coin and is DIRTY, then
         // its spentness hasn't been flushed to the parent cache. We're
         // re-adding the coin to this cache now but we can't mark it as FRESH.
@@ -169,18 +169,22 @@ bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {
            (uint32_t)it->second.coin.nHeight,
            (int64_t)it->second.coin.out.nValue,
            (bool)it->second.coin.IsCoinBase());
+
     if (moveout) {
         *moveout = std::move(it->second.coin);
     }
+
     if (it->second.IsFresh()) {
         cacheCoins.erase(it);
     } else {
         CCoinsCacheEntry::SetDirty(*it, m_sentinel);
         it->second.coin.Clear();
     }
+
     assert(CacheUsageValid());
     return true;
 }
+
 
 static const Coin coinEmpty;
 
