@@ -288,7 +288,9 @@ struct CoinsViewCacheCursor
         // Otherwise, clear the state of the entry.
         if (!m_will_erase) {
             if (current.second.coin.IsSpent()) {
-                m_usage -= current.second.coin.DynamicMemoryUsage();
+                size_t dynamic_memory_usage = current.second.coin.DynamicMemoryUsage();
+                assert(dynamic_memory_usage == 0);
+                m_usage -= dynamic_memory_usage;
                 m_map.erase(current.first);
             } else {
                 current.second.SetClean();

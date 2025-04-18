@@ -204,6 +204,9 @@ bool CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &ha
                 // and mark it as dirty.
                 itUs = cacheCoins.try_emplace(it->first).first;
                 CCoinsCacheEntry& entry{itUs->second};
+                const size_t usage{entry.coin.DynamicMemoryUsage()};
+                assert(cachedCoinsUsage >= usage);
+                cachedCoinsUsage -= usage;
                 if (cursor.WillErase(*it)) {
                     // Since this entry will be erased,
                     // we can move the coin into us instead of copying it
