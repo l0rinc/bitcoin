@@ -11,7 +11,7 @@ $ cmake --preset=libfuzzer
 # macOS users: If you have problem with this step then make sure to read "macOS hints for
 # libFuzzer" on https://github.com/bitcoin/bitcoin/blob/master/doc/fuzzing.md#macos-hints-for-libfuzzer
 $ cmake --build build_fuzz
-$ FUZZ=process_message build_fuzz/bin/fuzz
+$ FUZZ=coins_view build_fuzz/bin/fuzz
 # abort fuzzing using ctrl-c
 ```
 
