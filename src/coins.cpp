@@ -267,9 +267,9 @@ bool CCoinsViewCache::Flush() {
     if (fOk) {
         cacheCoins.clear();
         ReallocateCache();
+        cachedCoinsUsage = 0;
+        m_dirty_count = 0;
     }
-    cachedCoinsUsage = 0;
-    m_dirty_count = 0;
     return fOk;
 }
 
