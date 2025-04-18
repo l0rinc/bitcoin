@@ -388,6 +388,8 @@ public:
      */
     CCoinsViewCache(const CCoinsViewCache &) = delete;
 
+    bool CacheUsageValid() const;
+
     // Standard CCoinsView methods
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
     bool HaveCoin(const COutPoint &outpoint) const override;
