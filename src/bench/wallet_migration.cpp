@@ -65,9 +65,10 @@ static void WalletMigration(benchmark::Bench& bench)
 
     bench.epochs(/*numEpochs=*/1).run([&context, &wallet] {
         util::Result<MigrationResult> res = MigrateLegacyToDescriptor(std::move(wallet), /*passphrase=*/"", context, /*was_loaded=*/false);
-        assert(res);
-        assert(res->wallet);
-        assert(res->watchonly_wallet);
+        assert(res && res->wallet && res->watchonly_wallet);
+
+        res->wallet->Close();
+        res->watchonly_wallet->Close();
     });
 }
 
