@@ -64,14 +64,22 @@ static void WalletMigration(benchmark::Bench& bench)
     }
 
     const SecureString passphrase{};
-    bench.epochs(/*numEpochs=*/1).run([&context, &wallet, &passphrase] {
-        util::Result<MigrationResult> res = MigrateLegacyToDescriptor(std::move(wallet), passphrase, context, /*was_loaded=*/false);
-        assert(res);
-        assert(res->wallet);
-        assert(res->watchonly_wallet);
+    bench.epochs(1).run([&context, &wallet, &passphrase] {
+        auto res = MigrateLegacyToDescriptor(std::move(wallet), passphrase,
+                                             context, /*was_loaded=*/false);
+        assert(res && res->wallet && res->watchonly_wallet);
 
-        res->wallet->Close();
-        res->watchonly_wallet->Close();
+        // --- clean‑up -------------------------------------------------
+        std::vector<std::shared_ptr<wallet::CWallet>> wallets{
+            res->wallet, res->watchonly_wallet, res->solvables_wallet};
+
+        for (auto& w : wallets) {
+            if (!w) continue;
+            // 1. Tell the context we’re done with this wallet
+            wallet::RemoveWallet(context, w, /*load_on_start=*/std::nullopt);
+            // 2. Block until the custom deleter actually flushes & deletes
+            wallet::WaitForDeleteWallet(std::move(w));
+        }
     });
 }
 
