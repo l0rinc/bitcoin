@@ -3,14 +3,14 @@
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 
 #include <bench/bench.h>
-#include <kernel/chain.h>
 #include <interfaces/chain.h>
+#include <kernel/chain.h>
 #include <node/context.h>
 #include <test/util/mining.h>
 #include <test/util/setup_common.h>
-#include <wallet/test/util.h>
 #include <wallet/context.h>
 #include <wallet/receive.h>
+#include <wallet/test/util.h>
 #include <wallet/wallet.h>
 
 #include <optional>
@@ -65,9 +65,10 @@ static void WalletMigration(benchmark::Bench& bench)
 
     bench.epochs(/*numEpochs=*/1).run([&context, &wallet] {
         util::Result<MigrationResult> res = MigrateLegacyToDescriptor(std::move(wallet), /*passphrase=*/"", context, /*was_loaded=*/false);
-        assert(res);
-        assert(res->wallet);
-        assert(res->watchonly_wallet);
+        assert(res && res->wallet && res->watchonly_wallet);
+
+        assert(RemoveWallet(context, res->wallet, /*load_on_start=*/{}));
+        assert(RemoveWallet(context, res->watchonly_wallet, /*load_on_start=*/{}));
     });
 }
 
