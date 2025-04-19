@@ -68,8 +68,8 @@ static void WalletMigration(benchmark::Bench& bench)
         util::Result<MigrationResult> res = MigrateLegacyToDescriptor(std::move(wallet), passphrase, context, /*was_loaded=*/false);
         assert(res && res->wallet && res->watchonly_wallet);
 
-        res->wallet->Close();
-        res->watchonly_wallet->Close();
+        RemoveWallet(context, res->wallet, /*load_on_start=*/{});
+        RemoveWallet(context, res->watchonly_wallet, /*load_on_start=*/{});
     });
 }
 
