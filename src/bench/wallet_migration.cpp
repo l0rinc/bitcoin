@@ -64,7 +64,7 @@ static void WalletMigration(benchmark::Bench& bench)
     }
 
     const SecureString passphrase{};
-    bench.epochs(/*numEpochs=*/1).run([&context, &wallet, &passphrase] {
+    bench.epochs(/*numEpochs=*/1).epochIterations(/*numIters=*/1).run([&context, &wallet, &passphrase] {
         util::Result<MigrationResult> res = MigrateLegacyToDescriptor(std::move(wallet), passphrase, context, /*was_loaded=*/false);
         assert(res);
         assert(res->wallet);
