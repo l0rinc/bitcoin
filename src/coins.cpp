@@ -161,30 +161,31 @@ bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {
     CCoinsMap::iterator it = FetchCoin(outpoint);
     if (it == cacheCoins.end()) return false;
     const size_t usage{it->second.coin.DynamicMemoryUsage()};
-    assert(cachedCoinsUsage >= usage);
-    cachedCoinsUsage -= usage;
     TRACEPOINT(utxocache, spent,
            outpoint.hash.data(),
            (uint32_t)outpoint.n,
            (uint32_t)it->second.coin.nHeight,
            (int64_t)it->second.coin.out.nValue,
            (bool)it->second.coin.IsCoinBase());
-
     if (moveout) {
         *moveout = std::move(it->second.coin);
     }
-
     if (it->second.IsFresh()) {
+        assert(cachedCoinsUsage >= usage);
+        cachedCoinsUsage -= usage;
         cacheCoins.erase(it);
     } else {
         CCoinsCacheEntry::SetDirty(*it, m_sentinel);
         it->second.coin.Clear();
+
+        const size_t new_usage{it->second.coin.DynamicMemoryUsage()};
+        assert(cachedCoinsUsage >= (usage - new_usage));
+        cachedCoinsUsage -= (usage - new_usage);
     }
 
     assert(CacheUsageValid());
     return true;
 }
-
 
 static const Coin coinEmpty;
 
