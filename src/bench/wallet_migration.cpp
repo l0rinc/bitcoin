@@ -15,7 +15,7 @@
 
 #include <optional>
 
-namespace wallet{
+namespace wallet {
 
 static void WalletMigration(benchmark::Bench& bench)
 {
@@ -64,15 +64,11 @@ static void WalletMigration(benchmark::Bench& bench)
     }
 
     const SecureString passphrase{};
-    bench.epochs(/*numEpochs=*/1).run([&context, &wallet, &passphrase] {
+    bench.epochs(/*numEpochs=*/1).epochIterations(/*numIters=*/1).run([&context, &wallet, &passphrase] {
         util::Result<MigrationResult> res = MigrateLegacyToDescriptor(std::move(wallet), passphrase, context, /*was_loaded=*/false);
         assert(res && res->wallet && res->watchonly_wallet);
-
-        RemoveWallet(context, res->wallet, /*load_on_start=*/{});
-        RemoveWallet(context, res->watchonly_wallet, /*load_on_start=*/{});
     });
 }
 
 BENCHMARK(WalletMigration, benchmark::PriorityLevel::LOW);
-
 } // namespace wallet
