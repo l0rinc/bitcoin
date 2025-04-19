@@ -68,6 +68,9 @@ static void WalletMigration(benchmark::Bench& bench)
         assert(res);
         assert(res->wallet);
         assert(res->watchonly_wallet);
+
+        res->wallet->Close();
+        res->watchonly_wallet->Close();
     });
 }
 
