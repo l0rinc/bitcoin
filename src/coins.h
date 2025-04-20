@@ -18,7 +18,7 @@
 
 #include <assert.h>
 #include <stdint.h>
-
+#include <ranges>
 #include <functional>
 #include <unordered_map>
 
@@ -383,6 +383,13 @@ public:
      * By deleting the copy constructor, we prevent accidentally using it when one intends to create a cache on top of a base cache.
      */
     CCoinsViewCache(const CCoinsViewCache &) = delete;
+
+    bool CacheUsageValid() const // TODO remove
+    {
+        size_t actual{0};
+        for (auto& entry : cacheCoins | std::views::values) actual += entry.coin.DynamicMemoryUsage();
+        return actual == cachedCoinsUsage;
+    }
 
     // Standard CCoinsView methods
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
