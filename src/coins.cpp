@@ -42,10 +42,12 @@ CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic) :
 }
 
 size_t CCoinsViewCache::DynamicMemoryUsage() const {
+    assert(CacheUsageValid());
     return memusage::DynamicUsage(cacheCoins) + cachedCoinsUsage;
 }
 
 CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint) const {
+    assert(CacheUsageValid());
     const auto [ret, inserted] = cacheCoins.try_emplace(outpoint);
     if (inserted) {
         if (auto coin{base->GetCoin(outpoint)}) {
@@ -60,16 +62,19 @@ CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint) const 
             return cacheCoins.end();
         }
     }
+    assert(CacheUsageValid());
     return ret;
 }
 
 std::optional<Coin> CCoinsViewCache::GetCoin(const COutPoint& outpoint) const
 {
+    assert(CacheUsageValid());
     if (auto it{FetchCoin(outpoint)}; it != cacheCoins.end() && !it->second.coin.IsSpent()) return it->second.coin;
     return std::nullopt;
 }
 
 void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possible_overwrite) {
+    assert(CacheUsageValid());
     assert(!coin.IsSpent());
     if (coin.out.scriptPubKey.IsUnspendable()) return;
     CCoinsMap::iterator it;
@@ -108,9 +113,11 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possi
            (uint32_t)it->second.coin.nHeight,
            (int64_t)it->second.coin.out.nValue,
            (bool)it->second.coin.IsCoinBase());
+    assert(CacheUsageValid());
 }
 
 void CCoinsViewCache::EmplaceCoinInternalDANGER(COutPoint&& outpoint, Coin&& coin) {
+    assert(CacheUsageValid());
     auto [it, inserted] = cacheCoins.try_emplace(std::move(outpoint), std::move(coin));
     if (inserted) {
         CCoinsCacheEntry::SetDirty(*it, m_sentinel);
@@ -130,6 +137,7 @@ void AddCoins(CCoinsViewCache& cache, const CTransaction &tx, int nHeight, bool 
 }
 
 bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {
+    assert(CacheUsageValid());
     CCoinsMap::iterator it = FetchCoin(outpoint);
     if (it == cacheCoins.end()) return false;
     cachedCoinsUsage -= it->second.coin.DynamicMemoryUsage();
@@ -148,6 +156,7 @@ bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {
         CCoinsCacheEntry::SetDirty(*it, m_sentinel);
         it->second.coin.Clear();
     }
+    assert(CacheUsageValid());
     return true;
 }
 
@@ -163,16 +172,19 @@ const Coin& CCoinsViewCache::AccessCoin(const COutPoint &outpoint) const {
 }
 
 bool CCoinsViewCache::HaveCoin(const COutPoint &outpoint) const {
+    assert(CacheUsageValid());
     CCoinsMap::const_iterator it = FetchCoin(outpoint);
     return (it != cacheCoins.end() && !it->second.coin.IsSpent());
 }
 
 bool CCoinsViewCache::HaveCoinInCache(const COutPoint &outpoint) const {
+    assert(CacheUsageValid());
     CCoinsMap::const_iterator it = cacheCoins.find(outpoint);
     return (it != cacheCoins.end() && !it->second.coin.IsSpent());
 }
 
 uint256 CCoinsViewCache::GetBestBlock() const {
+    assert(CacheUsageValid());
     if (hashBlock.IsNull())
         hashBlock = base->GetBestBlock();
     return hashBlock;
@@ -183,6 +195,7 @@ void CCoinsViewCache::SetBestBlock(const uint256 &hashBlockIn) {
 }
 
 bool CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlockIn) {
+    assert(CacheUsageValid());
     for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)) {
         // Ignore non-dirty entries (optimization).
         if (!it->second.IsDirty()) {
@@ -248,10 +261,12 @@ bool CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &ha
         }
     }
     hashBlock = hashBlockIn;
+    assert(CacheUsageValid());
     return true;
 }
 
 bool CCoinsViewCache::Flush() {
+    assert(CacheUsageValid());
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/true)};
     bool fOk = base->BatchWrite(cursor, hashBlock);
     if (fOk) {
@@ -259,11 +274,13 @@ bool CCoinsViewCache::Flush() {
         ReallocateCache();
         cachedCoinsUsage = 0;
     }
+    assert(CacheUsageValid());
     return fOk;
 }
 
 bool CCoinsViewCache::Sync()
 {
+    assert(CacheUsageValid());
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/false)};
     bool fOk = base->BatchWrite(cursor, hashBlock);
     if (fOk) {
@@ -272,11 +289,13 @@ bool CCoinsViewCache::Sync()
             throw std::logic_error("Not all unspent flagged entries were cleared");
         }
     }
+    assert(CacheUsageValid());
     return fOk;
 }
 
 void CCoinsViewCache::Uncache(const COutPoint& hash)
 {
+    assert(CacheUsageValid());
     CCoinsMap::iterator it = cacheCoins.find(hash);
     if (it != cacheCoins.end() && !it->second.IsDirty() && !it->second.IsFresh()) {
         cachedCoinsUsage -= it->second.coin.DynamicMemoryUsage();
@@ -288,6 +307,7 @@ void CCoinsViewCache::Uncache(const COutPoint& hash)
                (bool)it->second.coin.IsCoinBase());
         cacheCoins.erase(it);
     }
+    assert(CacheUsageValid());
 }
 
 unsigned int CCoinsViewCache::GetCacheSize() const {
@@ -296,6 +316,7 @@ unsigned int CCoinsViewCache::GetCacheSize() const {
 
 bool CCoinsViewCache::HaveInputs(const CTransaction& tx) const
 {
+    assert(CacheUsageValid());
     if (!tx.IsCoinBase()) {
         for (unsigned int i = 0; i < tx.vin.size(); i++) {
             if (!HaveCoin(tx.vin[i].prevout)) {
@@ -303,17 +324,20 @@ bool CCoinsViewCache::HaveInputs(const CTransaction& tx) const
             }
         }
     }
+    assert(CacheUsageValid());
     return true;
 }
 
 void CCoinsViewCache::ReallocateCache()
 {
+    assert(CacheUsageValid());
     // Cache should be empty when we're calling this.
     assert(cacheCoins.size() == 0);
     cacheCoins.~CCoinsMap();
     m_cache_coins_memory_resource.~CCoinsMapMemoryResource();
     ::new (&m_cache_coins_memory_resource) CCoinsMapMemoryResource{};
     ::new (&cacheCoins) CCoinsMap{0, SaltedOutpointHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
+    assert(CacheUsageValid());
 }
 
 void CCoinsViewCache::SanityCheck() const
