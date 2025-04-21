@@ -4,6 +4,7 @@
 
 #include <bench/bench.h>
 #include <interfaces/chain.h>
+#include <interfaces/wallet.h>
 #include <kernel/chain.h>
 #include <node/context.h>
 #include <test/util/mining.h>
@@ -19,11 +20,8 @@ namespace wallet{
 
 static void WalletMigration(benchmark::Bench& bench)
 {
-    const auto test_setup = MakeNoLogFileContext<TestingSetup>();
-
-    WalletContext context;
-    context.args = &test_setup->m_args;
-    context.chain = test_setup->m_node.chain.get();
+    const auto test_setup{MakeNoLogFileContext<TestingSetup>()};
+    const auto loader{MakeWalletLoader(*test_setup->m_node.chain, Assert(test_setup->m_args))};
 
     // Number of imported watch only addresses
     int NUM_WATCH_ONLY_ADDR = 20;
@@ -63,12 +61,10 @@ static void WalletMigration(benchmark::Bench& bench)
         batch.WriteKey(pubkey, key.GetPrivKey(), CKeyMetadata());
     }
 
+    WalletContext& context{*loader->context()};
     bench.epochs(/*numEpochs=*/1).run([&context, &wallet] {
         util::Result<MigrationResult> res = MigrateLegacyToDescriptor(std::move(wallet), /*passphrase=*/"", context, /*was_loaded=*/false);
         assert(res && res->wallet && res->watchonly_wallet);
-
-        assert(RemoveWallet(context, res->wallet, /*load_on_start=*/{}));
-        assert(RemoveWallet(context, res->watchonly_wallet, /*load_on_start=*/{}));
     });
 }
 
