@@ -15,6 +15,7 @@
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows",
         "BUILD_GUI": "ON",
+        "WITH_MINIUPNPC": "ON",
         "WITH_ZMQ": "ON"
       }
     },
@@ -32,6 +33,7 @@
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows-static",
         "BUILD_GUI": "ON",
+        "WITH_MINIUPNPC": "ON",
         "WITH_ZMQ": "ON"
       }
     },
@@ -81,6 +83,7 @@
         "ENABLE_EXTERNAL_SIGNER": "ON",
         "ENABLE_WALLET": "ON",
         "ENABLE_IPC": "ON",
+        "WITH_MINIUPNPC": "ON",
         "WITH_QRENCODE": "ON",
         "WITH_USDT": "ON",
         "WITH_ZMQ": "ON"
