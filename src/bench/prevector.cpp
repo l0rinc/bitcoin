@@ -20,7 +20,7 @@ struct nontrivial_t
     SERIALIZE_METHODS(nontrivial_t, obj) { READWRITE(obj.x); }
 };
 
-static_assert(!std::is_trivially_default_constructible_v<nontrivial_t>,
+static_assert(!std::is_trivially_default_constructible<nontrivial_t>::value,
               "expected nontrivial_t to not be trivially constructible");
 
 typedef unsigned char trivial_t;
