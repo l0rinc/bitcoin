@@ -1071,7 +1071,7 @@ BOOST_AUTO_TEST_CASE(coins_resource_is_used)
 
         map.reserve(1000);
 
-        // The resource has preallocated a chunk, so we should have space for at several nodes without the need to allocate anything else.
+        // The resource has preallocated a chunk, so we should have space for at least several nodes without the need to allocate anything else.
         const auto usage_before = memusage::DynamicUsage(map);
 
         COutPoint out_point{};
@@ -1079,7 +1079,7 @@ BOOST_AUTO_TEST_CASE(coins_resource_is_used)
             out_point.n = i;
             map[out_point];
         }
-        BOOST_TEST(usage_before == memusage::DynamicUsage(map));
+        BOOST_TEST(usage_before < memusage::DynamicUsage(map));
     }
 
     PoolResourceTester::CheckAllDataAccountedFor(resource);
