@@ -212,7 +212,10 @@ static inline size_t DynamicUsage(const std::unordered_map<Key,
     size_t estimated_list_node_size = MallocUsage(sizeof(void*) * 3);
     size_t usage_resource = estimated_list_node_size * pool_resource->NumAllocatedChunks();
     size_t usage_chunks = MallocUsage(pool_resource->ChunkSizeBytes()) * pool_resource->NumAllocatedChunks();
-    return usage_resource + usage_chunks + MallocUsage(sizeof(void*) * m.bucket_count());
+    size_t usage_buckets = MallocUsage(sizeof(void*) * m.bucket_count());
+    size_t usage_hash_cache_overhead = m.size() * sizeof(size_t);
+
+    return usage_resource + usage_chunks + usage_buckets + usage_hash_cache_overhead;
 }
 
 } // namespace memusage
