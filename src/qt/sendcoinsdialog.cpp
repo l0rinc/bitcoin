@@ -33,6 +33,7 @@
 #include <fstream>
 #include <memory>
 
+#include <QDebug>
 #include <QFontMetrics>
 #include <QScrollBar>
 #include <QSettings>
