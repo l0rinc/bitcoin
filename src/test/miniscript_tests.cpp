@@ -295,28 +295,59 @@ using miniscript::operator""_mst;
 using Node = miniscript::Node<CPubKey>;
 
 /** Compute all challenges (pubkeys, hashes, timelocks) that occur in a given Miniscript. */
-std::set<Challenge> FindChallenges(const Node& root)
+// NOLINTNEXTLINE(misc-no-recursion)
+std::set<Challenge> FindChallenges_recursive(const NodeRef& ref) {
+    std::set<Challenge> chal;
+    for (const auto& key : ref->keys) {
+        chal.emplace(ChallengeType::PK, ChallengeNumber(key));
+    }
+    if (ref->fragment == miniscript::Fragment::OLDER) {
+        chal.emplace(ChallengeType::OLDER, ref->k);
+    } else if (ref->fragment == miniscript::Fragment::AFTER) {
+        chal.emplace(ChallengeType::AFTER, ref->k);
+    } else if (ref->fragment == miniscript::Fragment::SHA256) {
+        chal.emplace(ChallengeType::SHA256, ChallengeNumber(ref->data));
+    } else if (ref->fragment == miniscript::Fragment::RIPEMD160) {
+        chal.emplace(ChallengeType::RIPEMD160, ChallengeNumber(ref->data));
+    } else if (ref->fragment == miniscript::Fragment::HASH256) {
+        chal.emplace(ChallengeType::HASH256, ChallengeNumber(ref->data));
+    } else if (ref->fragment == miniscript::Fragment::HASH160) {
+        chal.emplace(ChallengeType::HASH160, ChallengeNumber(ref->data));
+    }
+    for (const auto& sub : ref->subs) {
+        auto sub_chal = FindChallenges_recursive(sub);
+        chal.insert(sub_chal.begin(), sub_chal.end());
+    }
+    return chal;
+}
+
+/** Compute all challenges (pubkeys, hashes, timelocks) that occur in a given Miniscript. */
+std::set<Challenge> FindChallenges(const NodeRef& root)
 {
     std::set<Challenge> chal;
 
-    for (std::vector stack{&root}; !stack.empty();) {
-        const auto* ref{stack.back()};
+    for (std::vector stack{root.get()}; !stack.empty();) {
+        const Node* ref{stack.back()};
         stack.pop_back();
 
-        for (const auto& key : ref->Keys()) {
+        for (const auto& key : ref->keys) {
             chal.emplace(ChallengeType::PK, ChallengeNumber(key));
         }
-        switch (ref->Fragment()) {
-        case Fragment::OLDER: chal.emplace(ChallengeType::OLDER, ref->K()); break;
-        case Fragment::AFTER: chal.emplace(ChallengeType::AFTER, ref->K()); break;
-        case Fragment::SHA256: chal.emplace(ChallengeType::SHA256, ChallengeNumber(ref->Data())); break;
-        case Fragment::RIPEMD160: chal.emplace(ChallengeType::RIPEMD160, ChallengeNumber(ref->Data())); break;
-        case Fragment::HASH256: chal.emplace(ChallengeType::HASH256, ChallengeNumber(ref->Data())); break;
-        case Fragment::HASH160: chal.emplace(ChallengeType::HASH160, ChallengeNumber(ref->Data())); break;
-        default: break;
+        if (ref->fragment == miniscript::Fragment::OLDER) {
+            chal.emplace(ChallengeType::OLDER, ref->k);
+        } else if (ref->fragment == miniscript::Fragment::AFTER) {
+            chal.emplace(ChallengeType::AFTER, ref->k);
+        } else if (ref->fragment == miniscript::Fragment::SHA256) {
+            chal.emplace(ChallengeType::SHA256, ChallengeNumber(ref->data));
+        } else if (ref->fragment == miniscript::Fragment::RIPEMD160) {
+            chal.emplace(ChallengeType::RIPEMD160, ChallengeNumber(ref->data));
+        } else if (ref->fragment == miniscript::Fragment::HASH256) {
+            chal.emplace(ChallengeType::HASH256, ChallengeNumber(ref->data));
+        } else if (ref->fragment == miniscript::Fragment::HASH160) {
+            chal.emplace(ChallengeType::HASH160, ChallengeNumber(ref->data));
         }
-        for (const auto& sub : ref->Subs()) {
-            stack.push_back(&sub);
+        for (const auto& sub : ref->subs) {
+            stack.push_back(sub.get());
         }
     }
     return chal;
@@ -344,10 +375,11 @@ void SatisfactionToWitness(miniscript::MiniscriptContext ctx, CScriptWitness& wi
 
 struct MiniScriptTest : BasicTestingSetup {
 /** Run random satisfaction tests. */
-void TestSatisfy(const KeyConverter& converter, const Node& node)
-{
-    auto script = node.ToScript(converter);
+void TestSatisfy(const KeyConverter& converter, const std::string& testcase, const NodeRef& node) {
+    auto script = node->ToScript(converter);
+    const auto challenges_recursive{FindChallenges_recursive(node)};
     const auto challenges{FindChallenges(node)}; // Find all challenges in the generated miniscript.
+    BOOST_CHECK(challenges_recursive == challenges);
     std::vector<Challenge> challist(challenges.begin(), challenges.end());
     for (int iter = 0; iter < 3; ++iter) {
         std::shuffle(challist.begin(), challist.end(), m_rng);
