@@ -23,7 +23,7 @@ BOOST_AUTO_TEST_CASE(xor_roundtrip_random_chunks)
     auto apply_random_xor_chunks{[&](std::span<std::byte> target, const std::span<std::byte, sizeof(uint64_t)> obfuscation) {
         for (size_t offset{0}; offset < target.size();) {
             const size_t chunk_size{1 + m_rng.randrange(target.size() - offset)};
-            util::Xor(target.subspan(offset, chunk_size), obfuscation, offset);
+            util::Obfuscate(target.subspan(offset, chunk_size), obfuscation, offset);
             offset += chunk_size;
         }
     }};
@@ -68,7 +68,7 @@ BOOST_AUTO_TEST_CASE(xor_bytes_reference)
         std::vector actual{expected};
 
         expected_xor(std::span{expected}.subspan(write_offset), key_bytes, key_offset);
-        util::Xor(std::span{actual}.subspan(write_offset), key_bytes, key_offset);
+        util::Obfuscate(std::span{actual}.subspan(write_offset), key_bytes, key_offset);
 
         BOOST_CHECK_EQUAL_COLLECTIONS(expected.begin(), expected.end(), actual.begin(), actual.end());
     }
@@ -284,7 +284,7 @@ BOOST_AUTO_TEST_CASE(streams_serializedata_xor)
     // Degenerate case
     {
         DataStream ds{};
-        ds.Xor("0000000000000000"_hex_v_u8);
+        ds.Obfuscate("0000000000000000"_hex_v_u8);
         BOOST_CHECK_EQUAL(""s, ds.str());
     }
 
@@ -292,7 +292,7 @@ BOOST_AUTO_TEST_CASE(streams_serializedata_xor)
         const auto key_bytes{"ffffffffffffffff"_hex_v_u8};
 
         DataStream ds{"0ff0"_hex};
-        ds.Xor(key_bytes);
+        ds.Obfuscate(key_bytes);
         BOOST_CHECK_EQUAL("\xf0\x0f"s, ds.str());
     }
 
@@ -300,7 +300,7 @@ BOOST_AUTO_TEST_CASE(streams_serializedata_xor)
         const auto key_bytes{"ff0fff0fff0fff0f"_hex_v_u8};
 
         DataStream ds{"f00f"_hex};
-        ds.Xor(key_bytes);
+        ds.Obfuscate(key_bytes);
         BOOST_CHECK_EQUAL("\x0f\x00"s, ds.str());
     }
 }
