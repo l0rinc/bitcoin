@@ -433,7 +433,7 @@ DEFAULT_CONTEXT = {
     # The annex (only when mode=="taproot").
     "annex": None,
     # The codeseparator position (only when mode=="taproot").
-    "codeseppos": 0xffffffff,
+    "codeseppos": -1,
     # Which OP_CODESEPARATOR is the last executed one in the script (in legacy/P2SH/P2WSH).
     "codesepnum": -1,
     # The redeemscript to add to the scriptSig (if P2SH; None implies not P2SH).
@@ -1294,6 +1294,70 @@ def spenders_taproot_active():
         inputs = []
         opcount = 1
         codeseppos = 0xffffffff
+        for pos, op in enumerate(ops):
+            if op == -1:
+                codeseppos = opcount
+                opcount += 1
+                script.append(OP_CODESEPARATOR)
+            elif pos + 1 != len(ops):
+                opcount += 2
+                script += [OP_TUCK, OP_CHECKSIGVERIFY]
+                inputs.append(getter("sign", codeseppos=codeseppos, hashtype=op))
+            else:
+                opcount += 1
+                script += [OP_CHECKSIG]
+                inputs.append(getter("sign", codeseppos=codeseppos, hashtype=op))
+        inputs.reverse()
+        script = CScript(script)
+        tap = taproot_construct(pubs[0], [("leaf", script)])
+        add_spender(spenders, "sighashcache/taproot", tap=tap, leaf="leaf", inputs=inputs, standard=True, key=secs[1], no_fail=True)
+
+    # == sighash caching tests ==
+
+    # Sighash caching in legacy.
+    for p2sh in [False, True]:
+        for witv0 in [False, True]:
+            eckey1, pubkey1 = generate_keypair(compressed=compressed)
+            for _ in range(10):
+                # Construct a script with 20 checksig operations (10 sighash types, each 2 times),
+                # randomly ordered and interleaved with 4 OP_CODESEPARATORS.
+                ops = [1, 2, 3, 0x21, 0x42, 0x63, 0x81, 0x83, 0xe1, 0xc2, -1, -1] * 2
+                # Make sure no OP_CODESEPARATOR appears last.
+                while True:
+                    random.shuffle(ops)
+                    if ops[-1] != -1:
+                        break
+                script = [pubkey1]
+                inputs = []
+                codeseps = -1
+                for pos, op in enumerate(ops):
+                    if op == -1:
+                        codeseps += 1
+                        script.append(OP_CODESEPARATOR)
+                    elif pos + 1 != len(ops):
+                        script += [OP_TUCK, OP_CHECKSIGVERIFY]
+                        inputs.append(getter("sign", codesepnum=codeseps, hashtype=op))
+                    else:
+                        script += [OP_CHECKSIG]
+                        inputs.append(getter("sign", codesepnum=codeseps, hashtype=op))
+                inputs.reverse()
+                script = CScript(script)
+                add_spender(spenders, "sighashcache/legacy", p2sh=p2sh, witv0=witv0, standard=False, script=script, inputs=inputs, key=eckey1, sigops_weight=12*8*(4-3*witv0), no_fail=True)
+
+    # Sighash caching in tapscript.
+    for _ in range(10):
+        # Construct a script with 700 checksig operations (7 sighash types, each 100 times),
+        # randomly ordered and interleaved with 100 OP_CODESEPARATORS.
+        ops = [0, 1, 2, 3, 0x81, 0x82, 0x83, -1] * 100
+        # Make sure no OP_CODESEPARATOR appears last.
+        while True:
+            random.shuffle(ops)
+            if ops[-1] != -1:
+                 break
+        script = [pubs[1]]
+        inputs = []
+        opcount = 1
+        codeseppos = -1
         for pos, op in enumerate(ops):
             if op == -1:
                 codeseppos = opcount
