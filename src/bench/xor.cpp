@@ -11,7 +11,7 @@
 #include <cstddef>
 #include <vector>
 
-static void XorObfuscationBench(benchmark::Bench& bench)
+static void ObfuscationBench(benchmark::Bench& bench)
 {
     FastRandomContext rng{/*fDeterministic=*/true};
     constexpr size_t bytes{10_MiB};
@@ -21,9 +21,9 @@ static void XorObfuscationBench(benchmark::Bench& bench)
 
     size_t offset{0};
     bench.batch(bytes / 1_MiB).unit("MiB").run([&] {
-        util::Xor(test_data, obfuscation, offset++);
+        util::Obfuscation(test_data, obfuscation, offset++);
         ankerl::nanobench::doNotOptimizeAway(test_data);
     });
 }
 
-BENCHMARK(XorObfuscationBench, benchmark::PriorityLevel::HIGH);
+BENCHMARK(ObfuscationBench, benchmark::PriorityLevel::HIGH);
