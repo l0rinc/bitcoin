@@ -21,7 +21,7 @@ static void XorObfuscationBench(benchmark::Bench& bench)
 
     size_t offset{0};
     bench.batch(bytes / 1_MiB).unit("MiB").run([&] {
-        util::Xor(test_data, obfuscation, offset++);
+        util::Obfuscation(test_data, obfuscation, offset++);
         ankerl::nanobench::doNotOptimizeAway(test_data);
     });
 }

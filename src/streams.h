@@ -25,7 +25,7 @@
 #include <vector>
 
 namespace util {
-inline void Xor(std::span<std::byte> write, std::span<const std::byte> key, size_t key_offset = 0)
+inline void Obfuscation(std::span<std::byte> write, std::span<const std::byte> key, size_t key_offset = 0)
 {
     if (key.size() == 0) {
         return;
@@ -271,11 +271,11 @@ public:
     /**
      * XOR the contents of this stream with a certain key.
      *
-     * @param[in] key    The key used to XOR the data in this stream.
+     * @param[in] obfuscation    The key used to XOR the data in this stream.
      */
-    void Xor(const std::vector<unsigned char>& key)
+    void Obfuscate(const std::vector<unsigned char>& obfuscation)
     {
-        util::Xor(MakeWritableByteSpan(*this), MakeByteSpan(key));
+        util::Obfuscation(MakeWritableByteSpan(*this), MakeByteSpan(obfuscation));
     }
 
     /** Compute total memory usage of this object (own memory + any dynamic memory). */
@@ -392,11 +392,11 @@ class AutoFile
 {
 protected:
     std::FILE* m_file;
-    std::vector<std::byte> m_xor;
+    std::vector<std::byte> m_obfuscation;
     std::optional<int64_t> m_position;
 
 public:
-    explicit AutoFile(std::FILE* file, std::vector<std::byte> data_xor={});
+    explicit AutoFile(std::FILE* file, std::vector<std::byte> obfuscation={});
 
     ~AutoFile() { fclose(); }
 
@@ -428,7 +428,7 @@ public:
     bool IsNull() const { return m_file == nullptr; }
 
     /** Continue with a different XOR key */
-    void SetXor(std::vector<std::byte> data_xor) { m_xor = data_xor; }
+    void SetObfuscation(std::vector<std::byte> obfuscation) { m_obfuscation = obfuscation; }
 
     /** Implementation detail, only used internally. */
     std::size_t detail_fread(std::span<std::byte> dst);
