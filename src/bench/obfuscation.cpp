@@ -23,7 +23,7 @@ static void ObfuscationBench(benchmark::Bench& bench)
 
     size_t offset{0};
     bench.batch(data.size()).unit("byte").run([&] {
-        util::Xor(data, obfuscation, offset++); // mutated differently each time
+        util::Obfuscate(data, obfuscation, offset++); // mutated differently each time
         ankerl::nanobench::doNotOptimizeAway(data);
     });
 }
