@@ -56,6 +56,7 @@ MAX_TIMEWARP = 600
 VERSIONBITS_TOP_BITS = 0x20000000
 VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT = 28
 DEFAULT_BLOCK_MIN_TX_FEE = 1 # default `-blockmintxfee` setting [sat/kvB]
+MAX_BLOCK_SERIALIZED_SIZE = 4_000_000
 
 class MiningTest(BitcoinTestFramework):
     def set_test_params(self):
@@ -334,6 +335,17 @@ class MiningTest(BitcoinTestFramework):
         )
         accounted_size = self.get_block_template_accounted_size(block_template)
         assert_greater_than_or_equal(custom_block_size, accounted_size)
+        assert_equal(self.nodes[0].getmininginfo()["currentblocksize"], accounted_size)
+
+        self.log.info("Testing custom -blockmaxsize startup option near the consensus maximum.")
+        near_max_block_size = MAX_BLOCK_SERIALIZED_SIZE - 1
+        self.restart_node(0, extra_args=[f"-blockmaxsize={near_max_block_size}"])
+        block_template = self.verify_block_template(
+            expected_tx_count=LARGE_TXS_COUNT,
+            expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT,
+        )
+        accounted_size = self.get_block_template_accounted_size(block_template)
+        assert_greater_than_or_equal(near_max_block_size, accounted_size)
         assert_equal(self.nodes[0].getmininginfo()["currentblocksize"], accounted_size)
 
         # Test block template creation with custom -blockmaxweight

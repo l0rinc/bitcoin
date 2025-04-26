@@ -110,7 +110,7 @@ BlockAssembler::BlockAssembler(Chainstate& chainstate,
           return FlattenMiningOptions(std::move(options));
       }()}
 {
-    m_account_block_size = *Assert(m_options.block_max_size) < DEFAULT_BLOCK_MAX_SIZE;
+    m_account_block_size = *Assert(m_options.block_max_size) < MAX_BLOCK_SERIALIZED_SIZE;
 }
 
 void BlockAssembler::resetBlock()

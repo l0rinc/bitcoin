@@ -371,9 +371,9 @@ class IPCMiningTest(BitcoinTestFramework):
             self.log.debug("Enforce reserved serialized size limit for IPC clients too")
             ctx, mining = await make_mining_ctx(self)
             opts = self.capnp_modules['mining'].BlockCreateOptions()
-            opts.blockReservedSize = MAX_BLOCK_SERIALIZED_SIZE
+            opts.blockReservedSize = MAX_BLOCK_SERIALIZED_SIZE + 1
             await assert_create_new_block_fails(ctx, mining, opts,
-                f"block_reserved_size ({MAX_BLOCK_SERIALIZED_SIZE}) exceeds maximum reserved block serialized size ({MAX_BLOCK_SERIALIZED_SIZE - 1000})")
+                f"block_reserved_size ({MAX_BLOCK_SERIALIZED_SIZE + 1}) exceeds maximum reserved block serialized size ({MAX_BLOCK_SERIALIZED_SIZE})")
 
         asyncio.run(capnp.run(async_routine()))
         asyncio.run(capnp.run(async_routine_check_max_reserved_weight()))
