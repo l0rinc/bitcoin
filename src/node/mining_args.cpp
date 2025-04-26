@@ -16,7 +16,6 @@
 #include <util/result.h>
 #include <util/translation.h>
 
-#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -27,11 +26,6 @@ using util::Error;
 using util::Result;
 
 namespace node {
-
-static uint64_t MaxSizeToMaxWeight(uint64_t block_max_size)
-{
-    return std::min<uint64_t>(block_max_size * WITNESS_SCALE_FACTOR, MAX_BLOCK_WEIGHT);
-}
 
 Result<void> CheckMiningOptions(BlockCreateOptions options, bool use_argnames)
 {
@@ -97,7 +91,7 @@ Result<BlockCreateOptions> ReadMiningArgs(const ArgsManager& args)
     options.block_max_weight = args.GetArg<uint64_t>("-blockmaxweight");
     options.block_max_size = args.GetArg<uint64_t>("-blockmaxsize");
     if (options.block_max_size && !block_max_weight_set && *options.block_max_size <= MAX_BLOCK_SERIALIZED_SIZE) {
-        options.block_max_weight = MaxSizeToMaxWeight(*options.block_max_size);
+        options.block_max_weight = MAX_BLOCK_WEIGHT;
     }
 
     if (auto result{CheckMiningOptions(options, /*use_argnames=*/true)}; !result) return Error{util::ErrorString(result)};
@@ -110,7 +104,7 @@ BlockCreateOptions FlattenMiningOptions(BlockCreateOptions options)
     if (!options.print_modified_fee) options.print_modified_fee = DEFAULT_PRINT_MODIFIED_FEE;
     if (!options.block_reserved_weight) options.block_reserved_weight = DEFAULT_BLOCK_RESERVED_WEIGHT;
     if (!options.block_max_weight && options.block_max_size && *options.block_max_size <= MAX_BLOCK_SERIALIZED_SIZE) {
-        options.block_max_weight = MaxSizeToMaxWeight(*options.block_max_size);
+        options.block_max_weight = MAX_BLOCK_WEIGHT;
     }
     if (!options.block_max_weight) options.block_max_weight = DEFAULT_BLOCK_MAX_WEIGHT;
     if (!options.block_max_size) options.block_max_size = DEFAULT_BLOCK_MAX_SIZE;

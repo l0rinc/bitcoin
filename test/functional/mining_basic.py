@@ -331,7 +331,7 @@ class MiningTest(BitcoinTestFramework):
         self.restart_node(0, extra_args=[f"-blockmaxsize={custom_block_size}"])
         block_template = self.verify_block_template(
             expected_tx_count=2,
-            expected_weight=custom_block_size * WITNESS_SCALE_FACTOR - DEFAULT_BLOCK_RESERVED_WEIGHT,
+            expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT,
         )
         accounted_size = self.get_block_template_accounted_size(block_template)
         assert_greater_than_or_equal(custom_block_size, accounted_size)

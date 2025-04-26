@@ -799,7 +799,7 @@ BOOST_AUTO_TEST_CASE(blockmaxsize_mining_options)
     BOOST_REQUIRE(size_only_options.block_max_size);
     BOOST_REQUIRE(size_only_options.block_max_weight);
     BOOST_CHECK_EQUAL(*size_only_options.block_max_size, 10'000U);
-    BOOST_CHECK_EQUAL(*size_only_options.block_max_weight, 10'000U * WITNESS_SCALE_FACTOR);
+    BOOST_CHECK_EQUAL(*size_only_options.block_max_weight, MAX_BLOCK_WEIGHT);
 
     const auto near_max_size_options{FlattenMiningOptions({
         .block_max_size = MAX_BLOCK_SERIALIZED_SIZE - 1,
