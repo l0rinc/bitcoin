@@ -309,6 +309,7 @@ void BlockAssembler::addChunks()
     // close to full; this is just a simple heuristic to finish quickly if the
     // mempool has a lot of entries.
     const int64_t MAX_CONSECUTIVE_FAILURES = 1000;
+    constexpr int32_t BLOCK_FULL_ENOUGH_SIZE_DELTA = 1000;
     constexpr int32_t BLOCK_FULL_ENOUGH_WEIGHT_DELTA = 4000;
     int64_t nConsecutiveFailed = 0;
 
@@ -342,7 +343,7 @@ void BlockAssembler::addChunks()
             Assert(m_options.block_max_weight);
             if (nConsecutiveFailed > MAX_CONSECUTIVE_FAILURES &&
                     (nBlockWeight + BLOCK_FULL_ENOUGH_WEIGHT_DELTA > *m_options.block_max_weight ||
-                     (m_account_block_size && nBlockSize + m_options.block_reserved_size > *Assert(m_options.block_max_size)))) {
+                     (m_account_block_size && nBlockSize + BLOCK_FULL_ENOUGH_SIZE_DELTA > *Assert(m_options.block_max_size)))) {
                 // Give up if we're close to full and haven't succeeded in a while
                 return;
             }
