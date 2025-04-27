@@ -2118,6 +2118,13 @@ void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txund
     AddCoins(inputs, tx, nHeight);
 }
 
+Num3072 GetNum3072(const Txid& hash, const uint32_t n) {
+    unsigned char tmp[Num3072::BYTE_SIZE];
+    const uint256 hashed_in{(HashWriter{} << hash << n).GetSHA256()};
+    ChaCha20Aligned{MakeByteSpan(hashed_in)}.Keystream(MakeWritableByteSpan(tmp));
+    return Num3072{tmp};
+}
+
 void UpdateCoinsIBDBooster(const CTransaction& tx, CCoinsViewCache& inputs, const CBlockIndex& block_index)
 {
     bool tx_is_coinbase = tx.IsCoinBase();
@@ -2128,25 +2135,20 @@ void UpdateCoinsIBDBooster(const CTransaction& tx, CCoinsViewCache& inputs, cons
     // mark inputs spent (-> simply remove them from ibd booster muhash)
     if (!tx_is_coinbase) {
         for (const CTxIn &txin : tx.vin) {
-            DataStream ss{};
-            ss << txin.prevout;
-            g_ibd_booster_muhash.Remove(MakeUCharSpan(ss));
+            g_ibd_booster_muhash.Remove(GetNum3072(txin.prevout.hash, txin.prevout.n));
         }
     }
+
     // add outputs
     const Txid& txid = tx.GetHash();
-    for (size_t i = 0; i < tx.vout.size(); ++i) {
-        // if we already know it gets spent up until the final booster block: add it to ibd booster muhash
+    for (uint32_t n{0}; n < tx.vout.size(); ++n) {
         if (!g_ibd_booster_hints.GetNextBit()) {
-            if (!tx.vout[i].scriptPubKey.IsUnspendable()) {
-                DataStream ss{};
-                ss << COutPoint(txid, i);
-                g_ibd_booster_muhash.Insert(MakeUCharSpan(ss));
-            }
-        // if we know it ends up in the final booster block UTXO set: add it as usual
+            // if we already know it gets spent up until the final booster block: add it to ibd booster muhash
+            g_ibd_booster_muhash.Insert(GetNum3072(txid, n));
         } else {
+            // if we know it ends up in the final booster block UTXO set: add it as usual
             bool overwrite = tx_is_coinbase;
-            inputs.AddCoin(COutPoint(txid, i), Coin(tx.vout[i], block_index.nHeight, tx_is_coinbase), overwrite);
+            inputs.AddCoin(COutPoint(txid, n), Coin(tx.vout[n], block_index.nHeight, tx_is_coinbase), overwrite);
         }
     }
 }
