@@ -2125,23 +2125,27 @@ void UpdateCoinsIBDBooster(const CTransaction& tx, CCoinsViewCache& inputs, cons
     // ignore txs that are overwritten later (duplicate txids)
     if (IsBIP30Unspendable(block_index) && tx_is_coinbase) return;
 
+    unsigned char tmp[Num3072::BYTE_SIZE];
+    auto bytes{MakeWritableByteSpan(tmp)};
+
     // mark inputs spent (-> simply remove them from ibd booster muhash)
     if (!tx_is_coinbase) {
         for (const CTxIn &txin : tx.vin) {
-            DataStream ss{};
-            ss << txin.prevout;
-            g_ibd_booster_muhash.Remove(MakeUCharSpan(ss));
+            uint256 hashed_in{(HashWriter{} << txin.prevout.hash << txin.prevout.n).GetSHA256()};
+            ChaCha20Aligned{MakeByteSpan(hashed_in)}.Keystream(bytes);
+            g_ibd_booster_muhash.Remove(Num3072{tmp});
         }
     }
+
     // add outputs
     const Txid& txid = tx.GetHash();
     for (size_t i = 0; i < tx.vout.size(); ++i) {
         // if we already know it gets spent up until the final booster block: add it to ibd booster muhash
         if (!g_ibd_booster_hints.GetNextBit()) {
             if (!tx.vout[i].scriptPubKey.IsUnspendable()) {
-                DataStream ss{};
-                ss << COutPoint(txid, i);
-                g_ibd_booster_muhash.Insert(MakeUCharSpan(ss));
+                uint256 hashed_in{(HashWriter{} << txid << i).GetSHA256()};
+                ChaCha20Aligned{MakeByteSpan(hashed_in)}.Keystream(bytes);
+                g_ibd_booster_muhash.Insert(Num3072{tmp});
             }
         // if we know it ends up in the final booster block UTXO set: add it as usual
         } else {
