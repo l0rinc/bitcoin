@@ -2147,10 +2147,9 @@ void UpdateCoinsIBDBooster(const CTransaction& tx, CCoinsViewCache& inputs, cons
                 ChaCha20Aligned{MakeByteSpan(hashed_in)}.Keystream(bytes);
                 g_ibd_booster_muhash.Insert(Num3072{tmp});
             }
-        // if we know it ends up in the final booster block UTXO set: add it as usual
+        // if we know it ends up in the final booster block UTXO set: add it similarly to how AssumeUTXO does it
         } else {
-            bool overwrite = tx_is_coinbase;
-            inputs.AddCoin(COutPoint(txid, i), Coin(tx.vout[i], block_index.nHeight, tx_is_coinbase), overwrite);
+            inputs.EmplaceCoinInternalDANGER(COutPoint(txid, i), Coin(tx.vout[i], block_index.nHeight, tx_is_coinbase));
         }
     }
 }
