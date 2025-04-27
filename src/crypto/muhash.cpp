@@ -582,12 +582,24 @@ bool MuHash3072::IsEmptySet() noexcept
     return std::equal(std::begin(num_bytes), std::end(num_bytes), std::begin(den_bytes));
 }
 
-MuHash3072& MuHash3072::Insert(std::span<const unsigned char> in) noexcept {
-    m_numerator.Multiply(ToNum3072(in));
+MuHash3072& MuHash3072::Insert(std::span<const unsigned char> in) noexcept
+{
+    Insert(ToNum3072(in));
+    return *this;
+}
+MuHash3072& MuHash3072::Insert(const Num3072& in) noexcept
+{
+    m_numerator.Multiply(in);
     return *this;
 }
 
-MuHash3072& MuHash3072::Remove(std::span<const unsigned char> in) noexcept {
-    m_denominator.Multiply(ToNum3072(in));
+MuHash3072& MuHash3072::Remove(std::span<const unsigned char> in) noexcept
+{
+    Remove(ToNum3072(in));
+    return *this;
+}
+MuHash3072& MuHash3072::Remove(const Num3072& in) noexcept
+{
+    m_denominator.Multiply(in);
     return *this;
 }
