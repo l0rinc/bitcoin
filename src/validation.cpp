@@ -2139,7 +2139,7 @@ void UpdateCoinsIBDBooster(const CTransaction& tx, CCoinsViewCache& inputs, cons
 
     // add outputs
     const Txid& txid = tx.GetHash();
-    for (size_t i = 0; i < tx.vout.size(); ++i) {
+    for (uint32_t i{0}; i < tx.vout.size(); ++i) {
         // if we already know it gets spent up until the final booster block: add it to ibd booster muhash
         if (!g_ibd_booster_hints.GetNextBit()) {
             if (!tx.vout[i].scriptPubKey.IsUnspendable()) {
@@ -2147,10 +2147,10 @@ void UpdateCoinsIBDBooster(const CTransaction& tx, CCoinsViewCache& inputs, cons
                 ChaCha20Aligned{MakeByteSpan(hashed_in)}.Keystream(bytes);
                 g_ibd_booster_muhash.Insert(Num3072{tmp});
             }
-        // if we know it ends up in the final booster block UTXO set: add it as usual
+        // if we know it ends up in the final booster block UTXO set: add it similarly to how AssumeUTXO does it
         } else {
-            bool overwrite = tx_is_coinbase;
-            inputs.AddCoin(COutPoint(txid, i), Coin(tx.vout[i], block_index.nHeight, tx_is_coinbase), overwrite);
+            assert(!tx.vout[i].scriptPubKey.IsUnspendable());
+            inputs.EmplaceCoinInternalDANGER(COutPoint{txid, i}, Coin{tx.vout[i], block_index.nHeight, tx_is_coinbase});
         }
     }
 }
