@@ -2118,7 +2118,7 @@ void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, CTxUndo &txund
     AddCoins(inputs, tx, nHeight);
 }
 
-Num3072 GetNum3072(const Txid& hash, const uint32_t n) {
+Num3072 ToNum3072(const Txid& hash, const uint32_t n) {
     unsigned char tmp[Num3072::BYTE_SIZE];
     const uint256 hashed_in{(HashWriter{} << hash << n).GetSHA256()};
     ChaCha20Aligned{MakeByteSpan(hashed_in)}.Keystream(MakeWritableByteSpan(tmp));
@@ -2135,7 +2135,7 @@ void UpdateCoinsIBDBooster(const CTransaction& tx, CCoinsViewCache& inputs, cons
     // mark inputs spent (-> simply remove them from ibd booster muhash)
     if (!tx_is_coinbase) {
         for (const CTxIn &txin : tx.vin) {
-            g_ibd_booster_muhash.Remove(GetNum3072(txin.prevout.hash, txin.prevout.n));
+            g_ibd_booster_muhash.Remove(ToNum3072(txin.prevout.hash, txin.prevout.n));
         }
     }
 
@@ -2144,11 +2144,10 @@ void UpdateCoinsIBDBooster(const CTransaction& tx, CCoinsViewCache& inputs, cons
     for (uint32_t n{0}; n < tx.vout.size(); ++n) {
         if (!g_ibd_booster_hints.GetNextBit()) {
             // if we already know it gets spent up until the final booster block: add it to ibd booster muhash
-            g_ibd_booster_muhash.Insert(GetNum3072(txid, n));
+            g_ibd_booster_muhash.Insert(ToNum3072(txid, n));
         } else {
             // if we know it ends up in the final booster block UTXO set: add it as usual
-            bool overwrite = tx_is_coinbase;
-            inputs.AddCoin(COutPoint(txid, n), Coin(tx.vout[n], block_index.nHeight, tx_is_coinbase), overwrite);
+            inputs.EmplaceCoinInternalDANGER(COutPoint{txid, i}, Coin{tx.vout[i], block_index.nHeight, tx_is_coinbase});
         }
     }
 }
