@@ -113,9 +113,11 @@ public:
 
     /* Insert a single piece of data into the set. */
     MuHash3072& Insert(std::span<const unsigned char> in) noexcept;
+    MuHash3072& Insert(const Num3072& in) noexcept;
 
     /* Remove a single piece of data from the set. */
     MuHash3072& Remove(std::span<const unsigned char> in) noexcept;
+    MuHash3072& Remove(const Num3072& in) noexcept;
 
     /* Multiply (resulting in a hash for the union of the sets) */
     MuHash3072& operator*=(const MuHash3072& mul) noexcept;
