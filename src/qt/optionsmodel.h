@@ -108,7 +108,7 @@ public:
     BitcoinUnit getDisplayUnit() const { return m_display_bitcoin_unit; }
     bool getDisplayAddresses() const { return bDisplayAddresses; }
     QString getThirdPartyTxUrls() const { return strThirdPartyTxUrls; }
-    QFont getFontForMoney() const;
+    QFont getFontForMoney(BitcoinUnit) const;
     FontChoice getFontChoiceForQRCodes() const { return m_font_qrcodes; }
     bool getPeersTabAlternatingRowColors() const { return m_peers_tab_alternating_row_colors; }
     bool getCoinControlFeatures() const { return fCoinControlFeatures; }
@@ -139,6 +139,7 @@ private:
     bool bDisplayAddresses;
     QString strThirdPartyTxUrls;
     FontChoice m_font_money{FontChoiceAbstract::EmbeddedFont};
+    bool m_font_money_supports_tonal;
     FontChoice m_font_qrcodes{FontChoiceAbstract::EmbeddedFont};
     bool m_peers_tab_alternating_row_colors;
     bool fCoinControlFeatures;

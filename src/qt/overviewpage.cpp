@@ -213,7 +213,7 @@ void OverviewPage::setClientModel(ClientModel *model)
         updateAlerts(model->getStatusBarWarnings());
 
         connect(model->getOptionsModel(), &OptionsModel::fontForMoneyChanged, this, &OverviewPage::setMonospacedFont);
-        setMonospacedFont(clientModel->getOptionsModel()->getFontForMoney());
+        setMonospacedFont(QFont() /* ignored */);
     }
 }
 
@@ -296,8 +296,10 @@ void OverviewPage::showOutOfSyncWarning(bool fShow)
     ui->labelTransactionsStatus->setVisible(fShow);
 }
 
-void OverviewPage::setMonospacedFont(const QFont& f)
+void OverviewPage::setMonospacedFont(const QFont& dummy)
 {
+    const BitcoinUnit display_unit = clientModel->getOptionsModel()->getDisplayUnit();
+    const QFont f = clientModel->getOptionsModel()->getFontForMoney(display_unit);
     ui->labelBalance->setFont(f);
     ui->labelUnconfirmed->setFont(f);
     ui->labelImmature->setFont(f);
