@@ -230,9 +230,9 @@ public:
         return nullptr;
     }
 
-    QString describe(interfaces::Node& node, interfaces::Wallet& wallet, TransactionRecord* rec, BitcoinUnit unit)
+    QString describe(interfaces::Node& node, interfaces::Wallet& wallet, TransactionRecord* rec, BitcoinUnit unit, const QFont& font_for_money)
     {
-        return TransactionDesc::toHTML(node, wallet, rec, unit);
+        return TransactionDesc::toHTML(node, wallet, rec, unit, font_for_money);
     }
 
     QString getTxHex(interfaces::Wallet& wallet, TransactionRecord *rec)
@@ -258,6 +258,7 @@ TransactionTableModel::TransactionTableModel(const PlatformStyle *_platformStyle
     priv->refreshWallet(walletModel->wallet());
 
     connect(walletModel->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &TransactionTableModel::updateDisplayUnit);
+    connect(walletModel->getOptionsModel(), &OptionsModel::fontForMoneyChanged, this, &TransactionTableModel::updateDisplayUnit);
 }
 
 TransactionTableModel::~TransactionTableModel()
@@ -548,6 +549,11 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
             return qint64(rec->credit + rec->debit);
         } // no default case, so the compiler can warn about missing cases
         assert(false);
+    case Qt::FontRole:
+        if (column == Amount) {
+            return walletModel->getOptionsModel()->getFontForMoney();
+        }
+        break;
     case Qt::ToolTipRole:
         return formatTooltip(rec);
     case Qt::TextAlignmentRole:
@@ -577,7 +583,10 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
     case DateRole:
         return QDateTime::fromSecsSinceEpoch(rec->time);
     case LongDescriptionRole:
-        return priv->describe(walletModel->node(), walletModel->wallet(), rec, walletModel->getOptionsModel()->getDisplayUnit());
+    {
+        const QFont font_for_money = walletModel->getOptionsModel()->getFontForMoney();
+        return priv->describe(walletModel->node(), walletModel->wallet(), rec, walletModel->getOptionsModel()->getDisplayUnit(), font_for_money);
+    }
     case AddressRole:
         return QString::fromStdString(rec->address);
     case LabelRole:
