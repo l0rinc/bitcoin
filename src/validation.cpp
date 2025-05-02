@@ -2923,8 +2923,8 @@ bool Chainstate::FlushStateToDisk(
         }
 
         if (should_write || m_next_write == NodeClock::time_point::max()) {
-            constexpr auto range{DATABASE_WRITE_INTERVAL_MAX - DATABASE_WRITE_INTERVAL_MIN};
-            m_next_write = FastRandomContext().rand_uniform_delay(NodeClock::now() + DATABASE_WRITE_INTERVAL_MIN, range);
+            m_next_write = NodeClock::now() +
+                           FastRandomContext().rand_uniform_range(DATABASE_WRITE_INTERVAL_MIN, DATABASE_WRITE_INTERVAL_MAX);
         }
     }
     if (full_flush_completed && m_chainman.m_options.signals) {

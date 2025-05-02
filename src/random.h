@@ -343,6 +343,14 @@ public:
         return Dur{Impl().randrange(range.count())};
     }
 
+    /** Generate a uniform random duration in the half‑open interval [min,max). */
+    template <StdChronoDuration Dur>
+    Dur rand_uniform_range(Dur min, Dur max) noexcept
+    {
+        Assume(max > min);
+        return min + Impl().template randrange<Dur>(max - min);
+    }
+
     /**
      * Return a duration sampled from an exponential distribution
      * (https://en.wikipedia.org/wiki/Exponential_distribution). Successive events
