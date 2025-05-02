@@ -113,10 +113,11 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possi
 }
 
 void CCoinsViewCache::EmplaceCoinInternalDANGER(COutPoint&& outpoint, Coin&& coin) {
-    cachedCoinsUsage += coin.DynamicMemoryUsage();
+    const auto mem_usage{coin.DynamicMemoryUsage()};
     auto [it, inserted] = cacheCoins.try_emplace(std::move(outpoint), std::move(coin));
     if (inserted) {
         CCoinsCacheEntry::SetDirty(*it, m_sentinel);
+        cachedCoinsUsage += mem_usage;
         ++m_dirty_count;
     }
 }
@@ -245,8 +246,8 @@ bool CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &ha
                 }
                 cachedCoinsUsage += itUs->second.coin.DynamicMemoryUsage();
                 if (!itUs->second.IsDirty()) {
-                    ++m_dirty_count;
                     CCoinsCacheEntry::SetDirty(*itUs, m_sentinel);
+                    ++m_dirty_count;
                 }
                 // NOTE: It isn't safe to mark the coin as FRESH in the parent
                 // cache. If it already existed and was spent in the parent
@@ -342,7 +343,7 @@ void CCoinsViewCache::SanityCheck() const
         // Recompute cachedCoinsUsage.
         recomputed_usage += entry.coin.DynamicMemoryUsage();
 
-        // Recompute m_num_dirty;
+        // Recompute m_dirty_count.
         dirty_count += entry.IsDirty();
 
         // Count the number of entries we expect in the linked list.

@@ -88,8 +88,6 @@ using node::CBlockIndexHeightOnlyComparator;
 using node::CBlockIndexWorkComparator;
 using node::SnapshotMetadata;
 
-/** Threshold for warning when writing this many dirty cache entries to disk. */
-static constexpr size_t WARN_FLUSH_COINS_COUNT = 10'000'000;
 /** Time window to wait between writing blocks/block index and chainstate to disk.
  *  Randomize writing time inside the window to prevent a situation where the
  *  network over time settles into a few cohorts of synchronized writers.
@@ -2899,7 +2897,7 @@ bool Chainstate::FlushStateToDisk(
             }
 
             if (!CoinsTip().GetBestBlock().IsNull()) {
-                if (coins_dirty_count >= WARN_FLUSH_COINS_COUNT) LogWarning("Flushing large (%d entries) UTXO set to disk, it may take several minutes", coins_dirty_count);
+
                 LOG_TIME_MILLIS_WITH_CATEGORY(strprintf("write coins cache to disk (%d out of %d cached coins)",
                     coins_dirty_count, coins_count), BCLog::BENCH);
 

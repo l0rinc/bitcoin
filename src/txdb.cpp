@@ -25,6 +25,9 @@ static constexpr uint8_t DB_HEAD_BLOCKS{'H'};
 // Keys used in previous version that might still be found in the DB:
 static constexpr uint8_t DB_COINS{'c'};
 
+// Threshold for warning when writing this many dirty cache entries to disk.
+static constexpr size_t WARN_FLUSH_COINS_COUNT{10'000'000};
+
 bool CCoinsViewDB::NeedsUpgrade()
 {
     std::unique_ptr<CDBIterator> cursor{m_db->NewIterator()};
@@ -93,6 +96,7 @@ std::vector<uint256> CCoinsViewDB::GetHeadBlocks() const {
 bool CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlock) {
     CDBBatch batch(*m_db);
     size_t count = 0;
+    size_t dirty_count{cursor.GetDirtyCount()};
     size_t changed = 0;
     assert(!hashBlock.IsNull());
 
@@ -108,6 +112,8 @@ bool CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashB
             old_tip = old_heads[1];
         }
     }
+
+    if (dirty_count > WARN_FLUSH_COINS_COUNT) LogWarning("Flushing large (%d entries) UTXO set to disk, it may take several minutes", dirty_count);
 
     // In the first batch, mark the database as being in the middle of a
     // transition from old_tip to hashBlock.
@@ -148,9 +154,10 @@ bool CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashB
     batch.Erase(DB_HEAD_BLOCKS);
     batch.Write(DB_BEST_BLOCK, hashBlock);
 
-    LogDebug(BCLog::COINDB, "Writing final batch of %.2f MiB\n", batch.ApproximateSize() * (1.0 / 1048576.0));
+    LogDebug(BCLog::COINDB, "Writing final batch of %.2f MiB", batch.ApproximateSize() * (1.0 / 1048576.0));
     bool ret = m_db->WriteBatch(batch);
-    LogDebug(BCLog::COINDB, "Committed %u changed transaction outputs (out of %u) to coin database...\n", (unsigned int)changed, (unsigned int)count);
+    assert(changed == dirty_count); // TODO remove `changed` after all scenarios pass
+    LogDebug(BCLog::COINDB, "Committed %u changed transaction outputs (out of %u) to coin database...", (unsigned int)dirty_count, (unsigned int)count);
     return ret;
 }
 
