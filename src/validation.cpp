@@ -2922,7 +2922,8 @@ bool Chainstate::FlushStateToDisk(
             }
         }
 
-        if (should_write || m_next_write == NodeClock::time_point::max()) {
+        const bool first_flush{m_next_write == NodeClock::time_point::max()};
+        if (first_flush || should_write) {
             m_next_write = NodeClock::now() +
                            FastRandomContext().rand_uniform_range(DATABASE_WRITE_INTERVAL_MIN, DATABASE_WRITE_INTERVAL_MAX);
         }
