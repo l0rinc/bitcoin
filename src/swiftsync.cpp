@@ -7,59 +7,48 @@
 #include <swiftsync.h>
 #include <util/fs.h>
 
-#include <exception>
 #include <string>
 
 void SwiftSyncHints::Load(const std::string& filename)
 {
     FILE* file = fsbridge::fopen(fs::u8path(filename), "rb");
     AutoFile hints_file(file);
-    int block_height = 0;
+
+    // TODO add number of blocks at the beginning of the file to be able to presize block_outputs_bitmap properly
 
     while (true) {
-        uint16_t num_bits;
-        hints_file >> num_bits;
-        if (num_bits == 0) break; // end-marker
+        uint16_t count;
+        hints_file >> count;
+        if (count == 0) break; // end-marker
 
-        std::vector<bool> bitmap;
-        uint8_t byte;
-        // read full bytes
-        for (int i = 0; i < num_bits / 8; i++) {
-            hints_file >> byte;
-            for (int bit = 0; bit < 8; bit++) {
-                bitmap.push_back((byte & (1 << bit)) != 0);
-            }
-        }
-        // read remaining bits, if there are any
-        int remaining_bits = num_bits % 8;
-        if (remaining_bits > 0) {
-            hints_file >> byte;
-            for (int bit = 0; bit < remaining_bits; bit++) {
-                bitmap.push_back((byte & (1 << bit)) != 0);
-            }
-        }
-        block_outputs_bitmap[block_height] = bitmap;
-        block_height++;
-        if (block_height % 20000 == 0) {
-            LogInfo("SwiftSync hints bitmap: loaded for %d blocks...\n", block_height);
+        block_outputs_bitset.emplace_back(count);
+        hints_file.read(MakeWritableByteSpan(block_outputs_bitset.back().spent));
+
+        if (!(block_outputs_bitset.size() % 20'000)) {
+            LogInfo("SwiftSync hints bitmap: loaded %zu blocks…", block_outputs_bitset.size());
         }
     }
 
-    terminal_block_height = block_height-1;
+    terminal_height = block_outputs_bitset.size() - 1;
     is_loaded = true;
 }
 
-void SwiftSyncHints::SetCurrentBlockHeight(int block_height)
+void SwiftSyncHints::SetCurrentBlockHeight(int height)
 {
     // TODO: don't crash is hints for certain height are not available
-    assert(block_outputs_bitmap.contains(block_height));
-    current_bitmap = &block_outputs_bitmap[block_height];
+    assert(is_loaded);
+    assert(height >= 0 && height <= terminal_height);
+    current_bitset = &block_outputs_bitset.at(height);
     next_bit_pos = 0;
 }
 
 bool SwiftSyncHints::GetNextBit()
 {
-    bool result = current_bitmap->at(next_bit_pos);
-    next_bit_pos++;
-    return result;
+    assert(current_bitset);
+    if (next_bit_pos >= current_bitset->count) throw std::out_of_range{""};
+
+    const int vector_index{next_bit_pos >> 3};
+    const int bit_index{next_bit_pos & 7};
+    ++next_bit_pos;
+    return (current_bitset->spent.at(vector_index) >> bit_index) & 1U;
 }
