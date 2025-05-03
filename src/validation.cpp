@@ -2102,12 +2102,12 @@ void UpdateCoinsSwiftSync(const CTransaction& tx, CCoinsViewCache& inputs, const
     bool tx_is_coinbase = tx.IsCoinBase();
 
     // ignore txs that are overwritten later (duplicate txids)
-    if (IsBIP30Unspendable(block_index) && tx_is_coinbase) return;
+    if (tx_is_coinbase && IsBIP30Unspendable(block_index.GetBlockHash(), block_index.nHeight)) return;
 
     // mark inputs spent (-> simply remove them from swiftsync aggregate hash)
     if (!tx_is_coinbase) {
         for (const CTxIn &txin : tx.vin) {
-            g_swiftsync_aggregate_hash ^= SipHashUint256Extra(k0, k1, txin.prevout.hash, txin.prevout.n);
+            g_swiftsync_aggregate_hash ^= SipHashUint256Extra(k0, k1, txin.prevout.hash.ToUint256(), txin.prevout.n);
         }
     }
     // add outputs
@@ -2118,7 +2118,7 @@ void UpdateCoinsSwiftSync(const CTransaction& tx, CCoinsViewCache& inputs, const
             inputs.EmplaceCoinInternalDANGER(COutPoint(txid, n), Coin(tx.vout[n], block_index.nHeight, tx_is_coinbase));
         } else if (!tx.vout[n].scriptPubKey.IsUnspendable()) {
             // if we already know it gets spent up until the terminal swiftsync block: add it to swiftsync aggregate hash
-            g_swiftsync_aggregate_hash ^= SipHashUint256Extra(k0, k1, txid, n);
+            g_swiftsync_aggregate_hash ^= SipHashUint256Extra(k0, k1, txid.ToUint256(), n);
         }
     }
 }

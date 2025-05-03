@@ -12,7 +12,7 @@ static void SwiftSyncLoadBench(benchmark::Bench& bench)
 {
     // TODO generate a fake swiftsync file
     // SwiftSyncHints hints;
-    // hints.Load(fs::PathToString("/Users/lorinc/Dev/swiftsync-888888.bin"));
+    // hints.Load(fs::PathToString("/Users/lorinc/Dev/swiftsync-888888_new.bin"));
     // assert(hints.IsLoaded() && hints.GetTerminalBlockHeight() == 888'888);
     //
     // bench.batch(hints.GetTerminalBlockHeight()).unit("blocks").run([&] {
