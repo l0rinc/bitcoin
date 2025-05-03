@@ -52,6 +52,7 @@ add_executable(bench_bitcoin
   strencodings.cpp
   txgraph.cpp
   txorphanage.cpp
+  swiftsyncbench.cpp
   util_time.cpp
   verify_script.cpp
 )
