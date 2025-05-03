@@ -17,13 +17,14 @@ BOOST_AUTO_TEST_CASE(bitmap_roundtrip)
     const fs::path path{m_args.GetDataDirBase() / "swiftsync_bitmap_test.dat"};
     constexpr uint32_t NUM_BLOCKS{10};
 
-    std::vector<std::vector<bool>> original(NUM_BLOCKS);
+    std::vector<std::vector<bool>> original(1 + NUM_BLOCKS);
 
     // --- write file --------------------------------------------------------
     {
         AutoFile f{fsbridge::fopen(path, "wb")};
+        f << NUM_BLOCKS;
 
-        for (uint32_t h{0}; h < NUM_BLOCKS; ++h) {
+        for (uint32_t h{0}; h <= NUM_BLOCKS; ++h) {
             const uint16_t bits = 1 + m_rng.randrange(200);
             original[h].resize(bits);
 
@@ -39,9 +40,6 @@ BOOST_AUTO_TEST_CASE(bitmap_roundtrip)
                 f << byte;
             }
         }
-
-        uint16_t end_marker = 0;
-        f << end_marker;
     }
 
     // --- read & verify -----------------------------------------------------
@@ -50,14 +48,15 @@ BOOST_AUTO_TEST_CASE(bitmap_roundtrip)
         hints.Load(fs::PathToString(path));
 
         BOOST_CHECK(hints.IsLoaded());
-        BOOST_CHECK_EQUAL(hints.GetTerminalBlockHeight(), NUM_BLOCKS - 1);
+        BOOST_CHECK_EQUAL(hints.GetTerminalBlockHeight(), NUM_BLOCKS);
 
-        for (uint32_t h{0}; h < NUM_BLOCKS; ++h) {
+        for (uint32_t h{0}; h <= NUM_BLOCKS; ++h) {
             hints.SetCurrentBlockHeight(h);
             for (size_t i = 0; i < original[h].size(); ++i) {
+                BOOST_CHECK(hints.HasNextBit());
                 BOOST_CHECK_EQUAL(hints.GetNextBit(), original[h][i]);
             }
-            // After the expected number of bits a further call MUST throw.
+            BOOST_CHECK(!hints.HasNextBit());
             BOOST_CHECK_THROW(hints.GetNextBit(), std::out_of_range);
         }
     }

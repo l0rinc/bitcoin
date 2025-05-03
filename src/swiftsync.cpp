@@ -14,22 +14,23 @@ void SwiftSyncHints::Load(const std::string& filename)
     FILE* file = fsbridge::fopen(fs::u8path(filename), "rb");
     AutoFile hints_file(file);
 
-    // TODO add number of blocks at the beginning of the file to be able to presize block_outputs_bitmap properly
+    uint32_t blocks;
+    hints_file >> blocks;
+    block_outputs_bitset.reserve(1 + blocks);
 
-    while (true) {
-        uint16_t count;
+    uint16_t count;
+    for (uint32_t i{0}; i <= blocks; ++i) {
         hints_file >> count;
-        if (count == 0) break; // end-marker
-
         block_outputs_bitset.emplace_back(count);
         hints_file.read(MakeWritableByteSpan(block_outputs_bitset.back().spent));
 
-        if (!(block_outputs_bitset.size() % 20'000)) {
+        if (!(block_outputs_bitset.size() % 100'000)) {
             LogInfo("SwiftSync hints bitmap: loaded %zu blocks…", block_outputs_bitset.size());
         }
     }
+    // assert(hints_file.feof()); // TODO generate new file first
 
-    terminal_height = block_outputs_bitset.size() - 1;
+    terminal_height = blocks;
     is_loaded = true;
 }
 
