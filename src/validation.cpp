@@ -3636,25 +3636,13 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
                 m_chainman.MaybeRebalanceCaches();
             }
 
-            // Write changes periodically to disk, after relay.
-            if (!FlushStateToDisk(state, FlushStateMode::PERIODIC)) {
-                return false;
-            }
-
-            reached_target = ReachedTarget();
+        // Write changes periodically to disk, after relay.
+        if (!FlushStateToDisk(state, FlushStateMode::PERIODIC)) {
+            return false;
         }
 
-        if (reached_target) {
-            // Chainstate has reached the target block, so exit.
-            //
-            // Restart indexes so indexes can resync and index new blocks after
-            // the target block.
-            //
-            // This cannot be done while holding cs_main (within
-            // MaybeValidateSnapshot) or a cs_main deadlock will occur.
-            if (m_chainman.snapshot_download_completed) {
-                m_chainman.snapshot_download_completed();
-            }
+        if (WITH_LOCK(::cs_main, return m_disabled)) {
+            // Background chainstate has reached the snapshot base block, so exit.
             break;
         }
 
@@ -3664,8 +3652,6 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
         // that the best block hash is non-null.
         if (m_chainman.m_interrupt) break;
     } while (pindexNewTip != pindexMostWork);
-
-    m_chainman.CheckBlockIndex();
 
     return true;
 }
