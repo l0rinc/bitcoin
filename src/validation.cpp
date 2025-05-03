@@ -115,8 +115,8 @@ const std::vector<std::string> CHECKLEVEL_DOC {
  * */
 static constexpr int PRUNE_LOCK_BUFFER{10};
 
-static arith_uint256 g_swiftsync_aggregate_hash;
-static HashWriter g_swiftsync_salted_hash_writer;
+// static arith_uint256 g_swiftsync_aggregate_hash;
+// static HashWriter g_swiftsync_salted_hash_writer;
 SwiftSyncHints g_swiftsync_hints;
 
 TRACEPOINT_SEMAPHORE(validation, block_connected);
@@ -2130,20 +2130,20 @@ void UpdateCoinsSwiftSync(const CTransaction& tx, CCoinsViewCache& inputs, const
 
     // mark inputs spent (-> simply remove them from swiftsync aggregate hash)
     if (!tx_is_coinbase) {
-        for (const CTxIn &txin : tx.vin) {
-            auto coin_hash = (HashWriter(g_swiftsync_salted_hash_writer) << txin.prevout).GetSHA256();
-            g_swiftsync_aggregate_hash -= UintToArith256(coin_hash);
-        }
+        // for (const CTxIn &txin : tx.vin) {
+        //     auto coin_hash = (HashWriter(g_swiftsync_salted_hash_writer) << txin.prevout).GetSHA256();
+        //     g_swiftsync_aggregate_hash -= UintToArith256(coin_hash);
+        // }
     }
     // add outputs
     const Txid& txid = tx.GetHash();
     for (size_t i = 0; i < tx.vout.size(); ++i) {
         // if we already know it gets spent up until the terminal swiftsync block: add it to swiftsync aggregate hash
         if (!g_swiftsync_hints.GetNextBit()) {
-            if (!tx.vout[i].scriptPubKey.IsUnspendable()) {
-                auto coin_hash = (HashWriter(g_swiftsync_salted_hash_writer) << COutPoint(txid, i)).GetSHA256();
-                g_swiftsync_aggregate_hash += UintToArith256(coin_hash);
-            }
+            // if (!tx.vout[i].scriptPubKey.IsUnspendable()) {
+            //     auto coin_hash = (HashWriter(g_swiftsync_salted_hash_writer) << COutPoint(txid, i)).GetSHA256();
+            //     g_swiftsync_aggregate_hash += UintToArith256(coin_hash);
+            // }
         // if we know it ends up in the terminal swiftsync block UTXO set: add it as usual
         } else {
             bool overwrite = tx_is_coinbase;
@@ -2496,10 +2496,10 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // Special case for the genesis block, skipping connection of its transactions
     // (its coinbase is unspendable)
     if (block_hash == params.GetConsensus().hashGenesisBlock) {
-        g_swiftsync_aggregate_hash = arith_uint256{0};
-        std::array<std::byte, 32> swiftsync_salt;
-        FastRandomContext{}.fillrand(swiftsync_salt);
-        g_swiftsync_salted_hash_writer.write(swiftsync_salt);
+        // g_swiftsync_aggregate_hash = arith_uint256{0};
+        // std::array<std::byte, 32> swiftsync_salt;
+        // FastRandomContext{}.fillrand(swiftsync_salt);
+        // g_swiftsync_salted_hash_writer.write(swiftsync_salt);
 
         if (!fJustCheck)
             view.SetBestBlock(pindex->GetBlockHash());
@@ -2744,14 +2744,14 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     }
 
     if (pindex->nHeight == g_swiftsync_hints.GetTerminalBlockHeight()) {
-        if (g_swiftsync_aggregate_hash == 0) {
-            LogInfo("*** SwiftSync: aggregate hash check at terminal block height %d succeeded. ***\n", pindex->nHeight);
-        } else {
-            // TODO: find a proper way to signal this error; strictly speaking it's not a
-            // block validation error, most likely the given hints data file was invalid
-            state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "swiftsync-aggregate-hash-not-zero-at-terminal-block",
-                          "fails the aggregate hash check (should be zero at terminal block!)");
-        }
+        // if (g_swiftsync_aggregate_hash == 0) {
+        //     LogInfo("*** SwiftSync: aggregate hash check at terminal block height %d succeeded. ***\n", pindex->nHeight);
+        // } else {
+        //     // TODO: find a proper way to signal this error; strictly speaking it's not a
+        //     // block validation error, most likely the given hints data file was invalid
+        //     state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "swiftsync-aggregate-hash-not-zero-at-terminal-block",
+        //                   "fails the aggregate hash check (should be zero at terminal block!)");
+        // }
     }
 
     const auto time_3{SteadyClock::now()};
