@@ -3591,14 +3591,14 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
         // caused an assert() failure during interrupt in such cases as the UTXO DB flushing checks
         // that the best block hash is non-null.
         if (m_chainman.m_interrupt) break;
+
+        // Write changes periodically to disk, after relay.
+        if (!FlushStateToDisk(state, FlushStateMode::PERIODIC)) {
+            return false;
+        }
     } while (pindexNewTip != pindexMostWork);
 
     m_chainman.CheckBlockIndex();
-
-    // Write changes periodically to disk, after relay.
-    if (!FlushStateToDisk(state, FlushStateMode::PERIODIC)) {
-        return false;
-    }
 
     return true;
 }
