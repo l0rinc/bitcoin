@@ -5,26 +5,36 @@
 #ifndef BITCOIN_SWIFTSYNC_H
 #define BITCOIN_SWIFTSYNC_H
 
-#include <map>
-#include <string>
 #include <vector>
+#include <string>
+#include <cstdint>
 
 class SwiftSyncHints
 {
 public:
-    void Load(const std::string &filename);
-    bool IsLoaded() const { return is_loaded; }
-    int  GetTerminalBlockHeight() const { return terminal_block_height; }
+    struct BlockHints
+    {
+        std::vector<uint8_t> spent;
+        uint16_t count;
+
+        explicit BlockHints(uint16_t c) : spent((c + 7) / 8), count(c) {}
+    };
+
+    void Load(const std::string& filename);
+    bool IsLoaded() const noexcept { return is_loaded; }
+    int GetTerminalBlockHeight() const noexcept { return terminal_height; }
+    int GetNextBitPos() const noexcept { return next_bit_pos; }
     void SetCurrentBlockHeight(int block_height);
+
+    bool HasNextBit() const noexcept { return next_bit_pos < current_bitset->count; }
     bool GetNextBit();
-    int  GetNextBitPos() { return next_bit_pos; }
 
 private:
     bool is_loaded{false};
-    int terminal_block_height;
-    std::vector<bool> *current_bitmap;
-    int next_bit_pos;
-    std::map<int, std::vector<bool>> block_outputs_bitmap;
+    int terminal_height{-1};
+    const BlockHints* current_bitset{nullptr};
+    int next_bit_pos{0};
+    std::vector<BlockHints> block_outputs_bitset;
 };
 
 #endif
