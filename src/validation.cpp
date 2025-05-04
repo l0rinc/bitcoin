@@ -2556,6 +2556,9 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // edge case when manipulating the UTXO and it would be simpler not to have
     // another edge case to deal with.
 
+    bool use_swiftsync = g_swiftsync_hints.IsLoaded()
+                         && pindex->nHeight <= g_swiftsync_hints.GetTerminalBlockHeight();
+
     // testnet3 has no blocks before the BIP34 height with indicated heights
     // post BIP34 before approximately height 486,000,000. After block
     // 1,983,702 testnet3 starts doing unnecessary BIP30 checking again.
@@ -2567,7 +2570,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // TODO: Remove BIP30 checking from block height 1,983,702 on, once we have a
     // consensus change that ensures coinbases at those heights cannot
     // duplicate earlier coinbases.
-    if (fEnforceBIP30 || pindex->nHeight >= BIP34_IMPLIES_BIP30_LIMIT) {
+    if (!use_swiftsync && (fEnforceBIP30 || pindex->nHeight >= BIP34_IMPLIES_BIP30_LIMIT)) {
         for (const auto& tx : block.vtx) {
             for (size_t o = 0; o < tx->vout.size(); o++) {
                 if (view.HaveCoin(COutPoint(tx->GetHash(), o))) {
@@ -2615,8 +2618,6 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     CAmount nFees = 0;
     int nInputs = 0;
     int64_t nSigOpsCost = 0;
-    bool use_swiftsync = g_swiftsync_hints.IsLoaded() &&
-        pindex->nHeight <= g_swiftsync_hints.GetTerminalBlockHeight();
     if (use_swiftsync) {
         g_swiftsync_hints.SetCurrentBlockHeight(pindex->nHeight);
     }
