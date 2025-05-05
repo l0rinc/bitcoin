@@ -564,6 +564,7 @@ public:
 
     bool IsPayToScriptHash() const noexcept
     {
+        // Extra-fast test for pay-to-script-hash CScripts:
         return size() == 23 &&
                front() == OP_HASH160 &&
                (*this)[1] == 0x14 &&
