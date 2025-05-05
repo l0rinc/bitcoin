@@ -158,6 +158,12 @@ std::string GetOpName(opcodetype opcode)
 
 unsigned int CScript::GetSigOpCount(bool fAccurate) const
 {
+    if (IsPayToPubKeyHash()) {
+        return 1;
+    } else if (IsPayToScriptHash() || IsPayToWitnessPubKeyHash() || IsPayToTaproot()) {
+        return 0;
+    }
+
     unsigned int n = 0;
     const_iterator pc = begin();
     opcodetype lastOpcode = OP_INVALIDOPCODE;
@@ -221,6 +227,17 @@ bool CScript::IsPayToAnchor(int version, const std::vector<unsigned char>& progr
         program[1] == 0x73;
 }
 
+bool CScript::IsPayToPubKeyHash() const
+{
+    // Extra-fast test for pay-to-pubkey-hash CScripts:
+    return (this->size() == 25 &&
+            (*this)[0] == OP_DUP &&
+            (*this)[1] == OP_HASH160 &&
+            (*this)[2] == 0x14 &&
+            (*this)[23] == OP_EQUALVERIFY &&
+            (*this)[24] == OP_CHECKSIG);
+}
+
 bool CScript::IsPayToScriptHash() const
 {
     // Extra-fast test for pay-to-script-hash CScripts:
@@ -228,6 +245,22 @@ bool CScript::IsPayToScriptHash() const
             (*this)[0] == OP_HASH160 &&
             (*this)[1] == 0x14 &&
             (*this)[22] == OP_EQUAL);
+}
+
+bool CScript::IsPayToWitnessPubKeyHash() const
+{
+    // Extra-fast test for pay-to-witness-pubkey-hash CScripts:
+    return (this->size() == 22 &&
+            (*this)[0] == OP_0 &&
+            (*this)[1] == 0x14);
+}
+
+bool CScript::IsPayToTaproot() const
+{
+    // Extra-fast test for pay-to-taproot CScripts:
+    return (this->size() == 34 &&
+            (*this)[0] == OP_1 &&
+            (*this)[1] == 0x20);
 }
 
 bool CScript::IsPayToWitnessScriptHash() const

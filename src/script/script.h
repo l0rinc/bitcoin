@@ -552,7 +552,10 @@ public:
      */
     static bool IsPayToAnchor(int version, const std::vector<unsigned char>& program);
 
+    bool IsPayToPubKeyHash() const;
     bool IsPayToScriptHash() const;
+    bool IsPayToWitnessPubKeyHash() const;
+    bool IsPayToTaproot() const;
     bool IsPayToWitnessScriptHash() const;
     bool IsWitnessProgram(int& version, std::vector<unsigned char>& program) const;
 
