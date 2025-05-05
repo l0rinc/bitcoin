@@ -552,8 +552,12 @@ public:
      */
     static bool IsPayToAnchor(int version, const std::vector<unsigned char>& program);
 
+    bool IsPayToPubKeyHash() const;
     bool IsPayToScriptHash() const;
+    bool IsPayToWitnessPubKeyHash() const;
+    bool IsPayToTaproot() const;
     bool IsPayToWitnessScriptHash() const;
+    bool IsOpReturn() const;
     bool IsWitnessProgram(int& version, std::vector<unsigned char>& program) const;
 
     /** Called by IsStandardTx and P2SH/BIP62 VerifyScript (which makes it consensus-critical). */

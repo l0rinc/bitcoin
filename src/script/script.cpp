@@ -3,6 +3,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include "core_io.h"
+
 #include <script/script.h>
 
 #include <crypto/common.h>
@@ -158,22 +160,35 @@ std::string GetOpName(opcodetype opcode)
 
 unsigned int CScript::GetSigOpCount(bool fAccurate) const
 {
+    switch (size()) {
+    case 0: return 0;
+    case 22: if (IsPayToWitnessPubKeyHash()) return 0; else break;
+    case 23: if (IsPayToScriptHash()) return 0; else break;
+    case 25: if (IsPayToPubKeyHash()) return 1; else break;
+    case 34: if (IsPayToTaproot() || IsPayToWitnessScriptHash()) return 0; else break;
+    }
+    if (IsOpReturn()) return 0;
+
+    // std::cout << "this->size() " << this->size() << std::endl;
+    // std::cout << "script: " << ScriptToAsmStr(*this) << std::endl;
+
     unsigned int n = 0;
     const_iterator pc = begin();
+    const_iterator op_end = end();
     opcodetype lastOpcode = OP_INVALIDOPCODE;
-    while (pc < end())
+    while (pc < op_end)
     {
         opcodetype opcode;
         if (!GetOp(pc, opcode))
             break;
-        if (opcode == OP_CHECKSIG || opcode == OP_CHECKSIGVERIFY)
-            n++;
-        else if (opcode == OP_CHECKMULTISIG || opcode == OP_CHECKMULTISIGVERIFY)
-        {
-            if (fAccurate && lastOpcode >= OP_1 && lastOpcode <= OP_16)
+        if (opcode == OP_CHECKSIG || opcode == OP_CHECKSIGVERIFY) {
+            ++n;
+        } else if (opcode == OP_CHECKMULTISIG || opcode == OP_CHECKMULTISIGVERIFY) {
+            if (fAccurate && lastOpcode >= OP_1 && lastOpcode <= OP_16) {
                 n += DecodeOP_N(lastOpcode);
-            else
+            } else {
                 n += MAX_PUBKEYS_PER_MULTISIG;
+            }
         }
         lastOpcode = opcode;
     }
@@ -221,6 +236,17 @@ bool CScript::IsPayToAnchor(int version, const std::vector<unsigned char>& progr
         program[1] == 0x73;
 }
 
+bool CScript::IsPayToPubKeyHash() const
+{
+    // Extra-fast test for pay-to-pubkey-hash CScripts:
+    return (this->size() == 25 &&
+            (*this)[0] == OP_DUP &&
+            (*this)[1] == OP_HASH160 &&
+            (*this)[2] == 0x14 &&
+            (*this)[23] == OP_EQUALVERIFY &&
+            (*this)[24] == OP_CHECKSIG);
+}
+
 bool CScript::IsPayToScriptHash() const
 {
     // Extra-fast test for pay-to-script-hash CScripts:
@@ -230,12 +256,35 @@ bool CScript::IsPayToScriptHash() const
             (*this)[22] == OP_EQUAL);
 }
 
+bool CScript::IsPayToWitnessPubKeyHash() const
+{
+    // Extra-fast test for pay-to-witness-pubkey-hash CScripts:
+    return (this->size() == 22 &&
+            (*this)[0] == OP_0 &&
+            (*this)[1] == 0x14);
+}
+
+bool CScript::IsPayToTaproot() const
+{
+    // Extra-fast test for pay-to-taproot CScripts:
+    return (this->size() == 34 &&
+            (*this)[0] == OP_1 &&
+            (*this)[1] == 0x20);
+}
+
 bool CScript::IsPayToWitnessScriptHash() const
 {
     // Extra-fast test for pay-to-witness-script-hash CScripts:
     return (this->size() == 34 &&
             (*this)[0] == OP_0 &&
             (*this)[1] == 0x20);
+}
+
+bool CScript::IsOpReturn() const
+{
+    // Extra-fast test for OP_RETURN CScripts:
+    return (this->size() &&
+            (*this)[0] == OP_RETURN);
 }
 
 // A witness program is any valid CScript that consists of a 1-byte push opcode
@@ -306,10 +355,8 @@ bool CScript::HasValidOps() const
 bool GetScriptOp(CScriptBase::const_iterator& pc, CScriptBase::const_iterator end, opcodetype& opcodeRet, std::vector<unsigned char>* pvchRet)
 {
     opcodeRet = OP_INVALIDOPCODE;
-    if (pvchRet)
-        pvchRet->clear();
-    if (pc >= end)
-        return false;
+    if (pvchRet) pvchRet->clear();
+    if (pc >= end) return false;
 
     // Read instruction
     if (end - pc < 1)
