@@ -18,6 +18,7 @@
 #include <walletinitinterface.h>
 
 #include <algorithm>
+#include <array>
 #include <fstream>
 #include <iterator>
 #include <map>
@@ -61,8 +62,14 @@ static UniValue JSONErrorReply(UniValue objError, const JSONRPCRequest& jreq, HT
 
 //This function checks username and password against -rpcauth
 //entries from config file.
-static bool CheckUserAuthorized(std::string_view user, std::string_view pass)
+static bool CheckUserAuthorized(std::string_view user_pass)
 {
+    if (user_pass.find(':') == std::string::npos) {
+        return false;
+    }
+    std::string_view user = user_pass.substr(0, user_pass.find(':'));
+    std::string_view pass = user_pass.substr(user_pass.find(':') + 1);
+
     for (const auto& fields : g_rpcauth) {
         if (!TimingResistantEqual(std::string_view(fields[0]), user)) {
             continue;
@@ -92,14 +99,10 @@ static bool RPCAuthorized(const std::string& strAuth, std::string& strAuthUserna
     if (!userpass_data) return false;
     strUserPass.assign(userpass_data->begin(), userpass_data->end());
 
-    size_t colon_pos = strUserPass.find(':');
-    if (colon_pos == std::string::npos) {
-        return false; // Invalid basic auth.
-    }
-    std::string user = strUserPass.substr(0, colon_pos);
-    std::string pass = strUserPass.substr(colon_pos + 1);
-    strAuthUsernameOut = user;
-    return CheckUserAuthorized(user, pass);
+    if (strUserPass.find(':') != std::string::npos)
+        strAuthUsernameOut = strUserPass.substr(0, strUserPass.find(':'));
+
+    return CheckUserAuthorized(strUserPass);
 }
 
 UniValue ExecuteHTTPRPC(const UniValue& valRequest, JSONRPCRequest& jreq, HTTPStatusCode& status)
@@ -249,8 +252,7 @@ static void HTTPReq_JSONRPC(const std::any& context, HTTPRequest* req)
 
 static bool InitRPCAuthentication()
 {
-    std::string user;
-    std::string pass;
+    std::string user_colon_pass;
 
     if (gArgs.GetArg("-rpcpassword", "") == "")
     {
@@ -265,6 +267,8 @@ static bool InitRPCAuthentication()
             cookie_perms = *perm_opt;
         }
 
+        std::string user;
+        std::string pass;
         switch (GenerateAuthCookie(cookie_perms, user, pass)) {
         case AuthCookieResult::Error:
             return false;
@@ -273,17 +277,25 @@ static bool InitRPCAuthentication()
             break;
         case AuthCookieResult::Ok:
             LogInfo("Using random cookie authentication.");
+            user_colon_pass = user + ":" + pass;
             break;
         }
     } else {
         LogInfo("Using rpcuser/rpcpassword authentication.");
         LogWarning("The use of rpcuser/rpcpassword is less secure, because credentials are configured in plain text. It is recommended that locally-run instances switch to cookie-based auth, or otherwise to use hashed rpcauth credentials. See share/rpcauth in the source directory for more information.");
-        user = gArgs.GetArg("-rpcuser", "");
-        pass = gArgs.GetArg("-rpcpassword", "");
+        user_colon_pass = gArgs.GetArg("-rpcuser", "") + ":" + gArgs.GetArg("-rpcpassword", "");
     }
 
     // If there is a plaintext credential, hash it with a random salt before storage.
-    if (!user.empty() || !pass.empty()) {
+    if (!user_colon_pass.empty()) {
+        std::vector<std::string> fields{SplitString(user_colon_pass, ':')};
+        if (fields.size() != 2) {
+            LogError("Unable to parse RPC credentials. The configured rpcuser or rpcpassword cannot contain a \":\".");
+            return false;
+        }
+        const std::string& user = fields[0];
+        const std::string& pass = fields[1];
+
         // Generate a random 16 byte hex salt.
         std::array<unsigned char, 16> raw_salt;
         GetStrongRandBytes(raw_salt);
