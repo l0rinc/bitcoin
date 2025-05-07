@@ -9,8 +9,8 @@
 #include <boost/test/unit_test.hpp>
 
 // Taken from validation.cpp
-static constexpr auto DATABASE_WRITE_INTERVAL_MIN{50min};
-static constexpr auto DATABASE_WRITE_INTERVAL_MAX{70min};
+static constexpr auto DATABASE_WRITE_INTERVAL_MIN{90min};
+static constexpr auto DATABASE_WRITE_INTERVAL_MAX{110min};
 
 BOOST_AUTO_TEST_SUITE(chainstate_write_tests)
 
