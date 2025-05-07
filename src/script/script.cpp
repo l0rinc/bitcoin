@@ -181,12 +181,12 @@ DecodePushData(const opcodetype opcode,
     case 4: data_bytes = ReadLE32(ptr); break;
     default: data_bytes = opcode; break;
     }
-    if (size_bytes + data_bytes > remaining) return {size_bytes, DECODE_ERR};
+    if (data_bytes > remaining || size_bytes + data_bytes > remaining) return {size_bytes, DECODE_ERR};
 
     return {size_bytes, data_bytes};
 }
 
-unsigned int CScript::GetSigOpCount(bool fAccurate) const
+unsigned int CScript::GetLegacySigOpCount(bool fAccurate) const
 {
     switch (size()) {
     case 0: return 0;
@@ -194,6 +194,8 @@ unsigned int CScript::GetSigOpCount(bool fAccurate) const
     case 23: if (IsPayToScriptHash()) return 0; else break;
     case 25: if (IsPayToPubKeyHash()) return 1; else break;
     case 34: if (IsPayToTaproot() || IsPayToWitnessScriptHash()) return 0; else break;
+    case 35: if (IsCompressedPayToPubKey()) return 1; else break;
+    case 67: if (IsUncompressedPayToPubKey()) return 1; else break;
     }
     if (IsOpReturn()) return 0;
 
@@ -221,7 +223,7 @@ unsigned int CScript::GetSigOpCount(bool fAccurate) const
                 n += MAX_PUBKEYS_PER_MULTISIG;
             }
         }
-        lastOpcode = opcode;
+        if (fAccurate) lastOpcode = opcode;
     }
     return n;
 }
@@ -229,7 +231,7 @@ unsigned int CScript::GetSigOpCount(bool fAccurate) const
 unsigned int CScript::GetSigOpCount(const CScript& scriptSig) const
 {
     if (!IsPayToScriptHash())
-        return GetSigOpCount(true);
+        return GetLegacySigOpCount(true);
 
     // This is a pay-to-script-hash scriptPubKey;
     // get the last item that the scriptSig
@@ -247,7 +249,7 @@ unsigned int CScript::GetSigOpCount(const CScript& scriptSig) const
 
     /// ... and return its opcount:
     CScript subscript(vData.begin(), vData.end());
-    return subscript.GetSigOpCount(true);
+    return subscript.GetLegacySigOpCount(true);
 }
 
 bool CScript::IsPayToAnchor() const
@@ -265,57 +267,6 @@ bool CScript::IsPayToAnchor(int version, const std::vector<unsigned char>& progr
         program.size() == 2 &&
         program[0] == 0x4e &&
         program[1] == 0x73;
-}
-
-bool CScript::IsPayToPubKeyHash() const
-{
-    // Extra-fast test for pay-to-pubkey-hash CScripts:
-    return (this->size() == 25 &&
-            (*this)[0] == OP_DUP &&
-            (*this)[1] == OP_HASH160 &&
-            (*this)[2] == 0x14 &&
-            (*this)[23] == OP_EQUALVERIFY &&
-            (*this)[24] == OP_CHECKSIG);
-}
-
-bool CScript::IsPayToScriptHash() const
-{
-    // Extra-fast test for pay-to-script-hash CScripts:
-    return (this->size() == 23 &&
-            (*this)[0] == OP_HASH160 &&
-            (*this)[1] == 0x14 &&
-            (*this)[22] == OP_EQUAL);
-}
-
-bool CScript::IsPayToWitnessPubKeyHash() const
-{
-    // Extra-fast test for pay-to-witness-pubkey-hash CScripts:
-    return (this->size() == 22 &&
-            (*this)[0] == OP_0 &&
-            (*this)[1] == 0x14);
-}
-
-bool CScript::IsPayToTaproot() const
-{
-    // Extra-fast test for pay-to-taproot CScripts:
-    return (this->size() == 34 &&
-            (*this)[0] == OP_1 &&
-            (*this)[1] == 0x20);
-}
-
-bool CScript::IsPayToWitnessScriptHash() const
-{
-    // Extra-fast test for pay-to-witness-script-hash CScripts:
-    return (this->size() == 34 &&
-            (*this)[0] == OP_0 &&
-            (*this)[1] == 0x20);
-}
-
-bool CScript::IsOpReturn() const
-{
-    // Extra-fast test for OP_RETURN CScripts:
-    return (this->size() &&
-            (*this)[0] == OP_RETURN);
 }
 
 // A witness program is any valid CScript that consists of a 1-byte push opcode
