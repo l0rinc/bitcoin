@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <bench/bench.h>
-#include <bench/data/block413567.raw.h>
+#include <bench/data/block784588.raw.h>
 #include <flatfile.h>
 #include <node/blockstorage.h>
 #include <primitives/block.h>
@@ -21,7 +21,7 @@
 
 static CBlock CreateTestBlock()
 {
-    DataStream stream{benchmark::data::block413567};
+    DataStream stream{benchmark::data::block784588};
     CBlock block;
     stream >> TX_WITH_WITNESS(block);
     return block;
