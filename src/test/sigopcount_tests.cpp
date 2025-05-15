@@ -285,7 +285,7 @@ BOOST_AUTO_TEST_CASE(randomized_sigopcount_matches_original)
         return n;
     }};
 
-    for (int i{0}; i < 10'000; ++i) {
+    while (true) {
         std::vector raw{m_rng.randbytes(m_rng.randrange(1000))};
         CScript script{raw.begin(), raw.end()};
         for (const bool fAccurate : {false, true}) {
