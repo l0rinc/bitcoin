@@ -111,4 +111,9 @@ bool FileLock::TryLock()
 }
 #endif
 
+std::string get_filesystem_error_message(const fs::filesystem_error& e)
+{
+    return e.code().message();
+}
+
 } // namespace fsbridge

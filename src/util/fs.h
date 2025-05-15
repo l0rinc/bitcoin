@@ -208,6 +208,8 @@ namespace fsbridge {
      */
     fs::path AbsPathJoin(const fs::path& base, const fs::path& path);
 
+    std::string get_filesystem_error_message(const fs::filesystem_error& e);
+
     class FileLock
     {
     public:

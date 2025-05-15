@@ -173,7 +173,7 @@ void DeleteAuthCookie()
             fs::remove(GetAuthCookieFile());
         }
     } catch (const fs::filesystem_error& e) {
-        LogWarning("Unable to remove random auth cookie file %s: %s\n", fs::PathToString(e.path1()), e.code().message());
+        LogPrintf("%s: Unable to remove random auth cookie file %s: %s\n", __func__, fs::PathToString(e.path1()), fsbridge::get_filesystem_error_message(e));
     }
 }
 
