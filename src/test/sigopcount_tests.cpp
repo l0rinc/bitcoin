@@ -113,6 +113,16 @@ BOOST_AUTO_TEST_CASE(GetSigOpCountKnownTemplates)
     CPubKey pubkey = dummyKey.GetPubKey();
 
     for (const bool fAccurate : {false, true}) {
+        {
+            auto raw{"4107f63413412743adb1bf4bd9b9dc5f65db763c46faeccc55e43df3924179899cdd96c8fda9494c2e86a67d117dd2a6ec8ff058399de55b27910123f1e5937e77acac"_hex_v_u8};
+            const CScript script{raw.begin(), raw.end()};
+            BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(fAccurate), 1);
+        }
+        {
+            auto raw{"419e000000416e6f7468657220746578742077617320656d62656464656420696e746f2074686520626c6f636b20636861696e2e20546865207374616e6461726420ac"_hex_v_u8};
+            const CScript script{raw.begin(), raw.end()};
+            BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(fAccurate), 1);
+        }
         // OP_RETURN with sigops after (non-standard, found first in block 229,712)
         {
             auto raw{"6a76a914cd2b3298b7f455f39805377e5f213093df3cc09a88ac"_hex_v_u8};

@@ -4,7 +4,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <script/script.h>
-
+#include <script/solver.h>
+#include <logging.h>
 #include <crypto/common.h>
 #include <crypto/hex_base.h>
 #include <hash.h>
@@ -186,37 +187,137 @@ static constexpr std::pair<unsigned int, unsigned int> DecodePushData(
 
 unsigned int CScript::GetLegacySigOpCount(bool fAccurate) const
 {
-    switch (size()) {
-    case 0: return 0;
-    case 4: if (IsPayToAnchor()) return 0; else break;
-    case 22: if (IsPayToWitnessPubKeyHash()) return 0; else break;
-    case 23: if (IsPayToScriptHash()) return 0; else break;
-    case 25: if (IsPayToPubKeyHash()) return 1; else break;
-    case 34: if (IsPayToTaproot() || IsPayToWitnessScriptHash()) return 0; else break;
-    case 35: if (IsCompressedPayToPubKey()) return 1; else break;
-    case 67: if (IsUncompressedPayToPubKey()) return 1; else break;
+    // Exact original methods
+    auto GetScriptOpOriginal{[&](CScript::const_iterator& pc, CScript::const_iterator end, opcodetype& opcodeRet, std::vector<unsigned char>* pvchRet) -> bool {
+        opcodeRet = OP_INVALIDOPCODE;
+        if (pvchRet)
+            pvchRet->clear();
+        if (pc >= end)
+            return false;
+
+        // Read instruction
+        if (end - pc < 1)
+            return false;
+        unsigned int opcode = *pc++;
+
+        // Immediate operand
+        if (opcode <= OP_PUSHDATA4) {
+            unsigned int nSize = 0;
+            if (opcode < OP_PUSHDATA1) {
+                nSize = opcode;
+            } else if (opcode == OP_PUSHDATA1) {
+                if (end - pc < 1)
+                    return false;
+                nSize = *pc++;
+            } else if (opcode == OP_PUSHDATA2) {
+                if (end - pc < 2)
+                    return false;
+                nSize = ReadLE16(&pc[0]);
+                pc += 2;
+            } else if (opcode == OP_PUSHDATA4) {
+                if (end - pc < 4)
+                    return false;
+                nSize = ReadLE32(&pc[0]);
+                pc += 4;
+            }
+            if (end - pc < 0 || (unsigned int)(end - pc) < nSize)
+                return false;
+            if (pvchRet)
+                pvchRet->assign(pc, pc + nSize);
+            pc += nSize;
+        }
+
+        opcodeRet = static_cast<opcodetype>(opcode);
+        return true;
+    }};
+
+    auto GetSigOpCountOriginal{[&](const CScript& script, bool fAccurate) -> unsigned int {
+        unsigned int n = 0;
+        CScript::const_iterator pc = script.begin();
+        opcodetype lastOpcode = OP_INVALIDOPCODE;
+        while (pc < script.end()) {
+            opcodetype opcode;
+            if (!GetScriptOpOriginal(pc, script.end(), opcode, nullptr)) // inlined GetOp
+                break;
+            if (opcode == OP_CHECKSIG || opcode == OP_CHECKSIGVERIFY)
+                n++;
+            else if (opcode == OP_CHECKMULTISIG || opcode == OP_CHECKMULTISIGVERIFY) {
+                if (fAccurate && lastOpcode >= OP_1 && lastOpcode <= OP_16)
+                    n += CScript::DecodeOP_N(lastOpcode);
+                else
+                    n += MAX_PUBKEYS_PER_MULTISIG;
+            }
+            lastOpcode = opcode;
+        }
+        return n;
+    }};
+
+    auto GetSigOpCountNew{[&](bool fAccurate) -> unsigned int {
+        switch (size()) {
+        case 0: return 0;
+        case 4: if (IsPayToAnchor()) return 0; else break;
+        case 22: if (IsPayToWitnessPubKeyHash()) return 0; else break;
+        case 23: if (IsPayToScriptHash()) return 0; else break;
+        case 25: if (IsPayToPubKeyHash()) return 1; else break;
+        case 34: if (IsPayToTaproot() || IsPayToWitnessScriptHash()) return 0; else break;
+        case 35: if (IsCompressedPayToPubKey()) return 1; else break;
+        case 67: if (IsUncompressedPayToPubKey()) return 1; else break;
+        }
+
+        unsigned int n{0};
+        opcodetype prev{OP_INVALIDOPCODE};
+        for (const_iterator pc{begin()}, pc_end{end()}; pc < pc_end;) {
+            const auto opcode{static_cast<opcodetype>(*pc++)};
+            if (opcode <= OP_PUSHDATA4) {
+                auto [size_bytes, data_bytes]{DecodePushData(opcode, pc, pc_end - pc)};
+                if (data_bytes == DECODE_ERR) break;
+                pc += size_bytes + data_bytes;
+            } else if (opcode == OP_CHECKSIG || opcode == OP_CHECKSIGVERIFY) {
+                ++n;
+            } else if (opcode == OP_CHECKMULTISIG || opcode == OP_CHECKMULTISIGVERIFY) {
+                if (fAccurate && IsSmallInteger(prev)) {
+                    n += DecodeOP_N(prev);
+                } else {
+                    n += MAX_PUBKEYS_PER_MULTISIG;
+                }
+            }
+            if (fAccurate) prev = opcode;
+        }
+        return n;
+    }};
+
+    const auto op_orig{GetSigOpCountOriginal(*this, fAccurate)};
+    const auto op_new{GetSigOpCountNew(fAccurate)};
+    if (op_orig != op_new) {
+        LogError("sigop-mismatch  orig=%u  new=%u  script=%s", op_orig, op_new, HexStr({begin(), end()}).c_str());
+        assert(false);
     }
 
-    unsigned int n{0};
-    opcodetype prev{OP_INVALIDOPCODE};
-    for (const_iterator pc{begin()}, pc_end{end()}; pc < pc_end;) {
-        const auto opcode{static_cast<opcodetype>(*pc++)};
-        if (opcode <= OP_PUSHDATA4) {
-            auto [size_bytes, data_bytes]{DecodePushData(opcode, pc, pc_end - pc)};
-            if (data_bytes == DECODE_ERR) break;
-            pc += size_bytes + data_bytes;
-        } else if (opcode == OP_CHECKSIG || opcode == OP_CHECKSIGVERIFY) {
-            ++n;
-        } else if (opcode == OP_CHECKMULTISIG || opcode == OP_CHECKMULTISIGVERIFY) {
-            if (fAccurate && IsSmallInteger(prev)) {
-                n += DecodeOP_N(prev);
-            } else {
-                n += MAX_PUBKEYS_PER_MULTISIG;
-            }
+    std::vector<std::vector<uint8_t>> dummy;
+    const TxoutType type{Solver(*this, dummy)};
+    auto bail{[&](const char* what) {
+        LogError("template-mismatch  type=%d  check=%s  script=%s", int(type), what, HexStr({begin(), end()}).c_str());
+        assert(false);
+    }};
+
+    switch (type) {
+    case TxoutType::ANCHOR: if (!IsPayToAnchor()) bail("IsPayToAnchor() == false but Solver == ANCHOR"); break;
+    case TxoutType::PUBKEY: if (!(IsCompressedPayToPubKey() || IsUncompressedPayToPubKey())) bail("IsPubKey() helpers false but Solver == PUBKEY"); break;
+    case TxoutType::PUBKEYHASH: if (!IsPayToPubKeyHash()) bail("IsPayToPubKeyHash() == false but Solver == P2PKH"); break;
+    case TxoutType::SCRIPTHASH: if (!IsPayToScriptHash()) bail("IsPayToScriptHash() == false but Solver == P2SH"); break;
+    case TxoutType::WITNESS_V1_TAPROOT: if (!IsPayToTaproot()) bail("IsPayToTaproot() == false but Solver == P2TR"); break;
+    case TxoutType::WITNESS_V0_KEYHASH: if (!IsPayToWitnessPubKeyHash()) bail("IsPayToWitnessPubKeyHash() == false but Solver == P2WPKH"); break;
+    case TxoutType::WITNESS_V0_SCRIPTHASH: if (!IsPayToWitnessScriptHash()) bail("IsPayToWitnessScriptHash() == false but Solver == P2WSH"); break;
+    default: { // NONSTANDARD, NULL_DATA, MULTISIG, WITNESS_UNKNOWN, …
+        if (IsPayToAnchor() || IsPayToWitnessPubKeyHash() || IsPayToScriptHash() || IsPayToPubKeyHash() || IsPayToTaproot()) {
+            bail("should-be-false");
         }
-        if (fAccurate) prev = opcode;
+        // IsCompressedPayToPubKey() || IsUncompressedPayToPubKey()
+        break;
     }
-    return n;
+    }
+
+    return op_orig;
 }
 
 unsigned int CScript::GetSigOpCount(const CScript& scriptSig) const
@@ -337,7 +438,6 @@ bool GetScriptOp(CScriptBase::const_iterator& pc, CScriptBase::const_iterator en
         auto [size_bytes, data_bytes]{DecodePushData(opcode, pc, end - pc)};
         if (data_bytes == DECODE_ERR) return false;
 
-        assert(size_bytes != DECODE_ERR);
         pc += size_bytes;
         if (pvchRet) pvchRet->assign(pc, pc + data_bytes);
         pc += data_bytes;
