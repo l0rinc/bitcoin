@@ -3,8 +3,9 @@
 # file COPYING or https://opensource.org/license/mit/.
 
 add_executable(bench_bitcoin
-  bench_bitcoin.cpp
   bench.cpp
+  bench_bitcoin.cpp
+  block_generator.cpp
   nanobench.cpp
 # Benchmarks:
   addrman.cpp
