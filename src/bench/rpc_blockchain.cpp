@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <bench/bench.h>
-#include <bench/data/block413567.raw.h>
+#include <bench/block_generator.h>
 #include <chain.h>
 #include <core_io.h>
 #include <primitives/block.h>
@@ -31,7 +31,7 @@ struct TestBlockAndIndex {
 
     TestBlockAndIndex()
     {
-        DataStream stream{benchmark::data::block413567};
+        auto stream{benchmark::GetBlockData(testing_setup->m_node.chainman->GetParams())};
         std::byte a{0};
         stream.write({&a, 1}); // Prevent compaction
 
@@ -39,7 +39,7 @@ struct TestBlockAndIndex {
 
         blockHash = block.GetHash();
         blockindex.phashBlock = &blockHash;
-        blockindex.nBits = 403014710;
+        blockindex.nBits = block.nBits;
     }
 };
 
