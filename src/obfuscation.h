@@ -27,10 +27,18 @@ public:
     {
         if (!*this) return;
         const uint64_t rot_key{m_rotations[key_offset_bytes % SIZE_BYTES]}; // Continue obfuscation from where we left off
-        for (; target.size() >= SIZE_BYTES; target = target.subspan(SIZE_BYTES)) { // Process multiple bytes at a time
-            Xor(target, rot_key, SIZE_BYTES);
+        // Process multiple bytes at a time
+        for (constexpr auto unroll{8}; target.size() >= SIZE_BYTES * unroll; target = target.subspan(SIZE_BYTES * unroll)) {
+            #pragma GCC unroll 8
+            for (size_t i{0}; i < unroll; ++i) {
+                Xor(target.subspan(i * SIZE_BYTES, SIZE_BYTES), rot_key, SIZE_BYTES);
+            }
         }
-        Xor(target, rot_key, target.size());
+        while (!target.empty()) {
+            const size_t chunk = std::min(SIZE_BYTES, target.size());
+            Xor(target.first(chunk), rot_key, chunk);
+            target = target.subspan(chunk);
+        }
     }
 
     template <typename Stream>
