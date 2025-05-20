@@ -19,18 +19,30 @@ public:
     static constexpr size_t SIZE_BYTES{sizeof(uint64_t)};
 
     Obfuscation(const uint64_t key) { SetRotations(key); }
-    Obfuscation(const std::span<const std::byte, SIZE_BYTES> key_span) : Obfuscation(ToUint64(key_span)) {}
+
+    Obfuscation(const std::span<const std::byte, SIZE_BYTES> key_span)
+        : Obfuscation(ToUint64(key_span))
+    {
+    }
 
     uint64_t Key() const { return m_rotations[0]; }
     operator bool() const { return Key() != 0; }
+
     void operator()(std::span<std::byte> target, const size_t key_offset_bytes = 0) const
     {
         if (!*this) return;
         const uint64_t rot_key{m_rotations[key_offset_bytes % SIZE_BYTES]}; // Continue obfuscation from where we left off
-        for (; target.size() >= SIZE_BYTES; target = target.subspan(SIZE_BYTES)) { // Process multiple bytes at a time
-            Xor(target, rot_key, SIZE_BYTES);
+        // Process multiple bytes at a time
+        for (constexpr auto unroll{8}; target.size() >= SIZE_BYTES * unroll; target = target.subspan(SIZE_BYTES * unroll)) {
+            for (size_t i{0}; i < unroll; ++i) {
+                Xor(target.subspan(i * SIZE_BYTES, SIZE_BYTES), rot_key, SIZE_BYTES);
+            }
         }
-        Xor(target, rot_key, target.size());
+        while (!target.empty()) {
+            const size_t chunk = std::min(SIZE_BYTES, target.size());
+            Xor(target.first(chunk), rot_key, chunk);
+            target = target.subspan(chunk);
+        }
     }
 
     template <typename Stream>
