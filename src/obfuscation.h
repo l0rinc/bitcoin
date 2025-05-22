@@ -27,12 +27,22 @@ public:
     {
         if (!*this) return;
         uint64_t rot_key{m_rotations[key_offset_bytes % SIZE_BYTES]}; // Continue obfuscation from where we left off
+
         const size_t alignment_remaining{std::min(SIZE_BYTES - (reinterpret_cast<ptrdiff_t>(target.data()) % SIZE_BYTES), target.size())};
         Xor(target, rot_key, alignment_remaining);
         target = target.subspan(alignment_remaining);
         rot_key = m_rotations[(key_offset_bytes + alignment_remaining) % SIZE_BYTES];
-        for (; target.size() >= SIZE_BYTES; target = target.subspan(SIZE_BYTES)) { // Process multiple bytes at a time
-            *reinterpret_cast<uint64_t*>(target.data()) ^= rot_key;
+
+        // Process multiple bytes at a time
+        for (constexpr auto unroll{8}; target.size() >= SIZE_BYTES * unroll; target = target.subspan(SIZE_BYTES * unroll)) {
+            for (size_t i{0}; i < unroll; ++i) {
+                Xor(target.subspan(i * SIZE_BYTES, SIZE_BYTES), rot_key, SIZE_BYTES);
+            }
+        }
+        while (!target.empty()) {
+            const size_t chunk = std::min(SIZE_BYTES, target.size());
+            Xor(target.first(chunk), rot_key, chunk);
+            target = target.subspan(chunk);
         }
         Xor(target, rot_key, target.size());
     }
