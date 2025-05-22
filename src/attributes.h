@@ -16,12 +16,24 @@
 #  define LIFETIMEBOUND
 #endif
 
-#if defined(__GNUC__)
+#if defined(__GNUC__) // Covers GCC and Clang
 #  define ALWAYS_INLINE inline __attribute__((always_inline))
 #elif defined(_MSC_VER)
 #  define ALWAYS_INLINE __forceinline
 #else
 #  error No known always_inline attribute for this platform.
+#endif
+
+#if defined(__clang__)
+#  define OPTIMIZED(func_def) \
+   _Pragma("clang optimize on") \
+   func_def \
+   _Pragma("clang optimize off")
+#elif defined(__GNUC__)
+#  define OPTIMIZED(func_def) \
+   __attribute__((optimize("O3"))) func_def
+#else
+#  define OPTIMIZED(func_def) func_def
 #endif
 
 #endif // BITCOIN_ATTRIBUTES_H
