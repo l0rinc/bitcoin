@@ -5,6 +5,7 @@
 #ifndef BITCOIN_OBFUSCATION_H
 #define BITCOIN_OBFUSCATION_H
 
+#include <attributes.h>
 #include <span.h>
 #include <tinyformat.h>
 
@@ -23,11 +24,19 @@ public:
 
     uint64_t Key() const { return m_rotations[0]; }
     operator bool() const { return Key() != 0; }
+
     void operator()(std::span<std::byte> target, const size_t key_offset_bytes = 0) const
     {
         if (!*this) return;
         const uint64_t rot_key{m_rotations[key_offset_bytes % SIZE_BYTES]}; // Continue obfuscation from where we left off
-        for (; target.size() >= SIZE_BYTES; target = target.subspan(SIZE_BYTES)) { // Process multiple bytes at a time
+
+        // Process multiple bytes at a time
+        for (constexpr auto unroll{8}; target.size() >= SIZE_BYTES * unroll; target = target.subspan(SIZE_BYTES * unroll)) {
+            for (size_t i{0}; i < unroll; ++i) {
+                Xor(target.subspan(i * SIZE_BYTES, SIZE_BYTES), rot_key, SIZE_BYTES);
+            }
+        }
+        for (; target.size() >= SIZE_BYTES; target = target.subspan(SIZE_BYTES)) {
             Xor(target, rot_key, SIZE_BYTES);
         }
         Xor(target, rot_key, target.size());
@@ -71,7 +80,7 @@ private:
         return key;
     }
 
-    static void Xor(std::span<std::byte> target, const uint64_t key, const size_t size)
+    static void ALWAYS_INLINE Xor(std::span<std::byte> target, const uint64_t key, const size_t size)
     {
         assert(size <= target.size());
         uint64_t raw{};
