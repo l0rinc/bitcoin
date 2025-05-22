@@ -24,4 +24,14 @@
 #  error No known always_inline attribute for this platform.
 #endif
 
+#if defined(__GNUC__)
+#  define UNROLL(count) _Pragma("GCC unroll " #count)
+#elif defined(__clang__)
+#  define UNROLL(count) _Pragma("clang loop unroll_count(" #count ")")
+#elif defined(_MSC_VER)
+#  define UNROLL(count) __pragma(loop(unroll_count(count)))
+#else
+#  define UNROLL(count)
+#endif
+
 #endif // BITCOIN_ATTRIBUTES_H
