@@ -28,7 +28,7 @@ BOOST_AUTO_TEST_CASE(xor_roundtrip_random_chunks)
         }
     }};
 
-    for (size_t test{0}; test < 100; ++test) {
+    for (size_t test{0}; test < 10'000'000; ++test) {
         const size_t write_size{1 + m_rng.randrange(100U)};
         const std::vector original{m_rng.randbytes<std::byte>(write_size)};
         std::vector roundtrip{original};
@@ -58,7 +58,7 @@ BOOST_AUTO_TEST_CASE(xor_bytes_reference)
         }
     }};
 
-    for (size_t test{0}; test < 100; ++test) {
+    for (size_t test{0}; test < 10'000'000; ++test) {
         const size_t write_size{1 + m_rng.randrange(100U)};
         const size_t key_offset{m_rng.randrange(3 * 8U)}; // Should wrap around
 
