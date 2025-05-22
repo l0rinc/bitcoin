@@ -24,4 +24,10 @@
 #  error No known always_inline attribute for this platform.
 #endif
 
+#if defined(__GNUC__)
+#  define FORCE_O3 [[gnu::optimize("-O3")]]
+#else
+#  define FORCE_O3
+#endif
+
 #endif // BITCOIN_ATTRIBUTES_H
