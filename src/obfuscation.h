@@ -5,13 +5,13 @@
 #ifndef BITCOIN_OBFUSCATION_H
 #define BITCOIN_OBFUSCATION_H
 
-#include <attributes.h>
 #include <span.h>
 #include <tinyformat.h>
 
 #include <array>
 #include <bit>
 #include <climits>
+#include <memory>
 #include <stdexcept>
 
 class Obfuscation
@@ -24,21 +24,36 @@ public:
 
     uint64_t Key() const { return m_rotations[0]; }
     operator bool() const { return Key() != 0; }
-    void operator()(std::span<std::byte> target, const size_t key_offset_bytes = 0) const
+
+    void operator()(std::span<std::byte> target, size_t key_offset = 0) const
     {
         if (!*this) return;
-        const uint64_t rot_key{m_rotations[key_offset_bytes % SIZE_BYTES]}; // Continue obfuscation from where we left off
 
-        // Process multiple bytes at a time
+        uint64_t rot_key{m_rotations[key_offset % SIZE_BYTES]}; // Continue obfuscation from where we left off
+
+        // Obfuscate until 64-bit aligment boundary
+        if (const auto misalign{std::bit_cast<uintptr_t>(target.data()) % SIZE_BYTES}) {
+            const size_t alignment{std::min(SIZE_BYTES - misalign, target.size())};
+            Xor(target, rot_key, alignment);
+
+            target = target.subspan(alignment);
+            rot_key = m_rotations[(key_offset + alignment) % SIZE_BYTES];
+        }
+        target = {std::assume_aligned<SIZE_BYTES>(target.data()), target.size()};
+
+        // Aligned obfuscation in 64-byte chunks
         for (constexpr auto unroll{8}; target.size() >= SIZE_BYTES * unroll; target = target.subspan(SIZE_BYTES * unroll)) {
             for (size_t i{0}; i < unroll; ++i) {
                 Xor(target.subspan(i * SIZE_BYTES, SIZE_BYTES), rot_key, SIZE_BYTES);
             }
         }
+        // Aligned obfuscation in 64-bit chunks
         for (; target.size() >= SIZE_BYTES; target = target.subspan(SIZE_BYTES)) {
             Xor(target, rot_key, SIZE_BYTES);
         }
-        Xor(target, rot_key, target.size());
+        if (target.size()) {
+            Xor(target, rot_key, target.size());
+        }
     }
 
     template <typename Stream>

@@ -24,16 +24,4 @@
 #  error No known always_inline attribute for this platform.
 #endif
 
-#if defined(__clang__)
-#  define OPTIMIZED(func_def) \
-   _Pragma("clang optimize on") \
-   func_def \
-   _Pragma("clang optimize off")
-#elif defined(__GNUC__)
-#  define OPTIMIZED(func_def) \
-   [[gnu::optimize("-O3")]] func_def
-#else
-#  define OPTIMIZED(func_def) func_def
-#endif
-
 #endif // BITCOIN_ATTRIBUTES_H
