@@ -27,14 +27,20 @@ public:
     void operator()(std::span<std::byte> target, const size_t key_offset_bytes = 0) const
     {
         if (!*this) return;
-        const uint64_t rot_key{m_rotations[key_offset_bytes % SIZE_BYTES]}; // Continue obfuscation from where we left off
+        const uint64_t rot_key{m_rotations[key_offset_bytes % SIZE_BYTES]};
 
-        // Process multiple bytes at a time
+        // Tell Clang exactly how to optimize this loop
+        #pragma clang loop vectorize(enable)
+        #pragma clang loop interleave(enable)
+        #pragma clang loop unroll(enable)
         for (constexpr auto unroll{8}; target.size() >= SIZE_BYTES * unroll; target = target.subspan(SIZE_BYTES * unroll)) {
             for (size_t i{0}; i < unroll; ++i) {
                 Xor(target.subspan(i * SIZE_BYTES, SIZE_BYTES), rot_key, SIZE_BYTES);
             }
         }
+
+        // Handle remaining bytes
+        #pragma clang loop vectorize(enable)
         for (; target.size() >= SIZE_BYTES; target = target.subspan(SIZE_BYTES)) {
             Xor(target, rot_key, SIZE_BYTES);
         }
