@@ -24,6 +24,7 @@ public:
 
     uint64_t Key() const { return m_rotations[0]; }
     operator bool() const { return Key() != 0; }
+    [[gnu::hot]] [[gnu::flatten]]
     void operator()(std::span<std::byte> target, const size_t key_offset_bytes = 0) const
     {
         if (!*this) return;
