@@ -24,8 +24,6 @@
 # cargo default target dir
 target/
 
-libbitcoinconsensus.pc
-
 /guix-build-*
 
 /ci/scratch/
