@@ -17,6 +17,9 @@ set -e -o pipefail
                 # Split binaries from their debug symbols
                 {
                     find "${DISTNAME}/bin" "${DISTNAME}/libexec" -type f -executable -print0
+                    if test -d "${DISTNAME}/lib"; then
+                        find "${DISTNAME}/lib" -type f -executable -print0
+                    fi
                 } | xargs -0 -P"$JOBS" -I{} "${DISTSRC}/build/split-debug.sh" {} {} {}.dbg
                 ;;
         esac
