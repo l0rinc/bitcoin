@@ -10,7 +10,12 @@ A transaction ("replacement transaction") may replace its directly conflicting t
 their in-mempool descendants (together, "original transactions") if, in addition to passing all
 other consensus and policy rules, each of the following conditions are met:
 
-1. (Removed)
+1. If `-mempoolfullrbf=0` (the value is 1 by default), the directly conflicting transactions all signal replaceability explicitly. A transaction is
+   signaling BIP125 replaceability if any of its inputs have an nSequence number less than (0xffffffff - 1).
+   A transaction also signals replaceability if its version field is set to 3.
+
+   *Rationale*: See [BIP125
+   explanation](https://github.com/bitcoin/bips/blob/master/bip-0125.mediawiki#motivation).
 
 2. (Removed)
 
@@ -63,9 +68,3 @@ other consensus and policy rules, each of the following conditions are met:
   #25353](https://github.com/bitcoin/bitcoin/pull/25353)).
 
 * Full replace-by-fee is the default policy as of **v28.0** ([PR #30493](https://github.com/bitcoin/bitcoin/pull/30493)).
-
-* Signaling for replace-by-fee is no longer required as of [PR 30592](https://github.com/bitcoin/bitcoin/pull/30592).
-
-* The incremental relay feerate default is 0.1sat/vB ([PR #33106](https://github.com/bitcoin/bitcoin/pull/33106)).
-
-* Feerate diagram policy enabled in conjunction with switch to cluster mempool as of **v31.0**.
