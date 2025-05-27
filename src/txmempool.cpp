@@ -562,10 +562,9 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
         }
         checkTotal += it->GetTxSize();
         check_total_adjusted_weight += it->GetAdjustedWeight();
-        CAmount dummyValue;
-        const double fresh_coin_age = GetCoinAge(it->GetTx(), active_coins_tip, spendheight, dummyValue);
+        const auto fresh_coin_age = GetCoinAge(it->GetTx(), active_coins_tip, spendheight);
         const auto fresh_mod_vsize = CalculateModifiedSize(it->GetTx(), it->GetTxSize());
-        const double freshPriority = ComputePriority2(fresh_coin_age, fresh_mod_vsize);
+        const double freshPriority = ComputePriority2(fresh_coin_age.inputs_coin_age, fresh_mod_vsize);
         double cachePriority = it->GetPriority(spendheight);
         double priDiff = cachePriority > freshPriority ? cachePriority - freshPriority : freshPriority - cachePriority;
         // Verify that the difference between the on the fly calculation and a fresh calculation
@@ -928,8 +927,8 @@ bool CTxMemPool::CheckPolicyLimits(const CTransactionRef& tx)
     // when it goes out of scope.
     auto changeset = GetChangeSet();
     (void) changeset->StageAddition(tx, /*fee=*/0, /*time=*/0, /*entry_height=*/0,
-                                    /*entry_sequence=*/0, /*entry_tx_inputs_coin_age=*/0.0,
-                                    /*in_chain_input_value=*/0, /*spends_coinbase=*/false, /*sigops_cost=*/0, LockPoints{});
+                                    /*entry_sequence=*/0, COIN_AGE_CACHE_ZERO,
+                                    /*spends_coinbase=*/false, /*sigops_cost=*/0, LockPoints{});
     return changeset->CheckMemPoolPolicyLimits();
 }
 
@@ -1127,7 +1126,7 @@ util::Result<std::pair<std::vector<FeeFrac>, std::vector<FeeFrac>>> CTxMemPool::
     return m_pool->m_txgraph->GetMainStagingDiagrams();
 }
 
-CTxMemPool::ChangeSet::TxHandle CTxMemPool::ChangeSet::StageAddition(const CTransactionRef& tx, const CAmount fee, int64_t time, unsigned int entry_height, uint64_t entry_sequence, const double entry_tx_inputs_coin_age, const CAmount in_chain_input_value, bool spends_coinbase, int64_t sigops_cost, LockPoints lp)
+CTxMemPool::ChangeSet::TxHandle CTxMemPool::ChangeSet::StageAddition(const CTransactionRef& tx, const CAmount fee, int64_t time, unsigned int entry_height, uint64_t entry_sequence, const CoinAgeCache coin_age_cache, bool spends_coinbase, int64_t sigops_cost, LockPoints lp)
 {
     LOCK(m_pool->cs);
     Assume(m_to_add.find(tx->GetHash()) == m_to_add.end());
@@ -1136,7 +1135,7 @@ CTxMemPool::ChangeSet::TxHandle CTxMemPool::ChangeSet::StageAddition(const CTran
     // We need to process dependencies after adding a new transaction.
     m_dependencies_processed = false;
 
-    auto newit = m_to_add.emplace(tx, fee, time, entry_height, entry_sequence, entry_tx_inputs_coin_age, in_chain_input_value, spends_coinbase, sigops_cost, lp).first;
+    auto newit = m_to_add.emplace(tx, fee, time, entry_height, entry_sequence, coin_age_cache, spends_coinbase, sigops_cost, lp).first;
     double priority_delta{0.};
     CAmount delta{0};
     m_pool->ApplyDeltas(tx->GetHash(), priority_delta, delta);

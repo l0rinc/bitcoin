@@ -109,8 +109,8 @@ BOOST_AUTO_TEST_CASE(MempoolCoinAgePriorityCache)
 
     const double starting_priority{ComputePriority2(input_value, modified_size)};
     CTxMemPoolEntry entry{tx_ref, /*fee=*/0, /*time=*/0, /*entry_height=*/100, /*entry_sequence=*/0,
-                          /*entry_tx_inputs_coin_age=*/input_value,
-                          input_value, /*spends_coinbase=*/false, sigops_cost, LockPoints{}};
+                          CoinAgeCache{.inputs_coin_age = input_value, .in_chain_input_value = input_value},
+                          /*spends_coinbase=*/false, sigops_cost, LockPoints{}};
 
     BOOST_CHECK_EQUAL(entry.GetStartingPriority(), starting_priority);
     BOOST_CHECK_EQUAL(entry.GetPriority(/*currentHeight=*/101), starting_priority);
@@ -120,7 +120,7 @@ BOOST_AUTO_TEST_CASE(MempoolCoinAgePriorityCache)
 
     entry.UpdateCachedPriority(/*currentHeight=*/103, /*valueInCurrentBlock=*/5 * COIN);
     BOOST_CHECK_EQUAL(entry.GetPriority(/*currentHeight=*/103), priority_after_two_blocks);
-    BOOST_CHECK_EQUAL(entry.GetInternalCoinAgePriorityCache2().second, 15 * COIN);
+    BOOST_CHECK_EQUAL(entry.GetInternalCoinAgeCache().in_chain_input_value, 15 * COIN);
     BOOST_CHECK_EQUAL(entry.GetPriority(/*currentHeight=*/104), priority_after_two_blocks + (15.0 * COIN) / modified_size);
 }
 
@@ -153,11 +153,11 @@ BOOST_AUTO_TEST_CASE(MempoolUpdateDependentPriorities)
     const CTransaction parent{parent_tx};
     test_pool.UpdateDependentPriorities(parent, /*nBlockHeight=*/101, /*addToChain=*/true);
     BOOST_CHECK_EQUAL((*child_entry)->GetPriority(/*currentHeight=*/101), 0);
-    BOOST_CHECK_EQUAL((*child_entry)->GetInternalCoinAgePriorityCache2().second, input_value);
+    BOOST_CHECK_EQUAL((*child_entry)->GetInternalCoinAgeCache().in_chain_input_value, input_value);
     BOOST_CHECK_EQUAL((*child_entry)->GetPriority(/*currentHeight=*/102), static_cast<double>(input_value) / modified_size);
 
     test_pool.UpdateDependentPriorities(parent, /*nBlockHeight=*/102, /*addToChain=*/false);
-    BOOST_CHECK_EQUAL((*child_entry)->GetInternalCoinAgePriorityCache2().second, 0);
+    BOOST_CHECK_EQUAL((*child_entry)->GetInternalCoinAgeCache().in_chain_input_value, 0);
     BOOST_CHECK_EQUAL((*child_entry)->GetPriority(/*currentHeight=*/103), static_cast<double>(input_value) / modified_size);
 }
 
