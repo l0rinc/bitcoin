@@ -4474,6 +4474,20 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
 
     const std::string wallet_name = local_wallet->GetName();
 
+    // Helper to reload as normal for some of our exit scenarios
+    const auto& reload_wallet = [&](std::shared_ptr<CWallet>& to_reload) {
+        assert(to_reload.use_count() == 1);
+        const std::string name = to_reload->GetName();
+        to_reload.reset();
+        to_reload = LoadWallet(context, name, /*load_on_start=*/std::nullopt, options, status, error, warnings);
+        if (!to_reload) {
+            LogError("Failed to load wallet '%s' after migration. Rolling back migration to preserve consistency. "
+                     "Error cause: %s\n", name, error.original);
+            return false;
+        }
+        return true;
+    };
+
     // Before anything else, check if there is something to migrate.
     if (local_wallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
         return util::Error{_("Error: This wallet is already a descriptor wallet")};
@@ -4578,36 +4592,33 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
         } else {
             UpdateWalletSetting(*context.chain, wallet_name, /*load_on_startup=*/false, warnings);
         }
-        // Migration successful, if load_wallet is set load all the migrated wallets.
+        // Migration successful. If load_wallet is set, unload all wallets locally,
+        // then reload them. The pointer loop avoids increasing shared_ptr refcounts
+        // since reload_wallet expects to be the sole owner.
         bool main_wallet_set{false};
         for (std::shared_ptr<CWallet>* wallet_ptr : {&local_wallet, &res.watchonly_wallet, &res.solvables_wallet}) {
             if (success && *wallet_ptr) {
                 std::shared_ptr<CWallet>& wallet = *wallet_ptr;
-                // Track db path
                 track_for_cleanup(*wallet);
-                assert(wallet.use_count() == 1);
-                std::string wallet_name = wallet->GetName();
-                wallet.reset();
+                const std::string current_wallet_name = wallet->GetName();
                 if (load_wallet) {
-                    wallet = LoadWallet(context, wallet_name, /*load_on_start=*/std::nullopt, options, status, error, warnings);
-                    if (!wallet) {
-                        LogError("Failed to load wallet '%s' after migration. Rolling back migration to preserve consistency. "
-                                 "Error cause: %s\n", wallet_name, error.original);
-                        success = false;
-                        break;
-                    }
+                    success = reload_wallet(wallet);
+                    if (!success) break;
+                } else {
+                    assert(wallet.use_count() == 1);
+                    wallet.reset();
                 }
                 // Set the first wallet as the main one.
                 // The loop order is intentional and must always start with the local wallet.
                 if (!main_wallet_set) {
-                    res.wallet_name = wallet_name;
+                    res.wallet_name = current_wallet_name;
                     if (load_wallet) res.wallet = std::move(wallet);
                     main_wallet_set = true;
                 }
                 if (wallet_ptr == &res.watchonly_wallet) {
-                    res.watchonly_wallet_name = wallet_name;
+                    res.watchonly_wallet_name = current_wallet_name;
                 } else if (wallet_ptr == &res.solvables_wallet) {
-                    res.solvables_wallet_name = wallet_name;
+                    res.solvables_wallet_name = current_wallet_name;
                 }
             }
         }
