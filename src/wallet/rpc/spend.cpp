@@ -1145,6 +1145,9 @@ static RPCMethod bumpfee_helper(std::string method_name)
                              "so the new transaction will not be explicitly bip-125 replaceable (though it may\n"
                              "still be replaceable in practice, for example if it has unconfirmed ancestors which\n"
                              "are replaceable).\n"},
+                    {"require_replacable", RPCArg::Type::BOOL, RPCArg::Default{true},
+                        "Fail (with an exception) if the target txid is not considered replacable (eg, BIP 125)."
+                    },
                     {"estimate_mode", RPCArg::Type::STR, RPCArg::Default{"unset"}, "The fee estimate mode, must be one of (case insensitive):\n"
                               + FeeModesDetail(std::string("economical mode is used if the transaction is replaceable;\notherwise, conservative mode is used"))},
                     {"outputs", RPCArg::Type::ARR, RPCArg::Default{UniValue::VARR}, "The outputs specified as key-value pairs.\n"
@@ -1200,15 +1203,16 @@ static RPCMethod bumpfee_helper(std::string method_name)
     std::optional<uint32_t> original_change_index;
 
     uint32_t psbt_version = 2;
+    const UniValue& options{request.params[1]};
 
-    if (!request.params[1].isNull()) {
-        UniValue options = request.params[1];
+    if (!options.isNull()) {
         RPCTypeCheckObj(options,
             {
                 {"confTarget", UniValueType(UniValue::VNUM)},
                 {"conf_target", UniValueType(UniValue::VNUM)},
                 {"fee_rate", UniValueType()}, // will be checked by AmountFromValue() in SetFeeEstimateMode()
                 {"replaceable", UniValueType(UniValue::VBOOL)},
+                {"require_replacable", UniValueType(UniValue::VBOOL)},
                 {"estimate_mode", UniValueType(UniValue::VSTR)},
                 {"outputs", UniValueType()}, // will be checked by AddOutputs()
                 {"original_change_index", UniValueType(UniValue::VNUM)},
@@ -1254,6 +1258,13 @@ static RPCMethod bumpfee_helper(std::string method_name)
     pwallet->BlockUntilSyncedToCurrentChain();
 
     LOCK(pwallet->cs_wallet);
+
+    if ((!options.exists("require_replacable")) || options["require_replacable"].get_bool()) {
+        const CWalletTx* wtx{pwallet->GetWalletTx(hash)};
+        if (wtx && !SignalsOptInRBF(*wtx->tx)) {
+            throw JSONRPCError(RPC_WALLET_ERROR, "Transaction is not BIP 125 replaceable");
+        }
+    }
 
     EnsureWalletIsUnlocked(*pwallet);
 
