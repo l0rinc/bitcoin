@@ -86,8 +86,6 @@ In a typical situation, this suffices to run behind a Tor proxy:
 
     bitcoind -proxy=127.0.0.1:9050
 
-`bitcoin node` or `bitcoin gui` can also be substituted for `bitcoind`.
-
 ## 2. Automatically create a Bitcoin Core onion service
 
 Bitcoin Core makes use of Tor's control socket API to create and destroy
