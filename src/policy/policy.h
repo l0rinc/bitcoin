@@ -103,6 +103,8 @@ static const bool DEFAULT_ACCEPT_DATACARRIER = true;
 /**
  * Default setting for -datacarriersize in vbytes.
  */
+/** Default for -permitbaredatacarrier */
+static const bool DEFAULT_PERMITBAREDATACARRIER{true};
 static const unsigned int MAX_OP_RETURN_RELAY = 83;
 /** Default for -datacarrierfullcount */
 static constexpr bool DEFAULT_DATACARRIER_FULLCOUNT{false};
