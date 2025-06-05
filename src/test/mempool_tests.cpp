@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <common/args.h>
 #include <common/system.h>
 #include <node/mempool_args.h>
 #include <policy/coin_age_priority.h>
@@ -90,6 +91,38 @@ BOOST_AUTO_TEST_CASE(MempoolLookupTest)
 
     // Lookup by Wtxid
     BOOST_CHECK(pool.get(CTransaction(tx).GetWitnessHash()));
+}
+
+BOOST_AUTO_TEST_CASE(MempoolPermitEphemeralParse)
+{
+    auto parse_options = [](const std::string& arg) {
+        ArgsManager argsman;
+        argsman.ForceSetArg("-permitephemeral", arg);
+        kernel::MemPoolOptions opts;
+        const auto result{ApplyArgsManOptions(argsman, Params(), opts)};
+        BOOST_REQUIRE(result);
+        return opts;
+    };
+
+    auto all{parse_options("1")};
+    BOOST_CHECK(all.permitephemeral_anchor);
+    BOOST_CHECK(all.permitephemeral_send);
+    BOOST_CHECK(all.permitephemeral_dust);
+
+    auto none{parse_options("reject")};
+    BOOST_CHECK(!none.permitephemeral_anchor);
+    BOOST_CHECK(!none.permitephemeral_send);
+    BOOST_CHECK(!none.permitephemeral_dust);
+
+    auto anchor_only{parse_options("anchor,-send,-dust")};
+    BOOST_CHECK(anchor_only.permitephemeral_anchor);
+    BOOST_CHECK(!anchor_only.permitephemeral_send);
+    BOOST_CHECK(!anchor_only.permitephemeral_dust);
+
+    auto dust_without_anchor{parse_options("-anchor,dust")};
+    BOOST_CHECK(!dust_without_anchor.permitephemeral_anchor);
+    BOOST_CHECK(dust_without_anchor.permitephemeral_send);
+    BOOST_CHECK(dust_without_anchor.permitephemeral_dust);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolCoinAgePriorityCache)
