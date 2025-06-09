@@ -1733,7 +1733,7 @@ RPCMethod listdescriptors()
 {
     return RPCMethod{
         "listdescriptors",
-        "List all descriptors present in a wallet.\n",
+        "\nList all descriptors present in a descriptor-enabled wallet.\n",
         {
             {"private", RPCArg::Type::BOOL, RPCArg::Default{false}, "Show private descriptors."}
         },
