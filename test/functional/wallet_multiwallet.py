@@ -112,7 +112,7 @@ class MultiWalletTest(BitcoinTestFramework):
         self.start_node(0)
         with node.assert_debug_log(unexpected_msgs=['Error scanning directory entries under'], expected_msgs=[]):
             result = node.listwalletdir()
-            assert_equal(result, {'wallets': [{'name': 'default_wallet', 'warnings': []}]})
+            assert_equal(result, {'wallets': [{'name': self.default_wallet_name}]})
         os.chmod(data_dir(node, 'wallets'), 0)
         with node.assert_debug_log(expected_msgs=['Error scanning directory entries under']):
             result = node.listwalletdir()
