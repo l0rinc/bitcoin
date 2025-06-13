@@ -45,15 +45,7 @@ std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& wall
     std::error_code ec;
 
     for (auto it = fs::recursive_directory_iterator(wallet_dir, ec); it != fs::recursive_directory_iterator(); it.increment(ec)) {
-        if (ec) {
-            if (fs::is_directory(*it)) {
-                it.disable_recursion_pending();
-                LogPrintf("%s: %s %s -- skipping.\n", __func__, ec.message(), fs::PathToString(it->path()));
-            } else {
-                LogPrintf("%s: %s %s\n", __func__, ec.message(), fs::PathToString(it->path()));
-            }
-            continue;
-        }
+        assert(!ec); // Loop should exit on error.
 
         // We don't want to iterate through those special node dirs
         if (ignore_paths.count(it->path())) {
