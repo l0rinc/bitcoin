@@ -47,9 +47,10 @@ class InitTest(BitcoinTestFramework):
                 node.process.terminate()
             node.process.wait()
 
-        def start_expecting_error(err_fragment):
+        def start_expecting_error(err_fragment, args=None):
+            extra_args = args or ['-txindex=1', '-blockfilterindex=1', '-coinstatsindex=1', '-checkblocks=200', '-checklevel=4']
             node.assert_start_raises_init_error(
-                extra_args=['-txindex=1', '-blockfilterindex=1', '-coinstatsindex=1', '-checkblocks=200', '-checklevel=4'],
+                extra_args=extra_args,
                 expected_msg=err_fragment,
                 match=ErrorMatch.PARTIAL_REGEX,
             )
@@ -112,17 +113,43 @@ class InitTest(BitcoinTestFramework):
             # 'indexes/txindex/*.log', 'indexes/txindex/CURRENT', 'indexes/txindex/LOCK'
         }
 
-        files_to_perturb = {
-            'blocks/index/*.ldb': 'Error loading block database.',
-            'chainstate/*.ldb': 'Error opening coins database.',
-            'blocks/blk*.dat': 'Corrupted block database detected.',
-            'indexes/blockfilter/basic/db/*.*': 'LevelDB error: Corruption',
-            'indexes/coinstats/db/*.*': 'LevelDB error: Corruption',
-            'indexes/txindex/*.log': 'LevelDB error: Corruption',
-            'indexes/txindex/CURRENT': 'LevelDB error: Corruption',
-            # Perturbing these files does not result in a startup error:
-            # 'indexes/blockfilter/basic/*.dat', 'indexes/txindex/MANIFEST*', 'indexes/txindex/LOCK'
-        }
+        perturbation_rounds = [
+            {
+                'filepath_glob': 'blocks/index/*.ldb',
+                'error_message': 'Error loading block database.',
+                'startup_args': ['-checkblocks=200', '-checklevel=4'],
+            },
+            {
+                'filepath_glob': 'chainstate/*.ldb',
+                'error_message': 'Error opening coins database.',
+                'startup_args': ['-checkblocks=200', '-checklevel=4'],
+            },
+            {
+                'filepath_glob': 'blocks/blk*.dat',
+                'error_message': 'Corrupted block database detected.',
+                'startup_args': ['-checkblocks=200', '-checklevel=4'],
+            },
+            {
+                'filepath_glob': 'indexes/blockfilter/basic/db/*.*',
+                'error_message': 'LevelDB error: Corruption',
+                'startup_args': ['-blockfilterindex=1'],
+            },
+            {
+                'filepath_glob': 'indexes/coinstats/db/*.*',
+                'error_message': 'LevelDB error: Corruption',
+                'startup_args': ['-coinstatsindex=1'],
+            },
+            {
+                'filepath_glob': 'indexes/txindex/*.log',
+                'error_message': 'LevelDB error: Corruption',
+                'startup_args': ['-txindex=1'],
+            },
+            {
+                'filepath_glob': 'indexes/txindex/CURRENT',
+                'error_message': 'LevelDB error: Corruption',
+                'startup_args': ['-txindex=1'],
+            },
+        ]
 
         for file_patt, err_fragment in files_to_delete.items():
             target_files = list(node.chain_path.glob(file_patt))
@@ -144,7 +171,11 @@ class InitTest(BitcoinTestFramework):
 
         self.log.info("Test startup errors after perturbing certain essential files")
         dirs = ["blocks", "chainstate", "indexes"]
-        for file_patt, err_fragment in files_to_perturb.items():
+        for round_info in perturbation_rounds:
+            file_patt = round_info['filepath_glob']
+            err_fragment = round_info['error_message']
+            startup_args = round_info['startup_args']
+
             for dir in dirs:
                 shutil.copytree(node.chain_path / dir, node.chain_path / f"{dir}_bak")
             target_files = list(node.chain_path.glob(file_patt))
@@ -158,7 +189,10 @@ class InitTest(BitcoinTestFramework):
                     tf.seek(150)
                     tf.write(b"1" * 200)
 
-            start_expecting_error(err_fragment)
+            self.log.info(f"Expecting error frag {err_fragment}")
+            start_expecting_error(err_fragment, startup_args)
+
+            self.log.info(f"Perturbing {file_patt} succeeded")
 
             for dir in dirs:
                 shutil.rmtree(node.chain_path / dir)
