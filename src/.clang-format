@@ -22,7 +22,6 @@ BreakConstructorInitializersBeforeComma: false
 BreakTemplateDeclarations: Yes
 ColumnLimit:     0
 CommentPragmas:  '^ IWYU pragma:'
-ConstructorInitializerAllOnOneLineOrOnePerLine: false
 ConstructorInitializerIndentWidth: 4
 ContinuationIndentWidth: 4
 Cpp11BracedListStyle: true
@@ -34,6 +33,7 @@ IndentWidth:     4
 KeepEmptyLinesAtTheStartOfBlocks: false
 MaxEmptyLinesToKeep: 2
 NamespaceIndentation: None
+PackConstructorInitializers: CurrentLine
 PointerAlignment: Left
 SpaceBeforeAssignmentOperators: true
 SpaceBeforeParens: ControlStatements
