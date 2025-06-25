@@ -18,7 +18,7 @@ BraceWrapping:
   AfterClass: true
   AfterFunction: true
 BreakBeforeTernaryOperators: false
-BreakConstructorInitializersBeforeComma: false
+BreakConstructorInitializers: BeforeColon
 BreakTemplateDeclarations: Yes
 ColumnLimit:     0
 CommentPragmas:  '^ IWYU pragma:'
