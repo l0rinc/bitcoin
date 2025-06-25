@@ -1,26 +1,40 @@
 AccessModifierOffset: -4
-AlignAfterOpenBracket: true
+AlignAfterOpenBracket: Align
 AlignEscapedNewlines: Left
-AlignTrailingComments: true
-AllowShortBlocksOnASingleLine: false
+AlignTrailingComments:
+  Kind:            Always
+  OverEmptyLines:  0
+AllowShortBlocksOnASingleLine: Never
 AllowShortCaseLabelsOnASingleLine: true
-AllowShortIfStatementsOnASingleLine: true
-BinPackParameters: true
-BreakBeforeBinaryOperators: false
-BreakBeforeBraces: Custom
+AllowShortIfStatementsOnASingleLine: WithoutElse
+BinPackParameters: BinPack
 BraceWrapping:
-  AfterClass: true
-  AfterFunction: true
+  AfterCaseLabel:  false
+  AfterClass:      true
+  AfterControlStatement: Never
+  AfterEnum:       false
+  AfterExternBlock: false
+  AfterFunction:   true
+  AfterNamespace:  false
+  AfterObjCDeclaration: false
+  AfterStruct:     false
+  AfterUnion:      false
+  BeforeCatch:     false
+  BeforeElse:      false
+  BeforeLambdaBody: false
+  BeforeWhile:     false
+  IndentBraces:    false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+BreakBeforeBinaryOperators: None
+BreakBeforeBraces: Custom
 BreakBeforeTernaryOperators: false
 BreakTemplateDeclarations: Yes
 ColumnLimit:     0
 IndentWidth:     4
-KeepEmptyLinesAtTheStartOfBlocks: false
 MaxEmptyLinesToKeep: 2
 PackConstructorInitializers: CurrentLine
 PointerAlignment: Left
-SpaceInEmptyParentheses: false
-SpacesInAngles:  false
-SpacesInCStyleCastParentheses: false
-SpacesInParentheses: false
-Standard: c++20
+SpacesInAngles:  Never
+Standard:        c++20
