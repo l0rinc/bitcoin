@@ -28,8 +28,8 @@ Cpp11BracedListStyle: true
 DerivePointerAlignment: false
 DisableFormat:   false
 IndentCaseLabels: false
-IndentFunctionDeclarationAfterType: false
 IndentWidth:     4
+IndentWrappedFunctionNames: false
 KeepEmptyLinesAtTheStartOfBlocks: false
 MaxEmptyLinesToKeep: 2
 NamespaceIndentation: None
