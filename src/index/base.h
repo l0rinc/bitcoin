@@ -25,7 +25,7 @@ class Chain;
 } // namespace interfaces
 
 /** Number of concurrent jobs during the initial sync process */
-static constexpr int16_t INDEX_WORKERS_COUNT = 0;
+static constexpr int16_t INDEX_WORKERS_COUNT = 10;
 /** Number of tasks processed by each worker */
 static constexpr int16_t INDEX_WORK_PER_CHUNK = 1000;
 
