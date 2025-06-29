@@ -200,8 +200,23 @@ bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
         // This means sigops in the spent scriptpubkey actually count toward the limit.
         // `fAccurate` means correctly accounting sigops for CHECKMULTISIGs with 16 pubkeys or less. This
         // method of accounting was introduced by BIP16, and BIP54 reuses it.
-        sigops += tx.vin[i].scriptSig.GetSigOpCount(/*fAccurate=*/true);
-        sigops += prev.scriptPubKey.GetSigOpCount(/*fAccurate=*/true);
+        sigops += tx.vin[i].scriptSig.GetLegacySigOpCount(/*fAccurate=*/true);
+        sigops += prev.scriptPubKey.GetLegacySigOpCount(/*fAccurate=*/true);
+
+        if (sigops > MAX_TX_LEGACY_SIGOPS) {
+            return false;
+        }
+
+        switch (prev.scriptPubKey.size()) {
+        case 0: continue;
+        case 4: if (prev.scriptPubKey.IsPayToAnchor()) continue; break;
+        case 22: if (prev.scriptPubKey.IsPayToWitnessPubKeyHash()) continue; break;
+        case 23: if (prev.scriptPubKey.IsPayToScriptHash()) continue; break;
+        case 25: if (prev.scriptPubKey.IsPayToPubKeyHash()) continue; break;
+        case 34: if (prev.scriptPubKey.IsPayToTaproot() || prev.scriptPubKey.IsPayToWitnessScriptHash()) continue; break;
+        case 35: if (prev.scriptPubKey.IsCompressedPayToPubKey()) continue; break;
+        case 67: if (prev.scriptPubKey.IsUncompressedPayToPubKey()) continue; break;
+        }
 
         std::vector<std::vector<unsigned char> > vSolutions;
         TxoutType whichType = Solver(prev.scriptPubKey, vSolutions);
@@ -219,7 +234,7 @@ bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
             if (stack.empty())
                 return false;
             CScript subscript(stack.back().begin(), stack.back().end());
-            const auto p2sh_sigops{subscript.GetSigOpCount(true)};
+            const auto p2sh_sigops{subscript.GetLegacySigOpCount(/*fAccurate=*/true)};
             if (p2sh_sigops > MAX_P2SH_SIGOPS) {
                 return false;
             }
