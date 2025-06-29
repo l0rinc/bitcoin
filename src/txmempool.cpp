@@ -680,9 +680,9 @@ void CTxMemPool::removeForBlock(const std::vector<CTransactionRef>& vtx, unsigne
             removeConflicts(*tx);
             ClearPrioritisation(tx->GetHash());
         }
-    }
-    if (m_opts.signals) {
-        m_opts.signals->MempoolTransactionsRemovedForBlock(txs_removed_for_block, nBlockHeight);
+        if (m_opts.signals) {
+            m_opts.signals->MempoolTransactionsRemovedForBlock(txs_removed_for_block, nBlockHeight);
+        }
     }
     lastRollingFeeUpdate = GetTime();
     blockSinceLastRollingFeeBump = true;
