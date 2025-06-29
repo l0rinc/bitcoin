@@ -200,8 +200,8 @@ bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
         // This means sigops in the spent scriptpubkey actually count toward the limit.
         // `fAccurate` means correctly accounting sigops for CHECKMULTISIGs with 16 pubkeys or less. This
         // method of accounting was introduced by BIP16, and BIP54 reuses it.
-        sigops += tx.vin[i].scriptSig.GetSigOpCount(/*fAccurate=*/true);
-        sigops += prev.scriptPubKey.GetSigOpCount(/*fAccurate=*/true);
+        sigops += tx.vin[i].scriptSig.GetLegacySigOpCount(/*fAccurate=*/true);
+        sigops += prev.scriptPubKey.GetLegacySigOpCount(/*fAccurate=*/true);
 
         std::vector<std::vector<unsigned char> > vSolutions;
         TxoutType whichType = Solver(prev.scriptPubKey, vSolutions);
@@ -219,7 +219,7 @@ bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
             if (stack.empty())
                 return false;
             CScript subscript(stack.back().begin(), stack.back().end());
-            const auto p2sh_sigops{subscript.GetSigOpCount(true)};
+            const auto p2sh_sigops{subscript.GetLegacySigOpCount(/*fAccurate=*/true)};
             if (p2sh_sigops > MAX_P2SH_SIGOPS) {
                 return false;
             }
