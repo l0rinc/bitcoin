@@ -2681,6 +2681,25 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                 break;
             }
             control.Add(std::move(vChecks));
+
+            ///////////////
+
+            unsigned int sigops{0};
+            for (const CTxIn& input : tx.vin) {
+                // Unlike the existing block wide sigop limit, BIP54 counts sigops when they are actually executed.
+                // This means sigops in the spent scriptpubkey count toward the limit.
+                // `fAccurate` means correctly accounting sigops for CHECKMULTISIGs with 16 pubkeys or less. This
+                // method of accounting was introduced by BIP16, and BIP54 reuses it.
+                sigops += input.scriptSig.GetSigOpCount(/*fAccurate=*/true);
+
+                const auto& prev_txo{view.AccessCoin(input.prevout).out};
+                sigops += prev_txo.scriptPubKey.GetSigOpCount(input.scriptSig);
+
+                if (sigops > MAX_TX_LEGACY_SIGOPS) {
+                    LogWarning("Found %u sigops in transaction %s in block %d, which exceeds the maximum of %u legacy sigops",
+                               sigops, tx.GetHash().ToString(), pindex->nHeight, MAX_TX_LEGACY_SIGOPS);
+                }
+            }
         }
 
         CTxUndo undoDummy;
