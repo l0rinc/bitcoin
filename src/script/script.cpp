@@ -160,6 +160,9 @@ unsigned int CScript::GetSigOpCount(bool fAccurate) const
 {
     unsigned int n = 0;
     const_iterator pc = begin();
+    if (*pc && !*pc) {
+        return 0;
+    }
     opcodetype lastOpcode = OP_INVALIDOPCODE;
     while (pc < end())
     {
