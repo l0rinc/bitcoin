@@ -2657,6 +2657,23 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                               "contains a non-BIP68-final transaction " + tx.GetHash().ToString());
                 break;
             }
+
+            unsigned int sigops{0};
+            for (unsigned j{0}; j < tx.vin.size(); ++j) {
+                const auto& prev_txo{view.AccessCoin(tx.vin[j].prevout).out};
+
+                // Unlike the existing block wide sigop limit, BIP54 counts sigops when they are actually executed.
+                // This means sigops in the spent scriptpubkey count toward the limit.
+                // `fAccurate` means correctly accounting sigops for CHECKMULTISIGs with 16 pubkeys or less. This
+                // method of accounting was introduced by BIP16, and BIP54 reuses it.
+                sigops += tx.vin[i].scriptSig.GetSigOpCount(/*fAccurate=*/true);
+                sigops += prev_txo.scriptPubKey.GetSigOpCount(tx.vin[i].scriptSig);
+
+                if (sigops > MAX_TX_LEGACY_SIGOPS) {
+                    LogWarning("Found %u sigops in transaction %s in block %d, which exceeds the maximum of %u legacy sigops",
+                               sigops, tx.GetHash().ToString(), pindex->nHeight, MAX_TX_LEGACY_SIGOPS);
+                }
+            }
         }
 
         // GetTransactionSigOpCost counts 3 types of sigops:
