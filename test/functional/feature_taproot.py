@@ -669,8 +669,8 @@ SIG_ADD_ZERO = {"failure": {"sign": zero_appender(default_sign)}}
 DUST_LIMIT = 600
 MIN_FEE = 50000
 
+TX_MAX_STANDARD_VERSION = 3
 TX_STANDARD_VERSIONS = [1, 2, TX_MAX_STANDARD_VERSION]
-TRUC_MAX_VSIZE = 10000 # test doesn't cover in-mempool spends, so only this limit is hit
 
 # === Actual test cases ===
 
@@ -1634,9 +1634,8 @@ class TaprootTest(BitcoinTestFramework):
                 is_standard_tx = (
                     fail_input is None  # Must be valid to be standard
                     and (all(utxo.spender.is_standard for utxo in input_utxos))  # All inputs must be standard
-                    and tx.version in TX_STANDARD_VERSIONS # The tx version must be standard
-                    and not (tx.version == 3 and tx.get_vsize() > TRUC_MAX_VSIZE)  # Topological standardness rules must be followed
-                )
+                    and tx.version in TX_STANDARD_VERSIONS)  # The tx version must be standard
+                tx.rehash()
                 msg = ','.join(utxo.spender.comment + ("*" if n == fail_input else "") for n, utxo in enumerate(input_utxos))
                 if is_standard_tx:
                     node.sendrawtransaction(tx.serialize().hex(), 0)
