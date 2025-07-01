@@ -76,12 +76,10 @@ In the following instructions, the "Debug" configuration can be specified instea
 
 Run `cmake -B build -LH` to see the full list of available options.
 
-### Building with Static Linking with GUI
-
-```powershell
-cmake -B build --preset vs2026-static          # It might take a while if the vcpkg binary cache is unpopulated or invalidated.
+```
+cmake -B build --preset vs2022-static          # It might take a while if the vcpkg binary cache is unpopulated or invalidated.
 cmake --build build --config Release           # Append "-j N" for N parallel jobs.
-ctest --test-dir build --build-config Release  # Append "-j N" for N parallel tests.
+ctest --test-dir build --build-config Release  # Append "-j N" for N parallel tests. Some tests are disabled if Python 3 is not available.
 cmake --install build --config Release         # Optional.
 ```
 
@@ -97,13 +95,9 @@ the [`--x-buildtrees-root`](https://learn.microsoft.com/en-us/vcpkg/commands/com
 ```powershell
 cmake -B build --preset vs2026-static -DVCPKG_INSTALL_OPTIONS="--x-buildtrees-root=C:\vcpkg"
 ```
-
-If vcpkg installation fails with the message "Paths with embedded space may be handled incorrectly", which
-can occur if your local Bitcoin Core repository path contains spaces, you can override the vcpkg install directory
-by setting the [`VCPKG_INSTALLED_DIR`](https://github.com/microsoft/vcpkg-docs/blob/main/vcpkg/users/buildsystems/cmake-integration.md#vcpkg_installed_dir) variable:
-
-```powershell
-cmake -B build --preset vs2026-static -DVCPKG_INSTALLED_DIR="C:\path_without_spaces"
+cmake -B build --preset vs2022 -DBUILD_GUI=OFF # It might take a while if the vcpkg binary cache is unpopulated or invalidated.
+cmake --build build --config Release           # Append "-j N" for N parallel jobs.
+ctest --test-dir build --build-config Release  # Append "-j N" for N parallel tests. Some tests are disabled if Python 3 is not available.
 ```
 
 ### 6. vcpkg-specific Issues and Workarounds
