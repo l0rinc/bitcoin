@@ -156,7 +156,7 @@ bool IsStandardTx(const CTransaction& tx, const kernel::MemPoolOptions& opts, st
         }
     }
 
-    unsigned int datacarrier_bytes_left = max_datacarrier_bytes.value_or(0);
+    unsigned int nDataOut = 0;
     TxoutType whichType;
     for (const CTxOut& txout : tx.vout) {
         if (!::IsStandard(txout.scriptPubKey, opts.max_datacarrier_bytes, whichType)) {
@@ -251,7 +251,7 @@ TxValidationState ValidateInputsStandardness(const CTransaction& tx, const CCoin
     }
 
     if (!CheckSigopsBIP54(tx, mapInputs)) {
-        if (maybe_reject("bad-txns-nonstandard-inputs", "non-witness sigops exceed bip54 limit")) return state;
+        if (maybe_reject("bad-txns-input-sigops-toomany-overall", "non-witness sigops exceed bip54 limit")) return state;
     }
 
     for (unsigned int i = 0; i < tx.vin.size(); i++) {

@@ -1068,7 +1068,7 @@ BOOST_AUTO_TEST_CASE(max_standard_legacy_sigops)
     BOOST_CHECK_GT((p2sh_inputs_count + 1) * MAX_P2SH_SIGOPS, MAX_TX_LEGACY_SIGOPS);
     auto legacy_sigops_count = GetP2SHSigOpCount(CTransaction(tx_max_sigops), coins);
     BOOST_CHECK_EQUAL(legacy_sigops_count, 2505);
-    std::string reject_reason("bad-txns-nonstandard-inputs");
+    std::string reject_reason("bad-txns-input-sigops-toomany-overall");
     std::string sigop_limit_reject_debug_message("non-witness sigops exceed bip54 limit");
     {
         auto validation_state = ValidateInputsStandardness(CTransaction(tx_max_sigops), coins);
