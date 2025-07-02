@@ -85,15 +85,7 @@ ctest --test-dir build --build-config Release  # Append "-j N" for N parallel te
 cmake --install build --config Release         # Optional.
 ```
 
-### Building with Dynamic Linking without GUI
-
-```powershell
-cmake -B build --preset vs2026 -DBUILD_GUI=OFF # It might take a while if the vcpkg binary cache is unpopulated or invalidated.
-cmake --build build --config Release           # Append "-j N" for N parallel jobs.
-ctest --test-dir build --build-config Release  # Append "-j N" for N parallel tests.
-```
-
-### vcpkg-specific Issues and Workarounds
+### 5. Building with Dynamic Linking without GUI
 
 vcpkg installation during the configuration step might fail for various reasons unrelated to Bitcoin Core.
 
@@ -114,9 +106,30 @@ by setting the [`VCPKG_INSTALLED_DIR`](https://github.com/microsoft/vcpkg-docs/b
 cmake -B build --preset vs2026-static -DVCPKG_INSTALLED_DIR="C:\path_without_spaces"
 ```
 
+### 6. vcpkg-specific Issues and Workarounds
+
+vcpkg installation during the configuration step might fail for various reasons unrelated to Bitcoin Core.
+
+If the failure is due to a "Buildtrees path … is too long" error, which is often encountered when building
+with `BUILD_GUI=ON` and using the default vcpkg installation provided by Visual Studio, you can
+specify a shorter path to store intermediate build files by using
+the [`--x-buildtrees-root`](https://learn.microsoft.com/en-us/vcpkg/commands/common-options#buildtrees-root) option:
+
+```powershell
+cmake -B build --preset vs2022-static -DVCPKG_INSTALL_OPTIONS="--x-buildtrees-root=C:\vcpkg"
+```
+
+If vcpkg installation fails with the message "Paths with embedded space may be handled incorrectly", which
+can occur if your local Bitcoin Core repository path contains spaces, you can override the vcpkg install directory
+by setting the [`VCPKG_INSTALLED_DIR`](https://github.com/microsoft/vcpkg-docs/blob/main/vcpkg/users/buildsystems/cmake-integration.md#vcpkg_installed_dir) variable:
+
+```powershell
+cmake -B build --preset vs2022-static -DVCPKG_INSTALLED_DIR="C:\path_without_spaces"
+```
+
 ## Performance Notes
 
-### vcpkg Manifest Default Features
+### 7. vcpkg Manifest Default Features
 
 One can skip vcpkg manifest default features to speed up the configuration step.
 For example, the following invocation will skip all features except for "wallet" and "tests" and their dependencies:
@@ -126,6 +139,6 @@ cmake -B build --preset vs2026 -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON -DVCPKG_M
 
 Available features are listed in the [`vcpkg.json`](/vcpkg.json) file.
 
-### Antivirus Software
+### 8. Antivirus Software
 
 To improve the build process performance, one might add the Bitcoin repository directory to the Microsoft Defender Antivirus exclusions.
