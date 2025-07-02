@@ -75,12 +75,13 @@ BOOST_AUTO_TEST_CASE(xor_bytes_reference)
 
 BOOST_AUTO_TEST_CASE(obfuscation_constructors)
 {
-    constexpr uint64_t test_key{0x0123456789ABCDEF};
+    using KeyType = uint64_t;
+    constexpr KeyType test_key{0x0123456789ABCDEF};
 
     std::array<std::byte, Obfuscation::KEY_SIZE> key_bytes{};
     std::memcpy(key_bytes.data(), &test_key, Obfuscation::KEY_SIZE);
     const Obfuscation obfuscation{key_bytes};
-    BOOST_CHECK_EQUAL(obfuscation.Key(), test_key);
+    BOOST_CHECK_EQUAL(obfuscation_private::Key(obfuscation), test_key);
 }
 
 BOOST_AUTO_TEST_CASE(obfuscation_serialize)
@@ -97,7 +98,7 @@ BOOST_AUTO_TEST_CASE(obfuscation_serialize)
     Obfuscation recovered{};
     ds >> recovered;
 
-    BOOST_CHECK_EQUAL(recovered.Key(), original.Key());
+    BOOST_CHECK_EQUAL(obfuscation_private::Key(recovered), obfuscation_private::Key(original));
 }
 
 BOOST_AUTO_TEST_CASE(obfuscation_empty)
