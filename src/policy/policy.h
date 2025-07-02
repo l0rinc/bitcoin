@@ -205,9 +205,11 @@ bool IsStandardTx(const CTransaction& tx, const kernel::MemPoolOptions& opts, st
 /**
  * Check for standard transaction types
  * @param[in] mapInputs       Map of previous transactions that have outputs we're spending
+ * @param[in] opts            Mempool policy options
  * @returns valid TxValidationState if all inputs (scriptSigs) use only standard transaction forms else returns
  * invalid TxValidationState which states why the first invalid input is not standard
  */
+TxValidationState ValidateInputsStandardness(const CTransaction& tx, const CCoinsViewCache& mapInputs, const kernel::MemPoolOptions& opts, const ignore_rejects_type& ignore_rejects=empty_ignore_rejects);
 TxValidationState ValidateInputsStandardness(const CTransaction& tx, const CCoinsViewCache& mapInputs, const ignore_rejects_type& ignore_rejects=empty_ignore_rejects);
 /**
 * Check if the transaction is over standard P2WSH resources limit:

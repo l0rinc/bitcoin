@@ -287,7 +287,7 @@ static bool CheckSigopsBIP54(const CTransaction& tx, const CCoinsViewCache& inpu
  *
  * We also check the total number of non-witness sigops across the whole transaction, as per BIP54.
  */
-TxValidationState ValidateInputsStandardness(const CTransaction& tx, const CCoinsViewCache& mapInputs, const ignore_rejects_type& ignore_rejects)
+TxValidationState ValidateInputsStandardness(const CTransaction& tx, const CCoinsViewCache& mapInputs, const kernel::MemPoolOptions& opts, const ignore_rejects_type& ignore_rejects)
 {
     TxValidationState state;
     const auto maybe_reject{[&](const std::string& reason, const std::string& debug) {
@@ -351,6 +351,11 @@ TxValidationState ValidateInputsStandardness(const CTransaction& tx, const CCoin
     }
 
     return state;
+}
+
+TxValidationState ValidateInputsStandardness(const CTransaction& tx, const CCoinsViewCache& mapInputs, const ignore_rejects_type& ignore_rejects)
+{
+    return ValidateInputsStandardness(tx, mapInputs, kernel::MemPoolOptions{}, ignore_rejects);
 }
 
 bool IsWitnessStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs, const std::string& reason_prefix, std::string& out_reason, const ignore_rejects_type& ignore_rejects)
