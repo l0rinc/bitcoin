@@ -125,6 +125,18 @@ BOOST_AUTO_TEST_CASE(MempoolPermitEphemeralParse)
     BOOST_CHECK(dust_without_anchor.permitephemeral_dust);
 }
 
+BOOST_AUTO_TEST_CASE(MempoolMaxTxLegacySigopsParse)
+{
+    ArgsManager argsman;
+    argsman.ForceSetArg("-maxtxlegacysigops", "1234");
+
+    kernel::MemPoolOptions opts;
+    BOOST_CHECK_EQUAL(opts.maxtxlegacysigops, MAX_TX_LEGACY_SIGOPS);
+    const auto result{ApplyArgsManOptions(argsman, Params(), opts)};
+    BOOST_REQUIRE(result);
+    BOOST_CHECK_EQUAL(opts.maxtxlegacysigops, 1234);
+}
+
 BOOST_AUTO_TEST_CASE(MempoolCoinAgePriorityCache)
 {
     constexpr CAmount input_value{10 * COIN};
