@@ -94,6 +94,22 @@ class DumptxoutsetTest(BitcoinTestFramework):
             # UTXO snapshot hash should be deterministic based on mocked time.
             assert_equal(sha256sum_file(str(expected_path)).hex(), expected_digest)
 
+        if {"format"} == set(params) - {"show_header", "separator"}:
+            # Test backward compatibility with Knots 0.20.0-28.1 positional
+            # format/show_header/separator arguments.
+            def test_dump_file_compat(*args, **kwargs):
+                os.replace(expected_path, node.chain_path / (filename + ".old"))
+                out2 = node.dumptxoutset(filename, *args, **kwargs)
+                assert_equal(out, out2)
+                if is_human_readable:
+                    self.check_ascii_dump(expected_path, out2, params)
+                else:
+                    assert_equal(sha256sum_file(str(expected_path)).hex(), expected_digest)
+
+            test_dump_file_compat(params.get("format"), params.get("show_header"), params.get("separator"))
+            test_dump_file_compat(params.get("format"), params.get("show_header"), separator=params.get("separator"))
+            test_dump_file_compat(params.get("format"), show_header=params.get("show_header"), separator=params.get("separator"))
+
         assert_equal(out["txoutset_hash"], "771d773b5c27b6f35f598ce764652a2cf28fbc268341eb1827844e416c629c7d")
         assert_equal(out["nchaintx"], 101)
 

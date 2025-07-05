@@ -437,6 +437,26 @@ BOOST_AUTO_TEST_CASE(rpc_convert_values_generatetoaddress)
     BOOST_CHECK_EQUAL(result[2].getInt<int>(), 9);
 }
 
+BOOST_AUTO_TEST_CASE(rpc_convert_values_dumptxoutset)
+{
+    UniValue result;
+
+    BOOST_CHECK_NO_THROW(result = RPCConvertValues("dumptxoutset", {"utxo.dat", R"(["txid","vout"])", "false", ":"}));
+    BOOST_CHECK_EQUAL(result[0].get_str(), "utxo.dat");
+    BOOST_REQUIRE(result[1].isArray());
+    BOOST_CHECK_EQUAL(result[1][0].get_str(), "txid");
+    BOOST_CHECK_EQUAL(result[1][1].get_str(), "vout");
+    BOOST_CHECK(!result[2].get_bool());
+    BOOST_CHECK_EQUAL(result[3].get_str(), ":");
+
+    BOOST_CHECK_NO_THROW(result = RPCConvertNamedValues("dumptxoutset", {"path=utxo.dat", R"(format=["txid"])", "show_header=false", "separator=:"}));
+    BOOST_CHECK_EQUAL(result.find_value("path").get_str(), "utxo.dat");
+    BOOST_REQUIRE(result.find_value("format").isArray());
+    BOOST_CHECK_EQUAL(result.find_value("format")[0].get_str(), "txid");
+    BOOST_CHECK(!result.find_value("show_header").get_bool());
+    BOOST_CHECK_EQUAL(result.find_value("separator").get_str(), ":");
+}
+
 BOOST_AUTO_TEST_CASE(rpc_getblockstats_calculate_percentiles_by_weight)
 {
     int64_t total_weight = 200;
