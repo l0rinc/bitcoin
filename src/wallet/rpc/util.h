@@ -46,6 +46,7 @@ std::optional<std::string> GetWalletNameFromJSONRPCRequest(const JSONRPCRequest&
  * Throws `RPC_INVALID_PARAMETER` if none or different wallet names are specified.
  */
 std::string EnsureUniqueWalletName(const JSONRPCRequest& request, std::optional<std::string_view> wallet_name);
+std::string EnsureUniqueWalletName(const JSONRPCRequest& request, const std::string* wallet_name);
 
 void EnsureWalletIsUnlocked(const CWallet&);
 WalletContext& EnsureWalletContext(const std::any& context);

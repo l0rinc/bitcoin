@@ -54,6 +54,8 @@
 #include <variant>
 #include <vector>
 
+#include <boost/signals2/signal.hpp>
+
 class CKey;
 class CKeyID;
 class CPubKey;

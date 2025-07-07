@@ -20,6 +20,13 @@ static std::string TestWalletName(const std::string& endpoint, std::optional<std
     return EnsureUniqueWalletName(req, parameter);
 }
 
+static std::string TestWalletNamePointer(const std::string& endpoint, std::optional<std::string> parameter = std::nullopt)
+{
+    JSONRPCRequest req;
+    req.URI = endpoint;
+    return EnsureUniqueWalletName(req, parameter ? &*parameter : nullptr);
+}
+
 BOOST_FIXTURE_TEST_SUITE(wallet_rpc_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(ensure_unique_wallet_name)
@@ -35,6 +42,10 @@ BOOST_AUTO_TEST_CASE(ensure_unique_wallet_name)
     BOOST_CHECK_THROW(TestWalletName("/wallet/foo", "bar"), UniValue);
     BOOST_CHECK_THROW(TestWalletName("/wallet/foo", "foobar"), UniValue);
     BOOST_CHECK_THROW(TestWalletName("/wallet/foobar", "foo"), UniValue);
+
+    BOOST_CHECK_EQUAL(TestWalletNamePointer("/wallet/foo"), "foo");
+    BOOST_CHECK_EQUAL(TestWalletNamePointer("/", "foo"), "foo");
+    BOOST_CHECK_THROW(TestWalletNamePointer("/wallet/foo", "bar"), UniValue);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

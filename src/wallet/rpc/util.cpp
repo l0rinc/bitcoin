@@ -50,6 +50,11 @@ std::string EnsureUniqueWalletName(const JSONRPCRequest& request, std::optional<
     return std::string{*wallet_name};
 }
 
+std::string EnsureUniqueWalletName(const JSONRPCRequest& request, const std::string* wallet_name)
+{
+    return EnsureUniqueWalletName(request, wallet_name ? std::optional<std::string_view>{*wallet_name} : std::nullopt);
+}
+
 std::optional<std::string> GetWalletNameFromJSONRPCRequest(const JSONRPCRequest& request)
 {
     if (request.URI.starts_with(WALLET_ENDPOINT_BASE)) {
