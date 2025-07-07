@@ -995,7 +995,11 @@ static bool IsCurrentForAntiFeeSniping(interfaces::Chain& chain, const uint256& 
     return true;
 }
 
-void DiscourageFeeSniping(CMutableTransaction& tx, FastRandomContext& rng_fast,
+/**
+ * Set a height-based locktime for new transactions (uses the height of the
+ * current chain tip unless we are not synced with the current chain
+ */
+static void DiscourageFeeSniping(CMutableTransaction& tx, FastRandomContext& rng_fast,
                                  interfaces::Chain& chain, const uint256& block_hash, int block_height)
 {
     // All inputs must be added by now
@@ -1051,7 +1055,23 @@ void DiscourageFeeSniping(CMutableTransaction& tx, FastRandomContext& rng_fast,
     }
 }
 
-uint64_t GetSerializeSizeForRecipient(const CRecipient& recipient)
+void MaybeDiscourageFeeSniping2(const CWallet &wallet,
+                               CMutableTransaction& tx)
+{
+    for (const CTxIn& tx_in : tx.vin) {
+        // Checks sequence values consistent with DiscourageFeeSniping
+        if (tx_in.nSequence != CTxIn::MAX_SEQUENCE_NONFINAL && tx_in.nSequence != MAX_BIP125_RBF_SEQUENCE) {
+            // If an input has an incompatible sequence, we can't do anti-fee-sniping
+            return;
+        }
+    }
+
+    FastRandomContext rng_fast;
+    LOCK(wallet.cs_wallet);
+    DiscourageFeeSniping(tx, rng_fast, wallet.chain(), wallet.GetLastBlockHash(), wallet.GetLastBlockHeight());
+}
+
+size_t GetSerializeSizeForRecipient(const CRecipient& recipient)
 {
     return ::GetSerializeSize(CTxOut(recipient.nAmount, GetScriptForDestination(recipient.dest)));
 }
