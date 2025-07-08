@@ -933,7 +933,16 @@ class PSBTTest(BitcoinTestFramework):
         for psbt_in in decoded_psbt["inputs"]:
             assert_equal(psbt_in["sequence"], MAX_BIP125_RBF_SEQUENCE)
             assert "bip32_derivs" in psbt_in
-        assert_equal(decoded_psbt["fallback_locktime"], 0)
+        # Anti fee sniping
+        assert 0 < decoded_psbt["fallback_locktime"] <= block_height
+
+        # Same construction with PSBTv0 also applies anti fee sniping
+        psbtx_info = self.nodes[0].walletcreatefundedpsbt(inputs=[], outputs=[{self.nodes[2].getnewaddress():unspent["amount"]+1}], psbt_version=0)
+        decoded_psbt = self.nodes[0].decodepsbt(psbtx_info["psbt"])
+        for tx_in, psbt_in in zip(decoded_psbt["tx"]["vin"], decoded_psbt["inputs"]):
+            assert_equal(tx_in["sequence"], MAX_BIP125_RBF_SEQUENCE)
+            assert "bip32_derivs" in psbt_in
+        assert 0 < decoded_psbt["tx"]["locktime"] <= block_height
 
         # Make sure change address wallet does not have P2SH innerscript access to results in success
         # when attempting BnB coin selection
