@@ -32,7 +32,7 @@ static RPCMethod gettxoutproof()
         {
             {"txids", RPCArg::Type::ARR, RPCArg::Optional::NO, "The txids to filter",
                 {
-                    {"txid", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "A transaction hash"},
+                    {"txid", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "A transaction id"},
                 },
             },
             {"blockhash", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "If specified, looks for txid in the block with this hash"},
