@@ -6589,6 +6589,12 @@ std::optional<std::pair<const CBlockIndex*, const CBlockIndex*>> ChainstateManag
     return std::make_pair(chainstate->m_chain.Tip(), chainstate->TargetBlock());
 }
 
+std::optional<int> ChainstateManager::GetSnapshotBaseHeight() const
+{
+    const CBlockIndex* base{CurrentChainstate().SnapshotBase()};
+    return base ? std::optional<int>{base->nHeight} : std::nullopt;
+}
+
 util::Result<void> ChainstateManager::ActivateBestChains()
 {
     // We can't hold cs_main during ActivateBestChain even though we're accessing

@@ -1377,6 +1377,9 @@ public:
     //! Get range of historical blocks to download.
     std::optional<std::pair<const CBlockIndex*, const CBlockIndex*>> GetHistoricalBlockRange() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
+    //! Return the height of the base block of the snapshot in use, if one exists.
+    std::optional<int> GetSnapshotBaseHeight() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
     //! Call ActivateBestChain() on every chainstate.
     util::Result<void> ActivateBestChains() LOCKS_EXCLUDED(::cs_main);
 
