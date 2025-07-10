@@ -1827,6 +1827,12 @@ std::vector<PeerRef> PeerManagerImpl::GetAllPeers() const
     return peers;
 }
 
+int PeerManagerImpl::GetNumberOfPeersWithValidatedDownloads() const
+{
+    AssertLockHeld(m_chainman.GetMutex());
+    return m_peers_downloading_from;
+}
+
 bool PeerManagerImpl::GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) const
 {
     {
@@ -1924,12 +1930,6 @@ std::vector<CTransactionRef> PeerManagerImpl::AbortPrivateBroadcast(const uint25
     m_connman.m_private_broadcast.NumToOpenSub(connections_cancelled);
 
     return removed_txs;
-}
-
-int PeerManagerImpl::GetNumberOfPeersWithValidatedDownloads() const
-{
-    AssertLockHeld(m_chainman.GetMutex());
-    return m_peers_downloading_from;
 }
 
 void PeerManagerImpl::AddToCompactExtraTransactions(const CTransactionRef& tx)
