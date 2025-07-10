@@ -1146,6 +1146,11 @@ bool AppInitParameterInteraction(const ArgsManager& args)
         SetMockTime(std::chrono::seconds{*mocktime});
     }
 
+    g_software_expiry = args.GetIntArg("-softwareexpiry", DEFAULT_SOFTWARE_EXPIRY);
+    if (IsThisSoftwareExpired(GetTime())) {
+        return InitError(_("This software is expired, and may be out of consensus. You must choose to upgrade or override this expiration."));
+    }
+
     if (args.GetBoolArg("-peerbloomfilters", DEFAULT_PEERBLOOMFILTERS))
         g_local_services = ServiceFlags(g_local_services | NODE_BLOOM);
 
