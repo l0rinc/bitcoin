@@ -1004,7 +1004,7 @@ private:
     /** Number of peers from which we're downloading blocks. */
     int m_peers_downloading_from GUARDED_BY(cs_main) = 0;
 
-    void AddToCompactExtraTransactions(const CTransactionRef& tx) EXCLUSIVE_LOCKS_REQUIRED(g_msgproc_mutex);
+    void AddToCompactExtraTransactions(const CTransactionRef& tx, size_t tx_dynamic_usage) EXCLUSIVE_LOCKS_REQUIRED(g_msgproc_mutex);
 
     /** Orphan/conflicted/etc transactions that are kept for compact block reconstruction.
      *  The last -blockreconstructionextratxn/DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN of
@@ -1012,6 +1012,7 @@ private:
     std::vector<std::pair<Wtxid, CTransactionRef>> vExtraTxnForCompact GUARDED_BY(g_msgproc_mutex);
     /** Offset into vExtraTxnForCompact to insert the next tx */
     size_t vExtraTxnForCompactIt GUARDED_BY(g_msgproc_mutex) = 0;
+    size_t blockreconstructionextratxn_memusage{0};
 
     /** Check whether the last unknown block a peer advertised is not yet known. */
     void ProcessBlockAvailability(NodeId nodeid) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
@@ -1932,16 +1933,27 @@ std::vector<CTransactionRef> PeerManagerImpl::AbortPrivateBroadcast(const uint25
     return removed_txs;
 }
 
-void PeerManagerImpl::AddToCompactExtraTransactions(const CTransactionRef& tx)
+void PeerManagerImpl::AddToCompactExtraTransactions(const CTransactionRef& tx, const size_t tx_dynamic_usage)
 {
-    if (m_opts.max_extra_txs == 0) return;
-    if (vExtraTxnForCompact.size() < m_opts.max_extra_txs) {
-        if (vExtraTxnForCompact.empty()) vExtraTxnForCompact.reserve(m_opts.max_extra_txs);
-        vExtraTxnForCompact.emplace_back(tx->GetWitnessHash(), tx);
-    } else {
-        vExtraTxnForCompact[vExtraTxnForCompactIt] = std::make_pair(tx->GetWitnessHash(), tx);
+    if (m_opts.max_extra_txs <= 0)
+        return;
+    if (!vExtraTxnForCompact.size())
+        vExtraTxnForCompact.resize(m_opts.max_extra_txs);
+
+    {
+        auto& entry = vExtraTxnForCompact[vExtraTxnForCompactIt];
+        if (entry.second) blockreconstructionextratxn_memusage -= RecursiveDynamicUsage(*entry.second);
+        entry = std::make_pair(tx->GetWitnessHash(), tx);
+        blockreconstructionextratxn_memusage += tx_dynamic_usage;
     }
     vExtraTxnForCompactIt = (vExtraTxnForCompactIt + 1) % m_opts.max_extra_txs;
+
+    while (blockreconstructionextratxn_memusage > m_opts.max_extra_txs_size) {
+        auto& entry = vExtraTxnForCompact[vExtraTxnForCompactIt];
+        if (entry.second) blockreconstructionextratxn_memusage -= RecursiveDynamicUsage(*entry.second);
+        entry = {};
+        vExtraTxnForCompactIt = (vExtraTxnForCompactIt + 1) % m_opts.max_extra_txs;
+    }
 }
 
 void PeerManagerImpl::Misbehaving(Peer& peer, const std::string& message)
@@ -3255,8 +3267,9 @@ std::optional<node::PackageToValidate> PeerManagerImpl::ProcessInvalidTx(NodeId 
 
     const auto& [add_extra_compact_tx, unique_parents, package_to_validate] = m_txdownloadman.MempoolRejectedTx(ptx, state, nodeid, first_time_failure);
 
-    if (add_extra_compact_tx && RecursiveDynamicUsage(*ptx) < 100000) {
-        AddToCompactExtraTransactions(ptx);
+    const size_t tx_dynamic_usage{RecursiveDynamicUsage(*ptx)};
+    if (add_extra_compact_tx && tx_dynamic_usage < BLOCK_RECONSTRUCTION_EXTRA_TXN_PER_TXN_SIZE_LIMIT) {
+        AddToCompactExtraTransactions(ptx, tx_dynamic_usage);
     }
     for (const Txid& parent_txid : unique_parents) {
         if (peer) AddKnownTx(*peer, parent_txid.ToUint256());
@@ -3282,7 +3295,8 @@ void PeerManagerImpl::ProcessValidTx(NodeId nodeid, const CTransactionRef& tx, c
     InitiateTxBroadcastToAll(tx->GetHash(), tx->GetWitnessHash());
 
     for (const CTransactionRef& removedTx : replaced_transactions) {
-        AddToCompactExtraTransactions(removedTx);
+        const size_t tx_dynamic_usage{RecursiveDynamicUsage(*removedTx)};
+        AddToCompactExtraTransactions(removedTx, tx_dynamic_usage);
     }
 }
 

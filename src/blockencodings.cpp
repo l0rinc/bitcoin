@@ -143,6 +143,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     }
 
     for (size_t i = 0; i < extra_txn.size(); i++) {
+        if (!extra_txn[i].second) continue;
         uint64_t shortid = cmpctblock.GetShortID(extra_txn[i].first);
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {

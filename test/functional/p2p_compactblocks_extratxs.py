@@ -107,13 +107,16 @@ class CompactBlocksBlockReconstructionLimitTest(BitcoinTestFramework):
         """Generate blocks to create UTXOs for the wallet."""
         self.generate(self.wallet, COINBASE_MATURITY + 420)
 
-    def restart_node_with_limit(self, count=None):
+    def restart_node_with_limit(self, count=None, size=None):
         """Restart node with specific count limit."""
         extra_args = list(self.extra_args[0])
 
         if count is not None:
             self.log.info(f"Setting transaction count limit: {count}")
             extra_args.append(f"-blockreconstructionextratxn={count}")
+        if size is not None:
+            self.log.info(f"Setting transaction size limit: {size} MB")
+            extra_args.append(f"-blockreconstructionextratxnsize={size}")
 
         self.log.info(f"Restarting node with args: {extra_args}")
         self.restart_node(0, extra_args=extra_args)
@@ -296,6 +299,16 @@ class CompactBlocksBlockReconstructionLimitTest(BitcoinTestFramework):
         expected_missing = list(range(tx_count - 1))
         assert_equal(result["missing_indices"], expected_missing)
 
+    def test_extratxnpool_size_limit(self):
+        """Test that the total size limit evicts extra transactions."""
+        self.log.info("Testing zero-size extra transaction pool limit...")
+
+        self.restart_node_with_limit(count=5, size=0)
+        rejected_txs = self.populate_extra_pool(1)
+
+        result = self.send_compact_block(rejected_txs, [0])
+        assert_equal(result["missing_indices"], [0])
+
     def test_extratxn_invalid_parameters(self):
         """Test handling of invalid blockreconstructionextratxn values."""
         self.log.info("Testing invalid parameter values...")
@@ -330,6 +343,7 @@ class CompactBlocksBlockReconstructionLimitTest(BitcoinTestFramework):
         self.test_extratxnpool_disabled()
         self.test_extratxnpool_capacity_and_wraparound()
         self.test_single_extratxnpool_capacity()
+        self.test_extratxnpool_size_limit()
         self.test_extratxn_invalid_parameters()
 
 

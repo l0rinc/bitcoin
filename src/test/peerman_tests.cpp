@@ -4,9 +4,11 @@
 
 #include <chain.h>
 #include <chainparams.h>
+#include <common/args.h>
 #include <consensus/params.h>
 #include <interfaces/mining.h>
 #include <net_processing.h>
+#include <node/peerman_args.h>
 #include <pow.h>
 #include <primitives/block.h>
 #include <protocol.h>
@@ -40,6 +42,25 @@ static void mineBlock(node::NodeContext& node, FakeNodeClock& clock, std::chrono
     clock.set(curr_time); // process block at current time
     Assert(node.chainman->ProcessNewBlock(std::make_shared<const CBlock>(block), /*force_processing=*/true, /*min_pow_checked=*/true, nullptr));
     node.validation_signals->SyncWithValidationInterfaceQueue(); // drain events queue
+}
+
+BOOST_AUTO_TEST_CASE(peerman_args_block_reconstruction_extra_txn)
+{
+    ArgsManager argsman;
+    argsman.ForceSetArg("-blockreconstructionextratxn", "12");
+    argsman.ForceSetArg("-blockreconstructionextratxnsize", "1.25");
+
+    PeerManager::Options options;
+    node::ApplyArgsManOptions(argsman, options);
+
+    BOOST_CHECK_EQUAL(options.max_extra_txs, 12);
+    BOOST_CHECK_EQUAL(options.max_extra_txs_size, 1'250'000);
+
+    ArgsManager argsman_negative;
+    argsman_negative.ForceSetArg("-blockreconstructionextratxnsize", "-1");
+    PeerManager::Options negative_options;
+    node::ApplyArgsManOptions(argsman_negative, negative_options);
+    BOOST_CHECK_EQUAL(negative_options.max_extra_txs_size, 0);
 }
 
 // Verifying when network-limited peer connections are desirable based on the node's proximity to the tip
