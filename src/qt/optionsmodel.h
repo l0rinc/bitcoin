@@ -89,6 +89,7 @@ public:
         incrementalrelayfee,
         mempoolexpiry,
         rejectunknownscripts,   // bool
+        rejectunknownwitness,   // bool
         rejectparasites,        // bool
         rejecttokens,           // bool
         rejectspkreuse,         // bool
