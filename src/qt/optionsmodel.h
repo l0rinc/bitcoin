@@ -103,6 +103,7 @@ public:
         rejectbarepubkey,       // bool
         rejectbaremultisig,     // bool
         maxscriptsize,
+        maxtxlegacysigops,
         datacarriercost,        // double
         datacarriersize,
         rejectnonstddatacarrier,  // bool
