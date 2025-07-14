@@ -1373,6 +1373,7 @@ bool OptionsModel::setOption(OptionID option, const QVariant& value, const std::
             std::string strNv = value.toString().toStdString();
             gArgs.ForceSetArg("-blockreconstructionextratxn", strNv);
             gArgs.ModifyRWConfigFile("blockreconstructionextratxn", strNv);
+            setRestartRequired(true);
         }
         break;
     case corepolicy:
