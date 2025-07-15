@@ -94,6 +94,8 @@ public:
         rejecttokens,           // bool
         rejectspkreuse,         // bool
         minrelaytxfee,
+        minrelaycoinblocks,
+        minrelaymaturity,
         bytespersigop,
         bytespersigopstrict,
         limitancestorcount,
