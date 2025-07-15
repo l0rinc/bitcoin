@@ -102,6 +102,7 @@ public:
         limitdescendantsize,
         rejectbarepubkey,       // bool
         rejectbaremultisig,     // bool
+        permitephemeral,
         rejectbareanchor,       // bool
         rejectbaredatacarrier,  // bool
         maxscriptsize,
