@@ -37,7 +37,10 @@ Bitcoin Core requires one of the following compilers.
 | Dependency | Releases | Minimum required |
 | --- | --- | --- |
 | [Cap'n Proto](../depends/packages/native_capnp.mk) ([IPC](multiprocess.md)) | [link](https://capnproto.org/) | [0.7.1](https://github.com/bitcoin/bitcoin/pull/33241) |
+| ImageMagick (non-macOS gui) | [link](https://imagemagick.org/) | 6.4.2 |
+| libicns (macOS deploy) | [link](https://icns.sourceforge.io/) | 0.8.1 |
 | [libmultiprocess](../depends/packages/native_libmultiprocess.mk) ([IPC](multiprocess.md)) | [link](https://github.com/bitcoin-core/libmultiprocess/tags) | [v7.0-pre1](https://github.com/bitcoin/bitcoin/pull/33517) |
+| librsvg (gui) | [link](https://gitlab.gnome.org/GNOME/librsvg) | 2.40.21 |
 | [MiniUPnPc](../depends/packages/miniupnpc.mk) (UPnP port mapping) | [link](https://miniupnp.tuxfamily.org/) | 2.1 |
 | Python (scripts, tests) | [link](https://www.python.org) | [3.10](https://github.com/bitcoin/bitcoin/pull/30527) |
 | [Qt](../depends/packages/qt.mk) (gui) | [link](https://download.qt.io/official_releases/qt/) | [5.11.3](https://github.com/bitcoin/bitcoin/pull/24132) |
