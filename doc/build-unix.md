@@ -40,12 +40,12 @@ You can either build from self-compiled [depends](/depends/README.md) or
 install the dependencies from your distribution package manager. Dependencies
 for additional features in later columns are optional.
 
-| Package manager         | Required build dependencies | SQLite (wallet) | Cap'n Proto (IPC) | ZMQ <sup><a href="#note1">[1]</a></sup> | USDT | UPnP | Qt and libqrencode (GUI) |
-| ----------------------- | --------------------------- | --------------- | ----------------- | --- | ---- | ---- | ------------------------ |
-| Debian / Ubuntu (`apt`) | `build-essential cmake python3 libboost-dev` | `libsqlite3-dev` | `libcapnp-dev capnproto` | `libzmq3-dev pkgconf` | `systemtap-sdt-dev` | `libminiupnpc-dev` | `qtbase5-dev qttools5-dev qttools5-dev-tools qtwayland5 libqrencode-dev` |
-| Fedora (`dnf`)          | `gcc-c++ cmake make python3 boost-devel` | `sqlite-devel` | `capnproto capnproto-devel` | `zeromq-devel pkgconf` | `systemtap-sdt-devel` | `miniupnpc-devel` | `qt5-qtbase-devel qt5-qttools-devel qt5-qtwayland qrencode-devel` |
-| Alpine (`apk`)          | `build-base cmake linux-headers python3 boost-dev` | `sqlite-dev` | `capnproto capnproto-dev` | `zeromq-dev` | Not supported | `miniupnpc-dev` | `qt5-qtbase-dev qt5-qttools-dev libqrencode-dev` |
-| Arch (`pacman`)         | `gcc make cmake python boost` | `sqlite` | `capnproto` | `zeromq` | `systemtap` | `miniupnpc` | `qt5-base qt5-tools qt5-wayland qrencode` |
+| Package manager         | Required build dependencies | SQLite (wallet) | Cap'n Proto (IPC) | ZMQ <sup><a href="#note1">[1]</a></sup> | USDT | UPnP | Qt, libqrencode, and image tools (GUI) |
+| ----------------------- | --------------------------- | --------------- | ----------------- | --- | ---- | ---- | ------------------------------------- |
+| Debian / Ubuntu (`apt`) | `build-essential cmake python3 libboost-dev` | `libsqlite3-dev` | `libcapnp-dev capnproto` | `libzmq3-dev pkgconf` | `systemtap-sdt-dev` | `libminiupnpc-dev` | `qtbase5-dev qttools5-dev qttools5-dev-tools qtwayland5 libqrencode-dev librsvg2-bin imagemagick` |
+| Fedora (`dnf`)          | `gcc-c++ cmake make python3 boost-devel` | `sqlite-devel` | `capnproto capnproto-devel` | `zeromq-devel pkgconf` | `systemtap-sdt-devel` | `miniupnpc-devel` | `qt5-qtbase-devel qt5-qttools-devel qt5-qtwayland qrencode-devel librsvg2-tools ImageMagick` |
+| Alpine (`apk`)          | `build-base cmake linux-headers python3 boost-dev` | `sqlite-dev` | `capnproto capnproto-dev` | `zeromq-dev` | Not supported | `miniupnpc-dev` | `qt5-qtbase-dev qt5-qttools-dev libqrencode-dev rsvg-convert imagemagick` |
+| Arch (`pacman`)         | `gcc make cmake python boost` | `sqlite` | `capnproto` | `zeromq` | `systemtap` | `miniupnpc` | `qt5-base qt5-tools qt5-wayland qrencode librsvg imagemagick` |
 
 <a id="note1"></a>1. Some ZMQ packages do not vendor the CMake config files, which requires `pkgconf` or `pkg-config` to be installed.
 
@@ -69,7 +69,8 @@ development package and must be enabled via `-DWITH_USDT=ON`.
 GUI dependencies:
 
 Bitcoin Core includes a GUI built with the cross-platform Qt Framework. To compile the GUI, we need to install
-the necessary parts of Qt, the libqrencode and pass `-DBUILD_GUI=ON`. Skip if you don't intend to use the GUI.
+the necessary parts of Qt, libqrencode, and image processing tools, and pass
+`-DBUILD_GUI=ON`. Skip if you don't intend to use the GUI.
 
 For Qt 6.5 and later, the xcb cursor runtime package must be installed (`libxcb-cursor0` on Debian/Ubuntu, `xcb-util-cursor` on Fedora).
 
