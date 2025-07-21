@@ -407,7 +407,7 @@ private:
  *  and made an initial sync 13% faster.
  */
 static constexpr unsigned int SCRIPT_BASE_SIZE{28};
-typedef prevector<SCRIPT_BASE_SIZE, unsigned char> CScriptBase;
+using CScriptBase = prevector<SCRIPT_BASE_SIZE, uint8_t>;
 
 bool GetScriptOp(CScriptBase::const_iterator& pc, CScriptBase::const_iterator end, opcodetype& opcodeRet, std::vector<unsigned char>* pvchRet);
 
