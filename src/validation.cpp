@@ -2548,7 +2548,7 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
             if (flags & STANDARD_NOT_MANDATORY_VERIFY_FLAGS) {
                 return state.Invalid(TxValidationResult::TX_NOT_STANDARD, strprintf("mempool-script-verify-flag-failed (%s)", ScriptErrorString(result->first)), result->second);
             } else {
-                return state.Invalid(TxValidationResult::TX_CONSENSUS, strprintf("block-script-verify-flag-failed (%s)", ScriptErrorString(result->first)), result->second);
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, strprintf("mandatory-script-verify-flag-failed (%s)", ScriptErrorString(result->first)), result->second);
             }
         }
     }
