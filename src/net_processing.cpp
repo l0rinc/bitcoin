@@ -2035,32 +2035,6 @@ void PeerManagerImpl::MaybePunishNodeForBlock(NodeId nodeid, const BlockValidati
     }
 }
 
-void PeerManagerImpl::MaybePunishNodeForTx(NodeId nodeid, const TxValidationState& state)
-{
-    PeerRef peer{GetPeerRef(nodeid)};
-    switch (state.GetResult()) {
-    case TxValidationResult::TX_RESULT_UNSET:
-        break;
-    // The node is providing invalid data:
-    case TxValidationResult::TX_CONSENSUS:
-        HandleDoSPunishment(m_connman, nodeid, 100, "transaction");
-        return;
-    // Conflicting (but not necessarily invalid) data or different policy:
-    case TxValidationResult::TX_INPUTS_NOT_STANDARD:
-    case TxValidationResult::TX_NOT_STANDARD:
-    case TxValidationResult::TX_MISSING_INPUTS:
-    case TxValidationResult::TX_PREMATURE_SPEND:
-    case TxValidationResult::TX_WITNESS_MUTATED:
-    case TxValidationResult::TX_WITNESS_STRIPPED:
-    case TxValidationResult::TX_CONFLICT:
-    case TxValidationResult::TX_MEMPOOL_POLICY:
-    case TxValidationResult::TX_NO_MEMPOOL:
-    case TxValidationResult::TX_RECONSIDERABLE:
-    case TxValidationResult::TX_UNKNOWN:
-        break;
-    }
-}
-
 bool PeerManagerImpl::BlockRequestAllowed(const CBlockIndex* pindex)
 {
     AssertLockHeld(cs_main);

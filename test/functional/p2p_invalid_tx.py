@@ -73,6 +73,7 @@ class InvalidTxRequestTest(BitcoinTestFramework):
             tx = template.get_tx()
             node.p2ps[0].send_txs_and_test(
                 [tx], node, success=False,
+                expect_disconnect=False,
                 reject_reason=template.reject_reason,
             )
 
@@ -154,8 +155,8 @@ class InvalidTxRequestTest(BitcoinTestFramework):
             node.p2ps[0].send_txs_and_test([rejected_parent], node, success=False)
 
         self.log.info('Test that a peer disconnection causes erase its transactions from the orphan pool')
-        self.reconnect_p2p(num_connections=1)
-        self.wait_until(lambda: len(node.getorphantxs()) == 0)
+        with node.assert_debug_log(['Erased 100 orphan transaction(s) from peer=']):
+            self.reconnect_p2p(num_connections=1)
 
         self.log.info('Test that a transaction in the orphan pool is included in a new tip block causes erase this transaction from the orphan pool')
         tx_withhold_until_block_A = CTransaction()

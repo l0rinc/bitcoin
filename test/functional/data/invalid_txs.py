@@ -93,6 +93,7 @@ class BadTxTemplate:
 
 class OutputMissing(BadTxTemplate):
     reject_reason = "bad-txns-vout-empty"
+    expect_disconnect = False
 
     def get_tx(self):
         tx = CTransaction()
@@ -102,6 +103,7 @@ class OutputMissing(BadTxTemplate):
 
 class InputMissing(BadTxTemplate):
     reject_reason = "bad-txns-vin-empty"
+    expect_disconnect = False
 
     # We use a blank transaction here to make sure
     # it is interpreted as a non-witness transaction.
@@ -161,6 +163,7 @@ class BadInputOutpointIndex(BadTxTemplate):
 
 class DuplicateInput(BadTxTemplate):
     reject_reason = 'bad-txns-inputs-duplicate'
+    expect_disconnect = False
 
     def get_tx(self):
         tx = CTransaction()
@@ -172,6 +175,7 @@ class DuplicateInput(BadTxTemplate):
 
 class PrevoutNullInput(BadTxTemplate):
     reject_reason = 'bad-txns-prevout-null'
+    expect_disconnect = False
 
     def get_tx(self):
         tx = CTransaction()
@@ -196,6 +200,7 @@ class NonexistentInput(BadTxTemplate):
 
 class SpendTooMuch(BadTxTemplate):
     reject_reason = 'bad-txns-in-belowout'
+    expect_disconnect = False
 
     def get_tx(self):
         return create_tx_with_script(
@@ -204,6 +209,7 @@ class SpendTooMuch(BadTxTemplate):
 
 class CreateNegative(BadTxTemplate):
     reject_reason = 'bad-txns-vout-negative'
+    expect_disconnect = False
 
     def get_tx(self):
         return create_tx_with_script(self.spend_tx, 0, amount=-1)
@@ -211,6 +217,7 @@ class CreateNegative(BadTxTemplate):
 
 class CreateTooLarge(BadTxTemplate):
     reject_reason = 'bad-txns-vout-toolarge'
+    expect_disconnect = False
 
     def get_tx(self):
         return create_tx_with_script(self.spend_tx, 0, amount=MAX_MONEY + 1)
@@ -218,6 +225,7 @@ class CreateTooLarge(BadTxTemplate):
 
 class CreateSumTooLarge(BadTxTemplate):
     reject_reason = 'bad-txns-txouttotal-toolarge'
+    expect_disconnect = False
 
     def get_tx(self):
         tx = create_tx_with_script(self.spend_tx, 0, amount=MAX_MONEY)
@@ -226,7 +234,9 @@ class CreateSumTooLarge(BadTxTemplate):
 
 
 class InvalidOPIFConstruction(BadTxTemplate):
-    reject_reason = "mempool-script-verify-flag-failed (Invalid OP_IF construction)"
+    reject_reason = "mandatory-script-verify-flag-failed (Invalid OP_IF construction)"
+    expect_disconnect = False
+    valid_in_block = True
 
     def get_tx(self):
         return create_tx_with_script(
@@ -275,9 +285,9 @@ def getDisabledOpcodeTemplate(opcode):
         })
 
 class NonStandardAndInvalid(BadTxTemplate):
-    """A non-standard transaction which is also consensus-invalid should return the first error."""
-    reject_reason = "mempool-script-verify-flag-failed (Using OP_CODESEPARATOR in non-witness script)"
-    block_reject_reason = "block-script-verify-flag-failed (OP_RETURN was encountered)"
+    """A non-standard transaction which is also consensus-invalid should return the consensus error."""
+    reject_reason = "mandatory-script-verify-flag-failed (OP_RETURN was encountered)"
+    expect_disconnect = False
     valid_in_block = False
 
     def get_tx(self):
