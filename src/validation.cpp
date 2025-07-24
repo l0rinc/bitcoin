@@ -3441,7 +3441,7 @@ bool ChainstateManager::NotifyHeaderTip()
 static void LimitValidationInterfaceQueue(ValidationSignals& signals) LOCKS_EXCLUDED(cs_main) {
     AssertLockNotHeld(cs_main);
 
-    if (signals.CallbacksPending() > 10) {
+    if (signals.CallbacksPending() > 15) {
         signals.SyncWithValidationInterfaceQueue();
     }
 }
