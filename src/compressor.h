@@ -12,15 +12,10 @@
 #include <serialize.h>
 #include <span.h>
 
-/**
- * This saves us from making many heap allocations when serializing
- * and deserializing compressed scripts.
- *
- * This prevector size is determined by the largest .resize() in the
- * CompressScript function. The largest compressed script format is a
- * compressed public key, which is 33 bytes.
- */
-using CompressedScript = prevector<33, unsigned char>;
+// Largest compressed form is 33 bytes, which now spills out-of-line.
+// A 28-byte inline buffer keeps the common 21-byte cases inline
+// while shrinking each CompressedScript to 32 bytes.
+using CompressedScript = prevector<28, uint8_t>;
 
 
 bool CompressScript(const CScript& script, CompressedScript& out);
