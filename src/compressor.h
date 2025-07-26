@@ -20,7 +20,7 @@
  * CompressScript function. The largest compressed script format is a
  * compressed public key, which is 33 bytes.
  */
-using CompressedScript = prevector<33, unsigned char>;
+using CompressedScript = prevector<28, uint8_t>;
 
 
 bool CompressScript(const CScript& script, CompressedScript& out);
