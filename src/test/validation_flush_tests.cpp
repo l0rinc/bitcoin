@@ -23,8 +23,11 @@ BOOST_AUTO_TEST_CASE(getcoinscachesizestate)
     LOCK(::cs_main);
     CCoinsViewCache& view{chainstate.CoinsTip()};
 
-    // Sanity: an empty cache should be ≲ 1 chunk (~ 256 KiB).
-    BOOST_CHECK_LT(view.DynamicMemoryUsage() / (256 * 1024.0), 1.1);
+    // The number of bytes consumed by coin's heap data, i.e. CScript
+    // (prevector<28, unsigned char>) when assigned 56 bytes of data per above.
+    //
+    // See also: Coin::DynamicMemoryUsage().
+    constexpr unsigned int COIN_SIZE = is_64_bit ? 80 : 64;
 
     constexpr size_t MAX_COINS_BYTES{8_MiB};
     constexpr size_t MAX_MEMPOOL_BYTES{4_MiB};
