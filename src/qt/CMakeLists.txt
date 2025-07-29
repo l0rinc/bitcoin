@@ -149,16 +149,19 @@ set(nsis_wizard_input "${ICON_PATH}/bitcoin290.png")
 set(nsis_wizard_bmp "${ICON_PATH}/nsis-wizard.bmp")
 add_custom_command(
   OUTPUT "${nsis_wizard_bmp}"
-  COMMAND "${IMAGEMAGICK_CONVERT}" ${nsis_wizard_input} -crop 164x290+62+0 -border 0x12 -strip BMP3:${nsis_wizard_bmp}
+  COMMAND "${IMAGEMAGICK_CONVERT}" ${nsis_wizard_input} -crop 164x290+68+0 -border 0x12 -strip BMP3:${nsis_wizard_bmp}
   DEPENDS ${nsis_wizard_input}
   COMMENT "Generating ${nsis_wizard_bmp} from ${nsis_wizard_input}"
   VERBATIM
 )
 set(nsis_header_input "res/src/nsis-header.svg")
-set(nsis_header_svg "${ICON_PATH}/nsis-header.svg")
+set(nsis_header_source_path "res/src")
+set(nsis_header_svg "${nsis_header_source_path}/nsis-header.svg")
 set(nsis_header_png "${ICON_PATH}/nsis-header.png")
 set(nsis_header_bmp "${ICON_PATH}/nsis-header.bmp")
 configure_file(${nsis_header_input} ${nsis_header_svg} @ONLY)
+configure_file(${bitcoin_svg} ${nsis_header_source_path}/bitcoin.svg COPYONLY)
+configure_file(res/src/bitcoinknots-logo.svg ${nsis_header_source_path}/bitcoinknots-logo.svg COPYONLY)
 add_custom_command(
   OUTPUT "${nsis_header_png}"
   COMMAND "${RSVG_CONVERT}" -f png -d 57 -p 57 --output "${nsis_header_png}" "${CMAKE_CURRENT_BINARY_DIR}/${nsis_header_svg}"
