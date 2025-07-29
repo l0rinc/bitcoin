@@ -538,6 +538,31 @@ def test_dust_to_fee(self, rbf_node, dest_address):
     assert_equal(full_bumped_tx["vout"][0]['value'], Decimal("0.00050000"))
     self.clear_mempool()
 
+
+def test_settxfee(self, rbf_node, dest_address):
+    self.log.info('Test settxfee')
+    assert_raises_rpc_error(-8, "txfee cannot be less than min relay tx fee", rbf_node.settxfee, Decimal('0.0000005'))
+    assert_raises_rpc_error(-8, "txfee cannot be less than wallet min fee", rbf_node.settxfee, Decimal('0.000015'))
+    # check that bumpfee reacts correctly to the use of settxfee (paytxfee)
+    rbfid = spend_one_input(rbf_node, dest_address)
+    requested_feerate = Decimal("0.00025000")
+    rbf_node.settxfee(requested_feerate)
+    bumped_tx = rbf_node.bumpfee(rbfid)
+    actual_feerate = bumped_tx["fee"] * 1000 / rbf_node.getrawtransaction(bumped_tx["txid"], True)["vsize"]
+    # Assert that the difference between the requested feerate and the actual
+    # feerate of the bumped transaction is small.
+    assert_greater_than(Decimal("0.00001000"), abs(requested_feerate - actual_feerate))
+    rbf_node.settxfee(Decimal("0.00000000"))  # unset paytxfee
+
+    # check that settxfee respects -maxtxfee
+    self.restart_node(1, ['-maxtxfee=0.000025'] + self.extra_args[1])
+    assert_raises_rpc_error(-8, "txfee cannot be more than wallet max tx fee", rbf_node.settxfee, Decimal('0.00003'))
+    self.restart_node(1, self.extra_args[1])
+    rbf_node.walletpassphrase(WALLET_PASSPHRASE, WALLET_PASSPHRASE_TIMEOUT)
+    self.connect_nodes(1, 0)
+    self.clear_mempool()
+
+
 def test_maxtxfee_fails(self, rbf_node, dest_address):
     self.log.info('Test that bumpfee fails when it hits -maxtxfee')
     # size of bumped transaction (p2wpkh, 1 input, 2 outputs): 141 vbytes
@@ -820,9 +845,9 @@ def test_bumpfee_with_feerate_ignores_walletincrementalrelayfee(self, rbf_node, 
     assert_raises_rpc_error(-8, "Insufficient total fee", rbf_node.bumpfee, tx["txid"], {"fee_rate": 1})
     assert_raises_rpc_error(-8, "Insufficient total fee", rbf_node.bumpfee, tx["txid"], {"fee_rate": 2})
 
-    # Ensure you can not fee bump if the fee_rate is more than original fee_rate but the additional fee does
-    # not cover incrementalrelayfee for the size of the replacement transaction
-    assert_raises_rpc_error(-8, "Insufficient total fee", rbf_node.bumpfee, tx["txid"], {"fee_rate": 2.09})
+    # Ensure you can not fee bump if the fee_rate is more than original fee_rate but the total fee from new fee_rate is
+    # less than (original fee + incrementalrelayfee)
+    assert_raises_rpc_error(-8, "Insufficient total fee", rbf_node.bumpfee, tx["txid"], {"fee_rate": 2.05})
 
     # You can fee bump as long as the new fee set from fee_rate is at least (original fee + incrementalrelayfee)
     rbf_node.bumpfee(tx["txid"], {"fee_rate": 2.1})

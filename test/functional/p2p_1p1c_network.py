@@ -13,6 +13,7 @@ from decimal import Decimal
 
 from test_framework.mempool_util import (
     DEFAULT_MIN_RELAY_TX_FEE,
+    fill_mempool,
 )
 from test_framework.messages import (
     COIN,
@@ -36,9 +37,22 @@ class PackageRelayTest(BitcoinTestFramework):
         self.num_nodes = 4
         # hugely speeds up the test, as it involves multiple hops of tx relay.
         self.noban_tx_relay = True
+        self.extra_args = [[
+            "-datacarriersize=100000",
+            "-maxmempool=5",
+        ]] * self.num_nodes
+        self.supports_cli = False
+
+    def raise_network_minfee(self):
+        fill_mempool(self, self.nodes[0])
+
+        self.log.debug("Check that all nodes' mempool minimum feerates are above min relay feerate")
+        for node in self.nodes:
+            assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal(DEFAULT_MIN_RELAY_TX_FEE) / COIN)
+            assert_greater_than(node.getmempoolinfo()['mempoolminfee'], Decimal(DEFAULT_MIN_RELAY_TX_FEE) / COIN)
 
     def create_basic_1p1c(self, wallet):
-        low_fee_parent = wallet.create_self_transfer(fee_rate=0, confirmed_only=True)
+        low_fee_parent = wallet.create_self_transfer(fee_rate=Decimal(DEFAULT_MIN_RELAY_TX_FEE) / COIN, confirmed_only=True)
         high_fee_child = wallet.create_self_transfer(utxo_to_spend=low_fee_parent["new_utxo"], fee_rate=999*Decimal(DEFAULT_MIN_RELAY_TX_FEE)/ COIN)
         package_hex_basic = [low_fee_parent["hex"], high_fee_child["hex"]]
         return package_hex_basic, low_fee_parent["tx"], high_fee_child["tx"]

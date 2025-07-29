@@ -223,9 +223,10 @@ class EphemeralDustTest(BitcoinTestFramework):
         dusty_tx, sweep_tx = self.create_ephemeral_dust_package(tx_version=2)
 
         res = self.nodes[0].submitpackage([dusty_tx["hex"], sweep_tx["hex"]])
-        assert_equal(res["package_msg"], "success")
-        assert_mempool_contents(self, self.nodes[0], expected=[dusty_tx["tx"], sweep_tx["tx"]])
-        self.generate(self.nodes[0], 1)
+        assert_equal(res["package_msg"], "transaction failed")
+        assert_equal(res["tx-results"][dusty_tx["wtxid"]]["error"], "min relay fee not met, 0 < 15")
+
+        assert_equal(self.nodes[0].getrawmempool(), [])
 
     def test_unspent_ephemeral(self):
         self.log.info("Test that spending from a tx with ephemeral outputs is only allowed if dust is spent as well")
