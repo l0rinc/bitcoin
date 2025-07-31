@@ -37,7 +37,7 @@ public:
             assert(&(pre_vector[s]) == &*(pre_vector.begin() + s));
             assert(&(pre_vector[s]) == &*((pre_vector.end() + s) - real_vector.size()));
         }
-        // assert(realtype(pre_vector) == real_vector);
+        Assert(realtype(pre_vector) == real_vector);
         assert(pretype(real_vector.begin(), real_vector.end()) == pre_vector);
         assert(pretype(pre_vector.begin(), pre_vector.end()) == pre_vector);
         size_t pos = 0;
