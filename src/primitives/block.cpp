@@ -3,6 +3,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include "logging.h"
+
 #include <primitives/block.h>
 
 #include <hash.h>
@@ -10,6 +12,7 @@
 
 uint256 CBlockHeader::GetHash() const
 {
+    LogInfo("Calling GetHash() for %s", GetHash().ToString());
     return (HashWriter{} << *this).GetHash();
 }
 
