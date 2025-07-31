@@ -1274,7 +1274,7 @@ void ImportBlocks(ChainstateManager& chainman, std::span<const fs::path> import_
     // the relevant pointers before the ABC call.
     for (Chainstate* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
         BlockValidationState state;
-        if (!chainstate->ActivateBestChain(state, nullptr)) {
+        if (!chainstate->ActivateBestChain(state)) {
             chainman.GetNotifications().fatalError(strprintf(_("Failed to connect best block (%s)."), state.ToString()));
             return;
         }

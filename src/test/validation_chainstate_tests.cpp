@@ -124,22 +124,23 @@ BOOST_FIXTURE_TEST_CASE(chainstate_update_tip, TestChain100Setup)
     const CChainParams& chainparams = Params();
     bool newblock = false;
 
+    auto block_hash{pblockone->GetHash()};
     // TODO: much of this is inlined from ProcessNewBlock(); just reuse PNB()
     // once it is changed to support multiple chainstates.
     {
         LOCK(::cs_main);
-        bool checked = CheckBlock(*pblockone, pblockone->GetHash(), state, chainparams.GetConsensus());
+        bool checked = CheckBlock(*pblockone, block_hash, state, chainparams.GetConsensus());
         BOOST_CHECK(checked);
         bool accepted = chainman.AcceptBlock(
-            pblockone, state, &pindex, true, nullptr, &newblock, true);
+            pblockone, block_hash, state, &pindex, true, nullptr, &newblock, true);
         BOOST_CHECK(accepted);
     }
 
     // UpdateTip is called here
-    bool block_added = background_cs.ActivateBestChain(state, pblockone);
+    bool block_added = background_cs.ActivateBestChain(state, pblockone, block_hash);
 
     // Ensure tip is as expected
-    BOOST_CHECK_EQUAL(background_cs.m_chain.Tip()->GetBlockHash(), pblockone->GetHash());
+    BOOST_CHECK_EQUAL(background_cs.m_chain.Tip()->GetBlockHash(), block_hash);
 
     // get_notify_tip() should be unchanged after adding a block to the background
     // validation chain.
