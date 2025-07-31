@@ -6,11 +6,14 @@
 #include <primitives/block.h>
 
 #include <hash.h>
+#include <logging.h>
 #include <tinyformat.h>
 
 uint256 CBlockHeader::GetHash() const
 {
-    return (HashWriter{} << *this).GetHash();
+    const auto hash{(HashWriter{} << *this).GetHash()};
+    LogPrintLevel_(BCLog::LogFlags::ALL, BCLog::Level::Info, /*should_ratelimit=*/false, "GetHash() = %s", hash.ToString());
+    return hash;
 }
 
 std::string CBlock::ToString() const
