@@ -3629,8 +3629,7 @@ bool Chainstate::PreciousBlock(BlockValidationState& state, CBlockIndex* pindex)
         }
     }
 
-    std::shared_ptr<const CBlock> pblock;
-    return ActivateBestChain(state, pblock, pblock->GetHash());
+    return ActivateBestChain(state, std::shared_ptr<const CBlock>(), {});
 }
 
 bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* pindex)
