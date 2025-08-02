@@ -4035,7 +4035,7 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
         return false;
 
     // Signet only: check block solution
-    if (consensusParams.signet_blocks && fCheckPOW && !CheckSignetBlockSolution(block, consensusParams)) {
+    if (consensusParams.signet_blocks && fCheckPOW && !CheckSignetBlockSolution(block, block.GetHash(), consensusParams)) {
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-signet-blksig", "signet block signature validation failure");
     }
 

@@ -1028,7 +1028,7 @@ bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::o
     }
 
     // Signet only: check block solution
-    if (GetConsensus().signet_blocks && !CheckSignetBlockSolution(block, GetConsensus())) {
+    if (GetConsensus().signet_blocks && !CheckSignetBlockSolution(block, block_hash, GetConsensus())) {
         LogError("Errors in block solution at %s while reading block", pos.ToString());
         return false;
     }
