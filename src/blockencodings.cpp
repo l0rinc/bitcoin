@@ -184,11 +184,10 @@ bool PartiallyDownloadedBlock::IsTxAvailable(size_t index) const
     return txn_available[index] != nullptr;
 }
 
-ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<CTransactionRef>& vtx_missing, bool segwit_active)
+ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const uint256& hash, const std::vector<CTransactionRef>& vtx_missing, bool segwit_active)
 {
     if (header.IsNull()) return READ_STATUS_INVALID;
 
-    uint256 hash = header.GetHash();
     block = header;
     block.vtx.resize(txn_available.size());
 
