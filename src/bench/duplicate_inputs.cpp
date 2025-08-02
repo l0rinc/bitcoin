@@ -68,10 +68,10 @@ static void DuplicateInputs(benchmark::Bench& bench)
     block.vtx.push_back(MakeTransactionRef(std::move(naughtyTx)));
 
     block.hashMerkleRoot = BlockMerkleRoot(block);
-
+    const auto block_hash{block.GetHash()};
     bench.run([&] {
         BlockValidationState cvstate{};
-        assert(!CheckBlock(block, cvstate, chainparams.GetConsensus(), false, false));
+        assert(!CheckBlock(block, block_hash, cvstate, chainparams.GetConsensus(), false, false));
         assert(cvstate.GetRejectReason() == "bad-txns-inputs-duplicate");
     });
 }
