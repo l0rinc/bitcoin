@@ -3488,7 +3488,6 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
                 // in case snapshot validation is completed during ActivateBestChainStep, the
                 // result of GetRole() changes from BACKGROUND to NORMAL.
                 const ChainstateRole chainstate_role{this->GetRole()};
-                Assert(block_hash == ((pblock == nullptr) ? std::nullopt : std::optional{pblock->GetHash()}));
                 if (!ActivateBestChainStep(state, pindexMostWork, pblock && block_hash == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connectTrace)) {
                     // A system error occurred
                     return false;
@@ -3935,7 +3934,6 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
 
 static bool CheckBlockHeader(const CBlockHeader& block, const uint256& block_hash, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
-    Assert(block.GetHash() == block_hash);
     // Check proof of work matches claimed amount
     if (fCheckPOW && !CheckProofOfWork(block_hash, block.nBits, consensusParams))
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
@@ -4027,7 +4025,6 @@ static bool CheckWitnessMalleation(const CBlock& block, bool expect_witness_comm
 bool CheckBlock(const CBlock& block, const uint256& block_hash, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW, bool fCheckMerkleRoot)
 {
     // These are checks that are independent of context.
-    Assert(block_hash == block.GetHash());
     if (block.fChecked)
         return true;
 
@@ -4295,7 +4292,6 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, const uint2
     AssertLockHeld(cs_main);
 
     // Check for duplicate
-    Assert(block.GetHash() == hash);
     BlockMap::iterator miSelf{m_blockman.m_block_index.find(hash)};
     if (hash != GetConsensus().hashGenesisBlock) {
         if (miSelf != m_blockman.m_block_index.end()) {
@@ -4403,7 +4399,6 @@ void ChainstateManager::ReportHeadersPresync(const arith_uint256& work, int64_t 
 /** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
 bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, const uint256& block_hash, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked)
 {
-    Assert(pblock->GetHash() == block_hash);
     const CBlock& block = *pblock;
 
     if (fNewBlock) *fNewBlock = false;
@@ -4454,7 +4449,6 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
 
     const CChainParams& params{GetParams()};
 
-    Assert(block.GetHash() == pindex->GetBlockHash());
     if (!CheckBlock(block, pindex->GetBlockHash(), state, params.GetConsensus()) ||
         !ContextualCheckBlock(block, state, *this, pindex->pprev)) {
         if (Assume(state.IsInvalid())) {
@@ -4590,7 +4584,6 @@ BlockValidationState TestBlockValidity(
     }
 
     // For signets CheckBlock() verifies the challenge iff fCheckPow is set.
-    Assert(block_hash == block.GetHash());
     if (!CheckBlock(block, block_hash, state, chainstate.m_chainman.GetConsensus(), /*fCheckPow=*/check_pow, /*fCheckMerkleRoot=*/check_merkle_root)) {
         // This should never happen, but belt-and-suspenders don't approve the
         // block if it does.
@@ -4771,7 +4764,6 @@ VerifyDBResult CVerifyDB::VerifyDB(
             return VerifyDBResult::CORRUPTED_BLOCK_DB;
         }
         // check level 1: verify block validity
-        Assert(block.GetHash() == pindex->GetBlockHash());
         if (nCheckLevel >= 1 && !CheckBlock(block, pindex->GetBlockHash(), state, consensus_params)) {
             LogPrintf("Verification error: found bad block at %d, hash=%s (%s)\n",
                       pindex->nHeight, pindex->GetBlockHash().ToString(), state.ToString());
