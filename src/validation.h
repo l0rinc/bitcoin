@@ -407,6 +407,7 @@ bool CheckBlock(const CBlock& block, const uint256& block_hash, BlockValidationS
 BlockValidationState TestBlockValidity(
     Chainstate& chainstate,
     const CBlock& block,
+    const uint256& block_hash,
     bool check_pow,
     bool check_merkle_root) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 

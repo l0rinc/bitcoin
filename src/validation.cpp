@@ -4572,6 +4572,7 @@ MempoolAcceptResult ChainstateManager::ProcessTransaction(const CTransactionRef&
 BlockValidationState TestBlockValidity(
     Chainstate& chainstate,
     const CBlock& block,
+    const uint256& block_hash,
     const bool check_pow,
     const bool check_merkle_root)
 {
@@ -4589,7 +4590,8 @@ BlockValidationState TestBlockValidity(
     }
 
     // For signets CheckBlock() verifies the challenge iff fCheckPow is set.
-    if (!CheckBlock(block, block.GetHash(), state, chainstate.m_chainman.GetConsensus(), /*fCheckPow=*/check_pow, /*fCheckMerkleRoot=*/check_merkle_root)) {
+    Assert(block_hash == block.GetHash());
+    if (!CheckBlock(block, block_hash, state, chainstate.m_chainman.GetConsensus(), /*fCheckPow=*/check_pow, /*fCheckMerkleRoot=*/check_merkle_root)) {
         // This should never happen, but belt-and-suspenders don't approve the
         // block if it does.
         if (state.IsValid()) NONFATAL_UNREACHABLE();
@@ -4624,7 +4626,6 @@ BlockValidationState TestBlockValidity(
     // We don't want ConnectBlock to update the actual chainstate, so create
     // a cache on top of it, along with a dummy block index.
     CBlockIndex index_dummy{block};
-    uint256 block_hash(block.GetHash());
     index_dummy.pprev = tip;
     index_dummy.nHeight = tip->nHeight + 1;
     index_dummy.phashBlock = &block_hash;

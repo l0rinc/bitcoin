@@ -388,7 +388,7 @@ static RPCHelpMan generateblock()
         block.vtx.insert(block.vtx.end(), txs.begin(), txs.end());
         RegenerateCommitments(block, chainman);
 
-        if (BlockValidationState state{TestBlockValidity(chainman.ActiveChainstate(), block, /*check_pow=*/false, /*check_merkle_root=*/false)}; !state.IsValid()) {
+        if (BlockValidationState state{TestBlockValidity(chainman.ActiveChainstate(), block, block.GetHash(), /*check_pow=*/false, /*check_merkle_root=*/false)}; !state.IsValid()) {
             throw JSONRPCError(RPC_VERIFY_ERROR, strprintf("TestBlockValidity failed: %s", state.ToString()));
         }
     }
@@ -747,7 +747,7 @@ static RPCHelpMan getblocktemplate()
                 return "duplicate-inconclusive";
             }
 
-            return BIP22ValidationResult(TestBlockValidity(chainman.ActiveChainstate(), block, /*check_pow=*/false, /*check_merkle_root=*/true)); // TODO
+            return BIP22ValidationResult(TestBlockValidity(chainman.ActiveChainstate(), block, hash, /*check_pow=*/false, /*check_merkle_root=*/true)); // TODO
         }
 
         const UniValue& aClientRules = oparam.find_value("rules");
