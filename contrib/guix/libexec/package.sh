@@ -99,7 +99,7 @@ set -e -o pipefail
             ;;
         *darwin*)
             cmake --build build --target deploy
-            mv build/dist/bitcoin-macos-app.zip "${OUTDIR}/${DISTNAME}-${HOST}-unsigned.zip"
+            mv build/dist/*.zip "${OUTDIR}/${DISTNAME}-${HOST}-unsigned.zip"
             mkdir -p "unsigned-app-${HOST}"
             cp  --target-directory="unsigned-app-${HOST}" \
                 contrib/macdeploy/detached-sig-create.sh
