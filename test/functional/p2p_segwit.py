@@ -699,6 +699,12 @@ class SegWitTest(BitcoinTestFramework):
                 expected_msgs=[spend_tx.txid_hex, 'was not accepted: mempool-script-verify-flag-failed (Witness program was passed an empty witness)']):
             test_transaction_acceptance(self.nodes[0], self.test_node, spend_tx, with_witness=False, accepted=False)
 
+        # The transaction was detected as witness stripped above and not added to the reject
+        # filter. Trying again will check it again and result in the same error.
+        with self.nodes[0].assert_debug_log(
+                expected_msgs=[spend_tx.hash, 'was not accepted: mandatory-script-verify-flag-failed (Witness program was passed an empty witness)']):
+            test_transaction_acceptance(self.nodes[0], self.test_node, spend_tx, with_witness=False, accepted=False)
+
         # Try to put the witness script in the scriptSig, should also fail.
         spend_tx.vin[0].scriptSig = CScript([p2wsh_pubkey, b'a'])
         with self.nodes[0].assert_debug_log(
@@ -1283,7 +1289,7 @@ class SegWitTest(BitcoinTestFramework):
         # Now do the opposite: strip the witness entirely. This will be detected as witness stripping and
         # the (w)txid won't be added to the reject filter: we can try again and get the same error.
         tx3.wit.vtxinwit[0].scriptWitness.stack = []
-        reason = "was not accepted: mempool-script-verify-flag-failed (Witness program was passed an empty witness)"
+        reason = "was not accepted: mandatory-script-verify-flag-failed (Witness program was passed an empty witness)"
         test_transaction_acceptance(self.nodes[0], self.test_node, tx3, with_witness=False, accepted=False, reason=reason)
         test_transaction_acceptance(self.nodes[0], self.test_node, tx3, with_witness=False, accepted=False, reason=reason)
 
