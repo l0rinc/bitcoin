@@ -48,6 +48,7 @@ class BlockValidationState;
 class CBlockUndo;
 class Chainstate;
 class ChainstateManager;
+struct CCheckpointData;
 namespace Consensus {
 struct Params;
 }
@@ -404,6 +405,9 @@ public:
 
     /** Get block file info entry for one block file */
     CBlockFileInfo* GetBlockFileInfo(size_t n) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    //! Returns last CBlockIndex* that is a checkpoint.
+    const CBlockIndex* GetLastCheckpoint(const CCheckpointData& data) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     bool WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationState& state, CBlockIndex& block)
         EXCLUSIVE_LOCKS_REQUIRED(::cs_main);

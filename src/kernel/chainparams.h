@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -132,6 +133,7 @@ public:
     const std::string& Bech32HRP() const { return bech32_hrp; }
     const std::vector<uint8_t>& FixedSeeds() const { return vFixedSeeds; }
     const HeadersSyncParams& HeadersSync() const { return m_headers_sync_params; }
+    const CCheckpointData& Checkpoints() const { return checkpointData; }
 
     std::optional<AssumeutxoData> AssumeutxoForHeight(int height) const
     {
@@ -213,6 +215,7 @@ protected:
     std::vector<uint8_t> vFixedSeeds;
     bool fDefaultConsistencyChecks;
     bool m_is_mockable_chain;
+    CCheckpointData checkpointData;
     std::vector<AssumeutxoData> m_assumeutxo_data;
     ChainTxData chainTxData;
     HeadersSyncParams m_headers_sync_params;

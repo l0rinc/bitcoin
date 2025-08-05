@@ -46,6 +46,7 @@
 #include <map>
 #include <optional>
 #include <ostream>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <system_error>
@@ -714,6 +715,18 @@ void BlockManager::ScanAndUnlinkAlreadyPrunedFiles()
     }
 
     UnlinkPrunedFiles(block_files_to_prune);
+}
+
+const CBlockIndex* BlockManager::GetLastCheckpoint(const CCheckpointData& data)
+{
+    const MapCheckpoints& checkpoints = data.mapCheckpoints;
+
+    for (const MapCheckpoints::value_type& i : checkpoints | std::views::reverse) {
+        const uint256& hash = i.second;
+        const CBlockIndex* pindex = LookupBlockIndex(hash);
+        if (pindex) return pindex;
+    }
+    return nullptr;
 }
 
 bool BlockManager::IsBlockPruned(const CBlockIndex& block) const
