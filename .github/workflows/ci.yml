@@ -295,6 +295,15 @@ jobs:
         run: |
           py -3 .github/ci-windows.py ${{ matrix.job-type }} run_tests
 
+      - name: Run fuzz tests
+        if: matrix.job-type == 'fuzz'
+        working-directory: build
+        env:
+          BITCOINFUZZ: '${{ github.workspace }}\build\bin\Release\fuzz.exe'
+        shell: cmd
+        run: |
+          py -3 test\fuzz\test_runner.py --par %NUMBER_OF_PROCESSORS% --loglevel DEBUG %RUNNER_TEMP%\qa-assets\fuzz_corpora
+
   record-frozen-commit:
     # Record frozen commit, so that the native tests on cross-builds can run on
     # the exact same commit id of the build.
@@ -331,11 +340,6 @@ jobs:
       FILE_ENV: ${{ matrix.file-env }}
       DANGER_CI_ON_HOST_FOLDERS: 1
 
-          - name: 'win64 Cross'
-            cirrus-runner: 'ghcr.io/cirruslabs/ubuntu-runner-amd64:24.04-sm'
-            fallback-runner: 'ubuntu-24.04'
-            timeout-minutes: 120
-            file-env: './ci/test/00_setup_env_win64.sh'
     steps:
       - *ANNOTATION_PR_NUMBER
 
@@ -456,7 +460,7 @@ jobs:
             file-env: './ci/test/00_setup_env_arm.sh'
             provider: 'gha'
 
-          - name: 'ASan + LSan + UBSan + integer'
+          - name: 'ASan + LSan + UBSan + integer, no depends, USDT'
             warp-runner: 'warp-ubuntu-2404-x64-8x' # has to match container in ci/test/00_setup_env_native_asan.sh for tracing tools
             fallback-runner: 'ubuntu-24.04'
             timeout-minutes: 120
