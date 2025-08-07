@@ -747,7 +747,6 @@ class TestHandler:
         dot_count = 0
         while True:
             # Return all procs that have finished, if any. Otherwise sleep until there is one.
-            time.sleep(.5)
             ret = []
             for job in self.jobs:
                 (name, start_time, proc, testdir, log_out, log_err) = job
@@ -771,6 +770,7 @@ class TestHandler:
                     ret.append((TestResult(name, status, int(time.time() - start_time)), testdir, stdout, stderr, skip_reason))
             if ret:
                 return ret
+            time.sleep(.5)
             if self.use_term_control:
                 print('.', end='', flush=True)
             dot_count += 1
