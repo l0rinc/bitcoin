@@ -73,7 +73,6 @@ class InvalidTxRequestTest(BitcoinTestFramework):
             tx = template.get_tx()
             node.p2ps[0].send_txs_and_test(
                 [tx], node, success=False,
-                expect_disconnect=False,
                 reject_reason=template.reject_reason,
             )
 
