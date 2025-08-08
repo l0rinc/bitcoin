@@ -569,7 +569,8 @@ public:
         return (size() > 0 && *begin() == OP_RETURN) || (size() > MAX_SCRIPT_SIZE);
     }
 
-    std::pair<size_t, size_t> DatacarrierBytes() const;
+    size_t IsOLGA(size_t remaining_outputs) const;
+    std::pair<size_t, size_t> DatacarrierBytes(size_t remaining_outputs) const;
 
     void clear()
     {
