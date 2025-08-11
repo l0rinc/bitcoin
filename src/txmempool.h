@@ -64,6 +64,9 @@ static constexpr uint64_t POST_CHANGE_COST = 5 * ACCEPTABLE_COST;
 inline int64_t maxmempoolMinimumBytes(const int64_t cluster_size_vbytes) {
     return cluster_size_vbytes * 40;
 }
+inline int64_t limitdescendantsizeMaximumVBytes(const int64_t maxmempool) {
+    return maxmempool / 40;
+}
 
 /**
  * Test whether the LockPoints height and time are still valid on the current chain
