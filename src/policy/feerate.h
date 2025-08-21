@@ -42,8 +42,6 @@ public:
 
     /**
      * Construct a fee rate from a fee in satoshis and a vsize in vB.
-     *
-     * Passing any virtual_bytes less than or equal to 0 will result in 0 fee rate per 0 size.
      */
     CFeeRate(const CAmount& nFeePaid, int32_t virtual_bytes);
 
