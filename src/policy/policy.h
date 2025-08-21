@@ -58,7 +58,8 @@ static constexpr unsigned int MAX_STANDARD_TX_SIGOPS_COST{MAX_BLOCK_SIGOPS_COST/
 /** The maximum number of potentially executed legacy signature operations in a single standard tx */
 static constexpr unsigned int MAX_TX_LEGACY_SIGOPS{2'500};
 /** Default for -incrementalrelayfee, which sets the minimum feerate increase for mempool limiting or replacement **/
-static constexpr unsigned int DEFAULT_INCREMENTAL_RELAY_FEE{100};
+static constexpr unsigned int DEFAULT_INCREMENTAL_RELAY_FEE{1000};
+static constexpr CAmount CORE_INCREMENTAL_RELAY_FEE{100};
 /** Default for -maxscriptsize */
 static constexpr unsigned int DEFAULT_SCRIPT_SIZE_POLICY_LIMIT{1650};
 /** Default for -bytespersigop */
@@ -106,7 +107,7 @@ static const std::string DEFAULT_DUST_DYNAMIC{"off"};
 static const int DEFAULT_DUST_RELAY_MULTIPLIER{3'000};
 static const std::string DEFAULT_SPKREUSE{"allow"};
 /** Default for -minrelaytxfee, minimum relay fee for transactions */
-static constexpr unsigned int DEFAULT_MIN_RELAY_TX_FEE{100};
+static constexpr unsigned int DEFAULT_MIN_RELAY_TX_FEE{1000};
 /** Maximum number of transactions per cluster (default) */
 static constexpr unsigned int DEFAULT_CLUSTER_LIMIT{64};
 /** Maximum size of cluster in virtual kilobytes */
