@@ -55,5 +55,11 @@
         "zeromq"
       ]
     }
-  }
+  },
+  "overrides": [
+    {
+      "name": "miniupnpc",
+      "version": "2.3.2"
+    }
+  ]
 }
