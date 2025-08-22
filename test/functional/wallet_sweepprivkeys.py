@@ -51,6 +51,11 @@ class WalletSweepPrivKeysTest(BitcoinTestFramework):
         empty_key = get_generate_key()
         assert_raises_rpc_error(-6, "No value to sweep", node.sweepprivkeys, {"privkeys": [empty_key.privkey]})
 
+        # This test is not meant to test fee estimation and we'd like
+        # to be sure all txs are sent at a consistent desired feerate
+        self.tx_feerate = max(self.nodes[0].getnetworkinfo()['relayfee'], self.nodes[0].getwalletinfo()['mintxfee']) * 2
+        node.settxfee(self.tx_feerate)
+
         self.log.info("Sweep an unconfirmed P2PKH output from the mempool")
         mempool_key = get_generate_key()
         node.sendtoaddress(mempool_key.p2pkh_addr, Decimal("1"))
