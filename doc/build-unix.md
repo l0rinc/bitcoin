@@ -42,10 +42,10 @@ for additional features in later columns are optional.
 
 | Package manager         | Required build dependencies | SQLite (wallet) | Cap'n Proto (IPC) | ZMQ <sup><a href="#note1">[1]</a></sup> | USDT | UPnP | Qt and libqrencode (GUI) |
 | ----------------------- | --------------------------- | --------------- | ----------------- | --- | ---- | ---- | ------------------------ |
-| Debian / Ubuntu (`apt`) | `build-essential cmake python3 libboost-dev` | `libsqlite3-dev` | `libcapnp-dev capnproto` | `libzmq3-dev pkgconf` | `systemtap-sdt-dev` | `libminiupnpc-dev` | `qt6-base-dev qt6-tools-dev qt6-l10n-tools qt6-tools-dev-tools libgl-dev qt6-wayland libqrencode-dev` |
-| Fedora (`dnf`)          | `gcc-c++ cmake make python3 boost-devel` | `sqlite-devel` | `capnproto capnproto-devel` | `zeromq-devel pkgconf` | `systemtap-sdt-devel` | `miniupnpc-devel` | `qt6-qtbase-devel qt6-qttools-devel qt6-qtwayland qrencode-devel` |
-| Alpine (`apk`)          | `build-base cmake linux-headers python3 boost-dev` | `sqlite-dev` | `capnproto capnproto-dev` | `zeromq-dev` | Not supported | `miniupnpc-dev` | `qt6-qtbase-dev qt6-qttools-dev libqrencode-dev` |
-| Arch (`pacman`)         | `gcc make cmake python boost` | `sqlite` | `capnproto` | `zeromq` | `systemtap` | `miniupnpc` | `qt6-base qt6-tools qt6-wayland qrencode` |
+| Debian / Ubuntu (`apt`) | `build-essential cmake python3 libboost-dev` | `libsqlite3-dev` | `libcapnp-dev capnproto` | `libzmq3-dev pkgconf` | `systemtap-sdt-dev` | `libminiupnpc-dev` | `qtbase5-dev qttools5-dev qttools5-dev-tools qtwayland5 libqrencode-dev` |
+| Fedora (`dnf`)          | `gcc-c++ cmake make python3 boost-devel` | `sqlite-devel` | `capnproto capnproto-devel` | `zeromq-devel pkgconf` | `systemtap-sdt-devel` | `miniupnpc-devel` | `qt5-qtbase-devel qt5-qttools-devel qt5-qtwayland qrencode-devel` |
+| Alpine (`apk`)          | `build-base cmake linux-headers python3 boost-dev` | `sqlite-dev` | `capnproto capnproto-dev` | `zeromq-dev` | Not supported | `miniupnpc-dev` | `qt5-qtbase-dev qt5-qttools-dev libqrencode-dev` |
+| Arch (`pacman`)         | `gcc make cmake python boost` | `sqlite` | `capnproto` | `zeromq` | `systemtap` | `miniupnpc` | `qt5-base qt5-tools qt5-wayland qrencode` |
 
 <a id="note1"></a>1. Some ZMQ packages do not vendor the CMake config files, which requires `pkgconf` or `pkg-config` to be installed.
 
@@ -77,6 +77,10 @@ Additionally, install the Qt Wayland platform plugin for modern desktop environm
 
 The GUI will be able to encode addresses in QR codes and requires libqrencode.
 Otherwise, if you don't need QR encoding support, use the `-DWITH_QRENCODE=OFF` option to disable this feature in order to compile the GUI.
+
+The GUI builds with Qt 5 by default. You can build with Qt 6 instead by passing
+`-DWITH_QT_VERSION=6` to cmake and installing your distribution's Qt 6
+development packages.
 
 ### Disable-wallet mode
 
