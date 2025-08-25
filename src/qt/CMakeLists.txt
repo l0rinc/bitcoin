@@ -170,13 +170,15 @@ set(nsis_header_source_path "res/src")
 set(nsis_header_svg "${nsis_header_source_path}/nsis-header.svg")
 set(nsis_header_png "${ICON_PATH}/nsis-header.png")
 set(nsis_header_bmp "${ICON_PATH}/nsis-header.bmp")
+set(ABS_FONT_DIR "${CMAKE_CURRENT_BINARY_DIR}/res/fonts")
+file(WRITE "${ABS_FONT_DIR}/fonts.conf" "<fontconfig><dir>${ABS_FONT_DIR}</dir></fontconfig>\n")
 configure_file(${nsis_header_input} ${nsis_header_svg} @ONLY)
 configure_file(${bitcoin_svg} ${nsis_header_source_path}/bitcoin.svg COPYONLY)
 configure_file(res/src/bitcoinknots-logo.svg ${nsis_header_source_path}/bitcoinknots-logo.svg COPYONLY)
 add_custom_command(
   OUTPUT "${nsis_header_png}"
-  COMMAND "${RSVG_CONVERT}" -f png -d 57 -p 57 --output "${nsis_header_png}" "${CMAKE_CURRENT_BINARY_DIR}/${nsis_header_svg}"
-  DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/${nsis_header_svg}"
+  COMMAND "${CMAKE_COMMAND}" -E env "FONTCONFIG_PATH=${ABS_FONT_DIR}" "${RSVG_CONVERT}" -f png -d 57 -p 57 --output "${nsis_header_png}" "${CMAKE_CURRENT_BINARY_DIR}/${nsis_header_svg}"
+  DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/${nsis_header_svg}" "${CMAKE_CURRENT_BINARY_DIR}/${nsis_header_source_path}/bitcoinknots-logo.svg" "${FONT_PATH}"
   COMMENT "Generating ${nsis_header_png} from ${nsis_header_input}"
   VERBATIM
 )

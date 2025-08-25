@@ -19,7 +19,6 @@
              ((gnu packages python) #:select (python-minimal))
              ((gnu packages python-xyz) #:select (python-lief))
              ((gnu packages version-control) #:select (git-minimal))
-             (guix build-system font)
              (guix build-system trivial)
              (guix download)
              (guix gexp)
@@ -169,28 +168,6 @@ chain for " target " development."))
       (home-page (package-home-page pthreads-xgcc))
       (license (package-license pthreads-xgcc)))))
 
-(define-public font-tuffy
-  (package
-    (name "font-tuffy")
-    (version "20120614")
-    (source
-      (origin
-        (method url-fetch)
-        (uri (string-append "http://tulrich.com/fonts/tuffy-" version ".tar.gz"))
-        (file-name (string-append name "-" version ".tar.gz"))
-        (sha256
-          (base32
-            "02vf72bgrp30vrbfhxjw82s115z27dwfgnmmzfb0n9wfhxxfpyf6"))))
-    (build-system font-build-system)
-    (home-page "http://tulrich.com/fonts/")
-    (synopsis "The Tuffy Truetype Font Family")
-    (description
-      "Thatcher Ulrich's first outline font design. He started with the goal
-of producing a neutral, readable sans-serif text font. There are lots of
-\"expressive\" fonts out there, but he wanted to start with something very plain
-and clean, something he might want to actually use.")
-    (license license:public-domain)))
-
 (define-public mingw-w64-base-gcc
   (package
     (inherit base-gcc)
@@ -314,8 +291,7 @@ and clean, something he might want to actually use.")
         python-lief)
   (let ((target (getenv "HOST")))
     (cond ((string-suffix? "-mingw32" target)
-           (list font-tuffy
-                 (make-mingw-pthreads-cross-toolchain "x86_64-w64-mingw32")
+           (list (make-mingw-pthreads-cross-toolchain "x86_64-w64-mingw32")
                  nsis-x86_64
                  zip))
           ((string-contains target "-linux-")
