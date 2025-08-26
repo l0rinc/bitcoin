@@ -5,9 +5,8 @@
 #ifndef BITCOIN_WALLET_MIGRATE_H
 #define BITCOIN_WALLET_MIGRATE_H
 
+#include <support/allocators/zeroafterfree.h>
 #include <wallet/db.h>
-
-#include <optional>
 
 namespace wallet {
 
