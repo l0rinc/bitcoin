@@ -81,7 +81,7 @@ static void PrevectorDeserialize(benchmark::Bench& bench)
         for (auto x = 0; x < 1000; ++x) {
             s0 >> t1;
         }
-        s0.Rewind();
+        s0.rewind();
     });
 }
 

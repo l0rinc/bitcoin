@@ -9,7 +9,6 @@
 #include <logging.h>
 #include <serialize.h>
 #include <span.h>
-#include <support/allocators/zeroafterfree.h>
 #include <util/check.h>
 #include <util/obfuscation.h>
 #include <util/overflow.h>
@@ -18,8 +17,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
-#include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <ios>
 #include <limits>
@@ -129,20 +126,17 @@ public:
 class DataStream
 {
 protected:
-    using vector_type = SerializeData;
-    vector_type vch;
-    vector_type::size_type m_read_pos{0};
+    using SerializedData = std::vector<std::byte>;
+    SerializedData vch;
+    SerializedData::size_type m_read_pos{0};
 
 public:
-    typedef vector_type::allocator_type   allocator_type;
-    typedef vector_type::size_type        size_type;
-    typedef vector_type::difference_type  difference_type;
-    typedef vector_type::reference        reference;
-    typedef vector_type::const_reference  const_reference;
-    typedef vector_type::value_type       value_type;
-    typedef vector_type::iterator         iterator;
-    typedef vector_type::const_iterator   const_iterator;
-    typedef vector_type::reverse_iterator reverse_iterator;
+    using size_type = SerializedData::size_type;
+    using reference = SerializedData::reference;
+    using const_reference = SerializedData::const_reference;
+    using value_type = SerializedData::value_type;
+    using iterator = SerializedData::iterator;
+    using const_iterator = SerializedData::const_iterator;
 
     explicit DataStream() = default;
     explicit DataStream(std::span<const uint8_t> sp) : DataStream{std::as_bytes(sp)} {}
@@ -153,50 +147,29 @@ public:
         return std::string{UCharCast(data()), UCharCast(data() + size())};
     }
 
-
     //
     // Vector subset
     //
-    const_iterator begin() const                     { return vch.begin() + m_read_pos; }
-    iterator begin()                                 { return vch.begin() + m_read_pos; }
-    const_iterator end() const                       { return vch.end(); }
-    iterator end()                                   { return vch.end(); }
-    size_type size() const                           { return vch.size() - m_read_pos; }
-    bool empty() const                               { return vch.size() == m_read_pos; }
+    const_iterator begin() const { return vch.begin() + m_read_pos; }
+    iterator begin() { return vch.begin() + m_read_pos; }
+    const_iterator end() const { return vch.end(); }
+    iterator end() { return vch.end(); }
+    size_type size() const { return vch.size() - m_read_pos; }
+    bool empty() const { return vch.size() == m_read_pos; }
     void resize(size_type n, value_type c = value_type{}) { vch.resize(n + m_read_pos, c); }
-    void reserve(size_type n)                        { vch.reserve(n + m_read_pos); }
-    const_reference operator[](size_type pos) const  { return vch[pos + m_read_pos]; }
-    reference operator[](size_type pos)              { return vch[pos + m_read_pos]; }
-    void clear()                                     { vch.clear(); m_read_pos = 0; }
-    value_type* data()                               { return vch.data() + m_read_pos; }
-    const value_type* data() const                   { return vch.data() + m_read_pos; }
-
-    inline void Compact()
-    {
-        vch.erase(vch.begin(), vch.begin() + m_read_pos);
-        m_read_pos = 0;
-    }
-
-    bool Rewind(std::optional<size_type> n = std::nullopt)
-    {
-        // Total rewind if no size is passed
-        if (!n) {
-            m_read_pos = 0;
-            return true;
-        }
-        // Rewind by n characters if the buffer hasn't been compacted yet
-        if (*n > m_read_pos)
-            return false;
-        m_read_pos -= *n;
-        return true;
-    }
-
+    void reserve(size_type n) { vch.reserve(n + m_read_pos); }
+    const_reference operator[](size_type pos) const { return vch[pos + m_read_pos]; }
+    reference operator[](size_type pos) { return vch[pos + m_read_pos]; }
+    void rewind() { m_read_pos = 0; }
+    void clear() { vch.clear(); rewind(); }
+    value_type* data() { return vch.data() + m_read_pos; }
+    const value_type* data() const { return vch.data() + m_read_pos; }
 
     //
     // Stream subset
     //
-    bool eof() const             { return size() == 0; }
-    int in_avail() const         { return size(); }
+    bool eof() const { return empty(); }
+    int in_avail() const { return size(); }
 
     void read(std::span<value_type> dst)
     {
@@ -237,7 +210,7 @@ public:
         vch.insert(vch.end(), src.begin(), src.end());
     }
 
-    template<typename T>
+    template <typename T>
     DataStream& operator<<(const T& obj)
     {
         ::Serialize(*this, obj);
