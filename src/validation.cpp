@@ -2882,7 +2882,7 @@ bool Chainstate::FlushStateToDisk(
                 }
                 // Flush the chainstate (which may refer to block index entries).
                 const auto empty_cache{(mode == FlushStateMode::ALWAYS) || fCacheLarge || fCacheCritical};
-                if (empty_cache ? !CoinsTip().Flush() : !CoinsTip().Sync()) {
+                if (empty_cache ? !CoinsTip().Flush(/*reallocate_cache=*/true) : !CoinsTip().Sync()) {
                     return FatalError(m_chainman.GetNotifications(), state, _("Failed to write to coin database."));
                 }
                 full_flush_completed = true;
@@ -3021,7 +3021,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
             LogError("DisconnectTip(): DisconnectBlock %s failed\n", pindexDelete->GetBlockHash().ToString());
             return false;
         }
-        bool flushed = view.Flush();
+        bool flushed = view.Flush(/*reallocate_cache=*/false);
         assert(flushed);
     }
     LogDebug(BCLog::BENCH, "- Disconnect block: %.2fms\n",
@@ -3156,7 +3156,7 @@ bool Chainstate::ConnectTip(
                  Ticks<MillisecondsDouble>(time_3 - time_2),
                  Ticks<SecondsDouble>(m_chainman.time_connect_total),
                  Ticks<MillisecondsDouble>(m_chainman.time_connect_total) / m_chainman.num_blocks_total);
-        bool flushed = view.Flush();
+        bool flushed = view.Flush(/*reallocate_cache=*/false);
         assert(flushed);
     }
     const auto time_4{SteadyClock::now()};
@@ -4719,6 +4719,9 @@ VerifyDBResult CVerifyDB::VerifyDB(
 
     const bool is_snapshot_cs{chainstate.m_from_snapshot_blockhash};
 
+    std::unordered_set<COutPoint, SaltedOutpointHasher> spent;
+    std::vector<std::pair<COutPoint, Coin>> warm;
+
     for (pindex = chainstate.m_chain.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
         const int percentageDone = std::max(1, std::min(99, (int)(((double)(chainstate.m_chain.Height() - pindex->nHeight)) / (double)nCheckDepth * (nCheckLevel >= 4 ? 50 : 100))));
         if (reportDone < percentageDone / 10) {
@@ -4781,6 +4784,20 @@ VerifyDBResult CVerifyDB::VerifyDB(
             }
         }
         if (chainstate.m_chainman.m_interrupt) return VerifyDBResult::INTERRUPTED;
+
+        // Cache transactions from each read block
+        for (const auto& tx : std::views::reverse(block.vtx)) {
+            for (const auto& in : tx->vin) {
+                spent.insert(in.prevout);
+            }
+            for (uint32_t n{0}; n < tx->vout.size(); ++n) {
+                if (auto out{tx->vout[n]}; !out.scriptPubKey.IsUnspendable()) {
+                    if (COutPoint op{tx->GetHash(), n}; !spent.contains(op)) {
+                        warm.emplace_back(std::move(op), Coin{out, pindex->nHeight, tx->IsCoinBase()});
+                    }
+                }
+            }
+        }
     }
     if (pindexFailure) {
         LogPrintf("Verification error: coin database inconsistencies found (last %i blocks, %i good transactions before that)\n", chainstate.m_chain.Height() - pindexFailure->nHeight + 1, nGoodTransactions);
@@ -4825,6 +4842,19 @@ VerifyDBResult CVerifyDB::VerifyDB(
     if (skipped_no_block_data) {
         return VerifyDBResult::SKIPPED_MISSING_BLOCKS;
     }
+
+    auto cache_size{chainstate.CoinsTip().GetCacheSize()}; // TODO remove safety checks
+    for (auto& [outpoint, coin] : std::views::reverse(warm)) {
+        {
+            // TODO remove safety checks
+            auto dbcoin{coinsview.GetCoin(outpoint)};
+            assert(dbcoin && !dbcoin->IsSpent());
+            assert((DataStream{} << *dbcoin).str() == (DataStream{} << coin).str());
+        }
+        chainstate.CoinsTip().EmplaceCoinInternalDANGER(std::move(outpoint), std::move(coin));
+    }
+    assert(chainstate.CoinsTip().GetCacheSize() >= cache_size); // TODO remove safety checks
+
     return VerifyDBResult::SUCCESS;
 }
 
@@ -4921,7 +4951,7 @@ bool Chainstate::ReplayBlocks()
     }
 
     cache.SetBestBlock(pindexNew->GetBlockHash());
-    cache.Flush();
+    cache.Flush(/*reallocate_cache=*/false);
     m_chainman.GetNotifications().progress(bilingual_str{}, 100, false);
     return true;
 }
@@ -5831,7 +5861,7 @@ static void FlushSnapshotToDisk(CCoinsViewCache& coins_cache, bool snapshot_load
                   coins_cache.DynamicMemoryUsage() / (1000 * 1000)),
         BCLog::LogFlags::ALL);
 
-    coins_cache.Flush();
+    coins_cache.Flush(/*reallocate_cache=*/true);
 }
 
 struct StopHashingException : public std::exception

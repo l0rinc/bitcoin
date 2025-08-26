@@ -247,12 +247,14 @@ bool CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &ha
     return true;
 }
 
-bool CCoinsViewCache::Flush() {
+bool CCoinsViewCache::Flush(bool reallocate_cache) {
     auto cursor{CoinsViewCacheCursor(cachedCoinsUsage, m_sentinel, cacheCoins, /*will_erase=*/true)};
     bool fOk = base->BatchWrite(cursor, hashBlock);
     if (fOk) {
         cacheCoins.clear();
-        ReallocateCache();
+        if (reallocate_cache) {
+            ReallocateCache();
+        }
     }
     cachedCoinsUsage = 0;
     return fOk;
