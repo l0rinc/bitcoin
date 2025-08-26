@@ -27,14 +27,11 @@
 
 static void DeserializeBlockTest(benchmark::Bench& bench)
 {
-    DataStream stream(benchmark::data::block413567);
-    std::byte a{0};
-    stream.write({&a, 1}); // Prevent compaction
-
     bench.unit("block").run([&] {
+        DataStream stream(benchmark::data::block413567);
         CBlock block;
         stream >> TX_WITH_WITNESS(block);
-        stream.rewind();
+        assert(stream.size() == benchmark::data::block413567.size());
     });
 }
 
