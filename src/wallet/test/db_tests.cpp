@@ -4,12 +4,13 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <support/allocators/zeroafterfree.h>
 #include <test/util/setup_common.h>
 #include <util/check.h>
 #include <util/fs.h>
 #include <util/translation.h>
-#include <wallet/sqlite.h>
 #include <wallet/migrate.h>
+#include <wallet/sqlite.h>
 #include <wallet/test/util.h>
 #include <wallet/walletutil.h>
 
@@ -22,7 +23,7 @@
 #include <utility>
 #include <vector>
 
-inline std::ostream& operator<<(std::ostream& os, const std::pair<const SerializeData, SerializeData>& kv)
+inline std::ostream& operator<<(std::ostream& os, const std::pair<const SafeSerializedData, SafeSerializedData>& kv)
 {
     std::span key{kv.first}, value{kv.second};
     os << "(\"" << std::string_view{reinterpret_cast<const char*>(key.data()), key.size()} << "\", \""
@@ -37,10 +38,10 @@ inline std::span<const std::byte> StringBytes(std::string_view str)
     return std::as_bytes(std::span{str});
 }
 
-static SerializeData StringData(std::string_view str)
+static SafeSerializedData StringData(std::string_view str)
 {
     auto bytes = StringBytes(str);
-    return SerializeData{bytes.begin(), bytes.end()};
+    return SafeSerializedData{bytes.begin(), bytes.end()};
 }
 
 static void CheckPrefix(DatabaseBatch& batch, std::span<const std::byte> prefix, MockableData expected)
@@ -53,7 +54,7 @@ static void CheckPrefix(DatabaseBatch& batch, std::span<const std::byte> prefix,
         if (status == DatabaseCursor::Status::DONE) break;
         BOOST_CHECK(status == DatabaseCursor::Status::MORE);
         BOOST_CHECK(
-            actual.emplace(SerializeData(key.begin(), key.end()), SerializeData(value.begin(), value.end())).second);
+            actual.emplace(SafeSerializedData(key.begin(), key.end()), SafeSerializedData(value.begin(), value.end())).second);
     }
     BOOST_CHECK_EQUAL_COLLECTIONS(actual.begin(), actual.end(), expected.begin(), expected.end());
 }

@@ -46,6 +46,6 @@ struct zero_after_free_allocator {
 };
 
 /** Byte-vector that clears its contents before deletion. */
-using SerializeData = std::vector<std::byte, zero_after_free_allocator<std::byte>>;
+using SafeSerializedData = std::vector<std::byte, zero_after_free_allocator<std::byte>>;
 
 #endif // BITCOIN_SUPPORT_ALLOCATORS_ZEROAFTERFREE_H

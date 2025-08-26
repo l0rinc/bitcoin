@@ -8,6 +8,7 @@
 #include <key.h>
 #include <key_io.h>
 #include <streams.h>
+#include <support/allocators/zeroafterfree.h>
 #include <test/util/setup_common.h>
 #include <validationinterface.h>
 #include <wallet/context.h>
@@ -122,7 +123,7 @@ bool MockableBatch::ReadKey(DataStream&& key, DataStream& value)
     if (!m_pass) {
         return false;
     }
-    SerializeData key_data{key.begin(), key.end()};
+    SafeSerializedData key_data{key.begin(), key.end()};
     const auto& it = m_records.find(key_data);
     if (it == m_records.end()) {
         return false;
@@ -137,8 +138,8 @@ bool MockableBatch::WriteKey(DataStream&& key, DataStream&& value, bool overwrit
     if (!m_pass) {
         return false;
     }
-    SerializeData key_data{key.begin(), key.end()};
-    SerializeData value_data{value.begin(), value.end()};
+    SafeSerializedData key_data{key.begin(), key.end()};
+    SafeSerializedData value_data{value.begin(), value.end()};
     auto [it, inserted] = m_records.emplace(key_data, value_data);
     if (!inserted && overwrite) { // Overwrite if requested
         it->second = value_data;
@@ -152,7 +153,7 @@ bool MockableBatch::EraseKey(DataStream&& key)
     if (!m_pass) {
         return false;
     }
-    SerializeData key_data{key.begin(), key.end()};
+    SafeSerializedData key_data{key.begin(), key.end()};
     m_records.erase(key_data);
     return true;
 }
@@ -162,7 +163,7 @@ bool MockableBatch::HasKey(DataStream&& key)
     if (!m_pass) {
         return false;
     }
-    SerializeData key_data{key.begin(), key.end()};
+    SafeSerializedData key_data{key.begin(), key.end()};
     return m_records.count(key_data) > 0;
 }
 

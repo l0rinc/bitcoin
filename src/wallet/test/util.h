@@ -6,6 +6,7 @@
 #define BITCOIN_WALLET_TEST_UTIL_H
 
 #include <addresstype.h>
+#include <support/allocators/zeroafterfree.h>
 #include <wallet/db.h>
 #include <wallet/scriptpubkeyman.h>
 
@@ -44,7 +45,7 @@ std::string getnewaddress(CWallet& w);
 /** Returns a new destination, of an specific type, from the wallet */
 CTxDestination getNewDestination(CWallet& w, OutputType output_type);
 
-using MockableData = std::map<SerializeData, SerializeData, std::less<>>;
+using MockableData = std::map<SafeSerializedData, SafeSerializedData, std::less<>>;
 
 class MockableCursor: public DatabaseCursor
 {

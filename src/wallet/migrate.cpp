@@ -6,6 +6,7 @@
 #include <crypto/common.h>
 #include <logging.h>
 #include <streams.h>
+#include <support/allocators/zeroafterfree.h>
 #include <util/translation.h>
 #include <wallet/migrate.h>
 
@@ -691,7 +692,7 @@ void BerkeleyRODatabase::Open()
                 if (is_key) {
                     key = data;
                 } else {
-                    m_records.emplace(SerializeData{key.begin(), key.end()}, SerializeData{data.begin(), data.end()});
+                    m_records.emplace(SafeSerializedData{key.begin(), key.end()}, SafeSerializedData{data.begin(), data.end()});
                     key.clear();
                 }
                 is_key = !is_key;
@@ -734,7 +735,7 @@ bool BerkeleyRODatabase::Backup(const std::string& dest) const
 
 bool BerkeleyROBatch::ReadKey(DataStream&& key, DataStream& value)
 {
-    SerializeData key_data{key.begin(), key.end()};
+    SafeSerializedData key_data{key.begin(), key.end()};
     const auto it{m_database.m_records.find(key_data)};
     if (it == m_database.m_records.end()) {
         return false;
@@ -747,7 +748,7 @@ bool BerkeleyROBatch::ReadKey(DataStream&& key, DataStream& value)
 
 bool BerkeleyROBatch::HasKey(DataStream&& key)
 {
-    SerializeData key_data{key.begin(), key.end()};
+    SafeSerializedData key_data{key.begin(), key.end()};
     return m_database.m_records.count(key_data) > 0;
 }
 
