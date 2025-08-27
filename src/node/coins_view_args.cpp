@@ -17,7 +17,6 @@ void ReadCoinsViewArgs(const ArgsManager& args, CoinsViewOptions& options)
     } else {
         options.batch_write_bytes = GetDbBatchSize(args.GetIntArg("-dbcache", DEFAULT_KERNEL_CACHE));
     }
-    assert(options.batch_write_bytes == 64_MiB); // TODO
 
     if (const auto value{args.GetIntArg("-dbcrashratio")}) {
         options.simulate_crash_ratio = *value;

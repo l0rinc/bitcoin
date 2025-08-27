@@ -15,7 +15,7 @@ namespace node
 {
 static constexpr size_t GetDbBatchSize(const size_t dbcache_bytes)
 {
-    return 64_MiB;
+    return 32_MiB;
 }
 
 void ReadCoinsViewArgs(const ArgsManager& args, CoinsViewOptions& options);
