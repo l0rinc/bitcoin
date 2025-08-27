@@ -36,6 +36,8 @@ namespace Ui {
 }
 
 QT_BEGIN_NAMESPACE
+class QColor;
+class QEvent;
 class QDateTime;
 class QLabel;
 class QMenu;
@@ -48,6 +50,10 @@ class RPCConsole: public QWidget
     Q_OBJECT
 
 public:
+    struct ThemeColors {
+        QColor warning;
+        QColor userinput;
+    };
     explicit RPCConsole(interfaces::Node& node, const PlatformStyle *platformStyle, QWidget *parent);
     ~RPCConsole();
 
@@ -194,6 +200,9 @@ private:
     QByteArray m_banlist_widget_header_state;
     bool m_alternating_row_colors{false};
 
+    // Theme Colors
+    const ThemeColors *m_theme_colors;
+
     /** Update UI with latest network info from model. */
     void updateNetworkState();
 
@@ -209,6 +218,8 @@ private:
     }
 
     void updateWindowTitle();
+    void updateThemeColors();
+    void updateConsoleStyleSheet();
 
 private Q_SLOTS:
     void updateAlerts(const QString& warnings);
