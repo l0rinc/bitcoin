@@ -1789,7 +1789,9 @@ bool CWallet::IsFromMe(const CTransaction& tx) const
 {
     LOCK(cs_wallet);
     for (const CTxIn& txin : tx.vin) {
-        if (GetTXO(txin.prevout)) return true;
+        if (IsMine(txin.prevout)) {
+            return true;
+        }
     }
     return false;
 }
