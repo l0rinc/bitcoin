@@ -213,6 +213,7 @@ QT_TRANSLATE_NOOP("bitcoin-core", "The inputs size exceeds the maximum weight. P
 QT_TRANSLATE_NOOP("bitcoin-core", "The preselected coins total amount does not cover the transaction target. Please allow other inputs to be automatically selected or include more coins manually"),
 QT_TRANSLATE_NOOP("bitcoin-core", "The source code is available from %s."),
 QT_TRANSLATE_NOOP("bitcoin-core", "The specified config file %s does not exist"),
+QT_TRANSLATE_NOOP("bitcoin-core", "The total exceeds your balance when the %s transaction fee is included."),
 QT_TRANSLATE_NOOP("bitcoin-core", "The transaction amount is too small to pay the fee"),
 QT_TRANSLATE_NOOP("bitcoin-core", "The transaction amount is too small to send after the fee has been deducted"),
 QT_TRANSLATE_NOOP("bitcoin-core", "The transactions removal process can only be executed within a db txn"),
