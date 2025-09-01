@@ -257,7 +257,11 @@ CDBWrapper::CDBWrapper(const DBParams& params)
         m_obfuscation = obfuscation;
         LogInfo("Wrote new obfuscation key for %s: %s", fs::PathToString(params.path), m_obfuscation.HexKey());
     }
-    LogInfo("Using obfuscation key for %s: %s", fs::PathToString(params.path), m_obfuscation.HexKey());
+    if (m_obfuscation) {
+        LogInfo("Using obfuscation key for %s: %s", fs::PathToString(params.path), m_obfuscation.HexKey());
+    } else {
+        LogWarning("Block obfuscation isn't enabled, restart with `-obfuscate-blocks` option to enable it. Note that this operation can take several hours.");
+    }
 }
 
 CDBWrapper::~CDBWrapper()
