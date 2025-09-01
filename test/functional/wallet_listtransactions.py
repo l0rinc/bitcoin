@@ -98,6 +98,7 @@ class ListTransactionsTest(BitcoinTestFramework):
         self.test_op_return()
         self.test_listtransactions_display_in_mempool()
         self.test_gettransaction_display_in_mempool()
+        self.test_from_me_status_change()
 
     def run_externally_generated_address_test(self):
         """Test behavior when receiving address is not in the address book."""
