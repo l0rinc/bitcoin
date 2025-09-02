@@ -1187,13 +1187,15 @@ static RPCHelpMan gettxout()
     CCoinsViewCache* coins_view = &active_chainstate.CoinsTip();
 
     std::optional<Coin> coin;
+    DataStream key_buffer;
+    key_buffer.resize(MAX_COUTPOINT_SERIALIZED_SIZE);
     if (fMempool) {
         const CTxMemPool& mempool = EnsureMemPool(node);
         LOCK(mempool.cs);
         CCoinsViewMemPool view(coins_view, mempool);
-        if (!mempool.isSpent(out)) coin = view.GetCoin(out);
+        if (!mempool.isSpent(out)) coin = view.GetCoin(out, key_buffer);
     } else {
-        coin = coins_view->GetCoin(out);
+        coin = coins_view->GetCoin(out, key_buffer);
     }
     if (!coin) return UniValue::VNULL;
 
@@ -2828,6 +2830,8 @@ static RPCHelpMan getdescriptoractivity()
         LOCK(mempool.cs);
         const CCoinsViewCache& coins_view = &active_chainstate.CoinsTip();
 
+        DataStream key_buffer;
+        key_buffer.resize(MAX_COUTPOINT_SERIALIZED_SIZE);
         for (const CTxMemPoolEntry& e : mempool.entryAll()) {
             const auto& tx = e.GetSharedTx();
 
@@ -2835,7 +2839,7 @@ static RPCHelpMan getdescriptoractivity()
                 CScript scriptPubKey;
                 CAmount value;
                 const auto& txin = tx->vin.at(vin_idx);
-                std::optional<Coin> coin = coins_view.GetCoin(txin.prevout);
+                std::optional<Coin> coin = coins_view.GetCoin(txin.prevout, key_buffer);
 
                 // Check if the previous output is in the chain
                 if (!coin) {
