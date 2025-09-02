@@ -1024,7 +1024,7 @@ bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::o
     }
 
     // Signet only: check block solution
-    if (GetConsensus().signet_blocks && !CheckSignetBlockSolution(block, GetConsensus())) {
+    if (GetConsensus().signet_blocks && !CheckSignetBlockSolution(block, block_hash, GetConsensus())) {
         LogError("Errors in block solution at %s while reading block", pos.ToString());
         return false;
     }
@@ -1270,7 +1270,7 @@ void ImportBlocks(ChainstateManager& chainman, std::span<const fs::path> import_
     // the relevant pointers before the ABC call.
     for (Chainstate* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
         BlockValidationState state;
-        if (!chainstate->ActivateBestChain(state, nullptr)) {
+        if (!chainstate->ActivateBestChain(state)) {
             chainman.GetNotifications().fatalError(strprintf(_("Failed to connect best block (%s)."), state.ToString()));
             return;
         }

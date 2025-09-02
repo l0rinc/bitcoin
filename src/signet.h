@@ -14,7 +14,7 @@
 /**
  * Extract signature and check whether a block has a valid solution
  */
-bool CheckSignetBlockSolution(const CBlock& block, const Consensus::Params& consensusParams);
+bool CheckSignetBlockSolution(const CBlock& block, const uint256& block_hash, const Consensus::Params& consensusParams);
 
 /**
  * Generate the signet tx corresponding to the given block
