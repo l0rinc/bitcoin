@@ -34,6 +34,8 @@ set(CLIENT_VERSION_RC 0)
 set(CLIENT_VERSION_IS_RELEASE "false")
 set(COPYRIGHT_YEAR "2026")
 
+set(CLIENT_VERSION_SUFFIX ".knots20250903")
+
 # During the enabling of the CXX and CXXOBJ languages, we modify
 # CMake's compiler/linker invocation strings by appending the content
 # of the user-defined `APPEND_*` variables, which allows overriding
