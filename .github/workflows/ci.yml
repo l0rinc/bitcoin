@@ -137,11 +137,9 @@ jobs:
       BASE_ROOT_DIR: ${{ github.workspace }}/repo_archive
 
     steps:
-      - *ANNOTATION_PR_NUMBER
-
       - &CHECKOUT
         name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v5
         with:
           # Ensure the latest merged pull request state is used, even on re-runs.
           ref: &CHECKOUT_REF_TMPL ${{ github.event_name == 'pull_request' && github.ref || '' }}
@@ -216,7 +214,7 @@ jobs:
             job-name: 'Windows native, fuzz, VS'
 
     steps:
-      - *ANNOTATION_PR_NUMBER
+      - *CHECKOUT
 
       - *CHECKOUT
 
@@ -342,12 +340,7 @@ jobs:
       DANGER_CI_ON_HOST_FOLDERS: 1
 
     steps:
-      - *ANNOTATION_PR_NUMBER
-
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.record-frozen-commit.outputs.commit }}
+      - *CHECKOUT
 
       - name: Configure environment
         uses: ./.github/actions/configure-environment
