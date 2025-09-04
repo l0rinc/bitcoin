@@ -167,6 +167,33 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
     return nSigOps;
 }
 
+bool Consensus::CheckSigopsBIP54(const CTransaction& tx, const CCoinsViewCache& inputs)
+{
+    Assert(!tx.IsCoinBase());
+
+    unsigned int sigops{0};
+    for (const auto& txin: tx.vin) {
+        const auto& prev_txo{inputs.AccessCoin(txin.prevout).out};
+
+        // Unlike the existing block-wide sigop limit, which counts sigops present in the block itself
+        // (including in output scripts, which are not executed until spent later), BIP54 counts the
+        // sigops in the scripts associated with each input: the scriptSig, the spent scriptPubKey and,
+        // for P2SH, the redeemScript. The count is static, so sigops in unexecuted branches count too.
+        // `fAccurate` means CHECKMULTISIG(VERIFY) is charged according to an immediately preceding
+        // OP_1 through OP_16, and 20 sigops otherwise. This method of accounting was introduced by
+        // BIP16, and BIP54 reuses it.
+        // The GetSigOpCount call on the previous scriptPubKey counts both bare and P2SH sigops.
+        sigops += txin.scriptSig.GetSigOpCount(/*fAccurate=*/true);
+        sigops += prev_txo.scriptPubKey.GetSigOpCount(txin.scriptSig);
+
+        if (sigops > MAX_TX_BIP54_SIGOPS) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee)
 {
     // are the actual inputs available?

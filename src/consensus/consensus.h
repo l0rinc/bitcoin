@@ -34,4 +34,11 @@ inline constexpr unsigned int LOCKTIME_VERIFY_SEQUENCE = (1 << 0);
  */
 inline constexpr int64_t MAX_TIMEWARP = 600;
 
+/**
+ * The maximum number of legacy (non-Segwit) signature operations in a single transaction (BIP54). They are counted
+ * statically, as introduced by BIP16, in each input's scriptSig, spent scriptPubKey and P2SH redeemScript, whether
+ * or not execution reaches them.
+ */
+inline constexpr unsigned int MAX_TX_BIP54_SIGOPS{2'500};
+
 #endif // BITCOIN_CONSENSUS_CONSENSUS_H

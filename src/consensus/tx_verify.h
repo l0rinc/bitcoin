@@ -21,6 +21,14 @@ class TxValidationState;
 
 namespace Consensus {
 /**
+ * Check the BIP54 limit on the total number of legacy (non-Segwit) sigops across the whole transaction. The sigops
+ * are counted statically in each input's scriptSig, spent scriptPubKey and P2SH redeemScript, including in branches
+ * that execution does not reach.
+ * Preconditions: tx.IsCoinBase() is false.
+ */
+bool CheckSigopsBIP54(const CTransaction& tx, const CCoinsViewCache& inputs);
+
+/**
  * Check whether all inputs of this transaction are valid (no double spends and amounts)
  * This does not modify the UTXO set. This does not check scripts and sigs.
  * @param[out] txfee Set to the transaction fee if successful.
