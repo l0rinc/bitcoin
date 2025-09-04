@@ -237,7 +237,7 @@ std::optional<std::vector<uint8_t>> PCPSendRecv(Sock &sock, const std::string &p
         }
         // Dispatch packet to gateway.
         if (sock.Send(request.data(), request.size(), 0) != static_cast<ssize_t>(request.size())) {
-            LogDebug(BCLog::NET, "%s: Could not send request: %s\n", protocol, NetworkErrorString(WSAGetLastError()));
+            LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "%s: Could not send request: %s\n", protocol, NetworkErrorString(WSAGetLastError()));
             return std::nullopt; // Network-level error, probably no use retrying.
         }
 
@@ -259,7 +259,7 @@ std::optional<std::vector<uint8_t>> PCPSendRecv(Sock &sock, const std::string &p
             // Receive response.
             recvsz = sock.Recv(response, sizeof(response), MSG_DONTWAIT);
             if (recvsz < 0) {
-                LogDebug(BCLog::NET, "%s: Could not receive response: %s\n", protocol, NetworkErrorString(WSAGetLastError()));
+                LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "%s: Could not receive response: %s\n", protocol, NetworkErrorString(WSAGetLastError()));
                 return std::nullopt; // Network-level error, probably no use retrying.
             }
             LogDebug(BCLog::NET, "%s: Received response of %d bytes: %s\n", protocol, recvsz, HexStr(std::span(response, recvsz)));
