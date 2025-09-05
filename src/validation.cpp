@@ -4186,6 +4186,29 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
         }
     }
 
+    // If the block is the first of a difficulty adjustment interval, check its timestamp against the previous
+    // one to prevent timewarp attacks (see BIP 54).
+    const int dai{static_cast<int>(consensusParams.DifficultyAdjustmentInterval())};
+    const bool is_first_block{nHeight % dai == 0};
+    if (is_first_block && DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)) {
+        if (block.GetBlockTime() < pindexPrev->GetBlockTime() - MAX_TIMEWARP_BIP54) {
+            return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-timewarp-attack", "block's timestamp is too early on diff adjustment block");
+        }
+    }
+
+    // Fix for the Murch-Zawy attack. See https://delvingbitcoin.org/t/zawy-s-alternating-timestamp-attack/1062 .
+    // TL;DR: the duration of a retarget period must not be negative or the difficulty adjustment limit may be exploited to unduly
+    // reduce difficulty similarly to the timewarp vulnerability. Along with the timewarp fix, this effectively makes retarget periods
+    // monotonic (modulo the timewarp fix grace period).
+    const bool is_last_block{nHeight % dai == dai - 1};
+    if (is_last_block && DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)) {
+        const CBlockIndex* first_block{Assert(pindexPrev->GetAncestor(nHeight - dai + 1))};
+        if (block.GetBlockTime() < first_block->GetBlockTime()) {
+            return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-negative-interval",
+                                 "the last block's timestamp in the difficulty adjustment interval is earlier than the first block's");
+        }
+    }
+
     // Check timestamp
     if (block.Time() > NodeClock::now() + std::chrono::seconds{MAX_FUTURE_BLOCK_TIME}) {
         return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "time-too-new", "block timestamp too far in the future");

@@ -38,6 +38,7 @@ from test_framework.script_util import (
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
+    assert_raises_rpc_error,
 )
 from test_framework.wallet import MiniWallet
 from test_framework.wallet_util import generate_keypair
@@ -347,8 +348,8 @@ class Bip54Test(BitcoinTestFramework):
         assert_equal(self.submit_block_many_sigops(node), "bad-txns-legacy-sigops")
         assert_equal(self.submit_block_many_sigops_split(node), None)
         # - Cannot perform Timewarp and Murch-Zawy attacks
-        self.timewarp_attack(node, fork_height=cc_dep["since"]) # TODO: The first retarget block must respect the two-hour timewarp bound
-        self.murch_zawy_attack(node, fork_height=cc_dep["since"] - 1) # TODO: Retarget periods must not have a negative duration
+        assert_raises_rpc_error(-25, "time-timewarp-attack", self.timewarp_attack, node, fork_height=cc_dep["since"])
+        assert_raises_rpc_error(-25, "time-negative-interval", self.murch_zawy_attack, node, fork_height=cc_dep["since"] - 1)
         # - Refuse blocks with a coinbase not timelocked to the block height, or with its timelock disabled
         assert_equal(self.submit_nontimelocked_cb(node), None) # TODO: The coinbase must enforce its height timelock
         assert_equal(self.submit_final_sequence_cb(node), None) # TODO: The coinbase must enforce its height timelock

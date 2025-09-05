@@ -1275,7 +1275,7 @@ BOOST_AUTO_TEST_CASE(bip54_timestamps)
 {
     UniValue tests;
     Assert(tests.read(json_tests::bip54_timestamps));
-    for (const bool bip54_active : {false}) {
+    for (const bool bip54_active : {false, true}) {
         // Skip the block index consistency check, which ProcessNewBlockHeaders() would otherwise run after every
         // one of the 4'000+ headers and which dominates the runtime of this test.
         auto opts{BIP54TestOpts(bip54_active)};
