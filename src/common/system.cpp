@@ -11,11 +11,13 @@
 #include <util/string.h>
 #include <util/time.h>
 
-#ifndef WIN32
-#include <sys/stat.h>
-#else
-#include <compat/compat.h>
+#ifdef WIN32
 #include <codecvt>
+#include <compat/compat.h>
+#include <windows.h>
+#else
+#include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 #ifdef HAVE_MALLOPT_ARENA_MAX
@@ -24,6 +26,7 @@
 
 #include <cstdlib>
 #include <locale>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -103,6 +106,17 @@ bool SetupNetworking()
 int GetNumCores()
 {
     return std::thread::hardware_concurrency();
+}
+
+std::optional<size_t> GetTotalRAM()
+{
+#ifdef WIN32
+    if (MEMORYSTATUSEX m{}; (m.dwLength = sizeof(m), GlobalMemoryStatusEx(&m))) return size_t(m.ullTotalPhys);
+#else
+    if (long p{sysconf(_SC_PHYS_PAGES)}, s{sysconf(_SC_PAGE_SIZE)}; p > 0 && s > 0) return size_t(p * s);
+#endif
+
+    return std::nullopt;
 }
 
 // Obtain the application startup time (used for uptime calculation)
