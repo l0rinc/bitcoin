@@ -223,7 +223,7 @@ CNetAddr PCPUnwrapAddress(std::span<const uint8_t> wrapped_addr)
 //! PCP or NAT-PMP send-receive loop.
 std::optional<std::vector<uint8_t>> PCPSendRecv(Sock &sock, const std::string &protocol, std::span<const uint8_t> request, int num_tries,
         std::chrono::milliseconds timeout_per_try,
-        std::function<bool(std::span<const uint8_t>)> check_packet,
+        std::function<bool(Span<const uint8_t>)> check_packet,
         CThreadInterrupt& interrupt)
 {
     using namespace std::chrono;
