@@ -150,7 +150,8 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p0.send_header_for_blocks(self.blocks[2000:])
 
         # Send blocks to node0. Block 102 will be rejected.
-        with self.nodes[0].assert_debug_log(expected_msgs=['Enabling signature validations at block #1',]):
+        with self.nodes[0].assert_debug_log(expected_msgs=['Enabling signature validations at block #1',
+                                                           'assumevalid=0 (always verify)']):  # AssumeValid::CHECKED
             self.send_blocks_until_disconnected(p2p0)
             self.wait_until(lambda: self.nodes[0].getblockcount() >= COINBASE_MATURITY + 1)
         assert_equal(self.nodes[0].getblockcount(), COINBASE_MATURITY + 1)
@@ -160,8 +161,9 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p1 = self.nodes[1].add_p2p_connection(BaseNode())
         p2p1.send_header_for_blocks(self.blocks[0:2000])
         p2p1.send_header_for_blocks(self.blocks[2000:])
-        with self.nodes[1].assert_debug_log(expected_msgs=['Disabling signature validations at block #1',
-                                                           'Enabling signature validations at block #103',]):
+        with self.nodes[1].assert_debug_log(expected_msgs=['Disabling signature validations at block #1',  # AssumeValid::SKIPPED
+                                                           'Enabling signature validations at block #103',
+                                                           'block not under assumevalid anchor']):  # AssumeValid::CHECKED_NOT_UNDER_ASSUMEVALID
             # Send all blocks to node1. All blocks will be accepted.
             for i in range(2202):
                 p2p1.send_without_ping(msg_block(self.blocks[i]))
@@ -175,7 +177,8 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p2.send_header_for_blocks(self.blocks[0:200])
 
         # Send blocks to node2. Block 102 will be rejected.
-        with self.nodes[2].assert_debug_log(expected_msgs=["Enabling signature validations at block #1",]):
+        with self.nodes[2].assert_debug_log(expected_msgs=["Enabling signature validations at block #1",
+                                                           "too recent relative to best header"]):  # AssumeValid::CHECKED_NOT_BURIED_ENOUGH
             self.send_blocks_until_disconnected(p2p2)
             self.wait_until(lambda: self.nodes[2].getblockcount() >= COINBASE_MATURITY + 1)
         assert_equal(self.nodes[2].getblockcount(), COINBASE_MATURITY + 1)
@@ -187,11 +190,13 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p3.send_without_ping(msg_block(self.blocks[0]))
         self.wait_until(lambda: self.nodes[3].getblockcount())
 
-        with self.nodes[3].assert_debug_log(expected_msgs=["Enabling signature validations at block #1",]):
+        with self.nodes[3].assert_debug_log(expected_msgs=["Enabling signature validations at block #1",
+                                                           "assumevalid hash not in headers"]):  # AssumeValid::CHECKED_HASH_NOT_IN_HEADERS
             self.restart_node(3, extra_args=["-reindex-chainstate", "-assumevalid=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"])
         assert_equal(self.nodes[3].getblockcount(), 1)
 
-        with self.nodes[3].assert_debug_log(expected_msgs=["Enabling signature validations at block #1",]):
+        with self.nodes[3].assert_debug_log(expected_msgs=["Enabling signature validations at block #1",
+                                                           "best-header chainwork below nMinimumChainWork"]):  # AssumeValid::CHECKED_BELOW_MIN_CHAINWORK
             self.restart_node(3, extra_args=["-reindex-chainstate", "-assumevalid=" + block102.hash_hex, "-minimumchainwork=0xffff"])
         assert_equal(self.nodes[3].getblockcount(), 1)
 

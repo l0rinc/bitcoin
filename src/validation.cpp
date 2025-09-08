@@ -73,6 +73,7 @@
 #include <ranges>
 #include <span>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 
@@ -105,6 +106,20 @@ const std::vector<std::string> CHECKLEVEL_DOC {
     "level 3 checks disconnection of tip blocks",
     "level 4 tries to reconnect the blocks",
     "each level includes the checks of the previous levels",
+};
+inline std::string_view assumevalid_reason(const AssumeValid v) noexcept
+{
+    using enum AssumeValid;
+    switch (v) {
+    case SKIPPED:                       return "";
+    case CHECKED:                       return "assumevalid=0 (always verify)";
+    case CHECKED_HASH_NOT_IN_HEADERS:   return "assumevalid hash not in headers";
+    case CHECKED_NOT_UNDER_ASSUMEVALID: return "block not under assumevalid anchor";
+    case CHECKED_OFF_BESTHEADER_PATH:   return "block not on best header path";
+    case CHECKED_BELOW_MIN_CHAINWORK:   return "best header's chainwork is below the built-in minimum";
+    case CHECKED_NOT_BURIED_ENOUGH:     return "too recent relative to best header";
+    default:                            std::abort();
+    }
 };
 /** The number of blocks to keep below the deepest prune lock.
  *  There is nothing special about this number. It is higher than what we
@@ -2433,15 +2448,15 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         //  effectively caching the result of part of the verification.
         BlockMap::const_iterator it{m_blockman.m_block_index.find(m_chainman.AssumedValidBlock())};
         if (it == m_blockman.m_block_index.end()) {
-            assume_valid = CHECKED;
+            assume_valid = CHECKED_HASH_NOT_IN_HEADERS;
         } else if (it->second.GetAncestor(pindex->nHeight) != pindex) {
-            assume_valid = CHECKED;
+            assume_valid = CHECKED_NOT_UNDER_ASSUMEVALID;
         } else if (m_chainman.m_best_header->GetAncestor(pindex->nHeight) != pindex) {
-            assume_valid = CHECKED;
+            assume_valid = CHECKED_OFF_BESTHEADER_PATH;
         } else if (m_chainman.m_best_header->nChainWork < m_chainman.MinimumChainWork()) {
-            assume_valid = CHECKED;
+            assume_valid = CHECKED_BELOW_MIN_CHAINWORK;
         } else if (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= 60 * 60 * 24 * 7 * 2) {
-            assume_valid = CHECKED;
+            assume_valid = CHECKED_NOT_BURIED_ENOUGH;
         } else {
             // This block is a member of the assumed verified chain and an ancestor of the best header.
             // Script verification is skipped when connecting blocks under the
@@ -2575,8 +2590,8 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             LogInfo("Disabling signature validations at block #%d (%s).",
                     pindex->nHeight, block_hash.ToString());
         } else {
-            LogInfo("Enabling signature validations at block #%d (%s).",
-                    pindex->nHeight, block_hash.ToString());
+            LogInfo("Enabling signature validations at block #%d (%s): %s.",
+                    pindex->nHeight, block_hash.ToString(), assumevalid_reason(assume_valid));
         }
         m_prev_assume_valid_logged = assume_valid;
     }

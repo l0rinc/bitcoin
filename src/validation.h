@@ -517,6 +517,11 @@ enum class AssumeValid : uint8_t
 {
     SKIPPED = 0,                       //!< skip script verification
     CHECKED = 1,                       //!< always verify scripts
+    CHECKED_HASH_NOT_IN_HEADERS = 2,   //!< assumevalid hash not found in m_block_index
+    CHECKED_NOT_UNDER_ASSUMEVALID = 3, //!< pindex is not an ancestor of the assumevalid anchor
+    CHECKED_OFF_BESTHEADER_PATH = 4,   //!< pindex is not an ancestor of m_best_header
+    CHECKED_BELOW_MIN_CHAINWORK = 5,   //!< best header's cumulative work is below the built-in minimum
+    CHECKED_NOT_BURIED_ENOUGH = 6,     //!< too recent compared to best header
 };
 
 /**
