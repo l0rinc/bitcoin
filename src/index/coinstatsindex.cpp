@@ -237,7 +237,7 @@ bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
     // // syncing.
     // if (block.height % 10'000 == 0) {
     //     LogDebug(BCLog::INDEX, "Compacting database of coinstatsindex");
-    //     m_db->CompactFull();
+    m_db->CompactFull();
     // }
 
     // Intentionally do not update DB_MUHASH here so it stays in sync with
