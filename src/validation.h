@@ -513,6 +513,12 @@ constexpr int64_t LargeCoinsCacheThreshold(int64_t total_space) noexcept
                     total_space - MAX_BLOCK_COINSDB_USAGE_BYTES);
 }
 
+enum class AssumeValid : uint8_t
+{
+    SKIPPED = 0,                       //!< skip script verification
+    CHECKED = 1,                       //!< always verify scripts
+};
+
 /**
  * Chainstate stores and provides an API to update our local knowledge of the
  * current best chain.
@@ -560,7 +566,7 @@ protected:
     //! Cached result of LookupBlockIndex(*m_from_snapshot_blockhash)
     mutable const CBlockIndex* m_cached_snapshot_base GUARDED_BY(::cs_main){nullptr};
 
-    std::atomic_bool m_prev_assume_valid_logged{true};
+    std::optional<AssumeValid> m_prev_assume_valid_logged GUARDED_BY(::cs_main){};
 
 public:
     //! Reference to a BlockManager instance which itself is shared across all

@@ -150,8 +150,9 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p0.send_header_for_blocks(self.blocks[2000:])
 
         # Send blocks to node0. Block 102 will be rejected.
-        self.send_blocks_until_disconnected(p2p0)
-        self.wait_until(lambda: self.nodes[0].getblockcount() >= COINBASE_MATURITY + 1)
+        with self.nodes[0].assert_debug_log(expected_msgs=['Enabling signature validations at block #1',]):
+            self.send_blocks_until_disconnected(p2p0)
+            self.wait_until(lambda: self.nodes[0].getblockcount() >= COINBASE_MATURITY + 1)
         assert_equal(self.nodes[0].getblockcount(), COINBASE_MATURITY + 1)
 
 
@@ -174,8 +175,9 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p2.send_header_for_blocks(self.blocks[0:200])
 
         # Send blocks to node2. Block 102 will be rejected.
-        self.send_blocks_until_disconnected(p2p2)
-        self.wait_until(lambda: self.nodes[2].getblockcount() >= COINBASE_MATURITY + 1)
+        with self.nodes[2].assert_debug_log(expected_msgs=["Enabling signature validations at block #1",]):
+            self.send_blocks_until_disconnected(p2p2)
+            self.wait_until(lambda: self.nodes[2].getblockcount() >= COINBASE_MATURITY + 1)
         assert_equal(self.nodes[2].getblockcount(), COINBASE_MATURITY + 1)
 
 
@@ -185,10 +187,12 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p3.send_without_ping(msg_block(self.blocks[0]))
         self.wait_until(lambda: self.nodes[3].getblockcount())
 
-        self.restart_node(3, extra_args=["-reindex-chainstate", "-assumevalid=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"])
+        with self.nodes[3].assert_debug_log(expected_msgs=["Enabling signature validations at block #1",]):
+            self.restart_node(3, extra_args=["-reindex-chainstate", "-assumevalid=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"])
         assert_equal(self.nodes[3].getblockcount(), 1)
 
-        self.restart_node(3, extra_args=["-reindex-chainstate", "-assumevalid=" + block102.hash_hex, "-minimumchainwork=0xffff"])
+        with self.nodes[3].assert_debug_log(expected_msgs=["Enabling signature validations at block #1",]):
+            self.restart_node(3, extra_args=["-reindex-chainstate", "-assumevalid=" + block102.hash_hex, "-minimumchainwork=0xffff"])
         assert_equal(self.nodes[3].getblockcount(), 1)
 
         # TODO test what happens when block is not on the best header path
