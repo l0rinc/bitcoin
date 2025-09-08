@@ -64,6 +64,7 @@
 #include <util/translation.h>
 #include <validationinterface.h>
 
+#include <array>
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -73,6 +74,7 @@
 #include <ranges>
 #include <span>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 
@@ -105,6 +107,15 @@ const std::vector<std::string> CHECKLEVEL_DOC {
     "level 3 checks disconnection of tip blocks",
     "level 4 tries to reconnect the blocks",
     "each level includes the checks of the previous levels",
+};
+inline constexpr std::array<std::string_view, 7> ASSUMEVALID_REASONS {
+    "assumevalid=0 (always verify)",
+    "assumevalid hash not in headers",
+    "block not under assumevalid anchor",
+    "block not on best-header path",
+    "best-header chainwork below nMinimumChainWork",
+    "too recent relative to best header",
+    "DISABLED",
 };
 /** The number of blocks to keep below the deepest prune lock.
  *  There is nothing special about this number. It is higher than what we
@@ -2423,34 +2434,41 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         return true;
     }
 
-    bool fScriptChecks = true;
+    auto assume_valid{AssumeValid::ENABLED};
     if (!m_chainman.AssumedValidBlock().IsNull()) {
+        using enum AssumeValid;
         // We've been configured with the hash of a block which has been externally verified to have a valid history.
         // A suitable default value is included with the software and updated from time to time.  Because validity
         //  relative to a piece of software is an objective fact these defaults can be easily reviewed.
         // This setting doesn't force the selection of any particular chain but makes validating some faster by
         //  effectively caching the result of part of the verification.
         BlockMap::const_iterator it{m_blockman.m_block_index.find(m_chainman.AssumedValidBlock())};
-        if (it != m_blockman.m_block_index.end()) {
-            if (it->second.GetAncestor(pindex->nHeight) == pindex &&
-                m_chainman.m_best_header->GetAncestor(pindex->nHeight) == pindex &&
-                m_chainman.m_best_header->nChainWork >= m_chainman.MinimumChainWork()) {
-                // This block is a member of the assumed verified chain and an ancestor of the best header.
-                // Script verification is skipped when connecting blocks under the
-                // assumevalid block. Assuming the assumevalid block is valid this
-                // is safe because block merkle hashes are still computed and checked,
-                // Of course, if an assumed valid block is invalid due to false scriptSigs
-                // this optimization would allow an invalid chain to be accepted.
-                // The equivalent time check discourages hash power from extorting the network via DOS attack
-                //  into accepting an invalid block through telling users they must manually set assumevalid.
-                //  Requiring a software change or burying the invalid block, regardless of the setting, makes
-                //  it hard to hide the implication of the demand.  This also avoids having release candidates
-                //  that are hardly doing any signature verification at all in testing without having to
-                //  artificially set the default assumed verified block further back.
-                // The test against the minimum chain work prevents the skipping when denied access to any chain at
-                //  least as good as the expected chain.
-                fScriptChecks = (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= 60 * 60 * 24 * 7 * 2);
-            }
+        if (it == m_blockman.m_block_index.end()) {
+            assume_valid = ENABLED_HASH_NOT_IN_HEADERS;
+        } else if (it->second.GetAncestor(pindex->nHeight) != pindex) {
+            assume_valid = ENABLED_NOT_UNDER_ASSUMEVALID;
+        } else if (m_chainman.m_best_header->GetAncestor(pindex->nHeight) != pindex) {
+            assume_valid = ENABLED_OFF_BESTHEADER_PATH;
+        } else if (m_chainman.m_best_header->nChainWork < m_chainman.MinimumChainWork()) {
+            assume_valid = ENABLED_BELOW_MIN_CHAINWORK;
+        } else if (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= 60 * 60 * 24 * 7 * 2) {
+            assume_valid = ENABLED_NOT_BURIED_ENOUGH;
+        } else {
+            // This block is a member of the assumed verified chain and an ancestor of the best header.
+            // Script verification is skipped when connecting blocks under the
+            //  assumevalid block. Assuming the assumevalid block is valid this
+            //  is safe because block merkle hashes are still computed and checked,
+            // Of course, if an assumed valid block is invalid due to false scriptSigs
+            //  this optimization would allow an invalid chain to be accepted.
+            // The equivalent time check discourages hash power from extorting the network via DOS attack
+            //  into accepting an invalid block through telling users they must manually set assumevalid.
+            //  Requiring a software change or burying the invalid block, regardless of the setting, makes
+            //  it hard to hide the implication of the demand. This also avoids having release candidates
+            //  that are hardly doing any signature verification at all in testing without having to
+            //  artificially set the default assumed verified block further back.
+            // The test against the minimum chain work prevents the skipping when denied access to any chain at
+            //  least as good as the expected chain.
+            assume_valid = DISABLED;
         }
     }
 
@@ -2563,9 +2581,15 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
              Ticks<SecondsDouble>(m_chainman.time_forks),
              Ticks<MillisecondsDouble>(m_chainman.time_forks) / m_chainman.num_blocks_total);
 
-    if (fScriptChecks != m_prev_script_checks_logged && GetRole() == ChainstateRole::NORMAL) {
-        LogInfo("%s signature validations at block #%d (%s).", fScriptChecks ? "Enabling" : "Disabling", pindex->nHeight, block_hash.ToString());
-        m_prev_script_checks_logged = fScriptChecks;
+    if (assume_valid != m_prev_assume_valid_logged && GetRole() == ChainstateRole::NORMAL) {
+        if (assume_valid == AssumeValid::DISABLED) {
+            LogInfo("Disabling signature validations at block #%d (%s).",
+                    pindex->nHeight, block_hash.ToString());
+        } else {
+            LogInfo("Enabling signature validations at block #%d (%s): %s.",
+                    pindex->nHeight, block_hash.ToString(), ASSUMEVALID_REASONS.at(uint8_t(assume_valid)));
+        }
+        m_prev_assume_valid_logged = assume_valid;
     }
 
     CBlockUndo blockundo;
@@ -2576,7 +2600,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // doesn't invalidate pointers into the vector, and keep txsdata in scope
     // for as long as `control`.
     std::optional<CCheckQueueControl<CScriptCheck>> control;
-    if (auto& queue = m_chainman.GetCheckQueue(); queue.HasThreads() && fScriptChecks) control.emplace(queue);
+    if (auto& queue = m_chainman.GetCheckQueue(); queue.HasThreads() && assume_valid != AssumeValid::DISABLED) control.emplace(queue);
 
     std::vector<PrecomputedTransactionData> txsdata(block.vtx.size());
 
@@ -2635,7 +2659,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             break;
         }
 
-        if (!tx.IsCoinBase() && fScriptChecks)
+        if (!tx.IsCoinBase() && assume_valid != AssumeValid::DISABLED)
         {
             bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks (still consult the cache, though) */
             bool tx_ok;

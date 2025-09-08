@@ -529,6 +529,17 @@ constexpr int64_t LargeCoinsCacheThreshold(int64_t total_space) noexcept
  */
 class Chainstate
 {
+    enum class AssumeValid : uint8_t
+    {
+        ENABLED = 0,                       //!< always verify scripts
+        ENABLED_HASH_NOT_IN_HEADERS = 1,   //!< assumevalid hash not found in m_block_index
+        ENABLED_NOT_UNDER_ASSUMEVALID = 2, //!< pindex is not an ancestor of the assumevalid anchor
+        ENABLED_OFF_BESTHEADER_PATH = 3,   //!< pindex is not an ancestor of m_best_header
+        ENABLED_BELOW_MIN_CHAINWORK = 4,   //!< best header's cumulative work is below the built-in minimum
+        ENABLED_NOT_BURIED_ENOUGH = 5,     //!< too recent compared to best header
+        DISABLED = 6,                      //!< skip script verification
+    };
+
 protected:
     /**
      * The ChainState Mutex
@@ -560,7 +571,7 @@ protected:
     //! Cached result of LookupBlockIndex(*m_from_snapshot_blockhash)
     mutable const CBlockIndex* m_cached_snapshot_base GUARDED_BY(::cs_main){nullptr};
 
-    std::atomic_bool m_prev_script_checks_logged{true};
+    std::optional<AssumeValid> m_prev_assume_valid_logged GUARDED_BY(::cs_main){};
 
 public:
     //! Reference to a BlockManager instance which itself is shared across all
