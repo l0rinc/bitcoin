@@ -184,6 +184,8 @@ bool BaseIndex::ProcessBlock(const CBlockIndex* pindex, const CBlock* block_data
 
 void BaseIndex::Sync()
 {
+    const auto start{std::chrono::steady_clock::now()};
+
     const CBlockIndex* pindex = m_best_block_index.load();
     if (!m_synced) {
         auto last_log_time{NodeClock::now()};
@@ -249,6 +251,9 @@ void BaseIndex::Sync()
     } else {
         LogInfo("%s is enabled", GetName());
     }
+
+    LogInfo("Indexing finished migrating in %is", Ticks<std::chrono::seconds>(SteadyClock::now() - start));
+    LogInfo("----- Exiting ----");
 }
 
 bool BaseIndex::Commit()
