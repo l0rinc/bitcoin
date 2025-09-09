@@ -235,7 +235,7 @@ bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
     // Force compaction of the database from time to time since LevelDB doesn't
     // seem to be handling this well itself at the speed coinstats index is
     // syncing.
-    if (block.height % 10'000 == 0) {
+    if (block.height % 100'000 == 0) {
         LogDebug(BCLog::INDEX, "Compacting database of coinstatsindex");
         m_db->CompactFull();
     }

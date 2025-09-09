@@ -350,7 +350,7 @@ bool CDBWrapper::IsEmpty()
 
 void CDBWrapper::CompactFull()
 {
-    DBContext().pdb->CompactRange(nullptr, nullptr);
+    DBContext().pdb->CompactRange(/*begin=*/nullptr, /*end=*/nullptr);
 }
 
 struct CDBIterator::IteratorImpl {
