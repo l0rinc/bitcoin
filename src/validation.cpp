@@ -2425,6 +2425,8 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
     bool fScriptChecks = true;
     if (!m_chainman.AssumedValidBlock().IsNull()) {
+        LogInfo("[assumevalid] AssumedValidBlock is set to: %s\n", m_chainman.AssumedValidBlock().ToString());
+
         // We've been configured with the hash of a block which has been externally verified to have a valid history.
         // A suitable default value is included with the software and updated from time to time.  Because validity
         //  relative to a piece of software is an objective fact these defaults can be easily reviewed.
@@ -2432,9 +2434,28 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         //  effectively caching the result of part of the verification.
         BlockMap::const_iterator it{m_blockman.m_block_index.find(m_chainman.AssumedValidBlock())};
         if (it != m_blockman.m_block_index.end()) {
-            if (it->second.GetAncestor(pindex->nHeight) == pindex &&
-                m_chainman.m_best_header->GetAncestor(pindex->nHeight) == pindex &&
-                m_chainman.m_best_header->nChainWork >= m_chainman.MinimumChainWork()) {
+            LogInfo("[assumevalid] Found assumevalid block in index at height %d\n", it->second.nHeight);
+
+            bool is_ancestor_of_pindex = (it->second.GetAncestor(pindex->nHeight) == pindex);
+            bool best_header_has_pindex = (m_chainman.m_best_header->GetAncestor(pindex->nHeight) == pindex);
+            bool sufficient_chain_work = (m_chainman.m_best_header->nChainWork >= m_chainman.MinimumChainWork());
+
+            LogInfo("[assumevalid] Checking block %d (hash=%s):\n"
+                    "  - is_ancestor_of_pindex: %s\n"
+                    "  - best_header_has_pindex: %s\n"
+                    "  - sufficient_chain_work: %s\n"
+                    "  - best_header height: %d\n"
+                    "  - best_header chainwork: %s\n"
+                    "  - minimum chainwork: %s\n",
+                    pindex->nHeight, pindex->GetBlockHash().ToString(),
+                    is_ancestor_of_pindex ? "true" : "false",
+                    best_header_has_pindex ? "true" : "false",
+                    sufficient_chain_work ? "true" : "false",
+                    m_chainman.m_best_header->nHeight,
+                    m_chainman.m_best_header->nChainWork.ToString(),
+                    m_chainman.MinimumChainWork().ToString());
+
+            if (is_ancestor_of_pindex && best_header_has_pindex && sufficient_chain_work) {
                 // This block is a member of the assumed verified chain and an ancestor of the best header.
                 // Script verification is skipped when connecting blocks under the
                 // assumevalid block. Assuming the assumevalid block is valid this
@@ -2449,9 +2470,25 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                 //  artificially set the default assumed verified block further back.
                 // The test against the minimum chain work prevents the skipping when denied access to any chain at
                 //  least as good as the expected chain.
-                fScriptChecks = (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= 60 * 60 * 24 * 7 * 2);
+                int64_t proof_equivalent_time = GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus());
+                fScriptChecks = (proof_equivalent_time <= 60 * 60 * 24 * 7 * 2);
+
+                LogInfo("[assumevalid] Block %d qualifies for assumevalid optimization:\n"
+                        "  - proof_equivalent_time: %ld seconds (%.2f days)\n"
+                        "  - threshold: %d seconds (14 days)\n"
+                        "  - fScriptChecks will be: %s\n",
+                        pindex->nHeight,
+                        proof_equivalent_time, proof_equivalent_time / 86400.0,
+                        60 * 60 * 24 * 7 * 2,
+                        fScriptChecks ? "TRUE (verification enabled)" : "FALSE (verification skipped)");
+            } else {
+                LogInfo("[assumevalid] Block %d does NOT qualify for assumevalid optimization (conditions not met)\n", pindex->nHeight);
             }
+        } else {
+            LogInfo("[assumevalid] AssumedValidBlock not found in block index\n");
         }
+    } else {
+        LogInfo("[assumevalid] No AssumedValidBlock configured for block %d\n", pindex->nHeight);
     }
 
     const auto time_1{SteadyClock::now()};

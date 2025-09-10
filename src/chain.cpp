@@ -88,27 +88,61 @@ int static inline GetSkipHeight(int height) {
 const CBlockIndex* CBlockIndex::GetAncestor(int height) const
 {
     if (height > nHeight || height < 0) {
+        if (height > nHeight) {
+            LogDebug(BCLog::VALIDATION, "[GetAncestor] Requested height %d > current height %d, returning nullptr\n",
+                     height, nHeight);
+        }
         return nullptr;
+    }
+
+    // Only log for significant ancestor lookups during assumevalid checks
+    bool should_log = (nHeight > 199000 && nHeight < 201000) || (height == 200000);
+
+    if (should_log) {
+        LogInfo("[GetAncestor] Starting: block at height %d (hash=%s) looking for ancestor at height %d\n",
+                nHeight, GetBlockHash().ToString(), height);
     }
 
     const CBlockIndex* pindexWalk = this;
     int heightWalk = nHeight;
+    int steps = 0;
+
     while (heightWalk > height) {
         int heightSkip = GetSkipHeight(heightWalk);
         int heightSkipPrev = GetSkipHeight(heightWalk - 1);
+
         if (pindexWalk->pskip != nullptr &&
             (heightSkip == height ||
              (heightSkip > height && !(heightSkipPrev < heightSkip - 2 &&
                                        heightSkipPrev >= height)))) {
             // Only follow pskip if pprev->pskip isn't better than pskip->pprev.
+            if (should_log && steps < 10) {  // Limit logging to first 10 steps
+                LogInfo("[GetAncestor]   Step %d: Using skip from height %d to %d (target=%d)\n",
+                        steps, heightWalk, heightSkip, height);
+            }
             pindexWalk = pindexWalk->pskip;
             heightWalk = heightSkip;
         } else {
             assert(pindexWalk->pprev);
+            if (should_log && steps < 10) {
+                LogInfo("[GetAncestor]   Step %d: Using pprev from height %d to %d (target=%d)\n",
+                        steps, heightWalk, heightWalk - 1, height);
+            }
             pindexWalk = pindexWalk->pprev;
             heightWalk--;
         }
+        steps++;
     }
+
+    if (should_log) {
+        if (pindexWalk) {
+            LogInfo("[GetAncestor] Found ancestor at height %d (hash=%s) after %d steps\n",
+                    pindexWalk->nHeight, pindexWalk->GetBlockHash().ToString(), steps);
+        } else {
+            LogInfo("[GetAncestor] Returning nullptr after %d steps\n", steps);
+        }
+    }
+
     return pindexWalk;
 }
 
