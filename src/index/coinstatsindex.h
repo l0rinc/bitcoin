@@ -51,7 +51,7 @@ protected:
 
     bool CustomCommit(CDBBatch& batch) override;
 
-    bool CustomAppend(const interfaces::BlockInfo& block) override;
+    bool CustomAppend(const interfaces::BlockInfo& block, CDBBatch& batch) override;
 
     bool CustomRemove(const interfaces::BlockInfo& block) override;
 

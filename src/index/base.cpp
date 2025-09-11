@@ -149,7 +149,7 @@ static const CBlockIndex* NextSyncBlock(const CBlockIndex* pindex_prev, CChain& 
     return chain.Next(chain.FindFork(pindex_prev));
 }
 
-bool BaseIndex::ProcessBlock(const CBlockIndex* pindex, const CBlock* block_data)
+bool BaseIndex::ProcessBlock(const CBlockIndex* pindex, CDBBatch& batch, const CBlock* block_data)
 {
     interfaces::BlockInfo block_info = kernel::MakeBlockInfo(pindex, block_data);
 
@@ -173,7 +173,7 @@ bool BaseIndex::ProcessBlock(const CBlockIndex* pindex, const CBlock* block_data
         block_info.undo_data = &block_undo;
     }
 
-    if (!CustomAppend(block_info)) {
+    if (!CustomAppend(block_info, batch)) {
         FatalErrorf("Failed to write block %s to index database",
                     pindex->GetBlockHash().ToString());
         return false;
@@ -185,6 +185,7 @@ bool BaseIndex::ProcessBlock(const CBlockIndex* pindex, const CBlock* block_data
 void BaseIndex::Sync()
 {
     const CBlockIndex* pindex = m_best_block_index.load();
+    CDBBatch batch{GetDB()};
     if (!m_synced) {
         auto last_log_time{NodeClock::now()};
         auto last_locator_write_time{last_log_time};
@@ -196,7 +197,7 @@ void BaseIndex::Sync()
                 // No need to handle errors in Commit. If it fails, the error will be already be
                 // logged. The best way to recover is to continue, as index cannot be corrupted by
                 // a missed commit to disk for an advanced index state.
-                Commit();
+                Commit(batch);
                 return;
             }
 
@@ -206,7 +207,7 @@ void BaseIndex::Sync()
             if (!pindex_next) {
                 SetBestBlockIndex(pindex);
                 // No need to handle errors in Commit. See rationale above.
-                Commit();
+                Commit(batch);
 
                 // If pindex is still the chain tip after committing, exit the
                 // sync loop. It is important for cs_main to be locked while
@@ -227,7 +228,7 @@ void BaseIndex::Sync()
             pindex = pindex_next;
 
 
-            if (!ProcessBlock(pindex)) return; // error logged internally
+            if (!ProcessBlock(pindex, batch)) return; // error logged internally
 
             auto current_time{NodeClock::now()};
             if (current_time - last_log_time >= SYNC_LOG_INTERVAL) {
@@ -239,10 +240,13 @@ void BaseIndex::Sync()
                 SetBestBlockIndex(pindex);
                 last_locator_write_time = current_time;
                 // No need to handle errors in Commit. See rationale above.
-                Commit();
+                Commit(batch);
             }
         }
     }
+
+    GetDB().WriteBatch(batch);
+    batch.Clear();
 
     if (pindex) {
         LogInfo("%s is enabled at height %d", GetName(), pindex->nHeight);
@@ -251,24 +255,29 @@ void BaseIndex::Sync()
     }
 }
 
-bool BaseIndex::Commit()
+bool BaseIndex::Commit(CDBBatch& batch)
 {
-    // Don't commit anything if we haven't indexed any block yet
-    // (this could happen if init is interrupted).
-    bool ok = m_best_block_index != nullptr;
-    if (ok) {
-        CDBBatch batch(GetDB());
-        ok = CustomCommit(batch);
-        if (ok) {
-            GetDB().WriteBestBlock(batch, GetLocator(*m_chain, m_best_block_index.load()->GetBlockHash()));
-            ok = GetDB().WriteBatch(batch);
-        }
+    // Don't write if we haven't indexed any blocks yet
+    if (m_best_block_index == nullptr) {
+        return true;
     }
+
+    // Write accumulated data
+    bool ok = GetDB().WriteBatch(batch);
+    batch.Clear();
+
+    // Add index-specific data (like DB_MUHASH for coinstatsindex)
+    if (CustomCommit(batch)) {
+        // Add best block locator if custom commit succeeded
+        GetDB().WriteBestBlock(batch, GetLocator(*m_chain, m_best_block_index.load()->GetBlockHash()));
+        ok = GetDB().WriteBatch(batch);
+    }
+    batch.Clear();
+
     if (!ok) {
         LogError("Failed to commit latest %s state", GetName());
-        return false;
     }
-    return true;
+    return ok;
 }
 
 bool BaseIndex::Rewind(const CBlockIndex* current_tip, const CBlockIndex* new_tip)
@@ -354,11 +363,12 @@ void BaseIndex::BlockConnected(ChainstateRole role, const std::shared_ptr<const 
     }
 
     // Dispatch block to child class; errors are logged internally and abort the node.
-    if (ProcessBlock(pindex, block.get())) {
+    if (CDBBatch batch{GetDB()}; ProcessBlock(pindex, batch, block.get())) {
         // Setting the best block index is intentionally the last step of this
         // function, so BlockUntilSyncedToCurrentChain callers waiting for the
         // best block index to be updated can rely on the block being fully
         // processed, and the index object being safe to delete.
+        GetDB().WriteBatch(batch);
         SetBestBlockIndex(pindex);
     }
 }
@@ -405,7 +415,8 @@ void BaseIndex::ChainStateFlushed(ChainstateRole role, const CBlockLocator& loca
     // No need to handle errors in Commit. If it fails, the error will be already be logged. The
     // best way to recover is to continue, as index cannot be corrupted by a missed commit to disk
     // for an advanced index state.
-    Commit();
+    CDBBatch batch{GetDB()};
+    Commit(batch);
 }
 
 bool BaseIndex::BlockUntilSyncedToCurrentChain() const
