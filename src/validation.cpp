@@ -2424,6 +2424,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     }
 
     bool fScriptChecks = true;
+    LogInfo("m_chainman.AssumedValidBlock() is %s\n", m_chainman.AssumedValidBlock().ToString());
     if (!m_chainman.AssumedValidBlock().IsNull()) {
         // We've been configured with the hash of a block which has been externally verified to have a valid history.
         // A suitable default value is included with the software and updated from time to time.  Because validity
@@ -2431,10 +2432,20 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         // This setting doesn't force the selection of any particular chain but makes validating some faster by
         //  effectively caching the result of part of the verification.
         BlockMap::const_iterator it{m_blockman.m_block_index.find(m_chainman.AssumedValidBlock())};
+        LogInfo("it is %s\n", it != m_blockman.m_block_index.end() ? "found" : "not found");
         if (it != m_blockman.m_block_index.end()) {
-            if (it->second.GetAncestor(pindex->nHeight) == pindex &&
-                m_chainman.m_best_header->GetAncestor(pindex->nHeight) == pindex &&
-                m_chainman.m_best_header->nChainWork >= m_chainman.MinimumChainWork()) {
+            auto block_index = it->second.GetAncestor(pindex->nHeight);
+            auto ancestor = m_chainman.m_best_header->GetAncestor(pindex->nHeight);
+            auto n_chain_work = m_chainman.m_best_header->nChainWork;
+            auto minimum_chain_work = m_chainman.MinimumChainWork();
+            LogInfo("block_index is %s (height %d)\n", block_index ? block_index->GetBlockHash().ToString() : "null", block_index ? block_index->nHeight : -1);
+            LogInfo("ancestor is %s (height %d)\n", ancestor ? ancestor->GetBlockHash().ToString() : "null", ancestor ? ancestor->nHeight : -1);
+            LogInfo("pindex is %s (height %d)\n", pindex->GetBlockHash().ToString(), pindex->nHeight);
+            LogInfo("n_chain_work is %s\n", n_chain_work.ToString());
+            LogInfo("minimum_chain_work is %s\n", minimum_chain_work.ToString());
+            if (block_index == pindex &&
+                ancestor == pindex &&
+                n_chain_work >= minimum_chain_work) {
                 // This block is a member of the assumed verified chain and an ancestor of the best header.
                 // Script verification is skipped when connecting blocks under the
                 // assumevalid block. Assuming the assumevalid block is valid this
@@ -2449,10 +2460,24 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                 //  artificially set the default assumed verified block further back.
                 // The test against the minimum chain work prevents the skipping when denied access to any chain at
                 //  least as good as the expected chain.
-                fScriptChecks = (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= 60 * 60 * 24 * 7 * 2);
+                int64_t block_proof_equivalent_time = GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus());
+                LogInfo("All assumevalid conditions met - checking time constraint: %lld seconds vs 2 weeks (%d seconds)\n", (long long)block_proof_equivalent_time, 60 * 60 * 24 * 7 * 2);
+                fScriptChecks = (block_proof_equivalent_time <= 60 * 60 * 24 * 7 * 2);
+                LogInfo("Time check result: fScriptChecks = %s\n", fScriptChecks ? "true (script verification enabled)" : "false (script verification disabled)");
+            } else {
+                LogInfo("Assumevalid conditions failed: block_index==pindex %s, ancestor==pindex %s, chain_work_sufficient %s\n",
+                        (block_index == pindex) ? "true" : "false",
+                        (ancestor == pindex) ? "true" : "false",
+                        (n_chain_work >= minimum_chain_work) ? "true" : "false");
             }
         }
+        else {
+            LogInfo("AssumedValidBlock not found in block index - assumevalid disabled\n");
+        }
+    } else {
+        LogInfo("No AssumedValidBlock configured - assumevalid disabled\n");
     }
+    LogInfo("Final fScriptChecks is %s\n", fScriptChecks ? "true (verification enabled)" : "false (verification disabled)");
 
     const auto time_1{SteadyClock::now()};
     m_chainman.time_check += time_1 - time_start;
