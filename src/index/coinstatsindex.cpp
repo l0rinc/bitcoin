@@ -130,7 +130,7 @@ CoinStatsIndex::CoinStatsIndex(std::unique_ptr<interfaces::Chain> chain, size_t 
     m_db = std::make_unique<CoinStatsIndex::DB>(path / "db", n_cache_size, f_memory, f_wipe);
 }
 
-bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
+bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block, CDBBatch& batch)
 {
     const CAmount block_subsidy{GetBlockSubsidy(block.height, Params().GetConsensus())};
     m_total_subsidy += block_subsidy;
@@ -234,7 +234,8 @@ bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
 
     // Intentionally do not update DB_MUHASH here so it stays in sync with
     // DB_BEST_BLOCK, and the index is not corrupted if there is an unclean shutdown.
-    return m_db->Write(DBHeightKey(block.height), value);
+    batch.Write(DBHeightKey(block.height), value);
+    return true;
 }
 
 [[nodiscard]] static bool CopyHeightIndexToHashIndex(CDBIterator& db_it, CDBBatch& batch,
