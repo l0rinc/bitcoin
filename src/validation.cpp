@@ -2423,7 +2423,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         return true;
     }
 
-    bool fScriptChecks = true;
+    auto assume_valid{true};
     if (!m_chainman.AssumedValidBlock().IsNull()) {
         // We've been configured with the hash of a block which has been externally verified to have a valid history.
         // A suitable default value is included with the software and updated from time to time.  Because validity
@@ -2449,7 +2449,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                 //  artificially set the default assumed verified block further back.
                 // The test against the minimum chain work prevents the skipping when denied access to any chain at
                 //  least as good as the expected chain.
-                fScriptChecks = (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= 60 * 60 * 24 * 7 * 2);
+                assume_valid = (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= 60 * 60 * 24 * 7 * 2);
             }
         }
     }
@@ -2563,9 +2563,9 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
              Ticks<SecondsDouble>(m_chainman.time_forks),
              Ticks<MillisecondsDouble>(m_chainman.time_forks) / m_chainman.num_blocks_total);
 
-    if (fScriptChecks != m_prev_script_checks_logged && GetRole() == ChainstateRole::NORMAL) {
-        LogInfo("%s signature validations at block #%d (%s).", fScriptChecks ? "Enabling" : "Disabling", pindex->nHeight, block_hash.ToString());
-        m_prev_script_checks_logged = fScriptChecks;
+    if (assume_valid != m_prev_assume_valid_logged && GetRole() == ChainstateRole::NORMAL) {
+        LogInfo("%s signature validations at block #%d (%s).", assume_valid ? "Enabling" : "Disabling", pindex->nHeight, block_hash.ToString());
+        m_prev_assume_valid_logged = assume_valid;
     }
 
     CBlockUndo blockundo;
@@ -2576,7 +2576,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // doesn't invalidate pointers into the vector, and keep txsdata in scope
     // for as long as `control`.
     std::optional<CCheckQueueControl<CScriptCheck>> control;
-    if (auto& queue = m_chainman.GetCheckQueue(); queue.HasThreads() && fScriptChecks) control.emplace(queue);
+    if (auto& queue = m_chainman.GetCheckQueue(); queue.HasThreads() && assume_valid) control.emplace(queue);
 
     std::vector<PrecomputedTransactionData> txsdata(block.vtx.size());
 
@@ -2635,7 +2635,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             break;
         }
 
-        if (!tx.IsCoinBase() && fScriptChecks)
+        if (!tx.IsCoinBase() && assume_valid)
         {
             bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks (still consult the cache, though) */
             bool tx_ok;
