@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014-2022 The Bitcoin Core developers
+# Copyright (c) 2014-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test logic for skipping signature validation on old blocks.
@@ -7,7 +7,7 @@
 Test logic for skipping signature validation on blocks which we've assumed
 valid (https://github.com/bitcoin/bitcoin/pull/9484)
 
-We build a chain that includes and invalid signature for one of the
+We build a chain that includes an invalid signature for one of the
 transactions:
 
     0:        genesis block
@@ -19,7 +19,7 @@ transactions:
     103-2202: bury the bad block with just over two weeks' worth of blocks
               (2100 blocks)
 
-Start three nodes:
+Start nodes:
 
     - node0 has no -assumevalid parameter. Try to sync to block 2202. It will
       reject block 102 and only sync as far as block 101
@@ -28,6 +28,7 @@ Start three nodes:
     - node2 has -assumevalid set to the hash of block 102. Try to sync to
       block 200. node2 will reject block 102 since it's assumed valid, but it
       isn't buried by at least two weeks' work.
+    - node3 starts normally and is reindexed with invalid -assumevalid and -minimumchainwork args.
 """
 
 from test_framework.blocktools import (
@@ -64,11 +65,11 @@ class BaseNode(P2PInterface):
 class AssumeValidTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
-        self.num_nodes = 3
+        self.num_nodes = 4
         self.rpc_timeout = 120
 
     def setup_network(self):
-        self.add_nodes(3)
+        self.add_nodes(self.num_nodes)
         # Start node0. We don't start the other nodes yet since
         # we need to pre-mine a block with an invalid transaction
         # signature so we can pass in the block hash as assumevalid.
@@ -140,7 +141,10 @@ class AssumeValidTest(BitcoinTestFramework):
         # Start node1 and node2 with assumevalid so they accept a block with a bad signature.
         self.start_node(1, extra_args=["-assumevalid=" + block102.hash_hex])
         self.start_node(2, extra_args=["-assumevalid=" + block102.hash_hex])
+        self.start_node(3)
 
+
+        # nodes[0]
         p2p0 = self.nodes[0].add_p2p_connection(BaseNode())
         p2p0.send_header_for_blocks(self.blocks[0:2000])
         p2p0.send_header_for_blocks(self.blocks[2000:])
@@ -150,10 +154,13 @@ class AssumeValidTest(BitcoinTestFramework):
         self.wait_until(lambda: self.nodes[0].getblockcount() >= COINBASE_MATURITY + 1)
         assert_equal(self.nodes[0].getblockcount(), COINBASE_MATURITY + 1)
 
+
+        # nodes[1]
         p2p1 = self.nodes[1].add_p2p_connection(BaseNode())
         p2p1.send_header_for_blocks(self.blocks[0:2000])
         p2p1.send_header_for_blocks(self.blocks[2000:])
-        with self.nodes[1].assert_debug_log(expected_msgs=['Disabling signature validations at block #1', 'Enabling signature validations at block #103']):
+        with self.nodes[1].assert_debug_log(expected_msgs=['Disabling signature validations at block #1',
+                                                           'Enabling signature validations at block #103',]):
             # Send all blocks to node1. All blocks will be accepted.
             for i in range(2202):
                 p2p1.send_without_ping(msg_block(self.blocks[i]))
@@ -161,6 +168,8 @@ class AssumeValidTest(BitcoinTestFramework):
             p2p1.sync_with_ping(timeout=960)
         assert_equal(self.nodes[1].getblock(self.nodes[1].getbestblockhash())['height'], 2202)
 
+
+        # nodes[2]
         p2p2 = self.nodes[2].add_p2p_connection(BaseNode())
         p2p2.send_header_for_blocks(self.blocks[0:200])
 
@@ -168,6 +177,21 @@ class AssumeValidTest(BitcoinTestFramework):
         self.send_blocks_until_disconnected(p2p2)
         self.wait_until(lambda: self.nodes[2].getblockcount() >= COINBASE_MATURITY + 1)
         assert_equal(self.nodes[2].getblockcount(), COINBASE_MATURITY + 1)
+
+
+        # nodes[3]
+        p2p3 = self.nodes[3].add_p2p_connection(BaseNode())
+        p2p3.send_header_for_blocks(self.blocks[0:200])
+        p2p3.send_without_ping(msg_block(self.blocks[0]))
+        self.wait_until(lambda: self.nodes[3].getblockcount())
+
+        self.restart_node(3, extra_args=["-reindex-chainstate", "-assumevalid=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"])
+        assert_equal(self.nodes[3].getblockcount(), 1)
+
+        self.restart_node(3, extra_args=["-reindex-chainstate", "-assumevalid=" + block102.hash_hex, "-minimumchainwork=0xffff"])
+        assert_equal(self.nodes[3].getblockcount(), 1)
+
+        # TODO test what happens when block is not on the best header path
 
 
 if __name__ == '__main__':
