@@ -2425,36 +2425,39 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
     auto assume_valid{AssumeValid::CHECKED};
     if (!m_chainman.AssumedValidBlock().IsNull()) {
+        using enum AssumeValid;
         // We've been configured with the hash of a block which has been externally verified to have a valid history.
         // A suitable default value is included with the software and updated from time to time.  Because validity
         //  relative to a piece of software is an objective fact these defaults can be easily reviewed.
         // This setting doesn't force the selection of any particular chain but makes validating some faster by
         //  effectively caching the result of part of the verification.
         BlockMap::const_iterator it{m_blockman.m_block_index.find(m_chainman.AssumedValidBlock())};
-        if (it != m_blockman.m_block_index.end()) {
-            if (it->second.GetAncestor(pindex->nHeight) == pindex &&
-                m_chainman.m_best_header->GetAncestor(pindex->nHeight) == pindex &&
-                m_chainman.m_best_header->nChainWork >= m_chainman.MinimumChainWork()) {
-                // This block is a member of the assumed verified chain and an ancestor of the best header.
-                // Script verification is skipped when connecting blocks under the
-                // assumevalid block. Assuming the assumevalid block is valid this
-                // is safe because block merkle hashes are still computed and checked,
-                // Of course, if an assumed valid block is invalid due to false scriptSigs
-                // this optimization would allow an invalid chain to be accepted.
-                // The equivalent time check discourages hash power from extorting the network via DOS attack
-                //  into accepting an invalid block through telling users they must manually set assumevalid.
-                //  Requiring a software change or burying the invalid block, regardless of the setting, makes
-                //  it hard to hide the implication of the demand.  This also avoids having release candidates
-                //  that are hardly doing any signature verification at all in testing without having to
-                //  artificially set the default assumed verified block further back.
-                // The test against the minimum chain work prevents the skipping when denied access to any chain at
-                //  least as good as the expected chain.
-                if (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= 60 * 60 * 24 * 7 * 2) {
-                    assume_valid = AssumeValid::CHECKED;
-                } else {
-                    assume_valid = AssumeValid::SKIPPED;
-                }
-            }
+        if (it == m_blockman.m_block_index.end()) {
+            assume_valid = CHECKED;
+        } else if (it->second.GetAncestor(pindex->nHeight) != pindex) {
+            assume_valid = CHECKED;
+        } else if (m_chainman.m_best_header->GetAncestor(pindex->nHeight) != pindex) {
+            assume_valid = CHECKED;
+        } else if (m_chainman.m_best_header->nChainWork < m_chainman.MinimumChainWork()) {
+            assume_valid = CHECKED;
+        } else if (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= 60 * 60 * 24 * 7 * 2) {
+            assume_valid = CHECKED;
+        } else {
+            // This block is a member of the assumed verified chain and an ancestor of the best header.
+            // Script verification is skipped when connecting blocks under the
+            //  assumevalid block. Assuming the assumevalid block is valid this
+            //  is safe because block merkle hashes are still computed and checked,
+            // Of course, if an assumed valid block is invalid due to false scriptSigs
+            //  this optimization would allow an invalid chain to be accepted.
+            // The equivalent time check discourages hash power from extorting the network via DOS attack
+            //  into accepting an invalid block through telling users they must manually set assumevalid.
+            //  Requiring a software change or burying the invalid block, regardless of the setting, makes
+            //  it hard to hide the implication of the demand. This also avoids having release candidates
+            //  that are hardly doing any signature verification at all in testing without having to
+            //  artificially set the default assumed verified block further back.
+            // The test against the minimum chain work prevents the skipping when denied access to any chain at
+            //  least as good as the expected chain.
+            assume_valid = SKIPPED;
         }
     }
 
@@ -2568,7 +2571,13 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
              Ticks<MillisecondsDouble>(m_chainman.time_forks) / m_chainman.num_blocks_total);
 
     if (assume_valid != m_prev_assume_valid_logged && GetRole() == ChainstateRole::NORMAL) {
-        LogInfo("%s signature validations at block #%d (%s).", assume_valid != AssumeValid::SKIPPED ? "Enabling" : "Disabling", pindex->nHeight, block_hash.ToString());
+        if (assume_valid == AssumeValid::SKIPPED) {
+            LogInfo("Disabling signature validations at block #%d (%s).",
+                    pindex->nHeight, block_hash.ToString());
+        } else {
+            LogInfo("Enabling signature validations at block #%d (%s).",
+                    pindex->nHeight, block_hash.ToString());
+        }
         m_prev_assume_valid_logged = assume_valid;
     }
 
