@@ -21,6 +21,7 @@ BOOST_FIXTURE_TEST_SUITE(system_tests, BasicTestingSetup)
 BOOST_AUTO_TEST_CASE(total_ram)
 {
     BOOST_CHECK_GE(GetTotalRAM(), 1000_MiB);
+    std::cout << "GetTotalRAM() = " << GetTotalRAM() << std::endl;
 
     if constexpr (SIZE_MAX == UINT64_MAX) {
         // Upper bound check only on 64-bit: 32-bit systems can reasonably have max memory,
