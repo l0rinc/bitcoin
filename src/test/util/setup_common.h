@@ -6,6 +6,7 @@
 #define BITCOIN_TEST_UTIL_SETUP_COMMON_H
 
 #include <common/args.h> // IWYU pragma: export
+#include <common/pcp.h>
 #include <consensus/amount.h>
 #include <kernel/caches.h>
 #include <key.h>
@@ -21,6 +22,7 @@
 #include <util/signalinterrupt.h>
 #include <util/vector.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -28,6 +30,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 class CFeeRate;
@@ -290,5 +293,17 @@ private:
 };
 
 CBlock getBlock13b8a();
+
+static inline std::variant<MappingResult, MappingError> NATPMPRequestPortMap(const CNetAddr& gateway, uint16_t port, uint32_t lifetime, int num_tries = 3, std::chrono::milliseconds timeout_per_try = std::chrono::milliseconds{1000})
+{
+    static CThreadInterrupt interrupt;
+    return NATPMPRequestPortMap(gateway, port, lifetime, interrupt, num_tries, timeout_per_try);
+}
+
+static inline std::variant<MappingResult, MappingError> PCPRequestPortMap(const PCPMappingNonce& nonce, const CNetAddr& gateway, const CNetAddr& bind, uint16_t port, uint32_t lifetime, int num_tries = 3, std::chrono::milliseconds timeout_per_try = std::chrono::milliseconds{1000})
+{
+    static CThreadInterrupt interrupt;
+    return PCPRequestPortMap(nonce, gateway, bind, port, lifetime, interrupt, num_tries, timeout_per_try);
+}
 
 #endif // BITCOIN_TEST_UTIL_SETUP_COMMON_H
