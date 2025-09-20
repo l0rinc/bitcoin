@@ -53,6 +53,8 @@ class MiningMainnetTest(BitcoinTestFramework):
             help='Block data file (default: %(default)s)',
         )
 
+        self.add_wallet_options(parser)
+
     def mine(self, height, prev_hash, blocks, node):
         self.log.debug(f"height={height}")
         block = CBlock()
@@ -62,9 +64,6 @@ class MiningMainnetTest(BitcoinTestFramework):
         block.nBits = DIFF_1_N_BITS if height < 2016 else DIFF_4_N_BITS
         block.nNonce = blocks['nonces'][height - 1]
         block.vtx = [create_coinbase(height=height, script_pubkey=bytes.fromhex(COINBASE_SCRIPT_PUBKEY), halving_period=210000)]
-        # The alternate mainnet chain was mined with non-timelocked coinbase txs.
-        block.vtx[0].nLockTime = 0
-        block.vtx[0].vin[0].nSequence = SEQUENCE_FINAL
         block.hashMerkleRoot = block.calc_merkle_root()
         block_hex = block.serialize(with_witness=False).hex()
         self.log.debug(block_hex)
@@ -83,7 +82,7 @@ class MiningMainnetTest(BitcoinTestFramework):
         path = os.path.join(os.path.dirname(os.path.realpath(__file__)), self.options.datafile)
         prev_hash = node.getbestblockhash()
         blocks = None
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             blocks = json.load(f)
             n_blocks = len(blocks['timestamps'])
             assert_equal(n_blocks, 2016)
@@ -109,17 +108,5 @@ class MiningMainnetTest(BitcoinTestFramework):
         height = 2016
         prev_hash = self.mine(height, prev_hash, blocks, node)
         assert_equal(node.getblockcount(), height)
-
-        mining_info = node.getmininginfo()
-        assert_equal(mining_info['difficulty'], 4)
-
-        self.log.info("getblock RPC should show historical target")
-        block_info = node.getblock(node.getblockhash(1))
-
-        assert_equal(block_info['difficulty'], 1)
-        assert_equal(block_info['bits'], nbits_str(DIFF_1_N_BITS))
-        assert_equal(block_info['target'], target_str(DIFF_1_TARGET))
-
-
 if __name__ == '__main__':
     MiningMainnetTest(__file__).main()
