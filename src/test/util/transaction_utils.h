@@ -42,11 +42,13 @@ void BulkTransaction(CMutableTransaction& tx, int32_t target_weight);
  * @param nHashType  Signature hash type.
  * @param sig_data   Additional data provided to solve a script. Filled with the resulting satisfying
  *                   script and whether the satisfaction is complete.
+ * @param spent_outputs The outputs spent by all of `txTo`'s inputs, needed to sign Taproot inputs.
  *
  * @return           True if the produced script is entirely satisfying `fromPubKey`.
  **/
 bool SignSignature(const SigningProvider &provider, const CScript& fromPubKey, CMutableTransaction& txTo,
-                   unsigned int nIn, const CAmount& amount, int nHashType, SignatureData& sig_data);
+                   unsigned int nIn, const CAmount& amount, int nHashType, SignatureData& sig_data,
+                   std::vector<CTxOut> spent_outputs = {});
 bool SignSignature(const SigningProvider &provider, const CTransaction& txFrom, CMutableTransaction& txTo,
                    unsigned int nIn, int nHashType, SignatureData& sig_data);
 
