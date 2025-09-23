@@ -26,7 +26,6 @@
 #include <string>
 #include <utility>
 
-using kernel::CBlockFileInfo;
 using node::STORAGE_HEADER_BYTES;
 using node::BlockManager;
 using node::KernelNotifications;
@@ -71,6 +70,9 @@ BOOST_AUTO_TEST_CASE(blockmanager_args_prune_during_init)
 
     BOOST_CHECK_EQUAL(
         apply_args({{"-prune", "550"}, {"-pruneduringinit", "1"}}).second,
+        std::numeric_limits<int64_t>::max());
+    BOOST_CHECK_EQUAL(
+        apply_args({{"-prune", "550"}, {"-pruneduringinit", "0"}}).second,
         std::numeric_limits<int64_t>::max());
 
     const auto check_invalid = [&](const std::initializer_list<std::pair<std::string, std::string>>& args) {
@@ -348,7 +350,7 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
     // UpdateBlockInfo will, however, update the blockfile metadata.
     // Verify this behavior by attempting (and failing) to write block 3 data
     // to block 2 location.
-    CBlockFileInfo* block_data = blockman.GetBlockFileInfo(0);
+    kernel::CBlockFileInfo* block_data = blockman.GetBlockFileInfo(0);
     BOOST_CHECK_EQUAL(block_data->nBlocks, 2);
     blockman.UpdateBlockInfo(block3, /*nHeight=*/3, /*pos=*/pos2);
     // Metadata is updated...

@@ -51,7 +51,11 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& args, BlockManager::Op
     if (const auto prune_during_init{args.GetIntArg("-pruneduringinit")}) {
         if (*prune_during_init == -1) {
             opts.prune_target_during_init = -1;
-        } else if (const auto prune_parsed = ParsePruneOption(*prune_during_init, "-pruneduringinit")) {
+        } else if (auto prune_parsed = ParsePruneOption(*prune_during_init, "-pruneduringinit")) {
+            if (*prune_parsed == 0) {
+                // We don't actually disable pruning, just treat it as manual until sync completes.
+                *prune_parsed = BlockManager::PRUNE_TARGET_MANUAL;
+            }
             opts.prune_target_during_init = *prune_parsed > uint64_t{std::numeric_limits<int64_t>::max()} ?
                 std::numeric_limits<int64_t>::max() :
                 static_cast<int64_t>(*prune_parsed);
