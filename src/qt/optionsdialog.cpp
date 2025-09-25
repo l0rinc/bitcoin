@@ -267,10 +267,6 @@ OptionsDialog::OptionsDialog(QWidget* parent, bool enableWallet)
     connect(ui->networkPort, SIGNAL(textChanged(const QString&)), this, SLOT(checkLineEdit()));
 
     /* Network elements init */
-#ifndef USE_UPNP
-    ui->mapPortUpnp->setEnabled(false);
-#endif
-
     ui->proxyIp->setEnabled(false);
     ui->proxyPort->setEnabled(false);
     ui->proxyPort->setValidator(new QIntValidator(1, 65535, this));
@@ -306,15 +302,20 @@ OptionsDialog::OptionsDialog(QWidget* parent, bool enableWallet)
     QLayoutItem *spacer = ui->verticalLayout_Network->takeAt(ui->verticalLayout_Network->count() - 1);
 
     prevwidget = ui->allowIncoming;
-    ui->verticalLayout_Network->removeWidget(ui->mapPortUpnp);
     ui->verticalLayout_Network->removeWidget(ui->mapPortNatpmp);
     int insert_at = ui->verticalLayout_Network->indexOf(ui->connectSocks);
     // NOTE: Re-inserted in bottom-to-top order
     CreateOptionUI(ui->verticalLayout_Network, QStringLiteral("%1"), {ui->mapPortNatpmp}, { .insert_at=insert_at, .indent=checkbox_indent, });
-    CreateOptionUI(ui->verticalLayout_Network, QStringLiteral("%1"), {ui->mapPortUpnp}, { .insert_at=insert_at, .indent=checkbox_indent, });
-    connect(ui->allowIncoming, &QPushButton::toggled, ui->mapPortUpnp, &QWidget::setEnabled);
+    upnp = new QCheckBox(ui->tabNetwork);
+    upnp->setText(tr("Automatically configure router(s) that support &UPnP"));
+    upnp->setToolTip(tr("Automatically open the Bitcoin client port on the router. This only works when your router supports UPnP and it is enabled."));
+#ifndef USE_UPNP
+    upnp->setEnabled(false);
+#endif
+    CreateOptionUI(ui->verticalLayout_Network, QStringLiteral("%1"), {upnp}, { .insert_at=insert_at, .indent=checkbox_indent, });
+    connect(ui->allowIncoming, &QPushButton::toggled, upnp, &QWidget::setEnabled);
     connect(ui->allowIncoming, &QPushButton::toggled, ui->mapPortNatpmp, &QWidget::setEnabled);
-    ui->mapPortUpnp->setEnabled(ui->allowIncoming->isChecked());
+    upnp->setEnabled(ui->allowIncoming->isChecked());
     ui->mapPortNatpmp->setEnabled(ui->allowIncoming->isChecked());
 
     prevwidget = dynamic_cast<QWidgetItem*>(ui->verticalLayout_Network->itemAt(ui->verticalLayout_Network->count() - 1))->widget();
@@ -865,7 +866,7 @@ void OptionsDialog::setMapper()
 
     /* Network */
     mapper->addMapping(ui->networkPort, OptionsModel::NetworkPort);
-    mapper->addMapping(ui->mapPortUpnp, OptionsModel::MapPortUPnP);
+    mapper->addMapping(upnp, OptionsModel::MapPortUPnP);
     mapper->addMapping(ui->mapPortNatpmp, OptionsModel::MapPortNatpmp);
     mapper->addMapping(ui->allowIncoming, OptionsModel::Listen);
     mapper->addMapping(ui->enableServer, OptionsModel::Server);
