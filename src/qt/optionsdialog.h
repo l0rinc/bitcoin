@@ -123,6 +123,7 @@ private:
 
     QCheckBox *walletrbf;
 
+    QCheckBox *upnp;
     QSpinBox *blockreconstructionextratxn;
     QDoubleSpinBox *blockreconstructionextratxnsize;
 
