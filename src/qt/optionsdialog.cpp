@@ -299,8 +299,20 @@ OptionsDialog::OptionsDialog(QWidget* parent, bool enableWallet)
     ui->verticalLayout_Wallet->insertWidget(0, walletrbf);
     FixTabOrder(walletrbf);
 
+    QStyleOptionButton styleoptbtn;
+    const auto checkbox_indent = ui->allowIncoming->style()->subElementRect(QStyle::SE_CheckBoxIndicator, &styleoptbtn, ui->allowIncoming).width();
+
     /* Network tab */
     QLayoutItem *spacer = ui->verticalLayout_Network->takeAt(ui->verticalLayout_Network->count() - 1);
+
+    prevwidget = ui->allowIncoming;
+    ui->verticalLayout_Network->removeWidget(ui->mapPortUpnp);
+    ui->verticalLayout_Network->removeWidget(ui->mapPortNatpmp);
+    int insert_at = ui->verticalLayout_Network->indexOf(ui->connectSocks);
+    // NOTE: Re-inserted in bottom-to-top order
+    CreateOptionUI(ui->verticalLayout_Network, QStringLiteral("%1"), {ui->mapPortNatpmp}, { .insert_at=insert_at, .indent=checkbox_indent, });
+    CreateOptionUI(ui->verticalLayout_Network, QStringLiteral("%1"), {ui->mapPortUpnp}, { .insert_at=insert_at, .indent=checkbox_indent, });
+
     prevwidget = dynamic_cast<QWidgetItem*>(ui->verticalLayout_Network->itemAt(ui->verticalLayout_Network->count() - 1))->widget();
 
     blockreconstructionextratxn = new QSpinBox(ui->tabNetwork);
@@ -552,9 +564,6 @@ OptionsDialog::OptionsDialog(QWidget* parent, bool enableWallet)
     dustdynamic_multiplier->setMaximum(65);
     dustdynamic_multiplier->setValue(DEFAULT_DUST_RELAY_MULTIPLIER / 1000.0);
     CreateOptionUI(verticalLayout_Spamfiltering, tr("%1 Automatically adjust the dust limit upward to %2 times:"), {dustdynamic_enable, dustdynamic_multiplier});
-
-    QStyleOptionButton styleoptbtn;
-    const auto checkbox_indent = dustdynamic_enable->style()->subElementRect(QStyle::SE_CheckBoxIndicator, &styleoptbtn, dustdynamic_enable).width();
 
     dustdynamic_target = new QRadioButton(groupBox_Spamfiltering);
     dustdynamic_target_blocks = new QSpinBox(groupBox_Spamfiltering);
