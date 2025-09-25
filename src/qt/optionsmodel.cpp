@@ -851,13 +851,17 @@ bool OptionsModel::setOption(OptionID option, const QVariant& value, const std::
     case MapPortUPnP: // core option - can be changed on-the-fly
         if (changed()) {
             update(value.toBool());
-            node().mapPort(value.toBool(), getOption(MapPortNatpmp).toBool());
+            if (gArgs.GetBoolArg("-listen", DEFAULT_LISTEN)) {
+                node().mapPort(value.toBool(), getOption(MapPortNatpmp).toBool());
+            }
         }
         break;
     case MapPortNatpmp: // core option - can be changed on-the-fly
         if (changed()) {
             update(value.toBool());
-            node().mapPort(getOption(MapPortUPnP).toBool(), value.toBool());
+            if (gArgs.GetBoolArg("-listen", DEFAULT_LISTEN)) {
+                node().mapPort(getOption(MapPortUPnP).toBool(), value.toBool());
+            }
         }
         break;
     case MinimizeOnClose:

@@ -903,9 +903,12 @@ void InitParameterInteraction(ArgsManager& args)
 
     if (!args.GetBoolArg("-listen", DEFAULT_LISTEN)) {
         // do not map ports or try to retrieve public IP when not listening (pointless)
-        if (args.SoftSetBoolArg("-upnp", false))
+        if (args.GetBoolArg("-upnp", DEFAULT_UPNP)) {
+            args.ForceSetArg("-upnp", "0");
             LogInfo("parameter interaction: -listen=0 -> setting -upnp=0\n");
-        if (args.SoftSetBoolArg("-natpmp", false)) {
+        }
+        if (args.GetBoolArg("-natpmp", DEFAULT_NATPMP)) {
+            args.ForceSetArg("-natpmp", "0");
             LogInfo("parameter interaction: -listen=0 -> setting -natpmp=0\n");
         }
         if (args.SoftSetBoolArg("-discover", false))
