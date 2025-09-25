@@ -100,6 +100,7 @@ void OptionsDialog::FixTabOrder(QWidget * const o)
 struct CreateOptionUIOpts {
     QBoxLayout *horizontal_layout{nullptr};
     int stretch{1};
+    int insert_at{-1};
     int indent{0};
 };
 
@@ -153,7 +154,7 @@ void OptionsDialog::CreateOptionUI(QBoxLayout * const layout, const QString& tex
 
     if (opts.stretch) horizontalLayout->addStretch(opts.stretch);
 
-    layout->addLayout(horizontalLayout);
+    layout->insertLayout(opts.insert_at, horizontalLayout);
 
     for (auto& o : objs) {
         o->setProperty("L", QVariant::fromValue((QLayout*)horizontalLayout));
