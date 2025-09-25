@@ -312,6 +312,10 @@ OptionsDialog::OptionsDialog(QWidget* parent, bool enableWallet)
     // NOTE: Re-inserted in bottom-to-top order
     CreateOptionUI(ui->verticalLayout_Network, QStringLiteral("%1"), {ui->mapPortNatpmp}, { .insert_at=insert_at, .indent=checkbox_indent, });
     CreateOptionUI(ui->verticalLayout_Network, QStringLiteral("%1"), {ui->mapPortUpnp}, { .insert_at=insert_at, .indent=checkbox_indent, });
+    connect(ui->allowIncoming, &QPushButton::toggled, ui->mapPortUpnp, &QWidget::setEnabled);
+    connect(ui->allowIncoming, &QPushButton::toggled, ui->mapPortNatpmp, &QWidget::setEnabled);
+    ui->mapPortUpnp->setEnabled(ui->allowIncoming->isChecked());
+    ui->mapPortNatpmp->setEnabled(ui->allowIncoming->isChecked());
 
     prevwidget = dynamic_cast<QWidgetItem*>(ui->verticalLayout_Network->itemAt(ui->verticalLayout_Network->count() - 1))->widget();
 
