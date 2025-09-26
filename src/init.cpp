@@ -522,7 +522,7 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
             "(default: 0 = disable pruning blocks, 1 = allow manual pruning via RPC, >=%u = automatically prune block files to stay under the specified target size in MiB)", MIN_DISK_SPACE_FOR_BLOCK_FILES / 1024 / 1024), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-reindex", "If enabled, wipe chain state and block index, and rebuild them from blk*.dat files on disk. Also wipe and rebuild other optional indexes that are active. If an assumeutxo snapshot was loaded, its chainstate will be wiped as well. The snapshot can then be reloaded via RPC.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-reindex-chainstate", "If enabled, wipe chain state, and rebuild it from blk*.dat files on disk. If an assumeutxo snapshot was loaded, its chainstate will be wiped as well. The snapshot can then be reloaded via RPC.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
-    argsman.AddArg("-reobfuscate-blocks", "Reobfuscate existing blk*/rev* files. If a 16 character hexadecimal value is provided, it's used as the new XOR key; otherwise, the value is treated as a boolean and a random key is generated. This operation is resumable.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-reobfuscate-blocks", "Reobfuscate existing blk*/rev* files. If a 16 character hexadecimal value is provided, it's used as the new XOR key; otherwise, the value is treated as a boolean and a random key is generated. This operation is resumable and the number of worker threads is controlled by -par.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-settings=<file>", strprintf("Specify path to dynamic settings data file. Can be disabled with -nosettings. File is written at runtime and not meant to be edited by users (use %s instead for custom settings). Relative paths will be prefixed by datadir location. (default: %s)", BITCOIN_CONF_FILENAME, BITCOIN_SETTINGS_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #if HAVE_SYSTEM
     argsman.AddArg("-startupnotify=<cmd>", "Execute command on startup.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -1273,6 +1273,7 @@ static std::optional<CService> CheckBindingConflicts(const CConnman::Options& co
 static bool ObfuscateBlocks(
     const util::SignalInterrupt& interrupt,
     std::string_view suffix,
+    size_t thread_count,
     const fs::path& blocks_dir,
     const fs::path& xor_dat,
     const fs::path& xor_new,
@@ -1354,18 +1355,28 @@ static bool ObfuscateBlocks(
 
     const auto& files{collect_block_files()};
     LogInfo("[obfuscate] Reobfuscating %zu block and undo files", files.size());
-    // Migrate undo and block files atomically
-    double progress{0};
-    for (const auto& file : files | std::views::values) {
-        if (interrupt) return false;
-        if (!migrate_single_blockfile(file, suffix, *delta_obfuscation)) return false;
+    const Obfuscation delta{*delta_obfuscation};
 
-        const auto new_progress{progress + 100.0 / files.size()};
-        if (auto percentage{int(new_progress)}; percentage > int(progress)) {
-            LogInfo("[obfuscate] Migrating %s - %d%% done", fs::PathToString(file.filename()), percentage);
+    // Migrate undo and block files atomically
+    std::atomic_size_t migrated{0};
+    {
+        std::vector<std::thread> threads;
+        threads.reserve(thread_count);
+        if (thread_count > 1) LogInfo("[obfuscate] Using %zu threads", thread_count);
+        for (size_t t{0}; t < thread_count; ++t) {
+            threads.emplace_back([&, t, delta] {
+                for (size_t i{t}; i < files.size(); i += thread_count) {
+                    if (!interrupt && migrate_single_blockfile(files[i].second, suffix, delta)) {
+                        if (const auto done{++migrated}; done % 100 == 0) {
+                            LogInfo("[obfuscate] %d%% done", (done * 100) / files.size());
+                        }
+                    }
+                }
+            });
         }
-        progress = new_progress;
+        for (auto& th : threads) th.join();
     }
+    if (migrated != files.size()) return false;
 
     // After migration rename new files to old names and use the new obfuscation key
     for (const auto& entry : fs::directory_iterator(blocks_dir)) {
@@ -1455,7 +1466,8 @@ static ChainstateLoadResult InitAndLoadChainstate(
         }
         // reobfuscate if requested or if resuming a previous run
         if (requested_key.size() || fs::exists(xor_new)) {
-            if (!ObfuscateBlocks(*g_shutdown, block_obfuscation_suffix, blocks_dir, xor_dat, xor_new, requested_key)) {
+            const auto thread_count{std::clamp<size_t>(args.GetIntArg("-par", GetNumCores()), 1, 50)};
+            if (!ObfuscateBlocks(*g_shutdown, block_obfuscation_suffix, thread_count, blocks_dir, xor_dat, xor_new, requested_key)) {
                 return {ChainstateLoadStatus::FAILURE, _("Block obfuscation failed")};
             }
         }

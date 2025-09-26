@@ -48,17 +48,17 @@ class ReobfuscateBlocksSmokeTest(BitcoinTestFramework):
         before_blk = blk0.read_bytes()
         before_rev = rev0.read_bytes()
 
-        self.log.info("Add many dummy block/undo files for progress logging (10 pairs in total)")
-        for i in range(1, 10):
+        self.log.info("Add many dummy block/undo files for progress logging (200 pairs in total)")
+        for i in range(1, 200):
             (blocks_dir / f"blk{i:05d}.dat").write_bytes(b"\0")
             (blocks_dir / f"rev{i:05d}.dat").write_bytes(b"\0")
 
         self.log.info("Restarting with reobfuscation enabled")
         with self.nodes[0].assert_debug_log(expected_msgs=[
-            "[obfuscate] Reobfuscating 20 block and undo files",
+            "[obfuscate] Reobfuscating 400 block and undo files",
             "% done",
         ]):
-            self.restart_node(0, extra_args=self.extra_args[0] + ["-reobfuscate-blocks"])
+            self.restart_node(0, extra_args=self.extra_args[0] + ["-reobfuscate-blocks", "-par=2"])
             self.stop_node(0)
 
         assert xor_dat.exists(), "xor.dat not created"
