@@ -25,7 +25,7 @@ private:
     bool AllowPrune() const override { return false; }
 
 protected:
-    bool CustomAppend(const interfaces::BlockInfo& block) override;
+    bool CustomAppend(const interfaces::BlockInfo& block, CDBBatch& batch) override;
 
     BaseIndex::DB& GetDB() const override;
 

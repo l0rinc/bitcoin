@@ -26,9 +26,6 @@ public:
     /// Read the disk location of the transaction data with the given hash. Returns false if the
     /// transaction hash is not indexed.
     bool ReadTxPos(const Txid& txid, CDiskTxPos& pos) const;
-
-    /// Write a batch of transaction positions to the DB.
-    [[nodiscard]] bool WriteTxs(const std::vector<std::pair<Txid, CDiskTxPos>>& v_pos);
 };
 
 TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe) :
@@ -40,35 +37,31 @@ bool TxIndex::DB::ReadTxPos(const Txid& txid, CDiskTxPos& pos) const
     return Read(std::make_pair(DB_TXINDEX, txid.ToUint256()), pos);
 }
 
-bool TxIndex::DB::WriteTxs(const std::vector<std::pair<Txid, CDiskTxPos>>& v_pos)
-{
-    CDBBatch batch(*this);
-    for (const auto& [txid, pos] : v_pos) {
-        batch.Write(std::make_pair(DB_TXINDEX, txid.ToUint256()), pos);
-    }
-    return WriteBatch(batch);
-}
-
 TxIndex::TxIndex(std::unique_ptr<interfaces::Chain> chain, size_t n_cache_size, bool f_memory, bool f_wipe)
     : BaseIndex(std::move(chain), "txindex"), m_db(std::make_unique<TxIndex::DB>(n_cache_size, f_memory, f_wipe))
 {}
 
 TxIndex::~TxIndex() = default;
 
-bool TxIndex::CustomAppend(const interfaces::BlockInfo& block)
+bool TxIndex::CustomAppend(const interfaces::BlockInfo& block, CDBBatch& batch)
 {
     // Exclude genesis block transaction because outputs are not spendable.
     if (block.height == 0) return true;
 
     assert(block.data);
-    CDiskTxPos pos({block.file_number, block.data_pos}, GetSizeOfCompactSize(block.data->vtx.size()));
+    CDiskTxPos tx_pos({block.file_number, block.data_pos}, GetSizeOfCompactSize(block.data->vtx.size()));
+
     std::vector<std::pair<Txid, CDiskTxPos>> vPos;
     vPos.reserve(block.data->vtx.size());
     for (const auto& tx : block.data->vtx) {
-        vPos.emplace_back(tx->GetHash(), pos);
-        pos.nTxOffset += ::GetSerializeSize(TX_WITH_WITNESS(*tx));
+        vPos.emplace_back(tx->GetHash(), tx_pos);
+        tx_pos.nTxOffset += ::GetSerializeSize(TX_WITH_WITNESS(*tx));
     }
-    return m_db->WriteTxs(vPos);
+
+    for (const auto& [txid, pos] : vPos) {
+        batch.Write(std::make_pair(DB_TXINDEX, txid.ToUint256()), pos);
+    }
+    return true;
 }
 
 BaseIndex::DB& TxIndex::GetDB() const { return *m_db; }

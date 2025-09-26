@@ -88,12 +88,12 @@ private:
     /// from further behind on reboot. If the new state is not a successor of the previous state (due
     /// to a chain reorganization), the index must halt until Commit succeeds or else it could end up
     /// getting corrupted.
-    bool Commit();
+    bool Commit(CDBBatch& batch);
 
     /// Loop over disconnected blocks and call CustomRemove.
     bool Rewind(const CBlockIndex* current_tip, const CBlockIndex* new_tip);
 
-    bool ProcessBlock(const CBlockIndex* pindex, const CBlock* block_data = nullptr);
+    bool ProcessBlock(const CBlockIndex* pindex, CDBBatch& batch, const CBlock* block_data = nullptr);
 
     virtual bool AllowPrune() const = 0;
 
@@ -116,7 +116,7 @@ protected:
     [[nodiscard]] virtual bool CustomInit(const std::optional<interfaces::BlockRef>& block) { return true; }
 
     /// Write update index entries for a newly connected block.
-    [[nodiscard]] virtual bool CustomAppend(const interfaces::BlockInfo& block) { return true; }
+    [[nodiscard]] virtual bool CustomAppend(const interfaces::BlockInfo& block, CDBBatch& batch) { return true; }
 
     /// Virtual method called internally by Commit that can be overridden to atomically
     /// commit more index state.
