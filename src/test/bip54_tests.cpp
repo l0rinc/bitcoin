@@ -18,10 +18,13 @@
 #include <script/script.h>
 #include <script/signingprovider.h>
 #include <streams.h>
+#include <test/data/bip54_timestamps.json.h>
+#include <test/util/json.h>
 #include <test/util/setup_common.h>
 #include <test/util/transaction_utils.h>
 #include <tinyformat.h>
 #include <univalue.h>
+#include <util/chaintype.h>
 #include <util/fs.h>
 #include <util/strencodings.h>
 #include <validation.h>
@@ -1213,6 +1216,72 @@ BOOST_FIXTURE_TEST_CASE(bip54_created_output_sigops, TestChain100Setup)
     LOCK(chainman.GetMutex());
     const auto state{TestBlockValidity(chainman.ActiveChainstate(), block, /*check_pow=*/true, /*check_merkle_root=*/true)};
     BOOST_CHECK_MESSAGE(state.IsValid(), state.ToString());
+}
+
+/** Options for a mainnet test setup with the Consensus Cleanup deployment either never (the default) or always active. */
+static TestOpts BIP54TestOpts(bool bip54_active)
+{
+    TestOpts opts;
+    if (bip54_active) opts.extra_args = {"-vbparams=consensuscleanup:-1:-1"};
+    return opts;
+}
+
+/**
+ * The BIP 54 timestamp test vectors form a tree of JSON nodes. Every node has a "block_headers" chain extending its
+ * parent's, and either an "extensions" array of child nodes or, for a leaf, the "valid" and "comment" fields of a
+ * test case. Process each node's headers once, then recurse into its children. The tree is rooted at the genesis
+ * block, so `first_height` is the height of the node's first header.
+ */
+// NOLINTNEXTLINE(misc-no-recursion)
+static void CheckTimestampsNode(ChainstateManager& chainman, const UniValue& test_node, bool bip54_active, int first_height = 0)
+{
+    std::vector<CBlockHeader> headers;
+    for (const auto& header_str: test_node["block_headers"].getValues()) {
+        headers.emplace_back();
+        BOOST_REQUIRE(DecodeHexBlockHeader(headers.back(), header_str.get_str()));
+    }
+    BlockValidationState state;
+    const bool res{chainman.ProcessNewBlockHeaders(headers, /*min_pow_checked=*/true, state, /*ppindex=*/nullptr)};
+    const int next_height{first_height + static_cast<int>(headers.size())};
+
+    const auto& branches{test_node["extensions"]};
+    if (!branches.isNull()) {
+        BOOST_REQUIRE_MESSAGE(res, state.ToString());
+        for (const auto& branch: branches.getValues()) {
+            CheckTimestampsNode(chainman, branch, bip54_active, next_height);
+        }
+        return;
+    }
+
+    // All invalid test vectors fail on rules newly introduced by BIP54, which is a soft fork. Therefore
+    // all cases will pass without the rules active.
+    const auto& comment{test_node["comment"].get_str()};
+    const bool valid{!bip54_active || test_node["valid"].get_bool()};
+    BOOST_CHECK_MESSAGE(res == valid, comment);
+    if (!valid) {
+        // Every invalid vector ends with the offending header, whose position in the difficulty adjustment
+        // period determines which of the two rules must have rejected it.
+        const int interval{static_cast<int>(chainman.GetConsensus().DifficultyAdjustmentInterval())};
+        const int offset{(next_height - 1) % interval};
+        BOOST_REQUIRE_MESSAGE(offset == 0 || offset == interval - 1, comment);
+        const std::string expected_reason{offset == 0 ? "time-timewarp-attack" : "time-negative-interval"};
+        BOOST_CHECK_MESSAGE(state.GetRejectReason() == expected_reason, comment + ": " + state.GetRejectReason());
+    }
+}
+
+/** Process chains of headers from the BIP54 test vectors for timewarp and Murch-Zawy fixes. */
+BOOST_AUTO_TEST_CASE(bip54_timestamps)
+{
+    UniValue tests;
+    Assert(tests.read(json_tests::bip54_timestamps));
+    for (const bool bip54_active : {false}) {
+        // Skip the block index consistency check, which ProcessNewBlockHeaders() would otherwise run after every
+        // one of the 4'000+ headers and which dominates the runtime of this test.
+        auto opts{BIP54TestOpts(bip54_active)};
+        opts.check_block_index = 0;
+        TestingSetup test_setup{ChainType::MAIN, opts};
+        CheckTimestampsNode(*test_setup.m_node.chainman, tests, bip54_active);
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()
