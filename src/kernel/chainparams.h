@@ -128,14 +128,6 @@ public:
     const ChainTxData& TxData() const { return chainTxData; }
 
     /**
-     * SigNetOptions holds configurations for creating a signet CChainParams.
-     */
-    struct SigNetOptions {
-        std::optional<std::vector<uint8_t>> challenge{};
-        std::optional<std::vector<std::string>> seeds{};
-    };
-
-    /**
      * VersionBitsParameters holds activation parameters
      */
     struct VersionBitsParameters {
@@ -147,6 +139,14 @@ public:
     struct DeploymentOptions {
         std::unordered_map<Consensus::DeploymentPos, VersionBitsParameters> version_bits_parameters{};
         std::unordered_map<Consensus::BuriedDeployment, int> activation_heights{};
+    };
+
+    /**
+     * SigNetOptions holds configurations for creating a signet CChainParams.
+     */
+    struct SigNetOptions {
+        std::optional<std::vector<uint8_t>> challenge{};
+        std::optional<std::vector<std::string>> seeds{};
     };
 
     /**
