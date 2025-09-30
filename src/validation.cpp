@@ -1230,7 +1230,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         }
     }
 
-    if (m_pool.m_opts.truc_policy == TRUCPolicy::Enforce) {
+    if (m_pool.m_opts.truc_policy == TRUCPolicy::Enforce && !ignore_rejects.count("truc")) {
         if (const auto err{SingleTRUCChecks(m_pool, ws.m_ptx, "truc-", reason, ignore_rejects, ws.m_parents, conflicts_as_a_set, ws.m_vsize)}) {
             // Single transaction contexts only.
             if (args.m_allow_sibling_eviction && err->second != nullptr) {

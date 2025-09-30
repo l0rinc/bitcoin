@@ -132,6 +132,27 @@ class MempoolTRUC(BitcoinTestFramework):
         self.check_mempool([tx_v3_parent_normal["txid"], tx_v3_child_almost_heavy_rbf["txid"]])
         assert_equal(node.getmempoolentry(tx_v3_parent_normal["txid"])["descendantcount"], 2)
 
+    @cleanup()
+    def test_truc_ignore_rejects(self):
+        node = self.nodes[0]
+        self.log.info("Test ignore_rejects=truc skips single-transaction TRUC policy")
+        tx_v3_parent = self.wallet.send_self_transfer(from_node=node, version=3)
+        tx_v3_child_heavy = self.wallet.create_self_transfer(
+            utxo_to_spend=tx_v3_parent["new_utxo"],
+            target_vsize=TRUC_CHILD_MAX_VSIZE + 1,
+            version=3,
+        )
+
+        expected_error_child_heavy = f"truc-child-toobig, version=3 child tx {tx_v3_child_heavy['txid']} (wtxid={tx_v3_child_heavy['wtxid']}) is too big"
+        assert_raises_rpc_error(-26, expected_error_child_heavy, node.sendrawtransaction, tx_v3_child_heavy["hex"])
+        testres = node.testmempoolaccept([tx_v3_child_heavy["hex"]], ignore_rejects=["truc"])[0]
+        assert_equal(testres["allowed"], True)
+        assert "reject-reason" not in testres
+
+        txid = node.sendrawtransaction(hexstring=tx_v3_child_heavy["hex"], ignore_rejects=["truc"])
+        assert_equal(txid, tx_v3_child_heavy["txid"])
+        self.check_mempool([tx_v3_parent["txid"], tx_v3_child_heavy["txid"]])
+
     @cleanup(extra_args=None)
     def test_truc_replacement(self):
         node = self.nodes[0]
@@ -710,6 +731,7 @@ class MempoolTRUC(BitcoinTestFramework):
         self.test_truc_policy_option()
         self.test_truc_max_vsize()
         self.test_truc_acceptance()
+        self.test_truc_ignore_rejects()
         self.test_truc_replacement()
         self.test_truc_bip125()
         self.test_truc_reorg()
