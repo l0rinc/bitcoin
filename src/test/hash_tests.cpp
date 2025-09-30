@@ -136,15 +136,15 @@ BOOST_AUTO_TEST_CASE(siphash)
         uint64_t k0 = ctx.rand64();
         uint64_t k1 = ctx.rand64();
         uint256 x = m_rng.rand256();
-        uint32_t n = ctx.rand32();
-        uint8_t nb[4];
-        WriteLE32(nb, n);
 
         CSipHasher sip256(k0, k1);
         sip256.Write(x);
         BOOST_CHECK_EQUAL(PresaltedSipHasher(k0, k1)(x), sip256.Finalize());
 
         CSipHasher sip288 = sip256;
+        uint32_t n = ctx.rand32();
+        uint8_t nb[4];
+        WriteLE32(nb, n);
         sip288.Write(nb);
         BOOST_CHECK_EQUAL(PresaltedSipHasher(k0, k1)(x, n), sip288.Finalize());
     }
