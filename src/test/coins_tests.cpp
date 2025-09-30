@@ -99,7 +99,7 @@ public:
 
     CCoinsMap& map() const { return cacheCoins; }
     CoinsCachePair& sentinel() const { return m_sentinel; }
-    size_t& usage() const { return cachedCoinsUsage; }
+    void AddUsage(size_t usage) const { cachedCoinsUsage += usage; }
 };
 
 } // namespace
@@ -677,7 +677,9 @@ public:
     {
         auto base_cache_coin{base_value == ABSENT ? MISSING : CoinEntry{base_value, CoinEntry::State::DIRTY}};
         WriteCoinsViewEntry(base, base_cache_coin);
-        if (cache_coin) cache.usage() += InsertCoinsMapEntry(cache.map(), cache.sentinel(), *cache_coin);
+        if (cache_coin) {
+            cache.AddUsage(InsertCoinsMapEntry(cache.map(), cache.sentinel(), *cache_coin));
+        }
     }
 
     CCoinsView root;
