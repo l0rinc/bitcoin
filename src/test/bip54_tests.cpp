@@ -18,6 +18,7 @@
 #include <script/script.h>
 #include <script/signingprovider.h>
 #include <streams.h>
+#include <test/data/bip54_coinbases.json.h>
 #include <test/data/bip54_timestamps.json.h>
 #include <test/util/json.h>
 #include <test/util/setup_common.h>
@@ -1281,6 +1282,60 @@ BOOST_AUTO_TEST_CASE(bip54_timestamps)
         opts.check_block_index = 0;
         TestingSetup test_setup{ChainType::MAIN, opts};
         CheckTimestampsNode(*test_setup.m_node.chainman, tests, bip54_active);
+    }
+}
+
+/** Run AcceptBlock() on this chain of blocks in order. */
+static bool AcceptBlocks(ChainstateManager& chainman, std::vector<CBlock> blocks, BlockValidationState& state)
+{
+    LOCK(chainman.GetMutex());
+    for (auto& block: blocks) {
+        const auto shared_blk{std::make_shared<const CBlock>(std::move(block))};
+        if (!chainman.AcceptBlock(shared_blk, state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr, /*fNewBlock=*/nullptr, /*min_pow_checked=*/true)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/** Run the BIP54 test vectors for the new restrictions on coinbase transactions. */
+BOOST_AUTO_TEST_CASE(bip54_coinbase)
+{
+    const auto tests{read_json(json_tests::bip54_coinbases)};
+
+    constexpr bool valid_before_bip54[]{false, false, true, true, true, true, true};
+    BOOST_REQUIRE_EQUAL(tests.size(), std::size(valid_before_bip54));
+    size_t index{0};
+    for (const auto& test: tests.getValues()) {
+        // Get the data for this test case.
+        const auto valid_without_bip54{valid_before_bip54[index++]};
+        const auto& comment{test["comment"].get_str()};
+        const auto& blocks_hex{test["block_chain"].getValues()};
+        std::vector<CBlock> blocks;
+        for (const auto& blk: blocks_hex) {
+            blocks.emplace_back();
+            BOOST_REQUIRE(DecodeHexBlk(blocks.back(), blk.get_str()));
+        }
+
+        // Without BIP54, only the pre-existing transaction finality rules restrict these coinbases. With it, the new
+        // coinbase restrictions apply too, and some of the test vectors demonstrate finality is still enforced.
+        for (const bool bip54_active : {false}) {
+            TestingSetup test_setup{ChainType::MAIN, BIP54TestOpts(bip54_active)};
+            const bool valid{bip54_active ? test["valid"].get_bool() : valid_without_bip54};
+            BlockValidationState state;
+            const bool res{AcceptBlocks(*test_setup.m_node.chainman, blocks, state)};
+            BOOST_CHECK_MESSAGE(res == valid, comment);
+            if (!valid) {
+                // Finality is checked before the BIP54 coinbase rules. The chain starts at genesis, so the last
+                // block's height is one less than the chain length.
+                std::string expected_reason{"bad-txns-nonfinal"};
+                if (bip54_active && valid_without_bip54) {
+                    const auto& coinbase{*blocks.back().vtx.front()};
+                    expected_reason = coinbase.nLockTime != blocks.size() - 2 ? "bad-cb-locktime" : "bad-cb-sequence";
+                }
+                BOOST_CHECK_MESSAGE(state.GetRejectReason() == expected_reason, comment + ": " + state.GetRejectReason());
+            }
+        }
     }
 }
 
