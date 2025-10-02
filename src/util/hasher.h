@@ -68,7 +68,7 @@ public:
     SaltedOutpointHasher(bool deterministic = false);
 
     size_t operator()(const COutPoint& id) const {
-        return SipHashUint256Extra13(k0, k1, id.hash.ToUint256(), id.n);
+        return SipHash13Uint256Extra(k0, k1, id.hash.ToUint256(), id.n);
     }
 };
 
