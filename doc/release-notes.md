@@ -65,6 +65,7 @@ Notable changes
 
 ### CI
 
+- #32989 ci: Migrate CI to hosted Cirrus Runners
 - #32999 ci: Use APT_LLVM_V in msan task
 - #33099 ci: allow for any libc++ intrumentation & use it for TSAN
 - #33258 ci: use LLVM 21
@@ -78,12 +79,14 @@ Notable changes
 
 - #33310 trace: Workaround GCC bug compiling with old systemtap
 - #33340 Fix benchmark CSV output
+- #33482 contrib: fix macOS deployment with no translations
 
 Credits
 =======
 
 Thanks to everyone who directly contributed to this release:
 
+- Amisha Chhajed
 - Eugene Siegel
 - fanquake
 - Greg Sanders
@@ -94,6 +97,7 @@ Thanks to everyone who directly contributed to this release:
 - Sebastian Falbesoner
 - Sjors Provoost
 - Vasil Dimov
+- Will Clark
 
 As well as to everyone that helped with translations on
 [Transifex](https://explore.transifex.com/bitcoin/bitcoin/).
