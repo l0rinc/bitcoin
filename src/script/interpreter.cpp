@@ -1995,7 +1995,8 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
             // Script path spending (stack size is >1 after removing optional annex)
             const valtype& control = SpanPopBack(stack);
             const valtype& script = SpanPopBack(stack);
-            if (control.size() < TAPROOT_CONTROL_BASE_SIZE || control.size() > TAPROOT_CONTROL_MAX_SIZE || ((control.size() - TAPROOT_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE) != 0) {
+            const size_t max_control_size = (flags & SCRIPT_VERIFY_REDUCED_DATA) ? TAPROOT_CONTROL_MAX_SIZE_REDUCED : TAPROOT_CONTROL_MAX_SIZE;
+            if (control.size() < TAPROOT_CONTROL_BASE_SIZE || control.size() > max_control_size || ((control.size() - TAPROOT_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE) != 0) {
                 return set_error(serror, SCRIPT_ERR_TAPROOT_WRONG_CONTROL_SIZE);
             }
             execdata.m_tapleaf_hash = ComputeTapleafHash(control[0] & TAPROOT_LEAF_MASK, script);
