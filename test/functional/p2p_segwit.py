@@ -83,6 +83,7 @@ from test_framework.util import (
     assert_not_equal,
     assert_greater_than_or_equal,
     assert_equal,
+    assert_equal_without_usage,
     assert_raises_rpc_error,
     ensure_for,
     softfork_active,
@@ -610,7 +611,7 @@ class SegWitTest(BitcoinTestFramework):
             testres3 = self.nodes[0].testmempoolaccept([tx3.serialize_with_witness().hex()])
             testres3[0]["fees"].pop("effective-feerate")
             testres3[0]["fees"].pop("effective-includes")
-            assert_equal(testres3,
+            assert_equal_without_usage(testres3,
                 [{
                     'txid': tx3.txid_hex,
                     'wtxid': tx3.wtxid_hex,
@@ -628,7 +629,7 @@ class SegWitTest(BitcoinTestFramework):
             testres3_replaced = self.nodes[0].testmempoolaccept([tx3.serialize_with_witness().hex()])
             testres3_replaced[0]["fees"].pop("effective-feerate")
             testres3_replaced[0]["fees"].pop("effective-includes")
-            assert_equal(testres3_replaced,
+            assert_equal_without_usage(testres3_replaced,
                 [{
                     'txid': tx3.txid_hex,
                     'wtxid': tx3.wtxid_hex,
@@ -1346,7 +1347,7 @@ class SegWitTest(BitcoinTestFramework):
             # First try to spend to a future version segwit script_pubkey.
             if version == OP_1:
                 # Don't use 32-byte v1 witness (used by Taproot; see BIP 341)
-                script_pubkey = CScript([CScriptOp(version), witness_hash + b'\x00'])
+                script_pubkey = CScript([CScriptOp(version), witness_hash[:31]])
             else:
                 script_pubkey = CScript([CScriptOp(version), witness_hash])
             tx.vin = [CTxIn(COutPoint(self.utxo[0].sha256, self.utxo[0].n), b"")]

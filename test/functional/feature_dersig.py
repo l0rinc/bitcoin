@@ -115,17 +115,17 @@ class BIP66Test(BitcoinTestFramework):
         # rejected from the mempool for exactly that reason.
         spendtx_txid = spendtx.txid_hex
         spendtx_wtxid = spendtx.wtxid_hex
-        assert_equal(
-            [{
+        expected = {
                 'txid': spendtx_txid,
                 'wtxid': spendtx_wtxid,
                 'allowed': False,
                 'reject-reason': 'mempool-script-verify-flag-failed (Non-canonical DER signature)',
                 'reject-details': 'mempool-script-verify-flag-failed (Non-canonical DER signature), ' +
-                                  f"input 0 of {spendtx_txid} (wtxid {spendtx_wtxid}), spending {coin_txid}:0"
-            }],
-            self.nodes[0].testmempoolaccept(rawtxs=[spendtx.serialize().hex()], maxfeerate=0),
-        )
+                                  f"input 0 of {spendtx_txid} (wtxid {spendtx_wtxid}), spending {coin_txid}:0",
+        }
+        result = self.nodes[0].testmempoolaccept(rawtxs=[spendtx.serialize().hex()], maxfeerate=0)[0]
+        result.pop('usage')
+        assert_equal(result, expected)
 
         # Now we verify that a block with this transaction is also invalid.
         block.vtx.append(spendtx)
