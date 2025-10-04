@@ -1383,15 +1383,6 @@ script_verify_flags PolicyScriptVerifyFlags(const ignore_rejects_type& ignore_re
         if (ignore_rejects.count("non-mandatory-script-verify-flag-upgradable-nops")) {
             flags &= ~SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS;
         }
-        if (ignore_rejects.count("non-mandatory-script-verify-flag-upgradable-witness_program")) {
-            flags &= ~SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM;
-        }
-        if (ignore_rejects.count("non-mandatory-script-verify-flag-upgradable-taproot_version")) {
-            flags &= ~SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION;
-        }
-        if (ignore_rejects.count("non-mandatory-script-verify-flag-upgradable-op_success")) {
-            flags &= ~SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS;
-        }
         if (ignore_rejects.count("non-mandatory-script-verify-flag-upgradable-pubkeytype")) {
             flags &= ~SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE;
         }
