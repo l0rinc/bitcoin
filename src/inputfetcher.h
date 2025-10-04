@@ -8,11 +8,18 @@
 #include <coins.h>
 #include <logging.h>
 #include <primitives/transaction_identifier.h>
+#include <tinyformat.h>
 #include <txdb.h>
 #include <util/hasher.h>
+#include <util/threadnames.h>
 
+#include <atomic>
+#include <barrier>
 #include <cstdint>
+#include <functional>
+#include <semaphore>
 #include <stdexcept>
+#include <thread>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -20,10 +27,13 @@
 /**
  * Helper for fetching inputs from the CoinsDB and inserting into the CoinsTip.
  *
- * It loops through the block and writes all input indexes to a
- * vector. It then assigns itself an input from the vector, and
+ * The main thread loops through the block and writes all input indexes to a
+ * global vector. It then wakes all workers and starts working as well. Each
+ * thread assigns itself an input from the shared vector, and
  * fetches the coin from disk. The outpoint and coin pairs are written to a
- * a different vector. Once all inputs are fetched, it writes the coins to the cache.
+ * thread local vector. Once all inputs are fetched, the last thread to arrive
+ * at the completion barrier loops through all thread local vectors and writes
+ * the coins to the cache.
  */
 class InputFetcher
 {
@@ -43,28 +53,55 @@ private:
 
     /**
      * The latest index in m_inputs that is not yet being fetched.
-     * The inputfetcher increments this counter when it assigns itself an input
+     * Workers increment this counter when they assign themselves an input
      * from m_inputs to fetch.
      */
-    size_t m_input_counter{0};
+    std::atomic<size_t> m_input_counter{0};
 
     /**
-     * The vector of outpoint:coin pairs.
+     * The vector of vectors of outpoint:coin pairs.
+     * Each thread writes the coins it fetches to the vector at its thread
+     * index. This way multiple threads can write concurrently to different
+     * vectors in a thread safe way. After all threads are finished, the main
+     * thread can loop through all vectors and write the coins to the cache.
      */
-    std::vector<std::pair<COutPoint, Coin>> m_coins{};
+    std::vector<std::vector<std::pair<COutPoint, Coin>>> m_coins{};
 
     //! DB coins view to fetch from.
     const CCoinsView* m_db{nullptr};
-    //! The cache to check if we already have this input.
-    const CCoinsViewCache* m_cache{nullptr};
+    //! The cache to write to.
+    CCoinsViewCache* m_cache{nullptr};
     //! The block whose prevouts we are fetching.
     const CBlock* m_block{nullptr};
 
-    void Work() noexcept
+    std::vector<std::thread> m_worker_threads;
+    std::counting_semaphore<> m_start_semaphore{0};
+    struct OnCompletionWrapper { // Necessary to get this to compile on Windows
+        InputFetcher* self;
+        void operator()() noexcept { self->OnCompletion(); }
+    };
+    std::barrier<OnCompletionWrapper> m_complete_barrier;
+    std::atomic<bool> m_request_stop{false};
+
+    void ThreadLoop(size_t thread_index) noexcept
+    {
+        util::ThreadRename(strprintf("inputfetch.%i", thread_index));
+
+        while (true) {
+            m_start_semaphore.acquire();
+            if (m_request_stop.load(std::memory_order_relaxed)) {
+                return;
+            }
+            Work(thread_index);
+            [[maybe_unused]] const auto arrival_token{m_complete_barrier.arrive()};
+        }
+    }
+
+    void Work(size_t thread_index) noexcept
     {
         try {
             while (true) {
-                const auto input_index{m_input_counter++};
+                const auto input_index{m_input_counter.fetch_add(1, std::memory_order_relaxed)};
                 if (input_index >= m_inputs.size()) {
                     return;
                 }
@@ -79,10 +116,11 @@ private:
                     continue;
                 }
                 if (auto coin{m_db->GetCoin(outpoint)}; coin) {
-                    m_coins.emplace_back(outpoint, std::move(*coin));
+                    m_coins[thread_index].emplace_back(outpoint, std::move(*coin));
                 } else {
                     // Missing an input. This block will fail validation.
                     // Skip remaining inputs.
+                    m_input_counter.store(m_inputs.size(), std::memory_order_relaxed);
                     return;
                 }
             }
@@ -90,14 +128,41 @@ private:
             // Database error. This will be handled later in validation.
             // Skip remaining inputs.
             LogPrintLevel(BCLog::VALIDATION, BCLog::Level::Warning, "InputFetcher failed to fetch input: %s.\n", e.what());
+            m_input_counter.store(m_inputs.size(), std::memory_order_relaxed);
+        }
+    }
+
+    void OnCompletion() noexcept
+    {
+        // At this point all threads are done writing to m_coins and reading from m_cache,
+        // so we can safely read from m_coins and write to m_cache.
+        for (auto& coins : m_coins) {
+            for (auto&& [outpoint, coin] : coins) {
+                m_cache->EmplaceCoinInternalDANGER(std::move(outpoint), std::move(coin));
+            }
+            coins.clear();
         }
     }
 
 public:
+    explicit InputFetcher(size_t worker_thread_count) noexcept
+        : m_complete_barrier{static_cast<int32_t>(worker_thread_count + 1), OnCompletionWrapper{this}}
+    {
+        if (worker_thread_count == 0) {
+            return;
+        }
+        for (size_t n{0}; n < worker_thread_count; ++n) {
+            m_coins.emplace_back();
+            m_worker_threads.emplace_back(std::bind(&InputFetcher::ThreadLoop, this, n));
+        }
+        // One more coins vector for the main thread
+        m_coins.emplace_back();
+    }
+
     //! Fetch all block inputs from db, and insert into cache.
     void FetchInputs(CCoinsViewCache& cache, const CCoinsView& db, const CBlock& block) noexcept
     {
-        if (block.vtx.size() <= 1) {
+        if (block.vtx.size() <= 1 || m_worker_threads.size() == 0) {
             return;
         }
 
@@ -116,15 +181,22 @@ public:
             m_txids.emplace(block.vtx[i]->GetHash());
         }
 
-        // Set the input counter.
-        m_input_counter = 0;
+        // Set the input counter and wake threads.
+        m_input_counter.store(0, std::memory_order_relaxed);
+        m_start_semaphore.release(m_worker_threads.size());
 
-        Work();
+        // Have the main thread work too before we wait for other threads
+        Work(m_worker_threads.size());
+        m_complete_barrier.arrive_and_wait();
+    }
 
-        for (auto&& [outpoint, coin] : m_coins) {
-            cache.EmplaceCoinInternalDANGER(std::move(outpoint), std::move(coin));
+    ~InputFetcher()
+    {
+        m_request_stop.store(true, std::memory_order_relaxed);
+        m_start_semaphore.release(m_worker_threads.size());
+        for (auto& t : m_worker_threads) {
+            t.join();
         }
-        m_coins.clear();
     }
 };
 
