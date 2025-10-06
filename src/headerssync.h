@@ -184,6 +184,11 @@ protected:
     const size_t m_commit_offset;
 
 private:
+    ProcessingResult ProcessPresync(std::span<const CBlockHeader>
+            received_headers, bool full_headers_message);
+    ProcessingResult ProcessRedownload(std::span<const CBlockHeader>
+            received_headers, bool full_headers_message);
+
     /** Clear out all download state that might be in progress (freeing any used
      * memory), and mark this object as no longer usable.
      */
