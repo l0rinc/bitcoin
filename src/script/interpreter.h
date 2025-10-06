@@ -146,7 +146,8 @@ enum class script_verify_flag_name : uint8_t {
     // Making unknown public key versions (in BIP 342 scripts) non-standard
     SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE,
 
-    // Enforce reduced-data policy limits.
+    // Enforce MAX_SCRIPT_ELEMENT_SIZE_REDUCED instead of MAX_SCRIPT_ELEMENT_SIZE.
+    // The P2SH redeemScript push is exempted.
     SCRIPT_VERIFY_REDUCED_DATA,
 
     // Constants to point to the highest flag in use. Add new flags above this line.
