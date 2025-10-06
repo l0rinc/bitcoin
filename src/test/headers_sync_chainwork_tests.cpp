@@ -87,10 +87,10 @@ struct HeadersGeneratorSetup : public RegTestingSetup {
                 HeadersSyncParams{
                     .commitment_period = COMMITMENT_PERIOD,
                     .redownload_buffer_size = REDOWNLOAD_BUFFER_SIZE,
+                    .cache_size = cache_size,
                 },
                 chain_start,
-                /*minimum_required_work=*/CHAIN_WORK,
-                /*cache_bytes=*/cache_size * sizeof(CompressedHeader)};
+                /*minimum_required_work=*/CHAIN_WORK};
     }
 
 private:

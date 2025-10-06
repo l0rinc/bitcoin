@@ -335,6 +335,8 @@ def analyze(when):
     _, mem_mainchain, mem_timewarp = memory_usage(period, bufsize, when)
     headers_per_attack, _ = attack_rate(period, bufsize)
     attack_volume = NET_HEADER_SIZE * MINCHAINWORK_HEADERS
+    cache = (when - GENESIS_TIME) / BLOCK_INTERVAL
+
     # And report them.
     print()
     print(f"Given current min chainwork headers of {MINCHAINWORK_HEADERS}, the optimal parameters for low")
@@ -345,6 +347,7 @@ def analyze(when):
     print(f"            .commitment_period = {period},")
     print(f"            .redownload_buffer_size = {bufsize},"
           f" // {bufsize}/{period} = ~{bufsize/period:.1f} commitments")
+    print(f"            .cache_size = {int(cache)},")
     print( "        };")
     print()
     print("Properties:")

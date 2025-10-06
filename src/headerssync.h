@@ -15,7 +15,6 @@
 #include <util/hasher.h>
 
 #include <deque>
-#include <optional>
 #include <vector>
 
 // A compressed CBlockHeader, which leaves out the prevhash
@@ -139,13 +138,10 @@ public:
      * consensus_params: parameters needed for difficulty adjustment validation
      * chain_start: best known fork point that the peer's headers branch from
      * minimum_required_work: amount of chain work required to accept the chain
-     * cache_bytes: Memory to use for headers cache in order to avoid re-downloading.
-     *              Configured depending on available RAM if unset.
      */
     HeadersSyncState(NodeId id, const Consensus::Params& consensus_params,
             const HeadersSyncParams& params, const CBlockIndex* chain_start,
-            const arith_uint256& minimum_required_work,
-            std::optional<size_t> cache_bytes);
+            const arith_uint256& minimum_required_work);
 
     /** Result data structure for ProcessNextHeaders. */
     struct ProcessingResult {
@@ -275,9 +271,6 @@ private:
              * Uses deque instead of vector so that we can swap it with
              * m_redownload.headers for minimum memory overhead. */
             std::deque<CompressedHeader> data{};
-
-            /** Explicit cap for data. */
-            const size_t cap;
         } headers_cache;
     } m_presync;
 

@@ -68,6 +68,8 @@ struct HeadersSyncParams {
     //! Minimum number of validated headers to accumulate in the redownload
     //! buffer before feeding them into the permanent block index.
     size_t redownload_buffer_size{0};
+    //! Number of headers to cache between presync and redownload phases.
+    size_t cache_size{0};
 };
 
 /**

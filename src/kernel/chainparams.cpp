@@ -200,6 +200,7 @@ public:
         m_headers_sync_params = HeadersSyncParams{
             .commitment_period = 632,
             .redownload_buffer_size = 15009, // 15009/632 = ~23.7 commitments
+            .cache_size = 1012176,
         };
     }
 };
@@ -303,6 +304,7 @@ public:
         m_headers_sync_params = HeadersSyncParams{
             .commitment_period = 628,
             .redownload_buffer_size = 13460, // 13460/628 = ~21.4 commitments
+            .cache_size = 902736,
         };
     }
 };
@@ -410,6 +412,7 @@ public:
         m_headers_sync_params = HeadersSyncParams{
             .commitment_period = 275,
             .redownload_buffer_size = 7017, // 7017/275 = ~25.5 commitments
+            .cache_size = 205920,
         };
     }
 };
@@ -529,6 +532,7 @@ public:
         m_headers_sync_params = HeadersSyncParams{
             .commitment_period = 390,
             .redownload_buffer_size = 9584, // 9584/390 = ~24.6 commitments
+            .cache_size = 398880,
         };
     }
 };
@@ -665,6 +669,7 @@ public:
         m_headers_sync_params = HeadersSyncParams{
             .commitment_period = 275,
             .redownload_buffer_size = 7017, // 7017/275 = ~25.5 commitments
+            .cache_size = 205920,
         };
     }
 };
