@@ -18,6 +18,7 @@
 #include <test/util/net.h>
 #include <test/util/setup_common.h>
 #include <test/util/validation.h>
+#include <util/byte_units.h>
 #include <util/time.h>
 #include <validationinterface.h>
 
@@ -56,6 +57,7 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
                                      PeerManager::Options{
                                          .reconcile_txs = true,
                                          .deterministic_rng = true,
+                                         .headerssync_cache_bytes = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 20_MiB),
                                      });
     connman.SetMsgProc(peerman.get());
 

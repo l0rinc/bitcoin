@@ -23,6 +23,11 @@ void ApplyArgsManOptions(const ArgsManager& argsman, PeerManager::Options& optio
     if (auto value{argsman.GetBoolArg("-capturemessages")}) options.capture_messages = *value;
 
     if (auto value{argsman.GetBoolArg("-blocksonly")}) options.ignore_incoming_txs = *value;
+
+    if (std::optional<int64_t> value{argsman.GetIntArg("-headerssynccache")}) {
+        options.headerssync_cache_bytes = std::min<uint64_t>(SaturatingLeftShift<uint64_t>(*value, 20), // Shift by 20 to treat as MiB.
+                                                             std::numeric_limits<size_t>::max());
+    }
 }
 
 } // namespace node

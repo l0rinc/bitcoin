@@ -78,7 +78,7 @@ struct HeadersGeneratorSetup : public RegTestingSetup {
         return second_chain;
     }
 
-    HeadersSyncState CreateState()
+    HeadersSyncState CreateState(size_t cache_size)
     {
         return {/*id=*/0,
                 Params().GetConsensus(),
@@ -87,7 +87,8 @@ struct HeadersGeneratorSetup : public RegTestingSetup {
                     .redownload_buffer_size = REDOWNLOAD_BUFFER_SIZE,
                 },
                 chain_start,
-                /*minimum_required_work=*/CHAIN_WORK};
+                /*minimum_required_work=*/CHAIN_WORK,
+                /*cache_bytes=*/cache_size * sizeof(CompressedHeader)};
     }
 
 private:
@@ -147,7 +148,7 @@ BOOST_AUTO_TEST_CASE(sneaky_redownload)
 
     // Feed the first chain to HeadersSyncState, by delivering 1 header
     // initially and then the rest.
-    HeadersSyncState hss{CreateState()};
+    HeadersSyncState hss{CreateState(/*cache_size=*/1)};
 
     // Just feed one header and check state.
     // Pretend the message is still "full", so we don't abort.
@@ -163,7 +164,9 @@ BOOST_AUTO_TEST_CASE(sneaky_redownload)
         hss, /*exp_state=*/State::REDOWNLOAD,
         /*exp_success*/true, /*exp_request_more=*/true,
         /*exp_headers_size=*/0, /*exp_pow_validated_prev=*/std::nullopt,
-        /*exp_locator_hash=*/genesis.GetHash());
+        // The locator should reset to the first header after genesis, since it
+        // was cached.
+        /*exp_locator_hash=*/first_chain.front().GetHash());
 
     // Below is the number of commitment bits that must randomly match between
     // the two chains for this test to spuriously fail. 1 / 2^25 =
@@ -186,7 +189,7 @@ BOOST_AUTO_TEST_CASE(happy_path)
     // Headers message that moves us to the next state doesn't need to be full.
     for (const bool full_headers_message : {false, true}) {
         // This time we feed the first chain twice.
-        HeadersSyncState hss{CreateState()};
+        HeadersSyncState hss{CreateState(/*cache_size=*/1)};
 
         // Sufficient work transitions us from PRESYNC to REDOWNLOAD:
         const auto genesis_hash{genesis.GetHash()};
@@ -194,11 +197,13 @@ BOOST_AUTO_TEST_CASE(happy_path)
             hss, /*exp_state=*/State::REDOWNLOAD,
             /*exp_success*/true, /*exp_request_more=*/true,
             /*exp_headers_size=*/0, /*exp_pow_validated_prev=*/std::nullopt,
-            /*exp_locator_hash=*/genesis_hash);
+            // The locator should reset to the first header after genesis, since
+            // it was cached.
+            /*exp_locator_hash=*/first_chain.front().GetHash());
 
         // Process only so that the internal threshold isn't exceeded, meaning
         // validated headers shouldn't be returned yet:
-        CHECK_RESULT(hss.ProcessNextHeaders({first_chain.begin(), REDOWNLOAD_BUFFER_SIZE}, true),
+        CHECK_RESULT(hss.ProcessNextHeaders({first_chain.begin() + 1, REDOWNLOAD_BUFFER_SIZE - 1}, true),
             hss, /*exp_state=*/State::REDOWNLOAD,
             /*exp_success*/true, /*exp_request_more=*/true,
             /*exp_headers_size=*/0, /*exp_pow_validated_prev=*/std::nullopt,
@@ -228,7 +233,7 @@ BOOST_AUTO_TEST_CASE(too_little_work)
 
     // Verify that just trying to process the second chain would not succeed
     // (too little work).
-    HeadersSyncState hss{CreateState()};
+    HeadersSyncState hss{CreateState(/*cache_size=*/TARGET_BLOCKS)};
     BOOST_REQUIRE_EQUAL(hss.GetState(), State::PRESYNC);
 
     // Pretend just the first message is "full", so we don't abort.

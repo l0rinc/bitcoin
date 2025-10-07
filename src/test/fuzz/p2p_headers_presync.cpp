@@ -31,6 +31,7 @@ public:
     {
         PeerManager::Options peerman_opts;
         node::ApplyArgsManOptions(*m_node.args, peerman_opts);
+        // TODO: Find way to reset peerman_opts.headerssync_cache_bytes based off FuzzedDataProvider.
         peerman_opts.max_headers_result = FUZZ_MAX_HEADERS_RESULTS;
         // The peerman's rng is a global that is reused, so it will be reused
         // and may cause non-determinism between runs. This may even influence

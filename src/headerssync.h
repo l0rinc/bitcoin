@@ -15,6 +15,7 @@
 #include <util/hasher.h>
 
 #include <deque>
+#include <optional>
 #include <vector>
 
 // A compressed CBlockHeader, which leaves out the prevhash
@@ -40,7 +41,8 @@ struct CompressedHeader {
         nNonce = header.nNonce;
     }
 
-    CBlockHeader GetFullHeader(const uint256& hash_prev_block) {
+    CBlockHeader GetFullHeader(const uint256& hash_prev_block) const
+    {
         CBlockHeader ret;
         ret.nVersion = nVersion;
         ret.hashPrevBlock = hash_prev_block;
@@ -96,6 +98,9 @@ struct CompressedHeader {
  * parametrization, we can achieve a given security target for potential
  * permanent memory usage, while choosing N to minimize memory use during the
  * sync (temporary, per-peer storage).
+ *
+ * Later versions also attempt to cache a reasonable amount of headers (assuming
+ * ~10min blocks) from the presync phase to later be reused during redownload.
  */
 
 class HeadersSyncState {
@@ -134,10 +139,13 @@ public:
      * consensus_params: parameters needed for difficulty adjustment validation
      * chain_start: best known fork point that the peer's headers branch from
      * minimum_required_work: amount of chain work required to accept the chain
+     * cache_bytes: Memory to use for headers cache in order to avoid re-downloading.
+     *              Configured depending on available RAM if unset.
      */
     HeadersSyncState(NodeId id, const Consensus::Params& consensus_params,
             const HeadersSyncParams& params, const CBlockIndex* chain_start,
-            const arith_uint256& minimum_required_work);
+            const arith_uint256& minimum_required_work,
+            std::optional<size_t> cache_bytes);
 
     /** Result data structure for ProcessNextHeaders. */
     struct ProcessingResult {
@@ -254,6 +262,23 @@ private:
 
         /** Height of last_header_received */
         int64_t height{0};
+
+        struct { // Headers cache
+            /** The accumulated work in the cache. */
+            arith_uint256 chain_work;
+
+            /** Needed since hashPrevBlock doesn't exist in CompressedHeader. */
+            uint256 last_hash{};
+
+            /** During phase 1 (PRESYNC), we cache a limited amount of received headers so
+             * we only have to re-download those which don't fit during phase 2 (REDOWNLOAD).
+             * Uses deque instead of vector so that we can swap it with
+             * m_redownload.headers for minimum memory overhead. */
+            std::deque<CompressedHeader> data{};
+
+            /** Explicit cap for data. */
+            const size_t cap;
+        } headers_cache;
     } m_presync;
 
     struct { // REDOWNLOAD
