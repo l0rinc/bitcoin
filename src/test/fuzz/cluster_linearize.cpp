@@ -452,6 +452,7 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
         }
     };
 
+    auto last_compaction_pos{real.PositionRange()};
     LIMITED_WHILE(provider.remaining_bytes() > 0, 1000) {
         int command = provider.ConsumeIntegral<uint8_t>() % 4;
         while (true) {
@@ -474,6 +475,7 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
                 // Update sim.
                 sim[idx] = {feerate, TestBitSet::Singleton(idx)};
                 ++num_tx_sim;
+                SanityCheck(real);
                 break;
             } else if (num_tx_sim > 0 && command-- == 0) {
                 // AddDependencies.
@@ -483,6 +485,7 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
                 real.AddDependencies(parents, child);
                 // Apply to sim.
                 sim[child]->second |= parents;
+                SanityCheck(real);
                 break;
             } else if (num_tx_sim > 0 && command-- == 0) {
                 // Remove transactions.
@@ -505,10 +508,16 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
                         }
                     }
                 }
+                SanityCheck(real);
                 break;
             } else if (command-- == 0) {
-                // Compact.
+                const size_t mem_before{real.DynamicMemoryUsage()};
                 real.Compact();
+                const size_t mem_after{real.DynamicMemoryUsage()};
+
+                assert(real.PositionRange() < last_compaction_pos ? mem_after < mem_before : mem_after <= mem_before);
+                last_compaction_pos = real.PositionRange();
+                SanityCheck(real);
                 break;
             }
         }

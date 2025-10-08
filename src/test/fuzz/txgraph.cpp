@@ -462,6 +462,7 @@ FUZZ_TARGET(txgraph)
                 auto ref_loc = top_sim.AddTransaction(feerate);
                 // Move it in place.
                 *ref_loc = std::move(ref);
+                real->SanityCheck();
                 break;
             } else if ((block_builders.empty() || sims.size() > 1) && top_sim.GetTransactionCount() + top_sim.removed.size() > 1 && command-- == 0) {
                 // AddDependency.
@@ -477,6 +478,7 @@ FUZZ_TARGET(txgraph)
                 top_sim.AddDependency(par, chl);
                 top_sim.real_is_optimal = false;
                 real->AddDependency(*par, *chl);
+                real->SanityCheck();
                 break;
             } else if ((block_builders.empty() || sims.size() > 1) && top_sim.removed.size() < 100 && command-- == 0) {
                 // RemoveTransaction. Either all its ancestors or all its descendants are also
@@ -492,6 +494,7 @@ FUZZ_TARGET(txgraph)
                     real->RemoveTransaction(*ptr);
                     top_sim.RemoveTransaction(ptr);
                 }
+                real->SanityCheck();
                 break;
             } else if (sel_sim.removed.size() > 0 && command-- == 0) {
                 // ~Ref (of an already-removed transaction). Destroying a TxGraph::Ref has an
@@ -507,6 +510,7 @@ FUZZ_TARGET(txgraph)
                     std::swap(sel_sim.removed[removed_pos], sel_sim.removed.back());
                 }
                 sel_sim.removed.pop_back();
+                real->SanityCheck();
                 break;
             } else if (block_builders.empty() && command-- == 0) {
                 // ~Ref (of any transaction).
@@ -529,6 +533,7 @@ FUZZ_TARGET(txgraph)
                         sims[level].DestroyTransaction(ptr, level == sims.size() - 1);
                     }
                 }
+                real->SanityCheck();
                 break;
             } else if (block_builders.empty() && command-- == 0) {
                 // SetTransactionFee.
@@ -543,10 +548,12 @@ FUZZ_TARGET(txgraph)
                 for (auto& sim : sims) {
                     sim.SetTransactionFee(ref, fee);
                 }
+                real->SanityCheck();
                 break;
             } else if (command-- == 0) {
                 // GetTransactionCount.
                 assert(real->GetTransactionCount(level_select) == sel_sim.GetTransactionCount());
+                real->SanityCheck();
                 break;
             } else if (command-- == 0) {
                 // Exists.
@@ -554,10 +561,12 @@ FUZZ_TARGET(txgraph)
                 bool exists = real->Exists(*ref, level_select);
                 bool should_exist = sel_sim.Find(ref) != SimTxGraph::MISSING;
                 assert(exists == should_exist);
+                real->SanityCheck();
                 break;
             } else if (command-- == 0) {
                 // IsOversized.
                 assert(sel_sim.IsOversized() == real->IsOversized(level_select));
+                real->SanityCheck();
                 break;
             } else if (command-- == 0) {
                 // GetIndividualFeerate.
@@ -572,6 +581,7 @@ FUZZ_TARGET(txgraph)
                     }
                 }
                 if (!found) assert(feerate.IsEmpty());
+                real->SanityCheck();
                 break;
             } else if (!main_sim.IsOversized() && command-- == 0) {
                 // GetMainChunkFeerate.
@@ -586,6 +596,7 @@ FUZZ_TARGET(txgraph)
                     assert(feerate.size >= main_sim.graph.FeeRate(simpos).size);
                     assert(feerate.size <= main_sim.SumAll().size);
                 }
+                real->SanityCheck();
                 break;
             } else if (!sel_sim.IsOversized() && command-- == 0) {
                 // GetAncestors/GetDescendants.
@@ -597,6 +608,7 @@ FUZZ_TARGET(txgraph)
                 assert(result.size() == result_set.Count());
                 auto expect_set = sel_sim.GetAncDesc(ref, alt);
                 assert(result_set == expect_set);
+                real->SanityCheck();
                 break;
             } else if (!sel_sim.IsOversized() && command-- == 0) {
                 // GetAncestorsUnion/GetDescendantsUnion.
@@ -619,6 +631,7 @@ FUZZ_TARGET(txgraph)
                 for (TxGraph::Ref* ref : refs) expect_set |= sel_sim.GetAncDesc(ref, alt);
                 // Compare.
                 assert(result_set == expect_set);
+                real->SanityCheck();
                 break;
             } else if (!sel_sim.IsOversized() && command-- == 0) {
                 // GetCluster.
@@ -654,16 +667,19 @@ FUZZ_TARGET(txgraph)
                     assert(sel_sim.graph.Ancestors(i).IsSubsetOf(result_set));
                     assert(sel_sim.graph.Descendants(i).IsSubsetOf(result_set));
                 }
+                real->SanityCheck();
                 break;
             } else if (command-- == 0) {
                 // HaveStaging.
                 assert((sims.size() == 2) == real->HaveStaging());
+                real->SanityCheck();
                 break;
             } else if (sims.size() < 2 && command-- == 0) {
                 // StartStaging.
                 sims.emplace_back(sims.back());
                 sims.back().modified = SimTxGraph::SetType{};
                 real->StartStaging();
+                real->SanityCheck();
                 break;
             } else if (block_builders.empty() && sims.size() > 1 && command-- == 0) {
                 // CommitStaging.
@@ -672,6 +688,7 @@ FUZZ_TARGET(txgraph)
                 const bool main_optimal = std::all_of(sims.cbegin(), sims.cend(), [](const auto &sim) { return sim.real_is_optimal; });
                 sims.erase(sims.begin());
                 sims.front().real_is_optimal = main_optimal;
+                real->SanityCheck();
                 break;
             } else if (sims.size() > 1 && command-- == 0) {
                 // AbortStaging.
@@ -681,6 +698,7 @@ FUZZ_TARGET(txgraph)
                 // removals of main transactions while staging was active, then aborting will
                 // cause it to be re-evaluated in TxGraph).
                 sims.back().oversized = std::nullopt;
+                real->SanityCheck();
                 break;
             } else if (!main_sim.IsOversized() && command-- == 0) {
                 // CompareMainOrder.
@@ -699,6 +717,7 @@ FUZZ_TARGET(txgraph)
                 // Do not verify consistency with chunk feerates, as we cannot easily determine
                 // these here without making more calls to real, which could affect its internal
                 // state. A full comparison is done at the end.
+                real->SanityCheck();
                 break;
             } else if (!sel_sim.IsOversized() && command-- == 0) {
                 // CountDistinctClusters.
@@ -730,6 +749,7 @@ FUZZ_TARGET(txgraph)
                 // Compare the number of deduplicated representatives with the value returned by
                 // the real function.
                 assert(result == sim_reps.Count());
+                real->SanityCheck();
                 break;
             } else if (command-- == 0) {
                 // DoWork.
@@ -767,6 +787,7 @@ FUZZ_TARGET(txgraph)
                     // allowed to touch.
                     assert(iters <= iters_for_optimal);
                 }
+                real->SanityCheck();
                 break;
             } else if (sims.size() == 2 && !sims[0].IsOversized() && !sims[1].IsOversized() && command-- == 0) {
                 // GetMainStagingDiagrams()
@@ -786,14 +807,17 @@ FUZZ_TARGET(txgraph)
                 for (size_t i = 1; i < real_staged_diagram.size(); ++i) {
                     assert(FeeRateCompare(real_staged_diagram[i], real_staged_diagram[i - 1]) <= 0);
                 }
+                real->SanityCheck();
                 break;
             } else if (block_builders.size() < 4 && !main_sim.IsOversized() && command-- == 0) {
                 // GetBlockBuilder.
                 block_builders.emplace_back(real->GetBlockBuilder());
+                real->SanityCheck();
                 break;
             } else if (!block_builders.empty() && command-- == 0) {
                 // ~BlockBuilder.
                 block_builders.erase(block_builders.begin() + builder_idx);
+                real->SanityCheck();
                 break;
             } else if (!block_builders.empty() && command-- == 0) {
                 // BlockBuilder::GetCurrentChunk, followed by Include/Skip.
@@ -845,6 +869,7 @@ FUZZ_TARGET(txgraph)
                     builder_data.included = new_included;
                 }
                 builder_data.done = new_done;
+                real->SanityCheck();
                 break;
             } else if (!main_sim.IsOversized() && command-- == 0) {
                 // GetWorstMainChunk.
@@ -871,6 +896,7 @@ FUZZ_TARGET(txgraph)
                     }
                     assert(sum == worst_chunk_feerate);
                 }
+                real->SanityCheck();
                 break;
             } else if ((block_builders.empty() || sims.size() > 1) && command-- == 0) {
                 // Trim.
@@ -895,6 +921,7 @@ FUZZ_TARGET(txgraph)
                     top_sim.RemoveTransaction(top_sim.GetRef(simpos));
                 }
                 assert(!top_sim.IsOversized());
+                real->SanityCheck();
                 break;
             } else if ((block_builders.empty() || sims.size() > 1) &&
                        top_sim.GetTransactionCount() > max_cluster_count && !top_sim.IsOversized() && command-- == 0) {
@@ -1011,15 +1038,18 @@ FUZZ_TARGET(txgraph)
                     top_sim.RemoveTransaction(top_sim.GetRef(simpos));
                 }
                 assert(!top_sim.IsOversized());
+                real->SanityCheck();
                 break;
-            } else if (command-- == 0) {
-                // GetMainMemoryUsage().
-                real->GetMainMemoryUsage();
-                // There is nothing to test about this function, as it's very
-                // implementation-specific, and can go up (even when transactions are removed) and
-                // down (even when dependencies are added), as clusters can split and merge.
-                // Still include it here as it has (non-observable) effects on the real
-                // implementation.
+            } else if (block_builders.empty()) {
+                assert(real->GetMainMemoryUsage() == real->GetMainMemoryUsage());
+
+                if (real->GetTransactionCount(TxGraph::Level::MAIN) == 0) {
+                    assert(real->GetMainMemoryUsage() == 0);
+                } else {
+                    assert(real->GetMainMemoryUsage() > 0);
+                }
+
+                real->SanityCheck();
                 break;
             }
         }
