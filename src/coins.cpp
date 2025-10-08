@@ -77,6 +77,7 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possi
     std::tie(it, inserted) = cacheCoins.emplace(std::piecewise_construct, std::forward_as_tuple(outpoint), std::tuple<>());
     bool fresh = false;
     if (!inserted) {
+        Assert(cachedCoinsUsage >= it->second.coin.DynamicMemoryUsage());
         cachedCoinsUsage -= it->second.coin.DynamicMemoryUsage();
     }
     if (!possible_overwrite) {
