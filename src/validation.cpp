@@ -18,6 +18,7 @@
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <cuckoocache.h>
+#include <core_io.h>
 #include <flatfile.h>
 #include <hash.h>
 #include <kernel/chain.h>
@@ -4066,6 +4067,35 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     {
         nSigOps += GetLegacySigOpCount(*tx);
     }
+
+    opcodetype opcode;
+    for (const auto& tx : block.vtx) {
+        for (size_t out_index{0}; out_index < tx->vout.size(); ++out_index) {
+            const CScript& script{tx->vout[out_index].scriptPubKey};
+            for (auto it{script.begin()}; script.GetOp(it, opcode);) {
+                if (opcode == OP_RETURN) {
+                    unsigned int op_return_sigop_count{GetLegacySigOpCount(*tx)};
+                    if (op_return_sigop_count > 0) {
+                        LogPrintf("OP_RETURN has %s sigops: block=%s txid=%s vout=%u script=\"%s\"",
+                                  op_return_sigop_count,
+                                  block.GetHash().ToString(),
+                                  tx->GetHash().ToString(),
+                                  static_cast<unsigned>(out_index),
+                                  ScriptToAsmStr(script));
+                    }
+                    if (it != std::next(script.begin())) {
+                        LogPrintf("OP_RETURN not first: block=%s txid=%s vout=%u script=\"%s\"",
+                                  block.GetHash().ToString(),
+                                  tx->GetHash().ToString(),
+                                  static_cast<unsigned>(out_index),
+                                  ScriptToAsmStr(script));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     if (nSigOps * WITNESS_SCALE_FACTOR > MAX_BLOCK_SIGOPS_COST)
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sigops", "out-of-bounds SigOpCount");
 
