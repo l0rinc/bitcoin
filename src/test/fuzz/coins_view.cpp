@@ -74,13 +74,13 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& backend
                         // of cachedCoinsUsage would have been incorrectly decreased, leading to an underflow later on.
                         // To avoid this, use Flush() to reset the value of cachedCoinsUsage in sync with the cacheCoins
                         // mapping.
-                        (void)coins_view_cache.Flush();
+                        (void)coins_view_cache.Flush(/*reallocate_cache=*/true);
                     }
                 }
                 assert(expected_code_path);
             },
             [&] {
-                (void)coins_view_cache.Flush();
+                (void)coins_view_cache.Flush(/*reallocate_cache=*/fuzzed_data_provider.ConsumeBool());
             },
             [&] {
                 (void)coins_view_cache.Sync();
