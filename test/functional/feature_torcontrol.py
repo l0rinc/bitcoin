@@ -115,13 +115,13 @@ class TorControlTest(BitcoinTestFramework):
         self._port_counter = getattr(self, '_port_counter', 0) + 1
         return p2p_port(self.num_nodes + self._port_counter)
 
-    def restart_with_mock(self, mock_tor):
+    def restart_with_mock(self, mock_tor, extra_args=None):
         mock_tor.start()
         self.restart_node(0, extra_args=[
             f"-torcontrol=127.0.0.1:{mock_tor.port}",
             "-listenonion=1",
             "-debug=tor",
-        ])
+        ] + (extra_args or []))
 
         # Wait for connection and PROTOCOLINFO command
         mock_tor.conn_ready.wait(timeout=10)
@@ -159,6 +159,20 @@ class TorControlTest(BitcoinTestFramework):
         assert "PoWDefensesEnabled=1" in mock_tor.received_commands[3]
 
         # Clean up
+        mock_tor.stop()
+
+    def test_bind_any_onion_target_uses_loopback(self):
+        self.log.info("Test Tor onion service maps bind-any target to loopback")
+
+        mock_tor = MockTorControlServer(self.next_port())
+        onion_bind_port = self.next_port()
+        self.restart_with_mock(mock_tor, extra_args=[f"-bind=0.0.0.0:{onion_bind_port}=onion"])
+
+        self.wait_until(lambda: any(command.startswith("ADD_ONION ") for command in mock_tor.received_commands), timeout=10)
+        add_onion_command = next(command for command in mock_tor.received_commands if command.startswith("ADD_ONION "))
+        assert f",127.0.0.1:{onion_bind_port}" in add_onion_command
+        assert f",0.0.0.0:{onion_bind_port}" not in add_onion_command
+
         mock_tor.stop()
 
     def test_partial_data(self):
@@ -349,6 +363,7 @@ if owned:
 
     def run_test(self):
         self.test_basic()
+        self.test_bind_any_onion_target_uses_loopback()
         self.test_partial_data()
         self.test_pow_fallback()
         self.test_oversized_line()
