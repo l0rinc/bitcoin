@@ -344,7 +344,7 @@ class Bip54Test(BitcoinTestFramework):
         # Once BIP54 is active we:
         # - Refuse blocks with more than 2500 BIP54-sigops in a single transaction but still
         #   accept a block with the same number of BIP54-sigops split in more than one transaction.
-        assert_equal(self.submit_block_many_sigops(node), None) # TODO: A transaction with more than 2500 legacy sigops must be invalid
+        assert_equal(self.submit_block_many_sigops(node), "bad-txns-legacy-sigops")
         assert_equal(self.submit_block_many_sigops_split(node), None)
         # - Cannot perform Timewarp and Murch-Zawy attacks
         self.timewarp_attack(node, fork_height=cc_dep["since"]) # TODO: The first retarget block must respect the two-hour timewarp bound

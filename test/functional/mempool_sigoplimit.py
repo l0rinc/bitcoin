@@ -204,7 +204,7 @@ class BytesPerSigOpTest(BitcoinTestFramework):
         assert_greater_than(2000, tx_parent.get_weight() + tx_child.get_weight())
 
     def test_legacy_sigops_limit(self):
-        self.log.info("Test a transaction with too many legacy sigops in its inputs is non-standard.")
+        self.log.info("Test a transaction with too many legacy sigops in its inputs is invalid.")
 
         # Restart with the default settings
         self.restart_node(0)
@@ -225,26 +225,25 @@ class BytesPerSigOpTest(BitcoinTestFramework):
             outpoints.append(COutPoint(txid, res["sent_vout"]))
         self.generate(self.nodes[0], 1)
 
-        # Spending all these outputs at once accounts for 2505 legacy sigops and is non-standard.
-        nonstd_tx = CTransaction()
-        nonstd_tx.vin = [CTxIn(op, CScript([b"", packed_redeem_script])) for op in outpoints]
-        nonstd_tx.vout = [CTxOut(0, CScript([OP_RETURN, b""]))]
-        assert_raises_rpc_error(-26, "bad-txns-nonstandard-inputs, non-witness sigops exceed bip54 limit",
-                                        self.nodes[0].sendrawtransaction, nonstd_tx.serialize().hex())
+        # Spending all these outputs at once accounts for 2505 legacy sigops and is invalid.
+        over_limit_tx = CTransaction()
+        over_limit_tx.vin = [CTxIn(op, CScript([b"", packed_redeem_script])) for op in outpoints]
+        over_limit_tx.vout = [CTxOut(0, CScript([OP_RETURN, b""]))]
+        assert_raises_rpc_error(-26, "bad-txns-legacy-sigops", self.nodes[0].sendrawtransaction, over_limit_tx.serialize().hex())
 
-        # Spending one less accounts for 2490 legacy sigops and is standard.
-        std_tx = deepcopy(nonstd_tx)
-        std_tx.vin.pop()
-        self.nodes[0].sendrawtransaction(std_tx.serialize().hex())
+        # Spending one less accounts for 2490 legacy sigops and is valid and standard.
+        under_limit_tx = deepcopy(over_limit_tx)
+        under_limit_tx.vin.pop()
+        self.nodes[0].sendrawtransaction(under_limit_tx.serialize().hex())
 
-        # Make sure the original, non-standard, transaction can be mined.
-        self.generateblock(self.nodes[0], output="raw(42)", transactions=[nonstd_tx.serialize().hex()], submit=False) # TODO: BIP54 must reject this transaction in an active block
+        # The invalid transaction also cannot appear in a block.
+        assert_raises_rpc_error(-25, "bad-txns-legacy-sigops", self.generateblock, self.nodes[0], "raw(42)", [over_limit_tx.serialize().hex()], submit=False)
 
         self.log.info("The mempool enforces the sigop limit even when BIP54 is inactive and nonstandard transactions are allowed")
-        # Discard the conflicting standard transaction without spending its inputs
+        # Discard the conflicting under-limit transaction without spending its inputs
         self.restart_node(0, [CONSENSUS_CLEANUP_NEVER_ACTIVE, "-acceptnonstdtxn=1", "-persistmempool=0"])
-        self.nodes[0].sendrawtransaction(nonstd_tx.serialize().hex()) # TODO: The BIP54 mempool sigop limit must apply while the deployment is inactive
-        self.generateblock(self.nodes[0], "raw(42)", [nonstd_tx.serialize().hex()])
+        assert_raises_rpc_error(-26, "bad-txns-legacy-sigops", self.nodes[0].sendrawtransaction, over_limit_tx.serialize().hex())
+        self.generateblock(self.nodes[0], "raw(42)", [over_limit_tx.serialize().hex()])
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])

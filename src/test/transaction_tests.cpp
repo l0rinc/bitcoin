@@ -1024,7 +1024,7 @@ BOOST_AUTO_TEST_CASE(max_tx_bip54_sigops)
     const auto check_bip54_sigops{[&](const CMutableTransaction& mtx) {
         TxValidationState state;
         CAmount txfee{0};
-        const bool res{Consensus::CheckTxInputs(CTransaction{mtx}, state, coins, /*nSpendHeight=*/0, txfee)};
+        const bool res{Consensus::CheckTxInputs(CTransaction{mtx}, state, coins, /*nSpendHeight=*/0, txfee, /*enforce_bip54=*/true)};
         BOOST_CHECK_EQUAL(res, state.IsValid());
         if (!res) {
             BOOST_CHECK(state.GetResult() == TxValidationResult::TX_CONSENSUS);
@@ -1075,7 +1075,7 @@ BOOST_AUTO_TEST_CASE(max_tx_bip54_sigops)
     BOOST_CHECK_GT((p2sh_inputs_count + 1) * MAX_P2SH_SIGOPS, MAX_TX_BIP54_SIGOPS);
     auto legacy_sigops_count = GetP2SHSigOpCount(CTransaction(tx_max_sigops), coins);
     BOOST_CHECK_EQUAL(legacy_sigops_count, 2505);
-    BOOST_CHECK(check_bip54_sigops(tx_max_sigops)); // TODO: Transactions above the BIP54 sigop limit must be invalid
+    BOOST_CHECK(!check_bip54_sigops(tx_max_sigops));
 
     // Now, check the limit can be reached with regular P2PK outputs too. Use a separate
     // preparation transaction, to demonstrate spending coins from a single tx is irrelevant.
@@ -1123,7 +1123,7 @@ BOOST_AUTO_TEST_CASE(max_tx_bip54_sigops)
     AddCoins(coins, CTransaction(tx_create_p2pk), 0, false);
     auto legacy_sigop_count_p2pk = p2sh_inputs_count * MAX_P2SH_SIGOPS + p2pk_inputs_count * 1;
     BOOST_CHECK_GT(legacy_sigop_count_p2pk, MAX_TX_BIP54_SIGOPS);
-    BOOST_CHECK(check_bip54_sigops(tx_max_sigops)); // TODO: Transactions above the BIP54 sigop limit must be invalid
+    BOOST_CHECK(!check_bip54_sigops(tx_max_sigops));
 }
 
 BOOST_AUTO_TEST_CASE(getlegacysigopcount_inaccurate_test)
@@ -1158,7 +1158,7 @@ BOOST_AUTO_TEST_CASE(checktxinputs_invalid_transactions_test)
 
         TxValidationState state;
         CAmount txfee{0};
-        BOOST_CHECK(!Consensus::CheckTxInputs(CTransaction{mtx}, state, inputs, spend_height, txfee));
+        BOOST_CHECK(!Consensus::CheckTxInputs(CTransaction{mtx}, state, inputs, spend_height, txfee, /*enforce_bip54=*/true));
         BOOST_CHECK(state.IsInvalid());
         BOOST_CHECK_EQUAL(state.GetResult(), expected_result);
         BOOST_CHECK_EQUAL(state.GetRejectReason(), expected_reason);

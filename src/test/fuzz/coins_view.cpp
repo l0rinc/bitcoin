@@ -315,7 +315,6 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 (void)ValidateInputsStandardness(CTransaction{random_mutable_transaction}, coins_view_cache);
             },
             [&] {
-                TxValidationState state;
                 CAmount tx_fee_out;
                 const CTransaction transaction{random_mutable_transaction};
                 if (ContainsSpentInput(transaction, coins_view_cache)) {
@@ -333,8 +332,11 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                     // It is not allowed to call CheckTxInputs on a coinbase transaction.
                     return;
                 }
-                if (Consensus::CheckTxInputs(transaction, state, coins_view_cache, spend_height, tx_fee_out)) {
-                    assert(MoneyRange(tx_fee_out));
+                for (const bool enforce_bip54 : {false, true}) {
+                    TxValidationState state;
+                    if (Consensus::CheckTxInputs(transaction, state, coins_view_cache, spend_height, tx_fee_out, enforce_bip54)) {
+                        assert(MoneyRange(tx_fee_out));
+                    }
                 }
             },
             [&] {
