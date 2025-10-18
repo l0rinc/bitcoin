@@ -24,7 +24,7 @@ private:
     DbMap& m_map;
 
 public:
-    DbCoinsView(DbMap& map) : m_map(map) {}
+    explicit DbCoinsView(DbMap& map) : m_map(map) {}
 
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override
     {
@@ -38,13 +38,9 @@ public:
     }
 };
 
-class NoAccessCoinsView : public CCoinsView
+struct NoAccessCoinsView : CCoinsView
 {
-public:
-    std::optional<Coin> GetCoin(const COutPoint&) const override
-    {
-        abort();
-    }
+    std::optional<Coin> GetCoin(const COutPoint&) const override { std::abort(); }
 };
 
 FUZZ_TARGET(inputfetcher)
@@ -56,7 +52,7 @@ FUZZ_TARGET(inputfetcher)
         fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(2, 4)};
     InputFetcher fetcher{static_cast<size_t>(worker_threads)};
 
-    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10000) {
+    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10'000) {
         CBlock block;
         Txid prevhash{Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider))};
 
@@ -68,7 +64,7 @@ FUZZ_TARGET(inputfetcher)
         NoAccessCoinsView back;
         CCoinsViewCache cache(&back);
 
-        LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10000) {
+        LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10'000) {
             CMutableTransaction tx;
 
             LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10) {
@@ -116,8 +112,10 @@ FUZZ_TARGET(inputfetcher)
             prevhash = tx.GetHash();
             block.vtx.push_back(MakeTransactionRef(tx));
         }
+        if (block.vtx.empty()) continue;
 
-        fetcher.FetchInputs(cache, db, block);
+        CCoinsViewCache block_cache{&cache};
+        fetcher.FetchInputs(cache, block_cache, db, block);
 
         for (const auto& [outpoint, pair] : db_map) {
             // Check pre-existing coins in the cache have not been updated

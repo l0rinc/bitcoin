@@ -4,25 +4,23 @@
 #include <coins.h>
 #include <logging.h>
 #include <primitives/transaction.h>
-#include <tinyformat.h>
+#include <threadpool.h>
 #include <util/hasher.h>
 
 #include <algorithm>
 #include <cassert>
 #include <numeric>
-#include <thread>
 #include <unordered_set>
 #include <vector>
 
 class InputFetcher
 {
-    const size_t m_max_thread_count;
-    static constexpr size_t PARALLEL_THRESHOLD_MULTIPLIER{2};
+    ThreadPool m_pool;
 
 public:
-    explicit InputFetcher(size_t max_thread_count) : m_max_thread_count{max_thread_count}
+    explicit InputFetcher(size_t thread_count) : m_pool{thread_count}
     {
-        assert(m_max_thread_count > 0);
+        assert(thread_count > 0);
     }
 
     void FetchInputs(const CCoinsViewCache& cache, CCoinsViewCache& block_cache, const CCoinsView& db, const CBlock& block) noexcept
@@ -47,17 +45,24 @@ public:
         if (missing.empty()) return;
         std::ranges::sort(missing, [](const auto& a, const auto& b) { return a < b; }); // Sort for disk locality
 
-        try {
-            for (const auto& outpoint : missing) {
-                if (auto coin{db.GetCoin(outpoint)}) {
-                    block_cache.EmplaceCoinInternalDANGER(COutPoint{outpoint}, std::move(*coin));
+        const size_t slice{(missing.size() + (m_pool.Size() - 1)) / m_pool.Size()}; // Round up so last thread gets smallest slice
+        std::vector<std::vector<std::pair<COutPoint, Coin>>> results(m_pool.Size());
+        for (auto& result : results) result.reserve(slice);
+
+        m_pool.Run([&](size_t thread_index) {
+            for (size_t i{thread_index * slice}, end{std::min((thread_index + 1) * slice, missing.size())}; i < end; ++i) {
+                if (auto coin{db.GetCoin(missing[i])}) {
+                    results[thread_index].emplace_back(missing[i], std::move(*coin));
                 } else {
-                    throw std::runtime_error("Failed to fetch outpoint from db"); // caught below
+                    throw std::runtime_error("Failed to fetch outpoint from db"); // caught by pool, will fail validation
                 }
             }
-        } catch (const std::runtime_error& e) {
-            // Database error: will be handled later in validation.
-            LogPrintLevel(BCLog::VALIDATION, BCLog::Level::Warning, "InputFetcher failed to fetch input: %s.", e.what());
+        });
+
+        for (size_t t{0}; t < m_pool.Size(); ++t) {
+            for (auto& [outpoint, coin] : results[t]) {
+                block_cache.EmplaceCoinInternalDANGER(std::move(outpoint), std::move(coin));
+            }
         }
     }
 };
