@@ -47,9 +47,10 @@ static void InputFetcherBenchmark(benchmark::Bench& bench)
     InputFetcher fetcher{static_cast<size_t>(worker_threads_num)};
 
     bench.run([&] {
+        CCoinsViewCache block_cache{&cache};
         const auto ok{cache.Flush()};
         assert(ok);
-        fetcher.FetchInputs(cache, db, block);
+        fetcher.FetchInputs(cache, block_cache, db, block);
     });
 }
 
