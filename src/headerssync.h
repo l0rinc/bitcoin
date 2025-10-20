@@ -40,7 +40,8 @@ struct CompressedHeader {
         nNonce = header.nNonce;
     }
 
-    CBlockHeader GetFullHeader(const uint256& hash_prev_block) {
+    CBlockHeader GetFullHeader(const uint256& hash_prev_block) const
+    {
         CBlockHeader ret;
         ret.nVersion = nVersion;
         ret.hashPrevBlock = hash_prev_block;
@@ -96,6 +97,9 @@ struct CompressedHeader {
  * parametrization, we can achieve a given security target for potential
  * permanent memory usage, while choosing N to minimize memory use during the
  * sync (temporary, per-peer storage).
+ *
+ * Later versions also attempt to cache a reasonable amount of headers (assuming
+ * ~10min blocks) from the presync phase to later be reused during redownload.
  */
 
 class HeadersSyncState {
@@ -116,16 +120,16 @@ public:
     };
 
     /** Return the current state of our download */
-    State GetState() const { return m_download_state; }
+    State GetState() const { return m_state; }
 
     /** Return the height reached during the PRESYNC phase */
-    int64_t GetPresyncHeight() const { return m_current_height; }
+    int64_t GetPresyncHeight() const { return m_presync.height; }
 
     /** Return the block timestamp of the last header received during the PRESYNC phase. */
-    uint32_t GetPresyncTime() const { return m_last_header_received.nTime; }
+    uint32_t GetPresyncTime() const { return m_presync.last_header_received.nTime; }
 
     /** Return the amount of work in the chain received during the PRESYNC phase. */
-    arith_uint256 GetPresyncWork() const { return m_current_chain_work; }
+    arith_uint256 GetPresyncWork() const { return m_presync.chain_work; }
 
     /** Construct a HeadersSyncState object representing a headers sync via this
      *  download-twice mechanism).
@@ -136,7 +140,8 @@ public:
      * minimum_required_work: amount of chain work required to accept the chain
      */
     HeadersSyncState(NodeId id, const Consensus::Params& consensus_params,
-            const CBlockIndex* chain_start, const arith_uint256& minimum_required_work);
+            const HeadersSyncParams& params, const CBlockIndex* chain_start,
+            const arith_uint256& minimum_required_work);
 
     /** Result data structure for ProcessNextHeaders. */
     struct ProcessingResult {
@@ -165,7 +170,7 @@ public:
      * ProcessingResult.request_more: if true, the caller is suggested to call
      *                       NextHeadersRequestLocator and send a getheaders message using it.
      */
-    ProcessingResult ProcessNextHeaders(const std::vector<CBlockHeader>&
+    ProcessingResult ProcessNextHeaders(std::span<const CBlockHeader>
             received_headers, bool full_headers_message);
 
     /** Issue the next GETHEADERS message to our peer.
@@ -179,10 +184,15 @@ protected:
     /** The (secret) offset on the heights for which to create commitments.
      *
      * m_header_commitments entries are created at any height h for which
-     * (h % HEADER_COMMITMENT_PERIOD) == m_commit_offset. */
-    const unsigned m_commit_offset;
+     * (h % m_params.commitment_period) == m_commit_offset. */
+    const size_t m_commit_offset;
 
 private:
+    ProcessingResult ProcessPresync(std::span<const CBlockHeader>
+            received_headers, bool full_headers_message);
+    ProcessingResult ProcessRedownload(std::span<const CBlockHeader>
+            received_headers, bool full_headers_message);
+
     /** Clear out all download state that might be in progress (freeing any used
      * memory), and mark this object as no longer usable.
      */
@@ -195,7 +205,7 @@ private:
      *  processed headers.
      *  On failure, this invokes Finalize() and returns false.
      */
-    bool ValidateAndStoreHeadersCommitments(const std::vector<CBlockHeader>& headers);
+    bool ValidateAndStoreHeadersCommitments(std::span<const CBlockHeader> headers);
 
     /** In PRESYNC, process and update state for a single header */
     bool ValidateAndProcessSingleHeader(const CBlockHeader& current);
@@ -214,14 +224,14 @@ private:
     /** We use the consensus params in our anti-DoS calculations */
     const Consensus::Params& m_consensus_params;
 
+    /** Parameters that impact memory usage for a given chain, especially when attacked. */
+    const HeadersSyncParams m_params;
+
     /** Store the last block in our block index that the peer's chain builds from */
     const CBlockIndex* m_chain_start{nullptr};
 
     /** Minimum work that we're looking for on this chain. */
     const arith_uint256 m_minimum_required_work;
-
-    /** Work that we've seen so far on the peer's chain */
-    arith_uint256 m_current_chain_work;
 
     /** m_hasher is a salted hasher for making our 1-bit commitments to headers we've seen. */
     const SaltedUint256Hasher m_hasher;
@@ -236,43 +246,63 @@ private:
      * memory bound on m_header_commitments. */
     uint64_t m_max_commitments{0};
 
-    /** Store the latest header received while in PRESYNC (initialized to m_chain_start) */
-    CBlockHeader m_last_header_received;
-
-    /** Height of m_last_header_received */
-    int64_t m_current_height{0};
-
-    /** During phase 2 (REDOWNLOAD), we buffer redownloaded headers in memory
-     *  until enough commitments have been verified; those are stored in
-     *  m_redownloaded_headers */
-    std::deque<CompressedHeader> m_redownloaded_headers;
-
-    /** Height of last header in m_redownloaded_headers */
-    int64_t m_redownload_buffer_last_height{0};
-
-    /** Hash of last header in m_redownloaded_headers (initialized to
-     * m_chain_start). We have to cache it because we don't have hashPrevBlock
-     * available in a CompressedHeader.
-     */
-    uint256 m_redownload_buffer_last_hash;
-
-    /** The hashPrevBlock entry for the first header in m_redownloaded_headers
-     * We need this to reconstruct the full header when it's time for
-     * processing.
-     */
-    uint256 m_redownload_buffer_first_prev_hash;
-
-    /** The accumulated work on the redownloaded chain. */
-    arith_uint256 m_redownload_chain_work;
-
-    /** Set this to true once we encounter the target blockheader during phase
-     * 2 (REDOWNLOAD). At this point, we can process and store all remaining
-     * headers still in m_redownloaded_headers.
-     */
-    bool m_process_all_remaining_headers{false};
-
     /** Current state of our headers sync. */
-    State m_download_state{State::PRESYNC};
+    State m_state{State::PRESYNC};
+
+    struct { // PRESYNC
+        /** Work that we've seen so far on the peer's chain */
+        arith_uint256 chain_work;
+
+        /** Store the latest header received while in PRESYNC (initialized to m_chain_start) */
+        CBlockHeader last_header_received;
+
+        /** Height of last_header_received */
+        int64_t height{0};
+
+        struct { // Headers cache
+            /** The accumulated work in the cache. */
+            arith_uint256 chain_work;
+
+            /** Needed since hashPrevBlock doesn't exist in CompressedHeader. */
+            uint256 last_hash{};
+
+            /** During phase 1 (PRESYNC), we cache a limited amount of received headers so
+             * we only have to re-download those which don't fit during phase 2 (REDOWNLOAD).
+             * Uses deque instead of vector so that we can swap it with
+             * m_redownload.headers for minimum memory overhead. */
+            std::deque<CompressedHeader> data{};
+        } headers_cache;
+    } m_presync;
+
+    struct { // REDOWNLOAD
+        /** The accumulated work on the redownloaded chain. */
+        arith_uint256 chain_work;
+
+        /** During phase 2 (REDOWNLOAD), we buffer redownloaded headers in memory
+         *  until enough commitments have been verified; those are stored here. */
+        std::deque<CompressedHeader> headers{};
+
+        /** Height of last header in headers above */
+        int64_t last_height{0};
+
+        /** Hash of last header in headers (initialized to m_chain_start).
+         * We have to cache it because we don't have hashPrevBlock
+         * available in a CompressedHeader.
+         */
+        uint256 last_hash;
+
+        /** The hashPrevBlock entry for the first header in headers
+         * We need this to reconstruct the full header when it's time for
+         * processing.
+         */
+        uint256 first_prev_hash;
+
+        /** Set this to true once we encounter the target blockheader during
+         * phase 2 (REDOWNLOAD). At this point, we can externally process and
+         * store all remaining headers still in headers.
+         */
+        bool process_all_remaining_headers{false};
+    } m_redownload;
 };
 
 #endif // BITCOIN_HEADERSSYNC_H
