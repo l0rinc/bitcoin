@@ -45,7 +45,7 @@ public:
             block_txids.insert(block.vtx[i]->GetHash());
         }
         if (missing.empty()) return;
-        // std::ranges::sort(missing, [](const auto& a, const auto& b) { return a < b; }); // Sort for disk locality
+        std::ranges::sort(missing, [](const auto& a, const auto& b) { return a < b; }); // Sort for disk locality
 
         try {
             for (const auto& outpoint : missing) {
