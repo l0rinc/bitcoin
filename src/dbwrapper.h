@@ -92,17 +92,24 @@ public:
     ~CDBBatch();
     void Clear();
 
+    template <typename V>
+    void WriteSpan(Span<const std::byte> key, const V& value)
+    {
+        ssValue.reserve(DBWRAPPER_PREALLOC_VALUE_SIZE);
+        ssValue << value;
+        WriteImpl(key, ssValue);
+        ssValue.clear();
+    }
     template <typename K, typename V>
     void Write(const K& key, const V& value)
     {
         ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
-        ssValue.reserve(DBWRAPPER_PREALLOC_VALUE_SIZE);
         ssKey << key;
-        ssValue << value;
-        WriteImpl(ssKey, ssValue);
+        WriteSpan<V>(ssKey, value);
         ssKey.clear();
-        ssValue.clear();
     }
+
+    void EraseImpl(Span<const std::byte> key);
 
     template <typename K>
     void Erase(const K& key)
@@ -150,6 +157,8 @@ public:
     }
 
     void Next();
+
+    Span<const std::byte> GetKeyImpl() const;
 
     template<typename K> bool GetKey(K& key) {
         try {
@@ -209,24 +218,28 @@ public:
     CDBWrapper(const CDBWrapper&) = delete;
     CDBWrapper& operator=(const CDBWrapper&) = delete;
 
+    template <typename V>
+    bool ReadSpan(Span<const std::byte> key, V& value) const
+    {
+        if (auto strValue{ReadImpl(key)}) {
+            try {
+                DataStream ssValue{MakeByteSpan(*strValue)};
+                m_obfuscation(ssValue);
+                ssValue >> value;
+                return true;
+            }
+            catch (const std::exception&) {
+            }
+        }
+        return false;
+    }
     template <typename K, typename V>
     bool Read(const K& key, V& value) const
     {
         DataStream ssKey{};
         ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey << key;
-        std::optional<std::string> strValue{ReadImpl(ssKey)};
-        if (!strValue) {
-            return false;
-        }
-        try {
-            DataStream ssValue{MakeByteSpan(*strValue)};
-            m_obfuscation(ssValue);
-            ssValue >> value;
-        } catch (const std::exception&) {
-            return false;
-        }
-        return true;
+        return ReadSpan<V>(ssKey, value);
     }
 
     template <typename K, typename V>
@@ -244,6 +257,8 @@ public:
         }
         return m_path;
     }
+
+    bool ExistsImpl(Span<const std::byte> key) const;
 
     template <typename K>
     bool Exists(const K& key) const
