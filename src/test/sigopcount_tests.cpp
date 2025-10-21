@@ -18,6 +18,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+using namespace util::hex_literals;
+
 // Helpers:
 static std::vector<unsigned char>
 Serialize(const CScript& s)
@@ -28,19 +30,147 @@ Serialize(const CScript& s)
 
 BOOST_FIXTURE_TEST_SUITE(sigopcount_tests, BasicTestingSetup)
 
+BOOST_AUTO_TEST_CASE(GetSigOpCountErrors)
+{
+    // OP_PUSHDATA1
+    {
+        auto raw{"ac4c"_hex_v_u8};
+        CScript script{raw.begin(), raw.end()};
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 1); // out of bounds OP_PUSHDATA1 data size
+    }
+
+    // OP_PUSHDATA2
+    {
+        auto raw{"ac4d"_hex_v_u8};
+        CScript script{raw.begin(), raw.end()};
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 1); // not enough data after OP_PUSHDATA2
+    }
+    {
+        auto raw{"ac4dac"_hex_v_u8};
+        CScript script{raw.begin(), raw.end()};
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 1); // not enough data after OP_PUSHDATA2
+    }
+    {
+        auto raw{"ac4dfeffffffac"_hex_v_u8};
+        CScript script{raw.begin(), raw.end()};
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 1); // out of bounds OP_PUSHDATA2 data size
+    }
+
+    // OP_PUSHDATA4
+    {
+        auto raw{"ac4e"_hex_v_u8};
+        CScript script{raw.begin(), raw.end()};
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 1); // not enough data after OP_PUSHDATA4
+    }
+    {
+        auto raw{"ac4eac"_hex_v_u8};
+        CScript script{raw.begin(), raw.end()};
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 1); // not enough data after OP_PUSHDATA4
+    }
+    {
+        auto raw{"ac4eacac"_hex_v_u8};
+        CScript script{raw.begin(), raw.end()};
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 1); // not enough data after OP_PUSHDATA4
+    }
+    {
+        auto raw{"ac4eacacac"_hex_v_u8};
+        CScript script{raw.begin(), raw.end()};
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 1); // not enough data after OP_PUSHDATA4
+    }
+    {
+        auto raw{"ac4efeffffffac"_hex_v_u8};
+        CScript script{raw.begin(), raw.end()};
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 1); // out of bounds OP_PUSHDATA4 data size
+    }
+}
+
+BOOST_AUTO_TEST_CASE(GetSigOpCountStandardScripts)
+{
+    CKey dummyKey;
+    dummyKey.MakeNewKey(true);
+    CPubKey pubkey = dummyKey.GetPubKey();
+
+    // OP_RETURN
+    {
+        auto raw{"6a76a914cd2b3298b7f455f39805377e5f213093df3cc09a88ac"_hex_v_u8}; // OP_RETURN with sigops after, from block #229712
+        const CScript script{raw.begin(), raw.end()};
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 1);
+    }
+
+    // P2WPKH
+    {
+        const auto script{GetScriptForDestination(WitnessV0KeyHash(pubkey.GetID()))};
+        BOOST_CHECK(script.IsPayToWitnessPubKeyHash());
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 0);
+    }
+
+    // P2SH
+    {
+        const auto script{GetScriptForDestination(ScriptHash(CScript() << OP_TRUE))};
+        BOOST_CHECK(script.IsPayToScriptHash());
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 0);
+    }
+
+    // P2PKH
+    {
+        const auto script{GetScriptForDestination(PKHash(pubkey.GetID()))};
+        BOOST_CHECK(script.IsPayToPubKeyHash());
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 1);
+    }
+
+    // P2WSH
+    {
+        const auto script{GetScriptForDestination(WitnessV0ScriptHash(CScript() << OP_TRUE))};
+        BOOST_CHECK(script.IsPayToWitnessScriptHash());
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 0);
+    }
+
+    // P2TR
+    {
+        const auto script{GetScriptForDestination(WitnessV1Taproot(XOnlyPubKey(pubkey)))};
+        BOOST_CHECK(script.IsPayToTaproot());
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 0);
+    }
+
+    // P2PK (compressed)
+    {
+        const auto script{GetScriptForRawPubKey(pubkey)};
+        BOOST_CHECK_EQUAL(script.size(), 35);
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 1);
+    }
+
+    // P2PK (uncompressed)
+    {
+        CKey uncompressedKey;
+        uncompressedKey.MakeNewKey(false);
+        const auto script{GetScriptForRawPubKey(uncompressedKey.GetPubKey())};
+        BOOST_CHECK_EQUAL(script.size(), 67);
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 1);
+    }
+
+    // MULTISIG
+    {
+        std::vector<CPubKey> keys;
+        keys.push_back(pubkey);
+        keys.push_back(pubkey);  // Using the same key twice for simplicity
+        const auto script{GetScriptForMultisig(1, keys)};
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(false), 20);  // Default max pubkeys
+        BOOST_CHECK_EQUAL(script.GetLegacySigOpCount(true), 2);    // Actual count when accurate=true
+    }
+}
+
 BOOST_AUTO_TEST_CASE(GetSigOpCount)
 {
-    // Test CScript::GetSigOpCount()
     CScript s1;
-    BOOST_CHECK_EQUAL(s1.GetSigOpCount(false), 0U);
-    BOOST_CHECK_EQUAL(s1.GetSigOpCount(true), 0U);
+    BOOST_CHECK_EQUAL(s1.GetLegacySigOpCount(false), 0U);
+    BOOST_CHECK_EQUAL(s1.GetLegacySigOpCount(true), 0U);
 
     uint160 dummy;
     s1 << OP_1 << ToByteVector(dummy) << ToByteVector(dummy) << OP_2 << OP_CHECKMULTISIG;
-    BOOST_CHECK_EQUAL(s1.GetSigOpCount(true), 2U);
+    BOOST_CHECK_EQUAL(s1.GetLegacySigOpCount(true), 2U);
     s1 << OP_IF << OP_CHECKSIG << OP_ENDIF;
-    BOOST_CHECK_EQUAL(s1.GetSigOpCount(true), 3U);
-    BOOST_CHECK_EQUAL(s1.GetSigOpCount(false), 21U);
+    BOOST_CHECK_EQUAL(s1.GetLegacySigOpCount(true), 3U);
+    BOOST_CHECK_EQUAL(s1.GetLegacySigOpCount(false), 21U);
 
     CScript p2sh = GetScriptForDestination(ScriptHash(s1));
     CScript scriptSig;
@@ -54,15 +184,25 @@ BOOST_AUTO_TEST_CASE(GetSigOpCount)
         keys.push_back(k.GetPubKey());
     }
     CScript s2 = GetScriptForMultisig(1, keys);
-    BOOST_CHECK_EQUAL(s2.GetSigOpCount(true), 3U);
-    BOOST_CHECK_EQUAL(s2.GetSigOpCount(false), 20U);
+    BOOST_CHECK_EQUAL(s2.GetLegacySigOpCount(true), 3U);
+    BOOST_CHECK_EQUAL(s2.GetLegacySigOpCount(false), 20U);
 
     p2sh = GetScriptForDestination(ScriptHash(s2));
-    BOOST_CHECK_EQUAL(p2sh.GetSigOpCount(true), 0U);
-    BOOST_CHECK_EQUAL(p2sh.GetSigOpCount(false), 0U);
+    BOOST_CHECK_EQUAL(p2sh.GetLegacySigOpCount(true), 0U);
+    BOOST_CHECK_EQUAL(p2sh.GetLegacySigOpCount(false), 0U);
     CScript scriptSig2;
     scriptSig2 << OP_1 << ToByteVector(dummy) << ToByteVector(dummy) << Serialize(s2);
     BOOST_CHECK_EQUAL(p2sh.GetSigOpCount(scriptSig2), 3U);
+}
+
+BOOST_AUTO_TEST_CASE(randomized_sigopcount_no_throw)
+{
+    for (int i{0}; i < 1'000; ++i) {
+        std::vector raw{m_rng.randbytes(m_rng.randrange(100))};
+        CScript script{raw.begin(), raw.end()};
+        BOOST_CHECK_NO_THROW(script.GetLegacySigOpCount(false));
+        BOOST_CHECK_NO_THROW(script.GetLegacySigOpCount(true));
+    }
 }
 
 /**
