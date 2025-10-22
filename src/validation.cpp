@@ -3136,9 +3136,37 @@ bool Chainstate::ConnectTip(
     // num_blocks_total may be zero until the ConnectBlock() call below.
     LogDebug(BCLog::BENCH, "  - Load block from disk: %.2fms\n",
              Ticks<MillisecondsDouble>(time_2 - time_1));
+    auto& vtx{block_to_connect->vtx};
     {
-        CCoinsViewCache view(&CoinsTip());
-        bool rv = ConnectBlock(*block_to_connect, state, pindexNew, view);
+        auto& db_cache{CoinsDB()};
+        auto& cache{CoinsTip()};
+        CCoinsViewCache block_cache(&cache);
+
+        {
+            std::unordered_set<Txid, SaltedTxidHasher> block_txids;
+            block_txids.reserve(vtx.size() - 1);
+
+            auto input_count{std::accumulate(std::next(vtx.cbegin()), vtx.cend(), size_t{0}, [](auto sum, const auto& tx) { return sum + tx->vin.size(); } )};
+            std::vector<COutPoint> missing;
+            missing.reserve(input_count);
+            for (uint32_t i{1}; i < vtx.size(); ++i) {
+                for (const auto& vin : vtx[i]->vin) {
+                    if (!cache.HaveCoinInCache(vin.prevout) && !block_txids.contains(vin.prevout.hash)) {
+                        missing.push_back(vin.prevout);
+                    }
+                }
+                block_txids.insert(vtx[i]->GetHash());
+            }
+            // std::ranges::sort(missing, [](const auto& a, const auto& b) { return a < b; }); // Sort for disk locality
+
+            for (const auto& outpoint : missing) {
+                if (auto coin{db_cache.GetCoin(outpoint)}) {
+                    block_cache.EmplaceCoinInternalDANGER(COutPoint{outpoint}, std::move(*coin));
+                }
+            }
+        }
+
+        bool rv = ConnectBlock(*block_to_connect, state, pindexNew, block_cache);
         if (m_chainman.m_options.signals) {
             m_chainman.m_options.signals->BlockChecked(block_to_connect, state);
         }
@@ -3155,7 +3183,7 @@ bool Chainstate::ConnectTip(
                  Ticks<MillisecondsDouble>(time_3 - time_2),
                  Ticks<SecondsDouble>(m_chainman.time_connect_total),
                  Ticks<MillisecondsDouble>(m_chainman.time_connect_total) / m_chainman.num_blocks_total);
-        bool flushed = view.Flush();
+        bool flushed = block_cache.Flush();
         assert(flushed);
     }
     const auto time_4{SteadyClock::now()};
@@ -3176,8 +3204,8 @@ bool Chainstate::ConnectTip(
              Ticks<MillisecondsDouble>(m_chainman.time_chainstate) / m_chainman.num_blocks_total);
     // Remove conflicting transactions from the mempool.;
     if (m_mempool) {
-        m_mempool->removeForBlock(block_to_connect->vtx, pindexNew->nHeight);
-        disconnectpool.removeForBlock(block_to_connect->vtx);
+        m_mempool->removeForBlock(vtx, pindexNew->nHeight);
+        disconnectpool.removeForBlock(vtx);
     }
     // Update m_chain & related variables.
     m_chain.SetTip(*pindexNew);
