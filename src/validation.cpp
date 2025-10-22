@@ -3157,7 +3157,7 @@ bool Chainstate::ConnectTip(
                 }
                 block_txids.insert(vtx[i]->GetHash());
             }
-            // std::ranges::sort(missing, [](const auto& a, const auto& b) { return a < b; }); // Sort for disk locality
+            std::ranges::sort(missing, [](const auto& a, const auto& b) { return a < b; }); // Sort for disk locality
 
             for (const auto& outpoint : missing) {
                 if (auto coin{db_cache.GetCoin(outpoint)}) {
