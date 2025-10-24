@@ -122,7 +122,7 @@ class TestNode():
         self.rpchost = rpchost
         self.rpc_timeout = timewait  # Already multiplied by timeout_factor
         self.timeout_factor = timeout_factor
-        self.binaries = binaries
+        self.binary = bitcoind
         self.coverage_dir = coverage_dir
         self.cwd = cwd
         self.has_explicit_bind = False
@@ -318,7 +318,7 @@ class TestNode():
         else:  # mode==CLI
             return TestNodeCLI(self.binaries)(
                 f"-datadir={self.datadir_path}",
-                f"-rpcclienttimeout={client_timeout}",
+                f"-rpcclienttimeout={int(client_timeout)}",
                 f"-rpcconnect={host}",
                 f"-rpcport={port}",
             )
