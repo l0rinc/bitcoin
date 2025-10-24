@@ -3158,7 +3158,7 @@ bool Chainstate::ConnectTip(
                 block_txids.insert(vtx[i]->GetHash());
             }
             block_txids.clear();
-            // TODO std::ranges::sort(missing, [](const auto& a, const auto& b) { return a < b; }); // Sort for disk locality
+            std::ranges::sort(inputs, [](const auto& a, const auto& b) { return a < b; }); // Sort for disk locality
 
             for (const auto& op : inputs) {
                 if (!cache.HaveCoinInCache(op)) {
