@@ -147,7 +147,7 @@ static leveldb::Options GetOptions(size_t nCacheSize)
     options.block_size = 4096; // cap: 1 << 10, 4 << 20
     options.block_restart_interval = 16;
     options.write_buffer_size = 2'097'152; // cap: 64 << 10, 1 << 30
-    options.filter_policy = leveldb::NewBloomFilterPolicy(10);
+    options.filter_policy = nullptr; // bloom filters only help with missing values
     options.compression = leveldb::kNoCompression;
     options.info_log = new CBitcoinLevelDBLogger();
     if (leveldb::kMajorVersion > 1 || (leveldb::kMajorVersion == 1 && leveldb::kMinorVersion >= 16)) {
