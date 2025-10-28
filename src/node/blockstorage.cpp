@@ -903,7 +903,7 @@ void BlockManager::UpdateBlockInfo(const CBlock& block, unsigned int nHeight, co
     }
 
     // Update the file information with the current block.
-    const unsigned int added_size = ::GetSerializeSize(TX_WITH_WITNESS(block));
+    const auto added_size{static_cast<uint32_t>(GetSerializeSize(TX_WITH_WITNESS(block)))};
     const int nFile = pos.nFile;
     if (static_cast<int>(m_blockfile_info.size()) <= nFile) {
         m_blockfile_info.resize(nFile + 1);
@@ -1096,7 +1096,7 @@ bool BlockManager::ReadRawBlock(std::vector<std::byte>& block, const FlatFilePos
 
 FlatFilePos BlockManager::WriteBlock(const CBlock& block, int nHeight)
 {
-    const unsigned int block_size{static_cast<unsigned int>(GetSerializeSize(TX_WITH_WITNESS(block)))};
+    const auto block_size{static_cast<uint32_t>(GetSerializeSize(TX_WITH_WITNESS(block)))};
     FlatFilePos pos{FindNextBlockPos(block_size + STORAGE_HEADER_BYTES, nHeight, block.GetBlockTime())};
     if (pos.IsNull()) {
         LogError("FindNextBlockPos failed for %s while writing block", pos.ToString());
