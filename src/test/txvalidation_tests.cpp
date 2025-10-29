@@ -503,7 +503,7 @@ BOOST_FIXTURE_TEST_CASE(version3_tests, RegTestingSetup)
     // Parent + child with TRUC in the mempool. Child is allowed as long as it is under TRUC_CHILD_MAX_VSIZE.
     auto tx_mempool_v3_child = make_tx({COutPoint{mempool_tx_v3->GetHash(), 0}}, /*version=*/3);
     {
-        BOOST_CHECK(GetTransactionWeight(*tx_mempool_v3_child) <= TRUC_CHILD_MAX_VSIZE * WITNESS_SCALE_FACTOR);
+        BOOST_CHECK(GetTransactionWeight(*tx_mempool_v3_child) <= int64_t(TRUC_CHILD_MAX_VSIZE * WITNESS_SCALE_FACTOR));
         auto ancestors{pool.CalculateMemPoolAncestors(entry.FromTx(tx_mempool_v3_child), m_limits)};
         BOOST_CHECK(SingleTRUCChecks(tx_mempool_v3_child, *ancestors, empty_conflicts_set, GetVirtualTransactionSize(*tx_mempool_v3_child)) == std::nullopt);
         AddToMempool(pool, entry.FromTx(tx_mempool_v3_child));

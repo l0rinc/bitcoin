@@ -147,7 +147,7 @@ BOOST_AUTO_TEST_CASE( comparison ) // <= >= < >
                    uint256{"0000000000000000000000000000000000000000000000000000000000000001"});
 }
 
-BOOST_AUTO_TEST_CASE(methods) // GetHex FromHex begin() end() size() GetLow64 GetSerializeSize, Serialize, Unserialize
+BOOST_AUTO_TEST_CASE(methods)
 {
     BOOST_CHECK_EQUAL(R1L.GetHex(), R1L.ToString());
     BOOST_CHECK_EQUAL(R2L.GetHex(), R2L.ToString());

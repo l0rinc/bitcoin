@@ -80,7 +80,7 @@ private:
     mutable Parents m_parents;
     mutable Children m_children;
     const CAmount nFee;             //!< Cached to avoid expensive parent-transaction lookups
-    const int32_t nTxWeight;         //!< ... and avoid recomputing tx weight (also used for GetTxSize())
+    const int32_t nTxWeight;        //!< ... and avoid recomputing tx weight (also used for GetTxSize())
     const size_t nUsageSize;        //!< ... and total memory usage
     const int64_t nTime;            //!< Local time when entering the mempool
     const uint64_t entry_sequence;  //!< Sequence number used to determine whether this transaction is too recent for relay

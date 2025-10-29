@@ -107,9 +107,9 @@ CAmount CTransaction::GetValueOut() const
     return nValueOut;
 }
 
-unsigned int CTransaction::GetTotalSize() const
+uint32_t CTransaction::GetTotalSize() const
 {
-    return ::GetSerializeSize(TX_WITH_WITNESS(*this));
+    return GetSerializeSize(TX_WITH_WITNESS(*this));
 }
 
 std::string CTransaction::ToString() const
