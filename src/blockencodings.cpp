@@ -192,29 +192,33 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
     block = header;
     block.vtx.resize(txn_available.size());
 
-    unsigned int tx_missing_size = 0;
+    [[maybe_unused]] uint32_t tx_missing_size{0};
     size_t tx_missing_offset = 0;
     for (size_t i = 0; i < txn_available.size(); i++) {
         if (!txn_available[i]) {
-            if (vtx_missing.size() <= tx_missing_offset)
+            if (vtx_missing.size() <= tx_missing_offset) {
                 return READ_STATUS_INVALID;
+            }
             block.vtx[i] = vtx_missing[tx_missing_offset++];
-            tx_missing_size += block.vtx[i]->GetTotalSize();
-        } else
+            if (LogAcceptCategory(BCLog::CMPCTBLOCK, BCLog::Level::Debug)) {
+                tx_missing_size += block.vtx[i]->GetTotalSize();
+            }
+        } else {
             block.vtx[i] = std::move(txn_available[i]);
+        }
     }
 
     // Make sure we can't call FillBlock again.
     header.SetNull();
     txn_available.clear();
 
-    if (vtx_missing.size() != tx_missing_offset)
+    if (vtx_missing.size() != tx_missing_offset) {
         return READ_STATUS_INVALID;
+    }
 
     // Check for possible mutations early now that we have a seemingly good block
     IsBlockMutatedFn check_mutated{m_check_block_mutated_mock ? m_check_block_mutated_mock : IsBlockMutated};
-    if (check_mutated(/*block=*/block,
-                       /*check_witness_root=*/segwit_active)) {
+    if (check_mutated(/*block=*/block, /*check_witness_root=*/segwit_active)) {
         return READ_STATUS_FAILED; // Possible Short ID collision
     }
 
