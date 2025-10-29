@@ -192,14 +192,16 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
     block = header;
     block.vtx.resize(txn_available.size());
 
-    unsigned int tx_missing_size = 0;
+    uint64_t tx_missing_size = 0;
     size_t tx_missing_offset = 0;
     for (size_t i = 0; i < txn_available.size(); i++) {
         if (!txn_available[i]) {
             if (vtx_missing.size() <= tx_missing_offset)
                 return READ_STATUS_INVALID;
             block.vtx[i] = vtx_missing[tx_missing_offset++];
-            tx_missing_size += block.vtx[i]->GetTotalSize();
+            if (LogAcceptCategory(BCLog::CMPCTBLOCK, BCLog::Level::Debug)) {
+                tx_missing_size += block.vtx[i]->GetTotalSize();
+            }
         } else
             block.vtx[i] = std::move(txn_available[i]);
     }

@@ -429,7 +429,7 @@ void minisketch_destroy(minisketch* sketch) {
     }
 }
 
-size_t minisketch_serialized_size(const minisketch* sketch) {
+uint32_t minisketch_serialized_size(const minisketch* sketch) {
     const Sketch* s = (const Sketch*)sketch;
     s->Check();
     size_t bits = s->Bits();

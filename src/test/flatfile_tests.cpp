@@ -39,8 +39,8 @@ BOOST_AUTO_TEST_CASE(flatfile_open)
     std::string line2("Digital signatures provide part of the solution, but the main benefits are "
                       "lost if a trusted third party is still required to prevent double-spending.");
 
-    uint64_t pos1{0};
-    uint64_t pos2{pos1 + GetSerializeSize(line1)};
+    uint32_t pos1{0};
+    uint32_t pos2{pos1 + GetSerializeSize(line1)};
 
     // Write first line to file.
     {

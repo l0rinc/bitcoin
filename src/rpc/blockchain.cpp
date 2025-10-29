@@ -1904,7 +1904,7 @@ static inline bool SetHasKeys(const std::set<T>& set, const Tk& key, const Args&
 }
 
 // outpoint (needed for the utxo index) + nHeight + fCoinBase
-static constexpr size_t PER_UTXO_OVERHEAD = sizeof(COutPoint) + sizeof(uint32_t) + sizeof(bool);
+static constexpr uint32_t PER_UTXO_OVERHEAD{sizeof(COutPoint) + sizeof(uint32_t) + sizeof(bool)};
 
 static RPCHelpMan getblockstats()
 {
@@ -2033,7 +2033,7 @@ static RPCHelpMan getblockstats()
             for (const CTxOut& out : tx->vout) {
                 tx_total_out += out.nValue;
 
-                uint64_t out_size{GetSerializeSize(out) + PER_UTXO_OVERHEAD};
+                auto out_size{GetSerializeSize(out) + PER_UTXO_OVERHEAD};
                 utxo_size_inc += out_size;
 
                 // The Genesis block and the repeated BIP30 block coinbases don't change the UTXO
@@ -2085,7 +2085,7 @@ static RPCHelpMan getblockstats()
                 const CTxOut& prevoutput = coin.out;
 
                 tx_total_in += prevoutput.nValue;
-                uint64_t prevout_size{GetSerializeSize(prevoutput) + PER_UTXO_OVERHEAD};
+                auto prevout_size{GetSerializeSize(prevoutput) + PER_UTXO_OVERHEAD};
                 utxo_size_inc -= prevout_size;
                 utxo_size_inc_actual -= prevout_size;
             }

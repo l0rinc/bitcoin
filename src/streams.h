@@ -98,7 +98,7 @@ public:
         return (*this);
     }
 
-    size_t size() const { return m_data.size(); }
+    uint32_t size() const { return m_data.size(); }
     bool empty() const { return m_data.empty(); }
 
     void read(std::span<std::byte> dst)

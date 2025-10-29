@@ -351,7 +351,7 @@ public:
      * "Total Size" defined in BIP141 and BIP144.
      * @return Total transaction size in bytes
      */
-    unsigned int GetTotalSize() const;
+    uint32_t GetTotalSize() const;
 
     bool IsCoinBase() const
     {

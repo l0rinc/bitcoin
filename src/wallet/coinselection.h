@@ -135,7 +135,7 @@ struct CoinSelectionParams {
     /** Randomness to use in the context of coin selection. */
     FastRandomContext& rng_fast;
     /** Size of a change output in bytes, determined by the output type. */
-    int change_output_size = 0;
+    int32_t change_output_size = 0;
     /** Size of the input to spend a change output in virtual bytes. */
     int change_spend_size = 0;
     /** Mininmum change to target in Knapsack solver and CoinGrinder:
@@ -158,7 +158,7 @@ struct CoinSelectionParams {
     CFeeRate m_discard_feerate;
     /** Size of the transaction before coin selection, consisting of the header and recipient
      * output(s), excluding the inputs and change output(s). */
-    int tx_noinputs_size = 0;
+    int32_t tx_noinputs_size = 0;
     /** Indicate that we are subtracting the fee from outputs */
     bool m_subtract_fee_outputs = false;
     /** When true, always spend all (up to OUTPUT_GROUP_MAX_ENTRIES) or none of the outputs
@@ -177,7 +177,7 @@ struct CoinSelectionParams {
 
     CoinSelectionParams(FastRandomContext& rng_fast, int change_output_size, int change_spend_size,
                         CAmount min_change_target, CFeeRate effective_feerate,
-                        CFeeRate long_term_feerate, CFeeRate discard_feerate, int tx_noinputs_size, bool avoid_partial,
+                        CFeeRate long_term_feerate, CFeeRate discard_feerate, int32_t tx_noinputs_size, bool avoid_partial,
                         std::optional<int> max_tx_weight = std::nullopt)
         : rng_fast{rng_fast},
           change_output_size(change_output_size),

@@ -801,7 +801,7 @@ fs::path BlockManager::GetBlockPosFilename(const FlatFilePos& pos) const
     return m_block_file_seq.FileName(pos);
 }
 
-FlatFilePos BlockManager::FindNextBlockPos(unsigned int nAddSize, unsigned int nHeight, uint64_t nTime)
+FlatFilePos BlockManager::FindNextBlockPos(uint32_t nAddSize, unsigned int nHeight, uint64_t nTime)
 {
     LOCK(cs_LastBlockFile);
 
@@ -822,7 +822,7 @@ FlatFilePos BlockManager::FindNextBlockPos(unsigned int nAddSize, unsigned int n
     }
 
     bool finalize_undo = false;
-    unsigned int max_blockfile_size{MAX_BLOCKFILE_SIZE};
+    auto max_blockfile_size{MAX_BLOCKFILE_SIZE};
     // Use smaller blockfiles in test-only -fastprune mode - but avoid
     // the possibility of having a block not fit into the block file.
     if (m_opts.fast_prune) {
@@ -903,9 +903,9 @@ void BlockManager::UpdateBlockInfo(const CBlock& block, unsigned int nHeight, co
     }
 
     // Update the file information with the current block.
-    const auto added_size{static_cast<uint32_t>(GetSerializeSize(TX_WITH_WITNESS(block)))};
-    const int nFile = pos.nFile;
-    if (static_cast<int>(m_blockfile_info.size()) <= nFile) {
+    const auto added_size{GetSerializeSize(TX_WITH_WITNESS(block))};
+    const int32_t nFile{pos.nFile};
+    if (int32_t(m_blockfile_info.size()) <= nFile) {
         m_blockfile_info.resize(nFile + 1);
     }
     m_blockfile_info[nFile].AddBlock(nHeight, block.GetBlockTime());
@@ -913,7 +913,7 @@ void BlockManager::UpdateBlockInfo(const CBlock& block, unsigned int nHeight, co
     m_dirty_fileinfo.insert(nFile);
 }
 
-bool BlockManager::FindUndoPos(BlockValidationState& state, int nFile, FlatFilePos& pos, unsigned int nAddSize)
+bool BlockManager::FindUndoPos(BlockValidationState& state, int nFile, FlatFilePos& pos, uint32_t nAddSize)
 {
     pos.nFile = nFile;
 
@@ -944,7 +944,7 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
     // Write undo information to disk
     if (block.GetUndoPos().IsNull()) {
         FlatFilePos pos;
-        const auto blockundo_size{static_cast<uint32_t>(GetSerializeSize(blockundo))};
+        const auto blockundo_size{GetSerializeSize(blockundo)};
         if (!FindUndoPos(state, block.nFile, pos, blockundo_size + UNDO_DATA_DISK_OVERHEAD)) {
             LogError("FindUndoPos failed for %s while writing block undo", pos.ToString());
             return false;
@@ -1068,7 +1068,7 @@ bool BlockManager::ReadRawBlock(std::vector<std::byte>& block, const FlatFilePos
 
     try {
         MessageStartChars blk_start;
-        unsigned int blk_size;
+        uint32_t blk_size;
 
         filein >> blk_start >> blk_size;
 
@@ -1096,7 +1096,7 @@ bool BlockManager::ReadRawBlock(std::vector<std::byte>& block, const FlatFilePos
 
 FlatFilePos BlockManager::WriteBlock(const CBlock& block, int nHeight)
 {
-    const auto block_size{static_cast<uint32_t>(GetSerializeSize(TX_WITH_WITNESS(block)))};
+    const auto block_size{GetSerializeSize(TX_WITH_WITNESS(block))};
     FlatFilePos pos{FindNextBlockPos(block_size + STORAGE_HEADER_BYTES, nHeight, block.GetBlockTime())};
     if (pos.IsNull()) {
         LogError("FindNextBlockPos failed for %s while writing block", pos.ToString());
