@@ -68,11 +68,13 @@
 #include <cassert>
 #include <chrono>
 #include <deque>
+#include <filesystem>
 #include <numeric>
 #include <optional>
 #include <ranges>
 #include <span>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 
@@ -2942,6 +2944,27 @@ void Chainstate::PruneAndFlush()
     }
 }
 
+static std::pair<size_t, size_t> GetDirectoryStats(const fs::path& dir_path)
+{
+    assert(fs::exists(dir_path) && fs::is_directory(dir_path));
+    for (int attempts{0}; attempts < 100; ++attempts) {
+        try {
+            size_t file_count{0}, total_bytes{0};
+            for (const auto& entry : fs::recursive_directory_iterator(dir_path)) {
+                if (entry.is_regular_file()) {
+                    ++file_count;
+                    total_bytes += entry.file_size();
+                }
+            }
+            return {file_count, total_bytes};
+        } catch (const fs::filesystem_error&) {
+            // can fail during compaction
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+        }
+    }
+    std::terminate();
+}
+
 static void UpdateTipLog(
     const ChainstateManager& chainman,
     const CCoinsViewCache& coins_tip,
@@ -2953,8 +2976,12 @@ static void UpdateTipLog(
 
     AssertLockHeld(::cs_main);
 
-    // Disable rate limiting in LogPrintLevel_ so this source location may log during IBD.
-    LogPrintLevel_(BCLog::LogFlags::ALL, BCLog::Level::Info, /*should_ratelimit=*/false, "%s%s: new best=%s height=%d version=0x%08x log2_work=%f tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)%s\n",
+    const fs::path datadir{"/mnt/my_storage/BitcoinData"}; // TODO shouldn't be hard-coded
+    auto [chainstate_files, chainstate_bytes] = GetDirectoryStats(datadir / "chainstate");
+    auto [index_files, index_bytes] = GetDirectoryStats(datadir / "blocks" / "index");
+
+    LogPrintLevel_(BCLog::LogFlags::ALL, BCLog::Level::Info, /*should_ratelimit=*/false,
+                   "%s%s: new best=%s height=%d version=0x%08x log2_work=%f tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo) chainstate=%zu files/%zu bytes index=%zu files/%zu bytes%s\n",
                    prefix, func_name,
                    tip->GetBlockHash().ToString(), tip->nHeight, tip->nVersion,
                    log(tip->nChainWork.getdouble()) / log(2.0), tip->m_chain_tx_count,
@@ -2962,6 +2989,8 @@ static void UpdateTipLog(
                    chainman.GuessVerificationProgress(tip),
                    coins_tip.DynamicMemoryUsage() * (1.0 / (1 << 20)),
                    coins_tip.GetCacheSize(),
+                   chainstate_files, chainstate_bytes,
+                   index_files, index_bytes,
                    !warning_messages.empty() ? strprintf(" warning='%s'", warning_messages) : "");
 }
 
