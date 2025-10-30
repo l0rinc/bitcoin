@@ -5,8 +5,10 @@
 #include <bench/bench.h>
 #include <blockencodings.h>
 #include <consensus/amount.h>
+#include <consensus/merkle.h>
 #include <kernel/cs_main.h>
 #include <net_processing.h>
+#include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
 #include <sync.h>
@@ -15,9 +17,9 @@
 #include <txmempool.h>
 #include <util/check.h>
 
+#include <array>
 #include <memory>
 #include <vector>
-
 
 static void AddTx(const CTransactionRef& tx, const CAmount& fee, CTxMemPool& pool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, pool.cs)
 {
@@ -51,7 +53,7 @@ public:
     {
         shorttxids.reserve(txs);
         while (txs-- > 0) {
-            shorttxids.push_back(rng.randbits<SHORTTXIDS_LENGTH*8>());
+            shorttxids.push_back(rng.randbits<SHORTTXIDS_LENGTH * 8>());
         }
     }
 };
@@ -69,7 +71,7 @@ static void BlockEncodingBench(benchmark::Bench& bench, size_t n_pool, size_t n_
     extratxn.reserve(n_extra);
 
     // bump up the size of txs
-    std::array<std::byte,200> sigspam;
+    std::array<std::byte, 200> sigspam;
     sigspam.fill(std::byte(42));
 
     // a reasonably large mempool of 50k txs, ~10MB total
@@ -110,6 +112,65 @@ static void BlockEncodingBench(benchmark::Bench& bench, size_t n_pool, size_t n_
     });
 }
 
+static void BlockReconstructFill(benchmark::Bench& bench)
+{
+    const auto testing_setup = MakeNoLogFileContext<const ChainTestingSetup>(ChainType::MAIN);
+    CTxMemPool& pool = *Assert(testing_setup->m_node.mempool);
+    InsecureRandomContext rng(11);
+
+    LOCK2(cs_main, pool.cs);
+
+    std::array<std::byte, 200> sigspam;
+    sigspam.fill(std::byte(42));
+
+    // Create a proper block with 3000 transactions
+    CBlock block;
+    block.nVersion = 5;
+    block.hashPrevBlock.SetNull();
+    block.nTime = 1231006505;
+    block.nBits = 0x1d00ffff;
+    block.nNonce = 2083236893;
+
+    // Coinbase with proper null prevout
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vout.resize(1);
+    coinbase.vout[0].nValue = 50 * COIN;
+    block.vtx.emplace_back(MakeTransactionRef(coinbase));
+
+    // Add 3000 transactions
+    std::vector<CTransactionRef> vtx_missing;
+    vtx_missing.reserve(3000);
+    for (std::size_t i{0}; i < 3000; ++i) {
+        CMutableTransaction tx;
+        tx.vin.resize(1);
+        tx.vin[0].scriptSig = CScript() << sigspam;
+        tx.vout.resize(1);
+        tx.vout[0].scriptPubKey = CScript() << OP_1 << OP_EQUAL;
+        tx.vout[0].nValue = i;
+        vtx_missing.emplace_back(MakeTransactionRef(tx));
+        block.vtx.push_back(vtx_missing.back());
+    }
+
+    // Compute correct merkle root
+    bool mutated;
+    block.hashMerkleRoot = BlockMerkleRoot(block, &mutated);
+
+    // Create compact block from the real block
+    CBlockHeaderAndShortTxIDs cmpctblock{block, rng.rand64()};
+
+    bench.run([&] {
+        PartiallyDownloadedBlock pdb{&pool};
+        auto res = pdb.InitData(cmpctblock, /*extra_txn=*/{});
+        assert(res == READ_STATUS_OK);
+
+        CBlock out;
+        auto st = pdb.FillBlock(out, vtx_missing, /*segwit_active=*/false);
+        assert(st == READ_STATUS_OK);
+    });
+}
+
 static void BlockEncodingNoExtra(benchmark::Bench& bench)
 {
     BlockEncodingBench(bench, 50000, 0);
@@ -129,3 +190,4 @@ static void BlockEncodingLargeExtra(benchmark::Bench& bench)
 BENCHMARK(BlockEncodingNoExtra, benchmark::PriorityLevel::HIGH);
 BENCHMARK(BlockEncodingStdExtra, benchmark::PriorityLevel::HIGH);
 BENCHMARK(BlockEncodingLargeExtra, benchmark::PriorityLevel::HIGH);
+BENCHMARK(BlockReconstructFill, benchmark::PriorityLevel::HIGH);
