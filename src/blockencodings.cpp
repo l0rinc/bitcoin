@@ -212,12 +212,6 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
 
     if (vtx_missing.size() != tx_missing_offset) {
         return READ_STATUS_INVALID;
-
-    // Check for possible mutations early now that we have a seemingly good block
-    IsBlockMutatedFn check_mutated{m_check_block_mutated_mock ? m_check_block_mutated_mock : IsBlockMutated};
-    if (check_mutated(/*block=*/block,
-                       /*check_witness_root=*/segwit_active)) {
-        return READ_STATUS_FAILED; // Possible Short ID collision
     }
 
     // Check for possible mutations early now that we have a seemingly good block
