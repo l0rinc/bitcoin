@@ -46,12 +46,16 @@ private:
         //! Workers set this after setting the coin. The main thread tests this before reading the coin.
         std::atomic_flag ready{};
         //! The outpoint to fetch;
-        const COutPoint& outpoint;
+        const COutPoint* outpoint;
         //! The coin that workers will fetch and main thread will insert into cache.
         std::optional<Coin> coin{std::nullopt};
 
+        Input& operator=(Input&& other) noexcept {
+            outpoint = other.outpoint;
+            return *this;
+        }
         Input(Input&& other) noexcept : outpoint{other.outpoint} {} // Only moved in setup for reallocation.
-        explicit Input(const COutPoint& o LIFETIMEBOUND) noexcept : outpoint{o} {}
+        explicit Input(const COutPoint* o LIFETIMEBOUND) noexcept : outpoint{o} {}
     };
     std::vector<Input> m_inputs{};
 
@@ -84,15 +88,16 @@ private:
         const auto i{m_input_head.fetch_add(1, std::memory_order_relaxed)};
         if (i >= m_inputs.size()) [[unlikely]] return false;
         auto& input{m_inputs[i]};
-        if (std::ranges::binary_search(m_txids, input.outpoint.hash.ToUint256().GetUint64(0))) {
+        const auto& outpoint{*input.outpoint};
+        if (std::ranges::binary_search(m_txids, outpoint.hash.ToUint256().GetUint64(0))) {
             input.ready.test_and_set(std::memory_order_relaxed);
             input.ready.notify_one();
             return true;
         }
-        auto coin{m_cache->GetPossiblySpentCoinFromCache(input.outpoint)};
+        auto coin{m_cache->GetPossiblySpentCoinFromCache(outpoint)};
         if (!coin) {
             try {
-                coin = m_db->GetCoin(input.outpoint);
+                coin = m_db->GetCoin(outpoint);
             } catch (const std::runtime_error& e) {
                 LogPrintLevel(BCLog::VALIDATION, BCLog::Level::Warning, "InputFetcher failed to fetch input: %s.", e.what());
             }
@@ -119,9 +124,10 @@ public:
             const auto& tx{block.vtx[i]};
             outputs_count += tx->vout.size();
             m_txids.emplace_back(tx->GetHash().ToUint256().GetUint64(0));
-            for (const auto& input : tx->vin) m_inputs.emplace_back(input.prevout);
+            for (const auto& input : tx->vin) m_inputs.emplace_back(&input.prevout);
         }
         std::ranges::sort(m_txids);
+        std::sort(m_inputs.begin(), m_inputs.end(), [](const Input& a, const Input& b) { return *a.outpoint < *b.outpoint; });
 
         // Setup shared pointers and start workers.
         m_db = &db;
@@ -141,7 +147,7 @@ public:
                 }
             }
             if (input.coin) {
-                temp_cache.EmplaceCoinInternalDANGER(COutPoint{input.outpoint}, std::move(*input.coin));
+                temp_cache.EmplaceCoinInternalDANGER(COutPoint{*input.outpoint}, std::move(*input.coin));
             }
         }
 
