@@ -17,6 +17,7 @@
 #include <atomic>
 #include <barrier>
 #include <cstdint>
+#include <set>
 #include <stdexcept>
 #include <thread>
 #include <unordered_set>
@@ -38,9 +39,8 @@
  */
 class InputFetcher
 {
-private:
     //! The latest input being fetched. Workers atomically increment this when fetching.
-    alignas(64) std::atomic_size_t m_input_head{0};
+    alignas(64) std::atomic_int32_t m_input_head{0};
 
     //! The inputs of the block which is being fetched.
     struct Input {
@@ -59,7 +59,7 @@ private:
         Coin coin{};
 
         Input(Input&& other) noexcept : outpoint{other.outpoint} {} // Only moved in setup for reallocation.
-        Input(const COutPoint& o LIFETIMEBOUND) noexcept : outpoint{o} {}
+        explicit Input(const COutPoint& o LIFETIMEBOUND) noexcept : outpoint{o} {}
     };
     std::vector<Input> m_inputs{};
 
@@ -68,7 +68,7 @@ private:
      * Used to filter out inputs that are created and spent in the same block,
      * since they will not be in the db or the cache.
      */
-    std::unordered_set<Txid, SaltedTxidHasher> m_txids{};
+    std::set<Txid> m_txids{};
 
     //! DB coins view to fetch from.
     const CCoinsView* m_db{nullptr};
@@ -77,18 +77,15 @@ private:
 
     std::vector<std::thread> m_worker_threads{};
     std::barrier<> m_barrier;
-    bool m_request_stop{false};
 
     void WorkLoop() noexcept
     {
         while (true) {
             m_barrier.arrive_and_wait();
-            if (m_request_stop) [[unlikely]] {
-                return;
-            }
+            if (m_input_head.load(std::memory_order_relaxed) < 0) [[unlikely]] return;
             while (true) {
-                const size_t i{m_input_head.fetch_add(1, std::memory_order_relaxed)};
-                if (i >= m_inputs.size()) [[unlikely]] {
+                const auto i{m_input_head.fetch_add(1, std::memory_order_relaxed)};
+                if (i >= int32_t(m_inputs.size())) [[unlikely]] {
                     break;
                 }
                 auto& input{m_inputs[i]};
@@ -125,11 +122,10 @@ private:
     }
 
 public:
-    explicit InputFetcher(size_t worker_thread_count) noexcept
-        : m_barrier{static_cast<int32_t>(worker_thread_count + 1)}
+    explicit InputFetcher(int32_t worker_thread_count) noexcept : m_barrier{(worker_thread_count + 1)}
     {
-        for (size_t n{0}; n < worker_thread_count; ++n) {
-            m_worker_threads.emplace_back([this, n]() {
+        for (int32_t n{0}; n < worker_thread_count; ++n) {
+            m_worker_threads.emplace_back([this, n] {
                 util::ThreadRename(strprintf("inputfetch.%i", n));
                 WorkLoop();
             });
@@ -145,6 +141,8 @@ public:
 
         // Loop through the inputs of the block and set them in the queue.
         // Construct the set of txids to filter, and count the outputs to reserve for temp_cache.
+        //m_txids.reserve(block.vtx.size());
+        m_inputs.reserve(2 * block.vtx.size()); // rough guess
         auto outputs_count{block.vtx[0]->vout.size()};
         for (size_t i{1}; i < block.vtx.size(); ++i) {
             const auto& tx{block.vtx[i]};
@@ -162,7 +160,7 @@ public:
         m_barrier.arrive_and_wait();
 
         // Insert fetched coins into the temp_cache as they are set to READY.
-        temp_cache.Reserve(m_inputs.size() + outputs_count);
+        temp_cache.Reserve(temp_cache.GetCacheSize() + m_inputs.size() + outputs_count);
         for (auto& input : m_inputs) {
             auto status{input.status.load(std::memory_order_acquire)};
             while (status == Input::Status::WAITING) {
@@ -175,6 +173,7 @@ public:
                 break;
             }
         }
+        Assert(temp_cache.GetCacheSize() <= temp_cache.GetCacheSize() + m_inputs.size() + outputs_count); // TODO remove
 
         m_barrier.arrive_and_wait();
         // Cleanup after all worker threads have exited the inner loop.
@@ -186,11 +185,9 @@ public:
 
     ~InputFetcher()
     {
-        m_request_stop = true;
-        m_barrier.arrive_and_wait();
-        for (auto& t : m_worker_threads) {
-            t.join();
-        }
+        m_input_head.store(-1, std::memory_order_relaxed);
+        m_barrier.arrive_and_drop();
+        for (auto& t : m_worker_threads) t.join();
     }
 };
 
