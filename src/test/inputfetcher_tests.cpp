@@ -14,10 +14,8 @@
 
 #include <boost/test/unit_test.hpp>
 
-#include <cstdint>
 #include <memory>
 #include <stdexcept>
-#include <string>
 #include <unordered_set>
 
 BOOST_AUTO_TEST_SUITE(inputfetcher_tests)
