@@ -486,7 +486,8 @@ public:
      * Reserve enough space in the cache so the underlying unordered_map will
      * not have to rehash unless capacity is exceeded.
      */
-    void Reserve(size_t capacity) {
+    void Reserve(size_t capacity)
+    {
         cacheCoins.reserve(capacity);
     }
 
