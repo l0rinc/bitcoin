@@ -146,6 +146,8 @@ public:
         // Loop through the inputs of the block and set them in the queue.
         // Construct the set of txids to filter, and count the outputs to reserve for temp_cache.
         auto outputs_count{block.vtx[0]->vout.size()};
+        m_txids.reserve(block.vtx.size());
+        m_inputs.reserve(2 * block.vtx.size()); // rough guess
         for (size_t i{1}; i < block.vtx.size(); ++i) {
             const auto& tx{block.vtx[i]};
             outputs_count += tx->vout.size();
@@ -162,7 +164,7 @@ public:
         m_barrier.arrive_and_wait();
 
         // Insert fetched coins into the temp_cache as they are set to READY.
-        temp_cache.Reserve(m_inputs.size() + outputs_count);
+        temp_cache.Reserve(temp_cache.GetCacheSize() + m_inputs.size() + outputs_count);
         for (auto& input : m_inputs) {
             auto status{input.status.load(std::memory_order_acquire)};
             while (status == Input::Status::WAITING) {
@@ -175,6 +177,7 @@ public:
                 break;
             }
         }
+        Assert(temp_cache.GetCacheSize() <= temp_cache.GetCacheSize() + m_inputs.size() + outputs_count);
 
         m_barrier.arrive_and_wait();
         // Cleanup after all worker threads have exited the inner loop.
