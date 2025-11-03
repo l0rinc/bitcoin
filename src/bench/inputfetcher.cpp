@@ -5,45 +5,56 @@
 #include <bench/bench.h>
 #include <bench/data/block413567.raw.h>
 #include <coins.h>
-#include <common/system.h>
 #include <inputfetcher.h>
 #include <primitives/block.h>
 #include <serialize.h>
 #include <streams.h>
-#include <util/time.h>
 
-static constexpr auto DELAY{2ms};
-
-//! Simulates a DB by adding a delay when calling GetCoin
-struct DelayedCoinsView : CCoinsView {
-    std::optional<Coin> GetCoin(const COutPoint&) const override
-    {
-        UninterruptibleSleep(DELAY);
-        Coin coin{};
-        coin.out.nValue = 1;
-        return coin;
-    }
-};
-
-static void InputFetcherBenchmark(benchmark::Bench& bench)
+static void InputFetcher_SortedVectorBenchmark(benchmark::Bench& bench)
 {
     CBlock block;
     DataStream{benchmark::data::block413567} >> TX_WITH_WITNESS(block);
 
-    DelayedCoinsView db{};
-    CCoinsViewCache main_cache(&db);
-
-    // The main thread should be counted to prevent thread oversubscription, and
-    // to decrease the variance of benchmark results.
-    const auto worker_threads_num{GetNumCores() - 1};
-    InputFetcher fetcher{worker_threads_num};
-
     bench.run([&] {
-        CCoinsViewCache temp_cache(&main_cache);
-        fetcher.FetchInputs(temp_cache, main_cache, db, block);
-        ankerl::nanobench::doNotOptimizeAway(&temp_cache);
-        Assert(temp_cache.GetCacheSize() == 4599);
+        std::vector<Txid> v{};
+        v.reserve(block.vtx.size());
+        for (const auto& tx : block.vtx) {
+            v.emplace_back(tx->GetHash());
+        }
+        std::sort(v.begin(), v.end());
+        ankerl::nanobench::doNotOptimizeAway(v);
     });
 }
 
-BENCHMARK(InputFetcherBenchmark, benchmark::PriorityLevel::HIGH);
+static void InputFetcher_UnorderedSetBenchmark(benchmark::Bench& bench)
+{
+    CBlock block;
+    DataStream{benchmark::data::block413567} >> TX_WITH_WITNESS(block);
+
+    bench.run([&] {
+        std::unordered_set<Txid, SaltedTxidHasher> u{};
+        u.reserve(block.vtx.size());
+        for (const auto& tx : block.vtx) {
+            u.emplace(tx->GetHash());
+        }
+        ankerl::nanobench::doNotOptimizeAway(u);
+    });
+}
+
+static void InputFetcher_SetBenchmark(benchmark::Bench& bench)
+{
+    CBlock block;
+    DataStream{benchmark::data::block413567} >> TX_WITH_WITNESS(block);
+
+    bench.run([&] {
+        std::set<Txid> s{};
+        for (const auto& tx : block.vtx) {
+            s.insert(tx->GetHash());
+        }
+        ankerl::nanobench::doNotOptimizeAway(s);
+    });
+}
+
+BENCHMARK(InputFetcher_SortedVectorBenchmark, benchmark::PriorityLevel::HIGH);
+BENCHMARK(InputFetcher_UnorderedSetBenchmark, benchmark::PriorityLevel::HIGH);
+BENCHMARK(InputFetcher_SetBenchmark, benchmark::PriorityLevel::HIGH);

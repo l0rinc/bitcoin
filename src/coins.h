@@ -407,7 +407,7 @@ public:
      * Used in InputFetcher to make sure we do not add a coin from the backing
      * view when it is spent in the cache but not yet flushed to the parent.
      */
-    std::optional<Coin> GetPossiblySpentCoinFromCache(const COutPoint &outpoint) const noexcept;
+    std::optional<Coin> GetPossiblySpentCoinFromCache(const COutPoint& outpoint) const noexcept;
 
     /**
      * Return a reference to Coin in the cache, or coinEmpty if not found. This is

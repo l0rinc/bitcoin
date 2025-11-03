@@ -18,8 +18,7 @@
 
 using DbMap = std::map<const COutPoint, std::pair<std::optional<const Coin>, bool>>;
 
-struct DbCoinsView : CCoinsView
-{
+struct DbCoinsView : CCoinsView {
     DbMap& m_map;
     DbCoinsView(DbMap& map) noexcept : m_map(map) {}
 
@@ -35,8 +34,7 @@ struct DbCoinsView : CCoinsView
     }
 };
 
-struct NoAccessCoinsView : CCoinsView
-{
+struct NoAccessCoinsView : CCoinsView {
     std::optional<Coin> GetCoin(const COutPoint&) const override { abort(); }
 };
 
@@ -49,7 +47,8 @@ FUZZ_TARGET(inputfetcher)
         fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(2, 4)};
     InputFetcher fetcher{worker_threads};
 
-    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10000) {
+    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10000)
+    {
         CBlock block;
         Txid prevhash{Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider))};
 
@@ -61,13 +60,13 @@ FUZZ_TARGET(inputfetcher)
         NoAccessCoinsView back;
         CCoinsViewCache main_cache(&back);
 
-        LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10000) {
+        LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10000)
+        {
             CMutableTransaction tx;
 
-            LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10) {
-                const auto txid{fuzzed_data_provider.ConsumeBool()
-                    ? Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider))
-                    : prevhash};
+            LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10)
+            {
+                const auto txid{fuzzed_data_provider.ConsumeBool() ? Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider)) : prevhash};
                 const auto index{fuzzed_data_provider.ConsumeIntegral<uint32_t>()};
                 const COutPoint outpoint(txid, index);
 
@@ -87,8 +86,8 @@ FUZZ_TARGET(inputfetcher)
                     maybe_coin = std::nullopt;
                 }
                 db_map.try_emplace(outpoint, std::make_pair(
-                    maybe_coin,
-                    fuzzed_data_provider.ConsumeBool()));
+                                                 maybe_coin,
+                                                 fuzzed_data_provider.ConsumeBool()));
 
                 // Add the coin to the cache
                 if (fuzzed_data_provider.ConsumeBool()) {

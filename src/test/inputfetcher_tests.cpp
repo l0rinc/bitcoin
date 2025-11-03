@@ -48,7 +48,7 @@ private:
 
 public:
     explicit InputFetcherTest(const ChainType chainType = ChainType::MAIN,
-                             TestOpts opts = {})
+                              TestOpts opts = {})
         : BasicTestingSetup{chainType, opts}
     {
         SeedRandomForTest(SeedRand::FIXED_SEED);
@@ -200,8 +200,7 @@ BOOST_FIXTURE_TEST_CASE(fetch_no_inputs, InputFetcherTest)
     }
 }
 
-struct ThrowCoinsView : CCoinsView
-{
+struct ThrowCoinsView : CCoinsView {
     std::optional<Coin> GetCoin(const COutPoint&) const override
     {
         throw std::runtime_error("database error");

@@ -1341,7 +1341,8 @@ public:
     void RecalculateBestHeader() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     CCheckQueue<CScriptCheck>& GetCheckQueue() { return m_script_check_queue; }
-    void FetchInputs(CCoinsViewCache& temp_cache, const CCoinsViewCache& main_cache, const CCoinsView& db, const CBlock& block) noexcept {
+    void FetchInputs(CCoinsViewCache& temp_cache, const CCoinsViewCache& main_cache, const CCoinsView& db, const CBlock& block) noexcept
+    {
         m_input_fetcher.FetchInputs(temp_cache, main_cache, db, block);
     }
 

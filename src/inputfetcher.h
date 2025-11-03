@@ -46,8 +46,8 @@ private:
     struct Input {
         enum class Status : uint8_t {
             WAITING, // The coin has not been fetched yet
-            READY, // The coin has been fetched and is ready to be inserted into the cache
-            FAILED, // The coin failed to be fetched
+            READY,   // The coin has been fetched and is ready to be inserted into the cache
+            FAILED,  // The coin failed to be fetched
             SKIPPED, // The coin is created and spent in the same block so cannot be fetched
         };
 
