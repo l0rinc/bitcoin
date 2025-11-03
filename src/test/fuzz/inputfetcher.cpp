@@ -40,14 +40,18 @@ struct NoAccessCoinsView : CCoinsView
     std::optional<Coin> GetCoin(const COutPoint&) const override { abort(); }
 };
 
-FUZZ_TARGET(inputfetcher)
+std::optional<InputFetcher> g_fetcher{};
+
+static void setup_threadpool_test()
+{
+    LogInstance().DisableLogging();
+    g_fetcher.emplace(3);
+}
+
+FUZZ_TARGET(inputfetcher, .init = setup_threadpool_test)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
-
-    const auto worker_threads{
-        fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(2, 4)};
-    InputFetcher fetcher{worker_threads};
 
     LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10000) {
         CBlock block;
@@ -112,7 +116,7 @@ FUZZ_TARGET(inputfetcher)
         }
 
         CCoinsViewCache cache(&back);
-        fetcher.FetchInputs(cache, main_cache, db, block);
+        g_fetcher->FetchInputs(cache, main_cache, db, block);
 
         Coin empty_coin;
         for (const auto& [outpoint, pair] : db_map) {
