@@ -2998,6 +2998,8 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
             }
         }
     }
+    m_blockman.m_block_tree_db->CompactFull();
+    this->CoinsDB().CompactFull();
     UpdateTipLog(m_chainman, coins_tip, pindexNew, __func__, "",
                  util::Join(warning_messages, Untranslated(", ")).original);
 }
