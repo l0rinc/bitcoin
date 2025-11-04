@@ -2922,6 +2922,9 @@ bool Chainstate::FlushStateToDisk(
     } catch (const std::runtime_error& e) {
         return FatalError(m_chainman.GetNotifications(), state, strprintf(_("System error while flushing: %s"), e.what()));
     }
+    const auto compaction_start{SteadyClock::now()};
+    CoinsDB().CompactFull();
+    LogInfo("CoinsDB().CompactFull() took %dms", Ticks<std::chrono::milliseconds>(SteadyClock::now() - compaction_start));
     return true;
 }
 

@@ -56,6 +56,7 @@ public:
 
     //! @returns filesystem path to on-disk storage or std::nullopt if in memory.
     std::optional<fs::path> StoragePath() { return m_db->StoragePath(); }
+    void CompactFull() const { m_db->CompactFull(); }
 };
 
 #endif // BITCOIN_TXDB_H
