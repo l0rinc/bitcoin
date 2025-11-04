@@ -19,7 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 
-size_t g_low_memory_threshold{64_MiB};
+size_t g_low_memory_threshold{0};
 
 bool SystemNeedsMemoryReleased()
 {
