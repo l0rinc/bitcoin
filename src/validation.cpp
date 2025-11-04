@@ -1728,8 +1728,6 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransactionInternal(const CTransa
     AssertLockHeld(cs_main);
     AssertLockHeld(m_pool.cs);
 
-    const CFeeRate mempool_min_fee_rate = m_pool.GetMinFee();
-
     Workspace ws(ptx);
     const std::vector<Wtxid> single_wtxid{ws.m_ptx->GetWitnessHash()};
 
@@ -1850,7 +1848,8 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransactionInternal(const CTransa
     }
 
     // update mempool stats cache
-    CStats::DefaultStats()->addMempoolSample(m_pool.size(), m_pool.DynamicMemoryUsage(), mempool_min_fee_rate.GetFeePerK());
+    const CFeeRate min_fee_rate = std::max(m_pool.GetMinFee(), m_pool.m_opts.min_relay_feerate);
+    CStats::DefaultStats()->addMempoolSample(m_pool.size(), m_pool.DynamicMemoryUsage(), min_fee_rate.GetFeePerK());
 
     return MempoolAcceptResult::Success(std::move(m_subpackage.m_replaced_transactions), ws.m_vsize, ws.m_base_fees,
                                         effective_feerate, single_wtxid);
@@ -3482,7 +3481,8 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
 
     if (m_mempool) {
         // add mempool stats sample
-        CStats::DefaultStats()->addMempoolSample(m_mempool->size(), m_mempool->DynamicMemoryUsage(), m_mempool->GetMinFee().GetFeePerK());
+        const CFeeRate min_fee_rate = std::max(m_mempool->GetMinFee(), m_mempool->m_opts.min_relay_feerate);
+        CStats::DefaultStats()->addMempoolSample(m_mempool->size(), m_mempool->DynamicMemoryUsage(), min_fee_rate.GetFeePerK());
     }
 
     return true;
@@ -3578,7 +3578,8 @@ bool Chainstate::ConnectTip(
 
     if (m_mempool) {
         // add mempool stats sample
-        CStats::DefaultStats()->addMempoolSample(m_mempool->size(), m_mempool->DynamicMemoryUsage(), m_mempool->GetMinFee().GetFeePerK());
+        const CFeeRate min_fee_rate = std::max(m_mempool->GetMinFee(), m_mempool->m_opts.min_relay_feerate);
+        CStats::DefaultStats()->addMempoolSample(m_mempool->size(), m_mempool->DynamicMemoryUsage(), min_fee_rate.GetFeePerK());
     }
 
     const auto time_6{SteadyClock::now()};
