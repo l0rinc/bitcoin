@@ -165,6 +165,7 @@ private:
     void startExecutor();
     void setTrafficGraphRange(int mins);
     void WriteCommandHistory();
+    void ClearCommandHistory();
 
     enum ColumnWidths
     {
