@@ -52,6 +52,7 @@ add_executable(bench_bitcoin
   streams_findbyte.cpp
   strencodings.cpp
   txgraph.cpp
+  txid_membership.cpp
   txorphanage.cpp
   util_time.cpp
   verify_script.cpp
