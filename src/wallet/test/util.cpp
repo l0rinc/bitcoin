@@ -8,6 +8,7 @@
 #include <key.h>
 #include <key_io.h>
 #include <streams.h>
+#include <support/allocators/zeroafterfree.h>
 #include <test/util/setup_common.h>
 #include <validationinterface.h>
 #include <wallet/context.h>

@@ -6,6 +6,7 @@
 #define BITCOIN_WALLET_TEST_UTIL_H
 
 #include <addresstype.h>
+#include <support/allocators/zeroafterfree.h>
 #include <wallet/db.h>
 #include <wallet/scriptpubkeyman.h>
 
