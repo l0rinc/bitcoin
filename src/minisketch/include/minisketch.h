@@ -106,7 +106,7 @@ MINISKETCH_API minisketch* minisketch_clone(const minisketch* sketch);
 MINISKETCH_API void minisketch_destroy(minisketch* sketch);
 
 /** Compute the size in bytes for serializing a given sketch. */
-MINISKETCH_API size_t minisketch_serialized_size(const minisketch* sketch);
+MINISKETCH_API uint32_t minisketch_serialized_size(const minisketch* sketch);
 
 /** Serialize a sketch to bytes. */
 MINISKETCH_API void minisketch_serialize(const minisketch* sketch, unsigned char* output);
@@ -318,7 +318,7 @@ public:
     }
 
     /** Get the serialized size in bytes for this (valid) Minisketch object.. */
-    size_t GetSerializedSize() const noexcept { return minisketch_serialized_size(m_minisketch.get()); }
+    uint32_t GetSerializedSize() const noexcept { return minisketch_serialized_size(m_minisketch.get()); }
 
     /** Serialize this (valid) Minisketch object as a byte vector. */
     std::vector<unsigned char> Serialize() const

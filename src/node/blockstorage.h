@@ -47,6 +47,47 @@ class SignalInterrupt;
 } // namespace util
 
 namespace kernel {
+class CBlockFileInfo
+{
+public:
+    uint32_t nBlocks{};      //!< number of blocks stored in file
+    uint32_t nSize{};        //!< number of used bytes of block file
+    uint32_t nUndoSize{};    //!< number of used bytes in the undo file
+    uint32_t nHeightFirst{}; //!< lowest height of block in file
+    uint32_t nHeightLast{};  //!< highest height of block in file
+    uint64_t nTimeFirst{};   //!< earliest time of block in file
+    uint64_t nTimeLast{};    //!< latest time of block in file
+
+    SERIALIZE_METHODS(CBlockFileInfo, obj)
+    {
+        READWRITE(VARINT(obj.nBlocks));
+        READWRITE(VARINT(obj.nSize));
+        READWRITE(VARINT(obj.nUndoSize));
+        READWRITE(VARINT(obj.nHeightFirst));
+        READWRITE(VARINT(obj.nHeightLast));
+        READWRITE(VARINT(obj.nTimeFirst));
+        READWRITE(VARINT(obj.nTimeLast));
+    }
+
+    CBlockFileInfo() = default;
+
+    std::string ToString() const;
+
+    /** update statistics (does not update nSize) */
+    void AddBlock(unsigned int nHeightIn, uint64_t nTimeIn)
+    {
+        if (nBlocks == 0 || nHeightFirst > nHeightIn)
+            nHeightFirst = nHeightIn;
+        if (nBlocks == 0 || nTimeFirst > nTimeIn)
+            nTimeFirst = nTimeIn;
+        nBlocks++;
+        if (nHeightIn > nHeightLast)
+            nHeightLast = nHeightIn;
+        if (nTimeIn > nTimeLast)
+            nTimeLast = nTimeIn;
+    }
+};
+
 /** Access to the block database (blocks/index/) */
 class BlockTreeDB : public CDBWrapper
 {
@@ -65,17 +106,18 @@ public:
 } // namespace kernel
 
 namespace node {
+using kernel::CBlockFileInfo;
 using kernel::BlockTreeDB;
 
 /** The pre-allocation chunk size for blk?????.dat files (since 0.8) */
-static const unsigned int BLOCKFILE_CHUNK_SIZE = 0x1000000; // 16 MiB
+static constexpr uint32_t BLOCKFILE_CHUNK_SIZE = 0x1000000; // 16 MiB
 /** The pre-allocation chunk size for rev?????.dat files (since 0.8) */
-static const unsigned int UNDOFILE_CHUNK_SIZE = 0x100000; // 1 MiB
+static constexpr uint32_t UNDOFILE_CHUNK_SIZE = 0x100000; // 1 MiB
 /** The maximum size of a blk?????.dat file (since 0.8) */
-static const unsigned int MAX_BLOCKFILE_SIZE = 0x8000000; // 128 MiB
+static constexpr uint32_t MAX_BLOCKFILE_SIZE = 0x8000000; // 128 MiB
 
 /** Size of header written by WriteBlock before a serialized CBlock (8 bytes) */
-static constexpr uint32_t STORAGE_HEADER_BYTES{std::tuple_size_v<MessageStartChars> + sizeof(unsigned int)};
+static constexpr uint32_t STORAGE_HEADER_BYTES{std::tuple_size_v<MessageStartChars> + sizeof(uint32_t)};
 
 /** Total overhead when writing undo data: header (8 bytes) plus checksum (32 bytes) */
 static constexpr uint32_t UNDO_DATA_DISK_OVERHEAD{STORAGE_HEADER_BYTES + uint256::size()};
@@ -166,9 +208,9 @@ private:
      * The nAddSize argument passed to this function should include not just the size of the serialized CBlock, but also the size of
      * separator fields (STORAGE_HEADER_BYTES).
      */
-    [[nodiscard]] FlatFilePos FindNextBlockPos(unsigned int nAddSize, unsigned int nHeight, uint64_t nTime);
+    [[nodiscard]] FlatFilePos FindNextBlockPos(uint32_t nAddSize, unsigned int nHeight, uint64_t nTime);
     [[nodiscard]] bool FlushChainstateBlockFile(int tip_height);
-    bool FindUndoPos(BlockValidationState& state, int nFile, FlatFilePos& pos, unsigned int nAddSize);
+    bool FindUndoPos(BlockValidationState& state, int nFile, FlatFilePos& pos, uint32_t nAddSize);
 
     AutoFile OpenUndoFile(const FlatFilePos& pos, bool fReadOnly = false) const;
 
