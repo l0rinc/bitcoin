@@ -42,11 +42,11 @@ void initialize_coins_view()
     static const auto testing_setup = MakeNoLogFileContext<>();
 }
 
-void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& backend_coins_view, bool is_db)
+void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, bool is_db)
 {
     bool good_data{true};
 
-    CCoinsViewCache coins_view_cache{&backend_coins_view, /*deterministic=*/true};
+    CCoinsViewCache coins_view_cache{nullptr, /*deterministic=*/true};
     if (is_db) coins_view_cache.SetBestBlock(uint256::ONE);
     COutPoint random_out_point;
     Coin random_coin;
@@ -96,7 +96,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& backend
                 if (fuzzed_data_provider.ConsumeBool()) {
                     backend_coins_view = CCoinsView{};
                 }
-                coins_view_cache.SetBackend(backend_coins_view);
+                coins_view_cache.SetBackend(&backend_coins_view);
             },
             [&] {
                 const std::optional<COutPoint> opt_out_point = ConsumeDeserializable<COutPoint>(fuzzed_data_provider);
@@ -297,8 +297,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& backend
 FUZZ_TARGET(coins_view, .init = initialize_coins_view)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
-    CCoinsView backend_coins_view;
-    TestCoinsView(fuzzed_data_provider, backend_coins_view, /*is_db=*/false);
+    TestCoinsView(fuzzed_data_provider, /*is_db=*/false);
 }
 
 FUZZ_TARGET(coins_view_db, .init = initialize_coins_view)
@@ -310,5 +309,5 @@ FUZZ_TARGET(coins_view_db, .init = initialize_coins_view)
         .memory_only = true,
     };
     CCoinsViewDB coins_db{std::move(db_params), CoinsViewOptions{}};
-    TestCoinsView(fuzzed_data_provider, coins_db, /*is_db=*/true);
+    TestCoinsView(fuzzed_data_provider, /*is_db=*/true);
 }
