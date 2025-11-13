@@ -13,24 +13,13 @@ TRACEPOINT_SEMAPHORE(utxocache, add);
 TRACEPOINT_SEMAPHORE(utxocache, spent);
 TRACEPOINT_SEMAPHORE(utxocache, uncache);
 
-std::optional<Coin> CCoinsView::GetCoin(const COutPoint& outpoint) const { return std::nullopt; }
-uint256 CCoinsView::GetBestBlock() const { return uint256(); }
-std::vector<uint256> CCoinsView::GetHeadBlocks() const { return std::vector<uint256>(); }
-bool CCoinsView::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlock) { return false; }
-std::unique_ptr<CCoinsViewCursor> CCoinsView::Cursor() const { return nullptr; }
-
-bool CCoinsView::HaveCoin(const COutPoint &outpoint) const
-{
-    return GetCoin(outpoint).has_value();
-}
-
 CCoinsViewBacked::CCoinsViewBacked(CCoinsView *viewIn) : base(viewIn) { }
 std::optional<Coin> CCoinsViewBacked::GetCoin(const COutPoint& outpoint) const { return base->GetCoin(outpoint); }
 bool CCoinsViewBacked::HaveCoin(const COutPoint &outpoint) const { return base->HaveCoin(outpoint); }
 uint256 CCoinsViewBacked::GetBestBlock() const { return base->GetBestBlock(); }
 std::vector<uint256> CCoinsViewBacked::GetHeadBlocks() const { return base->GetHeadBlocks(); }
-void CCoinsViewBacked::SetBackend(CCoinsView &viewIn) { base = &viewIn; }
-bool CCoinsViewBacked::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlock) { return base->BatchWrite(cursor, hashBlock); }
+void CCoinsViewBacked::SetBackend(CCoinsView* viewIn) { base = viewIn; }
+void CCoinsViewBacked::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlock) { base->BatchWrite(cursor, hashBlock); }
 std::unique_ptr<CCoinsViewCursor> CCoinsViewBacked::Cursor() const { return base->Cursor(); }
 size_t CCoinsViewBacked::EstimateSize() const { return base->EstimateSize(); }
 
@@ -47,7 +36,7 @@ size_t CCoinsViewCache::DynamicMemoryUsage() const {
 
 CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint) const {
     const auto [ret, inserted] = cacheCoins.try_emplace(outpoint);
-    if (inserted) {
+    if (base && inserted) {
         if (auto coin{base->GetCoin(outpoint)}) {
             ret->second.coin = std::move(*coin);
             cachedCoinsUsage += ret->second.coin.DynamicMemoryUsage();
@@ -183,7 +172,7 @@ void CCoinsViewCache::SetBestBlock(const uint256 &hashBlockIn) {
     hashBlock = hashBlockIn;
 }
 
-bool CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlockIn) {
+void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlockIn) {
     for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)) {
         // Ignore non-dirty entries (optimization).
         if (!it->second.IsDirty()) {
@@ -248,31 +237,24 @@ bool CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &ha
         }
     }
     hashBlock = hashBlockIn;
-    return true;
 }
 
-bool CCoinsViewCache::Flush() {
+void CCoinsViewCache::Flush() {
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/true)};
-    bool fOk = base->BatchWrite(cursor, hashBlock);
-    if (fOk) {
-        cacheCoins.clear();
-        ReallocateCache();
-        cachedCoinsUsage = 0;
-    }
-    return fOk;
+    base->BatchWrite(cursor, hashBlock);
+    cacheCoins.clear();
+    ReallocateCache();
+    cachedCoinsUsage = 0;
 }
 
-bool CCoinsViewCache::Sync()
+void CCoinsViewCache::Sync()
 {
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/false)};
-    bool fOk = base->BatchWrite(cursor, hashBlock);
-    if (fOk) {
-        if (m_sentinel.second.Next() != &m_sentinel) {
-            /* BatchWrite must clear flags of all entries */
-            throw std::logic_error("Not all unspent flagged entries were cleared");
-        }
+    base->BatchWrite(cursor, hashBlock);
+    if (m_sentinel.second.Next() != &m_sentinel) {
+        /* BatchWrite must clear flags of all entries */
+        throw std::logic_error("Not all unspent flagged entries were cleared");
     }
-    return fOk;
 }
 
 void CCoinsViewCache::Uncache(const COutPoint& hash)
