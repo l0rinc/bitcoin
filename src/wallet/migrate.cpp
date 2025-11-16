@@ -6,6 +6,7 @@
 #include <crypto/common.h>
 #include <logging.h>
 #include <streams.h>
+#include <support/allocators/zeroafterfree.h>
 #include <util/translation.h>
 #include <wallet/migrate.h>
 
