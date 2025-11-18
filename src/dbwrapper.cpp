@@ -138,8 +138,8 @@ static void SetMaxOpenFiles(leveldb::Options *options) {
 static leveldb::Options GetOptions(size_t nCacheSize)
 {
     leveldb::Options options;
-    options.block_cache       = leveldb::NewLRUCache(nCacheSize / 2);
-    options.write_buffer_size = nCacheSize / 4;   // 2 * wb = 1/2 nCacheSize
+    options.write_buffer_size = nCacheSize / 3;   // ~66% memtables, ~33% block_cache
+    options.block_cache       = leveldb::NewLRUCache(nCacheSize - 2 * options.write_buffer_size);
     options.filter_policy = leveldb::NewBloomFilterPolicy(10);
     options.compression = leveldb::kNoCompression;
     options.info_log = new CBitcoinLevelDBLogger();
