@@ -138,7 +138,7 @@ static void SetMaxOpenFiles(leveldb::Options *options) {
 static leveldb::Options GetOptions(size_t nCacheSize)
 {
     leveldb::Options options;
-    options.write_buffer_size = nCacheSize / 3;   // ~66% memtables, ~33% block_cache
+    options.write_buffer_size = nCacheSize / 6;   // ~33% memtables, ~66% block_cache
     options.block_cache       = leveldb::NewLRUCache(nCacheSize - 2 * options.write_buffer_size);
     options.filter_policy = leveldb::NewBloomFilterPolicy(10);
     options.compression = leveldb::kNoCompression;
