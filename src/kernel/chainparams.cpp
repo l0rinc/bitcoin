@@ -17,6 +17,7 @@
 #include <script/interpreter.h>
 #include <script/script.h>
 #include <script/verify_flags.h>
+#include <tinyformat.h>
 #include <uint256.h>
 #include <util/chaintype.h>
 #include <util/log.h>
@@ -28,8 +29,10 @@
 #include <cstdint>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <span>
+#include <stdexcept>
 #include <utility>
 
 using namespace util::hex_literals;
@@ -96,9 +99,21 @@ void CChainParams::ApplyDeploymentOptions(const DeploymentOptions& opts)
     }
 
     for (const auto& [deployment_pos, version_bits_params] : opts.version_bits_parameters) {
-        consensus.vDeployments[deployment_pos].nStartTime = version_bits_params.start_time;
-        consensus.vDeployments[deployment_pos].nTimeout = version_bits_params.timeout;
-        consensus.vDeployments[deployment_pos].min_activation_height = version_bits_params.min_activation_height;
+        auto& deployment{consensus.vDeployments[deployment_pos]};
+        deployment.nStartTime = version_bits_params.start_time;
+        deployment.nTimeout = version_bits_params.timeout;
+        deployment.min_activation_height = version_bits_params.min_activation_height;
+        deployment.max_activation_height = version_bits_params.max_activation_height;
+        deployment.active_duration = version_bits_params.active_duration;
+        if (deployment.active_duration != std::numeric_limits<int>::max() && deployment.active_duration % deployment.period != 0) {
+            throw std::runtime_error(strprintf("active_duration (%d) must be a multiple of period (%d)", deployment.active_duration, deployment.period));
+        }
+        if (version_bits_params.threshold) {
+            if (*version_bits_params.threshold > deployment.period) {
+                throw std::runtime_error(strprintf("threshold (%u) must not exceed period (%u)", *version_bits_params.threshold, deployment.period));
+            }
+            deployment.threshold = *version_bits_params.threshold;
+        }
     }
 }
 
