@@ -1071,6 +1071,15 @@ static UniValue TemplateToJSON(const Consensus::Params& consensusParams, const C
         aRules.push_back("!signet");
     }
 
+    uint32_t vbrequired{0};
+    for (int j = 0; j < static_cast<int>(Consensus::MAX_VERSION_BITS_DEPLOYMENTS); ++j) {
+        const auto pos{static_cast<Consensus::DeploymentPos>(j)};
+        const ThresholdState state{chainman.m_versionbitscache.State(pindexPrev, consensusParams, pos)};
+        if (DeploymentMustSignalAfter(pindexPrev, consensusParams, pos, state)) {
+            vbrequired |= uint32_t{1} << consensusParams.vDeployments[pos].bit;
+        }
+    }
+
     UniValue vbavailable(UniValue::VOBJ);
     const auto gbtstatus = chainman.m_versionbitscache.GBTStatus(*pindexPrev, consensusParams);
 
@@ -1102,7 +1111,7 @@ static UniValue TemplateToJSON(const Consensus::Params& consensusParams, const C
     result.pushKV("version", block_header.nVersion);
     result.pushKV("rules", std::move(aRules));
     result.pushKV("vbavailable", std::move(vbavailable));
-    result.pushKV("vbrequired", 0);
+    result.pushKV("vbrequired", vbrequired);
 
     result.pushKV("previousblockhash", block.hashPrevBlock.GetHex());
     result.pushKV("transactions", std::move(transactions));

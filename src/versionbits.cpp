@@ -294,6 +294,12 @@ BIP9GBTStatus VersionBitsCache::GBTStatus(const CBlockIndex& block_index, const 
     return result;
 }
 
+ThresholdState VersionBitsCache::State(const CBlockIndex* pindexPrev, const Consensus::Params& params, Consensus::DeploymentPos pos)
+{
+    LOCK(m_mutex);
+    return VersionBitsConditionChecker(params, pos).GetStateFor(pindexPrev, m_caches[pos]);
+}
+
 bool VersionBitsCache::IsActiveAfter(const CBlockIndex* pindexPrev, const Consensus::Params& params, Consensus::DeploymentPos pos)
 {
     LOCK(m_mutex);
