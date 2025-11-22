@@ -25,6 +25,7 @@
 #include <kernel/chain.h>
 #include <logging.h>
 #include <merkleblock.h>
+#include <pow.h>
 #include <net.h>
 #include <net_permissions.h>
 #include <netaddress.h>
@@ -651,8 +652,6 @@ private:
      * non-connecting headers (this can happen due to BIP 130 headers
      * announcements for blocks interacting with the 2hr (MAX_FUTURE_BLOCK_TIME) rule). */
     void HandleUnconnectingHeaders(CNode& pfrom, Peer& peer, const std::vector<CBlockHeader>& headers) EXCLUSIVE_LOCKS_REQUIRED(g_msgproc_mutex);
-    /** Return true if the headers connect to each other, false otherwise */
-    bool CheckHeadersAreContinuous(const std::vector<CBlockHeader>& headers) const;
     /** Try to continue a low-work headers sync that has already begun.
      * Assumes the caller has already verified the headers connect, and has
      * checked that each header satisfies the proof-of-work target included in
@@ -951,7 +950,7 @@ private:
         LOCKS_EXCLUDED(::cs_main);
 
     /** Process a new block. Perform any post-processing housekeeping */
-    void ProcessBlock(CNode& node, const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked);
+    void ProcessBlock(CNode& node, const std::shared_ptr<const CBlock>& block, const uint256& block_hash, bool force_processing, bool min_pow_checked);
 
     /** Process compact block txns  */
     void ProcessCompactBlockTxns(CNode& pfrom, Peer& peer, const BlockTransactions& block_transactions)
@@ -2199,10 +2198,12 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
 {
     std::shared_ptr<const CBlock> a_recent_block;
     std::shared_ptr<const CBlockHeaderAndShortTxIDs> a_recent_compact_block;
+    uint256 a_recent_block_hash;
     {
         LOCK(m_most_recent_block_mutex);
         a_recent_block = m_most_recent_block;
         a_recent_compact_block = m_most_recent_compact_block;
+        a_recent_block_hash = m_most_recent_block_hash;
     }
 
     bool need_activate_chain = false;
@@ -2223,7 +2224,7 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
     } // release cs_main before calling ActivateBestChain
     if (need_activate_chain) {
         BlockValidationState state;
-        if (!m_chainman.ActiveChainstate().ActivateBestChain(state, a_recent_block)) {
+        if (!m_chainman.ActiveChainstate().ActivateBestChain(state, a_recent_block, a_recent_block_hash)) {
             LogDebug(BCLog::NET, "failed to activate chain (%s)\n", state.ToString());
         }
     }
@@ -2486,16 +2487,21 @@ void PeerManagerImpl::SendBlockTransactions(CNode& pfrom, Peer& peer, const CBlo
 
 bool PeerManagerImpl::CheckHeadersPoW(const std::vector<CBlockHeader>& headers, const Consensus::Params& consensusParams, Peer& peer)
 {
-    // Do these headers have proof-of-work matching what's claimed?
-    if (!HasValidProofOfWork(headers, consensusParams)) {
-        Misbehaving(peer, "header with invalid proof of work");
-        return false;
-    }
-
     // Are these headers connected to each other?
-    if (!CheckHeadersAreContinuous(headers)) {
-        Misbehaving(peer, "non-continuous headers sequence");
-        return false;
+    uint256 hashLastBlock;
+    for (const CBlockHeader& header : headers) {
+        const auto hash{header.GetHash()};
+        // Do these headers have proof-of-work matching what's claimed?
+        if (!CheckProofOfWork(hash, header.nBits, consensusParams)) {
+            /** Check with the proof of work on each blockheader matches the value in nBits */
+            Misbehaving(peer, "header with invalid proof of work");
+            return false;
+        }
+        if (!hashLastBlock.IsNull() && header.hashPrevBlock != hashLastBlock) {
+            Misbehaving(peer, "non-continuous headers sequence");
+            return false;
+        }
+        hashLastBlock = hash;
     }
     return true;
 }
@@ -2536,18 +2542,6 @@ void PeerManagerImpl::HandleUnconnectingHeaders(CNode& pfrom, Peer& peer,
     // eventually get the headers - even from a different peer -
     // we can use this peer to download.
     WITH_LOCK(cs_main, UpdateBlockAvailability(pfrom.GetId(), headers.back().GetHash()));
-}
-
-bool PeerManagerImpl::CheckHeadersAreContinuous(const std::vector<CBlockHeader>& headers) const
-{
-    uint256 hashLastBlock;
-    for (const CBlockHeader& header : headers) {
-        if (!hashLastBlock.IsNull() && header.hashPrevBlock != hashLastBlock) {
-            return false;
-        }
-        hashLastBlock = header.GetHash();
-    }
-    return true;
 }
 
 bool PeerManagerImpl::IsContinuationOfLowWorkHeadersSync(Peer& peer, CNode& pfrom, std::vector<CBlockHeader>& headers)
@@ -3287,7 +3281,7 @@ void PeerManagerImpl::ProcessGetCFCheckPt(CNode& node, Peer& peer, DataStream& v
               headers);
 }
 
-void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked)
+void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlock>& block, const uint256& block_hash, bool force_processing, bool min_pow_checked)
 {
     bool new_block{false};
     m_chainman.ProcessNewBlock(block, force_processing, min_pow_checked, &new_block);
@@ -3297,21 +3291,23 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
         // from, we can erase the block request now anyway (as we just stored
         // this block to disk).
         LOCK(cs_main);
-        RemoveBlockRequest(block->GetHash(), std::nullopt);
+        RemoveBlockRequest(block_hash, std::nullopt);
     } else {
         LOCK(cs_main);
-        mapBlockSource.erase(block->GetHash());
+        mapBlockSource.erase(block_hash);
     }
 }
 
 void PeerManagerImpl::ProcessCompactBlockTxns(CNode& pfrom, Peer& peer, const BlockTransactions& block_transactions)
 {
+    const auto header_hash{block_transactions.blockhash};
+
     std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
     bool fBlockRead{false};
     {
         LOCK(cs_main);
 
-        auto range_flight = mapBlocksInFlight.equal_range(block_transactions.blockhash);
+        auto range_flight = mapBlocksInFlight.equal_range(header_hash);
         size_t already_in_flight = std::distance(range_flight.first, range_flight.second);
         bool requested_block_from_this_peer{false};
 
@@ -3346,7 +3342,7 @@ void PeerManagerImpl::ProcessCompactBlockTxns(CNode& pfrom, Peer& peer, const Bl
 
         // We should not have gotten this far in compact block processing unless it's attached to a known header
         const CBlockIndex* prev_block{Assume(m_chainman.m_blockman.LookupBlockIndex(partialBlock.header.hashPrevBlock))};
-        ReadStatus status = partialBlock.FillBlock(*pblock, block_transactions.txn,
+        ReadStatus status = partialBlock.FillBlock(*pblock, header_hash, block_transactions.txn,
                                                    /*segwit_active=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT));
         if (status == READ_STATUS_INVALID) {
             RemoveBlockRequest(block_transactions.blockhash, pfrom.GetId()); // Reset in-flight state in case Misbehaving does not result in a disconnect
@@ -3386,7 +3382,7 @@ void PeerManagerImpl::ProcessCompactBlockTxns(CNode& pfrom, Peer& peer, const Bl
         // disk-space attacks), but this should be safe due to the
         // protections in the compact block handler -- see related comment
         // in compact block optimistic reconstruction handling.
-        ProcessBlock(pfrom, pblock, /*force_processing=*/true, /*min_pow_checked=*/true);
+        ProcessBlock(pfrom, pblock, header_hash, /*force_processing=*/true, /*min_pow_checked=*/true);
     }
     return;
 }
@@ -4068,12 +4064,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // compact blocks but still use getblocks to request blocks.
         {
             std::shared_ptr<const CBlock> a_recent_block;
+            uint256 a_recent_block_hash;
             {
                 LOCK(m_most_recent_block_mutex);
                 a_recent_block = m_most_recent_block;
+                a_recent_block_hash = m_most_recent_block_hash;
             }
             BlockValidationState state;
-            if (!m_chainman.ActiveChainstate().ActivateBestChain(state, a_recent_block)) {
+            if (!m_chainman.ActiveChainstate().ActivateBestChain(state, a_recent_block, a_recent_block_hash)) {
                 LogDebug(BCLog::NET, "failed to activate chain (%s)\n", state.ToString());
             }
         }
@@ -4508,8 +4506,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
                 std::vector<CTransactionRef> dummy;
                 const CBlockIndex* prev_block{Assume(m_chainman.m_blockman.LookupBlockIndex(cmpctblock.header.hashPrevBlock))};
-                status = tempBlock.FillBlock(*pblock, dummy,
-                                             /*segwit_active=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT));
+                status = tempBlock.FillBlock(*pblock, pblock->GetHash(),
+                                             dummy, /*segwit_active=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT));
                 if (status == READ_STATUS_OK) {
                     fBlockReconstructed = true;
                 }
@@ -4560,7 +4558,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // we have a chain with at least the minimum chain work), and we ignore
             // compact blocks with less work than our tip, it is safe to treat
             // reconstructed compact blocks as having been requested.
-            ProcessBlock(pfrom, pblock, /*force_processing=*/true, /*min_pow_checked=*/true);
+            ProcessBlock(pfrom, pblock, blockhash, /*force_processing=*/true, /*min_pow_checked=*/true);
             LOCK(cs_main); // hold cs_main for CBlockIndex::IsValid()
             if (pindex->IsValid(BLOCK_VALID_TRANSACTIONS)) {
                 // Clear download state for this block, which is in
@@ -4671,7 +4669,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 min_pow_checked = true;
             }
         }
-        ProcessBlock(pfrom, pblock, forceProcessing, min_pow_checked);
+        ProcessBlock(pfrom, pblock, hash, forceProcessing, min_pow_checked);
         return;
     }
 
