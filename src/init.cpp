@@ -69,6 +69,7 @@
 #include <rpc/util.h>
 #include <scheduler.h>
 #include <script/sigcache.h>
+#include <swiftsync.h>
 #include <sync.h>
 #include <torcontrol.h>
 #include <txdb.h>
@@ -147,6 +148,8 @@ static constexpr bool DEFAULT_PROXYRANDOMIZE{true};
 static constexpr bool DEFAULT_REST_ENABLE{false};
 static constexpr bool DEFAULT_I2P_ACCEPT_INCOMING{true};
 static constexpr bool DEFAULT_STOPAFTERBLOCKIMPORT{false};
+
+extern SwiftSyncHints g_swiftsync_hints;
 
 #ifdef WIN32
 // Win32 LevelDB doesn't use filedescriptors, and the ones used for
@@ -478,6 +481,7 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
     argsman.AddArg("-alertnotify=<cmd>", "Execute command when an alert is raised (%s in cmd is replaced by message)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #endif
     argsman.AddArg("-assumevalid=<hex>", strprintf("If this block is in the chain assume that it and its ancestors are valid and potentially skip their script verification (0 to verify all, default: %s, testnet3: %s, testnet4: %s, signet: %s)", defaultChainParams->GetConsensus().defaultAssumeValid.GetHex(), testnetChainParams->GetConsensus().defaultAssumeValid.GetHex(), testnet4ChainParams->GetConsensus().defaultAssumeValid.GetHex(), signetChainParams->GetConsensus().defaultAssumeValid.GetHex()), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-swiftsyncfile=<file>", "Specify hints file to use for SwiftSync.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-blocksdir=<dir>", "Specify directory to hold blocks subdirectory for *.dat files (default: <datadir>)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-blocksxor",
                    strprintf("Whether an XOR-key applies to blocksdir *.dat files. "
@@ -1755,6 +1759,15 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         validation_signals.RegisterValidationInterface(g_zmq_notification_interface.get());
     }
 #endif
+
+    if (args.IsArgSet("-swiftsyncfile")) {
+        fs::path path = fs::absolute(args.GetPathArg("-swiftsyncfile"));
+        if (!fs::exists(path)) {
+            return InitError(Untranslated("Provided SwiftSync file doesn't exist"));
+        }
+        LogInfo("Loading SwiftSync hints bitmap file...");
+        g_swiftsync_hints.Load(path.utf8string());
+    }
 
     // ********************************************************* Step 7: load block chain
 

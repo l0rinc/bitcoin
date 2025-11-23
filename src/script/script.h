@@ -534,7 +534,7 @@ public:
      * counted more accurately, assuming they are of the form
      *  ... OP_N CHECKMULTISIG ...
      */
-    unsigned int GetSigOpCount(bool fAccurate) const;
+    unsigned int GetLegacySigOpCount(bool fAccurate) const;
 
     /**
      * Accurately count sigOps, including sigOps in
@@ -550,11 +550,63 @@ public:
      */
     static bool IsPayToAnchor(int version, const std::vector<unsigned char>& program);
 
-    bool IsPayToScriptHash() const;
-    bool IsPayToWitnessScriptHash() const;
-    bool IsWitnessProgram(int& version, std::vector<unsigned char>& program) const;
+    bool IsPayToPubKeyHash() const noexcept
+    {
+        return size() == 25 &&
+               front() == OP_DUP &&
+               (*this)[1] == OP_HASH160 &&
+               (*this)[2] == 0x14 &&
+               (*this)[23] == OP_EQUALVERIFY &&
+               (*this)[24] == OP_CHECKSIG;
+    }
 
-    bool IsPayToTaproot() const;
+    bool IsPayToScriptHash() const noexcept
+    {
+        // Extra-fast test for pay-to-script-hash CScripts:
+        return size() == 23 &&
+               front() == OP_HASH160 &&
+               (*this)[1] == 0x14 &&
+               (*this)[22] == OP_EQUAL;
+    }
+
+    bool IsPayToWitnessPubKeyHash() const noexcept
+    {
+        return size() == 22 &&
+               front() == OP_0 &&
+               (*this)[1] == 0x14;
+    }
+
+    bool IsPayToTaproot() const noexcept
+    {
+        return size() == 34 &&
+               front() == OP_1 &&
+               (*this)[1] == 0x20;
+    }
+
+    bool IsPayToWitnessScriptHash() const noexcept
+    {
+        return size() == 34 &&
+               front() == OP_0 &&
+               (*this)[1] == 0x20;
+    }
+
+    bool IsCompressedPayToPubKey() const noexcept
+    {
+        return size() == 35 &&
+               front() == 0x21 &&
+               ((*this)[1] == 0x02 || (*this)[1] == 0x03) &&
+               back() == OP_CHECKSIG;
+    }
+
+    bool IsUncompressedPayToPubKey() const noexcept
+    {
+        return size() == 67 &&
+               front() == 0x41 &&
+               (*this)[1] == 0x04 &&
+               back() == OP_CHECKSIG;
+    }
+
+    bool IsWitnessProgram(int& version, std::vector<unsigned char>& program) const;
 
     /** Called by IsStandardTx and P2SH/BIP62 VerifyScript (which makes it consensus-critical). */
     bool IsPushOnly(const_iterator pc) const;
