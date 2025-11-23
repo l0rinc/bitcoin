@@ -106,6 +106,7 @@ using CoinsCachePair = std::pair<const COutPoint, CCoinsCacheEntry>;
  * - spent, not FRESH, DIRTY (e.g. a coin is spent and spentness needs to be flushed to the parent)
  */
 struct __attribute__((packed)) CCoinsCacheEntry {
+    Coin coin; // The actual cached data.
 private:
     /**
      * These are used to create a doubly linked list of flagged entries.
