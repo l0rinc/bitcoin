@@ -29,7 +29,7 @@
  * - VARINT((coinbase ? 1 : 0) | (height << 1))
  * - the non-spent CTxOut (via TxOutCompression)
  */
-class __attribute__((packed)) Coin
+class Coin
 {
 public:
     //! unspent transaction output
