@@ -77,11 +77,14 @@ public:
 
 private:
     struct Priority {
-        // Note: operator<=>() depends on the declaration order.
         size_t num_broadcasted{0};
         NodeClock::time_point last_broadcasted{};
 
-        auto operator<=>(const Priority&) const = default;
+        bool operator<(const Priority& other) const
+        {
+            return std::tie(num_broadcasted, last_broadcasted) <
+                   std::tie(other.num_broadcasted, other.last_broadcasted);
+        }
     };
 
     struct TxWithPriority {
