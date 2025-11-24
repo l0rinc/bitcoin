@@ -7,6 +7,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <list>
+#include <vector>
 
 BOOST_AUTO_TEST_SUITE(coinscachepair_tests)
 
@@ -22,13 +23,7 @@ std::list<CoinsCachePair> CreatePairs(CoinsCachePair& sentinel)
         CCoinsCacheEntry::SetDirty(*node, sentinel);
 
         BOOST_CHECK(node->second.IsDirty() && !node->second.IsFresh());
-        BOOST_CHECK_EQUAL(node->second.Next(), &sentinel);
-        BOOST_CHECK_EQUAL(sentinel.second.Prev(), &(*node));
-
-        if (i > 0) {
-            BOOST_CHECK_EQUAL(std::prev(node)->second.Next(), &(*node));
-            BOOST_CHECK_EQUAL(node->second.Prev(), &(*std::prev(node)));
-        }
+        BOOST_CHECK_EQUAL(sentinel.second.Next(), &(*node));
     }
     return nodes;
 }
@@ -39,104 +34,54 @@ BOOST_AUTO_TEST_CASE(linked_list_iteration)
     sentinel.second.SelfRef(sentinel);
     auto nodes{CreatePairs(sentinel)};
 
-    // Check iterating through pairs is identical to iterating through a list
-    auto node{sentinel.second.Next()};
-    for (const auto& expected : nodes) {
-        BOOST_CHECK_EQUAL(&expected, node);
-        node = node->second.Next();
+    std::vector<CoinsCachePair*> expected;
+    for (auto it{nodes.rbegin()}; it != nodes.rend(); ++it) {
+        expected.push_back(&(*it));
     }
-    BOOST_CHECK_EQUAL(node, &sentinel);
 
-    // Check iterating through pairs is identical to iterating through a list
-    // Clear the state during iteration
-    node = sentinel.second.Next();
-    for (const auto& expected : nodes) {
-        BOOST_CHECK_EQUAL(&expected, node);
-        auto next = node->second.Next();
-        node->second.SetClean();
+    size_t idx{0};
+    for (auto node{sentinel.second.Next()}; node != &sentinel; node = node->second.Next()) {
+        BOOST_CHECK_EQUAL(expected.at(idx++), node);
+    }
+    BOOST_CHECK_EQUAL(idx, expected.size());
+
+    CoinsCachePair* prev{&sentinel};
+    for (auto node{sentinel.second.Next()}; node != &sentinel; ) {
+        auto next{node->second.Next()};
+        node->second.SetClean(*prev);
         node = next;
     }
-    BOOST_CHECK_EQUAL(node, &sentinel);
-    // Check that sentinel's next and prev are itself
     BOOST_CHECK_EQUAL(sentinel.second.Next(), &sentinel);
-    BOOST_CHECK_EQUAL(sentinel.second.Prev(), &sentinel);
-
-    // Delete the nodes from the list to make sure there are no dangling pointers
-    for (auto it{nodes.begin()}; it != nodes.end(); it = nodes.erase(it)) {
-        BOOST_CHECK(!it->second.IsDirty() && !it->second.IsFresh());
-    }
 }
 
-BOOST_AUTO_TEST_CASE(linked_list_iterate_erase)
+BOOST_AUTO_TEST_CASE(linked_list_middle_removal)
 {
     CoinsCachePair sentinel;
     sentinel.second.SelfRef(sentinel);
     auto nodes{CreatePairs(sentinel)};
 
-    // Check iterating through pairs is identical to iterating through a list
-    // Erase the nodes as we iterate through, but don't clear state
-    // The state will be cleared by the CCoinsCacheEntry's destructor
-    auto node{sentinel.second.Next()};
-    for (auto expected{nodes.begin()}; expected != nodes.end(); expected = nodes.erase(expected)) {
-        BOOST_CHECK_EQUAL(&(*expected), node);
-        node = node->second.Next();
+    std::vector<CoinsCachePair*> order;
+    for (auto it{nodes.rbegin()}; it != nodes.rend(); ++it) {
+        order.push_back(&(*it));
     }
-    BOOST_CHECK_EQUAL(node, &sentinel);
 
-    // Check that sentinel's next and prev are itself
+    auto head{order.front()};
+    auto middle{order.at(1)};
+    auto tail_after_middle{order.at(2)};
+
+    middle->second.SetClean(*head);
+    BOOST_CHECK_EQUAL(head->second.Next(), tail_after_middle);
+
+    head->second.SetClean(sentinel);
+    BOOST_CHECK_EQUAL(sentinel.second.Next(), tail_after_middle);
+
+    CoinsCachePair* prev{&sentinel};
+    for (auto node{sentinel.second.Next()}; node != &sentinel; ) {
+        auto next{node->second.Next()};
+        node->second.SetClean(*prev);
+        node = next;
+    }
     BOOST_CHECK_EQUAL(sentinel.second.Next(), &sentinel);
-    BOOST_CHECK_EQUAL(sentinel.second.Prev(), &sentinel);
-}
-
-BOOST_AUTO_TEST_CASE(linked_list_random_deletion)
-{
-    CoinsCachePair sentinel;
-    sentinel.second.SelfRef(sentinel);
-    auto nodes{CreatePairs(sentinel)};
-
-    // Create linked list sentinel->n1->n2->n3->n4->sentinel
-    auto n1{nodes.begin()};
-    auto n2{std::next(n1)};
-    auto n3{std::next(n2)};
-    auto n4{std::next(n3)};
-
-    // Delete n2
-    // sentinel->n1->n3->n4->sentinel
-    nodes.erase(n2);
-    // Check that n1 now points to n3, and n3 still points to n4
-    // Also check that state was not altered
-    BOOST_CHECK(n1->second.IsDirty() && !n1->second.IsFresh());
-    BOOST_CHECK_EQUAL(n1->second.Next(), &(*n3));
-    BOOST_CHECK(n3->second.IsDirty() && !n3->second.IsFresh());
-    BOOST_CHECK_EQUAL(n3->second.Next(), &(*n4));
-    BOOST_CHECK_EQUAL(n3->second.Prev(), &(*n1));
-
-    // Delete n1
-    // sentinel->n3->n4->sentinel
-    nodes.erase(n1);
-    // Check that sentinel now points to n3, and n3 still points to n4
-    // Also check that state was not altered
-    BOOST_CHECK(n3->second.IsDirty() && !n3->second.IsFresh());
-    BOOST_CHECK_EQUAL(sentinel.second.Next(), &(*n3));
-    BOOST_CHECK_EQUAL(n3->second.Next(), &(*n4));
-    BOOST_CHECK_EQUAL(n3->second.Prev(), &sentinel);
-
-    // Delete n4
-    // sentinel->n3->sentinel
-    nodes.erase(n4);
-    // Check that sentinel still points to n3, and n3 points to sentinel
-    // Also check that state was not altered
-    BOOST_CHECK(n3->second.IsDirty() && !n3->second.IsFresh());
-    BOOST_CHECK_EQUAL(sentinel.second.Next(), &(*n3));
-    BOOST_CHECK_EQUAL(n3->second.Next(), &sentinel);
-    BOOST_CHECK_EQUAL(sentinel.second.Prev(), &(*n3));
-
-    // Delete n3
-    // sentinel->sentinel
-    nodes.erase(n3);
-    // Check that sentinel's next and prev are itself
-    BOOST_CHECK_EQUAL(sentinel.second.Next(), &sentinel);
-    BOOST_CHECK_EQUAL(sentinel.second.Prev(), &sentinel);
 }
 
 BOOST_AUTO_TEST_CASE(linked_list_set_state)
@@ -150,49 +95,62 @@ BOOST_AUTO_TEST_CASE(linked_list_set_state)
     CCoinsCacheEntry::SetDirty(n1, sentinel);
     BOOST_CHECK(n1.second.IsDirty() && !n1.second.IsFresh());
     BOOST_CHECK_EQUAL(n1.second.Next(), &sentinel);
-    BOOST_CHECK_EQUAL(n1.second.Prev(), &sentinel);
     BOOST_CHECK_EQUAL(sentinel.second.Next(), &n1);
-    BOOST_CHECK_EQUAL(sentinel.second.Prev(), &n1);
 
-    // Check that setting FRESH on new node inserts it after n1
+    // Check that setting FRESH on new node inserts it before n1
     CCoinsCacheEntry::SetFresh(n2, sentinel);
     BOOST_CHECK(n2.second.IsFresh() && !n2.second.IsDirty());
-    BOOST_CHECK_EQUAL(n2.second.Next(), &sentinel);
-    BOOST_CHECK_EQUAL(n2.second.Prev(), &n1);
-    BOOST_CHECK_EQUAL(n1.second.Next(), &n2);
-    BOOST_CHECK_EQUAL(sentinel.second.Prev(), &n2);
+    BOOST_CHECK_EQUAL(n2.second.Next(), &n1);
+    BOOST_CHECK_EQUAL(sentinel.second.Next(), &n2);
 
-    // Check that we can set extra state, but they don't change our position
+    // Check that we can set extra state without changing position
     CCoinsCacheEntry::SetFresh(n1, sentinel);
     BOOST_CHECK(n1.second.IsDirty() && n1.second.IsFresh());
-    BOOST_CHECK_EQUAL(n1.second.Next(), &n2);
-    BOOST_CHECK_EQUAL(n1.second.Prev(), &sentinel);
-    BOOST_CHECK_EQUAL(sentinel.second.Next(), &n1);
-    BOOST_CHECK_EQUAL(n2.second.Prev(), &n1);
+    BOOST_CHECK_EQUAL(sentinel.second.Next(), &n2);
+    BOOST_CHECK_EQUAL(n2.second.Next(), &n1);
 
-    // Check that we can clear state then re-set it
-    n1.second.SetClean();
+    // Clear n1 and ensure n2 remains linked
+    n1.second.SetClean(n2);
     BOOST_CHECK(!n1.second.IsDirty() && !n1.second.IsFresh());
     BOOST_CHECK_EQUAL(sentinel.second.Next(), &n2);
-    BOOST_CHECK_EQUAL(sentinel.second.Prev(), &n2);
     BOOST_CHECK_EQUAL(n2.second.Next(), &sentinel);
-    BOOST_CHECK_EQUAL(n2.second.Prev(), &sentinel);
 
-    // Calling `SetClean` a second time has no effect
-    n1.second.SetClean();
-    BOOST_CHECK(!n1.second.IsDirty() && !n1.second.IsFresh());
-    BOOST_CHECK_EQUAL(sentinel.second.Next(), &n2);
-    BOOST_CHECK_EQUAL(sentinel.second.Prev(), &n2);
-    BOOST_CHECK_EQUAL(n2.second.Next(), &sentinel);
-    BOOST_CHECK_EQUAL(n2.second.Prev(), &sentinel);
+    // Clear n2 and ensure sentinel points to itself
+    n2.second.SetClean(sentinel);
+    BOOST_CHECK(!n2.second.IsDirty() && !n2.second.IsFresh());
+    BOOST_CHECK_EQUAL(sentinel.second.Next(), &sentinel);
 
-    // Adding DIRTY re-inserts it after n2
+    // Re-adding DIRTY re-inserts it at the head
     CCoinsCacheEntry::SetDirty(n1, sentinel);
     BOOST_CHECK(n1.second.IsDirty() && !n1.second.IsFresh());
-    BOOST_CHECK_EQUAL(n2.second.Next(), &n1);
-    BOOST_CHECK_EQUAL(n1.second.Prev(), &n2);
+    BOOST_CHECK_EQUAL(sentinel.second.Next(), &n1);
     BOOST_CHECK_EQUAL(n1.second.Next(), &sentinel);
-    BOOST_CHECK_EQUAL(sentinel.second.Prev(), &n1);
+}
+
+BOOST_AUTO_TEST_CASE(cursor_removes_pruned_entry)
+{
+    CoinsCachePair sentinel;
+    sentinel.second.SelfRef(sentinel);
+    CCoinsMapMemoryResource resource;
+    CCoinsMap map{0, CCoinsMap::hasher{}, CCoinsMap::key_equal{}, &resource};
+
+    auto [it, inserted] = map.emplace();
+    BOOST_REQUIRE(inserted);
+    it->second.coin.Clear(); // spent
+    CCoinsCacheEntry::SetDirty(*it, sentinel);
+    CCoinsCacheEntry::SetFresh(*it, sentinel);
+    size_t pruned{1};
+
+    CoinsViewCacheCursor cursor{sentinel, map, /*will_erase=*/false, &pruned};
+    auto node{cursor.Begin()};
+    BOOST_REQUIRE(node != cursor.End());
+    BOOST_CHECK_EQUAL(pruned, 1);
+
+    auto end{cursor.NextAndMaybeErase(*node)};
+    BOOST_CHECK_EQUAL(end, cursor.End());
+    BOOST_CHECK(map.empty());
+    BOOST_CHECK_EQUAL(pruned, 0);
+    BOOST_CHECK_EQUAL(sentinel.second.Next(), &sentinel);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
