@@ -13,6 +13,7 @@ add_executable(bench_bitcoin
   bip324_ecdh.cpp
   block_assemble.cpp
   blockencodings.cpp
+  blockstorage.cpp
   ccoins_caching.cpp
   chacha20.cpp
   checkblock.cpp
@@ -42,6 +43,7 @@ add_executable(bench_bitcoin
   poly1305.cpp
   pool.cpp
   prevector.cpp
+  privatebroadcast.cpp
   random.cpp
   readwriteblock.cpp
   rollingbloom.cpp
