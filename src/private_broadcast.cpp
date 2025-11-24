@@ -3,31 +3,30 @@
 // file COPYING or https://opensource.org/license/mit/.
 
 #include <private_broadcast.h>
-#include <util/check.h>
+
+#include <algorithm>
+
+using namespace std::ranges;
 
 /// If a transaction is not received back from the network for this duration
-/// after it is broadcast, then we consider it stale / for rebroadcasting.
+/// after it is broadcast, then we consider it stale for rebroadcasting.
 static constexpr auto STALE_DURATION{1min};
 
 bool PrivateBroadcast::Add(const CTransactionRef& tx) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
-    const Txid& txid = tx->GetHash();
     LOCK(m_mutex);
-    auto [pos, inserted] = m_by_txid.emplace(txid, TxWithPriority{.tx = tx, .priority = Priority{}});
-    if (inserted) {
-        m_by_priority.emplace(Priority{}, txid);
-    }
-    return inserted;
+    if (any_of(m_entries, EqTxid(tx))) return false;
+    m_entries.emplace_back(tx, Priority{});
+    return true;
 }
 
 std::optional<size_t> PrivateBroadcast::Remove(const CTransactionRef& tx) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
-    auto iters = Find(tx->GetHash());
-    if (iters && iters->by_txid->second.tx->GetWitnessHash() == tx->GetWitnessHash()) {
-        m_by_txid.erase(iters->by_txid);
-        const auto handle{m_by_priority.extract(iters->by_priority)};
-        return handle.key().num_broadcasted;
+    if (auto it{find_if(m_entries, EqTxidWtxid(tx))}; it != m_entries.end()) {
+        const auto num_broadcasted{it->m_priority.num_broadcasted};
+        *it = std::move(m_entries.back()); m_entries.pop_back();
+        return num_broadcasted;
     }
     return std::nullopt;
 }
@@ -35,106 +34,47 @@ std::optional<size_t> PrivateBroadcast::Remove(const CTransactionRef& tx) EXCLUS
 std::optional<CTransactionRef> PrivateBroadcast::GetTxForBroadcast() EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
-    if (!m_by_priority.empty()) {
-        const Txid& txid = m_by_priority.begin()->second;
-        auto it = m_by_txid.find(txid);
-        if (Assume(it != m_by_txid.end())) {
-            return it->second.tx;
-        }
-        m_by_priority.erase(m_by_priority.begin());
-    }
+    if (auto it{std::min_element(m_entries.begin(), m_entries.end())}; it != m_entries.end()) return it->m_tx;
     return std::nullopt;
 }
 
 void PrivateBroadcast::PushedToNode(const NodeId& nodeid, const Txid& txid) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
-    LOCK(m_mutex);
-    m_by_nodeid.emplace(nodeid, txid);
+    WITH_LOCK(m_mutex, m_by_nodeid.emplace(nodeid, txid));
 }
 
-std::optional<CTransactionRef> PrivateBroadcast::GetTxPushedToNode(const NodeId& nodeid) const
-    EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
+std::optional<CTransactionRef> PrivateBroadcast::GetTxPushedToNode(const NodeId& nodeid) const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
-
-    auto it_by_node = m_by_nodeid.find(nodeid);
-    if (it_by_node != m_by_nodeid.end()) {
-        const Txid& txid{it_by_node->second};
-        auto it_by_txid = m_by_txid.find(txid);
-        if (it_by_txid != m_by_txid.end()) {
-            return it_by_txid->second.tx;
-        }
+    if (auto it_id{m_by_nodeid.find(nodeid)}; it_id != m_by_nodeid.end()) {
+        if (auto it_tx{find_if(m_entries, EqTxid(it_id->second))}; it_tx != m_entries.end()) return it_tx->m_tx;
     }
-
     return std::nullopt;
 }
 
 bool PrivateBroadcast::FinishBroadcast(const NodeId& nodeid, bool confirmed_by_node) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
-    const auto handle{m_by_nodeid.extract(nodeid)};
-    if (!handle) {
-        return false;
+    if (auto handle{m_by_nodeid.extract(nodeid)}) {
+        if (auto it{find_if(m_entries, EqTxid(handle.mapped()))}; it != m_entries.end()) {
+            if (confirmed_by_node) {
+                ++it->m_priority.num_broadcasted;
+                it->m_priority.last_broadcasted = NodeClock::now();
+            }
+            return true;
+        }
     }
-
-    const Txid& txid{handle.mapped()};
-
-    auto iters{Find(txid)};
-
-    if (!iters.has_value()) {
-        return false;
-    }
-
-    if (confirmed_by_node) {
-        // Update broadcast stats, since txid was found and its reception is confirmed by the node.
-        Priority& priority = iters->by_txid->second.priority;
-
-        ++priority.num_broadcasted;
-        priority.last_broadcasted = NodeClock::now();
-
-        // Remove and re-add the entry in the m_by_priority map because we have changed the key.
-        m_by_priority.erase(iters->by_priority);
-        m_by_priority.emplace(priority, txid);
-    }
-
-    return true;
+    return false;
 }
 
 std::vector<CTransactionRef> PrivateBroadcast::GetStale() const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
-    const auto stale_time = NodeClock::now() - STALE_DURATION;
+    const auto stale_time{NodeClock::now() - STALE_DURATION};
     std::vector<CTransactionRef> stale;
-    for (const auto& [_, tx_with_priority] : m_by_txid) {
-        if (tx_with_priority.priority.last_broadcasted < stale_time) {
-            stale.push_back(tx_with_priority.tx);
-        }
+    stale.reserve(m_entries.size());
+    for (const auto& [tx, _, __, priority] : m_entries) {
+        if (priority.last_broadcasted < stale_time) stale.push_back(tx);
     }
     return stale;
-}
-
-bool PrivateBroadcast::Priority::operator<(const Priority& other) const
-{
-    if (num_broadcasted < other.num_broadcasted) {
-        return true;
-    }
-    if (num_broadcasted == other.num_broadcasted) {
-        return last_broadcasted < other.last_broadcasted;
-    }
-    return false;
-}
-
-std::optional<PrivateBroadcast::Iterators> PrivateBroadcast::Find(const Txid& txid) EXCLUSIVE_LOCKS_REQUIRED(m_mutex)
-{
-    AssertLockHeld(m_mutex);
-    auto i = m_by_txid.find(txid);
-    if (i != m_by_txid.end()) {
-        const Priority& priority = i->second.priority;
-        for (auto j = m_by_priority.lower_bound(priority); j != m_by_priority.end(); ++j) {
-            if (j->second == txid) {
-                return Iterators{.by_txid = i, .by_priority = j};
-            }
-        }
-    }
-    return std::nullopt;
 }

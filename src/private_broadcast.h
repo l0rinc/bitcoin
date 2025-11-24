@@ -13,8 +13,8 @@
 #include <util/hasher.h>
 #include <util/time.h>
 
-#include <map>
 #include <optional>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
@@ -59,8 +59,7 @@ public:
     /**
      * Get the transaction that was pushed to a given node by PushedToNode().
      */
-    std::optional<CTransactionRef> GetTxPushedToNode(const NodeId& nodeid) const
-        EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
+    std::optional<CTransactionRef> GetTxPushedToNode(const NodeId& nodeid) const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
 
     /**
      * Mark the end of a broadcast of a transaction. Either successful by receiving a PONG,
@@ -80,37 +79,40 @@ private:
         size_t num_broadcasted{0};
         NodeClock::time_point last_broadcasted{};
 
-        bool operator<(const Priority& other) const;
+        // Fewer broadcasts first, then older last_broadcasted first.
+        bool operator<(const Priority& other) const
+        {
+            return std::tie(num_broadcasted, last_broadcasted) <
+                   std::tie(other.num_broadcasted, other.last_broadcasted);
+        }
     };
 
-    struct TxWithPriority {
-        CTransactionRef tx;
-        Priority priority;
+    struct Entry {
+        CTransactionRef m_tx;
+        Txid m_txid;
+        Wtxid m_wtxid;
+        Priority m_priority;
+
+        Entry(const CTransactionRef& tx, Priority priority) : m_tx{tx},
+                                                              m_txid{tx->GetHash()},
+                                                              m_wtxid{tx->GetWitnessHash()},
+                                                              m_priority{priority} {}
+
+        friend bool operator<(const Entry& a, const Entry& b) { return a.m_priority < b.m_priority; }
     };
 
-    using ByTxid = std::unordered_map<Txid, TxWithPriority, SaltedTxidHasher>;
-    using ByPriority = std::multimap<Priority, Txid>;
-    using ByNodeId = std::unordered_map<NodeId, Txid>;
-
-    struct Iterators {
-        ByTxid::iterator by_txid;
-        ByPriority::iterator by_priority;
-    };
-
-    /**
-     * Get iterators in `m_by_txid` and `m_by_priority` for a given transaction.
-     */
-    std::optional<Iterators> Find(const Txid& txid) EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
+    static auto EqTxid(const Txid& txid) noexcept { return [txid](const Entry& e) { return e.m_txid == txid; }; }
+    static auto EqTxid(const CTransactionRef& tx) noexcept { return EqTxid(tx->GetHash()); }
+    static auto EqTxidWtxid(const CTransactionRef& tx) noexcept { return [tx](const Entry& e) { return EqTxid(tx)(e) && e.m_wtxid == tx->GetWitnessHash(); }; }
 
     mutable Mutex m_mutex;
-    ByTxid m_by_txid GUARDED_BY(m_mutex);
-    ByPriority m_by_priority GUARDED_BY(m_mutex);
+    std::vector<Entry> m_entries GUARDED_BY(m_mutex);
 
     /**
      * Remember which transaction was sent to which node, so that when we get the PONG
      * from that node we can mark the transaction as broadcast.
      */
-    ByNodeId m_by_nodeid GUARDED_BY(m_mutex);
+    std::unordered_map<NodeId, Txid> m_by_nodeid GUARDED_BY(m_mutex);
 };
 
 #endif // BITCOIN_PRIVATE_BROADCAST_H
