@@ -18,6 +18,7 @@
 #include <ios>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <numeric>
 #include <string>
 #include <tuple>
@@ -311,11 +312,10 @@ public:
 private:
     /** Memory only. */
     const bool m_has_witness;
-    const Txid hash;
-    const Wtxid m_witness_hash;
 
-    Txid ComputeHash() const;
-    Wtxid ComputeWitnessHash() const;
+    mutable Txid* m_hash{nullptr};
+    mutable Wtxid* m_witness_hash{nullptr};
+    mutable std::once_flag m_initialized{};
 
     bool ComputeHasWitness() const;
 
@@ -323,6 +323,10 @@ public:
     /** Convert a CMutableTransaction into a CTransaction. */
     explicit CTransaction(const CMutableTransaction& tx);
     explicit CTransaction(CMutableTransaction&& tx);
+
+    CTransaction(const CTransaction& tx);
+    CTransaction(CTransaction&& tx) noexcept;
+    ~CTransaction();
 
     template <typename Stream>
     inline void Serialize(Stream& s) const {
@@ -340,8 +344,8 @@ public:
         return vin.empty() && vout.empty();
     }
 
-    const Txid& GetHash() const LIFETIMEBOUND { return hash; }
-    const Wtxid& GetWitnessHash() const LIFETIMEBOUND { return m_witness_hash; };
+    const Txid& GetHash() const LIFETIMEBOUND;
+    const Wtxid& GetWitnessHash() const LIFETIMEBOUND;
 
     // Return sum of txouts.
     CAmount GetValueOut() const;
@@ -355,17 +359,21 @@ public:
 
     bool IsCoinBase() const
     {
-        return (vin.size() == 1 && vin[0].prevout.IsNull());
+        return vin.size() == 1 && vin[0].prevout.IsNull();
     }
 
     friend bool operator==(const CTransaction& a, const CTransaction& b)
     {
+        // Quick checks first to avoid hash computation
+        if (a.nLockTime != b.nLockTime || a.version != b.version || a.vin.size() != b.vin.size() || a.vout.size() != b.vout.size()) {
+            return false;
+        }
         return a.GetWitnessHash() == b.GetWitnessHash();
     }
 
     friend bool operator!=(const CTransaction& a, const CTransaction& b)
     {
-        return !operator==(a, b);
+        return !(a == b);
     }
 
     std::string ToString() const;
