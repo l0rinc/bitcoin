@@ -1540,53 +1540,38 @@ void PeerManagerImpl::FindNextBlocks(std::vector<const CBlockIndex*>& vBlocks, c
 
 void PeerManagerImpl::PushNodeVersion(CNode& pnode, const Peer& peer)
 {
-    uint64_t my_services;
-    int64_t my_time;
-    uint64_t your_services;
-    CService your_addr;
-    std::string my_user_agent;
-    int my_height;
-    bool my_tx_relay;
+    auto push{[&](uint64_t my_services, int64_t my_time, uint64_t your_services, const CService& your_addr, const std::string& my_user_agent, int my_height, bool my_tx_relay) {
+        MakeAndPushMessage(
+            pnode,
+            NetMsgType::VERSION,
+            PROTOCOL_VERSION,
+            my_services,
+            my_time,
+            your_services, CNetAddr::V1(your_addr), // your_services + CNetAddr::V1(your_addr) is the pre-version-31402 serialization of your_addr (without nTime)
+            my_services, CNetAddr::V1(CService{}),  // same, for a dummy address
+            pnode.GetLocalNonce(),
+            my_user_agent,
+            my_height,
+            my_tx_relay);
+        LogDebug(BCLog::NET, "send version message: version %d, blocks=%d, txrelay=%d, peer=%d%s", PROTOCOL_VERSION, my_height, my_tx_relay, pnode.GetId(), pnode.LogIP(fLogIPs));
+    }};
+
     if (pnode.IsPrivateBroadcastConn()) {
-        my_services = NODE_NONE;
-        my_time = 0;
-        your_services = NODE_NONE;
-        your_addr = CService{};
-        my_user_agent = "/pynode:0.0.1/"; // Use a constant other than the default (or user-configured). See https://github.com/bitcoin/bitcoin/pull/27509#discussion_r1214671917
-        my_height = 0;
-        my_tx_relay = false;
+        push(/*my_services=*/NODE_NONE,
+             /*my_time=*/0,
+             /*your_services=*/NODE_NONE,
+             /*your_addr=*/CService{},
+             /*my_user_agent=*/"/pynode:0.0.1/",
+             /*my_height=*/0,
+             /*my_tx_relay=*/false);
     } else {
-        CAddress addr{pnode.addr};
-
-        my_services = peer.m_our_services;
-        my_time = count_seconds(GetTime<std::chrono::seconds>());
-        your_services = addr.nServices;
-        your_addr = addr.IsRoutable() && !IsProxy(addr) && addr.IsAddrV1Compatible() ? CService{addr} : CService{};
-        my_user_agent = strSubVersion;
-        my_height = m_best_height;
-        my_tx_relay = !RejectIncomingTxs(pnode);
-    }
-
-    MakeAndPushMessage(
-        pnode,
-        NetMsgType::VERSION,
-        PROTOCOL_VERSION,
-        my_services,
-        my_time,
-        // your_services + CNetAddr::V1(your_addr) is the pre-version-31402 serialization of your_addr (without nTime)
-        your_services, CNetAddr::V1(your_addr),
-        // same, for a dummy address
-        my_services, CNetAddr::V1(CService{}),
-        pnode.GetLocalNonce(),
-        my_user_agent,
-        my_height,
-        my_tx_relay);
-
-    const NodeId nodeid{pnode.GetId()};
-    if (fLogIPs) {
-        LogDebug(BCLog::NET, "send version message: version %d, blocks=%d, them=%s, txrelay=%d, peer=%d", PROTOCOL_VERSION, my_height, your_addr.ToStringAddrPort(), my_tx_relay, nodeid);
-    } else {
-        LogDebug(BCLog::NET, "send version message: version %d, blocks=%d, txrelay=%d, peer=%d", PROTOCOL_VERSION, my_height, my_tx_relay, nodeid);
+        push(/*my_services=*/peer.m_our_services,
+             /*my_time=*/count_seconds(GetTime<std::chrono::seconds>()),
+             /*your_services=*/pnode.addr.nServices,
+             /*your_addr=*/pnode.addr.IsRoutable() && !IsProxy(pnode.addr) && pnode.addr.IsAddrV1Compatible() ? CService{pnode.addr} : CService{},
+             /*my_user_agent=*/strSubVersion,
+             /*my_height=*/m_best_height.load(),
+             /*my_tx_relay=*/!RejectIncomingTxs(pnode));
     }
 }
 

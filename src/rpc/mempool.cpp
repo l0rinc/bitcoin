@@ -48,15 +48,15 @@ static RPCHelpMan sendrawtransaction()
         "sendrawtransaction",
         "Submit a raw transaction (serialized, hex-encoded) to the network.\n"
 
-        "\nIf -privatebroadcast is disabled, then the transaction will be put into the\n"
+        "\nIf -privatebroadcast is disabled, the transaction will be put into the\n"
         "local mempool of the node and will be sent unconditionally to all currently\n"
-        "connected peers, so using sendrawtransaction for manual rebroadcast will degrade\n"
-        "privacy by leaking the transaction's origin, as nodes will normally not\n"
+        "connected peers. Using sendrawtransaction for manual rebroadcast will degrade\n"
+        "privacy by leaking the transaction's origin, because nodes will normally not\n"
         "rebroadcast non-wallet transactions already in their mempool.\n"
 
-        "\nIf -privatebroadcast is enabled, then the transaction will be sent only via\n"
-        "dedicated, short-lived connections to Tor or I2P peers or IPv4/IPv6 peers\n"
-        "through the Tor network. This conceals the transaction origin. The transaction\n"
+        "\nIf -privatebroadcast is enabled, the transaction will be sent only via\n"
+        "dedicated, short-lived connections to Tor or I2P peers, or IPv4/IPv6 peers\n"
+        "via the Tor network. This conceals the transaction's origin. The transaction\n"
         "will only enter the local mempool when it is received back from the network.\n"
 
         "\nA specific exception, RPC_TRANSACTION_ALREADY_IN_UTXO_SET, may throw if the transaction cannot be added to the mempool.\n"
@@ -115,10 +115,10 @@ static RPCHelpMan sendrawtransaction()
                 !g_reachable_nets.Contains(NET_ONION) &&
                 !g_reachable_nets.Contains(NET_I2P)) {
                 throw JSONRPCError(RPC_MISC_ERROR,
-                                   "-privatebroadcast is enabled, but none of the Tor or I2P networks is "
-                                   "reachable. Maybe the location of the Tor proxy couldn't be retrieved "
+                                   "-privatebroadcast is enabled, but neither the Tor nor the I2P network is "
+                                   "reachable. Maybe the location of the Tor proxy could not be retrieved "
                                    "from the Tor daemon at startup. Check whether the Tor daemon is running "
-                                   "and that -torcontrol, -torpassword and -i2psam are configured properly.");
+                                   "and that -torcontrol, -torpassword, and -i2psam are configured properly.");
             }
             const auto method = private_broadcast_enabled ? node::TxBroadcast::NO_MEMPOOL_PRIVATE_BROADCAST
                                                           : node::TxBroadcast::MEMPOOL_AND_BROADCAST_TO_ALL;
