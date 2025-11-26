@@ -15,18 +15,15 @@ static constexpr auto STALE_DURATION{1min};
 bool PrivateBroadcast::Add(const CTransactionRef& tx) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
-    const bool inserted{m_transactions.try_emplace(tx).second};
-    return inserted;
+    return m_transactions.try_emplace(tx).second;
 }
 
 std::optional<size_t> PrivateBroadcast::Remove(const CTransactionRef& tx)
     EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
-    const auto handle{m_transactions.extract(tx)};
-    if (handle) {
-        const auto p{DerivePriority(handle.mapped())};
-        return p.num_confirmed;
+    if (const auto handle{m_transactions.extract(tx)}) {
+        return DerivePriority(handle.mapped()).num_confirmed;
     }
     return std::nullopt;
 }
@@ -36,12 +33,12 @@ std::optional<CTransactionRef> PrivateBroadcast::PickTxForSend(const NodeId& wil
 {
     LOCK(m_mutex);
 
-    const auto it{std::ranges::max_element(
+    if (const auto it{std::ranges::max_element(
             m_transactions,
             [](const auto& a, const auto& b) { return a < b; },
             [](const auto& el) { return DerivePriority(el.second); })};
-
-    if (it != m_transactions.end()) {
+        it != m_transactions.end()
+    ) {
         auto& [tx, sent_to]{*it};
         sent_to.emplace_back(will_send_to_nodeid, NodeClock::now());
         return tx;
@@ -54,9 +51,8 @@ std::optional<CTransactionRef> PrivateBroadcast::GetTxForNode(const NodeId& node
     EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
-    const auto tx_and_status{GetSendStatusByNode(nodeid)};
-    if (tx_and_status.has_value()) {
-        return tx_and_status.value().tx;
+    if (const auto tx_and_status{GetSendStatusByNode(nodeid)}) {
+        return tx_and_status->tx;
     }
     return std::nullopt;
 }
@@ -65,9 +61,8 @@ void PrivateBroadcast::NodeConfirmedReception(const NodeId& nodeid)
     EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
-    const auto tx_and_status{GetSendStatusByNode(nodeid)};
-    if (tx_and_status.has_value()) {
-        tx_and_status.value().send_status.confirmed = NodeClock::now();
+    if (const auto tx_and_status{GetSendStatusByNode(nodeid)}) {
+        tx_and_status->send_status.confirmed = NodeClock::now();
     }
 }
 
@@ -75,9 +70,8 @@ bool PrivateBroadcast::DidNodeConfirmReception(const NodeId& nodeid)
     EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
-    const auto tx_and_status{GetSendStatusByNode(nodeid)};
-    if (tx_and_status.has_value()) {
-        return tx_and_status.value().send_status.confirmed.has_value();
+    if (const auto tx_and_status{GetSendStatusByNode(nodeid)}) {
+        return !!tx_and_status->send_status.confirmed;
     }
     return false;
 }
@@ -87,27 +81,13 @@ std::vector<CTransactionRef> PrivateBroadcast::GetStale() const EXCLUSIVE_LOCKS_
     LOCK(m_mutex);
     const auto stale_time{NodeClock::now() - STALE_DURATION};
     std::vector<CTransactionRef> stale;
+    stale.reserve(m_transactions.size());
     for (const auto& [tx, send_status] : m_transactions) {
-        const Priority p{DerivePriority(send_status)};
-        if (p.last_confirmed < stale_time) {
+        if (const Priority p{DerivePriority(send_status)}; p.last_confirmed < stale_time) {
             stale.push_back(tx);
         }
     }
     return stale;
-}
-
-std::strong_ordering PrivateBroadcast::Priority::operator<=>(const Priority& other) const
-{
-    const auto this_tie{std::tie(num_picked, num_confirmed, last_picked, last_confirmed)};
-    const auto other_tie{std::tie(other.num_picked, other.num_confirmed, other.last_picked, other.last_confirmed)};
-
-    if (this_tie < other_tie) { // Smaller num_picked, num_confirmed or older times mean greater priority.
-        return std::strong_ordering::greater;
-    }
-    if (this_tie == other_tie) {
-        return std::strong_ordering::equivalent;
-    }
-    return std::strong_ordering::less;
 }
 
 PrivateBroadcast::Priority PrivateBroadcast::DerivePriority(const std::vector<SendStatus>& sent_to)
@@ -116,9 +96,9 @@ PrivateBroadcast::Priority PrivateBroadcast::DerivePriority(const std::vector<Se
     p.num_picked = sent_to.size();
     for (const auto& send_status : sent_to) {
         p.last_picked = std::max(p.last_picked, send_status.picked);
-        if (send_status.confirmed.has_value()) {
+        if (send_status.confirmed) {
             ++p.num_confirmed;
-            p.last_confirmed = std::max(p.last_confirmed, send_status.confirmed.value());
+            p.last_confirmed = std::max(p.last_confirmed, *send_status.confirmed);
         }
     }
     return p;

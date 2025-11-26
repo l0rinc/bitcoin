@@ -102,7 +102,11 @@ private:
         size_t num_confirmed{0}; ///< Number of nodes that have confirmed reception of a transaction (by PONG).
         NodeClock::time_point last_confirmed{}; ///< The most recent time when the transaction was confirmed.
 
-        std::strong_ordering operator<=>(const Priority& other) const;
+        auto operator<=>(const Priority& other) const noexcept
+        {
+            return std::tie(other.num_picked, other.num_confirmed, other.last_picked, other.last_confirmed)
+               <=> std::tie(num_picked, num_confirmed, last_picked, last_confirmed);
+        }
     };
 
     /// A pair of a transaction and a sent status for a given node. Convenience return type of GetSendStatusByNode().
