@@ -4063,18 +4063,21 @@ bool CConnman::NodeFullyConnected(const CNode* pnode)
     return pnode && pnode->fSuccessfullyConnected && !pnode->fDisconnect;
 }
 
+bool IsPrivateBroadcastAllowed(std::string_view type) noexcept
+{
+    return type == NetMsgType::VERSION
+        || type == NetMsgType::VERACK
+        || type == NetMsgType::INV
+        || type == NetMsgType::TX
+        || type == NetMsgType::PING;
+}
+
 void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
 {
     AssertLockNotHeld(m_total_bytes_sent_mutex);
 
-    if (pnode->IsPrivateBroadcastConn() &&
-        msg.m_type != NetMsgType::VERSION &&
-        msg.m_type != NetMsgType::VERACK &&
-        msg.m_type != NetMsgType::INV &&
-        msg.m_type != NetMsgType::TX &&
-        msg.m_type != NetMsgType::PING) {
-        // Ensure private broadcast connections only send the above message types.
-        // Others are not needed and may degrade privacy.
+    if (pnode->IsPrivateBroadcastConn() && !IsPrivateBroadcastAllowed(msg.m_type)) {
+        // Other message type are not needed and may degrade privacy.
         LogDebug(BCLog::PRIVBROADCAST,
                  "Omitting send of message '%s', peer=%d%s",
                  msg.m_type,

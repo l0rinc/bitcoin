@@ -1584,20 +1584,9 @@ void PeerManagerImpl::PushNodeVersion(CNode& pnode, const Peer& peer)
 
     const NodeId nodeid{pnode.GetId()};
     if (fLogIPs) {
-        LogDebug(BCLog::NET,
-                 "send version message: version %d, blocks=%d, them=%s, txrelay=%d, peer=%d",
-                 PROTOCOL_VERSION,
-                 my_height,
-                 your_addr.ToStringAddrPort(),
-                 my_tx_relay,
-                 nodeid);
+        LogDebug(BCLog::NET, "send version message: version %d, blocks=%d, them=%s, txrelay=%d, peer=%d", PROTOCOL_VERSION, my_height, your_addr.ToStringAddrPort(), my_tx_relay, nodeid);
     } else {
-        LogDebug(BCLog::NET,
-                 "send version message: version %d, blocks=%d, txrelay=%d, peer=%d",
-                 PROTOCOL_VERSION,
-                 my_height,
-                 my_tx_relay,
-                 nodeid);
+        LogDebug(BCLog::NET, "send version message: version %d, blocks=%d, txrelay=%d, peer=%d", PROTOCOL_VERSION, my_height, my_tx_relay, nodeid);
     }
 }
 
@@ -3550,30 +3539,47 @@ void PeerManagerImpl::LogBlockHeader(const CBlockIndex& index, const CNode& peer
     }
 }
 
+bool IsPrivateBroadcastInboundAllowed(std::string_view msg_type) noexcept
+{
+    return msg_type == NetMsgType::PONG
+        || msg_type == NetMsgType::GETDATA;
+}
+
+template <typename... Args>
+void LogPrivDebug(const CNode& node, const std::string& fmt, const Args&... args)
+{
+    LogDebug(BCLog::PRIVBROADCAST, "%s, peer=%d%s",
+             strprintf(tinyformat::RuntimeFormat{fmt}, args...),
+             node.GetId(),
+             node.LogIP(fLogIPs));
+}
+
+template <typename... Args>
+void LogPrivInfo(const CNode& node, const std::string& fmt, const Args&... args)
+{
+    LogPrintLevel(BCLog::PRIVBROADCAST, BCLog::Level::Info, "%s, peer=%d%s",
+                  strprintf(tinyformat::RuntimeFormat{fmt}, args...),
+                  node.GetId(),
+                  node.LogIP(fLogIPs));
+}
+
 void PeerManagerImpl::PushPrivateBroadcastTx(CNode& node)
 {
     Assume(node.IsPrivateBroadcastConn());
 
     auto opt_tx = m_tx_for_private_broadcast.PickTxForSend(node.GetId());
     if (!opt_tx) {
-        LogDebug(BCLog::PRIVBROADCAST,
-                 "Disconnecting: no more transactions for private broadcast (connected in vain), peer=%d%s",
-                 node.GetId(),
-                 node.LogIP(fLogIPs));
+        LogPrivDebug(node, "Disconnecting: no more transactions for private broadcast (connected in vain)");
         node.fDisconnect = true;
         return;
     }
     const CTransactionRef& tx{*opt_tx};
 
-    LogPrintLevel(BCLog::PRIVBROADCAST,
-                  BCLog::Level::Info,
-                  "P2P handshake completed, sending INV for txid=%s%s, peer=%d%s",
-                  tx->GetHash().ToString(),
-                  tx->HasWitness() ? strprintf(", wtxid=%s", tx->GetWitnessHash().ToString()) : "",
-                  node.GetId(),
-                  node.LogIP(fLogIPs));
+    LogPrivInfo(node, "P2P handshake completed, sending INV for txid=%s%s",
+                tx->GetHash().ToString(),
+                tx->HasWitness() ? strprintf(", wtxid=%s", tx->GetWitnessHash().ToString()) : "");
 
-    MakeAndPushMessage(node, NetMsgType::INV, std::vector<CInv>{{CInv{MSG_TX, tx->GetHash().ToUint256()}}});
+    MakeAndPushMessage(node, NetMsgType::INV, std::vector<CInv>{{MSG_TX, tx->GetHash().ToUint256()}});
 }
 
 void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, DataStream& vRecv,
@@ -3710,11 +3716,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (fRelay) {
                 MakeAndPushMessage(pfrom, NetMsgType::VERACK);
             } else {
-                LogPrintLevel(BCLog::PRIVBROADCAST,
-                              BCLog::Level::Info,
-                              "Disconnecting: does not support transactions relay (connected in vain), peer=%d%s",
-                              pfrom.GetId(),
-                              pfrom.LogIP(fLogIPs));
+                LogPrivInfo(pfrom, "Disconnecting: does not support transactions relay (connected in vain)");
                 pfrom.fDisconnect = true;
             }
             return;
@@ -4020,15 +4022,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         return;
     }
 
-    if (pfrom.IsPrivateBroadcastConn()) {
-        if (msg_type != NetMsgType::PONG && msg_type != NetMsgType::GETDATA) {
-            LogDebug(BCLog::PRIVBROADCAST,
-                     "Ignoring incoming message '%s', peer=%d%s",
-                     msg_type,
-                     pfrom.GetId(),
-                     pfrom.LogIP(fLogIPs));
-            return;
-        }
+    if (pfrom.IsPrivateBroadcastConn() && !IsPrivateBroadcastInboundAllowed(msg_type)) {
+        LogPrivDebug(pfrom, "Ignoring incoming message '%s'", msg_type);
+        return;
     }
 
     if (msg_type == NetMsgType::ADDR || msg_type == NetMsgType::ADDRV2) {
@@ -4237,11 +4233,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (pfrom.IsPrivateBroadcastConn()) {
             const auto pushed_tx_opt = m_tx_for_private_broadcast.GetTxForNode(pfrom.GetId());
             if (!pushed_tx_opt) {
-                LogPrintLevel(BCLog::PRIVBROADCAST,
-                              BCLog::Level::Info,
-                              "Disconnecting: got GETDATA without sending an INV, peer=%d%s",
-                              pfrom.GetId(),
-                              fLogIPs ? strprintf(", peeraddr=%s", pfrom.addr.ToStringAddrPort()) : "");
+                LogPrivInfo(pfrom, "Disconnecting: got GETDATA without sending an INV");
                 pfrom.fDisconnect = true;
                 return;
             }
@@ -4257,11 +4249,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 peer->m_ping_queued = true; // Ensure a ping will be sent: mimic a request via RPC.
                 MaybeSendPing(pfrom, *peer, GetTime<std::chrono::microseconds>());
             } else {
-                LogPrintLevel(BCLog::PRIVBROADCAST,
-                              BCLog::Level::Info,
-                              "Disconnecting: got an unexpected GETDATA message, peer=%d%s",
-                              pfrom.GetId(),
-                              fLogIPs ? strprintf(", peeraddr=%s", pfrom.addr.ToStringAddrPort()) : "");
+                LogPrivInfo(pfrom, "Disconnecting: got an unexpected GETDATA message");
                 pfrom.fDisconnect = true;
             }
             return;
@@ -4505,13 +4493,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         AddKnownTx(*peer, hash);
 
         if (auto num_broadcasted = m_tx_for_private_broadcast.Remove(ptx)) {
-            LogPrintLevel(BCLog::PRIVBROADCAST,
-                          BCLog::Level::Info,
-                          "Received our privately broadcast transaction (txid=%s) from the "
-                          "network from peer=%d%s; stopping private broadcast attempts",
-                          txid.ToString(),
-                          pfrom.GetId(),
-                          pfrom.LogIP(fLogIPs));
+            LogPrivInfo(pfrom,
+                "Received our privately broadcast transaction (txid=%s) from the network; stopping private broadcast attempts",
+                txid.ToString());
             if (NUM_PRIVATE_BROADCAST_PER_TX > num_broadcasted.value()) {
                 // Not all of the initial NUM_PRIVATE_BROADCAST_PER_TX connections were needed.
                 // Tell CConnman it does not need to start the remaining ones.
@@ -5025,13 +5009,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         pfrom.PongReceived(ping_time);
                         if (pfrom.IsPrivateBroadcastConn()) {
                             m_tx_for_private_broadcast.NodeConfirmedReception(pfrom.GetId());
-                            LogPrintLevel(
-                                BCLog::PRIVBROADCAST,
-                                BCLog::Level::Info,
-                                "Got a PONG (the transaction will probably reach the network), "
-                                "marking for disconnect, peer=%d%s",
-                                pfrom.GetId(),
-                                pfrom.LogIP(fLogIPs));
+                            LogPrivInfo(pfrom,
+                                "Got a PONG (the transaction will probably reach the network), marking for disconnect");
                             pfrom.fDisconnect = true;
                         }
                     } else {
@@ -5746,13 +5725,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
     // not sent. This here is just an optimization.
     if (pto->IsPrivateBroadcastConn()) {
         if (pto->m_connected + PRIVATE_BROADCAST_MAX_CONNECTION_LIFETIME < current_time) {
-            LogPrintLevel(
-                BCLog::PRIVBROADCAST,
-                BCLog::Level::Info,
-                "Disconnecting: did not complete the transaction send within %d seconds, peer=%d%s",
-                std::chrono::duration_cast<std::chrono::seconds>(PRIVATE_BROADCAST_MAX_CONNECTION_LIFETIME).count(),
-                pto->GetId(),
-                pto->LogIP(fLogIPs));
+            LogPrivInfo(*pto, "Disconnecting: did not complete the transaction send within %d seconds",
+                count_seconds(PRIVATE_BROADCAST_MAX_CONNECTION_LIFETIME));
             pto->fDisconnect = true;
         }
         return true;
