@@ -88,23 +88,27 @@ private:
     /// Status of a transaction sent to a given node.
     struct SendStatus {
         NodeId nodeid; /// Node to which the transaction will be sent (or was sent).
-        NodeClock::time_point picked; ///< When was the transaction picked for sending to the node.
-        std::optional<NodeClock::time_point> confirmed; ///< When was the transaction reception confirmed by the node (by PONG).
+        NodeSeconds picked; ///< When was the transaction picked for sending to the node.
+        std::optional<NodeSeconds> confirmed; ///< When was the transaction reception confirmed by the node (by PONG).
     };
 
     /// Cumulative stats from all the send attempts for a transaction. Used to prioritize transactions.
     struct Priority {
         size_t num_picked{0}; ///< Number of times the transaction was picked for sending.
-        NodeClock::time_point last_picked{}; ///< The most recent time when the transaction was picked for sending.
+        NodeSeconds last_picked{}; ///< The most recent time when the transaction was picked for sending.
         size_t num_confirmed{0}; ///< Number of nodes that have confirmed reception of a transaction (by PONG).
-        NodeClock::time_point last_confirmed{}; ///< The most recent time when the transaction was confirmed.
+        NodeSeconds last_confirmed{}; ///< The most recent time when the transaction was confirmed.
 
-        std::strong_ordering operator<=>(const Priority& other) const;
+        auto operator<=>(const Priority& other) const noexcept
+        {
+            return std::tie(other.num_picked, other.num_confirmed, other.last_picked, other.last_confirmed)
+               <=> std::tie(num_picked, num_confirmed, last_picked, last_confirmed);
+        }
     };
 
     /// A pair of a transaction and a sent status for a given node. Convenience return type of GetSendStatusByNode().
     struct TxAndSendStatusForNode {
-        CTransactionRef& tx;
+        const CTransactionRef& tx;
         SendStatus& send_status;
     };
 
