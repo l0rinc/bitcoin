@@ -50,6 +50,7 @@ add_executable(test_bitcoin
   headers_sync_chainwork_tests.cpp
   httpserver_tests.cpp
   i2p_tests.cpp
+  inputfetcher_tests.cpp
   interfaces_tests.cpp
   key_io_tests.cpp
   key_tests.cpp
@@ -105,6 +106,7 @@ add_executable(test_bitcoin
   system_ram_tests.cpp
   system_tests.cpp
   testnet4_miner_tests.cpp
+  threadpool_tests.cpp
   timeoffsets_tests.cpp
   torcontrol_tests.cpp
   transaction_tests.cpp
