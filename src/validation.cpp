@@ -2858,7 +2858,7 @@ bool Chainstate::FlushStateToDisk(
                     return FatalError(m_chainman.GetNotifications(), state, _("Disk space is too low!"));
                 }
                 if (should_empty) {
-                    CoinsTip().Flush();
+                    CoinsTip().Flush(/*will_reuse_cache=*/!m_chainman.IsInitialBlockDownload());
                 } else {
                     CoinsTip().Sync();
                 }
