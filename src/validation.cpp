@@ -2332,7 +2332,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // is enforced in ContextualCheckBlockHeader(); we wouldn't want to
     // re-enforce that rule here (at least until we make it impossible for
     // the clock to go backward).
-    if (!CheckBlock(block, state, params.GetConsensus(), !fJustCheck, !fJustCheck)) {
+    if (!CheckBlock(block, block_hash, state, params.GetConsensus(), !fJustCheck, !fJustCheck)) {
         if (state.GetResult() == BlockValidationResult::BLOCK_MUTATED) {
             // We don't write down blocks to disk if they may have been
             // corrupted, so this should be impossible unless we're having hardware
@@ -3359,7 +3359,7 @@ static void LimitValidationInterfaceQueue(ValidationSignals& signals) LOCKS_EXCL
     }
 }
 
-bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock)
+bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock, std::optional<uint256> block_hash)
 {
     AssertLockNotHeld(m_chainstate_mutex);
 
@@ -3422,8 +3422,8 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
                 // BlockConnected signals must be sent for the original role;
                 // in case snapshot validation is completed during ActivateBestChainStep, the
                 // result of GetRole() changes from BACKGROUND to NORMAL.
-               const ChainstateRole chainstate_role{this->GetRole()};
-                if (!ActivateBestChainStep(state, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connectTrace)) {
+                const ChainstateRole chainstate_role{this->GetRole()};
+                if (!ActivateBestChainStep(state, pindexMostWork, pblock && block_hash == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connectTrace)) {
                     // A system error occurred
                     return false;
                 }
@@ -3556,7 +3556,7 @@ bool Chainstate::PreciousBlock(BlockValidationState& state, CBlockIndex* pindex)
         }
     }
 
-    return ActivateBestChain(state, std::shared_ptr<const CBlock>());
+    return ActivateBestChain(state, std::shared_ptr<const CBlock>(), {});
 }
 
 bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* pindex)
@@ -3867,10 +3867,10 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
     }
 }
 
-static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
+static bool CheckBlockHeader(const CBlockHeader& block, const uint256& block_hash, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
     // Check proof of work matches claimed amount
-    if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
+    if (fCheckPOW && !CheckProofOfWork(block_hash, block.nBits, consensusParams))
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
 
     return true;
@@ -3957,20 +3957,19 @@ static bool CheckWitnessMalleation(const CBlock& block, bool expect_witness_comm
     return true;
 }
 
-bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW, bool fCheckMerkleRoot)
+bool CheckBlock(const CBlock& block, const uint256& block_hash, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW, bool fCheckMerkleRoot)
 {
     // These are checks that are independent of context.
-
     if (block.fChecked)
         return true;
 
     // Check that the header is valid (particularly PoW).  This is mostly
     // redundant with the call in AcceptBlockHeader.
-    if (!CheckBlockHeader(block, state, consensusParams, fCheckPOW))
+    if (!CheckBlockHeader(block, block_hash, state, consensusParams, fCheckPOW))
         return false;
 
     // Signet only: check block solution
-    if (consensusParams.signet_blocks && fCheckPOW && !CheckSignetBlockSolution(block, consensusParams)) {
+    if (consensusParams.signet_blocks && fCheckPOW && !CheckSignetBlockSolution(block, block_hash, consensusParams)) {
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-signet-blksig", "signet block signature validation failure");
     }
 
@@ -4061,12 +4060,6 @@ std::vector<unsigned char> ChainstateManager::GenerateCoinbaseCommitment(CBlock&
     }
     UpdateUncommittedBlockStructures(block, pindexPrev);
     return commitment;
-}
-
-bool HasValidProofOfWork(const std::vector<CBlockHeader>& headers, const Consensus::Params& consensusParams)
-{
-    return std::all_of(headers.cbegin(), headers.cend(),
-            [&](const auto& header) { return CheckProofOfWork(header.GetHash(), header.nBits, consensusParams);});
 }
 
 bool IsBlockMutated(const CBlock& block, bool check_witness_root)
@@ -4229,12 +4222,11 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     return true;
 }
 
-bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, CBlockIndex** ppindex, bool min_pow_checked)
+bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, const uint256& hash, BlockValidationState& state, CBlockIndex** ppindex, bool min_pow_checked)
 {
     AssertLockHeld(cs_main);
 
     // Check for duplicate
-    uint256 hash = block.GetHash();
     BlockMap::iterator miSelf{m_blockman.m_block_index.find(hash)};
     if (hash != GetConsensus().hashGenesisBlock) {
         if (miSelf != m_blockman.m_block_index.end()) {
@@ -4249,7 +4241,7 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
             return true;
         }
 
-        if (!CheckBlockHeader(block, state, GetConsensus())) {
+        if (!CheckBlockHeader(block, hash, state, GetConsensus())) {
             LogDebug(BCLog::VALIDATION, "%s: Consensus::CheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
             return false;
         }
@@ -4291,7 +4283,7 @@ bool ChainstateManager::ProcessNewBlockHeaders(std::span<const CBlockHeader> hea
         LOCK(cs_main);
         for (const CBlockHeader& header : headers) {
             CBlockIndex *pindex = nullptr; // Use a temp pindex instead of ppindex to avoid a const_cast
-            bool accepted{AcceptBlockHeader(header, state, &pindex, min_pow_checked)};
+            bool accepted{AcceptBlockHeader(header, header.GetHash(), state, &pindex, min_pow_checked)};
             CheckBlockIndex();
 
             if (!accepted) {
@@ -4340,7 +4332,7 @@ void ChainstateManager::ReportHeadersPresync(const arith_uint256& work, int64_t 
 }
 
 /** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
-bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked)
+bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, const uint256& block_hash, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked)
 {
     const CBlock& block = *pblock;
 
@@ -4350,7 +4342,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     CBlockIndex *pindexDummy = nullptr;
     CBlockIndex *&pindex = ppindex ? *ppindex : pindexDummy;
 
-    bool accepted_header{AcceptBlockHeader(block, state, &pindex, min_pow_checked)};
+    bool accepted_header{AcceptBlockHeader(block, block_hash, state, &pindex, min_pow_checked)};
     CheckBlockIndex();
 
     if (!accepted_header)
@@ -4392,7 +4384,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
 
     const CChainParams& params{GetParams()};
 
-    if (!CheckBlock(block, state, params.GetConsensus()) ||
+    if (!CheckBlock(block, pindex->GetBlockHash(), state, params.GetConsensus()) ||
         !ContextualCheckBlock(block, state, *this, pindex->pprev)) {
         if (Assume(state.IsInvalid())) {
             ActiveChainstate().InvalidBlockFound(pindex, state);
@@ -4444,6 +4436,7 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
 {
     AssertLockNotHeld(cs_main);
 
+    auto block_hash{block->GetHash()};
     {
         CBlockIndex *pindex = nullptr;
         if (new_block) *new_block = false;
@@ -4458,10 +4451,10 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
         // malleability that cause CheckBlock() to fail; see e.g. CVE-2012-2459 and
         // https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2019-February/016697.html.  Because CheckBlock() is
         // not very expensive, the anti-DoS benefits of caching failure (of a definitely-invalid block) are not substantial.
-        bool ret = CheckBlock(*block, state, GetConsensus());
+        bool ret = CheckBlock(*block, block_hash, state, GetConsensus());
         if (ret) {
             // Store to disk
-            ret = AcceptBlock(block, state, &pindex, force_processing, nullptr, new_block, min_pow_checked);
+            ret = AcceptBlock(block, block_hash, state, &pindex, force_processing, nullptr, new_block, min_pow_checked);
         }
         if (!ret) {
             if (m_options.signals) {
@@ -4475,14 +4468,14 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
     NotifyHeaderTip();
 
     BlockValidationState state; // Only used to report errors, not invalidity - ignore it
-    if (!ActiveChainstate().ActivateBestChain(state, block)) {
+    if (!ActiveChainstate().ActivateBestChain(state, block, block_hash)) {
         LogError("%s: ActivateBestChain failed (%s)\n", __func__, state.ToString());
         return false;
     }
 
     Chainstate* bg_chain{WITH_LOCK(cs_main, return BackgroundSyncInProgress() ? m_ibd_chainstate.get() : nullptr)};
     BlockValidationState bg_state;
-    if (bg_chain && !bg_chain->ActivateBestChain(bg_state, block)) {
+    if (bg_chain && !bg_chain->ActivateBestChain(bg_state, block, block_hash)) {
         LogError("%s: [background] ActivateBestChain failed (%s)\n", __func__, bg_state.ToString());
         return false;
      }
@@ -4508,6 +4501,7 @@ MempoolAcceptResult ChainstateManager::ProcessTransaction(const CTransactionRef&
 BlockValidationState TestBlockValidity(
     Chainstate& chainstate,
     const CBlock& block,
+    const uint256& block_hash,
     const bool check_pow,
     const bool check_merkle_root)
 {
@@ -4525,7 +4519,7 @@ BlockValidationState TestBlockValidity(
     }
 
     // For signets CheckBlock() verifies the challenge iff fCheckPow is set.
-    if (!CheckBlock(block, state, chainstate.m_chainman.GetConsensus(), /*fCheckPow=*/check_pow, /*fCheckMerkleRoot=*/check_merkle_root)) {
+    if (!CheckBlock(block, block_hash, state, chainstate.m_chainman.GetConsensus(), /*fCheckPow=*/check_pow, /*fCheckMerkleRoot=*/check_merkle_root)) {
         // This should never happen, but belt-and-suspenders don't approve the
         // block if it does.
         if (state.IsValid()) NONFATAL_UNREACHABLE();
@@ -4560,7 +4554,6 @@ BlockValidationState TestBlockValidity(
     // We don't want ConnectBlock to update the actual chainstate, so create
     // a cache on top of it, along with a dummy block index.
     CBlockIndex index_dummy{block};
-    uint256 block_hash(block.GetHash());
     index_dummy.pprev = tip;
     index_dummy.nHeight = tip->nHeight + 1;
     index_dummy.phashBlock = &block_hash;
@@ -4706,7 +4699,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
             return VerifyDBResult::CORRUPTED_BLOCK_DB;
         }
         // check level 1: verify block validity
-        if (nCheckLevel >= 1 && !CheckBlock(block, state, consensus_params)) {
+        if (nCheckLevel >= 1 && !CheckBlock(block, pindex->GetBlockHash(), state, consensus_params)) {
             LogPrintf("Verification error: found bad block at %d, hash=%s (%s)\n",
                       pindex->nHeight, pindex->GetBlockHash().ToString(), state.ToString());
             return VerifyDBResult::CORRUPTED_BLOCK_DB;
@@ -5073,7 +5066,7 @@ void ChainstateManager::LoadExternalBlockFile(
                         nRewind = blkdat.GetPos();
 
                         BlockValidationState state;
-                        if (AcceptBlock(pblock, state, nullptr, true, dbp, nullptr, true)) {
+                        if (AcceptBlock(pblock, hash, state, nullptr, true, dbp, nullptr, true)) {
                             nLoaded++;
                         }
                         if (state.IsError()) {
@@ -5093,7 +5086,7 @@ void ChainstateManager::LoadExternalBlockFile(
                 // was interrupted by the user.
                 if (hash == params.GetConsensus().hashGenesisBlock && WITH_LOCK(::cs_main, return ActiveHeight()) == -1) {
                     BlockValidationState state;
-                    if (!ActiveChainstate().ActivateBestChain(state, nullptr)) {
+                    if (!ActiveChainstate().ActivateBestChain(state)) {
                         break;
                     }
                 }
@@ -5109,7 +5102,7 @@ void ChainstateManager::LoadExternalBlockFile(
                     bool activation_failure = false;
                     for (auto c : GetAll()) {
                         BlockValidationState state;
-                        if (!c->ActivateBestChain(state, pblock)) {
+                        if (!c->ActivateBestChain(state, pblock, hash)) {
                             LogDebug(BCLog::REINDEX, "failed to activate chain (%s)\n", state.ToString());
                             activation_failure = true;
                             break;
@@ -5139,7 +5132,7 @@ void ChainstateManager::LoadExternalBlockFile(
                             LogDebug(BCLog::REINDEX, "%s: Processing out of order child %s of %s", __func__, block_hash.ToString(), head.ToString());
                             LOCK(cs_main);
                             BlockValidationState dummy;
-                            if (AcceptBlock(pblockrecursive, dummy, nullptr, true, &it->second, nullptr, true)) {
+                            if (AcceptBlock(pblockrecursive, block_hash, dummy, nullptr, true, &it->second, nullptr, true)) {
                                 nLoaded++;
                                 queue.push_back(block_hash);
                             }

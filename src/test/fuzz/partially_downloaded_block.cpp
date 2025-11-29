@@ -118,7 +118,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     pdb.m_check_block_mutated_mock = FuzzedIsBlockMutated(fail_block_mutated);
 
     CBlock reconstructed_block;
-    auto fill_status{pdb.FillBlock(reconstructed_block, missing, segwit_active)};
+    auto fill_status{pdb.FillBlock(reconstructed_block, reconstructed_block.GetHash(), missing, segwit_active)};
     switch (fill_status) {
     case READ_STATUS_OK:
         assert(!skipped_missing);

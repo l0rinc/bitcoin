@@ -148,7 +148,7 @@ public:
     ReadStatus InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, const std::vector<std::pair<Wtxid, CTransactionRef>>& extra_txn);
     bool IsTxAvailable(size_t index) const;
     // segwit_active enforces witness mutation checks just before reporting a healthy status
-    ReadStatus FillBlock(CBlock& block, const std::vector<CTransactionRef>& vtx_missing, bool segwit_active);
+    ReadStatus FillBlock(CBlock& block, const uint256& hash, const std::vector<CTransactionRef>& vtx_missing, bool segwit_active);
 };
 
 #endif // BITCOIN_BLOCKENCODINGS_H
