@@ -100,6 +100,7 @@ public:
     CCoinsMap& map() const { return cacheCoins; }
     CoinsCachePair& sentinel() const { return m_sentinel; }
     size_t& usage() const { return cachedCoinsUsage; }
+    size_t& pruned() const { return m_prune_count; }
 };
 
 } // namespace
@@ -732,14 +733,14 @@ BOOST_AUTO_TEST_CASE(ccoins_spend)
         CheckSpendCoins(base_value, MISSING,            base_value == VALUE1 ? SPENT_DIRTY : MISSING);
 
         CheckSpendCoins(base_value, SPENT_CLEAN,        SPENT_DIRTY);
-        CheckSpendCoins(base_value, SPENT_FRESH,        MISSING    );
+        CheckSpendCoins(base_value, SPENT_FRESH,        SPENT_DIRTY_FRESH);
         CheckSpendCoins(base_value, SPENT_DIRTY,        SPENT_DIRTY);
-        CheckSpendCoins(base_value, SPENT_DIRTY_FRESH,  MISSING    );
+        CheckSpendCoins(base_value, SPENT_DIRTY_FRESH,  SPENT_DIRTY_FRESH);
 
         CheckSpendCoins(base_value, VALUE2_CLEAN,       SPENT_DIRTY);
-        CheckSpendCoins(base_value, VALUE2_FRESH,       MISSING    );
+        CheckSpendCoins(base_value, VALUE2_FRESH,       SPENT_DIRTY_FRESH);
         CheckSpendCoins(base_value, VALUE2_DIRTY,       SPENT_DIRTY);
-        CheckSpendCoins(base_value, VALUE2_DIRTY_FRESH, MISSING    );
+        CheckSpendCoins(base_value, VALUE2_DIRTY_FRESH, SPENT_DIRTY_FRESH);
     }
 }
 
@@ -873,6 +874,28 @@ BOOST_AUTO_TEST_CASE(ccoins_write)
             CheckWriteCoins(parent, child, expected);
         }
     }
+}
+
+BOOST_AUTO_TEST_CASE(coins_pruned_compaction)
+{
+    CCoinsView base;
+    CCoinsViewCacheTest cache{&base};
+    FastRandomContext rng{};
+
+    constexpr size_t PRUNE_TARGET{1024};
+
+    for (size_t i{0}; i < PRUNE_TARGET; ++i) {
+        const auto outpoint{COutPoint(Txid::FromUint256(rng.rand256()), 0)};
+        cache.AddCoin(outpoint, Coin{CTxOut{1, CScript{}}, 1, /*fCoinBaseIn=*/false}, /*possible_overwrite=*/false);
+        BOOST_CHECK(cache.SpendCoin(outpoint));
+    }
+    BOOST_CHECK_EQUAL(cache.pruned(), PRUNE_TARGET);
+    BOOST_CHECK_EQUAL(cache.GetCacheSize(), PRUNE_TARGET);
+
+    BOOST_CHECK_EQUAL(cache.CompactPrunedEntries(), PRUNE_TARGET);
+    BOOST_CHECK_EQUAL(cache.pruned(), 0);
+    BOOST_CHECK_EQUAL(cache.GetCacheSize(), 0);
+    BOOST_CHECK_EQUAL(cache.sentinel().second.Next(), &cache.sentinel());
 }
 
 struct FlushTest : BasicTestingSetup {
