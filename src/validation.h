@@ -937,6 +937,9 @@ private:
     /** The last header for which a headerTip notification was issued. */
     CBlockIndex* m_last_notified_header GUARDED_BY(GetMutex()){nullptr};
 
+    /** Set the active chain tip. */
+    void SetTip(CBlockIndex& block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
     bool NotifyHeaderTip() LOCKS_EXCLUDED(GetMutex());
 
     //! Internal helper for ActivateSnapshot().
@@ -1046,7 +1049,7 @@ public:
      * Mutable because we need to be able to mark IsInitialBlockDownload()
      * const, which latches this for caching purposes.
      */
-    mutable std::atomic<bool> m_cached_finished_ibd{false};
+    mutable std::atomic_bool m_cached_finished_ibd{false};
 
     /**
      * Every received block is assigned a unique and increasing identifier, so we

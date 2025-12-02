@@ -6,6 +6,7 @@
 #include <chain.h>
 #include <tinyformat.h>
 #include <util/check.h>
+#include <validation.h>
 
 std::string CBlockIndex::ToString() const
 {
