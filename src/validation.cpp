@@ -1956,14 +1956,7 @@ bool ChainstateManager::IsInitialBlockDownload() const
     if (m_blockman.LoadingBlocks()) {
         return true;
     }
-    CChain& chain{ActiveChain()};
-    if (chain.Tip() == nullptr) {
-        return true;
-    }
-    if (chain.Tip()->nChainWork < MinimumChainWork()) {
-        return true;
-    }
-    if (chain.Tip()->Time() < Now<NodeSeconds>() - m_options.max_tip_age) {
+    if (!ActiveChain().IsTipRecent(MinimumChainWork(), m_options.max_tip_age)) {
         return true;
     }
     LogInfo("Leaving InitialBlockDownload (latching to false)");
