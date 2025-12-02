@@ -1038,6 +1038,9 @@ public:
      */
     mutable std::atomic_bool m_cached_finished_ibd{false};
 
+    /** Latch that becomes true once the active tip has met IsTipRecent(). */
+    mutable std::atomic_bool m_cached_tip_recent{false};
+
     /**
      * Every received block is assigned a unique and increasing identifier, so we
      * know which one to give priority in case of a fork.
@@ -1157,7 +1160,7 @@ public:
     CBlockIndex* ActiveTip() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex()) { return ActiveChain().Tip(); }
     //! @}
 
-    /** Set a chain tip. */
+    /** Set a chain tip and latch m_cached_tip_recent if this is the active chain and the new tip is recent. */
     void SetTip(CChain& chain, CBlockIndex& block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     node::BlockMap& BlockIndex() EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
