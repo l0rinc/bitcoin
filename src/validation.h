@@ -1046,7 +1046,7 @@ public:
      * Mutable because we need to be able to mark IsInitialBlockDownload()
      * const, which latches this for caching purposes.
      */
-    mutable std::atomic<bool> m_cached_finished_ibd{false};
+    mutable std::atomic_bool m_cached_finished_ibd{false};
 
     /**
      * Every received block is assigned a unique and increasing identifier, so we
@@ -1126,6 +1126,9 @@ public:
     CChain& ActiveChain() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex()) { return ActiveChainstate().m_chain; }
     int ActiveHeight() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex()) { return ActiveChain().Height(); }
     CBlockIndex* ActiveTip() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex()) { return ActiveChain().Tip(); }
+
+    /** Set the active chain tip. */
+    void SetTip(CBlockIndex& block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     //! The state of a background sync (for net processing)
     bool BackgroundSyncInProgress() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex()) {
