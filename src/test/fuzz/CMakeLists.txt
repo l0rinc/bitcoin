@@ -29,10 +29,10 @@ add_executable(fuzz
   coinscache_sim.cpp
   connman.cpp
   crypto.cpp
-  crypto_aes256.cpp
   crypto_aes256cbc.cpp
-  crypto_chacha20.cpp
+  crypto_aes256.cpp
   crypto_chacha20poly1305.cpp
+  crypto_chacha20.cpp
   crypto_common.cpp
   crypto_diff_fuzz_chacha20.cpp
   crypto_hkdf_hmac_sha256_l32.cpp
@@ -43,8 +43,8 @@ add_executable(fuzz
   deserialize.cpp
   difference_formatter.cpp
   eval_script.cpp
-  feefrac.cpp
   fee_rate.cpp
+  feefrac.cpp
   feeratediagram.cpp
   fees.cpp
   flatfile.cpp
@@ -54,6 +54,7 @@ add_executable(fuzz
   hex.cpp
   http_request.cpp
   i2p.cpp
+  inputfetcher.cpp
   integer.cpp
   key.cpp
   key_io.cpp
@@ -63,9 +64,9 @@ add_executable(fuzz
   merkle.cpp
   merkleblock.cpp
   message.cpp
+  mini_miner.cpp
   miniscript.cpp
   minisketch.cpp
-  mini_miner.cpp
   muhash.cpp
   multiplication_overflow.cpp
   net.cpp
@@ -77,7 +78,6 @@ add_executable(fuzz
   p2p_handshake.cpp
   p2p_headers_presync.cpp
   p2p_transport_serialization.cpp
-  pcp.cpp
   package_eval.cpp
   parse_hd_keypath.cpp
   parse_iso8601.cpp
@@ -85,6 +85,7 @@ add_executable(fuzz
   parse_script.cpp
   parse_univalue.cpp
   partially_downloaded_block.cpp
+  pcp.cpp
   policy_estimator.cpp
   policy_estimator_io.cpp
   poolresource.cpp
@@ -119,13 +120,14 @@ add_executable(fuzz
   string.cpp
   strprintf.cpp
   system.cpp
+  threadpool.cpp
   timeoffsets.cpp
   torcontrol.cpp
   transaction.cpp
-  txdownloadman.cpp
   tx_in.cpp
   tx_out.cpp
   tx_pool.cpp
+  txdownloadman.cpp
   txgraph.cpp
   txorphan.cpp
   txrequest.cpp

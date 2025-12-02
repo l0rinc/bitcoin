@@ -3086,8 +3086,11 @@ bool Chainstate::ConnectTip(
     LogDebug(BCLog::BENCH, "  - Load block from disk: %.2fms\n",
              Ticks<MillisecondsDouble>(time_2 - time_1));
     {
-        CCoinsViewCache view(&CoinsTip());
-        bool rv = ConnectBlock(*block_to_connect, state, pindexNew, view);
+        CCoinsViewCache* cache{&CoinsTip()};
+        CCoinsViewCache new_cache{cache};
+        m_chainman.FetchInputs(*cache, new_cache, CoinsDB(), *block_to_connect);
+
+        bool rv = ConnectBlock(*block_to_connect, state, pindexNew, new_cache);
         if (m_chainman.m_options.signals) {
             m_chainman.m_options.signals->BlockChecked(block_to_connect, state);
         }
@@ -3104,7 +3107,8 @@ bool Chainstate::ConnectTip(
                  Ticks<MillisecondsDouble>(time_3 - time_2),
                  Ticks<SecondsDouble>(m_chainman.time_connect_total),
                  Ticks<MillisecondsDouble>(m_chainman.time_connect_total) / m_chainman.num_blocks_total);
-        bool flushed = view.Flush();
+
+        bool flushed = new_cache.Flush();
         assert(flushed);
     }
     const auto time_4{SteadyClock::now()};
@@ -6242,6 +6246,7 @@ static ChainstateManager::Options&& Flatten(ChainstateManager::Options&& opts)
 
 ChainstateManager::ChainstateManager(const util::SignalInterrupt& interrupt, Options options, node::BlockManager::Options blockman_options)
     : m_script_check_queue{/*batch_size=*/128, std::clamp(options.worker_threads_num, 0, MAX_SCRIPTCHECK_THREADS)},
+      m_input_fetcher{std::clamp<size_t>(options.worker_threads_num, 1, MAX_SCRIPTCHECK_THREADS)},
       m_interrupt{interrupt},
       m_options{Flatten(std::move(options))},
       m_blockman{interrupt, std::move(blockman_options)},
