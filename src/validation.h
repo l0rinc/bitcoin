@@ -937,7 +937,7 @@ private:
     /** The last header for which a headerTip notification was issued. */
     CBlockIndex* m_last_notified_header GUARDED_BY(GetMutex()){nullptr};
 
-    /** Set the active chain tip. */
+    /** Set the active chain tip and latch m_cached_tip_recent if the new tip is recent. */
     void SetTip(CBlockIndex& block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     bool NotifyHeaderTip() LOCKS_EXCLUDED(GetMutex());
@@ -1050,6 +1050,9 @@ public:
      * const, which latches this for caching purposes.
      */
     mutable std::atomic_bool m_cached_finished_ibd{false};
+
+    /** Cached ActiveChain::IsTipRecent result. */
+    mutable std::atomic_bool m_cached_tip_recent{false};
 
     /**
      * Every received block is assigned a unique and increasing identifier, so we

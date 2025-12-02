@@ -1930,16 +1930,13 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
 bool ChainstateManager::IsInitialBlockDownload() const
 {
     // Optimization: pre-test latch before taking the lock.
-    if (m_cached_finished_ibd.load(std::memory_order_relaxed))
+    if (m_cached_finished_ibd.load(std::memory_order_relaxed)) {
         return false;
-
-    LOCK(cs_main);
-    if (m_cached_finished_ibd.load(std::memory_order_relaxed))
-        return false;
+    }
     if (m_blockman.LoadingBlocks()) {
         return true;
     }
-    if (!ActiveChain().IsTipRecent(MinimumChainWork(), m_options.max_tip_age)) {
+    if (!m_cached_tip_recent) {
         return true;
     }
     LogInfo("Leaving InitialBlockDownload (latching to false)");
@@ -3121,7 +3118,7 @@ bool Chainstate::ConnectTip(
         m_mempool->removeForBlock(block_to_connect->vtx, pindexNew->nHeight);
         disconnectpool.removeForBlock(block_to_connect->vtx);
     }
-    // Update m_chain and related variables.
+    // Update m_chain and m_cached_tip_recent and related variables.
     m_chainman.SetTip(*pindexNew);
     UpdateTip(pindexNew);
 
@@ -3327,6 +3324,10 @@ void ChainstateManager::SetTip(CBlockIndex& block)
     AssertLockHeld(cs_main);
     auto& chain{ActiveChain()};
     chain.SetTip(block);
+    if (!m_cached_tip_recent.load(std::memory_order_relaxed) &&
+        chain.IsTipRecent(MinimumChainWork(), m_options.max_tip_age)) {
+        m_cached_tip_recent.store(true, std::memory_order_relaxed);
+    }
 }
 
 bool ChainstateManager::NotifyHeaderTip()
