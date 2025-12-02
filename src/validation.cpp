@@ -1956,7 +1956,7 @@ bool ChainstateManager::IsInitialBlockDownload() const
     if (m_blockman.LoadingBlocks()) {
         return true;
     }
-    if (!ActiveChain().IsTipRecent(MinimumChainWork(), m_options.max_tip_age)) {
+    if (!m_cached_tip_recent.load(std::memory_order_relaxed)) {
         return true;
     }
     LogInfo("Leaving InitialBlockDownload (latching to false)");
@@ -3132,7 +3132,7 @@ bool Chainstate::ConnectTip(
         m_mempool->removeForBlock(block_to_connect->vtx, pindexNew->nHeight);
         disconnectpool.removeForBlock(block_to_connect->vtx);
     }
-    // Update m_chain and related variables.
+    // Update m_chain and (for the active chainstate) m_cached_tip_recent and related variables.
     m_chainman.SetTip(m_chain, *pindexNew);
     UpdateTip(pindexNew);
 
@@ -3341,6 +3341,11 @@ void ChainstateManager::SetTip(CChain& chain, CBlockIndex& block)
 {
     AssertLockHeld(cs_main);
     chain.SetTip(block);
+    if (m_cached_tip_recent.load(std::memory_order_relaxed)) return;
+    if (&chain != &CurrentChainstate().m_chain) return;
+    if (chain.IsTipRecent(MinimumChainWork(), m_options.max_tip_age)) {
+        m_cached_tip_recent.store(true, std::memory_order_relaxed);
+    }
 }
 
 bool ChainstateManager::NotifyHeaderTip()
