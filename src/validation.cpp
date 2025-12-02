@@ -3136,8 +3136,8 @@ bool Chainstate::ConnectTip(
         m_mempool->removeForBlock(block_to_connect->vtx, pindexNew->nHeight);
         disconnectpool.removeForBlock(block_to_connect->vtx);
     }
-    // Update m_chain & related variables.
-    m_chain.SetTip(*pindexNew);
+    // Update m_chain and related variables.
+    m_chainman.SetTip(m_chain, *pindexNew);
     UpdateTip(pindexNew);
 
     const auto time_6{SteadyClock::now()};
@@ -3339,6 +3339,12 @@ static SynchronizationState GetSynchronizationState(bool init, bool blockfiles_i
     if (!init) return SynchronizationState::POST_INIT;
     if (!blockfiles_indexed) return SynchronizationState::INIT_REINDEX;
     return SynchronizationState::INIT_DOWNLOAD;
+}
+
+void ChainstateManager::SetTip(CChain& chain, CBlockIndex& block)
+{
+    AssertLockHeld(cs_main);
+    chain.SetTip(block);
 }
 
 bool ChainstateManager::NotifyHeaderTip()
@@ -4623,7 +4629,7 @@ bool Chainstate::LoadChainTip()
     if (!pindex) {
         return false;
     }
-    m_chain.SetTip(*pindex);
+    m_chainman.SetTip(m_chain, *pindex);
     tip = m_chain.Tip();
 
     // Make sure our chain tip before shutting down scores better than any other candidate
