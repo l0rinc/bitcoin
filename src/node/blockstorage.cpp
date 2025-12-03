@@ -1051,7 +1051,7 @@ bool BlockManager::ReadBlock(CBlock& block, const CBlockIndex& index) const
 
 bool BlockManager::ReadRawBlock(std::vector<std::byte>& block, const FlatFilePos& pos) const
 {
-    auto ret{ReadRawBlock(pos)};
+    auto ret{ReadRawBlock(pos, /*part_offset=*/0, /*part_size=*/std::nullopt)};
     if (auto* vec{std::get_if<std::vector<std::byte>>(&ret)}) {
         block = std::move(*vec);
         return true;
@@ -1059,7 +1059,7 @@ bool BlockManager::ReadRawBlock(std::vector<std::byte>& block, const FlatFilePos
     return false;
 }
 
-std::variant<std::vector<std::byte>, ReadRawError> BlockManager::ReadRawBlock(const FlatFilePos& pos) const
+std::variant<std::vector<std::byte>, ReadRawError> BlockManager::ReadRawBlock(const FlatFilePos& pos, size_t part_offset, std::optional<size_t> part_size) const
 {
     if (pos.nPos < STORAGE_HEADER_BYTES) {
         // If nPos is less than STORAGE_HEADER_BYTES, we can't read the header that precedes the block data
@@ -1092,8 +1092,23 @@ std::variant<std::vector<std::byte>, ReadRawError> BlockManager::ReadRawBlock(co
             return ReadRawError::IO;
         }
 
+        if (part_offset > blk_size) {
+            // Avoid logging - part_offset can come from an untrusted source (REST)
+            return ReadRawError::BadPartRange;
+        }
+
+        size_t size = blk_size - part_offset;
+        if (part_size.has_value()) {
+            if (*part_size > size || *part_size == 0) {
+                // Avoid logging - part_offset & part_size can come from an untrusted source (REST)
+                return ReadRawError::BadPartRange;
+            }
+            size = *part_size;
+        }
+
         std::vector<std::byte> data;
-        data.resize(blk_size); // Zeroing of memory is intentional here
+        data.resize(size); // Zeroing of memory is intentional here
+        if (part_offset > 0) filein.seek(part_offset, SEEK_CUR);
         filein.read(data);
         return data;
     } catch (const std::exception& e) {
