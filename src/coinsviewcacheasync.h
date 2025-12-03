@@ -23,7 +23,7 @@
 #include <utility>
 #include <vector>
 
-static constexpr int32_t WORKER_THREADS{1};
+static constexpr int32_t WORKER_THREADS{2};
 
 /**
  * CCoinsViewCache subclass that asynchronously fetches block inputs in parallel.
