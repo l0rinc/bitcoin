@@ -19,6 +19,7 @@
 #include <uint256.h>
 #include <util/fs.h>
 #include <util/hasher.h>
+#include <util/result.h>
 
 #include <array>
 #include <atomic>
@@ -306,6 +307,7 @@ private:
 
 public:
     using Options = kernel::BlockManagerOpts;
+    using ReadRawBlockResult = util::Result<std::vector<std::byte>, ReadRawError>;
 
     explicit BlockManager(const util::SignalInterrupt& interrupt, Options opts);
 
@@ -459,8 +461,7 @@ public:
     /** Functions for disk access for blocks */
     bool ReadBlock(CBlock& block, const FlatFilePos& pos, const std::optional<uint256>& expected_hash) const;
     bool ReadBlock(CBlock& block, const CBlockIndex& index) const;
-    bool ReadRawBlock(std::vector<std::byte>& block, const FlatFilePos& pos) const;
-    std::variant<std::vector<std::byte>, ReadRawError> ReadRawBlock(const FlatFilePos& pos, size_t part_offset, std::optional<size_t> part_size) const;
+    ReadRawBlockResult ReadRawBlock(const FlatFilePos& pos, std::optional<std::pair<size_t, size_t>> block_part = std::nullopt) const;
 
     bool ReadBlockUndo(CBlockUndo& blockundo, const CBlockIndex& index) const;
 

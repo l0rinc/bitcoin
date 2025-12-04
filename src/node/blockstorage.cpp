@@ -1007,14 +1007,14 @@ bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::o
     block.SetNull();
 
     // Open history file to read
-    std::vector<std::byte> block_data;
-    if (!ReadRawBlock(block_data, pos)) {
+    auto block_data{ReadRawBlock(pos)};
+    if (!block_data) {
         return false;
     }
 
     try {
         // Read block
-        SpanReader{block_data} >> TX_WITH_WITNESS(block);
+        SpanReader{*block_data} >> TX_WITH_WITNESS(block);
     } catch (const std::exception& e) {
         LogError("Deserialize or I/O error - %s at %s while reading block", e.what(), pos.ToString());
         return false;
@@ -1049,17 +1049,7 @@ bool BlockManager::ReadBlock(CBlock& block, const CBlockIndex& index) const
     return ReadBlock(block, block_pos, index.GetBlockHash());
 }
 
-bool BlockManager::ReadRawBlock(std::vector<std::byte>& block, const FlatFilePos& pos) const
-{
-    auto ret{ReadRawBlock(pos, /*part_offset=*/0, /*part_size=*/std::nullopt)};
-    if (auto* vec{std::get_if<std::vector<std::byte>>(&ret)}) {
-        block = std::move(*vec);
-        return true;
-    }
-    return false;
-}
-
-std::variant<std::vector<std::byte>, ReadRawError> BlockManager::ReadRawBlock(const FlatFilePos& pos, size_t part_offset, std::optional<size_t> part_size) const
+BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& pos, std::optional<std::pair<size_t, size_t>> block_part) const
 {
     if (pos.nPos < STORAGE_HEADER_BYTES) {
         // If nPos is less than STORAGE_HEADER_BYTES, we can't read the header that precedes the block data
@@ -1092,30 +1082,22 @@ std::variant<std::vector<std::byte>, ReadRawError> BlockManager::ReadRawBlock(co
             return ReadRawError::IO;
         }
 
-        if (part_offset > blk_size) {
-            // Avoid logging - part_offset can come from an untrusted source (REST)
-            return ReadRawError::BadPartRange;
-        }
-
-        size_t size = blk_size - part_offset;
-        if (part_size.has_value()) {
-            if (*part_size > size || *part_size == 0) {
-                // Avoid logging - part_offset & part_size can come from an untrusted source (REST)
-                return ReadRawError::BadPartRange;
+        if (block_part) {
+            const auto [offset, size]{*block_part};
+            if (size == 0 || offset >= blk_size || size > blk_size - offset) {
+                return ReadRawError::BadPartRange; // Avoid logging - offset/size come from untrusted REST input
             }
-            size = *part_size;
+            filein.seek(offset, SEEK_CUR);
+            blk_size = size;
         }
 
-        std::vector<std::byte> data;
-        data.resize(size); // Zeroing of memory is intentional here
-        if (part_offset > 0) filein.seek(part_offset, SEEK_CUR);
+        std::vector<std::byte> data(blk_size); // Zeroing of memory is intentional here
         filein.read(data);
         return data;
     } catch (const std::exception& e) {
         LogError("Read from block file failed: %s for %s while reading raw block", e.what(), pos.ToString());
         return ReadRawError::IO;
     }
-    assert(false);
 }
 
 FlatFilePos BlockManager::WriteBlock(const CBlock& block, int nHeight)

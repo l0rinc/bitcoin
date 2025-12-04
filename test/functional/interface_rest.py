@@ -470,17 +470,14 @@ class RESTTest (BitcoinTestFramework):
                     resp = bytes.fromhex(resp.decode().strip())
                 return resp
 
-            assert_equal(block_bin, _get_block_part())
-            assert_equal(block_bin, _get_block_part(query_params={"offset": 0}))
-            assert_equal(block_bin, _get_block_part(query_params={"size": len(block_bin)}))
             assert_equal(block_bin, _get_block_part(query_params={"offset": 0, "size": len(block_bin)}))
 
             assert len(block_bin) >= 500
-            assert_equal(block_bin[10:], _get_block_part(query_params={"offset": 10}))
-            assert_equal(block_bin[:100], _get_block_part(query_params={"size": 100}))
             assert_equal(block_bin[20:320], _get_block_part(query_params={"offset": 20, "size": 300}))
             assert_equal(block_bin[-5:], _get_block_part(query_params={"offset": len(block_bin) - 5, "size": 5}))
 
+            _get_block_part(status=400, query_params={"offset": 10})
+            _get_block_part(status=400, query_params={"size": 100})
             _get_block_part(status=400, query_params={"offset": "x"})
             _get_block_part(status=400, query_params={"size": "y"})
             _get_block_part(status=400, query_params={"offset": "x", "size": "y"})
@@ -490,8 +487,8 @@ class RESTTest (BitcoinTestFramework):
             _get_block_part(status=404, query_params={"offset": len(block_bin), "size": 0})
             _get_block_part(status=404, query_params={"offset": len(block_bin) + 1, "size": 1})
             _get_block_part(status=404, query_params={"offset": len(block_bin), "size": 1})
-            _get_block_part(status=404, query_params={"offset": len(block_bin) + 1})
-            _get_block_part(status=404, query_params={"size": len(block_bin) + 1})
+            _get_block_part(status=404, query_params={"offset": len(block_bin) + 1, "size": 1})
+            _get_block_part(status=404, query_params={"offset": 0, "size": len(block_bin) + 1})
 
         self.test_rest_request(f"/blockpart/{blockhash}", status=400, req_type=ReqType.JSON, ret_type=RetType.OBJ)
 
