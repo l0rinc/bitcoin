@@ -138,6 +138,50 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_availability, TestChain100Setup)
     BOOST_CHECK(!blockman.CheckBlockDataAvailability(tip, *last_pruned_block));
 }
 
+BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_part, TestChain100Setup)
+{
+    LOCK(::cs_main);
+    auto& chainman{m_node.chainman};
+    auto& blockman{chainman->m_blockman};
+    const CBlockIndex& tip{*chainman->ActiveTip()};
+    const FlatFilePos tip_block_pos{tip.GetBlockPos()};
+
+    auto block{blockman.ReadRawBlock(tip_block_pos)};
+    BOOST_REQUIRE(block);
+    BOOST_REQUIRE_GE(block->size(), 200);
+
+    const auto expect_part{[&](size_t offset, size_t size) {
+        auto res{blockman.ReadRawBlock(tip_block_pos, std::pair{offset, size})};
+        BOOST_REQUIRE(res);
+        const auto& part{res.value()};
+        BOOST_CHECK_EQUAL_COLLECTIONS(part.begin(), part.end(), block->begin() + offset, block->begin() + offset + size);
+    }};
+
+    expect_part(0, block->size());
+    expect_part(1, block->size() - 1);
+    expect_part(10, 20);
+    expect_part(0, block->size());
+    expect_part(0, block->size() - 1);
+    expect_part(0, block->size() - 10);
+    expect_part(0, 20);
+    expect_part(1, block->size() - 1);
+    expect_part(10, 20);
+    expect_part(block->size() - 1, 1);
+
+    // TODO: separate test for failures
+    // BOOST_CHECK(!read_tip_part(0, 0));
+    // BOOST_CHECK(!read_tip_part(0, block->size() + 1));
+    // BOOST_CHECK(!read_tip_part(1, block->size()));
+    // BOOST_CHECK(!read_tip_part(2, block->size() - 1));
+    // BOOST_CHECK(!read_tip_part(block->size() - 2, 3));
+    // BOOST_CHECK(!read_tip_part(block->size() - 1, 2));
+    // BOOST_CHECK(!read_tip_part(block->size(), 0));
+    // BOOST_CHECK(!read_tip_part(block->size(), 1));
+    // BOOST_CHECK(!read_tip_part(block->size() + 1, 0));
+    // BOOST_CHECK(!read_tip_part(block->size() + 1, 1));
+    // BOOST_CHECK(!read_tip_part(block->size() + 2, 2));
+}
+
 BOOST_FIXTURE_TEST_CASE(blockmanager_readblock_hash_mismatch, TestingSetup)
 {
     CBlockIndex index;
