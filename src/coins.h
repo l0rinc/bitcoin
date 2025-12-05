@@ -466,6 +466,11 @@ public:
     //! Calculate the size of the cache (in bytes)
     size_t DynamicMemoryUsage() const;
 
+    size_t ActiveMemoryUsage() const
+    {
+        return cachedCoinsUsage + cacheCoins.get_allocator().resource()->BytesInUse();
+    }
+
     //! Check whether all prevouts of the transaction are present in the UTXO set represented by this view
     bool HaveInputs(const CTransaction& tx) const;
 

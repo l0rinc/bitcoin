@@ -43,7 +43,7 @@ BOOST_AUTO_TEST_CASE(getcoinscachesizestate)
         }
 
         // LARGE → CRITICAL
-        for (size_t i{0}; i < MAX_ATTEMPTS && int64_t(view.DynamicMemoryUsage()) <= full_cap; ++i) {
+        for (size_t i{0}; i < MAX_ATTEMPTS && int64_t(view.ActiveMemoryUsage()) <= full_cap; ++i) {
             BOOST_CHECK_EQUAL(state, CoinsCacheSizeState::LARGE);
             AddTestCoin(m_rng, view);
             state = chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, max_mempool_size_bytes);
