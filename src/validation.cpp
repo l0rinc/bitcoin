@@ -2726,18 +2726,24 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
     size_t max_mempool_size_bytes)
 {
     AssertLockHeld(::cs_main);
-    const int64_t nMempoolUsage = m_mempool ? m_mempool->DynamicMemoryUsage() : 0;
-    int64_t cacheSize = CoinsTip().DynamicMemoryUsage();
-    int64_t nTotalSpace =
-        max_coins_cache_size_bytes + std::max<int64_t>(int64_t(max_mempool_size_bytes) - nMempoolUsage, 0);
+    const int64_t cache_capacity{int64_t(CoinsTip().DynamicMemoryUsage())};
+    const int64_t cache_active{int64_t(CoinsTip().ActiveMemoryUsage())};
 
-    if (cacheSize > nTotalSpace) {
-        LogInfo("Cache size (%s) exceeds total space (%s)\n", cacheSize, nTotalSpace);
+    const int64_t mempool_usage{m_mempool ? int64_t(m_mempool->DynamicMemoryUsage()) : 0};
+    const int64_t max_mempool_usage{std::max<int64_t>(int64_t(max_mempool_size_bytes) - mempool_usage, 0)};
+
+    const int64_t critical_threshold{int64_t(max_coins_cache_size_bytes) + max_mempool_usage};
+    const int64_t large_threshold{LargeCoinsCacheThreshold(critical_threshold)};
+
+    if (cache_active > critical_threshold) {
+        LogInfo("Coins cache active (%s) exceeds total space (%s)\n", cache_active, critical_threshold);
         return CoinsCacheSizeState::CRITICAL;
-    } else if (cacheSize > LargeCoinsCacheThreshold(nTotalSpace)) {
+    } else if (cache_capacity > large_threshold) {
+        LogInfo("Coins cache capacity (%s) exceeds total space (%s)\n", cache_capacity, large_threshold);
         return CoinsCacheSizeState::LARGE;
+    } else {
+        return CoinsCacheSizeState::OK;
     }
-    return CoinsCacheSizeState::OK;
 }
 
 bool Chainstate::FlushStateToDisk(
