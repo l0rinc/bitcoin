@@ -2699,18 +2699,24 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
     size_t max_mempool_size_bytes)
 {
     AssertLockHeld(::cs_main);
-    const int64_t nMempoolUsage = m_mempool ? m_mempool->DynamicMemoryUsage() : 0;
-    int64_t cacheSize = CoinsTip().DynamicMemoryUsage();
-    int64_t nTotalSpace =
-        max_coins_cache_size_bytes + std::max<int64_t>(int64_t(max_mempool_size_bytes) - nMempoolUsage, 0);
+    const int64_t cache_capacity{int64_t(CoinsTip().DynamicMemoryUsage())};
+    const int64_t cache_active{int64_t(CoinsTip().ActiveMemoryUsage())};
 
-    if (cacheSize > nTotalSpace) {
-        LogPrintf("Cache size (%s) exceeds total space (%s)\n", cacheSize, nTotalSpace);
+    const int64_t mempool_usage{m_mempool ? int64_t(m_mempool->DynamicMemoryUsage()) : 0};
+    const int64_t max_mempool_usage{std::max<int64_t>(int64_t(max_mempool_size_bytes) - mempool_usage, 0)};
+
+    const int64_t critical_threshold{int64_t(max_coins_cache_size_bytes) + max_mempool_usage};
+    const int64_t large_threshold{LargeCoinsCacheThreshold(critical_threshold)};
+
+    if (cache_active > critical_threshold) {
+        LogPrintf("Coins cache active (%s) exceeds total space (%s)\n", cache_active, critical_threshold);
         return CoinsCacheSizeState::CRITICAL;
-    } else if (cacheSize > LargeCoinsCacheThreshold(nTotalSpace)) {
+    } else if (cache_capacity > large_threshold) {
+        LogPrintf("Coins cache capacity (%s) exceeds total space (%s)\n", cache_capacity, large_threshold);
         return CoinsCacheSizeState::LARGE;
+    } else {
+        return CoinsCacheSizeState::OK;
     }
-    return CoinsCacheSizeState::OK;
 }
 
 bool Chainstate::FlushStateToDisk(
@@ -2780,8 +2786,10 @@ bool Chainstate::FlushStateToDisk(
         bool fCacheCritical = mode == FlushStateMode::IF_NEEDED && cache_state >= CoinsCacheSizeState::CRITICAL;
         // It's been a while since we wrote the block index and chain state to disk. Do this frequently, so we don't need to redownload or reindex after a crash.
         bool fPeriodicWrite = mode == FlushStateMode::PERIODIC && nNow >= m_next_write;
+        // Flush the chainstate (which may refer to block index entries).
+        bool should_empty{(mode == FlushStateMode::ALWAYS) || fCacheLarge || fCacheCritical};
         // Combine all conditions that result in a write to disk.
-        bool should_write = (mode == FlushStateMode::ALWAYS) || fCacheLarge || fCacheCritical || fPeriodicWrite || fFlushForPrune;
+        bool should_write{should_empty || fPeriodicWrite || fFlushForPrune};
         // Write blocks, block index and best chain related state to disk.
         if (should_write) {
             LogDebug(BCLog::COINDB, "Writing chainstate to disk: flush mode=%s, prune=%d, large=%d, critical=%d, periodic=%d",
@@ -2828,10 +2836,10 @@ bool Chainstate::FlushStateToDisk(
                 if (!CheckDiskSpace(m_chainman.m_options.datadir, 48 * 2 * 2 * CoinsTip().GetCacheSize())) {
                     return FatalError(m_chainman.GetNotifications(), state, _("Disk space is too low!"));
                 }
-                // Flush the chainstate (which may refer to block index entries).
-                const auto empty_cache{(mode == FlushStateMode::ALWAYS) || fCacheLarge || fCacheCritical};
-                if (empty_cache ? !CoinsTip().Flush() : !CoinsTip().Sync()) {
-                    return FatalError(m_chainman.GetNotifications(), state, _("Failed to write to coin database."));
+                if (should_empty) {
+                    CoinsTip().Flush(/*deallocate=*/!m_chainman.IsInitialBlockDownload());
+                } else {
+                    CoinsTip().Sync();
                 }
                 full_flush_completed = true;
                 TRACEPOINT(utxocache, flush,
@@ -2969,7 +2977,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
             LogError("DisconnectTip(): DisconnectBlock %s failed\n", pindexDelete->GetBlockHash().ToString());
             return false;
         }
-        bool flushed = view.Flush();
+        bool flushed = view.Flush(/*deallocate=*/false); // local CCoinsViewCache goes out of scope
         assert(flushed);
     }
     LogDebug(BCLog::BENCH, "- Disconnect block: %.2fms\n",
@@ -3104,7 +3112,7 @@ bool Chainstate::ConnectTip(
                  Ticks<MillisecondsDouble>(time_3 - time_2),
                  Ticks<SecondsDouble>(m_chainman.time_connect_total),
                  Ticks<MillisecondsDouble>(m_chainman.time_connect_total) / m_chainman.num_blocks_total);
-        bool flushed = view.Flush();
+        bool flushed = view.Flush(/*deallocate=*/false); // local CCoinsViewCache goes out of scope
         assert(flushed);
     }
     const auto time_4{SteadyClock::now()};
@@ -4895,7 +4903,7 @@ bool Chainstate::ReplayBlocks()
     }
 
     cache.SetBestBlock(pindexNew->GetBlockHash());
-    cache.Flush();
+    cache.Flush(/*deallocate=*/false); // local CCoinsViewCache goes out of scope
     m_chainman.GetNotifications().progress(bilingual_str{}, 100, false);
     return true;
 }
