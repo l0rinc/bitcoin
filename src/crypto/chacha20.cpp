@@ -10,6 +10,10 @@
 #include <crypto/chacha20_vec.h>
 #include <support/cleanse.h>
 
+#if defined(ENABLE_CHACHA20_VEC) && defined(ENABLE_AVX2)
+#include <compat/cpuid.h>
+#endif
+
 #include <algorithm>
 #include <bit>
 #include <cassert>
@@ -24,6 +28,28 @@ static_assert(ChaCha20Aligned::BLOCKLEN == CHACHA20_VEC_BLOCKLEN);
   c += d; b = std::rotl(b ^ c, 7);
 
 #define REPEAT10(a) do { {a}; {a}; {a}; {a}; {a}; {a}; {a}; {a}; {a}; {a}; } while(0)
+
+namespace {
+
+#if defined(ENABLE_CHACHA20_VEC) && defined(ENABLE_AVX2)
+bool AVX2Enabled()
+{
+#if defined(HAVE_GETCPUID)
+    bool have_sse4 = false;
+
+    uint32_t eax, ebx, ecx, edx;
+    GetCPUID(1, 0, eax, ebx, ecx, edx);
+    have_sse4 = (ecx >> 19) & 1;
+    if (have_sse4) {
+        GetCPUID(7, 0, eax, ebx, ecx, edx);
+        return true;
+    }
+#endif
+    return false;
+}
+#endif
+
+} // namespace
 
 void ChaCha20Aligned::SetKey(std::span<const std::byte> key) noexcept
 {
@@ -293,7 +319,17 @@ inline void ChaCha20Aligned::Crypt(std::span<const std::byte> in_bytes, std::spa
     // Only use the vectorized implementations if the counter will not overflow.
     if (blocks > 1 && input[0] + blocks <= std::numeric_limits<uint32_t>::max()) {
         const auto state = std::to_array(input);
-        size_t written = written = chacha20_vec_base::chacha20_crypt_vectorized(in_bytes, out_bytes, state);
+        size_t written = 0;
+#if defined(ENABLE_AVX2)
+        static const bool avx2_enabled = AVX2Enabled();
+        if (avx2_enabled) {
+            written = chacha20_vec_avx2::chacha20_crypt_vectorized(in_bytes, out_bytes, state);
+        } else {
+            written = chacha20_vec_base::chacha20_crypt_vectorized(in_bytes, out_bytes, state);
+        }
+#else
+        written = chacha20_vec_base::chacha20_crypt_vectorized(in_bytes, out_bytes, state);
+#endif
         input[8] += written;
         in_bytes = in_bytes.subspan(written * BLOCKLEN);
         out_bytes = out_bytes.subspan(written * BLOCKLEN);
