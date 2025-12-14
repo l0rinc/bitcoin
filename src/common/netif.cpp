@@ -109,16 +109,33 @@ std::optional<CNetAddr> QueryDefaultGatewayImpl(sa_family_t family)
 
     // Receive response.
     char response[4096];
-    ssize_t total_bytes_read{0};
-    bool done{false};
-    while (!done) {
-        int64_t recv_result;
-        do {
-            recv_result = sock->Recv(response, sizeof(response), 0);
-        } while (recv_result < 0 && (errno == EINTR || errno == EAGAIN));
-        if (recv_result < 0) {
-            LogError("recv() from netlink socket: %s\n", NetworkErrorString(errno));
-            return std::nullopt;
+    int64_t recv_result;
+    do {
+        recv_result = sock->Recv(response, sizeof(response), 0);
+    } while (recv_result < 0 && (errno == EINTR || errno == EAGAIN));
+    if (recv_result < 0) {
+        LogPrintLevel(BCLog::NET, BCLog::Level::Error, "recv() from netlink socket: %s\n", NetworkErrorString(errno));
+        return std::nullopt;
+    }
+
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 1500029
+    using recv_result_t = size_t;
+#else
+    using recv_result_t = int64_t;
+#endif
+    for (nlmsghdr* hdr = (nlmsghdr*)response; NLMSG_OK(hdr, static_cast<recv_result_t>(recv_result)); hdr = NLMSG_NEXT(hdr, recv_result)) {
+        rtmsg* r = (rtmsg*)NLMSG_DATA(hdr);
+        int remaining_len = RTM_PAYLOAD(hdr);
+
+        // Iterate over the attributes.
+        rtattr *rta_gateway = nullptr;
+        int scope_id = 0;
+        for (rtattr* attr = RTM_RTA(r); RTA_OK(attr, remaining_len); attr = RTA_NEXT(attr, remaining_len)) {
+            if (attr->rta_type == RTA_GATEWAY) {
+                rta_gateway = attr;
+            } else if (attr->rta_type == RTA_OIF && sizeof(int) == RTA_PAYLOAD(attr)) {
+                std::memcpy(&scope_id, RTA_DATA(attr), sizeof(scope_id));
+            }
         }
 
         total_bytes_read += recv_result;
