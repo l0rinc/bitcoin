@@ -196,14 +196,8 @@ static inline size_t DynamicUsage(const std::unordered_map<X, Y, Z>& m)
     return MallocUsage(sizeof(unordered_node<std::pair<const X, Y> >)) * m.size() + MallocUsage(sizeof(void*) * m.bucket_count());
 }
 
-template <class Key, class T, class Hash, class Pred, std::size_t MAX_BLOCK_SIZE_BYTES, std::size_t ALIGN_BYTES>
-static inline size_t DynamicUsage(const std::unordered_map<Key,
-                                                           T,
-                                                           Hash,
-                                                           Pred,
-                                                           PoolAllocator<std::pair<const Key, T>,
-                                                                         MAX_BLOCK_SIZE_BYTES,
-                                                                         ALIGN_BYTES>>& m)
+template <class Key, class T, class Compare, std::size_t MAX_BLOCK_SIZE_BYTES, std::size_t ALIGN_BYTES>
+static inline size_t DynamicUsage(const std::map<Key, T, Compare, PoolAllocator<std::pair<const Key, T>, MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>>& m)
 {
     auto* pool_resource = m.get_allocator().resource();
 
@@ -212,7 +206,7 @@ static inline size_t DynamicUsage(const std::unordered_map<Key,
     size_t estimated_list_node_size = MallocUsage(sizeof(void*) * 3);
     size_t usage_resource = estimated_list_node_size * pool_resource->NumAllocatedChunks();
     size_t usage_chunks = MallocUsage(pool_resource->ChunkSizeBytes()) * pool_resource->NumAllocatedChunks();
-    return usage_resource + usage_chunks + MallocUsage(sizeof(void*) * m.bucket_count());
+    return usage_resource + usage_chunks;
 }
 
 } // namespace memusage

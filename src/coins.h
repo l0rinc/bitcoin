@@ -14,13 +14,12 @@
 #include <support/allocators/pool.h>
 #include <uint256.h>
 #include <util/check.h>
-#include <util/hasher.h>
 
 #include <cassert>
 #include <cstdint>
 
 #include <functional>
-#include <unordered_map>
+#include <map>
 
 /**
  * A UTXO entry.
@@ -215,18 +214,17 @@ public:
 
 /**
  * PoolAllocator's MAX_BLOCK_SIZE_BYTES parameter here uses sizeof the data, and adds the size
- * of 4 pointers. We do not know the exact node size used in the std::unordered_node implementation
+ * of 4 pointers. We do not know the exact node size used in the std::map implementation
  * because it is implementation defined. Most implementations have an overhead of 1 or 2 pointers,
  * so nodes can be connected in a linked list, and in some cases the hash value is stored as well.
  * Using an additional sizeof(void*)*4 for MAX_BLOCK_SIZE_BYTES should thus be sufficient so that
  * all implementations can allocate the nodes from the PoolAllocator.
  */
-using CCoinsMap = std::unordered_map<COutPoint,
-                                     CCoinsCacheEntry,
-                                     SaltedOutpointHasher,
-                                     std::equal_to<COutPoint>,
-                                     PoolAllocator<CoinsCachePair,
-                                                   sizeof(CoinsCachePair) + sizeof(void*) * 4>>;
+using CCoinsMap = std::map<
+    COutPoint,
+    CCoinsCacheEntry,
+    std::less<COutPoint>,
+    PoolAllocator<CoinsCachePair, sizeof(CoinsCachePair) + sizeof(void*) * 4>>;
 
 using CCoinsMapMemoryResource = CCoinsMap::allocator_type::ResourceType;
 
