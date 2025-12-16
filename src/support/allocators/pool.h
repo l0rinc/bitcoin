@@ -8,11 +8,11 @@
 #include <array>
 #include <cassert>
 #include <cstddef>
-#include <list>
 #include <memory>
 #include <new>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include <util/check.h>
 
@@ -64,9 +64,9 @@
  *
  * Here m_free_lists[1] holds the 2 blocks of size 8 bytes, and m_free_lists[2]
  * holds the 3 blocks of size 16. The blocks came from the data stored in the
- * m_allocated_chunks list. Each chunk has bytes 262144. The last chunk has still
+ * m_allocated_chunks vector. Each chunk has bytes 262144. The last chunk has still
  * some memory available for the blocks, and when m_available_memory_it is at the
- * end, a new chunk will be allocated and added to the list.
+ * end, a new chunk will be allocated and added to the vector.
  */
 template <std::size_t MAX_BLOCK_SIZE_BYTES, std::size_t ALIGN_BYTES>
 class PoolResource final
@@ -100,7 +100,7 @@ class PoolResource final
     /**
      * Contains all allocated pools of memory, used to free the data in the destructor.
      */
-    std::list<std::byte*> m_allocated_chunks{};
+    std::vector<std::byte*> m_allocated_chunks{};
 
     /**
      * Single linked lists of all data that came from deallocating.
@@ -183,6 +183,7 @@ public:
         : m_chunk_size_bytes(NumElemAlignBytes(chunk_size_bytes) * ELEM_ALIGN_BYTES)
     {
         assert(m_chunk_size_bytes >= MAX_BLOCK_SIZE_BYTES);
+        m_allocated_chunks.reserve(2048); // TODO measure
         AllocateChunk();
     }
 
@@ -270,6 +271,14 @@ public:
     [[nodiscard]] std::size_t NumAllocatedChunks() const
     {
         return m_allocated_chunks.size();
+    }
+
+    /**
+     * Capacity of the underlying chunk pointer container.
+     */
+    [[nodiscard]] std::size_t AllocatedChunksCapacity() const
+    {
+        return m_allocated_chunks.capacity();
     }
 
     /**
