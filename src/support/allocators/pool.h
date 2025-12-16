@@ -8,6 +8,7 @@
 #include <array>
 #include <cassert>
 #include <cstddef>
+#include <consensus/consensus.h>
 #include <memory>
 #include <new>
 #include <type_traits>
@@ -188,9 +189,9 @@ public:
     }
 
     /**
-     * Construct a new Pool Resource object, defaults to 2^18=262144 chunk size.
+     * Construct a new Pool Resource object, defaults to the maximum block size.
      */
-    PoolResource() : PoolResource(262144) {}
+    PoolResource() : PoolResource(MAX_BLOCK_SERIALIZED_SIZE) {}
 
     /**
      * Disable copy & move semantics, these are not supported for the resource.
@@ -206,7 +207,7 @@ public:
     ~PoolResource()
     {
         for (std::byte* chunk : m_allocated_chunks) {
-            std::destroy(chunk, chunk + m_chunk_size_bytes);
+            // std::destroy(chunk, chunk + m_chunk_size_bytes);
             ::operator delete ((void*)chunk, std::align_val_t{ELEM_ALIGN_BYTES});
             ASAN_UNPOISON_MEMORY_REGION(chunk, m_chunk_size_bytes);
         }
