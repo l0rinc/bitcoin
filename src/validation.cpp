@@ -54,6 +54,7 @@
 #include <util/fs_helpers.h>
 #include <util/hasher.h>
 #include <util/moneystr.h>
+#include <util/prefetch.h>
 #include <util/rbf.h>
 #include <util/result.h>
 #include <util/signalinterrupt.h>
@@ -2566,6 +2567,12 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
         if (!state.IsValid()) break;
+        if (i + 1 < block.vtx.size()) [[likely]] {
+            const CTransaction* next_tx{block.vtx[i + 1].get()};
+            util::Prefetch(next_tx);
+            if (next_tx && !next_tx->vin.empty()) util::Prefetch(next_tx->vin.data());
+            if (next_tx && !next_tx->vout.empty()) util::Prefetch(next_tx->vout.data());
+        }
         const CTransaction &tx = *(block.vtx[i]);
 
         nInputs += tx.vin.size();
