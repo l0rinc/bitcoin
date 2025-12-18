@@ -190,10 +190,23 @@ static void SHA512(benchmark::Bench& bench)
     });
 }
 
-static void SipHash_32b(benchmark::Bench& bench)
+static void SipHash24_32b(benchmark::Bench& bench)
 {
     FastRandomContext rng{/*fDeterministic=*/true};
-    PresaltedSipHasher presalted_sip_hasher(rng.rand64(), rng.rand64());
+    PresaltedSipHasher24 presalted_sip_hasher(rng.rand64(), rng.rand64());
+    auto val{rng.rand256()};
+    auto i{0U};
+    bench.run([&] {
+        ankerl::nanobench::doNotOptimizeAway(presalted_sip_hasher(val));
+        ++i;
+        val.data()[i % uint256::size()] ^= i & 0xFF;
+    });
+}
+
+static void SipHash13_32b(benchmark::Bench& bench)
+{
+    FastRandomContext rng{/*fDeterministic=*/true};
+    PresaltedSipHasher13 presalted_sip_hasher(rng.rand64(), rng.rand64());
     auto val{rng.rand256()};
     auto i{0U};
     bench.run([&] {
@@ -273,7 +286,8 @@ BENCHMARK(SHA256_32b_STANDARD, benchmark::PriorityLevel::HIGH);
 BENCHMARK(SHA256_32b_SSE4, benchmark::PriorityLevel::HIGH);
 BENCHMARK(SHA256_32b_AVX2, benchmark::PriorityLevel::HIGH);
 BENCHMARK(SHA256_32b_SHANI, benchmark::PriorityLevel::HIGH);
-BENCHMARK(SipHash_32b, benchmark::PriorityLevel::HIGH);
+BENCHMARK(SipHash24_32b, benchmark::PriorityLevel::HIGH);
+BENCHMARK(SipHash13_32b, benchmark::PriorityLevel::HIGH);
 BENCHMARK(SHA256D64_1024_STANDARD, benchmark::PriorityLevel::HIGH);
 BENCHMARK(SHA256D64_1024_SSE4, benchmark::PriorityLevel::HIGH);
 BENCHMARK(SHA256D64_1024_AVX2, benchmark::PriorityLevel::HIGH);

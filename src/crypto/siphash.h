@@ -49,15 +49,41 @@ public:
  * This class caches the initial SipHash v[0..3] state derived from (k0, k1)
  * and implements a specialized hashing path for uint256 values, with or
  * without an extra 32-bit word. The internal state is immutable, so
- * PresaltedSipHasher instances can be reused for multiple hashes with the
+ * PresaltedSipHasher24 instances can be reused for multiple hashes with the
  * same key.
  */
-class PresaltedSipHasher
+class PresaltedSipHasher24
 {
     const SipHashState m_state;
 
 public:
-    explicit PresaltedSipHasher(uint64_t k0, uint64_t k1) noexcept : m_state{k0, k1} {}
+    explicit PresaltedSipHasher24(uint64_t k0, uint64_t k1) noexcept : m_state{k0, k1} {}
+
+    /** Equivalent to CSipHasher(k0, k1).Write(val).Finalize(). */
+    uint64_t operator()(const uint256& val) const noexcept;
+
+    /**
+     * Equivalent to CSipHasher(k0, k1).Write(val).Write(extra).Finalize(),
+     * with `extra` encoded as 4 little-endian bytes.
+     */
+    uint64_t operator()(const uint256& val, uint32_t extra) const noexcept;
+};
+
+/**
+ * Optimized SipHash‑1‑3 implementation for uint256.
+ *
+ * This class caches the initial SipHash v[0..3] state derived from (k0, k1)
+ * and implements a specialized hashing path for uint256 values, with or
+ * without an extra 32-bit word. The internal state is immutable, so
+ * PresaltedSipHasher13 instances can be reused for multiple hashes with the
+ * same key.
+ */
+class PresaltedSipHasher13
+{
+    const SipHashState m_state;
+
+public:
+    explicit PresaltedSipHasher13(uint64_t k0, uint64_t k1) noexcept : m_state{k0, k1} {}
 
     /** Equivalent to CSipHasher(k0, k1).Write(val).Finalize(). */
     uint64_t operator()(const uint256& val) const noexcept;

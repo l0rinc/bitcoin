@@ -124,7 +124,7 @@ FUZZ_TARGET(coinsviewcacheasync, .init = setup_threadpool_test)
         cache.SetBackend(main_cache);
         cache.StartFetching(block);
 
-        std::unordered_set<COutPoint, SaltedOutpointHasher> outpoints_in_cache{};
+        std::unordered_set<COutPoint, SaltedOutpointHasher13> outpoints_in_cache{};
         LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), static_cast<uint32_t>(input_outpoints.size() * 10))
         {
             COutPoint outpoint;

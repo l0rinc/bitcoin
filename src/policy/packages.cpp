@@ -52,7 +52,7 @@ bool IsTopoSortedPackage(const Package& txns)
 bool IsConsistentPackage(const Package& txns)
 {
     // Don't allow any conflicting transactions, i.e. spending the same inputs, in a package.
-    std::unordered_set<COutPoint, SaltedOutpointHasher> inputs_seen;
+    std::unordered_set<COutPoint, SaltedOutpointHasher13> inputs_seen;
     for (const auto& tx : txns) {
         if (tx->vin.empty()) {
             // This function checks consistency based on inputs, and we can't do that if there are
