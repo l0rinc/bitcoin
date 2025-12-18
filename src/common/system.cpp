@@ -67,14 +67,10 @@ void runCommand(const std::string& strCommand)
 void SetupEnvironment()
 {
 #ifdef HAVE_MALLOPT_ARENA_MAX
-    // glibc-specific: On 32-bit systems set the number of arenas to 1.
-    // By default, since glibc 2.10, the C library will create up to two heap
-    // arenas per core. This is known to cause excessive virtual address space
-    // usage in our usage. Work around it by setting the maximum number of
-    // arenas to 1.
-    if (sizeof(void*) == 4) {
-        mallopt(M_ARENA_MAX, 1);
-    }
+    // https://www.gnu.org/software/libc/manual/html_node/Malloc-Tunable-Parameters.html
+    // > For 32-bit systems the limit is twice the number of cores online and on 64-bit systems, it is eight times the number of cores online.
+    // Limit malloc arenas to reduce memory fragmentation
+    mallopt(M_ARENA_MAX, sizeof(void*) == 4 ? 1 : 2);
 #endif
     // On most POSIX systems (e.g. Linux, but not BSD) the environment's locale
     // may be invalid, in which case the "C.UTF-8" locale is used as fallback.
