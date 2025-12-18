@@ -9,8 +9,10 @@
 #include <sync.h>
 #include <tinyformat.h>
 #include <util/threadnames.h>
+#include <util/prefetch.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <iterator>
 #include <optional>
 #include <vector>
@@ -127,8 +129,9 @@ private:
             }
             // execute work
             if (do_work) {
-                for (T& check : vChecks) {
-                    local_result = check();
+                for (size_t idx = 0; idx < vChecks.size(); ++idx) {
+                    if (idx + 1 < vChecks.size()) util::Prefetch(&vChecks[idx + 1]);
+                    local_result = vChecks[idx]();
                     if (local_result.has_value()) break;
                 }
             }

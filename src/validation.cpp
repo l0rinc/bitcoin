@@ -54,6 +54,7 @@
 #include <util/fs_helpers.h>
 #include <util/hasher.h>
 #include <util/moneystr.h>
+#include <util/prefetch.h>
 #include <util/rbf.h>
 #include <util/result.h>
 #include <util/signalinterrupt.h>
@@ -1873,6 +1874,7 @@ void CoinsViews::InitCache()
 {
     AssertLockHeld(::cs_main);
     m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview);
+    m_connect_block_view = std::make_unique<CoinsViewCacheAsync>(*m_cacheview, m_catcherview);
 }
 
 Chainstate::Chainstate(
@@ -2565,6 +2567,12 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
         if (!state.IsValid()) break;
+        if (i + 1 < block.vtx.size()) [[likely]] {
+            const CTransaction* next_tx{block.vtx[i + 1].get()};
+            util::Prefetch(next_tx);
+            if (next_tx && !next_tx->vin.empty()) util::Prefetch(next_tx->vin.data());
+            if (next_tx && !next_tx->vout.empty()) util::Prefetch(next_tx->vout.data());
+        }
         const CTransaction &tx = *(block.vtx[i]);
 
         nInputs += tx.vin.size();
@@ -3113,7 +3121,8 @@ bool Chainstate::ConnectTip(
     LogDebug(BCLog::BENCH, "  - Load block from disk: %.2fms\n",
              Ticks<MillisecondsDouble>(time_2 - time_1));
     {
-        CCoinsViewCache view(&CoinsTip());
+        auto& view{*m_coins_views->m_connect_block_view};
+        view.StartFetching(*block_to_connect);
         bool rv = ConnectBlock(*block_to_connect, state, pindexNew, view);
         if (m_chainman.m_options.signals) {
             m_chainman.m_options.signals->BlockChecked(block_to_connect, state);
@@ -3122,6 +3131,7 @@ bool Chainstate::ConnectTip(
             if (state.IsInvalid())
                 InvalidBlockFound(pindexNew, state);
             LogError("%s: ConnectBlock %s failed, %s\n", __func__, pindexNew->GetBlockHash().ToString(), state.ToString());
+            view.Reset();
             return false;
         }
         time_3 = SteadyClock::now();

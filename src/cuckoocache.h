@@ -6,11 +6,13 @@
 #define BITCOIN_CUCKOOCACHE_H
 
 #include <util/fastrange.h>
+#include <util/prefetch.h>
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -474,12 +476,17 @@ public:
     inline bool contains(const Element& e, const bool erase) const
     {
         std::array<uint32_t, 8> locs = compute_hashes(e);
-        for (const uint32_t loc : locs)
+        util::Prefetch(&table[locs[0]]);
+        util::Prefetch(&table[locs[1]]);
+        for (size_t i = 0; i < locs.size(); ++i) {
+            if (i + 2 < locs.size()) util::Prefetch(&table[locs[i + 2]]);
+            const uint32_t loc{locs[i]};
             if (table[loc] == e) {
                 if (erase)
                     allow_erase(loc);
                 return true;
             }
+        }
         return false;
     }
 };
