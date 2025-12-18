@@ -36,7 +36,7 @@ size_t CCoinsViewBacked::EstimateSize() const { return base->EstimateSize(); }
 
 CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic) :
     CCoinsViewBacked(baseIn), m_deterministic(deterministic),
-    cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
+    cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic))
 {
     m_sentinel.second.SelfRef(m_sentinel);
 }
@@ -171,6 +171,12 @@ bool CCoinsViewCache::HaveCoin(const COutPoint &outpoint) const {
 bool CCoinsViewCache::HaveCoinInCache(const COutPoint &outpoint) const {
     CCoinsMap::const_iterator it = cacheCoins.find(outpoint);
     return (it != cacheCoins.end() && !it->second.coin.IsSpent());
+}
+
+std::optional<Coin> CCoinsViewCache::GetPossiblySpentCoinFromCache(const COutPoint& outpoint) const noexcept
+{
+    if (auto it{cacheCoins.find(outpoint)}; it != cacheCoins.end()) return it->second.coin;
+    return std::nullopt;
 }
 
 uint256 CCoinsViewCache::GetBestBlock() const {
@@ -311,9 +317,7 @@ void CCoinsViewCache::ReallocateCache()
     // Cache should be empty when we're calling this.
     assert(cacheCoins.size() == 0);
     cacheCoins.~CCoinsMap();
-    m_cache_coins_memory_resource.~CCoinsMapMemoryResource();
-    ::new (&m_cache_coins_memory_resource) CCoinsMapMemoryResource{};
-    ::new (&cacheCoins) CCoinsMap{0, SaltedOutpointHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
+    ::new (&cacheCoins) CCoinsMap{0, SaltedOutpointHasher{/*deterministic=*/m_deterministic}};
 }
 
 void CCoinsViewCache::SanityCheck() const

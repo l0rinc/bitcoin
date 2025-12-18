@@ -32,6 +32,7 @@ add_executable(test_bitcoin
   cluster_linearize_tests.cpp
   coins_tests.cpp
   coinscachepair_tests.cpp
+  coinsviewcacheasync_tests.cpp
   coinstatsindex_tests.cpp
   common_url_tests.cpp
   compress_tests.cpp
@@ -73,7 +74,6 @@ add_executable(test_bitcoin
   peerman_tests.cpp
   pmt_tests.cpp
   policyestimator_tests.cpp
-  pool_tests.cpp
   pow_tests.cpp
   prevector_tests.cpp
   raii_event_tests.cpp
