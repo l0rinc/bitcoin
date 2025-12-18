@@ -88,7 +88,7 @@ uint64_t CSipHasher::Finalize() const
     return v0 ^ v1 ^ v2 ^ v3;
 }
 
-uint64_t PresaltedSipHasher::operator()(const uint256& val) const noexcept
+uint64_t PresaltedSipHasher24::operator()(const uint256& val) const noexcept
 {
     uint64_t v0 = m_state.v[0], v1 = m_state.v[1], v2 = m_state.v[2], v3 = m_state.v[3];
     uint64_t d = val.GetUint64(0);
@@ -125,7 +125,7 @@ uint64_t PresaltedSipHasher::operator()(const uint256& val) const noexcept
 }
 
 /** Specialized implementation for efficiency */
-uint64_t PresaltedSipHasher::operator()(const uint256& val, uint32_t extra) const noexcept
+uint64_t PresaltedSipHasher24::operator()(const uint256& val, uint32_t extra) const noexcept
 {
     uint64_t v0 = m_state.v[0], v1 = m_state.v[1], v2 = m_state.v[2], v3 = m_state.v[3];
     uint64_t d = val.GetUint64(0);
@@ -155,6 +155,67 @@ uint64_t PresaltedSipHasher::operator()(const uint256& val, uint32_t extra) cons
     v0 ^= d;
     v2 ^= 0xFF;
     SIPROUND;
+    SIPROUND;
+    SIPROUND;
+    SIPROUND;
+    return v0 ^ v1 ^ v2 ^ v3;
+}
+
+uint64_t PresaltedSipHasher13::operator()(const uint256& val) const noexcept
+{
+    uint64_t v0 = m_state.v[0], v1 = m_state.v[1], v2 = m_state.v[2], v3 = m_state.v[3];
+    uint64_t d = val.GetUint64(0);
+    v3 ^= d;
+
+    SIPROUND;
+    v0 ^= d;
+    d = val.GetUint64(1);
+    v3 ^= d;
+    SIPROUND;
+    v0 ^= d;
+    d = val.GetUint64(2);
+    v3 ^= d;
+    SIPROUND;
+    v0 ^= d;
+    d = val.GetUint64(3);
+    v3 ^= d;
+    SIPROUND;
+    v0 ^= d;
+    v3 ^= (uint64_t{4}) << 59;
+    SIPROUND;
+    v0 ^= (uint64_t{4}) << 59;
+    v2 ^= 0xFF;
+    SIPROUND;
+    SIPROUND;
+    SIPROUND;
+    return v0 ^ v1 ^ v2 ^ v3;
+}
+
+/** Specialized implementation for efficiency */
+uint64_t PresaltedSipHasher13::operator()(const uint256& val, uint32_t extra) const noexcept
+{
+    uint64_t v0 = m_state.v[0], v1 = m_state.v[1], v2 = m_state.v[2], v3 = m_state.v[3];
+    uint64_t d = val.GetUint64(0);
+    v3 ^= d;
+    SIPROUND;
+    v0 ^= d;
+    d = val.GetUint64(1);
+    v3 ^= d;
+    SIPROUND;
+    v0 ^= d;
+    d = val.GetUint64(2);
+    v3 ^= d;
+    SIPROUND;
+    v0 ^= d;
+    d = val.GetUint64(3);
+    v3 ^= d;
+    SIPROUND;
+    v0 ^= d;
+    d = ((uint64_t{36}) << 56) | extra;
+    v3 ^= d;
+    SIPROUND;
+    v0 ^= d;
+    v2 ^= 0xFF;
     SIPROUND;
     SIPROUND;
     SIPROUND;

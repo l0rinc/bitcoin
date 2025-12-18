@@ -17,7 +17,7 @@
 
 class SaltedUint256Hasher
 {
-    const PresaltedSipHasher m_hasher;
+    const PresaltedSipHasher24 m_hasher;
 
 public:
     SaltedUint256Hasher();
@@ -30,7 +30,7 @@ public:
 
 class SaltedTxidHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const PresaltedSipHasher24 m_hasher;
 
 public:
     SaltedTxidHasher();
@@ -43,7 +43,7 @@ public:
 
 class SaltedWtxidHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const PresaltedSipHasher24 m_hasher;
 
 public:
     SaltedWtxidHasher();
@@ -54,12 +54,25 @@ public:
     }
 };
 
-class SaltedOutpointHasher
+class SaltedOutpointHasher24
 {
-    const PresaltedSipHasher m_hasher;
+    const PresaltedSipHasher24 m_hasher;
 
 public:
-    SaltedOutpointHasher(bool deterministic = false);
+    SaltedOutpointHasher24(bool deterministic = false);
+
+    size_t operator()(const COutPoint& id) const
+    {
+        return m_hasher(id.hash.ToUint256(), id.n);
+    }
+};
+
+class SaltedOutpointHasher13
+{
+    const PresaltedSipHasher13 m_hasher;
+
+public:
+    SaltedOutpointHasher13(bool deterministic = false);
 
     /**
      * Having the hash noexcept allows libstdc++'s unordered_map to recalculate
