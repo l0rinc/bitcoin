@@ -1301,7 +1301,8 @@ static ChainstateLoadResult InitAndLoadChainstate(
     bool do_reindex,
     const bool do_reindex_chainstate,
     const kernel::CacheSizes& cache_sizes,
-    const ArgsManager& args)
+    const ArgsManager& args,
+    const std::function<void()>& read_error_cb)
 {
     // This function may be called twice, so any dirty state must be reset.
     node.notifications.reset(); // Drop state, such as a cached tip block
@@ -1331,6 +1332,7 @@ static ChainstateLoadResult InitAndLoadChainstate(
     ChainstateManager::Options chainman_opts{
         .chainparams = chainparams,
         .datadir = args.GetDataDirNet(),
+        .read_error_cb = read_error_cb,
         .notifications = *node.notifications,
         .signals = node.validation_signals.get(),
     };
@@ -1344,6 +1346,7 @@ static ChainstateLoadResult InitAndLoadChainstate(
             .path = args.GetDataDirNet() / "blocks" / "index",
             .cache_bytes = cache_sizes.block_tree_db,
             .wipe_data = do_reindex,
+            .read_error_cb = read_error_cb,
         },
     };
     Assert(ApplyArgsManOptions(args, blockman_opts)); // no error can happen, already checked in AppInitParameterInteraction
@@ -1390,11 +1393,6 @@ static ChainstateLoadResult InitAndLoadChainstate(
     options.check_blocks = args.GetIntArg("-checkblocks", DEFAULT_CHECKBLOCKS);
     options.check_level = args.GetIntArg("-checklevel", DEFAULT_CHECKLEVEL);
     options.require_full_verification = args.IsArgSet("-checkblocks") || args.IsArgSet("-checklevel");
-    options.read_error_cb = [] {
-        uiInterface.ThreadSafeMessageBox(
-            _("Cannot read from database, shutting down."),
-            CClientUIInterface::MSG_ERROR);
-    };
     uiInterface.InitMessage(_("Loading block index…"));
     auto catch_exceptions = [](auto&& f) -> ChainstateLoadResult {
         try {
@@ -1843,6 +1841,11 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     bool do_reindex{args.GetBoolArg("-reindex", false)};
     const bool do_reindex_chainstate{args.GetBoolArg("-reindex-chainstate", false)};
+    const std::function<void()> read_error_cb{[] {
+        uiInterface.ThreadSafeMessageBox(
+            _("Cannot read from database, shutting down."),
+            CClientUIInterface::MSG_ERROR);
+    }};
 
     // Chainstate initialization and loading may be retried once with reindexing by GUI users
     auto [status, error] = InitAndLoadChainstate(
@@ -1850,7 +1853,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         do_reindex,
         do_reindex_chainstate,
         kernel_cache_sizes,
-        args);
+        args,
+        read_error_cb);
     if (status == ChainstateLoadStatus::FAILURE && !do_reindex && !ShutdownRequested(node)) {
         // suggest a reindex
         bool do_retry{HasTestOption(args, "reindex_after_failure_noninteractive_yes") ||
@@ -1870,7 +1874,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
             do_reindex,
             do_reindex_chainstate,
             kernel_cache_sizes,
-            args);
+            args,
+            read_error_cb);
     }
     if (status != ChainstateLoadStatus::SUCCESS && status != ChainstateLoadStatus::INTERRUPTED) {
         return InitError(error);
@@ -1896,7 +1901,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     // ********************************************************* Step 8: start indexers
 
     if (args.GetBoolArg("-txindex", DEFAULT_TXINDEX)) {
-        g_txindex = std::make_unique<TxIndex>(interfaces::MakeChain(node), index_cache_sizes.tx_index, false, do_reindex);
+        g_txindex = std::make_unique<TxIndex>(interfaces::MakeChain(node), index_cache_sizes.tx_index, false, do_reindex, read_error_cb);
         node.indexes.emplace_back(g_txindex.get());
     }
 
@@ -1906,12 +1911,12 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     }
 
     for (const auto& filter_type : g_enabled_filter_types) {
-        InitBlockFilterIndex([&]{ return interfaces::MakeChain(node); }, filter_type, index_cache_sizes.filter_index, false, do_reindex);
+        InitBlockFilterIndex([&]{ return interfaces::MakeChain(node); }, filter_type, index_cache_sizes.filter_index, false, do_reindex, read_error_cb);
         node.indexes.emplace_back(GetBlockFilterIndex(filter_type));
     }
 
     if (args.GetBoolArg("-coinstatsindex", DEFAULT_COINSTATSINDEX)) {
-        g_coin_stats_index = std::make_unique<CoinStatsIndex>(interfaces::MakeChain(node), /*cache_size=*/0, false, do_reindex);
+        g_coin_stats_index = std::make_unique<CoinStatsIndex>(interfaces::MakeChain(node), /*cache_size=*/0, false, do_reindex, read_error_cb);
         node.indexes.emplace_back(g_coin_stats_index.get());
     }
 
