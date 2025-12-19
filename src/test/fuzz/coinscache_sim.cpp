@@ -153,6 +153,11 @@ public:
         return std::nullopt;
     }
 
+    bool HaveCoin(const COutPoint& outpoint) const final
+    {
+        return !!GetCoin(outpoint);
+    }
+
     uint256 GetBestBlock() const final { return {}; }
     std::vector<uint256> GetHeadBlocks() const final { return {}; }
     std::unique_ptr<CCoinsViewCursor> Cursor() const final { return {}; }
