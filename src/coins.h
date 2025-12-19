@@ -297,7 +297,7 @@ private:
     bool m_will_erase;
 };
 
-/** Abstract view on the open txout dataset. */
+/** Pure abstract view on the open txout dataset. */
 class CCoinsView
 {
 public:
@@ -308,7 +308,7 @@ public:
     virtual std::optional<Coin> GetCoin(const COutPoint& outpoint) const = 0;
 
     //! Just check whether a given outpoint is unspent.
-    virtual bool HaveCoin(const COutPoint& outpoint) const;
+    virtual bool HaveCoin(const COutPoint& outpoint) const = 0;
 
     //! Retrieve the block hash whose state this CCoinsView currently represents
     virtual uint256 GetBestBlock() const = 0;
@@ -347,6 +347,7 @@ public:
     CCoinsViewEmpty& operator=(const CCoinsViewEmpty&) = delete;
 
     std::optional<Coin> GetCoin(const COutPoint&) const override { return {}; }
+    bool HaveCoin(const COutPoint&) const override { return false; }
     uint256 GetBestBlock() const override { return {}; }
     std::vector<uint256> GetHeadBlocks() const override { return {}; }
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256&) override
