@@ -336,6 +336,18 @@ public:
     virtual size_t EstimateSize() const { return 0; }
 };
 
+/** Noop coins view. */
+class CCoinsViewEmpty final : public CCoinsView
+{
+public:
+    std::optional<Coin> GetCoin(const COutPoint&) const override { return std::nullopt; }
+    bool HaveCoin(const COutPoint&) const override { return false; }
+    uint256 GetBestBlock() const override { return uint256(); }
+    std::vector<uint256> GetHeadBlocks() const override { return std::vector<uint256>(); }
+    bool BatchWrite(CoinsViewCacheCursor&, const uint256&) override { return false; }
+    std::unique_ptr<CCoinsViewCursor> Cursor() const override { return nullptr; }
+    size_t EstimateSize() const override { return 0; }
+};
 
 /** CCoinsView backed by another CCoinsView */
 class CCoinsViewBacked : public CCoinsView

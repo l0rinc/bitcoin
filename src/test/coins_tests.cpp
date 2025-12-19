@@ -677,7 +677,7 @@ public:
         if (cache_coin) cache.usage() += InsertCoinsMapEntry(cache.map(), cache.sentinel(), *cache_coin);
     }
 
-    CCoinsView root;
+    CCoinsViewEmpty root;
     CCoinsViewCacheTest base{&root};
     CCoinsViewCacheTest cache{&base};
 };
@@ -1087,7 +1087,7 @@ BOOST_AUTO_TEST_CASE(coins_resource_is_used)
 
 BOOST_AUTO_TEST_CASE(ccoins_addcoin_exception_keeps_usage_balanced)
 {
-    CCoinsView root;
+    CCoinsViewEmpty root;
     CCoinsViewCacheTest cache{&root};
 
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
@@ -1105,7 +1105,7 @@ BOOST_AUTO_TEST_CASE(ccoins_addcoin_exception_keeps_usage_balanced)
 
 BOOST_AUTO_TEST_CASE(ccoins_emplace_duplicate_keeps_usage_balanced)
 {
-    CCoinsView root;
+    CCoinsViewEmpty root;
     CCoinsViewCacheTest cache{&root};
 
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
