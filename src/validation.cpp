@@ -2750,14 +2750,17 @@ bool Chainstate::FlushStateToDisk(
     std::set<int> setFilesToPrune;
     bool full_flush_completed = false;
 
-    const size_t coins_count = CoinsTip().GetCacheSize();
-    const size_t coins_mem_usage = CoinsTip().DynamicMemoryUsage();
-
     try {
     {
         bool fFlushForPrune = false;
 
         CoinsCacheSizeState cache_state = GetCoinsCacheSizeState();
+        if (cache_state >= CoinsCacheSizeState::LARGE) {
+            CoinsTip().CompactTombstones();
+            cache_state = GetCoinsCacheSizeState();
+        }
+        const size_t coins_count{CoinsTip().GetCacheSize()};
+        const size_t coins_mem_usage{CoinsTip().DynamicMemoryUsage()};
         LOCK(m_blockman.cs_LastBlockFile);
         if (m_blockman.IsPruneMode() && (m_blockman.m_check_for_pruning || nManualPruneHeight > 0) && m_chainman.m_blockman.m_blockfiles_indexed) {
             // make sure we don't prune above any of the prune locks bestblocks

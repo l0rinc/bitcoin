@@ -667,7 +667,9 @@ public:
     {
         auto base_cache_coin{base_value == ABSENT ? MISSING : CoinEntry{base_value, CoinEntry::State::DIRTY}};
         WriteCoinsViewEntry(base, base_cache_coin);
-        if (cache_coin) cache.usage() += InsertCoinsMapEntry(cache.map(), cache.sentinel(), *cache_coin);
+        if (cache_coin) {
+            cache.usage() += InsertCoinsMapEntry(cache.map(), cache.sentinel(), *cache_coin);
+        }
     }
 
     CCoinsView root;
@@ -724,11 +726,11 @@ BOOST_AUTO_TEST_CASE(ccoins_spend)
 
         CheckSpendCoins(base_value, SPENT_CLEAN,        SPENT_DIRTY);
         CheckSpendCoins(base_value, SPENT_DIRTY,        SPENT_DIRTY);
-        CheckSpendCoins(base_value, SPENT_DIRTY_FRESH,  MISSING    );
+        CheckSpendCoins(base_value, SPENT_DIRTY_FRESH,  SPENT_DIRTY_FRESH);
 
         CheckSpendCoins(base_value, VALUE2_CLEAN,       SPENT_DIRTY);
         CheckSpendCoins(base_value, VALUE2_DIRTY,       SPENT_DIRTY);
-        CheckSpendCoins(base_value, VALUE2_DIRTY_FRESH, MISSING    );
+        CheckSpendCoins(base_value, VALUE2_DIRTY_FRESH, SPENT_DIRTY_FRESH);
     }
 }
 
@@ -807,8 +809,8 @@ BOOST_AUTO_TEST_CASE(ccoins_write)
     CheckWriteCoins(SPENT_CLEAN,        SPENT_DIRTY_FRESH,  SPENT_DIRTY        );
     CheckWriteCoins(SPENT_DIRTY,        SPENT_DIRTY,        SPENT_DIRTY        );
     CheckWriteCoins(SPENT_DIRTY,        SPENT_DIRTY_FRESH,  SPENT_DIRTY        );
-    CheckWriteCoins(SPENT_DIRTY_FRESH,  SPENT_DIRTY,        MISSING            );
-    CheckWriteCoins(SPENT_DIRTY_FRESH,  SPENT_DIRTY_FRESH,  MISSING            );
+    CheckWriteCoins(SPENT_DIRTY_FRESH,  SPENT_DIRTY,        SPENT_DIRTY_FRESH  );
+    CheckWriteCoins(SPENT_DIRTY_FRESH,  SPENT_DIRTY_FRESH,  SPENT_DIRTY_FRESH  );
 
     CheckWriteCoins(SPENT_CLEAN,        VALUE2_DIRTY,       VALUE2_DIRTY       );
     CheckWriteCoins(SPENT_CLEAN,        VALUE2_DIRTY_FRESH, VALUE2_DIRTY       );
@@ -824,7 +826,7 @@ BOOST_AUTO_TEST_CASE(ccoins_write)
     CheckWriteCoins(VALUE1_CLEAN,       SPENT_DIRTY_FRESH,  EX_FRESH_MISAPPLIED);
     CheckWriteCoins(VALUE1_DIRTY,       SPENT_DIRTY,        SPENT_DIRTY        );
     CheckWriteCoins(VALUE1_DIRTY,       SPENT_DIRTY_FRESH,  EX_FRESH_MISAPPLIED);
-    CheckWriteCoins(VALUE1_DIRTY_FRESH, SPENT_DIRTY,        MISSING            );
+    CheckWriteCoins(VALUE1_DIRTY_FRESH, SPENT_DIRTY,        SPENT_DIRTY_FRESH  );
     CheckWriteCoins(VALUE1_DIRTY_FRESH, SPENT_DIRTY_FRESH,  EX_FRESH_MISAPPLIED);
 
     CheckWriteCoins(VALUE1_CLEAN,       VALUE2_DIRTY,       VALUE2_DIRTY       );
