@@ -82,7 +82,9 @@ public:
 class CCoinsViewCacheTest : public CCoinsViewCache
 {
 public:
-    explicit CCoinsViewCacheTest(CCoinsView* _base) : CCoinsViewCache(_base) {}
+    CCoinsViewCacheTest() = default;
+    explicit CCoinsViewCacheTest(CCoinsViewCacheTest& backend_cache) : CCoinsViewCache(backend_cache) {}
+    explicit CCoinsViewCacheTest(CCoinsView* backend) : CCoinsViewCache(backend) {}
 
     void SelfTest(bool sanity_check = true) const
     {
@@ -680,9 +682,8 @@ public:
         if (cache_coin) cache.usage() += InsertCoinsMapEntry(cache.map(), cache.sentinel(), *cache_coin);
     }
 
-    CCoinsViewEmpty root;
-    CCoinsViewCacheTest base{&root};
-    CCoinsViewCacheTest cache{&base};
+    CCoinsViewCacheTest base;
+    CCoinsViewCacheTest cache{base};
 };
 
 static void CheckAccessCoin(const CAmount base_value, const MaybeCoin& cache_coin, const MaybeCoin& expected)
@@ -1090,8 +1091,7 @@ BOOST_AUTO_TEST_CASE(coins_resource_is_used)
 
 BOOST_AUTO_TEST_CASE(ccoins_addcoin_exception_keeps_usage_balanced)
 {
-    CCoinsViewEmpty root;
-    CCoinsViewCacheTest cache{&root};
+    CCoinsViewCacheTest cache;
 
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
 
@@ -1108,8 +1108,7 @@ BOOST_AUTO_TEST_CASE(ccoins_addcoin_exception_keeps_usage_balanced)
 
 BOOST_AUTO_TEST_CASE(ccoins_emplace_duplicate_keeps_usage_balanced)
 {
-    CCoinsViewEmpty root;
-    CCoinsViewCacheTest cache{&root};
+    CCoinsViewCacheTest cache;
 
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
 

@@ -46,7 +46,6 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& backend
 {
     bool good_data{true};
 
-    CCoinsViewEmpty coins_dummy;
     CCoinsViewCache coins_view_cache{&backend_coins_view, /*deterministic=*/true};
     if (is_db) coins_view_cache.SetBestBlock(uint256::ONE);
     COutPoint random_out_point;
@@ -97,7 +96,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& backend
                 if (is_db || fuzzed_data_provider.ConsumeBool()) {
                     coins_view_cache.SetBackend(backend_coins_view);
                 } else {
-                    coins_view_cache.SetBackend(coins_dummy);
+                    coins_view_cache.SetBackend(CCoinsViewEmpty::Get());
                 }
             },
             [&] {
@@ -299,8 +298,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& backend
 FUZZ_TARGET(coins_view, .init = initialize_coins_view)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
-    CCoinsViewEmpty backend_coins_view;
-    TestCoinsView(fuzzed_data_provider, backend_coins_view, /*is_db=*/false);
+    TestCoinsView(fuzzed_data_provider, CCoinsViewEmpty::Get(), /*is_db=*/false);
 }
 
 FUZZ_TARGET(coins_view_db, .init = initialize_coins_view)

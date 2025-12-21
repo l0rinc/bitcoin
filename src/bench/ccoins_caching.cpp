@@ -26,8 +26,7 @@ static void CCoinsCaching(benchmark::Bench& bench)
     ECC_Context ecc_context{};
 
     FillableSigningProvider keystore;
-    CCoinsViewEmpty coinsDummy;
-    CCoinsViewCache coins(&coinsDummy);
+    CCoinsViewCache coins;
     std::vector<CMutableTransaction> dummyTransactions =
         SetupDummyInputs(keystore, coins, {11 * COIN, 50 * COIN, 21 * COIN, 22 * COIN});
 

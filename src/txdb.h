@@ -31,7 +31,7 @@ struct CoinsViewOptions {
     int simulate_crash_ratio{0};
 };
 
-/** CCoinsView backed by the coin database (chainstate/) */
+/** Coins view backed by the coin database (chainstate/) */
 class CCoinsViewDB final : public CCoinsView
 {
 protected:
