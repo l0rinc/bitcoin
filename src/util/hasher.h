@@ -53,12 +53,12 @@ public:
     }
 };
 
-class SaltedOutpointHasher
+class SaltedOutpointHasher24
 {
-    const PresaltedSipHasher m_hasher;
+    const PresaltedSipHasher24 m_hasher;
 
 public:
-    SaltedOutpointHasher(bool deterministic = false);
+    SaltedOutpointHasher24(bool deterministic = false);
 
     /**
      * Having the hash noexcept allows libstdc++'s unordered_map to recalculate
@@ -75,6 +75,33 @@ public:
     }
 };
 
+class SaltedOutpointHasher13
+{
+    const PresaltedSipHasher13 m_hasher;
+
+public:
+    SaltedOutpointHasher13(bool deterministic = false);
+
+    size_t operator()(const COutPoint& id) const noexcept
+    {
+        return m_hasher(id.hash.ToUint256(), id.n);
+    }
+};
+
+class SaltedOutpointHasher13Jumbo
+{
+    const PresaltedSipHasher13Jumbo m_hasher;
+
+public:
+    SaltedOutpointHasher13Jumbo(bool deterministic = false);
+
+    size_t operator()(const COutPoint& id) const noexcept
+    {
+        return m_hasher(id.hash.ToUint256(), id.n);
+    }
+};
+
+using SaltedOutpointHasher = SaltedOutpointHasher13Jumbo;
 /**
  * We're hashing a nonce into the entries themselves, so we don't need extra
  * blinding in the set hash computation.

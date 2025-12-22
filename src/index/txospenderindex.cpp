@@ -78,7 +78,7 @@ interfaces::Chain::NotifyOptions TxoSpenderIndex::CustomOptions()
 
 static uint64_t CreateKeyPrefix(std::pair<uint64_t, uint64_t> siphash_key, const COutPoint& vout)
 {
-    return PresaltedSipHasher(siphash_key.first, siphash_key.second)(vout.hash.ToUint256(), vout.n);
+    return PresaltedSipHasher24(siphash_key.first, siphash_key.second)(vout.hash.ToUint256(), vout.n);
 }
 
 static DBKey CreateKey(std::pair<uint64_t, uint64_t> siphash_key, const COutPoint& vout, const CDiskTxPos& pos)
