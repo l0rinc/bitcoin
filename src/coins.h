@@ -457,6 +457,9 @@ public:
      */
     bool Sync();
 
+    //! Wipe local state.
+    void Reset() noexcept;
+
     /**
      * Removes the UTXO with the given outpoint from the cache, if it is
      * not modified.
