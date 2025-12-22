@@ -216,6 +216,49 @@ static void SipHash13_32b(benchmark::Bench& bench)
     });
 }
 
+static void SipHash13Jumbo_32b(benchmark::Bench& bench)
+{
+    FastRandomContext rng{/*fDeterministic=*/true};
+    PresaltedSipHasher13Jumbo presalted_sip_hasher(rng.rand64(), rng.rand64());
+    auto val{rng.rand256()};
+    auto i{0U};
+    bench.run([&] {
+        ankerl::nanobench::doNotOptimizeAway(presalted_sip_hasher(val));
+        ++i;
+        val.data()[i % uint256::size()] ^= i & 0xFF;
+    });
+}
+
+static void SipHash13_36b(benchmark::Bench& bench)
+{
+    FastRandomContext rng{/*fDeterministic=*/true};
+    PresaltedSipHasher13 presalted_sip_hasher(rng.rand64(), rng.rand64());
+    auto val{rng.rand256()};
+    uint32_t extra{rng.rand32()};
+    auto i{0U};
+    bench.run([&] {
+        ankerl::nanobench::doNotOptimizeAway(presalted_sip_hasher(val, extra));
+        ++i;
+        val.data()[i % uint256::size()] ^= i & 0xFF;
+        extra += i;
+    });
+}
+
+static void SipHash13Jumbo_36b(benchmark::Bench& bench)
+{
+    FastRandomContext rng{/*fDeterministic=*/true};
+    PresaltedSipHasher13Jumbo presalted_sip_hasher(rng.rand64(), rng.rand64());
+    auto val{rng.rand256()};
+    uint32_t extra{rng.rand32()};
+    auto i{0U};
+    bench.run([&] {
+        ankerl::nanobench::doNotOptimizeAway(presalted_sip_hasher(val, extra));
+        ++i;
+        val.data()[i % uint256::size()] ^= i & 0xFF;
+        extra += i;
+    });
+}
+
 static void MuHash(benchmark::Bench& bench)
 {
     MuHash3072 acc;
@@ -288,6 +331,9 @@ BENCHMARK(SHA256_32b_AVX2, benchmark::PriorityLevel::HIGH);
 BENCHMARK(SHA256_32b_SHANI, benchmark::PriorityLevel::HIGH);
 BENCHMARK(SipHash24_32b, benchmark::PriorityLevel::HIGH);
 BENCHMARK(SipHash13_32b, benchmark::PriorityLevel::HIGH);
+BENCHMARK(SipHash13Jumbo_32b, benchmark::PriorityLevel::HIGH);
+BENCHMARK(SipHash13_36b, benchmark::PriorityLevel::HIGH);
+BENCHMARK(SipHash13Jumbo_36b, benchmark::PriorityLevel::HIGH);
 BENCHMARK(SHA256D64_1024_STANDARD, benchmark::PriorityLevel::HIGH);
 BENCHMARK(SHA256D64_1024_SSE4, benchmark::PriorityLevel::HIGH);
 BENCHMARK(SHA256D64_1024_AVX2, benchmark::PriorityLevel::HIGH);

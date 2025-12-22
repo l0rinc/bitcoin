@@ -147,6 +147,14 @@ BOOST_AUTO_TEST_CASE(siphash)
         WriteLE32(nb, n);
         sip288.Write(nb);
         BOOST_CHECK_EQUAL(PresaltedSipHasher24(k0, k1)(x, n), sip288.Finalize());
+
+        CSipHasher13 sip13(k0, k1);
+        sip13.Write(x);
+        BOOST_CHECK_EQUAL(PresaltedSipHasher13(k0, k1)(x), sip13.Finalize());
+
+        CSipHasher13 sip13_288 = sip13;
+        sip13_288.Write(nb);
+        BOOST_CHECK_EQUAL(PresaltedSipHasher13(k0, k1)(x, n), sip13_288.Finalize());
     }
 }
 

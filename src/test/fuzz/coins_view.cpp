@@ -134,7 +134,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& backend
                 CoinsCachePair sentinel{};
                 sentinel.second.SelfRef(sentinel);
                 CCoinsMapMemoryResource resource;
-                CCoinsMap coins_map{0, SaltedOutpointHasher13{/*deterministic=*/true}, CCoinsMap::key_equal{}, &resource};
+                CCoinsMap coins_map{0, SaltedOutpointHasher13Jumbo{/*deterministic=*/true}, CCoinsMap::key_equal{}, &resource};
                 LIMITED_WHILE(good_data && fuzzed_data_provider.ConsumeBool(), 10'000)
                 {
                     CCoinsCacheEntry coins_cache_entry;
