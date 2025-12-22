@@ -297,6 +297,9 @@ struct CoinsViewCacheCursor
     }
 
     inline bool WillErase(CoinsCachePair& current) const noexcept { return m_will_erase || current.second.coin.IsSpent(); }
+
+    inline bool WillEraseCache() const noexcept { return m_will_erase; }
+    inline const CCoinsMap& Map() const noexcept { return m_map; }
 private:
     CoinsCachePair& m_sentinel;
     CCoinsMap& m_map;
