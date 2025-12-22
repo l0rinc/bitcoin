@@ -89,6 +89,19 @@ public:
     }
 };
 
+class SaltedOutpointHasher13Jumbo
+{
+    const PresaltedSipHasher13Jumbo m_hasher;
+
+public:
+    SaltedOutpointHasher13Jumbo(bool deterministic = false);
+
+    size_t operator()(const COutPoint& id) const
+    {
+        return m_hasher(id.hash.ToUint256(), id.n);
+    }
+};
+
 struct FilterHeaderHasher {
     size_t operator()(const uint256& hash) const { return ReadLE64(hash.begin()); }
 };

@@ -203,6 +203,21 @@ static void SipHash24_32b(benchmark::Bench& bench)
     });
 }
 
+static void SipHash24_36b(benchmark::Bench& bench)
+{
+    FastRandomContext rng{/*fDeterministic=*/true};
+    PresaltedSipHasher24 presalted_sip_hasher(rng.rand64(), rng.rand64());
+    auto val{rng.rand256()};
+    uint32_t extra{rng.rand32()};
+    auto i{0U};
+    bench.run([&] {
+        ankerl::nanobench::doNotOptimizeAway(presalted_sip_hasher(val, extra));
+        ++i;
+        val.data()[i % uint256::size()] ^= i & 0xFF;
+        extra += i;
+    });
+}
+
 static void SipHash13_32b(benchmark::Bench& bench)
 {
     FastRandomContext rng{/*fDeterministic=*/true};
@@ -216,10 +231,38 @@ static void SipHash13_32b(benchmark::Bench& bench)
     });
 }
 
-static void SipHash24_36b(benchmark::Bench& bench)
+static void SipHash13Jumbo_32b(benchmark::Bench& bench)
 {
     FastRandomContext rng{/*fDeterministic=*/true};
-    PresaltedSipHasher presalted_sip_hasher(rng.rand64(), rng.rand64());
+    PresaltedSipHasher13Jumbo presalted_sip_hasher(rng.rand64(), rng.rand64());
+    auto val{rng.rand256()};
+    auto i{0U};
+    bench.run([&] {
+        ankerl::nanobench::doNotOptimizeAway(presalted_sip_hasher(val));
+        ++i;
+        val.data()[i % uint256::size()] ^= i & 0xFF;
+    });
+}
+
+static void SipHash13_36b(benchmark::Bench& bench)
+{
+    FastRandomContext rng{/*fDeterministic=*/true};
+    PresaltedSipHasher13 presalted_sip_hasher(rng.rand64(), rng.rand64());
+    auto val{rng.rand256()};
+    uint32_t extra{rng.rand32()};
+    auto i{0U};
+    bench.run([&] {
+        ankerl::nanobench::doNotOptimizeAway(presalted_sip_hasher(val, extra));
+        ++i;
+        val.data()[i % uint256::size()] ^= i & 0xFF;
+        extra += i;
+    });
+}
+
+static void SipHash13Jumbo_36b(benchmark::Bench& bench)
+{
+    FastRandomContext rng{/*fDeterministic=*/true};
+    PresaltedSipHasher13Jumbo presalted_sip_hasher(rng.rand64(), rng.rand64());
     auto val{rng.rand256()};
     uint32_t extra{rng.rand32()};
     auto i{0U};
@@ -304,6 +347,9 @@ BENCHMARK(SHA256_32b_SHANI);
 BENCHMARK(SipHash24_32b);
 BENCHMARK(SipHash24_36b);
 BENCHMARK(SipHash13_32b);
+BENCHMARK(SipHash13Jumbo_32b);
+BENCHMARK(SipHash13_36b);
+BENCHMARK(SipHash13Jumbo_36b);
 BENCHMARK(SHA256D64_1024_STANDARD);
 BENCHMARK(SHA256D64_1024_SSE4);
 BENCHMARK(SHA256D64_1024_AVX2);
