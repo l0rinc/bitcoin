@@ -17,6 +17,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <iterator>
+#include <map>
 #include <utility>
 
 static constexpr uint8_t DB_COIN{'C'};
@@ -92,6 +93,19 @@ std::vector<uint256> CCoinsViewDB::GetHeadBlocks() const {
 
 void CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& hashBlock)
 {
+    const auto& map{cursor.Map()};
+    std::vector<size_t> hist(100);
+    for (size_t b{0}; b < map.bucket_count(); ++b) {
+        ++hist[map.bucket_size(b)];
+    }
+    std::string summary;
+    for (size_t i = hist.size(); i-- > 0;) {
+        if (hist[i] == 0) continue;
+        if (!summary.empty()) summary += ',';
+        summary += std::to_string(hist[i]) + 'x' + std::to_string(i);
+    }
+    LogInfo("CCoinsMap bucket histogram: %s (size=%zu, buckets=%zu, load=%.2f)",
+            summary, map.size(), map.bucket_count(), map.load_factor());
     CDBBatch batch(*m_db);
     size_t count = 0;
     size_t changed = 0;
