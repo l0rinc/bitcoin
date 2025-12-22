@@ -765,7 +765,7 @@ public:
      */
     bool ActivateBestChain(
         BlockValidationState& state,
-        std::shared_ptr<const CBlock> pblock = nullptr)
+        const std::shared_ptr<const CBlock>& pblock = nullptr)
         EXCLUSIVE_LOCKS_REQUIRED(!m_chainstate_mutex)
         LOCKS_EXCLUDED(::cs_main);
 

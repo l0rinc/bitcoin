@@ -3390,7 +3390,7 @@ static void LimitValidationInterfaceQueue(ValidationSignals& signals) LOCKS_EXCL
     }
 }
 
-bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock)
+bool Chainstate::ActivateBestChain(BlockValidationState& state, const std::shared_ptr<const CBlock>& pblock)
 {
     AssertLockNotHeld(m_chainstate_mutex);
 
