@@ -1313,11 +1313,11 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
         Assume(iter.has_value());
         const auto effective_feerate = args.m_package_feerates ? ws.m_package_feerate :
             CFeeRate{ws.m_modified_fees, static_cast<int32_t>(ws.m_vsize)};
-        const auto effective_feerate_wtxids = args.m_package_feerates ? all_package_wtxids :
-            std::vector<Wtxid>{ws.m_ptx->GetWitnessHash()};
         results.emplace(ws.m_ptx->GetWitnessHash(),
                         MempoolAcceptResult::Success(std::move(m_subpackage.m_replaced_transactions), ws.m_vsize,
-                                         ws.m_base_fees, effective_feerate, effective_feerate_wtxids));
+                                         ws.m_base_fees, effective_feerate, args.m_package_feerates ?
+                                             all_package_wtxids :
+                                             std::vector<Wtxid>{ws.m_ptx->GetWitnessHash()}));
         if (!m_pool.m_opts.signals) continue;
         const CTransaction& tx = *ws.m_ptx;
         const auto tx_info = NewMempoolTransactionInfo(ws.m_ptx, ws.m_base_fees,
@@ -1560,12 +1560,12 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptMultipleTransactionsInternal(con
         if (args.m_test_accept) {
             const auto effective_feerate = args.m_package_feerates ? ws.m_package_feerate :
                 CFeeRate{ws.m_modified_fees, static_cast<int32_t>(ws.m_vsize)};
-            const auto effective_feerate_wtxids = args.m_package_feerates ? all_package_wtxids :
-                std::vector<Wtxid>{ws.m_ptx->GetWitnessHash()};
             results.emplace(ws.m_ptx->GetWitnessHash(),
                             MempoolAcceptResult::Success(std::move(m_subpackage.m_replaced_transactions),
                                                          ws.m_vsize, ws.m_base_fees, effective_feerate,
-                                                         effective_feerate_wtxids));
+                                                         args.m_package_feerates ?
+                                                             all_package_wtxids :
+                                                             std::vector<Wtxid>{ws.m_ptx->GetWitnessHash()}));
         }
     }
 

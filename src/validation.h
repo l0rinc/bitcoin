@@ -164,22 +164,22 @@ struct MempoolAcceptResult {
     const std::optional<Wtxid> m_other_wtxid;
 
     static MempoolAcceptResult Failure(TxValidationState state) {
-        return MempoolAcceptResult(state);
+        return MempoolAcceptResult(std::move(state));
     }
 
     static MempoolAcceptResult FeeFailure(TxValidationState state,
                                           CFeeRate effective_feerate,
-                                          const std::vector<Wtxid>& wtxids_fee_calculations) {
-        return MempoolAcceptResult(state, effective_feerate, wtxids_fee_calculations);
+                                          std::vector<Wtxid> wtxids_fee_calculations) {
+        return MempoolAcceptResult(std::move(state), std::move(effective_feerate), std::move(wtxids_fee_calculations));
     }
 
     static MempoolAcceptResult Success(std::list<CTransactionRef>&& replaced_txns,
                                        int64_t vsize,
                                        CAmount fees,
                                        CFeeRate effective_feerate,
-                                       const std::vector<Wtxid>& wtxids_fee_calculations) {
+                                       std::vector<Wtxid> wtxids_fee_calculations) {
         return MempoolAcceptResult(std::move(replaced_txns), vsize, fees,
-                                   effective_feerate, wtxids_fee_calculations);
+                                   std::move(effective_feerate), std::move(wtxids_fee_calculations));
     }
 
     static MempoolAcceptResult MempoolTx(int64_t vsize, CAmount fees) {
@@ -194,8 +194,8 @@ struct MempoolAcceptResult {
 private:
     /** Constructor for failure case */
     explicit MempoolAcceptResult(TxValidationState state)
-        : m_result_type(ResultType::INVALID), m_state(state) {
-            Assume(!state.IsValid()); // Can be invalid or error
+        : m_result_type(ResultType::INVALID), m_state{std::move(state)} {
+            Assume(!m_state.IsValid()); // Can be invalid or error
         }
 
     /** Constructor for success case */
@@ -203,22 +203,22 @@ private:
                                  int64_t vsize,
                                  CAmount fees,
                                  CFeeRate effective_feerate,
-                                 const std::vector<Wtxid>& wtxids_fee_calculations)
+                                 std::vector<Wtxid> wtxids_fee_calculations)
         : m_result_type(ResultType::VALID),
         m_replaced_transactions(std::move(replaced_txns)),
         m_vsize{vsize},
         m_base_fees(fees),
-        m_effective_feerate(effective_feerate),
-        m_wtxids_fee_calculations(wtxids_fee_calculations) {}
+        m_effective_feerate{std::move(effective_feerate)},
+        m_wtxids_fee_calculations{std::move(wtxids_fee_calculations)} {}
 
     /** Constructor for fee-related failure case */
     explicit MempoolAcceptResult(TxValidationState state,
                                  CFeeRate effective_feerate,
-                                 const std::vector<Wtxid>& wtxids_fee_calculations)
+                                 std::vector<Wtxid> wtxids_fee_calculations)
         : m_result_type(ResultType::INVALID),
-        m_state(state),
-        m_effective_feerate(effective_feerate),
-        m_wtxids_fee_calculations(wtxids_fee_calculations) {}
+        m_state{std::move(state)},
+        m_effective_feerate{std::move(effective_feerate)},
+        m_wtxids_fee_calculations{std::move(wtxids_fee_calculations)} {}
 
     /** Constructor for already-in-mempool case. It wouldn't replace any transactions. */
     explicit MempoolAcceptResult(int64_t vsize, CAmount fees)
@@ -245,11 +245,11 @@ struct PackageMempoolAcceptResult
 
     explicit PackageMempoolAcceptResult(PackageValidationState state,
                                         std::map<Wtxid, MempoolAcceptResult>&& results)
-        : m_state{state}, m_tx_results(std::move(results)) {}
+        : m_state{std::move(state)}, m_tx_results(std::move(results)) {}
 
     explicit PackageMempoolAcceptResult(PackageValidationState state, CFeeRate feerate,
                                         std::map<Wtxid, MempoolAcceptResult>&& results)
-        : m_state{state}, m_tx_results(std::move(results)) {}
+        : m_state{std::move(state)}, m_tx_results(std::move(results)) {}
 
     /** Constructor to create a PackageMempoolAcceptResult from a single MempoolAcceptResult */
     explicit PackageMempoolAcceptResult(const Wtxid& wtxid, const MempoolAcceptResult& result)
