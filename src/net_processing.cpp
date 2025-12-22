@@ -4934,6 +4934,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         vRecv >> vInv;
         std::vector<GenTxid> tx_invs;
         if (vInv.size() <= node::MAX_PEER_TX_ANNOUNCEMENTS + MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+            tx_invs.reserve(vInv.size());
             for (CInv &inv : vInv) {
                 if (inv.IsGenTxMsg()) {
                     tx_invs.emplace_back(ToGenTxid(inv));
@@ -5915,17 +5916,20 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         // Message: getdata (blocks)
         //
         std::vector<CInv> vGetData;
+        vGetData.reserve(MAX_BLOCKS_IN_TRANSIT_PER_PEER);
         if (CanServeBlocks(*peer) && ((sync_blocks_and_headers_from_peer && !IsLimitedPeer(*peer)) || !m_chainman.IsInitialBlockDownload()) && state.vBlocksInFlight.size() < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
             std::vector<const CBlockIndex*> vToDownload;
             NodeId staller = -1;
             auto get_inflight_budget = [&state]() {
                 return std::max(0, MAX_BLOCKS_IN_TRANSIT_PER_PEER - static_cast<int>(state.vBlocksInFlight.size()));
             };
+            const int inflight_budget{get_inflight_budget()};
+            vToDownload.reserve(inflight_budget);
 
             // If there are multiple chainstates, download blocks for the
             // current chainstate first, to prioritize getting to network tip
             // before downloading historical blocks.
-            FindNextBlocksToDownload(*peer, get_inflight_budget(), vToDownload, staller);
+            FindNextBlocksToDownload(*peer, inflight_budget, vToDownload, staller);
             auto historical_blocks{m_chainman.GetHistoricalBlockRange()};
             if (historical_blocks && !IsLimitedPeer(*peer)) {
                 // If the first needed historical block is not an ancestor of the last,
@@ -5933,7 +5937,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 const CBlockIndex* from_tip = LastCommonAncestor(historical_blocks->first, historical_blocks->second);
                 TryDownloadingHistoricalBlocks(
                     *peer,
-                    get_inflight_budget(),
+                    inflight_budget,
                     vToDownload, from_tip, historical_blocks->second);
             }
             for (const CBlockIndex *pindex : vToDownload) {

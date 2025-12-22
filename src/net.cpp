@@ -3240,7 +3240,7 @@ CConnman::CConnman(uint64_t nSeed0In,
     , m_netgroupman{netgroupman}
     , nSeed0(nSeed0In)
     , nSeed1(nSeed1In)
-    , m_interrupt_net{interrupt_net}
+    , m_interrupt_net{std::move(interrupt_net)}
     , m_params(params)
 {
     SetTryNewOutboundPeer(false);
@@ -3830,7 +3830,7 @@ CNode::CNode(NodeId idIn,
              CNodeOptions&& node_opts)
     : m_transport{MakeTransport(idIn, node_opts.use_v2transport, conn_type_in == ConnectionType::INBOUND)},
       m_permission_flags{node_opts.permission_flags},
-      m_sock{sock},
+      m_sock{std::move(sock)},
       m_connected{GetTime<std::chrono::seconds>()},
       addr{addrIn},
       addrBind{addrBindIn},
