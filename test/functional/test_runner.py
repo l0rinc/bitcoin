@@ -445,6 +445,7 @@ def main():
     parser.add_argument('--quiet', '-q', action='store_true', help='only print dots, results summary and failure logs')
     parser.add_argument('--tmpdirprefix', '-t', default=tempfile.gettempdir(), help="Root directory for datadirs")
     parser.add_argument('--failfast', '-F', action='store_true', help='stop execution after the first test failure')
+    parser.add_argument('--retry-failed', action='store_true', help='retry failed tests at the end on a single thread')
     parser.add_argument('--filter', help='filter scripts to run by regular expression')
     parser.add_argument("--nocleanup", dest="nocleanup", default=False, action="store_true",
                         help="Leave bitcoinds and test.* datadir on exit or error")
@@ -588,11 +589,12 @@ def main():
         args=passon_args,
         combined_logs_len=args.combinedlogslen,
         failfast=args.failfast,
+        retry_failed=args.retry_failed,
         use_term_control=args.ansi,
         results_filepath=results_filepath,
     )
 
-def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, args=None, combined_logs_len=0, failfast=False, use_term_control, results_filepath=None):
+def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, args=None, combined_logs_len=0, failfast=False, retry_failed=False, use_term_control, results_filepath=None):
     args = args or []
 
     # Warn if bitcoind is already running
@@ -674,7 +676,6 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
 
     test_count = len(test_list)
     all_passed = True
-    retry_failed = True
     effective_failfast = failfast and not retry_failed
     while not job_queue.done():
         if effective_failfast and not all_passed:
