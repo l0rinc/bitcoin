@@ -644,7 +644,6 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
     start_time = time.time()
     test_results = []
 
-    max_len_name = len(max(test_list, key=len))
     test_count = len(test_list)
     all_passed = True
     retry_failed = True
@@ -720,10 +719,22 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
             if os.path.isdir(retry_tmpdir) and not os.listdir(retry_tmpdir):
                 os.rmdir(retry_tmpdir)
 
+    test_results_by_name = {}
+    for test_result in test_results:
+        test_results_by_name.setdefault(test_result.name, []).append(test_result)
+
+    report_results = []
+    for name, attempt_results in test_results_by_name.items():
+        final_result = attempt_results[-1]
+        total_time = sum(result.time for result in attempt_results)
+        report_results.append(TestResult(name, final_result.status, total_time))
+
+    all_passed = all(test_result.was_successful for test_result in report_results)
+    max_len_name = max(len(strip_ansi(test_result.name)) for test_result in report_results)
     runtime = int(time.time() - start_time)
-    print_results(initial_test_results, max_len_name, runtime)
+    print_results(report_results, max_len_name, runtime)
     if results_filepath:
-        write_results(initial_test_results, results_filepath, runtime)
+        write_results(report_results, results_filepath, runtime)
 
     if coverage:
         coverage_passed = coverage.report_rpc_coverage()
