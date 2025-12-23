@@ -85,6 +85,32 @@ ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 def strip_ansi(text):
     return ANSI_ESCAPE_RE.sub("", text)
 
+
+def format_duration(seconds):
+    hours = seconds // 3600
+    seconds -= hours * 3600
+
+    minutes = seconds // 60
+    seconds -= minutes * 60
+
+    parts = []
+    for value, suffix in ((hours, "h"), (minutes, "m"), (seconds, "s")):
+        if value > 0:
+            parts.append(f"{value}{suffix}")
+    return " ".join(parts) if parts else "0s"
+
+
+def format_duration_detail(seconds):
+    return f"{ITALIC[1]}duration: {format_duration(seconds)}{ITALIC[0]}"
+
+def format_progress_status(status, *, retry=False):
+    if status == "Passed":
+        color = ORANGE if retry else GREEN
+        return f"{color[1]}passed{color[0]}"
+    if status == "Skipped":
+        return f"{GREY[1]}skipped{GREY[0]}"
+    raise AssertionError(f"Unexpected test status: {status!r}")
+
 TEST_EXIT_PASSED = 0
 TEST_EXIT_SKIPPED = 77
 
@@ -597,7 +623,7 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
     flags = [f"--cachedir={cache_dir}"] + args
 
     def handle_failed_test(*, done_str, test_result, stdout, stderr, testdir, failure_label):
-        print(f"{done_str} {failure_label}, Duration: {test_result.time} s\n")
+        print(f"{done_str} {RED[1]}{failure_label}{RED[0]}, {format_duration_detail(test_result.time)}\n")
         print(f"{BOLD[1]}stdout:\n{BOLD[0]}{stdout}\n")
         print(f"{BOLD[1]}stderr:\n{BOLD[0]}{stderr}\n")
         if combined_logs_len and os.path.isdir(testdir):
@@ -657,9 +683,9 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
             test_results.append(test_result)
             done_str = f"{len(test_results)}/{test_count} - {BOLD[1]}{test_result.name}{BOLD[0]}"
             if test_result.status == "Passed":
-                logging.debug("%s passed, Duration: %s s" % (done_str, test_result.time))
+                logging.debug(f"{done_str} {format_progress_status(test_result.status)}, {format_duration_detail(test_result.time)}")
             elif test_result.status == "Skipped":
-                logging.debug(f"{done_str} skipped ({skip_reason})")
+                logging.debug(f"{done_str} {format_progress_status(test_result.status)} {ITALIC[1]}({skip_reason}){ITALIC[0]}")
             else:
                 all_passed = False
                 handle_failed_test(
@@ -704,9 +730,9 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
                     test_results.append(test_result)
                     done_str = f"{retry_done}/{retry_count} - {BOLD[1]}{test_result.name}{BOLD[0]}"
                     if test_result.status == "Passed":
-                        logging.debug("%s passed on retry, Duration: %s s" % (done_str, test_result.time))
+                        logging.debug(f"{done_str} {format_progress_status(test_result.status, retry=True)} on retry, {format_duration_detail(test_result.time)}")
                     elif test_result.status == "Skipped":
-                        logging.debug(f"{done_str} skipped on retry ({skip_reason})")
+                        logging.debug(f"{done_str} {format_progress_status(test_result.status)} on retry {ITALIC[1]}({skip_reason}){ITALIC[0]}")
                     else:
                         handle_failed_test(
                             done_str=done_str,
@@ -782,13 +808,20 @@ def print_results(test_results, max_len_name, runtime):
         test_result.padding = max_len_name
         results += str(test_result)
 
-    status = TICK + "Passed" if all_passed else CROSS + "Failed"
-    if not all_passed:
-        results += RED[1]
-    results += BOLD[1] + "\n%s | %s | %s s (accumulated) \n" % ("ALL".ljust(max_len_name), status.ljust(9), time_sum) + BOLD[0]
-    if not all_passed:
-        results += RED[0]
-    results += "Runtime: %s s\n" % (runtime)
+    passed = sum(1 for test_result in test_results if test_result.display_status == "Passed")
+    flaky = sum(1 for test_result in test_results if test_result.display_status == "Flaky")
+    failed = sum(1 for test_result in test_results if test_result.display_status == "Failed")
+    status = f"{CROSS}Failed" if failed else f"{FLAKY}Passed" if flaky else f"{TICK}Passed"
+    status_color = RED if failed else ORANGE if flaky else GREEN
+    colored_status = f"{status_color[1]}{BOLD[1]}{status.ljust(9)}{status_color[0]}{BOLD[1]}"
+    results += f"{BOLD[1]}\n{'ALL'.ljust(max_len_name)} | {colored_status} | {format_duration_detail(time_sum)} (accumulated) \n{BOLD[0]}"
+    summary = ", ".join([
+        f"{GREEN[1]}{passed} passed{GREEN[0]}",
+        f"{ORANGE[1]}{flaky} flaky{ORANGE[0]}",
+        f"{RED[1]}{failed} failed{RED[0]}",
+    ])
+    results += f"{BOLD[1]}Summary: {BOLD[0]}{summary}\n"
+    results += f"Runtime: {format_duration(runtime)}\n"
     print(results)
 
 
@@ -918,7 +951,7 @@ class TestResult():
         except KeyError:
             raise AssertionError(f"Unexpected test status: {self.display_status!r}") from None
 
-        return color[1] + "%s | %s%s | %s s\n" % (self.name.ljust(self.padding), glyph, self.display_status.ljust(7), self.time) + color[0]
+        return f"{color[1]}{self.name.ljust(self.padding)} | {glyph}{self.display_status.ljust(7)} | {format_duration(self.time)}\n{color[0]}"
 
     @property
     def was_successful(self):
