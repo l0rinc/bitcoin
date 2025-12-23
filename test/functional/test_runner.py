@@ -635,8 +635,10 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
     max_len_name = len(max(test_list, key=len))
     test_count = len(test_list)
     all_passed = True
+    retry_failed = True
+    effective_failfast = failfast and not retry_failed
     while not job_queue.done():
-        if failfast and not all_passed:
+        if effective_failfast and not all_passed:
             break
         for test_result, testdir, stdout, stderr, skip_reason in job_queue.get_next():
             test_results.append(test_result)
@@ -656,16 +658,60 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
                     failure_label="failed",
                 )
 
-                if failfast:
+                if effective_failfast:
                     logging.debug("Early exiting after test failure")
                     break
 
                 exit_if_no_space_left(stdout=stdout)
 
+    initial_test_results = list(test_results)
+
+    if retry_failed:
+        failed_tests = [test_result.name for test_result in initial_test_results if test_result.status == "Failed"]
+        if failed_tests:
+            retry_plural = "" if len(failed_tests) == 1 else "s"
+            print(f"{BOLD[1]}Retrying {len(failed_tests)} failed test{retry_plural} one at a time...{BOLD[0]}")
+            retry_tmpdir = f"{tmpdir}/retry"
+            os.makedirs(retry_tmpdir, exist_ok=True)
+            retry_list = deque(failed_tests)
+            retry_queue = TestHandler(
+                num_tests_parallel=1,
+                tests_dir=tests_dir,
+                tmpdir=retry_tmpdir,
+                test_list=retry_list,
+                flags=flags,
+                use_term_control=use_term_control,
+                show_remaining_jobs=False,
+            )
+            retry_count = len(retry_list)
+            retry_done = 0
+            while not retry_queue.done():
+                for test_result, testdir, stdout, stderr, skip_reason in retry_queue.get_next():
+                    retry_done += 1
+                    test_results.append(test_result)
+                    done_str = f"{retry_done}/{retry_count} - {BOLD[1]}{test_result.name}{BOLD[0]}"
+                    if test_result.status == "Passed":
+                        logging.debug("%s passed on retry, Duration: %s s" % (done_str, test_result.time))
+                    elif test_result.status == "Skipped":
+                        logging.debug(f"{done_str} skipped on retry ({skip_reason})")
+                    else:
+                        handle_failed_test(
+                            done_str=done_str,
+                            test_result=test_result,
+                            stdout=stdout,
+                            stderr=stderr,
+                            testdir=testdir,
+                            failure_label="failed on retry",
+                        )
+                        exit_if_no_space_left(stdout=stdout)
+
+            if os.path.isdir(retry_tmpdir) and not os.listdir(retry_tmpdir):
+                os.rmdir(retry_tmpdir)
+
     runtime = int(time.time() - start_time)
-    print_results(test_results, max_len_name, runtime)
+    print_results(initial_test_results, max_len_name, runtime)
     if results_filepath:
-        write_results(test_results, results_filepath, runtime)
+        write_results(initial_test_results, results_filepath, runtime)
 
     if coverage:
         coverage_passed = coverage.report_rpc_coverage()
@@ -684,7 +730,7 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
     # Clean up dangling processes if any. This may only happen with --failfast option.
     # Killing the process group will also terminate the current process but that is
     # not an issue
-    if not os.getenv("CI_FAILFAST_TEST_LEAVE_DANGLING") and len(job_queue.jobs):
+    if effective_failfast and not os.getenv("CI_FAILFAST_TEST_LEAVE_DANGLING") and len(job_queue.jobs):
         os.killpg(os.getpgid(0), signal.SIGKILL)
 
     sys.exit(not all_passed)
@@ -727,7 +773,7 @@ class TestHandler:
     """
     Trigger the test scripts passed in via the list.
     """
-    def __init__(self, *, num_tests_parallel, tests_dir, tmpdir, test_list, flags, use_term_control):
+    def __init__(self, *, num_tests_parallel, tests_dir, tmpdir, test_list, flags, use_term_control, show_remaining_jobs=True):
         assert num_tests_parallel >= 1
         self.executor = futures.ThreadPoolExecutor(max_workers=num_tests_parallel)
         self.num_jobs = num_tests_parallel
@@ -737,6 +783,7 @@ class TestHandler:
         self.flags = flags
         self.jobs = {}
         self.use_term_control = use_term_control
+        self.show_remaining_jobs = show_remaining_jobs
 
     def done(self):
         return not (self.jobs or self.test_list)
@@ -775,7 +822,7 @@ class TestHandler:
         assert self.jobs  # Must not be empty here
 
         # Print remaining running jobs when all jobs have been started.
-        if not self.test_list:
+        if self.show_remaining_jobs and not self.test_list:
             print("Remaining jobs: [{}]".format(", ".join(sorted(self.jobs.values()))))
 
         dot_count = 0
