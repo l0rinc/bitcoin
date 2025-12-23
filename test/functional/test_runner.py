@@ -38,7 +38,7 @@ ADDITIONAL_SPACE_PER_JOB = 100 * 1024 * 1024
 MIN_NO_CLEANUP_SPACE = 12 * 1024 * 1024 * 1024
 
 # Formatting. Default colors to empty strings.
-DEFAULT, BOLD, GREEN, RED = ("", ""), ("", ""), ("", ""), ("", "")
+DEFAULT, BOLD, ITALIC, GREEN, ORANGE, RED, GREY = ("", ""), ("", ""), ("", ""), ("", ""), ("", ""), ("", ""), ("", "")
 try:
     # Make sure python thinks it can write unicode to its stdout
     "\u2713".encode("utf_8").decode(sys.stdout.encoding)
@@ -71,8 +71,17 @@ else:
     # terminal via ANSI escape sequences:
     DEFAULT = ('\033[0m', '\033[0m')
     BOLD = ('\033[0m', '\033[1m')
+    ITALIC = ('\033[23m', '\033[3m')
     GREEN = ('\033[0m', '\033[0;32m')
+    ORANGE = ('\033[0m', '\033[0;33m')
     RED = ('\033[0m', '\033[0;31m')
+    GREY = ('\033[0m', '\033[0;90m')
+
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def strip_ansi(text):
+    return ANSI_ESCAPE_RE.sub("", text)
 
 TEST_EXIT_PASSED = 0
 TEST_EXIT_SKIPPED = 77
@@ -416,11 +425,14 @@ def main():
     args, unknown_args = parser.parse_known_args()
     fail_on_warn = args.ci
     if not args.ansi:
-        global DEFAULT, BOLD, GREEN, RED
+        global DEFAULT, BOLD, ITALIC, GREEN, ORANGE, RED, GREY
         DEFAULT = ("", "")
         BOLD = ("", "")
+        ITALIC = ("", "")
         GREEN = ("", "")
+        ORANGE = ("", "")
         RED = ("", "")
+        GREY = ("", "")
 
     # args to be passed on always start with two dashes; tests are the remaining unknown args
     tests = [arg for arg in unknown_args if arg[:2] != "--"]
