@@ -45,10 +45,12 @@ try:
     TICK = "✓ "
     CROSS = "✖ "
     CIRCLE = "○ "
+    FLAKY = "⚠ "
 except UnicodeDecodeError:
     TICK = "P "
     CROSS = "x "
     CIRCLE = "o "
+    FLAKY = "R "
 
 if platform.system() == 'Windows':
     import ctypes
@@ -725,9 +727,17 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
 
     report_results = []
     for name, attempt_results in test_results_by_name.items():
-        final_result = attempt_results[-1]
         total_time = sum(result.time for result in attempt_results)
-        report_results.append(TestResult(name, final_result.status, total_time))
+        final_status = attempt_results[-1].status
+        had_failure = any(result.status == "Failed" for result in attempt_results)
+        if had_failure:
+            status = "Passed" if final_status == "Passed" else "Failed"
+            display_status = "Flaky" if final_status == "Passed" else "Failed"
+        else:
+            status = final_status
+            display_status = final_status
+
+        report_results.append(TestResult(name, status, total_time, display_status=display_status))
 
     all_passed = all(test_result.was_successful for test_result in report_results)
     max_len_name = max(len(strip_ansi(test_result.name)) for test_result in report_results)
@@ -882,32 +892,33 @@ class TestHandler:
 
 
 class TestResult():
-    def __init__(self, name, status, time):
+    def __init__(self, name, status, time, display_status=None):
         self.name = name
         self.status = status
+        self.display_status = display_status or status
         self.time = time
         self.padding = 0
 
     def sort_key(self):
-        if self.status == "Passed":
-            return 0, self.name.lower()
-        elif self.status == "Failed":
-            return 2, self.name.lower()
-        elif self.status == "Skipped":
-            return 1, self.name.lower()
+        status_order = ["Passed", "Flaky", "Skipped", "Failed"]
+        try:
+            return status_order.index(self.display_status), self.name.lower()
+        except ValueError:
+            raise AssertionError(f"Unexpected test status: {self.display_status!r}") from None
 
     def __repr__(self):
-        if self.status == "Passed":
-            color = GREEN
-            glyph = TICK
-        elif self.status == "Failed":
-            color = RED
-            glyph = CROSS
-        elif self.status == "Skipped":
-            color = DEFAULT
-            glyph = CIRCLE
+        styles = {
+            "Passed": (GREEN, TICK),
+            "Flaky": (ORANGE, FLAKY),
+            "Skipped": (GREY, CIRCLE),
+            "Failed": (RED, CROSS),
+        }
+        try:
+            color, glyph = styles[self.display_status]
+        except KeyError:
+            raise AssertionError(f"Unexpected test status: {self.display_status!r}") from None
 
-        return color[1] + "%s | %s%s | %s s\n" % (self.name.ljust(self.padding), glyph, self.status.ljust(7), self.time) + color[0]
+        return color[1] + "%s | %s%s | %s s\n" % (self.name.ljust(self.padding), glyph, self.display_status.ljust(7), self.time) + color[0]
 
     @property
     def was_successful(self):
