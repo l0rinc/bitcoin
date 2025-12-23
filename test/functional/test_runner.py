@@ -580,7 +580,30 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
     # a hard link or a copy on any platform. See https://github.com/bitcoin/bitcoin/pull/27561.
     sys.path.append(tests_dir)
 
-    flags = ['--cachedir={}'.format(cache_dir)] + args
+    flags = [f"--cachedir={cache_dir}"] + args
+
+    def handle_failed_test(*, done_str, test_result, stdout, stderr, testdir, failure_label):
+        print(f"{done_str} {failure_label}, Duration: {test_result.time} s\n")
+        print(f"{BOLD[1]}stdout:\n{BOLD[0]}{stdout}\n")
+        print(f"{BOLD[1]}stderr:\n{BOLD[0]}{stderr}\n")
+        if combined_logs_len and os.path.isdir(testdir):
+            # Print the final `combinedlogslen` lines of the combined logs
+            print(f"{BOLD[1]}Combine the logs and print the last {combined_logs_len} lines ...{BOLD[0]}")
+            print('\n============')
+            print(f"{BOLD[1]}Combined log for {testdir}:{BOLD[0]}")
+            print('============\n')
+            combined_logs_args = [sys.executable, os.path.join(tests_dir, 'combine_logs.py'), testdir]
+            if BOLD[0]:
+                combined_logs_args += ['--color']
+            combined_logs, _ = subprocess.Popen(combined_logs_args, text=True, stdout=subprocess.PIPE).communicate()
+            print("\n".join(deque(combined_logs.splitlines(), combined_logs_len)))
+
+    def exit_if_no_space_left(*, stdout):
+        if "[Errno 28] No space left on device" in stdout:
+            sys.exit(f"Early exiting after test failure due to insufficient free space in {tmpdir}\n"
+                     f"Test execution data left in {tmpdir}.\n"
+                     f"Additional storage is needed to execute testing.")
+
 
     if enable_coverage:
         coverage = RPCCoverage()
@@ -624,29 +647,20 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
                 logging.debug(f"{done_str} skipped ({skip_reason})")
             else:
                 all_passed = False
-                print("%s failed, Duration: %s s\n" % (done_str, test_result.time))
-                print(BOLD[1] + 'stdout:\n' + BOLD[0] + stdout + '\n')
-                print(BOLD[1] + 'stderr:\n' + BOLD[0] + stderr + '\n')
-                if combined_logs_len and os.path.isdir(testdir):
-                    # Print the final `combinedlogslen` lines of the combined logs
-                    print('{}Combine the logs and print the last {} lines ...{}'.format(BOLD[1], combined_logs_len, BOLD[0]))
-                    print('\n============')
-                    print('{}Combined log for {}:{}'.format(BOLD[1], testdir, BOLD[0]))
-                    print('============\n')
-                    combined_logs_args = [sys.executable, os.path.join(tests_dir, 'combine_logs.py'), testdir]
-                    if BOLD[0]:
-                        combined_logs_args += ['--color']
-                    combined_logs, _ = subprocess.Popen(combined_logs_args, text=True, stdout=subprocess.PIPE).communicate()
-                    print("\n".join(deque(combined_logs.splitlines(), combined_logs_len)))
+                handle_failed_test(
+                    done_str=done_str,
+                    test_result=test_result,
+                    stdout=stdout,
+                    stderr=stderr,
+                    testdir=testdir,
+                    failure_label="failed",
+                )
 
                 if failfast:
                     logging.debug("Early exiting after test failure")
                     break
 
-                if "[Errno 28] No space left on device" in stdout:
-                    sys.exit(f"Early exiting after test failure due to insufficient free space in {tmpdir}\n"
-                             f"Test execution data left in {tmpdir}.\n"
-                             f"Additional storage is needed to execute testing.")
+                exit_if_no_space_left(stdout=stdout)
 
     runtime = int(time.time() - start_time)
     print_results(test_results, max_len_name, runtime)
