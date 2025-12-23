@@ -66,7 +66,17 @@ FUZZ_TARGET(coinsviewcacheasync, .init = setup_threadpool_test)
 
             LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10000)
             {
-                Txid txid{Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider))};
+                Txid txid;
+                if (fuzzed_data_provider.ConsumeBool()) {
+                    txid = Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider));
+                } else if (fuzzed_data_provider.ConsumeBool()) {
+                    txid = prevhash;
+                } else {
+                    // Test shortid collisions
+                    uint256 u{ConsumeUInt256(fuzzed_data_provider)};
+                    std::memcpy(u.begin(), prevhash.ToUint256().begin(), 8);
+                    txid = Txid::FromUint256(u);
+                }
                 const auto index{fuzzed_data_provider.ConsumeIntegral<uint32_t>()};
                 const COutPoint outpoint{txid, index};
 
