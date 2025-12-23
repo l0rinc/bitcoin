@@ -768,6 +768,13 @@ struct DefaultFormatter
     static void Unser(Stream& s, T& t) { Unserialize(s, t); }
 };
 
+/** Concept for streams that expose a contiguous readable byte range. */
+template <typename Stream>
+concept ContiguousByteStream = requires(Stream& s, size_t n) {
+    { s.size() } -> std::convertible_to<size_t>;
+    { s.data() } -> std::convertible_to<const std::byte*>;
+    s.ignore(n);
+};
 
 
 
@@ -786,10 +793,23 @@ void Serialize(Stream& os, const std::basic_string<C>& str)
 template<typename Stream, typename C>
 void Unserialize(Stream& is, std::basic_string<C>& str)
 {
-    unsigned int nSize = ReadCompactSize(is);
-    str.resize(nSize);
-    if (nSize != 0)
-        is.read(MakeWritableByteSpan(str));
+    const size_t nSize = ReadCompactSize(is);
+    if constexpr (sizeof(C) == 1 && ContiguousByteStream<Stream>) {
+        if (nSize == 0) {
+            str.clear();
+            return;
+        }
+        if (nSize > is.size()) {
+            throw std::ios_base::failure("Unserialize(): end of data");
+        }
+        str.assign(reinterpret_cast<const C*>(UCharCast(is.data())), nSize);
+        is.ignore(nSize);
+    } else {
+        str.resize(nSize);
+        if (nSize != 0) {
+            is.read(MakeWritableByteSpan(str));
+        }
+    }
 }
 
 
@@ -818,7 +838,7 @@ void Unserialize(Stream& is, prevector<N, T>& v)
         unsigned int nSize = ReadCompactSize(is);
         unsigned int i = 0;
         while (i < nSize) {
-            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
+            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + (MAX_VECTOR_ALLOCATE - 1) / sizeof(T)));
             v.resize_uninitialized(i + blk);
             is.read(std::as_writable_bytes(std::span{&v[i], blk}));
             i += blk;
@@ -858,13 +878,29 @@ void Unserialize(Stream& is, std::vector<T, A>& v)
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
-        unsigned int nSize = ReadCompactSize(is);
-        unsigned int i = 0;
-        while (i < nSize) {
-            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
-            v.resize(i + blk);
-            is.read(std::as_writable_bytes(std::span{&v[i], blk}));
-            i += blk;
+        const size_t nSize = ReadCompactSize(is);
+        if constexpr (ContiguousByteStream<Stream>) {
+            if (nSize == 0) {
+                return;
+            }
+            if (nSize > is.size()) {
+                throw std::ios_base::failure("Unserialize(): end of data");
+            }
+            if constexpr (std::is_same_v<T, std::byte>) {
+                v.assign(is.data(), is.data() + nSize);
+            } else {
+                const auto* ptr = reinterpret_cast<const T*>(UCharCast(is.data()));
+                v.assign(ptr, ptr + nSize);
+            }
+            is.ignore(nSize);
+        } else {
+            size_t i = 0;
+            while (i < nSize) {
+                size_t blk = std::min(nSize - i, size_t{1 + (MAX_VECTOR_ALLOCATE - 1) / sizeof(T)});
+                v.resize(i + blk);
+                is.read(std::as_writable_bytes(std::span{&v[i], blk}));
+                i += blk;
+            }
         }
     } else {
         Unserialize(is, Using<VectorFormatter<DefaultFormatter>>(v));
