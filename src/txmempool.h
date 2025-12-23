@@ -778,7 +778,7 @@ public:
  * signrawtransactionwithkey and signrawtransactionwithwallet,
  * as long as the conflicting transaction is not yet confirmed.
  */
-class CCoinsViewMemPool : public CCoinsViewBacked
+class CCoinsViewMemPool : public CCoinsView
 {
     /**
     * Coins made available by transactions being validated. Tracking these allows for package

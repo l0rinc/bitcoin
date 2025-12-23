@@ -13,29 +13,16 @@ TRACEPOINT_SEMAPHORE(utxocache, add);
 TRACEPOINT_SEMAPHORE(utxocache, spent);
 TRACEPOINT_SEMAPHORE(utxocache, uncache);
 
-std::optional<Coin> CCoinsView::GetCoin(const COutPoint& outpoint) const { return std::nullopt; }
-uint256 CCoinsView::GetBestBlock() const { return uint256(); }
-std::vector<uint256> CCoinsView::GetHeadBlocks() const { return std::vector<uint256>(); }
-bool CCoinsView::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlock) { return false; }
-std::unique_ptr<CCoinsViewCursor> CCoinsView::Cursor() const { return nullptr; }
-
-bool CCoinsView::HaveCoin(const COutPoint &outpoint) const
-{
-    return GetCoin(outpoint).has_value();
-}
-
-CCoinsViewBacked::CCoinsViewBacked(CCoinsView *viewIn) : base(viewIn) { }
-std::optional<Coin> CCoinsViewBacked::GetCoin(const COutPoint& outpoint) const { return base->GetCoin(outpoint); }
-bool CCoinsViewBacked::HaveCoin(const COutPoint &outpoint) const { return base->HaveCoin(outpoint); }
-uint256 CCoinsViewBacked::GetBestBlock() const { return base->GetBestBlock(); }
-std::vector<uint256> CCoinsViewBacked::GetHeadBlocks() const { return base->GetHeadBlocks(); }
-void CCoinsViewBacked::SetBackend(CCoinsView &viewIn) { base = &viewIn; }
-bool CCoinsViewBacked::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlock) { return base->BatchWrite(cursor, hashBlock); }
-std::unique_ptr<CCoinsViewCursor> CCoinsViewBacked::Cursor() const { return base->Cursor(); }
-size_t CCoinsViewBacked::EstimateSize() const { return base->EstimateSize(); }
-
 CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic) :
-    CCoinsViewBacked(baseIn), m_deterministic(deterministic),
+    CCoinsViewCache(*Assert(baseIn), deterministic) {}
+
+CCoinsViewCache::CCoinsViewCache() : CCoinsViewCache(CCoinsViewEmpty::Get()) {}
+
+CCoinsViewCache::CCoinsViewCache(CCoinsViewCache& baseIn, bool deterministic) :
+    CCoinsViewCache(static_cast<CCoinsView&>(baseIn), deterministic) {}
+
+CCoinsViewCache::CCoinsViewCache(CCoinsView& baseIn, bool deterministic) :
+    CCoinsView(baseIn), m_deterministic(deterministic),
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
     m_sentinel.second.SelfRef(m_sentinel);
@@ -183,7 +170,8 @@ void CCoinsViewCache::SetBestBlock(const uint256 &hashBlockIn) {
     hashBlock = hashBlockIn;
 }
 
-bool CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlockIn) {
+void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& hashBlockIn)
+{
     for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)) {
         if (!it->second.IsDirty()) { // TODO a cursor can only contain dirty entries
             continue;
@@ -246,33 +234,27 @@ bool CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &ha
         }
     }
     hashBlock = hashBlockIn;
-    return true;
 }
 
-bool CCoinsViewCache::Flush(bool will_reuse_cache) {
+void CCoinsViewCache::Flush(bool will_reuse_cache)
+{
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/true)};
-    bool fOk = base->BatchWrite(cursor, hashBlock);
-    if (fOk) {
-        cacheCoins.clear();
-        if (will_reuse_cache) {
-            ReallocateCache();
-        }
-        cachedCoinsUsage = 0;
+    base->BatchWrite(cursor, hashBlock);
+    cacheCoins.clear();
+    if (will_reuse_cache) {
+        ReallocateCache();
     }
-    return fOk;
+    cachedCoinsUsage = 0;
 }
 
-bool CCoinsViewCache::Sync()
+void CCoinsViewCache::Sync()
 {
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/false)};
-    bool fOk = base->BatchWrite(cursor, hashBlock);
-    if (fOk) {
-        if (m_sentinel.second.Next() != &m_sentinel) {
-            /* BatchWrite must clear flags of all entries */
-            throw std::logic_error("Not all unspent flagged entries were cleared");
-        }
+    base->BatchWrite(cursor, hashBlock);
+    if (m_sentinel.second.Next() != &m_sentinel) {
+        /* BatchWrite must clear flags of all entries */
+        throw std::logic_error("Not all unspent flagged entries were cleared");
     }
-    return fOk;
 }
 
 void CCoinsViewCache::Uncache(const COutPoint& hash)
@@ -361,32 +343,4 @@ const Coin& AccessByTxid(const CCoinsViewCache& view, const Txid& txid)
         ++iter.n;
     }
     return coinEmpty;
-}
-
-template <typename ReturnType, typename Func>
-static ReturnType ExecuteBackedWrapper(Func func, const std::vector<std::function<void()>>& err_callbacks)
-{
-    try {
-        return func();
-    } catch(const std::runtime_error& e) {
-        for (const auto& f : err_callbacks) {
-            f();
-        }
-        LogError("Error reading from database: %s\n", e.what());
-        // Starting the shutdown sequence and returning false to the caller would be
-        // interpreted as 'entry not found' (as opposed to unable to read data), and
-        // could lead to invalid interpretation. Just exit immediately, as we can't
-        // continue anyway, and all writes should be atomic.
-        std::abort();
-    }
-}
-
-std::optional<Coin> CCoinsViewErrorCatcher::GetCoin(const COutPoint& outpoint) const
-{
-    return ExecuteBackedWrapper<std::optional<Coin>>([&]() { return CCoinsViewBacked::GetCoin(outpoint); }, m_err_callbacks);
-}
-
-bool CCoinsViewErrorCatcher::HaveCoin(const COutPoint& outpoint) const
-{
-    return ExecuteBackedWrapper<bool>([&]() { return CCoinsViewBacked::HaveCoin(outpoint); }, m_err_callbacks);
 }

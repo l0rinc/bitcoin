@@ -56,9 +56,13 @@ public:
         return std::nullopt;
     }
 
+    bool HaveCoin(const COutPoint& outpoint) const override { return GetCoin(outpoint).has_value(); }
     uint256 GetBestBlock() const override { return hashBestBlock_; }
+    std::vector<uint256> GetHeadBlocks() const override { return {}; }
+    std::unique_ptr<CCoinsViewCursor> Cursor() const override { return {}; }
+    size_t EstimateSize() const override { return map_.size(); }
 
-    bool BatchWrite(CoinsViewCacheCursor& cursor, const uint256& hashBlock) override
+    void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& hashBlock) override
     {
         for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)){
             if (it->second.IsDirty()) {
@@ -72,14 +76,15 @@ public:
         }
         if (!hashBlock.IsNull())
             hashBestBlock_ = hashBlock;
-        return true;
     }
 };
 
 class CCoinsViewCacheTest : public CCoinsViewCache
 {
 public:
-    explicit CCoinsViewCacheTest(CCoinsView* _base) : CCoinsViewCache(_base) {}
+    CCoinsViewCacheTest() = default;
+    explicit CCoinsViewCacheTest(CCoinsViewCacheTest& backend_cache) : CCoinsViewCache(backend_cache) {}
+    explicit CCoinsViewCacheTest(CCoinsView* backend) : CCoinsViewCache(backend) {}
 
     void SelfTest(bool sanity_check = true) const
     {
@@ -237,7 +242,7 @@ void SimulationTest(CCoinsView* base, bool fake_best_block)
                 unsigned int flushIndex = m_rng.randrange(stack.size() - 1);
                 if (fake_best_block) stack[flushIndex]->SetBestBlock(m_rng.rand256());
                 bool should_erase = m_rng.randrange(4) < 3;
-                BOOST_CHECK(should_erase ? stack[flushIndex]->Flush() : stack[flushIndex]->Sync());
+                should_erase ? stack[flushIndex]->Flush() : stack[flushIndex]->Sync();
                 flushed_without_erase |= !should_erase;
             }
         }
@@ -247,7 +252,7 @@ void SimulationTest(CCoinsView* base, bool fake_best_block)
                 //Remove the top cache
                 if (fake_best_block) stack.back()->SetBestBlock(m_rng.rand256());
                 bool should_erase = m_rng.randrange(4) < 3;
-                BOOST_CHECK(should_erase ? stack.back()->Flush() : stack.back()->Sync());
+                should_erase ? stack.back()->Flush() : stack.back()->Sync();
                 flushed_without_erase |= !should_erase;
                 stack.pop_back();
             }
@@ -496,13 +501,13 @@ BOOST_FIXTURE_TEST_CASE(updatecoins_simulation_test, UpdateTest)
             // Every 100 iterations, flush an intermediate cache
             if (stack.size() > 1 && m_rng.randbool() == 0) {
                 unsigned int flushIndex = m_rng.randrange(stack.size() - 1);
-                BOOST_CHECK(stack[flushIndex]->Flush());
+                stack[flushIndex]->Flush();
             }
         }
         if (m_rng.randrange(100) == 0) {
             // Every 100 iterations, change the cache stack.
             if (stack.size() > 0 && m_rng.randbool() == 0) {
-                BOOST_CHECK(stack.back()->Flush());
+                stack.back()->Flush();
                 stack.pop_back();
             }
             if (stack.size() == 0 || (stack.size() < 4 && m_rng.randbool())) {
@@ -664,7 +669,7 @@ static void WriteCoinsViewEntry(CCoinsView& view, const MaybeCoin& cache_coin)
     CCoinsMap map{0, CCoinsMap::hasher{}, CCoinsMap::key_equal{}, &resource};
     if (cache_coin) InsertCoinsMapEntry(map, sentinel, *cache_coin);
     auto cursor{CoinsViewCacheCursor(sentinel, map, /*will_erase=*/true)};
-    BOOST_CHECK(view.BatchWrite(cursor, {}));
+    view.BatchWrite(cursor, {});
 }
 
 class SingleEntryCacheTest
@@ -677,9 +682,8 @@ public:
         if (cache_coin) cache.usage() += InsertCoinsMapEntry(cache.map(), cache.sentinel(), *cache_coin);
     }
 
-    CCoinsView root;
-    CCoinsViewCacheTest base{&root};
-    CCoinsViewCacheTest cache{&base};
+    CCoinsViewCacheTest base;
+    CCoinsViewCacheTest cache{base};
 };
 
 static void CheckAccessCoin(const CAmount base_value, const MaybeCoin& cache_coin, const MaybeCoin& expected)
@@ -1087,8 +1091,7 @@ BOOST_AUTO_TEST_CASE(coins_resource_is_used)
 
 BOOST_AUTO_TEST_CASE(ccoins_addcoin_exception_keeps_usage_balanced)
 {
-    CCoinsView root;
-    CCoinsViewCacheTest cache{&root};
+    CCoinsViewCacheTest cache;
 
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
 
@@ -1105,8 +1108,7 @@ BOOST_AUTO_TEST_CASE(ccoins_addcoin_exception_keeps_usage_balanced)
 
 BOOST_AUTO_TEST_CASE(ccoins_emplace_duplicate_keeps_usage_balanced)
 {
-    CCoinsView root;
-    CCoinsViewCacheTest cache{&root};
+    CCoinsViewCacheTest cache;
 
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
 

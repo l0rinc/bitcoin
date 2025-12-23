@@ -439,7 +439,6 @@ class MemPoolAccept
 public:
     explicit MemPoolAccept(CTxMemPool& mempool, Chainstate& active_chainstate) :
         m_pool(mempool),
-        m_view(&m_dummy),
         m_viewmempool(&active_chainstate.CoinsTip(), m_pool),
         m_active_chainstate(active_chainstate)
     {
@@ -737,14 +736,9 @@ private:
      */
     CCoinsViewCache m_view;
 
-    // These are the two possible backends for m_view.
-    /** When m_view is connected to m_viewmempool as its backend, it can pull coins from the mempool and from the UTXO
-     * set. This is also where temporary coins are stored. */
+    /** Backend for m_view when it should pull coins from the mempool and from the UTXO set.
+     * This is also where temporary coins are stored. */
     CCoinsViewMemPool m_viewmempool;
-    /** When m_view is connected to m_dummy, it can no longer look up coins from the mempool or UTXO set (meaning no disk
-     * operations happen), but can still return coins it accessed previously. Useful for keeping track of which coins
-     * were pulled from disk. */
-    CCoinsView m_dummy;
 
     Chainstate& m_active_chainstate;
 
@@ -875,10 +869,14 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // hierarchy brings the best block into scope. See CCoinsViewDB::GetBestBlock().
     m_view.GetBestBlock();
 
-    // we have all inputs cached now, so switch back to dummy (to protect
-    // against bugs where we pull more inputs from disk that miss being added
-    // to coins_to_uncache)
-    m_view.SetBackend(m_dummy);
+    // We have all inputs cached now, so disconnect m_view from the mempool and UTXO set
+    // (to protect against bugs where we pull more inputs from disk that miss being added
+    // to coins_to_uncache).
+    //
+    // When m_view is connected to an empty view, it can no longer look up coins from the mempool
+    // or UTXO set (meaning no disk operations happen), but can still return coins it accessed
+    // previously. Useful for keeping track of which coins were pulled from disk.
+    m_view.SetBackend(CCoinsViewEmpty::Get());
 
     assert(m_active_chainstate.m_blockman.LookupBlockIndex(m_view.GetBestBlock()) == m_active_chainstate.m_chain.Tip());
 
@@ -1865,14 +1863,13 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
     return nSubsidy;
 }
 
-CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
-    : m_dbview{std::move(db_params), std::move(options)},
-      m_catcherview(&m_dbview) {}
+CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options, std::function<void()> read_error_cb)
+    : m_dbview{std::move(db_params), std::move(options), std::move(read_error_cb)} {}
 
 void CoinsViews::InitCache()
 {
     AssertLockHeld(::cs_main);
-    m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview);
+    m_cacheview = std::make_unique<CCoinsViewCache>(&m_dbview);
 }
 
 Chainstate::Chainstate(
@@ -1928,7 +1925,8 @@ void Chainstate::SetTargetBlockHash(uint256 block_hash)
 void Chainstate::InitCoinsDB(
     size_t cache_size_bytes,
     bool in_memory,
-    bool should_wipe)
+    bool should_wipe,
+    std::function<void()> read_error_cb)
 {
     m_coins_views = std::make_unique<CoinsViews>(
         DBParams{
@@ -1938,7 +1936,8 @@ void Chainstate::InitCoinsDB(
             .wipe_data = should_wipe,
             .obfuscate = true,
             .options = m_chainman.m_options.coins_db},
-        m_chainman.m_options.coins_view);
+        m_chainman.m_options.coins_view,
+        std::move(read_error_cb));
 
     m_coinsdb_cache_size_bytes = cache_size_bytes;
 }
@@ -2857,9 +2856,7 @@ bool Chainstate::FlushStateToDisk(
                 }
                 // Flush the chainstate (which may refer to block index entries).
                 const auto empty_cache{(mode == FlushStateMode::ALWAYS) || fCacheLarge || fCacheCritical};
-                if (empty_cache ? !CoinsTip().Flush() : !CoinsTip().Sync()) {
-                    return FatalError(m_chainman.GetNotifications(), state, _("Failed to write to coin database."));
-                }
+                empty_cache ? CoinsTip().Flush() : CoinsTip().Sync();
                 full_flush_completed = true;
                 TRACEPOINT(utxocache, flush,
                     int64_t{Ticks<std::chrono::microseconds>(NodeClock::now() - nNow)},
@@ -2996,8 +2993,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
             LogError("DisconnectTip(): DisconnectBlock %s failed\n", pindexDelete->GetBlockHash().ToString());
             return false;
         }
-        bool flushed = view.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
-        assert(flushed);
+        view.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
     }
     LogDebug(BCLog::BENCH, "- Disconnect block: %.2fms\n",
              Ticks<MillisecondsDouble>(SteadyClock::now() - time_start));
@@ -3131,8 +3127,7 @@ bool Chainstate::ConnectTip(
                  Ticks<MillisecondsDouble>(time_3 - time_2),
                  Ticks<SecondsDouble>(m_chainman.time_connect_total),
                  Ticks<MillisecondsDouble>(m_chainman.time_connect_total) / m_chainman.num_blocks_total);
-        bool flushed = view.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
-        assert(flushed);
+        view.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
     }
     const auto time_4{SteadyClock::now()};
     m_chainman.time_flush += time_4 - time_3;
