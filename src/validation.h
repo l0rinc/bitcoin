@@ -10,6 +10,7 @@
 #include <attributes.h>
 #include <chain.h>
 #include <checkqueue.h>
+#include <coinsviewcacheasync.h>
 #include <consensus/amount.h>
 #include <cuckoocache.h>
 #include <deploymentstatus.h>
@@ -488,8 +489,10 @@ public:
     //! can fit per the dbcache setting.
     std::unique_ptr<CCoinsViewCache> m_cacheview GUARDED_BY(cs_main);
 
-    //! Per-block cache used for ConnectBlock. Reused across blocks and wiped via CCoinsViewCache::Reset().
-    std::unique_ptr<CCoinsViewCache> m_connect_block_view GUARDED_BY(cs_main);
+    //! Used as an ephemeral view passed into ConnectBlock to avoid polluting the underlying cache
+    //! with input lookups in case the block is invalid.
+    //! TODO: StartFetching() is synchronous in this commit; later commits parallelize it.
+    std::unique_ptr<CoinsViewCacheAsync> m_connect_block_view GUARDED_BY(cs_main);
 
     //! This constructor initializes CCoinsViewDB and CCoinsViewErrorCatcher instances, but it
     //! *does not* create a CCoinsViewCache instance by default. This is done separately because the
