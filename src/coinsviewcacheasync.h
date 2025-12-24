@@ -33,6 +33,7 @@ static constexpr int32_t WORKER_THREADS{4};
  *
  * The cache spawns a fixed set of worker threads that fetch Coins for each input in a block.
  * When FetchCoin() is called, the main thread waits for the corresponding coin to be fetched and returns it.
+ * While waiting, the main thread will also fetch coins to maximize parallelism.
  *
  * Worker threads are synchronized with the main thread using a barrier, which is used at the beginning of fetching to
  * start the workers and at the end to ensure all workers have finished before the next block is started.
@@ -105,8 +106,15 @@ private:
 
         if (const auto i{GetInputIndex(outpoint)}) [[likely]] {
             auto& input{m_inputs[*i]};
-            // We need to acquire to match the worker thread's release.
-            input.ready.wait(/*old=*/false, std::memory_order_acquire);
+            // Check if the coin is ready to be read. We need to acquire to match the worker thread's release.
+            while (!input.ready.test(std::memory_order_acquire)) {
+                // Work instead of waiting if the coin is not ready
+                if (!ProcessInputInBackground()) {
+                    // No more work, just wait
+                    input.ready.wait(/*old=*/false, std::memory_order_acquire);
+                    break;
+                }
+            }
             if (input.coin) [[likely]] ret->second.coin = std::move(*input.coin);
         }
 
