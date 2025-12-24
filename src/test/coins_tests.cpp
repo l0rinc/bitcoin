@@ -101,7 +101,6 @@ public:
     CoinsCachePair& sentinel() const { return m_sentinel; }
     size_t& usage() const { return cachedCoinsUsage; }
 };
-
 } // namespace
 
 static const unsigned int NUM_SIMULATION_ITERATIONS = 40000;
@@ -1143,6 +1142,35 @@ BOOST_AUTO_TEST_CASE(ccoins_reset)
     BOOST_CHECK(cache.AccessCoin(outpoint).IsSpent());
     BOOST_CHECK_EQUAL(cache.GetCacheSize(), 0);
     BOOST_CHECK_EQUAL(cache.GetBestBlock(), uint256::ZERO);
+}
+
+BOOST_AUTO_TEST_CASE(ccoins_fetchcoin_without_mutating)
+{
+    CCoinsViewTest base{m_rng};
+
+    // Populate the base view with a coin.
+    const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin coin{CTxOut{m_rng.randrange(10), CScript{}}, 1, false};
+    {
+        CCoinsViewCache cache{&base};
+        cache.AddCoin(outpoint, Coin{coin}, /*possible_overwrite=*/false);
+        cache.Flush();
+    }
+
+    // Verify a normal cache lookup will populate the intermediate cache.
+    CCoinsViewCacheTest main_cache{&base};
+    {
+        CCoinsViewCacheTest child_cache{&main_cache};
+        BOOST_CHECK(child_cache.HaveCoin(outpoint));
+    }
+    BOOST_CHECK(main_cache.HaveCoinInCache(outpoint));
+    main_cache.Reset();
+
+    // Verify PeekCoin can read through the cache stack without mutating the intermediate cache.
+    const auto fetched{main_cache.PeekCoin(outpoint)};
+    BOOST_CHECK(fetched.has_value());
+    BOOST_CHECK(*fetched == coin);
+    BOOST_CHECK(!main_cache.HaveCoinInCache(outpoint));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

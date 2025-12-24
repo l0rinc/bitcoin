@@ -745,6 +745,11 @@ std::optional<Coin> CCoinsViewMemPool::GetCoin(const COutPoint& outpoint) const
     return base->GetCoin(outpoint);
 }
 
+std::optional<Coin> CCoinsViewMemPool::PeekCoin(const COutPoint& outpoint) const
+{
+    throw std::logic_error("CCoinsViewMemPool::PeekCoin should never be called");
+}
+
 void CCoinsViewMemPool::PackageAddTransaction(const CTransactionRef& tx)
 {
     for (unsigned int n = 0; n < tx->vout.size(); ++n) {
