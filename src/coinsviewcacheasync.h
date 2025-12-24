@@ -13,6 +13,7 @@
 #include <util/threadnames.h>
 
 #include <atomic>
+#include <barrier>
 #include <cstdint>
 #include <optional>
 #include <ranges>
@@ -30,8 +31,11 @@ static constexpr int32_t WORKER_THREADS{4};
  * It provides the same interface as CCoinsViewCache, overriding the FetchCoin private method, Reset, and Flush.
  * It adds an additional StartFetching method to provide the block.
  *
- * The cache spawns a fixed set of worker threads on each StartFetching() call to fetch Coins for each input in a block.
+ * The cache spawns a fixed set of worker threads that fetch Coins for each input in a block.
  * When FetchCoin() is called, the main thread waits for the corresponding coin to be fetched and returns it.
+ *
+ * Worker threads are synchronized with the main thread using a barrier, which is used at the beginning of fetching to
+ * start the workers and at the end to ensure all workers have finished before the next block is started.
  */
 class CoinsViewCacheAsync : public CCoinsViewCache
 {
@@ -121,15 +125,16 @@ private:
     }
 
     std::vector<std::thread> m_worker_threads{};
+    std::barrier<> m_barrier;
 
     //! Stop all worker threads.
     void StopFetching() noexcept
     {
-        if (m_worker_threads.empty()) return;
+        if (m_inputs.empty()) return;
         // Skip fetching the rest of the inputs by moving the head to the end.
         m_input_head.store(m_inputs.size(), std::memory_order_relaxed);
-        for (auto& t : m_worker_threads) t.join();
-        m_worker_threads.clear();
+        // Wait for all threads to stop.
+        m_barrier.arrive_and_wait();
         m_inputs.clear();
     }
 
@@ -148,13 +153,8 @@ public:
         }
         // Don't start threads if there's nothing to fetch.
         if (m_inputs.empty()) [[unlikely]] return;
-        // Spawn per-block worker threads.
-        for (const auto n : std::views::iota(0, WORKER_THREADS)) {
-            m_worker_threads.emplace_back([this, n] {
-                util::ThreadRename(strprintf("inputfetch.%i", n));
-                while (ProcessInputInBackground()) [[likely]] {}
-            });
-        }
+        // Start workers by entering the barrier.
+        m_barrier.arrive_and_wait();
     }
 
     void Reset() noexcept override
@@ -171,7 +171,28 @@ public:
         return CCoinsViewCache::Flush(will_reuse_cache);
     }
 
-    explicit CoinsViewCacheAsync(CCoinsView* base_in) noexcept : CCoinsViewCache{base_in} {}
+    explicit CoinsViewCacheAsync(CCoinsView* base_in, int32_t num_workers = WORKER_THREADS) noexcept
+        : CCoinsViewCache{base_in}, m_barrier{num_workers + 1}
+    {
+        for (const auto n : std::views::iota(0, num_workers)) {
+            m_worker_threads.emplace_back([this, n] {
+                util::ThreadRename(strprintf("inputfetch.%i", n));
+                while (true) {
+                    m_barrier.arrive_and_wait();
+                    while (ProcessInputInBackground()) [[likely]] {}
+                    if (m_inputs.empty()) [[unlikely]] return;
+                    m_barrier.arrive_and_wait();
+                }
+            });
+        }
+    }
+
+    ~CoinsViewCacheAsync() override
+    {
+        StopFetching();
+        m_barrier.arrive_and_drop();
+        for (auto& t : m_worker_threads) t.join();
+    }
 };
 
 #endif // BITCOIN_COINSVIEWCACHEASYNC_H
