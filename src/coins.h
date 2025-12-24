@@ -454,6 +454,9 @@ public:
      */
     bool Sync();
 
+    //! Wipe local state.
+    virtual void Reset() noexcept;
+
     /**
      * Removes the UTXO with the given outpoint from the cache, if it is
      * not modified.
@@ -476,7 +479,7 @@ public:
     //! See: https://stackoverflow.com/questions/42114044/how-to-release-unordered-map-memory
     void ReallocateCache();
 
-    //! Run an internal sanity check on the cache data structure. */
+    //! Run an internal sanity check on the cache data structure.
     void SanityCheck() const;
 
 private:

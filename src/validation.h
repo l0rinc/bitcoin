@@ -488,6 +488,9 @@ public:
     //! can fit per the dbcache setting.
     std::unique_ptr<CCoinsViewCache> m_cacheview GUARDED_BY(cs_main);
 
+    //! Per-block cache used for ConnectBlock. Reused across blocks and wiped via CCoinsViewCache::Reset().
+    std::unique_ptr<CCoinsViewCache> m_connect_block_view GUARDED_BY(cs_main);
+
     //! This constructor initializes CCoinsViewDB and CCoinsViewErrorCatcher instances, but it
     //! *does not* create a CCoinsViewCache instance by default. This is done separately because the
     //! presence of the cache has implications on whether or not we're allowed to flush the cache's

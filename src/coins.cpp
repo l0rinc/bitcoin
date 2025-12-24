@@ -253,11 +253,13 @@ bool CCoinsViewCache::Flush(bool will_reuse_cache) {
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/true)};
     bool fOk = base->BatchWrite(cursor, hashBlock);
     if (fOk) {
-        cacheCoins.clear();
         if (will_reuse_cache) {
+            cacheCoins.clear();
+            cachedCoinsUsage = 0;
             ReallocateCache();
+        } else {
+            Reset();
         }
-        cachedCoinsUsage = 0;
     }
     return fOk;
 }
@@ -273,6 +275,13 @@ bool CCoinsViewCache::Sync()
         }
     }
     return fOk;
+}
+
+void CCoinsViewCache::Reset() noexcept
+{
+    cacheCoins.clear();
+    cachedCoinsUsage = 0;
+    hashBlock.SetNull();
 }
 
 void CCoinsViewCache::Uncache(const COutPoint& hash)
