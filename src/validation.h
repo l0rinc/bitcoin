@@ -490,8 +490,7 @@ public:
     std::unique_ptr<CCoinsViewCache> m_cacheview GUARDED_BY(cs_main);
 
     //! Used as an ephemeral view passed into ConnectBlock to avoid polluting the underlying cache
-    //! with input lookups in case the block is invalid.
-    //! TODO: StartFetching() is synchronous in this commit; later commits parallelize it.
+    //! with input lookups in case the block is invalid, and to prefetch inputs in parallel.
     std::unique_ptr<CoinsViewCacheAsync> m_connect_block_view GUARDED_BY(cs_main);
 
     //! This constructor initializes CCoinsViewDB and CCoinsViewErrorCatcher instances, but it
