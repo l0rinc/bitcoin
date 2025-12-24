@@ -215,4 +215,13 @@ BOOST_AUTO_TEST_CASE(access_non_input_coin)
     }
 }
 
+BOOST_AUTO_TEST_CASE(destructor_without_reset)
+{
+    CCoinsViewDB db{{.path = "", .memory_only = true}, {}};
+    CCoinsViewCache main_cache{&db};
+    CoinsViewCacheAsync view{&main_cache};
+    view.StartFetching(CreateBlock());
+    // Destructor called WITHOUT Reset() or Flush()
+}
+
 BOOST_AUTO_TEST_SUITE_END()
