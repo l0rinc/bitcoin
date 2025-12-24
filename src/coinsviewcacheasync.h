@@ -9,38 +9,45 @@
 #include <coins.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
+#include <tinyformat.h>
+#include <util/threadnames.h>
 
+#include <atomic>
 #include <cstdint>
 #include <optional>
 #include <ranges>
+#include <thread>
 #include <utility>
 #include <vector>
 
+static constexpr int32_t WORKER_THREADS{4};
+
 /**
- * CCoinsViewCache subclass used by ConnectBlock to prefetch all block inputs without mutating
- * parent caches.
+ * CCoinsViewCache subclass that asynchronously fetches all block inputs in parallel during ConnectBlock without
+ * mutating the base cache.
  *
- * This view aims to avoid mutating parent caches while looking up inputs, so an invalid block does not
- * pollute CoinsTip().
+ * Only used in ConnectBlock to pass as an ephemeral view that can be reset if the block is invalid.
+ * It provides the same interface as CCoinsViewCache, overriding the FetchCoin private method, Reset, and Flush.
+ * It adds an additional StartFetching method to provide the block.
  *
- * TODO: Despite the "Async" name, this commit is still synchronous: StartFetching() builds a per-block input queue
- * and fetches all inputs on the main thread. Later commits parallelize this work.
+ * The cache spawns a fixed set of worker threads on each StartFetching() call to fetch Coins for each input in a block.
+ * When FetchCoin() is called, the main thread waits for the corresponding coin to be fetched and returns it.
  */
 class CoinsViewCacheAsync : public CCoinsViewCache
 {
 private:
-    //! The latest input not yet being fetched.
-    mutable uint32_t m_input_head{0};
+    //! The latest input not yet being fetched. Workers atomically increment this when fetching.
+    mutable std::atomic_uint32_t m_input_head{0};
     //! The latest input not yet accessed by a consumer. Only the main thread increments this.
     mutable uint32_t m_input_tail{0};
 
     //! The inputs of the block which is being fetched.
     struct InputToFetch {
-        //! Set after setting the coin.
-        bool ready{false};
+        //! Workers set this after setting the coin. The main thread tests this before reading the coin.
+        std::atomic_flag ready{};
         //! The outpoint of the input to fetch.
         const COutPoint& outpoint;
-        //! The coin that will be fetched and inserted into cache.
+        //! The coin that workers will fetch and main thread will insert into cache.
         std::optional<Coin> coin{std::nullopt};
 
         /**
@@ -53,21 +60,21 @@ private:
     mutable std::vector<InputToFetch> m_inputs{};
 
     /**
-     * Claim and fetch the next input in the queue.
-     *
-     * TODO: Despite the name, this is only called on the main thread in this commit.
+     * Claim and fetch the next input in the queue. Safe to call from any thread once StartFetching() has queued inputs.
      *
      * @return true if there are more inputs in the queue to fetch
      * @return false if there are no more inputs in the queue to fetch
      */
     bool ProcessInputInBackground() const noexcept
     {
-        const auto i{m_input_head++};
+        const auto i{m_input_head.fetch_add(1, std::memory_order_relaxed)};
         if (i >= m_inputs.size()) [[unlikely]] return false;
 
         auto& input{m_inputs[i]};
         if (auto coin{base->PeekCoin(input.outpoint)}) [[likely]] input.coin.emplace(std::move(*coin));
-        input.ready = true;
+        // We need release here, so writing coin in the line above happens before the main thread acquires.
+        input.ready.test_and_set(std::memory_order_release);
+        input.ready.notify_one();
         return true;
     }
 
@@ -94,7 +101,8 @@ private:
 
         if (const auto i{GetInputIndex(outpoint)}) [[likely]] {
             auto& input{m_inputs[*i]};
-            while (!input.ready && ProcessInputInBackground()) [[likely]] {}
+            // We need to acquire to match the worker thread's release.
+            input.ready.wait(/*old=*/false, std::memory_order_acquire);
             if (input.coin) [[likely]] ret->second.coin = std::move(*input.coin);
         }
 
@@ -112,11 +120,25 @@ private:
         return ret;
     }
 
+    std::vector<std::thread> m_worker_threads{};
+
+    //! Stop all worker threads.
+    void StopFetching() noexcept
+    {
+        if (m_worker_threads.empty()) return;
+        // Skip fetching the rest of the inputs by moving the head to the end.
+        m_input_head.store(m_inputs.size(), std::memory_order_relaxed);
+        for (auto& t : m_worker_threads) t.join();
+        m_worker_threads.clear();
+        m_inputs.clear();
+    }
+
 public:
     //! Fetch all block inputs.
     void StartFetching(const CBlock& block) noexcept
     {
-        m_input_head = 0;
+        StopFetching();
+        m_input_head.store(0, std::memory_order_relaxed);
         m_input_tail = 0;
         m_inputs.clear();
 
@@ -124,15 +146,29 @@ public:
         for (const auto& tx : block.vtx | std::views::drop(1)) [[likely]] {
             for (const auto& input : tx->vin) [[likely]] m_inputs.emplace_back(input.prevout);
         }
-        while (ProcessInputInBackground()) [[likely]] {}
+        // Don't start threads if there's nothing to fetch.
+        if (m_inputs.empty()) [[unlikely]] return;
+        // Spawn per-block worker threads.
+        for (const auto n : std::views::iota(0, WORKER_THREADS)) {
+            m_worker_threads.emplace_back([this, n] {
+                util::ThreadRename(strprintf("inputfetch.%i", n));
+                while (ProcessInputInBackground()) [[likely]] {}
+            });
+        }
     }
 
     void Reset() noexcept override
     {
-        m_input_head = 0;
+        StopFetching();
+        m_input_head.store(0, std::memory_order_relaxed);
         m_input_tail = 0;
-        m_inputs.clear();
         CCoinsViewCache::Reset();
+    }
+
+    bool Flush(bool will_reuse_cache = true) override
+    {
+        StopFetching();
+        return CCoinsViewCache::Flush(will_reuse_cache);
     }
 
     explicit CoinsViewCacheAsync(CCoinsView* base_in) noexcept : CCoinsViewCache{base_in} {}
