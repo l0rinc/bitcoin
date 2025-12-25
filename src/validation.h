@@ -10,6 +10,7 @@
 #include <attributes.h>
 #include <chain.h>
 #include <checkqueue.h>
+#include <coinsviewcacheasync.h>
 #include <consensus/amount.h>
 #include <cuckoocache.h>
 #include <deploymentstatus.h>
@@ -487,6 +488,10 @@ public:
     //! This is the top layer of the cache hierarchy - it keeps as many coins in memory as
     //! can fit per the dbcache setting.
     std::unique_ptr<CCoinsViewCache> m_cacheview GUARDED_BY(cs_main);
+
+    //! Used as an ephemeral view passed into ConnectBlock to avoid polluting the underlying cache
+    //! with input lookups in case the block is invalid, and to prefetch inputs in parallel.
+    std::unique_ptr<CoinsViewCacheAsync> m_connect_block_view GUARDED_BY(cs_main);
 
     //! This constructor initializes CCoinsViewDB and CCoinsViewErrorCatcher instances, but it
     //! *does not* create a CCoinsViewCache instance by default. This is done separately because the
