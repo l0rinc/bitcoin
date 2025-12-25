@@ -54,7 +54,7 @@ struct CoinsResult {
     /** Return how many different output types this struct stores */
     size_t TypesCount() const { return coins.size(); }
     void Clear();
-    void Erase(const std::unordered_set<COutPoint, SaltedOutpointHasher>& coins_to_remove);
+    void Erase(const std::unordered_set<COutPoint, SaltedOutpointHasher24>& coins_to_remove);
     void Shuffle(FastRandomContext& rng_fast);
     void Add(OutputType type, const COutput& out);
 

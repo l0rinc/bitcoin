@@ -1415,7 +1415,7 @@ BOOST_FIXTURE_TEST_CASE(wallet_coinsresult_test, BasicTestingSetup)
     {
         // First test case, check that 'CoinsResult::Erase' function works as expected.
         // By trying to erase two elements from the 'available_coins' object.
-        std::unordered_set<COutPoint, SaltedOutpointHasher> outs_to_remove;
+        std::unordered_set<COutPoint, SaltedOutpointHasher24> outs_to_remove;
         const auto& coins = available_coins.All();
         for (int i = 0; i < 2; i++) {
             outs_to_remove.emplace(coins[i].outpoint);
