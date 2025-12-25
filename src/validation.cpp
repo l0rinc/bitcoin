@@ -1869,10 +1869,11 @@ CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
     : m_dbview{std::move(db_params), std::move(options)},
       m_catcherview(&m_dbview) {}
 
-void CoinsViews::InitCache()
+void CoinsViews::InitCache(size_t cache_size_bytes)
 {
     AssertLockHeld(::cs_main);
     m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview);
+    m_cacheview->ReserveCache(cache_size_bytes);
 }
 
 Chainstate::Chainstate(
@@ -1948,7 +1949,7 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
     AssertLockHeld(::cs_main);
     assert(m_coins_views != nullptr);
     m_coinstip_cache_size_bytes = cache_size_bytes;
-    m_coins_views->InitCache();
+    m_coins_views->InitCache(cache_size_bytes);
 }
 
 // Note that though this is marked const, we may end up modifying `m_cached_finished_ibd`, which
@@ -2726,7 +2727,6 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
     size_t max_mempool_size_bytes)
 {
     AssertLockHeld(::cs_main);
-    const int64_t cache_capacity{int64_t(CoinsTip().DynamicMemoryUsage())};
     const int64_t cache_active{int64_t(CoinsTip().ActiveMemoryUsage())};
 
     const int64_t mempool_usage{m_mempool ? int64_t(m_mempool->DynamicMemoryUsage()) : 0};
@@ -2738,8 +2738,8 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
     if (cache_active > critical_threshold) {
         LogInfo("Coins cache active (%s) exceeds total space (%s)\n", cache_active, critical_threshold);
         return CoinsCacheSizeState::CRITICAL;
-    } else if (cache_capacity > large_threshold) {
-        LogInfo("Coins cache capacity (%s) exceeds total space (%s)\n", cache_capacity, large_threshold);
+    } else if (cache_active > large_threshold) {
+        LogInfo("Coins cache active (%s) exceeds large threshold (%s)\n", cache_active, large_threshold);
         return CoinsCacheSizeState::LARGE;
     } else {
         return CoinsCacheSizeState::OK;
@@ -2864,7 +2864,7 @@ bool Chainstate::FlushStateToDisk(
                     return FatalError(m_chainman.GetNotifications(), state, _("Disk space is too low!"));
                 }
                 if (should_empty) {
-                    CoinsTip().Flush(/*will_reuse_cache=*/!m_chainman.IsInitialBlockDownload());
+                    CoinsTip().Flush();
                 } else {
                     CoinsTip().Sync();
                 }
@@ -3004,7 +3004,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
             LogError("DisconnectTip(): DisconnectBlock %s failed\n", pindexDelete->GetBlockHash().ToString());
             return false;
         }
-        bool flushed = view.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
+        bool flushed = view.Flush(); // local CCoinsViewCache goes out of scope
         assert(flushed);
     }
     LogDebug(BCLog::BENCH, "- Disconnect block: %.2fms\n",
@@ -3139,7 +3139,7 @@ bool Chainstate::ConnectTip(
                  Ticks<MillisecondsDouble>(time_3 - time_2),
                  Ticks<SecondsDouble>(m_chainman.time_connect_total),
                  Ticks<MillisecondsDouble>(m_chainman.time_connect_total) / m_chainman.num_blocks_total);
-        bool flushed = view.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
+        bool flushed = view.Flush(); // local CCoinsViewCache goes out of scope
         assert(flushed);
     }
     const auto time_4{SteadyClock::now()};
@@ -4770,7 +4770,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
             }
         }
         // check level 3: check for inconsistencies during memory-only disconnect of tip blocks
-        size_t curr_coins_usage = coins.DynamicMemoryUsage() + chainstate.CoinsTip().DynamicMemoryUsage();
+        size_t curr_coins_usage = coins.ActiveMemoryUsage() + chainstate.CoinsTip().ActiveMemoryUsage();
 
         if (nCheckLevel >= 3) {
             if (curr_coins_usage <= chainstate.m_coinstip_cache_size_bytes) {
@@ -4943,7 +4943,7 @@ bool Chainstate::ReplayBlocks()
     }
 
     cache.SetBestBlock(pindexNew->GetBlockHash());
-    cache.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
+    cache.Flush(); // local CCoinsViewCache goes out of scope
     m_chainman.GetNotifications().progress(bilingual_str{}, 100, false);
     return true;
 }
@@ -5556,6 +5556,7 @@ bool Chainstate::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
     m_coinstip_cache_size_bytes = coinstip_size;
     m_coinsdb_cache_size_bytes = coinsdb_size;
     CoinsDB().ResizeCache(coinsdb_size);
+    CoinsTip().ReserveCache(coinstip_size);
 
     LogInfo("[%s] resized coinsdb cache to %.1f MiB",
         this->ToString(), coinsdb_size * (1.0 / 1024 / 1024));
@@ -5571,6 +5572,10 @@ bool Chainstate::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
     } else {
         // Otherwise, flush state to disk and deallocate the in-memory coins map.
         ret = FlushStateToDisk(state, FlushStateMode::ALWAYS);
+        if (ret) {
+            CoinsTip().ReallocateCache();
+            CoinsTip().ReserveCache(coinstip_size);
+        }
     }
     return ret;
 }

@@ -439,11 +439,9 @@ public:
      * Push the modifications applied to this cache to its base and wipe local state.
      * Failure to call this method or Sync() before destruction will cause the changes
      * to be forgotten.
-     * If will_reuse_cache is false, the cache will retain the same memory footprint
-     * after flushing and should be destroyed to deallocate.
      * If false is returned, the state of this cache (and its backing view) will be undefined.
      */
-    bool Flush(bool will_reuse_cache = true);
+    bool Flush();
 
     /**
      * Push the modifications applied to this cache to its base while retaining
@@ -468,7 +466,11 @@ public:
 
     size_t ActiveMemoryUsage() const
     {
-        return cachedCoinsUsage + cacheCoins.get_allocator().resource()->BytesInUse();
+        const size_t coins_usage_bytes{cachedCoinsUsage};
+        const size_t node_pool_bytes{cacheCoins.get_allocator().resource()->BytesInUse()};
+        const size_t bucket_count{cacheCoins.bucket_count()};
+        const size_t bucket_array_bytes{memusage::MallocUsage(sizeof(void*) * bucket_count)};
+        return coins_usage_bytes + node_pool_bytes + bucket_array_bytes;
     }
 
     //! Check whether all prevouts of the transaction are present in the UTXO set represented by this view
@@ -480,6 +482,10 @@ public:
     //!
     //! See: https://stackoverflow.com/questions/42114044/how-to-release-unordered-map-memory
     void ReallocateCache();
+
+    //! Preallocate the cache map bucket count based on the expected maximum cache size.
+    //! This avoids expensive rehashing during cache growth.
+    void ReserveCache(size_t max_coins_cache_size_bytes);
 
     //! Run an internal sanity check on the cache data structure. */
     void SanityCheck() const;
