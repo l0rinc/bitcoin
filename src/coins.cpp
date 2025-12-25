@@ -250,6 +250,11 @@ bool CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &ha
 }
 
 bool CCoinsViewCache::Flush(bool will_reuse_cache) {
+    if (will_reuse_cache) {
+        LogInfo("cachedCoinsUsage: %s, buckets: %s, size: %s, load: %.2f",
+                cachedCoinsUsage, cacheCoins.bucket_count(), cacheCoins.size(), cacheCoins.load_factor());
+    }
+
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/true)};
     bool fOk = base->BatchWrite(cursor, hashBlock);
     if (fOk) {
