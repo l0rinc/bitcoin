@@ -14,13 +14,12 @@
 #include <support/allocators/pool.h>
 #include <uint256.h>
 #include <util/check.h>
-#include <util/hasher.h>
 
 #include <cassert>
 #include <cstdint>
 
 #include <functional>
-#include <unordered_map>
+#include <map>
 
 /**
  * A UTXO entry.
@@ -215,18 +214,17 @@ public:
 
 /**
  * PoolAllocator's MAX_BLOCK_SIZE_BYTES parameter here uses sizeof the data, and adds the size
- * of 4 pointers. We do not know the exact node size used in the std::unordered_node implementation
+ * of 4 pointers. We do not know the exact node size used in the std::map implementation
  * because it is implementation defined. Most implementations have an overhead of 1 or 2 pointers,
  * so nodes can be connected in a linked list, and in some cases the hash value is stored as well.
  * Using an additional sizeof(void*)*4 for MAX_BLOCK_SIZE_BYTES should thus be sufficient so that
  * all implementations can allocate the nodes from the PoolAllocator.
  */
-using CCoinsMap = std::unordered_map<COutPoint,
-                                     CCoinsCacheEntry,
-                                     SaltedOutpointHasher,
-                                     std::equal_to<COutPoint>,
-                                     PoolAllocator<CoinsCachePair,
-                                                   sizeof(CoinsCachePair) + sizeof(void*) * 4>>;
+using CCoinsMap = std::map<
+    COutPoint,
+    CCoinsCacheEntry,
+    std::less<COutPoint>,
+    PoolAllocator<CoinsCachePair, sizeof(CoinsCachePair) + sizeof(void*) * 4>>;
 
 using CCoinsMapMemoryResource = CCoinsMap::allocator_type::ResourceType;
 
@@ -402,6 +400,14 @@ public:
     bool HaveCoinInCache(const COutPoint &outpoint) const;
 
     /**
+     * Retrieve the coin from the cache even if it is spent, without calling
+     * the backing CCoinsView if no coin exists.
+     * Used in CoinsViewCacheAsync to make sure we do not add a coin from the backing
+     * view when it is spent in the cache but not yet flushed to the parent.
+     */
+    std::optional<Coin> GetPossiblySpentCoinFromCache(const COutPoint& outpoint) const noexcept;
+
+    /**
      * Return a reference to Coin in the cache, or coinEmpty if not found. This is
      * more efficient than GetCoin.
      *
@@ -443,7 +449,7 @@ public:
      * after flushing and should be destroyed to deallocate.
      * If false is returned, the state of this cache (and its backing view) will be undefined.
      */
-    bool Flush(bool will_reuse_cache = true);
+    virtual bool Flush(bool will_reuse_cache = true);
 
     /**
      * Push the modifications applied to this cache to its base while retaining
@@ -484,7 +490,7 @@ private:
      * @note this is marked const, but may actually append to `cacheCoins`, increasing
      * memory usage.
      */
-    CCoinsMap::iterator FetchCoin(const COutPoint &outpoint) const;
+    virtual CCoinsMap::iterator FetchCoin(const COutPoint &outpoint) const;
 };
 
 //! Utility function to add all of a transaction's outputs to a cache.

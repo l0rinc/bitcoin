@@ -16,6 +16,7 @@
 #include <script/descriptor.h>
 #include <script/script.h>
 #include <script/signingprovider.h>
+#include <util/hasher.h>
 #include <util/result.h>
 #include <util/time.h>
 #include <wallet/crypter.h>
