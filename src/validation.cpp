@@ -3001,7 +3001,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
             view.Reset();
             return false;
         }
-        bool flushed = view.Flush(/*will_reuse_cache=*/false);
+        bool flushed = view.Flush();
         assert(flushed);
         view.Reset();
     }
@@ -3140,7 +3140,7 @@ bool Chainstate::ConnectTip(
                  Ticks<MillisecondsDouble>(time_3 - time_2),
                  Ticks<SecondsDouble>(m_chainman.time_connect_total),
                  Ticks<MillisecondsDouble>(m_chainman.time_connect_total) / m_chainman.num_blocks_total);
-        bool flushed = view.Flush(/*will_reuse_cache=*/false);
+        bool flushed = view.Flush();
         assert(flushed);
         view.Reset();
     }
@@ -4949,7 +4949,7 @@ bool Chainstate::ReplayBlocks()
     }
 
     cache.SetBestBlock(pindexNew->GetBlockHash());
-    cache.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
+    cache.Flush(); // local CCoinsViewCache goes out of scope
     m_chainman.GetNotifications().progress(bilingual_str{}, 100, false);
     return true;
 }
