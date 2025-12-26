@@ -83,7 +83,11 @@ size_t CCoinsViewCache::ReservedEntries(size_t max_coins_cache_size_bytes, float
     constexpr size_t BYTES_PER_ENTRY_LOWER_BOUND{sizeof(CoinsCachePair) + sizeof(void*)};
     const size_t bucket_bytes_per_entry_lower_bound{size_t(double(sizeof(void*)) / max_load_factor)};
     const size_t bytes_per_entry_lower_bound{BYTES_PER_ENTRY_LOWER_BOUND + bucket_bytes_per_entry_lower_bound};
-    return max_coins_cache_size_bytes / bytes_per_entry_lower_bound;
+    size_t result = max_coins_cache_size_bytes / bytes_per_entry_lower_bound;
+    // TODO remove
+    LogInfo("Reserving %zu entries (at least %zu bytes per entry) for a coins cache of size %zu bytes with max load factor %.2f",
+            result, bytes_per_entry_lower_bound, max_coins_cache_size_bytes, max_load_factor);
+    return result;
 }
 
 void CCoinsViewCache::ReserveCache(size_t max_coins_cache_size_bytes, float max_load_factor)
@@ -94,7 +98,7 @@ void CCoinsViewCache::ReserveCache(size_t max_coins_cache_size_bytes, float max_
     assert(cacheCoins.max_load_factor() == max_load_factor);
 
     const size_t reserve_entries{std::min(ReservedEntries(max_coins_cache_size_bytes, max_load_factor), cacheCoins.max_size())};
-    cacheCoins.reserve(reserve_entries);
+        cacheCoins.reserve(reserve_entries);
 }
 
 size_t CCoinsViewCache::DynamicMemoryUsage() const
@@ -325,9 +329,9 @@ void CCoinsViewCache::Flush()
 {
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/true)};
     base->BatchWrite(cursor, hashBlock);
-        cacheCoins.clear();
-        cachedCoinsUsage = 0;
-
+    cacheCoins.clear();
+    cachedCoinsUsage = 0;
+    m_sentinel.second.SelfRef(m_sentinel);
 }
 
 void CCoinsViewCache::Sync()
@@ -375,10 +379,14 @@ void CCoinsViewCache::ReallocateCache()
 {
     // Cache should be empty when we're calling this.
     assert(cacheCoins.size() == 0);
+    LogInfo("Reallocating coins cache (%zu buckets, %zu chunks)",
+            cacheCoins.bucket_count(), m_cache_coins_memory_resource.NumAllocatedChunks());
+    const float max_load_factor{cacheCoins.max_load_factor()};
     cacheCoins.~CCoinsMap();
     m_cache_coins_memory_resource.~CCoinsMapMemoryResource();
     ::new (&m_cache_coins_memory_resource) CCoinsMapMemoryResource{};
     ::new (&cacheCoins) CCoinsMap{0, SaltedOutpointHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
+    cacheCoins.max_load_factor(max_load_factor);
 }
 
 void CCoinsViewCache::SanityCheck() const

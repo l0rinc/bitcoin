@@ -1855,7 +1855,10 @@ CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
 void CoinsViews::InitCache(size_t cache_size_bytes, float max_load_factor, size_t connect_block_view_reserve_entries)
 {
     AssertLockHeld(::cs_main);
-    m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview, /*deterministic=*/false, CCoinsViewCache::ReservedEntries(cache_size_bytes, max_load_factor), max_load_factor);
+
+    const size_t reserved_entries{CCoinsViewCache::ReservedEntries(cache_size_bytes, max_load_factor)};
+    m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview, /*deterministic=*/false, reserved_entries, max_load_factor);
+
     m_connect_block_view = std::make_unique<CCoinsViewCache>(&*m_cacheview, /*deterministic=*/false, connect_block_view_reserve_entries, max_load_factor);
 }
 
