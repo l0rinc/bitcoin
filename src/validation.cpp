@@ -1856,6 +1856,7 @@ void CoinsViews::InitCache()
 {
     AssertLockHeld(::cs_main);
     m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview);
+    m_connect_block_view = std::make_unique<CCoinsViewCache>(&*m_cacheview);
 }
 
 Chainstate::Chainstate(
@@ -2975,13 +2976,16 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
     // Apply the block atomically to the chain state.
     const auto time_start{SteadyClock::now()};
     {
-        CCoinsViewCache view(&CoinsTip());
+        auto& view{ConnectBlockView()};
+        view.Start();
         assert(view.GetBestBlock() == pindexDelete->GetBlockHash());
         if (DisconnectBlock(block, pindexDelete, view) != DISCONNECT_OK) {
             LogError("DisconnectTip(): DisconnectBlock %s failed\n", pindexDelete->GetBlockHash().ToString());
+            view.Reset();
             return false;
         }
-        view.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
+        view.Flush(/*will_reuse_cache=*/false);
+        view.Reset();
     }
     LogDebug(BCLog::BENCH, "- Disconnect block: %.2fms\n",
              Ticks<MillisecondsDouble>(SteadyClock::now() - time_start));
@@ -3097,7 +3101,9 @@ bool Chainstate::ConnectTip(
     LogDebug(BCLog::BENCH, "  - Load block from disk: %.2fms\n",
              Ticks<MillisecondsDouble>(time_2 - time_1));
     {
-        CCoinsViewCache view(&CoinsTip());
+        auto& view{ConnectBlockView()};
+        view.Start();
+        assert(view.GetBestBlock() == (pindexNew->pprev ? pindexNew->pprev->GetBlockHash() : uint256::ZERO));
         bool rv = ConnectBlock(*block_to_connect, state, pindexNew, view);
         if (m_chainman.m_options.signals) {
             m_chainman.m_options.signals->BlockChecked(block_to_connect, state);
@@ -3106,6 +3112,7 @@ bool Chainstate::ConnectTip(
             if (state.IsInvalid())
                 InvalidBlockFound(pindexNew, state);
             LogError("%s: ConnectBlock %s failed, %s\n", __func__, pindexNew->GetBlockHash().ToString(), state.ToString());
+            view.Reset();
             return false;
         }
         time_3 = SteadyClock::now();
@@ -3115,7 +3122,8 @@ bool Chainstate::ConnectTip(
                  Ticks<MillisecondsDouble>(time_3 - time_2),
                  Ticks<SecondsDouble>(m_chainman.time_connect_total),
                  Ticks<MillisecondsDouble>(m_chainman.time_connect_total) / m_chainman.num_blocks_total);
-        view.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
+        view.Flush(/*will_reuse_cache=*/false);
+        view.Reset();
     }
     const auto time_4{SteadyClock::now()};
     m_chainman.time_flush += time_4 - time_3;
@@ -4584,13 +4592,17 @@ BlockValidationState TestBlockValidity(
     index_dummy.pprev = tip;
     index_dummy.nHeight = tip->nHeight + 1;
     index_dummy.phashBlock = &block_hash;
-    CCoinsViewCache view_dummy(&chainstate.CoinsTip());
+    auto& view_dummy{chainstate.ConnectBlockView()};
+    view_dummy.Start();
+    assert(view_dummy.GetBestBlock() == tip->GetBlockHash());
 
     // Set fJustCheck to true in order to update, and not clear, validation caches.
     if(!chainstate.ConnectBlock(block, state, &index_dummy, view_dummy, /*fJustCheck=*/true)) {
         if (state.IsValid()) NONFATAL_UNREACHABLE();
+        view_dummy.Reset();
         return state;
     }
+    view_dummy.Reset();
 
     // Ensure no check returned successfully while also setting an invalid state.
     if (!state.IsValid()) NONFATAL_UNREACHABLE();

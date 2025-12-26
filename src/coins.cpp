@@ -42,6 +42,24 @@ CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic) :
     CCoinsViewBacked(baseIn), m_deterministic(deterministic),
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
+    Reset();
+}
+
+void CCoinsViewCache::Start()
+{
+    Assert(cacheCoins.empty());
+    Assert(cachedCoinsUsage == 0);
+    Assert(hashBlock.IsNull());
+    Assert(m_sentinel.second.Next() == &m_sentinel);
+    Assert(m_sentinel.second.Prev() == &m_sentinel);
+    (void)GetBestBlock(); // lazy init
+}
+
+void CCoinsViewCache::Reset() noexcept
+{
+    cacheCoins.clear();
+    cachedCoinsUsage = 0;
+    hashBlock.SetNull();
     m_sentinel.second.SelfRef(m_sentinel);
 }
 
