@@ -114,7 +114,8 @@ static ChainstateLoadResult CompleteChainstateInitialization(
         }
 
         // The on-disk coinsdb is now in a good state, create the cache
-        chainstate->InitCoinsCache(chainman.m_total_coinstip_cache * init_cache_fraction);
+        chainstate->InitCoinsCache(chainman.m_total_coinstip_cache * init_cache_fraction,
+                                   CCoinsViewCache::CONNECT_BLOCK_VIEW_RESERVE_ENTRIES);
         assert(chainstate->CanFlushToDisk());
 
         if (!is_coinsview_empty(*chainstate)) {

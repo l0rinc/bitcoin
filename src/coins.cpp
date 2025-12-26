@@ -47,10 +47,12 @@ void CCoinsViewBacked::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& h
 std::unique_ptr<CCoinsViewCursor> CCoinsViewBacked::Cursor() const { return base->Cursor(); }
 size_t CCoinsViewBacked::EstimateSize() const { return base->EstimateSize(); }
 
-CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic) :
+CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic, size_t reserve_entries, float max_load_factor) :
     CCoinsViewBacked(baseIn), m_deterministic(deterministic),
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
+    cacheCoins.max_load_factor(max_load_factor);
+    cacheCoins.reserve(reserve_entries);
     Reset();
 }
 
@@ -70,6 +72,29 @@ void CCoinsViewCache::Reset() noexcept
     cachedCoinsUsage = 0;
     hashBlock.SetNull();
     m_sentinel.second.SelfRef(m_sentinel);
+}
+
+size_t CCoinsViewCache::ReservedEntries(size_t max_coins_cache_size_bytes, float max_load_factor) noexcept
+{
+    if (max_coins_cache_size_bytes == 0) return 0;
+
+    assert(max_load_factor > 0);
+
+    constexpr size_t BYTES_PER_ENTRY_LOWER_BOUND{sizeof(CoinsCachePair) + sizeof(void*)};
+    const size_t bucket_bytes_per_entry_lower_bound{size_t(double(sizeof(void*)) / max_load_factor)};
+    const size_t bytes_per_entry_lower_bound{BYTES_PER_ENTRY_LOWER_BOUND + bucket_bytes_per_entry_lower_bound};
+    return max_coins_cache_size_bytes / bytes_per_entry_lower_bound;
+}
+
+void CCoinsViewCache::ReserveCache(size_t max_coins_cache_size_bytes, float max_load_factor)
+{
+    if (max_coins_cache_size_bytes == 0) return;
+
+    assert(max_load_factor > 0);
+    assert(cacheCoins.max_load_factor() == max_load_factor);
+
+    const size_t reserve_entries{std::min(ReservedEntries(max_coins_cache_size_bytes, max_load_factor), cacheCoins.max_size())};
+    cacheCoins.reserve(reserve_entries);
 }
 
 size_t CCoinsViewCache::DynamicMemoryUsage() const
@@ -393,6 +418,7 @@ void CCoinsViewCache::SanityCheck() const
 
 static const uint64_t MIN_TRANSACTION_OUTPUT_WEIGHT{WITNESS_SCALE_FACTOR * ::GetSerializeSize(CTxOut())};
 static const uint64_t MAX_OUTPUTS_PER_BLOCK{MAX_BLOCK_WEIGHT / MIN_TRANSACTION_OUTPUT_WEIGHT};
+const size_t CCoinsViewCache::CONNECT_BLOCK_VIEW_RESERVE_ENTRIES{size_t(2 * MAX_OUTPUTS_PER_BLOCK)};
 
 const Coin& AccessByTxid(const CCoinsViewCache& view, const Txid& txid)
 {

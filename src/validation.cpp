@@ -1852,11 +1852,11 @@ CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
     : m_dbview{std::move(db_params), std::move(options)},
       m_catcherview(&m_dbview) {}
 
-void CoinsViews::InitCache()
+void CoinsViews::InitCache(size_t cache_size_bytes, float max_load_factor, size_t connect_block_view_reserve_entries)
 {
     AssertLockHeld(::cs_main);
-    m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview);
-    m_connect_block_view = std::make_unique<CCoinsViewCache>(&*m_cacheview);
+    m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview, /*deterministic=*/false, CCoinsViewCache::ReservedEntries(cache_size_bytes, max_load_factor), max_load_factor);
+    m_connect_block_view = std::make_unique<CCoinsViewCache>(&*m_cacheview, /*deterministic=*/false, connect_block_view_reserve_entries, max_load_factor);
 }
 
 Chainstate::Chainstate(
@@ -1927,12 +1927,12 @@ void Chainstate::InitCoinsDB(
     m_coinsdb_cache_size_bytes = cache_size_bytes;
 }
 
-void Chainstate::InitCoinsCache(size_t cache_size_bytes)
+void Chainstate::InitCoinsCache(size_t cache_size_bytes, size_t connect_block_view_reserve_entries, float max_load_factor)
 {
     AssertLockHeld(::cs_main);
     assert(m_coins_views != nullptr);
     m_coinstip_cache_size_bytes = cache_size_bytes;
-    m_coins_views->InitCache();
+    m_coins_views->InitCache(cache_size_bytes, max_load_factor, connect_block_view_reserve_entries);
 }
 
 // Note that though this is marked const, we may end up modifying `m_cached_finished_ibd`, which
@@ -2711,12 +2711,12 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
 {
     AssertLockHeld(::cs_main);
     const int64_t nMempoolUsage = m_mempool ? m_mempool->DynamicMemoryUsage() : 0;
-    int64_t cacheSize = CoinsTip().DynamicMemoryUsage();
+    int64_t cacheSize = CoinsTip().ActiveMemoryUsage();
     int64_t nTotalSpace =
         max_coins_cache_size_bytes + std::max<int64_t>(int64_t(max_mempool_size_bytes) - nMempoolUsage, 0);
 
     if (cacheSize > nTotalSpace) {
-        LogInfo("Cache size (%s) exceeds total space (%s)\n", cacheSize, nTotalSpace);
+        LogInfo("Coins cache active (%s) exceeds total space (%s)\n", cacheSize, nTotalSpace);
         return CoinsCacheSizeState::CRITICAL;
     } else if (cacheSize > LargeCoinsCacheThreshold(nTotalSpace)) {
         return CoinsCacheSizeState::LARGE;
@@ -4756,7 +4756,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
             }
         }
         // check level 3: check for inconsistencies during memory-only disconnect of tip blocks
-        size_t curr_coins_usage = coins.DynamicMemoryUsage() + chainstate.CoinsTip().DynamicMemoryUsage();
+        size_t curr_coins_usage = coins.ActiveMemoryUsage() + chainstate.CoinsTip().ActiveMemoryUsage();
 
         if (nCheckLevel >= 3) {
             if (curr_coins_usage <= chainstate.m_coinstip_cache_size_bytes) {
@@ -5533,6 +5533,7 @@ std::string Chainstate::ToString()
 bool Chainstate::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
 {
     AssertLockHeld(::cs_main);
+    const float max_load_factor{CoinsTip().GetMaxLoadFactor()};
     if (coinstip_size == m_coinstip_cache_size_bytes &&
             coinsdb_size == m_coinsdb_cache_size_bytes) {
         // Cache sizes are unchanged, no need to continue.
@@ -5552,11 +5553,16 @@ bool Chainstate::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
     bool ret;
 
     if (coinstip_size > old_coinstip_size) {
+        CoinsTip().ReserveCache(coinstip_size, max_load_factor);
         // Likely no need to flush if cache sizes have grown.
         ret = FlushStateToDisk(state, FlushStateMode::IF_NEEDED);
     } else {
         // Otherwise, flush state to disk and deallocate the in-memory coins map.
         ret = FlushStateToDisk(state, FlushStateMode::ALWAYS);
+        if (ret) {
+            CoinsTip().ReallocateCache();
+            CoinsTip().ReserveCache(coinstip_size, max_load_factor);
+        }
     }
     return ret;
 }
@@ -5732,7 +5738,8 @@ util::Result<CBlockIndex*> ChainstateManager::ActivateSnapshot(
             static_cast<size_t>(current_coinsdb_cache_size * SNAPSHOT_CACHE_PERC),
             in_memory, /*should_wipe=*/false);
         snapshot_chainstate->InitCoinsCache(
-            static_cast<size_t>(current_coinstip_cache_size * SNAPSHOT_CACHE_PERC));
+            static_cast<size_t>(current_coinstip_cache_size * SNAPSHOT_CACHE_PERC),
+            CCoinsViewCache::CONNECT_BLOCK_VIEW_RESERVE_ENTRIES);
     }
 
     auto cleanup_bad_snapshot = [&](bilingual_str reason) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
