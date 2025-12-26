@@ -97,6 +97,8 @@ class PoolResource final
      */
     const size_t m_chunk_size_bytes;
 
+    size_t m_bytes_in_use{0};
+
     /**
      * Contains all allocated pools of memory, used to free the data in the destructor.
      */
@@ -227,6 +229,7 @@ public:
                 auto* next{m_free_lists[num_alignments]->m_next};
                 ASAN_POISON_MEMORY_REGION(m_free_lists[num_alignments], sizeof(ListNode));
                 ASAN_UNPOISON_MEMORY_REGION(m_free_lists[num_alignments], bytes);
+                m_bytes_in_use += num_alignments * ELEM_ALIGN_BYTES;
                 return std::exchange(m_free_lists[num_alignments], next);
             }
 
@@ -239,6 +242,7 @@ public:
 
             // Make sure we use the right amount of bytes for that freelist (might be rounded up),
             ASAN_UNPOISON_MEMORY_REGION(m_available_memory_it, round_bytes);
+            m_bytes_in_use += num_alignments * ELEM_ALIGN_BYTES;
             return std::exchange(m_available_memory_it, m_available_memory_it + round_bytes);
         }
 
@@ -253,6 +257,7 @@ public:
     {
         if (IsFreeListUsable(bytes, alignment)) {
             const std::size_t num_alignments = NumElemAlignBytes(bytes);
+            m_bytes_in_use -= num_alignments * ELEM_ALIGN_BYTES;
             // put the memory block into the linked list. We can placement construct the FreeList
             // into the memory since we can be sure the alignment is correct.
             ASAN_UNPOISON_MEMORY_REGION(p, sizeof(ListNode));
@@ -279,6 +284,8 @@ public:
     {
         return m_chunk_size_bytes;
     }
+
+    size_t BytesInUse() const noexcept { return m_bytes_in_use; }
 };
 
 

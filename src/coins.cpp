@@ -72,8 +72,16 @@ void CCoinsViewCache::Reset() noexcept
     m_sentinel.second.SelfRef(m_sentinel);
 }
 
-size_t CCoinsViewCache::DynamicMemoryUsage() const {
+size_t CCoinsViewCache::DynamicMemoryUsage() const
+{
     return memusage::DynamicUsage(cacheCoins) + cachedCoinsUsage;
+}
+
+size_t CCoinsViewCache::ActiveMemoryUsage() const
+{
+    const size_t node_pool_bytes{cacheCoins.get_allocator().resource()->BytesInUse()};
+    const size_t bucket_array_bytes{memusage::MallocUsage(sizeof(void*) * cacheCoins.bucket_count())};
+    return cachedCoinsUsage + node_pool_bytes + bucket_array_bytes;
 }
 
 CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint) const {
