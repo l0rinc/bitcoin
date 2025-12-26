@@ -377,7 +377,7 @@ protected:
     mutable size_t cachedCoinsUsage{0};
 
 public:
-    static constexpr float DEFAULT_MAX_LOAD_FACTOR{0.75f};
+    static constexpr float DEFAULT_MAX_LOAD_FACTOR{1.0f};
 
     static size_t ReservedEntries(size_t max_coins_cache_size_bytes, float max_load_factor) noexcept;
     static const size_t CONNECT_BLOCK_VIEW_RESERVE_ENTRIES;
