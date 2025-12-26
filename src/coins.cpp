@@ -13,6 +13,15 @@ TRACEPOINT_SEMAPHORE(utxocache, add);
 TRACEPOINT_SEMAPHORE(utxocache, spent);
 TRACEPOINT_SEMAPHORE(utxocache, uncache);
 
+namespace {
+void WarnOnCacheRehash(const CCoinsMap& cache_coins, size_t buckets_before)
+{
+    if (const size_t buckets_after{cache_coins.bucket_count()}; buckets_after > buckets_before) {
+        LogWarning("Coins cache buckets unexpectedly grew from %zu to %zu.", buckets_before, buckets_after);
+    }
+}
+}
+
 std::optional<Coin> CCoinsView::GetCoin(const COutPoint& outpoint) const { return std::nullopt; }
 uint256 CCoinsView::GetBestBlock() const { return uint256(); }
 std::vector<uint256> CCoinsView::GetHeadBlocks() const { return std::vector<uint256>(); }
@@ -68,7 +77,9 @@ size_t CCoinsViewCache::DynamicMemoryUsage() const {
 }
 
 CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint) const {
+    const size_t buckets_before{cacheCoins.bucket_count()};
     const auto [ret, inserted] = cacheCoins.try_emplace(outpoint);
+    if (inserted) WarnOnCacheRehash(cacheCoins, buckets_before);
     if (inserted) {
         if (auto coin{base->GetCoin(outpoint)}) {
             ret->second.coin = std::move(*coin);
@@ -96,7 +107,9 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possi
     if (coin.out.scriptPubKey.IsUnspendable()) return;
     CCoinsMap::iterator it;
     bool inserted;
+    const size_t buckets_before{cacheCoins.bucket_count()};
     std::tie(it, inserted) = cacheCoins.emplace(std::piecewise_construct, std::forward_as_tuple(outpoint), std::tuple<>());
+    if (inserted) WarnOnCacheRehash(cacheCoins, buckets_before);
     bool fresh = false;
     if (!possible_overwrite) {
         if (!it->second.coin.IsSpent()) {
@@ -134,8 +147,10 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possi
 
 void CCoinsViewCache::EmplaceCoinInternalDANGER(COutPoint&& outpoint, Coin&& coin) {
     const auto mem_usage{coin.DynamicMemoryUsage()};
+    const size_t buckets_before{cacheCoins.bucket_count()};
     auto [it, inserted] = cacheCoins.try_emplace(std::move(outpoint), std::move(coin));
     if (inserted) {
+        WarnOnCacheRehash(cacheCoins, buckets_before);
         CCoinsCacheEntry::SetDirty(*it, m_sentinel);
         cachedCoinsUsage += mem_usage;
     }
@@ -211,8 +226,10 @@ void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& ha
         if (!it->second.IsDirty()) { // TODO a cursor can only contain dirty entries
             continue;
         }
+        const size_t buckets_before{cacheCoins.bucket_count()};
         auto [itUs, inserted]{cacheCoins.try_emplace(it->first)};
         if (inserted) {
+            WarnOnCacheRehash(cacheCoins, buckets_before);
             if (it->second.IsFresh() && it->second.coin.IsSpent()) {
                 cacheCoins.erase(itUs); // TODO fresh coins should have been removed at spend
             } else {
