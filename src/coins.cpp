@@ -56,7 +56,7 @@ CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic) :
     CCoinsViewBacked(baseIn), m_deterministic(deterministic),
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
-    constexpr float max_load_factor{0.75f};
+    constexpr float max_load_factor{0.5f};
     cacheCoins.max_load_factor(max_load_factor);
     m_sentinel.second.SelfRef(m_sentinel);
 }
