@@ -186,6 +186,12 @@ BOOST_AUTO_TEST_CASE(memusage_test)
         auto max_nodes_per_chunk = resource.ChunkSizeBytes() / sizeof(Map::value_type);
         auto min_num_allocated_chunks = resource_map.size() / max_nodes_per_chunk + 1;
         BOOST_TEST(resource.NumAllocatedChunks() >= min_num_allocated_chunks);
+
+        size_t chunks_before_clear = resource.NumAllocatedChunks();
+        BOOST_CHECK(chunks_before_clear > 0);
+        resource_map.clear();
+        BOOST_CHECK_EQUAL(resource.NumAllocatedChunks(), chunks_before_clear);
+        BOOST_CHECK_EQUAL(resource.BytesInUse(), 0);
     }
 
     PoolResourceTester::CheckAllDataAccountedFor(resource);
