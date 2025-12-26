@@ -451,7 +451,7 @@ public:
      * If will_reuse_cache is false, the cache will retain the same memory footprint
      * after flushing and should be destroyed to deallocate.
      */
-    void Flush(bool will_reuse_cache = true);
+    void Flush();
 
     /**
      * Push the modifications applied to this cache to its base while retaining
