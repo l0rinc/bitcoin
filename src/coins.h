@@ -355,7 +355,7 @@ public:
     bool HaveCoin(const COutPoint &outpoint) const override;
     uint256 GetBestBlock() const override;
     std::vector<uint256> GetHeadBlocks() const override;
-    void SetBackend(CCoinsView &viewIn);
+    virtual void SetBackend(CCoinsView& viewIn);
     bool BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlock) override;
     std::unique_ptr<CCoinsViewCursor> Cursor() const override;
     size_t EstimateSize() const override;
@@ -462,7 +462,7 @@ public:
      * to be forgotten.
      * If false is returned, the state of this cache (and its backing view) will be undefined.
      */
-    bool Sync();
+    virtual bool Sync();
 
     /**
      * Removes the UTXO with the given outpoint from the cache, if it is

@@ -202,8 +202,27 @@ public:
         return CCoinsViewCache::Flush(will_reuse_cache);
     }
 
-    explicit CoinsViewCacheAsync(CCoinsView* base_in, int32_t num_workers = WORKER_THREADS) noexcept
-        : CCoinsViewCache{base_in}, m_barrier{num_workers + 1}
+    bool Sync() override
+    {
+        ResetFetchingState();
+        return CCoinsViewCache::Sync();
+    }
+
+    bool BatchWrite(CoinsViewCacheCursor& cursor, const uint256& hash_block) override
+    {
+        ResetFetchingState();
+        return CCoinsViewCache::BatchWrite(cursor, hash_block);
+    }
+
+    void SetBackend(CCoinsView& viewIn) override
+    {
+        ResetFetchingState();
+        CCoinsViewBacked::SetBackend(viewIn);
+    }
+
+    explicit CoinsViewCacheAsync(CCoinsView* base_in, bool deterministic = false,
+        int32_t num_workers = WORKER_THREADS) noexcept
+        : CCoinsViewCache{base_in, deterministic}, m_barrier{num_workers + 1}
     {
         for (const auto n : std::views::iota(0, num_workers)) {
             m_worker_threads.emplace_back([this, n] {
