@@ -4724,7 +4724,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
     }
     nCheckLevel = std::max(0, std::min(4, nCheckLevel));
     LogInfo("Verifying last %i blocks at level %i", nCheckDepth, nCheckLevel);
-    CCoinsViewCache coins(&coinsview);
+    CoinsViewCacheAsync coins(&coinsview);
     CBlockIndex* pindex;
     CBlockIndex* pindexFailure = nullptr;
     int nGoodTransactions = 0;
@@ -4826,6 +4826,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
                 LogError("Verification error: ReadBlock failed at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
                 return VerifyDBResult::CORRUPTED_BLOCK_DB;
             }
+            coins.StartFetching(block);
             if (!chainstate.ConnectBlock(block, state, pindex, coins)) {
                 LogError("Verification error: found unconnectable block at %d, hash=%s (%s)", pindex->nHeight, pindex->GetBlockHash().ToString(), state.ToString());
                 return VerifyDBResult::CORRUPTED_BLOCK_DB;
@@ -4846,7 +4847,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
 }
 
 /** Apply the effects of a block on the utxo cache, ignoring that it may already have been applied. */
-bool Chainstate::RollforwardBlock(const CBlockIndex* pindex, CCoinsViewCache& inputs)
+bool Chainstate::RollforwardBlock(const CBlockIndex* pindex, CoinsViewCacheAsync& inputs)
 {
     AssertLockHeld(cs_main);
     // TODO: merge with ConnectBlock
@@ -4856,6 +4857,7 @@ bool Chainstate::RollforwardBlock(const CBlockIndex* pindex, CCoinsViewCache& in
         return false;
     }
 
+    inputs.StartFetching(block);
     for (const CTransactionRef& tx : block.vtx) {
         if (!tx->IsCoinBase()) {
             for (const CTxIn &txin : tx->vin) {
@@ -4873,7 +4875,7 @@ bool Chainstate::ReplayBlocks()
     LOCK(cs_main);
 
     CCoinsView& db = this->CoinsDB();
-    CCoinsViewCache cache(&db);
+    CoinsViewCacheAsync cache(&db);
 
     std::vector<uint256> hashHeads = db.GetHeadBlocks();
     if (hashHeads.empty()) return true; // We're already in a consistent state.
@@ -4950,7 +4952,7 @@ bool Chainstate::ReplayBlocks()
     }
 
     cache.SetBestBlock(pindexNew->GetBlockHash());
-    cache.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
+    cache.Flush(/*will_reuse_cache=*/false); // cache goes out of scope
     m_chainman.GetNotifications().progress(bilingual_str{}, 100, false);
     return true;
 }
