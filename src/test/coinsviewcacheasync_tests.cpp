@@ -131,6 +131,9 @@ BOOST_AUTO_TEST_CASE(fetch_inputs_from_cache)
     for (auto i{0}; i < 3; ++i) {
         view.StartFetching(block);
         CheckCache(block, view);
+        // Also allow StartFetching() to be called repeatedly without requiring a full Reset().
+        view.StartFetching(block);
+        CheckCache(block, view);
         view.Reset();
     }
 }

@@ -25,12 +25,13 @@
 static constexpr int32_t WORKER_THREADS{4};
 
 /**
- * CCoinsViewCache subclass that asynchronously fetches all block inputs in parallel during ConnectBlock without
- * mutating the base cache.
+ * CCoinsViewCache subclass that asynchronously prefetches block inputs in parallel without mutating the base cache.
  *
- * Only used in ConnectBlock to pass as an ephemeral view that can be reset if the block is invalid.
- * It provides the same interface as CCoinsViewCache, overriding the FetchCoin private method, Reset, and Flush.
- * It adds an additional StartFetching method to provide the block.
+ * Used during block connection to avoid polluting CoinsTip() with cache misses while connecting a potentially-invalid
+ * block.
+ *
+ * It provides the same public API as CCoinsViewCache and adds StartFetching() to begin prefetching for a given block.
+ * Methods that mutate cacheCoins or the backing view are overridden to stop worker threads first.
  *
  * The cache spawns a fixed set of worker threads that fetch Coins for each input in a block.
  * When FetchCoin() is called, the main thread waits for the corresponding coin to be fetched and returns it.
@@ -177,6 +178,7 @@ public:
     //! Fetch all block inputs.
     void StartFetching(const CBlock& block) noexcept
     {
+        ResetFetchingState();
         // Loop through the inputs of the block and set them in the queue. Also construct the set of txids to filter.
         for (const auto& tx : block.vtx | std::views::drop(1)) [[likely]] {
             for (const auto& input : tx->vin) [[likely]] m_inputs.emplace_back(input.prevout);
