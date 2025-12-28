@@ -154,9 +154,13 @@ class PoolResource final
      */
     void AllocateChunk()
     {
-        // if there is still any available memory left, put it into the freelist.
-        size_t remaining_available_bytes = std::distance(m_available_memory_it, m_available_memory_end);
-        if (0 != remaining_available_bytes) {
+        // If there is still any available memory left, put it into the freelist.
+        size_t remaining_available_bytes{0};
+        if (m_available_memory_it != nullptr) {
+            assert(m_available_memory_end != nullptr);
+            remaining_available_bytes = std::distance(m_available_memory_it, m_available_memory_end);
+        }
+        if (remaining_available_bytes != 0) {
             ASAN_UNPOISON_MEMORY_REGION(m_available_memory_it, sizeof(ListNode));
             PlacementAddToList(m_available_memory_it, m_free_lists[remaining_available_bytes / ELEM_ALIGN_BYTES]);
             ASAN_POISON_MEMORY_REGION(m_available_memory_it, sizeof(ListNode));
