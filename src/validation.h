@@ -488,6 +488,10 @@ public:
     //! can fit per the dbcache setting.
     std::unique_ptr<CCoinsViewCache> m_cacheview GUARDED_BY(cs_main);
 
+    //! A per-block cache used for ConnectBlock to not pollute the underlying cache
+    //! with newly created coins in case the block is invalid.
+    std::unique_ptr<CCoinsViewCache> m_connect_block_view GUARDED_BY(cs_main);
+
     //! This constructor initializes CCoinsViewDB and CCoinsViewErrorCatcher instances, but it
     //! *does not* create a CCoinsViewCache instance by default. This is done separately because the
     //! presence of the cache has implications on whether or not we're allowed to flush the cache's
@@ -682,6 +686,13 @@ public:
         AssertLockHeld(::cs_main);
         Assert(m_coins_views);
         return *Assert(m_coins_views->m_cacheview);
+    }
+
+    CCoinsViewCache& ConnectBlockView() EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        AssertLockHeld(::cs_main);
+        Assert(m_coins_views);
+        return *Assert(m_coins_views->m_connect_block_view);
     }
 
     //! @returns A reference to the on-disk UTXO set database.

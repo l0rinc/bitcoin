@@ -74,7 +74,10 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& backend
                 }
             },
             [&] {
-                (void)coins_view_cache.Flush(/*will_reuse_cache=*/fuzzed_data_provider.ConsumeBool());
+                const auto will_reuse_cache{fuzzed_data_provider.ConsumeBool()};
+                (void)coins_view_cache.Flush(will_reuse_cache);
+                // Set best block hash to non-null to satisfy the assertion in CCoinsViewDB::BatchWrite().
+                if (!will_reuse_cache && is_db) coins_view_cache.SetBestBlock(uint256::ONE);
             },
             [&] {
                 (void)coins_view_cache.Sync();
@@ -84,6 +87,11 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& backend
                 // Set best block hash to non-null to satisfy the assertion in CCoinsViewDB::BatchWrite().
                 if (is_db && best_block.IsNull()) best_block = uint256::ONE;
                 coins_view_cache.SetBestBlock(best_block);
+            },
+            [&] {
+                coins_view_cache.Reset();
+                // Set best block hash to non-null to satisfy the assertion in CCoinsViewDB::BatchWrite().
+                if (is_db) coins_view_cache.SetBestBlock(uint256::ONE);
             },
             [&] {
                 Coin move_to;

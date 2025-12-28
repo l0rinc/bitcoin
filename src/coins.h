@@ -384,6 +384,9 @@ public:
      */
     CCoinsViewCache(const CCoinsViewCache &) = delete;
 
+    void Start();
+    virtual void Reset() noexcept;
+
     // Standard CCoinsView methods
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
     bool HaveCoin(const COutPoint &outpoint) const override;
@@ -476,7 +479,7 @@ public:
     //! See: https://stackoverflow.com/questions/42114044/how-to-release-unordered-map-memory
     void ReallocateCache();
 
-    //! Run an internal sanity check on the cache data structure. */
+    //! Run an internal sanity check on the cache data structure.
     void SanityCheck() const;
 
 private:

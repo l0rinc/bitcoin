@@ -38,7 +38,25 @@ CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic) :
     CCoinsViewBacked(baseIn), m_deterministic(deterministic),
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
-    (void)base->GetBestBlock(); // Sanity check validity of base
+    CCoinsViewCache::Reset();
+    Start();
+}
+
+void CCoinsViewCache::Start()
+{
+    Assert(cacheCoins.empty());
+    Assert(cachedCoinsUsage == 0);
+    Assert(m_sentinel.second.Next() == &m_sentinel);
+    Assert(m_sentinel.second.Prev() == &m_sentinel);
+
+    SetBestBlock(base->GetBestBlock());
+}
+
+void CCoinsViewCache::Reset() noexcept
+{
+    cacheCoins.clear();
+    cachedCoinsUsage = 0;
+    hashBlock.SetNull();
     m_sentinel.second.SelfRef(m_sentinel);
 }
 
@@ -174,13 +192,13 @@ bool CCoinsViewCache::HaveCoinInCache(const COutPoint &outpoint) const {
     return (it != cacheCoins.end() && !it->second.coin.IsSpent());
 }
 
-uint256 CCoinsViewCache::GetBestBlock() const {
-    if (hashBlock.IsNull())
-        hashBlock = base->GetBestBlock();
+uint256 CCoinsViewCache::GetBestBlock() const
+{
     return hashBlock;
 }
 
-void CCoinsViewCache::SetBestBlock(const uint256 &hashBlockIn) {
+void CCoinsViewCache::SetBestBlock(const uint256& hashBlockIn)
+{
     hashBlock = hashBlockIn;
 }
 
@@ -246,19 +264,21 @@ bool CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &ha
             }
         }
     }
-    hashBlock = hashBlockIn;
+    SetBestBlock(hashBlockIn);
     return true;
 }
 
 bool CCoinsViewCache::Flush(bool will_reuse_cache) {
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/true)};
-    bool fOk = base->BatchWrite(cursor, hashBlock);
+    bool fOk = base->BatchWrite(cursor, GetBestBlock());
     if (fOk) {
-        cacheCoins.clear();
         if (will_reuse_cache) {
+            cacheCoins.clear();
+            cachedCoinsUsage = 0;
             ReallocateCache();
+        } else {
+            Reset();
         }
-        cachedCoinsUsage = 0;
     }
     return fOk;
 }
@@ -266,7 +286,7 @@ bool CCoinsViewCache::Flush(bool will_reuse_cache) {
 bool CCoinsViewCache::Sync()
 {
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/false)};
-    bool fOk = base->BatchWrite(cursor, hashBlock);
+    bool fOk = base->BatchWrite(cursor, GetBestBlock());
     if (fOk) {
         if (m_sentinel.second.Next() != &m_sentinel) {
             /* BatchWrite must clear flags of all entries */
