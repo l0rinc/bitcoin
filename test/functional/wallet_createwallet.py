@@ -35,14 +35,14 @@ class CreateWalletTest(BitcoinTestFramework):
         dir_path = node.wallets_path / wallet_name
         dir_path.mkdir(parents=True)
         original_dir_perms = dir_path.stat().st_mode
-        os.chmod(dir_path, original_dir_perms & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
-        if is_dir_writable(dir_path):
-            self.log.warning("Skipping non-writable directory test: unable to enforce read-only permissions")
-        else:
-            # Run actual test
-            assert_raises_rpc_error(-4, f"SQLiteDatabase: Failed to open database in directory '{str(dir_path)}': directory is not writable", node.createwallet, wallet_name=wallet_name)
-        # Reset directory permissions for cleanup
-        dir_path.chmod(original_dir_perms)
+        try:
+            os.chmod(dir_path, original_dir_perms & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+            if is_dir_writable(dir_path):
+                self.log.warning("Skipping non-writable directory test: unable to enforce read-only permissions")
+            else:
+                assert_raises_rpc_error(-4, f"SQLiteDatabase: Failed to open database in directory '{str(dir_path)}': directory is not writable", node.createwallet, wallet_name=wallet_name, descriptors=True)
+        finally:
+            dir_path.chmod(original_dir_perms)
 
 
     def run_test(self):

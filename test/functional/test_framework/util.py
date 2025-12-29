@@ -728,6 +728,7 @@ def sync_txindex(test_framework, node):
     test_framework.wait_until(lambda: node.getindexinfo("txindex")["txindex"]["synced"])
     test_framework.log.debug(f"Synced in {time.time() - sync_start} seconds")
 
+
 def wallet_importprivkey(wallet_rpc, privkey, timestamp, *, label=""):
     desc = descsum_create("combo(" + privkey + ")")
     req = [{
@@ -737,6 +738,7 @@ def wallet_importprivkey(wallet_rpc, privkey, timestamp, *, label=""):
     }]
     import_res = wallet_rpc.importdescriptors(req)
     assert_equal(import_res[0]["success"], True)
+
 
 def is_dir_writable(dir_path: pathlib.Path) -> bool:
     """Return True if we can create a file in the directory, False otherwise"""
