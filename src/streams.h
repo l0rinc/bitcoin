@@ -211,8 +211,8 @@ public:
         }
         memcpy(dst.data(), &vch[m_read_pos], dst.size());
         if (next_read_pos.value() == vch.size()) {
-            m_read_pos = 0;
-            vch.clear();
+            // If fully consumed, reset to empty state.
+            clear();
             return;
         }
         m_read_pos = next_read_pos.value();
@@ -226,8 +226,8 @@ public:
             throw std::ios_base::failure("DataStream::ignore(): end of data");
         }
         if (next_read_pos.value() == vch.size()) {
-            m_read_pos = 0;
-            vch.clear();
+            // If all bytes are ignored, reset to empty state.
+            clear();
             return;
         }
         m_read_pos = next_read_pos.value();
