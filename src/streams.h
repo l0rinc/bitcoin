@@ -9,7 +9,6 @@
 #include <logging.h>
 #include <serialize.h>
 #include <span.h>
-#include <support/allocators/zeroafterfree.h>
 #include <util/check.h>
 #include <util/obfuscation.h>
 #include <util/overflow.h>
@@ -18,8 +17,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
-#include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <ios>
 #include <limits>
@@ -129,20 +126,17 @@ public:
 class DataStream
 {
 protected:
-    using vector_type = SerializeData;
-    vector_type vch;
-    vector_type::size_type m_read_pos{0};
+    using Storage = std::vector<std::byte>;
+    Storage vch;
+    Storage::size_type m_read_pos{0};
 
 public:
-    typedef vector_type::allocator_type allocator_type;
-    typedef vector_type::size_type size_type;
-    typedef vector_type::difference_type difference_type;
-    typedef vector_type::reference reference;
-    typedef vector_type::const_reference const_reference;
-    typedef vector_type::value_type value_type;
-    typedef vector_type::iterator iterator;
-    typedef vector_type::const_iterator const_iterator;
-    typedef vector_type::reverse_iterator reverse_iterator;
+    using size_type = Storage::size_type;
+    using reference = Storage::reference;
+    using const_reference = Storage::const_reference;
+    using value_type = Storage::value_type;
+    using iterator = Storage::iterator;
+    using const_iterator = Storage::const_iterator;
 
     explicit DataStream() = default;
     explicit DataStream(std::span<const uint8_t> sp) : DataStream{std::as_bytes(sp)} {}
