@@ -466,7 +466,7 @@ enum class FlushStateMode: uint8_t {
 };
 
 /**
- * A convenience class for constructing the CCoinsView* hierarchy used
+ * A convenience class for constructing the CCoinsView& hierarchy used
  * to facilitate access to the UTXO set.
  *
  * This class consists of an arrangement of layered CCoinsView objects,

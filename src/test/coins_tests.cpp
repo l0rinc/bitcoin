@@ -84,7 +84,7 @@ class CCoinsViewCacheTest : public CCoinsViewCache
 {
 public:
     CCoinsViewCacheTest() = default;
-    explicit CCoinsViewCacheTest(CCoinsView* _base) : CCoinsViewCache(_base) {}
+    explicit CCoinsViewCacheTest(CCoinsView& _base, bool deterministic = false) : CCoinsViewCache(_base, deterministic) {}
 
     void SelfTest(bool sanity_check = true) const
     {
@@ -126,7 +126,7 @@ struct CacheTest : BasicTestingSetup {
 // of best block on flush. This is necessary when using CCoinsViewDB as the base,
 // otherwise we'll hit an assertion in BatchWrite.
 //
-void SimulationTest(CCoinsView* base, bool fake_best_block)
+void SimulationTest(CCoinsView& base, bool fake_best_block)
 {
     // Various coverage trackers.
     bool removed_all_caches = false;
@@ -258,13 +258,13 @@ void SimulationTest(CCoinsView* base, bool fake_best_block)
             }
             if (stack.size() == 0 || (stack.size() < 4 && m_rng.randbool())) {
                 //Add a new cache
-                CCoinsView* tip = base;
+                CCoinsView* tip = &base;
                 if (stack.size() > 0) {
                     tip = stack.back().get();
                 } else {
                     removed_all_caches = true;
                 }
-                stack.push_back(std::make_unique<CCoinsViewCacheTest>(tip));
+                stack.push_back(std::make_unique<CCoinsViewCacheTest>(*tip));
                 if (stack.size() == 4) {
                     reached_4_caches = true;
                 }
@@ -292,7 +292,7 @@ BOOST_FIXTURE_TEST_SUITE(coins_tests_base, BasicTestingSetup)
 BOOST_FIXTURE_TEST_CASE(coins_cache_base_simulation_test, CacheTest)
 {
     CCoinsViewTest base{m_rng};
-    SimulationTest(&base, false);
+    SimulationTest(base, false);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -302,7 +302,7 @@ BOOST_FIXTURE_TEST_SUITE(coins_tests_dbbase, BasicTestingSetup)
 BOOST_FIXTURE_TEST_CASE(coins_cache_dbbase_simulation_test, CacheTest)
 {
     CCoinsViewDB db_base{{.path = "test", .cache_bytes = 1 << 23, .memory_only = true}, {}};
-    SimulationTest(&db_base, true);
+    SimulationTest(db_base, true);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -343,7 +343,7 @@ BOOST_FIXTURE_TEST_CASE(updatecoins_simulation_test, UpdateTest)
     // The cache stack.
     CCoinsViewTest base{m_rng}; // A CCoinsViewTest at the bottom.
     std::vector<std::unique_ptr<CCoinsViewCacheTest>> stack; // A stack of CCoinsViewCaches on top.
-    stack.push_back(std::make_unique<CCoinsViewCacheTest>(&base)); // Start with one cache.
+    stack.push_back(std::make_unique<CCoinsViewCacheTest>(base)); // Start with one cache.
 
     // Track the txids we've used in various sets
     std::set<COutPoint> coinbase_coins;
@@ -515,7 +515,7 @@ BOOST_FIXTURE_TEST_CASE(updatecoins_simulation_test, UpdateTest)
                 if (stack.size() > 0) {
                     tip = stack.back().get();
                 }
-                stack.push_back(std::make_unique<CCoinsViewCacheTest>(tip));
+                stack.push_back(std::make_unique<CCoinsViewCacheTest>(*tip));
             }
         }
     }
@@ -683,7 +683,7 @@ public:
     }
 
     CCoinsViewCacheTest base;
-    CCoinsViewCacheTest cache{&base};
+    CCoinsViewCacheTest cache{base, /*deterministic=*/false};
 };
 
 static void CheckAccessCoin(const CAmount base_value, const MaybeCoin& cache_coin, const MaybeCoin& expected)
@@ -1055,8 +1055,8 @@ BOOST_FIXTURE_TEST_CASE(ccoins_flush_behavior, FlushTest)
     // Create two in-memory caches atop a leveldb view.
     CCoinsViewDB base{{.path = "test", .cache_bytes = 1 << 23, .memory_only = true}, {}};
     std::vector<std::unique_ptr<CCoinsViewCacheTest>> caches;
-    caches.push_back(std::make_unique<CCoinsViewCacheTest>(&base));
-    caches.push_back(std::make_unique<CCoinsViewCacheTest>(caches.back().get()));
+    caches.push_back(std::make_unique<CCoinsViewCacheTest>(base));
+    caches.push_back(std::make_unique<CCoinsViewCacheTest>(*caches.back(), /*deterministic=*/false));
 
     for (const auto& view : caches) {
         TestFlushBehavior(view.get(), base, caches, /*do_erasing_flush=*/false);

@@ -365,20 +365,20 @@ public:
 class CCoinsViewBacked : public CCoinsView
 {
 protected:
-    CCoinsView* base;
+    std::reference_wrapper<CCoinsView> base;
 
 public:
-    explicit CCoinsViewBacked(CCoinsView* viewIn) : base{viewIn} {}
+    explicit CCoinsViewBacked(CCoinsView& viewIn) : base{viewIn} {}
 
-    void SetBackend(CCoinsView& viewIn) { base = &viewIn; }
+    void SetBackend(CCoinsView& viewIn) { base = viewIn; }
 
-    std::optional<Coin> GetCoin(const COutPoint& outpoint) const override { return base->GetCoin(outpoint); }
-    bool HaveCoin(const COutPoint& outpoint) const override { return base->HaveCoin(outpoint); }
-    uint256 GetBestBlock() const override { return base->GetBestBlock(); }
-    std::vector<uint256> GetHeadBlocks() const override { return base->GetHeadBlocks(); }
-    bool BatchWrite(CoinsViewCacheCursor& cursor, const uint256& hashBlock) override { return base->BatchWrite(cursor, hashBlock); }
-    std::unique_ptr<CCoinsViewCursor> Cursor() const override { return base->Cursor(); }
-    size_t EstimateSize() const override { return base->EstimateSize(); }
+    std::optional<Coin> GetCoin(const COutPoint& outpoint) const override { return base.get().GetCoin(outpoint); }
+    bool HaveCoin(const COutPoint& outpoint) const override { return base.get().HaveCoin(outpoint); }
+    uint256 GetBestBlock() const override { return base.get().GetBestBlock(); }
+    std::vector<uint256> GetHeadBlocks() const override { return base.get().GetHeadBlocks(); }
+    bool BatchWrite(CoinsViewCacheCursor& cursor, const uint256& hashBlock) override { return base.get().BatchWrite(cursor, hashBlock); }
+    std::unique_ptr<CCoinsViewCursor> Cursor() const override { return base.get().Cursor(); }
+    size_t EstimateSize() const override { return base.get().EstimateSize(); }
 };
 
 /** CCoinsView that adds a memory cache for transactions to another CCoinsView */
@@ -402,8 +402,8 @@ protected:
     mutable size_t cachedCoinsUsage{0};
 
 public:
-    CCoinsViewCache(CCoinsView *baseIn, bool deterministic = false);
-    CCoinsViewCache() : CCoinsViewCache{&CCoinsViewEmpty::Get()} {}
+    CCoinsViewCache(CCoinsView& baseIn, bool deterministic = false);
+    CCoinsViewCache() : CCoinsViewCache{CCoinsViewEmpty::Get()} {}
 
     /**
      * By deleting the copy constructor, we prevent accidentally using it when one intends to create a cache on top of a base cache.
@@ -537,7 +537,7 @@ const Coin& AccessByTxid(const CCoinsViewCache& cache, const Txid& txid);
 class CCoinsViewErrorCatcher final : public CCoinsViewBacked
 {
 public:
-    explicit CCoinsViewErrorCatcher(CCoinsView* view) : CCoinsViewBacked(view) {}
+    explicit CCoinsViewErrorCatcher(CCoinsView& view) : CCoinsViewBacked(view) {}
 
     void AddReadErrCallback(std::function<void()> f) {
         m_err_callbacks.emplace_back(std::move(f));

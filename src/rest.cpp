@@ -1017,7 +1017,7 @@ static bool rest_getutxos(const std::any& context, HTTPRequest* req, const std::
             // use db+mempool as cache backend in case user likes to query mempool
             LOCK2(cs_main, mempool->cs);
             CCoinsViewCache& viewChain = chainman.ActiveChainstate().CoinsTip();
-            CCoinsViewMemPool viewMempool(&viewChain, *mempool);
+            CCoinsViewMemPool viewMempool(viewChain, *mempool);
             process_utxos(viewMempool, mempool);
         } else {
             LOCK(cs_main);

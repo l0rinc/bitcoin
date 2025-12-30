@@ -13,11 +13,10 @@ TRACEPOINT_SEMAPHORE(utxocache, add);
 TRACEPOINT_SEMAPHORE(utxocache, spent);
 TRACEPOINT_SEMAPHORE(utxocache, uncache);
 
-CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic) :
+CCoinsViewCache::CCoinsViewCache(CCoinsView& baseIn, bool deterministic) :
     CCoinsViewBacked(baseIn), m_deterministic(deterministic),
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
-    (void)base->GetBestBlock(); // Sanity check validity of base
     m_sentinel.second.SelfRef(m_sentinel);
 }
 
@@ -28,7 +27,7 @@ size_t CCoinsViewCache::DynamicMemoryUsage() const {
 CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint) const {
     const auto [ret, inserted] = cacheCoins.try_emplace(outpoint);
     if (inserted) {
-        if (auto coin{base->GetCoin(outpoint)}) {
+        if (auto coin{base.get().GetCoin(outpoint)}) {
             ret->second.coin = std::move(*coin);
             cachedCoinsUsage += ret->second.coin.DynamicMemoryUsage();
             if (ret->second.coin.IsSpent()) { // TODO GetCoin cannot return spent coins
@@ -155,7 +154,7 @@ bool CCoinsViewCache::HaveCoinInCache(const COutPoint &outpoint) const {
 
 uint256 CCoinsViewCache::GetBestBlock() const {
     if (hashBlock.IsNull())
-        hashBlock = base->GetBestBlock();
+        hashBlock = base.get().GetBestBlock();
     return hashBlock;
 }
 
@@ -231,7 +230,7 @@ bool CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &ha
 
 bool CCoinsViewCache::Flush(bool will_reuse_cache) {
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/true)};
-    bool fOk = base->BatchWrite(cursor, hashBlock);
+    bool fOk = base.get().BatchWrite(cursor, hashBlock);
     if (fOk) {
         cacheCoins.clear();
         if (will_reuse_cache) {
@@ -245,7 +244,7 @@ bool CCoinsViewCache::Flush(bool will_reuse_cache) {
 bool CCoinsViewCache::Sync()
 {
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/false)};
-    bool fOk = base->BatchWrite(cursor, hashBlock);
+    bool fOk = base.get().BatchWrite(cursor, hashBlock);
     if (fOk) {
         if (m_sentinel.second.Next() != &m_sentinel) {
             /* BatchWrite must clear flags of all entries */

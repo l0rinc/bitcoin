@@ -44,7 +44,7 @@ struct MinerTestingSetup : public TestingSetup {
     void TestPrioritisedMining(const CScript& scriptPubKey, const std::vector<CTransactionRef>& txFirst) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     bool TestSequenceLocks(const CTransaction& tx, CTxMemPool& tx_mempool) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
-        CCoinsViewMemPool view_mempool{&m_node.chainman->ActiveChainstate().CoinsTip(), tx_mempool};
+        CCoinsViewMemPool view_mempool{m_node.chainman->ActiveChainstate().CoinsTip(), tx_mempool};
         CBlockIndex* tip{m_node.chainman->ActiveChain().Tip()};
         const std::optional<LockPoints> lock_points{CalculateLockPointsAtTip(tip, view_mempool, tx)};
         return lock_points.has_value() && CheckSequenceLocksAtTip(tip, *lock_points);

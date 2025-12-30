@@ -630,7 +630,7 @@ static RPCHelpMan combinerawtransaction()
         ChainstateManager& chainman = EnsureChainman(node);
         LOCK2(cs_main, mempool.cs);
         CCoinsViewCache &viewChain = chainman.ActiveChainstate().CoinsTip();
-        CCoinsViewMemPool viewMempool(&viewChain, mempool);
+        CCoinsViewMemPool viewMempool(viewChain, mempool);
         view.SetBackend(viewMempool); // temporarily switch cache backend to db+mempool view
 
         for (const CTxIn& txin : mergedTx.vin) {
