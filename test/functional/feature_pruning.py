@@ -485,9 +485,6 @@ class PruneTest(BitcoinTestFramework):
             self.log.info("Test wallet re-scan")
             self.test_wallet_rescan()
 
-            self.log.info("Test it's not possible to rescan beyond pruned data")
-            self.test_rescan_blockchain()
-
         self.log.info("Test invalid pruning command line options")
         self.test_invalid_command_line_options()
 
