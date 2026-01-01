@@ -310,6 +310,11 @@ public:
     //! Retrieve the Coin (unspent transaction output) for a given outpoint.
     virtual std::optional<Coin> GetCoin(const COutPoint& outpoint) const;
 
+    //! Retrieve the Coin (unspent transaction output) for a given outpoint, without caching results.
+    //!
+    //! Unlike CCoinsViewCache::GetCoin(), this method does not populate intermediate CCoinsViewCache layers.
+    virtual std::optional<Coin> PeekCoin(const COutPoint& outpoint) const;
+
     //! Just check whether a given outpoint is unspent.
     virtual bool HaveCoin(const COutPoint &outpoint) const;
 
@@ -346,10 +351,11 @@ protected:
 public:
     CCoinsViewBacked(CCoinsView *viewIn);
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
+    std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override;
     bool HaveCoin(const COutPoint &outpoint) const override;
     uint256 GetBestBlock() const override;
     std::vector<uint256> GetHeadBlocks() const override;
-    void SetBackend(CCoinsView &viewIn);
+    virtual void SetBackend(CCoinsView& viewIn);
     bool BatchWrite(CoinsViewCacheCursor& cursor, const uint256 &hashBlock) override;
     std::unique_ptr<CCoinsViewCursor> Cursor() const override;
     size_t EstimateSize() const override;
@@ -384,8 +390,12 @@ public:
      */
     CCoinsViewCache(const CCoinsViewCache &) = delete;
 
+    void Start();
+    virtual void Reset() noexcept;
+
     // Standard CCoinsView methods
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
+    std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override;
     bool HaveCoin(const COutPoint &outpoint) const override;
     uint256 GetBestBlock() const override;
     void SetBestBlock(const uint256 &hashBlock);
@@ -443,7 +453,7 @@ public:
      * after flushing and should be destroyed to deallocate.
      * If false is returned, the state of this cache (and its backing view) will be undefined.
      */
-    bool Flush(bool will_reuse_cache = true);
+    virtual bool Flush(bool will_reuse_cache = true);
 
     /**
      * Push the modifications applied to this cache to its base while retaining
@@ -452,7 +462,7 @@ public:
      * to be forgotten.
      * If false is returned, the state of this cache (and its backing view) will be undefined.
      */
-    bool Sync();
+    virtual bool Sync();
 
     /**
      * Removes the UTXO with the given outpoint from the cache, if it is
@@ -476,7 +486,7 @@ public:
     //! See: https://stackoverflow.com/questions/42114044/how-to-release-unordered-map-memory
     void ReallocateCache();
 
-    //! Run an internal sanity check on the cache data structure. */
+    //! Run an internal sanity check on the cache data structure.
     void SanityCheck() const;
 
 private:
@@ -484,7 +494,7 @@ private:
      * @note this is marked const, but may actually append to `cacheCoins`, increasing
      * memory usage.
      */
-    CCoinsMap::iterator FetchCoin(const COutPoint &outpoint) const;
+    virtual CCoinsMap::iterator FetchCoin(const COutPoint &outpoint) const;
 };
 
 //! Utility function to add all of a transaction's outputs to a cache.

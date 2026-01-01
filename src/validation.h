@@ -10,6 +10,7 @@
 #include <attributes.h>
 #include <chain.h>
 #include <checkqueue.h>
+#include <coinsviewcacheasync.h>
 #include <consensus/amount.h>
 #include <cuckoocache.h>
 #include <deploymentstatus.h>
@@ -488,6 +489,10 @@ public:
     //! can fit per the dbcache setting.
     std::unique_ptr<CCoinsViewCache> m_cacheview GUARDED_BY(cs_main);
 
+    //! Used as an ephemeral view passed into ConnectBlock to avoid polluting the underlying cache
+    //! with input lookups in case the block is invalid, and to prefetch inputs in parallel.
+    std::unique_ptr<CoinsViewCacheAsync> m_connect_block_view GUARDED_BY(cs_main);
+
     //! This constructor initializes CCoinsViewDB and CCoinsViewErrorCatcher instances, but it
     //! *does not* create a CCoinsViewCache instance by default. This is done separately because the
     //! presence of the cache has implications on whether or not we're allowed to flush the cache's
@@ -684,6 +689,13 @@ public:
         return *Assert(m_coins_views->m_cacheview);
     }
 
+    CoinsViewCacheAsync& ConnectBlockView() EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        AssertLockHeld(::cs_main);
+        Assert(m_coins_views);
+        return *Assert(m_coins_views->m_connect_block_view);
+    }
+
     //! @returns A reference to the on-disk UTXO set database.
     CCoinsViewDB& CoinsDB() EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
@@ -852,7 +864,7 @@ protected:
     void InvalidBlockFound(CBlockIndex* pindex, const BlockValidationState& state) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     CBlockIndex* FindMostWorkChain() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
-    bool RollforwardBlock(const CBlockIndex* pindex, CCoinsViewCache& inputs) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool RollforwardBlock(const CBlockIndex* pindex, CoinsViewCacheAsync& inputs) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     void CheckForkWarningConditions() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     void InvalidChainFound(CBlockIndex* pindexNew) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
