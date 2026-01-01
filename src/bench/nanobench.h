@@ -43,7 +43,9 @@
 #include <cstring>       // memcpy
 #include <iosfwd>        // for std::ostream* custom output target in Config
 #include <string>        // all names
+#include <type_traits>   // std::is_void_v
 #include <unordered_map> // holds context information of results
+#include <utility>       // std::forward
 #include <vector>        // holds all results
 
 #define ANKERL_NANOBENCH(x) ANKERL_NANOBENCH_PRIVATE_##x()
@@ -136,6 +138,11 @@ struct Config;
 class Result;
 class Rng;
 class BigO;
+
+namespace detail {
+template <typename SetupOp>
+class SetupRunner;
+} // namespace detail
 
 /**
  * @brief Renders output from a mustache-like template and benchmark results.
@@ -1007,7 +1014,21 @@ public:
     Bench& config(Config const& benchmarkConfig);
     ANKERL_NANOBENCH(NODISCARD) Config const& config() const noexcept;
 
+    /**
+     * @brief Configure an untimed setup step per epoch (fluent API).
+     *
+     * Example: `bench.setup(...).run(...);`
+     */
+    template <typename SetupOp>
+    detail::SetupRunner<std::decay_t<SetupOp>> setup(SetupOp&& setupOp);
+
 private:
+    template <typename SetupOp, typename BenchOp>
+    Bench& runImpl(SetupOp&& setup, BenchOp&& benchOp);
+
+    template <typename SetupOp>
+    friend class detail::SetupRunner;
+
     Config mConfig{};
     std::vector<Result> mResults{};
 };
@@ -1207,29 +1228,77 @@ constexpr uint64_t Rng::rotl(uint64_t x, unsigned k) noexcept {
     return (x << k) | (x >> (64U - k));
 }
 
+namespace detail {
+
+struct NoOp {
+    constexpr void operator()() const noexcept {}
+};
+
+template <typename SetupOp>
+class SetupRunner {
+public:
+    explicit SetupRunner(Bench& bench, SetupOp setup)
+        : mBench(bench), mSetup(std::move(setup)) {}
+
+    template <typename BenchOp>
+    Bench& run(BenchOp&& benchOp) {
+        return mBench.runImpl(std::move(mSetup), std::forward<BenchOp>(benchOp));
+    }
+
+private:
+    Bench& mBench;
+    SetupOp mSetup;
+};
+
+} // namespace detail
+
 template <typename Op>
 ANKERL_NANOBENCH_NO_SANITIZE("integer")
 Bench& Bench::run(Op&& op) {
+    return runImpl(detail::NoOp{}, std::forward<Op>(op));
+}
+
+template <typename SetupOp, typename BenchOp>
+ANKERL_NANOBENCH_NO_SANITIZE("integer")
+Bench& Bench::runImpl(SetupOp&& setup, BenchOp&& benchOp) {
     // It is important that this method is kept short so the compiler can do better optimizations/ inlining of op()
     detail::IterationLogic iterationLogic(*this);
     auto& pc = detail::performanceCounters();
 
     while (auto n = iterationLogic.numIters()) {
-        pc.beginMeasure();
-        Clock::time_point const before = Clock::now();
-        while (n-- > 0) {
-            op();
+        auto measure = [&](auto&& op) {
+            pc.beginMeasure();
+            Clock::time_point const before = Clock::now();
+            while (n-- > 0) {
+                if constexpr (std::is_void_v<decltype(op())>) {
+                    op();
+                } else {
+                    doNotOptimizeAway(op());
+                }
+            }
+            Clock::time_point const after = Clock::now();
+            pc.endMeasure();
+            pc.updateResults(n);
+            iterationLogic.add(after - before, pc);
+        };
+
+        if constexpr (std::is_void_v<decltype(setup())>) {
+            setup();
+            measure([&]() -> decltype(auto) { return benchOp(); });
+        } else {
+            decltype(auto) state = setup();
+            measure([&]() -> decltype(auto) { return benchOp(state); });
         }
-        Clock::time_point const after = Clock::now();
-        pc.endMeasure();
-        pc.updateResults(iterationLogic.numIters());
-        iterationLogic.add(after - before, pc);
     }
     iterationLogic.moveResultTo(mResults);
     return *this;
 }
 
-// Performs all evaluations.
+template <typename SetupOp>
+detail::SetupRunner<std::decay_t<SetupOp>> Bench::setup(SetupOp&& setupOp) {
+    return detail::SetupRunner<std::decay_t<SetupOp>>(*this, std::forward<SetupOp>(setupOp));
+}
+
 template <typename Op>
 Bench& Bench::run(char const* benchmarkName, Op&& op) {
     name(benchmarkName);

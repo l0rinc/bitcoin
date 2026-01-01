@@ -124,17 +124,12 @@ static CAmount make_hard_case(int utxos, std::vector<OutputGroup>& utxo_pool)
 
 static void BnBExhaustion(benchmark::Bench& bench)
 {
-    // Setup
     std::vector<OutputGroup> utxo_pool;
-
-    bench.run([&] {
-        // Benchmark
-        CAmount target = make_hard_case(17, utxo_pool);
-        [[maybe_unused]] auto _{SelectCoinsBnB(utxo_pool, target, /*cost_of_change=*/0, MAX_STANDARD_TX_WEIGHT)}; // Should exhaust
-
-        // Cleanup
-        utxo_pool.clear();
-    });
+    bench.epochIterations(1) //
+        .setup([&] { return make_hard_case(17, utxo_pool); })
+        .run([&](auto target) {
+            return SelectCoinsBnB(utxo_pool, target, /*cost_of_change=*/0, MAX_STANDARD_TX_WEIGHT); // Should exhaust
+        });
 }
 
 BENCHMARK(CoinSelection, benchmark::PriorityLevel::HIGH);
