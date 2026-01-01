@@ -214,7 +214,7 @@ void CoinsResult::Clear() {
     coins.clear();
 }
 
-void CoinsResult::Erase(const std::unordered_set<COutPoint, SaltedOutpointHasher>& coins_to_remove)
+void CoinsResult::Erase(const std::unordered_set<COutPoint, SaltedOutpointHasher24>& coins_to_remove)
 {
     for (auto& [type, vec] : coins) {
         auto remove_it = std::remove_if(vec.begin(), vec.end(), [&](const COutput& coin) {

@@ -117,7 +117,7 @@ class TxOrphanageImpl final : public TxOrphanage {
 
     /** Index from the parents' outputs to wtxids that exist in m_orphans. Used to find children of
      * a transaction that can be reconsidered and to remove entries that conflict with a block.*/
-    std::unordered_map<COutPoint, std::set<Wtxid>, SaltedOutpointHasher> m_outpoint_to_orphan_wtxids;
+    std::unordered_map<COutPoint, std::set<Wtxid>, SaltedOutpointHasher24> m_outpoint_to_orphan_wtxids;
 
     /** Set of Wtxids for which (exactly) one announcement with m_reconsider=true exists. */
     std::set<Wtxid> m_reconsiderable_wtxids;

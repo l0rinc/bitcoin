@@ -223,7 +223,7 @@ public:
  */
 using CCoinsMap = std::unordered_map<COutPoint,
                                      CCoinsCacheEntry,
-                                     SaltedOutpointHasher,
+                                     SaltedOutpointHasher13Jumbo,
                                      std::equal_to<COutPoint>,
                                      PoolAllocator<CoinsCachePair,
                                                    sizeof(CoinsCachePair) + sizeof(void*) * 4>>;
@@ -297,6 +297,9 @@ struct CoinsViewCacheCursor
     }
 
     inline bool WillErase(CoinsCachePair& current) const noexcept { return m_will_erase || current.second.coin.IsSpent(); }
+
+    inline bool WillEraseCache() const noexcept { return m_will_erase; }
+    inline const CCoinsMap& Map() const noexcept { return m_map; }
 private:
     CoinsCachePair& m_sentinel;
     CCoinsMap& m_map;
@@ -376,6 +379,9 @@ protected:
     /* Cached dynamic memory usage for the inner Coin objects. */
     mutable size_t cachedCoinsUsage{0};
 
+    //! Get the coin from base but do not access or mutate cacheCoins.
+    std::optional<Coin> FetchCoinWithoutMutating(const COutPoint& outpoint) const noexcept;
+
 public:
     CCoinsViewCache(CCoinsView *baseIn, bool deterministic = false);
 
@@ -443,7 +449,7 @@ public:
      * after flushing and should be destroyed to deallocate.
      * If false is returned, the state of this cache (and its backing view) will be undefined.
      */
-    bool Flush(bool will_reuse_cache = true);
+    virtual bool Flush(bool will_reuse_cache = true);
 
     /**
      * Push the modifications applied to this cache to its base while retaining
@@ -453,6 +459,9 @@ public:
      * If false is returned, the state of this cache (and its backing view) will be undefined.
      */
     bool Sync();
+
+    //! Wipe local state.
+    virtual void Reset() noexcept;
 
     /**
      * Removes the UTXO with the given outpoint from the cache, if it is
@@ -484,7 +493,7 @@ private:
      * @note this is marked const, but may actually append to `cacheCoins`, increasing
      * memory usage.
      */
-    CCoinsMap::iterator FetchCoin(const COutPoint &outpoint) const;
+    virtual CCoinsMap::iterator FetchCoin(const COutPoint &outpoint) const;
 };
 
 //! Utility function to add all of a transaction's outputs to a cache.

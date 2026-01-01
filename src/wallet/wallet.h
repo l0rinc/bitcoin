@@ -339,7 +339,7 @@ private:
      * detect and report conflicts (double-spends or
      * mutated transactions where the mutant gets mined).
      */
-    typedef std::unordered_multimap<COutPoint, Txid, SaltedOutpointHasher> TxSpends;
+    typedef std::unordered_multimap<COutPoint, Txid, SaltedOutpointHasher24> TxSpends;
     TxSpends mapTxSpends GUARDED_BY(cs_wallet);
     void AddToSpends(const COutPoint& outpoint, const Txid& txid) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void AddToSpends(const CWalletTx& wtx) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
@@ -437,7 +437,7 @@ private:
     std::unordered_map<CScript, std::vector<ScriptPubKeyMan*>, SaltedSipHasher> m_cached_spks;
 
     //! Set of both spent and unspent transaction outputs owned by this wallet
-    std::unordered_map<COutPoint, WalletTXO, SaltedOutpointHasher> m_txos GUARDED_BY(cs_wallet);
+    std::unordered_map<COutPoint, WalletTXO, SaltedOutpointHasher24> m_txos GUARDED_BY(cs_wallet);
 
     /**
      * Catch wallet up to current chain, scanning new blocks, updating the best
@@ -525,7 +525,7 @@ public:
 
     std::set<Txid> GetTxConflicts(const CWalletTx& wtx) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
-    const std::unordered_map<COutPoint, WalletTXO, SaltedOutpointHasher>& GetTXOs() const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) { AssertLockHeld(cs_wallet); return m_txos; };
+    const std::unordered_map<COutPoint, WalletTXO, SaltedOutpointHasher24>& GetTXOs() const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) { AssertLockHeld(cs_wallet); return m_txos; };
     std::optional<WalletTXO> GetTXO(const COutPoint& outpoint) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /** Cache outputs that belong to the wallet from a single transaction */

@@ -88,7 +88,7 @@ typedef enum ReadStatus_t
 } ReadStatus;
 
 class CBlockHeaderAndShortTxIDs {
-    mutable std::optional<PresaltedSipHasher> m_hasher;
+    mutable std::optional<PresaltedSipHasher24> m_hasher;
     uint64_t nonce;
 
     void FillShortTxIDSelector() const;
