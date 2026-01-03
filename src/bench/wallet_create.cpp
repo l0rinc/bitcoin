@@ -45,16 +45,26 @@ static void WalletCreate(benchmark::Bench& bench, bool encrypted)
     std::vector<bilingual_str> warnings;
 
     auto wallet_path = fs::PathToString(test_setup->m_path_root / "test_wallet");
-    bench.run([&] {
-        auto wallet = CreateWallet(context, wallet_path, /*load_on_start=*/std::nullopt, options, status, error_string, warnings);
-        assert(status == DatabaseStatus::SUCCESS);
-        assert(wallet != nullptr);
-
-        // Release wallet
-        RemoveWallet(context, wallet, /*load_on_start=*/ std::nullopt);
-        WaitForDeleteWallet(std::move(wallet));
+    std::shared_ptr<CWallet> wallet;
+    auto cleanup = [&] {
+        if (wallet) {
+            RemoveWallet(context, wallet, /*load_on_start=*/std::nullopt);
+            WaitForDeleteWallet(std::move(wallet));
+        }
         fs::remove_all(wallet_path);
-    });
+        status = DatabaseStatus::FAILED_LOAD;
+        error_string = {};
+        warnings.clear();
+    };
+
+    bench.epochIterations(1)
+        .setup(cleanup)
+        .run([&] {
+            wallet = CreateWallet(context, wallet_path, /*load_on_start=*/std::nullopt, options, status, error_string, warnings);
+            assert(status == DatabaseStatus::SUCCESS);
+            assert(wallet);
+        });
+    cleanup();
 }
 
 static void WalletCreatePlain(benchmark::Bench& bench) { WalletCreate(bench, /*encrypted=*/false); }
