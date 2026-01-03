@@ -4,12 +4,13 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <support/allocators/zeroafterfree.h>
 #include <test/util/setup_common.h>
 #include <util/check.h>
 #include <util/fs.h>
 #include <util/translation.h>
-#include <wallet/sqlite.h>
 #include <wallet/migrate.h>
+#include <wallet/sqlite.h>
 #include <wallet/test/util.h>
 #include <wallet/walletutil.h>
 
