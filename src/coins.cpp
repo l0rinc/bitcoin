@@ -330,10 +330,12 @@ void CCoinsViewCache::ReallocateCache()
 {
     // Cache should be empty when we're calling this.
     assert(cacheCoins.size() == 0);
+    const auto prev{cacheCoins.max_load_factor()};
     cacheCoins.~CCoinsMap();
     m_cache_coins_memory_resource.~CCoinsMapMemoryResource();
     ::new (&m_cache_coins_memory_resource) CCoinsMapMemoryResource{};
     ::new (&cacheCoins) CCoinsMap{0, SaltedOutpointHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
+    cacheCoins.max_load_factor(prev);
 }
 
 void CCoinsViewCache::SanityCheck() const
