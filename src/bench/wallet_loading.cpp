@@ -55,13 +55,15 @@ static void WalletLoadingDescriptors(benchmark::Bench& bench)
     // reload the wallet for the actual benchmark
     TestUnloadWallet(std::move(wallet));
 
-    bench.epochs(5).run([&] {
-        wallet = TestLoadWallet(std::move(database), context, create_flags);
+    bench.epochs(5).epochIterations(1)
+        .setup([&] {
+            if (!wallet) return;
+            database = DuplicateMockDatabase(wallet->GetDatabase());
+            TestUnloadWallet(std::move(wallet));
+        })
+        .run([&] { wallet = TestLoadWallet(std::move(database), context, create_flags); });
 
-        // Cleanup
-        database = DuplicateMockDatabase(wallet->GetDatabase());
-        TestUnloadWallet(std::move(wallet));
-    });
+    if (wallet) TestUnloadWallet(std::move(wallet));
 }
 
 BENCHMARK(WalletLoadingDescriptors, benchmark::PriorityLevel::HIGH);
