@@ -81,11 +81,6 @@ class ScopedHandle {
 
   ScopedHandle& operator=(const ScopedHandle&) = delete;
 
-  ScopedHandle& operator=(ScopedHandle&& rhs) noexcept {
-    if (this != &rhs) handle_ = rhs.Release();
-    return *this;
-  }
-
   bool Close() {
     if (!is_valid()) {
       return true;
