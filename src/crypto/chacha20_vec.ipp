@@ -137,60 +137,75 @@ ALWAYS_INLINE const vec256* increments_for_half_states(size_t half_states)
 /** Store a vector in all array elements */
 ALWAYS_INLINE void arr_set_vec256(vec256* arr, size_t half_states, const vec256& vec)
 {
-    for (size_t i = 0; i < half_states; ++i) {
-        arr[i] = vec;
+    CHACHA20_VEC_UNROLL(8)
+    for (size_t i = 0; i < 8; ++i) {
+        if (i < half_states) arr[i] = vec;
     }
 }
 
 /** Add a vector to all array elements */
 ALWAYS_INLINE void arr_add_vec256(vec256* arr, size_t half_states, const vec256& vec)
 {
-    for (size_t i = 0; i < half_states; ++i) {
-        arr[i] += vec;
+    CHACHA20_VEC_UNROLL(8)
+    for (size_t i = 0; i < 8; ++i) {
+        if (i < half_states) arr[i] += vec;
     }
 }
 
 /** Add corresponding vectors in arr1 to arr0 */
 ALWAYS_INLINE void arr_add_arr(vec256* arr0, const vec256* arr1, size_t half_states)
 {
-    for (size_t i = 0; i < half_states; ++i) {
-        arr0[i] += arr1[i];
+    CHACHA20_VEC_UNROLL(8)
+    for (size_t i = 0; i < 8; ++i) {
+        if (i < half_states) arr0[i] += arr1[i];
     }
 }
 
 ALWAYS_INLINE void arr_add_xor_rot16(vec256* arr0, const vec256* arr1, vec256* arr2, size_t half_states)
 {
-    for (size_t i = 0; i < half_states; ++i) {
-        arr0[i] += arr1[i];
-        arr2[i] ^= arr0[i];
-        vec_rotl16(arr2[i]);
+    CHACHA20_VEC_UNROLL(8)
+    for (size_t i = 0; i < 8; ++i) {
+        if (i < half_states) {
+            arr0[i] += arr1[i];
+            arr2[i] ^= arr0[i];
+            vec_rotl16(arr2[i]);
+        }
     }
 }
 
 ALWAYS_INLINE void arr_add_xor_rot12(vec256* arr0, const vec256* arr1, vec256* arr2, size_t half_states)
 {
-    for (size_t i = 0; i < half_states; ++i) {
-        arr0[i] += arr1[i];
-        arr2[i] ^= arr0[i];
-        vec_rotl12(arr2[i]);
+    CHACHA20_VEC_UNROLL(8)
+    for (size_t i = 0; i < 8; ++i) {
+        if (i < half_states) {
+            arr0[i] += arr1[i];
+            arr2[i] ^= arr0[i];
+            vec_rotl12(arr2[i]);
+        }
     }
 }
 
 ALWAYS_INLINE void arr_add_xor_rot8(vec256* arr0, const vec256* arr1, vec256* arr2, size_t half_states)
 {
-    for (size_t i = 0; i < half_states; ++i) {
-        arr0[i] += arr1[i];
-        arr2[i] ^= arr0[i];
-        vec_rotl8(arr2[i]);
+    CHACHA20_VEC_UNROLL(8)
+    for (size_t i = 0; i < 8; ++i) {
+        if (i < half_states) {
+            arr0[i] += arr1[i];
+            arr2[i] ^= arr0[i];
+            vec_rotl8(arr2[i]);
+        }
     }
 }
 
 ALWAYS_INLINE void arr_add_xor_rot7(vec256* arr0, const vec256* arr1, vec256* arr2, size_t half_states)
 {
-    for (size_t i = 0; i < half_states; ++i) {
-        arr0[i] += arr1[i];
-        arr2[i] ^= arr0[i];
-        vec_rotl7(arr2[i]);
+    CHACHA20_VEC_UNROLL(8)
+    for (size_t i = 0; i < 8; ++i) {
+        if (i < half_states) {
+            arr0[i] += arr1[i];
+            arr2[i] ^= arr0[i];
+            vec_rotl7(arr2[i]);
+        }
     }
 }
 
@@ -216,25 +231,34 @@ layout.
 */
 ALWAYS_INLINE void arr_shuf0(vec256* arr, size_t half_states)
 {
-    for (size_t i = 0; i < half_states; ++i) {
-        vec256& x = arr[i];
-        x = __builtin_shufflevector(x, x, 1, 2, 3, 0, 5, 6, 7, 4);
+    CHACHA20_VEC_UNROLL(8)
+    for (size_t i = 0; i < 8; ++i) {
+        if (i < half_states) {
+            vec256& x = arr[i];
+            x = __builtin_shufflevector(x, x, 1, 2, 3, 0, 5, 6, 7, 4);
+        }
     }
 }
 
 ALWAYS_INLINE void arr_shuf1(vec256* arr, size_t half_states)
 {
-    for (size_t i = 0; i < half_states; ++i) {
-        vec256& x = arr[i];
-        x = __builtin_shufflevector(x, x, 2, 3, 0, 1, 6, 7, 4, 5);
+    CHACHA20_VEC_UNROLL(8)
+    for (size_t i = 0; i < 8; ++i) {
+        if (i < half_states) {
+            vec256& x = arr[i];
+            x = __builtin_shufflevector(x, x, 2, 3, 0, 1, 6, 7, 4, 5);
+        }
     }
 }
 
 ALWAYS_INLINE void arr_shuf2(vec256* arr, size_t half_states)
 {
-    for (size_t i = 0; i < half_states; ++i) {
-        vec256& x = arr[i];
-        x = __builtin_shufflevector(x, x, 3, 0, 1, 2, 7, 4, 5, 6);
+    CHACHA20_VEC_UNROLL(8)
+    for (size_t i = 0; i < 8; ++i) {
+        if (i < half_states) {
+            vec256& x = arr[i];
+            x = __builtin_shufflevector(x, x, 3, 0, 1, 2, 7, 4, 5, 6);
+        }
     }
 }
 
@@ -287,20 +311,23 @@ ALWAYS_INLINE void vec_read_xor_write(std::span<const std::byte> in_bytes, std::
 /* Merge the 128 bit lanes from 2 states to the proper order, then pass each vec_read_xor_write */
 ALWAYS_INLINE void arr_read_xor_write(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const vec256* arr0, const vec256* arr1, const vec256* arr2, const vec256* arr3, size_t half_states)
 {
-    for (size_t i = 0; i < half_states; ++i) {
-        const vec256& w = arr0[i];
-        const vec256& x = arr1[i];
-        const vec256& y = arr2[i];
-        const vec256& z = arr3[i];
+    CHACHA20_VEC_UNROLL(8)
+    for (size_t i = 0; i < 8; ++i) {
+        if (i < half_states) {
+            const vec256& w = arr0[i];
+            const vec256& x = arr1[i];
+            const vec256& y = arr2[i];
+            const vec256& z = arr3[i];
 
-        const size_t offset = i * 128;
-        auto in_slice = in_bytes.subspan(offset, 128);
-        auto out_slice = out_bytes.subspan(offset, 128);
+            const size_t offset = i * 128;
+            auto in_slice = in_bytes.subspan(offset, 128);
+            auto out_slice = out_bytes.subspan(offset, 128);
 
-        vec_read_xor_write(in_slice.first(32), out_slice.first(32), __builtin_shufflevector(w, x, 4, 5, 6, 7, 12, 13, 14, 15));
-        vec_read_xor_write(in_slice.subspan(32, 32), out_slice.subspan(32, 32), __builtin_shufflevector(y, z, 4, 5, 6, 7, 12, 13, 14, 15));
-        vec_read_xor_write(in_slice.subspan(64, 32), out_slice.subspan(64, 32), __builtin_shufflevector(w, x, 0, 1, 2, 3, 8, 9, 10, 11));
-        vec_read_xor_write(in_slice.subspan(96, 32), out_slice.subspan(96, 32), __builtin_shufflevector(y, z, 0, 1, 2, 3, 8, 9, 10, 11));
+            vec_read_xor_write(in_slice.first(32), out_slice.first(32), __builtin_shufflevector(w, x, 4, 5, 6, 7, 12, 13, 14, 15));
+            vec_read_xor_write(in_slice.subspan(32, 32), out_slice.subspan(32, 32), __builtin_shufflevector(y, z, 4, 5, 6, 7, 12, 13, 14, 15));
+            vec_read_xor_write(in_slice.subspan(64, 32), out_slice.subspan(64, 32), __builtin_shufflevector(w, x, 0, 1, 2, 3, 8, 9, 10, 11));
+            vec_read_xor_write(in_slice.subspan(96, 32), out_slice.subspan(96, 32), __builtin_shufflevector(y, z, 0, 1, 2, 3, 8, 9, 10, 11));
+        }
     }
 }
 
