@@ -285,39 +285,12 @@ ALWAYS_INLINE void arr_read_xor_write(std::span<const std::byte> in_bytes, std::
 }
 
 /* Main crypt function. Calculates up to 16 states (8 half_states). */
-#if defined(__GNUC__) && !defined(__clang__)
 template <size_t States>
 ALWAYS_INLINE void multi_block_crypt(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const vec256& state0, const vec256& state1, const vec256& state2)
 {
     static_assert(States == 16 || States == 8 || States == 6 || States == 4 || States == 2);
     constexpr size_t half_states = States / 2;
-
-    std::array<vec256, half_states> arr0, arr1, arr2, arr3;
-
-    arr_set_vec256(arr0.data(), half_states, nums256);
-    arr_set_vec256(arr1.data(), half_states, state0);
-    arr_set_vec256(arr2.data(), half_states, state1);
-    arr_set_vec256(arr3.data(), half_states, state2);
-
-    arr_add_arr(arr3.data(), increments, half_states);
-
-    doubleround(arr0.data(), arr1.data(), arr2.data(), arr3.data(), half_states);
-
-    arr_add_vec256(arr0.data(), half_states, nums256);
-    arr_add_vec256(arr1.data(), half_states, state0);
-    arr_add_vec256(arr2.data(), half_states, state1);
-    arr_add_vec256(arr3.data(), half_states, state2);
-
-    arr_add_arr(arr3.data(), increments, half_states);
-
-    arr_read_xor_write(in_bytes, out_bytes, arr0.data(), arr1.data(), arr2.data(), arr3.data(), half_states);
-}
-#endif
-
-ALWAYS_INLINE void multi_block_crypt(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const vec256& state0, const vec256& state1, const vec256& state2, size_t states)
-{
-    const size_t half_states = states / 2;
-    vec256 arr0[8], arr1[8], arr2[8], arr3[8];
+    vec256 arr0[half_states], arr1[half_states], arr2[half_states], arr3[half_states];
 
     arr_set_vec256(arr0, half_states, nums256);
     arr_set_vec256(arr1, half_states, state0);
@@ -342,11 +315,7 @@ template <size_t States>
 ALWAYS_INLINE void process_blocks(std::span<const std::byte>& in_bytes, std::span<std::byte>& out_bytes, const vec256& state0, const vec256& state1, vec256& state2)
 {
     while (in_bytes.size() >= CHACHA20_VEC_BLOCKLEN * States) {
-#if defined(__GNUC__) && !defined(__clang__)
         multi_block_crypt<States>(in_bytes, out_bytes, state0, state1, state2);
-#else
-        multi_block_crypt(in_bytes, out_bytes, state0, state1, state2, States);
-#endif
         state2 += (vec256){static_cast<uint32_t>(States), 0, 0, 0, static_cast<uint32_t>(States), 0, 0, 0};
         in_bytes = in_bytes.subspan(CHACHA20_VEC_BLOCKLEN * States);
         out_bytes = out_bytes.subspan(CHACHA20_VEC_BLOCKLEN * States);
