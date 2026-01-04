@@ -174,33 +174,8 @@ After the second round, they are used (in reverse) to restore the original
 layout.
 
 */
-#if defined(__GNUC__) && !defined(__clang__)
-template <int... I>
-ALWAYS_INLINE vec256 vec_shuffle(const vec256& v)
-{
-    static_assert(sizeof...(I) == 8);
-    using mask_t = int __attribute__((__vector_size__(32)));
-    constexpr mask_t mask{I...};
-    return __builtin_shuffle(v, mask);
-}
-
-template <int... I>
-ALWAYS_INLINE vec256 vec_shuffle(const vec256& a, const vec256& b)
-{
-    static_assert(sizeof...(I) == 8);
-    using mask_t = int __attribute__((__vector_size__(32)));
-    constexpr mask_t mask{I...};
-    return __builtin_shuffle(a, b, mask);
-}
-#endif // defined(__GNUC__) && !defined(__clang__)
-
-#if defined(__GNUC__) && !defined(__clang__)
-#define VEC_SHUF_SELF(x, ...) vec_shuffle<__VA_ARGS__>(x)
-#define VEC_SHUF2(a, b, ...) vec_shuffle<__VA_ARGS__>(a, b)
-#else
 #define VEC_SHUF_SELF(x, ...) __builtin_shufflevector(x, x, __VA_ARGS__)
 #define VEC_SHUF2(a, b, ...) __builtin_shufflevector(a, b, __VA_ARGS__)
-#endif
 
 ALWAYS_INLINE void arr_shuf0(vec256* arr, size_t half_states)
 {
@@ -310,6 +285,35 @@ ALWAYS_INLINE void arr_read_xor_write(std::span<const std::byte> in_bytes, std::
 }
 
 /* Main crypt function. Calculates up to 16 states (8 half_states). */
+#if defined(__GNUC__) && !defined(__clang__)
+template <size_t States>
+ALWAYS_INLINE void multi_block_crypt(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const vec256& state0, const vec256& state1, const vec256& state2)
+{
+    static_assert(States == 16 || States == 8 || States == 6 || States == 4 || States == 2);
+    constexpr size_t half_states = States / 2;
+
+    std::array<vec256, half_states> arr0, arr1, arr2, arr3;
+
+    arr_set_vec256(arr0.data(), half_states, nums256);
+    arr_set_vec256(arr1.data(), half_states, state0);
+    arr_set_vec256(arr2.data(), half_states, state1);
+    arr_set_vec256(arr3.data(), half_states, state2);
+
+    arr_add_arr(arr3.data(), increments, half_states);
+
+    doubleround(arr0.data(), arr1.data(), arr2.data(), arr3.data(), half_states);
+
+    arr_add_vec256(arr0.data(), half_states, nums256);
+    arr_add_vec256(arr1.data(), half_states, state0);
+    arr_add_vec256(arr2.data(), half_states, state1);
+    arr_add_vec256(arr3.data(), half_states, state2);
+
+    arr_add_arr(arr3.data(), increments, half_states);
+
+    arr_read_xor_write(in_bytes, out_bytes, arr0.data(), arr1.data(), arr2.data(), arr3.data(), half_states);
+}
+#endif
+
 ALWAYS_INLINE void multi_block_crypt(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const vec256& state0, const vec256& state1, const vec256& state2, size_t states)
 {
     const size_t half_states = states / 2;
@@ -337,14 +341,15 @@ ALWAYS_INLINE void multi_block_crypt(std::span<const std::byte> in_bytes, std::s
 template <size_t States>
 ALWAYS_INLINE void process_blocks(std::span<const std::byte>& in_bytes, std::span<std::byte>& out_bytes, const vec256& state0, const vec256& state1, vec256& state2)
 {
-    constexpr size_t block_size = CHACHA20_VEC_BLOCKLEN * States;
-    constexpr vec256 increment = (vec256){static_cast<uint32_t>(States), 0, 0, 0, static_cast<uint32_t>(States), 0, 0, 0};
-
-    while (in_bytes.size() >= block_size) {
+    while (in_bytes.size() >= CHACHA20_VEC_BLOCKLEN * States) {
+#if defined(__GNUC__) && !defined(__clang__)
+        multi_block_crypt<States>(in_bytes, out_bytes, state0, state1, state2);
+#else
         multi_block_crypt(in_bytes, out_bytes, state0, state1, state2, States);
-        state2 += increment;
-        in_bytes = in_bytes.subspan(block_size);
-        out_bytes = out_bytes.subspan(block_size);
+#endif
+        state2 += (vec256){static_cast<uint32_t>(States), 0, 0, 0, static_cast<uint32_t>(States), 0, 0, 0};
+        in_bytes = in_bytes.subspan(CHACHA20_VEC_BLOCKLEN * States);
+        out_bytes = out_bytes.subspan(CHACHA20_VEC_BLOCKLEN * States);
     }
 }
 
