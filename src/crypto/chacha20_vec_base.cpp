@@ -20,7 +20,7 @@
 // implementation exists (e.g. via AVX2/AVX512 runtime dispatch).
 #    define CHACHA20_VEC_DISABLE_STATES_2
 #  endif
-#elif defined(__ARM_NEON)
+#elif defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(__aarch64__)
 #  define CHACHA20_VEC_DISABLE_STATES_2
 #else
 // Be conservative and require platforms to opt-in
