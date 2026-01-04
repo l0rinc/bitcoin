@@ -1664,27 +1664,6 @@ class WalletMigrationTest(BitcoinTestFramework):
         assert_equal(addr_info["solvable"], True)
         assert "hex" in addr_info
 
-    def test_loading_failure_after_migration(self):
-        self.log.info("Test that a failed loading of the wallet at the end of migration restores the backup")
-        self.stop_node(self.old_node.index)
-        self.old_node.chain = "signet"
-        self.old_node.replace_in_config([("regtest=", "signet="), ("[regtest]", "[signet]")])
-        # Disable network sync and prevent disk space warning on small (tmp)fs
-        self.start_node(self.old_node.index, extra_args=self.old_node.extra_args + ["-maxconnections=0", "-prune=550"])
-
-        wallet_name = "failed_load_after_migrate"
-        self.create_legacy_wallet(wallet_name)
-        assert_raises_rpc_error(-4, "Wallet loading failed. Wallet files should not be reused across chains.", lambda: self.migrate_and_get_rpc(wallet_name))
-
-        # Check the wallet we tried to migrate is still BDB
-        self.assert_is_bdb(wallet_name)
-
-        self.stop_node(self.old_node.index)
-        self.old_node.chain = "regtest"
-        self.old_node.replace_in_config([("signet=", "regtest="), ("[signet]", "[regtest]")])
-        self.start_node(self.old_node.index)
-        self.connect_nodes(1, 0)
-
     def unsynced_wallet_on_pruned_node_fails(self):
         self.log.info("Test migration of an unsynced wallet on a pruned node fails gracefully if loadwallet is set")
         wallet = self.create_legacy_wallet("", load_on_startup=False)
@@ -1704,12 +1683,17 @@ class WalletMigrationTest(BitcoinTestFramework):
         # Check migration failure
         mocked_time = int(time.time())
         self.master_node.setmocktime(mocked_time)
-        assert_raises_rpc_error(-4, "last wallet synchronisation goes beyond pruned data. You need to -reindex (download the whole blockchain again in case of a pruned node)", self.master_node.migratewallet, wallet_name="")
+        assert_raises_rpc_error(-4, "last wallet synchronisation goes beyond pruned data. You need to -reindex (download the whole blockchain again in case of pruned node)", self.master_node.migratewallet, wallet_name="")
         self.master_node.setmocktime(0)
 
         # Verify the /wallets/ path exists, the wallet is still BDB and the backup file is there.
         assert self.master_node.wallets_path.exists()
-        self.assert_is_bdb("")
+
+        with open(self.master_node.wallets_path / "wallet.dat", "rb") as f:
+            data = f.read(16)
+            _, _, magic = struct.unpack("QII", data)
+            assert_equal(magic, BTREE_MAGIC)
+
         backup_path = self.master_node.wallets_path / f"default_wallet_{mocked_time}.legacy.bak"
         assert backup_path.exists()
 
@@ -1802,6 +1786,9 @@ class WalletMigrationTest(BitcoinTestFramework):
         self.test_solvable_no_privs()
         self.test_loading_failure_after_migration()
         self.test_missing_bestblock()
+
+        # Note: After this test the first 250 blocks of 'master_node' are pruned
+        self.unsynced_wallet_on_pruned_node_fails()
 
         # Note: After this test the first 250 blocks of 'master_node' are pruned
         self.unsynced_wallet_on_pruned_node_fails()
