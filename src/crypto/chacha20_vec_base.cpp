@@ -22,7 +22,18 @@
 #    define CHACHA20_VEC_DISABLE_STATES_2
 #  endif
 #elif defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(__aarch64__)
-#  define CHACHA20_VEC_DISABLE_STATES_2
+#  if defined(__GNUC__) && !defined(__clang__)
+// Similar to x86_64, GCC currently generates slower code for the generic
+// vectorized implementation on AArch64/NEON. Disable all multi-state paths for
+// now to avoid a regression.
+#    define CHACHA20_VEC_DISABLE_STATES_16
+#    define CHACHA20_VEC_DISABLE_STATES_8
+#    define CHACHA20_VEC_DISABLE_STATES_6
+#    define CHACHA20_VEC_DISABLE_STATES_4
+#    define CHACHA20_VEC_DISABLE_STATES_2
+#  else
+#    define CHACHA20_VEC_DISABLE_STATES_2
+#  endif
 #else
 // Be conservative and require platforms to opt-in
 #  define CHACHA20_VEC_DISABLE_STATES_16

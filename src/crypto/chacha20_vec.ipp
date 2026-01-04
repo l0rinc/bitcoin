@@ -51,12 +51,20 @@ inline constexpr bool kEnableAnyMultiState = kEnableStates16 || kEnableStates8 |
 // vec256 type must be visible for if constexpr branches even when they're not taken
 using vec256 = uint32_t __attribute__((__vector_size__(32)));
 
-// Preprocessor check for conditional compilation of the anonymous namespace
+// Preprocessor check for conditional compilation of the anonymous namespace and
+// the multi-state code paths. When all states are disabled, avoid referencing
+// templates/functions that are not available.
 #if !defined(CHACHA20_VEC_DISABLE_STATES_16) || \
     !defined(CHACHA20_VEC_DISABLE_STATES_8) ||  \
     !defined(CHACHA20_VEC_DISABLE_STATES_6) ||  \
     !defined(CHACHA20_VEC_DISABLE_STATES_4) ||  \
     !defined(CHACHA20_VEC_DISABLE_STATES_2)
+#  define CHACHA20_VEC_ENABLE_ANY_MULTI_STATE 1
+#else
+#  define CHACHA20_VEC_ENABLE_ANY_MULTI_STATE 0
+#endif
+
+#if CHACHA20_VEC_ENABLE_ANY_MULTI_STATE
 
 namespace {
 
@@ -326,7 +334,7 @@ ALWAYS_INLINE void process_blocks(std::span<const std::byte>& in_bytes, std::spa
 #undef VEC_SHUF2
 
 } // anonymous namespace
-#endif // any multi-state enabled
+#endif // CHACHA20_VEC_ENABLE_ANY_MULTI_STATE
 
 #if defined(CHACHA20_NAMESPACE)
 namespace CHACHA20_NAMESPACE {
@@ -334,18 +342,22 @@ namespace CHACHA20_NAMESPACE {
 
 void chacha20_crypt_vectorized(std::span<const std::byte>& in_bytes, std::span<std::byte>& out_bytes, const std::array<uint32_t, 12>& input) noexcept
 {
-    if constexpr (kEnableAnyMultiState) {
-        assert(in_bytes.size() == out_bytes.size());
-        const vec256 state0 = (vec256){input[0], input[1], input[2], input[3], input[0], input[1], input[2], input[3]};
-        const vec256 state1 = (vec256){input[4], input[5], input[6], input[7], input[4], input[5], input[6], input[7]};
-        vec256 state2 = (vec256){input[8], input[9], input[10], input[11], input[8], input[9], input[10], input[11]};
+#if CHACHA20_VEC_ENABLE_ANY_MULTI_STATE
+    assert(in_bytes.size() == out_bytes.size());
+    const vec256 state0 = (vec256){input[0], input[1], input[2], input[3], input[0], input[1], input[2], input[3]};
+    const vec256 state1 = (vec256){input[4], input[5], input[6], input[7], input[4], input[5], input[6], input[7]};
+    vec256 state2 = (vec256){input[8], input[9], input[10], input[11], input[8], input[9], input[10], input[11]};
 
-        if constexpr (kEnableStates16) process_blocks<16>(in_bytes, out_bytes, state0, state1, state2);
-        if constexpr (kEnableStates8) process_blocks<8>(in_bytes, out_bytes, state0, state1, state2);
-        if constexpr (kEnableStates6) process_blocks<6>(in_bytes, out_bytes, state0, state1, state2);
-        if constexpr (kEnableStates4) process_blocks<4>(in_bytes, out_bytes, state0, state1, state2);
-        if constexpr (kEnableStates2) process_blocks<2>(in_bytes, out_bytes, state0, state1, state2);
-    }
+    if constexpr (kEnableStates16) process_blocks<16>(in_bytes, out_bytes, state0, state1, state2);
+    if constexpr (kEnableStates8) process_blocks<8>(in_bytes, out_bytes, state0, state1, state2);
+    if constexpr (kEnableStates6) process_blocks<6>(in_bytes, out_bytes, state0, state1, state2);
+    if constexpr (kEnableStates4) process_blocks<4>(in_bytes, out_bytes, state0, state1, state2);
+    if constexpr (kEnableStates2) process_blocks<2>(in_bytes, out_bytes, state0, state1, state2);
+#else
+    (void)in_bytes;
+    (void)out_bytes;
+    (void)input;
+#endif
 }
 
 #if defined(CHACHA20_NAMESPACE)
