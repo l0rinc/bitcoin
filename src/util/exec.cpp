@@ -5,6 +5,7 @@
 #include <util/exec.h>
 
 #include <util/fs.h>
+#include <util/string.h>
 #include <util/subprocess.h>
 
 #include <string>
@@ -24,16 +25,16 @@ int ExecVp(const char* file, char* const argv[])
     return execvp(file, argv);
 #else
     std::vector<std::wstring> escaped_args;
-    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
     for (char* const* arg_ptr{argv}; *arg_ptr; ++arg_ptr) {
-        subprocess::util::quote_argument(converter.from_bytes(*arg_ptr), escaped_args.emplace_back(), false);
+        subprocess::util::quote_argument(util::Utf8ToWide(*arg_ptr), escaped_args.emplace_back(), false);
     }
 
     std::vector<const wchar_t*> new_argv;
     new_argv.reserve(escaped_args.size() + 1);
     for (const auto& s : escaped_args) new_argv.push_back(s.c_str());
     new_argv.push_back(nullptr);
-    return _wexecvp(converter.from_bytes(file).c_str(), new_argv.data());
+    const std::wstring wide_file{util::Utf8ToWide(file)};
+    return _wexecvp(wide_file.c_str(), new_argv.data());
 #endif
 }
 

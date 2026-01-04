@@ -37,6 +37,7 @@ Documentation for C++ subprocessing library.
 #define BITCOIN_UTIL_SUBPROCESS_H
 
 #include <util/syserror.h>
+#include <util/string.h>
 
 #include <algorithm>
 #include <cassert>
@@ -57,10 +58,6 @@ Documentation for C++ subprocessing library.
 
 #if (defined _MSC_VER) || (defined __MINGW32__)
   #define __USING_WINDOWS__
-#endif
-
-#ifdef __USING_WINDOWS__
-  #include <codecvt>
 #endif
 
 extern "C" {
@@ -1102,7 +1099,6 @@ inline void Popen::execute_process() noexcept(false)
   }
   this->exe_name_ = vargs_[0];
 
-  std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
   std::wstring argument;
   std::wstring command_line;
   bool first_arg = true;
@@ -1113,7 +1109,7 @@ inline void Popen::execute_process() noexcept(false)
     } else {
       first_arg = false;
     }
-    argument = converter.from_bytes(arg);
+    argument = ::util::Utf8ToWide(arg);
     util::quote_argument(argument, command_line, false);
   }
 
