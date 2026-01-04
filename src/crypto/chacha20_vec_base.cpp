@@ -12,6 +12,14 @@
 #  define CHACHA20_VEC_DISABLE_STATES_16
 #  define CHACHA20_VEC_DISABLE_STATES_8
 #  define CHACHA20_VEC_DISABLE_STATES_6
+#  if defined(__GNUC__) && !defined(__clang__)
+// GCC currently generates slower code for the generic vectorized implementation
+// on x86_64. Disable the 4-state path for now to avoid a regression.
+#    define CHACHA20_VEC_DISABLE_STATES_4
+// Disable the 2-state path as well (fallback to scalar) until a faster GCC x86
+// implementation exists (e.g. via AVX2/AVX512 runtime dispatch).
+#    define CHACHA20_VEC_DISABLE_STATES_2
+#  endif
 #elif defined(__ARM_NEON)
 #  define CHACHA20_VEC_DISABLE_STATES_2
 #else
