@@ -740,6 +740,7 @@ private:
  * This takes care of all the fork-exec logic
  * in the execute_child API.
  */
+#ifndef __USING_WINDOWS__
 class Child
 {
 public:
@@ -756,6 +757,7 @@ private:
   Popen* parent_ = nullptr;
   int err_wr_pipe_ = -1;
 };
+#endif // !__USING_WINDOWS__
 
 // Fwd Decl.
 class Streams;
@@ -929,7 +931,9 @@ class Popen
 {
 public:
   friend struct detail::ArgumentDeducer;
+#ifndef __USING_WINDOWS__
   friend class detail::Child;
+#endif
 
   template <typename... Args>
   Popen(const std::string& cmd_args, Args&& ...args):
@@ -1032,7 +1036,9 @@ private:
   std::vector<char*> cargv_;
 
   // Pid of the child process
+#ifndef __USING_WINDOWS__
   int child_pid_ = -1;
+#endif
 
   int retcode_ = -1;
 };
