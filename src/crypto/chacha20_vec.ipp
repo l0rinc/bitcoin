@@ -4,10 +4,15 @@
 
 #include <crypto/chacha20_vec.h>
 
+#include <attributes.h>
+
 #include <bit>
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
+#include <utility>
 
 #if defined(ENABLE_CHACHA20_VEC)
 
@@ -22,22 +27,11 @@
 
 #if !defined(CHACHA20_VEC_ALL_MULTI_STATES_DISABLED)
 
-#if defined(__has_attribute)
-#  if __has_attribute(always_inline)
-#    define ALWAYS_INLINE __attribute__ ((always_inline)) inline
-#  endif
-#endif
-
-#if !defined(ALWAYS_INLINE)
-#  define ALWAYS_INLINE inline
-#endif
-
-
 namespace {
 
 using vec256 = uint32_t __attribute__((__vector_size__(32)));
-
-// Like Bitcoin Core's `ALWAYS_INLINE` in other files, but kept local to avoid touching shared headers.
+// Used for an optional aligned I/O fast-path.
+static constexpr size_t CHACHA20_VEC_MEM_ALIGN{16};
 
 /** Endian-conversion for big-endian */
 ALWAYS_INLINE void vec_byteswap(vec256& vec)
@@ -113,15 +107,6 @@ static const vec256 increments_8[8] = {
     (vec256){15, 0, 0, 0, 14, 0, 0, 0},
 };
 
-#define CHACHA20_VEC_PRAGMA(x) _Pragma(#x)
-#if defined(__clang__)
-#define CHACHA20_VEC_UNROLL(N) CHACHA20_VEC_PRAGMA(clang loop unroll_count(N))
-#elif defined(__GNUC__)
-#define CHACHA20_VEC_UNROLL(N) CHACHA20_VEC_PRAGMA(GCC unroll N)
-#else
-#define CHACHA20_VEC_UNROLL(N)
-#endif
-
 ALWAYS_INLINE const vec256* increments_for_half_states(size_t half_states)
 {
     switch (half_states) {
@@ -134,79 +119,83 @@ ALWAYS_INLINE const vec256* increments_for_half_states(size_t half_states)
     }
 }
 
+template <typename Fn, size_t... I>
+ALWAYS_INLINE void for_each_half_state(size_t half_states, Fn&& fn, std::index_sequence<I...>)
+{
+    ((I < half_states ? (fn(std::integral_constant<size_t, I>{}), 0) : 0), ...);
+}
+
+template <typename Fn>
+ALWAYS_INLINE void for_each_half_state(size_t half_states, Fn&& fn)
+{
+    for_each_half_state(half_states, std::forward<Fn>(fn), std::make_index_sequence<8>{});
+}
+
 /** Store a vector in all array elements */
 ALWAYS_INLINE void arr_set_vec256(vec256* arr, size_t half_states, const vec256& vec)
 {
-    CHACHA20_VEC_UNROLL(8)
-    for (size_t i = 0; i < 8; ++i) {
-        if (i < half_states) arr[i] = vec;
-    }
+    for_each_half_state(half_states, [&](auto idx) {
+        constexpr size_t i = decltype(idx)::value;
+        arr[i] = vec;
+    });
 }
 
 /** Add a vector to all array elements */
 ALWAYS_INLINE void arr_add_vec256(vec256* arr, size_t half_states, const vec256& vec)
 {
-    CHACHA20_VEC_UNROLL(8)
-    for (size_t i = 0; i < 8; ++i) {
-        if (i < half_states) arr[i] += vec;
-    }
+    for_each_half_state(half_states, [&](auto idx) {
+        constexpr size_t i = decltype(idx)::value;
+        arr[i] += vec;
+    });
 }
 
 /** Add corresponding vectors in arr1 to arr0 */
 ALWAYS_INLINE void arr_add_arr(vec256* arr0, const vec256* arr1, size_t half_states)
 {
-    CHACHA20_VEC_UNROLL(8)
-    for (size_t i = 0; i < 8; ++i) {
-        if (i < half_states) arr0[i] += arr1[i];
-    }
+    for_each_half_state(half_states, [&](auto idx) {
+        constexpr size_t i = decltype(idx)::value;
+        arr0[i] += arr1[i];
+    });
 }
 
 ALWAYS_INLINE void arr_add_xor_rot16(vec256* arr0, const vec256* arr1, vec256* arr2, size_t half_states)
 {
-    CHACHA20_VEC_UNROLL(8)
-    for (size_t i = 0; i < 8; ++i) {
-        if (i < half_states) {
-            arr0[i] += arr1[i];
-            arr2[i] ^= arr0[i];
-            vec_rotl16(arr2[i]);
-        }
-    }
+    for_each_half_state(half_states, [&](auto idx) {
+        constexpr size_t i = decltype(idx)::value;
+        arr0[i] += arr1[i];
+        arr2[i] ^= arr0[i];
+        vec_rotl16(arr2[i]);
+    });
 }
 
 ALWAYS_INLINE void arr_add_xor_rot12(vec256* arr0, const vec256* arr1, vec256* arr2, size_t half_states)
 {
-    CHACHA20_VEC_UNROLL(8)
-    for (size_t i = 0; i < 8; ++i) {
-        if (i < half_states) {
-            arr0[i] += arr1[i];
-            arr2[i] ^= arr0[i];
-            vec_rotl12(arr2[i]);
-        }
-    }
+    for_each_half_state(half_states, [&](auto idx) {
+        constexpr size_t i = decltype(idx)::value;
+        arr0[i] += arr1[i];
+        arr2[i] ^= arr0[i];
+        vec_rotl12(arr2[i]);
+    });
 }
 
 ALWAYS_INLINE void arr_add_xor_rot8(vec256* arr0, const vec256* arr1, vec256* arr2, size_t half_states)
 {
-    CHACHA20_VEC_UNROLL(8)
-    for (size_t i = 0; i < 8; ++i) {
-        if (i < half_states) {
-            arr0[i] += arr1[i];
-            arr2[i] ^= arr0[i];
-            vec_rotl8(arr2[i]);
-        }
-    }
+    for_each_half_state(half_states, [&](auto idx) {
+        constexpr size_t i = decltype(idx)::value;
+        arr0[i] += arr1[i];
+        arr2[i] ^= arr0[i];
+        vec_rotl8(arr2[i]);
+    });
 }
 
 ALWAYS_INLINE void arr_add_xor_rot7(vec256* arr0, const vec256* arr1, vec256* arr2, size_t half_states)
 {
-    CHACHA20_VEC_UNROLL(8)
-    for (size_t i = 0; i < 8; ++i) {
-        if (i < half_states) {
-            arr0[i] += arr1[i];
-            arr2[i] ^= arr0[i];
-            vec_rotl7(arr2[i]);
-        }
-    }
+    for_each_half_state(half_states, [&](auto idx) {
+        constexpr size_t i = decltype(idx)::value;
+        arr0[i] += arr1[i];
+        arr2[i] ^= arr0[i];
+        vec_rotl7(arr2[i]);
+    });
 }
 
 /*
@@ -231,41 +220,35 @@ layout.
 */
 ALWAYS_INLINE void arr_shuf0(vec256* arr, size_t half_states)
 {
-    CHACHA20_VEC_UNROLL(8)
-    for (size_t i = 0; i < 8; ++i) {
-        if (i < half_states) {
-            vec256& x = arr[i];
-            x = __builtin_shufflevector(x, x, 1, 2, 3, 0, 5, 6, 7, 4);
-        }
-    }
+    for_each_half_state(half_states, [&](auto idx) {
+        constexpr size_t i = decltype(idx)::value;
+        vec256& x = arr[i];
+        x = __builtin_shufflevector(x, x, 1, 2, 3, 0, 5, 6, 7, 4);
+    });
 }
 
 ALWAYS_INLINE void arr_shuf1(vec256* arr, size_t half_states)
 {
-    CHACHA20_VEC_UNROLL(8)
-    for (size_t i = 0; i < 8; ++i) {
-        if (i < half_states) {
-            vec256& x = arr[i];
-            x = __builtin_shufflevector(x, x, 2, 3, 0, 1, 6, 7, 4, 5);
-        }
-    }
+    for_each_half_state(half_states, [&](auto idx) {
+        constexpr size_t i = decltype(idx)::value;
+        vec256& x = arr[i];
+        x = __builtin_shufflevector(x, x, 2, 3, 0, 1, 6, 7, 4, 5);
+    });
 }
 
 ALWAYS_INLINE void arr_shuf2(vec256* arr, size_t half_states)
 {
-    CHACHA20_VEC_UNROLL(8)
-    for (size_t i = 0; i < 8; ++i) {
-        if (i < half_states) {
-            vec256& x = arr[i];
-            x = __builtin_shufflevector(x, x, 3, 0, 1, 2, 7, 4, 5, 6);
-        }
-    }
+    for_each_half_state(half_states, [&](auto idx) {
+        constexpr size_t i = decltype(idx)::value;
+        vec256& x = arr[i];
+        x = __builtin_shufflevector(x, x, 3, 0, 1, 2, 7, 4, 5, 6);
+    });
 }
 
 /* Main round function. */
 ALWAYS_INLINE void doubleround(vec256* arr0, vec256* arr1, vec256* arr2, vec256* arr3, size_t half_states)
 {
-    CHACHA20_VEC_UNROLL(10)
+    BITCOIN_UNROLL_LOOP(10)
     for (size_t i = 0; i < 10; ++i) {
         arr_add_xor_rot16(arr0, arr1, arr3, half_states);
         arr_add_xor_rot12(arr2, arr3, arr1, half_states);
@@ -284,50 +267,61 @@ ALWAYS_INLINE void doubleround(vec256* arr0, vec256* arr1, vec256* arr2, vec256*
     }
 }
 
-/* Read 32bytes of input, xor with calculated state, write to output. Assumes
-   that input and output are unaligned, and makes no assumptions about the
-   internal layout of vec256;
+/* Read 32 bytes of input, xor with calculated state, write to output.
+   Supports unaligned input/output, with an optional aligned fast-path.
 */
-ALWAYS_INLINE void vec_read_xor_write(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const vec256& vec)
+template <bool AssumeAligned>
+ALWAYS_INLINE void vec_read_xor_write(const std::byte* in_bytes, std::byte* out_bytes, const vec256& vec)
 {
-    assert(in_bytes.size() == 32);
-    assert(out_bytes.size() == 32);
+    if constexpr (AssumeAligned) {
+        in_bytes = std::assume_aligned<CHACHA20_VEC_MEM_ALIGN>(in_bytes);
+        out_bytes = std::assume_aligned<CHACHA20_VEC_MEM_ALIGN>(out_bytes);
+    }
 
-    uint32_t temparr[8];
-    memcpy(temparr, in_bytes.data(), in_bytes.size());
-    vec256 tempvec = vec ^ (vec256){temparr[0], temparr[1], temparr[2], temparr[3], temparr[4], temparr[5], temparr[6], temparr[7]};
-    vec_byteswap(tempvec);
-    temparr[0] = tempvec[0];
-    temparr[1] = tempvec[1];
-    temparr[2] = tempvec[2];
-    temparr[3] = tempvec[3];
-    temparr[4] = tempvec[4];
-    temparr[5] = tempvec[5];
-    temparr[6] = tempvec[6];
-    temparr[7] = tempvec[7];
-    memcpy(out_bytes.data(), temparr, out_bytes.size());
+    uint32_t tmp_arr[8];
+    memcpy(tmp_arr, in_bytes, sizeof(tmp_arr));
+    vec256 tmp_vec;
+    memcpy(&tmp_vec, tmp_arr, sizeof(tmp_vec));
+    vec_byteswap(tmp_vec);
+
+    tmp_vec ^= vec;
+    vec_byteswap(tmp_vec);
+
+    memcpy(out_bytes, &tmp_vec, sizeof(tmp_vec));
+}
+
+template <bool AssumeAligned>
+ALWAYS_INLINE void arr_read_xor_write_impl(const std::byte* in_bytes, std::byte* out_bytes, const vec256* arr0, const vec256* arr1, const vec256* arr2, const vec256* arr3, size_t half_states)
+{
+    for_each_half_state(half_states, [&](auto idx) {
+        constexpr size_t i = decltype(idx)::value;
+
+        const vec256& w = arr0[i];
+        const vec256& x = arr1[i];
+        const vec256& y = arr2[i];
+        const vec256& z = arr3[i];
+
+        const size_t offset = i * 128;
+        const std::byte* in_slice = in_bytes + offset;
+        std::byte* out_slice = out_bytes + offset;
+
+        vec_read_xor_write<AssumeAligned>(in_slice + 0, out_slice + 0, __builtin_shufflevector(w, x, 4, 5, 6, 7, 12, 13, 14, 15));
+        vec_read_xor_write<AssumeAligned>(in_slice + 32, out_slice + 32, __builtin_shufflevector(y, z, 4, 5, 6, 7, 12, 13, 14, 15));
+        vec_read_xor_write<AssumeAligned>(in_slice + 64, out_slice + 64, __builtin_shufflevector(w, x, 0, 1, 2, 3, 8, 9, 10, 11));
+        vec_read_xor_write<AssumeAligned>(in_slice + 96, out_slice + 96, __builtin_shufflevector(y, z, 0, 1, 2, 3, 8, 9, 10, 11));
+    });
 }
 
 /* Merge the 128 bit lanes from 2 states to the proper order, then pass each vec_read_xor_write */
 ALWAYS_INLINE void arr_read_xor_write(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const vec256* arr0, const vec256* arr1, const vec256* arr2, const vec256* arr3, size_t half_states)
 {
-    CHACHA20_VEC_UNROLL(8)
-    for (size_t i = 0; i < 8; ++i) {
-        if (i < half_states) {
-            const vec256& w = arr0[i];
-            const vec256& x = arr1[i];
-            const vec256& y = arr2[i];
-            const vec256& z = arr3[i];
+    constexpr std::uintptr_t mask{CHACHA20_VEC_MEM_ALIGN - 1};
+    const bool aligned = ((reinterpret_cast<std::uintptr_t>(in_bytes.data()) | reinterpret_cast<std::uintptr_t>(out_bytes.data())) & mask) == 0;
 
-            const size_t offset = i * 128;
-            auto in_slice = in_bytes.subspan(offset, 128);
-            auto out_slice = out_bytes.subspan(offset, 128);
-
-            vec_read_xor_write(in_slice.first(32), out_slice.first(32), __builtin_shufflevector(w, x, 4, 5, 6, 7, 12, 13, 14, 15));
-            vec_read_xor_write(in_slice.subspan(32, 32), out_slice.subspan(32, 32), __builtin_shufflevector(y, z, 4, 5, 6, 7, 12, 13, 14, 15));
-            vec_read_xor_write(in_slice.subspan(64, 32), out_slice.subspan(64, 32), __builtin_shufflevector(w, x, 0, 1, 2, 3, 8, 9, 10, 11));
-            vec_read_xor_write(in_slice.subspan(96, 32), out_slice.subspan(96, 32), __builtin_shufflevector(y, z, 0, 1, 2, 3, 8, 9, 10, 11));
-        }
+    if (aligned) {
+        arr_read_xor_write_impl<true>(in_bytes.data(), out_bytes.data(), arr0, arr1, arr2, arr3, half_states);
+    } else {
+        arr_read_xor_write_impl<false>(in_bytes.data(), out_bytes.data(), arr0, arr1, arr2, arr3, half_states);
     }
 }
 
@@ -358,9 +352,6 @@ ALWAYS_INLINE void multi_block_crypt(std::span<const std::byte> in_bytes, std::s
 
     arr_read_xor_write(in_bytes, out_bytes, arr0, arr1, arr2, arr3, half_states);
 }
-
-#undef CHACHA20_VEC_UNROLL
-#undef CHACHA20_VEC_PRAGMA
 
 } // anonymous namespace
 #endif // CHACHA20_VEC_ALL_MULTI_STATES_DISABLED

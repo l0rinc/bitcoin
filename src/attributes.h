@@ -24,4 +24,14 @@
 #  error No known always_inline attribute for this platform.
 #endif
 
+#define BITCOIN_PRAGMA(x) _Pragma(#x)
+
+#if defined(__clang__)
+#  define BITCOIN_UNROLL_LOOP(N) BITCOIN_PRAGMA(clang loop unroll_count(N))
+#elif defined(__GNUC__)
+#  define BITCOIN_UNROLL_LOOP(N) BITCOIN_PRAGMA(GCC unroll N)
+#else
+#  define BITCOIN_UNROLL_LOOP(N)
+#endif
+
 #endif // BITCOIN_ATTRIBUTES_H
