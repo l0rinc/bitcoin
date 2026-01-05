@@ -164,9 +164,20 @@ class WalletBackupTest(BitcoinTestFramework):
         self.log.info("Test restore into a default unnamed wallet")
         # This is also useful to test the migration recovery after failure logic
         node = self.nodes[3]
+        if not self.options.descriptors:
+            node.unloadwallet("")
+            os.rename(node.wallets_path / "wallet.dat", node.wallets_path / "default.wallet.dat")
         backup_file = self.nodes[0].datadir_path / 'wallet.bak'
-        assert_raises_rpc_error(-8, "Wallet name cannot be empty", node.restorewallet, "", backup_file)
-        assert not (node.wallets_path / "wallet.dat").exists()
+        wallet_name = ""
+        res = node.restorewallet(wallet_name, backup_file)
+        assert_equal(res['name'], "")
+        assert (node.wallets_path / "wallet.dat").exists()
+        # Clean for follow-up tests
+        node.unloadwallet("")
+        os.remove(node.wallets_path / "wallet.dat")
+        if not self.options.descriptors:
+            os.rename(node.wallets_path / "default.wallet.dat", node.wallets_path / "wallet.dat")
+            node.loadwallet("")
 
     def test_pruned_wallet_backup(self):
         self.log.info("Test loading backup on a pruned node when the backup was created close to the prune height of the restoring node")
@@ -188,10 +199,17 @@ class WalletBackupTest(BitcoinTestFramework):
         node.restorewallet('pruned', node.datadir_path / 'wallet_pruned.bak')
 
         self.log.info("Test restore on a pruned node when the backup was beyond the pruning point")
+        if not self.options.descriptors:
+            node.unloadwallet("")
+            os.rename(node.wallets_path / "wallet.dat", node.wallets_path / "default.wallet.dat")
         backup_file = self.nodes[0].datadir_path / 'wallet.bak'
-        error_message = "Wallet loading failed. Prune: last wallet synchronisation goes beyond pruned data. You need to -reindex (download the whole blockchain again in case of a pruned node)"
-        assert_raises_rpc_error(-4, error_message, node.restorewallet, "restore_pruned", backup_file)
+        wallet_name = ""
+        error_message = "Wallet loading failed. Prune: last wallet synchronisation goes beyond pruned data. You need to -reindex (download the whole blockchain again in case of pruned node)"
+        assert_raises_rpc_error(-4, error_message, node.restorewallet, wallet_name, backup_file)
         assert node.wallets_path.exists() # ensure the wallets dir exists
+        if not self.options.descriptors:
+            os.rename(node.wallets_path / "default.wallet.dat", node.wallets_path / "wallet.dat")
+            node.loadwallet("")
 
     def run_test(self):
         self.log.info("Generating initial blockchain")
@@ -259,6 +277,29 @@ class WalletBackupTest(BitcoinTestFramework):
         self.restore_wallet_existent_name()
         self.test_restore_existent_dir()
         self.test_restore_into_unnamed_wallet()
+
+        if not self.options.descriptors:
+            self.log.info("Restoring using dumped wallet")
+            self.stop_three()
+            self.erase_three()
+
+            #start node2 with no chain
+            shutil.rmtree(self.nodes[2].blocks_path)
+            shutil.rmtree(self.nodes[2].chain_path / 'chainstate')
+
+            self.start_three(["-nowallet"])
+            # Create new wallets for the three nodes.
+            # We will use this empty wallets to test the 'importwallet()' RPC command below.
+            for node_num in range(3):
+                self.nodes[node_num].createwallet(wallet_name=self.default_wallet_name, descriptors=self.options.descriptors, load_on_startup=True)
+                assert_equal(self.nodes[node_num].getbalance(), 0)
+                self.nodes[node_num].importwallet(self.nodes[node_num].datadir_path / 'wallet.dump')
+
+            self.sync_blocks()
+
+            assert_equal(self.nodes[0].getbalance(), balance0)
+            assert_equal(self.nodes[1].getbalance(), balance1)
+            assert_equal(self.nodes[2].getbalance(), balance2)
 
         # Backup to source wallet file must fail
         sourcePaths = [
