@@ -390,10 +390,16 @@ void BitcoinApplication::initializeResult(bool success, interfaces::BlockAndHead
         return;
     }
 
-        // Log this only after AppInitMain finishes, as then logging setup is guaranteed complete
-        qInfo() << "Platform customization:" << platformStyle->getName();
-        clientModel = new ClientModel(node(), optionsModel, *platformStyle);
-        window->setClientModel(clientModel, &tip_info);
+    delete m_splash;
+    m_splash = nullptr;
+
+    // Log this only after AppInitMain finishes, as then logging setup is guaranteed complete
+    qInfo() << "Platform customization:" << platformStyle->getName();
+    clientModel = new ClientModel(node(), optionsModel);
+    window->setClientModel(clientModel, &tip_info);
+
+    // If '-min' option passed, start window minimized (iconified) or minimized to tray
+    bool start_minimized = gArgs.GetBoolArg("-min", false);
 #ifdef ENABLE_WALLET
     if (WalletModel::isWalletEnabled()) {
         m_wallet_controller = new WalletController(*clientModel, platformStyle, this);

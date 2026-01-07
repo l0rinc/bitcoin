@@ -2149,7 +2149,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     // As LoadBlockIndex can take several minutes, it's possible the user
     // requested to kill the GUI during the last operation. If so, exit.
     if (ShutdownRequested(node)) {
-        LogInfo("Shutdown requested. Exiting.");
+        LogPrintf("Shutdown requested. Exiting.\n");
         return true;
     }
 
