@@ -1585,7 +1585,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     // As the program has not fully started yet, Shutdown() is possibly overkill.
     if (ShutdownRequested(node)) {
         LogPrintf("Shutdown requested. Exiting.\n");
-        return false;
+        return true;
     }
 
     ChainstateManager& chainman = *Assert(node.chainman);
@@ -1736,7 +1736,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     }
 
     if (ShutdownRequested(node)) {
-        return false;
+        return true;
     }
 
     // ********************************************************* Step 12: start node
