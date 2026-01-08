@@ -709,6 +709,11 @@ class WalletMigrationTest(BitcoinTestFramework):
         os.mkdir(watch_only_dir)
         shutil.copyfile(old_path / "wallet.dat", watch_only_dir / "wallet.dat")
 
+        # Failed cleanup must not remove unrelated files in the wallets directory.
+        survive_path = self.master_node.wallets_path / "survive"
+        survive_path.touch()
+        assert survive_path.exists()
+
         mocked_time = int(time.time())
         self.master_node.setmocktime(mocked_time)
         assert_raises_rpc_error(-4, "Failed to create database", self.master_node.migratewallet, wallet_name)
@@ -716,6 +721,7 @@ class WalletMigrationTest(BitcoinTestFramework):
 
         # Verify the /wallets/ path exists.
         assert self.master_node.wallets_path.exists()
+        assert survive_path.exists()
 
         # Verify both wallet paths exist.
         assert Path(old_path / "wallet.dat").exists()
@@ -726,6 +732,7 @@ class WalletMigrationTest(BitcoinTestFramework):
         assert backup_path.exists()
 
         self.assert_is_bdb(wallet_name)
+        survive_path.unlink()
 
         # Cleanup
         if is_default:
