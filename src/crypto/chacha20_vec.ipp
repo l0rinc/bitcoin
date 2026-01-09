@@ -48,8 +48,40 @@ inline constexpr bool kEnableStates2 = true;
 
 inline constexpr bool kEnableAnyMultiState = kEnableStates16 || kEnableStates8 || kEnableStates6 || kEnableStates4 || kEnableStates2;
 
-// vec256 type must be visible for if constexpr branches even when they're not taken
+using vec128 = uint32_t __attribute__((__vector_size__(16)));
+
+#if defined(__GNUC__) && !defined(__clang__)
+#  define CHACHA20_VEC_USE_SPLIT_LANES 1
+#else
+#  define CHACHA20_VEC_USE_SPLIT_LANES 0
+#endif
+
+#if CHACHA20_VEC_USE_SPLIT_LANES
+// Represent two 128-bit lanes explicitly. This avoids GCC generating expensive
+// scalar sequences for 256-bit shuffles on targets without native 256-bit SIMD
+// registers (e.g. AArch64/NEON, x86/SSE2).
+struct vec256 {
+    vec128 lo;
+    vec128 hi;
+};
+static_assert(sizeof(vec256) == 32);
+
+ALWAYS_INLINE vec256& operator+=(vec256& a, const vec256& b)
+{
+    a.lo += b.lo;
+    a.hi += b.hi;
+    return a;
+}
+
+ALWAYS_INLINE vec256& operator^=(vec256& a, const vec256& b)
+{
+    a.lo ^= b.lo;
+    a.hi ^= b.hi;
+    return a;
+}
+#else
 using vec256 = uint32_t __attribute__((__vector_size__(32)));
+#endif
 
 // Preprocessor check for conditional compilation of the anonymous namespace and
 // the multi-state code paths. When all states are disabled, avoid referencing
@@ -75,6 +107,20 @@ static constexpr size_t CHACHA20_VEC_MEM_ALIGN{16};
 ALWAYS_INLINE void vec_byteswap(vec256& vec)
 {
     if constexpr (std::endian::native == std::endian::big) {
+#if CHACHA20_VEC_USE_SPLIT_LANES
+        vec128 lo;
+        lo[0] = __builtin_bswap32(vec.lo[0]);
+        lo[1] = __builtin_bswap32(vec.lo[1]);
+        lo[2] = __builtin_bswap32(vec.lo[2]);
+        lo[3] = __builtin_bswap32(vec.lo[3]);
+        vec128 hi;
+        hi[0] = __builtin_bswap32(vec.hi[0]);
+        hi[1] = __builtin_bswap32(vec.hi[1]);
+        hi[2] = __builtin_bswap32(vec.hi[2]);
+        hi[3] = __builtin_bswap32(vec.hi[3]);
+        vec.lo = lo;
+        vec.hi = hi;
+#else
         vec256 ret;
         ret[0] = __builtin_bswap32(vec[0]);
         ret[1] = __builtin_bswap32(vec[1]);
@@ -85,6 +131,7 @@ ALWAYS_INLINE void vec_byteswap(vec256& vec)
         ret[6] = __builtin_bswap32(vec[6]);
         ret[7] = __builtin_bswap32(vec[7]);
         vec = ret;
+#endif
     }
 }
 
@@ -93,14 +140,34 @@ template <unsigned N>
 ALWAYS_INLINE void vec_rotl(vec256& vec)
 {
     static_assert(N > 0 && N < 32, "Rotation must be between 1 and 31 bits");
+#if CHACHA20_VEC_USE_SPLIT_LANES
+    vec.lo = (vec.lo << N) | (vec.lo >> (32 - N));
+    vec.hi = (vec.hi << N) | (vec.hi >> (32 - N));
+#else
     vec = (vec << N) | (vec >> (32 - N));
+#endif
 }
 
+#if CHACHA20_VEC_USE_SPLIT_LANES
+static constexpr vec128 nums128 = {0x61707865, 0x3320646e, 0x79622d32, 0x6b206574};
+static constexpr vec256 nums256 = {nums128, nums128};
+#else
 static constexpr vec256 nums256 = {0x61707865, 0x3320646e, 0x79622d32, 0x6b206574, 0x61707865, 0x3320646e, 0x79622d32, 0x6b206574};
+#endif
 
 // Counter increments for each half-state pair. Pattern: {2*i+1, 0, 0, 0, 2*i, 0, 0, 0}
 // All smaller state counts use a prefix of this array.
 static constexpr vec256 increments[8] = {
+#if CHACHA20_VEC_USE_SPLIT_LANES
+    {{1, 0, 0, 0}, {0, 0, 0, 0}},
+    {{3, 0, 0, 0}, {2, 0, 0, 0}},
+    {{5, 0, 0, 0}, {4, 0, 0, 0}},
+    {{7, 0, 0, 0}, {6, 0, 0, 0}},
+    {{9, 0, 0, 0}, {8, 0, 0, 0}},
+    {{11, 0, 0, 0}, {10, 0, 0, 0}},
+    {{13, 0, 0, 0}, {12, 0, 0, 0}},
+    {{15, 0, 0, 0}, {14, 0, 0, 0}},
+#else
     {1, 0, 0, 0, 0, 0, 0, 0},
     {3, 0, 0, 0, 2, 0, 0, 0},
     {5, 0, 0, 0, 4, 0, 0, 0},
@@ -109,6 +176,7 @@ static constexpr vec256 increments[8] = {
     {11, 0, 0, 0, 10, 0, 0, 0},
     {13, 0, 0, 0, 12, 0, 0, 0},
     {15, 0, 0, 0, 14, 0, 0, 0},
+#endif
 };
 
 template <typename Fn, size_t... I>
@@ -182,15 +250,17 @@ After the second round, they are used (in reverse) to restore the original
 layout.
 
 */
-#define VEC_SHUF_SELF(x, ...) __builtin_shufflevector(x, x, __VA_ARGS__)
-#define VEC_SHUF2(a, b, ...) __builtin_shufflevector(a, b, __VA_ARGS__)
-
 ALWAYS_INLINE void arr_shuf0(vec256* arr, size_t half_states)
 {
     for_each_half_state(half_states, [&](auto idx) {
         constexpr size_t i = decltype(idx)::value;
         vec256& x = arr[i];
-        x = VEC_SHUF_SELF(x, 1, 2, 3, 0, 5, 6, 7, 4);
+#if CHACHA20_VEC_USE_SPLIT_LANES
+        x.lo = __builtin_shufflevector(x.lo, x.lo, 1, 2, 3, 0);
+        x.hi = __builtin_shufflevector(x.hi, x.hi, 1, 2, 3, 0);
+#else
+        x = __builtin_shufflevector(x, x, 1, 2, 3, 0, 5, 6, 7, 4);
+#endif
     });
 }
 
@@ -199,7 +269,12 @@ ALWAYS_INLINE void arr_shuf1(vec256* arr, size_t half_states)
     for_each_half_state(half_states, [&](auto idx) {
         constexpr size_t i = decltype(idx)::value;
         vec256& x = arr[i];
-        x = VEC_SHUF_SELF(x, 2, 3, 0, 1, 6, 7, 4, 5);
+#if CHACHA20_VEC_USE_SPLIT_LANES
+        x.lo = __builtin_shufflevector(x.lo, x.lo, 2, 3, 0, 1);
+        x.hi = __builtin_shufflevector(x.hi, x.hi, 2, 3, 0, 1);
+#else
+        x = __builtin_shufflevector(x, x, 2, 3, 0, 1, 6, 7, 4, 5);
+#endif
     });
 }
 
@@ -208,7 +283,12 @@ ALWAYS_INLINE void arr_shuf2(vec256* arr, size_t half_states)
     for_each_half_state(half_states, [&](auto idx) {
         constexpr size_t i = decltype(idx)::value;
         vec256& x = arr[i];
-        x = VEC_SHUF_SELF(x, 3, 0, 1, 2, 7, 4, 5, 6);
+#if CHACHA20_VEC_USE_SPLIT_LANES
+        x.lo = __builtin_shufflevector(x.lo, x.lo, 3, 0, 1, 2);
+        x.hi = __builtin_shufflevector(x.hi, x.hi, 3, 0, 1, 2);
+#else
+        x = __builtin_shufflevector(x, x, 3, 0, 1, 2, 7, 4, 5, 6);
+#endif
     });
 }
 
@@ -245,10 +325,8 @@ ALWAYS_INLINE void vec_read_xor_write(const std::byte* in_bytes, std::byte* out_
         out_bytes = std::assume_aligned<CHACHA20_VEC_MEM_ALIGN>(out_bytes);
     }
 
-    uint32_t tmp_arr[8];
-    memcpy(tmp_arr, in_bytes, sizeof(tmp_arr));
     vec256 tmp_vec;
-    memcpy(&tmp_vec, tmp_arr, sizeof(tmp_vec));
+    memcpy(&tmp_vec, in_bytes, sizeof(tmp_vec));
     vec_byteswap(tmp_vec);
 
     tmp_vec ^= vec;
@@ -272,10 +350,17 @@ ALWAYS_INLINE void arr_read_xor_write_impl(const std::byte* in_bytes, std::byte*
         const std::byte* in_slice = in_bytes + offset;
         std::byte* out_slice = out_bytes + offset;
 
-        vec_read_xor_write<AssumeAligned>(in_slice + 0, out_slice + 0, VEC_SHUF2(w, x, 4, 5, 6, 7, 12, 13, 14, 15));
-        vec_read_xor_write<AssumeAligned>(in_slice + 32, out_slice + 32, VEC_SHUF2(y, z, 4, 5, 6, 7, 12, 13, 14, 15));
-        vec_read_xor_write<AssumeAligned>(in_slice + 64, out_slice + 64, VEC_SHUF2(w, x, 0, 1, 2, 3, 8, 9, 10, 11));
-        vec_read_xor_write<AssumeAligned>(in_slice + 96, out_slice + 96, VEC_SHUF2(y, z, 0, 1, 2, 3, 8, 9, 10, 11));
+#if CHACHA20_VEC_USE_SPLIT_LANES
+        vec_read_xor_write<AssumeAligned>(in_slice + 0, out_slice + 0, vec256{w.hi, x.hi});
+        vec_read_xor_write<AssumeAligned>(in_slice + 32, out_slice + 32, vec256{y.hi, z.hi});
+        vec_read_xor_write<AssumeAligned>(in_slice + 64, out_slice + 64, vec256{w.lo, x.lo});
+        vec_read_xor_write<AssumeAligned>(in_slice + 96, out_slice + 96, vec256{y.lo, z.lo});
+#else
+        vec_read_xor_write<AssumeAligned>(in_slice + 0, out_slice + 0, __builtin_shufflevector(w, x, 4, 5, 6, 7, 12, 13, 14, 15));
+        vec_read_xor_write<AssumeAligned>(in_slice + 32, out_slice + 32, __builtin_shufflevector(y, z, 4, 5, 6, 7, 12, 13, 14, 15));
+        vec_read_xor_write<AssumeAligned>(in_slice + 64, out_slice + 64, __builtin_shufflevector(w, x, 0, 1, 2, 3, 8, 9, 10, 11));
+        vec_read_xor_write<AssumeAligned>(in_slice + 96, out_slice + 96, __builtin_shufflevector(y, z, 0, 1, 2, 3, 8, 9, 10, 11));
+#endif
     });
 }
 
@@ -324,14 +409,16 @@ ALWAYS_INLINE void process_blocks(std::span<const std::byte>& in_bytes, std::spa
 {
     while (in_bytes.size() >= CHACHA20_VEC_BLOCKLEN * States) {
         multi_block_crypt<States>(in_bytes, out_bytes, state0, state1, state2);
-        state2 += (vec256){static_cast<uint32_t>(States), 0, 0, 0, static_cast<uint32_t>(States), 0, 0, 0};
+        const uint32_t inc = static_cast<uint32_t>(States);
+#if CHACHA20_VEC_USE_SPLIT_LANES
+        state2 += vec256{{inc, 0, 0, 0}, {inc, 0, 0, 0}};
+#else
+        state2 += (vec256){inc, 0, 0, 0, inc, 0, 0, 0};
+#endif
         in_bytes = in_bytes.subspan(CHACHA20_VEC_BLOCKLEN * States);
         out_bytes = out_bytes.subspan(CHACHA20_VEC_BLOCKLEN * States);
     }
 }
-
-#undef VEC_SHUF_SELF
-#undef VEC_SHUF2
 
 } // anonymous namespace
 #endif // CHACHA20_VEC_ENABLE_ANY_MULTI_STATE
@@ -344,9 +431,19 @@ void chacha20_crypt_vectorized(std::span<const std::byte>& in_bytes, std::span<s
 {
 #if CHACHA20_VEC_ENABLE_ANY_MULTI_STATE
     assert(in_bytes.size() == out_bytes.size());
+#if CHACHA20_VEC_USE_SPLIT_LANES
+    const vec128 state0_lane = {input[0], input[1], input[2], input[3]};
+    const vec128 state1_lane = {input[4], input[5], input[6], input[7]};
+    const vec128 state2_lane = {input[8], input[9], input[10], input[11]};
+
+    const vec256 state0 = {state0_lane, state0_lane};
+    const vec256 state1 = {state1_lane, state1_lane};
+    vec256 state2 = {state2_lane, state2_lane};
+#else
     const vec256 state0 = (vec256){input[0], input[1], input[2], input[3], input[0], input[1], input[2], input[3]};
     const vec256 state1 = (vec256){input[4], input[5], input[6], input[7], input[4], input[5], input[6], input[7]};
     vec256 state2 = (vec256){input[8], input[9], input[10], input[11], input[8], input[9], input[10], input[11]};
+#endif
 
     if constexpr (kEnableStates16) process_blocks<16>(in_bytes, out_bytes, state0, state1, state2);
     if constexpr (kEnableStates8) process_blocks<8>(in_bytes, out_bytes, state0, state1, state2);
@@ -363,5 +460,8 @@ void chacha20_crypt_vectorized(std::span<const std::byte>& in_bytes, std::span<s
 #if defined(CHACHA20_NAMESPACE)
 }
 #endif
+
+#undef CHACHA20_VEC_ENABLE_ANY_MULTI_STATE
+#undef CHACHA20_VEC_USE_SPLIT_LANES
 
 #endif // ENABLE_CHACHA20_VEC
