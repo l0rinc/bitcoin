@@ -23,12 +23,15 @@
 #  endif
 #elif defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(__aarch64__)
 #  if defined(__GNUC__) && !defined(__clang__)
-// GCC tends to spill heavily in the widest multi-state configuration on
-// AArch64/NEON. Prefer smaller multi-state levels that fit in registers.
+// The widest multi-state configuration (16) tends to spill on AArch64/NEON.
+// Also disable the 6-state variant: it increases code size and hurts the
+// common 8/4-state path on this target.
 #    define CHACHA20_VEC_DISABLE_STATES_16
 #    define CHACHA20_VEC_DISABLE_STATES_6
 #    define CHACHA20_VEC_DISABLE_STATES_2
 #  else
+#    define CHACHA20_VEC_DISABLE_STATES_16
+#    define CHACHA20_VEC_DISABLE_STATES_6
 #    define CHACHA20_VEC_DISABLE_STATES_2
 #  endif
 #else

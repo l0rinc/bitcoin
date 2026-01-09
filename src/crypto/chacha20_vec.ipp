@@ -46,8 +46,6 @@ inline constexpr bool kEnableStates2 = false;
 inline constexpr bool kEnableStates2 = true;
 #endif
 
-inline constexpr bool kEnableAnyMultiState = kEnableStates16 || kEnableStates8 || kEnableStates6 || kEnableStates4 || kEnableStates2;
-
 using vec128 = uint32_t __attribute__((__vector_size__(16)));
 
 #if defined(__GNUC__) && !defined(__clang__)
@@ -179,54 +177,62 @@ static constexpr vec256 increments[8] = {
 #endif
 };
 
-template <typename Fn, size_t... I>
-ALWAYS_INLINE void for_each_half_state(size_t half_states, Fn&& fn, std::index_sequence<I...>)
+/** Store a vector in all array elements */
+template <size_t HalfStates, typename Fn, size_t... I>
+ALWAYS_INLINE void for_each_half_state(Fn&& fn, std::index_sequence<I...>)
 {
-    ((I < half_states ? (fn(std::integral_constant<size_t, I>{}), 0) : 0), ...);
+    (fn(std::integral_constant<size_t, I>{}), ...);
 }
 
-template <typename Fn>
-ALWAYS_INLINE void for_each_half_state(size_t half_states, Fn&& fn)
+template <size_t HalfStates, typename Fn>
+ALWAYS_INLINE void for_each_half_state(Fn&& fn)
 {
-    for_each_half_state(half_states, std::forward<Fn>(fn), std::make_index_sequence<8>{});
+    for_each_half_state<HalfStates>(std::forward<Fn>(fn), std::make_index_sequence<HalfStates>{});
 }
 
 /** Store a vector in all array elements */
-ALWAYS_INLINE void arr_set_vec256(vec256* arr, size_t half_states, const vec256& vec)
+template <size_t HalfStates>
+ALWAYS_INLINE void arr_set_vec256(std::array<vec256, HalfStates>& arr, const vec256& vec)
 {
-    for_each_half_state(half_states, [&](auto idx) {
-        constexpr size_t i = decltype(idx)::value;
-        arr[i] = vec;
+    for_each_half_state<HalfStates>([&](auto idx) {
+        constexpr size_t i{decltype(idx)::value};
+        std::get<i>(arr) = vec;
     });
 }
 
 /** Add a vector to all array elements */
-ALWAYS_INLINE void arr_add_vec256(vec256* arr, size_t half_states, const vec256& vec)
+template <size_t HalfStates>
+ALWAYS_INLINE void arr_add_vec256(std::array<vec256, HalfStates>& arr, const vec256& vec)
 {
-    for_each_half_state(half_states, [&](auto idx) {
-        constexpr size_t i = decltype(idx)::value;
-        arr[i] += vec;
+    for_each_half_state<HalfStates>([&](auto idx) {
+        constexpr size_t i{decltype(idx)::value};
+        std::get<i>(arr) += vec;
     });
 }
 
 /** Add corresponding vectors in arr1 to arr0 */
-ALWAYS_INLINE void arr_add_arr(vec256* arr0, const vec256* arr1, size_t half_states)
+template <size_t HalfStates>
+ALWAYS_INLINE void arr_add_arr(std::array<vec256, HalfStates>& arr0, const vec256* arr1)
 {
-    for_each_half_state(half_states, [&](auto idx) {
-        constexpr size_t i = decltype(idx)::value;
-        arr0[i] += arr1[i];
+    for_each_half_state<HalfStates>([&](auto idx) {
+        constexpr size_t i{decltype(idx)::value};
+        std::get<i>(arr0) += arr1[i];
     });
 }
 
 /** Add arr1 to arr0, XOR result into arr2, rotate arr2 left by N bits */
-template <unsigned N>
-ALWAYS_INLINE void arr_add_xor_rot(vec256* arr0, const vec256* arr1, vec256* arr2, size_t half_states)
+template <unsigned N, size_t HalfStates>
+ALWAYS_INLINE void arr_add_xor_rot(std::array<vec256, HalfStates>& arr0, const std::array<vec256, HalfStates>& arr1, std::array<vec256, HalfStates>& arr2)
 {
-    for_each_half_state(half_states, [&](auto idx) {
-        constexpr size_t i = decltype(idx)::value;
-        arr0[i] += arr1[i];
-        arr2[i] ^= arr0[i];
-        vec_rotl<N>(arr2[i]);
+    for_each_half_state<HalfStates>([&](auto idx) {
+        constexpr size_t i{decltype(idx)::value};
+        vec256& x = std::get<i>(arr0);
+        const vec256& y = std::get<i>(arr1);
+        vec256& z = std::get<i>(arr2);
+
+        x += y;
+        z ^= x;
+        vec_rotl<N>(z);
     });
 }
 
@@ -250,11 +256,12 @@ After the second round, they are used (in reverse) to restore the original
 layout.
 
 */
-ALWAYS_INLINE void arr_shuf0(vec256* arr, size_t half_states)
+template <size_t HalfStates>
+ALWAYS_INLINE void arr_shuf0(std::array<vec256, HalfStates>& arr)
 {
-    for_each_half_state(half_states, [&](auto idx) {
-        constexpr size_t i = decltype(idx)::value;
-        vec256& x = arr[i];
+    for_each_half_state<HalfStates>([&](auto idx) {
+        constexpr size_t i{decltype(idx)::value};
+        vec256& x = std::get<i>(arr);
 #if CHACHA20_VEC_USE_SPLIT_LANES
         x.lo = __builtin_shufflevector(x.lo, x.lo, 1, 2, 3, 0);
         x.hi = __builtin_shufflevector(x.hi, x.hi, 1, 2, 3, 0);
@@ -264,11 +271,12 @@ ALWAYS_INLINE void arr_shuf0(vec256* arr, size_t half_states)
     });
 }
 
-ALWAYS_INLINE void arr_shuf1(vec256* arr, size_t half_states)
+template <size_t HalfStates>
+ALWAYS_INLINE void arr_shuf1(std::array<vec256, HalfStates>& arr)
 {
-    for_each_half_state(half_states, [&](auto idx) {
-        constexpr size_t i = decltype(idx)::value;
-        vec256& x = arr[i];
+    for_each_half_state<HalfStates>([&](auto idx) {
+        constexpr size_t i{decltype(idx)::value};
+        vec256& x = std::get<i>(arr);
 #if CHACHA20_VEC_USE_SPLIT_LANES
         x.lo = __builtin_shufflevector(x.lo, x.lo, 2, 3, 0, 1);
         x.hi = __builtin_shufflevector(x.hi, x.hi, 2, 3, 0, 1);
@@ -278,11 +286,12 @@ ALWAYS_INLINE void arr_shuf1(vec256* arr, size_t half_states)
     });
 }
 
-ALWAYS_INLINE void arr_shuf2(vec256* arr, size_t half_states)
+template <size_t HalfStates>
+ALWAYS_INLINE void arr_shuf2(std::array<vec256, HalfStates>& arr)
 {
-    for_each_half_state(half_states, [&](auto idx) {
-        constexpr size_t i = decltype(idx)::value;
-        vec256& x = arr[i];
+    for_each_half_state<HalfStates>([&](auto idx) {
+        constexpr size_t i{decltype(idx)::value};
+        vec256& x = std::get<i>(arr);
 #if CHACHA20_VEC_USE_SPLIT_LANES
         x.lo = __builtin_shufflevector(x.lo, x.lo, 3, 0, 1, 2);
         x.hi = __builtin_shufflevector(x.hi, x.hi, 3, 0, 1, 2);
@@ -293,24 +302,25 @@ ALWAYS_INLINE void arr_shuf2(vec256* arr, size_t half_states)
 }
 
 /* Main round function. */
-ALWAYS_INLINE void doubleround(vec256* arr0, vec256* arr1, vec256* arr2, vec256* arr3, size_t half_states)
+template <size_t HalfStates>
+ALWAYS_INLINE void doubleround(std::array<vec256, HalfStates>& arr0, std::array<vec256, HalfStates>& arr1, std::array<vec256, HalfStates>& arr2, std::array<vec256, HalfStates>& arr3)
 {
     UNROLL_LOOP(10)
     for (size_t i = 0; i < 10; ++i) {
-        arr_add_xor_rot<16>(arr0, arr1, arr3, half_states);
-        arr_add_xor_rot<12>(arr2, arr3, arr1, half_states);
-        arr_add_xor_rot<8>(arr0, arr1, arr3, half_states);
-        arr_add_xor_rot<7>(arr2, arr3, arr1, half_states);
-        arr_shuf0(arr1, half_states);
-        arr_shuf1(arr2, half_states);
-        arr_shuf2(arr3, half_states);
-        arr_add_xor_rot<16>(arr0, arr1, arr3, half_states);
-        arr_add_xor_rot<12>(arr2, arr3, arr1, half_states);
-        arr_add_xor_rot<8>(arr0, arr1, arr3, half_states);
-        arr_add_xor_rot<7>(arr2, arr3, arr1, half_states);
-        arr_shuf2(arr1, half_states);
-        arr_shuf1(arr2, half_states);
-        arr_shuf0(arr3, half_states);
+        arr_add_xor_rot<16>(arr0, arr1, arr3);
+        arr_add_xor_rot<12>(arr2, arr3, arr1);
+        arr_add_xor_rot<8>(arr0, arr1, arr3);
+        arr_add_xor_rot<7>(arr2, arr3, arr1);
+        arr_shuf0(arr1);
+        arr_shuf1(arr2);
+        arr_shuf2(arr3);
+        arr_add_xor_rot<16>(arr0, arr1, arr3);
+        arr_add_xor_rot<12>(arr2, arr3, arr1);
+        arr_add_xor_rot<8>(arr0, arr1, arr3);
+        arr_add_xor_rot<7>(arr2, arr3, arr1);
+        arr_shuf2(arr1);
+        arr_shuf1(arr2);
+        arr_shuf0(arr3);
     }
 }
 
@@ -335,16 +345,16 @@ ALWAYS_INLINE void vec_read_xor_write(const std::byte* in_bytes, std::byte* out_
     memcpy(out_bytes, &tmp_vec, sizeof(tmp_vec));
 }
 
-template <bool AssumeAligned>
-ALWAYS_INLINE void arr_read_xor_write_impl(const std::byte* in_bytes, std::byte* out_bytes, const vec256* arr0, const vec256* arr1, const vec256* arr2, const vec256* arr3, size_t half_states)
+template <bool AssumeAligned, size_t HalfStates>
+ALWAYS_INLINE void arr_read_xor_write_impl(const std::byte* in_bytes, std::byte* out_bytes, const std::array<vec256, HalfStates>& arr0, const std::array<vec256, HalfStates>& arr1, const std::array<vec256, HalfStates>& arr2, const std::array<vec256, HalfStates>& arr3)
 {
-    for_each_half_state(half_states, [&](auto idx) {
-        constexpr size_t i = decltype(idx)::value;
+    for_each_half_state<HalfStates>([&](auto idx) {
+        constexpr size_t i{decltype(idx)::value};
 
-        const vec256& w = arr0[i];
-        const vec256& x = arr1[i];
-        const vec256& y = arr2[i];
-        const vec256& z = arr3[i];
+        const vec256& w = std::get<i>(arr0);
+        const vec256& x = std::get<i>(arr1);
+        const vec256& y = std::get<i>(arr2);
+        const vec256& z = std::get<i>(arr3);
 
         const size_t offset = i * 128;
         const std::byte* in_slice = in_bytes + offset;
@@ -365,16 +375,23 @@ ALWAYS_INLINE void arr_read_xor_write_impl(const std::byte* in_bytes, std::byte*
 }
 
 /* Merge the 128 bit lanes from 2 states to the proper order, then pass each vec_read_xor_write */
-ALWAYS_INLINE void arr_read_xor_write(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const vec256* arr0, const vec256* arr1, const vec256* arr2, const vec256* arr3, size_t half_states)
+template <size_t HalfStates>
+ALWAYS_INLINE void arr_read_xor_write(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const std::array<vec256, HalfStates>& arr0, const std::array<vec256, HalfStates>& arr1, const std::array<vec256, HalfStates>& arr2, const std::array<vec256, HalfStates>& arr3)
 {
+#if defined(__clang__) && (defined(__aarch64__) || defined(__ARM_NEON) || defined(__ARM_NEON__))
+    // On AArch64/NEON, clang's codegen for `std::assume_aligned` + 32-byte memcpy
+    // can be slower than the unaligned path. Prefer the single unaligned variant.
+    arr_read_xor_write_impl<false>(in_bytes.data(), out_bytes.data(), arr0, arr1, arr2, arr3);
+#else
     constexpr std::uintptr_t mask{CHACHA20_VEC_MEM_ALIGN - 1};
     const bool aligned = ((reinterpret_cast<std::uintptr_t>(in_bytes.data()) | reinterpret_cast<std::uintptr_t>(out_bytes.data())) & mask) == 0;
 
     if (aligned) [[likely]] {
-        arr_read_xor_write_impl<true>(in_bytes.data(), out_bytes.data(), arr0, arr1, arr2, arr3, half_states);
+        arr_read_xor_write_impl<true>(in_bytes.data(), out_bytes.data(), arr0, arr1, arr2, arr3);
     } else {
-        arr_read_xor_write_impl<false>(in_bytes.data(), out_bytes.data(), arr0, arr1, arr2, arr3, half_states);
+        arr_read_xor_write_impl<false>(in_bytes.data(), out_bytes.data(), arr0, arr1, arr2, arr3);
     }
+#endif
 }
 
 /* Main crypt function. Calculates up to 16 states (8 half_states). */
@@ -383,25 +400,25 @@ ALWAYS_INLINE void multi_block_crypt(std::span<const std::byte> in_bytes, std::s
 {
     static_assert(States == 16 || States == 8 || States == 6 || States == 4 || States == 2);
     constexpr size_t half_states = States / 2;
-    vec256 arr0[half_states], arr1[half_states], arr2[half_states], arr3[half_states];
+    std::array<vec256, half_states> arr0, arr1, arr2, arr3;
 
-    arr_set_vec256(arr0, half_states, nums256);
-    arr_set_vec256(arr1, half_states, state0);
-    arr_set_vec256(arr2, half_states, state1);
-    arr_set_vec256(arr3, half_states, state2);
+    arr_set_vec256(arr0, nums256);
+    arr_set_vec256(arr1, state0);
+    arr_set_vec256(arr2, state1);
+    arr_set_vec256(arr3, state2);
 
-    arr_add_arr(arr3, increments, half_states);
+    arr_add_arr(arr3, increments);
 
-    doubleround(arr0, arr1, arr2, arr3, half_states);
+    doubleround(arr0, arr1, arr2, arr3);
 
-    arr_add_vec256(arr0, half_states, nums256);
-    arr_add_vec256(arr1, half_states, state0);
-    arr_add_vec256(arr2, half_states, state1);
-    arr_add_vec256(arr3, half_states, state2);
+    arr_add_vec256(arr0, nums256);
+    arr_add_vec256(arr1, state0);
+    arr_add_vec256(arr2, state1);
+    arr_add_vec256(arr3, state2);
 
-    arr_add_arr(arr3, increments, half_states);
+    arr_add_arr(arr3, increments);
 
-    arr_read_xor_write(in_bytes, out_bytes, arr0, arr1, arr2, arr3, half_states);
+    arr_read_xor_write(in_bytes, out_bytes, arr0, arr1, arr2, arr3);
 }
 
 template <size_t States>
