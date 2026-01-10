@@ -4,6 +4,7 @@
 
 #include <attributes.h>
 #include <crypto/chacha20_vec.h>
+#include <util/for_each_index.h>
 
 #include <bit>
 #include <cassert>
@@ -146,6 +147,15 @@ ALWAYS_INLINE void vec_rotl(vec256& vec)
 #endif
 }
 
+ALWAYS_INLINE void vec_add_counter(vec256& vec, uint32_t inc)
+{
+#if CHACHA20_VEC_USE_SPLIT_LANES
+    vec += vec256{{inc, 0, 0, 0}, {inc, 0, 0, 0}};
+#else
+    vec += (vec256){inc, 0, 0, 0, inc, 0, 0, 0};
+#endif
+}
+
 #if CHACHA20_VEC_USE_SPLIT_LANES
 static constexpr vec128 nums128 = {0x61707865, 0x3320646e, 0x79622d32, 0x6b206574};
 static constexpr vec256 nums256 = {nums128, nums128};
@@ -153,82 +163,118 @@ static constexpr vec256 nums256 = {nums128, nums128};
 static constexpr vec256 nums256 = {0x61707865, 0x3320646e, 0x79622d32, 0x6b206574, 0x61707865, 0x3320646e, 0x79622d32, 0x6b206574};
 #endif
 
+ALWAYS_INLINE vec256 vec_broadcast4(uint32_t a, uint32_t b, uint32_t c, uint32_t d)
+{
+#if CHACHA20_VEC_USE_SPLIT_LANES
+    const vec128 lane = {a, b, c, d};
+    return vec256{lane, lane};
+#else
+    return (vec256){a, b, c, d, a, b, c, d};
+#endif
+}
+
+ALWAYS_INLINE void vec_shuf0(vec256& x)
+{
+#if CHACHA20_VEC_USE_SPLIT_LANES
+    x.lo = __builtin_shufflevector(x.lo, x.lo, 1, 2, 3, 0);
+    x.hi = __builtin_shufflevector(x.hi, x.hi, 1, 2, 3, 0);
+#else
+    x = __builtin_shufflevector(x, x, 1, 2, 3, 0, 5, 6, 7, 4);
+#endif
+}
+
+ALWAYS_INLINE void vec_shuf1(vec256& x)
+{
+#if CHACHA20_VEC_USE_SPLIT_LANES
+    x.lo = __builtin_shufflevector(x.lo, x.lo, 2, 3, 0, 1);
+    x.hi = __builtin_shufflevector(x.hi, x.hi, 2, 3, 0, 1);
+#else
+    x = __builtin_shufflevector(x, x, 2, 3, 0, 1, 6, 7, 4, 5);
+#endif
+}
+
+ALWAYS_INLINE void vec_shuf2(vec256& x)
+{
+#if CHACHA20_VEC_USE_SPLIT_LANES
+    x.lo = __builtin_shufflevector(x.lo, x.lo, 3, 0, 1, 2);
+    x.hi = __builtin_shufflevector(x.hi, x.hi, 3, 0, 1, 2);
+#else
+    x = __builtin_shufflevector(x, x, 3, 0, 1, 2, 7, 4, 5, 6);
+#endif
+}
+
+ALWAYS_INLINE vec256 vec_pack_hi(const vec256& a, const vec256& b)
+{
+#if CHACHA20_VEC_USE_SPLIT_LANES
+    return vec256{a.hi, b.hi};
+#else
+    return __builtin_shufflevector(a, b, 4, 5, 6, 7, 12, 13, 14, 15);
+#endif
+}
+
+ALWAYS_INLINE vec256 vec_pack_lo(const vec256& a, const vec256& b)
+{
+#if CHACHA20_VEC_USE_SPLIT_LANES
+    return vec256{a.lo, b.lo};
+#else
+    return __builtin_shufflevector(a, b, 0, 1, 2, 3, 8, 9, 10, 11);
+#endif
+}
+
+#if CHACHA20_VEC_USE_SPLIT_LANES
+static constexpr vec256 make_increment(uint32_t odd, uint32_t even)
+{
+    return vec256{{odd, 0, 0, 0}, {even, 0, 0, 0}};
+}
+#else
+static constexpr vec256 make_increment(uint32_t odd, uint32_t even)
+{
+    return (vec256){odd, 0, 0, 0, even, 0, 0, 0};
+}
+#endif
+
 // Counter increments for each half-state pair. Pattern: {2*i+1, 0, 0, 0, 2*i, 0, 0, 0}
 // All smaller state counts use a prefix of this array.
 static constexpr vec256 increments[8] = {
-#if CHACHA20_VEC_USE_SPLIT_LANES
-    {{1, 0, 0, 0}, {0, 0, 0, 0}},
-    {{3, 0, 0, 0}, {2, 0, 0, 0}},
-    {{5, 0, 0, 0}, {4, 0, 0, 0}},
-    {{7, 0, 0, 0}, {6, 0, 0, 0}},
-    {{9, 0, 0, 0}, {8, 0, 0, 0}},
-    {{11, 0, 0, 0}, {10, 0, 0, 0}},
-    {{13, 0, 0, 0}, {12, 0, 0, 0}},
-    {{15, 0, 0, 0}, {14, 0, 0, 0}},
-#else
-    {1, 0, 0, 0, 0, 0, 0, 0},
-    {3, 0, 0, 0, 2, 0, 0, 0},
-    {5, 0, 0, 0, 4, 0, 0, 0},
-    {7, 0, 0, 0, 6, 0, 0, 0},
-    {9, 0, 0, 0, 8, 0, 0, 0},
-    {11, 0, 0, 0, 10, 0, 0, 0},
-    {13, 0, 0, 0, 12, 0, 0, 0},
-    {15, 0, 0, 0, 14, 0, 0, 0},
-#endif
+    make_increment(1, 0),
+    make_increment(3, 2),
+    make_increment(5, 4),
+    make_increment(7, 6),
+    make_increment(9, 8),
+    make_increment(11, 10),
+    make_increment(13, 12),
+    make_increment(15, 14),
 };
-
-/** Store a vector in all array elements */
-template <size_t HalfStates, typename Fn, size_t... I>
-ALWAYS_INLINE void for_each_half_state(Fn&& fn, std::index_sequence<I...>)
-{
-    (fn(std::integral_constant<size_t, I>{}), ...);
-}
-
-template <size_t HalfStates, typename Fn>
-ALWAYS_INLINE void for_each_half_state(Fn&& fn)
-{
-    for_each_half_state<HalfStates>(std::forward<Fn>(fn), std::make_index_sequence<HalfStates>{});
-}
 
 /** Store a vector in all array elements */
 template <size_t HalfStates>
 ALWAYS_INLINE void arr_set_vec256(std::array<vec256, HalfStates>& arr, const vec256& vec)
 {
-    for_each_half_state<HalfStates>([&](auto idx) {
-        constexpr size_t i{decltype(idx)::value};
-        std::get<i>(arr) = vec;
-    });
+    util::ForEachIndex<HalfStates>([&]<size_t I>() { arr[I] = vec; });
 }
 
 /** Add a vector to all array elements */
 template <size_t HalfStates>
 ALWAYS_INLINE void arr_add_vec256(std::array<vec256, HalfStates>& arr, const vec256& vec)
 {
-    for_each_half_state<HalfStates>([&](auto idx) {
-        constexpr size_t i{decltype(idx)::value};
-        std::get<i>(arr) += vec;
-    });
+    util::ForEachIndex<HalfStates>([&]<size_t I>() { arr[I] += vec; });
 }
 
 /** Add corresponding vectors in arr1 to arr0 */
 template <size_t HalfStates>
 ALWAYS_INLINE void arr_add_arr(std::array<vec256, HalfStates>& arr0, const vec256* arr1)
 {
-    for_each_half_state<HalfStates>([&](auto idx) {
-        constexpr size_t i{decltype(idx)::value};
-        std::get<i>(arr0) += arr1[i];
-    });
+    util::ForEachIndex<HalfStates>([&]<size_t I>() { arr0[I] += arr1[I]; });
 }
 
 /** Add arr1 to arr0, XOR result into arr2, rotate arr2 left by N bits */
 template <unsigned N, size_t HalfStates>
 ALWAYS_INLINE void arr_add_xor_rot(std::array<vec256, HalfStates>& arr0, const std::array<vec256, HalfStates>& arr1, std::array<vec256, HalfStates>& arr2)
 {
-    for_each_half_state<HalfStates>([&](auto idx) {
-        constexpr size_t i{decltype(idx)::value};
-        vec256& x = std::get<i>(arr0);
-        const vec256& y = std::get<i>(arr1);
-        vec256& z = std::get<i>(arr2);
+    util::ForEachIndex<HalfStates>([&]<size_t I>() {
+        vec256& x = arr0[I];
+        const vec256& y = arr1[I];
+        vec256& z = arr2[I];
 
         x += y;
         z ^= x;
@@ -259,46 +305,19 @@ layout.
 template <size_t HalfStates>
 ALWAYS_INLINE void arr_shuf0(std::array<vec256, HalfStates>& arr)
 {
-    for_each_half_state<HalfStates>([&](auto idx) {
-        constexpr size_t i{decltype(idx)::value};
-        vec256& x = std::get<i>(arr);
-#if CHACHA20_VEC_USE_SPLIT_LANES
-        x.lo = __builtin_shufflevector(x.lo, x.lo, 1, 2, 3, 0);
-        x.hi = __builtin_shufflevector(x.hi, x.hi, 1, 2, 3, 0);
-#else
-        x = __builtin_shufflevector(x, x, 1, 2, 3, 0, 5, 6, 7, 4);
-#endif
-    });
+    util::ForEachIndex<HalfStates>([&]<size_t I>() { vec_shuf0(arr[I]); });
 }
 
 template <size_t HalfStates>
 ALWAYS_INLINE void arr_shuf1(std::array<vec256, HalfStates>& arr)
 {
-    for_each_half_state<HalfStates>([&](auto idx) {
-        constexpr size_t i{decltype(idx)::value};
-        vec256& x = std::get<i>(arr);
-#if CHACHA20_VEC_USE_SPLIT_LANES
-        x.lo = __builtin_shufflevector(x.lo, x.lo, 2, 3, 0, 1);
-        x.hi = __builtin_shufflevector(x.hi, x.hi, 2, 3, 0, 1);
-#else
-        x = __builtin_shufflevector(x, x, 2, 3, 0, 1, 6, 7, 4, 5);
-#endif
-    });
+    util::ForEachIndex<HalfStates>([&]<size_t I>() { vec_shuf1(arr[I]); });
 }
 
 template <size_t HalfStates>
 ALWAYS_INLINE void arr_shuf2(std::array<vec256, HalfStates>& arr)
 {
-    for_each_half_state<HalfStates>([&](auto idx) {
-        constexpr size_t i{decltype(idx)::value};
-        vec256& x = std::get<i>(arr);
-#if CHACHA20_VEC_USE_SPLIT_LANES
-        x.lo = __builtin_shufflevector(x.lo, x.lo, 3, 0, 1, 2);
-        x.hi = __builtin_shufflevector(x.hi, x.hi, 3, 0, 1, 2);
-#else
-        x = __builtin_shufflevector(x, x, 3, 0, 1, 2, 7, 4, 5, 6);
-#endif
-    });
+    util::ForEachIndex<HalfStates>([&]<size_t I>() { vec_shuf2(arr[I]); });
 }
 
 /* Main round function. */
@@ -348,29 +367,20 @@ ALWAYS_INLINE void vec_read_xor_write(const std::byte* in_bytes, std::byte* out_
 template <bool AssumeAligned, size_t HalfStates>
 ALWAYS_INLINE void arr_read_xor_write_impl(const std::byte* in_bytes, std::byte* out_bytes, const std::array<vec256, HalfStates>& arr0, const std::array<vec256, HalfStates>& arr1, const std::array<vec256, HalfStates>& arr2, const std::array<vec256, HalfStates>& arr3)
 {
-    for_each_half_state<HalfStates>([&](auto idx) {
-        constexpr size_t i{decltype(idx)::value};
+    util::ForEachIndex<HalfStates>([&]<size_t I>() {
+        const vec256& w = arr0[I];
+        const vec256& x = arr1[I];
+        const vec256& y = arr2[I];
+        const vec256& z = arr3[I];
 
-        const vec256& w = std::get<i>(arr0);
-        const vec256& x = std::get<i>(arr1);
-        const vec256& y = std::get<i>(arr2);
-        const vec256& z = std::get<i>(arr3);
-
-        const size_t offset = i * 128;
+        constexpr size_t offset = I * 128;
         const std::byte* in_slice = in_bytes + offset;
         std::byte* out_slice = out_bytes + offset;
 
-#if CHACHA20_VEC_USE_SPLIT_LANES
-        vec_read_xor_write<AssumeAligned>(in_slice + 0, out_slice + 0, vec256{w.hi, x.hi});
-        vec_read_xor_write<AssumeAligned>(in_slice + 32, out_slice + 32, vec256{y.hi, z.hi});
-        vec_read_xor_write<AssumeAligned>(in_slice + 64, out_slice + 64, vec256{w.lo, x.lo});
-        vec_read_xor_write<AssumeAligned>(in_slice + 96, out_slice + 96, vec256{y.lo, z.lo});
-#else
-        vec_read_xor_write<AssumeAligned>(in_slice + 0, out_slice + 0, __builtin_shufflevector(w, x, 4, 5, 6, 7, 12, 13, 14, 15));
-        vec_read_xor_write<AssumeAligned>(in_slice + 32, out_slice + 32, __builtin_shufflevector(y, z, 4, 5, 6, 7, 12, 13, 14, 15));
-        vec_read_xor_write<AssumeAligned>(in_slice + 64, out_slice + 64, __builtin_shufflevector(w, x, 0, 1, 2, 3, 8, 9, 10, 11));
-        vec_read_xor_write<AssumeAligned>(in_slice + 96, out_slice + 96, __builtin_shufflevector(y, z, 0, 1, 2, 3, 8, 9, 10, 11));
-#endif
+        vec_read_xor_write<AssumeAligned>(in_slice + 0, out_slice + 0, vec_pack_hi(w, x));
+        vec_read_xor_write<AssumeAligned>(in_slice + 32, out_slice + 32, vec_pack_hi(y, z));
+        vec_read_xor_write<AssumeAligned>(in_slice + 64, out_slice + 64, vec_pack_lo(w, x));
+        vec_read_xor_write<AssumeAligned>(in_slice + 96, out_slice + 96, vec_pack_lo(y, z));
     });
 }
 
@@ -426,12 +436,7 @@ ALWAYS_INLINE void process_blocks(std::span<const std::byte>& in_bytes, std::spa
 {
     while (in_bytes.size() >= CHACHA20_VEC_BLOCKLEN * States) {
         multi_block_crypt<States>(in_bytes, out_bytes, state0, state1, state2);
-        const uint32_t inc = static_cast<uint32_t>(States);
-#if CHACHA20_VEC_USE_SPLIT_LANES
-        state2 += vec256{{inc, 0, 0, 0}, {inc, 0, 0, 0}};
-#else
-        state2 += (vec256){inc, 0, 0, 0, inc, 0, 0, 0};
-#endif
+        vec_add_counter(state2, static_cast<uint32_t>(States));
         in_bytes = in_bytes.subspan(CHACHA20_VEC_BLOCKLEN * States);
         out_bytes = out_bytes.subspan(CHACHA20_VEC_BLOCKLEN * States);
     }
@@ -448,19 +453,9 @@ void chacha20_crypt_vectorized(std::span<const std::byte>& in_bytes, std::span<s
 {
 #if CHACHA20_VEC_ENABLE_ANY_MULTI_STATE
     assert(in_bytes.size() == out_bytes.size());
-#if CHACHA20_VEC_USE_SPLIT_LANES
-    const vec128 state0_lane = {input[0], input[1], input[2], input[3]};
-    const vec128 state1_lane = {input[4], input[5], input[6], input[7]};
-    const vec128 state2_lane = {input[8], input[9], input[10], input[11]};
-
-    const vec256 state0 = {state0_lane, state0_lane};
-    const vec256 state1 = {state1_lane, state1_lane};
-    vec256 state2 = {state2_lane, state2_lane};
-#else
-    const vec256 state0 = (vec256){input[0], input[1], input[2], input[3], input[0], input[1], input[2], input[3]};
-    const vec256 state1 = (vec256){input[4], input[5], input[6], input[7], input[4], input[5], input[6], input[7]};
-    vec256 state2 = (vec256){input[8], input[9], input[10], input[11], input[8], input[9], input[10], input[11]};
-#endif
+    const vec256 state0 = vec_broadcast4(input[0], input[1], input[2], input[3]);
+    const vec256 state1 = vec_broadcast4(input[4], input[5], input[6], input[7]);
+    vec256 state2 = vec_broadcast4(input[8], input[9], input[10], input[11]);
 
     if constexpr (kEnableStates16) process_blocks<16>(in_bytes, out_bytes, state0, state1, state2);
     if constexpr (kEnableStates8) process_blocks<8>(in_bytes, out_bytes, state0, state1, state2);
