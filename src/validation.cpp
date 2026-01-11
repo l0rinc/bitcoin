@@ -1704,36 +1704,36 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
     m_coins_views->InitCache();
 }
 
-// Note that though this is marked const, we may end up modifying `m_cached_finished_ibd`, which
-// is a performance-related implementation detail. This function must be marked
-// `const` so that `CValidationInterface` clients (which are given a `const Chainstate*`)
-// can call it.
+// This function must be marked `const` so that `CValidationInterface` clients
+// (which are given a `const Chainstate*`) can call it.
+//
+// It is lock-free and depends on `m_cached_finished_ibd`, which is latched by
+// `UpdateIBDStatus()`.
 //
 bool ChainstateManager::IsInitialBlockDownload() const
 {
-    // Optimization: pre-test latch before taking the lock.
-    if (m_cached_finished_ibd.load(std::memory_order_relaxed))
-        return false;
+    return !m_cached_finished_ibd.load(std::memory_order_relaxed);
+}
 
-    LOCK(cs_main);
+void ChainstateManager::UpdateIBDStatus()
+{
     if (m_cached_finished_ibd.load(std::memory_order_relaxed))
-        return false;
+        return;
     if (m_blockman.LoadingBlocks()) {
-        return true;
+        return;
     }
     CChain& chain{ActiveChain()};
     if (chain.Tip() == nullptr) {
-        return true;
+        return;
     }
     if (chain.Tip()->nChainWork < MinimumChainWork()) {
-        return true;
+        return;
     }
     if (chain.Tip()->Time() < Now<NodeSeconds>() - m_options.max_tip_age) {
-        return true;
+        return;
     }
     LogPrintf("Leaving InitialBlockDownload (latching to false)\n");
     m_cached_finished_ibd.store(true, std::memory_order_relaxed);
-    return false;
 }
 
 void Chainstate::CheckForkWarningConditions()
@@ -2819,6 +2819,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
     }
 
     m_chain.SetTip(*pindexDelete->pprev);
+    m_chainman.UpdateIBDStatus();
 
     UpdateTip(pindexDelete->pprev);
     // Let wallets know transactions went from 1-confirmed to
@@ -2947,6 +2948,7 @@ bool Chainstate::ConnectTip(BlockValidationState& state, CBlockIndex* pindexNew,
     }
     // Update m_chain & related variables.
     m_chain.SetTip(*pindexNew);
+    m_chainman.UpdateIBDStatus();
     UpdateTip(pindexNew);
 
     const auto time_6{SteadyClock::now()};
@@ -4267,6 +4269,7 @@ bool Chainstate::LoadChainTip()
         return false;
     }
     m_chain.SetTip(*pindex);
+    m_chainman.UpdateIBDStatus();
     tip = m_chain.Tip();
 
     // Make sure our chain tip before shutting down scores better than any other candidate

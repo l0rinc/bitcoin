@@ -1691,6 +1691,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     chainman.m_thread_load = std::thread(&util::TraceThread, "initload", [=, &chainman, &args, &node] {
         // Import blocks
         ImportBlocks(chainman, vImportFiles);
+        WITH_LOCK(::cs_main, chainman.UpdateIBDStatus());
         if (args.GetBoolArg("-stopafterblockimport", DEFAULT_STOPAFTERBLOCKIMPORT)) {
             LogPrintf("Stopping after block import\n");
             StartShutdown();

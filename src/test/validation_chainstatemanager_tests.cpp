@@ -179,6 +179,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_ibd_exit_after_loading_blocks, ChainTe
         } else {
             assert(!chainman.ActiveChain().Tip());
         }
+        chainman.UpdateIBDStatus();
     }};
 
     for (const bool cached_finished_ibd : {false, true}) {
