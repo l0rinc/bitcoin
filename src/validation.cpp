@@ -1955,8 +1955,9 @@ bool ChainstateManager::IsInitialBlockDownload() const
     if (!m_cached_tip_recent.load(std::memory_order_relaxed)) {
         return true;
     }
-    LogInfo("Leaving InitialBlockDownload (latching to false)");
-    m_cached_finished_ibd.store(true, std::memory_order_relaxed);
+    if (!m_cached_finished_ibd.exchange(true, std::memory_order_relaxed)) {
+        LogInfo("Leaving InitialBlockDownload (latching to false)");
+    }
     return false;
 }
 
