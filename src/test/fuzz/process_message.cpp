@@ -35,7 +35,7 @@ std::string_view LIMIT_TO_MESSAGE_TYPE{};
 
 void ResetChainman(TestingSetup& setup)
 {
-    SetMockTime(setup.m_node.chainman->GetParams().GenesisBlock().Time());
+    SetMockTime(setup.m_node.chainman->GetParams().GenesisBlock().Time() + std::chrono::seconds{48 * 60 * 60});
     setup.m_node.chainman.reset();
     setup.m_make_chainman();
     setup.LoadVerifyActivateChainstate();
@@ -71,9 +71,8 @@ FUZZ_TARGET(process_message, .init = initialize_process_message)
     connman.ResetAddrCache();
     connman.ResetMaxOutboundCycle();
     auto& chainman = static_cast<TestChainstateManager&>(*g_setup->m_node.chainman);
+    Assert(chainman.IsInitialBlockDownload());
     const auto block_index_size{WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size())};
-    SetMockTime(1610000000); // any time to successfully reset ibd
-    chainman.ResetIbd();
     chainman.DisableNextWrite();
 
     node::Warnings warnings{};

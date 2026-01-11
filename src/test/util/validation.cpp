@@ -30,21 +30,6 @@ void TestChainstateManager::DisableNextWrite()
     }
 }
 
-void TestChainstateManager::ResetIbd()
-{
-    m_cached_finished_ibd = false;
-    m_cached_tip_recent = false;
-    assert(IsInitialBlockDownload());
-}
-
-void TestChainstateManager::JumpOutOfIbd()
-{
-    Assert(IsInitialBlockDownload());
-    m_cached_finished_ibd = true;
-    m_cached_tip_recent = true;
-    Assert(!IsInitialBlockDownload());
-}
-
 void ValidationInterfaceTest::BlockConnected(
     const ChainstateRole& role,
     CValidationInterface& obj,

@@ -17,6 +17,7 @@
 #include <test/util/net.h>
 #include <test/util/setup_common.h>
 #include <test/util/validation.h>
+#include <util/check.h>
 #include <util/time.h>
 #include <validationinterface.h>
 
@@ -30,7 +31,7 @@ TestingSetup* g_setup;
 
 void ResetChainman(TestingSetup& setup)
 {
-    SetMockTime(setup.m_node.chainman->GetParams().GenesisBlock().Time());
+    SetMockTime(setup.m_node.chainman->GetParams().GenesisBlock().Time() + std::chrono::seconds{48 * 60 * 60});
     setup.m_node.chainman.reset();
     setup.m_make_chainman();
     setup.LoadVerifyActivateChainstate();
@@ -61,9 +62,8 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     connman.ResetAddrCache();
     connman.ResetMaxOutboundCycle();
     auto& chainman = static_cast<TestChainstateManager&>(*g_setup->m_node.chainman);
+    Assert(chainman.IsInitialBlockDownload());
     const auto block_index_size{WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size())};
-    SetMockTime(1610000000); // any time to successfully reset ibd
-    chainman.ResetIbd();
     chainman.DisableNextWrite();
 
     node::Warnings warnings{};
