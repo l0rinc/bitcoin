@@ -107,128 +107,169 @@ static void BuildTxs(CMutableTransaction& spendingTx, CCoinsViewCache& coins, CM
     AddCoins(coins, CTransaction(creationTx), 0);
 }
 
-BOOST_AUTO_TEST_CASE(GetTxSigOpCost)
+BOOST_AUTO_TEST_CASE(GetTxSigOpCost_Multisig)
 {
-    // Transaction creates outputs
+    // Multisig script (legacy counting)
     CMutableTransaction creationTx;
-    // Transaction that spends outputs and whose
-    // sig op cost is going to be tested
     CMutableTransaction spendingTx;
 
-    // Create utxo set
     CCoinsView coinsDummy;
     CCoinsViewCache coins(&coinsDummy);
-    // Create key
     CKey key = GenerateRandomKey();
     CPubKey pubkey = key.GetPubKey();
-    // Default flags
     const script_verify_flags flags{SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_P2SH};
 
-    // Multisig script (legacy counting)
-    {
-        CScript scriptPubKey = CScript() << 1 << ToByteVector(pubkey) << ToByteVector(pubkey) << 2 << OP_CHECKMULTISIGVERIFY;
-        // Do not use a valid signature to avoid using wallet operations.
-        CScript scriptSig = CScript() << OP_0 << OP_0;
+    CScript scriptPubKey = CScript() << 1 << ToByteVector(pubkey) << ToByteVector(pubkey) << 2 << OP_CHECKMULTISIGVERIFY;
+    // Do not use a valid signature to avoid using wallet operations.
+    CScript scriptSig = CScript() << OP_0 << OP_0;
 
-        BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, CScriptWitness());
-        // Legacy counting only includes signature operations in scriptSigs and scriptPubKeys
-        // of a transaction and does not take the actual executed sig operations into account.
-        // spendingTx in itself does not contain a signature operation.
-        assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 0);
-        // creationTx contains two signature operations in its scriptPubKey, but legacy counting
-        // is not accurate.
-        assert(GetTransactionSigOpCost(CTransaction(creationTx), coins, flags) == MAX_PUBKEYS_PER_MULTISIG * WITNESS_SCALE_FACTOR);
-        // Sanity check: script verification fails because of an invalid signature.
-        assert(VerifyWithFlag(CTransaction(creationTx), spendingTx, flags) == SCRIPT_ERR_CHECKMULTISIGVERIFY);
-    }
+    BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, CScriptWitness());
+    // Legacy counting only includes signature operations in scriptSigs and scriptPubKeys
+    // of a transaction and does not take the actual executed sig operations into account.
+    // spendingTx in itself does not contain a signature operation.
+    assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 0);
+    // creationTx contains two signature operations in its scriptPubKey, but legacy counting
+    // is not accurate.
+    assert(GetTransactionSigOpCost(CTransaction(creationTx), coins, flags) == MAX_PUBKEYS_PER_MULTISIG * WITNESS_SCALE_FACTOR);
+    // Sanity check: script verification fails because of an invalid signature.
+    assert(VerifyWithFlag(CTransaction(creationTx), spendingTx, flags) == SCRIPT_ERR_CHECKMULTISIGVERIFY);
+}
 
+BOOST_AUTO_TEST_CASE(GetTxSigOpCost_MultisigP2SH)
+{
     // Multisig nested in P2SH
-    {
-        CScript redeemScript = CScript() << 1 << ToByteVector(pubkey) << ToByteVector(pubkey) << 2 << OP_CHECKMULTISIGVERIFY;
-        CScript scriptPubKey = GetScriptForDestination(ScriptHash(redeemScript));
-        CScript scriptSig = CScript() << OP_0 << OP_0 << ToByteVector(redeemScript);
+    CMutableTransaction creationTx;
+    CMutableTransaction spendingTx;
 
-        BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, CScriptWitness());
-        assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 2 * WITNESS_SCALE_FACTOR);
-        assert(VerifyWithFlag(CTransaction(creationTx), spendingTx, flags) == SCRIPT_ERR_CHECKMULTISIGVERIFY);
+    CCoinsView coinsDummy;
+    CCoinsViewCache coins(&coinsDummy);
+    CKey key = GenerateRandomKey();
+    CPubKey pubkey = key.GetPubKey();
+    const script_verify_flags flags{SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_P2SH};
 
-        // P2SH sigops are not counted if we don't set the SCRIPT_VERIFY_P2SH flag
-        assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, /*flags=*/0) == 0);
-    }
+    CScript redeemScript = CScript() << 1 << ToByteVector(pubkey) << ToByteVector(pubkey) << 2 << OP_CHECKMULTISIGVERIFY;
+    CScript scriptPubKey = GetScriptForDestination(ScriptHash(redeemScript));
+    CScript scriptSig = CScript() << OP_0 << OP_0 << ToByteVector(redeemScript);
 
+    BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, CScriptWitness());
+    assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 2 * WITNESS_SCALE_FACTOR);
+    assert(VerifyWithFlag(CTransaction(creationTx), spendingTx, flags) == SCRIPT_ERR_CHECKMULTISIGVERIFY);
+
+    // P2SH sigops are not counted if we don't set the SCRIPT_VERIFY_P2SH flag
+    assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, /*flags=*/0) == 0);
+}
+
+BOOST_AUTO_TEST_CASE(GetTxSigOpCost_P2WPKH)
+{
     // P2WPKH witness program
-    {
-        CScript scriptPubKey = GetScriptForDestination(WitnessV0KeyHash(pubkey));
-        CScript scriptSig = CScript();
-        CScriptWitness scriptWitness;
-        scriptWitness.stack.emplace_back(0);
-        scriptWitness.stack.emplace_back(0);
+    CMutableTransaction creationTx;
+    CMutableTransaction spendingTx;
 
+    CCoinsView coinsDummy;
+    CCoinsViewCache coins(&coinsDummy);
+    CKey key = GenerateRandomKey();
+    CPubKey pubkey = key.GetPubKey();
+    const script_verify_flags flags{SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_P2SH};
 
-        BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, scriptWitness);
-        assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 1);
-        // No signature operations if we don't verify the witness.
-        assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags & ~SCRIPT_VERIFY_WITNESS) == 0);
-        assert(VerifyWithFlag(CTransaction(creationTx), spendingTx, flags) == SCRIPT_ERR_EQUALVERIFY);
+    CScript scriptPubKey = GetScriptForDestination(WitnessV0KeyHash(pubkey));
+    CScript scriptSig = CScript();
+    CScriptWitness scriptWitness;
+    scriptWitness.stack.emplace_back(0);
+    scriptWitness.stack.emplace_back(0);
 
-        // The sig op cost for witness version != 0 is zero.
-        assert(scriptPubKey[0] == 0x00);
-        scriptPubKey[0] = 0x51;
-        BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, scriptWitness);
-        assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 0);
-        scriptPubKey[0] = 0x00;
-        BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, scriptWitness);
+    BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, scriptWitness);
+    assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 1);
+    // No signature operations if we don't verify the witness.
+    assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags & ~SCRIPT_VERIFY_WITNESS) == 0);
+    assert(VerifyWithFlag(CTransaction(creationTx), spendingTx, flags) == SCRIPT_ERR_EQUALVERIFY);
 
-        // The witness of a coinbase transaction is not taken into account.
-        spendingTx.vin[0].prevout.SetNull();
-        assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 0);
-    }
+    // The sig op cost for witness version != 0 is zero.
+    assert(scriptPubKey[0] == 0x00);
+    scriptPubKey[0] = 0x51;
+    BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, scriptWitness);
+    assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 0);
+    scriptPubKey[0] = 0x00;
+    BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, scriptWitness);
 
+    // The witness of a coinbase transaction is not taken into account.
+    spendingTx.vin[0].prevout.SetNull();
+    assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 0);
+}
+
+BOOST_AUTO_TEST_CASE(GetTxSigOpCost_P2WPKH_P2SH)
+{
     // P2WPKH nested in P2SH
-    {
-        CScript scriptSig = GetScriptForDestination(WitnessV0KeyHash(pubkey));
-        CScript scriptPubKey = GetScriptForDestination(ScriptHash(scriptSig));
-        scriptSig = CScript() << ToByteVector(scriptSig);
-        CScriptWitness scriptWitness;
-        scriptWitness.stack.emplace_back(0);
-        scriptWitness.stack.emplace_back(0);
+    CMutableTransaction creationTx;
+    CMutableTransaction spendingTx;
 
-        BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, scriptWitness);
-        assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 1);
-        assert(VerifyWithFlag(CTransaction(creationTx), spendingTx, flags) == SCRIPT_ERR_EQUALVERIFY);
-    }
+    CCoinsView coinsDummy;
+    CCoinsViewCache coins(&coinsDummy);
+    CKey key = GenerateRandomKey();
+    CPubKey pubkey = key.GetPubKey();
+    const script_verify_flags flags{SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_P2SH};
 
+    CScript scriptSig = GetScriptForDestination(WitnessV0KeyHash(pubkey));
+    CScript scriptPubKey = GetScriptForDestination(ScriptHash(scriptSig));
+    scriptSig = CScript() << ToByteVector(scriptSig);
+    CScriptWitness scriptWitness;
+    scriptWitness.stack.emplace_back(0);
+    scriptWitness.stack.emplace_back(0);
+
+    BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, scriptWitness);
+    assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 1);
+    assert(VerifyWithFlag(CTransaction(creationTx), spendingTx, flags) == SCRIPT_ERR_EQUALVERIFY);
+}
+
+BOOST_AUTO_TEST_CASE(GetTxSigOpCost_P2WSH)
+{
     // P2WSH witness program
-    {
-        CScript witnessScript = CScript() << 1 << ToByteVector(pubkey) << ToByteVector(pubkey) << 2 << OP_CHECKMULTISIGVERIFY;
-        CScript scriptPubKey = GetScriptForDestination(WitnessV0ScriptHash(witnessScript));
-        CScript scriptSig = CScript();
-        CScriptWitness scriptWitness;
-        scriptWitness.stack.emplace_back(0);
-        scriptWitness.stack.emplace_back(0);
-        scriptWitness.stack.emplace_back(witnessScript.begin(), witnessScript.end());
+    CMutableTransaction creationTx;
+    CMutableTransaction spendingTx;
 
-        BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, scriptWitness);
-        assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 2);
-        assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags & ~SCRIPT_VERIFY_WITNESS) == 0);
-        assert(VerifyWithFlag(CTransaction(creationTx), spendingTx, flags) == SCRIPT_ERR_CHECKMULTISIGVERIFY);
-    }
+    CCoinsView coinsDummy;
+    CCoinsViewCache coins(&coinsDummy);
+    CKey key = GenerateRandomKey();
+    CPubKey pubkey = key.GetPubKey();
+    const script_verify_flags flags{SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_P2SH};
 
+    CScript witnessScript = CScript() << 1 << ToByteVector(pubkey) << ToByteVector(pubkey) << 2 << OP_CHECKMULTISIGVERIFY;
+    CScript scriptPubKey = GetScriptForDestination(WitnessV0ScriptHash(witnessScript));
+    CScript scriptSig = CScript();
+    CScriptWitness scriptWitness;
+    scriptWitness.stack.emplace_back(0);
+    scriptWitness.stack.emplace_back(0);
+    scriptWitness.stack.emplace_back(witnessScript.begin(), witnessScript.end());
+
+    BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, scriptWitness);
+    assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 2);
+    assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags & ~SCRIPT_VERIFY_WITNESS) == 0);
+    assert(VerifyWithFlag(CTransaction(creationTx), spendingTx, flags) == SCRIPT_ERR_CHECKMULTISIGVERIFY);
+}
+
+BOOST_AUTO_TEST_CASE(GetTxSigOpCost_P2WSH_P2SH)
+{
     // P2WSH nested in P2SH
-    {
-        CScript witnessScript = CScript() << 1 << ToByteVector(pubkey) << ToByteVector(pubkey) << 2 << OP_CHECKMULTISIGVERIFY;
-        CScript redeemScript = GetScriptForDestination(WitnessV0ScriptHash(witnessScript));
-        CScript scriptPubKey = GetScriptForDestination(ScriptHash(redeemScript));
-        CScript scriptSig = CScript() << ToByteVector(redeemScript);
-        CScriptWitness scriptWitness;
-        scriptWitness.stack.emplace_back(0);
-        scriptWitness.stack.emplace_back(0);
-        scriptWitness.stack.emplace_back(witnessScript.begin(), witnessScript.end());
+    CMutableTransaction creationTx;
+    CMutableTransaction spendingTx;
 
-        BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, scriptWitness);
-        assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 2);
-        assert(VerifyWithFlag(CTransaction(creationTx), spendingTx, flags) == SCRIPT_ERR_CHECKMULTISIGVERIFY);
-    }
+    CCoinsView coinsDummy;
+    CCoinsViewCache coins(&coinsDummy);
+    CKey key = GenerateRandomKey();
+    CPubKey pubkey = key.GetPubKey();
+    const script_verify_flags flags{SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_P2SH};
+
+    CScript witnessScript = CScript() << 1 << ToByteVector(pubkey) << ToByteVector(pubkey) << 2 << OP_CHECKMULTISIGVERIFY;
+    CScript redeemScript = GetScriptForDestination(WitnessV0ScriptHash(witnessScript));
+    CScript scriptPubKey = GetScriptForDestination(ScriptHash(redeemScript));
+    CScript scriptSig = CScript() << ToByteVector(redeemScript);
+    CScriptWitness scriptWitness;
+    scriptWitness.stack.emplace_back(0);
+    scriptWitness.stack.emplace_back(0);
+    scriptWitness.stack.emplace_back(witnessScript.begin(), witnessScript.end());
+
+    BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, scriptWitness);
+    assert(GetTransactionSigOpCost(CTransaction(spendingTx), coins, flags) == 2);
+    assert(VerifyWithFlag(CTransaction(creationTx), spendingTx, flags) == SCRIPT_ERR_CHECKMULTISIGVERIFY);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
