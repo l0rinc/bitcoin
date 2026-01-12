@@ -28,6 +28,13 @@ Serialize(const CScript& s)
     return sSerialized;
 }
 
+static CTransaction MakeCoinBase(const CMutableTransaction& tx)
+{
+    CMutableTransaction coinbase{tx};
+    coinbase.vin[0].prevout.SetNull();
+    return CTransaction{coinbase};
+}
+
 BOOST_FIXTURE_TEST_SUITE(sigopcount_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(GetSigOpCount)
@@ -129,8 +136,8 @@ BOOST_AUTO_TEST_CASE(GetTxSigOpCost_Multisig)
     // of a transaction and does not take the actual executed sig operations into account.
     // spendingTx in itself does not contain a signature operation.
     BOOST_CHECK_EQUAL(GetTransactionSigOpCost(CTransaction(spendingTx), coins, STANDARD_SCRIPT_VERIFY_FLAGS), 0);
-    // creationTx contains two signature operations in its scriptPubKey, but legacy counting
-    // is not accurate.
+    // Even though creationTx is a coinbase, its legacy sigops in scriptPubKey are counted
+    // (and legacy counting is not accurate).
     BOOST_CHECK_EQUAL(GetTransactionSigOpCost(CTransaction(creationTx), coins, STANDARD_SCRIPT_VERIFY_FLAGS), MAX_PUBKEYS_PER_MULTISIG * WITNESS_SCALE_FACTOR);
     // Sanity check: script verification fails because of an invalid signature.
     BOOST_CHECK_EQUAL(VerifyWithFlag(CTransaction(creationTx), spendingTx, STANDARD_SCRIPT_VERIFY_FLAGS), SCRIPT_ERR_CHECKMULTISIGVERIFY);
@@ -157,6 +164,9 @@ BOOST_AUTO_TEST_CASE(GetTxSigOpCost_MultisigP2SH)
 
     // P2SH sigops are not counted if we don't set the SCRIPT_VERIFY_P2SH flag
     BOOST_CHECK_EQUAL(GetTransactionSigOpCost(CTransaction(spendingTx), coins, /*flags=*/0), 0);
+
+    // For coinbase transactions, GetTransactionSigOpCost only includes legacy sigops (no P2SH/witness).
+    BOOST_CHECK_EQUAL(GetTransactionSigOpCost(MakeCoinBase(spendingTx), coins, STANDARD_SCRIPT_VERIFY_FLAGS), 0);
 }
 
 BOOST_AUTO_TEST_CASE(GetTxSigOpCost_P2WPKH)
@@ -190,9 +200,9 @@ BOOST_AUTO_TEST_CASE(GetTxSigOpCost_P2WPKH)
     scriptPubKey[0] = OP_0;
     BuildTxs(spendingTx, coins, creationTx, scriptPubKey, scriptSig, scriptWitness);
 
-    // The witness of a coinbase transaction is not taken into account.
-    spendingTx.vin[0].prevout.SetNull();
-    BOOST_CHECK_EQUAL(GetTransactionSigOpCost(CTransaction(spendingTx), coins, STANDARD_SCRIPT_VERIFY_FLAGS), 0);
+    // For coinbase transactions, GetTransactionSigOpCost only includes legacy sigops (no P2SH/witness).
+    BOOST_REQUIRE(!spendingTx.vin[0].scriptWitness.IsNull());
+    BOOST_CHECK_EQUAL(GetTransactionSigOpCost(MakeCoinBase(spendingTx), coins, STANDARD_SCRIPT_VERIFY_FLAGS), 0);
 }
 
 BOOST_AUTO_TEST_CASE(GetTxSigOpCost_P2WPKH_P2SH)
