@@ -93,7 +93,7 @@ bool CCoinsViewDB::GetCoin(const COutPoint &outpoint, Coin &coin) const {
 }
 
 bool CCoinsViewDB::HaveCoin(const COutPoint &outpoint) const {
-    return m_db->Exists(CoinEntry(&outpoint));
+    throw "CCoinsViewDB::HaveCoin";
 }
 
 uint256 CCoinsViewDB::GetBestBlock() const {
