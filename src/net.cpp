@@ -2345,7 +2345,7 @@ void CConnman::ThreadDNSAddressSeed()
                 break;
             }
 
-            outbound_connection_count = GetFullOutboundConnCount();
+            outbound_connection_count = GetBIP110FullOutboundConnCount();
             if (outbound_connection_count >= SEED_OUTBOUND_CONNECTION_THRESHOLD) {
                 LogInfo("P2P peers available. Finished fetching data from seed nodes.\n");
                 break;
@@ -2400,7 +2400,7 @@ void CConnman::ThreadDNSAddressSeed()
                         if (!m_interrupt_net->sleep_for(w)) return;
                         to_wait -= w;
 
-                        if (GetFullOutboundConnCount() >= SEED_OUTBOUND_CONNECTION_THRESHOLD) {
+                        if (GetBIP110FullOutboundConnCount() >= SEED_OUTBOUND_CONNECTION_THRESHOLD) {
                             if (found > 0) {
                                 LogInfo("%d addresses found from DNS seeds\n", found);
                                 LogInfo("P2P peers available. Finished DNS seeding.\n");
@@ -2520,8 +2520,9 @@ void CConnman::StartExtraBlockRelayPeers()
     m_start_extra_block_relay_peers = true;
 }
 
-// Return the number of outbound connections that are full relay (not blocks only)
-int CConnman::GetFullOutboundConnCount() const
+// Return the number of BIP110 outbound connections that are full relay (not blocks only).
+// Non-BIP110 outbound peers are excluded as they are "additional" and don't count toward limits.
+int CConnman::GetBIP110FullOutboundConnCount() const
 {
     AssertLockNotHeld(m_nodes_mutex);
 
@@ -2529,7 +2530,7 @@ int CConnman::GetFullOutboundConnCount() const
     {
         LOCK(m_nodes_mutex);
         for (const CNode* pnode : m_nodes) {
-            if (pnode->fSuccessfullyConnected && pnode->IsFullOutboundConn()) ++nRelevant;
+            if (pnode->fSuccessfullyConnected && pnode->IsFullOutboundConn() && !pnode->m_is_non_bip110_outbound) ++nRelevant;
         }
     }
     return nRelevant;
@@ -2753,7 +2754,8 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect, std
         {
             LOCK(m_nodes_mutex);
             for (const CNode* pnode : m_nodes) {
-                if (pnode->IsFullOutboundConn()) nOutboundFullRelay++;
+                // Non-BIP110 outbound peers are "additional" - don't count toward limits
+                if (pnode->IsFullOutboundConn() && !pnode->m_is_non_bip110_outbound) nOutboundFullRelay++;
                 if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
 
                 // Make sure our persistent outbound slots to ipv4/ipv6 peers belong to different netgroups.
