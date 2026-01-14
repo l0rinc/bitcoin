@@ -17,6 +17,7 @@
 #include <clientversion.h>
 #include <common/args.h>
 #include <common/messages.h>
+#include <common/pcp.h>
 #include <common/system.h>
 #include <compat/compat.h>
 #include <consensus/params.h>
@@ -908,6 +909,9 @@ static bool AppInitServers(NodeContext& node)
 // Parameter interaction based on rules
 void InitParameterInteraction(ArgsManager& args)
 {
+    // Before any SoftSetArg so we get the actual user-set value
+    g_pcp_warn_for_unauthorized.store(args.GetBoolArg("-natpmp", false));
+
     if (args.GetBoolArg("-corepolicy", DEFAULT_COREPOLICY)) {
         args.SoftSetArg("-incrementalrelayfee", FormatMoney(CORE_INCREMENTAL_RELAY_FEE));
         if (!args.IsArgSet("-minrelaytxfee")) {

@@ -10,6 +10,7 @@
 #include <chainparams.h>
 #include <coins.h>
 #include <common/args.h>
+#include <common/pcp.h>
 #include <common/settings.h>
 #include <consensus/amount.h>
 #include <consensus/merkle.h>
@@ -199,7 +200,11 @@ public:
         });
         args().WriteSettingsFile();
     }
-    void mapPort(bool use_upnp, bool use_pcp) override { StartMapPort(use_upnp, use_pcp); }
+    void mapPort(bool use_upnp, bool use_pcp) override
+    {
+        g_pcp_warn_for_unauthorized.store(use_pcp);
+        StartMapPort(use_upnp, use_pcp);
+    }
     std::optional<Proxy> getProxy(Network net) override { return GetProxy(net); }
     size_t getNodeCount(ConnectionDirection flags) override
     {

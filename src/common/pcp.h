@@ -8,6 +8,7 @@
 #include <netaddress.h>
 #include <util/threadinterrupt.h>
 
+#include <atomic>
 #include <variant>
 
 // RFC6886 NAT-PMP and RFC6887 Port Control Protocol (PCP) implementation.
@@ -43,6 +44,8 @@ struct MappingResult {
     //! Format mapping as string for logging.
     std::string ToString() const;
 };
+
+extern std::atomic<bool> g_pcp_warn_for_unauthorized;
 
 //! Try to open a port using RFC 6886 NAT-PMP. IPv4 only.
 //!
