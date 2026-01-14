@@ -206,15 +206,21 @@ public:
     template <typename K, typename V>
     bool Read(const K& key, V& value) const
     {
-        DataStream ssKey{};
-        ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
-        ssKey << key;
-        std::optional<std::string> strValue{ReadImpl(ssKey)};
+        std::optional<std::string> strValue{ReadRaw(key)};
         if (!strValue) return false;
         DataStream ssValue{MakeByteSpan(*strValue)};
         m_obfuscation(ssValue);
         ssValue >> value;
         return true;
+    }
+
+    template <typename K>
+    std::optional<std::string> ReadRaw(const K& key) const
+    {
+        DataStream ssKey{};
+        ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
+        ssKey << key;
+        return ReadImpl(ssKey);
     }
 
     template <typename K, typename V>
