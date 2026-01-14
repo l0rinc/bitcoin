@@ -822,26 +822,27 @@ class TestHandler:
             procs = futures.wait(self.jobs.keys(), timeout=.5, return_when=futures.FIRST_COMPLETED)
             self.jobs = {fut: self.jobs[fut] for fut in procs.not_done}
             ret = []
-            for job in procs.done:
-                (name, start_time, proc, testdir, log_out, log_err) = job.result()
-
-                log_out.seek(0), log_err.seek(0)
-                [stdout, stderr] = [log_file.read().decode('utf-8') for log_file in (log_out, log_err)]
-                log_out.close(), log_err.close()
-                skip_reason = None
-                if proc.returncode == TEST_EXIT_PASSED and stderr == "":
-                    status = "Passed"
-                elif proc.returncode == TEST_EXIT_SKIPPED:
-                    status = "Skipped"
-                    skip_reason = re.search(r"Test Skipped: (.*)", stdout).group(1).strip()
-                else:
-                    status = "Failed"
-
-                if self.use_term_control:
-                    clearline = '\r' + (' ' * dot_count) + '\r'
-                    print(clearline, end='', flush=True)
-                dot_count = 0
-                ret.append((TestResult(name, status, int(time.time() - start_time)), testdir, stdout, stderr, skip_reason))
+            for job in self.jobs:
+                (name, start_time, proc, testdir, log_out, log_err) = job
+                if proc.poll() is not None:
+                    log_out.seek(0), log_err.seek(0)
+                    [stdout, stderr] = [log_file.read().decode('utf-8') for log_file in (log_out, log_err)]
+                    log_out.close(), log_err.close()
+                    skip_reason = None
+                    if proc.returncode == TEST_EXIT_PASSED and stderr == "":
+                        status = "Passed"
+                    elif proc.returncode == TEST_EXIT_SKIPPED:
+                        status = "Skipped"
+                        skip_reason = re.search(r"Test Skipped: (.*)", stdout).group(1).strip()
+                    else:
+                        status = "Failed"
+                    self.num_running -= 1
+                    self.jobs.remove(job)
+                    if self.use_term_control:
+                        clearline = '\r' + (' ' * dot_count) + '\r'
+                        print(clearline, end='', flush=True)
+                    dot_count = 0
+                    ret.append((TestResult(name, status, int(time.time() - start_time)), testdir, stdout, stderr, skip_reason))
             if ret:
                 return ret
             if self.use_term_control:
