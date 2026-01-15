@@ -200,11 +200,11 @@ struct SnapshotTestSetup : TestChain100Setup {
             initial_size = ibd_coinscache.GetCacheSize();
             size_t total_coins{0};
 
-            for (CTransactionRef& txn : m_coinbase_txns) {
-                COutPoint op{txn->GetHash(), 0};
-                BOOST_CHECK(ibd_coinscache.HaveCoin(op));
-                total_coins++;
-            }
+                for (CTransactionRef& txn : m_coinbase_txns) {
+                    COutPoint op{txn->GetHash(), 0};
+                    BOOST_CHECK(!ibd_coinscache.AccessCoin(op).IsSpent());
+                    total_coins++;
+                }
 
             BOOST_CHECK_EQUAL(total_coins, initial_total_coins);
             BOOST_CHECK_EQUAL(initial_size, initial_total_coins);
@@ -307,7 +307,7 @@ struct SnapshotTestSetup : TestChain100Setup {
 
                 for (CTransactionRef& txn : m_coinbase_txns) {
                     COutPoint op{txn->GetHash(), 0};
-                    BOOST_CHECK(coinscache.HaveCoin(op));
+                    BOOST_CHECK(!coinscache.AccessCoin(op).IsSpent());
                     total_coins++;
                 }
 
@@ -336,7 +336,7 @@ struct SnapshotTestSetup : TestChain100Setup {
 
                 for (CTransactionRef& txn : m_coinbase_txns) {
                     COutPoint op{txn->GetHash(), 0};
-                    if (coinscache.HaveCoin(op)) {
+                    if (!coinscache.AccessCoin(op).IsSpent()) {
                         (is_background ? coins_in_background : coins_in_active)++;
                     } else if (is_background) {
                         coins_missing_from_background++;

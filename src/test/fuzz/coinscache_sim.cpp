@@ -153,11 +153,6 @@ public:
         return std::nullopt;
     }
 
-    bool HaveCoin(const COutPoint& outpoint) const final
-    {
-        return m_data.contains(outpoint);
-    }
-
     uint256 GetBestBlock() const final { return {}; }
     std::vector<uint256> GetHeadBlocks() const final { return {}; }
     std::unique_ptr<CCoinsViewCursor> Cursor() const final { return {}; }
@@ -273,12 +268,12 @@ FUZZ_TARGET(coinscache_sim)
                 }
             },
 
-            [&]() { // HaveCoin
+            [&]() { // GetCoin
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
                 // Look up in simulation data.
                 auto sim = lookup(outpointidx);
                 // Look up in real caches.
-                auto real = caches.back()->HaveCoin(data.outpoints[outpointidx]);
+                auto real = caches.back()->GetCoin(data.outpoints[outpointidx]).has_value();
                 // Compare results.
                 assert(sim.has_value() == real);
             },
