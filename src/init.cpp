@@ -110,6 +110,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <array>
 #include <exception>
 #include <fstream>
 #include <functional>
@@ -546,6 +547,7 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
             "(default: 0 = disable pruning blocks, 1 = allow manual pruning via RPC, >=%u = automatically prune block files to stay under the specified target size in MiB)", MIN_DISK_SPACE_FOR_BLOCK_FILES / 1_MiB), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-reindex", "If enabled, wipe chain state and block index, and rebuild them from blk*.dat files on disk. Also wipe and rebuild other optional indexes that are active. If an assumeutxo snapshot was loaded, its chainstate will be wiped as well. The snapshot can then be reloaded via RPC.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-reindex-chainstate", "If enabled, wipe chain state, and rebuild it from blk*.dat files on disk. If an assumeutxo snapshot was loaded, its chainstate will be wiped as well. The snapshot can then be reloaded via RPC.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-reobfuscate-blocks", "Reobfuscate existing blk*/rev* files. If a 16 character hexadecimal value is provided, it's used as the new XOR key; otherwise, the value is treated as a boolean and a random key is generated. This operation is resumable.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-settings=<file>", strprintf("Specify path to dynamic settings data file. Can be disabled with -nosettings. File is written at runtime and not meant to be edited by users (use %s instead for custom settings). Relative paths will be prefixed by datadir location. (default: %s)", BITCOIN_CONF_FILENAME, BITCOIN_SETTINGS_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #if HAVE_SYSTEM
     argsman.AddArg("-startupnotify=<cmd>", "Execute command on startup.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -1310,6 +1312,39 @@ static std::optional<CService> CheckBindingConflicts(const CConnman::Options& co
     return std::nullopt;
 }
 
+static ChainstateLoadResult ReobfuscateBlocksIfRequested(NodeContext& node, const ArgsManager& args)
+{
+    constexpr auto block_obfuscation_suffix{".reobfuscated"};
+    const auto blocks_dir{args.GetBlocksDirPath()};
+    const auto xor_dat{blocks_dir / "xor.dat"};
+    const auto xor_new{xor_dat + block_obfuscation_suffix};
+
+    std::optional<std::array<std::byte, Obfuscation::KEY_SIZE>> requested_key{};
+    bool reobfuscate_requested{false};
+    if (const auto arg{args.GetArg("-reobfuscate-blocks")}) {
+        if (*arg == "0") {
+            reobfuscate_requested = false;
+        } else if (arg->empty() || *arg == "1") {
+            reobfuscate_requested = true;
+        } else if (arg->size() == 2 * Obfuscation::KEY_SIZE && IsHex(*arg)) {
+            requested_key.emplace();
+            std::ranges::copy(ParseHex<std::byte>(*arg), requested_key->begin());
+            reobfuscate_requested = true;
+        } else {
+            return {ChainstateLoadStatus::FAILURE_FATAL, strprintf(_("Invalid -reobfuscate-blocks value '%s'"), *arg)};
+        }
+    }
+
+    if (reobfuscate_requested || fs::exists(xor_new)) {
+        if (!node::ObfuscateBlocks(*g_shutdown, block_obfuscation_suffix, blocks_dir, xor_dat, xor_new, requested_key)) {
+            if (ShutdownRequested(node)) return {ChainstateLoadStatus::INTERRUPTED, {}};
+            return {ChainstateLoadStatus::FAILURE_FATAL, _("Block obfuscation failed")};
+        }
+    }
+
+    return {ChainstateLoadStatus::SUCCESS, {}};
+}
+
 // A GUI user may opt to retry once with do_reindex set if there is a failure during chainstate initialization.
 // The function therefore has to support re-entry.
 static ChainstateLoadResult InitAndLoadChainstate(
@@ -1842,6 +1877,13 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 #endif
 
     // ********************************************************* Step 7: load block chain
+
+    if (auto [status, error]{ReobfuscateBlocksIfRequested(node, args)}; status == ChainstateLoadStatus::INTERRUPTED) {
+        LogInfo("Shutdown requested. Exiting.");
+        return true;
+    } else if (status != ChainstateLoadStatus::SUCCESS) {
+        return InitError(error);
+    }
 
     // cache size calculations
     node::LogOversizedDbCache(args);
