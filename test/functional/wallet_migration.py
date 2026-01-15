@@ -1903,6 +1903,8 @@ class WalletMigrationTest(BitcoinTestFramework):
         backup_path = self.master_node.wallets_path / f"default_wallet_{mocked_time}.legacy.bak"
         assert backup_path.exists()
 
+        assert not (self.master_node.wallets_path / "wallet.dat-journal").exists()
+
         self.log.info("Test migration of an unsynced wallet on a pruned node does not fails if loadwallet is not set")
         self.master_node.migratewallet("", load_wallet=False)
         # The wallet should NOT be loaded after migration
