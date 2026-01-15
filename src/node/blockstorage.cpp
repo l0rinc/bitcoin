@@ -1307,6 +1307,7 @@ static auto InitBlocksdirXorKey(const BlockManager::Options& opts)
 
 bool ObfuscateBlocks(
     const util::SignalInterrupt& interrupt,
+    kernel::Notifications& notifications,
     std::string_view suffix,
     const fs::path& blocks_dir,
     const fs::path& xor_dat,
@@ -1353,6 +1354,8 @@ bool ObfuscateBlocks(
         auto files{CollectBlockAndUndoFiles(blocks_dir)};
         std::ranges::sort(files, {}, &BlockFileEntry::file_num);
         LogInfo("[obfuscate] Reobfuscating %s block and undo files", files.size());
+        constexpr auto title{_("Reobfuscating blocks…")};
+        notifications.progress(title, /*progress_percent=*/0, /*resume_possible=*/true);
         double progress{0};
         for (const auto& file : files) {
             if (interrupt) return false;
@@ -1361,9 +1364,11 @@ bool ObfuscateBlocks(
             const auto new_progress{progress + 100.0 / files.size()};
             if (auto percentage{int(new_progress)}; percentage > int(progress)) {
                 LogInfo("[obfuscate] Migrating %s - %s%% done", fs::PathToString(file.path.filename()), percentage);
+                notifications.progress(title, percentage, /*resume_possible=*/true);
             }
             progress = new_progress;
         }
+        notifications.progress(title, /*progress_percent=*/100, /*resume_possible=*/true);
         Assert(Remove(xor_dat));
     }
 

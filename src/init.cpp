@@ -1336,7 +1336,7 @@ static ChainstateLoadResult ReobfuscateBlocksIfRequested(NodeContext& node, cons
     }
 
     if (reobfuscate_requested || fs::exists(xor_new)) {
-        if (!node::ObfuscateBlocks(*g_shutdown, block_obfuscation_suffix, blocks_dir, xor_dat, xor_new, requested_key)) {
+        if (!node::ObfuscateBlocks(*g_shutdown, *Assert(node.notifications), block_obfuscation_suffix, blocks_dir, xor_dat, xor_new, requested_key)) {
             if (ShutdownRequested(node)) return {ChainstateLoadStatus::INTERRUPTED, {}};
             return {ChainstateLoadStatus::FAILURE_FATAL, _("Block obfuscation failed")};
         }
