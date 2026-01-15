@@ -1249,8 +1249,15 @@ static auto InitBlocksdirXorKey(const BlockManager::Options& opts)
                       HexStr(obfuscation), fs::PathToString(xor_key_path)),
         };
     }
-    LogInfo("Using obfuscation key for blocksdir *.dat files (%s): '%s'\n", fs::PathToString(opts.blocks_dir), HexStr(obfuscation));
-    return Obfuscation{obfuscation};
+    const Obfuscation result{obfuscation};
+    if (result) {
+        LogInfo("Using obfuscation key for blocksdir *.dat files (%s): '%s'\n", fs::PathToString(opts.blocks_dir), HexStr(obfuscation));
+    } else {
+        LogInfo("Obfuscation is not active for blocksdir *.dat files (%s). To obfuscate existing files, restart with the -reobfuscate-blocks option.",
+                fs::PathToString(opts.blocks_dir));
+    }
+
+    return result;
 }
 
 BlockManager::BlockManager(const util::SignalInterrupt& interrupt, Options opts)
