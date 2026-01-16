@@ -2397,7 +2397,7 @@ void CConnman::DumpAddresses()
 
     DumpPeerAddresses(::gArgs, addrman);
 
-    LogDebug(BCLog::NET, "Flushed %d addresses to peers.dat  %dms\n",
+    LogDebug(BCLog::NET, "Flushed %d addresses to peers.dat %dms",
              addrman.get().Size(), Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
 }
 
