@@ -20,10 +20,6 @@ struct TestBlockManager : public node::BlockManager {
 struct TestChainstateManager : public ChainstateManager {
     /** Disable the next write of all chainstates */
     void DisableNextWrite();
-    /** Reset the ibd cache to its initial state */
-    void ResetIbd();
-    /** Toggle IsInitialBlockDownload from true to false */
-    void JumpOutOfIbd();
     /** Wrappers that avoid making chainstatemanager internals public for tests */
     void InvalidBlockFound(CBlockIndex* pindex, const BlockValidationState& state) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     void InvalidChainFound(CBlockIndex* pindexNew) EXCLUSIVE_LOCKS_REQUIRED(cs_main);

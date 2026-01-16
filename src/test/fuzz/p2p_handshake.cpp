@@ -18,6 +18,7 @@
 #include <test/util/net.h>
 #include <test/util/setup_common.h>
 #include <test/util/validation.h>
+#include <util/check.h>
 #include <util/time.h>
 #include <validationinterface.h>
 
@@ -43,9 +44,9 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
 
     auto& connman = static_cast<ConnmanTestMsg&>(*g_setup->m_node.connman);
-    auto& chainman = static_cast<TestChainstateManager&>(*g_setup->m_node.chainman);
+    auto& chainman = *g_setup->m_node.chainman;
     SetMockTime(1610000000); // any time to successfully reset ibd
-    chainman.ResetIbd();
+    Assert(chainman.IsInitialBlockDownload());
 
     node::Warnings warnings{};
     NetGroupManager netgroupman{{}};

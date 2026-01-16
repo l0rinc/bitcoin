@@ -1941,28 +1941,18 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
 //
 bool ChainstateManager::IsInitialBlockDownload() const
 {
-    // Optimization: pre-test latch before taking the lock.
-    if (m_cached_finished_ibd.load(std::memory_order_relaxed))
+    if (m_cached_finished_ibd.load(std::memory_order_relaxed)) {
         return false;
-
-    LOCK(cs_main);
-    if (m_cached_finished_ibd.load(std::memory_order_relaxed))
-        return false;
+    }
     if (m_blockman.LoadingBlocks()) {
         return true;
     }
-    CChain& chain{ActiveChain()};
-    if (chain.Tip() == nullptr) {
+    if (!m_cached_tip_recent.load(std::memory_order_relaxed)) {
         return true;
     }
-    if (chain.Tip()->nChainWork < MinimumChainWork()) {
-        return true;
+    if (!m_cached_finished_ibd.exchange(true, std::memory_order_relaxed)) {
+        LogInfo("Leaving InitialBlockDownload (latching to false)");
     }
-    if (chain.Tip()->Time() < Now<NodeSeconds>() - m_options.max_tip_age) {
-        return true;
-    }
-    LogInfo("Leaving InitialBlockDownload (latching to false)");
-    m_cached_finished_ibd.store(true, std::memory_order_relaxed);
     return false;
 }
 
@@ -3006,7 +2996,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
         }
     }
 
-    m_chain.SetTip(*pindexDelete->pprev);
+    m_chainman.SetTip(m_chain, *pindexDelete->pprev);
 
     UpdateTip(pindexDelete->pprev);
     // Let wallets know transactions went from 1-confirmed to
@@ -3134,8 +3124,8 @@ bool Chainstate::ConnectTip(
         m_mempool->removeForBlock(block_to_connect->vtx, pindexNew->nHeight);
         disconnectpool.removeForBlock(block_to_connect->vtx);
     }
-    // Update m_chain & related variables.
-    m_chain.SetTip(*pindexNew);
+    // Update m_chain and (for the active chainstate) m_cached_tip_recent and related variables.
+    m_chainman.SetTip(m_chain, *pindexNew);
     UpdateTip(pindexNew);
 
     const auto time_6{SteadyClock::now()};
@@ -3337,6 +3327,17 @@ static SynchronizationState GetSynchronizationState(bool init, bool blockfiles_i
     if (!init) return SynchronizationState::POST_INIT;
     if (!blockfiles_indexed) return SynchronizationState::INIT_REINDEX;
     return SynchronizationState::INIT_DOWNLOAD;
+}
+
+void ChainstateManager::SetTip(CChain& chain, CBlockIndex& block)
+{
+    AssertLockHeld(cs_main);
+    chain.SetTip(block);
+    if (m_cached_tip_recent.load(std::memory_order_relaxed)) return;
+    if (&chain != &CurrentChainstate().m_chain) return;
+    if (chain.IsTipRecent(MinimumChainWork(), m_options.max_tip_age)) {
+        m_cached_tip_recent.store(true, std::memory_order_relaxed);
+    }
 }
 
 bool ChainstateManager::NotifyHeaderTip()
@@ -4620,7 +4621,7 @@ bool Chainstate::LoadChainTip()
     if (!pindex) {
         return false;
     }
-    m_chain.SetTip(*pindex);
+    m_chainman.SetTip(m_chain, *pindex);
     tip = m_chain.Tip();
 
     // Make sure our chain tip before shutting down scores better than any other candidate

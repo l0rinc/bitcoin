@@ -16,6 +16,7 @@
 #include <serialize.h>
 #include <span.h>
 #include <streams.h>
+#include <test/util/mining.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <test/util/validation.h>
@@ -801,8 +802,6 @@ BOOST_AUTO_TEST_CASE(LocalAddress_BasicLifecycle)
 
 BOOST_AUTO_TEST_CASE(initial_advertise_from_version_message)
 {
-    LOCK(NetEventsInterface::g_msgproc_mutex);
-
     // Tests the following scenario:
     // * -bind=3.4.5.6:20001 is specified
     // * we make an outbound connection to a peer
@@ -838,10 +837,15 @@ BOOST_AUTO_TEST_CASE(initial_advertise_from_version_message)
     const uint64_t services{NODE_NETWORK | NODE_WITNESS};
     const int64_t time{0};
 
-    // Force ChainstateManager::IsInitialBlockDownload() to return false.
-    // Otherwise PushAddress() isn't called by PeerManager::ProcessMessage().
-    auto& chainman = static_cast<TestChainstateManager&>(*m_node.chainman);
-    chainman.JumpOutOfIbd();
+    // Ensure ChainstateManager::IsInitialBlockDownload() is false, otherwise
+    // PushAddress() isn't called by PeerManager::ProcessMessage().
+    BOOST_CHECK(m_node.chainman->IsInitialBlockDownload());
+    SetMockTime(WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Tip()->GetMedianTimePast() + 1));
+    MineBlock(m_node, {});
+    BOOST_CHECK(!m_node.chainman->IsInitialBlockDownload());
+    BOOST_CHECK(m_node.chainman->m_cached_finished_ibd.load(std::memory_order_relaxed));
+
+    LOCK(NetEventsInterface::g_msgproc_mutex);
 
     m_node.peerman->InitializeNode(peer, NODE_NETWORK);
 
@@ -891,7 +895,6 @@ BOOST_AUTO_TEST_CASE(initial_advertise_from_version_message)
     BOOST_CHECK(sent);
 
     CaptureMessage = CaptureMessageOrig;
-    chainman.ResetIbd();
     m_node.connman->SetCaptureMessages(false);
     m_node.args->ForceSetArg("-bind", "");
 }
