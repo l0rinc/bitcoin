@@ -10,6 +10,7 @@
 #include <crypto/common.h>
 #include <prevector.h> // IWYU pragma: export
 #include <serialize.h>
+#include <span.h>
 #include <uint256.h>
 #include <util/hash_type.h>
 
@@ -483,7 +484,7 @@ public:
     CScript& operator<<(std::span<const std::byte> b) LIFETIMEBOUND
     {
         AppendDataSize(b.size());
-        AppendData({reinterpret_cast<const value_type*>(b.data()), b.size()});
+        AppendData(MakeUCharSpan(b));
         return *this;
     }
 
