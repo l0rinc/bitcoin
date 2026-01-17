@@ -5,6 +5,8 @@
 #ifndef BITCOIN_HTTPSERVER_H
 #define BITCOIN_HTTPSERVER_H
 
+#include <span.h>
+
 #include <functional>
 #include <optional>
 #include <span>
@@ -140,7 +142,7 @@ public:
      */
     void WriteReply(int nStatus, std::string_view reply = "")
     {
-        WriteReply(nStatus, std::as_bytes(std::span{reply}));
+        WriteReply(nStatus, MakeByteSpan(reply));
     }
     void WriteReply(int nStatus, std::span<const std::byte> reply);
 };

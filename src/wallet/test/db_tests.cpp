@@ -8,6 +8,7 @@
 #include <util/check.h>
 #include <util/fs.h>
 #include <util/translation.h>
+#include <span.h>
 #include <wallet/sqlite.h>
 #include <wallet/migrate.h>
 #include <wallet/test/util.h>
@@ -32,14 +33,9 @@ inline std::ostream& operator<<(std::ostream& os, const std::pair<const Serializ
 
 namespace wallet {
 
-inline std::span<const std::byte> StringBytes(std::string_view str)
-{
-    return std::as_bytes(std::span{str});
-}
-
 static SerializeData StringData(std::string_view str)
 {
-    auto bytes = StringBytes(str);
+    auto bytes = MakeByteSpan(str);
     return SerializeData{bytes.begin(), bytes.end()};
 }
 
@@ -137,10 +133,10 @@ BOOST_AUTO_TEST_CASE(db_cursor_prefix_byte_test)
             batch->Write(std::span{k}, std::span{v});
         }
 
-        CheckPrefix(*batch, StringBytes(""), {e, p, ps, f, fs, ff, ffs});
-        CheckPrefix(*batch, StringBytes("prefix"), {p, ps});
-        CheckPrefix(*batch, StringBytes("\xff"), {f, fs, ff, ffs});
-        CheckPrefix(*batch, StringBytes("\xff\xff"), {ff, ffs});
+        CheckPrefix(*batch, MakeByteSpan(""), {e, p, ps, f, fs, ff, ffs});
+        CheckPrefix(*batch, MakeByteSpan("prefix"), {p, ps});
+        CheckPrefix(*batch, MakeByteSpan("\xff"), {f, fs, ff, ffs});
+        CheckPrefix(*batch, MakeByteSpan("\xff\xff"), {ff, ffs});
         batch.reset();
         database->Close();
     }
