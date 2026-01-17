@@ -9,6 +9,7 @@
 #include <util/check.h>
 #include <util/strencodings.h>
 #include <util/string.h>
+#include <span.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -550,7 +551,7 @@ void CheckInferDescriptor(const std::string& script_hex, const std::string& expe
                 if (elem.size() > 0) {
                     const char last = elem[elem.size() - 1];
                     if (last == '\'' || last == 'h') {
-                        elem = elem.first(elem.size() - 1);
+                        SpanPopBack(elem);
                         hardened = true;
                     }
                 }
