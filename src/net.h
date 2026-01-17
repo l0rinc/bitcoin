@@ -1405,7 +1405,7 @@ private:
         std::shared_ptr<Sock> sock;
         inline void AddSocketPermissionFlags(NetPermissionFlags& flags) const { NetPermissions::AddFlag(flags, m_permissions); }
         ListenSocket(std::shared_ptr<Sock> sock_, NetPermissionFlags permissions_)
-            : sock{sock_}, m_permissions{permissions_}
+            : sock{std::move(sock_)}, m_permissions{permissions_}
         {
         }
 
