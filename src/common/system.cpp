@@ -13,7 +13,6 @@
 
 #ifdef WIN32
 #include <cassert>
-#include <codecvt>
 #include <compat/compat.h>
 #include <windows.h>
 #else
@@ -56,7 +55,8 @@ void runCommand(const std::string& strCommand)
 #ifndef WIN32
     int nErr = ::system(strCommand.c_str());
 #else
-    int nErr = ::_wsystem(std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>,wchar_t>().from_bytes(strCommand).c_str());
+    const std::wstring wide_command{util::Utf8ToWide(strCommand)};
+    int nErr = ::_wsystem(wide_command.c_str());
 #endif
     if (nErr) {
         LogWarning("runCommand error: system(%s) returned %d", strCommand, nErr);

@@ -37,6 +37,7 @@ Documentation for C++ subprocessing library.
 #define BITCOIN_UTIL_SUBPROCESS_H
 
 #include <util/syserror.h>
+#include <util/string.h>
 
 #include <algorithm>
 #include <cassert>
@@ -57,10 +58,6 @@ Documentation for C++ subprocessing library.
 
 #if (defined _MSC_VER) || (defined __MINGW32__)
   #define __USING_WINDOWS__
-#endif
-
-#ifdef __USING_WINDOWS__
-  #include <codecvt>
 #endif
 
 extern "C" {
@@ -743,6 +740,7 @@ private:
  * This takes care of all the fork-exec logic
  * in the execute_child API.
  */
+#ifndef __USING_WINDOWS__
 class Child
 {
 public:
@@ -759,6 +757,7 @@ private:
   Popen* parent_ = nullptr;
   int err_wr_pipe_ = -1;
 };
+#endif // !__USING_WINDOWS__
 
 // Fwd Decl.
 class Streams;
@@ -932,7 +931,9 @@ class Popen
 {
 public:
   friend struct detail::ArgumentDeducer;
+#ifndef __USING_WINDOWS__
   friend class detail::Child;
+#endif
 
   template <typename... Args>
   Popen(const std::string& cmd_args, Args&& ...args):
@@ -1035,7 +1036,9 @@ private:
   std::vector<char*> cargv_;
 
   // Pid of the child process
+#ifndef __USING_WINDOWS__
   int child_pid_ = -1;
+#endif
 
   int retcode_ = -1;
 };
@@ -1102,7 +1105,6 @@ inline void Popen::execute_process() noexcept(false)
   }
   this->exe_name_ = vargs_[0];
 
-  std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
   std::wstring argument;
   std::wstring command_line;
   bool first_arg = true;
@@ -1113,7 +1115,7 @@ inline void Popen::execute_process() noexcept(false)
     } else {
       first_arg = false;
     }
-    argument = converter.from_bytes(arg);
+    argument = ::util::Utf8ToWide(arg);
     util::quote_argument(argument, command_line, false);
   }
 

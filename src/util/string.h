@@ -260,6 +260,10 @@ template <typename T1, size_t PREFIX_LEN>
     return obj.size() >= PREFIX_LEN &&
            std::equal(std::begin(prefix), std::end(prefix), std::begin(obj));
 }
+
+#ifdef WIN32
+std::wstring Utf8ToWide(std::string_view utf8);
+#endif
 } // namespace util
 
 #endif // BITCOIN_UTIL_STRING_H
