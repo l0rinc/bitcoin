@@ -16,6 +16,7 @@
 #include <primitives/transaction.h>
 #include <script/interpreter.h>
 #include <script/script.h>
+#include <span.h>
 #include <uint256.h>
 #include <util/chaintype.h>
 #include <util/strencodings.h>
@@ -23,7 +24,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
-#include <cstring>
+#include <string_view>
 #include <type_traits>
 
 using namespace util::hex_literals;
@@ -43,7 +44,7 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
     txNew.version = 1;
     txNew.vin.resize(1);
     txNew.vout.resize(1);
-    txNew.vin[0].scriptSig = CScript() << 486604799 << CScriptNum(4) << std::vector<unsigned char>((const unsigned char*)pszTimestamp, (const unsigned char*)pszTimestamp + strlen(pszTimestamp));
+    txNew.vin[0].scriptSig = CScript() << 486604799 << CScriptNum(4) << MakeUCharSpan(std::string_view{pszTimestamp});
     txNew.vout[0].nValue = genesisReward;
     txNew.vout[0].scriptPubKey = genesisOutputScript;
 
