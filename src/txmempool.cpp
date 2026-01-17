@@ -265,7 +265,7 @@ void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
         RemovalReasonToString(reason).c_str(),
         it->GetTxSize(),
         it->GetFee(),
-        std::chrono::duration_cast<std::chrono::duration<std::uint64_t>>(it->GetTime()).count()
+        Ticks<std::chrono::duration<std::uint64_t>>(it->GetTime())
     );
 
     for (const CTxIn& txin : it->GetTx().vin)
