@@ -278,6 +278,51 @@ BOOST_AUTO_TEST_CASE(span_write_bytes)
     BOOST_CHECK_EQUAL(mut_arr.at(1), 0x11);
 }
 
+BOOST_AUTO_TEST_CASE(span_make_byte_span)
+{
+    constexpr std::array<uint8_t, 3> input{0x01, 0x02, 0x03};
+    const auto expected = std::as_bytes(std::span{input});
+    const auto actual = MakeByteSpan(input);
+    BOOST_CHECK_EQUAL_COLLECTIONS(actual.begin(), actual.end(), expected.begin(), expected.end());
+}
+
+BOOST_AUTO_TEST_CASE(span_make_writable_byte_span)
+{
+    std::array<uint8_t, 2> input{0x0a, 0x0b};
+    const auto expected = std::as_writable_bytes(std::span{input});
+    const auto actual = MakeWritableByteSpan(input);
+    BOOST_CHECK_EQUAL(actual.data(), expected.data());
+    BOOST_CHECK_EQUAL(actual.size(), expected.size());
+}
+
+BOOST_AUTO_TEST_CASE(span_make_uchar_span)
+{
+    std::array<std::byte, 2> bytes{std::byte{0x12}, std::byte{0x34}};
+    const auto span = MakeUCharSpan(bytes);
+    BOOST_CHECK_EQUAL(span.size(), bytes.size());
+    BOOST_CHECK_EQUAL(span[0], 0x12);
+    BOOST_CHECK_EQUAL(span[1], 0x34);
+}
+
+BOOST_AUTO_TEST_CASE(span_uchar_cast)
+{
+    std::array<std::byte, 2> bytes{std::byte{0xab}, std::byte{0xcd}};
+    const auto ptr = UCharCast(bytes.data());
+    BOOST_CHECK_EQUAL(ptr[0], 0xab);
+    BOOST_CHECK_EQUAL(ptr[1], 0xcd);
+}
+
+BOOST_AUTO_TEST_CASE(span_pop_back)
+{
+    std::array values{1, 2, 3};
+    std::span<int> span{values};
+    const int last = SpanPopBack(span);
+    BOOST_CHECK_EQUAL(last, 3);
+    BOOST_CHECK_EQUAL(span.size(), 2);
+    BOOST_CHECK_EQUAL(span[0], 1);
+    BOOST_CHECK_EQUAL(span[1], 2);
+}
+
 BOOST_AUTO_TEST_CASE(util_Join)
 {
     // Normal version
