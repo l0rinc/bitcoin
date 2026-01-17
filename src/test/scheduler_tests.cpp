@@ -207,7 +207,7 @@ BOOST_AUTO_TEST_CASE(mockforward)
 
     // check that the time of the remaining job has been updated
     auto now = std::chrono::steady_clock::now();
-    int delta = std::chrono::duration_cast<std::chrono::seconds>(first - now).count();
+    int delta = Ticks<std::chrono::seconds>(first - now);
     // should be between 2 & 3 minutes from now
     BOOST_CHECK(delta > 2*60 && delta < 3*60);
 }

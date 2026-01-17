@@ -1226,7 +1226,7 @@ void MemPoolAccept::FinalizeSubpackage(const ATMPArgs& args)
                 it->GetTx().GetHash().data(),
                 it->GetTxSize(),
                 it->GetFee(),
-                std::chrono::duration_cast<std::chrono::duration<std::uint64_t>>(it->GetTime()).count(),
+                Ticks<std::chrono::duration<std::uint64_t>>(it->GetTime()),
                 tx_or_package_hash.data(),
                 feerate.size,
                 feerate.fee,

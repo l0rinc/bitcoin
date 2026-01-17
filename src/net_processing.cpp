@@ -1338,7 +1338,7 @@ bool PeerManagerImpl::TipMayBeStale()
 
 int64_t PeerManagerImpl::ApproximateBestBlockDepth() const
 {
-    return (GetTime<std::chrono::seconds>() - m_best_block_time.load()).count() / m_chainparams.GetConsensus().nPowTargetSpacing;
+    return count_seconds(GetTime<std::chrono::seconds>() - m_best_block_time.load()) / m_chainparams.GetConsensus().nPowTargetSpacing;
 }
 
 bool PeerManagerImpl::CanDirectFetch()
@@ -5462,7 +5462,7 @@ void PeerManagerImpl::MaybeSendPing(CNode& node_to, Peer& peer, std::chrono::mic
     {
         // The ping timeout is using mocktime. To disable the check during
         // testing, increase -peertimeout.
-        LogDebug(BCLog::NET, "ping timeout: %fs, %s", 0.000001 * count_microseconds(now - peer.m_ping_start.load()), node_to.DisconnectMsg(fLogIPs));
+        LogDebug(BCLog::NET, "ping timeout: %fs, %s", Ticks<SecondsDouble>(now - peer.m_ping_start.load()), node_to.DisconnectMsg(fLogIPs));
         node_to.fDisconnect = true;
         return;
     }
