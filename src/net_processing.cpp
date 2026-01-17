@@ -1338,7 +1338,7 @@ bool PeerManagerImpl::TipMayBeStale()
 
 int64_t PeerManagerImpl::ApproximateBestBlockDepth() const
 {
-    return (GetTime<std::chrono::seconds>() - m_best_block_time.load()).count() / m_chainparams.GetConsensus().nPowTargetSpacing;
+    return count_seconds(GetTime<std::chrono::seconds>() - m_best_block_time.load()) / m_chainparams.GetConsensus().nPowTargetSpacing;
 }
 
 bool PeerManagerImpl::CanDirectFetch()

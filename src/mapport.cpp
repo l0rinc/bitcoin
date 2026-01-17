@@ -15,6 +15,7 @@
 #include <random.h>
 #include <util/thread.h>
 #include <util/threadinterrupt.h>
+#include <util/time.h>
 
 #include <atomic>
 #include <cassert>
@@ -40,7 +41,7 @@ static void ProcessPCP()
     bool no_resources = false;
     const uint16_t private_port = GetListenPort();
     // Multiply the reannounce period by two, as we'll try to renew approximately halfway.
-    const uint32_t requested_lifetime = std::chrono::seconds(PORT_MAPPING_REANNOUNCE_PERIOD * 2).count();
+    const uint32_t requested_lifetime = count_seconds(PORT_MAPPING_REANNOUNCE_PERIOD * 2);
     uint32_t actual_lifetime = 0;
     std::chrono::milliseconds sleep_time;
 

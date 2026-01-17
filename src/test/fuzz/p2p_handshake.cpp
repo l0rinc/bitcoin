@@ -82,8 +82,8 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
 
         SetMockTime(GetTime() +
                     fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(
-                        -std::chrono::seconds{10min}.count(), // Allow mocktime to go backwards slightly
-                        std::chrono::seconds{TIMEOUT_INTERVAL}.count()));
+                        -count_seconds(10min), // Allow mocktime to go backwards slightly
+                        count_seconds(TIMEOUT_INTERVAL)));
 
         CSerializedNetMsg net_msg;
         net_msg.m_type = PickValue(fuzzed_data_provider, ALL_NET_MESSAGE_TYPES);

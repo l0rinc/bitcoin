@@ -2272,7 +2272,7 @@ void CConnman::ThreadDNSAddressSeed()
     if (!gArgs.GetArgs("-seednode").empty()) {
         auto start = NodeClock::now();
         constexpr std::chrono::seconds SEEDNODE_TIMEOUT = 30s;
-        LogInfo("-seednode enabled. Trying the provided seeds for %d seconds before defaulting to the dnsseeds.\n", SEEDNODE_TIMEOUT.count());
+        LogInfo("-seednode enabled. Trying the provided seeds for %d seconds before defaulting to the dnsseeds.\n", count_seconds(SEEDNODE_TIMEOUT));
         while (!m_interrupt_net->interrupted()) {
             if (!m_interrupt_net->sleep_for(500ms)) {
                 return;
@@ -2330,7 +2330,7 @@ void CConnman::ThreadDNSAddressSeed()
                 seeds_right_now += DNSSEEDS_TO_QUERY_AT_ONCE;
 
                 if (addrman.Size() > 0) {
-                    LogInfo("Waiting %d seconds before querying DNS seeds.\n", seeds_wait_time.count());
+                    LogInfo("Waiting %d seconds before querying DNS seeds.\n", count_seconds(seeds_wait_time));
                     std::chrono::seconds to_wait = seeds_wait_time;
                     while (to_wait.count() > 0) {
                         // if sleeping for the MANY_PEERS interval, wake up
@@ -2594,7 +2594,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect, std
             if (addrman.Size() == 0) {
                 LogInfo("Empty addrman, adding seednode (%s) to addrfetch\n", seed);
             } else {
-                LogInfo("Couldn't connect to peers from addrman after %d seconds. Adding seednode (%s) to addrfetch\n", ADD_NEXT_SEEDNODE.count(), seed);
+                LogInfo("Couldn't connect to peers from addrman after %d seconds. Adding seednode (%s) to addrfetch\n", count_seconds(ADD_NEXT_SEEDNODE), seed);
             }
         }
 
@@ -4215,7 +4215,7 @@ static void CaptureMessageToFile(const CAddress& addr,
     fs::path path = base_path / (is_incoming ? "msgs_recv.dat" : "msgs_sent.dat");
     AutoFile f{fsbridge::fopen(path, "ab")};
 
-    ser_writedata64(f, now.count());
+    ser_writedata64(f, count_microseconds(now));
     f << std::span{msg_type};
     for (auto i = msg_type.length(); i < CMessageHeader::MESSAGE_TYPE_SIZE; ++i) {
         f << uint8_t{'\0'};
