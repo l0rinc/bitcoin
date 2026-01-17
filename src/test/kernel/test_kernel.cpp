@@ -9,6 +9,7 @@
 #include <boost/test/included/unit_test.hpp>
 
 #include <test/kernel/block_data.h>
+#include <span.h>
 
 #include <charconv>
 #include <cstdint>
@@ -81,8 +82,8 @@ constexpr auto VERIFY_ALL_PRE_TAPROOT{VERIFY_ALL_PRE_SEGWIT | ScriptVerification
 
 void check_equal(std::span<const std::byte> _actual, std::span<const std::byte> _expected, bool equal = true)
 {
-    std::span<const uint8_t> actual{reinterpret_cast<const unsigned char*>(_actual.data()), _actual.size()};
-    std::span<const uint8_t> expected{reinterpret_cast<const unsigned char*>(_expected.data()), _expected.size()};
+    const auto actual = MakeUCharSpan(_actual);
+    const auto expected = MakeUCharSpan(_expected);
     BOOST_CHECK_EQUAL_COLLECTIONS(
         actual.begin(), actual.end(),
         expected.begin(), expected.end());

@@ -249,7 +249,7 @@ public:
     void Unserialize(Stream& s)
     {
         data.resize(m_header.len);
-        s.read(std::as_writable_bytes(std::span(data.data(), data.size())));
+        s.read(MakeWritableByteSpan(data));
     }
 };
 
@@ -277,7 +277,7 @@ public:
         s >> records;
 
         data.resize(m_header.len);
-        s.read(std::as_writable_bytes(std::span(data.data(), data.size())));
+        s.read(MakeWritableByteSpan(data));
 
         if (m_header.other_endian) {
             page_num = internal_bswap_32(page_num);
@@ -461,7 +461,7 @@ public:
     void Unserialize(Stream& s)
     {
         data.resize(m_header.hf_offset);
-        s.read(std::as_writable_bytes(std::span(data.data(), data.size())));
+        s.read(MakeWritableByteSpan(data));
     }
 };
 

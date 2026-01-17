@@ -88,7 +88,7 @@ public:
     /**
      * @param[in]  data Referenced byte vector to overwrite/append
      */
-    explicit SpanReader(std::span<const unsigned char> data) : m_data{std::as_bytes(data)} {}
+    explicit SpanReader(std::span<const unsigned char> data) : m_data{MakeByteSpan(data)} {}
     explicit SpanReader(std::span<const std::byte> data) : m_data{data} {}
 
     template<typename T>
@@ -145,7 +145,7 @@ public:
     typedef vector_type::reverse_iterator reverse_iterator;
 
     explicit DataStream() = default;
-    explicit DataStream(std::span<const uint8_t> sp) : DataStream{std::as_bytes(sp)} {}
+    explicit DataStream(std::span<const uint8_t> sp) : DataStream{MakeByteSpan(sp)} {}
     explicit DataStream(std::span<const value_type> sp) : vch(sp.data(), sp.data() + sp.size()) {}
 
     std::string str() const

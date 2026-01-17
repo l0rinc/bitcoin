@@ -11,6 +11,7 @@
 #include <uint256.h>
 #include <univalue.h>
 #include <util/strencodings.h>
+#include <span.h>
 
 #include <algorithm>
 #include <cassert>
@@ -23,7 +24,7 @@ FUZZ_TARGET(hex)
     const std::string random_hex_string(buffer.begin(), buffer.end());
     const std::vector<unsigned char> data = ParseHex(random_hex_string);
     const std::vector<std::byte> bytes{ParseHex<std::byte>(random_hex_string)};
-    assert(std::ranges::equal(std::as_bytes(std::span{data}), bytes));
+    assert(std::ranges::equal(MakeByteSpan(data), bytes));
     const std::string hex_data = HexStr(data);
     if (IsHex(random_hex_string)) {
         assert(ToLower(random_hex_string) == hex_data);

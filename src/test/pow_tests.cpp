@@ -8,6 +8,7 @@
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <util/chaintype.h>
+#include <util/strencodings.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -196,6 +197,14 @@ BOOST_AUTO_TEST_CASE(ChainParams_REGTEST_sanity)
 BOOST_AUTO_TEST_CASE(ChainParams_TESTNET_sanity)
 {
     sanity_check_chainparams(*m_node.args, ChainType::TESTNET);
+}
+
+BOOST_AUTO_TEST_CASE(ChainParams_MAIN_genesis_scriptsig)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
+    const auto& genesis = chainParams->GenesisBlock();
+    const auto& script_sig = genesis.vtx[0]->vin[0].scriptSig;
+    BOOST_CHECK_EQUAL(HexStr(script_sig), "04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73");
 }
 
 BOOST_AUTO_TEST_CASE(ChainParams_TESTNET4_sanity)
