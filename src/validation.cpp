@@ -4618,6 +4618,14 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
             }
         }
         ReceivedBlockTransactions(block, pindex, blockPos);
+
+        // During IBD, keep the next few blocks' transactions hot in memory, so ConnectTip can
+        // avoid blocking on disk reads while holding `cs_main`.
+        if (m_block_prefetcher && IsInitialBlockDownload()) {
+            if (pindex->nHeight <= ActiveHeight() + IBD_BLOCK_PREFETCH_WINDOW) {
+                m_block_prefetcher->Store(pindex->GetBlockHash(), pblock);
+            }
+        }
     } catch (const std::runtime_error& e) {
         return FatalError(GetNotifications(), state, strprintf(_("System error while saving block to disk: %s"), e.what()));
     }
