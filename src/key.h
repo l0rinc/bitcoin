@@ -50,7 +50,7 @@ public:
 
 private:
     /** Internal data container for private key material. */
-    using KeyType = std::array<unsigned char, 32>;
+    using KeyType = std::array<std::byte, 32>;
 
     //! Whether the public key corresponding to this private key is (to be) compressed.
     bool fCompressed{false};
@@ -117,7 +117,7 @@ public:
 
     //! Simple read-only vector-like interface.
     unsigned int size() const { return keydata ? keydata->size() : 0; }
-    const std::byte* data() const { return keydata ? reinterpret_cast<const std::byte*>(keydata->data()) : nullptr; }
+    const std::byte* data() const { return keydata ? keydata->data() : nullptr; }
     const std::byte* begin() const { return data(); }
     const std::byte* end() const { return data() + size(); }
 

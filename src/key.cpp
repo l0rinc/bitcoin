@@ -162,7 +162,7 @@ bool CKey::Check(const std::byte* vch) { return Check(UCharCast(vch)); }
 void CKey::MakeNewKey(bool fCompressedIn) {
     MakeKeyData();
     do {
-        GetStrongRandBytes(MakeWritableByteSpan(*keydata));
+        GetStrongRandBytes(*keydata);
     } while (!Check(begin()));
     fCompressed = fCompressedIn;
 }
@@ -317,7 +317,7 @@ EllSwiftPubKey CKey::EllSwiftCreate(std::span<const std::byte> ent32) const
 
     auto success = secp256k1_ellswift_create(secp256k1_context_sign,
                                              UCharCast(encoded_pubkey.data()),
-                                             keydata->data(),
+                                             UCharCast(begin()),
                                              UCharCast(ent32.data()));
 
     // Should always succeed for valid keys (asserted above).
@@ -336,7 +336,7 @@ ECDHSecret CKey::ComputeBIP324ECDHSecret(const EllSwiftPubKey& their_ellswift, c
                                           UCharCast(output.data()),
                                           UCharCast(initiating ? our_ellswift.data() : their_ellswift.data()),
                                           UCharCast(initiating ? their_ellswift.data() : our_ellswift.data()),
-                                          keydata->data(),
+                                          UCharCast(begin()),
                                           initiating ? 0 : 1,
                                           secp256k1_ellswift_xdh_hash_function_bip324,
                                           nullptr);
