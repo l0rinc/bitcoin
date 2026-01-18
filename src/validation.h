@@ -53,6 +53,7 @@
 class Chainstate;
 class CTxMemPool;
 class ChainstateManager;
+class BlockPrefetcher;
 struct ChainTxData;
 class DisconnectedBlockTransactions;
 struct PrecomputedTransactionData;
@@ -966,6 +967,9 @@ private:
 
     //! A queue for script verifications that have to be performed by worker threads.
     CCheckQueue<CScriptCheck> m_script_check_queue;
+
+    //! Background block prefetcher used to warm block data for ConnectTip during IBD.
+    std::unique_ptr<BlockPrefetcher> m_block_prefetcher;
 
     //! Timers and counters used for benchmarking validation in both background
     //! and active chainstates.

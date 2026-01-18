@@ -59,6 +59,7 @@
 #include <util/signalinterrupt.h>
 #include <util/strencodings.h>
 #include <util/string.h>
+#include <util/thread.h>
 #include <util/time.h>
 #include <util/trace.h>
 #include <util/translation.h>
@@ -67,13 +68,18 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <condition_variable>
 #include <deque>
+#include <mutex>
 #include <numeric>
 #include <optional>
 #include <ranges>
 #include <span>
 #include <string>
+#include <thread>
 #include <tuple>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 using kernel::CCoinsStats;
@@ -113,11 +119,158 @@ const std::vector<std::string> CHECKLEVEL_DOC {
  *  noticeably interfere with the pruning mechanism.
  * */
 static constexpr int PRUNE_LOCK_BUFFER{10};
+/** How many blocks ahead of the next-to-connect to prefetch during IBD. */
+static constexpr int IBD_BLOCK_PREFETCH_WINDOW{10};
 
 TRACEPOINT_SEMAPHORE(validation, block_connected);
 TRACEPOINT_SEMAPHORE(utxocache, flush);
 TRACEPOINT_SEMAPHORE(mempool, replaced);
 TRACEPOINT_SEMAPHORE(mempool, rejected);
+
+class BlockPrefetcher
+{
+public:
+    BlockPrefetcher(const BlockPrefetcher&) = delete;
+    BlockPrefetcher& operator=(const BlockPrefetcher&) = delete;
+
+    explicit BlockPrefetcher(const BlockManager& blockman, const util::SignalInterrupt& interrupt,
+                             size_t max_blocks = IBD_BLOCK_PREFETCH_WINDOW)
+        : m_blockman{blockman}, m_interrupt{interrupt}, m_max_blocks{max_blocks}
+    {
+    }
+
+    ~BlockPrefetcher()
+    {
+        {
+            std::lock_guard<std::mutex> lock{m_mutex};
+            m_stop = true;
+        }
+        m_cv.notify_all();
+        if (m_worker.joinable()) m_worker.join();
+    }
+
+    void Enqueue(const FlatFilePos& pos, const uint256& block_hash)
+    {
+        if (pos.IsNull()) return;
+
+        std::unique_lock<std::mutex> lock{m_mutex};
+        if (m_interrupt) return;
+        if (m_stop) return;
+
+        if (m_ready.contains(block_hash) || m_queued.contains(block_hash)) return;
+
+        // Best-effort: if the buffer is full, skip prefetching.
+        if (m_ready.size() + m_queue.size() >= m_max_blocks) return;
+
+        if (!m_worker.joinable()) {
+            m_worker = std::thread([this] { util::TraceThread("blockprefetch", [this] { WorkerLoop(); }); });
+        }
+
+        m_queued.emplace(block_hash);
+        m_queue.push_back({pos, block_hash, m_generation});
+        lock.unlock();
+        m_cv.notify_one();
+    }
+
+    void Store(const uint256& block_hash, std::shared_ptr<const CBlock> block)
+    {
+        if (!block) return;
+
+        std::unique_lock<std::mutex> lock{m_mutex};
+        if (m_interrupt) return;
+        if (m_stop) return;
+
+        if (m_ready.contains(block_hash)) return;
+
+        if (m_queued.erase(block_hash) > 0) {
+            for (auto it = m_queue.begin(); it != m_queue.end();) {
+                if (it->hash == block_hash) {
+                    it = m_queue.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        // Best-effort: if the buffer is full, skip caching.
+        if (m_ready.size() + m_queue.size() >= m_max_blocks) return;
+
+        m_ready.emplace(block_hash, std::move(block));
+    }
+
+    std::shared_ptr<const CBlock> Take(const uint256& block_hash)
+    {
+        std::lock_guard<std::mutex> lock{m_mutex};
+        auto it = m_ready.find(block_hash);
+        if (it == m_ready.end()) return {};
+        std::shared_ptr<const CBlock> block = std::move(it->second);
+        m_ready.erase(it);
+        return block;
+    }
+
+    void Clear()
+    {
+        std::lock_guard<std::mutex> lock{m_mutex};
+        ++m_generation;
+        m_queue.clear();
+        m_queued.clear();
+        m_ready.clear();
+    }
+
+private:
+    struct Task {
+        FlatFilePos pos;
+        uint256 hash;
+        uint64_t generation;
+    };
+
+    void WorkerLoop()
+    {
+        while (true) {
+            Task task;
+            {
+                std::unique_lock<std::mutex> lock{m_mutex};
+                m_cv.wait(lock, [this] { return m_stop || !m_queue.empty(); });
+                if (m_stop) return;
+
+                task = std::move(m_queue.front());
+                m_queue.pop_front();
+            }
+
+            if (m_interrupt) return;
+
+            std::shared_ptr<CBlock> block = std::make_shared<CBlock>();
+            const bool ok = m_blockman.ReadBlock(*block, task.pos, task.hash);
+            if (!ok) block.reset();
+
+            {
+                std::lock_guard<std::mutex> lock{m_mutex};
+                if (task.generation != m_generation) continue;
+                m_queued.erase(task.hash);
+                if (!block) continue;
+                if (m_ready.size() < m_max_blocks) {
+                    m_ready.emplace(task.hash, std::move(block));
+                }
+            }
+        }
+    }
+
+    const BlockManager& m_blockman;
+    const util::SignalInterrupt& m_interrupt;
+    const size_t m_max_blocks;
+
+    std::mutex m_mutex;
+    std::condition_variable m_cv;
+
+    bool m_stop{false};
+    uint64_t m_generation{0};
+
+    std::thread m_worker;
+
+    std::deque<Task> m_queue;
+    std::unordered_set<uint256, SaltedUint256Hasher> m_queued;
+    std::unordered_map<uint256, std::shared_ptr<const CBlock>, SaltedUint256Hasher> m_ready;
+};
 
 const CBlockIndex* Chainstate::FindForkInGlobalIndex(const CBlockLocator& locator) const
 {
@@ -6185,6 +6338,7 @@ ChainstateManager::ChainstateManager(const util::SignalInterrupt& interrupt, Opt
       m_blockman{interrupt, std::move(blockman_options)},
       m_validation_cache{m_options.script_execution_cache_bytes, m_options.signature_cache_bytes}
 {
+    m_block_prefetcher = std::make_unique<BlockPrefetcher>(m_blockman, m_interrupt);
 }
 
 ChainstateManager::~ChainstateManager()
