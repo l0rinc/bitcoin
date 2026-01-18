@@ -162,7 +162,7 @@ bool CKey::Check(const unsigned char *vch) {
 void CKey::MakeNewKey(bool fCompressedIn) {
     MakeKeyData();
     do {
-        GetStrongRandBytes(*keydata);
+        GetStrongRandBytes(MakeWritableByteSpan(*keydata));
     } while (!Check(keydata->data()));
     fCompressed = fCompressedIn;
 }
@@ -365,7 +365,7 @@ std::vector<uint8_t> CKey::CreateMuSig2Nonce(MuSig2SecNonce& secnonce, const uin
 
     // Generate randomness for nonce
     uint256 rand;
-    GetStrongRandBytes(rand);
+    GetStrongRandBytes(MakeWritableByteSpan(rand));
 
     // Generate nonce
     secp256k1_musig_pubnonce pubnonce;

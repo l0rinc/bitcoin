@@ -603,9 +603,9 @@ void GetRandBytes(std::span<unsigned char> bytes) noexcept
     ProcRand(std::as_writable_bytes(bytes), RNGLevel::FAST, /*always_use_real_rng=*/false);
 }
 
-void GetStrongRandBytes(std::span<unsigned char> bytes) noexcept
+void GetStrongRandBytes(std::span<std::byte> bytes) noexcept
 {
-    ProcRand(std::as_writable_bytes(bytes), RNGLevel::SLOW, /*always_use_real_rng=*/true);
+    ProcRand(bytes, RNGLevel::SLOW, /*always_use_real_rng=*/true);
 }
 
 void RandAddPeriodic() noexcept

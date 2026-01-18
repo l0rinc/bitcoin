@@ -30,7 +30,7 @@ BOOST_AUTO_TEST_CASE(strongrandbytes_test)
     std::set<uint64_t> nums;
     for (int i{0}; i < 10; ++i) {
         uint64_t n;
-        GetStrongRandBytes({reinterpret_cast<uint8_t*>(&n), sizeof(n)});
+        GetStrongRandBytes(MakeWritableByteSpan(std::span{&n, 1}));
         nums.insert(n);
     }
     BOOST_CHECK(nums.size() > 1);
