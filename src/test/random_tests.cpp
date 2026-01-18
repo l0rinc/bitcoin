@@ -10,14 +10,30 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <array>
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
 #include <random>
+#include <set>
 
 BOOST_FIXTURE_TEST_SUITE(random_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(osrandom_tests)
 {
     BOOST_CHECK(Random_SanityCheck());
+}
+
+BOOST_AUTO_TEST_CASE(strongrandbytes_test)
+{
+    // Check that GetStrongRandBytes wiring is correct and returns different values on subsequent calls
+    std::set<uint64_t> nums;
+    for (int i{0}; i < 10; ++i) {
+        uint64_t n;
+        GetStrongRandBytes({reinterpret_cast<uint8_t*>(&n), sizeof(n)});
+        nums.insert(n);
+    }
+    BOOST_CHECK(nums.size() > 1);
 }
 
 BOOST_AUTO_TEST_CASE(fastrandom_tests_deterministic)
