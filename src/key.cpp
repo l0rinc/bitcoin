@@ -155,15 +155,15 @@ int ec_seckey_export_der(const secp256k1_context *ctx, unsigned char *seckey, si
     return 1;
 }
 
-bool CKey::Check(const unsigned char *vch) {
-    return secp256k1_ec_seckey_verify(secp256k1_context_static, vch);
-}
+bool CKey::Check(const unsigned char* vch) { return secp256k1_ec_seckey_verify(secp256k1_context_static, vch); }
+
+bool CKey::Check(const std::byte* vch) { return Check(UCharCast(vch)); }
 
 void CKey::MakeNewKey(bool fCompressedIn) {
     MakeKeyData();
     do {
         GetStrongRandBytes(MakeWritableByteSpan(*keydata));
-    } while (!Check(keydata->data()));
+    } while (!Check(begin()));
     fCompressed = fCompressedIn;
 }
 

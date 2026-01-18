@@ -59,7 +59,8 @@ private:
     secure_unique_ptr<KeyType> keydata;
 
     //! Check whether the 32-byte array pointed to by vch is valid keydata.
-    bool static Check(const unsigned char* vch);
+    static bool Check(const std::byte* vch);
+    static bool Check(const unsigned char* vch);
 
     void MakeKeyData()
     {
@@ -105,9 +106,9 @@ public:
     {
         if (size_t(pend - pbegin) != std::tuple_size_v<KeyType>) {
             ClearKeyData();
-        } else if (Check(UCharCast(&pbegin[0]))) {
+        } else if (Check(&pbegin[0])) {
             MakeKeyData();
-            memcpy(keydata->data(), (unsigned char*)&pbegin[0], keydata->size());
+            memcpy(keydata->data(), &pbegin[0], keydata->size());
             fCompressed = fCompressedIn;
         } else {
             ClearKeyData();
