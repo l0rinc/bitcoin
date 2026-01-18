@@ -3230,11 +3230,18 @@ bool Chainstate::ConnectTip(
     // Read block from disk.
     const auto time_1{SteadyClock::now()};
     if (!block_to_connect) {
-        std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
-        if (!m_blockman.ReadBlock(*pblockNew, *pindexNew)) {
-            return FatalError(m_chainman.GetNotifications(), state, _("Failed to read block."));
+        if (m_chainman.m_block_prefetcher) {
+            block_to_connect = m_chainman.m_block_prefetcher->Take(pindexNew->GetBlockHash());
         }
-        block_to_connect = std::move(pblockNew);
+        if (block_to_connect) {
+            LogDebug(BCLog::BENCH, "  - Using prefetched block\n");
+        } else {
+            std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
+            if (!m_blockman.ReadBlock(*pblockNew, *pindexNew)) {
+                return FatalError(m_chainman.GetNotifications(), state, _("Failed to read block."));
+            }
+            block_to_connect = std::move(pblockNew);
+        }
     } else {
         LogDebug(BCLog::BENCH, "  - Using cached block\n");
     }
@@ -3405,6 +3412,8 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex*
     AssertLockHeld(cs_main);
     if (m_mempool) AssertLockHeld(m_mempool->cs);
 
+    const bool do_prefetch = m_chainman.IsInitialBlockDownload() && m_chainman.m_block_prefetcher;
+
     const CBlockIndex* pindexOldTip = m_chain.Tip();
     const CBlockIndex* pindexFork = m_chain.FindFork(pindexMostWork);
 
@@ -3426,6 +3435,10 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex*
         fBlocksDisconnected = true;
     }
 
+    if (fBlocksDisconnected && m_chainman.m_block_prefetcher) {
+        m_chainman.m_block_prefetcher->Clear();
+    }
+
     // Build list of new blocks to connect (in descending height order).
     std::vector<CBlockIndex*> vpindexToConnect;
     bool fContinue = true;
@@ -3445,6 +3458,20 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex*
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
+            if (do_prefetch) {
+                const int start_height{m_chain.Height() + 2};
+                const int end_height{std::min(m_chain.Height() + IBD_BLOCK_PREFETCH_WINDOW, pindexMostWork->nHeight)};
+                for (const int height : std::views::iota(start_height, end_height + 1)) {
+                    CBlockIndex* pindex_prefetch = pindexMostWork->GetAncestor(height);
+                    if (!pindex_prefetch) continue;
+                    if (pblock && pindex_prefetch == pindexMostWork) continue;
+                    if (!(pindex_prefetch->nStatus & BLOCK_HAVE_DATA)) continue;
+                    const FlatFilePos pos = pindex_prefetch->GetBlockPos();
+                    if (pos.IsNull()) continue;
+                    m_chainman.m_block_prefetcher->Enqueue(pos, pindex_prefetch->GetBlockHash());
+                }
+            }
+
             if (!ConnectTip(state, pindexConnect, pindexConnect == pindexMostWork ? pblock : std::shared_ptr<const CBlock>(), connectTrace, disconnectpool)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
