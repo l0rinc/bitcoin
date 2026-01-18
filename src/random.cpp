@@ -558,12 +558,12 @@ enum class RNGLevel {
     PERIODIC, //!< Called by RandAddPeriodic()
 };
 
-void ProcRand(unsigned char* out, int num, RNGLevel level, bool always_use_real_rng) noexcept
+void ProcRand(std::span<std::byte> out, RNGLevel level, bool always_use_real_rng) noexcept
 {
     // Make sure the RNG is initialized first (as all Seed* function possibly need hwrand to be available).
     RNGState& rng = GetRNGState();
 
-    assert(num <= 32);
+    assert(out.size() <= 32);
 
     CSHA512 hasher;
     switch (level) {
@@ -579,12 +579,11 @@ void ProcRand(unsigned char* out, int num, RNGLevel level, bool always_use_real_
     }
 
     // Combine with and update state
-    auto out_bytes = std::as_writable_bytes(std::span{out, size_t(num)});
-    if (!rng.MixExtract(out_bytes, std::move(hasher), false, always_use_real_rng)) {
+    if (!rng.MixExtract(out, std::move(hasher), false, always_use_real_rng)) {
         // On the first invocation, also seed with SeedStartup().
         CSHA512 startup_hasher;
         SeedStartup(startup_hasher, rng);
-        rng.MixExtract(out_bytes, std::move(startup_hasher), true, always_use_real_rng);
+        rng.MixExtract(out, std::move(startup_hasher), true, always_use_real_rng);
     }
 }
 
@@ -601,17 +600,17 @@ std::atomic<bool> g_used_g_prng{false}; // Only accessed from tests
 void GetRandBytes(std::span<unsigned char> bytes) noexcept
 {
     g_used_g_prng = true;
-    ProcRand(bytes.data(), bytes.size(), RNGLevel::FAST, /*always_use_real_rng=*/false);
+    ProcRand(std::as_writable_bytes(bytes), RNGLevel::FAST, /*always_use_real_rng=*/false);
 }
 
 void GetStrongRandBytes(std::span<unsigned char> bytes) noexcept
 {
-    ProcRand(bytes.data(), bytes.size(), RNGLevel::SLOW, /*always_use_real_rng=*/true);
+    ProcRand(std::as_writable_bytes(bytes), RNGLevel::SLOW, /*always_use_real_rng=*/true);
 }
 
 void RandAddPeriodic() noexcept
 {
-    ProcRand(nullptr, 0, RNGLevel::PERIODIC, /*always_use_real_rng=*/false);
+    ProcRand({}, RNGLevel::PERIODIC, /*always_use_real_rng=*/false);
 }
 
 void RandAddEvent(const uint32_t event_info) noexcept { GetRNGState().AddEvent(event_info); }
@@ -696,7 +695,7 @@ FastRandomContext::FastRandomContext(bool fDeterministic) noexcept : requires_se
 void RandomInit()
 {
     // Invoke RNG code to trigger initialization (if not already performed)
-    ProcRand(nullptr, 0, RNGLevel::FAST, /*always_use_real_rng=*/true);
+    ProcRand({}, RNGLevel::FAST, /*always_use_real_rng=*/true);
 
     ReportHardwareRand();
 }
