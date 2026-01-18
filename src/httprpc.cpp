@@ -275,7 +275,7 @@ static bool InitRPCAuthentication()
     // If there is a plaintext credential, hash it with a random salt before storage.
     if (!user.empty() || !pass.empty()) {
         // Generate a random 16 byte hex salt.
-        std::array<unsigned char, 16> raw_salt;
+        std::array<std::byte, 16> raw_salt{};
         GetStrongRandBytes(raw_salt);
         std::string salt = HexStr(raw_salt);
 

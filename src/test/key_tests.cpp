@@ -15,6 +15,8 @@
 #include <util/strencodings.h>
 #include <util/string.h>
 
+#include <array>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -36,6 +38,34 @@ static const std::string strAddressBad = "1HV9Lc3sNHZxwj4Zk6fB38tEmBryq2cBiF";
 
 
 BOOST_FIXTURE_TEST_SUITE(key_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(ckey_set_accepts_unsigned_char_and_std_byte)
+{
+    const CKey ref{DecodeSecret(strSecret1C)};
+    BOOST_REQUIRE(ref.IsValid());
+    BOOST_REQUIRE(ref.IsCompressed());
+
+    auto uc_span{MakeUCharSpan(std::span{ref.begin(), ref.end()})};
+    CKey key_uc;
+    key_uc.Set(uc_span.begin(), uc_span.end(), /*fCompressedIn=*/true);
+    BOOST_CHECK(key_uc.IsValid());
+    BOOST_CHECK(key_uc == ref);
+
+    CKey key_byte;
+    key_byte.Set(ref.begin(), ref.end(), /*fCompressedIn=*/true);
+    BOOST_CHECK(key_byte.IsValid());
+    BOOST_CHECK(key_byte == ref);
+
+    std::array<unsigned char, 32> zeros_uc{};
+    CKey invalid_uc;
+    invalid_uc.Set(zeros_uc.begin(), zeros_uc.end(), /*fCompressedIn=*/true);
+    BOOST_CHECK(!invalid_uc.IsValid());
+
+    std::array<std::byte, 32> zeros_byte{};
+    CKey invalid_byte;
+    invalid_byte.Set(zeros_byte.begin(), zeros_byte.end(), /*fCompressedIn=*/true);
+    BOOST_CHECK(!invalid_byte.IsValid());
+}
 
 BOOST_AUTO_TEST_CASE(key_test1)
 {

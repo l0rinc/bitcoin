@@ -800,12 +800,12 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
     CKeyingMaterial plain_master_key;
 
     plain_master_key.resize(WALLET_CRYPTO_KEY_SIZE);
-    GetStrongRandBytes(plain_master_key);
+    GetStrongRandBytes(MakeWritableByteSpan(plain_master_key));
 
     CMasterKey master_key;
 
     master_key.vchSalt.resize(WALLET_CRYPTO_SALT_SIZE);
-    GetStrongRandBytes(master_key.vchSalt);
+    GetStrongRandBytes(MakeWritableByteSpan(master_key.vchSalt));
 
     if (!EncryptMasterKey(strWalletPassphrase, plain_master_key, master_key)) {
         return false;

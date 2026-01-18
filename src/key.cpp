@@ -155,15 +155,15 @@ int ec_seckey_export_der(const secp256k1_context *ctx, unsigned char *seckey, si
     return 1;
 }
 
-bool CKey::Check(const unsigned char *vch) {
-    return secp256k1_ec_seckey_verify(secp256k1_context_static, vch);
-}
+bool CKey::Check(const unsigned char* vch) { return secp256k1_ec_seckey_verify(secp256k1_context_static, vch); }
+
+bool CKey::Check(const std::byte* vch) { return Check(UCharCast(vch)); }
 
 void CKey::MakeNewKey(bool fCompressedIn) {
     MakeKeyData();
     do {
         GetStrongRandBytes(*keydata);
-    } while (!Check(keydata->data()));
+    } while (!Check(begin()));
     fCompressed = fCompressedIn;
 }
 
@@ -317,7 +317,7 @@ EllSwiftPubKey CKey::EllSwiftCreate(std::span<const std::byte> ent32) const
 
     auto success = secp256k1_ellswift_create(secp256k1_context_sign,
                                              UCharCast(encoded_pubkey.data()),
-                                             keydata->data(),
+                                             UCharCast(begin()),
                                              UCharCast(ent32.data()));
 
     // Should always succeed for valid keys (asserted above).
@@ -336,7 +336,7 @@ ECDHSecret CKey::ComputeBIP324ECDHSecret(const EllSwiftPubKey& their_ellswift, c
                                           UCharCast(output.data()),
                                           UCharCast(initiating ? our_ellswift.data() : their_ellswift.data()),
                                           UCharCast(initiating ? their_ellswift.data() : our_ellswift.data()),
-                                          keydata->data(),
+                                          UCharCast(begin()),
                                           initiating ? 0 : 1,
                                           secp256k1_ellswift_xdh_hash_function_bip324,
                                           nullptr);
@@ -365,7 +365,7 @@ std::vector<uint8_t> CKey::CreateMuSig2Nonce(MuSig2SecNonce& secnonce, const uin
 
     // Generate randomness for nonce
     uint256 rand;
-    GetStrongRandBytes(rand);
+    GetStrongRandBytes(MakeWritableByteSpan(rand));
 
     // Generate nonce
     secp256k1_musig_pubnonce pubnonce;
