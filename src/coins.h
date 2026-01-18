@@ -377,12 +377,21 @@ protected:
     mutable size_t cachedCoinsUsage{0};
 
 public:
-    CCoinsViewCache(CCoinsView *baseIn, bool deterministic = false);
+    static constexpr float DEFAULT_MAX_LOAD_FACTOR{1.0f};
+
+    static size_t ReservedEntries(size_t max_coins_cache_size_bytes, float max_load_factor) noexcept;
+    static const size_t CONNECT_BLOCK_VIEW_RESERVE_ENTRIES;
+    float GetMaxLoadFactor() const noexcept { return cacheCoins.max_load_factor(); }
+
+    CCoinsViewCache(CCoinsView* baseIn, bool deterministic = false, size_t reserve_entries = 0, float max_load_factor = DEFAULT_MAX_LOAD_FACTOR);
 
     /**
      * By deleting the copy constructor, we prevent accidentally using it when one intends to create a cache on top of a base cache.
      */
     CCoinsViewCache(const CCoinsViewCache &) = delete;
+
+    void Start();
+    void Reset() noexcept;
 
     // Standard CCoinsView methods
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
@@ -439,10 +448,8 @@ public:
      * Push the modifications applied to this cache to its base and wipe local state.
      * Failure to call this method or Sync() before destruction will cause the changes
      * to be forgotten.
-     * If will_reuse_cache is false, the cache will retain the same memory footprint
-     * after flushing and should be destroyed to deallocate.
      */
-    void Flush(bool will_reuse_cache = true);
+    void Flush();
 
     /**
      * Push the modifications applied to this cache to its base while retaining
@@ -464,6 +471,9 @@ public:
     //! Calculate the size of the cache (in bytes)
     size_t DynamicMemoryUsage() const;
 
+    //! Calculate the active memory usage of the cache (in bytes)
+    size_t ActiveMemoryUsage() const;
+
     //! Check whether all prevouts of the transaction are present in the UTXO set represented by this view
     bool HaveInputs(const CTransaction& tx) const;
 
@@ -473,6 +483,10 @@ public:
     //!
     //! See: https://stackoverflow.com/questions/42114044/how-to-release-unordered-map-memory
     void ReallocateCache();
+
+    //! Preallocate the cache map bucket count based on the expected maximum cache size.
+    //! This avoids expensive rehashing during cache growth.
+    void ReserveCache(size_t max_coins_cache_size_bytes, float max_load_factor);
 
     //! Run an internal sanity check on the cache data structure. */
     void SanityCheck() const;

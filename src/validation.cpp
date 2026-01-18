@@ -1852,10 +1852,14 @@ CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
     : m_dbview{std::move(db_params), std::move(options)},
       m_catcherview(&m_dbview) {}
 
-void CoinsViews::InitCache()
+void CoinsViews::InitCache(size_t cache_size_bytes, float max_load_factor, size_t connect_block_view_reserve_entries)
 {
     AssertLockHeld(::cs_main);
-    m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview);
+
+    const size_t reserved_entries{CCoinsViewCache::ReservedEntries(cache_size_bytes, max_load_factor)};
+    m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview, /*deterministic=*/false, reserved_entries, max_load_factor);
+
+    m_connect_block_view = std::make_unique<CCoinsViewCache>(&*m_cacheview, /*deterministic=*/false, connect_block_view_reserve_entries, max_load_factor);
 }
 
 Chainstate::Chainstate(
@@ -1926,12 +1930,12 @@ void Chainstate::InitCoinsDB(
     m_coinsdb_cache_size_bytes = cache_size_bytes;
 }
 
-void Chainstate::InitCoinsCache(size_t cache_size_bytes)
+void Chainstate::InitCoinsCache(size_t cache_size_bytes, size_t connect_block_view_reserve_entries, float max_load_factor)
 {
     AssertLockHeld(::cs_main);
     assert(m_coins_views != nullptr);
     m_coinstip_cache_size_bytes = cache_size_bytes;
-    m_coins_views->InitCache();
+    m_coins_views->InitCache(cache_size_bytes, max_load_factor, connect_block_view_reserve_entries);
 }
 
 // Note that though this is marked const, we may end up modifying `m_cached_finished_ibd`, which
@@ -2710,12 +2714,12 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
 {
     AssertLockHeld(::cs_main);
     const int64_t nMempoolUsage = m_mempool ? m_mempool->DynamicMemoryUsage() : 0;
-    int64_t cacheSize = CoinsTip().DynamicMemoryUsage();
+    int64_t cacheSize = CoinsTip().ActiveMemoryUsage();
     int64_t nTotalSpace =
         max_coins_cache_size_bytes + std::max<int64_t>(int64_t(max_mempool_size_bytes) - nMempoolUsage, 0);
 
     if (cacheSize > nTotalSpace) {
-        LogInfo("Cache size (%s) exceeds total space (%s)\n", cacheSize, nTotalSpace);
+        LogInfo("Coins cache active (%s) exceeds total space (%s)\n", cacheSize, nTotalSpace);
         return CoinsCacheSizeState::CRITICAL;
     } else if (cacheSize > LargeCoinsCacheThreshold(nTotalSpace)) {
         return CoinsCacheSizeState::LARGE;
@@ -2790,8 +2794,10 @@ bool Chainstate::FlushStateToDisk(
         bool fCacheCritical = mode == FlushStateMode::IF_NEEDED && cache_state >= CoinsCacheSizeState::CRITICAL;
         // It's been a while since we wrote the block index and chain state to disk. Do this frequently, so we don't need to redownload or reindex after a crash.
         bool fPeriodicWrite = mode == FlushStateMode::PERIODIC && nNow >= m_next_write;
+        // Flush the chainstate (which may refer to block index entries).
+        bool should_empty{(mode == FlushStateMode::ALWAYS) || fCacheLarge || fCacheCritical};
         // Combine all conditions that result in a write to disk.
-        bool should_write = (mode == FlushStateMode::ALWAYS) || fCacheLarge || fCacheCritical || fPeriodicWrite || fFlushForPrune;
+        bool should_write{should_empty || fPeriodicWrite || fFlushForPrune};
         // Write blocks, block index and best chain related state to disk.
         if (should_write) {
             LogDebug(BCLog::COINDB, "Writing chainstate to disk: flush mode=%s, prune=%d, large=%d, critical=%d, periodic=%d",
@@ -2838,9 +2844,11 @@ bool Chainstate::FlushStateToDisk(
                 if (!CheckDiskSpace(m_chainman.m_options.datadir, 48 * 2 * 2 * CoinsTip().GetCacheSize())) {
                     return FatalError(m_chainman.GetNotifications(), state, _("Disk space is too low!"));
                 }
-                // Flush the chainstate (which may refer to block index entries).
-                const auto empty_cache{(mode == FlushStateMode::ALWAYS) || fCacheLarge || fCacheCritical};
-                empty_cache ? CoinsTip().Flush() : CoinsTip().Sync();
+                if (should_empty) {
+                    CoinsTip().Flush();
+                } else {
+                    CoinsTip().Sync();
+                }
                 full_flush_completed = true;
                 TRACEPOINT(utxocache, flush,
                     int64_t{Ticks<std::chrono::microseconds>(NodeClock::now() - nNow)},
@@ -2971,13 +2979,16 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
     // Apply the block atomically to the chain state.
     const auto time_start{SteadyClock::now()};
     {
-        CCoinsViewCache view(&CoinsTip());
+        auto& view{ConnectBlockView()};
+        view.Start();
         assert(view.GetBestBlock() == pindexDelete->GetBlockHash());
         if (DisconnectBlock(block, pindexDelete, view) != DISCONNECT_OK) {
             LogError("DisconnectTip(): DisconnectBlock %s failed\n", pindexDelete->GetBlockHash().ToString());
+            view.Reset();
             return false;
         }
-        view.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
+        view.Flush();
+        view.Reset();
     }
     LogDebug(BCLog::BENCH, "- Disconnect block: %.2fms\n",
              Ticks<MillisecondsDouble>(SteadyClock::now() - time_start));
@@ -3093,7 +3104,9 @@ bool Chainstate::ConnectTip(
     LogDebug(BCLog::BENCH, "  - Load block from disk: %.2fms\n",
              Ticks<MillisecondsDouble>(time_2 - time_1));
     {
-        CCoinsViewCache view(&CoinsTip());
+        auto& view{ConnectBlockView()};
+        view.Start();
+        assert(view.GetBestBlock() == (pindexNew->pprev ? pindexNew->pprev->GetBlockHash() : uint256::ZERO));
         bool rv = ConnectBlock(*block_to_connect, state, pindexNew, view);
         if (m_chainman.m_options.signals) {
             m_chainman.m_options.signals->BlockChecked(block_to_connect, state);
@@ -3102,6 +3115,7 @@ bool Chainstate::ConnectTip(
             if (state.IsInvalid())
                 InvalidBlockFound(pindexNew, state);
             LogError("%s: ConnectBlock %s failed, %s\n", __func__, pindexNew->GetBlockHash().ToString(), state.ToString());
+            view.Reset();
             return false;
         }
         time_3 = SteadyClock::now();
@@ -3111,7 +3125,8 @@ bool Chainstate::ConnectTip(
                  Ticks<MillisecondsDouble>(time_3 - time_2),
                  Ticks<SecondsDouble>(m_chainman.time_connect_total),
                  Ticks<MillisecondsDouble>(m_chainman.time_connect_total) / m_chainman.num_blocks_total);
-        view.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
+        view.Flush();
+        view.Reset();
     }
     const auto time_4{SteadyClock::now()};
     m_chainman.time_flush += time_4 - time_3;
@@ -4580,13 +4595,17 @@ BlockValidationState TestBlockValidity(
     index_dummy.pprev = tip;
     index_dummy.nHeight = tip->nHeight + 1;
     index_dummy.phashBlock = &block_hash;
-    CCoinsViewCache view_dummy(&chainstate.CoinsTip());
+    auto& view_dummy{chainstate.ConnectBlockView()};
+    view_dummy.Start();
+    assert(view_dummy.GetBestBlock() == tip->GetBlockHash());
 
     // Set fJustCheck to true in order to update, and not clear, validation caches.
     if(!chainstate.ConnectBlock(block, state, &index_dummy, view_dummy, /*fJustCheck=*/true)) {
         if (state.IsValid()) NONFATAL_UNREACHABLE();
+        view_dummy.Reset();
         return state;
     }
+    view_dummy.Reset();
 
     // Ensure no check returned successfully while also setting an invalid state.
     if (!state.IsValid()) NONFATAL_UNREACHABLE();
@@ -4740,7 +4759,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
             }
         }
         // check level 3: check for inconsistencies during memory-only disconnect of tip blocks
-        size_t curr_coins_usage = coins.DynamicMemoryUsage() + chainstate.CoinsTip().DynamicMemoryUsage();
+        size_t curr_coins_usage = coins.ActiveMemoryUsage() + chainstate.CoinsTip().ActiveMemoryUsage();
 
         if (nCheckLevel >= 3) {
             if (curr_coins_usage <= chainstate.m_coinstip_cache_size_bytes) {
@@ -4913,7 +4932,7 @@ bool Chainstate::ReplayBlocks()
     }
 
     cache.SetBestBlock(pindexNew->GetBlockHash());
-    cache.Flush(/*will_reuse_cache=*/false); // local CCoinsViewCache goes out of scope
+    cache.Flush(); // local CCoinsViewCache goes out of scope
     m_chainman.GetNotifications().progress(bilingual_str{}, 100, false);
     return true;
 }
@@ -5517,6 +5536,7 @@ std::string Chainstate::ToString()
 bool Chainstate::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
 {
     AssertLockHeld(::cs_main);
+    const float max_load_factor{CoinsTip().GetMaxLoadFactor()};
     if (coinstip_size == m_coinstip_cache_size_bytes &&
             coinsdb_size == m_coinsdb_cache_size_bytes) {
         // Cache sizes are unchanged, no need to continue.
@@ -5536,11 +5556,16 @@ bool Chainstate::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
     bool ret;
 
     if (coinstip_size > old_coinstip_size) {
+        CoinsTip().ReserveCache(coinstip_size, max_load_factor);
         // Likely no need to flush if cache sizes have grown.
         ret = FlushStateToDisk(state, FlushStateMode::IF_NEEDED);
     } else {
         // Otherwise, flush state to disk and deallocate the in-memory coins map.
         ret = FlushStateToDisk(state, FlushStateMode::ALWAYS);
+        if (ret) {
+            CoinsTip().ReallocateCache();
+            CoinsTip().ReserveCache(coinstip_size, max_load_factor);
+        }
     }
     return ret;
 }
@@ -5716,7 +5741,8 @@ util::Result<CBlockIndex*> ChainstateManager::ActivateSnapshot(
             static_cast<size_t>(current_coinsdb_cache_size * SNAPSHOT_CACHE_PERC),
             in_memory, /*should_wipe=*/false);
         snapshot_chainstate->InitCoinsCache(
-            static_cast<size_t>(current_coinstip_cache_size * SNAPSHOT_CACHE_PERC));
+            static_cast<size_t>(current_coinstip_cache_size * SNAPSHOT_CACHE_PERC),
+            CCoinsViewCache::CONNECT_BLOCK_VIEW_RESERVE_ENTRIES);
     }
 
     auto cleanup_bad_snapshot = [&](bilingual_str reason) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {

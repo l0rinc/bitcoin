@@ -391,7 +391,7 @@ FUZZ_TARGET(coinscache_sim)
                 // Apply to simulation data.
                 flush();
                 // Apply to real caches.
-                caches.back()->Flush(/*will_reuse_cache=*/provider.ConsumeBool());
+                caches.back()->Flush();
             },
 
             [&]() { // Sync.
@@ -399,6 +399,12 @@ FUZZ_TARGET(coinscache_sim)
                 flush();
                 // Apply to real caches.
                 caches.back()->Sync();
+            },
+
+            [&]() { // Reset.
+                sim_caches[caches.size()].Wipe();
+                // Apply to real caches.
+                caches.back()->Reset();
             },
 
             [&]() { // GetCacheSize

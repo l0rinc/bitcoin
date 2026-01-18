@@ -22,10 +22,15 @@ BOOST_AUTO_TEST_CASE(getcoinscachesizestate)
     LOCK(::cs_main);
     CCoinsViewCache& view{chainstate.CoinsTip()};
 
-    // Sanity: an empty cache should be ≲ 1 chunk (~ 256 KiB).
-    BOOST_CHECK_LT(view.DynamicMemoryUsage() / (256 * 1024.0), 1.1);
+    // Sanity: an empty cache should comfortably fit within its configured size.
+    const size_t empty_cache_bytes{view.DynamicMemoryUsage()};
+    BOOST_CHECK_GT(empty_cache_bytes, 0U);
+    BOOST_CHECK_LT(empty_cache_bytes, chainstate.m_coinstip_cache_size_bytes);
 
-    constexpr size_t MAX_COINS_BYTES{8_MiB};
+    // Use a small growth target on top of the current baseline so the test runs fast
+    // regardless of cache preallocation heuristics.
+    const size_t baseline_cache_bytes{view.ActiveMemoryUsage()};
+    const size_t MAX_COINS_BYTES{baseline_cache_bytes + 8_MiB};
     constexpr size_t MAX_MEMPOOL_BYTES{4_MiB};
     constexpr size_t MAX_ATTEMPTS{50'000};
 
@@ -36,14 +41,14 @@ BOOST_AUTO_TEST_CASE(getcoinscachesizestate)
 
         // OK → LARGE
         auto state{chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, max_mempool_size_bytes)};
-        for (size_t i{0}; i < MAX_ATTEMPTS && int64_t(view.DynamicMemoryUsage()) <= large_cap; ++i) {
+        for (size_t i{0}; i < MAX_ATTEMPTS && int64_t(view.ActiveMemoryUsage()) <= large_cap; ++i) {
             BOOST_CHECK_EQUAL(state, CoinsCacheSizeState::OK);
             AddTestCoin(m_rng, view);
             state = chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, max_mempool_size_bytes);
         }
 
         // LARGE → CRITICAL
-        for (size_t i{0}; i < MAX_ATTEMPTS && int64_t(view.DynamicMemoryUsage()) <= full_cap; ++i) {
+        for (size_t i{0}; i < MAX_ATTEMPTS && int64_t(view.ActiveMemoryUsage()) <= full_cap; ++i) {
             BOOST_CHECK_EQUAL(state, CoinsCacheSizeState::LARGE);
             AddTestCoin(m_rng, view);
             state = chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, max_mempool_size_bytes);

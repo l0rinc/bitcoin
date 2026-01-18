@@ -13,6 +13,15 @@ TRACEPOINT_SEMAPHORE(utxocache, add);
 TRACEPOINT_SEMAPHORE(utxocache, spent);
 TRACEPOINT_SEMAPHORE(utxocache, uncache);
 
+namespace {
+void WarnOnCacheRehash(const CCoinsMap& cache_coins, size_t buckets_before)
+{
+    if (const size_t buckets_after{cache_coins.bucket_count()}; buckets_after > buckets_before) {
+        LogWarning("Coins cache buckets unexpectedly grew from %zu to %zu.", buckets_before, buckets_after);
+    }
+}
+}
+
 std::optional<Coin> CCoinsView::GetCoin(const COutPoint& outpoint) const { return std::nullopt; }
 uint256 CCoinsView::GetBestBlock() const { return uint256(); }
 std::vector<uint256> CCoinsView::GetHeadBlocks() const { return std::vector<uint256>(); }
@@ -38,19 +47,76 @@ void CCoinsViewBacked::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& h
 std::unique_ptr<CCoinsViewCursor> CCoinsViewBacked::Cursor() const { return base->Cursor(); }
 size_t CCoinsViewBacked::EstimateSize() const { return base->EstimateSize(); }
 
-CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic) :
+CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic, size_t reserve_entries, float max_load_factor) :
     CCoinsViewBacked(baseIn), m_deterministic(deterministic),
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
+    cacheCoins.max_load_factor(max_load_factor);
+    cacheCoins.reserve(reserve_entries);
+    Reset();
+}
+
+void CCoinsViewCache::Start()
+{
+    Assert(cacheCoins.empty());
+    Assert(cachedCoinsUsage == 0);
+    Assert(hashBlock.IsNull());
+    Assert(m_sentinel.second.Next() == &m_sentinel);
+    Assert(m_sentinel.second.Prev() == &m_sentinel);
+    (void)GetBestBlock(); // lazy init
+}
+
+void CCoinsViewCache::Reset() noexcept
+{
+    cacheCoins.clear();
+    cachedCoinsUsage = 0;
+    hashBlock.SetNull();
     m_sentinel.second.SelfRef(m_sentinel);
 }
 
-size_t CCoinsViewCache::DynamicMemoryUsage() const {
+size_t CCoinsViewCache::ReservedEntries(size_t max_coins_cache_size_bytes, float max_load_factor) noexcept
+{
+    if (max_coins_cache_size_bytes == 0) return 0;
+
+    assert(max_load_factor > 0);
+
+    constexpr size_t BYTES_PER_ENTRY_LOWER_BOUND{sizeof(CoinsCachePair) + sizeof(void*)};
+    const size_t bucket_bytes_per_entry_lower_bound{size_t(double(sizeof(void*)) / max_load_factor)};
+    const size_t bytes_per_entry_lower_bound{BYTES_PER_ENTRY_LOWER_BOUND + bucket_bytes_per_entry_lower_bound};
+    size_t result = max_coins_cache_size_bytes / bytes_per_entry_lower_bound;
+    // TODO remove
+    LogInfo("Reserving %zu entries (at least %zu bytes per entry) for a coins cache of size %zu bytes with max load factor %.2f",
+            result, bytes_per_entry_lower_bound, max_coins_cache_size_bytes, max_load_factor);
+    return result;
+}
+
+void CCoinsViewCache::ReserveCache(size_t max_coins_cache_size_bytes, float max_load_factor)
+{
+    if (max_coins_cache_size_bytes == 0) return;
+
+    assert(max_load_factor > 0);
+    assert(cacheCoins.max_load_factor() == max_load_factor);
+
+    const size_t reserve_entries{std::min(ReservedEntries(max_coins_cache_size_bytes, max_load_factor), cacheCoins.max_size())};
+        cacheCoins.reserve(reserve_entries);
+}
+
+size_t CCoinsViewCache::DynamicMemoryUsage() const
+{
     return memusage::DynamicUsage(cacheCoins) + cachedCoinsUsage;
 }
 
+size_t CCoinsViewCache::ActiveMemoryUsage() const
+{
+    const size_t node_pool_bytes{cacheCoins.get_allocator().resource()->BytesInUse()};
+    const size_t bucket_array_bytes{memusage::MallocUsage(sizeof(void*) * cacheCoins.bucket_count())};
+    return cachedCoinsUsage + node_pool_bytes + bucket_array_bytes;
+}
+
 CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint) const {
+    const size_t buckets_before{cacheCoins.bucket_count()};
     const auto [ret, inserted] = cacheCoins.try_emplace(outpoint);
+    if (inserted) WarnOnCacheRehash(cacheCoins, buckets_before);
     if (inserted) {
         if (auto coin{base->GetCoin(outpoint)}) {
             ret->second.coin = std::move(*coin);
@@ -78,7 +144,9 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possi
     if (coin.out.scriptPubKey.IsUnspendable()) return;
     CCoinsMap::iterator it;
     bool inserted;
+    const size_t buckets_before{cacheCoins.bucket_count()};
     std::tie(it, inserted) = cacheCoins.emplace(std::piecewise_construct, std::forward_as_tuple(outpoint), std::tuple<>());
+    if (inserted) WarnOnCacheRehash(cacheCoins, buckets_before);
     bool fresh = false;
     if (!possible_overwrite) {
         if (!it->second.coin.IsSpent()) {
@@ -116,8 +184,10 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possi
 
 void CCoinsViewCache::EmplaceCoinInternalDANGER(COutPoint&& outpoint, Coin&& coin) {
     const auto mem_usage{coin.DynamicMemoryUsage()};
+    const size_t buckets_before{cacheCoins.bucket_count()};
     auto [it, inserted] = cacheCoins.try_emplace(std::move(outpoint), std::move(coin));
     if (inserted) {
+        WarnOnCacheRehash(cacheCoins, buckets_before);
         CCoinsCacheEntry::SetDirty(*it, m_sentinel);
         cachedCoinsUsage += mem_usage;
     }
@@ -193,8 +263,10 @@ void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& ha
         if (!it->second.IsDirty()) { // TODO a cursor can only contain dirty entries
             continue;
         }
+        const size_t buckets_before{cacheCoins.bucket_count()};
         auto [itUs, inserted]{cacheCoins.try_emplace(it->first)};
         if (inserted) {
+            WarnOnCacheRehash(cacheCoins, buckets_before);
             if (it->second.IsFresh() && it->second.coin.IsSpent()) {
                 cacheCoins.erase(itUs); // TODO fresh coins should have been removed at spend
             } else {
@@ -253,15 +325,13 @@ void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& ha
     hashBlock = hashBlockIn;
 }
 
-void CCoinsViewCache::Flush(bool will_reuse_cache)
+void CCoinsViewCache::Flush()
 {
     auto cursor{CoinsViewCacheCursor(m_sentinel, cacheCoins, /*will_erase=*/true)};
     base->BatchWrite(cursor, hashBlock);
     cacheCoins.clear();
-    if (will_reuse_cache) {
-        ReallocateCache();
-    }
     cachedCoinsUsage = 0;
+    m_sentinel.second.SelfRef(m_sentinel);
 }
 
 void CCoinsViewCache::Sync()
@@ -309,10 +379,14 @@ void CCoinsViewCache::ReallocateCache()
 {
     // Cache should be empty when we're calling this.
     assert(cacheCoins.size() == 0);
+    LogInfo("Reallocating coins cache (%zu buckets, %zu chunks)",
+            cacheCoins.bucket_count(), m_cache_coins_memory_resource.NumAllocatedChunks());
+    const float max_load_factor{cacheCoins.max_load_factor()};
     cacheCoins.~CCoinsMap();
     m_cache_coins_memory_resource.~CCoinsMapMemoryResource();
     ::new (&m_cache_coins_memory_resource) CCoinsMapMemoryResource{};
     ::new (&cacheCoins) CCoinsMap{0, SaltedOutpointHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
+    cacheCoins.max_load_factor(max_load_factor);
 }
 
 void CCoinsViewCache::SanityCheck() const
@@ -350,6 +424,7 @@ void CCoinsViewCache::SanityCheck() const
 
 static const uint64_t MIN_TRANSACTION_OUTPUT_WEIGHT{WITNESS_SCALE_FACTOR * ::GetSerializeSize(CTxOut())};
 static const uint64_t MAX_OUTPUTS_PER_BLOCK{MAX_BLOCK_WEIGHT / MIN_TRANSACTION_OUTPUT_WEIGHT};
+const size_t CCoinsViewCache::CONNECT_BLOCK_VIEW_RESERVE_ENTRIES{size_t(2 * MAX_OUTPUTS_PER_BLOCK)};
 
 const Coin& AccessByTxid(const CCoinsViewCache& view, const Txid& txid)
 {
