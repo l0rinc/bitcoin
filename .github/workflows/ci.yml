@@ -138,7 +138,7 @@ jobs:
     steps:
       - &CHECKOUT
         name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           # Ensure the latest merged pull request state is used, even on re-runs.
           ref: &CHECKOUT_REF_TMPL ${{ github.event_name == 'pull_request' && github.ref || '' }}
