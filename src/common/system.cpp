@@ -30,9 +30,6 @@
 
 using util::ReplaceAll;
 
-// Application startup time (used for uptime calculation)
-const int64_t nStartupTime = GetTime();
-
 #ifndef WIN32
 std::string ShellEscape(const std::string& arg)
 {
@@ -105,8 +102,8 @@ int GetNumCores()
     return std::thread::hardware_concurrency();
 }
 
-// Obtain the application startup time (used for uptime calculation)
-int64_t GetStartupTime()
+SteadyClock::duration GetUptime()
 {
-    return nStartupTime;
+    static const auto g_startup_time{SteadyClock::now()};
+    return SteadyClock::now() - g_startup_time;
 }
