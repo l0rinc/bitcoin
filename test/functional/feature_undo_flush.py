@@ -9,7 +9,7 @@ in validation order. This can lead to undo data being written to an older rev fi
 use.
 
 This test sets up that situation and then replaces `rev00000.dat` with a directory. A forced flush via
-`gettxoutsetinfo` should succeed, demonstrating that the older rev file is not flushed.
+`gettxoutsetinfo` should then abort the node, demonstrating that the older rev file is flushed.
 
 The `rev00000.dat` swap is a deterministic stand-in for power loss: if the node can write the block index
 database without flushing older undo files, an unclean shutdown can leave `BLOCK_HAVE_UNDO` persisted while undo
@@ -36,7 +36,9 @@ class UndoFlushTest(BitcoinTestFramework):
     def run_test(self):
         node = self.nodes[0]
 
-        payload_bytes = 18_000  # keep file 0 under 64KiB until we want to rotate to file 1
+        # -fastprune uses smaller blockfiles (64KiB). Mine blocks sized so file 0 stays below the limit until we
+        # explicitly cause a rotation to file 1.
+        payload_bytes = 18_000
         nulldata = "ff" * payload_bytes
 
         def mine_large_block():
@@ -91,8 +93,15 @@ class UndoFlushTest(BitcoinTestFramework):
         rev0.mkdir()
 
         # gettxoutsetinfo calls ForceFlushStateToDisk() before scanning the UTXO set.
-        node.gettxoutsetinfo("none")
-        assert_equal(node.getblockcount(), 5)
+        expected_stderr = (
+            "Error: A fatal internal error occurred, see debug.log for details: "
+            "Flushing undo file to disk failed. This is likely the result of an I/O error."
+        )
+        try:
+            node.gettxoutsetinfo("none")
+        except Exception:
+            pass
+        node.wait_until_stopped(timeout=5, expect_error=True, expected_stderr=expected_stderr)
 
 
 if __name__ == "__main__":

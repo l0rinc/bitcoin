@@ -296,7 +296,7 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
     BOOST_CHECK_EQUAL(read_block.nVersion, 2);
 }
 
-BOOST_AUTO_TEST_CASE(blockmanager_flush_chainstate_block_file_skips_dirty_undo_file)
+BOOST_AUTO_TEST_CASE(blockmanager_flush_chainstate_block_file_flushes_dirty_undo_file)
 {
     const auto params{CreateChainParams(ArgsManager{}, ChainType::MAIN)};
 
@@ -354,19 +354,20 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_chainstate_block_file_skips_dirty_undo_f
         BOOST_CHECK(blockman.WriteBlockUndo(CBlockUndo{}, state, index));
     }
 
-    // Replace rev00000.dat with a directory: flushing it would fail if attempted.
+    // Replace rev00000.dat with a directory: flushing it would fail if attempted, because a directory cannot be
+    // opened as a regular file. This makes it detectable whether `FlushChainstateBlockFile` tries to flush the
+    // older undo file.
     const fs::path undo_path{blockman_opts.blocks_dir / "rev00000.dat"};
     BOOST_REQUIRE(fs::exists(undo_path));
     fs::remove_all(undo_path);
     BOOST_REQUIRE(fs::create_directory(undo_path));
 
-    // Flush should not attempt to flush the dirty undo file (rev00000.dat), because it is in an older
-    // file than the current cursor.
+    // Flush should also attempt to flush the dirty undo file (rev00000.dat).
     {
         LOCK(::cs_main);
-        BOOST_CHECK(node::BlockManagerTestAccess::FlushChainstateBlockFile(blockman, /*tip_height=*/2));
+        BOOST_CHECK(!node::BlockManagerTestAccess::FlushChainstateBlockFile(blockman, /*tip_height=*/2));
     }
-    BOOST_CHECK_EQUAL(notifications.flush_errors, 0);
+    BOOST_CHECK_EQUAL(notifications.flush_errors, 1);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
