@@ -876,7 +876,10 @@ class WalletMigrationTest(BitcoinTestFramework):
         mocked_time = int(time.time())
         self.master_node.setmocktime(mocked_time)
         migrate_res = self.master_node.migratewallet("plainfile")
-        assert_equal(f"plainfile_{mocked_time}.legacy.bak", os.path.basename(migrate_res["backup_path"]))
+        self.master_node.setmocktime(0)
+        expected_backup_path = self.master_node.wallets_path / "plainfile" / f"plainfile_{mocked_time}.legacy.bak"
+        assert_equal(str(expected_backup_path), migrate_res["backup_path"])
+        assert expected_backup_path.exists()
         wallet = self.master_node.get_wallet_rpc("plainfile")
         info = wallet.getwalletinfo()
         assert_equal(info["descriptors"], True)
