@@ -1190,7 +1190,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
 
         // Create an unspendable bare Script which exceeds 2500 sigops.
         CScript spk;
-        for (unsigned i{0}; i < MAX_TX_LEGACY_SIGOPS + 1; ++i) {
+        for (unsigned i{0}; i < MAX_TX_BIP54_SIGOPS + 1; ++i) {
             spk << OP_CHECKSIGVERIFY;
         }
 
@@ -1215,7 +1215,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         // following 125 CMS will have the previous CMS as their "last op", and will similarly
         // count for 20.
         CScript spk;
-        for (unsigned i{0}; i < MAX_TX_LEGACY_SIGOPS / 20 + 1; ++i) {
+        for (unsigned i{0}; i < MAX_TX_BIP54_SIGOPS / 20 + 1; ++i) {
             spk << OP_CHECKMULTISIG;
         }
 
@@ -1241,7 +1241,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         // with 2481 dummy CHECKSIG's.
         auto spk{CScript{} << OP_IF << OP_1 << ToByteVector(pubkey) << OP_1 << OP_ELSE};
         spk << OP_1 << ToByteVector(pubkey) << ToByteVector(pubkey) << OP_2 << OP_ENDIF << OP_CHECKMULTISIG;
-        for (unsigned i{0}; i < MAX_TX_LEGACY_SIGOPS - 20 + 1; ++i) {
+        for (unsigned i{0}; i < MAX_TX_BIP54_SIGOPS - 20 + 1; ++i) {
             spk << OP_CHECKSIG;
         }
 
@@ -1261,7 +1261,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         CMutableTransaction tx2;
 
         CScript spk;
-        for (unsigned i{0}; i < MAX_TX_LEGACY_SIGOPS + 1; ++i) {
+        for (unsigned i{0}; i < MAX_TX_BIP54_SIGOPS + 1; ++i) {
             spk << OP_CHECKSIG;
         }
         spk.push_back(static_cast<uint8_t>(OP_PUSHDATA1));
@@ -1282,7 +1282,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         CMutableTransaction tx2;
 
         CScript spk;
-        for (unsigned i{0}; i < MAX_TX_LEGACY_SIGOPS; ++i) {
+        for (unsigned i{0}; i < MAX_TX_BIP54_SIGOPS; ++i) {
             spk << OP_CHECKSIG;
         }
         spk.push_back(static_cast<uint8_t>(OP_PUSHDATA2));
