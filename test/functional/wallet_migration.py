@@ -1588,6 +1588,10 @@ class WalletMigrationTest(BitcoinTestFramework):
             "..",
             "../",
             "../subdir",
+            "../subdir/..",
+            "subdir/two",
+            "subdir/../two",
+            "subdir/two/..",
             os.path.abspath(self.master_node.datadir_path / "absolute_path"),
             "normallynamedwallet"
         ]
