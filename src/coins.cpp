@@ -38,10 +38,26 @@ void CCoinsViewBacked::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& h
 std::unique_ptr<CCoinsViewCursor> CCoinsViewBacked::Cursor() const { return base->Cursor(); }
 size_t CCoinsViewBacked::EstimateSize() const { return base->EstimateSize(); }
 
+std::optional<Coin> CCoinsViewCache::FetchCoinWithoutMutating(const COutPoint& outpoint) const noexcept
+{
+    // Walk up the chain of caches, returning on first entry that exists
+    const CCoinsView* view{base};
+    while (const auto* cache{dynamic_cast<const CCoinsViewCache*>(view)}) {
+        auto it{cache->cacheCoins.find(outpoint)};
+        if (it != cache->cacheCoins.end()) {
+            return !it->second.coin.IsSpent() ? std::optional<Coin>{it->second.coin} : std::nullopt;
+        }
+        view = cache->base;
+    }
+    return view->GetCoin(outpoint);
+}
+
 CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic) :
     CCoinsViewBacked(baseIn), m_deterministic(deterministic),
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
+    constexpr float max_load_factor{0.5f};
+    cacheCoins.max_load_factor(max_load_factor);
     m_sentinel.second.SelfRef(m_sentinel);
 }
 
@@ -274,6 +290,13 @@ void CCoinsViewCache::Sync()
     }
 }
 
+void CCoinsViewCache::Reset() noexcept
+{
+    cacheCoins.clear();
+    cachedCoinsUsage = 0;
+    hashBlock.SetNull();
+}
+
 void CCoinsViewCache::Uncache(const COutPoint& hash)
 {
     CCoinsMap::iterator it = cacheCoins.find(hash);
@@ -309,10 +332,12 @@ void CCoinsViewCache::ReallocateCache()
 {
     // Cache should be empty when we're calling this.
     assert(cacheCoins.size() == 0);
+    const auto prev{cacheCoins.max_load_factor()};
     cacheCoins.~CCoinsMap();
     m_cache_coins_memory_resource.~CCoinsMapMemoryResource();
     ::new (&m_cache_coins_memory_resource) CCoinsMapMemoryResource{};
     ::new (&cacheCoins) CCoinsMap{0, SaltedOutpointHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
+    cacheCoins.max_load_factor(prev);
 }
 
 void CCoinsViewCache::SanityCheck() const
