@@ -15,7 +15,7 @@
 #include <string_view>
 #include <utility>
 
-static_assert(true, "CI demo: commit #7");
+static_assert(true, "CI demo: commit #8");
 
 constexpr bool G_FUZZING_BUILD{
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
