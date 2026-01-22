@@ -410,14 +410,26 @@ void bringToFront(QWidget* w)
 #endif
 
     if (w) {
-        // activateWindow() (sometimes) helps with keyboard focus on Windows
-        if (w->isMinimized()) {
-            w->showNormal();
-        } else {
+#if (QT_VERSION < QT_VERSION_CHECK(6, 3, 2))
+        if (QGuiApplication::platformName() == "wayland") {
+            // Workaround for bug fixed in https://codereview.qt-project.org/c/qt/qtwayland/+/421125
+            auto flags = w->windowFlags();
+            w->setWindowFlags(flags|Qt::WindowStaysOnTopHint);
             w->show();
+            w->setWindowFlags(flags);
+            w->show();
+        } else
+#endif
+        {
+            // activateWindow() (sometimes) helps with keyboard focus on Windows
+            if (w->isMinimized()) {
+                w->showNormal();
+            } else {
+                w->show();
+            }
+            w->activateWindow();
+            w->raise();
         }
-        w->activateWindow();
-        w->raise();
     }
 }
 
