@@ -679,6 +679,11 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
                    DEFAULT_PRIVATE_BROADCAST),
                    ArgsManager::ALLOW_ANY,
                    OptionsCategory::NODE_RELAY);
+    argsman.AddArg("-privatebroadcastdelay=<n>",
+                   strprintf("Maximum random delay in milliseconds before starting private broadcast for transactions submitted via sendrawtransaction (default: %u). Set to 0 to disable.",
+                             Ticks<std::chrono::milliseconds>(DEFAULT_PRIVATE_BROADCAST_DELAY_MAX)),
+                   ArgsManager::ALLOW_ANY,
+                   OptionsCategory::NODE_RELAY);
     argsman.AddArg("-whitelistforcerelay", strprintf("Add 'forcerelay' permission to whitelisted peers with default permissions. This will relay transactions even if the transactions were already in the mempool. (default: %d)", DEFAULT_WHITELISTFORCERELAY), ArgsManager::ALLOW_ANY, OptionsCategory::NODE_RELAY);
     argsman.AddArg("-whitelistrelay", strprintf("Add 'relay' permission to whitelisted peers with default permissions. This will accept relayed transactions even when not relaying transactions (default: %d)", DEFAULT_WHITELISTRELAY), ArgsManager::ALLOW_ANY, OptionsCategory::NODE_RELAY);
 

@@ -87,6 +87,8 @@ static const bool DEFAULT_BLOCKSONLY = false;
 static const int64_t DEFAULT_PEER_CONNECT_TIMEOUT = 60;
 /** Default for -privatebroadcast. */
 static constexpr bool DEFAULT_PRIVATE_BROADCAST{false};
+/** Default for -privatebroadcastdelay. */
+static constexpr auto DEFAULT_PRIVATE_BROADCAST_DELAY_MAX{5s};
 /** Number of file descriptors required for message capture **/
 static const int NUM_FDS_MESSAGE_CAPTURE = 1;
 /** Interval for ASMap Health Check **/

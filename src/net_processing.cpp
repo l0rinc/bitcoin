@@ -1089,6 +1089,8 @@ private:
 
     void LogBlockHeader(const CBlockIndex& index, const CNode& peer, bool via_compact_block);
 
+    CScheduler* m_scheduler{nullptr};
+
     /// The transactions to be broadcast privately.
     PrivateBroadcast m_tx_for_private_broadcast;
 };
@@ -1996,6 +1998,8 @@ PeerManagerImpl::PeerManagerImpl(CConnman& connman, AddrMan& addrman,
 
 void PeerManagerImpl::StartScheduledTasks(CScheduler& scheduler)
 {
+    m_scheduler = &scheduler;
+
     // Stale tip checking and peer eviction are on two different timers, but we
     // don't want them to get out of sync due to drift in the scheduler, so we
     // combine them in one function and schedule at the quicker (peer-eviction)
@@ -2239,8 +2243,22 @@ void PeerManagerImpl::InitiateTxBroadcastPrivate(const CTransactionRef& tx)
 {
     const auto txstr{strprintf("txid=%s, wtxid=%s", tx->GetHash().ToString(), tx->GetWitnessHash().ToString())};
     if (m_tx_for_private_broadcast.Add(tx)) {
-        LogDebug(BCLog::PRIVBROADCAST, "Requesting %d new connections due to %s", NUM_PRIVATE_BROADCAST_PER_TX, txstr);
-        m_connman.m_private_broadcast.NumToOpenAdd(NUM_PRIVATE_BROADCAST_PER_TX);
+        if (m_opts.private_broadcast_delay_max > 0ms && m_scheduler != nullptr) {
+            const auto delay{FastRandomContext{m_opts.deterministic_rng}.randrange<std::chrono::milliseconds>(m_opts.private_broadcast_delay_max + 1ms)};
+            LogDebug(BCLog::PRIVBROADCAST,
+                     "Scheduling %d new connections in %dms due to %s",
+                     NUM_PRIVATE_BROADCAST_PER_TX, count_milliseconds(delay), txstr);
+            m_scheduler->scheduleFromNow(
+                [this] {
+                    if (m_tx_for_private_broadcast.HavePendingTransactions()) {
+                        m_connman.m_private_broadcast.NumToOpenAdd(NUM_PRIVATE_BROADCAST_PER_TX);
+                    }
+                },
+                delay);
+        } else {
+            LogDebug(BCLog::PRIVBROADCAST, "Requesting %d new connections due to %s", NUM_PRIVATE_BROADCAST_PER_TX, txstr);
+            m_connman.m_private_broadcast.NumToOpenAdd(NUM_PRIVATE_BROADCAST_PER_TX);
+        }
     } else {
         LogDebug(BCLog::PRIVBROADCAST, "Ignoring unnecessary request to schedule an already scheduled transaction: %s", txstr);
     }

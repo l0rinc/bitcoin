@@ -246,6 +246,7 @@ class P2PPrivateBroadcast(BitcoinTestFramework):
                 "-v2transport=0",
                 "-test=addrman",
                 "-privatebroadcast",
+                "-privatebroadcastdelay=0",
                 f"-proxy={socks5_server_config.addr[0]}:{socks5_server_config.addr[1]}",
                 # To increase coverage, make it think that the I2P network is reachable so that it
                 # selects such addresses as well. Pick a proxy address where nobody is listening
