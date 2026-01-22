@@ -763,6 +763,7 @@ class WalletMigrationTest(BitcoinTestFramework):
         assert_equal(info["format"], "sqlite")
         assert_equal(info["private_keys_enabled"], False)
         assert_equal(info["walletname"], "default_wallet_watchonly")
+
         # Check the default wallet is not available anymore
         assert not (self.master_node.wallets_path / "wallet.dat").exists()
 

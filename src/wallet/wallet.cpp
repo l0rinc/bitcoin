@@ -4599,6 +4599,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
         for (std::shared_ptr<CWallet>* wallet_ptr : {&local_wallet, &res.watchonly_wallet, &res.solvables_wallet}) {
             if (success && *wallet_ptr) {
                 std::shared_ptr<CWallet>& wallet = *wallet_ptr;
+                // Track db path before reloading or unloading the wallet.
                 track_for_cleanup(*wallet);
                 const std::string current_wallet_name = wallet->GetName();
                 if (load_wallet) {
@@ -4608,7 +4609,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
                     assert(wallet.use_count() == 1);
                     wallet.reset();
                 }
-                // Set the first wallet as the main one.
+                // Set the first successfully processed wallet as the main one.
                 // The loop order is intentional and must always start with the local wallet.
                 if (!main_wallet_set) {
                     res.wallet_name = current_wallet_name;
