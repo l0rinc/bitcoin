@@ -7,10 +7,13 @@
 #include <net_processing.h>
 #include <pow.h>
 #include <primitives/transaction.h>
+#include <scheduler.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
+
+#include <thread>
 
 BOOST_FIXTURE_TEST_SUITE(peerman_tests, RegTestingSetup)
 
@@ -74,14 +77,30 @@ BOOST_AUTO_TEST_CASE(connections_desirable_service_flags)
     BOOST_CHECK(peerman->GetDesirableServiceFlags(peer_flags) == ServiceFlags(NODE_NETWORK | NODE_WITNESS));
 }
 
-BOOST_AUTO_TEST_CASE(private_broadcast_requests_connections_immediately)
+BOOST_AUTO_TEST_CASE(private_broadcast_delays_connection_requests)
 {
-    std::unique_ptr<PeerManager> peerman = PeerManager::make(*m_node.connman, *m_node.addrman, nullptr, *m_node.chainman, *m_node.mempool, *m_node.warnings, {});
+    PeerManager::Options opts;
+    opts.deterministic_rng = true;
+    opts.private_broadcast = false;
+    opts.private_broadcast_delay_max = std::chrono::milliseconds{5000};
+
+    std::unique_ptr<PeerManager> peerman = PeerManager::make(*m_node.connman, *m_node.addrman, nullptr, *m_node.chainman, *m_node.mempool, *m_node.warnings, opts);
+
+    CScheduler scheduler;
+    peerman->StartScheduledTasks(scheduler);
 
     const CTransactionRef tx{MakeTransactionRef(CMutableTransaction{})};
 
     BOOST_CHECK_EQUAL(m_node.connman->m_private_broadcast.NumToOpen(), 0U);
     peerman->InitiateTxBroadcastPrivate(tx);
+    BOOST_CHECK_EQUAL(m_node.connman->m_private_broadcast.NumToOpen(), 0U);
+
+    std::thread scheduler_thread([&] { scheduler.serviceQueue(); });
+    scheduler.MockForward(std::chrono::duration_cast<std::chrono::seconds>(opts.private_broadcast_delay_max));
+    // Ensure the scheduler has time to process all tasks queued before now.
+    scheduler.scheduleFromNow([&scheduler] { scheduler.stop(); }, std::chrono::milliseconds{1});
+    scheduler_thread.join();
+
     BOOST_CHECK_EQUAL(m_node.connman->m_private_broadcast.NumToOpen(), 3U);
 }
 

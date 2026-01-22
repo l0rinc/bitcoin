@@ -92,6 +92,8 @@ public:
         uint32_t max_headers_result{MAX_HEADERS_RESULTS};
         //! Whether private broadcast is used for sending transactions.
         bool private_broadcast{DEFAULT_PRIVATE_BROADCAST};
+        //! Maximum random delay before starting private broadcast for transactions submitted via sendrawtransaction.
+        std::chrono::milliseconds private_broadcast_delay_max{0};
     };
 
     static std::unique_ptr<PeerManager> make(CConnman& connman, AddrMan& addrman,
