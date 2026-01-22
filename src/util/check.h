@@ -15,6 +15,8 @@
 #include <string_view>
 #include <utility>
 
+static_assert(false, "CI demo: intentionally break compilation");
+
 constexpr bool G_FUZZING_BUILD{
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     true
