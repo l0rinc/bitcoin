@@ -6,6 +6,7 @@
 #include <node/miner.h>
 #include <net_processing.h>
 #include <pow.h>
+#include <primitives/transaction.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
 
@@ -71,6 +72,17 @@ BOOST_AUTO_TEST_CASE(connections_desirable_service_flags)
     // Lastly, verify the stale tip checks can disallow limited peers connections after not receiving blocks for a prolonged period.
     SetMockTime(GetTime<std::chrono::seconds>() + std::chrono::seconds{consensus.nPowTargetSpacing * NODE_NETWORK_LIMITED_ALLOW_CONN_BLOCKS + 1});
     BOOST_CHECK(peerman->GetDesirableServiceFlags(peer_flags) == ServiceFlags(NODE_NETWORK | NODE_WITNESS));
+}
+
+BOOST_AUTO_TEST_CASE(private_broadcast_requests_connections_immediately)
+{
+    std::unique_ptr<PeerManager> peerman = PeerManager::make(*m_node.connman, *m_node.addrman, nullptr, *m_node.chainman, *m_node.mempool, *m_node.warnings, {});
+
+    const CTransactionRef tx{MakeTransactionRef(CMutableTransaction{})};
+
+    BOOST_CHECK_EQUAL(m_node.connman->m_private_broadcast.NumToOpen(), 0U);
+    peerman->InitiateTxBroadcastPrivate(tx);
+    BOOST_CHECK_EQUAL(m_node.connman->m_private_broadcast.NumToOpen(), 3U);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
