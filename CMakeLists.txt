@@ -167,6 +167,8 @@ if(WITH_SYSTEM_LIBSECP256K1)
 endif()  # WITH_SYSTEM_LIBSECP256K1
 
 option(ENABLE_WALLET "Enable wallet." ON)
+option(WITH_BDB "Enable Berkeley DB (BDB) wallet support." OFF)
+cmake_dependent_option(WARN_INCOMPATIBLE_BDB "Warn when using a Berkeley DB (BDB) version other than 4.8." ON "WITH_BDB" OFF)
 cmake_dependent_option(BUILD_WALLET_TOOL "Build bitcoin-wallet tool." ${BUILD_TESTS} "ENABLE_WALLET" OFF)
 
 option(ENABLE_EXTERNAL_SIGNER "Enable external signer support." ON)
@@ -295,6 +297,22 @@ if(ENABLE_WALLET)
     find_package(SQLite3 3.7.17 REQUIRED)
     if(NOT TARGET SQLite3::SQLite3) # CMake < 4.3
       add_library(SQLite3::SQLite3 ALIAS SQLite::SQLite3)
+    endif()
+  endif()
+  set(USE_SQLITE ON)
+endif()
+
+if(WITH_BDB)
+  find_package(BerkeleyDB 4.8 MODULE REQUIRED)
+  set(USE_BDB ON)
+  if(NOT BerkeleyDB_VERSION VERSION_EQUAL 4.8)
+    message(WARNING "Found Berkeley DB (BDB) other than 4.8.\n"
+                    "BDB (legacy) wallets opened by this build will not be portable!"
+    )
+    if(WARN_INCOMPATIBLE_BDB)
+      message(FATAL_ERROR "If this is intended, pass \"-DWARN_INCOMPATIBLE_BDB=OFF\".\n"
+                          "Passing \"-DWITH_BDB=OFF\" will suppress this warning."
+      )
     endif()
   endif()
 endif()
