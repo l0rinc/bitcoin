@@ -56,61 +56,67 @@ jobs:
           fi
 
   test-each-commit:
-    name: 'test max 6 ancestor commits'
+    name: 'unit tests on all ancestor commits'
     runs-on: ubuntu-24.04
     if: github.event_name == 'pull_request' && github.event.pull_request.commits != 1
-    timeout-minutes: 360  # Use maximum time, see https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes. Assuming a worst case time of 1 hour per commit, this leads to a --max-count=6 below.
-    env:
-      MAX_COUNT: 6  # Keep in sync with name above
+    timeout-minutes: 360  # Use maximum time, see https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes.
     steps:
-      - name: Determine fetch depth
+      - &EACH_COMMIT_DETERMINE_FETCH_DEPTH
+        name: Determine fetch depth
         run: echo "FETCH_DEPTH=$((${{ github.event.pull_request.commits }} + 2))" >> "$GITHUB_ENV"
       - *ANNOTATION_PR_NUMBER
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: ${{ env.FETCH_DEPTH }}
-      - name: Determine commit range
+      - &EACH_COMMIT_DETERMINE_COMMIT_RANGE
+        name: Determine commit range
         run: |
-          # Checkout HEAD~ and find the test base commit
-          # Checkout HEAD~ because it would be wasteful to rerun tests on the PR
-          # head commit that are already run by other jobs.
+          # Find the oldest commit to test/compile (exclude PR head, and commits before the last merge).
+          # See gitrevisions: `^@` expands merge parents, and `^<rev>` excludes a rev and its ancestors.
           git checkout HEAD~
-          # Figure out test base commit by listing ancestors of HEAD, excluding
-          # ancestors of the most recent merge commit, limiting the list to the
-          # newest MAX_COUNT ancestors, ordering it from oldest to newest, and
-          # taking the first one.
-          #
-          # If the branch contains up to MAX_COUNT ancestor commits after the
-          # most recent merge commit, all of those commits will be tested. If it
-          # contains more, only the most recent MAX_COUNT commits will be
-          # tested.
-          #
-          # In the command below, the ^@ suffix is used to refer to all parents
-          # of the merge commit as described in:
-          # https://git-scm.com/docs/git-rev-parse#_other_rev_parent_shorthand_notations
-          # and the ^ prefix is used to exclude these parents and all their
-          # ancestors from the rev-list output as described in:
-          # https://git-scm.com/docs/git-rev-list
           MERGE_BASE=$(git rev-list -n1 --merges HEAD)
           EXCLUDE_MERGE_BASE_ANCESTORS=
           # MERGE_BASE can be empty due to limited fetch-depth
           if test -n "$MERGE_BASE"; then
             EXCLUDE_MERGE_BASE_ANCESTORS=^${MERGE_BASE}^@
           fi
-          echo "TEST_BASE=$(git rev-list -n$((${{ env.MAX_COUNT }} + 1)) --reverse HEAD $EXCLUDE_MERGE_BASE_ANCESTORS | head -1)" >> "$GITHUB_ENV"
-      - run: |
+          echo "TEST_BASE=$(git rev-list -n${{ github.event.pull_request.commits }} --reverse HEAD $EXCLUDE_MERGE_BASE_ANCESTORS | head -1)" >> "$GITHUB_ENV"
+      - &EACH_COMMIT_PREPARE_GIT
+        run: |
           git fetch origin "${GITHUB_BASE_REF}"
           git config user.email "ci@example.com"
           git config user.name "CI"
-      - run: |
+      - &EACH_COMMIT_INSTALL_DEPS
+        run: |
           sudo apt-get update
           sudo apt-get install clang mold ccache build-essential cmake ninja-build pkgconf python3-zmq libevent-dev libboost-dev libsqlite3-dev systemtap-sdt-dev libzmq3-dev qt6-base-dev qt6-tools-dev qt6-l10n-tools libqrencode-dev capnproto libcapnp-dev -y
           sudo pip3 install --break-system-packages pycapnp
-      - name: Compile and run tests
+      - name: Compile and run unit tests
         run: |
-          # Run tests on commits after the last merge commit and before the PR head commit
-          git rebase --exec "git merge --no-commit origin/${GITHUB_BASE_REF} && python3 ./.github/ci-test-each-commit-exec.py && git reset --hard" ${{ env.TEST_BASE }}
+          # Run unit tests on all commits before the PR head commit.
+          git rebase --exec "git merge --no-commit origin/${GITHUB_BASE_REF} && python3 ./.github/ci-test-each-commit-exec.py --skip-functional-tests && git reset --hard" ${{ env.TEST_BASE }}
+
+  functional-test-each-commit:
+    name: 'functional tests on all ancestor commits'
+    needs: runners
+    runs-on: ${{ needs.runners.outputs.provider == 'cirrus' && 'ghcr.io/cirruslabs/ubuntu-runner-amd64:24.04-lg' || 'ubuntu-24.04' }}
+    if: github.event_name == 'pull_request' && github.event.pull_request.commits != 1
+    timeout-minutes: 360
+    steps:
+      - *EACH_COMMIT_DETERMINE_FETCH_DEPTH
+      - *ANNOTATION_PR_NUMBER
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: ${{ env.FETCH_DEPTH }}
+      - *EACH_COMMIT_DETERMINE_COMMIT_RANGE
+      - *EACH_COMMIT_PREPARE_GIT
+      - *EACH_COMMIT_INSTALL_DEPS
+      - name: Compile and run functional tests
+        run: |
+          # Run functional tests on all commits before the PR head commit.
+          git rebase --exec "git merge --no-commit origin/${GITHUB_BASE_REF} && python3 ./.github/ci-test-each-commit-exec.py --skip-unit-tests --failfast && git reset --hard" ${{ env.TEST_BASE }}
 
   macos-native-arm64:
     name: ${{ matrix.job-name }}

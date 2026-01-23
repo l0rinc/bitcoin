@@ -3,6 +3,7 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://opensource.org/license/mit/.
 
+import argparse
 import subprocess
 import sys
 import shlex
@@ -17,6 +18,12 @@ def run(cmd, **kwargs):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--skip-unit-tests", action="store_true", help="Skip CMake/ctest unit tests")
+    parser.add_argument("--skip-functional-tests", action="store_true", help="Skip functional tests")
+    parser.add_argument("--failfast", action="store_true", help="Stop functional tests after the first failure")
+    args = parser.parse_args()
+
     print("Running tests on commit ...")
     run(["git", "log", "-1"])
 
@@ -43,22 +50,28 @@ def main():
         "-DCMAKE_CXX_FLAGS=-Wno-error=unused-member-function",
     ])
     run(["cmake", "--build", build_dir, "-j", str(num_procs)])
-    run([
-        "ctest",
-        "--output-on-failure",
-        "--stop-on-failure",
-        "--test-dir",
-        build_dir,
-        "-j",
-        str(num_procs),
-    ])
-    run([
-        sys.executable,
-        f"./{build_dir}/test/functional/test_runner.py",
-        "-j",
-        str(num_procs * 2),
-        "--combinedlogslen=99999999",
-    ])
+    if not args.skip_unit_tests:
+        run([
+            "ctest",
+            "--output-on-failure",
+            "--stop-on-failure",
+            "--test-dir",
+            build_dir,
+            "-j",
+            str(num_procs),
+        ])
+
+    if not args.skip_functional_tests:
+        cmd = [
+            sys.executable,
+            f"./{build_dir}/test/functional/test_runner.py",
+            "-j",
+            str(num_procs * 2),
+            "--combinedlogslen=99999999",
+        ]
+        if args.failfast:
+            cmd.append("--failfast")
+        run(cmd)
 
 
 if __name__ == "__main__":
