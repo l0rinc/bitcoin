@@ -69,12 +69,12 @@ void CCoinsViewDB::ResizeCache(size_t new_cache_size)
     }
 }
 
-std::optional<Coin> CCoinsViewDB::GetCoin(const COutPoint& outpoint) const
+std::optional<Coin> CCoinsViewDB::GetCoin(const COutPoint& outpoint) const noexcept
 {
     return PeekCoin(outpoint);
 }
 
-std::optional<Coin> CCoinsViewDB::PeekCoin(const COutPoint& outpoint) const
+std::optional<Coin> CCoinsViewDB::PeekCoin(const COutPoint& outpoint) const noexcept
 {
     if (Coin coin; m_db->Read(CoinEntry(&outpoint), coin)) {
         Assert(!coin.IsSpent()); // The UTXO database should never contain spent coins
@@ -83,7 +83,7 @@ std::optional<Coin> CCoinsViewDB::PeekCoin(const COutPoint& outpoint) const
     return std::nullopt;
 }
 
-bool CCoinsViewDB::HaveCoin(const COutPoint& outpoint) const
+bool CCoinsViewDB::HaveCoin(const COutPoint& outpoint) const noexcept
 {
     return !!PeekCoin(outpoint);
 }
