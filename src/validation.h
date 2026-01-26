@@ -941,11 +941,10 @@ public:
      * Whether initial block download has ended and IsInitialBlockDownload
      * should return false from now on.
      *
-     * This value is used for lock-free IBD checks, and latches from true to
-     * false once block loading has finished and the current chain tip has
-     * enough work and is recent.
+     * Mutable because we need to be able to mark IsInitialBlockDownload()
+     * const, which latches this for caching purposes.
      */
-    std::atomic<bool> m_cached_finished_ibd{false};
+    mutable std::atomic<bool> m_cached_finished_ibd{false};
 
     /**
      * Every received block is assigned a unique and increasing identifier, so we
@@ -1066,7 +1065,7 @@ public:
      * conditions (e.g. after updating the active chain tip, or after
      * `ImportBlocks()` finishes).
      */
-    void UpdateIBDStatus() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool UpdateIBDStatus() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     node::BlockMap& BlockIndex() EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
