@@ -8,6 +8,7 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <common/args.h>
+#include <common/pcp.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
 #include <deploymentstatus.h>
@@ -188,7 +189,13 @@ public:
         });
         args().WriteSettingsFile();
     }
-    void mapPort(bool use_upnp, bool use_pcp) override { StartMapPort(use_upnp, use_pcp); }
+    void mapPort(bool use_upnp, bool use_pcp) override {
+        if (use_pcp && !MapPortIsProtoEnabled(MapPortProtoFlag::PCP)) {
+            // Explicitly enabling PCP
+            g_pcp_warn_for_unauthorized = true;
+        }
+        StartMapPort(use_upnp, use_pcp);
+    }
     bool getProxy(Network net, Proxy& proxy_info) override { return GetProxy(net, proxy_info); }
     size_t getNodeCount(ConnectionDirection flags) override
     {
