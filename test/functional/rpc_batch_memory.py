@@ -82,7 +82,7 @@ class RPCBatchMemoryTest(BitcoinTestFramework):
         payload = json.dumps(batch).encode()
 
         assert node.process.poll() is None
-        with node.assert_debug_log(["Large HTTP reply body copied:"]):
+        with node.assert_debug_log(["Large HTTP reply body referenced:"], unexpected_msgs=["Large HTTP reply body copied:"]):
             status = raw_jsonrpc_request(node.url, payload, timeout=120)
         assert_equal(status, 200)
         assert node.process.poll() is None
