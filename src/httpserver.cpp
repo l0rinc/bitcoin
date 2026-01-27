@@ -658,6 +658,10 @@ void HTTPRequest::WriteReply(int nStatus, std::span<const std::byte> reply)
     // Send event to main http thread to send reply message
     struct evbuffer* evb = evhttp_request_get_output_buffer(req);
     assert(evb);
+    static constexpr size_t LARGE_HTTP_REPLY_BYTES{16 * 1024 * 1024};
+    if (reply.size() >= LARGE_HTTP_REPLY_BYTES) {
+        LogDebug(BCLog::HTTP, "Large HTTP reply body copied: status=%d bytes=%u\n", nStatus, reply.size());
+    }
     evbuffer_add(evb, reply.data(), reply.size());
     auto req_copy = req;
     HTTPEvent* ev = new HTTPEvent(eventBase, true, [req_copy, nStatus]{
