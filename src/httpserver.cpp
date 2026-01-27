@@ -47,6 +47,8 @@
 //! the sleep time needs to be small to avoid new sockets stalling.
 static constexpr auto SELECT_TIMEOUT{50ms};
 
+static constexpr size_t LARGE_HTTP_REPLY_BYTES{16_MiB};
+
 //! Explicit alias for setting socket option methods.
 static constexpr int SOCKET_OPTION_TRUE{1};
 
@@ -583,6 +585,10 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
     // Serialize the response headers
     const std::string headers{res.StringifyHeaders()};
     const auto headers_bytes{std::as_bytes(std::span{headers})};
+
+    if (reply_body.size() >= LARGE_HTTP_REPLY_BYTES) {
+        LogDebug(BCLog::HTTP, "Large HTTP reply body copied: status=%d bytes=%d", status, reply_body.size());
+    }
 
     bool send_buffer_was_empty{false};
     // Fill the send buffer with the complete serialized response headers + body
