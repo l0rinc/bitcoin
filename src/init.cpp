@@ -1918,6 +1918,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     connOptions.m_peer_connect_timeout = peer_connect_timeout;
     connOptions.whitelist_forcerelay = args.GetBoolArg("-whitelistforcerelay", DEFAULT_WHITELISTFORCERELAY);
     connOptions.whitelist_relay = args.GetBoolArg("-whitelistrelay", DEFAULT_WHITELISTRELAY);
+    connOptions.m_capture_messages = args.GetBoolArg("-capturemessages", false);
     connOptions.disable_v1conn_clearnet = args.GetBoolArg("-v2onlyclearnet", false);
 
     // Port to bind to if `-bind=addr` is provided without a `:port` suffix.
