@@ -167,7 +167,7 @@ static bool HTTPReq_JSONRPC(const std::any& context, HTTPRequest* req)
     jreq.context = context;
     jreq.peerAddr = req->GetPeer().ToStringAddrPort();
     if (!RPCAuthorized(authHeader.second, jreq.authUser, jreq.m_wallet_restriction)) {
-        LogPrintf("ThreadRPCServer incorrect password attempt from %s\n", jreq.peerAddr);
+        LogWarning("ThreadRPCServer incorrect password attempt from %s", jreq.peerAddr);
 
         /* Deter brute-forcing
            If this results in a DoS the user really
@@ -191,7 +191,7 @@ static bool HTTPReq_JSONRPC(const std::any& context, HTTPRequest* req)
         UniValue reply;
         bool user_has_whitelist = g_rpc_whitelist.count(jreq.authUser);
         if (!user_has_whitelist && g_rpc_whitelist_default) {
-            LogPrintf("RPC User %s not allowed to call any methods\n", jreq.authUser);
+            LogWarning("RPC User %s not allowed to call any methods", jreq.authUser);
             req->WriteReply(HTTP_FORBIDDEN);
             return false;
 
@@ -199,7 +199,7 @@ static bool HTTPReq_JSONRPC(const std::any& context, HTTPRequest* req)
         } else if (valRequest.isObject()) {
             jreq.parse(valRequest);
             if (user_has_whitelist && !g_rpc_whitelist[jreq.authUser].count(jreq.strMethod)) {
-                LogPrintf("RPC User %s not allowed to call method %s\n", jreq.authUser, jreq.strMethod);
+                LogWarning("RPC User %s not allowed to call method %s", jreq.authUser, jreq.strMethod);
                 req->WriteReply(HTTP_FORBIDDEN);
                 return false;
             }
@@ -229,7 +229,7 @@ static bool HTTPReq_JSONRPC(const std::any& context, HTTPRequest* req)
                         // Parse method
                         std::string strMethod = request.find_value("method").get_str();
                         if (!g_rpc_whitelist[jreq.authUser].count(strMethod)) {
-                            LogPrintf("RPC User %s not allowed to call method %s\n", jreq.authUser, strMethod);
+                            LogWarning("RPC User %s not allowed to call method %s", jreq.authUser, strMethod);
                             req->WriteReply(HTTP_FORBIDDEN);
                             return false;
                         }
@@ -358,7 +358,7 @@ static bool InitRPCAuthentication()
         for (const std::string& rpcauth : gArgs.GetArgs("-rpcauth")) {
             if (rpcauth.empty()) continue;
             if (!AddRPCAuth(rpcauth)) {
-                LogPrintf("Invalid -rpcauth argument.\n");
+                LogWarning("Invalid -rpcauth argument.");
                 return false;
             }
         }
