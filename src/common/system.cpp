@@ -102,8 +102,8 @@ int GetNumCores()
     return std::thread::hardware_concurrency();
 }
 
-SteadyClock::duration GetUptime()
-{
-    static const auto g_startup_time{SteadyClock::now()};
-    return SteadyClock::now() - g_startup_time;
-}
+namespace {
+    const auto g_startup_time{SteadyClock::now()};
+} // namespace
+
+SteadyClock::duration GetUptime() { return SteadyClock::now() - g_startup_time; }
