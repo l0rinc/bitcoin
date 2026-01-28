@@ -1829,8 +1829,15 @@ BOOST_AUTO_TEST_CASE(mib_string_literal_test)
 {
     BOOST_CHECK_EQUAL(0_MiB, 0);
     BOOST_CHECK_EQUAL(1_MiB, 1024 * 1024);
+    BOOST_CHECK_EQUAL(4095_MiB, size_t{4095} << 20);
     const auto max_mib{std::numeric_limits<size_t>::max() >> 20};
-    BOOST_CHECK_EXCEPTION(operator""_MiB(static_cast<unsigned long long>(max_mib) + 1), std::overflow_error, HasReason("MiB value too large for size_t byte conversion"));
+    if constexpr (SIZE_MAX == UINT32_MAX) {
+        BOOST_CHECK_EQUAL(max_mib, 4095U);
+        BOOST_CHECK_EXCEPTION(4096_MiB, std::overflow_error, HasReason("MiB value too large for size_t byte conversion"));
+    } else {
+        BOOST_CHECK_EQUAL(4096_MiB, size_t{4096} << 20);
+    }
+    BOOST_CHECK_EXCEPTION(operator""_MiB(max_mib + 1), std::overflow_error, HasReason("MiB value too large for size_t byte conversion"));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
