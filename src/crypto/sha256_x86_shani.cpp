@@ -16,6 +16,12 @@
 
 namespace {
 
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(_MSC_VER)
+using m128i_u = __m128i_u;
+#else
+using m128i_u = __m128i;
+#endif
+
 alignas(__m128i) const uint8_t MASK[16] = {0x03, 0x02, 0x01, 0x00, 0x07, 0x06, 0x05, 0x04, 0x0b, 0x0a, 0x09, 0x08, 0x0f, 0x0e, 0x0d, 0x0c};
 alignas(__m128i) const uint8_t INIT0[16] = {0x8c, 0x68, 0x05, 0x9b, 0x7f, 0x52, 0x0e, 0x51, 0x85, 0xae, 0x67, 0xbb, 0x67, 0xe6, 0x09, 0x6a};
 alignas(__m128i) const uint8_t INIT1[16] = {0x19, 0xcd, 0xe0, 0x5b, 0xab, 0xd9, 0x83, 0x1f, 0x3a, 0xf5, 0x4f, 0xa5, 0x72, 0xf3, 0x6e, 0x3c};
@@ -68,12 +74,14 @@ void ALWAYS_INLINE Unshuffle(__m128i& s0, __m128i& s1)
 
 __m128i ALWAYS_INLINE Load(const unsigned char* in)
 {
-    return _mm_shuffle_epi8(_mm_loadu_si128((const __m128i*)in), _mm_load_si128((const __m128i*)MASK));
+    return _mm_shuffle_epi8(_mm_loadu_si128(reinterpret_cast<const m128i_u*>(in)),
+                            _mm_load_si128(reinterpret_cast<const __m128i*>(MASK)));
 }
 
 void ALWAYS_INLINE Save(unsigned char* out, __m128i s)
 {
-    _mm_storeu_si128((__m128i*)out, _mm_shuffle_epi8(s, _mm_load_si128((const __m128i*)MASK)));
+    _mm_storeu_si128(reinterpret_cast<m128i_u*>(out),
+                     _mm_shuffle_epi8(s, _mm_load_si128(reinterpret_cast<const __m128i*>(MASK))));
 }
 }
 
@@ -83,8 +91,8 @@ void Transform(uint32_t* s, const unsigned char* chunk, size_t blocks)
     __m128i m0, m1, m2, m3, s0, s1, so0, so1;
 
     /* Load state */
-    s0 = _mm_loadu_si128((const __m128i*)s);
-    s1 = _mm_loadu_si128((const __m128i*)(s + 4));
+    s0 = _mm_loadu_si128(reinterpret_cast<const m128i_u*>(s));
+    s1 = _mm_loadu_si128(reinterpret_cast<const m128i_u*>(s + 4));
     Shuffle(s0, s1);
 
     while (blocks--) {
@@ -137,8 +145,8 @@ void Transform(uint32_t* s, const unsigned char* chunk, size_t blocks)
     }
 
     Unshuffle(s0, s1);
-    _mm_storeu_si128((__m128i*)s, s0);
-    _mm_storeu_si128((__m128i*)(s + 4), s1);
+    _mm_storeu_si128(reinterpret_cast<m128i_u*>(s), s0);
+    _mm_storeu_si128(reinterpret_cast<m128i_u*>(s + 4), s1);
 }
 }
 
