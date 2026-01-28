@@ -191,7 +191,7 @@ util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool
     }
 
     // Set output set
-    for (const size_t& i : best_selection) {
+    for (size_t i : best_selection) {
         result.AddInput(utxo_pool.at(i));
     }
     result.RecalculateWaste(cost_of_change, cost_of_change, CAmount{0});
@@ -517,7 +517,7 @@ util::Result<SelectionResult> CoinGrinder(std::vector<OutputGroup>& utxo_pool, c
         return max_tx_weight_exceeded ? ErrorMaxWeightExceeded() : util::Error();
     }
 
-    for (const size_t& i : best_selection) {
+    for (size_t i : best_selection) {
         result.AddInput(utxo_pool[i]);
     }
 

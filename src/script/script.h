@@ -235,7 +235,7 @@ class CScriptNum
  */
 public:
 
-    explicit CScriptNum(const int64_t& n)
+    explicit CScriptNum(int64_t n)
     {
         m_value = n;
     }
@@ -269,21 +269,21 @@ public:
         m_value = set_vch(vch);
     }
 
-    inline bool operator==(const int64_t& rhs) const    { return m_value == rhs; }
-    inline auto operator<=>(const int64_t& rhs) const    { return m_value <=> rhs; }
+    inline bool operator==(int64_t rhs) const    { return m_value == rhs; }
+    inline auto operator<=>(int64_t rhs) const    { return m_value <=> rhs; }
 
     inline bool operator==(const CScriptNum& rhs) const { return operator==(rhs.m_value); }
     inline auto operator<=>(const CScriptNum& rhs) const { return operator<=>(rhs.m_value); }
 
-    inline CScriptNum operator+(   const int64_t& rhs)    const { return CScriptNum(m_value + rhs);}
-    inline CScriptNum operator-(   const int64_t& rhs)    const { return CScriptNum(m_value - rhs);}
+    inline CScriptNum operator+(   int64_t rhs)    const { return CScriptNum(m_value + rhs);}
+    inline CScriptNum operator-(   int64_t rhs)    const { return CScriptNum(m_value - rhs);}
     inline CScriptNum operator+(   const CScriptNum& rhs) const { return operator+(rhs.m_value);   }
     inline CScriptNum operator-(   const CScriptNum& rhs) const { return operator-(rhs.m_value);   }
 
     inline CScriptNum& operator+=( const CScriptNum& rhs)       { return operator+=(rhs.m_value);  }
     inline CScriptNum& operator-=( const CScriptNum& rhs)       { return operator-=(rhs.m_value);  }
 
-    inline CScriptNum operator&(   const int64_t& rhs)    const { return CScriptNum(m_value & rhs);}
+    inline CScriptNum operator&(   int64_t rhs)    const { return CScriptNum(m_value & rhs);}
     inline CScriptNum operator&(   const CScriptNum& rhs) const { return operator&(rhs.m_value);   }
 
     inline CScriptNum& operator&=( const CScriptNum& rhs)       { return operator&=(rhs.m_value);  }
@@ -294,13 +294,13 @@ public:
         return CScriptNum(-m_value);
     }
 
-    inline CScriptNum& operator=( const int64_t& rhs)
+    inline CScriptNum& operator=( int64_t rhs)
     {
         m_value = rhs;
         return *this;
     }
 
-    inline CScriptNum& operator+=( const int64_t& rhs)
+    inline CScriptNum& operator+=( int64_t rhs)
     {
         assert(rhs == 0 || (rhs > 0 && m_value <= std::numeric_limits<int64_t>::max() - rhs) ||
                            (rhs < 0 && m_value >= std::numeric_limits<int64_t>::min() - rhs));
@@ -308,7 +308,7 @@ public:
         return *this;
     }
 
-    inline CScriptNum& operator-=( const int64_t& rhs)
+    inline CScriptNum& operator-=( int64_t rhs)
     {
         assert(rhs == 0 || (rhs > 0 && m_value >= std::numeric_limits<int64_t>::min() + rhs) ||
                            (rhs < 0 && m_value <= std::numeric_limits<int64_t>::max() + rhs));
@@ -316,7 +316,7 @@ public:
         return *this;
     }
 
-    inline CScriptNum& operator&=( const int64_t& rhs)
+    inline CScriptNum& operator&=( int64_t rhs)
     {
         m_value &= rhs;
         return *this;
@@ -338,7 +338,7 @@ public:
         return serialize(m_value);
     }
 
-    static std::vector<unsigned char> serialize(const int64_t& value)
+    static std::vector<unsigned char> serialize(int64_t value)
     {
         if(value == 0)
             return std::vector<unsigned char>();
