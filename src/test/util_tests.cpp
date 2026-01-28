@@ -1840,4 +1840,20 @@ BOOST_AUTO_TEST_CASE(mib_string_literal_test)
     BOOST_CHECK_EXCEPTION(operator""_MiB(max_mib + 1), std::overflow_error, HasReason("MiB value too large for size_t byte conversion"));
 }
 
+BOOST_AUTO_TEST_CASE(gib_string_literal_test)
+{
+    BOOST_CHECK_EQUAL(0_GiB, 0);
+    BOOST_CHECK_EQUAL(1_GiB, 1024 * 1024 * 1024);
+    BOOST_CHECK_EQUAL(1024_MiB, 1_GiB);
+    BOOST_CHECK_EQUAL(3_GiB, size_t{3} << 30);
+    const auto max_gib{std::numeric_limits<size_t>::max() >> 30};
+    if constexpr (SIZE_MAX == UINT32_MAX) {
+        BOOST_CHECK_EQUAL(max_gib, 3U);
+        BOOST_CHECK_EXCEPTION(4_GiB, std::overflow_error, HasReason("GiB value too large for size_t byte conversion"));
+    } else {
+        BOOST_CHECK_EQUAL(4_GiB, size_t{4} << 30);
+    }
+    BOOST_CHECK_EXCEPTION(operator""_GiB(max_gib + 1), std::overflow_error, HasReason("GiB value too large for size_t byte conversion"));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
