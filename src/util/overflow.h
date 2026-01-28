@@ -5,6 +5,8 @@
 #ifndef BITCOIN_UTIL_OVERFLOW_H
 #define BITCOIN_UTIL_OVERFLOW_H
 
+#include <util/check.h>
+
 #include <climits>
 #include <concepts>
 #include <limits>
@@ -47,6 +49,26 @@ template <class T>
         }
     }
     return i + j;
+}
+
+/**
+ * @brief Unsigned integer ceiling division.
+ *
+ * Computes the smallest integer q such that q * divisor >= dividend.
+ * The divisor must be non-zero.
+ *
+ * The implementation avoids overflow that can occur with
+ * `(dividend + divisor - 1) / divisor` by using `q + (r != 0)`.
+ *
+ * The return type follows the usual arithmetic conversions via
+ * std::common_type_t<Dividend, Divisor> (e.g. uint32_t+uint64_t->uint64_t,
+ * size_t+uint64_t->uint64_t on 32-bit).
+ */
+template <std::unsigned_integral Dividend, std::unsigned_integral Divisor>
+[[nodiscard]] constexpr auto CeilDiv(const Dividend dividend, const Divisor divisor)
+{
+    const std::common_type_t<Dividend, Divisor> divisor_c{Assert(divisor)};
+    return dividend / divisor_c + (dividend % divisor_c != 0);
 }
 
 /**

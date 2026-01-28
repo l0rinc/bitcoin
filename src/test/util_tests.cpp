@@ -1856,4 +1856,53 @@ BOOST_AUTO_TEST_CASE(gib_string_literal_test)
     BOOST_CHECK_EXCEPTION(operator""_GiB(max_gib + 1), std::overflow_error, HasReason("GiB value too large for size_t byte conversion"));
 }
 
+BOOST_AUTO_TEST_CASE(ceil_div_test)
+{
+    // Return type: uses the usual arithmetic conversions (i.e. it is effectively the wider
+    // of the two unsigned types).
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(uint32_t{0}, uint32_t{1})), uint32_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(uint32_t{0}, uint64_t{1})), uint64_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(uint64_t{0}, uint32_t{1})), uint64_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(size_t{0}, uint32_t{1})), size_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(uint32_t{0}, size_t{1})), size_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(size_t{0}, size_t{1})), size_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(size_t{0}, uint64_t{1})), uint64_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(uint64_t{0}, size_t{1})), uint64_t>));
+
+    BOOST_CHECK_EQUAL(CeilDiv(0ULL, 1ULL), 0ULL);
+    BOOST_CHECK_EQUAL(CeilDiv(1ULL, 1ULL), 1ULL);
+    BOOST_CHECK_EQUAL(CeilDiv(2ULL, 2ULL), 1ULL);
+    BOOST_CHECK_EQUAL(CeilDiv(3ULL, 2ULL), 2ULL);
+
+    BOOST_CHECK_EQUAL(CeilDiv(size_t{0}, size_t{1}), size_t{0});
+    BOOST_CHECK_EQUAL(CeilDiv(size_t{3}, size_t{2}), size_t{2});
+
+    BOOST_CHECK_EQUAL(CeilDiv(0U, 1U), 0U);
+    BOOST_CHECK_EQUAL(CeilDiv(3U, 2U), 2U);
+
+    // `dividend / divisor + bool(dividend % divisor)` is preferred over:
+    // - `dividend / divisor + (dividend % divisor)`, which is incorrect for divisors > 2
+    // - `(dividend + divisor - 1) / divisor`, which can overflow
+    BOOST_CHECK_EQUAL(CeilDiv(5ULL, 3ULL), 2ULL);
+    const uint64_t max_u64{std::numeric_limits<uint64_t>::max()};
+    BOOST_CHECK_EQUAL(CeilDiv(max_u64, 2ULL), (max_u64 / 2) + 1);
+    BOOST_CHECK_EQUAL((max_u64 + 2ULL - 1) / 2ULL, 0ULL);
+
+    const size_t max_u32_as_size{std::numeric_limits<uint32_t>::max()};
+    BOOST_CHECK_EQUAL(CeilDiv(max_u32_as_size, uint32_t{2}), (max_u32_as_size / 2) + 1);
+    if constexpr (SIZE_MAX == UINT32_MAX) {
+        BOOST_CHECK_EQUAL((max_u32_as_size + uint32_t{2} - 1) / uint32_t{2}, size_t{0});
+    } else {
+        BOOST_CHECK_EQUAL((max_u32_as_size + uint32_t{2} - 1) / uint32_t{2}, (max_u32_as_size / 2) + 1);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(ceil_div_zero_divisor_test)
+{
+    // A divisor of zero triggers `Assert(divisor)` (fatal in production).
+    test_only_CheckFailuresAreExceptionsNotAborts check_failures;
+    BOOST_CHECK_THROW((void)CeilDiv(1ULL, 0ULL), NonFatalCheckError);
+    BOOST_CHECK_THROW((void)CeilDiv(size_t{1}, size_t{0}), NonFatalCheckError);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
