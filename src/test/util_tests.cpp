@@ -2079,6 +2079,21 @@ BOOST_AUTO_TEST_CASE(ceil_div_test)
     BOOST_CHECK((std::is_same_v<decltype(CeilDiv(uint32_t{0}, 8u)), uint32_t>));
     BOOST_CHECK((std::is_same_v<decltype(CeilDiv(size_t{0}, 8u)), size_t>));
     BOOST_CHECK((std::is_same_v<decltype(CeilDiv(unsigned{0}, size_t{1})), size_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(uint32_t{0}, uint32_t{1})), uint32_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(uint32_t{0}, uint64_t{1})), uint64_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(uint64_t{0}, uint32_t{1})), uint64_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(size_t{0}, uint32_t{1})), size_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(uint32_t{0}, size_t{1})), size_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(size_t{0}, size_t{1})), size_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(size_t{0}, uint64_t{1})), uint64_t>));
+    BOOST_CHECK((std::is_same_v<decltype(CeilDiv(uint64_t{0}, size_t{1})), uint64_t>));
+
+    // Basic ceiling division: exact divisions and rounding up.
+    BOOST_CHECK_EQUAL(CeilDiv(0ULL, 1ULL), 0ULL);
+    BOOST_CHECK_EQUAL(CeilDiv(1ULL, 1ULL), 1ULL);
+    BOOST_CHECK_EQUAL(CeilDiv(2ULL, 2ULL), 1ULL);
+    BOOST_CHECK_EQUAL(CeilDiv(3ULL, 2ULL), 2ULL);
+    BOOST_CHECK_EQUAL(CeilDiv(5ULL, 3ULL), 2ULL);
 
     // `common/bloom.cpp` and `cuckoocache.h` patterns.
     BOOST_CHECK_EQUAL(CeilDiv(uint32_t{3}, 2u), uint32_t{2});
@@ -2108,6 +2123,20 @@ BOOST_AUTO_TEST_CASE(ceil_div_test)
 
     // `serialize.h` varint scratch-buffer pattern.
     BOOST_CHECK_EQUAL(CeilDiv(sizeof(uint64_t) * 8, 7u), (sizeof(uint64_t) * 8 + 6) / 7);
+
+    // CeilDiv avoids overflow at max values.
+    constexpr uint64_t max_u64{std::numeric_limits<uint64_t>::max()};
+    BOOST_CHECK_EQUAL(CeilDiv(max_u64, 2ULL), (max_u64 / 2) + 1);
+
+    constexpr size_t max_u32_as_size{std::numeric_limits<uint32_t>::max()};
+    BOOST_CHECK_EQUAL(CeilDiv(max_u32_as_size, uint32_t{2}), (max_u32_as_size / 2) + 1);
+}
+
+BOOST_AUTO_TEST_CASE(ceil_div_zero_divisor_test)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts check_failures;
+    BOOST_CHECK_THROW((void)CeilDiv(1ULL, 0ULL), NonFatalCheckError);
+    BOOST_CHECK_THROW((void)CeilDiv(size_t{1}, size_t{0}), NonFatalCheckError);
 }
 
 BOOST_AUTO_TEST_CASE(gib_string_literal_test)

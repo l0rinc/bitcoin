@@ -59,17 +59,17 @@ template <std::integral T>
 }
 
 /**
- * @brief Integer ceiling division (for unsigned values).
+ * @brief Integer ceiling division (for non-negative values).
  *
  * Computes the smallest integer q such that q * divisor >= dividend.
- * Both dividend and divisor must be unsigned, and divisor must be non-zero.
+ * Both dividend and divisor must be non-negative, and divisor must be non-zero.
  *
  * The implementation avoids overflow that can occur with `(dividend + divisor - 1) / divisor`.
  */
-template <std::unsigned_integral Dividend, std::unsigned_integral Divisor>
+template <std::integral Dividend, std::integral Divisor>
 [[nodiscard]] constexpr auto CeilDiv(const Dividend dividend, const Divisor divisor)
 {
-    assert(divisor > 0);
+    Assert(dividend >= 0 && divisor > 0);
     return dividend / divisor + (dividend % divisor != 0);
 }
 
