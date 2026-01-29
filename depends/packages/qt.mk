@@ -1,9 +1,9 @@
 package=qt
-$(package)_version=5.15.17
+$(package)_version=5.15.18
 $(package)_download_path=https://download.qt.io/archive/qt/5.15/$($(package)_version)/submodules
 $(package)_suffix=everywhere-opensource-src-$($(package)_version).tar.xz
 $(package)_file_name=qtbase-$($(package)_suffix)
-$(package)_sha256_hash=db1513cbb3f4a5bd2229f759c0839436f7fe681a800ff2bc34c4960b09e756ff
+$(package)_sha256_hash=7b632550ea1048fc10c741e46e2e3b093e5ca94dfa6209e9e0848800e247023b
 $(package)_linux_dependencies=freetype fontconfig libxcb libxkbcommon libxcb_util libxcb_util_render libxcb_util_keysyms libxcb_util_image libxcb_util_wm
 $(package)_qt_libs=corelib network widgets gui plugins testlib
 $(package)_linguist_tools = lrelease lupdate lconvert
@@ -25,16 +25,16 @@ $(package)_patches += windows_lto.patch
 $(package)_patches += darwin_no_libm.patch
 
 $(package)_qttranslations_file_name=qttranslations-$($(package)_suffix)
-$(package)_qttranslations_sha256_hash=309ddea3d2696042001c5d0ef1ea86cec8d0323bc3a0b942b65aaaf5a5d483c9
+$(package)_qttranslations_sha256_hash=e5625757913caf66a9d702ba102ae92cb165d8dde17759b6de9fdea84a1f857f
 
 $(package)_qttools_file_name=qttools-$($(package)_suffix)
-$(package)_qttools_sha256_hash=433006eb6732bb7f546f63e0d1890477a9dd2f889228f30aa881aed5dfc9bfc6
+$(package)_qttools_sha256_hash=931e0969d9f9d8f233e5e9bf9db0cea9ce9914d49982f1795fe6191010113568
 
 $(package)_extra_sources  = $($(package)_qttranslations_file_name)
 $(package)_extra_sources += $($(package)_qttools_file_name)
 
 $(package)_qtwinextras_file_name=qtwinextras-$($(package)_suffix)
-$(package)_qtwinextras_sha256_hash=5e0e0e583b03f831ae02bf63a25a01e3bb511100ea6ca695fbc617b5c7f87bdc
+$(package)_qtwinextras_sha256_hash=8fbcd86483a348aa1232df7651472b5c7165e6a31d0d66dfd21cc5bfe06083d4
 $(package)_extra_sources += $($(package)_qtwinextras_file_name)
 
 define $(package)_set_vars
