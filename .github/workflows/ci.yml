@@ -581,7 +581,7 @@ jobs:
           - name: 'Valgrind, fuzz'
             cirrus-runner: 'ghcr.io/cirruslabs/ubuntu-runner-amd64:24.04-md'
             fallback-runner: 'ubuntu-24.04'
-            timeout-minutes: 240
+            timeout-minutes: 360
             file-env: './ci/test/00_setup_env_native_fuzz_with_valgrind.sh'
 
           - name: 'previous releases'

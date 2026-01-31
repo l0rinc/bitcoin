@@ -184,7 +184,7 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
         // Check for negative or overflow input values
         nValueIn += coin.out.nValue;
         if (!MoneyRange(coin.out.nValue) || !MoneyRange(nValueIn)) {
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-inputvalues-outofrange");
+            throw "bad-txns-inputvalues-outofrange";
         }
     }
 
@@ -197,7 +197,7 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
     // Tally transaction fees
     const CAmount txfee_aux = nValueIn - value_out;
     if (!MoneyRange(txfee_aux)) {
-        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-fee-outofrange");
+        throw "bad-txns-fee-outofrange";
     }
 
     txfee = txfee_aux;
