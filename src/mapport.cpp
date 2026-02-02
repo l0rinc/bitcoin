@@ -283,6 +283,11 @@ static void MapPortProtoSetEnabled(MapPortProtoFlag proto, bool enabled)
     }
 }
 
+bool MapPortIsProtoEnabled(const MapPortProtoFlag proto)
+{
+    return g_mapport_enabled_protos & proto;
+}
+
 void StartMapPort(bool use_upnp, bool use_pcp)
 {
     MapPortProtoSetEnabled(MapPortProtoFlag::UPNP, use_upnp);
