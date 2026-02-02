@@ -224,7 +224,7 @@ static RPCHelpMan getgeneralinfo()
         obj.pushKV("useragent", strSubVersion);
         obj.pushKV("datadir", fs::PathToString(args.GetDataDirNet()));
         obj.pushKV("blocksdir", fs::PathToString(args.GetBlocksDirPath()));
-        obj.pushKV("startuptime", GetStartupTime());
+        obj.pushKV("startuptime", TicksSinceEpoch<std::chrono::seconds>(NodeClock::now() - GetUptime()));
         return obj;
 },
     };
