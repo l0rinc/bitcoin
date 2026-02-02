@@ -3,7 +3,7 @@
     <name>AddressBookPage</name>
     <message>
         <source>Right-click to edit address or label</source>
-        <translation type="unfinished">I-right click ban alilan ing address o libel</translation>
+        <translation type="unfinished">I-right click ban alilan ing address o label</translation>
     </message>
     <message>
         <source>Create a new address</source>
@@ -15,7 +15,7 @@
     </message>
     <message>
         <source>Copy the currently selected address to the system clipboard</source>
-        <translation type="unfinished">Kopyan me ing salukuyan at makipiling address keng system clipboard</translation>
+        <translation type="unfinished">Kopyan me ing makalage address king system clipboard</translation>
     </message>
     <message>
         <source>&amp;Copy</source>
@@ -27,11 +27,19 @@
     </message>
     <message>
         <source>Delete the currently selected address from the list</source>
-        <translation type="unfinished">Ilako ya ing kasalungsungan makapiling address keng listahan</translation>
+        <translation type="unfinished">Ilako me ing kasalungsungang makalage address king listaan</translation>
     </message>
     <message>
         <source>Enter address or label to search</source>
-        <translation type="unfinished">Magpalub kang address o label para pantunan</translation>
+        <translation type="unfinished">Mangana kang address o label ban panintunan</translation>
+    </message>
+    <message>
+        <source>Export the data in the current tab to a file</source>
+        <translation type="unfinished">Export me ing data king tab a ini anting metung a file</translation>
+    </message>
+    <message>
+        <source>&amp;Export</source>
+        <translation type="unfinished">I&amp;Export</translation>
     </message>
     <message>
         <source>&amp;Delete</source>
@@ -39,27 +47,19 @@
     </message>
     <message>
         <source>Choose the address to send coins to</source>
-        <translation type="unfinished">Pilinan ing address a magpadalang coins kang</translation>
+        <translation type="unfinished">Mamili kang address a mamarlang coins</translation>
     </message>
     <message>
         <source>Choose the address to receive coins with</source>
-        <translation type="unfinished">Pilinan ing address a tumanggap coins a atin</translation>
+        <translation type="unfinished">Mamili kang address a tumanggap coins</translation>
     </message>
     <message>
         <source>C&amp;hoose</source>
         <translation type="unfinished">P&amp;ilinan</translation>
     </message>
     <message>
-        <source>Sending addresses</source>
-        <translation type="unfinished">Address king pamag-Send</translation>
-    </message>
-    <message>
-        <source>Receiving addresses</source>
-        <translation type="unfinished">Address king pamag-Tanggap</translation>
-    </message>
-    <message>
         <source>These are your Bitcoin addresses for sending payments. Always check the amount and the receiving address before sending coins.</source>
-        <translation type="unfinished">Reni reng kekang Bitcoin address king pamagpadalang kabayaran. Lawan mulang masalese reng alaga ampo ing address na ning tumanggap bayu ka magpadalang barya.</translation>
+        <translation type="unfinished">Oreni ring Bitcoin address mu king pamamarla karing bayad. Lawan mong masalese ring ulaga ra ampon ing address na ning mananggapan bayad bayu ka mamarla.</translation>
     </message>
     <message>
         <source>&amp;Copy Address</source>
@@ -458,14 +458,6 @@
         <translation type="unfinished">&amp;Pun</translation>
     </message>
     <message>
-        <source>Automatically open the Bitcoin client port on the router. This only works when your router supports UPnP and it is enabled.</source>
-        <translation type="unfinished">Ibuklat yang antimanu ing Bitcoin client port king router. Gagana yamu ini istung ing router mu susuporta yang UPnP at magsilbi ya.</translation>
-    </message>
-    <message>
-        <source>Map port using &amp;UPnP</source>
-        <translation type="unfinished">Mapa ng ning port gamit ing &amp;UPnP</translation>
-    </message>
-    <message>
         <source>Port of the proxy (e.g. 9050)</source>
         <translation type="unfinished">Port na ning proxy(e.g. 9050)</translation>
     </message>
@@ -539,6 +531,13 @@
     <message>
         <source>Your current total balance</source>
         <translation type="unfinished">Ing kekang kasalungsungan kabuuang balanse</translation>
+    </message>
+    </context>
+<context>
+    <name>PSBTOperationsDialog</name>
+    <message>
+        <source>own address</source>
+        <translation type="unfinished">sariling address</translation>
     </message>
     </context>
 <context>
@@ -796,10 +795,6 @@
         <translation type="unfinished">Maliaring pakilawe pasibayu ing address at pasibayuan ya iti.</translation>
     </message>
     <message>
-        <source>The entered address does not refer to a key.</source>
-        <translation type="unfinished">Ing milub a address ali ya mag-refer king metung a key.</translation>
-    </message>
-    <message>
         <source>Wallet unlock was cancelled.</source>
         <translation type="unfinished">Me-kansela ya ing pamag-unlock king wallet.</translation>
     </message>
@@ -969,10 +964,6 @@
         <translation type="unfinished">Mipadala kang</translation>
     </message>
     <message>
-        <source>Payment to yourself</source>
-        <translation type="unfinished">Kabayaran keka</translation>
-    </message>
-    <message>
         <source>Mined</source>
         <translation type="unfinished">Me-mina</translation>
     </message>
@@ -1032,10 +1023,6 @@
         <translation type="unfinished">Mipadala kang</translation>
     </message>
     <message>
-        <source>To yourself</source>
-        <translation type="unfinished">Keng sarili mu</translation>
-    </message>
-    <message>
         <source>Mined</source>
         <translation type="unfinished">Me-mina</translation>
     </message>
@@ -1083,14 +1070,21 @@
     </message>
     </context>
 <context>
+    <name>WalletView</name>
+    <message>
+        <source>&amp;Export</source>
+        <translation type="unfinished">I&amp;Export</translation>
+    </message>
+    <message>
+        <source>Export the data in the current tab to a file</source>
+        <translation type="unfinished">Export me ing data king tab a ini anting metung a file</translation>
+    </message>
+    </context>
+<context>
     <name>bitcoin-core</name>
     <message>
         <source>Corrupted block database detected</source>
         <translation type="unfinished">Mekapansin lang me-corrupt a block database</translation>
-    </message>
-    <message>
-        <source>Do you want to rebuild the block database now?</source>
-        <translation type="unfinished">Buri meng buuan pasibayu ing block database ngene?</translation>
     </message>
     <message>
         <source>Done loading</source>

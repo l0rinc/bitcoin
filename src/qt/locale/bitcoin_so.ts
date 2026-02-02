@@ -3,23 +3,23 @@
     <name>AddressBookPage</name>
     <message>
         <source>Right-click to edit address or label</source>
-        <translation type="unfinished">Fadlan garaaci Midig ku dhufo si aad u saxdo ciwaanka ama sumadda.</translation>
+        <translation type="unfinished">Xaq-click si aad cinwaanka edit ama qoraalka</translation>
     </message>
     <message>
         <source>Create a new address</source>
-        <translation type="unfinished">Fadhlan samee cinwaan cusub.</translation>
+        <translation type="unfinished">Abuur cinwaan cusub</translation>
     </message>
     <message>
         <source>&amp;New</source>
-        <translation type="unfinished">Maqal</translation>
+        <translation type="unfinished">&amp;Hormarin</translation>
     </message>
     <message>
         <source>Copy the currently selected address to the system clipboard</source>
-        <translation type="unfinished">Ka akhriso cinwaan aad xaqiijinaysay si aad u ku koobid natiijada isticmaalka ee nidaamka</translation>
+        <translation type="unfinished">Nuqul ka dhig cinwaanka hadda la soo xulay ee clipboard system</translation>
     </message>
     <message>
         <source>&amp;Copy</source>
-        <translation type="unfinished">&amp;Fidi </translation>
+        <translation type="unfinished">&amp;Nuqul</translation>
     </message>
     <message>
         <source>C&amp;lose</source>
@@ -58,14 +58,6 @@
         <translation type="unfinished">C&amp;Aagga</translation>
     </message>
     <message>
-        <source>Sending addresses</source>
-        <translation type="unfinished">Cinwaanada dirista</translation>
-    </message>
-    <message>
-        <source>Receiving addresses</source>
-        <translation type="unfinished">Cinwaanada qaabilaadda</translation>
-    </message>
-    <message>
         <source>These are your Bitcoin addresses for sending payments. Always check the amount and the receiving address before sending coins.</source>
         <translation type="unfinished">Kuwani waa cinwaanada Seeraar aad ku direyso lacagaha. Marwalba caddadka ama cinwaanka laga soo hubiyo inta aadan dirin lacagta qadaadiicda ah ka hor inta aadan dirin.</translation>
     </message>
@@ -84,9 +76,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </message>
     <message>
         <source>Export Address List</source>
-        <translation type="unfinished">Liiska Cinwaanka Dhoofinta
-
-</translation>
+        <translation type="unfinished">Liiska Cinwaanka Dhoofinta</translation>
     </message>
     <message>
         <source>Comma separated file</source>
@@ -97,6 +87,14 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <source>There was an error trying to save the address list to %1. Please try again.</source>
         <extracomment>An error message. %1 is a stand-in argument for the name of the file we attempted to save to.</extracomment>
         <translation type="unfinished">Waxaa jiray qalad isku dayaya in uu badbaadiyo liiska cinwaanka si. %1Iskuday mar kale.</translation>
+    </message>
+    <message>
+        <source>Sending addresses - %1</source>
+        <translation type="unfinished">Cinwaanada diraya%1</translation>
+    </message>
+    <message>
+        <source>Receiving addresses - %1</source>
+        <translation type="unfinished">Cinwaanada aan Helayaa - %1</translation>
     </message>
     <message>
         <source>Exporting Failed</source>
@@ -150,7 +148,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </message>
     <message>
         <source>Warning: If you encrypt your wallet and lose your passphrase, you will &lt;b&gt;LOSE ALL OF YOUR BITCOINS&lt;/b&gt;!</source>
-        <translation type="unfinished">Digniin: Haddii aad qarisid jeebkaaga oo aad lumiso ereyga Passphrase, waxaad 1LOSE DOONAA DHAMMAAN BITCOINS1!</translation>
+        <translation type="unfinished">Digniin: Haddii aad jeebka jeebkaaga qarisid, Oo aad lumiso ereygii,Adigaa sameyn doontaa&lt;b&gt;Lumin oo dhan BITCOINS AAD&lt;/b&gt;!</translation>
     </message>
     <message>
         <source>Are you sure you wish to encrypt your wallet?</source>
@@ -209,6 +207,10 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation type="unfinished">Jeebka passphrase ayaa si guul leh loo bedelay.</translation>
     </message>
     <message>
+        <source>Passphrase change failed</source>
+        <translation type="unfinished">Isbeddelka erayga sirta ah wuu fashilmay</translation>
+    </message>
+    <message>
         <source>Warning: The Caps Lock key is on!</source>
         <translation type="unfinished">Digniin: Furaha Lock Caps waa on!</translation>
     </message>
@@ -255,6 +257,10 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <extracomment>Explanatory text shown on startup when the settings file could not be written. Prompts user to check that we have the ability to write to the file. Explains that the user has the option of running without a settings file.</extracomment>
         <translation type="unfinished">Waxaa dhacday qalad dilaa ah. Hubi in file settings waa writable, ama isku day inaad la -nosettings socda.</translation>
     </message>
+    <message>
+        <source>Error: %1</source>
+        <translation type="unfinished">Khalad: %1</translation>
+    </message>
     <message numerus="yes">
         <source>%n second(s)</source>
         <translation type="unfinished">
@@ -300,6 +306,30 @@ Signing is only possible with addresses of the type 'legacy'.</source>
     </context>
 <context>
     <name>BitcoinGUI</name>
+    <message>
+        <source>&amp;Overview</source>
+        <translation type="unfinished">&amp;Dulmar</translation>
+    </message>
+    <message>
+        <source>Show general overview of wallet</source>
+        <translation type="unfinished">Muuji dulmar guud oo ku saabsan walletka</translation>
+    </message>
+    <message>
+        <source>&amp;Transactions</source>
+        <translation type="unfinished">&amp;Transaction-yada</translation>
+    </message>
+    <message>
+        <source>Browse transaction history</source>
+        <translation type="unfinished">Baadh taariikhda transaction-yada</translation>
+    </message>
+    <message>
+        <source>E&amp;xit</source>
+        <translation type="unfinished">ka bax</translation>
+    </message>
+    <message>
+        <source>Quit application</source>
+        <translation type="unfinished">Ka bax barnaamijka</translation>
+    </message>
     <message numerus="yes">
         <source>Processed %n block(s) of transaction history.</source>
         <translation type="unfinished">
@@ -314,6 +344,10 @@ Signing is only possible with addresses of the type 'legacy'.</source>
             <numerusform />
             <numerusform />
         </translation>
+    </message>
+    <message>
+        <source>Error: %1</source>
+        <translation type="unfinished">Khalad: %1</translation>
     </message>
     </context>
 <context>

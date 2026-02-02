@@ -139,8 +139,8 @@ class AssumeValidTest(BitcoinTestFramework):
             height += 1
 
         # Start node1 and node2 with assumevalid so they accept a block with a bad signature.
-        self.start_node(1, extra_args=["-assumevalid=" + hex(block102.sha256)])
-        self.start_node(2, extra_args=["-assumevalid=" + hex(block102.sha256)])
+        self.start_node(1, extra_args=["-assumevalid=" + block102.hash])
+        self.start_node(2, extra_args=["-assumevalid=" + block102.hash])
 
         p2p0 = self.nodes[0].add_p2p_connection(BaseNode())
         p2p0.send_header_for_blocks(self.blocks[0:2000])
@@ -159,7 +159,7 @@ class AssumeValidTest(BitcoinTestFramework):
         for i in range(2202):
             p2p1.send_message(msg_block(self.blocks[i]))
         # Syncing 2200 blocks can take a while on slow systems. Give it plenty of time to sync.
-        p2p1.sync_with_ping(960)
+        p2p1.sync_with_ping(timeout=960)
         assert_equal(self.nodes[1].getblock(self.nodes[1].getbestblockhash())['height'], 2202)
 
         p2p2 = self.nodes[2].add_p2p_connection(BaseNode())
@@ -172,4 +172,4 @@ class AssumeValidTest(BitcoinTestFramework):
 
 
 if __name__ == '__main__':
-    AssumeValidTest().main()
+    AssumeValidTest(__file__).main()

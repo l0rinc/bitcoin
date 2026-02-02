@@ -7,7 +7,6 @@
 #define BITCOIN_CONSENSUS_VALIDATION_H
 
 #include <string>
-#include <version.h>
 #include <consensus/consensus.h>
 #include <primitives/transaction.h>
 #include <primitives/block.h>
@@ -24,14 +23,6 @@ static constexpr size_t MINIMUM_WITNESS_COMMITMENT{38};
 enum class TxValidationResult {
     TX_RESULT_UNSET = 0,     //!< initial value. Tx has not yet been rejected
     TX_CONSENSUS,            //!< invalid by consensus rules
-    /**
-     * Invalid by a change to consensus rules more recent than SegWit.
-     * Currently unused as there are no such consensus rule changes, and any download
-     * sources realistically need to support SegWit in order to provide useful data,
-     * so differentiating between always-invalid and invalid-by-pre-SegWit-soft-fork
-     * is uninteresting.
-     */
-    TX_RECENT_CONSENSUS_CHANGE,
     TX_INPUTS_NOT_STANDARD,   //!< inputs (covered by txid) failed policy rules
     TX_NOT_STANDARD,          //!< otherwise didn't meet our local policy rules
     TX_MISSING_INPUTS,        //!< transaction was missing some of its inputs
@@ -54,6 +45,8 @@ enum class TxValidationResult {
     TX_CONFLICT,
     TX_MEMPOOL_POLICY,        //!< violated mempool's fee/size/descendant/RBF/etc limits
     TX_NO_MEMPOOL,            //!< this node does not have a mempool so can't validate the transaction
+    TX_RECONSIDERABLE,        //!< fails some policy, but might be acceptable if submitted in a (different) package
+    TX_UNKNOWN,               //!< transaction was not validated because package failed
 };
 
 /** A "reason" why a block was invalid, suitable for determining whether the
@@ -64,14 +57,6 @@ enum class TxValidationResult {
 enum class BlockValidationResult {
     BLOCK_RESULT_UNSET = 0,  //!< initial value. Block has not yet been rejected
     BLOCK_CONSENSUS,         //!< invalid by consensus rules (excluding any below reasons)
-    /**
-     * Invalid by a change to consensus rules more recent than SegWit.
-     * Currently unused as there are no such consensus rule changes, and any download
-     * sources realistically need to support SegWit in order to provide useful data,
-     * so differentiating between always-invalid and invalid-by-pre-SegWit-soft-fork
-     * is uninteresting.
-     */
-    BLOCK_RECENT_CONSENSUS_CHANGE,
     BLOCK_CACHED_INVALID,    //!< this block was cached as being invalid and we didn't store the reason why
     BLOCK_INVALID_HEADER,    //!< invalid proof of work or time too old
     BLOCK_MUTATED,           //!< the block's data didn't match the data committed to by the PoW
@@ -147,16 +132,16 @@ class BlockValidationState : public ValidationState<BlockValidationResult> {};
 // weight = (stripped_size * 3) + total_size.
 static inline int32_t GetTransactionWeight(const CTransaction& tx)
 {
-    return ::GetSerializeSize(tx, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS) * (WITNESS_SCALE_FACTOR - 1) + ::GetSerializeSize(tx, PROTOCOL_VERSION);
+    return ::GetSerializeSize(TX_NO_WITNESS(tx)) * (WITNESS_SCALE_FACTOR - 1) + ::GetSerializeSize(TX_WITH_WITNESS(tx));
 }
 static inline int64_t GetBlockWeight(const CBlock& block)
 {
-    return ::GetSerializeSize(block, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS) * (WITNESS_SCALE_FACTOR - 1) + ::GetSerializeSize(block, PROTOCOL_VERSION);
+    return ::GetSerializeSize(TX_NO_WITNESS(block)) * (WITNESS_SCALE_FACTOR - 1) + ::GetSerializeSize(TX_WITH_WITNESS(block));
 }
 static inline int64_t GetTransactionInputWeight(const CTxIn& txin)
 {
     // scriptWitness size is added here because witnesses and txins are split up in segwit serialization.
-    return ::GetSerializeSize(txin, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS) * (WITNESS_SCALE_FACTOR - 1) + ::GetSerializeSize(txin, PROTOCOL_VERSION) + ::GetSerializeSize(txin.scriptWitness.stack, PROTOCOL_VERSION);
+    return ::GetSerializeSize(TX_NO_WITNESS(txin)) * (WITNESS_SCALE_FACTOR - 1) + ::GetSerializeSize(TX_WITH_WITNESS(txin)) + ::GetSerializeSize(txin.scriptWitness.stack);
 }
 
 /** Compute at which vout of the block's coinbase transaction the witness commitment occurs, or -1 if not found */

@@ -3,12 +3,23 @@
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 
 #include <bench/bench.h>
-#include <bench/data.h>
+#include <bench/data/block413567.raw.h>
 #include <chainparams.h>
-#include <clientversion.h>
+#include <flatfile.h>
+#include <node/blockstorage.h>
+#include <span.h>
+#include <streams.h>
 #include <test/util/setup_common.h>
-#include <util/chaintype.h>
+#include <uint256.h>
+#include <util/fs.h>
 #include <validation.h>
+
+#include <cstdint>
+#include <cstdio>
+#include <map>
+#include <memory>
+#include <stdexcept>
+#include <vector>
 
 /**
  * The LoadExternalBlockFile() function is used during -reindex and -loadblock.
@@ -55,7 +66,7 @@ static void LoadExternalBlockFile(benchmark::Bench& bench)
     bench.run([&] {
         // "rb" is "binary, O_RDONLY", positioned to the start of the file.
         // The file will be closed by LoadExternalBlockFile().
-        CAutoFile file{fsbridge::fopen(blkfile, "rb"), CLIENT_VERSION};
+        AutoFile file{fsbridge::fopen(blkfile, "rb")};
         testing_setup->m_node.chainman->LoadExternalBlockFile(file, &pos, &blocks_with_unknown_parent);
     });
     fs::remove(blkfile);

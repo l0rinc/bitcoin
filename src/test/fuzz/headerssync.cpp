@@ -48,6 +48,7 @@ public:
 
 FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
 {
+    SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     auto mock_time{ConsumeTime(fuzzed_data_provider)};
 
@@ -108,7 +109,7 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
 
                     // If we get to redownloading, the presynced headers need
                     // to have the min amount of work on them.
-                    assert(CalculateHeadersWork(all_headers) >= min_work);
+                    assert(CalculateClaimedHeadersWork(all_headers) >= min_work);
                 }
             }
 

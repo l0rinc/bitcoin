@@ -16,6 +16,7 @@
 #include <util/fs.h>
 #include <util/fs_helpers.h>
 #include <util/strencodings.h>
+#include <util/string.h>
 
 #ifdef WIN32
 #include <codecvt>    /* for codecvt_utf8_utf16 */
@@ -28,7 +29,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <filesystem>
 #include <map>
 #include <optional>
 #include <stdexcept>
@@ -160,6 +160,7 @@ std::list<SectionInfo> ArgsManager::GetUnrecognizedSections() const
         ChainTypeToString(ChainType::REGTEST),
         ChainTypeToString(ChainType::SIGNET),
         ChainTypeToString(ChainType::TESTNET),
+        ChainTypeToString(ChainType::TESTNET4),
         ChainTypeToString(ChainType::MAIN),
     };
 
@@ -183,7 +184,7 @@ bool ArgsManager::ParseParameters(int argc, const char* const argv[], std::strin
     for (int i = 1; i < argc; i++) {
         std::string key(argv[i]);
 
-#ifdef MAC_OSX
+#ifdef __APPLE__
         // At the first time when a user gets the "App downloaded from the
         // internet" warning, and clicks the Open button, macOS passes
         // a unique process serial number (PSN) as -psn_... command-line
@@ -278,7 +279,7 @@ fs::path ArgsManager::GetPathArg(std::string arg, const fs::path& default_value)
     return result.has_filename() ? result : result.parent_path();
 }
 
-const fs::path& ArgsManager::GetBlocksDirPath() const
+fs::path ArgsManager::GetBlocksDirPath() const
 {
     LOCK(cs_args);
     fs::path& path = m_cached_blocks_path;
@@ -303,7 +304,7 @@ const fs::path& ArgsManager::GetBlocksDirPath() const
     return path;
 }
 
-const fs::path& ArgsManager::GetDataDir(bool net_specific) const
+fs::path ArgsManager::GetDataDir(bool net_specific) const
 {
     LOCK(cs_args);
     fs::path& path = net_specific ? m_cached_network_datadir_path : m_cached_datadir_path;
@@ -588,6 +589,23 @@ void ArgsManager::AddHiddenArgs(const std::vector<std::string>& names)
     }
 }
 
+void ArgsManager::CheckMultipleCLIArgs() const
+{
+    LOCK(cs_args);
+    std::vector<std::string> found{};
+    auto cmds = m_available_args.find(OptionsCategory::CLI_COMMANDS);
+    if (cmds != m_available_args.end()) {
+        for (const auto& [cmd, argspec] : cmds->second) {
+            if (IsArgSet(cmd)) {
+                found.push_back(cmd);
+            }
+        }
+        if (found.size() > 1) {
+            throw std::runtime_error(strprintf("Only one of %s may be specified.", util::Join(found, ", ")));
+        }
+    }
+}
+
 std::string ArgsManager::GetHelpMessage() const
 {
     const bool show_debug = GetBoolArg("-help-debug", false);
@@ -617,6 +635,9 @@ std::string ArgsManager::GetHelpMessage() const
             case OptionsCategory::RPC:
                 usage += HelpMessageGroup("RPC server options:");
                 break;
+            case OptionsCategory::IPC:
+                usage += HelpMessageGroup("IPC interprocess connection options:");
+                break;
             case OptionsCategory::WALLET:
                 usage += HelpMessageGroup("Wallet options:");
                 break;
@@ -634,6 +655,9 @@ std::string ArgsManager::GetHelpMessage() const
                 break;
             case OptionsCategory::REGISTER_COMMANDS:
                 usage += HelpMessageGroup("Register Commands:");
+                break;
+            case OptionsCategory::CLI_COMMANDS:
+                usage += HelpMessageGroup("CLI Commands:");
                 break;
             default:
                 break;
@@ -664,8 +688,8 @@ bool HelpRequested(const ArgsManager& args)
 
 void SetupHelpOptions(ArgsManager& args)
 {
-    args.AddArg("-?", "Print this help message and exit", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
-    args.AddHiddenArgs({"-h", "-help"});
+    args.AddArg("-help", "Print this help message and exit (also -h or -?)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    args.AddHiddenArgs({"-h", "-?"});
 }
 
 static const int screenWidth = 79;
@@ -683,14 +707,34 @@ std::string HelpMessageOpt(const std::string &option, const std::string &message
            std::string("\n\n");
 }
 
+const std::vector<std::string> TEST_OPTIONS_DOC{
+    "addrman (use deterministic addrman)",
+    "bip94 (enforce BIP94 consensus rules)",
+};
+
+bool HasTestOption(const ArgsManager& args, const std::string& test_option)
+{
+    const auto options = args.GetArgs("-test");
+    return std::any_of(options.begin(), options.end(), [test_option](const auto& option) {
+        return option == test_option;
+    });
+}
+
 fs::path GetDefaultDataDir()
 {
-    // Windows: C:\Users\Username\AppData\Roaming\Bitcoin
+    // Windows:
+    //   old: C:\Users\Username\AppData\Roaming\Bitcoin
+    //   new: C:\Users\Username\AppData\Local\Bitcoin
     // macOS: ~/Library/Application Support/Bitcoin
     // Unix-like: ~/.bitcoin
 #ifdef WIN32
     // Windows
-    return GetSpecialFolderPath(CSIDL_APPDATA) / "Bitcoin";
+    // Check for existence of datadir in old location and keep it there
+    fs::path legacy_path = GetSpecialFolderPath(CSIDL_APPDATA) / "Bitcoin";
+    if (fs::exists(legacy_path)) return legacy_path;
+
+    // Otherwise, fresh installs can start in the new, "proper" location
+    return GetSpecialFolderPath(CSIDL_LOCAL_APPDATA) / "Bitcoin";
 #else
     fs::path pathRet;
     char* pszHome = getenv("HOME");
@@ -698,7 +742,7 @@ fs::path GetDefaultDataDir()
         pathRet = fs::path("/");
     else
         pathRet = fs::path(pszHome);
-#ifdef MAC_OSX
+#ifdef __APPLE__
     // macOS
     return pathRet / "Library/Application Support/Bitcoin";
 #else
@@ -718,6 +762,13 @@ fs::path ArgsManager::GetConfigFilePath() const
 {
     LOCK(cs_args);
     return *Assert(m_config_path);
+}
+
+void ArgsManager::SetConfigFilePath(fs::path path)
+{
+    LOCK(cs_args);
+    assert(!m_config_path);
+    m_config_path = path;
 }
 
 ChainType ArgsManager::GetChainType() const
@@ -748,10 +799,11 @@ std::variant<ChainType, std::string> ArgsManager::GetChainArg() const
     const bool fRegTest = get_net("-regtest");
     const bool fSigNet  = get_net("-signet");
     const bool fTestNet = get_net("-testnet");
+    const bool fTestNet4 = get_net("-testnet4");
     const auto chain_arg = GetArg("-chain");
 
-    if ((int)chain_arg.has_value() + (int)fRegTest + (int)fSigNet + (int)fTestNet > 1) {
-        throw std::runtime_error("Invalid combination of -regtest, -signet, -testnet and -chain. Can use at most one.");
+    if ((int)chain_arg.has_value() + (int)fRegTest + (int)fSigNet + (int)fTestNet + (int)fTestNet4 > 1) {
+        throw std::runtime_error("Invalid combination of -regtest, -signet, -testnet, -testnet4 and -chain. Can use at most one.");
     }
     if (chain_arg) {
         if (auto parsed = ChainTypeFromString(*chain_arg)) return *parsed;
@@ -761,6 +813,7 @@ std::variant<ChainType, std::string> ArgsManager::GetChainArg() const
     if (fRegTest) return ChainType::REGTEST;
     if (fSigNet) return ChainType::SIGNET;
     if (fTestNet) return ChainType::TESTNET;
+    if (fTestNet4) return ChainType::TESTNET4;
     return ChainType::MAIN;
 }
 

@@ -7,9 +7,11 @@
 #include <common/system.h>
 #include <key.h>
 #include <prevector.h>
-#include <pubkey.h>
 #include <random.h>
 
+#include <cstddef>
+#include <cstdint>
+#include <utility>
 #include <vector>
 
 static const size_t BATCHES = 101;
@@ -25,22 +27,23 @@ static void CCheckQueueSpeedPrevectorJob(benchmark::Bench& bench)
     // We shouldn't ever be running with the checkqueue on a single core machine.
     if (GetNumCores() <= 1) return;
 
-    ECC_Start();
+    ECC_Context ecc_context{};
 
     struct PrevectorJob {
         prevector<PREVECTOR_SIZE, uint8_t> p;
         explicit PrevectorJob(FastRandomContext& insecure_rand){
             p.resize(insecure_rand.randrange(PREVECTOR_SIZE*2));
         }
-        bool operator()()
+        std::optional<int> operator()()
         {
-            return true;
+            return std::nullopt;
         }
     };
-    CCheckQueue<PrevectorJob> queue {QUEUE_BATCH_SIZE};
+
     // The main thread should be counted to prevent thread oversubscription, and
     // to decrease the variance of benchmark results.
-    queue.StartWorkerThreads(GetNumCores() - 1);
+    int worker_threads_num{GetNumCores() - 1};
+    CCheckQueue<PrevectorJob> queue{QUEUE_BATCH_SIZE, worker_threads_num};
 
     // create all the data once, then submit copies in the benchmark.
     FastRandomContext insecure_rand(true);
@@ -59,9 +62,7 @@ static void CCheckQueueSpeedPrevectorJob(benchmark::Bench& bench)
         }
         // control waits for completion by RAII, but
         // it is done explicitly here for clarity
-        control.Wait();
+        control.Complete();
     });
-    queue.StopWorkerThreads();
-    ECC_Stop();
 }
 BENCHMARK(CCheckQueueSpeedPrevectorJob, benchmark::PriorityLevel::HIGH);

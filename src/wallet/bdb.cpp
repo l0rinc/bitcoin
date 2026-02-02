@@ -65,6 +65,8 @@ RecursiveMutex cs_db;
 std::map<std::string, std::weak_ptr<BerkeleyEnvironment>> g_dbenvs GUARDED_BY(cs_db); //!< Map from directory name to db environment.
 } // namespace
 
+static constexpr auto REVERSE_BYTE_ORDER{std::endian::native == std::endian::little ? 4321 : 1234};
+
 bool WalletDatabaseFileId::operator==(const WalletDatabaseFileId& rhs) const
 {
     return memcmp(value, &rhs.value, sizeof(value)) == 0;
@@ -149,7 +151,7 @@ bool BerkeleyEnvironment::Open(bilingual_str& err)
 
     fs::path pathIn = fs::PathFromString(strPath);
     TryCreateDirectories(pathIn);
-    if (!LockDirectory(pathIn, ".walletlock")) {
+    if (util::LockDirectory(pathIn, ".walletlock") != util::LockResult::Success) {
         LogPrintf("Cannot obtain a lock on wallet directory %s. Another instance may be using it.\n", strPath);
         err = strprintf(_("Error initializing wallet database environment %s!"), fs::quoted(fs::PathToString(Directory())));
         return false;
@@ -209,7 +211,7 @@ BerkeleyEnvironment::BerkeleyEnvironment() : m_use_shared_memory(false)
 {
     Reset();
 
-    LogPrint(BCLog::WALLETDB, "BerkeleyEnvironment::MakeMock\n");
+    LogDebug(BCLog::WALLETDB, "BerkeleyEnvironment::MakeMock\n");
 
     dbenv->set_cachesize(1, 0, 1);
     dbenv->set_lg_bsize(10485760 * 4);
@@ -300,7 +302,11 @@ static Span<const std::byte> SpanFromDbt(const SafeDbt& dbt)
 }
 
 BerkeleyDatabase::BerkeleyDatabase(std::shared_ptr<BerkeleyEnvironment> env, fs::path filename, const DatabaseOptions& options) :
-    WalletDatabase(), env(std::move(env)), m_filename(std::move(filename)), m_max_log_mb(options.max_log_mb)
+    WalletDatabase(),
+    env(std::move(env)),
+    m_byteswap(options.require_format == DatabaseFormat::BERKELEY_SWAP),
+    m_filename(std::move(filename)),
+    m_max_log_mb(options.max_log_mb)
 {
     auto inserted = this->env->m_databases.emplace(m_filename, std::ref(*this));
     assert(inserted.second);
@@ -387,6 +393,10 @@ void BerkeleyDatabase::Open()
                 if (ret != 0) {
                     throw std::runtime_error(strprintf("BerkeleyDatabase: Failed to configure for no temp file backing for database %s", strFile));
                 }
+            }
+
+            if (m_byteswap) {
+                pdb_temp->set_lorder(REVERSE_BYTE_ORDER);
             }
 
             ret = pdb_temp->open(nullptr,                             // Txn pointer
@@ -521,6 +531,10 @@ bool BerkeleyDatabase::Rewrite(const char* pszSkip)
                     BerkeleyBatch db(*this, true);
                     std::unique_ptr<Db> pdbCopy = std::make_unique<Db>(env->dbenv.get(), 0);
 
+                    if (m_byteswap) {
+                        pdbCopy->set_lorder(REVERSE_BYTE_ORDER);
+                    }
+
                     int ret = pdbCopy->open(nullptr,               // Txn pointer
                                             strFileRes.c_str(), // Filename
                                             "main",             // Logical db name
@@ -591,7 +605,7 @@ void BerkeleyEnvironment::Flush(bool fShutdown)
 {
     const auto start{SteadyClock::now()};
     // Flush log data to the actual data file on all files that are not in use
-    LogPrint(BCLog::WALLETDB, "BerkeleyEnvironment::Flush: [%s] Flush(%s)%s\n", strPath, fShutdown ? "true" : "false", fDbEnvInit ? "" : " database not started");
+    LogDebug(BCLog::WALLETDB, "BerkeleyEnvironment::Flush: [%s] Flush(%s)%s\n", strPath, fShutdown ? "true" : "false", fDbEnvInit ? "" : " database not started");
     if (!fDbEnvInit)
         return;
     {
@@ -602,22 +616,22 @@ void BerkeleyEnvironment::Flush(bool fShutdown)
             int nRefCount = db_it.second.get().m_refcount;
             if (nRefCount < 0) continue;
             const std::string strFile = fs::PathToString(filename);
-            LogPrint(BCLog::WALLETDB, "BerkeleyEnvironment::Flush: Flushing %s (refcount = %d)...\n", strFile, nRefCount);
+            LogDebug(BCLog::WALLETDB, "BerkeleyEnvironment::Flush: Flushing %s (refcount = %d)...\n", strFile, nRefCount);
             if (nRefCount == 0) {
                 // Move log data to the dat file
                 CloseDb(filename);
-                LogPrint(BCLog::WALLETDB, "BerkeleyEnvironment::Flush: %s checkpoint\n", strFile);
+                LogDebug(BCLog::WALLETDB, "BerkeleyEnvironment::Flush: %s checkpoint\n", strFile);
                 dbenv->txn_checkpoint(0, 0, 0);
-                LogPrint(BCLog::WALLETDB, "BerkeleyEnvironment::Flush: %s detach\n", strFile);
+                LogDebug(BCLog::WALLETDB, "BerkeleyEnvironment::Flush: %s detach\n", strFile);
                 if (!fMockDb)
                     dbenv->lsn_reset(strFile.c_str(), 0);
-                LogPrint(BCLog::WALLETDB, "BerkeleyEnvironment::Flush: %s closed\n", strFile);
+                LogDebug(BCLog::WALLETDB, "BerkeleyEnvironment::Flush: %s closed\n", strFile);
                 nRefCount = -1;
             } else {
                 no_dbs_accessed = false;
             }
         }
-        LogPrint(BCLog::WALLETDB, "BerkeleyEnvironment::Flush: Flush(%s)%s took %15dms\n", fShutdown ? "true" : "false", fDbEnvInit ? "" : " database not started", Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
+        LogDebug(BCLog::WALLETDB, "BerkeleyEnvironment::Flush: Flush(%s)%s took %15dms\n", fShutdown ? "true" : "false", fDbEnvInit ? "" : " database not started", Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
         if (fShutdown) {
             char** listp;
             if (no_dbs_accessed) {
@@ -646,7 +660,7 @@ bool BerkeleyDatabase::PeriodicFlush()
     if (m_refcount < 0) return false;
 
     const std::string strFile = fs::PathToString(m_filename);
-    LogPrint(BCLog::WALLETDB, "Flushing %s\n", strFile);
+    LogDebug(BCLog::WALLETDB, "Flushing %s\n", strFile);
     const auto start{SteadyClock::now()};
 
     // Flush wallet file so it's self contained
@@ -654,7 +668,7 @@ bool BerkeleyDatabase::PeriodicFlush()
     env->CheckpointLSN(strFile);
     m_refcount = -1;
 
-    LogPrint(BCLog::WALLETDB, "Flushed %s %dms\n", strFile, Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
+    LogDebug(BCLog::WALLETDB, "Flushed %s %dms\n", strFile, Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
 
     return true;
 }
@@ -887,7 +901,12 @@ bool BerkeleyBatch::HasKey(DataStream&& key)
 
 bool BerkeleyBatch::ErasePrefix(Span<const std::byte> prefix)
 {
-    if (!TxnBegin()) return false;
+    // Because this function erases records one by one, ensure that it is executed within a txn context.
+    // Otherwise, consistency is at risk; it's possible that certain records are removed while others
+    // remain due to an internal failure during the procedure.
+    // Additionally, the Dbc::del() cursor delete call below would fail without an active transaction.
+    if (!Assume(activeTxn)) return false;
+
     auto cursor{std::make_unique<BerkeleyCursor>(m_database, *this)};
     // const_cast is safe below even though prefix_key is an in/out parameter,
     // because we are not using the DB_DBT_USERMEM flag, so BDB will allocate
@@ -901,7 +920,7 @@ bool BerkeleyBatch::ErasePrefix(Span<const std::byte> prefix)
         ret = cursor->dbc()->del(0);
     }
     cursor.reset();
-    return TxnCommit() && (ret == 0 || ret == DB_NOTFOUND);
+    return ret == 0 || ret == DB_NOTFOUND;
 }
 
 void BerkeleyDatabase::AddRef()

@@ -58,14 +58,6 @@
         <translation type="unfinished">Т&amp;аңдау</translation>
     </message>
     <message>
-        <source>Sending addresses</source>
-        <translation type="unfinished">Жіберуші мекенжайлар</translation>
-    </message>
-    <message>
-        <source>Receiving addresses</source>
-        <translation type="unfinished">Қабылдаушы мекенжайлар</translation>
-    </message>
-    <message>
         <source>These are your Bitcoin addresses for sending payments. Always check the amount and the receiving address before sending coins.</source>
         <translation type="unfinished">Бұл сіздің төлем жіберетін Bitcoin мекенжайларыңыз. Тиын жібермес бұрын, әрқашан сома мен алушы мекенжайды тексеріңіз.</translation>
     </message>
@@ -489,7 +481,7 @@
     </message>
     <message>
         <source>%1 behind</source>
-        <translation type="unfinished">%1 артта</translation>
+        <translation type="unfinished">%1 қалмады</translation>
     </message>
     <message>
         <source>Catching up…</source>
@@ -497,7 +489,7 @@
     </message>
     <message>
         <source>Error</source>
-        <translation type="unfinished">Қате</translation>
+        <translation type="unfinished">қате</translation>
     </message>
     <message>
         <source>Warning</source>
@@ -505,7 +497,7 @@
     </message>
     <message>
         <source>Information</source>
-        <translation type="unfinished">Ақпарат</translation>
+        <translation type="unfinished">Информация</translation>
     </message>
     <message>
         <source>Up to date</source>
@@ -551,10 +543,6 @@
         <translation type="unfinished">Комиссия</translation>
     </message>
     <message>
-        <source>Dust:</source>
-        <translation type="unfinished">Шаң</translation>
-    </message>
-    <message>
         <source>After Fee:</source>
         <translation type="unfinished">Комиссия алу кейін</translation>
     </message>
@@ -573,10 +561,6 @@
     <message>
         <source>Confirmed</source>
         <translation type="unfinished">Растық</translation>
-    </message>
-    <message>
-        <source>yes</source>
-        <translation type="unfinished">Иа</translation>
     </message>
     <message>
         <source>(no label)</source>
@@ -653,7 +637,7 @@
     </message>
     <message>
         <source>Error</source>
-        <translation type="unfinished">қате</translation>
+        <translation type="unfinished">Қате</translation>
     </message>
     <message>
         <source>This initial synchronisation is very demanding, and may expose hardware problems with your computer that had previously gone unnoticed. Each time you run %1, it will continue downloading where it left off.</source>
@@ -675,16 +659,12 @@
         <translation type="unfinished">Әмиян</translation>
     </message>
     <message>
-        <source>Map port using &amp;UPnP</source>
-        <translation type="unfinished">UPnP арқылы порт &amp;сәйкестендіру</translation>
-    </message>
-    <message>
         <source>&amp;Window</source>
         <translation type="unfinished">&amp;Терезе</translation>
     </message>
     <message>
         <source>Error</source>
-        <translation type="unfinished">қате</translation>
+        <translation type="unfinished">Қате</translation>
     </message>
     </context>
 <context>
@@ -771,10 +751,6 @@
     <message>
         <source>After Fee:</source>
         <translation type="unfinished">Комиссия алу кейін</translation>
-    </message>
-    <message>
-        <source>Dust:</source>
-        <translation type="unfinished">Шаң</translation>
     </message>
     <message numerus="yes">
         <source>Estimated to begin confirmation within %n block(s).</source>
@@ -879,7 +855,7 @@
     </message>
     <message>
         <source>Error</source>
-        <translation type="unfinished">қате</translation>
+        <translation type="unfinished">Қате</translation>
     </message>
     </context>
 <context>

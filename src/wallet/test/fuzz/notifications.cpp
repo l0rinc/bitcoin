@@ -1,22 +1,48 @@
-// Copyright (c) 2021-2022 The Bitcoin Core developers
+// Copyright (c) 2021-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <addresstype.h>
+#include <consensus/amount.h>
+#include <interfaces/chain.h>
 #include <kernel/chain.h>
+#include <outputtype.h>
+#include <policy/feerate.h>
+#include <policy/policy.h>
+#include <primitives/block.h>
+#include <primitives/transaction.h>
+#include <script/descriptor.h>
+#include <script/script.h>
+#include <script/signingprovider.h>
+#include <sync.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
+#include <test/fuzz/util/wallet.h>
 #include <test/util/setup_common.h>
+#include <tinyformat.h>
+#include <uint256.h>
+#include <util/check.h>
+#include <util/result.h>
+#include <util/time.h>
 #include <util/translation.h>
+#include <wallet/coincontrol.h>
 #include <wallet/context.h>
+#include <wallet/fees.h>
 #include <wallet/receive.h>
+#include <wallet/spend.h>
+#include <wallet/test/util.h>
 #include <wallet/wallet.h>
-#include <wallet/walletdb.h>
 #include <wallet/walletutil.h>
 
-#include <cassert>
+#include <cstddef>
 #include <cstdint>
+#include <limits>
+#include <numeric>
+#include <set>
 #include <string>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 namespace wallet {
@@ -29,66 +55,25 @@ void initialize_setup()
     g_setup = testing_setup.get();
 }
 
-/**
- * Wraps a descriptor wallet for fuzzing. The constructor writes the sqlite db
- * to disk, the destructor deletes it.
- */
-struct FuzzedWallet {
-    ArgsManager args;
-    WalletContext context;
-    std::shared_ptr<CWallet> wallet;
-    FuzzedWallet(const std::string& name)
-    {
-        context.args = &args;
-        context.chain = g_setup->m_node.chain.get();
-
-        DatabaseOptions options;
-        options.require_create = true;
-        options.create_flags = WALLET_FLAG_DESCRIPTORS;
-        const std::optional<bool> load_on_start;
-        gArgs.ForceSetArg("-keypool", "0"); // Avoid timeout in TopUp()
-
-        DatabaseStatus status;
-        bilingual_str error;
-        std::vector<bilingual_str> warnings;
-        wallet = CreateWallet(context, name, load_on_start, options, status, error, warnings);
-        assert(wallet);
-        assert(error.empty());
-        assert(warnings.empty());
-        assert(wallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS));
-    }
-    ~FuzzedWallet()
-    {
-        const auto name{wallet->GetName()};
-        std::vector<bilingual_str> warnings;
-        std::optional<bool> load_on_start;
-        assert(RemoveWallet(context, wallet, load_on_start, warnings));
-        assert(warnings.empty());
-        UnloadWallet(std::move(wallet));
-        fs::remove_all(GetWalletDir() / fs::PathFromString(name));
-    }
-    CScript GetScriptPubKey(FuzzedDataProvider& fuzzed_data_provider)
-    {
-        auto type{fuzzed_data_provider.PickValueInArray(OUTPUT_TYPES)};
-        util::Result<CTxDestination> op_dest{util::Error{}};
-        if (fuzzed_data_provider.ConsumeBool()) {
-            op_dest = wallet->GetNewDestination(type, "");
-        } else {
-            op_dest = wallet->GetNewChangeDestination(type);
-        }
-        return GetScriptForDestination(*Assert(op_dest));
-    }
-};
-
 FUZZ_TARGET(wallet_notifications, .init = initialize_setup)
 {
+    SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
+    SetMockTime(ConsumeTime(fuzzed_data_provider));
     // The total amount, to be distributed to the wallets a and b in txs
     // without fee. Thus, the balance of the wallets should always equal the
     // total amount.
-    const auto total_amount{ConsumeMoney(fuzzed_data_provider)};
-    FuzzedWallet a{"fuzzed_wallet_a"};
-    FuzzedWallet b{"fuzzed_wallet_b"};
+    const auto total_amount{ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY / 100000)};
+    FuzzedWallet a{
+        *g_setup->m_node.chain,
+        "fuzzed_wallet_a",
+        "tprv8ZgxMBicQKsPd1QwsGgzfu2pcPYbBosZhJknqreRHgsWx32nNEhMjGQX2cgFL8n6wz9xdDYwLcs78N4nsCo32cxEX8RBtwGsEGgybLiQJfk",
+    };
+    FuzzedWallet b{
+        *g_setup->m_node.chain,
+        "fuzzed_wallet_b",
+        "tprv8ZgxMBicQKsPfCunYTF18sEmEyjz8TfhGnZ3BoVAhkqLv7PLkQgmoG2Ecsp4JuqciWnkopuEwShit7st743fdmB9cMD4tznUkcs33vK51K9",
+    };
 
     // Keep track of all coins in this test.
     // Each tuple in the chain represents the coins and the block created with
@@ -100,9 +85,9 @@ FUZZ_TARGET(wallet_notifications, .init = initialize_setup)
         // Add the initial entry
         chain.emplace_back();
         auto& [coins, block]{chain.back()};
-        coins.emplace(total_amount, COutPoint{uint256::ONE, 1});
+        coins.emplace(total_amount, COutPoint{Txid::FromUint256(uint256::ONE), 1});
     }
-    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 200)
+    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 20)
     {
         CallOneOf(
             fuzzed_data_provider,
@@ -123,7 +108,7 @@ FUZZ_TARGET(wallet_notifications, .init = initialize_setup)
                         coins.erase(coins.begin());
                     }
                     // Create some outputs spending all inputs, without fee
-                    LIMITED_WHILE(in > 0 && fuzzed_data_provider.ConsumeBool(), 100)
+                    LIMITED_WHILE(in > 0 && fuzzed_data_provider.ConsumeBool(), 10)
                     {
                         const auto out_value{ConsumeMoney(fuzzed_data_provider, in)};
                         in -= out_value;
@@ -135,6 +120,9 @@ FUZZ_TARGET(wallet_notifications, .init = initialize_setup)
                     tx.vout.emplace_back(in, wallet.GetScriptPubKey(fuzzed_data_provider));
                     // Add tx to block
                     block.vtx.emplace_back(MakeTransactionRef(tx));
+                    // Check that funding the tx doesn't crash the wallet
+                    a.FundTx(fuzzed_data_provider, tx);
+                    b.FundTx(fuzzed_data_provider, tx);
                 }
                 // Mine block
                 const uint256& hash = block.GetHash();

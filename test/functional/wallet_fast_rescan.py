@@ -4,8 +4,6 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test that fast rescan using block filters for descriptor wallets detects
    top-ups correctly and finds the same transactions than the slow variant."""
-from typing import List
-
 from test_framework.address import address_to_scriptpubkey
 from test_framework.descriptors import descsum_create
 from test_framework.test_framework import BitcoinTestFramework
@@ -32,7 +30,7 @@ class WalletFastRescanTest(BitcoinTestFramework):
         self.skip_if_no_wallet()
         self.skip_if_no_sqlite()
 
-    def get_wallet_txids(self, node: TestNode, wallet_name: str) -> List[str]:
+    def get_wallet_txids(self, node: TestNode, wallet_name: str) -> list[str]:
         w = node.get_wallet_rpc(wallet_name)
         txs = w.listtransactions('*', 1000000)
         return [tx['txid'] for tx in txs]
@@ -51,7 +49,7 @@ class WalletFastRescanTest(BitcoinTestFramework):
         assert_equal(len(descriptors), NUM_DESCRIPTORS)
         w.backupwallet(WALLET_BACKUP_FILENAME)
 
-        self.log.info(f"Create txs sending to end range address of each descriptor, triggering top-ups")
+        self.log.info("Create txs sending to end range address of each descriptor, triggering top-ups")
         for i in range(NUM_BLOCKS):
             self.log.info(f"Block {i+1}/{NUM_BLOCKS}")
             for desc_info in w.listdescriptors()['descriptors']:
@@ -101,4 +99,4 @@ class WalletFastRescanTest(BitcoinTestFramework):
 
 
 if __name__ == '__main__':
-    WalletFastRescanTest().main()
+    WalletFastRescanTest(__file__).main()
