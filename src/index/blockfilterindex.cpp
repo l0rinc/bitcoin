@@ -342,7 +342,7 @@ static bool LookupRange(CDBWrapper& db, const std::string& index_name, int start
 
         size_t i = static_cast<size_t>(block_index->nHeight - start_height);
         if (block_hash == values[i].first) {
-            results[i] = std::move(values[i].second);
+            results[i] = values[i].second;
             continue;
         }
 

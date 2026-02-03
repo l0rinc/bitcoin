@@ -1849,7 +1849,7 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 }
 
 CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
-    : m_dbview{std::move(db_params), std::move(options)},
+    : m_dbview{std::move(db_params), options},
       m_catcherview(&m_dbview) {}
 
 void CoinsViews::InitCache()

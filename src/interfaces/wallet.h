@@ -358,7 +358,7 @@ struct WalletAddress
     std::string name;
 
     WalletAddress(CTxDestination dest, bool is_mine, wallet::AddressPurpose purpose, std::string name)
-        : dest(std::move(dest)), is_mine(is_mine), purpose(std::move(purpose)), name(std::move(name))
+        : dest(std::move(dest)), is_mine(is_mine), purpose(purpose), name(std::move(name))
     {
     }
 };

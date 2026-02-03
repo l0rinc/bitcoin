@@ -70,7 +70,7 @@ FUZZ_TARGET(block_index, .init = init_block_index)
     files_info.reserve(files_count);
     for (int i = 0; i < files_count; i++) {
         if (auto file_info = ConsumeDeserializable<CBlockFileInfo>(fuzzed_data_provider)) {
-            files.push_back(std::make_unique<CBlockFileInfo>(std::move(*file_info)));
+            files.push_back(std::make_unique<CBlockFileInfo>(*file_info));
             files_info.emplace_back(i, files.back().get());
         } else {
             return;
@@ -85,7 +85,7 @@ FUZZ_TARGET(block_index, .init = init_block_index)
     blocks_info.reserve(blocks_count);
     for (int i = 0; i < blocks_count; i++) {
         CBlockHeader header{ConsumeBlockHeader(fuzzed_data_provider)};
-        blocks.push_back(std::make_unique<CBlockIndex>(std::move(header)));
+        blocks.push_back(std::make_unique<CBlockIndex>(header));
         blocks.back()->phashBlock = &g_block_hash;
         blocks_info.push_back(blocks.back().get());
     }
