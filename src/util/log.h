@@ -68,7 +68,7 @@ using Level = util::log::Level;
 } // namespace BCLog
 
 template <typename... Args>
-inline void LogPrintFormatInternal(SourceLocation&& source_loc, BCLog::LogFlags flag, BCLog::Level level, bool should_ratelimit, util::ConstevalFormatString<sizeof...(Args)> fmt, const Args&... args)
+inline void LogPrintFormatInternal(const SourceLocation& source_loc, BCLog::LogFlags flag, BCLog::Level level, bool should_ratelimit, util::ConstevalFormatString<sizeof...(Args)> fmt, const Args&... args)
 {
     std::string log_msg;
     try {
@@ -80,7 +80,7 @@ inline void LogPrintFormatInternal(SourceLocation&& source_loc, BCLog::LogFlags 
         .category = flag,
         .level = level,
         .should_ratelimit = should_ratelimit,
-        .source_loc = std::move(source_loc),
+        .source_loc = source_loc,
         .message = std::move(log_msg)});
 }
 
