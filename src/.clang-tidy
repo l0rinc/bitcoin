@@ -36,8 +36,6 @@ WarningsAsErrors: '*'
 CheckOptions:
  - key: modernize-deprecated-headers.CheckHeaderFile
    value: false
- - key: performance-move-const-arg.CheckTriviallyCopyableMove
-   value: false
  - key: bugprone-unhandled-self-assignment.WarnOnlyIfThisHasSuspiciousField
    value: false
  - key: bugprone-unused-return-value.CheckedReturnTypes
