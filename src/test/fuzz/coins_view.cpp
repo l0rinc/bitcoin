@@ -70,7 +70,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& backend
                         assert(!possible_overwrite);
                     }
                 } else {
-                    coins_view_cache.EmplaceCoinInternalDANGER(std::move(outpoint), std::move(coin));
+                    coins_view_cache.EmplaceCoinInternalDANGER(outpoint, std::move(coin));
                 }
             },
             [&] {
