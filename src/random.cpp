@@ -409,7 +409,7 @@ public:
      * If always_use_real_rng is false, and MakeDeterministic has been called before, output
      * from the deterministic PRNG instead.
      */
-    bool MixExtract(unsigned char* out, size_t num, CSHA512&& hasher, bool strong_seed, bool always_use_real_rng) noexcept EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
+    bool MixExtract(unsigned char* out, size_t num, CSHA512& hasher, bool strong_seed, bool always_use_real_rng) noexcept EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
         assert(num <= 32);
         unsigned char buf[64];
@@ -508,7 +508,8 @@ void SeedStrengthen(CSHA512& hasher, RNGState& rng, SteadyClock::duration dur) n
     // Generate 32 bytes of entropy from the RNG, and a copy of the entropy already in hasher.
     // Never use the deterministic PRNG for this, as the result is only used internally.
     unsigned char strengthen_seed[32];
-    rng.MixExtract(strengthen_seed, sizeof(strengthen_seed), CSHA512(hasher), false, /*always_use_real_rng=*/true);
+    CSHA512 strengthen_hasher{hasher};
+    rng.MixExtract(strengthen_seed, sizeof(strengthen_seed), strengthen_hasher, false, /*always_use_real_rng=*/true);
     // Strengthen the seed, and feed it into hasher.
     Strengthen(strengthen_seed, dur, hasher);
 }
@@ -580,11 +581,11 @@ void ProcRand(unsigned char* out, int num, RNGLevel level, bool always_use_real_
     }
 
     // Combine with and update state
-    if (!rng.MixExtract(out, num, std::move(hasher), false, always_use_real_rng)) {
+    if (!rng.MixExtract(out, num, hasher, false, always_use_real_rng)) {
         // On the first invocation, also seed with SeedStartup().
         CSHA512 startup_hasher;
         SeedStartup(startup_hasher, rng);
-        rng.MixExtract(out, num, std::move(startup_hasher), true, always_use_real_rng);
+        rng.MixExtract(out, num, startup_hasher, true, always_use_real_rng);
     }
 }
 
@@ -679,7 +680,7 @@ bool Random_SanityCheck()
     CSHA512 to_add;
     to_add.Write((const unsigned char*)&start, sizeof(start));
     to_add.Write((const unsigned char*)&stop, sizeof(stop));
-    GetRNGState().MixExtract(nullptr, 0, std::move(to_add), false, /*always_use_real_rng=*/true);
+    GetRNGState().MixExtract(nullptr, 0, to_add, false, /*always_use_real_rng=*/true);
 
     return true;
 }
