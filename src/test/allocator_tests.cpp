@@ -5,6 +5,8 @@
 #include <common/system.h>
 #include <support/lockedpool.h>
 
+#include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -220,8 +222,11 @@ BOOST_AUTO_TEST_CASE(lockedpool_tests_live)
     void *a0 = pool.alloc(16);
     BOOST_CHECK(a0);
     // Test reading and writing the allocated memory
-    *((uint32_t*)a0) = 0x1234;
-    BOOST_CHECK(*((uint32_t*)a0) == 0x1234);
+    uint32_t value = 0x1234;
+    std::memcpy(a0, &value, sizeof(value));
+    uint32_t read_value;
+    std::memcpy(&read_value, a0, sizeof(read_value));
+    BOOST_CHECK_EQUAL(read_value, value);
 
     pool.free(a0);
     try { // Test exception on double-free
