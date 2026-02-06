@@ -731,7 +731,8 @@ private:
      * but must be cleaned up when we finish validating a subpackage, whether accepted or rejected. The cache must also
      * be cleared when mempool contents change (when a changeset is applied or when the mempool trims itself) because it
      * can return cached coins that no longer exist in the backend. Use CleanupTemporaryCoins() anytime you are finished
-     * with a SubPackageState or call LimitMempoolSize().
+     * with a SubPackageState or call LimitMempoolSize(). The cache starts with an empty backend and
+     * is connected to m_viewmempool only for portions of validation that need to perform lookups.
      */
     CCoinsViewCache m_view;
 
@@ -866,8 +867,8 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     }
 
     // This is const, but calls into the back end CoinsViews. The CCoinsViewDB at the bottom of the
-    // hierarchy brings the best block into scope. See CCoinsViewDB::GetBestBlock().
-    m_view.GetBestBlock();
+    // hierarchy brings the best block into scope.
+    const uint256 best_block{m_view.GetBestBlock()};
 
     // We have all inputs cached now, so disconnect m_view from the mempool and UTXO set
     // (to protect against bugs where we pull more inputs from disk that miss being added
@@ -878,7 +879,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // previously. Useful for keeping track of which coins were pulled from disk.
     m_view.SetBackend(CCoinsViewEmpty::Get());
 
-    assert(m_active_chainstate.m_blockman.LookupBlockIndex(m_view.GetBestBlock()) == m_active_chainstate.m_chain.Tip());
+    assert(m_active_chainstate.m_blockman.LookupBlockIndex(best_block) == m_active_chainstate.m_chain.Tip());
 
     // Only accept BIP68 sequence locked transactions that can be mined in the next
     // block; we don't want our mempool filled up with transactions that can't
