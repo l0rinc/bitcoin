@@ -155,10 +155,10 @@ public:
         try {
             DataStream ssKey{GetKeyImpl()};
             ssKey >> key;
+            return true;
         } catch (const std::exception&) {
             return false;
         }
-        return true;
     }
 
     template<typename V> bool GetValue(V& value) {
@@ -166,10 +166,10 @@ public:
             DataStream ssValue{GetValueImpl()};
             dbwrapper_private::GetObfuscation(parent)(ssValue);
             ssValue >> value;
+            return true;
         } catch (const std::exception&) {
             return false;
         }
-        return true;
     }
 };
 
@@ -203,32 +203,28 @@ public:
     CDBWrapper(const CDBWrapper&) = delete;
     CDBWrapper& operator=(const CDBWrapper&) = delete;
 
-    template <typename K, typename V>
-    bool Read(const K& key, V& value) const
+    template <typename K>
+    std::optional<std::string> ReadRaw(const K& key) const
     {
         DataStream ssKey{};
         ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey << key;
-        std::optional<std::string> strValue{ReadImpl(ssKey)};
-        if (!strValue) {
-            return false;
-        }
+        return ReadImpl(ssKey);
+    }
+
+    template <typename K, typename V>
+    bool Read(const K& key, V& value) const
+    {
+        auto strValue{ReadRaw(key)};
+        if (!strValue) return false;
         try {
             std::span ssValue{MakeWritableByteSpan(*strValue)};
             m_obfuscation(ssValue);
             SpanReader{ssValue} >> value;
+            return true;
         } catch (const std::exception&) {
             return false;
         }
-        return true;
-    }
-
-    template <typename K, typename V>
-    void Write(const K& key, const V& value, bool fSync = false)
-    {
-        CDBBatch batch(*this);
-        batch.Write(key, value);
-        WriteBatch(batch, fSync);
     }
 
     template <typename K>
@@ -238,6 +234,14 @@ public:
         ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey << key;
         return ExistsImpl(ssKey);
+    }
+
+    template <typename K, typename V>
+    void Write(const K& key, const V& value, bool fSync = false)
+    {
+        CDBBatch batch(*this);
+        batch.Write(key, value);
+        WriteBatch(batch, fSync);
     }
 
     template <typename K>
