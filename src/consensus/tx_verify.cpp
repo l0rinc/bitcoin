@@ -161,8 +161,10 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
     return nSigOps;
 }
 
-bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee)
+bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee, std::vector<int>* prev_heights)
 {
+    if (prev_heights) assert(prev_heights->size() == tx.vin.size());
+
     CAmount nValueIn = 0;
     for (unsigned int i = 0; i < tx.vin.size(); ++i) {
         const COutPoint &prevout = tx.vin[i].prevout;
@@ -172,6 +174,9 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
         if (coin.IsSpent()) {
             return state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missingorspent",
                                  strprintf("%s: inputs missing/spent", __func__));
+        }
+        if (prev_heights) {
+            (*prev_heights)[i] = coin.nHeight;
         }
 
         // If prev is coinbase, check that it's matured

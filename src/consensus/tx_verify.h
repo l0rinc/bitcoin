@@ -23,9 +23,12 @@ namespace Consensus {
  * Check whether all inputs of this transaction are valid (no double spends and amounts)
  * This does not modify the UTXO set. This does not check scripts and sigs.
  * @param[out] txfee Set to the transaction fee if successful.
+ * @param[out] prev_heights If provided, it must be sized to tx.vin.size() and
+ *                          will be filled with the confirmation heights of the
+ *                          spent outputs (for use in BIP68 sequence locks).
  * Preconditions: tx.IsCoinBase() is false.
  */
-[[nodiscard]] bool CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee);
+[[nodiscard]] bool CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee, std::vector<int>* prev_heights = nullptr);
 } // namespace Consensus
 
 /** Auxiliary functions for transaction validation (ideally should not be exposed) */
