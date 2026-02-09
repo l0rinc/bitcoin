@@ -2061,6 +2061,12 @@ void PeerManagerImpl::BlockConnected(
     if (role.historical) {
         return;
     }
+    // During initial block download, transaction announcements are discarded and we
+    // do not request transactions. TxDownloadManager has no relevant state to
+    // maintain on new blocks.
+    if (m_chainman.IsInitialBlockDownload()) {
+        return;
+    }
     LOCK(m_tx_download_mutex);
     m_txdownloadman.BlockConnected(pblock);
 }

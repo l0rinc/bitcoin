@@ -124,11 +124,14 @@ void CCoinsViewCache::EmplaceCoinInternalDANGER(COutPoint&& outpoint, Coin&& coi
 void AddCoins(CCoinsViewCache& cache, const CTransaction &tx, int nHeight, bool check_for_overwrite) {
     bool fCoinbase = tx.IsCoinBase();
     const Txid& txid = tx.GetHash();
+    // Reuse the outpoint to avoid copying the txid twice per output.
+    COutPoint outpoint{txid, 0};
     for (size_t i = 0; i < tx.vout.size(); ++i) {
-        bool overwrite = check_for_overwrite ? cache.HaveCoin(COutPoint(txid, i)) : fCoinbase;
+        outpoint.n = static_cast<uint32_t>(i);
+        bool overwrite = check_for_overwrite ? cache.HaveCoin(outpoint) : fCoinbase;
         // Coinbase transactions can always be overwritten, in order to correctly
         // deal with the pre-BIP30 occurrences of duplicate coinbase transactions.
-        cache.AddCoin(COutPoint(txid, i), Coin(tx.vout[i], nHeight, fCoinbase), overwrite);
+        cache.AddCoin(outpoint, Coin(tx.vout[i], nHeight, fCoinbase), overwrite);
     }
 }
 
