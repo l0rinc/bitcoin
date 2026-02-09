@@ -2768,6 +2768,11 @@ bool Chainstate::FlushStateToDisk(
         const auto empty_cache{(mode == FlushStateMode::FORCE_FLUSH) || fCacheLarge || fCacheCritical};
         // Combine all conditions that result in a write to disk.
         bool should_write = (mode == FlushStateMode::FORCE_SYNC) || empty_cache || fPeriodicWrite || fFlushForPrune;
+        // The coins database write is the most expensive part of a flush during IBD.
+        // Avoid writing coins in prune-only flushes during IBD; the chainstate will
+        // still be flushed on shutdown and on periodic/cache-pressure triggers.
+        const bool should_write_coins{(mode == FlushStateMode::FORCE_SYNC) || empty_cache || fPeriodicWrite ||
+            (!m_chainman.IsInitialBlockDownload() && fFlushForPrune)};
         // Write blocks, block index and best chain related state to disk.
         if (should_write) {
             LogDebug(BCLog::COINDB, "Writing chainstate to disk: flush mode=%s, prune=%d, large=%d, critical=%d, periodic=%d",
@@ -2801,7 +2806,7 @@ bool Chainstate::FlushStateToDisk(
                 m_blockman.UnlinkPrunedFiles(setFilesToPrune);
             }
 
-            if (!CoinsTip().GetBestBlock().IsNull()) {
+            if (should_write_coins && !CoinsTip().GetBestBlock().IsNull()) {
                 if (coins_mem_usage >= WARN_FLUSH_COINS_SIZE) LogWarning("Flushing large (%d GiB) UTXO set to disk, it may take several minutes", coins_mem_usage >> 30);
                 LOG_TIME_MILLIS_WITH_CATEGORY(strprintf("write coins cache to disk (%d coins, %.2fKiB)",
                     coins_count, coins_mem_usage >> 10), BCLog::BENCH);
@@ -2826,7 +2831,7 @@ bool Chainstate::FlushStateToDisk(
             }
         }
 
-        if (should_write || m_next_write == NodeClock::time_point::max()) {
+        if (should_write_coins || m_next_write == NodeClock::time_point::max()) {
             constexpr auto range{DATABASE_WRITE_INTERVAL_MAX - DATABASE_WRITE_INTERVAL_MIN};
             m_next_write = FastRandomContext().rand_uniform_delay(NodeClock::now() + DATABASE_WRITE_INTERVAL_MIN, range);
         }
