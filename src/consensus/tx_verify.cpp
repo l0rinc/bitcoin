@@ -147,15 +147,14 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
     if (tx.IsCoinBase())
         return nSigOps;
 
-    if (flags & SCRIPT_VERIFY_P2SH) {
-        nSigOps += GetP2SHSigOpCount(tx, inputs) * WITNESS_SCALE_FACTOR;
-    }
-
-    for (unsigned int i = 0; i < tx.vin.size(); i++)
-    {
+    const bool fP2SH{static_cast<bool>(flags & SCRIPT_VERIFY_P2SH)};
+    for (unsigned int i = 0; i < tx.vin.size(); i++) {
         const Coin& coin = inputs.AccessCoin(tx.vin[i].prevout);
         assert(!coin.IsSpent());
-        const CTxOut &prevout = coin.out;
+        const CTxOut& prevout{coin.out};
+        if (fP2SH && prevout.scriptPubKey.IsPayToScriptHash()) {
+            nSigOps += prevout.scriptPubKey.GetSigOpCount(tx.vin[i].scriptSig) * WITNESS_SCALE_FACTOR;
+        }
         nSigOps += CountWitnessSigOps(tx.vin[i].scriptSig, prevout.scriptPubKey, tx.vin[i].scriptWitness, flags);
     }
     return nSigOps;
