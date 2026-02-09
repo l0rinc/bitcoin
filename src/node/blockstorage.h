@@ -372,6 +372,8 @@ public:
 
     //! Mark one block file as pruned (modify associated database entries)
     void PruneOneBlockFile(int fileNumber) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    //! Mark multiple block files as pruned, scanning the block index once.
+    void PruneBlockFiles(const std::set<int>& file_numbers) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     CBlockIndex* LookupBlockIndex(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     const CBlockIndex* LookupBlockIndex(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(cs_main);

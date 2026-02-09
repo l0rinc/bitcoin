@@ -255,14 +255,17 @@ CBlockIndex* BlockManager::AddToBlockIndex(const CBlockHeader& block, CBlockInde
     return pindexNew;
 }
 
-void BlockManager::PruneOneBlockFile(const int fileNumber)
+void BlockManager::PruneBlockFiles(const std::set<int>& file_numbers)
 {
     AssertLockHeld(cs_main);
+    if (file_numbers.empty()) return;
     LOCK(cs_LastBlockFile);
 
     for (auto& entry : m_block_index) {
         CBlockIndex* pindex = &entry.second;
-        if (pindex->nFile == fileNumber) {
+        if (!file_numbers.contains(pindex->nFile)) continue;
+
+        {
             pindex->nStatus &= ~BLOCK_HAVE_DATA;
             pindex->nStatus &= ~BLOCK_HAVE_UNDO;
             pindex->nFile = 0;
@@ -285,8 +288,15 @@ void BlockManager::PruneOneBlockFile(const int fileNumber)
         }
     }
 
-    m_blockfile_info.at(fileNumber) = CBlockFileInfo{};
-    m_dirty_fileinfo.insert(fileNumber);
+    for (const int fileNumber : file_numbers) {
+        m_blockfile_info.at(fileNumber) = CBlockFileInfo{};
+        m_dirty_fileinfo.insert(fileNumber);
+    }
+}
+
+void BlockManager::PruneOneBlockFile(const int fileNumber)
+{
+    PruneBlockFiles({fileNumber});
 }
 
 void BlockManager::FindFilesToPruneManual(
@@ -310,10 +320,10 @@ void BlockManager::FindFilesToPruneManual(
             continue;
         }
 
-        PruneOneBlockFile(fileNumber);
         setFilesToPrune.insert(fileNumber);
         count++;
     }
+    PruneBlockFiles(setFilesToPrune);
     LogInfo("[%s] Prune (Manual): prune_height=%d removed %d blk/rev pairs",
         chain.GetRole(), last_block_can_prune, count);
 }
@@ -385,12 +395,12 @@ void BlockManager::FindFilesToPrune(
                 continue;
             }
 
-            PruneOneBlockFile(fileNumber);
             // Queue up the files for removal
             setFilesToPrune.insert(fileNumber);
             nCurrentUsage -= nBytesToPrune;
             count++;
         }
+        PruneBlockFiles(setFilesToPrune);
     }
 
     LogDebug(BCLog::PRUNE, "[%s] target=%dMiB actual=%dMiB diff=%dMiB min_height=%d max_prune_height=%d removed %d blk/rev pairs\n",
