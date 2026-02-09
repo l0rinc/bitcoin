@@ -62,15 +62,13 @@ public:
     SaltedOutpointHasher(bool deterministic = false);
 
     /**
-     * Having the hash noexcept allows libstdc++'s unordered_map to recalculate
-     * the hash during rehash, so it does not have to cache the value. This
-     * reduces node's memory by sizeof(size_t). The required recalculation has
-     * a slight performance penalty (around 1.6%), but this is compensated by
-     * memory savings of about 9% which allow for a larger dbcache setting.
+     * Note: This is intentionally not marked noexcept to let libstdc++ cache
+     * the hash value in unordered_map nodes, which improves performance at the
+     * cost of extra memory.
      *
      * @see https://gcc.gnu.org/onlinedocs/gcc-13.2.0/libstdc++/manual/manual/unordered_associative.html
      */
-    size_t operator()(const COutPoint& id) const noexcept
+    size_t operator()(const COutPoint& id) const
     {
         return m_hasher(id.hash.ToUint256(), id.n);
     }
