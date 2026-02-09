@@ -2527,12 +2527,13 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
         nInputs += tx.vin.size();
 
+        int64_t tx_sigops_cost{0};
         if (!tx.IsCoinBase())
         {
             prevheights.resize(tx.vin.size());
             CAmount txfee = 0;
             TxValidationState tx_state;
-            if (!Consensus::CheckTxInputs(tx, tx_state, view, pindex->nHeight, txfee, &prevheights)) {
+            if (!Consensus::CheckTxInputs(tx, tx_state, view, pindex->nHeight, txfee, &prevheights, flags, &tx_sigops_cost)) {
                 // Any transaction validation failure in ConnectBlock is a block consensus failure
                 state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
                               tx_state.GetRejectReason(),
@@ -2554,13 +2555,12 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                               "contains a non-BIP68-final transaction " + tx.GetHash().ToString());
                 break;
             }
+        } else {
+            // Coinbase: sigops are limited to legacy sigops.
+            tx_sigops_cost = GetLegacySigOpCount(tx) * WITNESS_SCALE_FACTOR;
         }
 
-        // GetTransactionSigOpCost counts 3 types of sigops:
-        // * legacy (always)
-        // * p2sh (when P2SH enabled in flags and excludes coinbase)
-        // * witness (when witness enabled in flags and excludes coinbase)
-        nSigOpsCost += GetTransactionSigOpCost(tx, view, flags);
+        nSigOpsCost += tx_sigops_cost;
         if (nSigOpsCost > MAX_BLOCK_SIGOPS_COST) {
             state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sigops", "too many sigops");
             break;

@@ -26,9 +26,13 @@ namespace Consensus {
  * @param[out] prev_heights If provided, it must be sized to tx.vin.size() and
  *                          will be filled with the confirmation heights of the
  *                          spent outputs (for use in BIP68 sequence locks).
+ * @param[out] tx_sigops_cost If provided, it will be filled with the sigops
+ *                            cost for this transaction (for use in block-level
+ *                            MAX_BLOCK_SIGOPS_COST checks).
+ * @param[in] flags Script verification flags used when calculating sigops cost.
  * Preconditions: tx.IsCoinBase() is false.
  */
-[[nodiscard]] bool CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee, std::vector<int>* prev_heights = nullptr);
+[[nodiscard]] bool CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee, std::vector<int>* prev_heights = nullptr, script_verify_flags flags = script_verify_flags{}, int64_t* tx_sigops_cost = nullptr);
 } // namespace Consensus
 
 /** Auxiliary functions for transaction validation (ideally should not be exposed) */
