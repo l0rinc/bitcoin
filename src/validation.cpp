@@ -2505,15 +2505,16 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
     CBlockUndo blockundo;
 
-    // Precomputed transaction data pointers must not be invalidated
-    // until after `control` has run the script checks (potentially
-    // in multiple threads). Preallocate the vector size so a new allocation
-    // doesn't invalidate pointers into the vector, and keep txsdata in scope
-    // for as long as `control`.
+    // Precomputed transaction data pointers must not be invalidated until after
+    // `control` has run the script checks (potentially in multiple threads).
+    // Only allocate the per-tx data when script checks are enabled to avoid
+    // wasting time initializing it during IBD when script verification is
+    // skipped (assumevalid).
     std::optional<CCheckQueueControl<CScriptCheck>> control;
     if (auto& queue = m_chainman.GetCheckQueue(); queue.HasThreads() && fScriptChecks) control.emplace(queue);
 
-    std::vector<PrecomputedTransactionData> txsdata(block.vtx.size());
+    std::vector<PrecomputedTransactionData> txsdata;
+    if (fScriptChecks) txsdata.resize(block.vtx.size());
 
     std::vector<int> prevheights;
     CAmount nFees = 0;
