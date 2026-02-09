@@ -296,11 +296,13 @@ public:
 private:
     /** Memory only. */
     const bool m_has_witness;
-    const Txid hash;
-    const Wtxid m_witness_hash;
+    struct Hashes {
+        Txid txid;
+        Wtxid wtxid;
+    };
+    const Hashes m_hashes;
 
-    Txid ComputeHash() const;
-    Wtxid ComputeWitnessHash() const;
+    Hashes ComputeHashes() const;
 
     bool ComputeHasWitness() const;
 
@@ -325,8 +327,8 @@ public:
         return vin.empty() && vout.empty();
     }
 
-    const Txid& GetHash() const LIFETIMEBOUND { return hash; }
-    const Wtxid& GetWitnessHash() const LIFETIMEBOUND { return m_witness_hash; };
+    const Txid& GetHash() const LIFETIMEBOUND { return m_hashes.txid; }
+    const Wtxid& GetWitnessHash() const LIFETIMEBOUND { return m_hashes.wtxid; };
 
     // Return sum of txouts.
     CAmount GetValueOut() const;

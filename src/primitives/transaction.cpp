@@ -78,22 +78,121 @@ bool CTransaction::ComputeHasWitness() const
     });
 }
 
-Txid CTransaction::ComputeHash() const
+namespace {
+/** A writer stream (for serialization) that computes two 256-bit hashes in parallel. */
+class DualHashWriter
 {
-    return Txid::FromUint256((HashWriter{} << TX_NO_WITNESS(*this)).GetHash());
-}
+    CSHA256 m_ctx_base;
+    CSHA256 m_ctx_witness;
 
-Wtxid CTransaction::ComputeWitnessHash() const
-{
-    if (!HasWitness()) {
-        return Wtxid::FromUint256(hash.ToUint256());
+public:
+    void write(std::span<const std::byte> src)
+    {
+        const auto* p{UCharCast(src.data())};
+        m_ctx_base.Write(p, src.size());
+        m_ctx_witness.Write(p, src.size());
     }
 
-    return Wtxid::FromUint256((HashWriter{} << TX_WITH_WITNESS(*this)).GetHash());
+    CSHA256& WitnessCtx() { return m_ctx_witness; }
+
+    template <typename T>
+    DualHashWriter& operator<<(const T& obj)
+    {
+        ::Serialize(*this, obj);
+        return *this;
+    }
+
+    uint256 GetBaseHash()
+    {
+        uint256 result;
+        m_ctx_base.Finalize(result.begin());
+        m_ctx_base.Reset().Write(result.begin(), CSHA256::OUTPUT_SIZE).Finalize(result.begin());
+        return result;
+    }
+
+    uint256 GetWitnessHash()
+    {
+        uint256 result;
+        m_ctx_witness.Finalize(result.begin());
+        m_ctx_witness.Reset().Write(result.begin(), CSHA256::OUTPUT_SIZE).Finalize(result.begin());
+        return result;
+    }
+};
+
+/** A writer stream that appends only to a provided CSHA256 context. */
+class HashWriterRef
+{
+    CSHA256& m_ctx;
+
+public:
+    explicit HashWriterRef(CSHA256& ctx) : m_ctx{ctx} {}
+
+    void write(std::span<const std::byte> src)
+    {
+        const auto* p{UCharCast(src.data())};
+        m_ctx.Write(p, src.size());
+    }
+
+    template <typename T>
+    HashWriterRef& operator<<(const T& obj)
+    {
+        ::Serialize(*this, obj);
+        return *this;
+    }
+};
+} // namespace
+
+CTransaction::Hashes CTransaction::ComputeHashes() const
+{
+    if (!m_has_witness) {
+        const Txid txid{Txid::FromUint256((HashWriter{} << TX_NO_WITNESS(*this)).GetHash())};
+        return {txid, Wtxid::FromUint256(txid.ToUint256())};
+    }
+
+    DualHashWriter common;
+    HashWriterRef witness{common.WitnessCtx()};
+
+    // Common prefix.
+    common << version;
+
+    // Segwit "extended" serialization prefix is part of the witness hash only.
+    unsigned char flags{1};
+    std::vector<CTxIn> vinDummy;
+    witness << vinDummy;
+    witness << flags;
+
+    // Common body.
+    common << vin;
+    common << vout;
+
+    // Witness data is part of the witness hash only.
+    for (const auto& in : vin) {
+        witness << in.scriptWitness.stack;
+    }
+
+    // Common suffix.
+    common << nLockTime;
+
+    const Txid txid{Txid::FromUint256(common.GetBaseHash())};
+    const Wtxid wtxid{Wtxid::FromUint256(common.GetWitnessHash())};
+    return {txid, wtxid};
 }
 
-CTransaction::CTransaction(const CMutableTransaction& tx) : vin(tx.vin), vout(tx.vout), version{tx.version}, nLockTime{tx.nLockTime}, m_has_witness{ComputeHasWitness()}, hash{ComputeHash()}, m_witness_hash{ComputeWitnessHash()} {}
-CTransaction::CTransaction(CMutableTransaction&& tx) : vin(std::move(tx.vin)), vout(std::move(tx.vout)), version{tx.version}, nLockTime{tx.nLockTime}, m_has_witness{ComputeHasWitness()}, hash{ComputeHash()}, m_witness_hash{ComputeWitnessHash()} {}
+CTransaction::CTransaction(const CMutableTransaction& tx) :
+    vin(tx.vin),
+    vout(tx.vout),
+    version{tx.version},
+    nLockTime{tx.nLockTime},
+    m_has_witness{ComputeHasWitness()},
+    m_hashes{ComputeHashes()} {}
+
+CTransaction::CTransaction(CMutableTransaction&& tx) :
+    vin(std::move(tx.vin)),
+    vout(std::move(tx.vout)),
+    version{tx.version},
+    nLockTime{tx.nLockTime},
+    m_has_witness{ComputeHasWitness()},
+    m_hashes{ComputeHashes()} {}
 
 CAmount CTransaction::GetValueOut() const
 {
