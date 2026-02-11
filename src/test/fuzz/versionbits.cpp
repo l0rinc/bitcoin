@@ -34,6 +34,7 @@ public:
         assert(dep.threshold <= dep.period);
         assert(0 <= dep.bit && dep.bit < 32 && dep.bit < VERSIONBITS_MAX_NUM_BITS);
         assert(0 <= dep.min_activation_height);
+        assert(0 <= dep.active_duration);
     }
 
     ThresholdState GetStateFor(const CBlockIndex* pindexPrev) const { return AbstractThresholdConditionChecker::GetStateFor(pindexPrev, m_cache); }
@@ -149,6 +150,7 @@ FUZZ_TARGET(versionbits, .init = initialize)
             if (fuzzed_data_provider.ConsumeBool()) dep.nTimeout += interval / 2;
         }
         dep.min_activation_height = fuzzed_data_provider.ConsumeIntegralInRange<int>(0, period * max_periods);
+        dep.active_duration = fuzzed_data_provider.ConsumeBool() ? std::numeric_limits<int>::max() : (fuzzed_data_provider.ConsumeIntegralInRange<int>(1, max_periods) * period);
         return dep;
     }()};
     TestConditionChecker checker(dep);
@@ -316,13 +318,22 @@ FUZZ_TARGET(versionbits, .init = initialize)
                 assert(exp_state == ThresholdState::FAILED);
             }
             return;
+        case ThresholdState::EXPIRED:
+            assert(!always_active_test);
+            assert(dep.active_duration < std::numeric_limits<int>::max());
+            assert(dep.min_activation_height <= current_block->nHeight + 1);
+            assert(exp_state == ThresholdState::EXPIRED || exp_state == ThresholdState::ACTIVE);
+            if (exp_state == ThresholdState::ACTIVE) {
+                assert(since == exp_since + dep.active_duration);
+            }
+            return;
         } // no default case, so the compiler can warn about missing cases
         assert(false);
     }();
 
     if (blocks.size() >= period * max_periods) {
         // we chose the timeout (and block times) so that by the time we have this many blocks it's all over
-        assert(state == ThresholdState::ACTIVE || state == ThresholdState::FAILED);
+        assert(state == ThresholdState::ACTIVE || state == ThresholdState::FAILED || state == ThresholdState::EXPIRED);
     }
 
     if (always_active_test) {
