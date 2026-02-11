@@ -84,8 +84,9 @@ std::optional<Coin> CCoinsViewDB::GetCoin(const COutPoint& outpoint) const
     }
 }
 
-bool CCoinsViewDB::HaveCoin(const COutPoint &outpoint) const {
-    return m_db->Exists(CoinEntry(&outpoint));
+bool CCoinsViewDB::HaveCoin(const COutPoint& outpoint) const
+{
+    return !!GetCoin(outpoint);
 }
 
 uint256 CCoinsViewDB::GetBestBlock() const {
