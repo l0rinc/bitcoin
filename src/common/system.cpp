@@ -21,6 +21,10 @@
 #include <unistd.h>
 #endif
 
+#ifdef __linux__
+#include <sys/sysinfo.h>
+#endif
+
 #ifdef HAVE_MALLOPT_ARENA_MAX
 #include <malloc.h>
 #endif
@@ -125,6 +129,28 @@ std::optional<size_t> GetTotalRAM()
     if (long p{sysconf(_SC_PHYS_PAGES)}, s{sysconf(_SC_PAGESIZE)}; p > 0 && s > 0) return clamp(1ULL * p * s);
 #endif
     return std::nullopt;
+}
+
+void MaybeWarnIfSystemSwapping()
+{
+#ifdef __linux__
+    static bool warned{false};
+    if (warned) return;
+
+    struct sysinfo info {};
+    if (sysinfo(&info) != 0) return;
+    if (info.totalswap <= info.freeswap) return;
+    // No swap is in use (or values are bogus), and this avoids underflow below.
+
+    const uint64_t swap_used_bytes{uint64_t{info.totalswap - info.freeswap} * uint64_t{info.mem_unit}};
+    // Heuristic: avoid warning on small/background swap usage; still catch obvious memory pressure.
+    constexpr uint64_t HEAVY_SWAP_USED_BYTES{512ULL * 1024 * 1024};
+    if (swap_used_bytes < HEAVY_SWAP_USED_BYTES) return;
+
+    LogWarning("High swap usage detected, it can severely degrade performance. "
+               "Consider reducing -dbcache, -maxmempool, -maxconnections, or using -blocksonly.");
+    warned = true;
+#endif // __linux__
 }
 
 namespace {

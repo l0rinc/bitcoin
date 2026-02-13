@@ -37,4 +37,11 @@ int GetNumCores();
  */
 std::optional<size_t> GetTotalRAM();
 
+/**
+ * Log a warning if the system appears to be swapping heavily.
+ *
+ * Intended to be called periodically. Currently implemented on Linux only.
+ */
+void MaybeWarnIfSystemSwapping();
+
 #endif // BITCOIN_COMMON_SYSTEM_H
