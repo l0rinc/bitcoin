@@ -2941,15 +2941,35 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, Peer& peer,
         // If we were in the middle of headers sync, receiving an empty headers
         // message suggests that the peer suddenly has nothing to give us
         // (perhaps it reorged to our chain). Clear download state for this peer.
-        LOCK(peer.m_headers_sync_mutex);
-        if (peer.m_headers_sync) {
-            peer.m_headers_sync.reset(nullptr);
-            LOCK(m_headers_presync_mutex);
-            m_headers_presync_stats.erase(pfrom.GetId());
+        {
+            LOCK(peer.m_headers_sync_mutex);
+            if (peer.m_headers_sync) {
+                peer.m_headers_sync.reset(nullptr);
+                LOCK(m_headers_presync_mutex);
+                m_headers_presync_stats.erase(pfrom.GetId());
+            }
+        }
+        bool reset_sync_state{false};
+        {
+            // If this peer sends an empty headers response during initial headers
+            // sync, avoid getting stuck syncing from it (which blocks syncing from
+            // other peers). See the logic around nSyncStarted in SendMessages().
+            LOCK(cs_main);
+            CNodeState& state{*Assert(State(pfrom.GetId()))};
+            const CBlockIndex* best_header{m_chainman.m_best_header ? m_chainman.m_best_header : m_chainman.ActiveChain().Tip()};
+            if (state.fSyncStarted && best_header != nullptr && best_header->Time() <= NodeClock::now() - 24h) {
+                state.fSyncStarted = false;
+                assert(nSyncStarted > 0);
+                nSyncStarted--;
+                peer.m_headers_sync_timeout = 0us;
+                reset_sync_state = true;
+            }
         }
         // A headers message with no headers cannot be an announcement, so assume
         // it is a response to our last getheaders request, if there is one.
-        peer.m_last_getheaders_timestamp = {};
+        // If we reset the sync state above, keep the last-getheaders timestamp
+        // intact to avoid immediately selecting the same peer for headers sync.
+        if (!reset_sync_state) peer.m_last_getheaders_timestamp = {};
         return;
     }
 
