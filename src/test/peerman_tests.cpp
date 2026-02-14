@@ -75,4 +75,25 @@ BOOST_AUTO_TEST_CASE(connections_desirable_service_flags)
     BOOST_CHECK(peerman->GetDesirableServiceFlags(peer_flags) == ServiceFlags(NODE_NETWORK | NODE_WITNESS));
 }
 
+BOOST_AUTO_TEST_CASE(approximate_best_block_depth_test)
+{
+    std::unique_ptr<PeerManager> peerman = PeerManager::make(*m_node.connman, *m_node.addrman, nullptr, *m_node.chainman, *m_node.mempool, *m_node.warnings, {});
+    auto consensus = m_node.chainman->GetParams().GetConsensus();
+    ServiceFlags peer_flags{NODE_WITNESS | NODE_NETWORK_LIMITED};
+
+    // Set best block time in the future (e.g., 100 blocks ahead)
+    int64_t future_time = GetTime<std::chrono::seconds>().count() + 100 * consensus.nPowTargetSpacing;
+    peerman->SetBestBlock(1000, std::chrono::seconds{future_time});
+
+    // We should return limited peers as desirable (depth 0 or negative)
+    BOOST_CHECK(peerman->GetDesirableServiceFlags(peer_flags) == ServiceFlags(NODE_NETWORK_LIMITED | NODE_WITNESS));
+
+    // Set best block time in the past (e.g., 200 blocks behind)
+    int64_t past_time = GetTime<std::chrono::seconds>().count() - 200 * consensus.nPowTargetSpacing;
+    peerman->SetBestBlock(1000, std::chrono::seconds{past_time});
+
+    // We should NOT return limited peers as desirable (depth 200 > 144)
+    BOOST_CHECK(peerman->GetDesirableServiceFlags(peer_flags) == ServiceFlags(NODE_NETWORK | NODE_WITNESS));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
