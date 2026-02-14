@@ -866,20 +866,20 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         }
     }
 
-    // This is const, but calls into the back end CoinsViews. The CCoinsViewDB at the bottom of the
-    // hierarchy brings the best block into scope.
-    const uint256 best_block{m_view.GetBestBlock()};
+    // This is const, but calls into the back end CCoinsViewCache::GetBestBlock().
+    m_view.GetBestBlock();
 
     // We have all inputs cached now, so disconnect m_view from the mempool and UTXO set
     // (to protect against bugs where we pull more inputs from disk that miss being added
     // to coins_to_uncache).
     //
     // When m_view is connected to an empty view, it can no longer look up coins from the mempool
-    // or UTXO set (meaning no disk operations happen), but can still return coins it accessed
-    // previously. Useful for keeping track of which coins were pulled from disk.
+    // or UTXO set (meaning no disk operations happen), but can still return coins it has already
+    // accessed while validating this tx and its package, including the later sequence-lock and
+    // policy checks.
     m_view.SetBackend(CCoinsViewEmpty::Get());
 
-    assert(m_active_chainstate.m_blockman.LookupBlockIndex(best_block) == m_active_chainstate.m_chain.Tip());
+    assert(m_active_chainstate.m_blockman.LookupBlockIndex(m_view.GetBestBlock()) == m_active_chainstate.m_chain.Tip());
 
     // Only accept BIP68 sequence locked transactions that can be mined in the next
     // block; we don't want our mempool filled up with transactions that can't

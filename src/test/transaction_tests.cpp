@@ -1114,8 +1114,7 @@ BOOST_AUTO_TEST_CASE(max_standard_legacy_sigops)
 BOOST_AUTO_TEST_CASE(checktxinputs_invalid_transactions_test)
 {
     auto check_invalid{[](CAmount input_value, CAmount output_value, bool coinbase, int spend_height, TxValidationResult expected_result, std::string_view expected_reason) {
-        CCoinsView coins_dummy;
-        CCoinsViewCache inputs(&coins_dummy);
+        CCoinsViewCache inputs{&CCoinsViewEmpty::Get()};
 
         const COutPoint prevout{Txid::FromUint256(uint256::ONE), 0};
         inputs.AddCoin(prevout, Coin{{input_value, CScript() << OP_TRUE}, /*nHeightIn=*/1, coinbase}, /*possible_overwrite=*/false);

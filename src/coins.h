@@ -323,7 +323,7 @@ public:
     //! The passed cursor is used to iterate through the coins.
     virtual void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& hash_block) = 0;
 
-    //! Get a cursor to iterate over the whole state
+    //! Get a cursor to iterate over the whole state. Implementations may return nullptr.
     virtual std::unique_ptr<CCoinsViewCursor> Cursor() const = 0;
 
     //! Estimate database size
@@ -355,7 +355,7 @@ public:
         for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)) { }
     }
     std::unique_ptr<CCoinsViewCursor> Cursor() const override { return {}; }
-    size_t EstimateSize() const override { return 0; }
+    size_t EstimateSize() const final { return 0; }
 };
 
 /** CCoinsView backed by another CCoinsView */

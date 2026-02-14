@@ -56,7 +56,7 @@ public:
     uint256 GetBestBlock() const override { return hashBestBlock_; }
     std::vector<uint256> GetHeadBlocks() const override { return {}; }
     std::unique_ptr<CCoinsViewCursor> Cursor() const override { return {}; }
-    size_t EstimateSize() const override { return map_.size(); }
+    size_t EstimateSize() const override { return 0; }
 
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& hash_block) override
     {
