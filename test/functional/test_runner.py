@@ -43,17 +43,19 @@ ADDITIONAL_SPACE_PER_JOB = 100 * 1024 * 1024
 MIN_NO_CLEANUP_SPACE = 12 * 1024 * 1024 * 1024
 
 # Formatting. Default colors to empty strings.
-DEFAULT, BOLD, GREEN, RED = ("", ""), ("", ""), ("", ""), ("", "")
+DEFAULT, BOLD, ITALIC, GREEN, ORANGE, RED, GREY = ("", ""), ("", ""), ("", ""), ("", ""), ("", ""), ("", ""), ("", "")
 try:
     # Make sure python thinks it can write unicode to its stdout
     "\u2713".encode("utf_8").decode(sys.stdout.encoding)
     TICK = "✓ "
     CROSS = "✖ "
     CIRCLE = "○ "
+    FLAKY = "⚠ "
 except UnicodeDecodeError:
     TICK = "P "
     CROSS = "x "
     CIRCLE = "o "
+    FLAKY = "R "
 
 if platform.system() == 'Windows':
     import ctypes
@@ -76,8 +78,43 @@ else:
     # terminal via ANSI escape sequences:
     DEFAULT = ('\033[0m', '\033[0m')
     BOLD = ('\033[0m', '\033[1m')
+    ITALIC = ('\033[23m', '\033[3m')
     GREEN = ('\033[0m', '\033[0;32m')
+    ORANGE = ('\033[0m', '\033[0;33m')
     RED = ('\033[0m', '\033[0;31m')
+    GREY = ('\033[0m', '\033[0;90m')
+
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def strip_ansi(text):
+    return ANSI_ESCAPE_RE.sub("", text)
+
+
+def format_duration(seconds):
+    hours = seconds // 3600
+    seconds -= hours * 3600
+
+    minutes = seconds // 60
+    seconds -= minutes * 60
+
+    parts = []
+    for value, suffix in ((hours, "h"), (minutes, "m"), (seconds, "s")):
+        if value > 0:
+            parts.append(f"{value}{suffix}")
+    return " ".join(parts) if parts else "0s"
+
+
+def format_duration_detail(seconds):
+    return f"{ITALIC[1]}duration: {format_duration(seconds)}{ITALIC[0]}"
+
+def format_progress_status(status, *, retry=False):
+    if status == "Passed":
+        color = ORANGE if retry else GREEN
+        return f"{color[1]}passed{color[0]}"
+    if status == "Skipped":
+        return f"{GREY[1]}skipped{GREY[0]}"
+    raise AssertionError(f"Unexpected test status: {status!r}")
 
 TEST_EXIT_PASSED = 0
 TEST_EXIT_SKIPPED = 77
@@ -419,6 +456,7 @@ def main():
     parser.add_argument('--quiet', '-q', action='store_true', help='only print dots, results summary and failure logs')
     parser.add_argument('--tmpdirprefix', '-t', default=tempfile.gettempdir(), help="Root directory for datadirs")
     parser.add_argument('--failfast', '-F', action='store_true', help='stop execution after the first test failure')
+    parser.add_argument('--retry-failed', action='store_true', help='retry failed tests at the end on a single thread')
     parser.add_argument('--filter', help='filter scripts to run by regular expression')
     parser.add_argument("--nocleanup", dest="nocleanup", default=False, action="store_true",
                         help="Leave bitcoinds and test.* datadir on exit or error")
@@ -428,11 +466,14 @@ def main():
     # Fail on self-check warnings before running the tests.
     fail_on_warn = True
     if not args.ansi:
-        global DEFAULT, BOLD, GREEN, RED
+        global DEFAULT, BOLD, ITALIC, GREEN, ORANGE, RED, GREY
         DEFAULT = ("", "")
         BOLD = ("", "")
+        ITALIC = ("", "")
         GREEN = ("", "")
+        ORANGE = ("", "")
         RED = ("", "")
+        GREY = ("", "")
 
     # args to be passed on always start with two dashes; tests are the remaining unknown args
     tests = [arg for arg in unknown_args if arg[:2] != "--"]
@@ -577,11 +618,12 @@ def main():
         args=passon_args,
         combined_logs_len=args.combinedlogslen,
         failfast=args.failfast,
+        retry_failed=args.retry_failed,
         use_term_control=args.ansi,
         results_filepath=results_filepath,
     )
 
-def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, args=None, combined_logs_len=0, failfast=False, use_term_control, results_filepath=None):
+def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, args=None, combined_logs_len=0, failfast=False, retry_failed=False, use_term_control, results_filepath=None):
     args = args or []
 
     # Warn if bitcoind is already running
@@ -609,7 +651,30 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
     # a hard link or a copy on any platform. See https://github.com/bitcoin/bitcoin/pull/27561.
     sys.path.append(tests_dir)
 
-    flags = ['--cachedir={}'.format(cache_dir)] + args
+    flags = [f"--cachedir={cache_dir}"] + args
+
+    def handle_failed_test(*, done_str, test_result, stdout, stderr, testdir, failure_label):
+        print(f"{done_str} {RED[1]}{failure_label}{RED[0]}, {format_duration_detail(test_result.time)}\n")
+        print(f"{BOLD[1]}stdout:\n{BOLD[0]}{stdout}\n")
+        print(f"{BOLD[1]}stderr:\n{BOLD[0]}{stderr}\n")
+        if combined_logs_len and os.path.isdir(testdir):
+            # Print the final `combinedlogslen` lines of the combined logs
+            print(f"{BOLD[1]}Combine the logs and print the last {combined_logs_len} lines ...{BOLD[0]}")
+            print('\n============')
+            print(f"{BOLD[1]}Combined log for {testdir}:{BOLD[0]}")
+            print('============\n')
+            combined_logs_args = [sys.executable, os.path.join(tests_dir, 'combine_logs.py'), testdir]
+            if BOLD[0]:
+                combined_logs_args += ['--color']
+            combined_logs, _ = subprocess.Popen(combined_logs_args, text=True, stdout=subprocess.PIPE).communicate()
+            print("\n".join(deque(combined_logs.splitlines(), combined_logs_len)))
+
+    def exit_if_no_space_left(*, stdout):
+        if "[Errno 28] No space left on device" in stdout:
+            sys.exit(f"Early exiting after test failure due to insufficient free space in {tmpdir}\n"
+                     f"Test execution data left in {tmpdir}.\n"
+                     f"Additional storage is needed to execute testing.")
+
 
     if enable_coverage:
         coverage = RPCCoverage()
@@ -638,49 +703,104 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
     start_time = time.time()
     test_results = []
 
-    max_len_name = len(max(test_list, key=len))
     test_count = len(test_list)
     all_passed = True
+    effective_failfast = failfast and not retry_failed
     while not job_queue.done():
-        if failfast and not all_passed:
+        if effective_failfast and not all_passed:
             break
         for test_result, testdir, stdout, stderr, skip_reason in job_queue.get_next():
             test_results.append(test_result)
             done_str = f"{len(test_results)}/{test_count} - {BOLD[1]}{test_result.name}{BOLD[0]}"
             if test_result.status == "Passed":
-                logging.debug("%s passed, Duration: %s s" % (done_str, test_result.time))
+                logging.debug(f"{done_str} {format_progress_status(test_result.status)}, {format_duration_detail(test_result.time)}")
             elif test_result.status == "Skipped":
-                logging.debug(f"{done_str} skipped ({skip_reason})")
+                logging.debug(f"{done_str} {format_progress_status(test_result.status)} {ITALIC[1]}({skip_reason}){ITALIC[0]}")
             else:
                 all_passed = False
-                print("%s failed, Duration: %s s\n" % (done_str, test_result.time))
-                print(BOLD[1] + 'stdout:\n' + BOLD[0] + stdout + '\n')
-                print(BOLD[1] + 'stderr:\n' + BOLD[0] + stderr + '\n')
-                if combined_logs_len and os.path.isdir(testdir):
-                    # Print the final `combinedlogslen` lines of the combined logs
-                    print('{}Combine the logs and print the last {} lines ...{}'.format(BOLD[1], combined_logs_len, BOLD[0]))
-                    print('\n============')
-                    print('{}Combined log for {}:{}'.format(BOLD[1], testdir, BOLD[0]))
-                    print('============\n')
-                    combined_logs_args = [sys.executable, os.path.join(tests_dir, 'combine_logs.py'), testdir]
-                    if BOLD[0]:
-                        combined_logs_args += ['--color']
-                    combined_logs, _ = subprocess.Popen(combined_logs_args, text=True, stdout=subprocess.PIPE).communicate()
-                    print("\n".join(deque(combined_logs.splitlines(), combined_logs_len)))
+                handle_failed_test(
+                    done_str=done_str,
+                    test_result=test_result,
+                    stdout=stdout,
+                    stderr=stderr,
+                    testdir=testdir,
+                    failure_label="failed",
+                )
 
-                if failfast:
+                if effective_failfast:
                     logging.debug("Early exiting after test failure")
                     break
 
-                if "[Errno 28] No space left on device" in stdout:
-                    sys.exit(f"Early exiting after test failure due to insufficient free space in {tmpdir}\n"
-                             f"Test execution data left in {tmpdir}.\n"
-                             f"Additional storage is needed to execute testing.")
+                exit_if_no_space_left(stdout=stdout)
 
+    initial_test_results = list(test_results)
+
+    if retry_failed:
+        failed_tests = [test_result.name for test_result in initial_test_results if test_result.status == "Failed"]
+        if failed_tests:
+            retry_plural = "" if len(failed_tests) == 1 else "s"
+            print(f"{BOLD[1]}Retrying {len(failed_tests)} failed test{retry_plural} one at a time...{BOLD[0]}")
+            retry_tmpdir = f"{tmpdir}/retry"
+            os.makedirs(retry_tmpdir, exist_ok=True)
+            retry_list = deque(failed_tests)
+            retry_queue = TestHandler(
+                num_tests_parallel=1,
+                tests_dir=tests_dir,
+                tmpdir=retry_tmpdir,
+                test_list=retry_list,
+                flags=flags,
+                use_term_control=use_term_control,
+                show_remaining_jobs=False,
+            )
+            retry_count = len(retry_list)
+            retry_done = 0
+            while not retry_queue.done():
+                for test_result, testdir, stdout, stderr, skip_reason in retry_queue.get_next():
+                    retry_done += 1
+                    test_results.append(test_result)
+                    done_str = f"{retry_done}/{retry_count} - {BOLD[1]}{test_result.name}{BOLD[0]}"
+                    if test_result.status == "Passed":
+                        logging.debug(f"{done_str} {format_progress_status(test_result.status, retry=True)} on retry, {format_duration_detail(test_result.time)}")
+                    elif test_result.status == "Skipped":
+                        logging.debug(f"{done_str} {format_progress_status(test_result.status)} on retry {ITALIC[1]}({skip_reason}){ITALIC[0]}")
+                    else:
+                        handle_failed_test(
+                            done_str=done_str,
+                            test_result=test_result,
+                            stdout=stdout,
+                            stderr=stderr,
+                            testdir=testdir,
+                            failure_label="failed on retry",
+                        )
+                        exit_if_no_space_left(stdout=stdout)
+
+            if os.path.isdir(retry_tmpdir) and not os.listdir(retry_tmpdir):
+                os.rmdir(retry_tmpdir)
+
+    test_results_by_name = {}
+    for test_result in test_results:
+        test_results_by_name.setdefault(test_result.name, []).append(test_result)
+
+    report_results = []
+    for name, attempt_results in test_results_by_name.items():
+        total_time = sum(result.time for result in attempt_results)
+        final_status = attempt_results[-1].status
+        had_failure = any(result.status == "Failed" for result in attempt_results)
+        if had_failure:
+            status = "Passed" if final_status == "Passed" else "Failed"
+            display_status = "Flaky" if final_status == "Passed" else "Failed"
+        else:
+            status = final_status
+            display_status = final_status
+
+        report_results.append(TestResult(name, status, total_time, display_status=display_status))
+
+    all_passed = all(test_result.was_successful for test_result in report_results)
+    max_len_name = max(len(strip_ansi(test_result.name)) for test_result in report_results)
     runtime = int(time.time() - start_time)
-    print_results(test_results, max_len_name, runtime)
+    print_results(report_results, max_len_name, runtime)
     if results_filepath:
-        write_results(test_results, results_filepath, runtime)
+        write_results(report_results, results_filepath, runtime)
 
     if coverage:
         coverage_passed = coverage.report_rpc_coverage()
@@ -699,7 +819,7 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
     # Clean up dangling processes if any. This may only happen with --failfast option.
     # Killing the process group will also terminate the current process but that is
     # not an issue
-    if not os.getenv("CI_FAILFAST_TEST_LEAVE_DANGLING") and len(job_queue.jobs):
+    if effective_failfast and not os.getenv("CI_FAILFAST_TEST_LEAVE_DANGLING") and len(job_queue.jobs):
         os.killpg(os.getpgid(0), signal.SIGKILL)
 
     sys.exit(not all_passed)
@@ -718,13 +838,20 @@ def print_results(test_results, max_len_name, runtime):
         test_result.padding = max_len_name
         results += str(test_result)
 
-    status = TICK + "Passed" if all_passed else CROSS + "Failed"
-    if not all_passed:
-        results += RED[1]
-    results += BOLD[1] + "\n%s | %s | %s s (accumulated) \n" % ("ALL".ljust(max_len_name), status.ljust(9), time_sum) + BOLD[0]
-    if not all_passed:
-        results += RED[0]
-    results += "Runtime: %s s\n" % (runtime)
+    passed = sum(1 for test_result in test_results if test_result.display_status == "Passed")
+    flaky = sum(1 for test_result in test_results if test_result.display_status == "Flaky")
+    failed = sum(1 for test_result in test_results if test_result.display_status == "Failed")
+    status = f"{CROSS}Failed" if failed else f"{FLAKY}Passed" if flaky else f"{TICK}Passed"
+    status_color = RED if failed else ORANGE if flaky else GREEN
+    colored_status = f"{status_color[1]}{BOLD[1]}{status.ljust(9)}{status_color[0]}{BOLD[1]}"
+    results += f"{BOLD[1]}\n{'ALL'.ljust(max_len_name)} | {colored_status} | {format_duration_detail(time_sum)} (accumulated) \n{BOLD[0]}"
+    summary = ", ".join([
+        f"{GREEN[1]}{passed} passed{GREEN[0]}",
+        f"{ORANGE[1]}{flaky} flaky{ORANGE[0]}",
+        f"{RED[1]}{failed} failed{RED[0]}",
+    ])
+    results += f"{BOLD[1]}Summary: {BOLD[0]}{summary}\n"
+    results += f"Runtime: {format_duration(runtime)}\n"
     print(results)
 
 
@@ -742,7 +869,7 @@ class TestHandler:
     """
     Trigger the test scripts passed in via the list.
     """
-    def __init__(self, *, num_tests_parallel, tests_dir, tmpdir, test_list, flags, use_term_control):
+    def __init__(self, *, num_tests_parallel, tests_dir, tmpdir, test_list, flags, use_term_control, show_remaining_jobs=True):
         assert num_tests_parallel >= 1
         self.executor = futures.ThreadPoolExecutor(max_workers=num_tests_parallel)
         self.num_jobs = num_tests_parallel
@@ -752,6 +879,7 @@ class TestHandler:
         self.flags = flags
         self.jobs = {}
         self.use_term_control = use_term_control
+        self.show_remaining_jobs = show_remaining_jobs
 
     def done(self):
         return not (self.jobs or self.test_list)
@@ -790,7 +918,7 @@ class TestHandler:
         assert self.jobs  # Must not be empty here
 
         # Print remaining running jobs when all jobs have been started.
-        if not self.test_list:
+        if self.show_remaining_jobs and not self.test_list:
             print("Remaining jobs: [{}]".format(", ".join(sorted(self.jobs.values()))))
 
         dot_count = 0
@@ -827,32 +955,33 @@ class TestHandler:
 
 
 class TestResult():
-    def __init__(self, name, status, time):
+    def __init__(self, name, status, time, display_status=None):
         self.name = name
         self.status = status
+        self.display_status = display_status or status
         self.time = time
         self.padding = 0
 
     def sort_key(self):
-        if self.status == "Passed":
-            return 0, self.name.lower()
-        elif self.status == "Failed":
-            return 2, self.name.lower()
-        elif self.status == "Skipped":
-            return 1, self.name.lower()
+        status_order = ["Passed", "Flaky", "Skipped", "Failed"]
+        try:
+            return status_order.index(self.display_status), self.name.lower()
+        except ValueError:
+            raise AssertionError(f"Unexpected test status: {self.display_status!r}") from None
 
     def __repr__(self):
-        if self.status == "Passed":
-            color = GREEN
-            glyph = TICK
-        elif self.status == "Failed":
-            color = RED
-            glyph = CROSS
-        elif self.status == "Skipped":
-            color = DEFAULT
-            glyph = CIRCLE
+        styles = {
+            "Passed": (GREEN, TICK),
+            "Flaky": (ORANGE, FLAKY),
+            "Skipped": (GREY, CIRCLE),
+            "Failed": (RED, CROSS),
+        }
+        try:
+            color, glyph = styles[self.display_status]
+        except KeyError:
+            raise AssertionError(f"Unexpected test status: {self.display_status!r}") from None
 
-        return color[1] + "%s | %s%s | %s s\n" % (self.name.ljust(self.padding), glyph, self.status.ljust(7), self.time) + color[0]
+        return f"{color[1]}{self.name.ljust(self.padding)} | {glyph}{self.display_status.ljust(7)} | {format_duration(self.time)}\n{color[0]}"
 
     @property
     def was_successful(self):
