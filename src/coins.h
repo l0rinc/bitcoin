@@ -341,6 +341,20 @@ public:
     virtual size_t EstimateSize() const { return 0; }
 };
 
+/** Noop coins view. */
+class CCoinsViewEmpty : public CCoinsView
+{
+public:
+    static CCoinsViewEmpty& Get()
+    {
+        static CCoinsViewEmpty instance;
+        return instance;
+    }
+
+    CCoinsViewEmpty() = default;
+    CCoinsViewEmpty(const CCoinsViewEmpty&) = delete;
+    CCoinsViewEmpty& operator=(const CCoinsViewEmpty&) = delete;
+};
 
 /** CCoinsView backed by another CCoinsView */
 class CCoinsViewBacked : public CCoinsView

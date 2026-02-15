@@ -37,14 +37,14 @@ bool operator==(const Coin &a, const Coin &b) {
            a.out == b.out;
 }
 
-class CCoinsViewTest : public CCoinsView
+class CCoinsViewTest : public CCoinsViewEmpty
 {
     FastRandomContext& m_rng;
     uint256 hashBestBlock_;
     std::map<COutPoint, Coin> map_;
 
 public:
-    CCoinsViewTest(FastRandomContext& rng) : m_rng{rng} {}
+    explicit CCoinsViewTest(FastRandomContext& rng) : m_rng{rng} {}
 
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override
     {
@@ -676,8 +676,7 @@ public:
         }
     }
 
-    CCoinsView root;
-    CCoinsViewCacheTest base{&root};
+    CCoinsViewCacheTest base{&CCoinsViewEmpty::Get()};
     CCoinsViewCacheTest cache{&base};
 };
 
@@ -1086,8 +1085,7 @@ BOOST_AUTO_TEST_CASE(coins_resource_is_used)
 
 BOOST_AUTO_TEST_CASE(ccoins_addcoin_exception_keeps_usage_balanced)
 {
-    CCoinsView root;
-    CCoinsViewCacheTest cache{&root};
+    CCoinsViewCacheTest cache{&CCoinsViewEmpty::Get()};
 
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
 
@@ -1104,8 +1102,7 @@ BOOST_AUTO_TEST_CASE(ccoins_addcoin_exception_keeps_usage_balanced)
 
 BOOST_AUTO_TEST_CASE(ccoins_emplace_duplicate_keeps_usage_balanced)
 {
-    CCoinsView root;
-    CCoinsViewCacheTest cache{&root};
+    CCoinsViewCacheTest cache{&CCoinsViewEmpty::Get()};
 
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
 
