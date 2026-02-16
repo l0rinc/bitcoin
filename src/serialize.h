@@ -960,7 +960,7 @@ void Unserialize(Stream& is, std::map<K, T, Pred, A>& m)
     {
         std::pair<K, T> item;
         Unserialize(is, item);
-        mi = m.insert(mi, item);
+        mi = m.insert(mi, std::move(item));
     }
 }
 
@@ -987,7 +987,7 @@ void Unserialize(Stream& is, std::set<K, Pred, A>& m)
     {
         K key;
         Unserialize(is, key);
-        it = m.insert(it, key);
+        it = m.insert(it, std::move(key));
     }
 }
 
