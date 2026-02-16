@@ -52,28 +52,34 @@ public:
     {
         ::SerializeMany(*this, std::forward<Args>(args)...);
     }
-    void write(std::span<const std::byte> src)
+    template <size_t Extent = std::dynamic_extent>
+    void write(std::span<const std::byte, Extent> src)
     {
         assert(nPos <= vchData.size());
+        const auto src_ptr{UCharCast(src.data())};
+        if constexpr (Extent == 1) {
+            const auto byte{src_ptr[0]};
+            if (nPos < vchData.size()) {
+                vchData[nPos] = byte;
+            } else {
+                vchData.push_back(byte);
+            }
+            nPos += 1;
+            return;
+        }
+        if (nPos == vchData.size()) {
+            vchData.insert(vchData.end(), src_ptr, src_ptr + src.size());
+            nPos += src.size();
+            return;
+        }
         size_t nOverwrite = std::min(src.size(), vchData.size() - nPos);
         if (nOverwrite) {
-            memcpy(vchData.data() + nPos, src.data(), nOverwrite);
+            memcpy(vchData.data() + nPos, src_ptr, nOverwrite);
         }
         if (nOverwrite < src.size()) {
-            vchData.insert(vchData.end(), UCharCast(src.data()) + nOverwrite, UCharCast(src.data() + src.size()));
+            vchData.insert(vchData.end(), src_ptr + nOverwrite, src_ptr + src.size());
         }
         nPos += src.size();
-    }
-    void write(std::span<const std::byte, 1> src)
-    {
-        assert(nPos <= vchData.size());
-        const auto byte{*UCharCast(&src[0])};
-        if (nPos < vchData.size()) {
-            vchData[nPos] = byte;
-        } else {
-            vchData.push_back(byte);
-        }
-        nPos += 1;
     }
     template <typename T>
     VectorWriter& operator<<(const T& obj)
