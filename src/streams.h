@@ -260,14 +260,22 @@ public:
         m_read_pos += num_ignore;
     }
 
-    void write(std::span<const value_type> src)
+    template <size_t Extent = std::dynamic_extent>
+    void write(std::span<const value_type, Extent> src)
     {
         // Write to the end of the buffer
-        vch.insert(vch.end(), src.begin(), src.end());
-    }
-    void write(std::span<const value_type, 1> src)
-    {
-        vch.push_back(src[0]);
+        if constexpr (Extent == 1) {
+            vch.push_back(src[0]);
+        } else if constexpr (Extent == 2) {
+            vch.push_back(src[0]);
+            vch.push_back(src[1]);
+        } else if constexpr (Extent != std::dynamic_extent) {
+            // Keep Extent a compile-time constant so small fixed-size writes can be optimized better
+            // than the dynamic-size path.
+            vch.insert(vch.end(), src.data(), src.data() + Extent);
+        } else {
+            vch.insert(vch.end(), src.data(), src.data() + src.size());
+        }
     }
 
     template<typename T>
