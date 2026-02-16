@@ -470,18 +470,18 @@ void WriteVarInt(Stream& os, I n)
         os.GetStream().seek(GetSizeOfVarInt<Mode, I>(n));
     } else {
         CheckVarIntMode<Mode, I>();
-        unsigned char tmp[(sizeof(n)*8+6)/7];
-        int len=0;
-        while(true) {
-            tmp[len] = (n & 0x7F) | (len ? 0x80 : 0x00);
-            if (n <= 0x7F)
-                break;
-            n = (n >> 7) - 1;
-            len++;
+        if (n <= 0x7F) {
+            ser_writedata8(os, n);
+            return;
         }
-        do {
-            ser_writedata8(os, tmp[len]);
-        } while(len--);
+        unsigned char tmp[(sizeof(n) * 8 + 6) / 7];
+        size_t pos = std::size(tmp);
+        tmp[--pos] = n & 0x7F;
+        while (n > 0x7F) {
+            n = (n >> 7) - 1;
+            tmp[--pos] = (n & 0x7F) | 0x80;
+        }
+        os.write(std::as_bytes(std::span{tmp}.subspan(pos)));
     }
 }
 
