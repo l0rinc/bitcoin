@@ -12,7 +12,6 @@
 #include <util/check.h>
 #include <util/log.h>
 #include <util/obfuscation.h>
-#include <util/overflow.h>
 #include <util/syserror.h>
 
 #include <algorithm>
@@ -112,18 +111,24 @@ public:
     size_t size() const { return m_data.size(); }
     bool empty() const { return m_data.empty(); }
 
-    void read(std::span<std::byte> dst)
+    template <size_t Extent = std::dynamic_extent>
+    void read(std::span<std::byte, Extent> dst)
     {
-        if (dst.size() == 0) {
-            return;
+        if constexpr (Extent == 1) {
+            if (m_data.empty()) {
+                throw std::ios_base::failure("SpanReader::read(): end of data");
+            }
+            dst[0] = m_data[0];
+            m_data = m_data.subspan(1);
+        } else {
+            const auto n{dst.size()};
+            // Read from the beginning of the buffer
+            if (n > m_data.size()) {
+                throw std::ios_base::failure("SpanReader::read(): end of data");
+            }
+            memcpy(dst.data(), m_data.data(), n);
+            m_data = m_data.subspan(n);
         }
-
-        // Read from the beginning of the buffer
-        if (dst.size() > m_data.size()) {
-            throw std::ios_base::failure("SpanReader::read(): end of data");
-        }
-        memcpy(dst.data(), m_data.data(), dst.size());
-        m_data = m_data.subspan(dst.size());
     }
 
     void ignore(size_t n)
@@ -212,37 +217,47 @@ public:
     //
     int in_avail() const         { return size(); }
 
-    void read(std::span<value_type> dst)
+    template <size_t Extent = std::dynamic_extent>
+    void read(std::span<value_type, Extent> dst)
     {
-        if (dst.size() == 0) return;
-
-        // Read from the beginning of the buffer
-        auto next_read_pos{CheckedAdd(m_read_pos, dst.size())};
-        if (!next_read_pos.has_value() || next_read_pos.value() > vch.size()) {
-            throw std::ios_base::failure("DataStream::read(): end of data");
+        if constexpr (Extent == 1) {
+            if (m_read_pos == vch.size()) {
+                throw std::ios_base::failure("DataStream::read(): end of data");
+            }
+            dst[0] = vch[m_read_pos];
+            ++m_read_pos;
+            if (m_read_pos == vch.size()) {
+                m_read_pos = 0;
+                vch.clear();
+            }
+        } else {
+            const auto n{dst.size()};
+            const auto avail{vch.size() - m_read_pos};
+            if (n > avail) {
+                throw std::ios_base::failure("DataStream::read(): end of data");
+            }
+            memcpy(dst.data(), &vch[m_read_pos], n);
+            if (n == avail) {
+                m_read_pos = 0;
+                vch.clear();
+                return;
+            }
+            m_read_pos += n;
         }
-        memcpy(dst.data(), &vch[m_read_pos], dst.size());
-        if (next_read_pos.value() == vch.size()) {
-            m_read_pos = 0;
-            vch.clear();
-            return;
-        }
-        m_read_pos = next_read_pos.value();
     }
 
     void ignore(size_t num_ignore)
     {
-        // Ignore from the beginning of the buffer
-        auto next_read_pos{CheckedAdd(m_read_pos, num_ignore)};
-        if (!next_read_pos.has_value() || next_read_pos.value() > vch.size()) {
+        const auto avail{vch.size() - m_read_pos};
+        if (num_ignore > avail) {
             throw std::ios_base::failure("DataStream::ignore(): end of data");
         }
-        if (next_read_pos.value() == vch.size()) {
+        if (num_ignore == avail) {
             m_read_pos = 0;
             vch.clear();
             return;
         }
-        m_read_pos = next_read_pos.value();
+        m_read_pos += num_ignore;
     }
 
     void write(std::span<const value_type> src)
