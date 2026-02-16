@@ -863,10 +863,18 @@ void Unserialize(Stream& is, prevector<N, T>& v)
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
-        unsigned int nSize = ReadCompactSize(is);
-        unsigned int i = 0;
+        size_t nSize = ReadCompactSize(is);
+        constexpr size_t max_chunk{static_cast<size_t>(1 + 4999999 / sizeof(T))};
+        if (nSize <= max_chunk) {
+            v.resize_uninitialized(nSize);
+            if (nSize != 0) {
+                is.read(std::as_writable_bytes(std::span{v.data(), nSize}));
+            }
+            return;
+        }
+        size_t i = 0;
         while (i < nSize) {
-            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
+            size_t blk = std::min(nSize - i, max_chunk);
             v.resize_uninitialized(i + blk);
             is.read(std::as_writable_bytes(std::span{&v[i], blk}));
             i += blk;
@@ -906,10 +914,18 @@ void Unserialize(Stream& is, std::vector<T, A>& v)
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
-        unsigned int nSize = ReadCompactSize(is);
-        unsigned int i = 0;
+        size_t nSize = ReadCompactSize(is);
+        constexpr size_t max_chunk{static_cast<size_t>(1 + 4999999 / sizeof(T))};
+        if (nSize <= max_chunk) {
+            v.resize(nSize);
+            if (nSize != 0) {
+                is.read(std::as_writable_bytes(std::span{v.data(), nSize}));
+            }
+            return;
+        }
+        size_t i = 0;
         while (i < nSize) {
-            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
+            size_t blk = std::min(nSize - i, max_chunk);
             v.resize(i + blk);
             is.read(std::as_writable_bytes(std::span{&v[i], blk}));
             i += blk;
