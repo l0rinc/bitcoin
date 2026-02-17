@@ -463,6 +463,48 @@ constexpr unsigned int GetSizeOfVarInt(I n)
     return nRet;
 }
 
+template <size_t N, typename Stream, typename I>
+ALWAYS_INLINE void WriteVarIntFixed(Stream& os, I n)
+{
+    unsigned char out[N];
+    if constexpr (N == 2) {
+        out[0] = static_cast<unsigned char>(((n >> 7) - 1) | 0x80);
+        out[1] = static_cast<unsigned char>(n & 0x7F);
+    } else {
+        I x = n;
+        out[N - 1] = static_cast<unsigned char>(x & 0x7F);
+        if constexpr (N > 1) {
+            x = (x >> 7) - 1;
+            out[N - 2] = static_cast<unsigned char>((x & 0x7F) | 0x80);
+        }
+        if constexpr (N > 2) {
+            x = (x >> 7) - 1;
+            out[N - 3] = static_cast<unsigned char>((x & 0x7F) | 0x80);
+        }
+        if constexpr (N > 3) {
+            x = (x >> 7) - 1;
+            out[N - 4] = static_cast<unsigned char>((x & 0x7F) | 0x80);
+        }
+        if constexpr (N > 4) {
+            x = (x >> 7) - 1;
+            out[N - 5] = static_cast<unsigned char>((x & 0x7F) | 0x80);
+        }
+        if constexpr (N > 5) {
+            x = (x >> 7) - 1;
+            out[N - 6] = static_cast<unsigned char>((x & 0x7F) | 0x80);
+        }
+        if constexpr (N > 6) {
+            x = (x >> 7) - 1;
+            out[N - 7] = static_cast<unsigned char>((x & 0x7F) | 0x80);
+        }
+        if constexpr (N > 7) {
+            x = (x >> 7) - 1;
+            out[N - 8] = static_cast<unsigned char>((x & 0x7F) | 0x80);
+        }
+    }
+    os.write(std::as_bytes(std::span{out}));
+}
+
 template<typename Stream, VarIntMode Mode, typename I>
 void WriteVarInt(Stream& os, I n)
 {
@@ -472,6 +514,18 @@ void WriteVarInt(Stream& os, I n)
         CheckVarIntMode<Mode, I>();
         if (n <= 0x7F) {
             ser_writedata8(os, n);
+            return;
+        }
+        if (n <= 0x1020407F) {
+            if (n <= 0x407F) {
+                WriteVarIntFixed<2>(os, n);
+                return;
+            }
+            if (n <= 0x20407F) {
+                WriteVarIntFixed<3>(os, n);
+                return;
+            }
+            WriteVarIntFixed<4>(os, n);
             return;
         }
         unsigned char tmp[(sizeof(n) * 8 + 6) / 7];
