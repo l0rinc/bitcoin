@@ -528,6 +528,10 @@ void WriteVarInt(Stream& os, I n)
             WriteVarIntFixed<4>(os, n);
             return;
         }
+        if (n <= 0x81020407FULL) {
+            WriteVarIntFixed<5>(os, n);
+            return;
+        }
         unsigned char tmp[(sizeof(n) * 8 + 6) / 7];
         size_t pos = std::size(tmp);
         tmp[--pos] = n & 0x7F;
