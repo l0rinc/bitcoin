@@ -506,7 +506,7 @@ ALWAYS_INLINE void WriteVarIntFixed(Stream& os, I n)
 }
 
 template<typename Stream, VarIntMode Mode, typename I>
-void WriteVarInt(Stream& os, I n)
+ALWAYS_INLINE void WriteVarInt(Stream& os, I n)
 {
     if constexpr (ContainsSizeComputer<Stream>) {
         os.GetStream().seek(GetSizeOfVarInt<Mode, I>(n));
@@ -534,6 +534,10 @@ void WriteVarInt(Stream& os, I n)
                 return;
             }
             WriteVarIntFixed<6>(os, n);
+            return;
+        }
+        if (n <= 0x204081020407FULL) {
+            WriteVarIntFixed<7>(os, n);
             return;
         }
         unsigned char tmp[(sizeof(n) * 8 + 6) / 7];
