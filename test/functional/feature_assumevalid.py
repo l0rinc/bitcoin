@@ -140,15 +140,13 @@ class AssumeValidTest(BitcoinTestFramework):
 
         # nodes[0]
         self.log.info("Send blocks to node0. Block 102 will be rejected.")
+        p2p0 = self.nodes[0].add_p2p_connection(BaseNode())
+        p2p0.send_header_for_blocks(self.blocks[0:2000])
+        p2p0.send_header_for_blocks(self.blocks[2000:])
         with self.nodes[0].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #1 ({block_1_hash}): assumevalid=0 (always verify).",
             "Block validation error: block-script-verify-flag-failed",
         ]):
-            p2p0 = self.nodes[0].add_p2p_connection(BaseNode())
-
-            p2p0.send_header_for_blocks(self.blocks[0:2000])
-            p2p0.send_header_for_blocks(self.blocks[2000:])
-
             for i in range(0, 103):
                 p2p0.send_without_ping(msg_block(self.blocks[i]))
             p2p0.wait_for_disconnect()
@@ -157,14 +155,13 @@ class AssumeValidTest(BitcoinTestFramework):
 
         # nodes[1]
         self.log.info("Send all blocks to node1. All blocks will be accepted.")
+        p2p1 = self.nodes[1].add_p2p_connection(BaseNode())
+        p2p1.send_header_for_blocks(self.blocks[0:2000])
+        p2p1.send_header_for_blocks(self.blocks[2000:])
         with self.nodes[1].assert_debug_log(expected_msgs=[
             f"Disabling script verification at block #1 ({self.blocks[0].hash_hex}).",
             f"Enabling script verification at block #103 ({self.blocks[102].hash_hex}): block height above assumevalid height.",
         ]):
-            p2p1 = self.nodes[1].add_p2p_connection(BaseNode())
-
-            p2p1.send_header_for_blocks(self.blocks[0:2000])
-            p2p1.send_header_for_blocks(self.blocks[2000:])
             for i in range(2202):
                 p2p1.send_without_ping(msg_block(self.blocks[i]))
             # Syncing 2200 blocks can take a while on slow systems. Give it plenty of time to sync.
@@ -173,13 +170,12 @@ class AssumeValidTest(BitcoinTestFramework):
 
         # nodes[2]
         self.log.info("Send blocks to node2. Block 102 will be rejected.")
+        p2p2 = self.nodes[2].add_p2p_connection(BaseNode())
+        p2p2.send_header_for_blocks(self.blocks[0:200])
         with self.nodes[2].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #1 ({block_1_hash}): block too recent relative to best header.",
             "Block validation error: block-script-verify-flag-failed",
         ]):
-            p2p2 = self.nodes[2].add_p2p_connection(BaseNode())
-            p2p2.send_header_for_blocks(self.blocks[0:200])
-
             for i in range(0, 103):
                 p2p2.send_without_ping(msg_block(self.blocks[i]))
             p2p2.wait_for_disconnect()
@@ -187,24 +183,21 @@ class AssumeValidTest(BitcoinTestFramework):
 
         # nodes[3]
         self.log.info("Send two header chains, and a block not in the best header chain to node3.")
+        best_hash = self.nodes[3].getbestblockhash()
+        tip_block = self.nodes[3].getblock(best_hash)
+        second_chain_tip, second_chain_time, second_chain_height = int(best_hash, 16), tip_block["time"] + 1, tip_block["height"] + 1
+        second_chain = []
+        for _ in range(150):
+            block = create_block(second_chain_tip, create_coinbase(second_chain_height), second_chain_time)
+            block.solve()
+            second_chain.append(block)
+            second_chain_tip, second_chain_time, second_chain_height = block.hash_int, second_chain_time + 1, second_chain_height + 1
+        p2p3 = self.nodes[3].add_p2p_connection(BaseNode())
+        p2p3.send_header_for_blocks(second_chain)
+        p2p3.send_header_for_blocks(self.blocks[0:103])
         with self.nodes[3].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #1 ({block_1_hash}): block not in best header chain.",
         ]):
-            best_hash = self.nodes[3].getbestblockhash()
-            tip_block = self.nodes[3].getblock(best_hash)
-            second_chain_tip, second_chain_time, second_chain_height = int(best_hash, 16), tip_block["time"] + 1, tip_block["height"] + 1
-            second_chain = []
-            for _ in range(150):
-                block = create_block(second_chain_tip, create_coinbase(second_chain_height), second_chain_time)
-                block.solve()
-                second_chain.append(block)
-                second_chain_tip, second_chain_time, second_chain_height = block.hash_int, second_chain_time + 1, second_chain_height + 1
-
-            p2p3 = self.nodes[3].add_p2p_connection(BaseNode())
-
-            p2p3.send_header_for_blocks(second_chain)
-            p2p3.send_header_for_blocks(self.blocks[0:103])
-
             p2p3.send_without_ping(msg_block(self.blocks[0]))
             self.wait_until(lambda: self.nodes[3].getblockcount() == 1)
 
@@ -214,12 +207,11 @@ class AssumeValidTest(BitcoinTestFramework):
         genesis_time = self.nodes[4].getblock(genesis_hash)['time']
         alt1 = create_block(int(genesis_hash, 16), create_coinbase(1), genesis_time + 2)
         alt1.solve()
+        p2p4 = self.nodes[4].add_p2p_connection(BaseNode())
+        p2p4.send_header_for_blocks(self.blocks[0:103])
         with self.nodes[4].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #1 ({alt1.hash_hex}): block not in assumevalid chain.",
         ]):
-            p2p4 = self.nodes[4].add_p2p_connection(BaseNode())
-            p2p4.send_header_for_blocks(self.blocks[0:103])
-
             p2p4.send_without_ping(msg_block(alt1))
             self.wait_until(lambda: self.nodes[4].getblockcount() == 1)
 
