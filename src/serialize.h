@@ -528,8 +528,12 @@ void WriteVarInt(Stream& os, I n)
             WriteVarIntFixed<4>(os, n);
             return;
         }
-        if (n <= 0x81020407FULL) {
-            WriteVarIntFixed<5>(os, n);
+        if (n <= 0x4081020407FULL) {
+            if (n <= 0x81020407FULL) {
+                WriteVarIntFixed<5>(os, n);
+                return;
+            }
+            WriteVarIntFixed<6>(os, n);
             return;
         }
         unsigned char tmp[(sizeof(n) * 8 + 6) / 7];
