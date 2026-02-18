@@ -34,7 +34,7 @@ std::string DeploymentName(Consensus::BuriedDeployment dep)
     case Consensus::DEPLOYMENT_SEGWIT:
         return "segwit";
     } // no default case, so the compiler can warn about missing cases
-    return "";
+    assert(false);
 }
 
 std::optional<Consensus::BuriedDeployment> GetBuriedDeployment(const std::string_view name)

@@ -149,9 +149,13 @@ void HandleWalletError(const std::shared_ptr<CWallet>& wallet, DatabaseStatus& s
             case DatabaseStatus::FAILED_ENCRYPT:
                 code = RPC_WALLET_ENCRYPTION_FAILED;
                 break;
-            default: // RPC_WALLET_ERROR is returned for all other cases.
+            case DatabaseStatus::SUCCESS:
+            case DatabaseStatus::FAILED_BAD_PATH:
+            case DatabaseStatus::FAILED_CREATE:
+            case DatabaseStatus::FAILED_LOAD:
+            case DatabaseStatus::FAILED_VERIFY:
                 break;
-        }
+        } // no default case, so the compiler can warn about missing cases
         throw JSONRPCError(code, error.original);
     }
 }

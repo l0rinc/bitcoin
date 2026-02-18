@@ -431,9 +431,10 @@ public:
                 to_jump += OverflowRecord::SIZE;
                 break;
             }
-            default:
-                throw std::runtime_error("Unknown record type in records page");
-            }
+            case RecordType::DELETE_FLAG:
+                throw std::runtime_error("Invalid records page entry: DELETE_FLAG set without a base record type");
+            } // no default case, so the compiler can warn about missing cases
+            assert(false);
 
             // Go back to the indexes
             s.seek(-to_jump, SEEK_CUR);
@@ -697,9 +698,12 @@ void BerkeleyRODatabase::Open()
             }
             break;
         }
-        default:
-            throw std::runtime_error("Unexpected page type");
-        }
+        case PageType::OVERFLOW_DATA:
+            throw std::runtime_error("Unexpected overflow page type");
+        case PageType::BTREE_META:
+            throw std::runtime_error("Unexpected metadata page type");
+        } // no default case, so the compiler can warn about missing cases
+        assert(false);
     }
 }
 

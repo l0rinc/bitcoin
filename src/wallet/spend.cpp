@@ -259,9 +259,15 @@ static OutputType GetOutputType(TxoutType type, bool is_from_p2sh)
         case TxoutType::SCRIPTHASH:
         case TxoutType::PUBKEYHASH:
             return OutputType::LEGACY;
-        default:
+        case TxoutType::NONSTANDARD:
+        case TxoutType::ANCHOR:
+        case TxoutType::PUBKEY:
+        case TxoutType::MULTISIG:
+        case TxoutType::NULL_DATA:
+        case TxoutType::WITNESS_UNKNOWN:
             return OutputType::UNKNOWN;
-    }
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
 }
 
 // Fetch and validate the coin control selected inputs.
