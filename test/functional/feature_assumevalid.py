@@ -154,7 +154,7 @@ class AssumeValidTest(BitcoinTestFramework):
                 p2p0.send_without_ping(msg_block(self.blocks[i]))
             p2p0.wait_for_disconnect()
             assert_equal(self.nodes[0].getblockcount(), COINBASE_MATURITY + 1)
-            self.wait_until(lambda: next(filter(lambda x: x["hash"] == self.blocks[-1].hash_hex, self.nodes[0].getchaintips()))["status"] == "invalid")
+            assert_equal(next(filter(lambda x: x["hash"] == self.blocks[-1].hash_hex, self.nodes[0].getchaintips()))["status"], "invalid")
 
         # nodes[1]
         self.log.info("Send all blocks to node1. All blocks will be accepted.")
@@ -172,7 +172,7 @@ class AssumeValidTest(BitcoinTestFramework):
                 p2p1.send_without_ping(msg_block(self.blocks[i]))
             # Syncing 2200 blocks can take a while on slow systems. Give it plenty of time to sync.
             p2p1.sync_with_ping(timeout=960)
-            assert_equal(self.nodes[1].getblock(self.nodes[1].getbestblockhash())['height'], 2202)
+            assert_equal(self.nodes[1].getblockcount(), 2202)
 
         # nodes[2]
         self.log.info("Send blocks to node2. Block 102 will be rejected.")
@@ -189,6 +189,7 @@ class AssumeValidTest(BitcoinTestFramework):
                 p2p2.send_without_ping(msg_block(self.blocks[i]))
             p2p2.wait_for_disconnect()
             assert_equal(self.nodes[2].getblockcount(), COINBASE_MATURITY + 1)
+            assert_equal(next(filter(lambda x: x["hash"] == self.blocks[199].hash_hex, self.nodes[2].getchaintips()))["status"], "invalid")
 
         # nodes[3]
         self.log.info("Send two header chains, and a block not in the best header chain to node3.")
@@ -207,8 +208,8 @@ class AssumeValidTest(BitcoinTestFramework):
         with self.nodes[3].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #1 ({block_1_hash}): block not in best header chain.",
         ]):
-            p2p3.send_without_ping(msg_block(self.blocks[0]))
-            self.wait_until(lambda: self.nodes[3].getblockcount() == 1)
+            p2p3.send_and_ping(msg_block(self.blocks[0]))
+            assert_equal(self.nodes[3].getblockcount(), 1)
 
         # nodes[4]
         self.log.info("Send a block not in the assumevalid header chain to node4.")
@@ -221,8 +222,8 @@ class AssumeValidTest(BitcoinTestFramework):
         with self.nodes[4].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #1 ({alt1.hash_hex}): block not in assumevalid chain.",
         ]):
-            p2p4.send_without_ping(msg_block(alt1))
-            self.wait_until(lambda: self.nodes[4].getblockcount() == 1)
+            p2p4.send_and_ping(msg_block(alt1))
+            assert_equal(self.nodes[4].getblockcount(), 1)
 
         # nodes[5]
         self.log.info("Reindex to hit specific assumevalid gates (no races with header downloads/chainwork during startup).")
