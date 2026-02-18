@@ -79,17 +79,6 @@ class AssumeValidTest(BitcoinTestFramework):
         # signature so we can pass in the block hash as assumevalid.
         self.start_node(0)
 
-    def send_blocks_until_disconnected(self, p2p_conn):
-        """Keep sending blocks to the node until we're disconnected."""
-        for i in range(len(self.blocks)):
-            if not p2p_conn.is_connected:
-                break
-            try:
-                p2p_conn.send_without_ping(msg_block(self.blocks[i]))
-            except IOError:
-                assert not p2p_conn.is_connected
-                break
-
     def run_test(self):
         # Build the blockchain
         self.tip = int(self.nodes[0].getbestblockhash(), 16)
@@ -161,8 +150,9 @@ class AssumeValidTest(BitcoinTestFramework):
             p2p0.send_header_for_blocks(self.blocks[0:2000])
             p2p0.send_header_for_blocks(self.blocks[2000:])
 
-            self.send_blocks_until_disconnected(p2p0)
-            self.wait_until(lambda: self.nodes[0].getblockcount() >= COINBASE_MATURITY + 1)
+            for i in range(0, 103):
+                p2p0.send_without_ping(msg_block(self.blocks[i]))
+            p2p0.wait_for_disconnect()
             assert_equal(self.nodes[0].getblockcount(), COINBASE_MATURITY + 1)
             self.wait_until(lambda: next(filter(lambda x: x["hash"] == self.blocks[-1].hash_hex, self.nodes[0].getchaintips()))["status"] == "invalid")
 
@@ -193,9 +183,9 @@ class AssumeValidTest(BitcoinTestFramework):
             p2p2 = self.nodes[2].add_p2p_connection(BaseNode())
             p2p2.send_header_for_blocks(self.blocks[0:200])
 
-            self.send_blocks_until_disconnected(p2p2)
-
-            self.wait_until(lambda: self.nodes[2].getblockcount() >= COINBASE_MATURITY + 1)
+            for i in range(0, 103):
+                p2p2.send_without_ping(msg_block(self.blocks[i]))
+            p2p2.wait_for_disconnect()
             assert_equal(self.nodes[2].getblockcount(), COINBASE_MATURITY + 1)
 
 
