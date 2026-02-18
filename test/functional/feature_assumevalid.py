@@ -145,9 +145,12 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p0.send_header_for_blocks(self.blocks[2000:])
         with self.nodes[0].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #1 ({block_1_hash}): assumevalid=0 (always verify).",
+        ]):
+            p2p0.send_and_ping(msg_block(self.blocks[0]))
+        with self.nodes[0].assert_debug_log(expected_msgs=[
             "Block validation error: block-script-verify-flag-failed",
         ]):
-            for i in range(0, 103):
+            for i in range(1, 103):
                 p2p0.send_without_ping(msg_block(self.blocks[i]))
             p2p0.wait_for_disconnect()
             assert_equal(self.nodes[0].getblockcount(), COINBASE_MATURITY + 1)
@@ -160,9 +163,12 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p1.send_header_for_blocks(self.blocks[2000:])
         with self.nodes[1].assert_debug_log(expected_msgs=[
             f"Disabling script verification at block #1 ({self.blocks[0].hash_hex}).",
+        ]):
+            p2p1.send_and_ping(msg_block(self.blocks[0]))
+        with self.nodes[1].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #103 ({self.blocks[102].hash_hex}): block height above assumevalid height.",
         ]):
-            for i in range(2202):
+            for i in range(1, 2202):
                 p2p1.send_without_ping(msg_block(self.blocks[i]))
             # Syncing 2200 blocks can take a while on slow systems. Give it plenty of time to sync.
             p2p1.sync_with_ping(timeout=960)
@@ -174,9 +180,12 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p2.send_header_for_blocks(self.blocks[0:200])
         with self.nodes[2].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #1 ({block_1_hash}): block too recent relative to best header.",
+        ]):
+            p2p2.send_and_ping(msg_block(self.blocks[0]))
+        with self.nodes[2].assert_debug_log(expected_msgs=[
             "Block validation error: block-script-verify-flag-failed",
         ]):
-            for i in range(0, 103):
+            for i in range(1, 103):
                 p2p2.send_without_ping(msg_block(self.blocks[i]))
             p2p2.wait_for_disconnect()
             assert_equal(self.nodes[2].getblockcount(), COINBASE_MATURITY + 1)
