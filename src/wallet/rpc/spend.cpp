@@ -1146,28 +1146,21 @@ static RPCHelpMan bumpfee_helper(std::string method_name)
     CAmount old_fee;
     CAmount new_fee;
     CMutableTransaction mtx;
-    feebumper::Result res;
     // Targeting feerate bump.
-    res = feebumper::CreateRateBumpTransaction(*pwallet, hash, coin_control, errors, old_fee, new_fee, mtx, /*require_mine=*/ !want_psbt, outputs, original_change_index);
-    if (res != feebumper::Result::OK) {
-        switch(res) {
-            case feebumper::Result::INVALID_ADDRESS_OR_KEY:
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, errors[0].original);
-                break;
-            case feebumper::Result::INVALID_REQUEST:
-                throw JSONRPCError(RPC_INVALID_REQUEST, errors[0].original);
-                break;
-            case feebumper::Result::INVALID_PARAMETER:
-                throw JSONRPCError(RPC_INVALID_PARAMETER, errors[0].original);
-                break;
-            case feebumper::Result::WALLET_ERROR:
-                throw JSONRPCError(RPC_WALLET_ERROR, errors[0].original);
-                break;
-            default:
-                throw JSONRPCError(RPC_MISC_ERROR, errors[0].original);
-                break;
-        }
-    }
+    switch (feebumper::CreateRateBumpTransaction(*pwallet, hash, coin_control, errors, old_fee, new_fee, mtx, /*require_mine=*/ !want_psbt, outputs, original_change_index)) {
+        case feebumper::Result::OK:
+            break;
+        case feebumper::Result::INVALID_ADDRESS_OR_KEY:
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, errors[0].original);
+        case feebumper::Result::INVALID_REQUEST:
+            throw JSONRPCError(RPC_INVALID_REQUEST, errors[0].original);
+        case feebumper::Result::INVALID_PARAMETER:
+            throw JSONRPCError(RPC_INVALID_PARAMETER, errors[0].original);
+        case feebumper::Result::WALLET_ERROR:
+            throw JSONRPCError(RPC_WALLET_ERROR, errors[0].original);
+        case feebumper::Result::MISC_ERROR:
+            throw JSONRPCError(RPC_MISC_ERROR, errors[0].original);
+    } // no default case, so the compiler can warn about missing cases
 
     UniValue result(UniValue::VOBJ);
 

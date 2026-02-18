@@ -9,6 +9,7 @@
 #include <script/verify_flags.h>
 #include <uint256.h>
 
+#include <cassert>
 #include <array>
 #include <chrono>
 #include <limits>
@@ -150,7 +151,7 @@ struct Params {
         case DEPLOYMENT_SEGWIT:
             return SegwitHeight;
         } // no default case, so the compiler can warn about missing cases
-        return std::numeric_limits<int>::max();
+        assert(false);
     }
 };
 

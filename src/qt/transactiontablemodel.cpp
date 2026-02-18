@@ -378,9 +378,10 @@ QString TransactionTableModel::formatTxType(const TransactionRecord *wtx) const
         return tr("Sent to");
     case TransactionRecord::Generated:
         return tr("Mined");
-    default:
+    case TransactionRecord::Other:
         return QString();
-    }
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
 }
 
 QVariant TransactionTableModel::txAddressDecoration(const TransactionRecord *wtx) const
@@ -395,9 +396,10 @@ QVariant TransactionTableModel::txAddressDecoration(const TransactionRecord *wtx
     case TransactionRecord::SendToAddress:
     case TransactionRecord::SendToOther:
         return QIcon(":/icons/tx_output");
-    default:
+    case TransactionRecord::Other:
         return QIcon(":/icons/tx_inout");
-    }
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
 }
 
 QString TransactionTableModel::formatTxToAddress(const TransactionRecord *wtx, bool tooltip) const
@@ -412,9 +414,10 @@ QString TransactionTableModel::formatTxToAddress(const TransactionRecord *wtx, b
         return lookupAddress(wtx->address, tooltip);
     case TransactionRecord::SendToOther:
         return QString::fromStdString(wtx->address);
-    default:
+    case TransactionRecord::Other:
         return tr("(n/a)");
-    }
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
 }
 
 QVariant TransactionTableModel::addressColor(const TransactionRecord *wtx) const
@@ -427,13 +430,15 @@ QVariant TransactionTableModel::addressColor(const TransactionRecord *wtx) const
     case TransactionRecord::Generated:
         {
         QString label = walletModel->getAddressTableModel()->labelForAddress(QString::fromStdString(wtx->address));
-        if(label.isEmpty())
-            return COLOR_BAREADDRESS;
-        } break;
-    default:
-        break;
-    }
-    return QVariant();
+        if(label.isEmpty()) return COLOR_BAREADDRESS;
+        else return QVariant();
+        }
+    case TransactionRecord::Other:
+    case TransactionRecord::RecvFromOther:
+    case TransactionRecord::SendToOther:
+        return QVariant();
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
 }
 
 QString TransactionTableModel::formatTxAmount(const TransactionRecord *wtx, bool showUnconfirmed, BitcoinUnits::SeparatorStyle separators) const
@@ -477,9 +482,8 @@ QVariant TransactionTableModel::txStatusDecoration(const TransactionRecord *wtx)
         }
     case TransactionStatus::NotAccepted:
         return QIcon(":/icons/transaction_0");
-    default:
-        return COLOR_BLACK;
-    }
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
 }
 
 QString TransactionTableModel::formatTooltip(const TransactionRecord *rec) const
