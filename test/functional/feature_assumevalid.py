@@ -138,9 +138,8 @@ class AssumeValidTest(BitcoinTestFramework):
         self.start_node(4, extra_args=[f"-assumevalid={block102.hash_hex}"])
         self.start_node(5)
 
-
         # nodes[0]
-        # Send blocks to node0. Block 102 will be rejected.
+        self.log.info("Send blocks to node0. Block 102 will be rejected.")
         with self.nodes[0].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #1 ({block_1_hash}): assumevalid=0 (always verify).",
             "Block validation error: block-script-verify-flag-failed",
@@ -156,8 +155,8 @@ class AssumeValidTest(BitcoinTestFramework):
             assert_equal(self.nodes[0].getblockcount(), COINBASE_MATURITY + 1)
             self.wait_until(lambda: next(filter(lambda x: x["hash"] == self.blocks[-1].hash_hex, self.nodes[0].getchaintips()))["status"] == "invalid")
 
-
         # nodes[1]
+        self.log.info("Send all blocks to node1. All blocks will be accepted.")
         with self.nodes[1].assert_debug_log(expected_msgs=[
             f"Disabling script verification at block #1 ({self.blocks[0].hash_hex}).",
             f"Enabling script verification at block #103 ({self.blocks[102].hash_hex}): block height above assumevalid height.",
@@ -166,16 +165,14 @@ class AssumeValidTest(BitcoinTestFramework):
 
             p2p1.send_header_for_blocks(self.blocks[0:2000])
             p2p1.send_header_for_blocks(self.blocks[2000:])
-            # Send all blocks to node1. All blocks will be accepted.
             for i in range(2202):
                 p2p1.send_without_ping(msg_block(self.blocks[i]))
             # Syncing 2200 blocks can take a while on slow systems. Give it plenty of time to sync.
             p2p1.sync_with_ping(timeout=960)
             assert_equal(self.nodes[1].getblock(self.nodes[1].getbestblockhash())['height'], 2202)
 
-
         # nodes[2]
-        # Send blocks to node2. Block 102 will be rejected.
+        self.log.info("Send blocks to node2. Block 102 will be rejected.")
         with self.nodes[2].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #1 ({block_1_hash}): block too recent relative to best header.",
             "Block validation error: block-script-verify-flag-failed",
@@ -188,8 +185,8 @@ class AssumeValidTest(BitcoinTestFramework):
             p2p2.wait_for_disconnect()
             assert_equal(self.nodes[2].getblockcount(), COINBASE_MATURITY + 1)
 
-
         # nodes[3]
+        self.log.info("Send two header chains, and a block not in the best header chain to node3.")
         with self.nodes[3].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #1 ({block_1_hash}): block not in best header chain.",
         ]):
@@ -211,8 +208,8 @@ class AssumeValidTest(BitcoinTestFramework):
             p2p3.send_without_ping(msg_block(self.blocks[0]))
             self.wait_until(lambda: self.nodes[3].getblockcount() == 1)
 
-
         # nodes[4]
+        self.log.info("Send a block not in the assumevalid header chain to node4.")
         genesis_hash = self.nodes[4].getbestblockhash()
         genesis_time = self.nodes[4].getblock(genesis_hash)['time']
         alt1 = create_block(int(genesis_hash, 16), create_coinbase(1), genesis_time + 2)
@@ -226,9 +223,8 @@ class AssumeValidTest(BitcoinTestFramework):
             p2p4.send_without_ping(msg_block(alt1))
             self.wait_until(lambda: self.nodes[4].getblockcount() == 1)
 
-
         # nodes[5]
-        # Reindex to hit specific assumevalid gates (no races with header downloads/chainwork during startup).
+        self.log.info("Reindex to hit specific assumevalid gates (no races with header downloads/chainwork during startup).")
         p2p5 = self.nodes[5].add_p2p_connection(BaseNode())
         p2p5.send_header_for_blocks(self.blocks[0:200])
         p2p5.send_without_ping(msg_block(self.blocks[0]))
@@ -243,7 +239,6 @@ class AssumeValidTest(BitcoinTestFramework):
         ]):
             self.restart_node(5, extra_args=["-reindex-chainstate", f"-assumevalid={block102.hash_hex}", "-minimumchainwork=0xffff"])
             assert_equal(self.nodes[5].getblockcount(), 1)
-
 
 if __name__ == '__main__':
     AssumeValidTest(__file__).main()
