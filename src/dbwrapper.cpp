@@ -139,10 +139,15 @@ static void SetMaxOpenFiles(leveldb::Options *options) {
 static leveldb::Options GetOptions(size_t nCacheSize)
 {
     leveldb::Options options;
+    options.max_file_size = std::max(options.max_file_size, DBWRAPPER_MAX_FILE_SIZE);
     // During reindex/IBD, the chainstate DB is write-heavy and compaction can become a major IO
-    // bottleneck once the UTXO working set no longer fits in memory. Bias slightly towards a
-    // larger memtable/write buffer to reduce level-0 churn and compaction overhead.
-    options.write_buffer_size = nCacheSize / 3; // up to two write buffers may be held in memory simultaneously
+    // bottleneck once the UTXO working set no longer fits in memory.
+    //
+    // LevelDB uses write_buffer_size as the memtable size, which also affects the size of
+    // level-0 files produced by memtable flushes. Keep it bounded by the target table file size
+    // to avoid producing oversized level-0 files that can increase overlap and compaction work.
+    const size_t max_write_buffer{options.max_file_size};
+    options.write_buffer_size = std::min(nCacheSize / 3, max_write_buffer); // up to two write buffers may be held in memory simultaneously
     options.block_cache = leveldb::NewLRUCache(nCacheSize - options.write_buffer_size);
     options.block_restart_interval = 4;
     options.filter_policy = leveldb::NewBloomFilterPolicy(14);
@@ -153,7 +158,6 @@ static leveldb::Options GetOptions(size_t nCacheSize)
         // on corruption in later versions.
         options.paranoid_checks = true;
     }
-    options.max_file_size = std::max(options.max_file_size, DBWRAPPER_MAX_FILE_SIZE);
     SetMaxOpenFiles(&options);
     return options;
 }
