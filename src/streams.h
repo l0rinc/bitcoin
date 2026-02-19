@@ -425,6 +425,16 @@ public:
      */
     bool IsNull() const { return m_file == nullptr; }
 
+    /** Return the file descriptor for the wrapped FILE* where available, or -1 otherwise. */
+    int GetFd() const
+    {
+#ifndef WIN32
+        return m_file ? ::fileno(m_file) : -1;
+#else
+        return -1;
+#endif
+    }
+
     /** Continue with a different XOR key */
     void SetObfuscation(const Obfuscation& obfuscation) { m_obfuscation = obfuscation; }
 

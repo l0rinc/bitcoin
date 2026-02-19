@@ -45,6 +45,9 @@
 #include <compare>
 #include <cstddef>
 #include <cstdio>
+#ifndef WIN32
+#include <fcntl.h>
+#endif
 #include <exception>
 #include <map>
 #include <optional>
@@ -980,6 +983,7 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
             LogError("FindUndoPos failed for %s while writing block undo", pos.ToString());
             return false;
         }
+        [[maybe_unused]] const uint32_t undo_pos_start{pos.nPos};
 
         // Open history file to append
         AutoFile file{OpenUndoFile(pos)};
@@ -1006,6 +1010,15 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
                 fileout << hasher.GetHash();
             }
             // BufferedWriter will flush pending data to file when fileout goes out of scope.
+        }
+
+        if (m_opts.drop_os_cache) {
+#ifdef POSIX_FADV_DONTNEED
+            if (const int fd{file.GetFd()}; fd != -1) {
+                // Best-effort: avoid polluting the OS cache during bulk validation/reindex.
+                posix_fadvise(fd, undo_pos_start, blockundo_size + UNDO_DATA_DISK_OVERHEAD, POSIX_FADV_DONTNEED);
+            }
+#endif
         }
 
         // Make sure that the file is closed before we call `FlushUndoFile`.
@@ -1131,6 +1144,15 @@ BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& p
 
         std::vector<std::byte> data(blk_size); // Zeroing of memory is intentional here
         filein.read(data);
+
+        if (m_opts.drop_os_cache && !block_part) {
+#ifdef POSIX_FADV_DONTNEED
+            if (const int fd{filein.GetFd()}; fd != -1) {
+                // Best-effort: avoid polluting the OS cache during bulk validation/reindex.
+                posix_fadvise(fd, pos.nPos - STORAGE_HEADER_BYTES, STORAGE_HEADER_BYTES + blk_size, POSIX_FADV_DONTNEED);
+            }
+#endif
+        }
         return data;
     } catch (const std::exception& e) {
         LogError("Read from block file failed: %s for %s while reading raw block", e.what(), pos.ToString());
