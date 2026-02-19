@@ -140,7 +140,10 @@ void AddCoins(CCoinsViewCache& cache, const CTransaction &tx, int nHeight, bool 
 }
 
 bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {
-    CCoinsMap::iterator it = FetchCoin(outpoint);
+    // SpendCoin is frequently called after an AccessCoin/HaveCoin on the same outpoint.
+    // Avoid the heavier try_emplace() path when the coin is already in the cache.
+    CCoinsMap::iterator it = cacheCoins.find(outpoint);
+    if (it == cacheCoins.end()) it = FetchCoin(outpoint);
     if (it == cacheCoins.end()) return false;
     cachedCoinsUsage -= it->second.coin.DynamicMemoryUsage();
     TRACEPOINT(utxocache, spent,
