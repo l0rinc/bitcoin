@@ -1057,15 +1057,66 @@ bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::o
 {
     block.SetNull();
 
-    // Open history file to read
-    const auto block_data{ReadRawBlock(pos)};
-    if (!block_data) {
+    if (pos.nPos < STORAGE_HEADER_BYTES) {
+        // If nPos is less than STORAGE_HEADER_BYTES, we can't read the header that precedes the block data
+        // This would cause an unsigned integer underflow when trying to position the file cursor
+        // This can happen after pruning or default constructed positions.
+        LogError("Failed for %s while reading block storage header", pos.ToString());
         return false;
     }
 
+    // Avoid allocating a new buffer for every block read. This makes the hot
+    // ReadBlock path much cheaper during reindex/IBD without impacting semantics.
+    static thread_local std::vector<std::byte> raw_block;
+
+    AutoFile filein{OpenBlockFile({pos.nFile, pos.nPos - STORAGE_HEADER_BYTES}, /*fReadOnly=*/true)};
+    if (filein.IsNull()) {
+        LogError("OpenBlockFile failed for %s while reading block", pos.ToString());
+        return false;
+    }
+
+    MessageStartChars blk_start;
+    unsigned int blk_size;
     try {
-        // Read block
-        SpanReader{*block_data} >> TX_WITH_WITNESS(block);
+        filein >> blk_start >> blk_size;
+    } catch (const std::exception& e) {
+        LogError("Read from block file failed: %s for %s while reading block header", e.what(), pos.ToString());
+        return false;
+    }
+
+    if (blk_start != GetParams().MessageStart()) {
+        LogError("Block magic mismatch for %s: %s versus expected %s while reading block",
+            pos.ToString(), HexStr(blk_start), HexStr(GetParams().MessageStart()));
+        return false;
+    }
+
+    if (blk_size > MAX_SIZE) {
+        LogError("Block data is larger than maximum deserialization size for %s: %s versus %s while reading block",
+            pos.ToString(), blk_size, MAX_SIZE);
+        return false;
+    }
+
+    if (raw_block.size() < blk_size) raw_block.resize(blk_size);
+    const auto block_span{std::span{raw_block}.first(blk_size)};
+
+    try {
+        filein.read(block_span);
+    } catch (const std::exception& e) {
+        LogError("Read from block file failed: %s for %s while reading block data", e.what(), pos.ToString());
+        return false;
+    }
+
+    if (m_opts.drop_os_cache) {
+#ifdef POSIX_FADV_DONTNEED
+        if (const int fd{filein.GetFd()}; fd != -1) {
+            // Best-effort: avoid polluting the OS cache during bulk validation/reindex.
+            posix_fadvise(fd, pos.nPos - STORAGE_HEADER_BYTES, STORAGE_HEADER_BYTES + blk_size, POSIX_FADV_DONTNEED);
+        }
+#endif
+    }
+
+    try {
+        SpanReader{block_span} >> TX_WITH_WITNESS(block);
     } catch (const std::exception& e) {
         LogError("Deserialize or I/O error - %s at %s while reading block", e.what(), pos.ToString());
         return false;
