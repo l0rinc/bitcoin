@@ -70,7 +70,10 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options,
   // Read the block contents as well as the type/crc footer.
   // See table_builder.cc for the code that built this structure.
   size_t n = static_cast<size_t>(handle.size());
-  char* buf = new char[n + kBlockTrailerSize];
+  char* buf = nullptr;
+  if (file->RequiresScratch()) {
+    buf = new char[n + kBlockTrailerSize];
+  }
   Slice contents;
   Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);
   if (!s.ok()) {

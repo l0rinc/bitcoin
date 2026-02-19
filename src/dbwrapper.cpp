@@ -139,9 +139,18 @@ static void SetMaxOpenFiles(leveldb::Options *options) {
 static leveldb::Options GetOptions(size_t nCacheSize)
 {
     leveldb::Options options;
-    options.block_cache = leveldb::NewLRUCache(nCacheSize / 2);
-    options.write_buffer_size = nCacheSize / 4; // up to two write buffers may be held in memory simultaneously
-    options.filter_policy = leveldb::NewBloomFilterPolicy(10);
+    options.max_file_size = std::max(options.max_file_size, DBWRAPPER_MAX_FILE_SIZE);
+    // During reindex/IBD, the chainstate DB is write-heavy and compaction can become a major IO
+    // bottleneck once the UTXO working set no longer fits in memory.
+    //
+    // LevelDB uses write_buffer_size as the memtable size, which also affects the size of
+    // level-0 files produced by memtable flushes. Keep it bounded by the target table file size
+    // to avoid producing oversized level-0 files that can increase overlap and compaction work.
+    const size_t max_write_buffer{options.max_file_size};
+    options.write_buffer_size = std::min(nCacheSize / 3, max_write_buffer); // up to two write buffers may be held in memory simultaneously
+    options.block_cache = leveldb::NewLRUCache(nCacheSize - options.write_buffer_size);
+    options.block_restart_interval = 4;
+    options.filter_policy = leveldb::NewBloomFilterPolicy(16);
     options.compression = leveldb::kNoCompression;
     options.info_log = new CBitcoinLevelDBLogger();
     if (leveldb::kMajorVersion > 1 || (leveldb::kMajorVersion == 1 && leveldb::kMinorVersion >= 16)) {
@@ -149,7 +158,6 @@ static leveldb::Options GetOptions(size_t nCacheSize)
         // on corruption in later versions.
         options.paranoid_checks = true;
     }
-    options.max_file_size = std::max(options.max_file_size, DBWRAPPER_MAX_FILE_SIZE);
     SetMaxOpenFiles(&options);
     return options;
 }
@@ -302,26 +310,10 @@ size_t CDBWrapper::DynamicMemoryUsage() const
     return parsed.value();
 }
 
-std::optional<std::string> CDBWrapper::ReadImpl(std::span<const std::byte> key) const
+bool CDBWrapper::ReadImpl(std::span<const std::byte> key, std::string& value) const
 {
     leveldb::Slice slKey(CharCast(key.data()), key.size());
-    std::string strValue;
-    leveldb::Status status = DBContext().pdb->Get(DBContext().readoptions, slKey, &strValue);
-    if (!status.ok()) {
-        if (status.IsNotFound())
-            return std::nullopt;
-        LogError("LevelDB read failure: %s", status.ToString());
-        HandleError(status);
-    }
-    return strValue;
-}
-
-bool CDBWrapper::ExistsImpl(std::span<const std::byte> key) const
-{
-    leveldb::Slice slKey(CharCast(key.data()), key.size());
-
-    std::string strValue;
-    leveldb::Status status = DBContext().pdb->Get(DBContext().readoptions, slKey, &strValue);
+    leveldb::Status status = DBContext().pdb->Get(DBContext().readoptions, slKey, &value);
     if (!status.ok()) {
         if (status.IsNotFound())
             return false;
@@ -329,6 +321,13 @@ bool CDBWrapper::ExistsImpl(std::span<const std::byte> key) const
         HandleError(status);
     }
     return true;
+}
+
+bool CDBWrapper::ExistsImpl(std::span<const std::byte> key) const
+{
+    std::string& value{ScratchValueString()};
+    value.clear();
+    return ReadImpl(key, value);
 }
 
 size_t CDBWrapper::EstimateSizeImpl(std::span<const std::byte> key1, std::span<const std::byte> key2) const

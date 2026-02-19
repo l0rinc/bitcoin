@@ -147,33 +147,57 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
     if (tx.IsCoinBase())
         return nSigOps;
 
-    if (flags & SCRIPT_VERIFY_P2SH) {
-        nSigOps += GetP2SHSigOpCount(tx, inputs) * WITNESS_SCALE_FACTOR;
-    }
-
-    for (unsigned int i = 0; i < tx.vin.size(); i++)
-    {
+    const bool fP2SH{static_cast<bool>(flags & SCRIPT_VERIFY_P2SH)};
+    for (unsigned int i = 0; i < tx.vin.size(); i++) {
         const Coin& coin = inputs.AccessCoin(tx.vin[i].prevout);
         assert(!coin.IsSpent());
-        const CTxOut &prevout = coin.out;
+        const CTxOut& prevout{coin.out};
+        if (fP2SH && prevout.scriptPubKey.IsPayToScriptHash()) {
+            nSigOps += prevout.scriptPubKey.GetSigOpCount(tx.vin[i].scriptSig) * WITNESS_SCALE_FACTOR;
+        }
         nSigOps += CountWitnessSigOps(tx.vin[i].scriptSig, prevout.scriptPubKey, tx.vin[i].scriptWitness, flags);
     }
     return nSigOps;
 }
 
-bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee)
+bool Consensus::CheckTxInputs(const CTransaction& tx,
+                              TxValidationState& state,
+                              const CCoinsViewCache& inputs,
+                              int nSpendHeight,
+                              CAmount& txfee,
+                              std::vector<int>* prev_heights,
+                              script_verify_flags flags,
+                              int64_t* tx_sigops_cost)
 {
-    // are the actual inputs available?
-    if (!inputs.HaveInputs(tx)) {
-        return state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missingorspent",
-                         strprintf("%s: inputs missing/spent", __func__));
+    if (prev_heights) assert(prev_heights->size() == tx.vin.size());
+
+    int64_t sigops_cost{0};
+    if (tx_sigops_cost) {
+        // Compute sigops alongside input value checks to avoid re-walking the
+        // UTXO set (a major IBD bottleneck).
+        sigops_cost = GetLegacySigOpCount(tx) * WITNESS_SCALE_FACTOR;
     }
 
     CAmount nValueIn = 0;
     for (unsigned int i = 0; i < tx.vin.size(); ++i) {
         const COutPoint &prevout = tx.vin[i].prevout;
         const Coin& coin = inputs.AccessCoin(prevout);
-        assert(!coin.IsSpent());
+        // AccessCoin() returns an empty coin for missing inputs, so checking
+        // IsSpent() avoids a redundant HaveInputs() pass.
+        if (coin.IsSpent()) {
+            return state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missingorspent",
+                                 strprintf("%s: inputs missing/spent", __func__));
+        }
+        if (prev_heights) {
+            (*prev_heights)[i] = coin.nHeight;
+        }
+        if (tx_sigops_cost) {
+            const CTxOut& prev_tx_out{coin.out};
+            if (flags & SCRIPT_VERIFY_P2SH && prev_tx_out.scriptPubKey.IsPayToScriptHash()) {
+                sigops_cost += prev_tx_out.scriptPubKey.GetSigOpCount(tx.vin[i].scriptSig) * WITNESS_SCALE_FACTOR;
+            }
+            sigops_cost += CountWitnessSigOps(tx.vin[i].scriptSig, prev_tx_out.scriptPubKey, tx.vin[i].scriptWitness, flags);
+        }
 
         // If prev is coinbase, check that it's matured
         if (coin.IsCoinBase() && nSpendHeight - coin.nHeight < COINBASE_MATURITY) {
@@ -210,5 +234,6 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
     }
 
     txfee = txfee_aux;
+    if (tx_sigops_cost) *tx_sigops_cost = sigops_cost;
     return true;
 }

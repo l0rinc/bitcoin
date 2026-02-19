@@ -10,14 +10,14 @@
 #include <algorithm>
 
 //! Suggested default amount of cache reserved for the kernel (bytes)
-static constexpr size_t DEFAULT_KERNEL_CACHE{450_MiB};
+static constexpr size_t DEFAULT_KERNEL_CACHE{550_MiB};
 //! Default LevelDB write batch size
 static constexpr size_t DEFAULT_DB_CACHE_BATCH{32_MiB};
 
 //! Max memory allocated to block tree DB specific cache (bytes)
-static constexpr size_t MAX_BLOCK_DB_CACHE{2_MiB};
+static constexpr size_t MAX_BLOCK_DB_CACHE{8_MiB};
 //! Max memory allocated to coin DB specific cache (bytes)
-static constexpr size_t MAX_COINS_DB_CACHE{8_MiB};
+static constexpr size_t MAX_COINS_DB_CACHE{512_MiB};
 
 namespace kernel {
 struct CacheSizes {
@@ -29,7 +29,10 @@ struct CacheSizes {
     {
         block_tree_db = std::min(total_cache / 8, MAX_BLOCK_DB_CACHE);
         total_cache -= block_tree_db;
-        coins_db = std::min(total_cache / 2, MAX_COINS_DB_CACHE);
+        // Prefer reserving most of the cache for the in-memory UTXO set, while still allowing
+        // the chainstate LevelDB cache (block cache + write buffers) to scale with -dbcache
+        // for IO-heavy startup/import/reindex scenarios.
+        coins_db = std::min(total_cache / 6, MAX_COINS_DB_CACHE);
         total_cache -= coins_db;
         coins = total_cache; // the rest goes to the coins cache
     }

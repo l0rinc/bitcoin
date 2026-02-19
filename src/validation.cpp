@@ -2505,15 +2505,16 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
     CBlockUndo blockundo;
 
-    // Precomputed transaction data pointers must not be invalidated
-    // until after `control` has run the script checks (potentially
-    // in multiple threads). Preallocate the vector size so a new allocation
-    // doesn't invalidate pointers into the vector, and keep txsdata in scope
-    // for as long as `control`.
+    // Precomputed transaction data pointers must not be invalidated until after
+    // `control` has run the script checks (potentially in multiple threads).
+    // Only allocate the per-tx data when script checks are enabled to avoid
+    // wasting time initializing it during IBD when script verification is
+    // skipped (assumevalid).
     std::optional<CCheckQueueControl<CScriptCheck>> control;
     if (auto& queue = m_chainman.GetCheckQueue(); queue.HasThreads() && fScriptChecks) control.emplace(queue);
 
-    std::vector<PrecomputedTransactionData> txsdata(block.vtx.size());
+    std::vector<PrecomputedTransactionData> txsdata;
+    if (fScriptChecks) txsdata.resize(block.vtx.size());
 
     std::vector<int> prevheights;
     CAmount nFees = 0;
@@ -2527,11 +2528,13 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
         nInputs += tx.vin.size();
 
+        int64_t tx_sigops_cost{0};
         if (!tx.IsCoinBase())
         {
+            prevheights.resize(tx.vin.size());
             CAmount txfee = 0;
             TxValidationState tx_state;
-            if (!Consensus::CheckTxInputs(tx, tx_state, view, pindex->nHeight, txfee)) {
+            if (!Consensus::CheckTxInputs(tx, tx_state, view, pindex->nHeight, txfee, &prevheights, flags, &tx_sigops_cost)) {
                 // Any transaction validation failure in ConnectBlock is a block consensus failure
                 state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
                               tx_state.GetRejectReason(),
@@ -2548,23 +2551,17 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             // Check that transaction is BIP68 final
             // BIP68 lock checks (as opposed to nLockTime checks) must
             // be in ConnectBlock because they require the UTXO set
-            prevheights.resize(tx.vin.size());
-            for (size_t j = 0; j < tx.vin.size(); j++) {
-                prevheights[j] = view.AccessCoin(tx.vin[j].prevout).nHeight;
-            }
-
             if (!SequenceLocks(tx, nLockTimeFlags, prevheights, *pindex)) {
                 state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-nonfinal",
                               "contains a non-BIP68-final transaction " + tx.GetHash().ToString());
                 break;
             }
+        } else {
+            // Coinbase: sigops are limited to legacy sigops.
+            tx_sigops_cost = GetLegacySigOpCount(tx) * WITNESS_SCALE_FACTOR;
         }
 
-        // GetTransactionSigOpCost counts 3 types of sigops:
-        // * legacy (always)
-        // * p2sh (when P2SH enabled in flags and excludes coinbase)
-        // * witness (when witness enabled in flags and excludes coinbase)
-        nSigOpsCost += GetTransactionSigOpCost(tx, view, flags);
+        nSigOpsCost += tx_sigops_cost;
         if (nSigOpsCost > MAX_BLOCK_SIGOPS_COST) {
             state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sigops", "too many sigops");
             break;
@@ -2689,7 +2686,18 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
     int64_t nTotalSpace =
         max_coins_cache_size_bytes + std::max<int64_t>(int64_t(max_mempool_size_bytes) - nMempoolUsage, 0);
 
-    if (cacheSize > nTotalSpace) {
+    // Allow a small amount of overshoot above the configured cache limit.
+    //
+    // The coins cache allocates memory in chunks (e.g. unordered_map bucket growth),
+    // so it can briefly exceed the target size by a small amount. Treating these
+    // tiny overshoots as CRITICAL can wipe the entire cache and cause long IO-bound
+    // periods while it warms up again.
+    // `cacheCoins` is an `unordered_map` and can grow in sudden steps when it
+    // rehashes (bucket array growth). Allow a small fixed overshoot so we don't
+    // fall into the CRITICAL->wipe path due to a modest rehash.
+    static constexpr int64_t COINS_CACHE_CRITICAL_OVERSHOOT{64 << 20}; // 64 MiB
+
+    if (cacheSize > nTotalSpace + COINS_CACHE_CRITICAL_OVERSHOOT) {
         LogInfo("Cache size (%s) exceeds total space (%s)\n", cacheSize, nTotalSpace);
         return CoinsCacheSizeState::CRITICAL;
     } else if (cacheSize > LargeCoinsCacheThreshold(nTotalSpace)) {
@@ -2765,9 +2773,17 @@ bool Chainstate::FlushStateToDisk(
         bool fCacheCritical = mode == FlushStateMode::IF_NEEDED && cache_state >= CoinsCacheSizeState::CRITICAL;
         // It's been a while since we wrote the block index and chain state to disk. Do this frequently, so we don't need to redownload or reindex after a crash.
         bool fPeriodicWrite = mode == FlushStateMode::PERIODIC && nNow >= m_next_write;
-        const auto empty_cache{(mode == FlushStateMode::FORCE_FLUSH) || fCacheLarge || fCacheCritical};
+        // Only empty the coins cache when forced or when over the configured limit. In IBD
+        // and reindex-chainstate, wiping a large cache can cause extended IO-bound periods
+        // due to cold UTXO lookups.
+        const auto empty_cache{(mode == FlushStateMode::FORCE_FLUSH) || fCacheCritical};
         // Combine all conditions that result in a write to disk.
         bool should_write = (mode == FlushStateMode::FORCE_SYNC) || empty_cache || fPeriodicWrite || fFlushForPrune;
+        // The coins database write is the most expensive part of a flush during IBD.
+        // Avoid writing coins in prune-only flushes during IBD; the chainstate will
+        // still be flushed on shutdown and on periodic/cache-pressure triggers.
+        const bool should_write_coins{(mode == FlushStateMode::FORCE_SYNC) || empty_cache || fPeriodicWrite ||
+            (!m_chainman.IsInitialBlockDownload() && fFlushForPrune)};
         // Write blocks, block index and best chain related state to disk.
         if (should_write) {
             LogDebug(BCLog::COINDB, "Writing chainstate to disk: flush mode=%s, prune=%d, large=%d, critical=%d, periodic=%d",
@@ -2801,7 +2817,7 @@ bool Chainstate::FlushStateToDisk(
                 m_blockman.UnlinkPrunedFiles(setFilesToPrune);
             }
 
-            if (!CoinsTip().GetBestBlock().IsNull()) {
+            if (should_write_coins && !CoinsTip().GetBestBlock().IsNull()) {
                 if (coins_mem_usage >= WARN_FLUSH_COINS_SIZE) LogWarning("Flushing large (%d GiB) UTXO set to disk, it may take several minutes", coins_mem_usage >> 30);
                 LOG_TIME_MILLIS_WITH_CATEGORY(strprintf("write coins cache to disk (%d coins, %.2fKiB)",
                     coins_count, coins_mem_usage >> 10), BCLog::BENCH);
@@ -2826,7 +2842,7 @@ bool Chainstate::FlushStateToDisk(
             }
         }
 
-        if (should_write || m_next_write == NodeClock::time_point::max()) {
+        if (should_write_coins || m_next_write == NodeClock::time_point::max()) {
             constexpr auto range{DATABASE_WRITE_INTERVAL_MAX - DATABASE_WRITE_INTERVAL_MIN};
             m_next_write = FastRandomContext().rand_uniform_delay(NodeClock::now() + DATABASE_WRITE_INTERVAL_MIN, range);
         }
@@ -5043,10 +5059,7 @@ void ChainstateManager::LoadExternalBlockFile(
                 CBlockHeader header;
                 blkdat >> header;
                 const uint256 hash{header.GetHash()};
-                // Skip the rest of this block (this may read from disk into memory); position to the marker before the
-                // next block, but it's still possible to rewind to the start of the current block (without a disk read).
-                nRewind = nBlockPos + nSize;
-                blkdat.SkipTo(nRewind);
+                const uint64_t nBlockEndPos{nBlockPos + nSize};
 
                 std::shared_ptr<CBlock> pblock{}; // needs to remain available after the cs_main lock is released to avoid duplicate reads from disk
 
@@ -5059,12 +5072,17 @@ void ChainstateManager::LoadExternalBlockFile(
                         if (dbp && blocks_with_unknown_parent) {
                             blocks_with_unknown_parent->emplace(header.hashPrevBlock, *dbp);
                         }
+                        nRewind = nBlockEndPos;
+                        blkdat.FastSkipNoRewind(nRewind);
                         continue;
                     }
 
                     // process in case the block isn't known yet
                     const CBlockIndex* pindex = m_blockman.LookupBlockIndex(hash);
                     if (!pindex || (pindex->nStatus & BLOCK_HAVE_DATA) == 0) {
+                        // Skip to the block end first so we can rewind and deserialize without another disk read.
+                        nRewind = nBlockEndPos;
+                        blkdat.SkipTo(nRewind);
                         // This block can be processed immediately; rewind to its start, read and deserialize it.
                         blkdat.SetPos(nBlockPos);
                         pblock = std::make_shared<CBlock>();
@@ -5079,7 +5097,13 @@ void ChainstateManager::LoadExternalBlockFile(
                             break;
                         }
                     } else if (hash != params.GetConsensus().hashGenesisBlock && pindex->nHeight % 1000 == 0) {
+                        // For known blocks, seek over payload bytes without reading and deobfuscating them.
+                        nRewind = nBlockEndPos;
+                        blkdat.FastSkipNoRewind(nRewind);
                         LogDebug(BCLog::REINDEX, "Block Import: already had block %s at height %d\n", hash.ToString(), pindex->nHeight);
+                    } else {
+                        nRewind = nBlockEndPos;
+                        blkdat.FastSkipNoRewind(nRewind);
                     }
                 }
 
@@ -5158,7 +5182,12 @@ void ChainstateManager::LoadExternalBlockFile(
     } catch (const std::runtime_error& e) {
         GetNotifications().fatalError(strprintf(_("System error while loading external block file: %s"), e.what()));
     }
-    LogInfo("Loaded %i blocks from external file in %dms", nLoaded, Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
+    const auto elapsed_ms{Ticks<std::chrono::milliseconds>(SteadyClock::now() - start)};
+    if (nLoaded > 0 || elapsed_ms >= 1000) {
+        LogInfo("Loaded %i blocks from external file in %dms", nLoaded, elapsed_ms);
+    } else {
+        LogDebug(BCLog::REINDEX, "Loaded %i blocks from external file in %dms", nLoaded, elapsed_ms);
+    }
 }
 
 bool ChainstateManager::ShouldCheckBlockIndex() const

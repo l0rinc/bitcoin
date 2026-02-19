@@ -143,7 +143,8 @@ public:
     void SeekToFirst();
 
     template<typename K> void Seek(const K& key) {
-        DataStream ssKey{};
+        static thread_local DataStream ssKey{};
+        ssKey.clear();
         ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey << key;
         SeekImpl(ssKey);
@@ -153,7 +154,7 @@ public:
 
     template<typename K> bool GetKey(K& key) {
         try {
-            DataStream ssKey{GetKeyImpl()};
+            SpanReader ssKey{GetKeyImpl()};
             ssKey >> key;
         } catch (const std::exception&) {
             return false;
@@ -163,8 +164,12 @@ public:
 
     template<typename V> bool GetValue(V& value) {
         try {
-            DataStream ssValue{GetValueImpl()};
-            dbwrapper_private::GetObfuscation(parent)(ssValue);
+            static thread_local DataStream ssValue{};
+            const auto sp_value{GetValueImpl()};
+            ssValue.clear();
+            ssValue.resize(sp_value.size());
+            std::memcpy(ssValue.data(), sp_value.data(), sp_value.size());
+            dbwrapper_private::GetObfuscation(parent)(std::span<std::byte>{ssValue.data(), ssValue.size()});
             ssValue >> value;
         } catch (const std::exception&) {
             return false;
@@ -191,10 +196,28 @@ private:
     //! obfuscation key storage key, null-prefixed to avoid collisions
     inline static const std::string OBFUSCATION_KEY{"\000obfuscate_key", 14}; // explicit size to avoid truncation at leading \0
 
-    std::optional<std::string> ReadImpl(std::span<const std::byte> key) const;
+    bool ReadImpl(std::span<const std::byte> key, std::string& value) const;
     bool ExistsImpl(std::span<const std::byte> key) const;
     size_t EstimateSizeImpl(std::span<const std::byte> key1, std::span<const std::byte> key2) const;
     auto& DBContext() const LIFETIMEBOUND { return *Assert(m_db_context); }
+
+    static DataStream& ScratchKeyStream() noexcept
+    {
+        static thread_local DataStream ssKey{};
+        return ssKey;
+    }
+
+    static DataStream& ScratchKeyStream2() noexcept
+    {
+        static thread_local DataStream ssKey{};
+        return ssKey;
+    }
+
+    static std::string& ScratchValueString() noexcept
+    {
+        static thread_local std::string value;
+        return value;
+    }
 
 public:
     CDBWrapper(const DBParams& params);
@@ -206,17 +229,19 @@ public:
     template <typename K, typename V>
     bool Read(const K& key, V& value) const
     {
-        DataStream ssKey{};
+        DataStream& ssKey{ScratchKeyStream()};
+        ssKey.clear();
         ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey << key;
-        std::optional<std::string> strValue{ReadImpl(ssKey)};
-        if (!strValue) {
+        std::string& strValue{ScratchValueString()};
+        strValue.clear();
+        if (!ReadImpl(ssKey, strValue)) {
             return false;
         }
         try {
-            std::span ssValue{MakeWritableByteSpan(*strValue)};
-            m_obfuscation(ssValue);
-            SpanReader{ssValue} >> value;
+            m_obfuscation(MakeWritableByteSpan(strValue));
+            SpanReader ssValue{MakeByteSpan(strValue)};
+            ssValue >> value;
         } catch (const std::exception&) {
             return false;
         }
@@ -234,7 +259,8 @@ public:
     template <typename K>
     bool Exists(const K& key) const
     {
-        DataStream ssKey{};
+        DataStream& ssKey{ScratchKeyStream()};
+        ssKey.clear();
         ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey << key;
         return ExistsImpl(ssKey);
@@ -263,7 +289,10 @@ public:
     template<typename K>
     size_t EstimateSize(const K& key_begin, const K& key_end) const
     {
-        DataStream ssKey1{}, ssKey2{};
+        DataStream& ssKey1{ScratchKeyStream()};
+        DataStream& ssKey2{ScratchKeyStream2()};
+        ssKey1.clear();
+        ssKey2.clear();
         ssKey1.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey2.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey1 << key_begin;

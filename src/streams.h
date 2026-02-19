@@ -425,6 +425,16 @@ public:
      */
     bool IsNull() const { return m_file == nullptr; }
 
+    /** Return the file descriptor for the wrapped FILE* where available, or -1 otherwise. */
+    int GetFd() const
+    {
+#ifndef WIN32
+        return m_file ? ::fileno(m_file) : -1;
+#else
+        return -1;
+#endif
+    }
+
     /** Continue with a different XOR key */
     void SetObfuscation(const Obfuscation& obfuscation) { m_obfuscation = obfuscation; }
 
@@ -557,6 +567,22 @@ public:
     {
         assert(file_pos >= m_read_pos);
         while (m_read_pos < file_pos) AdvanceStream(file_pos - m_read_pos);
+    }
+
+    //! Move to file_pos without reading intervening bytes. This discards rewind history before file_pos.
+    void FastSkipNoRewind(const uint64_t file_pos)
+    {
+        assert(file_pos >= m_read_pos);
+        if (file_pos > nReadLimit) {
+            throw std::ios_base::failure("Attempt to position past buffer limit");
+        }
+        if (file_pos <= nSrcPos) {
+            m_read_pos = file_pos;
+            return;
+        }
+        m_src.seek(file_pos, SEEK_SET);
+        m_read_pos = file_pos;
+        nSrcPos = file_pos;
     }
 
     //! return the current reading position
@@ -699,6 +725,30 @@ public:
     BufferedWriter& operator<<(const T& obj)
     {
         Serialize(*this, obj);
+        return *this;
+    }
+};
+
+/** Writer stream (for serialization) that forwards all written bytes to two underlying writers. */
+template <typename A, typename B>
+class TeeWriter
+{
+    A& m_a;
+    B& m_b;
+
+public:
+    TeeWriter(A& a LIFETIMEBOUND, B& b LIFETIMEBOUND) : m_a{a}, m_b{b} {}
+
+    void write(std::span<const std::byte> src)
+    {
+        m_a.write(src);
+        m_b.write(src);
+    }
+
+    template <typename T>
+    TeeWriter& operator<<(const T& obj)
+    {
+        ::Serialize(*this, obj);
         return *this;
     }
 };

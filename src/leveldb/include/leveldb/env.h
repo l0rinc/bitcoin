@@ -232,6 +232,11 @@ class LEVELDB_EXPORT RandomAccessFile {
 
   virtual ~RandomAccessFile();
 
+  // Return true if this implementation may write into the caller-provided
+  // scratch buffer passed to Read(). Implementations backed by a stable mapping
+  // (e.g. mmap) can ignore scratch and return pointers into the mapping.
+  virtual bool RequiresScratch() const { return true; }
+
   // Read up to "n" bytes from the file starting at "offset".
   // "scratch[0..n-1]" may be written by this routine.  Sets "*result"
   // to the data that was read (including if fewer than "n" bytes were

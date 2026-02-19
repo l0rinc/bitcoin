@@ -45,6 +45,9 @@
 #include <compare>
 #include <cstddef>
 #include <cstdio>
+#ifndef WIN32
+#include <fcntl.h>
+#endif
 #include <exception>
 #include <map>
 #include <optional>
@@ -255,14 +258,17 @@ CBlockIndex* BlockManager::AddToBlockIndex(const CBlockHeader& block, CBlockInde
     return pindexNew;
 }
 
-void BlockManager::PruneOneBlockFile(const int fileNumber)
+void BlockManager::PruneBlockFiles(const std::set<int>& file_numbers)
 {
     AssertLockHeld(cs_main);
+    if (file_numbers.empty()) return;
     LOCK(cs_LastBlockFile);
 
     for (auto& entry : m_block_index) {
         CBlockIndex* pindex = &entry.second;
-        if (pindex->nFile == fileNumber) {
+        if (!file_numbers.contains(pindex->nFile)) continue;
+
+        {
             pindex->nStatus &= ~BLOCK_HAVE_DATA;
             pindex->nStatus &= ~BLOCK_HAVE_UNDO;
             pindex->nFile = 0;
@@ -285,8 +291,15 @@ void BlockManager::PruneOneBlockFile(const int fileNumber)
         }
     }
 
-    m_blockfile_info.at(fileNumber) = CBlockFileInfo{};
-    m_dirty_fileinfo.insert(fileNumber);
+    for (const int fileNumber : file_numbers) {
+        m_blockfile_info.at(fileNumber) = CBlockFileInfo{};
+        m_dirty_fileinfo.insert(fileNumber);
+    }
+}
+
+void BlockManager::PruneOneBlockFile(const int fileNumber)
+{
+    PruneBlockFiles({fileNumber});
 }
 
 void BlockManager::FindFilesToPruneManual(
@@ -310,10 +323,10 @@ void BlockManager::FindFilesToPruneManual(
             continue;
         }
 
-        PruneOneBlockFile(fileNumber);
         setFilesToPrune.insert(fileNumber);
         count++;
     }
+    PruneBlockFiles(setFilesToPrune);
     LogInfo("[%s] Prune (Manual): prune_height=%d removed %d blk/rev pairs",
         chain.GetRole(), last_block_can_prune, count);
 }
@@ -385,12 +398,12 @@ void BlockManager::FindFilesToPrune(
                 continue;
             }
 
-            PruneOneBlockFile(fileNumber);
             // Queue up the files for removal
             setFilesToPrune.insert(fileNumber);
             nCurrentUsage -= nBytesToPrune;
             count++;
         }
+        PruneBlockFiles(setFilesToPrune);
     }
 
     LogDebug(BCLog::PRUNE, "[%s] target=%dMiB actual=%dMiB diff=%dMiB min_height=%d max_prune_height=%d removed %d blk/rev pairs\n",
@@ -970,6 +983,7 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
             LogError("FindUndoPos failed for %s while writing block undo", pos.ToString());
             return false;
         }
+        [[maybe_unused]] const uint32_t undo_pos_start{pos.nPos};
 
         // Open history file to append
         AutoFile file{OpenUndoFile(pos)};
@@ -986,11 +1000,25 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
             {
                 // Calculate checksum
                 HashWriter hasher{};
-                hasher << block.pprev->GetBlockHash() << blockundo;
-                // Write undo data & checksum
-                fileout << blockundo << hasher.GetHash();
+                hasher << block.pprev->GetBlockHash();
+
+                // Hash the exact bytes written to disk, to avoid serializing
+                // the undo data twice (once for hashing and once for writing).
+                TeeWriter hashing_out{fileout, hasher};
+                hashing_out << blockundo;
+                // Write checksum
+                fileout << hasher.GetHash();
             }
             // BufferedWriter will flush pending data to file when fileout goes out of scope.
+        }
+
+        if (m_opts.drop_os_cache) {
+#ifdef POSIX_FADV_DONTNEED
+            if (const int fd{file.GetFd()}; fd != -1) {
+                // Best-effort: avoid polluting the OS cache during bulk validation/reindex.
+                posix_fadvise(fd, undo_pos_start, blockundo_size + UNDO_DATA_DISK_OVERHEAD, POSIX_FADV_DONTNEED);
+            }
+#endif
         }
 
         // Make sure that the file is closed before we call `FlushUndoFile`.
@@ -1029,15 +1057,66 @@ bool BlockManager::ReadBlock(CBlock& block, const FlatFilePos& pos, const std::o
 {
     block.SetNull();
 
-    // Open history file to read
-    const auto block_data{ReadRawBlock(pos)};
-    if (!block_data) {
+    if (pos.nPos < STORAGE_HEADER_BYTES) {
+        // If nPos is less than STORAGE_HEADER_BYTES, we can't read the header that precedes the block data
+        // This would cause an unsigned integer underflow when trying to position the file cursor
+        // This can happen after pruning or default constructed positions.
+        LogError("Failed for %s while reading block storage header", pos.ToString());
         return false;
     }
 
+    // Avoid allocating a new buffer for every block read. This makes the hot
+    // ReadBlock path much cheaper during reindex/IBD without impacting semantics.
+    static thread_local std::vector<std::byte> raw_block;
+
+    AutoFile filein{OpenBlockFile({pos.nFile, pos.nPos - STORAGE_HEADER_BYTES}, /*fReadOnly=*/true)};
+    if (filein.IsNull()) {
+        LogError("OpenBlockFile failed for %s while reading block", pos.ToString());
+        return false;
+    }
+
+    MessageStartChars blk_start;
+    unsigned int blk_size;
     try {
-        // Read block
-        SpanReader{*block_data} >> TX_WITH_WITNESS(block);
+        filein >> blk_start >> blk_size;
+    } catch (const std::exception& e) {
+        LogError("Read from block file failed: %s for %s while reading block header", e.what(), pos.ToString());
+        return false;
+    }
+
+    if (blk_start != GetParams().MessageStart()) {
+        LogError("Block magic mismatch for %s: %s versus expected %s while reading block",
+            pos.ToString(), HexStr(blk_start), HexStr(GetParams().MessageStart()));
+        return false;
+    }
+
+    if (blk_size > MAX_SIZE) {
+        LogError("Block data is larger than maximum deserialization size for %s: %s versus %s while reading block",
+            pos.ToString(), blk_size, MAX_SIZE);
+        return false;
+    }
+
+    if (raw_block.size() < blk_size) raw_block.resize(blk_size);
+    const auto block_span{std::span{raw_block}.first(blk_size)};
+
+    try {
+        filein.read(block_span);
+    } catch (const std::exception& e) {
+        LogError("Read from block file failed: %s for %s while reading block data", e.what(), pos.ToString());
+        return false;
+    }
+
+    if (m_opts.drop_os_cache) {
+#ifdef POSIX_FADV_DONTNEED
+        if (const int fd{filein.GetFd()}; fd != -1) {
+            // Best-effort: avoid polluting the OS cache during bulk validation/reindex.
+            posix_fadvise(fd, pos.nPos - STORAGE_HEADER_BYTES, STORAGE_HEADER_BYTES + blk_size, POSIX_FADV_DONTNEED);
+        }
+#endif
+    }
+
+    try {
+        SpanReader{block_span} >> TX_WITH_WITNESS(block);
     } catch (const std::exception& e) {
         LogError("Deserialize or I/O error - %s at %s while reading block", e.what(), pos.ToString());
         return false;
@@ -1116,6 +1195,15 @@ BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& p
 
         std::vector<std::byte> data(blk_size); // Zeroing of memory is intentional here
         filein.read(data);
+
+        if (m_opts.drop_os_cache && !block_part) {
+#ifdef POSIX_FADV_DONTNEED
+            if (const int fd{filein.GetFd()}; fd != -1) {
+                // Best-effort: avoid polluting the OS cache during bulk validation/reindex.
+                posix_fadvise(fd, pos.nPos - STORAGE_HEADER_BYTES, STORAGE_HEADER_BYTES + blk_size, POSIX_FADV_DONTNEED);
+            }
+#endif
+        }
         return data;
     } catch (const std::exception& e) {
         LogError("Read from block file failed: %s for %s while reading raw block", e.what(), pos.ToString());
@@ -1265,13 +1353,18 @@ void ImportBlocks(ChainstateManager& chainman, std::span<const fs::path> import_
         // parent hash -> child disk position, multiple children can have the same parent.
         std::multimap<uint256, FlatFilePos> blocks_with_unknown_parent;
 
+        int last_reported_percent{-1};
         for (int nFile{0}; nFile < total_files; ++nFile) {
             FlatFilePos pos(nFile, 0);
             AutoFile file{chainman.m_blockman.OpenBlockFile(pos, /*fReadOnly=*/true)};
             if (file.IsNull()) {
                 break; // This error is logged in OpenBlockFile
             }
-            LogInfo("Reindexing block file blk%05u.dat (%d%% complete)...", (unsigned int)nFile, nFile * 100 / total_files);
+            const int progress_percent{nFile * 100 / total_files};
+            if (progress_percent != last_reported_percent || nFile == total_files - 1) {
+                LogInfo("Reindexing block file blk%05u.dat (%d%% complete)...", (unsigned int)nFile, progress_percent);
+                last_reported_percent = progress_percent;
+            }
             chainman.LoadExternalBlockFile(file, &pos, &blocks_with_unknown_parent);
             if (chainman.m_interrupt) {
                 LogInfo("Interrupt requested. Exit reindexing.");

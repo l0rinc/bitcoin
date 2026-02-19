@@ -1333,6 +1333,8 @@ static ChainstateLoadResult InitAndLoadChainstate(
 
     BlockManager::Options blockman_opts{
         .chainparams = chainman_opts.chainparams,
+        .drop_os_cache = (do_reindex || do_reindex_chainstate) ||
+            (args.IsArgSet("-connect") && args.GetArgs("-connect").size() == 1 && args.GetArgs("-connect")[0] == "0"),
         .blocks_dir = args.GetBlocksDirPath(),
         .notifications = chainman_opts.notifications,
         .block_tree_db_params = DBParams{

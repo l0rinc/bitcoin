@@ -42,8 +42,10 @@ namespace {
 // Set by EnvPosixTestHelper::SetReadOnlyMMapLimit() and MaxOpenFiles().
 int g_open_read_only_file_limit = -1;
 
-// Up to 4096 mmap regions for 64-bit binaries; none for 32-bit.
-constexpr const int kDefaultMmapLimit = (sizeof(void*) >= 8) ? 4096 : 0;
+// Default to no read-only mmaps. For large, cache-unfriendly workloads (like
+// chainstate lookups once the working set no longer fits in memory) this avoids
+// page-fault overhead and can reduce memory pressure.
+constexpr const int kDefaultMmapLimit = 0;
 
 // Can be set using EnvPosixTestHelper::SetReadOnlyMMapLimit().
 int g_mmap_limit = kDefaultMmapLimit;
@@ -159,6 +161,13 @@ class PosixRandomAccessFile final : public RandomAccessFile {
     if (!has_permanent_fd_) {
       assert(fd_ == -1);
       ::close(fd);  // The file will be opened on every read.
+    } else {
+#ifdef POSIX_FADV_RANDOM
+      // Best-effort: SSTable access is typically random. Hint to the kernel that
+      // readahead is unlikely to help for point lookups once the working set no
+      // longer fits in memory.
+      posix_fadvise(fd_, 0, 0, POSIX_FADV_RANDOM);
+#endif
     }
   }
 
@@ -231,6 +240,8 @@ class PosixMmapReadableFile final : public RandomAccessFile {
     ::munmap(static_cast<void*>(mmap_base_), length_);
     mmap_limiter_->Release();
   }
+
+  bool RequiresScratch() const override { return false; }
 
   Status Read(uint64_t offset, size_t n, Slice* result,
               char* scratch) const override {

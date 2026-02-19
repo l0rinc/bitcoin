@@ -10,6 +10,17 @@
 
 #include <boost/test/unit_test.hpp>
 
+namespace {
+void AddLargeTestCoin(FastRandomContext& rng, CCoinsViewCache& view)
+{
+    CScript script;
+    script.resize(8 << 10);
+    for (auto& byte : script) byte = OP_TRUE;
+    const COutPoint outpoint{Txid::FromUint256(rng.rand256()), rng.rand32()};
+    view.AddCoin(outpoint, Coin{CTxOut{1, std::move(script)}, /*nHeight=*/1, /*fCoinBase=*/false}, /*possible_overwrite=*/false);
+}
+} // namespace
+
 BOOST_FIXTURE_TEST_SUITE(validation_flush_tests, TestingSetup)
 
 //! Verify that Chainstate::GetCoinsCacheSizeState() switches from OK→LARGE→CRITICAL
@@ -22,12 +33,14 @@ BOOST_AUTO_TEST_CASE(getcoinscachesizestate)
     LOCK(::cs_main);
     CCoinsViewCache& view{chainstate.CoinsTip()};
 
-    // Sanity: an empty cache should be ≲ 1 chunk (~ 256 KiB).
-    BOOST_CHECK_LT(view.DynamicMemoryUsage() / (256 * 1024.0), 1.1);
+    // Sanity: an empty cache should remain close to one pool chunk.
+    // With 1 MiB pool chunks this is ~4 x 256 KiB.
+    BOOST_CHECK_LT(view.DynamicMemoryUsage() / (256 * 1024.0), 4.5);
 
     constexpr size_t MAX_COINS_BYTES{8_MiB};
     constexpr size_t MAX_MEMPOOL_BYTES{4_MiB};
-    constexpr size_t MAX_ATTEMPTS{50'000};
+    constexpr size_t MAX_ATTEMPTS_TO_LARGE{50'000};
+    constexpr size_t MAX_ATTEMPTS_TO_CRITICAL{20'000};
 
     // Run the same growth-path twice: first with 0 head-room, then with extra head-room
     for (size_t max_mempool_size_bytes : {size_t{0}, MAX_MEMPOOL_BYTES}) {
@@ -36,16 +49,19 @@ BOOST_AUTO_TEST_CASE(getcoinscachesizestate)
 
         // OK → LARGE
         auto state{chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, max_mempool_size_bytes)};
-        for (size_t i{0}; i < MAX_ATTEMPTS && int64_t(view.DynamicMemoryUsage()) <= large_cap; ++i) {
+        for (size_t i{0}; i < MAX_ATTEMPTS_TO_LARGE && int64_t(view.DynamicMemoryUsage()) <= large_cap; ++i) {
             BOOST_CHECK_EQUAL(state, CoinsCacheSizeState::OK);
             AddTestCoin(m_rng, view);
             state = chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, max_mempool_size_bytes);
         }
 
         // LARGE → CRITICAL
-        for (size_t i{0}; i < MAX_ATTEMPTS && int64_t(view.DynamicMemoryUsage()) <= full_cap; ++i) {
+        //
+        // With an explicit overshoot allowance before CRITICAL, use larger
+        // synthetic coins so this transition remains fast in tests.
+        for (size_t i{0}; i < MAX_ATTEMPTS_TO_CRITICAL && state != CoinsCacheSizeState::CRITICAL; ++i) {
             BOOST_CHECK_EQUAL(state, CoinsCacheSizeState::LARGE);
-            AddTestCoin(m_rng, view);
+            AddLargeTestCoin(m_rng, view);
             state = chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, max_mempool_size_bytes);
         }
         BOOST_CHECK_EQUAL(state, CoinsCacheSizeState::CRITICAL);

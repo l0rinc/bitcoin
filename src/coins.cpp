@@ -43,6 +43,10 @@ CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic) :
     CCoinsViewBacked(baseIn), m_deterministic(deterministic),
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
+    // Favor cache density once the UTXO set no longer fits in memory.
+    // A higher load factor reduces bucket array overhead and allows caching more coins
+    // for a fixed -dbcache at the cost of slightly more work per lookup.
+    cacheCoins.max_load_factor(2.0f);
     m_sentinel.second.SelfRef(m_sentinel);
 }
 
@@ -124,16 +128,26 @@ void CCoinsViewCache::EmplaceCoinInternalDANGER(COutPoint&& outpoint, Coin&& coi
 void AddCoins(CCoinsViewCache& cache, const CTransaction &tx, int nHeight, bool check_for_overwrite) {
     bool fCoinbase = tx.IsCoinBase();
     const Txid& txid = tx.GetHash();
+    // Reuse the outpoint to avoid copying the txid twice per output.
+    COutPoint outpoint{txid, 0};
     for (size_t i = 0; i < tx.vout.size(); ++i) {
-        bool overwrite = check_for_overwrite ? cache.HaveCoin(COutPoint(txid, i)) : fCoinbase;
+        // Skip provably unspendable outputs early to avoid unnecessary cache work.
+        // AddCoin() will also check this, but doing it here avoids the overwrite
+        // lookup and Coin construction on common OP_RETURN outputs.
+        if (tx.vout[i].scriptPubKey.IsUnspendable()) continue;
+        outpoint.n = static_cast<uint32_t>(i);
+        bool overwrite = check_for_overwrite ? cache.HaveCoin(outpoint) : fCoinbase;
         // Coinbase transactions can always be overwritten, in order to correctly
         // deal with the pre-BIP30 occurrences of duplicate coinbase transactions.
-        cache.AddCoin(COutPoint(txid, i), Coin(tx.vout[i], nHeight, fCoinbase), overwrite);
+        cache.AddCoin(outpoint, Coin(tx.vout[i], nHeight, fCoinbase), overwrite);
     }
 }
 
 bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {
-    CCoinsMap::iterator it = FetchCoin(outpoint);
+    // SpendCoin is frequently called after an AccessCoin/HaveCoin on the same outpoint.
+    // Avoid the heavier try_emplace() path when the coin is already in the cache.
+    CCoinsMap::iterator it = cacheCoins.find(outpoint);
+    if (it == cacheCoins.end()) it = FetchCoin(outpoint);
     if (it == cacheCoins.end()) return false;
     cachedCoinsUsage -= it->second.coin.DynamicMemoryUsage();
     TRACEPOINT(utxocache, spent,
