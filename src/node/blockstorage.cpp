@@ -1275,13 +1275,18 @@ void ImportBlocks(ChainstateManager& chainman, std::span<const fs::path> import_
         // parent hash -> child disk position, multiple children can have the same parent.
         std::multimap<uint256, FlatFilePos> blocks_with_unknown_parent;
 
+        int last_reported_percent{-1};
         for (int nFile{0}; nFile < total_files; ++nFile) {
             FlatFilePos pos(nFile, 0);
             AutoFile file{chainman.m_blockman.OpenBlockFile(pos, /*fReadOnly=*/true)};
             if (file.IsNull()) {
                 break; // This error is logged in OpenBlockFile
             }
-            LogInfo("Reindexing block file blk%05u.dat (%d%% complete)...", (unsigned int)nFile, nFile * 100 / total_files);
+            const int progress_percent{nFile * 100 / total_files};
+            if (progress_percent != last_reported_percent || nFile == total_files - 1) {
+                LogInfo("Reindexing block file blk%05u.dat (%d%% complete)...", (unsigned int)nFile, progress_percent);
+                last_reported_percent = progress_percent;
+            }
             chainman.LoadExternalBlockFile(file, &pos, &blocks_with_unknown_parent);
             if (chainman.m_interrupt) {
                 LogInfo("Interrupt requested. Exit reindexing.");

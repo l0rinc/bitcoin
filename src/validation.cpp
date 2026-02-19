@@ -5160,7 +5160,12 @@ void ChainstateManager::LoadExternalBlockFile(
     } catch (const std::runtime_error& e) {
         GetNotifications().fatalError(strprintf(_("System error while loading external block file: %s"), e.what()));
     }
-    LogInfo("Loaded %i blocks from external file in %dms", nLoaded, Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
+    const auto elapsed_ms{Ticks<std::chrono::milliseconds>(SteadyClock::now() - start)};
+    if (nLoaded > 0 || elapsed_ms >= 1000) {
+        LogInfo("Loaded %i blocks from external file in %dms", nLoaded, elapsed_ms);
+    } else {
+        LogDebug(BCLog::REINDEX, "Loaded %i blocks from external file in %dms", nLoaded, elapsed_ms);
+    }
 }
 
 bool ChainstateManager::ShouldCheckBlockIndex() const
