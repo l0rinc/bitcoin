@@ -143,7 +143,8 @@ public:
     void SeekToFirst();
 
     template<typename K> void Seek(const K& key) {
-        DataStream ssKey{};
+        static thread_local DataStream ssKey{};
+        ssKey.clear();
         ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey << key;
         SeekImpl(ssKey);
