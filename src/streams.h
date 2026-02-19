@@ -719,4 +719,28 @@ public:
     }
 };
 
+/** Writer stream (for serialization) that forwards all written bytes to two underlying writers. */
+template <typename A, typename B>
+class TeeWriter
+{
+    A& m_a;
+    B& m_b;
+
+public:
+    TeeWriter(A& a LIFETIMEBOUND, B& b LIFETIMEBOUND) : m_a{a}, m_b{b} {}
+
+    void write(std::span<const std::byte> src)
+    {
+        m_a.write(src);
+        m_b.write(src);
+    }
+
+    template <typename T>
+    TeeWriter& operator<<(const T& obj)
+    {
+        ::Serialize(*this, obj);
+        return *this;
+    }
+};
+
 #endif // BITCOIN_STREAMS_H

@@ -996,9 +996,14 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
             {
                 // Calculate checksum
                 HashWriter hasher{};
-                hasher << block.pprev->GetBlockHash() << blockundo;
-                // Write undo data & checksum
-                fileout << blockundo << hasher.GetHash();
+                hasher << block.pprev->GetBlockHash();
+
+                // Hash the exact bytes written to disk, to avoid serializing
+                // the undo data twice (once for hashing and once for writing).
+                TeeWriter hashing_out{fileout, hasher};
+                hashing_out << blockundo;
+                // Write checksum
+                fileout << hasher.GetHash();
             }
             // BufferedWriter will flush pending data to file when fileout goes out of scope.
         }
