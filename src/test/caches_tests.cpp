@@ -7,37 +7,52 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <cstdint>
+#include <limits>
+
 using namespace node;
 
 BOOST_AUTO_TEST_SUITE(caches_tests)
 
+BOOST_AUTO_TEST_CASE(default_dbcache_formula_by_total_ram)
+{
+    // The current default dbcache is fixed.
+    // Future commits will switch to a total-RAM-based default.
+    BOOST_CHECK_EQUAL(GetDefaultDbCacheBytes(), DEFAULT_DB_CACHE);
+}
+
 BOOST_AUTO_TEST_CASE(oversized_dbcache_warning)
 {
-    // memory restricted setup - cap is DEFAULT_DB_CACHE (450 MiB)
-    BOOST_CHECK(!ShouldWarnOversizedDbCache(/*dbcache=*/4_MiB, /*total_ram=*/1024_MiB));    // Under cap
-    BOOST_CHECK( ShouldWarnOversizedDbCache(/*dbcache=*/512_MiB, /*total_ram=*/1024_MiB));  // At cap
-    BOOST_CHECK( ShouldWarnOversizedDbCache(/*dbcache=*/1500_MiB, /*total_ram=*/1024_MiB)); // Over cap
+    {
+        constexpr size_t total_ram{1024_MiB};
+        const size_t cap{GetDefaultDbCacheBytes()};
+        BOOST_CHECK(!ShouldWarnOversizedDbCache(MIN_DB_CACHE, total_ram));  // Under cap
+        BOOST_CHECK(!ShouldWarnOversizedDbCache(cap, total_ram));           // At cap
+        BOOST_CHECK( ShouldWarnOversizedDbCache(cap + 1, total_ram));       // Over cap
+    }
 
-    // 2 GiB RAM - cap is 75%
-    BOOST_CHECK(!ShouldWarnOversizedDbCache(/*dbcache=*/1500_MiB, /*total_ram=*/2048_MiB)); // Under cap
-    BOOST_CHECK( ShouldWarnOversizedDbCache(/*dbcache=*/1600_MiB, /*total_ram=*/2048_MiB)); // Over cap
+    {
+        constexpr size_t total_ram{3072_MiB};
+        constexpr size_t cap{(total_ram / 100) * 75};
+        BOOST_CHECK(!ShouldWarnOversizedDbCache(cap, total_ram));
+        BOOST_CHECK( ShouldWarnOversizedDbCache(cap + 1, total_ram));
+    }
 
     if constexpr (SIZE_MAX == UINT64_MAX) {
-        // 4 GiB RAM - cap is 75%
-        BOOST_CHECK(!ShouldWarnOversizedDbCache(/*dbcache=*/2500_MiB, /*total_ram=*/4096_MiB)); // Under cap
-        BOOST_CHECK( ShouldWarnOversizedDbCache(/*dbcache=*/3500_MiB, /*total_ram=*/4096_MiB)); // Over cap
+        BOOST_CHECK(!ShouldWarnOversizedDbCache(/*dbcache=*/12'000_MiB, /*total_ram=*/16384_MiB));
+        BOOST_CHECK( ShouldWarnOversizedDbCache(/*dbcache=*/13'000_MiB, /*total_ram=*/16384_MiB));
+    }
+}
 
-        // 8 GiB RAM - cap is 75%
-        BOOST_CHECK(!ShouldWarnOversizedDbCache(/*dbcache=*/6000_MiB, /*total_ram=*/8192_MiB)); // Under cap
-        BOOST_CHECK( ShouldWarnOversizedDbCache(/*dbcache=*/7000_MiB, /*total_ram=*/8192_MiB)); // Over cap
+BOOST_AUTO_TEST_CASE(default_dbcache_never_warns)
+{
+    BOOST_CHECK(!ShouldWarnOversizedDbCache(GetDefaultDbCacheBytes(), /*total_ram=*/1024_MiB));
+    BOOST_CHECK(!ShouldWarnOversizedDbCache(GetDefaultDbCacheBytes(), /*total_ram=*/2048_MiB));
+    BOOST_CHECK(!ShouldWarnOversizedDbCache(GetDefaultDbCacheBytes(), /*total_ram=*/3072_MiB));
 
-        // 16 GiB RAM - cap is 75%
-        BOOST_CHECK(!ShouldWarnOversizedDbCache(/*dbcache=*/10'000_MiB, /*total_ram=*/16384_MiB)); // Under cap
-        BOOST_CHECK( ShouldWarnOversizedDbCache(/*dbcache=*/15'000_MiB, /*total_ram=*/16384_MiB)); // Over cap
-
-        // 32 GiB RAM - cap is 75%
-        BOOST_CHECK(!ShouldWarnOversizedDbCache(/*dbcache=*/20'000_MiB, /*total_ram=*/32768_MiB)); // Under cap
-        BOOST_CHECK( ShouldWarnOversizedDbCache(/*dbcache=*/30'000_MiB, /*total_ram=*/32768_MiB)); // Over cap
+    if constexpr (SIZE_MAX == UINT64_MAX) {
+        BOOST_CHECK(!ShouldWarnOversizedDbCache(GetDefaultDbCacheBytes(), /*total_ram=*/4096_MiB));
+        BOOST_CHECK(!ShouldWarnOversizedDbCache(GetDefaultDbCacheBytes(), /*total_ram=*/16384_MiB));
     }
 }
 
