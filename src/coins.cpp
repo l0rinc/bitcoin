@@ -127,6 +127,10 @@ void AddCoins(CCoinsViewCache& cache, const CTransaction &tx, int nHeight, bool 
     // Reuse the outpoint to avoid copying the txid twice per output.
     COutPoint outpoint{txid, 0};
     for (size_t i = 0; i < tx.vout.size(); ++i) {
+        // Skip provably unspendable outputs early to avoid unnecessary cache work.
+        // AddCoin() will also check this, but doing it here avoids the overwrite
+        // lookup and Coin construction on common OP_RETURN outputs.
+        if (tx.vout[i].scriptPubKey.IsUnspendable()) continue;
         outpoint.n = static_cast<uint32_t>(i);
         bool overwrite = check_for_overwrite ? cache.HaveCoin(outpoint) : fCoinbase;
         // Coinbase transactions can always be overwritten, in order to correctly
