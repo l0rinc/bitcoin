@@ -139,8 +139,11 @@ static void SetMaxOpenFiles(leveldb::Options *options) {
 static leveldb::Options GetOptions(size_t nCacheSize)
 {
     leveldb::Options options;
-    options.block_cache = leveldb::NewLRUCache((nCacheSize * 3) / 4);
-    options.write_buffer_size = nCacheSize / 4; // up to two write buffers may be held in memory simultaneously
+    // During reindex/IBD, the chainstate DB is write-heavy and compaction can become a major IO
+    // bottleneck once the UTXO working set no longer fits in memory. Bias slightly towards a
+    // larger memtable/write buffer to reduce level-0 churn and compaction overhead.
+    options.write_buffer_size = nCacheSize / 3; // up to two write buffers may be held in memory simultaneously
+    options.block_cache = leveldb::NewLRUCache(nCacheSize - options.write_buffer_size);
     options.block_restart_interval = 4;
     options.filter_policy = leveldb::NewBloomFilterPolicy(14);
     options.compression = leveldb::kNoCompression;
