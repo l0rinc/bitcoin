@@ -221,9 +221,9 @@ public:
             return false;
         }
         try {
-            std::span ssValue{MakeWritableByteSpan(strValue)};
-            m_obfuscation(ssValue);
-            SpanReader{ssValue} >> value;
+            m_obfuscation(MakeWritableByteSpan(strValue));
+            SpanReader ssValue{MakeByteSpan(strValue)};
+            ssValue >> value;
         } catch (const std::exception&) {
             return false;
         }
