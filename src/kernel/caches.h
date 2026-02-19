@@ -32,7 +32,7 @@ struct CacheSizes {
         // Prefer reserving most of the cache for the in-memory UTXO set, while still allowing
         // the chainstate LevelDB cache (block cache + write buffers) to scale with -dbcache
         // for IO-heavy startup/import/reindex scenarios.
-        coins_db = std::min(total_cache / 8, MAX_COINS_DB_CACHE);
+        coins_db = std::min(total_cache / 6, MAX_COINS_DB_CACHE);
         total_cache -= coins_db;
         coins = total_cache; // the rest goes to the coins cache
     }
