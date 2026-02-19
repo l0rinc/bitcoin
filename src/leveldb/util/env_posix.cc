@@ -161,6 +161,13 @@ class PosixRandomAccessFile final : public RandomAccessFile {
     if (!has_permanent_fd_) {
       assert(fd_ == -1);
       ::close(fd);  // The file will be opened on every read.
+    } else {
+#ifdef POSIX_FADV_RANDOM
+      // Best-effort: SSTable access is typically random. Hint to the kernel that
+      // readahead is unlikely to help for point lookups once the working set no
+      // longer fits in memory.
+      posix_fadvise(fd_, 0, 0, POSIX_FADV_RANDOM);
+#endif
     }
   }
 
