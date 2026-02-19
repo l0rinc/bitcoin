@@ -196,6 +196,12 @@ private:
     size_t EstimateSizeImpl(std::span<const std::byte> key1, std::span<const std::byte> key2) const;
     auto& DBContext() const LIFETIMEBOUND { return *Assert(m_db_context); }
 
+    static DataStream& ScratchKeyStream() noexcept
+    {
+        static thread_local DataStream ssKey{};
+        return ssKey;
+    }
+
     static std::string& ScratchValueString() noexcept
     {
         static thread_local std::string value;
@@ -212,7 +218,8 @@ public:
     template <typename K, typename V>
     bool Read(const K& key, V& value) const
     {
-        DataStream ssKey{};
+        DataStream& ssKey{ScratchKeyStream()};
+        ssKey.clear();
         ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey << key;
         std::string& strValue{ScratchValueString()};
@@ -241,7 +248,8 @@ public:
     template <typename K>
     bool Exists(const K& key) const
     {
-        DataStream ssKey{};
+        DataStream& ssKey{ScratchKeyStream()};
+        ssKey.clear();
         ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey << key;
         return ExistsImpl(ssKey);
