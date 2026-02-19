@@ -191,10 +191,16 @@ private:
     //! obfuscation key storage key, null-prefixed to avoid collisions
     inline static const std::string OBFUSCATION_KEY{"\000obfuscate_key", 14}; // explicit size to avoid truncation at leading \0
 
-    std::optional<std::string> ReadImpl(std::span<const std::byte> key) const;
+    bool ReadImpl(std::span<const std::byte> key, std::string& value) const;
     bool ExistsImpl(std::span<const std::byte> key) const;
     size_t EstimateSizeImpl(std::span<const std::byte> key1, std::span<const std::byte> key2) const;
     auto& DBContext() const LIFETIMEBOUND { return *Assert(m_db_context); }
+
+    static std::string& ScratchValueString() noexcept
+    {
+        static thread_local std::string value;
+        return value;
+    }
 
 public:
     CDBWrapper(const DBParams& params);
@@ -209,12 +215,13 @@ public:
         DataStream ssKey{};
         ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey << key;
-        std::optional<std::string> strValue{ReadImpl(ssKey)};
-        if (!strValue) {
+        std::string& strValue{ScratchValueString()};
+        strValue.clear();
+        if (!ReadImpl(ssKey, strValue)) {
             return false;
         }
         try {
-            std::span ssValue{MakeWritableByteSpan(*strValue)};
+            std::span ssValue{MakeWritableByteSpan(strValue)};
             m_obfuscation(ssValue);
             SpanReader{ssValue} >> value;
         } catch (const std::exception&) {
