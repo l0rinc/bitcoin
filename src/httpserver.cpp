@@ -583,9 +583,68 @@ void HTTPRequest::WriteReply(int nStatus, std::span<const std::byte> reply)
     // Send event to main http thread to send reply message
     struct evbuffer* evb = evhttp_request_get_output_buffer(req);
     assert(evb);
+    static constexpr size_t LARGE_HTTP_REPLY_BYTES{16 * 1024 * 1024};
+    if (reply.size() >= LARGE_HTTP_REPLY_BYTES) {
+        LogDebug(BCLog::HTTP, "Large HTTP reply body copied: status=%d bytes=%u\n", nStatus, reply.size());
+    }
     evbuffer_add(evb, reply.data(), reply.size());
     auto req_copy = req;
     HTTPEvent* ev = new HTTPEvent(eventBase, true, [req_copy, nStatus]{
+        evhttp_send_reply(req_copy, nStatus, nullptr, nullptr);
+        // Re-enable reading from the socket. This is the second part of the libevent
+        // workaround above.
+        if (event_get_version_number() >= 0x02010600 && event_get_version_number() < 0x02010900) {
+            evhttp_connection* conn = evhttp_request_get_connection(req_copy);
+            if (conn) {
+                bufferevent* bev = evhttp_connection_get_bufferevent(conn);
+                if (bev) {
+                    bufferevent_enable(bev, EV_READ | EV_WRITE);
+                }
+            }
+        }
+    });
+    ev->trigger(nullptr);
+    replySent = true;
+    req = nullptr; // transferred back to main thread
+}
+
+void HTTPRequest::WriteReply(int nStatus, std::string&& reply)
+{
+    assert(!replySent && req);
+    if (m_interrupt) {
+        WriteHeader("Connection", "close");
+    }
+
+    // Move the reply body into heap storage so libevent can reference it
+    // without copying, and free it once the buffer is done with it.
+    auto* reply_ref = new std::string(std::move(reply));
+
+    struct evbuffer* evb = evhttp_request_get_output_buffer(req);
+    assert(evb);
+    static constexpr size_t LARGE_HTTP_REPLY_BYTES{16 * 1024 * 1024};
+
+    const bool is_large{reply_ref->size() >= LARGE_HTTP_REPLY_BYTES};
+    if (evbuffer_add_reference(
+            evb,
+            reply_ref->data(),
+            reply_ref->size(),
+            [](const void*, size_t, void* arg) { delete static_cast<std::string*>(arg); },
+            reply_ref) != 0) {
+        // If reference insertion fails, fall back to copying the reply body and
+        // free the heap allocation immediately.
+        if (is_large) {
+            LogDebug(BCLog::HTTP, "Large HTTP reply body copied: status=%d bytes=%u\n", nStatus, reply_ref->size());
+        }
+        evbuffer_add(evb, reply_ref->data(), reply_ref->size());
+        delete reply_ref;
+    } else {
+        if (is_large) {
+            LogDebug(BCLog::HTTP, "Large HTTP reply body referenced: status=%d bytes=%u\n", nStatus, reply_ref->size());
+        }
+    }
+
+    auto req_copy = req;
+    HTTPEvent* ev = new HTTPEvent(eventBase, true, [req_copy, nStatus] {
         evhttp_send_reply(req_copy, nStatus, nullptr, nullptr);
         // Re-enable reading from the socket. This is the second part of the libevent
         // workaround above.

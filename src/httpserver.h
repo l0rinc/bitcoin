@@ -138,10 +138,15 @@ public:
      * @note Can be called only once. As this will give the request back to the
      * main thread, do not call any other HTTPRequest methods after calling this.
      */
+    void WriteReply(int nStatus, const char* reply)
+    {
+        WriteReply(nStatus, std::string_view{reply});
+    }
     void WriteReply(int nStatus, std::string_view reply = "")
     {
         WriteReply(nStatus, std::as_bytes(std::span{reply}));
     }
+    void WriteReply(int nStatus, std::string&& reply);
     void WriteReply(int nStatus, std::span<const std::byte> reply);
 };
 
