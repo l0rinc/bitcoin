@@ -232,6 +232,8 @@ class PosixMmapReadableFile final : public RandomAccessFile {
     mmap_limiter_->Release();
   }
 
+  bool RequiresScratch() const override { return false; }
+
   Status Read(uint64_t offset, size_t n, Slice* result,
               char* scratch) const override {
     if (offset + n > length_) {
