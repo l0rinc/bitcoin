@@ -62,13 +62,16 @@ public:
     SaltedOutpointHasher(bool deterministic = false);
 
     /**
-     * Note: This is intentionally not marked noexcept to let libstdc++ cache
-     * the hash value in unordered_map nodes, which improves performance at the
-     * cost of extra memory.
+     * Marking the hash functor noexcept allows libstdc++ to recalculate the
+     * hash during rehash rather than caching it in unordered_map nodes.
+     *
+     * This saves sizeof(size_t) per node, which is significant for large UTXO
+     * caches and can reduce coins DB lookups when the UTXO set does not fit in
+     * memory.
      *
      * @see https://gcc.gnu.org/onlinedocs/gcc-13.2.0/libstdc++/manual/manual/unordered_associative.html
      */
-    size_t operator()(const COutPoint& id) const
+    size_t operator()(const COutPoint& id) const noexcept
     {
         return m_hasher(id.hash.ToUint256(), id.n);
     }
