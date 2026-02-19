@@ -42,8 +42,10 @@ namespace {
 // Set by EnvPosixTestHelper::SetReadOnlyMMapLimit() and MaxOpenFiles().
 int g_open_read_only_file_limit = -1;
 
-// Up to 4096 mmap regions for 64-bit binaries; none for 32-bit.
-constexpr const int kDefaultMmapLimit = (sizeof(void*) >= 8) ? 4096 : 0;
+// Default to no read-only mmaps. For large, cache-unfriendly workloads (like
+// chainstate lookups once the working set no longer fits in memory) this avoids
+// page-fault overhead and can reduce memory pressure.
+constexpr const int kDefaultMmapLimit = 0;
 
 // Can be set using EnvPosixTestHelper::SetReadOnlyMMapLimit().
 int g_mmap_limit = kDefaultMmapLimit;
