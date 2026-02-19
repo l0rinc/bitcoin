@@ -49,7 +49,9 @@ CacheSizes CalculateCacheSizes(const ArgsManager& args, size_t n_indexes)
         index_sizes.filter_index = max_cache / n_indexes;
         total_cache -= index_sizes.filter_index * n_indexes;
     }
-    return {index_sizes, kernel::CacheSizes{total_cache}};
+    kernel::CacheSizes kernel_sizes{total_cache};
+
+    return {index_sizes, kernel_sizes};
 }
 
 void LogOversizedDbCache(const ArgsManager& args) noexcept
