@@ -559,6 +559,22 @@ public:
         while (m_read_pos < file_pos) AdvanceStream(file_pos - m_read_pos);
     }
 
+    //! Move to file_pos without reading intervening bytes. This discards rewind history before file_pos.
+    void FastSkipNoRewind(const uint64_t file_pos)
+    {
+        assert(file_pos >= m_read_pos);
+        if (file_pos > nReadLimit) {
+            throw std::ios_base::failure("Attempt to position past buffer limit");
+        }
+        if (file_pos <= nSrcPos) {
+            m_read_pos = file_pos;
+            return;
+        }
+        m_src.seek(file_pos, SEEK_SET);
+        m_read_pos = file_pos;
+        nSrcPos = file_pos;
+    }
+
     //! return the current reading position
     uint64_t GetPos() const {
         return m_read_pos;
