@@ -43,6 +43,10 @@ CCoinsViewCache::CCoinsViewCache(CCoinsView* baseIn, bool deterministic) :
     CCoinsViewBacked(baseIn), m_deterministic(deterministic),
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
+    // Favor cache density once the UTXO set no longer fits in memory.
+    // A higher load factor reduces bucket array overhead and allows caching more coins
+    // for a fixed -dbcache at the cost of slightly more work per lookup.
+    cacheCoins.max_load_factor(2.0f);
     m_sentinel.second.SelfRef(m_sentinel);
 }
 
