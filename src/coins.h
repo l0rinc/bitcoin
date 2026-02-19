@@ -14,9 +14,10 @@
 #include <serialize.h>
 #include <support/allocators/pool.h>
 #include <uint256.h>
+#include <util/byte_units.h>
 #include <util/check.h>
-#include <util/overflow.h>
 #include <util/hasher.h>
+#include <util/overflow.h>
 
 #include <cassert>
 #include <cstdint>
@@ -401,7 +402,7 @@ protected:
      * declared as "const".
      */
     mutable uint256 m_block_hash;
-    mutable CCoinsMapMemoryResource m_cache_coins_memory_resource{};
+    mutable CCoinsMapMemoryResource m_cache_coins_memory_resource{1_MiB};
     /* The starting sentinel of the flagged entry circular doubly linked list. */
     mutable CoinsCachePair m_sentinel;
     mutable CCoinsMap cacheCoins;
