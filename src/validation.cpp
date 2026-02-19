@@ -2692,7 +2692,10 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
     // so it can briefly exceed the target size by a small amount. Treating these
     // tiny overshoots as CRITICAL can wipe the entire cache and cause long IO-bound
     // periods while it warms up again.
-    static constexpr int64_t COINS_CACHE_CRITICAL_OVERSHOOT{16 << 20}; // 16 MiB
+    // `cacheCoins` is an `unordered_map` and can grow in sudden steps when it
+    // rehashes (bucket array growth). Allow a small fixed overshoot so we don't
+    // fall into the CRITICAL->wipe path due to a modest rehash.
+    static constexpr int64_t COINS_CACHE_CRITICAL_OVERSHOOT{64 << 20}; // 64 MiB
 
     if (cacheSize > nTotalSpace + COINS_CACHE_CRITICAL_OVERSHOOT) {
         LogInfo("Cache size (%s) exceeds total space (%s)\n", cacheSize, nTotalSpace);
