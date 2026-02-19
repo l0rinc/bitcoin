@@ -5045,10 +5045,7 @@ void ChainstateManager::LoadExternalBlockFile(
                 CBlockHeader header;
                 blkdat >> header;
                 const uint256 hash{header.GetHash()};
-                // Skip the rest of this block (this may read from disk into memory); position to the marker before the
-                // next block, but it's still possible to rewind to the start of the current block (without a disk read).
-                nRewind = nBlockPos + nSize;
-                blkdat.SkipTo(nRewind);
+                const uint64_t nBlockEndPos{nBlockPos + nSize};
 
                 std::shared_ptr<CBlock> pblock{}; // needs to remain available after the cs_main lock is released to avoid duplicate reads from disk
 
@@ -5061,12 +5058,17 @@ void ChainstateManager::LoadExternalBlockFile(
                         if (dbp && blocks_with_unknown_parent) {
                             blocks_with_unknown_parent->emplace(header.hashPrevBlock, *dbp);
                         }
+                        nRewind = nBlockEndPos;
+                        blkdat.FastSkipNoRewind(nRewind);
                         continue;
                     }
 
                     // process in case the block isn't known yet
                     const CBlockIndex* pindex = m_blockman.LookupBlockIndex(hash);
                     if (!pindex || (pindex->nStatus & BLOCK_HAVE_DATA) == 0) {
+                        // Skip to the block end first so we can rewind and deserialize without another disk read.
+                        nRewind = nBlockEndPos;
+                        blkdat.SkipTo(nRewind);
                         // This block can be processed immediately; rewind to its start, read and deserialize it.
                         blkdat.SetPos(nBlockPos);
                         pblock = std::make_shared<CBlock>();
@@ -5081,7 +5083,13 @@ void ChainstateManager::LoadExternalBlockFile(
                             break;
                         }
                     } else if (hash != params.GetConsensus().hashGenesisBlock && pindex->nHeight % 1000 == 0) {
+                        // For known blocks, seek over payload bytes without reading and deobfuscating them.
+                        nRewind = nBlockEndPos;
+                        blkdat.FastSkipNoRewind(nRewind);
                         LogDebug(BCLog::REINDEX, "Block Import: already had block %s at height %d\n", hash.ToString(), pindex->nHeight);
+                    } else {
+                        nRewind = nBlockEndPos;
+                        blkdat.FastSkipNoRewind(nRewind);
                     }
                 }
 
