@@ -362,7 +362,9 @@ protected:
      * declared as "const".
      */
     mutable uint256 hashBlock;
-    mutable CCoinsMapMemoryResource m_cache_coins_memory_resource{};
+    // Use larger pool chunks to reduce malloc/free churn when the cache grows large during
+    // reindex/IBD, while keeping the same total memory usage.
+    mutable CCoinsMapMemoryResource m_cache_coins_memory_resource{1 << 20};
     /* The starting sentinel of the flagged entry circular doubly linked list. */
     mutable CoinsCachePair m_sentinel;
     mutable CCoinsMap cacheCoins;
