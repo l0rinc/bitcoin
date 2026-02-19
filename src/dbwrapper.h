@@ -164,8 +164,12 @@ public:
 
     template<typename V> bool GetValue(V& value) {
         try {
-            DataStream ssValue{GetValueImpl()};
-            dbwrapper_private::GetObfuscation(parent)(ssValue);
+            static thread_local DataStream ssValue{};
+            const auto sp_value{GetValueImpl()};
+            ssValue.clear();
+            ssValue.resize(sp_value.size());
+            std::memcpy(ssValue.data(), sp_value.data(), sp_value.size());
+            dbwrapper_private::GetObfuscation(parent)(std::span<std::byte>{ssValue.data(), ssValue.size()});
             ssValue >> value;
         } catch (const std::exception&) {
             return false;
