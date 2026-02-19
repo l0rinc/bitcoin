@@ -203,6 +203,12 @@ private:
         return ssKey;
     }
 
+    static DataStream& ScratchKeyStream2() noexcept
+    {
+        static thread_local DataStream ssKey{};
+        return ssKey;
+    }
+
     static std::string& ScratchValueString() noexcept
     {
         static thread_local std::string value;
@@ -279,7 +285,10 @@ public:
     template<typename K>
     size_t EstimateSize(const K& key_begin, const K& key_end) const
     {
-        DataStream ssKey1{}, ssKey2{};
+        DataStream& ssKey1{ScratchKeyStream()};
+        DataStream& ssKey2{ScratchKeyStream2()};
+        ssKey1.clear();
+        ssKey2.clear();
         ssKey1.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey2.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
         ssKey1 << key_begin;
