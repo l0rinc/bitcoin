@@ -2762,7 +2762,10 @@ bool Chainstate::FlushStateToDisk(
         bool fCacheCritical = mode == FlushStateMode::IF_NEEDED && cache_state >= CoinsCacheSizeState::CRITICAL;
         // It's been a while since we wrote the block index and chain state to disk. Do this frequently, so we don't need to redownload or reindex after a crash.
         bool fPeriodicWrite = mode == FlushStateMode::PERIODIC && nNow >= m_next_write;
-        const auto empty_cache{(mode == FlushStateMode::FORCE_FLUSH) || fCacheLarge || fCacheCritical};
+        // Only empty the coins cache when forced or when over the configured limit. In IBD
+        // and reindex-chainstate, wiping a large cache can cause extended IO-bound periods
+        // due to cold UTXO lookups.
+        const auto empty_cache{(mode == FlushStateMode::FORCE_FLUSH) || fCacheCritical};
         // Combine all conditions that result in a write to disk.
         bool should_write = (mode == FlushStateMode::FORCE_SYNC) || empty_cache || fPeriodicWrite || fFlushForPrune;
         // The coins database write is the most expensive part of a flush during IBD.
