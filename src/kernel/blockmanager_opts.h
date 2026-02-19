@@ -26,6 +26,8 @@ struct BlockManagerOpts {
     bool use_xor{DEFAULT_XOR_BLOCKSDIR};
     uint64_t prune_target{0};
     bool fast_prune{false};
+    /** Hint to the OS that block/undo file pages can be dropped from cache after use. */
+    bool drop_os_cache{false};
     const fs::path blocks_dir;
     Notifications& notifications;
     DBParams block_tree_db_params;
