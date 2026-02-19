@@ -2686,7 +2686,15 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
     int64_t nTotalSpace =
         max_coins_cache_size_bytes + std::max<int64_t>(int64_t(max_mempool_size_bytes) - nMempoolUsage, 0);
 
-    if (cacheSize > nTotalSpace) {
+    // Allow a small amount of overshoot above the configured cache limit.
+    //
+    // The coins cache allocates memory in chunks (e.g. unordered_map bucket growth),
+    // so it can briefly exceed the target size by a small amount. Treating these
+    // tiny overshoots as CRITICAL can wipe the entire cache and cause long IO-bound
+    // periods while it warms up again.
+    static constexpr int64_t COINS_CACHE_CRITICAL_OVERSHOOT{16 << 20}; // 16 MiB
+
+    if (cacheSize > nTotalSpace + COINS_CACHE_CRITICAL_OVERSHOOT) {
         LogInfo("Cache size (%s) exceeds total space (%s)\n", cacheSize, nTotalSpace);
         return CoinsCacheSizeState::CRITICAL;
     } else if (cacheSize > LargeCoinsCacheThreshold(nTotalSpace)) {
