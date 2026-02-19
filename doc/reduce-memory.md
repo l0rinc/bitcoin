@@ -4,11 +4,13 @@ There are a few parameters that can be dialed down to reduce the memory usage of
 
 ## In-memory caches
 
-The size of some in-memory caches can be reduced. As caches trade off memory usage for performance, reducing these will usually have a negative effect on performance.
+The size of some in-memory caches can be reduced. As caches trade off memory for performance, reducing these usually slows validation.
 
-- `-dbcache=<n>` - the UTXO database cache size, this defaults to `450`. The unit is MiB (1024).
-  - The minimum value for `-dbcache` is 4.
-  - A lower `-dbcache` makes initial sync time much longer. After the initial sync, the effect is less pronounced for most use-cases, unless fast validation of blocks is important, such as for mining.
+- `-dbcache=<n>` - UTXO database cache size in MiB (minimum `4`).
+  - Automatic default: `clamp(100, 25% * (system RAM - 2 GiB), 3000)` MiB.
+  - Fallback if RAM cannot be detected: assume `4` GiB system RAM on 64-bit, `2` GiB on 32-bit.
+  - Oversized warning threshold: above the automatic default below fallback RAM, and above `75%` of RAM otherwise.
+  - Lower values can substantially slow initial sync.
 
 ## Memory pool
 
