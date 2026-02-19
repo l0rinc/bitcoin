@@ -2686,15 +2686,17 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
     int64_t nTotalSpace =
         max_coins_cache_size_bytes + std::max<int64_t>(int64_t(max_mempool_size_bytes) - nMempoolUsage, 0);
 
-    // Allow a small amount of overshoot above the configured cache limit.
+    // Allow an overshoot above the configured cache limit before the emergency
+    // CRITICAL path is used.
     //
-    // The coins cache allocates memory in chunks (e.g. unordered_map bucket growth),
-    // so it can briefly exceed the target size by a small amount. Treating these
-    // tiny overshoots as CRITICAL can wipe the entire cache and cause long IO-bound
-    // periods while it warms up again.
-    static constexpr int64_t COINS_CACHE_CRITICAL_OVERSHOOT{16 << 20}; // 16 MiB
+    // The LARGE path handles ordinary cache-pressure flushing without wiping
+    // clean entries. The CRITICAL path can drop the hot UTXO working set and
+    // force long IO-bound warmup periods, so keep it reserved for much larger
+    // overshoots while still bounding memory use.
+    static constexpr int64_t MIN_COINS_CACHE_CRITICAL_OVERSHOOT{64 << 20}; // 64 MiB
+    const int64_t critical_overshoot{std::max(MIN_COINS_CACHE_CRITICAL_OVERSHOOT, 4 * nTotalSpace)};
 
-    if (cacheSize > nTotalSpace + COINS_CACHE_CRITICAL_OVERSHOOT) {
+    if (cacheSize > nTotalSpace + critical_overshoot) {
         LogInfo("Cache size (%s) exceeds total space (%s)\n", cacheSize, nTotalSpace);
         return CoinsCacheSizeState::CRITICAL;
     } else if (cacheSize > LargeCoinsCacheThreshold(nTotalSpace)) {
