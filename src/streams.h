@@ -12,7 +12,6 @@
 #include <util/check.h>
 #include <util/log.h>
 #include <util/obfuscation.h>
-#include <util/overflow.h>
 #include <util/syserror.h>
 
 #include <algorithm>
@@ -53,15 +52,32 @@ public:
     {
         ::SerializeMany(*this, std::forward<Args>(args)...);
     }
-    void write(std::span<const std::byte> src)
+    template <size_t Extent = std::dynamic_extent>
+    void write(std::span<const std::byte, Extent> src)
     {
         assert(nPos <= vchData.size());
+        const auto src_ptr{UCharCast(src.data())};
+        if constexpr (Extent == 1) {
+            const auto byte{src_ptr[0]};
+            if (nPos < vchData.size()) {
+                vchData[nPos] = byte;
+            } else {
+                vchData.push_back(byte);
+            }
+            nPos += 1;
+            return;
+        }
+        if (nPos == vchData.size()) {
+            vchData.insert(vchData.end(), src_ptr, src_ptr + src.size());
+            nPos += src.size();
+            return;
+        }
         size_t nOverwrite = std::min(src.size(), vchData.size() - nPos);
         if (nOverwrite) {
-            memcpy(vchData.data() + nPos, src.data(), nOverwrite);
+            memcpy(vchData.data() + nPos, src_ptr, nOverwrite);
         }
         if (nOverwrite < src.size()) {
-            vchData.insert(vchData.end(), UCharCast(src.data()) + nOverwrite, UCharCast(src.data() + src.size()));
+            vchData.insert(vchData.end(), src_ptr + nOverwrite, src_ptr + src.size());
         }
         nPos += src.size();
     }
@@ -101,18 +117,24 @@ public:
     size_t size() const { return m_data.size(); }
     bool empty() const { return m_data.empty(); }
 
-    void read(std::span<std::byte> dst)
+    template <size_t Extent = std::dynamic_extent>
+    void read(std::span<std::byte, Extent> dst)
     {
-        if (dst.size() == 0) {
-            return;
+        if constexpr (Extent == 1) {
+            if (m_data.empty()) {
+                throw std::ios_base::failure("SpanReader::read(): end of data");
+            }
+            dst[0] = m_data[0];
+            m_data = m_data.subspan(1);
+        } else {
+            const auto n{dst.size()};
+            // Read from the beginning of the buffer
+            if (n > m_data.size()) {
+                throw std::ios_base::failure("SpanReader::read(): end of data");
+            }
+            memcpy(dst.data(), m_data.data(), n);
+            m_data = m_data.subspan(n);
         }
-
-        // Read from the beginning of the buffer
-        if (dst.size() > m_data.size()) {
-            throw std::ios_base::failure("SpanReader::read(): end of data");
-        }
-        memcpy(dst.data(), m_data.data(), dst.size());
-        m_data = m_data.subspan(dst.size());
     }
 
     void ignore(size_t n)
@@ -148,6 +170,7 @@ public:
     typedef vector_type::reverse_iterator reverse_iterator;
 
     explicit DataStream() = default;
+    explicit DataStream(size_type n) { reserve(n); }
     explicit DataStream(std::span<const uint8_t> sp) : DataStream{std::as_bytes(sp)} {}
     explicit DataStream(std::span<const value_type> sp) : vch(sp.data(), sp.data() + sp.size()) {}
 
@@ -200,43 +223,65 @@ public:
     //
     int in_avail() const         { return size(); }
 
-    void read(std::span<value_type> dst)
+    template <size_t Extent = std::dynamic_extent>
+    void read(std::span<value_type, Extent> dst)
     {
-        if (dst.size() == 0) return;
-
-        // Read from the beginning of the buffer
-        auto next_read_pos{CheckedAdd(m_read_pos, dst.size())};
-        if (!next_read_pos.has_value() || next_read_pos.value() > vch.size()) {
-            throw std::ios_base::failure("DataStream::read(): end of data");
+        if constexpr (Extent == 1) {
+            if (m_read_pos == vch.size()) {
+                throw std::ios_base::failure("DataStream::read(): end of data");
+            }
+            dst[0] = vch[m_read_pos];
+            ++m_read_pos;
+            if (m_read_pos == vch.size()) {
+                m_read_pos = 0;
+                vch.clear();
+            }
+        } else {
+            const auto n{dst.size()};
+            const auto avail{vch.size() - m_read_pos};
+            if (n > avail) {
+                throw std::ios_base::failure("DataStream::read(): end of data");
+            }
+            memcpy(dst.data(), &vch[m_read_pos], n);
+            if (n == avail) {
+                m_read_pos = 0;
+                vch.clear();
+                return;
+            }
+            m_read_pos += n;
         }
-        memcpy(dst.data(), &vch[m_read_pos], dst.size());
-        if (next_read_pos.value() == vch.size()) {
-            m_read_pos = 0;
-            vch.clear();
-            return;
-        }
-        m_read_pos = next_read_pos.value();
     }
 
     void ignore(size_t num_ignore)
     {
-        // Ignore from the beginning of the buffer
-        auto next_read_pos{CheckedAdd(m_read_pos, num_ignore)};
-        if (!next_read_pos.has_value() || next_read_pos.value() > vch.size()) {
+        const auto avail{vch.size() - m_read_pos};
+        if (num_ignore > avail) {
             throw std::ios_base::failure("DataStream::ignore(): end of data");
         }
-        if (next_read_pos.value() == vch.size()) {
+        if (num_ignore == avail) {
             m_read_pos = 0;
             vch.clear();
             return;
         }
-        m_read_pos = next_read_pos.value();
+        m_read_pos += num_ignore;
     }
 
-    void write(std::span<const value_type> src)
+    template <size_t Extent = std::dynamic_extent>
+    void write(std::span<const value_type, Extent> src)
     {
         // Write to the end of the buffer
-        vch.insert(vch.end(), src.begin(), src.end());
+        if constexpr (Extent == 1) {
+            vch.push_back(src[0]);
+        } else if constexpr (Extent == 2) {
+            vch.push_back(src[0]);
+            vch.push_back(src[1]);
+        } else if constexpr (Extent != std::dynamic_extent) {
+            // Keep Extent a compile-time constant so small fixed-size writes can be optimized better
+            // than the dynamic-size path.
+            vch.insert(vch.end(), src.data(), src.data() + Extent);
+        } else {
+            vch.insert(vch.end(), src.data(), src.data() + src.size());
+        }
     }
 
     template<typename T>
@@ -453,8 +498,10 @@ public:
     // Stream subset
     //
     void read(std::span<std::byte> dst);
+    void read(std::span<std::byte, 1> dst);
     void ignore(size_t nSize);
     void write(std::span<const std::byte> src);
+    void write(std::span<const std::byte, 1> src);
 
     template <typename T>
     AutoFile& operator<<(const T& obj)
