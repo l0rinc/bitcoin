@@ -73,12 +73,12 @@ private:
     mutable std::vector<CacheCoinSnapshot> m_expected_snapshot{ComputeCacheCoinsSnapshot()};
 
 public:
-    void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) override
+    void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& in_block_hash) override
     {
         // Nothing must modify cacheCoins other than BatchWrite.
         assert(ComputeCacheCoinsSnapshot() == m_expected_snapshot);
         try {
-            CCoinsViewCache::BatchWrite(cursor, block_hash);
+            CCoinsViewCache::BatchWrite(cursor, in_block_hash);
         } catch (const std::logic_error& e) {
             // This error is thrown if the cursor contains a fresh entry for an outpoint that we already have a fresh
             // entry for. This can happen if the fuzzer calls AddCoin -> Flush -> AddCoin -> Flush on the child cache.
