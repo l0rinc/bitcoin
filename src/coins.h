@@ -306,13 +306,16 @@ private:
 class CCoinsView
 {
 public:
-    //! Retrieve the Coin (unspent transaction output) for a given outpoint.
-    //! May populate the cache. Use PeekCoin() to perform a non-caching lookup.
-    virtual std::optional<Coin> GetCoin(const COutPoint& outpoint) const;
+    //! As we use CCoinsViews polymorphically, have a virtual destructor.
+    virtual ~CCoinsView() = default;
 
     //! Retrieve the Coin (unspent transaction output) for a given outpoint, without caching results.
     //! Does not populate the cache. Use GetCoin() to cache the result.
     virtual std::optional<Coin> PeekCoin(const COutPoint& outpoint) const;
+
+    //! Retrieve the Coin (unspent transaction output) for a given outpoint.
+    //! May populate the cache. Use PeekCoin() to perform a non-caching lookup.
+    virtual std::optional<Coin> GetCoin(const COutPoint& outpoint) const;
 
     //! Just check whether a given outpoint is unspent.
     //! May populate the cache. Use PeekCoin() to perform a non-caching lookup.
@@ -333,9 +336,6 @@ public:
 
     //! Get a cursor to iterate over the whole state
     virtual std::unique_ptr<CCoinsViewCursor> Cursor() const;
-
-    //! As we use CCoinsViews polymorphically, have a virtual destructor
-    virtual ~CCoinsView() = default;
 
     //! Estimate database size (0 if not implemented)
     virtual size_t EstimateSize() const { return 0; }
@@ -364,8 +364,8 @@ protected:
 
 public:
     CCoinsViewBacked(CCoinsView* in_view);
-    std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
     std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override;
+    std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
     bool HaveCoin(const COutPoint& outpoint) const override;
     uint256 GetBestBlock() const override;
     std::vector<uint256> GetHeadBlocks() const override;
@@ -416,8 +416,8 @@ public:
     CCoinsViewCache(const CCoinsViewCache &) = delete;
 
     // Standard CCoinsView methods
-    std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
     std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override;
+    std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
     bool HaveCoin(const COutPoint& outpoint) const override;
     uint256 GetBestBlock() const override;
     void SetBestBlock(const uint256& block_hash);
@@ -590,9 +590,9 @@ public:
         m_err_callbacks.emplace_back(std::move(f));
     }
 
+    std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override;
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
     bool HaveCoin(const COutPoint& outpoint) const override;
-    std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override;
 
 private:
     /** A list of callbacks to execute upon leveldb read error. */
