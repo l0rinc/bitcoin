@@ -18,6 +18,7 @@ add_library(bitcoinkernel
   cs_main.cpp
   disconnected_transactions.cpp
   mempool_removal_reason.cpp
+  ../common/system.cpp
   ../arith_uint256.cpp
   ../chain.cpp
   ../coins.cpp
@@ -32,6 +33,7 @@ add_library(bitcoinkernel
   ../hash.cpp
   ../logging.cpp
   ../node/blockstorage.cpp
+  ../node/caches.cpp
   ../node/chainstate.cpp
   ../node/utxo_snapshot.cpp
   ../policy/ephemeral_policy.cpp

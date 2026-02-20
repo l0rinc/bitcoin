@@ -15,6 +15,8 @@
 #include <util/byte_units.h>
 
 #include <algorithm>
+#include <cstdint>
+#include <limits>
 #include <string>
 
 // Unlike for the UTXO database, for the txindex scenario the leveldb cache make
@@ -29,15 +31,21 @@ static constexpr size_t MAX_TXOSPENDER_INDEX_CACHE{1024_MiB};
 static constexpr size_t MAX_32BIT_DBCACHE{1024_MiB};
 
 namespace node {
+static constexpr size_t MAX_DBCACHE_BYTES{SIZE_MAX == UINT64_MAX ? std::numeric_limits<size_t>::max() : MAX_32BIT_DBCACHE};
+
+size_t GetDefaultDbCacheBytes() noexcept
+{
+    return std::min(DEFAULT_DB_CACHE, MAX_DBCACHE_BYTES);
+}
+
 size_t CalculateDbCacheBytes(const ArgsManager& args)
 {
     if (auto db_cache{args.GetIntArg("-dbcache")}) {
         if (*db_cache < 0) db_cache = 0;
         const uint64_t db_cache_bytes{SaturatingLeftShift<uint64_t>(*db_cache, 20)};
-        constexpr auto max_db_cache{sizeof(void*) == 4 ? MAX_32BIT_DBCACHE : std::numeric_limits<size_t>::max()};
-        return std::max<size_t>(MIN_DB_CACHE, std::min<uint64_t>(db_cache_bytes, max_db_cache));
+        return std::max<size_t>(MIN_DB_CACHE, std::min<uint64_t>(db_cache_bytes, MAX_DBCACHE_BYTES));
     }
-    return DEFAULT_DB_CACHE;
+    return GetDefaultDbCacheBytes();
 }
 
 CacheSizes CalculateCacheSizes(const ArgsManager& args, size_t n_indexes)
