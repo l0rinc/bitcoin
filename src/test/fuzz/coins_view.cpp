@@ -280,19 +280,10 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                     // coins.cpp:69: void CCoinsViewCache::AddCoin(const COutPoint &, Coin &&, bool): Assertion `!coin.IsSpent()' failed.
                     return;
                 }
-                bool expected_code_path = false;
                 const int height{int(fuzzed_data_provider.ConsumeIntegral<uint32_t>() >> 1)};
                 const bool possible_overwrite = fuzzed_data_provider.ConsumeBool();
-                try {
-                    AddCoins(coins_view_cache, transaction, height, possible_overwrite);
-                    expected_code_path = true;
-                } catch (const std::logic_error& e) {
-                    if (e.what() == std::string{"Attempted to overwrite an unspent coin (when possible_overwrite is false)"}) {
-                        assert(!possible_overwrite);
-                        expected_code_path = true;
-                    }
-                }
-                assert(expected_code_path);
+                // For non-coinbase transactions, make `AddCoins` query the view to determine overwrites.
+                AddCoins(coins_view_cache, transaction, height, possible_overwrite || !transaction.IsCoinBase());
             },
             [&] {
                 (void)AreInputsStandard(CTransaction{random_mutable_transaction}, coins_view_cache);
