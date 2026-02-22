@@ -77,18 +77,7 @@ public:
     {
         // Nothing must modify cacheCoins other than BatchWrite.
         assert(ComputeCacheCoinsSnapshot() == m_expected_snapshot);
-        try {
-            CCoinsViewCache::BatchWrite(cursor, block_hash);
-        } catch (const std::logic_error& e) {
-            // This error is thrown if the cursor contains a fresh entry for an outpoint that we already have a fresh
-            // entry for. This can happen if the fuzzer calls AddCoin -> Flush -> AddCoin -> Flush on the child cache.
-            // There's not an easy way to prevent the fuzzer from reaching this, so we handle it here.
-            // Since it is thrown in the middle of the write, we reset our own state and iterate through
-            // the cursor so the caller's state is also reset.
-            assert(e.what() == std::string{"FRESH flag misapplied to coin that exists in parent cache"});
-            Reset();
-            for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)) {}
-        }
+        CCoinsViewCache::BatchWrite(cursor, block_hash);
         m_expected_snapshot = ComputeCacheCoinsSnapshot();
     }
 
