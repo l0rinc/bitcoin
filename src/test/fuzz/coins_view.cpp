@@ -200,8 +200,8 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 LIMITED_WHILE(good_data && fuzzed_data_provider.ConsumeBool(), 10'000)
                 {
                     CCoinsCacheEntry coins_cache_entry;
-                    const auto dirty{fuzzed_data_provider.ConsumeBool()};
-                    const auto fresh{fuzzed_data_provider.ConsumeBool()};
+                    bool dirty{fuzzed_data_provider.ConsumeBool()};
+                    bool fresh{fuzzed_data_provider.ConsumeBool()};
                     if (fuzzed_data_provider.ConsumeBool()) {
                         coins_cache_entry.coin = random_coin;
                     } else {
@@ -212,26 +212,20 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                         }
                         coins_cache_entry.coin = *opt_coin;
                     }
+                    // Avoid setting FRESH for an outpoint that already exists unspent in the parent view.
+                    if (fresh && coins_view_cache.PeekCoin(random_out_point)) fresh = false;
+                    if (fresh) dirty = true;
                     auto it{coins_map.emplace(random_out_point, std::move(coins_cache_entry)).first};
                     if (dirty) CCoinsCacheEntry::SetDirty(*it, sentinel);
                     if (fresh) CCoinsCacheEntry::SetFresh(*it, sentinel);
                     dirty_count += dirty;
                 }
-                bool expected_code_path = false;
-                try {
-                    auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, coins_map, /*will_erase=*/true)};
-                    uint256 best_block{coins_view_cache.GetBestBlock()};
-                    if (fuzzed_data_provider.ConsumeBool()) best_block = ConsumeUInt256(fuzzed_data_provider);
-                    // Set best block hash to non-null to satisfy the assertion in CCoinsViewDB::BatchWrite().
-                    if (is_db && best_block.IsNull()) best_block = uint256::ONE;
-                    coins_view_cache.BatchWrite(cursor, best_block);
-                    expected_code_path = true;
-                } catch (const std::logic_error& e) {
-                    if (e.what() == std::string{"FRESH flag misapplied to coin that exists in parent cache"}) {
-                        expected_code_path = true;
-                    }
-                }
-                assert(expected_code_path);
+                auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, coins_map, /*will_erase=*/true)};
+                uint256 best_block{coins_view_cache.GetBestBlock()};
+                if (fuzzed_data_provider.ConsumeBool()) best_block = ConsumeUInt256(fuzzed_data_provider);
+                // Set best block hash to non-null to satisfy the assertion in CCoinsViewDB::BatchWrite().
+                if (is_db && best_block.IsNull()) best_block = uint256::ONE;
+                coins_view_cache.BatchWrite(cursor, best_block);
             });
     }
 
