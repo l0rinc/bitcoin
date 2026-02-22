@@ -10,6 +10,7 @@
 #include <limits>
 #include <optional>
 #include <type_traits>
+#include <util/check.h>
 
 template <class T>
 [[nodiscard]] bool AdditionOverflow(const T i, const T j) noexcept
@@ -29,6 +30,13 @@ template <class T>
         return std::nullopt;
     }
     return i + j;
+}
+
+template <std::unsigned_integral T, std::unsigned_integral U>
+[[nodiscard]] constexpr T CheckedSub(const T i, const U j) noexcept
+{
+    Assume(i >= T{j});
+    return i - T{j};
 }
 
 template <class T>
