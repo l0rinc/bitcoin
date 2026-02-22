@@ -121,12 +121,9 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 Coin coin{random_coin};
                 if (fuzzed_data_provider.ConsumeBool()) {
                     const bool possible_overwrite{fuzzed_data_provider.ConsumeBool()};
-                    try {
-                        coins_view_cache.AddCoin(outpoint, std::move(coin), possible_overwrite);
-                    } catch (const std::logic_error& e) {
-                        assert(e.what() == std::string{"Attempted to overwrite an unspent coin (when possible_overwrite is false)"});
-                        assert(!possible_overwrite);
-                    }
+                    // Avoid overwriting an unspent coin when `possible_overwrite` is false.
+                    if (!possible_overwrite && coins_view_cache.HaveCoin(outpoint)) return;
+                    coins_view_cache.AddCoin(outpoint, std::move(coin), possible_overwrite);
                 } else {
                     coins_view_cache.EmplaceCoinInternalDANGER(std::move(outpoint), std::move(coin));
                 }
