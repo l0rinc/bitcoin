@@ -92,6 +92,7 @@ public:
         rejectunknownwitness,   // bool
         rejectparasites,        // bool
         rejecttokens,           // bool
+        subdustfeepenalty,      // bool
         rejectspkreuse,         // bool
         minrelaytxfee,
         minrelaycoinblocks,
