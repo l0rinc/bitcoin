@@ -4,6 +4,7 @@
 
 #include <musig.h>
 #include <support/allocators/secure.h>
+#include <util/strencodings.h>
 
 #include <secp256k1_musig.h>
 

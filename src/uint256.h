@@ -8,8 +8,6 @@
 
 #include <crypto/common.h>
 #include <span.h>
-#include <util/strencodings.h>
-#include <util/string.h>
 
 #include <algorithm>
 #include <array>
@@ -19,6 +17,17 @@
 #include <optional>
 #include <string>
 #include <string_view>
+
+namespace uint256_detail {
+/** consteval version of HexDigit() without the lookup table. */
+consteval uint8_t ConstevalHexDigit(const char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 0xa;
+
+    throw "Only lowercase hex digits are allowed, for consistency";
+}
+} // namespace uint256_detail
 
 /** Template base class for fixed-sized opaque blobs. */
 template<unsigned int BITS>
@@ -126,55 +135,10 @@ consteval base_blob<BITS>::base_blob(std::string_view hex_str)
     if (hex_str.length() != m_data.size() * 2) throw "Hex string must fit exactly";
     auto str_it = hex_str.rbegin();
     for (auto& elem : m_data) {
-        auto lo = util::ConstevalHexDigit(*(str_it++));
-        elem = (util::ConstevalHexDigit(*(str_it++)) << 4) | lo;
+        auto lo = uint256_detail::ConstevalHexDigit(*(str_it++));
+        elem = (uint256_detail::ConstevalHexDigit(*(str_it++)) << 4) | lo;
     }
 }
-
-namespace detail {
-/**
- * Writes the hex string (in reverse byte order) into a new uintN_t object
- * and only returns a value iff all of the checks pass:
- *   - Input length is uintN_t::size()*2
- *   - All characters are hex
- */
-template <class uintN_t>
-std::optional<uintN_t> FromHex(std::string_view str)
-{
-    if (uintN_t::size() * 2 != str.size() || !IsHex(str)) return std::nullopt;
-    uintN_t rv;
-    unsigned char* p1 = rv.begin();
-    unsigned char* pend = rv.end();
-    size_t digits = str.size();
-    while (digits > 0 && p1 < pend) {
-        *p1 = ::HexDigit(str[--digits]);
-        if (digits > 0) {
-            *p1 |= ((unsigned char)::HexDigit(str[--digits]) << 4);
-            p1++;
-        }
-    }
-    return rv;
-}
-/**
- * @brief Like FromHex(std::string_view str), but allows an "0x" prefix
- *        and pads the input with leading zeroes if it is shorter than
- *        the expected length of uintN_t::size()*2.
- *
- *        Designed to be used when dealing with user input.
- */
-template <class uintN_t>
-std::optional<uintN_t> FromUserHex(std::string_view input)
-{
-    input = util::RemovePrefixView(input, "0x");
-    constexpr auto expected_size{uintN_t::size() * 2};
-    if (input.size() < expected_size) {
-        auto padded = std::string(expected_size, '0');
-        std::copy(input.begin(), input.end(), padded.begin() + expected_size - input.size());
-        return FromHex<uintN_t>(padded);
-    }
-    return FromHex<uintN_t>(input);
-}
-} // namespace detail
 
 /** 160-bit opaque blob.
  * @note This type is called uint160 for historical reasons only. It is an opaque
@@ -182,7 +146,7 @@ std::optional<uintN_t> FromUserHex(std::string_view input)
  */
 class uint160 : public base_blob<160> {
 public:
-    static std::optional<uint160> FromHex(std::string_view str) { return detail::FromHex<uint160>(str); }
+    static std::optional<uint160> FromHex(std::string_view str);
     constexpr uint160() = default;
     constexpr explicit uint160(std::span<const unsigned char> vch) : base_blob<160>(vch) {}
 };
@@ -194,8 +158,8 @@ public:
  */
 class uint256 : public base_blob<256> {
 public:
-    static std::optional<uint256> FromHex(std::string_view str) { return detail::FromHex<uint256>(str); }
-    static std::optional<uint256> FromUserHex(std::string_view str) { return detail::FromUserHex<uint256>(str); }
+    static std::optional<uint256> FromHex(std::string_view str);
+    static std::optional<uint256> FromUserHex(std::string_view str);
     constexpr uint256() = default;
     consteval explicit uint256(std::string_view hex_str) : base_blob<256>(hex_str) {}
     constexpr explicit uint256(uint8_t v) : base_blob<256>(v) {}
