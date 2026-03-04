@@ -21,6 +21,7 @@
 #include <util/string.h>
 #include <util/strencodings.h>
 #include <util/translation.h>
+#include <util/vector.h>
 
 void AddInputs(CMutableTransaction& rawTx, const UniValue& inputs_in, std::optional<bool> rbf)
 {
