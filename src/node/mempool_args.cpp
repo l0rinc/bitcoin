@@ -209,6 +209,8 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& argsman, const CChainP
 
     mempool_opts.reject_tokens = argsman.GetBoolArg("-rejecttokens", DEFAULT_REJECT_TOKENS);
 
+    mempool_opts.subdustfeepenalty = argsman.GetBoolArg("-subdustfeepenalty", DEFAULT_SUBDUSTFEEPENALTY);
+
     if (argsman.GetBoolArg("-datacarrier", DEFAULT_ACCEPT_DATACARRIER)) {
         mempool_opts.max_datacarrier_bytes = argsman.GetIntArg("-datacarriersize", MAX_OP_RETURN_RELAY);
         if (mempool_opts.max_datacarrier_bytes.value() > MAX_OUTPUT_DATA_SIZE) {
