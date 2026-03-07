@@ -439,7 +439,7 @@ public:
     CCoinsViewCache(const CCoinsViewCache &) = delete;
 
     // Backend management
-    void SetBackend(CCoinsViewCacheBackend& in_view) { base = &in_view; }
+    virtual void SetBackend(CCoinsViewCacheBackend& in_view) { base = &in_view; }
 
     // Standard CCoinsView methods
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
@@ -497,7 +497,7 @@ public:
      * If reallocate_cache is false, the cache will retain the same memory footprint
      * after flushing and should be destroyed to deallocate.
      */
-    void Flush(bool reallocate_cache = true);
+    virtual void Flush(bool reallocate_cache = true);
 
     /**
      * Push the modifications applied to this cache to its base while retaining
@@ -505,7 +505,7 @@ public:
      * Failure to call this method or Flush() before destruction will cause the changes
      * to be forgotten.
      */
-    void Sync();
+    virtual void Sync();
 
     /**
      * Removes the UTXO with the given outpoint from the cache, if it is
@@ -659,7 +659,7 @@ protected:
     }
 
 public:
-    explicit CoinsViewOverlay(CCoinsView* in_base, bool deterministic = false) noexcept
+    explicit CoinsViewOverlay(CCoinsViewCacheBackend& in_base, bool deterministic = false) noexcept
         : CCoinsViewCache{in_base, deterministic}
     {
         // Reserve to maximum theoretical number so emplace_back in StartFetching never reallocates m_inputs.
@@ -684,6 +684,24 @@ public:
         m_txids.clear();
         while (ProcessInput()) {}
         return CreateResetGuard();
+    }
+
+    void SetBackend(CCoinsViewCacheBackend& view) override
+    {
+        StopFetching();
+        CCoinsViewCache::SetBackend(view);
+    }
+
+    void Flush(bool reallocate_cache = true) override
+    {
+        StopFetching();
+        CCoinsViewCache::Flush(reallocate_cache);
+    }
+
+    void Sync() override
+    {
+        StopFetching();
+        CCoinsViewCache::Sync();
     }
 };
 
