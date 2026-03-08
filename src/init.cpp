@@ -1303,6 +1303,7 @@ static ChainstateLoadResult InitAndLoadChainstate(
     NodeContext& node,
     bool do_reindex,
     const bool do_reindex_chainstate,
+    const size_t total_dbcache,
     const kernel::CacheSizes& cache_sizes,
     const ArgsManager& args)
 {
@@ -1384,6 +1385,9 @@ static ChainstateLoadResult InitAndLoadChainstate(
     };
     node::ChainstateLoadOptions options;
     options.mempool = Assert(node.mempool.get());
+    options.auto_dbcache = !args.GetIntArg("-dbcache");
+    options.total_ram_bytes = node::GetTotalRam();
+    options.fixed_index_cache_bytes = total_dbcache - (cache_sizes.block_tree_db + cache_sizes.coins_db + cache_sizes.coins);
     options.wipe_chainstate_db = do_reindex || do_reindex_chainstate;
     options.prune = chainman.m_blockman.IsPruneMode();
     options.check_blocks = args.GetIntArg("-checkblocks", DEFAULT_CHECKBLOCKS);
@@ -1834,6 +1838,13 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         node::LogAutoDbCacheSettings();
     }
     const auto [index_cache_sizes, kernel_cache_sizes] = CalculateCacheSizes(args, g_enabled_filter_types.size());
+    const size_t total_dbcache{
+        index_cache_sizes.tx_index +
+        index_cache_sizes.txospender_index +
+        index_cache_sizes.filter_index * g_enabled_filter_types.size() +
+        kernel_cache_sizes.block_tree_db +
+        kernel_cache_sizes.coins_db +
+        kernel_cache_sizes.coins};
 
     LogInfo("Cache configuration:");
     LogInfo("* Using %.1f MiB for block index database", kernel_cache_sizes.block_tree_db * (1.0 / 1024 / 1024));
@@ -1860,6 +1871,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         node,
         do_reindex,
         do_reindex_chainstate,
+        total_dbcache,
         kernel_cache_sizes,
         args);
     if (status == ChainstateLoadStatus::FAILURE && !do_reindex && !ShutdownRequested(node)) {
@@ -1880,6 +1892,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
             node,
             do_reindex,
             do_reindex_chainstate,
+            total_dbcache,
             kernel_cache_sizes,
             args);
     }

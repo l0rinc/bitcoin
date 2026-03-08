@@ -21,6 +21,7 @@
 #include <util/time.h>
 #include <util/translation.h>
 #include <validation.h>
+#include <node/dbcache.h>
 
 #include <algorithm>
 #include <cassert>
@@ -171,6 +172,9 @@ ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSize
 
     chainman.m_total_coinstip_cache = cache_sizes.coins;
     chainman.m_total_coinsdb_cache = cache_sizes.coins_db;
+    chainman.m_auto_dbcache = options.auto_dbcache;
+    chainman.m_total_ram_bytes = options.total_ram_bytes.value_or(node::GetTotalRam());
+    chainman.m_fixed_index_cache_bytes = options.fixed_index_cache_bytes;
 
     // Load the fully validated chainstate.
     Chainstate& validated_cs{chainman.InitializeChainstate(options.mempool)};
