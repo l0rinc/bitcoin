@@ -240,7 +240,7 @@ class BackwardsCompatibilityTest(BitcoinTestFramework):
         node_master.createwallet(wallet_name="w2", disable_private_keys=True)
         wallet = node_master.get_wallet_rpc("w2")
         info = wallet.getwalletinfo()
-        assert info['private_keys_enabled'] == False
+        assert not info['private_keys_enabled']
         assert info['keypoolsize'] == 0
 
         # w3: blank wallet, created on master: update this
@@ -279,7 +279,7 @@ class BackwardsCompatibilityTest(BitcoinTestFramework):
                     wallet = n.get_wallet_rpc(wallet_name)
                     info = wallet.getwalletinfo()
                     if wallet_name == "w1":
-                        assert info['private_keys_enabled'] == True
+                        assert info['private_keys_enabled']
                         assert info['keypoolsize'] > 0
                         txs = wallet.listtransactions()
                         assert_equal(len(txs), 5)
@@ -294,10 +294,10 @@ class BackwardsCompatibilityTest(BitcoinTestFramework):
                         assert_equal(txs[3]["replaced_by_txid"], tx4_id)
                         assert not hasattr(txs[3], "blockindex")
                     elif wallet_name == "w2":
-                        assert info['private_keys_enabled'] == False
+                        assert not info['private_keys_enabled']
                         assert info['keypoolsize'] == 0
                     else:
-                        assert info['private_keys_enabled'] == True
+                        assert info['private_keys_enabled']
                         assert info['keypoolsize'] == 0
 
                     # Copy back to master

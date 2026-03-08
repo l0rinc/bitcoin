@@ -284,7 +284,7 @@ def from_binary(cls, stream):
     obj = cls()
     obj.deserialize(stream)
     if was_bytes:
-        assert len(stream.read()) == 0
+        assert not stream.read()
     return obj
 
 

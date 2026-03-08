@@ -1358,7 +1358,7 @@ class SegWitTest(BitcoinTestFramework):
             temp_utxo.append(UTXO(tx.txid_int, 0, tx.vout[0].nValue))
 
         self.generate(self.nodes[0], 1)  # Mine all the transactions
-        assert len(self.nodes[0].getrawmempool()) == 0
+        assert not self.nodes[0].getrawmempool()
 
         # Finally, verify that version 0 -> version 2 transactions
         # are standard

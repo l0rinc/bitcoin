@@ -1646,8 +1646,8 @@ class TaprootTest(BitcoinTestFramework):
                 self.log.info("  - %i tests done" % (len(spenders) - left))
 
         assert left == 0
-        assert len(normal_utxos) == 0
-        assert len(mismatching_utxos) == 0
+        assert not normal_utxos
+        assert not mismatching_utxos
         self.log.info("  - Done")
 
     def gen_test_vectors(self):
