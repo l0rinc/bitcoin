@@ -241,7 +241,7 @@ class BackwardsCompatibilityTest(BitcoinTestFramework):
         wallet = node_master.get_wallet_rpc("w2")
         info = wallet.getwalletinfo()
         assert not info['private_keys_enabled']
-        assert info['keypoolsize'] == 0
+        assert_equal(info['keypoolsize'], 0)
 
         # w3: blank wallet, created on master: update this
         #     test when default blank wallets can no longer be opened by older versions.
@@ -249,7 +249,7 @@ class BackwardsCompatibilityTest(BitcoinTestFramework):
         wallet = node_master.get_wallet_rpc("w3")
         info = wallet.getwalletinfo()
         assert info['private_keys_enabled']
-        assert info['keypoolsize'] == 0
+        assert_equal(info['keypoolsize'], 0)
 
         # Unload wallets and copy to older nodes:
         node_master_wallets_dir = node_master.wallets_path
@@ -295,10 +295,10 @@ class BackwardsCompatibilityTest(BitcoinTestFramework):
                         assert not hasattr(txs[3], "blockindex")
                     elif wallet_name == "w2":
                         assert not info['private_keys_enabled']
-                        assert info['keypoolsize'] == 0
+                        assert_equal(info['keypoolsize'], 0)
                     else:
                         assert info['private_keys_enabled']
-                        assert info['keypoolsize'] == 0
+                        assert_equal(info['keypoolsize'], 0)
 
                     # Copy back to master
                     wallet.unloadwallet()
