@@ -49,9 +49,35 @@ BOOST_AUTO_TEST_CASE(default_dbcache_formula_by_total_ram)
     }
 }
 
+BOOST_AUTO_TEST_CASE(post_ibd_dbcache_formula_by_total_ram)
+{
+    for (const auto& [total_ram, expected] : std::array<std::pair<size_t, size_t>, 4>{{
+        {512_MiB, MIN_DEFAULT_DBCACHE},
+        {1024_MiB, MIN_DEFAULT_DBCACHE},
+        {RESERVED_RAM - 1, MIN_DEFAULT_DBCACHE},
+        {4108_MiB, 103_MiB}
+    }}) {
+        BOOST_CHECK_EQUAL(GetDefaultDBCache(total_ram, /*ibd=*/false), expected);
+        BOOST_CHECK_LE(GetDefaultDBCache(total_ram, /*ibd=*/false), GetDefaultDBCache(total_ram));
+    }
+
+    BOOST_CHECK_EQUAL(GetDefaultDBCache(8208_MiB, /*ibd=*/false), 308_MiB);
+
+    if constexpr (SIZE_MAX == UINT64_MAX) {
+        for (const auto& [total_ram_64, expected] : std::array<std::pair<size_t, size_t>, 3>{{
+            {16388_MiB, 717_MiB},
+            {43008_MiB, MAX_DEFAULT_DBCACHE},
+            {65528_MiB, MAX_DEFAULT_DBCACHE}
+        }}) {
+            BOOST_CHECK_EQUAL(GetDefaultDBCache(total_ram_64, /*ibd=*/false), expected);
+        }
+    }
+}
+
 BOOST_AUTO_TEST_CASE(default_dbcache_uses_current_total_ram)
 {
     BOOST_CHECK_EQUAL(GetDefaultDBCache(), GetDefaultDBCache(GetTotalRam()));
+    BOOST_CHECK_EQUAL(GetDefaultDBCache(/*total_ram=*/{}, /*ibd=*/false), GetDefaultDBCache(GetTotalRam(), /*ibd=*/false));
 }
 
 BOOST_AUTO_TEST_CASE(oversized_dbcache_warning)

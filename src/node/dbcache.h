@@ -27,7 +27,7 @@ static constexpr size_t MAX_DBCACHE_BYTES{SIZE_MAX == UINT64_MAX ? std::numeric_
 
 namespace node {
 size_t GetTotalRam() noexcept;
-size_t GetDefaultDBCache(std::optional<size_t> total_ram = {}) noexcept;
+size_t GetDefaultDBCache(std::optional<size_t> total_ram = {}, bool ibd = true) noexcept;
 
 bool ShouldWarnOversizedDbCache(size_t dbcache, size_t total_ram) noexcept;
 } // namespace node
