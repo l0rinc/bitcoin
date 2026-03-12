@@ -8,8 +8,10 @@
 #include <util/translation.h>
 #include <validation.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <tuple>
 
 class CTxMemPool;
@@ -22,6 +24,9 @@ namespace node {
 
 struct ChainstateLoadOptions {
     CTxMemPool* mempool{nullptr};
+    bool auto_dbcache{true};
+    std::optional<size_t> total_ram_bytes{};
+    size_t fixed_index_cache_bytes{0};
     bool coins_db_in_memory{false};
     // Whether to wipe the chainstate database when loading it. If set, this
     // will cause the chainstate database to be rebuilt starting from genesis.
