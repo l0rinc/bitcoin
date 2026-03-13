@@ -53,7 +53,8 @@ static void WriteJSONTestVectors(const std::vector<T>& test_vectors, std::string
     for (const auto& test_vector: test_vectors) {
         json_vectors.push_back(test_vector.GetJson());
     }
-    const auto json_str{json_vectors.write(4)};
+    auto json_str{json_vectors.write(4)};
+    json_str += '\n';
     FILE* file = fsbridge::fopen(filename, "w");
     fputs(json_str.c_str(), file);
     fclose(file);
