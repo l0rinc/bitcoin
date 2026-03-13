@@ -1547,6 +1547,18 @@ BOOST_AUTO_TEST_CASE(bip54_txsize)
         RecordTestCase(test_vectors, CTransaction{tx_copy}, /*valid=*/false, "A 64-byte Segwit transaction (1 p2tr input, 1 p2a output).");
     }
 
+    // A semi-realistic 64-byte transaction: 1 Taproot input with an annex, 1 OP_RETURN output.
+    {
+        CMutableTransaction tx_copy{tx};
+        tx_copy.vout.back().scriptPubKey << OP_RETURN << "ab01"_hex_v;
+        auto sig{"5a78b5a14a2527feb02c08b8124e74c3b9bcc1bd3dba1fbfa87f1c930f28a46fea2bf375105dfd835e212c9127aad4976c46ef86be02edbb681e6f38f9a9e06f01"_hex_v_u8};
+        tx_copy.vin.back().scriptWitness.stack.emplace_back(std::move(sig));
+        auto annex{"4242ffab2121"_hex_v_u8};
+        tx_copy.vin.back().scriptWitness.stack.emplace_back(std::move(annex));
+        Assert(GetSerializeSize(TX_NO_WITNESS(tx_copy)) == INVALID_TX_NONWITNESS_SIZE);
+        RecordTestCase(test_vectors, CTransaction{tx_copy}, /*valid=*/false, "A 64-byte Segwit transaction (1 p2tr input with annex, 1 OP_RETURN output).");
+    }
+
     // Historical 64-byte transactions. Taken from Chris Stewart's BIP53.
     constexpr std::string_view historical_txs_hex[]{
         "0200000001deb98691723fa71260ffca6ea0a7bc0a63b0a8a366e1b585caad47fb269a2ce401000000030251b201000000010000000000000000016a00000000",
