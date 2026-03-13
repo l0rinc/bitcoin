@@ -855,7 +855,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             tx_copy2.vin[idx].scriptSig << OP_0 << sig << ToByteVector(redeem_script);
             BOOST_REQUIRE(VerifyTxin(spk, tx_copy2, idx));
 
-            CheckExceedsBIP54Limits(CTransaction(tx_copy2), coins, test_vectors, "Mixed input types reaching exactly 2500 BIP54-sigops + a P2SH input with 1-of-1 CHECMULTISIG");
+            CheckExceedsBIP54Limits(CTransaction(tx_copy2), coins, test_vectors, "Mixed input types reaching exactly 2500 BIP54-sigops + a P2SH input with 1-of-1 CHECKMULTISIG");
         }
 
         // Adding an input spending an invalid Script but containing a CHECKSIG will
@@ -1240,7 +1240,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         tx2.vin.emplace_back(tx_create.GetHash(), 0);
 
         // CheckSigopsBIP54 will return false because there is 126 CMS that account for 20 each.
-        CheckExceedsBIP54Limits(CTransaction(tx2), coins, test_vectors, "Invalid bare script with 126 CHECMULTISIGs each accounted for 20 BIP54-sigops");
+        CheckExceedsBIP54Limits(CTransaction(tx2), coins, test_vectors, "Invalid bare script with 126 CHECKMULTISIGs each accounted for 20 BIP54-sigops");
     }
 
     // Note this is also a limitation for legitimate Scripts, for instance if the arguments to
