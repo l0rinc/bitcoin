@@ -4,10 +4,12 @@
 
 #include <compressor.h>
 #include <script/script.h>
+#include <streams.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 
 #include <cstdint>
+#include <limits>
 
 #include <boost/test/unit_test.hpp>
 
@@ -61,6 +63,15 @@ BOOST_AUTO_TEST_CASE(compress_amounts)
 
     for (uint64_t i = 0; i < 100000; i++)
         BOOST_CHECK(TestDecode(i));
+}
+
+BOOST_AUTO_TEST_CASE(compress_amount_deserialize_out_of_range)
+{
+    DataStream stream{};
+    stream << VARINT(std::numeric_limits<uint64_t>::max());
+
+    CAmount amount;
+    BOOST_CHECK_THROW(stream >> Using<AmountCompression>(amount), std::ios_base::failure);
 }
 
 BOOST_AUTO_TEST_CASE(compress_script_to_ckey_id)

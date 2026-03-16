@@ -13,6 +13,8 @@
 #include <univalue.h>
 #include <util/chaintype.h>
 
+#include <cassert>
+
 void initialize_script_format()
 {
     SelectParams(ChainType::REGTEST);
@@ -26,7 +28,8 @@ FUZZ_TARGET(script_format, .init = initialize_script_format)
         return;
     }
 
-    (void)FormatScript(script);
+    const std::string formatted_script = FormatScript(script);
+    assert(ParseScript(formatted_script) == script);
     (void)ScriptToAsmStr(script, /*fAttemptSighashDecode=*/fuzzed_data_provider.ConsumeBool());
 
     UniValue o1(UniValue::VOBJ);

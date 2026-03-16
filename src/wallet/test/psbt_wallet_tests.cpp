@@ -129,6 +129,9 @@ BOOST_AUTO_TEST_CASE(parse_hd_keypath)
     BOOST_CHECK(ParseHDKeypath("m/0'", keypath));
     BOOST_CHECK(!ParseHDKeypath("m/0''", keypath));
 
+    BOOST_CHECK(ParseHDKeypath("m/0h", keypath));
+    BOOST_CHECK(!ParseHDKeypath("m/0hh", keypath));
+
     BOOST_CHECK(ParseHDKeypath("m/0'/0'", keypath));
     BOOST_CHECK(!ParseHDKeypath("m/'0/0'", keypath));
 

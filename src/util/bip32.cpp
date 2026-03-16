@@ -25,14 +25,14 @@ bool ParseHDKeypath(const std::string& keypath_str, std::vector<uint32_t>& keypa
         }
         // Finds whether it is hardened
         uint32_t path = 0;
-        size_t pos = item.find('\'');
+        size_t pos = item.find_last_of("'h");
         if (pos != std::string::npos) {
-            // The hardened tick can only be in the last index of the string
-            if (pos != item.size() - 1) {
+            // The hardened marker can only be the last character.
+            if (pos != item.size() - 1 || item.find_first_of("'h") != pos) {
                 return false;
             }
             path |= 0x80000000;
-            item = item.substr(0, item.size() - 1); // Drop the last character which is the hardened tick
+            item = item.substr(0, item.size() - 1); // Drop the hardened marker.
         }
 
         // Ensure this is only numbers

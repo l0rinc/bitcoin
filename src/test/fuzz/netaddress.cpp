@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <netbase.h>
 #include <netaddress.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
@@ -10,7 +11,31 @@
 
 #include <cassert>
 #include <cstdint>
+#include <optional>
+#include <string>
 #include <vector>
+
+namespace {
+std::optional<CNetAddr> LookupHostRoundtrip(const CNetAddr& net_addr)
+{
+    const std::optional<CNetAddr> parsed = LookupHost(net_addr.ToStringAddr(), /*fAllowLookup=*/false);
+    if (!parsed.has_value()) return std::nullopt;
+    if (net_addr.IsCJDNS()) {
+        return static_cast<CNetAddr>(MaybeFlipIPv6toCJDNS(CService{*parsed, /*port=*/0}));
+    }
+    return parsed;
+}
+
+std::optional<CService> LookupServiceRoundtrip(const CService& service)
+{
+    const std::optional<CService> parsed = Lookup(service.ToStringAddrPort(), /*portDefault=*/0, /*fAllowLookup=*/false);
+    if (!parsed.has_value()) return std::nullopt;
+    if (service.IsCJDNS()) {
+        return MaybeFlipIPv6toCJDNS(*parsed);
+    }
+    return parsed;
+}
+} // namespace
 
 FUZZ_TARGET(netaddress)
 {
@@ -84,16 +109,30 @@ FUZZ_TARGET(netaddress)
         assert(net_addr.GetNetwork() == Network::NET_CJDNS);
     }
     (void)net_addr.IsValid();
-    (void)net_addr.ToStringAddr();
+    if (!net_addr.IsInternal()) {
+        const auto roundtrip_net_addr = LookupHostRoundtrip(net_addr);
+        assert(roundtrip_net_addr.has_value());
+        assert(*roundtrip_net_addr == net_addr);
+    }
 
     const CSubNet sub_net{net_addr, fuzzed_data_provider.ConsumeIntegral<uint8_t>()};
     (void)sub_net.IsValid();
-    (void)sub_net.ToString();
+    const auto assert_subnet_roundtrip = [](const CSubNet& subnet) {
+        if (!subnet.IsValid()) return;
+        const std::string subnet_string = subnet.ToString();
+        if (subnet_string.ends_with(".internal")) return;
+        assert(LookupSubNet(subnet_string) == subnet);
+    };
+    assert_subnet_roundtrip(sub_net);
 
     const CService service{net_addr, fuzzed_data_provider.ConsumeIntegral<uint16_t>()};
     (void)service.GetKey();
     (void)service.GetPort();
-    (void)service.ToStringAddrPort();
+    if (!service.IsInternal()) {
+        const auto roundtrip_service = LookupServiceRoundtrip(service);
+        assert(roundtrip_service.has_value());
+        assert(*roundtrip_service == service);
+    }
     (void)CServiceHash()(service);
     (void)CServiceHash(0, 0)(service);
 
@@ -111,6 +150,8 @@ FUZZ_TARGET(netaddress)
 
     const CSubNet sub_net_copy_1{net_addr, other_net_addr};
     const CSubNet sub_net_copy_2{net_addr};
+    assert_subnet_roundtrip(sub_net_copy_1);
+    assert_subnet_roundtrip(sub_net_copy_2);
 
     CNetAddr mutable_net_addr;
     mutable_net_addr.SetIP(net_addr);

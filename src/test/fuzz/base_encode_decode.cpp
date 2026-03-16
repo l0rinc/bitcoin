@@ -7,6 +7,7 @@
 #include <base58.h>
 #include <psbt.h>
 #include <span.h>
+#include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <util/strencodings.h>
 #include <util/string.h>
@@ -17,6 +18,15 @@
 #include <ranges>
 
 using util::TrimStringView;
+
+namespace {
+std::vector<std::byte> SerializePSBT(const PartiallySignedTransaction& psbt)
+{
+    DataStream ds{};
+    ds << psbt;
+    return {ds.begin(), ds.end()};
+}
+} // namespace
 
 FUZZ_TARGET(base58_encode_decode)
 {
@@ -94,4 +104,12 @@ FUZZ_TARGET(psbt_base64_decode)
     std::string error;
     const bool ok{DecodeBase64PSBT(psbt, random_string, error)};
     assert(ok == error.empty());
+    if (ok) {
+        const std::vector<std::byte> serialized_psbt = SerializePSBT(psbt);
+        PartiallySignedTransaction roundtrip_psbt;
+        std::string roundtrip_error;
+        assert(DecodeBase64PSBT(roundtrip_psbt, EncodeBase64(serialized_psbt), roundtrip_error));
+        assert(roundtrip_error.empty());
+        assert(SerializePSBT(roundtrip_psbt) == serialized_psbt);
+    }
 }

@@ -6,6 +6,7 @@
 #ifndef BITCOIN_COMPRESSOR_H
 #define BITCOIN_COMPRESSOR_H
 
+#include <consensus/amount.h>
 #include <prevector.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
@@ -105,7 +106,11 @@ struct AmountCompression
     {
         uint64_t v;
         s >> VARINT(v);
-        val = DecompressAmount(v);
+        const uint64_t amount{DecompressAmount(v)};
+        if (amount > static_cast<uint64_t>(MAX_MONEY)) {
+            throw std::ios_base::failure("AmountCompression::Unser(): amount out of range");
+        }
+        val = amount;
     }
 };
 

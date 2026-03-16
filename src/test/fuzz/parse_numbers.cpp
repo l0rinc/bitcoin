@@ -2,6 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <consensus/amount.h>
+#include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <util/moneystr.h>
 #include <util/strencodings.h>
@@ -14,7 +16,9 @@
 
 FUZZ_TARGET(parse_numbers)
 {
-    const std::string random_string(buffer.begin(), buffer.end());
+    FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
+    const std::string random_string = fuzzed_data_provider.ConsumeRandomLengthString();
+    const CAmount money = fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(0, MAX_MONEY);
     {
         const auto i8{ToIntegral<int8_t>(random_string)};
         const auto u8{ToIntegral<uint8_t>(random_string)};
@@ -53,7 +57,15 @@ FUZZ_TARGET(parse_numbers)
         }
     }
 
-    (void)ParseMoney(random_string);
+    const auto parsed_money = ParseMoney(random_string);
+    if (parsed_money) {
+        const auto reparsed_money = ParseMoney(FormatMoney(*parsed_money));
+        assert(reparsed_money.has_value());
+        assert(*reparsed_money == *parsed_money);
+    }
+    const auto reparsed_generated_money = ParseMoney(FormatMoney(money));
+    assert(reparsed_generated_money.has_value());
+    assert(*reparsed_generated_money == money);
 
     (void)LocaleIndependentAtoi<int>(random_string);
 

@@ -225,14 +225,28 @@ FUZZ_TARGET_DESERIALIZE(blockheader_deserialize, {
 FUZZ_TARGET_DESERIALIZE(txundo_deserialize, {
     CTxUndo tu;
     DeserializeFromFuzzingInput(buffer, tu);
+    for (const auto& coin : tu.vprevout) {
+        assert(MoneyRange(coin.out.nValue));
+    }
 })
 FUZZ_TARGET_DESERIALIZE(blockundo_deserialize, {
     CBlockUndo bu;
     DeserializeFromFuzzingInput(buffer, bu);
+    for (const auto& tx_undo : bu.vtxundo) {
+        for (const auto& coin : tx_undo.vprevout) {
+            assert(MoneyRange(coin.out.nValue));
+        }
+    }
 })
 FUZZ_TARGET_DESERIALIZE(coins_deserialize, {
     Coin coin;
     DeserializeFromFuzzingInput(buffer, coin);
+    assert(MoneyRange(coin.out.nValue));
+    const Coin roundtrip{Deserialize<Coin>(Serialize(coin))};
+    assert(roundtrip.fCoinBase == coin.fCoinBase);
+    assert(roundtrip.nHeight == coin.nHeight);
+    assert(roundtrip.out.nValue == coin.out.nValue);
+    assert(roundtrip.out.scriptPubKey == coin.out.scriptPubKey);
 })
 FUZZ_TARGET(netaddr_deserialize, .init = initialize_deserialize)
 {
@@ -306,6 +320,11 @@ FUZZ_TARGET_DESERIALIZE(txoutcompressor_deserialize, {
     CTxOut to;
     auto toc = Using<TxOutCompression>(to);
     DeserializeFromFuzzingInput(buffer, toc);
+    assert(MoneyRange(to.nValue));
+    const auto params = [](auto& tx_out) { return Using<TxOutCompression>(tx_out); };
+    const CTxOut roundtrip{Deserialize<CTxOut>(Serialize(to, params), params)};
+    assert(roundtrip.nValue == to.nValue);
+    assert(roundtrip.scriptPubKey == to.scriptPubKey);
 })
 FUZZ_TARGET_DESERIALIZE(blocktransactions_deserialize, {
     BlockTransactions bt;

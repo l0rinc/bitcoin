@@ -29,4 +29,10 @@ FUZZ_TARGET(decode_tx)
         assert(!no_witness_mtx.HasWitness());
         assert(result_try_witness_and_maybe_no_witness);
     }
+    if (result_try_witness || result_try_witness_and_maybe_no_witness) {
+        const std::string canonical_tx_hex = EncodeHexTx(CTransaction{mtx});
+        CMutableTransaction roundtrip_mtx;
+        assert(DecodeHexTx(roundtrip_mtx, canonical_tx_hex, /*try_no_witness=*/true, /*try_witness=*/true));
+        assert(CTransaction{roundtrip_mtx} == CTransaction{mtx});
+    }
 }

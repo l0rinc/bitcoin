@@ -12,6 +12,7 @@
 #include <test/util/random.h>
 #include <util/check.h>
 
+#include <cassert>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -20,6 +21,15 @@
 using node::AnalyzePSBT;
 using node::PSBTAnalysis;
 using node::PSBTInputAnalysis;
+
+namespace {
+std::vector<std::byte> SerializePSBT(const PartiallySignedTransaction& psbt)
+{
+    DataStream ds{};
+    ds << psbt;
+    return {ds.begin(), ds.end()};
+}
+} // namespace
 
 FUZZ_TARGET(psbt)
 {
@@ -32,6 +42,12 @@ FUZZ_TARGET(psbt)
         return;
     }
     const PartiallySignedTransaction psbt = psbt_mut;
+    const std::vector<std::byte> serialized_psbt = SerializePSBT(psbt);
+    PartiallySignedTransaction roundtrip_psbt;
+    DataStream roundtrip_stream{serialized_psbt};
+    roundtrip_stream >> roundtrip_psbt;
+    assert(roundtrip_stream.empty());
+    assert(SerializePSBT(roundtrip_psbt) == serialized_psbt);
 
     const PSBTAnalysis analysis = AnalyzePSBT(psbt);
     (void)PSBTRoleName(analysis.next);
