@@ -100,7 +100,7 @@ class BindExtraTest(BitcoinTestFramework):
 
         self.log.info("Test -bind without dedicated onion bind warns when -listenonion=1")
         self.start_node(0, extra_args=[f"-bind=127.0.0.1:{bind_port}", "-listenonion=1"])
-        self.stop_node(0)  # TODO: Warn when the onion service shares a normal bind
+        self.stop_node(0, expected_stderr="Warning: The Tor onion service is being directed to a -bind address without a dedicated onion socket (-bind=<addr>=onion). Incoming Tor connections cannot be distinguished from regular connections.")
 
         self.log.info("Test -bind with dedicated onion bind does not warn when -listenonion=1")
         self.start_node(0, extra_args=[f"-bind=127.0.0.1:{bind_port}", f"-bind=127.0.0.1:{tor_port(0)}=onion", "-listenonion=1"])
