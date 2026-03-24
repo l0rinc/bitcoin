@@ -21,6 +21,7 @@ from test_framework.util import (
     assert_equal,
     p2p_port,
     rpc_port,
+    tor_port,
 )
 
 class BindExtraTest(BitcoinTestFramework):
@@ -93,6 +94,11 @@ class BindExtraTest(BitcoinTestFramework):
             binds = set(filter(lambda e: e[1] != rpc_port(i), binds))
             assert_equal(binds, set(expected_services))
 
+        self.stop_node(0)
+
+        bind_port = p2p_port(self.num_nodes)
+        self.log.info("Test -bind with dedicated onion bind does not warn when -listenonion=1")
+        self.start_node(0, extra_args=[f"-bind=127.0.0.1:{bind_port}", f"-bind=127.0.0.1:{tor_port(0)}=onion", "-listenonion=1"])
         self.stop_node(0)
 
         addr = "127.0.0.1:11012"
