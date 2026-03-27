@@ -30,6 +30,7 @@
 #include <kernel/warning.h>
 #include <logging/timer.h>
 #include <node/blockstorage.h>
+#include <node/dbcache.h>
 #include <node/utxo_snapshot.h>
 #include <policy/ephemeral_policy.h>
 #include <policy/policy.h>
@@ -6071,6 +6072,17 @@ Chainstate& ChainstateManager::ActiveChainstate() const
 void ChainstateManager::MaybeRebalanceCaches()
 {
     AssertLockHeld(::cs_main);
+    if (m_auto_dbcache) {
+        const size_t target_dbcache{node::GetDefaultDBCache(m_total_ram_bytes, IsInitialBlockDownload())};
+        const size_t target_kernel_cache{
+            target_dbcache > m_fixed_index_cache_bytes
+                ? std::max(target_dbcache - m_fixed_index_cache_bytes, MIN_DB_CACHE)
+                : MIN_DB_CACHE};
+        const kernel::CacheSizes cache_sizes{target_kernel_cache};
+        m_total_coinsdb_cache = cache_sizes.coins_db;
+        m_total_coinstip_cache = cache_sizes.coins;
+    }
+
     Chainstate& current_cs{CurrentChainstate()};
     Chainstate* historical_cs{HistoricalChainstate()};
     if (!historical_cs && !current_cs.m_from_snapshot_blockhash) {

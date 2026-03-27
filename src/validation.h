@@ -1084,6 +1084,12 @@ public:
     //! The total number of bytes available for us to use across all leveldb
     //! coins databases. This will be split somehow across chainstates.
     size_t m_total_coinsdb_cache{0};
+    //! Whether the current cache budget came from the automatic default instead of an explicit `-dbcache`.
+    bool m_auto_dbcache{true};
+    //! Total RAM used for automatic dbcache sizing.
+    size_t m_total_ram_bytes{0};
+    //! Dbcache bytes reserved for runtime-fixed index caches outside the chainstate split.
+    size_t m_fixed_index_cache_bytes{0};
 
     //! Instantiate a new chainstate.
     //!
