@@ -174,12 +174,6 @@ public:
     value_type* data()                               { return vch.data() + m_read_pos; }
     const value_type* data() const                   { return vch.data() + m_read_pos; }
 
-    inline void Compact()
-    {
-        vch.erase(vch.begin(), vch.begin() + m_read_pos);
-        m_read_pos = 0;
-    }
-
     bool Rewind(std::optional<size_type> n = std::nullopt)
     {
         // Total rewind if no size is passed
