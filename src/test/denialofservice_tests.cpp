@@ -32,7 +32,7 @@ static CService ip(uint32_t i)
     return CService(CNetAddr(s), Params().GetDefaultPort());
 }
 
-BOOST_FIXTURE_TEST_SUITE(denialofservice_tests, TestingSetup)
+BOOST_AUTO_TEST_SUITE(denialofservice_tests)
 
 // Test eviction of an outbound peer whose chain never advances
 // Mock a node connection, and use mocktime to simulate a peer
@@ -42,7 +42,7 @@ BOOST_FIXTURE_TEST_SUITE(denialofservice_tests, TestingSetup)
 // this logic; this test takes advantage of that protection only
 // being applied to nodes which send headers with sufficient
 // work.
-BOOST_AUTO_TEST_CASE(outbound_slow_chain_eviction)
+BOOST_FIXTURE_TEST_CASE(outbound_slow_chain_eviction, TestingSetup)
 {
     LOCK(NetEventsInterface::g_msgproc_mutex);
 
@@ -298,7 +298,7 @@ BOOST_FIXTURE_TEST_CASE(block_relay_only_eviction, OutboundTest)
     connman->ClearTestNodes();
 }
 
-BOOST_AUTO_TEST_CASE(peer_discouragement)
+BOOST_FIXTURE_TEST_CASE(peer_discouragement, TestingSetup)
 {
     LOCK(NetEventsInterface::g_msgproc_mutex);
 
@@ -402,7 +402,7 @@ BOOST_AUTO_TEST_CASE(peer_discouragement)
     connman->ClearTestNodes();
 }
 
-BOOST_AUTO_TEST_CASE(DoS_bantime)
+BOOST_FIXTURE_TEST_CASE(DoS_bantime, TestingSetup)
 {
     LOCK(NetEventsInterface::g_msgproc_mutex);
 

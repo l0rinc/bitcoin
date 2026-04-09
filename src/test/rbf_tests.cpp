@@ -14,7 +14,7 @@
 #include <optional>
 #include <vector>
 
-BOOST_FIXTURE_TEST_SUITE(rbf_tests, TestingSetup)
+BOOST_AUTO_TEST_SUITE(rbf_tests)
 
 static inline CTransactionRef make_tx(const std::vector<CTransactionRef>& inputs,
                                       const std::vector<CAmount>& output_values)
@@ -483,7 +483,7 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
     }
 }
 
-BOOST_AUTO_TEST_CASE(feerate_chunks_utilities)
+BOOST_FIXTURE_TEST_CASE(feerate_chunks_utilities, TestingSetup)
 {
     // Sanity check the correctness of the feerate chunks comparison.
 
