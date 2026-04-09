@@ -13,7 +13,7 @@
 #include <optional>
 #include <vector>
 
-BOOST_AUTO_TEST_SUITE(miniminer_tests)
+BOOST_FIXTURE_TEST_SUITE(miniminer_tests, TestingSetup)
 
 const CAmount low_fee{CENT/2000}; // 500 ṩ
 const CAmount med_fee{CENT/200}; // 5000 ṩ

@@ -23,11 +23,11 @@
 
 #include <boost/test/unit_test.hpp>
 
-BOOST_FIXTURE_TEST_SUITE(validation_chainstate_tests, ChainTestingSetup)
+BOOST_AUTO_TEST_SUITE(validation_chainstate_tests)
 
 //! Test resizing coins-related Chainstate caches during runtime.
 //!
-BOOST_AUTO_TEST_CASE(validation_chainstate_resize_caches)
+BOOST_FIXTURE_TEST_CASE(validation_chainstate_resize_caches, ChainTestingSetup)
 {
     ChainstateManager& manager = *Assert(m_node.chainman);
     CTxMemPool& mempool = *Assert(m_node.mempool);
