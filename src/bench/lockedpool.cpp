@@ -11,6 +11,7 @@
 
 #define ASIZE 2048
 #define MSIZE 2048
+static constexpr uint32_t INITIAL_STATE{0x12345678};
 
 static void BenchLockedPool(benchmark::Bench& bench)
 {
@@ -19,8 +20,9 @@ static void BenchLockedPool(benchmark::Bench& bench)
     Arena b(synth_base, synth_size, 16);
 
     std::vector<void*> addr{ASIZE, nullptr};
-    uint32_t s = 0x12345678;
+    uint32_t s = INITIAL_STATE;
     bench.run([&] {
+        // assert(s == INITIAL_STATE);
         int idx = s & (addr.size() - 1);
         if (s & 0x80000000) {
             b.free(addr[idx]);

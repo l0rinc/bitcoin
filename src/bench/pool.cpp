@@ -20,6 +20,7 @@ void BenchFillClearMap(benchmark::Bench& bench, Map& map)
     // do this at least 10 times so we get reasonable accurate results
 
     bench.batch(batch_size).minEpochIterations(10).run([&] {
+        // assert(map.bucket_count() == 0);
         auto rng = ankerl::nanobench::Rng(1234);
         for (size_t i = 0; i < batch_size; ++i) {
             map[rng()];

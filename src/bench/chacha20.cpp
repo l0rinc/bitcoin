@@ -26,6 +26,7 @@ static void CHACHA20(benchmark::Bench& bench, size_t buffersize)
     std::vector<std::byte> out(buffersize, {});
     bench.batch(in.size()).unit("byte").run([&] {
         ctx.Crypt(in, out);
+        // assert(out[0] == std::byte{0x76});
     });
 }
 
@@ -38,6 +39,7 @@ static void FSCHACHA20POLY1305(benchmark::Bench& bench, size_t buffersize)
     std::vector<std::byte> out(buffersize + FSChaCha20Poly1305::EXPANSION);
     bench.batch(in.size()).unit("byte").run([&] {
         ctx.Encrypt(in, aad, out);
+        // assert(out[0] == std::byte{0x9f});
     });
 }
 
