@@ -25,7 +25,10 @@ void ApplyArgsManOptions(const ArgsManager& argsman, PeerManager::Options& optio
     if (auto value{argsman.GetBoolArg("-blocksonly")}) options.ignore_incoming_txs = *value;
 
     if (auto value{argsman.GetBoolArg("-privatebroadcast")}) options.private_broadcast = *value;
+
+    if (auto value{argsman.GetIntArg("-privatebroadcastdelay")}) {
+        options.private_broadcast_delay_max = std::chrono::milliseconds{std::max<int64_t>(*value, 0)};
+    }
 }
 
 } // namespace node
-
