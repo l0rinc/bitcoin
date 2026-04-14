@@ -53,28 +53,46 @@ public:
     }
 };
 
-class SaltedOutpointHasher
+class SaltedOutpointHasher24
 {
-    const PresaltedSipHasher m_hasher;
+    const PresaltedSipHasher24 m_hasher;
 
 public:
-    SaltedOutpointHasher(bool deterministic = false);
+    SaltedOutpointHasher24(bool deterministic = false);
 
-    /**
-     * Having the hash noexcept allows libstdc++'s unordered_map to recalculate
-     * the hash during rehash, so it does not have to cache the value. This
-     * reduces node's memory by sizeof(size_t). The required recalculation has
-     * a slight performance penalty (around 1.6%), but this is compensated by
-     * memory savings of about 9% which allow for a larger dbcache setting.
-     *
-     * @see https://gcc.gnu.org/onlinedocs/gcc-13.2.0/libstdc++/manual/manual/unordered_associative.html
-     */
+    size_t operator()(const COutPoint& id) const
+    {
+        return m_hasher(id.hash.ToUint256(), id.n);
+    }
+};
+
+class SaltedOutpointHasher13
+{
+    const PresaltedSipHasher13 m_hasher;
+
+public:
+    SaltedOutpointHasher13(bool deterministic = false);
+
     size_t operator()(const COutPoint& id) const noexcept
     {
         return m_hasher(id.hash.ToUint256(), id.n);
     }
 };
 
+class SaltedOutpointHasher13Jumbo
+{
+    const PresaltedSipHasher13Jumbo m_hasher;
+
+public:
+    SaltedOutpointHasher13Jumbo(bool deterministic = false);
+
+    size_t operator()(const COutPoint& id) const
+    {
+        return m_hasher(id.hash.ToUint256(), id.n);
+    }
+};
+
+using SaltedOutpointHasher = SaltedOutpointHasher13Jumbo;
 /**
  * We're hashing a nonce into the entries themselves, so we don't need extra
  * blinding in the set hash computation.

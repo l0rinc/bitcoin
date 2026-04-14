@@ -755,26 +755,27 @@ class CCoinsViewMemPool : public CCoinsViewBacked
     * Coins made available by transactions being validated. Tracking these allows for package
     * validation, since we can access transaction outputs without submitting them to mempool.
     */
-    std::unordered_map<COutPoint, Coin, SaltedOutpointHasher> m_temp_added;
+    std::unordered_map<COutPoint, Coin, SaltedOutpointHasher13> m_temp_added;
 
     /**
      * Set of all coins that have been fetched from mempool or created using PackageAddTransaction
      * (not base). Used to track the origin of a coin, see GetNonBaseCoins().
      */
-    mutable std::unordered_set<COutPoint, SaltedOutpointHasher> m_non_base_coins;
+    mutable std::unordered_set<COutPoint, SaltedOutpointHasher13> m_non_base_coins;
 protected:
     const CTxMemPool& mempool;
 
 public:
     CCoinsViewMemPool(CCoinsView* baseIn, const CTxMemPool& mempoolIn);
     /** GetCoin, returning whether it exists and is not spent. Also updates m_non_base_coins if the
-     * coin is not fetched from base. May populate the base view on cache misses. */
-    std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
+     * coin is not fetched from base. May populate the base view on cache misses unless
+     * peek_only is true. */
+    std::optional<Coin> GetCoin(const COutPoint& outpoint, bool peek_only = false) const override;
     /** Add the coins created by this transaction. These coins are only temporarily stored in
      * m_temp_added and cannot be flushed to the back end. Only used for package validation. */
     void PackageAddTransaction(const CTransactionRef& tx);
     /** Get all coins in m_non_base_coins. */
-    const std::unordered_set<COutPoint, SaltedOutpointHasher>& GetNonBaseCoins() const { return m_non_base_coins; }
+    const std::unordered_set<COutPoint, SaltedOutpointHasher13>& GetNonBaseCoins() const { return m_non_base_coins; }
     /** Clear m_temp_added and m_non_base_coins. */
     void Reset();
 };
