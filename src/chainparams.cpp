@@ -9,6 +9,8 @@
 #include <common/args.h>
 #include <consensus/params.h>
 #include <deploymentinfo.h>
+#include <kernel/chainparams.h>
+#include <logging.h>
 #include <tinyformat.h>
 #include <util/chaintype.h>
 #include <util/log.h>
@@ -168,6 +170,15 @@ const CChainParams &Params() {
 
 std::unique_ptr<const CChainParams> CreateChainParams(const ArgsManager& args, const ChainType chain)
 {
+    if (g_rdts_consent == RDTSConsentFlag::UNSUPPORTED_UNSAFE_NO_ENFORCEMENT && !g_enable_rdts) {
+        for (const auto& rulesok : args.GetArgs(CONSENSUSRULES_CONFIG_NAME)) {
+            if (rulesok == CONSENSUSRULES_REQUIRED) {
+                g_enable_rdts = true;
+                break;
+            }
+        }
+    }
+
     switch (chain) {
     case ChainType::MAIN: {
         auto opts = CChainParams::MainNetOptions{};
