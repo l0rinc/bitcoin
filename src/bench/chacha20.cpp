@@ -8,8 +8,10 @@
 #include <crypto/chacha20poly1305.h>
 #include <span.h>
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 /* Number of bytes to process per iteration */
@@ -20,25 +22,30 @@ static const uint64_t BUFFER_SIZE_LARGE = 1024*1024;
 static void CHACHA20(benchmark::Bench& bench, size_t buffersize)
 {
     std::vector<std::byte> key(32, {});
-    ChaCha20 ctx(key);
-    ctx.Seek({0, 0}, 0);
+    std::optional<ChaCha20> ctx;
     std::vector<std::byte> in(buffersize, {});
     std::vector<std::byte> out(buffersize, {});
-    bench.batch(in.size()).unit("byte").run([&] {
-        ctx.Crypt(in, out);
-    });
+    bench.batch(in.size()).unit("byte").epochIterations(1)
+        .setup([&] { ctx.emplace(key); })
+        .run([&] {
+            ctx->Crypt(in, out);
+            assert(out[0] == std::byte{0x76});
+        });
 }
 
 static void FSCHACHA20POLY1305(benchmark::Bench& bench, size_t buffersize)
 {
     std::vector<std::byte> key(32);
-    FSChaCha20Poly1305 ctx(key, 224);
+    std::optional<FSChaCha20Poly1305> ctx;
     std::vector<std::byte> in(buffersize);
     std::vector<std::byte> aad;
     std::vector<std::byte> out(buffersize + FSChaCha20Poly1305::EXPANSION);
-    bench.batch(in.size()).unit("byte").run([&] {
-        ctx.Encrypt(in, aad, out);
-    });
+    bench.batch(in.size()).unit("byte").epochIterations(1)
+        .setup([&] { ctx.emplace(key, 224); })
+        .run([&] {
+            ctx->Encrypt(in, aad, out);
+            assert(out[0] == std::byte{0x9f});
+        });
 }
 
 static void CHACHA20_64BYTES(benchmark::Bench& bench)

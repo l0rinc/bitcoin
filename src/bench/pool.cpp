@@ -5,6 +5,7 @@
 #include <bench/bench.h>
 #include <support/allocators/pool.h>
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -15,17 +16,22 @@ template <typename Map>
 void BenchFillClearMap(benchmark::Bench& bench, Map& map)
 {
     size_t batch_size = 5000;
+    size_t reset_bucket_count = 0;
 
-    // make sure each iteration of the benchmark contains exactly 5000 inserts and one clear.
-    // do this at least 10 times so we get reasonable accurate results
-
-    bench.batch(batch_size).minEpochIterations(10).run([&] {
-        auto rng = ankerl::nanobench::Rng(1234);
-        for (size_t i = 0; i < batch_size; ++i) {
-            map[rng()];
-        }
-        map.clear();
-    });
+    // Each timed call inserts batch_size keys into a freshly reset map.
+    bench.batch(batch_size).epochIterations(1)
+        .setup([&] {
+            map.clear();
+            map.rehash(0);
+            reset_bucket_count = map.bucket_count();
+        })
+        .run([&] {
+            assert(map.bucket_count() == reset_bucket_count);
+            auto rng = ankerl::nanobench::Rng(1234);
+            for (size_t i = 0; i < batch_size; ++i) {
+                map[rng()];
+            }
+        });
 }
 
 static void PoolAllocator_StdUnorderedMap(benchmark::Bench& bench)

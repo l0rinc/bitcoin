@@ -40,6 +40,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include <chrono>        // high_resolution_clock
+#include <cassert>       // assert
 #include <cstring>       // memcpy
 #include <iosfwd>        // for std::ostream* custom output target in Config
 #include <string>        // all names
@@ -1238,6 +1239,8 @@ public:
     template <typename Op>
     ANKERL_NANOBENCH_NO_SANITIZE("integer")
     Bench& run(Op&& op) {
+        assert(mBench.epochIterations() == 1 &&
+               "setup() runs once per epoch, not once per iteration; use epochIterations(1) when setup() must reset state for each timed call");
         return mBench.runImpl(mSetupOp, std::forward<Op>(op));
     }
 
