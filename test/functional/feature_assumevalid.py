@@ -242,6 +242,5 @@ class AssumeValidTest(BitcoinTestFramework):
             self.restart_node(5, extra_args=["-reindex-chainstate", f"-assumevalid={block102.hash_hex}", "-minimumchainwork=0xffff"])
             assert_equal(self.nodes[5].getblockcount(), 1)
 
-
 if __name__ == '__main__':
     AssumeValidTest(__file__).main()
