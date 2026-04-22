@@ -176,8 +176,21 @@ bool WalletBatch::EraseWatchOnly(const CScript &dest)
 
 bool WalletBatch::WriteBestBlock(const CBlockLocator& locator)
 {
-    WriteIC(DBKeys::BESTBLOCK, CBlockLocator()); // Write empty block locator so versions that require a merkle branch automatically rescan
-    return WriteIC(DBKeys::BESTBLOCK_NOMERKLE, locator);
+    const bool started_txn{!m_batch->HasActiveTxn()};
+    if (started_txn && !TxnBegin()) {
+        return false;
+    }
+
+    // Write empty block locator so versions that require a merkle branch automatically rescan.
+    bool ok{WriteIC(DBKeys::BESTBLOCK, CBlockLocator())};
+    ok = ok && WriteIC(DBKeys::BESTBLOCK_NOMERKLE, locator);
+    if (!ok) {
+        if (!started_txn) return false;
+        TxnAbort();
+        return false;
+    }
+
+    return !started_txn || TxnCommit();
 }
 
 bool WalletBatch::ReadBestBlock(CBlockLocator& locator)
