@@ -297,6 +297,54 @@ BOOST_AUTO_TEST_CASE(ComputeTimeSmart)
     BOOST_CHECK_EQUAL(AddTx(*m_node.chainman, m_wallet, 5, 50, 600), 300);
 }
 
+class BestBlockCheckpointRegtestSetup : public TestChain100Setup
+{
+public:
+    BestBlockCheckpointRegtestSetup()
+        : TestChain100Setup{ChainType::REGTEST}
+    {
+        m_context.chain = m_node.chain.get();
+        m_context.args = &m_args;
+        m_wallet = TestCreateWallet(CreateMockableWalletDatabase(), m_context, WALLET_FLAG_DESCRIPTORS);
+        const CKey key{GenerateRandomKey()};
+        AddKey(*m_wallet, key);
+        m_wallet_script = GetScriptForRawPubKey(key.GetPubKey());
+    }
+
+    ~BestBlockCheckpointRegtestSetup()
+    {
+        TestUnloadWallet(std::move(m_wallet));
+    }
+
+    WalletContext m_context;
+    std::shared_ptr<CWallet> m_wallet;
+    CScript m_wallet_script;
+};
+
+BOOST_FIXTURE_TEST_CASE(bestblock_checkpoint_policy, BestBlockCheckpointRegtestSetup)
+{
+    const auto read_best_block = [&] {
+        CBlockLocator locator;
+        BOOST_REQUIRE(WalletBatch{m_wallet->GetDatabase()}.ReadBestBlock(locator));
+        BOOST_REQUIRE(!locator.IsNull());
+        return locator;
+    };
+
+    const uint256 initial_tip_hash = WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return Assert(m_node.chainman)->ActiveChain().Tip()->GetBlockHash());
+    BOOST_CHECK(read_best_block().vHave.front() == initial_tip_hash);
+
+    CreateAndProcessBlock({}, m_wallet_script);
+    m_wallet->chain().waitForNotifications();
+    BOOST_CHECK(read_best_block().vHave.front() == initial_tip_hash);
+
+    for (int i = 0; i < 43; ++i) {
+        CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
+    }
+    m_wallet->chain().waitForNotifications();
+
+    const uint256 checkpoint_tip_hash = WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return Assert(m_node.chainman)->ActiveChain().Tip()->GetBlockHash());
+    BOOST_CHECK(read_best_block().vHave.front() == checkpoint_tip_hash);
+}
 void TestLoadWallet(const std::string& name, DatabaseFormat format, std::function<void(std::shared_ptr<CWallet>)> f)
 {
     node::NodeContext node;

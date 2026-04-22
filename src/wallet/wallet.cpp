@@ -1592,8 +1592,7 @@ void CWallet::blockConnected(const ChainstateRole& role, const interfaces::Block
         transactionRemovedFromMempool(block.data->vtx[index], MemPoolRemovalReason::BLOCK);
     }
 
-    // Update on disk if this block resulted in us updating a tx, or periodically every 144 blocks (~1 day)
-    if (wallet_updated || block.height % 144 == 0) {
+    if ((wallet_updated && !Params().MineBlocksOnDemand()) || block.height % 144 == 0) {
         WriteBestBlock();
     }
 }
