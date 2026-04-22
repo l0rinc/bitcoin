@@ -532,21 +532,45 @@ The [`include-what-you-use`](https://github.com/include-what-you-use/include-wha
 helps to enforce the source code organization [policy](#source-code-organization) in this repository.
 
 To ensure consistency, it is recommended to run the IWYU CI job locally rather than running the tool directly.
+For focused local fixing of specific files inside the provided IWYU CI environment, run:
+```bash
+python3 /include-what-you-use/iwyu_tool.py \
+         -p "${BASE_BUILD_DIR}" src/foo.cpp \
+         -- -Xiwyu --cxx17ns -Xiwyu --mapping_file="${BASE_ROOT_DIR}/contrib/devtools/iwyu/bitcoin.core.imp" \
+         -Xiwyu --max_line_length=160 \
+         -Xiwyu --check_also="*/primitives/*.h" \
+         2>&1 | tee /tmp/iwyu_ci.out
+python3 /include-what-you-use/fix_includes.py --nosafe_headers < /tmp/iwyu_ci.out
+git diff -U1 | ./contrib/devtools/clang-format-diff.py -binary="clang-format-${IWYU_LLVM_V}" -p1 -i -v
+git diff
+```
+The local command is:
+```bash
+env -i HOME="$HOME" PATH="$PATH" USER="$USER" FILE_ENV="./ci/test/00_setup_env_native_iwyu.sh" ./ci/test_run_all.sh
+```
 
 In some cases, IWYU might suggest headers that seem unnecessary at first glance, but are actually required.
 For example, a macro may use a symbol that requires its own include. Another example is passing a string literal
 to a function that accepts a `std::string` parameter. An implicit conversion occurs at the callsite using the
 `std::string` constructor, which makes the corresponding header required. We accept these suggestions as is.
 
-Use `IWYU pragma: export` very sparingly, as this enforces transitive inclusion of headers
-and undermines the specific purpose of IWYU.
+If the provided IWYU CI job still produces a false positive, reduce it to a minimal reproducer and report it upstream at
+[`include-what-you-use/include-what-you-use`](https://github.com/include-what-you-use/include-what-you-use).
 
-The acceptable cases for using `IWYU pragma: export` are:
+Use [`IWYU pragma: keep`](https://github.com/include-what-you-use/include-what-you-use/blob/clang_22/docs/IWYUPragmas.md#iwyu-pragma-keep)
+only as a narrow workaround when needed.
+
+Use [`IWYU pragma: export`](https://github.com/include-what-you-use/include-what-you-use/blob/clang_22/docs/IWYUPragmas.md#iwyu-pragma-export)
+very sparingly, as this enforces transitive inclusion of headers and undermines the specific purpose of IWYU.
+The upstream pragma reference is
+[`docs/IWYUPragmas.md`](https://github.com/include-what-you-use/include-what-you-use/blob/clang_22/docs/IWYUPragmas.md).
+
+The acceptable cases for using [`IWYU pragma: export`](https://github.com/include-what-you-use/include-what-you-use/blob/clang_22/docs/IWYUPragmas.md#iwyu-pragma-export) are:
 1. Facade headers. For example, see [`compat/compat.h`](/src/compat/compat.h).
 2. Drop-in replacement headers. For example, see [`util/time.h`](/src/util/time.h).
 3. Presenting a complete interface across multiple headers.
 
-A comment explaining the rationale is required for every use of `IWYU pragma: export`.
+For non-obvious uses of `IWYU pragma`, add a nearby comment in the source file explaining why the pragma is needed.
 
 ### Performance profiling with perf
 
