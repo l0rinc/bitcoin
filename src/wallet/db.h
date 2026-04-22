@@ -50,6 +50,9 @@ public:
 class DatabaseBatch
 {
 private:
+    DataStream m_key{};
+    DataStream m_value{};
+
     virtual bool ReadKey(DataStream&& key, DataStream& value) = 0;
     virtual bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite = true) = 0;
     virtual bool EraseKey(DataStream&& key) = 0;
@@ -67,14 +70,13 @@ public:
     template <typename K, typename T>
     bool Read(const K& key, T& value)
     {
-        DataStream ssKey{};
-        ssKey.reserve(1000);
-        ssKey << key;
+        ScopedDataStreamUsage scoped_key{m_key};
+        m_key << key;
 
-        DataStream ssValue{};
-        if (!ReadKey(std::move(ssKey), ssValue)) return false;
+        ScopedDataStreamUsage scoped_value{m_value};
+        if (!ReadKey(std::move(m_key), m_value)) return false;
         try {
-            ssValue >> value;
+            m_value >> value;
             return true;
         } catch (const std::exception&) {
             return false;
@@ -84,35 +86,31 @@ public:
     template <typename K, typename T>
     bool Write(const K& key, const T& value, bool fOverwrite = true)
     {
-        DataStream ssKey{};
-        ssKey.reserve(1000);
-        ssKey << key;
+        ScopedDataStreamUsage scoped_key{m_key};
+        m_key << key;
 
-        DataStream ssValue{};
-        ssValue.reserve(10000);
-        ssValue << value;
+        ScopedDataStreamUsage scoped_value{m_value};
+        m_value << value;
 
-        return WriteKey(std::move(ssKey), std::move(ssValue), fOverwrite);
+        return WriteKey(std::move(m_key), std::move(m_value), fOverwrite);
     }
 
     template <typename K>
     bool Erase(const K& key)
     {
-        DataStream ssKey{};
-        ssKey.reserve(1000);
-        ssKey << key;
+        ScopedDataStreamUsage scoped_key{m_key};
+        m_key << key;
 
-        return EraseKey(std::move(ssKey));
+        return EraseKey(std::move(m_key));
     }
 
     template <typename K>
     bool Exists(const K& key)
     {
-        DataStream ssKey{};
-        ssKey.reserve(1000);
-        ssKey << key;
+        ScopedDataStreamUsage scoped_key{m_key};
+        m_key << key;
 
-        return HasKey(std::move(ssKey));
+        return HasKey(std::move(m_key));
     }
     virtual bool ErasePrefix(std::span<const std::byte> prefix) = 0;
 
