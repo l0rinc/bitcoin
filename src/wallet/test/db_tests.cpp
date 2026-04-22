@@ -155,6 +155,7 @@ BOOST_AUTO_TEST_CASE(db_availability_after_write_error)
         // Write original record
         std::unique_ptr<DatabaseBatch> batch = database->MakeBatch();
         std::string key = "key";
+        std::string key2 = "key2";
         std::string value = "value";
         std::string value2 = "value_2";
         BOOST_CHECK(batch->Write(key, value));
@@ -165,6 +166,15 @@ BOOST_AUTO_TEST_CASE(db_availability_after_write_error)
         // Sanity-check; read and verify the overwritten value
         std::string read_value;
         BOOST_CHECK(batch->Read(key, read_value));
+        BOOST_CHECK_EQUAL(read_value, value2);
+
+        // Reuse the same batch for mixed success and failure cases.
+        BOOST_CHECK(!batch->Exists("missing"));
+        BOOST_CHECK(batch->Exists(key));
+        BOOST_CHECK(batch->Write(key2, value2));
+        BOOST_CHECK(batch->Erase(key));
+        BOOST_CHECK(!batch->Exists(key));
+        BOOST_CHECK(batch->Read(key2, read_value));
         BOOST_CHECK_EQUAL(read_value, value2);
     }
 }
