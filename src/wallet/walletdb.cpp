@@ -181,8 +181,11 @@ bool WalletBatch::WriteBestBlock(const CBlockLocator& locator)
         return false;
     }
 
-    // Write empty block locator so versions that require a merkle branch automatically rescan.
-    bool ok{WriteIC(DBKeys::BESTBLOCK, CBlockLocator())};
+    CBlockLocator legacy_locator;
+    // Keep the legacy key empty so versions that require a merkle branch automatically rescan,
+    // but avoid rewriting the same empty value on every update.
+    const bool write_legacy{!m_batch->Read(DBKeys::BESTBLOCK, legacy_locator) || !legacy_locator.IsNull()};
+    bool ok{!write_legacy || WriteIC(DBKeys::BESTBLOCK, CBlockLocator())};
     ok = ok && WriteIC(DBKeys::BESTBLOCK_NOMERKLE, locator);
     if (!ok) {
         if (!started_txn) return false;
