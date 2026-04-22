@@ -531,20 +531,7 @@ The generated coverage report can be accessed at `build/coverage_report/index.ht
 The [`include-what-you-use`](https://github.com/include-what-you-use/include-what-you-use) tool (IWYU)
 helps to enforce the source code organization [policy](#source-code-organization) in this repository.
 
-To ensure consistency, it is recommended to run the IWYU CI job locally rather than running the tool directly.
-For focused local fixing of specific files inside the provided IWYU CI environment, run:
-```bash
-python3 /include-what-you-use/iwyu_tool.py \
-         -p "${BASE_BUILD_DIR}" src/foo.cpp \
-         -- -Xiwyu --cxx17ns -Xiwyu --mapping_file="${BASE_ROOT_DIR}/contrib/devtools/iwyu/bitcoin.core.imp" \
-         -Xiwyu --max_line_length=160 \
-         -Xiwyu --check_also="*/primitives/*.h" \
-         2>&1 | tee /tmp/iwyu_ci.out
-python3 /include-what-you-use/fix_includes.py --nosafe_headers < /tmp/iwyu_ci.out
-git diff -U1 | ./contrib/devtools/clang-format-diff.py -binary="clang-format-${IWYU_LLVM_V}" -p1 -i -v
-git diff
-```
-The local command is:
+To ensure consistency, reproduce the IWYU CI job locally rather than running the tool directly:
 ```bash
 env -i HOME="$HOME" PATH="$PATH" USER="$USER" FILE_ENV="./ci/test/00_setup_env_native_iwyu.sh" ./ci/test_run_all.sh
 ```
