@@ -9,6 +9,7 @@
 #include <serialize.h>
 #include <span.h>
 #include <support/allocators/zeroafterfree.h>
+#include <util/byte_units.h>
 #include <util/check.h>
 #include <util/log.h>
 #include <util/obfuscation.h>
@@ -198,6 +199,7 @@ public:
     iterator end()                                   { return vch.end(); }
     size_type size() const                           { return vch.size() - m_read_pos; }
     bool empty() const                               { return vch.size() == m_read_pos; }
+    size_t capacity() const                          { return vch.capacity(); }
     void resize(size_type n, value_type c = value_type{}) { vch.resize(n + m_read_pos, c); }
     void reserve(size_type n)                        { vch.reserve(n + m_read_pos); }
     const_reference operator[](size_type pos) const  { return vch[pos + m_read_pos]; }
@@ -266,6 +268,33 @@ public:
 
     /** Compute total memory usage of this object (own memory + any dynamic memory). */
     size_t GetMemoryUsage() const noexcept;
+};
+
+// Require empty scratch streams on entry and reset them on exit.
+class ScopedDataStreamUsage
+{
+    static constexpr auto DEFAULT_MAX_CAPACITY{1_MiB};
+
+    DataStream& m_stream;
+
+public:
+    explicit ScopedDataStreamUsage(DataStream& stream)
+        : m_stream(stream)
+    {
+        assert(m_stream.empty());
+    }
+
+    ScopedDataStreamUsage(const ScopedDataStreamUsage&) = delete;
+    ScopedDataStreamUsage& operator=(const ScopedDataStreamUsage&) = delete;
+
+    ~ScopedDataStreamUsage()
+    {
+        if (m_stream.capacity() <= DEFAULT_MAX_CAPACITY) [[likely]] {
+            m_stream.clear(); // Keep the existing capacity for the next reuse.
+        } else {
+            m_stream = DataStream{}; // Drop unusually large scratch allocations.
+        }
+    }
 };
 
 template <typename IStream>

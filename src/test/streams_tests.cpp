@@ -88,6 +88,28 @@ BOOST_AUTO_TEST_CASE(obfuscation_empty)
     BOOST_CHECK(non_null_obf);
 }
 
+BOOST_AUTO_TEST_CASE(streams_scoped_data_stream_usage)
+{
+    for (const auto& [reserve_bytes, retain_capacity] : std::array<std::pair<size_t, bool>, 2>{{
+             {1 + m_rng.randrange(4096U), true},
+             {1_MiB + 1 + m_rng.randrange(4096U), false},
+         }}) {
+        DataStream stream{};
+        stream.reserve(reserve_bytes);
+        const size_t retained_capacity{stream.capacity()};
+        BOOST_REQUIRE_GT(retained_capacity, 0U);
+
+        {
+            ScopedDataStreamUsage usage{stream};
+            stream << uint8_t{42};
+            BOOST_CHECK_GT(stream.size(), 0U);
+        }
+
+        BOOST_CHECK(stream.empty());
+        BOOST_CHECK_EQUAL(stream.capacity() == retained_capacity, retain_capacity);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(xor_file)
 {
     fs::path xor_path{m_args.GetDataDirBase() / "test_xor.bin"};
