@@ -184,6 +184,13 @@ BOOST_AUTO_TEST_CASE(dbwrapper_batch)
 
         // key3 should've never been written
         BOOST_CHECK(dbw.Read(key3, res) == false);
+
+        batch.Clear();
+        batch.Write(key3, in3);
+        dbw.WriteBatch(batch);
+
+        BOOST_CHECK(dbw.Read(key3, res));
+        BOOST_CHECK_EQUAL(res.ToString(), in3.ToString());
     }
 }
 
@@ -215,6 +222,20 @@ BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
         BOOST_CHECK_EQUAL(key_res, key);
         BOOST_CHECK_EQUAL(val_res.ToString(), in.ToString());
 
+        it->Seek(key2);
+
+        BOOST_REQUIRE(it->GetKey(key_res));
+        BOOST_REQUIRE(it->GetValue(val_res));
+        BOOST_CHECK_EQUAL(key_res, key2);
+        BOOST_CHECK_EQUAL(val_res.ToString(), in2.ToString());
+
+        it->Seek(key);
+
+        BOOST_REQUIRE(it->GetKey(key_res));
+        BOOST_REQUIRE(it->GetValue(val_res));
+        BOOST_CHECK_EQUAL(key_res, key);
+        BOOST_CHECK_EQUAL(val_res.ToString(), in.ToString());
+
         it->Next();
 
         BOOST_REQUIRE(it->GetKey(key_res));
@@ -224,6 +245,39 @@ BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
 
         it->Next();
         BOOST_CHECK_EQUAL(it->Valid(), false);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(dbwrapper_reused_key_streams)
+{
+    for (const bool obfuscate : {false, true}) {
+        fs::path ph = m_args.GetDataDirBase() / (obfuscate ? "dbwrapper_reused_key_streams_obfuscate_true" : "dbwrapper_reused_key_streams_obfuscate_false");
+        CDBWrapper dbw({.path = ph, .cache_bytes = 1_MiB, .memory_only = true, .wipe_data = false, .obfuscate = obfuscate});
+
+        constexpr uint8_t key1{'a'};
+        constexpr uint8_t key2{'b'};
+        constexpr uint8_t missing{'z'};
+        const uint256 in1{m_rng.rand256()};
+        const uint256 in2{m_rng.rand256()};
+        dbw.Write(key1, in1);
+        dbw.Write(key2, in2);
+
+        uint256 res{};
+        const auto check_read{[&](const uint8_t key, const uint256& expected) {
+            BOOST_REQUIRE(dbw.Read(key, res));
+            BOOST_CHECK_EQUAL(res, expected);
+        }};
+
+        BOOST_CHECK(!dbw.Read(missing, res));
+        check_read(key1, in1);
+        check_read(key2, in2);
+
+        BOOST_CHECK(!dbw.Exists(missing));
+        for (const uint8_t key : {key1, key2}) BOOST_CHECK(dbw.Exists(key));
+
+        const size_t estimate_1{dbw.EstimateSize(uint8_t{'a'}, uint8_t{'z'})};
+        const size_t estimate_2{dbw.EstimateSize(uint8_t{'a'}, uint8_t{'z'})};
+        BOOST_CHECK_EQUAL(estimate_1, estimate_2);
     }
 }
 
