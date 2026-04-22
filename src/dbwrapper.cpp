@@ -171,6 +171,8 @@ CDBBatch::~CDBBatch() = default;
 void CDBBatch::Clear()
 {
     m_impl_batch->batch.Clear();
+    assert(ssKey.empty());
+    assert(ssValue.empty());
 }
 
 void CDBBatch::WriteImpl(std::span<const std::byte> key, DataStream& ssValue)

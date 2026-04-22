@@ -21,7 +21,6 @@
 #include <string>
 
 static const size_t DBWRAPPER_PREALLOC_KEY_SIZE = 64;
-static const size_t DBWRAPPER_PREALLOC_VALUE_SIZE = 1024;
 static const size_t DBWRAPPER_MAX_FILE_SIZE{32_MiB};
 
 //! User-controlled performance and debug options.
@@ -96,22 +95,19 @@ public:
     template <typename K, typename V>
     void Write(const K& key, const V& value)
     {
-        ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
-        ssValue.reserve(DBWRAPPER_PREALLOC_VALUE_SIZE);
+        ScopedDataStreamUsage scoped_key{ssKey};
+        ScopedDataStreamUsage scoped_value{ssValue};
         ssKey << key;
         ssValue << value;
         WriteImpl(ssKey, ssValue);
-        ssKey.clear();
-        ssValue.clear();
     }
 
     template <typename K>
     void Erase(const K& key)
     {
-        ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
+        ScopedDataStreamUsage scoped_key{ssKey};
         ssKey << key;
         EraseImpl(ssKey);
-        ssKey.clear();
     }
 
     size_t ApproximateSize() const;
