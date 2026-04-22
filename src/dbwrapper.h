@@ -121,6 +121,7 @@ public:
 private:
     const CDBWrapper &parent;
     const std::unique_ptr<IteratorImpl> m_impl_iter;
+    DataStream m_seek_key{};
 
     void SeekImpl(std::span<const std::byte> key);
     std::span<const std::byte> GetKeyImpl() const;
@@ -140,10 +141,9 @@ public:
     void SeekToFirst();
 
     template<typename K> void Seek(const K& key) {
-        DataStream ssKey{};
-        ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
-        ssKey << key;
-        SeekImpl(ssKey);
+        ScopedDataStreamUsage scoped_seek_key{m_seek_key};
+        m_seek_key << key;
+        SeekImpl(m_seek_key);
     }
 
     void Next();
