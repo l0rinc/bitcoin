@@ -28,6 +28,7 @@
 #include <uint256.h>
 #include <undo.h>
 #include <util/check.h>
+#include <util/byte_units.h>
 #include <util/expected.h>
 #include <util/fs.h>
 #include <util/log.h>
