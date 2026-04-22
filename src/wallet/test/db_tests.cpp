@@ -144,6 +144,26 @@ BOOST_AUTO_TEST_CASE(db_cursor_prefix_byte_test)
         batch.reset();
         database->Close();
     }
+
+    BerkeleyRODatabase berkeley_ro{m_path_root / "berkeley_ro_wallet.dat", /*open=*/false};
+    const MockableData expected_all{e, p, ps, f, fs, ff, ffs};
+    for (const auto& [k, v] : expected_all) {
+        berkeley_ro.m_records.emplace(k, v);
+    }
+    std::unique_ptr<DatabaseBatch> batch = berkeley_ro.MakeBatch();
+    std::unique_ptr<DatabaseCursor> cursor = batch->GetNewPrefixCursor(StringBytes(""));
+    MockableData actual;
+    while (true) {
+        DataStream key, value;
+        key << uint8_t{0x11};
+        value << uint8_t{0x22};
+        DatabaseCursor::Status status = cursor->Next(key, value);
+        if (status == DatabaseCursor::Status::DONE) break;
+        BOOST_CHECK(status == DatabaseCursor::Status::MORE);
+        BOOST_CHECK(
+            actual.emplace(SerializeData(key.begin(), key.end()), SerializeData(value.begin(), value.end())).second);
+    }
+    BOOST_CHECK_EQUAL_COLLECTIONS(actual.begin(), actual.end(), expected_all.begin(), expected_all.end());
 }
 
 BOOST_AUTO_TEST_CASE(db_availability_after_write_error)
