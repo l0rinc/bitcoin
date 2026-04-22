@@ -200,6 +200,7 @@ public:
     CDBWrapper(const CDBWrapper&) = delete;
     CDBWrapper& operator=(const CDBWrapper&) = delete;
 
+    // Keep read-side key streams local to avoid shared mutable state in these const methods.
     template <typename K, typename V>
     bool Read(const K& key, V& value) const
     {
