@@ -1060,6 +1060,9 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
     LOCK(cs_wallet);
 
     WalletBatch batch(GetDatabase());
+    if (!batch.TxnBegin()) {
+        return nullptr;
+    }
 
     Txid hash = tx->GetHash();
 
@@ -1147,8 +1150,14 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
 
     // Write to disk
     if (fInsertedNew || fUpdated)
-        if (!batch.WriteTx(wtx))
+        if (!batch.WriteTx(wtx)) {
+            batch.TxnAbort();
             return nullptr;
+        }
+
+    if (!batch.TxnCommit()) {
+        return nullptr;
+    }
 
     // Break debit/credit balance caches:
     wtx.MarkDirty();
