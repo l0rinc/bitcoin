@@ -36,18 +36,18 @@ BOOST_FIXTURE_TEST_CASE(chainstate_write_interval, TestingSetup)
     // The first periodic flush sets m_next_write and does not flush
     chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC);
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
-    BOOST_CHECK(!sub->m_did_flush);
+    CHECK(!sub->m_did_flush);
 
     // The periodic flush interval is between 50 and 70 minutes (inclusive)
     clock_ctx += DATABASE_WRITE_INTERVAL_MIN - 1min;
     chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC);
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
-    BOOST_CHECK(!sub->m_did_flush);
+    CHECK(!sub->m_did_flush);
 
     clock_ctx += DATABASE_WRITE_INTERVAL_MAX;
     chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC);
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
-    BOOST_CHECK(sub->m_did_flush);
+    CHECK(sub->m_did_flush);
 }
 
 // Test that we do PERIODIC flushes inside ActivateBestChain.

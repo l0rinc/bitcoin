@@ -139,12 +139,12 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     TryAddToMempool(pool, entry.Fee(500LL).FromTx(tx2));
 
     pool.TrimToSize(pool.DynamicMemoryUsage()); // should do nothing
-    BOOST_CHECK(pool.exists(tx1.GetHash()));
-    BOOST_CHECK(pool.exists(tx2.GetHash()));
+    CHECK(pool.exists(tx1.GetHash()));
+    CHECK(pool.exists(tx2.GetHash()));
 
     pool.TrimToSize(pool.DynamicMemoryUsage() * 3 / 4); // should remove the lower-feerate transaction
-    BOOST_CHECK(pool.exists(tx1.GetHash()));
-    BOOST_CHECK(!pool.exists(tx2.GetHash()));
+    CHECK(pool.exists(tx1.GetHash()));
+    CHECK(!pool.exists(tx2.GetHash()));
 
     TryAddToMempool(pool, entry.FromTx(tx2));
     CMutableTransaction tx3 = CMutableTransaction();
@@ -157,14 +157,14 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     TryAddToMempool(pool, entry.Fee(2000LL).FromTx(tx3));
 
     pool.TrimToSize(pool.DynamicMemoryUsage() * 3 / 4); // tx3 should pay for tx2 (CPFP)
-    BOOST_CHECK(!pool.exists(tx1.GetHash()));
-    BOOST_CHECK(pool.exists(tx2.GetHash()));
-    BOOST_CHECK(pool.exists(tx3.GetHash()));
+    CHECK(!pool.exists(tx1.GetHash()));
+    CHECK(pool.exists(tx2.GetHash()));
+    CHECK(pool.exists(tx3.GetHash()));
 
     pool.TrimToSize(GetVirtualTransactionSize(CTransaction(tx1))); // mempool is limited to tx1's size in memory usage, so nothing fits
-    BOOST_CHECK(!pool.exists(tx1.GetHash()));
-    BOOST_CHECK(!pool.exists(tx2.GetHash()));
-    BOOST_CHECK(!pool.exists(tx3.GetHash()));
+    CHECK(!pool.exists(tx1.GetHash()));
+    CHECK(!pool.exists(tx2.GetHash()));
+    CHECK(!pool.exists(tx3.GetHash()));
 
     CFeeRate maxFeeRateRemoved(2500, GetVirtualTransactionSize(CTransaction(tx3)) + GetVirtualTransactionSize(CTransaction(tx2)));
     BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE);
@@ -228,8 +228,8 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     // in the mempool since it has a higher feerate than its descendants and
     // should be in its own chunk.
     pool.TrimToSize(pool.DynamicMemoryUsage() - 1);
-    BOOST_CHECK(pool.exists(tx4.GetHash()));
-    BOOST_CHECK(!pool.exists(tx7.GetHash()));
+    CHECK(pool.exists(tx4.GetHash()));
+    CHECK(!pool.exists(tx7.GetHash()));
 
     // Tx5 and Tx6 may be removed as well because they're in the same chunk as
     // tx7, but this behavior need not be guaranteed.
@@ -242,10 +242,10 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
 
     // If we trim sufficiently, everything but tx4 should be removed.
     pool.TrimToSize(usage_with_tx4_only + 1);
-    BOOST_CHECK(pool.exists(tx4.GetHash()));
-    BOOST_CHECK(!pool.exists(tx5.GetHash()));
-    BOOST_CHECK(!pool.exists(tx6.GetHash()));
-    BOOST_CHECK(!pool.exists(tx7.GetHash()));
+    CHECK(pool.exists(tx4.GetHash()));
+    CHECK(!pool.exists(tx5.GetHash()));
+    CHECK(!pool.exists(tx6.GetHash()));
+    CHECK(!pool.exists(tx7.GetHash()));
 
     TryAddToMempool(pool, entry.Fee(100LL).FromTx(tx5));
     TryAddToMempool(pool, entry.Fee(110LL).FromTx(tx6));

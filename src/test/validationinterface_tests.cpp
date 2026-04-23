@@ -45,7 +45,7 @@ BOOST_AUTO_TEST_CASE(unregister_validation_interface_race)
 
     gen.join();
     sub.join();
-    BOOST_CHECK(!generate);
+    CHECK(!generate);
 }
 
 class TestInterface : public CValidationInterface
@@ -84,19 +84,19 @@ BOOST_AUTO_TEST_CASE(unregister_all_during_call)
         [&] {
             // First call should decrements reference count 2 -> 1
             m_node.validation_signals->UnregisterAllValidationInterfaces();
-            BOOST_CHECK(!destroyed);
+            CHECK(!destroyed);
             // Second call should not decrement reference count 1 -> 0
             m_node.validation_signals->UnregisterAllValidationInterfaces();
-            BOOST_CHECK(!destroyed);
+            CHECK(!destroyed);
         },
         [&] { destroyed = true; })};
     m_node.validation_signals->RegisterSharedValidationInterface(shared);
-    BOOST_CHECK(shared.use_count() == 2);
+    CHECK(shared.use_count() == 2);
     shared->Call();
-    BOOST_CHECK(shared.use_count() == 1);
-    BOOST_CHECK(!destroyed);
+    CHECK(shared.use_count() == 1);
+    CHECK(!destroyed);
     shared.reset();
-    BOOST_CHECK(destroyed);
+    CHECK(destroyed);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

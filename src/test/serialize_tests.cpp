@@ -111,26 +111,26 @@ BOOST_AUTO_TEST_CASE(varints)
     for (int i = 0; i < 100000; i++) {
         ss << VARINT_MODE(i, VarIntMode::NONNEGATIVE_SIGNED);
         size += ::GetSerializeSize(VARINT_MODE(i, VarIntMode::NONNEGATIVE_SIGNED));
-        BOOST_CHECK(size == ss.size());
+        CHECK(size == ss.size());
     }
 
     for (uint64_t i = 0;  i < 100000000000ULL; i += 999999937) {
         ss << VARINT(i);
         size += ::GetSerializeSize(VARINT(i));
-        BOOST_CHECK(size == ss.size());
+        CHECK(size == ss.size());
     }
 
     // decode
     for (int i = 0; i < 100000; i++) {
         int j = -1;
         ss >> VARINT_MODE(j, VarIntMode::NONNEGATIVE_SIGNED);
-        BOOST_CHECK_MESSAGE(i == j, "decoded:" << j << " expected:" << i);
+        CHECK_MESSAGE(i == j, "decoded:" << j << " expected:" << i);
     }
 
     for (uint64_t i = 0;  i < 100000000000ULL; i += 999999937) {
         uint64_t j = std::numeric_limits<uint64_t>::max();
         ss >> VARINT(j);
-        BOOST_CHECK_MESSAGE(i == j, "decoded:" << j << " expected:" << i);
+        CHECK_MESSAGE(i == j, "decoded:" << j << " expected:" << i);
     }
 }
 
@@ -168,9 +168,9 @@ BOOST_AUTO_TEST_CASE(compactsize)
     for (i = 1; i <= MAX_SIZE; i *= 2)
     {
         j = ReadCompactSize(ss);
-        BOOST_CHECK_MESSAGE((i-1) == j, "decoded:" << j << " expected:" << (i-1));
+        CHECK_MESSAGE((i-1) == j, "decoded:" << j << " expected:" << (i-1));
         j = ReadCompactSize(ss);
-        BOOST_CHECK_MESSAGE(i == j, "decoded:" << j << " expected:" << i);
+        CHECK_MESSAGE(i == j, "decoded:" << j << " expected:" << i);
     }
 }
 
@@ -190,8 +190,8 @@ BOOST_AUTO_TEST_CASE(vector_bool)
     std::vector<uint8_t> vec1{1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 0, 0, 1};
     std::vector<bool> vec2{1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 0, 0, 1};
 
-    BOOST_CHECK(vec1 == std::vector<uint8_t>(vec2.begin(), vec2.end()));
-    BOOST_CHECK((HashWriter{} << vec1).GetHash() == (HashWriter{} << vec2).GetHash());
+    CHECK(vec1 == std::vector<uint8_t>(vec2.begin(), vec2.end()));
+    CHECK((HashWriter{} << vec1).GetHash() == (HashWriter{} << vec2).GetHash());
 }
 
 BOOST_AUTO_TEST_CASE(array)
@@ -201,7 +201,7 @@ BOOST_AUTO_TEST_CASE(array)
     ds << array1;
     std::array<uint8_t, 32> array2;
     ds >> array2;
-    BOOST_CHECK(array1 == array2);
+    CHECK(array1 == array2);
 }
 
 BOOST_AUTO_TEST_CASE(noncanonical)
@@ -213,32 +213,32 @@ BOOST_AUTO_TEST_CASE(noncanonical)
 
     // zero encoded with three bytes:
     ss << std::span{"\xfd\x00\x00"}.first(3);
-    BOOST_CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
+    CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
 
     // 0xfc encoded with three bytes:
     ss << std::span{"\xfd\xfc\x00"}.first(3);
-    BOOST_CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
+    CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
 
     // 0xfd encoded with three bytes is OK:
     ss << std::span{"\xfd\xfd\x00"}.first(3);
     n = ReadCompactSize(ss);
-    BOOST_CHECK(n == 0xfd);
+    CHECK(n == 0xfd);
 
     // zero encoded with five bytes:
     ss << std::span{"\xfe\x00\x00\x00\x00"}.first(5);
-    BOOST_CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
+    CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
 
     // 0xffff encoded with five bytes:
     ss << std::span{"\xfe\xff\xff\x00\x00"}.first(5);
-    BOOST_CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
+    CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
 
     // zero encoded with nine bytes:
     ss << std::span{"\xff\x00\x00\x00\x00\x00\x00\x00\x00"}.first(9);
-    BOOST_CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
+    CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
 
     // 0x01ffffff encoded with nine bytes:
     ss << std::span{"\xff\xff\xff\xff\x01\x00\x00\x00\x00"}.first(9);
-    BOOST_CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
+    CHECK_EXCEPTION(ReadCompactSize(ss), std::ios_base::failure, isCanonicalException);
 }
 
 BOOST_AUTO_TEST_CASE(class_methods)
@@ -254,19 +254,19 @@ BOOST_AUTO_TEST_CASE(class_methods)
     CSerializeMethodsTestSingle methodtest3;
     CSerializeMethodsTestMany methodtest4;
     DataStream ss;
-    BOOST_CHECK(methodtest1 == methodtest2);
+    CHECK(methodtest1 == methodtest2);
     ss << methodtest1;
     ss >> methodtest4;
     ss << methodtest2;
     ss >> methodtest3;
-    BOOST_CHECK(methodtest1 == methodtest2);
-    BOOST_CHECK(methodtest2 == methodtest3);
-    BOOST_CHECK(methodtest3 == methodtest4);
+    CHECK(methodtest1 == methodtest2);
+    CHECK(methodtest2 == methodtest3);
+    CHECK(methodtest3 == methodtest4);
 
     DataStream ss2;
     ss2 << intval << boolval << stringval << charstrval << TX_WITH_WITNESS(txval);
     ss2 >> methodtest3;
-    BOOST_CHECK(methodtest3 == methodtest4);
+    CHECK(methodtest3 == methodtest4);
     {
         DataStream ds;
         const std::string in{"ab"};

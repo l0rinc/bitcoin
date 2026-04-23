@@ -33,7 +33,7 @@ BOOST_FIXTURE_TEST_SUITE(testnet4_miner_tests, Testnet4MinerTestingSetup)
 BOOST_AUTO_TEST_CASE(MiningInterface)
 {
     auto mining{MakeMining()};
-    BOOST_REQUIRE(mining);
+    CHECK(mining);
 
     BlockAssembler::Options options;
     options.include_dummy_extranonce = true;
@@ -44,7 +44,7 @@ BOOST_AUTO_TEST_CASE(MiningInterface)
     NodeClockContext clock_ctx{template_time};
 
     block_template = mining->createNewBlock(options, /*cooldown=*/false);
-    BOOST_REQUIRE(block_template);
+    CHECK(block_template);
 
     // The template should use the mocked system time
     BOOST_REQUIRE_EQUAL(block_template->getBlockHeader().Time(), template_time);
@@ -53,19 +53,19 @@ BOOST_AUTO_TEST_CASE(MiningInterface)
 
     // waitNext() should return nullptr because there is no better template
     auto should_be_nullptr = block_template->waitNext(wait_options);
-    BOOST_REQUIRE(should_be_nullptr == nullptr);
+    CHECK(should_be_nullptr == nullptr);
 
     // This remains the case when exactly 20 minutes have gone by
     clock_ctx += 17min;
     should_be_nullptr = block_template->waitNext(wait_options);
-    BOOST_REQUIRE(should_be_nullptr == nullptr);
+    CHECK(should_be_nullptr == nullptr);
 
     // One second later the difficulty drops and it returns a new template
     // Note that we can't test the actual difficulty change, because the
     // difficulty is already at 1.
     clock_ctx += 1s;
     block_template = block_template->waitNext(wait_options);
-    BOOST_REQUIRE(block_template);
+    CHECK(block_template);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

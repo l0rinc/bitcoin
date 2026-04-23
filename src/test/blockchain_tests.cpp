@@ -33,7 +33,7 @@ static CBlockIndex* CreateBlockIndexWithNbits(uint32_t nbits)
 }
 
 static void RejectDifficultyMismatch(double difficulty, double expected_difficulty) {
-     BOOST_CHECK_MESSAGE(
+     CHECK_MESSAGE(
         DoubleEquals(difficulty, expected_difficulty, 0.00001),
         "Difficulty was " + ToString(difficulty)
             + " but was expected to be " + ToString(expected_difficulty));
@@ -91,7 +91,7 @@ static void CheckGetPruneHeight(const node::BlockManager& blockman, const CChain
     }
 
     const auto prune_height{GetPruneHeight(blockman, chain)};
-    BOOST_REQUIRE(prune_height.has_value());
+    CHECK(prune_height.has_value());
     BOOST_CHECK_EQUAL(*prune_height, height);
 }
 
@@ -102,7 +102,7 @@ BOOST_FIXTURE_TEST_CASE(get_prune_height, TestChain100Setup)
     const auto& blockman = m_node.chainman->m_blockman;
 
     // Fresh chain of 100 blocks without any pruned blocks, so std::nullopt should be returned
-    BOOST_CHECK(!GetPruneHeight(blockman, chain).has_value());
+    CHECK(!GetPruneHeight(blockman, chain).has_value());
 
     // Start pruning
     CheckGetPruneHeight(blockman, chain, 1);

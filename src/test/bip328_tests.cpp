@@ -74,18 +74,18 @@ BOOST_AUTO_TEST_CASE(valid_keys)
 
         // Aggregate public keys
         std::optional<CPubKey> m_aggregate_pubkey = MuSig2AggregatePubkeys(pubkeys);
-        BOOST_CHECK_MESSAGE(m_aggregate_pubkey.has_value(), "Test vector " << i << ": Failed to aggregate pubkeys");
+        CHECK_MESSAGE(m_aggregate_pubkey.has_value(), "Test vector " << i << ": Failed to aggregate pubkeys");
 
         // Check aggregate pubkey
         std::string combined_keys = HexStr(m_aggregate_pubkey.value());
-        BOOST_CHECK_MESSAGE(combined_keys == test.expected_aggregate_pubkey, "Test vector " << i << ": Aggregate pubkey mismatch");
+        CHECK_MESSAGE(combined_keys == test.expected_aggregate_pubkey, "Test vector " << i << ": Aggregate pubkey mismatch");
 
         // Create extended public key
         CExtPubKey extpub = CreateMuSig2SyntheticXpub(m_aggregate_pubkey.value());
 
         // Check xpub
         std::string xpub = EncodeExtPubKey(extpub);
-        BOOST_CHECK_MESSAGE(xpub == test.expected_aggregate_xpub, "Test vector " << i << ": Synthetic xpub mismatch");
+        CHECK_MESSAGE(xpub == test.expected_aggregate_xpub, "Test vector " << i << ": Synthetic xpub mismatch");
     }
 }
 
@@ -106,7 +106,7 @@ BOOST_AUTO_TEST_CASE(invalid_key)
 
     // Aggregate public keys
     std::optional<CPubKey> m_aggregate_pubkey = MuSig2AggregatePubkeys(pubkeys);
-    BOOST_CHECK_MESSAGE(!m_aggregate_pubkey.has_value(), "Aggregate key with an invalid public key is null");
+    CHECK_MESSAGE(!m_aggregate_pubkey.has_value(), "Aggregate key with an invalid public key is null");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

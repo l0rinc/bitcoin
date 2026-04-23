@@ -6,6 +6,7 @@
 #include <scheduler.h>
 #include <util/time.h>
 
+#include <test/util/check.h>
 #include <boost/test/unit_test.hpp>
 
 #include <functional>
@@ -53,7 +54,7 @@ BOOST_AUTO_TEST_CASE(manythreads)
     auto now = start;
     std::chrono::steady_clock::time_point first, last;
     size_t nTasks = microTasks.getQueueInfo(first, last);
-    BOOST_CHECK(nTasks == 0);
+    CHECK(nTasks == 0);
 
     for (int i = 0; i < 100; ++i) {
         auto t = now + std::chrono::microseconds(randomMsec(rng));
@@ -65,9 +66,9 @@ BOOST_AUTO_TEST_CASE(manythreads)
         microTasks.schedule(f, t);
     }
     nTasks = microTasks.getQueueInfo(first, last);
-    BOOST_CHECK(nTasks == 100);
-    BOOST_CHECK(first < last);
-    BOOST_CHECK(last > now);
+    CHECK(nTasks == 100);
+    CHECK(first < last);
+    CHECK(last > now);
 
     // As soon as these are created they will start running and servicing the queue
     std::vector<std::thread> microThreads;
@@ -100,7 +101,7 @@ BOOST_AUTO_TEST_CASE(manythreads)
 
     int counterSum = 0;
     for (int i = 0; i < 10; i++) {
-        BOOST_CHECK(counter[i] != 0);
+        CHECK(counter[i] != 0);
         counterSum += counter[i];
     }
     BOOST_CHECK_EQUAL(counterSum, 200);
@@ -116,12 +117,12 @@ BOOST_AUTO_TEST_CASE(wait_until_past)
         return condvar.wait_until(lock, std::chrono::steady_clock::now() - d);
     };
 
-    BOOST_CHECK(std::cv_status::timeout == no_wait(std::chrono::seconds{1}));
-    BOOST_CHECK(std::cv_status::timeout == no_wait(std::chrono::minutes{1}));
-    BOOST_CHECK(std::cv_status::timeout == no_wait(std::chrono::hours{1}));
-    BOOST_CHECK(std::cv_status::timeout == no_wait(std::chrono::hours{10}));
-    BOOST_CHECK(std::cv_status::timeout == no_wait(std::chrono::hours{100}));
-    BOOST_CHECK(std::cv_status::timeout == no_wait(std::chrono::hours{1000}));
+    CHECK(std::cv_status::timeout == no_wait(std::chrono::seconds{1}));
+    CHECK(std::cv_status::timeout == no_wait(std::chrono::minutes{1}));
+    CHECK(std::cv_status::timeout == no_wait(std::chrono::hours{1}));
+    CHECK(std::cv_status::timeout == no_wait(std::chrono::hours{10}));
+    CHECK(std::cv_status::timeout == no_wait(std::chrono::hours{100}));
+    CHECK(std::cv_status::timeout == no_wait(std::chrono::hours{1000}));
 }
 
 BOOST_AUTO_TEST_CASE(singlethreadedscheduler_ordered)
@@ -209,7 +210,7 @@ BOOST_AUTO_TEST_CASE(mockforward)
     auto now = std::chrono::steady_clock::now();
     int delta = std::chrono::duration_cast<std::chrono::seconds>(first - now).count();
     // should be between 2 & 3 minutes from now
-    BOOST_CHECK(delta > 2*60 && delta < 3*60);
+    CHECK(delta > 2*60 && delta < 3*60);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

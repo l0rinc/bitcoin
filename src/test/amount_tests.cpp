@@ -7,6 +7,7 @@
 
 #include <limits>
 
+#include <test/util/check.h>
 #include <boost/test/unit_test.hpp>
 
 BOOST_AUTO_TEST_SUITE(amount_tests)
@@ -70,50 +71,50 @@ BOOST_AUTO_TEST_CASE(GetFeeTest)
     BOOST_CHECK_EQUAL(feeRate.GetFee(100), altFeeRate.GetFee(100));
 
     // Check full constructor
-    BOOST_CHECK(CFeeRate(CAmount(-1), 0) == CFeeRate(0));
-    BOOST_CHECK(CFeeRate(CAmount(0), 0) == CFeeRate(0));
-    BOOST_CHECK(CFeeRate(CAmount(1), 0) == CFeeRate(0));
-    BOOST_CHECK(CFeeRate(CAmount(1), -1000) == CFeeRate(0));
+    CHECK(CFeeRate(CAmount(-1), 0) == CFeeRate(0));
+    CHECK(CFeeRate(CAmount(0), 0) == CFeeRate(0));
+    CHECK(CFeeRate(CAmount(1), 0) == CFeeRate(0));
+    CHECK(CFeeRate(CAmount(1), -1000) == CFeeRate(0));
     // default value
-    BOOST_CHECK(CFeeRate(CAmount(-1), 1000) == CFeeRate(-1));
-    BOOST_CHECK(CFeeRate(CAmount(0), 1000) == CFeeRate(0));
-    BOOST_CHECK(CFeeRate(CAmount(1), 1000) == CFeeRate(1));
+    CHECK(CFeeRate(CAmount(-1), 1000) == CFeeRate(-1));
+    CHECK(CFeeRate(CAmount(0), 1000) == CFeeRate(0));
+    CHECK(CFeeRate(CAmount(1), 1000) == CFeeRate(1));
     // Previously, precision was limited to three decimal digits
     // due to only supporting satoshis per kB, so CFeeRate(CAmount(1), 1001) was equal to CFeeRate(0)
     // Since #32750, higher precision is maintained.
-    BOOST_CHECK(CFeeRate(CAmount(1), 1001) > CFeeRate(0) && CFeeRate(CAmount(1), 1001) < CFeeRate(1));
-    BOOST_CHECK(CFeeRate(CAmount(2), 1001) > CFeeRate(1) && CFeeRate(CAmount(2), 1001) < CFeeRate(2));
+    CHECK(CFeeRate(CAmount(1), 1001) > CFeeRate(0) && CFeeRate(CAmount(1), 1001) < CFeeRate(1));
+    CHECK(CFeeRate(CAmount(2), 1001) > CFeeRate(1) && CFeeRate(CAmount(2), 1001) < CFeeRate(2));
     // some more integer checks
-    BOOST_CHECK(CFeeRate(CAmount(26), 789) > CFeeRate(32) && CFeeRate(CAmount(26), 789) < CFeeRate(33));
-    BOOST_CHECK(CFeeRate(CAmount(27), 789) > CFeeRate(34) && CFeeRate(CAmount(27), 789) < CFeeRate(35));
+    CHECK(CFeeRate(CAmount(26), 789) > CFeeRate(32) && CFeeRate(CAmount(26), 789) < CFeeRate(33));
+    CHECK(CFeeRate(CAmount(27), 789) > CFeeRate(34) && CFeeRate(CAmount(27), 789) < CFeeRate(35));
     // Maximum size in bytes, should not crash
     CFeeRate(MAX_MONEY, std::numeric_limits<int32_t>::max()).GetFeePerK();
 
     // check multiplication operator
     // check multiplying by zero
     feeRate = CFeeRate(1000);
-    BOOST_CHECK(0 * feeRate == CFeeRate(0));
-    BOOST_CHECK(feeRate * 0 == CFeeRate(0));
+    CHECK(0 * feeRate == CFeeRate(0));
+    CHECK(feeRate * 0 == CFeeRate(0));
     // check multiplying by a positive integer
-    BOOST_CHECK(3 * feeRate == CFeeRate(3000));
-    BOOST_CHECK(feeRate * 3 == CFeeRate(3000));
+    CHECK(3 * feeRate == CFeeRate(3000));
+    CHECK(feeRate * 3 == CFeeRate(3000));
     // check multiplying by a negative integer
-    BOOST_CHECK(-3 * feeRate == CFeeRate(-3000));
-    BOOST_CHECK(feeRate * -3 == CFeeRate(-3000));
+    CHECK(-3 * feeRate == CFeeRate(-3000));
+    CHECK(feeRate * -3 == CFeeRate(-3000));
     // check commutativity
-    BOOST_CHECK(2 * feeRate == feeRate * 2);
+    CHECK(2 * feeRate == feeRate * 2);
     // check with large numbers
     int largeNumber = 1000000;
-    BOOST_CHECK(largeNumber * feeRate == feeRate * largeNumber);
+    CHECK(largeNumber * feeRate == feeRate * largeNumber);
     // check boundary values
     int maxInt = std::numeric_limits<int>::max();
     feeRate = CFeeRate(maxInt);
-    BOOST_CHECK(feeRate * 2 == CFeeRate(static_cast<int64_t>(maxInt) * 2));
-    BOOST_CHECK(2 * feeRate == CFeeRate(static_cast<int64_t>(maxInt) * 2));
+    CHECK(feeRate * 2 == CFeeRate(static_cast<int64_t>(maxInt) * 2));
+    CHECK(2 * feeRate == CFeeRate(static_cast<int64_t>(maxInt) * 2));
     // check with zero fee rate
     feeRate = CFeeRate(0);
-    BOOST_CHECK(feeRate * 5 == CFeeRate(0));
-    BOOST_CHECK(5 * feeRate == CFeeRate(0));
+    CHECK(feeRate * 5 == CFeeRate(0));
+    CHECK(5 * feeRate == CFeeRate(0));
 }
 
 BOOST_AUTO_TEST_CASE(BinaryOperatorTest)
@@ -121,16 +122,16 @@ BOOST_AUTO_TEST_CASE(BinaryOperatorTest)
     CFeeRate a, b;
     a = CFeeRate(1);
     b = CFeeRate(2);
-    BOOST_CHECK(a < b);
-    BOOST_CHECK(b > a);
-    BOOST_CHECK(a == a);
-    BOOST_CHECK(a <= b);
-    BOOST_CHECK(a <= a);
-    BOOST_CHECK(b >= a);
-    BOOST_CHECK(b >= b);
+    CHECK(a < b);
+    CHECK(b > a);
+    CHECK(a == a);
+    CHECK(a <= b);
+    CHECK(a <= a);
+    CHECK(b >= a);
+    CHECK(b >= b);
     // a should be 0.00000002 BTC/kvB now
     a += a;
-    BOOST_CHECK(a == b);
+    CHECK(a == b);
 }
 
 BOOST_AUTO_TEST_CASE(ToStringTest)

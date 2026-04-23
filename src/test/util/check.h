@@ -51,7 +51,7 @@ inline std::ostream& operator<<(std::ostream& os, const T& e)
     return os << static_cast<std::underlying_type_t<T>>(e);
 }
 
-template <typename T>
+template <typename T> requires requires(std::ostream& os, const T& t) { os << t; }
 inline std::ostream& operator<<(std::ostream& os, const std::optional<T>& v)
 {
     return v ? os << *v
@@ -158,6 +158,12 @@ inline constexpr bool IsByteValue{
     std::same_as<Decay<T>, signed char> ||
     std::same_as<Decay<T>, uint8_t> ||
     std::same_as<Decay<T>, int8_t>};
+
+template <typename T>
+inline constexpr bool IsOptional{false};
+
+template <typename T>
+inline constexpr bool IsOptional<std::optional<T>>{true};
 
 template <typename T>
 concept StringValue = std::same_as<Decay<T>, std::string> || std::same_as<Decay<T>, std::string_view>;
@@ -287,6 +293,9 @@ std::string FormatValueUncaught(const T& value)
         return value == nullptr ? "nullptr" : EscapeString(value);
     } else if constexpr (StringValue<T>) {
         return EscapeString(std::string_view{value});
+    } else if constexpr (IsOptional<Decay<T>>) {
+        return value ? "std::optional(" + FormatValue(*value) + ")"
+                     : "std::nullopt";
     } else if constexpr (IsByteValue<T>) {
         return FormatByte(ByteValue(value));
     } else if constexpr (std::is_pointer_v<Decay<T>>) {

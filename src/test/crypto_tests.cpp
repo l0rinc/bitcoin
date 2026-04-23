@@ -35,12 +35,12 @@ struct CryptoTest : BasicTestingSetup {
 template<typename Hasher, typename In, typename Out>
 void TestVector(const Hasher &h, const In &in, const Out &out) {
     Out hash;
-    BOOST_CHECK(out.size() == h.OUTPUT_SIZE);
+    CHECK(out.size() == h.OUTPUT_SIZE);
     hash.resize(out.size());
     {
         // Test that writing the whole input string at once works.
         Hasher(h).Write((const uint8_t*)in.data(), in.size()).Finalize(hash.data());
-        BOOST_CHECK(hash == out);
+        CHECK(hash == out);
     }
     for (int i=0; i<32; i++) {
         // Test that writing the string broken up in random pieces works.
@@ -53,11 +53,11 @@ void TestVector(const Hasher &h, const In &in, const Out &out) {
             if (pos > 0 && pos + 2 * out.size() > in.size() && pos < in.size()) {
                 // Test that writing the rest at once to a copy of a hasher works.
                 Hasher(hasher).Write((const uint8_t*)in.data() + pos, in.size() - pos).Finalize(hash.data());
-                BOOST_CHECK(hash == out);
+                CHECK(hash == out);
             }
         }
         hasher.Finalize(hash.data());
-        BOOST_CHECK(hash == out);
+        CHECK(hash == out);
     }
 }
 
@@ -89,10 +89,10 @@ void TestAES256(const std::string &hexkey, const std::string &hexin, const std::
     AES256Encrypt enc(key.data());
     buf.resize(correctout.size());
     enc.Encrypt(buf.data(), in.data());
-    BOOST_CHECK(buf == correctout);
+    CHECK(buf == correctout);
     AES256Decrypt dec(key.data());
     dec.Decrypt(buf.data(), buf.data());
-    BOOST_CHECK(buf == in);
+    CHECK(buf == in);
 }
 
 void TestAES256CBC(const std::string &hexkey, const std::string &hexiv, bool pad, const std::string &hexin, const std::string &hexout)
@@ -107,16 +107,16 @@ void TestAES256CBC(const std::string &hexkey, const std::string &hexiv, bool pad
     AES256CBCEncrypt enc(key.data(), iv.data(), pad);
     int size = enc.Encrypt(in.data(), in.size(), realout.data());
     realout.resize(size);
-    BOOST_CHECK(realout.size() == correctout.size());
-    BOOST_CHECK_MESSAGE(realout == correctout, HexStr(realout) + std::string(" != ") + hexout);
+    CHECK(realout.size() == correctout.size());
+    CHECK_MESSAGE(realout == correctout, HexStr(realout) + std::string(" != ") + hexout);
 
     // Decrypt the cipher and verify that it equals the plaintext
     std::vector<unsigned char> decrypted(correctout.size());
     AES256CBCDecrypt dec(key.data(), iv.data(), pad);
     size = dec.Decrypt(correctout.data(), correctout.size(), decrypted.data());
     decrypted.resize(size);
-    BOOST_CHECK(decrypted.size() == in.size());
-    BOOST_CHECK_MESSAGE(decrypted == in, HexStr(decrypted) + std::string(" != ") + hexin);
+    CHECK(decrypted.size() == in.size());
+    CHECK_MESSAGE(decrypted == in, HexStr(decrypted) + std::string(" != ") + hexin);
 
     // Encrypt and re-decrypt substrings of the plaintext and verify that they equal each-other
     for(std::vector<unsigned char>::iterator i(in.begin()); i != in.end(); ++i)
@@ -130,8 +130,8 @@ void TestAES256CBC(const std::string &hexkey, const std::string &hexiv, bool pad
             std::vector<unsigned char> subdecrypted(subout.size());
             _size = dec.Decrypt(subout.data(), subout.size(), subdecrypted.data());
             subdecrypted.resize(_size);
-            BOOST_CHECK(decrypted.size() == in.size());
-            BOOST_CHECK_MESSAGE(subdecrypted == sub, HexStr(subdecrypted) + std::string(" != ") + HexStr(sub));
+            CHECK(decrypted.size() == in.size());
+            CHECK_MESSAGE(subdecrypted == sub, HexStr(subdecrypted) + std::string(" != ") + HexStr(sub));
         }
     }
 }
@@ -206,14 +206,14 @@ void TestFSChaCha20(const std::string& hex_plaintext, const std::string& hexkey,
     for (size_t i = 0; i < rekey_interval; i++) {
         fsc20.Crypt(plaintext, fsc20_output);
         c20.Crypt(plaintext, c20_output);
-        BOOST_CHECK(c20_output == fsc20_output);
+        CHECK(c20_output == fsc20_output);
     }
 
     // At the rotation interval, the outputs will no longer match
     fsc20.Crypt(plaintext, fsc20_output);
     auto c20_copy = c20;
     c20.Crypt(plaintext, c20_output);
-    BOOST_CHECK(c20_output != fsc20_output);
+    CHECK(c20_output != fsc20_output);
 
     std::byte new_key[FSChaCha20::KEYLEN];
     c20_copy.Keystream(new_key);
@@ -222,7 +222,7 @@ void TestFSChaCha20(const std::string& hex_plaintext, const std::string& hexkey,
 
     // Outputs should match again after simulating key rotation
     c20.Crypt(plaintext, c20_output);
-    BOOST_CHECK(c20_output == fsc20_output);
+    CHECK(c20_output == fsc20_output);
 
     BOOST_CHECK_EQUAL(HexStr(fsc20_output), ciphertext_after_rotation);
 }
@@ -270,7 +270,7 @@ void TestChaCha20Poly1305(const std::string& plain_hex, const std::string& aad_h
         } else {
             aead.Encrypt(std::span{plain}.first(prefix), std::span{plain}.subspan(prefix), aad, nonce, cipher);
         }
-        BOOST_CHECK(cipher == expected_cipher);
+        CHECK(cipher == expected_cipher);
 
         // Decrypt.
         std::vector<std::byte> decipher(cipher.size() - AEADChaCha20Poly1305::EXPANSION);
@@ -280,8 +280,8 @@ void TestChaCha20Poly1305(const std::string& plain_hex, const std::string& aad_h
         } else {
             ret = aead.Decrypt(cipher, aad, nonce, std::span{decipher}.first(prefix), std::span{decipher}.subspan(prefix));
         }
-        BOOST_CHECK(ret);
-        BOOST_CHECK(decipher == plain);
+        CHECK(ret);
+        CHECK(decipher == plain);
     }
 
     // Test Keystream output.
@@ -318,7 +318,7 @@ void TestFSChaCha20Poly1305(const std::string& plain_hex, const std::string& aad
         } else {
             enc_aead.Encrypt(std::span{plain}.first(prefix), std::span{plain}.subspan(prefix), aad, cipher);
         }
-        BOOST_CHECK(cipher == expected_cipher);
+        CHECK(cipher == expected_cipher);
 
         // Do msg_idx dummy decryptions to seek to the correct packet.
         FSChaCha20Poly1305 dec_aead{key, 224};
@@ -334,8 +334,8 @@ void TestFSChaCha20Poly1305(const std::string& plain_hex, const std::string& aad
         } else {
             ret = dec_aead.Decrypt(cipher, aad, std::span{decipher}.first(prefix), std::span{decipher}.subspan(prefix));
         }
-        BOOST_CHECK(ret);
-        BOOST_CHECK(decipher == plain);
+        CHECK(ret);
+        CHECK(decipher == plain);
     }
 }
 
@@ -352,7 +352,7 @@ void TestHKDF_SHA256_32(const std::string &ikm_hex, const std::string &salt_hex,
     CHKDF_HMAC_SHA256_L32 hkdf32(initial_key_material.data(), initial_key_material.size(), salt_stringified);
     unsigned char out[32];
     hkdf32.Expand32(info_stringified, out);
-    BOOST_CHECK(HexStr(out) == okm_check_hex);
+    CHECK(HexStr(out) == okm_check_hex);
 }
 
 void TestSHA3_256(const std::string& input, const std::string& output);
@@ -844,9 +844,9 @@ BOOST_AUTO_TEST_CASE(chacha20_midblock)
     c20.Keystream(b2);
     c20.Keystream(b3);
 
-    BOOST_CHECK(std::ranges::equal(std::span{block}.first(5), b1));
-    BOOST_CHECK(std::ranges::equal(std::span{block}.subspan(5, 7), b2));
-    BOOST_CHECK(std::ranges::equal(std::span{block}.last(52), b3));
+    CHECK(std::ranges::equal(std::span{block}.first(5), b1));
+    CHECK(std::ranges::equal(std::span{block}.subspan(5, 7), b2));
+    CHECK(std::ranges::equal(std::span{block}.last(52), b3));
 }
 
 BOOST_AUTO_TEST_CASE(poly1305_testvector)
@@ -1083,7 +1083,7 @@ BOOST_AUTO_TEST_CASE(sha256d64)
             CHash256().Write({in + 64 * j, 64}).Finalize({out1 + 32 * j, 32});
         }
         SHA256D64(out2, in, i);
-        BOOST_CHECK(memcmp(out1, out2, 32 * i) == 0);
+        CHECK(memcmp(out1, out2, 32 * i) == 0);
     }
 }
 
@@ -1097,7 +1097,7 @@ void CryptoTest::TestSHA3_256(const std::string& input, const std::string& outpu
     unsigned char out[SHA3_256::OUTPUT_SIZE];
     sha.Write(in_bytes).Finalize(out);
     assert(out_bytes.size() == sizeof(out));
-    BOOST_CHECK(std::equal(std::begin(out_bytes), std::end(out_bytes), out));
+    CHECK(std::equal(std::begin(out_bytes), std::end(out_bytes), out));
 
     // Reset and split randomly in 3
     sha.Reset();
@@ -1106,7 +1106,7 @@ void CryptoTest::TestSHA3_256(const std::string& input, const std::string& outpu
     int s3 = in_bytes.size() - s1 - s2;
     sha.Write(std::span{in_bytes}.first(s1)).Write(std::span{in_bytes}.subspan(s1, s2));
     sha.Write(std::span{in_bytes}.last(s3)).Finalize(out);
-    BOOST_CHECK(std::equal(std::begin(out_bytes), std::end(out_bytes), out));
+    CHECK(std::equal(std::begin(out_bytes), std::end(out_bytes), out));
 }
 
 BOOST_AUTO_TEST_CASE(keccak_tests)
@@ -1222,7 +1222,7 @@ BOOST_AUTO_TEST_CASE(muhash_tests)
             if (order == 0) {
                 res = out;
             } else {
-                BOOST_CHECK(res == out);
+                CHECK(res == out);
             }
         }
 

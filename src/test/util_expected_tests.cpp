@@ -26,8 +26,8 @@ BOOST_AUTO_TEST_CASE(expected_value)
 
     e = Obj{42};
 
-    BOOST_CHECK(e.has_value());
-    BOOST_CHECK(static_cast<bool>(e));
+    CHECK(e.has_value());
+    CHECK(static_cast<bool>(e));
     BOOST_CHECK_EQUAL(e.value().x, 42);
     BOOST_CHECK_EQUAL((*e).x, 42);
     BOOST_CHECK_EQUAL(e->x, 42);
@@ -70,22 +70,22 @@ BOOST_AUTO_TEST_CASE(expected_value_or)
 BOOST_AUTO_TEST_CASE(expected_value_throws)
 {
     const Expected<int, std::string> e{Unexpected{"fail"}};
-    BOOST_CHECK_THROW(e.value(), BadExpectedAccess);
+    CHECK_THROW(e.value(), BadExpectedAccess);
 
     const Expected<void, std::string> void_e{Unexpected{"fail"}};
-    BOOST_CHECK_THROW(void_e.value(), BadExpectedAccess);
+    CHECK_THROW(void_e.value(), BadExpectedAccess);
 }
 
 BOOST_AUTO_TEST_CASE(expected_error)
 {
     Expected<void, std::string> e{};
-    BOOST_CHECK(e.has_value());
+    CHECK(e.has_value());
     [&]() -> void { return e.value(); }(); // check value returns void and does not throw
     [&]() -> void { return *e; }();
 
     e = Unexpected{"fail"};
-    BOOST_CHECK(!e.has_value());
-    BOOST_CHECK(!static_cast<bool>(e));
+    CHECK(!e.has_value());
+    CHECK(!static_cast<bool>(e));
     BOOST_CHECK_EQUAL(e.error(), "fail");
 
     // modify error

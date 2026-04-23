@@ -49,7 +49,7 @@ public:
         const std::optional<CService> local_ipv6{Lookup("2a10:1234:5678:9abc:def0:1234:5678:9abc", 1, false)};
         const std::optional<CService> gateway_ipv4{Lookup("192.168.0.1", 1, false)};
         const std::optional<CService> gateway_ipv6{Lookup("2a10:1234:5678:9abc:def0:0000:0000:0000", 1, false)};
-        BOOST_REQUIRE(local_ipv4 && local_ipv6 && gateway_ipv4 && gateway_ipv6);
+        CHECK(local_ipv4 && local_ipv6 && gateway_ipv4 && gateway_ipv6);
         default_local_ipv4 = *local_ipv4;
         default_local_ipv6 = *local_ipv6;
         default_gateway_ipv4 = *gateway_ipv4;
@@ -237,7 +237,7 @@ private:
 
     bool AtEndOfScript() const { return m_script_ptr == m_script.size(); }
     const TestOp &CurOp() const {
-        BOOST_REQUIRE(m_script_ptr < m_script.size());
+        CHECK(m_script_ptr < m_script.size());
         return m_script[m_script_ptr];
     }
 
@@ -301,7 +301,7 @@ BOOST_AUTO_TEST_CASE(natpmp_ipv4)
     auto res = NATPMPRequestPortMap(default_gateway_ipv4, 1234, 1000, g_interrupt, 1, 200ms);
 
     MappingResult* mapping = std::get_if<MappingResult>(&res);
-    BOOST_REQUIRE(mapping);
+    CHECK(mapping);
     BOOST_CHECK_EQUAL(mapping->version, 0);
     BOOST_CHECK_EQUAL(mapping->internal.ToStringAddrPort(), "192.168.0.6:1234");
     BOOST_CHECK_EQUAL(mapping->external.ToStringAddrPort(), "1.2.3.4:1234");
@@ -345,7 +345,7 @@ BOOST_AUTO_TEST_CASE(pcp_ipv4)
     auto res = PCPRequestPortMap(TEST_NONCE, default_gateway_ipv4, bind_any_ipv4, 1234, 1000, g_interrupt, 1, 1000ms);
 
     MappingResult* mapping = std::get_if<MappingResult>(&res);
-    BOOST_REQUIRE(mapping);
+    CHECK(mapping);
     BOOST_CHECK_EQUAL(mapping->version, 2);
     BOOST_CHECK_EQUAL(mapping->internal.ToStringAddrPort(), "192.168.0.6:1234");
     BOOST_CHECK_EQUAL(mapping->external.ToStringAddrPort(), "1.2.3.4:1234");
@@ -389,7 +389,7 @@ BOOST_AUTO_TEST_CASE(pcp_ipv6)
     auto res = PCPRequestPortMap(TEST_NONCE, default_gateway_ipv6, default_local_ipv6, 1234, 1000, g_interrupt, 1, 1000ms);
 
     MappingResult* mapping = std::get_if<MappingResult>(&res);
-    BOOST_REQUIRE(mapping);
+    CHECK(mapping);
     BOOST_CHECK_EQUAL(mapping->version, 2);
     BOOST_CHECK_EQUAL(mapping->internal.ToStringAddrPort(), "[2a10:1234:5678:9abc:def0:1234:5678:9abc]:1234");
     BOOST_CHECK_EQUAL(mapping->external.ToStringAddrPort(), "[2a10:1234:5678:9abc:def0:1234:5678:9abc]:1234");
@@ -412,7 +412,7 @@ BOOST_AUTO_TEST_CASE(pcp_timeout)
     auto res = PCPRequestPortMap(TEST_NONCE, default_gateway_ipv4, bind_any_ipv4, 1234, 1000, g_interrupt, 3, 2000ms);
 
     MappingError* err = std::get_if<MappingError>(&res);
-    BOOST_REQUIRE(err);
+    CHECK(err);
     BOOST_CHECK_EQUAL(*err, MappingError::NETWORK_ERROR);
 }
 
@@ -441,7 +441,7 @@ BOOST_AUTO_TEST_CASE(pcp_connrefused)
     auto res = PCPRequestPortMap(TEST_NONCE, default_gateway_ipv4, bind_any_ipv4, 1234, 1000, g_interrupt, 3, 2000ms);
 
     MappingError* err = std::get_if<MappingError>(&res);
-    BOOST_REQUIRE(err);
+    CHECK(err);
     BOOST_CHECK_EQUAL(*err, MappingError::NETWORK_ERROR);
 }
 
@@ -500,7 +500,7 @@ BOOST_AUTO_TEST_CASE(pcp_ipv6_timeout_success)
 
     auto res = PCPRequestPortMap(TEST_NONCE, default_gateway_ipv6, default_local_ipv6, 1234, 1000, g_interrupt, 2, 2000ms);
 
-    BOOST_CHECK(std::get_if<MappingResult>(&res));
+    CHECK(std::get_if<MappingResult>(&res));
 }
 
 // PCP IPv4 failure (no resources).
@@ -540,7 +540,7 @@ BOOST_AUTO_TEST_CASE(pcp_ipv4_fail_no_resources)
     auto res = PCPRequestPortMap(TEST_NONCE, default_gateway_ipv4, bind_any_ipv4, 1234, 1000, g_interrupt, 3, 1000ms);
 
     MappingError* err = std::get_if<MappingError>(&res);
-    BOOST_REQUIRE(err);
+    CHECK(err);
     BOOST_CHECK_EQUAL(*err, MappingError::NO_RESOURCES);
 }
 
@@ -576,7 +576,7 @@ BOOST_AUTO_TEST_CASE(pcp_ipv4_fail_unsupported_version)
     auto res = PCPRequestPortMap(TEST_NONCE, default_gateway_ipv4, bind_any_ipv4, 1234, 1000, g_interrupt, 3, 1000ms);
 
     MappingError* err = std::get_if<MappingError>(&res);
-    BOOST_REQUIRE(err);
+    CHECK(err);
     BOOST_CHECK_EQUAL(*err, MappingError::UNSUPP_VERSION);
 }
 
@@ -608,7 +608,7 @@ BOOST_AUTO_TEST_CASE(natpmp_protocol_error)
     auto res = NATPMPRequestPortMap(default_gateway_ipv4, 1234, 1000, g_interrupt, 1, 200ms);
 
     MappingError* err = std::get_if<MappingError>(&res);
-    BOOST_REQUIRE(err);
+    CHECK(err);
     BOOST_CHECK_EQUAL(*err, MappingError::PROTOCOL_ERROR);
 
     // First scenario: non-0 result code when requesting port mapping.
@@ -653,7 +653,7 @@ BOOST_AUTO_TEST_CASE(natpmp_protocol_error)
     res = NATPMPRequestPortMap(default_gateway_ipv4, 1234, 1000, g_interrupt, 1, 200ms);
 
     err = std::get_if<MappingError>(&res);
-    BOOST_REQUIRE(err);
+    CHECK(err);
     BOOST_CHECK_EQUAL(*err, MappingError::PROTOCOL_ERROR);
 }
 
@@ -694,7 +694,7 @@ BOOST_AUTO_TEST_CASE(pcp_protocol_error)
     auto res = PCPRequestPortMap(TEST_NONCE, default_gateway_ipv4, bind_any_ipv4, 1234, 1000, g_interrupt, 1, 1000ms);
 
     MappingError* err = std::get_if<MappingError>(&res);
-    BOOST_REQUIRE(err);
+    CHECK(err);
     BOOST_CHECK_EQUAL(*err, MappingError::PROTOCOL_ERROR);
 }
 

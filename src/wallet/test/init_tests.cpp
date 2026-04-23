@@ -17,7 +17,7 @@ BOOST_AUTO_TEST_CASE(walletinit_verify_walletdir_default)
 {
     SetWalletDir(m_walletdir_path_cases["default"]);
     bool result = m_wallet_loader->verify();
-    BOOST_CHECK(result == true);
+    CHECK(result == true);
     fs::path walletdir = m_args.GetPathArg("-walletdir");
     fs::path expected_path = fs::canonical(m_walletdir_path_cases["default"]);
     BOOST_CHECK_EQUAL(walletdir, expected_path);
@@ -27,7 +27,7 @@ BOOST_AUTO_TEST_CASE(walletinit_verify_walletdir_custom)
 {
     SetWalletDir(m_walletdir_path_cases["custom"]);
     bool result = m_wallet_loader->verify();
-    BOOST_CHECK(result == true);
+    CHECK(result == true);
     fs::path walletdir = m_args.GetPathArg("-walletdir");
     fs::path expected_path = fs::canonical(m_walletdir_path_cases["custom"]);
     BOOST_CHECK_EQUAL(walletdir, expected_path);
@@ -39,7 +39,7 @@ BOOST_AUTO_TEST_CASE(walletinit_verify_walletdir_does_not_exist)
     {
         ASSERT_DEBUG_LOG("does not exist");
         bool result = m_wallet_loader->verify();
-        BOOST_CHECK(result == false);
+        CHECK(result == false);
     }
 }
 
@@ -49,7 +49,7 @@ BOOST_AUTO_TEST_CASE(walletinit_verify_walletdir_is_not_directory)
     {
         ASSERT_DEBUG_LOG("is not a directory");
         bool result = m_wallet_loader->verify();
-        BOOST_CHECK(result == false);
+        CHECK(result == false);
     }
 }
 
@@ -59,7 +59,7 @@ BOOST_AUTO_TEST_CASE(walletinit_verify_walletdir_is_not_relative)
     {
         ASSERT_DEBUG_LOG("is a relative path");
         bool result = m_wallet_loader->verify();
-        BOOST_CHECK(result == false);
+        CHECK(result == false);
     }
 }
 
@@ -67,7 +67,7 @@ BOOST_AUTO_TEST_CASE(walletinit_verify_walletdir_no_trailing)
 {
     SetWalletDir(m_walletdir_path_cases["trailing"]);
     bool result = m_wallet_loader->verify();
-    BOOST_CHECK(result == true);
+    CHECK(result == true);
     fs::path walletdir = m_args.GetPathArg("-walletdir");
     fs::path expected_path = fs::canonical(m_walletdir_path_cases["default"]);
     BOOST_CHECK_EQUAL(walletdir, expected_path);
@@ -77,7 +77,7 @@ BOOST_AUTO_TEST_CASE(walletinit_verify_walletdir_no_trailing2)
 {
     SetWalletDir(m_walletdir_path_cases["trailing2"]);
     bool result = m_wallet_loader->verify();
-    BOOST_CHECK(result == true);
+    CHECK(result == true);
     fs::path walletdir = m_args.GetPathArg("-walletdir");
     fs::path expected_path = fs::canonical(m_walletdir_path_cases["default"]);
     BOOST_CHECK_EQUAL(walletdir, expected_path);

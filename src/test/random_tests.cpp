@@ -17,7 +17,7 @@ BOOST_FIXTURE_TEST_SUITE(random_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(osrandom_tests)
 {
-    BOOST_CHECK(Random_SanityCheck());
+    CHECK(Random_SanityCheck());
 }
 
 BOOST_AUTO_TEST_CASE(fastrandom_tests_deterministic)
@@ -58,14 +58,14 @@ BOOST_AUTO_TEST_CASE(fastrandom_tests_deterministic)
     BOOST_CHECK_EQUAL(ctx1.rand32(), ctx2.rand32());
     BOOST_CHECK_EQUAL(ctx1.rand64(), ctx2.rand64());
     BOOST_CHECK_EQUAL(ctx1.randbits(3), ctx2.randbits(3));
-    BOOST_CHECK(std::ranges::equal(ctx1.randbytes<std::byte>(17), ctx2.randbytes<17>())); // check vector/array behavior symmetry
-    BOOST_CHECK(ctx1.rand256() == ctx2.rand256());
+    CHECK(std::ranges::equal(ctx1.randbytes<std::byte>(17), ctx2.randbytes<17>())); // check vector/array behavior symmetry
+    CHECK(ctx1.rand256() == ctx2.rand256());
     BOOST_CHECK_EQUAL(ctx1.randbits(7), ctx2.randbits(7));
-    BOOST_CHECK(ctx1.randbytes(128) == ctx2.randbytes(128));
+    CHECK(ctx1.randbytes(128) == ctx2.randbytes(128));
     BOOST_CHECK_EQUAL(ctx1.rand32(), ctx2.rand32());
     BOOST_CHECK_EQUAL(ctx1.randbits(3), ctx2.randbits(3));
-    BOOST_CHECK(ctx1.rand256() == ctx2.rand256());
-    BOOST_CHECK(ctx1.randbytes(50) == ctx2.randbytes(50));
+    CHECK(ctx1.rand256() == ctx2.rand256());
+    CHECK(ctx1.randbytes(50) == ctx2.randbytes(50));
     {
         struct MicroClock {
             using duration = std::chrono::microseconds;
@@ -82,33 +82,33 @@ BOOST_AUTO_TEST_CASE(fastrandom_tests_nondeterministic)
 {
     // Check that a nondeterministic ones are not
     {
-        BOOST_CHECK(FastRandomContext().rand<uint64_t>() != uint64_t{9330418229102544152u});
-        BOOST_CHECK(FastRandomContext().rand<int>() != int{618925161});
-        BOOST_CHECK(FastRandomContext().randrange<std::chrono::microseconds>(1h).count() != 1271170921);
-        BOOST_CHECK(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count() != 2803534);
+        CHECK(FastRandomContext().rand<uint64_t>() != uint64_t{9330418229102544152u});
+        CHECK(FastRandomContext().rand<int>() != int{618925161});
+        CHECK(FastRandomContext().randrange<std::chrono::microseconds>(1h).count() != 1271170921);
+        CHECK(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count() != 2803534);
 
-        BOOST_CHECK(FastRandomContext().rand<uint64_t>() != uint64_t{10170981140880778086u});
-        BOOST_CHECK(FastRandomContext().rand<int>() != int{1689082725});
-        BOOST_CHECK(FastRandomContext().randrange<std::chrono::microseconds>(1h).count() != 2464643716);
-        BOOST_CHECK(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count() != 2312205);
+        CHECK(FastRandomContext().rand<uint64_t>() != uint64_t{10170981140880778086u});
+        CHECK(FastRandomContext().rand<int>() != int{1689082725});
+        CHECK(FastRandomContext().randrange<std::chrono::microseconds>(1h).count() != 2464643716);
+        CHECK(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count() != 2312205);
 
-        BOOST_CHECK(FastRandomContext().rand<uint64_t>() != uint64_t{5689404004456455543u});
-        BOOST_CHECK(FastRandomContext().rand<int>() != int{785839937});
-        BOOST_CHECK(FastRandomContext().randrange<std::chrono::microseconds>(1h).count() != 93558804);
-        BOOST_CHECK(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count() != 507022);
+        CHECK(FastRandomContext().rand<uint64_t>() != uint64_t{5689404004456455543u});
+        CHECK(FastRandomContext().rand<int>() != int{785839937});
+        CHECK(FastRandomContext().randrange<std::chrono::microseconds>(1h).count() != 93558804);
+        CHECK(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count() != 507022);
     }
 
     {
         FastRandomContext ctx3, ctx4;
-        BOOST_CHECK(ctx3.rand64() != ctx4.rand64()); // extremely unlikely to be equal
+        CHECK(ctx3.rand64() != ctx4.rand64()); // extremely unlikely to be equal
     }
     {
         FastRandomContext ctx3, ctx4;
-        BOOST_CHECK(ctx3.rand256() != ctx4.rand256());
+        CHECK(ctx3.rand256() != ctx4.rand256());
     }
     {
         FastRandomContext ctx3, ctx4;
-        BOOST_CHECK(ctx3.randbytes(7) != ctx4.randbytes(7));
+        CHECK(ctx3.randbytes(7) != ctx4.randbytes(7));
     }
 }
 
@@ -122,7 +122,7 @@ BOOST_AUTO_TEST_CASE(fastrandom_randbits)
             BOOST_CHECK_EQUAL(rangebits >> bits, 0U);
             uint64_t range = (uint64_t{1}) << bits | rangebits;
             uint64_t rand = ctx2.randrange(range);
-            BOOST_CHECK(rand < range);
+            CHECK(rand < range);
         }
     }
 }
@@ -198,13 +198,13 @@ BOOST_AUTO_TEST_CASE(stdrandom_test)
     std::uniform_int_distribution<int> distribution(3, 9);
     for (int i = 0; i < 100; ++i) {
         int x = distribution(ctx);
-        BOOST_CHECK(x >= 3);
-        BOOST_CHECK(x <= 9);
+        CHECK(x >= 3);
+        CHECK(x <= 9);
 
         std::vector<int> test{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
         std::shuffle(test.begin(), test.end(), ctx);
         for (int j = 1; j <= 10; ++j) {
-            BOOST_CHECK(std::find(test.begin(), test.end(), j) != test.end());
+            CHECK(std::find(test.begin(), test.end(), j) != test.end());
         }
     }
 }
@@ -226,16 +226,16 @@ BOOST_AUTO_TEST_CASE(shuffle_stat_test)
         int i1 = i % 5, i2 = (i / 5) % 5, i3 = (i / 25) % 5, i4 = (i / 125) % 5, i5 = i / 625;
         uint32_t count = counts[i];
         if (i1 == i2 || i1 == i3 || i1 == i4 || i1 == i5 || i2 == i3 || i2 == i4 || i2 == i5 || i3 == i4 || i3 == i5 || i4 == i5) {
-            BOOST_CHECK(count == 0);
+            CHECK(count == 0);
         } else {
             chi_score += ((count - 100.0) * (count - 100.0)) / 100.0;
-            BOOST_CHECK(count > 50);
-            BOOST_CHECK(count < 150);
+            CHECK(count > 50);
+            CHECK(count < 150);
             sum += count;
         }
     }
-    BOOST_CHECK(chi_score > 58.1411); // 99.9999% confidence interval
-    BOOST_CHECK(chi_score < 210.275);
+    CHECK(chi_score > 58.1411); // 99.9999% confidence interval
+    CHECK(chi_score < 210.275);
     BOOST_CHECK_EQUAL(sum, 12000U);
 }
 
@@ -243,17 +243,17 @@ BOOST_AUTO_TEST_CASE(xoroshiro128plusplus_reference_values)
 {
     // numbers generated from reference implementation
     InsecureRandomContext rng(0);
-    BOOST_TEST(0x6f68e1e7e2646ee1 == rng());
-    BOOST_TEST(0xbf971b7f454094ad == rng());
-    BOOST_TEST(0x48f2de556f30de38 == rng());
-    BOOST_TEST(0x6ea7c59f89bbfc75 == rng());
+    CHECK(0x6f68e1e7e2646ee1 == rng());
+    CHECK(0xbf971b7f454094ad == rng());
+    CHECK(0x48f2de556f30de38 == rng());
+    CHECK(0x6ea7c59f89bbfc75 == rng());
 
     // seed with a random number
     rng.Reseed(0x1a26f3fa8546b47a);
-    BOOST_TEST(0xc8dc5e08d844ac7d == rng());
-    BOOST_TEST(0x5b5f1f6d499dad1b == rng());
-    BOOST_TEST(0xbeb0031f93313d6f == rng());
-    BOOST_TEST(0xbfbcf4f43a264497 == rng());
+    CHECK(0xc8dc5e08d844ac7d == rng());
+    CHECK(0x5b5f1f6d499dad1b == rng());
+    CHECK(0xbeb0031f93313d6f == rng());
+    CHECK(0xbfbcf4f43a264497 == rng());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

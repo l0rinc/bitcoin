@@ -30,11 +30,11 @@ BOOST_AUTO_TEST_CASE(ensure_unique_wallet_name)
     BOOST_CHECK_EQUAL(TestWalletName("/", "foo"), "foo");
     BOOST_CHECK_EQUAL(TestWalletName("/bar", "foo"), "foo");
 
-    BOOST_CHECK_THROW(TestWalletName("/"), UniValue);
-    BOOST_CHECK_THROW(TestWalletName("/foo"), UniValue);
-    BOOST_CHECK_THROW(TestWalletName("/wallet/foo", "bar"), UniValue);
-    BOOST_CHECK_THROW(TestWalletName("/wallet/foo", "foobar"), UniValue);
-    BOOST_CHECK_THROW(TestWalletName("/wallet/foobar", "foo"), UniValue);
+    CHECK_THROW(TestWalletName("/"), UniValue);
+    CHECK_THROW(TestWalletName("/foo"), UniValue);
+    CHECK_THROW(TestWalletName("/wallet/foo", "bar"), UniValue);
+    CHECK_THROW(TestWalletName("/wallet/foo", "foobar"), UniValue);
+    CHECK_THROW(TestWalletName("/wallet/foobar", "foo"), UniValue);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

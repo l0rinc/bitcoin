@@ -11,6 +11,7 @@
 #include <wallet/test/util.h>
 #include <wallet/test/wallet_test_fixture.h>
 
+#include <test/util/check.h>
 #include <boost/test/unit_test.hpp>
 
 namespace wallet {
@@ -34,7 +35,7 @@ static void CheckMaxWeightComputation(const std::string& script_str, const std::
     SignatureWeights weights;
     SignatureWeightChecker size_checker(weights, DUMMY_CHECKER);
     bool script_ok = VerifyScript(input.scriptSig, prevout_script, &input.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, size_checker);
-    BOOST_CHECK(script_ok);
+    CHECK(script_ok);
     weight += weights.GetWeightDiffToMax();
     BOOST_CHECK_EQUAL(weight, expected_max_weight);
 }

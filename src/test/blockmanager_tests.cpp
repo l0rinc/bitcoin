@@ -81,23 +81,23 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_scan_unlink_already_pruned_files, TestChain
     // Check that the file is not unlinked after ScanAndUnlinkAlreadyPrunedFiles
     // if m_have_pruned is not yet set
     WITH_LOCK(chainman.GetMutex(), blockman.ScanAndUnlinkAlreadyPrunedFiles());
-    BOOST_CHECK(!blockman.OpenBlockFile(pos, true).IsNull());
+    CHECK(!blockman.OpenBlockFile(pos, true).IsNull());
 
     // Check that the file is unlinked after ScanAndUnlinkAlreadyPrunedFiles
     // once m_have_pruned is set
     blockman.m_have_pruned = true;
     WITH_LOCK(chainman.GetMutex(), blockman.ScanAndUnlinkAlreadyPrunedFiles());
-    BOOST_CHECK(blockman.OpenBlockFile(pos, true).IsNull());
+    CHECK(blockman.OpenBlockFile(pos, true).IsNull());
 
     // Check that calling with already pruned files doesn't cause an error
     WITH_LOCK(chainman.GetMutex(), blockman.ScanAndUnlinkAlreadyPrunedFiles());
 
     // Check that the new tip file has not been removed
     const CBlockIndex* new_tip{WITH_LOCK(chainman.GetMutex(), return chainman.ActiveChain().Tip())};
-    BOOST_CHECK_NE(old_tip, new_tip);
+    CHECK(old_tip != new_tip);
     const int new_file_number{WITH_LOCK(chainman.GetMutex(), return new_tip->GetBlockPos().nFile)};
     const FlatFilePos new_pos(new_file_number, 0);
-    BOOST_CHECK(!blockman.OpenBlockFile(new_pos, true).IsNull());
+    CHECK(!blockman.OpenBlockFile(new_pos, true).IsNull());
 }
 
 BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_availability, TestChain100Setup)
@@ -121,19 +121,19 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_availability, TestChain100Setup)
 
     // 1) Return genesis block when all blocks are available
     BOOST_CHECK_EQUAL(&blockman.GetFirstBlock(tip, BLOCK_HAVE_DATA), chainman->ActiveChain()[0]);
-    BOOST_CHECK(blockman.CheckBlockDataAvailability(tip, *chainman->ActiveChain()[0]));
+    CHECK(blockman.CheckBlockDataAvailability(tip, *chainman->ActiveChain()[0]));
 
     // 2) Check lower_block when all blocks are available
     CBlockIndex* lower_block = chainman->ActiveChain()[tip.nHeight / 2];
-    BOOST_CHECK(blockman.CheckBlockDataAvailability(tip, *lower_block));
+    CHECK(blockman.CheckBlockDataAvailability(tip, *lower_block));
 
     // Ensure we don't fail due to the expected absence of undo data in the genesis block
     CBlockIndex* upper_block = chainman->ActiveChain()[2];
     CBlockIndex* genesis = chainman->ActiveChain()[0];
-    BOOST_CHECK(blockman.CheckBlockDataAvailability(*upper_block, *genesis, BlockStatus{BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO}));
+    CHECK(blockman.CheckBlockDataAvailability(*upper_block, *genesis, BlockStatus{BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO}));
     // Ensure we detect absence of undo data in the first block
     chainman->ActiveChain()[1]->nStatus &= ~BLOCK_HAVE_UNDO;
-    BOOST_CHECK(!blockman.CheckBlockDataAvailability(tip, *genesis, BlockStatus{BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO}));
+    CHECK(!blockman.CheckBlockDataAvailability(tip, *genesis, BlockStatus{BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO}));
 
     // Prune half of the blocks
     int height_to_prune = tip.nHeight / 2;
@@ -143,14 +143,14 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_availability, TestChain100Setup)
 
     // 3) The last block not pruned is in-between upper-block and the genesis block
     BOOST_CHECK_EQUAL(&blockman.GetFirstBlock(tip, BLOCK_HAVE_DATA), first_available_block);
-    BOOST_CHECK(blockman.CheckBlockDataAvailability(tip, *first_available_block));
-    BOOST_CHECK(!blockman.CheckBlockDataAvailability(tip, *last_pruned_block));
+    CHECK(blockman.CheckBlockDataAvailability(tip, *first_available_block));
+    CHECK(!blockman.CheckBlockDataAvailability(tip, *last_pruned_block));
 
     // Simulate that the first available block is missing undo data and
     // detect this by using a status mask.
     first_available_block->nStatus &= ~BLOCK_HAVE_UNDO;
-    BOOST_CHECK(!blockman.CheckBlockDataAvailability(tip, *first_available_block, BlockStatus{BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO}));
-    BOOST_CHECK(blockman.CheckBlockDataAvailability(tip, *first_available_block, BlockStatus{BLOCK_HAVE_DATA}));
+    CHECK(!blockman.CheckBlockDataAvailability(tip, *first_available_block, BlockStatus{BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO}));
+    CHECK(blockman.CheckBlockDataAvailability(tip, *first_available_block, BlockStatus{BLOCK_HAVE_DATA}));
 }
 
 BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_part, TestChain100Setup)
@@ -162,14 +162,14 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_part, TestChain100Setup)
     const FlatFilePos tip_block_pos{tip.GetBlockPos()};
 
     auto block{blockman.ReadRawBlock(tip_block_pos)};
-    BOOST_REQUIRE(block);
-    BOOST_REQUIRE_GE(block->size(), 200);
+    CHECK(block);
+    CHECK_GE(block->size(), size_t{200});
 
     const auto expect_part{[&](size_t offset, size_t size) {
         auto res{blockman.ReadRawBlock(tip_block_pos, std::pair{offset, size})};
-        BOOST_CHECK(res);
+        CHECK(res);
         const auto& part{res.value()};
-        BOOST_CHECK_EQUAL_COLLECTIONS(part.begin(), part.end(), block->begin() + offset, block->begin() + offset + size);
+        CHECK_EQUAL_COLLECTIONS(part.begin(), part.end(), block->begin() + offset, block->begin() + offset + size);
     }};
 
     expect_part(0, 20);
@@ -190,12 +190,12 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_part_error, TestChain100Setup)
     const FlatFilePos tip_block_pos{tip.GetBlockPos()};
 
     auto block{blockman.ReadRawBlock(tip_block_pos)};
-    BOOST_REQUIRE(block);
-    BOOST_REQUIRE_GE(block->size(), 200);
+    CHECK(block);
+    CHECK_GE(block->size(), size_t{200});
 
     const auto expect_part_error{[&](size_t offset, size_t size) {
         auto res{blockman.ReadRawBlock(tip_block_pos, std::pair{offset, size})};
-        BOOST_CHECK(!res);
+        CHECK(!res);
         BOOST_CHECK_EQUAL(res.error(), node::ReadRawError::BadPartRange);
     }};
 
@@ -228,7 +228,7 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_readblock_hash_mismatch, TestingSetup)
 
     ASSERT_DEBUG_LOG("GetHash() doesn't match index");
     CBlock block;
-    BOOST_CHECK(!m_node.chainman->m_blockman.ReadBlock(block, index));
+    CHECK(!m_node.chainman->m_blockman.ReadBlock(block, index));
 }
 
 BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
@@ -274,12 +274,12 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
     BOOST_CHECK_EQUAL(read_block.nVersion, 0);
     {
         ASSERT_DEBUG_LOG("Errors in block header");
-        BOOST_CHECK(!blockman.ReadBlock(read_block, pos1, {}));
+        CHECK(!blockman.ReadBlock(read_block, pos1, {}));
         BOOST_CHECK_EQUAL(read_block.nVersion, 1);
     }
     {
         ASSERT_DEBUG_LOG("Errors in block header");
-        BOOST_CHECK(!blockman.ReadBlock(read_block, pos2, {}));
+        CHECK(!blockman.ReadBlock(read_block, pos2, {}));
         BOOST_CHECK_EQUAL(read_block.nVersion, 2);
     }
 
@@ -296,7 +296,7 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
     BOOST_CHECK_EQUAL(blockman.CalculateCurrentUsage(), (TEST_BLOCK_SIZE + STORAGE_HEADER_BYTES) * 2);
 
     // Block 2 was not overwritten:
-    BOOST_CHECK(!blockman.ReadBlock(read_block, pos2, {}));
+    CHECK(!blockman.ReadBlock(read_block, pos2, {}));
     BOOST_CHECK_EQUAL(read_block.nVersion, 2);
 }
 
@@ -313,13 +313,13 @@ BOOST_FIXTURE_TEST_CASE(prune_lock_update_and_delete, TestingSetup)
     blockman.UpdatePruneLock("test_lock", node::PruneLockInfo{.height_first = 200});
 
     // Delete existing prune lock
-    BOOST_CHECK(blockman.DeletePruneLock("test_lock"));
+    CHECK(blockman.DeletePruneLock("test_lock"));
 
     // Verify deletion worked by trying to delete the same lock again
-    BOOST_CHECK(!blockman.DeletePruneLock("test_lock"));
+    CHECK(!blockman.DeletePruneLock("test_lock"));
 
     // Deleting a non-existent lock returns false
-    BOOST_CHECK(!blockman.DeletePruneLock("nonexistent"));
+    CHECK(!blockman.DeletePruneLock("nonexistent"));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -24,7 +24,7 @@ using util::SplitString;
 static UniValue JSON(std::string_view json)
 {
     UniValue value;
-    BOOST_CHECK(value.read(json));
+    CHECK(value.read(json));
     return value;
 }
 
@@ -94,18 +94,18 @@ BOOST_AUTO_TEST_CASE(rpc_namedparams)
     BOOST_CHECK_EQUAL(TransformParams(JSON(R"({"arg2": 2, "arg4": 4})"), arg_names).write(), "[null,2,null,4]");
 
     // Make sure named argument specified multiple times raises an exception
-    BOOST_CHECK_EXCEPTION(TransformParams(JSON(R"({"arg2": 2, "arg2": 4})"), arg_names), UniValue,
+    CHECK_EXCEPTION(TransformParams(JSON(R"({"arg2": 2, "arg2": 4})"), arg_names), UniValue,
                           HasJSON(R"({"code":-8,"message":"Parameter arg2 specified multiple times"})"));
 
     // Make sure named and positional arguments can be combined.
     BOOST_CHECK_EQUAL(TransformParams(JSON(R"({"arg5": 5, "args": [1, 2], "arg4": 4})"), arg_names).write(), "[1,2,null,4,5]");
 
     // Make sure a unknown named argument raises an exception
-    BOOST_CHECK_EXCEPTION(TransformParams(JSON(R"({"arg2": 2, "unknown": 6})"), arg_names), UniValue,
+    CHECK_EXCEPTION(TransformParams(JSON(R"({"arg2": 2, "unknown": 6})"), arg_names), UniValue,
                           HasJSON(R"({"code":-8,"message":"Unknown named parameter unknown"})"));
 
     // Make sure an overlap between a named argument and positional argument raises an exception
-    BOOST_CHECK_EXCEPTION(TransformParams(JSON(R"({"args": [1,2,3], "arg4": 4, "arg2": 2})"), arg_names), UniValue,
+    CHECK_EXCEPTION(TransformParams(JSON(R"({"args": [1,2,3], "arg4": 4, "arg2": 2})"), arg_names), UniValue,
                           HasJSON(R"({"code":-8,"message":"Parameter arg2 specified twice both as positional and named argument"})"));
 
     // Make sure extra positional arguments can be passed through to the method implementation, as long as they don't overlap with named arguments.
@@ -127,11 +127,11 @@ BOOST_AUTO_TEST_CASE(rpc_namedonlyparams)
     BOOST_CHECK_EQUAL(TransformParams(JSON(R"({"arg1": 1, "arg2": 2, "options":{"opt1": 10, "opt2": 20}})"), arg_names).write(), R"([1,2,{"opt1":10,"opt2":20}])");
 
     // Make sure options and named parameters conflict.
-    BOOST_CHECK_EXCEPTION(TransformParams(JSON(R"({"arg1": 1, "arg2": 2, "opt1": 10, "options":{"opt1": 10}})"), arg_names), UniValue,
+    CHECK_EXCEPTION(TransformParams(JSON(R"({"arg1": 1, "arg2": 2, "opt1": 10, "options":{"opt1": 10}})"), arg_names), UniValue,
                           HasJSON(R"({"code":-8,"message":"Parameter options conflicts with parameter opt1"})"));
 
     // Make sure options object specified through args array conflicts.
-    BOOST_CHECK_EXCEPTION(TransformParams(JSON(R"({"args": [1, 2, {"opt1": 10}], "opt2": 20})"), arg_names), UniValue,
+    CHECK_EXCEPTION(TransformParams(JSON(R"({"args": [1, 2, {"opt1": 10}], "opt2": 20})"), arg_names), UniValue,
                           HasJSON(R"({"code":-8,"message":"Parameter options specified twice both as positional and named argument"})"));
 }
 
@@ -140,34 +140,34 @@ BOOST_AUTO_TEST_CASE(rpc_rawparams)
     // Test raw transaction API argument handling
     UniValue r;
 
-    BOOST_CHECK_THROW(CallRPC("getrawtransaction"), std::runtime_error);
-    BOOST_CHECK_THROW(CallRPC("getrawtransaction not_hex"), std::runtime_error);
-    BOOST_CHECK_THROW(CallRPC("getrawtransaction a3b807410df0b60fcb9736768df5823938b2f838694939ba45f3c0a1bff150ed not_int"), std::runtime_error);
+    CHECK_THROW(CallRPC("getrawtransaction"), std::runtime_error);
+    CHECK_THROW(CallRPC("getrawtransaction not_hex"), std::runtime_error);
+    CHECK_THROW(CallRPC("getrawtransaction a3b807410df0b60fcb9736768df5823938b2f838694939ba45f3c0a1bff150ed not_int"), std::runtime_error);
 
-    BOOST_CHECK_THROW(CallRPC("createrawtransaction"), std::runtime_error);
-    BOOST_CHECK_THROW(CallRPC("createrawtransaction null null"), std::runtime_error);
-    BOOST_CHECK_THROW(CallRPC("createrawtransaction not_array"), std::runtime_error);
-    BOOST_CHECK_THROW(CallRPC("createrawtransaction {} {}"), std::runtime_error);
-    BOOST_CHECK_NO_THROW(CallRPC("createrawtransaction [] {}"));
-    BOOST_CHECK_THROW(CallRPC("createrawtransaction [] {} extra"), std::runtime_error);
+    CHECK_THROW(CallRPC("createrawtransaction"), std::runtime_error);
+    CHECK_THROW(CallRPC("createrawtransaction null null"), std::runtime_error);
+    CHECK_THROW(CallRPC("createrawtransaction not_array"), std::runtime_error);
+    CHECK_THROW(CallRPC("createrawtransaction {} {}"), std::runtime_error);
+    CHECK_NO_THROW(CallRPC("createrawtransaction [] {}"));
+    CHECK_THROW(CallRPC("createrawtransaction [] {} extra"), std::runtime_error);
 
-    BOOST_CHECK_THROW(CallRPC("decoderawtransaction"), std::runtime_error);
-    BOOST_CHECK_THROW(CallRPC("decoderawtransaction null"), std::runtime_error);
-    BOOST_CHECK_THROW(CallRPC("decoderawtransaction DEADBEEF"), std::runtime_error);
+    CHECK_THROW(CallRPC("decoderawtransaction"), std::runtime_error);
+    CHECK_THROW(CallRPC("decoderawtransaction null"), std::runtime_error);
+    CHECK_THROW(CallRPC("decoderawtransaction DEADBEEF"), std::runtime_error);
     std::string rawtx = "0100000001a15d57094aa7a21a28cb20b59aab8fc7d1149a3bdbcddba9c622e4f5f6a99ece010000006c493046022100f93bb0e7d8db7bd46e40132d1f8242026e045f03a0efe71bbb8e3f475e970d790221009337cd7f1f929f00cc6ff01f03729b069a7c21b59b1736ddfee5db5946c5da8c0121033b9b137ee87d5a812d6f506efdd37f0affa7ffc310711c06c7f3e097c9447c52ffffffff0100e1f505000000001976a9140389035a9225b3839e2bbf32d826a1e222031fd888ac00000000";
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("decoderawtransaction ")+rawtx));
+    CHECK_NO_THROW(r = CallRPC(std::string("decoderawtransaction ")+rawtx));
     BOOST_CHECK_EQUAL(r.get_obj().find_value("size").getInt<int>(), 193);
     BOOST_CHECK_EQUAL(r.get_obj().find_value("version").getInt<int>(), 1);
     BOOST_CHECK_EQUAL(r.get_obj().find_value("locktime").getInt<int>(), 0);
-    BOOST_CHECK_THROW(CallRPC(std::string("decoderawtransaction ")+rawtx+" extra"), std::runtime_error);
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("decoderawtransaction ")+rawtx+" false"));
-    BOOST_CHECK_THROW(r = CallRPC(std::string("decoderawtransaction ")+rawtx+" false extra"), std::runtime_error);
+    CHECK_THROW(CallRPC(std::string("decoderawtransaction ")+rawtx+" extra"), std::runtime_error);
+    CHECK_NO_THROW(r = CallRPC(std::string("decoderawtransaction ")+rawtx+" false"));
+    CHECK_THROW(r = CallRPC(std::string("decoderawtransaction ")+rawtx+" false extra"), std::runtime_error);
 
     // Only check failure cases for sendrawtransaction, there's no network to send to...
-    BOOST_CHECK_THROW(CallRPC("sendrawtransaction"), std::runtime_error);
-    BOOST_CHECK_THROW(CallRPC("sendrawtransaction null"), std::runtime_error);
-    BOOST_CHECK_THROW(CallRPC("sendrawtransaction DEADBEEF"), std::runtime_error);
-    BOOST_CHECK_THROW(CallRPC(std::string("sendrawtransaction ")+rawtx+" extra"), std::runtime_error);
+    CHECK_THROW(CallRPC("sendrawtransaction"), std::runtime_error);
+    CHECK_THROW(CallRPC("sendrawtransaction null"), std::runtime_error);
+    CHECK_THROW(CallRPC("sendrawtransaction DEADBEEF"), std::runtime_error);
+    CHECK_THROW(CallRPC(std::string("sendrawtransaction ")+rawtx+" extra"), std::runtime_error);
 }
 
 BOOST_AUTO_TEST_CASE(rpc_togglenetwork)
@@ -178,7 +178,7 @@ BOOST_AUTO_TEST_CASE(rpc_togglenetwork)
     bool netState = r.get_obj().find_value("networkactive").get_bool();
     BOOST_CHECK_EQUAL(netState, true);
 
-    BOOST_CHECK_NO_THROW(CallRPC("setnetworkactive false"));
+    CHECK_NO_THROW(CallRPC("setnetworkactive false"));
     r = CallRPC("getnetworkinfo");
     int numConnection = r.get_obj().find_value("connections").getInt<int>();
     BOOST_CHECK_EQUAL(numConnection, 0);
@@ -186,7 +186,7 @@ BOOST_AUTO_TEST_CASE(rpc_togglenetwork)
     netState = r.get_obj().find_value("networkactive").get_bool();
     BOOST_CHECK_EQUAL(netState, false);
 
-    BOOST_CHECK_NO_THROW(CallRPC("setnetworkactive true"));
+    CHECK_NO_THROW(CallRPC("setnetworkactive true"));
     r = CallRPC("getnetworkinfo");
     netState = r.get_obj().find_value("networkactive").get_bool();
     BOOST_CHECK_EQUAL(netState, true);
@@ -206,36 +206,36 @@ BOOST_AUTO_TEST_CASE(rpc_rawsign)
     std::string privkey1 = "\"KzsXybp9jX64P5ekX1KUxRQ79Jht9uzW7LorgwE65i5rWACL6LQe\"";
     std::string privkey2 = "\"Kyhdf5LuKTRx4ge69ybABsiUAWjVRK4XGxAKk2FQLp2HjGMy87Z4\"";
     r = CallRPC(std::string("signrawtransactionwithkey ")+notsigned+" [] "+prevout);
-    BOOST_CHECK(r.get_obj().find_value("complete").get_bool() == false);
+    CHECK(r.get_obj().find_value("complete").get_bool() == false);
     r = CallRPC(std::string("signrawtransactionwithkey ")+notsigned+" ["+privkey1+","+privkey2+"] "+prevout);
-    BOOST_CHECK(r.get_obj().find_value("complete").get_bool() == true);
+    CHECK(r.get_obj().find_value("complete").get_bool() == true);
 }
 
 BOOST_AUTO_TEST_CASE(rpc_createraw_op_return)
 {
-    BOOST_CHECK_NO_THROW(CallRPC("createrawtransaction [{\"txid\":\"a3b807410df0b60fcb9736768df5823938b2f838694939ba45f3c0a1bff150ed\",\"vout\":0}] {\"data\":\"68656c6c6f776f726c64\"}"));
+    CHECK_NO_THROW(CallRPC("createrawtransaction [{\"txid\":\"a3b807410df0b60fcb9736768df5823938b2f838694939ba45f3c0a1bff150ed\",\"vout\":0}] {\"data\":\"68656c6c6f776f726c64\"}"));
 
     // Key not "data" (bad address)
-    BOOST_CHECK_THROW(CallRPC("createrawtransaction [{\"txid\":\"a3b807410df0b60fcb9736768df5823938b2f838694939ba45f3c0a1bff150ed\",\"vout\":0}] {\"somedata\":\"68656c6c6f776f726c64\"}"), std::runtime_error);
+    CHECK_THROW(CallRPC("createrawtransaction [{\"txid\":\"a3b807410df0b60fcb9736768df5823938b2f838694939ba45f3c0a1bff150ed\",\"vout\":0}] {\"somedata\":\"68656c6c6f776f726c64\"}"), std::runtime_error);
 
     // Bad hex encoding of data output
-    BOOST_CHECK_THROW(CallRPC("createrawtransaction [{\"txid\":\"a3b807410df0b60fcb9736768df5823938b2f838694939ba45f3c0a1bff150ed\",\"vout\":0}] {\"data\":\"12345\"}"), std::runtime_error);
-    BOOST_CHECK_THROW(CallRPC("createrawtransaction [{\"txid\":\"a3b807410df0b60fcb9736768df5823938b2f838694939ba45f3c0a1bff150ed\",\"vout\":0}] {\"data\":\"12345g\"}"), std::runtime_error);
+    CHECK_THROW(CallRPC("createrawtransaction [{\"txid\":\"a3b807410df0b60fcb9736768df5823938b2f838694939ba45f3c0a1bff150ed\",\"vout\":0}] {\"data\":\"12345\"}"), std::runtime_error);
+    CHECK_THROW(CallRPC("createrawtransaction [{\"txid\":\"a3b807410df0b60fcb9736768df5823938b2f838694939ba45f3c0a1bff150ed\",\"vout\":0}] {\"data\":\"12345g\"}"), std::runtime_error);
 
     // Data 81 bytes long
-    BOOST_CHECK_NO_THROW(CallRPC("createrawtransaction [{\"txid\":\"a3b807410df0b60fcb9736768df5823938b2f838694939ba45f3c0a1bff150ed\",\"vout\":0}] {\"data\":\"010203040506070809101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081\"}"));
+    CHECK_NO_THROW(CallRPC("createrawtransaction [{\"txid\":\"a3b807410df0b60fcb9736768df5823938b2f838694939ba45f3c0a1bff150ed\",\"vout\":0}] {\"data\":\"010203040506070809101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081\"}"));
 }
 
 BOOST_AUTO_TEST_CASE(rpc_format_monetary_values)
 {
-    BOOST_CHECK(ValueFromAmount(0LL).write() == "0.00000000");
-    BOOST_CHECK(ValueFromAmount(1LL).write() == "0.00000001");
-    BOOST_CHECK(ValueFromAmount(17622195LL).write() == "0.17622195");
-    BOOST_CHECK(ValueFromAmount(50000000LL).write() == "0.50000000");
-    BOOST_CHECK(ValueFromAmount(89898989LL).write() == "0.89898989");
-    BOOST_CHECK(ValueFromAmount(100000000LL).write() == "1.00000000");
-    BOOST_CHECK(ValueFromAmount(2099999999999990LL).write() == "20999999.99999990");
-    BOOST_CHECK(ValueFromAmount(2099999999999999LL).write() == "20999999.99999999");
+    CHECK(ValueFromAmount(0LL).write() == "0.00000000");
+    CHECK(ValueFromAmount(1LL).write() == "0.00000001");
+    CHECK(ValueFromAmount(17622195LL).write() == "0.17622195");
+    CHECK(ValueFromAmount(50000000LL).write() == "0.50000000");
+    CHECK(ValueFromAmount(89898989LL).write() == "0.89898989");
+    CHECK(ValueFromAmount(100000000LL).write() == "1.00000000");
+    CHECK(ValueFromAmount(2099999999999990LL).write() == "20999999.99999990");
+    CHECK(ValueFromAmount(2099999999999999LL).write() == "20999999.99999999");
 
     BOOST_CHECK_EQUAL(ValueFromAmount(0).write(), "0.00000000");
     BOOST_CHECK_EQUAL(ValueFromAmount((COIN/10000)*123456789).write(), "12345.67890000");
@@ -280,7 +280,7 @@ static UniValue ValueFromString(const std::string& str) noexcept
 
 BOOST_AUTO_TEST_CASE(rpc_parse_monetary_values)
 {
-    BOOST_CHECK_THROW(AmountFromValue(ValueFromString("-0.00000001")), UniValue);
+    CHECK_THROW(AmountFromValue(ValueFromString("-0.00000001")), UniValue);
     BOOST_CHECK_EQUAL(AmountFromValue(ValueFromString("0")), 0LL);
     BOOST_CHECK_EQUAL(AmountFromValue(ValueFromString("0.00000000")), 0LL);
     BOOST_CHECK_EQUAL(AmountFromValue(ValueFromString("0.00000001")), 1LL);
@@ -300,38 +300,38 @@ BOOST_AUTO_TEST_CASE(rpc_parse_monetary_values)
     BOOST_CHECK_EQUAL(AmountFromValue(ValueFromString("10000000000000000000000000000000000000000000000000000000000000000e-64")), COIN);
     BOOST_CHECK_EQUAL(AmountFromValue(ValueFromString("0.000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000e64")), COIN);
 
-    BOOST_CHECK_THROW(AmountFromValue(ValueFromString("1e-9")), UniValue); //should fail
-    BOOST_CHECK_THROW(AmountFromValue(ValueFromString("0.000000019")), UniValue); //should fail
+    CHECK_THROW(AmountFromValue(ValueFromString("1e-9")), UniValue); //should fail
+    CHECK_THROW(AmountFromValue(ValueFromString("0.000000019")), UniValue); //should fail
     BOOST_CHECK_EQUAL(AmountFromValue(ValueFromString("0.00000001000000")), 1LL); //should pass, cut trailing 0
-    BOOST_CHECK_THROW(AmountFromValue(ValueFromString("19e-9")), UniValue); //should fail
+    CHECK_THROW(AmountFromValue(ValueFromString("19e-9")), UniValue); //should fail
     BOOST_CHECK_EQUAL(AmountFromValue(ValueFromString("0.19e-6")), 19); //should pass, leading 0 is present
-    BOOST_CHECK_EXCEPTION(AmountFromValue(".19e-6"), UniValue, HasJSON(R"({"code":-3,"message":"Invalid amount"})")); //should fail, no leading 0
+    CHECK_EXCEPTION(AmountFromValue(".19e-6"), UniValue, HasJSON(R"({"code":-3,"message":"Invalid amount"})")); //should fail, no leading 0
 
-    BOOST_CHECK_THROW(AmountFromValue(ValueFromString("92233720368.54775808")), UniValue); //overflow error
-    BOOST_CHECK_THROW(AmountFromValue(ValueFromString("1e+11")), UniValue); //overflow error
-    BOOST_CHECK_THROW(AmountFromValue(ValueFromString("1e11")), UniValue); //overflow error signless
-    BOOST_CHECK_THROW(AmountFromValue(ValueFromString("93e+9")), UniValue); //overflow error
+    CHECK_THROW(AmountFromValue(ValueFromString("92233720368.54775808")), UniValue); //overflow error
+    CHECK_THROW(AmountFromValue(ValueFromString("1e+11")), UniValue); //overflow error
+    CHECK_THROW(AmountFromValue(ValueFromString("1e11")), UniValue); //overflow error signless
+    CHECK_THROW(AmountFromValue(ValueFromString("93e+9")), UniValue); //overflow error
 }
 
 BOOST_AUTO_TEST_CASE(rpc_ban)
 {
-    BOOST_CHECK_NO_THROW(CallRPC(std::string("clearbanned")));
+    CHECK_NO_THROW(CallRPC(std::string("clearbanned")));
 
     UniValue r;
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("setban 127.0.0.0 add")));
-    BOOST_CHECK_THROW(r = CallRPC(std::string("setban 127.0.0.0:8334")), std::runtime_error); //portnumber for setban not allowed
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
+    CHECK_NO_THROW(r = CallRPC(std::string("setban 127.0.0.0 add")));
+    CHECK_THROW(r = CallRPC(std::string("setban 127.0.0.0:8334")), std::runtime_error); //portnumber for setban not allowed
+    CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
     UniValue ar = r.get_array();
     UniValue o1 = ar[0].get_obj();
     UniValue adr = o1.find_value("address");
     BOOST_CHECK_EQUAL(adr.get_str(), "127.0.0.0/32");
-    BOOST_CHECK_NO_THROW(CallRPC(std::string("setban 127.0.0.0 remove")));
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
+    CHECK_NO_THROW(CallRPC(std::string("setban 127.0.0.0 remove")));
+    CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
     ar = r.get_array();
     BOOST_CHECK_EQUAL(ar.size(), 0U);
 
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("setban 127.0.0.0/24 add 9907731200 true")));
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
+    CHECK_NO_THROW(r = CallRPC(std::string("setban 127.0.0.0/24 add 9907731200 true")));
+    CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
     ar = r.get_array();
     o1 = ar[0].get_obj();
     adr = o1.find_value("address");
@@ -339,14 +339,14 @@ BOOST_AUTO_TEST_CASE(rpc_ban)
     BOOST_CHECK_EQUAL(adr.get_str(), "127.0.0.0/24");
     BOOST_CHECK_EQUAL(banned_until, 9907731200); // absolute time check
 
-    BOOST_CHECK_NO_THROW(CallRPC(std::string("clearbanned")));
+    CHECK_NO_THROW(CallRPC(std::string("clearbanned")));
 
     auto now = 10'000s;
     SetMockTime(now);
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("setban 127.0.0.0/24 add 200")));
+    CHECK_NO_THROW(r = CallRPC(std::string("setban 127.0.0.0/24 add 200")));
     SetMockTime(now += 2s);
     const int64_t time_remaining_expected{198};
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
+    CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
     ar = r.get_array();
     o1 = ar[0].get_obj();
     adr = o1.find_value("address");
@@ -360,43 +360,43 @@ BOOST_AUTO_TEST_CASE(rpc_ban)
     BOOST_CHECK_EQUAL(time_remaining, time_remaining_expected);
 
     // must throw an exception because 127.0.0.1 is in already banned subnet range
-    BOOST_CHECK_THROW(r = CallRPC(std::string("setban 127.0.0.1 add")), std::runtime_error);
+    CHECK_THROW(r = CallRPC(std::string("setban 127.0.0.1 add")), std::runtime_error);
 
-    BOOST_CHECK_NO_THROW(CallRPC(std::string("setban 127.0.0.0/24 remove")));
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
+    CHECK_NO_THROW(CallRPC(std::string("setban 127.0.0.0/24 remove")));
+    CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
     ar = r.get_array();
     BOOST_CHECK_EQUAL(ar.size(), 0U);
 
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("setban 127.0.0.0/255.255.0.0 add")));
-    BOOST_CHECK_THROW(r = CallRPC(std::string("setban 127.0.1.1 add")), std::runtime_error);
+    CHECK_NO_THROW(r = CallRPC(std::string("setban 127.0.0.0/255.255.0.0 add")));
+    CHECK_THROW(r = CallRPC(std::string("setban 127.0.1.1 add")), std::runtime_error);
 
-    BOOST_CHECK_NO_THROW(CallRPC(std::string("clearbanned")));
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
+    CHECK_NO_THROW(CallRPC(std::string("clearbanned")));
+    CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
     ar = r.get_array();
     BOOST_CHECK_EQUAL(ar.size(), 0U);
 
 
-    BOOST_CHECK_THROW(r = CallRPC(std::string("setban test add")), std::runtime_error); //invalid IP
+    CHECK_THROW(r = CallRPC(std::string("setban test add")), std::runtime_error); //invalid IP
 
     //IPv6 tests
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("setban FE80:0000:0000:0000:0202:B3FF:FE1E:8329 add")));
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
+    CHECK_NO_THROW(r = CallRPC(std::string("setban FE80:0000:0000:0000:0202:B3FF:FE1E:8329 add")));
+    CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
     ar = r.get_array();
     o1 = ar[0].get_obj();
     adr = o1.find_value("address");
     BOOST_CHECK_EQUAL(adr.get_str(), "fe80::202:b3ff:fe1e:8329/128");
 
-    BOOST_CHECK_NO_THROW(CallRPC(std::string("clearbanned")));
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("setban 2001:db8::/ffff:fffc:0:0:0:0:0:0 add")));
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
+    CHECK_NO_THROW(CallRPC(std::string("clearbanned")));
+    CHECK_NO_THROW(r = CallRPC(std::string("setban 2001:db8::/ffff:fffc:0:0:0:0:0:0 add")));
+    CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
     ar = r.get_array();
     o1 = ar[0].get_obj();
     adr = o1.find_value("address");
     BOOST_CHECK_EQUAL(adr.get_str(), "2001:db8::/30");
 
-    BOOST_CHECK_NO_THROW(CallRPC(std::string("clearbanned")));
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("setban 2001:4d48:ac57:400:cacf:e9ff:fe1d:9c63/128 add")));
-    BOOST_CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
+    CHECK_NO_THROW(CallRPC(std::string("clearbanned")));
+    CHECK_NO_THROW(r = CallRPC(std::string("setban 2001:4d48:ac57:400:cacf:e9ff:fe1d:9c63/128 add")));
+    CHECK_NO_THROW(r = CallRPC(std::string("listbanned")));
     ar = r.get_array();
     o1 = ar[0].get_obj();
     adr = o1.find_value("address");
@@ -407,20 +407,20 @@ BOOST_AUTO_TEST_CASE(rpc_convert_values_generatetoaddress)
 {
     UniValue result;
 
-    BOOST_CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"101", "mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a"}));
+    CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"101", "mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a"}));
     BOOST_CHECK_EQUAL(result[0].getInt<int>(), 101);
     BOOST_CHECK_EQUAL(result[1].get_str(), "mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a");
 
-    BOOST_CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"101", "mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU"}));
+    CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"101", "mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU"}));
     BOOST_CHECK_EQUAL(result[0].getInt<int>(), 101);
     BOOST_CHECK_EQUAL(result[1].get_str(), "mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU");
 
-    BOOST_CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"1", "mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a", "9"}));
+    CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"1", "mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a", "9"}));
     BOOST_CHECK_EQUAL(result[0].getInt<int>(), 1);
     BOOST_CHECK_EQUAL(result[1].get_str(), "mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a");
     BOOST_CHECK_EQUAL(result[2].getInt<int>(), 9);
 
-    BOOST_CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"1", "mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU", "9"}));
+    CHECK_NO_THROW(result = RPCConvertValues("generatetoaddress", {"1", "mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU", "9"}));
     BOOST_CHECK_EQUAL(result[0].getInt<int>(), 1);
     BOOST_CHECK_EQUAL(result[1].get_str(), "mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU");
     BOOST_CHECK_EQUAL(result[2].getInt<int>(), 9);
@@ -540,18 +540,18 @@ BOOST_AUTO_TEST_CASE(check_dup_param_names)
         test_only_CheckFailuresAreExceptionsNotAborts mock_checks{};
         // Error if parameter names are duplicates, unless one parameter is
         // positional and the other is named and .also_positional is true.
-        BOOST_CHECK_THROW(make_rpc({{"p1", POSITIONAL}, {"p1", POSITIONAL}}), NonFatalCheckError);
+        CHECK_THROW(make_rpc({{"p1", POSITIONAL}, {"p1", POSITIONAL}}), NonFatalCheckError);
         make_rpc({{"p1", POSITIONAL}, {"p1", NAMED}});
-        BOOST_CHECK_THROW(make_rpc({{"p1", POSITIONAL}, {"p1", NAMED_ONLY}}), NonFatalCheckError);
+        CHECK_THROW(make_rpc({{"p1", POSITIONAL}, {"p1", NAMED_ONLY}}), NonFatalCheckError);
         make_rpc({{"p1", NAMED}, {"p1", POSITIONAL}});
-        BOOST_CHECK_THROW(make_rpc({{"p1", NAMED}, {"p1", NAMED}}), NonFatalCheckError);
-        BOOST_CHECK_THROW(make_rpc({{"p1", NAMED}, {"p1", NAMED_ONLY}}), NonFatalCheckError);
-        BOOST_CHECK_THROW(make_rpc({{"p1", NAMED_ONLY}, {"p1", POSITIONAL}}), NonFatalCheckError);
-        BOOST_CHECK_THROW(make_rpc({{"p1", NAMED_ONLY}, {"p1", NAMED}}), NonFatalCheckError);
-        BOOST_CHECK_THROW(make_rpc({{"p1", NAMED_ONLY}, {"p1", NAMED_ONLY}}), NonFatalCheckError);
+        CHECK_THROW(make_rpc({{"p1", NAMED}, {"p1", NAMED}}), NonFatalCheckError);
+        CHECK_THROW(make_rpc({{"p1", NAMED}, {"p1", NAMED_ONLY}}), NonFatalCheckError);
+        CHECK_THROW(make_rpc({{"p1", NAMED_ONLY}, {"p1", POSITIONAL}}), NonFatalCheckError);
+        CHECK_THROW(make_rpc({{"p1", NAMED_ONLY}, {"p1", NAMED}}), NonFatalCheckError);
+        CHECK_THROW(make_rpc({{"p1", NAMED_ONLY}, {"p1", NAMED_ONLY}}), NonFatalCheckError);
 
         // Make sure duplicate aliases are detected too.
-        BOOST_CHECK_THROW(make_rpc({{"p1", POSITIONAL}, {"p2|p1", NAMED_ONLY}}), NonFatalCheckError);
+        CHECK_THROW(make_rpc({{"p1", POSITIONAL}, {"p2|p1", NAMED_ONLY}}), NonFatalCheckError);
     }
 }
 
@@ -587,7 +587,7 @@ BOOST_AUTO_TEST_CASE(help_example)
     BOOST_CHECK_EQUAL(HelpExampleCliNamed("foo", {{"arg", true}}), HelpExampleCliNamed("foo", {{"arg", "true"}}));
 
     // test types matter for Rpc
-    BOOST_CHECK_NE(HelpExampleRpcNamed("foo", {{"arg", true}}), HelpExampleRpcNamed("foo", {{"arg", "true"}}));
+    CHECK_NE(HelpExampleRpcNamed("foo", {{"arg", true}}), HelpExampleRpcNamed("foo", {{"arg", "true"}}));
 }
 
 static void CheckRpc(const std::vector<RPCArg>& params, const UniValue& args, RPCMethod::RPCMethodImpl test_impl)
@@ -630,12 +630,12 @@ BOOST_AUTO_TEST_CASE(rpc_arg_helper)
             if (!request.params[5].isNull()) {
                 BOOST_CHECK_EQUAL(self.MaybeArg<double>("opt_double").value(), request.params[5].get_real());
             } else {
-                BOOST_CHECK(!self.MaybeArg<double>("opt_double"));
+                CHECK(!self.MaybeArg<double>("opt_double"));
             }
             if (!request.params[6].isNull()) {
                 BOOST_CHECK_EQUAL(self.MaybeArg<std::string_view>("opt_string"), request.params[6].get_str());
             } else {
-                BOOST_CHECK(!self.MaybeArg<std::string_view>("opt_string"));
+                CHECK(!self.MaybeArg<std::string_view>("opt_string"));
             }
             return UniValue{};
         };

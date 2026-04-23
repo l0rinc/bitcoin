@@ -137,7 +137,7 @@ BOOST_FIXTURE_TEST_CASE(logging_LogPrint, LogSetup)
         LogInstance().LogPrint({.category = category, .level = level, .should_ratelimit = false, .source_loc = std::move(loc), .message = msg});
     }
     std::vector<std::string> log_lines{ReadDebugLogLines()};
-    BOOST_CHECK_EQUAL_COLLECTIONS(log_lines.begin(), log_lines.end(), expected.begin(), expected.end());
+    CHECK_EQUAL_COLLECTIONS(log_lines.begin(), log_lines.end(), expected.begin(), expected.end());
 }
 
 BOOST_FIXTURE_TEST_CASE(logging_LogPrintMacros, LogSetup)
@@ -155,7 +155,7 @@ BOOST_FIXTURE_TEST_CASE(logging_LogPrintMacros, LogSetup)
         "[warning] foo9: bar9",
         "[error] foo10: bar10",
     };
-    BOOST_CHECK_EQUAL_COLLECTIONS(log_lines.begin(), log_lines.end(), expected.begin(), expected.end());
+    CHECK_EQUAL_COLLECTIONS(log_lines.begin(), log_lines.end(), expected.begin(), expected.end());
 }
 
 BOOST_FIXTURE_TEST_CASE(logging_LogPrintMacros_CategoryName, LogSetup)
@@ -180,7 +180,7 @@ BOOST_FIXTURE_TEST_CASE(logging_LogPrintMacros_CategoryName, LogSetup)
     }
 
     std::vector<std::string> log_lines{ReadDebugLogLines()};
-    BOOST_CHECK_EQUAL_COLLECTIONS(log_lines.begin(), log_lines.end(), expected.begin(), expected.end());
+    CHECK_EQUAL_COLLECTIONS(log_lines.begin(), log_lines.end(), expected.begin(), expected.end());
 }
 
 BOOST_FIXTURE_TEST_CASE(logging_SeverityLevels, LogSetup)
@@ -206,7 +206,7 @@ BOOST_FIXTURE_TEST_CASE(logging_SeverityLevels, LogSetup)
         "[error] err_5",
     };
     std::vector<std::string> log_lines{ReadDebugLogLines()};
-    BOOST_CHECK_EQUAL_COLLECTIONS(log_lines.begin(), log_lines.end(), expected.begin(), expected.end());
+    CHECK_EQUAL_COLLECTIONS(log_lines.begin(), log_lines.end(), expected.begin(), expected.end());
 }
 
 BOOST_FIXTURE_TEST_CASE(logging_Conf, LogSetup)
@@ -218,10 +218,10 @@ BOOST_FIXTURE_TEST_CASE(logging_Conf, LogSetup)
         args.AddArg("-loglevel", "...", ArgsManager::ALLOW_ANY, OptionsCategory::DEBUG_TEST);
         const char* argv_test[] = {"bitcoind", "-loglevel=debug"};
         std::string err;
-        BOOST_REQUIRE(args.ParseParameters(2, argv_test, err));
+        CHECK(args.ParseParameters(2, argv_test, err));
 
         auto result = init::SetLoggingLevel(args);
-        BOOST_REQUIRE(result);
+        CHECK(result);
         BOOST_CHECK_EQUAL(LogInstance().LogLevel(), BCLog::Level::Debug);
     }
 
@@ -232,15 +232,15 @@ BOOST_FIXTURE_TEST_CASE(logging_Conf, LogSetup)
         args.AddArg("-loglevel", "...", ArgsManager::ALLOW_ANY, OptionsCategory::DEBUG_TEST);
         const char* argv_test[] = {"bitcoind", "-loglevel=net:trace"};
         std::string err;
-        BOOST_REQUIRE(args.ParseParameters(2, argv_test, err));
+        CHECK(args.ParseParameters(2, argv_test, err));
 
         auto result = init::SetLoggingLevel(args);
-        BOOST_REQUIRE(result);
+        CHECK(result);
         BOOST_CHECK_EQUAL(LogInstance().LogLevel(), BCLog::DEFAULT_LOG_LEVEL);
 
         const auto& category_levels{LogInstance().CategoryLevels()};
         const auto net_it{category_levels.find(BCLog::LogFlags::NET)};
-        BOOST_REQUIRE(net_it != category_levels.end());
+        CHECK(net_it != category_levels.end());
         BOOST_CHECK_EQUAL(net_it->second, BCLog::Level::Trace);
     }
 
@@ -251,21 +251,21 @@ BOOST_FIXTURE_TEST_CASE(logging_Conf, LogSetup)
         args.AddArg("-loglevel", "...", ArgsManager::ALLOW_ANY, OptionsCategory::DEBUG_TEST);
         const char* argv_test[] = {"bitcoind", "-loglevel=debug", "-loglevel=net:trace", "-loglevel=http:info"};
         std::string err;
-        BOOST_REQUIRE(args.ParseParameters(4, argv_test, err));
+        CHECK(args.ParseParameters(4, argv_test, err));
 
         auto result = init::SetLoggingLevel(args);
-        BOOST_REQUIRE(result);
+        CHECK(result);
         BOOST_CHECK_EQUAL(LogInstance().LogLevel(), BCLog::Level::Debug);
 
         const auto& category_levels{LogInstance().CategoryLevels()};
         BOOST_CHECK_EQUAL(category_levels.size(), 2);
 
         const auto net_it{category_levels.find(BCLog::LogFlags::NET)};
-        BOOST_CHECK(net_it != category_levels.end());
+        CHECK(net_it != category_levels.end());
         BOOST_CHECK_EQUAL(net_it->second, BCLog::Level::Trace);
 
         const auto http_it{category_levels.find(BCLog::LogFlags::HTTP)};
-        BOOST_CHECK(http_it != category_levels.end());
+        CHECK(http_it != category_levels.end());
         BOOST_CHECK_EQUAL(http_it->second, BCLog::Level::Info);
     }
 }
@@ -310,30 +310,30 @@ BOOST_AUTO_TEST_CASE(logging_log_rate_limiter)
     auto source_loc_2{SourceLocation{__func__}};
 
     // A fresh limiter should not have any suppressions
-    BOOST_CHECK(!limiter.SuppressionsActive());
+    CHECK(!limiter.SuppressionsActive());
 
     // Resetting an unused limiter is fine
     limiter.Reset();
-    BOOST_CHECK(!limiter.SuppressionsActive());
+    CHECK(!limiter.SuppressionsActive());
 
     // No suppression should happen until more than max_bytes have been consumed
     BOOST_CHECK_EQUAL(limiter.Consume(source_loc_1, std::string(max_bytes - 1, 'a')), Status::UNSUPPRESSED);
     BOOST_CHECK_EQUAL(limiter.Consume(source_loc_1, "a"), Status::UNSUPPRESSED);
-    BOOST_CHECK(!limiter.SuppressionsActive());
+    CHECK(!limiter.SuppressionsActive());
     BOOST_CHECK_EQUAL(limiter.Consume(source_loc_1, "a"), Status::NEWLY_SUPPRESSED);
-    BOOST_CHECK(limiter.SuppressionsActive());
+    CHECK(limiter.SuppressionsActive());
     BOOST_CHECK_EQUAL(limiter.Consume(source_loc_1, "a"), Status::STILL_SUPPRESSED);
-    BOOST_CHECK(limiter.SuppressionsActive());
+    CHECK(limiter.SuppressionsActive());
 
     // Location 2  should not be affected by location 1's suppression
     BOOST_CHECK_EQUAL(limiter.Consume(source_loc_2, std::string(max_bytes, 'a')), Status::UNSUPPRESSED);
     BOOST_CHECK_EQUAL(limiter.Consume(source_loc_2, "a"), Status::NEWLY_SUPPRESSED);
-    BOOST_CHECK(limiter.SuppressionsActive());
+    CHECK(limiter.SuppressionsActive());
 
     // After reset_window time has passed, all suppressions should be cleared.
     scheduler.MockForwardAndSync(reset_window);
 
-    BOOST_CHECK(!limiter.SuppressionsActive());
+    CHECK(!limiter.SuppressionsActive());
     BOOST_CHECK_EQUAL(limiter.Consume(source_loc_1, std::string(max_bytes, 'a')), Status::UNSUPPRESSED);
     BOOST_CHECK_EQUAL(limiter.Consume(source_loc_2, std::string(max_bytes, 'a')), Status::UNSUPPRESSED);
 }
@@ -347,16 +347,16 @@ BOOST_AUTO_TEST_CASE(logging_log_limit_stats)
     BOOST_CHECK_EQUAL(stats.m_dropped_bytes, uint64_t{0});
 
     const uint64_t MESSAGE_SIZE{BCLog::RATELIMIT_MAX_BYTES / 2};
-    BOOST_CHECK(stats.Consume(MESSAGE_SIZE));
+    CHECK(stats.Consume(MESSAGE_SIZE));
     BOOST_CHECK_EQUAL(stats.m_available_bytes, BCLog::RATELIMIT_MAX_BYTES - MESSAGE_SIZE);
     BOOST_CHECK_EQUAL(stats.m_dropped_bytes, uint64_t{0});
 
-    BOOST_CHECK(stats.Consume(MESSAGE_SIZE));
+    CHECK(stats.Consume(MESSAGE_SIZE));
     BOOST_CHECK_EQUAL(stats.m_available_bytes, BCLog::RATELIMIT_MAX_BYTES - MESSAGE_SIZE * 2);
     BOOST_CHECK_EQUAL(stats.m_dropped_bytes, uint64_t{0});
 
     // Consuming more bytes after already having consumed RATELIMIT_MAX_BYTES should fail.
-    BOOST_CHECK(!stats.Consume(500));
+    CHECK(!stats.Consume(500));
     BOOST_CHECK_EQUAL(stats.m_available_bytes, uint64_t{0});
     BOOST_CHECK_EQUAL(stats.m_dropped_bytes, uint64_t{500});
 }
@@ -412,13 +412,13 @@ void TestLogFromLocation(Location location, const std::string& message,
 
     if (status == Status::NEWLY_SUPPRESSED) {
         BOOST_REQUIRE_EQUAL(log_lines.size(), 2);
-        BOOST_CHECK(log_lines[0].starts_with("[*] [warning] Excessive logging detected"));
+        CHECK(log_lines[0].starts_with("[*] [warning] Excessive logging detected"));
         log_lines.erase(log_lines.begin());
     }
     BOOST_REQUIRE_EQUAL(log_lines.size(), 1);
     auto& payload{log_lines.back()};
     BOOST_CHECK_EQUAL(suppressions_active, payload.starts_with("[*]"));
-    BOOST_CHECK(payload.ends_with(message));
+    CHECK(payload.ends_with(message));
 }
 
 } // namespace
@@ -450,7 +450,7 @@ BOOST_FIXTURE_TEST_CASE(logging_filesize_rate_limit, LogSetup)
     TestLogFromLocation(Location::INFO_2, "c", Status::UNSUPPRESSED, /*suppressions_active=*/true);
     {
         scheduler.MockForwardAndSync(time_window);
-        BOOST_CHECK(ReadDebugLogLines().back().starts_with("[warning] Restarting logging"));
+        CHECK(ReadDebugLogLines().back().starts_with("[warning] Restarting logging"));
     }
     // Check that logging from previously suppressed location is unsuppressed again.
     TestLogFromLocation(Location::INFO_1, log_message, Status::UNSUPPRESSED, /*suppressions_active=*/false);

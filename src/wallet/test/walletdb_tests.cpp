@@ -26,7 +26,7 @@ BOOST_AUTO_TEST_CASE(walletdb_readkeyvalue)
      */
     DataStream ssValue{};
     uint256 dummy;
-    BOOST_CHECK_THROW(ssValue >> dummy, std::ios_base::failure);
+    CHECK_THROW(ssValue >> dummy, std::ios_base::failure);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

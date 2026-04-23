@@ -27,7 +27,7 @@ BOOST_AUTO_TEST_CASE(file)
             "  { \"version\": 1, \"ban_created\": 0, \"banned_until\": 778, \"address\": \"1.0.0.0/8\" }"
             "] }",
         };
-        BOOST_REQUIRE(WriteBinaryFile(banlist_path + ".json", entries_write));
+        CHECK(WriteBinaryFile(banlist_path + ".json", entries_write));
         {
             // The invalid entries will be dropped, but the valid one remains
             ASSERT_DEBUG_LOG("Dropping entry with unparseable address or subnet (aaaaaaaaa) from ban list");

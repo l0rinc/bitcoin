@@ -23,10 +23,10 @@ uint64_t TestDouble(double f) {
     double f2 = DecodeDouble(i);
     if (std::isnan(f)) {
         // NaN is not guaranteed to round-trip exactly.
-        BOOST_CHECK(std::isnan(f2));
+        CHECK(std::isnan(f2));
     } else {
         // Everything else is.
-        BOOST_CHECK(!std::isnan(f2));
+        CHECK(!std::isnan(f2));
         uint64_t i2 = EncodeDouble(f2);
         BOOST_CHECK_EQUAL(f, f2);
         BOOST_CHECK_EQUAL(i, i2);
@@ -139,14 +139,14 @@ BOOST_AUTO_TEST_CASE(doubles)
     for (int i = 0; i < 1000; i++) {
         ss << EncodeDouble(i);
     }
-    BOOST_CHECK(Hash(ss) == uint256{"43d0c82591953c4eafe114590d392676a01585d25b25d433557f0d7878b23f96"});
+    CHECK(Hash(ss) == uint256{"43d0c82591953c4eafe114590d392676a01585d25b25d433557f0d7878b23f96"});
 
     // decode
     for (int i = 0; i < 1000; i++) {
         uint64_t val;
         ss >> val;
         double j = DecodeDouble(val);
-        BOOST_CHECK_MESSAGE(i == j, "decoded:" << j << " expected:" << i);
+        CHECK_MESSAGE(i == j, "decoded:" << j << " expected:" << i);
     }
 }
 

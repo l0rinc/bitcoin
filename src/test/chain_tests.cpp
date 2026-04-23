@@ -71,9 +71,9 @@ BOOST_AUTO_TEST_CASE(basic_tests)
     BOOST_CHECK_EQUAL(chain_2[2], nullptr);
 
     // Contains: call with contained & non-contained blocks
-    BOOST_CHECK(chain_2.Contains(genesis));
-    BOOST_CHECK(chain_2.Contains(bi1));
-    BOOST_CHECK(!chain_0.Contains(genesis));
+    CHECK(chain_2.Contains(genesis));
+    CHECK(chain_2.Contains(bi1));
+    CHECK(!chain_0.Contains(genesis));
 
     // Call with non-tip & tip blocks
     BOOST_CHECK_EQUAL(chain_2.Next(genesis), &bi1);
@@ -171,14 +171,14 @@ BOOST_AUTO_TEST_CASE(chain_test)
             const CBlockIndex* block = block_index[ctx.randrange(block_index.size())].get();
             unsigned height = ctx.randrange<unsigned>(block->nHeight + 1);
             const CBlockIndex* result = block->GetAncestor(height);
-            BOOST_CHECK(result == NaiveGetAncestor(block, height));
+            CHECK(result == NaiveGetAncestor(block, height));
         }
         // Run 10000 random LastCommonAncestor queries.
         for (int q = 0; q < 10000; ++q) {
             const CBlockIndex* block1 = block_index[ctx.randrange(block_index.size())].get();
             const CBlockIndex* block2 = block_index[ctx.randrange(block_index.size())].get();
             const CBlockIndex* result = LastCommonAncestor(block1, block2);
-            BOOST_CHECK(result == NaiveLastCommonAncestor(block1, block2));
+            CHECK(result == NaiveLastCommonAncestor(block1, block2));
         }
     }
 }

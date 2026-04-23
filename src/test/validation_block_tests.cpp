@@ -107,7 +107,7 @@ std::shared_ptr<CBlock> MinerTestingSetup::FinalizeBlock(std::shared_ptr<CBlock>
     // submit block header, so that miner can get the block height from the
     // global state and the node has the topology of the chain
     BlockValidationState ignored;
-    BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlockHeaders({{*pblock}}, true, ignored));
+    CHECK(Assert(m_node.chainman)->ProcessNewBlockHeaders({{*pblock}}, true, ignored));
 
     return pblock;
 }
@@ -165,7 +165,7 @@ BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering)
 
     bool ignored;
     // Connect the genesis block and drain any outstanding events
-    BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlock(std::make_shared<CBlock>(Params().GenesisBlock()), true, true, &ignored));
+    CHECK(Assert(m_node.chainman)->ProcessNewBlock(std::make_shared<CBlock>(Params().GenesisBlock()), true, true, &ignored));
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
 
     // subscribe to events (this subscriber will validate event ordering)
@@ -237,9 +237,9 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
     };
 
     // Process all mined blocks
-    BOOST_REQUIRE(ProcessBlock(std::make_shared<CBlock>(Params().GenesisBlock())));
+    CHECK(ProcessBlock(std::make_shared<CBlock>(Params().GenesisBlock())));
     auto last_mined = GoodBlock(Params().GenesisBlock().GetHash());
-    BOOST_REQUIRE(ProcessBlock(last_mined));
+    CHECK(ProcessBlock(last_mined));
 
     // Run the test multiple times
     for (int test_runs = 3; test_runs > 0; --test_runs) {
@@ -260,13 +260,13 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
             txs.push_back(MakeTransactionRef(mtx));
 
             last_mined = GoodBlock(last_mined->GetHash());
-            BOOST_REQUIRE(ProcessBlock(last_mined));
+            CHECK(ProcessBlock(last_mined));
         }
 
         // Mature the inputs of the txs
         for (int j = COINBASE_MATURITY; j > 0; --j) {
             last_mined = GoodBlock(last_mined->GetHash());
-            BOOST_REQUIRE(ProcessBlock(last_mined));
+            CHECK(ProcessBlock(last_mined));
         }
 
         // Mine a reorg (and hold it back) before adding the txs to the mempool
@@ -285,7 +285,7 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
             LOCK(cs_main);
             for (const auto& tx : txs) {
                 const MempoolAcceptResult result = m_node.chainman->ProcessTransaction(tx);
-                BOOST_REQUIRE(result.m_result_type == MempoolAcceptResult::ResultType::VALID);
+                CHECK(result.m_result_type == MempoolAcceptResult::ResultType::VALID);
             }
         }
 

@@ -51,7 +51,7 @@ void TestDepGraphSerialization(const std::vector<std::pair<FeeFrac, SetType>>& c
     SpanReader reader(encoding);
     DepGraph<SetType> depgraph_read;
     reader >> Using<DepGraphFormatter>(depgraph_read);
-    BOOST_CHECK(depgraph == depgraph_read);
+    CHECK(depgraph == depgraph_read);
 }
 
 void TestOptimalLinearization(std::span<const uint8_t> enc, std::initializer_list<DepGraphIndex> optimal_linearization)
@@ -95,10 +95,10 @@ void TestOptimalLinearization(std::span<const uint8_t> enc, std::initializer_lis
                 /*fallback_order=*/IndexTxOrder{},
                 /*old_linearization=*/lin,
                 /*is_topological=*/is_topological);
-            BOOST_CHECK(opt);
-            BOOST_CHECK(cost <= MaxOptimalLinearizationCost(depgraph.TxCount()));
+            CHECK(opt);
+            CHECK(cost <= MaxOptimalLinearizationCost(depgraph.TxCount()));
             SanityCheck(depgraph, lin);
-            BOOST_CHECK(std::ranges::equal(lin, optimal_linearization));
+            CHECK(std::ranges::equal(lin, optimal_linearization));
         }
         tx_count = depgraph.PositionRange();
     };

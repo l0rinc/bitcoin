@@ -31,7 +31,7 @@ static bool SocketIsClosed(const SOCKET& s)
 static SOCKET CreateSocket()
 {
     const SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    BOOST_REQUIRE(s != static_cast<SOCKET>(SOCKET_ERROR));
+    CHECK(s != static_cast<SOCKET>(SOCKET_ERROR));
     return s;
 }
 
@@ -39,10 +39,10 @@ BOOST_AUTO_TEST_CASE(constructor_and_destructor)
 {
     const SOCKET s = CreateSocket();
     Sock* sock = new Sock(s);
-    BOOST_CHECK(*sock == s);
-    BOOST_CHECK(!SocketIsClosed(s));
+    CHECK(*sock == s);
+    CHECK(!SocketIsClosed(s));
     delete sock;
-    BOOST_CHECK(SocketIsClosed(s));
+    CHECK(SocketIsClosed(s));
 }
 
 BOOST_AUTO_TEST_CASE(move_constructor)
@@ -51,10 +51,10 @@ BOOST_AUTO_TEST_CASE(move_constructor)
     Sock* sock1 = new Sock(s);
     Sock* sock2 = new Sock(std::move(*sock1));
     delete sock1;
-    BOOST_CHECK(!SocketIsClosed(s));
-    BOOST_CHECK(*sock2 == s);
+    CHECK(!SocketIsClosed(s));
+    CHECK(*sock2 == s);
     delete sock2;
-    BOOST_CHECK(SocketIsClosed(s));
+    CHECK(SocketIsClosed(s));
 }
 
 BOOST_AUTO_TEST_CASE(move_assignment)
@@ -64,22 +64,22 @@ BOOST_AUTO_TEST_CASE(move_assignment)
     Sock* sock1 = new Sock(s1);
     Sock* sock2 = new Sock(s2);
 
-    BOOST_CHECK(!SocketIsClosed(s1));
-    BOOST_CHECK(!SocketIsClosed(s2));
+    CHECK(!SocketIsClosed(s1));
+    CHECK(!SocketIsClosed(s2));
 
     *sock2 = std::move(*sock1);
-    BOOST_CHECK(!SocketIsClosed(s1));
-    BOOST_CHECK(SocketIsClosed(s2));
-    BOOST_CHECK(*sock2 == s1);
+    CHECK(!SocketIsClosed(s1));
+    CHECK(SocketIsClosed(s2));
+    CHECK(*sock2 == s1);
 
     delete sock1;
-    BOOST_CHECK(!SocketIsClosed(s1));
-    BOOST_CHECK(SocketIsClosed(s2));
-    BOOST_CHECK(*sock2 == s1);
+    CHECK(!SocketIsClosed(s1));
+    CHECK(SocketIsClosed(s2));
+    CHECK(*sock2 == s1);
 
     delete sock2;
-    BOOST_CHECK(SocketIsClosed(s1));
-    BOOST_CHECK(SocketIsClosed(s2));
+    CHECK(SocketIsClosed(s1));
+    CHECK(SocketIsClosed(s2));
 }
 
 struct TcpSocketPair {
@@ -117,7 +117,7 @@ struct TcpSocketPair {
         BOOST_REQUIRE_EQUAL(sender.Connect(reinterpret_cast<sockaddr*>(&bound), sizeof(bound)), 0);
 
         std::unique_ptr<Sock> accepted = receiver.Accept(nullptr, nullptr);
-        BOOST_REQUIRE(accepted != nullptr);
+        CHECK(accepted != nullptr);
 
         receiver = std::move(*accepted);
     }
@@ -165,7 +165,7 @@ BOOST_AUTO_TEST_CASE(recv_until_terminator_limit)
     std::thread receiver([&socks, &timeout, &interrupt]() {
         constexpr size_t max_data{10};
         bool threw_as_expected{false};
-        // BOOST_CHECK_EXCEPTION() writes to some variables shared with the main thread which
+        // CHECK_EXCEPTION() writes to some variables shared with the main thread which
         // creates a data race. So mimic it manually.
         try {
             (void)socks.receiver.RecvUntilTerminator('\n', timeout, interrupt, max_data);
@@ -175,8 +175,8 @@ BOOST_AUTO_TEST_CASE(recv_until_terminator_limit)
         CHECK(threw_as_expected);
     });
 
-    BOOST_REQUIRE_NO_THROW(socks.sender.SendComplete("1234567", timeout, interrupt));
-    BOOST_REQUIRE_NO_THROW(socks.sender.SendComplete("89a\n", timeout, interrupt));
+    CHECK_NO_THROW(socks.sender.SendComplete("1234567", timeout, interrupt));
+    CHECK_NO_THROW(socks.sender.SendComplete("89a\n", timeout, interrupt));
 
     receiver.join();
 }

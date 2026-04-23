@@ -4,6 +4,7 @@
 
 #include <util/strencodings.h>
 
+#include <test/util/check.h>
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
@@ -25,16 +26,16 @@ BOOST_AUTO_TEST_CASE(base32_testvectors)
         strEnc = EncodeBase32(vstrIn[i], false);
         BOOST_CHECK_EQUAL(strEnc, vstrOutNoPadding[i]);
         auto dec = DecodeBase32(vstrOut[i]);
-        BOOST_REQUIRE(dec);
-        BOOST_CHECK_MESSAGE(std::ranges::equal(*dec, vstrIn[i]), vstrOut[i]);
+        CHECK(dec);
+        CHECK_MESSAGE(std::ranges::equal(*dec, vstrIn[i]), vstrOut[i]);
     }
 
-    BOOST_CHECK(!DecodeBase32("AWSX3VPPinvalid")); // invalid size
-    BOOST_CHECK( DecodeBase32("AWSX3VPP")); // valid
+    CHECK(!DecodeBase32("AWSX3VPPinvalid")); // invalid size
+    CHECK( DecodeBase32("AWSX3VPP")); // valid
 
     // Decoding strings with embedded NUL characters should fail
-    BOOST_CHECK(!DecodeBase32("invalid\0"sv)); // correct size, invalid due to \0
-    BOOST_CHECK(!DecodeBase32("AWSX3VPP\0invalid"sv)); // correct size, invalid due to \0
+    CHECK(!DecodeBase32("invalid\0"sv)); // correct size, invalid due to \0
+    CHECK(!DecodeBase32("AWSX3VPP\0invalid"sv)); // correct size, invalid due to \0
 }
 
 BOOST_AUTO_TEST_CASE(base32_padding)
@@ -43,14 +44,14 @@ BOOST_AUTO_TEST_CASE(base32_padding)
     BOOST_CHECK_EQUAL(EncodeBase32("fooba"), "mzxw6ytb");
 
     // Valid size
-    BOOST_CHECK(!DecodeBase32("========"));
-    BOOST_CHECK(!DecodeBase32("a======="));
-    BOOST_CHECK( DecodeBase32("aa======"));
-    BOOST_CHECK(!DecodeBase32("aaa====="));
-    BOOST_CHECK( DecodeBase32("aaaa===="));
-    BOOST_CHECK( DecodeBase32("aaaaa==="));
-    BOOST_CHECK(!DecodeBase32("aaaaaa=="));
-    BOOST_CHECK( DecodeBase32("aaaaaaa="));
+    CHECK(!DecodeBase32("========"));
+    CHECK(!DecodeBase32("a======="));
+    CHECK( DecodeBase32("aa======"));
+    CHECK(!DecodeBase32("aaa====="));
+    CHECK( DecodeBase32("aaaa===="));
+    CHECK( DecodeBase32("aaaaa==="));
+    CHECK(!DecodeBase32("aaaaaa=="));
+    CHECK( DecodeBase32("aaaaaaa="));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

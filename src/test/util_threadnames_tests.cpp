@@ -11,6 +11,7 @@
 #include <thread>
 #include <vector>
 
+#include <test/util/check.h>
 #include <boost/test/unit_test.hpp>
 
 using util::ToString;
@@ -58,7 +59,7 @@ BOOST_AUTO_TEST_CASE(util_threadnames_test_rename_threaded)
 
     // Names "test_thread.[n]" should exist for n = [0, 99]
     for (int i = 0; i < 100; ++i) {
-        BOOST_CHECK(names.contains(TEST_THREAD_NAME_BASE + ToString(i)));
+        CHECK(names.contains(TEST_THREAD_NAME_BASE + ToString(i)));
     }
 
 }

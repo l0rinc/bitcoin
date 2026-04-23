@@ -27,11 +27,11 @@ static void TestPassphraseSingle(const std::span<const unsigned char> salt, cons
     crypt.SetKeyFromPassphrase(passphrase, salt, rounds, 0);
 
     if (!correct_key.empty()) {
-        BOOST_CHECK_MESSAGE(memcmp(crypt.vchKey.data(), correct_key.data(), crypt.vchKey.size()) == 0,
+        CHECK_MESSAGE(memcmp(crypt.vchKey.data(), correct_key.data(), crypt.vchKey.size()) == 0,
             HexStr(crypt.vchKey) + std::string(" != ") + HexStr(correct_key));
     }
     if (!correct_iv.empty()) {
-        BOOST_CHECK_MESSAGE(memcmp(crypt.vchIV.data(), correct_iv.data(), crypt.vchIV.size()) == 0,
+        CHECK_MESSAGE(memcmp(crypt.vchIV.data(), correct_iv.data(), crypt.vchIV.size()) == 0,
             HexStr(crypt.vchIV) + std::string(" != ") + HexStr(correct_iv));
     }
 }
@@ -52,7 +52,7 @@ static void TestDecrypt(const CCrypter& crypt, const std::span<const unsigned ch
     CKeyingMaterial decrypted;
     crypt.Decrypt(ciphertext, decrypted);
     if (!correct_plaintext.empty()) {
-        BOOST_CHECK_EQUAL_COLLECTIONS(decrypted.begin(), decrypted.end(), correct_plaintext.begin(), correct_plaintext.end());
+        CHECK_EQUAL_COLLECTIONS(decrypted.begin(), decrypted.end(), correct_plaintext.begin(), correct_plaintext.end());
     }
 }
 
@@ -63,7 +63,7 @@ static void TestEncryptSingle(const CCrypter& crypt, const CKeyingMaterial& plai
     crypt.Encrypt(plaintext, ciphertext);
 
     if (!correct_ciphertext.empty()) {
-        BOOST_CHECK_EQUAL_COLLECTIONS(ciphertext.begin(), ciphertext.end(), correct_ciphertext.begin(), correct_ciphertext.end());
+        CHECK_EQUAL_COLLECTIONS(ciphertext.begin(), ciphertext.end(), correct_ciphertext.begin(), correct_ciphertext.end());
     }
 
     TestDecrypt(crypt, ciphertext, /*correct_plaintext=*/plaintext);

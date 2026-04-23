@@ -223,7 +223,7 @@ BOOST_FIXTURE_TEST_CASE(handle_missing_inputs, TestChain100Setup)
         if (parent_recent_conf) txdownload_impl.RecentConfirmedTransactionsFilter().insert(single_parent->GetHash().ToUint256());
         if (parent_in_mempool) {
             const auto mempool_result = WITH_LOCK(::cs_main, return m_node.chainman->ProcessTransaction(single_parent));
-            BOOST_CHECK(mempool_result.m_result_type == MempoolAcceptResult::ResultType::VALID);
+            CHECK(mempool_result.m_result_type == MempoolAcceptResult::ResultType::VALID);
             coinbase_idx += 1;
             assert(coinbase_idx < m_coinbase_txns.size());
         }
@@ -235,12 +235,12 @@ BOOST_FIXTURE_TEST_CASE(handle_missing_inputs, TestChain100Setup)
         const unsigned int expected_parents = parent_recent_rej || parent_recent_conf || parent_in_mempool ? 0 : 1;
         // If we don't expect to keep the orphan then expected_parents is 0.
         // !expect_keep_orphan => (expected_parents == 0)
-        BOOST_CHECK(expect_keep_orphan || expected_parents == 0);
+        CHECK(expect_keep_orphan || expected_parents == 0);
         const auto ret_1p1c = txdownload_impl.MempoolRejectedTx(orphan, state_orphan, nodeid, /*first_time_failure=*/true);
         std::string err_msg;
         const bool ok = CheckOrphanBehavior(txdownload_impl, orphan, ret_1p1c, err_msg,
                                             /*expect_orphan=*/expect_keep_orphan, /*expect_keep=*/true, /*expected_parents=*/expected_parents);
-        BOOST_CHECK_MESSAGE(ok, err_msg);
+        CHECK_MESSAGE(ok, err_msg);
     }
 
     // Orphan with multiple parents
@@ -271,7 +271,7 @@ BOOST_FIXTURE_TEST_CASE(handle_missing_inputs, TestChain100Setup)
             std::string err_msg;
             const bool ok = CheckOrphanBehavior(txdownload_impl, orphan, ret_1p1c_parent_reconsiderable, err_msg,
                                                 /*expect_orphan=*/true, /*expect_keep=*/true, /*expected_parents=*/num_parents);
-            BOOST_CHECK_MESSAGE(ok, err_msg);
+            CHECK_MESSAGE(ok, err_msg);
         }
 
         // 1 parent in RecentRejectsReconsiderableFilter, the rest are confirmed
@@ -289,7 +289,7 @@ BOOST_FIXTURE_TEST_CASE(handle_missing_inputs, TestChain100Setup)
             std::string err_msg;
             const bool ok = CheckOrphanBehavior(txdownload_impl, orphan, ret_1recon_conf, err_msg,
                                                 /*expect_orphan=*/true, /*expect_keep=*/true, /*expected_parents=*/expected_parents);
-            BOOST_CHECK_MESSAGE(ok, err_msg);
+            CHECK_MESSAGE(ok, err_msg);
         }
 
         // 1 parent in RecentRejectsReconsiderableFilter, 1 other in {RecentRejectsReconsiderableFilter, RecentRejectsFilter}
@@ -311,7 +311,7 @@ BOOST_FIXTURE_TEST_CASE(handle_missing_inputs, TestChain100Setup)
             std::string err_msg;
             const bool ok = CheckOrphanBehavior(txdownload_impl, orphan, ret_2_problems, err_msg,
                                                 /*expect_orphan=*/false, /*expect_keep=*/true, /*expected_parents=*/0);
-            BOOST_CHECK_MESSAGE(ok, err_msg);
+            CHECK_MESSAGE(ok, err_msg);
         }
     }
 
@@ -334,7 +334,7 @@ BOOST_FIXTURE_TEST_CASE(handle_missing_inputs, TestChain100Setup)
             std::string err_msg;
             const bool ok = CheckOrphanBehavior(txdownload_impl, orphan, ret_1p1c_2reconsiderable, err_msg,
                                                 /*expect_orphan=*/true, /*expect_keep=*/true, /*expected_parents=*/1);
-            BOOST_CHECK_MESSAGE(ok, err_msg);
+            CHECK_MESSAGE(ok, err_msg);
         }
     }
 }

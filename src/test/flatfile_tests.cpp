@@ -52,7 +52,7 @@ BOOST_AUTO_TEST_CASE(flatfile_open)
     // Attempt to append to file opened in read-only mode.
     {
         AutoFile file{seq.Open(FlatFilePos(0, pos2), true)};
-        BOOST_CHECK_THROW(file << LIMITED_STRING(line2, 256), std::ios_base::failure);
+        CHECK_THROW(file << LIMITED_STRING(line2, 256), std::ios_base::failure);
     }
 
     // Append second line to file.
@@ -88,7 +88,7 @@ BOOST_AUTO_TEST_CASE(flatfile_open)
     {
         std::string text;
         AutoFile file{seq.Open(FlatFilePos(1, pos2))};
-        BOOST_CHECK_THROW(file >> LIMITED_STRING(text, 256), std::ios_base::failure);
+        CHECK_THROW(file >> LIMITED_STRING(text, 256), std::ios_base::failure);
         BOOST_REQUIRE_EQUAL(file.fclose(), 0);
     }
 }
@@ -102,15 +102,15 @@ BOOST_AUTO_TEST_CASE(flatfile_allocate)
 
     BOOST_CHECK_EQUAL(seq.Allocate(FlatFilePos(0, 0), 1, out_of_space), 100U);
     BOOST_CHECK_EQUAL(fs::file_size(seq.FileName(FlatFilePos(0, 0))), 100U);
-    BOOST_CHECK(!out_of_space);
+    CHECK(!out_of_space);
 
     BOOST_CHECK_EQUAL(seq.Allocate(FlatFilePos(0, 99), 1, out_of_space), 0U);
     BOOST_CHECK_EQUAL(fs::file_size(seq.FileName(FlatFilePos(0, 99))), 100U);
-    BOOST_CHECK(!out_of_space);
+    CHECK(!out_of_space);
 
     BOOST_CHECK_EQUAL(seq.Allocate(FlatFilePos(0, 99), 2, out_of_space), 101U);
     BOOST_CHECK_EQUAL(fs::file_size(seq.FileName(FlatFilePos(0, 99))), 200U);
-    BOOST_CHECK(!out_of_space);
+    CHECK(!out_of_space);
 }
 
 BOOST_AUTO_TEST_CASE(flatfile_flush)

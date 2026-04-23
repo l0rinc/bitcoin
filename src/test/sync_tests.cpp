@@ -17,7 +17,7 @@ void TestPotentialDeadLockDetected(MutexType& mutex1, MutexType& mutex2)
     {
         LOCK2(mutex1, mutex2);
     }
-    BOOST_CHECK(LockStackEmpty());
+    CHECK(LockStackEmpty());
     bool error_thrown = false;
     try {
         LOCK2(mutex2, mutex1);
@@ -25,11 +25,11 @@ void TestPotentialDeadLockDetected(MutexType& mutex1, MutexType& mutex2)
         BOOST_CHECK_EQUAL(e.what(), "potential deadlock detected: mutex1 -> mutex2 -> mutex1");
         error_thrown = true;
     }
-    BOOST_CHECK(LockStackEmpty());
+    CHECK(LockStackEmpty());
     #ifdef DEBUG_LOCKORDER
-    BOOST_CHECK(error_thrown);
+    CHECK(error_thrown);
     #else
-    BOOST_CHECK(!error_thrown);
+    CHECK(!error_thrown);
     #endif
 }
 
@@ -50,13 +50,13 @@ void TestDoubleLock(bool should_throw)
     {
         LOCK(m);
         if (should_throw) {
-            BOOST_CHECK_EXCEPTION(TestDoubleLock2(m), std::logic_error,
+            CHECK_EXCEPTION(TestDoubleLock2(m), std::logic_error,
                               HasReason("double lock detected"));
         } else {
-            BOOST_CHECK_NO_THROW(TestDoubleLock2(m));
+            CHECK_NO_THROW(TestDoubleLock2(m));
         }
     }
-    BOOST_CHECK(LockStackEmpty());
+    CHECK(LockStackEmpty());
 
     g_debug_lockorder_abort = prev;
 }
@@ -69,10 +69,10 @@ void TestInconsistentLockOrderDetected(MutexType& mutex1, MutexType& mutex2)
         WAIT_LOCK(mutex1, lock1);
         LOCK(mutex2);
 #ifdef DEBUG_LOCKORDER
-        BOOST_CHECK_EXCEPTION(REVERSE_LOCK(lock1, mutex1), std::logic_error, HasReason("mutex1 was not most recent critical section locked"));
+        CHECK_EXCEPTION(([&] { REVERSE_LOCK(lock1, mutex1); }()), std::logic_error, HasReason("mutex1 was not most recent critical section locked"));
 #endif // DEBUG_LOCKORDER
     }
-    BOOST_CHECK(LockStackEmpty());
+    CHECK(LockStackEmpty());
 }
 } // namespace
 

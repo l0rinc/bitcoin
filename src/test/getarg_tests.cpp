@@ -38,7 +38,7 @@ void ResetArgs(ArgsManager& local_args, const std::string& strArg)
         vecChar.push_back(s.c_str());
 
     std::string error;
-    BOOST_CHECK(local_args.ParseParameters(vecChar.size(), vecChar.data(), error));
+    CHECK(local_args.ParseParameters(vecChar.size(), vecChar.data(), error));
 }
 
 void SetupArgs(ArgsManager& local_args, const std::vector<std::pair<std::string, unsigned int>>& args)
@@ -105,22 +105,22 @@ BOOST_AUTO_TEST_CASE(setting_args)
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "99");
     BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "99");
     BOOST_CHECK_EQUAL(args.GetIntArg("foo", 100), 99);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
+    CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
+    CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
 
     set_foo(3.25);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "3.25");
     BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "3.25");
-    BOOST_CHECK_THROW(args.GetIntArg("foo", 100), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
+    CHECK_THROW(args.GetIntArg("foo", 100), std::runtime_error);
+    CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
+    CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
 
     set_foo(0);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "0");
     BOOST_CHECK_EQUAL(args.GetArg("foo", "default"), "0");
     BOOST_CHECK_EQUAL(args.GetIntArg("foo", 100), 0);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
+    CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
+    CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
 
     set_foo(true);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "true");
@@ -138,17 +138,17 @@ BOOST_AUTO_TEST_CASE(setting_args)
 
     set_foo(UniValue::VOBJ);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "{}");
-    BOOST_CHECK_THROW(args.GetArg("foo", "default"), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetIntArg("foo", 100), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
+    CHECK_THROW(args.GetArg("foo", "default"), std::runtime_error);
+    CHECK_THROW(args.GetIntArg("foo", 100), std::runtime_error);
+    CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
+    CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
 
     set_foo(UniValue::VARR);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "[]");
-    BOOST_CHECK_THROW(args.GetArg("foo", "default"), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetIntArg("foo", 100), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
-    BOOST_CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
+    CHECK_THROW(args.GetArg("foo", "default"), std::runtime_error);
+    CHECK_THROW(args.GetIntArg("foo", 100), std::runtime_error);
+    CHECK_THROW(args.GetBoolArg("foo", true), std::runtime_error);
+    CHECK_THROW(args.GetBoolArg("foo", false), std::runtime_error);
 
     set_foo(UniValue::VNULL);
     BOOST_CHECK_EQUAL(args.GetSetting("foo").write(), "null");
@@ -165,52 +165,52 @@ BOOST_AUTO_TEST_CASE(boolarg)
     const auto foo = std::make_pair("-foo", ArgsManager::ALLOW_ANY);
     SetupArgs(local_args, {foo});
     ResetArgs(local_args, "-foo");
-    BOOST_CHECK(local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(local_args.GetBoolArg("-foo", true));
+    CHECK(local_args.GetBoolArg("-foo", false));
+    CHECK(local_args.GetBoolArg("-foo", true));
 
-    BOOST_CHECK(!local_args.GetBoolArg("-fo", false));
-    BOOST_CHECK(local_args.GetBoolArg("-fo", true));
+    CHECK(!local_args.GetBoolArg("-fo", false));
+    CHECK(local_args.GetBoolArg("-fo", true));
 
-    BOOST_CHECK(!local_args.GetBoolArg("-fooo", false));
-    BOOST_CHECK(local_args.GetBoolArg("-fooo", true));
+    CHECK(!local_args.GetBoolArg("-fooo", false));
+    CHECK(local_args.GetBoolArg("-fooo", true));
 
     ResetArgs(local_args, "-foo=0");
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", true));
+    CHECK(!local_args.GetBoolArg("-foo", false));
+    CHECK(!local_args.GetBoolArg("-foo", true));
 
     ResetArgs(local_args, "-foo=1");
-    BOOST_CHECK(local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(local_args.GetBoolArg("-foo", true));
+    CHECK(local_args.GetBoolArg("-foo", false));
+    CHECK(local_args.GetBoolArg("-foo", true));
 
     // New 0.6 feature: auto-map -nosomething to !-something:
     ResetArgs(local_args, "-nofoo");
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", true));
+    CHECK(!local_args.GetBoolArg("-foo", false));
+    CHECK(!local_args.GetBoolArg("-foo", true));
 
     ResetArgs(local_args, "-nofoo=1");
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", true));
+    CHECK(!local_args.GetBoolArg("-foo", false));
+    CHECK(!local_args.GetBoolArg("-foo", true));
 
     ResetArgs(local_args, "-foo -nofoo"); // -nofoo should win
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", true));
+    CHECK(!local_args.GetBoolArg("-foo", false));
+    CHECK(!local_args.GetBoolArg("-foo", true));
 
     ResetArgs(local_args, "-foo=1 -nofoo=1"); // -nofoo should win
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", true));
+    CHECK(!local_args.GetBoolArg("-foo", false));
+    CHECK(!local_args.GetBoolArg("-foo", true));
 
     ResetArgs(local_args, "-foo=0 -nofoo=0"); // -nofoo=0 should win
-    BOOST_CHECK(local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(local_args.GetBoolArg("-foo", true));
+    CHECK(local_args.GetBoolArg("-foo", false));
+    CHECK(local_args.GetBoolArg("-foo", true));
 
     // New 0.6 feature: treat -- same as -:
     ResetArgs(local_args, "--foo=1");
-    BOOST_CHECK(local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(local_args.GetBoolArg("-foo", true));
+    CHECK(local_args.GetBoolArg("-foo", false));
+    CHECK(local_args.GetBoolArg("-foo", true));
 
     ResetArgs(local_args, "--nofoo=1");
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", false));
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", true));
+    CHECK(!local_args.GetBoolArg("-foo", false));
+    CHECK(!local_args.GetBoolArg("-foo", true));
 }
 
 BOOST_AUTO_TEST_CASE(stringarg)
@@ -250,8 +250,8 @@ BOOST_AUTO_TEST_CASE(intarg)
     SetupArgs(local_args, {foo, bar});
 
     ResetArgs(local_args, "");
-    BOOST_CHECK(!local_args.GetArg<int64_t>("-foo").has_value());
-    BOOST_CHECK(!local_args.GetArg<uint8_t>("-bar").has_value());
+    CHECK(!local_args.GetArg<int64_t>("-foo").has_value());
+    CHECK(!local_args.GetArg<uint8_t>("-bar").has_value());
     BOOST_CHECK_EQUAL(local_args.GetIntArg("-foo", 11), 11);
     BOOST_CHECK_EQUAL(local_args.GetIntArg("-foo", 0), 0);
     BOOST_CHECK_EQUAL(local_args.GetArg("-bar", uint8_t{222}), 222);
@@ -420,24 +420,24 @@ BOOST_AUTO_TEST_CASE(boolargno)
     const auto bar = std::make_pair("-bar", ArgsManager::ALLOW_ANY);
     SetupArgs(local_args, {foo, bar});
     ResetArgs(local_args, "-nofoo");
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", true));
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", false));
+    CHECK(!local_args.GetBoolArg("-foo", true));
+    CHECK(!local_args.GetBoolArg("-foo", false));
 
     ResetArgs(local_args, "-nofoo=1");
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", true));
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", false));
+    CHECK(!local_args.GetBoolArg("-foo", true));
+    CHECK(!local_args.GetBoolArg("-foo", false));
 
     ResetArgs(local_args, "-nofoo=0");
-    BOOST_CHECK(local_args.GetBoolArg("-foo", true));
-    BOOST_CHECK(local_args.GetBoolArg("-foo", false));
+    CHECK(local_args.GetBoolArg("-foo", true));
+    CHECK(local_args.GetBoolArg("-foo", false));
 
     ResetArgs(local_args, "-foo --nofoo"); // --nofoo should win
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", true));
-    BOOST_CHECK(!local_args.GetBoolArg("-foo", false));
+    CHECK(!local_args.GetBoolArg("-foo", true));
+    CHECK(!local_args.GetBoolArg("-foo", false));
 
     ResetArgs(local_args, "-nofoo -foo"); // foo always wins:
-    BOOST_CHECK(local_args.GetBoolArg("-foo", true));
-    BOOST_CHECK(local_args.GetBoolArg("-foo", false));
+    CHECK(local_args.GetBoolArg("-foo", true));
+    CHECK(local_args.GetBoolArg("-foo", false));
 }
 
 BOOST_AUTO_TEST_CASE(logargs)
@@ -463,11 +463,11 @@ BOOST_AUTO_TEST_CASE(logargs)
 
     LogInstance().DeleteCallback(print_connection);
     // Check that what should appear does, and what shouldn't doesn't.
-    BOOST_CHECK(str.find("Command-line arg: okaylog-bool=\"\"") != std::string::npos);
-    BOOST_CHECK(str.find("Command-line arg: okaylog-negbool=false") != std::string::npos);
-    BOOST_CHECK(str.find("Command-line arg: okaylog=\"public\"") != std::string::npos);
-    BOOST_CHECK(str.find("dontlog=****") != std::string::npos);
-    BOOST_CHECK(str.find("private42") == std::string::npos);
+    CHECK(str.find("Command-line arg: okaylog-bool=\"\"") != std::string::npos);
+    CHECK(str.find("Command-line arg: okaylog-negbool=false") != std::string::npos);
+    CHECK(str.find("Command-line arg: okaylog=\"public\"") != std::string::npos);
+    CHECK(str.find("dontlog=****") != std::string::npos);
+    CHECK(str.find("private42") == std::string::npos);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -21,7 +21,7 @@ BOOST_AUTO_TEST_CASE(fsbridge_pathtostring)
     BOOST_CHECK_EQUAL(fs::PathToString(fs::PathFromString(u8_str)), u8_str);
     BOOST_CHECK_EQUAL(fs::u8path(u8_str).utf8string(), u8_str);
     BOOST_CHECK_EQUAL(fs::path(str8).utf8string(), u8_str);
-    BOOST_CHECK(fs::path(str8).u8string() == str8);
+    CHECK(fs::path(str8).u8string() == str8);
     BOOST_CHECK_EQUAL(fs::PathFromString(u8_str).utf8string(), u8_str);
     BOOST_CHECK_EQUAL(fs::PathToString(fs::u8path(u8_str)), u8_str);
 #ifndef WIN32
@@ -89,13 +89,13 @@ BOOST_AUTO_TEST_CASE(fsbridge_fstream)
     {
         // Join an absolute path and a relative path.
         fs::path p = fsbridge::AbsPathJoin(tmpfolder, fs::u8path("fs_tests_₿_🏃"));
-        BOOST_CHECK(p.is_absolute());
+        CHECK(p.is_absolute());
         BOOST_CHECK_EQUAL(tmpfile1, p);
     }
     {
         // Join two absolute paths.
         fs::path p = fsbridge::AbsPathJoin(tmpfile1, tmpfile2);
-        BOOST_CHECK(p.is_absolute());
+        CHECK(p.is_absolute());
         BOOST_CHECK_EQUAL(tmpfile2, p);
     }
     {
@@ -126,9 +126,9 @@ BOOST_AUTO_TEST_CASE(rename)
     }
 
     // Rename path1 -> path2.
-    BOOST_CHECK(RenameOver(path1, path2));
+    CHECK(RenameOver(path1, path2));
 
-    BOOST_CHECK(!fs::exists(path1));
+    CHECK(!fs::exists(path1));
 
     {
         std::ifstream file{path2.std_path()};

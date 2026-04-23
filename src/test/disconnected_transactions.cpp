@@ -49,7 +49,7 @@ BOOST_FIXTURE_TEST_CASE(disconnectpool_memory_limits, TestChain100Setup)
         // to a minimum and avoid all (instead of all but 1) transactions getting evicted.
         std::vector<CTransactionRef> two_txns({block_vtx.at(0), block_vtx.at(1)});
         auto evicted_txns{disconnectpool.AddTransactionsFromBlock(two_txns)};
-        BOOST_CHECK(disconnectpool.DynamicMemoryUsage() <= MAP_1 + ENTRY_USAGE_ESTIMATE);
+        CHECK(disconnectpool.DynamicMemoryUsage() <= MAP_1 + ENTRY_USAGE_ESTIMATE);
 
         // Only 1 transaction can be kept
         BOOST_CHECK_EQUAL(1, evicted_txns.size());
@@ -67,7 +67,7 @@ BOOST_FIXTURE_TEST_CASE(disconnectpool_memory_limits, TestChain100Setup)
         DisconnectedBlockTransactions disconnectpool{USAGE_100_OVERESTIMATE};
         auto evicted_txns{disconnectpool.AddTransactionsFromBlock(block_vtx)};
         BOOST_CHECK_EQUAL(evicted_txns.size(), 0);
-        BOOST_CHECK(disconnectpool.DynamicMemoryUsage() <= USAGE_100_OVERESTIMATE);
+        CHECK(disconnectpool.DynamicMemoryUsage() <= USAGE_100_OVERESTIMATE);
 
         usage_full = disconnectpool.DynamicMemoryUsage();
 
@@ -79,7 +79,7 @@ BOOST_FIXTURE_TEST_CASE(disconnectpool_memory_limits, TestChain100Setup)
         const size_t MAX_MEMUSAGE_99{usage_full - sizeof(void*)};
         DisconnectedBlockTransactions disconnectpool{MAX_MEMUSAGE_99};
         auto evicted_txns{disconnectpool.AddTransactionsFromBlock(block_vtx)};
-        BOOST_CHECK(disconnectpool.DynamicMemoryUsage() <= MAX_MEMUSAGE_99);
+        CHECK(disconnectpool.DynamicMemoryUsage() <= MAX_MEMUSAGE_99);
 
         // Only 1 transaction needed to be evicted
         BOOST_CHECK_EQUAL(1, evicted_txns.size());

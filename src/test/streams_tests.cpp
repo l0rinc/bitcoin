@@ -364,7 +364,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file)
         BufferedFile bfbad{file, 25, 25};
         CHECK(false);
     } catch (const std::exception& e) {
-        BOOST_CHECK(strstr(e.what(),
+        CHECK(strstr(e.what(),
                         "Rewind limit must be less than buffer size") != nullptr);
     }
 
@@ -400,7 +400,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file)
         bf >> i;
         CHECK(false);
     } catch (const std::exception& e) {
-        BOOST_CHECK(strstr(e.what(),
+        CHECK(strstr(e.what(),
                            "Attempt to position past buffer limit") != nullptr);
     }
     // The default argument removes the limit completely.
@@ -453,7 +453,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file)
         bf >> i;
         CHECK(false);
     } catch (const std::exception& e) {
-        BOOST_CHECK(strstr(e.what(),
+        CHECK(strstr(e.what(),
                         "BufferedFile::Fill: end of file") != nullptr);
     }
     // Attempting to read beyond the end sets the EOF indicator.

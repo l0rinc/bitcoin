@@ -225,7 +225,7 @@ public:
 
     ~prevector_tester()
     {
-        BOOST_CHECK_MESSAGE(passed, "insecure_rand: " + rand_seed.ToString());
+        CHECK_MESSAGE(passed, "insecure_rand: " + rand_seed.ToString());
     }
 
     prevector_tester(FastRandomContext& rng)

@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://opensource.org/license/mit/.
 
+#include <test/util/check.h>
 #include <boost/test/unit_test.hpp>
 
 #include <iostream>
@@ -16,13 +17,13 @@ BOOST_AUTO_TEST_CASE(valid_json, *boost::unit_test::disabled())
 
 BOOST_AUTO_TEST_CASE(nonzeroexit_nooutput, *boost::unit_test::disabled())
 {
-    BOOST_FAIL("Test unconditionally fails.");
+    CHECK_FAIL("Test unconditionally fails.");
 }
 
 BOOST_AUTO_TEST_CASE(nonzeroexit_stderroutput, *boost::unit_test::disabled())
 {
     std::cerr << "err\n";
-    BOOST_FAIL("Test unconditionally fails.");
+    CHECK_FAIL("Test unconditionally fails.");
 }
 
 BOOST_AUTO_TEST_CASE(invalid_json, *boost::unit_test::disabled())

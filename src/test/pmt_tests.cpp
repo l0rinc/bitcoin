@@ -78,7 +78,7 @@ BOOST_AUTO_TEST_CASE(pmt_test1)
 
             // verify CPartialMerkleTree's size guarantees
             unsigned int n = std::min<unsigned int>(nTx, 1 + vMatchTxid1.size()*nHeight);
-            BOOST_CHECK(ss.size() <= 10 + (258*n+7)/8);
+            CHECK(ss.size() <= 10 + (258*n+7)/8);
 
             // deserialize into a tester copy
             CPartialMerkleTreeTester pmt2{m_rng};
@@ -90,11 +90,11 @@ BOOST_AUTO_TEST_CASE(pmt_test1)
             uint256 merkleRoot2 = pmt2.ExtractMatches(vMatchTxid2, vIndex);
 
             // check that it has the same merkle root as the original, and a valid one
-            BOOST_CHECK(merkleRoot1 == merkleRoot2);
-            BOOST_CHECK(!merkleRoot2.IsNull());
+            CHECK(merkleRoot1 == merkleRoot2);
+            CHECK(!merkleRoot2.IsNull());
 
             // check that it contains the matched transactions (in the same order!)
-            BOOST_CHECK(vMatchTxid1 == vMatchTxid2);
+            CHECK(vMatchTxid1 == vMatchTxid2);
 
             // check that random bit flips break the authentication
             for (int j=0; j<4; j++) {
@@ -102,7 +102,7 @@ BOOST_AUTO_TEST_CASE(pmt_test1)
                 pmt3.Damage();
                 std::vector<Txid> vMatchTxid3;
                 uint256 merkleRoot3 = pmt3.ExtractMatches(vMatchTxid3, vIndex);
-                BOOST_CHECK(merkleRoot3 != merkleRoot1);
+                CHECK(merkleRoot3 != merkleRoot1);
             }
         }
     }
@@ -122,7 +122,7 @@ BOOST_AUTO_TEST_CASE(pmt_malleability)
 
     CPartialMerkleTree tree(vTxid, vMatch);
     std::vector<unsigned int> vIndex;
-    BOOST_CHECK(tree.ExtractMatches(vTxid, vIndex).IsNull());
+    CHECK(tree.ExtractMatches(vTxid, vIndex).IsNull());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
