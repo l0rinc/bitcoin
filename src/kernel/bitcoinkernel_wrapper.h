@@ -83,6 +83,7 @@ enum class ScriptVerifyStatus : btck_ScriptVerifyStatus {
     OK = btck_ScriptVerifyStatus_OK,
     ERROR_INVALID_FLAGS_COMBINATION = btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION,
     ERROR_SPENT_OUTPUTS_REQUIRED = btck_ScriptVerifyStatus_ERROR_SPENT_OUTPUTS_REQUIRED,
+    ERROR_TX_INPUT_INDEX = btck_ScriptVerifyStatus_ERROR_TX_INPUT_INDEX,
 };
 
 enum class ScriptVerificationFlags : btck_ScriptVerificationFlags {

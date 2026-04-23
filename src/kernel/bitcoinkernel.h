@@ -477,6 +477,7 @@ typedef uint8_t btck_ScriptVerifyStatus;
 #define btck_ScriptVerifyStatus_OK ((btck_ScriptVerifyStatus)(0))
 #define btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION ((btck_ScriptVerifyStatus)(1)) //!< The flags were combined in an invalid way.
 #define btck_ScriptVerifyStatus_ERROR_SPENT_OUTPUTS_REQUIRED ((btck_ScriptVerifyStatus)(2))    //!< The taproot flag was set, so valid spent_outputs have to be provided.
+#define btck_ScriptVerifyStatus_ERROR_TX_INPUT_INDEX ((btck_ScriptVerifyStatus)(3))            //!< The input index is out of bounds for the transaction.
 
 /**
  * Script verification flags that may be composed with each other.

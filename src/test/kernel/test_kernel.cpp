@@ -536,6 +536,28 @@ BOOST_AUTO_TEST_CASE(btck_script_verify_tests)
         /*input_index=*/0,
         /*taproot=*/false);
 
+    auto status = ScriptVerifyStatus::OK;
+    BOOST_CHECK(!legacy_spent_script_pubkey.Verify(
+        0,
+        legacy_spending_tx,
+        nullptr,
+        legacy_spending_tx.CountInputs(),
+        VERIFY_ALL_PRE_TAPROOT,
+        status));
+    BOOST_CHECK(status == ScriptVerifyStatus::ERROR_TX_INPUT_INDEX);
+    btck_ScriptVerifyStatus raw_status{btck_ScriptVerifyStatus_OK};
+    const auto invalid_flags{static_cast<btck_ScriptVerificationFlags>(btck_ScriptVerificationFlags_ALL | (1U << 31))};
+    BOOST_CHECK_EQUAL(btck_script_pubkey_verify(
+                          legacy_spent_script_pubkey.get(),
+                          0,
+                          legacy_spending_tx.get(),
+                          nullptr,
+                          0,
+                          invalid_flags,
+                          &raw_status),
+                      0);
+    BOOST_CHECK_EQUAL(raw_status, btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION);
+
     // Legacy transaction aca326a724eda9a461c10a876534ecd5ae7b27f10f26c3862fb996f80ea2d45d with precomputed_txdata
     auto legacy_precomputed_txdata{PrecomputedTransactionData{
         /*tx_to=*/legacy_spending_tx,

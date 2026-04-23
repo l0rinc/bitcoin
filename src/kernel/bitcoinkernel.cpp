@@ -668,16 +668,22 @@ int btck_script_pubkey_verify(const btck_ScriptPubkey* script_pubkey,
                               const btck_ScriptVerificationFlags flags,
                               btck_ScriptVerifyStatus* status)
 {
-    // Assert that all specified flags are part of the interface before continuing
-    assert((flags & ~btck_ScriptVerificationFlags_ALL) == 0);
+    if ((flags & ~btck_ScriptVerificationFlags_ALL) != 0) {
+        if (status) *status = btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION;
+        return 0;
+    }
 
-    if (!is_valid_flag_combination(script_verify_flags::from_int(flags))) {
+    const auto verify_flags{script_verify_flags::from_int(flags)};
+    if (!is_valid_flag_combination(verify_flags)) {
         if (status) *status = btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION;
         return 0;
     }
 
     const CTransaction& tx{*btck_Transaction::get(tx_to)};
-    assert(input_index < tx.vin.size());
+    if (input_index >= tx.vin.size()) {
+        if (status) *status = btck_ScriptVerifyStatus_ERROR_TX_INPUT_INDEX;
+        return 0;
+    }
 
     const PrecomputedTransactionData& txdata{precomputed_txdata ? btck_PrecomputedTransactionData::get(precomputed_txdata) : PrecomputedTransactionData(tx)};
 
@@ -691,7 +697,7 @@ int btck_script_pubkey_verify(const btck_ScriptPubkey* script_pubkey,
     bool result = VerifyScript(tx.vin[input_index].scriptSig,
                                btck_ScriptPubkey::get(script_pubkey),
                                &tx.vin[input_index].scriptWitness,
-                               script_verify_flags::from_int(flags),
+                               verify_flags,
                                TransactionSignatureChecker(&tx, input_index, amount, txdata, MissingDataBehavior::FAIL),
                                nullptr);
     return result ? 1 : 0;
