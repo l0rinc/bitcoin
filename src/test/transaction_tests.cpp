@@ -1165,6 +1165,54 @@ BOOST_AUTO_TEST_CASE(checktxinputs_invalid_transactions_test)
                   TxValidationResult::TX_PREMATURE_SPEND, /*expected_reason=*/"bad-txns-premature-spend-of-coinbase");
 }
 
+BOOST_AUTO_TEST_CASE(checktxinputs_missing_or_spent_precedence_test)
+{
+    static constexpr auto MISSING_REASON{"bad-txns-inputs-missingorspent"};
+    static constexpr auto MISSING_DEBUG{"CheckTxInputs: inputs missing/spent"};
+
+    auto check_missing_or_spent{[](const CTransaction& tx, CCoinsViewCache& inputs, int spend_height) {
+        TxValidationState state;
+        CAmount txfee{0};
+        BOOST_CHECK(!Consensus::CheckTxInputs(tx, state, inputs, spend_height, txfee));
+        BOOST_CHECK(state.IsInvalid());
+        BOOST_CHECK_EQUAL(state.GetResult(), TxValidationResult::TX_MISSING_INPUTS);
+        BOOST_CHECK_EQUAL(state.GetRejectReason(), MISSING_REASON);
+        BOOST_CHECK_EQUAL(state.GetDebugMessage(), MISSING_DEBUG);
+    }};
+
+    {
+        CCoinsViewCache inputs{&CoinsViewEmpty::Get()};
+        const COutPoint immature_prevout{Txid::FromUint256(uint256::ONE), 0};
+        const COutPoint missing_prevout{Txid::FromUint256(uint256::ONE), 1};
+        inputs.AddCoin(immature_prevout, Coin{{1 * COIN, CScript() << OP_TRUE}, /*nHeightIn=*/1, /*coinbase=*/true}, /*possible_overwrite=*/false);
+
+        CMutableTransaction mtx;
+        mtx.vin.emplace_back(immature_prevout);
+        mtx.vin.emplace_back(missing_prevout);
+        mtx.vout.emplace_back(0, CScript() << OP_TRUE);
+
+        check_missing_or_spent(CTransaction{mtx}, inputs, COINBASE_MATURITY);
+    }
+
+    {
+        CCoinsViewCache base{&CoinsViewEmpty::Get()};
+        const COutPoint out_of_range_prevout{Txid::FromUint256(uint256::ONE), 1};
+        const COutPoint spent_prevout{Txid::FromUint256(uint256::ONE), 2};
+        base.AddCoin(out_of_range_prevout, Coin{{MAX_MONEY + 1, CScript() << OP_TRUE}, /*nHeightIn=*/1, /*coinbase=*/false}, /*possible_overwrite=*/false);
+        base.AddCoin(spent_prevout, Coin{{1 * COIN, CScript() << OP_TRUE}, /*nHeightIn=*/1, /*coinbase=*/false}, /*possible_overwrite=*/false);
+
+        CCoinsViewCache inputs{&base};
+        BOOST_REQUIRE(inputs.SpendCoin(spent_prevout));
+
+        CMutableTransaction mtx;
+        mtx.vin.emplace_back(out_of_range_prevout);
+        mtx.vin.emplace_back(spent_prevout);
+        mtx.vout.emplace_back(0, CScript() << OP_TRUE);
+
+        check_missing_or_spent(CTransaction{mtx}, inputs, /*spend_height=*/2);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(getvalueout_out_of_range_throws)
 {
     CMutableTransaction mtx;
