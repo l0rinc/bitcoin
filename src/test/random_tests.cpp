@@ -186,7 +186,7 @@ BOOST_AUTO_TEST_CASE(randbits_test)
         // Check that each bit appears within 7.78 standard deviations of 50%
         // (each will fail with P < 1/(2080 * 64 * 10^9)).
         for (const auto& val : seen) {
-             assert(fabs(val.first * 0.5 - val.second) < sqrt(val.first * 0.25) * 7.78);
+             CHECK(fabs(val.first * 0.5 - val.second) < sqrt(val.first * 0.25) * 7.78);
         }
     }
 }

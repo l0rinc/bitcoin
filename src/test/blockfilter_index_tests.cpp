@@ -260,7 +260,7 @@ BOOST_FIXTURE_TEST_CASE(blockfilter_index_initial_sync, BuildChainTestingSetup)
     CHECK(filter_index.LookupFilterRange(0, tip, filters));
     CHECK(filter_index.LookupFilterHashRange(0, tip, filter_hashes));
 
-    assert(tip->nHeight >= 0);
+    CHECK(tip->nHeight >= 0);
     CHECK_EQUAL(filters.size(), tip->nHeight + 1U);
     CHECK_EQUAL(filter_hashes.size(), tip->nHeight + 1U);
 

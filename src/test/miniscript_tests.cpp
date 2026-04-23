@@ -181,7 +181,7 @@ struct KeyConverter {
 
     template<typename I>
     std::optional<Key> FromPKHBytes(I first, I last) const {
-        assert(last - first == 20);
+        CHECK(last - first == 20);
         CKeyID keyid;
         std::copy(first, last, keyid.begin());
         return g_testdata->pkmap.at(keyid);
@@ -383,7 +383,7 @@ void TestSatisfy(const KeyConverter& converter, const Node& node)
                 // If a non-malleable satisfaction exists, the malleable one must also exist, and be identical to it.
                 CHECK(mal_success);
                 CHECK(witness_nonmal.stack == witness_mal.stack);
-                assert(wit_size <= *node.GetWitnessSize());
+                CHECK(wit_size <= *node.GetWitnessSize());
 
                 // Test non-malleable satisfaction.
                 ScriptError serror;

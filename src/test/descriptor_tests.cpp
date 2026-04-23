@@ -298,7 +298,7 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
     // * For non-ranged descriptors, we evaluate the descriptors at positions 0, 1, and 2, but expect the
     //   same result in each case, namely the first element of `scripts`. Because of that, the size of
     //   `scripts` must be one in that case.
-    if (!(flags & RANGE)) assert(scripts.size() == 1);
+    if (!(flags & RANGE)) CHECK(scripts.size() == 1);
     size_t max = (flags & RANGE) ? scripts.size() : 3;
 
     // Iterate over the position we'll evaluate the descriptors in.
@@ -514,10 +514,10 @@ void CheckMultipath(const std::string& prv,
         const std::optional<OutputType>& type,
         const std::vector<std::set<std::vector<uint32_t>>>& paths)
 {
-    assert(expanded_prvs.size() == expanded_pubs.size());
-    assert(expanded_prvs.size() == expanded_norm_pubs.size());
-    assert(expanded_prvs.size() == scripts.size());
-    assert(expanded_prvs.size() == paths.size());
+    CHECK(expanded_prvs.size() == expanded_pubs.size());
+    CHECK(expanded_prvs.size() == expanded_norm_pubs.size());
+    CHECK(expanded_prvs.size() == scripts.size());
+    CHECK(expanded_prvs.size() == paths.size());
     for (size_t i = 0; i < expanded_prvs.size(); ++i) {
         Check(prv, pub, expanded_norm_pubs.at(i), flags, scripts.at(i), type, std::nullopt, paths.at(i),
               /*spender_nlocktime=*/0, /*spender_nsequence=*/CTxIn::SEQUENCE_FINAL, /*preimages=*/{},
@@ -531,7 +531,7 @@ void CheckMultipath(const std::string& prv,
     std::string error;
     const auto desc{[&](){
         auto parsed{Parse(pub, prov, error)};
-        assert(parsed.size() > 1);
+        CHECK(parsed.size() > 1);
         return std::move(parsed.at(0));
     }()};
     desc->ToString();

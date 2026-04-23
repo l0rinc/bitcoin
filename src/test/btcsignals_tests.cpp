@@ -160,8 +160,8 @@ BOOST_AUTO_TEST_CASE(thread_safety)
         // Because these calls are purposely happening on both threads at the
         // same time, these must be asserts rather than BOOST_CHECKs to prevent
         // a race inside of BOOST_CHECK itself (writing to the log).
-        assert(!sig0.empty());
-        assert(conn0.connected());
+        CHECK(!sig0.empty());
+        CHECK(conn0.connected());
     });
 
     std::thread extra_increment_injector([&conn0, &sig0, &val] {

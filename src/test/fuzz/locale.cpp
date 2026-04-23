@@ -14,6 +14,7 @@
 #include <locale>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 namespace {
 const std::string locale_identifiers[] = {
@@ -43,7 +44,7 @@ FUZZ_TARGET(locale)
         return;
     }
     const char* c_locale = std::setlocale(LC_ALL, "C");
-    assert(c_locale != nullptr);
+    CHECK(c_locale != nullptr);
 
     const std::string random_string = fuzzed_data_provider.ConsumeRandomLengthString(5);
     const int64_t random_int64 = fuzzed_data_provider.ConsumeIntegral<int64_t>();
@@ -53,15 +54,15 @@ FUZZ_TARGET(locale)
     const std::string strprintf_double_without_locale = strprintf("%f", random_double);
 
     const char* new_locale = std::setlocale(LC_ALL, locale_identifier.c_str());
-    assert(new_locale != nullptr);
+    CHECK(new_locale != nullptr);
 
     const std::string tostring_with_locale = util::ToString(random_int64);
-    assert(tostring_without_locale == tostring_with_locale);
+    CHECK(tostring_without_locale == tostring_with_locale);
     const std::string strprintf_int_with_locale = strprintf("%d", random_int64);
-    assert(strprintf_int_without_locale == strprintf_int_with_locale);
+    CHECK(strprintf_int_without_locale == strprintf_int_with_locale);
     const std::string strprintf_double_with_locale = strprintf("%f", random_double);
-    assert(strprintf_double_without_locale == strprintf_double_with_locale);
+    CHECK(strprintf_double_without_locale == strprintf_double_with_locale);
 
     const std::locale current_cpp_locale;
-    assert(current_cpp_locale == std::locale::classic());
+    CHECK(current_cpp_locale == std::locale::classic());
 }

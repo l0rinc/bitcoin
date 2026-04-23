@@ -6,6 +6,7 @@
 #include <consensus/validation.h>
 #include <script/signingprovider.h>
 #include <test/util/transaction_utils.h>
+#include <test/util/check.h>
 
 CMutableTransaction BuildCreditingTransaction(const CScript& scriptPubKey, int nValue)
 {
@@ -75,7 +76,7 @@ void BulkTransaction(CMutableTransaction& tx, int32_t target_weight)
 {
     tx.vout.emplace_back(0, CScript() << OP_RETURN);
     auto unpadded_weight{GetTransactionWeight(CTransaction(tx))};
-    assert(target_weight >= unpadded_weight);
+    CHECK(target_weight >= unpadded_weight);
 
     // determine number of needed padding bytes by converting weight difference to vbytes
     auto dummy_vbytes = (target_weight - unpadded_weight + (WITNESS_SCALE_FACTOR - 1)) / WITNESS_SCALE_FACTOR;
@@ -87,13 +88,13 @@ void BulkTransaction(CMutableTransaction& tx, int32_t target_weight)
     tx.vout[0].scriptPubKey.insert(tx.vout[0].scriptPubKey.end(), dummy_vbytes, OP_1);
 
     // actual weight should be at most 3 higher than target weight
-    assert(GetTransactionWeight(CTransaction(tx)) >= target_weight);
-    assert(GetTransactionWeight(CTransaction(tx)) <= target_weight + 3);
+    CHECK(GetTransactionWeight(CTransaction(tx)) >= target_weight);
+    CHECK(GetTransactionWeight(CTransaction(tx)) <= target_weight + 3);
 }
 
 bool SignSignature(const SigningProvider &provider, const CScript& fromPubKey, CMutableTransaction& txTo, unsigned int nIn, const CAmount& amount, int nHashType, SignatureData& sig_data)
 {
-    assert(nIn < txTo.vin.size());
+    CHECK(nIn < txTo.vin.size());
 
     MutableTransactionSignatureCreator creator(txTo, nIn, amount, nHashType);
 
@@ -104,9 +105,9 @@ bool SignSignature(const SigningProvider &provider, const CScript& fromPubKey, C
 
 bool SignSignature(const SigningProvider &provider, const CTransaction& txFrom, CMutableTransaction& txTo, unsigned int nIn, int nHashType, SignatureData& sig_data)
 {
-    assert(nIn < txTo.vin.size());
+    CHECK(nIn < txTo.vin.size());
     const CTxIn& txin = txTo.vin[nIn];
-    assert(txin.prevout.n < txFrom.vout.size());
+    CHECK(txin.prevout.n < txFrom.vout.size());
     const CTxOut& txout = txFrom.vout[txin.prevout.n];
 
     return SignSignature(provider, txout.scriptPubKey, txTo, nIn, txout.nValue, nHashType, sig_data);

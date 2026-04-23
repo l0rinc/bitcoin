@@ -155,12 +155,12 @@ void static NegateSignatureS(std::vector<unsigned char>& vchSig) {
     while (s.size() < 33) {
         s.insert(s.begin(), 0x00);
     }
-    assert(s[0] == 0);
+    CHECK(s[0] == 0);
     // Perform mod-n negation of s by (ab)using libsecp256k1
     // (note that this function is meant to be used for negating secret keys,
     //  but it works for any non-zero scalar modulo the group order, i.e. also for s)
     int ret = secp256k1_ec_seckey_negate(secp256k1_context_static, s.data() + 1);
-    assert(ret);
+    CHECK(ret);
 
     if (s[1] < 0x80) {
         s.erase(s.begin());
@@ -352,10 +352,10 @@ public:
 
     TestBuilder& EditPush(unsigned int pos, const std::string& hexin, const std::string& hexout)
     {
-        assert(havePush);
+        CHECK(havePush);
         std::vector<unsigned char> datain = ParseHex(hexin);
         std::vector<unsigned char> dataout = ParseHex(hexout);
-        assert(pos + datain.size() <= push.size());
+        CHECK(pos + datain.size() <= push.size());
         CHECK_MESSAGE(std::vector<unsigned char>(push.begin() + pos, push.begin() + pos + datain.size()) == datain, comment);
         push.erase(push.begin() + pos, push.begin() + pos + datain.size());
         push.insert(push.begin() + pos, dataout.begin(), dataout.end());
@@ -364,8 +364,8 @@ public:
 
     TestBuilder& DamagePush(unsigned int pos)
     {
-        assert(havePush);
-        assert(pos < push.size());
+        CHECK(havePush);
+        CHECK(pos < push.size());
         push[pos] ^= 1;
         return *this;
     }
@@ -381,7 +381,7 @@ public:
 
     TestBuilder& AsWit()
     {
-        assert(havePush);
+        CHECK(havePush);
         scriptWitness.stack.push_back(push);
         havePush = false;
         return *this;

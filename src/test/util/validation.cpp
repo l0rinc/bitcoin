@@ -5,6 +5,7 @@
 #include <test/util/validation.h>
 
 #include <node/blockstorage.h>
+#include <test/util/check.h>
 #include <util/check.h>
 #include <util/time.h>
 #include <validation.h>
@@ -33,7 +34,7 @@ void TestChainstateManager::DisableNextWrite()
 void TestChainstateManager::ResetIbd()
 {
     m_cached_is_ibd = true;
-    assert(IsInitialBlockDownload());
+    CHECK(IsInitialBlockDownload());
 }
 
 void TestChainstateManager::JumpOutOfIbd()

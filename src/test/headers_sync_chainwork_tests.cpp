@@ -63,7 +63,7 @@ struct HeadersGeneratorSetup : public RegTestingSetup {
         // roughly as the coefficient 0x7fffff with the exponent 0x20 (32 bytes).
         // This implies around every 2nd hash attempt should succeed, which
         // is why CHAIN_WORK == TARGET_BLOCKS * 2.
-        assert(genesis.nBits == 0x207fffff);
+        CHECK(genesis.nBits == 0x207fffff);
 
         // Subtract 1 since the genesis block also contributes work so we reach
         // the CHAIN_WORK target.

@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <optional>
 #include <vector>
+#include <test/util/check.h>
 
 using common::TransactionErrorString;
 using node::TransactionError;
@@ -47,12 +48,12 @@ FUZZ_TARGET(kitchen_sink)
     const OutputType output_type = fuzzed_data_provider.PickValueInArray(OUTPUT_TYPES);
     const std::string& output_type_string = FormatOutputType(output_type);
     const std::optional<OutputType> parsed = ParseOutputType(output_type_string);
-    assert(parsed);
-    assert(output_type == parsed.value());
+    CHECK(parsed);
+    CHECK(output_type == parsed.value());
     (void)ParseOutputType(fuzzed_data_provider.ConsumeRandomLengthString(64));
 
     const std::vector<uint8_t> bytes = ConsumeRandomLengthByteVector(fuzzed_data_provider);
     const std::vector<bool> bits = BytesToBits(bytes);
     const std::vector<uint8_t> bytes_decoded = BitsToBytes(bits);
-    assert(bytes == bytes_decoded);
+    CHECK(bytes == bytes_decoded);
 }

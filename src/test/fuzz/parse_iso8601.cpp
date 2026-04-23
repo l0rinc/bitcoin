@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 FUZZ_TARGET(parse_iso8601)
 {
@@ -21,7 +22,7 @@ FUZZ_TARGET(parse_iso8601)
     const std::string iso8601_datetime = FormatISO8601DateTime(random_time);
     (void)FormatISO8601Date(random_time);
     const int64_t parsed_time_1{ParseISO8601DateTime(iso8601_datetime).value()};
-    assert(parsed_time_1 == random_time);
+    CHECK(parsed_time_1 == random_time);
 
     (void)ParseISO8601DateTime(random_string);
 }

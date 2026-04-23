@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <test/util/check.h>
 
 FUZZ_TARGET(crypto_chacha20)
 {
@@ -85,7 +86,7 @@ void ChaCha20SplitFuzz(FuzzedDataProvider& provider)
     }
 
     // Whether UseCrypt is used or not, the two byte arrays must match.
-    assert(data1 == data2);
+    CHECK(data1 == data2);
 
     // Encrypt data1, the whole array at once.
     if constexpr (UseCrypt) {
@@ -116,9 +117,9 @@ void ChaCha20SplitFuzz(FuzzedDataProvider& provider)
         if (is_last) break;
     }
     // We should have processed everything now.
-    assert(bytes2 == total_bytes);
+    CHECK(bytes2 == total_bytes);
     // And the result should match.
-    assert(data1 == data2);
+    CHECK(data1 == data2);
 }
 
 } // namespace

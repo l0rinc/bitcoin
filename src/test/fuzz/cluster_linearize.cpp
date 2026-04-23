@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <utility>
 #include <vector>
+#include <test/util/check.h>
 
 /*
  * The tests in this file primarily cover the candidate finder classes and linearization algorithms.
@@ -254,7 +255,7 @@ std::vector<DepGraphIndex> ExhaustiveLinearize(const DepGraph<SetType>& depgraph
             // Otherwise, fast forward to the last permutation with the same non-topological
             // prefix.
             auto first_non_topo = perm_linearization.begin() + topo_length;
-            assert(std::is_sorted(first_non_topo + 1, perm_linearization.end()));
+            CHECK(std::is_sorted(first_non_topo + 1, perm_linearization.end()));
             std::reverse(first_non_topo + 1, perm_linearization.end());
         }
     } while(std::next_permutation(perm_linearization.begin(), perm_linearization.end()));
@@ -334,7 +335,7 @@ std::vector<DepGraphIndex> ReadLinearization(const DepGraph<BS>& depgraph, SpanR
             potential_next = todo;
         }
         // There must always be one (otherwise there is a cycle in the graph).
-        assert(potential_next.Any());
+        CHECK(potential_next.Any());
         // Read a number from reader, and interpret it as index into potential_next.
         uint64_t idx{0};
         try {
@@ -346,7 +347,7 @@ std::vector<DepGraphIndex> ReadLinearization(const DepGraph<BS>& depgraph, SpanR
             if (idx == 0) {
                 // When found, add it to linearization and remove it from todo.
                 linearization.push_back(j);
-                assert(todo[j]);
+                CHECK(todo[j]);
                 todo.Reset(j);
                 break;
             }
@@ -419,7 +420,7 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
             if (offset == 0) return i;
             --offset;
         }
-        assert(false);
+        CHECK(false);
         return DepGraphIndex(-1);
     };
 
@@ -436,7 +437,7 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
             }
             mask_shifted >>= 1;
         }
-        assert(mask_shifted == 0);
+        CHECK(mask_shifted == 0);
         return subset;
     };
 
@@ -473,13 +474,13 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
     /** Compare the state of transaction i in the simulation with the real one. */
     auto check_fn = [&](DepGraphIndex i) {
         // Compare used positions.
-        assert(real.Positions()[i] == sim[i].has_value());
+        CHECK(real.Positions()[i] == sim[i].has_value());
         if (sim[i].has_value()) {
             // Compare feerate.
-            assert(real.FeeRate(i) == sim[i]->first);
+            CHECK(real.FeeRate(i) == sim[i]->first);
             // Compare ancestors (note that SanityCheck verifies correspondence between ancestors
             // and descendants, so we can restrict ourselves to ancestors here).
-            assert(real.Ancestors(i) == sim[i]->second);
+            CHECK(real.Ancestors(i) == sim[i]->second);
         }
     };
 
@@ -497,10 +498,10 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
                 // Apply to DepGraph.
                 auto idx = real.AddTransaction(feerate);
                 // Verify that the returned index is correct.
-                assert(!sim[idx].has_value());
+                CHECK(!sim[idx].has_value());
                 for (DepGraphIndex i = 0; i < TestBitSet::Size(); ++i) {
                     if (!sim[i].has_value()) {
-                        assert(idx == i);
+                        CHECK(idx == i);
                         break;
                     }
                 }
@@ -544,7 +545,7 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
                 const size_t mem_before{real.DynamicMemoryUsage()};
                 real.Compact();
                 const size_t mem_after{real.DynamicMemoryUsage()};
-                assert(real.PositionRange() < last_compaction_pos ? mem_after < mem_before : mem_after <= mem_before);
+                CHECK(real.PositionRange() < last_compaction_pos ? mem_after < mem_before : mem_after <= mem_before);
                 last_compaction_pos = real.PositionRange();
                 break;
             }
@@ -554,7 +555,7 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
     // Compare the real obtained depgraph against the simulation.
     anc_update_fn();
     for (DepGraphIndex i = 0; i < sim.size(); ++i) check_fn(i);
-    assert(real.TxCount() == num_tx_sim);
+    CHECK(real.TxCount() == num_tx_sim);
     // Sanity check the result (which includes round-tripping serialization, if applicable).
     SanityCheck(real);
 }
@@ -573,7 +574,7 @@ FUZZ_TARGET(clusterlin_depgraph_serialization)
     SanityCheck(depgraph);
 
     // Verify the graph is a DAG.
-    assert(depgraph.IsAcyclic());
+    CHECK(depgraph.IsAcyclic());
 
     // Introduce a cycle, and then test that IsAcyclic returns false.
     if (depgraph.TxCount() < 2) return;
@@ -601,7 +602,7 @@ FUZZ_TARGET(clusterlin_depgraph_serialization)
     // Add the cycle-introducing dependency.
     depgraph.AddDependencies(TestBitSet::Singleton(par), chl);
     // Check that we now detect a cycle.
-    assert(!depgraph.IsAcyclic());
+    CHECK(!depgraph.IsAcyclic());
 }
 
 FUZZ_TARGET(clusterlin_components)
@@ -635,25 +636,25 @@ FUZZ_TARGET(clusterlin_components)
                                 : depgraph.FindConnectedComponent(todo);
 
         // The component must be a subset of todo and non-empty.
-        assert(component.IsSubsetOf(todo));
-        assert(component.Any());
+        CHECK(component.IsSubsetOf(todo));
+        CHECK(component.Any());
 
         // If picked was provided, the component must include it.
-        if (picked) assert(component[*picked]);
+        if (picked) CHECK(component[*picked]);
 
         // If todo is the entire graph, and the entire graph is connected, then the component must
         // be the entire graph.
         if (todo == depgraph.Positions()) {
-            assert((component == todo) == depgraph.IsConnected());
+            CHECK((component == todo) == depgraph.IsConnected());
         }
 
         // If subset is connected, then component must match subset.
-        assert((component == todo) == depgraph.IsConnected(todo));
+        CHECK((component == todo) == depgraph.IsConnected(todo));
 
         // The component cannot have any ancestors or descendants outside of component but in todo.
         for (auto i : component) {
-            assert((depgraph.Ancestors(i) & todo).IsSubsetOf(component));
-            assert((depgraph.Descendants(i) & todo).IsSubsetOf(component));
+            CHECK((depgraph.Ancestors(i) & todo).IsSubsetOf(component));
+            CHECK((depgraph.Descendants(i) & todo).IsSubsetOf(component));
         }
 
         // Starting from any component element, we must be able to reach every element.
@@ -671,7 +672,7 @@ FUZZ_TARGET(clusterlin_components)
                 reachable = new_reachable;
             }
             // Verify that the result is the entire component.
-            assert(component == reachable);
+            CHECK(component == reachable);
         }
 
         // Construct an arbitrary subset of todo.
@@ -693,7 +694,7 @@ FUZZ_TARGET(clusterlin_components)
     }
 
     // No components can be found in an empty subset.
-    assert(depgraph.FindConnectedComponent(todo).None());
+    CHECK(depgraph.FindConnectedComponent(todo).None());
 }
 
 FUZZ_TARGET(clusterlin_make_connected)
@@ -707,7 +708,7 @@ FUZZ_TARGET(clusterlin_make_connected)
     } catch (const std::ios_base::failure&) {}
     MakeConnected(depgraph);
     SanityCheck(depgraph);
-    assert(depgraph.IsConnected());
+    CHECK(depgraph.IsConnected());
 }
 
 FUZZ_TARGET(clusterlin_chunking)
@@ -729,21 +730,21 @@ FUZZ_TARGET(clusterlin_chunking)
     auto chunking_info = ChunkLinearizationInfo(depgraph, linearization);
 
     // Verify consistency between the two functions.
-    assert(chunking.size() == chunking_info.size());
+    CHECK(chunking.size() == chunking_info.size());
     for (size_t i = 0; i < chunking.size(); ++i) {
-        assert(chunking[i] == chunking_info[i].feerate);
-        assert(SetInfo(depgraph, chunking_info[i].transactions) == chunking_info[i]);
+        CHECK(chunking[i] == chunking_info[i].feerate);
+        CHECK(SetInfo(depgraph, chunking_info[i].transactions) == chunking_info[i]);
     }
 
     // Verify that chunk feerates are monotonically non-increasing.
     for (size_t i = 1; i < chunking.size(); ++i) {
-        assert(!(chunking[i] >> chunking[i - 1]));
+        CHECK(!(chunking[i] >> chunking[i - 1]));
     }
 
     // Naively recompute the chunks (each is the highest-feerate prefix of what remains).
     auto todo = depgraph.Positions();
     for (const auto& [chunk_set, chunk_feerate] : chunking_info) {
-        assert(todo.Any());
+        CHECK(todo.Any());
         SetInfo<TestBitSet> accumulator, best;
         for (DepGraphIndex idx : linearization) {
             if (todo[idx]) {
@@ -753,12 +754,12 @@ FUZZ_TARGET(clusterlin_chunking)
                 }
             }
         }
-        assert(chunk_feerate == best.feerate);
-        assert(chunk_set == best.transactions);
-        assert(best.transactions.IsSubsetOf(todo));
+        CHECK(chunk_feerate == best.feerate);
+        CHECK(chunk_set == best.transactions);
+        CHECK(best.transactions.IsSubsetOf(todo));
         todo -= best.transactions;
     }
-    assert(todo.None());
+    CHECK(todo.None());
 }
 
 static constexpr auto MAX_SIMPLE_ITERATIONS = 300000;
@@ -787,31 +788,31 @@ FUZZ_TARGET(clusterlin_simple_finder)
 
     auto todo = depgraph.Positions();
     while (todo.Any()) {
-        assert(!smp_finder.AllDone());
-        assert(!exh_finder.AllDone());
+        CHECK(!smp_finder.AllDone());
+        CHECK(!exh_finder.AllDone());
 
         // Call SimpleCandidateFinder.
         auto [found, iterations_done] = smp_finder.FindCandidateSet(MAX_SIMPLE_ITERATIONS);
         bool optimal = (iterations_done != MAX_SIMPLE_ITERATIONS);
 
         // Sanity check the result.
-        assert(iterations_done <= MAX_SIMPLE_ITERATIONS);
-        assert(found.transactions.Any());
-        assert(found.transactions.IsSubsetOf(todo));
-        assert(depgraph.FeeRate(found.transactions) == found.feerate);
+        CHECK(iterations_done <= MAX_SIMPLE_ITERATIONS);
+        CHECK(found.transactions.Any());
+        CHECK(found.transactions.IsSubsetOf(todo));
+        CHECK(depgraph.FeeRate(found.transactions) == found.feerate);
         // Check that it is topologically valid.
         for (auto i : found.transactions) {
-            assert(found.transactions.IsSupersetOf(depgraph.Ancestors(i) & todo));
+            CHECK(found.transactions.IsSupersetOf(depgraph.Ancestors(i) & todo));
         }
 
         // At most 2^(N-1) iterations can be required: the number of non-empty connected subsets a
         // graph with N transactions can have. If MAX_SIMPLE_ITERATIONS exceeds this number, the
         // result is necessarily optimal.
-        assert(iterations_done <= (uint64_t{1} << (todo.Count() - 1)));
-        if (MAX_SIMPLE_ITERATIONS > (uint64_t{1} << (todo.Count() - 1))) assert(optimal);
+        CHECK(iterations_done <= (uint64_t{1} << (todo.Count() - 1)));
+        if (MAX_SIMPLE_ITERATIONS > (uint64_t{1} << (todo.Count() - 1))) CHECK(optimal);
 
         // SimpleCandidateFinder only finds connected sets.
-        assert(depgraph.IsConnected(found.transactions));
+        CHECK(depgraph.IsConnected(found.transactions));
 
         // Perform further quality checks only if SimpleCandidateFinder claims an optimal result.
         if (optimal) {
@@ -819,13 +820,13 @@ FUZZ_TARGET(clusterlin_simple_finder)
                 // Compare with ExhaustiveCandidateFinder. This quickly gets computationally
                 // expensive for large clusters (O(2^n)), so only do it for sufficiently small ones.
                 auto exhaustive = exh_finder.FindCandidateSet();
-                assert(exhaustive.feerate == found.feerate);
+                CHECK(exhaustive.feerate == found.feerate);
             }
 
             // Compare with a non-empty topological set read from the fuzz input (comparing with an
             // empty set is not interesting).
             auto read_topo = ReadTopologicalSet(depgraph, todo, reader, /*non_empty=*/true);
-            assert(found.feerate >= depgraph.FeeRate(read_topo));
+            CHECK(found.feerate >= depgraph.FeeRate(read_topo));
         }
 
         // Find a non-empty topologically valid subset of transactions to remove from the graph.
@@ -837,8 +838,8 @@ FUZZ_TARGET(clusterlin_simple_finder)
         exh_finder.MarkDone(del_set);
     }
 
-    assert(smp_finder.AllDone());
-    assert(exh_finder.AllDone());
+    CHECK(smp_finder.AllDone());
+    CHECK(exh_finder.AllDone());
 }
 
 FUZZ_TARGET(clusterlin_simple_linearize)
@@ -866,7 +867,7 @@ FUZZ_TARGET(clusterlin_simple_linearize)
     // connected topologically valid subset), which sums over k=1..n to (2^n)-1.
     const uint64_t n = depgraph.TxCount();
     if (n <= 63 && (iter_count >> n)) {
-        assert(optimal);
+        CHECK(optimal);
     }
 
     // If SimpleLinearize claims optimal result, and the cluster is sufficiently small (there are
@@ -875,8 +876,8 @@ FUZZ_TARGET(clusterlin_simple_linearize)
         auto exh_linearization = ExhaustiveLinearize(depgraph);
         auto exh_chunking = ChunkLinearization(depgraph, exh_linearization);
         auto cmp = CompareChunks(simple_chunking, exh_chunking);
-        assert(cmp == 0);
-        assert(simple_chunking.size() == exh_chunking.size());
+        CHECK(cmp == 0);
+        CHECK(simple_chunking.size() == exh_chunking.size());
     }
 
     if (optimal) {
@@ -884,7 +885,7 @@ FUZZ_TARGET(clusterlin_simple_linearize)
         auto read = ReadLinearization(depgraph, reader);
         auto read_chunking = ChunkLinearization(depgraph, read);
         auto cmp = CompareChunks(simple_chunking, read_chunking);
-        assert(cmp >= 0);
+        CHECK(cmp >= 0);
     }
 }
 
@@ -928,21 +929,21 @@ FUZZ_TARGET(clusterlin_sfl)
             auto lin = sfl.GetLinearization(IndexTxOrder{});
             auto lin_diagram = ChunkLinearization(depgraph, lin);
             auto cmp_lin = CompareChunks(lin_diagram, diagram);
-            assert(cmp_lin >= 0);
+            CHECK(cmp_lin >= 0);
             // If we're in an allegedly optimal state, they must match.
-            if (is_optimal) assert(cmp_lin == 0);
+            if (is_optimal) CHECK(cmp_lin == 0);
             // If we're in an allegedly minimal state, they must also have the same number of
             // segments.
-            if (is_minimal) assert(diagram.size() == lin_diagram.size());
+            if (is_minimal) CHECK(diagram.size() == lin_diagram.size());
         }
         // Verify that subsequent calls to GetDiagram() never get worse/incomparable.
         if (!last_diagram.empty()) {
             auto cmp = CompareChunks(diagram, last_diagram);
-            assert(cmp >= 0);
+            CHECK(cmp >= 0);
             // If the last diagram was already optimal, the new one cannot be better.
-            if (was_optimal) assert(cmp == 0);
+            if (was_optimal) CHECK(cmp == 0);
             // Also, if the diagram was already optimal, the number of segments can only increase.
-            if (was_optimal) assert(diagram.size() >= last_diagram.size());
+            if (was_optimal) CHECK(diagram.size() >= last_diagram.size());
         }
         last_diagram = std::move(diagram);
         was_optimal = is_optimal;
@@ -984,17 +985,17 @@ FUZZ_TARGET(clusterlin_sfl)
 
     // Verify that optimality is reached within an expected amount of work. This protects against
     // hypothetical bugs that hugely increase the amount of work needed to reach optimality.
-    assert(sfl.GetCost() <= MaxOptimalLinearizationCost(depgraph.TxCount()));
+    CHECK(sfl.GetCost() <= MaxOptimalLinearizationCost(depgraph.TxCount()));
 
     // The result must be as good as SimpleLinearize.
     auto [simple_linearization, simple_optimal] = SimpleLinearize(depgraph, MAX_SIMPLE_ITERATIONS / 10);
     auto simple_diagram = ChunkLinearization(depgraph, simple_linearization);
     auto simple_cmp = CompareChunks(last_diagram, simple_diagram);
-    assert(simple_cmp >= 0);
-    if (simple_optimal) assert(simple_cmp == 0);
+    CHECK(simple_cmp >= 0);
+    if (simple_optimal) CHECK(simple_cmp == 0);
     // If the diagram matches, we must also have at least as many segments (because the SFL state
     // and its produced diagram are minimal);
-    if (simple_cmp == 0) assert(last_diagram.size() >= simple_diagram.size());
+    if (simple_cmp == 0) CHECK(last_diagram.size() >= simple_diagram.size());
 
     // We can compare with any arbitrary linearization, and the diagram must be at least as good as
     // each.
@@ -1002,8 +1003,8 @@ FUZZ_TARGET(clusterlin_sfl)
         auto read_lin = ReadLinearization(depgraph, reader);
         auto read_diagram = ChunkLinearization(depgraph, read_lin);
         auto cmp = CompareChunks(last_diagram, read_diagram);
-        assert(cmp >= 0);
-        if (cmp == 0) assert(last_diagram.size() >= read_diagram.size());
+        CHECK(cmp >= 0);
+        if (cmp == 0) CHECK(last_diagram.size() >= read_diagram.size());
     }
 }
 
@@ -1060,12 +1061,12 @@ FUZZ_TARGET(clusterlin_linearize)
     if (provide_topological_input) {
         auto old_chunking = ChunkLinearization(depgraph, old_linearization);
         auto cmp = CompareChunks(chunking, old_chunking);
-        assert(cmp >= 0);
+        CHECK(cmp >= 0);
     }
 
     // If the maximum amount of work is sufficiently high, an optimal linearization must be found.
     if (max_cost > MaxOptimalLinearizationCost(depgraph.TxCount())) {
-        assert(optimal);
+        CHECK(optimal);
     }
 
     // If Linearize claims optimal result, run quality tests.
@@ -1075,20 +1076,20 @@ FUZZ_TARGET(clusterlin_linearize)
         SanityCheck(depgraph, simple_linearization);
         auto simple_chunking = ChunkLinearization(depgraph, simple_linearization);
         auto cmp = CompareChunks(chunking, simple_chunking);
-        assert(cmp >= 0);
+        CHECK(cmp >= 0);
         // If SimpleLinearize finds the optimal result too, they must be equal (if not,
         // SimpleLinearize is broken).
-        if (simple_optimal) assert(cmp == 0);
+        if (simple_optimal) CHECK(cmp == 0);
 
         // If simple_chunking is diagram-optimal, it cannot have more chunks than chunking (as
         // chunking is claimed to be optimal, which implies minimal chunks).
-        if (cmp == 0) assert(chunking.size() >= simple_chunking.size());
+        if (cmp == 0) CHECK(chunking.size() >= simple_chunking.size());
 
         // Compare with a linearization read from the fuzz input.
         auto read = ReadLinearization(depgraph, reader);
         auto read_chunking = ChunkLinearization(depgraph, read);
         auto cmp_read = CompareChunks(chunking, read_chunking);
-        assert(cmp_read >= 0);
+        CHECK(cmp_read >= 0);
 
         // Verify that within every chunk, the transactions are in a valid order. For any pair of
         // transactions, it should not be possible to swap them; either due to a missing
@@ -1112,10 +1113,10 @@ FUZZ_TARGET(clusterlin_linearize)
                         // tx2 could take position pos1.
                         // Verify that individual transaction feerate is decreasing (note that >=
                         // tie-breaks by size).
-                        assert(depgraph.FeeRate(tx1) >= depgraph.FeeRate(tx2));
+                        CHECK(depgraph.FeeRate(tx1) >= depgraph.FeeRate(tx2));
                         // If feerate and size are equal, compare by DepGraphIndex.
                         if (depgraph.FeeRate(tx1) == depgraph.FeeRate(tx2)) {
-                            assert(tx1 < tx2);
+                            CHECK(tx1 < tx2);
                         }
                     }
                 }
@@ -1140,10 +1141,10 @@ FUZZ_TARGET(clusterlin_linearize)
                 if ((chunk2_ancestors - done).IsSubsetOf(chunk2.transactions)) {
                     // chunk2 could take position chunk_num1.
                     // Verify that chunk feerate is decreasing (note that >= tie-breaks by size).
-                    assert(chunk1.feerate >= chunk2.feerate);
+                    CHECK(chunk1.feerate >= chunk2.feerate);
                     // If feerate and size are equal, compare by maximum DepGraphIndex element.
                     if (chunk1.feerate == chunk2.feerate) {
-                        assert(chunk1.transactions.Last() < chunk2.transactions.Last());
+                        CHECK(chunk1.transactions.Last() < chunk2.transactions.Last());
                     }
                 }
             }
@@ -1153,8 +1154,8 @@ FUZZ_TARGET(clusterlin_linearize)
         // Redo from scratch with a different rng_seed. The resulting linearization should be
         // deterministic, if both are optimal.
         auto [linearization2, optimal2, cost2] = Linearize(depgraph, MaxOptimalLinearizationCost(depgraph.TxCount()) + 1, rng_seed ^ 0x1337, IndexTxOrder{});
-        assert(optimal2);
-        assert(linearization2 == linearization);
+        CHECK(optimal2);
+        CHECK(linearization2 == linearization);
     }
 }
 
@@ -1183,7 +1184,7 @@ FUZZ_TARGET(clusterlin_postlinearize)
     auto chunking = ChunkLinearization(depgraph, linearization);
     auto post_chunking = ChunkLinearization(depgraph, post_linearization);
     auto cmp = CompareChunks(post_chunking, chunking);
-    assert(cmp >= 0);
+    CHECK(cmp >= 0);
 
     // Run again, things can keep improving (and never get worse)
     auto post_post_linearization = post_linearization;
@@ -1191,12 +1192,12 @@ FUZZ_TARGET(clusterlin_postlinearize)
     SanityCheck(depgraph, post_post_linearization);
     auto post_post_chunking = ChunkLinearization(depgraph, post_post_linearization);
     cmp = CompareChunks(post_post_chunking, post_chunking);
-    assert(cmp >= 0);
+    CHECK(cmp >= 0);
 
     // The chunks that come out of postlinearizing are always connected.
     auto linchunking = ChunkLinearizationInfo(depgraph, post_linearization);
     for (const auto& [chunk_set, _chunk_feerate] : linchunking) {
-        assert(depgraph.IsConnected(chunk_set));
+        CHECK(depgraph.IsConnected(chunk_set));
     }
 }
 
@@ -1230,7 +1231,7 @@ FUZZ_TARGET(clusterlin_postlinearize_tree)
     auto chunking = ChunkLinearization(depgraph_tree, linearization);
     auto post_chunking = ChunkLinearization(depgraph_tree, post_linearization);
     auto cmp = CompareChunks(post_chunking, chunking);
-    assert(cmp >= 0);
+    CHECK(cmp >= 0);
 
     // Verify that post-linearizing again does not change the diagram. The result must be identical
     // as post_linearization ought to be optimal already with a tree-structured graph.
@@ -1239,14 +1240,14 @@ FUZZ_TARGET(clusterlin_postlinearize_tree)
     SanityCheck(depgraph_tree, post_post_linearization);
     auto post_post_chunking = ChunkLinearization(depgraph_tree, post_post_linearization);
     auto cmp_post = CompareChunks(post_post_chunking, post_chunking);
-    assert(cmp_post == 0);
+    CHECK(cmp_post == 0);
 
     // Try to find an even better linearization directly. This must not change the diagram for the
     // same reason.
     auto [opt_linearization, _optimal, _cost] = Linearize(depgraph_tree, 1000000, rng_seed, IndexTxOrder{}, post_linearization);
     auto opt_chunking = ChunkLinearization(depgraph_tree, opt_linearization);
     auto cmp_opt = CompareChunks(opt_chunking, post_chunking);
-    assert(cmp_opt == 0);
+    CHECK(cmp_opt == 0);
 }
 
 FUZZ_TARGET(clusterlin_postlinearize_moved_leaf)
@@ -1289,5 +1290,5 @@ FUZZ_TARGET(clusterlin_postlinearize_moved_leaf)
     depgraph.FeeRate(lin_leaf.back()).fee += fee_inc;
     auto new_chunking = ChunkLinearization(depgraph, lin_moved);
     auto cmp = CompareChunks(new_chunking, old_chunking);
-    assert(cmp >= 0);
+    CHECK(cmp >= 0);
 }

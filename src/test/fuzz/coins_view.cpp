@@ -76,7 +76,7 @@ public:
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) override
     {
         // Nothing must modify cacheCoins other than BatchWrite.
-        assert(ComputeCacheCoinsSnapshot() == m_expected_snapshot);
+        CHECK(ComputeCacheCoinsSnapshot() == m_expected_snapshot);
         CCoinsViewCache::BatchWrite(cursor, block_hash);
         m_expected_snapshot = ComputeCacheCoinsSnapshot();
     }
@@ -228,7 +228,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
         } catch (const std::logic_error&) {
             expected_code_path = true;
         }
-        assert(expected_code_path);
+        CHECK(expected_code_path);
         (void)coins_view_cache.DynamicMemoryUsage();
         (void)coins_view_cache.EstimateSize();
         (void)coins_view_cache.GetBestBlock();
@@ -239,7 +239,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
 
     {
         if (is_db && backend_coins_view == original_backend) {
-            assert(backend_coins_view->Cursor());
+            CHECK(backend_coins_view->Cursor());
         }
         (void)backend_coins_view->EstimateSize();
         (void)backend_coins_view->GetBestBlock();
@@ -289,7 +289,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                     return;
                 }
                 if (Consensus::CheckTxInputs(transaction, state, coins_view_cache, fuzzed_data_provider.ConsumeIntegralInRange<int>(0, std::numeric_limits<int>::max()), tx_fee_out)) {
-                    assert(MoneyRange(tx_fee_out));
+                    CHECK(MoneyRange(tx_fee_out));
                 }
             },
             [&] {
@@ -327,22 +327,22 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
         const bool exists_using_have_coin = coins_view_cache.HaveCoin(random_out_point);
         const bool exists_using_have_coin_in_cache = coins_view_cache.HaveCoinInCache(random_out_point);
         if (auto coin{coins_view_cache.GetCoin(random_out_point)}) {
-            assert(*coin == coin_using_access_coin);
-            assert(exists_using_access_coin && exists_using_have_coin_in_cache && exists_using_have_coin);
+            CHECK(*coin == coin_using_access_coin);
+            CHECK(exists_using_access_coin && exists_using_have_coin_in_cache && exists_using_have_coin);
         } else {
-            assert(!exists_using_access_coin && !exists_using_have_coin_in_cache && !exists_using_have_coin);
+            CHECK(!exists_using_access_coin && !exists_using_have_coin_in_cache && !exists_using_have_coin);
         }
         // If HaveCoin on the backend is true, it must also be on the cache if the coin wasn't spent.
         const bool exists_using_have_coin_in_backend = backend_coins_view->HaveCoin(random_out_point);
         if (!coin_using_access_coin.IsSpent() && exists_using_have_coin_in_backend) {
-            assert(exists_using_have_coin);
+            CHECK(exists_using_have_coin);
         }
         if (auto coin{backend_coins_view->GetCoin(random_out_point)}) {
-            assert(exists_using_have_coin_in_backend);
+            CHECK(exists_using_have_coin_in_backend);
             // Note we can't assert that `coin_using_get_coin == *coin` because the coin in
             // the cache may have been modified but not yet flushed.
         } else {
-            assert(!exists_using_have_coin_in_backend);
+            CHECK(!exists_using_have_coin_in_backend);
         }
     }
 }

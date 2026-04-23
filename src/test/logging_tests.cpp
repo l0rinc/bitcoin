@@ -385,7 +385,7 @@ void LogFromLocation(Location location, const std::string& message) {
         LogPrintLevel_(BCLog::LogFlags::ALL, BCLog::Level::Info, /*should_ratelimit=*/false, "%s\n", message);
         return;
     } // no default case, so the compiler can warn about missing cases
-    assert(false);
+    CHECK(false);
 }
 
 /**
@@ -398,7 +398,7 @@ void TestLogFromLocation(Location location, const std::string& message,
 {
     BOOST_TEST_INFO_SCOPE("TestLogFromLocation called from " << source.file_name() << ":" << source.line());
     using Status = BCLog::LogRateLimiter::Status;
-    if (!suppressions_active) assert(status == Status::UNSUPPRESSED); // developer error
+    if (!suppressions_active) CHECK(status == Status::UNSUPPRESSED); // developer error
 
     std::ofstream ofs(LogInstance().m_file_path.std_path(), std::ios::out | std::ios::trunc); // clear debug log
     LogFromLocation(location, message);

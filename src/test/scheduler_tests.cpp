@@ -153,12 +153,12 @@ BOOST_AUTO_TEST_CASE(singlethreadedscheduler_ordered)
     for (int i = 0; i < 100; ++i) {
         queue1.insert([i, &counter1]() {
             bool expectation = i == counter1++;
-            assert(expectation);
+            CHECK(expectation);
         });
 
         queue2.insert([i, &counter2]() {
             bool expectation = i == counter2++;
-            assert(expectation);
+            CHECK(expectation);
         });
     }
 

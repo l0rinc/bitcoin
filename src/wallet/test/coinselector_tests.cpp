@@ -74,7 +74,7 @@ static void add_coin(CoinsResult& available_coins, CWallet& wallet, const CAmoun
 
     LOCK(wallet.cs_wallet);
     auto ret = wallet.mapWallet.emplace(std::piecewise_construct, std::forward_as_tuple(txid), std::forward_as_tuple(MakeTransactionRef(std::move(tx)), TxStateInactive{}));
-    assert(ret.second);
+    CHECK(ret.second);
     CWalletTx& wtx = (*ret.first).second;
     const auto& txout = wtx.tx->vout.at(nInput);
     available_coins.Add(OutputType::BECH32, {COutPoint(wtx.GetHash(), nInput), txout, nAge, custom_size == 0 ? CalculateMaximumSignedInputSize(txout, &wallet, /*coin_control=*/nullptr) : custom_size, /*solvable=*/true, /*safe=*/true, wtx.GetTxTime(), fIsFromMe, feerate});
@@ -832,7 +832,7 @@ BOOST_AUTO_TEST_CASE(waste_test)
         // = (2 * fee) - (2 * (fee + large_fee_diff)) + change_cost
         // = (2 * 100) - (2 * (100 + 90)) + 125
         // = 200 - 380 + 125 = -55
-        assert(target_waste2 == -55);
+        CHECK(target_waste2 == -55);
         add_coin(1 * COIN, 1, selection, fee, fee + large_fee_diff);
         add_coin(2 * COIN, 2, selection, fee, fee + large_fee_diff);
         selection.RecalculateWaste(min_viable_change, change_cost, change_fee);

@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 FUZZ_TARGET(script_descriptor_cache)
 {
@@ -27,14 +28,14 @@ FUZZ_TARGET(script_descriptor_cache)
             if (fuzzed_data_provider.ConsumeBool()) {
                 (void)descriptor_cache.GetCachedParentExtPubKey(key_exp_pos, xpub_fetched);
                 descriptor_cache.CacheParentExtPubKey(key_exp_pos, xpub);
-                assert(descriptor_cache.GetCachedParentExtPubKey(key_exp_pos, xpub_fetched));
+                CHECK(descriptor_cache.GetCachedParentExtPubKey(key_exp_pos, xpub_fetched));
             } else {
                 const uint32_t der_index = fuzzed_data_provider.ConsumeIntegral<uint32_t>();
                 (void)descriptor_cache.GetCachedDerivedExtPubKey(key_exp_pos, der_index, xpub_fetched);
                 descriptor_cache.CacheDerivedExtPubKey(key_exp_pos, der_index, xpub);
-                assert(descriptor_cache.GetCachedDerivedExtPubKey(key_exp_pos, der_index, xpub_fetched));
+                CHECK(descriptor_cache.GetCachedDerivedExtPubKey(key_exp_pos, der_index, xpub_fetched));
             }
-            assert(xpub == xpub_fetched);
+            CHECK(xpub == xpub_fetched);
         }
         (void)descriptor_cache.GetCachedParentExtPubKeys();
         (void)descriptor_cache.GetCachedDerivedExtPubKeys();

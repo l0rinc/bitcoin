@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 void initialize_key_io()
 {
@@ -24,16 +25,16 @@ FUZZ_TARGET(key_io, .init = initialize_key_io)
 
     const CKey key = DecodeSecret(random_string);
     if (key.IsValid()) {
-        assert(key == DecodeSecret(EncodeSecret(key)));
+        CHECK(key == DecodeSecret(EncodeSecret(key)));
     }
 
     const CExtKey ext_key = DecodeExtKey(random_string);
     if (ext_key.key.size() == 32) {
-        assert(ext_key == DecodeExtKey(EncodeExtKey(ext_key)));
+        CHECK(ext_key == DecodeExtKey(EncodeExtKey(ext_key)));
     }
 
     const CExtPubKey ext_pub_key = DecodeExtPubKey(random_string);
     if (ext_pub_key.pubkey.size() == CPubKey::COMPRESSED_SIZE) {
-        assert(ext_pub_key == DecodeExtPubKey(EncodeExtPubKey(ext_pub_key)));
+        CHECK(ext_pub_key == DecodeExtPubKey(EncodeExtPubKey(ext_pub_key)));
     }
 }

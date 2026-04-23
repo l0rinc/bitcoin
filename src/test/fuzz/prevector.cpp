@@ -10,6 +10,7 @@
 
 #include <ranges>
 #include <vector>
+#include <test/util/check.h>
 namespace {
 
 template <unsigned int N, typename T>
@@ -29,58 +30,58 @@ public:
     void test() const
     {
         const pretype& const_pre_vector = pre_vector;
-        assert(real_vector.size() == pre_vector.size());
-        assert(real_vector.empty() == pre_vector.empty());
+        CHECK(real_vector.size() == pre_vector.size());
+        CHECK(real_vector.empty() == pre_vector.empty());
         for (Size s = 0; s < real_vector.size(); s++) {
-            assert(real_vector[s] == pre_vector[s]);
-            assert(&(pre_vector[s]) == &(pre_vector.begin()[s]));
-            assert(&(pre_vector[s]) == &*(pre_vector.begin() + s));
-            assert(&(pre_vector[s]) == &*((pre_vector.end() + s) - real_vector.size()));
+            CHECK(real_vector[s] == pre_vector[s]);
+            CHECK(&(pre_vector[s]) == &(pre_vector.begin()[s]));
+            CHECK(&(pre_vector[s]) == &*(pre_vector.begin() + s));
+            CHECK(&(pre_vector[s]) == &*((pre_vector.end() + s) - real_vector.size()));
         }
-        // assert(realtype(pre_vector) == real_vector);
-        assert(pretype(real_vector.begin(), real_vector.end()) == pre_vector);
-        assert(pretype(pre_vector.begin(), pre_vector.end()) == pre_vector);
+        // CHECK(realtype(pre_vector) == real_vector);
+        CHECK(pretype(real_vector.begin(), real_vector.end()) == pre_vector);
+        CHECK(pretype(pre_vector.begin(), pre_vector.end()) == pre_vector);
         size_t pos = 0;
         for (const T& v : pre_vector) {
-            assert(v == real_vector[pos]);
+            CHECK(v == real_vector[pos]);
             ++pos;
         }
         for (const T& v : pre_vector | std::views::reverse) {
             --pos;
-            assert(v == real_vector[pos]);
+            CHECK(v == real_vector[pos]);
         }
         for (const T& v : const_pre_vector) {
-            assert(v == real_vector[pos]);
+            CHECK(v == real_vector[pos]);
             ++pos;
         }
         for (const T& v : const_pre_vector | std::views::reverse) {
             --pos;
-            assert(v == real_vector[pos]);
+            CHECK(v == real_vector[pos]);
         }
         DataStream ss1{};
         DataStream ss2{};
         ss1 << real_vector;
         ss2 << pre_vector;
-        assert(ss1.size() == ss2.size());
+        CHECK(ss1.size() == ss2.size());
         for (Size s = 0; s < ss1.size(); s++) {
-            assert(ss1[s] == ss2[s]);
+            CHECK(ss1[s] == ss2[s]);
         }
     }
 
     void resize(Size s)
     {
         real_vector.resize(s);
-        assert(real_vector.size() == s);
+        CHECK(real_vector.size() == s);
         pre_vector.resize(s);
-        assert(pre_vector.size() == s);
+        CHECK(pre_vector.size() == s);
     }
 
     void reserve(Size s)
     {
         real_vector.reserve(s);
-        assert(real_vector.capacity() >= s);
+        CHECK(real_vector.capacity() >= s);
         pre_vector.reserve(s);
-        assert(pre_vector.capacity() >= s);
+        CHECK(pre_vector.capacity() >= s);
     }
 
     void insert(Size position, const T& value)

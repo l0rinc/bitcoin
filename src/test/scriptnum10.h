@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 class scriptnum10_error : public std::runtime_error
 {
@@ -76,7 +77,7 @@ public:
 
     inline CScriptNum10 operator-()                         const
     {
-        assert(m_value != std::numeric_limits<int64_t>::min());
+        CHECK(m_value != std::numeric_limits<int64_t>::min());
         return CScriptNum10(-m_value);
     }
 
@@ -88,7 +89,7 @@ public:
 
     inline CScriptNum10& operator+=( const int64_t& rhs)
     {
-        assert(rhs == 0 || (rhs > 0 && m_value <= std::numeric_limits<int64_t>::max() - rhs) ||
+        CHECK(rhs == 0 || (rhs > 0 && m_value <= std::numeric_limits<int64_t>::max() - rhs) ||
                            (rhs < 0 && m_value >= std::numeric_limits<int64_t>::min() - rhs));
         m_value += rhs;
         return *this;
@@ -96,7 +97,7 @@ public:
 
     inline CScriptNum10& operator-=( const int64_t& rhs)
     {
-        assert(rhs == 0 || (rhs > 0 && m_value >= std::numeric_limits<int64_t>::min() + rhs) ||
+        CHECK(rhs == 0 || (rhs > 0 && m_value >= std::numeric_limits<int64_t>::min() + rhs) ||
                            (rhs < 0 && m_value <= std::numeric_limits<int64_t>::max() + rhs));
         m_value -= rhs;
         return *this;

@@ -14,13 +14,14 @@
 #include <ios>
 #include <utility>
 #include <vector>
+#include <test/util/check.h>
 
 static SpanReader& operator>>(SpanReader& ds, script_verify_flags& f)
 {
     script_verify_flags::value_type n{0};
     ds >> n;
     f = script_verify_flags::from_int(n);
-    assert(n == f.as_int());
+    CHECK(n == f.as_int());
     return ds;
 }
 
@@ -34,7 +35,7 @@ FUZZ_TARGET(script_flags)
         script_verify_flags verify_flags;
         ds >> verify_flags;
 
-        assert(verify_flags == script_verify_flags::from_int(verify_flags.as_int()));
+        CHECK(verify_flags == script_verify_flags::from_int(verify_flags.as_int()));
 
         if (!IsValidFlagCombination(verify_flags)) return;
 
@@ -60,7 +61,7 @@ FUZZ_TARGET(script_flags)
 
             ScriptError serror;
             const bool ret = VerifyScript(tx.vin.at(i).scriptSig, prevout.scriptPubKey, &tx.vin.at(i).scriptWitness, verify_flags, checker, &serror);
-            assert(ret == (serror == SCRIPT_ERR_OK));
+            CHECK(ret == (serror == SCRIPT_ERR_OK));
 
             // Verify that removing flags from a passing test or adding flags to a failing test does not change the result
             if (ret) {
@@ -72,9 +73,9 @@ FUZZ_TARGET(script_flags)
 
             ScriptError serror_fuzzed;
             const bool ret_fuzzed = VerifyScript(tx.vin.at(i).scriptSig, prevout.scriptPubKey, &tx.vin.at(i).scriptWitness, verify_flags, checker, &serror_fuzzed);
-            assert(ret_fuzzed == (serror_fuzzed == SCRIPT_ERR_OK));
+            CHECK(ret_fuzzed == (serror_fuzzed == SCRIPT_ERR_OK));
 
-            assert(ret_fuzzed == ret);
+            CHECK(ret_fuzzed == ret);
         }
     } catch (const std::ios_base::failure&) {
         return;

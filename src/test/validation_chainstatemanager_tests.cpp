@@ -188,7 +188,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_ibd_exit_after_loading_blocks, ChainTe
             tip.nTime = (recent_time - (tip_recent ? 0h : 100h)).time_since_epoch().count();
             chainman.ActiveChain().SetTip(tip);
         } else {
-            assert(!chainman.ActiveChain().Tip());
+            CHECK(!chainman.ActiveChain().Tip());
         }
         chainman.UpdateIBDStatus();
     }};

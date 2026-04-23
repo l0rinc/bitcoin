@@ -11,6 +11,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 FUZZ_TARGET(primitives_transaction)
 {
@@ -23,12 +24,12 @@ FUZZ_TARGET(primitives_transaction)
     }
     const CTxOut tx_out_1{ConsumeMoney(fuzzed_data_provider), script};
     const CTxOut tx_out_2{ConsumeMoney(fuzzed_data_provider), ConsumeScript(fuzzed_data_provider)};
-    assert((tx_out_1 == tx_out_2) != (tx_out_1 != tx_out_2));
+    CHECK((tx_out_1 == tx_out_2) != (tx_out_1 != tx_out_2));
     const std::optional<CMutableTransaction> mutable_tx_1 = ConsumeDeserializable<CMutableTransaction>(fuzzed_data_provider, TX_WITH_WITNESS);
     const std::optional<CMutableTransaction> mutable_tx_2 = ConsumeDeserializable<CMutableTransaction>(fuzzed_data_provider, TX_WITH_WITNESS);
     if (mutable_tx_1 && mutable_tx_2) {
         const CTransaction tx_1{*mutable_tx_1};
         const CTransaction tx_2{*mutable_tx_2};
-        assert((tx_1 == tx_2) != (tx_1 != tx_2));
+        CHECK((tx_1 == tx_2) != (tx_1 != tx_2));
     }
 }

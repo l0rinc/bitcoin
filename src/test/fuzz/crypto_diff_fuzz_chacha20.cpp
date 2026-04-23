@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <test/util/check.h>
 
 /*
 From https://cr.yp.to/chacha.html
@@ -311,7 +312,7 @@ FUZZ_TARGET(crypto_diff_fuzz_chacha20)
                 chacha20.Keystream(MakeWritableByteSpan(output));
                 std::vector<uint8_t> djb_output(integralInRange);
                 ECRYPT_keystream_bytes(&ctx, djb_output.data(), djb_output.size());
-                assert(output == djb_output);
+                CHECK(output == djb_output);
                 // DJB's version seeks forward to a multiple of 64 bytes after every operation. Correct for that.
                 uint32_t old_counter = counter;
                 counter += (integralInRange + 63) >> 6;
@@ -319,7 +320,7 @@ FUZZ_TARGET(crypto_diff_fuzz_chacha20)
                 if (integralInRange & 63) {
                     chacha20.Seek(nonce, counter);
                 }
-                assert(counter == ctx.input[12]);
+                CHECK(counter == ctx.input[12]);
             },
             [&] {
                 uint32_t integralInRange = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 4096);
@@ -328,7 +329,7 @@ FUZZ_TARGET(crypto_diff_fuzz_chacha20)
                 chacha20.Crypt(MakeByteSpan(input), MakeWritableByteSpan(output));
                 std::vector<uint8_t> djb_output(integralInRange);
                 ECRYPT_encrypt_bytes(&ctx, input.data(), djb_output.data(), input.size());
-                assert(output == djb_output);
+                CHECK(output == djb_output);
                 // DJB's version seeks forward to a multiple of 64 bytes after every operation. Correct for that.
                 uint32_t old_counter = counter;
                 counter += (integralInRange + 63) >> 6;
@@ -336,7 +337,7 @@ FUZZ_TARGET(crypto_diff_fuzz_chacha20)
                 if (integralInRange & 63) {
                     chacha20.Seek(nonce, counter);
                 }
-                assert(counter == ctx.input[12]);
+                CHECK(counter == ctx.input[12]);
             });
     }
 }

@@ -21,7 +21,7 @@ struct RandomHasher {
     template <uint8_t>
     uint32_t operator()(const bool& /* unused */) const
     {
-        assert(fuzzed_data_provider_ptr != nullptr);
+        CHECK(fuzzed_data_provider_ptr != nullptr);
         return fuzzed_data_provider_ptr->ConsumeIntegral<uint32_t>();
     }
 };

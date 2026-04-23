@@ -189,11 +189,11 @@ BOOST_AUTO_TEST_CASE(block_malleation)
         coinbase.vout[0].scriptPubKey[5] = 0xed;
 
         auto tx = MakeTransactionRef(coinbase);
-        assert(tx->IsCoinBase());
+        CHECK(tx->IsCoinBase());
         return tx;
     };
     auto insert_witness_commitment = [](CBlock& block, uint256 commitment) {
-        assert(!block.vtx.empty() && block.vtx[0]->IsCoinBase() && !block.vtx[0]->vout.empty());
+        CHECK(!block.vtx.empty() && block.vtx[0]->IsCoinBase() && !block.vtx[0]->vout.empty());
 
         CMutableTransaction mtx{*block.vtx[0]};
         CHash256().Write(commitment).Write(std::vector<unsigned char>(32, 0x00)).Finalize(commitment);
@@ -249,8 +249,8 @@ BOOST_AUTO_TEST_CASE(block_malleation)
             mtx.vout[0].scriptPubKey.resize(4);
             block.vtx.push_back(MakeTransactionRef(mtx));
             block.hashMerkleRoot = block.vtx.back()->GetHash().ToUint256();
-            assert(block.vtx.back()->IsCoinBase());
-            assert(GetSerializeSize(TX_NO_WITNESS(block.vtx.back())) == 64);
+            CHECK(block.vtx.back()->IsCoinBase());
+            CHECK(GetSerializeSize(TX_NO_WITNESS(block.vtx.back())) == 64);
         }
         CHECK(is_not_mutated(block, /*check_witness_root=*/false));
     }
@@ -285,9 +285,9 @@ BOOST_AUTO_TEST_CASE(block_malleation)
             HashWriter hasher;
             hasher.write(tx1.GetHash());
             hasher.write(tx2.GetHash());
-            assert(hasher.GetHash() == tx3.GetHash().ToUint256());
+            CHECK(hasher.GetHash() == tx3.GetHash().ToUint256());
             // Verify that tx3 is 64 bytes in size (without witness).
-            assert(GetSerializeSize(TX_NO_WITNESS(tx3)) == 64);
+            CHECK(GetSerializeSize(TX_NO_WITNESS(tx3)) == 64);
         }
 
         CBlock block;
@@ -334,7 +334,7 @@ BOOST_AUTO_TEST_CASE(block_malleation)
         // Malleating witnesses should be caught by `IsBlockMutated`.
         {
             CMutableTransaction mtx{*block.vtx[1]};
-            assert(!mtx.vin[0].scriptWitness.stack[0].empty());
+            CHECK(!mtx.vin[0].scriptWitness.stack[0].empty());
             ++mtx.vin[0].scriptWitness.stack[0][0];
             block.vtx[1] = MakeTransactionRef(mtx);
         }

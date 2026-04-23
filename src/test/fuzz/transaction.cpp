@@ -21,6 +21,7 @@
 #include <validation.h>
 
 #include <cassert>
+#include <test/util/check.h>
 
 void initialize_transaction()
 {
@@ -47,7 +48,7 @@ FUZZ_TARGET(transaction, .init = initialize_transaction)
     } catch (const std::ios_base::failure&) {
         valid_mutable_tx = false;
     }
-    assert(valid_tx == valid_mutable_tx);
+    CHECK(valid_tx == valid_mutable_tx);
     if (!valid_tx) {
         return;
     }
@@ -63,7 +64,7 @@ FUZZ_TARGET(transaction, .init = initialize_transaction)
     const bool is_standard_with_permit_bare_multisig = IsStandardTx(tx, std::nullopt, /* permit_bare_multisig= */ true, dust_relay_fee, reason);
     const bool is_standard_without_permit_bare_multisig = IsStandardTx(tx, std::nullopt, /* permit_bare_multisig= */ false, dust_relay_fee, reason);
     if (is_standard_without_permit_bare_multisig) {
-        assert(is_standard_with_permit_bare_multisig);
+        CHECK(is_standard_with_permit_bare_multisig);
     }
 
     (void)tx.GetHash();

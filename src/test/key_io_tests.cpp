@@ -103,7 +103,7 @@ BOOST_AUTO_TEST_CASE(key_io_valid_gen)
             bool isCompressed = metadata.find_value("isCompressed").get_bool();
             CKey key;
             key.Set(exp_payload.begin(), exp_payload.end(), isCompressed);
-            assert(key.IsValid());
+            CHECK(key.IsValid());
             CHECK_MESSAGE(EncodeSecret(key) == exp_base58string, "result mismatch: " + strTest);
         } else {
             CTxDestination dest;

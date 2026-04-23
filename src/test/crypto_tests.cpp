@@ -83,9 +83,9 @@ void TestAES256(const std::string &hexkey, const std::string &hexin, const std::
     std::vector<unsigned char> correctout = ParseHex(hexout);
     std::vector<unsigned char> buf;
 
-    assert(key.size() == 32);
-    assert(in.size() == 16);
-    assert(correctout.size() == 16);
+    CHECK(key.size() == 32);
+    CHECK(in.size() == 16);
+    CHECK(correctout.size() == 16);
     AES256Encrypt enc(key.data());
     buf.resize(correctout.size());
     enc.Encrypt(buf.data(), in.data());
@@ -139,13 +139,13 @@ void TestAES256CBC(const std::string &hexkey, const std::string &hexiv, bool pad
 void TestChaCha20(const std::string &hex_message, const std::string &hexkey, ChaCha20::Nonce96 nonce, uint32_t seek, const std::string& hexout)
 {
     auto key = ParseHex<std::byte>(hexkey);
-    assert(key.size() == 32);
+    CHECK(key.size() == 32);
     auto m = ParseHex<std::byte>(hex_message);
     ChaCha20 rng{key};
     rng.Seek(nonce, seek);
     std::vector<std::byte> outres;
     outres.resize(hexout.size() / 2);
-    assert(hex_message.empty() || m.size() * 2 == hexout.size());
+    CHECK(hex_message.empty() || m.size() * 2 == hexout.size());
 
     // perform the ChaCha20 round(s), if message is provided it will output the encrypted ciphertext otherwise the keystream
     if (!hex_message.empty()) {
@@ -1096,7 +1096,7 @@ void CryptoTest::TestSHA3_256(const std::string& input, const std::string& outpu
     // Hash the whole thing.
     unsigned char out[SHA3_256::OUTPUT_SIZE];
     sha.Write(in_bytes).Finalize(out);
-    assert(out_bytes.size() == sizeof(out));
+    CHECK(out_bytes.size() == sizeof(out));
     CHECK(std::equal(std::begin(out_bytes), std::end(out_bytes), out));
 
     // Reset and split randomly in 3

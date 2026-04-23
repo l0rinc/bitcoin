@@ -65,7 +65,7 @@ static void AddKey(CWallet& wallet, const CKey& key)
     FlatSigningProvider provider;
     std::string error;
     auto descs = Parse("combo(" + EncodeSecret(key) + ")", provider, error, /* require_checksum=*/ false);
-    assert(descs.size() == 1);
+    CHECK(descs.size() == 1);
     auto& desc = descs.at(0);
     WalletDescriptor w_desc(std::move(desc), 0, 0, 1, 1);
     Assert(wallet.AddWalletDescriptor(w_desc, provider, "", false));
@@ -256,7 +256,7 @@ static int64_t AddTx(ChainstateManager& chainman, CWallet& wallet, uint32_t lock
     if (blockTime > 0) {
         LOCK(cs_main);
         auto inserted = chainman.BlockIndex().emplace(std::piecewise_construct, std::make_tuple(GetRandHash()), std::make_tuple());
-        assert(inserted.second);
+        CHECK(inserted.second);
         const uint256& hash = inserted.first->first;
         block = &inserted.first->second;
         block->nTime = blockTime;
@@ -526,7 +526,7 @@ static size_t CalculateNestedKeyhashInputSize(bool use_max_sig)
 
     if (!ProduceSignature(keystore, use_max_sig ? DUMMY_MAXIMUM_SIGNATURE_CREATOR : DUMMY_SIGNATURE_CREATOR, script_pubkey, sig_data)) {
         // We're hand-feeding it correct arguments; shouldn't happen
-        assert(false);
+        CHECK(false);
     }
 
     CTxIn tx_in;

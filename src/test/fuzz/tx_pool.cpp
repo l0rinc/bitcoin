@@ -123,7 +123,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
     if (!info_all.empty()) {
         const auto& tx_to_remove = *PickValue(fuzzed_data_provider, info_all).tx;
         WITH_LOCK(tx_pool.cs, tx_pool.removeRecursive(tx_to_remove, MemPoolRemovalReason::BLOCK /* dummy */));
-        assert(tx_pool.size() < info_all.size());
+        CHECK(tx_pool.size() < info_all.size());
     }
 
     if (fuzzed_data_provider.ConsumeBool()) {

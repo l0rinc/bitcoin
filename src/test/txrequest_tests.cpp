@@ -95,7 +95,7 @@ public:
     /** Advance this Scenario's time; this affects the timestamps newly scheduled events get. */
     void AdvanceTime(std::chrono::microseconds amount)
     {
-        assert(amount.count() >= 0);
+        CHECK(amount.count() >= 0);
         m_now += amount;
     }
 
@@ -167,7 +167,7 @@ public:
         const auto comment = m_testname + " " + checkname;
         auto& runner = m_runner;
         const auto now = m_now;
-        assert(offset.count() <= 0);
+        CHECK(offset.count() <= 0);
         runner.actions.emplace_back(m_now, [=, &runner]() {
             std::vector<std::pair<NodeId, GenTxid>> expired_now;
             auto ret = runner.txrequest.GetRequestable(peer, now + offset, &expired_now);

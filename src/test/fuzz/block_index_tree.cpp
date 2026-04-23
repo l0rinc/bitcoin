@@ -65,8 +65,8 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                 if (!(prev_block->nStatus & BLOCK_FAILED_VALID)) {
                     CBlockHeader header = ConsumeBlockHeader(fuzzed_data_provider, prev_block->GetBlockHash(), nonce_counter);
                     CBlockIndex* index = blockman.AddToBlockIndex(header, chainman.m_best_header);
-                    assert(index->nStatus & BLOCK_VALID_TREE);
-                    assert(index->pprev == prev_block);
+                    CHECK(index->nStatus & BLOCK_VALID_TREE);
+                    CHECK(index->pprev == prev_block);
                     blocks.push_back(index);
                 }
             },
@@ -86,8 +86,8 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                         block.vtx = std::vector<CTransactionRef>(nTx);
                         FlatFilePos pos(0, fuzzed_data_provider.ConsumeIntegralInRange<int>(1, 1000));
                         chainman.ReceivedBlockTransactions(block, index, pos);
-                        assert(index->nStatus & BLOCK_VALID_TRANSACTIONS);
-                        assert(index->nStatus & BLOCK_HAVE_DATA);
+                        CHECK(index->nStatus & BLOCK_VALID_TRANSACTIONS);
+                        CHECK(index->nStatus & BLOCK_HAVE_DATA);
                     }
                 }
             },
@@ -96,10 +96,10 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                 LOCK(cs_main);
                 auto& chain = chainman.ActiveChain();
                 CBlockIndex* old_tip = chain.Tip();
-                assert(old_tip);
+                CHECK(old_tip);
                 do {
                     CBlockIndex* best_tip = chainman.FindMostWorkChain();
-                    assert(best_tip);                   // Should at least return current tip
+                    CHECK(best_tip);                   // Should at least return current tip
                     if (best_tip == chain.Tip()) break; // Nothing to do
                     // Rewind chain to forking point
                     const CBlockIndex* fork = chain.FindFork(*best_tip);
@@ -108,7 +108,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                     CBlockIndex* it = chain.Tip();
                     while (it && it->nHeight != fork->nHeight) {
                         if (!(it->nStatus & BLOCK_HAVE_UNDO)) {
-                            assert(blockman.m_have_pruned);
+                            CHECK(blockman.m_have_pruned);
                             abort_run = true;
                             return;
                         }
@@ -125,8 +125,8 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                     }
                     // Connect blocks, possibly fail
                     for (CBlockIndex* block : to_connect | std::views::reverse) {
-                        assert(!(block->nStatus & BLOCK_FAILED_VALID));
-                        assert(block->nStatus & BLOCK_HAVE_DATA);
+                        CHECK(!(block->nStatus & BLOCK_FAILED_VALID));
+                        CHECK(block->nStatus & BLOCK_HAVE_DATA);
                         if (!block->IsValid(BLOCK_VALID_SCRIPTS)) {
                             if (fuzzed_data_provider.ConsumeBool()) { // Invalid
                                 BlockValidationState state;
@@ -148,7 +148,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                         }
                     }
                 } while (node::CBlockIndexWorkComparator()(chain.Tip(), old_tip));
-                assert(chain.Tip()->nChainWork >= old_tip->nChainWork);
+                CHECK(chain.Tip()->nChainWork >= old_tip->nChainWork);
             },
             [&] {
                 // Prune chain - dealing with block files is beyond the scope of this test, so just prune random blocks, making no assumptions
@@ -184,13 +184,13 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                 if (num_pruned == 0) return;
                 size_t i = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, num_pruned - 1);
                 CBlockIndex* index = pruned_blocks[i];
-                assert(!(index->nStatus & BLOCK_HAVE_DATA));
+                CHECK(!(index->nStatus & BLOCK_HAVE_DATA));
                 CBlock block;
                 block.vtx = std::vector<CTransactionRef>(index->nTx); // Set the number of tx to the prior value.
                 FlatFilePos pos(0, fuzzed_data_provider.ConsumeIntegralInRange<int>(1, 1000));
                 chainman.ReceivedBlockTransactions(block, index, pos);
-                assert(index->nStatus & BLOCK_VALID_TRANSACTIONS);
-                assert(index->nStatus & BLOCK_HAVE_DATA);
+                CHECK(index->nStatus & BLOCK_VALID_TRANSACTIONS);
+                CHECK(index->nStatus & BLOCK_HAVE_DATA);
                 pruned_blocks.erase(pruned_blocks.begin() + i);
             });
     }
@@ -222,8 +222,8 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
             }
         }
         chainman.ActiveChainstate().TryAddBlockIndexCandidate(genesis);
-        assert(blockman.m_block_index.size() == 1);
-        assert(chainman.ActiveChainstate().setBlockIndexCandidates.size() == 1);
-        assert(chainman.ActiveChain().Height() == 0);
+        CHECK(blockman.m_block_index.size() == 1);
+        CHECK(chainman.ActiveChainstate().setBlockIndexCandidates.size() == 1);
+        CHECK(chainman.ActiveChain().Height() == 0);
     }
 }

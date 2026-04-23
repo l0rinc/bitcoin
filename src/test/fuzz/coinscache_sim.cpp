@@ -14,6 +14,7 @@
 #include <memory>
 #include <optional>
 #include <vector>
+#include <test/util/check.h>
 
 namespace {
 
@@ -147,7 +148,7 @@ public:
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const final
     {
         if (auto it{m_data.find(outpoint)}; it != m_data.end()) {
-            assert(!it->second.IsSpent());
+            CHECK(!it->second.IsSpent());
             return it->second;
         }
         return std::nullopt;
@@ -170,12 +171,12 @@ public:
                 /* For non-dirty entries being written, compare them with what we have. */
                 auto it2 = m_data.find(it->first);
                 if (it->second.coin.IsSpent()) {
-                    assert(it2 == m_data.end());
+                    CHECK(it2 == m_data.end());
                 } else {
-                    assert(it2 != m_data.end());
-                    assert(it->second.coin.out == it2->second.out);
-                    assert(it->second.coin.fCoinBase == it2->second.fCoinBase);
-                    assert(it->second.coin.nHeight == it2->second.nHeight);
+                    CHECK(it2 != m_data.end());
+                    CHECK(it->second.coin.out == it2->second.out);
+                    CHECK(it->second.coin.fCoinBase == it2->second.fCoinBase);
+                    CHECK(it->second.coin.nHeight == it2->second.nHeight);
                 }
             }
         }
@@ -219,7 +220,7 @@ FUZZ_TARGET(coinscache_sim)
 
     /** Flush changes in top cache to the one below. */
     auto flush = [&]() {
-        assert(caches.size() >= 1);
+        CHECK(caches.size() >= 1);
         auto& cache = sim_caches[caches.size()];
         auto& prev_cache = sim_caches[caches.size() - 1];
         for (uint32_t outpointidx = 0; outpointidx < NUM_OUTPOINTS; ++outpointidx) {
@@ -257,13 +258,13 @@ FUZZ_TARGET(coinscache_sim)
                     caches.back()->GetCoin(data.outpoints[outpointidx]);
                 // Compare results.
                 if (!sim.has_value()) {
-                    assert(!realcoin);
+                    CHECK(!realcoin);
                 } else {
-                    assert(realcoin && !realcoin->IsSpent());
+                    CHECK(realcoin && !realcoin->IsSpent());
                     const auto& simcoin = data.coins[sim->first];
-                    assert(realcoin->out == simcoin.out);
-                    assert(realcoin->fCoinBase == simcoin.fCoinBase);
-                    assert(realcoin->nHeight == sim->second);
+                    CHECK(realcoin->out == simcoin.out);
+                    CHECK(realcoin->fCoinBase == simcoin.fCoinBase);
+                    CHECK(realcoin->nHeight == sim->second);
                 }
             },
 
@@ -274,7 +275,7 @@ FUZZ_TARGET(coinscache_sim)
                 // Look up in real caches.
                 auto real = caches.back()->HaveCoin(data.outpoints[outpointidx]);
                 // Compare results.
-                assert(sim.has_value() == real);
+                CHECK(sim.has_value() == real);
             },
 
             [&]() { // HaveCoinInCache
@@ -291,13 +292,13 @@ FUZZ_TARGET(coinscache_sim)
                 const auto& realcoin = caches.back()->AccessCoin(data.outpoints[outpointidx]);
                 // Compare results.
                 if (!sim.has_value()) {
-                    assert(realcoin.IsSpent());
+                    CHECK(realcoin.IsSpent());
                 } else {
-                    assert(!realcoin.IsSpent());
+                    CHECK(!realcoin.IsSpent());
                     const auto& simcoin = data.coins[sim->first];
-                    assert(simcoin.out == realcoin.out);
-                    assert(simcoin.fCoinBase == realcoin.fCoinBase);
-                    assert(realcoin.nHeight == sim->second);
+                    CHECK(simcoin.out == realcoin.out);
+                    CHECK(simcoin.fCoinBase == realcoin.fCoinBase);
+                    CHECK(realcoin.nHeight == sim->second);
                 }
             },
 
@@ -350,13 +351,13 @@ FUZZ_TARGET(coinscache_sim)
                 sim_caches[caches.size()].entry[outpointidx].entrytype = EntryType::SPENT;
                 // Compare *moveto with the value expected based on simulation data.
                 if (!sim.has_value()) {
-                    assert(realcoin.IsSpent());
+                    CHECK(realcoin.IsSpent());
                 } else {
-                    assert(!realcoin.IsSpent());
+                    CHECK(!realcoin.IsSpent());
                     const auto& simcoin = data.coins[sim->first];
-                    assert(simcoin.out == realcoin.out);
-                    assert(simcoin.fCoinBase == realcoin.fCoinBase);
-                    assert(realcoin.nHeight == sim->second);
+                    CHECK(simcoin.out == realcoin.out);
+                    CHECK(simcoin.fCoinBase == realcoin.fCoinBase);
+                    CHECK(realcoin.nHeight == sim->second);
                 }
             },
 
@@ -437,17 +438,17 @@ FUZZ_TARGET(coinscache_sim)
             const auto& real = cache.AccessCoin(data.outpoints[outpointidx]);
             auto sim = lookup(outpointidx, sim_idx);
             if (!sim.has_value()) {
-                assert(real.IsSpent());
+                CHECK(real.IsSpent());
             } else {
-                assert(!real.IsSpent());
-                assert(real.out == data.coins[sim->first].out);
-                assert(real.fCoinBase == data.coins[sim->first].fCoinBase);
-                assert(real.nHeight == sim->second);
+                CHECK(!real.IsSpent());
+                CHECK(real.out == data.coins[sim->first].out);
+                CHECK(real.fCoinBase == data.coins[sim->first].fCoinBase);
+                CHECK(real.nHeight == sim->second);
             }
         }
 
         // HaveCoinInCache ignores spent coins, so GetCacheSize() may exceed it. */
-        assert(cache.GetCacheSize() >= cache_size);
+        CHECK(cache.GetCacheSize() >= cache_size);
     }
 
     // Compare the bottom coinsview (not a CCoinsViewCache) with sim_cache[0].
@@ -455,12 +456,12 @@ FUZZ_TARGET(coinscache_sim)
         auto realcoin = bottom.GetCoin(data.outpoints[outpointidx]);
         auto sim = lookup(outpointidx, 0);
         if (!sim.has_value()) {
-            assert(!realcoin);
+            CHECK(!realcoin);
         } else {
-            assert(realcoin && !realcoin->IsSpent());
-            assert(realcoin->out == data.coins[sim->first].out);
-            assert(realcoin->fCoinBase == data.coins[sim->first].fCoinBase);
-            assert(realcoin->nHeight == sim->second);
+            CHECK(realcoin && !realcoin->IsSpent());
+            CHECK(realcoin->out == data.coins[sim->first].out);
+            CHECK(realcoin->fCoinBase == data.coins[sim->first].fCoinBase);
+            CHECK(realcoin->nHeight == sim->second);
         }
     }
 }

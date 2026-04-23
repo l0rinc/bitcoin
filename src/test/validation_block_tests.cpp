@@ -195,7 +195,7 @@ BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering)
             for (const auto& block : blocks) {
                 if (block->vtx.size() == 1) {
                     bool processed = Assert(m_node.chainman)->ProcessNewBlock(block, true, true, &ignored);
-                    assert(processed);
+                    CHECK(processed);
                 }
             }
         });
@@ -311,12 +311,12 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
                 // be atomic. So the caller assumes that the returned mempool
                 // is consistent. That is, it has all txs that were there
                 // before the reorg.
-                assert(m_node.mempool->size() == txs.size());
+                CHECK(m_node.mempool->size() == txs.size());
                 continue;
             }
             LOCK(cs_main);
             // We are done with the reorg, so the tip must have changed
-            assert(tip_init != m_node.chainman->ActiveChain().Tip()->GetBlockHash());
+            CHECK(tip_init != m_node.chainman->ActiveChain().Tip()->GetBlockHash());
         }};
 
         // Submit the reorg in this thread to invalidate and remove the txs from the tx pool

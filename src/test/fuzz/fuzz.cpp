@@ -157,7 +157,7 @@ static void initialize()
             std::cerr << "Warning: FUZZ_NONDETERMINISM env var set, results may be inconsistent with fuzz build" << std::endl;
         } else {
             g_enable_dynamic_fuzz_determinism = true;
-            assert(EnableFuzzDeterminism());
+            CHECK(EnableFuzzDeterminism());
         }
     }
     Assert(!g_test_one_input);

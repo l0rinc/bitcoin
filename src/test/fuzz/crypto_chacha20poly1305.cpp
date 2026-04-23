@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <test/util/check.h>
 
 constexpr static inline void crypt_till_rekey(FSChaCha20Poly1305& aead, int rekey_interval, bool encrypt)
 {
@@ -71,7 +72,7 @@ FUZZ_TARGET(crypto_aeadchacha20poly1305)
         std::vector<std::byte> keystream(length);
         aead.Keystream(nonce, keystream);
         for (size_t i = 0; i < length; ++i) {
-            assert((plain[i] ^ keystream[i]) == cipher[i]);
+            CHECK((plain[i] ^ keystream[i]) == cipher[i]);
         }
 
         std::vector<std::byte> decrypted_contents(length);
@@ -85,7 +86,7 @@ FUZZ_TARGET(crypto_aeadchacha20poly1305)
 
         AEADChaCha20Poly1305 bad_aead(bad_key);
         ok = bad_aead.Decrypt(cipher, aad, nonce, decrypted_contents);
-        assert(!ok);
+        CHECK(!ok);
 
         // Optionally damage 1 bit in either the cipher (corresponding to a change in transit)
         // or the aad (to make sure that decryption will fail if the AAD mismatches).
@@ -108,9 +109,9 @@ FUZZ_TARGET(crypto_aeadchacha20poly1305)
         }
 
         // Decryption *must* fail if the packet was damaged, and succeed if it wasn't.
-        assert(!ok == damage);
+        CHECK(!ok == damage);
         if (!ok) break;
-        assert(decrypted_contents == plain);
+        CHECK(decrypted_contents == plain);
     }
 }
 
@@ -169,7 +170,7 @@ FUZZ_TARGET(crypto_fschacha20poly1305)
         FSChaCha20Poly1305 bad_fs_aead(bad_key, rekey_interval);
         crypt_till_rekey(bad_fs_aead, rekey_interval, false);
         ok = bad_fs_aead.Decrypt(cipher, aad, decrypted_contents);
-        assert(!ok);
+        CHECK(!ok);
 
         // Optionally damage 1 bit in either the cipher (corresponding to a change in transit)
         // or the aad (to make sure that decryption will fail if the AAD mismatches).
@@ -193,8 +194,8 @@ FUZZ_TARGET(crypto_fschacha20poly1305)
         }
 
         // Decryption *must* fail if the packet was damaged, and succeed if it wasn't.
-        assert(!ok == damage);
+        CHECK(!ok == damage);
         if (!ok) break;
-        assert(decrypted_contents == plain);
+        CHECK(decrypted_contents == plain);
     }
 }

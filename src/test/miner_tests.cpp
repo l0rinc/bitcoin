@@ -296,7 +296,7 @@ std::vector<CTransactionRef> CreateBigSigOpsCluster(const CTransactionRef& first
     tx.vout[0].nValue -= CENT;
     CTransactionRef parent_tx = MakeTransactionRef(tx);
     ret.push_back(parent_tx);
-    assert(GetLegacySigOpCount(*parent_tx) == 1);
+    CHECK(GetLegacySigOpCount(*parent_tx) == 1);
 
     // Tx1 has 1 sigops, 1 input, 50 outputs.
     // Tx2-51 has 400 sigops: 1 input, 20 CHECKMULTISIG outputs
@@ -357,8 +357,8 @@ void MinerTestingSetup::TestBasicMining(const CScript& scriptPubKey, const std::
             legacy_sigops += GetLegacySigOpCount(*t);
             CHECK(tx_mempool.GetIter(t->GetHash()).has_value());
         }
-        assert(tx_mempool.mapTx.size() == 51);
-        assert(legacy_sigops == 20001);
+        CHECK(tx_mempool.mapTx.size() == 51);
+        CHECK(legacy_sigops == 20001);
         CHECK_EXCEPTION(mining->createNewBlock(options, /*cooldown=*/false), std::runtime_error, HasReason("bad-blk-sigops"));
     }
 
@@ -367,7 +367,7 @@ void MinerTestingSetup::TestBasicMining(const CScript& scriptPubKey, const std::
         LOCK(tx_mempool.cs);
 
         // Check that the mempool is empty.
-        assert(tx_mempool.mapTx.empty());
+        CHECK(tx_mempool.mapTx.empty());
 
         // Just to make sure we can still make simple blocks
         auto block_template{mining->createNewBlock(options, /*cooldown=*/false)};
@@ -382,8 +382,8 @@ void MinerTestingSetup::TestBasicMining(const CScript& scriptPubKey, const std::
             legacy_sigops += GetLegacySigOpCount(*t);
             CHECK(tx_mempool.GetIter(t->GetHash()).has_value());
         }
-        assert(tx_mempool.mapTx.size() == 51);
-        assert(legacy_sigops == 20001);
+        CHECK(tx_mempool.mapTx.size() == 51);
+        CHECK(legacy_sigops == 20001);
 
         CHECK(mining->createNewBlock(options, /*cooldown=*/false));
     }

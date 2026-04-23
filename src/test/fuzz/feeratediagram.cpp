@@ -13,6 +13,7 @@
 #include <test/fuzz/util.h>
 
 #include <cassert>
+#include <test/util/check.h>
 
 namespace {
 
@@ -36,7 +37,7 @@ std::vector<FeeFrac> BuildDiagramFromChunks(const std::span<const FeeFrac> chunk
  * the FeeFrac::fee field in the result. */
 FeeFrac EvaluateDiagram(int32_t size, std::span<const FeeFrac> diagram)
 {
-    assert(diagram.size() > 0);
+    CHECK(diagram.size() > 0);
     unsigned not_above = 0;
     unsigned not_below = diagram.size() - 1;
     // If outside the range of diagram, extend begin/end.
@@ -52,14 +53,14 @@ FeeFrac EvaluateDiagram(int32_t size, std::span<const FeeFrac> diagram)
     if (not_below == not_above) return {diagram[not_below].fee, 1};
     // Otherwise, interpolate.
     auto dir_coef = diagram[not_below] - diagram[not_above];
-    assert(dir_coef.size > 0);
+    CHECK(dir_coef.size > 0);
     // Let A = diagram[not_above] and B = diagram[not_below]
     const auto& point_a = diagram[not_above];
     // We want to return:
     //     A.fee + (B.fee - A.fee) / (B.size - A.size) * (size - A.size)
     //   = A.fee + dir_coef.fee / dir_coef.size * (size - A.size)
     //   = (A.fee * dir_coef.size + dir_coef.fee * (size - A.size)) / dir_coef.size
-    assert(size >= point_a.size);
+    CHECK(size >= point_a.size);
     return {point_a.fee * dir_coef.size + dir_coef.fee * (size - point_a.size), dir_coef.size};
 }
 
@@ -114,12 +115,12 @@ FUZZ_TARGET(build_and_compare_feerate_diagram)
     std::vector<FeeFrac> diagram1{BuildDiagramFromChunks(chunks1)};
     std::vector<FeeFrac> diagram2{BuildDiagramFromChunks(chunks2)};
 
-    assert(diagram1.front() == empty);
-    assert(diagram2.front() == empty);
+    CHECK(diagram1.front() == empty);
+    CHECK(diagram2.front() == empty);
 
     auto real = CompareChunks(chunks1, chunks2);
     auto sim = CompareDiagrams(diagram1, diagram2);
-    assert(real == sim);
+    CHECK(real == sim);
 
     // Do explicit evaluation at up to 1000 points, and verify consistency with the result.
     LIMITED_WHILE(fuzzed_data_provider.remaining_bytes(), 1000) {
@@ -127,7 +128,7 @@ FUZZ_TARGET(build_and_compare_feerate_diagram)
         auto eval1 = EvaluateDiagram(size, diagram1);
         auto eval2 = EvaluateDiagram(size, diagram2);
         auto cmp = FeeRateCompare(eval1, eval2);
-        if (std::is_lt(cmp)) assert(!std::is_gt(real));
-        if (std::is_gt(cmp)) assert(!std::is_lt(real));
+        if (std::is_lt(cmp)) CHECK(!std::is_gt(real));
+        if (std::is_gt(cmp)) CHECK(!std::is_lt(real));
     }
 }

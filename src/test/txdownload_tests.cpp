@@ -225,7 +225,7 @@ BOOST_FIXTURE_TEST_CASE(handle_missing_inputs, TestChain100Setup)
             const auto mempool_result = WITH_LOCK(::cs_main, return m_node.chainman->ProcessTransaction(single_parent));
             CHECK(mempool_result.m_result_type == MempoolAcceptResult::ResultType::VALID);
             coinbase_idx += 1;
-            assert(coinbase_idx < m_coinbase_txns.size());
+            CHECK(coinbase_idx < m_coinbase_txns.size());
         }
 
         // Whether or not the transaction is added as an orphan depends solely on whether or not
@@ -249,7 +249,7 @@ BOOST_FIXTURE_TEST_CASE(handle_missing_inputs, TestChain100Setup)
         std::vector<COutPoint> outpoints;
         int32_t num_parents{24};
         for (int32_t i = 0; i < num_parents; ++i) {
-            assert(coinbase_idx < m_coinbase_txns.size());
+            CHECK(coinbase_idx < m_coinbase_txns.size());
             auto mtx_parent = CreateValidMempoolTransaction(m_coinbase_txns[coinbase_idx++], /*input_vout=*/0, test_chain_height,
                                                             coinbaseKey, destination, amount_depth_1 + i, /*submit=*/false);
             auto ptx_parent = MakeTransactionRef(mtx_parent);
@@ -317,7 +317,7 @@ BOOST_FIXTURE_TEST_CASE(handle_missing_inputs, TestChain100Setup)
 
     // Orphan with multiple inputs spending from a single parent
     {
-        assert(coinbase_idx < m_coinbase_txns.size());
+        CHECK(coinbase_idx < m_coinbase_txns.size());
         auto parent_2outputs = MakeTransactionRef(CreateValidMempoolTransaction({m_coinbase_txns[coinbase_idx]}, {{m_coinbase_txns[coinbase_idx]->GetHash(), 0}}, test_chain_height, {coinbaseKey},
                                                              {{amount_split_half, destination}, {amount_split_half, destination}}, /*submit=*/false));
 
