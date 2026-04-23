@@ -624,7 +624,8 @@ BITCOINKERNEL_API void btck_transaction_destroy(btck_Transaction* transaction);
  *
  * @param[in] tx_to             Non-null.
  * @param[in] spent_outputs     Nullable for non-taproot verification. Points to an array of
- *                              outputs spent by the transaction.
+ *                              outputs spent by the transaction. Each output must be non-null,
+ *                              and the array length must match the transaction input count.
  * @param[in] spent_outputs_len Length of the spent_outputs array.
  * @return                      The precomputed data, or null on error.
  */
