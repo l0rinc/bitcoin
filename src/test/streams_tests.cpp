@@ -680,7 +680,7 @@ BOOST_AUTO_TEST_CASE(buffered_reader_matches_autofile_random_content)
             DataBuffer buffered_buffer{read};
             buffered_reader.read(buffered_buffer);
 
-            BOOST_CHECK_EQUAL_COLLECTIONS(
+            CHECK_EQUAL_COLLECTIONS(
                 direct_file_buffer.begin(), direct_file_buffer.end(),
                 buffered_buffer.begin(), buffered_buffer.end()
             );
@@ -754,7 +754,7 @@ BOOST_AUTO_TEST_CASE(buffered_writer_matches_autofile_random_content)
         CHECK_EXCEPTION(verify_buffered.read(excess_byte), std::ios_base::failure, HasReason{"end of file"});
     }
 
-    BOOST_CHECK_EQUAL_COLLECTIONS(
+    CHECK_EQUAL_COLLECTIONS(
         direct_result.begin(), direct_result.end(),
         buffered_result.begin(), buffered_result.end()
     );
