@@ -16,6 +16,7 @@
 #include <primitives/transaction.h>
 #include <pubkey.h>
 #include <stdexcept>
+#include <test/util/check.h>
 #include <test/util/random.h>
 #include <util/chaintype.h> // IWYU pragma: export
 #include <util/check.h>

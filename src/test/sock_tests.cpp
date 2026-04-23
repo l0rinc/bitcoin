@@ -4,6 +4,7 @@
 
 #include <common/system.h>
 #include <compat/compat.h>
+#include <test/util/check.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <util/sock.h>
@@ -11,7 +12,6 @@
 
 #include <boost/test/unit_test.hpp>
 
-#include <cassert>
 #include <thread>
 
 using namespace std::chrono_literals;
@@ -172,7 +172,7 @@ BOOST_AUTO_TEST_CASE(recv_until_terminator_limit)
         } catch (const std::runtime_error& e) {
             threw_as_expected = HasReason("too many bytes without a terminator")(e);
         }
-        assert(threw_as_expected);
+        CHECK(threw_as_expected);
     });
 
     BOOST_REQUIRE_NO_THROW(socks.sender.SendComplete("1234567", timeout, interrupt));

@@ -4,10 +4,52 @@
 
 #include <util/check.h>
 
+#include <test/util/check.h>
+
 #include <boost/test/unit_test.hpp>
 #include <test/util/common.h>
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <ostream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <vector>
+
 BOOST_AUTO_TEST_SUITE(util_check_tests)
+
+static_assert(test::check_detail::ValidComparisonTypes<int, int>);
+static_assert(test::check_detail::ValidComparisonTypes<unsigned, uint64_t>);
+static_assert(test::check_detail::ValidComparisonTypes<std::string, std::string_view>);
+static_assert(!test::check_detail::ValidComparisonTypes<int, unsigned>);
+static_assert(!test::check_detail::ValidComparisonTypes<bool, int>);
+static_assert(!test::check_detail::ValidComparisonTypes<int*, int*>);
+static_assert(!test::check_detail::ValidComparisonTypes<decltype("literal"), std::string>);
+static_assert(!test::check_detail::ValidComparisonTypes<const char*, std::string>);
+
+template <typename Fn>
+std::string CheckFailureMessage(Fn&& fn)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts mock_checks{};
+    try {
+        fn();
+    } catch (const NonFatalCheckError& e) {
+        return e.what();
+    }
+    throw std::logic_error{"check did not fail"};
+}
+
+struct ThrowingPrintable {
+    int value;
+    friend bool operator==(const ThrowingPrintable& a, const ThrowingPrintable& b) { return a.value == b.value; }
+    friend std::ostream& operator<<(std::ostream&, const ThrowingPrintable&) { throw std::runtime_error{"format failed"}; }
+};
+
+struct NonStandardException {
+};
 
 BOOST_AUTO_TEST_CASE(check_pass)
 {
@@ -28,6 +70,99 @@ BOOST_AUTO_TEST_CASE(check_fail)
     }
     BOOST_CHECK_EXCEPTION(Assert(false), NonFatalCheckError, HasReason{"Internal bug detected: false"});
     BOOST_CHECK_EXCEPTION(CHECK_NONFATAL(false), NonFatalCheckError, HasReason{"Internal bug detected: false"});
+}
+
+BOOST_AUTO_TEST_CASE(test_check_pass)
+{
+    CHECK(true);
+    CHECK_EQUAL(1, 1);
+    CHECK_NE(1, 2);
+    CHECK_LT(1, 2);
+    CHECK_LE(1, 1);
+    CHECK_GT(2, 1);
+    CHECK_GE(2, 2);
+
+    const std::array<std::byte, 2> bytes{std::byte{0x01}, std::byte{0x02}};
+    CHECK_EQUAL_COLLECTIONS(bytes.begin(), bytes.end(), bytes.begin(), bytes.end());
+    CHECK_EXCEPTION(throw std::runtime_error{"expected reason"}, std::runtime_error, HasReason{"expected reason"});
+
+    std::thread thread{[] { CHECK(true); }};
+    thread.join();
+}
+
+BOOST_AUTO_TEST_CASE(test_check_fail)
+{
+    auto message{CheckFailureMessage([] { CHECK(false); })};
+    BOOST_CHECK_NE(message.find("expression evaluated to false"), std::string::npos);
+    BOOST_CHECK_NE(message.find("expression: false"), std::string::npos);
+
+    int* null_ptr{nullptr};
+    message = CheckFailureMessage([&] { CHECK(null_ptr); });
+    BOOST_CHECK_NE(message.find("value: nullptr"), std::string::npos);
+
+    message = CheckFailureMessage([] { CHECK_EQUAL(1, 2); });
+    BOOST_CHECK_NE(message.find("expression: 1 == 2"), std::string::npos);
+    BOOST_CHECK_NE(message.find("lhs: 1"), std::string::npos);
+    BOOST_CHECK_NE(message.find("rhs: 2"), std::string::npos);
+
+    message = CheckFailureMessage([] { CHECK_EQUAL(std::byte{0x1b}, std::byte{0x02}); });
+    BOOST_CHECK_NE(message.find("lhs: 0x1b"), std::string::npos);
+    BOOST_CHECK_NE(message.find("rhs: 0x02"), std::string::npos);
+
+    const std::string left{"a\n"};
+    const std::string right{"a\t"};
+    message = CheckFailureMessage([&] { CHECK_EQUAL(left, right); });
+    BOOST_CHECK_NE(message.find("lhs: \"a\\n\""), std::string::npos);
+    BOOST_CHECK_NE(message.find("rhs: \"a\\t\""), std::string::npos);
+
+    const std::vector<unsigned char> mid_left{1, 2, 3};
+    const std::vector<unsigned char> mid_right{1, 9, 3};
+    message = CheckFailureMessage([&] {
+        CHECK_EQUAL_COLLECTIONS(mid_left.begin(), mid_left.end(), mid_right.begin(), mid_right.end());
+    });
+    BOOST_CHECK_NE(message.find("mismatch index: 1"), std::string::npos);
+    BOOST_CHECK_NE(message.find("lhs: 0x02"), std::string::npos);
+    BOOST_CHECK_NE(message.find("rhs: 0x09"), std::string::npos);
+
+    const std::vector<unsigned char> end_left{1};
+    const std::vector<unsigned char> end_right{1, 2};
+    message = CheckFailureMessage([&] {
+        CHECK_EQUAL_COLLECTIONS(end_left.begin(), end_left.end(), end_right.begin(), end_right.end());
+    });
+    BOOST_CHECK_NE(message.find("mismatch index: 1"), std::string::npos);
+    BOOST_CHECK_NE(message.find("lhs: <end>"), std::string::npos);
+    BOOST_CHECK_NE(message.find("rhs: 0x02"), std::string::npos);
+
+    message = CheckFailureMessage([] {
+        CHECK_EXCEPTION((void)0, std::runtime_error, [](const std::runtime_error&) { return true; });
+    });
+    BOOST_CHECK_NE(message.find("expected exception was not thrown"), std::string::npos);
+
+    message = CheckFailureMessage([] {
+        CHECK_EXCEPTION(throw std::logic_error{"wrong\nreason"}, std::runtime_error, [](const std::runtime_error&) { return true; });
+    });
+    BOOST_CHECK_NE(message.find("wrong exception type thrown"), std::string::npos);
+    BOOST_CHECK_NE(message.find("what(): \"wrong\\nreason\""), std::string::npos);
+
+    message = CheckFailureMessage([] {
+        CHECK_EXCEPTION(throw NonStandardException{}, std::runtime_error, [](const std::runtime_error&) { return true; });
+    });
+    BOOST_CHECK_NE(message.find("actual exception: non-standard exception"), std::string::npos);
+
+    message = CheckFailureMessage([] {
+        CHECK_EXCEPTION(throw std::runtime_error{"predicate reason"}, std::runtime_error, [](const std::runtime_error&) { return false; });
+    });
+    BOOST_CHECK_NE(message.find("exception predicate returned false"), std::string::npos);
+    BOOST_CHECK_NE(message.find("what(): \"predicate reason\""), std::string::npos);
+
+    message = CheckFailureMessage([] {
+        CHECK_EXCEPTION(throw NonStandardException{}, NonStandardException, [](const NonStandardException&) { return false; });
+    });
+    BOOST_CHECK_NE(message.find("exception predicate returned false"), std::string::npos);
+    BOOST_CHECK_NE(message.find("value: <unprintable value>"), std::string::npos);
+
+    message = CheckFailureMessage([] { CHECK_EQUAL(ThrowingPrintable{1}, ThrowingPrintable{2}); });
+    BOOST_CHECK_NE(message.find("lhs: <unprintable value>"), std::string::npos);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
