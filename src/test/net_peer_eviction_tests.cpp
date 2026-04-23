@@ -36,7 +36,7 @@ bool IsProtected(int num_peers,
     const size_t size{candidates.size()};
     const size_t expected{size - size / 2}; // Expect half the candidates will be protected.
     ProtectEvictionCandidatesByRatio(candidates);
-    BOOST_CHECK_EQUAL(candidates.size(), expected);
+    CHECK_EQUAL(candidates.size(), expected);
 
     size_t unprotected_count{0};
     for (const NodeEvictionCandidate& candidate : candidates) {

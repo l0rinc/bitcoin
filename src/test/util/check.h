@@ -94,18 +94,25 @@ inline constexpr bool IsCharArray{IsRawArray<T> && IsChar<std::remove_extent_t<D
 template <typename T>
 inline constexpr bool IsCharPointer{IsRawPointer<T> && IsChar<std::remove_pointer_t<Decay<T>>>};
 
+template <typename T>
+concept StringValue = std::same_as<Decay<T>, std::string> || std::same_as<Decay<T>, std::string_view>;
+
+template <typename L, typename R>
+inline constexpr bool RawOperandAllowed =
+    ((!IsRawArray<L> && !IsRawPointer<L>) || ((IsCharArray<L> || IsCharPointer<L>) && StringValue<R>)) &&
+    ((!IsRawArray<R> && !IsRawPointer<R>) || ((IsCharArray<R> || IsCharPointer<R>) && StringValue<L>));
+
 template <typename L, typename R>
 inline constexpr bool SameIntegralSignedness{
     !(IsIntegralNoBool<L> && IsIntegralNoBool<R>) ||
-    (std::is_signed_v<Decay<L>> == std::is_signed_v<Decay<R>>)};
+    (std::is_signed_v<Decay<L>> == std::is_signed_v<Decay<R>>) };
 
 template <typename L, typename R>
 inline constexpr bool SameBoolness{IsBool<L> == IsBool<R>};
 
 template <typename L, typename R>
 concept ValidComparisonTypes =
-    !IsRawArray<L> && !IsRawArray<R> &&
-    !IsRawPointer<L> && !IsRawPointer<R> &&
+    RawOperandAllowed<L, R> &&
     SameBoolness<L, R> &&
     SameIntegralSignedness<L, R>;
 
@@ -164,9 +171,6 @@ inline constexpr bool IsOptional{false};
 
 template <typename T>
 inline constexpr bool IsOptional<std::optional<T>>{true};
-
-template <typename T>
-concept StringValue = std::same_as<Decay<T>, std::string> || std::same_as<Decay<T>, std::string_view>;
 
 template <typename T>
 concept Streamable = requires(std::ostream& os, const T& value) {

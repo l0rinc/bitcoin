@@ -105,16 +105,16 @@ struct TcpSocketPair {
         addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         addr.sin_port = 0;
 
-        BOOST_REQUIRE_EQUAL(receiver.Bind(reinterpret_cast<sockaddr*>(&addr), sizeof(addr)), 0);
-        BOOST_REQUIRE_EQUAL(receiver.Listen(1), 0);
+        CHECK_EQUAL(receiver.Bind(reinterpret_cast<sockaddr*>(&addr), sizeof(addr)), std::remove_cvref_t<decltype(receiver.Bind(reinterpret_cast<sockaddr*>(&addr), sizeof(addr)))>{0});
+        CHECK_EQUAL(receiver.Listen(1), std::remove_cvref_t<decltype(receiver.Listen(1))>{0});
 
         // Get the address of the listener.
         sockaddr_in bound{};
         socklen_t blen = sizeof(bound);
-        BOOST_REQUIRE_EQUAL(receiver.GetSockName(reinterpret_cast<sockaddr*>(&bound), &blen), 0);
-        BOOST_REQUIRE_EQUAL(blen, sizeof(bound));
+        CHECK_EQUAL(receiver.GetSockName(reinterpret_cast<sockaddr*>(&bound), &blen), std::remove_cvref_t<decltype(receiver.GetSockName(reinterpret_cast<sockaddr*>(&bound), &blen))>{0});
+        CHECK_EQUAL(blen, sizeof(bound));
 
-        BOOST_REQUIRE_EQUAL(sender.Connect(reinterpret_cast<sockaddr*>(&bound), sizeof(bound)), 0);
+        CHECK_EQUAL(sender.Connect(reinterpret_cast<sockaddr*>(&bound), sizeof(bound)), std::remove_cvref_t<decltype(sender.Connect(reinterpret_cast<sockaddr*>(&bound), sizeof(bound)))>{0});
 
         std::unique_ptr<Sock> accepted = receiver.Accept(nullptr, nullptr);
         CHECK(accepted != nullptr);
@@ -128,9 +128,9 @@ struct TcpSocketPair {
         constexpr ssize_t msg_len = 4;
         char recv_buf[10];
 
-        BOOST_CHECK_EQUAL(sender.Send(msg, msg_len, 0), msg_len);
-        BOOST_CHECK_EQUAL(receiver.Recv(recv_buf, sizeof(recv_buf), 0), msg_len);
-        BOOST_CHECK_EQUAL(strncmp(msg, recv_buf, msg_len), 0);
+        CHECK_EQUAL(sender.Send(msg, msg_len, 0), msg_len);
+        CHECK_EQUAL(receiver.Recv(recv_buf, sizeof(recv_buf), 0), msg_len);
+        CHECK_EQUAL(strncmp(msg, recv_buf, msg_len), std::remove_cvref_t<decltype(strncmp(msg, recv_buf, msg_len))>{0});
     }
 };
 
@@ -150,7 +150,7 @@ BOOST_AUTO_TEST_CASE(wait)
 
     std::thread waiter([&socks]() { (void)socks.receiver.Wait(24h, Sock::RECV); });
 
-    BOOST_REQUIRE_EQUAL(socks.sender.Send("a", 1, 0), 1);
+    CHECK_EQUAL(socks.sender.Send("a", 1, 0), std::remove_cvref_t<decltype(socks.sender.Send("a", 1, 0))>{1});
 
     waiter.join();
 }

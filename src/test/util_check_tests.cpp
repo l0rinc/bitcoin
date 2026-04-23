@@ -27,8 +27,8 @@ static_assert(test::check_detail::ValidComparisonTypes<std::string, std::string_
 static_assert(!test::check_detail::ValidComparisonTypes<int, unsigned>);
 static_assert(!test::check_detail::ValidComparisonTypes<bool, int>);
 static_assert(!test::check_detail::ValidComparisonTypes<int*, int*>);
-static_assert(!test::check_detail::ValidComparisonTypes<decltype("literal"), std::string>);
-static_assert(!test::check_detail::ValidComparisonTypes<const char*, std::string>);
+static_assert(test::check_detail::ValidComparisonTypes<decltype("literal"), std::string>);
+static_assert(test::check_detail::ValidComparisonTypes<const char*, std::string>);
 
 template <typename Fn>
 std::string CheckFailureMessage(Fn&& fn)
@@ -80,7 +80,7 @@ BOOST_AUTO_TEST_CASE(check_fail)
 BOOST_AUTO_TEST_CASE(test_check_pass)
 {
     CHECK(true);
-    CHECK_EQUAL(1, 1);
+    CHECK_EQUAL(std::remove_cvref_t<decltype(std::remove_cvref_t<decltype(1)>{1})>{1}, std::remove_cvref_t<decltype(1)>{1});
     CHECK_NE(1, 2);
     CHECK_LT(1, 2);
     CHECK_LE(1, 1);
@@ -111,7 +111,7 @@ BOOST_AUTO_TEST_CASE(test_check_fail)
     message = CheckFailureMessage([&] { CHECK(null_ptr); });
     CHECK_NE(message.find("value: nullptr"), std::string::npos);
 
-    message = CheckFailureMessage([] { CHECK_EQUAL(1, 2); });
+    message = CheckFailureMessage([] { CHECK_EQUAL(std::remove_cvref_t<decltype(std::remove_cvref_t<decltype(1)>{2})>{1}, std::remove_cvref_t<decltype(1)>{2}); });
     CHECK_NE(message.find("expression: 1 == 2"), std::string::npos);
     CHECK_NE(message.find("lhs: 1"), std::string::npos);
     CHECK_NE(message.find("rhs: 2"), std::string::npos);

@@ -87,7 +87,7 @@ BOOST_FIXTURE_TEST_CASE(connect_tip_does_not_cache_inputs_on_failed_connect, Tes
     CHECK(Assert(m_node.chainman)->ProcessNewBlock(std::make_shared<CBlock>(block), true, true, nullptr));
 
     LOCK(cs_main);
-    BOOST_CHECK_EQUAL(tip, chainstate.m_chain.Tip()->GetBlockHash()); // block rejected
+    CHECK_EQUAL(tip, chainstate.m_chain.Tip()->GetBlockHash()); // block rejected
     CHECK(!chainstate.CoinsTip().HaveCoinInCache(outpoint));    // input not cached
 }
 
@@ -158,12 +158,12 @@ BOOST_FIXTURE_TEST_CASE(chainstate_update_tip, TestChain100Setup)
     bool block_added = background_cs.ActivateBestChain(state, pblockone);
 
     // Ensure tip is as expected
-    BOOST_CHECK_EQUAL(background_cs.m_chain.Tip()->GetBlockHash(), pblockone->GetHash());
+    CHECK_EQUAL(background_cs.m_chain.Tip()->GetBlockHash(), pblockone->GetHash());
 
     // get_notify_tip() should be unchanged after adding a block to the background
     // validation chain.
     CHECK(block_added);
-    BOOST_CHECK_EQUAL(curr_tip, get_notify_tip());
+    CHECK_EQUAL(curr_tip, get_notify_tip());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

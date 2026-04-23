@@ -41,16 +41,16 @@ struct Behaviors {
 
     void CheckEqual(const Behaviors& other, bool segwit)
     {
-        BOOST_CHECK_EQUAL(other.m_wtxid_in_rejects,       m_wtxid_in_rejects);
-        BOOST_CHECK_EQUAL(other.m_wtxid_in_rejects_recon, m_wtxid_in_rejects_recon);
-        BOOST_CHECK_EQUAL(other.m_keep_for_compact,       m_keep_for_compact);
-        BOOST_CHECK_EQUAL(other.m_ignore_inv_wtxid,       m_ignore_inv_wtxid);
+        CHECK_EQUAL(other.m_wtxid_in_rejects,       m_wtxid_in_rejects);
+        CHECK_EQUAL(other.m_wtxid_in_rejects_recon, m_wtxid_in_rejects_recon);
+        CHECK_EQUAL(other.m_keep_for_compact,       m_keep_for_compact);
+        CHECK_EQUAL(other.m_ignore_inv_wtxid,       m_ignore_inv_wtxid);
 
         // false negatives for nonsegwit transactions, since txid == wtxid.
         if (segwit) {
-            BOOST_CHECK_EQUAL(other.m_txid_in_rejects,        m_txid_in_rejects);
-            BOOST_CHECK_EQUAL(other.m_txid_in_rejects_recon,  m_txid_in_rejects_recon);
-            BOOST_CHECK_EQUAL(other.m_ignore_inv_txid,        m_ignore_inv_txid);
+            CHECK_EQUAL(other.m_txid_in_rejects,        m_txid_in_rejects);
+            CHECK_EQUAL(other.m_txid_in_rejects_recon,  m_txid_in_rejects_recon);
+            CHECK_EQUAL(other.m_ignore_inv_txid,        m_ignore_inv_txid);
         }
     }
 };
@@ -159,11 +159,11 @@ BOOST_FIXTURE_TEST_CASE(tx_rejection_types, TestChain100Setup)
 
                 // If parent (by txid) was rejected, child is too.
                 const bool parent_txid_rejected{segwit_parent ? expected_behavior.m_txid_in_rejects : expected_behavior.m_wtxid_in_rejects};
-                BOOST_CHECK_EQUAL(parent_txid_rejected, txdownload_impl.RecentRejectsFilter().contains(child_txid.ToUint256()));
-                BOOST_CHECK_EQUAL(parent_txid_rejected, txdownload_impl.RecentRejectsFilter().contains(child_wtxid.ToUint256()));
+                CHECK_EQUAL(parent_txid_rejected, txdownload_impl.RecentRejectsFilter().contains(child_txid.ToUint256()));
+                CHECK_EQUAL(parent_txid_rejected, txdownload_impl.RecentRejectsFilter().contains(child_wtxid.ToUint256()));
 
                 // Unless rejected, the child should be in orphanage.
-                BOOST_CHECK_EQUAL(!parent_txid_rejected, txdownload_impl.m_orphanage->HaveTx(ptx_child->GetWitnessHash()));
+                CHECK_EQUAL(!parent_txid_rejected, txdownload_impl.m_orphanage->HaveTx(ptx_child->GetWitnessHash()));
             }
         }
     }

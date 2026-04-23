@@ -147,8 +147,8 @@ public:
     {
         if (exp != exp_delayed) {
             // only expected differences are that delayed stays in locked_in longer
-            BOOST_CHECK_EQUAL(exp, ThresholdState::ACTIVE);
-            BOOST_CHECK_EQUAL(exp_delayed, ThresholdState::LOCKED_IN);
+            CHECK_EQUAL(exp, ThresholdState::ACTIVE);
+            CHECK_EQUAL(exp_delayed, ThresholdState::LOCKED_IN);
         }
 
         const CBlockIndex* pindex = Tip();
@@ -275,7 +275,7 @@ void check_computeblockversion(VersionBitsCache& versionbitscache, const Consens
     CHECK(threshold < period); // must be able to have a window that does activate
 
     // should not be any signalling for first block
-    BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(nullptr, params), VERSIONBITS_TOP_BITS);
+    CHECK_EQUAL(versionbitscache.ComputeBlockVersion(nullptr, params), VERSIONBITS_TOP_BITS);
 
     // always/never active deployments shouldn't need to be tested further
     if (nStartTime == Consensus::BIP9Deployment::ALWAYS_ACTIVE ||
@@ -286,8 +286,8 @@ void check_computeblockversion(VersionBitsCache& versionbitscache, const Consens
         } else {
             CHECK(!versionbitscache.IsActiveAfter(nullptr, params, dep));
         }
-        BOOST_CHECK_EQUAL(min_activation_height, 0);
-        BOOST_CHECK_EQUAL(nTimeout, Consensus::BIP9Deployment::NO_TIMEOUT);
+        CHECK_EQUAL(min_activation_height, std::remove_cvref_t<decltype(min_activation_height)>{0});
+        CHECK_EQUAL(nTimeout, Consensus::BIP9Deployment::NO_TIMEOUT);
         return;
     }
 
@@ -299,7 +299,7 @@ void check_computeblockversion(VersionBitsCache& versionbitscache, const Consens
     CHECK(((1 << bit) & VERSIONBITS_TOP_MASK) == 0);
     CHECK(min_activation_height >= 0);
     // Check min_activation_height is on a retarget boundary
-    BOOST_REQUIRE_EQUAL(min_activation_height % period, 0U);
+    CHECK_EQUAL(min_activation_height % period, 0U);
 
     // In the first chain, test that the bit is set by CBV until it has failed.
     // In the second chain, test the bit is set by CBV while STARTED and
@@ -317,7 +317,7 @@ void check_computeblockversion(VersionBitsCache& versionbitscache, const Consens
         // earlier time, so will transition from DEFINED to STARTED at the
         // end of the first period by mining blocks at nTime == 0
         lastBlock = firstChain.Mine(period - 1, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
-        BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), 0);
+        CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), std::remove_cvref_t<decltype(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit))>{0});
         CHECK(!versionbitscache.IsActiveAfter(lastBlock, params, dep));
         lastBlock = firstChain.Mine(period, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
         CHECK((versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit)) != 0);
@@ -329,13 +329,13 @@ void check_computeblockversion(VersionBitsCache& versionbitscache, const Consens
 
         // Start generating blocks before nStartTime
         lastBlock = firstChain.Mine(period, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
-        BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), 0);
+        CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), std::remove_cvref_t<decltype(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit))>{0});
         CHECK(!versionbitscache.IsActiveAfter(lastBlock, params, dep));
 
         // Mine more blocks (4 less than the adjustment period) at the old time, and check that CBV isn't setting the bit yet.
         for (uint32_t i = 1; i < period - 4; i++) {
             lastBlock = firstChain.Mine(period + i, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
-            BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), 0);
+            CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), std::remove_cvref_t<decltype(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit))>{0});
             CHECK(!versionbitscache.IsActiveAfter(lastBlock, params, dep));
         }
         // Now mine 5 more blocks at the start time -- MTP should not have passed yet, so
@@ -343,7 +343,7 @@ void check_computeblockversion(VersionBitsCache& versionbitscache, const Consens
         nTime = nStartTime;
         for (uint32_t i = period - 4; i <= period; i++) {
             lastBlock = firstChain.Mine(period + i, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
-            BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), 0);
+            CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), std::remove_cvref_t<decltype(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit))>{0});
             CHECK(!versionbitscache.IsActiveAfter(lastBlock, params, dep));
         }
         // Next we will advance to the next period and transition to STARTED,
@@ -353,7 +353,7 @@ void check_computeblockversion(VersionBitsCache& versionbitscache, const Consens
     // so ComputeBlockVersion should now set the bit,
     CHECK((versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit)) != 0);
     // and should also be using the VERSIONBITS_TOP_BITS.
-    BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & VERSIONBITS_TOP_MASK, VERSIONBITS_TOP_BITS);
+    CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & VERSIONBITS_TOP_MASK, VERSIONBITS_TOP_BITS);
     CHECK(!versionbitscache.IsActiveAfter(lastBlock, params, dep));
 
     // Check that ComputeBlockVersion will set the bit until nTimeout
@@ -364,7 +364,7 @@ void check_computeblockversion(VersionBitsCache& versionbitscache, const Consens
     while (nTime < nTimeout && blocksToMine > 0) {
         lastBlock = firstChain.Mine(nHeight+1, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
         CHECK((versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit)) != 0);
-        BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & VERSIONBITS_TOP_MASK, VERSIONBITS_TOP_BITS);
+        CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & VERSIONBITS_TOP_MASK, VERSIONBITS_TOP_BITS);
         CHECK(!versionbitscache.IsActiveAfter(lastBlock, params, dep));
         blocksToMine--;
         nTime += 600;
@@ -394,7 +394,7 @@ void check_computeblockversion(VersionBitsCache& versionbitscache, const Consens
         }
         // The next block should trigger no longer setting the bit.
         lastBlock = firstChain.Mine(nHeight+1, nTime, VERSIONBITS_LAST_OLD_BLOCK_VERSION).Tip();
-        BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), 0);
+        CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), std::remove_cvref_t<decltype(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit))>{0});
         CHECK(!versionbitscache.IsActiveAfter(lastBlock, params, dep));
     }
 
@@ -433,7 +433,7 @@ void check_computeblockversion(VersionBitsCache& versionbitscache, const Consens
     }
 
     // Check that we don't signal after activation
-    BOOST_CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), 0);
+    CHECK_EQUAL(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit), std::remove_cvref_t<decltype(versionbitscache.ComputeBlockVersion(lastBlock, params) & (1 << bit))>{0});
     CHECK(versionbitscache.IsActiveAfter(lastBlock, params, dep));
 }
 }; // struct BlockVersionTest

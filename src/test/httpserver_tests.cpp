@@ -20,17 +20,17 @@ BOOST_AUTO_TEST_CASE(test_query_parameters)
 
     // Single parameter
     uri = "localhost:8080/rest/endpoint/someresource.json?p1=v1";
-    BOOST_CHECK_EQUAL(GetQueryParameterFromUri(uri.c_str(), "p1").value(), "v1");
+    CHECK_EQUAL(GetQueryParameterFromUri(uri.c_str(), "p1").value(), std::string_view{"v1"});
     CHECK(!GetQueryParameterFromUri(uri.c_str(), "p2").has_value());
 
     // Multiple parameters
     uri = "/rest/endpoint/someresource.json?p1=v1&p2=v2";
-    BOOST_CHECK_EQUAL(GetQueryParameterFromUri(uri.c_str(), "p1").value(), "v1");
-    BOOST_CHECK_EQUAL(GetQueryParameterFromUri(uri.c_str(), "p2").value(), "v2");
+    CHECK_EQUAL(GetQueryParameterFromUri(uri.c_str(), "p1").value(), std::string_view{"v1"});
+    CHECK_EQUAL(GetQueryParameterFromUri(uri.c_str(), "p2").value(), std::string_view{"v2"});
 
     // If the query string contains duplicate keys, the first value is returned
     uri = "/rest/endpoint/someresource.json?p1=v1&p1=v2";
-    BOOST_CHECK_EQUAL(GetQueryParameterFromUri(uri.c_str(), "p1").value(), "v1");
+    CHECK_EQUAL(GetQueryParameterFromUri(uri.c_str(), "p1").value(), std::string_view{"v1"});
 
     // Invalid query string syntax is the same as not having parameters
     uri = "/rest/endpoint/someresource.json&p1=v1&p2=v2";

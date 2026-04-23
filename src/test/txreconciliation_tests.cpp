@@ -20,13 +20,13 @@ BOOST_AUTO_TEST_CASE(RegisterPeerTest)
     tracker.PreRegisterPeer(0);
 
     // Invalid version.
-    BOOST_CHECK_EQUAL(tracker.RegisterPeer(/*peer_id=*/0, /*is_peer_inbound=*/true,
+    CHECK_EQUAL(tracker.RegisterPeer(/*peer_id=*/0, /*is_peer_inbound=*/true,
                                            /*peer_recon_version=*/0, salt),
                       ReconciliationRegisterResult::PROTOCOL_VIOLATION);
 
     // Valid registration (inbound and outbound peers).
     CHECK(!tracker.IsPeerRegistered(0));
-    BOOST_REQUIRE_EQUAL(tracker.RegisterPeer(0, true, 1, salt), ReconciliationRegisterResult::SUCCESS);
+    CHECK_EQUAL(tracker.RegisterPeer(0, true, 1, salt), ReconciliationRegisterResult::SUCCESS);
     CHECK(tracker.IsPeerRegistered(0));
     CHECK(!tracker.IsPeerRegistered(1));
     tracker.PreRegisterPeer(1);
@@ -43,7 +43,7 @@ BOOST_AUTO_TEST_CASE(RegisterPeerTest)
     CHECK(tracker.RegisterPeer(1, false, 1, salt) == ReconciliationRegisterResult::ALREADY_REGISTERED);
 
     // Do not register if there were no pre-registration for the peer.
-    BOOST_REQUIRE_EQUAL(tracker.RegisterPeer(100, true, 1, salt), ReconciliationRegisterResult::NOT_FOUND);
+    CHECK_EQUAL(tracker.RegisterPeer(100, true, 1, salt), ReconciliationRegisterResult::NOT_FOUND);
     CHECK(!tracker.IsPeerRegistered(100));
 }
 
@@ -55,12 +55,12 @@ BOOST_AUTO_TEST_CASE(ForgetPeerTest)
     // Removing peer after pre-registering works and does not let to register the peer.
     tracker.PreRegisterPeer(peer_id0);
     tracker.ForgetPeer(peer_id0);
-    BOOST_CHECK_EQUAL(tracker.RegisterPeer(peer_id0, true, 1, 1), ReconciliationRegisterResult::NOT_FOUND);
+    CHECK_EQUAL(tracker.RegisterPeer(peer_id0, true, 1, 1), ReconciliationRegisterResult::NOT_FOUND);
 
     // Removing peer after it is registered works.
     tracker.PreRegisterPeer(peer_id0);
     CHECK(!tracker.IsPeerRegistered(peer_id0));
-    BOOST_REQUIRE_EQUAL(tracker.RegisterPeer(peer_id0, true, 1, 1), ReconciliationRegisterResult::SUCCESS);
+    CHECK_EQUAL(tracker.RegisterPeer(peer_id0, true, 1, 1), ReconciliationRegisterResult::SUCCESS);
     CHECK(tracker.IsPeerRegistered(peer_id0));
     tracker.ForgetPeer(peer_id0);
     CHECK(!tracker.IsPeerRegistered(peer_id0));
@@ -75,7 +75,7 @@ BOOST_AUTO_TEST_CASE(IsPeerRegisteredTest)
     tracker.PreRegisterPeer(peer_id0);
     CHECK(!tracker.IsPeerRegistered(peer_id0));
 
-    BOOST_REQUIRE_EQUAL(tracker.RegisterPeer(peer_id0, true, 1, 1), ReconciliationRegisterResult::SUCCESS);
+    CHECK_EQUAL(tracker.RegisterPeer(peer_id0, true, 1, 1), ReconciliationRegisterResult::SUCCESS);
     CHECK(tracker.IsPeerRegistered(peer_id0));
 
     tracker.ForgetPeer(peer_id0);

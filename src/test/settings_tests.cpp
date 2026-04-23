@@ -115,8 +115,8 @@ static void CheckValues(const common::Settings& settings, const std::string& sin
     for (const auto& item : GetSettingsList(settings, "section", "name", false)) {
         list_value.push_back(item);
     }
-    BOOST_CHECK_EQUAL(single_value.write().c_str(), single_val);
-    BOOST_CHECK_EQUAL(list_value.write().c_str(), list_val);
+    CHECK_EQUAL(single_value.write().c_str(), single_val);
+    CHECK_EQUAL(list_value.write().c_str(), list_val);
 };
 
 // Simple settings merge test case.
@@ -146,9 +146,9 @@ BOOST_AUTO_TEST_CASE(NullOverride)
 {
     common::Settings settings;
     settings.command_line_options["name"].emplace_back("value");
-    BOOST_CHECK_EQUAL(R"("value")", GetSetting(settings, "section", "name", false, false, false).write().c_str());
+    CHECK_EQUAL(std::string_view{R"("value")"}, GetSetting(settings, "section", "name", false, false, false).write().c_str());
     settings.forced_settings["name"] = {};
-    BOOST_CHECK_EQUAL(R"(null)", GetSetting(settings, "section", "name", false, false, false).write().c_str());
+    CHECK_EQUAL(std::string_view{R"(null)"}, GetSetting(settings, "section", "name", false, false, false).write().c_str());
 }
 
 // Test different ways settings can be merged, and verify results. This test can
@@ -263,7 +263,7 @@ BOOST_FIXTURE_TEST_CASE(Merge, MergeTestingSetup)
     // Results file is formatted like:
     //
     //   <input> || GetSetting() | GetSettingsList() | OnlyHasDefaultSectionSetting()
-    BOOST_CHECK_EQUAL(out_sha_hex, "79db02d74e3e193196541b67c068b40ebd0c124a24b3ecbe9cbf7e85b1c4ba7a");
+    CHECK_EQUAL(out_sha_hex, std::string_view{"79db02d74e3e193196541b67c068b40ebd0c124a24b3ecbe9cbf7e85b1c4ba7a"});
 }
 
 BOOST_AUTO_TEST_SUITE_END()

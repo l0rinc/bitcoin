@@ -1012,11 +1012,11 @@ BOOST_AUTO_TEST_CASE(script_PushData)
 
     std::vector<std::vector<unsigned char>> stack_ignore;
     CHECK(!EvalScript(stack_ignore, CScript(pushdata1_trunc.begin(), pushdata1_trunc.end()), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
-    BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
+    CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
     CHECK(!EvalScript(stack_ignore, CScript(pushdata2_trunc.begin(), pushdata2_trunc.end()), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
-    BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
+    CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
     CHECK(!EvalScript(stack_ignore, CScript(pushdata4_trunc.begin(), pushdata4_trunc.end()), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
-    BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
+    CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
 }
 
 BOOST_AUTO_TEST_CASE(script_cltv_truncated)
@@ -1026,7 +1026,7 @@ BOOST_AUTO_TEST_CASE(script_cltv_truncated)
     std::vector<std::vector<unsigned char>> stack_ignore;
     ScriptError err;
     CHECK(!EvalScript(stack_ignore, script_cltv_trunc, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY, BaseSignatureChecker(), SigVersion::BASE, &err));
-    BOOST_CHECK_EQUAL(err, SCRIPT_ERR_INVALID_STACK_OPERATION);
+    CHECK_EQUAL(err, SCRIPT_ERR_INVALID_STACK_OPERATION);
 }
 
 static CScript
@@ -1167,25 +1167,25 @@ static TxoutType GetTxoutType(const CScript& output_script)
 
 #define CHECK_SCRIPT_STATIC_SIZE(script, expected_size)                   \
     do {                                                                  \
-        BOOST_CHECK_EQUAL((script).size(), (expected_size));              \
-        BOOST_CHECK_EQUAL((script).capacity(), CScriptBase::STATIC_SIZE); \
-        BOOST_CHECK_EQUAL((script).allocated_memory(), 0);                \
+        CHECK_EQUAL((script).size(), static_cast<std::remove_cvref_t<decltype((script).size())>>(expected_size));              \
+        CHECK_EQUAL((script).capacity(), CScriptBase::STATIC_SIZE); \
+        CHECK_EQUAL((script).allocated_memory(), std::remove_cvref_t<decltype((script).allocated_memory())>{0});                \
     } while (0)
 
 #define CHECK_SCRIPT_DYNAMIC_SIZE(script, expected_size, expected_extra)                 \
     do {                                                                 \
-        BOOST_CHECK_EQUAL((script).size(), (expected_size));             \
-        BOOST_CHECK_EQUAL((script).capacity(), (expected_extra));         \
-        BOOST_CHECK_EQUAL((script).allocated_memory(), (expected_extra)); \
+        CHECK_EQUAL((script).size(), static_cast<std::remove_cvref_t<decltype((script).size())>>(expected_size));             \
+        CHECK_EQUAL((script).capacity(), static_cast<std::remove_cvref_t<decltype((script).capacity())>>(expected_extra));         \
+        CHECK_EQUAL((script).allocated_memory(), static_cast<std::remove_cvref_t<decltype((script).allocated_memory())>>(expected_extra)); \
     } while (0)
 
 BOOST_AUTO_TEST_CASE(script_size_and_capacity_test)
 {
-    BOOST_CHECK_EQUAL(sizeof(CompressedScript), 40);
-    BOOST_CHECK_EQUAL(sizeof(CScriptBase), 40);
+    CHECK_EQUAL(sizeof(CompressedScript), std::remove_cvref_t<decltype(sizeof(CompressedScript))>{40});
+    CHECK_EQUAL(sizeof(CScriptBase), std::remove_cvref_t<decltype(sizeof(CScriptBase))>{40});
     CHECK_NE(sizeof(CScriptBase), sizeof(prevector<CScriptBase::STATIC_SIZE + 1, uint8_t>)); // CScriptBase size should be set to avoid wasting space in padding
-    BOOST_CHECK_EQUAL(sizeof(CScript), 40);
-    BOOST_CHECK_EQUAL(sizeof(CTxOut), 48);
+    CHECK_EQUAL(sizeof(CScript), std::remove_cvref_t<decltype(sizeof(CScript))>{40});
+    CHECK_EQUAL(sizeof(CTxOut), std::remove_cvref_t<decltype(sizeof(CTxOut))>{48});
 
     CKey dummy_key;
     dummy_key.MakeNewKey(/*fCompressed=*/true);
@@ -1194,14 +1194,14 @@ BOOST_AUTO_TEST_CASE(script_size_and_capacity_test)
     // Small OP_RETURN has direct allocation
     {
         const auto script{CScript() << OP_RETURN << std::vector<uint8_t>(10, 0xaa)};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::NULL_DATA);
-        CHECK_SCRIPT_STATIC_SIZE(script, 12);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::NULL_DATA);
+        CHECK_SCRIPT_STATIC_SIZE(script, size_t{12});
     }
 
     // P2WPKH has direct allocation
     {
         const auto script{GetScriptForDestination(WitnessV0KeyHash{PKHash{dummy_pubkey}})};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::WITNESS_V0_KEYHASH);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::WITNESS_V0_KEYHASH);
         CHECK_SCRIPT_STATIC_SIZE(script, 22);
     }
 
@@ -1215,7 +1215,7 @@ BOOST_AUTO_TEST_CASE(script_size_and_capacity_test)
     // P2PKH has direct allocation
     {
         const auto script{GetScriptForDestination(PKHash{dummy_pubkey})};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEYHASH);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEYHASH);
         CHECK_SCRIPT_STATIC_SIZE(script, 25);
     }
 
@@ -1229,14 +1229,14 @@ BOOST_AUTO_TEST_CASE(script_size_and_capacity_test)
     // P2TR has direct allocation
     {
         const auto script{GetScriptForDestination(WitnessV1Taproot{XOnlyPubKey{dummy_pubkey}})};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::WITNESS_V1_TAPROOT);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::WITNESS_V1_TAPROOT);
         CHECK_SCRIPT_STATIC_SIZE(script, 34);
     }
 
     // Compressed P2PK has direct allocation
     {
         const auto script{GetScriptForRawPubKey(dummy_pubkey)};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEY);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEY);
         CHECK_SCRIPT_STATIC_SIZE(script, 35);
     }
 
@@ -1247,14 +1247,14 @@ BOOST_AUTO_TEST_CASE(script_size_and_capacity_test)
         const CPubKey uncompressed_pubkey{uncompressed_key.GetPubKey()};
 
         const auto script{GetScriptForRawPubKey(uncompressed_pubkey)};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEY);
-        CHECK_SCRIPT_DYNAMIC_SIZE(script, 67, 67);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEY);
+        CHECK_SCRIPT_DYNAMIC_SIZE(script, size_t{67}, size_t{67});
     }
 
     // Bare multisig needs extra allocation
     {
         const auto script{GetScriptForMultisig(1, std::vector{2, dummy_pubkey})};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::MULTISIG);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::MULTISIG);
         CHECK_SCRIPT_DYNAMIC_SIZE(script, 71, 103);
     }
 }
@@ -1465,32 +1465,32 @@ BOOST_AUTO_TEST_CASE(script_CheckMinimalPush_boundary)
 
 BOOST_AUTO_TEST_CASE(script_GetScriptAsm)
 {
-    BOOST_CHECK_EQUAL("OP_CHECKLOCKTIMEVERIFY", ScriptToAsmStr(CScript() << OP_NOP2, true));
-    BOOST_CHECK_EQUAL("OP_CHECKLOCKTIMEVERIFY", ScriptToAsmStr(CScript() << OP_CHECKLOCKTIMEVERIFY, true));
-    BOOST_CHECK_EQUAL("OP_CHECKLOCKTIMEVERIFY", ScriptToAsmStr(CScript() << OP_NOP2));
-    BOOST_CHECK_EQUAL("OP_CHECKLOCKTIMEVERIFY", ScriptToAsmStr(CScript() << OP_CHECKLOCKTIMEVERIFY));
+    CHECK_EQUAL(std::string_view{"OP_CHECKLOCKTIMEVERIFY"}, ScriptToAsmStr(CScript() << OP_NOP2, true));
+    CHECK_EQUAL(std::string_view{"OP_CHECKLOCKTIMEVERIFY"}, ScriptToAsmStr(CScript() << OP_CHECKLOCKTIMEVERIFY, true));
+    CHECK_EQUAL(std::string_view{"OP_CHECKLOCKTIMEVERIFY"}, ScriptToAsmStr(CScript() << OP_NOP2));
+    CHECK_EQUAL(std::string_view{"OP_CHECKLOCKTIMEVERIFY"}, ScriptToAsmStr(CScript() << OP_CHECKLOCKTIMEVERIFY));
 
     std::string derSig("304502207fa7a6d1e0ee81132a269ad84e68d695483745cde8b541e3bf630749894e342a022100c1f7ab20e13e22fb95281a870f3dcf38d782e53023ee313d741ad0cfbc0c5090");
     std::string pubKey("03b0da749730dc9b4b1f4a14d6902877a92541f5368778853d9c4a0cb7802dcfb2");
     std::vector<unsigned char> vchPubKey = ToByteVector(ParseHex(pubKey));
 
-    BOOST_CHECK_EQUAL(derSig + "00 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "00")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "80 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "80")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "[ALL] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "01")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "[NONE] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "02")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "[SINGLE] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "03")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "[ALL|ANYONECANPAY] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "81")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "[NONE|ANYONECANPAY] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "82")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "[SINGLE|ANYONECANPAY] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "83")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "00 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "00")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "80 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "80")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "[ALL] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "01")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "[NONE] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "02")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "[SINGLE] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "03")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "[ALL|ANYONECANPAY] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "81")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "[NONE|ANYONECANPAY] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "82")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "[SINGLE|ANYONECANPAY] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "83")) << vchPubKey, true));
 
-    BOOST_CHECK_EQUAL(derSig + "00 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "00")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "80 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "80")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "01 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "01")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "02 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "02")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "03 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "03")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "81 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "81")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "82 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "82")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "83 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "83")) << vchPubKey));
+    CHECK_EQUAL(derSig + "00 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "00")) << vchPubKey));
+    CHECK_EQUAL(derSig + "80 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "80")) << vchPubKey));
+    CHECK_EQUAL(derSig + "01 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "01")) << vchPubKey));
+    CHECK_EQUAL(derSig + "02 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "02")) << vchPubKey));
+    CHECK_EQUAL(derSig + "03 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "03")) << vchPubKey));
+    CHECK_EQUAL(derSig + "81 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "81")) << vchPubKey));
+    CHECK_EQUAL(derSig + "82 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "82")) << vchPubKey));
+    CHECK_EQUAL(derSig + "83 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "83")) << vchPubKey));
 }
 
 template <typename T>
@@ -1517,43 +1517,43 @@ BOOST_AUTO_TEST_CASE(script_FindAndDelete)
     s = CScript() << OP_1 << OP_2;
     d = CScript(); // delete nothing should be a no-op
     expect = s;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 0);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{0});
     CHECK(s == expect);
 
     s = CScript() << OP_1 << OP_2 << OP_3;
     d = CScript() << OP_2;
     expect = CScript() << OP_1 << OP_3;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
     CHECK(s == expect);
 
     s = CScript() << OP_3 << OP_1 << OP_3 << OP_3 << OP_4 << OP_3;
     d = CScript() << OP_3;
     expect = CScript() << OP_1 << OP_4;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 4);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{4});
     CHECK(s == expect);
 
     s = ToScript("0302ff03"_hex); // PUSH 0x02ff03 onto stack
     d = ToScript("0302ff03"_hex);
     expect = CScript();
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
     CHECK(s == expect);
 
     s = ToScript("0302ff030302ff03"_hex); // PUSH 0x02ff03 PUSH 0x02ff03
     d = ToScript("0302ff03"_hex);
     expect = CScript();
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 2);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{2});
     CHECK(s == expect);
 
     s = ToScript("0302ff030302ff03"_hex);
     d = ToScript("02"_hex);
     expect = s; // FindAndDelete matches entire opcodes
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 0);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{0});
     CHECK(s == expect);
 
     s = ToScript("0302ff030302ff03"_hex);
     d = ToScript("ff"_hex);
     expect = s;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 0);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{0});
     CHECK(s == expect);
 
     // This is an odd edge case: strip of the push-three-bytes
@@ -1561,44 +1561,44 @@ BOOST_AUTO_TEST_CASE(script_FindAndDelete)
     s = ToScript("0302ff030302ff03"_hex);
     d = ToScript("03"_hex);
     expect = CScript() << "ff03"_hex << "ff03"_hex;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 2);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{2});
     CHECK(s == expect);
 
     // Byte sequence that spans multiple opcodes:
     s = ToScript("02feed5169"_hex); // PUSH(0xfeed) OP_1 OP_VERIFY
     d = ToScript("feed51"_hex);
     expect = s;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 0); // doesn't match 'inside' opcodes
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{0}); // doesn't match 'inside' opcodes
     CHECK(s == expect);
 
     s = ToScript("02feed5169"_hex); // PUSH(0xfeed) OP_1 OP_VERIFY
     d = ToScript("02feed51"_hex);
     expect = ToScript("69"_hex);
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
     CHECK(s == expect);
 
     s = ToScript("516902feed5169"_hex);
     d = ToScript("feed51"_hex);
     expect = s;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 0);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{0});
     CHECK(s == expect);
 
     s = ToScript("516902feed5169"_hex);
     d = ToScript("02feed51"_hex);
     expect = ToScript("516969"_hex);
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
     CHECK(s == expect);
 
     s = CScript() << OP_0 << OP_0 << OP_1 << OP_1;
     d = CScript() << OP_0 << OP_1;
     expect = CScript() << OP_0 << OP_1; // FindAndDelete is single-pass
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
     CHECK(s == expect);
 
     s = CScript() << OP_0 << OP_0 << OP_1 << OP_0 << OP_1 << OP_1;
     d = CScript() << OP_0 << OP_1;
     expect = CScript() << OP_0 << OP_1; // FindAndDelete is single-pass
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 2);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{2});
     CHECK(s == expect);
 
     // Another weird edge case:
@@ -1606,13 +1606,13 @@ BOOST_AUTO_TEST_CASE(script_FindAndDelete)
     s = ToScript("0003feed"_hex);
     d = ToScript("03feed"_hex); // ... can remove the invalid push
     expect = ToScript("00"_hex);
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
     CHECK(s == expect);
 
     s = ToScript("0003feed"_hex);
     d = ToScript("00"_hex);
     expect = ToScript("03feed"_hex);
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
     CHECK(s == expect);
 }
 
@@ -1653,11 +1653,11 @@ BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
         txdata.Init(tx, std::vector<CTxOut>{utxos}, true);
 
         CHECK(txdata.m_bip341_taproot_ready);
-        BOOST_CHECK_EQUAL(HexStr(txdata.m_spent_amounts_single_hash), vec["intermediary"]["hashAmounts"].get_str());
-        BOOST_CHECK_EQUAL(HexStr(txdata.m_outputs_single_hash), vec["intermediary"]["hashOutputs"].get_str());
-        BOOST_CHECK_EQUAL(HexStr(txdata.m_prevouts_single_hash), vec["intermediary"]["hashPrevouts"].get_str());
-        BOOST_CHECK_EQUAL(HexStr(txdata.m_spent_scripts_single_hash), vec["intermediary"]["hashScriptPubkeys"].get_str());
-        BOOST_CHECK_EQUAL(HexStr(txdata.m_sequences_single_hash), vec["intermediary"]["hashSequences"].get_str());
+        CHECK_EQUAL(HexStr(txdata.m_spent_amounts_single_hash), vec["intermediary"]["hashAmounts"].get_str());
+        CHECK_EQUAL(HexStr(txdata.m_outputs_single_hash), vec["intermediary"]["hashOutputs"].get_str());
+        CHECK_EQUAL(HexStr(txdata.m_prevouts_single_hash), vec["intermediary"]["hashPrevouts"].get_str());
+        CHECK_EQUAL(HexStr(txdata.m_spent_scripts_single_hash), vec["intermediary"]["hashScriptPubkeys"].get_str());
+        CHECK_EQUAL(HexStr(txdata.m_sequences_single_hash), vec["intermediary"]["hashSequences"].get_str());
 
         for (const auto& input : vec["inputSpending"].getValues()) {
             int txinpos = input["given"]["txinIndex"].getInt<int>();
@@ -1676,7 +1676,7 @@ BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
 
             // Compute and verify (internal) public key.
             XOnlyPubKey pubkey{key.GetPubKey()};
-            BOOST_CHECK_EQUAL(HexStr(pubkey), input["intermediary"]["internalPubkey"].get_str());
+            CHECK_EQUAL(HexStr(pubkey), input["intermediary"]["internalPubkey"].get_str());
 
             // Sign and verify signature.
             FlatSigningProvider provider;
@@ -1684,10 +1684,10 @@ BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
             MutableTransactionSignatureCreator creator(tx, txinpos, utxos[txinpos].nValue, &txdata, hashtype);
             std::vector<unsigned char> signature;
             CHECK(creator.CreateSchnorrSig(provider, signature, pubkey, nullptr, &merkle_root, SigVersion::TAPROOT));
-            BOOST_CHECK_EQUAL(HexStr(signature), input["expected"]["witness"][0].get_str());
+            CHECK_EQUAL(HexStr(signature), input["expected"]["witness"][0].get_str());
 
             // We can't observe the tweak used inside the signing logic, so verify by recomputing it.
-            BOOST_CHECK_EQUAL(HexStr(pubkey.ComputeTapTweakHash(merkle_root.IsNull() ? nullptr : &merkle_root)), input["intermediary"]["tweak"].get_str());
+            CHECK_EQUAL(HexStr(pubkey.ComputeTapTweakHash(merkle_root.IsNull() ? nullptr : &merkle_root)), input["intermediary"]["tweak"].get_str());
 
             // We can't observe the sighash used inside the signing logic, so verify by recomputing it.
             ScriptExecutionData sed;
@@ -1695,10 +1695,10 @@ BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
             sed.m_annex_present = false;
             uint256 sighash;
             CHECK(SignatureHashSchnorr(sighash, sed, tx, txinpos, hashtype, SigVersion::TAPROOT, txdata, MissingDataBehavior::FAIL));
-            BOOST_CHECK_EQUAL(HexStr(sighash), input["intermediary"]["sigHash"].get_str());
+            CHECK_EQUAL(HexStr(sighash), input["intermediary"]["sigHash"].get_str());
 
             // To verify the sigmsg, hash the expected sigmsg, and compare it with the (expected) sighash.
-            BOOST_CHECK_EQUAL(HexStr((HashWriter{HASHER_TAPSIGHASH} << std::span<const uint8_t>{ParseHex(input["intermediary"]["sigMsg"].get_str())}).GetSHA256()), input["intermediary"]["sigHash"].get_str());
+            CHECK_EQUAL(HexStr((HashWriter{HASHER_TAPSIGHASH} << std::span<const uint8_t>{ParseHex(input["intermediary"]["sigMsg"].get_str())}).GetSHA256()), input["intermediary"]["sigHash"].get_str());
         }
     }
 }
@@ -1708,7 +1708,7 @@ BOOST_AUTO_TEST_CASE(compute_tapbranch)
     constexpr uint256 hash1{"8ad69ec7cf41c2a4001fd1f738bf1e505ce2277acdcaa63fe4765192497f47a7"};
     constexpr uint256 hash2{"f224a923cd0021ab202ab139cc56802ddb92dcfc172b9212261a539df79a112a"};
     constexpr uint256 result{"a64c5b7b943315f9b805d7a7296bedfcfd08919270a1f7a1466e98f8693d8cd9"};
-    BOOST_CHECK_EQUAL(ComputeTapbranchHash(hash1, hash2), result);
+    CHECK_EQUAL(ComputeTapbranchHash(hash1, hash2), result);
 }
 
 BOOST_AUTO_TEST_CASE(compute_tapleaf)
@@ -1717,19 +1717,19 @@ BOOST_AUTO_TEST_CASE(compute_tapleaf)
     constexpr uint256 tlc0{"edbc10c272a1215dcdcc11d605b9027b5ad6ed97cd45521203f136767b5b9c06"};
     constexpr uint256 tlc2{"8b5c4f90ae6bf76e259dbef5d8a59df06359c391b59263741b25eca76451b27a"};
 
-    BOOST_CHECK_EQUAL(ComputeTapleafHash(0xc0, std::span(script)), tlc0);
-    BOOST_CHECK_EQUAL(ComputeTapleafHash(0xc2, std::span(script)), tlc2);
+    CHECK_EQUAL(ComputeTapleafHash(0xc0, std::span(script)), tlc0);
+    CHECK_EQUAL(ComputeTapleafHash(0xc2, std::span(script)), tlc2);
 }
 
 BOOST_AUTO_TEST_CASE(formatscriptflags)
 {
     // quick check that FormatScriptFlags reports any unknown/unexpected bits
-    BOOST_CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_P2SH), "P2SH");
-    BOOST_CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_TAPROOT), "P2SH,TAPROOT");
-    BOOST_CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_P2SH | script_verify_flags::from_int(1u<<31)), "P2SH,0x80000000");
-    BOOST_CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_TAPROOT | script_verify_flags::from_int(1u<<27)), "TAPROOT,0x08000000");
-    BOOST_CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_TAPROOT | script_verify_flags::from_int((1u<<28) | (1ull<<58))), "TAPROOT,0x400000010000000");
-    BOOST_CHECK_EQUAL(FormatScriptFlags(script_verify_flags::from_int(1u<<26)), "0x04000000");
+    CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_P2SH), std::string_view{"P2SH"});
+    CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_TAPROOT), std::string_view{"P2SH,TAPROOT"});
+    CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_P2SH | script_verify_flags::from_int(1u<<31)), std::string_view{"P2SH,0x80000000"});
+    CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_TAPROOT | script_verify_flags::from_int(1u<<27)), std::string_view{"TAPROOT,0x08000000"});
+    CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_TAPROOT | script_verify_flags::from_int((1u<<28) | (1ull<<58))), std::string_view{"TAPROOT,0x400000010000000"});
+    CHECK_EQUAL(FormatScriptFlags(script_verify_flags::from_int(1u<<26)), std::string_view{"0x04000000"});
 }
 
 BOOST_AUTO_TEST_SUITE_END()

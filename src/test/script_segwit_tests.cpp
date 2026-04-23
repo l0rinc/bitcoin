@@ -76,7 +76,7 @@ bool IsExpectedWitnessProgram(const CScript& script, const int expectedVersion, 
     if (!script.IsWitnessProgram(actualVersion, actualProgram)) {
         return false;
     }
-    BOOST_CHECK_EQUAL(actualVersion, expectedVersion);
+    CHECK_EQUAL(actualVersion, expectedVersion);
     CHECK(actualProgram == expectedProgram);
     return true;
 }

@@ -147,7 +147,7 @@ BOOST_AUTO_TEST_CASE(multisig_IsStandard)
         TxoutType type;
         bool res{::IsStandard(spk, type)};
         if (res) {
-            BOOST_CHECK_EQUAL(type, TxoutType::MULTISIG);
+            CHECK_EQUAL(type, TxoutType::MULTISIG);
         }
         return res;
     }};

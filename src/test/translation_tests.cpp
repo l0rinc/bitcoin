@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <tinyformat.h>
+#include <test/util/check.h>
 #include <util/translation.h>
 
 #include <boost/test/unit_test.hpp>
@@ -22,13 +23,13 @@ BOOST_AUTO_TEST_CASE(translation_namedparams)
 {
     bilingual_str arg{"original", "translated"};
     bilingual_str result{strprintf(_t("original [%s]"), arg)};
-    BOOST_CHECK_EQUAL(result.original, "original [original]");
-    BOOST_CHECK_EQUAL(result.translated, "t(original [translated])");
+    CHECK_EQUAL(result.original, std::string_view{"original [original]"});
+    CHECK_EQUAL(result.translated, std::string_view{"t(original [translated])"});
 
     util::TranslatedLiteral arg2{"original", &translate};
     bilingual_str result2{strprintf(_t("original [%s]"), arg2)};
-    BOOST_CHECK_EQUAL(result2.original, "original [original]");
-    BOOST_CHECK_EQUAL(result2.translated, "t(original [t(original)])");
+    CHECK_EQUAL(result2.original, std::string_view{"original [original]"});
+    CHECK_EQUAL(result2.translated, std::string_view{"t(original [t(original)])"});
 }
 
 BOOST_AUTO_TEST_SUITE_END()

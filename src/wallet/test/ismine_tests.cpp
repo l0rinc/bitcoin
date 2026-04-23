@@ -103,7 +103,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         std::string desc_str = "sh(sh(" + EncodeSecret(keys[0]) + "))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, false);
-        BOOST_CHECK_EQUAL(spk_manager, nullptr);
+        CHECK(spk_manager == nullptr);
     }
 
     // (P2PKH inside) P2SH inside P2WSH (invalid) - Descriptor
@@ -112,7 +112,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         std::string desc_str = "wsh(sh(" + EncodeSecret(keys[0]) + "))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, false);
-        BOOST_CHECK_EQUAL(spk_manager, nullptr);
+        CHECK(spk_manager == nullptr);
     }
 
     // P2WPKH inside P2WSH (invalid) - Descriptor
@@ -121,7 +121,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         std::string desc_str = "wsh(wpkh(" + EncodeSecret(keys[0]) + "))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, false);
-        BOOST_CHECK_EQUAL(spk_manager, nullptr);
+        CHECK(spk_manager == nullptr);
     }
 
     // (P2PKH inside) P2WSH inside P2WSH (invalid) - Descriptor
@@ -130,7 +130,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         std::string desc_str = "wsh(wsh(" + EncodeSecret(keys[0]) + "))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, false);
-        BOOST_CHECK_EQUAL(spk_manager, nullptr);
+        CHECK(spk_manager == nullptr);
     }
 
     // P2WPKH compressed - Descriptor
@@ -151,7 +151,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         std::string desc_str = "wpkh(" + EncodeSecret(uncompressedKey) + ")";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, false);
-        BOOST_CHECK_EQUAL(spk_manager, nullptr);
+        CHECK(spk_manager == nullptr);
     }
 
     // scriptPubKey multisig - Descriptor
@@ -201,7 +201,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         std::string desc_str = "wsh(multi(2," + EncodeSecret(uncompressedKey) + "," + EncodeSecret(keys[1]) + "))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, false);
-        BOOST_CHECK_EQUAL(spk_manager, nullptr);
+        CHECK(spk_manager == nullptr);
     }
 
     // P2WSH multisig wrapped in P2SH - Descriptor

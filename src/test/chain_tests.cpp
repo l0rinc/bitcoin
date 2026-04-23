@@ -19,7 +19,7 @@ const CBlockIndex* NaiveGetAncestor(const CBlockIndex* a, int height)
     while (a->nHeight > height) {
         a = a->pprev;
     }
-    BOOST_REQUIRE_EQUAL(a->nHeight, height);
+    CHECK_EQUAL(a->nHeight, height);
     return a;
 }
 
@@ -32,11 +32,11 @@ const CBlockIndex* NaiveLastCommonAncestor(const CBlockIndex* a, const CBlockInd
         b = b->pprev;
     }
     while (a != b) {
-        BOOST_REQUIRE_EQUAL(a->nHeight, b->nHeight);
+        CHECK_EQUAL(a->nHeight, b->nHeight);
         a = a->pprev;
         b = b->pprev;
     }
-    BOOST_REQUIRE_EQUAL(a, b);
+    CHECK(a == b);
     return a;
 }
 
@@ -58,17 +58,17 @@ BOOST_AUTO_TEST_CASE(basic_tests)
     bi1.nHeight = 1;
     chain_2.SetTip(bi1);
 
-    BOOST_CHECK_EQUAL(chain_0.Height(), -1);
-    BOOST_CHECK_EQUAL(chain_2.Height(), 1);
+    CHECK_EQUAL(chain_0.Height(), -1);
+    CHECK_EQUAL(chain_2.Height(), std::remove_cvref_t<decltype(chain_2.Height())>{1});
 
-    BOOST_CHECK_EQUAL(chain_0.Tip(), nullptr);
-    BOOST_CHECK_EQUAL(chain_2.Tip(), &bi1);
+    CHECK(chain_0.Tip() == nullptr);
+    CHECK(chain_2.Tip() == &bi1);
 
     // Indexer accessor: call with valid and invalid (low & high) values
-    BOOST_CHECK_EQUAL(chain_2[-1], nullptr);
-    BOOST_CHECK_EQUAL(chain_2[0], &genesis);
-    BOOST_CHECK_EQUAL(chain_2[1], &bi1);
-    BOOST_CHECK_EQUAL(chain_2[2], nullptr);
+    CHECK(chain_2[-1] == nullptr);
+    CHECK(chain_2[0] == &genesis);
+    CHECK(chain_2[1] == &bi1);
+    CHECK(chain_2[2] == nullptr);
 
     // Contains: call with contained & non-contained blocks
     CHECK(chain_2.Contains(genesis));
@@ -76,12 +76,12 @@ BOOST_AUTO_TEST_CASE(basic_tests)
     CHECK(!chain_0.Contains(genesis));
 
     // Call with non-tip & tip blocks
-    BOOST_CHECK_EQUAL(chain_2.Next(genesis), &bi1);
-    BOOST_CHECK_EQUAL(chain_2.Next(bi1), nullptr);
-    BOOST_CHECK_EQUAL(chain_0.Next(genesis), nullptr);
+    CHECK(chain_2.Next(genesis) == &bi1);
+    CHECK(chain_2.Next(bi1) == nullptr);
+    CHECK(chain_0.Next(genesis) == nullptr);
 
-    BOOST_CHECK_EQUAL(chain_2.Genesis(), &genesis);
-    BOOST_CHECK_EQUAL(chain_0.Genesis(), nullptr);
+    CHECK(chain_2.Genesis() == &genesis);
+    CHECK(chain_0.Genesis() == nullptr);
 }
 
 BOOST_AUTO_TEST_CASE(findfork_tests)
@@ -96,13 +96,13 @@ BOOST_AUTO_TEST_CASE(findfork_tests)
 
     const auto check_same{[](const CChain& chain, const auto& blocks) {
         for (const auto& block : blocks) {
-            BOOST_CHECK_EQUAL(chain.FindFork(block), &block);
+            CHECK(chain.FindFork(block) == &block);
         }
     }};
 
     const auto check_fork_point{[](const CChain& chain, const auto& blocks, const CBlockIndex& fork_point) {
         for (const auto& block : blocks) {
-            BOOST_CHECK_EQUAL(chain.FindFork(block), &fork_point);
+            CHECK(chain.FindFork(block) == &fork_point);
         }
     }};
 
@@ -118,7 +118,7 @@ BOOST_AUTO_TEST_CASE(findfork_tests)
     // Create a chain with the longer fork
     CChain chain_long;
     chain_long.SetTip(blocks_long.back());
-    BOOST_CHECK_EQUAL(chain_long.Height(), 10 + 10 - 1);
+    CHECK_EQUAL(chain_long.Height(), 10 + 10 - 1);
     // Test the blocks in the common part -> result should be the same
     check_same(chain_long, blocks_common);
     // Test the blocks on the longer fork -> result should be the same
@@ -129,7 +129,7 @@ BOOST_AUTO_TEST_CASE(findfork_tests)
     // Create a chain with the shorter fork
     CChain chain_short;
     chain_short.SetTip(blocks_short.back());
-    BOOST_CHECK_EQUAL(chain_short.Height(), 10 + 5 - 1);
+    CHECK_EQUAL(chain_short.Height(), 10 + 5 - 1);
     // Test the blocks in the common part -> result should be the same
     check_same(chain_short, blocks_common);
     // Test the blocks on the shorter fork -> result should be the same
@@ -139,7 +139,7 @@ BOOST_AUTO_TEST_CASE(findfork_tests)
 
     // Invalid test case. Mixing chains is not supported
     CBlockIndex block_on_unrelated_chain;
-    BOOST_CHECK_EQUAL(chain_long.FindFork(block_on_unrelated_chain), nullptr);
+    CHECK(chain_long.FindFork(block_on_unrelated_chain) == nullptr);
 }
 
 BOOST_AUTO_TEST_CASE(chain_test)

@@ -107,7 +107,7 @@ BOOST_AUTO_TEST_CASE(logging_timer)
 {
     auto micro_timer = BCLog::Timer<std::chrono::microseconds>("tests", "end_msg");
     const std::string_view result_prefix{"tests: msg ("};
-    BOOST_CHECK_EQUAL(micro_timer.LogMsg("msg").substr(0, result_prefix.size()), result_prefix);
+    CHECK_EQUAL(micro_timer.LogMsg("msg").substr(0, result_prefix.size()), result_prefix);
 }
 
 BOOST_FIXTURE_TEST_CASE(logging_LogPrint, LogSetup)
@@ -222,7 +222,7 @@ BOOST_FIXTURE_TEST_CASE(logging_Conf, LogSetup)
 
         auto result = init::SetLoggingLevel(args);
         CHECK(result);
-        BOOST_CHECK_EQUAL(LogInstance().LogLevel(), BCLog::Level::Debug);
+        CHECK_EQUAL(LogInstance().LogLevel(), BCLog::Level::Debug);
     }
 
     // Set category-specific log level
@@ -236,12 +236,12 @@ BOOST_FIXTURE_TEST_CASE(logging_Conf, LogSetup)
 
         auto result = init::SetLoggingLevel(args);
         CHECK(result);
-        BOOST_CHECK_EQUAL(LogInstance().LogLevel(), BCLog::DEFAULT_LOG_LEVEL);
+        CHECK_EQUAL(LogInstance().LogLevel(), BCLog::DEFAULT_LOG_LEVEL);
 
         const auto& category_levels{LogInstance().CategoryLevels()};
         const auto net_it{category_levels.find(BCLog::LogFlags::NET)};
         CHECK(net_it != category_levels.end());
-        BOOST_CHECK_EQUAL(net_it->second, BCLog::Level::Trace);
+        CHECK_EQUAL(net_it->second, BCLog::Level::Trace);
     }
 
     // Set both global log level and category-specific log level
@@ -255,18 +255,18 @@ BOOST_FIXTURE_TEST_CASE(logging_Conf, LogSetup)
 
         auto result = init::SetLoggingLevel(args);
         CHECK(result);
-        BOOST_CHECK_EQUAL(LogInstance().LogLevel(), BCLog::Level::Debug);
+        CHECK_EQUAL(LogInstance().LogLevel(), BCLog::Level::Debug);
 
         const auto& category_levels{LogInstance().CategoryLevels()};
-        BOOST_CHECK_EQUAL(category_levels.size(), 2);
+        CHECK_EQUAL(category_levels.size(), std::remove_cvref_t<decltype(category_levels.size())>{2});
 
         const auto net_it{category_levels.find(BCLog::LogFlags::NET)};
         CHECK(net_it != category_levels.end());
-        BOOST_CHECK_EQUAL(net_it->second, BCLog::Level::Trace);
+        CHECK_EQUAL(net_it->second, BCLog::Level::Trace);
 
         const auto http_it{category_levels.find(BCLog::LogFlags::HTTP)};
         CHECK(http_it != category_levels.end());
-        BOOST_CHECK_EQUAL(http_it->second, BCLog::Level::Info);
+        CHECK_EQUAL(http_it->second, BCLog::Level::Info);
     }
 }
 
@@ -317,25 +317,25 @@ BOOST_AUTO_TEST_CASE(logging_log_rate_limiter)
     CHECK(!limiter.SuppressionsActive());
 
     // No suppression should happen until more than max_bytes have been consumed
-    BOOST_CHECK_EQUAL(limiter.Consume(source_loc_1, std::string(max_bytes - 1, 'a')), Status::UNSUPPRESSED);
-    BOOST_CHECK_EQUAL(limiter.Consume(source_loc_1, "a"), Status::UNSUPPRESSED);
+    CHECK_EQUAL(limiter.Consume(source_loc_1, std::string(max_bytes - 1, 'a')), Status::UNSUPPRESSED);
+    CHECK_EQUAL(limiter.Consume(source_loc_1, "a"), Status::UNSUPPRESSED);
     CHECK(!limiter.SuppressionsActive());
-    BOOST_CHECK_EQUAL(limiter.Consume(source_loc_1, "a"), Status::NEWLY_SUPPRESSED);
+    CHECK_EQUAL(limiter.Consume(source_loc_1, "a"), Status::NEWLY_SUPPRESSED);
     CHECK(limiter.SuppressionsActive());
-    BOOST_CHECK_EQUAL(limiter.Consume(source_loc_1, "a"), Status::STILL_SUPPRESSED);
+    CHECK_EQUAL(limiter.Consume(source_loc_1, "a"), Status::STILL_SUPPRESSED);
     CHECK(limiter.SuppressionsActive());
 
     // Location 2  should not be affected by location 1's suppression
-    BOOST_CHECK_EQUAL(limiter.Consume(source_loc_2, std::string(max_bytes, 'a')), Status::UNSUPPRESSED);
-    BOOST_CHECK_EQUAL(limiter.Consume(source_loc_2, "a"), Status::NEWLY_SUPPRESSED);
+    CHECK_EQUAL(limiter.Consume(source_loc_2, std::string(max_bytes, 'a')), Status::UNSUPPRESSED);
+    CHECK_EQUAL(limiter.Consume(source_loc_2, "a"), Status::NEWLY_SUPPRESSED);
     CHECK(limiter.SuppressionsActive());
 
     // After reset_window time has passed, all suppressions should be cleared.
     scheduler.MockForwardAndSync(reset_window);
 
     CHECK(!limiter.SuppressionsActive());
-    BOOST_CHECK_EQUAL(limiter.Consume(source_loc_1, std::string(max_bytes, 'a')), Status::UNSUPPRESSED);
-    BOOST_CHECK_EQUAL(limiter.Consume(source_loc_2, std::string(max_bytes, 'a')), Status::UNSUPPRESSED);
+    CHECK_EQUAL(limiter.Consume(source_loc_1, std::string(max_bytes, 'a')), Status::UNSUPPRESSED);
+    CHECK_EQUAL(limiter.Consume(source_loc_2, std::string(max_bytes, 'a')), Status::UNSUPPRESSED);
 }
 
 BOOST_AUTO_TEST_CASE(logging_log_limit_stats)
@@ -343,22 +343,22 @@ BOOST_AUTO_TEST_CASE(logging_log_limit_stats)
     BCLog::LogRateLimiter::Stats stats(BCLog::RATELIMIT_MAX_BYTES);
 
     // Check that stats gets initialized correctly.
-    BOOST_CHECK_EQUAL(stats.m_available_bytes, BCLog::RATELIMIT_MAX_BYTES);
-    BOOST_CHECK_EQUAL(stats.m_dropped_bytes, uint64_t{0});
+    CHECK_EQUAL(stats.m_available_bytes, BCLog::RATELIMIT_MAX_BYTES);
+    CHECK_EQUAL(stats.m_dropped_bytes, uint64_t{0});
 
     const uint64_t MESSAGE_SIZE{BCLog::RATELIMIT_MAX_BYTES / 2};
     CHECK(stats.Consume(MESSAGE_SIZE));
-    BOOST_CHECK_EQUAL(stats.m_available_bytes, BCLog::RATELIMIT_MAX_BYTES - MESSAGE_SIZE);
-    BOOST_CHECK_EQUAL(stats.m_dropped_bytes, uint64_t{0});
+    CHECK_EQUAL(stats.m_available_bytes, BCLog::RATELIMIT_MAX_BYTES - MESSAGE_SIZE);
+    CHECK_EQUAL(stats.m_dropped_bytes, uint64_t{0});
 
     CHECK(stats.Consume(MESSAGE_SIZE));
-    BOOST_CHECK_EQUAL(stats.m_available_bytes, BCLog::RATELIMIT_MAX_BYTES - MESSAGE_SIZE * 2);
-    BOOST_CHECK_EQUAL(stats.m_dropped_bytes, uint64_t{0});
+    CHECK_EQUAL(stats.m_available_bytes, BCLog::RATELIMIT_MAX_BYTES - MESSAGE_SIZE * 2);
+    CHECK_EQUAL(stats.m_dropped_bytes, uint64_t{0});
 
     // Consuming more bytes after already having consumed RATELIMIT_MAX_BYTES should fail.
     CHECK(!stats.Consume(500));
-    BOOST_CHECK_EQUAL(stats.m_available_bytes, uint64_t{0});
-    BOOST_CHECK_EQUAL(stats.m_dropped_bytes, uint64_t{500});
+    CHECK_EQUAL(stats.m_available_bytes, uint64_t{0});
+    CHECK_EQUAL(stats.m_dropped_bytes, uint64_t{500});
 }
 
 namespace {
@@ -406,18 +406,18 @@ void TestLogFromLocation(Location location, const std::string& message,
     BOOST_TEST_INFO_SCOPE(log_lines.size() << " log_lines read: \n" << util::Join(log_lines, "\n"));
 
     if (status == Status::STILL_SUPPRESSED) {
-        BOOST_CHECK_EQUAL(log_lines.size(), 0);
+        CHECK_EQUAL(log_lines.size(), std::remove_cvref_t<decltype(log_lines.size())>{0});
         return;
     }
 
     if (status == Status::NEWLY_SUPPRESSED) {
-        BOOST_REQUIRE_EQUAL(log_lines.size(), 2);
+        CHECK_EQUAL(log_lines.size(), std::remove_cvref_t<decltype(log_lines.size())>{2});
         CHECK(log_lines[0].starts_with("[*] [warning] Excessive logging detected"));
         log_lines.erase(log_lines.begin());
     }
-    BOOST_REQUIRE_EQUAL(log_lines.size(), 1);
+    CHECK_EQUAL(log_lines.size(), std::remove_cvref_t<decltype(log_lines.size())>{1});
     auto& payload{log_lines.back()};
-    BOOST_CHECK_EQUAL(suppressions_active, payload.starts_with("[*]"));
+    CHECK_EQUAL(suppressions_active, payload.starts_with("[*]"));
     CHECK(payload.ends_with(message));
 }
 

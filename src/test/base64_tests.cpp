@@ -21,7 +21,7 @@ BOOST_AUTO_TEST_CASE(base64_testvectors)
     for (unsigned int i=0; i<std::size(vstrIn); i++)
     {
         std::string strEnc = EncodeBase64(vstrIn[i]);
-        BOOST_CHECK_EQUAL(strEnc, vstrOut[i]);
+        CHECK_EQUAL(strEnc, vstrOut[i]);
         auto dec = DecodeBase64(strEnc);
         CHECK(dec);
         CHECK_MESSAGE(std::ranges::equal(*dec, vstrIn[i]), vstrOut[i]);
@@ -32,9 +32,9 @@ BOOST_AUTO_TEST_CASE(base64_testvectors)
         const std::vector<std::byte> in_b{std::byte{0xff}, std::byte{0x01}, std::byte{0xff}};
         const std::string in_s{"\xff\x01\xff"};
         const std::string out_exp{"/wH/"};
-        BOOST_CHECK_EQUAL(EncodeBase64(in_u), out_exp);
-        BOOST_CHECK_EQUAL(EncodeBase64(in_b), out_exp);
-        BOOST_CHECK_EQUAL(EncodeBase64(in_s), out_exp);
+        CHECK_EQUAL(EncodeBase64(in_u), out_exp);
+        CHECK_EQUAL(EncodeBase64(in_b), out_exp);
+        CHECK_EQUAL(EncodeBase64(in_s), out_exp);
     }
 
     CHECK(DecodeBase64("nQB/pZw=")); // valid
@@ -48,7 +48,7 @@ BOOST_AUTO_TEST_CASE(base64_testvectors)
 BOOST_AUTO_TEST_CASE(base64_padding)
 {
     // Is valid without padding
-    BOOST_CHECK_EQUAL(EncodeBase64("foobar"), "Zm9vYmFy");
+    CHECK_EQUAL(EncodeBase64("foobar"), std::string_view{"Zm9vYmFy"});
 
     // Valid size
     CHECK(!DecodeBase64("===="));

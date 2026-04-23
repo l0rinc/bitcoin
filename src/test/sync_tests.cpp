@@ -22,7 +22,7 @@ void TestPotentialDeadLockDetected(MutexType& mutex1, MutexType& mutex2)
     try {
         LOCK2(mutex2, mutex1);
     } catch (const std::logic_error& e) {
-        BOOST_CHECK_EQUAL(e.what(), "potential deadlock detected: mutex1 -> mutex2 -> mutex1");
+        CHECK_EQUAL(e.what(), std::string_view{"potential deadlock detected: mutex1 -> mutex2 -> mutex1"});
         error_thrown = true;
     }
     CHECK(LockStackEmpty());

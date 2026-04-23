@@ -104,7 +104,7 @@ BOOST_AUTO_TEST_CASE(manythreads)
         CHECK(counter[i] != 0);
         counterSum += counter[i];
     }
-    BOOST_CHECK_EQUAL(counterSum, 200);
+    CHECK_EQUAL(counterSum, std::remove_cvref_t<decltype(counterSum)>{200});
 }
 
 BOOST_AUTO_TEST_CASE(wait_until_past)
@@ -168,8 +168,8 @@ BOOST_AUTO_TEST_CASE(singlethreadedscheduler_ordered)
         if (thread.joinable()) thread.join();
     }
 
-    BOOST_CHECK_EQUAL(counter1, 100);
-    BOOST_CHECK_EQUAL(counter2, 100);
+    CHECK_EQUAL(counter1, std::remove_cvref_t<decltype(counter1)>{100});
+    CHECK_EQUAL(counter2, std::remove_cvref_t<decltype(counter2)>{100});
 }
 
 BOOST_AUTO_TEST_CASE(mockforward)
@@ -188,7 +188,7 @@ BOOST_AUTO_TEST_CASE(mockforward)
     // check taskQueue
     std::chrono::steady_clock::time_point first, last;
     size_t num_tasks = scheduler.getQueueInfo(first, last);
-    BOOST_CHECK_EQUAL(num_tasks, 3ul);
+    CHECK_EQUAL(num_tasks, 3ul);
 
     std::thread scheduler_thread([&]() { scheduler.serviceQueue(); });
 
@@ -201,10 +201,10 @@ BOOST_AUTO_TEST_CASE(mockforward)
 
     // check that the queue only has one job remaining
     num_tasks = scheduler.getQueueInfo(first, last);
-    BOOST_CHECK_EQUAL(num_tasks, 1ul);
+    CHECK_EQUAL(num_tasks, 1ul);
 
     // check that the dummy function actually ran
-    BOOST_CHECK_EQUAL(counter, 2);
+    CHECK_EQUAL(counter, std::remove_cvref_t<decltype(counter)>{2});
 
     // check that the time of the remaining job has been updated
     auto now = std::chrono::steady_clock::now();

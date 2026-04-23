@@ -74,7 +74,7 @@ BOOST_AUTO_TEST_CASE(txgraph_trim_zigzag)
     // Check that the graph is now oversized. This also forces the graph to
     // group clusters and compute the oversized status.
     graph->SanityCheck();
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), NUM_TOTAL_TX);
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{NUM_TOTAL_TX});
     CHECK(graph->IsOversized(TxGraph::Level::TOP));
 
     // Call Trim() to remove transactions and bring the cluster back within limits.
@@ -83,10 +83,10 @@ BOOST_AUTO_TEST_CASE(txgraph_trim_zigzag)
     CHECK(!graph->IsOversized(TxGraph::Level::TOP));
 
     // We only need to trim the middle bottom transaction to end up with 2 clusters each within cluster limits.
-    BOOST_CHECK_EQUAL(removed_refs.size(), 1);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), MAX_CLUSTER_COUNT * 2 - 2);
+    CHECK_EQUAL(removed_refs.size(), std::remove_cvref_t<decltype(removed_refs.size())>{1});
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), static_cast<std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>>(MAX_CLUSTER_COUNT * 2 - 2));
     for (unsigned int i = 0; i < refs.size(); ++i) {
-        BOOST_CHECK_EQUAL(graph->Exists(refs[i], TxGraph::Level::TOP), i != (NUM_BOTTOM_TX / 2));
+        CHECK_EQUAL(graph->Exists(refs[i], TxGraph::Level::TOP), i != (NUM_BOTTOM_TX / 2));
     }
 }
 
@@ -141,8 +141,8 @@ BOOST_AUTO_TEST_CASE(txgraph_trim_flower)
     CHECK(!graph->IsOversized(TxGraph::Level::TOP));
 
     // Since only the bottom transaction connects these clusters, we only need to remove it.
-    BOOST_CHECK_EQUAL(removed_refs.size(), 1);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), MAX_CLUSTER_COUNT * 2);
+    CHECK_EQUAL(removed_refs.size(), std::remove_cvref_t<decltype(removed_refs.size())>{1});
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{MAX_CLUSTER_COUNT * 2});
     CHECK(!graph->Exists(refs[0], TxGraph::Level::TOP));
     for (unsigned int i = 1; i < refs.size(); ++i) {
         CHECK(graph->Exists(refs[i], TxGraph::Level::TOP));
@@ -293,12 +293,12 @@ BOOST_AUTO_TEST_CASE(txgraph_trim_big_singletons)
     // Call Trim() to remove transactions and bring the cluster back within limits.
     auto removed_refs = graph->Trim();
     graph->SanityCheck();
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), NUM_TOTAL_TX - 6);
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{NUM_TOTAL_TX - 6});
     CHECK(!graph->IsOversized(TxGraph::Level::TOP));
 
     // Check that all the oversized transactions were removed.
     for (unsigned int i = 0; i < refs.size(); ++i) {
-        BOOST_CHECK_EQUAL(graph->Exists(refs[i], TxGraph::Level::TOP), i != 88 && i % 20 != 0);
+        CHECK_EQUAL(graph->Exists(refs[i], TxGraph::Level::TOP), i != 88 && i % 20 != 0);
     }
 }
 
@@ -346,24 +346,24 @@ BOOST_AUTO_TEST_CASE(txgraph_chunk_chain)
     // everytime adding a transaction, test the chunk status
     // [A]
     graph->AddTransaction(refs.emplace_back(), feerateA);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 1);
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{1});
     block_builder_checker({{&refs[0]}});
     // [A, B]
     graph->AddTransaction(refs.emplace_back(), feerateB);
     graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 2);
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{2});
     block_builder_checker({{&refs[0]}, {&refs[1]}});
 
     // [A, BC]
     graph->AddTransaction(refs.emplace_back(), feerateC);
     graph->AddDependency(/*parent=*/refs[1], /*child=*/refs[2]);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 3);
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{3});
     block_builder_checker({{&refs[0]}, {&refs[1], &refs[2]}});
 
     // [ABCD]
     graph->AddTransaction(refs.emplace_back(), feerateD);
     graph->AddDependency(/*parent=*/refs[2], /*child=*/refs[3]);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 4);
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{4});
     block_builder_checker({{&refs[0], &refs[1], &refs[2], &refs[3]}});
 
     graph->SanityCheck();
@@ -371,11 +371,11 @@ BOOST_AUTO_TEST_CASE(txgraph_chunk_chain)
     // D->C->A
     graph->RemoveTransaction(refs[1]);
     // txgraph is not responsible for removing the descendants or ancestors
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 3);
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{3});
     // only A remains there
     graph->RemoveTransaction(refs[2]);
     graph->RemoveTransaction(refs[3]);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 1);
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{1});
     block_builder_checker({{&refs[0]}});
 }
 
@@ -395,39 +395,39 @@ BOOST_AUTO_TEST_CASE(txgraph_staging)
     // everytime adding a transaction, test the chunk status
     // [A]
     graph->AddTransaction(refs.emplace_back(), feerateA);
-    BOOST_CHECK_EQUAL(graph->HaveStaging(), false);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 1);
+    CHECK_EQUAL(graph->HaveStaging(), std::remove_cvref_t<decltype(graph->HaveStaging())>{false});
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{1});
 
     graph->StartStaging();
-    BOOST_CHECK_EQUAL(graph->HaveStaging(), true);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 1);
+    CHECK_EQUAL(graph->HaveStaging(), std::remove_cvref_t<decltype(graph->HaveStaging())>{true});
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{1});
 
     // [A, B]
     graph->AddTransaction(refs.emplace_back(), feerateB);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), 1);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 2);
-    BOOST_CHECK_EQUAL(graph->Exists(refs[0], TxGraph::Level::TOP), true);
-    BOOST_CHECK_EQUAL(graph->Exists(refs[1], TxGraph::Level::TOP), true);
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::MAIN))>{1});
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{2});
+    CHECK_EQUAL(graph->Exists(refs[0], TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->Exists(refs[0], TxGraph::Level::TOP))>{true});
+    CHECK_EQUAL(graph->Exists(refs[1], TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->Exists(refs[1], TxGraph::Level::TOP))>{true});
 
     graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), 1);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 2);
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::MAIN))>{1});
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{2});
 
     graph->CommitStaging();
-    BOOST_CHECK_EQUAL(graph->HaveStaging(), false);
+    CHECK_EQUAL(graph->HaveStaging(), std::remove_cvref_t<decltype(graph->HaveStaging())>{false});
 
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), 2);
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::MAIN))>{2});
 
     graph->StartStaging();
 
     // [A]
     graph->RemoveTransaction(refs[1]);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), 2);
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 1);
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::MAIN))>{2});
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::TOP))>{1});
 
     graph->CommitStaging();
 
-    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), 1);
+    CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), std::remove_cvref_t<decltype(graph->GetTransactionCount(TxGraph::Level::MAIN))>{1});
 
     graph->SanityCheck();
 }

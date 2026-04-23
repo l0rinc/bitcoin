@@ -25,10 +25,10 @@ BOOST_FIXTURE_TEST_SUITE(wallet_rpc_tests, BasicTestingSetup)
 BOOST_AUTO_TEST_CASE(ensure_unique_wallet_name)
 {
     // EnsureUniqueWalletName should only return if exactly one unique wallet name is provided
-    BOOST_CHECK_EQUAL(TestWalletName("/wallet/foo"), "foo");
-    BOOST_CHECK_EQUAL(TestWalletName("/wallet/foo", "foo"), "foo");
-    BOOST_CHECK_EQUAL(TestWalletName("/", "foo"), "foo");
-    BOOST_CHECK_EQUAL(TestWalletName("/bar", "foo"), "foo");
+    CHECK_EQUAL(TestWalletName("/wallet/foo"), std::string_view{"foo"});
+    CHECK_EQUAL(TestWalletName("/wallet/foo", "foo"), std::string_view{"foo"});
+    CHECK_EQUAL(TestWalletName("/", "foo"), std::string_view{"foo"});
+    CHECK_EQUAL(TestWalletName("/bar", "foo"), std::string_view{"foo"});
 
     CHECK_THROW(TestWalletName("/"), UniValue);
     CHECK_THROW(TestWalletName("/foo"), UniValue);

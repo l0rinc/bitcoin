@@ -44,7 +44,7 @@ void TestDepGraphSerialization(const std::vector<std::pair<FeeFrac, SetType>>& c
     std::vector<unsigned char> encoding;
     VectorWriter writer(encoding, 0);
     writer << Using<DepGraphFormatter>(depgraph);
-    BOOST_CHECK_EQUAL(HexStr(encoding), hexenc);
+    CHECK_EQUAL(HexStr(encoding), hexenc);
 
     // Test that deserializing that encoding yields depgraph. This is effectively already implied
     // by the round-trip test above (if depgraph is acyclic), but verify it explicitly again here.

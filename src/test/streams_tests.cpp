@@ -39,9 +39,9 @@ BOOST_AUTO_TEST_CASE(xor_random_chunks)
         const auto key_bytes{m_rng.randbool() ? m_rng.randbytes<Obfuscation::KEY_SIZE>() : std::array<std::byte, Obfuscation::KEY_SIZE>{}};
         const Obfuscation obfuscation{key_bytes};
         apply_random_xor_chunks(roundtrip, obfuscation);
-        BOOST_CHECK_EQUAL(roundtrip.size(), original.size());
+        CHECK_EQUAL(roundtrip.size(), original.size());
         for (size_t i{0}; i < original.size(); ++i) {
-            BOOST_CHECK_EQUAL(roundtrip[i], original[i] ^ key_bytes[i % Obfuscation::KEY_SIZE]);
+            CHECK_EQUAL(roundtrip[i], original[i] ^ key_bytes[i % Obfuscation::KEY_SIZE]);
         }
 
         apply_random_xor_chunks(roundtrip, obfuscation);
@@ -54,7 +54,7 @@ BOOST_AUTO_TEST_CASE(obfuscation_hexkey)
     const auto key_bytes{m_rng.randbytes<Obfuscation::KEY_SIZE>()};
 
     const Obfuscation obfuscation{key_bytes};
-    BOOST_CHECK_EQUAL(obfuscation.HexKey(), HexStr(key_bytes));
+    CHECK_EQUAL(obfuscation.HexKey(), HexStr(key_bytes));
 }
 
 BOOST_AUTO_TEST_CASE(obfuscation_serialize)
@@ -66,7 +66,7 @@ BOOST_AUTO_TEST_CASE(obfuscation_serialize)
     std::vector key_in{m_rng.randbytes<std::byte>(Obfuscation::KEY_SIZE)};
     DataStream ds_in;
     ds_in << key_in;
-    BOOST_CHECK_EQUAL(ds_in.size(), 1 + Obfuscation::KEY_SIZE); // serialized as a vector
+    CHECK_EQUAL(ds_in.size(), 1 + Obfuscation::KEY_SIZE); // serialized as a vector
     ds_in >> obfuscation;
 
     // Test saving the key.
@@ -113,28 +113,28 @@ BOOST_AUTO_TEST_CASE(xor_file)
 #endif
         AutoFile xor_file{raw_file(mode), obfuscation};
         xor_file << test1 << test2;
-        BOOST_CHECK_EQUAL(xor_file.size(), 7);
-        CHECK_EQUAL(xor_file.fclose(), 0);
+        CHECK_EQUAL(xor_file.size(), std::remove_cvref_t<decltype(xor_file.size())>{7});
+        CHECK_EQUAL(xor_file.fclose(), std::remove_cvref_t<decltype(xor_file.fclose())>{0});
     }
     {
         // Read raw from disk
         AutoFile non_xor_file{raw_file("rb")};
         std::vector<std::byte> raw(7);
         non_xor_file >> std::span{raw};
-        BOOST_CHECK_EQUAL(HexStr(raw), "fc01fd03fd04fa");
+        CHECK_EQUAL(HexStr(raw), std::string_view{"fc01fd03fd04fa"});
         // Check that no padding exists
         CHECK_EXCEPTION(non_xor_file.ignore(1), std::ios_base::failure, HasReason{"AutoFile::ignore: end of file"});
-        BOOST_CHECK_EQUAL(non_xor_file.size(), 7);
+        CHECK_EQUAL(non_xor_file.size(), std::remove_cvref_t<decltype(non_xor_file.size())>{7});
     }
     {
         AutoFile xor_file{raw_file("rb"), obfuscation};
         std::vector<std::byte> read1, read2;
         xor_file >> read1 >> read2;
-        BOOST_CHECK_EQUAL(HexStr(read1), HexStr(test1));
-        BOOST_CHECK_EQUAL(HexStr(read2), HexStr(test2));
+        CHECK_EQUAL(HexStr(read1), HexStr(test1));
+        CHECK_EQUAL(HexStr(read2), HexStr(test2));
         // Check that eof was reached
         CHECK_EXCEPTION(xor_file >> std::byte{}, std::ios_base::failure, HasReason{"AutoFile::read: end of file"});
-        BOOST_CHECK_EQUAL(xor_file.size(), 7);
+        CHECK_EQUAL(xor_file.size(), std::remove_cvref_t<decltype(xor_file.size())>{7});
     }
     {
         AutoFile xor_file{raw_file("rb"), obfuscation};
@@ -142,11 +142,11 @@ BOOST_AUTO_TEST_CASE(xor_file)
         // Check that ignore works
         xor_file.ignore(4);
         xor_file >> read2;
-        BOOST_CHECK_EQUAL(HexStr(read2), HexStr(test2));
+        CHECK_EQUAL(HexStr(read2), HexStr(test2));
         // Check that ignore and read fail now
         CHECK_EXCEPTION(xor_file.ignore(1), std::ios_base::failure, HasReason{"AutoFile::ignore: end of file"});
         CHECK_EXCEPTION(xor_file >> std::byte{}, std::ios_base::failure, HasReason{"AutoFile::read: end of file"});
-        BOOST_CHECK_EQUAL(xor_file.size(), 7);
+        CHECK_EQUAL(xor_file.size(), std::remove_cvref_t<decltype(xor_file.size())>{7});
     }
 }
 
@@ -218,11 +218,11 @@ BOOST_AUTO_TEST_CASE(streams_span_writer)
     // Test operator<<
     SpanWriter writer{arr};
     writer << a << b;
-    BOOST_CHECK_EQUAL(HexStr(arr), "0102000000000000");
+    CHECK_EQUAL(HexStr(arr), std::string_view{"0102000000000000"});
 
     // Use variadic constructor and write to subspan.
     SpanWriter{std::span{arr}.subspan(2), a, bytes, b};
-    BOOST_CHECK_EQUAL(HexStr(arr), "0102010304050602");
+    CHECK_EQUAL(HexStr(arr), std::string_view{"0102010304050602"});
 
     // Writing past the end throws
     std::array<std::byte, 1> small{};
@@ -235,28 +235,28 @@ BOOST_AUTO_TEST_CASE(streams_vector_reader)
     std::vector<unsigned char> vch = {1, 255, 3, 4, 5, 6};
 
     SpanReader reader{vch};
-    BOOST_CHECK_EQUAL(reader.size(), 6U);
+    CHECK_EQUAL(reader.size(), 6U);
     CHECK(!reader.empty());
 
     // Read a single byte as an unsigned char.
     unsigned char a;
     reader >> a;
-    BOOST_CHECK_EQUAL(a, 1);
-    BOOST_CHECK_EQUAL(reader.size(), 5U);
+    CHECK_EQUAL(a, std::remove_cvref_t<decltype(a)>{1});
+    CHECK_EQUAL(reader.size(), 5U);
     CHECK(!reader.empty());
 
     // Read a single byte as a int8_t.
     int8_t b;
     reader >> b;
-    BOOST_CHECK_EQUAL(b, -1);
-    BOOST_CHECK_EQUAL(reader.size(), 4U);
+    CHECK_EQUAL(b, -1);
+    CHECK_EQUAL(reader.size(), 4U);
     CHECK(!reader.empty());
 
     // Read a 4 bytes as an unsigned int.
     unsigned int c;
     reader >> c;
-    BOOST_CHECK_EQUAL(c, 100992003U); // 3,4,5,6 in little-endian base-256
-    BOOST_CHECK_EQUAL(reader.size(), 0U);
+    CHECK_EQUAL(c, 100992003U); // 3,4,5,6 in little-endian base-256
+    CHECK_EQUAL(reader.size(), 0U);
     CHECK(reader.empty());
 
     // Reading after end of byte vector throws an error.
@@ -266,8 +266,8 @@ BOOST_AUTO_TEST_CASE(streams_vector_reader)
     // Read a 4 bytes as a signed int from the beginning of the buffer.
     SpanReader new_reader{vch};
     new_reader >> d;
-    BOOST_CHECK_EQUAL(d, 67370753); // 1,255,3,4 in little-endian base-256
-    BOOST_CHECK_EQUAL(new_reader.size(), 2U);
+    CHECK_EQUAL(d, std::remove_cvref_t<decltype(d)>{67370753}); // 1,255,3,4 in little-endian base-256
+    CHECK_EQUAL(new_reader.size(), 2U);
     CHECK(!new_reader.empty());
 
     // Reading after end of byte vector throws an error even if the reader is
@@ -282,7 +282,7 @@ BOOST_AUTO_TEST_CASE(streams_vector_reader_rvalue)
     uint32_t varint = 0;
     // Deserialize into r-value
     reader >> VARINT(varint);
-    BOOST_CHECK_EQUAL(varint, 54321U);
+    CHECK_EQUAL(varint, 54321U);
     CHECK(reader.empty());
 }
 
@@ -304,20 +304,20 @@ BOOST_AUTO_TEST_CASE(bitstream_reader_writer)
     DataStream data_copy{data};
     uint32_t serialized_int1;
     data >> serialized_int1;
-    BOOST_CHECK_EQUAL(serialized_int1, uint32_t{0x7700C35A}); // NOTE: Serialized as LE
+    CHECK_EQUAL(serialized_int1, uint32_t{0x7700C35A}); // NOTE: Serialized as LE
     uint16_t serialized_int2;
     data >> serialized_int2;
-    BOOST_CHECK_EQUAL(serialized_int2, uint16_t{0x1072}); // NOTE: Serialized as LE
+    CHECK_EQUAL(serialized_int2, uint16_t{0x1072}); // NOTE: Serialized as LE
 
     BitStreamReader bit_reader{data_copy};
-    BOOST_CHECK_EQUAL(bit_reader.Read(1), 0U);
-    BOOST_CHECK_EQUAL(bit_reader.Read(2), 2U);
-    BOOST_CHECK_EQUAL(bit_reader.Read(3), 6U);
-    BOOST_CHECK_EQUAL(bit_reader.Read(4), 11U);
-    BOOST_CHECK_EQUAL(bit_reader.Read(5), 1U);
-    BOOST_CHECK_EQUAL(bit_reader.Read(6), 32U);
-    BOOST_CHECK_EQUAL(bit_reader.Read(7), 7U);
-    BOOST_CHECK_EQUAL(bit_reader.Read(16), 30497U);
+    CHECK_EQUAL(bit_reader.Read(1), 0U);
+    CHECK_EQUAL(bit_reader.Read(2), 2U);
+    CHECK_EQUAL(bit_reader.Read(3), 6U);
+    CHECK_EQUAL(bit_reader.Read(4), 11U);
+    CHECK_EQUAL(bit_reader.Read(5), 1U);
+    CHECK_EQUAL(bit_reader.Read(6), 32U);
+    CHECK_EQUAL(bit_reader.Read(7), 7U);
+    CHECK_EQUAL(bit_reader.Read(16), 30497U);
     CHECK_EXCEPTION(bit_reader.Read(8), std::ios_base::failure, [](const std::ios_base::failure&) { return true; });
 }
 
@@ -327,7 +327,7 @@ BOOST_AUTO_TEST_CASE(streams_serializedata_xor)
     {
         DataStream ds{};
         Obfuscation{}(ds);
-        BOOST_CHECK_EQUAL(""s, ds.str());
+        CHECK_EQUAL(std::string_view{""s}, ds.str());
     }
 
     {
@@ -335,7 +335,7 @@ BOOST_AUTO_TEST_CASE(streams_serializedata_xor)
 
         DataStream ds{"0ff0"_hex};
         obfuscation(ds);
-        BOOST_CHECK_EQUAL("\xf0\x0f"s, ds.str());
+        CHECK_EQUAL(std::string_view{"\xf0\x0f"s}, ds.str());
     }
 
     {
@@ -343,7 +343,7 @@ BOOST_AUTO_TEST_CASE(streams_serializedata_xor)
 
         DataStream ds{"f00f"_hex};
         obfuscation(ds);
-        BOOST_CHECK_EQUAL("\x0f\x00"s, ds.str());
+        CHECK_EQUAL(std::string_view{"\x0f\x00"s}, ds.str());
     }
 }
 
@@ -374,22 +374,22 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file)
 
     uint8_t i;
     bf >> i;
-    BOOST_CHECK_EQUAL(i, 0);
+    CHECK_EQUAL(i, std::remove_cvref_t<decltype(i)>{0});
     bf >> i;
-    BOOST_CHECK_EQUAL(i, 1);
+    CHECK_EQUAL(i, std::remove_cvref_t<decltype(i)>{1});
 
     // After reading bytes 0 and 1, we're positioned at 2.
-    BOOST_CHECK_EQUAL(bf.GetPos(), 2U);
+    CHECK_EQUAL(bf.GetPos(), 2U);
 
     // Rewind to offset 0, ok (within the 10 byte window).
     CHECK(bf.SetPos(0));
     bf >> i;
-    BOOST_CHECK_EQUAL(i, 0);
+    CHECK_EQUAL(i, std::remove_cvref_t<decltype(i)>{0});
 
     // We can go forward to where we've been, but beyond may fail.
     CHECK(bf.SetPos(2));
     bf >> i;
-    BOOST_CHECK_EQUAL(i, 2);
+    CHECK_EQUAL(i, std::remove_cvref_t<decltype(i)>{2});
 
     // If you know the maximum number of bytes that should be
     // read to deserialize the variable, you can limit the read
@@ -406,35 +406,35 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file)
     // The default argument removes the limit completely.
     CHECK(bf.SetLimit());
     // The read position should still be at 3 (no change).
-    BOOST_CHECK_EQUAL(bf.GetPos(), 3U);
+    CHECK_EQUAL(bf.GetPos(), 3U);
 
     // Read from current offset, 3, forward until position 10.
     for (uint8_t j = 3; j < 10; ++j) {
         bf >> i;
-        BOOST_CHECK_EQUAL(i, j);
+        CHECK_EQUAL(i, j);
     }
-    BOOST_CHECK_EQUAL(bf.GetPos(), 10U);
+    CHECK_EQUAL(bf.GetPos(), 10U);
 
     // We're guaranteed (just barely) to be able to rewind to zero.
     CHECK(bf.SetPos(0));
-    BOOST_CHECK_EQUAL(bf.GetPos(), 0U);
+    CHECK_EQUAL(bf.GetPos(), 0U);
     bf >> i;
-    BOOST_CHECK_EQUAL(i, 0);
+    CHECK_EQUAL(i, std::remove_cvref_t<decltype(i)>{0});
 
     // We can set the position forward again up to the farthest
     // into the stream we've been, but no farther. (Attempting
     // to go farther may succeed, but it's not guaranteed.)
     CHECK(bf.SetPos(10));
     bf >> i;
-    BOOST_CHECK_EQUAL(i, 10);
-    BOOST_CHECK_EQUAL(bf.GetPos(), 11U);
+    CHECK_EQUAL(i, std::remove_cvref_t<decltype(i)>{10});
+    CHECK_EQUAL(bf.GetPos(), 11U);
 
     // Now it's only guaranteed that we can rewind to offset 1
     // (current read position, 11, minus rewind amount, 10).
     CHECK(bf.SetPos(1));
-    BOOST_CHECK_EQUAL(bf.GetPos(), 1U);
+    CHECK_EQUAL(bf.GetPos(), 1U);
     bf >> i;
-    BOOST_CHECK_EQUAL(i, 1);
+    CHECK_EQUAL(i, std::remove_cvref_t<decltype(i)>{1});
 
     // We can stream into large variables, even larger than
     // the buffer size.
@@ -443,10 +443,10 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file)
         uint8_t a[40 - 11];
         bf >> a;
         for (uint8_t j = 0; j < sizeof(a); ++j) {
-            BOOST_CHECK_EQUAL(a[j], 11 + j);
+            CHECK_EQUAL(a[j], static_cast<std::remove_cvref_t<decltype(a[j])>>(11 + j));
         }
     }
-    BOOST_CHECK_EQUAL(bf.GetPos(), 40U);
+    CHECK_EQUAL(bf.GetPos(), 40U);
 
     // We've read the entire file, the next read should throw.
     try {
@@ -460,11 +460,11 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file)
     CHECK(bf.eof());
 
     // Still at offset 40, we can go back 10, to 30.
-    BOOST_CHECK_EQUAL(bf.GetPos(), 40U);
+    CHECK_EQUAL(bf.GetPos(), 40U);
     CHECK(bf.SetPos(30));
     bf >> i;
-    BOOST_CHECK_EQUAL(i, 30);
-    BOOST_CHECK_EQUAL(bf.GetPos(), 31U);
+    CHECK_EQUAL(i, std::remove_cvref_t<decltype(i)>{30});
+    CHECK_EQUAL(bf.GetPos(), 31U);
 
     // We're too far to rewind to position zero.
     CHECK(!bf.SetPos(0));
@@ -472,7 +472,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file)
     // by the rewind window (relative to our farthest read position, 40).
     CHECK(bf.GetPos() <= 30U);
 
-    CHECK_EQUAL(file.fclose(), 0);
+    CHECK_EQUAL(file.fclose(), std::remove_cvref_t<decltype(file.fclose())>{0});
 
     fs::remove(streams_test_filename);
 }
@@ -494,20 +494,20 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_skip)
     // This is like bf >> (7-byte-variable), in that it will cause data
     // to be read from the file into memory, but it's not copied to us.
     bf.SkipTo(7);
-    BOOST_CHECK_EQUAL(bf.GetPos(), 7U);
+    CHECK_EQUAL(bf.GetPos(), 7U);
     bf >> i;
-    BOOST_CHECK_EQUAL(i, 7);
+    CHECK_EQUAL(i, std::remove_cvref_t<decltype(i)>{7});
 
     // The bytes in the buffer up to offset 7 are valid and can be read.
     CHECK(bf.SetPos(0));
     bf >> i;
-    BOOST_CHECK_EQUAL(i, 0);
+    CHECK_EQUAL(i, std::remove_cvref_t<decltype(i)>{0});
     bf >> i;
-    BOOST_CHECK_EQUAL(i, 1);
+    CHECK_EQUAL(i, std::remove_cvref_t<decltype(i)>{1});
 
     bf.SkipTo(11);
     bf >> i;
-    BOOST_CHECK_EQUAL(i, 11);
+    CHECK_EQUAL(i, std::remove_cvref_t<decltype(i)>{11});
 
     // SkipTo() honors the transfer limit; we can't position beyond the limit.
     bf.SetLimit(13);
@@ -520,9 +520,9 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_skip)
 
     // We can position exactly to the transfer limit.
     bf.SkipTo(13);
-    BOOST_CHECK_EQUAL(bf.GetPos(), 13U);
+    CHECK_EQUAL(bf.GetPos(), 13U);
 
-    CHECK_EQUAL(file.fclose(), 0);
+    CHECK_EQUAL(file.fclose(), std::remove_cvref_t<decltype(file.fclose())>{0});
     fs::remove(streams_test_filename);
 }
 
@@ -551,7 +551,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
 
             // We haven't read to the end of the file yet.
             CHECK(!bf.eof());
-            BOOST_CHECK_EQUAL(bf.GetPos(), currentPos);
+            CHECK_EQUAL(bf.GetPos(), currentPos);
 
             // Pretend the file consists of a series of objects of varying
             // sizes; the boundaries of the objects can interact arbitrarily
@@ -565,7 +565,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
                 bf.SetLimit(currentPos + 1);
                 bf >> a;
                 for (uint8_t i = 0; i < 1; ++i) {
-                    BOOST_CHECK_EQUAL(a[i], currentPos);
+                    CHECK_EQUAL(a[i], currentPos);
                     currentPos++;
                 }
                 break;
@@ -577,7 +577,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
                 bf.SetLimit(currentPos + 2);
                 bf >> a;
                 for (uint8_t i = 0; i < 2; ++i) {
-                    BOOST_CHECK_EQUAL(a[i], currentPos);
+                    CHECK_EQUAL(a[i], currentPos);
                     currentPos++;
                 }
                 break;
@@ -589,7 +589,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
                 bf.SetLimit(currentPos + 5);
                 bf >> a;
                 for (uint8_t i = 0; i < 5; ++i) {
-                    BOOST_CHECK_EQUAL(a[i], currentPos);
+                    CHECK_EQUAL(a[i], currentPos);
                     currentPos++;
                 }
                 break;
@@ -611,13 +611,13 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
                     find = fileSize - 1;
                 bf.FindByte(std::byte(find));
                 // The value at each offset is the offset.
-                BOOST_CHECK_EQUAL(bf.GetPos(), find);
+                CHECK_EQUAL(bf.GetPos(), find);
                 currentPos = find;
 
                 bf.SetLimit(currentPos + 1);
                 uint8_t i;
                 bf >> i;
-                BOOST_CHECK_EQUAL(i, currentPos);
+                CHECK_EQUAL(i, currentPos);
                 currentPos++;
                 break;
             }
@@ -629,7 +629,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
                 // window, and we may not be able to move forward beyond the
                 // farthest position we've reached so far.
                 currentPos = bf.GetPos();
-                BOOST_CHECK_EQUAL(okay, currentPos == requestPos);
+                CHECK_EQUAL(okay, currentPos == requestPos);
                 // Check that we can position within the rewind window.
                 if (requestPos <= maxPos &&
                     maxPos > rewindSize &&
@@ -643,7 +643,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
             if (maxPos < currentPos)
                 maxPos = currentPos;
         }
-        CHECK_EQUAL(file.fclose(), 0);
+        CHECK_EQUAL(file.fclose(), std::remove_cvref_t<decltype(file.fclose())>{0});
     }
     fs::remove(streams_test_filename);
 }
@@ -661,9 +661,9 @@ BOOST_AUTO_TEST_CASE(buffered_reader_matches_autofile_random_content)
     {
         AutoFile f{test_file.Open(pos, /*read_only=*/false), obfuscation};
         f.write(m_rng.randbytes<std::byte>(file_size));
-        CHECK_EQUAL(f.fclose(), 0);
+        CHECK_EQUAL(f.fclose(), std::remove_cvref_t<decltype(f.fclose())>{0});
     }
-    BOOST_CHECK_EQUAL(fs::file_size(test_file.FileName(pos)), file_size);
+    CHECK_EQUAL(fs::file_size(test_file.FileName(pos)), file_size);
 
     {
         AutoFile direct_file{test_file.Open(pos, /*read_only=*/true), obfuscation};
@@ -731,8 +731,8 @@ BOOST_AUTO_TEST_CASE(buffered_writer_matches_autofile_random_content)
                 total_written += write_size;
             }
         }
-        CHECK_EQUAL(buffered_file.fclose(), 0);
-        CHECK_EQUAL(direct_file.fclose(), 0);
+        CHECK_EQUAL(buffered_file.fclose(), std::remove_cvref_t<decltype(buffered_file.fclose())>{0});
+        CHECK_EQUAL(direct_file.fclose(), std::remove_cvref_t<decltype(direct_file.fclose())>{0});
     }
 
     // Compare the resulting files
@@ -775,7 +775,7 @@ BOOST_AUTO_TEST_CASE(buffered_writer_reader)
         f << v1 << v2;
         f.write(std::as_bytes(std::span{&v3, 1}));
     }
-    CHECK_EQUAL(file.fclose(), 0);
+    CHECK_EQUAL(file.fclose(), std::remove_cvref_t<decltype(file.fclose())>{0});
 
     // Read back and verify using BufferedReader
     {
@@ -784,9 +784,9 @@ BOOST_AUTO_TEST_CASE(buffered_writer_reader)
         BufferedReader f(std::move(file), sizeof(v1) + sizeof(v2) + sizeof(v3));
         f >> _v1 >> _v2;
         f.read(std::as_writable_bytes(std::span{&_v3, 1}));
-        BOOST_CHECK_EQUAL(_v1, v1);
-        BOOST_CHECK_EQUAL(_v2, v2);
-        BOOST_CHECK_EQUAL(_v3, v3);
+        CHECK_EQUAL(_v1, v1);
+        CHECK_EQUAL(_v2, v2);
+        CHECK_EQUAL(_v3, v3);
 
         DataBuffer excess_byte{1};
         CHECK_EXCEPTION(f.read(excess_byte), std::ios_base::failure, HasReason{"end of file"});
@@ -805,8 +805,8 @@ BOOST_AUTO_TEST_CASE(streams_hashed)
     HashVerifier hash_verifier{stream};
     std::string result;
     hash_verifier >> result;
-    BOOST_CHECK_EQUAL(data, result);
-    BOOST_CHECK_EQUAL(hash_writer.GetHash(), hash_verifier.GetHash());
+    CHECK_EQUAL(data, result);
+    CHECK_EQUAL(hash_writer.GetHash(), hash_verifier.GetHash());
 }
 
 BOOST_AUTO_TEST_CASE(size_preserves_position)
@@ -824,7 +824,7 @@ BOOST_AUTO_TEST_CASE(size_preserves_position)
     (void)f.size();
     uint8_t first{};
     f >> first;
-    BOOST_CHECK_EQUAL(first, 0);
+    CHECK_EQUAL(first, std::remove_cvref_t<decltype(first)>{0});
 
     // Case: Pos at middle of the file
     f.seek(0, SEEK_SET);
@@ -834,7 +834,7 @@ BOOST_AUTO_TEST_CASE(size_preserves_position)
     uint8_t middle{};
     f >> middle;
     // Pos still at 4
-    BOOST_CHECK_EQUAL(middle, 4);
+    CHECK_EQUAL(middle, std::remove_cvref_t<decltype(middle)>{4});
 
     // Case: Pos at EOF
     f.seek(0, SEEK_END);
@@ -842,7 +842,7 @@ BOOST_AUTO_TEST_CASE(size_preserves_position)
     uint8_t end{};
     CHECK_EXCEPTION(f >> end, std::ios_base::failure, HasReason{"AutoFile::read: end of file"});
 
-    CHECK_EQUAL(f.fclose(), 0);
+    CHECK_EQUAL(f.fclose(), std::remove_cvref_t<decltype(f.fclose())>{0});
     fs::remove(path);
 }
 

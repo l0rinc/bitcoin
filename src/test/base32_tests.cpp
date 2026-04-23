@@ -22,9 +22,9 @@ BOOST_AUTO_TEST_CASE(base32_testvectors)
     for (unsigned int i=0; i<std::size(vstrIn); i++)
     {
         std::string strEnc = EncodeBase32(vstrIn[i]);
-        BOOST_CHECK_EQUAL(strEnc, vstrOut[i]);
+        CHECK_EQUAL(strEnc, vstrOut[i]);
         strEnc = EncodeBase32(vstrIn[i], false);
-        BOOST_CHECK_EQUAL(strEnc, vstrOutNoPadding[i]);
+        CHECK_EQUAL(strEnc, vstrOutNoPadding[i]);
         auto dec = DecodeBase32(vstrOut[i]);
         CHECK(dec);
         CHECK_MESSAGE(std::ranges::equal(*dec, vstrIn[i]), vstrOut[i]);
@@ -41,7 +41,7 @@ BOOST_AUTO_TEST_CASE(base32_testvectors)
 BOOST_AUTO_TEST_CASE(base32_padding)
 {
     // Is valid without padding
-    BOOST_CHECK_EQUAL(EncodeBase32("fooba"), "mzxw6ytb");
+    CHECK_EQUAL(EncodeBase32("fooba"), std::string_view{"mzxw6ytb"});
 
     // Valid size
     CHECK(!DecodeBase32("========"));

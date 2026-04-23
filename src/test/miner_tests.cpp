@@ -126,7 +126,7 @@ void MinerTestingSetup::TestPackageSelection(const CScript& scriptPubKey, const 
     std::unique_ptr<BlockTemplate> block_template = mining->createNewBlock(options, /*cooldown=*/false);
     CHECK(block_template);
     CBlock block{block_template->getBlock()};
-    BOOST_REQUIRE_EQUAL(block.vtx.size(), 1U);
+    CHECK_EQUAL(block.vtx.size(), 1U);
 
     // waitNext() on an empty mempool should return nullptr because there is no better template
     auto should_be_nullptr = block_template->waitNext({.timeout = MillisecondsDouble{0}, .fee_threshold = 1});
@@ -170,7 +170,7 @@ void MinerTestingSetup::TestPackageSelection(const CScript& scriptPubKey, const 
     block_template = mining->createNewBlock(options, /*cooldown=*/false);
     CHECK(block_template);
     block = block_template->getBlock();
-    BOOST_REQUIRE_EQUAL(block.vtx.size(), 4U);
+    CHECK_EQUAL(block.vtx.size(), 4U);
     CHECK(block.vtx[1]->GetHash() == hashParentTx);
     CHECK(block.vtx[2]->GetHash() == hashHighFeeTx);
     CHECK(block.vtx[3]->GetHash() == hashMediumFeeTx);
@@ -229,7 +229,7 @@ void MinerTestingSetup::TestPackageSelection(const CScript& scriptPubKey, const 
     block_template = block_template->waitNext({.fee_threshold = 1});
     CHECK(block_template);
     block = block_template->getBlock();
-    BOOST_REQUIRE_EQUAL(block.vtx.size(), 6U);
+    CHECK_EQUAL(block.vtx.size(), 6U);
     CHECK(block.vtx[4]->GetHash() == hashFreeTx);
     CHECK(block.vtx[5]->GetHash() == hashLowFeeTx);
 
@@ -272,7 +272,7 @@ void MinerTestingSetup::TestPackageSelection(const CScript& scriptPubKey, const 
     block_template = mining->createNewBlock(options, /*cooldown=*/false);
     CHECK(block_template);
     block = block_template->getBlock();
-    BOOST_REQUIRE_EQUAL(block.vtx.size(), 9U);
+    CHECK_EQUAL(block.vtx.size(), 9U);
     CHECK(block.vtx[8]->GetHash() == hashLowFeeTx2);
 }
 
@@ -641,7 +641,7 @@ void MinerTestingSetup::TestBasicMining(const CScript& scriptPubKey, const std::
     // but relative locked txs will if inconsistently added to mempool.
     // For now these will still generate a valid template until BIP68 soft fork
     CBlock block{block_template->getBlock()};
-    BOOST_CHECK_EQUAL(block.vtx.size(), 3U);
+    CHECK_EQUAL(block.vtx.size(), 3U);
     // However if we advance height by 1 and time by SEQUENCE_LOCK_TIME, all of them should be mined
     for (int i = 0; i < CBlockIndex::nMedianTimeSpan; ++i) {
         CBlockIndex* ancestor{Assert(m_node.chainman->ActiveChain().Tip()->GetAncestor(m_node.chainman->ActiveChain().Tip()->nHeight - i))};
@@ -653,7 +653,7 @@ void MinerTestingSetup::TestBasicMining(const CScript& scriptPubKey, const std::
     block_template = mining->createNewBlock(options, /*cooldown=*/false);
     CHECK(block_template);
     block = block_template->getBlock();
-    BOOST_CHECK_EQUAL(block.vtx.size(), 5U);
+    CHECK_EQUAL(block.vtx.size(), 5U);
 }
 
 void MinerTestingSetup::TestPrioritisedMining(const CScript& scriptPubKey, const std::vector<CTransactionRef>& txFirst)
@@ -729,7 +729,7 @@ void MinerTestingSetup::TestPrioritisedMining(const CScript& scriptPubKey, const
     auto block_template = mining->createNewBlock(options, /*cooldown=*/false);
     CHECK(block_template);
     CBlock block{block_template->getBlock()};
-    BOOST_REQUIRE_EQUAL(block.vtx.size(), 6U);
+    CHECK_EQUAL(block.vtx.size(), 6U);
     CHECK(block.vtx[1]->GetHash() == hashFreeParent);
     CHECK(block.vtx[2]->GetHash() == hashFreePrioritisedTx);
     CHECK(block.vtx[3]->GetHash() == hashParentTx);
@@ -764,8 +764,8 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
             std::string reason;
             std::string debug;
             CHECK(!mining->checkBlock(block, {.check_pow = false}, reason, debug));
-            BOOST_REQUIRE_EQUAL(reason, "bad-txnmrklroot");
-            BOOST_REQUIRE_EQUAL(debug, "hashMerkleRoot mismatch");
+            CHECK_EQUAL(reason, std::string_view{"bad-txnmrklroot"});
+            CHECK_EQUAL(debug, std::string_view{"hashMerkleRoot mismatch"});
         }
 
         block.hashMerkleRoot = BlockMerkleRoot(block);
@@ -774,8 +774,8 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
             std::string reason;
             std::string debug;
             CHECK(mining->checkBlock(block, {.check_pow = false}, reason, debug));
-            BOOST_REQUIRE_EQUAL(reason, "");
-            BOOST_REQUIRE_EQUAL(debug, "");
+            CHECK_EQUAL(reason, std::string_view{""});
+            CHECK_EQUAL(debug, std::string_view{""});
         }
 
         {
@@ -788,8 +788,8 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
             std::string reason;
             std::string debug;
             CHECK(!mining->checkBlock(block, {.check_pow = true}, reason, debug));
-            BOOST_REQUIRE_EQUAL(reason, "high-hash");
-            BOOST_REQUIRE_EQUAL(debug, "proof of work failed");
+            CHECK_EQUAL(reason, std::string_view{"high-hash"});
+            CHECK_EQUAL(debug, std::string_view{"proof of work failed"});
         }
     }
 
@@ -843,7 +843,7 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
             // The above calls don't guarantee the tip is actually updated, so
             // we explicitly check this.
             auto maybe_new_tip{Assert(m_node.chainman)->ActiveChain().Tip()};
-            BOOST_REQUIRE_EQUAL(maybe_new_tip->GetBlockHash(), block.GetHash());
+            CHECK_EQUAL(maybe_new_tip->GetBlockHash(), block.GetHash());
         }
         if (current_height % 2 == 0) {
             block_template = block_template->waitNext();

@@ -28,42 +28,42 @@ BOOST_AUTO_TEST_CASE(fastrandom_tests_deterministic)
     FastRandomContext ctx2{true};
 
     {
-        BOOST_CHECK_EQUAL(FastRandomContext().rand<uint64_t>(), uint64_t{9330418229102544152u});
-        BOOST_CHECK_EQUAL(FastRandomContext().rand<int>(), int{618925161});
-        BOOST_CHECK_EQUAL(FastRandomContext().randrange<std::chrono::microseconds>(1h).count(), 1271170921);
-        BOOST_CHECK_EQUAL(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count(), 2803534);
+        CHECK_EQUAL(FastRandomContext().rand<uint64_t>(), uint64_t{9330418229102544152u});
+        CHECK_EQUAL(FastRandomContext().rand<int>(), int{618925161});
+        CHECK_EQUAL(FastRandomContext().randrange<std::chrono::microseconds>(1h).count(), std::remove_cvref_t<decltype(FastRandomContext().randrange<std::chrono::microseconds>(1h).count())>{1271170921});
+        CHECK_EQUAL(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count(), std::remove_cvref_t<decltype(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count())>{2803534});
 
-        BOOST_CHECK_EQUAL(FastRandomContext().rand<uint64_t>(), uint64_t{10170981140880778086u});
-        BOOST_CHECK_EQUAL(FastRandomContext().rand<int>(), int{1689082725});
-        BOOST_CHECK_EQUAL(FastRandomContext().randrange<std::chrono::microseconds>(1h).count(), 2464643716);
-        BOOST_CHECK_EQUAL(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count(), 2312205);
+        CHECK_EQUAL(FastRandomContext().rand<uint64_t>(), uint64_t{10170981140880778086u});
+        CHECK_EQUAL(FastRandomContext().rand<int>(), int{1689082725});
+        CHECK_EQUAL(FastRandomContext().randrange<std::chrono::microseconds>(1h).count(), std::remove_cvref_t<decltype(FastRandomContext().randrange<std::chrono::microseconds>(1h).count())>{2464643716});
+        CHECK_EQUAL(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count(), std::remove_cvref_t<decltype(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count())>{2312205});
 
-        BOOST_CHECK_EQUAL(FastRandomContext().rand<uint64_t>(), uint64_t{5689404004456455543u});
-        BOOST_CHECK_EQUAL(FastRandomContext().rand<int>(), int{785839937});
-        BOOST_CHECK_EQUAL(FastRandomContext().randrange<std::chrono::microseconds>(1h).count(), 93558804);
-        BOOST_CHECK_EQUAL(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count(), 507022);
+        CHECK_EQUAL(FastRandomContext().rand<uint64_t>(), uint64_t{5689404004456455543u});
+        CHECK_EQUAL(FastRandomContext().rand<int>(), int{785839937});
+        CHECK_EQUAL(FastRandomContext().randrange<std::chrono::microseconds>(1h).count(), std::remove_cvref_t<decltype(FastRandomContext().randrange<std::chrono::microseconds>(1h).count())>{93558804});
+        CHECK_EQUAL(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count(), std::remove_cvref_t<decltype(FastRandomContext().randrange<std::chrono::milliseconds>(1h).count())>{507022});
     }
 
     {
         constexpr SteadySeconds time_point{1s};
         FastRandomContext ctx{true};
-        BOOST_CHECK_EQUAL(7, ctx.rand_uniform_delay(time_point, 9s).time_since_epoch().count());
-        BOOST_CHECK_EQUAL(-6, ctx.rand_uniform_delay(time_point, -9s).time_since_epoch().count());
-        BOOST_CHECK_EQUAL(1, ctx.rand_uniform_delay(time_point, 0s).time_since_epoch().count());
-        BOOST_CHECK_EQUAL(4652286523065884857, ctx.rand_uniform_delay(time_point, 9223372036854775807s).time_since_epoch().count());
-        BOOST_CHECK_EQUAL(-8813961240025683129, ctx.rand_uniform_delay(time_point, -9223372036854775807s).time_since_epoch().count());
-        BOOST_CHECK_EQUAL(26443, ctx.rand_uniform_delay(time_point, 9h).time_since_epoch().count());
+        CHECK_EQUAL(std::remove_cvref_t<decltype(ctx.rand_uniform_delay(time_point, 9s).time_since_epoch().count())>{7}, ctx.rand_uniform_delay(time_point, 9s).time_since_epoch().count());
+        CHECK_EQUAL(-6, ctx.rand_uniform_delay(time_point, -9s).time_since_epoch().count());
+        CHECK_EQUAL(std::remove_cvref_t<decltype(ctx.rand_uniform_delay(time_point, 0s).time_since_epoch().count())>{1}, ctx.rand_uniform_delay(time_point, 0s).time_since_epoch().count());
+        CHECK_EQUAL(std::remove_cvref_t<decltype(ctx.rand_uniform_delay(time_point, 9223372036854775807s).time_since_epoch().count())>{4652286523065884857}, ctx.rand_uniform_delay(time_point, 9223372036854775807s).time_since_epoch().count());
+        CHECK_EQUAL(-8813961240025683129, ctx.rand_uniform_delay(time_point, -9223372036854775807s).time_since_epoch().count());
+        CHECK_EQUAL(std::remove_cvref_t<decltype(ctx.rand_uniform_delay(time_point, 9h).time_since_epoch().count())>{26443}, ctx.rand_uniform_delay(time_point, 9h).time_since_epoch().count());
     }
-    BOOST_CHECK_EQUAL(ctx1.rand32(), ctx2.rand32());
-    BOOST_CHECK_EQUAL(ctx1.rand32(), ctx2.rand32());
-    BOOST_CHECK_EQUAL(ctx1.rand64(), ctx2.rand64());
-    BOOST_CHECK_EQUAL(ctx1.randbits(3), ctx2.randbits(3));
+    CHECK_EQUAL(ctx1.rand32(), ctx2.rand32());
+    CHECK_EQUAL(ctx1.rand32(), ctx2.rand32());
+    CHECK_EQUAL(ctx1.rand64(), ctx2.rand64());
+    CHECK_EQUAL(ctx1.randbits(3), ctx2.randbits(3));
     CHECK(std::ranges::equal(ctx1.randbytes<std::byte>(17), ctx2.randbytes<17>())); // check vector/array behavior symmetry
     CHECK(ctx1.rand256() == ctx2.rand256());
-    BOOST_CHECK_EQUAL(ctx1.randbits(7), ctx2.randbits(7));
+    CHECK_EQUAL(ctx1.randbits(7), ctx2.randbits(7));
     CHECK(ctx1.randbytes(128) == ctx2.randbytes(128));
-    BOOST_CHECK_EQUAL(ctx1.rand32(), ctx2.rand32());
-    BOOST_CHECK_EQUAL(ctx1.randbits(3), ctx2.randbits(3));
+    CHECK_EQUAL(ctx1.rand32(), ctx2.rand32());
+    CHECK_EQUAL(ctx1.randbits(3), ctx2.randbits(3));
     CHECK(ctx1.rand256() == ctx2.rand256());
     CHECK(ctx1.randbytes(50) == ctx2.randbytes(50));
     {
@@ -72,9 +72,9 @@ BOOST_AUTO_TEST_CASE(fastrandom_tests_deterministic)
         };
         FastRandomContext ctx{true};
         // Check with clock type
-        BOOST_CHECK_EQUAL(47222, ctx.rand_uniform_duration<MicroClock>(1s).count());
+        CHECK_EQUAL(std::remove_cvref_t<decltype(ctx.rand_uniform_duration<MicroClock>(1s).count())>{47222}, ctx.rand_uniform_duration<MicroClock>(1s).count());
         // Check with time-point type
-        BOOST_CHECK_EQUAL(2782, ctx.rand_uniform_duration<SteadySeconds>(9h).count());
+        CHECK_EQUAL(std::remove_cvref_t<decltype(ctx.rand_uniform_duration<SteadySeconds>(9h).count())>{2782}, ctx.rand_uniform_duration<SteadySeconds>(9h).count());
     }
 }
 
@@ -119,7 +119,7 @@ BOOST_AUTO_TEST_CASE(fastrandom_randbits)
     for (int bits = 0; bits < 63; ++bits) {
         for (int j = 0; j < 1000; ++j) {
             uint64_t rangebits = ctx1.randbits(bits);
-            BOOST_CHECK_EQUAL(rangebits >> bits, 0U);
+            CHECK_EQUAL(rangebits >> bits, 0U);
             uint64_t range = (uint64_t{1}) << bits | rangebits;
             uint64_t rand = ctx2.randrange(range);
             CHECK(rand < range);
@@ -164,9 +164,9 @@ BOOST_AUTO_TEST_CASE(randbits_test)
                 } else {
                     gen2 = ctx_test2.randbits(bits);
                 }
-                BOOST_CHECK_EQUAL(gen, gen2);
+                CHECK_EQUAL(gen, gen2);
                 // Make sure the result is in range.
-                if (bits < 64) BOOST_CHECK_EQUAL(gen >> bits, 0);
+                if (bits < 64) CHECK_EQUAL(gen >> bits, std::remove_cvref_t<decltype(gen >> bits)>{0});
                 // Mark all the seen bits in the output.
                 for (int bit = 0; bit < bits; ++bit) {
                     int idx = bit + (bits * (bits - 1)) / 2 + 2080 * ctx_test_bitsleft;
@@ -236,7 +236,7 @@ BOOST_AUTO_TEST_CASE(shuffle_stat_test)
     }
     CHECK(chi_score > 58.1411); // 99.9999% confidence interval
     CHECK(chi_score < 210.275);
-    BOOST_CHECK_EQUAL(sum, 12000U);
+    CHECK_EQUAL(sum, 12000U);
 }
 
 BOOST_AUTO_TEST_CASE(xoroshiro128plusplus_reference_values)

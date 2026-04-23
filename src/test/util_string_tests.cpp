@@ -177,25 +177,25 @@ BOOST_AUTO_TEST_CASE(line_reader_test)
         // Check three lines terminated by \n and \r\n, trimming whitespace
         std::string_view input = "once upon a time\n there was a dog \r\nwho liked food\n";
         LineReader reader(input, /*max_line_length=*/128);
-        BOOST_CHECK_EQUAL(reader.Consumed(), 0);
-        BOOST_CHECK_EQUAL(reader.Remaining(), 51);
+        CHECK_EQUAL(reader.Consumed(), std::remove_cvref_t<decltype(reader.Consumed())>{0});
+        CHECK_EQUAL(reader.Remaining(), std::remove_cvref_t<decltype(reader.Remaining())>{51});
         std::optional<std::string> line1{reader.ReadLine()};
-        BOOST_CHECK_EQUAL(reader.Consumed(), 17);
-        BOOST_CHECK_EQUAL(reader.Remaining(), 34);
+        CHECK_EQUAL(reader.Consumed(), std::remove_cvref_t<decltype(reader.Consumed())>{17});
+        CHECK_EQUAL(reader.Remaining(), std::remove_cvref_t<decltype(reader.Remaining())>{34});
         std::optional<std::string> line2{reader.ReadLine()};
-        BOOST_CHECK_EQUAL(reader.Consumed(), 36);
-        BOOST_CHECK_EQUAL(reader.Remaining(), 15);
+        CHECK_EQUAL(reader.Consumed(), std::remove_cvref_t<decltype(reader.Consumed())>{36});
+        CHECK_EQUAL(reader.Remaining(), std::remove_cvref_t<decltype(reader.Remaining())>{15});
         std::optional<std::string> line3{reader.ReadLine()};
         std::optional<std::string> line4{reader.ReadLine()};
         CHECK(line1);
         CHECK(line2);
         CHECK(line3);
         CHECK(!line4);
-        BOOST_CHECK_EQUAL(line1.value(), "once upon a time");
-        BOOST_CHECK_EQUAL(line2.value(), "there was a dog");
-        BOOST_CHECK_EQUAL(line3.value(), "who liked food");
-        BOOST_CHECK_EQUAL(reader.Consumed(), 51);
-        BOOST_CHECK_EQUAL(reader.Remaining(), 0);
+        CHECK_EQUAL(line1.value(), std::string_view{"once upon a time"});
+        CHECK_EQUAL(line2.value(), std::string_view{"there was a dog"});
+        CHECK_EQUAL(line3.value(), std::string_view{"who liked food"});
+        CHECK_EQUAL(reader.Consumed(), std::remove_cvref_t<decltype(reader.Consumed())>{51});
+        CHECK_EQUAL(reader.Remaining(), std::remove_cvref_t<decltype(reader.Remaining())>{0});
     }
     {
         // Do not exceed max_line_length + 1 while searching for \n
@@ -204,15 +204,15 @@ BOOST_AUTO_TEST_CASE(line_reader_test)
 
         LineReader reader1(input, /*max_line_length=*/22);
         // First line is exactly the length of max_line_length
-        BOOST_CHECK_EQUAL(reader1.ReadLine(), "once upon a time there");
+        CHECK_EQUAL(reader1.ReadLine(), std::string_view{"once upon a time there"});
         // Second line is +1 character too long
         CHECK_EXCEPTION(reader1.ReadLine(), std::runtime_error, HasReason{"max_line_length exceeded by LineReader"});
 
         // Increase max_line_length by 1
         LineReader reader2(input, /*max_line_length=*/23);
         // Both lines fit within limit
-        BOOST_CHECK_EQUAL(reader2.ReadLine(), "once upon a time there");
-        BOOST_CHECK_EQUAL(reader2.ReadLine(), "was a dog who liked tea");
+        CHECK_EQUAL(reader2.ReadLine(), std::string_view{"once upon a time there"});
+        CHECK_EQUAL(reader2.ReadLine(), std::string_view{"was a dog who liked tea"});
         // End of buffer reached
         CHECK(!reader2.ReadLine());
     }
@@ -220,7 +220,7 @@ BOOST_AUTO_TEST_CASE(line_reader_test)
         // Empty lines are empty
         std::string_view input = "\n";
         LineReader reader(input, /*max_line_length=*/1024);
-        BOOST_CHECK_EQUAL(reader.ReadLine(), "");
+        CHECK_EQUAL(reader.ReadLine(), std::string_view{""});
         CHECK(!reader.ReadLine());
     }
     {
@@ -239,24 +239,24 @@ BOOST_AUTO_TEST_CASE(line_reader_test)
     {
         std::string_view input = "a\nb\n";
         LineReader reader(input, /*max_line_length=*/1);
-        BOOST_CHECK_EQUAL(reader.ReadLine(), "a");
-        BOOST_CHECK_EQUAL(reader.ReadLine(), "b");
+        CHECK_EQUAL(reader.ReadLine(), std::string_view{"a"});
+        CHECK_EQUAL(reader.ReadLine(), std::string_view{"b"});
         CHECK(!reader.ReadLine());
     }
     {
         // If ReadLine fails, the iterator is reset and we can ReadLength instead
         std::string_view input = "a\nbaboon\n";
         LineReader reader(input, /*max_line_length=*/1);
-        BOOST_CHECK_EQUAL(reader.ReadLine(), "a");
+        CHECK_EQUAL(reader.ReadLine(), std::string_view{"a"});
         // "baboon" is too long
         CHECK_EXCEPTION(reader.ReadLine(), std::runtime_error, HasReason{"max_line_length exceeded by LineReader"});
-        BOOST_CHECK_EQUAL(reader.ReadLength(1), "b");
-        BOOST_CHECK_EQUAL(reader.ReadLength(1), "a");
-        BOOST_CHECK_EQUAL(reader.ReadLength(2), "bo");
+        CHECK_EQUAL(reader.ReadLength(1), std::string_view{"b"});
+        CHECK_EQUAL(reader.ReadLength(1), std::string_view{"a"});
+        CHECK_EQUAL(reader.ReadLength(2), std::string_view{"bo"});
         // "on" is too long
         CHECK_EXCEPTION(reader.ReadLine(), std::runtime_error, HasReason{"max_line_length exceeded by LineReader"});
-        BOOST_CHECK_EQUAL(reader.ReadLength(1), "o");
-        BOOST_CHECK_EQUAL(reader.ReadLine(), "n"); // now the remainder of the buffer fits in one line
+        CHECK_EQUAL(reader.ReadLength(1), std::string_view{"o"});
+        CHECK_EQUAL(reader.ReadLine(), std::string_view{"n"}); // now the remainder of the buffer fits in one line
         CHECK(!reader.ReadLine());
     }
     {
@@ -267,23 +267,23 @@ BOOST_AUTO_TEST_CASE(line_reader_test)
         // First line is exactly the length of max_line_length, but that doesn't matter because \n is missing
         CHECK(!reader.ReadLine());
         // Data can still be read using ReadLength
-        BOOST_CHECK_EQUAL(reader.ReadLength(22), "once upon a time there");
+        CHECK_EQUAL(reader.ReadLength(22), std::string_view{"once upon a time there"});
         // End of buffer reached
-        BOOST_CHECK_EQUAL(reader.Remaining(), 0);
+        CHECK_EQUAL(reader.Remaining(), std::remove_cvref_t<decltype(reader.Remaining())>{0});
     }
     {
         // Read specific number of bytes regardless of max_line_length or \n unless buffer is too short
         std::string_view input = "once upon a time\n there was a dog \r\nwho liked food";
         LineReader reader(input, /*max_line_length=*/1);
-        BOOST_CHECK_EQUAL(reader.ReadLength(0), "");
-        BOOST_CHECK_EQUAL(reader.ReadLength(3), "onc");
-        BOOST_CHECK_EQUAL(reader.ReadLength(8), "e upon a");
-        BOOST_CHECK_EQUAL(reader.ReadLength(8), " time\n t");
+        CHECK_EQUAL(reader.ReadLength(0), std::string_view{""});
+        CHECK_EQUAL(reader.ReadLength(3), std::string_view{"onc"});
+        CHECK_EQUAL(reader.ReadLength(8), std::string_view{"e upon a"});
+        CHECK_EQUAL(reader.ReadLength(8), std::string_view{" time\n t"});
         CHECK_EXCEPTION(reader.ReadLength(128), std::runtime_error, HasReason{"Not enough data in buffer"});
         // After the error the iterator is reset so we can try again
-        BOOST_CHECK_EQUAL(reader.ReadLength(31), "here was a dog \r\nwho liked food");
+        CHECK_EQUAL(reader.ReadLength(31), std::string_view{"here was a dog \r\nwho liked food"});
         // End of buffer reached
-        BOOST_CHECK_EQUAL(reader.Remaining(), 0);
+        CHECK_EQUAL(reader.Remaining(), std::remove_cvref_t<decltype(reader.Remaining())>{0});
     }
 }
 

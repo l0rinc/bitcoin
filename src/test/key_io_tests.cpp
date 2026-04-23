@@ -57,7 +57,7 @@ BOOST_AUTO_TEST_CASE(key_io_valid_parse)
             destination = DecodeDestination(exp_base58string);
             CScript script = GetScriptForDestination(destination);
             CHECK_MESSAGE(IsValidDestination(destination), "!IsValid:" + strTest);
-            BOOST_CHECK_EQUAL(HexStr(script), HexStr(exp_payload));
+            CHECK_EQUAL(HexStr(script), HexStr(exp_payload));
 
             // Try flipped case version
             for (char& c : exp_base58string) {
@@ -71,7 +71,7 @@ BOOST_AUTO_TEST_CASE(key_io_valid_parse)
             CHECK_MESSAGE(IsValidDestination(destination) == try_case_flip, "!IsValid case flipped:" + strTest);
             if (IsValidDestination(destination)) {
                 script = GetScriptForDestination(destination);
-                BOOST_CHECK_EQUAL(HexStr(script), HexStr(exp_payload));
+                CHECK_EQUAL(HexStr(script), HexStr(exp_payload));
             }
 
             // Public key must be invalid private key
@@ -111,7 +111,7 @@ BOOST_AUTO_TEST_CASE(key_io_valid_gen)
             CHECK(ExtractDestination(exp_script, dest));
             std::string address = EncodeDestination(dest);
 
-            BOOST_CHECK_EQUAL(address, exp_base58string);
+            CHECK_EQUAL(address, exp_base58string);
         }
     }
 

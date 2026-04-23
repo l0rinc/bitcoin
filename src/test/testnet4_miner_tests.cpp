@@ -47,7 +47,7 @@ BOOST_AUTO_TEST_CASE(MiningInterface)
     CHECK(block_template);
 
     // The template should use the mocked system time
-    BOOST_REQUIRE_EQUAL(block_template->getBlockHeader().Time(), template_time);
+    CHECK_EQUAL(block_template->getBlockHeader().Time(), template_time);
 
     const BlockWaitOptions wait_options{.timeout = MillisecondsDouble{0}, .fee_threshold = 1};
 

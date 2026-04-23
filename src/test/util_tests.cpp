@@ -112,12 +112,12 @@ BOOST_AUTO_TEST_CASE(util_check)
     Assert(x).test();
 
     // Check nested Asserts
-    BOOST_CHECK_EQUAL(Assert((Assert(x).test() ? 3 : 0)), 3);
+    CHECK_EQUAL(Assert((Assert(x).test() ? 3 : 0)), std::remove_cvref_t<decltype(Assert((Assert(x).test() ? 3 : 0)))>{3});
 
     // Check -Wdangling-gsl does not trigger when copying the int. (It would
     // trigger on "const int&")
     const int nine{*Assert(std::optional<int>{9})};
-    BOOST_CHECK_EQUAL(9, nine);
+    CHECK_EQUAL(std::remove_cvref_t<decltype(nine)>{9}, nine);
 }
 
 BOOST_AUTO_TEST_CASE(util_criticalsection)
@@ -201,45 +201,45 @@ BOOST_AUTO_TEST_CASE(parse_hex)
     // Empty string is supported
     static_assert(""_hex.empty());
     static_assert(""_hex_u8.empty());
-    BOOST_CHECK_EQUAL(""_hex_v.size(), 0);
-    BOOST_CHECK_EQUAL(""_hex_v_u8.size(), 0);
-    BOOST_CHECK_EQUAL(ParseHex("").size(), 0);
-    BOOST_CHECK_EQUAL(TryParseHex<uint8_t>("").value().size(), 0);
+    CHECK_EQUAL(""_hex_v.size(), std::remove_cvref_t<decltype(""_hex_v.size())>{0});
+    CHECK_EQUAL(""_hex_v_u8.size(), std::remove_cvref_t<decltype(""_hex_v_u8.size())>{0});
+    CHECK_EQUAL(ParseHex("").size(), std::remove_cvref_t<decltype(ParseHex("").size())>{0});
+    CHECK_EQUAL(TryParseHex<uint8_t>("").value().size(), std::remove_cvref_t<decltype(TryParseHex<uint8_t>("").value().size())>{0});
 
     // Spaces between nibbles is treated as invalid
-    BOOST_CHECK_EQUAL(ParseHex("AAF F").size(), 0);
+    CHECK_EQUAL(ParseHex("AAF F").size(), std::remove_cvref_t<decltype(ParseHex("AAF F").size())>{0});
     CHECK(!TryParseHex("AAF F").has_value());
 
     // Embedded null is treated as invalid
     const std::string with_embedded_null{" 11 "s
                                          " \0 "
                                          " 22 "s};
-    BOOST_CHECK_EQUAL(with_embedded_null.size(), 11);
-    BOOST_CHECK_EQUAL(ParseHex(with_embedded_null).size(), 0);
+    CHECK_EQUAL(with_embedded_null.size(), std::remove_cvref_t<decltype(with_embedded_null.size())>{11});
+    CHECK_EQUAL(ParseHex(with_embedded_null).size(), std::remove_cvref_t<decltype(ParseHex(with_embedded_null).size())>{0});
     CHECK(!TryParseHex(with_embedded_null).has_value());
 
     // Non-hex is treated as invalid
-    BOOST_CHECK_EQUAL(ParseHex("1234 invalid 1234").size(), 0);
+    CHECK_EQUAL(ParseHex("1234 invalid 1234").size(), std::remove_cvref_t<decltype(ParseHex("1234 invalid 1234").size())>{0});
     CHECK(!TryParseHex("1234 invalid 1234").has_value());
 
     // Truncated input is treated as invalid
-    BOOST_CHECK_EQUAL(ParseHex("12 3").size(), 0);
+    CHECK_EQUAL(ParseHex("12 3").size(), std::remove_cvref_t<decltype(ParseHex("12 3").size())>{0});
     CHECK(!TryParseHex("12 3").has_value());
 }
 
 BOOST_AUTO_TEST_CASE(consteval_hex_digit)
 {
-    BOOST_CHECK_EQUAL(ConstevalHexDigit('0'), 0);
-    BOOST_CHECK_EQUAL(ConstevalHexDigit('9'), 9);
-    BOOST_CHECK_EQUAL(ConstevalHexDigit('a'), 0xa);
-    BOOST_CHECK_EQUAL(ConstevalHexDigit('f'), 0xf);
+    CHECK_EQUAL(ConstevalHexDigit('0'), std::remove_cvref_t<decltype(ConstevalHexDigit('0'))>{0});
+    CHECK_EQUAL(ConstevalHexDigit('9'), std::remove_cvref_t<decltype(ConstevalHexDigit('9'))>{9});
+    CHECK_EQUAL(ConstevalHexDigit('a'), std::remove_cvref_t<decltype(ConstevalHexDigit('a'))>{0xa});
+    CHECK_EQUAL(ConstevalHexDigit('f'), std::remove_cvref_t<decltype(ConstevalHexDigit('f'))>{0xf});
 }
 
 BOOST_AUTO_TEST_CASE(util_HexStr)
 {
-    BOOST_CHECK_EQUAL(HexStr(HEX_PARSE_OUTPUT), HEX_PARSE_INPUT);
-    BOOST_CHECK_EQUAL(HexStr(std::span{HEX_PARSE_OUTPUT}.last(0)), "");
-    BOOST_CHECK_EQUAL(HexStr(std::span{HEX_PARSE_OUTPUT}.first(0)), "");
+    CHECK_EQUAL(HexStr(HEX_PARSE_OUTPUT), HEX_PARSE_INPUT);
+    CHECK_EQUAL(HexStr(std::span{HEX_PARSE_OUTPUT}.last(0)), std::string_view{""});
+    CHECK_EQUAL(HexStr(std::span{HEX_PARSE_OUTPUT}.first(0)), std::string_view{""});
 
     {
         constexpr std::string_view out_exp{"04678afdb0"};
@@ -247,9 +247,9 @@ BOOST_AUTO_TEST_CASE(util_HexStr)
         const std::span<const uint8_t> in_u{MakeUCharSpan(in_s)};
         const std::span<const std::byte> in_b{MakeByteSpan(in_s)};
 
-        BOOST_CHECK_EQUAL(HexStr(in_u), out_exp);
-        BOOST_CHECK_EQUAL(HexStr(in_s), out_exp);
-        BOOST_CHECK_EQUAL(HexStr(in_b), out_exp);
+        CHECK_EQUAL(HexStr(in_u), out_exp);
+        CHECK_EQUAL(HexStr(in_s), out_exp);
+        CHECK_EQUAL(HexStr(in_b), out_exp);
     }
 
     {
@@ -276,22 +276,22 @@ BOOST_AUTO_TEST_CASE(span_write_bytes)
     std::array mut_arr{uint8_t{0xaa}, uint8_t{0xbb}};
     const auto mut_bytes{MakeWritableByteSpan(mut_arr)};
     mut_bytes[1] = std::byte{0x11};
-    BOOST_CHECK_EQUAL(mut_arr.at(0), 0xaa);
-    BOOST_CHECK_EQUAL(mut_arr.at(1), 0x11);
+    CHECK_EQUAL(mut_arr.at(0), std::remove_cvref_t<decltype(mut_arr.at(0))>{0xaa});
+    CHECK_EQUAL(mut_arr.at(1), std::remove_cvref_t<decltype(mut_arr.at(1))>{0x11});
 }
 
 BOOST_AUTO_TEST_CASE(util_Join)
 {
     // Normal version
-    BOOST_CHECK_EQUAL(Join(std::vector<std::string>{}, ", "), "");
-    BOOST_CHECK_EQUAL(Join(std::vector<std::string>{"foo"}, ", "), "foo");
-    BOOST_CHECK_EQUAL(Join(std::vector<std::string>{"foo", "bar"}, ", "), "foo, bar");
+    CHECK_EQUAL(Join(std::vector<std::string>{}, ", "), std::string_view{""});
+    CHECK_EQUAL(Join(std::vector<std::string>{"foo"}, ", "), std::string_view{"foo"});
+    CHECK_EQUAL(Join(std::vector<std::string>{"foo", "bar"}, ", "), std::string_view{"foo, bar"});
 
     // Version with unary operator
     const auto op_upper = [](const std::string& s) { return ToUpper(s); };
-    BOOST_CHECK_EQUAL(Join(std::list<std::string>{}, ", ", op_upper), "");
-    BOOST_CHECK_EQUAL(Join(std::list<std::string>{"foo"}, ", ", op_upper), "FOO");
-    BOOST_CHECK_EQUAL(Join(std::list<std::string>{"foo", "bar"}, ", ", op_upper), "FOO, BAR");
+    CHECK_EQUAL(Join(std::list<std::string>{}, ", ", op_upper), std::string_view{""});
+    CHECK_EQUAL(Join(std::list<std::string>{"foo"}, ", ", op_upper), std::string_view{"FOO"});
+    CHECK_EQUAL(Join(std::list<std::string>{"foo", "bar"}, ", ", op_upper), std::string_view{"FOO, BAR"});
 }
 
 BOOST_AUTO_TEST_CASE(util_ReplaceAll)
@@ -300,7 +300,7 @@ BOOST_AUTO_TEST_CASE(util_ReplaceAll)
     auto test_replaceall = [&original](const std::string& search, const std::string& substitute, const std::string& expected) {
         auto test = original;
         ReplaceAll(test, search, substitute);
-        BOOST_CHECK_EQUAL(test, expected);
+        CHECK_EQUAL(test, expected);
     };
 
     test_replaceall("", "foo", original);
@@ -312,37 +312,37 @@ BOOST_AUTO_TEST_CASE(util_ReplaceAll)
 
 BOOST_AUTO_TEST_CASE(util_TrimString)
 {
-    BOOST_CHECK_EQUAL(TrimString(" foo bar "), "foo bar");
-    BOOST_CHECK_EQUAL(TrimStringView("\t \n  \n \f\n\r\t\v\tfoo \n \f\n\r\t\v\tbar\t  \n \f\n\r\t\v\t\n "), "foo \n \f\n\r\t\v\tbar");
-    BOOST_CHECK_EQUAL(TrimString("\t \n foo \n\tbar\t \n "), "foo \n\tbar");
-    BOOST_CHECK_EQUAL(TrimStringView("\t \n foo \n\tbar\t \n ", "fobar"), "\t \n foo \n\tbar\t \n ");
-    BOOST_CHECK_EQUAL(TrimString("foo bar"), "foo bar");
-    BOOST_CHECK_EQUAL(TrimStringView("foo bar", "fobar"), " ");
-    BOOST_CHECK_EQUAL(TrimString(std::string("\0 foo \0 ", 8)), std::string("\0 foo \0", 7));
-    BOOST_CHECK_EQUAL(TrimStringView(std::string(" foo ", 5)), std::string("foo", 3));
-    BOOST_CHECK_EQUAL(TrimString(std::string("\t\t\0\0\n\n", 6)), std::string("\0\0", 2));
-    BOOST_CHECK_EQUAL(TrimStringView(std::string("\x05\x04\x03\x02\x01\x00", 6)), std::string("\x05\x04\x03\x02\x01\x00", 6));
-    BOOST_CHECK_EQUAL(TrimString(std::string("\x05\x04\x03\x02\x01\x00", 6), std::string("\x05\x04\x03\x02\x01", 5)), std::string("\0", 1));
-    BOOST_CHECK_EQUAL(TrimStringView(std::string("\x05\x04\x03\x02\x01\x00", 6), std::string("\x05\x04\x03\x02\x01\x00", 6)), "");
+    CHECK_EQUAL(TrimString(" foo bar "), std::string_view{"foo bar"});
+    CHECK_EQUAL(TrimStringView("\t \n  \n \f\n\r\t\v\tfoo \n \f\n\r\t\v\tbar\t  \n \f\n\r\t\v\t\n "), std::string_view{"foo \n \f\n\r\t\v\tbar"});
+    CHECK_EQUAL(TrimString("\t \n foo \n\tbar\t \n "), std::string_view{"foo \n\tbar"});
+    CHECK_EQUAL(TrimStringView("\t \n foo \n\tbar\t \n ", "fobar"), std::string_view{"\t \n foo \n\tbar\t \n "});
+    CHECK_EQUAL(TrimString("foo bar"), std::string_view{"foo bar"});
+    CHECK_EQUAL(TrimStringView("foo bar", "fobar"), std::string_view{" "});
+    CHECK_EQUAL(TrimString(std::string("\0 foo \0 ", 8)), std::string("\0 foo \0", 7));
+    CHECK_EQUAL(TrimStringView(std::string(" foo ", 5)), std::string("foo", 3));
+    CHECK_EQUAL(TrimString(std::string("\t\t\0\0\n\n", 6)), std::string("\0\0", 2));
+    CHECK_EQUAL(TrimStringView(std::string("\x05\x04\x03\x02\x01\x00", 6)), std::string("\x05\x04\x03\x02\x01\x00", 6));
+    CHECK_EQUAL(TrimString(std::string("\x05\x04\x03\x02\x01\x00", 6), std::string("\x05\x04\x03\x02\x01", 5)), std::string("\0", 1));
+    CHECK_EQUAL(TrimStringView(std::string("\x05\x04\x03\x02\x01\x00", 6), std::string("\x05\x04\x03\x02\x01\x00", 6)), std::string_view{""});
 }
 
 BOOST_AUTO_TEST_CASE(util_ParseISO8601DateTime)
 {
-    BOOST_CHECK_EQUAL(ParseISO8601DateTime("1969-12-31T23:59:59Z").value(), -1);
-    BOOST_CHECK_EQUAL(ParseISO8601DateTime("1970-01-01T00:00:00Z").value(), 0);
-    BOOST_CHECK_EQUAL(ParseISO8601DateTime("1970-01-01T00:00:01Z").value(), 1);
-    BOOST_CHECK_EQUAL(ParseISO8601DateTime("2000-01-01T00:00:01Z").value(), 946684801);
-    BOOST_CHECK_EQUAL(ParseISO8601DateTime("2011-09-30T23:36:17Z").value(), 1317425777);
-    BOOST_CHECK_EQUAL(ParseISO8601DateTime("2100-12-31T23:59:59Z").value(), 4133980799);
-    BOOST_CHECK_EQUAL(ParseISO8601DateTime("9999-12-31T23:59:59Z").value(), 253402300799);
+    CHECK_EQUAL(ParseISO8601DateTime("1969-12-31T23:59:59Z").value(), -1);
+    CHECK_EQUAL(ParseISO8601DateTime("1970-01-01T00:00:00Z").value(), std::remove_cvref_t<decltype(ParseISO8601DateTime("1970-01-01T00:00:00Z").value())>{0});
+    CHECK_EQUAL(ParseISO8601DateTime("1970-01-01T00:00:01Z").value(), std::remove_cvref_t<decltype(ParseISO8601DateTime("1970-01-01T00:00:01Z").value())>{1});
+    CHECK_EQUAL(ParseISO8601DateTime("2000-01-01T00:00:01Z").value(), std::remove_cvref_t<decltype(ParseISO8601DateTime("2000-01-01T00:00:01Z").value())>{946684801});
+    CHECK_EQUAL(ParseISO8601DateTime("2011-09-30T23:36:17Z").value(), std::remove_cvref_t<decltype(ParseISO8601DateTime("2011-09-30T23:36:17Z").value())>{1317425777});
+    CHECK_EQUAL(ParseISO8601DateTime("2100-12-31T23:59:59Z").value(), std::remove_cvref_t<decltype(ParseISO8601DateTime("2100-12-31T23:59:59Z").value())>{4133980799});
+    CHECK_EQUAL(ParseISO8601DateTime("9999-12-31T23:59:59Z").value(), std::remove_cvref_t<decltype(ParseISO8601DateTime("9999-12-31T23:59:59Z").value())>{253402300799});
 
     // Accept edge-cases, where the time overflows. They are not produced by
     // FormatISO8601DateTime, so this can be changed in the future, if needed.
     // For now, keep compatibility with the previous implementation.
-    BOOST_CHECK_EQUAL(ParseISO8601DateTime("2000-01-01T99:00:00Z").value(), 947041200);
-    BOOST_CHECK_EQUAL(ParseISO8601DateTime("2000-01-01T00:99:00Z").value(), 946690740);
-    BOOST_CHECK_EQUAL(ParseISO8601DateTime("2000-01-01T00:00:99Z").value(), 946684899);
-    BOOST_CHECK_EQUAL(ParseISO8601DateTime("2000-01-01T99:99:99Z").value(), 947047239);
+    CHECK_EQUAL(ParseISO8601DateTime("2000-01-01T99:00:00Z").value(), std::remove_cvref_t<decltype(ParseISO8601DateTime("2000-01-01T99:00:00Z").value())>{947041200});
+    CHECK_EQUAL(ParseISO8601DateTime("2000-01-01T00:99:00Z").value(), std::remove_cvref_t<decltype(ParseISO8601DateTime("2000-01-01T00:99:00Z").value())>{946690740});
+    CHECK_EQUAL(ParseISO8601DateTime("2000-01-01T00:00:99Z").value(), std::remove_cvref_t<decltype(ParseISO8601DateTime("2000-01-01T00:00:99Z").value())>{946684899});
+    CHECK_EQUAL(ParseISO8601DateTime("2000-01-01T99:99:99Z").value(), std::remove_cvref_t<decltype(ParseISO8601DateTime("2000-01-01T99:99:99Z").value())>{947047239});
 
     // Reject date overflows.
     CHECK(!ParseISO8601DateTime("2000-99-01T00:00:00Z"));
@@ -366,111 +366,111 @@ BOOST_AUTO_TEST_CASE(util_ParseISO8601DateTime)
 
 BOOST_AUTO_TEST_CASE(util_FormatISO8601DateTime)
 {
-    BOOST_CHECK_EQUAL(FormatISO8601DateTime(971890963199), "32767-12-31T23:59:59Z");
-    BOOST_CHECK_EQUAL(FormatISO8601DateTime(971890876800), "32767-12-31T00:00:00Z");
+    CHECK_EQUAL(FormatISO8601DateTime(971890963199), std::string_view{"32767-12-31T23:59:59Z"});
+    CHECK_EQUAL(FormatISO8601DateTime(971890876800), std::string_view{"32767-12-31T00:00:00Z"});
 
-    BOOST_CHECK_EQUAL(FormatISO8601DateTime(-1), "1969-12-31T23:59:59Z");
-    BOOST_CHECK_EQUAL(FormatISO8601DateTime(0), "1970-01-01T00:00:00Z");
-    BOOST_CHECK_EQUAL(FormatISO8601DateTime(1), "1970-01-01T00:00:01Z");
-    BOOST_CHECK_EQUAL(FormatISO8601DateTime(946684801), "2000-01-01T00:00:01Z");
-    BOOST_CHECK_EQUAL(FormatISO8601DateTime(1317425777), "2011-09-30T23:36:17Z");
-    BOOST_CHECK_EQUAL(FormatISO8601DateTime(4133980799), "2100-12-31T23:59:59Z");
-    BOOST_CHECK_EQUAL(FormatISO8601DateTime(253402300799), "9999-12-31T23:59:59Z");
+    CHECK_EQUAL(FormatISO8601DateTime(-1), std::string_view{"1969-12-31T23:59:59Z"});
+    CHECK_EQUAL(FormatISO8601DateTime(0), std::string_view{"1970-01-01T00:00:00Z"});
+    CHECK_EQUAL(FormatISO8601DateTime(1), std::string_view{"1970-01-01T00:00:01Z"});
+    CHECK_EQUAL(FormatISO8601DateTime(946684801), std::string_view{"2000-01-01T00:00:01Z"});
+    CHECK_EQUAL(FormatISO8601DateTime(1317425777), std::string_view{"2011-09-30T23:36:17Z"});
+    CHECK_EQUAL(FormatISO8601DateTime(4133980799), std::string_view{"2100-12-31T23:59:59Z"});
+    CHECK_EQUAL(FormatISO8601DateTime(253402300799), std::string_view{"9999-12-31T23:59:59Z"});
 }
 
 BOOST_AUTO_TEST_CASE(util_FormatISO8601Date)
 {
-    BOOST_CHECK_EQUAL(FormatISO8601Date(971890963199), "32767-12-31");
-    BOOST_CHECK_EQUAL(FormatISO8601Date(971890876800), "32767-12-31");
+    CHECK_EQUAL(FormatISO8601Date(971890963199), std::string_view{"32767-12-31"});
+    CHECK_EQUAL(FormatISO8601Date(971890876800), std::string_view{"32767-12-31"});
 
-    BOOST_CHECK_EQUAL(FormatISO8601Date(0), "1970-01-01");
-    BOOST_CHECK_EQUAL(FormatISO8601Date(1317425777), "2011-09-30");
+    CHECK_EQUAL(FormatISO8601Date(0), std::string_view{"1970-01-01"});
+    CHECK_EQUAL(FormatISO8601Date(1317425777), std::string_view{"2011-09-30"});
 }
 
 
 BOOST_AUTO_TEST_CASE(util_FormatRFC1123DateTime)
 {
-    BOOST_CHECK_EQUAL(FormatRFC1123DateTime(std::numeric_limits<int64_t>::max()), "");
-    BOOST_CHECK_EQUAL(FormatRFC1123DateTime(253402300800), "");
-    BOOST_CHECK_EQUAL(FormatRFC1123DateTime(253402300799), "Fri, 31 Dec 9999 23:59:59 GMT");
-    BOOST_CHECK_EQUAL(FormatRFC1123DateTime(253402214400), "Fri, 31 Dec 9999 00:00:00 GMT");
-    BOOST_CHECK_EQUAL(FormatRFC1123DateTime(1717429609), "Mon, 03 Jun 2024 15:46:49 GMT");
-    BOOST_CHECK_EQUAL(FormatRFC1123DateTime(0), "Thu, 01 Jan 1970 00:00:00 GMT");
-    BOOST_CHECK_EQUAL(FormatRFC1123DateTime(-1), "Wed, 31 Dec 1969 23:59:59 GMT");
-    BOOST_CHECK_EQUAL(FormatRFC1123DateTime(-1717429609), "Sat, 31 Jul 1915 08:13:11 GMT");
-    BOOST_CHECK_EQUAL(FormatRFC1123DateTime(-62167219200), "Sat, 01 Jan 0000 00:00:00 GMT");
-    BOOST_CHECK_EQUAL(FormatRFC1123DateTime(-62167219201), "");
+    CHECK_EQUAL(FormatRFC1123DateTime(std::numeric_limits<int64_t>::max()), std::string_view{""});
+    CHECK_EQUAL(FormatRFC1123DateTime(253402300800), std::string_view{""});
+    CHECK_EQUAL(FormatRFC1123DateTime(253402300799), std::string_view{"Fri, 31 Dec 9999 23:59:59 GMT"});
+    CHECK_EQUAL(FormatRFC1123DateTime(253402214400), std::string_view{"Fri, 31 Dec 9999 00:00:00 GMT"});
+    CHECK_EQUAL(FormatRFC1123DateTime(1717429609), std::string_view{"Mon, 03 Jun 2024 15:46:49 GMT"});
+    CHECK_EQUAL(FormatRFC1123DateTime(0), std::string_view{"Thu, 01 Jan 1970 00:00:00 GMT"});
+    CHECK_EQUAL(FormatRFC1123DateTime(-1), std::string_view{"Wed, 31 Dec 1969 23:59:59 GMT"});
+    CHECK_EQUAL(FormatRFC1123DateTime(-1717429609), std::string_view{"Sat, 31 Jul 1915 08:13:11 GMT"});
+    CHECK_EQUAL(FormatRFC1123DateTime(-62167219200), std::string_view{"Sat, 01 Jan 0000 00:00:00 GMT"});
+    CHECK_EQUAL(FormatRFC1123DateTime(-62167219201), std::string_view{""});
 }
 
 BOOST_AUTO_TEST_CASE(util_FormatMoney)
 {
-    BOOST_CHECK_EQUAL(FormatMoney(0), "0.00");
-    BOOST_CHECK_EQUAL(FormatMoney((COIN/10000)*123456789), "12345.6789");
-    BOOST_CHECK_EQUAL(FormatMoney(-COIN), "-1.00");
+    CHECK_EQUAL(FormatMoney(0), std::string_view{"0.00"});
+    CHECK_EQUAL(FormatMoney((COIN/10000)*123456789), std::string_view{"12345.6789"});
+    CHECK_EQUAL(FormatMoney(-COIN), std::string_view{"-1.00"});
 
-    BOOST_CHECK_EQUAL(FormatMoney(COIN*100000000), "100000000.00");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN*10000000), "10000000.00");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN*1000000), "1000000.00");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN*100000), "100000.00");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN*10000), "10000.00");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN*1000), "1000.00");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN*100), "100.00");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN*10), "10.00");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN), "1.00");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN/10), "0.10");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN/100), "0.01");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN/1000), "0.001");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN/10000), "0.0001");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN/100000), "0.00001");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN/1000000), "0.000001");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN/10000000), "0.0000001");
-    BOOST_CHECK_EQUAL(FormatMoney(COIN/100000000), "0.00000001");
+    CHECK_EQUAL(FormatMoney(COIN*100000000), std::string_view{"100000000.00"});
+    CHECK_EQUAL(FormatMoney(COIN*10000000), std::string_view{"10000000.00"});
+    CHECK_EQUAL(FormatMoney(COIN*1000000), std::string_view{"1000000.00"});
+    CHECK_EQUAL(FormatMoney(COIN*100000), std::string_view{"100000.00"});
+    CHECK_EQUAL(FormatMoney(COIN*10000), std::string_view{"10000.00"});
+    CHECK_EQUAL(FormatMoney(COIN*1000), std::string_view{"1000.00"});
+    CHECK_EQUAL(FormatMoney(COIN*100), std::string_view{"100.00"});
+    CHECK_EQUAL(FormatMoney(COIN*10), std::string_view{"10.00"});
+    CHECK_EQUAL(FormatMoney(COIN), std::string_view{"1.00"});
+    CHECK_EQUAL(FormatMoney(COIN/10), std::string_view{"0.10"});
+    CHECK_EQUAL(FormatMoney(COIN/100), std::string_view{"0.01"});
+    CHECK_EQUAL(FormatMoney(COIN/1000), std::string_view{"0.001"});
+    CHECK_EQUAL(FormatMoney(COIN/10000), std::string_view{"0.0001"});
+    CHECK_EQUAL(FormatMoney(COIN/100000), std::string_view{"0.00001"});
+    CHECK_EQUAL(FormatMoney(COIN/1000000), std::string_view{"0.000001"});
+    CHECK_EQUAL(FormatMoney(COIN/10000000), std::string_view{"0.0000001"});
+    CHECK_EQUAL(FormatMoney(COIN/100000000), std::string_view{"0.00000001"});
 
-    BOOST_CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::max()), "92233720368.54775807");
-    BOOST_CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::max() - 1), "92233720368.54775806");
-    BOOST_CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::max() - 2), "92233720368.54775805");
-    BOOST_CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::max() - 3), "92233720368.54775804");
+    CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::max()), std::string_view{"92233720368.54775807"});
+    CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::max() - 1), std::string_view{"92233720368.54775806"});
+    CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::max() - 2), std::string_view{"92233720368.54775805"});
+    CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::max() - 3), std::string_view{"92233720368.54775804"});
     // ...
-    BOOST_CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::min() + 3), "-92233720368.54775805");
-    BOOST_CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::min() + 2), "-92233720368.54775806");
-    BOOST_CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::min() + 1), "-92233720368.54775807");
-    BOOST_CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::min()), "-92233720368.54775808");
+    CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::min() + 3), std::string_view{"-92233720368.54775805"});
+    CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::min() + 2), std::string_view{"-92233720368.54775806"});
+    CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::min() + 1), std::string_view{"-92233720368.54775807"});
+    CHECK_EQUAL(FormatMoney(std::numeric_limits<CAmount>::min()), std::string_view{"-92233720368.54775808"});
 }
 
 BOOST_AUTO_TEST_CASE(util_ParseMoney)
 {
-    BOOST_CHECK_EQUAL(ParseMoney("0.0").value(), 0);
-    BOOST_CHECK_EQUAL(ParseMoney(".").value(), 0);
-    BOOST_CHECK_EQUAL(ParseMoney("0.").value(), 0);
-    BOOST_CHECK_EQUAL(ParseMoney(".0").value(), 0);
-    BOOST_CHECK_EQUAL(ParseMoney(".6789").value(), 6789'0000);
-    BOOST_CHECK_EQUAL(ParseMoney("12345.").value(), COIN * 12345);
+    CHECK_EQUAL(ParseMoney("0.0").value(), std::remove_cvref_t<decltype(ParseMoney("0.0").value())>{0});
+    CHECK_EQUAL(ParseMoney(".").value(), std::remove_cvref_t<decltype(ParseMoney(".").value())>{0});
+    CHECK_EQUAL(ParseMoney("0.").value(), std::remove_cvref_t<decltype(ParseMoney("0.").value())>{0});
+    CHECK_EQUAL(ParseMoney(".0").value(), std::remove_cvref_t<decltype(ParseMoney(".0").value())>{0});
+    CHECK_EQUAL(ParseMoney(".6789").value(), 6789'0000);
+    CHECK_EQUAL(ParseMoney("12345.").value(), COIN * 12345);
 
-    BOOST_CHECK_EQUAL(ParseMoney("12345.6789").value(), (COIN/10000)*123456789);
+    CHECK_EQUAL(ParseMoney("12345.6789").value(), (COIN/10000)*123456789);
 
-    BOOST_CHECK_EQUAL(ParseMoney("10000000.00").value(), COIN*10000000);
-    BOOST_CHECK_EQUAL(ParseMoney("1000000.00").value(), COIN*1000000);
-    BOOST_CHECK_EQUAL(ParseMoney("100000.00").value(), COIN*100000);
-    BOOST_CHECK_EQUAL(ParseMoney("10000.00").value(), COIN*10000);
-    BOOST_CHECK_EQUAL(ParseMoney("1000.00").value(), COIN*1000);
-    BOOST_CHECK_EQUAL(ParseMoney("100.00").value(), COIN*100);
-    BOOST_CHECK_EQUAL(ParseMoney("10.00").value(), COIN*10);
-    BOOST_CHECK_EQUAL(ParseMoney("1.00").value(), COIN);
-    BOOST_CHECK_EQUAL(ParseMoney("1").value(), COIN);
-    BOOST_CHECK_EQUAL(ParseMoney("   1").value(), COIN);
-    BOOST_CHECK_EQUAL(ParseMoney("1   ").value(), COIN);
-    BOOST_CHECK_EQUAL(ParseMoney("  1 ").value(), COIN);
-    BOOST_CHECK_EQUAL(ParseMoney("0.1").value(), COIN/10);
-    BOOST_CHECK_EQUAL(ParseMoney("0.01").value(), COIN/100);
-    BOOST_CHECK_EQUAL(ParseMoney("0.001").value(), COIN/1000);
-    BOOST_CHECK_EQUAL(ParseMoney("0.0001").value(), COIN/10000);
-    BOOST_CHECK_EQUAL(ParseMoney("0.00001").value(), COIN/100000);
-    BOOST_CHECK_EQUAL(ParseMoney("0.000001").value(), COIN/1000000);
-    BOOST_CHECK_EQUAL(ParseMoney("0.0000001").value(), COIN/10000000);
-    BOOST_CHECK_EQUAL(ParseMoney("0.00000001").value(), COIN/100000000);
-    BOOST_CHECK_EQUAL(ParseMoney(" 0.00000001 ").value(), COIN/100000000);
-    BOOST_CHECK_EQUAL(ParseMoney("0.00000001 ").value(), COIN/100000000);
-    BOOST_CHECK_EQUAL(ParseMoney(" 0.00000001").value(), COIN/100000000);
+    CHECK_EQUAL(ParseMoney("10000000.00").value(), COIN*10000000);
+    CHECK_EQUAL(ParseMoney("1000000.00").value(), COIN*1000000);
+    CHECK_EQUAL(ParseMoney("100000.00").value(), COIN*100000);
+    CHECK_EQUAL(ParseMoney("10000.00").value(), COIN*10000);
+    CHECK_EQUAL(ParseMoney("1000.00").value(), COIN*1000);
+    CHECK_EQUAL(ParseMoney("100.00").value(), COIN*100);
+    CHECK_EQUAL(ParseMoney("10.00").value(), COIN*10);
+    CHECK_EQUAL(ParseMoney("1.00").value(), COIN);
+    CHECK_EQUAL(ParseMoney("1").value(), COIN);
+    CHECK_EQUAL(ParseMoney("   1").value(), COIN);
+    CHECK_EQUAL(ParseMoney("1   ").value(), COIN);
+    CHECK_EQUAL(ParseMoney("  1 ").value(), COIN);
+    CHECK_EQUAL(ParseMoney("0.1").value(), COIN/10);
+    CHECK_EQUAL(ParseMoney("0.01").value(), COIN/100);
+    CHECK_EQUAL(ParseMoney("0.001").value(), COIN/1000);
+    CHECK_EQUAL(ParseMoney("0.0001").value(), COIN/10000);
+    CHECK_EQUAL(ParseMoney("0.00001").value(), COIN/100000);
+    CHECK_EQUAL(ParseMoney("0.000001").value(), COIN/1000000);
+    CHECK_EQUAL(ParseMoney("0.0000001").value(), COIN/10000000);
+    CHECK_EQUAL(ParseMoney("0.00000001").value(), COIN/100000000);
+    CHECK_EQUAL(ParseMoney(" 0.00000001 ").value(), COIN/100000000);
+    CHECK_EQUAL(ParseMoney("0.00000001 ").value(), COIN/100000000);
+    CHECK_EQUAL(ParseMoney(" 0.00000001").value(), COIN/100000000);
 
     // Parsing amount that cannot be represented should fail
     CHECK(!ParseMoney("100000000.00"));
@@ -590,39 +590,39 @@ BOOST_AUTO_TEST_CASE(util_mocktime)
     // Check that mock time does not change after a sleep
     for (const auto& num_sleep : {0ms, 1ms}) {
         UninterruptibleSleep(num_sleep);
-        BOOST_CHECK_EQUAL(111, GetTime()); // Deprecated time getter
-        BOOST_CHECK_EQUAL(111, Now<NodeSeconds>().time_since_epoch().count());
-        BOOST_CHECK_EQUAL(111, TicksSinceEpoch<std::chrono::seconds>(NodeClock::now()));
-        BOOST_CHECK_EQUAL(111, TicksSinceEpoch<SecondsDouble>(Now<NodeSeconds>()));
-        BOOST_CHECK_EQUAL(111, GetTime<std::chrono::seconds>().count());
-        BOOST_CHECK_EQUAL(111000, GetTime<std::chrono::milliseconds>().count());
-        BOOST_CHECK_EQUAL(111000, TicksSinceEpoch<std::chrono::milliseconds>(NodeClock::now()));
-        BOOST_CHECK_EQUAL(111000000, GetTime<std::chrono::microseconds>().count());
+        CHECK_EQUAL(111, GetTime()); // Deprecated time getter
+        CHECK_EQUAL(111, Now<NodeSeconds>().time_since_epoch().count());
+        CHECK_EQUAL(111, TicksSinceEpoch<std::chrono::seconds>(NodeClock::now()));
+        CHECK_EQUAL(111, TicksSinceEpoch<SecondsDouble>(Now<NodeSeconds>()));
+        CHECK_EQUAL(111, GetTime<std::chrono::seconds>().count());
+        CHECK_EQUAL(111000, GetTime<std::chrono::milliseconds>().count());
+        CHECK_EQUAL(111000, TicksSinceEpoch<std::chrono::milliseconds>(NodeClock::now()));
+        CHECK_EQUAL(111000000, GetTime<std::chrono::microseconds>().count());
     }
 }
 
 BOOST_AUTO_TEST_CASE(util_ticksseconds)
 {
-    BOOST_CHECK_EQUAL(TicksSeconds(0s), 0);
-    BOOST_CHECK_EQUAL(TicksSeconds(1s), 1);
-    BOOST_CHECK_EQUAL(TicksSeconds(999ms), 0);
-    BOOST_CHECK_EQUAL(TicksSeconds(1000ms), 1);
-    BOOST_CHECK_EQUAL(TicksSeconds(1500ms), 1);
+    CHECK_EQUAL(TicksSeconds(0s), 0);
+    CHECK_EQUAL(TicksSeconds(1s), 1);
+    CHECK_EQUAL(TicksSeconds(999ms), 0);
+    CHECK_EQUAL(TicksSeconds(1000ms), 1);
+    CHECK_EQUAL(TicksSeconds(1500ms), 1);
 }
 
 BOOST_AUTO_TEST_CASE(test_IsDigit)
 {
-    BOOST_CHECK_EQUAL(IsDigit('0'), true);
-    BOOST_CHECK_EQUAL(IsDigit('1'), true);
-    BOOST_CHECK_EQUAL(IsDigit('8'), true);
-    BOOST_CHECK_EQUAL(IsDigit('9'), true);
+    CHECK_EQUAL(IsDigit('0'), true);
+    CHECK_EQUAL(IsDigit('1'), true);
+    CHECK_EQUAL(IsDigit('8'), true);
+    CHECK_EQUAL(IsDigit('9'), true);
 
-    BOOST_CHECK_EQUAL(IsDigit('0' - 1), false);
-    BOOST_CHECK_EQUAL(IsDigit('9' + 1), false);
-    BOOST_CHECK_EQUAL(IsDigit(0), false);
-    BOOST_CHECK_EQUAL(IsDigit(1), false);
-    BOOST_CHECK_EQUAL(IsDigit(8), false);
-    BOOST_CHECK_EQUAL(IsDigit(9), false);
+    CHECK_EQUAL(IsDigit('0' - 1), false);
+    CHECK_EQUAL(IsDigit('9' + 1), false);
+    CHECK_EQUAL(IsDigit(0), false);
+    CHECK_EQUAL(IsDigit(1), false);
+    CHECK_EQUAL(IsDigit(8), false);
+    CHECK_EQUAL(IsDigit(9), false);
 }
 
 /* Check for overflow */
@@ -632,17 +632,17 @@ static void TestAddMatrixOverflow()
     constexpr T MAXI{std::numeric_limits<T>::max()};
     CHECK(!CheckedAdd(T{1}, MAXI));
     CHECK(!CheckedAdd(MAXI, MAXI));
-    BOOST_CHECK_EQUAL(MAXI, SaturatingAdd(T{1}, MAXI));
-    BOOST_CHECK_EQUAL(MAXI, SaturatingAdd(MAXI, MAXI));
+    CHECK_EQUAL(MAXI, SaturatingAdd(T{1}, MAXI));
+    CHECK_EQUAL(MAXI, SaturatingAdd(MAXI, MAXI));
 
-    BOOST_CHECK_EQUAL(0, CheckedAdd(T{0}, T{0}).value());
-    BOOST_CHECK_EQUAL(MAXI, CheckedAdd(T{0}, MAXI).value());
-    BOOST_CHECK_EQUAL(MAXI, CheckedAdd(T{1}, MAXI - 1).value());
-    BOOST_CHECK_EQUAL(MAXI - 1, CheckedAdd(T{1}, MAXI - 2).value());
-    BOOST_CHECK_EQUAL(0, SaturatingAdd(T{0}, T{0}));
-    BOOST_CHECK_EQUAL(MAXI, SaturatingAdd(T{0}, MAXI));
-    BOOST_CHECK_EQUAL(MAXI, SaturatingAdd(T{1}, MAXI - 1));
-    BOOST_CHECK_EQUAL(MAXI - 1, SaturatingAdd(T{1}, MAXI - 2));
+    CHECK_EQUAL(std::remove_cvref_t<decltype(CheckedAdd(T{0}, T{0}).value())>{0}, CheckedAdd(T{0}, T{0}).value());
+    CHECK_EQUAL(MAXI, CheckedAdd(T{0}, MAXI).value());
+    CHECK_EQUAL(MAXI, CheckedAdd(T{1}, MAXI - 1).value());
+    CHECK_EQUAL(MAXI - 1, CheckedAdd(T{1}, MAXI - 2).value());
+    CHECK_EQUAL(std::remove_cvref_t<decltype(SaturatingAdd(T{0}, T{0}))>{0}, SaturatingAdd(T{0}, T{0}));
+    CHECK_EQUAL(MAXI, SaturatingAdd(T{0}, MAXI));
+    CHECK_EQUAL(MAXI, SaturatingAdd(T{1}, MAXI - 1));
+    CHECK_EQUAL(MAXI - 1, SaturatingAdd(T{1}, MAXI - 2));
 }
 
 /* Check for overflow or underflow */
@@ -654,17 +654,17 @@ static void TestAddMatrix()
     constexpr T MAXI{std::numeric_limits<T>::max()};
     CHECK(!CheckedAdd(T{-1}, MINI));
     CHECK(!CheckedAdd(MINI, MINI));
-    BOOST_CHECK_EQUAL(MINI, SaturatingAdd(T{-1}, MINI));
-    BOOST_CHECK_EQUAL(MINI, SaturatingAdd(MINI, MINI));
+    CHECK_EQUAL(MINI, SaturatingAdd(T{-1}, MINI));
+    CHECK_EQUAL(MINI, SaturatingAdd(MINI, MINI));
 
-    BOOST_CHECK_EQUAL(MINI, CheckedAdd(T{0}, MINI).value());
-    BOOST_CHECK_EQUAL(MINI, CheckedAdd(T{-1}, MINI + 1).value());
-    BOOST_CHECK_EQUAL(-1, CheckedAdd(MINI, MAXI).value());
-    BOOST_CHECK_EQUAL(MINI + 1, CheckedAdd(T{-1}, MINI + 2).value());
-    BOOST_CHECK_EQUAL(MINI, SaturatingAdd(T{0}, MINI));
-    BOOST_CHECK_EQUAL(MINI, SaturatingAdd(T{-1}, MINI + 1));
-    BOOST_CHECK_EQUAL(MINI + 1, SaturatingAdd(T{-1}, MINI + 2));
-    BOOST_CHECK_EQUAL(-1, SaturatingAdd(MINI, MAXI));
+    CHECK_EQUAL(MINI, CheckedAdd(T{0}, MINI).value());
+    CHECK_EQUAL(MINI, CheckedAdd(T{-1}, MINI + 1).value());
+    CHECK_EQUAL(-1, CheckedAdd(MINI, MAXI).value());
+    CHECK_EQUAL(MINI + 1, CheckedAdd(T{-1}, MINI + 2).value());
+    CHECK_EQUAL(MINI, SaturatingAdd(T{0}, MINI));
+    CHECK_EQUAL(MINI, SaturatingAdd(T{-1}, MINI + 1));
+    CHECK_EQUAL(MINI + 1, SaturatingAdd(T{-1}, MINI + 2));
+    CHECK_EQUAL(-1, SaturatingAdd(MINI, MAXI));
 }
 
 BOOST_AUTO_TEST_CASE(util_overflow)
@@ -704,15 +704,15 @@ static void RunToIntegralTests()
 
 BOOST_AUTO_TEST_CASE(test_ToIntegral)
 {
-    BOOST_CHECK_EQUAL(ToIntegral<int32_t>("1234").value(), 1'234);
-    BOOST_CHECK_EQUAL(ToIntegral<int32_t>("0").value(), 0);
-    BOOST_CHECK_EQUAL(ToIntegral<int32_t>("01234").value(), 1'234);
-    BOOST_CHECK_EQUAL(ToIntegral<int32_t>("00000000000000001234").value(), 1'234);
-    BOOST_CHECK_EQUAL(ToIntegral<int32_t>("-00000000000000001234").value(), -1'234);
-    BOOST_CHECK_EQUAL(ToIntegral<int32_t>("00000000000000000000").value(), 0);
-    BOOST_CHECK_EQUAL(ToIntegral<int32_t>("-00000000000000000000").value(), 0);
-    BOOST_CHECK_EQUAL(ToIntegral<int32_t>("-1234").value(), -1'234);
-    BOOST_CHECK_EQUAL(ToIntegral<int32_t>("-1").value(), -1);
+    CHECK_EQUAL(ToIntegral<int32_t>("1234").value(), 1'234);
+    CHECK_EQUAL(ToIntegral<int32_t>("0").value(), std::remove_cvref_t<decltype(ToIntegral<int32_t>("0").value())>{0});
+    CHECK_EQUAL(ToIntegral<int32_t>("01234").value(), 1'234);
+    CHECK_EQUAL(ToIntegral<int32_t>("00000000000000001234").value(), 1'234);
+    CHECK_EQUAL(ToIntegral<int32_t>("-00000000000000001234").value(), -1'234);
+    CHECK_EQUAL(ToIntegral<int32_t>("00000000000000000000").value(), 0);
+    CHECK_EQUAL(ToIntegral<int32_t>("-00000000000000000000").value(), 0);
+    CHECK_EQUAL(ToIntegral<int32_t>("-1234").value(), -1'234);
+    CHECK_EQUAL(ToIntegral<int32_t>("-1").value(), -1);
 
     RunToIntegralTests<uint64_t>();
     RunToIntegralTests<int64_t>();
@@ -724,43 +724,43 @@ BOOST_AUTO_TEST_CASE(test_ToIntegral)
     RunToIntegralTests<int8_t>();
 
     CHECK(!ToIntegral<int64_t>("-9223372036854775809"));
-    BOOST_CHECK_EQUAL(ToIntegral<int64_t>("-9223372036854775808").value(), -9'223'372'036'854'775'807LL - 1LL);
-    BOOST_CHECK_EQUAL(ToIntegral<int64_t>("9223372036854775807").value(), 9'223'372'036'854'775'807);
+    CHECK_EQUAL(ToIntegral<int64_t>("-9223372036854775808").value(), -9'223'372'036'854'775'807LL - 1LL);
+    CHECK_EQUAL(ToIntegral<int64_t>("9223372036854775807").value(), 9'223'372'036'854'775'807);
     CHECK(!ToIntegral<int64_t>("9223372036854775808"));
 
     CHECK(!ToIntegral<uint64_t>("-1"));
-    BOOST_CHECK_EQUAL(ToIntegral<uint64_t>("0").value(), 0U);
-    BOOST_CHECK_EQUAL(ToIntegral<uint64_t>("18446744073709551615").value(), 18'446'744'073'709'551'615ULL);
+    CHECK_EQUAL(ToIntegral<uint64_t>("0").value(), 0U);
+    CHECK_EQUAL(ToIntegral<uint64_t>("18446744073709551615").value(), 18'446'744'073'709'551'615ULL);
     CHECK(!ToIntegral<uint64_t>("18446744073709551616"));
 
     CHECK(!ToIntegral<int32_t>("-2147483649"));
-    BOOST_CHECK_EQUAL(ToIntegral<int32_t>("-2147483648").value(), -2'147'483'648LL);
-    BOOST_CHECK_EQUAL(ToIntegral<int32_t>("2147483647").value(), 2'147'483'647);
+    CHECK_EQUAL(ToIntegral<int32_t>("-2147483648").value(), -2'147'483'648LL);
+    CHECK_EQUAL(ToIntegral<int32_t>("2147483647").value(), 2'147'483'647);
     CHECK(!ToIntegral<int32_t>("2147483648"));
 
     CHECK(!ToIntegral<uint32_t>("-1"));
-    BOOST_CHECK_EQUAL(ToIntegral<uint32_t>("0").value(), 0U);
-    BOOST_CHECK_EQUAL(ToIntegral<uint32_t>("4294967295").value(), 4'294'967'295U);
+    CHECK_EQUAL(ToIntegral<uint32_t>("0").value(), 0U);
+    CHECK_EQUAL(ToIntegral<uint32_t>("4294967295").value(), 4'294'967'295U);
     CHECK(!ToIntegral<uint32_t>("4294967296"));
 
     CHECK(!ToIntegral<int16_t>("-32769"));
-    BOOST_CHECK_EQUAL(ToIntegral<int16_t>("-32768").value(), -32'768);
-    BOOST_CHECK_EQUAL(ToIntegral<int16_t>("32767").value(), 32'767);
+    CHECK_EQUAL(ToIntegral<int16_t>("-32768").value(), -32'768);
+    CHECK_EQUAL(ToIntegral<int16_t>("32767").value(), 32'767);
     CHECK(!ToIntegral<int16_t>("32768"));
 
     CHECK(!ToIntegral<uint16_t>("-1"));
-    BOOST_CHECK_EQUAL(ToIntegral<uint16_t>("0").value(), 0U);
-    BOOST_CHECK_EQUAL(ToIntegral<uint16_t>("65535").value(), 65'535U);
+    CHECK_EQUAL(ToIntegral<uint16_t>("0").value(), 0U);
+    CHECK_EQUAL(ToIntegral<uint16_t>("65535").value(), 65'535U);
     CHECK(!ToIntegral<uint16_t>("65536"));
 
     CHECK(!ToIntegral<int8_t>("-129"));
-    BOOST_CHECK_EQUAL(ToIntegral<int8_t>("-128").value(), -128);
-    BOOST_CHECK_EQUAL(ToIntegral<int8_t>("127").value(), 127);
+    CHECK_EQUAL(ToIntegral<int8_t>("-128").value(), -128);
+    CHECK_EQUAL(ToIntegral<int8_t>("127").value(), std::remove_cvref_t<decltype(ToIntegral<int8_t>("127").value())>{127});
     CHECK(!ToIntegral<int8_t>("128"));
 
     CHECK(!ToIntegral<uint8_t>("-1"));
-    BOOST_CHECK_EQUAL(ToIntegral<uint8_t>("0").value(), 0U);
-    BOOST_CHECK_EQUAL(ToIntegral<uint8_t>("255").value(), 255U);
+    CHECK_EQUAL(ToIntegral<uint8_t>("0").value(), 0U);
+    CHECK_EQUAL(ToIntegral<uint8_t>("255").value(), 255U);
     CHECK(!ToIntegral<uint8_t>("256"));
 }
 
@@ -771,38 +771,38 @@ int64_t atoi64_legacy(const std::string& str)
 
 BOOST_AUTO_TEST_CASE(test_LocaleIndependentAtoi)
 {
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("1234"), 1'234);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("0"), 0);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("01234"), 1'234);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-1234"), -1'234);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>(" 1"), 1);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("1 "), 1);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("1a"), 1);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("1.1"), 1);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("1.9"), 1);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("+01.9"), 1);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-1"), -1);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>(" -1"), -1);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-1 "), -1);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>(" -1 "), -1);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("+1"), 1);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>(" +1"), 1);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>(" +1 "), 1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("1234"), 1'234);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("0"), 0);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("01234"), 1'234);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-1234"), -1'234);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>(" 1"), 1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("1 "), 1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("1a"), 1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("1.1"), 1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("1.9"), 1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("+01.9"), 1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-1"), -1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>(" -1"), -1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-1 "), -1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>(" -1 "), -1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("+1"), 1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>(" +1"), 1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>(" +1 "), 1);
 
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("+-1"), 0);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-+1"), 0);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("++1"), 0);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("--1"), 0);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>(""), 0);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("aap"), 0);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("0x1"), 0);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-32482348723847471234"), -2'147'483'647 - 1);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("32482348723847471234"), 2'147'483'647);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("+-1"), 0);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-+1"), 0);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("++1"), 0);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("--1"), 0);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>(""), 0);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("aap"), 0);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("0x1"), 0);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-32482348723847471234"), -2'147'483'647 - 1);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("32482348723847471234"), 2'147'483'647);
 
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("-9223372036854775809"), -9'223'372'036'854'775'807LL - 1LL);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("-9223372036854775808"), -9'223'372'036'854'775'807LL - 1LL);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("9223372036854775807"), 9'223'372'036'854'775'807);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("9223372036854775808"), 9'223'372'036'854'775'807);
+    CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("-9223372036854775809"), -9'223'372'036'854'775'807LL - 1LL);
+    CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("-9223372036854775808"), -9'223'372'036'854'775'807LL - 1LL);
+    CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("9223372036854775807"), 9'223'372'036'854'775'807);
+    CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("9223372036854775808"), 9'223'372'036'854'775'807);
 
     std::map<std::string, int64_t> atoi64_test_pairs = {
         {"-9223372036854775809", std::numeric_limits<int64_t>::min()},
@@ -816,48 +816,48 @@ BOOST_AUTO_TEST_CASE(test_LocaleIndependentAtoi)
     };
 
     for (const auto& pair : atoi64_test_pairs) {
-        BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>(pair.first), pair.second);
+        CHECK_EQUAL(LocaleIndependentAtoi<int64_t>(pair.first), pair.second);
     }
 
     // Ensure legacy compatibility with previous versions of Bitcoin Core's atoi64
     for (const auto& pair : atoi64_test_pairs) {
-        BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>(pair.first), atoi64_legacy(pair.first));
+        CHECK_EQUAL(LocaleIndependentAtoi<int64_t>(pair.first), atoi64_legacy(pair.first));
     }
 
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint64_t>("-1"), 0U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint64_t>("0"), 0U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint64_t>("18446744073709551615"), 18'446'744'073'709'551'615ULL);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint64_t>("18446744073709551616"), 18'446'744'073'709'551'615ULL);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint64_t>("-1"), 0U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint64_t>("0"), 0U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint64_t>("18446744073709551615"), 18'446'744'073'709'551'615ULL);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint64_t>("18446744073709551616"), 18'446'744'073'709'551'615ULL);
 
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-2147483649"), -2'147'483'648LL);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-2147483648"), -2'147'483'648LL);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("2147483647"), 2'147'483'647);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("2147483648"), 2'147'483'647);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-2147483649"), -2'147'483'648LL);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-2147483648"), -2'147'483'648LL);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("2147483647"), 2'147'483'647);
+    CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("2147483648"), 2'147'483'647);
 
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint32_t>("-1"), 0U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint32_t>("0"), 0U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint32_t>("4294967295"), 4'294'967'295U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint32_t>("4294967296"), 4'294'967'295U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint32_t>("-1"), 0U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint32_t>("0"), 0U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint32_t>("4294967295"), 4'294'967'295U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint32_t>("4294967296"), 4'294'967'295U);
 
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("-32769"), -32'768);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("-32768"), -32'768);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("32767"), 32'767);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("32768"), 32'767);
+    CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("-32769"), -32'768);
+    CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("-32768"), -32'768);
+    CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("32767"), 32'767);
+    CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("32768"), 32'767);
 
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint16_t>("-1"), 0U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint16_t>("0"), 0U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint16_t>("65535"), 65'535U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint16_t>("65536"), 65'535U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint16_t>("-1"), 0U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint16_t>("0"), 0U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint16_t>("65535"), 65'535U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint16_t>("65536"), 65'535U);
 
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("-129"), -128);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("-128"), -128);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("127"), 127);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("128"), 127);
+    CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("-129"), -128);
+    CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("-128"), -128);
+    CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("127"), 127);
+    CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("128"), 127);
 
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("-1"), 0U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("0"), 0U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("255"), 255U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("256"), 255U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("-1"), 0U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("0"), 0U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("255"), 255U);
+    CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("256"), 255U);
 }
 
 BOOST_AUTO_TEST_CASE(test_ToIntegralHex)
@@ -865,25 +865,25 @@ BOOST_AUTO_TEST_CASE(test_ToIntegralHex)
     std::optional<uint64_t> n;
     // Valid values
     n = ToIntegral<uint64_t>("1234", 16);
-    BOOST_CHECK_EQUAL(*n, 0x1234);
+    CHECK_EQUAL(*n, std::remove_cvref_t<decltype(*n)>{0x1234});
     n = ToIntegral<uint64_t>("a", 16);
-    BOOST_CHECK_EQUAL(*n, 0xA);
+    CHECK_EQUAL(*n, std::remove_cvref_t<decltype(*n)>{0xA});
     n = ToIntegral<uint64_t>("0000000a", 16);
-    BOOST_CHECK_EQUAL(*n, 0xA);
+    CHECK_EQUAL(*n, std::remove_cvref_t<decltype(*n)>{0xA});
     n = ToIntegral<uint64_t>("100", 16);
-    BOOST_CHECK_EQUAL(*n, 0x100);
+    CHECK_EQUAL(*n, std::remove_cvref_t<decltype(*n)>{0x100});
     n = ToIntegral<uint64_t>("DEADbeef", 16);
-    BOOST_CHECK_EQUAL(*n, 0xDEADbeef);
+    CHECK_EQUAL(*n, 0xDEADbeef);
     n = ToIntegral<uint64_t>("FfFfFfFf", 16);
-    BOOST_CHECK_EQUAL(*n, 0xFfFfFfFf);
+    CHECK_EQUAL(*n, 0xFfFfFfFf);
     n = ToIntegral<uint64_t>("123456789", 16);
-    BOOST_CHECK_EQUAL(*n, 0x123456789ULL);
+    CHECK_EQUAL(*n, 0x123456789ULL);
     n = ToIntegral<uint64_t>("0", 16);
-    BOOST_CHECK_EQUAL(*n, 0);
+    CHECK_EQUAL(*n, std::remove_cvref_t<decltype(*n)>{0});
     n = ToIntegral<uint64_t>("FfFfFfFfFfFfFfFf", 16);
-    BOOST_CHECK_EQUAL(*n, 0xFfFfFfFfFfFfFfFfULL);
+    CHECK_EQUAL(*n, 0xFfFfFfFfFfFfFfFfULL);
     n = ToIntegral<int64_t>("-1", 16);
-    BOOST_CHECK_EQUAL(*n, -1);
+    CHECK_EQUAL(*n, std::numeric_limits<uint64_t>::max());
     // Invalid values
     CHECK(!ToIntegral<uint64_t>("", 16));
     CHECK(!ToIntegral<uint64_t>("-1", 16));
@@ -895,29 +895,29 @@ BOOST_AUTO_TEST_CASE(test_ToIntegralHex)
 
 BOOST_AUTO_TEST_CASE(test_FormatParagraph)
 {
-    BOOST_CHECK_EQUAL(FormatParagraph("", 79, 0), "");
-    BOOST_CHECK_EQUAL(FormatParagraph("test", 79, 0), "test");
-    BOOST_CHECK_EQUAL(FormatParagraph(" test", 79, 0), " test");
-    BOOST_CHECK_EQUAL(FormatParagraph("test test", 79, 0), "test test");
-    BOOST_CHECK_EQUAL(FormatParagraph("test test", 4, 0), "test\ntest");
-    BOOST_CHECK_EQUAL(FormatParagraph("testerde test", 4, 0), "testerde\ntest");
-    BOOST_CHECK_EQUAL(FormatParagraph("test test", 4, 4), "test\n    test");
+    CHECK_EQUAL(FormatParagraph("", 79, 0), "");
+    CHECK_EQUAL(FormatParagraph("test", 79, 0), "test");
+    CHECK_EQUAL(FormatParagraph(" test", 79, 0), " test");
+    CHECK_EQUAL(FormatParagraph("test test", 79, 0), "test test");
+    CHECK_EQUAL(FormatParagraph("test test", 4, 0), "test\ntest");
+    CHECK_EQUAL(FormatParagraph("testerde test", 4, 0), "testerde\ntest");
+    CHECK_EQUAL(FormatParagraph("test test", 4, 4), "test\n    test");
 
     // Make sure we don't indent a fully-new line following a too-long line ending
-    BOOST_CHECK_EQUAL(FormatParagraph("test test\nabc", 4, 4), "test\n    test\nabc");
+    CHECK_EQUAL(FormatParagraph("test test\nabc", 4, 4), "test\n    test\nabc");
 
-    BOOST_CHECK_EQUAL(FormatParagraph("This_is_a_very_long_test_string_without_any_spaces_so_it_should_just_get_returned_as_is_despite_the_length until it gets here", 79), "This_is_a_very_long_test_string_without_any_spaces_so_it_should_just_get_returned_as_is_despite_the_length\nuntil it gets here");
+    CHECK_EQUAL(FormatParagraph("This_is_a_very_long_test_string_without_any_spaces_so_it_should_just_get_returned_as_is_despite_the_length until it gets here", 79), "This_is_a_very_long_test_string_without_any_spaces_so_it_should_just_get_returned_as_is_despite_the_length\nuntil it gets here");
 
     // Test wrap length is exact
-    BOOST_CHECK_EQUAL(FormatParagraph("a b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 a b c de f g h i j k l m n o p", 79), "a b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 a b c de\nf g h i j k l m n o p");
-    BOOST_CHECK_EQUAL(FormatParagraph("x\na b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 a b c de f g h i j k l m n o p", 79), "x\na b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 a b c de\nf g h i j k l m n o p");
+    CHECK_EQUAL(FormatParagraph("a b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 a b c de f g h i j k l m n o p", 79), "a b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 a b c de\nf g h i j k l m n o p");
+    CHECK_EQUAL(FormatParagraph("x\na b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 a b c de f g h i j k l m n o p", 79), "x\na b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 a b c de\nf g h i j k l m n o p");
     // Indent should be included in length of lines
-    BOOST_CHECK_EQUAL(FormatParagraph("x\na b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 a b c de f g h i j k l m n o p q r s t u v w x y z 0 1 2 3 4 5 6 7 8 9 a b c d e fg h i j k", 79, 4), "x\na b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 a b c de\n    f g h i j k l m n o p q r s t u v w x y z 0 1 2 3 4 5 6 7 8 9 a b c d e fg\n    h i j k");
+    CHECK_EQUAL(FormatParagraph("x\na b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 a b c de f g h i j k l m n o p q r s t u v w x y z 0 1 2 3 4 5 6 7 8 9 a b c d e fg h i j k", 79, 4), "x\na b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 a b c de\n    f g h i j k l m n o p q r s t u v w x y z 0 1 2 3 4 5 6 7 8 9 a b c d e fg\n    h i j k");
 
-    BOOST_CHECK_EQUAL(FormatParagraph("This is a very long test string. This is a second sentence in the very long test string.", 79), "This is a very long test string. This is a second sentence in the very long\ntest string.");
-    BOOST_CHECK_EQUAL(FormatParagraph("This is a very long test string.\nThis is a second sentence in the very long test string. This is a third sentence in the very long test string.", 79), "This is a very long test string.\nThis is a second sentence in the very long test string. This is a third\nsentence in the very long test string.");
-    BOOST_CHECK_EQUAL(FormatParagraph("This is a very long test string.\n\nThis is a second sentence in the very long test string. This is a third sentence in the very long test string.", 79), "This is a very long test string.\n\nThis is a second sentence in the very long test string. This is a third\nsentence in the very long test string.");
-    BOOST_CHECK_EQUAL(FormatParagraph("Testing that normal newlines do not get indented.\nLike here.", 79), "Testing that normal newlines do not get indented.\nLike here.");
+    CHECK_EQUAL(FormatParagraph("This is a very long test string. This is a second sentence in the very long test string.", 79), "This is a very long test string. This is a second sentence in the very long\ntest string.");
+    CHECK_EQUAL(FormatParagraph("This is a very long test string.\nThis is a second sentence in the very long test string. This is a third sentence in the very long test string.", 79), "This is a very long test string.\nThis is a second sentence in the very long test string. This is a third\nsentence in the very long test string.");
+    CHECK_EQUAL(FormatParagraph("This is a very long test string.\n\nThis is a second sentence in the very long test string. This is a third sentence in the very long test string.", 79), "This is a very long test string.\n\nThis is a second sentence in the very long test string. This is a third\nsentence in the very long test string.");
+    CHECK_EQUAL(FormatParagraph("Testing that normal newlines do not get indented.\nLike here.", 79), "Testing that normal newlines do not get indented.\nLike here.");
 }
 
 BOOST_AUTO_TEST_CASE(test_FormatSubVersion)
@@ -927,46 +927,46 @@ BOOST_AUTO_TEST_CASE(test_FormatSubVersion)
     std::vector<std::string> comments2;
     comments2.emplace_back("comment1");
     comments2.push_back(SanitizeString(std::string("Comment2; .,_?@-; !\"#$%&'()*+/<=>[]\\^`{|}~"), SAFE_CHARS_UA_COMMENT)); // Semicolon is discouraged but not forbidden by BIP-0014
-    BOOST_CHECK_EQUAL(FormatSubVersion("Test", 99900, std::vector<std::string>()),std::string("/Test:9.99.0/"));
-    BOOST_CHECK_EQUAL(FormatSubVersion("Test", 99900, comments),std::string("/Test:9.99.0(comment1)/"));
-    BOOST_CHECK_EQUAL(FormatSubVersion("Test", 99900, comments2),std::string("/Test:9.99.0(comment1; Comment2; .,_?@-; )/"));
+    CHECK_EQUAL(FormatSubVersion("Test", 99900, std::vector<std::string>()),std::string("/Test:9.99.0/"));
+    CHECK_EQUAL(FormatSubVersion("Test", 99900, comments),std::string("/Test:9.99.0(comment1)/"));
+    CHECK_EQUAL(FormatSubVersion("Test", 99900, comments2),std::string("/Test:9.99.0(comment1; Comment2; .,_?@-; )/"));
 }
 
 BOOST_AUTO_TEST_CASE(test_ParseFixedPoint)
 {
     int64_t amount = 0;
     CHECK(ParseFixedPoint("0", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, 0LL);
+    CHECK_EQUAL(amount, 0LL);
     CHECK(ParseFixedPoint("1", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, 100000000LL);
+    CHECK_EQUAL(amount, 100000000LL);
     CHECK(ParseFixedPoint("0.0", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, 0LL);
+    CHECK_EQUAL(amount, 0LL);
     CHECK(ParseFixedPoint("-0.1", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, -10000000LL);
+    CHECK_EQUAL(amount, -10000000LL);
     CHECK(ParseFixedPoint("1.1", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, 110000000LL);
+    CHECK_EQUAL(amount, 110000000LL);
     CHECK(ParseFixedPoint("1.10000000000000000", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, 110000000LL);
+    CHECK_EQUAL(amount, 110000000LL);
     CHECK(ParseFixedPoint("1.1e1", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, 1100000000LL);
+    CHECK_EQUAL(amount, 1100000000LL);
     CHECK(ParseFixedPoint("1.1e-1", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, 11000000LL);
+    CHECK_EQUAL(amount, 11000000LL);
     CHECK(ParseFixedPoint("1000", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, 100000000000LL);
+    CHECK_EQUAL(amount, 100000000000LL);
     CHECK(ParseFixedPoint("-1000", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, -100000000000LL);
+    CHECK_EQUAL(amount, -100000000000LL);
     CHECK(ParseFixedPoint("0.00000001", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, 1LL);
+    CHECK_EQUAL(amount, 1LL);
     CHECK(ParseFixedPoint("0.0000000100000000", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, 1LL);
+    CHECK_EQUAL(amount, 1LL);
     CHECK(ParseFixedPoint("-0.00000001", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, -1LL);
+    CHECK_EQUAL(amount, -1LL);
     CHECK(ParseFixedPoint("1000000000.00000001", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, 100000000000000001LL);
+    CHECK_EQUAL(amount, 100000000000000001LL);
     CHECK(ParseFixedPoint("9999999999.99999999", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, 999999999999999999LL);
+    CHECK_EQUAL(amount, 999999999999999999LL);
     CHECK(ParseFixedPoint("-9999999999.99999999", 8, &amount));
-    BOOST_CHECK_EQUAL(amount, -999999999999999999LL);
+    CHECK_EQUAL(amount, -999999999999999999LL);
 
     CHECK(!ParseFixedPoint("", 8, &amount));
     CHECK(!ParseFixedPoint("-", 8, &amount));
@@ -998,7 +998,7 @@ BOOST_AUTO_TEST_CASE(test_ParseFixedPoint)
 
     // Test with 3 decimal places for fee rates in sat/vB.
     CHECK(ParseFixedPoint("0.001", 3, &amount));
-    BOOST_CHECK_EQUAL(amount, CAmount{1});
+    CHECK_EQUAL(amount, CAmount{1});
     CHECK(!ParseFixedPoint("0.0009", 3, &amount));
     CHECK(!ParseFixedPoint("31.00100001", 3, &amount));
     CHECK(!ParseFixedPoint("31.0011", 3, &amount));
@@ -1061,80 +1061,80 @@ BOOST_AUTO_TEST_CASE(test_LockDirectory)
     // won't fork while holding the lock (which might be undefined, and is not
     // relevant as test case as that is avoided with -daemonize).
     int fd[2];
-    BOOST_CHECK_EQUAL(socketpair(AF_UNIX, SOCK_STREAM, 0, fd), 0);
+    CHECK_EQUAL(socketpair(AF_UNIX, SOCK_STREAM, 0, fd), 0);
     pid_t pid = fork();
     if (!pid) {
-        BOOST_CHECK_EQUAL(close(fd[1]), 0); // Child: close parent end
+        CHECK_EQUAL(close(fd[1]), 0); // Child: close parent end
         TestOtherProcess(dirname, lockname, fd[0]);
     }
-    BOOST_CHECK_EQUAL(close(fd[0]), 0); // Parent: close child end
+    CHECK_EQUAL(close(fd[0]), 0); // Parent: close child end
 
     char ch;
     // Lock on non-existent directory should fail
-    BOOST_CHECK_EQUAL(write(fd[1], &LockCommand, 1), 1);
-    BOOST_CHECK_EQUAL(read(fd[1], &ch, 1), 1);
-    BOOST_CHECK_EQUAL(ch, ResErrorWrite);
+    CHECK_EQUAL(write(fd[1], &LockCommand, 1), 1);
+    CHECK_EQUAL(read(fd[1], &ch, 1), 1);
+    CHECK_EQUAL(ch, ResErrorWrite);
 #endif
     // Lock on non-existent directory should fail
-    BOOST_CHECK_EQUAL(util::LockDirectory(dirname, lockname), util::LockResult::ErrorWrite);
+    CHECK_EQUAL(util::LockDirectory(dirname, lockname), util::LockResult::ErrorWrite);
 
     fs::create_directories(dirname);
 
     // Probing lock on new directory should succeed
-    BOOST_CHECK_EQUAL(util::LockDirectory(dirname, lockname, true), util::LockResult::Success);
+    CHECK_EQUAL(util::LockDirectory(dirname, lockname, true), util::LockResult::Success);
 
     // Persistent lock on new directory should succeed
-    BOOST_CHECK_EQUAL(util::LockDirectory(dirname, lockname), util::LockResult::Success);
+    CHECK_EQUAL(util::LockDirectory(dirname, lockname), util::LockResult::Success);
 
     // Another lock on the directory from the same thread should succeed
-    BOOST_CHECK_EQUAL(util::LockDirectory(dirname, lockname), util::LockResult::Success);
+    CHECK_EQUAL(util::LockDirectory(dirname, lockname), util::LockResult::Success);
 
     // Another lock on the directory from a different thread within the same process should succeed
     util::LockResult threadresult;
     std::thread thr([&] { threadresult = util::LockDirectory(dirname, lockname); });
     thr.join();
-    BOOST_CHECK_EQUAL(threadresult, util::LockResult::Success);
+    CHECK_EQUAL(threadresult, util::LockResult::Success);
 #ifndef WIN32
     // Try to acquire lock in child process while we're holding it, this should fail.
-    BOOST_CHECK_EQUAL(write(fd[1], &LockCommand, 1), 1);
-    BOOST_CHECK_EQUAL(read(fd[1], &ch, 1), 1);
-    BOOST_CHECK_EQUAL(ch, ResErrorLock);
+    CHECK_EQUAL(write(fd[1], &LockCommand, 1), 1);
+    CHECK_EQUAL(read(fd[1], &ch, 1), 1);
+    CHECK_EQUAL(ch, ResErrorLock);
 
     // Give up our lock
     ReleaseDirectoryLocks();
     // Probing lock from our side now should succeed, but not hold on to the lock.
-    BOOST_CHECK_EQUAL(util::LockDirectory(dirname, lockname, true), util::LockResult::Success);
+    CHECK_EQUAL(util::LockDirectory(dirname, lockname, true), util::LockResult::Success);
 
     // Try to acquire the lock in the child process, this should be successful.
-    BOOST_CHECK_EQUAL(write(fd[1], &LockCommand, 1), 1);
-    BOOST_CHECK_EQUAL(read(fd[1], &ch, 1), 1);
-    BOOST_CHECK_EQUAL(ch, ResSuccess);
+    CHECK_EQUAL(write(fd[1], &LockCommand, 1), 1);
+    CHECK_EQUAL(read(fd[1], &ch, 1), 1);
+    CHECK_EQUAL(ch, ResSuccess);
 
     // When we try to probe the lock now, it should fail.
-    BOOST_CHECK_EQUAL(util::LockDirectory(dirname, lockname, true), util::LockResult::ErrorLock);
+    CHECK_EQUAL(util::LockDirectory(dirname, lockname, true), util::LockResult::ErrorLock);
 
     // Unlock the lock in the child process
-    BOOST_CHECK_EQUAL(write(fd[1], &UnlockCommand, 1), 1);
-    BOOST_CHECK_EQUAL(read(fd[1], &ch, 1), 1);
-    BOOST_CHECK_EQUAL(ch, ResUnlockSuccess);
+    CHECK_EQUAL(write(fd[1], &UnlockCommand, 1), 1);
+    CHECK_EQUAL(read(fd[1], &ch, 1), 1);
+    CHECK_EQUAL(ch, ResUnlockSuccess);
 
     // When we try to probe the lock now, it should succeed.
-    BOOST_CHECK_EQUAL(util::LockDirectory(dirname, lockname, true), util::LockResult::Success);
+    CHECK_EQUAL(util::LockDirectory(dirname, lockname, true), util::LockResult::Success);
 
     // Re-lock the lock in the child process, then wait for it to exit, check
     // successful return. After that, we check that exiting the process
     // has released the lock as we would expect by probing it.
     int processstatus;
-    BOOST_CHECK_EQUAL(write(fd[1], &LockCommand, 1), 1);
+    CHECK_EQUAL(write(fd[1], &LockCommand, 1), 1);
     // The following line invokes the ~CNetCleanup dtor without
     // a paired SetupNetworking call. This is acceptable as long as
     // ~CNetCleanup is a no-op for non-Windows platforms.
-    BOOST_CHECK_EQUAL(write(fd[1], &ExitCommand, 1), 1);
-    BOOST_CHECK_EQUAL(waitpid(pid, &processstatus, 0), pid);
-    BOOST_CHECK_EQUAL(processstatus, 0);
-    BOOST_CHECK_EQUAL(util::LockDirectory(dirname, lockname, true), util::LockResult::Success);
+    CHECK_EQUAL(write(fd[1], &ExitCommand, 1), 1);
+    CHECK_EQUAL(waitpid(pid, &processstatus, 0), pid);
+    CHECK_EQUAL(processstatus, 0);
+    CHECK_EQUAL(util::LockDirectory(dirname, lockname, true), util::LockResult::Success);
 
-    BOOST_CHECK_EQUAL(close(fd[1]), 0); // Close our side of the socketpair
+    CHECK_EQUAL(close(fd[1]), 0); // Close our side of the socketpair
 #endif
     // Clean up
     ReleaseDirectoryLocks();
@@ -1144,37 +1144,37 @@ BOOST_AUTO_TEST_CASE(test_LockDirectory)
 
 BOOST_AUTO_TEST_CASE(test_ToLower)
 {
-    BOOST_CHECK_EQUAL(ToLower('@'), '@');
-    BOOST_CHECK_EQUAL(ToLower('A'), 'a');
-    BOOST_CHECK_EQUAL(ToLower('Z'), 'z');
-    BOOST_CHECK_EQUAL(ToLower('['), '[');
-    BOOST_CHECK_EQUAL(ToLower(0), 0);
-    BOOST_CHECK_EQUAL(ToLower('\xff'), '\xff');
+    CHECK_EQUAL(ToLower('@'), '@');
+    CHECK_EQUAL(ToLower('A'), 'a');
+    CHECK_EQUAL(ToLower('Z'), 'z');
+    CHECK_EQUAL(ToLower('['), '[');
+    CHECK_EQUAL(ToLower(0), 0);
+    CHECK_EQUAL(ToLower('\xff'), '\xff');
 
-    BOOST_CHECK_EQUAL(ToLower(""), "");
-    BOOST_CHECK_EQUAL(ToLower("#HODL"), "#hodl");
-    BOOST_CHECK_EQUAL(ToLower("\x00\xfe\xff"), "\x00\xfe\xff");
+    CHECK_EQUAL(ToLower(""), std::string_view{""});
+    CHECK_EQUAL(ToLower("#HODL"), std::string_view{"#hodl"});
+    CHECK_EQUAL(ToLower("\x00\xfe\xff"), std::string_view{"\x00\xfe\xff"});
 }
 
 BOOST_AUTO_TEST_CASE(test_ToUpper)
 {
-    BOOST_CHECK_EQUAL(ToUpper('`'), '`');
-    BOOST_CHECK_EQUAL(ToUpper('a'), 'A');
-    BOOST_CHECK_EQUAL(ToUpper('z'), 'Z');
-    BOOST_CHECK_EQUAL(ToUpper('{'), '{');
-    BOOST_CHECK_EQUAL(ToUpper(0), 0);
-    BOOST_CHECK_EQUAL(ToUpper('\xff'), '\xff');
+    CHECK_EQUAL(ToUpper('`'), '`');
+    CHECK_EQUAL(ToUpper('a'), 'A');
+    CHECK_EQUAL(ToUpper('z'), 'Z');
+    CHECK_EQUAL(ToUpper('{'), '{');
+    CHECK_EQUAL(ToUpper(0), 0);
+    CHECK_EQUAL(ToUpper('\xff'), '\xff');
 
-    BOOST_CHECK_EQUAL(ToUpper(""), "");
-    BOOST_CHECK_EQUAL(ToUpper("#hodl"), "#HODL");
-    BOOST_CHECK_EQUAL(ToUpper("\x00\xfe\xff"), "\x00\xfe\xff");
+    CHECK_EQUAL(ToUpper(""), std::string_view{""});
+    CHECK_EQUAL(ToUpper("#hodl"), std::string_view{"#HODL"});
+    CHECK_EQUAL(ToUpper("\x00\xfe\xff"), std::string_view{"\x00\xfe\xff"});
 }
 
 BOOST_AUTO_TEST_CASE(test_Capitalize)
 {
-    BOOST_CHECK_EQUAL(Capitalize(""), "");
-    BOOST_CHECK_EQUAL(Capitalize("bitcoin"), "Bitcoin");
-    BOOST_CHECK_EQUAL(Capitalize("\x00\xfe\xff"), "\x00\xfe\xff");
+    CHECK_EQUAL(Capitalize(""), std::string_view{""});
+    CHECK_EQUAL(Capitalize("bitcoin"), std::string_view{"Bitcoin"});
+    CHECK_EQUAL(Capitalize("\x00\xfe\xff"), std::string_view{"\x00\xfe\xff"});
 }
 
 static std::string SpanToStr(const std::span<const char>& span)
@@ -1194,15 +1194,15 @@ BOOST_AUTO_TEST_CASE(test_script_parsing)
     sp = input;
     success = Const("", sp); // empty
     CHECK(success);
-    BOOST_CHECK_EQUAL(SpanToStr(sp), "MilkToastHoney");
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{"MilkToastHoney"});
 
     success = Const("Milk", sp, /*skip=*/false);
     CHECK(success);
-    BOOST_CHECK_EQUAL(SpanToStr(sp), "MilkToastHoney");
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{"MilkToastHoney"});
 
     success = Const("Milk", sp);
     CHECK(success);
-    BOOST_CHECK_EQUAL(SpanToStr(sp), "ToastHoney");
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{"ToastHoney"});
 
     success = Const("Bread", sp, /*skip=*/false);
     CHECK(!success);
@@ -1212,22 +1212,22 @@ BOOST_AUTO_TEST_CASE(test_script_parsing)
 
     success = Const("Toast", sp, /*skip=*/false);
     CHECK(success);
-    BOOST_CHECK_EQUAL(SpanToStr(sp), "ToastHoney");
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{"ToastHoney"});
 
     success = Const("Toast", sp);
     CHECK(success);
-    BOOST_CHECK_EQUAL(SpanToStr(sp), "Honey");
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{"Honey"});
 
     success = Const("Honeybadger", sp);
     CHECK(!success);
 
     success = Const("Honey", sp, /*skip=*/false);
     CHECK(success);
-    BOOST_CHECK_EQUAL(SpanToStr(sp), "Honey");
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{"Honey"});
 
     success = Const("Honey", sp);
     CHECK(success);
-    BOOST_CHECK_EQUAL(SpanToStr(sp), "");
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{""});
     // Func(...): parse a function call, update span to argument if successful
     input = "Foo(Bar(xy,z()))";
     sp = input;
@@ -1240,11 +1240,11 @@ BOOST_AUTO_TEST_CASE(test_script_parsing)
 
     success = Func("Foo", sp);
     CHECK(success);
-    BOOST_CHECK_EQUAL(SpanToStr(sp), "Bar(xy,z())");
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{"Bar(xy,z())"});
 
     success = Func("Bar", sp);
     CHECK(success);
-    BOOST_CHECK_EQUAL(SpanToStr(sp), "xy,z()");
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{"xy,z()"});
 
     success = Func("xy", sp);
     CHECK(!success);
@@ -1255,76 +1255,76 @@ BOOST_AUTO_TEST_CASE(test_script_parsing)
     input = "(n*(n-1))/2";
     sp = input;
     result = Expr(sp);
-    BOOST_CHECK_EQUAL(SpanToStr(result), "(n*(n-1))/2");
-    BOOST_CHECK_EQUAL(SpanToStr(sp), "");
+    CHECK_EQUAL(SpanToStr(result), std::string_view{"(n*(n-1))/2"});
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{""});
 
     input = "foo,bar";
     sp = input;
     result = Expr(sp);
-    BOOST_CHECK_EQUAL(SpanToStr(result), "foo");
-    BOOST_CHECK_EQUAL(SpanToStr(sp), ",bar");
+    CHECK_EQUAL(SpanToStr(result), std::string_view{"foo"});
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{",bar"});
 
     input = "(aaaaa,bbbbb()),c";
     sp = input;
     result = Expr(sp);
-    BOOST_CHECK_EQUAL(SpanToStr(result), "(aaaaa,bbbbb())");
-    BOOST_CHECK_EQUAL(SpanToStr(sp), ",c");
+    CHECK_EQUAL(SpanToStr(result), std::string_view{"(aaaaa,bbbbb())"});
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{",c"});
 
     input = "xyz)foo";
     sp = input;
     result = Expr(sp);
-    BOOST_CHECK_EQUAL(SpanToStr(result), "xyz");
-    BOOST_CHECK_EQUAL(SpanToStr(sp), ")foo");
+    CHECK_EQUAL(SpanToStr(result), std::string_view{"xyz"});
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{")foo"});
 
     input = "((a),(b),(c)),xxx";
     sp = input;
     result = Expr(sp);
-    BOOST_CHECK_EQUAL(SpanToStr(result), "((a),(b),(c))");
-    BOOST_CHECK_EQUAL(SpanToStr(sp), ",xxx");
+    CHECK_EQUAL(SpanToStr(result), std::string_view{"((a),(b),(c))"});
+    CHECK_EQUAL(SpanToStr(sp), std::string_view{",xxx"});
 
     // Split(...): split a string on every instance of sep, return vector
     std::vector<std::span<const char>> results;
 
     input = "xxx";
     results = Split(input, 'x');
-    BOOST_CHECK_EQUAL(results.size(), 4U);
-    BOOST_CHECK_EQUAL(SpanToStr(results[0]), "");
-    BOOST_CHECK_EQUAL(SpanToStr(results[1]), "");
-    BOOST_CHECK_EQUAL(SpanToStr(results[2]), "");
-    BOOST_CHECK_EQUAL(SpanToStr(results[3]), "");
+    CHECK_EQUAL(results.size(), 4U);
+    CHECK_EQUAL(SpanToStr(results[0]), std::string_view{""});
+    CHECK_EQUAL(SpanToStr(results[1]), std::string_view{""});
+    CHECK_EQUAL(SpanToStr(results[2]), std::string_view{""});
+    CHECK_EQUAL(SpanToStr(results[3]), std::string_view{""});
 
     input = "one#two#three";
     results = Split(input, '-');
-    BOOST_CHECK_EQUAL(results.size(), 1U);
-    BOOST_CHECK_EQUAL(SpanToStr(results[0]), "one#two#three");
+    CHECK_EQUAL(results.size(), 1U);
+    CHECK_EQUAL(SpanToStr(results[0]), std::string_view{"one#two#three"});
 
     input = "one#two#three";
     results = Split(input, '#');
-    BOOST_CHECK_EQUAL(results.size(), 3U);
-    BOOST_CHECK_EQUAL(SpanToStr(results[0]), "one");
-    BOOST_CHECK_EQUAL(SpanToStr(results[1]), "two");
-    BOOST_CHECK_EQUAL(SpanToStr(results[2]), "three");
+    CHECK_EQUAL(results.size(), 3U);
+    CHECK_EQUAL(SpanToStr(results[0]), std::string_view{"one"});
+    CHECK_EQUAL(SpanToStr(results[1]), std::string_view{"two"});
+    CHECK_EQUAL(SpanToStr(results[2]), std::string_view{"three"});
 
     results = Split(input, '#', /*include_sep=*/true);
-    BOOST_CHECK_EQUAL(results.size(), 3U);
-    BOOST_CHECK_EQUAL(SpanToStr(results[0]), "one#");
-    BOOST_CHECK_EQUAL(SpanToStr(results[1]), "two#");
-    BOOST_CHECK_EQUAL(SpanToStr(results[2]), "three");
+    CHECK_EQUAL(results.size(), 3U);
+    CHECK_EQUAL(SpanToStr(results[0]), std::string_view{"one#"});
+    CHECK_EQUAL(SpanToStr(results[1]), std::string_view{"two#"});
+    CHECK_EQUAL(SpanToStr(results[2]), std::string_view{"three"});
 
     input = "*foo*bar*";
     results = Split(input, '*');
-    BOOST_CHECK_EQUAL(results.size(), 4U);
-    BOOST_CHECK_EQUAL(SpanToStr(results[0]), "");
-    BOOST_CHECK_EQUAL(SpanToStr(results[1]), "foo");
-    BOOST_CHECK_EQUAL(SpanToStr(results[2]), "bar");
-    BOOST_CHECK_EQUAL(SpanToStr(results[3]), "");
+    CHECK_EQUAL(results.size(), 4U);
+    CHECK_EQUAL(SpanToStr(results[0]), std::string_view{""});
+    CHECK_EQUAL(SpanToStr(results[1]), std::string_view{"foo"});
+    CHECK_EQUAL(SpanToStr(results[2]), std::string_view{"bar"});
+    CHECK_EQUAL(SpanToStr(results[3]), std::string_view{""});
 
     results = Split(input, '*', /*include_sep=*/true);
-    BOOST_CHECK_EQUAL(results.size(), 4U);
-    BOOST_CHECK_EQUAL(SpanToStr(results[0]), "*");
-    BOOST_CHECK_EQUAL(SpanToStr(results[1]), "foo*");
-    BOOST_CHECK_EQUAL(SpanToStr(results[2]), "bar*");
-    BOOST_CHECK_EQUAL(SpanToStr(results[3]), "");
+    CHECK_EQUAL(results.size(), 4U);
+    CHECK_EQUAL(SpanToStr(results[0]), std::string_view{"*"});
+    CHECK_EQUAL(SpanToStr(results[1]), std::string_view{"foo*"});
+    CHECK_EQUAL(SpanToStr(results[2]), std::string_view{"bar*"});
+    CHECK_EQUAL(SpanToStr(results[3]), std::string_view{""});
 }
 
 BOOST_AUTO_TEST_CASE(test_SplitString)
@@ -1332,47 +1332,47 @@ BOOST_AUTO_TEST_CASE(test_SplitString)
     // Empty string.
     {
         std::vector<std::string> result = SplitString("", '-');
-        BOOST_CHECK_EQUAL(result.size(), 1);
-        BOOST_CHECK_EQUAL(result[0], "");
+        CHECK_EQUAL(result.size(), std::remove_cvref_t<decltype(result.size())>{1});
+        CHECK_EQUAL(result[0], std::string_view{""});
     }
 
     // Empty items.
     {
         std::vector<std::string> result = SplitString("-", '-');
-        BOOST_CHECK_EQUAL(result.size(), 2);
-        BOOST_CHECK_EQUAL(result[0], "");
-        BOOST_CHECK_EQUAL(result[1], "");
+        CHECK_EQUAL(result.size(), std::remove_cvref_t<decltype(result.size())>{2});
+        CHECK_EQUAL(result[0], std::string_view{""});
+        CHECK_EQUAL(result[1], std::string_view{""});
     }
 
     // More empty items.
     {
         std::vector<std::string> result = SplitString("--", '-');
-        BOOST_CHECK_EQUAL(result.size(), 3);
-        BOOST_CHECK_EQUAL(result[0], "");
-        BOOST_CHECK_EQUAL(result[1], "");
-        BOOST_CHECK_EQUAL(result[2], "");
+        CHECK_EQUAL(result.size(), std::remove_cvref_t<decltype(result.size())>{3});
+        CHECK_EQUAL(result[0], std::string_view{""});
+        CHECK_EQUAL(result[1], std::string_view{""});
+        CHECK_EQUAL(result[2], std::string_view{""});
     }
 
     // Separator is not present.
     {
         std::vector<std::string> result = SplitString("abc", '-');
-        BOOST_CHECK_EQUAL(result.size(), 1);
-        BOOST_CHECK_EQUAL(result[0], "abc");
+        CHECK_EQUAL(result.size(), std::remove_cvref_t<decltype(result.size())>{1});
+        CHECK_EQUAL(result[0], std::string_view{"abc"});
     }
 
     // Basic behavior.
     {
         std::vector<std::string> result = SplitString("a-b", '-');
-        BOOST_CHECK_EQUAL(result.size(), 2);
-        BOOST_CHECK_EQUAL(result[0], "a");
-        BOOST_CHECK_EQUAL(result[1], "b");
+        CHECK_EQUAL(result.size(), std::remove_cvref_t<decltype(result.size())>{2});
+        CHECK_EQUAL(result[0], std::string_view{"a"});
+        CHECK_EQUAL(result[1], std::string_view{"b"});
     }
 
     // Case-sensitivity of the separator.
     {
         std::vector<std::string> result = SplitString("AAA", 'a');
-        BOOST_CHECK_EQUAL(result.size(), 1);
-        BOOST_CHECK_EQUAL(result[0], "AAA");
+        CHECK_EQUAL(result.size(), std::remove_cvref_t<decltype(result.size())>{1});
+        CHECK_EQUAL(result[0], std::string_view{"AAA"});
     }
 
     // multiple split characters
@@ -1392,14 +1392,14 @@ BOOST_AUTO_TEST_CASE(test_SplitString)
 BOOST_AUTO_TEST_CASE(test_LogEscapeMessage)
 {
     // ASCII and UTF-8 must pass through unaltered.
-    BOOST_CHECK_EQUAL(BCLog::LogEscapeMessage("Valid log message貓"), "Valid log message貓");
+    CHECK_EQUAL(BCLog::LogEscapeMessage("Valid log message貓"), std::string_view{"Valid log message貓"});
     // Newlines must pass through unaltered.
-    BOOST_CHECK_EQUAL(BCLog::LogEscapeMessage("Message\n with newlines\n"), "Message\n with newlines\n");
+    CHECK_EQUAL(BCLog::LogEscapeMessage("Message\n with newlines\n"), std::string_view{"Message\n with newlines\n"});
     // Other control characters are escaped in C syntax.
-    BOOST_CHECK_EQUAL(BCLog::LogEscapeMessage("\x01\x7f Corrupted log message\x0d"), R"(\x01\x7f Corrupted log message\x0d)");
+    CHECK_EQUAL(BCLog::LogEscapeMessage("\x01\x7f Corrupted log message\x0d"), std::string_view{R"(\x01\x7f Corrupted log message\x0d)"});
     // Embedded NULL characters are escaped too.
     const std::string NUL("O\x00O", 3);
-    BOOST_CHECK_EQUAL(BCLog::LogEscapeMessage(NUL), R"(O\x00O)");
+    CHECK_EQUAL(BCLog::LogEscapeMessage(NUL), std::string_view{R"(O\x00O)"});
 }
 
 namespace {
@@ -1437,70 +1437,70 @@ BOOST_AUTO_TEST_CASE(test_tracked_vector)
     CHECK(t3.origin == &t3);
 
     auto v1 = Vector(t1);
-    BOOST_CHECK_EQUAL(v1.size(), 1U);
+    CHECK_EQUAL(v1.size(), 1U);
     CHECK(v1[0].origin == &t1);
-    BOOST_CHECK_EQUAL(v1[0].copies, 1);
+    CHECK_EQUAL(v1[0].copies, std::remove_cvref_t<decltype(v1[0].copies)>{1});
 
     auto v2 = Vector(std::move(t2));
-    BOOST_CHECK_EQUAL(v2.size(), 1U);
+    CHECK_EQUAL(v2.size(), 1U);
     CHECK(v2[0].origin == &t2); // NOLINT(*-use-after-move)
-    BOOST_CHECK_EQUAL(v2[0].copies, 0);
+    CHECK_EQUAL(v2[0].copies, std::remove_cvref_t<decltype(v2[0].copies)>{0});
 
     auto v3 = Vector(t1, std::move(t2));
-    BOOST_CHECK_EQUAL(v3.size(), 2U);
+    CHECK_EQUAL(v3.size(), 2U);
     CHECK(v3[0].origin == &t1);
     CHECK(v3[1].origin == &t2); // NOLINT(*-use-after-move)
-    BOOST_CHECK_EQUAL(v3[0].copies, 1);
-    BOOST_CHECK_EQUAL(v3[1].copies, 0);
+    CHECK_EQUAL(v3[0].copies, std::remove_cvref_t<decltype(v3[0].copies)>{1});
+    CHECK_EQUAL(v3[1].copies, std::remove_cvref_t<decltype(v3[1].copies)>{0});
 
     auto v4 = Vector(std::move(v3[0]), v3[1], std::move(t3));
-    BOOST_CHECK_EQUAL(v4.size(), 3U);
+    CHECK_EQUAL(v4.size(), 3U);
     CHECK(v4[0].origin == &t1);
     CHECK(v4[1].origin == &t2);
     CHECK(v4[2].origin == &t3); // NOLINT(*-use-after-move)
-    BOOST_CHECK_EQUAL(v4[0].copies, 1);
-    BOOST_CHECK_EQUAL(v4[1].copies, 1);
-    BOOST_CHECK_EQUAL(v4[2].copies, 0);
+    CHECK_EQUAL(v4[0].copies, std::remove_cvref_t<decltype(v4[0].copies)>{1});
+    CHECK_EQUAL(v4[1].copies, std::remove_cvref_t<decltype(v4[1].copies)>{1});
+    CHECK_EQUAL(v4[2].copies, std::remove_cvref_t<decltype(v4[2].copies)>{0});
 
     auto v5 = Cat(v1, v4);
-    BOOST_CHECK_EQUAL(v5.size(), 4U);
+    CHECK_EQUAL(v5.size(), 4U);
     CHECK(v5[0].origin == &t1);
     CHECK(v5[1].origin == &t1);
     CHECK(v5[2].origin == &t2);
     CHECK(v5[3].origin == &t3);
-    BOOST_CHECK_EQUAL(v5[0].copies, 2);
-    BOOST_CHECK_EQUAL(v5[1].copies, 2);
-    BOOST_CHECK_EQUAL(v5[2].copies, 2);
-    BOOST_CHECK_EQUAL(v5[3].copies, 1);
+    CHECK_EQUAL(v5[0].copies, std::remove_cvref_t<decltype(v5[0].copies)>{2});
+    CHECK_EQUAL(v5[1].copies, std::remove_cvref_t<decltype(v5[1].copies)>{2});
+    CHECK_EQUAL(v5[2].copies, std::remove_cvref_t<decltype(v5[2].copies)>{2});
+    CHECK_EQUAL(v5[3].copies, std::remove_cvref_t<decltype(v5[3].copies)>{1});
 
     auto v6 = Cat(std::move(v1), v3);
-    BOOST_CHECK_EQUAL(v6.size(), 3U);
+    CHECK_EQUAL(v6.size(), 3U);
     CHECK(v6[0].origin == &t1);
     CHECK(v6[1].origin == &t1);
     CHECK(v6[2].origin == &t2);
-    BOOST_CHECK_EQUAL(v6[0].copies, 1);
-    BOOST_CHECK_EQUAL(v6[1].copies, 2);
-    BOOST_CHECK_EQUAL(v6[2].copies, 1);
+    CHECK_EQUAL(v6[0].copies, std::remove_cvref_t<decltype(v6[0].copies)>{1});
+    CHECK_EQUAL(v6[1].copies, std::remove_cvref_t<decltype(v6[1].copies)>{2});
+    CHECK_EQUAL(v6[2].copies, std::remove_cvref_t<decltype(v6[2].copies)>{1});
 
     auto v7 = Cat(v2, std::move(v4));
-    BOOST_CHECK_EQUAL(v7.size(), 4U);
+    CHECK_EQUAL(v7.size(), 4U);
     CHECK(v7[0].origin == &t2);
     CHECK(v7[1].origin == &t1);
     CHECK(v7[2].origin == &t2);
     CHECK(v7[3].origin == &t3);
-    BOOST_CHECK_EQUAL(v7[0].copies, 1);
-    BOOST_CHECK_EQUAL(v7[1].copies, 1);
-    BOOST_CHECK_EQUAL(v7[2].copies, 1);
-    BOOST_CHECK_EQUAL(v7[3].copies, 0);
+    CHECK_EQUAL(v7[0].copies, std::remove_cvref_t<decltype(v7[0].copies)>{1});
+    CHECK_EQUAL(v7[1].copies, std::remove_cvref_t<decltype(v7[1].copies)>{1});
+    CHECK_EQUAL(v7[2].copies, std::remove_cvref_t<decltype(v7[2].copies)>{1});
+    CHECK_EQUAL(v7[3].copies, std::remove_cvref_t<decltype(v7[3].copies)>{0});
 
     auto v8 = Cat(std::move(v2), std::move(v3));
-    BOOST_CHECK_EQUAL(v8.size(), 3U);
+    CHECK_EQUAL(v8.size(), 3U);
     CHECK(v8[0].origin == &t2);
     CHECK(v8[1].origin == &t1);
     CHECK(v8[2].origin == &t2);
-    BOOST_CHECK_EQUAL(v8[0].copies, 0);
-    BOOST_CHECK_EQUAL(v8[1].copies, 1);
-    BOOST_CHECK_EQUAL(v8[2].copies, 0);
+    CHECK_EQUAL(v8[0].copies, std::remove_cvref_t<decltype(v8[0].copies)>{0});
+    CHECK_EQUAL(v8[1].copies, std::remove_cvref_t<decltype(v8[1].copies)>{1});
+    CHECK_EQUAL(v8[2].copies, std::remove_cvref_t<decltype(v8[2].copies)>{0});
 }
 
 BOOST_AUTO_TEST_CASE(message_sign)
@@ -1536,54 +1536,54 @@ BOOST_AUTO_TEST_CASE(message_sign)
     CHECK_MESSAGE(MessageSign(privkey, message, generated_signature),
         "Sign with a valid private key");
 
-    BOOST_CHECK_EQUAL(expected_signature, generated_signature);
+    CHECK_EQUAL(expected_signature, generated_signature);
 }
 
 BOOST_AUTO_TEST_CASE(message_verify)
 {
-    BOOST_CHECK_EQUAL(
+    CHECK_EQUAL(
         MessageVerify(
             "invalid address",
             "signature should be irrelevant",
             "message too"),
         MessageVerificationResult::ERR_INVALID_ADDRESS);
 
-    BOOST_CHECK_EQUAL(
+    CHECK_EQUAL(
         MessageVerify(
             "3B5fQsEXEaV8v6U3ejYc8XaKXAkyQj2MjV",
             "signature should be irrelevant",
             "message too"),
         MessageVerificationResult::ERR_ADDRESS_NO_KEY);
 
-    BOOST_CHECK_EQUAL(
+    CHECK_EQUAL(
         MessageVerify(
             "1KqbBpLy5FARmTPD4VZnDDpYjkUvkr82Pm",
             "invalid signature, not in base64 encoding",
             "message should be irrelevant"),
         MessageVerificationResult::ERR_MALFORMED_SIGNATURE);
 
-    BOOST_CHECK_EQUAL(
+    CHECK_EQUAL(
         MessageVerify(
             "1KqbBpLy5FARmTPD4VZnDDpYjkUvkr82Pm",
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
             "message should be irrelevant"),
         MessageVerificationResult::ERR_PUBKEY_NOT_RECOVERED);
 
-    BOOST_CHECK_EQUAL(
+    CHECK_EQUAL(
         MessageVerify(
             "15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs",
             "IPojfrX2dfPnH26UegfbGQQLrdK844DlHq5157/P6h57WyuS/Qsl+h/WSVGDF4MUi4rWSswW38oimDYfNNUBUOk=",
             "I never signed this"),
         MessageVerificationResult::ERR_NOT_SIGNED);
 
-    BOOST_CHECK_EQUAL(
+    CHECK_EQUAL(
         MessageVerify(
             "15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs",
             "IPojfrX2dfPnH26UegfbGQQLrdK844DlHq5157/P6h57WyuS/Qsl+h/WSVGDF4MUi4rWSswW38oimDYfNNUBUOk=",
             "Trust no one"),
         MessageVerificationResult::OK);
 
-    BOOST_CHECK_EQUAL(
+    CHECK_EQUAL(
         MessageVerify(
             "11canuhp9X2NocwCq7xNrQYTmUgZAnLK3",
             "IIcaIENoYW5jZWxsb3Igb24gYnJpbmsgb2Ygc2Vjb25kIGJhaWxvdXQgZm9yIGJhbmtzIAaHRtbCeDZINyavx14=",
@@ -1604,21 +1604,21 @@ BOOST_AUTO_TEST_CASE(message_hash)
     const uint256 message_hash1 = Hash(prefixed_message);
     const uint256 message_hash2 = MessageHash(unsigned_tx);
 
-    BOOST_CHECK_EQUAL(message_hash1, message_hash2);
+    CHECK_EQUAL(message_hash1, message_hash2);
     CHECK_NE(message_hash1, signature_hash);
 }
 
 BOOST_AUTO_TEST_CASE(remove_prefix)
 {
-    BOOST_CHECK_EQUAL(RemovePrefix("./common/system.h", "./"), "common/system.h");
-    BOOST_CHECK_EQUAL(RemovePrefixView("foo", "foo"), "");
-    BOOST_CHECK_EQUAL(RemovePrefix("foo", "fo"), "o");
-    BOOST_CHECK_EQUAL(RemovePrefixView("foo", "f"), "oo");
-    BOOST_CHECK_EQUAL(RemovePrefix("foo", ""), "foo");
-    BOOST_CHECK_EQUAL(RemovePrefixView("fo", "foo"), "fo");
-    BOOST_CHECK_EQUAL(RemovePrefix("f", "foo"), "f");
-    BOOST_CHECK_EQUAL(RemovePrefixView("", "foo"), "");
-    BOOST_CHECK_EQUAL(RemovePrefix("", ""), "");
+    CHECK_EQUAL(RemovePrefix("./common/system.h", "./"), std::string_view{"common/system.h"});
+    CHECK_EQUAL(RemovePrefixView("foo", "foo"), std::string_view{""});
+    CHECK_EQUAL(RemovePrefix("foo", "fo"), std::string_view{"o"});
+    CHECK_EQUAL(RemovePrefixView("foo", "f"), std::string_view{"oo"});
+    CHECK_EQUAL(RemovePrefix("foo", ""), std::string_view{"foo"});
+    CHECK_EQUAL(RemovePrefixView("fo", "foo"), std::string_view{"fo"});
+    CHECK_EQUAL(RemovePrefix("f", "foo"), std::string_view{"f"});
+    CHECK_EQUAL(RemovePrefixView("", "foo"), std::string_view{""});
+    CHECK_EQUAL(RemovePrefix("", ""), std::string_view{""});
 }
 
 BOOST_AUTO_TEST_CASE(util_ParseByteUnits)
@@ -1626,23 +1626,23 @@ BOOST_AUTO_TEST_CASE(util_ParseByteUnits)
     auto noop = ByteUnit::NOOP;
 
     // no multiplier
-    BOOST_CHECK_EQUAL(ParseByteUnits("1", noop).value(), 1);
-    BOOST_CHECK_EQUAL(ParseByteUnits("0", noop).value(), 0);
+    CHECK_EQUAL(ParseByteUnits("1", noop).value(), std::remove_cvref_t<decltype(ParseByteUnits("1", noop).value())>{1});
+    CHECK_EQUAL(ParseByteUnits("0", noop).value(), std::remove_cvref_t<decltype(ParseByteUnits("0", noop).value())>{0});
 
-    BOOST_CHECK_EQUAL(ParseByteUnits("1k", noop).value(), 1000ULL);
-    BOOST_CHECK_EQUAL(ParseByteUnits("1K", noop).value(), 1ULL << 10);
+    CHECK_EQUAL(ParseByteUnits("1k", noop).value(), 1000ULL);
+    CHECK_EQUAL(ParseByteUnits("1K", noop).value(), 1ULL << 10);
 
-    BOOST_CHECK_EQUAL(ParseByteUnits("2m", noop).value(), 2'000'000ULL);
-    BOOST_CHECK_EQUAL(ParseByteUnits("2M", noop).value(), 2_MiB);
+    CHECK_EQUAL(ParseByteUnits("2m", noop).value(), 2'000'000ULL);
+    CHECK_EQUAL(ParseByteUnits("2M", noop).value(), 2_MiB);
 
-    BOOST_CHECK_EQUAL(ParseByteUnits("3g", noop).value(), 3'000'000'000ULL);
-    BOOST_CHECK_EQUAL(ParseByteUnits("3G", noop).value(), 3_GiB);
+    CHECK_EQUAL(ParseByteUnits("3g", noop).value(), 3'000'000'000ULL);
+    CHECK_EQUAL(ParseByteUnits("3G", noop).value(), 3_GiB);
 
-    BOOST_CHECK_EQUAL(ParseByteUnits("4t", noop).value(), 4'000'000'000'000ULL);
-    BOOST_CHECK_EQUAL(ParseByteUnits("4T", noop).value(), 4ULL << 40);
+    CHECK_EQUAL(ParseByteUnits("4t", noop).value(), 4'000'000'000'000ULL);
+    CHECK_EQUAL(ParseByteUnits("4T", noop).value(), 4ULL << 40);
 
     // check default multiplier
-    BOOST_CHECK_EQUAL(ParseByteUnits("5", ByteUnit::K).value(), 5ULL << 10);
+    CHECK_EQUAL(ParseByteUnits("5", ByteUnit::K).value(), 5ULL << 10);
 
     // NaN
     CHECK(!ParseByteUnits("", noop));
@@ -1657,7 +1657,7 @@ BOOST_AUTO_TEST_CASE(util_ParseByteUnits)
     CHECK(!ParseByteUnits("+123m", noop));
 
     // zero padding
-    BOOST_CHECK_EQUAL(ParseByteUnits("020M", noop).value(), 20_MiB);
+    CHECK_EQUAL(ParseByteUnits("020M", noop).value(), 20_MiB);
 
     // fractions not allowed
     CHECK(!ParseByteUnits("0.5T", noop));
@@ -1685,13 +1685,13 @@ BOOST_AUTO_TEST_CASE(util_ReadBinaryFile)
         // read all contents in file
         auto [valid, text] = ReadBinaryFile(tmpfile);
         CHECK(valid);
-        BOOST_CHECK_EQUAL(text, expected_text);
+        CHECK_EQUAL(text, expected_text);
     }
     {
         // read half contents in file
         auto [valid, text] = ReadBinaryFile(tmpfile, expected_text.size() / 2);
         CHECK(valid);
-        BOOST_CHECK_EQUAL(text, expected_text.substr(0, expected_text.size() / 2));
+        CHECK_EQUAL(text, expected_text.substr(0, expected_text.size() / 2));
     }
     {
         // read from non-existent file
@@ -1712,7 +1712,7 @@ BOOST_AUTO_TEST_CASE(util_WriteBinaryFile)
     std::ifstream file{tmpfile.std_path()};
     file >> actual_text;
     CHECK(valid);
-    BOOST_CHECK_EQUAL(actual_text, expected_text);
+    CHECK_EQUAL(actual_text, expected_text);
 }
 
 BOOST_AUTO_TEST_CASE(clearshrink_test)
@@ -1720,21 +1720,21 @@ BOOST_AUTO_TEST_CASE(clearshrink_test)
     {
         std::vector<uint8_t> v = {1, 2, 3};
         ClearShrink(v);
-        BOOST_CHECK_EQUAL(v.size(), 0);
-        BOOST_CHECK_EQUAL(v.capacity(), 0);
+        CHECK_EQUAL(v.size(), std::remove_cvref_t<decltype(v.size())>{0});
+        CHECK_EQUAL(v.capacity(), std::remove_cvref_t<decltype(v.capacity())>{0});
     }
 
     {
         std::vector<bool> v = {false, true, false, false, true, true};
         ClearShrink(v);
-        BOOST_CHECK_EQUAL(v.size(), 0);
-        BOOST_CHECK_EQUAL(v.capacity(), 0);
+        CHECK_EQUAL(v.size(), std::remove_cvref_t<decltype(v.size())>{0});
+        CHECK_EQUAL(v.capacity(), std::remove_cvref_t<decltype(v.capacity())>{0});
     }
 
     {
         std::deque<int> v = {1, 3, 3, 7};
         ClearShrink(v);
-        BOOST_CHECK_EQUAL(v.size(), 0);
+        CHECK_EQUAL(v.size(), std::remove_cvref_t<decltype(v.size())>{0});
         // std::deque has no capacity() we can observe.
     }
 }
@@ -1745,14 +1745,14 @@ void TestCheckedLeftShift()
     constexpr auto MAX{std::numeric_limits<T>::max()};
 
     // Basic operations
-    BOOST_CHECK_EQUAL(CheckedLeftShift<T>(0, 1), 0);
-    BOOST_CHECK_EQUAL(CheckedLeftShift<T>(0, 127), 0);
-    BOOST_CHECK_EQUAL(CheckedLeftShift<T>(1, 1), 2);
-    BOOST_CHECK_EQUAL(CheckedLeftShift<T>(2, 2), 8);
-    BOOST_CHECK_EQUAL(CheckedLeftShift<T>(MAX >> 1, 1), MAX - 1);
+    CHECK_EQUAL(CheckedLeftShift<T>(0, 1), 0);
+    CHECK_EQUAL(CheckedLeftShift<T>(0, 127), 0);
+    CHECK_EQUAL(CheckedLeftShift<T>(1, 1), 2);
+    CHECK_EQUAL(CheckedLeftShift<T>(2, 2), 8);
+    CHECK_EQUAL(CheckedLeftShift<T>(MAX >> 1, 1), MAX - 1);
 
     // Max left shift
-    BOOST_CHECK_EQUAL(CheckedLeftShift<T>(1, std::numeric_limits<T>::digits - 1), MAX / 2 + 1);
+    CHECK_EQUAL(CheckedLeftShift<T>(1, std::numeric_limits<T>::digits - 1), MAX / 2 + 1);
 
     // Overflow cases
     CHECK(!CheckedLeftShift<T>((MAX >> 1) + 1, 1));
@@ -1763,10 +1763,10 @@ void TestCheckedLeftShift()
     if constexpr (std::is_signed_v<T>) {
         constexpr auto MIN{std::numeric_limits<T>::min()};
         // Negative input
-        BOOST_CHECK_EQUAL(CheckedLeftShift<T>(-1, 1), -2);
-        BOOST_CHECK_EQUAL(CheckedLeftShift<T>((MIN >> 2), 1), MIN / 2);
-        BOOST_CHECK_EQUAL(CheckedLeftShift<T>((MIN >> 1) + 1, 1), MIN + 2);
-        BOOST_CHECK_EQUAL(CheckedLeftShift<T>(MIN >> 1, 1), MIN);
+        CHECK_EQUAL(CheckedLeftShift<T>(-1, 1), -2);
+        CHECK_EQUAL(CheckedLeftShift<T>((MIN >> 2), 1), MIN / 2);
+        CHECK_EQUAL(CheckedLeftShift<T>((MIN >> 1) + 1, 1), MIN + 2);
+        CHECK_EQUAL(CheckedLeftShift<T>(MIN >> 1, 1), MIN);
         // Overflow negative
         CHECK(!CheckedLeftShift<T>((MIN >> 1) - 1, 1));
         CHECK(!CheckedLeftShift<T>(MIN >> 1, 2));
@@ -1780,32 +1780,32 @@ void TestSaturatingLeftShift()
     constexpr auto MAX{std::numeric_limits<T>::max()};
 
     // Basic operations
-    BOOST_CHECK_EQUAL(SaturatingLeftShift<T>(0, 1), 0);
-    BOOST_CHECK_EQUAL(SaturatingLeftShift<T>(0, 127), 0);
-    BOOST_CHECK_EQUAL(SaturatingLeftShift<T>(1, 1), 2);
-    BOOST_CHECK_EQUAL(SaturatingLeftShift<T>(2, 2), 8);
-    BOOST_CHECK_EQUAL(SaturatingLeftShift<T>(MAX >> 1, 1), MAX - 1);
+    CHECK_EQUAL(SaturatingLeftShift<T>(0, 1), std::remove_cvref_t<decltype(SaturatingLeftShift<T>(0, 1))>{0});
+    CHECK_EQUAL(SaturatingLeftShift<T>(0, 127), std::remove_cvref_t<decltype(SaturatingLeftShift<T>(0, 127))>{0});
+    CHECK_EQUAL(SaturatingLeftShift<T>(1, 1), std::remove_cvref_t<decltype(SaturatingLeftShift<T>(1, 1))>{2});
+    CHECK_EQUAL(SaturatingLeftShift<T>(2, 2), std::remove_cvref_t<decltype(SaturatingLeftShift<T>(2, 2))>{8});
+    CHECK_EQUAL(SaturatingLeftShift<T>(MAX >> 1, 1), std::remove_cvref_t<decltype(SaturatingLeftShift<T>(MAX >> 1, 1))>{MAX - 1});
 
     // Max left shift
-    BOOST_CHECK_EQUAL(SaturatingLeftShift<T>(1, std::numeric_limits<T>::digits - 1), MAX / 2 + 1);
+    CHECK_EQUAL(SaturatingLeftShift<T>(1, std::numeric_limits<T>::digits - 1), std::remove_cvref_t<decltype(SaturatingLeftShift<T>(1, std::numeric_limits<T>::digits - 1))>{MAX / 2 + 1});
 
     // Saturation cases
-    BOOST_CHECK_EQUAL(SaturatingLeftShift<T>((MAX >> 1) + 1, 1), MAX);
-    BOOST_CHECK_EQUAL(SaturatingLeftShift<T>(MAX, 1), MAX);
-    BOOST_CHECK_EQUAL(SaturatingLeftShift<T>(1, std::numeric_limits<T>::digits), MAX);
-    BOOST_CHECK_EQUAL(SaturatingLeftShift<T>(1, std::numeric_limits<T>::digits + 1), MAX);
+    CHECK_EQUAL(SaturatingLeftShift<T>((MAX >> 1) + 1, 1), MAX);
+    CHECK_EQUAL(SaturatingLeftShift<T>(MAX, 1), MAX);
+    CHECK_EQUAL(SaturatingLeftShift<T>(1, std::numeric_limits<T>::digits), MAX);
+    CHECK_EQUAL(SaturatingLeftShift<T>(1, std::numeric_limits<T>::digits + 1), MAX);
 
     if constexpr (std::is_signed_v<T>) {
         constexpr auto MIN{std::numeric_limits<T>::min()};
         // Negative input
-        BOOST_CHECK_EQUAL(SaturatingLeftShift<T>(-1, 1), -2);
-        BOOST_CHECK_EQUAL(SaturatingLeftShift<T>((MIN >> 2), 1), MIN / 2);
-        BOOST_CHECK_EQUAL(SaturatingLeftShift<T>((MIN >> 1) + 1, 1), MIN + 2);
-        BOOST_CHECK_EQUAL(SaturatingLeftShift<T>(MIN >> 1, 1), MIN);
+        CHECK_EQUAL(SaturatingLeftShift<T>(-1, 1), -2);
+        CHECK_EQUAL(SaturatingLeftShift<T>((MIN >> 2), 1), MIN / 2);
+        CHECK_EQUAL(SaturatingLeftShift<T>((MIN >> 1) + 1, 1), MIN + 2);
+        CHECK_EQUAL(SaturatingLeftShift<T>(MIN >> 1, 1), MIN);
         // Saturation negative
-        BOOST_CHECK_EQUAL(SaturatingLeftShift<T>((MIN >> 1) - 1, 1), MIN);
-        BOOST_CHECK_EQUAL(SaturatingLeftShift<T>(MIN >> 1, 2), MIN);
-        BOOST_CHECK_EQUAL(SaturatingLeftShift<T>(-1, 100), MIN);
+        CHECK_EQUAL(SaturatingLeftShift<T>((MIN >> 1) - 1, 1), MIN);
+        CHECK_EQUAL(SaturatingLeftShift<T>(MIN >> 1, 2), MIN);
+        CHECK_EQUAL(SaturatingLeftShift<T>(-1, 100), MIN);
     }
 }
 
@@ -1830,34 +1830,34 @@ BOOST_AUTO_TEST_CASE(saturating_left_shift_test)
 BOOST_AUTO_TEST_CASE(mib_string_literal_test)
 {
     // Basic equivalences and simple arithmetic operations
-    BOOST_CHECK_EQUAL(0_MiB, 0);
-    BOOST_CHECK_EQUAL(1_MiB, 1 << 20);
-    BOOST_CHECK_EQUAL(1_MiB, 1024 * 1024);
-    BOOST_CHECK_EQUAL(1_MiB, 0x100000U);
-    BOOST_CHECK_EQUAL(1_MiB, 1048576U);
-    BOOST_CHECK_EQUAL(2ULL * 1_MiB, 2ULL << 20);
-    BOOST_CHECK_EQUAL((3_MiB + 123) / double(1_MiB), (3_MiB + 123) / 1024.0 / 1024.0);
+    CHECK_EQUAL(0_MiB, std::remove_cvref_t<decltype(0_MiB)>{0});
+    CHECK_EQUAL(1_MiB, std::remove_cvref_t<decltype(1_MiB)>{1 << 20});
+    CHECK_EQUAL(1_MiB, std::remove_cvref_t<decltype(1_MiB)>{1024 * 1024});
+    CHECK_EQUAL(1_MiB, 0x100000U);
+    CHECK_EQUAL(1_MiB, 1048576U);
+    CHECK_EQUAL(2ULL * 1_MiB, 2ULL << 20);
+    CHECK_EQUAL((3_MiB + 123) / double(1_MiB), (3_MiB + 123) / 1024.0 / 1024.0);
 
     // Specific codebase values
-    BOOST_CHECK_EQUAL(4_MiB, 1 << 22);
-    BOOST_CHECK_EQUAL(8_MiB, 1 << 23);
-    BOOST_CHECK_EQUAL(16_MiB, 0x1000000U);
-    BOOST_CHECK_EQUAL(16_MiB, 1 << 24);
-    BOOST_CHECK_EQUAL(32_MiB, 0x2000000U);
-    BOOST_CHECK_EQUAL(32_MiB, 32U << 20);
-    BOOST_CHECK_EQUAL(50_MiB / 1_MiB, 50U);
-    BOOST_CHECK_EQUAL(50_MiB, 52428800U);
-    BOOST_CHECK_EQUAL(128_MiB, 0x8000000U);
-    BOOST_CHECK_EQUAL(550_MiB, 550ULL * 1024 * 1024);
+    CHECK_EQUAL(4_MiB, std::remove_cvref_t<decltype(4_MiB)>{1 << 22});
+    CHECK_EQUAL(8_MiB, std::remove_cvref_t<decltype(8_MiB)>{1 << 23});
+    CHECK_EQUAL(16_MiB, 0x1000000U);
+    CHECK_EQUAL(16_MiB, std::remove_cvref_t<decltype(16_MiB)>{1 << 24});
+    CHECK_EQUAL(32_MiB, 0x2000000U);
+    CHECK_EQUAL(32_MiB, 32U << 20);
+    CHECK_EQUAL(50_MiB / 1_MiB, 50U);
+    CHECK_EQUAL(50_MiB, 52428800U);
+    CHECK_EQUAL(128_MiB, 0x8000000U);
+    CHECK_EQUAL(550_MiB, 550ULL * 1024 * 1024);
 
     // Overflow handling
     constexpr auto max_mib{std::numeric_limits<size_t>::max() >> 20};
     if constexpr (SIZE_MAX == UINT32_MAX) {
-        BOOST_CHECK_EQUAL(max_mib, 4095U);
-        BOOST_CHECK_EQUAL(4095_MiB, size_t{4095} << 20);
+        CHECK_EQUAL(max_mib, 4095U);
+        CHECK_EQUAL(4095_MiB, size_t{4095} << 20);
         CHECK_EXCEPTION(4096_MiB, std::overflow_error, HasReason("MiB value too large for size_t byte conversion"));
     } else {
-        BOOST_CHECK_EQUAL(4096_MiB, size_t{4096} << 20);
+        CHECK_EQUAL(4096_MiB, size_t{4096} << 20);
     }
     CHECK_EXCEPTION(operator""_MiB(max_mib + 1), std::overflow_error, HasReason("MiB value too large for size_t byte conversion"));
 }
@@ -1870,64 +1870,64 @@ BOOST_AUTO_TEST_CASE(ceil_div_test)
     CHECK((std::is_same_v<decltype(CeilDiv(unsigned{0}, size_t{1})), size_t>));
 
     // `common/bloom.cpp` and `cuckoocache.h` patterns.
-    BOOST_CHECK_EQUAL(CeilDiv(uint32_t{3}, 2u), uint32_t{2});
-    BOOST_CHECK_EQUAL(CeilDiv(uint32_t{65}, 64u), uint32_t{2});
-    BOOST_CHECK_EQUAL(CeilDiv(uint32_t{9}, 8u), uint32_t{2});
+    CHECK_EQUAL(CeilDiv(uint32_t{3}, 2u), uint32_t{2});
+    CHECK_EQUAL(CeilDiv(uint32_t{65}, 64u), uint32_t{2});
+    CHECK_EQUAL(CeilDiv(uint32_t{9}, 8u), uint32_t{2});
 
     // `key_io.cpp`, `rest.cpp`, `merkleblock.cpp`, `strencodings.cpp` patterns.
-    BOOST_CHECK_EQUAL(CeilDiv(size_t{9}, 8u), size_t{2});
-    BOOST_CHECK_EQUAL(CeilDiv(size_t{10}, 3u), size_t{4});
-    BOOST_CHECK_EQUAL(CeilDiv(size_t{11}, 5u), size_t{3});
-    BOOST_CHECK_EQUAL(CeilDiv(size_t{41} * 8, 5u), size_t{66});
+    CHECK_EQUAL(CeilDiv(size_t{9}, 8u), size_t{2});
+    CHECK_EQUAL(CeilDiv(size_t{10}, 3u), size_t{4});
+    CHECK_EQUAL(CeilDiv(size_t{11}, 5u), size_t{3});
+    CHECK_EQUAL(CeilDiv(size_t{41} * 8, 5u), size_t{66});
 
     // `flatfile.cpp` mixed unsigned/size_t pattern.
-    BOOST_CHECK_EQUAL(CeilDiv(unsigned{10}, size_t{4}), size_t{3});
+    CHECK_EQUAL(CeilDiv(unsigned{10}, size_t{4}), size_t{3});
 
     // `util/feefrac.h` fast-path rounding-up pattern.
     constexpr int64_t fee{12345};
     constexpr int32_t at_size{67};
     constexpr int32_t size{10};
-    BOOST_CHECK_EQUAL(CeilDiv(uint64_t(fee) * at_size, uint32_t(size)),
+    CHECK_EQUAL(CeilDiv(uint64_t(fee) * at_size, uint32_t(size)),
                       (uint64_t(fee) * at_size + uint32_t(size) - 1) / uint32_t(size));
 
     // `bitset.h` template parameter pattern.
     constexpr unsigned bits{129};
     constexpr size_t digits{std::numeric_limits<size_t>::digits};
-    BOOST_CHECK_EQUAL(CeilDiv(bits, digits), (bits + digits - 1) / digits);
+    CHECK_EQUAL(CeilDiv(bits, digits), (bits + digits - 1) / digits);
 
     // `serialize.h` varint scratch-buffer pattern.
-    BOOST_CHECK_EQUAL(CeilDiv(sizeof(uint64_t) * 8, 7u), (sizeof(uint64_t) * 8 + 6) / 7);
+    CHECK_EQUAL(CeilDiv(sizeof(uint64_t) * 8, 7u), (sizeof(uint64_t) * 8 + 6) / 7);
 }
 
 BOOST_AUTO_TEST_CASE(gib_string_literal_test)
 {
     // Basic equivalences and simple arithmetic operations
-    BOOST_CHECK_EQUAL(0_GiB, 0);
-    BOOST_CHECK_EQUAL(1_GiB, 1 << 30);
-    BOOST_CHECK_EQUAL(1_GiB, 1024 * 1024 * 1024);
-    BOOST_CHECK_EQUAL(1_GiB, 0x40000000U);
-    BOOST_CHECK_EQUAL(1_GiB, 1073741824U);
-    BOOST_CHECK_EQUAL(1_GiB, 1_MiB * 1024);
-    BOOST_CHECK_EQUAL(1_GiB, 1024_MiB);
-    BOOST_CHECK_EQUAL((1_GiB + 123) / double(1_GiB), (1_GiB + 123) / 1024.0 / 1024.0 / 1024.0);
-    BOOST_CHECK_EQUAL(2ULL * 1_GiB, 2ULL << 30);
-    BOOST_CHECK_EQUAL(4 * uint64_t{1_GiB}, uint64_t{4} << 30);
-    BOOST_CHECK_EQUAL(2_GiB, 2048_MiB);
-    BOOST_CHECK_EQUAL(3_GiB / 1_GiB, 3U);
-    BOOST_CHECK_EQUAL(3_GiB, 3U << 30);
+    CHECK_EQUAL(0_GiB, std::remove_cvref_t<decltype(0_GiB)>{0});
+    CHECK_EQUAL(1_GiB, std::remove_cvref_t<decltype(1_GiB)>{1 << 30});
+    CHECK_EQUAL(1_GiB, std::remove_cvref_t<decltype(1_GiB)>{1024 * 1024 * 1024});
+    CHECK_EQUAL(1_GiB, 0x40000000U);
+    CHECK_EQUAL(1_GiB, 1073741824U);
+    CHECK_EQUAL(1_GiB, 1_MiB * 1024);
+    CHECK_EQUAL(1_GiB, 1024_MiB);
+    CHECK_EQUAL((1_GiB + 123) / double(1_GiB), (1_GiB + 123) / 1024.0 / 1024.0 / 1024.0);
+    CHECK_EQUAL(2ULL * 1_GiB, 2ULL << 30);
+    CHECK_EQUAL(4 * uint64_t{1_GiB}, uint64_t{4} << 30);
+    CHECK_EQUAL(2_GiB, 2048_MiB);
+    CHECK_EQUAL(3_GiB / 1_GiB, 3U);
+    CHECK_EQUAL(3_GiB, 3U << 30);
 
     // Overflow handling and specific codebase values
     constexpr auto max_gib{std::numeric_limits<size_t>::max() >> 30};
     if constexpr (SIZE_MAX == UINT32_MAX) {
-        BOOST_CHECK_EQUAL(max_gib, 3U);
+        CHECK_EQUAL(max_gib, 3U);
         CHECK_EXCEPTION(4_GiB, std::overflow_error, HasReason("GiB value too large for size_t byte conversion"));
     } else {
         CHECK_GT(max_gib, 3U);
-        BOOST_CHECK_EQUAL(4_GiB, size_t{4} << 30);
-        BOOST_CHECK_EQUAL(4_GiB, 4096_MiB);
-        BOOST_CHECK_EQUAL(8_GiB, 8192_MiB);
-        BOOST_CHECK_EQUAL(16_GiB, 16384_MiB);
-        BOOST_CHECK_EQUAL(32_GiB, 32768_MiB);
+        CHECK_EQUAL(4_GiB, size_t{4} << 30);
+        CHECK_EQUAL(4_GiB, 4096_MiB);
+        CHECK_EQUAL(8_GiB, 8192_MiB);
+        CHECK_EQUAL(16_GiB, 16384_MiB);
+        CHECK_EQUAL(32_GiB, 32768_MiB);
     }
     CHECK_EXCEPTION(operator""_GiB(max_gib + 1), std::overflow_error, HasReason("GiB value too large for size_t byte conversion"));
 }

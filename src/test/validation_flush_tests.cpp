@@ -38,31 +38,31 @@ BOOST_AUTO_TEST_CASE(getcoinscachesizestate)
         // OK → LARGE
         auto state{chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, max_mempool_size_bytes)};
         for (size_t i{0}; i < MAX_ATTEMPTS && int64_t(view.DynamicMemoryUsage()) <= large_cap; ++i) {
-            BOOST_CHECK_EQUAL(state, CoinsCacheSizeState::OK);
+            CHECK_EQUAL(state, CoinsCacheSizeState::OK);
             AddTestCoin(m_rng, view);
             state = chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, max_mempool_size_bytes);
         }
 
         // LARGE → CRITICAL
         for (size_t i{0}; i < MAX_ATTEMPTS && int64_t(view.DynamicMemoryUsage()) <= full_cap; ++i) {
-            BOOST_CHECK_EQUAL(state, CoinsCacheSizeState::LARGE);
+            CHECK_EQUAL(state, CoinsCacheSizeState::LARGE);
             AddTestCoin(m_rng, view);
             state = chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, max_mempool_size_bytes);
         }
-        BOOST_CHECK_EQUAL(state, CoinsCacheSizeState::CRITICAL);
+        CHECK_EQUAL(state, CoinsCacheSizeState::CRITICAL);
     }
 
     // Default thresholds (no explicit limits) permit many more coins.
     for (int i{0}; i < 1'000; ++i) {
         AddTestCoin(m_rng, view);
-        BOOST_CHECK_EQUAL(chainstate.GetCoinsCacheSizeState(), CoinsCacheSizeState::OK);
+        CHECK_EQUAL(chainstate.GetCoinsCacheSizeState(), CoinsCacheSizeState::OK);
     }
 
     // CRITICAL → OK via Flush
-    BOOST_CHECK_EQUAL(chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, /*max_mempool_size_bytes=*/0), CoinsCacheSizeState::CRITICAL);
+    CHECK_EQUAL(chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, /*max_mempool_size_bytes=*/0), CoinsCacheSizeState::CRITICAL);
     view.SetBestBlock(m_rng.rand256());
     view.Flush();
-    BOOST_CHECK_EQUAL(chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, /*max_mempool_size_bytes=*/0), CoinsCacheSizeState::OK);
+    CHECK_EQUAL(chainstate.GetCoinsCacheSizeState(MAX_COINS_BYTES, /*max_mempool_size_bytes=*/0), CoinsCacheSizeState::OK);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

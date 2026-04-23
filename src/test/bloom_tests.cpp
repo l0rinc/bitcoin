@@ -179,9 +179,9 @@ BOOST_AUTO_TEST_CASE(merkle_block_1)
     filter.insert(uint256{"74d681e0e03bafa802c8aa084379aa98d9fcd632ddc2ed9782b586ec87451f20"});
 
     CMerkleBlock merkleBlock(block, filter);
-    BOOST_CHECK_EQUAL(merkleBlock.header.GetHash().GetHex(), block.GetHash().GetHex());
+    CHECK_EQUAL(merkleBlock.header.GetHash().GetHex(), block.GetHash().GetHex());
 
-    BOOST_CHECK_EQUAL(merkleBlock.vMatchedTxn.size(), 1U);
+    CHECK_EQUAL(merkleBlock.vMatchedTxn.size(), 1U);
     std::pair<unsigned int, Txid> pair = merkleBlock.vMatchedTxn[0];
 
     CHECK(merkleBlock.vMatchedTxn[0].second == Txid::FromUint256(uint256{"74d681e0e03bafa802c8aa084379aa98d9fcd632ddc2ed9782b586ec87451f20"}));
@@ -491,7 +491,7 @@ BOOST_AUTO_TEST_CASE(rolling_bloom)
             ++nHits;
     }
     // Expect about 100 hits
-    BOOST_CHECK_EQUAL(nHits, 71U);
+    CHECK_EQUAL(nHits, 71U);
 
     CHECK(rb1.contains(data[DATASIZE-1]));
     rb1.reset();
@@ -519,7 +519,7 @@ BOOST_AUTO_TEST_CASE(rolling_bloom)
             ++nHits;
     }
     // Expect about 5 false positives
-    BOOST_CHECK_EQUAL(nHits, 3U);
+    CHECK_EQUAL(nHits, 3U);
 
     // last-1000-entry, 0.01% false positive:
     CRollingBloomFilter rb2(1000, 0.001);

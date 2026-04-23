@@ -741,7 +741,7 @@ void TxRequestTest::TestInterleavedScenarios()
         action.second();
     }
 
-    BOOST_CHECK_EQUAL(runner.txrequest.Size(), 0U);
+    CHECK_EQUAL(runner.txrequest.Size(), 0U);
     CHECK(runner.expired.empty());
 }
 

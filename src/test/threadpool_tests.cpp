@@ -86,7 +86,7 @@ BOOST_AUTO_TEST_CASE(submit_fails_with_correct_error)
     // Never started: Inactive
     auto res = threadPool.Submit(fn_empty);
     CHECK(!res);
-    BOOST_CHECK_EQUAL(SubmitErrorString(res.error()), "No active workers");
+    CHECK_EQUAL(SubmitErrorString(res.error()), std::string_view{"No active workers"});
 
     // Interrupted (workers still alive): Interrupted, and Start() must be rejected too
     std::counting_semaphore<> blocker(0);
@@ -95,7 +95,7 @@ BOOST_AUTO_TEST_CASE(submit_fails_with_correct_error)
     threadPool.Interrupt();
     res = threadPool.Submit(fn_empty);
     CHECK(!res);
-    BOOST_CHECK_EQUAL(SubmitErrorString(res.error()), "Interrupted");
+    CHECK_EQUAL(SubmitErrorString(res.error()), std::string_view{"Interrupted"});
     CHECK_EXCEPTION(threadPool.Start(NUM_WORKERS_DEFAULT), std::runtime_error, HasReason("Thread pool has been interrupted or is stopping"));
     blocker.release(NUM_WORKERS_DEFAULT);
     WAIT_FOR(blocking_tasks);
@@ -104,19 +104,19 @@ BOOST_AUTO_TEST_CASE(submit_fails_with_correct_error)
     threadPool.Stop();
     res = threadPool.Submit(fn_empty);
     CHECK(!res);
-    BOOST_CHECK_EQUAL(SubmitErrorString(res.error()), "No active workers");
+    CHECK_EQUAL(SubmitErrorString(res.error()), std::string_view{"No active workers"});
 
     // Started then stopped: Inactive
     threadPool.Start(NUM_WORKERS_DEFAULT);
     threadPool.Stop();
     res = threadPool.Submit(fn_empty);
     CHECK(!res);
-    BOOST_CHECK_EQUAL(SubmitErrorString(res.error()), "No active workers");
+    CHECK_EQUAL(SubmitErrorString(res.error()), std::string_view{"No active workers"});
 
     std::vector<std::function<void()>> tasks;
     const auto range_res{threadPool.Submit(std::move(tasks))};
     CHECK(!range_res);
-    BOOST_CHECK_EQUAL(SubmitErrorString(range_res.error()), "No active workers");
+    CHECK_EQUAL(SubmitErrorString(range_res.error()), std::string_view{"No active workers"});
 }
 
 // Test 1, submit tasks and verify completion
@@ -140,8 +140,8 @@ BOOST_AUTO_TEST_CASE(submit_tasks_complete_successfully)
     // Wait for all tasks to finish
     WAIT_FOR(futures);
     int expected_value = (num_tasks * (num_tasks + 1)) / 2; // Gauss sum.
-    BOOST_CHECK_EQUAL(counter.load(), expected_value);
-    BOOST_CHECK_EQUAL(threadPool.WorkQueueSize(), 0);
+    CHECK_EQUAL(counter.load(), expected_value);
+    CHECK_EQUAL(threadPool.WorkQueueSize(), std::remove_cvref_t<decltype(threadPool.WorkQueueSize())>{0});
 }
 
 // Test 2, maintain all threads busy except one
@@ -162,12 +162,12 @@ BOOST_AUTO_TEST_CASE(single_available_worker_executes_all_tasks)
     for (auto& f : futures) f = Submit(threadPool, [&counter]{ counter++; });
 
     WAIT_FOR(futures);
-    BOOST_CHECK_EQUAL(counter, num_tasks);
+    CHECK_EQUAL(counter, num_tasks);
 
     blocker.release(NUM_WORKERS_DEFAULT - 1);
     WAIT_FOR(blocking_tasks);
     threadPool.Stop();
-    BOOST_CHECK_EQUAL(threadPool.WorkersCount(), 0);
+    CHECK_EQUAL(threadPool.WorkersCount(), std::remove_cvref_t<decltype(threadPool.WorkersCount())>{0});
 }
 
 // Test 3, wait for work to finish
@@ -194,7 +194,7 @@ BOOST_AUTO_TEST_CASE(get_result_from_completed_task)
 
     std::future<std::string> future_str = Submit(threadPool, []() { return std::string("true"); });
     std::string result = future_str.get();
-    BOOST_CHECK_EQUAL(result, "true");
+    CHECK_EQUAL(result, std::string_view{"true"});
 }
 
 // Test 5, throw exception and catch it on the consumer side
@@ -235,14 +235,14 @@ BOOST_AUTO_TEST_CASE(process_tasks_manually_when_workers_busy)
         });
     }
     UninterruptibleSleep(100ms);
-    BOOST_CHECK_EQUAL(threadPool.WorkQueueSize(), num_tasks);
+    CHECK_EQUAL(threadPool.WorkQueueSize(), static_cast<std::remove_cvref_t<decltype(threadPool.WorkQueueSize())>>(num_tasks));
 
     // Now process manually
     for (int i = 0; i < num_tasks; i++) {
         threadPool.ProcessTask();
     }
-    BOOST_CHECK_EQUAL(counter.load(), num_tasks);
-    BOOST_CHECK_EQUAL(threadPool.WorkQueueSize(), 0);
+    CHECK_EQUAL(counter.load(), num_tasks);
+    CHECK_EQUAL(threadPool.WorkQueueSize(), std::remove_cvref_t<decltype(threadPool.WorkQueueSize())>{0});
     blocker.release(NUM_WORKERS_DEFAULT);
     threadPool.Stop();
     WAIT_FOR(blocking_tasks);
@@ -278,7 +278,7 @@ BOOST_AUTO_TEST_CASE(task_submitted_while_busy_completes)
     std::future<bool> future = Submit(threadPool, []() { return true; });
 
     // At this point, all workers are blocked, and the extra task is queued
-    BOOST_CHECK_EQUAL(threadPool.WorkQueueSize(), 1);
+    CHECK_EQUAL(threadPool.WorkQueueSize(), std::remove_cvref_t<decltype(threadPool.WorkQueueSize())>{1});
 
     // Wait a short moment before unblocking the threads to mimic a concurrent shutdown
     std::thread thread_unblocker([&blocker]() {
@@ -297,7 +297,7 @@ BOOST_AUTO_TEST_CASE(task_submitted_while_busy_completes)
     WAIT_FOR(blocking_tasks);
 
     // Pool should be stopped and no workers remaining
-    BOOST_CHECK_EQUAL(threadPool.WorkersCount(), 0);
+    CHECK_EQUAL(threadPool.WorkersCount(), std::remove_cvref_t<decltype(threadPool.WorkersCount())>{0});
 }
 
 // Test 9, more workers than available cores (congestion test)
@@ -318,7 +318,7 @@ BOOST_AUTO_TEST_CASE(congestion_more_workers_than_cores)
     }
 
     WAIT_FOR(futures);
-    BOOST_CHECK_EQUAL(counter.load(), num_tasks);
+    CHECK_EQUAL(counter.load(), num_tasks);
 }
 
 // Test 10, Interrupt() prevents further submissions
@@ -331,12 +331,12 @@ BOOST_AUTO_TEST_CASE(interrupt_blocks_new_submissions)
 
     auto res = threadPool.Submit([]{});
     CHECK(!res);
-    BOOST_CHECK_EQUAL(SubmitErrorString(res.error()), "Interrupted");
+    CHECK_EQUAL(SubmitErrorString(res.error()), std::string_view{"Interrupted"});
 
     std::vector<std::function<void()>> tasks;
     const auto range_res{threadPool.Submit(std::move(tasks))};
     CHECK(!range_res);
-    BOOST_CHECK_EQUAL(SubmitErrorString(range_res.error()), "Interrupted");
+    CHECK_EQUAL(SubmitErrorString(range_res.error()), std::string_view{"Interrupted"});
 
     // Reset pool
     threadPool.Stop();
@@ -353,10 +353,10 @@ BOOST_AUTO_TEST_CASE(interrupt_blocks_new_submissions)
     }).get();
     blocker.release(1); // unblock worker
 
-    BOOST_CHECK_EQUAL(counter.load(), 1);
+    CHECK_EQUAL(counter.load(), std::remove_cvref_t<decltype(counter.load())>{1});
     threadPool.Stop();
     WAIT_FOR(blocking_tasks);
-    BOOST_CHECK_EQUAL(threadPool.WorkersCount(), 0);
+    CHECK_EQUAL(threadPool.WorkersCount(), std::remove_cvref_t<decltype(threadPool.WorkersCount())>{0});
 }
 
 // Test 11, Start() must not cause a deadlock when called during Stop()
@@ -384,7 +384,7 @@ BOOST_AUTO_TEST_CASE(start_mid_stop_does_not_deadlock)
     try {
         threadPool.Start(NUM_WORKERS_DEFAULT);
     } catch (std::exception& e) {
-        BOOST_CHECK_EQUAL(e.what(), "Thread pool has been interrupted or is stopping");
+        CHECK_EQUAL(e.what(), std::string_view{"Thread pool has been interrupted or is stopping"});
     }
     workers_blocker.release(NUM_WORKERS_DEFAULT);
     WAIT_FOR(blocking_tasks);
@@ -415,7 +415,7 @@ BOOST_AUTO_TEST_CASE(queued_tasks_complete_after_interrupt)
     // Queued tasks must still complete despite the interrupt
     blocker.release(NUM_WORKERS_DEFAULT);
     WAIT_FOR(futures);
-    BOOST_CHECK_EQUAL(counter.load(), num_tasks);
+    CHECK_EQUAL(counter.load(), num_tasks);
 
     threadPool.Stop();
     WAIT_FOR(blocking_tasks);
@@ -439,7 +439,7 @@ BOOST_AUTO_TEST_CASE(stop_active_wait_drains_queue)
                 main_thread_tasks.fetch_add(1, std::memory_order_relaxed);
         });
     }
-    BOOST_CHECK_EQUAL(threadPool.WorkQueueSize(), num_tasks);
+    CHECK_EQUAL(threadPool.WorkQueueSize(), num_tasks);
 
     // Delay release so Stop() drains all tasks from the calling thread
     std::thread unblocker([&blocker, &threadPool]() {
@@ -453,7 +453,7 @@ BOOST_AUTO_TEST_CASE(stop_active_wait_drains_queue)
     unblocker.join();
 
     // Check the main thread processed all tasks
-    BOOST_CHECK_EQUAL(main_thread_tasks.load(), num_tasks);
+    CHECK_EQUAL(main_thread_tasks.load(), std::remove_cvref_t<decltype(main_thread_tasks.load())>{num_tasks});
     WAIT_FOR(blocking_tasks);
 }
 
@@ -479,9 +479,9 @@ BOOST_AUTO_TEST_CASE(submit_range_of_tasks_complete_successfully)
     }
 
     auto futures{std::move(*Assert(threadPool.Submit(std::move(array_tasks))))};
-    BOOST_CHECK_EQUAL(futures.size(), static_cast<size_t>(num_tasks));
+    CHECK_EQUAL(futures.size(), static_cast<size_t>(num_tasks));
     std::ranges::move(*Assert(threadPool.Submit(std::move(vector_tasks))), std::back_inserter(futures));
-    BOOST_CHECK_EQUAL(futures.size(), static_cast<size_t>(num_tasks * 2));
+    CHECK_EQUAL(futures.size(), static_cast<size_t>(num_tasks * 2));
 
     auto squares_sum{0};
     for (auto& future : futures) {
@@ -491,9 +491,9 @@ BOOST_AUTO_TEST_CASE(submit_range_of_tasks_complete_successfully)
     // 2x Gauss sum.
     const auto expected_sum{2 * ((num_tasks * (num_tasks + 1)) / 2)};
     const auto expected_squares_sum{2 * ((num_tasks * (num_tasks + 1) * ((num_tasks * 2) + 1)) / 6)};
-    BOOST_CHECK_EQUAL(sum, expected_sum);
-    BOOST_CHECK_EQUAL(squares_sum, expected_squares_sum);
-    BOOST_CHECK_EQUAL(threadPool.WorkQueueSize(), 0);
+    CHECK_EQUAL(sum, expected_sum);
+    CHECK_EQUAL(squares_sum, expected_squares_sum);
+    CHECK_EQUAL(threadPool.WorkQueueSize(), std::remove_cvref_t<decltype(threadPool.WorkQueueSize())>{0});
 }
 
 BOOST_AUTO_TEST_SUITE_END()

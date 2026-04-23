@@ -145,22 +145,22 @@ BOOST_AUTO_TEST_CASE(key_test1)
     CHECK(key1.Sign(hashMsg, detsig));
     CHECK(key1C.Sign(hashMsg, detsigc));
     CHECK(detsig == detsigc);
-    BOOST_CHECK_EQUAL(HexStr(detsig), "304402205dbbddda71772d95ce91cd2d14b592cfbc1dd0aabd6a394b6c2d377bbe59d31d022014ddda21494a4e221f0824f0b8b924c43fa43c0ad57dccdaa11f81a6bd4582f6");
+    CHECK_EQUAL(HexStr(detsig), std::string_view{"304402205dbbddda71772d95ce91cd2d14b592cfbc1dd0aabd6a394b6c2d377bbe59d31d022014ddda21494a4e221f0824f0b8b924c43fa43c0ad57dccdaa11f81a6bd4582f6"});
 
     CHECK(key2.Sign(hashMsg, detsig));
     CHECK(key2C.Sign(hashMsg, detsigc));
     CHECK(detsig == detsigc);
-    BOOST_CHECK_EQUAL(HexStr(detsig), "3044022052d8a32079c11e79db95af63bb9600c5b04f21a9ca33dc129c2bfa8ac9dc1cd5022061d8ae5e0f6c1a16bde3719c64c2fd70e404b6428ab9a69566962e8771b5944d");
+    CHECK_EQUAL(HexStr(detsig), std::string_view{"3044022052d8a32079c11e79db95af63bb9600c5b04f21a9ca33dc129c2bfa8ac9dc1cd5022061d8ae5e0f6c1a16bde3719c64c2fd70e404b6428ab9a69566962e8771b5944d"});
 
     CHECK(key1.SignCompact(hashMsg, detsig));
     CHECK(key1C.SignCompact(hashMsg, detsigc));
-    BOOST_CHECK_EQUAL(HexStr(detsig), "1c5dbbddda71772d95ce91cd2d14b592cfbc1dd0aabd6a394b6c2d377bbe59d31d14ddda21494a4e221f0824f0b8b924c43fa43c0ad57dccdaa11f81a6bd4582f6");
-    BOOST_CHECK_EQUAL(HexStr(detsigc), "205dbbddda71772d95ce91cd2d14b592cfbc1dd0aabd6a394b6c2d377bbe59d31d14ddda21494a4e221f0824f0b8b924c43fa43c0ad57dccdaa11f81a6bd4582f6");
+    CHECK_EQUAL(HexStr(detsig), std::string_view{"1c5dbbddda71772d95ce91cd2d14b592cfbc1dd0aabd6a394b6c2d377bbe59d31d14ddda21494a4e221f0824f0b8b924c43fa43c0ad57dccdaa11f81a6bd4582f6"});
+    CHECK_EQUAL(HexStr(detsigc), std::string_view{"205dbbddda71772d95ce91cd2d14b592cfbc1dd0aabd6a394b6c2d377bbe59d31d14ddda21494a4e221f0824f0b8b924c43fa43c0ad57dccdaa11f81a6bd4582f6"});
 
     CHECK(key2.SignCompact(hashMsg, detsig));
     CHECK(key2C.SignCompact(hashMsg, detsigc));
-    BOOST_CHECK_EQUAL(HexStr(detsig), "1c52d8a32079c11e79db95af63bb9600c5b04f21a9ca33dc129c2bfa8ac9dc1cd561d8ae5e0f6c1a16bde3719c64c2fd70e404b6428ab9a69566962e8771b5944d");
-    BOOST_CHECK_EQUAL(HexStr(detsigc), "2052d8a32079c11e79db95af63bb9600c5b04f21a9ca33dc129c2bfa8ac9dc1cd561d8ae5e0f6c1a16bde3719c64c2fd70e404b6428ab9a69566962e8771b5944d");
+    CHECK_EQUAL(HexStr(detsig), std::string_view{"1c52d8a32079c11e79db95af63bb9600c5b04f21a9ca33dc129c2bfa8ac9dc1cd561d8ae5e0f6c1a16bde3719c64c2fd70e404b6428ab9a69566962e8771b5944d"});
+    CHECK_EQUAL(HexStr(detsigc), std::string_view{"2052d8a32079c11e79db95af63bb9600c5b04f21a9ca33dc129c2bfa8ac9dc1cd561d8ae5e0f6c1a16bde3719c64c2fd70e404b6428ab9a69566962e8771b5944d"});
 }
 
 BOOST_AUTO_TEST_CASE(key_signature_tests)
@@ -276,7 +276,7 @@ BOOST_AUTO_TEST_CASE(bip340_test_vectors)
         auto pubkey = ParseHex(test.first[0]);
         auto msg = ParseHex(test.first[1]);
         auto sig = ParseHex(test.first[2]);
-        BOOST_CHECK_EQUAL(XOnlyPubKey(pubkey).VerifySchnorr(uint256(msg), sig), test.second);
+        CHECK_EQUAL(XOnlyPubKey(pubkey).VerifySchnorr(uint256(msg), sig), test.second);
     }
 
     static const std::vector<std::array<std::string, 5>> SIGN_VECTORS = {
@@ -386,7 +386,7 @@ BOOST_AUTO_TEST_CASE(key_schnorr_tweak_smoke_test)
     CPubKey pubkey = key.GetPubKey();
     uint256 tweak_new = XOnlyPubKey(pubkey).ComputeTapTweakHash(&merkle_root);
 
-    BOOST_CHECK_EQUAL(tweak_old, tweak_new);
+    CHECK_EQUAL(tweak_old, tweak_new);
 
     secp256k1_context_destroy(secp256k1_context_sign);
 }

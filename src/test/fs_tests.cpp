@@ -18,12 +18,12 @@ BOOST_AUTO_TEST_CASE(fsbridge_pathtostring)
 {
     std::string u8_str = "fs_tests_₿_🏃";
     std::u8string str8{u8"fs_tests_₿_🏃"};
-    BOOST_CHECK_EQUAL(fs::PathToString(fs::PathFromString(u8_str)), u8_str);
-    BOOST_CHECK_EQUAL(fs::u8path(u8_str).utf8string(), u8_str);
-    BOOST_CHECK_EQUAL(fs::path(str8).utf8string(), u8_str);
+    CHECK_EQUAL(fs::PathToString(fs::PathFromString(u8_str)), u8_str);
+    CHECK_EQUAL(fs::u8path(u8_str).utf8string(), u8_str);
+    CHECK_EQUAL(fs::path(str8).utf8string(), u8_str);
     CHECK(fs::path(str8).u8string() == str8);
-    BOOST_CHECK_EQUAL(fs::PathFromString(u8_str).utf8string(), u8_str);
-    BOOST_CHECK_EQUAL(fs::PathToString(fs::u8path(u8_str)), u8_str);
+    CHECK_EQUAL(fs::PathFromString(u8_str).utf8string(), u8_str);
+    CHECK_EQUAL(fs::PathToString(fs::u8path(u8_str)), u8_str);
 #ifndef WIN32
     // On non-windows systems, verify that arbitrary byte strings containing
     // invalid UTF-8 can be round tripped successfully with PathToString and
@@ -32,8 +32,8 @@ BOOST_AUTO_TEST_CASE(fsbridge_pathtostring)
     // and these functions do encoding and decoding, so the behavior of this
     // test would be undefined.
     std::string invalid_u8_str = "\xf0";
-    BOOST_CHECK_EQUAL(invalid_u8_str.size(), 1);
-    BOOST_CHECK_EQUAL(fs::PathToString(fs::PathFromString(invalid_u8_str)), invalid_u8_str);
+    CHECK_EQUAL(invalid_u8_str.size(), std::remove_cvref_t<decltype(invalid_u8_str.size())>{1});
+    CHECK_EQUAL(fs::PathToString(fs::PathFromString(invalid_u8_str)), invalid_u8_str);
 #endif
 }
 
@@ -41,7 +41,7 @@ BOOST_AUTO_TEST_CASE(fsbridge_stem)
 {
     std::string test_filename = "fs_tests_₿_🏃.dat";
     std::string expected_stem = "fs_tests_₿_🏃";
-    BOOST_CHECK_EQUAL(fs::PathToString(fs::PathFromString(test_filename).stem()), expected_stem);
+    CHECK_EQUAL(fs::PathToString(fs::PathFromString(test_filename).stem()), expected_stem);
 }
 
 BOOST_AUTO_TEST_CASE(fsbridge_fstream)
@@ -58,13 +58,13 @@ BOOST_AUTO_TEST_CASE(fsbridge_fstream)
         std::ifstream file{tmpfile2.std_path()};
         std::string input_buffer;
         file >> input_buffer;
-        BOOST_CHECK_EQUAL(input_buffer, "bitcoin");
+        CHECK_EQUAL(input_buffer, std::string_view{"bitcoin"});
     }
     {
         std::ifstream file{tmpfile1.std_path(), std::ios_base::in | std::ios_base::ate};
         std::string input_buffer;
         file >> input_buffer;
-        BOOST_CHECK_EQUAL(input_buffer, "");
+        CHECK_EQUAL(input_buffer, std::string_view{""});
     }
     {
         std::ofstream file{tmpfile2.std_path(), std::ios_base::out | std::ios_base::app};
@@ -74,7 +74,7 @@ BOOST_AUTO_TEST_CASE(fsbridge_fstream)
         std::ifstream file{tmpfile1.std_path()};
         std::string input_buffer;
         file >> input_buffer;
-        BOOST_CHECK_EQUAL(input_buffer, "bitcointests");
+        CHECK_EQUAL(input_buffer, std::string_view{"bitcointests"});
     }
     {
         std::ofstream file{tmpfile2.std_path(), std::ios_base::out | std::ios_base::trunc};
@@ -84,24 +84,24 @@ BOOST_AUTO_TEST_CASE(fsbridge_fstream)
         std::ifstream file{tmpfile1.std_path()};
         std::string input_buffer;
         file >> input_buffer;
-        BOOST_CHECK_EQUAL(input_buffer, "bitcoin");
+        CHECK_EQUAL(input_buffer, std::string_view{"bitcoin"});
     }
     {
         // Join an absolute path and a relative path.
         fs::path p = fsbridge::AbsPathJoin(tmpfolder, fs::u8path("fs_tests_₿_🏃"));
         CHECK(p.is_absolute());
-        BOOST_CHECK_EQUAL(tmpfile1, p);
+        CHECK_EQUAL(tmpfile1, p);
     }
     {
         // Join two absolute paths.
         fs::path p = fsbridge::AbsPathJoin(tmpfile1, tmpfile2);
         CHECK(p.is_absolute());
-        BOOST_CHECK_EQUAL(tmpfile2, p);
+        CHECK_EQUAL(tmpfile2, p);
     }
     {
         // Ensure joining with empty paths does not add trailing path components.
-        BOOST_CHECK_EQUAL(tmpfile1, fsbridge::AbsPathJoin(tmpfile1, ""));
-        BOOST_CHECK_EQUAL(tmpfile1, fsbridge::AbsPathJoin(tmpfile1, {}));
+        CHECK_EQUAL(tmpfile1, fsbridge::AbsPathJoin(tmpfile1, ""));
+        CHECK_EQUAL(tmpfile1, fsbridge::AbsPathJoin(tmpfile1, {}));
     }
 }
 
@@ -134,7 +134,7 @@ BOOST_AUTO_TEST_CASE(rename)
         std::ifstream file{path2.std_path()};
         std::string contents;
         file >> contents;
-        BOOST_CHECK_EQUAL(contents, path1_contents);
+        CHECK_EQUAL(contents, path1_contents);
     }
     fs::remove(path2);
 }

@@ -87,8 +87,8 @@ public:
             ret += entry.second.coin.DynamicMemoryUsage();
             ++count;
         }
-        BOOST_CHECK_EQUAL(GetCacheSize(), count);
-        BOOST_CHECK_EQUAL(DynamicMemoryUsage(), ret);
+        CHECK_EQUAL(GetCacheSize(), count);
+        CHECK_EQUAL(DynamicMemoryUsage(), ret);
         if (sanity_check) {
             SanityCheck();
         }
@@ -525,26 +525,26 @@ BOOST_AUTO_TEST_CASE(ccoins_serialization)
     // Good example
     Coin cc1;
     SpanReader{"97f23c835800816115944e077fe7c803cfa57f29b36bf87c1d35"_hex} >> cc1;
-    BOOST_CHECK_EQUAL(cc1.IsCoinBase(), false);
-    BOOST_CHECK_EQUAL(cc1.nHeight, 203998U);
-    BOOST_CHECK_EQUAL(cc1.out.nValue, CAmount{60000000000});
-    BOOST_CHECK_EQUAL(HexStr(cc1.out.scriptPubKey), HexStr(GetScriptForDestination(PKHash(uint160("816115944e077fe7c803cfa57f29b36bf87c1d35"_hex_u8)))));
+    CHECK_EQUAL(cc1.IsCoinBase(), std::remove_cvref_t<decltype(cc1.IsCoinBase())>{false});
+    CHECK_EQUAL(cc1.nHeight, 203998U);
+    CHECK_EQUAL(cc1.out.nValue, CAmount{60000000000});
+    CHECK_EQUAL(HexStr(cc1.out.scriptPubKey), HexStr(GetScriptForDestination(PKHash(uint160("816115944e077fe7c803cfa57f29b36bf87c1d35"_hex_u8)))));
 
     // Good example
     Coin cc2;
     SpanReader{"8ddf77bbd123008c988f1a4a4de2161e0f50aac7f17e7f9555caa4"_hex} >> cc2;
-    BOOST_CHECK_EQUAL(cc2.IsCoinBase(), true);
-    BOOST_CHECK_EQUAL(cc2.nHeight, 120891U);
-    BOOST_CHECK_EQUAL(cc2.out.nValue, 110397);
-    BOOST_CHECK_EQUAL(HexStr(cc2.out.scriptPubKey), HexStr(GetScriptForDestination(PKHash(uint160("8c988f1a4a4de2161e0f50aac7f17e7f9555caa4"_hex_u8)))));
+    CHECK_EQUAL(cc2.IsCoinBase(), std::remove_cvref_t<decltype(cc2.IsCoinBase())>{true});
+    CHECK_EQUAL(cc2.nHeight, 120891U);
+    CHECK_EQUAL(cc2.out.nValue, std::remove_cvref_t<decltype(cc2.out.nValue)>{110397});
+    CHECK_EQUAL(HexStr(cc2.out.scriptPubKey), HexStr(GetScriptForDestination(PKHash(uint160("8c988f1a4a4de2161e0f50aac7f17e7f9555caa4"_hex_u8)))));
 
     // Smallest possible example
     Coin cc3;
     SpanReader{"000006"_hex} >> cc3;
-    BOOST_CHECK_EQUAL(cc3.IsCoinBase(), false);
-    BOOST_CHECK_EQUAL(cc3.nHeight, 0U);
-    BOOST_CHECK_EQUAL(cc3.out.nValue, 0);
-    BOOST_CHECK_EQUAL(cc3.out.scriptPubKey.size(), 0U);
+    CHECK_EQUAL(cc3.IsCoinBase(), std::remove_cvref_t<decltype(cc3.IsCoinBase())>{false});
+    CHECK_EQUAL(cc3.nHeight, 0U);
+    CHECK_EQUAL(cc3.out.nValue, std::remove_cvref_t<decltype(cc3.out.nValue)>{0});
+    CHECK_EQUAL(cc3.out.scriptPubKey.size(), 0U);
 
     // scriptPubKey that ends beyond the end of the stream
     try {
@@ -558,7 +558,7 @@ BOOST_AUTO_TEST_CASE(ccoins_serialization)
     DataStream tmp{};
     uint64_t x = 3000000000ULL;
     tmp << VARINT(x);
-    BOOST_CHECK_EQUAL(HexStr(tmp), "8a95c0bb00");
+    CHECK_EQUAL(HexStr(tmp), std::string_view{"8a95c0bb00"});
     try {
         Coin cc5;
         SpanReader{"00008a95c0bb00"_hex} >> cc5;
@@ -662,7 +662,7 @@ static void WriteCoinsViewEntry(CCoinsView& view, const MaybeCoin& cache_coin)
     size_t dirty_count{cache_coin && cache_coin->IsDirty()};
     auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, map, /*will_erase=*/true)};
     view.BatchWrite(cursor, {});
-    BOOST_CHECK_EQUAL(dirty_count, 0U);
+    CHECK_EQUAL(dirty_count, 0U);
 }
 
 class SingleEntryCacheTest
@@ -686,9 +686,9 @@ static void CheckAccessCoin(const CAmount base_value, const MaybeCoin& cache_coi
 {
     SingleEntryCacheTest test{base_value, cache_coin};
     auto& coin = test.cache.AccessCoin(OUTPOINT);
-    BOOST_CHECK_EQUAL(coin.IsSpent(), !test.cache.GetCoin(OUTPOINT));
+    CHECK_EQUAL(coin.IsSpent(), !test.cache.GetCoin(OUTPOINT));
     test.cache.SelfTest(/*sanity_check=*/false);
-    BOOST_CHECK_EQUAL(GetCoinsMapEntry(test.cache.map()), expected);
+    CHECK_EQUAL(GetCoinsMapEntry(test.cache.map()), expected);
 }
 
 BOOST_AUTO_TEST_CASE(ccoins_access)
@@ -718,7 +718,7 @@ static void CheckSpendCoins(const CAmount base_value, const MaybeCoin& cache_coi
     SingleEntryCacheTest test{base_value, cache_coin};
     test.cache.SpendCoin(OUTPOINT);
     test.cache.SelfTest();
-    BOOST_CHECK_EQUAL(GetCoinsMapEntry(test.cache.map()), expected);
+    CHECK_EQUAL(GetCoinsMapEntry(test.cache.map()), expected);
 }
 
 BOOST_AUTO_TEST_CASE(ccoins_spend)
@@ -751,7 +751,7 @@ static void CheckAddCoin(const CAmount base_value, const MaybeCoin& cache_coin, 
     if (auto* expected_coin{std::get_if<MaybeCoin>(&expected)}) {
         add_coin();
         test.cache.SelfTest();
-        BOOST_CHECK_EQUAL(GetCoinsMapEntry(test.cache.map()), *expected_coin);
+        CHECK_EQUAL(GetCoinsMapEntry(test.cache.map()), *expected_coin);
     } else {
         CHECK_EXCEPTION(add_coin(), std::logic_error, HasReason(std::get<std::string>(expected)));
     }
@@ -796,7 +796,7 @@ static void CheckWriteCoins(const MaybeCoin& parent, const MaybeCoin& child, con
     if (auto* expected_coin{std::get_if<MaybeCoin>(&expected)}) {
         write_coins();
         test.cache.SelfTest(/*sanity_check=*/false);
-        BOOST_CHECK_EQUAL(GetCoinsMapEntry(test.cache.map()), *expected_coin);
+        CHECK_EQUAL(GetCoinsMapEntry(test.cache.map()), *expected_coin);
     } else {
         CHECK_EXCEPTION(write_coins(), std::logic_error, HasReason(std::get<std::string>(expected)));
     }
@@ -935,19 +935,19 @@ void TestFlushBehavior(
     CHECK(!base.HaveCoin(outp));
     CHECK(view->HaveCoin(outp));
 
-    BOOST_CHECK_EQUAL(GetCoinsMapEntry(view->map(), outp), CoinEntry(coin.out.nValue, CoinEntry::State::DIRTY_FRESH));
+    CHECK_EQUAL(GetCoinsMapEntry(view->map(), outp), CoinEntry(coin.out.nValue, CoinEntry::State::DIRTY_FRESH));
 
     // --- 2. Flushing all caches (without erasing)
     //
     flush_all(/*erase=*/ false);
 
     // CoinsMap usage should be unchanged since we didn't erase anything.
-    BOOST_CHECK_EQUAL(cache_usage, view->DynamicMemoryUsage());
-    BOOST_CHECK_EQUAL(cache_size, view->map().size());
+    CHECK_EQUAL(cache_usage, view->DynamicMemoryUsage());
+    CHECK_EQUAL(cache_size, view->map().size());
 
     // --- 3. Ensuring the entry still exists in the cache and has been written to parent
     //
-    BOOST_CHECK_EQUAL(GetCoinsMapEntry(view->map(), outp), CoinEntry(coin.out.nValue, CoinEntry::State::CLEAN)); // State should have been wiped.
+    CHECK_EQUAL(GetCoinsMapEntry(view->map(), outp), CoinEntry(coin.out.nValue, CoinEntry::State::CLEAN)); // State should have been wiped.
 
     // Both views should now have the coin.
     CHECK(base.HaveCoin(outp));
@@ -967,7 +967,7 @@ void TestFlushBehavior(
         //
         CHECK(!GetCoinsMapEntry(view->map(), outp));
         view->AccessCoin(outp);
-        BOOST_CHECK_EQUAL(GetCoinsMapEntry(view->map(), outp), CoinEntry(coin.out.nValue, CoinEntry::State::CLEAN));
+        CHECK_EQUAL(GetCoinsMapEntry(view->map(), outp), CoinEntry(coin.out.nValue, CoinEntry::State::CLEAN));
     }
 
     // Can't overwrite an entry without specifying that an overwrite is
@@ -981,7 +981,7 @@ void TestFlushBehavior(
     CHECK(view->SpendCoin(outp));
 
     // The coin should be in the cache, but spent and marked dirty.
-    BOOST_CHECK_EQUAL(GetCoinsMapEntry(view->map(), outp), SPENT_DIRTY);
+    CHECK_EQUAL(GetCoinsMapEntry(view->map(), outp), SPENT_DIRTY);
     CHECK(!view->HaveCoin(outp)); // Coin should be considered spent in `view`.
     CHECK(base.HaveCoin(outp));  // But coin should still be unspent in `base`.
 
@@ -1032,7 +1032,7 @@ void TestFlushBehavior(
     all_caches[0]->AddCoin(outp, std::move(coin), false);
 
     // Coin should be FRESH in the cache.
-    BOOST_CHECK_EQUAL(GetCoinsMapEntry(all_caches[0]->map(), outp), CoinEntry(coin_val, CoinEntry::State::DIRTY_FRESH));
+    CHECK_EQUAL(GetCoinsMapEntry(all_caches[0]->map(), outp), CoinEntry(coin_val, CoinEntry::State::DIRTY_FRESH));
     // Base shouldn't have seen coin.
     CHECK(!base.HaveCoin(outp));
 
@@ -1133,7 +1133,7 @@ BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
 
     const Coin coin{CTxOut{m_rng.randrange(10), CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
     cache.EmplaceCoinInternalDANGER(COutPoint{outpoint}, Coin{coin});
-    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), 1U);
+    CHECK_EQUAL(cache.GetDirtyCount(), 1U);
 
     uint256 cache_best_block{m_rng.rand256()};
     cache.SetBestBlock(cache_best_block);
@@ -1142,16 +1142,16 @@ BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
         const auto reset_guard{cache.CreateResetGuard()};
         CHECK(cache.AccessCoin(outpoint) == coin);
         CHECK(!cache.AccessCoin(outpoint).IsSpent());
-        BOOST_CHECK_EQUAL(cache.GetCacheSize(), 1);
-        BOOST_CHECK_EQUAL(cache.GetDirtyCount(), 1);
-        BOOST_CHECK_EQUAL(cache.GetBestBlock(), cache_best_block);
+        CHECK_EQUAL(cache.GetCacheSize(), std::remove_cvref_t<decltype(cache.GetCacheSize())>{1});
+        CHECK_EQUAL(cache.GetDirtyCount(), std::remove_cvref_t<decltype(cache.GetDirtyCount())>{1});
+        CHECK_EQUAL(cache.GetBestBlock(), cache_best_block);
         CHECK(!root_cache.HaveCoinInCache(outpoint));
     }
 
     CHECK(cache.AccessCoin(outpoint).IsSpent());
-    BOOST_CHECK_EQUAL(cache.GetCacheSize(), 0);
-    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), 0);
-    BOOST_CHECK_EQUAL(cache.GetBestBlock(), base_best_block);
+    CHECK_EQUAL(cache.GetCacheSize(), std::remove_cvref_t<decltype(cache.GetCacheSize())>{0});
+    CHECK_EQUAL(cache.GetDirtyCount(), std::remove_cvref_t<decltype(cache.GetDirtyCount())>{0});
+    CHECK_EQUAL(cache.GetBestBlock(), base_best_block);
     CHECK(!root_cache.HaveCoinInCache(outpoint));
 
     // Using a reset guard again is idempotent
@@ -1160,14 +1160,14 @@ BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
     }
 
     CHECK(cache.AccessCoin(outpoint).IsSpent());
-    BOOST_CHECK_EQUAL(cache.GetCacheSize(), 0);
-    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), 0U);
-    BOOST_CHECK_EQUAL(cache.GetBestBlock(), base_best_block);
+    CHECK_EQUAL(cache.GetCacheSize(), std::remove_cvref_t<decltype(cache.GetCacheSize())>{0});
+    CHECK_EQUAL(cache.GetDirtyCount(), 0U);
+    CHECK_EQUAL(cache.GetBestBlock(), base_best_block);
     CHECK(!root_cache.HaveCoinInCache(outpoint));
 
     // Flush should be a no-op after reset.
     cache.Flush();
-    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), 0U);
+    CHECK_EQUAL(cache.GetDirtyCount(), 0U);
 }
 
 BOOST_AUTO_TEST_CASE(ccoins_peekcoin)

@@ -95,16 +95,16 @@ BOOST_AUTO_TEST_CASE(db_cursor_prefix_range_test)
             DataStream value;
             for (int i = 0; i < 10; i++) {
                 DatabaseCursor::Status status = cursor->Next(key, value);
-                BOOST_CHECK_EQUAL(status, DatabaseCursor::Status::MORE);
+                CHECK_EQUAL(status, DatabaseCursor::Status::MORE);
 
                 std::string key_back;
                 unsigned int i_back;
                 key >> key_back >> i_back;
-                BOOST_CHECK_EQUAL(key_back, prefix);
+                CHECK_EQUAL(key_back, prefix);
 
                 unsigned int value_back;
                 value >> value_back;
-                BOOST_CHECK_EQUAL(value_back, i_back);
+                CHECK_EQUAL(value_back, i_back);
             }
 
             // Let's now read it once more, it should return DONE
@@ -165,7 +165,7 @@ BOOST_AUTO_TEST_CASE(db_availability_after_write_error)
         // Sanity-check; read and verify the overwritten value
         std::string read_value;
         CHECK(batch->Read(key, read_value));
-        BOOST_CHECK_EQUAL(read_value, value2);
+        CHECK_EQUAL(read_value, value2);
     }
 }
 
@@ -288,13 +288,13 @@ BOOST_AUTO_TEST_CASE(concurrent_txn_dont_interfere)
     // And, once commit is completed, handler2 can read the record
     std::string read_value;
     CHECK(handler2->Read(key, read_value));
-    BOOST_CHECK_EQUAL(read_value, value);
+    CHECK_EQUAL(read_value, value);
 
     // Also, once txn is committed, single write statements are re-enabled.
     // Which means that handler2 can read the record changes directly.
     CHECK(handler->Write(key, value2, /*fOverwrite=*/true));
     CHECK(handler2->Read(key, read_value));
-    BOOST_CHECK_EQUAL(read_value, value2);
+    CHECK_EQUAL(read_value, value2);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -88,7 +88,7 @@ public:
         OutputGroupTypeMap groups = GroupOutputs(*wallet, coins_pool, makeSelectionParams(rand, avoid_partial_spends), {{filter}})[filter];
         std::vector<OutputGroup>& groups_out = positive_only ? groups.groups_by_type[type].positive_group :
                                                groups.groups_by_type[type].mixed_group;
-        BOOST_CHECK_EQUAL(groups_out.size(), expected_size);
+        CHECK_EQUAL(groups_out.size(), static_cast<std::remove_cvref_t<decltype(groups_out.size())>>(expected_size));
     }
 
     void GroupAndVerify(const OutputType type,

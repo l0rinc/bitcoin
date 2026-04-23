@@ -54,7 +54,7 @@ BOOST_AUTO_TEST_CASE(getlocator_test)
         vBlocksMain[i].pprev = i ? &vBlocksMain[i - 1] : nullptr;
         vBlocksMain[i].phashBlock = &vHashMain[i];
         vBlocksMain[i].BuildSkip();
-        BOOST_CHECK_EQUAL((int)UintToArith256(vBlocksMain[i].GetBlockHash()).GetLow64(), vBlocksMain[i].nHeight);
+        CHECK_EQUAL((int)UintToArith256(vBlocksMain[i].GetBlockHash()).GetLow64(), vBlocksMain[i].nHeight);
         CHECK(vBlocksMain[i].pprev == nullptr || vBlocksMain[i].nHeight == vBlocksMain[i].pprev->nHeight + 1);
     }
 
@@ -67,7 +67,7 @@ BOOST_AUTO_TEST_CASE(getlocator_test)
         vBlocksSide[i].pprev = i ? &vBlocksSide[i - 1] : (vBlocksMain.data()+49999);
         vBlocksSide[i].phashBlock = &vHashSide[i];
         vBlocksSide[i].BuildSkip();
-        BOOST_CHECK_EQUAL((int)UintToArith256(vBlocksSide[i].GetBlockHash()).GetLow64(), vBlocksSide[i].nHeight);
+        CHECK_EQUAL((int)UintToArith256(vBlocksSide[i].GetBlockHash()).GetLow64(), vBlocksSide[i].nHeight);
         CHECK(vBlocksSide[i].pprev == nullptr || vBlocksSide[i].nHeight == vBlocksSide[i].pprev->nHeight + 1);
     }
 
@@ -87,13 +87,13 @@ BOOST_AUTO_TEST_CASE(getlocator_test)
 
         // Entries 1 through 11 (inclusive) go back one step each.
         for (unsigned int i = 1; i < 12 && i < locator.vHave.size() - 1; i++) {
-            BOOST_CHECK_EQUAL(UintToArith256(locator.vHave[i]).GetLow64(), tip->nHeight - i);
+            CHECK_EQUAL(UintToArith256(locator.vHave[i]).GetLow64(), tip->nHeight - i);
         }
 
         // The further ones (excluding the last one) go back with exponential steps.
         unsigned int dist = 2;
         for (unsigned int i = 12; i < locator.vHave.size() - 1; i++) {
-            BOOST_CHECK_EQUAL(UintToArith256(locator.vHave[i - 1]).GetLow64() - UintToArith256(locator.vHave[i]).GetLow64(), dist);
+            CHECK_EQUAL(UintToArith256(locator.vHave[i - 1]).GetLow64() - UintToArith256(locator.vHave[i]).GetLow64(), dist);
             dist *= 2;
         }
     }
@@ -158,27 +158,27 @@ BOOST_AUTO_TEST_CASE(findearliestatleast_edge_test)
     CChain chain;
     chain.SetTip(blocks.back());
 
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(50, 0)->nHeight, 0);
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(100, 0)->nHeight, 0);
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(150, 0)->nHeight, 3);
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(200, 0)->nHeight, 3);
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(250, 0)->nHeight, 6);
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(300, 0)->nHeight, 6);
+    CHECK_EQUAL(chain.FindEarliestAtLeast(50, 0)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(50, 0)->nHeight)>{0});
+    CHECK_EQUAL(chain.FindEarliestAtLeast(100, 0)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(100, 0)->nHeight)>{0});
+    CHECK_EQUAL(chain.FindEarliestAtLeast(150, 0)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(150, 0)->nHeight)>{3});
+    CHECK_EQUAL(chain.FindEarliestAtLeast(200, 0)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(200, 0)->nHeight)>{3});
+    CHECK_EQUAL(chain.FindEarliestAtLeast(250, 0)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(250, 0)->nHeight)>{6});
+    CHECK_EQUAL(chain.FindEarliestAtLeast(300, 0)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(300, 0)->nHeight)>{6});
     CHECK(!chain.FindEarliestAtLeast(350, 0));
 
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(0, 0)->nHeight, 0);
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(-1, 0)->nHeight, 0);
+    CHECK_EQUAL(chain.FindEarliestAtLeast(0, 0)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(0, 0)->nHeight)>{0});
+    CHECK_EQUAL(chain.FindEarliestAtLeast(-1, 0)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(-1, 0)->nHeight)>{0});
 
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(std::numeric_limits<int64_t>::min(), 0)->nHeight, 0);
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(-int64_t(std::numeric_limits<unsigned int>::max()) - 1, 0)->nHeight, 0);
+    CHECK_EQUAL(chain.FindEarliestAtLeast(std::numeric_limits<int64_t>::min(), 0)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(std::numeric_limits<int64_t>::min(), 0)->nHeight)>{0});
+    CHECK_EQUAL(chain.FindEarliestAtLeast(-int64_t(std::numeric_limits<unsigned int>::max()) - 1, 0)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(-int64_t(std::numeric_limits<unsigned int>::max()) - 1, 0)->nHeight)>{0});
     CHECK(!chain.FindEarliestAtLeast(std::numeric_limits<int64_t>::max(), 0));
     CHECK(!chain.FindEarliestAtLeast(std::numeric_limits<unsigned int>::max(), 0));
     CHECK(!chain.FindEarliestAtLeast(int64_t(std::numeric_limits<unsigned int>::max()) + 1, 0));
 
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(0, -1)->nHeight, 0);
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(0, 0)->nHeight, 0);
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(0, 3)->nHeight, 3);
-    BOOST_CHECK_EQUAL(chain.FindEarliestAtLeast(0, 8)->nHeight, 8);
+    CHECK_EQUAL(chain.FindEarliestAtLeast(0, -1)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(0, -1)->nHeight)>{0});
+    CHECK_EQUAL(chain.FindEarliestAtLeast(0, 0)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(0, 0)->nHeight)>{0});
+    CHECK_EQUAL(chain.FindEarliestAtLeast(0, 3)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(0, 3)->nHeight)>{3});
+    CHECK_EQUAL(chain.FindEarliestAtLeast(0, 8)->nHeight, std::remove_cvref_t<decltype(chain.FindEarliestAtLeast(0, 8)->nHeight)>{8});
     CHECK(!chain.FindEarliestAtLeast(0, 9));
 
     CBlockIndex* ret1 = chain.FindEarliestAtLeast(100, 2);

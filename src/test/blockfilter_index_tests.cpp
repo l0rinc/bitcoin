@@ -51,13 +51,13 @@ static bool CheckFilterLookups(BlockFilterIndex& filter_index, const CBlockIndex
     CHECK(filter_index.LookupFilterHashRange(block_index->nHeight, block_index,
                                                    filter_hashes));
 
-    BOOST_CHECK_EQUAL(filters.size(), 1U);
-    BOOST_CHECK_EQUAL(filter_hashes.size(), 1U);
+    CHECK_EQUAL(filters.size(), 1U);
+    CHECK_EQUAL(filter_hashes.size(), 1U);
 
-    BOOST_CHECK_EQUAL(filter.GetHash(), expected_filter.GetHash());
-    BOOST_CHECK_EQUAL(filter_header, expected_filter.ComputeHeader(last_header));
-    BOOST_CHECK_EQUAL(filters[0].GetHash(), expected_filter.GetHash());
-    BOOST_CHECK_EQUAL(filter_hashes[0], expected_filter.GetHash());
+    CHECK_EQUAL(filter.GetHash(), expected_filter.GetHash());
+    CHECK_EQUAL(filter_header, expected_filter.ComputeHeader(last_header));
+    CHECK_EQUAL(filters[0].GetHash(), expected_filter.GetHash());
+    CHECK_EQUAL(filter_hashes[0], expected_filter.GetHash());
 
     filters.clear();
     filter_hashes.clear();
@@ -261,8 +261,8 @@ BOOST_FIXTURE_TEST_CASE(blockfilter_index_initial_sync, BuildChainTestingSetup)
     CHECK(filter_index.LookupFilterHashRange(0, tip, filter_hashes));
 
     assert(tip->nHeight >= 0);
-    BOOST_CHECK_EQUAL(filters.size(), tip->nHeight + 1U);
-    BOOST_CHECK_EQUAL(filter_hashes.size(), tip->nHeight + 1U);
+    CHECK_EQUAL(filters.size(), tip->nHeight + 1U);
+    CHECK_EQUAL(filter_hashes.size(), tip->nHeight + 1U);
 
     filters.clear();
     filter_hashes.clear();
@@ -289,7 +289,7 @@ BOOST_FIXTURE_TEST_CASE(blockfilter_index_init_destroy, BasicTestingSetup)
 
     int iter_count = 0;
     ForEachBlockFilterIndex([&iter_count](BlockFilterIndex& _index) { iter_count++; });
-    BOOST_CHECK_EQUAL(iter_count, 1);
+    CHECK_EQUAL(iter_count, std::remove_cvref_t<decltype(iter_count)>{1});
 
     CHECK(DestroyBlockFilterIndex(BlockFilterType::BASIC));
 

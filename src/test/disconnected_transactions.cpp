@@ -16,7 +16,7 @@ BOOST_FIXTURE_TEST_CASE(disconnectpool_memory_limits, TestChain100Setup)
     // transactions would realistically be in a block together, they just need distinct txids and
     // uniform size for this test to work.
     std::vector<CTransactionRef> block_vtx(m_coinbase_txns);
-    BOOST_CHECK_EQUAL(block_vtx.size(), 100);
+    CHECK_EQUAL(block_vtx.size(), std::remove_cvref_t<decltype(block_vtx.size())>{100});
 
     // Roughly estimate sizes to sanity check that DisconnectedBlockTransactions::DynamicMemoryUsage
     // is within an expected range.
@@ -30,7 +30,7 @@ BOOST_FIXTURE_TEST_CASE(disconnectpool_memory_limits, TestChain100Setup)
 
     const size_t TX_USAGE{RecursiveDynamicUsage(block_vtx.front())};
     for (const auto& tx : block_vtx)
-        BOOST_CHECK_EQUAL(RecursiveDynamicUsage(tx), TX_USAGE);
+        CHECK_EQUAL(RecursiveDynamicUsage(tx), TX_USAGE);
 
     // Our overall formula is unordered map overhead + usage per entry.
     // Implementations may vary, but we're trying to guess the usage of data structures.
@@ -52,9 +52,9 @@ BOOST_FIXTURE_TEST_CASE(disconnectpool_memory_limits, TestChain100Setup)
         CHECK(disconnectpool.DynamicMemoryUsage() <= MAP_1 + ENTRY_USAGE_ESTIMATE);
 
         // Only 1 transaction can be kept
-        BOOST_CHECK_EQUAL(1, evicted_txns.size());
+        CHECK_EQUAL(std::remove_cvref_t<decltype(evicted_txns.size())>{1}, evicted_txns.size());
         // Transactions are added from back to front and eviction is FIFO.
-        BOOST_CHECK_EQUAL(block_vtx.at(1), evicted_txns.front());
+        CHECK_EQUAL(block_vtx.at(1), evicted_txns.front());
 
         disconnectpool.clear();
     }
@@ -66,7 +66,7 @@ BOOST_FIXTURE_TEST_CASE(disconnectpool_memory_limits, TestChain100Setup)
         const size_t USAGE_100_OVERESTIMATE{MAP_100 + ENTRY_USAGE_ESTIMATE * 100};
         DisconnectedBlockTransactions disconnectpool{USAGE_100_OVERESTIMATE};
         auto evicted_txns{disconnectpool.AddTransactionsFromBlock(block_vtx)};
-        BOOST_CHECK_EQUAL(evicted_txns.size(), 0);
+        CHECK_EQUAL(evicted_txns.size(), std::remove_cvref_t<decltype(evicted_txns.size())>{0});
         CHECK(disconnectpool.DynamicMemoryUsage() <= USAGE_100_OVERESTIMATE);
 
         usage_full = disconnectpool.DynamicMemoryUsage();
@@ -82,11 +82,11 @@ BOOST_FIXTURE_TEST_CASE(disconnectpool_memory_limits, TestChain100Setup)
         CHECK(disconnectpool.DynamicMemoryUsage() <= MAX_MEMUSAGE_99);
 
         // Only 1 transaction needed to be evicted
-        BOOST_CHECK_EQUAL(1, evicted_txns.size());
+        CHECK_EQUAL(std::remove_cvref_t<decltype(evicted_txns.size())>{1}, evicted_txns.size());
 
         // Transactions are added from back to front and eviction is FIFO.
         // The last transaction of block_vtx should be the first to be evicted.
-        BOOST_CHECK_EQUAL(block_vtx.back(), evicted_txns.front());
+        CHECK_EQUAL(block_vtx.back(), evicted_txns.front());
 
         disconnectpool.clear();
     }

@@ -153,7 +153,7 @@ void TestChaCha20(const std::string &hex_message, const std::string &hexkey, Cha
     } else {
         rng.Keystream(outres);
     }
-    BOOST_CHECK_EQUAL(hexout, HexStr(outres));
+    CHECK_EQUAL(hexout, HexStr(outres));
     if (!hex_message.empty()) {
         // Manually XOR with the keystream and compare the output
         rng.Seek(nonce, seek);
@@ -162,7 +162,7 @@ void TestChaCha20(const std::string &hex_message, const std::string &hexkey, Cha
         for (size_t i = 0; i != m.size(); i++) {
             outres[i] = m[i] ^ only_keystream[i];
         }
-        BOOST_CHECK_EQUAL(hexout, HexStr(outres));
+        CHECK_EQUAL(hexout, HexStr(outres));
     }
 
     // Repeat 10x, but fragmented into 3 chunks, to exercise the ChaCha20 class's caching.
@@ -183,14 +183,14 @@ void TestChaCha20(const std::string &hex_message, const std::string &hexkey, Cha
             }
             pos += lens[j];
         }
-        BOOST_CHECK_EQUAL(hexout, HexStr(outres));
+        CHECK_EQUAL(hexout, HexStr(outres));
     }
 }
 
 void TestFSChaCha20(const std::string& hex_plaintext, const std::string& hexkey, uint32_t rekey_interval, const std::string& ciphertext_after_rotation)
 {
     auto key = ParseHex<std::byte>(hexkey);
-    BOOST_CHECK_EQUAL(FSChaCha20::KEYLEN, key.size());
+    CHECK_EQUAL(FSChaCha20::KEYLEN, key.size());
 
     auto plaintext = ParseHex<std::byte>(hex_plaintext);
 
@@ -224,7 +224,7 @@ void TestFSChaCha20(const std::string& hex_plaintext, const std::string& hexkey,
     c20.Crypt(plaintext, c20_output);
     CHECK(c20_output == fsc20_output);
 
-    BOOST_CHECK_EQUAL(HexStr(fsc20_output), ciphertext_after_rotation);
+    CHECK_EQUAL(HexStr(fsc20_output), ciphertext_after_rotation);
 }
 
 void TestPoly1305(const std::string &hexmessage, const std::string &hexkey, const std::string& hextag)
@@ -233,7 +233,7 @@ void TestPoly1305(const std::string &hexmessage, const std::string &hexkey, cons
     auto m = ParseHex<std::byte>(hexmessage);
     std::vector<std::byte> tagres(Poly1305::TAGLEN);
     Poly1305{key}.Update(m).Finalize(tagres);
-    BOOST_CHECK_EQUAL(HexStr(tagres), hextag);
+    CHECK_EQUAL(HexStr(tagres), hextag);
 
     // Test incremental interface
     for (int splits = 0; splits < 10; ++splits) {
@@ -247,7 +247,7 @@ void TestPoly1305(const std::string &hexmessage, const std::string &hexkey, cons
             }
             tagres.assign(Poly1305::TAGLEN, std::byte{});
             poly1305.Update(data).Finalize(tagres);
-            BOOST_CHECK_EQUAL(HexStr(tagres), hextag);
+            CHECK_EQUAL(HexStr(tagres), hextag);
         }
     }
 }
@@ -289,7 +289,7 @@ void TestChaCha20Poly1305(const std::string& plain_hex, const std::string& aad_h
     AEADChaCha20Poly1305 aead{key};
     aead.Keystream(nonce, keystream);
     for (size_t i = 0; i < plain.size(); ++i) {
-        BOOST_CHECK_EQUAL(plain[i] ^ keystream[i], expected_cipher[i]);
+        CHECK_EQUAL(plain[i] ^ keystream[i], expected_cipher[i]);
     }
 }
 
@@ -940,7 +940,7 @@ BOOST_AUTO_TEST_CASE(poly1305_testvector)
         }
         std::vector<std::byte> total_tag(Poly1305::TAGLEN);
         total_ctx.Finalize(total_tag);
-        BOOST_CHECK_EQUAL(HexStr(total_tag), "64afe2e8d6ad7bbdd287f97c44623d39");
+        CHECK_EQUAL(HexStr(total_tag), std::string_view{"64afe2e8d6ad7bbdd287f97c44623d39"});
     }
 
     // Tests with sparse messages and random keys.
@@ -1126,7 +1126,7 @@ BOOST_AUTO_TEST_CASE(keccak_tests)
     tester.Finalize(out.begin());
     // Expected hash of the concatenated serialized states after 1...262144 iterations of KeccakF.
     // Verified against an independent implementation.
-    BOOST_CHECK_EQUAL(out.ToString(), "5f4a7f2eca7d57740ef9f1a077b4fc67328092ec62620447fe27ad8ed5f7e34f");
+    CHECK_EQUAL(out.ToString(), std::string_view{"5f4a7f2eca7d57740ef9f1a077b4fc67328092ec62620447fe27ad8ed5f7e34f"});
 }
 
 BOOST_AUTO_TEST_CASE(sha3_256_tests)
@@ -1239,14 +1239,14 @@ BOOST_AUTO_TEST_CASE(muhash_tests)
         MuHash3072 a;
         a.Finalize(out2);
 
-        BOOST_CHECK_EQUAL(out, out2);
+        CHECK_EQUAL(out, out2);
     }
 
     MuHash3072 acc = FromInt(0);
     acc *= FromInt(1);
     acc /= FromInt(2);
     acc.Finalize(out);
-    BOOST_CHECK_EQUAL(out, uint256{"10d312b100cbd32ada024a6646e40d3482fcff103668d2625f10002a607d5863"});
+    CHECK_EQUAL(out, uint256{"10d312b100cbd32ada024a6646e40d3482fcff103668d2625f10002a607d5863"});
 
     MuHash3072 acc2 = FromInt(0);
     unsigned char tmp[32] = {1, 0};
@@ -1254,14 +1254,14 @@ BOOST_AUTO_TEST_CASE(muhash_tests)
     unsigned char tmp2[32] = {2, 0};
     acc2.Remove(tmp2);
     acc2.Finalize(out);
-    BOOST_CHECK_EQUAL(out, uint256{"10d312b100cbd32ada024a6646e40d3482fcff103668d2625f10002a607d5863"});
+    CHECK_EQUAL(out, uint256{"10d312b100cbd32ada024a6646e40d3482fcff103668d2625f10002a607d5863"});
 
     // Test MuHash3072 serialization
     MuHash3072 serchk = FromInt(1); serchk *= FromInt(2);
     std::string ser_exp = "1fa093295ea30a6a3acdc7b3f770fa538eff537528e990e2910e40bbcfd7f6696b1256901929094694b56316de342f593303dd12ac43e06dce1be1ff8301c845beb15468fff0ef002dbf80c29f26e6452bccc91b5cb9437ad410d2a67ea847887fa3c6a6553309946880fe20db2c73fe0641adbd4e86edfee0d9f8cd0ee1230898873dc13ed8ddcaf045c80faa082774279007a2253f8922ee3ef361d378a6af3ddaf180b190ac97e556888c36b3d1fb1c85aab9ccd46e3deaeb7b7cf5db067a7e9ff86b658cf3acd6662bbcce37232daa753c48b794356c020090c831a8304416e2aa7ad633c0ddb2f11be1be316a81be7f7e472071c042cb68faef549c221ebff209273638b741aba5a81675c45a5fa92fea4ca821d7a324cb1e1a2ccd3b76c4228ec8066dad2a5df6e1bd0de45c7dd5de8070bdb46db6c554cf9aefc9b7b2bbf9f75b1864d9f95005314593905c0109b71f703d49944ae94477b51dac10a816bb6d1c700bafabc8bd86fac8df24be519a2f2836b16392e18036cb13e48c5c010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
     DataStream ss_chk{};
     ss_chk << serchk;
-    BOOST_CHECK_EQUAL(ser_exp, HexStr(ss_chk.str()));
+    CHECK_EQUAL(ser_exp, HexStr(ss_chk.str()));
 
     // Test MuHash3072 deserialization
     MuHash3072 deserchk;
@@ -1269,7 +1269,7 @@ BOOST_AUTO_TEST_CASE(muhash_tests)
     uint256 out3;
     serchk.Finalize(out);
     deserchk.Finalize(out3);
-    BOOST_CHECK_EQUAL(HexStr(out), HexStr(out3));
+    CHECK_EQUAL(HexStr(out), HexStr(out3));
 
     // Test MuHash3072 overflow, meaning the internal data is larger than the modulus.
     DataStream ss_max{"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"_hex};
@@ -1278,7 +1278,7 @@ BOOST_AUTO_TEST_CASE(muhash_tests)
 
     uint256 out4;
     overflowchk.Finalize(out4);
-    BOOST_CHECK_EQUAL(HexStr(out4), "3a31e6903aff0de9f62f9a9f7f8b861de76ce2cda09822b90014319ae5dc2271");
+    CHECK_EQUAL(HexStr(out4), std::string_view{"3a31e6903aff0de9f62f9a9f7f8b861de76ce2cda09822b90014319ae5dc2271"});
 }
 
 BOOST_AUTO_TEST_SUITE_END()

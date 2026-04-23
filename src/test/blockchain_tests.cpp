@@ -92,7 +92,7 @@ static void CheckGetPruneHeight(const node::BlockManager& blockman, const CChain
 
     const auto prune_height{GetPruneHeight(blockman, chain)};
     CHECK(prune_height.has_value());
-    BOOST_CHECK_EQUAL(*prune_height, height);
+    CHECK_EQUAL(*prune_height, height);
 }
 
 BOOST_FIXTURE_TEST_CASE(get_prune_height, TestChain100Setup)
@@ -114,7 +114,7 @@ BOOST_AUTO_TEST_CASE(num_chain_tx_max)
 {
     CBlockIndex block_index{};
     block_index.m_chain_tx_count = std::numeric_limits<uint64_t>::max();
-    BOOST_CHECK_EQUAL(block_index.m_chain_tx_count, std::numeric_limits<uint64_t>::max());
+    CHECK_EQUAL(block_index.m_chain_tx_count, std::numeric_limits<uint64_t>::max());
 }
 
 BOOST_FIXTURE_TEST_CASE(invalidate_block, TestChain100Setup)

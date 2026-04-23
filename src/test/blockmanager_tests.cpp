@@ -42,7 +42,7 @@ BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
     };
     BlockManager blockman{*Assert(m_node.shutdown_signal), blockman_opts};
     // simulate adding a genesis block normally
-    BOOST_CHECK_EQUAL(blockman.WriteBlock(params->GenesisBlock(), 0).nPos, STORAGE_HEADER_BYTES);
+    CHECK_EQUAL(blockman.WriteBlock(params->GenesisBlock(), 0).nPos, STORAGE_HEADER_BYTES);
     // simulate what happens during reindex
     // simulate a well-formed genesis block being found at offset 8 in the blk00000.dat file
     // the block is found at offset 8 because there is an 8 byte serialization header
@@ -56,7 +56,7 @@ BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
     // 8 bytes (for serialization header) + 285 (for serialized genesis block) = 293
     // add another 8 bytes for the second block's serialization header and we get 293 + 8 = 301
     FlatFilePos actual{blockman.WriteBlock(params->GenesisBlock(), 1)};
-    BOOST_CHECK_EQUAL(actual.nPos, STORAGE_HEADER_BYTES + ::GetSerializeSize(TX_WITH_WITNESS(params->GenesisBlock())) + STORAGE_HEADER_BYTES);
+    CHECK_EQUAL(actual.nPos, STORAGE_HEADER_BYTES + ::GetSerializeSize(TX_WITH_WITNESS(params->GenesisBlock())) + STORAGE_HEADER_BYTES);
 }
 
 BOOST_FIXTURE_TEST_CASE(blockmanager_scan_unlink_already_pruned_files, TestChain100Setup)
@@ -120,7 +120,7 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_availability, TestChain100Setup)
     };
 
     // 1) Return genesis block when all blocks are available
-    BOOST_CHECK_EQUAL(&blockman.GetFirstBlock(tip, BLOCK_HAVE_DATA), chainman->ActiveChain()[0]);
+    CHECK(&blockman.GetFirstBlock(tip, BLOCK_HAVE_DATA) == chainman->ActiveChain()[0]);
     CHECK(blockman.CheckBlockDataAvailability(tip, *chainman->ActiveChain()[0]));
 
     // 2) Check lower_block when all blocks are available
@@ -142,7 +142,7 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_availability, TestChain100Setup)
     func_prune_blocks(last_pruned_block);
 
     // 3) The last block not pruned is in-between upper-block and the genesis block
-    BOOST_CHECK_EQUAL(&blockman.GetFirstBlock(tip, BLOCK_HAVE_DATA), first_available_block);
+    CHECK(&blockman.GetFirstBlock(tip, BLOCK_HAVE_DATA) == first_available_block);
     CHECK(blockman.CheckBlockDataAvailability(tip, *first_available_block));
     CHECK(!blockman.CheckBlockDataAvailability(tip, *last_pruned_block));
 
@@ -196,7 +196,7 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_part_error, TestChain100Setup)
     const auto expect_part_error{[&](size_t offset, size_t size) {
         auto res{blockman.ReadRawBlock(tip_block_pos, std::pair{offset, size})};
         CHECK(!res);
-        BOOST_CHECK_EQUAL(res.error(), node::ReadRawError::BadPartRange);
+        CHECK_EQUAL(res.error(), node::ReadRawError::BadPartRange);
     }};
 
     expect_part_error(0, 0);
@@ -257,7 +257,7 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
     constexpr int TEST_BLOCK_SIZE{81};
 
     // Blockstore is empty
-    BOOST_CHECK_EQUAL(blockman.CalculateCurrentUsage(), 0);
+    CHECK_EQUAL(blockman.CalculateCurrentUsage(), std::remove_cvref_t<decltype(blockman.CalculateCurrentUsage())>{0});
 
     // Write the first block to a new location.
     FlatFilePos pos1{blockman.WriteBlock(block1, /*nHeight=*/1)};
@@ -266,21 +266,21 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
     FlatFilePos pos2{blockman.WriteBlock(block2, /*nHeight=*/2)};
 
     // Two blocks in the file
-    BOOST_CHECK_EQUAL(blockman.CalculateCurrentUsage(), (TEST_BLOCK_SIZE + STORAGE_HEADER_BYTES) * 2);
+    CHECK_EQUAL(blockman.CalculateCurrentUsage(), (TEST_BLOCK_SIZE + STORAGE_HEADER_BYTES) * 2);
 
     // First two blocks are written as expected
     // Errors are expected because block data is junk, thrown AFTER successful read
     CBlock read_block;
-    BOOST_CHECK_EQUAL(read_block.nVersion, 0);
+    CHECK_EQUAL(read_block.nVersion, std::remove_cvref_t<decltype(read_block.nVersion)>{0});
     {
         ASSERT_DEBUG_LOG("Errors in block header");
         CHECK(!blockman.ReadBlock(read_block, pos1, {}));
-        BOOST_CHECK_EQUAL(read_block.nVersion, 1);
+        CHECK_EQUAL(read_block.nVersion, std::remove_cvref_t<decltype(read_block.nVersion)>{1});
     }
     {
         ASSERT_DEBUG_LOG("Errors in block header");
         CHECK(!blockman.ReadBlock(read_block, pos2, {}));
-        BOOST_CHECK_EQUAL(read_block.nVersion, 2);
+        CHECK_EQUAL(read_block.nVersion, std::remove_cvref_t<decltype(read_block.nVersion)>{2});
     }
 
     // During reindex, the flat file block storage will not be written to.
@@ -288,16 +288,16 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
     // Verify this behavior by attempting (and failing) to write block 3 data
     // to block 2 location.
     CBlockFileInfo* block_data = blockman.GetBlockFileInfo(0);
-    BOOST_CHECK_EQUAL(block_data->nBlocks, 2);
+    CHECK_EQUAL(block_data->nBlocks, std::remove_cvref_t<decltype(block_data->nBlocks)>{2});
     blockman.UpdateBlockInfo(block3, /*nHeight=*/3, /*pos=*/pos2);
     // Metadata is updated...
-    BOOST_CHECK_EQUAL(block_data->nBlocks, 3);
+    CHECK_EQUAL(block_data->nBlocks, std::remove_cvref_t<decltype(block_data->nBlocks)>{3});
     // ...but there are still only two blocks in the file
-    BOOST_CHECK_EQUAL(blockman.CalculateCurrentUsage(), (TEST_BLOCK_SIZE + STORAGE_HEADER_BYTES) * 2);
+    CHECK_EQUAL(blockman.CalculateCurrentUsage(), (TEST_BLOCK_SIZE + STORAGE_HEADER_BYTES) * 2);
 
     // Block 2 was not overwritten:
     CHECK(!blockman.ReadBlock(read_block, pos2, {}));
-    BOOST_CHECK_EQUAL(read_block.nVersion, 2);
+    CHECK_EQUAL(read_block.nVersion, std::remove_cvref_t<decltype(read_block.nVersion)>{2});
 }
 
 BOOST_FIXTURE_TEST_CASE(prune_lock_update_and_delete, TestingSetup)

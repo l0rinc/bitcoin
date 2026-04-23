@@ -63,16 +63,16 @@ static std::string ArrayToString(const unsigned char A[], unsigned int width)
 BOOST_AUTO_TEST_CASE( basics ) // constructors, equality, inequality
 {
     // constructor uint256(vector<char>):
-    BOOST_CHECK_EQUAL(R1L.ToString(), ArrayToString(R1Array,32));
-    BOOST_CHECK_EQUAL(R1S.ToString(), ArrayToString(R1Array,20));
-    BOOST_CHECK_EQUAL(R2L.ToString(), ArrayToString(R2Array,32));
-    BOOST_CHECK_EQUAL(R2S.ToString(), ArrayToString(R2Array,20));
-    BOOST_CHECK_EQUAL(ZeroL.ToString(), ArrayToString(ZeroArray,32));
-    BOOST_CHECK_EQUAL(ZeroS.ToString(), ArrayToString(ZeroArray,20));
-    BOOST_CHECK_EQUAL(OneL.ToString(), ArrayToString(OneArray,32));
-    BOOST_CHECK_EQUAL(OneS.ToString(), ArrayToString(OneArray,20));
-    BOOST_CHECK_EQUAL(MaxL.ToString(), ArrayToString(MaxArray,32));
-    BOOST_CHECK_EQUAL(MaxS.ToString(), ArrayToString(MaxArray,20));
+    CHECK_EQUAL(R1L.ToString(), ArrayToString(R1Array,32));
+    CHECK_EQUAL(R1S.ToString(), ArrayToString(R1Array,20));
+    CHECK_EQUAL(R2L.ToString(), ArrayToString(R2Array,32));
+    CHECK_EQUAL(R2S.ToString(), ArrayToString(R2Array,20));
+    CHECK_EQUAL(ZeroL.ToString(), ArrayToString(ZeroArray,32));
+    CHECK_EQUAL(ZeroS.ToString(), ArrayToString(ZeroArray,20));
+    CHECK_EQUAL(OneL.ToString(), ArrayToString(OneArray,32));
+    CHECK_EQUAL(OneS.ToString(), ArrayToString(OneArray,20));
+    CHECK_EQUAL(MaxL.ToString(), ArrayToString(MaxArray,32));
+    CHECK_EQUAL(MaxS.ToString(), ArrayToString(MaxArray,20));
     CHECK_NE(OneL.ToString(), ArrayToString(ZeroArray,32));
     CHECK_NE(OneS.ToString(), ArrayToString(ZeroArray,20));
 
@@ -83,26 +83,26 @@ BOOST_AUTO_TEST_CASE( basics ) // constructors, equality, inequality
     CHECK_NE(MaxL, ZeroL); CHECK_NE(MaxS, ZeroS);
 
     // String Constructor and Copy Constructor
-    BOOST_CHECK_EQUAL(uint256::FromHex(R1L.ToString()).value(), R1L);
-    BOOST_CHECK_EQUAL(uint256::FromHex(R2L.ToString()).value(), R2L);
-    BOOST_CHECK_EQUAL(uint256::FromHex(ZeroL.ToString()).value(), ZeroL);
-    BOOST_CHECK_EQUAL(uint256::FromHex(OneL.ToString()).value(), OneL);
-    BOOST_CHECK_EQUAL(uint256::FromHex(MaxL.ToString()).value(), MaxL);
-    BOOST_CHECK_EQUAL(uint256::FromHex(R1ArrayHex).value(), R1L);
-    BOOST_CHECK_EQUAL(uint256(R1L), R1L);
-    BOOST_CHECK_EQUAL(uint256(ZeroL), ZeroL);
-    BOOST_CHECK_EQUAL(uint256(OneL), OneL);
+    CHECK_EQUAL(uint256::FromHex(R1L.ToString()).value(), R1L);
+    CHECK_EQUAL(uint256::FromHex(R2L.ToString()).value(), R2L);
+    CHECK_EQUAL(uint256::FromHex(ZeroL.ToString()).value(), ZeroL);
+    CHECK_EQUAL(uint256::FromHex(OneL.ToString()).value(), OneL);
+    CHECK_EQUAL(uint256::FromHex(MaxL.ToString()).value(), MaxL);
+    CHECK_EQUAL(uint256::FromHex(R1ArrayHex).value(), R1L);
+    CHECK_EQUAL(uint256(R1L), R1L);
+    CHECK_EQUAL(uint256(ZeroL), ZeroL);
+    CHECK_EQUAL(uint256(OneL), OneL);
 
-    BOOST_CHECK_EQUAL(uint160::FromHex(R1S.ToString()).value(), R1S);
-    BOOST_CHECK_EQUAL(uint160::FromHex(R2S.ToString()).value(), R2S);
-    BOOST_CHECK_EQUAL(uint160::FromHex(ZeroS.ToString()).value(), ZeroS);
-    BOOST_CHECK_EQUAL(uint160::FromHex(OneS.ToString()).value(), OneS);
-    BOOST_CHECK_EQUAL(uint160::FromHex(MaxS.ToString()).value(), MaxS);
-    BOOST_CHECK_EQUAL(uint160::FromHex(std::string_view{R1ArrayHex + 24, 40}).value(), R1S);
+    CHECK_EQUAL(uint160::FromHex(R1S.ToString()).value(), R1S);
+    CHECK_EQUAL(uint160::FromHex(R2S.ToString()).value(), R2S);
+    CHECK_EQUAL(uint160::FromHex(ZeroS.ToString()).value(), ZeroS);
+    CHECK_EQUAL(uint160::FromHex(OneS.ToString()).value(), OneS);
+    CHECK_EQUAL(uint160::FromHex(MaxS.ToString()).value(), MaxS);
+    CHECK_EQUAL(uint160::FromHex(std::string_view{R1ArrayHex + 24, 40}).value(), R1S);
 
-    BOOST_CHECK_EQUAL(uint160(R1S), R1S);
-    BOOST_CHECK_EQUAL(uint160(ZeroS), ZeroS);
-    BOOST_CHECK_EQUAL(uint160(OneS), OneS);
+    CHECK_EQUAL(uint160(R1S), R1S);
+    CHECK_EQUAL(uint160(ZeroS), ZeroS);
+    CHECK_EQUAL(uint160(OneS), OneS);
 }
 
 BOOST_AUTO_TEST_CASE( comparison ) // <= >= < >
@@ -149,14 +149,14 @@ BOOST_AUTO_TEST_CASE( comparison ) // <= >= < >
 
 BOOST_AUTO_TEST_CASE(methods) // GetHex FromHex begin() end() size() GetLow64 GetSerializeSize, Serialize, Unserialize
 {
-    BOOST_CHECK_EQUAL(R1L.GetHex(), R1L.ToString());
-    BOOST_CHECK_EQUAL(R2L.GetHex(), R2L.ToString());
-    BOOST_CHECK_EQUAL(OneL.GetHex(), OneL.ToString());
-    BOOST_CHECK_EQUAL(MaxL.GetHex(), MaxL.ToString());
+    CHECK_EQUAL(R1L.GetHex(), R1L.ToString());
+    CHECK_EQUAL(R2L.GetHex(), R2L.ToString());
+    CHECK_EQUAL(OneL.GetHex(), OneL.ToString());
+    CHECK_EQUAL(MaxL.GetHex(), MaxL.ToString());
     uint256 TmpL(R1L);
-    BOOST_CHECK_EQUAL(TmpL, R1L);
-    BOOST_CHECK_EQUAL(uint256::FromHex(R2L.ToString()).value(), R2L);
-    BOOST_CHECK_EQUAL(uint256::FromHex(ZeroL.ToString()).value(), uint256());
+    CHECK_EQUAL(TmpL, R1L);
+    CHECK_EQUAL(uint256::FromHex(R2L.ToString()).value(), R2L);
+    CHECK_EQUAL(uint256::FromHex(ZeroL.ToString()).value(), uint256());
 
     TmpL = uint256::FromHex(R1L.ToString()).value();
     CHECK_EQUAL_COLLECTIONS(R1L.begin(), R1L.end(), R1Array, R1Array + uint256::size());
@@ -164,45 +164,45 @@ BOOST_AUTO_TEST_CASE(methods) // GetHex FromHex begin() end() size() GetLow64 Ge
     CHECK_EQUAL_COLLECTIONS(R2L.begin(), R2L.end(), R2Array, R2Array + uint256::size());
     CHECK_EQUAL_COLLECTIONS(ZeroL.begin(), ZeroL.end(), ZeroArray, ZeroArray + uint256::size());
     CHECK_EQUAL_COLLECTIONS(OneL.begin(), OneL.end(), OneArray, OneArray + uint256::size());
-    BOOST_CHECK_EQUAL(R1L.size(), sizeof(R1L));
-    BOOST_CHECK_EQUAL(sizeof(R1L), 32);
-    BOOST_CHECK_EQUAL(R1L.size(), 32);
-    BOOST_CHECK_EQUAL(R2L.size(), 32);
-    BOOST_CHECK_EQUAL(ZeroL.size(), 32);
-    BOOST_CHECK_EQUAL(MaxL.size(), 32);
-    BOOST_CHECK_EQUAL(R1L.begin() + 32, R1L.end());
-    BOOST_CHECK_EQUAL(R2L.begin() + 32, R2L.end());
-    BOOST_CHECK_EQUAL(OneL.begin() + 32, OneL.end());
-    BOOST_CHECK_EQUAL(MaxL.begin() + 32, MaxL.end());
-    BOOST_CHECK_EQUAL(TmpL.begin() + 32, TmpL.end());
-    BOOST_CHECK_EQUAL(GetSerializeSize(R1L), 32);
-    BOOST_CHECK_EQUAL(GetSerializeSize(ZeroL), 32);
+    CHECK_EQUAL(R1L.size(), sizeof(R1L));
+    CHECK_EQUAL(sizeof(R1L), std::remove_cvref_t<decltype(sizeof(R1L))>{32});
+    CHECK_EQUAL(R1L.size(), std::remove_cvref_t<decltype(R1L.size())>{32});
+    CHECK_EQUAL(R2L.size(), std::remove_cvref_t<decltype(R2L.size())>{32});
+    CHECK_EQUAL(ZeroL.size(), std::remove_cvref_t<decltype(ZeroL.size())>{32});
+    CHECK_EQUAL(MaxL.size(), std::remove_cvref_t<decltype(MaxL.size())>{32});
+    CHECK(R1L.begin() + 32 == R1L.end());
+    CHECK(R2L.begin() + 32 == R2L.end());
+    CHECK(OneL.begin() + 32 == OneL.end());
+    CHECK(MaxL.begin() + 32 == MaxL.end());
+    CHECK(TmpL.begin() + 32 == TmpL.end());
+    CHECK_EQUAL(GetSerializeSize(R1L), std::remove_cvref_t<decltype(GetSerializeSize(R1L))>{32});
+    CHECK_EQUAL(GetSerializeSize(ZeroL), std::remove_cvref_t<decltype(GetSerializeSize(ZeroL))>{32});
 
     DataStream ss{};
     ss << R1L;
-    BOOST_CHECK_EQUAL(ss.str(), std::string(R1Array,R1Array+32));
+    CHECK_EQUAL(ss.str(), std::string(R1Array,R1Array+32));
     ss >> TmpL;
-    BOOST_CHECK_EQUAL(R1L, TmpL);
+    CHECK_EQUAL(R1L, TmpL);
     ss.clear();
     ss << ZeroL;
-    BOOST_CHECK_EQUAL(ss.str(), std::string(ZeroArray,ZeroArray+32));
+    CHECK_EQUAL(ss.str(), std::string(ZeroArray,ZeroArray+32));
     ss >> TmpL;
-    BOOST_CHECK_EQUAL(ZeroL, TmpL);
+    CHECK_EQUAL(ZeroL, TmpL);
     ss.clear();
     ss << MaxL;
-    BOOST_CHECK_EQUAL(ss.str(), std::string(MaxArray,MaxArray+32));
+    CHECK_EQUAL(ss.str(), std::string(MaxArray,MaxArray+32));
     ss >> TmpL;
-    BOOST_CHECK_EQUAL(MaxL, TmpL);
+    CHECK_EQUAL(MaxL, TmpL);
     ss.clear();
 
-    BOOST_CHECK_EQUAL(R1S.GetHex(), R1S.ToString());
-    BOOST_CHECK_EQUAL(R2S.GetHex(), R2S.ToString());
-    BOOST_CHECK_EQUAL(OneS.GetHex(), OneS.ToString());
-    BOOST_CHECK_EQUAL(MaxS.GetHex(), MaxS.ToString());
+    CHECK_EQUAL(R1S.GetHex(), R1S.ToString());
+    CHECK_EQUAL(R2S.GetHex(), R2S.ToString());
+    CHECK_EQUAL(OneS.GetHex(), OneS.ToString());
+    CHECK_EQUAL(MaxS.GetHex(), MaxS.ToString());
     uint160 TmpS(R1S);
-    BOOST_CHECK_EQUAL(TmpS, R1S);
-    BOOST_CHECK_EQUAL(uint160::FromHex(R2S.ToString()).value(), R2S);
-    BOOST_CHECK_EQUAL(uint160::FromHex(ZeroS.ToString()).value(), uint160());
+    CHECK_EQUAL(TmpS, R1S);
+    CHECK_EQUAL(uint160::FromHex(R2S.ToString()).value(), R2S);
+    CHECK_EQUAL(uint160::FromHex(ZeroS.ToString()).value(), uint160());
 
     TmpS = uint160::FromHex(R1S.ToString()).value();
     CHECK_EQUAL_COLLECTIONS(R1S.begin(), R1S.end(), R1Array, R1Array + uint160::size());
@@ -210,34 +210,34 @@ BOOST_AUTO_TEST_CASE(methods) // GetHex FromHex begin() end() size() GetLow64 Ge
     CHECK_EQUAL_COLLECTIONS(R2S.begin(), R2S.end(), R2Array, R2Array + uint160::size());
     CHECK_EQUAL_COLLECTIONS(ZeroS.begin(), ZeroS.end(), ZeroArray, ZeroArray + uint160::size());
     CHECK_EQUAL_COLLECTIONS(OneS.begin(), OneS.end(), OneArray, OneArray + uint160::size());
-    BOOST_CHECK_EQUAL(R1S.size(), sizeof(R1S));
-    BOOST_CHECK_EQUAL(sizeof(R1S), 20);
-    BOOST_CHECK_EQUAL(R1S.size(), 20);
-    BOOST_CHECK_EQUAL(R2S.size(), 20);
-    BOOST_CHECK_EQUAL(ZeroS.size(), 20);
-    BOOST_CHECK_EQUAL(MaxS.size(), 20);
-    BOOST_CHECK_EQUAL(R1S.begin() + 20, R1S.end());
-    BOOST_CHECK_EQUAL(R2S.begin() + 20, R2S.end());
-    BOOST_CHECK_EQUAL(OneS.begin() + 20, OneS.end());
-    BOOST_CHECK_EQUAL(MaxS.begin() + 20, MaxS.end());
-    BOOST_CHECK_EQUAL(TmpS.begin() + 20, TmpS.end());
-    BOOST_CHECK_EQUAL(GetSerializeSize(R1S), 20);
-    BOOST_CHECK_EQUAL(GetSerializeSize(ZeroS), 20);
+    CHECK_EQUAL(R1S.size(), sizeof(R1S));
+    CHECK_EQUAL(sizeof(R1S), std::remove_cvref_t<decltype(sizeof(R1S))>{20});
+    CHECK_EQUAL(R1S.size(), std::remove_cvref_t<decltype(R1S.size())>{20});
+    CHECK_EQUAL(R2S.size(), std::remove_cvref_t<decltype(R2S.size())>{20});
+    CHECK_EQUAL(ZeroS.size(), std::remove_cvref_t<decltype(ZeroS.size())>{20});
+    CHECK_EQUAL(MaxS.size(), std::remove_cvref_t<decltype(MaxS.size())>{20});
+    CHECK(R1S.begin() + 20 == R1S.end());
+    CHECK(R2S.begin() + 20 == R2S.end());
+    CHECK(OneS.begin() + 20 == OneS.end());
+    CHECK(MaxS.begin() + 20 == MaxS.end());
+    CHECK(TmpS.begin() + 20 == TmpS.end());
+    CHECK_EQUAL(GetSerializeSize(R1S), std::remove_cvref_t<decltype(GetSerializeSize(R1S))>{20});
+    CHECK_EQUAL(GetSerializeSize(ZeroS), std::remove_cvref_t<decltype(GetSerializeSize(ZeroS))>{20});
 
     ss << R1S;
-    BOOST_CHECK_EQUAL(ss.str(), std::string(R1Array,R1Array+20));
+    CHECK_EQUAL(ss.str(), std::string(R1Array,R1Array+20));
     ss >> TmpS;
-    BOOST_CHECK_EQUAL(R1S, TmpS);
+    CHECK_EQUAL(R1S, TmpS);
     ss.clear();
     ss << ZeroS;
-    BOOST_CHECK_EQUAL(ss.str(), std::string(ZeroArray,ZeroArray+20));
+    CHECK_EQUAL(ss.str(), std::string(ZeroArray,ZeroArray+20));
     ss >> TmpS;
-    BOOST_CHECK_EQUAL(ZeroS, TmpS);
+    CHECK_EQUAL(ZeroS, TmpS);
     ss.clear();
     ss << MaxS;
-    BOOST_CHECK_EQUAL(ss.str(), std::string(MaxArray,MaxArray+20));
+    CHECK_EQUAL(ss.str(), std::string(MaxArray,MaxArray+20));
     ss >> TmpS;
-    BOOST_CHECK_EQUAL(MaxS, TmpS);
+    CHECK_EQUAL(MaxS, TmpS);
     ss.clear();
 }
 
@@ -256,7 +256,7 @@ void TestFromHex()
         // check that lower and upper case hex characters are accepted
         auto valid_result{T::FromHex(valid_input)};
         CHECK(valid_result);
-        BOOST_CHECK_EQUAL(valid_result->ToString(), ToLower(valid_input));
+        CHECK_EQUAL(valid_result->ToString(), ToLower(valid_input));
     }
     {
         // check that only strings of size num_chars are accepted
@@ -280,7 +280,7 @@ void TestFromHex()
     {
         // check that string_view length is respected
         std::string chars_68{valid_64char_input + "0123"};
-        BOOST_CHECK_EQUAL(T::FromHex(std::string_view(chars_68.data(), num_chars)).value().ToString(), ToLower(valid_input));
+        CHECK_EQUAL(T::FromHex(std::string_view(chars_68.data(), num_chars)).value().ToString(), ToLower(valid_input));
         CHECK(!T::FromHex(std::string_view(chars_68.data(), num_chars - 1))); // too short
         CHECK(!T::FromHex(std::string_view(chars_68.data(), num_chars + 1))); // too long
     }
@@ -296,19 +296,19 @@ BOOST_AUTO_TEST_CASE(from_hex)
 
 BOOST_AUTO_TEST_CASE(from_user_hex)
 {
-    BOOST_CHECK_EQUAL(uint256::FromUserHex(""), uint256::ZERO);
-    BOOST_CHECK_EQUAL(uint256::FromUserHex("0x"), uint256::ZERO);
-    BOOST_CHECK_EQUAL(uint256::FromUserHex("0"), uint256::ZERO);
-    BOOST_CHECK_EQUAL(uint256::FromUserHex("00"), uint256::ZERO);
-    BOOST_CHECK_EQUAL(uint256::FromUserHex("1"), uint256::ONE);
-    BOOST_CHECK_EQUAL(uint256::FromUserHex("0x10"), uint256{0x10});
-    BOOST_CHECK_EQUAL(uint256::FromUserHex("10"), uint256{0x10});
-    BOOST_CHECK_EQUAL(uint256::FromUserHex("0xFf"), uint256{0xff});
-    BOOST_CHECK_EQUAL(uint256::FromUserHex("Ff"), uint256{0xff});
+    CHECK_EQUAL(uint256::FromUserHex(""), uint256::ZERO);
+    CHECK_EQUAL(uint256::FromUserHex("0x"), uint256::ZERO);
+    CHECK_EQUAL(uint256::FromUserHex("0"), uint256::ZERO);
+    CHECK_EQUAL(uint256::FromUserHex("00"), uint256::ZERO);
+    CHECK_EQUAL(uint256::FromUserHex("1"), uint256::ONE);
+    CHECK_EQUAL(uint256::FromUserHex("0x10"), uint256{0x10});
+    CHECK_EQUAL(uint256::FromUserHex("10"), uint256{0x10});
+    CHECK_EQUAL(uint256::FromUserHex("0xFf"), uint256{0xff});
+    CHECK_EQUAL(uint256::FromUserHex("Ff"), uint256{0xff});
     const std::string valid_hex_64{"0x0123456789abcdef0123456789abcdef0123456789ABDCEF0123456789ABCDEF"};
-    BOOST_REQUIRE_EQUAL(valid_hex_64.size(), 2 + 64); // 0x prefix and 64 hex digits
-    BOOST_CHECK_EQUAL(uint256::FromUserHex(valid_hex_64.substr(2)).value().ToString(), ToLower(valid_hex_64.substr(2)));
-    BOOST_CHECK_EQUAL(uint256::FromUserHex(valid_hex_64.substr(0)).value().ToString(), ToLower(valid_hex_64.substr(2)));
+    CHECK_EQUAL(valid_hex_64.size(), std::remove_cvref_t<decltype(valid_hex_64.size())>{2 + 64}); // 0x prefix and 64 hex digits
+    CHECK_EQUAL(uint256::FromUserHex(valid_hex_64.substr(2)).value().ToString(), ToLower(valid_hex_64.substr(2)));
+    CHECK_EQUAL(uint256::FromUserHex(valid_hex_64.substr(0)).value().ToString(), ToLower(valid_hex_64.substr(2)));
 
     CHECK(!uint256::FromUserHex("0x0 "));                       // no spaces at end,
     CHECK(!uint256::FromUserHex(" 0x0"));                       // or beginning,
@@ -326,14 +326,14 @@ BOOST_AUTO_TEST_CASE(from_user_hex)
 BOOST_AUTO_TEST_CASE( check_ONE )
 {
     uint256 one = uint256{"0000000000000000000000000000000000000000000000000000000000000001"};
-    BOOST_CHECK_EQUAL(one, uint256::ONE);
+    CHECK_EQUAL(one, uint256::ONE);
 }
 
 BOOST_AUTO_TEST_CASE(FromHex_vs_uint256)
 {
     auto runtime_uint{uint256::FromHex("4A5E1E4BAAB89F3A32518A88C31BC87F618f76673e2cc77ab2127b7afdeda33b")};
     constexpr uint256 consteval_uint{  "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"};
-    BOOST_CHECK_EQUAL(consteval_uint, runtime_uint);
+    CHECK_EQUAL(consteval_uint, runtime_uint);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

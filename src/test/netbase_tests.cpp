@@ -149,7 +149,7 @@ BOOST_AUTO_TEST_CASE(embedded_test)
     CNetAddr addr1(ResolveIP("1.2.3.4"));
     CNetAddr addr2(ResolveIP("::FFFF:0102:0304"));
     CHECK(addr2.IsIPv4());
-    BOOST_CHECK_EQUAL(addr1.ToStringAddr(), addr2.ToStringAddr());
+    CHECK_EQUAL(addr1.ToStringAddr(), addr2.ToStringAddr());
 }
 
 BOOST_AUTO_TEST_CASE(subnet_test)
@@ -206,18 +206,18 @@ BOOST_AUTO_TEST_CASE(subnet_test)
     CHECK(CSubNet(ResolveIP("127.0.0.1")).ToString() == "127.0.0.1/32");
 
     CSubNet subnet = CSubNet(ResolveIP("1.2.3.4"), 32);
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.3.4/32");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.3.4/32"});
     subnet = CSubNet(ResolveIP("1.2.3.4"), 8);
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.0.0.0/8");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.0.0.0/8"});
     subnet = CSubNet(ResolveIP("1.2.3.4"), 0);
-    BOOST_CHECK_EQUAL(subnet.ToString(), "0.0.0.0/0");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"0.0.0.0/0"});
 
     subnet = CSubNet(ResolveIP("1.2.3.4"), ResolveIP("255.255.255.255"));
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.3.4/32");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.3.4/32"});
     subnet = CSubNet(ResolveIP("1.2.3.4"), ResolveIP("255.0.0.0"));
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.0.0.0/8");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.0.0.0/8"});
     subnet = CSubNet(ResolveIP("1.2.3.4"), ResolveIP("0.0.0.0"));
-    BOOST_CHECK_EQUAL(subnet.ToString(), "0.0.0.0/0");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"0.0.0.0/0"});
 
     CHECK(CSubNet(ResolveIP("1:2:3:4:5:6:7:8")).IsValid());
     CHECK(CSubNet(ResolveIP("1:2:3:4:5:6:7:8")).Match(ResolveIP("1:2:3:4:5:6:7:8")));
@@ -234,7 +234,7 @@ BOOST_AUTO_TEST_CASE(subnet_test)
 
     subnet = CSubNet(tor_addr);
     CHECK(subnet.IsValid());
-    BOOST_CHECK_EQUAL(subnet.ToString(), tor_addr.ToStringAddr());
+    CHECK_EQUAL(subnet.ToString(), tor_addr.ToStringAddr());
     CHECK(subnet.Match(tor_addr));
     CHECK(
         !subnet.Match(ResolveIP("kpgvmscirrdqpekbqjsvw5teanhatztpp2gl6eee4zkowvwfxwenqaid.onion")));
@@ -244,78 +244,78 @@ BOOST_AUTO_TEST_CASE(subnet_test)
     CHECK(!CSubNet(tor_addr, ResolveIP("255.0.0.0")).IsValid());
 
     subnet = LookupSubNet("1.2.3.4/255.255.255.255");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.3.4/32");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.3.4/32"});
     subnet = LookupSubNet("1.2.3.4/255.255.255.254");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.3.4/31");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.3.4/31"});
     subnet = LookupSubNet("1.2.3.4/255.255.255.252");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.3.4/30");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.3.4/30"});
     subnet = LookupSubNet("1.2.3.4/255.255.255.248");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.3.0/29");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.3.0/29"});
     subnet = LookupSubNet("1.2.3.4/255.255.255.240");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.3.0/28");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.3.0/28"});
     subnet = LookupSubNet("1.2.3.4/255.255.255.224");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.3.0/27");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.3.0/27"});
     subnet = LookupSubNet("1.2.3.4/255.255.255.192");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.3.0/26");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.3.0/26"});
     subnet = LookupSubNet("1.2.3.4/255.255.255.128");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.3.0/25");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.3.0/25"});
     subnet = LookupSubNet("1.2.3.4/255.255.255.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.3.0/24");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.3.0/24"});
     subnet = LookupSubNet("1.2.3.4/255.255.254.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.2.0/23");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.2.0/23"});
     subnet = LookupSubNet("1.2.3.4/255.255.252.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.0.0/22");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.0.0/22"});
     subnet = LookupSubNet("1.2.3.4/255.255.248.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.0.0/21");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.0.0/21"});
     subnet = LookupSubNet("1.2.3.4/255.255.240.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.0.0/20");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.0.0/20"});
     subnet = LookupSubNet("1.2.3.4/255.255.224.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.0.0/19");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.0.0/19"});
     subnet = LookupSubNet("1.2.3.4/255.255.192.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.0.0/18");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.0.0/18"});
     subnet = LookupSubNet("1.2.3.4/255.255.128.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.0.0/17");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.0.0/17"});
     subnet = LookupSubNet("1.2.3.4/255.255.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.0.0/16");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.0.0/16"});
     subnet = LookupSubNet("1.2.3.4/255.254.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.2.0.0/15");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.2.0.0/15"});
     subnet = LookupSubNet("1.2.3.4/255.252.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.0.0.0/14");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.0.0.0/14"});
     subnet = LookupSubNet("1.2.3.4/255.248.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.0.0.0/13");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.0.0.0/13"});
     subnet = LookupSubNet("1.2.3.4/255.240.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.0.0.0/12");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.0.0.0/12"});
     subnet = LookupSubNet("1.2.3.4/255.224.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.0.0.0/11");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.0.0.0/11"});
     subnet = LookupSubNet("1.2.3.4/255.192.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.0.0.0/10");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.0.0.0/10"});
     subnet = LookupSubNet("1.2.3.4/255.128.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.0.0.0/9");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.0.0.0/9"});
     subnet = LookupSubNet("1.2.3.4/255.0.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1.0.0.0/8");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1.0.0.0/8"});
     subnet = LookupSubNet("1.2.3.4/254.0.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "0.0.0.0/7");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"0.0.0.0/7"});
     subnet = LookupSubNet("1.2.3.4/252.0.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "0.0.0.0/6");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"0.0.0.0/6"});
     subnet = LookupSubNet("1.2.3.4/248.0.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "0.0.0.0/5");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"0.0.0.0/5"});
     subnet = LookupSubNet("1.2.3.4/240.0.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "0.0.0.0/4");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"0.0.0.0/4"});
     subnet = LookupSubNet("1.2.3.4/224.0.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "0.0.0.0/3");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"0.0.0.0/3"});
     subnet = LookupSubNet("1.2.3.4/192.0.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "0.0.0.0/2");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"0.0.0.0/2"});
     subnet = LookupSubNet("1.2.3.4/128.0.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "0.0.0.0/1");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"0.0.0.0/1"});
     subnet = LookupSubNet("1.2.3.4/0.0.0.0");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "0.0.0.0/0");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"0.0.0.0/0"});
 
     subnet = LookupSubNet("1:2:3:4:5:6:7:8/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1:2:3:4:5:6:7:8/128");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1:2:3:4:5:6:7:8/128"});
     subnet = LookupSubNet("1:2:3:4:5:6:7:8/ffff:0000:0000:0000:0000:0000:0000:0000");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "1::/16");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"1::/16"});
     subnet = LookupSubNet("1:2:3:4:5:6:7:8/0000:0000:0000:0000:0000:0000:0000:0000");
-    BOOST_CHECK_EQUAL(subnet.ToString(), "::/0");
+    CHECK_EQUAL(subnet.ToString(), std::string_view{"::/0"});
     // Invalid netmasks (with 1-bits after 0-bits)
     subnet = LookupSubNet("1.2.3.4/255.255.232.0");
     CHECK(!subnet.IsValid());
@@ -347,25 +347,25 @@ BOOST_AUTO_TEST_CASE(netbase_getgroup)
 
 BOOST_AUTO_TEST_CASE(netbase_parsenetwork)
 {
-    BOOST_CHECK_EQUAL(ParseNetwork("ipv4"), NET_IPV4);
-    BOOST_CHECK_EQUAL(ParseNetwork("ipv6"), NET_IPV6);
-    BOOST_CHECK_EQUAL(ParseNetwork("onion"), NET_ONION);
-    BOOST_CHECK_EQUAL(ParseNetwork("cjdns"), NET_CJDNS);
+    CHECK_EQUAL(ParseNetwork("ipv4"), NET_IPV4);
+    CHECK_EQUAL(ParseNetwork("ipv6"), NET_IPV6);
+    CHECK_EQUAL(ParseNetwork("onion"), NET_ONION);
+    CHECK_EQUAL(ParseNetwork("cjdns"), NET_CJDNS);
 
-    BOOST_CHECK_EQUAL(ParseNetwork("IPv4"), NET_IPV4);
-    BOOST_CHECK_EQUAL(ParseNetwork("IPv6"), NET_IPV6);
-    BOOST_CHECK_EQUAL(ParseNetwork("ONION"), NET_ONION);
-    BOOST_CHECK_EQUAL(ParseNetwork("CJDNS"), NET_CJDNS);
+    CHECK_EQUAL(ParseNetwork("IPv4"), NET_IPV4);
+    CHECK_EQUAL(ParseNetwork("IPv6"), NET_IPV6);
+    CHECK_EQUAL(ParseNetwork("ONION"), NET_ONION);
+    CHECK_EQUAL(ParseNetwork("CJDNS"), NET_CJDNS);
 
     // "tor" as a network specification was deprecated in 60dc8e4208 in favor of
     // "onion" and later removed.
-    BOOST_CHECK_EQUAL(ParseNetwork("tor"), NET_UNROUTABLE);
-    BOOST_CHECK_EQUAL(ParseNetwork("TOR"), NET_UNROUTABLE);
+    CHECK_EQUAL(ParseNetwork("tor"), NET_UNROUTABLE);
+    CHECK_EQUAL(ParseNetwork("TOR"), NET_UNROUTABLE);
 
-    BOOST_CHECK_EQUAL(ParseNetwork(":)"), NET_UNROUTABLE);
-    BOOST_CHECK_EQUAL(ParseNetwork("oniÖn"), NET_UNROUTABLE);
-    BOOST_CHECK_EQUAL(ParseNetwork("\xfe\xff"), NET_UNROUTABLE);
-    BOOST_CHECK_EQUAL(ParseNetwork(""), NET_UNROUTABLE);
+    CHECK_EQUAL(ParseNetwork(":)"), NET_UNROUTABLE);
+    CHECK_EQUAL(ParseNetwork("oniÖn"), NET_UNROUTABLE);
+    CHECK_EQUAL(ParseNetwork("\xfe\xff"), NET_UNROUTABLE);
+    CHECK_EQUAL(ParseNetwork(""), NET_UNROUTABLE);
 }
 
 BOOST_AUTO_TEST_CASE(netpermissions_test)
@@ -385,63 +385,63 @@ BOOST_AUTO_TEST_CASE(netpermissions_test)
     // If no permission flags, assume backward compatibility
     CHECK(NetWhitebindPermissions::TryParse("1.2.3.4:32", whitebindPermissions, error));
     CHECK(error.empty());
-    BOOST_CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::Implicit);
+    CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::Implicit);
     CHECK(NetPermissions::HasFlag(whitebindPermissions.m_flags, NetPermissionFlags::Implicit));
     NetPermissions::ClearFlag(whitebindPermissions.m_flags, NetPermissionFlags::Implicit);
     CHECK(!NetPermissions::HasFlag(whitebindPermissions.m_flags, NetPermissionFlags::Implicit));
-    BOOST_CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::None);
+    CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::None);
     NetPermissions::AddFlag(whitebindPermissions.m_flags, NetPermissionFlags::Implicit);
     CHECK(NetPermissions::HasFlag(whitebindPermissions.m_flags, NetPermissionFlags::Implicit));
 
     // Can set one permission
     CHECK(NetWhitebindPermissions::TryParse("bloom@1.2.3.4:32", whitebindPermissions, error));
-    BOOST_CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::BloomFilter);
+    CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::BloomFilter);
     CHECK(NetWhitebindPermissions::TryParse("@1.2.3.4:32", whitebindPermissions, error));
-    BOOST_CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::None);
+    CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::None);
 
     NetWhitebindPermissions noban, noban_download, download_noban, download;
 
     // "noban" implies "download"
     CHECK(NetWhitebindPermissions::TryParse("noban@1.2.3.4:32", noban, error));
-    BOOST_CHECK_EQUAL(noban.m_flags, NetPermissionFlags::NoBan);
+    CHECK_EQUAL(noban.m_flags, NetPermissionFlags::NoBan);
     CHECK(NetPermissions::HasFlag(noban.m_flags, NetPermissionFlags::Download));
     CHECK(NetPermissions::HasFlag(noban.m_flags, NetPermissionFlags::NoBan));
 
     // "noban,download" is equivalent to "noban"
     CHECK(NetWhitebindPermissions::TryParse("noban,download@1.2.3.4:32", noban_download, error));
-    BOOST_CHECK_EQUAL(noban_download.m_flags, noban.m_flags);
+    CHECK_EQUAL(noban_download.m_flags, noban.m_flags);
 
     // "download,noban" is equivalent to "noban"
     CHECK(NetWhitebindPermissions::TryParse("download,noban@1.2.3.4:32", download_noban, error));
-    BOOST_CHECK_EQUAL(download_noban.m_flags, noban.m_flags);
+    CHECK_EQUAL(download_noban.m_flags, noban.m_flags);
 
     // "download" excludes (does not imply) "noban"
     CHECK(NetWhitebindPermissions::TryParse("download@1.2.3.4:32", download, error));
-    BOOST_CHECK_EQUAL(download.m_flags, NetPermissionFlags::Download);
+    CHECK_EQUAL(download.m_flags, NetPermissionFlags::Download);
     CHECK(NetPermissions::HasFlag(download.m_flags, NetPermissionFlags::Download));
     CHECK(!NetPermissions::HasFlag(download.m_flags, NetPermissionFlags::NoBan));
 
     // Happy path, can parse flags
     CHECK(NetWhitebindPermissions::TryParse("bloom,forcerelay@1.2.3.4:32", whitebindPermissions, error));
     // forcerelay should also activate the relay permission
-    BOOST_CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::BloomFilter | NetPermissionFlags::ForceRelay | NetPermissionFlags::Relay);
+    CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::BloomFilter | NetPermissionFlags::ForceRelay | NetPermissionFlags::Relay);
     CHECK(NetWhitebindPermissions::TryParse("bloom,relay,noban@1.2.3.4:32", whitebindPermissions, error));
-    BOOST_CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::BloomFilter | NetPermissionFlags::Relay | NetPermissionFlags::NoBan);
+    CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::BloomFilter | NetPermissionFlags::Relay | NetPermissionFlags::NoBan);
     CHECK(NetWhitebindPermissions::TryParse("bloom,forcerelay,noban@1.2.3.4:32", whitebindPermissions, error));
     CHECK(NetWhitebindPermissions::TryParse("all@1.2.3.4:32", whitebindPermissions, error));
-    BOOST_CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::All);
+    CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::All);
 
     // Allow dups
     CHECK(NetWhitebindPermissions::TryParse("bloom,relay,noban,noban@1.2.3.4:32", whitebindPermissions, error));
-    BOOST_CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::BloomFilter | NetPermissionFlags::Relay | NetPermissionFlags::NoBan | NetPermissionFlags::Download); // "noban" implies "download"
+    CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::BloomFilter | NetPermissionFlags::Relay | NetPermissionFlags::NoBan | NetPermissionFlags::Download); // "noban" implies "download"
 
     // Allow empty
     CHECK(NetWhitebindPermissions::TryParse("bloom,relay,,noban@1.2.3.4:32", whitebindPermissions, error));
-    BOOST_CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::BloomFilter | NetPermissionFlags::Relay | NetPermissionFlags::NoBan);
+    CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::BloomFilter | NetPermissionFlags::Relay | NetPermissionFlags::NoBan);
     CHECK(NetWhitebindPermissions::TryParse(",@1.2.3.4:32", whitebindPermissions, error));
-    BOOST_CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::None);
+    CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::None);
     CHECK(NetWhitebindPermissions::TryParse(",,@1.2.3.4:32", whitebindPermissions, error));
-    BOOST_CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::None);
+    CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::None);
 
     CHECK(!NetWhitebindPermissions::TryParse("out,forcerelay@1.2.3.4:32", whitebindPermissions, error));
     CHECK(error.original.find("whitebind may only be used for incoming connections (\"out\" was passed)") != std::string::npos);
@@ -456,23 +456,23 @@ BOOST_AUTO_TEST_CASE(netpermissions_test)
 
     // Happy path for whitelist parsing
     CHECK(NetWhitelistPermissions::TryParse("noban@1.2.3.4", whitelistPermissions, connection_direction, error));
-    BOOST_CHECK_EQUAL(whitelistPermissions.m_flags, NetPermissionFlags::NoBan);
+    CHECK_EQUAL(whitelistPermissions.m_flags, NetPermissionFlags::NoBan);
     CHECK(NetPermissions::HasFlag(whitelistPermissions.m_flags, NetPermissionFlags::NoBan));
 
     CHECK(NetWhitelistPermissions::TryParse("bloom,forcerelay,noban,relay@1.2.3.4/32", whitelistPermissions, connection_direction, error));
-    BOOST_CHECK_EQUAL(whitelistPermissions.m_flags, NetPermissionFlags::BloomFilter | NetPermissionFlags::ForceRelay | NetPermissionFlags::NoBan | NetPermissionFlags::Relay);
+    CHECK_EQUAL(whitelistPermissions.m_flags, NetPermissionFlags::BloomFilter | NetPermissionFlags::ForceRelay | NetPermissionFlags::NoBan | NetPermissionFlags::Relay);
     CHECK(error.empty());
-    BOOST_CHECK_EQUAL(whitelistPermissions.m_subnet.ToString(), "1.2.3.4/32");
+    CHECK_EQUAL(whitelistPermissions.m_subnet.ToString(), std::string_view{"1.2.3.4/32"});
     CHECK(NetWhitelistPermissions::TryParse("bloom,forcerelay,noban,relay,mempool@1.2.3.4/32", whitelistPermissions, connection_direction, error));
     CHECK(NetWhitelistPermissions::TryParse("in,relay@1.2.3.4", whitelistPermissions, connection_direction, error));
-    BOOST_CHECK_EQUAL(connection_direction, ConnectionDirection::In);
+    CHECK_EQUAL(connection_direction, ConnectionDirection::In);
     CHECK(NetWhitelistPermissions::TryParse("out,bloom@1.2.3.4", whitelistPermissions, connection_direction, error));
-    BOOST_CHECK_EQUAL(connection_direction, ConnectionDirection::Out);
+    CHECK_EQUAL(connection_direction, ConnectionDirection::Out);
     CHECK(NetWhitelistPermissions::TryParse("in,out,bloom@1.2.3.4", whitelistPermissions, connection_direction, error));
-    BOOST_CHECK_EQUAL(connection_direction, ConnectionDirection::Both);
+    CHECK_EQUAL(connection_direction, ConnectionDirection::Both);
 
     const auto strings = NetPermissions::ToStrings(NetPermissionFlags::All);
-    BOOST_CHECK_EQUAL(strings.size(), 7U);
+    CHECK_EQUAL(strings.size(), 7U);
     CHECK(std::find(strings.begin(), strings.end(), "bloomfilter") != strings.end());
     CHECK(std::find(strings.begin(), strings.end(), "forcerelay") != strings.end());
     CHECK(std::find(strings.begin(), strings.end(), "relay") != strings.end());
@@ -571,7 +571,7 @@ BOOST_AUTO_TEST_CASE(caddress_serialize_v1)
     DataStream s{};
 
     s << CAddress::V1_NETWORK(fixture_addresses);
-    BOOST_CHECK_EQUAL(HexStr(s), stream_addrv1_hex);
+    CHECK_EQUAL(HexStr(s), stream_addrv1_hex);
 }
 
 BOOST_AUTO_TEST_CASE(caddress_unserialize_v1)
@@ -587,7 +587,7 @@ BOOST_AUTO_TEST_CASE(caddress_serialize_v2)
     DataStream s{};
 
     s << CAddress::V2_NETWORK(fixture_addresses);
-    BOOST_CHECK_EQUAL(HexStr(s), stream_addrv2_hex);
+    CHECK_EQUAL(HexStr(s), stream_addrv2_hex);
 }
 
 BOOST_AUTO_TEST_CASE(caddress_unserialize_v2)
@@ -611,7 +611,7 @@ BOOST_AUTO_TEST_CASE(isbadport)
     // Check all possible ports and ensure we only flag the expected amount as bad
     std::list<int> ports(std::numeric_limits<uint16_t>::max());
     std::iota(ports.begin(), ports.end(), 1);
-    BOOST_CHECK_EQUAL(std::ranges::count_if(ports, IsBadPort), 85);
+    CHECK_EQUAL(std::ranges::count_if(ports, IsBadPort), std::remove_cvref_t<decltype(std::ranges::count_if(ports, IsBadPort))>{85});
 }
 
 
@@ -636,25 +636,25 @@ BOOST_AUTO_TEST_CASE(asmap_test_vectors)
 
     // Check some randomly-generated IPv6 addresses in it (biased towards the very beginning and
     // very end of the 128-bit range).
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("0:1559:183:3728:224c:65a5:62e6:e991", false)), 961340);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("d0:d493:faa0:8609:e927:8b75:293c:f5a4", false)), 961340);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("2a0:26f:8b2c:2ee7:c7d1:3b24:4705:3f7f", false)), 693761);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("a77:7cd4:4be5:a449:89f2:3212:78c6:ee38", false)), 0);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("1336:1ad6:2f26:4fe3:d809:7321:6e0d:4615", false)), 672176);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("1d56:abd0:a52f:a8d5:d5a7:a610:581d:d792", false)), 499880);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("378e:7290:54e5:bd36:4760:971c:e9b9:570d", false)), 0);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("406c:820b:272a:c045:b74e:fc0a:9ef2:cecc", false)), 248495);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("46c2:ae07:9d08:2d56:d473:2bc7:57e3:20ac", false)), 248495);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("50d2:3db6:52fa:2e7:12ec:5bc4:1bd1:49f9", false)), 124471);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("53e1:1812:ffa:dccf:f9f2:64be:75fa:795", false)), 539993);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("544d:eeba:3990:35d1:ad66:f9a3:576d:8617", false)), 374443);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("6a53:40dc:8f1d:3ffa:efeb:3aa3:df88:b94b", false)), 435070);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("87aa:d1c9:9edb:91e7:aab1:9eb9:baa0:de18", false)), 244121);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("9f00:48fa:88e3:4b67:a6f3:e6d2:5cc1:5be2", false)), 862116);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("c49f:9cc6:86ad:ba08:4580:315e:dbd1:8a62", false)), 969411);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("dff5:8021:61d:b17d:406d:7888:fdac:4a20", false)), 969411);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("e888:6791:2960:d723:bcfd:47e1:2d8c:599f", false)), 824019);
-    BOOST_CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("ffff:d499:8c4b:4941:bc81:d5b9:b51e:85a8", false)), 824019);
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("0:1559:183:3728:224c:65a5:62e6:e991", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("0:1559:183:3728:224c:65a5:62e6:e991", false)))>{961340});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("d0:d493:faa0:8609:e927:8b75:293c:f5a4", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("d0:d493:faa0:8609:e927:8b75:293c:f5a4", false)))>{961340});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("2a0:26f:8b2c:2ee7:c7d1:3b24:4705:3f7f", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("2a0:26f:8b2c:2ee7:c7d1:3b24:4705:3f7f", false)))>{693761});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("a77:7cd4:4be5:a449:89f2:3212:78c6:ee38", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("a77:7cd4:4be5:a449:89f2:3212:78c6:ee38", false)))>{0});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("1336:1ad6:2f26:4fe3:d809:7321:6e0d:4615", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("1336:1ad6:2f26:4fe3:d809:7321:6e0d:4615", false)))>{672176});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("1d56:abd0:a52f:a8d5:d5a7:a610:581d:d792", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("1d56:abd0:a52f:a8d5:d5a7:a610:581d:d792", false)))>{499880});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("378e:7290:54e5:bd36:4760:971c:e9b9:570d", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("378e:7290:54e5:bd36:4760:971c:e9b9:570d", false)))>{0});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("406c:820b:272a:c045:b74e:fc0a:9ef2:cecc", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("406c:820b:272a:c045:b74e:fc0a:9ef2:cecc", false)))>{248495});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("46c2:ae07:9d08:2d56:d473:2bc7:57e3:20ac", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("46c2:ae07:9d08:2d56:d473:2bc7:57e3:20ac", false)))>{248495});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("50d2:3db6:52fa:2e7:12ec:5bc4:1bd1:49f9", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("50d2:3db6:52fa:2e7:12ec:5bc4:1bd1:49f9", false)))>{124471});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("53e1:1812:ffa:dccf:f9f2:64be:75fa:795", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("53e1:1812:ffa:dccf:f9f2:64be:75fa:795", false)))>{539993});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("544d:eeba:3990:35d1:ad66:f9a3:576d:8617", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("544d:eeba:3990:35d1:ad66:f9a3:576d:8617", false)))>{374443});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("6a53:40dc:8f1d:3ffa:efeb:3aa3:df88:b94b", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("6a53:40dc:8f1d:3ffa:efeb:3aa3:df88:b94b", false)))>{435070});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("87aa:d1c9:9edb:91e7:aab1:9eb9:baa0:de18", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("87aa:d1c9:9edb:91e7:aab1:9eb9:baa0:de18", false)))>{244121});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("9f00:48fa:88e3:4b67:a6f3:e6d2:5cc1:5be2", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("9f00:48fa:88e3:4b67:a6f3:e6d2:5cc1:5be2", false)))>{862116});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("c49f:9cc6:86ad:ba08:4580:315e:dbd1:8a62", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("c49f:9cc6:86ad:ba08:4580:315e:dbd1:8a62", false)))>{969411});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("dff5:8021:61d:b17d:406d:7888:fdac:4a20", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("dff5:8021:61d:b17d:406d:7888:fdac:4a20", false)))>{969411});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("e888:6791:2960:d723:bcfd:47e1:2d8c:599f", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("e888:6791:2960:d723:bcfd:47e1:2d8c:599f", false)))>{824019});
+    CHECK_EQUAL(netgroup.GetMappedAS(*LookupHost("ffff:d499:8c4b:4941:bc81:d5b9:b51e:85a8", false)), std::remove_cvref_t<decltype(netgroup.GetMappedAS(*LookupHost("ffff:d499:8c4b:4941:bc81:d5b9:b51e:85a8", false)))>{824019});
 }
 
 BOOST_AUTO_TEST_SUITE_END()

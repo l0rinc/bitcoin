@@ -80,9 +80,9 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_block_doublespend, Dersig100Setup)
         LOCK(cs_main);
         CHECK(m_node.chainman->ActiveChain().Tip()->GetBlockHash() != block.GetHash());
     }
-    BOOST_CHECK_EQUAL(m_node.mempool->size(), 1U);
+    CHECK_EQUAL(m_node.mempool->size(), 1U);
     WITH_LOCK(m_node.mempool->cs, m_node.mempool->removeRecursive(CTransaction{spends[0]}, MemPoolRemovalReason::CONFLICT));
-    BOOST_CHECK_EQUAL(m_node.mempool->size(), 0U);
+    CHECK_EQUAL(m_node.mempool->size(), 0U);
 
     // Test 3: ... and should be rejected if spend2 is in the memory pool
     CHECK(ToMemPool(spends[1]));
@@ -91,9 +91,9 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_block_doublespend, Dersig100Setup)
         LOCK(cs_main);
         CHECK(m_node.chainman->ActiveChain().Tip()->GetBlockHash() != block.GetHash());
     }
-    BOOST_CHECK_EQUAL(m_node.mempool->size(), 1U);
+    CHECK_EQUAL(m_node.mempool->size(), 1U);
     WITH_LOCK(m_node.mempool->cs, m_node.mempool->removeRecursive(CTransaction{spends[1]}, MemPoolRemovalReason::CONFLICT));
-    BOOST_CHECK_EQUAL(m_node.mempool->size(), 0U);
+    CHECK_EQUAL(m_node.mempool->size(), 0U);
 
     // Final sanity test: first spend in *m_node.mempool, second in block, that's OK:
     std::vector<CMutableTransaction> oneSpend;
@@ -106,7 +106,7 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_block_doublespend, Dersig100Setup)
     }
     // spends[1] should have been removed from the mempool when the
     // block with spends[0] is accepted:
-    BOOST_CHECK_EQUAL(m_node.mempool->size(), 0U);
+    CHECK_EQUAL(m_node.mempool->size(), 0U);
 }
 
 // Run CheckInputScripts (using CoinsTip()) on the given transaction, for all script
@@ -146,7 +146,7 @@ static void ValidateCheckInputsForAllFlags(const CTransaction &tx, script_verify
         // CheckInputScripts should succeed iff test_flags doesn't intersect with
         // failing_flags
         bool expected_return_value = !(test_flags & failing_flags);
-        BOOST_CHECK_EQUAL(ret, expected_return_value);
+        CHECK_EQUAL(ret, expected_return_value);
 
         // Test the caching
         if (ret && add_to_cache) {
@@ -159,7 +159,7 @@ static void ValidateCheckInputsForAllFlags(const CTransaction &tx, script_verify
             // was invalid, or we didn't add to cache.
             std::vector<CScriptCheck> scriptchecks;
             CHECK(CheckInputScripts(tx, state, &active_coins_tip, test_flags, true, add_to_cache, txdata, validation_cache, &scriptchecks));
-            BOOST_CHECK_EQUAL(scriptchecks.size(), tx.vin.size());
+            CHECK_EQUAL(scriptchecks.size(), tx.vin.size());
         }
     }
 }
@@ -223,7 +223,7 @@ BOOST_FIXTURE_TEST_CASE(checkinputs_test, Dersig100Setup)
         // not caching invalidity (if that changes, delete this test case).
         std::vector<CScriptCheck> scriptchecks;
         CHECK(CheckInputScripts(CTransaction(spend_tx), state, &m_node.chainman->ActiveChainstate().CoinsTip(), SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_DERSIG, true, true, ptd_spend_tx, m_node.chainman->m_validation_cache, &scriptchecks));
-        BOOST_CHECK_EQUAL(scriptchecks.size(), 1U);
+        CHECK_EQUAL(scriptchecks.size(), 1U);
 
         // Test that CheckInputScripts returns true iff DERSIG-enforcing flags are
         // not present.  Don't add these checks to the cache, so that we can
@@ -381,7 +381,7 @@ BOOST_FIXTURE_TEST_CASE(checkinputs_test, Dersig100Setup)
         // input was valid)
         CHECK(CheckInputScripts(CTransaction(tx), state, &m_node.chainman->ActiveChainstate().CoinsTip(), SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS, true, true, txdata, m_node.chainman->m_validation_cache, &scriptchecks));
         // Should get 2 script checks back -- caching is on a whole-transaction basis.
-        BOOST_CHECK_EQUAL(scriptchecks.size(), 2U);
+        CHECK_EQUAL(scriptchecks.size(), 2U);
     }
 }
 

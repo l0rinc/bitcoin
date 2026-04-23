@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <util/result.h>
+#include <test/util/check.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -54,18 +55,18 @@ util::Result<NoCopy> NoCopyFn(int i, bool success)
 template <typename T>
 void ExpectResult(const util::Result<T>& result, bool success, const bilingual_str& str)
 {
-    BOOST_CHECK_EQUAL(bool(result), success);
-    BOOST_CHECK_EQUAL(util::ErrorString(result), str);
+    CHECK_EQUAL(bool(result), success);
+    CHECK_EQUAL(util::ErrorString(result), str);
 }
 
 template <typename T, typename... Args>
 void ExpectSuccess(const util::Result<T>& result, const bilingual_str& str, Args&&... args)
 {
     ExpectResult(result, true, str);
-    BOOST_CHECK_EQUAL(result.has_value(), true);
+    CHECK_EQUAL(result.has_value(), std::remove_cvref_t<decltype(result.has_value())>{true});
     T expected{std::forward<Args>(args)...};
-    BOOST_CHECK_EQUAL(result.value(), expected);
-    BOOST_CHECK_EQUAL(&result.value(), &*result);
+    CHECK_EQUAL(result.value(), expected);
+    CHECK(&result.value() == &*result);
 }
 
 template <typename T, typename... Args>
@@ -86,12 +87,12 @@ BOOST_AUTO_TEST_CASE(check_returned)
 
 BOOST_AUTO_TEST_CASE(check_value_or)
 {
-    BOOST_CHECK_EQUAL(IntFn(10, true).value_or(20), 10);
-    BOOST_CHECK_EQUAL(IntFn(10, false).value_or(20), 20);
-    BOOST_CHECK_EQUAL(NoCopyFn(10, true).value_or(20), 10);
-    BOOST_CHECK_EQUAL(NoCopyFn(10, false).value_or(20), 20);
-    BOOST_CHECK_EQUAL(StrFn(Untranslated("A"), true).value_or(Untranslated("B")), Untranslated("A"));
-    BOOST_CHECK_EQUAL(StrFn(Untranslated("A"), false).value_or(Untranslated("B")), Untranslated("B"));
+    CHECK_EQUAL(IntFn(10, true).value_or(20), std::remove_cvref_t<decltype(IntFn(10, true).value_or(20))>{10});
+    CHECK_EQUAL(IntFn(10, false).value_or(20), std::remove_cvref_t<decltype(IntFn(10, false).value_or(20))>{20});
+    CHECK_EQUAL(NoCopyFn(10, true).value_or(20), std::remove_cvref_t<decltype(NoCopyFn(10, true).value_or(20))>{10});
+    CHECK_EQUAL(NoCopyFn(10, false).value_or(20), std::remove_cvref_t<decltype(NoCopyFn(10, false).value_or(20))>{20});
+    CHECK_EQUAL(StrFn(Untranslated("A"), true).value_or(Untranslated("B")), Untranslated("A"));
+    CHECK_EQUAL(StrFn(Untranslated("A"), false).value_or(Untranslated("B")), Untranslated("B"));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

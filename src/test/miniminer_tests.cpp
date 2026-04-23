@@ -102,7 +102,7 @@ BOOST_FIXTURE_TEST_CASE(miniminer_negative, TestChain100Setup)
     CHECK(mini_miner_no_target.IsReadyToCalculate());
     mini_miner_no_target.BuildMockTemplate(std::nullopt);
     const auto template_txids{mini_miner_no_target.GetMockTemplateTxids()};
-    BOOST_CHECK_EQUAL(template_txids.size(), 1);
+    CHECK_EQUAL(template_txids.size(), std::remove_cvref_t<decltype(template_txids.size())>{1});
     CHECK(template_txids.contains(tx_mod_negative->GetHash()));
 }
 
@@ -202,7 +202,7 @@ BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
         for (const auto& outpoint: nonexistent_outpoints) {
             auto it = bump_fees.find(outpoint);
             CHECK(it != bump_fees.end());
-            BOOST_CHECK_EQUAL(it->second, 0);
+            CHECK_EQUAL(it->second, std::remove_cvref_t<decltype(it->second)>{0});
         }
     }
 
@@ -213,16 +213,16 @@ BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
         auto bump_fees = mini_miner.CalculateBumpFees(target_feerate);
         CHECK(!mini_miner.IsReadyToCalculate());
         CHECK(sanity_check(all_transactions, bump_fees));
-        BOOST_CHECK_EQUAL(bump_fees.size(), all_unspent_outpoints.size());
+        CHECK_EQUAL(bump_fees.size(), all_unspent_outpoints.size());
 
         // Check tx0 bumpfee: no other bumper.
         const TxDimensions& tx0_dimensions = tx_dims.find(tx0->GetHash())->second;
         CAmount bumpfee0 = Find(bump_fees, COutPoint{tx0->GetHash(), 1});
         if (target_feerate <= tx0_dimensions.feerate) {
-            BOOST_CHECK_EQUAL(bumpfee0, 0);
+            CHECK_EQUAL(bumpfee0, std::remove_cvref_t<decltype(bumpfee0)>{0});
         } else {
             // Difference is fee to bump tx0 from current to target feerate.
-            BOOST_CHECK_EQUAL(bumpfee0, target_feerate.GetFee(tx0_dimensions.vsize) - tx0_dimensions.mod_fee);
+            CHECK_EQUAL(bumpfee0, target_feerate.GetFee(tx0_dimensions.vsize) - tx0_dimensions.mod_fee);
         }
 
         // Check tx2 bumpfee: assisted by tx3.
@@ -232,10 +232,10 @@ BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
         CAmount bumpfee2 = Find(bump_fees, COutPoint{tx2->GetHash(), 1});
         if (target_feerate <= tx2_feerate) {
             // As long as target feerate is below tx3's ancestor feerate, there is no bump fee.
-            BOOST_CHECK_EQUAL(bumpfee2, 0);
+            CHECK_EQUAL(bumpfee2, std::remove_cvref_t<decltype(bumpfee2)>{0});
         } else {
             // Difference is fee to bump tx2 from current to target feerate, without tx3.
-            BOOST_CHECK_EQUAL(bumpfee2, target_feerate.GetFee(tx2_dimensions.vsize) - tx2_dimensions.mod_fee);
+            CHECK_EQUAL(bumpfee2, target_feerate.GetFee(tx2_dimensions.vsize) - tx2_dimensions.mod_fee);
         }
 
         // If tx5’s modified fees are sufficient for tx4 and tx5 to be picked
@@ -252,10 +252,10 @@ BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
         CAmount bumpfee4 = Find(bump_fees, COutPoint{tx4->GetHash(), 1});
         if (target_feerate <= tx4_feerate) {
             // As long as target feerate is below tx5's ancestor feerate, there is no bump fee.
-            BOOST_CHECK_EQUAL(bumpfee4, 0);
+            CHECK_EQUAL(bumpfee4, std::remove_cvref_t<decltype(bumpfee4)>{0});
         } else {
             // Difference is fee to bump tx4 from current to target feerate, without tx5.
-            BOOST_CHECK_EQUAL(bumpfee4, target_feerate.GetFee(tx4_dimensions.vsize) - tx4_dimensions.mod_fee);
+            CHECK_EQUAL(bumpfee4, target_feerate.GetFee(tx4_dimensions.vsize) - tx4_dimensions.mod_fee);
         }
     }
     // Spent outpoints should usually not be requested as they would not be
@@ -266,12 +266,12 @@ BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
         CHECK(mini_miner_all_spent.IsReadyToCalculate());
         auto bump_fees_all_spent = mini_miner_all_spent.CalculateBumpFees(target_feerate);
         CHECK(!mini_miner_all_spent.IsReadyToCalculate());
-        BOOST_CHECK_EQUAL(bump_fees_all_spent.size(), all_spent_outpoints.size());
+        CHECK_EQUAL(bump_fees_all_spent.size(), all_spent_outpoints.size());
         node::MiniMiner mini_miner_all_parents(pool, all_parent_outputs);
         CHECK(mini_miner_all_parents.IsReadyToCalculate());
         auto bump_fees_all_parents = mini_miner_all_parents.CalculateBumpFees(target_feerate);
         CHECK(!mini_miner_all_parents.IsReadyToCalculate());
-        BOOST_CHECK_EQUAL(bump_fees_all_parents.size(), all_parent_outputs.size());
+        CHECK_EQUAL(bump_fees_all_parents.size(), all_parent_outputs.size());
         for (auto& bump_fees : {bump_fees_all_parents, bump_fees_all_spent}) {
             // For all_parents case, both outputs from the parent should have the same bump fee,
             // even though only one of them is in a to-be-replaced transaction.
@@ -281,10 +281,10 @@ BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
             const TxDimensions& tx0_dimensions = tx_dims.find(tx0->GetHash())->second;
             CAmount it0_spent = Find(bump_fees, COutPoint{tx0->GetHash(), 0});
             if (target_feerate <= tx0_dimensions.feerate) {
-                BOOST_CHECK_EQUAL(it0_spent, 0);
+                CHECK_EQUAL(it0_spent, std::remove_cvref_t<decltype(it0_spent)>{0});
             } else {
                 // Difference is fee to bump tx0 from current to target feerate.
-                BOOST_CHECK_EQUAL(it0_spent, target_feerate.GetFee(tx0_dimensions.vsize) - tx0_dimensions.mod_fee);
+                CHECK_EQUAL(it0_spent, target_feerate.GetFee(tx0_dimensions.vsize) - tx0_dimensions.mod_fee);
             }
 
             // Check tx2 bumpfee: no other bumper, because tx3 is to-be-replaced.
@@ -292,10 +292,10 @@ BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
             const CFeeRate tx2_feerate_unbumped = tx2_dimensions.feerate;
             auto it2_spent = Find(bump_fees, COutPoint{tx2->GetHash(), 0});
             if (target_feerate <= tx2_feerate_unbumped) {
-                BOOST_CHECK_EQUAL(it2_spent, 0);
+                CHECK_EQUAL(it2_spent, std::remove_cvref_t<decltype(it2_spent)>{0});
             } else {
                 // Difference is fee to bump tx2 from current to target feerate, without tx3.
-                BOOST_CHECK_EQUAL(it2_spent, target_feerate.GetFee(tx2_dimensions.vsize) - tx2_dimensions.mod_fee);
+                CHECK_EQUAL(it2_spent, target_feerate.GetFee(tx2_dimensions.vsize) - tx2_dimensions.mod_fee);
             }
 
             // Check tx4 bumpfee: no other bumper, because tx5 is to-be-replaced.
@@ -303,10 +303,10 @@ BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
             const CFeeRate tx4_feerate_unbumped = tx4_dimensions.feerate;
             auto it4_spent = Find(bump_fees, COutPoint{tx4->GetHash(), 0});
             if (target_feerate <= tx4_feerate_unbumped) {
-                BOOST_CHECK_EQUAL(it4_spent, 0);
+                CHECK_EQUAL(it4_spent, std::remove_cvref_t<decltype(it4_spent)>{0});
             } else {
                 // Difference is fee to bump tx4 from current to target feerate, without tx5.
-                BOOST_CHECK_EQUAL(it4_spent, target_feerate.GetFee(tx4_dimensions.vsize) - tx4_dimensions.mod_fee);
+                CHECK_EQUAL(it4_spent, target_feerate.GetFee(tx4_dimensions.vsize) - tx4_dimensions.mod_fee);
             }
         }
     }
@@ -351,22 +351,22 @@ BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
     CHECK(miniminer_pool.IsReadyToCalculate());
     for (const auto& sequences : {miniminer_manual.Linearize(), miniminer_pool.Linearize()}) {
         // tx6 is selected first: high feerate with no parents to bump
-        BOOST_CHECK_EQUAL(Find(sequences, tx6->GetHash()), 0);
+        CHECK_EQUAL(Find(sequences, tx6->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx6->GetHash()))>{0});
 
         // tx2 + tx3 CPFP are selected next
-        BOOST_CHECK_EQUAL(Find(sequences, tx2->GetHash()), 1);
-        BOOST_CHECK_EQUAL(Find(sequences, tx3->GetHash()), 1);
+        CHECK_EQUAL(Find(sequences, tx2->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx2->GetHash()))>{1});
+        CHECK_EQUAL(Find(sequences, tx3->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx3->GetHash()))>{1});
 
         // tx4 + prioritised tx5 CPFP
-        BOOST_CHECK_EQUAL(Find(sequences, tx4->GetHash()), 2);
-        BOOST_CHECK_EQUAL(Find(sequences, tx5->GetHash()), 2);
+        CHECK_EQUAL(Find(sequences, tx4->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx4->GetHash()))>{2});
+        CHECK_EQUAL(Find(sequences, tx5->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx5->GetHash()))>{2});
 
-        BOOST_CHECK_EQUAL(Find(sequences, tx0->GetHash()), 3);
-        BOOST_CHECK_EQUAL(Find(sequences, tx1->GetHash()), 3);
+        CHECK_EQUAL(Find(sequences, tx0->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx0->GetHash()))>{3});
+        CHECK_EQUAL(Find(sequences, tx1->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx1->GetHash()))>{3});
 
 
         // tx7 is selected last: low feerate with no children
-        BOOST_CHECK_EQUAL(Find(sequences, tx7->GetHash()), 4);
+        CHECK_EQUAL(Find(sequences, tx7->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx7->GetHash()))>{4});
     }
 }
 
@@ -474,23 +474,23 @@ BOOST_FIXTURE_TEST_CASE(miniminer_overlap, TestChain100Setup)
         CHECK(tx3_anc_feerate < very_high_feerate);
         CHECK(mini_miner.IsReadyToCalculate());
         auto bump_fees = mini_miner.CalculateBumpFees(very_high_feerate);
-        BOOST_CHECK_EQUAL(bump_fees.size(), all_unspent_outpoints.size());
+        CHECK_EQUAL(bump_fees.size(), all_unspent_outpoints.size());
         CHECK(!mini_miner.IsReadyToCalculate());
         CHECK(sanity_check(all_transactions, bump_fees));
         const auto tx0_bumpfee = bump_fees.find(COutPoint{tx0->GetHash(), 1});
         CHECK(tx0_bumpfee != bump_fees.end());
-        BOOST_CHECK_EQUAL(tx0_bumpfee->second, very_high_feerate.GetFee(tx_vsizes[0]) - low_fee);
+        CHECK_EQUAL(tx0_bumpfee->second, very_high_feerate.GetFee(tx_vsizes[0]) - low_fee);
         const auto tx3_bumpfee = bump_fees.find(COutPoint{tx3->GetHash(), 0});
         CHECK(tx3_bumpfee != bump_fees.end());
-        BOOST_CHECK_EQUAL(tx3_bumpfee->second,
+        CHECK_EQUAL(tx3_bumpfee->second,
             very_high_feerate.GetFee(tx_vsizes[0] + tx_vsizes[1] + tx_vsizes[2] + tx_vsizes[3]) - (low_fee + med_fee + high_fee + high_fee));
         const auto tx6_bumpfee = bump_fees.find(COutPoint{tx6->GetHash(), 0});
         CHECK(tx6_bumpfee != bump_fees.end());
-        BOOST_CHECK_EQUAL(tx6_bumpfee->second,
+        CHECK_EQUAL(tx6_bumpfee->second,
             very_high_feerate.GetFee(tx_vsizes[4] + tx_vsizes[5] + tx_vsizes[6]) - (high_fee + low_fee + med_fee));
         const auto tx7_bumpfee = bump_fees.find(COutPoint{tx7->GetHash(), 0});
         CHECK(tx7_bumpfee != bump_fees.end());
-        BOOST_CHECK_EQUAL(tx7_bumpfee->second,
+        CHECK_EQUAL(tx7_bumpfee->second,
             very_high_feerate.GetFee(tx_vsizes[4] + tx_vsizes[5] + tx_vsizes[7]) - (high_fee + low_fee + high_fee));
         // Total fees: if spending multiple outputs from tx3 don't double-count fees.
         node::MiniMiner mini_miner_total_tx3(pool, {COutPoint{tx3->GetHash(), 0}, COutPoint{tx3->GetHash(), 1}});
@@ -498,7 +498,7 @@ BOOST_FIXTURE_TEST_CASE(miniminer_overlap, TestChain100Setup)
         const auto tx3_bump_fee = mini_miner_total_tx3.CalculateTotalBumpFees(very_high_feerate);
         CHECK(!mini_miner_total_tx3.IsReadyToCalculate());
         CHECK(tx3_bump_fee.has_value());
-        BOOST_CHECK_EQUAL(tx3_bump_fee.value(),
+        CHECK_EQUAL(tx3_bump_fee.value(),
             very_high_feerate.GetFee(tx_vsizes[0] + tx_vsizes[1] + tx_vsizes[2] + tx_vsizes[3]) - (low_fee + med_fee + high_fee + high_fee));
         // Total fees: if spending both tx6 and tx7, don't double-count fees.
         node::MiniMiner mini_miner_tx6_tx7(pool, {COutPoint{tx6->GetHash(), 0}, COutPoint{tx7->GetHash(), 0}});
@@ -506,7 +506,7 @@ BOOST_FIXTURE_TEST_CASE(miniminer_overlap, TestChain100Setup)
         const auto tx6_tx7_bumpfee = mini_miner_tx6_tx7.CalculateTotalBumpFees(very_high_feerate);
         CHECK(!mini_miner_tx6_tx7.IsReadyToCalculate());
         CHECK(tx6_tx7_bumpfee.has_value());
-        BOOST_CHECK_EQUAL(tx6_tx7_bumpfee.value(),
+        CHECK_EQUAL(tx6_tx7_bumpfee.value(),
             very_high_feerate.GetFee(tx_vsizes[4] + tx_vsizes[5] + tx_vsizes[6] + tx_vsizes[7]) - (high_fee + low_fee + med_fee + high_fee));
     }
     // Feerate just below tx4: tx6 and tx7 have different bump fees.
@@ -516,21 +516,21 @@ BOOST_FIXTURE_TEST_CASE(miniminer_overlap, TestChain100Setup)
         CHECK(mini_miner.IsReadyToCalculate());
         auto bump_fees = mini_miner.CalculateBumpFees(just_below_tx4);
         CHECK(!mini_miner.IsReadyToCalculate());
-        BOOST_CHECK_EQUAL(bump_fees.size(), all_unspent_outpoints.size());
+        CHECK_EQUAL(bump_fees.size(), all_unspent_outpoints.size());
         CHECK(sanity_check(all_transactions, bump_fees));
         const auto tx6_bumpfee = bump_fees.find(COutPoint{tx6->GetHash(), 0});
         CHECK(tx6_bumpfee != bump_fees.end());
-        BOOST_CHECK_EQUAL(tx6_bumpfee->second, just_below_tx4.GetFee(tx_vsizes[5] + tx_vsizes[6]) - (low_fee + med_fee));
+        CHECK_EQUAL(tx6_bumpfee->second, just_below_tx4.GetFee(tx_vsizes[5] + tx_vsizes[6]) - (low_fee + med_fee));
         const auto tx7_bumpfee = bump_fees.find(COutPoint{tx7->GetHash(), 0});
         CHECK(tx7_bumpfee != bump_fees.end());
-        BOOST_CHECK_EQUAL(tx7_bumpfee->second, just_below_tx4.GetFee(tx_vsizes[5] + tx_vsizes[7]) - (low_fee + high_fee));
+        CHECK_EQUAL(tx7_bumpfee->second, just_below_tx4.GetFee(tx_vsizes[5] + tx_vsizes[7]) - (low_fee + high_fee));
         // Total fees: if spending both tx6 and tx7, don't double-count fees.
         node::MiniMiner mini_miner_tx6_tx7(pool, {COutPoint{tx6->GetHash(), 0}, COutPoint{tx7->GetHash(), 0}});
         CHECK(mini_miner_tx6_tx7.IsReadyToCalculate());
         const auto tx6_tx7_bumpfee = mini_miner_tx6_tx7.CalculateTotalBumpFees(just_below_tx4);
         CHECK(!mini_miner_tx6_tx7.IsReadyToCalculate());
         CHECK(tx6_tx7_bumpfee.has_value());
-        BOOST_CHECK_EQUAL(tx6_tx7_bumpfee.value(), just_below_tx4.GetFee(tx_vsizes[5] + tx_vsizes[6]) - (low_fee + med_fee));
+        CHECK_EQUAL(tx6_tx7_bumpfee.value(), just_below_tx4.GetFee(tx_vsizes[5] + tx_vsizes[6]) - (low_fee + med_fee));
     }
     // Feerate between tx6 and tx7's ancestor feerates: don't need to bump tx5 because tx7 already does.
     {
@@ -540,14 +540,14 @@ BOOST_FIXTURE_TEST_CASE(miniminer_overlap, TestChain100Setup)
         CHECK(mini_miner.IsReadyToCalculate());
         auto bump_fees = mini_miner.CalculateBumpFees(just_above_tx6);
         CHECK(!mini_miner.IsReadyToCalculate());
-        BOOST_CHECK_EQUAL(bump_fees.size(), all_unspent_outpoints.size());
+        CHECK_EQUAL(bump_fees.size(), all_unspent_outpoints.size());
         CHECK(sanity_check(all_transactions, bump_fees));
         const auto tx6_bumpfee = bump_fees.find(COutPoint{tx6->GetHash(), 0});
         CHECK(tx6_bumpfee != bump_fees.end());
-        BOOST_CHECK_EQUAL(tx6_bumpfee->second, just_above_tx6.GetFee(tx_vsizes[6]) - (med_fee));
+        CHECK_EQUAL(tx6_bumpfee->second, just_above_tx6.GetFee(tx_vsizes[6]) - (med_fee));
         const auto tx7_bumpfee = bump_fees.find(COutPoint{tx7->GetHash(), 0});
         CHECK(tx7_bumpfee != bump_fees.end());
-        BOOST_CHECK_EQUAL(tx7_bumpfee->second, 0);
+        CHECK_EQUAL(tx7_bumpfee->second, std::remove_cvref_t<decltype(tx7_bumpfee->second)>{0});
     }
     // Check linearization order
     std::vector<node::MiniMinerMempoolEntry> miniminer_info;
@@ -577,20 +577,20 @@ BOOST_FIXTURE_TEST_CASE(miniminer_overlap, TestChain100Setup)
     CHECK(miniminer_pool.IsReadyToCalculate());
     for (const auto& sequences : {miniminer_manual.Linearize(), miniminer_pool.Linearize()}) {
         // tx2 and tx4 selected first: high feerate with nothing to bump
-        BOOST_CHECK_EQUAL(Find(sequences, tx4->GetHash()), 0);
-        BOOST_CHECK_EQUAL(Find(sequences, tx2->GetHash()), 1);
+        CHECK_EQUAL(Find(sequences, tx4->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx4->GetHash()))>{0});
+        CHECK_EQUAL(Find(sequences, tx2->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx2->GetHash()))>{1});
 
         // tx5 + tx7 CPFP
-        BOOST_CHECK_EQUAL(Find(sequences, tx5->GetHash()), 2);
-        BOOST_CHECK_EQUAL(Find(sequences, tx7->GetHash()), 2);
+        CHECK_EQUAL(Find(sequences, tx5->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx5->GetHash()))>{2});
+        CHECK_EQUAL(Find(sequences, tx7->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx7->GetHash()))>{2});
 
         // tx0 and tx1 CPFP'd by tx3
-        BOOST_CHECK_EQUAL(Find(sequences, tx0->GetHash()), 3);
-        BOOST_CHECK_EQUAL(Find(sequences, tx1->GetHash()), 3);
-        BOOST_CHECK_EQUAL(Find(sequences, tx3->GetHash()), 3);
+        CHECK_EQUAL(Find(sequences, tx0->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx0->GetHash()))>{3});
+        CHECK_EQUAL(Find(sequences, tx1->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx1->GetHash()))>{3});
+        CHECK_EQUAL(Find(sequences, tx3->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx3->GetHash()))>{3});
 
         // tx6 at medium feerate
-        BOOST_CHECK_EQUAL(Find(sequences, tx6->GetHash()), 4);
+        CHECK_EQUAL(Find(sequences, tx6->GetHash()), std::remove_cvref_t<decltype(Find(sequences, tx6->GetHash()))>{4});
     }
 }
 BOOST_FIXTURE_TEST_CASE(calculate_cluster, TestChain100Setup)
@@ -616,7 +616,7 @@ BOOST_FIXTURE_TEST_CASE(calculate_cluster, TestChain100Setup)
     }
     const auto cluster_500tx = pool.GatherClusters(last_txs);
     CTxMemPool::setEntries cluster_500tx_set{cluster_500tx.begin(), cluster_500tx.end()};
-    BOOST_CHECK_EQUAL(cluster_500tx.size(), cluster_500tx_set.size());
+    CHECK_EQUAL(cluster_500tx.size(), cluster_500tx_set.size());
     const auto vec_iters_500 = pool.GetIterVec(chain_txids);
     for (const auto& iter : vec_iters_500) CHECK(cluster_500tx_set.count(iter));
 
@@ -624,7 +624,7 @@ BOOST_FIXTURE_TEST_CASE(calculate_cluster, TestChain100Setup)
     const auto tx_501 = make_tx({COutPoint{lasttx->GetHash(), 0}}, /*num_outputs=*/1);
     TryAddToMempool(pool, entry.Fee(CENT).FromTx(tx_501));
     const auto cluster_501 = pool.GatherClusters(last_txs);
-    BOOST_CHECK_EQUAL(cluster_501.size(), 0);
+    CHECK_EQUAL(cluster_501.size(), std::remove_cvref_t<decltype(cluster_501.size())>{0});
 
     /* Zig Zag cluster:
      * txp0     txp1     txp2    ...  txp30  txp31
@@ -648,9 +648,9 @@ BOOST_FIXTURE_TEST_CASE(calculate_cluster, TestChain100Setup)
     const std::vector<size_t> indices{0, 22, 52, zigzag_txids.size() - 1};
     for (const auto index : indices) {
         const auto cluster = pool.GatherClusters({zigzag_txids[index]});
-        BOOST_CHECK_EQUAL(cluster.size(), zigzag_txids.size());
+        CHECK_EQUAL(cluster.size(), zigzag_txids.size());
         CTxMemPool::setEntries clusterset{cluster.begin(), cluster.end()};
-        BOOST_CHECK_EQUAL(cluster.size(), clusterset.size());
+        CHECK_EQUAL(cluster.size(), clusterset.size());
         for (const auto& iter : vec_iters_zigzag) CHECK(clusterset.count(iter));
     }
 }
@@ -699,19 +699,19 @@ BOOST_FIXTURE_TEST_CASE(manual_ctor, TestChain100Setup)
         const auto sequences{miniminer_manual.Linearize()};
 
         // CPFP zero + high
-        BOOST_CHECK_EQUAL(sequences.at(grandparent_zero_fee->GetHash()), 0);
-        BOOST_CHECK_EQUAL(sequences.at(parent_high_feerate->GetHash()), 0);
+        CHECK_EQUAL(sequences.at(grandparent_zero_fee->GetHash()), std::remove_cvref_t<decltype(sequences.at(grandparent_zero_fee->GetHash()))>{0});
+        CHECK_EQUAL(sequences.at(parent_high_feerate->GetHash()), std::remove_cvref_t<decltype(sequences.at(parent_high_feerate->GetHash()))>{0});
 
         // CPFP double low + med
-        BOOST_CHECK_EQUAL(sequences.at(grandparent_double_low_feerate->GetHash()), 1);
-        BOOST_CHECK_EQUAL(sequences.at(parent_med_feerate->GetHash()), 1);
+        CHECK_EQUAL(sequences.at(grandparent_double_low_feerate->GetHash()), std::remove_cvref_t<decltype(sequences.at(grandparent_double_low_feerate->GetHash()))>{1});
+        CHECK_EQUAL(sequences.at(parent_med_feerate->GetHash()), std::remove_cvref_t<decltype(sequences.at(parent_med_feerate->GetHash()))>{1});
 
         // CPFP low + double low
-        BOOST_CHECK_EQUAL(sequences.at(grandparent_low_feerate->GetHash()), 2);
-        BOOST_CHECK_EQUAL(sequences.at(parent_double_low_feerate->GetHash()), 2);
+        CHECK_EQUAL(sequences.at(grandparent_low_feerate->GetHash()), std::remove_cvref_t<decltype(sequences.at(grandparent_low_feerate->GetHash()))>{2});
+        CHECK_EQUAL(sequences.at(parent_double_low_feerate->GetHash()), std::remove_cvref_t<decltype(sequences.at(parent_double_low_feerate->GetHash()))>{2});
 
         // Child at the end
-        BOOST_CHECK_EQUAL(sequences.at(child->GetHash()), 3);
+        CHECK_EQUAL(sequences.at(child->GetHash()), std::remove_cvref_t<decltype(sequences.at(child->GetHash()))>{3});
     }
 }
 

@@ -176,7 +176,7 @@ void test_cache_erase(size_t megabytes)
     double hit_rate_fresh = double(count_fresh) / (double(n_insert) / 2.0);
 
     // Check that our hit_rate_fresh is perfect
-    BOOST_CHECK_EQUAL(hit_rate_fresh, 1.0);
+    CHECK_EQUAL(hit_rate_fresh, 1.0);
     // Check that we have a more than 2x better hit rate on stale elements than
     // erased elements.
     CHECK(hit_rate_stale > 2 * hit_rate_erased_but_contained);
@@ -269,7 +269,7 @@ void test_cache_erase_parallel(size_t megabytes)
     double hit_rate_fresh = double(count_fresh) / (double(n_insert) / 2.0);
 
     // Check that our hit_rate_fresh is perfect
-    BOOST_CHECK_EQUAL(hit_rate_fresh, 1.0);
+    CHECK_EQUAL(hit_rate_fresh, 1.0);
     // Check that we have a more than 2x better hit rate on stale elements than
     // erased elements.
     CHECK(hit_rate_stale > 2 * hit_rate_erased_but_contained);

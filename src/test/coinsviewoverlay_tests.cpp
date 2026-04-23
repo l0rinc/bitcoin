@@ -68,13 +68,13 @@ void CheckCache(const CBlock& block, const CCoinsViewCache& cache)
                 const auto& outpoint{in.prevout};
                 const auto& first{cache.AccessCoin(outpoint)};
                 const auto& second{cache.AccessCoin(outpoint)};
-                BOOST_CHECK_EQUAL(&first, &second);
+                CHECK(&first == &second);
                 ++counter;
                 CHECK(cache.HaveCoinInCache(outpoint));
             }
         }
     }
-    BOOST_CHECK_EQUAL(cache.GetCacheSize(), counter);
+    CHECK_EQUAL(cache.GetCacheSize(), counter);
 }
 
 } // namespace
@@ -142,7 +142,7 @@ BOOST_AUTO_TEST_CASE(fetch_no_double_spend)
         }
     }
     // Coins are not added to the view, even though they exist unspent in the parent db
-    BOOST_CHECK_EQUAL(view.GetCacheSize(), 0);
+    CHECK_EQUAL(view.GetCacheSize(), std::remove_cvref_t<decltype(view.GetCacheSize())>{0});
 }
 
 BOOST_AUTO_TEST_CASE(fetch_no_inputs)
@@ -159,8 +159,7 @@ BOOST_AUTO_TEST_CASE(fetch_no_inputs)
             CHECK(!view.GetCoin(in.prevout));
         }
     }
-    BOOST_CHECK_EQUAL(view.GetCacheSize(), 0);
+    CHECK_EQUAL(view.GetCacheSize(), std::remove_cvref_t<decltype(view.GetCacheSize())>{0});
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-

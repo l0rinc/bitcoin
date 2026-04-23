@@ -408,7 +408,7 @@ void TestSatisfy(const KeyConverter& converter, const Node& node)
 
             if (node.IsSane()) {
                 // For sane nodes, the two algorithms behave identically.
-                BOOST_CHECK_EQUAL(mal_success, nonmal_success);
+                CHECK_EQUAL(mal_success, nonmal_success);
             }
 
             // Adding more satisfied conditions can never remove our ability to produce a satisfaction.
@@ -426,9 +426,9 @@ void TestSatisfy(const KeyConverter& converter, const Node& node)
 
         bool satisfiable = node.IsSatisfiable([](const Node&) { return true; });
         // If the miniscript was satisfiable at all, a satisfaction must be found after all conditions are added.
-        BOOST_CHECK_EQUAL(prev_mal_success, satisfiable);
+        CHECK_EQUAL(prev_mal_success, satisfiable);
         // If the miniscript is sane and satisfiable, a nonmalleable satisfaction must eventually be found.
-        if (node.IsSane()) BOOST_CHECK_EQUAL(prev_nonmal_success, satisfiable);
+        if (node.IsSane()) CHECK_EQUAL(prev_nonmal_success, satisfiable);
     }
 }
 
@@ -667,8 +667,8 @@ BOOST_AUTO_TEST_CASE(fixed_tests)
     // For CHECKMULTISIG the OP cost is the number of keys, but the stack size is the number of sigs (+1)
     const auto ms_multi = miniscript::FromString("multi(1,03d30199d74fb5a22d47b6e054e2f378cedacffcb89904a61d75d0dbd407143e65,03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556,0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)", wsh_converter);
     CHECK(ms_multi);
-    BOOST_CHECK_EQUAL(*ms_multi->GetOps(), 4); // 3 pubkeys + CMS
-    BOOST_CHECK_EQUAL(*ms_multi->GetStackSize(), 2); // 1 sig + dummy elem
+    CHECK_EQUAL(*ms_multi->GetOps(), std::remove_cvref_t<decltype(*ms_multi->GetOps())>{4}); // 3 pubkeys + CMS
+    CHECK_EQUAL(*ms_multi->GetStackSize(), std::remove_cvref_t<decltype(*ms_multi->GetStackSize())>{2}); // 1 sig + dummy elem
     // The 'd:' wrapper leaves on the stack what was DUP'ed at the beginning of its execution.
     // Since it contains an OP_IF just after on the same element, we can make sure that the element
     // in question must be OP_1 if OP_IF enforces that its argument must only be OP_1 or the empty
@@ -753,13 +753,13 @@ BOOST_AUTO_TEST_CASE(node_stress_stack)
         root = NodeU32{NoDupCheck{}, ctx, Fragment::WRAP_N, Vector(std::move(root))};
     }
     CHECK(root.IsValid());
-    BOOST_CHECK_EQUAL(compute_depth(root), depth);
+    CHECK_EQUAL(compute_depth(root), depth);
 
     auto clone{root.Clone()};
-    BOOST_CHECK_EQUAL(compute_depth(clone), depth);
+    CHECK_EQUAL(compute_depth(clone), depth);
 
     clone = std::move(root);
-    BOOST_CHECK_EQUAL(compute_depth(clone), depth);
+    CHECK_EQUAL(compute_depth(clone), depth);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

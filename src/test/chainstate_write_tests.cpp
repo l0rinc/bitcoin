@@ -81,7 +81,7 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
         chainstate.DisconnectTip(state_dummy, nullptr);
     }
 
-    BOOST_CHECK_EQUAL(second_from_tip->pprev, chainstate.m_chain.Tip());
+    CHECK(second_from_tip->pprev == chainstate.m_chain.Tip());
 
     // Set m_next_write to current time
     chainstate.FlushStateToDisk(state_dummy, FlushStateMode::FORCE_FLUSH);
@@ -95,12 +95,12 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
 
     // ActivateBestChain back to tip
     chainstate.ActivateBestChain(state_dummy, nullptr);
-    BOOST_CHECK_EQUAL(tip, chainstate.m_chain.Tip());
+    CHECK(tip == chainstate.m_chain.Tip());
     // Check that we flushed inside ActivateBestChain while we were at the
     // second block from tip, since FlushStateToDisk is called with PERIODIC
     // inside the outer loop.
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
-    BOOST_CHECK_EQUAL(sub->m_flushed_at_block, second_from_tip);
+    CHECK(sub->m_flushed_at_block == second_from_tip);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

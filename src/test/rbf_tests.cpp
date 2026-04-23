@@ -111,14 +111,14 @@ BOOST_FIXTURE_TEST_CASE(rbf_helper_functions, TestChain100Setup)
     const auto entry7_high = pool.GetIter(tx7->GetHash()).value();
     const auto entry8_high = pool.GetIter(tx8->GetHash()).value();
 
-    BOOST_CHECK_EQUAL(entry1_normal->GetFee(), normal_fee);
-    BOOST_CHECK_EQUAL(entry2_normal->GetFee(), normal_fee);
-    BOOST_CHECK_EQUAL(entry3_low->GetFee(), low_fee);
-    BOOST_CHECK_EQUAL(entry4_high->GetFee(), high_fee);
-    BOOST_CHECK_EQUAL(entry5_low->GetFee(), low_fee);
-    BOOST_CHECK_EQUAL(entry6_low_prioritised->GetFee(), low_fee);
-    BOOST_CHECK_EQUAL(entry7_high->GetFee(), high_fee);
-    BOOST_CHECK_EQUAL(entry8_high->GetFee(), high_fee);
+    CHECK_EQUAL(entry1_normal->GetFee(), normal_fee);
+    CHECK_EQUAL(entry2_normal->GetFee(), normal_fee);
+    CHECK_EQUAL(entry3_low->GetFee(), low_fee);
+    CHECK_EQUAL(entry4_high->GetFee(), high_fee);
+    CHECK_EQUAL(entry5_low->GetFee(), low_fee);
+    CHECK_EQUAL(entry6_low_prioritised->GetFee(), low_fee);
+    CHECK_EQUAL(entry7_high->GetFee(), high_fee);
+    CHECK_EQUAL(entry8_high->GetFee(), high_fee);
 
     CTxMemPool::setEntries set_12_normal{entry1_normal, entry2_normal};
     CTxMemPool::setEntries set_34_cpfp{entry3_low, entry4_high};
@@ -217,7 +217,7 @@ BOOST_FIXTURE_TEST_CASE(rbf_conflicts_calculator, TestChain100Setup)
                                        /*pool=*/ pool,
                                        /*iters_conflicting=*/ all_conflicts,
                                        /*all_conflicts=*/ dummy) == std::nullopt);
-    BOOST_CHECK_EQUAL(all_conflicts.size(), dummy.size());
+    CHECK_EQUAL(all_conflicts.size(), dummy.size());
     dummy.clear();
 
     // If we mine the parent_tx's, then the clusters split (102 clusters).

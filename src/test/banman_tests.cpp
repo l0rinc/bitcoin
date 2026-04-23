@@ -35,7 +35,7 @@ BOOST_AUTO_TEST_CASE(file)
             BanMan banman{banlist_path, /*client_interface=*/nullptr, /*default_ban_time=*/0};
             banmap_t entries_read;
             banman.GetBanned(entries_read);
-            BOOST_CHECK_EQUAL(entries_read.size(), 1);
+            CHECK_EQUAL(entries_read.size(), std::remove_cvref_t<decltype(entries_read.size())>{1});
         }
     }
 }

@@ -239,30 +239,30 @@ BOOST_AUTO_TEST_CASE(sighash_caching)
             // The result of computing the sighash should be the same with or without cache.
             const auto sighash_with_cache{SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &cache)};
             const auto sighash_no_cache{SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, nullptr)};
-            BOOST_CHECK_EQUAL(sighash_with_cache, sighash_no_cache);
+            CHECK_EQUAL(sighash_with_cache, sighash_no_cache);
 
             // Calling the cached version again should return the same value again.
-            BOOST_CHECK_EQUAL(sighash_with_cache, SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &cache));
+            CHECK_EQUAL(sighash_with_cache, SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &cache));
 
             // While here we might as well also check that the result for legacy is the same as for the old SignatureHash() function.
             if (sigversion == SigVersion::BASE) {
-                BOOST_CHECK_EQUAL(sighash_with_cache, SignatureHashOld(scriptcode, CTransaction(tx), in_index, hash_type));
+                CHECK_EQUAL(sighash_with_cache, SignatureHashOld(scriptcode, CTransaction(tx), in_index, hash_type));
             }
 
             // Calling with a different scriptcode (for instance in case a CODESEP is encountered) will not return the cache value but
             // overwrite it. The sighash will always be different except in case of legacy SIGHASH_SINGLE bug.
             const auto sighash_with_cache2{SignatureHash(diff_scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &cache)};
             const auto sighash_no_cache2{SignatureHash(diff_scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, nullptr)};
-            BOOST_CHECK_EQUAL(sighash_with_cache2, sighash_no_cache2);
+            CHECK_EQUAL(sighash_with_cache2, sighash_no_cache2);
             if (!expect_one) {
                 CHECK_NE(sighash_with_cache, sighash_with_cache2);
             } else {
-                BOOST_CHECK_EQUAL(sighash_with_cache, sighash_with_cache2);
-                BOOST_CHECK_EQUAL(sighash_with_cache, uint256::ONE);
+                CHECK_EQUAL(sighash_with_cache, sighash_with_cache2);
+                CHECK_EQUAL(sighash_with_cache, uint256::ONE);
             }
 
             // Calling the cached version again should return the same value again.
-            BOOST_CHECK_EQUAL(sighash_with_cache2, SignatureHash(diff_scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &cache));
+            CHECK_EQUAL(sighash_with_cache2, SignatureHash(diff_scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &cache));
 
             // And if we store a different value for this scriptcode and hash type it will return that instead.
             {
@@ -272,7 +272,7 @@ BOOST_AUTO_TEST_CASE(sighash_caching)
                 const auto stored_hash{h.GetHash()};
                 CHECK(cache.Load(hash_type, scriptcode, h));
                 const auto loaded_hash{h.GetHash()};
-                BOOST_CHECK_EQUAL(stored_hash, loaded_hash);
+                CHECK_EQUAL(stored_hash, loaded_hash);
             }
 
             // And using this mutated cache with the sighash function will return the new value (except in the legacy SIGHASH_SINGLE bug
@@ -283,9 +283,9 @@ BOOST_AUTO_TEST_CASE(sighash_caching)
                 CHECK(cache.Load(hash_type, scriptcode, h));
                 h << hash_type;
                 const auto new_hash{h.GetHash()};
-                BOOST_CHECK_EQUAL(SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &cache), new_hash);
+                CHECK_EQUAL(SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &cache), new_hash);
             } else {
-                BOOST_CHECK_EQUAL(SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &cache), uint256::ONE);
+                CHECK_EQUAL(SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &cache), uint256::ONE);
             }
 
             // Wipe the cache and restore the correct cached value for this scriptcode and hash_type before starting the next iteration.

@@ -770,14 +770,14 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     constexpr auto CheckIsNotStandard = [](const auto& t, const std::string& reason_in, const unsigned int max_op_return_relay = MAX_OP_RETURN_RELAY) {
         std::string reason;
         CHECK(!IsStandardTx(CTransaction{t}, max_op_return_relay, g_bare_multi, g_dust, reason));
-        BOOST_CHECK_EQUAL(reason_in, reason);
+        CHECK_EQUAL(reason_in, reason);
     };
 
     CheckIsStandard(t);
 
     // Check dust with default relay fee:
     CAmount nDustThreshold = 182 * g_dust.GetFeePerK() / 1000;
-    BOOST_CHECK_EQUAL(nDustThreshold, 546);
+    CHECK_EQUAL(nDustThreshold, std::remove_cvref_t<decltype(nDustThreshold)>{546});
 
     // Add dust outputs up to allowed maximum, still standard!
     for (size_t i{0}; i < MAX_DUST_OUTPUTS_PER_TX; ++i) {
@@ -825,7 +825,7 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
 
     // Custom 83-byte TxoutType::NULL_DATA (standard with max_op_return_relay of 83)
     t.vout[0].scriptPubKey = CScript() << OP_RETURN << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3804678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38"_hex;
-    BOOST_CHECK_EQUAL(83, t.vout[0].scriptPubKey.size());
+    CHECK_EQUAL(std::remove_cvref_t<decltype(t.vout[0].scriptPubKey.size())>{83}, t.vout[0].scriptPubKey.size());
     CheckIsStandard(t, /*max_op_return_relay=*/83);
 
     // Non-standard if max_op_return_relay datacarrier arg is one less
@@ -927,12 +927,12 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     //    1 output:              30 bytes =>    120 weight units
     //                      ======================================
     //                                total: 400000 weight units
-    BOOST_CHECK_EQUAL(GetTransactionWeight(CTransaction(t)), 400000);
+    CHECK_EQUAL(GetTransactionWeight(CTransaction(t)), std::remove_cvref_t<decltype(GetTransactionWeight(CTransaction(t)))>{400000});
     CheckIsStandard(t);
 
     // increase output size by one byte, so we end up with 400004 weight units
     t.vout[0].scriptPubKey = CScript() << OP_RETURN << std::vector<unsigned char>(20, 0); // output size: 31 bytes
-    BOOST_CHECK_EQUAL(GetTransactionWeight(CTransaction(t)), 400004);
+    CHECK_EQUAL(GetTransactionWeight(CTransaction(t)), std::remove_cvref_t<decltype(GetTransactionWeight(CTransaction(t)))>{400004});
     CheckIsNotStandard(t, "tx-size");
 
     // Check bare multisig (standard if policy flag g_bare_multi is set)
@@ -1049,7 +1049,7 @@ BOOST_AUTO_TEST_CASE(max_standard_legacy_sigops)
     AddCoins(coins, CTransaction(tx_create), 0, false);
 
     // 2490 sigops is below the limit.
-    BOOST_CHECK_EQUAL(GetP2SHSigOpCount(CTransaction(tx_max_sigops), coins), 2490);
+    CHECK_EQUAL(GetP2SHSigOpCount(CTransaction(tx_max_sigops), coins), std::remove_cvref_t<decltype(GetP2SHSigOpCount(CTransaction(tx_max_sigops), coins))>{2490});
     CHECK(::ValidateInputsStandardness(CTransaction(tx_max_sigops), coins).IsValid());
 
     // Adding one more input will bump this to 2505, hitting the limit.
@@ -1062,14 +1062,14 @@ BOOST_AUTO_TEST_CASE(max_standard_legacy_sigops)
     AddCoins(coins, CTransaction(tx_create), 0, false);
     CHECK_GT((p2sh_inputs_count + 1) * MAX_P2SH_SIGOPS, MAX_TX_LEGACY_SIGOPS);
     auto legacy_sigops_count = GetP2SHSigOpCount(CTransaction(tx_max_sigops), coins);
-    BOOST_CHECK_EQUAL(legacy_sigops_count, 2505);
+    CHECK_EQUAL(legacy_sigops_count, std::remove_cvref_t<decltype(legacy_sigops_count)>{2505});
     std::string reject_reason("bad-txns-nonstandard-inputs");
     std::string sigop_limit_reject_debug_message("non-witness sigops exceed bip54 limit");
     {
         auto validation_state = ValidateInputsStandardness(CTransaction(tx_max_sigops), coins);
         CHECK(validation_state.IsInvalid());
-        BOOST_CHECK_EQUAL(validation_state.GetRejectReason(), reject_reason);
-        BOOST_CHECK_EQUAL(validation_state.GetDebugMessage(), sigop_limit_reject_debug_message);
+        CHECK_EQUAL(validation_state.GetRejectReason(), reject_reason);
+        CHECK_EQUAL(validation_state.GetDebugMessage(), sigop_limit_reject_debug_message);
     }
 
 
@@ -1121,8 +1121,8 @@ BOOST_AUTO_TEST_CASE(max_standard_legacy_sigops)
     {
         auto validation_state = ValidateInputsStandardness(CTransaction(tx_max_sigops), coins);
         CHECK(validation_state.IsInvalid());
-        BOOST_CHECK_EQUAL(validation_state.GetRejectReason(), reject_reason);
-        BOOST_CHECK_EQUAL(validation_state.GetDebugMessage(), sigop_limit_reject_debug_message);
+        CHECK_EQUAL(validation_state.GetRejectReason(), reject_reason);
+        CHECK_EQUAL(validation_state.GetDebugMessage(), sigop_limit_reject_debug_message);
     }
 }
 
@@ -1142,8 +1142,8 @@ BOOST_AUTO_TEST_CASE(checktxinputs_invalid_transactions_test)
         CAmount txfee{0};
         CHECK(!Consensus::CheckTxInputs(CTransaction{mtx}, state, inputs, spend_height, txfee));
         CHECK(state.IsInvalid());
-        BOOST_CHECK_EQUAL(state.GetResult(), expected_result);
-        BOOST_CHECK_EQUAL(state.GetRejectReason(), expected_reason);
+        CHECK_EQUAL(state.GetResult(), expected_result);
+        CHECK_EQUAL(state.GetRejectReason(), expected_reason);
     }};
 
     check_invalid(/*input_value=*/MAX_MONEY + 1,
@@ -1194,14 +1194,14 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
 
     // P2PK
     tx_create.vout[0].scriptPubKey = GetScriptForDestination(PubKeyDestination{pubkey});
-    BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::PUBKEY);
+    CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::PUBKEY);
     tx_spend.vin[0].prevout.hash = tx_create.GetHash();
     AddCoins(coins, CTransaction{tx_create}, 0, false);
     CHECK(!::SpendsNonAnchorWitnessProg(CTransaction{tx_spend}, coins));
 
     // P2PKH
     tx_create.vout[0].scriptPubKey = GetScriptForDestination(PKHash{pubkey});
-    BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::PUBKEYHASH);
+    CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::PUBKEYHASH);
     tx_spend.vin[0].prevout.hash = tx_create.GetHash();
     AddCoins(coins, CTransaction{tx_create}, 0, false);
     CHECK(!::SpendsNonAnchorWitnessProg(CTransaction{tx_spend}, coins));
@@ -1209,7 +1209,7 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
     // P2SH
     auto redeem_script{CScript{} << OP_1 << OP_CHECKSIG};
     tx_create.vout[0].scriptPubKey = GetScriptForDestination(ScriptHash{redeem_script});
-    BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
+    CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
     tx_spend.vin[0].prevout.hash = tx_create.GetHash();
     tx_spend.vin[0].scriptSig = CScript{} << OP_0 << ToByteVector(redeem_script);
     AddCoins(coins, CTransaction{tx_create}, 0, false);
@@ -1219,7 +1219,7 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
     // native P2WSH
     const auto witness_script{CScript{} << OP_12 << OP_HASH160 << OP_DUP << OP_EQUAL};
     tx_create.vout[0].scriptPubKey = GetScriptForDestination(WitnessV0ScriptHash{witness_script});
-    BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::WITNESS_V0_SCRIPTHASH);
+    CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::WITNESS_V0_SCRIPTHASH);
     tx_spend.vin[0].prevout.hash = tx_create.GetHash();
     AddCoins(coins, CTransaction{tx_create}, 0, false);
     CHECK(::SpendsNonAnchorWitnessProg(CTransaction{tx_spend}, coins));
@@ -1227,7 +1227,7 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
     // P2SH-wrapped P2WSH
     redeem_script = tx_create.vout[0].scriptPubKey;
     tx_create.vout[0].scriptPubKey = GetScriptForDestination(ScriptHash(redeem_script));
-    BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
+    CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
     tx_spend.vin[0].prevout.hash = tx_create.GetHash();
     tx_spend.vin[0].scriptSig = CScript{} << ToByteVector(redeem_script);
     AddCoins(coins, CTransaction{tx_create}, 0, false);
@@ -1237,7 +1237,7 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
 
     // native P2WPKH
     tx_create.vout[0].scriptPubKey = GetScriptForDestination(WitnessV0KeyHash{pubkey});
-    BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::WITNESS_V0_KEYHASH);
+    CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::WITNESS_V0_KEYHASH);
     tx_spend.vin[0].prevout.hash = tx_create.GetHash();
     AddCoins(coins, CTransaction{tx_create}, 0, false);
     CHECK(::SpendsNonAnchorWitnessProg(CTransaction{tx_spend}, coins));
@@ -1245,7 +1245,7 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
     // P2SH-wrapped P2WPKH
     redeem_script = tx_create.vout[0].scriptPubKey;
     tx_create.vout[0].scriptPubKey = GetScriptForDestination(ScriptHash(redeem_script));
-    BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
+    CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
     tx_spend.vin[0].prevout.hash = tx_create.GetHash();
     tx_spend.vin[0].scriptSig = CScript{} << ToByteVector(redeem_script);
     AddCoins(coins, CTransaction{tx_create}, 0, false);
@@ -1255,7 +1255,7 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
 
     // P2TR
     tx_create.vout[0].scriptPubKey = GetScriptForDestination(WitnessV1Taproot{XOnlyPubKey{pubkey}});
-    BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::WITNESS_V1_TAPROOT);
+    CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::WITNESS_V1_TAPROOT);
     tx_spend.vin[0].prevout.hash = tx_create.GetHash();
     AddCoins(coins, CTransaction{tx_create}, 0, false);
     CHECK(::SpendsNonAnchorWitnessProg(CTransaction{tx_spend}, coins));
@@ -1263,7 +1263,7 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
     // P2SH-wrapped P2TR (undefined, non-standard)
     redeem_script = tx_create.vout[0].scriptPubKey;
     tx_create.vout[0].scriptPubKey = GetScriptForDestination(ScriptHash(redeem_script));
-    BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
+    CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
     tx_spend.vin[0].prevout.hash = tx_create.GetHash();
     tx_spend.vin[0].scriptSig = CScript{} << ToByteVector(redeem_script);
     AddCoins(coins, CTransaction{tx_create}, 0, false);
@@ -1273,7 +1273,7 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
 
     // P2A
     tx_create.vout[0].scriptPubKey = GetScriptForDestination(PayToAnchor{});
-    BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::ANCHOR);
+    CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::ANCHOR);
     tx_spend.vin[0].prevout.hash = tx_create.GetHash();
     AddCoins(coins, CTransaction{tx_create}, 0, false);
     CHECK(!::SpendsNonAnchorWitnessProg(CTransaction{tx_spend}, coins));
@@ -1281,7 +1281,7 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
     // P2SH-wrapped P2A (undefined, non-standard)
     redeem_script = tx_create.vout[0].scriptPubKey;
     tx_create.vout[0].scriptPubKey = GetScriptForDestination(ScriptHash(redeem_script));
-    BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
+    CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
     tx_spend.vin[0].prevout.hash = tx_create.GetHash();
     tx_spend.vin[0].scriptSig = CScript{} << ToByteVector(redeem_script);
     AddCoins(coins, CTransaction{tx_create}, 0, false);
@@ -1290,7 +1290,7 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
 
     // Undefined version 1 witness program
     tx_create.vout[0].scriptPubKey = GetScriptForDestination(WitnessUnknown{1, {0x42, 0x42}});
-    BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::WITNESS_UNKNOWN);
+    CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::WITNESS_UNKNOWN);
     tx_spend.vin[0].prevout.hash = tx_create.GetHash();
     AddCoins(coins, CTransaction{tx_create}, 0, false);
     CHECK(::SpendsNonAnchorWitnessProg(CTransaction{tx_spend}, coins));
@@ -1298,7 +1298,7 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
     // P2SH-wrapped undefined version 1 witness program
     redeem_script = tx_create.vout[0].scriptPubKey;
     tx_create.vout[0].scriptPubKey = GetScriptForDestination(ScriptHash(redeem_script));
-    BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
+    CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
     tx_spend.vin[0].prevout.hash = tx_create.GetHash();
     tx_spend.vin[0].scriptSig = CScript{} << ToByteVector(redeem_script);
     AddCoins(coins, CTransaction{tx_create}, 0, false);
@@ -1310,7 +1310,7 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
     const auto program{ToByteVector(XOnlyPubKey{pubkey})};
     for (int i{2}; i <= 16; ++i) {
         tx_create.vout[0].scriptPubKey = GetScriptForDestination(WitnessUnknown{i, program});
-        BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::WITNESS_UNKNOWN);
+        CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::WITNESS_UNKNOWN);
         tx_spend.vin[0].prevout.hash = tx_create.GetHash();
         AddCoins(coins, CTransaction{tx_create}, 0, false);
         CHECK(::SpendsNonAnchorWitnessProg(CTransaction{tx_spend}, coins));
@@ -1318,7 +1318,7 @@ BOOST_AUTO_TEST_CASE(spends_witness_prog)
         // It's also detected within P2SH.
         redeem_script = tx_create.vout[0].scriptPubKey;
         tx_create.vout[0].scriptPubKey = GetScriptForDestination(ScriptHash(redeem_script));
-        BOOST_CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
+        CHECK_EQUAL(Solver(tx_create.vout[0].scriptPubKey, sol_dummy), TxoutType::SCRIPTHASH);
         tx_spend.vin[0].prevout.hash = tx_create.GetHash();
         tx_spend.vin[0].scriptSig = CScript{} << ToByteVector(redeem_script);
         AddCoins(coins, CTransaction{tx_create}, 0, false);

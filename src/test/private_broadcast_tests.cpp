@@ -36,9 +36,9 @@ BOOST_AUTO_TEST_CASE(basic)
 
     // No transactions initially.
     CHECK(!pb.PickTxForSend(/*will_send_to_nodeid=*/recipient1, /*will_send_to_address=*/addr1).has_value());
-    BOOST_CHECK_EQUAL(pb.GetStale().size(), 0);
+    CHECK_EQUAL(pb.GetStale().size(), std::remove_cvref_t<decltype(pb.GetStale().size())>{0});
     CHECK(!pb.HavePendingTransactions());
-    BOOST_CHECK_EQUAL(pb.GetBroadcastInfo().size(), 0);
+    CHECK_EQUAL(pb.GetBroadcastInfo().size(), std::remove_cvref_t<decltype(pb.GetBroadcastInfo().size())>{0});
 
     // Make a transaction and add it.
     const auto tx1{MakeDummyTx(/*id=*/1, /*num_witness=*/0)};
@@ -59,9 +59,9 @@ BOOST_AUTO_TEST_CASE(basic)
     }};
     const auto check_peer_counts{[&](size_t tx1_peer_count, size_t tx2_peer_count) {
         const auto infos{pb.GetBroadcastInfo()};
-        BOOST_CHECK_EQUAL(infos.size(), 2);
-        BOOST_CHECK_EQUAL(find_tx_info(infos, tx1).peers.size(), tx1_peer_count);
-        BOOST_CHECK_EQUAL(find_tx_info(infos, tx2).peers.size(), tx2_peer_count);
+        CHECK_EQUAL(infos.size(), std::remove_cvref_t<decltype(infos.size())>{2});
+        CHECK_EQUAL(find_tx_info(infos, tx1).peers.size(), tx1_peer_count);
+        CHECK_EQUAL(find_tx_info(infos, tx2).peers.size(), tx2_peer_count);
     }};
 
     check_peer_counts(/*tx1_peer_count=*/0, /*tx2_peer_count=*/0);
@@ -82,8 +82,8 @@ BOOST_AUTO_TEST_CASE(basic)
 
     // Confirm transactions <-> recipients mapping is correct.
     CHECK(!pb.GetTxForNode(nonexistent_recipient).has_value());
-    BOOST_CHECK_EQUAL(pb.GetTxForNode(recipient1).value(), tx_for_recipient1);
-    BOOST_CHECK_EQUAL(pb.GetTxForNode(recipient2).value(), tx_for_recipient2);
+    CHECK_EQUAL(pb.GetTxForNode(recipient1).value(), tx_for_recipient1);
+    CHECK_EQUAL(pb.GetTxForNode(recipient2).value(), tx_for_recipient2);
 
     // Confirm none of the transactions' reception have been confirmed.
     CHECK(!pb.DidNodeConfirmReception(recipient1));
@@ -91,13 +91,13 @@ BOOST_AUTO_TEST_CASE(basic)
     CHECK(!pb.DidNodeConfirmReception(nonexistent_recipient));
 
     // 1. Freshly added transactions should NOT be stale yet.
-    BOOST_CHECK_EQUAL(pb.GetStale().size(), 0);
+    CHECK_EQUAL(pb.GetStale().size(), std::remove_cvref_t<decltype(pb.GetStale().size())>{0});
 
     // 2. Fast-forward the mock clock past the INITIAL_STALE_DURATION.
     SetMockTime(Now<NodeSeconds>() + PrivateBroadcast::INITIAL_STALE_DURATION + 1min);
 
     // 3. Now that the initial duration has passed, both unconfirmed transactions should be stale.
-    BOOST_CHECK_EQUAL(pb.GetStale().size(), 2);
+    CHECK_EQUAL(pb.GetStale().size(), std::remove_cvref_t<decltype(pb.GetStale().size())>{2});
 
     // Confirm reception by recipient1.
     pb.NodeConfirmedReception(nonexistent_recipient); // Dummy call.
@@ -107,34 +107,34 @@ BOOST_AUTO_TEST_CASE(basic)
     CHECK(!pb.DidNodeConfirmReception(recipient2));
 
     const auto infos{pb.GetBroadcastInfo()};
-    BOOST_CHECK_EQUAL(infos.size(), 2);
+    CHECK_EQUAL(infos.size(), std::remove_cvref_t<decltype(infos.size())>{2});
     {
         const auto& peers{find_tx_info(infos, tx_for_recipient1).peers};
-        BOOST_CHECK_EQUAL(peers.size(), 1);
-        BOOST_CHECK_EQUAL(peers[0].address.ToStringAddrPort(), addr1.ToStringAddrPort());
+        CHECK_EQUAL(peers.size(), std::remove_cvref_t<decltype(peers.size())>{1});
+        CHECK_EQUAL(peers[0].address.ToStringAddrPort(), addr1.ToStringAddrPort());
         CHECK(peers[0].received.has_value());
     }
     {
         const auto& peers{find_tx_info(infos, tx_for_recipient2).peers};
-        BOOST_CHECK_EQUAL(peers.size(), 1);
-        BOOST_CHECK_EQUAL(peers[0].address.ToStringAddrPort(), addr2.ToStringAddrPort());
+        CHECK_EQUAL(peers.size(), std::remove_cvref_t<decltype(peers.size())>{1});
+        CHECK_EQUAL(peers[0].address.ToStringAddrPort(), addr2.ToStringAddrPort());
         CHECK(!peers[0].received.has_value());
     }
 
     const auto stale_state{pb.GetStale()};
-    BOOST_CHECK_EQUAL(stale_state.size(), 1);
-    BOOST_CHECK_EQUAL(stale_state[0], tx_for_recipient2);
+    CHECK_EQUAL(stale_state.size(), std::remove_cvref_t<decltype(stale_state.size())>{1});
+    CHECK_EQUAL(stale_state[0], tx_for_recipient2);
 
     SetMockTime(Now<NodeSeconds>() + 10h);
 
-    BOOST_CHECK_EQUAL(pb.GetStale().size(), 2);
+    CHECK_EQUAL(pb.GetStale().size(), std::remove_cvref_t<decltype(pb.GetStale().size())>{2});
 
-    BOOST_CHECK_EQUAL(pb.Remove(tx_for_recipient1).value(), 1);
+    CHECK_EQUAL(pb.Remove(tx_for_recipient1).value(), std::remove_cvref_t<decltype(pb.Remove(tx_for_recipient1).value())>{1});
     CHECK(!pb.Remove(tx_for_recipient1).has_value());
-    BOOST_CHECK_EQUAL(pb.Remove(tx_for_recipient2).value(), 0);
+    CHECK_EQUAL(pb.Remove(tx_for_recipient2).value(), std::remove_cvref_t<decltype(pb.Remove(tx_for_recipient2).value())>{0});
     CHECK(!pb.Remove(tx_for_recipient2).has_value());
 
-    BOOST_CHECK_EQUAL(pb.GetBroadcastInfo().size(), 0);
+    CHECK_EQUAL(pb.GetBroadcastInfo().size(), std::remove_cvref_t<decltype(pb.GetBroadcastInfo().size())>{0});
     const CService addr_nonexistent{ipv4Addr, 3333};
     CHECK(!pb.PickTxForSend(/*will_send_to_nodeid=*/nonexistent_recipient, /*will_send_to_address=*/addr_nonexistent).has_value());
 }
@@ -148,13 +148,13 @@ BOOST_AUTO_TEST_CASE(stale_unpicked_tx)
     CHECK(pb.Add(tx));
 
     // Unpicked transactions use the longer INITIAL_STALE_DURATION.
-    BOOST_CHECK_EQUAL(pb.GetStale().size(), 0);
+    CHECK_EQUAL(pb.GetStale().size(), std::remove_cvref_t<decltype(pb.GetStale().size())>{0});
     SetMockTime(Now<NodeSeconds>() + PrivateBroadcast::INITIAL_STALE_DURATION - 1min);
-    BOOST_CHECK_EQUAL(pb.GetStale().size(), 0);
+    CHECK_EQUAL(pb.GetStale().size(), std::remove_cvref_t<decltype(pb.GetStale().size())>{0});
     SetMockTime(Now<NodeSeconds>() + 2min);
     const auto stale_state{pb.GetStale()};
-    BOOST_REQUIRE_EQUAL(stale_state.size(), 1);
-    BOOST_CHECK_EQUAL(stale_state[0], tx);
+    CHECK_EQUAL(stale_state.size(), std::remove_cvref_t<decltype(stale_state.size())>{1});
+    CHECK_EQUAL(stale_state[0], tx);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

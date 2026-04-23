@@ -173,7 +173,7 @@ void CheckQueueTest::Correct_Queue_range(std::vector<size_t> range)
             control.Add(std::move(vChecks));
         }
         CHECK(!control.Complete().has_value());
-        BOOST_REQUIRE_EQUAL(FakeCheckCheckCompletion::n_calls, i);
+        CHECK_EQUAL(FakeCheckCheckCompletion::n_calls, i);
     }
 }
 
@@ -280,7 +280,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_UniqueCheck)
     {
         LOCK(UniqueCheck::m);
         bool r = true;
-        BOOST_REQUIRE_EQUAL(UniqueCheck::results.size(), COUNT);
+        CHECK_EQUAL(UniqueCheck::results.size(), COUNT);
         for (size_t i = 0; i < COUNT; ++i) {
             r = r && UniqueCheck::results.count(i) == 1;
         }
@@ -313,7 +313,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_Memory)
                 control.Add(std::move(vChecks));
             }
         }
-        BOOST_REQUIRE_EQUAL(MemoryCheck::fake_allocated_memory, 0U);
+        CHECK_EQUAL(MemoryCheck::fake_allocated_memory, 0U);
     }
 }
 
@@ -374,7 +374,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueueControl_Locks)
         for (auto& thread: tg) {
             if (thread.joinable()) thread.join();
         }
-        BOOST_REQUIRE_EQUAL(fails, 0);
+        CHECK_EQUAL(fails, std::remove_cvref_t<decltype(fails)>{0});
     }
     {
         std::vector<std::thread> tg;

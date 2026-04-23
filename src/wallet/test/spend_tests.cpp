@@ -37,8 +37,8 @@ BOOST_FIXTURE_TEST_CASE(SubtractFee, TestChain100Setup)
         auto res = CreateTransaction(*wallet, {recipient}, /*change_pos=*/std::nullopt, coin_control);
         CHECK(res);
         const auto& txr = *res;
-        BOOST_CHECK_EQUAL(txr.tx->vout.size(), 1);
-        BOOST_CHECK_EQUAL(txr.tx->vout[0].nValue, recipient.nAmount + leftover_input_amount - txr.fee);
+        CHECK_EQUAL(txr.tx->vout.size(), std::remove_cvref_t<decltype(txr.tx->vout.size())>{1});
+        CHECK_EQUAL(txr.tx->vout[0].nValue, recipient.nAmount + leftover_input_amount - txr.fee);
         CHECK_GT(txr.fee, 0);
         return txr.fee;
     };
@@ -49,17 +49,17 @@ BOOST_FIXTURE_TEST_CASE(SubtractFee, TestChain100Setup)
 
     // Send slightly less than full input amount to recipient, check leftover
     // input amount is paid to recipient not the miner (to_reduce == fee - 123)
-    BOOST_CHECK_EQUAL(fee, check_tx(123));
+    CHECK_EQUAL(fee, check_tx(123));
 
     // Send full input minus fee amount to recipient, check leftover input
     // amount is paid to recipient not the miner (to_reduce == 0)
-    BOOST_CHECK_EQUAL(fee, check_tx(fee));
+    CHECK_EQUAL(fee, check_tx(fee));
 
     // Send full input minus more than the fee amount to recipient, check
     // leftover input amount is paid to recipient not the miner (to_reduce ==
     // -123). This overpays the recipient instead of overpaying the miner more
     // than double the necessary fee.
-    BOOST_CHECK_EQUAL(fee, check_tx(fee + 123));
+    CHECK_EQUAL(fee, check_tx(fee + 123));
 }
 
 BOOST_FIXTURE_TEST_CASE(wallet_duplicated_preset_inputs_test, TestChain100Setup)

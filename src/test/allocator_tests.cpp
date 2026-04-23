@@ -68,10 +68,10 @@ BOOST_AUTO_TEST_CASE(arena_tests)
     CHECK(b.stats().used == 128);
     b.free(a3);
     CHECK(b.stats().used == 0);
-    BOOST_CHECK_EQUAL(b.stats().chunks_used, 0U);
+    CHECK_EQUAL(b.stats().chunks_used, 0U);
     CHECK(b.stats().total == synth_size);
     CHECK(b.stats().free == synth_size);
-    BOOST_CHECK_EQUAL(b.stats().chunks_free, 1U);
+    CHECK_EQUAL(b.stats().chunks_free, 1U);
 
     std::vector<void*> addr;
     CHECK(b.alloc(0) == nullptr); // allocating 0 always returns nullptr

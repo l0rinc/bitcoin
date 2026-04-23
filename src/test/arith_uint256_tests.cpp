@@ -93,12 +93,12 @@ BOOST_AUTO_TEST_CASE( basics ) // constructors, equality, inequality
     CHECK(ZeroL == (OneL << 256));
 
     // Construct from hex string
-    BOOST_CHECK_EQUAL(UintToArith256(uint256::FromHex(R1L.ToString()).value()), R1L);
-    BOOST_CHECK_EQUAL(UintToArith256(uint256::FromHex(R2L.ToString()).value()), R2L);
-    BOOST_CHECK_EQUAL(UintToArith256(uint256::FromHex(ZeroL.ToString()).value()), ZeroL);
-    BOOST_CHECK_EQUAL(UintToArith256(uint256::FromHex(OneL.ToString()).value()), OneL);
-    BOOST_CHECK_EQUAL(UintToArith256(uint256::FromHex(MaxL.ToString()).value()), MaxL);
-    BOOST_CHECK_EQUAL(UintToArith256(uint256::FromHex(R1ArrayHex).value()), R1L);
+    CHECK_EQUAL(UintToArith256(uint256::FromHex(R1L.ToString()).value()), R1L);
+    CHECK_EQUAL(UintToArith256(uint256::FromHex(R2L.ToString()).value()), R2L);
+    CHECK_EQUAL(UintToArith256(uint256::FromHex(ZeroL.ToString()).value()), ZeroL);
+    CHECK_EQUAL(UintToArith256(uint256::FromHex(OneL.ToString()).value()), OneL);
+    CHECK_EQUAL(UintToArith256(uint256::FromHex(MaxL.ToString()).value()), MaxL);
+    CHECK_EQUAL(UintToArith256(uint256::FromHex(R1ArrayHex).value()), R1L);
 
     // Copy constructor
     CHECK(arith_uint256(R1L) == R1L);
@@ -107,10 +107,10 @@ BOOST_AUTO_TEST_CASE( basics ) // constructors, equality, inequality
     CHECK(arith_uint256(OneL) == OneL);
 
     // uint64_t constructor
-    BOOST_CHECK_EQUAL(R1L & arith_uint256{0xffffffffffffffff}, arith_uint256{R1LLow64});
-    BOOST_CHECK_EQUAL(ZeroL, arith_uint256{0});
-    BOOST_CHECK_EQUAL(OneL, arith_uint256{1});
-    BOOST_CHECK_EQUAL(arith_uint256{0xffffffffffffffff}, arith_uint256{0xffffffffffffffffULL});
+    CHECK_EQUAL(R1L & arith_uint256{0xffffffffffffffff}, arith_uint256{R1LLow64});
+    CHECK_EQUAL(ZeroL, arith_uint256{0});
+    CHECK_EQUAL(OneL, arith_uint256{1});
+    CHECK_EQUAL(arith_uint256{0xffffffffffffffff}, arith_uint256{0xffffffffffffffffULL});
 
     // Assignment (from base_uint)
     arith_uint256 tmpL = ~ZeroL; CHECK(tmpL == ~ZeroL);
@@ -282,7 +282,7 @@ BOOST_AUTO_TEST_CASE( comparison ) // <= >= < >
 BOOST_AUTO_TEST_CASE( plusMinus )
 {
     arith_uint256 TmpL = 0;
-    BOOST_CHECK_EQUAL(R1L + R2L, UintToArith256(uint256{"549fb09fea236a1ea3e31d4d58f1b1369288d204211ca751527cfc175767850c"}));
+    CHECK_EQUAL(R1L + R2L, UintToArith256(uint256{"549fb09fea236a1ea3e31d4d58f1b1369288d204211ca751527cfc175767850c"}));
     TmpL += R1L;
     CHECK(TmpL == R1L);
     TmpL += R2L;
@@ -412,126 +412,126 @@ BOOST_AUTO_TEST_CASE(bignum_SetCompact)
     bool fNegative;
     bool fOverflow;
     num.SetCompact(0, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000000000");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000000000"});
+    CHECK_EQUAL(num.GetCompact(), 0U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x00123456, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000000000");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000000000"});
+    CHECK_EQUAL(num.GetCompact(), 0U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x01003456, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000000000");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000000000"});
+    CHECK_EQUAL(num.GetCompact(), 0U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x02000056, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000000000");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000000000"});
+    CHECK_EQUAL(num.GetCompact(), 0U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x03000000, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000000000");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000000000"});
+    CHECK_EQUAL(num.GetCompact(), 0U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x04000000, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000000000");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000000000"});
+    CHECK_EQUAL(num.GetCompact(), 0U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x00923456, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000000000");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000000000"});
+    CHECK_EQUAL(num.GetCompact(), 0U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x01803456, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000000000");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000000000"});
+    CHECK_EQUAL(num.GetCompact(), 0U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x02800056, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000000000");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000000000"});
+    CHECK_EQUAL(num.GetCompact(), 0U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x03800000, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000000000");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000000000"});
+    CHECK_EQUAL(num.GetCompact(), 0U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x04800000, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000000000");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000000000"});
+    CHECK_EQUAL(num.GetCompact(), 0U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x01123456, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000000012");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0x01120000U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000000012"});
+    CHECK_EQUAL(num.GetCompact(), 0x01120000U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     // Make sure that we don't generate compacts with the 0x00800000 bit set
     num = 0x80;
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0x02008000U);
+    CHECK_EQUAL(num.GetCompact(), 0x02008000U);
 
     num.SetCompact(0x01fedcba, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "000000000000000000000000000000000000000000000000000000000000007e");
-    BOOST_CHECK_EQUAL(num.GetCompact(true), 0x01fe0000U);
-    BOOST_CHECK_EQUAL(fNegative, true);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"000000000000000000000000000000000000000000000000000000000000007e"});
+    CHECK_EQUAL(num.GetCompact(true), 0x01fe0000U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{true});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x02123456, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000001234");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0x02123400U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000001234"});
+    CHECK_EQUAL(num.GetCompact(), 0x02123400U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x03123456, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000000123456");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0x03123456U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000000123456"});
+    CHECK_EQUAL(num.GetCompact(), 0x03123456U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x04123456, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000012345600");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0x04123456U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000012345600"});
+    CHECK_EQUAL(num.GetCompact(), 0x04123456U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x04923456, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000012345600");
-    BOOST_CHECK_EQUAL(num.GetCompact(true), 0x04923456U);
-    BOOST_CHECK_EQUAL(fNegative, true);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000012345600"});
+    CHECK_EQUAL(num.GetCompact(true), 0x04923456U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{true});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x05009234, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "0000000000000000000000000000000000000000000000000000000092340000");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0x05009234U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"0000000000000000000000000000000000000000000000000000000092340000"});
+    CHECK_EQUAL(num.GetCompact(), 0x05009234U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0x20123456, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(num.GetHex(), "1234560000000000000000000000000000000000000000000000000000000000");
-    BOOST_CHECK_EQUAL(num.GetCompact(), 0x20123456U);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, false);
+    CHECK_EQUAL(num.GetHex(), std::string_view{"1234560000000000000000000000000000000000000000000000000000000000"});
+    CHECK_EQUAL(num.GetCompact(), 0x20123456U);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{false});
 
     num.SetCompact(0xff123456, &fNegative, &fOverflow);
-    BOOST_CHECK_EQUAL(fNegative, false);
-    BOOST_CHECK_EQUAL(fOverflow, true);
+    CHECK_EQUAL(fNegative, std::remove_cvref_t<decltype(fNegative)>{false});
+    CHECK_EQUAL(fOverflow, std::remove_cvref_t<decltype(fOverflow)>{true});
 }
 
 
@@ -565,16 +565,16 @@ BOOST_AUTO_TEST_CASE(conversion)
 {
     for (const arith_uint256& arith : {ZeroL, OneL, R1L, R2L}) {
         const auto u256{uint256::FromHex(arith.GetHex()).value()};
-        BOOST_CHECK_EQUAL(UintToArith256(ArithToUint256(arith)), arith);
-        BOOST_CHECK_EQUAL(UintToArith256(u256), arith);
-        BOOST_CHECK_EQUAL(u256, ArithToUint256(arith));
-        BOOST_CHECK_EQUAL(ArithToUint256(arith).GetHex(), UintToArith256(u256).GetHex());
+        CHECK_EQUAL(UintToArith256(ArithToUint256(arith)), arith);
+        CHECK_EQUAL(UintToArith256(u256), arith);
+        CHECK_EQUAL(u256, ArithToUint256(arith));
+        CHECK_EQUAL(ArithToUint256(arith).GetHex(), UintToArith256(u256).GetHex());
     }
 
     for (uint8_t num : {0, 1, 0xff}) {
-        BOOST_CHECK_EQUAL(UintToArith256(uint256{num}), arith_uint256{num});
-        BOOST_CHECK_EQUAL(uint256{num}, ArithToUint256(arith_uint256{num}));
-        BOOST_CHECK_EQUAL(UintToArith256(uint256{num}), num);
+        CHECK_EQUAL(UintToArith256(uint256{num}), arith_uint256{num});
+        CHECK_EQUAL(uint256{num}, ArithToUint256(arith_uint256{num}));
+        CHECK_EQUAL(UintToArith256(uint256{num}), num);
     }
 }
 
@@ -582,13 +582,13 @@ BOOST_AUTO_TEST_CASE(operator_with_self)
 {
     arith_uint256 v{2};
     v *= v;
-    BOOST_CHECK_EQUAL(v, arith_uint256{4});
+    CHECK_EQUAL(v, arith_uint256{4});
     v /= v;
-    BOOST_CHECK_EQUAL(v, arith_uint256{1});
+    CHECK_EQUAL(v, arith_uint256{1});
     v += v;
-    BOOST_CHECK_EQUAL(v, arith_uint256{2});
+    CHECK_EQUAL(v, arith_uint256{2});
     v -= v;
-    BOOST_CHECK_EQUAL(v, arith_uint256{0});
+    CHECK_EQUAL(v, arith_uint256{0});
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -37,7 +37,7 @@ static void CheckMaxWeightComputation(const std::string& script_str, const std::
     bool script_ok = VerifyScript(input.scriptSig, prevout_script, &input.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, size_checker);
     CHECK(script_ok);
     weight += weights.GetWeightDiffToMax();
-    BOOST_CHECK_EQUAL(weight, expected_max_weight);
+    CHECK_EQUAL(weight, expected_max_weight);
 }
 
 BOOST_AUTO_TEST_CASE(external_max_weight_test)

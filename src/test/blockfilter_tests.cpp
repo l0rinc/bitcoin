@@ -44,14 +44,14 @@ BOOST_AUTO_TEST_CASE(gcsfilter_test)
 BOOST_AUTO_TEST_CASE(gcsfilter_default_constructor)
 {
     GCSFilter filter;
-    BOOST_CHECK_EQUAL(filter.GetN(), 0U);
-    BOOST_CHECK_EQUAL(filter.GetEncoded().size(), 1U);
+    CHECK_EQUAL(filter.GetN(), 0U);
+    CHECK_EQUAL(filter.GetEncoded().size(), 1U);
 
     const GCSFilter::Params& params = filter.GetParams();
-    BOOST_CHECK_EQUAL(params.m_siphash_k0, 0U);
-    BOOST_CHECK_EQUAL(params.m_siphash_k1, 0U);
-    BOOST_CHECK_EQUAL(params.m_P, 0);
-    BOOST_CHECK_EQUAL(params.m_M, 1U);
+    CHECK_EQUAL(params.m_siphash_k0, 0U);
+    CHECK_EQUAL(params.m_siphash_k1, 0U);
+    CHECK_EQUAL(params.m_P, std::remove_cvref_t<decltype(params.m_P)>{0});
+    CHECK_EQUAL(params.m_M, 1U);
 }
 
 BOOST_AUTO_TEST_CASE(blockfilter_basic_test)
@@ -116,14 +116,14 @@ BOOST_AUTO_TEST_CASE(blockfilter_basic_test)
     stream << block_filter;
     stream >> block_filter2;
 
-    BOOST_CHECK_EQUAL(block_filter.GetFilterType(), block_filter2.GetFilterType());
-    BOOST_CHECK_EQUAL(block_filter.GetBlockHash(), block_filter2.GetBlockHash());
+    CHECK_EQUAL(block_filter.GetFilterType(), block_filter2.GetFilterType());
+    CHECK_EQUAL(block_filter.GetBlockHash(), block_filter2.GetBlockHash());
     CHECK(block_filter.GetEncodedFilter() == block_filter2.GetEncodedFilter());
 
     BlockFilter default_ctor_block_filter_1;
     BlockFilter default_ctor_block_filter_2;
-    BOOST_CHECK_EQUAL(default_ctor_block_filter_1.GetFilterType(), default_ctor_block_filter_2.GetFilterType());
-    BOOST_CHECK_EQUAL(default_ctor_block_filter_1.GetBlockHash(), default_ctor_block_filter_2.GetBlockHash());
+    CHECK_EQUAL(default_ctor_block_filter_1.GetFilterType(), default_ctor_block_filter_2.GetFilterType());
+    CHECK_EQUAL(default_ctor_block_filter_1.GetBlockHash(), default_ctor_block_filter_2.GetBlockHash());
     CHECK(default_ctor_block_filter_1.GetEncodedFilter() == default_ctor_block_filter_2.GetEncodedFilter());
 }
 
@@ -178,12 +178,12 @@ BOOST_AUTO_TEST_CASE(blockfilters_json_test)
 
 BOOST_AUTO_TEST_CASE(blockfilter_type_names)
 {
-    BOOST_CHECK_EQUAL(BlockFilterTypeName(BlockFilterType::BASIC), "basic");
-    BOOST_CHECK_EQUAL(BlockFilterTypeName(static_cast<BlockFilterType>(255)), "");
+    CHECK_EQUAL(BlockFilterTypeName(BlockFilterType::BASIC), std::string_view{"basic"});
+    CHECK_EQUAL(BlockFilterTypeName(static_cast<BlockFilterType>(255)), std::string_view{""});
 
     BlockFilterType filter_type;
     CHECK(BlockFilterTypeByName("basic", filter_type));
-    BOOST_CHECK_EQUAL(filter_type, BlockFilterType::BASIC);
+    CHECK_EQUAL(filter_type, BlockFilterType::BASIC);
 
     CHECK(!BlockFilterTypeByName("unknown", filter_type));
 }

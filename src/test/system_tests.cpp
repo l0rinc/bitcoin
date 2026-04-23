@@ -51,7 +51,7 @@ BOOST_AUTO_TEST_CASE(run_command)
         CHECK(result.isObject());
         const UniValue& success = result.find_value("success");
         CHECK(!success.isNull());
-        BOOST_CHECK_EQUAL(success.get_bool(), true);
+        CHECK_EQUAL(success.get_bool(), std::remove_cvref_t<decltype(success.get_bool())>{true});
     }
     {
         // An invalid command is handled by cpp-subprocess
@@ -92,7 +92,7 @@ BOOST_AUTO_TEST_CASE(run_command)
         CHECK(result.isObject());
         const UniValue& success = result.find_value("success");
         CHECK(!success.isNull());
-        BOOST_CHECK_EQUAL(success.get_bool(), true);
+        CHECK_EQUAL(success.get_bool(), std::remove_cvref_t<decltype(success.get_bool())>{true});
     }
 }
 #endif // ENABLE_EXTERNAL_SIGNER

@@ -70,13 +70,13 @@ BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
     // Nothing in pool, remove should do nothing:
     unsigned int poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txParent), REMOVAL_REASON_DUMMY);
-    BOOST_CHECK_EQUAL(testPool.size(), poolSize);
+    CHECK_EQUAL(testPool.size(), poolSize);
 
     // Just the parent:
     TryAddToMempool(testPool, entry.FromTx(txParent));
     poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txParent), REMOVAL_REASON_DUMMY);
-    BOOST_CHECK_EQUAL(testPool.size(), poolSize - 1);
+    CHECK_EQUAL(testPool.size(), poolSize - 1);
 
     // Parent, children, grandchildren:
     TryAddToMempool(testPool, entry.FromTx(txParent));
@@ -88,19 +88,19 @@ BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
     // Remove Child[0], GrandChild[0] should be removed:
     poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txChild[0]), REMOVAL_REASON_DUMMY);
-    BOOST_CHECK_EQUAL(testPool.size(), poolSize - 2);
+    CHECK_EQUAL(testPool.size(), poolSize - 2);
     // ... make sure grandchild and child are gone:
     poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txGrandChild[0]), REMOVAL_REASON_DUMMY);
-    BOOST_CHECK_EQUAL(testPool.size(), poolSize);
+    CHECK_EQUAL(testPool.size(), poolSize);
     poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txChild[0]), REMOVAL_REASON_DUMMY);
-    BOOST_CHECK_EQUAL(testPool.size(), poolSize);
+    CHECK_EQUAL(testPool.size(), poolSize);
     // Remove parent, all children/grandchildren should go:
     poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txParent), REMOVAL_REASON_DUMMY);
-    BOOST_CHECK_EQUAL(testPool.size(), poolSize - 5);
-    BOOST_CHECK_EQUAL(testPool.size(), 0U);
+    CHECK_EQUAL(testPool.size(), poolSize - 5);
+    CHECK_EQUAL(testPool.size(), 0U);
 
     // Add children and grandchildren, but NOT the parent (simulate the parent being in a block)
     for (int i = 0; i < 3; i++)
@@ -112,8 +112,8 @@ BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
     // put into the mempool (maybe because it is non-standard):
     poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txParent), REMOVAL_REASON_DUMMY);
-    BOOST_CHECK_EQUAL(testPool.size(), poolSize - 6);
-    BOOST_CHECK_EQUAL(testPool.size(), 0U);
+    CHECK_EQUAL(testPool.size(), poolSize - 6);
+    CHECK_EQUAL(testPool.size(), 0U);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
@@ -167,7 +167,7 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     CHECK(!pool.exists(tx3.GetHash()));
 
     CFeeRate maxFeeRateRemoved(2500, GetVirtualTransactionSize(CTransaction(tx3)) + GetVirtualTransactionSize(CTransaction(tx2)));
-    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE);
+    CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE);
 
     CMutableTransaction tx4 = CMutableTransaction();
     tx4.vin.resize(2);
@@ -255,27 +255,27 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     NodeClockContext clock_ctx{42s};
     constexpr std::chrono::seconds HALFLIFE{CTxMemPool::ROLLING_FEE_HALFLIFE};
     clock_ctx += HALFLIFE;
-    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE);
+    CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE);
     // ... we should keep the same min fee until we get a block
     pool.removeForBlock(vtx, 1);
     clock_ctx += HALFLIFE;
-    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), llround((maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE)/2.0));
+    CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), llround((maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE)/2.0));
     // ... then feerate should drop 1/2 each halflife
 
     clock_ctx += HALFLIFE / 2;
-    BOOST_CHECK_EQUAL(pool.GetMinFee(pool.DynamicMemoryUsage() * 5 / 2).GetFeePerK(), llround((maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE)/4.0));
+    CHECK_EQUAL(pool.GetMinFee(pool.DynamicMemoryUsage() * 5 / 2).GetFeePerK(), llround((maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE)/4.0));
     // ... with a 1/2 halflife when mempool is < 1/2 its target size
 
     clock_ctx += HALFLIFE / 4;
-    BOOST_CHECK_EQUAL(pool.GetMinFee(pool.DynamicMemoryUsage() * 9 / 2).GetFeePerK(), llround((maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE)/8.0));
+    CHECK_EQUAL(pool.GetMinFee(pool.DynamicMemoryUsage() * 9 / 2).GetFeePerK(), llround((maxFeeRateRemoved.GetFeePerK() + DEFAULT_INCREMENTAL_RELAY_FEE)/8.0));
     // ... with a 1/4 halflife when mempool is < 1/4 its target size
 
     clock_ctx += 5 * HALFLIFE;
-    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), DEFAULT_INCREMENTAL_RELAY_FEE);
+    CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), std::remove_cvref_t<decltype(pool.GetMinFee(1).GetFeePerK())>{DEFAULT_INCREMENTAL_RELAY_FEE});
     // ... but feerate should never drop below DEFAULT_INCREMENTAL_RELAY_FEE
 
     clock_ctx += HALFLIFE;
-    BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), 0);
+    CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), std::remove_cvref_t<decltype(pool.GetMinFee(1).GetFeePerK())>{0});
     // ... unless it has gone all the way to 0 (after getting past DEFAULT_INCREMENTAL_RELAY_FEE/2)
 }
 
@@ -313,8 +313,8 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
 
     // Ancestors / clustersize should be 1 / 1 (itself / itself)
     pool.GetTransactionAncestry(tx1->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 1ULL);
-    BOOST_CHECK_EQUAL(clustersize, 1ULL);
+    CHECK_EQUAL(ancestors, 1ULL);
+    CHECK_EQUAL(clustersize, 1ULL);
 
     /* Child transaction */
     //
@@ -329,11 +329,11 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     // tx1          1 (tx1)     2 (tx1,2)
     // tx2          2 (tx1,2)   2 (tx1,2)
     pool.GetTransactionAncestry(tx1->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 1ULL);
-    BOOST_CHECK_EQUAL(clustersize, 2ULL);
+    CHECK_EQUAL(ancestors, 1ULL);
+    CHECK_EQUAL(clustersize, 2ULL);
     pool.GetTransactionAncestry(tx2->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 2ULL);
-    BOOST_CHECK_EQUAL(clustersize, 2ULL);
+    CHECK_EQUAL(ancestors, 2ULL);
+    CHECK_EQUAL(clustersize, 2ULL);
 
     /* Grand-child 1 */
     //
@@ -349,14 +349,14 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     // tx2          2 (tx1,2)   3 (tx1,2,3)
     // tx3          3 (tx1,2,3) 3 (tx1,2,3)
     pool.GetTransactionAncestry(tx1->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 1ULL);
-    BOOST_CHECK_EQUAL(clustersize, 3ULL);
+    CHECK_EQUAL(ancestors, 1ULL);
+    CHECK_EQUAL(clustersize, 3ULL);
     pool.GetTransactionAncestry(tx2->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 2ULL);
-    BOOST_CHECK_EQUAL(clustersize, 3ULL);
+    CHECK_EQUAL(ancestors, 2ULL);
+    CHECK_EQUAL(clustersize, 3ULL);
     pool.GetTransactionAncestry(tx3->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 3ULL);
-    BOOST_CHECK_EQUAL(clustersize, 3ULL);
+    CHECK_EQUAL(ancestors, 3ULL);
+    CHECK_EQUAL(clustersize, 3ULL);
 
     /* Grand-child 2 */
     //
@@ -375,17 +375,17 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     // tx3          3 (tx1,2,3) 4 (tx1,2,3,4)
     // tx4          3 (tx1,2,4) 4 (tx1,2,3,4)
     pool.GetTransactionAncestry(tx1->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 1ULL);
-    BOOST_CHECK_EQUAL(clustersize, 4ULL);
+    CHECK_EQUAL(ancestors, 1ULL);
+    CHECK_EQUAL(clustersize, 4ULL);
     pool.GetTransactionAncestry(tx2->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 2ULL);
-    BOOST_CHECK_EQUAL(clustersize, 4ULL);
+    CHECK_EQUAL(ancestors, 2ULL);
+    CHECK_EQUAL(clustersize, 4ULL);
     pool.GetTransactionAncestry(tx3->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 3ULL);
-    BOOST_CHECK_EQUAL(clustersize, 4ULL);
+    CHECK_EQUAL(ancestors, 3ULL);
+    CHECK_EQUAL(clustersize, 4ULL);
     pool.GetTransactionAncestry(tx4->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 3ULL);
-    BOOST_CHECK_EQUAL(clustersize, 4ULL);
+    CHECK_EQUAL(ancestors, 3ULL);
+    CHECK_EQUAL(clustersize, 4ULL);
 
     /* Make an alternate branch that is longer and connect it to tx3 */
     //
@@ -404,8 +404,8 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
         v -= 50 * CENT;
         TryAddToMempool(pool, entry.Fee(10000LL).FromTx(tyi));
         pool.GetTransactionAncestry(tyi->GetHash(), ancestors, clustersize);
-        BOOST_CHECK_EQUAL(ancestors, i+1);
-        BOOST_CHECK_EQUAL(clustersize, i+1);
+        CHECK_EQUAL(ancestors, i+1);
+        CHECK_EQUAL(clustersize, i+1);
     }
     CTransactionRef ty6 = make_tx(/*output_values=*/{5 * COIN}, /*inputs=*/{tx3, ty5});
     TryAddToMempool(pool, entry.Fee(10000LL).FromTx(ty6));
@@ -424,35 +424,35 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     // ty5          5 (y12345)          10
     // ty6          9 (tx123, ty123456) 10
     pool.GetTransactionAncestry(tx1->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 1ULL);
-    BOOST_CHECK_EQUAL(clustersize, 10ULL);
+    CHECK_EQUAL(ancestors, 1ULL);
+    CHECK_EQUAL(clustersize, 10ULL);
     pool.GetTransactionAncestry(tx2->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 2ULL);
-    BOOST_CHECK_EQUAL(clustersize, 10ULL);
+    CHECK_EQUAL(ancestors, 2ULL);
+    CHECK_EQUAL(clustersize, 10ULL);
     pool.GetTransactionAncestry(tx3->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 3ULL);
-    BOOST_CHECK_EQUAL(clustersize, 10ULL);
+    CHECK_EQUAL(ancestors, 3ULL);
+    CHECK_EQUAL(clustersize, 10ULL);
     pool.GetTransactionAncestry(tx4->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 3ULL);
-    BOOST_CHECK_EQUAL(clustersize, 10ULL);
+    CHECK_EQUAL(ancestors, 3ULL);
+    CHECK_EQUAL(clustersize, 10ULL);
     pool.GetTransactionAncestry(ty1->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 1ULL);
-    BOOST_CHECK_EQUAL(clustersize, 10ULL);
+    CHECK_EQUAL(ancestors, 1ULL);
+    CHECK_EQUAL(clustersize, 10ULL);
     pool.GetTransactionAncestry(ty2->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 2ULL);
-    BOOST_CHECK_EQUAL(clustersize, 10ULL);
+    CHECK_EQUAL(ancestors, 2ULL);
+    CHECK_EQUAL(clustersize, 10ULL);
     pool.GetTransactionAncestry(ty3->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 3ULL);
-    BOOST_CHECK_EQUAL(clustersize, 10ULL);
+    CHECK_EQUAL(ancestors, 3ULL);
+    CHECK_EQUAL(clustersize, 10ULL);
     pool.GetTransactionAncestry(ty4->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 4ULL);
-    BOOST_CHECK_EQUAL(clustersize, 10ULL);
+    CHECK_EQUAL(ancestors, 4ULL);
+    CHECK_EQUAL(clustersize, 10ULL);
     pool.GetTransactionAncestry(ty5->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 5ULL);
-    BOOST_CHECK_EQUAL(clustersize, 10ULL);
+    CHECK_EQUAL(ancestors, 5ULL);
+    CHECK_EQUAL(clustersize, 10ULL);
     pool.GetTransactionAncestry(ty6->GetHash(), ancestors, clustersize);
-    BOOST_CHECK_EQUAL(ancestors, 9ULL);
-    BOOST_CHECK_EQUAL(clustersize, 10ULL);
+    CHECK_EQUAL(ancestors, 9ULL);
+    CHECK_EQUAL(clustersize, 10ULL);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolAncestryTestsDiamond)
@@ -487,17 +487,17 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTestsDiamond)
     // tc           3 (ta,tb,tc)        4 (ta,tb,tc,td)
     // td           4 (ta,tb,tc,td)     4 (ta,tb,tc,td)
     pool.GetTransactionAncestry(ta->GetHash(), ancestors, descendants);
-    BOOST_CHECK_EQUAL(ancestors, 1ULL);
-    BOOST_CHECK_EQUAL(descendants, 4ULL);
+    CHECK_EQUAL(ancestors, 1ULL);
+    CHECK_EQUAL(descendants, 4ULL);
     pool.GetTransactionAncestry(tb->GetHash(), ancestors, descendants);
-    BOOST_CHECK_EQUAL(ancestors, 2ULL);
-    BOOST_CHECK_EQUAL(descendants, 4ULL);
+    CHECK_EQUAL(ancestors, 2ULL);
+    CHECK_EQUAL(descendants, 4ULL);
     pool.GetTransactionAncestry(tc->GetHash(), ancestors, descendants);
-    BOOST_CHECK_EQUAL(ancestors, 3ULL);
-    BOOST_CHECK_EQUAL(descendants, 4ULL);
+    CHECK_EQUAL(ancestors, 3ULL);
+    CHECK_EQUAL(descendants, 4ULL);
     pool.GetTransactionAncestry(td->GetHash(), ancestors, descendants);
-    BOOST_CHECK_EQUAL(ancestors, 4ULL);
-    BOOST_CHECK_EQUAL(descendants, 4ULL);
+    CHECK_EQUAL(ancestors, 4ULL);
+    CHECK_EQUAL(descendants, 4ULL);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

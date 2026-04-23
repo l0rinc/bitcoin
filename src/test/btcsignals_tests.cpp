@@ -59,7 +59,7 @@ BOOST_AUTO_TEST_CASE(callback_order)
     sig0.connect(SquareCallback);
     int val{3};
     sig0(val);
-    BOOST_CHECK_EQUAL(val, 16);
+    CHECK_EQUAL(val, std::remove_cvref_t<decltype(val)>{16});
     CHECK(!sig0.empty());
 }
 
@@ -72,19 +72,19 @@ BOOST_AUTO_TEST_CASE(disconnects)
     CHECK(!sig0.empty());
     int val{3};
     sig0(val);
-    BOOST_CHECK_EQUAL(val, 4);
+    CHECK_EQUAL(val, std::remove_cvref_t<decltype(val)>{4});
 
     CHECK(!sig0.empty());
     conn0.disconnect();
     CHECK(sig0.empty());
     sig0(val);
-    BOOST_CHECK_EQUAL(val, 4);
+    CHECK_EQUAL(val, std::remove_cvref_t<decltype(val)>{4});
 
     conn0 = sig0.connect(IncrementCallback);
     conn1 = sig0.connect(IncrementCallback);
     CHECK(!sig0.empty());
     sig0(val);
-    BOOST_CHECK_EQUAL(val, 6);
+    CHECK_EQUAL(val, std::remove_cvref_t<decltype(val)>{6});
     conn1.disconnect();
 
     CHECK(conn0.connected());
@@ -94,7 +94,7 @@ BOOST_AUTO_TEST_CASE(disconnects)
     CHECK(!conn0.connected());
     CHECK(sig0.empty());
     sig0(val);
-    BOOST_CHECK_EQUAL(val, 6);
+    CHECK_EQUAL(val, std::remove_cvref_t<decltype(val)>{6});
 }
 
 /* Check that move-only return types work correctly
@@ -105,7 +105,7 @@ BOOST_AUTO_TEST_CASE(moveonly_return)
     sig0.connect(MoveOnlyReturnCallback);
     int data{3};
     auto ret = sig0(data);
-    BOOST_CHECK_EQUAL(ret->m_data, 3);
+    CHECK_EQUAL(ret->m_data, std::remove_cvref_t<decltype(ret->m_data)>{3});
 }
 
 /* The result of the signal invocation should always be the result of the last
@@ -273,7 +273,7 @@ BOOST_AUTO_TEST_CASE(disconnect_thread_safety)
     });
     sig0(val);
     thr.join();
-    BOOST_CHECK_EQUAL(val, 0);
+    CHECK_EQUAL(val, std::remove_cvref_t<decltype(val)>{0});
 }
 
 

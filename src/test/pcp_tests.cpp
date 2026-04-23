@@ -302,10 +302,10 @@ BOOST_AUTO_TEST_CASE(natpmp_ipv4)
 
     MappingResult* mapping = std::get_if<MappingResult>(&res);
     CHECK(mapping);
-    BOOST_CHECK_EQUAL(mapping->version, 0);
-    BOOST_CHECK_EQUAL(mapping->internal.ToStringAddrPort(), "192.168.0.6:1234");
-    BOOST_CHECK_EQUAL(mapping->external.ToStringAddrPort(), "1.2.3.4:1234");
-    BOOST_CHECK_EQUAL(mapping->lifetime, 500);
+    CHECK_EQUAL(mapping->version, std::remove_cvref_t<decltype(mapping->version)>{0});
+    CHECK_EQUAL(mapping->internal.ToStringAddrPort(), std::string_view{"192.168.0.6:1234"});
+    CHECK_EQUAL(mapping->external.ToStringAddrPort(), std::string_view{"1.2.3.4:1234"});
+    CHECK_EQUAL(mapping->lifetime, std::remove_cvref_t<decltype(mapping->lifetime)>{500});
 }
 
 // PCP IPv4 good-weather scenario.
@@ -346,10 +346,10 @@ BOOST_AUTO_TEST_CASE(pcp_ipv4)
 
     MappingResult* mapping = std::get_if<MappingResult>(&res);
     CHECK(mapping);
-    BOOST_CHECK_EQUAL(mapping->version, 2);
-    BOOST_CHECK_EQUAL(mapping->internal.ToStringAddrPort(), "192.168.0.6:1234");
-    BOOST_CHECK_EQUAL(mapping->external.ToStringAddrPort(), "1.2.3.4:1234");
-    BOOST_CHECK_EQUAL(mapping->lifetime, 500);
+    CHECK_EQUAL(mapping->version, std::remove_cvref_t<decltype(mapping->version)>{2});
+    CHECK_EQUAL(mapping->internal.ToStringAddrPort(), std::string_view{"192.168.0.6:1234"});
+    CHECK_EQUAL(mapping->external.ToStringAddrPort(), std::string_view{"1.2.3.4:1234"});
+    CHECK_EQUAL(mapping->lifetime, std::remove_cvref_t<decltype(mapping->lifetime)>{500});
 }
 
 // PCP IPv6 good-weather scenario.
@@ -390,10 +390,10 @@ BOOST_AUTO_TEST_CASE(pcp_ipv6)
 
     MappingResult* mapping = std::get_if<MappingResult>(&res);
     CHECK(mapping);
-    BOOST_CHECK_EQUAL(mapping->version, 2);
-    BOOST_CHECK_EQUAL(mapping->internal.ToStringAddrPort(), "[2a10:1234:5678:9abc:def0:1234:5678:9abc]:1234");
-    BOOST_CHECK_EQUAL(mapping->external.ToStringAddrPort(), "[2a10:1234:5678:9abc:def0:1234:5678:9abc]:1234");
-    BOOST_CHECK_EQUAL(mapping->lifetime, 500);
+    CHECK_EQUAL(mapping->version, std::remove_cvref_t<decltype(mapping->version)>{2});
+    CHECK_EQUAL(mapping->internal.ToStringAddrPort(), std::string_view{"[2a10:1234:5678:9abc:def0:1234:5678:9abc]:1234"});
+    CHECK_EQUAL(mapping->external.ToStringAddrPort(), std::string_view{"[2a10:1234:5678:9abc:def0:1234:5678:9abc]:1234"});
+    CHECK_EQUAL(mapping->lifetime, std::remove_cvref_t<decltype(mapping->lifetime)>{500});
 }
 
 // PCP timeout.
@@ -413,7 +413,7 @@ BOOST_AUTO_TEST_CASE(pcp_timeout)
 
     MappingError* err = std::get_if<MappingError>(&res);
     CHECK(err);
-    BOOST_CHECK_EQUAL(*err, MappingError::NETWORK_ERROR);
+    CHECK_EQUAL(*err, MappingError::NETWORK_ERROR);
 }
 
 // PCP failure receiving (router sends ICMP port closed).
@@ -442,7 +442,7 @@ BOOST_AUTO_TEST_CASE(pcp_connrefused)
 
     MappingError* err = std::get_if<MappingError>(&res);
     CHECK(err);
-    BOOST_CHECK_EQUAL(*err, MappingError::NETWORK_ERROR);
+    CHECK_EQUAL(*err, MappingError::NETWORK_ERROR);
 }
 
 // PCP IPv6 success after one timeout.
@@ -541,7 +541,7 @@ BOOST_AUTO_TEST_CASE(pcp_ipv4_fail_no_resources)
 
     MappingError* err = std::get_if<MappingError>(&res);
     CHECK(err);
-    BOOST_CHECK_EQUAL(*err, MappingError::NO_RESOURCES);
+    CHECK_EQUAL(*err, MappingError::NO_RESOURCES);
 }
 
 // PCP IPv4 failure (test NATPMP downgrade scenario).
@@ -577,7 +577,7 @@ BOOST_AUTO_TEST_CASE(pcp_ipv4_fail_unsupported_version)
 
     MappingError* err = std::get_if<MappingError>(&res);
     CHECK(err);
-    BOOST_CHECK_EQUAL(*err, MappingError::UNSUPP_VERSION);
+    CHECK_EQUAL(*err, MappingError::UNSUPP_VERSION);
 }
 
 // NAT-PMP IPv4 protocol error scenarii.
@@ -609,7 +609,7 @@ BOOST_AUTO_TEST_CASE(natpmp_protocol_error)
 
     MappingError* err = std::get_if<MappingError>(&res);
     CHECK(err);
-    BOOST_CHECK_EQUAL(*err, MappingError::PROTOCOL_ERROR);
+    CHECK_EQUAL(*err, MappingError::PROTOCOL_ERROR);
 
     // First scenario: non-0 result code when requesting port mapping.
     script = {
@@ -654,7 +654,7 @@ BOOST_AUTO_TEST_CASE(natpmp_protocol_error)
 
     err = std::get_if<MappingError>(&res);
     CHECK(err);
-    BOOST_CHECK_EQUAL(*err, MappingError::PROTOCOL_ERROR);
+    CHECK_EQUAL(*err, MappingError::PROTOCOL_ERROR);
 }
 
 // PCP IPv4 protocol error scenario.
@@ -695,7 +695,7 @@ BOOST_AUTO_TEST_CASE(pcp_protocol_error)
 
     MappingError* err = std::get_if<MappingError>(&res);
     CHECK(err);
-    BOOST_CHECK_EQUAL(*err, MappingError::PROTOCOL_ERROR);
+    CHECK_EQUAL(*err, MappingError::PROTOCOL_ERROR);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
