@@ -9,9 +9,13 @@
 #include <util/byte_units.h>
 
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 
 //! min. -dbcache (bytes)
 static constexpr size_t MIN_DB_CACHE{4_MiB};
+//! Maximum dbcache size on current architecture.
+static constexpr size_t MAX_DBCACHE_BYTES{sizeof(void*) == 4 ? 1_GiB : std::numeric_limits<size_t>::max()};
 
 namespace node {
 size_t GetDefaultDBCache();
