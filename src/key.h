@@ -50,7 +50,7 @@ public:
 
 private:
     /** Internal data container for private key material. */
-    using KeyType = std::array<unsigned char, 32>;
+    using KeyType = std::array<std::byte, 32>;
 
     //! Whether the public key corresponding to this private key is (to be) compressed.
     bool fCompressed{false};
@@ -59,7 +59,8 @@ private:
     secure_unique_ptr<KeyType> keydata;
 
     //! Check whether the 32-byte array pointed to by vch is valid keydata.
-    bool static Check(const unsigned char* vch);
+    static bool Check(const std::byte* vch);
+    static bool Check(const unsigned char* vch);
 
     void MakeKeyData()
     {
@@ -105,9 +106,9 @@ public:
     {
         if (size_t(pend - pbegin) != std::tuple_size_v<KeyType>) {
             ClearKeyData();
-        } else if (Check(UCharCast(&pbegin[0]))) {
+        } else if (Check(&pbegin[0])) {
             MakeKeyData();
-            memcpy(keydata->data(), (unsigned char*)&pbegin[0], keydata->size());
+            memcpy(keydata->data(), &pbegin[0], keydata->size());
             fCompressed = fCompressedIn;
         } else {
             ClearKeyData();
@@ -116,7 +117,7 @@ public:
 
     //! Simple read-only vector-like interface.
     unsigned int size() const { return keydata ? keydata->size() : 0; }
-    const std::byte* data() const { return keydata ? reinterpret_cast<const std::byte*>(keydata->data()) : nullptr; }
+    const std::byte* data() const { return keydata ? keydata->data() : nullptr; }
     const std::byte* begin() const { return data(); }
     const std::byte* end() const { return data() + size(); }
 

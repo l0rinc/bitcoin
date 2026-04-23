@@ -126,7 +126,7 @@ void GetRandBytes(std::span<unsigned char> bytes) noexcept;
  *
  * Thread-safe.
  */
-void GetStrongRandBytes(std::span<unsigned char> bytes) noexcept;
+void GetStrongRandBytes(std::span<std::byte> bytes) noexcept;
 
 
 /* ============================= RANDOM NUMBER GENERATION CLASSES =============================
