@@ -322,6 +322,7 @@ BASE_SCRIPTS = [
     'wallet_spend_unconfirmed.py',
     'wallet_rescan_unconfirmed.py',
     'p2p_fingerprint.py',
+    'p2p_historical_reorg_proxy.py',
     'feature_uacomment.py',
     'feature_init.py',
     'wallet_coinbase_category.py',
