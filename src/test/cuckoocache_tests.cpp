@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <cuckoocache.h>
+#include <crypto/common.h>
 #include <random.h>
 #include <script/sigcache.h>
 #include <test/util/random.h>
@@ -64,9 +65,10 @@ double test_cache(size_t megabytes, double load)
     uint32_t n_insert = static_cast<uint32_t>(load * (bytes / sizeof(uint256)));
     hashes.resize(n_insert);
     for (uint32_t i = 0; i < n_insert; ++i) {
-        uint32_t* ptr = (uint32_t*)hashes[i].begin();
-        for (uint8_t j = 0; j < 8; ++j)
-            *(ptr++) = m_rng.rand32();
+        unsigned char* const data = hashes[i].begin();
+        for (uint8_t j = 0; j < 8; ++j) {
+            WriteLE32(data + j * sizeof(uint32_t), m_rng.rand32());
+        }
     }
     /** We make a copy of the hashes because future optimizations of the
      * cuckoocache may overwrite the inserted element, so the test is
@@ -137,9 +139,10 @@ void test_cache_erase(size_t megabytes)
     uint32_t n_insert = static_cast<uint32_t>(load * (bytes / sizeof(uint256)));
     hashes.resize(n_insert);
     for (uint32_t i = 0; i < n_insert; ++i) {
-        uint32_t* ptr = (uint32_t*)hashes[i].begin();
-        for (uint8_t j = 0; j < 8; ++j)
-            *(ptr++) = m_rng.rand32();
+        unsigned char* const data = hashes[i].begin();
+        for (uint8_t j = 0; j < 8; ++j) {
+            WriteLE32(data + j * sizeof(uint32_t), m_rng.rand32());
+        }
     }
     /** We make a copy of the hashes because future optimizations of the
      * cuckoocache may overwrite the inserted element, so the test is
@@ -202,9 +205,10 @@ void test_cache_erase_parallel(size_t megabytes)
     uint32_t n_insert = static_cast<uint32_t>(load * (bytes / sizeof(uint256)));
     hashes.resize(n_insert);
     for (uint32_t i = 0; i < n_insert; ++i) {
-        uint32_t* ptr = (uint32_t*)hashes[i].begin();
-        for (uint8_t j = 0; j < 8; ++j)
-            *(ptr++) = m_rng.rand32();
+        unsigned char* const data = hashes[i].begin();
+        for (uint8_t j = 0; j < 8; ++j) {
+            WriteLE32(data + j * sizeof(uint32_t), m_rng.rand32());
+        }
     }
     /** We make a copy of the hashes because future optimizations of the
      * cuckoocache may overwrite the inserted element, so the test is
@@ -316,9 +320,10 @@ void test_cache_generations()
             inserts.resize(n_insert);
             reads.reserve(n_insert / 2);
             for (uint32_t i = 0; i < n_insert; ++i) {
-                uint32_t* ptr = (uint32_t*)inserts[i].begin();
-                for (uint8_t j = 0; j < 8; ++j)
-                    *(ptr++) = rng.rand32();
+                unsigned char* const data = inserts[i].begin();
+                for (uint8_t j = 0; j < 8; ++j) {
+                    WriteLE32(data + j * sizeof(uint32_t), rng.rand32());
+                }
             }
             for (uint32_t i = 0; i < n_insert / 4; ++i)
                 reads.push_back(inserts[i]);
