@@ -51,6 +51,11 @@ struct ThrowingPrintable {
 struct NonStandardException {
 };
 
+struct WithToString {
+    std::string ToString() const { return "with-to-string"; }
+    friend bool operator==(const WithToString&, const WithToString&) = default;
+};
+
 BOOST_AUTO_TEST_CASE(check_pass)
 {
     Assume(true);
@@ -85,6 +90,12 @@ BOOST_AUTO_TEST_CASE(test_check_pass)
     const std::array<std::byte, 2> bytes{std::byte{0x01}, std::byte{0x02}};
     CHECK_EQUAL_COLLECTIONS(bytes.begin(), bytes.end(), bytes.begin(), bytes.end());
     CHECK_EXCEPTION(throw std::runtime_error{"expected reason"}, std::runtime_error, HasReason{"expected reason"});
+    CHECK_THROW(throw std::runtime_error{"expected reason"}, std::runtime_error);
+    CHECK_NO_THROW((void)0);
+    CHECK_MESSAGE(true, "message ok");
+    CHECK_CLOSE(99.5, 100.0, 1.0);
+    CHECK_EQUAL(std::optional<int>{1}, std::optional<int>{1});
+    CHECK_EQUAL(WithToString{}, WithToString{});
 
     std::thread thread{[] { CHECK(true); }};
     thread.join();
@@ -163,6 +174,26 @@ BOOST_AUTO_TEST_CASE(test_check_fail)
 
     message = CheckFailureMessage([] { CHECK_EQUAL(ThrowingPrintable{1}, ThrowingPrintable{2}); });
     BOOST_CHECK_NE(message.find("lhs: <unprintable value>"), std::string::npos);
+
+    message = CheckFailureMessage([] { CHECK_MESSAGE(false, "details " << 7); });
+    BOOST_CHECK_NE(message.find("message: details 7"), std::string::npos);
+
+    message = CheckFailureMessage([] { CHECK_NO_THROW(throw std::runtime_error{"boom"}); });
+    BOOST_CHECK_NE(message.find("unexpected exception thrown"), std::string::npos);
+    BOOST_CHECK_NE(message.find("what(): \"boom\""), std::string::npos);
+
+    message = CheckFailureMessage([] { CHECK_THROW((void)0, std::runtime_error); });
+    BOOST_CHECK_NE(message.find("expected exception was not thrown"), std::string::npos);
+
+    message = CheckFailureMessage([] { CHECK_CLOSE(100.0, 103.0, 1.0); });
+    BOOST_CHECK_NE(message.find("values are not within tolerance"), std::string::npos);
+
+    message = CheckFailureMessage([] { CHECK_FAIL("forced " << 9); });
+    BOOST_CHECK_NE(message.find("failure requested"), std::string::npos);
+    BOOST_CHECK_NE(message.find("message: forced 9"), std::string::npos);
+
+    message = CheckFailureMessage([] { CHECK_ERROR("forced " << 10); });
+    BOOST_CHECK_NE(message.find("message: forced 10"), std::string::npos);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -7,14 +7,17 @@
 
 #include <util/check.h>
 
+#include <chrono>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <exception>
 #include <functional>
 #include <iterator>
+#include <optional>
 #include <ostream>
 #include <ranges>
 #include <sstream>
@@ -22,6 +25,48 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <typeinfo>
+
+class HasReason
+{
+public:
+    explicit HasReason(std::string_view reason) : m_reason(reason) {}
+    bool operator()(std::string_view s) const { return s.find(m_reason) != std::string_view::npos; }
+    bool operator()(const std::exception& e) const { return (*this)(e.what()); }
+
+private:
+    const std::string m_reason;
+};
+
+namespace std {
+template <typename Clock, typename Duration>
+inline std::ostream& operator<<(std::ostream& os, const std::chrono::time_point<Clock, Duration>& tp)
+{
+    return os << tp.time_since_epoch().count();
+}
+
+template <typename T> requires std::is_enum_v<T>
+inline std::ostream& operator<<(std::ostream& os, const T& e)
+{
+    return os << static_cast<std::underlying_type_t<T>>(e);
+}
+
+template <typename T>
+inline std::ostream& operator<<(std::ostream& os, const std::optional<T>& v)
+{
+    return v ? os << *v
+             : os << "std::nullopt";
+}
+} // namespace std
+
+template <typename T>
+concept HasToString = requires(const T& t) { t.ToString(); };
+
+template <HasToString T>
+inline std::ostream& operator<<(std::ostream& os, const T& obj)
+{
+    return os << obj.ToString();
+}
 
 namespace test::check_detail {
 
@@ -139,6 +184,26 @@ concept GenericRange = ConstRange<T> && !StringValue<T> && !CharRange<T> && !Byt
 
 template <typename T>
 std::string FormatValue(const T& value);
+
+template <typename Fn>
+std::string FormatMessage(Fn&& fn)
+{
+    try {
+        return std::invoke(std::forward<Fn>(fn));
+    } catch (...) {
+        return "<failed to format message>";
+    }
+}
+
+template <typename Fn>
+std::string StreamMessage(Fn&& fn)
+{
+    return FormatMessage([&] {
+        std::ostringstream oss;
+        std::invoke(std::forward<Fn>(fn), oss);
+        return oss.str();
+    });
+}
 
 inline std::string FormatByte(uint8_t byte)
 {
@@ -310,6 +375,31 @@ void CheckBool(const T& value, std::string_view expr, const std::source_location
     }
 }
 
+template <typename T, typename Fn>
+void CheckBoolMessage(const T& value,
+                      std::string_view expr,
+                      Fn&& fn,
+                      const std::source_location& loc)
+{
+    bool passed;
+    try {
+        passed = static_cast<bool>(value);
+    } catch (...) {
+        FailWith([&] {
+            return "expression threw while converting to bool\n  expression: " + std::string{expr} +
+                   "\n  message: " + StreamMessage(std::forward<Fn>(fn));
+        }, loc);
+    }
+
+    if (!passed) {
+        FailWith([&] {
+            return "expression evaluated to false\n  expression: " + std::string{expr} +
+                   "\n  value: " + FormatValue(value) +
+                   "\n  message: " + StreamMessage(std::forward<Fn>(fn));
+        }, loc);
+    }
+}
+
 enum class ComparisonOp {
     EQ,
     NE,
@@ -447,9 +537,11 @@ template <typename Exception>
 std::string FormatCaughtException(const Exception& e)
 {
     if constexpr (std::derived_from<Decay<Exception>, std::exception>) {
-        return "\n  what(): " + FormatValue(std::string_view{e.what()});
+        return "\n  actual exception: " + std::string{typeid(e).name()} +
+               "\n  what(): " + FormatValue(std::string_view{e.what()});
     } else {
-        return "\n  value: " + FormatValue(e);
+        return "\n  actual exception: " + std::string{typeid(e).name()} +
+               "\n  value: " + FormatValue(e);
     }
 }
 
@@ -488,7 +580,7 @@ void CheckException(Fn&& fn,
         FailWith([&] {
             return "wrong exception type thrown\n  expression: " + std::string{expr} +
                    "\n  expected exception: " + std::string{exception_expr} +
-                   "\n  actual exception: std::exception-derived" +
+                   "\n  actual exception: " + std::string{typeid(e).name()} +
                    "\n  what(): " + FormatValue(std::string_view{e.what()});
         }, loc);
     } catch (...) {
@@ -505,10 +597,77 @@ void CheckException(Fn&& fn,
     }, loc);
 }
 
+template <typename Fn>
+void CheckNoThrow(Fn&& fn,
+                  std::string_view expr,
+                  const std::source_location& loc)
+{
+    try {
+        std::invoke(std::forward<Fn>(fn));
+    } catch (const std::exception& e) {
+        FailWith([&] {
+            return "unexpected exception thrown\n  expression: " + std::string{expr} +
+                   "\n  actual exception: " + std::string{typeid(e).name()} +
+                   "\n  what(): " + FormatValue(std::string_view{e.what()});
+        }, loc);
+    } catch (...) {
+        FailWith([&] {
+            return "unexpected exception thrown\n  expression: " + std::string{expr} +
+                   "\n  actual exception: non-standard exception";
+        }, loc);
+    }
+}
+
+template <typename L, typename R, typename Tol>
+void CheckClose(const L& lhs,
+                const R& rhs,
+                const Tol& tolerance,
+                std::string_view lhs_expr,
+                std::string_view rhs_expr,
+                std::string_view tolerance_expr,
+                const std::source_location& loc)
+{
+    static_assert(std::is_arithmetic_v<Decay<L>> && std::is_arithmetic_v<Decay<R>> && std::is_arithmetic_v<Decay<Tol>>,
+                  "CHECK_CLOSE operands and tolerance must be arithmetic");
+
+    const long double tol{static_cast<long double>(tolerance)};
+    if (tol < 0) {
+        FailWith([&] {
+            return "negative tolerance\n  tolerance: " + FormatValue(tolerance);
+        }, loc);
+    }
+
+    const long double lhs_ld{static_cast<long double>(lhs)};
+    const long double rhs_ld{static_cast<long double>(rhs)};
+
+    if (lhs_ld == rhs_ld) return;
+
+    const long double diff{std::fabs(lhs_ld - rhs_ld)};
+    const long double scale{std::max(std::fabs(lhs_ld), std::fabs(rhs_ld))};
+    const long double allowed{scale == 0 ? 0 : scale * tol / 100.0L};
+
+    if (diff > allowed) {
+        FailWith([&] {
+            std::ostringstream oss;
+            oss << "values are not within tolerance\n  expression: " << lhs_expr << " ~= " << rhs_expr
+                << "\n  lhs: " << FormatValue(lhs)
+                << "\n  rhs: " << FormatValue(rhs)
+                << "\n  tolerance (%): " << FormatValue(tolerance)
+                << "\n  tolerance expression: " << tolerance_expr
+                << "\n  diff: " << diff
+                << "\n  allowed diff: " << allowed;
+            return oss.str();
+        }, loc);
+    }
+}
+
 } // namespace test::check_detail
 
 #define CHECK(condition) \
     ::test::check_detail::CheckBool((condition), #condition, std::source_location::current())
+
+#define CHECK_MESSAGE(condition, message) \
+    ::test::check_detail::CheckBoolMessage((condition), #condition, [&](std::ostream& _check_message_oss) { _check_message_oss << message; }, std::source_location::current())
 
 #define CHECK_EQUAL(lhs, rhs) \
     ::test::check_detail::CheckComparison<::test::check_detail::ComparisonOp::EQ>((lhs), (rhs), #lhs, #rhs, std::source_location::current())
@@ -538,5 +697,19 @@ void CheckException(Fn&& fn,
                                                         (predicate),            \
                                                         #predicate,             \
                                                         std::source_location::current())
+
+#define CHECK_THROW(expr, exception_type) \
+    CHECK_EXCEPTION(expr, exception_type, [](const exception_type&) { return true; })
+
+#define CHECK_NO_THROW(expr) \
+    ::test::check_detail::CheckNoThrow([&] { (void)(expr); }, #expr, std::source_location::current())
+
+#define CHECK_CLOSE(lhs, rhs, tolerance) \
+    ::test::check_detail::CheckClose((lhs), (rhs), (tolerance), #lhs, #rhs, #tolerance, std::source_location::current())
+
+#define CHECK_FAIL(message) \
+    ::test::check_detail::FailWith([&] { return std::string{"failure requested\n  message: "} + ::test::check_detail::StreamMessage([&](std::ostream& _check_fail_oss) { _check_fail_oss << message; }); }, std::source_location::current())
+
+#define CHECK_ERROR(message) CHECK_FAIL(message)
 
 #endif // BITCOIN_TEST_UTIL_CHECK_H
