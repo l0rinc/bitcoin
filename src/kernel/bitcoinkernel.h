@@ -561,7 +561,7 @@ BITCOINKERNEL_API size_t BITCOINKERNEL_WARN_UNUSED_RESULT btck_transaction_count
  *
  * @param[in] transaction  Non-null.
  * @param[in] output_index The index of the transaction output to be retrieved.
- * @return                 The transaction output
+ * @return                 The transaction output, or null if the index is out of bounds.
  */
 BITCOINKERNEL_API const btck_TransactionOutput* BITCOINKERNEL_WARN_UNUSED_RESULT btck_transaction_get_output_at(
     const btck_Transaction* transaction, size_t output_index) BITCOINKERNEL_ARG_NONNULL(1);
@@ -573,7 +573,7 @@ BITCOINKERNEL_API const btck_TransactionOutput* BITCOINKERNEL_WARN_UNUSED_RESULT
  *
  * @param[in] transaction Non-null.
  * @param[in] input_index The index of the transaction input to be retrieved.
- * @return                 The transaction input
+ * @return                 The transaction input, or null if the index is out of bounds.
  */
 BITCOINKERNEL_API const btck_TransactionInput* BITCOINKERNEL_WARN_UNUSED_RESULT btck_transaction_get_input_at(
     const btck_Transaction* transaction, size_t input_index) BITCOINKERNEL_ARG_NONNULL(1);
@@ -1329,7 +1329,7 @@ BITCOINKERNEL_API size_t BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_count_trans
  *
  * @param[in] block             Non-null.
  * @param[in] transaction_index The index of the transaction to be retrieved.
- * @return                      The transaction.
+ * @return                      The transaction, or null if the index is out of bounds.
  */
 BITCOINKERNEL_API const btck_Transaction* BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_get_transaction_at(
     const btck_Block* block, size_t transaction_index) BITCOINKERNEL_ARG_NONNULL(1);

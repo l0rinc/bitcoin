@@ -523,7 +523,9 @@ size_t btck_transaction_count_outputs(const btck_Transaction* transaction)
 const btck_TransactionOutput* btck_transaction_get_output_at(const btck_Transaction* transaction, size_t output_index)
 {
     const CTransaction& tx = *btck_Transaction::get(transaction);
-    assert(output_index < tx.vout.size());
+    if (output_index >= tx.vout.size()) {
+        return nullptr;
+    }
     return btck_TransactionOutput::ref(&tx.vout[output_index]);
 }
 
@@ -534,8 +536,11 @@ size_t btck_transaction_count_inputs(const btck_Transaction* transaction)
 
 const btck_TransactionInput* btck_transaction_get_input_at(const btck_Transaction* transaction, size_t input_index)
 {
-    assert(input_index < btck_Transaction::get(transaction)->vin.size());
-    return btck_TransactionInput::ref(&btck_Transaction::get(transaction)->vin[input_index]);
+    const CTransaction& tx = *btck_Transaction::get(transaction);
+    if (input_index >= tx.vin.size()) {
+        return nullptr;
+    }
+    return btck_TransactionInput::ref(&tx.vin[input_index]);
 }
 
 uint32_t btck_transaction_get_locktime(const btck_Transaction* transaction)
@@ -1156,8 +1161,11 @@ size_t btck_block_count_transactions(const btck_Block* block)
 
 const btck_Transaction* btck_block_get_transaction_at(const btck_Block* block, size_t index)
 {
-    assert(index < btck_Block::get(block)->vtx.size());
-    return btck_Transaction::ref(&btck_Block::get(block)->vtx[index]);
+    const auto& transactions{btck_Block::get(block)->vtx};
+    if (index >= transactions.size()) {
+        return nullptr;
+    }
+    return btck_Transaction::ref(&transactions[index]);
 }
 
 btck_BlockHeader* btck_block_get_header(const btck_Block* block)

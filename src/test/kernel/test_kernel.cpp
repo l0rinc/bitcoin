@@ -404,6 +404,8 @@ BOOST_AUTO_TEST_CASE(btck_transaction_tests)
 
     BOOST_CHECK_EQUAL(tx.CountOutputs(), 2);
     BOOST_CHECK_EQUAL(tx.CountInputs(), 1);
+    BOOST_CHECK(btck_transaction_get_output_at(tx.get(), tx.CountOutputs()) == nullptr);
+    BOOST_CHECK(btck_transaction_get_input_at(tx.get(), tx.CountInputs()) == nullptr);
     BOOST_CHECK_EQUAL(tx.GetLocktime(), 510826);
     auto broken_tx_data{std::span<std::byte>{tx_data.begin(), tx_data.begin() + 10}};
     BOOST_CHECK_THROW(Transaction{broken_tx_data}, std::runtime_error);
@@ -714,6 +716,7 @@ BOOST_AUTO_TEST_CASE(btck_block)
     CheckHandle(block, block_100);
     Block block_tx{hex_string_to_byte_vec(REGTEST_BLOCK_DATA[205])};
     CheckRange(block_tx.Transactions(), block_tx.CountTransactions());
+    BOOST_CHECK(btck_block_get_transaction_at(block_tx.get(), block_tx.CountTransactions()) == nullptr);
     auto invalid_data = hex_string_to_byte_vec("012300");
     BOOST_CHECK_THROW(Block{invalid_data}, std::runtime_error);
     auto empty_data = hex_string_to_byte_vec("");
