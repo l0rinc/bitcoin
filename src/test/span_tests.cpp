@@ -4,6 +4,7 @@
 
 #include <span.h>
 
+#include <test/util/check.h>
 #include <boost/test/unit_test.hpp>
 #include <array>
 #include <set>
@@ -49,14 +50,14 @@ BOOST_AUTO_TEST_SUITE(span_tests)
 // aren't compatible with std::span at compile time.
 BOOST_AUTO_TEST_CASE(span_constructor_sfinae)
 {
-    BOOST_CHECK(Spannable(std::vector<int>{}));
-    BOOST_CHECK(!Spannable(std::set<int>{}));
-    BOOST_CHECK(!Spannable(std::vector<bool>{}));
-    BOOST_CHECK(Spannable(std::array<int, 3>{}));
-    BOOST_CHECK(Spannable(std::span<int>{}));
-    BOOST_CHECK(Spannable("char array"));
-    BOOST_CHECK(Spannable(SpannableYes{}));
-    BOOST_CHECK(!Spannable(SpannableNo{}));
+    CHECK(Spannable(std::vector<int>{}));
+    CHECK(!Spannable(std::set<int>{}));
+    CHECK(!Spannable(std::vector<bool>{}));
+    CHECK(Spannable(std::array<int, 3>{}));
+    CHECK(Spannable(std::span<int>{}));
+    CHECK(Spannable("char array"));
+    CHECK(Spannable(SpannableYes{}));
+    CHECK(!Spannable(SpannableNo{}));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

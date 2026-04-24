@@ -59,7 +59,7 @@ FUZZ_TARGET(data_stream_addr_man, .init = initialize_addrman)
 CNetAddr RandAddr(FuzzedDataProvider& fuzzed_data_provider, FastRandomContext& fast_random_context)
 {
     CNetAddr addr;
-    assert(!addr.IsValid());
+    CHECK(!addr.IsValid());
     for (size_t i = 0; i < 8 && !addr.IsValid(); ++i) {
         if (fuzzed_data_provider.remaining_bytes() > 1 && fuzzed_data_provider.ConsumeBool()) {
             addr = ConsumeNetAddr(fuzzed_data_provider);
@@ -213,5 +213,5 @@ FUZZ_TARGET(addrman_serdeser, .init = initialize_addrman)
     FillAddrman(addr_man1, fuzzed_data_provider);
     data_stream << addr_man1;
     data_stream >> addr_man2;
-    assert(addr_man1 == addr_man2);
+    CHECK(addr_man1 == addr_man2);
 }

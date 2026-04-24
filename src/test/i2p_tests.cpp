@@ -62,7 +62,7 @@ BOOST_AUTO_TEST_CASE(unlimited_recv)
 
         i2p::Connection conn;
         bool proxy_error;
-        BOOST_REQUIRE(!session.Connect(CService{}, conn, proxy_error));
+        CHECK(!session.Connect(CService{}, conn, proxy_error));
     }
 }
 
@@ -126,8 +126,8 @@ BOOST_AUTO_TEST_CASE(listen_ok_accept_fail)
         ASSERT_DEBUG_LOG("Persistent I2P SAM session" /* ... created */);
         ASSERT_DEBUG_LOG("Error accepting");
         ASSERT_DEBUG_LOG("Destroying I2P SAM session");
-        BOOST_REQUIRE(session.Listen(conn));
-        BOOST_REQUIRE(!session.Accept(conn));
+        CHECK(session.Listen(conn));
+        CHECK(!session.Accept(conn));
     }
 }
 
@@ -154,7 +154,7 @@ BOOST_AUTO_TEST_CASE(damaged_private_key)
              {std::string(385, '\0') + '\0' + '\5' + "abcd",
               "Certificate length (5) designates that the private key should be 392 bytes, but it is only "
               "391 bytes"}}) {
-        BOOST_REQUIRE(WriteBinaryFile(i2p_private_key_file, file_contents));
+        CHECK(WriteBinaryFile(i2p_private_key_file, file_contents));
 
         auto interrupt{std::make_shared<CThreadInterrupt>()};
         const CService addr{in6_addr(COMPAT_IN6ADDR_LOOPBACK_INIT), /*port=*/7656};
@@ -167,7 +167,7 @@ BOOST_AUTO_TEST_CASE(damaged_private_key)
 
             i2p::Connection conn;
             bool proxy_error;
-            BOOST_CHECK(!session.Connect(CService{}, conn, proxy_error));
+            CHECK(!session.Connect(CService{}, conn, proxy_error));
         }
     }
 }

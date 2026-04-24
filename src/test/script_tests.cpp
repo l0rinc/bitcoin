@@ -107,7 +107,7 @@ static std::string FormatScriptError(ScriptError_t err)
     for (const auto& se : script_errors)
         if (se.err == err)
             return se.name;
-    BOOST_ERROR("Unknown scripterror enumeration value, update script_errors in script_tests.cpp.");
+    CHECK_ERROR("Unknown scripterror enumeration value, update script_errors in script_tests.cpp.");
     return "";
 }
 
@@ -116,7 +116,7 @@ static ScriptError_t ParseScriptError(const std::string& name)
     for (const auto& se : script_errors)
         if (se.name == name)
             return se.err;
-    BOOST_ERROR("Unknown scripterror \"" << name << "\" in test description");
+    CHECK_ERROR("Unknown scripterror \"" << name << "\" in test description");
     return SCRIPT_ERR_UNKNOWN_ERROR;
 }
 
@@ -131,8 +131,8 @@ void DoTest(const CScript& scriptPubKey, const CScript& scriptSig, const CScript
     ScriptError err;
     const CTransaction txCredit{BuildCreditingTransaction(scriptPubKey, nValue)};
     CMutableTransaction tx = BuildSpendingTransaction(scriptSig, scriptWitness, txCredit);
-    BOOST_CHECK_MESSAGE(VerifyScript(scriptSig, scriptPubKey, &scriptWitness, flags, MutableTransactionSignatureChecker(&tx, 0, txCredit.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err) == expect, message);
-    BOOST_CHECK_MESSAGE(err == scriptError, FormatScriptError(err) + " where " + FormatScriptError((ScriptError_t)scriptError) + " expected: " + message);
+    CHECK_MESSAGE(VerifyScript(scriptSig, scriptPubKey, &scriptWitness, flags, MutableTransactionSignatureChecker(&tx, 0, txCredit.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err) == expect, message);
+    CHECK_MESSAGE(err == scriptError, FormatScriptError(err) + " where " + FormatScriptError((ScriptError_t)scriptError) + " expected: " + message);
 
     // Verify that removing flags from a passing test or adding flags to a failing test does not change the result.
     for (int i = 0; i < 256; ++i) {
@@ -141,7 +141,7 @@ void DoTest(const CScript& scriptPubKey, const CScript& scriptSig, const CScript
         // Weed out some invalid flag combinations.
         if (combined_flags & SCRIPT_VERIFY_CLEANSTACK && ~combined_flags & (SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS)) continue;
         if (combined_flags & SCRIPT_VERIFY_WITNESS && ~combined_flags & SCRIPT_VERIFY_P2SH) continue;
-        BOOST_CHECK_MESSAGE(VerifyScript(scriptSig, scriptPubKey, &scriptWitness, combined_flags, MutableTransactionSignatureChecker(&tx, 0, txCredit.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err) == expect, message + strprintf(" (with flags %x)", combined_flags.as_int()));
+        CHECK_MESSAGE(VerifyScript(scriptSig, scriptPubKey, &scriptWitness, combined_flags, MutableTransactionSignatureChecker(&tx, 0, txCredit.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err) == expect, message + strprintf(" (with flags %x)", combined_flags.as_int()));
     }
 }
 }; // struct ScriptTest
@@ -155,12 +155,12 @@ void static NegateSignatureS(std::vector<unsigned char>& vchSig) {
     while (s.size() < 33) {
         s.insert(s.begin(), 0x00);
     }
-    assert(s[0] == 0);
+    CHECK(s[0] == 0);
     // Perform mod-n negation of s by (ab)using libsecp256k1
     // (note that this function is meant to be used for negating secret keys,
     //  but it works for any non-zero scalar modulo the group order, i.e. also for s)
     int ret = secp256k1_ec_seckey_negate(secp256k1_context_static, s.data() + 1);
-    assert(ret);
+    CHECK(ret);
 
     if (s[1] < 0x80) {
         s.erase(s.begin());
@@ -352,11 +352,11 @@ public:
 
     TestBuilder& EditPush(unsigned int pos, const std::string& hexin, const std::string& hexout)
     {
-        assert(havePush);
+        CHECK(havePush);
         std::vector<unsigned char> datain = ParseHex(hexin);
         std::vector<unsigned char> dataout = ParseHex(hexout);
-        assert(pos + datain.size() <= push.size());
-        BOOST_CHECK_MESSAGE(std::vector<unsigned char>(push.begin() + pos, push.begin() + pos + datain.size()) == datain, comment);
+        CHECK(pos + datain.size() <= push.size());
+        CHECK_MESSAGE(std::vector<unsigned char>(push.begin() + pos, push.begin() + pos + datain.size()) == datain, comment);
         push.erase(push.begin() + pos, push.begin() + pos + datain.size());
         push.insert(push.begin() + pos, dataout.begin(), dataout.end());
         return *this;
@@ -364,8 +364,8 @@ public:
 
     TestBuilder& DamagePush(unsigned int pos)
     {
-        assert(havePush);
-        assert(pos < push.size());
+        CHECK(havePush);
+        CHECK(pos < push.size());
         push[pos] ^= 1;
         return *this;
     }
@@ -381,7 +381,7 @@ public:
 
     TestBuilder& AsWit()
     {
-        assert(havePush);
+        CHECK(havePush);
         scriptWitness.stack.push_back(push);
         havePush = false;
         return *this;
@@ -893,7 +893,7 @@ BOOST_AUTO_TEST_CASE(script_build)
         strGen += str + ",\n";
 #else
         if (!tests_set.contains(str)) {
-            BOOST_CHECK_MESSAGE(false, "Missing auto script_valid test: " + test.GetComment());
+            CHECK_MESSAGE(false, "Missing auto script_valid test: " + test.GetComment());
         }
 #endif
     }
@@ -944,7 +944,7 @@ BOOST_AUTO_TEST_CASE(script_json_test)
                 } else {
                     const auto witness_value{TryParseHex<unsigned char>(element)};
                     if (!witness_value.has_value()) {
-                        BOOST_ERROR("Bad witness in test: " << strTest << " witness is not hex: " << element);
+                        CHECK_ERROR("Bad witness in test: " << strTest << " witness is not hex: " << element);
                     }
                     witness.stack.push_back(witness_value.value());
                 }
@@ -955,7 +955,7 @@ BOOST_AUTO_TEST_CASE(script_json_test)
         if (test.size() < 4 + pos) // Allow size > 3; extra stuff ignored (useful for comments)
         {
             if (test.size() != 1) {
-                BOOST_ERROR("Bad test: " << strTest);
+                CHECK_ERROR("Bad test: " << strTest);
             }
             continue;
         }
@@ -965,7 +965,7 @@ BOOST_AUTO_TEST_CASE(script_json_test)
         CScript scriptPubKey;
         // If requested, auto-generate the taproot output
         if (scriptPubKeyString == "0x51 0x20 #TAPROOTOUTPUT#") {
-            BOOST_CHECK_MESSAGE(taprootBuilder.IsComplete(), "Failed to autogenerate Tapscript output key");
+            CHECK_MESSAGE(taprootBuilder.IsComplete(), "Failed to autogenerate Tapscript output key");
             scriptPubKey = CScript() << OP_1 << ToByteVector(taprootBuilder.GetOutput());
         } else {
             scriptPubKey = ParseScript(scriptPubKeyString);
@@ -988,35 +988,35 @@ BOOST_AUTO_TEST_CASE(script_PushData)
 
     ScriptError err;
     std::vector<std::vector<unsigned char> > directStack;
-    BOOST_CHECK(EvalScript(directStack, CScript(direct, direct + sizeof(direct)), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
+    CHECK(EvalScript(directStack, CScript(direct, direct + sizeof(direct)), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
 
     std::vector<std::vector<unsigned char> > pushdata1Stack;
-    BOOST_CHECK(EvalScript(pushdata1Stack, CScript(pushdata1, pushdata1 + sizeof(pushdata1)), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
-    BOOST_CHECK(pushdata1Stack == directStack);
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
+    CHECK(EvalScript(pushdata1Stack, CScript(pushdata1, pushdata1 + sizeof(pushdata1)), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
+    CHECK(pushdata1Stack == directStack);
+    CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
 
     std::vector<std::vector<unsigned char> > pushdata2Stack;
-    BOOST_CHECK(EvalScript(pushdata2Stack, CScript(pushdata2, pushdata2 + sizeof(pushdata2)), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
-    BOOST_CHECK(pushdata2Stack == directStack);
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
+    CHECK(EvalScript(pushdata2Stack, CScript(pushdata2, pushdata2 + sizeof(pushdata2)), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
+    CHECK(pushdata2Stack == directStack);
+    CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
 
     std::vector<std::vector<unsigned char> > pushdata4Stack;
-    BOOST_CHECK(EvalScript(pushdata4Stack, CScript(pushdata4, pushdata4 + sizeof(pushdata4)), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
-    BOOST_CHECK(pushdata4Stack == directStack);
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
+    CHECK(EvalScript(pushdata4Stack, CScript(pushdata4, pushdata4 + sizeof(pushdata4)), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
+    CHECK(pushdata4Stack == directStack);
+    CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
 
     const std::vector<unsigned char> pushdata1_trunc{OP_PUSHDATA1, 1};
     const std::vector<unsigned char> pushdata2_trunc{OP_PUSHDATA2, 1, 0};
     const std::vector<unsigned char> pushdata4_trunc{OP_PUSHDATA4, 1, 0, 0, 0};
 
     std::vector<std::vector<unsigned char>> stack_ignore;
-    BOOST_CHECK(!EvalScript(stack_ignore, CScript(pushdata1_trunc.begin(), pushdata1_trunc.end()), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
-    BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
-    BOOST_CHECK(!EvalScript(stack_ignore, CScript(pushdata2_trunc.begin(), pushdata2_trunc.end()), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
-    BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
-    BOOST_CHECK(!EvalScript(stack_ignore, CScript(pushdata4_trunc.begin(), pushdata4_trunc.end()), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
-    BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
+    CHECK(!EvalScript(stack_ignore, CScript(pushdata1_trunc.begin(), pushdata1_trunc.end()), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
+    CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
+    CHECK(!EvalScript(stack_ignore, CScript(pushdata2_trunc.begin(), pushdata2_trunc.end()), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
+    CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
+    CHECK(!EvalScript(stack_ignore, CScript(pushdata4_trunc.begin(), pushdata4_trunc.end()), SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), SigVersion::BASE, &err));
+    CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
 }
 
 BOOST_AUTO_TEST_CASE(script_cltv_truncated)
@@ -1025,8 +1025,8 @@ BOOST_AUTO_TEST_CASE(script_cltv_truncated)
 
     std::vector<std::vector<unsigned char>> stack_ignore;
     ScriptError err;
-    BOOST_CHECK(!EvalScript(stack_ignore, script_cltv_trunc, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY, BaseSignatureChecker(), SigVersion::BASE, &err));
-    BOOST_CHECK_EQUAL(err, SCRIPT_ERR_INVALID_STACK_OPERATION);
+    CHECK(!EvalScript(stack_ignore, script_cltv_trunc, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY, BaseSignatureChecker(), SigVersion::BASE, &err));
+    CHECK_EQUAL(err, SCRIPT_ERR_INVALID_STACK_OPERATION);
 }
 
 static CScript
@@ -1047,7 +1047,7 @@ sign_multisig(const CScript& scriptPubKey, const std::vector<CKey>& keys, const 
     for (const CKey &key : keys)
     {
         std::vector<unsigned char> vchSig;
-        BOOST_CHECK(key.Sign(hash, vchSig));
+        CHECK(key.Sign(hash, vchSig));
         vchSig.push_back((unsigned char)SIGHASH_ALL);
         result << vchSig;
     }
@@ -1075,19 +1075,19 @@ BOOST_AUTO_TEST_CASE(script_CHECKMULTISIG12)
     CMutableTransaction txTo12 = BuildSpendingTransaction(CScript(), CScriptWitness(), txFrom12);
 
     CScript goodsig1 = sign_multisig(scriptPubKey12, key1, CTransaction(txTo12));
-    BOOST_CHECK(VerifyScript(goodsig1, scriptPubKey12, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo12, 0, txFrom12.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
+    CHECK(VerifyScript(goodsig1, scriptPubKey12, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo12, 0, txFrom12.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
     txTo12.vout[0].nValue = 2;
-    BOOST_CHECK(!VerifyScript(goodsig1, scriptPubKey12, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo12, 0, txFrom12.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
+    CHECK(!VerifyScript(goodsig1, scriptPubKey12, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo12, 0, txFrom12.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
 
     CScript goodsig2 = sign_multisig(scriptPubKey12, key2, CTransaction(txTo12));
-    BOOST_CHECK(VerifyScript(goodsig2, scriptPubKey12, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo12, 0, txFrom12.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
+    CHECK(VerifyScript(goodsig2, scriptPubKey12, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo12, 0, txFrom12.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
 
     CScript badsig1 = sign_multisig(scriptPubKey12, key3, CTransaction(txTo12));
-    BOOST_CHECK(!VerifyScript(badsig1, scriptPubKey12, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo12, 0, txFrom12.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
+    CHECK(!VerifyScript(badsig1, scriptPubKey12, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo12, 0, txFrom12.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
 }
 
 BOOST_AUTO_TEST_CASE(script_CHECKMULTISIG23)
@@ -1107,55 +1107,55 @@ BOOST_AUTO_TEST_CASE(script_CHECKMULTISIG23)
     std::vector<CKey> keys;
     keys.push_back(key1); keys.push_back(key2);
     CScript goodsig1 = sign_multisig(scriptPubKey23, keys, CTransaction(txTo23));
-    BOOST_CHECK(VerifyScript(goodsig1, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
+    CHECK(VerifyScript(goodsig1, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
 
     keys.clear();
     keys.push_back(key1); keys.push_back(key3);
     CScript goodsig2 = sign_multisig(scriptPubKey23, keys, CTransaction(txTo23));
-    BOOST_CHECK(VerifyScript(goodsig2, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
+    CHECK(VerifyScript(goodsig2, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
 
     keys.clear();
     keys.push_back(key2); keys.push_back(key3);
     CScript goodsig3 = sign_multisig(scriptPubKey23, keys, CTransaction(txTo23));
-    BOOST_CHECK(VerifyScript(goodsig3, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
+    CHECK(VerifyScript(goodsig3, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
 
     keys.clear();
     keys.push_back(key2); keys.push_back(key2); // Can't reuse sig
     CScript badsig1 = sign_multisig(scriptPubKey23, keys, CTransaction(txTo23));
-    BOOST_CHECK(!VerifyScript(badsig1, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
+    CHECK(!VerifyScript(badsig1, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
 
     keys.clear();
     keys.push_back(key2); keys.push_back(key1); // sigs must be in correct order
     CScript badsig2 = sign_multisig(scriptPubKey23, keys, CTransaction(txTo23));
-    BOOST_CHECK(!VerifyScript(badsig2, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
+    CHECK(!VerifyScript(badsig2, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
 
     keys.clear();
     keys.push_back(key3); keys.push_back(key2); // sigs must be in correct order
     CScript badsig3 = sign_multisig(scriptPubKey23, keys, CTransaction(txTo23));
-    BOOST_CHECK(!VerifyScript(badsig3, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
+    CHECK(!VerifyScript(badsig3, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
 
     keys.clear();
     keys.push_back(key4); keys.push_back(key2); // sigs must match pubkeys
     CScript badsig4 = sign_multisig(scriptPubKey23, keys, CTransaction(txTo23));
-    BOOST_CHECK(!VerifyScript(badsig4, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
+    CHECK(!VerifyScript(badsig4, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
 
     keys.clear();
     keys.push_back(key1); keys.push_back(key4); // sigs must match pubkeys
     CScript badsig5 = sign_multisig(scriptPubKey23, keys, CTransaction(txTo23));
-    BOOST_CHECK(!VerifyScript(badsig5, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
+    CHECK(!VerifyScript(badsig5, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_EVAL_FALSE, ScriptErrorString(err));
 
     keys.clear(); // Must have signatures
     CScript badsig6 = sign_multisig(scriptPubKey23, keys, CTransaction(txTo23));
-    BOOST_CHECK(!VerifyScript(badsig6, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
-    BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_INVALID_STACK_OPERATION, ScriptErrorString(err));
+    CHECK(!VerifyScript(badsig6, scriptPubKey23, nullptr, gFlags, MutableTransactionSignatureChecker(&txTo23, 0, txFrom23.vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &err));
+    CHECK_MESSAGE(err == SCRIPT_ERR_INVALID_STACK_OPERATION, ScriptErrorString(err));
 }
 
 /** Return the TxoutType of a script without exposing Solver details. */
@@ -1167,25 +1167,25 @@ static TxoutType GetTxoutType(const CScript& output_script)
 
 #define CHECK_SCRIPT_STATIC_SIZE(script, expected_size)                   \
     do {                                                                  \
-        BOOST_CHECK_EQUAL((script).size(), (expected_size));              \
-        BOOST_CHECK_EQUAL((script).capacity(), CScriptBase::STATIC_SIZE); \
-        BOOST_CHECK_EQUAL((script).allocated_memory(), 0);                \
+        CHECK_EQUAL((script).size(), static_cast<std::remove_cvref_t<decltype((script).size())>>(expected_size));              \
+        CHECK_EQUAL((script).capacity(), CScriptBase::STATIC_SIZE); \
+        CHECK_EQUAL((script).allocated_memory(), std::remove_cvref_t<decltype((script).allocated_memory())>{0});                \
     } while (0)
 
 #define CHECK_SCRIPT_DYNAMIC_SIZE(script, expected_size, expected_extra)                 \
     do {                                                                 \
-        BOOST_CHECK_EQUAL((script).size(), (expected_size));             \
-        BOOST_CHECK_EQUAL((script).capacity(), (expected_extra));         \
-        BOOST_CHECK_EQUAL((script).allocated_memory(), (expected_extra)); \
+        CHECK_EQUAL((script).size(), static_cast<std::remove_cvref_t<decltype((script).size())>>(expected_size));             \
+        CHECK_EQUAL((script).capacity(), static_cast<std::remove_cvref_t<decltype((script).capacity())>>(expected_extra));         \
+        CHECK_EQUAL((script).allocated_memory(), static_cast<std::remove_cvref_t<decltype((script).allocated_memory())>>(expected_extra)); \
     } while (0)
 
 BOOST_AUTO_TEST_CASE(script_size_and_capacity_test)
 {
-    BOOST_CHECK_EQUAL(sizeof(CompressedScript), 40);
-    BOOST_CHECK_EQUAL(sizeof(CScriptBase), 40);
-    BOOST_CHECK_NE(sizeof(CScriptBase), sizeof(prevector<CScriptBase::STATIC_SIZE + 1, uint8_t>)); // CScriptBase size should be set to avoid wasting space in padding
-    BOOST_CHECK_EQUAL(sizeof(CScript), 40);
-    BOOST_CHECK_EQUAL(sizeof(CTxOut), 48);
+    CHECK_EQUAL(sizeof(CompressedScript), std::remove_cvref_t<decltype(sizeof(CompressedScript))>{40});
+    CHECK_EQUAL(sizeof(CScriptBase), std::remove_cvref_t<decltype(sizeof(CScriptBase))>{40});
+    CHECK_NE(sizeof(CScriptBase), sizeof(prevector<CScriptBase::STATIC_SIZE + 1, uint8_t>)); // CScriptBase size should be set to avoid wasting space in padding
+    CHECK_EQUAL(sizeof(CScript), std::remove_cvref_t<decltype(sizeof(CScript))>{40});
+    CHECK_EQUAL(sizeof(CTxOut), std::remove_cvref_t<decltype(sizeof(CTxOut))>{48});
 
     CKey dummy_key;
     dummy_key.MakeNewKey(/*fCompressed=*/true);
@@ -1194,49 +1194,49 @@ BOOST_AUTO_TEST_CASE(script_size_and_capacity_test)
     // Small OP_RETURN has direct allocation
     {
         const auto script{CScript() << OP_RETURN << std::vector<uint8_t>(10, 0xaa)};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::NULL_DATA);
-        CHECK_SCRIPT_STATIC_SIZE(script, 12);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::NULL_DATA);
+        CHECK_SCRIPT_STATIC_SIZE(script, size_t{12});
     }
 
     // P2WPKH has direct allocation
     {
         const auto script{GetScriptForDestination(WitnessV0KeyHash{PKHash{dummy_pubkey}})};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::WITNESS_V0_KEYHASH);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::WITNESS_V0_KEYHASH);
         CHECK_SCRIPT_STATIC_SIZE(script, 22);
     }
 
     // P2SH has direct allocation
     {
         const auto script{GetScriptForDestination(ScriptHash{CScript{} << OP_TRUE})};
-        BOOST_CHECK(script.IsPayToScriptHash());
+        CHECK(script.IsPayToScriptHash());
         CHECK_SCRIPT_STATIC_SIZE(script, 23);
     }
 
     // P2PKH has direct allocation
     {
         const auto script{GetScriptForDestination(PKHash{dummy_pubkey})};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEYHASH);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEYHASH);
         CHECK_SCRIPT_STATIC_SIZE(script, 25);
     }
 
     // P2WSH has direct allocation
     {
         const auto script{GetScriptForDestination(WitnessV0ScriptHash{CScript{} << OP_TRUE})};
-        BOOST_CHECK(script.IsPayToWitnessScriptHash());
+        CHECK(script.IsPayToWitnessScriptHash());
         CHECK_SCRIPT_STATIC_SIZE(script, 34);
     }
 
     // P2TR has direct allocation
     {
         const auto script{GetScriptForDestination(WitnessV1Taproot{XOnlyPubKey{dummy_pubkey}})};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::WITNESS_V1_TAPROOT);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::WITNESS_V1_TAPROOT);
         CHECK_SCRIPT_STATIC_SIZE(script, 34);
     }
 
     // Compressed P2PK has direct allocation
     {
         const auto script{GetScriptForRawPubKey(dummy_pubkey)};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEY);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEY);
         CHECK_SCRIPT_STATIC_SIZE(script, 35);
     }
 
@@ -1247,14 +1247,14 @@ BOOST_AUTO_TEST_CASE(script_size_and_capacity_test)
         const CPubKey uncompressed_pubkey{uncompressed_key.GetPubKey()};
 
         const auto script{GetScriptForRawPubKey(uncompressed_pubkey)};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEY);
-        CHECK_SCRIPT_DYNAMIC_SIZE(script, 67, 67);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::PUBKEY);
+        CHECK_SCRIPT_DYNAMIC_SIZE(script, size_t{67}, size_t{67});
     }
 
     // Bare multisig needs extra allocation
     {
         const auto script{GetScriptForMultisig(1, std::vector{2, dummy_pubkey})};
-        BOOST_CHECK_EQUAL(GetTxoutType(script), TxoutType::MULTISIG);
+        CHECK_EQUAL(GetTxoutType(script), TxoutType::MULTISIG);
         CHECK_SCRIPT_DYNAMIC_SIZE(script, 71, 103);
     }
 }
@@ -1280,7 +1280,7 @@ BOOST_AUTO_TEST_CASE(script_combineSigs)
         CKey key = GenerateRandomKey(/*compressed=*/i%2 == 1);
         keys.push_back(key);
         pubkeys.push_back(key.GetPubKey());
-        BOOST_CHECK(keystore.AddKey(key));
+        CHECK(keystore.AddKey(key));
     }
 
     CMutableTransaction txFrom = BuildCreditingTransaction(GetScriptForDestination(PKHash(keys[0].GetPubKey())));
@@ -1290,65 +1290,65 @@ BOOST_AUTO_TEST_CASE(script_combineSigs)
 
     SignatureData empty;
     SignatureData combined = CombineSignatures(txFrom.vout[0], txTo, empty, empty);
-    BOOST_CHECK(combined.scriptSig.empty());
+    CHECK(combined.scriptSig.empty());
 
     // Single signature case:
     SignatureData dummy;
-    BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy)); // changes scriptSig
+    CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy)); // changes scriptSig
     scriptSig = DataFromTransaction(txTo, 0, txFrom.vout[0]);
     combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty);
-    BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
+    CHECK(combined.scriptSig == scriptSig.scriptSig);
     combined = CombineSignatures(txFrom.vout[0], txTo, empty, scriptSig);
-    BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
+    CHECK(combined.scriptSig == scriptSig.scriptSig);
     SignatureData scriptSigCopy = scriptSig;
     // Signing again will give a different, valid signature:
     SignatureData dummy_b;
-    BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy_b));
+    CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy_b));
     scriptSig = DataFromTransaction(txTo, 0, txFrom.vout[0]);
     combined = CombineSignatures(txFrom.vout[0], txTo, scriptSigCopy, scriptSig);
-    BOOST_CHECK(combined.scriptSig == scriptSigCopy.scriptSig || combined.scriptSig == scriptSig.scriptSig);
+    CHECK(combined.scriptSig == scriptSigCopy.scriptSig || combined.scriptSig == scriptSig.scriptSig);
 
     // P2SH, single-signature case:
     CScript pkSingle; pkSingle << ToByteVector(keys[0].GetPubKey()) << OP_CHECKSIG;
-    BOOST_CHECK(keystore.AddCScript(pkSingle));
+    CHECK(keystore.AddCScript(pkSingle));
     scriptPubKey = GetScriptForDestination(ScriptHash(pkSingle));
     SignatureData dummy_c;
-    BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy_c));
+    CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy_c));
     scriptSig = DataFromTransaction(txTo, 0, txFrom.vout[0]);
     combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty);
-    BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
+    CHECK(combined.scriptSig == scriptSig.scriptSig);
     combined = CombineSignatures(txFrom.vout[0], txTo, empty, scriptSig);
-    BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
+    CHECK(combined.scriptSig == scriptSig.scriptSig);
     scriptSigCopy = scriptSig;
     SignatureData dummy_d;
-    BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy_d));
+    CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy_d));
     scriptSig = DataFromTransaction(txTo, 0, txFrom.vout[0]);
     combined = CombineSignatures(txFrom.vout[0], txTo, scriptSigCopy, scriptSig);
-    BOOST_CHECK(combined.scriptSig == scriptSigCopy.scriptSig || combined.scriptSig == scriptSig.scriptSig);
+    CHECK(combined.scriptSig == scriptSigCopy.scriptSig || combined.scriptSig == scriptSig.scriptSig);
 
     // Hardest case:  Multisig 2-of-3
     scriptPubKey = GetScriptForMultisig(2, pubkeys);
-    BOOST_CHECK(keystore.AddCScript(scriptPubKey));
+    CHECK(keystore.AddCScript(scriptPubKey));
     SignatureData dummy_e;
-    BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy_e));
+    CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SIGHASH_ALL, dummy_e));
     scriptSig = DataFromTransaction(txTo, 0, txFrom.vout[0]);
     combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty);
-    BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
+    CHECK(combined.scriptSig == scriptSig.scriptSig);
     combined = CombineSignatures(txFrom.vout[0], txTo, empty, scriptSig);
-    BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
+    CHECK(combined.scriptSig == scriptSig.scriptSig);
 
     // A couple of partially-signed versions:
     std::vector<unsigned char> sig1;
     uint256 hash1 = SignatureHash(scriptPubKey, txTo, 0, SIGHASH_ALL, 0, SigVersion::BASE);
-    BOOST_CHECK(keys[0].Sign(hash1, sig1));
+    CHECK(keys[0].Sign(hash1, sig1));
     sig1.push_back(SIGHASH_ALL);
     std::vector<unsigned char> sig2;
     uint256 hash2 = SignatureHash(scriptPubKey, txTo, 0, SIGHASH_NONE, 0, SigVersion::BASE);
-    BOOST_CHECK(keys[1].Sign(hash2, sig2));
+    CHECK(keys[1].Sign(hash2, sig2));
     sig2.push_back(SIGHASH_NONE);
     std::vector<unsigned char> sig3;
     uint256 hash3 = SignatureHash(scriptPubKey, txTo, 0, SIGHASH_SINGLE, 0, SigVersion::BASE);
-    BOOST_CHECK(keys[2].Sign(hash3, sig3));
+    CHECK(keys[2].Sign(hash3, sig3));
     sig3.push_back(SIGHASH_SINGLE);
 
     // Not fussy about order (or even existence) of placeholders or signatures:
@@ -1370,21 +1370,21 @@ BOOST_AUTO_TEST_CASE(script_combineSigs)
     partial3_sigs.signatures.emplace(keys[2].GetPubKey().GetID(), SigPair(keys[2].GetPubKey(), sig3));
 
     combined = CombineSignatures(txFrom.vout[0], txTo, partial1_sigs, partial1_sigs);
-    BOOST_CHECK(combined.scriptSig == partial1a);
+    CHECK(combined.scriptSig == partial1a);
     combined = CombineSignatures(txFrom.vout[0], txTo, partial1_sigs, partial2_sigs);
-    BOOST_CHECK(combined.scriptSig == complete12);
+    CHECK(combined.scriptSig == complete12);
     combined = CombineSignatures(txFrom.vout[0], txTo, partial2_sigs, partial1_sigs);
-    BOOST_CHECK(combined.scriptSig == complete12);
+    CHECK(combined.scriptSig == complete12);
     combined = CombineSignatures(txFrom.vout[0], txTo, partial1_sigs, partial2_sigs);
-    BOOST_CHECK(combined.scriptSig == complete12);
+    CHECK(combined.scriptSig == complete12);
     combined = CombineSignatures(txFrom.vout[0], txTo, partial3_sigs, partial1_sigs);
-    BOOST_CHECK(combined.scriptSig == complete13);
+    CHECK(combined.scriptSig == complete13);
     combined = CombineSignatures(txFrom.vout[0], txTo, partial2_sigs, partial3_sigs);
-    BOOST_CHECK(combined.scriptSig == complete23);
+    CHECK(combined.scriptSig == complete23);
     combined = CombineSignatures(txFrom.vout[0], txTo, partial3_sigs, partial2_sigs);
-    BOOST_CHECK(combined.scriptSig == complete23);
+    CHECK(combined.scriptSig == complete23);
     combined = CombineSignatures(txFrom.vout[0], txTo, partial3_sigs, partial3_sigs);
-    BOOST_CHECK(combined.scriptSig == partial3c);
+    CHECK(combined.scriptSig == partial3c);
 }
 
 /**
@@ -1407,7 +1407,7 @@ BOOST_AUTO_TEST_CASE(sign_invalid_miniscript)
     sig_data.tr_spenddata = builder.GetSpendData();
 
     // SignSignature can fail but it shouldn't raise an exception (nor crash).
-    BOOST_CHECK(!SignSignature(keystore, CTransaction(prev), curr, 0, SIGHASH_ALL, sig_data));
+    CHECK(!SignSignature(keystore, CTransaction(prev), curr, 0, SIGHASH_ALL, sig_data));
 }
 
 /* P2A input should be considered signed. */
@@ -1420,7 +1420,7 @@ BOOST_AUTO_TEST_CASE(sign_paytoanchor)
 
     curr.vin.emplace_back(COutPoint{prev.GetHash(), 0});
 
-    BOOST_CHECK(SignSignature(keystore, CTransaction(prev), curr, 0, SIGHASH_ALL, sig_data));
+    CHECK(SignSignature(keystore, CTransaction(prev), curr, 0, SIGHASH_ALL, sig_data));
 }
 
 BOOST_AUTO_TEST_CASE(script_standard_push)
@@ -1429,18 +1429,18 @@ BOOST_AUTO_TEST_CASE(script_standard_push)
     for (int i=0; i<67000; i++) {
         CScript script;
         script << i;
-        BOOST_CHECK_MESSAGE(script.IsPushOnly(), "Number " << i << " is not pure push.");
-        BOOST_CHECK_MESSAGE(VerifyScript(script, CScript() << OP_1, nullptr, SCRIPT_VERIFY_MINIMALDATA, BaseSignatureChecker(), &err), "Number " << i << " push is not minimal data.");
-        BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
+        CHECK_MESSAGE(script.IsPushOnly(), "Number " << i << " is not pure push.");
+        CHECK_MESSAGE(VerifyScript(script, CScript() << OP_1, nullptr, SCRIPT_VERIFY_MINIMALDATA, BaseSignatureChecker(), &err), "Number " << i << " push is not minimal data.");
+        CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
     }
 
     for (unsigned int i=0; i<=MAX_SCRIPT_ELEMENT_SIZE; i++) {
         std::vector<unsigned char> data(i, '\111');
         CScript script;
         script << data;
-        BOOST_CHECK_MESSAGE(script.IsPushOnly(), "Length " << i << " is not pure push.");
-        BOOST_CHECK_MESSAGE(VerifyScript(script, CScript() << OP_1, nullptr, SCRIPT_VERIFY_MINIMALDATA, BaseSignatureChecker(), &err), "Length " << i << " push is not minimal data.");
-        BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
+        CHECK_MESSAGE(script.IsPushOnly(), "Length " << i << " is not pure push.");
+        CHECK_MESSAGE(VerifyScript(script, CScript() << OP_1, nullptr, SCRIPT_VERIFY_MINIMALDATA, BaseSignatureChecker(), &err), "Length " << i << " push is not minimal data.");
+        CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
     }
 }
 
@@ -1452,45 +1452,45 @@ BOOST_AUTO_TEST_CASE(script_IsPushOnly_on_invalid_scripts)
     // not be consensus critical as the P2SH evaluation would fail first due to
     // the invalid push. Still, it doesn't hurt to test it explicitly.
     static const unsigned char direct[] = { 1 };
-    BOOST_CHECK(!CScript(direct, direct+sizeof(direct)).IsPushOnly());
+    CHECK(!CScript(direct, direct+sizeof(direct)).IsPushOnly());
 }
 
 BOOST_AUTO_TEST_CASE(script_CheckMinimalPush_boundary)
 {
     // Test the boundary at exactly 65535 bytes: must use OP_PUSHDATA2, not OP_PUSHDATA4.
     std::vector<unsigned char> data(65535, '\x42');
-    BOOST_CHECK(CheckMinimalPush(data, OP_PUSHDATA2));
-    BOOST_CHECK(!CheckMinimalPush(data, OP_PUSHDATA4));
+    CHECK(CheckMinimalPush(data, OP_PUSHDATA2));
+    CHECK(!CheckMinimalPush(data, OP_PUSHDATA4));
 }
 
 BOOST_AUTO_TEST_CASE(script_GetScriptAsm)
 {
-    BOOST_CHECK_EQUAL("OP_CHECKLOCKTIMEVERIFY", ScriptToAsmStr(CScript() << OP_NOP2, true));
-    BOOST_CHECK_EQUAL("OP_CHECKLOCKTIMEVERIFY", ScriptToAsmStr(CScript() << OP_CHECKLOCKTIMEVERIFY, true));
-    BOOST_CHECK_EQUAL("OP_CHECKLOCKTIMEVERIFY", ScriptToAsmStr(CScript() << OP_NOP2));
-    BOOST_CHECK_EQUAL("OP_CHECKLOCKTIMEVERIFY", ScriptToAsmStr(CScript() << OP_CHECKLOCKTIMEVERIFY));
+    CHECK_EQUAL(std::string_view{"OP_CHECKLOCKTIMEVERIFY"}, ScriptToAsmStr(CScript() << OP_NOP2, true));
+    CHECK_EQUAL(std::string_view{"OP_CHECKLOCKTIMEVERIFY"}, ScriptToAsmStr(CScript() << OP_CHECKLOCKTIMEVERIFY, true));
+    CHECK_EQUAL(std::string_view{"OP_CHECKLOCKTIMEVERIFY"}, ScriptToAsmStr(CScript() << OP_NOP2));
+    CHECK_EQUAL(std::string_view{"OP_CHECKLOCKTIMEVERIFY"}, ScriptToAsmStr(CScript() << OP_CHECKLOCKTIMEVERIFY));
 
     std::string derSig("304502207fa7a6d1e0ee81132a269ad84e68d695483745cde8b541e3bf630749894e342a022100c1f7ab20e13e22fb95281a870f3dcf38d782e53023ee313d741ad0cfbc0c5090");
     std::string pubKey("03b0da749730dc9b4b1f4a14d6902877a92541f5368778853d9c4a0cb7802dcfb2");
     std::vector<unsigned char> vchPubKey = ToByteVector(ParseHex(pubKey));
 
-    BOOST_CHECK_EQUAL(derSig + "00 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "00")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "80 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "80")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "[ALL] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "01")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "[NONE] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "02")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "[SINGLE] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "03")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "[ALL|ANYONECANPAY] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "81")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "[NONE|ANYONECANPAY] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "82")) << vchPubKey, true));
-    BOOST_CHECK_EQUAL(derSig + "[SINGLE|ANYONECANPAY] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "83")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "00 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "00")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "80 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "80")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "[ALL] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "01")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "[NONE] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "02")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "[SINGLE] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "03")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "[ALL|ANYONECANPAY] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "81")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "[NONE|ANYONECANPAY] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "82")) << vchPubKey, true));
+    CHECK_EQUAL(derSig + "[SINGLE|ANYONECANPAY] " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "83")) << vchPubKey, true));
 
-    BOOST_CHECK_EQUAL(derSig + "00 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "00")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "80 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "80")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "01 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "01")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "02 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "02")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "03 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "03")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "81 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "81")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "82 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "82")) << vchPubKey));
-    BOOST_CHECK_EQUAL(derSig + "83 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "83")) << vchPubKey));
+    CHECK_EQUAL(derSig + "00 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "00")) << vchPubKey));
+    CHECK_EQUAL(derSig + "80 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "80")) << vchPubKey));
+    CHECK_EQUAL(derSig + "01 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "01")) << vchPubKey));
+    CHECK_EQUAL(derSig + "02 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "02")) << vchPubKey));
+    CHECK_EQUAL(derSig + "03 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "03")) << vchPubKey));
+    CHECK_EQUAL(derSig + "81 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "81")) << vchPubKey));
+    CHECK_EQUAL(derSig + "82 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "82")) << vchPubKey));
+    CHECK_EQUAL(derSig + "83 " + pubKey, ScriptToAsmStr(CScript() << ToByteVector(ParseHex(derSig + "83")) << vchPubKey));
 }
 
 template <typename T>
@@ -1504,7 +1504,7 @@ BOOST_AUTO_TEST_CASE(script_byte_array_u8_vector_equivalence)
 {
     const CScript scriptPubKey1 = CScript() << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f"_hex_v_u8 << OP_CHECKSIG;
     const CScript scriptPubKey2 = CScript() << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f"_hex << OP_CHECKSIG;
-    BOOST_CHECK(scriptPubKey1 == scriptPubKey2);
+    CHECK(scriptPubKey1 == scriptPubKey2);
 }
 
 BOOST_AUTO_TEST_CASE(script_FindAndDelete)
@@ -1517,103 +1517,103 @@ BOOST_AUTO_TEST_CASE(script_FindAndDelete)
     s = CScript() << OP_1 << OP_2;
     d = CScript(); // delete nothing should be a no-op
     expect = s;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 0);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{0});
+    CHECK(s == expect);
 
     s = CScript() << OP_1 << OP_2 << OP_3;
     d = CScript() << OP_2;
     expect = CScript() << OP_1 << OP_3;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
+    CHECK(s == expect);
 
     s = CScript() << OP_3 << OP_1 << OP_3 << OP_3 << OP_4 << OP_3;
     d = CScript() << OP_3;
     expect = CScript() << OP_1 << OP_4;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 4);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{4});
+    CHECK(s == expect);
 
     s = ToScript("0302ff03"_hex); // PUSH 0x02ff03 onto stack
     d = ToScript("0302ff03"_hex);
     expect = CScript();
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
+    CHECK(s == expect);
 
     s = ToScript("0302ff030302ff03"_hex); // PUSH 0x02ff03 PUSH 0x02ff03
     d = ToScript("0302ff03"_hex);
     expect = CScript();
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 2);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{2});
+    CHECK(s == expect);
 
     s = ToScript("0302ff030302ff03"_hex);
     d = ToScript("02"_hex);
     expect = s; // FindAndDelete matches entire opcodes
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 0);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{0});
+    CHECK(s == expect);
 
     s = ToScript("0302ff030302ff03"_hex);
     d = ToScript("ff"_hex);
     expect = s;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 0);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{0});
+    CHECK(s == expect);
 
     // This is an odd edge case: strip of the push-three-bytes
     // prefix, leaving 02ff03 which is push-two-bytes:
     s = ToScript("0302ff030302ff03"_hex);
     d = ToScript("03"_hex);
     expect = CScript() << "ff03"_hex << "ff03"_hex;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 2);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{2});
+    CHECK(s == expect);
 
     // Byte sequence that spans multiple opcodes:
     s = ToScript("02feed5169"_hex); // PUSH(0xfeed) OP_1 OP_VERIFY
     d = ToScript("feed51"_hex);
     expect = s;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 0); // doesn't match 'inside' opcodes
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{0}); // doesn't match 'inside' opcodes
+    CHECK(s == expect);
 
     s = ToScript("02feed5169"_hex); // PUSH(0xfeed) OP_1 OP_VERIFY
     d = ToScript("02feed51"_hex);
     expect = ToScript("69"_hex);
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
+    CHECK(s == expect);
 
     s = ToScript("516902feed5169"_hex);
     d = ToScript("feed51"_hex);
     expect = s;
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 0);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{0});
+    CHECK(s == expect);
 
     s = ToScript("516902feed5169"_hex);
     d = ToScript("02feed51"_hex);
     expect = ToScript("516969"_hex);
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
+    CHECK(s == expect);
 
     s = CScript() << OP_0 << OP_0 << OP_1 << OP_1;
     d = CScript() << OP_0 << OP_1;
     expect = CScript() << OP_0 << OP_1; // FindAndDelete is single-pass
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
+    CHECK(s == expect);
 
     s = CScript() << OP_0 << OP_0 << OP_1 << OP_0 << OP_1 << OP_1;
     d = CScript() << OP_0 << OP_1;
     expect = CScript() << OP_0 << OP_1; // FindAndDelete is single-pass
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 2);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{2});
+    CHECK(s == expect);
 
     // Another weird edge case:
     // End with invalid push (not enough data)...
     s = ToScript("0003feed"_hex);
     d = ToScript("03feed"_hex); // ... can remove the invalid push
     expect = ToScript("00"_hex);
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
+    CHECK(s == expect);
 
     s = ToScript("0003feed"_hex);
     d = ToScript("00"_hex);
     expect = ToScript("03feed"_hex);
-    BOOST_CHECK_EQUAL(FindAndDelete(s, d), 1);
-    BOOST_CHECK(s == expect);
+    CHECK_EQUAL(FindAndDelete(s, d), std::remove_cvref_t<decltype(FindAndDelete(s, d))>{1});
+    CHECK(s == expect);
 }
 
 BOOST_AUTO_TEST_CASE(script_HasValidOps)
@@ -1621,13 +1621,13 @@ BOOST_AUTO_TEST_CASE(script_HasValidOps)
     // Exercise the HasValidOps functionality
     CScript script;
     script = ToScript("76a9141234567890abcdefa1a2a3a4a5a6a7a8a9a0aaab88ac"_hex); // Normal script
-    BOOST_CHECK(script.HasValidOps());
+    CHECK(script.HasValidOps());
     script = ToScript("76a914ff34567890abcdefa1a2a3a4a5a6a7a8a9a0aaab88ac"_hex);
-    BOOST_CHECK(script.HasValidOps());
+    CHECK(script.HasValidOps());
     script = ToScript("ff88ac"_hex); // Script with OP_INVALIDOPCODE explicit
-    BOOST_CHECK(!script.HasValidOps());
+    CHECK(!script.HasValidOps());
     script = ToScript("88acc0"_hex); // Script with undefined opcode
-    BOOST_CHECK(!script.HasValidOps());
+    CHECK(!script.HasValidOps());
 }
 
 BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
@@ -1652,12 +1652,12 @@ BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
         PrecomputedTransactionData txdata;
         txdata.Init(tx, std::vector<CTxOut>{utxos}, true);
 
-        BOOST_CHECK(txdata.m_bip341_taproot_ready);
-        BOOST_CHECK_EQUAL(HexStr(txdata.m_spent_amounts_single_hash), vec["intermediary"]["hashAmounts"].get_str());
-        BOOST_CHECK_EQUAL(HexStr(txdata.m_outputs_single_hash), vec["intermediary"]["hashOutputs"].get_str());
-        BOOST_CHECK_EQUAL(HexStr(txdata.m_prevouts_single_hash), vec["intermediary"]["hashPrevouts"].get_str());
-        BOOST_CHECK_EQUAL(HexStr(txdata.m_spent_scripts_single_hash), vec["intermediary"]["hashScriptPubkeys"].get_str());
-        BOOST_CHECK_EQUAL(HexStr(txdata.m_sequences_single_hash), vec["intermediary"]["hashSequences"].get_str());
+        CHECK(txdata.m_bip341_taproot_ready);
+        CHECK_EQUAL(HexStr(txdata.m_spent_amounts_single_hash), vec["intermediary"]["hashAmounts"].get_str());
+        CHECK_EQUAL(HexStr(txdata.m_outputs_single_hash), vec["intermediary"]["hashOutputs"].get_str());
+        CHECK_EQUAL(HexStr(txdata.m_prevouts_single_hash), vec["intermediary"]["hashPrevouts"].get_str());
+        CHECK_EQUAL(HexStr(txdata.m_spent_scripts_single_hash), vec["intermediary"]["hashScriptPubkeys"].get_str());
+        CHECK_EQUAL(HexStr(txdata.m_sequences_single_hash), vec["intermediary"]["hashSequences"].get_str());
 
         for (const auto& input : vec["inputSpending"].getValues()) {
             int txinpos = input["given"]["txinIndex"].getInt<int>();
@@ -1676,29 +1676,29 @@ BOOST_AUTO_TEST_CASE(bip341_keypath_test_vectors)
 
             // Compute and verify (internal) public key.
             XOnlyPubKey pubkey{key.GetPubKey()};
-            BOOST_CHECK_EQUAL(HexStr(pubkey), input["intermediary"]["internalPubkey"].get_str());
+            CHECK_EQUAL(HexStr(pubkey), input["intermediary"]["internalPubkey"].get_str());
 
             // Sign and verify signature.
             FlatSigningProvider provider;
             provider.keys[key.GetPubKey().GetID()] = key;
             MutableTransactionSignatureCreator creator(tx, txinpos, utxos[txinpos].nValue, &txdata, hashtype);
             std::vector<unsigned char> signature;
-            BOOST_CHECK(creator.CreateSchnorrSig(provider, signature, pubkey, nullptr, &merkle_root, SigVersion::TAPROOT));
-            BOOST_CHECK_EQUAL(HexStr(signature), input["expected"]["witness"][0].get_str());
+            CHECK(creator.CreateSchnorrSig(provider, signature, pubkey, nullptr, &merkle_root, SigVersion::TAPROOT));
+            CHECK_EQUAL(HexStr(signature), input["expected"]["witness"][0].get_str());
 
             // We can't observe the tweak used inside the signing logic, so verify by recomputing it.
-            BOOST_CHECK_EQUAL(HexStr(pubkey.ComputeTapTweakHash(merkle_root.IsNull() ? nullptr : &merkle_root)), input["intermediary"]["tweak"].get_str());
+            CHECK_EQUAL(HexStr(pubkey.ComputeTapTweakHash(merkle_root.IsNull() ? nullptr : &merkle_root)), input["intermediary"]["tweak"].get_str());
 
             // We can't observe the sighash used inside the signing logic, so verify by recomputing it.
             ScriptExecutionData sed;
             sed.m_annex_init = true;
             sed.m_annex_present = false;
             uint256 sighash;
-            BOOST_CHECK(SignatureHashSchnorr(sighash, sed, tx, txinpos, hashtype, SigVersion::TAPROOT, txdata, MissingDataBehavior::FAIL));
-            BOOST_CHECK_EQUAL(HexStr(sighash), input["intermediary"]["sigHash"].get_str());
+            CHECK(SignatureHashSchnorr(sighash, sed, tx, txinpos, hashtype, SigVersion::TAPROOT, txdata, MissingDataBehavior::FAIL));
+            CHECK_EQUAL(HexStr(sighash), input["intermediary"]["sigHash"].get_str());
 
             // To verify the sigmsg, hash the expected sigmsg, and compare it with the (expected) sighash.
-            BOOST_CHECK_EQUAL(HexStr((HashWriter{HASHER_TAPSIGHASH} << std::span<const uint8_t>{ParseHex(input["intermediary"]["sigMsg"].get_str())}).GetSHA256()), input["intermediary"]["sigHash"].get_str());
+            CHECK_EQUAL(HexStr((HashWriter{HASHER_TAPSIGHASH} << std::span<const uint8_t>{ParseHex(input["intermediary"]["sigMsg"].get_str())}).GetSHA256()), input["intermediary"]["sigHash"].get_str());
         }
     }
 }
@@ -1708,7 +1708,7 @@ BOOST_AUTO_TEST_CASE(compute_tapbranch)
     constexpr uint256 hash1{"8ad69ec7cf41c2a4001fd1f738bf1e505ce2277acdcaa63fe4765192497f47a7"};
     constexpr uint256 hash2{"f224a923cd0021ab202ab139cc56802ddb92dcfc172b9212261a539df79a112a"};
     constexpr uint256 result{"a64c5b7b943315f9b805d7a7296bedfcfd08919270a1f7a1466e98f8693d8cd9"};
-    BOOST_CHECK_EQUAL(ComputeTapbranchHash(hash1, hash2), result);
+    CHECK_EQUAL(ComputeTapbranchHash(hash1, hash2), result);
 }
 
 BOOST_AUTO_TEST_CASE(compute_tapleaf)
@@ -1717,19 +1717,19 @@ BOOST_AUTO_TEST_CASE(compute_tapleaf)
     constexpr uint256 tlc0{"edbc10c272a1215dcdcc11d605b9027b5ad6ed97cd45521203f136767b5b9c06"};
     constexpr uint256 tlc2{"8b5c4f90ae6bf76e259dbef5d8a59df06359c391b59263741b25eca76451b27a"};
 
-    BOOST_CHECK_EQUAL(ComputeTapleafHash(0xc0, std::span(script)), tlc0);
-    BOOST_CHECK_EQUAL(ComputeTapleafHash(0xc2, std::span(script)), tlc2);
+    CHECK_EQUAL(ComputeTapleafHash(0xc0, std::span(script)), tlc0);
+    CHECK_EQUAL(ComputeTapleafHash(0xc2, std::span(script)), tlc2);
 }
 
 BOOST_AUTO_TEST_CASE(formatscriptflags)
 {
     // quick check that FormatScriptFlags reports any unknown/unexpected bits
-    BOOST_CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_P2SH), "P2SH");
-    BOOST_CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_TAPROOT), "P2SH,TAPROOT");
-    BOOST_CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_P2SH | script_verify_flags::from_int(1u<<31)), "P2SH,0x80000000");
-    BOOST_CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_TAPROOT | script_verify_flags::from_int(1u<<27)), "TAPROOT,0x08000000");
-    BOOST_CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_TAPROOT | script_verify_flags::from_int((1u<<28) | (1ull<<58))), "TAPROOT,0x400000010000000");
-    BOOST_CHECK_EQUAL(FormatScriptFlags(script_verify_flags::from_int(1u<<26)), "0x04000000");
+    CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_P2SH), std::string_view{"P2SH"});
+    CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_TAPROOT), std::string_view{"P2SH,TAPROOT"});
+    CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_P2SH | script_verify_flags::from_int(1u<<31)), std::string_view{"P2SH,0x80000000"});
+    CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_TAPROOT | script_verify_flags::from_int(1u<<27)), std::string_view{"TAPROOT,0x08000000"});
+    CHECK_EQUAL(FormatScriptFlags(SCRIPT_VERIFY_TAPROOT | script_verify_flags::from_int((1u<<28) | (1ull<<58))), std::string_view{"TAPROOT,0x400000010000000"});
+    CHECK_EQUAL(FormatScriptFlags(script_verify_flags::from_int(1u<<26)), std::string_view{"0x04000000"});
 }
 
 BOOST_AUTO_TEST_SUITE_END()

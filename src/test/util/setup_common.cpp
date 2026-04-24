@@ -326,10 +326,10 @@ void ChainTestingSetup::LoadVerifyActivateChainstate()
     options.check_level = m_args.GetIntArg("-checklevel", DEFAULT_CHECKLEVEL);
     options.require_full_verification = m_args.IsArgSet("-checkblocks") || m_args.IsArgSet("-checklevel");
     auto [status, error] = LoadChainstate(chainman, m_kernel_cache_sizes, options);
-    assert(status == node::ChainstateLoadStatus::SUCCESS);
+    CHECK(status == node::ChainstateLoadStatus::SUCCESS);
 
     std::tie(status, error) = VerifyLoadedChainstate(chainman, options);
-    assert(status == node::ChainstateLoadStatus::SUCCESS);
+    CHECK(status == node::ChainstateLoadStatus::SUCCESS);
 
     BlockValidationState state;
     if (!chainman.ActiveChainstate().ActivateBestChain(state)) {
@@ -388,7 +388,7 @@ TestChain100Setup::TestChain100Setup(
 
     {
         LOCK(::cs_main);
-        assert(
+        CHECK(
             m_node.chainman->ActiveChain().Tip()->GetBlockHash().ToString() ==
             "0c8c5f79505775a0f6aed6aca2350718ceb9c6f2c878667864d5c7a6d8ffa2a6");
     }
@@ -481,15 +481,15 @@ std::pair<CMutableTransaction, CAmount> TestChain100Setup::CreateValidTransactio
     // - Default signature hashing type
     int nHashType = SIGHASH_ALL;
     std::map<int, bilingual_str> input_errors;
-    assert(SignTransaction(mempool_txn, &keystore, input_coins, nHashType, input_errors));
+    CHECK(SignTransaction(mempool_txn, &keystore, input_coins, nHashType, input_errors));
     CAmount current_fee = inputs_amount - std::accumulate(outputs.begin(), outputs.end(), CAmount(0),
         [](const CAmount& acc, const CTxOut& out) {
         return acc + out.nValue;
     });
     // Deduct fees from fee_output to meet feerate if set
     if (feerate.has_value()) {
-        assert(fee_output.has_value());
-        assert(fee_output.value() < mempool_txn.vout.size());
+        CHECK(fee_output.has_value());
+        CHECK(fee_output.value() < mempool_txn.vout.size());
         CAmount target_fee = feerate.value().GetFee(GetVirtualTransactionSize(CTransaction{mempool_txn}));
         CAmount deduction = target_fee - current_fee;
         if (deduction > 0) {
@@ -498,7 +498,7 @@ std::pair<CMutableTransaction, CAmount> TestChain100Setup::CreateValidTransactio
             mempool_txn.vout[fee_output.value()].nValue -= deduction;
             // Re-sign since an output has changed
             input_errors.clear();
-            assert(SignTransaction(mempool_txn, &keystore, input_coins, nHashType, input_errors));
+            CHECK(SignTransaction(mempool_txn, &keystore, input_coins, nHashType, input_errors));
             current_fee = target_fee;
         }
     }
@@ -517,7 +517,7 @@ CMutableTransaction TestChain100Setup::CreateValidMempoolTransaction(const std::
     if (submit) {
         LOCK(cs_main);
         const MempoolAcceptResult result = m_node.chainman->ProcessTransaction(MakeTransactionRef(mempool_txn));
-        assert(result.m_result_type == MempoolAcceptResult::ResultType::VALID);
+        CHECK(result.m_result_type == MempoolAcceptResult::ResultType::VALID);
     }
     return mempool_txn;
 }

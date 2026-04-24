@@ -11,6 +11,7 @@
 #include <wallet/test/util.h>
 #include <wallet/test/wallet_test_fixture.h>
 
+#include <test/util/check.h>
 #include <boost/test/unit_test.hpp>
 
 namespace wallet {
@@ -34,11 +35,11 @@ BOOST_FIXTURE_TEST_CASE(SubtractFee, TestChain100Setup)
         // We need to use a change type with high cost of change so that the leftover amount will be dropped to fee instead of added as a change output
         coin_control.m_change_type = OutputType::LEGACY;
         auto res = CreateTransaction(*wallet, {recipient}, /*change_pos=*/std::nullopt, coin_control);
-        BOOST_CHECK(res);
+        CHECK(res);
         const auto& txr = *res;
-        BOOST_CHECK_EQUAL(txr.tx->vout.size(), 1);
-        BOOST_CHECK_EQUAL(txr.tx->vout[0].nValue, recipient.nAmount + leftover_input_amount - txr.fee);
-        BOOST_CHECK_GT(txr.fee, 0);
+        CHECK_EQUAL(txr.tx->vout.size(), std::remove_cvref_t<decltype(txr.tx->vout.size())>{1});
+        CHECK_EQUAL(txr.tx->vout[0].nValue, recipient.nAmount + leftover_input_amount - txr.fee);
+        CHECK_GT(txr.fee, 0);
         return txr.fee;
     };
 
@@ -48,17 +49,17 @@ BOOST_FIXTURE_TEST_CASE(SubtractFee, TestChain100Setup)
 
     // Send slightly less than full input amount to recipient, check leftover
     // input amount is paid to recipient not the miner (to_reduce == fee - 123)
-    BOOST_CHECK_EQUAL(fee, check_tx(123));
+    CHECK_EQUAL(fee, check_tx(123));
 
     // Send full input minus fee amount to recipient, check leftover input
     // amount is paid to recipient not the miner (to_reduce == 0)
-    BOOST_CHECK_EQUAL(fee, check_tx(fee));
+    CHECK_EQUAL(fee, check_tx(fee));
 
     // Send full input minus more than the fee amount to recipient, check
     // leftover input amount is paid to recipient not the miner (to_reduce ==
     // -123). This overpays the recipient instead of overpaying the miner more
     // than double the necessary fee.
-    BOOST_CHECK_EQUAL(fee, check_tx(fee + 123));
+    CHECK_EQUAL(fee, check_tx(fee + 123));
 }
 
 BOOST_FIXTURE_TEST_CASE(wallet_duplicated_preset_inputs_test, TestChain100Setup)
@@ -97,11 +98,11 @@ BOOST_FIXTURE_TEST_CASE(wallet_duplicated_preset_inputs_test, TestChain100Setup)
     // so that the recipient's amount is no longer equal to the user's selected target of 299 BTC.
 
     // First case, use 'subtract_fee_from_outputs=true'
-    BOOST_CHECK(!CreateTransaction(*wallet, recipients, /*change_pos=*/std::nullopt, coin_control));
+    CHECK(!CreateTransaction(*wallet, recipients, /*change_pos=*/std::nullopt, coin_control));
 
     // Second case, don't use 'subtract_fee_from_outputs'.
     recipients[0].fSubtractFeeFromAmount = false;
-    BOOST_CHECK(!CreateTransaction(*wallet, recipients, /*change_pos=*/std::nullopt, coin_control));
+    CHECK(!CreateTransaction(*wallet, recipients, /*change_pos=*/std::nullopt, coin_control));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -9,6 +9,7 @@
 #include <primitives/transaction.h>
 #include <streams.h>
 #include <test/fuzz/fuzz.h>
+#include <test/util/check.h>
 
 FUZZ_TARGET(tx_out)
 {
@@ -27,5 +28,5 @@ FUZZ_TARGET(tx_out)
     (void)tx_out.ToString();
     (void)tx_out.IsNull();
     tx_out.SetNull();
-    assert(tx_out.IsNull());
+    CHECK(tx_out.IsNull());
 }

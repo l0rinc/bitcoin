@@ -14,6 +14,7 @@
 #include <wallet/spend.h>
 #include <wallet/test/util.h>
 #include <wallet/wallet.h>
+#include <test/util/check.h>
 
 namespace wallet {
 
@@ -32,7 +33,7 @@ struct FuzzedWallet {
             wallet->SetLastBlockProcessed(height, chain.getBlockHash(height));
         }
         wallet->m_keypool_size = 1; // Avoid timeout in TopUp()
-        assert(wallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS));
+        CHECK(wallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS));
         ImportDescriptors(seed_insecure);
     }
     void ImportDescriptors(const std::string& seed_insecure)
@@ -51,13 +52,13 @@ struct FuzzedWallet {
                 FlatSigningProvider keys;
                 std::string error;
                 auto parsed_desc = std::move(Parse(descriptor, keys, error, /*require_checksum=*/false).at(0));
-                assert(parsed_desc);
-                assert(error.empty());
-                assert(parsed_desc->IsRange());
-                assert(parsed_desc->IsSingleType());
-                assert(!keys.keys.empty());
+                CHECK(parsed_desc);
+                CHECK(error.empty());
+                CHECK(parsed_desc->IsRange());
+                CHECK(parsed_desc->IsSingleType());
+                CHECK(!keys.keys.empty());
                 WalletDescriptor w_desc{std::move(parsed_desc), /*creation_time=*/0, /*range_start=*/0, /*range_end=*/1, /*next_index=*/0};
-                assert(!wallet->GetDescriptorScriptPubKeyMan(w_desc));
+                CHECK(!wallet->GetDescriptorScriptPubKeyMan(w_desc));
                 LOCK(wallet->cs_wallet);
                 auto& spk_manager = Assert(wallet->AddWalletDescriptor(w_desc, keys, /*label=*/"", internal))->get();
                 wallet->AddActiveScriptPubKeyMan(spk_manager.GetID(), *Assert(w_desc.descriptor->GetOutputType()), internal);

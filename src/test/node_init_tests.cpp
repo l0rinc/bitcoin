@@ -48,8 +48,8 @@ BOOST_AUTO_TEST_CASE(init_test)
 
     // Run through initialization and shutdown code.
     TestInit init{m_node};
-    BOOST_CHECK(AppInitInterfaces(m_node));
-    BOOST_CHECK(AppInitMain(m_node));
+    CHECK(AppInitInterfaces(m_node));
+    CHECK(AppInitMain(m_node));
     Interrupt(m_node);
     Shutdown(m_node);
 }

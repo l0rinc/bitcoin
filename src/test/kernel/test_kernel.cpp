@@ -84,7 +84,7 @@ void check_equal(std::span<const std::byte> _actual, std::span<const std::byte> 
 {
     std::span<const uint8_t> actual{reinterpret_cast<const unsigned char*>(_actual.data()), _actual.size()};
     std::span<const uint8_t> expected{reinterpret_cast<const unsigned char*>(_expected.data()), _expected.size()};
-    BOOST_CHECK_EQUAL_COLLECTIONS(
+    CHECK_EQUAL_COLLECTIONS(
         actual.begin(), actual.end(),
         expected.begin(), expected.end());
 }
@@ -117,7 +117,7 @@ class TestKernelNotifications : public KernelNotifications
 public:
     void HeaderTipHandler(SynchronizationState state, int64_t height, int64_t timestamp, bool presync) override
     {
-        BOOST_CHECK_GT(timestamp, 0);
+        CHECK_GT(timestamp, 0);
     }
 
     void WarningSetHandler(Warning warning, std::string_view message) override
@@ -227,42 +227,42 @@ void run_verify_test(
     auto status = ScriptVerifyStatus::OK;
 
     if (taproot) {
-        BOOST_CHECK(spent_script_pubkey.Verify(
+        CHECK(spent_script_pubkey.Verify(
             amount,
             spending_tx,
             precomputed_txdata,
             input_index,
             ScriptVerificationFlags::ALL,
             status));
-        BOOST_CHECK(status == ScriptVerifyStatus::OK);
+        CHECK(status == ScriptVerifyStatus::OK);
     } else {
-        BOOST_CHECK(!spent_script_pubkey.Verify(
+        CHECK(!spent_script_pubkey.Verify(
             amount,
             spending_tx,
             precomputed_txdata,
             input_index,
             ScriptVerificationFlags::ALL,
             status));
-        BOOST_CHECK(status == ScriptVerifyStatus::ERROR_SPENT_OUTPUTS_REQUIRED);
+        CHECK(status == ScriptVerifyStatus::ERROR_SPENT_OUTPUTS_REQUIRED);
     }
 
-    BOOST_CHECK(spent_script_pubkey.Verify(
+    CHECK(spent_script_pubkey.Verify(
         amount,
         spending_tx,
         precomputed_txdata,
         input_index,
         VERIFY_ALL_PRE_TAPROOT,
         status));
-    BOOST_CHECK(status == ScriptVerifyStatus::OK);
+    CHECK(status == ScriptVerifyStatus::OK);
 
-    BOOST_CHECK(spent_script_pubkey.Verify(
+    CHECK(spent_script_pubkey.Verify(
         0,
         spending_tx,
         precomputed_txdata,
         input_index,
         VERIFY_ALL_PRE_SEGWIT,
         status));
-    BOOST_CHECK(status == ScriptVerifyStatus::OK);
+    CHECK(status == ScriptVerifyStatus::OK);
 }
 
 template <typename T>
@@ -273,19 +273,19 @@ concept HasToBytes = requires(T t) {
 template <typename T>
 void CheckHandle(T object, T distinct_object)
 {
-    BOOST_CHECK(object.get() != nullptr);
-    BOOST_CHECK(distinct_object.get() != nullptr);
-    BOOST_CHECK(object.get() != distinct_object.get());
+    CHECK(object.get() != nullptr);
+    CHECK(distinct_object.get() != nullptr);
+    CHECK(object.get() != distinct_object.get());
 
     if constexpr (HasToBytes<T>) {
         const auto object_bytes = object.ToBytes();
         const auto distinct_bytes = distinct_object.ToBytes();
-        BOOST_CHECK(!std::ranges::equal(object_bytes, distinct_bytes));
+        CHECK(!std::ranges::equal(object_bytes, distinct_bytes));
     }
 
     // Copy constructor
     T object2(distinct_object);
-    BOOST_CHECK_NE(distinct_object.get(), object2.get());
+    CHECK_NE(distinct_object.get(), object2.get());
     if constexpr (HasToBytes<T>) {
         check_equal(distinct_object.ToBytes(), object2.ToBytes());
     }
@@ -293,7 +293,7 @@ void CheckHandle(T object, T distinct_object)
     // Copy assignment
     T object3{distinct_object};
     object2 = object3;
-    BOOST_CHECK_NE(object3.get(), object2.get());
+    CHECK_NE(object3.get(), object2.get());
     if constexpr (HasToBytes<T>) {
         check_equal(object3.ToBytes(), object2.ToBytes());
     }
@@ -301,8 +301,8 @@ void CheckHandle(T object, T distinct_object)
     // Move constructor
     auto* original_ptr = object2.get();
     T object4{std::move(object2)};
-    BOOST_CHECK_EQUAL(object4.get(), original_ptr);
-    BOOST_CHECK_EQUAL(object2.get(), nullptr); // NOLINT(bugprone-use-after-move)
+    CHECK_EQUAL(object4.get(), original_ptr);
+    CHECK(object2.get() == nullptr); // NOLINT(bugprone-use-after-move)
     if constexpr (HasToBytes<T>) {
         check_equal(object4.ToBytes(), object3.ToBytes());
     }
@@ -310,8 +310,8 @@ void CheckHandle(T object, T distinct_object)
     // Move assignment
     original_ptr = object4.get();
     object2 = std::move(object4);
-    BOOST_CHECK_EQUAL(object2.get(), original_ptr);
-    BOOST_CHECK_EQUAL(object4.get(), nullptr); // NOLINT(bugprone-use-after-move)
+    CHECK_EQUAL(object2.get(), original_ptr);
+    CHECK(object4.get() == nullptr); // NOLINT(bugprone-use-after-move)
     if constexpr (HasToBytes<T>) {
         check_equal(object2.ToBytes(), object3.ToBytes());
     }
@@ -323,70 +323,70 @@ void CheckRange(const RangeType& range, size_t expected_size)
 {
     using value_type = std::ranges::range_value_t<RangeType>;
 
-    BOOST_CHECK_EQUAL(range.size(), expected_size);
-    BOOST_REQUIRE(range.size() > 0); // Some checks below assume a non-empty range
-    BOOST_REQUIRE(!range.empty());
+    CHECK_EQUAL(range.size(), expected_size);
+    CHECK(range.size() > 0); // Some checks below assume a non-empty range
+    CHECK(!range.empty());
 
-    BOOST_CHECK(range.begin() != range.end());
-    BOOST_CHECK_EQUAL(std::distance(range.begin(), range.end()), static_cast<std::ptrdiff_t>(expected_size));
-    BOOST_CHECK(range.cbegin() == range.begin());
-    BOOST_CHECK(range.cend() == range.end());
+    CHECK(range.begin() != range.end());
+    CHECK_EQUAL(std::distance(range.begin(), range.end()), static_cast<std::ptrdiff_t>(expected_size));
+    CHECK(range.cbegin() == range.begin());
+    CHECK(range.cend() == range.end());
 
     for (size_t i = 0; i < range.size(); ++i) {
-        BOOST_CHECK_EQUAL(range[i].get(), (*(range.begin() + i)).get());
+        CHECK_EQUAL(range[i].get(), (*(range.begin() + i)).get());
     }
 
-    BOOST_CHECK_THROW(range.at(expected_size), std::out_of_range);
+    CHECK_THROW(range.at(expected_size), std::out_of_range);
 
-    BOOST_CHECK_EQUAL(range.front().get(), range[0].get());
-    BOOST_CHECK_EQUAL(range.back().get(), range[expected_size - 1].get());
+    CHECK_EQUAL(range.front().get(), range[0].get());
+    CHECK_EQUAL(range.back().get(), range[expected_size - 1].get());
 
     auto it = range.begin();
     auto it_copy = it;
     ++it;
-    BOOST_CHECK(it != it_copy);
+    CHECK(it != it_copy);
     --it;
-    BOOST_CHECK(it == it_copy);
+    CHECK(it == it_copy);
     it = range.begin();
     auto old_it = it++;
-    BOOST_CHECK(old_it == range.begin());
-    BOOST_CHECK(it == range.begin() + 1);
+    CHECK(old_it == range.begin());
+    CHECK(it == range.begin() + 1);
     old_it = it--;
-    BOOST_CHECK(old_it == range.begin() + 1);
-    BOOST_CHECK(it == range.begin());
+    CHECK(old_it == range.begin() + 1);
+    CHECK(it == range.begin());
 
     it = range.begin();
     it += 2;
-    BOOST_CHECK(it == range.begin() + 2);
+    CHECK(it == range.begin() + 2);
     it -= 2;
-    BOOST_CHECK(it == range.begin());
+    CHECK(it == range.begin());
 
-    BOOST_CHECK(range.begin() < range.end());
-    BOOST_CHECK(range.begin() <= range.end());
-    BOOST_CHECK(range.end() > range.begin());
-    BOOST_CHECK(range.end() >= range.begin());
-    BOOST_CHECK(range.begin() == range.begin());
+    CHECK(range.begin() < range.end());
+    CHECK(range.begin() <= range.end());
+    CHECK(range.end() > range.begin());
+    CHECK(range.end() >= range.begin());
+    CHECK(range.begin() == range.begin());
 
-    BOOST_CHECK_EQUAL(range.begin()[0].get(), range[0].get());
+    CHECK_EQUAL(range.begin()[0].get(), range[0].get());
 
     size_t count = 0;
     for (auto rit = range.end(); rit != range.begin();) {
         --rit;
         ++count;
     }
-    BOOST_CHECK_EQUAL(count, expected_size);
+    CHECK_EQUAL(count, expected_size);
 
     std::vector<value_type> collected;
     for (const auto& elem : range) {
         collected.push_back(elem);
     }
-    BOOST_CHECK_EQUAL(collected.size(), expected_size);
+    CHECK_EQUAL(collected.size(), expected_size);
 
-    BOOST_CHECK_EQUAL(std::ranges::size(range), expected_size);
+    CHECK_EQUAL(std::ranges::size(range), expected_size);
 
     it = range.begin();
     auto it2 = 1 + it;
-    BOOST_CHECK(it2 == it + 1);
+    CHECK(it2 == it + 1);
 }
 
 BOOST_AUTO_TEST_CASE(btck_transaction_tests)
@@ -398,19 +398,19 @@ BOOST_AUTO_TEST_CASE(btck_transaction_tests)
     CheckHandle(tx, tx2);
 
     auto invalid_data = hex_string_to_byte_vec("012300");
-    BOOST_CHECK_THROW(Transaction{invalid_data}, std::runtime_error);
+    CHECK_THROW(Transaction{invalid_data}, std::runtime_error);
     auto empty_data = hex_string_to_byte_vec("");
-    BOOST_CHECK_THROW(Transaction{empty_data}, std::runtime_error);
+    CHECK_THROW(Transaction{empty_data}, std::runtime_error);
 
-    BOOST_CHECK_EQUAL(tx.CountOutputs(), 2);
-    BOOST_CHECK_EQUAL(tx.CountInputs(), 1);
-    BOOST_CHECK_EQUAL(tx.GetLocktime(), 510826);
+    CHECK_EQUAL(tx.CountOutputs(), std::remove_cvref_t<decltype(tx.CountOutputs())>{2});
+    CHECK_EQUAL(tx.CountInputs(), std::remove_cvref_t<decltype(tx.CountInputs())>{1});
+    CHECK_EQUAL(tx.GetLocktime(), std::remove_cvref_t<decltype(tx.GetLocktime())>{510826});
     auto broken_tx_data{std::span<std::byte>{tx_data.begin(), tx_data.begin() + 10}};
-    BOOST_CHECK_THROW(Transaction{broken_tx_data}, std::runtime_error);
+    CHECK_THROW(Transaction{broken_tx_data}, std::runtime_error);
     auto input{tx.GetInput(0)};
-    BOOST_CHECK_EQUAL(input.GetSequence(), 0xfffffffe);
+    CHECK_EQUAL(input.GetSequence(), std::remove_cvref_t<decltype(input.GetSequence())>{0xfffffffe});
     auto output{tx.GetOutput(tx.CountOutputs() - 1)};
-    BOOST_CHECK_EQUAL(output.Amount(), 42130042);
+    CHECK_EQUAL(output.Amount(), std::remove_cvref_t<decltype(output.Amount())>{42130042});
     auto script_pubkey{output.GetScriptPubkey()};
     {
         auto tx_new{Transaction{tx_data}};
@@ -419,23 +419,23 @@ BOOST_AUTO_TEST_CASE(btck_transaction_tests)
         ScriptPubkey script = output.GetScriptPubkey();
 
         TransactionOutputView output2 = tx_new.GetOutput(tx_new.CountOutputs() - 1);
-        BOOST_CHECK_NE(output.get(), output2.get());
-        BOOST_CHECK_EQUAL(output.Amount(), output2.Amount());
+        CHECK_NE(output.get(), output2.get());
+        CHECK_EQUAL(output.Amount(), output2.Amount());
         TransactionOutput output3 = output2;
-        BOOST_CHECK_NE(output3.get(), output2.get());
-        BOOST_CHECK_EQUAL(output3.Amount(), output2.Amount());
+        CHECK_NE(output3.get(), output2.get());
+        CHECK_EQUAL(output3.Amount(), output2.Amount());
 
         // Non-owned view
         ScriptPubkeyView script2 = output.GetScriptPubkey();
-        BOOST_CHECK_NE(script.get(), script2.get());
+        CHECK_NE(script.get(), script2.get());
         check_equal(script.ToBytes(), script2.ToBytes());
 
         // Non-owned to owned
         ScriptPubkey script3 = script2;
-        BOOST_CHECK_NE(script3.get(), script2.get());
+        CHECK_NE(script3.get(), script2.get());
         check_equal(script3.ToBytes(), script2.ToBytes());
     }
-    BOOST_CHECK_EQUAL(output.Amount(), 42130042);
+    CHECK_EQUAL(output.Amount(), std::remove_cvref_t<decltype(output.Amount())>{42130042});
 
     auto tx_roundtrip{Transaction{tx.ToBytes()}};
     check_equal(tx_roundtrip.ToBytes(), tx_data);
@@ -448,13 +448,13 @@ BOOST_AUTO_TEST_CASE(btck_transaction_tests)
     //     return tx.GetOutput(0);
     // };
     // auto output_new = get_output();
-    // BOOST_CHECK_EQUAL(output_new.Amount(), 20737411);
+    // CHECK_EQUAL(output_new.Amount(), std::remove_cvref_t<decltype(output_new.Amount())>{20737411});
 
     int64_t total_amount{0};
     for (const auto output : tx.Outputs()) {
         total_amount += output.Amount();
     }
-    BOOST_CHECK_EQUAL(total_amount, 62867453);
+    CHECK_EQUAL(total_amount, std::remove_cvref_t<decltype(total_amount)>{62867453});
 
     auto amount = *(tx.Outputs() | std::ranges::views::filter([](const auto& output) {
                         return output.Amount() == 42130042;
@@ -462,8 +462,8 @@ BOOST_AUTO_TEST_CASE(btck_transaction_tests)
                     std::views::transform([](const auto& output) {
                         return output.Amount();
                     })).begin();
-    BOOST_REQUIRE(amount);
-    BOOST_CHECK_EQUAL(amount, 42130042);
+    CHECK(amount);
+    CHECK_EQUAL(amount, std::remove_cvref_t<decltype(amount)>{42130042});
 
     CheckRange(tx.Outputs(), tx.CountOutputs());
 
@@ -669,24 +669,24 @@ BOOST_AUTO_TEST_CASE(btck_block_header_tests)
 {
     // Block header format: version(4) + prev_hash(32) + merkle_root(32) + timestamp(4) + bits(4) + nonce(4) = 80 bytes
     BlockHeader header_0{hex_string_to_byte_vec("00e07a26beaaeee2e71d7eb19279545edbaf15de0999983626ec00000000000000000000579cf78b65229bfb93f4a11463af2eaa5ad91780f27f5d147a423bea5f7e4cdf2a47e268b4dd01173a9662ee")};
-    BOOST_CHECK_EQUAL(byte_span_to_hex_string_reversed(header_0.Hash().ToBytes()), "00000000000000000000325c7e14a4ee3b4fcb2343089a839287308a0ddbee4f");
+    CHECK_EQUAL(byte_span_to_hex_string_reversed(header_0.Hash().ToBytes()), std::string_view{"00000000000000000000325c7e14a4ee3b4fcb2343089a839287308a0ddbee4f"});
     BlockHeader header_1{hex_string_to_byte_vec("00c00020e7cb7b4de21d26d55bd384017b8bb9333ac3b2b55bed00000000000000000000d91b4484f801b99f03d36b9d26cfa83420b67f81da12d7e6c1e7f364e743c5ba9946e268b4dd011799c8533d")};
     CheckHandle(header_0, header_1);
 
     // Test error handling for invalid data
-    BOOST_CHECK_THROW(BlockHeader{hex_string_to_byte_vec("00")}, std::runtime_error);
-    BOOST_CHECK_THROW(BlockHeader{hex_string_to_byte_vec("")}, std::runtime_error);
+    CHECK_THROW(BlockHeader{hex_string_to_byte_vec("00")}, std::runtime_error);
+    CHECK_THROW(BlockHeader{hex_string_to_byte_vec("")}, std::runtime_error);
 
     // Test all header field accessors using mainnet block 1
     auto mainnet_block_1_header = hex_string_to_byte_vec("010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e36299");
     BlockHeader header{mainnet_block_1_header};
-    BOOST_CHECK_EQUAL(header.Version(), 1);
-    BOOST_CHECK_EQUAL(header.Timestamp(), 1231469665);
-    BOOST_CHECK_EQUAL(header.Bits(), 0x1d00ffff);
-    BOOST_CHECK_EQUAL(header.Nonce(), 2573394689);
-    BOOST_CHECK_EQUAL(byte_span_to_hex_string_reversed(header.Hash().ToBytes()), "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048");
+    CHECK_EQUAL(header.Version(), std::remove_cvref_t<decltype(header.Version())>{1});
+    CHECK_EQUAL(header.Timestamp(), std::remove_cvref_t<decltype(header.Timestamp())>{1231469665});
+    CHECK_EQUAL(header.Bits(), std::remove_cvref_t<decltype(header.Bits())>{0x1d00ffff});
+    CHECK_EQUAL(header.Nonce(), std::remove_cvref_t<decltype(header.Nonce())>{2573394689});
+    CHECK_EQUAL(byte_span_to_hex_string_reversed(header.Hash().ToBytes()), std::string_view{"00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048"});
     auto prev_hash = header.PrevHash();
-    BOOST_CHECK_EQUAL(byte_span_to_hex_string_reversed(prev_hash.ToBytes()), "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
+    CHECK_EQUAL(byte_span_to_hex_string_reversed(prev_hash.ToBytes()), std::string_view{"000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"});
 
     // Test round-trip serialization of block header
     auto header_roundtrip{BlockHeader{header.ToBytes()}};
@@ -695,15 +695,15 @@ BOOST_AUTO_TEST_CASE(btck_block_header_tests)
     auto raw_block = hex_string_to_byte_vec("010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e362990101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000");
     Block block{raw_block};
     BlockHeader block_header{block.GetHeader()};
-    BOOST_CHECK_EQUAL(block_header.Version(), 1);
-    BOOST_CHECK_EQUAL(block_header.Timestamp(), 1231469665);
-    BOOST_CHECK_EQUAL(block_header.Bits(), 0x1d00ffff);
-    BOOST_CHECK_EQUAL(block_header.Nonce(), 2573394689);
-    BOOST_CHECK_EQUAL(byte_span_to_hex_string_reversed(block_header.Hash().ToBytes()), "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048");
+    CHECK_EQUAL(block_header.Version(), std::remove_cvref_t<decltype(block_header.Version())>{1});
+    CHECK_EQUAL(block_header.Timestamp(), std::remove_cvref_t<decltype(block_header.Timestamp())>{1231469665});
+    CHECK_EQUAL(block_header.Bits(), std::remove_cvref_t<decltype(block_header.Bits())>{0x1d00ffff});
+    CHECK_EQUAL(block_header.Nonce(), std::remove_cvref_t<decltype(block_header.Nonce())>{2573394689});
+    CHECK_EQUAL(byte_span_to_hex_string_reversed(block_header.Hash().ToBytes()), std::string_view{"00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048"});
 
     // Verify header from block serializes to first 80 bytes of raw block
     auto block_header_bytes = block_header.ToBytes();
-    BOOST_CHECK_EQUAL(block_header_bytes.size(), 80);
+    CHECK_EQUAL(block_header_bytes.size(), std::remove_cvref_t<decltype(block_header_bytes.size())>{80});
     check_equal(block_header_bytes, std::span<const std::byte>(raw_block.data(), 80));
 }
 
@@ -715,9 +715,9 @@ BOOST_AUTO_TEST_CASE(btck_block)
     Block block_tx{hex_string_to_byte_vec(REGTEST_BLOCK_DATA[205])};
     CheckRange(block_tx.Transactions(), block_tx.CountTransactions());
     auto invalid_data = hex_string_to_byte_vec("012300");
-    BOOST_CHECK_THROW(Block{invalid_data}, std::runtime_error);
+    CHECK_THROW(Block{invalid_data}, std::runtime_error);
     auto empty_data = hex_string_to_byte_vec("");
-    BOOST_CHECK_THROW(Block{empty_data}, std::runtime_error);
+    CHECK_THROW(Block{empty_data}, std::runtime_error);
 }
 
 Context create_context(std::shared_ptr<TestKernelNotifications> notifications, ChainType chain_type, std::shared_ptr<TestValidationInterface> validation_interface = nullptr)
@@ -760,7 +760,7 @@ BOOST_AUTO_TEST_CASE(btck_chainman_tests)
             {{nullptr, 0}, {nullptr, 0}},
         };
         for (auto& [data_dir, blocks_dir] : illegal_cases) {
-            BOOST_CHECK_THROW(ChainstateManagerOptions(context, data_dir, blocks_dir),
+            CHECK_THROW(ChainstateManagerOptions(context, data_dir, blocks_dir),
                               std::runtime_error);
         };
     }
@@ -770,10 +770,10 @@ BOOST_AUTO_TEST_CASE(btck_chainman_tests)
 
     ChainstateManagerOptions chainman_opts{context, PathToString(test_directory.m_directory), PathToString(test_directory.m_directory / "blocks")};
     chainman_opts.SetWorkerThreads(4);
-    BOOST_CHECK(!chainman_opts.SetWipeDbs(/*wipe_block_tree=*/true, /*wipe_chainstate=*/false));
-    BOOST_CHECK(chainman_opts.SetWipeDbs(/*wipe_block_tree=*/true, /*wipe_chainstate=*/true));
-    BOOST_CHECK(chainman_opts.SetWipeDbs(/*wipe_block_tree=*/false, /*wipe_chainstate=*/true));
-    BOOST_CHECK(chainman_opts.SetWipeDbs(/*wipe_block_tree=*/false, /*wipe_chainstate=*/false));
+    CHECK(!chainman_opts.SetWipeDbs(/*wipe_block_tree=*/true, /*wipe_chainstate=*/false));
+    CHECK(chainman_opts.SetWipeDbs(/*wipe_block_tree=*/true, /*wipe_chainstate=*/true));
+    CHECK(chainman_opts.SetWipeDbs(/*wipe_block_tree=*/false, /*wipe_chainstate=*/true));
+    CHECK(chainman_opts.SetWipeDbs(/*wipe_block_tree=*/false, /*wipe_chainstate=*/false));
     ChainMan chainman{context, chainman_opts};
 }
 
@@ -812,22 +812,22 @@ void chainman_reindex_test(TestDirectory& test_directory)
         /*block_tree_db_in_memory=*/false, /*chainstate_db_in_memory=*/false, context)};
 
     std::vector<std::string> import_files;
-    BOOST_CHECK(chainman->ImportBlocks(import_files));
+    CHECK(chainman->ImportBlocks(import_files));
 
     // Sanity check some block retrievals
     auto chain{chainman->GetChain()};
-    BOOST_CHECK_THROW(chain.GetByHeight(1000), std::runtime_error);
+    CHECK_THROW(chain.GetByHeight(1000), std::runtime_error);
     auto genesis_index{chain.Entries().front()};
-    BOOST_CHECK(!genesis_index.GetPrevious());
+    CHECK(!genesis_index.GetPrevious());
     auto genesis_block_raw{chainman->ReadBlock(genesis_index).value().ToBytes()};
     auto first_index{chain.GetByHeight(0)};
     auto first_block_raw{chainman->ReadBlock(genesis_index).value().ToBytes()};
     check_equal(genesis_block_raw, first_block_raw);
     auto height{first_index.GetHeight()};
-    BOOST_CHECK_EQUAL(height, 0);
+    CHECK_EQUAL(height, std::remove_cvref_t<decltype(height)>{0});
 
     auto next_index{chain.GetByHeight(first_index.GetHeight() + 1)};
-    BOOST_CHECK(chain.Contains(next_index));
+    CHECK(chain.Contains(next_index));
     auto next_block_data{chainman->ReadBlock(next_index).value().ToBytes()};
     auto tip_index{chain.Entries().back()};
     auto tip_block_data{chainman->ReadBlock(tip_index).value().ToBytes()};
@@ -835,17 +835,17 @@ void chainman_reindex_test(TestDirectory& test_directory)
     auto second_block{chainman->ReadBlock(second_index).value()};
     auto second_block_data{second_block.ToBytes()};
     auto second_height{second_index.GetHeight()};
-    BOOST_CHECK_EQUAL(second_height, 1);
+    CHECK_EQUAL(second_height, std::remove_cvref_t<decltype(second_height)>{1});
     check_equal(next_block_data, tip_block_data);
     check_equal(next_block_data, second_block_data);
 
     auto second_hash{second_index.GetHash()};
     auto another_second_index{chainman->GetBlockTreeEntry(second_hash)};
-    BOOST_CHECK(another_second_index);
+    CHECK(another_second_index);
     auto another_second_height{another_second_index->GetHeight()};
     auto second_block_hash{second_block.GetHash()};
     check_equal(second_block_hash.ToBytes(), second_hash.ToBytes());
-    BOOST_CHECK_EQUAL(second_height, another_second_height);
+    CHECK_EQUAL(second_height, another_second_height);
 }
 
 void chainman_reindex_chainstate_test(TestDirectory& test_directory)
@@ -858,7 +858,7 @@ void chainman_reindex_chainstate_test(TestDirectory& test_directory)
 
     std::vector<std::string> import_files;
     import_files.push_back(PathToString(test_directory.m_directory / "blocks" / "blk00000.dat"));
-    BOOST_CHECK(chainman->ImportBlocks(import_files));
+    CHECK(chainman->ImportBlocks(import_files));
 }
 
 void chainman_mainnet_validation_test(TestDirectory& test_directory)
@@ -875,54 +875,54 @@ void chainman_mainnet_validation_test(TestDirectory& test_directory)
     Block block{raw_block};
     BlockHeader header{block.GetHeader()};
     TransactionView tx{block.GetTransaction(block.CountTransactions() - 1)};
-    BOOST_CHECK_EQUAL(byte_span_to_hex_string_reversed(tx.Txid().ToBytes()), "0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098");
-    BOOST_CHECK_EQUAL(header.Version(), 1);
-    BOOST_CHECK_EQUAL(header.Timestamp(), 1231469665);
-    BOOST_CHECK_EQUAL(header.Bits(), 0x1d00ffff);
-    BOOST_CHECK_EQUAL(header.Nonce(), 2573394689);
-    BOOST_CHECK_EQUAL(tx.CountInputs(), 1);
+    CHECK_EQUAL(byte_span_to_hex_string_reversed(tx.Txid().ToBytes()), std::string_view{"0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098"});
+    CHECK_EQUAL(header.Version(), std::remove_cvref_t<decltype(header.Version())>{1});
+    CHECK_EQUAL(header.Timestamp(), std::remove_cvref_t<decltype(header.Timestamp())>{1231469665});
+    CHECK_EQUAL(header.Bits(), std::remove_cvref_t<decltype(header.Bits())>{0x1d00ffff});
+    CHECK_EQUAL(header.Nonce(), std::remove_cvref_t<decltype(header.Nonce())>{2573394689});
+    CHECK_EQUAL(tx.CountInputs(), std::remove_cvref_t<decltype(tx.CountInputs())>{1});
     Transaction tx2 = tx;
-    BOOST_CHECK_EQUAL(tx2.CountInputs(), 1);
+    CHECK_EQUAL(tx2.CountInputs(), std::remove_cvref_t<decltype(tx2.CountInputs())>{1});
     for (auto transaction : block.Transactions()) {
-        BOOST_CHECK_EQUAL(transaction.CountInputs(), 1);
+        CHECK_EQUAL(transaction.CountInputs(), std::remove_cvref_t<decltype(transaction.CountInputs())>{1});
     }
     auto output_counts = *(block.Transactions() | std::views::transform([](const auto& tx) {
                                return tx.CountOutputs();
                            })).begin();
-    BOOST_CHECK_EQUAL(output_counts, 1);
+    CHECK_EQUAL(output_counts, std::remove_cvref_t<decltype(output_counts)>{1});
 
     validation_interface->m_expected_valid_block.emplace(raw_block);
     auto ser_block{block.ToBytes()};
     check_equal(ser_block, raw_block);
     bool new_block = false;
-    BOOST_CHECK(chainman->ProcessBlock(block, &new_block));
-    BOOST_CHECK(new_block);
+    CHECK(chainman->ProcessBlock(block, &new_block));
+    CHECK(new_block);
 
     validation_interface->m_expected_valid_block = std::nullopt;
     new_block = false;
     Block invalid_block{hex_string_to_byte_vec(REGTEST_BLOCK_DATA[REGTEST_BLOCK_DATA.size() - 1])};
-    BOOST_CHECK(!chainman->ProcessBlock(invalid_block, &new_block));
-    BOOST_CHECK(!new_block);
+    CHECK(!chainman->ProcessBlock(invalid_block, &new_block));
+    CHECK(!new_block);
 
     auto chain{chainman->GetChain()};
-    BOOST_CHECK_EQUAL(chain.Height(), 1);
+    CHECK_EQUAL(chain.Height(), std::remove_cvref_t<decltype(chain.Height())>{1});
     auto tip{chain.Entries().back()};
     auto read_block{chainman->ReadBlock(tip)};
-    BOOST_REQUIRE(read_block);
+    CHECK(read_block);
     check_equal(read_block.value().ToBytes(), raw_block);
 
     // Check that we can read the previous block
     BlockTreeEntry tip_2{*tip.GetPrevious()};
     Block read_block_2{*chainman->ReadBlock(tip_2)};
-    BOOST_CHECK_EQUAL(chainman->ReadBlockSpentOutputs(tip_2).Count(), 0);
-    BOOST_CHECK_EQUAL(chainman->ReadBlockSpentOutputs(tip).Count(), 0);
+    CHECK_EQUAL(chainman->ReadBlockSpentOutputs(tip_2).Count(), std::remove_cvref_t<decltype(chainman->ReadBlockSpentOutputs(tip_2).Count())>{0});
+    CHECK_EQUAL(chainman->ReadBlockSpentOutputs(tip).Count(), std::remove_cvref_t<decltype(chainman->ReadBlockSpentOutputs(tip).Count())>{0});
 
     // It should be an error if we go another block back, since the genesis has no ancestor
-    BOOST_CHECK(!tip_2.GetPrevious());
+    CHECK(!tip_2.GetPrevious());
 
     // If we try to validate it again, it should be a duplicate
-    BOOST_CHECK(chainman->ProcessBlock(block, &new_block));
-    BOOST_CHECK(!new_block);
+    CHECK(chainman->ProcessBlock(block, &new_block));
+    CHECK(!new_block);
 }
 
 BOOST_AUTO_TEST_CASE(btck_check_block_context_free)
@@ -942,45 +942,45 @@ BOOST_AUTO_TEST_CASE(btck_check_block_context_free)
     Block block{raw_block};
     BlockValidationState state;
 
-    BOOST_CHECK(block.Check(consensus_params, BlockCheckFlags::BASE, state));
-    BOOST_CHECK(state.GetValidationMode() == ValidationMode::VALID);
+    CHECK(block.Check(consensus_params, BlockCheckFlags::BASE, state));
+    CHECK(state.GetValidationMode() == ValidationMode::VALID);
 
-    BOOST_CHECK(block.Check(consensus_params, BlockCheckFlags::ALL, state));
-    BOOST_CHECK(state.GetValidationMode() == ValidationMode::VALID);
+    CHECK(block.Check(consensus_params, BlockCheckFlags::ALL, state));
+    CHECK(state.GetValidationMode() == ValidationMode::VALID);
 
     auto bad_merkle_block_data = raw_block;
     bad_merkle_block_data[MERKLE_ROOT_OFFSET] ^= std::byte{0x01};
     Block bad_merkle_block{bad_merkle_block_data};
 
-    BOOST_CHECK(!bad_merkle_block.Check(consensus_params, BlockCheckFlags::MERKLE, state));
-    BOOST_CHECK(state.GetValidationMode() == ValidationMode::INVALID);
-    BOOST_CHECK(state.GetBlockValidationResult() == BlockValidationResult::MUTATED);
+    CHECK(!bad_merkle_block.Check(consensus_params, BlockCheckFlags::MERKLE, state));
+    CHECK(state.GetValidationMode() == ValidationMode::INVALID);
+    CHECK(state.GetBlockValidationResult() == BlockValidationResult::MUTATED);
 
-    BOOST_CHECK(bad_merkle_block.Check(consensus_params, BlockCheckFlags::BASE, state));
-    BOOST_CHECK(state.GetValidationMode() == ValidationMode::VALID);
+    CHECK(bad_merkle_block.Check(consensus_params, BlockCheckFlags::BASE, state));
+    CHECK(state.GetValidationMode() == ValidationMode::VALID);
 
     auto bad_pow_block_data = raw_block;
     bad_pow_block_data[NBITS_OFFSET + 3] = std::byte{0x1c};
     Block bad_pow_block{bad_pow_block_data};
 
-    BOOST_CHECK(!bad_pow_block.Check(consensus_params, BlockCheckFlags::POW, state));
-    BOOST_CHECK(state.GetValidationMode() == ValidationMode::INVALID);
-    BOOST_CHECK(state.GetBlockValidationResult() == BlockValidationResult::INVALID_HEADER);
+    CHECK(!bad_pow_block.Check(consensus_params, BlockCheckFlags::POW, state));
+    CHECK(state.GetValidationMode() == ValidationMode::INVALID);
+    CHECK(state.GetBlockValidationResult() == BlockValidationResult::INVALID_HEADER);
 
-    BOOST_CHECK(bad_pow_block.Check(consensus_params, BlockCheckFlags::MERKLE, state));
-    BOOST_CHECK(state.GetValidationMode() == ValidationMode::VALID);
+    CHECK(bad_pow_block.Check(consensus_params, BlockCheckFlags::MERKLE, state));
+    CHECK(state.GetValidationMode() == ValidationMode::VALID);
 
     auto bad_base_block_data = raw_block;
     bad_base_block_data[COINBASE_PREVOUT_N_OFFSET] = std::byte{0x00};
     Block bad_base_block{bad_base_block_data};
 
-    BOOST_CHECK(!bad_base_block.Check(consensus_params, BlockCheckFlags::BASE, state));
-    BOOST_CHECK(state.GetValidationMode() == ValidationMode::INVALID);
-    BOOST_CHECK(state.GetBlockValidationResult() == BlockValidationResult::CONSENSUS);
+    CHECK(!bad_base_block.Check(consensus_params, BlockCheckFlags::BASE, state));
+    CHECK(state.GetValidationMode() == ValidationMode::INVALID);
+    CHECK(state.GetBlockValidationResult() == BlockValidationResult::CONSENSUS);
 
     // Test with invalid truncated block data.
     auto truncated_block_data = hex_string_to_byte_vec("010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e36299");
-    BOOST_CHECK_EXCEPTION(Block{truncated_block_data}, std::runtime_error,
+    CHECK_EXCEPTION(Block{truncated_block_data}, std::runtime_error,
                           HasReason{"failed to instantiate btck object"});
 }
 
@@ -1002,8 +1002,8 @@ BOOST_AUTO_TEST_CASE(btck_block_hash_tests)
     }
     BlockHash block_hash{test_hash};
     BlockHash block_hash_2{test_hash_2};
-    BOOST_CHECK(block_hash != block_hash_2);
-    BOOST_CHECK(block_hash == block_hash);
+    CHECK(block_hash != block_hash_2);
+    CHECK(block_hash == block_hash);
     CheckHandle(block_hash, block_hash_2);
 }
 
@@ -1025,7 +1025,7 @@ BOOST_AUTO_TEST_CASE(btck_block_tree_entry_tests)
         Block block{hex_string_to_byte_vec(REGTEST_BLOCK_DATA[i])};
         bool new_block{false};
         chainman->ProcessBlock(block, &new_block);
-        BOOST_CHECK(new_block);
+        CHECK(new_block);
     }
 
     auto chain{chainman->GetChain()};
@@ -1034,19 +1034,19 @@ BOOST_AUTO_TEST_CASE(btck_block_tree_entry_tests)
     auto entry_2{chain.GetByHeight(2)};
 
     // Test inequality
-    BOOST_CHECK(entry_0 != entry_1);
-    BOOST_CHECK(entry_1 != entry_2);
-    BOOST_CHECK(entry_0 != entry_2);
+    CHECK(entry_0 != entry_1);
+    CHECK(entry_1 != entry_2);
+    CHECK(entry_0 != entry_2);
 
     // Test equality with same entry
-    BOOST_CHECK(entry_0 == chain.GetByHeight(0));
-    BOOST_CHECK(entry_0 == BlockTreeEntry{entry_0});
-    BOOST_CHECK(entry_1 == entry_1);
+    CHECK(entry_0 == chain.GetByHeight(0));
+    CHECK(entry_0 == BlockTreeEntry{entry_0});
+    CHECK(entry_1 == entry_1);
 
     // Test GetPrevious
     auto prev{entry_1.GetPrevious()};
-    BOOST_CHECK(prev.has_value());
-    BOOST_CHECK(prev.value() == entry_0);
+    CHECK(prev.has_value());
+    CHECK(prev.value() == entry_0);
 
     // Test GetAncestor
     BOOST_CHECK(entry_2.GetAncestor(2) == entry_2);
@@ -1068,14 +1068,14 @@ BOOST_AUTO_TEST_CASE(btck_chainman_in_memory_tests)
         Block block{hex_string_to_byte_vec(raw_block)};
         bool new_block{false};
         chainman->ProcessBlock(block, &new_block);
-        BOOST_CHECK(new_block);
+        CHECK(new_block);
     }
 
-    BOOST_CHECK(fs::exists(in_memory_test_directory.m_directory / "blocks"));
-    BOOST_CHECK(!fs::exists(in_memory_test_directory.m_directory / "blocks" / "index"));
-    BOOST_CHECK(!fs::exists(in_memory_test_directory.m_directory / "chainstate"));
+    CHECK(fs::exists(in_memory_test_directory.m_directory / "blocks"));
+    CHECK(!fs::exists(in_memory_test_directory.m_directory / "blocks" / "index"));
+    CHECK(!fs::exists(in_memory_test_directory.m_directory / "chainstate"));
 
-    BOOST_CHECK(context.interrupt());
+    CHECK(context.interrupt());
 }
 
 BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
@@ -1093,14 +1093,14 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
             Block block{hex_string_to_byte_vec(data)};
             BlockHeader header = block.GetHeader();
             BlockValidationState state{};
-            BOOST_CHECK(state.GetBlockValidationResult() == BlockValidationResult::UNSET);
-            BOOST_CHECK(chainman->ProcessBlockHeader(header, state));
-            BOOST_CHECK(state.GetValidationMode() == ValidationMode::VALID);
+            CHECK(state.GetBlockValidationResult() == BlockValidationResult::UNSET);
+            CHECK(chainman->ProcessBlockHeader(header, state));
+            CHECK(state.GetValidationMode() == ValidationMode::VALID);
             BlockTreeEntry entry{*chainman->GetBlockTreeEntry(header.Hash())};
-            BOOST_CHECK(!chainman->GetChain().Contains(entry));
+            CHECK(!chainman->GetChain().Contains(entry));
             BlockTreeEntry best_entry{chainman->GetBestEntry()};
             BlockHash hash{entry.GetHash()};
-            BOOST_CHECK(hash == best_entry.GetHeader().Hash());
+            CHECK(hash == best_entry.GetHeader().Hash());
         }
     }
 
@@ -1116,8 +1116,8 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
         for (size_t i{0}; i < mid; i++) {
             Block block{hex_string_to_byte_vec(REGTEST_BLOCK_DATA[i])};
             bool new_block{false};
-            BOOST_CHECK(chainman->ProcessBlock(block, &new_block));
-            BOOST_CHECK(new_block);
+            CHECK(chainman->ProcessBlock(block, &new_block));
+            CHECK(new_block);
         }
     }
 
@@ -1128,8 +1128,8 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
     for (size_t i{mid}; i < REGTEST_BLOCK_DATA.size(); i++) {
         Block block{hex_string_to_byte_vec(REGTEST_BLOCK_DATA[i])};
         bool new_block{false};
-        BOOST_CHECK(chainman->ProcessBlock(block, &new_block));
-        BOOST_CHECK(new_block);
+        CHECK(chainman->ProcessBlock(block, &new_block));
+        CHECK(new_block);
     }
 
     auto chain = chainman->GetChain();
@@ -1143,8 +1143,8 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
 
     Txid txid = read_block.Transactions()[0].Txid();
     Txid txid_2 = read_block_2.Transactions()[0].Txid();
-    BOOST_CHECK(txid != txid_2);
-    BOOST_CHECK(txid == txid);
+    CHECK(txid != txid_2);
+    CHECK(txid == txid);
     CheckHandle(txid, txid_2);
 
     auto find_transaction = [&chainman](const TxidView& target_txid) -> std::optional<Transaction> {
@@ -1171,17 +1171,17 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
                     continue;
                 }
                 inputs.emplace_back(input);
-                BOOST_CHECK(point.Txid() != transaction.Txid());
+                CHECK(point.Txid() != transaction.Txid());
                 std::optional<Transaction> tx = find_transaction(point.Txid());
-                BOOST_CHECK(tx.has_value());
-                BOOST_CHECK(point.Txid() == tx->Txid());
+                CHECK(tx.has_value());
+                CHECK(point.Txid() == tx->Txid());
                 spent_outputs.emplace_back(tx->GetOutput(point.index()));
             }
-            BOOST_CHECK(inputs.size() == spent_outputs.size());
+            CHECK(inputs.size() == spent_outputs.size());
             ScriptVerifyStatus status = ScriptVerifyStatus::OK;
             const PrecomputedTransactionData precomputed_txdata{transaction, spent_outputs};
             for (size_t i{0}; i < inputs.size(); ++i) {
-                BOOST_CHECK(spent_outputs[i].GetScriptPubkey().Verify(spent_outputs[i].Amount(), transaction, &precomputed_txdata, i, ScriptVerificationFlags::ALL, status));
+                CHECK(spent_outputs[i].GetScriptPubkey().Verify(spent_outputs[i].Amount(), transaction, &precomputed_txdata, i, ScriptVerificationFlags::ALL, status));
             }
         }
     }
@@ -1191,7 +1191,7 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
     BlockSpentOutputs block_spent_outputs_prev{chainman->ReadBlockSpentOutputs(*tip.GetPrevious())};
     CheckHandle(block_spent_outputs, block_spent_outputs_prev);
     CheckRange(block_spent_outputs_prev.TxsSpentOutputs(), block_spent_outputs_prev.Count());
-    BOOST_CHECK_EQUAL(block_spent_outputs.Count(), 1);
+    CHECK_EQUAL(block_spent_outputs.Count(), std::remove_cvref_t<decltype(block_spent_outputs.Count())>{1});
 
     // Get transaction spent outputs from the last transaction in the two blocks
     TransactionSpentOutputsView transaction_spent_outputs{block_spent_outputs.GetTxSpentOutputs(block_spent_outputs.Count() - 1)};
@@ -1202,7 +1202,7 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
 
     // Get the last coin from the transaction spent outputs
     CoinView coin{transaction_spent_outputs.GetCoin(transaction_spent_outputs.Count() - 1)};
-    BOOST_CHECK(!coin.IsCoinbase());
+    CHECK(!coin.IsCoinbase());
     Coin owned_coin{coin};
     Coin owned_coin_prev{owned_transaction_spent_outputs_prev.GetCoin(owned_transaction_spent_outputs_prev.Count() - 1)};
     CheckHandle(owned_coin, owned_coin_prev);
@@ -1210,19 +1210,19 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
     // Validate coin properties
     TransactionOutputView output = coin.GetOutput();
     uint32_t coin_height = coin.GetConfirmationHeight();
-    BOOST_CHECK_EQUAL(coin_height, 205);
-    BOOST_CHECK_EQUAL(output.Amount(), 100000000);
+    CHECK_EQUAL(coin_height, std::remove_cvref_t<decltype(coin_height)>{205});
+    CHECK_EQUAL(output.Amount(), std::remove_cvref_t<decltype(output.Amount())>{100000000});
 
     // Test script pubkey serialization
     auto script_pubkey = output.GetScriptPubkey();
     auto script_pubkey_bytes{script_pubkey.ToBytes()};
-    BOOST_CHECK_EQUAL(script_pubkey_bytes.size(), 22);
+    CHECK_EQUAL(script_pubkey_bytes.size(), std::remove_cvref_t<decltype(script_pubkey_bytes.size())>{22});
     auto round_trip_script_pubkey{ScriptPubkey(script_pubkey_bytes)};
-    BOOST_CHECK_EQUAL(round_trip_script_pubkey.ToBytes().size(), 22);
+    CHECK_EQUAL(round_trip_script_pubkey.ToBytes().size(), std::remove_cvref_t<decltype(round_trip_script_pubkey.ToBytes().size())>{22});
 
     for (const auto tx_spent_outputs : block_spent_outputs.TxsSpentOutputs()) {
         for (const auto coins : tx_spent_outputs.Coins()) {
-            BOOST_CHECK_GT(coins.GetOutput().Amount(), 1);
+            CHECK_GT(coins.GetOutput().Amount(), 1);
         }
     }
 
@@ -1237,7 +1237,7 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
                     if ((unsigned char)output.GetScriptPubkey().ToBytes()[0] == 0x6a) {
                         continue;
                     }
-                    BOOST_CHECK_GT(output.Amount(), 1);
+                    CHECK_GT(output.Amount(), 1);
                 }
             }
         }
@@ -1245,14 +1245,14 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
 
     int32_t count{0};
     for (const auto entry : chain.Entries()) {
-        BOOST_CHECK_EQUAL(entry.GetHeight(), count);
+        CHECK_EQUAL(entry.GetHeight(), count);
         ++count;
     }
-    BOOST_CHECK_EQUAL(count, chain.CountEntries());
+    CHECK_EQUAL(count, chain.CountEntries());
 
 
     fs::remove(test_directory.m_directory / "blocks" / "blk00000.dat");
-    BOOST_CHECK(!chainman->ReadBlock(tip_2).has_value());
+    CHECK(!chainman->ReadBlock(tip_2).has_value());
     fs::remove(test_directory.m_directory / "blocks" / "rev00000.dat");
-    BOOST_CHECK_THROW(chainman->ReadBlockSpentOutputs(tip), std::runtime_error);
+    CHECK_THROW(chainman->ReadBlockSpentOutputs(tip), std::runtime_error);
 }

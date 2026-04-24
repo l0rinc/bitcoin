@@ -30,6 +30,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <test/util/check.h>
 
 class FastRandomContext;
 
@@ -375,7 +376,7 @@ void DynSock::Pipe::PushNetMsg(const std::string& type, Args&&... payload)
     V1Transport transport{NodeId{0}};
 
     const bool queued{transport.SetMessageToSend(msg)};
-    assert(queued);
+    CHECK(queued);
 
     LOCK(m_mutex);
 

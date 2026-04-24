@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 FUZZ_TARGET(decode_tx)
 {
@@ -21,12 +22,12 @@ FUZZ_TARGET(decode_tx)
     const bool result_try_witness_and_maybe_no_witness = DecodeHexTx(mtx, tx_hex, true, true);
     CMutableTransaction no_witness_mtx;
     const bool result_try_no_witness = DecodeHexTx(no_witness_mtx, tx_hex, true, false);
-    assert(!result_none);
+    CHECK(!result_none);
     if (result_try_witness_and_maybe_no_witness) {
-        assert(result_try_no_witness || result_try_witness);
+        CHECK(result_try_no_witness || result_try_witness);
     }
     if (result_try_no_witness) {
-        assert(!no_witness_mtx.HasWitness());
-        assert(result_try_witness_and_maybe_no_witness);
+        CHECK(!no_witness_mtx.HasWitness());
+        CHECK(result_try_witness_and_maybe_no_witness);
     }
 }

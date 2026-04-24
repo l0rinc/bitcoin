@@ -9,6 +9,7 @@
 
 #include <bitset>
 #include <vector>
+#include <test/util/check.h>
 
 namespace {
 
@@ -45,27 +46,27 @@ void TestType(FuzzBufferType buffer)
         unsigned last = S::Size();
         for (unsigned i = 0; i < S::Size(); ++i) {
             bool match = (it != real[idx].end()) && *it == i;
-            assert(sim[idx][i] == real[idx][i]);
-            assert(match == real[idx][i]);
-            assert((it == real[idx].end()) != (it != real[idx].end()));
+            CHECK(sim[idx][i] == real[idx][i]);
+            CHECK(match == real[idx][i]);
+            CHECK((it == real[idx].end()) != (it != real[idx].end()));
             if (match) {
                 ++it;
                 if (first == S::Size()) first = i;
                 last = i;
             }
         }
-        assert(it == real[idx].end());
-        assert(!(it != real[idx].end()));
+        CHECK(it == real[idx].end());
+        CHECK(!(it != real[idx].end()));
         /* Any / None */
-        assert(sim[idx].any() == real[idx].Any());
-        assert(sim[idx].none() == real[idx].None());
+        CHECK(sim[idx].any() == real[idx].Any());
+        CHECK(sim[idx].none() == real[idx].None());
         /* First / Last */
         if (sim[idx].any()) {
-            assert(first == real[idx].First());
-            assert(last == real[idx].Last());
+            CHECK(first == real[idx].First());
+            CHECK(last == real[idx].Last());
         }
         /* Count */
-        assert(sim[idx].count() == real[idx].Count());
+        CHECK(sim[idx].count() == real[idx].Count());
     };
 
     LIMITED_WHILE(buffer.size() > 0, 1000) {
@@ -77,7 +78,7 @@ void TestType(FuzzBufferType buffer)
         unsigned src = (((args >> 3) & 7) * sim.size()) >> 3;
         unsigned aux = (((args >> 6) & 3) * sim.size()) >> 2;
         // Args are in range for non-empty sim, or sim is completely empty and will be grown
-        assert((sim.empty() && dest == 0 && src == 0 && aux == 0) ||
+        CHECK((sim.empty() && dest == 0 && src == 0 && aux == 0) ||
             (!sim.empty() &&  dest < sim.size() && src < sim.size() && aux < sim.size()));
 
         // Pick one operation based on value of command. Not all operations are always applicable.
@@ -87,21 +88,21 @@ void TestType(FuzzBufferType buffer)
             if (dest < sim.size() && command-- == 0) {
                 /* Set() (true) */
                 unsigned val = ReadByte(buffer) % S::Size();
-                assert(sim[dest][val] == real[dest][val]);
+                CHECK(sim[dest][val] == real[dest][val]);
                 sim[dest].set(val);
                 real[dest].Set(val);
                 break;
             } else if (dest < sim.size() && command-- == 0) {
                 /* Reset() */
                 unsigned val = ReadByte(buffer) % S::Size();
-                assert(sim[dest][val] == real[dest][val]);
+                CHECK(sim[dest][val] == real[dest][val]);
                 sim[dest].reset(val);
                 real[dest].Reset(val);
                 break;
             } else if (dest < sim.size() && command-- == 0) {
                 /* Set() (conditional) */
                 unsigned val = ReadByte(buffer) % S::Size();
-                assert(sim[dest][val] == real[dest][val]);
+                CHECK(sim[dest][val] == real[dest][val]);
                 sim[dest].set(val, args >> 7);
                 real[dest].Set(val, args >> 7);
                 break;
@@ -189,17 +190,17 @@ void TestType(FuzzBufferType buffer)
                 for (unsigned i = 0; i < S::Size(); ++i) {
                     if (i == val) it_copy = it;
                     bool match = (it != real[src].end()) && *it == i;
-                    assert(match == sim[src][i]);
+                    CHECK(match == sim[src][i]);
                     if (match) ++it;
                 }
-                assert(it == real[src].end());
+                CHECK(it == real[src].end());
                 /* Then compare from the copied point again to end. */
                 for (unsigned i = val; i < S::Size(); ++i) {
                     bool match = (it_copy != real[src].end()) && *it_copy == i;
-                    assert(match == sim[src][i]);
+                    CHECK(match == sim[src][i]);
                     if (match) ++it_copy;
                 }
-                assert(it_copy == real[src].end());
+                CHECK(it_copy == real[src].end());
                 break;
             } else if (src < sim.size() && dest < sim.size() && command-- == 0) {
                 /* operator|= */
@@ -253,20 +254,20 @@ void TestType(FuzzBufferType buffer)
                 /* IsSupersetOf() and IsSubsetOf() */
                 bool is_superset = (sim[aux] & ~sim[src]).none();
                 bool is_subset = (sim[src] & ~sim[aux]).none();
-                assert(real[src].IsSupersetOf(real[aux]) == is_superset);
-                assert(real[src].IsSubsetOf(real[aux]) == is_subset);
-                assert(real[aux].IsSupersetOf(real[src]) == is_subset);
-                assert(real[aux].IsSubsetOf(real[src]) == is_superset);
+                CHECK(real[src].IsSupersetOf(real[aux]) == is_superset);
+                CHECK(real[src].IsSubsetOf(real[aux]) == is_subset);
+                CHECK(real[aux].IsSupersetOf(real[src]) == is_subset);
+                CHECK(real[aux].IsSubsetOf(real[src]) == is_superset);
                 break;
             } else if (src < sim.size() && aux < sim.size() && command-- == 0) {
                 /* operator== and operator!= */
-                assert((sim[src] == sim[aux]) == (real[src] == real[aux]));
-                assert((sim[src] != sim[aux]) == (real[src] != real[aux]));
+                CHECK((sim[src] == sim[aux]) == (real[src] == real[aux]));
+                CHECK((sim[src] != sim[aux]) == (real[src] != real[aux]));
                 break;
             } else if (src < sim.size() && aux < sim.size() && command-- == 0) {
                 /* Overlaps() */
-                assert((sim[src] & sim[aux]).any() == real[src].Overlaps(real[aux]));
-                assert((sim[src] & sim[aux]).any() == real[aux].Overlaps(real[src]));
+                CHECK((sim[src] & sim[aux]).any() == real[src].Overlaps(real[aux]));
+                CHECK((sim[src] & sim[aux]).any() == real[aux].Overlaps(real[src]));
                 break;
             }
         }

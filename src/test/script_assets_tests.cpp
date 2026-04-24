@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include <test/util/check.h>
 #include <boost/test/unit_test.hpp>
 
 #include <univalue.h>
@@ -50,7 +51,7 @@ static CMutableTransaction TxFromHex(const std::string& str)
 
 static std::vector<CTxOut> TxOutsFromJSON(const UniValue& univalue)
 {
-    assert(univalue.isArray());
+    CHECK(univalue.isArray());
     std::vector<CTxOut> prevouts;
     for (size_t i = 0; i < univalue.size(); ++i) {
         CTxOut txout;
@@ -62,7 +63,7 @@ static std::vector<CTxOut> TxOutsFromJSON(const UniValue& univalue)
 
 static CScriptWitness ScriptWitnessFromJSON(const UniValue& univalue)
 {
-    assert(univalue.isArray());
+    CHECK(univalue.isArray());
     CScriptWitness scriptwitness;
     for (size_t i = 0; i < univalue.size(); ++i) {
         auto bytes = ParseHex(univalue[i].get_str());
@@ -101,11 +102,11 @@ static const std::vector<script_verify_flags> ALL_CONSENSUS_FLAGS = AllConsensus
 
 static void AssetTest(const UniValue& test, SignatureCache& signature_cache)
 {
-    BOOST_CHECK(test.isObject());
+    CHECK(test.isObject());
 
     CMutableTransaction mtx = TxFromHex(test["tx"].get_str());
     const std::vector<CTxOut> prevouts = TxOutsFromJSON(test["prevouts"]);
-    BOOST_CHECK(prevouts.size() == mtx.vin.size());
+    CHECK(prevouts.size() == mtx.vin.size());
     size_t idx = test["index"].getInt<int64_t>();
     script_verify_flags test_flags{ParseScriptFlags(test["flags"].get_str())};
     bool fin = test.exists("final") && test["final"].get_bool();
@@ -123,7 +124,7 @@ static void AssetTest(const UniValue& test, SignatureCache& signature_cache)
             // a subset of test_flags.
             if (fin || ((flags & test_flags) == flags)) {
                 bool ret = VerifyScript(tx.vin[idx].scriptSig, prevouts[idx].scriptPubKey, &tx.vin[idx].scriptWitness, flags, txcheck, nullptr);
-                BOOST_CHECK(ret);
+                CHECK(ret);
             }
         }
     }
@@ -140,7 +141,7 @@ static void AssetTest(const UniValue& test, SignatureCache& signature_cache)
             // If a test is supposed to fail with test_flags, it should also fail with any superset thereof.
             if ((flags & test_flags) == test_flags) {
                 bool ret = VerifyScript(tx.vin[idx].scriptSig, prevouts[idx].scriptPubKey, &tx.vin[idx].scriptWitness, flags, txcheck, nullptr);
-                BOOST_CHECK(!ret);
+                CHECK(!ret);
             }
         }
     }
@@ -160,15 +161,15 @@ BOOST_AUTO_TEST_CASE(script_assets_test)
     BOOST_WARN_MESSAGE(exists, "File $DIR_UNIT_TEST_DATA/script_assets_test.json not found, skipping script_assets_test");
     if (!exists) return;
     std::ifstream file{path.std_path()};
-    BOOST_CHECK(file.is_open());
+    CHECK(file.is_open());
     file.seekg(0, std::ios::end);
     size_t length = file.tellg();
     file.seekg(0, std::ios::beg);
     std::string data(length, '\0');
     file.read(data.data(), data.size());
     UniValue tests = read_json(data);
-    BOOST_CHECK(tests.isArray());
-    BOOST_CHECK(tests.size() > 0);
+    CHECK(tests.isArray());
+    CHECK(tests.size() > 0);
 
     for (size_t i = 0; i < tests.size(); i++) {
         AssetTest(tests[i], signature_cache);

@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <test/util/check.h>
 
 namespace {
 
@@ -72,7 +73,7 @@ struct TestData {
             privkey.Sign(MESSAGE_HASH, sig);
             sig.push_back(1); // SIGHASH_ALL
             dummy_sigs.insert({pubkey, {sig, i & 1}});
-            assert(privkey.SignSchnorr(MESSAGE_HASH, schnorr_sig, nullptr, EMPTY_AUX));
+            CHECK(privkey.SignSchnorr(MESSAGE_HASH, schnorr_sig, nullptr, EMPTY_AUX));
             schnorr_sig.push_back(1); // Maximally-sized signature has sighash byte
             schnorr_sigs.emplace(XOnlyPubKey{pubkey}, std::make_pair(std::move(schnorr_sig), i & 1));
 
@@ -86,7 +87,7 @@ struct TestData {
             if (i & 1) hash256_preimages[hash] = std::vector<unsigned char>(keydata, keydata + 32);
             hash.resize(20);
             CRIPEMD160().Write(keydata, 32).Finalize(hash.data());
-            assert(hash.size() == 20);
+            CHECK(hash.size() == 20);
             ripemd160.push_back(hash);
             if (i & 1) ripemd160_preimages[hash] = std::vector<unsigned char>(keydata, keydata + 32);
             CHash160().Write(keydata).Finalize(hash);
@@ -176,7 +177,7 @@ struct ParserContext {
 
     template<typename I>
     std::optional<Key> FromPKHBytes(I first, I last) const {
-        assert(last - first == 20);
+        CHECK(last - first == 20);
         CKeyID keyid;
         std::copy(first, last, keyid.begin());
         const auto it = TEST_DATA.dummy_keys_map.find(keyid);
@@ -207,7 +208,7 @@ struct ScriptParserContext {
 
     const std::vector<unsigned char>& ToPKBytes(const Key& key) const
     {
-        assert(!key.is_hash);
+        CHECK(!key.is_hash);
         return key.data;
     }
 
@@ -772,7 +773,7 @@ std::optional<NodeInfo> ConsumeNodeSmart(MsCtx script_ctx, FuzzedDataProvider& p
     /** Table entry for the requested type. */
     const auto& table{IsTapscript(script_ctx) ? SMARTINFO.tap_table : SMARTINFO.wsh_table};
     auto recipes_it = table.find(type_needed);
-    assert(recipes_it != table.end());
+    CHECK(recipes_it != table.end());
     /** Pick one recipe from the available ones for that type. */
     const auto& [frag, subt] = PickValue(provider, recipes_it->second);
 
@@ -839,7 +840,7 @@ std::optional<NodeInfo> ConsumeNodeSmart(MsCtx script_ctx, FuzzedDataProvider& p
         }
     }
 
-    assert(false);
+    CHECK(false);
 }
 
 /**
@@ -972,17 +973,17 @@ std::optional<Node> GenNode(MsCtx script_ctx, F ConsumeNode, Type root_type, boo
                 if (info.keys.empty()) {
                     return Node{miniscript::internal::NoDupCheck{}, script_ctx, info.fragment, std::move(sub), std::move(info.hash), info.k};
                 }
-                assert(sub.empty());
-                assert(info.hash.empty());
+                CHECK(sub.empty());
+                CHECK(info.hash.empty());
                 return Node{miniscript::internal::NoDupCheck{}, script_ctx, info.fragment, std::move(info.keys), info.k};
             }()};
             // Verify acceptability.
             if ((node.GetType() & "KVWB"_mst) == ""_mst) {
-                assert(!strict_valid);
+                CHECK(!strict_valid);
                 return {};
             }
             if (!(type_needed == ""_mst)) {
-                assert(node.GetType() << type_needed);
+                CHECK(node.GetType() << type_needed);
             }
             if (!node.IsValid()) return {};
             // Update resource predictions.
@@ -999,9 +1000,9 @@ std::optional<Node> GenNode(MsCtx script_ctx, F ConsumeNode, Type root_type, boo
             todo.pop_back();
         }
     }
-    assert(stack.size() == 1);
-    assert(stack[0].GetStaticOps() == ops);
-    assert(stack[0].ScriptSize() == scriptsize);
+    CHECK(stack.size() == 1);
+    CHECK(stack[0].GetStaticOps() == ops);
+    CHECK(stack[0].ScriptSize() == scriptsize);
     stack[0].DuplicateKeyCheck(KEY_COMP);
     return std::move(stack[0]);
 }
@@ -1034,20 +1035,20 @@ void TestNode(const MsCtx script_ctx, const std::optional<Node>& node, FuzzedDat
     // Check that it roundtrips to text representation
     const ParserContext parser_ctx{script_ctx};
     std::optional<std::string> str{node->ToString(parser_ctx)};
-    assert(str);
+    CHECK(str);
     auto parsed = miniscript::FromString(*str, parser_ctx);
-    assert(parsed);
-    assert(*parsed == *node);
+    CHECK(parsed);
+    CHECK(*parsed == *node);
 
     // Check consistency between script size estimation and real size.
     auto script = node->ToScript(parser_ctx);
-    assert(node->ScriptSize() == script.size());
+    CHECK(node->ScriptSize() == script.size());
 
     // Check consistency of "x" property with the script (type K is excluded, because it can end
     // with a push of a key, which could match these opcodes).
     if (!(node->GetType() << "K"_mst)) {
         bool ends_in_verify = !(node->GetType() << "x"_mst);
-        assert(ends_in_verify == (script.back() == OP_CHECKSIG || script.back() == OP_CHECKMULTISIG || script.back() == OP_EQUAL || script.back() == OP_NUMEQUAL));
+        CHECK(ends_in_verify == (script.back() == OP_CHECKSIG || script.back() == OP_CHECKMULTISIG || script.back() == OP_EQUAL || script.back() == OP_NUMEQUAL));
     }
 
     // The rest of the checks only apply when testing a valid top-level script.
@@ -1055,12 +1056,12 @@ void TestNode(const MsCtx script_ctx, const std::optional<Node>& node, FuzzedDat
 
     // Check roundtrip to script
     auto decoded = miniscript::FromScript(script, parser_ctx);
-    assert(decoded);
+    CHECK(decoded);
     // Note we can't use *decoded == *node because the miniscript representation may differ, so we check that:
     // - The script corresponding to that decoded form matches exactly
     // - The type matches exactly
-    assert(decoded->ToScript(parser_ctx) == script);
-    assert(decoded->GetType() == node->GetType());
+    CHECK(decoded->ToScript(parser_ctx) == script);
+    CHECK(decoded->GetType() == node->GetType());
 
     // Optionally pad the script or the witness in order to increase the sensitivity of the tests of
     // the resources limits logic.
@@ -1115,13 +1116,13 @@ void TestNode(const MsCtx script_ctx, const std::optional<Node>& node, FuzzedDat
         // - For P2WSH spends, the witness script
         // - For Tapscript spends, both the witness script and the control block
         const size_t max_stack_size{*node->GetStackSize() + 1 + miniscript::IsTapscript(script_ctx)};
-        assert(stack_nonmal.size() <= max_stack_size);
+        CHECK(stack_nonmal.size() <= max_stack_size);
         // If a non-malleable satisfaction exists, the malleable one must also exist, and be identical to it.
-        assert(mal_success);
-        assert(stack_nonmal == stack_mal);
+        CHECK(mal_success);
+        CHECK(stack_nonmal == stack_mal);
         // Compute witness size (excluding script push, control block, and witness count encoding).
         const uint64_t wit_size{GetSerializeSize(stack_nonmal) - GetSizeOfCompactSize(stack_nonmal.size())};
-        assert(wit_size <= *node->GetWitnessSize());
+        CHECK(wit_size <= *node->GetWitnessSize());
 
         // Test non-malleable satisfaction.
         witness_nonmal.stack.insert(witness_nonmal.stack.end(), std::make_move_iterator(stack_nonmal.begin()), std::make_move_iterator(stack_nonmal.end()));
@@ -1129,10 +1130,10 @@ void TestNode(const MsCtx script_ctx, const std::optional<Node>& node, FuzzedDat
         ScriptError serror;
         bool res = VerifyScript(DUMMY_SCRIPTSIG, script_pubkey, &witness_nonmal, STANDARD_SCRIPT_VERIFY_FLAGS, CHECKER_CTX, &serror);
         // Non-malleable satisfactions are guaranteed to be valid if ValidSatisfactions().
-        if (node->ValidSatisfactions()) assert(res);
+        if (node->ValidSatisfactions()) CHECK(res);
         // More detailed: non-malleable satisfactions must be valid, or could fail with ops count error (if CheckOpsLimit failed),
         // or with a stack size error (if CheckStackSize check failed).
-        assert(res ||
+        CHECK(res ||
                (!node->CheckOpsLimit() && serror == ScriptError::SCRIPT_ERR_OP_COUNT) ||
                (!node->CheckStackSize() && serror == ScriptError::SCRIPT_ERR_STACK_SIZE));
     }
@@ -1145,12 +1146,12 @@ void TestNode(const MsCtx script_ctx, const std::optional<Node>& node, FuzzedDat
         bool res = VerifyScript(DUMMY_SCRIPTSIG, script_pubkey, &witness_mal, STANDARD_SCRIPT_VERIFY_FLAGS, CHECKER_CTX, &serror);
         // Malleable satisfactions are not guaranteed to be valid under any conditions, but they can only
         // fail due to stack or ops limits.
-        assert(res || serror == ScriptError::SCRIPT_ERR_OP_COUNT || serror == ScriptError::SCRIPT_ERR_STACK_SIZE);
+        CHECK(res || serror == ScriptError::SCRIPT_ERR_OP_COUNT || serror == ScriptError::SCRIPT_ERR_STACK_SIZE);
     }
 
     if (node->IsSane()) {
         // For sane nodes, the two algorithms behave identically.
-        assert(mal_success == nonmal_success);
+        CHECK(mal_success == nonmal_success);
     }
 
     // Verify that if a node is policy-satisfiable, the malleable satisfaction
@@ -1185,11 +1186,11 @@ void TestNode(const MsCtx script_ctx, const std::optional<Node>& node, FuzzedDat
         case Fragment::HASH160:
             return TEST_DATA.hash160_preimages.contains(node.Data());
         default:
-            assert(false);
+            CHECK(false);
         }
         return false;
     });
-    assert(mal_success == satisfiable);
+    CHECK(mal_success == satisfiable);
 }
 
 } // namespace
@@ -1245,10 +1246,10 @@ FUZZ_TARGET(miniscript_string, .init = FuzzInit)
     if (!parsed) return;
 
     const auto str2 = parsed->ToString(parser_ctx);
-    assert(str2);
+    CHECK(str2);
     auto parsed2 = miniscript::FromString(*str2, parser_ctx);
-    assert(parsed2);
-    assert(*parsed == *parsed2);
+    CHECK(parsed2);
+    CHECK(*parsed == *parsed2);
 }
 
 /* Fuzz tests that test parsing from a script, and roundtripping via script. */
@@ -1262,5 +1263,5 @@ FUZZ_TARGET(miniscript_script)
     const auto ms = miniscript::FromScript(*script, script_parser_ctx);
     if (!ms) return;
 
-    assert(ms->ToScript(script_parser_ctx) == *script);
+    CHECK(ms->ToScript(script_parser_ctx) == *script);
 }

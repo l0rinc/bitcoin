@@ -24,21 +24,21 @@ using State = HeadersSyncState::State;
                      exp_headers_size, exp_pow_validated_prev, exp_locator_hash)                         \
     do {                                                                                                 \
         const auto result{result_expression};                                                            \
-        BOOST_REQUIRE_EQUAL(hss.GetState(), exp_state);                                                  \
-        BOOST_CHECK_EQUAL(result.success, exp_success);                                                  \
-        BOOST_CHECK_EQUAL(result.request_more, exp_request_more);                                        \
-        BOOST_CHECK_EQUAL(result.pow_validated_headers.size(), exp_headers_size);                        \
+        CHECK_EQUAL(hss.GetState(), exp_state);                                                  \
+        CHECK_EQUAL(result.success, exp_success);                                                  \
+        CHECK_EQUAL(result.request_more, exp_request_more);                                        \
+        CHECK_EQUAL(result.pow_validated_headers.size(), static_cast<std::remove_cvref_t<decltype(result.pow_validated_headers.size())>>(exp_headers_size));                        \
         const std::optional<uint256> pow_validated_prev_opt{exp_pow_validated_prev};                     \
         if (pow_validated_prev_opt) {                                                                    \
-            BOOST_CHECK_EQUAL(result.pow_validated_headers.at(0).hashPrevBlock, pow_validated_prev_opt); \
+            CHECK_EQUAL(result.pow_validated_headers.at(0).hashPrevBlock, pow_validated_prev_opt); \
         } else {                                                                                         \
-            BOOST_CHECK_EQUAL(exp_headers_size, 0);                                                      \
+            CHECK_EQUAL(exp_headers_size, std::remove_cvref_t<decltype(exp_headers_size)>{0});                                                      \
         }                                                                                                \
         const std::optional<uint256> locator_hash_opt{exp_locator_hash};                                 \
         if (locator_hash_opt) {                                                                          \
-            BOOST_CHECK_EQUAL(hss.NextHeadersRequestLocator().vHave.at(0), locator_hash_opt);            \
+            CHECK_EQUAL(hss.NextHeadersRequestLocator().vHave.at(0), locator_hash_opt);            \
         } else {                                                                                         \
-            BOOST_CHECK_EQUAL(exp_state, State::FINAL);                                                  \
+            CHECK_EQUAL(exp_state, State::FINAL);                                                  \
         }                                                                                                \
     } while (false)
 
@@ -63,7 +63,7 @@ struct HeadersGeneratorSetup : public RegTestingSetup {
         // roughly as the coefficient 0x7fffff with the exponent 0x20 (32 bytes).
         // This implies around every 2nd hash attempt should succeed, which
         // is why CHAIN_WORK == TARGET_BLOCKS * 2.
-        assert(genesis.nBits == 0x207fffff);
+        CHECK(genesis.nBits == 0x207fffff);
 
         // Subtract 1 since the genesis block also contributes work so we reach
         // the CHAIN_WORK target.
@@ -152,10 +152,10 @@ BOOST_AUTO_TEST_CASE(sneaky_redownload)
 
     // Just feed one header and check state.
     // Pretend the message is still "full", so we don't abort.
-    CHECK_RESULT(hss.ProcessNextHeaders({{first_chain.front()}}, /*full_headers_message=*/true),
-        hss, /*exp_state=*/State::PRESYNC,
-        /*exp_success=*/true, /*exp_request_more=*/true,
-        /*exp_headers_size=*/0, /*exp_pow_validated_prev=*/std::nullopt,
+        CHECK_RESULT(hss.ProcessNextHeaders({{first_chain.front()}}, /*full_headers_message=*/true),
+            hss, /*exp_state=*/State::PRESYNC,
+            /*exp_success=*/true, /*exp_request_more=*/true,
+            /*exp_headers_size=*/size_t{0}, /*exp_pow_validated_prev=*/std::nullopt,
         /*exp_locator_hash=*/first_chain.front().GetHash());
 
     // This chain should look valid, and we should have met the proof-of-work
@@ -230,7 +230,7 @@ BOOST_AUTO_TEST_CASE(too_little_work)
     // Verify that just trying to process the second chain would not succeed
     // (too little work).
     HeadersSyncState hss{CreateState()};
-    BOOST_REQUIRE_EQUAL(hss.GetState(), State::PRESYNC);
+    CHECK_EQUAL(hss.GetState(), State::PRESYNC);
 
     // Pretend just the first message is "full", so we don't abort.
     CHECK_RESULT(hss.ProcessNextHeaders({{second_chain.front()}}, true),

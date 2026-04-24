@@ -43,9 +43,9 @@ BOOST_AUTO_TEST_CASE(raii_event_creation)
     {
         auto base = obtain_event_base();
         base_ptr = (void*)base.get();
-        BOOST_CHECK(tags[base_ptr] == 1);
+        CHECK(tags[base_ptr] == 1);
     }
-    BOOST_CHECK(tags[base_ptr] == 0);
+    CHECK(tags[base_ptr] == 0);
 
     void* event_ptr = nullptr;
     {
@@ -55,11 +55,11 @@ BOOST_AUTO_TEST_CASE(raii_event_creation)
         base_ptr = (void*)base.get();
         event_ptr = (void*)event.get();
 
-        BOOST_CHECK(tags[base_ptr] == 1);
-        BOOST_CHECK(tags[event_ptr] == 1);
+        CHECK(tags[base_ptr] == 1);
+        CHECK(tags[event_ptr] == 1);
     }
-    BOOST_CHECK(tags[base_ptr] == 0);
-    BOOST_CHECK(tags[event_ptr] == 0);
+    CHECK(tags[base_ptr] == 0);
+    CHECK(tags[event_ptr] == 0);
 
     event_set_mem_functions(malloc, realloc, free);
 }
@@ -78,10 +78,10 @@ BOOST_AUTO_TEST_CASE(raii_event_order)
         event_ptr = (void*)event.get();
 
         // base should have allocated before event
-        BOOST_CHECK(orders[base_ptr] < orders[event_ptr]);
+        CHECK(orders[base_ptr] < orders[event_ptr]);
     }
     // base should be freed after event
-    BOOST_CHECK(orders[base_ptr] > orders[event_ptr]);
+    CHECK(orders[base_ptr] > orders[event_ptr]);
 
     event_set_mem_functions(malloc, realloc, free);
 }

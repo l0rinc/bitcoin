@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 namespace {
 template <typename T>
@@ -20,9 +21,9 @@ void TestMultiplicationOverflow(FuzzedDataProvider& fuzzed_data_provider)
 #ifndef _MSC_VER
     T result_builtin;
     const bool is_multiplication_overflow_builtin = __builtin_mul_overflow(i, j, &result_builtin);
-    assert(is_multiplication_overflow_custom == is_multiplication_overflow_builtin);
+    CHECK(is_multiplication_overflow_custom == is_multiplication_overflow_builtin);
     if (!is_multiplication_overflow_custom) {
-        assert(i * j == result_builtin);
+        CHECK(i * j == result_builtin);
     }
 #else
     if (!is_multiplication_overflow_custom) {

@@ -12,6 +12,7 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 FUZZ_TARGET(fee_rate)
 {
@@ -30,11 +31,11 @@ FUZZ_TARGET(fee_rate)
     CFeeRate larger_fee_rate{another_satoshis_per_k};
     larger_fee_rate += fee_rate;
     if (satoshis_per_k != 0 && another_satoshis_per_k != 0) {
-        assert(fee_rate < larger_fee_rate);
-        assert(!(fee_rate > larger_fee_rate));
-        assert(!(fee_rate == larger_fee_rate));
-        assert(fee_rate <= larger_fee_rate);
-        assert(!(fee_rate >= larger_fee_rate));
-        assert(fee_rate != larger_fee_rate);
+        CHECK(fee_rate < larger_fee_rate);
+        CHECK(!(fee_rate > larger_fee_rate));
+        CHECK(!(fee_rate == larger_fee_rate));
+        CHECK(fee_rate <= larger_fee_rate);
+        CHECK(!(fee_rate >= larger_fee_rate));
+        CHECK(fee_rate != larger_fee_rate);
     }
 }

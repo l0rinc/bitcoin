@@ -10,6 +10,7 @@
 #include <cassert>
 #include <cstdint>
 #include <vector>
+#include <test/util/check.h>
 
 FUZZ_TARGET(crypto_aes256)
 {
@@ -25,6 +26,6 @@ FUZZ_TARGET(crypto_aes256)
         encrypt.Encrypt(ciphertext.data(), plaintext.data());
         std::vector<uint8_t> decrypted_plaintext(AES_BLOCKSIZE);
         decrypt.Decrypt(decrypted_plaintext.data(), ciphertext.data());
-        assert(decrypted_plaintext == plaintext);
+        CHECK(decrypted_plaintext == plaintext);
     }
 }

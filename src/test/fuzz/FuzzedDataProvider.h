@@ -26,6 +26,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <test/util/check.h>
 
 // In addition to the comments below, the API is also briefly documented at
 // https://github.com/google/fuzzing/blob/master/docs/split-inputs.md#fuzzed-data-provider

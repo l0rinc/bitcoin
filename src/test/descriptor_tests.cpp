@@ -28,9 +28,9 @@ void CheckUnparsable(const std::string& prv, const std::string& pub, const std::
     std::string error;
     auto parse_priv = Parse(prv, keys_priv, error);
     auto parse_pub = Parse(pub, keys_pub, error);
-    BOOST_CHECK_MESSAGE(parse_priv.empty(), prv);
-    BOOST_CHECK_MESSAGE(parse_pub.empty(), pub);
-    BOOST_CHECK_EQUAL(error, expected_error);
+    CHECK_MESSAGE(parse_priv.empty(), prv);
+    CHECK_MESSAGE(parse_pub.empty(), pub);
+    CHECK_EQUAL(error, expected_error);
 }
 
 /** Check that the script is inferred as non-standard */
@@ -38,7 +38,7 @@ void CheckInferRaw(const CScript& script)
 {
     FlatSigningProvider dummy_provider;
     std::unique_ptr<Descriptor> desc = InferDescriptor(script, dummy_provider);
-    BOOST_CHECK(desc->ToString().rfind("raw(", 0) == 0);
+    CHECK(desc->ToString().rfind("raw(", 0) == 0);
 }
 
 constexpr int DEFAULT = 0;
@@ -127,7 +127,7 @@ std::set<CPubKey> GetKeyData(const FlatSigningProvider& provider, int flags) {
     for (const auto& [_, pubkey] : provider.pubkeys) {
         if (flags & XONLY_KEYS) {
             unsigned char bytes[33];
-            BOOST_CHECK_EQUAL(pubkey.size(), 33);
+            CHECK_EQUAL(pubkey.size(), std::remove_cvref_t<decltype(pubkey.size())>{33});
             std::copy(pubkey.begin(), pubkey.end(), bytes);
             bytes[0] = 0x02;
             CPubKey norm_pubkey{bytes};
@@ -154,7 +154,7 @@ std::set<std::pair<CPubKey, KeyOriginInfo>> GetKeyOriginData(const FlatSigningPr
         if (ignored.contains(keyid)) continue;
         if (flags & XONLY_KEYS) {
             unsigned char bytes[33];
-            BOOST_CHECK_EQUAL(data.first.size(), 33);
+            CHECK_EQUAL(data.first.size(), std::remove_cvref_t<decltype(data.first.size())>{33});
             std::copy(data.first.begin(), data.first.end(), bytes);
             bytes[0] = 0x02;
             CPubKey norm_pubkey{bytes};
@@ -186,12 +186,12 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
         prv = UseHInsteadOfApostrophe(prv);
     }
     parse_privs = Parse(prv, keys_priv, error);
-    BOOST_CHECK_MESSAGE(!parse_privs.empty(), error);
+    CHECK_MESSAGE(!parse_privs.empty(), error);
     if (replace_apostrophe_with_h_in_pub) {
         pub = UseHInsteadOfApostrophe(pub);
     }
     parse_pubs = Parse(pub, keys_pub, error);
-    BOOST_CHECK_MESSAGE(!parse_pubs.empty(), error);
+    CHECK_MESSAGE(!parse_pubs.empty(), error);
 
     auto& parse_priv = parse_privs.at(desc_index);
     auto& parse_pub = parse_pubs.at(desc_index);
@@ -200,61 +200,61 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
     const bool is_nontop_or_nonsolvable{!parse_priv->IsSolvable() || !parse_priv->GetOutputType()};
     const auto max_sat_maxsig{parse_priv->MaxSatisfactionWeight(true)};
     const auto max_sat_nonmaxsig{parse_priv->MaxSatisfactionWeight(false)};
-    BOOST_CHECK(max_sat_nonmaxsig <= max_sat_maxsig);
+    CHECK(max_sat_nonmaxsig <= max_sat_maxsig);
     const auto max_elems{parse_priv->MaxSatisfactionElems()};
     const bool is_input_size_info_set{max_sat_maxsig && max_sat_nonmaxsig && max_elems};
-    BOOST_CHECK_MESSAGE(is_input_size_info_set || is_nontop_or_nonsolvable, prv);
+    CHECK_MESSAGE(is_input_size_info_set || is_nontop_or_nonsolvable, prv);
 
     // The ScriptSize() must match the size of the Script string. (ScriptSize() is set for all descs but 'combo()'.)
     const bool is_combo{!parse_priv->IsSingleType()};
-    BOOST_CHECK_MESSAGE(is_combo || parse_priv->ScriptSize() == scripts[0][0].size() / 2, "Invalid ScriptSize() for " + prv);
+    CHECK_MESSAGE(is_combo || parse_priv->ScriptSize() == scripts[0][0].size() / 2, "Invalid ScriptSize() for " + prv);
 
     // Check that the correct OutputType is inferred
-    BOOST_CHECK(parse_priv->GetOutputType() == type);
-    BOOST_CHECK(parse_pub->GetOutputType() == type);
+    CHECK(parse_priv->GetOutputType() == type);
+    CHECK(parse_pub->GetOutputType() == type);
 
     // Check private keys are extracted from the private version but not the public one.
-    BOOST_CHECK(keys_priv.keys.size());
-    BOOST_CHECK(!keys_pub.keys.size());
+    CHECK(keys_priv.keys.size());
+    CHECK(!keys_pub.keys.size());
 
     // If expected_pub is provided, check that the serialize matches that.
     // Otherwise check that they serialize back to the public version.
     std::string pub1 = parse_priv->ToString();
     std::string pub2 = parse_pub->ToString();
     if (expected_pub) {
-        BOOST_CHECK_MESSAGE(EqualDescriptor(*expected_pub, pub1), "Private ser: " + pub1 + " Public desc: " + *expected_pub);
-        BOOST_CHECK_MESSAGE(EqualDescriptor(*expected_pub, pub2), "Public ser: " + pub2 + " Public desc: " + *expected_pub);
+        CHECK_MESSAGE(EqualDescriptor(*expected_pub, pub1), "Private ser: " + pub1 + " Public desc: " + *expected_pub);
+        CHECK_MESSAGE(EqualDescriptor(*expected_pub, pub2), "Public ser: " + pub2 + " Public desc: " + *expected_pub);
     } else {
-        BOOST_CHECK_MESSAGE(EqualDescriptor(pub, pub1), "Private ser: " + pub1 + " Public desc: " + pub);
-        BOOST_CHECK_MESSAGE(EqualDescriptor(pub, pub2), "Public ser: " + pub2 + " Public desc: " + pub);
+        CHECK_MESSAGE(EqualDescriptor(pub, pub1), "Private ser: " + pub1 + " Public desc: " + pub);
+        CHECK_MESSAGE(EqualDescriptor(pub, pub2), "Public ser: " + pub2 + " Public desc: " + pub);
     }
 
     // Check that the COMPAT identifier did not change
     if (op_desc_id) {
-        BOOST_CHECK_MESSAGE(DescriptorID(*parse_priv) == *op_desc_id, "DescriptorID() " + DescriptorID(*parse_priv).ToString() + " does not match for priv " + prv);
+        CHECK_MESSAGE(DescriptorID(*parse_priv) == *op_desc_id, "DescriptorID() " + DescriptorID(*parse_priv).ToString() + " does not match for priv " + prv);
     }
 
     // Check that both can be serialized with private key back to the private version, but not without private key.
     if (!(flags & MISSING_PRIVKEYS)) {
         std::string prv1;
-        BOOST_CHECK(parse_priv->ToPrivateString(keys_priv, prv1));
+        CHECK(parse_priv->ToPrivateString(keys_priv, prv1));
         if (expected_prv) {
-            BOOST_CHECK_MESSAGE(EqualDescriptor(*expected_prv, prv1), "Private ser: " + prv1 + "Private desc: " + *expected_prv);
+            CHECK_MESSAGE(EqualDescriptor(*expected_prv, prv1), "Private ser: " + prv1 + "Private desc: " + *expected_prv);
         } else {
-            BOOST_CHECK_MESSAGE(EqualDescriptor(prv, prv1), "Private ser: " + prv1 + " Private desc: " + prv);
+            CHECK_MESSAGE(EqualDescriptor(prv, prv1), "Private ser: " + prv1 + " Private desc: " + prv);
         }
-        BOOST_CHECK(!parse_priv->HavePrivateKeys(keys_pub));
-        BOOST_CHECK(parse_pub->HavePrivateKeys(keys_priv));
+        CHECK(!parse_priv->HavePrivateKeys(keys_pub));
+        CHECK(parse_pub->HavePrivateKeys(keys_priv));
 
-        BOOST_CHECK(!parse_priv->ToPrivateString(keys_pub, prv1));
-        BOOST_CHECK(parse_pub->ToPrivateString(keys_priv, prv1));
+        CHECK(!parse_priv->ToPrivateString(keys_pub, prv1));
+        CHECK(parse_pub->ToPrivateString(keys_priv, prv1));
         if (expected_prv) {
-            BOOST_CHECK(EqualDescriptor(*expected_prv, prv1));
-            BOOST_CHECK_MESSAGE(EqualDescriptor(*expected_prv, prv1), "Private ser: " + prv1 + " Private desc: " + *expected_prv);
+            CHECK(EqualDescriptor(*expected_prv, prv1));
+            CHECK_MESSAGE(EqualDescriptor(*expected_prv, prv1), "Private ser: " + prv1 + " Private desc: " + *expected_prv);
         } else {
-            BOOST_CHECK_MESSAGE(EqualDescriptor(prv, prv1), "Private ser: " + prv1 + " Private desc: " + prv);
+            CHECK_MESSAGE(EqualDescriptor(prv, prv1), "Private ser: " + prv1 + " Private desc: " + prv);
         }
-        BOOST_CHECK(!parse_pub->ToPrivateString(keys_pub, prv1));
+        CHECK(!parse_pub->ToPrivateString(keys_pub, prv1));
 
         // Check that both can ExpandPrivate and get the same SigningProviders
         FlatSigningProvider priv_prov;
@@ -263,33 +263,33 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
         FlatSigningProvider pub_prov;
         parse_pub->ExpandPrivate(0, keys_priv, pub_prov);
 
-        BOOST_CHECK_MESSAGE(EqualSigningProviders(priv_prov, pub_prov), "Private desc: " + prv + " Pub desc: " + pub);
+        CHECK_MESSAGE(EqualSigningProviders(priv_prov, pub_prov), "Private desc: " + prv + " Pub desc: " + pub);
     } else if (keys_priv.keys.size() > 0) {
         // If there is at least one private key, ToPrivateString() should return true and include that key
         std::string prv_str;
-        BOOST_CHECK(parse_priv->ToPrivateString(keys_priv, prv_str));
+        CHECK(parse_priv->ToPrivateString(keys_priv, prv_str));
         size_t checksum_len = 9; // Including the '#' character
-        BOOST_CHECK_MESSAGE(prv == prv_str.substr(0, prv_str.length() - checksum_len), prv);
+        CHECK_MESSAGE(prv == prv_str.substr(0, prv_str.length() - checksum_len), prv);
     }
 
     // Check that private can produce the normalized descriptors
     std::string norm1;
-    BOOST_CHECK(parse_priv->ToNormalizedString(keys_priv, norm1));
-    BOOST_CHECK_MESSAGE(EqualDescriptor(norm1, norm_pub), "priv->ToNormalizedString(): " + norm1 + " Norm. desc: " + norm_pub);
-    BOOST_CHECK(parse_pub->ToNormalizedString(keys_priv, norm1));
-    BOOST_CHECK_MESSAGE(EqualDescriptor(norm1, norm_pub), "pub->ToNormalizedString(): " + norm1 + " Norm. desc: " + norm_pub);
+    CHECK(parse_priv->ToNormalizedString(keys_priv, norm1));
+    CHECK_MESSAGE(EqualDescriptor(norm1, norm_pub), "priv->ToNormalizedString(): " + norm1 + " Norm. desc: " + norm_pub);
+    CHECK(parse_pub->ToNormalizedString(keys_priv, norm1));
+    CHECK_MESSAGE(EqualDescriptor(norm1, norm_pub), "pub->ToNormalizedString(): " + norm1 + " Norm. desc: " + norm_pub);
 
     // Check whether IsRange on both returns the expected result
-    BOOST_CHECK_EQUAL(parse_pub->IsRange(), (flags & RANGE) != 0);
-    BOOST_CHECK_EQUAL(parse_priv->IsRange(), (flags & RANGE) != 0);
+    CHECK_EQUAL(parse_pub->IsRange(), (flags & RANGE) != 0);
+    CHECK_EQUAL(parse_priv->IsRange(), (flags & RANGE) != 0);
 
     // Check that the highest key expression index matches the number of keys in the descriptor
     BOOST_TEST_INFO("Pub desc: " + pub);
     uint32_t key_exprs = parse_pub->GetMaxKeyExpr();
-    BOOST_CHECK_EQUAL(key_exprs + 1, parse_pub->GetKeyCount());
+    CHECK_EQUAL(key_exprs + 1, parse_pub->GetKeyCount());
     BOOST_TEST_INFO("Priv desc: " + prv);
-    BOOST_CHECK_EQUAL(key_exprs, parse_priv->GetMaxKeyExpr());
-    BOOST_CHECK_EQUAL(key_exprs + 1, parse_priv->GetKeyCount());
+    CHECK_EQUAL(key_exprs, parse_priv->GetMaxKeyExpr());
+    CHECK_EQUAL(key_exprs + 1, parse_priv->GetKeyCount());
 
     // * For ranged descriptors,  the `scripts` parameter is a list of expected result outputs, for subsequent
     //   positions to evaluate the descriptors on (so the first element of `scripts` is for evaluating the
@@ -298,7 +298,7 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
     // * For non-ranged descriptors, we evaluate the descriptors at positions 0, 1, and 2, but expect the
     //   same result in each case, namely the first element of `scripts`. Because of that, the size of
     //   `scripts` must be one in that case.
-    if (!(flags & RANGE)) assert(scripts.size() == 1);
+    if (!(flags & RANGE)) CHECK(scripts.size() == 1);
     size_t max = (flags & RANGE) ? scripts.size() : 3;
 
     // Iterate over the position we'll evaluate the descriptors in.
@@ -314,17 +314,17 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
             FlatSigningProvider script_provider, script_provider_cached;
             std::vector<CScript> spks, spks_cached;
             DescriptorCache desc_cache;
-            BOOST_CHECK((t ? parse_priv : parse_pub)->Expand(i, key_provider, spks, script_provider, &desc_cache));
+            CHECK((t ? parse_priv : parse_pub)->Expand(i, key_provider, spks, script_provider, &desc_cache));
 
             // Compare the output with the expected result.
-            BOOST_CHECK_EQUAL(spks.size(), ref.size());
+            CHECK_EQUAL(spks.size(), ref.size());
 
             // Try to expand again using cached data, and compare.
-            BOOST_CHECK(parse_pub->ExpandFromCache(i, desc_cache, spks_cached, script_provider_cached));
-            BOOST_CHECK(spks == spks_cached);
-            BOOST_CHECK(GetKeyData(script_provider, flags) == GetKeyData(script_provider_cached, flags));
-            BOOST_CHECK(script_provider.scripts == script_provider_cached.scripts);
-            BOOST_CHECK(GetKeyOriginData(script_provider, flags) == GetKeyOriginData(script_provider_cached, flags));
+            CHECK(parse_pub->ExpandFromCache(i, desc_cache, spks_cached, script_provider_cached));
+            CHECK(spks == spks_cached);
+            CHECK(GetKeyData(script_provider, flags) == GetKeyData(script_provider_cached, flags));
+            CHECK(script_provider.scripts == script_provider_cached.scripts);
+            CHECK(GetKeyOriginData(script_provider, flags) == GetKeyOriginData(script_provider_cached, flags));
 
             // Check whether keys are in the cache
             const auto& der_xpub_cache = desc_cache.GetCachedDerivedExtPubKeys();
@@ -339,13 +339,13 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
             if ((flags & RANGE) && !(flags & (DERIVE_HARDENED))) {
                 // For ranged, unhardened derivation, None of the keys in origins should appear in the cache but the cache should have parent keys
                 // But we can derive one level from each of those parent keys and find them all
-                BOOST_CHECK(der_xpub_cache.empty());
-                BOOST_CHECK(parent_xpub_cache.size() > 0);
+                CHECK(der_xpub_cache.empty());
+                CHECK(parent_xpub_cache.size() > 0);
                 std::set<CPubKey> pubkeys;
                 for (const auto& xpub_pair : parent_xpub_cache) {
                     const CExtPubKey& xpub = xpub_pair.second;
                     CExtPubKey der;
-                    BOOST_CHECK(xpub.Derive(der, i));
+                    CHECK(xpub.Derive(der, i));
                     pubkeys.insert(der.pubkey);
                 }
                 int count_pks = 0;
@@ -355,25 +355,25 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
                 }
                 if (flags & MUSIG_DERIVATION) {
                     if (!(flags & MIXED_MUSIG)) {
-                        BOOST_CHECK_EQUAL(count_pks, 1);
+                        CHECK_EQUAL(count_pks, std::remove_cvref_t<decltype(count_pks)>{1});
                     }
-                    BOOST_CHECK_EQUAL(num_xpubs, pubkeys.size());
+                    CHECK_EQUAL(num_xpubs, pubkeys.size());
                 } else {
                     if (flags & MUSIG) count_pks++; // One extra key for the aggregate key that is not in the cache
                     if (flags & MIXED_PUBKEYS) {
-                        BOOST_CHECK_EQUAL(num_xpubs, count_pks);
+                        CHECK_EQUAL(num_xpubs, static_cast<std::remove_cvref_t<decltype(num_xpubs)>>(count_pks));
                     } else {
-                        BOOST_CHECK_EQUAL(script_provider_cached.origins.size(), count_pks);
+                        CHECK_EQUAL(script_provider_cached.origins.size(), static_cast<std::remove_cvref_t<decltype(script_provider_cached.origins.size())>>(count_pks));
                     }
                 }
             } else if (num_xpubs > 0) {
                 // For ranged, hardened derivation, or not ranged, but has an xpub, all of the keys should appear in the cache
-                BOOST_CHECK_EQUAL(der_xpub_cache.size() + parent_xpub_cache.size(), num_xpubs);
+                CHECK_EQUAL(der_xpub_cache.size() + parent_xpub_cache.size(), num_xpubs);
                 if (!(flags & MIXED_PUBKEYS)) {
                     if (flags & UNIQUE_XPUBS) {
-                        BOOST_CHECK_EQUAL(script_provider_cached.origins.size(), num_unique_xpubs);
+                        CHECK_EQUAL(script_provider_cached.origins.size(), num_unique_xpubs);
                     } else {
-                        BOOST_CHECK_EQUAL(script_provider_cached.origins.size(), num_xpubs);
+                        CHECK_EQUAL(script_provider_cached.origins.size(), num_xpubs);
                     }
                 }
                 // Get all of the derived pubkeys
@@ -389,7 +389,7 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
                     const CExtPubKey& xpub = xpub_pair.second;
                     pubkeys.insert(xpub.pubkey);
                     CExtPubKey der;
-                    BOOST_CHECK(xpub.Derive(der, i));
+                    CHECK(xpub.Derive(der, i));
                     pubkeys.insert(der.pubkey);
                 }
                 int count_pks = 0;
@@ -399,24 +399,24 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
                 }
                 if (flags & MUSIG_DERIVATION && !(flags & MIXED_PUBKEYS)) {
                     // pubkeys is one key per xpub + one derived key per xpub
-                    BOOST_CHECK_EQUAL(2 * count_pks, pubkeys.size());
+                    CHECK_EQUAL(static_cast<std::remove_cvref_t<decltype(pubkeys.size())>>(2 * count_pks), pubkeys.size());
                     if (flags & UNIQUE_XPUBS) {
-                        BOOST_CHECK_EQUAL(2 * num_unique_xpubs, pubkeys.size());
+                        CHECK_EQUAL(static_cast<std::remove_cvref_t<decltype(pubkeys.size())>>(2 * num_unique_xpubs), pubkeys.size());
                     } else {
-                        BOOST_CHECK_EQUAL(2 * num_xpubs, pubkeys.size());
+                        CHECK_EQUAL(2 * num_xpubs, pubkeys.size());
                     }
                 } else {
                     if (flags & MUSIG) count_pks++; // One extra key for the aggregate key that is not in the cache
                     if (flags & MIXED_PUBKEYS) {
-                        BOOST_CHECK_EQUAL(num_xpubs, count_pks);
+                        CHECK_EQUAL(num_xpubs, static_cast<std::remove_cvref_t<decltype(num_xpubs)>>(count_pks));
                     } else {
-                        BOOST_CHECK_EQUAL(script_provider_cached.origins.size(), count_pks);
+                        CHECK_EQUAL(script_provider_cached.origins.size(), static_cast<std::remove_cvref_t<decltype(script_provider_cached.origins.size())>>(count_pks));
                     }
                 }
             } else if (!(flags & MIXED_PUBKEYS)) {
                 // Only const pubkeys, nothing should be cached
-                BOOST_CHECK(der_xpub_cache.empty());
-                BOOST_CHECK(parent_xpub_cache.empty());
+                CHECK(der_xpub_cache.empty());
+                CHECK(parent_xpub_cache.empty());
             }
 
             // Make sure we can expand using cached xpubs for unhardened derivation
@@ -424,19 +424,19 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
                 // Evaluate the descriptor at i + 1
                 FlatSigningProvider script_provider1, script_provider_cached1;
                 std::vector<CScript> spks1, spk1_from_cache;
-                BOOST_CHECK((t ? parse_priv : parse_pub)->Expand(i + 1, key_provider, spks1, script_provider1, nullptr));
+                CHECK((t ? parse_priv : parse_pub)->Expand(i + 1, key_provider, spks1, script_provider1, nullptr));
 
                 // Try again but use the cache from expanding i. That cache won't have the pubkeys for i + 1, but will have the parent xpub for derivation.
-                BOOST_CHECK(parse_pub->ExpandFromCache(i + 1, desc_cache, spk1_from_cache, script_provider_cached1));
-                BOOST_CHECK(spks1 == spk1_from_cache);
-                BOOST_CHECK(GetKeyData(script_provider1, flags) == GetKeyData(script_provider_cached1, flags));
-                BOOST_CHECK(script_provider1.scripts == script_provider_cached1.scripts);
-                BOOST_CHECK(GetKeyOriginData(script_provider1, flags) == GetKeyOriginData(script_provider_cached1, flags));
+                CHECK(parse_pub->ExpandFromCache(i + 1, desc_cache, spk1_from_cache, script_provider_cached1));
+                CHECK(spks1 == spk1_from_cache);
+                CHECK(GetKeyData(script_provider1, flags) == GetKeyData(script_provider_cached1, flags));
+                CHECK(script_provider1.scripts == script_provider_cached1.scripts);
+                CHECK(GetKeyOriginData(script_provider1, flags) == GetKeyOriginData(script_provider_cached1, flags));
             }
 
             // For each of the produced scripts, verify solvability, and when possible, try to sign a transaction spending it.
             for (size_t n = 0; n < spks.size(); ++n) {
-                BOOST_CHECK_EQUAL(ref[n], HexStr(spks[n]));
+                CHECK_EQUAL(ref[n], HexStr(spks[n]));
 
                 if (flags & (SIGNABLE | SIGNABLE_FAILS)) {
                     CMutableTransaction spend;
@@ -455,32 +455,32 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
                     sigdata.ripemd160_preimages = preimages;
                     sigdata.hash160_preimages = preimages;
                     const auto prod_sig_res = ProduceSignature(FlatSigningProvider{keys_priv}.Merge(FlatSigningProvider{script_provider}), creator, spks[n], sigdata);
-                    BOOST_CHECK_MESSAGE(prod_sig_res == !(flags & SIGNABLE_FAILS), prv);
+                    CHECK_MESSAGE(prod_sig_res == !(flags & SIGNABLE_FAILS), prv);
                 }
 
                 /* Infer a descriptor from the generated script, and verify its solvability and that it roundtrips. */
                 auto inferred = InferDescriptor(spks[n], script_provider);
-                BOOST_CHECK_EQUAL(inferred->IsSolvable(), !(flags & UNSOLVABLE));
+                CHECK_EQUAL(inferred->IsSolvable(), !(flags & UNSOLVABLE));
                 std::vector<CScript> spks_inferred;
                 FlatSigningProvider provider_inferred;
-                BOOST_CHECK(inferred->Expand(0, provider_inferred, spks_inferred, provider_inferred));
-                BOOST_CHECK_EQUAL(spks_inferred.size(), 1U);
-                BOOST_CHECK(spks_inferred[0] == spks[n]);
-                BOOST_CHECK_EQUAL(InferDescriptor(spks_inferred[0], provider_inferred)->IsSolvable(), !(flags & UNSOLVABLE));
-                BOOST_CHECK(GetKeyOriginData(provider_inferred, flags) == GetKeyOriginData(script_provider, flags));
+                CHECK(inferred->Expand(0, provider_inferred, spks_inferred, provider_inferred));
+                CHECK_EQUAL(spks_inferred.size(), 1U);
+                CHECK(spks_inferred[0] == spks[n]);
+                CHECK_EQUAL(InferDescriptor(spks_inferred[0], provider_inferred)->IsSolvable(), !(flags & UNSOLVABLE));
+                CHECK(GetKeyOriginData(provider_inferred, flags) == GetKeyOriginData(script_provider, flags));
             }
 
             // Test whether the observed key path is present in the 'paths' variable (which contains expected, unobserved paths),
             // and then remove it from that set.
             for (const auto& origin : script_provider.origins) {
-                BOOST_CHECK_MESSAGE(paths.contains(origin.second.second.path), "Unexpected key path: " + prv);
+                CHECK_MESSAGE(paths.contains(origin.second.second.path), "Unexpected key path: " + prv);
                 left_paths.erase(origin.second.second.path);
             }
         }
     }
 
     // Verify no expected paths remain that were not observed.
-    BOOST_CHECK_MESSAGE(left_paths.empty(), "Not all expected key paths found: " + prv);
+    CHECK_MESSAGE(left_paths.empty(), "Not all expected key paths found: " + prv);
 }
 
 void Check(const std::string& prv, const std::string& pub, const std::string& norm_pub, int flags,
@@ -514,10 +514,10 @@ void CheckMultipath(const std::string& prv,
         const std::optional<OutputType>& type,
         const std::vector<std::set<std::vector<uint32_t>>>& paths)
 {
-    assert(expanded_prvs.size() == expanded_pubs.size());
-    assert(expanded_prvs.size() == expanded_norm_pubs.size());
-    assert(expanded_prvs.size() == scripts.size());
-    assert(expanded_prvs.size() == paths.size());
+    CHECK(expanded_prvs.size() == expanded_pubs.size());
+    CHECK(expanded_prvs.size() == expanded_norm_pubs.size());
+    CHECK(expanded_prvs.size() == scripts.size());
+    CHECK(expanded_prvs.size() == paths.size());
     for (size_t i = 0; i < expanded_prvs.size(); ++i) {
         Check(prv, pub, expanded_norm_pubs.at(i), flags, scripts.at(i), type, std::nullopt, paths.at(i),
               /*spender_nlocktime=*/0, /*spender_nsequence=*/CTxIn::SEQUENCE_FINAL, /*preimages=*/{},
@@ -531,7 +531,7 @@ void CheckMultipath(const std::string& prv,
     std::string error;
     const auto desc{[&](){
         auto parsed{Parse(pub, prov, error)};
-        assert(parsed.size() > 1);
+        CHECK(parsed.size() > 1);
         return std::move(parsed.at(0));
     }()};
     desc->ToString();
@@ -582,7 +582,7 @@ void CheckInferDescriptor(const std::string& script_hex, const std::string& expe
     std::string checksum{GetDescriptorChecksum(expected_desc)};
 
     std::unique_ptr<Descriptor> desc = InferDescriptor(script, provider);
-    BOOST_CHECK_EQUAL(desc->ToString(), expected_desc + "#" + checksum);
+    CHECK_EQUAL(desc->ToString(), expected_desc + "#" + checksum);
 }
 
 }
@@ -1285,7 +1285,7 @@ BOOST_AUTO_TEST_CASE(descriptor_literal_null_byte)
     FlatSigningProvider keys;
     std::string err;
     auto descs = Parse("pk(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)", keys, err, /*require_checksum=*/false);
-    BOOST_REQUIRE_MESSAGE(!descs.empty(), err);
+    CHECK_MESSAGE(!descs.empty(), err);
 }
 
 BOOST_AUTO_TEST_CASE(descriptor_older_warnings)
@@ -1295,8 +1295,8 @@ BOOST_AUTO_TEST_CASE(descriptor_older_warnings)
         FlatSigningProvider keys;
         std::string err;
         auto descs = Parse("wsh(and_v(v:pk(0379e45b3cf75f9c5f9befd8e9506fb962f6a9d185ac87001ec44a8d3df8d4a9e3),older(65535)))", keys, err, /*require_checksum=*/false);
-        BOOST_REQUIRE_MESSAGE(!descs.empty(), err);
-        BOOST_CHECK(descs[0]->Warnings().empty());
+        CHECK_MESSAGE(!descs.empty(), err);
+        CHECK(descs[0]->Warnings().empty());
     }
 
     // Height-based unsafe value (65536) should produce one warning.
@@ -1305,10 +1305,10 @@ BOOST_AUTO_TEST_CASE(descriptor_older_warnings)
         std::string err;
         const uint32_t height_unsafe = 65536;
         auto descs = Parse(strprintf("wsh(and_v(v:pk(0379e45b3cf75f9c5f9befd8e9506fb962f6a9d185ac87001ec44a8d3df8d4a9e3),older(%u)))", height_unsafe), keys, err, /*require_checksum=*/false);
-        BOOST_REQUIRE_MESSAGE(!descs.empty(), err);
+        CHECK_MESSAGE(!descs.empty(), err);
         const auto& ws = descs[0]->Warnings();
-        BOOST_REQUIRE_EQUAL(ws.size(), 1U);
-        BOOST_CHECK_EQUAL(ws[0], strprintf("height-based relative locktime: older(%u) > 65535 blocks is unsafe", height_unsafe));
+        CHECK_EQUAL(ws.size(), 1U);
+        CHECK_EQUAL(ws[0], strprintf("height-based relative locktime: older(%u) > 65535 blocks is unsafe", height_unsafe));
     }
 
     // Time-based unsafe value: add SEQUENCE_LOCKTIME_TYPE_FLAG (1<<22)
@@ -1317,10 +1317,10 @@ BOOST_AUTO_TEST_CASE(descriptor_older_warnings)
         std::string err;
         const uint32_t time_unsafe = 65536 | CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG;
         auto descs = Parse(strprintf("wsh(and_v(v:pk(0379e45b3cf75f9c5f9befd8e9506fb962f6a9d185ac87001ec44a8d3df8d4a9e3),older(%u)))", time_unsafe), keys, err, /*require_checksum=*/false);
-        BOOST_REQUIRE_MESSAGE(!descs.empty(), err);
+        CHECK_MESSAGE(!descs.empty(), err);
         const auto& warnings = descs[0]->Warnings();
-        BOOST_REQUIRE_EQUAL(warnings.size(), 1U);
-        BOOST_CHECK_EQUAL(warnings[0], strprintf("time-based relative locktime: older(%u) > (65535 * 512) seconds is unsafe", time_unsafe));
+        CHECK_EQUAL(warnings.size(), 1U);
+        CHECK_EQUAL(warnings[0], strprintf("time-based relative locktime: older(%u) > (65535 * 512) seconds is unsafe", time_unsafe));
     }
 
     // Ensure no false positive warnings for absolute timelocks
@@ -1329,8 +1329,8 @@ BOOST_AUTO_TEST_CASE(descriptor_older_warnings)
         std::string err;
         // Using after() with a large timestamp (> 65535)
         auto descs = Parse("wsh(and_v(v:pk(0379e45b3cf75f9c5f9befd8e9506fb962f6a9d185ac87001ec44a8d3df8d4a9e3),after(1000000)))", keys, err, /*require_checksum=*/false);
-        BOOST_REQUIRE_MESSAGE(!descs.empty(), err);
-        BOOST_CHECK(descs[0]->Warnings().empty());
+        CHECK_MESSAGE(!descs.empty(), err);
+        CHECK(descs[0]->Warnings().empty());
     }
 }
 

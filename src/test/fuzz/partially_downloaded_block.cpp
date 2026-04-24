@@ -101,7 +101,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         // collisions (i.e. available.contains(i) does not imply
         // IsTxAvailable(i) == true).
         if (init_status == READ_STATUS_OK) {
-            assert(!pdb.IsTxAvailable(i) || available.contains(i));
+            CHECK(!pdb.IsTxAvailable(i) || available.contains(i));
         }
 
         bool skip{fuzzed_data_provider.ConsumeBool()};
@@ -122,12 +122,12 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     auto fill_status{pdb.FillBlock(reconstructed_block, missing, segwit_active)};
     switch (fill_status) {
     case READ_STATUS_OK:
-        assert(!skipped_missing);
-        assert(!fail_block_mutated);
-        assert(block->GetHash() == reconstructed_block.GetHash());
+        CHECK(!skipped_missing);
+        CHECK(!fail_block_mutated);
+        CHECK(block->GetHash() == reconstructed_block.GetHash());
         break;
     case READ_STATUS_FAILED:
-        assert(fail_block_mutated);
+        CHECK(fail_block_mutated);
         break;
     case READ_STATUS_INVALID:
         break;

@@ -45,7 +45,7 @@ BOOST_AUTO_TEST_CASE(test_cuckoocache_no_fakes)
         cc.insert(m_rng.rand256());
     }
     for (int x = 0; x < 100000; ++x) {
-        BOOST_CHECK(!cc.contains(m_rng.rand256(), false));
+        CHECK(!cc.contains(m_rng.rand256(), false));
     }
 };
 
@@ -117,7 +117,7 @@ BOOST_FIXTURE_TEST_CASE(cuckoocache_hit_rate_ok, HitRateTest)
     size_t megabytes = 4;
     for (double load = 0.1; load < 2; load *= 2) {
         double hits = test_cache<CuckooCache::cache<uint256, SignatureCacheHasher>>(megabytes, load);
-        BOOST_CHECK(normalize_hit_rate(hits, load) > HitRateThresh);
+        CHECK(normalize_hit_rate(hits, load) > HitRateThresh);
     }
 }
 
@@ -152,7 +152,7 @@ void test_cache_erase(size_t megabytes)
         set.insert(hashes_insert_copy[i]);
     /** Erase the first quarter */
     for (uint32_t i = 0; i < (n_insert / 4); ++i)
-        BOOST_CHECK(set.contains(hashes[i], true));
+        CHECK(set.contains(hashes[i], true));
     /** Insert the second half */
     for (uint32_t i = (n_insert / 2); i < n_insert; ++i)
         set.insert(hashes_insert_copy[i]);
@@ -176,10 +176,10 @@ void test_cache_erase(size_t megabytes)
     double hit_rate_fresh = double(count_fresh) / (double(n_insert) / 2.0);
 
     // Check that our hit_rate_fresh is perfect
-    BOOST_CHECK_EQUAL(hit_rate_fresh, 1.0);
+    CHECK_EQUAL(hit_rate_fresh, 1.0);
     // Check that we have a more than 2x better hit rate on stale elements than
     // erased elements.
-    BOOST_CHECK(hit_rate_stale > 2 * hit_rate_erased_but_contained);
+    CHECK(hit_rate_stale > 2 * hit_rate_erased_but_contained);
 }
 }; // struct EraseTest
 
@@ -236,7 +236,7 @@ void test_cache_erase_parallel(size_t megabytes)
             size_t end = ntodo*(x+1);
             for (uint32_t i = start; i < end; ++i) {
                 bool contains = set.contains(hashes[i], true);
-                assert(contains);
+                CHECK(contains);
             }
         });
 
@@ -269,10 +269,10 @@ void test_cache_erase_parallel(size_t megabytes)
     double hit_rate_fresh = double(count_fresh) / (double(n_insert) / 2.0);
 
     // Check that our hit_rate_fresh is perfect
-    BOOST_CHECK_EQUAL(hit_rate_fresh, 1.0);
+    CHECK_EQUAL(hit_rate_fresh, 1.0);
     // Check that we have a more than 2x better hit rate on stale elements than
     // erased elements.
-    BOOST_CHECK(hit_rate_stale > 2 * hit_rate_erased_but_contained);
+    CHECK(hit_rate_stale > 2 * hit_rate_erased_but_contained);
 }
 }; // struct EraseParallelTest
 BOOST_FIXTURE_TEST_CASE(cuckoocache_erase_parallel_ok, EraseParallelTest)
@@ -363,14 +363,14 @@ void test_cache_generations()
         // full yet.
         double hit = (double(count)) / (last_few.size() * POP_AMOUNT);
         // Loose Check that hit rate is above min_hit_rate
-        BOOST_CHECK(hit > min_hit_rate);
+        CHECK(hit > min_hit_rate);
         // Tighter check, count number of times we are less than tight_hit_rate
         // (and implicitly, greater than min_hit_rate)
         out_of_tight_tolerance += hit < tight_hit_rate;
     }
     // Check that being out of tolerance happens less than
     // max_rate_less_than_tight_hit_rate of the time
-    BOOST_CHECK(double(out_of_tight_tolerance) / double(total) < max_rate_less_than_tight_hit_rate);
+    CHECK(double(out_of_tight_tolerance) / double(total) < max_rate_less_than_tight_hit_rate);
 }
 }; // struct GenerationsTest
 BOOST_FIXTURE_TEST_CASE(cuckoocache_generations, GenerationsTest)

@@ -12,6 +12,7 @@
 #include <cmath>
 #include <limits>
 #include <optional>
+#include <test/util/check.h>
 
 FUZZ_TARGET(float)
 {
@@ -52,11 +53,11 @@ FUZZ_TARGET(float)
             if (!std::isnan(d)) {
                 uint64_t encoded_in_memory;
                 std::copy((const unsigned char*)&d, (const unsigned char*)(&d + 1), (unsigned char*)&encoded_in_memory);
-                assert(encoded_in_memory == encoded);
+                CHECK(encoded_in_memory == encoded);
             }
         }
         double d_deserialized = DecodeDouble(encoded);
-        assert(std::isnan(d) == std::isnan(d_deserialized));
-        assert(std::isnan(d) || d == d_deserialized);
+        CHECK(std::isnan(d) == std::isnan(d_deserialized));
+        CHECK(std::isnan(d) || d == d_deserialized);
     }
 }

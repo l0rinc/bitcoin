@@ -26,15 +26,15 @@ BOOST_AUTO_TEST_CASE(DescriptorScriptPubKeyManTests)
     auto key_internal = GenerateRandomKey();
     std::string desc_str = "tr(" + EncodeSecret(key_internal) + ",pk(" + HexStr(key_scriptpath.GetPubKey()) + "))";
     auto spk_man1 = CreateDescriptor(keystore, desc_str, true);
-    BOOST_CHECK(spk_man1 != nullptr);
+    CHECK(spk_man1 != nullptr);
     auto signprov_keypath_spendable = spk_man1->GetSigningProvider(key_internal.GetPubKey());
-    BOOST_CHECK(signprov_keypath_spendable != nullptr);
+    CHECK(signprov_keypath_spendable != nullptr);
 
     desc_str = "tr(" + HexStr(XOnlyPubKey::NUMS_H) + ",pk(" + HexStr(key_scriptpath.GetPubKey()) + "))";
     auto spk_man2 = CreateDescriptor(keystore, desc_str, true);
-    BOOST_CHECK(spk_man2 != nullptr);
+    CHECK(spk_man2 != nullptr);
     auto signprov_keypath_nums_h = spk_man2->GetSigningProvider(XOnlyPubKey::NUMS_H.GetEvenCorrespondingCPubKey());
-    BOOST_CHECK(signprov_keypath_nums_h == nullptr);
+    CHECK(signprov_keypath_nums_h == nullptr);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

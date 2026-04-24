@@ -16,6 +16,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 void initialize_message()
 {
@@ -32,9 +33,9 @@ FUZZ_TARGET(message, .init = initialize_message)
         std::string signature;
         const bool message_signed = MessageSign(private_key, random_message, signature);
         if (private_key.IsValid()) {
-            assert(message_signed);
+            CHECK(message_signed);
             const MessageVerificationResult verification_result = MessageVerify(EncodeDestination(PKHash(private_key.GetPubKey().GetID())), signature, random_message);
-            assert(verification_result == MessageVerificationResult::OK);
+            CHECK(verification_result == MessageVerificationResult::OK);
         }
     }
     {

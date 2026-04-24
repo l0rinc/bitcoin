@@ -58,15 +58,15 @@ void TestBIP324PacketVector(
 
     // Instantiate encryption BIP324 cipher.
     BIP324Cipher cipher(key, ellswift_ours);
-    BOOST_CHECK(!cipher);
-    BOOST_CHECK(cipher.GetOurPubKey() == ellswift_ours);
+    CHECK(!cipher);
+    CHECK(cipher.GetOurPubKey() == ellswift_ours);
     cipher.Initialize(ellswift_theirs, in_initiating);
-    BOOST_CHECK(cipher);
+    CHECK(cipher);
 
     // Compare session variables.
-    BOOST_CHECK(std::ranges::equal(out_session_id, cipher.GetSessionID()));
-    BOOST_CHECK(std::ranges::equal(mid_send_garbage, cipher.GetSendGarbageTerminator()));
-    BOOST_CHECK(std::ranges::equal(mid_recv_garbage, cipher.GetReceiveGarbageTerminator()));
+    CHECK(std::ranges::equal(out_session_id, cipher.GetSessionID()));
+    CHECK(std::ranges::equal(mid_send_garbage, cipher.GetSendGarbageTerminator()));
+    CHECK(std::ranges::equal(mid_recv_garbage, cipher.GetReceiveGarbageTerminator()));
 
     // Vector of encrypted empty messages, encrypted in order to seek to the right position.
     std::vector<std::vector<std::byte>> dummies(in_idx);
@@ -88,10 +88,10 @@ void TestBIP324PacketVector(
     // Verify ciphertext. Note that the test vectors specify either out_ciphertext (for short
     // messages) or out_ciphertext_endswith (for long messages), so only check the relevant one.
     if (!out_ciphertext.empty()) {
-        BOOST_CHECK(out_ciphertext == ciphertext);
+        CHECK(out_ciphertext == ciphertext);
     } else {
-        BOOST_CHECK(ciphertext.size() >= out_ciphertext_endswith.size());
-        BOOST_CHECK(std::ranges::equal(out_ciphertext_endswith, std::span{ciphertext}.last(out_ciphertext_endswith.size())));
+        CHECK(ciphertext.size() >= out_ciphertext_endswith.size());
+        CHECK(std::ranges::equal(out_ciphertext_endswith, std::span{ciphertext}.last(out_ciphertext_endswith.size())));
     }
 
     for (unsigned error = 0; error <= 12; ++error) {
@@ -105,15 +105,15 @@ void TestBIP324PacketVector(
 
         // Instantiate self-decrypting BIP324 cipher.
         BIP324Cipher dec_cipher(key, ellswift_ours);
-        BOOST_CHECK(!dec_cipher);
-        BOOST_CHECK(dec_cipher.GetOurPubKey() == ellswift_ours);
+        CHECK(!dec_cipher);
+        CHECK(dec_cipher.GetOurPubKey() == ellswift_ours);
         dec_cipher.Initialize(ellswift_theirs, (error == 1) ^ in_initiating, /*self_decrypt=*/true);
-        BOOST_CHECK(dec_cipher);
+        CHECK(dec_cipher);
 
         // Compare session variables.
-        BOOST_CHECK(std::ranges::equal(out_session_id, dec_cipher.GetSessionID()) == (error != 1));
-        BOOST_CHECK(std::ranges::equal(mid_send_garbage, dec_cipher.GetSendGarbageTerminator()) == (error != 1));
-        BOOST_CHECK(std::ranges::equal(mid_recv_garbage, dec_cipher.GetReceiveGarbageTerminator()) == (error != 1));
+        CHECK(std::ranges::equal(out_session_id, dec_cipher.GetSessionID()) == (error != 1));
+        CHECK(std::ranges::equal(mid_send_garbage, dec_cipher.GetSendGarbageTerminator()) == (error != 1));
+        CHECK(std::ranges::equal(mid_recv_garbage, dec_cipher.GetReceiveGarbageTerminator()) == (error != 1));
 
         // Seek to the numbered packet.
         if (in_idx == 0 && error == 12) continue;
@@ -150,10 +150,10 @@ void TestBIP324PacketVector(
         bool dec_ok = dec_cipher.Decrypt(std::span{to_decrypt}.subspan(cipher.LENGTH_LEN), dec_aad, dec_ignore, decrypted);
 
         // Verify result.
-        BOOST_CHECK(dec_ok == !error);
+        CHECK(dec_ok == !error);
         if (dec_ok) {
-            BOOST_CHECK(decrypted == contents);
-            BOOST_CHECK(dec_ignore == in_ignore);
+            CHECK(decrypted == contents);
+            CHECK(dec_ignore == in_ignore);
         }
     }
 }

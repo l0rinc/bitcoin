@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <tuple>
 #include <vector>
+#include <test/util/check.h>
 
 namespace {
 
@@ -44,16 +45,16 @@ public:
 
     void Allocate(size_t size, size_t alignment)
     {
-        assert(size > 0);                           // Must allocate at least 1 byte.
-        assert(alignment > 0);                      // Alignment must be at least 1.
-        assert((alignment & (alignment - 1)) == 0); // Alignment must be power of 2.
-        assert((size & (alignment - 1)) == 0);      // Size must be a multiple of alignment.
+        CHECK(size > 0);                           // Must allocate at least 1 byte.
+        CHECK(alignment > 0);                      // Alignment must be at least 1.
+        CHECK((alignment & (alignment - 1)) == 0); // Alignment must be power of 2.
+        CHECK((size & (alignment - 1)) == 0);      // Size must be a multiple of alignment.
 
         auto span = std::span(static_cast<std::byte*>(m_test_resource.Allocate(size, alignment)), size);
         m_total_allocated += size;
 
         auto ptr_val = reinterpret_cast<std::uintptr_t>(span.data());
-        assert((ptr_val & (alignment - 1)) == 0);
+        CHECK((ptr_val & (alignment - 1)) == 0);
 
         uint64_t seed = m_sequence++;
         RandomContentFill(m_entries.emplace_back(span, alignment, seed));
@@ -79,13 +80,13 @@ public:
     {
         std::vector<std::byte> expect(entry.span.size());
         InsecureRandomContext(entry.seed).fillrand(expect);
-        assert(std::ranges::equal(entry.span, expect));
+        CHECK(std::ranges::equal(entry.span, expect));
     }
 
     void Deallocate(const Entry& entry)
     {
         auto ptr_val = reinterpret_cast<std::uintptr_t>(entry.span.data());
-        assert((ptr_val & (entry.alignment - 1)) == 0);
+        CHECK((ptr_val & (entry.alignment - 1)) == 0);
         RandomContentCheck(entry);
         m_total_allocated -= entry.span.size();
         m_test_resource.Deallocate(entry.span.data(), entry.span.size(), entry.alignment);

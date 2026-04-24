@@ -33,10 +33,10 @@ BOOST_AUTO_TEST_CASE(gcsfilter_test)
 
     GCSFilter filter({0, 0, 10, 1 << 10}, included_elements);
     for (const auto& element : included_elements) {
-        BOOST_CHECK(filter.Match(element));
+        CHECK(filter.Match(element));
 
         auto insertion = excluded_elements.insert(element);
-        BOOST_CHECK(filter.MatchAny(excluded_elements));
+        CHECK(filter.MatchAny(excluded_elements));
         excluded_elements.erase(insertion.first);
     }
 }
@@ -44,14 +44,14 @@ BOOST_AUTO_TEST_CASE(gcsfilter_test)
 BOOST_AUTO_TEST_CASE(gcsfilter_default_constructor)
 {
     GCSFilter filter;
-    BOOST_CHECK_EQUAL(filter.GetN(), 0U);
-    BOOST_CHECK_EQUAL(filter.GetEncoded().size(), 1U);
+    CHECK_EQUAL(filter.GetN(), 0U);
+    CHECK_EQUAL(filter.GetEncoded().size(), 1U);
 
     const GCSFilter::Params& params = filter.GetParams();
-    BOOST_CHECK_EQUAL(params.m_siphash_k0, 0U);
-    BOOST_CHECK_EQUAL(params.m_siphash_k1, 0U);
-    BOOST_CHECK_EQUAL(params.m_P, 0);
-    BOOST_CHECK_EQUAL(params.m_M, 1U);
+    CHECK_EQUAL(params.m_siphash_k0, 0U);
+    CHECK_EQUAL(params.m_siphash_k1, 0U);
+    CHECK_EQUAL(params.m_P, std::remove_cvref_t<decltype(params.m_P)>{0});
+    CHECK_EQUAL(params.m_M, 1U);
 }
 
 BOOST_AUTO_TEST_CASE(blockfilter_basic_test)
@@ -103,10 +103,10 @@ BOOST_AUTO_TEST_CASE(blockfilter_basic_test)
     const GCSFilter& filter = block_filter.GetFilter();
 
     for (const CScript& script : included_scripts) {
-        BOOST_CHECK(filter.Match(GCSFilter::Element(script.begin(), script.end())));
+        CHECK(filter.Match(GCSFilter::Element(script.begin(), script.end())));
     }
     for (const CScript& script : excluded_scripts) {
-        BOOST_CHECK(!filter.Match(GCSFilter::Element(script.begin(), script.end())));
+        CHECK(!filter.Match(GCSFilter::Element(script.begin(), script.end())));
     }
 
     // Test serialization/unserialization.
@@ -116,22 +116,22 @@ BOOST_AUTO_TEST_CASE(blockfilter_basic_test)
     stream << block_filter;
     stream >> block_filter2;
 
-    BOOST_CHECK_EQUAL(block_filter.GetFilterType(), block_filter2.GetFilterType());
-    BOOST_CHECK_EQUAL(block_filter.GetBlockHash(), block_filter2.GetBlockHash());
-    BOOST_CHECK(block_filter.GetEncodedFilter() == block_filter2.GetEncodedFilter());
+    CHECK_EQUAL(block_filter.GetFilterType(), block_filter2.GetFilterType());
+    CHECK_EQUAL(block_filter.GetBlockHash(), block_filter2.GetBlockHash());
+    CHECK(block_filter.GetEncodedFilter() == block_filter2.GetEncodedFilter());
 
     BlockFilter default_ctor_block_filter_1;
     BlockFilter default_ctor_block_filter_2;
-    BOOST_CHECK_EQUAL(default_ctor_block_filter_1.GetFilterType(), default_ctor_block_filter_2.GetFilterType());
-    BOOST_CHECK_EQUAL(default_ctor_block_filter_1.GetBlockHash(), default_ctor_block_filter_2.GetBlockHash());
-    BOOST_CHECK(default_ctor_block_filter_1.GetEncodedFilter() == default_ctor_block_filter_2.GetEncodedFilter());
+    CHECK_EQUAL(default_ctor_block_filter_1.GetFilterType(), default_ctor_block_filter_2.GetFilterType());
+    CHECK_EQUAL(default_ctor_block_filter_1.GetBlockHash(), default_ctor_block_filter_2.GetBlockHash());
+    CHECK(default_ctor_block_filter_1.GetEncodedFilter() == default_ctor_block_filter_2.GetEncodedFilter());
 }
 
 BOOST_AUTO_TEST_CASE(blockfilters_json_test)
 {
     UniValue json;
     if (!json.read(json_tests::blockfilters) || !json.isArray()) {
-        BOOST_ERROR("Parse error.");
+        CHECK_ERROR("Parse error.");
         return;
     }
 
@@ -143,16 +143,16 @@ BOOST_AUTO_TEST_CASE(blockfilters_json_test)
         if (test.size() == 1) {
             continue;
         } else if (test.size() < 7) {
-            BOOST_ERROR("Bad test: " << strTest);
+            CHECK_ERROR("Bad test: " << strTest);
             continue;
         }
 
         unsigned int pos = 0;
         /*int block_height =*/ test[pos++].getInt<int>();
-        BOOST_CHECK(uint256::FromHex(test[pos++].get_str()));
+        CHECK(uint256::FromHex(test[pos++].get_str()));
 
         CBlock block;
-        BOOST_REQUIRE(DecodeHexBlk(block, test[pos++].get_str()));
+        CHECK(DecodeHexBlk(block, test[pos++].get_str()));
 
         CBlockUndo block_undo;
         block_undo.vtxundo.emplace_back();
@@ -169,23 +169,23 @@ BOOST_AUTO_TEST_CASE(blockfilters_json_test)
         uint256 filter_header_basic{*Assert(uint256::FromHex(test[pos++].get_str()))};
 
         BlockFilter computed_filter_basic(BlockFilterType::BASIC, block, block_undo);
-        BOOST_CHECK(computed_filter_basic.GetFilter().GetEncoded() == filter_basic);
+        CHECK(computed_filter_basic.GetFilter().GetEncoded() == filter_basic);
 
         uint256 computed_header_basic = computed_filter_basic.ComputeHeader(prev_filter_header_basic);
-        BOOST_CHECK(computed_header_basic == filter_header_basic);
+        CHECK(computed_header_basic == filter_header_basic);
     }
 }
 
 BOOST_AUTO_TEST_CASE(blockfilter_type_names)
 {
-    BOOST_CHECK_EQUAL(BlockFilterTypeName(BlockFilterType::BASIC), "basic");
-    BOOST_CHECK_EQUAL(BlockFilterTypeName(static_cast<BlockFilterType>(255)), "");
+    CHECK_EQUAL(BlockFilterTypeName(BlockFilterType::BASIC), std::string_view{"basic"});
+    CHECK_EQUAL(BlockFilterTypeName(static_cast<BlockFilterType>(255)), std::string_view{""});
 
     BlockFilterType filter_type;
-    BOOST_CHECK(BlockFilterTypeByName("basic", filter_type));
-    BOOST_CHECK_EQUAL(filter_type, BlockFilterType::BASIC);
+    CHECK(BlockFilterTypeByName("basic", filter_type));
+    CHECK_EQUAL(filter_type, BlockFilterType::BASIC);
 
-    BOOST_CHECK(!BlockFilterTypeByName("unknown", filter_type));
+    CHECK(!BlockFilterTypeByName("unknown", filter_type));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

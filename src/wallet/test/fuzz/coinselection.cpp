@@ -122,17 +122,17 @@ FUZZ_TARGET(coin_grinder)
     // Run coinselection algorithms
     auto result_cg = CoinGrinder(group_pos, target, coin_params.m_min_change_target, MAX_STANDARD_TX_WEIGHT);
     if (target + coin_params.m_min_change_target > max_spendable || HasErrorMsg(result_cg)) return; // We only need to compare algorithms if CoinGrinder has a solution
-    assert(result_cg);
+    CHECK(result_cg);
     if (!result_cg->GetAlgoCompleted()) return; // Bail out if CoinGrinder solution is not optimal
 
     auto result_srd = SelectCoinsSRD(group_pos, target, coin_params.m_change_fee, fast_random_context, MAX_STANDARD_TX_WEIGHT);
     if (result_srd && result_srd->GetChange(CHANGE_LOWER, coin_params.m_change_fee) > 0) { // exclude any srd solutions that don’t have change, err on excluding
-        assert(result_srd->GetWeight() >= result_cg->GetWeight());
+        CHECK(result_srd->GetWeight() >= result_cg->GetWeight());
     }
 
     auto result_knapsack = KnapsackSolver(group_pos, target, coin_params.m_min_change_target, fast_random_context, MAX_STANDARD_TX_WEIGHT);
     if (result_knapsack && result_knapsack->GetChange(CHANGE_LOWER, coin_params.m_change_fee) > 0) { // exclude any knapsack solutions that don’t have change, err on excluding
-        assert(result_knapsack->GetWeight() >= result_cg->GetWeight());
+        CHECK(result_knapsack->GetWeight() >= result_cg->GetWeight());
     }
 }
 
@@ -171,7 +171,7 @@ FUZZ_TARGET(coin_grinder_is_optimal)
         group_pos.push_back(output_group);
     }
     size_t num_groups = group_pos.size();
-    assert(num_groups <= max_output_groups);
+    CHECK(num_groups <= max_output_groups);
 
     // Only choose targets below max_spendable
     const CAmount target{fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(1, std::max(CAmount{1}, max_spendable - coin_params.m_min_change_target))};
@@ -199,14 +199,14 @@ FUZZ_TARGET(coin_grinder_is_optimal)
         int high_max_selection_weight = fuzzed_data_provider.ConsumeIntegralInRange<int>(best_weight, std::numeric_limits<int>::max());
 
         auto result_cg = CoinGrinder(group_pos, target, coin_params.m_min_change_target, high_max_selection_weight);
-        assert(result_cg);
-        assert(result_cg->GetWeight() <= high_max_selection_weight);
-        assert(result_cg->GetSelectedEffectiveValue() >= target + coin_params.m_min_change_target);
-        assert(best_weight < result_cg->GetWeight() || (best_weight == result_cg->GetWeight() && best_amount <= result_cg->GetSelectedEffectiveValue()));
+        CHECK(result_cg);
+        CHECK(result_cg->GetWeight() <= high_max_selection_weight);
+        CHECK(result_cg->GetSelectedEffectiveValue() >= target + coin_params.m_min_change_target);
+        CHECK(best_weight < result_cg->GetWeight() || (best_weight == result_cg->GetWeight() && best_amount <= result_cg->GetSelectedEffectiveValue()));
         if (result_cg->GetAlgoCompleted()) {
             // If CoinGrinder exhausted the search space, it must return the optimal solution
-            assert(best_weight == result_cg->GetWeight());
-            assert(best_amount == result_cg->GetSelectedEffectiveValue());
+            CHECK(best_weight == result_cg->GetWeight());
+            CHECK(best_amount == result_cg->GetSelectedEffectiveValue());
         }
     }
 
@@ -214,7 +214,7 @@ FUZZ_TARGET(coin_grinder_is_optimal)
     int low_max_selection_weight = fuzzed_data_provider.ConsumeIntegralInRange<int>(0, best_weight - 1);
     auto result_cg = CoinGrinder(group_pos, target, coin_params.m_min_change_target, low_max_selection_weight);
     // Max_weight should have been exceeded, or there were insufficient funds
-    assert(!result_cg);
+    CHECK(!result_cg);
 }
 
 FUZZ_TARGET(bnb_finds_min_waste)
@@ -268,7 +268,7 @@ FUZZ_TARGET(bnb_finds_min_waste)
         group_pos.push_back(output_group);
     }
     size_t num_groups = group_pos.size();
-    assert(num_groups <= max_output_groups);
+    CHECK(num_groups <= max_output_groups);
 
     // Only choose targets below max_spendable
     const CAmount target{fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(1, std::max(CAmount{1}, max_spendable - coin_params.m_cost_of_change))};
@@ -316,7 +316,7 @@ FUZZ_TARGET(bnb_finds_min_waste)
             if (subset_waste < best_waste) {
                 best_waste = subset_waste;
                 result_bf.RecalculateWaste(coin_params.min_viable_change, coin_params.m_cost_of_change, coin_params.m_change_fee);
-                assert(result_bf.GetWaste() == best_waste);
+                CHECK(result_bf.GetWaste() == best_waste);
                 best_weight = subset_weight;
             }
         }
@@ -327,18 +327,18 @@ FUZZ_TARGET(bnb_finds_min_waste)
 
     if (!solutions.size() || !result_bnb) {
         // Either both BnB and Brute Force find a solution or neither does.
-        assert(!result_bnb == !solutions.size());
+        CHECK(!result_bnb == !solutions.size());
     } else {
         // If brute forcing found a solution with an acceptable weight, BnB must find at least one solution with at most 16 output groups
-        assert(result_bnb);
+        CHECK(result_bnb);
         result_bnb->RecalculateWaste(coin_params.min_viable_change, coin_params.m_cost_of_change, coin_params.m_change_fee);
-        assert(result_bnb->GetWeight() <= high_max_selection_weight);
-        assert(result_bnb->GetSelectedEffectiveValue() >= target);
-        assert(result_bnb->GetSelectedEffectiveValue() <= target + coin_params.m_cost_of_change);
-        assert(best_waste <= result_bnb->GetWaste());
+        CHECK(result_bnb->GetWeight() <= high_max_selection_weight);
+        CHECK(result_bnb->GetSelectedEffectiveValue() >= target);
+        CHECK(result_bnb->GetSelectedEffectiveValue() <= target + coin_params.m_cost_of_change);
+        CHECK(best_waste <= result_bnb->GetWaste());
         if (result_bnb->GetAlgoCompleted()) {
             // If BnB exhausted the search space, it must return an optimal solution (tied on waste score)
-            assert(best_waste == result_bnb->GetWaste());
+            CHECK(best_waste == result_bnb->GetWaste());
         }
     }
 }
@@ -392,9 +392,9 @@ void FuzzCoinSelectionAlgorithm(std::span<const uint8_t> buffer) {
             auto result_bnb = SelectCoinsBnB(group_pos, target, coin_params.m_cost_of_change, max_selection_weight);
             if (result_bnb) {
                 result = *result_bnb;
-                assert(result_bnb->GetChange(coin_params.min_viable_change, coin_params.m_change_fee) == 0);
-                assert(result_bnb->GetSelectedValue() >= target);
-                assert(result_bnb->GetWeight() <= max_selection_weight);
+                CHECK(result_bnb->GetChange(coin_params.min_viable_change, coin_params.m_change_fee) == 0);
+                CHECK(result_bnb->GetSelectedValue() >= target);
+                CHECK(result_bnb->GetWeight() <= max_selection_weight);
                 (void)result_bnb->GetShuffledInputVector();
                 (void)result_bnb->GetInputSet();
             }
@@ -405,9 +405,9 @@ void FuzzCoinSelectionAlgorithm(std::span<const uint8_t> buffer) {
         auto result_srd = SelectCoinsSRD(group_pos, target, coin_params.m_change_fee, fast_random_context, max_selection_weight);
         if (result_srd) {
             result = *result_srd;
-            assert(result_srd->GetSelectedValue() >= target);
-            assert(result_srd->GetChange(CHANGE_LOWER, coin_params.m_change_fee) > 0);
-            assert(result_srd->GetWeight() <= max_selection_weight);
+            CHECK(result_srd->GetSelectedValue() >= target);
+            CHECK(result_srd->GetChange(CHANGE_LOWER, coin_params.m_change_fee) > 0);
+            CHECK(result_srd->GetWeight() <= max_selection_weight);
             result_srd->SetBumpFeeDiscount(ConsumeMoney(fuzzed_data_provider));
             result_srd->RecalculateWaste(coin_params.min_viable_change, coin_params.m_cost_of_change, coin_params.m_change_fee);
             (void)result_srd->GetShuffledInputVector();
@@ -429,12 +429,12 @@ void FuzzCoinSelectionAlgorithm(std::span<const uint8_t> buffer) {
         // If the total balance is sufficient for the target and we are not using
         // effective values, Knapsack should always find a solution (unless the selection exceeded the max tx weight).
         if (total_balance >= target && subtract_fee_outputs && !HasErrorMsg(result_knapsack)) {
-            assert(result_knapsack);
+            CHECK(result_knapsack);
         }
         if (result_knapsack) {
             result = *result_knapsack;
-            assert(result_knapsack->GetSelectedValue() >= target);
-            assert(result_knapsack->GetWeight() <= max_selection_weight);
+            CHECK(result_knapsack->GetSelectedValue() >= target);
+            CHECK(result_knapsack->GetWeight() <= max_selection_weight);
             result_knapsack->SetBumpFeeDiscount(ConsumeMoney(fuzzed_data_provider));
             result_knapsack->RecalculateWaste(coin_params.min_viable_change, coin_params.m_cost_of_change, coin_params.m_change_fee);
             (void)result_knapsack->GetShuffledInputVector();
@@ -452,7 +452,7 @@ void FuzzCoinSelectionAlgorithm(std::span<const uint8_t> buffer) {
         if (result) {
             const auto weight{result->GetWeight()};
             result->AddInputs(new_utxo_pool, subtract_fee_outputs);
-            assert(result->GetWeight() > weight);
+            CHECK(result->GetWeight() > weight);
         }
     }
 
@@ -465,9 +465,9 @@ void FuzzCoinSelectionAlgorithm(std::span<const uint8_t> buffer) {
         const OutputSet input_set{result->GetInputSet()};
         const int old_weight{result->GetWeight()};
         result->Merge(manual_selection);
-        assert(result->GetInputSet().size() == input_set.size() + manual_inputs.size());
-        assert(result->GetTarget() == old_target + manual_selection.GetTarget());
-        assert(result->GetWeight() == old_weight + manual_selection.GetWeight());
+        CHECK(result->GetInputSet().size() == input_set.size() + manual_inputs.size());
+        CHECK(result->GetTarget() == old_target + manual_selection.GetTarget());
+        CHECK(result->GetWeight() == old_weight + manual_selection.GetWeight());
     }
 }
 

@@ -24,12 +24,12 @@ BOOST_AUTO_TEST_CASE(test_tracepoints)
     TRACEPOINT(test, one_arg, 1);
     TRACEPOINT(test, six_args, 1, 2, 3, 4, 5, 6);
     TRACEPOINT(test, twelve_args, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
-    BOOST_CHECK(true);
+    CHECK(true);
 }
 
 int fail_test_if_executed()
 {
-    BOOST_CHECK(false);
+    CHECK(false);
     return 0;
 }
 
@@ -40,7 +40,7 @@ BOOST_AUTO_TEST_CASE(test_tracepoint_check_if_attached)
     // `test:check_if_attached` tracepoint, fail_test_if_executed() is executed.
     // Since we don't attach to the tracepoint when running the test, it succeeds.
     TRACEPOINT(test, check_if_attached, fail_test_if_executed());
-    BOOST_CHECK(true);
+    CHECK(true);
 }
 
 BOOST_AUTO_TEST_CASE(test_tracepoint_manual_tracepoint_active_check)
@@ -49,10 +49,10 @@ BOOST_AUTO_TEST_CASE(test_tracepoint_manual_tracepoint_active_check)
     // execute an 'expensive' code section if we are attached to the
     // tracepoint.
     if (TRACEPOINT_ACTIVE(test, expensive_section)) {
-        BOOST_CHECK(false); // expensive_function()
+        CHECK(false); // expensive_function()
         TRACEPOINT(test, expensive_section);
     }
-    BOOST_CHECK(true);
+    CHECK(true);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

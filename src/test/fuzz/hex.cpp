@@ -17,31 +17,32 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 FUZZ_TARGET(hex)
 {
     const std::string random_hex_string(buffer.begin(), buffer.end());
     const std::vector<unsigned char> data = ParseHex(random_hex_string);
     const std::vector<std::byte> bytes{ParseHex<std::byte>(random_hex_string)};
-    assert(std::ranges::equal(std::as_bytes(std::span{data}), bytes));
+    CHECK(std::ranges::equal(std::as_bytes(std::span{data}), bytes));
     const std::string hex_data = HexStr(data);
     if (IsHex(random_hex_string)) {
-        assert(ToLower(random_hex_string) == hex_data);
+        CHECK(ToLower(random_hex_string) == hex_data);
     }
     if (uint256::FromHex(random_hex_string)) {
-        assert(random_hex_string.length() == 64);
-        assert(Txid::FromHex(random_hex_string));
-        assert(Wtxid::FromHex(random_hex_string));
-        assert(uint256::FromUserHex(random_hex_string));
+        CHECK(random_hex_string.length() == 64);
+        CHECK(Txid::FromHex(random_hex_string));
+        CHECK(Wtxid::FromHex(random_hex_string));
+        CHECK(uint256::FromUserHex(random_hex_string));
     }
     if (const auto result{uint256::FromUserHex(random_hex_string)}) {
         const auto result_string{result->ToString()}; // ToString() returns a fixed-length string without "0x" prefix
-        assert(result_string.length() == 64);
-        assert(IsHex(result_string));
-        assert(TryParseHex(result_string));
-        assert(Txid::FromHex(result_string));
-        assert(Wtxid::FromHex(result_string));
-        assert(uint256::FromHex(result_string));
+        CHECK(result_string.length() == 64);
+        CHECK(IsHex(result_string));
+        CHECK(TryParseHex(result_string));
+        CHECK(Txid::FromHex(result_string));
+        CHECK(Wtxid::FromHex(result_string));
+        CHECK(uint256::FromHex(result_string));
     }
     try {
         (void)HexToPubKey(random_hex_string);

@@ -42,7 +42,7 @@ static void addCoin(CoinsResult& coins,
     const auto txid{tx.GetHash()};
     LOCK(wallet.cs_wallet);
     auto ret = wallet.mapWallet.emplace(std::piecewise_construct, std::forward_as_tuple(txid), std::forward_as_tuple(MakeTransactionRef(std::move(tx)), TxStateInactive{}));
-    assert(ret.second);
+    CHECK(ret.second);
     CWalletTx& wtx = (*ret.first).second;
     const auto& txout = wtx.tx->vout.at(0);
     coins.Add(*Assert(OutputTypeFromDestination(dest)),
@@ -88,7 +88,7 @@ public:
         OutputGroupTypeMap groups = GroupOutputs(*wallet, coins_pool, makeSelectionParams(rand, avoid_partial_spends), {{filter}})[filter];
         std::vector<OutputGroup>& groups_out = positive_only ? groups.groups_by_type[type].positive_group :
                                                groups.groups_by_type[type].mixed_group;
-        BOOST_CHECK_EQUAL(groups_out.size(), expected_size);
+        CHECK_EQUAL(groups_out.size(), static_cast<std::remove_cvref_t<decltype(groups_out.size())>>(expected_size));
     }
 
     void GroupAndVerify(const OutputType type,
@@ -152,7 +152,7 @@ BOOST_AUTO_TEST_CASE(outputs_grouping_tests)
 
     const CTxDestination dest3 = *Assert(wallet->GetNewDestination(OutputType::BECH32, ""));
     addCoin(group_verifier.coins_pool, *wallet, dest3, 1, true, CFeeRate(100));
-    BOOST_CHECK(group_verifier.coins_pool.coins[OutputType::BECH32].back().GetEffectiveValue() <= 0);
+    CHECK(group_verifier.coins_pool.coins[OutputType::BECH32].back().GetEffectiveValue() <= 0);
 
     // First expect no changes with "positive_only" enabled
     group_verifier.GroupAndVerify(OutputType::BECH32,

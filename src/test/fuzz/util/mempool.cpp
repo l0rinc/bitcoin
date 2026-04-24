@@ -13,6 +13,7 @@
 #include <cassert>
 #include <cstdint>
 #include <limits>
+#include <test/util/check.h>
 
 CTxMemPoolEntry ConsumeTxMemPoolEntry(FuzzedDataProvider& fuzzed_data_provider, const CTransaction& tx, uint32_t max_height) noexcept
 {
@@ -21,7 +22,7 @@ CTxMemPoolEntry ConsumeTxMemPoolEntry(FuzzedDataProvider& fuzzed_data_provider, 
     //
     // Reproduce using CFeeRate(348732081484775, 10).GetFeePerK()
     const CAmount fee{ConsumeMoney(fuzzed_data_provider, /*max=*/std::numeric_limits<CAmount>::max() / CAmount{100'000})};
-    assert(MoneyRange(fee));
+    CHECK(MoneyRange(fee));
     const int64_t time = fuzzed_data_provider.ConsumeIntegral<int64_t>();
     const uint64_t entry_sequence{fuzzed_data_provider.ConsumeIntegral<uint64_t>()};
     const auto entry_height{fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(0, max_height)};

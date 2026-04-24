@@ -322,7 +322,7 @@ ssize_t FuzzedFileProvider::write(void* cookie, const char* buf, size_t size)
 
 int FuzzedFileProvider::seek(void* cookie, int64_t* offset, int whence)
 {
-    assert(whence == SEEK_SET || whence == SEEK_CUR || whence == SEEK_END);
+    CHECK(whence == SEEK_SET || whence == SEEK_CUR || whence == SEEK_END);
     FuzzedFileProvider* fuzzed_file = (FuzzedFileProvider*)cookie;
     SetFuzzedErrNo(fuzzed_file->m_fuzzed_data_provider);
     int64_t new_offset = 0;

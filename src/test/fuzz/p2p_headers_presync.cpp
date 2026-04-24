@@ -241,10 +241,10 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
     total_work += CalculateClaimedHeadersWork(all_headers);
 
     // This test should never create a chain with more work than MinimumChainWork.
-    assert(total_work < chainman.MinimumChainWork());
+    CHECK(total_work < chainman.MinimumChainWork());
 
     // The headers/blocks sent in this test should never be stored, as the chains don't have the work required
     // to meet the anti-DoS work threshold. So, if at any point the block index grew in size, then there's a bug
     // in the headers pre-sync logic.
-    assert(WITH_LOCK(cs_main, return chainman.m_blockman.m_block_index.size()) == original_index_size);
+    CHECK(WITH_LOCK(cs_main, return chainman.m_blockman.m_block_index.size()) == original_index_size);
 }

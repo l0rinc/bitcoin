@@ -9,6 +9,7 @@
 
 #include <deque>
 #include <vector>
+#include <test/util/check.h>
 
 namespace {
 
@@ -148,12 +149,12 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                 std::deque<bool> deq2(rand_begin, rand_end);
                 bitdeque_type bitdeq2(rand_begin, rand_end);
                 using std::swap;
-                assert(deq.size() == bitdeq.size());
-                assert(deq2.size() == bitdeq2.size());
+                CHECK(deq.size() == bitdeq.size());
+                CHECK(deq2.size() == bitdeq2.size());
                 swap(deq, deq2);
                 swap(bitdeq, bitdeq2);
-                assert(deq.size() == bitdeq.size());
-                assert(deq2.size() == bitdeq2.size());
+                CHECK(deq.size() == bitdeq.size());
+                CHECK(deq2.size() == bitdeq2.size());
             },
             [&] {
                 // deque.swap
@@ -162,12 +163,12 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                 auto rand_end = rand_begin + count;
                 std::deque<bool> deq2(rand_begin, rand_end);
                 bitdeque_type bitdeq2(rand_begin, rand_end);
-                assert(deq.size() == bitdeq.size());
-                assert(deq2.size() == bitdeq2.size());
+                CHECK(deq.size() == bitdeq.size());
+                CHECK(deq2.size() == bitdeq2.size());
                 deq.swap(deq2);
                 bitdeq.swap(bitdeq2);
-                assert(deq.size() == bitdeq.size());
-                assert(deq2.size() == bitdeq2.size());
+                CHECK(deq.size() == bitdeq.size());
+                CHECK(deq2.size() == bitdeq2.size());
             },
             [&] {
                 // operator=(initializer_list)
@@ -181,9 +182,9 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                 auto pos2 = provider.ConsumeIntegralInRange<long>(0, cdeq.size());
                 auto it = deq.begin() + pos1;
                 auto bitit = bitdeq.begin() + pos1;
-                if ((size_t)pos1 != cdeq.size()) assert(*it == *bitit);
-                assert(it - deq.begin() == pos1);
-                assert(bitit - bitdeq.begin() == pos1);
+                if ((size_t)pos1 != cdeq.size()) CHECK(*it == *bitit);
+                CHECK(it - deq.begin() == pos1);
+                CHECK(bitit - bitdeq.begin() == pos1);
                 if (provider.ConsumeBool()) {
                     it += pos2 - pos1;
                     bitit += pos2 - pos1;
@@ -191,8 +192,8 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                     it -= pos1 - pos2;
                     bitit -= pos1 - pos2;
                 }
-                if ((size_t)pos2 != cdeq.size()) assert(*it == *bitit);
-                assert(deq.end() - it == bitdeq.end() - bitit);
+                if ((size_t)pos2 != cdeq.size()) CHECK(*it == *bitit);
+                CHECK(deq.end() - it == bitdeq.end() - bitit);
                 if (provider.ConsumeBool()) {
                     if ((size_t)pos2 != cdeq.size()) {
                         ++it;
@@ -204,40 +205,40 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                         --bitit;
                     }
                 }
-                assert(deq.end() - it == bitdeq.end() - bitit);
+                CHECK(deq.end() - it == bitdeq.end() - bitit);
             },
             [&] {
                 // begin() and end()
-                assert(deq.end() - deq.begin() == bitdeq.end() - bitdeq.begin());
+                CHECK(deq.end() - deq.begin() == bitdeq.end() - bitdeq.begin());
             },
             [&] {
                 // begin() and end() (const)
-                assert(cdeq.end() - cdeq.begin() == cbitdeq.end() - cbitdeq.begin());
+                CHECK(cdeq.end() - cdeq.begin() == cbitdeq.end() - cbitdeq.begin());
             },
             [&] {
                 // rbegin() and rend()
-                assert(deq.rend() - deq.rbegin() == bitdeq.rend() - bitdeq.rbegin());
+                CHECK(deq.rend() - deq.rbegin() == bitdeq.rend() - bitdeq.rbegin());
             },
             [&] {
                 // rbegin() and rend() (const)
-                assert(cdeq.rend() - cdeq.rbegin() == cbitdeq.rend() - cbitdeq.rbegin());
+                CHECK(cdeq.rend() - cdeq.rbegin() == cbitdeq.rend() - cbitdeq.rbegin());
             },
             [&] {
                 // cbegin() and cend()
-                assert(cdeq.cend() - cdeq.cbegin() == cbitdeq.cend() - cbitdeq.cbegin());
+                CHECK(cdeq.cend() - cdeq.cbegin() == cbitdeq.cend() - cbitdeq.cbegin());
             },
             [&] {
                 // crbegin() and crend()
-                assert(cdeq.crend() - cdeq.crbegin() == cbitdeq.crend() - cbitdeq.crbegin());
+                CHECK(cdeq.crend() - cdeq.crbegin() == cbitdeq.crend() - cbitdeq.crbegin());
             },
             [&] {
                 // size() and maxsize()
-                assert(cdeq.size() == cbitdeq.size());
-                assert(cbitdeq.size() <= cbitdeq.max_size());
+                CHECK(cdeq.size() == cbitdeq.size());
+                CHECK(cbitdeq.size() <= cbitdeq.max_size());
             },
             [&] {
                 // empty
-                assert(cdeq.empty() == cbitdeq.empty());
+                CHECK(cdeq.empty() == cbitdeq.empty());
             },
             [&] {
                 // at (in range) and flip
@@ -245,7 +246,7 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                     size_t pos = provider.ConsumeIntegralInRange<size_t>(0, cdeq.size() - 1);
                     auto& ref = deq.at(pos);
                     auto bitref = bitdeq.at(pos);
-                    assert(ref == bitref);
+                    CHECK(ref == bitref);
                     if (ctx.randbool()) {
                         ref = !ref;
                         bitref.flip();
@@ -272,9 +273,9 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                 } catch (const std::out_of_range&) {
                     throw_bitdeq = true;
                 }
-                assert(throw_deq == throw_bitdeq);
-                assert(throw_bitdeq == (pos >= cdeq.size()));
-                if (!throw_deq) assert(val_deq == val_bitdeq);
+                CHECK(throw_deq == throw_bitdeq);
+                CHECK(throw_bitdeq == (pos >= cdeq.size()));
+                if (!throw_deq) CHECK(val_deq == val_bitdeq);
             },
             [&] {
                 // at (maybe out of range) (const)
@@ -293,15 +294,15 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                 } catch (const std::out_of_range&) {
                     throw_bitdeq = true;
                 }
-                assert(throw_deq == throw_bitdeq);
-                assert(throw_bitdeq == (pos >= cdeq.size()));
-                if (!throw_deq) assert(val_deq == val_bitdeq);
+                CHECK(throw_deq == throw_bitdeq);
+                CHECK(throw_bitdeq == (pos >= cdeq.size()));
+                if (!throw_deq) CHECK(val_deq == val_bitdeq);
             },
             [&] {
                 // operator[]
                 if (!cdeq.empty()) {
                     size_t pos = provider.ConsumeIntegralInRange<size_t>(0, cdeq.size() - 1);
-                    assert(deq[pos] == bitdeq[pos]);
+                    CHECK(deq[pos] == bitdeq[pos]);
                     if (ctx.randbool()) {
                         deq[pos] = !deq[pos];
                         bitdeq[pos].flip();
@@ -312,7 +313,7 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                 // operator[] const
                 if (!cdeq.empty()) {
                     size_t pos = provider.ConsumeIntegralInRange<size_t>(0, cdeq.size() - 1);
-                    assert(deq[pos] == bitdeq[pos]);
+                    CHECK(deq[pos] == bitdeq[pos]);
                 }
             },
             [&] {
@@ -320,7 +321,7 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                 if (!cdeq.empty()) {
                     auto& ref = deq.front();
                     auto bitref = bitdeq.front();
-                    assert(ref == bitref);
+                    CHECK(ref == bitref);
                     if (ctx.randbool()) {
                         ref = !ref;
                         bitref = !bitref;
@@ -332,7 +333,7 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                 if (!cdeq.empty()) {
                     auto& ref = cdeq.front();
                     auto bitref = cbitdeq.front();
-                    assert(ref == bitref);
+                    CHECK(ref == bitref);
                 }
             },
             [&] {
@@ -340,7 +341,7 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                 if (!cdeq.empty()) {
                     auto& ref = deq.back();
                     auto bitref = bitdeq.back();
-                    assert(ref == bitref);
+                    CHECK(ref == bitref);
                     if (ctx.randbool()) {
                         ref = !ref;
                         bitref.flip();
@@ -354,7 +355,7 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                     const auto& cbitdeq = bitdeq;
                     auto& ref = cdeq.back();
                     auto bitref = cbitdeq.back();
-                    assert(ref == bitref);
+                    CHECK(ref == bitref);
                 }
             },
             [&] {
@@ -368,10 +369,10 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                         size_t pos = provider.ConsumeIntegralInRange<size_t>(0, cdeq.size() - 1);
                         auto& ref = deq[pos];
                         auto bitref = bitdeq[pos];
-                        assert(ref == bitref);
+                        CHECK(ref == bitref);
                         deq.push_back(val);
                         bitdeq.push_back(val);
-                        assert(ref == bitref); // references are not invalidated
+                        CHECK(ref == bitref); // references are not invalidated
                     }
                 }
             },
@@ -386,10 +387,10 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                         size_t pos = provider.ConsumeIntegralInRange<size_t>(0, cdeq.size() - 1);
                         auto& ref = deq[pos];
                         auto bitref = bitdeq[pos];
-                        assert(ref == bitref);
+                        CHECK(ref == bitref);
                         deq.push_front(val);
                         bitdeq.push_front(val);
-                        assert(ref == bitref); // references are not invalidated
+                        CHECK(ref == bitref); // references are not invalidated
                     }
                 }
             },
@@ -403,10 +404,10 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                         size_t pos = provider.ConsumeIntegralInRange<size_t>(0, cdeq.size() - 2);
                         auto& ref = deq[pos];
                         auto bitref = bitdeq[pos];
-                        assert(ref == bitref);
+                        CHECK(ref == bitref);
                         deq.pop_back();
                         bitdeq.pop_back();
-                        assert(ref == bitref); // references to other elements are not invalidated
+                        CHECK(ref == bitref); // references to other elements are not invalidated
                     }
                 }
             },
@@ -420,10 +421,10 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                         size_t pos = provider.ConsumeIntegralInRange<size_t>(1, cdeq.size() - 1);
                         auto& ref = deq[pos];
                         auto bitref = bitdeq[pos];
-                        assert(ref == bitref);
+                        CHECK(ref == bitref);
                         deq.pop_front();
                         bitdeq.pop_front();
-                        assert(ref == bitref); // references to other elements are not invalidated
+                        CHECK(ref == bitref); // references to other elements are not invalidated
                     }
                 }
             },
@@ -434,8 +435,8 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                     size_t after = cdeq.size() - 1 - before;
                     auto it = deq.erase(cdeq.begin() + before);
                     auto bitit = bitdeq.erase(cbitdeq.begin() + before);
-                    assert(it == cdeq.begin() + before && it == cdeq.end() - after);
-                    assert(bitit == cbitdeq.begin() + before && bitit == cbitdeq.end() - after);
+                    CHECK(it == cdeq.begin() + before && it == cdeq.end() - after);
+                    CHECK(bitit == cbitdeq.begin() + before && bitit == cbitdeq.end() - after);
                 }
             },
             [&] {
@@ -443,16 +444,16 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                 size_t count = provider.ConsumeIntegralInRange<size_t>(0, cdeq.size());
                 auto it = deq.erase(cdeq.begin(), cdeq.begin() + count);
                 auto bitit = bitdeq.erase(cbitdeq.begin(), cbitdeq.begin() + count);
-                assert(it == deq.begin());
-                assert(bitit == bitdeq.begin());
+                CHECK(it == deq.begin());
+                CHECK(bitit == bitdeq.begin());
             },
             [&] {
                 // erase (at back, range)
                 size_t count = provider.ConsumeIntegralInRange<size_t>(0, cdeq.size());
                 auto it = deq.erase(cdeq.end() - count, cdeq.end());
                 auto bitit = bitdeq.erase(cbitdeq.end() - count, cbitdeq.end());
-                assert(it == deq.end());
-                assert(bitit == bitdeq.end());
+                CHECK(it == deq.end());
+                CHECK(bitit == bitdeq.end());
             },
             [&] {
                 // erase (in middle, range)
@@ -461,8 +462,8 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                 size_t after = cdeq.size() - count - before;
                 auto it = deq.erase(cdeq.begin() + before, cdeq.end() - after);
                 auto bitit = bitdeq.erase(cbitdeq.begin() + before, cbitdeq.end() - after);
-                assert(it == cdeq.begin() + before && it == cdeq.end() - after);
-                assert(bitit == cbitdeq.begin() + before && bitit == cbitdeq.end() - after);
+                CHECK(it == cdeq.begin() + before && it == cdeq.end() - after);
+                CHECK(bitit == cbitdeq.begin() + before && bitit == cbitdeq.end() - after);
             },
             [&] {
                 // insert/emplace (in middle, single)
@@ -473,8 +474,8 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                     auto it = deq.insert(cdeq.begin() + before, val);
                     auto bitit = do_emplace ? bitdeq.emplace(cbitdeq.begin() + before, val)
                                             : bitdeq.insert(cbitdeq.begin() + before, val);
-                    assert(it == deq.begin() + before);
-                    assert(bitit == bitdeq.begin() + before);
+                    CHECK(it == deq.begin() + before);
+                    CHECK(bitit == bitdeq.begin() + before);
                 }
             },
             [&] {
@@ -485,8 +486,8 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                     auto rand_end = rand_begin + count;
                     auto it = deq.insert(cdeq.begin(), rand_begin, rand_end);
                     auto bitit = bitdeq.insert(cbitdeq.begin(), rand_begin, rand_end);
-                    assert(it == cdeq.begin());
-                    assert(bitit == cbitdeq.begin());
+                    CHECK(it == cdeq.begin());
+                    CHECK(bitit == cbitdeq.begin());
                 }
             },
             [&] {
@@ -497,8 +498,8 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                     auto rand_end = rand_begin + count;
                     auto it = deq.insert(cdeq.end(), rand_begin, rand_end);
                     auto bitit = bitdeq.insert(cbitdeq.end(), rand_begin, rand_end);
-                    assert(it == cdeq.end() - count);
-                    assert(bitit == cbitdeq.end() - count);
+                    CHECK(it == cdeq.end() - count);
+                    CHECK(bitit == cbitdeq.end() - count);
                 }
             },
             [&] {
@@ -509,8 +510,8 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                     bool val = ctx.randbool();
                     auto it = deq.insert(cdeq.begin() + before, count, val);
                     auto bitit = bitdeq.insert(cbitdeq.begin() + before, count, val);
-                    assert(it == deq.begin() + before);
-                    assert(bitit == bitdeq.begin() + before);
+                    CHECK(it == deq.begin() + before);
+                    CHECK(bitit == bitdeq.begin() + before);
                 }
             },
             [&] {
@@ -522,18 +523,18 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                     auto rand_end = rand_begin + count;
                     auto it = deq.insert(cdeq.begin() + before, rand_begin, rand_end);
                     auto bitit = bitdeq.insert(cbitdeq.begin() + before, rand_begin, rand_end);
-                    assert(it == deq.begin() + before);
-                    assert(bitit == bitdeq.begin() + before);
+                    CHECK(it == deq.begin() + before);
+                    CHECK(bitit == bitdeq.begin() + before);
                 }
             });
     }
     {
-        assert(deq.size() == bitdeq.size());
+        CHECK(deq.size() == bitdeq.size());
         auto it = deq.begin();
         auto bitit = bitdeq.begin();
         auto itend = deq.end();
         while (it != itend) {
-            assert(*it == *bitit);
+            CHECK(*it == *bitit);
             ++it;
             ++bitit;
         }

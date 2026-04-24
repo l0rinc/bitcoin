@@ -95,7 +95,7 @@ public:
     /** Advance this Scenario's time; this affects the timestamps newly scheduled events get. */
     void AdvanceTime(std::chrono::microseconds amount)
     {
-        assert(amount.count() >= 0);
+        CHECK(amount.count() >= 0);
         m_now += amount;
     }
 
@@ -167,7 +167,7 @@ public:
         const auto comment = m_testname + " " + checkname;
         auto& runner = m_runner;
         const auto now = m_now;
-        assert(offset.count() <= 0);
+        CHECK(offset.count() <= 0);
         runner.actions.emplace_back(m_now, [=, &runner]() {
             std::vector<std::pair<NodeId, GenTxid>> expired_now;
             auto ret = runner.txrequest.GetRequestable(peer, now + offset, &expired_now);
@@ -180,10 +180,10 @@ public:
             size_t real_total = runner.txrequest.Count(peer);
             size_t real_candidates = runner.txrequest.CountCandidates(peer);
             size_t real_inflight = runner.txrequest.CountInFlight(peer);
-            BOOST_CHECK_MESSAGE(real_total == total, strprintf("[%s] total %i (%i expected)", comment, real_total, total));
-            BOOST_CHECK_MESSAGE(real_inflight == inflight, strprintf("[%s] inflight %i (%i expected)", comment, real_inflight, inflight));
-            BOOST_CHECK_MESSAGE(real_candidates == candidates, strprintf("[%s] candidates %i (%i expected)", comment, real_candidates, candidates));
-            BOOST_CHECK_MESSAGE(ret == expected, strprintf("[%s] mismatching requestables", comment));
+            CHECK_MESSAGE(real_total == total, strprintf("[%s] total %i (%i expected)", comment, real_total, total));
+            CHECK_MESSAGE(real_inflight == inflight, strprintf("[%s] inflight %i (%i expected)", comment, real_inflight, inflight));
+            CHECK_MESSAGE(real_candidates == candidates, strprintf("[%s] candidates %i (%i expected)", comment, real_candidates, candidates));
+            CHECK_MESSAGE(ret == expected, strprintf("[%s] mismatching requestables", comment));
         });
     }
 
@@ -197,7 +197,7 @@ public:
         auto& runner = m_runner;
         runner.actions.emplace_back(m_now, [=, &runner]() {
             auto it = runner.expired.find(std::pair<NodeId, GenTxid>{peer, gtxid});
-            BOOST_CHECK_MESSAGE(it != runner.expired.end(), "[" + testname + "] missing expiration");
+            CHECK_MESSAGE(it != runner.expired.end(), "[" + testname + "] missing expiration");
             if (it != runner.expired.end()) runner.expired.erase(it);
         });
     }
@@ -741,8 +741,8 @@ void TxRequestTest::TestInterleavedScenarios()
         action.second();
     }
 
-    BOOST_CHECK_EQUAL(runner.txrequest.Size(), 0U);
-    BOOST_CHECK(runner.expired.empty());
+    CHECK_EQUAL(runner.txrequest.Size(), 0U);
+    CHECK(runner.expired.empty());
 }
 
 }  // namespace

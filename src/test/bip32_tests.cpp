@@ -133,22 +133,22 @@ void RunTest(const TestVector& test)
         pubkey.Encode(data);
 
         // Test private key
-        BOOST_CHECK(EncodeExtKey(key) == derive.prv);
-        BOOST_CHECK(DecodeExtKey(derive.prv) == key); //ensure a base58 decoded key also matches
+        CHECK(EncodeExtKey(key) == derive.prv);
+        CHECK(DecodeExtKey(derive.prv) == key); //ensure a base58 decoded key also matches
 
         // Test public key
-        BOOST_CHECK(EncodeExtPubKey(pubkey) == derive.pub);
-        BOOST_CHECK(DecodeExtPubKey(derive.pub) == pubkey); //ensure a base58 decoded pubkey also matches
+        CHECK(EncodeExtPubKey(pubkey) == derive.pub);
+        CHECK(DecodeExtPubKey(derive.pub) == pubkey); //ensure a base58 decoded pubkey also matches
 
         // Derive new keys
         CExtKey keyNew;
-        BOOST_CHECK(key.Derive(keyNew, derive.nChild));
+        CHECK(key.Derive(keyNew, derive.nChild));
         CExtPubKey pubkeyNew = keyNew.Neuter();
         if (!(derive.nChild & 0x80000000)) {
             // Compare with public derivation
             CExtPubKey pubkeyNew2;
-            BOOST_CHECK(pubkey.Derive(pubkeyNew2, derive.nChild));
-            BOOST_CHECK(pubkeyNew == pubkeyNew2);
+            CHECK(pubkey.Derive(pubkeyNew2, derive.nChild));
+            CHECK(pubkeyNew == pubkeyNew2);
         }
         key = keyNew;
         pubkey = pubkeyNew;
@@ -179,8 +179,8 @@ BOOST_AUTO_TEST_CASE(bip32_test5) {
     for (const auto& str : TEST5) {
         auto dec_extkey = DecodeExtKey(str);
         auto dec_extpubkey = DecodeExtPubKey(str);
-        BOOST_CHECK_MESSAGE(!dec_extkey.key.IsValid(), "Decoding '" + str + "' as xprv should fail");
-        BOOST_CHECK_MESSAGE(!dec_extpubkey.pubkey.IsValid(), "Decoding '" + str + "' as xpub should fail");
+        CHECK_MESSAGE(!dec_extkey.key.IsValid(), "Decoding '" + str + "' as xprv should fail");
+        CHECK_MESSAGE(!dec_extpubkey.pubkey.IsValid(), "Decoding '" + str + "' as xpub should fail");
     }
 }
 
@@ -190,16 +190,16 @@ BOOST_AUTO_TEST_CASE(bip32_max_depth) {
 
     // We can derive up to the 255th depth..
     for (auto i = 0; i++ < 255;) {
-        BOOST_CHECK(key_parent.Derive(key_child, 0));
+        CHECK(key_parent.Derive(key_child, 0));
         std::swap(key_parent, key_child);
-        BOOST_CHECK(pubkey_parent.Derive(pubkey_child, 0));
+        CHECK(pubkey_parent.Derive(pubkey_child, 0));
         std::swap(pubkey_parent, pubkey_child);
     }
 
     // But trying to derive a non-existent 256th depth will fail!
-    BOOST_CHECK(key_parent.nDepth == 255 && pubkey_parent.nDepth == 255);
-    BOOST_CHECK(!key_parent.Derive(key_child, 0));
-    BOOST_CHECK(!pubkey_parent.Derive(pubkey_child, 0));
+    CHECK(key_parent.nDepth == 255 && pubkey_parent.nDepth == 255);
+    CHECK(!key_parent.Derive(key_child, 0));
+    CHECK(!pubkey_parent.Derive(pubkey_child, 0));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

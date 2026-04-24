@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 extern "C" int evhttp_parse_firstline_(struct evhttp_request*, struct evbuffer*);
 extern "C" int evhttp_parse_headers_(struct evhttp_request*, struct evbuffer*);
@@ -29,10 +30,10 @@ FUZZ_TARGET(http_request)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     evhttp_request* evreq = evhttp_request_new(nullptr, nullptr);
-    assert(evreq != nullptr);
+    CHECK(evreq != nullptr);
     evreq->kind = EVHTTP_REQUEST;
     evbuffer* evbuf = evbuffer_new();
-    assert(evbuf != nullptr);
+    CHECK(evbuf != nullptr);
     const std::vector<uint8_t> http_buffer = ConsumeRandomLengthByteVector(fuzzed_data_provider, 4096);
     evbuffer_add(evbuf, http_buffer.data(), http_buffer.size());
     // Avoid constructing requests that will be interpreted by libevent as PROXY requests to avoid triggering
@@ -59,9 +60,9 @@ FUZZ_TARGET(http_request)
     (void)http_request.WriteHeader(header, fuzzed_data_provider.ConsumeRandomLengthString(16));
     (void)http_request.GetHeader(header);
     const std::string body = http_request.ReadBody();
-    assert(body.empty());
+    CHECK(body.empty());
     const CService service = http_request.GetPeer();
-    assert(service.ToStringAddrPort() == "[::]:0");
+    CHECK(service.ToStringAddrPort() == "[::]:0");
 
     evbuffer_free(evbuf);
     evhttp_request_free(evreq);

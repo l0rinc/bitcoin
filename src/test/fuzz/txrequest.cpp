@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <queue>
 #include <vector>
+#include <test/util/check.h>
 
 namespace {
 
@@ -275,13 +276,13 @@ public:
         std::vector<std::pair<NodeId, GenTxid>> expired;
         const auto actual = m_tracker.GetRequestable(peer, m_now, &expired);
         std::sort(expired.begin(), expired.end());
-        assert(expired == expected_expired);
+        CHECK(expired == expected_expired);
 
         m_tracker.PostGetRequestableSanityCheck(m_now);
-        assert(result.size() == actual.size());
+        CHECK(result.size() == actual.size());
         for (size_t pos = 0; pos < actual.size(); ++pos) {
-            assert(TXHASHES[std::get<1>(result[pos])] == actual[pos].ToUint256());
-            assert(std::get<2>(result[pos]) == actual[pos].IsWtxid());
+            CHECK(TXHASHES[std::get<1>(result[pos])] == actual[pos].ToUint256());
+            CHECK(std::get<2>(result[pos]) == actual[pos].IsWtxid());
         }
     }
 
@@ -306,18 +307,18 @@ public:
                 }
                 std::vector<NodeId> candidate_peers;
                 m_tracker.GetCandidatePeers(TXHASHES[txhash], candidate_peers);
-                assert(expected_announcers.count() == candidate_peers.size());
+                CHECK(expected_announcers.count() == candidate_peers.size());
                 for (const auto& peer : candidate_peers) {
-                    assert(expected_announcers[peer]);
+                    CHECK(expected_announcers[peer]);
                 }
             }
-            assert(m_tracker.Count(peer) == tracked);
-            assert(m_tracker.CountInFlight(peer) == inflight);
-            assert(m_tracker.CountCandidates(peer) == candidates);
+            CHECK(m_tracker.Count(peer) == tracked);
+            CHECK(m_tracker.CountInFlight(peer) == inflight);
+            CHECK(m_tracker.CountCandidates(peer) == candidates);
             total += tracked;
         }
         // Compare Size.
-        assert(m_tracker.Size() == total);
+        CHECK(m_tracker.Size() == total);
 
         // Invoke internal consistency check of TxRequestTracker object.
         m_tracker.SanityCheck();
@@ -382,7 +383,7 @@ FUZZ_TARGET(txrequest)
             tester.ReceivedResponse(peer, txidnum % MAX_TXHASHES);
             break;
         default:
-            assert(false);
+            CHECK(false);
         }
     }
     tester.Check();

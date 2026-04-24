@@ -4,6 +4,7 @@
 
 #include <common/system.h>
 #include <compat/compat.h>
+#include <test/util/check.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <util/sock.h>
@@ -11,7 +12,6 @@
 
 #include <boost/test/unit_test.hpp>
 
-#include <cassert>
 #include <thread>
 
 using namespace std::chrono_literals;
@@ -31,7 +31,7 @@ static bool SocketIsClosed(const SOCKET& s)
 static SOCKET CreateSocket()
 {
     const SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    BOOST_REQUIRE(s != static_cast<SOCKET>(SOCKET_ERROR));
+    CHECK(s != static_cast<SOCKET>(SOCKET_ERROR));
     return s;
 }
 
@@ -39,10 +39,10 @@ BOOST_AUTO_TEST_CASE(constructor_and_destructor)
 {
     const SOCKET s = CreateSocket();
     Sock* sock = new Sock(s);
-    BOOST_CHECK(*sock == s);
-    BOOST_CHECK(!SocketIsClosed(s));
+    CHECK(*sock == s);
+    CHECK(!SocketIsClosed(s));
     delete sock;
-    BOOST_CHECK(SocketIsClosed(s));
+    CHECK(SocketIsClosed(s));
 }
 
 BOOST_AUTO_TEST_CASE(move_constructor)
@@ -51,10 +51,10 @@ BOOST_AUTO_TEST_CASE(move_constructor)
     Sock* sock1 = new Sock(s);
     Sock* sock2 = new Sock(std::move(*sock1));
     delete sock1;
-    BOOST_CHECK(!SocketIsClosed(s));
-    BOOST_CHECK(*sock2 == s);
+    CHECK(!SocketIsClosed(s));
+    CHECK(*sock2 == s);
     delete sock2;
-    BOOST_CHECK(SocketIsClosed(s));
+    CHECK(SocketIsClosed(s));
 }
 
 BOOST_AUTO_TEST_CASE(move_assignment)
@@ -64,22 +64,22 @@ BOOST_AUTO_TEST_CASE(move_assignment)
     Sock* sock1 = new Sock(s1);
     Sock* sock2 = new Sock(s2);
 
-    BOOST_CHECK(!SocketIsClosed(s1));
-    BOOST_CHECK(!SocketIsClosed(s2));
+    CHECK(!SocketIsClosed(s1));
+    CHECK(!SocketIsClosed(s2));
 
     *sock2 = std::move(*sock1);
-    BOOST_CHECK(!SocketIsClosed(s1));
-    BOOST_CHECK(SocketIsClosed(s2));
-    BOOST_CHECK(*sock2 == s1);
+    CHECK(!SocketIsClosed(s1));
+    CHECK(SocketIsClosed(s2));
+    CHECK(*sock2 == s1);
 
     delete sock1;
-    BOOST_CHECK(!SocketIsClosed(s1));
-    BOOST_CHECK(SocketIsClosed(s2));
-    BOOST_CHECK(*sock2 == s1);
+    CHECK(!SocketIsClosed(s1));
+    CHECK(SocketIsClosed(s2));
+    CHECK(*sock2 == s1);
 
     delete sock2;
-    BOOST_CHECK(SocketIsClosed(s1));
-    BOOST_CHECK(SocketIsClosed(s2));
+    CHECK(SocketIsClosed(s1));
+    CHECK(SocketIsClosed(s2));
 }
 
 struct TcpSocketPair {
@@ -105,19 +105,19 @@ struct TcpSocketPair {
         addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         addr.sin_port = 0;
 
-        BOOST_REQUIRE_EQUAL(receiver.Bind(reinterpret_cast<sockaddr*>(&addr), sizeof(addr)), 0);
-        BOOST_REQUIRE_EQUAL(receiver.Listen(1), 0);
+        CHECK_EQUAL(receiver.Bind(reinterpret_cast<sockaddr*>(&addr), sizeof(addr)), std::remove_cvref_t<decltype(receiver.Bind(reinterpret_cast<sockaddr*>(&addr), sizeof(addr)))>{0});
+        CHECK_EQUAL(receiver.Listen(1), std::remove_cvref_t<decltype(receiver.Listen(1))>{0});
 
         // Get the address of the listener.
         sockaddr_in bound{};
         socklen_t blen = sizeof(bound);
-        BOOST_REQUIRE_EQUAL(receiver.GetSockName(reinterpret_cast<sockaddr*>(&bound), &blen), 0);
-        BOOST_REQUIRE_EQUAL(blen, sizeof(bound));
+        CHECK_EQUAL(receiver.GetSockName(reinterpret_cast<sockaddr*>(&bound), &blen), std::remove_cvref_t<decltype(receiver.GetSockName(reinterpret_cast<sockaddr*>(&bound), &blen))>{0});
+        CHECK_EQUAL(blen, sizeof(bound));
 
-        BOOST_REQUIRE_EQUAL(sender.Connect(reinterpret_cast<sockaddr*>(&bound), sizeof(bound)), 0);
+        CHECK_EQUAL(sender.Connect(reinterpret_cast<sockaddr*>(&bound), sizeof(bound)), std::remove_cvref_t<decltype(sender.Connect(reinterpret_cast<sockaddr*>(&bound), sizeof(bound)))>{0});
 
         std::unique_ptr<Sock> accepted = receiver.Accept(nullptr, nullptr);
-        BOOST_REQUIRE(accepted != nullptr);
+        CHECK(accepted != nullptr);
 
         receiver = std::move(*accepted);
     }
@@ -128,9 +128,9 @@ struct TcpSocketPair {
         constexpr ssize_t msg_len = 4;
         char recv_buf[10];
 
-        BOOST_CHECK_EQUAL(sender.Send(msg, msg_len, 0), msg_len);
-        BOOST_CHECK_EQUAL(receiver.Recv(recv_buf, sizeof(recv_buf), 0), msg_len);
-        BOOST_CHECK_EQUAL(strncmp(msg, recv_buf, msg_len), 0);
+        CHECK_EQUAL(sender.Send(msg, msg_len, 0), msg_len);
+        CHECK_EQUAL(receiver.Recv(recv_buf, sizeof(recv_buf), 0), msg_len);
+        CHECK_EQUAL(strncmp(msg, recv_buf, msg_len), std::remove_cvref_t<decltype(strncmp(msg, recv_buf, msg_len))>{0});
     }
 };
 
@@ -150,7 +150,7 @@ BOOST_AUTO_TEST_CASE(wait)
 
     std::thread waiter([&socks]() { (void)socks.receiver.Wait(24h, Sock::RECV); });
 
-    BOOST_REQUIRE_EQUAL(socks.sender.Send("a", 1, 0), 1);
+    CHECK_EQUAL(socks.sender.Send("a", 1, 0), std::remove_cvref_t<decltype(socks.sender.Send("a", 1, 0))>{1});
 
     waiter.join();
 }
@@ -165,18 +165,18 @@ BOOST_AUTO_TEST_CASE(recv_until_terminator_limit)
     std::thread receiver([&socks, &timeout, &interrupt]() {
         constexpr size_t max_data{10};
         bool threw_as_expected{false};
-        // BOOST_CHECK_EXCEPTION() writes to some variables shared with the main thread which
+        // CHECK_EXCEPTION() writes to some variables shared with the main thread which
         // creates a data race. So mimic it manually.
         try {
             (void)socks.receiver.RecvUntilTerminator('\n', timeout, interrupt, max_data);
         } catch (const std::runtime_error& e) {
             threw_as_expected = HasReason("too many bytes without a terminator")(e);
         }
-        assert(threw_as_expected);
+        CHECK(threw_as_expected);
     });
 
-    BOOST_REQUIRE_NO_THROW(socks.sender.SendComplete("1234567", timeout, interrupt));
-    BOOST_REQUIRE_NO_THROW(socks.sender.SendComplete("89a\n", timeout, interrupt));
+    CHECK_NO_THROW(socks.sender.SendComplete("1234567", timeout, interrupt));
+    CHECK_NO_THROW(socks.sender.SendComplete("89a\n", timeout, interrupt));
 
     receiver.join();
 }

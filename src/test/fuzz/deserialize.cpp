@@ -81,7 +81,7 @@ void DeserializeFromFuzzingInput(FuzzBufferType buffer, T&& obj, const P& params
     } catch (const std::ios_base::failure&) {
         throw invalid_fuzzing_input_exception();
     }
-    assert(buffer.empty() || !Serialize(obj, params).empty());
+    CHECK(buffer.empty() || !Serialize(obj, params).empty());
 }
 
 template <typename T>
@@ -108,18 +108,18 @@ void DeserializeFromFuzzingInput(FuzzBufferType buffer, T&& obj)
     } catch (const std::ios_base::failure&) {
         throw invalid_fuzzing_input_exception();
     }
-    assert(buffer.empty() || !Serialize(obj).empty());
+    CHECK(buffer.empty() || !Serialize(obj).empty());
 }
 
 template <typename T, typename P>
 void AssertEqualAfterSerializeDeserialize(const T& obj, const P& params)
 {
-    assert(Deserialize<T>(Serialize(obj, params), params) == obj);
+    CHECK(Deserialize<T>(Serialize(obj, params), params) == obj);
 }
 template <typename T>
 void AssertEqualAfterSerializeDeserialize(const T& obj)
 {
-    assert(Deserialize<T>(Serialize(obj)) == obj);
+    CHECK(Deserialize<T>(Serialize(obj)) == obj);
 }
 
 } // namespace
@@ -252,7 +252,7 @@ FUZZ_TARGET(service_deserialize, .init = initialize_deserialize)
     }
     AssertEqualAfterSerializeDeserialize(s, CNetAddr::V2);
     if (ser_params.enc == CNetAddr::Encoding::V1) {
-        assert(s.IsAddrV1Compatible());
+        CHECK(s.IsAddrV1Compatible());
     }
 }
 FUZZ_TARGET_DESERIALIZE(messageheader_deserialize, {

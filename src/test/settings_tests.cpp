@@ -72,39 +72,39 @@ BOOST_AUTO_TEST_CASE(ReadWrite)
     // Check file read.
     std::map<std::string, common::SettingsValue> values;
     std::vector<std::string> errors;
-    BOOST_CHECK(common::ReadSettings(path, values, errors));
-    BOOST_CHECK_EQUAL_COLLECTIONS(values.begin(), values.end(), expected.begin(), expected.end());
-    BOOST_CHECK(errors.empty());
+    CHECK(common::ReadSettings(path, values, errors));
+    CHECK_EQUAL_COLLECTIONS(values.begin(), values.end(), expected.begin(), expected.end());
+    CHECK(errors.empty());
 
     // Check no errors if file doesn't exist.
     fs::remove(path);
-    BOOST_CHECK(common::ReadSettings(path, values, errors));
-    BOOST_CHECK(values.empty());
-    BOOST_CHECK(errors.empty());
+    CHECK(common::ReadSettings(path, values, errors));
+    CHECK(values.empty());
+    CHECK(errors.empty());
 
     // Check duplicate keys not allowed and that values returns empty if a duplicate is found.
     WriteText(path, R"({
         "dupe": "string",
         "dupe": "dupe"
     })");
-    BOOST_CHECK(!common::ReadSettings(path, values, errors));
+    CHECK(!common::ReadSettings(path, values, errors));
     std::vector<std::string> dup_keys = {strprintf("Found duplicate key dupe in settings file %s", fs::PathToString(path))};
-    BOOST_CHECK_EQUAL_COLLECTIONS(errors.begin(), errors.end(), dup_keys.begin(), dup_keys.end());
-    BOOST_CHECK(values.empty());
+    CHECK_EQUAL_COLLECTIONS(errors.begin(), errors.end(), dup_keys.begin(), dup_keys.end());
+    CHECK(values.empty());
 
     // Check non-kv json files not allowed
     WriteText(path, R"("non-kv")");
-    BOOST_CHECK(!common::ReadSettings(path, values, errors));
+    CHECK(!common::ReadSettings(path, values, errors));
     std::vector<std::string> non_kv = {strprintf("Found non-object value \"non-kv\" in settings file %s", fs::PathToString(path))};
-    BOOST_CHECK_EQUAL_COLLECTIONS(errors.begin(), errors.end(), non_kv.begin(), non_kv.end());
+    CHECK_EQUAL_COLLECTIONS(errors.begin(), errors.end(), non_kv.begin(), non_kv.end());
 
     // Check invalid json not allowed
     WriteText(path, R"(invalid json)");
-    BOOST_CHECK(!common::ReadSettings(path, values, errors));
+    CHECK(!common::ReadSettings(path, values, errors));
     std::vector<std::string> fail_parse = {strprintf("Settings file %s does not contain valid JSON. This is probably caused by disk corruption or a crash, "
                                                      "and can be fixed by removing the file, which will reset settings to default values.",
                                                      fs::PathToString(path))};
-    BOOST_CHECK_EQUAL_COLLECTIONS(errors.begin(), errors.end(), fail_parse.begin(), fail_parse.end());
+    CHECK_EQUAL_COLLECTIONS(errors.begin(), errors.end(), fail_parse.begin(), fail_parse.end());
 }
 
 //! Check settings struct contents against expected json strings.
@@ -115,8 +115,8 @@ static void CheckValues(const common::Settings& settings, const std::string& sin
     for (const auto& item : GetSettingsList(settings, "section", "name", false)) {
         list_value.push_back(item);
     }
-    BOOST_CHECK_EQUAL(single_value.write().c_str(), single_val);
-    BOOST_CHECK_EQUAL(list_value.write().c_str(), list_val);
+    CHECK_EQUAL(single_value.write().c_str(), single_val);
+    CHECK_EQUAL(list_value.write().c_str(), list_val);
 };
 
 // Simple settings merge test case.
@@ -146,9 +146,9 @@ BOOST_AUTO_TEST_CASE(NullOverride)
 {
     common::Settings settings;
     settings.command_line_options["name"].emplace_back("value");
-    BOOST_CHECK_EQUAL(R"("value")", GetSetting(settings, "section", "name", false, false, false).write().c_str());
+    CHECK_EQUAL(std::string_view{R"("value")"}, GetSetting(settings, "section", "name", false, false, false).write().c_str());
     settings.forced_settings["name"] = {};
-    BOOST_CHECK_EQUAL(R"(null)", GetSetting(settings, "section", "name", false, false, false).write().c_str());
+    CHECK_EQUAL(std::string_view{R"(null)"}, GetSetting(settings, "section", "name", false, false, false).write().c_str());
 }
 
 // Test different ways settings can be merged, and verify results. This test can
@@ -241,7 +241,7 @@ BOOST_FIXTURE_TEST_CASE(Merge, MergeTestingSetup)
 
         out_sha.Write(MakeUCharSpan(desc));
         if (out_file) {
-            BOOST_REQUIRE(fwrite(desc.data(), 1, desc.size(), out_file) == desc.size());
+            CHECK(fwrite(desc.data(), 1, desc.size(), out_file) == desc.size());
         }
     });
 
@@ -263,7 +263,7 @@ BOOST_FIXTURE_TEST_CASE(Merge, MergeTestingSetup)
     // Results file is formatted like:
     //
     //   <input> || GetSetting() | GetSettingsList() | OnlyHasDefaultSectionSetting()
-    BOOST_CHECK_EQUAL(out_sha_hex, "79db02d74e3e193196541b67c068b40ebd0c124a24b3ecbe9cbf7e85b1c4ba7a");
+    CHECK_EQUAL(out_sha_hex, std::string_view{"79db02d74e3e193196541b67c068b40ebd0c124a24b3ecbe9cbf7e85b1c4ba7a"});
 }
 
 BOOST_AUTO_TEST_SUITE_END()

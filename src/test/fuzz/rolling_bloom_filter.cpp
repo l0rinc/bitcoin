@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 FUZZ_TARGET(rolling_bloom_filter)
 {
@@ -32,14 +33,14 @@ FUZZ_TARGET(rolling_bloom_filter)
                 (void)rolling_bloom_filter.contains(b);
                 rolling_bloom_filter.insert(b);
                 const bool present = rolling_bloom_filter.contains(b);
-                assert(present);
+                CHECK(present);
             },
             [&] {
                 const uint256 u256{ConsumeUInt256(fuzzed_data_provider)};
                 (void)rolling_bloom_filter.contains(u256);
                 rolling_bloom_filter.insert(u256);
                 const bool present = rolling_bloom_filter.contains(u256);
-                assert(present);
+                CHECK(present);
             },
             [&] {
                 rolling_bloom_filter.reset();

@@ -4,6 +4,7 @@
 //
 
 #include <boost/test/unit_test.hpp>
+#include <test/util/check.h>
 
 #include <map>
 #include <string>
@@ -19,8 +20,8 @@ BOOST_AUTO_TEST_SUITE(torcontrol_tests)
 static void CheckSplitTorReplyLine(std::string input, std::string command, std::string args)
 {
     auto ret = SplitTorReplyLine(input);
-    BOOST_CHECK_EQUAL(ret.first, command);
-    BOOST_CHECK_EQUAL(ret.second, args);
+    CHECK_EQUAL(ret.first, command);
+    CHECK_EQUAL(ret.second, args);
 }
 
 BOOST_AUTO_TEST_CASE(util_SplitTorReplyLine)
@@ -59,12 +60,12 @@ BOOST_AUTO_TEST_CASE(util_SplitTorReplyLine)
 static void CheckParseTorReplyMapping(std::string input, std::map<std::string,std::string> expected)
 {
     auto ret = ParseTorReplyMapping(input);
-    BOOST_CHECK_EQUAL(ret.size(), expected.size());
+    CHECK_EQUAL(ret.size(), expected.size());
     auto r_it = ret.begin();
     auto e_it = expected.begin();
     while (r_it != ret.end() && e_it != expected.end()) {
-        BOOST_CHECK_EQUAL(r_it->first, e_it->first);
-        BOOST_CHECK_EQUAL(r_it->second, e_it->second);
+        CHECK_EQUAL(r_it->first, e_it->first);
+        CHECK_EQUAL(r_it->second, e_it->second);
         r_it++;
         e_it++;
     }
@@ -170,11 +171,11 @@ BOOST_AUTO_TEST_CASE(util_ParseTorReplyMapping)
     // Special handling for null case
     // (needed because string comparison reads the null as end-of-string)
     auto ret = ParseTorReplyMapping("Null=\"\\0\"");
-    BOOST_CHECK_EQUAL(ret.size(), 1U);
+    CHECK_EQUAL(ret.size(), 1U);
     auto r_it = ret.begin();
-    BOOST_CHECK_EQUAL(r_it->first, "Null");
-    BOOST_CHECK_EQUAL(r_it->second.size(), 1U);
-    BOOST_CHECK_EQUAL(r_it->second[0], '\0');
+    CHECK_EQUAL(r_it->first, std::string_view{"Null"});
+    CHECK_EQUAL(r_it->second.size(), 1U);
+    CHECK_EQUAL(r_it->second[0], '\0');
 
     // A more complex valid grammar. PROTOCOLINFO accepts a VersionLine that
     // takes a key=value pair followed by an OptArguments, making this valid.

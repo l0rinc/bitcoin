@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <vector>
+#include <test/util/check.h>
 
 namespace {
 
@@ -45,13 +46,13 @@ FUZZ_TARGET(bip324_cipher_roundtrip, .init=Initialize)
 
     // Initialize ciphers by exchanging public keys.
     BIP324Cipher initiator(init_key, init_ent);
-    assert(!initiator);
+    CHECK(!initiator);
     BIP324Cipher responder(resp_key, resp_ent);
-    assert(!responder);
+    CHECK(!responder);
     initiator.Initialize(responder.GetOurPubKey(), true);
-    assert(initiator);
+    CHECK(initiator);
     responder.Initialize(initiator.GetOurPubKey(), false);
-    assert(responder);
+    CHECK(responder);
 
     // Initialize RNG deterministically, to generate contents and AAD. We assume that there are no
     // (potentially buggy) edge cases triggered by specific values of contents/AAD, so we can avoid
@@ -60,9 +61,9 @@ FUZZ_TARGET(bip324_cipher_roundtrip, .init=Initialize)
     InsecureRandomContext rng(provider.ConsumeIntegral<uint64_t>());
 
     // Compare session IDs and garbage terminators.
-    assert(std::ranges::equal(initiator.GetSessionID(), responder.GetSessionID()));
-    assert(std::ranges::equal(initiator.GetSendGarbageTerminator(), responder.GetReceiveGarbageTerminator()));
-    assert(std::ranges::equal(initiator.GetReceiveGarbageTerminator(), responder.GetSendGarbageTerminator()));
+    CHECK(std::ranges::equal(initiator.GetSessionID(), responder.GetSessionID()));
+    CHECK(std::ranges::equal(initiator.GetSendGarbageTerminator(), responder.GetReceiveGarbageTerminator()));
+    CHECK(std::ranges::equal(initiator.GetReceiveGarbageTerminator(), responder.GetSendGarbageTerminator()));
 
     LIMITED_WHILE(provider.remaining_bytes(), 1000) {
         // Mode:
@@ -108,7 +109,7 @@ FUZZ_TARGET(bip324_cipher_roundtrip, .init=Initialize)
         // Decrypt length
         uint32_t dec_length = receiver.DecryptLength(std::span{ciphertext}.first(initiator.LENGTH_LEN));
         if (!damage) {
-            assert(dec_length == length);
+            CHECK(dec_length == length);
         } else {
             // For performance reasons, don't try to decode if length got increased too much.
             if (dec_length > 16384 + length) break;
@@ -121,9 +122,9 @@ FUZZ_TARGET(bip324_cipher_roundtrip, .init=Initialize)
         bool dec_ignore{false};
         bool ok = receiver.Decrypt(std::span{ciphertext}.subspan(initiator.LENGTH_LEN), aad, dec_ignore, decrypt);
         // Decryption *must* fail if the packet was damaged, and succeed if it wasn't.
-        assert(!ok == damage);
+        CHECK(!ok == damage);
         if (!ok) break;
-        assert(ignore == dec_ignore);
-        assert(decrypt == contents);
+        CHECK(ignore == dec_ignore);
+        CHECK(decrypt == contents);
     }
 }

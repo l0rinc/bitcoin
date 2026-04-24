@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <limits>
 #include <vector>
+#include <test/util/check.h>
 
 namespace {
 bool IsValidAddition(const CScriptNum& lhs, const CScriptNum& rhs)
@@ -33,34 +34,34 @@ FUZZ_TARGET(scriptnum_ops)
             fuzzed_data_provider,
             [&] {
                 const int64_t i = fuzzed_data_provider.ConsumeIntegral<int64_t>();
-                assert((script_num == i) != (script_num != i));
-                assert((script_num <= i) != (script_num > i));
-                assert((script_num >= i) != (script_num < i));
+                CHECK((script_num == i) != (script_num != i));
+                CHECK((script_num <= i) != (script_num > i));
+                CHECK((script_num >= i) != (script_num < i));
                 // Avoid signed integer overflow:
                 // script/script.h:264:93: runtime error: signed integer overflow: -2261405121394637306 + -9223372036854775802 cannot be represented in type 'long'
                 if (IsValidAddition(script_num, CScriptNum{i})) {
-                    assert((script_num + i) - i == script_num);
+                    CHECK((script_num + i) - i == script_num);
                 }
                 // Avoid signed integer overflow:
                 // script/script.h:265:93: runtime error: signed integer overflow: 9223371895120855039 - -9223372036854710486 cannot be represented in type 'long'
                 if (IsValidSubtraction(script_num, CScriptNum{i})) {
-                    assert((script_num - i) + i == script_num);
+                    CHECK((script_num - i) + i == script_num);
                 }
             },
             [&] {
                 const CScriptNum random_script_num = ConsumeScriptNum(fuzzed_data_provider);
-                assert((script_num == random_script_num) != (script_num != random_script_num));
-                assert((script_num <= random_script_num) != (script_num > random_script_num));
-                assert((script_num >= random_script_num) != (script_num < random_script_num));
+                CHECK((script_num == random_script_num) != (script_num != random_script_num));
+                CHECK((script_num <= random_script_num) != (script_num > random_script_num));
+                CHECK((script_num >= random_script_num) != (script_num < random_script_num));
                 // Avoid signed integer overflow:
                 // script/script.h:264:93: runtime error: signed integer overflow: -9223126527765971126 + -9223372036854756825 cannot be represented in type 'long'
                 if (IsValidAddition(script_num, random_script_num)) {
-                    assert((script_num + random_script_num) - random_script_num == script_num);
+                    CHECK((script_num + random_script_num) - random_script_num == script_num);
                 }
                 // Avoid signed integer overflow:
                 // script/script.h:265:93: runtime error: signed integer overflow: 6052837899185946624 - -9223372036854775808 cannot be represented in type 'long'
                 if (IsValidSubtraction(script_num, random_script_num)) {
-                    assert((script_num - random_script_num) + random_script_num == script_num);
+                    CHECK((script_num - random_script_num) + random_script_num == script_num);
                 }
             },
             [&] {

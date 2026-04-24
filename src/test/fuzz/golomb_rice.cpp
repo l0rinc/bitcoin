@@ -18,6 +18,7 @@
 #include <iosfwd>
 #include <unordered_set>
 #include <vector>
+#include <test/util/check.h>
 
 namespace {
 
@@ -78,7 +79,7 @@ FUZZ_TARGET(golomb_rice)
         }
     }
 
-    assert(encoded_deltas == decoded_deltas);
+    CHECK(encoded_deltas == decoded_deltas);
 
     {
         const std::vector<uint8_t> random_bytes = ConsumeRandomLengthByteVector(fuzzed_data_provider, 1024);

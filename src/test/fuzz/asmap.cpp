@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <test/util/check.h>
 
 using namespace util::hex_literals;
 
@@ -34,10 +35,10 @@ FUZZ_TARGET(asmap)
     const uint8_t* addr_data = buffer.data() + 1 + asmap_size;
     CNetAddr net_addr;
     if (ipv6) {
-        assert(addr_size == ADDR_IPV6_SIZE);
+        CHECK(addr_size == ADDR_IPV6_SIZE);
         net_addr.SetLegacyIPv6({addr_data, addr_size});
     } else {
-        assert(addr_size == ADDR_IPV4_SIZE);
+        CHECK(addr_size == ADDR_IPV4_SIZE);
         in_addr ipv4;
         memcpy(&ipv4, addr_data, addr_size);
         net_addr.SetIP(CNetAddr{ipv4});

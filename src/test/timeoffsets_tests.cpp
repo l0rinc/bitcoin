@@ -27,27 +27,27 @@ BOOST_AUTO_TEST_CASE(timeoffsets)
 {
     node::Warnings warnings{};
     TimeOffsets offsets{warnings};
-    BOOST_CHECK(offsets.Median() == 0s);
+    CHECK(offsets.Median() == 0s);
 
     AddMulti(offsets, {{0s, -1s, -2s, -3s}});
     // median should be zero for < 5 offsets
-    BOOST_CHECK(offsets.Median() == 0s);
+    CHECK(offsets.Median() == 0s);
 
     offsets.Add(-4s);
     // we now have 5 offsets: [-4, -3, -2, -1, 0]
-    BOOST_CHECK(offsets.Median() == -2s);
+    CHECK(offsets.Median() == -2s);
 
     AddMulti(offsets, {4, 5s});
     // we now have 9 offsets: [-4, -3, -2, -1, 0, 5, 5, 5, 5]
-    BOOST_CHECK(offsets.Median() == 0s);
+    CHECK(offsets.Median() == 0s);
 
     AddMulti(offsets, {41, 10s});
     // the TimeOffsets is now at capacity with 50 offsets, oldest offsets is discarded for any additional offset
-    BOOST_CHECK(offsets.Median() == 10s);
+    CHECK(offsets.Median() == 10s);
 
     AddMulti(offsets, {25, 15s});
     // we now have 25 offsets of 10s followed by 25 offsets of 15s
-    BOOST_CHECK(offsets.Median() == 15s);
+    CHECK(offsets.Median() == 15s);
 }
 
 static bool IsWarningRaised(const std::vector<std::chrono::seconds>& check_offsets)
@@ -61,11 +61,11 @@ static bool IsWarningRaised(const std::vector<std::chrono::seconds>& check_offse
 
 BOOST_AUTO_TEST_CASE(timeoffsets_warning)
 {
-    BOOST_CHECK(IsWarningRaised({{-60min, -40min, -30min, 0min, 10min}}));
-    BOOST_CHECK(IsWarningRaised({5, 11min}));
+    CHECK(IsWarningRaised({{-60min, -40min, -30min, 0min, 10min}}));
+    CHECK(IsWarningRaised({5, 11min}));
 
-    BOOST_CHECK(!IsWarningRaised({4, 60min}));
-    BOOST_CHECK(!IsWarningRaised({100, 3min}));
+    CHECK(!IsWarningRaised({4, 60min}));
+    CHECK(!IsWarningRaised({100, 3min}));
 }
 
 

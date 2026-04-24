@@ -11,6 +11,7 @@
 #include <atomic>
 #include <future>
 #include <queue>
+#include <test/util/check.h>
 
 struct ExpectedException : std::runtime_error {
     explicit ExpectedException(const std::string& msg) : std::runtime_error(msg) {}
@@ -34,7 +35,7 @@ static void GetFuture(std::future<void>& future, uint32_t& fail_counter)
     } catch (const ExpectedException&) {
         fail_counter++;
     } catch (...) {
-        assert(false && "Unexpected exception type");
+        CHECK(false && "Unexpected exception type");
     }
 }
 
@@ -70,8 +71,8 @@ FUZZ_TARGET(threadpool, .init = setup_threadpool_test) EXCLUSIVE_LOCKS_REQUIRED(
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
 
     const uint32_t num_tasks = fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(0, 1024);
-    assert(g_pool.WorkersCount() == g_num_workers);
-    assert(g_pool.WorkQueueSize() == 0);
+    CHECK(g_pool.WorkersCount() == g_num_workers);
+    CHECK(g_pool.WorkQueueSize() == 0);
 
     // Counters
     std::atomic_uint32_t task_counter{0};
@@ -111,7 +112,7 @@ FUZZ_TARGET(threadpool, .init = setup_threadpool_test) EXCLUSIVE_LOCKS_REQUIRED(
         GetFuture(fut, fail_counter);
     }
 
-    assert(g_pool.WorkQueueSize() == 0);
-    assert(task_counter.load() == expected_task_counter);
-    assert(fail_counter == expected_fail_tasks);
+    CHECK(g_pool.WorkQueueSize() == 0);
+    CHECK(task_counter.load() == expected_task_counter);
+    CHECK(fail_counter == expected_fail_tasks);
 }

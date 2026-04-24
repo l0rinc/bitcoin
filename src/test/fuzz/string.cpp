@@ -35,6 +35,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 using common::AmountErrMsg;
 using common::AmountHighWarn;
@@ -112,11 +113,11 @@ FUZZ_TARGET(string)
         data_stream << random_string_1;
         try {
             data_stream >> limited_string;
-            assert(data_stream.empty());
-            assert(s.size() <= random_string_1.size());
-            assert(s.size() <= 10);
+            CHECK(data_stream.empty());
+            CHECK(s.size() <= random_string_1.size());
+            CHECK(s.size() <= 10);
             if (!random_string_1.empty()) {
-                assert(!s.empty());
+                CHECK(!s.empty());
             }
         } catch (const std::ios_base::failure&) {
         }
@@ -127,8 +128,8 @@ FUZZ_TARGET(string)
         data_stream << limited_string;
         std::string deserialized_string;
         data_stream >> deserialized_string;
-        assert(data_stream.empty());
-        assert(deserialized_string == random_string_1);
+        CHECK(data_stream.empty());
+        CHECK(deserialized_string == random_string_1);
     }
     {
         int64_t amount_out;
@@ -136,9 +137,9 @@ FUZZ_TARGET(string)
     }
     {
         const auto single_split{SplitString(random_string_1, fuzzed_data_provider.ConsumeIntegral<char>())};
-        assert(single_split.size() >= 1);
+        CHECK(single_split.size() >= 1);
         const auto any_split{SplitString(random_string_1, random_string_2)};
-        assert(any_split.size() >= 1);
+        CHECK(any_split.size() >= 1);
     }
     {
         (void)Untranslated(random_string_1);

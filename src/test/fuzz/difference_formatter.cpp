@@ -8,6 +8,7 @@
 #include <test/fuzz/fuzz.h>
 
 #include <vector>
+#include <test/util/check.h>
 
 FUZZ_TARGET(difference_formatter)
 {
@@ -19,11 +20,11 @@ FUZZ_TARGET(difference_formatter)
     try {
         BlockTransactionsRequest test_container;
         ss >> test_container;
-        assert(test_container.blockhash == block_hash);
+        CHECK(test_container.blockhash == block_hash);
 
         // Invariant: strictly monotonic increasing (no duplicates allowed)
         for (size_t i = 1; i < test_container.indexes.size(); ++i) {
-            assert(test_container.indexes[i] > test_container.indexes[i-1]);
+            CHECK(test_container.indexes[i] > test_container.indexes[i-1]);
         }
 
     } catch (const std::ios_base::failure&) {

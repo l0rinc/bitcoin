@@ -13,6 +13,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 FUZZ_TARGET(block_header)
 {
@@ -24,26 +25,26 @@ FUZZ_TARGET(block_header)
     {
         const uint256 hash = block_header->GetHash();
         constexpr uint256 u256_max{"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
-        assert(hash != u256_max);
-        assert(block_header->GetBlockTime() == block_header->nTime);
-        assert(block_header->IsNull() == (block_header->nBits == 0));
+        CHECK(hash != u256_max);
+        CHECK(block_header->GetBlockTime() == block_header->nTime);
+        CHECK(block_header->IsNull() == (block_header->nBits == 0));
     }
     {
         CBlockHeader mut_block_header = *block_header;
         mut_block_header.SetNull();
-        assert(mut_block_header.IsNull());
+        CHECK(mut_block_header.IsNull());
         CBlock block{*block_header};
-        assert(block.GetHash() == block_header->GetHash());
+        CHECK(block.GetHash() == block_header->GetHash());
         (void)block.ToString();
         block.SetNull();
-        assert(block.GetHash() == mut_block_header.GetHash());
+        CHECK(block.GetHash() == mut_block_header.GetHash());
     }
     {
         std::optional<CBlockLocator> block_locator = ConsumeDeserializable<CBlockLocator>(fuzzed_data_provider);
         if (block_locator) {
             (void)block_locator->IsNull();
             block_locator->SetNull();
-            assert(block_locator->IsNull());
+            CHECK(block_locator->IsNull());
         }
     }
 }

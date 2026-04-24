@@ -44,14 +44,14 @@ BOOST_AUTO_TEST_CASE(run_command)
 {
     {
         const UniValue result = RunCommandParseJSON({});
-        BOOST_CHECK(result.isNull());
+        CHECK(result.isNull());
     }
     {
         const UniValue result = RunCommandParseJSON(mock_executable("valid_json"));
-        BOOST_CHECK(result.isObject());
+        CHECK(result.isObject());
         const UniValue& success = result.find_value("success");
-        BOOST_CHECK(!success.isNull());
-        BOOST_CHECK_EQUAL(success.get_bool(), true);
+        CHECK(!success.isNull());
+        CHECK_EQUAL(success.get_bool(), std::remove_cvref_t<decltype(success.get_bool())>{true});
     }
     {
         // An invalid command is handled by cpp-subprocess
@@ -60,14 +60,14 @@ BOOST_AUTO_TEST_CASE(run_command)
 #else
         const std::string expected{"execve failed: "};
 #endif
-        BOOST_CHECK_EXCEPTION(RunCommandParseJSON({"invalid_command"}), subprocess::CalledProcessError, HasReason(expected));
+        CHECK_EXCEPTION(RunCommandParseJSON({"invalid_command"}), subprocess::CalledProcessError, HasReason(expected));
     }
     {
         // Return non-zero exit code, no output to stderr
         const std::vector<std::string> command = mock_executable("nonzeroexit_nooutput");
-        BOOST_CHECK_EXCEPTION(RunCommandParseJSON(command), std::runtime_error, [&](const std::runtime_error& e) {
+        CHECK_EXCEPTION(RunCommandParseJSON(command), std::runtime_error, [&](const std::runtime_error& e) {
             const std::string what{e.what()};
-            BOOST_CHECK(what.find(strprintf("RunCommandParseJSON error: process(%s) returned %d: \n", util::Join(command, " "), boost::exit_test_failure)) != std::string::npos);
+            CHECK(what.find(strprintf("RunCommandParseJSON error: process(%s) returned %d: \n", util::Join(command, " "), boost::exit_test_failure)) != std::string::npos);
             return true;
         });
     }
@@ -75,24 +75,24 @@ BOOST_AUTO_TEST_CASE(run_command)
         // Return non-zero exit code, with error message for stderr
         const std::vector<std::string> command = mock_executable("nonzeroexit_stderroutput");
         const std::string expected{"err"};
-        BOOST_CHECK_EXCEPTION(RunCommandParseJSON(command), std::runtime_error, [&](const std::runtime_error& e) {
+        CHECK_EXCEPTION(RunCommandParseJSON(command), std::runtime_error, [&](const std::runtime_error& e) {
             const std::string what(e.what());
-            BOOST_CHECK(what.find(strprintf("RunCommandParseJSON error: process(%s) returned %s: %s", util::Join(command, " "), boost::exit_test_failure, "err")) != std::string::npos);
-            BOOST_CHECK(what.find(expected) != std::string::npos);
+            CHECK(what.find(strprintf("RunCommandParseJSON error: process(%s) returned %s: %s", util::Join(command, " "), boost::exit_test_failure, "err")) != std::string::npos);
+            CHECK(what.find(expected) != std::string::npos);
             return true;
         });
     }
     {
         // Unable to parse JSON
-        BOOST_CHECK_EXCEPTION(RunCommandParseJSON(mock_executable("invalid_json")), std::runtime_error, HasReason("Unable to parse JSON: {"));
+        CHECK_EXCEPTION(RunCommandParseJSON(mock_executable("invalid_json")), std::runtime_error, HasReason("Unable to parse JSON: {"));
     }
     {
         // Test stdin
         const UniValue result = RunCommandParseJSON(mock_executable("pass_stdin_to_stdout"), "{\"success\": true}");
-        BOOST_CHECK(result.isObject());
+        CHECK(result.isObject());
         const UniValue& success = result.find_value("success");
-        BOOST_CHECK(!success.isNull());
-        BOOST_CHECK_EQUAL(success.get_bool(), true);
+        CHECK(!success.isNull());
+        CHECK_EQUAL(success.get_bool(), std::remove_cvref_t<decltype(success.get_bool())>{true});
     }
 }
 #endif // ENABLE_EXTERNAL_SIGNER

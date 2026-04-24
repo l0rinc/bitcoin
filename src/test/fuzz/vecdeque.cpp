@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <test/util/check.h>
 
 namespace {
 
@@ -41,14 +42,14 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
 
     // Compare a real and a simulated buffer.
     auto compare_fn = [](const VecDeque<T>& r, const std::deque<T>& s) {
-        assert(r.size() == s.size());
-        assert(r.empty() == s.empty());
-        assert(r.capacity() >= r.size());
+        CHECK(r.size() == s.size());
+        CHECK(r.empty() == s.empty());
+        CHECK(r.capacity() >= r.size());
         if (s.size() == 0) return;
-        assert(r.front() == s.front());
-        assert(r.back() == s.back());
+        CHECK(r.front() == s.front());
+        CHECK(r.back() == s.back());
         for (size_t i = 0; i < s.size(); ++i) {
-            assert(r[i] == s[i]);
+            CHECK(r[i] == s[i]);
         }
     };
 
@@ -65,7 +66,7 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
         const bool multiple_exist{num_buffers > 1};
         const bool existing_buffer_non_full{non_empty && sim[idx].size() < MAX_BUFFER_SIZE};
         const bool existing_buffer_non_empty{non_empty && !sim[idx].empty()};
-        assert(non_full || non_empty);
+        CHECK(non_full || non_empty);
         while (true) {
             if (non_full && command-- == 0) {
                 /* Default construct. */
@@ -79,7 +80,7 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 size_t new_size = provider.ConsumeIntegralInRange<size_t>(0, MAX_BUFFER_SIZE);
                 real[idx].resize(new_size);
                 sim[idx].resize(new_size);
-                assert(real[idx].size() == new_size);
+                CHECK(real[idx].size() == new_size);
                 break;
             }
             if (non_empty && command-- == 0) {
@@ -87,7 +88,7 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 compare_fn(real[idx], sim[idx]);
                 real[idx].clear();
                 sim[idx].clear();
-                assert(real[idx].empty());
+                CHECK(real[idx].empty());
                 break;
             }
             if (non_empty && command-- == 0) {
@@ -95,7 +96,7 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 compare_fn(real[idx], sim[idx]);
                 real[idx] = VecDeque<T>();
                 sim[idx].clear();
-                assert(real[idx].size() == 0);
+                CHECK(real[idx].size() == 0);
                 break;
             }
             if (non_empty && command-- == 0) {
@@ -161,16 +162,16 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 size_t old_cap = real[idx].capacity();
                 size_t old_size = real[idx].size();
                 real[idx].reserve(res_size);
-                assert(real[idx].size() == old_size);
-                assert(real[idx].capacity() == std::max(old_cap, res_size));
+                CHECK(real[idx].size() == old_size);
+                CHECK(real[idx].capacity() == std::max(old_cap, res_size));
                 break;
             }
             if (non_empty && command-- == 0) {
                 /* shrink_to_fit() */
                 size_t old_size = real[idx].size();
                 real[idx].shrink_to_fit();
-                assert(real[idx].size() == old_size);
-                assert(real[idx].capacity() == old_size);
+                CHECK(real[idx].size() == old_size);
+                CHECK(real[idx].capacity() == old_size);
                 break;
             }
             if (existing_buffer_non_full && command-- == 0) {
@@ -180,12 +181,12 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 size_t old_cap = real[idx].capacity();
                 real[idx].push_back(*tmp);
                 sim[idx].push_back(*tmp);
-                assert(real[idx].size() == old_size + 1);
+                CHECK(real[idx].size() == old_size + 1);
                 if (old_cap > old_size) {
-                    assert(real[idx].capacity() == old_cap);
+                    CHECK(real[idx].capacity() == old_cap);
                 } else {
-                    assert(real[idx].capacity() > old_cap);
-                    assert(real[idx].capacity() <= 2 * (old_cap + 1));
+                    CHECK(real[idx].capacity() > old_cap);
+                    CHECK(real[idx].capacity() <= 2 * (old_cap + 1));
                 }
                 break;
             }
@@ -196,12 +197,12 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 size_t old_cap = real[idx].capacity();
                 sim[idx].push_back(*tmp);
                 real[idx].push_back(std::move(*tmp));
-                assert(real[idx].size() == old_size + 1);
+                CHECK(real[idx].size() == old_size + 1);
                 if (old_cap > old_size) {
-                    assert(real[idx].capacity() == old_cap);
+                    CHECK(real[idx].capacity() == old_cap);
                 } else {
-                    assert(real[idx].capacity() > old_cap);
-                    assert(real[idx].capacity() <= 2 * (old_cap + 1));
+                    CHECK(real[idx].capacity() > old_cap);
+                    CHECK(real[idx].capacity() <= 2 * (old_cap + 1));
                 }
                 break;
             }
@@ -212,12 +213,12 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 size_t old_cap = real[idx].capacity();
                 sim[idx].emplace_back(seed);
                 real[idx].emplace_back(seed);
-                assert(real[idx].size() == old_size + 1);
+                CHECK(real[idx].size() == old_size + 1);
                 if (old_cap > old_size) {
-                    assert(real[idx].capacity() == old_cap);
+                    CHECK(real[idx].capacity() == old_cap);
                 } else {
-                    assert(real[idx].capacity() > old_cap);
-                    assert(real[idx].capacity() <= 2 * (old_cap + 1));
+                    CHECK(real[idx].capacity() > old_cap);
+                    CHECK(real[idx].capacity() <= 2 * (old_cap + 1));
                 }
                 break;
             }
@@ -228,12 +229,12 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 size_t old_cap = real[idx].capacity();
                 real[idx].push_front(*tmp);
                 sim[idx].push_front(*tmp);
-                assert(real[idx].size() == old_size + 1);
+                CHECK(real[idx].size() == old_size + 1);
                 if (old_cap > old_size) {
-                    assert(real[idx].capacity() == old_cap);
+                    CHECK(real[idx].capacity() == old_cap);
                 } else {
-                    assert(real[idx].capacity() > old_cap);
-                    assert(real[idx].capacity() <= 2 * (old_cap + 1));
+                    CHECK(real[idx].capacity() > old_cap);
+                    CHECK(real[idx].capacity() <= 2 * (old_cap + 1));
                 }
                 break;
             }
@@ -244,12 +245,12 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 size_t old_cap = real[idx].capacity();
                 sim[idx].push_front(*tmp);
                 real[idx].push_front(std::move(*tmp));
-                assert(real[idx].size() == old_size + 1);
+                CHECK(real[idx].size() == old_size + 1);
                 if (old_cap > old_size) {
-                    assert(real[idx].capacity() == old_cap);
+                    CHECK(real[idx].capacity() == old_cap);
                 } else {
-                    assert(real[idx].capacity() > old_cap);
-                    assert(real[idx].capacity() <= 2 * (old_cap + 1));
+                    CHECK(real[idx].capacity() > old_cap);
+                    CHECK(real[idx].capacity() <= 2 * (old_cap + 1));
                 }
                 break;
             }
@@ -260,12 +261,12 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 size_t old_cap = real[idx].capacity();
                 sim[idx].emplace_front(seed);
                 real[idx].emplace_front(seed);
-                assert(real[idx].size() == old_size + 1);
+                CHECK(real[idx].size() == old_size + 1);
                 if (old_cap > old_size) {
-                    assert(real[idx].capacity() == old_cap);
+                    CHECK(real[idx].capacity() == old_cap);
                 } else {
-                    assert(real[idx].capacity() > old_cap);
-                    assert(real[idx].capacity() <= 2 * (old_cap + 1));
+                    CHECK(real[idx].capacity() > old_cap);
+                    CHECK(real[idx].capacity() <= 2 * (old_cap + 1));
                 }
                 break;
             }
@@ -273,20 +274,20 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 /* front() [modifying] */
                 tmp = T(rng.rand64());
                 size_t old_size = real[idx].size();
-                assert(sim[idx].front() == real[idx].front());
+                CHECK(sim[idx].front() == real[idx].front());
                 sim[idx].front() = *tmp;
                 real[idx].front() = std::move(*tmp);
-                assert(real[idx].size() == old_size);
+                CHECK(real[idx].size() == old_size);
                 break;
             }
             if (existing_buffer_non_empty && command-- == 0) {
                 /* back() [modifying] */
                 tmp = T(rng.rand64());
                 size_t old_size = real[idx].size();
-                assert(sim[idx].back() == real[idx].back());
+                CHECK(sim[idx].back() == real[idx].back());
                 sim[idx].back() = *tmp;
                 real[idx].back() = *tmp;
-                assert(real[idx].size() == old_size);
+                CHECK(real[idx].size() == old_size);
                 break;
             }
             if (existing_buffer_non_empty && command-- == 0) {
@@ -294,28 +295,28 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 tmp = T(rng.rand64());
                 size_t pos = provider.ConsumeIntegralInRange<size_t>(0, sim[idx].size() - 1);
                 size_t old_size = real[idx].size();
-                assert(sim[idx][pos] == real[idx][pos]);
+                CHECK(sim[idx][pos] == real[idx][pos]);
                 sim[idx][pos] = *tmp;
                 real[idx][pos] = std::move(*tmp);
-                assert(real[idx].size() == old_size);
+                CHECK(real[idx].size() == old_size);
                 break;
             }
             if (existing_buffer_non_empty && command-- == 0) {
                 /* pop_front() */
-                assert(sim[idx].front() == real[idx].front());
+                CHECK(sim[idx].front() == real[idx].front());
                 size_t old_size = real[idx].size();
                 sim[idx].pop_front();
                 real[idx].pop_front();
-                assert(real[idx].size() == old_size - 1);
+                CHECK(real[idx].size() == old_size - 1);
                 break;
             }
             if (existing_buffer_non_empty && command-- == 0) {
                 /* pop_back() */
-                assert(sim[idx].back() == real[idx].back());
+                CHECK(sim[idx].back() == real[idx].back());
                 size_t old_size = real[idx].size();
                 sim[idx].pop_back();
                 real[idx].pop_back();
-                assert(real[idx].size() == old_size - 1);
+                CHECK(real[idx].size() == old_size - 1);
                 break;
             }
         }
@@ -328,9 +329,9 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
         const std::deque<T>& simbuf = sim[i];
         compare_fn(realbuf, simbuf);
         for (unsigned j = 0; j < sim.size(); ++j) {
-            assert((realbuf == real[j]) == (simbuf == sim[j]));
-            assert(((realbuf <=> real[j]) >= 0) == (simbuf >= sim[j]));
-            assert(((realbuf <=> real[j]) <= 0) == (simbuf <= sim[j]));
+            CHECK((realbuf == real[j]) == (simbuf == sim[j]));
+            CHECK(((realbuf <=> real[j]) >= 0) == (simbuf >= sim[j]));
+            CHECK(((realbuf <=> real[j]) <= 0) == (simbuf <= sim[j]));
         }
         // Clear out the buffers so we can check below that no objects exist anymore.
         sim[i].clear();
@@ -371,7 +372,7 @@ private:
     {
         auto it = g_tracker.find(this);
         for (size_t i = 0; i < Size; ++i) {
-            assert(m_track_entry[i] == it);
+            CHECK(m_track_entry[i] == it);
         }
     }
 
@@ -379,7 +380,7 @@ private:
     void Register()
     {
         auto [it, inserted] = g_tracker.emplace(this, std::nullopt);
-        assert(inserted);
+        CHECK(inserted);
         for (size_t i = 0; i < Size; ++i) {
             m_track_entry[i] = it;
         }
@@ -388,7 +389,7 @@ private:
     void Deregister()
     {
         Check();
-        assert(m_track_entry[0] != g_tracker.end());
+        CHECK(m_track_entry[0] != g_tracker.end());
         g_tracker.erase(m_track_entry[0]);
         for (size_t i = 0; i < Size; ++i) {
             m_track_entry[i] = g_tracker.end();
@@ -399,7 +400,7 @@ private:
     std::optional<uint64_t>& Deref()
     {
         Check();
-        assert(m_track_entry[0] != g_tracker.end());
+        CHECK(m_track_entry[0] != g_tracker.end());
         return m_track_entry[0]->second;
     }
 
@@ -407,7 +408,7 @@ private:
     const std::optional<uint64_t>& Deref() const
     {
         Check();
-        assert(m_track_entry[0] != g_tracker.end());
+        CHECK(m_track_entry[0] != g_tracker.end());
         return m_track_entry[0]->second;
     }
 
@@ -466,7 +467,7 @@ public:
 
     static void CheckNoneExist()
     {
-        assert(g_tracker.empty());
+        CHECK(g_tracker.empty());
     }
 };
 

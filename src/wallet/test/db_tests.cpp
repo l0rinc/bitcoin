@@ -51,11 +51,11 @@ static void CheckPrefix(DatabaseBatch& batch, std::span<const std::byte> prefix,
         DataStream key, value;
         DatabaseCursor::Status status = cursor->Next(key, value);
         if (status == DatabaseCursor::Status::DONE) break;
-        BOOST_CHECK(status == DatabaseCursor::Status::MORE);
-        BOOST_CHECK(
+        CHECK(status == DatabaseCursor::Status::MORE);
+        CHECK(
             actual.emplace(SerializeData(key.begin(), key.end()), SerializeData(value.begin(), value.end())).second);
     }
-    BOOST_CHECK_EQUAL_COLLECTIONS(actual.begin(), actual.end(), expected.begin(), expected.end());
+    CHECK_EQUAL_COLLECTIONS(actual.begin(), actual.end(), expected.begin(), expected.end());
 }
 
 BOOST_FIXTURE_TEST_SUITE(db_tests, BasicTestingSetup)
@@ -82,7 +82,7 @@ BOOST_AUTO_TEST_CASE(db_cursor_prefix_range_test)
         // Write elements to it
         for (unsigned int i = 0; i < 10; i++) {
             for (const auto& prefix : prefixes) {
-                BOOST_CHECK(handler->Write(std::make_pair(prefix, i), i));
+                CHECK(handler->Write(std::make_pair(prefix, i), i));
             }
         }
 
@@ -95,20 +95,20 @@ BOOST_AUTO_TEST_CASE(db_cursor_prefix_range_test)
             DataStream value;
             for (int i = 0; i < 10; i++) {
                 DatabaseCursor::Status status = cursor->Next(key, value);
-                BOOST_CHECK_EQUAL(status, DatabaseCursor::Status::MORE);
+                CHECK_EQUAL(status, DatabaseCursor::Status::MORE);
 
                 std::string key_back;
                 unsigned int i_back;
                 key >> key_back >> i_back;
-                BOOST_CHECK_EQUAL(key_back, prefix);
+                CHECK_EQUAL(key_back, prefix);
 
                 unsigned int value_back;
                 value >> value_back;
-                BOOST_CHECK_EQUAL(value_back, i_back);
+                CHECK_EQUAL(value_back, i_back);
             }
 
             // Let's now read it once more, it should return DONE
-            BOOST_CHECK(cursor->Next(key, value) == DatabaseCursor::Status::DONE);
+            CHECK(cursor->Next(key, value) == DatabaseCursor::Status::DONE);
         }
         handler.reset();
         database->Close();
@@ -157,15 +157,15 @@ BOOST_AUTO_TEST_CASE(db_availability_after_write_error)
         std::string key = "key";
         std::string value = "value";
         std::string value2 = "value_2";
-        BOOST_CHECK(batch->Write(key, value));
+        CHECK(batch->Write(key, value));
         // Attempt to overwrite the record (expect failure)
-        BOOST_CHECK(!batch->Write(key, value2, /*fOverwrite=*/false));
+        CHECK(!batch->Write(key, value2, /*fOverwrite=*/false));
         // Successfully overwrite the record
-        BOOST_CHECK(batch->Write(key, value2, /*fOverwrite=*/true));
+        CHECK(batch->Write(key, value2, /*fOverwrite=*/true));
         // Sanity-check; read and verify the overwritten value
         std::string read_value;
-        BOOST_CHECK(batch->Read(key, read_value));
-        BOOST_CHECK_EQUAL(read_value, value2);
+        CHECK(batch->Read(key, read_value));
+        CHECK_EQUAL(read_value, value2);
     }
 }
 
@@ -188,21 +188,21 @@ BOOST_AUTO_TEST_CASE(erase_prefix)
 
         // Write two entries with the same key type prefix, a third one with a different prefix
         // and a fourth one with the type-id values inverted
-        BOOST_CHECK(batch->Write(make_key(key, value), value));
-        BOOST_CHECK(batch->Write(make_key(key, value2), value2));
-        BOOST_CHECK(batch->Write(make_key(key2, value), value));
-        BOOST_CHECK(batch->Write(make_key(value, key), value));
+        CHECK(batch->Write(make_key(key, value), value));
+        CHECK(batch->Write(make_key(key, value2), value2));
+        CHECK(batch->Write(make_key(key2, value), value));
+        CHECK(batch->Write(make_key(value, key), value));
 
         // Erase the ones with the same prefix and verify result
-        BOOST_CHECK(batch->TxnBegin());
-        BOOST_CHECK(batch->ErasePrefix(DataStream() << key));
-        BOOST_CHECK(batch->TxnCommit());
+        CHECK(batch->TxnBegin());
+        CHECK(batch->ErasePrefix(DataStream() << key));
+        CHECK(batch->TxnCommit());
 
-        BOOST_CHECK(!batch->Exists(make_key(key, value)));
-        BOOST_CHECK(!batch->Exists(make_key(key, value2)));
+        CHECK(!batch->Exists(make_key(key, value)));
+        CHECK(!batch->Exists(make_key(key, value2)));
         // Also verify that entries with a different prefix were not erased
-        BOOST_CHECK(batch->Exists(make_key(key2, value)));
-        BOOST_CHECK(batch->Exists(make_key(value, key)));
+        CHECK(batch->Exists(make_key(key2, value)));
+        CHECK(batch->Exists(make_key(value, key)));
     }
 }
 
@@ -235,8 +235,8 @@ BOOST_AUTO_TEST_CASE(txn_close_failure_dangling_txn)
     std::string value = "value";
 
     std::unique_ptr<SQLiteBatch> batch = std::make_unique<SQLiteBatch>(*database);
-    BOOST_CHECK(batch->TxnBegin());
-    BOOST_CHECK(batch->Write(key, value));
+    CHECK(batch->TxnBegin());
+    CHECK(batch->Write(key, value));
     // Set a handler to prevent txn abortion during destruction.
     // Mimicking a db statement execution failure.
     batch->SetExecHandler(std::make_unique<DbExecBlocker>(std::set<std::string>{"ROLLBACK TRANSACTION"}));
@@ -244,15 +244,15 @@ BOOST_AUTO_TEST_CASE(txn_close_failure_dangling_txn)
     batch.reset();
 
     // Ensure there is no dangling, to-be-reversed db txn
-    BOOST_CHECK(!database->HasActiveTxn());
+    CHECK(!database->HasActiveTxn());
 
     // And, just as a sanity check; verify that new batchs only write what they suppose to write
     // and nothing else.
     std::string key2 = "key2";
     std::unique_ptr<SQLiteBatch> batch2 = std::make_unique<SQLiteBatch>(*database);
-    BOOST_CHECK(batch2->Write(key2, value));
+    CHECK(batch2->Write(key2, value));
     // The first key must not exist
-    BOOST_CHECK(!batch2->Exists(key));
+    CHECK(!batch2->Exists(key));
 }
 
 BOOST_AUTO_TEST_CASE(concurrent_txn_dont_interfere)
@@ -270,31 +270,31 @@ BOOST_AUTO_TEST_CASE(concurrent_txn_dont_interfere)
 
     // Verify concurrent db transactions does not interfere between each other.
     // Start db txn, write key and check the key does exist within the db txn.
-    BOOST_CHECK(handler->TxnBegin());
-    BOOST_CHECK(handler->Write(key, value));
-    BOOST_CHECK(handler->Exists(key));
+    CHECK(handler->TxnBegin());
+    CHECK(handler->Write(key, value));
+    CHECK(handler->Exists(key));
 
     // But, the same key, does not exist in another handler
     std::unique_ptr<DatabaseBatch> handler2 = Assert(database)->MakeBatch();
-    BOOST_CHECK(handler2->Exists(key));
+    CHECK(handler2->Exists(key));
 
     // Attempt to commit the handler txn calling the handler2 methods.
     // Which, must not be possible.
-    BOOST_CHECK(!handler2->TxnCommit());
-    BOOST_CHECK(!handler2->TxnAbort());
+    CHECK(!handler2->TxnCommit());
+    CHECK(!handler2->TxnAbort());
 
     // Only the first handler can commit the changes.
-    BOOST_CHECK(handler->TxnCommit());
+    CHECK(handler->TxnCommit());
     // And, once commit is completed, handler2 can read the record
     std::string read_value;
-    BOOST_CHECK(handler2->Read(key, read_value));
-    BOOST_CHECK_EQUAL(read_value, value);
+    CHECK(handler2->Read(key, read_value));
+    CHECK_EQUAL(read_value, value);
 
     // Also, once txn is committed, single write statements are re-enabled.
     // Which means that handler2 can read the record changes directly.
-    BOOST_CHECK(handler->Write(key, value2, /*fOverwrite=*/true));
-    BOOST_CHECK(handler2->Read(key, read_value));
-    BOOST_CHECK_EQUAL(read_value, value2);
+    CHECK(handler->Write(key, value2, /*fOverwrite=*/true));
+    CHECK(handler2->Read(key, read_value));
+    CHECK_EQUAL(read_value, value2);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

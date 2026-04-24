@@ -172,8 +172,8 @@ void CheckQueueTest::Correct_Queue_range(std::vector<size_t> range)
             total -= vChecks.size();
             control.Add(std::move(vChecks));
         }
-        BOOST_REQUIRE(!control.Complete().has_value());
-        BOOST_REQUIRE_EQUAL(FakeCheckCheckCompletion::n_calls, i);
+        CHECK(!control.Complete().has_value());
+        CHECK_EQUAL(FakeCheckCheckCompletion::n_calls, i);
     }
 }
 
@@ -233,9 +233,9 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_Catches_Failure)
         }
         auto result = control.Complete();
         if (i > 0) {
-            BOOST_REQUIRE(result.has_value() && *result == static_cast<int>(17 * i));
+            CHECK(result.has_value() && *result == static_cast<int>(17 * i));
         } else {
-            BOOST_REQUIRE(!result.has_value());
+            CHECK(!result.has_value());
         }
     }
 }
@@ -254,7 +254,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_Recovers_From_Failure)
                 control.Add(std::move(vChecks));
             }
             bool r = !control.Complete().has_value();
-            BOOST_REQUIRE(r != end_fails);
+            CHECK(r != end_fails);
         }
     }
 }
@@ -280,11 +280,11 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_UniqueCheck)
     {
         LOCK(UniqueCheck::m);
         bool r = true;
-        BOOST_REQUIRE_EQUAL(UniqueCheck::results.size(), COUNT);
+        CHECK_EQUAL(UniqueCheck::results.size(), COUNT);
         for (size_t i = 0; i < COUNT; ++i) {
             r = r && UniqueCheck::results.count(i) == 1;
         }
-        BOOST_REQUIRE(r);
+        CHECK(r);
     }
 }
 
@@ -313,7 +313,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_Memory)
                 control.Add(std::move(vChecks));
             }
         }
-        BOOST_REQUIRE_EQUAL(MemoryCheck::fake_allocated_memory, 0U);
+        CHECK_EQUAL(MemoryCheck::fake_allocated_memory, 0U);
     }
 }
 
@@ -328,7 +328,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_FrozenCleanup)
         std::vector<FrozenCleanupCheck> vChecks(1);
         control.Add(std::move(vChecks));
         auto result = control.Complete(); // Hangs here
-        assert(!result);
+        CHECK(!result);
     });
     {
         std::unique_lock<std::mutex> l(FrozenCleanupCheck::m);
@@ -348,7 +348,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_FrozenCleanup)
     FrozenCleanupCheck::cv.notify_one();
     // Wait for control to finish
     t0.join();
-    BOOST_REQUIRE(!fails);
+    CHECK(!fails);
 }
 
 
@@ -374,7 +374,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueueControl_Locks)
         for (auto& thread: tg) {
             if (thread.joinable()) thread.join();
         }
-        BOOST_REQUIRE_EQUAL(fails, 0);
+        CHECK_EQUAL(fails, std::remove_cvref_t<decltype(fails)>{0});
     }
     {
         std::vector<std::thread> tg;
@@ -410,7 +410,7 @@ BOOST_AUTO_TEST_CASE(test_CheckQueueControl_Locks)
             // Acknowledge the done
             done_ack = true;
             cv.notify_one();
-            BOOST_REQUIRE(!fails);
+            CHECK(!fails);
         }
         for (auto& thread: tg) {
             if (thread.joinable()) thread.join();

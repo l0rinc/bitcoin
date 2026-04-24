@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <test/util/check.h>
 
 int ec_seckey_import_der(const secp256k1_context* ctx, unsigned char* out32, const unsigned char* seckey, size_t seckeylen);
 int ec_seckey_export_der(const secp256k1_context* ctx, unsigned char* seckey, size_t* seckeylen, const unsigned char* key32, bool compressed);
@@ -32,7 +33,7 @@ FUZZ_TARGET(secp256k1_ec_seckey_import_export_der)
         if (exported) {
             std::vector<uint8_t> out32(32);
             const bool imported = ec_seckey_import_der(secp256k1_context_static, out32.data(), seckey.data(), seckey.size()) == 1;
-            assert(imported && key32 == out32);
+            CHECK(imported && key32 == out32);
         }
     }
 }

@@ -13,6 +13,7 @@
 #include <limits>
 #include <optional>
 #include <vector>
+#include <test/util/check.h>
 
 FUZZ_TARGET(bloom_filter)
 {
@@ -33,7 +34,7 @@ FUZZ_TARGET(bloom_filter)
                 (void)bloom_filter.contains(b);
                 bloom_filter.insert(b);
                 const bool present = bloom_filter.contains(b);
-                assert(present);
+                CHECK(present);
             },
             [&] {
                 const std::optional<COutPoint> out_point = ConsumeDeserializable<COutPoint>(fuzzed_data_provider);
@@ -44,7 +45,7 @@ FUZZ_TARGET(bloom_filter)
                 (void)bloom_filter.contains(*out_point);
                 bloom_filter.insert(*out_point);
                 const bool present = bloom_filter.contains(*out_point);
-                assert(present);
+                CHECK(present);
             },
             [&] {
                 const std::optional<uint256> u256 = ConsumeDeserializable<uint256>(fuzzed_data_provider);
@@ -55,7 +56,7 @@ FUZZ_TARGET(bloom_filter)
                 (void)bloom_filter.contains(*u256);
                 bloom_filter.insert(*u256);
                 const bool present = bloom_filter.contains(*u256);
-                assert(present);
+                CHECK(present);
             },
             [&] {
                 const std::optional<CMutableTransaction> mut_tx = ConsumeDeserializable<CMutableTransaction>(fuzzed_data_provider, TX_WITH_WITNESS);

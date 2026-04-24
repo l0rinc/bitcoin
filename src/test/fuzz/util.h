@@ -28,6 +28,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 class PeerManager;
 
@@ -47,7 +48,7 @@ template <typename Collection>
 auto& PickValue(FuzzedDataProvider& fuzzed_data_provider, Collection& col)
 {
     auto sz{col.size()};
-    assert(sz >= 1);
+    CHECK(sz >= 1);
     auto it = col.begin();
     std::advance(it, fuzzed_data_provider.ConsumeIntegralInRange<decltype(sz)>(0, sz - 1));
     return *it;
@@ -189,7 +190,7 @@ template <class Dur>
 
 [[nodiscard]] inline arith_uint256 ConsumeArithUInt256InRange(FuzzedDataProvider& fuzzed_data_provider, const arith_uint256& min, const arith_uint256& max) noexcept
 {
-    assert(min <= max);
+    CHECK(min <= max);
     const arith_uint256 range = max - min;
     const arith_uint256 value = ConsumeArithUInt256(fuzzed_data_provider);
     arith_uint256 result = value;
@@ -199,7 +200,7 @@ template <class Dur>
         result = value - (quotient * (range + 1));
     }
     result += min;
-    assert(result >= min && result <= max);
+    CHECK(result >= min && result <= max);
     return result;
 }
 

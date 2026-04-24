@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <test/util/check.h>
 
 FUZZ_TARGET(bech32_random_decode)
 {
@@ -20,12 +21,12 @@ FUZZ_TARGET(bech32_random_decode)
     auto decoded = bech32::Decode(random_string, limit);
 
     if (decoded.hrp.empty()) {
-        assert(decoded.encoding == bech32::Encoding::INVALID);
-        assert(decoded.data.empty());
+        CHECK(decoded.encoding == bech32::Encoding::INVALID);
+        CHECK(decoded.data.empty());
     } else {
-        assert(decoded.encoding != bech32::Encoding::INVALID);
+        CHECK(decoded.encoding != bech32::Encoding::INVALID);
         auto reencoded = bech32::Encode(decoded.encoding, decoded.hrp, decoded.data);
-        assert(CaseInsensitiveEqual(random_string, reencoded));
+        CHECK(CaseInsensitiveEqual(random_string, reencoded));
     }
 }
 
@@ -57,12 +58,12 @@ FUZZ_TARGET(bech32_roundtrip)
     if (size <= bech32::CharLimit::BECH32) {
         for (auto encoding: {bech32::Encoding::BECH32, bech32::Encoding::BECH32M}) {
             auto encoded = bech32::Encode(encoding, hrp, converted_input);
-            assert(!encoded.empty());
+            CHECK(!encoded.empty());
 
             const auto decoded = bech32::Decode(encoded);
-            assert(decoded.encoding == encoding);
-            assert(decoded.hrp == hrp);
-            assert(decoded.data == converted_input);
+            CHECK(decoded.encoding == encoding);
+            CHECK(decoded.hrp == hrp);
+            CHECK(decoded.data == converted_input);
         }
     }
 }
