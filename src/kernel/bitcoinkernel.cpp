@@ -43,6 +43,7 @@
 #include <functional>
 #include <list>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -149,7 +150,7 @@ struct btck_BlockValidationState : Handle<btck_BlockValidationState, BlockValida
 
 namespace {
 
-BCLog::Level get_bclog_level(btck_LogLevel level)
+std::optional<BCLog::Level> get_bclog_level(btck_LogLevel level)
 {
     switch (level) {
     case btck_LogLevel_INFO: {
@@ -162,10 +163,10 @@ BCLog::Level get_bclog_level(btck_LogLevel level)
         return BCLog::Level::Trace;
     }
     }
-    assert(false);
+    return std::nullopt;
 }
 
-BCLog::LogFlags get_bclog_flag(btck_LogCategory category)
+std::optional<BCLog::LogFlags> get_bclog_flag(btck_LogCategory category)
 {
     switch (category) {
     case btck_LogCategory_BENCH: {
@@ -202,7 +203,7 @@ BCLog::LogFlags get_bclog_flag(btck_LogCategory category)
         return BCLog::LogFlags::ALL;
     }
     }
-    assert(false);
+    return std::nullopt;
 }
 
 btck_SynchronizationState cast_state(SynchronizationState state)
@@ -784,21 +785,30 @@ void btck_logging_set_options(const btck_LoggingOptions options)
 void btck_logging_set_level_category(btck_LogCategory category, btck_LogLevel level)
 {
     LOCK(cs_main);
+    const auto bclog_level{get_bclog_level(level)};
+    const auto bclog_flag{get_bclog_flag(category)};
+    if (!bclog_level || !bclog_flag) {
+        return;
+    }
     if (category == btck_LogCategory_ALL) {
-        LogInstance().SetLogLevel(get_bclog_level(level));
+        LogInstance().SetLogLevel(*bclog_level);
     }
 
-    LogInstance().AddCategoryLogLevel(get_bclog_flag(category), get_bclog_level(level));
+    LogInstance().AddCategoryLogLevel(*bclog_flag, *bclog_level);
 }
 
 void btck_logging_enable_category(btck_LogCategory category)
 {
-    LogInstance().EnableCategory(get_bclog_flag(category));
+    if (const auto bclog_flag{get_bclog_flag(category)}) {
+        LogInstance().EnableCategory(*bclog_flag);
+    }
 }
 
 void btck_logging_disable_category(btck_LogCategory category)
 {
-    LogInstance().DisableCategory(get_bclog_flag(category));
+    if (const auto bclog_flag{get_bclog_flag(category)}) {
+        LogInstance().DisableCategory(*bclog_flag);
+    }
 }
 
 void btck_logging_disable()
