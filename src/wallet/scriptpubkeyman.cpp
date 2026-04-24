@@ -991,6 +991,15 @@ std::optional<CKey> DescriptorScriptPubKeyMan::GetKey(const CKeyID& keyid) const
 
 bool DescriptorScriptPubKeyMan::TopUp(unsigned int size)
 {
+    {
+        LOCK(cs_desc_man);
+        const int64_t target_size{size > 0 ? size : m_keypool_size};
+        if (m_wallet_descriptor.descriptor->IsRange() &&
+            m_wallet_descriptor.range_end - m_wallet_descriptor.next_index >= target_size) {
+            return true;
+        }
+    }
+
     WalletBatch batch(m_storage.GetDatabase());
     if (!batch.TxnBegin()) return false;
     bool res = TopUpWithDB(batch, size);
