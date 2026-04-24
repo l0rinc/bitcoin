@@ -121,6 +121,7 @@ public:
 private:
     const CDBWrapper &parent;
     const std::unique_ptr<IteratorImpl> m_impl_iter;
+    DataStream m_scratch{};
 
     void SeekImpl(std::span<const std::byte> key);
     std::span<const std::byte> GetKeyImpl() const;
@@ -140,10 +141,9 @@ public:
     void SeekToFirst();
 
     template<typename K> void Seek(const K& key) {
-        DataStream ssKey{};
-        ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
-        ssKey << key;
-        SeekImpl(ssKey);
+        ScopedDataStreamUsage scoped_scratch{m_scratch};
+        m_scratch << key;
+        SeekImpl(m_scratch);
     }
 
     void Next();
@@ -160,9 +160,10 @@ public:
 
     template<typename V> bool GetValue(V& value) {
         try {
-            DataStream ssValue{GetValueImpl()};
-            dbwrapper_private::GetObfuscation(parent)(ssValue);
-            ssValue >> value;
+            ScopedDataStreamUsage scoped_scratch{m_scratch};
+            m_scratch.write(GetValueImpl());
+            dbwrapper_private::GetObfuscation(parent)(m_scratch);
+            m_scratch >> value;
         } catch (const std::exception&) {
             return false;
         }

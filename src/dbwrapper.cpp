@@ -360,7 +360,10 @@ struct CDBIterator::IteratorImpl {
 };
 
 CDBIterator::CDBIterator(const CDBWrapper& _parent, std::unique_ptr<IteratorImpl> _piter) : parent(_parent),
-                                                                                            m_impl_iter(std::move(_piter)) {}
+                                                                                            m_impl_iter(std::move(_piter))
+{
+    m_scratch.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
+}
 
 CDBIterator* CDBWrapper::NewIterator()
 {
