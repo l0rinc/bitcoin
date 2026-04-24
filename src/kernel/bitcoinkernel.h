@@ -866,7 +866,7 @@ BITCOINKERNEL_API void btck_logging_connection_destroy(btck_LoggingConnection* l
  * passed in chain type.
  *
  * @param[in] chain_type Controls the chain parameters type created.
- * @return               An allocated chain parameters opaque struct.
+ * @return               An allocated chain parameters opaque struct, or null for an unknown chain type.
  */
 BITCOINKERNEL_API btck_ChainParameters* BITCOINKERNEL_WARN_UNUSED_RESULT btck_chain_parameters_create(
     btck_ChainType chain_type);
