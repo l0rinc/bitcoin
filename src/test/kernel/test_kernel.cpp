@@ -564,6 +564,14 @@ BOOST_AUTO_TEST_CASE(btck_script_verify_tests)
         VERIFY_ALL_PRE_TAPROOT,
         status));
     BOOST_CHECK(status == ScriptVerifyStatus::ERROR_TX_INPUT_INDEX);
+    BOOST_CHECK(!legacy_spent_script_pubkey.Verify(
+        -1,
+        legacy_spending_tx,
+        nullptr,
+        0,
+        VERIFY_ALL_PRE_TAPROOT,
+        status));
+    BOOST_CHECK(status == ScriptVerifyStatus::ERROR_AMOUNT_OUT_OF_RANGE);
     btck_ScriptVerifyStatus raw_status{btck_ScriptVerifyStatus_OK};
     const auto invalid_flags{static_cast<btck_ScriptVerificationFlags>(btck_ScriptVerificationFlags_ALL | (1U << 31))};
     BOOST_CHECK_EQUAL(btck_script_pubkey_verify(
@@ -576,6 +584,16 @@ BOOST_AUTO_TEST_CASE(btck_script_verify_tests)
                           &raw_status),
                       0);
     BOOST_CHECK_EQUAL(raw_status, btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION);
+    BOOST_CHECK_EQUAL(btck_script_pubkey_verify(
+                          legacy_spent_script_pubkey.get(),
+                          MAX_MONEY + 1,
+                          legacy_spending_tx.get(),
+                          nullptr,
+                          0,
+                          static_cast<btck_ScriptVerificationFlags>(VERIFY_ALL_PRE_TAPROOT),
+                          &raw_status),
+                      0);
+    BOOST_CHECK_EQUAL(raw_status, btck_ScriptVerifyStatus_ERROR_AMOUNT_OUT_OF_RANGE);
 
     // Legacy transaction aca326a724eda9a461c10a876534ecd5ae7b27f10f26c3862fb996f80ea2d45d with precomputed_txdata
     auto legacy_precomputed_txdata{PrecomputedTransactionData{

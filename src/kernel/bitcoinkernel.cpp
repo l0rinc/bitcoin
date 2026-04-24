@@ -695,6 +695,11 @@ int btck_script_pubkey_verify(const btck_ScriptPubkey* script_pubkey,
         return 0;
     }
 
+    if (!MoneyRange(amount)) {
+        if (status) *status = btck_ScriptVerifyStatus_ERROR_AMOUNT_OUT_OF_RANGE;
+        return 0;
+    }
+
     const CTransaction& tx{*btck_Transaction::get(tx_to)};
     if (input_index >= tx.vin.size()) {
         if (status) *status = btck_ScriptVerifyStatus_ERROR_TX_INPUT_INDEX;
