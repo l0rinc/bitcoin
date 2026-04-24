@@ -1024,6 +1024,10 @@ BOOST_AUTO_TEST_CASE(btck_check_block_context_free)
     BOOST_CHECK(block.Check(consensus_params, BlockCheckFlags::ALL, state));
     BOOST_CHECK(state.GetValidationMode() == ValidationMode::VALID);
 
+    const auto invalid_flags{static_cast<btck_BlockCheckFlags>(btck_BlockCheckFlags_ALL | (1U << 31))};
+    BOOST_CHECK_EQUAL(btck_block_check(block.get(), consensus_params.get(), invalid_flags, state.get()), 0);
+    BOOST_CHECK(state.GetValidationMode() == ValidationMode::INTERNAL_ERROR);
+
     auto bad_merkle_block_data = raw_block;
     bad_merkle_block_data[MERKLE_ROOT_OFFSET] ^= std::byte{0x01};
     Block bad_merkle_block{bad_merkle_block_data};

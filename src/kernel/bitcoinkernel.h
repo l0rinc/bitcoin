@@ -1306,7 +1306,7 @@ typedef uint32_t btck_BlockCheckFlags;
  * @param[in]     flags             Bitmask of btck_BlockCheckFlags controlling the
  *                                  optional POW and merkle-root checks. Use
  *                                  btck_BlockCheckFlags_BASE to run only the base
- *                                  checks.
+ *                                  checks. Unknown flag bits fail validation.
  * @param[in,out] validation_state  Non-null, previously created with
  *                                  btck_block_validation_state_create and updated
  *                                  in-place with the validation result.
