@@ -8,6 +8,7 @@
 
 #include <chain.h>
 #include <coins.h>
+#include <consensus/amount.h>
 #include <consensus/validation.h>
 #include <dbwrapper.h>
 #include <kernel/caches.h>
@@ -602,6 +603,9 @@ void btck_script_pubkey_destroy(btck_ScriptPubkey* script_pubkey)
 
 btck_TransactionOutput* btck_transaction_output_create(const btck_ScriptPubkey* script_pubkey, int64_t amount)
 {
+    if (!MoneyRange(amount)) {
+        return nullptr;
+    }
     return btck_TransactionOutput::create(amount, btck_ScriptPubkey::get(script_pubkey));
 }
 
@@ -642,6 +646,9 @@ btck_PrecomputedTransactionData* btck_precomputed_transaction_data_create(
                     return nullptr;
                 }
                 const CTxOut& tx_out{btck_TransactionOutput::get(spent_outputs_[i])};
+                if (!MoneyRange(tx_out.nValue)) {
+                    return nullptr;
+                }
                 spent_outputs.push_back(tx_out);
             }
         }

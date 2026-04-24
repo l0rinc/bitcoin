@@ -625,7 +625,8 @@ BITCOINKERNEL_API void btck_transaction_destroy(btck_Transaction* transaction);
  * @param[in] tx_to             Non-null.
  * @param[in] spent_outputs     Nullable for non-taproot verification. Points to an array of
  *                              outputs spent by the transaction. Each output must be non-null,
- *                              and the array length must match the transaction input count.
+ *                              have a valid amount, and the array length must match the transaction
+ *                              input count.
  * @param[in] spent_outputs_len Length of the spent_outputs array.
  * @return                      The precomputed data, or null on error.
  */
@@ -729,8 +730,8 @@ BITCOINKERNEL_API void btck_script_pubkey_destroy(btck_ScriptPubkey* script_pubk
  * @brief Create a transaction output from a script pubkey and an amount.
  *
  * @param[in] script_pubkey Non-null.
- * @param[in] amount        The amount associated with the script pubkey for this output.
- * @return                  The transaction output.
+ * @param[in] amount        The valid amount associated with the script pubkey for this output.
+ * @return                  The transaction output, or null if the amount is out of range.
  */
 BITCOINKERNEL_API btck_TransactionOutput* BITCOINKERNEL_WARN_UNUSED_RESULT btck_transaction_output_create(
     const btck_ScriptPubkey* script_pubkey,

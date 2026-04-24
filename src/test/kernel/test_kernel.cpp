@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <consensus/amount.h>
 #include <kernel/bitcoinkernel.h>
 #include <kernel/bitcoinkernel_wrapper.h>
 #include <util/fs.h>
@@ -493,6 +494,8 @@ BOOST_AUTO_TEST_CASE(btck_transaction_output)
     TransactionOutput output{script, 1};
     TransactionOutput output2{script, 2};
     CheckHandle(output, output2);
+    BOOST_CHECK(btck_transaction_output_create(script.get(), -1) == nullptr);
+    BOOST_CHECK(btck_transaction_output_create(script.get(), MAX_MONEY + 1) == nullptr);
 }
 
 BOOST_AUTO_TEST_CASE(btck_transaction_input)
@@ -526,6 +529,16 @@ BOOST_AUTO_TEST_CASE(btck_precomputed_txdata) {
     BOOST_CHECK(btck_precomputed_transaction_data_create(tx.get(), mismatched_outputs, 2) == nullptr);
     const btck_TransactionOutput* null_output[]{nullptr};
     BOOST_CHECK(btck_precomputed_transaction_data_create(tx.get(), null_output, 1) == nullptr);
+    auto invalid_tx_data{tx_data};
+    // First serialized output amount in tx_data.
+    constexpr size_t first_output_amount_offset{154};
+    for (size_t i{0}; i < 8; ++i) {
+        invalid_tx_data[first_output_amount_offset + i] = std::byte{0xff};
+    }
+    auto invalid_tx{Transaction{invalid_tx_data}};
+    auto invalid_output{invalid_tx.GetOutput(0)};
+    const btck_TransactionOutput* invalid_outputs[]{invalid_output.get()};
+    BOOST_CHECK(btck_precomputed_transaction_data_create(tx.get(), invalid_outputs, 1) == nullptr);
     CheckHandle(precomputed_txdata, precomputed_txdata_2);
 }
 
