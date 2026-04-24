@@ -8,6 +8,7 @@
 
 #include <chain.h>
 #include <coins.h>
+#include <consensus/amount.h>
 #include <consensus/validation.h>
 #include <dbwrapper.h>
 #include <kernel/caches.h>
@@ -43,6 +44,7 @@
 #include <functional>
 #include <list>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -149,7 +151,7 @@ struct btck_BlockValidationState : Handle<btck_BlockValidationState, BlockValida
 
 namespace {
 
-BCLog::Level get_bclog_level(btck_LogLevel level)
+std::optional<BCLog::Level> get_bclog_level(btck_LogLevel level)
 {
     switch (level) {
     case btck_LogLevel_INFO: {
@@ -162,10 +164,10 @@ BCLog::Level get_bclog_level(btck_LogLevel level)
         return BCLog::Level::Trace;
     }
     }
-    assert(false);
+    return std::nullopt;
 }
 
-BCLog::LogFlags get_bclog_flag(btck_LogCategory category)
+std::optional<BCLog::LogFlags> get_bclog_flag(btck_LogCategory category)
 {
     switch (category) {
     case btck_LogCategory_BENCH: {
@@ -202,7 +204,7 @@ BCLog::LogFlags get_bclog_flag(btck_LogCategory category)
         return BCLog::LogFlags::ALL;
     }
     }
-    assert(false);
+    return std::nullopt;
 }
 
 btck_SynchronizationState cast_state(SynchronizationState state)
@@ -523,7 +525,9 @@ size_t btck_transaction_count_outputs(const btck_Transaction* transaction)
 const btck_TransactionOutput* btck_transaction_get_output_at(const btck_Transaction* transaction, size_t output_index)
 {
     const CTransaction& tx = *btck_Transaction::get(transaction);
-    assert(output_index < tx.vout.size());
+    if (output_index >= tx.vout.size()) {
+        return nullptr;
+    }
     return btck_TransactionOutput::ref(&tx.vout[output_index]);
 }
 
@@ -534,8 +538,11 @@ size_t btck_transaction_count_inputs(const btck_Transaction* transaction)
 
 const btck_TransactionInput* btck_transaction_get_input_at(const btck_Transaction* transaction, size_t input_index)
 {
-    assert(input_index < btck_Transaction::get(transaction)->vin.size());
-    return btck_TransactionInput::ref(&btck_Transaction::get(transaction)->vin[input_index]);
+    const CTransaction& tx = *btck_Transaction::get(transaction);
+    if (input_index >= tx.vin.size()) {
+        return nullptr;
+    }
+    return btck_TransactionInput::ref(&tx.vin[input_index]);
 }
 
 uint32_t btck_transaction_get_locktime(const btck_Transaction* transaction)
@@ -596,6 +603,9 @@ void btck_script_pubkey_destroy(btck_ScriptPubkey* script_pubkey)
 
 btck_TransactionOutput* btck_transaction_output_create(const btck_ScriptPubkey* script_pubkey, int64_t amount)
 {
+    if (!MoneyRange(amount)) {
+        return nullptr;
+    }
     return btck_TransactionOutput::create(amount, btck_ScriptPubkey::get(script_pubkey));
 }
 
@@ -625,15 +635,26 @@ btck_PrecomputedTransactionData* btck_precomputed_transaction_data_create(
 {
     try {
         const CTransaction& tx{*btck_Transaction::get(tx_to)};
-        auto txdata{btck_PrecomputedTransactionData::create()};
+        std::vector<CTxOut> spent_outputs;
         if (spent_outputs_ != nullptr && spent_outputs_len > 0) {
-            assert(spent_outputs_len == tx.vin.size());
-            std::vector<CTxOut> spent_outputs;
+            if (spent_outputs_len != tx.vin.size()) {
+                return nullptr;
+            }
             spent_outputs.reserve(spent_outputs_len);
             for (size_t i = 0; i < spent_outputs_len; i++) {
+                if (spent_outputs_[i] == nullptr) {
+                    return nullptr;
+                }
                 const CTxOut& tx_out{btck_TransactionOutput::get(spent_outputs_[i])};
+                if (!MoneyRange(tx_out.nValue)) {
+                    return nullptr;
+                }
                 spent_outputs.push_back(tx_out);
             }
+        }
+
+        auto txdata{btck_PrecomputedTransactionData::create()};
+        if (!spent_outputs.empty()) {
             btck_PrecomputedTransactionData::get(txdata).Init(tx, std::move(spent_outputs));
         } else {
             btck_PrecomputedTransactionData::get(txdata).Init(tx, {});
@@ -663,16 +684,27 @@ int btck_script_pubkey_verify(const btck_ScriptPubkey* script_pubkey,
                               const btck_ScriptVerificationFlags flags,
                               btck_ScriptVerifyStatus* status)
 {
-    // Assert that all specified flags are part of the interface before continuing
-    assert((flags & ~btck_ScriptVerificationFlags_ALL) == 0);
-
-    if (!is_valid_flag_combination(script_verify_flags::from_int(flags))) {
+    if ((flags & ~btck_ScriptVerificationFlags_ALL) != 0) {
         if (status) *status = btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION;
         return 0;
     }
 
+    const auto verify_flags{script_verify_flags::from_int(flags)};
+    if (!is_valid_flag_combination(verify_flags)) {
+        if (status) *status = btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION;
+        return 0;
+    }
+
+    if (!MoneyRange(amount)) {
+        if (status) *status = btck_ScriptVerifyStatus_ERROR_AMOUNT_OUT_OF_RANGE;
+        return 0;
+    }
+
     const CTransaction& tx{*btck_Transaction::get(tx_to)};
-    assert(input_index < tx.vin.size());
+    if (input_index >= tx.vin.size()) {
+        if (status) *status = btck_ScriptVerifyStatus_ERROR_TX_INPUT_INDEX;
+        return 0;
+    }
 
     const PrecomputedTransactionData& txdata{precomputed_txdata ? btck_PrecomputedTransactionData::get(precomputed_txdata) : PrecomputedTransactionData(tx)};
 
@@ -686,7 +718,7 @@ int btck_script_pubkey_verify(const btck_ScriptPubkey* script_pubkey,
     bool result = VerifyScript(tx.vin[input_index].scriptSig,
                                btck_ScriptPubkey::get(script_pubkey),
                                &tx.vin[input_index].scriptWitness,
-                               script_verify_flags::from_int(flags),
+                               verify_flags,
                                TransactionSignatureChecker(&tx, input_index, amount, txdata, MissingDataBehavior::FAIL),
                                nullptr);
     return result ? 1 : 0;
@@ -765,21 +797,30 @@ void btck_logging_set_options(const btck_LoggingOptions options)
 void btck_logging_set_level_category(btck_LogCategory category, btck_LogLevel level)
 {
     LOCK(cs_main);
+    const auto bclog_level{get_bclog_level(level)};
+    const auto bclog_flag{get_bclog_flag(category)};
+    if (!bclog_level || !bclog_flag) {
+        return;
+    }
     if (category == btck_LogCategory_ALL) {
-        LogInstance().SetLogLevel(get_bclog_level(level));
+        LogInstance().SetLogLevel(*bclog_level);
     }
 
-    LogInstance().AddCategoryLogLevel(get_bclog_flag(category), get_bclog_level(level));
+    LogInstance().AddCategoryLogLevel(*bclog_flag, *bclog_level);
 }
 
 void btck_logging_enable_category(btck_LogCategory category)
 {
-    LogInstance().EnableCategory(get_bclog_flag(category));
+    if (const auto bclog_flag{get_bclog_flag(category)}) {
+        LogInstance().EnableCategory(*bclog_flag);
+    }
 }
 
 void btck_logging_disable_category(btck_LogCategory category)
 {
-    LogInstance().DisableCategory(get_bclog_flag(category));
+    if (const auto bclog_flag{get_bclog_flag(category)}) {
+        LogInstance().DisableCategory(*bclog_flag);
+    }
 }
 
 void btck_logging_disable()
@@ -820,7 +861,7 @@ btck_ChainParameters* btck_chain_parameters_create(const btck_ChainType chain_ty
         return btck_ChainParameters::ref(const_cast<CChainParams*>(CChainParams::RegTest({}).release()));
     }
     }
-    assert(false);
+    return nullptr;
 }
 
 btck_ChainParameters* btck_chain_parameters_copy(const btck_ChainParameters* chain_parameters)
@@ -908,7 +949,9 @@ const btck_BlockTreeEntry* btck_block_tree_entry_get_previous(const btck_BlockTr
 const btck_BlockTreeEntry* btck_block_tree_entry_get_ancestor(const btck_BlockTreeEntry* block_tree_entry, int32_t height)
 {
     const auto* ancestor{btck_BlockTreeEntry::get(block_tree_entry).GetAncestor(height)};
-    assert(ancestor);
+    if (!ancestor) {
+        return nullptr;
+    }
     return btck_BlockTreeEntry::ref(ancestor);
 }
 
@@ -1095,9 +1138,13 @@ void btck_chainstate_manager_destroy(btck_ChainstateManager* chainman)
 int btck_chainstate_manager_import_blocks(btck_ChainstateManager* chainman, const char** block_file_paths_data, size_t* block_file_paths_lens, size_t block_file_paths_data_len)
 {
     try {
+        if (block_file_paths_data_len != 0 && (block_file_paths_data == nullptr || block_file_paths_lens == nullptr)) {
+            LogError("Failed to import blocks: path data and lengths must be non-null when count is non-zero.");
+            return -1;
+        }
         std::vector<fs::path> import_files;
         import_files.reserve(block_file_paths_data_len);
-        for (uint32_t i = 0; i < block_file_paths_data_len; i++) {
+        for (size_t i = 0; i < block_file_paths_data_len; i++) {
             if (block_file_paths_data[i] != nullptr) {
                 import_files.emplace_back(std::string{block_file_paths_data[i], block_file_paths_lens[i]}.c_str());
             }
@@ -1141,6 +1188,11 @@ int btck_block_check(const btck_Block* block, const btck_ConsensusParams* consen
     auto& state = btck_BlockValidationState::get(validation_state);
     state = BlockValidationState{};
 
+    if ((flags & ~btck_BlockCheckFlags_ALL) != 0) {
+        state.Error("invalid block check flags");
+        return 0;
+    }
+
     const bool check_pow    = (flags & btck_BlockCheckFlags_POW) != 0;
     const bool check_merkle = (flags & btck_BlockCheckFlags_MERKLE) != 0;
 
@@ -1156,8 +1208,11 @@ size_t btck_block_count_transactions(const btck_Block* block)
 
 const btck_Transaction* btck_block_get_transaction_at(const btck_Block* block, size_t index)
 {
-    assert(index < btck_Block::get(block)->vtx.size());
-    return btck_Transaction::ref(&btck_Block::get(block)->vtx[index]);
+    const auto& transactions{btck_Block::get(block)->vtx};
+    if (index >= transactions.size()) {
+        return nullptr;
+    }
+    return btck_Transaction::ref(&transactions[index]);
 }
 
 btck_BlockHeader* btck_block_get_header(const btck_Block* block)
@@ -1268,8 +1323,11 @@ size_t btck_block_spent_outputs_count(const btck_BlockSpentOutputs* block_spent_
 
 const btck_TransactionSpentOutputs* btck_block_spent_outputs_get_transaction_spent_outputs_at(const btck_BlockSpentOutputs* block_spent_outputs, size_t transaction_index)
 {
-    assert(transaction_index < btck_BlockSpentOutputs::get(block_spent_outputs)->vtxundo.size());
-    const auto* tx_undo{&btck_BlockSpentOutputs::get(block_spent_outputs)->vtxundo.at(transaction_index)};
+    const auto& tx_undos{btck_BlockSpentOutputs::get(block_spent_outputs)->vtxundo};
+    if (transaction_index >= tx_undos.size()) {
+        return nullptr;
+    }
+    const auto* tx_undo{&tx_undos[transaction_index]};
     return btck_TransactionSpentOutputs::ref(tx_undo);
 }
 
@@ -1295,8 +1353,11 @@ void btck_transaction_spent_outputs_destroy(btck_TransactionSpentOutputs* transa
 
 const btck_Coin* btck_transaction_spent_outputs_get_coin_at(const btck_TransactionSpentOutputs* transaction_spent_outputs, size_t coin_index)
 {
-    assert(coin_index < btck_TransactionSpentOutputs::get(transaction_spent_outputs).vprevout.size());
-    const Coin* coin{&btck_TransactionSpentOutputs::get(transaction_spent_outputs).vprevout.at(coin_index)};
+    const auto& coins{btck_TransactionSpentOutputs::get(transaction_spent_outputs).vprevout};
+    if (coin_index >= coins.size()) {
+        return nullptr;
+    }
+    const Coin* coin{&coins[coin_index]};
     return btck_Coin::ref(coin);
 }
 

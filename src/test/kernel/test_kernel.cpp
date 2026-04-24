@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <consensus/amount.h>
 #include <kernel/bitcoinkernel.h>
 #include <kernel/bitcoinkernel_wrapper.h>
 #include <util/fs.h>
@@ -404,6 +405,8 @@ BOOST_AUTO_TEST_CASE(btck_transaction_tests)
 
     BOOST_CHECK_EQUAL(tx.CountOutputs(), 2);
     BOOST_CHECK_EQUAL(tx.CountInputs(), 1);
+    BOOST_CHECK(btck_transaction_get_output_at(tx.get(), tx.CountOutputs()) == nullptr);
+    BOOST_CHECK(btck_transaction_get_input_at(tx.get(), tx.CountInputs()) == nullptr);
     BOOST_CHECK_EQUAL(tx.GetLocktime(), 510826);
     auto broken_tx_data{std::span<std::byte>{tx_data.begin(), tx_data.begin() + 10}};
     BOOST_CHECK_THROW(Transaction{broken_tx_data}, std::runtime_error);
@@ -491,6 +494,8 @@ BOOST_AUTO_TEST_CASE(btck_transaction_output)
     TransactionOutput output{script, 1};
     TransactionOutput output2{script, 2};
     CheckHandle(output, output2);
+    BOOST_CHECK(btck_transaction_output_create(script.get(), -1) == nullptr);
+    BOOST_CHECK(btck_transaction_output_create(script.get(), MAX_MONEY + 1) == nullptr);
 }
 
 BOOST_AUTO_TEST_CASE(btck_transaction_input)
@@ -518,6 +523,22 @@ BOOST_AUTO_TEST_CASE(btck_precomputed_txdata) {
         /*tx_to=*/tx2,
         /*spent_outputs=*/{},
     }};
+    const auto output0{tx.GetOutput(0)};
+    const auto output1{tx.GetOutput(1)};
+    const btck_TransactionOutput* mismatched_outputs[]{output0.get(), output1.get()};
+    BOOST_CHECK(btck_precomputed_transaction_data_create(tx.get(), mismatched_outputs, 2) == nullptr);
+    const btck_TransactionOutput* null_output[]{nullptr};
+    BOOST_CHECK(btck_precomputed_transaction_data_create(tx.get(), null_output, 1) == nullptr);
+    auto invalid_tx_data{tx_data};
+    // First serialized output amount in tx_data.
+    constexpr size_t first_output_amount_offset{154};
+    for (size_t i{0}; i < 8; ++i) {
+        invalid_tx_data[first_output_amount_offset + i] = std::byte{0xff};
+    }
+    auto invalid_tx{Transaction{invalid_tx_data}};
+    auto invalid_output{invalid_tx.GetOutput(0)};
+    const btck_TransactionOutput* invalid_outputs[]{invalid_output.get()};
+    BOOST_CHECK(btck_precomputed_transaction_data_create(tx.get(), invalid_outputs, 1) == nullptr);
     CheckHandle(precomputed_txdata, precomputed_txdata_2);
 }
 
@@ -533,6 +554,46 @@ BOOST_AUTO_TEST_CASE(btck_script_verify_tests)
         /*amount=*/0,
         /*input_index=*/0,
         /*taproot=*/false);
+
+    auto status = ScriptVerifyStatus::OK;
+    BOOST_CHECK(!legacy_spent_script_pubkey.Verify(
+        0,
+        legacy_spending_tx,
+        nullptr,
+        legacy_spending_tx.CountInputs(),
+        VERIFY_ALL_PRE_TAPROOT,
+        status));
+    BOOST_CHECK(status == ScriptVerifyStatus::ERROR_TX_INPUT_INDEX);
+    BOOST_CHECK(!legacy_spent_script_pubkey.Verify(
+        -1,
+        legacy_spending_tx,
+        nullptr,
+        0,
+        VERIFY_ALL_PRE_TAPROOT,
+        status));
+    BOOST_CHECK(status == ScriptVerifyStatus::ERROR_AMOUNT_OUT_OF_RANGE);
+    btck_ScriptVerifyStatus raw_status{btck_ScriptVerifyStatus_OK};
+    const auto invalid_flags{static_cast<btck_ScriptVerificationFlags>(btck_ScriptVerificationFlags_ALL | (1U << 31))};
+    BOOST_CHECK_EQUAL(btck_script_pubkey_verify(
+                          legacy_spent_script_pubkey.get(),
+                          0,
+                          legacy_spending_tx.get(),
+                          nullptr,
+                          0,
+                          invalid_flags,
+                          &raw_status),
+                      0);
+    BOOST_CHECK_EQUAL(raw_status, btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION);
+    BOOST_CHECK_EQUAL(btck_script_pubkey_verify(
+                          legacy_spent_script_pubkey.get(),
+                          MAX_MONEY + 1,
+                          legacy_spending_tx.get(),
+                          nullptr,
+                          0,
+                          static_cast<btck_ScriptVerificationFlags>(VERIFY_ALL_PRE_TAPROOT),
+                          &raw_status),
+                      0);
+    BOOST_CHECK_EQUAL(raw_status, btck_ScriptVerifyStatus_ERROR_AMOUNT_OUT_OF_RANGE);
 
     // Legacy transaction aca326a724eda9a461c10a876534ecd5ae7b27f10f26c3862fb996f80ea2d45d with precomputed_txdata
     auto legacy_precomputed_txdata{PrecomputedTransactionData{
@@ -630,6 +691,10 @@ BOOST_AUTO_TEST_CASE(logging_tests)
     logging_disable_category(LogCategory::BENCH);
     logging_enable_category(LogCategory::VALIDATION);
     logging_disable_category(LogCategory::VALIDATION);
+    btck_logging_set_level_category(static_cast<btck_LogCategory>(255), btck_LogLevel_INFO);
+    btck_logging_set_level_category(btck_LogCategory_KERNEL, static_cast<btck_LogLevel>(255));
+    btck_logging_enable_category(static_cast<btck_LogCategory>(255));
+    btck_logging_disable_category(static_cast<btck_LogCategory>(255));
 
     // Check that connecting, connecting another, and then disconnecting and connecting a logger again works.
     {
@@ -659,6 +724,7 @@ BOOST_AUTO_TEST_CASE(btck_context_tests)
         ChainParams params{ChainType::MAINNET};
         ChainParams regtest_params{ChainType::REGTEST};
         CheckHandle(params, regtest_params);
+        BOOST_CHECK(btck_chain_parameters_create(static_cast<btck_ChainType>(255)) == nullptr);
         options.SetChainParams(params);
         options.SetNotifications(std::make_shared<TestKernelNotifications>());
         Context context{options};
@@ -714,6 +780,7 @@ BOOST_AUTO_TEST_CASE(btck_block)
     CheckHandle(block, block_100);
     Block block_tx{hex_string_to_byte_vec(REGTEST_BLOCK_DATA[205])};
     CheckRange(block_tx.Transactions(), block_tx.CountTransactions());
+    BOOST_CHECK(btck_block_get_transaction_at(block_tx.get(), block_tx.CountTransactions()) == nullptr);
     auto invalid_data = hex_string_to_byte_vec("012300");
     BOOST_CHECK_THROW(Block{invalid_data}, std::runtime_error);
     auto empty_data = hex_string_to_byte_vec("");
@@ -774,6 +841,15 @@ BOOST_AUTO_TEST_CASE(btck_chainman_tests)
     BOOST_CHECK(chainman_opts.SetWipeDbs(/*wipe_block_tree=*/true, /*wipe_chainstate=*/true));
     BOOST_CHECK(chainman_opts.SetWipeDbs(/*wipe_block_tree=*/false, /*wipe_chainstate=*/true));
     BOOST_CHECK(chainman_opts.SetWipeDbs(/*wipe_block_tree=*/false, /*wipe_chainstate=*/false));
+    {
+        std::unique_ptr<btck_ChainstateManager, decltype(&btck_chainstate_manager_destroy)> raw_chainman{
+            btck_chainstate_manager_create(chainman_opts.get()), btck_chainstate_manager_destroy};
+        BOOST_REQUIRE(raw_chainman);
+        BOOST_CHECK_EQUAL(btck_chainstate_manager_import_blocks(raw_chainman.get(), nullptr, nullptr, 0), 0);
+        BOOST_CHECK_EQUAL(btck_chainstate_manager_import_blocks(raw_chainman.get(), nullptr, nullptr, 1), -1);
+        const char* path{"blk00000.dat"};
+        BOOST_CHECK_EQUAL(btck_chainstate_manager_import_blocks(raw_chainman.get(), &path, nullptr, 1), -1);
+    }
     ChainMan chainman{context, chainman_opts};
 }
 
@@ -948,6 +1024,10 @@ BOOST_AUTO_TEST_CASE(btck_check_block_context_free)
     BOOST_CHECK(block.Check(consensus_params, BlockCheckFlags::ALL, state));
     BOOST_CHECK(state.GetValidationMode() == ValidationMode::VALID);
 
+    const auto invalid_flags{static_cast<btck_BlockCheckFlags>(btck_BlockCheckFlags_ALL | (1U << 31))};
+    BOOST_CHECK_EQUAL(btck_block_check(block.get(), consensus_params.get(), invalid_flags, state.get()), 0);
+    BOOST_CHECK(state.GetValidationMode() == ValidationMode::INTERNAL_ERROR);
+
     auto bad_merkle_block_data = raw_block;
     bad_merkle_block_data[MERKLE_ROOT_OFFSET] ^= std::byte{0x01};
     Block bad_merkle_block{bad_merkle_block_data};
@@ -1052,6 +1132,8 @@ BOOST_AUTO_TEST_CASE(btck_block_tree_entry_tests)
     BOOST_CHECK(entry_2.GetAncestor(2) == entry_2);
     BOOST_CHECK(entry_2.GetAncestor(1) == entry_1);
     BOOST_CHECK(entry_2.GetAncestor(0) == entry_0);
+    BOOST_CHECK(btck_block_tree_entry_get_ancestor(entry_2.get(), 3) == nullptr);
+    BOOST_CHECK(btck_block_tree_entry_get_ancestor(entry_2.get(), -1) == nullptr);
 }
 
 BOOST_AUTO_TEST_CASE(btck_chainman_in_memory_tests)
@@ -1192,6 +1274,7 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
     CheckHandle(block_spent_outputs, block_spent_outputs_prev);
     CheckRange(block_spent_outputs_prev.TxsSpentOutputs(), block_spent_outputs_prev.Count());
     BOOST_CHECK_EQUAL(block_spent_outputs.Count(), 1);
+    BOOST_CHECK(btck_block_spent_outputs_get_transaction_spent_outputs_at(block_spent_outputs.get(), block_spent_outputs.Count()) == nullptr);
 
     // Get transaction spent outputs from the last transaction in the two blocks
     TransactionSpentOutputsView transaction_spent_outputs{block_spent_outputs.GetTxSpentOutputs(block_spent_outputs.Count() - 1)};
@@ -1199,6 +1282,7 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
     TransactionSpentOutputs owned_transaction_spent_outputs_prev{block_spent_outputs_prev.GetTxSpentOutputs(block_spent_outputs_prev.Count() - 1)};
     CheckHandle(owned_transaction_spent_outputs, owned_transaction_spent_outputs_prev);
     CheckRange(transaction_spent_outputs.Coins(), transaction_spent_outputs.Count());
+    BOOST_CHECK(btck_transaction_spent_outputs_get_coin_at(transaction_spent_outputs.get(), transaction_spent_outputs.Count()) == nullptr);
 
     // Get the last coin from the transaction spent outputs
     CoinView coin{transaction_spent_outputs.GetCoin(transaction_spent_outputs.Count() - 1)};
