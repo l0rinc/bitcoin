@@ -927,7 +927,9 @@ const btck_BlockTreeEntry* btck_block_tree_entry_get_previous(const btck_BlockTr
 const btck_BlockTreeEntry* btck_block_tree_entry_get_ancestor(const btck_BlockTreeEntry* block_tree_entry, int32_t height)
 {
     const auto* ancestor{btck_BlockTreeEntry::get(block_tree_entry).GetAncestor(height)};
-    assert(ancestor);
+    if (!ancestor) {
+        return nullptr;
+    }
     return btck_BlockTreeEntry::ref(ancestor);
 }
 
@@ -1290,8 +1292,11 @@ size_t btck_block_spent_outputs_count(const btck_BlockSpentOutputs* block_spent_
 
 const btck_TransactionSpentOutputs* btck_block_spent_outputs_get_transaction_spent_outputs_at(const btck_BlockSpentOutputs* block_spent_outputs, size_t transaction_index)
 {
-    assert(transaction_index < btck_BlockSpentOutputs::get(block_spent_outputs)->vtxundo.size());
-    const auto* tx_undo{&btck_BlockSpentOutputs::get(block_spent_outputs)->vtxundo.at(transaction_index)};
+    const auto& tx_undos{btck_BlockSpentOutputs::get(block_spent_outputs)->vtxundo};
+    if (transaction_index >= tx_undos.size()) {
+        return nullptr;
+    }
+    const auto* tx_undo{&tx_undos[transaction_index]};
     return btck_TransactionSpentOutputs::ref(tx_undo);
 }
 
@@ -1317,8 +1322,11 @@ void btck_transaction_spent_outputs_destroy(btck_TransactionSpentOutputs* transa
 
 const btck_Coin* btck_transaction_spent_outputs_get_coin_at(const btck_TransactionSpentOutputs* transaction_spent_outputs, size_t coin_index)
 {
-    assert(coin_index < btck_TransactionSpentOutputs::get(transaction_spent_outputs).vprevout.size());
-    const Coin* coin{&btck_TransactionSpentOutputs::get(transaction_spent_outputs).vprevout.at(coin_index)};
+    const auto& coins{btck_TransactionSpentOutputs::get(transaction_spent_outputs).vprevout};
+    if (coin_index >= coins.size()) {
+        return nullptr;
+    }
+    const Coin* coin{&coins[coin_index]};
     return btck_Coin::ref(coin);
 }
 

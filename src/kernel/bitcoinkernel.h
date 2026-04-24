@@ -1046,7 +1046,7 @@ BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_tree_entry_equ
  *
  * @param[in] block_tree_entry Non-null.
  * @param[in] height           The height of the requested ancestor.
- * @return                     The ancestor at the given height.
+ * @return                     The ancestor at the given height, or null if the height is out of bounds.
  */
 BITCOINKERNEL_API const btck_BlockTreeEntry* BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_tree_entry_get_ancestor(
     const btck_BlockTreeEntry* block_tree_entry,
@@ -1501,7 +1501,7 @@ BITCOINKERNEL_API size_t BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_spent_outpu
  *
  * @param[in] block_spent_outputs             Non-null.
  * @param[in] transaction_spent_outputs_index The index of the transaction spent outputs within the block spent outputs.
- * @return                                    A transaction spent outputs pointer.
+ * @return                                    A transaction spent outputs pointer, or null if the index is out of bounds.
  */
 BITCOINKERNEL_API const btck_TransactionSpentOutputs* BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_spent_outputs_get_transaction_spent_outputs_at(
     const btck_BlockSpentOutputs* block_spent_outputs,
@@ -1546,7 +1546,7 @@ BITCOINKERNEL_API size_t BITCOINKERNEL_WARN_UNUSED_RESULT btck_transaction_spent
  * @param[in] transaction_spent_outputs Non-null.
  * @param[in] coin_index                The index of the to be retrieved coin within the
  *                                      transaction spent outputs.
- * @return                              A coin pointer.
+ * @return                              A coin pointer, or null if the index is out of bounds.
  */
 BITCOINKERNEL_API const btck_Coin* BITCOINKERNEL_WARN_UNUSED_RESULT btck_transaction_spent_outputs_get_coin_at(
     const btck_TransactionSpentOutputs* transaction_spent_outputs,

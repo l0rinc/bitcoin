@@ -1083,6 +1083,8 @@ BOOST_AUTO_TEST_CASE(btck_block_tree_entry_tests)
     BOOST_CHECK(entry_2.GetAncestor(2) == entry_2);
     BOOST_CHECK(entry_2.GetAncestor(1) == entry_1);
     BOOST_CHECK(entry_2.GetAncestor(0) == entry_0);
+    BOOST_CHECK(btck_block_tree_entry_get_ancestor(entry_2.get(), 3) == nullptr);
+    BOOST_CHECK(btck_block_tree_entry_get_ancestor(entry_2.get(), -1) == nullptr);
 }
 
 BOOST_AUTO_TEST_CASE(btck_chainman_in_memory_tests)
@@ -1223,6 +1225,7 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
     CheckHandle(block_spent_outputs, block_spent_outputs_prev);
     CheckRange(block_spent_outputs_prev.TxsSpentOutputs(), block_spent_outputs_prev.Count());
     BOOST_CHECK_EQUAL(block_spent_outputs.Count(), 1);
+    BOOST_CHECK(btck_block_spent_outputs_get_transaction_spent_outputs_at(block_spent_outputs.get(), block_spent_outputs.Count()) == nullptr);
 
     // Get transaction spent outputs from the last transaction in the two blocks
     TransactionSpentOutputsView transaction_spent_outputs{block_spent_outputs.GetTxSpentOutputs(block_spent_outputs.Count() - 1)};
@@ -1230,6 +1233,7 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
     TransactionSpentOutputs owned_transaction_spent_outputs_prev{block_spent_outputs_prev.GetTxSpentOutputs(block_spent_outputs_prev.Count() - 1)};
     CheckHandle(owned_transaction_spent_outputs, owned_transaction_spent_outputs_prev);
     CheckRange(transaction_spent_outputs.Coins(), transaction_spent_outputs.Count());
+    BOOST_CHECK(btck_transaction_spent_outputs_get_coin_at(transaction_spent_outputs.get(), transaction_spent_outputs.Count()) == nullptr);
 
     // Get the last coin from the transaction spent outputs
     CoinView coin{transaction_spent_outputs.GetCoin(transaction_spent_outputs.Count() - 1)};
