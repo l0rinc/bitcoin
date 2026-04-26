@@ -879,8 +879,8 @@ util::Result<SelectionResult> AutomaticCoinSelection(const CWallet& wallet, Coin
     unsigned int limit_ancestor_count = 0;
     unsigned int limit_descendant_count = 0;
     wallet.chain().getPackageLimits(limit_ancestor_count, limit_descendant_count);
-    const size_t max_ancestors = (size_t)std::max<int64_t>(1, limit_ancestor_count);
-    const size_t max_cluster_count = (size_t)std::max<int64_t>(1, limit_descendant_count);
+    const size_t max_ancestors{std::max<size_t>(1, limit_ancestor_count)};
+    const size_t max_cluster_count{std::max<size_t>(1, limit_descendant_count)};
     const bool fRejectLongChains = gArgs.GetBoolArg("-walletrejectlongchains", DEFAULT_WALLET_REJECT_LONG_CHAINS);
 
     // Cases where we have 101+ outputs all pointing to the same destination may result in
