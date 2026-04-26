@@ -300,3 +300,38 @@ mutation classes that carry the CVE. No defect.
   ComputeMerkleRoot core — covered transitively.
 - Clean-room surfaces closed: CompactSize, bech32, VarInt
   x2, segwit-address, merkle. New surfaces only on redraw.
+
+## Cycle 7 (2026-08-03, draw 280, raw=13882470306579902973, suspicion-mined): PR 35161 merkle contract doc — ADOPTED: the doc+test pins in-tree what #99 c6 proved out-of-tree (CVE anchor [1..6] vs [1..6,5,6]); merkle_tests green
+
+### Assessment
+- The PR documents ComputeMerkleRoot's two-output contract
+  (mutation flag + always-full-input root) and adds
+  merkle_test_mutated_return_value pinning the CVE-2012-2459
+  anchor — the EXACT case our #99 c6 clean-room differential
+  proved byte-exactly (same root e997cf87..., B flagged
+  mutated=1, A clean).
+- The doc/test is a documentation gap, not a defect — but it
+  pins in-tree (as a named regression) the contract our c6
+  proved only in a journal artifact. ADOPT: zero code change,
+  doc + test, already-validated semantics.
+
+### Adoption (audit/adopt-merkle-doc @ 7ffa0afe2e)
+- Clean cherry-pick (doc comments in merkle.{h,cpp} + the
+  test). merkle_tests suite green including
+  merkle_test_mutated_return_value (Entering/Leaving clean).
+
+### Verdict
+ADOPTED: the two-output contract is now documented AND pinned
+in-tree; #99 c6's journal-level proof has a permanent in-tree
+oracle. Upstream vehicle: PR 35161.
+
+### Suspicion-mining
+- S15: the test's mutated_leaves construct (repeat LAST TWO)
+  is exactly the CVE anchor — a future refactor touching the
+  odd-dup step now fails this test loudly.
+
+### Exact commands
+- cherry-pick above; test runs above.
+
+### Limitations / queue
+- The merkle.h doc wording is the PR's own (kept verbatim).

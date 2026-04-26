@@ -209,6 +209,7 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
 | 73 | network-state-machine | CYCLE-5 (COMPLETE) | 2026-08-01 | node-initiated half-close: shape absent (zero shutdown() syscalls); peer view = full close, clean EOF 0.04s |
 | 99 | clean-room-reimplementation | CYCLE-1 | 2026-07-29 | CompactSize clean-room differential: 804 cases, 0 mismatches |
 | 99 | clean-room-reimplementation | CYCLE-6 | 2026-08-02 | merkle root+mutation clean-room: 400/400 exact incl. CVE-2012-2459 anchor; DISMISSED |
+| 99 | clean-room-reimplementation | CYCLE-7 | 2026-08-03 | PR 35161 doc+test ADOPTED: merkle two-output contract pinned in-tree (CVE anchor) |
 | 38 | failure-cleanup-crash-safety | CYCLE-1 (retro) | 2026-07-28 | EncryptWallet mkey rollback fix (9894fb8b6c, row restored) |
 | 38 | failure-cleanup-crash-safety | CYCLE-2 | 2026-07-29 | txindex interrupted-build: empty-block build uninterruptible (~3s); resume mechanics present |
 | 38 | failure-cleanup-crash-safety | CYCLE-3 | 2026-08-02 | mid-build kill attempt: warm rebuild sub-second, 6/6 post-build resumes clean; premise confirmed; DISMISSED at scale |
@@ -1064,6 +1065,8 @@ reconstructed as: shared boilerplate + the goal's campaign-focus section.
    (63-bit) -> idx 2 -> #60 c13 (zero-delta x3; cadence ->
    merge-event-triggered).
    Pool: #42, #65 on same event-triggered rule.
+   Cycle 280 (suspicion-mined): PR 35161 merkle doc+test
+   ADOPTED (pins #99-c6's proven contract in-tree).
    Cycle 279 (suspicion-mined): PR 35820 typed durations:
    hardening refactor; no adoption.
    Cycle 278 (suspicion-mined): PR 33324 reobfuscation:
