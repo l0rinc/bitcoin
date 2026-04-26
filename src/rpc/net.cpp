@@ -616,9 +616,7 @@ static RPCMethod getnettotals()
 static UniValue GetNetworksInfo()
 {
     UniValue networks(UniValue::VARR);
-    for (int n = 0; n < NET_MAX; ++n) {
-        enum Network network = static_cast<enum Network>(n);
-        if (network == NET_UNROUTABLE || network == NET_INTERNAL) continue;
+    for (const Network network : {NET_IPV4, NET_IPV6, NET_ONION, NET_I2P, NET_CJDNS}) {
         UniValue obj(UniValue::VOBJ);
         obj.pushKV("name", GetNetworkName(network));
         obj.pushKV("limited", !g_reachable_nets.Contains(network));
@@ -1103,9 +1101,7 @@ static RPCMethod getaddrmaninfo()
             AddrMan& addrman = EnsureAnyAddrman(request.context);
 
             UniValue ret(UniValue::VOBJ);
-            for (int n = 0; n < NET_MAX; ++n) {
-                enum Network network = static_cast<enum Network>(n);
-                if (network == NET_UNROUTABLE || network == NET_INTERNAL) continue;
+            for (const Network network : {NET_IPV4, NET_IPV6, NET_ONION, NET_I2P, NET_CJDNS}) {
                 UniValue obj(UniValue::VOBJ);
                 obj.pushKV("new", addrman.Size(network, true));
                 obj.pushKV("tried", addrman.Size(network, false));
