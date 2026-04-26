@@ -834,7 +834,7 @@ UniValue RPCMethod::GetArgMap() const
 {
     UniValue arr{UniValue::VARR};
 
-    auto push_back_arg_info = [&arr](const std::string& rpc_name, int pos, const std::string& arg_name, const RPCArg::Type& type) {
+    auto push_back_arg_info = [&arr](const std::string& rpc_name, size_t pos, const std::string& arg_name, const RPCArg::Type& type) {
         UniValue map{UniValue::VARR};
         map.push_back(rpc_name);
         map.push_back(pos);
@@ -844,7 +844,7 @@ UniValue RPCMethod::GetArgMap() const
         arr.push_back(std::move(map));
     };
 
-    for (int i{0}; i < int(m_args.size()); ++i) {
+    for (size_t i{0}; i < m_args.size(); ++i) {
         const auto& arg = m_args.at(i);
         std::vector<std::string> arg_names = SplitString(arg.m_names, '|');
         for (const auto& arg_name : arg_names) {
