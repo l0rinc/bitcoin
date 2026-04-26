@@ -761,7 +761,7 @@ private:
         /** Total modified fees of mempool transactions being replaced. */
         CAmount m_conflicting_fees{0};
         /** Total size (in virtual bytes) of mempool transactions being replaced. */
-        size_t m_conflicting_size{0};
+        int64_t m_conflicting_size{0};
     };
 
     struct SubPackageState m_subpackage;
@@ -1285,7 +1285,7 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
         LogDebug(BCLog::MEMPOOL, "replaced %u mempool transactions with %u new one(s) for %s additional fees, %d delta bytes\n",
                  m_subpackage.m_replaced_transactions.size(), workspaces.size(),
                  m_subpackage.m_total_modified_fees - m_subpackage.m_conflicting_fees,
-                 m_subpackage.m_total_vsize - static_cast<int>(m_subpackage.m_conflicting_size));
+                 m_subpackage.m_total_vsize - m_subpackage.m_conflicting_size);
     }
 
     // Add successful results. The returned results may change later if LimitMempoolSize() evicts them.
@@ -1419,7 +1419,7 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransactionInternal(const CTransa
         LogDebug(BCLog::MEMPOOL, "replaced %u mempool transactions with 1 new transaction for %s additional fees, %d delta bytes\n",
                  m_subpackage.m_replaced_transactions.size(),
                  ws.m_modified_fees - m_subpackage.m_conflicting_fees,
-                 ws.m_vsize - static_cast<int>(m_subpackage.m_conflicting_size));
+                 ws.m_vsize - m_subpackage.m_conflicting_size);
     }
 
     return MempoolAcceptResult::Success(std::move(m_subpackage.m_replaced_transactions), ws.m_vsize, ws.m_base_fees,
