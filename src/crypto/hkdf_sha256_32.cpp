@@ -8,15 +8,16 @@
 
 #include <cassert>
 
-CHKDF_HMAC_SHA256_L32::CHKDF_HMAC_SHA256_L32(const unsigned char* ikm, size_t ikmlen, const std::string& salt)
+CHKDF_HMAC_SHA256_L32::CHKDF_HMAC_SHA256_L32(std::span<const unsigned char> ikm, std::span<const unsigned char> salt)
 {
-    CHMAC_SHA256((const unsigned char*)salt.data(), salt.size()).Write(ikm, ikmlen).Finalize(m_prk);
+    CHMAC_SHA256(salt.data(), salt.size()).Write(ikm.data(), ikm.size()).Finalize(m_prk);
 }
 
-void CHKDF_HMAC_SHA256_L32::Expand32(const std::string& info, unsigned char hash[OUTPUT_SIZE])
+void CHKDF_HMAC_SHA256_L32::Expand32(std::span<const unsigned char> info, std::span<unsigned char> hash)
 {
     // expand a 32byte key (single round)
     assert(info.size() <= 128);
+    assert(hash.size() == OUTPUT_SIZE);
     static const unsigned char one[1] = {1};
-    CHMAC_SHA256(m_prk, 32).Write((const unsigned char*)info.data(), info.size()).Write(one, 1).Finalize(hash);
+    CHMAC_SHA256(m_prk, 32).Write(info.data(), info.size()).Write(one, 1).Finalize(hash.data());
 }
