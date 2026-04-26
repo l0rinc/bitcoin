@@ -17,13 +17,13 @@ unsigned int MurmurHash3(unsigned int nHashSeed, std::span<const unsigned char> 
     const uint32_t c1 = 0xcc9e2d51;
     const uint32_t c2 = 0x1b873593;
 
-    const int nblocks = vDataToHash.size() / 4;
+    const size_t nblocks = vDataToHash.size() / 4;
 
     //----------
     // body
     const uint8_t* blocks = vDataToHash.data();
 
-    for (int i = 0; i < nblocks; ++i) {
+    for (size_t i = 0; i < nblocks; ++i) {
         uint32_t k1 = ReadLE32(blocks + i*4);
 
         k1 *= c1;
