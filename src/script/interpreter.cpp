@@ -1891,9 +1891,9 @@ uint256 ComputeTaprootMerkleRoot(std::span<const unsigned char> control, const u
     assert(control.size() <= TAPROOT_CONTROL_MAX_SIZE);
     assert((control.size() - TAPROOT_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE == 0);
 
-    const int path_len = (control.size() - TAPROOT_CONTROL_BASE_SIZE) / TAPROOT_CONTROL_NODE_SIZE;
+    const size_t path_len = (control.size() - TAPROOT_CONTROL_BASE_SIZE) / TAPROOT_CONTROL_NODE_SIZE;
     uint256 k = tapleaf_hash;
-    for (int i = 0; i < path_len; ++i) {
+    for (size_t i = 0; i < path_len; ++i) {
         std::span node{std::span{control}.subspan(TAPROOT_CONTROL_BASE_SIZE + TAPROOT_CONTROL_NODE_SIZE * i, TAPROOT_CONTROL_NODE_SIZE)};
         k = ComputeTapbranchHash(k, node);
     }
