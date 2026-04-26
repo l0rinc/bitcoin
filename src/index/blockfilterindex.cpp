@@ -309,19 +309,19 @@ static bool LookupRange(CDBWrapper& db, const std::string& index_name, int start
         return false;
     }
 
-    size_t results_size = static_cast<size_t>(stop_index->nHeight - start_height + 1);
+    const size_t results_size{static_cast<size_t>(stop_index->nHeight - start_height + 1)};
     std::vector<std::pair<uint256, DBVal>> values(results_size);
 
     index_util::DBHeightKey key(start_height);
     std::unique_ptr<CDBIterator> db_it(db.NewIterator());
     db_it->Seek(index_util::DBHeightKey(start_height));
-    for (int height = start_height; height <= stop_index->nHeight; ++height) {
+    size_t value_index{0};
+    for (int height = start_height; height <= stop_index->nHeight; ++height, ++value_index) {
         if (!db_it->Valid() || !db_it->GetKey(key) || key.height != height) {
             return false;
         }
 
-        size_t i = static_cast<size_t>(height - start_height);
-        if (!db_it->GetValue(values[i])) {
+        if (!db_it->GetValue(values[value_index])) {
             LogError("unable to read value in %s at key (%c, %d)",
                      index_name, index_util::DB_BLOCK_HEIGHT, height);
             return false;
@@ -334,18 +334,19 @@ static bool LookupRange(CDBWrapper& db, const std::string& index_name, int start
 
     // Iterate backwards through block indexes collecting results in order to access the block hash
     // of each entry in case we need to look it up in the hash index.
+    size_t result_index{results_size};
     for (const CBlockIndex* block_index = stop_index;
          block_index && block_index->nHeight >= start_height;
          block_index = block_index->pprev) {
+        --result_index;
         uint256 block_hash = block_index->GetBlockHash();
 
-        size_t i = static_cast<size_t>(block_index->nHeight - start_height);
-        if (block_hash == values[i].first) {
-            results[i] = std::move(values[i].second);
+        if (block_hash == values[result_index].first) {
+            results[result_index] = std::move(values[result_index].second);
             continue;
         }
 
-        if (!db.Read(index_util::DBHashKey(block_hash), results[i])) {
+        if (!db.Read(index_util::DBHashKey(block_hash), results[result_index])) {
             LogError("unable to read value in %s at key (%c, %s)",
                      index_name, index_util::DB_BLOCK_HASH, block_hash.ToString());
             return false;
