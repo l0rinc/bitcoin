@@ -4738,14 +4738,14 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         std::vector<CBlockHeader> headers;
 
         // Bypass the normal CBlock deserialization, as we don't want to risk deserializing 2000 full blocks.
-        unsigned int nCount = ReadCompactSize(vRecv);
+        const auto nCount{ReadCompactSize(vRecv)};
         if (nCount > m_opts.max_headers_result) {
             Misbehaving(peer, strprintf("headers message size = %u", nCount));
             return;
         }
         headers.resize(nCount);
-        for (unsigned int n = 0; n < nCount; n++) {
-            vRecv >> headers[n];
+        for (auto& header : headers) {
+            vRecv >> header;
             ReadCompactSize(vRecv); // ignore tx count; assume it is 0.
         }
 
