@@ -13,6 +13,8 @@
 #include <tinyformat.h>
 #include <uint256.h>
 
+#include <utility>
+
 typedef std::vector<unsigned char> valtype;
 
 namespace {
@@ -237,7 +239,7 @@ int FindAndDelete(CScript& script, const CScript& b)
     do
     {
         result.insert(result.end(), pc2, pc);
-        while (static_cast<size_t>(end - pc) >= b.size() && std::equal(b.begin(), b.end(), pc))
+        while (std::cmp_greater_equal(end - pc, b.size()) && std::equal(b.begin(), b.end(), pc))
         {
             pc = pc + b.size();
             ++nFound;
