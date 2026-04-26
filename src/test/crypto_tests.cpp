@@ -16,6 +16,7 @@
 #include <crypto/sha512.h>
 #include <crypto/muhash.h>
 #include <random.h>
+#include <span.h>
 #include <streams.h>
 #include <test/util/common.h>
 #include <test/util/random.h>
@@ -345,13 +346,9 @@ void TestHKDF_SHA256_32(const std::string &ikm_hex, const std::string &salt_hex,
     std::vector<unsigned char> info = ParseHex(info_hex);
 
 
-    // our implementation only supports strings for the "info" and "salt", stringify them
-    std::string salt_stringified(reinterpret_cast<char*>(salt.data()), salt.size());
-    std::string info_stringified(reinterpret_cast<char*>(info.data()), info.size());
-
-    CHKDF_HMAC_SHA256_L32 hkdf32(initial_key_material.data(), initial_key_material.size(), salt_stringified);
+    CHKDF_HMAC_SHA256_L32 hkdf32(MakeUCharSpan(initial_key_material), MakeUCharSpan(salt));
     unsigned char out[32];
-    hkdf32.Expand32(info_stringified, out);
+    hkdf32.Expand32(MakeUCharSpan(info), out);
     BOOST_CHECK(HexStr(out) == okm_check_hex);
 }
 

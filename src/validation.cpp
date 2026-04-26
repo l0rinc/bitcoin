@@ -642,7 +642,7 @@ private:
 
         /** Virtual size of the transaction as used by the mempool, calculated using serialized size
          * of the transaction and sigops. */
-        int64_t m_vsize;
+        int32_t m_vsize;
         /** Fees paid by this transaction: total input amounts subtracted by total output amounts. */
         CAmount m_base_fees;
         /** Base fees + any fee delta set by the user with prioritisetransaction. */
@@ -673,7 +673,7 @@ private:
 
     bool PackageRBFChecks(const std::vector<CTransactionRef>& txns,
                           std::vector<Workspace>& workspaces,
-                          int64_t total_vsize,
+                          int32_t total_vsize,
                           PackageValidationState& package_state) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_pool.cs);
 
     // Run the script checks using our policy flags. As this can be slow, we should
@@ -697,7 +697,7 @@ private:
          EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_pool.cs);
 
     // Compare a package's feerate against minimum allowed.
-    bool CheckFeeRate(size_t package_size, CAmount package_fee, TxValidationState& state) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, m_pool.cs)
+    bool CheckFeeRate(int32_t package_size, CAmount package_fee, TxValidationState& state) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, m_pool.cs)
     {
         AssertLockHeld(::cs_main);
         AssertLockHeld(m_pool.cs);
@@ -747,7 +747,7 @@ private:
         /** Aggregated modified fees of all transactions, used to calculate package feerate. */
         CAmount m_total_modified_fees{0};
         /** Aggregated virtual size of all transactions, used to calculate package feerate. */
-        int64_t m_total_vsize{0};
+        int32_t m_total_vsize{0};
 
         // RBF-related members
         /** Whether the transaction(s) would replace any mempool transactions and/or evict any siblings.
@@ -761,7 +761,7 @@ private:
         /** Total modified fees of mempool transactions being replaced. */
         CAmount m_conflicting_fees{0};
         /** Total size (in virtual bytes) of mempool transactions being replaced. */
-        size_t m_conflicting_size{0};
+        int64_t m_conflicting_size{0};
     };
 
     struct SubPackageState m_subpackage;
@@ -1033,7 +1033,7 @@ bool MemPoolAccept::ReplacementChecks(Workspace& ws)
 
 bool MemPoolAccept::PackageRBFChecks(const std::vector<CTransactionRef>& txns,
                                      std::vector<Workspace>& workspaces,
-                                     const int64_t total_vsize,
+                                     const int32_t total_vsize,
                                      PackageValidationState& package_state)
 {
     AssertLockHeld(cs_main);
@@ -1199,7 +1199,7 @@ void MemPoolAccept::FinalizeSubpackage(const ATMPArgs& args)
                                       it->GetTx().GetWitnessHash().ToString(),
                                       it->GetFee(),
                                       it->GetTxSize());
-        FeeFrac feerate{m_subpackage.m_total_modified_fees, int32_t(m_subpackage.m_total_vsize)};
+        FeeFrac feerate{m_subpackage.m_total_modified_fees, m_subpackage.m_total_vsize};
         uint256 tx_or_package_hash{};
         const bool replaced_with_tx{m_subpackage.m_changeset->GetTxCount() == 1};
         if (replaced_with_tx) {
@@ -1285,7 +1285,7 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
         LogDebug(BCLog::MEMPOOL, "replaced %u mempool transactions with %u new one(s) for %s additional fees, %d delta bytes\n",
                  m_subpackage.m_replaced_transactions.size(), workspaces.size(),
                  m_subpackage.m_total_modified_fees - m_subpackage.m_conflicting_fees,
-                 m_subpackage.m_total_vsize - static_cast<int>(m_subpackage.m_conflicting_size));
+                 m_subpackage.m_total_vsize - m_subpackage.m_conflicting_size);
     }
 
     // Add successful results. The returned results may change later if LimitMempoolSize() evicts them.
@@ -1293,7 +1293,7 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
         auto iter = m_pool.GetIter(ws.m_ptx->GetHash());
         Assume(iter.has_value());
         const auto effective_feerate = args.m_package_feerates ? ws.m_package_feerate :
-            CFeeRate{ws.m_modified_fees, static_cast<int32_t>(ws.m_vsize)};
+            CFeeRate{ws.m_modified_fees, ws.m_vsize};
         const auto effective_feerate_wtxids = args.m_package_feerates ? all_package_wtxids :
             std::vector<Wtxid>{ws.m_ptx->GetWitnessHash()};
         results.emplace(ws.m_ptx->GetWitnessHash(),
@@ -1380,7 +1380,7 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransactionInternal(const CTransa
 
     if (!ConsensusScriptChecks(args, ws)) return MempoolAcceptResult::Failure(ws.m_state);
 
-    const CFeeRate effective_feerate{ws.m_modified_fees, static_cast<int32_t>(ws.m_vsize)};
+    const CFeeRate effective_feerate{ws.m_modified_fees, ws.m_vsize};
     // Tx was accepted, but not added
     if (args.m_test_accept) {
         return MempoolAcceptResult::Success(std::move(m_subpackage.m_replaced_transactions), ws.m_vsize,
@@ -1419,7 +1419,7 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransactionInternal(const CTransa
         LogDebug(BCLog::MEMPOOL, "replaced %u mempool transactions with 1 new transaction for %s additional fees, %d delta bytes\n",
                  m_subpackage.m_replaced_transactions.size(),
                  ws.m_modified_fees - m_subpackage.m_conflicting_fees,
-                 ws.m_vsize - static_cast<int>(m_subpackage.m_conflicting_size));
+                 ws.m_vsize - m_subpackage.m_conflicting_size);
     }
 
     return MempoolAcceptResult::Success(std::move(m_subpackage.m_replaced_transactions), ws.m_vsize, ws.m_base_fees,
@@ -1491,8 +1491,8 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptMultipleTransactionsInternal(con
     // a child that is below mempool minimum feerate. To avoid these behaviors, callers of
     // AcceptMultipleTransactions need to restrict txns topology (e.g. to ancestor sets) and check
     // the feerates of individuals and subsets.
-    m_subpackage.m_total_vsize = std::accumulate(workspaces.cbegin(), workspaces.cend(), int64_t{0},
-        [](int64_t sum, auto& ws) { return sum + ws.m_vsize; });
+    m_subpackage.m_total_vsize = std::accumulate(workspaces.cbegin(), workspaces.cend(), int32_t{0},
+        [](int32_t sum, auto& ws) { return sum + ws.m_vsize; });
     m_subpackage.m_total_modified_fees = std::accumulate(workspaces.cbegin(), workspaces.cend(), CAmount{0},
         [](CAmount sum, auto& ws) { return sum + ws.m_modified_fees; });
     const CFeeRate package_feerate(m_subpackage.m_total_modified_fees, m_subpackage.m_total_vsize);
@@ -1540,7 +1540,7 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptMultipleTransactionsInternal(con
         }
         if (args.m_test_accept) {
             const auto effective_feerate = args.m_package_feerates ? ws.m_package_feerate :
-                CFeeRate{ws.m_modified_fees, static_cast<int32_t>(ws.m_vsize)};
+                CFeeRate{ws.m_modified_fees, ws.m_vsize};
             const auto effective_feerate_wtxids = args.m_package_feerates ? all_package_wtxids :
                 std::vector<Wtxid>{ws.m_ptx->GetWitnessHash()};
             results.emplace(ws.m_ptx->GetWitnessHash(),
@@ -2074,7 +2074,7 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
     // transaction).
     uint256 hashCacheEntry;
     CSHA256 hasher = validation_cache.ScriptExecutionCacheHasher();
-    hasher.Write(UCharCast(tx.GetWitnessHash().begin()), 32).Write((unsigned char*)&flags, sizeof(flags)).Finalize(hashCacheEntry.begin());
+    hasher.Write(tx.GetWitnessHash()).Write(std::as_bytes(std::span{&flags, 1})).Finalize(hashCacheEntry);
     AssertLockHeld(cs_main); //TODO: Remove this requirement by making CuckooCache not require external locks
     if (validation_cache.m_script_execution_cache.contains(hashCacheEntry, !cacheFullScriptStore)) {
         return true;

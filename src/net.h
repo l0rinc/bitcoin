@@ -716,7 +716,7 @@ public:
     // Bind address of our side of the connection
     const CService addrBind;
     const std::string m_addr_name;
-    /** The pszDest argument provided to ConnectNode(). Only used for reconnections. */
+    /** The destination argument provided to ConnectNode(). Only used for reconnections. */
     const std::string m_dest;
     //! Whether this peer is an inbound onion, i.e. connected via our Tor onion service.
     const bool m_inbound_onion;
@@ -1169,10 +1169,10 @@ public:
 
     /**
      * Open a new P2P connection and initialize it with the PeerManager at `m_msgproc`.
-     * @param[in] addrConnect Address to connect to, if `pszDest` is `nullptr`.
+     * @param[in] addrConnect Address to connect to, if `dest` is `nullptr`.
      * @param[in] fCountFailure Increment the number of connection attempts to this address in Addrman.
      * @param[in] grant_outbound Take ownership of this grant, to be released later when the connection is closed.
-     * @param[in] pszDest Address to resolve and connect to.
+     * @param[in] dest Address to resolve and connect to.
      * @param[in] conn_type Type of the connection to open, must not be `ConnectionType::INBOUND`.
      * @param[in] use_v2transport Use P2P encryption, (aka V2 transport, BIP324).
      * @param[in] proxy_override Optional proxy to use and override normal proxy selection.
@@ -1182,7 +1182,7 @@ public:
     bool OpenNetworkConnection(const CAddress& addrConnect,
                                bool fCountFailure,
                                CountingSemaphoreGrant<>&& grant_outbound,
-                               const char* pszDest,
+                               const std::string* dest,
                                ConnectionType conn_type,
                                bool use_v2transport,
                                const std::optional<Proxy>& proxy_override = std::nullopt)
@@ -1508,8 +1508,8 @@ private:
 
     /**
      * Open a new P2P connection.
-     * @param[in] addrConnect Address to connect to, if `pszDest` is `nullptr`.
-     * @param[in] pszDest Address to resolve and connect to.
+     * @param[in] addrConnect Address to connect to, if `dest` is `nullptr`.
+     * @param[in] dest Address to resolve and connect to.
      * @param[in] fCountFailure Increment the number of connection attempts to this address in Addrman.
      * @param[in] conn_type Type of the connection to open, must not be `ConnectionType::INBOUND`.
      * @param[in] use_v2transport Use P2P encryption, (aka V2 transport, BIP324).
@@ -1517,7 +1517,7 @@ private:
      * @return Newly created CNode object or nullptr if the connection failed.
      */
     CNode* ConnectNode(CAddress addrConnect,
-                       const char* pszDest,
+                       const std::string* dest,
                        bool fCountFailure,
                        ConnectionType conn_type,
                        bool use_v2transport,

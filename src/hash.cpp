@@ -17,13 +17,13 @@ unsigned int MurmurHash3(unsigned int nHashSeed, std::span<const unsigned char> 
     const uint32_t c1 = 0xcc9e2d51;
     const uint32_t c2 = 0x1b873593;
 
-    const int nblocks = vDataToHash.size() / 4;
+    const size_t nblocks = vDataToHash.size() / 4;
 
     //----------
     // body
     const uint8_t* blocks = vDataToHash.data();
 
-    for (int i = 0; i < nblocks; ++i) {
+    for (size_t i = 0; i < nblocks; ++i) {
         uint32_t k1 = ReadLE32(blocks + i*4);
 
         k1 *= c1;
@@ -78,7 +78,7 @@ void BIP32Hash(const ChainCode &chainCode, unsigned int nChild, unsigned char he
 uint256 SHA256Uint256(const uint256& input)
 {
     uint256 result;
-    CSHA256().Write(input.begin(), 32).Finalize(result.begin());
+    CSHA256().Write(input).Finalize(result);
     return result;
 }
 
@@ -86,7 +86,7 @@ HashWriter TaggedHash(const std::string& tag)
 {
     HashWriter writer{};
     uint256 taghash;
-    CSHA256().Write((const unsigned char*)tag.data(), tag.size()).Finalize(taghash.begin());
+    CSHA256().Write(tag).Finalize(taghash);
     writer << taghash << taghash;
     return writer;
 }

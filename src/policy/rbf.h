@@ -12,7 +12,6 @@
 #include <util/feefrac.h>
 
 #include <compare>
-#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <set>
@@ -95,7 +94,7 @@ std::optional<std::string> EntriesAndTxidsDisjoint(const CTxMemPool::setEntries&
  */
 std::optional<std::string> PaysForRBF(CAmount original_fees,
                                       CAmount replacement_fees,
-                                      size_t replacement_vsize,
+                                      int32_t replacement_vsize,
                                       CFeeRate relay_fee,
                                       const Txid& txid);
 

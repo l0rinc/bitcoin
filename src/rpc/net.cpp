@@ -347,7 +347,7 @@ static RPCMethod addnode()
     NodeContext& node = EnsureAnyNodeContext(request.context);
     CConnman& connman = EnsureConnman(node);
 
-    const auto node_arg{self.Arg<std::string_view>("node")};
+    const std::string node_arg{self.Arg<std::string_view>("node")};
     bool node_v2transport = connman.GetLocalServices() & NODE_P2P_V2;
     bool use_v2transport = self.MaybeArg<bool>("v2transport").value_or(node_v2transport);
 
@@ -358,13 +358,13 @@ static RPCMethod addnode()
     if (command == "onetry")
     {
         CAddress addr;
-        connman.OpenNetworkConnection(addr, /*fCountFailure=*/false, /*grant_outbound=*/{}, std::string{node_arg}.c_str(), ConnectionType::MANUAL, use_v2transport);
+        connman.OpenNetworkConnection(addr, /*fCountFailure=*/false, /*grant_outbound=*/{}, &node_arg, ConnectionType::MANUAL, use_v2transport);
         return UniValue::VNULL;
     }
 
     if (command == "add")
     {
-        if (!connman.AddNode({std::string{node_arg}, use_v2transport})) {
+        if (!connman.AddNode({node_arg, use_v2transport})) {
             throw JSONRPCError(RPC_CLIENT_NODE_ALREADY_ADDED, "Error: Node already added");
         }
     }
@@ -616,9 +616,7 @@ static RPCMethod getnettotals()
 static UniValue GetNetworksInfo()
 {
     UniValue networks(UniValue::VARR);
-    for (int n = 0; n < NET_MAX; ++n) {
-        enum Network network = static_cast<enum Network>(n);
-        if (network == NET_UNROUTABLE || network == NET_INTERNAL) continue;
+    for (const Network network : {NET_IPV4, NET_IPV6, NET_ONION, NET_I2P, NET_CJDNS}) {
         UniValue obj(UniValue::VOBJ);
         obj.pushKV("name", GetNetworkName(network));
         obj.pushKV("limited", !g_reachable_nets.Contains(network));
@@ -1103,9 +1101,7 @@ static RPCMethod getaddrmaninfo()
             AddrMan& addrman = EnsureAnyAddrman(request.context);
 
             UniValue ret(UniValue::VOBJ);
-            for (int n = 0; n < NET_MAX; ++n) {
-                enum Network network = static_cast<enum Network>(n);
-                if (network == NET_UNROUTABLE || network == NET_INTERNAL) continue;
+            for (const Network network : {NET_IPV4, NET_IPV6, NET_ONION, NET_I2P, NET_CJDNS}) {
                 UniValue obj(UniValue::VOBJ);
                 obj.pushKV("new", addrman.Size(network, true));
                 obj.pushKV("tried", addrman.Size(network, false));

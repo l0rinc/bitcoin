@@ -375,7 +375,7 @@ bool CConnman::CheckIncomingNonce(uint64_t nonce)
 }
 
 CNode* CConnman::ConnectNode(CAddress addrConnect,
-                             const char* pszDest,
+                             const std::string* dest,
                              bool fCountFailure,
                              ConnectionType conn_type,
                              bool use_v2transport,
@@ -384,7 +384,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect,
     AssertLockNotHeld(m_unused_i2p_sessions_mutex);
     assert(conn_type != ConnectionType::INBOUND);
 
-    if (pszDest == nullptr) {
+    if (dest == nullptr) {
         if (IsLocal(addrConnect))
             return nullptr;
 
@@ -398,17 +398,17 @@ CNode* CConnman::ConnectNode(CAddress addrConnect,
     LogDebug(BCLog::NET, "trying %s connection (%s) to %s, lastseen=%.1fhrs\n",
         use_v2transport ? "v2" : "v1",
         ConnectionTypeAsString(conn_type),
-        pszDest ? pszDest : addrConnect.ToStringAddrPort(),
-        Ticks<HoursDouble>(pszDest ? 0h : Now<NodeSeconds>() - addrConnect.nTime));
+        dest ? *dest : addrConnect.ToStringAddrPort(),
+        Ticks<HoursDouble>(dest ? 0h : Now<NodeSeconds>() - addrConnect.nTime));
 
     // Resolve
-    const uint16_t default_port{pszDest != nullptr ? GetDefaultPort(pszDest) :
-                                                     m_params.GetDefaultPort()};
+    const uint16_t default_port{dest != nullptr ? GetDefaultPort(*dest) :
+                                                  m_params.GetDefaultPort()};
 
-    // Collection of addresses to try to connect to: either all dns resolved addresses if a domain name (pszDest) is provided, or addrConnect otherwise.
+    // Collection of addresses to try to connect to: either all dns resolved addresses if a domain name is provided, or addrConnect otherwise.
     std::vector<CAddress> connect_to{};
-    if (pszDest) {
-        std::vector<CService> resolved{Lookup(pszDest, default_port, fNameLookup && !HaveNameProxy(), 256)};
+    if (dest) {
+        std::vector<CService> resolved{Lookup(*dest, default_port, fNameLookup && !HaveNameProxy(), 256)};
         if (!resolved.empty()) {
             std::shuffle(resolved.begin(), resolved.end(), FastRandomContext());
             // If the connection is made by name, it can be the case that the name resolves to more than one address.
@@ -416,13 +416,13 @@ CNode* CConnman::ConnectNode(CAddress addrConnect,
             for (const auto& r : resolved) {
                 addrConnect = CAddress{MaybeFlipIPv6toCJDNS(r), NODE_NONE};
                 if (!addrConnect.IsValid()) {
-                    LogDebug(BCLog::NET, "Resolver returned invalid address %s for %s\n", addrConnect.ToStringAddrPort(), pszDest);
+                    LogDebug(BCLog::NET, "Resolver returned invalid address %s for %s\n", addrConnect.ToStringAddrPort(), *dest);
                     return nullptr;
                 }
-                // It is possible that we already have a connection to the IP/port pszDest resolved to.
+                // It is possible that we already have a connection to the IP/port the destination resolved to.
                 // In that case, drop the connection that was just created.
                 if (AlreadyConnectedToAddressPort(addrConnect)) {
-                    LogInfo("Not opening a connection to %s, already connected to %s\n", pszDest, addrConnect.ToStringAddrPort());
+                    LogInfo("Not opening a connection to %s, already connected to %s\n", *dest, addrConnect.ToStringAddrPort());
                     return nullptr;
                 }
                 // Add the address to the resolved addresses vector so we can try to connect to it later on
@@ -495,11 +495,11 @@ CNode* CConnman::ConnectNode(CAddress addrConnect,
                 // the proxy, mark this as an attempt.
                 addrman.get().Attempt(target_addr, fCountFailure);
             }
-        } else if (pszDest) {
+        } else if (dest) {
             if (const auto name_proxy = GetNameProxy()) {
                 std::string host;
                 uint16_t port{default_port};
-                SplitHostPort(pszDest, port, host);
+                SplitHostPort(*dest, port, host);
                 bool proxyConnectionFailed;
                 sock = ConnectThroughProxy(*name_proxy, host, port, proxyConnectionFailed);
             }
@@ -532,7 +532,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect,
                                 CalculateKeyedNetGroup(target_addr),
                                 nonce,
                                 addr_bind,
-                                pszDest ? pszDest : "",
+                                dest ? *dest : "",
                                 conn_type,
                                 /*inbound_onion=*/false,
                                 network_id,
@@ -1907,7 +1907,7 @@ bool CConnman::AddConnection(const std::string& address, ConnectionType conn_typ
     CountingSemaphoreGrant<> grant(*semOutbound, true);
     if (!grant) return false;
 
-    OpenNetworkConnection(CAddress(), false, std::move(grant), address.c_str(), conn_type, /*use_v2transport=*/use_v2transport);
+    OpenNetworkConnection(CAddress(), false, std::move(grant), &address, conn_type, /*use_v2transport=*/use_v2transport);
     return true;
 }
 
@@ -2424,7 +2424,7 @@ void CConnman::ProcessAddrFetch()
     CAddress addr;
     CountingSemaphoreGrant<> grant(*semOutbound, /*fTry=*/true);
     if (grant) {
-        OpenNetworkConnection(addr, false, std::move(grant), strDest.c_str(), ConnectionType::ADDR_FETCH, use_v2transport);
+        OpenNetworkConnection(addr, false, std::move(grant), &strDest, ConnectionType::ADDR_FETCH, use_v2transport);
     }
 }
 
@@ -2495,9 +2495,7 @@ int CConnman::GetExtraBlockRelayCount() const
 std::unordered_set<Network> CConnman::GetReachableEmptyNetworks() const
 {
     std::unordered_set<Network> networks{};
-    for (int n = 0; n < NET_MAX; n++) {
-        enum Network net = (enum Network)n;
-        if (net == NET_UNROUTABLE || net == NET_INTERNAL) continue;
+    for (const Network net : {NET_IPV4, NET_IPV6, NET_ONION, NET_I2P, NET_CJDNS}) {
         if (g_reachable_nets.Contains(net) && addrman.get().Size(net, std::nullopt) == 0) {
             networks.insert(net);
         }
@@ -2543,7 +2541,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect, std
             for (const std::string& strAddr : connect)
             {
                 CAddress addr(CService(), NODE_NONE);
-                OpenNetworkConnection(addr, false, {}, strAddr.c_str(), ConnectionType::MANUAL, /*use_v2transport=*/use_v2transport);
+                OpenNetworkConnection(addr, false, {}, &strAddr, ConnectionType::MANUAL, /*use_v2transport=*/use_v2transport);
                 for (int i = 0; i < 10 && i < nLoop; i++)
                 {
                     if (!m_interrupt_net->sleep_for(500ms)) {
@@ -2893,7 +2891,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect, std
             const bool count_failures{((int)outbound_ipv46_peer_netgroups.size() + outbound_privacy_network_peers) >= std::min(m_max_automatic_connections - 1, 2)};
             // Use BIP324 transport when both us and them have NODE_V2_P2P set.
             const bool use_v2transport(addrConnect.nServices & GetLocalServices() & NODE_P2P_V2);
-            OpenNetworkConnection(addrConnect, count_failures, std::move(grant), /*pszDest=*/nullptr, conn_type, use_v2transport);
+            OpenNetworkConnection(addrConnect, count_failures, std::move(grant), /*dest=*/nullptr, conn_type, use_v2transport);
         }
     }
 }
@@ -2988,7 +2986,7 @@ void CConnman::ThreadOpenAddedConnections()
             }
             tried = true;
             CAddress addr(CService(), NODE_NONE);
-            OpenNetworkConnection(addr, false, std::move(grant), info.m_params.m_added_node.c_str(), ConnectionType::MANUAL, info.m_params.m_use_v2transport);
+            OpenNetworkConnection(addr, false, std::move(grant), &info.m_params.m_added_node, ConnectionType::MANUAL, info.m_params.m_use_v2transport);
             if (!m_interrupt_net->sleep_for(500ms)) return;
             grant = CountingSemaphoreGrant<>(*semAddnode, /*fTry=*/true);
         }
@@ -3005,7 +3003,7 @@ void CConnman::ThreadOpenAddedConnections()
 bool CConnman::OpenNetworkConnection(const CAddress& addrConnect,
                                      bool fCountFailure,
                                      CountingSemaphoreGrant<>&& grant_outbound,
-                                     const char* pszDest,
+                                     const std::string* dest,
                                      ConnectionType conn_type,
                                      bool use_v2transport,
                                      const std::optional<Proxy>& proxy_override)
@@ -3022,16 +3020,16 @@ bool CConnman::OpenNetworkConnection(const CAddress& addrConnect,
     if (!fNetworkActive) {
         return false;
     }
-    if (!pszDest) {
+    if (!dest) {
         bool banned_or_discouraged = m_banman && (m_banman->IsDiscouraged(addrConnect) || m_banman->IsBanned(addrConnect));
         if (IsLocal(addrConnect) || banned_or_discouraged || AlreadyConnectedToAddress(addrConnect)) {
             return false;
         }
-    } else if (AlreadyConnectedToHost(pszDest)) {
+    } else if (AlreadyConnectedToHost(*dest)) {
         return false;
     }
 
-    CNode* pnode = ConnectNode(addrConnect, pszDest, fCountFailure, conn_type, use_v2transport, proxy_override);
+    CNode* pnode = ConnectNode(addrConnect, dest, fCountFailure, conn_type, use_v2transport, proxy_override);
 
     if (!pnode)
         return false;
@@ -3259,7 +3257,7 @@ void CConnman::ThreadPrivateBroadcast()
         if (OpenNetworkConnection(addr,
                                   /*fCountFailure=*/true,
                                   std::move(conn_max_grant),
-                                  /*pszDest=*/nullptr,
+                                  /*dest=*/nullptr,
                                   ConnectionType::PRIVATE_BROADCAST,
                                   use_v2transport,
                                   proxy)) {
@@ -4169,7 +4167,7 @@ void CConnman::PerformReconnections()
                               // count failure to reconnect.
                               /*fCountFailure=*/false,
                               std::move(item.grant),
-                              item.destination.empty() ? nullptr : item.destination.c_str(),
+                              item.destination.empty() ? nullptr : &item.destination,
                               item.conn_type,
                               item.use_v2transport);
     }

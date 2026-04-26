@@ -13,6 +13,7 @@
 #include <cstring>
 
 #include <limits>
+#include <string_view>
 
 using util::ContainsNoNUL;
 
@@ -37,27 +38,28 @@ static const int8_t mapBase58[256] = {
     -1,-1,-1,-1,-1,-1,-1,-1, -1,-1,-1,-1,-1,-1,-1,-1,
 };
 
-[[nodiscard]] static bool DecodeBase58(const char* psz, std::vector<unsigned char>& vch, int max_ret_len)
+[[nodiscard]] static bool DecodeBase58Internal(std::string_view str, std::vector<unsigned char>& vch, int max_ret_len)
 {
     // Skip leading spaces.
-    while (*psz && IsSpace(*psz))
-        psz++;
+    while (!str.empty() && IsSpace(str.front())) {
+        str.remove_prefix(1);
+    }
     // Skip and count leading '1's.
     int zeroes = 0;
     int length = 0;
-    while (*psz == '1') {
+    while (!str.empty() && str.front() == '1') {
         zeroes++;
         if (zeroes > max_ret_len) return false;
-        psz++;
+        str.remove_prefix(1);
     }
     // Allocate enough space in big-endian base256 representation.
-    int size = strlen(psz) * 733 /1000 + 1; // log(58) / log(256), rounded up.
+    const size_t size = str.size() * 733 / 1000 + 1; // log(58) / log(256), rounded up.
     std::vector<unsigned char> b256(size);
     // Process the characters.
     static_assert(std::size(mapBase58) == 256, "mapBase58.size() should be 256"); // guarantee not out of range
-    while (*psz && !IsSpace(*psz)) {
+    while (!str.empty() && !IsSpace(str.front())) {
         // Decode base58 character
-        int carry = mapBase58[(uint8_t)*psz];
+        int carry = mapBase58[static_cast<uint8_t>(str.front())];
         if (carry == -1)  // Invalid b58 character
             return false;
         int i = 0;
@@ -69,15 +71,17 @@ static const int8_t mapBase58[256] = {
         assert(carry == 0);
         length = i;
         if (length + zeroes > max_ret_len) return false;
-        psz++;
+        str.remove_prefix(1);
     }
     // Skip trailing spaces.
-    while (IsSpace(*psz))
-        psz++;
-    if (*psz != 0)
+    while (!str.empty() && IsSpace(str.front())) {
+        str.remove_prefix(1);
+    }
+    if (!str.empty()) {
         return false;
+    }
     // Skip leading zeroes in b256.
-    std::vector<unsigned char>::iterator it = b256.begin() + (size - length);
+    std::vector<unsigned char>::iterator it = b256.end() - length;
     // Copy result into output vector.
     vch.reserve(zeroes + (b256.end() - it));
     vch.assign(zeroes, 0x00);
@@ -126,12 +130,12 @@ std::string EncodeBase58(std::span<const unsigned char> input)
     return str;
 }
 
-bool DecodeBase58(const std::string& str, std::vector<unsigned char>& vchRet, int max_ret_len)
+bool DecodeBase58(std::string_view str, std::vector<unsigned char>& vchRet, int max_ret_len)
 {
     if (!ContainsNoNUL(str)) {
         return false;
     }
-    return DecodeBase58(str.c_str(), vchRet, max_ret_len);
+    return DecodeBase58Internal(str, vchRet, max_ret_len);
 }
 
 std::string EncodeBase58Check(std::span<const unsigned char> input)
@@ -143,9 +147,9 @@ std::string EncodeBase58Check(std::span<const unsigned char> input)
     return EncodeBase58(vch);
 }
 
-[[nodiscard]] static bool DecodeBase58Check(const char* psz, std::vector<unsigned char>& vchRet, int max_ret_len)
+[[nodiscard]] static bool DecodeBase58CheckInternal(std::string_view str, std::vector<unsigned char>& vchRet, int max_ret_len)
 {
-    if (!DecodeBase58(psz, vchRet, max_ret_len > std::numeric_limits<int>::max() - 4 ? std::numeric_limits<int>::max() : max_ret_len + 4) ||
+    if (!DecodeBase58Internal(str, vchRet, max_ret_len > std::numeric_limits<int>::max() - 4 ? std::numeric_limits<int>::max() : max_ret_len + 4) ||
         (vchRet.size() < 4)) {
         vchRet.clear();
         return false;
@@ -160,10 +164,10 @@ std::string EncodeBase58Check(std::span<const unsigned char> input)
     return true;
 }
 
-bool DecodeBase58Check(const std::string& str, std::vector<unsigned char>& vchRet, int max_ret)
+bool DecodeBase58Check(std::string_view str, std::vector<unsigned char>& vchRet, int max_ret)
 {
     if (!ContainsNoNUL(str)) {
         return false;
     }
-    return DecodeBase58Check(str.c_str(), vchRet, max_ret);
+    return DecodeBase58CheckInternal(str, vchRet, max_ret);
 }
