@@ -192,7 +192,7 @@ FUZZ_TARGET(connman, .init = initialize_connman)
                     /*addrConnect=*/random_address,
                     /*fCountFailure=*/fuzzed_data_provider.ConsumeBool(),
                     /*grant_outbound=*/{},
-                    /*pszDest=*/fuzzed_data_provider.ConsumeBool() ? nullptr : random_string.c_str(),
+                    /*dest=*/fuzzed_data_provider.ConsumeBool() ? nullptr : &random_string,
                     /*conn_type=*/conn_type,
                     /*use_v2transport=*/fuzzed_data_provider.ConsumeBool());
             },
