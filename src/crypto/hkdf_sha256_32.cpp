@@ -10,7 +10,7 @@
 
 CHKDF_HMAC_SHA256_L32::CHKDF_HMAC_SHA256_L32(std::span<const unsigned char> ikm, std::span<const unsigned char> salt)
 {
-    CHMAC_SHA256(salt.data(), salt.size()).Write(ikm.data(), ikm.size()).Finalize(m_prk);
+    CHMAC_SHA256{salt}.Write(ikm).Finalize(m_prk);
 }
 
 void CHKDF_HMAC_SHA256_L32::Expand32(std::span<const unsigned char> info, std::span<unsigned char> hash)
@@ -19,5 +19,5 @@ void CHKDF_HMAC_SHA256_L32::Expand32(std::span<const unsigned char> info, std::s
     assert(info.size() <= 128);
     assert(hash.size() == OUTPUT_SIZE);
     static const unsigned char one[1] = {1};
-    CHMAC_SHA256(m_prk, 32).Write(info.data(), info.size()).Write(one, 1).Finalize(hash.data());
+    CHMAC_SHA256{std::span{m_prk}}.Write(info).Write(one).Finalize(hash);
 }
