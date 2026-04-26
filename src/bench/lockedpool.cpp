@@ -22,7 +22,7 @@ static void BenchLockedPool(benchmark::Bench& bench)
     std::vector<void*> addr{ASIZE, nullptr};
     uint32_t s = 0x12345678;
     bench.run([&] {
-        int idx = s & (addr.size() - 1);
+        size_t idx = s & (addr.size() - 1);
         if (s & 0x80000000) {
             b.free(addr[idx]);
             addr[idx] = nullptr;
