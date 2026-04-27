@@ -689,7 +689,7 @@ and its `cs_KeyStore` lock for example).
 - [HTTP worker threads (`b-http.x`)](https://doxygen.bitcoincore.org/httpserver_8cpp.html#a2ad0a49dc9b5e8117c0dee98c24187d8)
   : Threads to service RPC and REST requests.
 
-- [Indexer threads (`b-txindex`, etc)](https://doxygen.bitcoincore.org/class_base_index.html#a96a7407421fbf877509248bbe64f8d87)
+- [Indexer threads (`b-txindex`, `b-basicfltridx`, `b-coinstatsidx`, `b-txospenderidx`)](https://doxygen.bitcoincore.org/class_base_index.html#a96a7407421fbf877509248bbe64f8d87)
   : One thread per indexer.
 
 - [SchedulerThread (`b-scheduler`)](https://doxygen.bitcoincore.org/class_c_scheduler.html#a14d2800815da93577858ea078aed1fba)
