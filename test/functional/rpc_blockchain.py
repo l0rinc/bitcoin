@@ -396,6 +396,10 @@ class BlockchainTest(BitcoinTestFramework):
         # hash_type none should not return a UTXO set hash.
         res5 = node.gettxoutsetinfo(hash_type='none')
         assert 'hash_serialized_3' not in res5
+        del res5['disk_size']
+        res_without_hash = res.copy()
+        del res_without_hash['hash_serialized_3']
+        assert_equal(res5, res_without_hash)
 
         # hash_type muhash should return a different UTXO set hash.
         res6 = node.gettxoutsetinfo(hash_type='muhash')
