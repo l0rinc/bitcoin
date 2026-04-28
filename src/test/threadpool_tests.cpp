@@ -126,7 +126,7 @@ BOOST_AUTO_TEST_CASE(submit_tasks_complete_successfully)
 
     ThreadPool threadPool(POOL_NAME);
     threadPool.Start(NUM_WORKERS_DEFAULT);
-    std::atomic<int> counter = 0;
+    std::atomic_int counter = 0;
 
     // Store futures to ensure completion before checking counter.
     std::vector<std::future<void>> futures;
@@ -175,7 +175,7 @@ BOOST_AUTO_TEST_CASE(wait_for_task_to_finish)
 {
     ThreadPool threadPool(POOL_NAME);
     threadPool.Start(NUM_WORKERS_DEFAULT);
-    std::atomic<bool> flag = false;
+    std::atomic_bool flag = false;
     std::future<void> future = Submit(threadPool, [&flag]() {
         UninterruptibleSleep(200ms);
         flag.store(true, std::memory_order_release);
@@ -228,7 +228,7 @@ BOOST_AUTO_TEST_CASE(process_tasks_manually_when_workers_busy)
 
     // Now submit tasks and check that none of them are executed.
     int num_tasks = 20;
-    std::atomic<int> counter = 0;
+    std::atomic_int counter = 0;
     for (int i = 0; i < num_tasks; i++) {
         (void)Submit(threadPool, [&counter]() {
             counter.fetch_add(1, std::memory_order_relaxed);
@@ -307,7 +307,7 @@ BOOST_AUTO_TEST_CASE(congestion_more_workers_than_cores)
     threadPool.Start(std::max(1, GetNumCores() * 2)); // Oversubscribe by 2×
 
     int num_tasks = 200;
-    std::atomic<int> counter{0};
+    std::atomic_int counter{0};
 
     std::vector<std::future<void>> futures;
     futures.reserve(num_tasks);
@@ -344,7 +344,7 @@ BOOST_AUTO_TEST_CASE(interrupt_blocks_new_submissions)
     // 2) Interrupt() from a worker thread
     // One worker is blocked, another calls Interrupt(), and the remaining one waits for tasks.
     threadPool.Start(/*num_workers=*/3);
-    std::atomic<int> counter{0};
+    std::atomic_int counter{0};
     std::counting_semaphore<> blocker(0);
     const auto blocking_tasks = BlockWorkers(threadPool, blocker, 1);
     Submit(threadPool, [&threadPool, &counter]{
@@ -403,7 +403,7 @@ BOOST_AUTO_TEST_CASE(queued_tasks_complete_after_interrupt)
     const auto blocking_tasks = BlockWorkers(threadPool, blocker, NUM_WORKERS_DEFAULT);
 
     // Queue tasks while all workers are busy, then interrupt
-    std::atomic<int> counter{0};
+    std::atomic_int counter{0};
     const int num_tasks = 10;
     std::vector<std::future<void>> futures;
     futures.reserve(num_tasks);
@@ -431,7 +431,7 @@ BOOST_AUTO_TEST_CASE(stop_active_wait_drains_queue)
     const auto blocking_tasks = BlockWorkers(threadPool, blocker, NUM_WORKERS_DEFAULT);
 
     auto main_thread_id = std::this_thread::get_id();
-    std::atomic<int> main_thread_tasks{0};
+    std::atomic_int main_thread_tasks{0};
     const size_t num_tasks = 20;
     for (size_t i = 0; i < num_tasks; i++) {
         (void)Submit(threadPool, [&main_thread_tasks, main_thread_id]() {
