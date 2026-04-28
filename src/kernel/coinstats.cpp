@@ -165,7 +165,7 @@ static std::optional<CCoinsStats> ComputeUTXOStats(std::nullptr_t, CCoinsView* v
     Txid prevkey;
     bool have_prevkey{false};
     while (pcursor->Valid()) {
-        if (interruption_point) interruption_point();
+        if (interruption_point && stats.coins_count % 8192 == 0) interruption_point();
         COutPoint key;
         Coin coin;
         if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
