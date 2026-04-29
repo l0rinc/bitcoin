@@ -392,8 +392,13 @@ public:
 /** CCoinsView that adds a memory cache for transactions to another CCoinsView */
 class CCoinsViewCache : public CCoinsViewBacked
 {
-private:
     const bool m_deterministic;
+
+    /**
+     * @note this is marked const, but may actually append to `cacheCoins`, increasing
+     * memory usage.
+     */
+    CCoinsMap::iterator FetchCoin(const COutPoint &outpoint) const;
 
 protected:
     /**
@@ -543,13 +548,6 @@ public:
 
     //! Create a scoped guard that will call `Reset()` on this cache when it goes out of scope.
     [[nodiscard]] ResetGuard CreateResetGuard() noexcept { return ResetGuard{*this}; }
-
-private:
-    /**
-     * @note this is marked const, but may actually append to `cacheCoins`, increasing
-     * memory usage.
-     */
-    CCoinsMap::iterator FetchCoin(const COutPoint &outpoint) const;
 };
 
 /**
