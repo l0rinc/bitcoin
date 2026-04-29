@@ -12,11 +12,11 @@
 #include <limits>
 
 //! min. -dbcache (bytes)
-static constexpr size_t MIN_DBCACHE_BYTES{4_MiB};
+static constexpr uint64_t MIN_DBCACHE_BYTES{4_MiB};
 //! -dbcache default (bytes)
-static constexpr size_t DEFAULT_DBCACHE_BYTES{450_MiB};
+static constexpr uint64_t DEFAULT_DBCACHE_BYTES{450_MiB};
 //! Maximum dbcache size on current architecture.
-static constexpr size_t MAX_DBCACHE_BYTES{sizeof(void*) == 4 ? 1_GiB : std::numeric_limits<size_t>::max()};
+static constexpr uint64_t MAX_DBCACHE_BYTES{sizeof(void*) == 4 ? 1_GiB : std::numeric_limits<uint64_t>::max()};
 
 namespace node {
 size_t GetDefaultDBCache();
