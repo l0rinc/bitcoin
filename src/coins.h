@@ -401,6 +401,22 @@ class CCoinsViewCache : public CCoinsViewBacked
     //! See: https://stackoverflow.com/questions/42114044/how-to-release-unordered-map-memory
     void ReallocateCache();
 
+    class ResetGuard
+    {
+    private:
+        friend CCoinsViewCache;
+        CCoinsViewCache& m_cache;
+        explicit ResetGuard(CCoinsViewCache& cache LIFETIMEBOUND) noexcept : m_cache{cache} {}
+
+    public:
+        ResetGuard(const ResetGuard&) = delete;
+        ResetGuard& operator=(const ResetGuard&) = delete;
+        ResetGuard(ResetGuard&&) = delete;
+        ResetGuard& operator=(ResetGuard&&) = delete;
+
+        ~ResetGuard() { m_cache.Reset(); }
+    };
+
     /**
      * @note this is marked const, but may actually append to `cacheCoins`, increasing
      * memory usage.
@@ -529,22 +545,6 @@ public:
 
     //! Run an internal sanity check on the cache data structure. */
     void SanityCheck() const;
-
-    class ResetGuard
-    {
-    private:
-        friend CCoinsViewCache;
-        CCoinsViewCache& m_cache;
-        explicit ResetGuard(CCoinsViewCache& cache LIFETIMEBOUND) noexcept : m_cache{cache} {}
-
-    public:
-        ResetGuard(const ResetGuard&) = delete;
-        ResetGuard& operator=(const ResetGuard&) = delete;
-        ResetGuard(ResetGuard&&) = delete;
-        ResetGuard& operator=(ResetGuard&&) = delete;
-
-        ~ResetGuard() { m_cache.Reset(); }
-    };
 
     //! Create a scoped guard that will call `Reset()` on this cache when it goes out of scope.
     [[nodiscard]] ResetGuard CreateResetGuard() noexcept { return ResetGuard{*this}; }
