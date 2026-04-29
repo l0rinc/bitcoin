@@ -11,7 +11,7 @@
 #include <cstdint>
 
 //! Larger default dbcache on 64-bit systems with enough RAM.
-static constexpr size_t HIGH_DEFAULT_DBCACHE{1_GiB};
+static constexpr uint64_t HIGH_DEFAULT_DBCACHE{1_GiB};
 //! Minimum detected RAM required for HIGH_DEFAULT_DBCACHE.
 static constexpr uint64_t HIGH_DEFAULT_DBCACHE_MIN_TOTAL_RAM{4_GiB};
 
