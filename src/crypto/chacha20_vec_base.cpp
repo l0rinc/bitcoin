@@ -9,18 +9,24 @@
 // (sse2 and neon respectively) are safe to use without runtime detection.
 
 #if defined(__x86_64__) || defined(__amd64__)
-#  define CHACHA20_VEC_DISABLE_STATES_16
-#  define CHACHA20_VEC_DISABLE_STATES_8
-#  define CHACHA20_VEC_DISABLE_STATES_6
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_16{true};
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_8{true};
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_6{true};
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_4{false};
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_2{false};
 #elif defined(__ARM_NEON)
-#  define CHACHA20_VEC_DISABLE_STATES_2
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_16{false};
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_8{false};
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_6{false};
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_4{false};
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_2{true};
 #else
-// Be conservative and require platforms to opt-in
-#  define CHACHA20_VEC_DISABLE_STATES_16
-#  define CHACHA20_VEC_DISABLE_STATES_8
-#  define CHACHA20_VEC_DISABLE_STATES_6
-#  define CHACHA20_VEC_DISABLE_STATES_4
-#  define CHACHA20_VEC_DISABLE_STATES_2
+// Be conservative and require platforms to opt in.
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_16{true};
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_8{true};
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_6{true};
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_4{true};
+static constexpr bool CHACHA20_VEC_DISABLE_STATES_2{true};
 #endif
 
 #include <crypto/chacha20_vec.ipp>
