@@ -4,8 +4,6 @@
 
 #include <crypto/siphash.h>
 
-#include <uint256.h>
-
 #include <cassert>
 #include <span>
 
