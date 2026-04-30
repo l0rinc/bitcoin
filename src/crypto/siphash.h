@@ -5,11 +5,34 @@
 #ifndef BITCOIN_CRYPTO_SIPHASH_H
 #define BITCOIN_CRYPTO_SIPHASH_H
 
+#include <attributes.h>
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <span>
 
 class uint256;
+
+namespace siphash_detail {
+
+ALWAYS_INLINE void SipRound(uint64_t& v0, uint64_t& v1, uint64_t& v2, uint64_t& v3)
+{
+    uint64_t a{v0}, b{v1}, c{v2}, d{v3};
+
+    a += b; b = std::rotl(b, 13); b ^= a;
+    a = std::rotl(a, 32);
+    c += d; d = std::rotl(d, 16); d ^= c;
+    a += d; d = std::rotl(d, 21); d ^= a;
+    c += b; b = std::rotl(b, 17); b ^= c;
+    c = std::rotl(c, 32);
+
+    v0 = a;
+    v1 = b;
+    v2 = c;
+    v3 = d;
+}
+
+} // namespace siphash_detail
 
 /** Shared SipHash internal state v[0..3], initialized from (k0, k1). */
 class SipHashState
