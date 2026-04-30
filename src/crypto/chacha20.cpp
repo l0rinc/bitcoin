@@ -291,10 +291,9 @@ inline void ChaCha20Aligned::Crypt(std::span<const std::byte> in_bytes, std::spa
     assert(blocks * ChaCha20Aligned::BLOCKLEN == out_bytes.size());
 #ifdef ENABLE_CHACHA20_VEC
     // Only use the vectorized implementations if the counter will not overflow.
-    const bool overflow = static_cast<uint64_t>(input[8]) + blocks > std::numeric_limits<uint32_t>::max();
+    const bool overflow = blocks > std::numeric_limits<uint32_t>::max() - input[8];
     if (blocks > 1 && !overflow) {
-        const auto state = std::to_array(input);
-        chacha20_vec_base::chacha20_crypt_vectorized(in_bytes, out_bytes, state);
+        chacha20_vec_base::chacha20_crypt_vectorized(in_bytes, out_bytes, std::span<const uint32_t, 12>{input});
         const size_t blocks_written = blocks - (out_bytes.size() / ChaCha20Aligned::BLOCKLEN);
         input[8] += blocks_written;
     }
