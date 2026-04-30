@@ -47,6 +47,7 @@
 #include <univalue.h>
 #include <util/check.h>
 #include <util/fs.h>
+#include <util/hasher.h>
 #include <util/strencodings.h>
 #include <util/syserror.h>
 #include <util/translation.h>
@@ -63,6 +64,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 using kernel::CCoinsStats;
@@ -2229,28 +2231,37 @@ static RPCMethod getblockstats()
 }
 
 namespace {
+bool ContainsScriptSize(const std::vector<size_t>& sizes, size_t size)
+{
+    for (const size_t candidate_size : sizes) {
+        if (candidate_size == size) return true;
+    }
+    return false;
+}
+
 //! Search for a given set of pubkey scripts
-bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& should_abort, int64_t& count, CCoinsViewCursor* cursor, const std::set<CScript>& needles, std::map<COutPoint, Coin>& out_results, std::function<void()>& interruption_point)
+bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& should_abort, int64_t& count, CCoinsViewCursor* cursor, const std::unordered_set<CScript, SaltedSipHasher>& needles, const std::vector<size_t>& needle_sizes, std::map<COutPoint, Coin>& out_results, std::function<void()>& interruption_point)
 {
     scan_progress = 0;
     count = 0;
     while (cursor->Valid()) {
-        COutPoint key;
         Coin coin;
-        if (!cursor->GetKey(key) || !cursor->GetValue(coin)) return false;
+        if (!cursor->GetValue(coin)) return false;
         if (++count % 8192 == 0) {
             interruption_point();
             if (should_abort) {
                 // allow to abort the scan via the abort reference
                 return false;
             }
-        }
-        if (count % 256 == 0) {
-            // update progress reference every 256 item
+            // update progress reference every 8192 items
+            COutPoint key;
+            if (!cursor->GetKey(key)) return false;
             uint32_t high = 0x100 * *UCharCast(key.hash.begin()) + *(UCharCast(key.hash.begin()) + 1);
             scan_progress = (int)(high * 100.0 / 65536.0 + 0.5);
         }
-        if (needles.contains(coin.out.scriptPubKey)) {
+        if (ContainsScriptSize(needle_sizes, coin.out.scriptPubKey.size()) && needles.contains(coin.out.scriptPubKey)) {
+            COutPoint key;
+            if (!cursor->GetKey(key)) return false;
             out_results.emplace(key, coin);
         }
         cursor->Next();
@@ -2420,7 +2431,8 @@ static RPCMethod scantxoutset()
             throw JSONRPCError(RPC_MISC_ERROR, "scanobjects argument is required for the start action");
         }
 
-        std::set<CScript> needles;
+        std::unordered_set<CScript, SaltedSipHasher> needles;
+        std::vector<size_t> needle_sizes;
         std::map<CScript, std::string> descriptors;
         CAmount total_in = 0;
 
@@ -2431,6 +2443,7 @@ static RPCMethod scantxoutset()
             for (CScript& script : scripts) {
                 std::string inferred = InferDescriptor(script, provider)->ToString();
                 needles.emplace(script);
+                if (!ContainsScriptSize(needle_sizes, script.size())) needle_sizes.push_back(script.size());
                 descriptors.emplace(std::move(script), std::move(inferred));
             }
         }
@@ -2452,7 +2465,7 @@ static RPCMethod scantxoutset()
             pcursor = CHECK_NONFATAL(active_chainstate.CoinsDB().Cursor());
             tip = CHECK_NONFATAL(active_chainstate.m_chain.Tip());
         }
-        bool res = FindScriptPubKey(g_scan_progress, g_should_abort_scan, count, pcursor.get(), needles, coins, node.rpc_interruption_point);
+        bool res = FindScriptPubKey(g_scan_progress, g_should_abort_scan, count, pcursor.get(), needles, needle_sizes, coins, node.rpc_interruption_point);
         result.pushKV("success", res);
         result.pushKV("txouts", count);
         result.pushKV("height", tip->nHeight);
