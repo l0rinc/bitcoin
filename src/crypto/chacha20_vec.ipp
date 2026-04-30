@@ -9,8 +9,10 @@
 #include <array>
 #include <bit>
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 
 #if defined(ENABLE_CHACHA20_VEC)
 
@@ -24,6 +26,8 @@ static constexpr bool CHACHA20_VEC_ALL_MULTI_STATES_DISABLED{
 namespace {
 
 using vec256 = uint32_t __attribute__((__vector_size__(32)));
+
+static constexpr size_t CHACHA20_VEC_MEM_ALIGN{16};
 
 /** Endian-conversion for big-endian */
 ALWAYS_INLINE void vec_byteswap(vec256& vec)
@@ -161,31 +165,52 @@ ALWAYS_INLINE void doubleround(std::array<vec256, N>& arr0, std::array<vec256, N
    that input and output are unaligned, and makes no assumptions about the
    internal layout of vec256;
 */
-ALWAYS_INLINE void vec_read_xor_write(std::span<const std::byte, 32> in_bytes, std::span<std::byte, 32> out_bytes, const vec256& vec)
+template <bool AssumeAligned>
+ALWAYS_INLINE void vec_read_xor_write(const std::byte* in_bytes, std::byte* out_bytes, const vec256& vec)
 {
+    if constexpr (AssumeAligned) {
+        in_bytes = std::assume_aligned<CHACHA20_VEC_MEM_ALIGN>(in_bytes);
+        out_bytes = std::assume_aligned<CHACHA20_VEC_MEM_ALIGN>(out_bytes);
+    }
+
     vec256 tempvec;
-    memcpy(&tempvec, in_bytes.data(), sizeof(tempvec));
+    memcpy(&tempvec, in_bytes, sizeof(tempvec));
     vec_byteswap(tempvec);
     tempvec ^= vec;
     vec_byteswap(tempvec);
-    memcpy(out_bytes.data(), &tempvec, sizeof(tempvec));
+    memcpy(out_bytes, &tempvec, sizeof(tempvec));
 }
 
 /* Merge the 128-bit lanes from 2 states to the proper order, then pass each vec_read_xor_write */
-template <size_t N, size_t INDEX = 0>
-ALWAYS_INLINE void arr_read_xor_write(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const std::array<vec256, N>& arr0, const std::array<vec256, N>& arr1, const std::array<vec256, N>& arr2, const std::array<vec256, N>& arr3)
+template <bool AssumeAligned, size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_read_xor_write_impl(const std::byte* in_bytes, std::byte* out_bytes, const std::array<vec256, N>& arr0, const std::array<vec256, N>& arr1, const std::array<vec256, N>& arr2, const std::array<vec256, N>& arr3)
 {
     const vec256& w = std::get<INDEX>(arr0);
     const vec256& x = std::get<INDEX>(arr1);
     const vec256& y = std::get<INDEX>(arr2);
     const vec256& z = std::get<INDEX>(arr3);
+    const std::byte* in_slice{in_bytes + INDEX * 128};
+    std::byte* out_slice{out_bytes + INDEX * 128};
 
-    vec_read_xor_write(in_bytes.first<32>(), out_bytes.first<32>(), __builtin_shufflevector(w, x, 4, 5, 6, 7, 12, 13, 14, 15));
-    vec_read_xor_write(in_bytes.subspan<32, 32>(), out_bytes.subspan<32, 32>(), __builtin_shufflevector(y, z, 4, 5, 6, 7, 12, 13, 14, 15));
-    vec_read_xor_write(in_bytes.subspan<64, 32>(), out_bytes.subspan<64, 32>(), __builtin_shufflevector(w, x, 0, 1, 2, 3, 8, 9, 10, 11));
-    vec_read_xor_write(in_bytes.subspan<96, 32>(), out_bytes.subspan<96, 32>(), __builtin_shufflevector(y, z, 0, 1, 2, 3, 8, 9, 10, 11));
+    vec_read_xor_write<AssumeAligned>(in_slice, out_slice, __builtin_shufflevector(w, x, 4, 5, 6, 7, 12, 13, 14, 15));
+    vec_read_xor_write<AssumeAligned>(in_slice + 32, out_slice + 32, __builtin_shufflevector(y, z, 4, 5, 6, 7, 12, 13, 14, 15));
+    vec_read_xor_write<AssumeAligned>(in_slice + 64, out_slice + 64, __builtin_shufflevector(w, x, 0, 1, 2, 3, 8, 9, 10, 11));
+    vec_read_xor_write<AssumeAligned>(in_slice + 96, out_slice + 96, __builtin_shufflevector(y, z, 0, 1, 2, 3, 8, 9, 10, 11));
 
-    if constexpr (INDEX + 1 < N) arr_read_xor_write<N, INDEX + 1>(in_bytes.subspan<128>(), out_bytes.subspan<128>(), arr0, arr1, arr2, arr3);
+    if constexpr (INDEX + 1 < N) arr_read_xor_write_impl<AssumeAligned, N, INDEX + 1>(in_bytes, out_bytes, arr0, arr1, arr2, arr3);
+}
+
+template <size_t N>
+ALWAYS_INLINE void arr_read_xor_write(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const std::array<vec256, N>& arr0, const std::array<vec256, N>& arr1, const std::array<vec256, N>& arr2, const std::array<vec256, N>& arr3)
+{
+    constexpr uintptr_t mask{CHACHA20_VEC_MEM_ALIGN - 1};
+    const bool aligned{((reinterpret_cast<uintptr_t>(in_bytes.data()) | reinterpret_cast<uintptr_t>(out_bytes.data())) & mask) == 0};
+
+    if (aligned) [[likely]] {
+        arr_read_xor_write_impl<true>(in_bytes.data(), out_bytes.data(), arr0, arr1, arr2, arr3);
+    } else {
+        arr_read_xor_write_impl<false>(in_bytes.data(), out_bytes.data(), arr0, arr1, arr2, arr3);
+    }
 }
 
 /* Compile-time helper to create addend vectors which used to increment the states
