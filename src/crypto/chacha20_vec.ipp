@@ -163,13 +163,12 @@ ALWAYS_INLINE void doubleround(std::array<vec256, N>& arr0, std::array<vec256, N
 */
 ALWAYS_INLINE void vec_read_xor_write(std::span<const std::byte, 32> in_bytes, std::span<std::byte, 32> out_bytes, const vec256& vec)
 {
-    std::array<uint32_t, 8> temparr;
-    memcpy(temparr.data(), in_bytes.data(), in_bytes.size());
-    vec256 tempvec = vec;
+    vec256 tempvec;
+    memcpy(&tempvec, in_bytes.data(), sizeof(tempvec));
     vec_byteswap(tempvec);
-    tempvec ^= (vec256){temparr[0], temparr[1], temparr[2], temparr[3], temparr[4], temparr[5], temparr[6], temparr[7]};
-    temparr = {tempvec[0], tempvec[1], tempvec[2], tempvec[3], tempvec[4], tempvec[5], tempvec[6], tempvec[7]};
-    memcpy(out_bytes.data(), temparr.data(), out_bytes.size());
+    tempvec ^= vec;
+    vec_byteswap(tempvec);
+    memcpy(out_bytes.data(), &tempvec, sizeof(tempvec));
 }
 
 /* Merge the 128-bit lanes from 2 states to the proper order, then pass each vec_read_xor_write */
