@@ -10,8 +10,7 @@
 #include <bit>
 #include <cstdint>
 #include <span>
-
-class uint256;
+#include <uint256.h>
 
 namespace siphash_detail {
 
@@ -91,5 +90,58 @@ public:
      */
     uint64_t operator()(const uint256& val, uint32_t extra) const noexcept;
 };
+
+/**
+ * SipHash-1-3 variant for hashing 256-bit hashes plus a 32-bit index in internal hash tables.
+ *
+ * This is a non-standard SipHash-c-d variant. "Jumboblock" means the four 64-bit
+ * limbs of the 256-bit hash are injected together and mixed by one SipRound,
+ * instead of being processed as four separate SipHash message blocks.
+ *
+ * This is not a general-purpose SipHash replacement. It is meant for keys that
+ * already contain a uniformly distributed hash, such as COutPoint keys in the
+ * coins cache.
+ */
+class PresaltedSipHasher13Jumbo
+{
+    const SipHashState m_state;
+
+public:
+    explicit PresaltedSipHasher13Jumbo(uint64_t k0, uint64_t k1) noexcept : m_state{k0, k1} {}
+
+    uint64_t operator()(const uint256& val, uint32_t extra) const noexcept;
+};
+
+ALWAYS_INLINE uint64_t PresaltedSipHasher13Jumbo::operator()(const uint256& val, uint32_t extra) const noexcept
+{
+    using siphash_detail::SipRound;
+    uint64_t v0 = m_state.v[0], v1 = m_state.v[1], v2 = m_state.v[2], v3 = m_state.v[3];
+
+    const uint64_t m0{val.GetUint64(0)};
+    const uint64_t m1{val.GetUint64(1)};
+    const uint64_t m2{val.GetUint64(2)};
+    const uint64_t m3{val.GetUint64(3)};
+
+    v0 ^= m0;
+    v1 ^= m1;
+    v2 ^= m2;
+    v3 ^= m3;
+    SipRound(v0, v1, v2, v3);
+    v0 ^= m3;
+    v1 ^= m0;
+    v2 ^= m1;
+    v3 ^= m2;
+
+    const uint64_t d{(uint64_t{36} << 56) | extra};
+    v3 ^= d;
+    SipRound(v0, v1, v2, v3);
+    v0 ^= d;
+
+    v2 ^= 0xFF;
+    SipRound(v0, v1, v2, v3);
+    SipRound(v0, v1, v2, v3);
+    SipRound(v0, v1, v2, v3);
+    return v0 ^ v1 ^ v2 ^ v3;
+}
 
 #endif // BITCOIN_CRYPTO_SIPHASH_H
