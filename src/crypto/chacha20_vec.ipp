@@ -4,6 +4,9 @@
 
 #include <crypto/chacha20_vec.h>
 
+#include <attributes.h>
+#include <compat/byteswap.h>
+
 #include <bit>
 #include <cassert>
 #include <cstring>
@@ -22,36 +25,18 @@
 
 #if !defined(CHACHA20_VEC_ALL_MULTI_STATES_DISABLED)
 
-#if defined(__has_attribute)
-#  if __has_attribute(always_inline)
-#    define ALWAYS_INLINE __attribute__ ((always_inline)) inline
-#  endif
-#endif
-
-#if !defined(ALWAYS_INLINE)
-#  define ALWAYS_INLINE inline
-#endif
-
-
 namespace {
 
 using vec256 = uint32_t __attribute__((__vector_size__(32)));
+static_assert(sizeof(vec256) == 32);
 
 /** Endian-conversion for big-endian */
 ALWAYS_INLINE void vec_byteswap(vec256& vec)
 {
-    if constexpr (std::endian::native == std::endian::big)
-    {
-        vec256 ret;
-        ret[0] = __builtin_bswap32(vec[0]);
-        ret[1] = __builtin_bswap32(vec[1]);
-        ret[2] = __builtin_bswap32(vec[2]);
-        ret[3] = __builtin_bswap32(vec[3]);
-        ret[4] = __builtin_bswap32(vec[4]);
-        ret[5] = __builtin_bswap32(vec[5]);
-        ret[6] = __builtin_bswap32(vec[6]);
-        ret[7] = __builtin_bswap32(vec[7]);
-        vec = ret;
+    if constexpr (std::endian::native == std::endian::big) {
+        for (size_t i{0}; i < 8; ++i) {
+            vec[i] = internal_bswap_32(vec[i]);
+        }
     }
 }
 
