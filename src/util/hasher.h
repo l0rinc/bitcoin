@@ -60,7 +60,13 @@ class SaltedOutpointHasher
 public:
     SaltedOutpointHasher(bool deterministic = false);
 
-    size_t operator()(const COutPoint& id) const
+    /**
+     * `noexcept(false)` is intentional even though the body cannot throw:
+     * libstdc++ caches hash codes for potentially throwing fast hash functions.
+     *
+     * @see https://gcc.gnu.org/onlinedocs/libstdc++/manual/unordered_associative.html
+     */
+    size_t operator()(const COutPoint& id) const noexcept(false)
     {
         return m_hasher(id.hash.ToUint256(), id.n);
     }
