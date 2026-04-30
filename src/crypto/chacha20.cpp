@@ -7,11 +7,16 @@
 
 #include <crypto/common.h>
 #include <crypto/chacha20.h>
+#include <crypto/chacha20_vec.h>
 #include <support/cleanse.h>
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cassert>
+#include <limits>
+
+static_assert(ChaCha20Aligned::BLOCKLEN == CHACHA20_VEC_BLOCKLEN);
 
 #define QUARTERROUND(a,b,c,d) \
   a += b; d = std::rotl(d ^ a, 16); \
@@ -157,13 +162,13 @@ inline void ChaCha20Aligned::Keystream(std::span<std::byte> output) noexcept
     }
 }
 
-inline void ChaCha20Aligned::Crypt(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes) noexcept
+static inline void chacha20_crypt_scalar(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, uint32_t input[12]) noexcept
 {
     assert(in_bytes.size() == out_bytes.size());
     const std::byte* m = in_bytes.data();
     std::byte* c = out_bytes.data();
-    size_t blocks = out_bytes.size() / BLOCKLEN;
-    assert(blocks * BLOCKLEN == out_bytes.size());
+    size_t blocks = out_bytes.size() / ChaCha20Aligned::BLOCKLEN;
+    assert(blocks * ChaCha20Aligned::BLOCKLEN == out_bytes.size());
 
     uint32_t x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15;
     uint32_t j4, j5, j6, j7, j8, j9, j10, j11, j12, j13, j14, j15;
@@ -273,8 +278,29 @@ inline void ChaCha20Aligned::Crypt(std::span<const std::byte> in_bytes, std::spa
             return;
         }
         blocks -= 1;
-        c += BLOCKLEN;
-        m += BLOCKLEN;
+        c += ChaCha20Aligned::BLOCKLEN;
+        m += ChaCha20Aligned::BLOCKLEN;
+    }
+}
+
+inline void ChaCha20Aligned::Crypt(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes) noexcept
+{
+    assert(in_bytes.size() == out_bytes.size());
+    size_t blocks = out_bytes.size() / BLOCKLEN;
+    assert(blocks * BLOCKLEN == out_bytes.size());
+
+#if defined(ENABLE_CHACHA20_VEC)
+    const bool counter_overflow{blocks > std::numeric_limits<uint32_t>::max() - input[8]};
+    if (blocks > 1 && !counter_overflow) {
+        const auto state{std::to_array(input)};
+        chacha20_vec_base::Crypt(in_bytes, out_bytes, state);
+        const size_t blocks_done{blocks - (out_bytes.size() / BLOCKLEN)};
+        input[8] += static_cast<uint32_t>(blocks_done);
+    }
+#endif
+
+    if (!in_bytes.empty()) {
+        chacha20_crypt_scalar(in_bytes, out_bytes, input);
     }
 }
 
