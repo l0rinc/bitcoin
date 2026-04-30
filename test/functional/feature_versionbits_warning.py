@@ -21,7 +21,7 @@ VB_TOP_BITS = 0x20000000
 
 # Choose a bit unassigned to any deployment, or start the
 # node with the deployment matching this bit disabled.
-VB_UNKNOWN_BIT = 3
+VB_UNKNOWN_BIT = 4
 VB_UNKNOWN_VERSION = VB_TOP_BITS | (1 << VB_UNKNOWN_BIT)
 VB_IGNORED_BIT = 5
 VB_IGNORED_VERSION = VB_TOP_BITS | (1 << VB_IGNORED_BIT)

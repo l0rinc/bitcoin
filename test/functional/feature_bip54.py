@@ -7,6 +7,7 @@
 from test_framework.blocktools import (
     add_witness_commitment,
     create_block,
+    create_empty_fork,
     create_tx_with_script,
     MAX_FUTURE_BLOCK_TIME,
     NORMAL_GBT_REQUEST_PARAMS,
@@ -45,6 +46,13 @@ from test_framework.wallet_util import generate_keypair
 class Bip54Test(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
+        # BIP54 will be activated halfway through the test.
+        self.extra_args = [["-vbparams=consensuscleanup:0:3999999999"]]
+
+    def generate_bulk(self, node, count, version=None):
+        """Generate a number of blocks at once, controlling the block version."""
+        for block in create_empty_fork(node, count, version=version):
+            assert_equal(node.submitblock(block.serialize().hex()), None)
 
     def mine_and_submit(self, node, txs):
         """Mine these transactions into a block and submit it to the provided node, returning its rejection reason if any."""
@@ -312,6 +320,42 @@ class Bip54Test(BitcoinTestFramework):
         assert_equal(self.submit_block_64byte(node), None)
         # - Even if that is the coinbase transaction.
         assert_equal(self.submit_block_64byte_coinbase(node), None)
+
+        self.log.info("Activating BIP54")
+        # Mine all the way to the very last block of the current retarget period.
+        self.generate_bulk(node, 143 - node.getblockcount() % 144)
+
+        # Mine enough signaling blocks to transition to locked in and reach the next period.
+        cc_dep = node.getdeploymentinfo()["deployments"]["consensuscleanup"]["bip9"]
+        assert_equal(cc_dep["status"], "started")
+        signal_bip54 = (1 << 29) | (1 << cc_dep["bit"])
+        thresh = cc_dep["statistics"]["threshold"]
+        self.generate_bulk(node, thresh, version=signal_bip54)
+        self.generate_bulk(node, 144 - thresh + 1)
+
+        # Mine one more retarget period to transition from locked in to active.
+        cc_dep = node.getdeploymentinfo()["deployments"]["consensuscleanup"]["bip9"]
+        assert_equal(cc_dep["status"], "locked_in")
+        self.generate_bulk(node, 144)
+        cc_dep = node.getdeploymentinfo()["deployments"]["consensuscleanup"]["bip9"]
+        assert_equal(cc_dep["status"], "active")
+
+        self.log.info("BIP54 tests after activation")
+        # Once BIP54 is active we:
+        # - Refuse blocks with more than 2500 BIP54-sigops in a single transaction but still
+        #   accept a block with the same number of BIP54-sigops split in more than one transaction.
+        assert_equal(self.submit_block_many_sigops(node), None) # TODO: A transaction with more than 2500 legacy sigops must be invalid
+        assert_equal(self.submit_block_many_sigops_split(node), None)
+        # - Cannot perform Timewarp and Murch-Zawy attacks
+        self.timewarp_attack(node, fork_height=cc_dep["since"]) # TODO: The first retarget block must respect the two-hour timewarp bound
+        self.murch_zawy_attack(node, fork_height=cc_dep["since"] - 1) # TODO: Retarget periods must not have a negative duration
+        # - Refuse blocks with a coinbase not timelocked to the block height, or with its timelock disabled
+        assert_equal(self.submit_nontimelocked_cb(node), None) # TODO: The coinbase must enforce its height timelock
+        assert_equal(self.submit_final_sequence_cb(node), None) # TODO: The coinbase must enforce its height timelock
+        # - Refuse a block containing a 64-byte transaction
+        assert_equal(self.submit_block_64byte(node), None) # TODO: Transactions with exactly 64 non-witness bytes must be invalid
+        # - Even if that is the coinbase transaction
+        assert_equal(self.submit_block_64byte_coinbase(node), None) # TODO: Transactions with exactly 64 non-witness bytes must be invalid
 
 if __name__ == "__main__":
     Bip54Test(__file__).main()

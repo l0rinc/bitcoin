@@ -7,6 +7,7 @@ from copy import deepcopy
 from decimal import Decimal
 from math import ceil
 
+from test_framework.blocktools import CONSENSUS_CLEANUP_NEVER_ACTIVE
 from test_framework.messages import (
     COutPoint,
     CTransaction,
@@ -237,7 +238,13 @@ class BytesPerSigOpTest(BitcoinTestFramework):
         self.nodes[0].sendrawtransaction(std_tx.serialize().hex())
 
         # Make sure the original, non-standard, transaction can be mined.
-        self.generateblock(self.nodes[0], output="raw(42)", transactions=[nonstd_tx.serialize().hex()])
+        self.generateblock(self.nodes[0], output="raw(42)", transactions=[nonstd_tx.serialize().hex()], submit=False) # TODO: BIP54 must reject this transaction in an active block
+
+        self.log.info("The mempool enforces the sigop limit even when BIP54 is inactive and nonstandard transactions are allowed")
+        # Discard the conflicting standard transaction without spending its inputs
+        self.restart_node(0, [CONSENSUS_CLEANUP_NEVER_ACTIVE, "-acceptnonstdtxn=1", "-persistmempool=0"])
+        self.nodes[0].sendrawtransaction(nonstd_tx.serialize().hex()) # TODO: The BIP54 mempool sigop limit must apply while the deployment is inactive
+        self.generateblock(self.nodes[0], "raw(42)", [nonstd_tx.serialize().hex()])
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
