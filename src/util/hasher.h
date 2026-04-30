@@ -75,6 +75,19 @@ public:
     }
 };
 
+class SaltedOutpointHasher13Jumbo
+{
+    const PresaltedSipHasher13Jumbo m_hasher;
+
+public:
+    SaltedOutpointHasher13Jumbo(bool deterministic = false);
+
+    size_t operator()(const COutPoint& id) const noexcept
+    {
+        return m_hasher(id.hash.ToUint256(), id.n);
+    }
+};
+
 /**
  * We're hashing a nonce into the entries themselves, so we don't need extra
  * blinding in the set hash computation.

@@ -30,6 +30,11 @@ SaltedOutpointHasher::SaltedOutpointHasher(bool deterministic) : m_hasher{
     deterministic ? DETERMINISTIC_OUTPOINT_K1 : FastRandomContext().rand64()}
 {}
 
+SaltedOutpointHasher13Jumbo::SaltedOutpointHasher13Jumbo(bool deterministic) : m_hasher{
+    deterministic ? DETERMINISTIC_OUTPOINT_K0 : FastRandomContext().rand64(),
+    deterministic ? DETERMINISTIC_OUTPOINT_K1 : FastRandomContext().rand64()}
+{}
+
 SaltedSipHasher::SaltedSipHasher() :
     m_k0{FastRandomContext().rand64()},
     m_k1{FastRandomContext().rand64()}

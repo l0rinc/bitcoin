@@ -160,3 +160,34 @@ uint64_t PresaltedSipHasher::operator()(const uint256& val, uint32_t extra) cons
     SIPROUND;
     return v0 ^ v1 ^ v2 ^ v3;
 }
+
+uint64_t PresaltedSipHasher13Jumbo::operator()(const uint256& val, uint32_t extra) const noexcept
+{
+    uint64_t v0 = m_state.v[0], v1 = m_state.v[1], v2 = m_state.v[2], v3 = m_state.v[3];
+
+    const uint64_t m0{val.GetUint64(0)};
+    const uint64_t m1{val.GetUint64(1)};
+    const uint64_t m2{val.GetUint64(2)};
+    const uint64_t m3{val.GetUint64(3)};
+
+    v0 ^= m0;
+    v1 ^= m1;
+    v2 ^= m2;
+    v3 ^= m3;
+    SIPROUND;
+    v0 ^= m3;
+    v1 ^= m0;
+    v2 ^= m1;
+    v3 ^= m2;
+
+    const uint64_t d{(uint64_t{36} << 56) | extra};
+    v3 ^= d;
+    SIPROUND;
+    v0 ^= d;
+
+    v2 ^= 0xFF;
+    SIPROUND;
+    SIPROUND;
+    SIPROUND;
+    return v0 ^ v1 ^ v2 ^ v3;
+}
