@@ -5,7 +5,6 @@
 #ifndef BITCOIN_CRYPTO_CHACHA20_VEC_H
 #define BITCOIN_CRYPTO_CHACHA20_VEC_H
 
-#include <array>
 #include <cstdint>
 #include <cstddef>
 #include <span>
@@ -22,7 +21,7 @@ static constexpr size_t CHACHA20_VEC_BLOCKLEN = 64;
 
 namespace chacha20_vec_base
 {
-    void chacha20_crypt_vectorized(std::span<const std::byte>& in_bytes, std::span<std::byte>& out_bytes, const std::array<uint32_t, 12>& input) noexcept;
+    void chacha20_crypt_vectorized(std::span<const std::byte>& in_bytes, std::span<std::byte>& out_bytes, std::span<const uint32_t, 12> input) noexcept;
 }
 
 #endif // ENABLE_CHACHA20_VEC

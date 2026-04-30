@@ -289,7 +289,7 @@ ALWAYS_INLINE void multi_block_crypt(std::span<const std::byte> in_bytes, std::s
 namespace CHACHA20_NAMESPACE {
 #endif
 
-void chacha20_crypt_vectorized(std::span<const std::byte>& in_bytes, std::span<std::byte>& out_bytes, const std::array<uint32_t, 12>& input) noexcept
+void chacha20_crypt_vectorized(std::span<const std::byte>& in_bytes, std::span<std::byte>& out_bytes, std::span<const uint32_t, 12> input) noexcept
 {
 #if !defined(CHACHA20_VEC_ALL_MULTI_STATES_DISABLED)
     assert(in_bytes.size() == out_bytes.size());
