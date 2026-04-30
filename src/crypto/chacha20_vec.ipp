@@ -4,6 +4,9 @@
 
 #include <crypto/chacha20_vec.h>
 
+#include <attributes.h>
+
+#include <array>
 #include <bit>
 #include <cassert>
 #include <cstring>
@@ -21,17 +24,6 @@
 
 
 #if !defined(CHACHA20_VEC_ALL_MULTI_STATES_DISABLED)
-
-#if defined(__has_attribute)
-#  if __has_attribute(always_inline)
-#    define ALWAYS_INLINE __attribute__ ((always_inline)) inline
-#  endif
-#endif
-
-#if !defined(ALWAYS_INLINE)
-#  define ALWAYS_INLINE inline
-#endif
-
 
 namespace {
 
@@ -63,42 +55,42 @@ ALWAYS_INLINE void vec_rotl(vec256& vec)
 }
 
 /** Store a vector in all array elements */
-template <size_t I, size_t ITER = 0>
-ALWAYS_INLINE void arr_set_vec256(std::array<vec256, I>& arr, const vec256& vec)
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_set_vec256(std::array<vec256, N>& arr, const vec256& vec)
 {
-    std::get<ITER>(arr) = vec;
-    if constexpr(ITER + 1 < I ) arr_set_vec256<I, ITER + 1>(arr, vec);
+    std::get<INDEX>(arr) = vec;
+    if constexpr (INDEX + 1 < N) arr_set_vec256<N, INDEX + 1>(arr, vec);
 }
 
 /** Add a vector to all array elements */
-template <size_t I, size_t ITER = 0>
-ALWAYS_INLINE void arr_add_vec256(std::array<vec256, I>& arr, const vec256& vec)
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_add_vec256(std::array<vec256, N>& arr, const vec256& vec)
 {
-    std::get<ITER>(arr) += vec;
-    if constexpr(ITER + 1 < I ) arr_add_vec256<I, ITER + 1>(arr, vec);
+    std::get<INDEX>(arr) += vec;
+    if constexpr (INDEX + 1 < N) arr_add_vec256<N, INDEX + 1>(arr, vec);
 }
 
 /** Add corresponding vectors in arr1 to arr0 */
-template <size_t I, size_t ITER = 0>
-ALWAYS_INLINE void arr_add_arr(std::array<vec256, I>& arr0, const std::array<vec256, I>& arr1)
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_add_arr(std::array<vec256, N>& arr0, const std::array<vec256, N>& arr1)
 {
-    std::get<ITER>(arr0) += std::get<ITER>(arr1);
-    if constexpr(ITER + 1 < I ) arr_add_arr<I, ITER + 1>(arr0, arr1);
+    std::get<INDEX>(arr0) += std::get<INDEX>(arr1);
+    if constexpr (INDEX + 1 < N) arr_add_arr<N, INDEX + 1>(arr0, arr1);
 }
 
 /** Perform add/xor/rotate for the round function */
-template <size_t BITS, size_t I, size_t ITER = 0>
-ALWAYS_INLINE void arr_add_xor_rot(std::array<vec256, I>& arr0, const std::array<vec256, I>& arr1, std::array<vec256, I>& arr2)
+template <size_t BITS, size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_add_xor_rot(std::array<vec256, N>& arr0, const std::array<vec256, N>& arr1, std::array<vec256, N>& arr2)
 {
-    vec256& x = std::get<ITER>(arr0);
-    const vec256& y = std::get<ITER>(arr1);
-    vec256& z = std::get<ITER>(arr2);
+    vec256& x = std::get<INDEX>(arr0);
+    const vec256& y = std::get<INDEX>(arr1);
+    vec256& z = std::get<INDEX>(arr2);
 
     x += y;
     z ^= x;
     vec_rotl<BITS>(z);
 
-    if constexpr(ITER + 1 < I ) arr_add_xor_rot<BITS, I, ITER + 1>(arr0, arr1, arr2);
+    if constexpr (INDEX + 1 < N) arr_add_xor_rot<BITS, N, INDEX + 1>(arr0, arr1, arr2);
 }
 
 /*
@@ -121,36 +113,36 @@ After the second round, they are used (in reverse) to restore the original
 layout.
 
 */
-template <size_t I, size_t ITER = 0>
-ALWAYS_INLINE void arr_shuf0(std::array<vec256, I>& arr)
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_shuf0(std::array<vec256, N>& arr)
 {
-    vec256& x = std::get<ITER>(arr);
+    vec256& x = std::get<INDEX>(arr);
     x = vec256{x[1], x[2], x[3], x[0], x[5], x[6], x[7], x[4]};
 
-    if constexpr(ITER + 1 < I ) arr_shuf0<I, ITER + 1>(arr);
+    if constexpr (INDEX + 1 < N) arr_shuf0<N, INDEX + 1>(arr);
 }
 
-template <size_t I, size_t ITER = 0>
-ALWAYS_INLINE void arr_shuf1(std::array<vec256, I>& arr)
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_shuf1(std::array<vec256, N>& arr)
 {
-    vec256& x = std::get<ITER>(arr);
+    vec256& x = std::get<INDEX>(arr);
     x = vec256{x[2], x[3], x[0], x[1], x[6], x[7], x[4], x[5]};
 
-    if constexpr(ITER + 1 < I ) arr_shuf1<I, ITER + 1>(arr);
+    if constexpr (INDEX + 1 < N) arr_shuf1<N, INDEX + 1>(arr);
 }
 
-template <size_t I, size_t ITER = 0>
-ALWAYS_INLINE void arr_shuf2(std::array<vec256, I>& arr)
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_shuf2(std::array<vec256, N>& arr)
 {
-    vec256& x = std::get<ITER>(arr);
+    vec256& x = std::get<INDEX>(arr);
     x = vec256{x[3], x[0], x[1], x[2], x[7], x[4], x[5], x[6]};
 
-    if constexpr(ITER + 1 < I ) arr_shuf2<I, ITER + 1>(arr);
+    if constexpr (INDEX + 1 < N) arr_shuf2<N, INDEX + 1>(arr);
 }
 
 /* Main round function. */
-template <size_t I, size_t ITER = 0>
-ALWAYS_INLINE void doubleround(std::array<vec256, I>& arr0, std::array<vec256, I>& arr1, std::array<vec256, I>&arr2, std::array<vec256, I>&arr3)
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void doubleround(std::array<vec256, N>& arr0, std::array<vec256, N>& arr1, std::array<vec256, N>&arr2, std::array<vec256, N>&arr3)
 {
     arr_add_xor_rot<16>(arr0, arr1, arr3);
     arr_add_xor_rot<12>(arr2, arr3, arr1);
@@ -166,10 +158,10 @@ ALWAYS_INLINE void doubleround(std::array<vec256, I>& arr0, std::array<vec256, I
     arr_shuf2(arr1);
     arr_shuf1(arr2);
     arr_shuf0(arr3);
-    if constexpr (ITER + 1 < 10) doubleround<I, ITER + 1>(arr0, arr1, arr2, arr3);
+    if constexpr (INDEX + 1 < 10) doubleround<N, INDEX + 1>(arr0, arr1, arr2, arr3);
 }
 
-/* Read 32bytes of input, xor with calculated state, write to output. Assumes
+/* Read 32 bytes of input, xor with calculated state, write to output. Assumes
    that input and output are unaligned, and makes no assumptions about the
    internal layout of vec256;
 */
@@ -184,21 +176,21 @@ ALWAYS_INLINE void vec_read_xor_write(std::span<const std::byte, 32> in_bytes, s
     memcpy(out_bytes.data(), temparr.data(), out_bytes.size());
 }
 
-/* Merge the 128 bit lanes from 2 states to the proper order, then pass each vec_read_xor_write */
-template <size_t I, size_t ITER = 0>
-ALWAYS_INLINE void arr_read_xor_write(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const std::array<vec256, I>& arr0, const std::array<vec256, I>& arr1, const std::array<vec256, I>& arr2, const std::array<vec256, I>& arr3)
+/* Merge the 128-bit lanes from 2 states to the proper order, then pass each vec_read_xor_write */
+template <size_t N, size_t INDEX = 0>
+ALWAYS_INLINE void arr_read_xor_write(std::span<const std::byte> in_bytes, std::span<std::byte> out_bytes, const std::array<vec256, N>& arr0, const std::array<vec256, N>& arr1, const std::array<vec256, N>& arr2, const std::array<vec256, N>& arr3)
 {
-    const vec256& w = std::get<ITER>(arr0);
-    const vec256& x = std::get<ITER>(arr1);
-    const vec256& y = std::get<ITER>(arr2);
-    const vec256& z = std::get<ITER>(arr3);
+    const vec256& w = std::get<INDEX>(arr0);
+    const vec256& x = std::get<INDEX>(arr1);
+    const vec256& y = std::get<INDEX>(arr2);
+    const vec256& z = std::get<INDEX>(arr3);
 
     vec_read_xor_write(in_bytes.first<32>(), out_bytes.first<32>(), __builtin_shufflevector(w, x, 4, 5, 6, 7, 12, 13, 14, 15));
     vec_read_xor_write(in_bytes.subspan<32, 32>(), out_bytes.subspan<32, 32>(), __builtin_shufflevector(y, z, 4, 5, 6, 7, 12, 13, 14, 15));
     vec_read_xor_write(in_bytes.subspan<64, 32>(), out_bytes.subspan<64, 32>(), __builtin_shufflevector(w, x, 0, 1, 2, 3, 8, 9, 10, 11));
     vec_read_xor_write(in_bytes.subspan<96, 32>(), out_bytes.subspan<96, 32>(), __builtin_shufflevector(y, z, 0, 1, 2, 3, 8, 9, 10, 11));
 
-    if constexpr(ITER + 1 < I ) arr_read_xor_write<I, ITER + 1>(in_bytes.subspan<128>(), out_bytes.subspan<128>(), arr0, arr1, arr2, arr3);
+    if constexpr (INDEX + 1 < N) arr_read_xor_write<N, INDEX + 1>(in_bytes.subspan<128>(), out_bytes.subspan<128>(), arr0, arr1, arr2, arr3);
 }
 
 /* Compile-time helper to create addend vectors which used to increment the states
