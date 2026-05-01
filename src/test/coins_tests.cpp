@@ -652,7 +652,7 @@ static MaybeCoin GetCoinsMapEntry(const CCoinsMap& map, const COutPoint& outp = 
     return MISSING;
 }
 
-static void WriteCoinsViewEntry(CCoinsView& view, const MaybeCoin& cache_coin)
+static void WriteCoinsViewEntry(CCoinsViewBatchWriter& view, const MaybeCoin& cache_coin)
 {
     CoinsCachePair sentinel{};
     sentinel.second.SelfRef(sentinel);

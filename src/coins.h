@@ -303,7 +303,7 @@ private:
     bool m_will_erase;
 };
 
-/** Pure abstract view on the open txout dataset. */
+/** Pure abstract reader for the open txout dataset. */
 class CCoinsView
 {
 public:
@@ -324,16 +324,33 @@ public:
 
     //! Retrieve the block hash whose state this CCoinsView currently represents
     virtual uint256 GetBestBlock() const = 0;
+};
+
+/** Pure abstract writer for applying cache batches to a coins view. */
+class CCoinsViewBatchWriter
+{
+public:
+    virtual ~CCoinsViewBatchWriter() = default;
+
+    //! Do a bulk modification (multiple Coin changes + BestBlock change).
+    //! The passed cursor is used to iterate through the coins.
+    virtual void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) = 0;
+};
+
+/** Pure abstract interface for iterating and sizing persistent coins storage. */
+class CCoinsViewStorage
+{
+public:
+    virtual ~CCoinsViewStorage() = default;
+
+    //! Retrieve the block hash whose state this coins storage currently represents
+    virtual uint256 GetBestBlock() const = 0;
 
     //! Retrieve the range of blocks that may have been only partially written.
     //! If the database is in a consistent state, the result is the empty vector.
     //! Otherwise, a two-element vector is returned consisting of the new and
     //! the old block hash, in that order.
     virtual std::vector<uint256> GetHeadBlocks() const = 0;
-
-    //! Do a bulk modification (multiple Coin changes + BestBlock change).
-    //! The passed cursor is used to iterate through the coins.
-    virtual void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) = 0;
 
     //! Get a cursor to iterate over the whole state. Implementations may return nullptr.
     virtual std::unique_ptr<CCoinsViewCursor> Cursor() const = 0;
@@ -343,7 +360,7 @@ public:
 };
 
 /** Noop coins view. */
-class CoinsViewEmpty : public CCoinsView
+class CoinsViewEmpty : public CCoinsView, public CCoinsViewBatchWriter, public CCoinsViewStorage
 {
 protected:
     CoinsViewEmpty() = default;
@@ -376,24 +393,19 @@ protected:
 public:
     explicit CCoinsViewBacked(CCoinsView* in_view) : base{Assert(in_view)} {}
 
-    void SetBackend(CCoinsView& in_view) { base = &in_view; }
-
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override { return base->GetCoin(outpoint); }
     std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override { return base->PeekCoin(outpoint); }
     bool HaveCoin(const COutPoint& outpoint) const override { return base->HaveCoin(outpoint); }
     uint256 GetBestBlock() const override { return base->GetBestBlock(); }
-    std::vector<uint256> GetHeadBlocks() const override { return base->GetHeadBlocks(); }
-    void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) override { base->BatchWrite(cursor, block_hash); }
-    std::unique_ptr<CCoinsViewCursor> Cursor() const override { return base->Cursor(); }
-    size_t EstimateSize() const override { return base->EstimateSize(); }
 };
 
 
 /** CCoinsView that adds a memory cache for transactions to another CCoinsView */
-class CCoinsViewCache : public CCoinsViewBacked
+class CCoinsViewCache : public CCoinsViewBacked, public CCoinsViewBatchWriter
 {
 private:
     const bool m_deterministic;
+    CCoinsViewBatchWriter* m_batch_writer;
 
 protected:
     /**
@@ -428,16 +440,18 @@ public:
      */
     CCoinsViewCache(const CCoinsViewCache &) = delete;
 
+    // Backend management
+    void SetBackend(CCoinsView& in_view);
+
     // Standard CCoinsView methods
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
     std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override;
     bool HaveCoin(const COutPoint& outpoint) const override;
     uint256 GetBestBlock() const override;
     void SetBestBlock(const uint256& block_hash);
+
+    // CCoinsViewBatchWriter method
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) override;
-    std::unique_ptr<CCoinsViewCursor> Cursor() const override {
-        throw std::logic_error("CCoinsViewCache cursor iteration not supported.");
-    }
 
     /**
      * Check if we have the given utxo already loaded in this cache.
@@ -594,7 +608,7 @@ const Coin& AccessByTxid(const CCoinsViewCache& cache, const Txid& txid);
  *
  * Writes do not need similar protection, as failure to write is handled by the caller.
 */
-class CCoinsViewErrorCatcher final : public CCoinsViewBacked
+class CCoinsViewErrorCatcher final : public CCoinsViewBacked, public CCoinsViewBatchWriter
 {
 public:
     explicit CCoinsViewErrorCatcher(CCoinsView* view) : CCoinsViewBacked(view) {}
@@ -606,6 +620,7 @@ public:
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
     bool HaveCoin(const COutPoint& outpoint) const override;
     std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override;
+    void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) override;
 
 private:
     /** A list of callbacks to execute upon leveldb read error. */

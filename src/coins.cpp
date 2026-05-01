@@ -30,9 +30,16 @@ std::optional<Coin> CCoinsViewCache::PeekCoin(const COutPoint& outpoint) const
 
 CCoinsViewCache::CCoinsViewCache(CCoinsView* in_base, bool deterministic) :
     CCoinsViewBacked(in_base), m_deterministic(deterministic),
+    m_batch_writer{dynamic_cast<CCoinsViewBatchWriter*>(Assert(in_base))},
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
     m_sentinel.second.SelfRef(m_sentinel);
+}
+
+void CCoinsViewCache::SetBackend(CCoinsView& in_view)
+{
+    base = &in_view;
+    m_batch_writer = dynamic_cast<CCoinsViewBatchWriter*>(&in_view);
 }
 
 size_t CCoinsViewCache::DynamicMemoryUsage() const {
@@ -260,7 +267,10 @@ void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& in
 void CCoinsViewCache::Flush(bool reallocate_cache)
 {
     auto cursor{CoinsViewCacheCursor(m_dirty_count, m_sentinel, cacheCoins, /*will_erase=*/true)};
-    base->BatchWrite(cursor, m_block_hash);
+    if (!m_batch_writer) {
+        throw std::logic_error("CCoinsViewCache cannot flush to a read-only backend.");
+    }
+    m_batch_writer->BatchWrite(cursor, m_block_hash);
     Assume(m_dirty_count == 0);
     cacheCoins.clear();
     if (reallocate_cache) {
@@ -272,7 +282,10 @@ void CCoinsViewCache::Flush(bool reallocate_cache)
 void CCoinsViewCache::Sync()
 {
     auto cursor{CoinsViewCacheCursor(m_dirty_count, m_sentinel, cacheCoins, /*will_erase=*/false)};
-    base->BatchWrite(cursor, m_block_hash);
+    if (!m_batch_writer) {
+        throw std::logic_error("CCoinsViewCache cannot sync to a read-only backend.");
+    }
+    m_batch_writer->BatchWrite(cursor, m_block_hash);
     Assume(m_dirty_count == 0);
     if (m_sentinel.second.Next() != &m_sentinel) {
         /* BatchWrite must clear flags of all entries */
@@ -406,4 +419,9 @@ bool CCoinsViewErrorCatcher::HaveCoin(const COutPoint& outpoint) const
 std::optional<Coin> CCoinsViewErrorCatcher::PeekCoin(const COutPoint& outpoint) const
 {
     return ExecuteBackedWrapper<std::optional<Coin>>([&]() { return CCoinsViewBacked::PeekCoin(outpoint); }, m_err_callbacks);
+}
+
+void CCoinsViewErrorCatcher::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash)
+{
+    Assert(dynamic_cast<CCoinsViewBatchWriter*>(base))->BatchWrite(cursor, block_hash);
 }
