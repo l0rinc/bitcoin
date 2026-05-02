@@ -2941,7 +2941,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
     // Apply the block atomically to the chain state.
     const auto time_start{SteadyClock::now()};
     {
-        CCoinsView& coins_backend{CoinsTip()};
+        CCoinsViewCacheBackend& coins_backend{CoinsTip()};
         CCoinsViewCache view{coins_backend};
         assert(view.GetBestBlock() == pindexDelete->GetBlockHash());
         if (DisconnectBlock(block, pindexDelete, view) != DISCONNECT_OK) {
@@ -4510,7 +4510,7 @@ BlockValidationState TestBlockValidity(
     index_dummy.pprev = tip;
     index_dummy.nHeight = tip->nHeight + 1;
     index_dummy.phashBlock = &block_hash;
-    CCoinsView& coins_backend{chainstate.CoinsTip()};
+    CCoinsViewCacheBackend& coins_backend{chainstate.CoinsTip()};
     CCoinsViewCache view_dummy{coins_backend};
 
     // Set fJustCheck to true in order to update, and not clear, validation caches.
@@ -4603,7 +4603,7 @@ CVerifyDB::~CVerifyDB()
 VerifyDBResult CVerifyDB::VerifyDB(
     Chainstate& chainstate,
     const Consensus::Params& consensus_params,
-    CCoinsView& coinsview,
+    CCoinsViewCacheBackend& coinsview,
     int nCheckLevel, int nCheckDepth)
 {
     AssertLockHeld(cs_main);

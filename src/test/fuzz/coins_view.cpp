@@ -89,10 +89,10 @@ void initialize_coins_view()
     static const auto testing_setup = MakeNoLogFileContext<>();
 }
 
-void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& coins_view_cache, CCoinsView& original_backend, bool require_non_null_best_block)
+void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& coins_view_cache, CCoinsViewCacheBackend& original_backend, bool require_non_null_best_block)
 {
     bool good_data{true};
-    CCoinsView* backend_coins_view{&original_backend};
+    CCoinsViewCacheBackend* backend_coins_view{&original_backend};
 
     if (require_non_null_best_block) coins_view_cache.SetBestBlock(uint256::ONE);
     COutPoint random_out_point;

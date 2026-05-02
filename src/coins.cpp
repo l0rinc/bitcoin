@@ -28,7 +28,7 @@ std::optional<Coin> CCoinsViewCache::PeekCoin(const COutPoint& outpoint) const
     return base->PeekCoin(outpoint);
 }
 
-CCoinsViewCache::CCoinsViewCache(CCoinsView& in_base, bool deterministic) :
+CCoinsViewCache::CCoinsViewCache(CCoinsViewCacheBackend& in_base, bool deterministic) :
     m_deterministic(deterministic), base{&in_base},
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
