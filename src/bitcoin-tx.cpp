@@ -586,7 +586,7 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
     // starts as a clone of the raw tx:
     CMutableTransaction mergedTx{tx};
     const CMutableTransaction txv{tx};
-    CCoinsViewCache view{&CoinsViewEmpty::Get()};
+    CCoinsViewCache view{CoinsViewEmpty::Get()};
 
     if (!registers.contains("privatekeys"))
         throw std::runtime_error("privatekeys register variable must be set.");

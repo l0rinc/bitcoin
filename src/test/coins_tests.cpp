@@ -76,7 +76,7 @@ public:
 class CCoinsViewCacheTest : public CCoinsViewCache
 {
 public:
-    explicit CCoinsViewCacheTest(CCoinsView* _base) : CCoinsViewCache(_base) {}
+    explicit CCoinsViewCacheTest(CCoinsView& _base) : CCoinsViewCache(_base) {}
 
     void SelfTest(bool sanity_check = true) const
     {
@@ -138,7 +138,7 @@ void SimulationTest(CCoinsView* base, bool fake_best_block)
 
     // The cache stack.
     std::vector<std::unique_ptr<CCoinsViewCacheTest>> stack; // A stack of CCoinsViewCaches on top.
-    stack.push_back(std::make_unique<CCoinsViewCacheTest>(base)); // Start with one cache.
+    stack.push_back(std::make_unique<CCoinsViewCacheTest>(*base)); // Start with one cache.
 
     // Use a limited set of random transaction ids, so we do test overwriting entries.
     std::vector<Txid> txids;
@@ -260,7 +260,7 @@ void SimulationTest(CCoinsView* base, bool fake_best_block)
                 } else {
                     removed_all_caches = true;
                 }
-                stack.push_back(std::make_unique<CCoinsViewCacheTest>(tip));
+                stack.push_back(std::make_unique<CCoinsViewCacheTest>(*tip));
                 if (stack.size() == 4) {
                     reached_4_caches = true;
                 }
@@ -339,7 +339,7 @@ BOOST_FIXTURE_TEST_CASE(updatecoins_simulation_test, UpdateTest)
     // The cache stack.
     CCoinsViewTest base{m_rng}; // A CCoinsViewTest at the bottom.
     std::vector<std::unique_ptr<CCoinsViewCacheTest>> stack; // A stack of CCoinsViewCaches on top.
-    stack.push_back(std::make_unique<CCoinsViewCacheTest>(&base)); // Start with one cache.
+    stack.push_back(std::make_unique<CCoinsViewCacheTest>(base)); // Start with one cache.
 
     // Track the txids we've used in various sets
     std::set<COutPoint> coinbase_coins;
@@ -511,7 +511,7 @@ BOOST_FIXTURE_TEST_CASE(updatecoins_simulation_test, UpdateTest)
                 if (stack.size() > 0) {
                     tip = stack.back().get();
                 }
-                stack.push_back(std::make_unique<CCoinsViewCacheTest>(tip));
+                stack.push_back(std::make_unique<CCoinsViewCacheTest>(*tip));
             }
         }
     }
@@ -678,8 +678,9 @@ public:
         }
     }
 
-    CCoinsViewCacheTest base{&CoinsViewEmpty::Get()};
-    CCoinsViewCacheTest cache{&base};
+    CCoinsViewCacheTest base{CoinsViewEmpty::Get()};
+    CCoinsView& cache_base{base};
+    CCoinsViewCacheTest cache{cache_base};
 };
 
 static void CheckAccessCoin(const CAmount base_value, const MaybeCoin& cache_coin, const MaybeCoin& expected)
@@ -1051,8 +1052,9 @@ BOOST_FIXTURE_TEST_CASE(ccoins_flush_behavior, FlushTest)
     // Create two in-memory caches atop a leveldb view.
     CCoinsViewDB base{{.path = "test", .cache_bytes = 8_MiB, .memory_only = true}, {}};
     std::vector<std::unique_ptr<CCoinsViewCacheTest>> caches;
-    caches.push_back(std::make_unique<CCoinsViewCacheTest>(&base));
-    caches.push_back(std::make_unique<CCoinsViewCacheTest>(caches.back().get()));
+    caches.push_back(std::make_unique<CCoinsViewCacheTest>(base));
+    CCoinsView& cache_base{*caches.back()};
+    caches.push_back(std::make_unique<CCoinsViewCacheTest>(cache_base));
 
     for (const auto& view : caches) {
         TestFlushBehavior(view.get(), base, caches, /*do_erasing_flush=*/false);
@@ -1087,7 +1089,7 @@ BOOST_AUTO_TEST_CASE(coins_resource_is_used)
 
 BOOST_AUTO_TEST_CASE(ccoins_addcoin_exception_keeps_usage_balanced)
 {
-    CCoinsViewCacheTest cache{&CoinsViewEmpty::Get()};
+    CCoinsViewCacheTest cache{CoinsViewEmpty::Get()};
 
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
 
@@ -1104,7 +1106,7 @@ BOOST_AUTO_TEST_CASE(ccoins_addcoin_exception_keeps_usage_balanced)
 
 BOOST_AUTO_TEST_CASE(ccoins_emplace_duplicate_keeps_usage_balanced)
 {
-    CCoinsViewCacheTest cache{&CoinsViewEmpty::Get()};
+    CCoinsViewCacheTest cache{CoinsViewEmpty::Get()};
 
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
 
@@ -1122,12 +1124,12 @@ BOOST_AUTO_TEST_CASE(ccoins_emplace_duplicate_keeps_usage_balanced)
 BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
 {
     CCoinsViewTest root{m_rng};
-    CCoinsViewCache root_cache{&root};
+    CCoinsViewCache root_cache{root};
     uint256 base_best_block{m_rng.rand256()};
     root_cache.SetBestBlock(base_best_block);
     root_cache.Flush();
 
-    CCoinsViewCache cache{&root};
+    CCoinsViewCache cache{root};
 
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
 
@@ -1178,13 +1180,13 @@ BOOST_AUTO_TEST_CASE(ccoins_peekcoin)
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
     const Coin coin{CTxOut{m_rng.randrange(10), CScript{}}, 1, false};
     {
-        CCoinsViewCache cache{&base};
+        CCoinsViewCache cache{base};
         cache.AddCoin(outpoint, Coin{coin}, /*possible_overwrite=*/false);
         cache.Flush();
     }
 
     // Verify PeekCoin can read through the cache stack without mutating the intermediate cache.
-    CCoinsViewCacheTest main_cache{&base};
+    CCoinsViewCacheTest main_cache{base};
     const auto fetched{main_cache.PeekCoin(outpoint)};
     BOOST_CHECK(fetched.has_value());
     BOOST_CHECK(*fetched == coin);
