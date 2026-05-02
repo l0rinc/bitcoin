@@ -39,7 +39,7 @@ CBlock CreateBlock() noexcept
     return block;
 }
 
-void PopulateView(const CBlock& block, CCoinsView& view, bool spent = false)
+void PopulateView(const CBlock& block, CCoinsViewCacheBackend& view, bool spent = false)
 {
     CCoinsViewCache cache{view};
     cache.SetBestBlock(uint256::ONE);

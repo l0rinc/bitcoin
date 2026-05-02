@@ -2915,7 +2915,7 @@ static RPCMethod getdescriptoractivity()
         const CTxMemPool& mempool = EnsureMemPool(node);
         LOCK(::cs_main);
         LOCK(mempool.cs);
-        CCoinsView& coins_backend{active_chainstate.CoinsTip()};
+        CCoinsViewCacheBackend& coins_backend{active_chainstate.CoinsTip()};
         const CCoinsViewCache coins_view{coins_backend};
 
         for (const CTxMemPoolEntry& e : mempool.entryAll()) {

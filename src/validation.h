@@ -443,7 +443,7 @@ public:
     [[nodiscard]] VerifyDBResult VerifyDB(
         Chainstate& chainstate,
         const Consensus::Params& consensus_params,
-        CCoinsView& coinsview,
+        CCoinsViewCacheBackend& coinsview,
         int nCheckLevel,
         int nCheckDepth) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 };
