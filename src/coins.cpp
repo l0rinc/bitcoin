@@ -395,15 +395,15 @@ static ReturnType ExecuteBackedWrapper(Func func, const std::vector<std::functio
 
 std::optional<Coin> CCoinsViewErrorCatcher::GetCoin(const COutPoint& outpoint) const
 {
-    return ExecuteBackedWrapper<std::optional<Coin>>([&]() { return CCoinsViewBacked::GetCoin(outpoint); }, m_err_callbacks);
+    return ExecuteBackedWrapper<std::optional<Coin>>([&]() { return base->GetCoin(outpoint); }, m_err_callbacks);
 }
 
 bool CCoinsViewErrorCatcher::HaveCoin(const COutPoint& outpoint) const
 {
-    return ExecuteBackedWrapper<bool>([&]() { return CCoinsViewBacked::HaveCoin(outpoint); }, m_err_callbacks);
+    return ExecuteBackedWrapper<bool>([&]() { return base->HaveCoin(outpoint); }, m_err_callbacks);
 }
 
 std::optional<Coin> CCoinsViewErrorCatcher::PeekCoin(const COutPoint& outpoint) const
 {
-    return ExecuteBackedWrapper<std::optional<Coin>>([&]() { return CCoinsViewBacked::PeekCoin(outpoint); }, m_err_callbacks);
+    return ExecuteBackedWrapper<std::optional<Coin>>([&]() { return base->PeekCoin(outpoint); }, m_err_callbacks);
 }

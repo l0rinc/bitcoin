@@ -356,7 +356,7 @@ void Chainstate::MaybeUpdateMempoolForReorg(
                 return true;
             }
         } else {
-            const CCoinsViewMemPool view_mempool{&CoinsTip(), *m_mempool};
+            const CCoinsViewMemPool view_mempool{CoinsTip(), *m_mempool};
             const std::optional<LockPoints> new_lock_points{CalculateLockPointsAtTip(m_chain.Tip(), view_mempool, tx)};
             if (new_lock_points.has_value() && CheckSequenceLocksAtTip(m_chain.Tip(), *new_lock_points)) {
                 // Now update the mempool entry lockpoints as well.
@@ -439,7 +439,7 @@ public:
     explicit MemPoolAccept(CTxMemPool& mempool, Chainstate& active_chainstate) :
         m_pool(mempool),
         m_view(&CoinsViewEmpty::Get()),
-        m_viewmempool(&active_chainstate.CoinsTip(), m_pool),
+        m_viewmempool(active_chainstate.CoinsTip(), m_pool),
         m_active_chainstate(active_chainstate)
     {
     }
@@ -1848,7 +1848,7 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 
 CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
     : m_dbview{std::move(db_params), std::move(options)},
-      m_catcherview(&m_dbview) {}
+      m_catcherview{m_dbview} {}
 
 void CoinsViews::InitCache()
 {

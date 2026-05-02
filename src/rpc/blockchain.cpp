@@ -1247,7 +1247,7 @@ static RPCMethod gettxout()
     if (fMempool) {
         const CTxMemPool& mempool = EnsureMemPool(node);
         LOCK(mempool.cs);
-        CCoinsViewMemPool view(coins_view, mempool);
+        CCoinsViewMemPool view{*coins_view, mempool};
         if (!mempool.isSpent(out)) coin = view.GetCoin(out);
     } else {
         coin = coins_view->GetCoin(out);
