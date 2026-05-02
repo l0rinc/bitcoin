@@ -1662,6 +1662,91 @@ static ChainstateLoadResult InitAndLoadChainstate(
     return {status, error};
 };
 
+bool UserProtocolRulesCheck()
+{
+    const auto rules_requested{gArgs.GetArgs(CONSENSUSRULES_CONFIG_NAME)};
+    for (const auto& rulesok : rules_requested) {
+        if (rulesok == CONSENSUSRULES_REQUIRED) continue;
+        return InitError(strprintf(_("Unknown rule specified in -%s: %s"), CONSENSUSRULES_CONFIG_NAME, rulesok));
+    }
+    return true;
+}
+
+enum class RDTSConsentFlag {
+    RUNTIME_CHECK,
+    IMPLICIT,
+};
+
+constexpr RDTSConsentFlag g_rdts_consent{RDTS_CONSENT};
+
+bool UserProtocolRulesConsent()
+{
+    if (g_rdts_consent == RDTSConsentFlag::IMPLICIT) {
+        LogPrintf("User already consented to '%s' consensus rules (at installation)\n", CONSENSUSRULES_REQUIRED);
+        return true;
+    }
+    for (const auto& rulesok : gArgs.GetArgs(CONSENSUSRULES_CONFIG_NAME)) {
+        if (rulesok == CONSENSUSRULES_REQUIRED) {
+            LogPrintf("User already consented to '%s' consensus rules (in config)\n", CONSENSUSRULES_REQUIRED);
+            return true;
+        }
+    }
+
+    bilingual_str msg = strprintf(_(
+        "BIP110/RDTS Network Upgrade\n"
+        "\n"
+        "This version of %s applies the BIP110 (RDTS) network upgrade, "
+        "which fixes critical vulnerabilities in long-standing network design. "
+        "However, you are in control of your own software, and this application asks for explicit confirmation.\n"
+        "\n"
+        "Important: "
+        "Because this upgrade already has broad community support, "
+        "reverting to an older software version does not reject it. "
+        "Running outdated software after any network upgrade only leaves your node vulnerable to displaying fake or fraudulent transactions. "
+        "To effectively reject this upgrade, you need to run alternative software designed to split away from the upgraded network.\n"
+        "\n"
+        "For more information, see: %s"
+    ),
+        CLIENT_NAME,
+        "https://bitcoinknots.org/learn/2026-rdts");
+    const bilingual_str msg_manual_suffix = strprintf(_(
+        "To confirm this upgrade, add to your %s file: %s"
+    ),
+        gArgs.GetPathArg("-conf", BITCOIN_CONF_FILENAME).utf8string(),
+        CONSENSUSRULES_CONFIG_NAME + "=" + CONSENSUSRULES_REQUIRED);
+    const bilingual_str msg_manual = msg + Untranslated("\n\n") + msg_manual_suffix;
+
+    if (!gArgs.GetSettingsPath()) {
+        msg = msg_manual;
+    }
+
+    const bool consent = uiInterface.ThreadSafeQuestion(
+        _("Attention:") + Untranslated(" ") + msg,
+        msg_manual.original
+        , "Attention", CClientUIInterface::MSG_WARNING | CClientUIInterface::BTN_ABORT);
+
+    if (consent) {
+        if (gArgs.GetSettingsPath()) {
+            // Write to settings.json so we don't ask anymore
+            LogPrintf("User interactively consented to '%s' consensus rules (%s)\n", CONSENSUSRULES_REQUIRED, "remembering for next time");
+            gArgs.LockSettings([&](common::Settings& settings) {
+                auto& setting = settings.rw_settings[CONSENSUSRULES_CONFIG_NAME];
+                if (setting.isArray()) {
+                    // Normally, it doesn't make sense to support multiple rulesets, but if the user has done so already, don't lose the current set
+                    setting.push_back(CONSENSUSRULES_REQUIRED);
+                } else {
+                    setting = CONSENSUSRULES_REQUIRED;
+                }
+            });
+            gArgs.WriteSettingsFile();
+        } else {
+            LogPrintf("User interactively consented to '%s' consensus rules (%s)\n", CONSENSUSRULES_REQUIRED, "settings disabled, so can't save");
+        }
+    }
+
+    return consent;
+}
+
 bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 {
     const ArgsManager& args = *Assert(node.args);
