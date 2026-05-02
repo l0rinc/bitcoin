@@ -39,6 +39,7 @@
 #include <ipc/exception.h>
 #include <kernel/blockmanager_opts.h>
 #include <kernel/caches.h>
+#include <kernel/chainparams.h>
 #include <kernel/chainstatemanager_opts.h>
 #include <kernel/checks.h>
 #include <kernel/context.h>
@@ -1672,13 +1673,6 @@ bool UserProtocolRulesCheck()
     return true;
 }
 
-enum class RDTSConsentFlag {
-    RUNTIME_CHECK,
-    IMPLICIT,
-};
-
-constexpr RDTSConsentFlag g_rdts_consent{RDTS_CONSENT};
-
 bool UserProtocolRulesConsent()
 {
     if (g_rdts_consent == RDTSConsentFlag::IMPLICIT) {
@@ -1827,6 +1821,26 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     // when load() and start() interface methods are called below.
     g_wallet_init_interface.Construct(node);
     uiInterface.InitWallet();
+
+    if (!UserProtocolRulesCheck()) {
+        return false;
+    }
+
+    if (!(chainparams.IsTestChain() || UserProtocolRulesConsent())) {
+        if (g_rdts_consent == RDTSConsentFlag::RUNTIME_CHECK) {
+            return InitError(_("User has not consented to supported protocol rules. Exiting"));
+        } else {
+            LogError("User has not consented to supported protocol rules. This node will STILL enforce them. Warning every hour.");
+            g_rdts_warning = true;
+            scheduler.scheduleEvery([]{
+                LogError("This software applies the BIP110/RDTS network upgrade, which fixes critical vulnerabilities, but explicit user confirmation has not been configured.\n");
+                LogError("For more information, see: %s\n", "https://bitcoinknots.org/learn/2026-rdts");
+                LogError("To confirm this upgrade and dismiss this warning, add to your %s file: %s\n",
+                    gArgs.GetPathArg("-conf", BITCOIN_CONF_FILENAME).utf8string(),
+                    CONSENSUSRULES_CONFIG_NAME + "=" + CONSENSUSRULES_REQUIRED);
+            }, std::chrono::hours{1});
+        }
+    }
 
     if (interfaces::Ipc* ipc = node.init->ipc()) {
         for (std::string address : gArgs.GetArgs("-ipcbind")) {
