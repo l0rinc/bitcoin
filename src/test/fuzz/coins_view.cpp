@@ -334,7 +334,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
 FUZZ_TARGET(coins_view, .init = initialize_coins_view)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
-    CCoinsViewCache coins_view_cache{&CoinsViewEmpty::Get(), /*deterministic=*/true};
+    CCoinsViewCache coins_view_cache{CoinsViewEmpty::Get(), /*deterministic=*/true};
     TestCoinsView(fuzzed_data_provider, coins_view_cache, CoinsViewEmpty::Get(), /*require_non_null_best_block=*/false);
 }
 
@@ -347,7 +347,7 @@ FUZZ_TARGET(coins_view_db, .init = initialize_coins_view)
         .memory_only = true,
     };
     CCoinsViewDB backend_coins_view{std::move(db_params), CoinsViewOptions{}};
-    CCoinsViewCache coins_view_cache{&backend_coins_view, /*deterministic=*/true};
+    CCoinsViewCache coins_view_cache{backend_coins_view, /*deterministic=*/true};
     TestCoinsView(fuzzed_data_provider, coins_view_cache, backend_coins_view, /*require_non_null_best_block=*/true);
     assert(backend_coins_view.Cursor());
     (void)backend_coins_view.EstimateSize();
@@ -361,7 +361,7 @@ FUZZ_TARGET(coins_view_db, .init = initialize_coins_view)
 FUZZ_TARGET(coins_view_overlay, .init = initialize_coins_view)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
-    MutationGuardCoinsViewCache backend_cache{&CoinsViewEmpty::Get(), /*deterministic=*/true};
-    CoinsViewOverlay coins_view_cache{&backend_cache, /*deterministic=*/true};
+    MutationGuardCoinsViewCache backend_cache{CoinsViewEmpty::Get(), /*deterministic=*/true};
+    CoinsViewOverlay coins_view_cache{backend_cache, /*deterministic=*/true};
     TestCoinsView(fuzzed_data_provider, coins_view_cache, backend_cache, /*require_non_null_best_block=*/false);
 }

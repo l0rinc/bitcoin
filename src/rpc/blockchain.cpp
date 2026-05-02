@@ -2915,7 +2915,8 @@ static RPCMethod getdescriptoractivity()
         const CTxMemPool& mempool = EnsureMemPool(node);
         LOCK(::cs_main);
         LOCK(mempool.cs);
-        const CCoinsViewCache& coins_view = &active_chainstate.CoinsTip();
+        CCoinsView& coins_backend{active_chainstate.CoinsTip()};
+        const CCoinsViewCache coins_view{coins_backend};
 
         for (const CTxMemPoolEntry& e : mempool.entryAll()) {
             const auto& tx = e.GetSharedTx();
@@ -3249,7 +3250,7 @@ UniValue CreateRolledBackUTXOSnapshot(
     const CBlockIndex* tip = nullptr;
     LogInfo("Copying current UTXO set to temporary database.");
     {
-        CCoinsViewCache temp_cache(temp_db.get());
+        CCoinsViewCache temp_cache{*temp_db};
         std::unique_ptr<CCoinsViewCursor> cursor;
         {
             LOCK(::cs_main);
@@ -3290,7 +3291,7 @@ UniValue CreateRolledBackUTXOSnapshot(
 
     const CBlockIndex* block_index{tip};
     const size_t total_blocks{static_cast<size_t>(block_index->nHeight - target->nHeight)};
-    CCoinsViewCache rollback_cache(temp_db.get());
+    CCoinsViewCache rollback_cache{*temp_db};
     rollback_cache.SetBestBlock(block_index->GetBlockHash());
     size_t blocks_processed = 0;
     int last_progress{0};

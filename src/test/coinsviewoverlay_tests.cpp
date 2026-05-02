@@ -41,7 +41,7 @@ CBlock CreateBlock() noexcept
 
 void PopulateView(const CBlock& block, CCoinsView& view, bool spent = false)
 {
-    CCoinsViewCache cache{&view};
+    CCoinsViewCache cache{view};
     cache.SetBestBlock(uint256::ONE);
 
     for (const auto& tx : block.vtx | std::views::drop(1)) {
@@ -83,8 +83,8 @@ BOOST_AUTO_TEST_CASE(fetch_inputs_from_db)
     const auto block{CreateBlock()};
     CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
     PopulateView(block, db);
-    CCoinsViewCache main_cache{&db};
-    CoinsViewOverlay view{&main_cache};
+    CCoinsViewCache main_cache{db};
+    CoinsViewOverlay view{main_cache};
     const auto& outpoint{block.vtx[1]->vin[0].prevout};
 
     BOOST_CHECK(view.HaveCoin(outpoint));
@@ -109,9 +109,9 @@ BOOST_AUTO_TEST_CASE(fetch_inputs_from_cache)
 {
     const auto block{CreateBlock()};
     CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
-    CCoinsViewCache main_cache{&db};
+    CCoinsViewCache main_cache{db};
     PopulateView(block, main_cache);
-    CoinsViewOverlay view{&main_cache};
+    CoinsViewOverlay view{main_cache};
     CheckCache(block, view);
 
     const auto& outpoint{block.vtx[1]->vin[0].prevout};
@@ -128,10 +128,10 @@ BOOST_AUTO_TEST_CASE(fetch_no_double_spend)
     const auto block{CreateBlock()};
     CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
     PopulateView(block, db);
-    CCoinsViewCache main_cache{&db};
+    CCoinsViewCache main_cache{db};
     // Add all inputs as spent already in cache
     PopulateView(block, main_cache, /*spent=*/true);
-    CoinsViewOverlay view{&main_cache};
+    CoinsViewOverlay view{main_cache};
     for (const auto& tx : block.vtx) {
         for (const auto& in : tx->vin) {
             const auto& c{view.AccessCoin(in.prevout)};
@@ -148,8 +148,8 @@ BOOST_AUTO_TEST_CASE(fetch_no_inputs)
 {
     const auto block{CreateBlock()};
     CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
-    CCoinsViewCache main_cache{&db};
-    CoinsViewOverlay view{&main_cache};
+    CCoinsViewCache main_cache{db};
+    CoinsViewOverlay view{main_cache};
     for (const auto& tx : block.vtx) {
         for (const auto& in : tx->vin) {
             const auto& c{view.AccessCoin(in.prevout)};
@@ -162,4 +162,3 @@ BOOST_AUTO_TEST_CASE(fetch_no_inputs)
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-

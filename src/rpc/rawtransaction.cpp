@@ -623,7 +623,7 @@ static RPCMethod combinerawtransaction()
     CMutableTransaction mergedTx(txVariants[0]);
 
     // Fetch previous transactions (inputs):
-    CCoinsViewCache view{&CoinsViewEmpty::Get()};
+    CCoinsViewCache view{CoinsViewEmpty::Get()};
     {
         NodeContext& node = EnsureAnyNodeContext(request.context);
         const CTxMemPool& mempool = EnsureMemPool(node);
