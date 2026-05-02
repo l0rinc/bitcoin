@@ -384,8 +384,6 @@ protected:
 public:
     explicit CCoinsViewBacked(CCoinsView* in_view) : base{Assert(in_view)} {}
 
-    void SetBackend(CCoinsView& in_view) { base = &in_view; }
-
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override { return base->GetCoin(outpoint); }
     std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override { return base->PeekCoin(outpoint); }
     bool HaveCoin(const COutPoint& outpoint) const override { return base->HaveCoin(outpoint); }
@@ -395,12 +393,14 @@ public:
 
 
 /** CCoinsView that adds a memory cache for transactions to another CCoinsView */
-class CCoinsViewCache : public CCoinsViewBacked
+class CCoinsViewCache : public CCoinsView
 {
 private:
     const bool m_deterministic;
 
 protected:
+    CCoinsView* base;
+
     /**
      * Make mutable so that we can "fill the cache" even from Get-methods
      * declared as "const".
@@ -432,6 +432,9 @@ public:
      * By deleting the copy constructor, we prevent accidentally using it when one intends to create a cache on top of a base cache.
      */
     CCoinsViewCache(const CCoinsViewCache &) = delete;
+
+    // Backend management
+    void SetBackend(CCoinsView& in_view) { base = &in_view; }
 
     // Standard CCoinsView methods
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
