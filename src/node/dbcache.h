@@ -13,7 +13,7 @@
 #include <limits>
 
 //! min. -dbcache (bytes)
-static constexpr size_t MIN_DB_CACHE{4_MiB};
+static constexpr size_t MIN_DBCACHE_BYTES{4_MiB};
 //! Maximum dbcache size on current architecture.
 static constexpr size_t MAX_DBCACHE_BYTES{sizeof(void*) == 4 ? 1_GiB : std::numeric_limits<size_t>::max()};
 
