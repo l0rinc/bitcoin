@@ -4,20 +4,12 @@
 
 #include <crypto/siphash.h>
 
-#include <uint256.h>
-
-#include <bit>
 #include <cassert>
 #include <span>
 
-#define SIPROUND do { \
-    v0 += v1; v1 = std::rotl(v1, 13); v1 ^= v0; \
-    v0 = std::rotl(v0, 32); \
-    v2 += v3; v3 = std::rotl(v3, 16); v3 ^= v2; \
-    v0 += v3; v3 = std::rotl(v3, 21); v3 ^= v0; \
-    v2 += v1; v1 = std::rotl(v1, 17); v1 ^= v2; \
-    v2 = std::rotl(v2, 32); \
-} while (0)
+using siphash_detail::SipRound;
+
+#define SIPROUND SipRound(v0, v1, v2, v3)
 
 CSipHasher::CSipHasher(uint64_t k0, uint64_t k1) : m_state{k0, k1} {}
 
@@ -155,37 +147,6 @@ uint64_t PresaltedSipHasher::operator()(const uint256& val, uint32_t extra) cons
     v0 ^= d;
     v2 ^= 0xFF;
     SIPROUND;
-    SIPROUND;
-    SIPROUND;
-    SIPROUND;
-    return v0 ^ v1 ^ v2 ^ v3;
-}
-
-uint64_t PresaltedSipHasher13Jumbo::operator()(const uint256& val, uint32_t extra) const noexcept
-{
-    uint64_t v0 = m_state.v[0], v1 = m_state.v[1], v2 = m_state.v[2], v3 = m_state.v[3];
-
-    const uint64_t m0{val.GetUint64(0)};
-    const uint64_t m1{val.GetUint64(1)};
-    const uint64_t m2{val.GetUint64(2)};
-    const uint64_t m3{val.GetUint64(3)};
-
-    v0 ^= m0;
-    v1 ^= m1;
-    v2 ^= m2;
-    v3 ^= m3;
-    SIPROUND;
-    v0 ^= m3;
-    v1 ^= m0;
-    v2 ^= m1;
-    v3 ^= m2;
-
-    const uint64_t d{(uint64_t{36} << 56) | extra};
-    v3 ^= d;
-    SIPROUND;
-    v0 ^= d;
-
-    v2 ^= 0xFF;
     SIPROUND;
     SIPROUND;
     SIPROUND;
