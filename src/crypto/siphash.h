@@ -69,4 +69,29 @@ public:
     uint64_t operator()(const uint256& val, uint32_t extra) const noexcept;
 };
 
+/**
+ * SipHash-1-3 variant for hashing 256-bit hashes, optionally plus a 32-bit index, in local indexes.
+ *
+ * This is a non-standard SipHash-c-d variant. "Jumboblock" means the four 64-bit
+ * limbs of the 256-bit hash are injected together and mixed by one SipRound,
+ * instead of being processed as four separate SipHash message blocks.
+ *
+ * This is not a general-purpose SipHash replacement. It is meant for keys that
+ * already contain a uniformly distributed hash, such as COutPoint keys in the
+ * coins cache or txids used as salted local index prefixes.
+ *
+ * The fixed-size paths omit SipHash's final length/padding word. This is the
+ * SH13+JB+UP construction for the supported 32-byte and 36-byte input shapes.
+ */
+class PresaltedSipHasher13Jumbo
+{
+    const SipHashState m_state;
+
+public:
+    explicit PresaltedSipHasher13Jumbo(uint64_t k0, uint64_t k1) noexcept : m_state{k0, k1} {}
+
+    uint64_t operator()(const uint256& val) const noexcept;
+    uint64_t operator()(const uint256& val, uint32_t extra) const noexcept;
+};
+
 #endif // BITCOIN_CRYPTO_SIPHASH_H
