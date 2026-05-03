@@ -13,7 +13,7 @@ BOOST_AUTO_TEST_SUITE(caches_tests)
 
 BOOST_AUTO_TEST_CASE(oversized_dbcache_warning)
 {
-    // memory restricted setup - cap is DEFAULT_DB_CACHE (450 MiB)
+    // memory restricted setup - cap is DEFAULT_DBCACHE_BYTES (450 MiB)
     BOOST_CHECK(!ShouldWarnOversizedDbCache(/*dbcache=*/4_MiB, /*total_ram=*/1_GiB));    // Under cap
     BOOST_CHECK( ShouldWarnOversizedDbCache(/*dbcache=*/512_MiB, /*total_ram=*/1_GiB));  // At cap
     BOOST_CHECK( ShouldWarnOversizedDbCache(/*dbcache=*/1500_MiB, /*total_ram=*/1_GiB)); // Over cap
