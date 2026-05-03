@@ -55,7 +55,7 @@ public:
 
 class SaltedOutpointHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const PresaltedSipHasher13Jumbo m_hasher;
 
 public:
     SaltedOutpointHasher(bool deterministic = false);
