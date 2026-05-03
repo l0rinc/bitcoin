@@ -239,7 +239,7 @@ FUZZ_TARGET(coinscache_sim)
         ++current_height;
         // Make sure there is always at least one CCoinsViewCache.
         if (caches.empty()) {
-            caches.emplace_back(new CCoinsViewCache(&bottom, /*deterministic=*/true));
+            caches.emplace_back(new CCoinsViewCache(bottom, /*deterministic=*/true));
             sim_caches[caches.size()].Wipe();
         }
 
@@ -370,9 +370,9 @@ FUZZ_TARGET(coinscache_sim)
                 if (caches.size() != MAX_CACHES) {
                     // Apply to real caches.
                     if (provider.ConsumeBool()) {
-                        caches.emplace_back(new CCoinsViewCache(&*caches.back(), /*deterministic=*/true));
+                        caches.emplace_back(new CCoinsViewCache(*caches.back(), /*deterministic=*/true));
                     } else {
-                        caches.emplace_back(new CoinsViewOverlay(&*caches.back(), /*deterministic=*/true));
+                        caches.emplace_back(new CoinsViewOverlay(*caches.back(), /*deterministic=*/true));
                     }
                     // Apply to simulation data.
                     sim_caches[caches.size()].Wipe();

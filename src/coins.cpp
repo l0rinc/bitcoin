@@ -28,11 +28,21 @@ std::optional<Coin> CCoinsViewCache::PeekCoin(const COutPoint& outpoint) const
     return base->PeekCoin(outpoint);
 }
 
-CCoinsViewCache::CCoinsViewCache(CCoinsView* in_base, bool deterministic) :
-    CCoinsViewBacked(in_base), m_deterministic(deterministic),
+CCoinsViewCache::CCoinsViewCache(BackendTag, CCoinsViewCacheBackend& in_base, bool deterministic) :
+    m_deterministic(deterministic), base{&in_base},
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
     m_sentinel.second.SelfRef(m_sentinel);
+}
+
+CCoinsViewCache::CCoinsViewCache(CCoinsViewCacheBackend& in_base, bool deterministic) :
+    CCoinsViewCache(BackendTag{}, in_base, deterministic)
+{
+}
+
+CCoinsViewCache::CCoinsViewCache(CCoinsViewCache& in_base, bool deterministic) :
+    CCoinsViewCache(BackendTag{}, in_base, deterministic)
+{
 }
 
 size_t CCoinsViewCache::DynamicMemoryUsage() const {
@@ -395,15 +405,15 @@ static ReturnType ExecuteBackedWrapper(Func func, const std::vector<std::functio
 
 std::optional<Coin> CCoinsViewErrorCatcher::GetCoin(const COutPoint& outpoint) const
 {
-    return ExecuteBackedWrapper<std::optional<Coin>>([&]() { return CCoinsViewBacked::GetCoin(outpoint); }, m_err_callbacks);
+    return ExecuteBackedWrapper<std::optional<Coin>>([&]() { return base->GetCoin(outpoint); }, m_err_callbacks);
 }
 
 bool CCoinsViewErrorCatcher::HaveCoin(const COutPoint& outpoint) const
 {
-    return ExecuteBackedWrapper<bool>([&]() { return CCoinsViewBacked::HaveCoin(outpoint); }, m_err_callbacks);
+    return ExecuteBackedWrapper<bool>([&]() { return base->HaveCoin(outpoint); }, m_err_callbacks);
 }
 
 std::optional<Coin> CCoinsViewErrorCatcher::PeekCoin(const COutPoint& outpoint) const
 {
-    return ExecuteBackedWrapper<std::optional<Coin>>([&]() { return CCoinsViewBacked::PeekCoin(outpoint); }, m_err_callbacks);
+    return ExecuteBackedWrapper<std::optional<Coin>>([&]() { return base->PeekCoin(outpoint); }, m_err_callbacks);
 }

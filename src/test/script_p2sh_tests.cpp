@@ -277,7 +277,7 @@ BOOST_AUTO_TEST_CASE(switchover)
 
 BOOST_AUTO_TEST_CASE(ValidateInputsStandardness)
 {
-    CCoinsViewCache coins{&CoinsViewEmpty::Get()};
+    CCoinsViewCache coins{CoinsViewEmpty::Get()};
     FillableSigningProvider keystore;
     CKey key[6];
     for (int i = 0; i < 6; i++)
