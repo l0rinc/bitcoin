@@ -386,6 +386,10 @@ public:
 class CCoinsViewCache : public CCoinsViewCacheBackend
 {
 private:
+    struct BackendTag {};
+
+    CCoinsViewCache(BackendTag, CCoinsViewCacheBackend& in_base, bool deterministic);
+
     const bool m_deterministic;
 
 protected:
@@ -417,9 +421,11 @@ protected:
 
 public:
     CCoinsViewCache(CCoinsViewCacheBackend& in_base, bool deterministic = false);
+    explicit CCoinsViewCache(CCoinsViewCache& in_base, bool deterministic = false);
 
     /**
-     * By deleting the copy constructor, we prevent accidentally using it when one intends to create a cache on top of a base cache.
+     * By deleting the copy constructor, we prevent accidentally copying a cache.
+     * Construct from a non-const parent cache to create a cache on top of it.
      */
     CCoinsViewCache(const CCoinsViewCache &) = delete;
 

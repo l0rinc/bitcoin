@@ -76,7 +76,8 @@ public:
 class CCoinsViewCacheTest : public CCoinsViewCache
 {
 public:
-    explicit CCoinsViewCacheTest(CCoinsViewCacheBackend& _base) : CCoinsViewCache(_base) {}
+    using CCoinsViewCache::CCoinsViewCache;
+    explicit CCoinsViewCacheTest(CCoinsViewCacheTest& _base) : CCoinsViewCache(_base) {}
 
     void SelfTest(bool sanity_check = true) const
     {
@@ -679,8 +680,7 @@ public:
     }
 
     CCoinsViewCacheTest base{CoinsViewEmpty::Get()};
-    CCoinsViewCacheBackend& cache_base{base};
-    CCoinsViewCacheTest cache{cache_base};
+    CCoinsViewCacheTest cache{base};
 };
 
 static void CheckAccessCoin(const CAmount base_value, const MaybeCoin& cache_coin, const MaybeCoin& expected)
@@ -1053,8 +1053,7 @@ BOOST_FIXTURE_TEST_CASE(ccoins_flush_behavior, FlushTest)
     CCoinsViewDB base{{.path = "test", .cache_bytes = 8_MiB, .memory_only = true}, {}};
     std::vector<std::unique_ptr<CCoinsViewCacheTest>> caches;
     caches.push_back(std::make_unique<CCoinsViewCacheTest>(base));
-    CCoinsViewCacheBackend& cache_base{*caches.back()};
-    caches.push_back(std::make_unique<CCoinsViewCacheTest>(cache_base));
+    caches.push_back(std::make_unique<CCoinsViewCacheTest>(*caches.back()));
 
     for (const auto& view : caches) {
         TestFlushBehavior(view.get(), base, caches, /*do_erasing_flush=*/false);

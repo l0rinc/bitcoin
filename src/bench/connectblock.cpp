@@ -98,8 +98,7 @@ void BenchmarkConnectBlock(benchmark::Bench& bench, std::vector<CKey>& keys, std
         auto& chainstate{chainman->ActiveChainstate()};
         BlockValidationState test_block_state;
         auto* pindex{chainman->m_blockman.AddToBlockIndex(test_block, chainman->m_best_header)}; // Doing this here doesn't impact the benchmark
-        CCoinsViewCacheBackend& coins_backend{chainstate.CoinsTip()};
-        CCoinsViewCache viewNew{coins_backend};
+        CCoinsViewCache viewNew{chainstate.CoinsTip()};
 
         assert(chainstate.ConnectBlock(test_block, test_block_state, pindex, viewNew));
     });

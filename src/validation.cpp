@@ -2941,8 +2941,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
     // Apply the block atomically to the chain state.
     const auto time_start{SteadyClock::now()};
     {
-        CCoinsViewCacheBackend& coins_backend{CoinsTip()};
-        CCoinsViewCache view{coins_backend};
+        CCoinsViewCache view{CoinsTip()};
         assert(view.GetBestBlock() == pindexDelete->GetBlockHash());
         if (DisconnectBlock(block, pindexDelete, view) != DISCONNECT_OK) {
             LogError("DisconnectTip(): DisconnectBlock %s failed\n", pindexDelete->GetBlockHash().ToString());
@@ -4510,8 +4509,7 @@ BlockValidationState TestBlockValidity(
     index_dummy.pprev = tip;
     index_dummy.nHeight = tip->nHeight + 1;
     index_dummy.phashBlock = &block_hash;
-    CCoinsViewCacheBackend& coins_backend{chainstate.CoinsTip()};
-    CCoinsViewCache view_dummy{coins_backend};
+    CCoinsViewCache view_dummy{chainstate.CoinsTip()};
 
     // Set fJustCheck to true in order to update, and not clear, validation caches.
     if(!chainstate.ConnectBlock(block, state, &index_dummy, view_dummy, /*fJustCheck=*/true)) {
