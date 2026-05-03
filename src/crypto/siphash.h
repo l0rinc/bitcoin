@@ -5,11 +5,34 @@
 #ifndef BITCOIN_CRYPTO_SIPHASH_H
 #define BITCOIN_CRYPTO_SIPHASH_H
 
+#include <attributes.h>
+
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <span>
+#include <uint256.h>
 
-class uint256;
+namespace siphash_detail {
+
+ALWAYS_INLINE void SipRound(uint64_t& v0, uint64_t& v1, uint64_t& v2, uint64_t& v3)
+{
+    uint64_t a{v0}, b{v1}, c{v2}, d{v3};
+
+    a += b; b = std::rotl(b, 13); b ^= a;
+    a = std::rotl(a, 32);
+    c += d; d = std::rotl(d, 16); d ^= c;
+    a += d; d = std::rotl(d, 21); d ^= a;
+    c += b; b = std::rotl(b, 17); b ^= c;
+    c = std::rotl(c, 32);
+
+    v0 = a;
+    v1 = b;
+    v2 = c;
+    v3 = d;
+}
+
+} // namespace siphash_detail
 
 /** Shared SipHash internal state v[0..3], initialized from (k0, k1). */
 class SipHashState
@@ -87,11 +110,52 @@ class PresaltedSipHasher13Jumbo
 {
     const SipHashState m_state;
 
+    //! Inject the four 64-bit limbs of the hash, mix with one SipRound, and feed them forward rotated.
+    ALWAYS_INLINE static void Absorb(uint64_t& v0, uint64_t& v1, uint64_t& v2, uint64_t& v3, const uint256& val) noexcept
+    {
+        const uint64_t m0{val.GetUint64(0)}, m1{val.GetUint64(1)}, m2{val.GetUint64(2)}, m3{val.GetUint64(3)};
+
+        v0 ^= m0;
+        v1 ^= m1;
+        v2 ^= m2;
+        v3 ^= m3;
+        siphash_detail::SipRound(v0, v1, v2, v3);
+        v0 ^= m3;
+        v1 ^= m0;
+        v2 ^= m1;
+        v3 ^= m2;
+    }
+
+    ALWAYS_INLINE static uint64_t Finalize(uint64_t v0, uint64_t v1, uint64_t v2, uint64_t v3) noexcept
+    {
+        v2 ^= 0xFF;
+        siphash_detail::SipRound(v0, v1, v2, v3);
+        siphash_detail::SipRound(v0, v1, v2, v3);
+        siphash_detail::SipRound(v0, v1, v2, v3);
+        return v0 ^ v1 ^ v2 ^ v3;
+    }
+
 public:
     explicit PresaltedSipHasher13Jumbo(uint64_t k0, uint64_t k1) noexcept : m_state{k0, k1} {}
 
-    uint64_t operator()(const uint256& val) const noexcept;
-    uint64_t operator()(const uint256& val, uint32_t extra) const noexcept;
+    ALWAYS_INLINE uint64_t operator()(const uint256& val) const noexcept
+    {
+        uint64_t v0{m_state.v[0]}, v1{m_state.v[1]}, v2{m_state.v[2]}, v3{m_state.v[3]};
+
+        Absorb(v0, v1, v2, v3, val);
+        return Finalize(v0, v1, v2, v3);
+    }
+
+    ALWAYS_INLINE uint64_t operator()(const uint256& val, uint32_t extra) const noexcept
+    {
+        uint64_t v0{m_state.v[0]}, v1{m_state.v[1]}, v2{m_state.v[2]}, v3{m_state.v[3]};
+
+        Absorb(v0, v1, v2, v3, val);
+        v3 ^= extra;
+        siphash_detail::SipRound(v0, v1, v2, v3);
+        v0 ^= extra;
+        return Finalize(v0, v1, v2, v3);
+    }
 };
 
 #endif // BITCOIN_CRYPTO_SIPHASH_H
