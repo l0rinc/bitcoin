@@ -226,24 +226,30 @@ public:
 
     static const int ROLLING_FEE_HALFLIFE = 60 * 60 * 12; // public only for testing
 
+    using CTxMemPoolEntry_Indices_ = boost::multi_index::indexed_by<
+        // sorted by txid
+        boost::multi_index::hashed_unique<mempoolentry_txid, SaltedTxidHasher>,
+        // sorted by wtxid
+        boost::multi_index::hashed_unique<
+            boost::multi_index::tag<index_by_wtxid>,
+            mempoolentry_wtxid,
+            SaltedWtxidHasher
+        >,
+        // sorted by entry time
+        boost::multi_index::ordered_non_unique<
+            boost::multi_index::tag<entry_time>,
+            boost::multi_index::identity<CTxMemPoolEntry>,
+            CompareTxMemPoolEntryByEntryTime
+        >
+    >;
+#if BOOST_VERSION >= 109100
+    using CTxMemPoolEntry_Indices = CTxMemPoolEntry_Indices_;
+#else
+    struct CTxMemPoolEntry_Indices final : CTxMemPoolEntry_Indices_{};
+#endif
     using indexed_transaction_set = boost::multi_index_container<
         CTxMemPoolEntry,
-        boost::multi_index::indexed_by<
-            // sorted by txid
-            boost::multi_index::hashed_unique<mempoolentry_txid, SaltedTxidHasher>,
-            // sorted by wtxid
-            boost::multi_index::hashed_unique<
-                boost::multi_index::tag<index_by_wtxid>,
-                mempoolentry_wtxid,
-                SaltedWtxidHasher
-            >,
-            // sorted by entry time
-            boost::multi_index::ordered_non_unique<
-                boost::multi_index::tag<entry_time>,
-                boost::multi_index::identity<CTxMemPoolEntry>,
-                CompareTxMemPoolEntryByEntryTime
-            >
-        >
+        CTxMemPoolEntry_Indices
     >;
 
     /**
