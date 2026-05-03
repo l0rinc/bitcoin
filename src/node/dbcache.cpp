@@ -23,6 +23,6 @@ size_t GetDefaultDBCache()
             return HIGH_DEFAULT_DBCACHE;
         }
     }
-    return DEFAULT_DB_CACHE;
+    return DEFAULT_DBCACHE_BYTES;
 }
 } // namespace node

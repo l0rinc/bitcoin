@@ -12,9 +12,9 @@
 #include <limits>
 
 //! min. -dbcache (bytes)
-static constexpr size_t MIN_DB_CACHE{4_MiB};
+static constexpr size_t MIN_DBCACHE_BYTES{4_MiB};
 //! -dbcache default (bytes)
-static constexpr size_t DEFAULT_DB_CACHE{450_MiB};
+static constexpr size_t DEFAULT_DBCACHE_BYTES{450_MiB};
 //! Maximum dbcache size on current architecture.
 static constexpr size_t MAX_DBCACHE_BYTES{sizeof(void*) == 4 ? 1_GiB : std::numeric_limits<size_t>::max()};
 
@@ -23,7 +23,7 @@ size_t GetDefaultDBCache();
 
 constexpr bool ShouldWarnOversizedDbCache(uint64_t dbcache, uint64_t total_ram) noexcept
 {
-    const uint64_t cap{(total_ram < 2_GiB) ? DEFAULT_DB_CACHE : (total_ram / 100) * 75};
+    const uint64_t cap{(total_ram < 2_GiB) ? DEFAULT_DBCACHE_BYTES : (total_ram / 100) * 75};
     return dbcache > cap;
 }
 } // namespace node
