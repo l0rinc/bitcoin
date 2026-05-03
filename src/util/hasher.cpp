@@ -7,6 +7,9 @@
 #include <crypto/siphash.h>
 #include <random.h>
 
+constexpr uint64_t DETERMINISTIC_OUTPOINT_K0{0x8e819f2607a18de6};
+constexpr uint64_t DETERMINISTIC_OUTPOINT_K1{0xf4020d2e3983b0eb};
+
 SaltedUint256Hasher::SaltedUint256Hasher() : m_hasher{
     FastRandomContext().rand64(),
     FastRandomContext().rand64()}
@@ -23,8 +26,13 @@ SaltedWtxidHasher::SaltedWtxidHasher() : m_hasher{
 {}
 
 SaltedOutpointHasher::SaltedOutpointHasher(bool deterministic) : m_hasher{
-    deterministic ? 0x8e819f2607a18de6 : FastRandomContext().rand64(),
-    deterministic ? 0xf4020d2e3983b0eb : FastRandomContext().rand64()}
+    deterministic ? DETERMINISTIC_OUTPOINT_K0 : FastRandomContext().rand64(),
+    deterministic ? DETERMINISTIC_OUTPOINT_K1 : FastRandomContext().rand64()}
+{}
+
+SaltedOutpointHasher13Jumbo::SaltedOutpointHasher13Jumbo(bool deterministic) : m_hasher{
+    deterministic ? DETERMINISTIC_OUTPOINT_K0 : FastRandomContext().rand64(),
+    deterministic ? DETERMINISTIC_OUTPOINT_K1 : FastRandomContext().rand64()}
 {}
 
 SaltedSipHasher::SaltedSipHasher() :
