@@ -77,7 +77,7 @@ class InitTest(BitcoinTestFramework):
             b'net thread start',
             b'addcon thread start',
             b'initload thread start',
-            b'txindex thread start',
+            b'txidx thread start',
             b'blkfltbscidx thread start',
             b'coinstatsidx thread start',
             b'txospenderidx thread start',
