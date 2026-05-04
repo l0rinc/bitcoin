@@ -2,6 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <coins.h>
 
 #include <consensus/consensus.h>
@@ -9,6 +11,10 @@
 #include <uint256.h>
 #include <util/log.h>
 #include <util/trace.h>
+
+#ifdef HAVE_MALLOC_INFO
+#include <malloc.h>
+#endif
 
 TRACEPOINT_SEMAPHORE(utxocache, add);
 TRACEPOINT_SEMAPHORE(utxocache, spent);
@@ -327,6 +333,11 @@ void CCoinsViewCache::ReallocateCache()
     m_cache_coins_memory_resource.~CCoinsMapMemoryResource();
     ::new (&m_cache_coins_memory_resource) CCoinsMapMemoryResource{};
     ::new (&cacheCoins) CCoinsMap{0, SaltedOutpointHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
+#ifdef HAVE_MALLOC_INFO
+    // The pool chunks freed above can otherwise remain in the process RSS after
+    // emergency coins cache wipes on glibc.
+    malloc_trim(0);
+#endif
 }
 
 void CCoinsViewCache::SanityCheck() const
