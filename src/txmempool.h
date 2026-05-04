@@ -313,7 +313,7 @@ public:
      * all inputs are in the mapNextTx array). If sanity-checking is turned off,
      * check does nothing.
      */
-    void check(const CCoinsViewCache& active_coins_tip, int64_t spendheight) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    void check(CCoinsViewCache& active_coins_tip, int64_t spendheight) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /**
      * Remove a transaction from the mempool along with any descendants.
@@ -747,8 +747,10 @@ public:
  * signrawtransactionwithkey and signrawtransactionwithwallet,
  * as long as the conflicting transaction is not yet confirmed.
  */
-class CCoinsViewMemPool : public CCoinsViewBacked
+class CCoinsViewMemPool : public CCoinsViewCacheBackend
 {
+    CCoinsViewCacheBackend* base;
+
     /**
     * Coins made available by transactions being validated. Tracking these allows for package
     * validation, since we can access transaction outputs without submitting them to mempool.
@@ -764,10 +766,14 @@ protected:
     const CTxMemPool& mempool;
 
 public:
-    CCoinsViewMemPool(CCoinsView* baseIn, const CTxMemPool& mempoolIn);
+    CCoinsViewMemPool(CCoinsViewCacheBackend& baseIn, const CTxMemPool& mempoolIn);
     /** GetCoin, returning whether it exists and is not spent. Also updates m_non_base_coins if the
      * coin is not fetched from base. May populate the base view on cache misses. */
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
+    std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override { return base->PeekCoin(outpoint); }
+    bool HaveCoin(const COutPoint& outpoint) const override { return base->HaveCoin(outpoint); }
+    uint256 GetBestBlock() const override { return base->GetBestBlock(); }
+    void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) override { base->BatchWrite(cursor, block_hash); }
     /** Add the coins created by this transaction. These coins are only temporarily stored in
      * m_temp_added and cannot be flushed to the back end. Only used for package validation. */
     void PackageAddTransaction(const CTransactionRef& tx);

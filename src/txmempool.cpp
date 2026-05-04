@@ -430,7 +430,7 @@ void CTxMemPool::removeForBlock(const std::vector<CTransactionRef>& vtx, unsigne
     }
 }
 
-void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendheight) const
+void CTxMemPool::check(CCoinsViewCache& active_coins_tip, int64_t spendheight) const
 {
     if (m_opts.check_ratio == 0) return;
 
@@ -449,7 +449,8 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
     assert(!m_txgraph->IsOversized(TxGraph::Level::MAIN));
     m_txgraph->SanityCheck();
 
-    CCoinsViewCache mempoolDuplicate(const_cast<CCoinsViewCache*>(&active_coins_tip));
+    CCoinsViewCacheBackend& active_coins_backend{active_coins_tip};
+    CCoinsViewCache mempoolDuplicate{active_coins_backend};
 
     const auto score_with_topo{GetSortedScoreWithTopology()};
 
@@ -737,7 +738,7 @@ bool CTxMemPool::HasNoInputsOf(const CTransaction &tx) const
     return true;
 }
 
-CCoinsViewMemPool::CCoinsViewMemPool(CCoinsView* baseIn, const CTxMemPool& mempoolIn) : CCoinsViewBacked(baseIn), mempool(mempoolIn) { }
+CCoinsViewMemPool::CCoinsViewMemPool(CCoinsViewCacheBackend& baseIn, const CTxMemPool& mempoolIn) : base{&baseIn}, mempool(mempoolIn) { }
 
 std::optional<Coin> CCoinsViewMemPool::GetCoin(const COutPoint& outpoint) const
 {

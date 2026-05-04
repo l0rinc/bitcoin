@@ -25,7 +25,6 @@
 #include <memory>
 #include <optional>
 #include <ranges>
-#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -90,13 +89,12 @@ void initialize_coins_view()
     static const auto testing_setup = MakeNoLogFileContext<>();
 }
 
-void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& coins_view_cache, CCoinsView* backend_coins_view)
+void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& coins_view_cache, CCoinsViewCacheBackend& original_backend, bool require_non_null_best_block)
 {
-    const bool is_db{dynamic_cast<CCoinsViewDB*>(backend_coins_view) != nullptr};
     bool good_data{true};
-    auto* original_backend{backend_coins_view};
+    CCoinsViewCacheBackend* backend_coins_view{&original_backend};
 
-    if (is_db) coins_view_cache.SetBestBlock(uint256::ONE);
+    if (require_non_null_best_block) coins_view_cache.SetBestBlock(uint256::ONE);
     COutPoint random_out_point;
     Coin random_coin;
     CMutableTransaction random_mutable_transaction;
@@ -127,13 +125,13 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
             [&] {
                 uint256 best_block{ConsumeUInt256(fuzzed_data_provider)};
                 // `CCoinsViewDB::BatchWrite()` requires a non-null best block.
-                if (is_db && best_block.IsNull()) best_block = uint256::ONE;
+                if (require_non_null_best_block && best_block.IsNull()) best_block = uint256::ONE;
                 coins_view_cache.SetBestBlock(best_block);
             },
             [&] {
                 (void)coins_view_cache.CreateResetGuard();
                 // Reset() clears the best block, so reseed db-backed caches.
-                if (is_db) {
+                if (require_non_null_best_block) {
                     const uint256 best_block{ConsumeUInt256(fuzzed_data_provider)};
                     if (best_block.IsNull()) {
                         good_data = false;
@@ -151,14 +149,14 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
             },
             [&] {
                 const bool use_original_backend{fuzzed_data_provider.ConsumeBool()};
-                if (use_original_backend && backend_coins_view != original_backend) {
+                if (use_original_backend && backend_coins_view != &original_backend) {
                     // FRESH flags valid against the empty backend may be invalid
                     // against the original backend, so reset before restoring it.
                     (void)coins_view_cache.CreateResetGuard();
                     // Reset() clears the best block; db backends require a non-null hash.
-                    if (is_db) coins_view_cache.SetBestBlock(uint256::ONE);
+                    if (require_non_null_best_block) coins_view_cache.SetBestBlock(uint256::ONE);
                 }
-                backend_coins_view = use_original_backend ? original_backend : &CoinsViewEmpty::Get();
+                backend_coins_view = use_original_backend ? &original_backend : &CoinsViewEmpty::Get();
                 coins_view_cache.SetBackend(*backend_coins_view);
             },
             [&] {
@@ -216,34 +214,20 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 uint256 best_block{coins_view_cache.GetBestBlock()};
                 if (fuzzed_data_provider.ConsumeBool()) best_block = ConsumeUInt256(fuzzed_data_provider);
                 // Set best block hash to non-null to satisfy the assertion in CCoinsViewDB::BatchWrite().
-                if (is_db && best_block.IsNull()) best_block = uint256::ONE;
+                if (require_non_null_best_block && best_block.IsNull()) best_block = uint256::ONE;
                 coins_view_cache.BatchWrite(cursor, best_block);
             });
     }
 
     {
-        bool expected_code_path = false;
-        try {
-            (void)coins_view_cache.Cursor();
-        } catch (const std::logic_error&) {
-            expected_code_path = true;
-        }
-        assert(expected_code_path);
         (void)coins_view_cache.DynamicMemoryUsage();
-        (void)coins_view_cache.EstimateSize();
         (void)coins_view_cache.GetBestBlock();
         (void)coins_view_cache.GetCacheSize();
-        (void)coins_view_cache.GetHeadBlocks();
         (void)coins_view_cache.HaveInputs(CTransaction{random_mutable_transaction});
     }
 
     {
-        if (is_db && backend_coins_view == original_backend) {
-            assert(backend_coins_view->Cursor());
-        }
-        (void)backend_coins_view->EstimateSize();
         (void)backend_coins_view->GetBestBlock();
-        (void)backend_coins_view->GetHeadBlocks();
     }
 
     if (fuzzed_data_provider.ConsumeBool()) {
@@ -350,8 +334,8 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
 FUZZ_TARGET(coins_view, .init = initialize_coins_view)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
-    CCoinsViewCache coins_view_cache{&CoinsViewEmpty::Get(), /*deterministic=*/true};
-    TestCoinsView(fuzzed_data_provider, coins_view_cache, &CoinsViewEmpty::Get());
+    CCoinsViewCache coins_view_cache{CoinsViewEmpty::Get(), /*deterministic=*/true};
+    TestCoinsView(fuzzed_data_provider, coins_view_cache, CoinsViewEmpty::Get(), /*require_non_null_best_block=*/false);
 }
 
 FUZZ_TARGET(coins_view_db, .init = initialize_coins_view)
@@ -363,8 +347,11 @@ FUZZ_TARGET(coins_view_db, .init = initialize_coins_view)
         .memory_only = true,
     };
     CCoinsViewDB backend_coins_view{std::move(db_params), CoinsViewOptions{}};
-    CCoinsViewCache coins_view_cache{&backend_coins_view, /*deterministic=*/true};
-    TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_coins_view);
+    CCoinsViewCache coins_view_cache{backend_coins_view, /*deterministic=*/true};
+    TestCoinsView(fuzzed_data_provider, coins_view_cache, backend_coins_view, /*require_non_null_best_block=*/true);
+    assert(backend_coins_view.Cursor());
+    (void)backend_coins_view.EstimateSize();
+    (void)backend_coins_view.GetHeadBlocks();
 }
 
 // Creates a CoinsViewOverlay and a MutationGuardCoinsViewCache as the base.
@@ -374,7 +361,7 @@ FUZZ_TARGET(coins_view_db, .init = initialize_coins_view)
 FUZZ_TARGET(coins_view_overlay, .init = initialize_coins_view)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
-    MutationGuardCoinsViewCache backend_cache{&CoinsViewEmpty::Get(), /*deterministic=*/true};
-    CoinsViewOverlay coins_view_cache{&backend_cache, /*deterministic=*/true};
-    TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_cache);
+    MutationGuardCoinsViewCache backend_cache{CoinsViewEmpty::Get(), /*deterministic=*/true};
+    CoinsViewOverlay coins_view_cache{backend_cache, /*deterministic=*/true};
+    TestCoinsView(fuzzed_data_provider, coins_view_cache, backend_cache, /*require_non_null_best_block=*/false);
 }

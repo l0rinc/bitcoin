@@ -356,7 +356,7 @@ void Chainstate::MaybeUpdateMempoolForReorg(
                 return true;
             }
         } else {
-            const CCoinsViewMemPool view_mempool{&CoinsTip(), *m_mempool};
+            const CCoinsViewMemPool view_mempool{CoinsTip(), *m_mempool};
             const std::optional<LockPoints> new_lock_points{CalculateLockPointsAtTip(m_chain.Tip(), view_mempool, tx)};
             if (new_lock_points.has_value() && CheckSequenceLocksAtTip(m_chain.Tip(), *new_lock_points)) {
                 // Now update the mempool entry lockpoints as well.
@@ -438,8 +438,8 @@ class MemPoolAccept
 public:
     explicit MemPoolAccept(CTxMemPool& mempool, Chainstate& active_chainstate) :
         m_pool(mempool),
-        m_view(&CoinsViewEmpty::Get()),
-        m_viewmempool(&active_chainstate.CoinsTip(), m_pool),
+        m_view(CoinsViewEmpty::Get()),
+        m_viewmempool(active_chainstate.CoinsTip(), m_pool),
         m_active_chainstate(active_chainstate)
     {
     }
@@ -1848,13 +1848,13 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 
 CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
     : m_dbview{std::move(db_params), std::move(options)},
-      m_catcherview(&m_dbview) {}
+      m_catcherview{m_dbview} {}
 
 void CoinsViews::InitCache()
 {
     AssertLockHeld(::cs_main);
-    m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview);
-    m_connect_block_view = std::make_unique<CoinsViewOverlay>(&*m_cacheview);
+    m_cacheview = std::make_unique<CCoinsViewCache>(m_catcherview);
+    m_connect_block_view = std::make_unique<CoinsViewOverlay>(*m_cacheview);
 }
 
 Chainstate::Chainstate(
@@ -2941,7 +2941,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
     // Apply the block atomically to the chain state.
     const auto time_start{SteadyClock::now()};
     {
-        CCoinsViewCache view(&CoinsTip());
+        CCoinsViewCache view{CoinsTip()};
         assert(view.GetBestBlock() == pindexDelete->GetBlockHash());
         if (DisconnectBlock(block, pindexDelete, view) != DISCONNECT_OK) {
             LogError("DisconnectTip(): DisconnectBlock %s failed\n", pindexDelete->GetBlockHash().ToString());
@@ -4509,7 +4509,7 @@ BlockValidationState TestBlockValidity(
     index_dummy.pprev = tip;
     index_dummy.nHeight = tip->nHeight + 1;
     index_dummy.phashBlock = &block_hash;
-    CCoinsViewCache view_dummy(&chainstate.CoinsTip());
+    CCoinsViewCache view_dummy{chainstate.CoinsTip()};
 
     // Set fJustCheck to true in order to update, and not clear, validation caches.
     if(!chainstate.ConnectBlock(block, state, &index_dummy, view_dummy, /*fJustCheck=*/true)) {
@@ -4601,7 +4601,7 @@ CVerifyDB::~CVerifyDB()
 VerifyDBResult CVerifyDB::VerifyDB(
     Chainstate& chainstate,
     const Consensus::Params& consensus_params,
-    CCoinsView& coinsview,
+    CCoinsViewCacheBackend& coinsview,
     int nCheckLevel, int nCheckDepth)
 {
     AssertLockHeld(cs_main);
@@ -4616,7 +4616,7 @@ VerifyDBResult CVerifyDB::VerifyDB(
     }
     nCheckLevel = std::max(0, std::min(4, nCheckLevel));
     LogInfo("Verifying last %i blocks at level %i", nCheckDepth, nCheckLevel);
-    CCoinsViewCache coins(&coinsview);
+    CCoinsViewCache coins{coinsview};
     CBlockIndex* pindex;
     CBlockIndex* pindexFailure = nullptr;
     int nGoodTransactions = 0;
@@ -4764,8 +4764,8 @@ bool Chainstate::ReplayBlocks()
 {
     LOCK(cs_main);
 
-    CCoinsView& db = this->CoinsDB();
-    CCoinsViewCache cache(&db);
+    CCoinsViewDB& db = this->CoinsDB();
+    CCoinsViewCache cache{db};
 
     std::vector<uint256> hashHeads = db.GetHeadBlocks();
     if (hashHeads.empty()) return true; // We're already in a consistent state.
@@ -5890,7 +5890,7 @@ util::Result<void> ChainstateManager::PopulateAndValidateSnapshot(
 
     try {
         maybe_stats = ComputeUTXOStats(
-            CoinStatsHashType::HASH_SERIALIZED, snapshot_coinsdb, m_blockman, [&interrupt = m_interrupt] { SnapshotUTXOHashBreakpoint(interrupt); });
+            CoinStatsHashType::HASH_SERIALIZED, *snapshot_coinsdb, m_blockman, [&interrupt = m_interrupt] { SnapshotUTXOHashBreakpoint(interrupt); });
     } catch (StopHashingException const&) {
         return util::Error{Untranslated("Aborting after an interrupt was requested")};
     }
@@ -6025,7 +6025,7 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
     try {
         validated_cs_stats = ComputeUTXOStats(
             CoinStatsHashType::HASH_SERIALIZED,
-            &validated_coins_db,
+            validated_coins_db,
             m_blockman,
             [&interrupt = m_interrupt] { SnapshotUTXOHashBreakpoint(interrupt); });
     } catch (StopHashingException const&) {
