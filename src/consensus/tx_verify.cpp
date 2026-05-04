@@ -171,12 +171,6 @@ bool Consensus::CheckTxInputs(const CTransaction& tx,
 {
     if (prev_heights) assert(prev_heights->size() == tx.vin.size());
 
-    // are the actual inputs available?
-    if (!inputs.HaveInputs(tx)) {
-        return state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missingorspent",
-                         strprintf("%s: inputs missing/spent", __func__));
-    }
-
     int64_t sigops_cost{0};
     if (tx_sigops_cost) {
         // Compute sigops alongside input value checks to avoid re-walking the
@@ -184,11 +178,21 @@ bool Consensus::CheckTxInputs(const CTransaction& tx,
         sigops_cost = GetLegacySigOpCount(tx) * WITNESS_SCALE_FACTOR;
     }
 
+    enum class DeferredInputError {
+        NONE,
+        PREMATURE_COINBASE_SPEND,
+        INPUT_VALUE_OUT_OF_RANGE,
+    };
+    DeferredInputError input_error{DeferredInputError::NONE};
+    int premature_coinbase_depth{0};
+
     CAmount nValueIn = 0;
     for (unsigned int i = 0; i < tx.vin.size(); ++i) {
-        const COutPoint &prevout = tx.vin[i].prevout;
-        const Coin& coin = inputs.AccessCoin(prevout);
-        assert(!coin.IsSpent());
+        const Coin& coin = inputs.AccessCoin(tx.vin[i].prevout);
+        if (coin.IsSpent()) {
+            return state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missingorspent",
+                             strprintf("%s: inputs missing/spent", __func__));
+        }
         if (prev_heights) {
             (*prev_heights)[i] = coin.nHeight;
         }
@@ -200,17 +204,31 @@ bool Consensus::CheckTxInputs(const CTransaction& tx,
             sigops_cost += CountWitnessSigOps(tx.vin[i].scriptSig, prev_tx_out.scriptPubKey, tx.vin[i].scriptWitness, flags);
         }
 
-        // If prev is coinbase, check that it's matured
-        if (coin.IsCoinBase() && nSpendHeight - coin.nHeight < COINBASE_MATURITY) {
-            return state.Invalid(TxValidationResult::TX_PREMATURE_SPEND, "bad-txns-premature-spend-of-coinbase",
-                strprintf("tried to spend coinbase at depth %d", nSpendHeight - coin.nHeight));
-        }
+        // Keep missing-input errors ahead of all other contextual input
+        // errors, matching the previous HaveInputs() precheck, while still
+        // avoiding a second UTXO cache lookup for valid transactions.
+        if (input_error == DeferredInputError::NONE) {
+            // If prev is coinbase, check that it's matured
+            if (coin.IsCoinBase() && nSpendHeight - coin.nHeight < COINBASE_MATURITY) {
+                input_error = DeferredInputError::PREMATURE_COINBASE_SPEND;
+                premature_coinbase_depth = nSpendHeight - coin.nHeight;
+                continue;
+            }
 
-        // Check for negative or overflow input values
-        nValueIn += coin.out.nValue;
-        if (!MoneyRange(coin.out.nValue) || !MoneyRange(nValueIn)) {
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-inputvalues-outofrange");
+            // Check for negative or overflow input values
+            nValueIn += coin.out.nValue;
+            if (!MoneyRange(coin.out.nValue) || !MoneyRange(nValueIn)) {
+                input_error = DeferredInputError::INPUT_VALUE_OUT_OF_RANGE;
+            }
         }
+    }
+
+    if (input_error == DeferredInputError::PREMATURE_COINBASE_SPEND) {
+        return state.Invalid(TxValidationResult::TX_PREMATURE_SPEND, "bad-txns-premature-spend-of-coinbase",
+            strprintf("tried to spend coinbase at depth %d", premature_coinbase_depth));
+    }
+    if (input_error == DeferredInputError::INPUT_VALUE_OUT_OF_RANGE) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-inputvalues-outofrange");
     }
 
     // `tx.GetValueOut()` won't throw in validation paths because output-range checks run first
