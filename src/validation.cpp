@@ -2694,7 +2694,7 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
     // force long IO-bound warmup periods, so keep it reserved for much larger
     // overshoots while still bounding memory use.
     static constexpr int64_t MIN_COINS_CACHE_CRITICAL_OVERSHOOT{64 << 20}; // 64 MiB
-    const int64_t critical_overshoot{std::max(MIN_COINS_CACHE_CRITICAL_OVERSHOOT, 4 * nTotalSpace)};
+    const int64_t critical_overshoot{std::max(MIN_COINS_CACHE_CRITICAL_OVERSHOOT, 6 * nTotalSpace)};
 
     if (cacheSize > nTotalSpace + critical_overshoot) {
         LogInfo("Cache size (%s) exceeds total space (%s)\n", cacheSize, nTotalSpace);
