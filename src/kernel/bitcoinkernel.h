@@ -477,6 +477,8 @@ typedef uint8_t btck_ScriptVerifyStatus;
 #define btck_ScriptVerifyStatus_OK ((btck_ScriptVerifyStatus)(0))
 #define btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION ((btck_ScriptVerifyStatus)(1)) //!< The flags were combined in an invalid way.
 #define btck_ScriptVerifyStatus_ERROR_SPENT_OUTPUTS_REQUIRED ((btck_ScriptVerifyStatus)(2))    //!< The taproot flag was set, so valid spent_outputs have to be provided.
+#define btck_ScriptVerifyStatus_ERROR_TX_INPUT_INDEX ((btck_ScriptVerifyStatus)(3))            //!< The input index is out of bounds for the transaction.
+#define btck_ScriptVerifyStatus_ERROR_AMOUNT_OUT_OF_RANGE ((btck_ScriptVerifyStatus)(4))       //!< The amount is out of range.
 
 /**
  * Script verification flags that may be composed with each other.
@@ -561,7 +563,7 @@ BITCOINKERNEL_API size_t BITCOINKERNEL_WARN_UNUSED_RESULT btck_transaction_count
  *
  * @param[in] transaction  Non-null.
  * @param[in] output_index The index of the transaction output to be retrieved.
- * @return                 The transaction output
+ * @return                 The transaction output, or null if the index is out of bounds.
  */
 BITCOINKERNEL_API const btck_TransactionOutput* BITCOINKERNEL_WARN_UNUSED_RESULT btck_transaction_get_output_at(
     const btck_Transaction* transaction, size_t output_index) BITCOINKERNEL_ARG_NONNULL(1);
@@ -573,7 +575,7 @@ BITCOINKERNEL_API const btck_TransactionOutput* BITCOINKERNEL_WARN_UNUSED_RESULT
  *
  * @param[in] transaction Non-null.
  * @param[in] input_index The index of the transaction input to be retrieved.
- * @return                 The transaction input
+ * @return                 The transaction input, or null if the index is out of bounds.
  */
 BITCOINKERNEL_API const btck_TransactionInput* BITCOINKERNEL_WARN_UNUSED_RESULT btck_transaction_get_input_at(
     const btck_Transaction* transaction, size_t input_index) BITCOINKERNEL_ARG_NONNULL(1);
@@ -623,7 +625,9 @@ BITCOINKERNEL_API void btck_transaction_destroy(btck_Transaction* transaction);
  *
  * @param[in] tx_to             Non-null.
  * @param[in] spent_outputs     Nullable for non-taproot verification. Points to an array of
- *                              outputs spent by the transaction.
+ *                              outputs spent by the transaction. Each output must be non-null,
+ *                              have a valid amount, and the array length must match the transaction
+ *                              input count.
  * @param[in] spent_outputs_len Length of the spent_outputs array.
  * @return                      The precomputed data, or null on error.
  */
@@ -727,8 +731,8 @@ BITCOINKERNEL_API void btck_script_pubkey_destroy(btck_ScriptPubkey* script_pubk
  * @brief Create a transaction output from a script pubkey and an amount.
  *
  * @param[in] script_pubkey Non-null.
- * @param[in] amount        The amount associated with the script pubkey for this output.
- * @return                  The transaction output.
+ * @param[in] amount        The valid amount associated with the script pubkey for this output.
+ * @return                  The transaction output, or null if the amount is out of range.
  */
 BITCOINKERNEL_API btck_TransactionOutput* BITCOINKERNEL_WARN_UNUSED_RESULT btck_transaction_output_create(
     const btck_ScriptPubkey* script_pubkey,
@@ -864,7 +868,7 @@ BITCOINKERNEL_API void btck_logging_connection_destroy(btck_LoggingConnection* l
  * passed in chain type.
  *
  * @param[in] chain_type Controls the chain parameters type created.
- * @return               An allocated chain parameters opaque struct.
+ * @return               An allocated chain parameters opaque struct, or null for an unknown chain type.
  */
 BITCOINKERNEL_API btck_ChainParameters* BITCOINKERNEL_WARN_UNUSED_RESULT btck_chain_parameters_create(
     btck_ChainType chain_type);
@@ -1044,7 +1048,7 @@ BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_tree_entry_equ
  *
  * @param[in] block_tree_entry Non-null.
  * @param[in] height           The height of the requested ancestor.
- * @return                     The ancestor at the given height.
+ * @return                     The ancestor at the given height, or null if the height is out of bounds.
  */
 BITCOINKERNEL_API const btck_BlockTreeEntry* BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_tree_entry_get_ancestor(
     const btck_BlockTreeEntry* block_tree_entry,
@@ -1175,8 +1179,8 @@ BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_p
  * files selected by the user.
  *
  * @param[in] chainstate_manager        Non-null.
- * @param[in] block_file_paths_data     Nullable, array of block files described by their full filesystem paths.
- * @param[in] block_file_paths_lens     Nullable, array containing the lengths of each of the paths.
+ * @param[in] block_file_paths_data     Nullable if block_file_paths_data_len is 0, array of block files described by their full filesystem paths.
+ * @param[in] block_file_paths_lens     Nullable if block_file_paths_data_len is 0, array containing the lengths of each of the paths.
  * @param[in] block_file_paths_data_len Length of the block_file_paths_data and block_file_paths_len arrays.
  * @return                              0 if the import blocks call was completed successfully, non-zero otherwise.
  */
@@ -1302,7 +1306,7 @@ typedef uint32_t btck_BlockCheckFlags;
  * @param[in]     flags             Bitmask of btck_BlockCheckFlags controlling the
  *                                  optional POW and merkle-root checks. Use
  *                                  btck_BlockCheckFlags_BASE to run only the base
- *                                  checks.
+ *                                  checks. Unknown flag bits fail validation.
  * @param[in,out] validation_state  Non-null, previously created with
  *                                  btck_block_validation_state_create and updated
  *                                  in-place with the validation result.
@@ -1329,7 +1333,7 @@ BITCOINKERNEL_API size_t BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_count_trans
  *
  * @param[in] block             Non-null.
  * @param[in] transaction_index The index of the transaction to be retrieved.
- * @return                      The transaction.
+ * @return                      The transaction, or null if the index is out of bounds.
  */
 BITCOINKERNEL_API const btck_Transaction* BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_get_transaction_at(
     const btck_Block* block, size_t transaction_index) BITCOINKERNEL_ARG_NONNULL(1);
@@ -1499,7 +1503,7 @@ BITCOINKERNEL_API size_t BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_spent_outpu
  *
  * @param[in] block_spent_outputs             Non-null.
  * @param[in] transaction_spent_outputs_index The index of the transaction spent outputs within the block spent outputs.
- * @return                                    A transaction spent outputs pointer.
+ * @return                                    A transaction spent outputs pointer, or null if the index is out of bounds.
  */
 BITCOINKERNEL_API const btck_TransactionSpentOutputs* BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_spent_outputs_get_transaction_spent_outputs_at(
     const btck_BlockSpentOutputs* block_spent_outputs,
@@ -1544,7 +1548,7 @@ BITCOINKERNEL_API size_t BITCOINKERNEL_WARN_UNUSED_RESULT btck_transaction_spent
  * @param[in] transaction_spent_outputs Non-null.
  * @param[in] coin_index                The index of the to be retrieved coin within the
  *                                      transaction spent outputs.
- * @return                              A coin pointer.
+ * @return                              A coin pointer, or null if the index is out of bounds.
  */
 BITCOINKERNEL_API const btck_Coin* BITCOINKERNEL_WARN_UNUSED_RESULT btck_transaction_spent_outputs_get_coin_at(
     const btck_TransactionSpentOutputs* transaction_spent_outputs,
