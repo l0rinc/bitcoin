@@ -397,15 +397,27 @@ public:
 /** CCoinsView that adds a memory cache for transactions to another CCoinsView */
 class CCoinsViewCache : public CCoinsViewCacheBackend
 {
+public:
+    struct NonMutatingReads {};
+
 private:
     struct BackendTag {};
 
-    CCoinsViewCache(BackendTag, CCoinsViewCacheBackend& in_base, bool deterministic);
+    CCoinsViewCache(BackendTag,
+                    const CCoinsView& read_view,
+                    CCoinsViewCacheBackend& write_view,
+                    const CCoinsViewCache* read_cache,
+                    bool mutating_read_view,
+                    bool deterministic);
 
     const bool m_deterministic;
 
 protected:
-    CCoinsViewCacheBackend* base;
+    const CCoinsView* m_read_view;
+    CCoinsViewCacheBackend* m_write_view;
+    // Set when m_read_view is known to be another cache, so non-mutating reads can recurse without RTTI.
+    const CCoinsViewCache* m_read_cache;
+    bool m_mutating_read_view;
 
     /**
      * Make mutable so that we can "fill the cache" even from Get-methods
@@ -423,17 +435,18 @@ protected:
     mutable size_t m_dirty_count{0};
 
     /**
-     * Discard all modifications made to this cache without flushing to the base view.
+     * Discard all modifications made to this cache without flushing to the write view.
      * This can be used to efficiently reuse a cache instance across multiple operations.
      */
     virtual void Reset() noexcept;
 
-    /* Fetch the coin from base. Used for cache misses in FetchCoin. */
+    /* Fetch the coin from the read view. Used for cache misses in FetchCoin. */
     virtual std::optional<Coin> FetchCoinFromBase(const COutPoint& outpoint) const;
 
 public:
     CCoinsViewCache(CCoinsViewCacheBackend& in_base, bool deterministic = false);
     explicit CCoinsViewCache(CCoinsViewCache& in_base, bool deterministic = false);
+    CCoinsViewCache(NonMutatingReads, const CCoinsViewCache& read_cache, CCoinsViewCacheBackend& write_view, bool deterministic = false);
 
     /**
      * By deleting the copy constructor, we prevent accidentally copying a cache.
@@ -442,7 +455,13 @@ public:
     CCoinsViewCache(const CCoinsViewCache &) = delete;
 
     // Backend management
-    virtual void SetBackend(CCoinsViewCacheBackend& in_view) { base = &in_view; }
+    virtual void SetBackend(CCoinsViewCacheBackend& in_view)
+    {
+        m_read_view = &in_view;
+        m_write_view = &in_view;
+        m_read_cache = nullptr;
+        m_mutating_read_view = true;
+    }
 
     // Standard CCoinsView methods
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
@@ -494,7 +513,7 @@ public:
     bool SpendCoin(const COutPoint &outpoint, Coin* moveto = nullptr);
 
     /**
-     * Push the modifications applied to this cache to its base and wipe local state.
+     * Push the modifications applied to this cache to its write view and wipe local state.
      * Failure to call this method or Sync() before destruction will cause the changes
      * to be forgotten.
      * If reallocate_cache is false, the cache will retain the same memory footprint
@@ -503,7 +522,7 @@ public:
     virtual void Flush(bool reallocate_cache = true);
 
     /**
-     * Push the modifications applied to this cache to its base while retaining
+     * Push the modifications applied to this cache to its write view while retaining
      * the contents of this cache (except for spent coins, which we erase).
      * Failure to call this method or Flush() before destruction will cause the changes
      * to be forgotten.
@@ -558,6 +577,9 @@ public:
     [[nodiscard]] ResetGuard CreateResetGuard() noexcept { return ResetGuard{*this}; }
 
 private:
+    std::optional<Coin> GetCoinNoCache(const COutPoint& outpoint) const;
+    std::optional<Coin> ReadCoinNoCache(const COutPoint& outpoint) const;
+
     /**
      * @note this is marked const, but may actually append to `cacheCoins`, increasing
      * memory usage.
@@ -660,7 +682,7 @@ private:
         if (i >= m_inputs.size()) return false;
 
         auto& input{m_inputs[i]};
-        input.coin = base->PeekCoin(input.outpoint);
+        input.coin = m_read_view->PeekCoin(input.outpoint);
         // Use release so writing coin above happens before the main thread acquires.
         input.ready.test_and_set(std::memory_order_release);
         input.ready.notify_one();
@@ -707,7 +729,7 @@ private:
         }
 
         // We will only get here for BIP30 checks or when parallel fetching is disabled.
-        return base->PeekCoin(outpoint);
+        return m_read_view->PeekCoin(outpoint);
     }
 
     /**

@@ -22,26 +22,46 @@ CoinsViewEmpty& CoinsViewEmpty::Get()
 
 std::optional<Coin> CCoinsViewCache::PeekCoin(const COutPoint& outpoint) const
 {
+    return GetCoinNoCache(outpoint);
+}
+
+std::optional<Coin> CCoinsViewCache::GetCoinNoCache(const COutPoint& outpoint) const
+{
     if (auto it{cacheCoins.find(outpoint)}; it != cacheCoins.end()) {
         return it->second.coin.IsSpent() ? std::nullopt : std::optional{it->second.coin};
     }
-    return base->PeekCoin(outpoint);
+    return ReadCoinNoCache(outpoint);
 }
 
-CCoinsViewCache::CCoinsViewCache(BackendTag, CCoinsViewCacheBackend& in_base, bool deterministic) :
-    m_deterministic(deterministic), base{&in_base},
+std::optional<Coin> CCoinsViewCache::ReadCoinNoCache(const COutPoint& outpoint) const
+{
+    if (m_read_cache) return m_read_cache->GetCoinNoCache(outpoint);
+    return m_read_view->GetCoin(outpoint);
+}
+
+CCoinsViewCache::CCoinsViewCache(BackendTag, const CCoinsView& read_view, CCoinsViewCacheBackend& write_view, const CCoinsViewCache* read_cache, bool mutating_read_view, bool deterministic) :
+    m_deterministic(deterministic),
+    m_read_view{&read_view},
+    m_write_view{&write_view},
+    m_read_cache{read_cache},
+    m_mutating_read_view{mutating_read_view},
     cacheCoins(0, SaltedOutpointHasher(/*deterministic=*/deterministic), CCoinsMap::key_equal{}, &m_cache_coins_memory_resource)
 {
     m_sentinel.second.SelfRef(m_sentinel);
 }
 
 CCoinsViewCache::CCoinsViewCache(CCoinsViewCacheBackend& in_base, bool deterministic) :
-    CCoinsViewCache(BackendTag{}, in_base, deterministic)
+    CCoinsViewCache(BackendTag{}, in_base, in_base, /*read_cache=*/nullptr, /*mutating_read_view=*/true, deterministic)
 {
 }
 
 CCoinsViewCache::CCoinsViewCache(CCoinsViewCache& in_base, bool deterministic) :
-    CCoinsViewCache(BackendTag{}, in_base, deterministic)
+    CCoinsViewCache(BackendTag{}, in_base, in_base, &in_base, /*mutating_read_view=*/true, deterministic)
+{
+}
+
+CCoinsViewCache::CCoinsViewCache(NonMutatingReads, const CCoinsViewCache& read_cache, CCoinsViewCacheBackend& write_view, bool deterministic) :
+    CCoinsViewCache(BackendTag{}, read_cache, write_view, &read_cache, /*mutating_read_view=*/false, deterministic)
 {
 }
 
@@ -51,7 +71,7 @@ size_t CCoinsViewCache::DynamicMemoryUsage() const {
 
 std::optional<Coin> CCoinsViewCache::FetchCoinFromBase(const COutPoint& outpoint) const
 {
-    return base->GetCoin(outpoint);
+    return m_mutating_read_view ? m_read_view->GetCoin(outpoint) : ReadCoinNoCache(outpoint);
 }
 
 CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint) const {
@@ -187,7 +207,7 @@ bool CCoinsViewCache::HaveCoinInCache(const COutPoint &outpoint) const {
 
 uint256 CCoinsViewCache::GetBestBlock() const {
     if (m_block_hash.IsNull())
-        m_block_hash = base->GetBestBlock();
+        m_block_hash = m_read_view->GetBestBlock();
     return m_block_hash;
 }
 
@@ -270,7 +290,7 @@ void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& in
 void CCoinsViewCache::Flush(bool reallocate_cache)
 {
     auto cursor{CoinsViewCacheCursor(m_dirty_count, m_sentinel, cacheCoins, /*will_erase=*/true)};
-    base->BatchWrite(cursor, m_block_hash);
+    m_write_view->BatchWrite(cursor, m_block_hash);
     Assume(m_dirty_count == 0);
     cacheCoins.clear();
     if (reallocate_cache) {
@@ -282,7 +302,7 @@ void CCoinsViewCache::Flush(bool reallocate_cache)
 void CCoinsViewCache::Sync()
 {
     auto cursor{CoinsViewCacheCursor(m_dirty_count, m_sentinel, cacheCoins, /*will_erase=*/false)};
-    base->BatchWrite(cursor, m_block_hash);
+    m_write_view->BatchWrite(cursor, m_block_hash);
     Assume(m_dirty_count == 0);
     if (m_sentinel.second.Next() != &m_sentinel) {
         /* BatchWrite must clear flags of all entries */

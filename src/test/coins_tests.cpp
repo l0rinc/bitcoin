@@ -1171,7 +1171,7 @@ BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
     BOOST_CHECK_EQUAL(cache.GetDirtyCount(), 0U);
 }
 
-BOOST_AUTO_TEST_CASE(ccoins_peekcoin)
+BOOST_AUTO_TEST_CASE(ccoins_non_mutating_cache_read)
 {
     CCoinsViewTest base{m_rng};
 
@@ -1184,12 +1184,15 @@ BOOST_AUTO_TEST_CASE(ccoins_peekcoin)
         cache.Flush();
     }
 
-    // Verify PeekCoin can read through the cache stack without mutating the intermediate cache.
-    CCoinsViewCacheTest main_cache{base};
-    const auto fetched{main_cache.PeekCoin(outpoint)};
+    // Verify a non-mutating read cache can read through a cache stack without mutating lower caches.
+    CCoinsViewCacheTest lower_cache{base};
+    CCoinsViewCacheTest main_cache{lower_cache};
+    CCoinsViewCache read_cache{CCoinsViewCache::NonMutatingReads{}, main_cache, CoinsViewEmpty::Get()};
+    const auto fetched{read_cache.GetCoin(outpoint)};
     BOOST_CHECK(fetched.has_value());
     BOOST_CHECK(*fetched == coin);
     BOOST_CHECK(!main_cache.HaveCoinInCache(outpoint));
+    BOOST_CHECK(!lower_cache.HaveCoinInCache(outpoint));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
