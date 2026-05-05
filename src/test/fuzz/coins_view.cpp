@@ -132,6 +132,10 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
 {
     bool good_data{true};
     CCoinsViewCacheBackend* backend_coins_view{&original_backend};
+    const auto has_coin_no_cache{[&](const COutPoint& outpoint) {
+        CCoinsViewCache read_cache{CCoinsViewCache::NonMutatingReads{}, coins_view_cache, CoinsViewEmpty::Get(), /*deterministic=*/true};
+        return read_cache.GetCoin(outpoint).has_value();
+    }};
 
     if (require_non_null_best_block) coins_view_cache.SetBestBlock(uint256::ONE);
     COutPoint random_out_point;
@@ -149,7 +153,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 Coin coin{random_coin};
                 if (fuzzed_data_provider.ConsumeBool()) {
                     // We can only skip the check if no unspent coin exists for this outpoint.
-                    const bool possible_overwrite{coins_view_cache.PeekCoin(outpoint) || fuzzed_data_provider.ConsumeBool()};
+                    const bool possible_overwrite{has_coin_no_cache(outpoint) || fuzzed_data_provider.ConsumeBool()};
                     coins_view_cache.AddCoin(outpoint, std::move(coin), possible_overwrite);
                 } else {
                     coins_view_cache.EmplaceCoinInternalDANGER(std::move(outpoint), std::move(coin));
@@ -242,7 +246,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                         coins_cache_entry.coin = *opt_coin;
                     }
                     // Avoid setting FRESH for an outpoint that already exists unspent in the parent view.
-                    bool fresh{!coins_view_cache.PeekCoin(random_out_point) && fuzzed_data_provider.ConsumeBool()};
+                    bool fresh{!has_coin_no_cache(random_out_point) && fuzzed_data_provider.ConsumeBool()};
                     bool dirty{fresh || fuzzed_data_provider.ConsumeBool()};
                     auto it{coins_map.emplace(random_out_point, std::move(coins_cache_entry)).first};
                     if (dirty) CCoinsCacheEntry::SetDirty(*it, sentinel);
@@ -288,7 +292,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 const int height{int(fuzzed_data_provider.ConsumeIntegral<uint32_t>() >> 1)};
                 const bool check_for_overwrite{transaction.IsCoinBase() || [&] {
                     for (uint32_t i{0}; i < transaction.vout.size(); ++i) {
-                        if (coins_view_cache.PeekCoin(COutPoint{transaction.GetHash(), i})) return true;
+                        if (has_coin_no_cache(COutPoint{transaction.GetHash(), i})) return true;
                     }
                     return fuzzed_data_provider.ConsumeBool();
                 }()}; // We can only skip the check if the current txid has no unspent outputs
@@ -436,11 +440,11 @@ FUZZ_TARGET(coins_view_stacked, .init = initialize_coins_view) EXCLUSIVE_LOCKS_R
         .memory_only = true,
     };
     CCoinsViewDB backend_base_coins_view{std::move(db_params), CoinsViewOptions{}};
-    CCoinsViewCache backend_cache{&backend_base_coins_view, /*deterministic=*/true};
-    TestCoinsView(fuzzed_data_provider, backend_cache, &backend_base_coins_view);
-    CoinsViewOverlay coins_view_cache{&backend_cache, g_thread_pool, /*deterministic=*/true};
+    CCoinsViewCache backend_cache{backend_base_coins_view, /*deterministic=*/true};
+    TestCoinsView(fuzzed_data_provider, backend_cache, backend_base_coins_view, /*require_non_null_best_block=*/true);
+    CoinsViewOverlay coins_view_cache{backend_cache, g_thread_pool, /*deterministic=*/true};
     CBlock block{BuildRandomBlock(fuzzed_data_provider)};
     const auto reset_guard{coins_view_cache.StartFetching(block)};
-    TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_cache);
-    TestCoinsView(fuzzed_data_provider, backend_cache, &backend_base_coins_view);
+    TestCoinsView(fuzzed_data_provider, coins_view_cache, backend_cache, /*require_non_null_best_block=*/false);
+    TestCoinsView(fuzzed_data_provider, backend_cache, backend_base_coins_view, /*require_non_null_best_block=*/true);
 }

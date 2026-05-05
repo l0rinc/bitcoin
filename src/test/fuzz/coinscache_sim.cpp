@@ -283,14 +283,18 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         CallOneOf(
             provider,
 
-            [&]() { // PeekCoin/GetCoin
+            [&]() { // Non-mutating GetCoin/GetCoin
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
                 // Look up in simulation data.
                 auto sim = lookup(outpointidx);
                 // Look up in real caches.
-                auto realcoin = provider.ConsumeBool() ?
-                    caches.back()->PeekCoin(data.outpoints[outpointidx]) :
-                    caches.back()->GetCoin(data.outpoints[outpointidx]);
+                auto realcoin = [&] {
+                    if (provider.ConsumeBool()) {
+                        CCoinsViewCache read_cache{CCoinsViewCache::NonMutatingReads{}, *caches.back(), CoinsViewEmpty::Get(), /*deterministic=*/true};
+                        return read_cache.GetCoin(data.outpoints[outpointidx]);
+                    }
+                    return caches.back()->GetCoin(data.outpoints[outpointidx]);
+                }();
                 // Compare results.
                 if (!sim.has_value()) {
                     assert(!realcoin);
@@ -476,11 +480,12 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
     // Full comparison between caches and simulation data, from bottom to top,
     for (unsigned sim_idx = 1; sim_idx <= caches.size(); ++sim_idx) {
         auto& cache = *caches[sim_idx - 1];
+        CCoinsViewCache read_cache{CCoinsViewCache::NonMutatingReads{}, cache, CoinsViewEmpty::Get(), /*deterministic=*/true};
         size_t cache_size = 0;
 
         for (uint32_t outpointidx = 0; outpointidx < NUM_OUTPOINTS; ++outpointidx) {
             cache_size += cache.HaveCoinInCache(data.outpoints[outpointidx]);
-            const auto real{cache.PeekCoin(data.outpoints[outpointidx])};
+            const auto real{read_cache.GetCoin(data.outpoints[outpointidx])};
             auto sim = lookup(outpointidx, sim_idx);
             if (!sim.has_value()) {
                 assert(!real);

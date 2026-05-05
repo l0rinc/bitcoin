@@ -770,7 +770,6 @@ public:
     /** GetCoin, returning whether it exists and is not spent. Also updates m_non_base_coins if the
      * coin is not fetched from base. May populate the base view on cache misses. */
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
-    std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override { return base->PeekCoin(outpoint); }
     bool HaveCoin(const COutPoint& outpoint) const override { return base->HaveCoin(outpoint); }
     uint256 GetBestBlock() const override { return base->GetBestBlock(); }
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) override { base->BatchWrite(cursor, block_hash); }

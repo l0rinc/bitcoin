@@ -323,15 +323,9 @@ public:
     virtual ~CCoinsView() = default;
 
     //! Retrieve the Coin (unspent transaction output) for a given outpoint.
-    //! May populate the cache. Use PeekCoin() to perform a non-caching lookup.
     virtual std::optional<Coin> GetCoin(const COutPoint& outpoint) const = 0;
 
-    //! Retrieve the Coin (unspent transaction output) for a given outpoint, without caching results.
-    //! Does not populate the cache. Use GetCoin() to cache the result.
-    virtual std::optional<Coin> PeekCoin(const COutPoint& outpoint) const = 0;
-
     //! Just check whether a given outpoint is unspent.
-    //! May populate the cache. Use PeekCoin() to perform a non-caching lookup.
     virtual bool HaveCoin(const COutPoint& outpoint) const = 0;
 
     //! Retrieve the block hash whose state this CCoinsView currently represents
@@ -385,7 +379,6 @@ public:
     CoinsViewEmpty& operator=(const CoinsViewEmpty&) = delete;
 
     std::optional<Coin> GetCoin(const COutPoint&) const override { return {}; }
-    std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override { return GetCoin(outpoint); }
     bool HaveCoin(const COutPoint& outpoint) const override { return !!GetCoin(outpoint); }
     uint256 GetBestBlock() const override { return {}; }
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256&) override
@@ -465,7 +458,6 @@ public:
 
     // Standard CCoinsView methods
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
-    std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override;
     bool HaveCoin(const COutPoint& outpoint) const override;
     uint256 GetBestBlock() const override;
     void SetBestBlock(const uint256& block_hash);
@@ -851,7 +843,6 @@ public:
 
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
     bool HaveCoin(const COutPoint& outpoint) const override;
-    std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override;
     uint256 GetBestBlock() const override { return base->GetBestBlock(); }
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) override { base->BatchWrite(cursor, block_hash); }
 
