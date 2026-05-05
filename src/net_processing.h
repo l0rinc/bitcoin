@@ -57,6 +57,7 @@ static const unsigned int MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK = 3;
 static const unsigned int MAX_HEADERS_RESULTS = 2000;
 /** The compactblocks version we support. See BIP 152. */
 static constexpr uint64_t CMPCTBLOCKS_VERSION{2};
+static constexpr int DEFAULT_MAXSTALEOUTBOUND{2};
 
 struct CNodeStateStats {
     int nSyncHeight = -1;
@@ -107,6 +108,7 @@ public:
         uint32_t max_headers_result{MAX_HEADERS_RESULTS};
         //! Whether private broadcast is used for sending transactions.
         bool private_broadcast{DEFAULT_PRIVATE_BROADCAST};
+        unsigned int maxstaleoutbound{DEFAULT_MAXSTALEOUTBOUND};
     };
 
     static std::unique_ptr<PeerManager> make(CConnman& connman, AddrMan& addrman,
