@@ -9,6 +9,7 @@
 #include <crypto/hmac_sha512.h>
 #include <hash.h>
 #include <random.h>
+#include <span.h>
 
 #include <secp256k1.h>
 #include <secp256k1_ellswift.h>
@@ -492,7 +493,7 @@ void CExtKey::SetSeed(std::span<const std::byte> seed)
 {
     static const unsigned char hashkey[] = {'B','i','t','c','o','i','n',' ','s','e','e','d'};
     std::vector<unsigned char, secure_allocator<unsigned char>> vout(64);
-    CHMAC_SHA512{hashkey, sizeof(hashkey)}.Write(UCharCast(seed.data()), seed.size()).Finalize(vout.data());
+    CHMAC_SHA512{std::span{hashkey}}.Write(MakeUCharSpan(seed)).Finalize(MakeWritableUCharSpan(vout));
     key.Set(vout.data(), vout.data() + 32, true);
     memcpy(chaincode.begin(), vout.data() + 32, 32);
     nDepth = 0;

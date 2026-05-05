@@ -5,6 +5,10 @@
 #ifndef BITCOIN_CRYPTO_SHA256_H
 #define BITCOIN_CRYPTO_SHA256_H
 
+#include <span.h>
+
+#include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <string>
@@ -22,7 +26,20 @@ public:
 
     CSHA256();
     CSHA256& Write(const unsigned char* data, size_t len);
+    CSHA256& Write(std::span<const unsigned char> data) { return Write(data.data(), data.size()); }
+    CSHA256& Write(std::span<const char> data) { return Write(UCharCast(data.data()), data.size()); }
+    CSHA256& Write(std::span<const std::byte> data) { return Write(UCharCast(data.data()), data.size()); }
     void Finalize(unsigned char hash[OUTPUT_SIZE]);
+    void Finalize(std::span<unsigned char> hash)
+    {
+        assert(hash.size() == OUTPUT_SIZE);
+        Finalize(hash.data());
+    }
+    void Finalize(std::span<std::byte> hash)
+    {
+        assert(hash.size() == OUTPUT_SIZE);
+        Finalize(UCharCast(hash.data()));
+    }
     CSHA256& Reset();
 };
 

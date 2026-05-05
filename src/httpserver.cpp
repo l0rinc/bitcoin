@@ -30,6 +30,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <sys/types.h>
@@ -252,7 +253,7 @@ static void http_request_cb(struct evhttp_request* req, void* arg)
 
     // Dispatch to worker thread
     if (i != iend) {
-        if (static_cast<int>(g_threadpool_http.WorkQueueSize()) >= g_max_queue_depth) {
+        if (std::cmp_greater_equal(g_threadpool_http.WorkQueueSize(), g_max_queue_depth)) {
             LogWarning("Request rejected because http work queue depth exceeded, it can be increased with the -rpcworkqueue= setting");
             hreq->WriteReply(HTTP_SERVICE_UNAVAILABLE, "Work queue depth exceeded");
             return;

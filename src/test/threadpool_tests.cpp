@@ -460,30 +460,30 @@ BOOST_AUTO_TEST_CASE(stop_active_wait_drains_queue)
 // Test 14, submit range of tasks in one lock acquisition
 BOOST_AUTO_TEST_CASE(submit_range_of_tasks_complete_successfully)
 {
-    constexpr int32_t num_tasks{50};
+    constexpr size_t num_tasks{50};
 
     ThreadPool threadPool{POOL_NAME};
     threadPool.Start(NUM_WORKERS_DEFAULT);
-    std::atomic_int32_t sum{0};
-    const auto square{[&sum](int32_t i) {
+    std::atomic<size_t> sum{0};
+    const auto square{[&sum](size_t i) {
         sum.fetch_add(i, std::memory_order_relaxed);
         return i * i;
     }};
 
-    std::array<std::function<int32_t()>, static_cast<size_t>(num_tasks)> array_tasks;
-    std::vector<std::function<int32_t()>> vector_tasks;
-    vector_tasks.reserve(static_cast<size_t>(num_tasks));
-    for (const auto i : std::views::iota(int32_t{1}, num_tasks + 1)) {
-        array_tasks.at(static_cast<size_t>(i - 1)) = [i, square] { return square(i); };
+    std::array<std::function<size_t()>, num_tasks> array_tasks;
+    std::vector<std::function<size_t()>> vector_tasks;
+    vector_tasks.reserve(num_tasks);
+    for (const auto i : std::views::iota(size_t{1}, num_tasks + 1)) {
+        array_tasks.at(i - 1) = [i, square] { return square(i); };
         vector_tasks.emplace_back([i, square] { return square(i); });
     }
 
     auto futures{std::move(*Assert(threadPool.Submit(std::move(array_tasks))))};
-    BOOST_CHECK_EQUAL(futures.size(), static_cast<size_t>(num_tasks));
+    BOOST_CHECK_EQUAL(futures.size(), num_tasks);
     std::ranges::move(*Assert(threadPool.Submit(std::move(vector_tasks))), std::back_inserter(futures));
-    BOOST_CHECK_EQUAL(futures.size(), static_cast<size_t>(num_tasks * 2));
+    BOOST_CHECK_EQUAL(futures.size(), num_tasks * 2);
 
-    auto squares_sum{0};
+    size_t squares_sum{0};
     for (auto& future : futures) {
         squares_sum += future.get();
     }

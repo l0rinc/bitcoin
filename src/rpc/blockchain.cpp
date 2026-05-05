@@ -3289,11 +3289,11 @@ UniValue CreateRolledBackUTXOSnapshot(
     LogInfo("Rolling back from height %d to %d", tip->nHeight, target->nHeight);
 
     const CBlockIndex* block_index{tip};
-    const size_t total_blocks{static_cast<size_t>(block_index->nHeight - target->nHeight)};
+    const int64_t total_blocks{block_index->nHeight - target->nHeight};
     CCoinsViewCache rollback_cache(temp_db.get());
     rollback_cache.SetBestBlock(block_index->GetBlockHash());
-    size_t blocks_processed = 0;
-    int last_progress{0};
+    int64_t blocks_processed{0};
+    int64_t last_progress{0};
     DisconnectResult res;
 
     while (block_index->nHeight > target->nHeight) {
@@ -3312,7 +3312,7 @@ UniValue CreateRolledBackUTXOSnapshot(
         }
 
         blocks_processed++;
-        int progress{static_cast<int>(blocks_processed * 100 / total_blocks)};
+        const int64_t progress{blocks_processed * 100 / total_blocks};
         if (progress >= last_progress + 5) {
             LogInfo("Rolled back %d%% of blocks.", progress);
             last_progress = progress;

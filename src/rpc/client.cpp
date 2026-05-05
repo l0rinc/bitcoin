@@ -7,6 +7,7 @@
 #include <rpc/client.h>
 #include <tinyformat.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <set>
 #include <string>
@@ -20,7 +21,7 @@ class CRPCConvertParam
 {
 public:
     std::string methodName; //!< method whose params want conversion
-    int paramIdx;           //!< 0-based idx of param to convert
+    size_t paramIdx;        //!< 0-based idx of param to convert
     std::string paramName;  //!< parameter name
     ParamFormat format{ParamFormat::JSON}; //!< parameter format
 };
@@ -408,7 +409,7 @@ namespace rpc_convert
 const CRPCConvertParam* FromPosition(std::string_view method, size_t pos)
 {
     auto it = std::ranges::find_if(vRPCConvertParams, [&](const auto& p) {
-        return p.methodName == method && p.paramIdx == static_cast<int>(pos);
+        return p.methodName == method && p.paramIdx == pos;
     });
 
     return it == std::end(vRPCConvertParams) ? nullptr : &*it;

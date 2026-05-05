@@ -37,9 +37,9 @@ void CBlockHeaderAndShortTxIDs::FillShortTxIDSelector() const
     DataStream stream{};
     stream << header << nonce;
     CSHA256 hasher;
-    hasher.Write((unsigned char*)&(*stream.begin()), stream.end() - stream.begin());
+    hasher.Write(stream);
     uint256 shorttxidhash;
-    hasher.Finalize(shorttxidhash.begin());
+    hasher.Finalize(shorttxidhash);
     m_hasher.emplace(shorttxidhash.GetUint64(0), shorttxidhash.GetUint64(1));
 }
 

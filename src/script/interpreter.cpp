@@ -13,6 +13,8 @@
 #include <tinyformat.h>
 #include <uint256.h>
 
+#include <utility>
+
 typedef std::vector<unsigned char> valtype;
 
 namespace {
@@ -237,7 +239,7 @@ int FindAndDelete(CScript& script, const CScript& b)
     do
     {
         result.insert(result.end(), pc2, pc);
-        while (static_cast<size_t>(end - pc) >= b.size() && std::equal(b.begin(), b.end(), pc))
+        while (std::cmp_greater_equal(end - pc, b.size()) && std::equal(b.begin(), b.end(), pc))
         {
             pc = pc + b.size();
             ++nFound;
@@ -1891,9 +1893,9 @@ uint256 ComputeTaprootMerkleRoot(std::span<const unsigned char> control, const u
     assert(control.size() <= TAPROOT_CONTROL_MAX_SIZE);
     assert((control.size() - TAPROOT_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE == 0);
 
-    const int path_len = (control.size() - TAPROOT_CONTROL_BASE_SIZE) / TAPROOT_CONTROL_NODE_SIZE;
+    const size_t path_len = (control.size() - TAPROOT_CONTROL_BASE_SIZE) / TAPROOT_CONTROL_NODE_SIZE;
     uint256 k = tapleaf_hash;
-    for (int i = 0; i < path_len; ++i) {
+    for (size_t i = 0; i < path_len; ++i) {
         std::span node{std::span{control}.subspan(TAPROOT_CONTROL_BASE_SIZE + TAPROOT_CONTROL_NODE_SIZE * i, TAPROOT_CONTROL_NODE_SIZE)};
         k = ComputeTapbranchHash(k, node);
     }

@@ -363,9 +363,9 @@ std::unique_ptr<Transport> MakeV2Transport(NodeId nodeid, bool initiator, RNG& r
     // both non-randomly and dependently. Since the entropy is hashed anyway inside the ellswift
     // computation, no coverage should be lost by using a hash as entropy, and it removes the
     // possibility of garbage that happens to contain what is effectively a hash of the keys.
-    CSHA256().Write(UCharCast(ent.data()), ent.size())
-             .Write(garb.data(), garb.size())
-             .Finalize(UCharCast(ent.data()));
+    CSHA256().Write(ent)
+             .Write(garb)
+             .Finalize(ent);
 
     return std::make_unique<V2Transport>(nodeid, initiator, key, ent, std::move(garb));
 }

@@ -14,7 +14,7 @@ namespace script {
 
 bool Const(const std::string& str, std::span<const char>& sp, bool skip)
 {
-    if ((size_t)sp.size() >= str.size() && std::equal(str.begin(), str.end(), sp.begin())) {
+    if (sp.size() >= str.size() && std::equal(str.begin(), str.end(), sp.begin())) {
         if (skip) sp = sp.subspan(str.size());
         return true;
     }
@@ -23,7 +23,7 @@ bool Const(const std::string& str, std::span<const char>& sp, bool skip)
 
 bool Func(const std::string& str, std::span<const char>& sp)
 {
-    if ((size_t)sp.size() >= str.size() + 2 && sp[str.size()] == '(' && sp[sp.size() - 1] == ')' && std::equal(str.begin(), str.end(), sp.begin())) {
+    if (sp.size() >= str.size() + 2 && sp[str.size()] == '(' && sp[sp.size() - 1] == ')' && std::equal(str.begin(), str.end(), sp.begin())) {
         sp = sp.subspan(str.size() + 1, sp.size() - str.size() - 2);
         return true;
     }

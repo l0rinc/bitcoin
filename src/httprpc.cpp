@@ -11,6 +11,7 @@
 #include <netaddress.h>
 #include <rpc/protocol.h>
 #include <rpc/server.h>
+#include <span.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
 #include <util/strencodings.h>
@@ -70,7 +71,7 @@ static bool CheckUserAuthorized(std::string_view user, std::string_view pass)
         const std::string& hash = fields[2];
 
         std::array<unsigned char, CHMAC_SHA256::OUTPUT_SIZE> out;
-        CHMAC_SHA256(UCharCast(salt.data()), salt.size()).Write(UCharCast(pass.data()), pass.size()).Finalize(out.data());
+        CHMAC_SHA256{MakeUCharSpan(salt)}.Write(MakeUCharSpan(pass)).Finalize(out);
         std::string hash_from_pass = HexStr(out);
 
         if (TimingResistantEqual(hash_from_pass, hash)) {
@@ -289,7 +290,7 @@ static bool InitRPCAuthentication()
 
         // Compute HMAC.
         std::array<unsigned char, CHMAC_SHA256::OUTPUT_SIZE> out;
-        CHMAC_SHA256(UCharCast(salt.data()), salt.size()).Write(UCharCast(pass.data()), pass.size()).Finalize(out.data());
+        CHMAC_SHA256{MakeUCharSpan(salt)}.Write(MakeUCharSpan(pass)).Finalize(out);
         std::string hash = HexStr(out);
 
         g_rpcauth.push_back({user, salt, hash});

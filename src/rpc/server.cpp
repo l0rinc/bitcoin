@@ -388,8 +388,8 @@ static inline JSONRPCRequest transformNamedArguments(const JSONRPCRequest& in, c
     // i.e. how many initial positional arguments were left unspecified. This is
     // used after the for-loop to add initial positional arguments from the
     // "args" parameter, if present.
-    int hole = 0;
-    int initial_hole_size = 0;
+    size_t hole = 0;
+    size_t initial_hole_size = 0;
     const std::string* initial_param = nullptr;
     UniValue options{UniValue::VOBJ};
     for (const auto& [argNamePattern, named_only]: argNames) {
@@ -417,7 +417,7 @@ static inline JSONRPCRequest transformNamedArguments(const JSONRPCRequest& in, c
         }
 
         if (!options.empty() || fr != argsIn.end()) {
-            for (int i = 0; i < hole; ++i) {
+            for (size_t i = 0; i < hole; ++i) {
                 // Fill hole between specified parameters with JSON nulls,
                 // but not at the end (for backwards compatibility with calls
                 // that act based on number of specified parameters).
@@ -451,7 +451,7 @@ static inline JSONRPCRequest transformNamedArguments(const JSONRPCRequest& in, c
     // arguments as described in doc/JSON-RPC-interface.md#parameter-passing
     auto positional_args{argsIn.extract("args")};
     if (positional_args && positional_args.mapped()->isArray()) {
-        if (initial_hole_size < (int)positional_args.mapped()->size() && initial_param) {
+        if (initial_hole_size < positional_args.mapped()->size() && initial_param) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Parameter " + *initial_param + " specified twice both as positional and named argument");
         }
         // Assign positional_args to out.params and append named_args after.

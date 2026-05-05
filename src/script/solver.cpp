@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cassert>
 #include <string>
+#include <utility>
 
 typedef std::vector<unsigned char> valtype;
 
@@ -99,7 +100,7 @@ static bool MatchMultisig(const CScript& script, int& required_sigs, std::vector
     }
     auto num_keys = GetScriptNumber(opcode, data, required_sigs, MAX_PUBKEYS_PER_MULTISIG);
     if (!num_keys) return false;
-    if (pubkeys.size() != static_cast<unsigned long>(*num_keys)) return false;
+    if (!std::cmp_equal(pubkeys.size(), *num_keys)) return false;
 
     return (it + 1 == script.end());
 }

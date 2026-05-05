@@ -35,7 +35,7 @@ public:
     }
 
     CHash256& Write(std::span<const unsigned char> input) {
-        sha.Write(input.data(), input.size());
+        sha.Write(input);
         return *this;
     }
 
@@ -60,7 +60,7 @@ public:
     }
 
     CHash160& Write(std::span<const unsigned char> input) {
-        sha.Write(input.data(), input.size());
+        sha.Write(input);
         return *this;
     }
 
@@ -105,7 +105,7 @@ private:
 public:
     void write(std::span<const std::byte> src)
     {
-        ctx.Write(UCharCast(src.data()), src.size());
+        ctx.Write(src);
     }
 
     /** Compute the double-SHA256 hash of all data written to this object.
@@ -114,8 +114,8 @@ public:
      */
     uint256 GetHash() {
         uint256 result;
-        ctx.Finalize(result.begin());
-        ctx.Reset().Write(result.begin(), CSHA256::OUTPUT_SIZE).Finalize(result.begin());
+        ctx.Finalize(result);
+        ctx.Reset().Write(result).Finalize(result);
         return result;
     }
 
