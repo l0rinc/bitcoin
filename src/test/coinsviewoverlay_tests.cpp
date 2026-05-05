@@ -130,7 +130,8 @@ BOOST_AUTO_TEST_CASE(fetch_inputs_from_db)
     view.SetBestBlock(uint256::ONE);
     BOOST_CHECK(view.SpendCoin(outpoint));
     view.Flush();
-    BOOST_CHECK(!main_cache.PeekCoin(outpoint).has_value());
+    CCoinsViewCache read_cache{CCoinsViewCache::NonMutatingReads{}, main_cache, CoinsViewEmpty::Get()};
+    BOOST_CHECK(!read_cache.GetCoin(outpoint).has_value());
 }
 
 BOOST_AUTO_TEST_CASE(fetch_inputs_from_cache)
@@ -147,7 +148,32 @@ BOOST_AUTO_TEST_CASE(fetch_inputs_from_cache)
     view.SetBestBlock(uint256::ONE);
     BOOST_CHECK(view.SpendCoin(outpoint));
     view.Flush();
-    BOOST_CHECK(!main_cache.PeekCoin(outpoint).has_value());
+    CCoinsViewCache read_cache{CCoinsViewCache::NonMutatingReads{}, main_cache, CoinsViewEmpty::Get()};
+    BOOST_CHECK(!read_cache.GetCoin(outpoint).has_value());
+}
+
+BOOST_AUTO_TEST_CASE(fetch_from_cache_flush_to_separate_writer)
+{
+    const auto block{CreateBlock()};
+    CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
+    PopulateView(block, db);
+    CCoinsViewCache read_cache{db};
+    CCoinsViewCache writer_cache{db};
+    CoinsViewOverlay view{read_cache, writer_cache, StartedThreadPool()};
+    const auto reset_guard{view.StartFetching(block)};
+    const auto& outpoint{block.vtx[1]->vin[0].prevout};
+
+    BOOST_CHECK(view.GetCoin(outpoint).has_value());
+    BOOST_CHECK(!read_cache.HaveCoinInCache(outpoint));
+
+    view.SetBestBlock(uint256::ONE);
+    BOOST_CHECK(view.SpendCoin(outpoint));
+    view.Flush();
+
+    BOOST_CHECK(!read_cache.HaveCoinInCache(outpoint));
+    BOOST_CHECK_EQUAL(writer_cache.GetDirtyCount(), 1U);
+    CCoinsViewCache writer_read{CCoinsViewCache::NonMutatingReads{}, writer_cache, CoinsViewEmpty::Get()};
+    BOOST_CHECK(!writer_read.GetCoin(outpoint).has_value());
 }
 
 // Test for the case where a block spends coins that are spent in the cache, but
@@ -217,7 +243,7 @@ BOOST_AUTO_TEST_CASE(access_non_input_coins)
     BOOST_CHECK(!view.HaveCoinInCache(missing_outpoint));
 }
 
-// Test that disabled input fetching falls back to normal cache lookups via base->PeekCoin.
+// Test that disabled input fetching falls back to normal non-mutating cache lookups.
 BOOST_AUTO_TEST_CASE(fetch_unstarted_thread_pool)
 {
     const auto block{CreateBlock()};

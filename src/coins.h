@@ -589,10 +589,10 @@ private:
 
 /**
  * CCoinsViewCache subclass that asynchronously fetches all block inputs in parallel during ConnectBlock without
- * mutating the base cache.
+ * mutating the read cache.
  *
  * Only used in ConnectBlock to pass as an ephemeral view that can be reset if the block is invalid.
- * It provides the same interface as CCoinsViewCache. It overrides all methods that mutate base,
+ * It provides the same interface as CCoinsViewCache. It overrides all methods that mutate the read or write views,
  * stopping threads before calling superclass.
  * It adds an additional StartFetching method to provide the block.
  *
@@ -604,11 +604,11 @@ private:
  * m_inputs vector at a time. Workers race to claim inputs, so they may fetch elements in any order. If the fetched
  * index is greater than the size of m_inputs, no more inputs can be fetched and false is returned.
  *
- * The worker claims the InputToFetch at this index, fetches the coin from the base cache and moves it into the
+ * The worker claims the InputToFetch at this index, fetches the coin from the read cache and moves it into the
  * InputToFetch object. The ready flag is then set with a release memory order. This allows the ready flag to be
  * used as a memory fence, guaranteeing the coin being written to the object will have happened before another
  * thread tests the flag with an acquire memory order.
- * This assumes all base->PeekCoin() paths are safe for concurrent readers and do not mutate lower cache layers.
+ * The read path uses CCoinsViewCache::NonMutatingReads, so concurrent readers do not mutate lower cache layers.
  *
  * When a coin is requested from the cache on the main thread and is not already in cacheCoins map, FetchCoinFromBase
  * checks whether the next unconsumed entry in m_inputs has the requested outpoint. On a match, m_input_tail is advanced
@@ -682,7 +682,7 @@ private:
         if (i >= m_inputs.size()) return false;
 
         auto& input{m_inputs[i]};
-        input.coin = m_read_view->PeekCoin(input.outpoint);
+        input.coin = CCoinsViewCache::FetchCoinFromBase(input.outpoint);
         // Use release so writing coin above happens before the main thread acquires.
         input.ready.test_and_set(std::memory_order_release);
         input.ready.notify_one();
@@ -729,7 +729,7 @@ private:
         }
 
         // We will only get here for BIP30 checks or when parallel fetching is disabled.
-        return m_read_view->PeekCoin(outpoint);
+        return CCoinsViewCache::FetchCoinFromBase(outpoint);
     }
 
     /**
@@ -750,13 +750,21 @@ protected:
     }
 
 public:
-    explicit CoinsViewOverlay(CCoinsViewCacheBackend& in_base, std::shared_ptr<ThreadPool> thread_pool,
+    explicit CoinsViewOverlay(const CCoinsViewCache& read_cache,
+                              CCoinsViewCacheBackend& write_view,
+                              std::shared_ptr<ThreadPool> thread_pool,
                               bool deterministic = false) noexcept
-        : CCoinsViewCache{in_base, deterministic}, m_thread_pool{std::move(thread_pool)}
+        : CCoinsViewCache{NonMutatingReads{}, read_cache, write_view, deterministic}, m_thread_pool{std::move(thread_pool)}
     {
         Assert(m_thread_pool);
         // Reserve to maximum theoretical number so emplace_back in StartFetching never reallocates m_inputs.
         m_inputs.reserve(MAX_INPUTS_PER_BLOCK);
+    }
+
+    explicit CoinsViewOverlay(CCoinsViewCache& in_base, std::shared_ptr<ThreadPool> thread_pool,
+                              bool deterministic = false) noexcept
+        : CoinsViewOverlay{in_base, in_base, std::move(thread_pool), deterministic}
+    {
     }
 
     //! Start fetching inputs from block in background.
