@@ -296,7 +296,7 @@ constexpr char ToUpper(char c)
  * This is a feature, not a limitation.
  *
  * @param[in] str   the string to convert to uppercase.
- * @returns         UPPERCASED EQUIVALENT OF str
+ * @returns         uppercased equivalent of str
  */
 std::string ToUpper(std::string_view str);
 
@@ -319,8 +319,8 @@ std::string Capitalize(std::string str);
  *
  * @param[in] str                  the string to convert into bytes
  * @param[in] default_multiplier   if no unit is found in str use this unit
- * @returns                        optional uint64_t bytes from str or nullopt
- *                                 if ToIntegral is false, str is empty, trailing whitespace or overflow
+ * @returns                        parsed byte count, or std::nullopt if str is empty, the
+ *                                 numeric part fails to parse, or the multiplication overflows
  */
 std::optional<uint64_t> ParseByteUnits(std::string_view str, ByteUnit default_multiplier);
 

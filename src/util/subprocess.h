@@ -414,12 +414,12 @@ namespace util
    * Parameters:
    * [in] fp : The file object from which it needs to read.
    * [in] buf : The buffer into which it needs to write the data.
-   * [in] read_upto: Max number of bytes which must be read from `fd`.
+   * [in] read_upto: Max number of bytes to read from `fd`.
    * [out] int : Number of bytes written to `buf` or read from `fd`
    *             OR -1 in case of error.
-   *  NOTE: In case of EINTR while reading from socket, this API
+   *  NOTE: In case of EINTR while reading from `fd`, this API
    *  will retry to read from `fd`, but only till the EINTR counter
-   *  reaches 50 after which it will return with whatever data it read.
+   *  reaches 50 after which it will return -1.
    */
   static inline
   int read_atmost_n(FILE* fp, char* buf, size_t read_upto)

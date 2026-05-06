@@ -170,8 +170,8 @@ static void secp256k1_ecmult_gen(const secp256k1_ecmult_gen_context *ctx, secp25
      *
      * This computes c = comb(d, G/2), and thus finally R = c + ctx->ge_offset. Note that it would
      * be possible to apply an initial offset instead of a final offset (moving ge_offset to take
-     * the place of infinity above), but the chosen approach allows using (in a future improvement)
-     * an incomplete addition formula for most of the multiplication.
+     * the place of infinity above), but the chosen approach also permits using an incomplete
+     * addition formula for most of the multiplication.
      *
      * The last question is how to implement the table(b, m) function. For any value of b,
      * m=(d & mask(b)) can only take on at most 2^COMB_TEETH possible values (the last one may have

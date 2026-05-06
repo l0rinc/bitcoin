@@ -27,7 +27,7 @@ static constexpr uint32_t MAX_REPLACEMENT_CANDIDATES{100};
 
 /** The rbf state of unconfirmed transactions */
 enum class RBFTransactionState {
-    /** Unconfirmed tx that does not signal rbf and is not in the mempool */
+    /** Unable to determine inherited RBF signalling from local mempool state */
     UNKNOWN,
     /** Either this tx or a mempool ancestor signals rbf */
     REPLACEABLE_BIP125,

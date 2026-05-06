@@ -52,7 +52,7 @@
 #define SHARED_LOCKS_REQUIRED(...)
 #define NO_THREAD_SAFETY_ANALYSIS
 #define ASSERT_EXCLUSIVE_LOCK(...)
-#endif // __GNUC__
+#endif // __clang__
 
 // StdMutex provides an annotated version of std::mutex for us,
 // and should only be used when sync.h Mutex/LOCK/etc are not usable.

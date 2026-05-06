@@ -170,8 +170,8 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
-    // The steady clock is currently only used for logging, so a constant
-    // time-point seems acceptable for now.
+    // Use a deterministic steady clock. Besides log timestamps, headers
+    // presync progress reporting is rate-limited on MockableSteadyClock.
     ElapseSteady elapse_steady{};
 
     ChainstateManager& chainman = *g_testing_setup->m_node.chainman;

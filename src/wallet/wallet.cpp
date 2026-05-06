@@ -314,7 +314,7 @@ public:
             auto desc_spkm{dynamic_cast<DescriptorScriptPubKeyMan*>(spkm)};
             assert(desc_spkm != nullptr);
             AddScriptPubKeys(desc_spkm);
-            // save each range descriptor's end for possible future filter updates
+            // Save each range descriptor's end for later filter updates.
             if (desc_spkm->IsHDEnabled()) {
                 m_last_range_ends.emplace(desc_spkm->GetID(), desc_spkm->GetEndRange());
             }
@@ -923,7 +923,7 @@ bool CWallet::MarkReplaced(const Txid& originalHash, const Txid& newHash)
 
     CWalletTx& wtx = (*mi).second;
 
-    // Ensure for now that we're not overwriting data
+    // Ensure we're not overwriting an existing replacement marker.
     assert(wtx.mapValue.count("replaced_by_txid") == 0);
 
     wtx.mapValue["replaced_by_txid"] = newHash.ToString();
@@ -1092,11 +1092,8 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
             ReplaceAll(strCmd, "%h", "-1");
         }
 #ifndef WIN32
-        // Substituting the wallet name isn't currently supported on windows
-        // because windows shell escaping has not been implemented yet:
-        // https://github.com/bitcoin/bitcoin/pull/13339#issuecomment-537384875
-        // A few ways it could be implemented in the future are described in:
-        // https://github.com/bitcoin/bitcoin/pull/13339#issuecomment-461288094
+        // %w wallet-name substitution is skipped on Windows because shell escaping
+        // for this path has not been implemented there.
         ReplaceAll(strCmd, "%w", ShellEscape(GetName()));
 #endif
         std::thread t(runCommand, strCmd);
@@ -1192,8 +1189,8 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, const SyncTxS
                 }
             }
 
-            // Block disconnection override an abandoned tx as unconfirmed
-            // which means user may have to call abandontransaction again
+            // Block disconnection can change an abandoned tx back to unconfirmed,
+            // which means the user may have to call abandontransaction again.
             TxState tx_state = std::visit([](auto&& s) -> TxState { return s; }, state);
             CWalletTx* wtx = AddToWallet(MakeTransactionRef(tx), tx_state, /*update_wtx=*/nullptr, rescanning_old_block);
             if (!wtx) {
@@ -1420,9 +1417,9 @@ void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRe
         // Trigger external -walletnotify notifications for these transactions.
         // Set Status::UNCONFIRMED instead of Status::CONFLICTED for a few reasons:
         //
-        // 1. The transactionRemovedFromMempool callback does not currently
+        // 1. The transactionRemovedFromMempool callback does not
         //    provide the conflicting block's hash and height, and for backwards
-        //    compatibility reasons it may not be not safe to store conflicted
+        //    compatibility reasons it may not be safe to store conflicted
         //    wallet transactions with a null block hash. See
         //    https://github.com/bitcoin/bitcoin/pull/18600#discussion_r420195993.
         // 2. For most of these transactions, the wallet's internal conflict
@@ -1436,10 +1433,8 @@ void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRe
         //    implementation before that was to mark these transactions
         //    unconfirmed rather than conflicted.
         //
-        // Nothing described above should be seen as an unchangeable requirement
-        // when improving this code in the future. The wallet's heuristics for
-        // distinguishing between conflicted and unconfirmed transactions are
-        // imperfect, and could be improved in general, see
+        // The wallet's heuristics for distinguishing between conflicted and
+        // unconfirmed transactions are imperfect; see
         // https://github.com/bitcoin-core/bitcoin-devwiki/wiki/Wallet-Transaction-Conflict-Tracking
         SyncTransaction(tx, TxStateInactive{});
     }
@@ -1513,8 +1508,8 @@ void CWallet::blockDisconnected(const interfaces::BlockInfo& block)
 
     // At block disconnection, this will change an abandoned transaction to
     // be unconfirmed, whether or not the transaction is added back to the mempool.
-    // User may have to call abandontransaction again. It may be addressed in the
-    // future with a stickier abandoned state or even removing abandontransaction call.
+    // User may have to call abandontransaction again until the wallet tracks
+    // abandoned state more persistently across reorgs.
     int disconnect_height = block.height;
 
     for (size_t index = 0; index < block.data->vtx.size(); index++) {
@@ -1804,9 +1799,8 @@ int64_t CWallet::RescanFromTime(int64_t startTime, const WalletRescanReserver& r
  *         pruning or corruption). USER_ABORT if the rescan was aborted before
  *         it could complete.
  *
- * @pre Caller needs to make sure start_block (and the optional stop_block) are on
- * the main chain after to the addition of any new keys you want to detect
- * transactions for.
+ * @pre Caller needs to make sure start_block is on the active chain after
+ * any new keys to detect transactions for have been added.
  */
 CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_block, int start_height, std::optional<int> max_height, const WalletRescanReserver& reserver, bool fUpdate, const bool save_progress)
 {
@@ -2221,23 +2215,23 @@ OutputType CWallet::TransactionChangeType(const std::optional<OutputType>& chang
 
     const bool has_bech32m_spkman(GetScriptPubKeyMan(OutputType::BECH32M, /*internal=*/true));
     if (has_bech32m_spkman && any_tr) {
-        // Currently tr is the only type supported by the BECH32M spkman
+        // The BECH32M spkman only provides P2TR change descriptors.
         return OutputType::BECH32M;
     }
     const bool has_bech32_spkman(GetScriptPubKeyMan(OutputType::BECH32, /*internal=*/true));
     if (has_bech32_spkman && any_wpkh) {
-        // Currently wpkh is the only type supported by the BECH32 spkman
+        // The BECH32 spkman only provides P2WPKH change descriptors.
         return OutputType::BECH32;
     }
     const bool has_p2sh_segwit_spkman(GetScriptPubKeyMan(OutputType::P2SH_SEGWIT, /*internal=*/true));
     if (has_p2sh_segwit_spkman && any_sh) {
-        // Currently sh_wpkh is the only type supported by the P2SH_SEGWIT spkman
-        // As of 2021 about 80% of all SH are wrapping WPKH, so use that
+        // The P2SH_SEGWIT spkman only provides P2SH-P2WPKH change descriptors.
+        // Use that as the closest available match for script-hash recipients.
         return OutputType::P2SH_SEGWIT;
     }
     const bool has_legacy_spkman(GetScriptPubKeyMan(OutputType::LEGACY, /*internal=*/true));
     if (has_legacy_spkman && any_pkh) {
-        // Currently pkh is the only type supported by the LEGACY spkman
+        // The LEGACY spkman only provides P2PKH change descriptors.
         return OutputType::LEGACY;
     }
 
@@ -2318,7 +2312,7 @@ DBErrors CWallet::LoadWallet()
 util::Result<void> CWallet::RemoveTxs(std::vector<Txid>& txs_to_remove)
 {
     AssertLockHeld(cs_wallet);
-    bilingual_str str_err;  // future: make RunWithinTxn return a util::Result
+    bilingual_str str_err;  // Collect util::Result errors across the RunWithinTxn callback boundary.
     bool was_txn_committed = RunWithinTxn(GetDatabase(), /*process_desc=*/"remove transactions", [&](WalletBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) {
         util::Result<void> result{RemoveTxs(batch, txs_to_remove)};
         if (!result) str_err = util::ErrorString(result);
@@ -3125,7 +3119,7 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
     // Because of the wallet lock being held, block connection notifications are going to
     // be pending on the validation-side until lock release. Blocks that are connected while the
     // rescan is ongoing will not be processed in the rescan but with the block connected notifications,
-    // so the wallet will only be completeley synced after the notifications delivery.
+    // so the wallet will only be completely synced after the notifications delivery.
     walletInstance->m_chain_notifications_handler = walletInstance->chain().handleNotifications(walletInstance);
 
     // If rescan_required = true, rescan_height remains equal to 0

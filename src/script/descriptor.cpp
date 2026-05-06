@@ -223,7 +223,7 @@ public:
     /** Make a deep copy of this PubkeyProvider */
     virtual std::unique_ptr<PubkeyProvider> Clone() const = 0;
 
-    /** Whether this PubkeyProvider is a BIP 32 extended key that can be derived from */
+    /** Whether this PubkeyProvider is backed by a BIP 32 extended key and supports child derivation. */
     virtual bool IsBIP32() const = 0;
 };
 
@@ -537,7 +537,7 @@ public:
 
         CExtPubKey xpub;
         CExtKey lh_xprv;
-        // If we have the cache, just get the parent xpub
+        // If we have the cache, just get the last hardened xpub.
         if (cache != nullptr) {
             cache->GetCachedLastHardenedExtPubKey(m_expr_index, xpub);
         }
@@ -793,14 +793,13 @@ public:
 class DescriptorImpl : public Descriptor
 {
 protected:
-    //! Public key arguments for this descriptor (size 1 for PK, PKH, WPKH; any size for WSH and Multisig).
+    //! Public key arguments for this descriptor (often size 1 for pk/pkh/wpkh/rawtr/tr, empty for raw/addr/sh/wsh, and arbitrary for multisig and miniscript).
     const std::vector<std::unique_ptr<PubkeyProvider>> m_pubkey_args;
     //! The string name of the descriptor function.
     const std::string m_name;
 
-    //! The sub-descriptor arguments (empty for everything but SH and WSH).
-    //! In doc/descriptors.m this is referred to as SCRIPT expressions sh(SCRIPT)
-    //! and wsh(SCRIPT), and distinct from KEY expressions and ADDR expressions.
+    //! The sub-descriptor arguments (used by descriptors that wrap or embed scripts, including sh(), wsh(), and tr() script trees).
+    //! In doc/descriptors.md this is referred to as SCRIPT expressions, distinct from KEY expressions and ADDR expressions.
     //! Subdescriptors can only ever generate a single script.
     const std::vector<std::unique_ptr<DescriptorImpl>> m_subdescriptor_args;
 
@@ -1587,12 +1586,12 @@ public:
     std::optional<int64_t> ScriptSize() const override { return 1 + 1 + 32; }
 
     std::optional<int64_t> MaxSatisfactionWeight(bool) const override {
-        // We can't know whether there is a script path, so assume key path spend.
+        // rawtr() only commits to the output key, so satisfaction is always a key-path spend.
         return 1 + 65;
     }
 
     std::optional<int64_t> MaxSatisfactionElems() const override {
-        // See above, we assume keypath spend.
+        // See above: rawtr() only has the key-path spend case.
         return 1;
     }
 
@@ -2250,7 +2249,7 @@ std::vector<std::unique_ptr<DescriptorImpl>> ParseScript(uint32_t& key_exp_index
 
         // Build the final descriptors vector
         for (size_t i = 0; i < max_providers_len; ++i) {
-            // Build final pubkeys vectors by retrieving the i'th subscript for each vector in subscripts
+            // Build the final pubkey-provider vector by retrieving the i'th provider from each multipath key vector.
             std::vector<std::unique_ptr<PubkeyProvider>> pubs;
             pubs.reserve(providers.size());
             for (auto& pub : providers) {
@@ -2518,7 +2517,7 @@ std::vector<std::unique_ptr<DescriptorImpl>> ParseScript(uint32_t& key_exp_index
 
             // Build the final descriptors vector
             for (size_t i = 0; i < num_multipath; ++i) {
-                // Build final pubkeys vectors by retrieving the i'th subscript for each vector in subscripts
+                // Build the final pubkey-provider vector by retrieving the i'th provider from each multipath key vector.
                 std::vector<std::unique_ptr<PubkeyProvider>> pubs;
                 pubs.reserve(parser.m_keys.size());
                 for (auto& pub : parser.m_keys) {

@@ -92,7 +92,7 @@ void run_ellswift_bench(int iters, int argc, char **argv) {
     bench_ellswift_data data;
     int d = argc == 1;
 
-    /* create a context with signing capabilities */
+    /* Create a context for the benchmark. */
     data.ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
     if (d || have_flag(argc, argv, "ellswift") || have_flag(argc, argv, "encode") || have_flag(argc, argv, "ellswift_encode")) run_benchmark("ellswift_encode", bench_ellswift_encode, bench_ellswift_setup, NULL, &data, 10, iters);

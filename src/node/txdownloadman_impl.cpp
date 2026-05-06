@@ -169,10 +169,9 @@ void TxDownloadManagerImpl::DisconnectedPeer(NodeId nodeid)
 
 bool TxDownloadManagerImpl::AddTxAnnouncement(NodeId peer, const GenTxid& gtxid, std::chrono::microseconds now)
 {
-    // If this is an orphan we are trying to resolve, consider this peer as a orphan resolution candidate instead.
-    // - is wtxid matching something in orphanage
-    // - exists in orphanage
-    // - peer can be an orphan resolution candidate
+    // If this matches an orphan we are trying to resolve, treat this peer as an
+    // orphan-resolution candidate for the orphan's missing parents instead of
+    // as a fresh announcer of the orphan itself.
     if (const auto* wtxid = std::get_if<Wtxid>(&gtxid)) {
         if (auto orphan_tx{m_orphanage->GetTx(*wtxid)}) {
             auto unique_parents{GetUniqueParents(*orphan_tx)};
@@ -206,7 +205,8 @@ bool TxDownloadManagerImpl::AddTxAnnouncement(NodeId peer, const GenTxid& gtxid,
         return false;
     }
     // Decide the TxRequestTracker parameters for this announcement:
-    // - "preferred": if fPreferredDownload is set (= outbound, or NetPermissionFlags::NoBan permission)
+    // - "preferred": if the peer is marked preferred (= outbound, or has
+    //   NetPermissionFlags::NoBan permission)
     // - "reqtime": current time plus delays for:
     //   - NONPREF_PEER_TX_DELAY for announcements from non-preferred connections
     //   - TXID_RELAY_DELAY for txid announcements while wtxid peers are available
@@ -252,8 +252,8 @@ bool TxDownloadManagerImpl::MaybeAddOrphanResolutionCandidate(const std::vector<
     const bool overloaded = !info.m_relay_permissions && m_txrequest.CountInFlight(nodeid) >= MAX_PEER_TX_REQUEST_IN_FLIGHT;
     if (overloaded) delay += OVERLOADED_PEER_TX_DELAY;
 
-    // Treat finding orphan resolution candidate as equivalent to the peer announcing all missing parents.
-    // In the future, orphan resolution may include more explicit steps
+    // Treat finding an orphan-resolution candidate as equivalent to the peer
+    // announcing all missing parents in the current implementation.
     for (const auto& parent_txid : unique_parents) {
         m_txrequest.ReceivedInv(nodeid, parent_txid, info.m_preferred, now + delay);
     }
@@ -445,12 +445,10 @@ node::RejectedTxTodo TxDownloadManagerImpl::MempoolRejectedTx(const CTransaction
         // interfere with relay of valid transactions from peers that
         // do not support wtxid-based relay. See
         // https://github.com/bitcoin/bitcoin/issues/8279 for details.
-        // We can remove this restriction (and always add wtxids to
-        // the filter even for witness stripped transactions) once
-        // wtxid-based relay is broadly deployed.
-        // See also comments in https://github.com/bitcoin/bitcoin/pull/18044#discussion_r443419034
-        // for concerns around weakening security of unupgraded nodes
-        // if we start doing this too early.
+        // Keep this restriction because adding txids for witness-stripped
+        // failures could still interfere with relay from peers that do not
+        // support wtxid-based relay. See also
+        // https://github.com/bitcoin/bitcoin/pull/18044#discussion_r443419034.
         if (state.GetResult() == TxValidationResult::TX_RECONSIDERABLE) {
             // If the result is TX_RECONSIDERABLE, add it to m_lazy_recent_rejects_reconsiderable
             // because we should not download or submit this transaction by itself again, but may

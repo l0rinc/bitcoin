@@ -14,8 +14,8 @@
 class ArgsManager;
 
 /**
- * CBaseChainParams defines the base parameters (shared between bitcoin-cli and bitcoind)
- * of a given instance of the Bitcoin system.
+ * CBaseChainParams defines base chain parameters shared across Bitcoin
+ * executables for a given chain.
  */
 class CBaseChainParams
 {
@@ -37,9 +37,7 @@ private:
  */
 std::unique_ptr<CBaseChainParams> CreateBaseChainParams(const ChainType chain);
 
-/**
- *Set the arguments for chainparams
- */
+/** Set the arguments for base chain parameters. */
 void SetupChainParamsBaseOptions(ArgsManager& argsman);
 
 /**
@@ -48,7 +46,7 @@ void SetupChainParamsBaseOptions(ArgsManager& argsman);
  */
 const CBaseChainParams& BaseParams();
 
-/** Sets the params returned by Params() to those for the given chain. */
+/** Sets the params returned by BaseParams() to those for the given chain. */
 void SelectBaseParams(const ChainType chain);
 
 /** List of possible chain / network names  */

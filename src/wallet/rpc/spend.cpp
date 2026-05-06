@@ -475,7 +475,8 @@ RPCHelpMan settxfee()
 }
 
 
-// Only includes key documentation where the key is snake_case in all RPC methods. MixedCase keys can be added later.
+// Only include keys that are snake_case across all RPC methods. MixedCase
+// compatibility aliases stay documented inline on the RPCs that accept them.
 static std::vector<RPCArg> FundTxDoc(bool solving_data = true)
 {
     std::vector<RPCArg> args = {
@@ -517,8 +518,8 @@ static std::vector<RPCArg> FundTxDoc(bool solving_data = true)
 
 CreatedTransactionResult FundTransaction(CWallet& wallet, const CMutableTransaction& tx, const std::vector<CRecipient>& recipients, const UniValue& options, CCoinControl& coinControl, bool override_min_fee)
 {
-    // We want to make sure tx.vout is not used now that we are passing outputs as a vector of recipients.
-    // This sets us up to remove tx completely in a future PR in favor of passing the inputs directly.
+    // Outputs are passed separately in recipients, so tx.vout must remain
+    // unused.
     CHECK_NONFATAL(tx.vout.empty());
     // Make sure the results are valid at least up to the most recent block
     // the user could have gotten from another RPC command prior to now
@@ -871,8 +872,8 @@ RPCHelpMan fundrawtransaction()
     CCoinControl coin_control;
     // Automatically select (additional) coins. Can be overridden by options.add_inputs.
     coin_control.m_allow_other_inputs = true;
-    // Clear tx.vout since it is not meant to be used now that we are passing outputs directly.
-    // This sets us up for a future PR to completely remove tx from the function signature in favor of passing inputs directly
+    // Clear tx.vout so funding uses the recipients vector instead of the
+    // decoded outputs.
     tx.vout.clear();
     auto txr = FundTransaction(*pwallet, tx, recipients, options, coin_control, /*override_min_fee=*/true);
 
@@ -1327,8 +1328,8 @@ RPCHelpMan send()
             }
 
             SetOptionsInputWeights(options["inputs"], options);
-            // Clear tx.vout since it is not meant to be used now that we are passing outputs directly.
-            // This sets us up for a future PR to completely remove tx from the function signature in favor of passing inputs directly
+            // Clear tx.vout so funding uses the recipients vector instead of
+            // the constructed outputs.
             rawTx.vout.clear();
             auto txr = FundTransaction(*pwallet, rawTx, recipients, options, coin_control, /*override_min_fee=*/false);
 
@@ -1486,7 +1487,8 @@ RPCHelpMan sendall()
                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Fee rate (%s) is lower than the minimum fee rate setting (%s)", coin_control.m_feerate->ToString(FeeEstimateMode::SAT_VB), fee_rate.ToString(FeeEstimateMode::SAT_VB)));
             }
             if (fee_calc_out.reason == FeeReason::FALLBACK && !pwallet->m_allow_fallback_fee) {
-                // eventually allow a fallback fee
+                // Reject estimator fallback fees when fallback fees are
+                // disabled.
                 throw JSONRPCError(RPC_WALLET_ERROR, "Fee estimation failed. Fallbackfee is disabled. Wait a few blocks or enable -fallbackfee.");
             }
 
@@ -1809,8 +1811,8 @@ RPCHelpMan walletcreatefundedpsbt()
     // be overridden by options.add_inputs.
     coin_control.m_allow_other_inputs = rawTx.vin.size() == 0;
     SetOptionsInputWeights(request.params[0], options);
-    // Clear tx.vout since it is not meant to be used now that we are passing outputs directly.
-    // This sets us up for a future PR to completely remove tx from the function signature in favor of passing inputs directly
+    // Clear tx.vout so funding uses the recipients vector instead of the
+    // constructed outputs.
     rawTx.vout.clear();
     auto txr = FundTransaction(wallet, rawTx, recipients, options, coin_control, /*override_min_fee=*/true);
 

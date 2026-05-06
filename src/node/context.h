@@ -76,9 +76,8 @@ struct NodeContext {
     std::unique_ptr<interfaces::Chain> chain;
     //! List of all chain clients (wallet processes or other client) connected to node.
     std::vector<std::unique_ptr<interfaces::ChainClient>> chain_clients;
-    //! Reference to chain client that should used to load or create wallets
-    //! opened by the gui.
     std::unique_ptr<interfaces::Mining> mining;
+    //! Wallet loader used to load or create wallets opened by the GUI.
     interfaces::WalletLoader* wallet_loader{nullptr};
     std::unique_ptr<CScheduler> scheduler;
     std::function<void()> rpc_interruption_point = [] {};

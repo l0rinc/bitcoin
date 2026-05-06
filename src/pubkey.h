@@ -19,7 +19,7 @@
 const unsigned int BIP32_EXTKEY_SIZE = 74;
 const unsigned int BIP32_EXTKEY_WITH_VERSION_SIZE = 78;
 
-/** A reference to a CKey: the Hash160 of its serialized public key */
+/** Identifier for a public key: the Hash160 of its serialized form. */
 class CKeyID : public uint160
 {
 public:

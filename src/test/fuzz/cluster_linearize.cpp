@@ -258,8 +258,8 @@ std::vector<DepGraphIndex> ExhaustiveLinearize(const DepGraph<SetType>& depgraph
             // linearization so far.
             auto perm_chunking = ChunkLinearization(depgraph, perm_linearization);
             auto cmp = CompareChunks(perm_chunking, chunking);
-            // If the diagram is better, or if it is equal but with more chunks (because we
-            // prefer minimal chunks), consider this better.
+            // If the diagram is better, or if it is equal but split into more chunks, consider
+            // this better.
             if (linearization.empty() || cmp > 0 || (cmp == 0 && perm_chunking.size() > chunking.size())) {
                 linearization = perm_linearization;
                 chunking = perm_chunking;
@@ -1182,8 +1182,8 @@ FUZZ_TARGET(clusterlin_linearize)
         // If SimpleLinearize finds the optimal result too, they must be equal (if not,
         // SimpleLinearize is broken).
         if (simple_optimal) assert(cmp == 0);
-        // If simple_chunking is diagram-optimal, it cannot have more chunks than chunking (as
-        // chunking is claimed to be optimal, which implies minimal chunks).
+        // If simple_chunking is diagram-optimal, chunking must have at least as many chunks, as
+        // optimality also prefers more chunks on ties.
         if (cmp == 0) assert(chunking.size() >= simple_chunking.size());
 
         // Compare with a linearization read from the fuzz input.
@@ -1297,11 +1297,11 @@ FUZZ_TARGET(clusterlin_postlinearize_tree)
     auto cmp = CompareChunks(post_chunking, chunking);
     assert(cmp >= 0);
 
-    // Verify that post-linearizing again does not change the diagram. The result must be identical
-    // as post_linearization ought to be optimal already with a tree-structured graph.
+    // Verify that post-linearizing again does not change the diagram. Tree-structured graphs
+    // should already be diagram-optimal after one pass.
     auto post_post_linearization = post_linearization;
-    PostLinearize(depgraph_tree, post_linearization);
-    SanityCheck(depgraph_tree, post_linearization);
+    PostLinearize(depgraph_tree, post_post_linearization);
+    SanityCheck(depgraph_tree, post_post_linearization);
     auto post_post_chunking = ChunkLinearization(depgraph_tree, post_post_linearization);
     auto cmp_post = CompareChunks(post_post_chunking, post_chunking);
     assert(cmp_post == 0);

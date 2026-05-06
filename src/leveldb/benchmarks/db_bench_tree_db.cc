@@ -21,8 +21,8 @@
 //   fillrand100K  -- write N/1000 100K values in random order in async mode
 //   fillseq100K   -- write N/1000 100K values in seq order in async mode
 //   readseq       -- read N times sequentially
-//   readseq100K   -- read N/1000 100K values in sequential order in async mode
-//   readrand100K  -- read N/1000 100K values in sequential order in async mode
+//   readseq100K   -- read N/1000 100K values in sequential order
+//   readrand100K  -- read N/1000 100K values in random order
 //   readrandom    -- read N times in random order
 static const char* FLAGS_benchmarks =
     "fillseq,"

@@ -70,7 +70,7 @@ const struct {
 
 namespace {
 
-// don't add private key handling cmd's to the history
+// Don't add sensitive commands to the history.
 const QStringList historyFilter = QStringList()
     << "signmessagewithprivkey"
     << "signrawtransactionwithkey"
@@ -521,7 +521,7 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
 
     ui->promptIcon->setIcon(platformStyle->SingleColorIcon(QStringLiteral(":/icons/prompticon")));
 
-    // Install event filter for up and down arrow
+    // Install event filter for console key handling.
     ui->lineEdit->installEventFilter(this);
     ui->lineEdit->setMaxLength(16 * 1024 * 1024);
     ui->messagesWidget->installEventFilter(this);
@@ -532,7 +532,7 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
     connect(ui->fontSmallerButton, &QAbstractButton::clicked, this, &RPCConsole::fontSmaller);
     connect(ui->btnClearTrafficGraph, &QPushButton::clicked, ui->trafficGraph, &TrafficGraphWidget::clear);
 
-    // disable the wallet selector by default
+    // Hide the wallet selector by default.
     ui->WalletSelector->setVisible(false);
     ui->WalletSelectorLabel->setVisible(false);
 
@@ -1274,11 +1274,11 @@ void RPCConsole::showBanTableContextMenu(const QPoint& point)
 
 void RPCConsole::disconnectSelectedNode()
 {
-    // Get selected peer addresses
+    // Get selected peer node IDs.
     QList<QModelIndex> nodes = GUIUtil::getEntryData(ui->peerWidget, PeerTableModel::NetNodeId);
     for(int i = 0; i < nodes.count(); i++)
     {
-        // Get currently selected peer address
+        // Get the currently selected peer node ID.
         NodeId id = nodes.at(i).data().toLongLong();
         // Find the node, disconnect it and clear the selected node
         if(m_node.disconnectById(id))
@@ -1292,7 +1292,7 @@ void RPCConsole::banSelectedNode(int bantime)
         return;
 
     for (const QModelIndex& peer : GUIUtil::getEntryData(ui->peerWidget, PeerTableModel::NetNodeId)) {
-        // Find possible nodes, ban it and clear the selected node
+        // Ban each selected peer address and clear the selected node.
         const auto stats = peer.data(PeerTableModel::StatsRole).value<CNodeCombinedStats*>();
         if (stats) {
             m_node.ban(stats->nodeStats.addr, bantime);

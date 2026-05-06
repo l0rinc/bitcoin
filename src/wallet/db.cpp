@@ -48,9 +48,9 @@ std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& wall
                         paths.emplace_back(fs::path(), "sqlite");
                     }
                 } else if (IsBDBFile(it->path())) {
-                    // Found top-level btree file not called wallet.dat. Current bitcoin
-                    // software will never create these files but will allow them to be
-                    // opened in a shared database environment for backwards compatibility.
+                    // Found a top-level btree file not called wallet.dat. Descriptor-only
+                    // wallet creation does not create these files, but they are still
+                    // accepted for backwards compatibility in shared Berkeley DB setups.
                     // Add it to the list of available wallets.
                     paths.emplace_back(path, "bdb");
                 }

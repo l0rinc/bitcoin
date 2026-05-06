@@ -152,12 +152,13 @@ SECP256K1_INLINE static void secp256k1_ecmult_table_get_ge_storage(secp256k1_ge 
     }
 }
 
-/** Convert a number to WNAF notation. The number becomes represented by sum(2^i * wnaf[i], i=0..bits),
+/** Convert a number to WNAF notation. The number becomes represented by sum(2^i * wnaf[i], i=0..len-1),
  *  with the following guarantees:
  *  - each wnaf[i] is either 0, or an odd integer between -(1<<(w-1) - 1) and (1<<(w-1) - 1)
  *  - two non-zero entries in wnaf are separated by at least w-1 zeroes.
- *  - the number of set values in wnaf is returned. This number is at most 256, and at most one more
- *    than the number of bits in the (absolute value) of the input.
+ *  - the number of entries up to and including the highest non-zero value is returned.
+ *    This number is at most 256, and at most one more than the number of bits
+ *    in the (absolute value) of the input.
  */
 static int secp256k1_ecmult_wnaf(int *wnaf, int len, const secp256k1_scalar *a, int w) {
     secp256k1_scalar s;
@@ -272,7 +273,7 @@ static void secp256k1_ecmult_strauss_wnaf(const struct secp256k1_strauss_state *
 
         /* Calculate odd multiples of a.
          * All multiples are brought to the same Z 'denominator', which is stored
-         * in Z. Due to secp256k1' isomorphism we can do all operations pretending
+         * in Z. Due to secp256k1's isomorphism we can do all operations pretending
          * that the Z coordinate was 1, use affine addition formulae, and correct
          * the Z coordinate of the result once at the end.
          * The exception is the precomputed G table points, which are actually
@@ -302,7 +303,7 @@ static void secp256k1_ecmult_strauss_wnaf(const struct secp256k1_strauss_state *
     }
 
     if (ng) {
-        /* split ng into ng_1 and ng_128 (where gn = gn_1 + gn_128*2^128, and gn_1 and gn_128 are ~128 bit) */
+        /* split ng into ng_1 and ng_128 (where ng = ng_1 + ng_128*2^128, and ng_1 and ng_128 are ~128 bit) */
         secp256k1_scalar_split_128(&ng_1, &ng_128, ng);
 
         /* Build wnaf representation for ng_1 and ng_128 */
@@ -412,7 +413,7 @@ static size_t secp256k1_strauss_max_points(const secp256k1_callback* error_callb
 }
 
 /** Convert a number to WNAF notation.
- *  The number becomes represented by sum(2^{wi} * wnaf[i], i=0..WNAF_SIZE(w)+1) - return_val.
+ *  The number becomes represented by sum(2^{wi} * wnaf[i], i=0..WNAF_SIZE(w)-1) - return_val.
  *  It has the following guarantees:
  *  - each wnaf[i] is either 0 or an odd integer between -(1 << w) and (1 << w)
  *  - the number of words set is always WNAF_SIZE(w)

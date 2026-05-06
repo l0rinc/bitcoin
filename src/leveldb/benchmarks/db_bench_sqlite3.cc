@@ -18,13 +18,14 @@
 //   fillseqbatch  -- batch write N values in sequential key order in async mode
 //   fillrandom    -- write N values in random key order in async mode
 //   fillrandsync  -- write N/100 values in random key order in sync mode
-//   fillrandbatch -- batch write N values in sequential key order in async mode
+//   fillrandbatch -- batch write N values in random key order in async mode
 //   overwrite     -- overwrite N values in random key order in async mode
+//   overwritebatch -- batch overwrite N values in random key order in async mode
 //   fillrand100K  -- write N/1000 100K values in random order in async mode
 //   fillseq100K   -- write N/1000 100K values in sequential order in async mode
 //   readseq       -- read N times sequentially
 //   readrandom    -- read N times in random order
-//   readrand100K  -- read N/1000 100K values in sequential order in async mode
+//   readrand100K  -- read N/1000 100K values in random order
 static const char* FLAGS_benchmarks =
     "fillseq,"
     "fillseqsync,"

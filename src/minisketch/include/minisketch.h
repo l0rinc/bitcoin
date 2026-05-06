@@ -54,7 +54,7 @@ MINISKETCH_API int minisketch_bits_supported(uint32_t bits);
 */
 MINISKETCH_API uint32_t minisketch_implementation_max(void);
 
-/** Determine if the a combination of bits and implementation number is available.
+/** Determine if a combination of bits and implementation number is available.
  *
  * Returns 1 if it is, 0 otherwise.
  */
@@ -149,7 +149,7 @@ MINISKETCH_API size_t minisketch_merge(minisketch* sketch, const minisketch* oth
 
 /** Decode a sketch.
  *
- * `output` is a pointer to an array of `max_element` uint64_t's, which will be
+ * `output` is a pointer to an array of `max_elements` uint64_t's, which will be
  * filled with the elements in this sketch.
  *
  * The return value is the number of decoded elements, or -1 if decoding failed.
@@ -259,7 +259,7 @@ public:
 
     /** Construct a Minisketch object with the specified parameters.
      *
-     * If bits is not BitsSupported(), or the combination of bits and capacity is not
+     * If bits is not BitsSupported(), or the combination of bits and implementation is not
      * ImplementationSupported(), or OOM occurs internally, an invalid Minisketch
      * object will be constructed. Use operator bool() to check that this isn't the
      * case before performing any other operations. */
@@ -317,7 +317,7 @@ public:
         return true;
     }
 
-    /** Get the serialized size in bytes for this (valid) Minisketch object.. */
+    /** Get the serialized size in bytes for this (valid) Minisketch object. */
     size_t GetSerializedSize() const noexcept { return minisketch_serialized_size(m_minisketch.get()); }
 
     /** Serialize this (valid) Minisketch object as a byte vector. */

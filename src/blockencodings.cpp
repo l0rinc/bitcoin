@@ -48,9 +48,9 @@ uint64_t CBlockHeaderAndShortTxIDs::GetShortID(const Wtxid& wtxid) const {
 /* Reconstructing a compact block is in the hot-path for block relay,
  * so we want to do it as quickly as possible. Because this often
  * involves iterating over the entire mempool, we put all the data we
- * need (ie the wtxid and a reference to the actual transaction data)
+ * need (i.e. the wtxid and a reference to the actual transaction data)
  * in a vector and iterate over the vector directly. This allows optimal
- * CPU caching behaviour, at a cost of only 40 bytes per transaction.
+ * CPU caching behaviour at a modest per-transaction memory cost.
  */
 ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, const std::vector<std::pair<Wtxid, CTransactionRef>>& extra_txn)
 {
@@ -83,7 +83,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     }
     prefilled_count = cmpctblock.prefilledtxn.size();
 
-    // Calculate map of txids -> positions and check mempool to see what we have (or don't)
+    // Calculate map of short IDs -> positions and check mempool to see what we have (or don't)
     // Because well-formed cmpctblock messages will have a (relatively) uniform distribution
     // of short IDs, any highly-uneven distribution of elements can be safely treated as a
     // READ_STATUS_FAILED.

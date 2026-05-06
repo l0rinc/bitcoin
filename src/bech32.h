@@ -33,7 +33,7 @@ enum class Encoding {
 
 /** Character limits for Bech32(m) encoded strings. Character limits are how we provide error location guarantees.
  *  These values should never exceed 2^31 - 1 (max value for a 32-bit int), since there are places where we may need to
- *  convert the CharLimit::VALUE to an int. In practice, this should never happen since this CharLimit applies to an address encoding
+ *  convert a CharLimit value to an int. In practice, this should never happen since this CharLimit applies to an address encoding
  *  and we would never encode an address with such a massive value */
 enum CharLimit : size_t {
     BECH32 = 90,            //!< BIP173/350 imposed character limit for Bech32(m) encoded addresses. This guarantees finding up to 4 errors.

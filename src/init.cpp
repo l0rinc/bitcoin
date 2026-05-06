@@ -229,19 +229,14 @@ void InitContext(NodeContext& node)
 //
 // Thread management and startup/shutdown:
 //
-// The network-processing threads are all part of a thread group
-// created by AppInit() or the Qt main() function.
+// AppInit() starts subsystem-owned threads (networking, schedulers, index sync,
+// background initialization, etc.). A clean exit happens when the
+// SignalInterrupt object is triggered, which makes the main thread's
+// SignalInterrupt::wait() call return. The caller then invokes Interrupt() and
+// Shutdown() to stop those subsystems and join their threads in a safe order.
 //
-// A clean exit happens when the SignalInterrupt object is triggered, which
-// makes the main thread's SignalInterrupt::wait() call return, and join all
-// other ongoing threads in the thread group to the main thread.
-// Shutdown() is then called to clean up database connections, and stop other
-// threads that should only be stopped after the main network-processing
-// threads have exited.
-//
-// Shutdown for Qt is very similar, only it uses a QTimer to detect
-// ShutdownRequested() getting set, and then does the normal Qt
-// shutdown thing.
+// Shutdown for Qt is similar, except Qt uses a timer to notice
+// ShutdownRequested() and then transitions into its normal shutdown path.
 //
 
 bool ShutdownRequested(node::NodeContext& node)
@@ -750,7 +745,7 @@ void InitParameterInteraction(ArgsManager& args)
     }
 
     if (!args.GetArgs("-connect").empty() || args.IsArgNegated("-connect") || args.GetIntArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS) <= 0) {
-        // when only connecting to trusted nodes, do not seed via DNS, or listen by default
+        // when only connecting to specified peers, do not seed via DNS, or listen by default
         // do the same when connections are disabled
         if (args.SoftSetBoolArg("-dnsseed", false))
             LogInfo("parameter interaction: -connect or -maxconnections=0 set -> setting -dnsseed=0\n");
@@ -1321,9 +1316,10 @@ static ChainstateLoadResult InitAndLoadChainstate(
     };
     Assert(ApplyArgsManOptions(args, blockman_opts)); // no error can happen, already checked in AppInitParameterInteraction
 
-    // Creating the chainstate manager internally creates a BlockManager, opens
-    // the blocks tree db, and wipes existing block files in case of a reindex.
-    // The coinsdb is opened at a later point on LoadChainstate.
+    // Creating the chainstate manager internally creates a BlockManager and
+    // opens the block tree db. In prune mode, a reindex also deletes unusable
+    // block and undo files here. The coinsdb is opened later by
+    // LoadChainstate().
     Assert(!node.chainman); // Was reset above
     try {
         node.chainman = std::make_unique<ChainstateManager>(*Assert(node.shutdown_signal), chainman_opts, blockman_opts);
@@ -1819,8 +1815,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         return InitError(error);
     }
 
-    // As LoadBlockIndex can take several minutes, it's possible the user
-    // requested to kill the GUI during the last operation. If so, exit.
+    // As LoadBlockIndex can take several minutes, the user may have requested
+    // shutdown during the last operation. If so, exit.
     if (ShutdownRequested(node)) {
         LogInfo("Shutdown requested. Exiting.");
         return false;
@@ -1981,15 +1977,17 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     });
 
     /*
-     * Wait for genesis block to be processed. Typically kernel_notifications.m_tip_block
-     * has already been set by a call to LoadChainTip() in CompleteChainstateInitialization().
+     * Wait for a chain tip to be published through kernel_notifications.
+     * Typically m_tip_block has already been set by LoadChainTip() in
+     * CompleteChainstateInitialization().
      * But this is skipped if the chainstate doesn't exist yet or is being wiped:
      *
      * 1. first startup with an empty datadir
      * 2. reindex
      * 3. reindex-chainstate
      *
-     * In these case it's connected by a call to ActivateBestChain() in the initload thread.
+     * In those cases, the tip gets published by ActivateBestChain() in the
+     * initload thread.
      */
     {
         WAIT_LOCK(kernel_notifications.m_tip_block_mutex, lock);
@@ -2024,7 +2022,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     LogInfo("nBestHeight = %d", chain_active_height);
     if (node.peerman) node.peerman->SetBestBlock(chain_active_height, std::chrono::seconds{best_block_time});
 
-    // Map ports with NAT-PMP
+    // Map ports with PCP or NAT-PMP.
     StartMapPort(args.GetBoolArg("-natpmp", DEFAULT_NATPMP));
 
     CConnman::Options connOptions;
@@ -2143,8 +2141,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     const auto connect = args.GetArgs("-connect");
     if (!connect.empty() || args.IsArgNegated("-connect")) {
-        // Do not initiate other outgoing connections when connecting to trusted
-        // nodes, or when -noconnect is specified.
+        // Do not initiate addrman-selected outgoing connections when specific
+        // peers were supplied with -connect, or when -noconnect is specified.
         connOptions.m_use_addrman_outgoing = false;
 
         if (connect.size() != 1 || connect[0] != "0") {
@@ -2232,7 +2230,8 @@ bool StartIndexBackgroundSync(NodeContext& node)
         const IndexSummary& summary = index->GetSummary();
         if (summary.synced) continue;
 
-        // Get the last common block between the index best block and the active chain
+        // Get the last common block between the index best block and the
+        // chainstate currently used for indexing.
         LOCK(::cs_main);
         const CBlockIndex* pindex = chainman.m_blockman.LookupBlockIndex(summary.best_block_hash);
         if (!index_chain.Contains(pindex)) {

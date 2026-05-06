@@ -770,7 +770,7 @@ BOOST_AUTO_TEST_CASE(addrman_serialization)
     BOOST_CHECK(addr_pos4.bucket != addr_pos3.bucket);
     BOOST_CHECK(addr_pos4 == addr_pos2);
 
-    // used to map to different buckets, now maps to the same bucket.
+    // These addresses map to different buckets without asmap, but to the same bucket after loading into an asmap-aware addrman.
     addrman_asmap1 = std::make_unique<AddrMan>(netgroupman, DETERMINISTIC, ratio);
     addrman_noasmap = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, ratio);
     CAddress addr1 = CAddress(ResolveService("250.1.1.1"), NODE_NONE);
@@ -901,7 +901,7 @@ BOOST_AUTO_TEST_CASE(addrman_noevict)
 
     BOOST_CHECK_EQUAL(addrman->SelectTriedCollision().first.ToStringAddrPort(), "250.1.1.10:0");
 
-    // Cause a second collision in the new table.
+    // Re-adding addr36 does not create a duplicate collision entry; it remains blocked by its existing tried-table collision.
     BOOST_CHECK(!addrman->Add({CAddress(addr36, NODE_NONE)}, source));
 
     // 36 still cannot be moved from new to tried due to colliding with 19
@@ -964,11 +964,11 @@ BOOST_AUTO_TEST_CASE(addrman_evictionworks)
     BOOST_CHECK(!addrman->Good(addr19));
     BOOST_CHECK_EQUAL(addrman->SelectTriedCollision().first.ToStringAddrPort(), "250.1.1.36:0");
 
-    // Eviction is also successful if too much time has passed since last try
+    // Eviction is also successful once the unresolved collision has aged past the test window.
     SetMockTime(GetTime() + 4 * 60 *60);
     addrman->ResolveCollisions();
     BOOST_CHECK(addrman->SelectTriedCollision().first.ToStringAddrPort() == "[::]:0");
-    //Now 19 is in tried again, and 36 back to new
+    // Now 19 is in tried again, and 36 back to new.
     AddressPosition addr_pos19{addrman->FindAddressEntry(CAddress(addr19, NODE_NONE)).value()};
     BOOST_CHECK(addr_pos19.tried);
     AddressPosition addr_pos36{addrman->FindAddressEntry(CAddress(addr, NODE_NONE)).value()};
@@ -1127,8 +1127,8 @@ BOOST_AUTO_TEST_CASE(addrman_update_address)
     BOOST_CHECK_EQUAL(vAddr4.size(), 1U);
     BOOST_CHECK_EQUAL(vAddr4.at(0).nServices, NODE_NETWORK);
 
-    // Promoting to Tried does not affect the service flags
-    BOOST_CHECK(addrman->Good(addr)); // addr has NODE_NONE
+    // Promoting to Tried does not affect the stored service flags.
+    BOOST_CHECK(addrman->Good(addr));
     std::vector<CAddress> vAddr5{addrman->GetAddr(/*max_addresses=*/0, /*max_pct=*/0, /*network=*/std::nullopt)};
     BOOST_CHECK_EQUAL(vAddr5.size(), 1U);
     BOOST_CHECK_EQUAL(vAddr5.at(0).nServices, NODE_NETWORK);

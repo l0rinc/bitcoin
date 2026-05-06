@@ -32,8 +32,7 @@ std::vector<FeeFrac> BuildDiagramFromChunks(const std::span<const FeeFrac> chunk
 
 /** Evaluate a diagram at a specific size, returning the fee as a fraction.
  *
- * Fees in diagram cannot exceed 2^32, as the returned evaluation could overflow
- * the FeeFrac::fee field in the result. */
+ * The interpolation arithmetic must fit in FeeFrac::fee's int64_t range. */
 FeeFrac EvaluateDiagram(int32_t size, std::span<const FeeFrac> diagram)
 {
     assert(diagram.size() > 0);

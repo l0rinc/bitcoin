@@ -33,7 +33,6 @@ FUZZ_TARGET(buffered_file)
     } catch (const std::ios_base::failure&) {
     }
     if (opt_buffered_file && !fuzzed_file.IsNull()) {
-        bool setpos_fail = false;
         LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 100)
         {
             CallOneOf(
@@ -49,15 +48,9 @@ FUZZ_TARGET(buffered_file)
                     opt_buffered_file->SetLimit(fuzzed_data_provider.ConsumeIntegralInRange<uint64_t>(0, 4096));
                 },
                 [&] {
-                    if (!opt_buffered_file->SetPos(fuzzed_data_provider.ConsumeIntegralInRange<uint64_t>(0, 4096))) {
-                        setpos_fail = true;
-                    }
+                    opt_buffered_file->SetPos(fuzzed_data_provider.ConsumeIntegralInRange<uint64_t>(0, 4096));
                 },
                 [&] {
-                    if (setpos_fail) {
-                        // Calling FindByte(...) after a failed SetPos(...) call may result in an infinite loop.
-                        return;
-                    }
                     try {
                         opt_buffered_file->FindByte(std::byte(fuzzed_data_provider.ConsumeIntegral<uint8_t>()));
                     } catch (const std::ios_base::failure&) {

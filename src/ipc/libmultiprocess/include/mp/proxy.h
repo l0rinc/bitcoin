@@ -103,10 +103,10 @@ public:
     //
     // The construct() method is not generally very useful, but can be used to
     // run custom code on the server automatically when a ProxyClient client is
-    // constructed. The only current use is adding a construct method to Init
-    // interfaces that is called automatically on construction, so client and
-    // server exchange ThreadMap references and set Connection::m_thread_map
-    // values as soon as the Init client is created.
+    // constructed. One use is adding a construct method to Init interfaces
+    // that is called automatically on construction, so client and server
+    // exchange ThreadMap references and set Connection::m_thread_map values as
+    // soon as the Init client is created.
     //
     //     construct @0 (threadMap: Proxy.ThreadMap) -> (threadMap: Proxy.ThreadMap);
     //
@@ -164,9 +164,9 @@ public:
      * the connection to delete the capnp client & server objects since native
      * code on that side of the connection will just be taking a plain reference
      * rather than a pointer, so won't be able to do its own cleanup. Right now
-     * this is implemented with addCloseHook callbacks to delete clients at
-     * appropriate times depending on semantics of the particular method being
-     * wrapped. */
+     * this requires method-specific cleanup code on the other side of the
+     * connection to delete the corresponding proxy client and server objects
+     * at times matching the wrapped method's ownership semantics. */
     std::shared_ptr<Impl> m_impl;
     ProxyContext m_context;
 };
@@ -181,7 +181,7 @@ public:
 //! If this is done, however, care should be taken to ensure that the extra
 //! state can be destroyed without blocking, because ProxyServer destructors are
 //! called from the EventLoop thread, and if they block, it could deadlock the
-//! program. One way to do avoid blocking is to clean up the state by pushing
+//! program. One way to avoid blocking is to clean up the state by pushing
 //! cleanup callbacks to the m_context.cleanup_fns list, which run after the server
 //! m_impl object is destroyed on the same thread destroying it (which will
 //! either be an IPC worker thread if the ProxyServer is being explicitly
@@ -211,7 +211,7 @@ struct ProxyServerCustom : public ProxyServerBase<Interface, Impl>
 //! Param<N> - helper to access individual parameter types by index number.
 //! Fwd<N>   - helper to forward arguments by index number.
 //! Fields   - helper alias that appends Result type to the Params typelist if
-//!            it not void.
+//!            it is not void.
 template <class Fn>
 struct FunctionTraits;
 

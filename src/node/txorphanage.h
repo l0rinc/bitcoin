@@ -23,16 +23,22 @@ static constexpr int64_t DEFAULT_RESERVED_ORPHAN_WEIGHT_PER_PEER{404'000};
 static constexpr unsigned int DEFAULT_MAX_ORPHANAGE_LATENCY_SCORE{3000};
 
 /** A class to track orphan transactions (failed on TX_MISSING_INPUTS)
- * Since we cannot distinguish orphans from bad transactions with non-existent inputs, we heavily limit the amount of
- * announcements (unique (NodeId, wtxid) pairs), the number of inputs, and size of the orphans stored (both individual
- * and summed). We also try to prevent adversaries from churning this data structure: once global limits are reached, we
- * continuously evict the oldest announcement (sorting non-reconsiderable orphans before reconsiderable ones) from the
- * most resource-intensive peer until we are back within limits.
- * - Peers can exceed their individual limits (e.g. because they are very useful transaction relay peers) as long as the
- *   global limits are not exceeded.
- * - As long as the orphan has 1 announcer, it remains in the orphanage.
- * - No peer can trigger the eviction of another peer's orphans.
- * - Peers' orphans are effectively protected from eviction as long as they don't exceed their limits.
+ * Since we cannot distinguish orphans from bad transactions with non-existent
+ * inputs, we heavily limit the amount of announcements (unique (NodeId, wtxid)
+ * pairs), the number of inputs, and size of the orphans stored (both
+ * individual and summed). We also try to prevent adversaries from churning this
+ * data structure: once global limits are reached, we continuously evict the
+ * oldest announcement (sorting non-reconsiderable orphans before
+ * reconsiderable ones) from the most resource-intensive peer until we are back
+ * within limits.
+ * - Peers can exceed their individual limits (e.g. because they are very useful
+ *   transaction relay peers) as long as the global limits are not exceeded.
+ * - If an orphan has multiple announcers, removing one peer only removes that
+ *   peer's announcement; the orphan remains while at least one announcer is
+ *   left.
+ * - Evictions come from the doSiest peer, so peers that stay within their
+ *   effective share are protected from trimming until the more abusive peers
+ *   have been reduced first.
  * Not thread-safe. Requires external synchronization.
  */
 class TxOrphanage {
@@ -88,7 +94,8 @@ public:
     /** Erase all orphans included in or invalidated by a new block */
     virtual void EraseForBlock(const CBlock& block) = 0;
 
-    /** Add any orphans that list a particular tx as a parent into the from peer's work set */
+    /** Mark any orphans that list a particular tx as a parent as
+     * reconsiderable, assigning each to one announcing peer's work set. */
     virtual std::vector<std::pair<Wtxid, NodeId>> AddChildrenToWorkSet(const CTransaction& tx, FastRandomContext& rng) = 0;
 
     /** Does this peer have any work to do? */

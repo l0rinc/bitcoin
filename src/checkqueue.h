@@ -43,7 +43,7 @@ private:
     std::condition_variable m_master_cv;
 
     //! The queue of elements to be processed.
-    //! As the order of booleans doesn't matter, it is used as a LIFO (stack)
+    //! As task order does not matter, it is used as a LIFO stack.
     std::vector<T> queue GUARDED_BY(m_mutex);
 
     //! The number of workers (including the master) that are idle.
@@ -161,8 +161,8 @@ public:
     CCheckQueue(CCheckQueue&&) = delete;
     CCheckQueue& operator=(CCheckQueue&&) = delete;
 
-    //! Join the execution until completion. If at least one evaluation wasn't successful, return
-    //! its error.
+    //! Join the execution until completion. If any evaluation produced a result,
+    //! return one such result.
     std::optional<R> Complete() EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
         return Loop(true /* master thread */);

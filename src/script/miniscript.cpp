@@ -170,7 +170,7 @@ Type ComputeType(Fragment fragment, Type x, Type y, Type z, const std::vector<Ty
                 ((x << "i"_mst) && (y << "j"_mst)) ||
                 ((x << "j"_mst) && (y << "i"_mst)))); // k=k_x*k_y*!(g_x*h_y + h_x*g_y + i_x*j_y + j_x*i_y)
         case Fragment::OR_B: return
-            "B"_mst.If(x << "Bd"_mst && y << "Wd"_mst) | // B=B_x*d_x*W_x*d_y
+            "B"_mst.If(x << "Bd"_mst && y << "Wd"_mst) | // B=B_x*d_x*W_y*d_y
             ((x | y) & "o"_mst).If((x | y) << "z"_mst) | // o=o_x*z_y+z_x*o_y
             (x & y & "m"_mst).If((x | y) << "s"_mst && (x & y) << "e"_mst) | // m=m_x*m_y*e_x*e_y*(s_x+s_y)
             (x & y & "zse"_mst) | // z=z_x*z_y, s=s_x*s_y, e=e_x*e_y
@@ -214,7 +214,7 @@ Type ComputeType(Fragment fragment, Type x, Type y, Type z, const std::vector<Ty
             (x & y & z & "m"_mst).If(x << "e"_mst && (x | y | z) << "s"_mst) | // m=m_x*m_y*m_z*e_x*(s_x+s_y+s_z)
             (z & (x | y) & "s"_mst) | // s=s_z*(s_x+s_y)
             "x"_mst | // x
-            ((x | y | z) & "ghij"_mst) | // g=g_x+g_y+g_z, h=h_x+h_y+h_z, i=i_x+i_y+i_z, j=j_x+j_y_j_z
+            ((x | y | z) & "ghij"_mst) | // g=g_x+g_y+g_z, h=h_x+h_y+h_z, i=i_x+i_y+i_z, j=j_x+j_y+j_z
             "k"_mst.If(((x & y & z) << "k"_mst) &&
                 !(((x << "g"_mst) && (y << "h"_mst)) ||
                 ((x << "h"_mst) && (y << "g"_mst)) ||
@@ -253,7 +253,7 @@ Type ComputeType(Fragment fragment, Type x, Type y, Type z, const std::vector<Ty
                    "z"_mst.If(args == 0) | // z=all z
                    "o"_mst.If(args == 1) | // o=all z except one o
                    "e"_mst.If(all_e && num_s == n_subs) | // e=all e and all s
-                   "m"_mst.If(all_e && all_m && num_s >= n_subs - k) | // m=all e, >=(n-k) s
+                   "m"_mst.If(all_e && all_m && num_s >= n_subs - k) | // m=all e, all m, >=(n-k) s
                    "s"_mst.If(num_s >= n_subs - k + 1) |  // s= >=(n-k+1) s
                    acc_tl; // timelock info
             }

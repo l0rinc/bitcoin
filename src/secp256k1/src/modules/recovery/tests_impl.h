@@ -13,12 +13,12 @@ static int recovery_test_nonce_function(unsigned char *nonce32, const unsigned c
     (void) algo16;
     (void) data;
 
-    /* On the first run, return 0 to force a second run */
+    /* On the first run, return an all-zero nonce to force a second run. */
     if (counter == 0) {
         memset(nonce32, 0, 32);
         return 1;
     }
-    /* On the second run, return an overflow to force a third run */
+    /* On the second run, return an overflow nonce to force a third run. */
     if (counter == 1) {
         memset(nonce32, 0xff, 32);
         return 1;

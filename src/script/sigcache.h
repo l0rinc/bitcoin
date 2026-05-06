@@ -31,9 +31,9 @@ static constexpr size_t DEFAULT_SCRIPT_EXECUTION_CACHE_BYTES{DEFAULT_VALIDATION_
 static_assert(DEFAULT_VALIDATION_CACHE_BYTES == DEFAULT_SIGNATURE_CACHE_BYTES + DEFAULT_SCRIPT_EXECUTION_CACHE_BYTES);
 
 /**
- * Valid signature cache, to avoid doing expensive ECDSA signature checking
- * twice for every transaction (once when accepted into memory pool, and
- * again when accepted into the block chain)
+ * Valid signature cache, to avoid doing expensive ECDSA and Schnorr signature
+ * checking twice for every transaction (once when accepted into the mempool,
+ * and again when accepted into the block chain)
  */
 class SignatureCache
 {

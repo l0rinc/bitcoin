@@ -51,10 +51,9 @@ static bool IsSegwit(const Descriptor& desc) {
     return false;
 }
 
-/** Whether to assume ECDSA signatures' will be high-r. */
+/** Whether to assume ECDSA signatures will use their maximum size. */
 static bool UseMaxSig(const std::optional<CTxIn>& txin, const CCoinControl* coin_control) {
-    // Use max sig if watch only inputs were used or if this particular input is an external input
-    // to ensure a sufficient fee is attained for the requested feerate.
+    // External inputs may be signed by parties that do not grind R, so size them conservatively.
     return coin_control && txin && coin_control->IsExternalSelected(txin->prevout);
 }
 
@@ -94,7 +93,7 @@ int CalculateMaximumSignedInputSize(const CTxOut& txout, const COutPoint outpoin
     if (!provider) return -1;
 
     if (const auto desc = InferDescriptor(txout.scriptPubKey, *provider)) {
-        if (const auto weight = MaxInputWeight(*desc, {}, coin_control, true, can_grind_r)) {
+        if (const auto weight = MaxInputWeight(*desc, {CTxIn{outpoint}}, coin_control, true, can_grind_r)) {
             return static_cast<int>(GetVirtualTransactionSize(*weight, 0, 0));
         }
     }
@@ -923,7 +922,8 @@ util::Result<SelectionResult> AutomaticCoinSelection(const CWallet& wallet, Coin
             if (group.m_ancestors >= max_ancestors || group.m_descendants >= max_descendants) total_unconf_long_chain += group.GetSelectionAmount();
         }
 
-        if (CAmount total_amount = available_coins.GetTotalAmount() - total_discarded < value_to_select) {
+        const CAmount total_amount = available_coins.GetTotalAmount() - total_discarded;
+        if (total_amount < value_to_select) {
             // Special case, too-long-mempool cluster.
             if (total_amount + total_unconf_long_chain > value_to_select) {
                 return util::Error{_("Unconfirmed UTXOs are available, but spending them creates a chain of transactions that will be rejected by the mempool")};
@@ -985,12 +985,9 @@ void DiscourageFeeSniping(CMutableTransaction& tx, FastRandomContext& rng_fast,
     assert(!tx.vin.empty());
     // Discourage fee sniping.
     //
-    // For a large miner the value of the transactions in the best block and
-    // the mempool can exceed the cost of deliberately attempting to mine two
-    // blocks to orphan the current best block. By setting nLockTime such that
-    // only the next block can include the transaction, we discourage this
-    // practice as the height restricted and limited blocksize gives miners
-    // considering fee sniping fewer options for pulling off this attack.
+    // Setting nLockTime to the current tip height makes the transaction
+    // non-final for competing forks below the next block, reducing the
+    // incentive to reorg the current tip to capture its fees.
     //
     // A simple way to think about this is from the wallet's point of view we
     // always want the blockchain to move forward. By setting nLockTime this
@@ -998,11 +995,6 @@ void DiscourageFeeSniping(CMutableTransaction& tx, FastRandomContext& rng_fast,
     // transaction to appear in the next block; we don't want to potentially
     // encourage reorgs by allowing transactions to appear at lower heights
     // than the next block in forks of the best chain.
-    //
-    // Of course, the subsidy is high enough, and transaction volume low
-    // enough, that fee sniping isn't a problem yet, but by implementing a fix
-    // now we ensure code won't be written that makes assumptions about
-    // nLockTime that preclude a fix later.
     if (IsCurrentForAntiFeeSniping(chain, block_hash)) {
         tx.nLockTime = block_height;
 
@@ -1029,7 +1021,7 @@ void DiscourageFeeSniping(CMutableTransaction& tx, FastRandomContext& rng_fast,
         if (in.nSequence == CTxIn::MAX_SEQUENCE_NONFINAL) continue;
         // May be MAX BIP125 to disable BIP68 and enable BIP125
         if (in.nSequence == MAX_BIP125_RBF_SEQUENCE) continue;
-        // The wallet does not support any other sequence-use right now.
+        // The wallet does not construct any other sequence values here.
         assert(false);
     }
 }
@@ -1069,8 +1061,9 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
     }
     // Set the long term feerate estimate to the wallet's consolidate feerate
     coin_selection_params.m_long_term_feerate = wallet.m_consolidate_feerate;
-    // Static vsize overhead + outputs vsize. 4 nVersion, 4 nLocktime, 1 input count, 1 witness overhead (dummy, flag, stack size)
-    coin_selection_params.tx_noinputs_size = 10 + GetSizeOfCompactSize(vecSend.size()); // bytes for output count
+    // Base transaction size estimate before inputs or a change output are added; the recipient
+    // count CompactSize is added here and each recipient output size is added below.
+    coin_selection_params.tx_noinputs_size = 10 + GetSizeOfCompactSize(vecSend.size());
 
     CAmount recipients_sum = 0;
     const OutputType change_type = wallet.TransactionChangeType(coin_control.m_change_type ? *coin_control.m_change_type : wallet.m_default_change_type, vecSend);
@@ -1126,8 +1119,8 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
 
     // Get size of spending the change output
     int change_spend_size = CalculateMaximumSignedInputSize(change_prototype_txout, &wallet, /*coin_control=*/nullptr);
-    // If the wallet doesn't know how to sign change output, assume p2sh-p2wpkh
-    // as lower-bound to allow BnB to do its thing
+    // If the wallet doesn't know how to sign the change output, fall back to a conservative
+    // nested-P2WPKH estimate so BnB can still model the cost of change.
     if (change_spend_size == -1) {
         coin_selection_params.change_spend_size = DUMMY_NESTED_P2WPKH_INPUT_SIZE;
     } else {
@@ -1146,14 +1139,14 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
         return util::Error{strprintf(_("Fee rate (%s) is lower than the minimum fee rate setting (%s)"), coin_control.m_feerate->ToString(FeeEstimateMode::SAT_VB), coin_selection_params.m_effective_feerate.ToString(FeeEstimateMode::SAT_VB))};
     }
     if (feeCalc.reason == FeeReason::FALLBACK && !wallet.m_allow_fallback_fee) {
-        // eventually allow a fallback fee
+        // Refuse fallback estimates when the wallet has fallback fees disabled.
         return util::Error{strprintf(_("Fee estimation failed. Fallbackfee is disabled. Wait a few blocks or enable %s."), "-fallbackfee")};
     }
 
     // Calculate the cost of change
     // Cost of change is the cost of creating the change output + cost of spending the change output in the future.
     // For creating the change output now, we use the effective feerate.
-    // For spending the change output in the future, we use the discard feerate for now.
+    // For spending the change output in the future, we use the discard feerate.
     // So cost of change = (change output size * effective feerate) + (size of spending change output * discard feerate)
     coin_selection_params.m_change_fee = coin_selection_params.m_effective_feerate.GetFee(coin_selection_params.change_output_size);
     coin_selection_params.m_cost_of_change = coin_selection_params.m_discard_feerate.GetFee(coin_selection_params.change_spend_size) + coin_selection_params.m_change_fee;
@@ -1434,7 +1427,8 @@ util::Result<CreatedTransactionResult> CreateTransaction(
         CCoinControl tmp_cc = coin_control;
         tmp_cc.m_avoid_partial_spends = true;
 
-        // Reuse the change destination from the first creation attempt to avoid skipping BIP44 indexes
+        // Reuse the change destination from the first creation attempt to avoid consuming another
+        // change derivation index.
         if (txr_ungrouped.change_pos) {
             ExtractDestination(txr_ungrouped.tx->vout[*txr_ungrouped.change_pos].scriptPubKey, tmp_cc.destChange);
         }
@@ -1459,8 +1453,8 @@ util::Result<CreatedTransactionResult> CreateTransaction(
 
 util::Result<CreatedTransactionResult> FundTransaction(CWallet& wallet, const CMutableTransaction& tx, const std::vector<CRecipient>& vecSend, std::optional<unsigned int> change_pos, bool lockUnspents, CCoinControl coinControl)
 {
-    // We want to make sure tx.vout is not used now that we are passing outputs as a vector of recipients.
-    // This sets us up to remove tx completely in a future PR in favor of passing the inputs directly.
+    // FundTransaction receives its outputs via vecSend, so require tx.vout to stay empty to avoid
+    // two competing output sources.
     assert(tx.vout.empty());
 
     // Set the user desired locktime

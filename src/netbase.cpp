@@ -272,7 +272,7 @@ enum SOCKS5Reply: uint8_t {
     GENFAILURE = 0x01,                 //!< RFC1928: General failure
     NOTALLOWED = 0x02,                 //!< RFC1928: Connection not allowed by ruleset
     NETUNREACHABLE = 0x03,             //!< RFC1928: Network unreachable
-    HOSTUNREACHABLE = 0x04,            //!< RFC1928: Network unreachable
+    HOSTUNREACHABLE = 0x04,            //!< RFC1928: Host unreachable
     CONNREFUSED = 0x05,                //!< RFC1928: Connection refused
     TTLEXPIRED = 0x06,                 //!< RFC1928: TTL expired
     CMDUNSUPPORTED = 0x07,             //!< RFC1928: Command not supported

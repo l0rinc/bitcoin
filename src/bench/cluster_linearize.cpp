@@ -117,8 +117,8 @@ DepGraph<SetType> MakeHardGraph(DepGraphIndex ntx)
 /** Benchmark that does search-based candidate finding with a specified number of iterations.
  *
  * Its goal is measuring how much time every additional search iteration in linearization costs,
- * by running with a low and a high count, subtracting the results, and divided by the number
- * iterations difference.
+ * by running with a low and a high count, subtracting the results, and dividing by the
+ * iteration-count difference.
  */
 template<typename SetType>
 void BenchLinearizeWorstCase(DepGraphIndex ntx, benchmark::Bench& bench, uint64_t iter_limit)

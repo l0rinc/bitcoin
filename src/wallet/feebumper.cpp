@@ -125,10 +125,9 @@ static CFeeRate EstimateFeeRate(const CWallet& wallet, const CWalletTx& wtx, con
     feerate += CFeeRate(1);
 
     // The node has a configurable incremental relay fee. Increment the fee by
-    // the minimum of that and the wallet's conservative
-    // WALLET_INCREMENTAL_RELAY_FEE value to future proof against changes to
-    // network wide policy for incremental relay fee that our node may not be
-    // aware of. This ensures we're over the required relay fee rate
+    // the maximum of that and the wallet's conservative
+    // WALLET_INCREMENTAL_RELAY_FEE value so we're above whichever relay fee
+    // floor is higher. This ensures we're over the required relay fee rate
     // (Rule 4).  The replacement tx will be at least as large as the
     // original tx, so the total fee will be greater (Rule 3)
     CFeeRate node_incremental_relay_fee = wallet.chain().relayIncrementalFee();
@@ -158,7 +157,7 @@ bool TransactionCanBeBumped(const CWallet& wallet, const Txid& txid)
 Result CreateRateBumpTransaction(CWallet& wallet, const Txid& txid, const CCoinControl& coin_control, std::vector<bilingual_str>& errors,
                                  CAmount& old_fee, CAmount& new_fee, CMutableTransaction& mtx, bool require_mine, const std::vector<CTxOut>& outputs, std::optional<uint32_t> original_change_index)
 {
-    // For now, cannot specify both new outputs to use and an output index to send change
+    // Cannot specify both new outputs to use and an output index to send change.
     if (!outputs.empty() && original_change_index.has_value()) {
         errors.emplace_back(Untranslated("The options 'outputs' and 'original_change_index' are incompatible. You can only either specify a new set of outputs, or designate a change output to be recycled."));
         return Result::INVALID_PARAMETER;

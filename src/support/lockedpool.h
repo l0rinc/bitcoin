@@ -115,8 +115,8 @@ private:
  * To avoid sensitive key data from being swapped to disk, the memory in this pool
  * is locked/pinned.
  *
- * An arena manages a contiguous region of memory. The pool starts out with one arena
- * but can grow to multiple arenas if the need arises.
+ * An arena manages a contiguous region of memory. The pool allocates arenas on
+ * demand and can grow to multiple arenas if the need arises.
  *
  * Unlike a normal C heap, the administrative structures are separate from the managed
  * memory. This has been done as the sizes and bases of objects are not in themselves sensitive
@@ -152,10 +152,10 @@ public:
         size_t chunks_free;
     };
 
-    /** Create a new LockedPool. This takes ownership of the MemoryPageLocker,
+    /** Create a new LockedPool. This takes ownership of the LockedPageAllocator,
      * you can only instantiate this with LockedPool(std::move(...)).
      *
-     * The second argument is an optional callback when locking a newly allocated arena failed.
+     * The second argument is an optional callback when locking a newly allocated arena fails.
      * If this callback is provided and returns false, the allocation fails (hard fail), if
      * it returns true the allocation proceeds, but it could warn.
      */
@@ -165,9 +165,9 @@ public:
     LockedPool(const LockedPool& other) = delete; // non construction-copyable
     LockedPool& operator=(const LockedPool&) = delete; // non copyable
 
-    /** Allocate size bytes from this arena.
-     * Returns pointer on success, or 0 if memory is full or
-     * the application tried to allocate 0 bytes.
+    /** Allocate size bytes from this pool.
+     * Returns a pointer on success, or nullptr if the request is zero,
+     * exceeds ARENA_SIZE, or cannot be satisfied.
      */
     void* alloc(size_t size);
 
@@ -205,8 +205,8 @@ private:
 };
 
 /**
- * Singleton class to keep track of locked (ie, non-swappable) memory, for use in
- * std::allocator templates.
+ * Singleton class to keep track of locked memory, for use in std::allocator
+ * templates.
  *
  * Some implementations of the STL allocate memory in some constructors (i.e., see
  * MSVC's vector<T> implementation where it allocates 1 byte of memory in the allocator.)

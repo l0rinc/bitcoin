@@ -84,8 +84,8 @@ public:
 #endif
 
 #ifdef ENABLE_WALLET
-    /** Set the wallet model.
-        The wallet model represents a bitcoin wallet, and offers access to the list of transactions, address book and sending
+    /** Add a wallet model.
+        A wallet model represents a bitcoin wallet and offers access to its transaction list, address book, and sending
         functionality.
     */
     void addWallet(WalletModel* walletModel);
@@ -95,7 +95,7 @@ public:
     bool enableWallet = false;
 
     /** Get the tray icon status.
-        Some systems have not "system tray" or "notification area" available.
+        Some systems do not have a "system tray" or "notification area" available.
     */
     bool hasTrayIcon() const { return trayIcon; }
 

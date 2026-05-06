@@ -1646,7 +1646,7 @@ std::pair<size_t, bool> CConnman::SocketSendData(CNode& node) const
             // Notify transport that bytes have been processed.
             node.m_transport->MarkBytesSent(nBytes);
             // Update statistics per message type.
-            if (!msg_type.empty()) { // don't report v2 handshake bytes for now
+            if (!msg_type.empty()) { // v2 handshake bytes are not attributed to a message type
                 node.AccountForSentBytes(msg_type, nBytes);
             }
             nSentSize += nBytes;
@@ -2635,7 +2635,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect, std
         //
         CAddress addrConnect;
 
-        // Only connect out to one peer per ipv4/ipv6 network group (/16 for IPv4).
+        // Only connect out to one peer per IPv4/IPv6 netgroup.
         int nOutboundFullRelay = 0;
         int nOutboundBlockRelay = 0;
         int outbound_privacy_network_peers = 0;
@@ -2649,7 +2649,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect, std
 
                 // Make sure our persistent outbound slots to ipv4/ipv6 peers belong to different netgroups.
                 switch (pnode->m_conn_type) {
-                    // We currently don't take inbound connections into account. Since they are
+                    // We don't take inbound connections into account here. Since they are
                     // free to make, an attacker could make them to prevent us from connecting to
                     // certain peers.
                     case ConnectionType::INBOUND:
@@ -2833,8 +2833,8 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect, std
             }
 
             // for non-feelers, require all the services we'll want,
-            // for feelers, only require they be a full node (only because most
-            // SPV clients don't have a good address DB available)
+            // for feelers, only require they may have a useful address DB
+            // (most SPV clients do not)
             if (!fFeeler && !m_msgproc->HasAllDesirableServiceFlags(addr.nServices)) {
                 continue;
             } else if (fFeeler && !MayHaveUsefulAddressDB(addr.nServices)) {

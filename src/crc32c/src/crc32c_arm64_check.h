@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-// ARM-specific code checking for the availability of CRC32C instructions.
+// ARM-specific code checking for the availability of the CRC32 and PMULL
+// instructions used by the accelerated CRC32C path.
 
 #ifndef CRC32C_CRC32C_ARM_CHECK_H_
 #define CRC32C_CRC32C_ARM_CHECK_H_

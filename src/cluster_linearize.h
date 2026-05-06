@@ -37,7 +37,7 @@ class DepGraph
         /** All descendants of the transaction (including itself). */
         SetType descendants;
 
-        /** Equality operator (primarily for for testing purposes). */
+        /** Equality operator (primarily for testing purposes). */
         friend bool operator==(const Entry&, const Entry&) noexcept = default;
 
         /** Construct an empty entry. */
@@ -459,7 +459,7 @@ class LinearizationChunking
     }
 
 public:
-    /** Initialize a LinearizationSubset object for a given length of linearization. */
+    /** Initialize a LinearizationChunking object for a given linearization. */
     explicit LinearizationChunking(const DepGraph<SetType>& depgraph LIFETIMEBOUND, std::span<const DepGraphIndex> lin LIFETIMEBOUND) noexcept :
         m_depgraph(depgraph), m_linearization(lin)
     {
@@ -553,7 +553,7 @@ class AncestorCandidateFinder
 {
     /** Internal dependency graph. */
     const DepGraph<SetType>& m_depgraph;
-    /** Which transaction are left to include. */
+    /** Which transactions are left to include. */
     SetType m_todo;
     /** Precomputed ancestor-set feerates (only kept up-to-date for indices in m_todo). */
     std::vector<FeeFrac> m_ancestor_set_feerates;
@@ -687,7 +687,7 @@ public:
      * @param[in] depgraph   Dependency graph for the to-be-linearized cluster.
      * @param[in] rng_seed   A random seed to control the search order.
      *
-     * Complexity: O(N^2) where N=depgraph.Count().
+     * Complexity: O(N^2) where N=depgraph.TxCount().
      */
     SearchCandidateFinder(const DepGraph<SetType>& depgraph, uint64_t rng_seed) noexcept :
         m_rng(rng_seed),

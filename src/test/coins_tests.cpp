@@ -50,7 +50,9 @@ public:
     {
         if (auto it{map_.find(outpoint)}; it != map_.end()) {
             if (!it->second.IsSpent() || m_rng.randbool()) {
-                return it->second; // TODO spent coins shouldn't be returned
+                // Deliberately return spent coins sometimes to exercise the
+                // cache path that handles GetCoin() contract violations.
+                return it->second;
             }
         }
         return std::nullopt;

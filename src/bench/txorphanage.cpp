@@ -98,7 +98,8 @@ static void OrphanageSinglePeerEviction(benchmark::Bench& bench)
         const auto num_announcements_before_trim{orphanage->CountAnnouncements()};
         assert(orphanage->AddTx(large_tx, peer));
 
-        // If there are multiple peers, note that they all have the same DoS score. We will evict only 1 item at a time for each new DoSiest peer.
+        // All announcements belong to the same peer, so trimming evicts that peer's oldest
+        // announcements one at a time.
         const auto num_announcements_after_trim{orphanage->CountAnnouncements()};
         const auto num_evicted{num_announcements_before_trim - num_announcements_after_trim};
 
@@ -134,7 +135,8 @@ static void OrphanageMultiPeerEviction(benchmark::Bench& bench)
     const auto orphanage{node::MakeTxOrphanage(/*max_global_latency_score=*/node::DEFAULT_MAX_ORPHANAGE_LATENCY_SCORE, /*reserved_peer_usage=*/node::DEFAULT_RESERVED_ORPHAN_WEIGHT_PER_PEER)};
     // Every peer sends the same transactions, all from shared_txs.
     // Each peer has 1 or 2 assigned transactions, which they must place as the last and second-to-last positions.
-    // The assignments ensure that every transaction is in some peer's last 2 transactions, and is thus remains in the orphanage until the end of LimitOrphans.
+    // The assignments ensure that every transaction is in some peer's last 2 transactions, and
+    // thus remains in the orphanage until the end of LimitOrphans.
     static_assert(NUM_UNIQUE_TXNS <= NUM_PEERS * 2);
 
     // We need each peer to send some transactions so that the global limit (which is a function of the number of peers providing at least 1 announcement) rises.
@@ -205,8 +207,9 @@ static void OrphanageEraseAll(benchmark::Bench& bench, bool block_or_disconnect)
     // Divide the block's inputs evenly among the peers.
     constexpr unsigned int INPUTS_PER_PEER = NUM_BLOCK_INPUTS / NUM_PEERS;
     static_assert(INPUTS_PER_PEER > 0);
-    // All the block inputs are spent by the orphanage transactions. Each peer is assigned 76 of them.
-    // Each peer has 24 transactions spending 9 inputs each, so jumping by 3 ensures we cover all of the inputs.
+    // All the block inputs are spent by the orphanage transactions. Each peer is assigned 160 of
+    // them. Each peer has 24 transactions spending 9 inputs each, so jumping by 7 ensures we
+    // cover all of the inputs.
     static_assert(7 * NUM_TXNS_PER_PEER + INPUTS_PER_TX - 1 >= INPUTS_PER_PEER);
 
     for (NodeId peer{0}; peer < NUM_PEERS; ++peer) {

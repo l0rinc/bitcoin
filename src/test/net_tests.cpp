@@ -584,12 +584,12 @@ BOOST_AUTO_TEST_CASE(cnetaddr_unserialize_v2)
     BOOST_REQUIRE(s.empty());
 }
 
-// prior to PR #14728, this test triggers an undefined behavior
+// Regression test for mixed-family self-advertise handling in GetLocalAddrForPeer().
 BOOST_AUTO_TEST_CASE(ipv4_peer_with_ipv6_addrMe_test)
 {
-    // set up local addresses; all that's necessary to reproduce the bug is
-    // that a normal IPv4 address is among the entries, but if this address is
-    // !IsRoutable the undefined behavior is easier to trigger deterministically
+    // Set up local addresses. All that's necessary to exercise this path is
+    // that a normal IPv4 address is among the entries, but using a non-routable
+    // one makes the mixed-family path deterministic under sanitizers.
     in_addr raw_addr;
     raw_addr.s_addr = htonl(0x7f000001);
     const CNetAddr mapLocalHost_entry = CNetAddr(raw_addr);
@@ -623,10 +623,10 @@ BOOST_AUTO_TEST_CASE(ipv4_peer_with_ipv6_addrMe_test)
     CAddress addrLocal = CAddress(CService(ipv6AddrLocal, 7777), NODE_NETWORK);
     pnode->SetAddrLocal(addrLocal);
 
-    // before patch, this causes undefined behavior detectable with clang's -fsanitize=memory
+    // Exercise the mixed-family self-advertise path; sanitizers catch regressions here.
     GetLocalAddrForPeer(*pnode);
 
-    // suppress no-checks-run warning; if this test fails, it's by triggering a sanitizer
+    // Keep an explicit assertion so the test is marked as having run.
     BOOST_CHECK(1);
 
     // Cleanup, so that we don't confuse other tests.
@@ -671,7 +671,8 @@ BOOST_AUTO_TEST_CASE(get_local_addr_for_peer_port)
     peer_out.fSuccessfullyConnected = true;
     peer_out.SetAddrLocal(peer_us);
 
-    // Without the fix peer_us:8333 is chosen instead of the proper peer_us:bind_port.
+    // Outbound connections should keep the bound listen port when reusing the
+    // peer-reported IP address.
     auto chosen_local_addr = GetLocalAddrForPeer(peer_out);
     BOOST_REQUIRE(chosen_local_addr);
     const CService expected{peer_us_addr, bind_port};
@@ -692,7 +693,7 @@ BOOST_AUTO_TEST_CASE(get_local_addr_for_peer_port)
     peer_in.fSuccessfullyConnected = true;
     peer_in.SetAddrLocal(peer_us);
 
-    // Without the fix peer_us:8333 is chosen instead of the proper peer_us:peer_us.GetPort().
+    // Inbound connections should advertise the full peer-reported address and port.
     chosen_local_addr = GetLocalAddrForPeer(peer_in);
     BOOST_REQUIRE(chosen_local_addr);
     BOOST_CHECK(*chosen_local_addr == peer_us);

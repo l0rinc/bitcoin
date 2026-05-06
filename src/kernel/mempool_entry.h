@@ -234,7 +234,7 @@ struct NewMempoolTransactionInfo {
      * transaction is added to the mempool.
      */
     const bool m_chainstate_is_current;
-    /* Indicates whether the transaction has unconfirmed parents. */
+    /* Indicates whether the transaction has no unconfirmed mempool parents. */
     const bool m_has_no_mempool_parents;
 
     explicit NewMempoolTransactionInfo(const CTransactionRef& tx, const CAmount& fee,

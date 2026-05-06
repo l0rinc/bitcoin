@@ -51,7 +51,9 @@ CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint) const 
         if (auto coin{base->GetCoin(outpoint)}) {
             ret->second.coin = std::move(*coin);
             cachedCoinsUsage += ret->second.coin.DynamicMemoryUsage();
-            if (ret->second.coin.IsSpent()) { // TODO GetCoin cannot return spent coins
+            if (ret->second.coin.IsSpent()) {
+                // GetCoin() is expected to return only unspent outputs. If an empty coin
+                // is returned anyway, treat it like an empty parent entry and mark ours fresh.
                 // The parent only has an empty entry for this outpoint; we can consider our version as fresh.
                 CCoinsCacheEntry::SetFresh(*ret, m_sentinel);
             }

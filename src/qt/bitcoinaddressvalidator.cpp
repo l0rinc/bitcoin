@@ -6,14 +6,8 @@
 
 #include <key_io.h>
 
-/* Base58 characters are:
-     "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-
-  This is:
-  - All numbers except for '0'
-  - All upper-case letters except for 'I' and 'O'
-  - All lower-case letters except for 'l'
-*/
+/* Reject characters that are invalid in all supported address encodings here.
+   Encoding-specific checks are left to BitcoinAddressCheckValidator. */
 
 BitcoinAddressEntryValidator::BitcoinAddressEntryValidator(QObject *parent) :
     QValidator(parent)

@@ -239,8 +239,8 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_Catches_Failure)
         }
     }
 }
-// Test that a block validation which fails does not interfere with
-// future blocks, ie, the bad state is cleared.
+// Test that a failed validation run does not interfere with
+// subsequent runs, i.e. the bad state is cleared.
 BOOST_AUTO_TEST_CASE(test_CheckQueue_Recovers_From_Failure)
 {
     auto fail_queue = std::make_unique<Fixed_Queue>(QUEUE_BATCH_SIZE, SCRIPT_CHECK_THREADS);

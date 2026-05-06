@@ -37,7 +37,8 @@
 // * Simplicity and minimalism.  A single header file to include and distribute
 //   with your projects.
 // * Augment rather than replace the standard stream formatting mechanism
-// * C++98 support, with optional C++11 niceties
+// * Upstream tinyformat supported C++98, with optional C++11 niceties.
+//   Bitcoin Core's wrappers below require a newer C++ standard.
 //
 //
 // Main interface example usage
@@ -84,9 +85,10 @@
 // User defined format functions
 // -----------------------------
 //
-// Simulating variadic templates in C++98 is pretty painful since it requires
-// writing out the same function for each desired number of arguments.  To make
-// this bearable tinyformat comes with a set of macros which are used
+// Before variadic templates were widely available, simulating them in C++98
+// was pretty painful since it required writing out the same function for each
+// desired number of arguments.  To make this bearable tinyformat comes with a
+// set of macros which are used
 // internally to generate the API, but which may also be used in user code.
 //
 // The three macros TINYFORMAT_ARGTYPES(n), TINYFORMAT_VARARGS(n) and
@@ -187,7 +189,7 @@ struct RuntimeFormat {
 };
 
 // Added for Bitcoin Core. Wrapper for checking format strings at compile time.
-// Unlike ConstevalFormatString this supports RunTimeFormat-wrapped std::string
+// Unlike ConstevalFormatString this supports RuntimeFormat-wrapped std::string
 // for runtime string formatting without compile time checks.
 template <unsigned num_params>
 struct FormatStringCheck {
@@ -399,9 +401,10 @@ TINYFORMAT_DEFINE_FORMATVALUE_CHAR(unsigned char)
 
 
 //------------------------------------------------------------------------------
-// Tools for emulating variadic templates in C++98.  The basic idea here is
-// stolen from the boost preprocessor metaprogramming library and cut down to
-// be just general enough for what we need.
+// Legacy tools from the original library for emulating variadic templates
+// before they were available natively.  The basic idea here is stolen from
+// the boost preprocessor metaprogramming library and cut down to be just
+// general enough for what we need.
 
 #define TINYFORMAT_ARGTYPES(n) TINYFORMAT_ARGTYPES_ ## n
 #define TINYFORMAT_VARARGS(n) TINYFORMAT_VARARGS_ ## n
@@ -990,7 +993,7 @@ class FormatListN : public FormatList
             : FormatList(&m_formatterStore[0], N),
             m_formatterStore { FormatArg(args)... }
         { static_assert(sizeof...(args) == N, "Number of args must be N"); }
-#else // C++98 version
+#else // Legacy non-variadic-template version
         void init(int) {}
 #       define TINYFORMAT_MAKE_FORMATLIST_CONSTRUCTOR(n)                \
                                                                         \
@@ -1045,7 +1048,7 @@ detail::FormatListN<sizeof...(Args)> makeFormatList(const Args&... args)
     return detail::FormatListN<sizeof...(args)>(args...);
 }
 
-#else // C++98 version
+#else // Legacy non-variadic-template version
 
 inline detail::FormatListN<0> makeFormatList()
 {
@@ -1106,7 +1109,7 @@ void printfln(FormatStringCheck<sizeof...(Args)> fmt, const Args&... args)
 }
 
 
-#else // C++98 version
+#else // Legacy non-variadic-template version
 
 inline void format(std::ostream& out, const char* fmt)
 {

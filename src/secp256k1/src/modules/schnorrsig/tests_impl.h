@@ -9,8 +9,8 @@
 
 #include "../../../include/secp256k1_schnorrsig.h"
 
-/* Checks that a bit flip in the n_flip-th argument (that has n_bytes many
- * bytes) changes the hash function
+/* Checks that a bit flip in the n_flip-th argument (which has n_bytes many
+ * bytes) changes the nonce-function output.
  */
 static void nonce_function_bip340_bitflip(unsigned char **args, size_t n_flip, size_t n_bytes, size_t msglen, size_t algolen) {
     unsigned char nonces[2][32];
@@ -193,7 +193,7 @@ static void test_schnorrsig_bip_vectors_check_signing(const unsigned char *sk, c
 }
 
 /* Helper function for schnorrsig_bip_vectors
- * Checks that both verify and verify_batch (TODO) return the same value as expected. */
+ * Checks that verify returns the expected value. Batch verification is TODO. */
 static void test_schnorrsig_bip_vectors_check_verify(const unsigned char *pk_serialized, const unsigned char *msg, size_t msglen, const unsigned char *sig, int expected) {
     secp256k1_xonly_pubkey pk;
 
@@ -849,9 +849,8 @@ static void test_schnorrsig_sign(void) {
 }
 
 #define N_SIGS 3
-/* Creates N_SIGS valid signatures and verifies them with verify and
- * verify_batch (TODO). Then flips some bits and checks that verification now
- * fails. */
+/* Creates N_SIGS valid signatures and verifies them. Then flips some bits and
+ * checks that verification now fails. Batch verification is TODO. */
 static void test_schnorrsig_sign_verify(void) {
     unsigned char sk[32];
     unsigned char msg[N_SIGS][32];
@@ -873,7 +872,7 @@ static void test_schnorrsig_sign_verify(void) {
 
     {
         /* Flip a few bits in the signature and in the message and check that
-         * verify and verify_batch (TODO) fail */
+         * verify fails. Batch verification is TODO. */
         size_t sig_idx = testrand_int(N_SIGS);
         size_t byte_idx = testrand_bits(5);
         unsigned char xorbyte = testrand_int(254)+1;

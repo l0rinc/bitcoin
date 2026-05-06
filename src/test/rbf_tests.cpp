@@ -607,10 +607,10 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
         BOOST_CHECK(replace_multiple_clusters_2->second.size() == 1);
     }
 
-    // Add another descendant to conflict_1, making the cluster size > 2 should fail at this point.
+    // Add another descendant to conflict_1. The cluster size now exceeds 2, so this should fail.
     const auto conflict_1_grand_child = make_tx(/*inputs=*/{conflict_1_child}, /*output_values=*/ {995 * CENT});
     AddToMempool(pool, entry.Fee(high_fee).FromTx(conflict_1_grand_child));
-    const auto conflict_1_grand_child_entry = pool.GetIter(conflict_1_child->GetHash()).value();
+    const auto conflict_1_grand_child_entry = pool.GetIter(conflict_1_grand_child->GetHash()).value();
 
     {
         auto changeset = pool.GetChangeSet();
@@ -660,7 +660,7 @@ BOOST_AUTO_TEST_CASE(feerate_chunks_utilities)
     BOOST_CHECK(std::is_lt(CompareChunks(old_chunks, new_chunks)));
     BOOST_CHECK(std::is_gt(CompareChunks(new_chunks, old_chunks)));
 
-    // Feerate of first new chunk is better with, but second chunk is worse
+    // Feerate of first new chunk is better, but the second chunk is worse.
     old_chunks = {{950, 300}, {100, 100}};
     new_chunks = {{750, 100}, {249, 250}, {151, 650}};
 

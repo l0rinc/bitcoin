@@ -109,7 +109,7 @@ CoinControlDialog::CoinControlDialog(CCoinControl& coin_control, WalletModel* _m
     // default view is sorted by amount desc
     sortView(COLUMN_AMOUNT, Qt::DescendingOrder);
 
-    // restore list mode and sortorder as a convenience feature
+    // restore the saved view mode and sort order as a convenience feature
     QSettings settings;
     if (settings.contains("nCoinControlMode") && !settings.value("nCoinControlMode").toBool())
         ui->radioTreeMode->click();
@@ -252,37 +252,37 @@ void CoinControlDialog::unlockCoin()
     updateLabelLocked();
 }
 
-// copy label "Quantity" to clipboard
+// copy quantity to clipboard
 void CoinControlDialog::clipboardQuantity()
 {
     GUIUtil::setClipboard(ui->labelCoinControlQuantity->text());
 }
 
-// copy label "Amount" to clipboard
+// copy amount to clipboard
 void CoinControlDialog::clipboardAmount()
 {
     GUIUtil::setClipboard(ui->labelCoinControlAmount->text().left(ui->labelCoinControlAmount->text().indexOf(" ")));
 }
 
-// copy label "Fee" to clipboard
+// copy fee to clipboard
 void CoinControlDialog::clipboardFee()
 {
     GUIUtil::setClipboard(ui->labelCoinControlFee->text().left(ui->labelCoinControlFee->text().indexOf(" ")).replace(ASYMP_UTF8, ""));
 }
 
-// copy label "After fee" to clipboard
+// copy after-fee amount to clipboard
 void CoinControlDialog::clipboardAfterFee()
 {
     GUIUtil::setClipboard(ui->labelCoinControlAfterFee->text().left(ui->labelCoinControlAfterFee->text().indexOf(" ")).replace(ASYMP_UTF8, ""));
 }
 
-// copy label "Bytes" to clipboard
+// copy bytes to clipboard
 void CoinControlDialog::clipboardBytes()
 {
     GUIUtil::setClipboard(ui->labelCoinControlBytes->text().replace(ASYMP_UTF8, ""));
 }
 
-// copy label "Change" to clipboard
+// copy change to clipboard
 void CoinControlDialog::clipboardChange()
 {
     GUIUtil::setClipboard(ui->labelCoinControlChange->text().left(ui->labelCoinControlChange->text().indexOf(" ")).replace(ASYMP_UTF8, ""));

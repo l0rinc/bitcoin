@@ -234,7 +234,7 @@ static void MutateTxRBFOptIn(CMutableTransaction& tx, const std::string& strInId
         throw std::runtime_error("Invalid TX input index '" + strInIdx + "'");
     }
 
-    // set the nSequence to MAX_INT - 2 (= RBF opt in flag)
+    // Set nSequence to MAX_BIP125_RBF_SEQUENCE (= SEQUENCE_FINAL - 2).
     uint32_t cnt{0};
     for (CTxIn& txin : tx.vin) {
         if (strInIdx == "" || cnt == *idx) {
@@ -603,7 +603,7 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
         tempKeystore.AddKey(key);
     }
 
-    // Add previous txouts given in the RPC call:
+    // Add previous txouts provided in the prevtxs register:
     if (!registers.count("prevtxs"))
         throw std::runtime_error("prevtxs register variable must be set.");
     UniValue prevtxsObj = registers["prevtxs"];
@@ -652,8 +652,8 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
                 view.AddCoin(out, std::move(newcoin), true);
             }
 
-            // if redeemScript given and private keys given,
-            // add redeemScript to the tempKeystore so it can be signed:
+            // If a redeemScript is provided for a P2SH or P2WSH prevout, add
+            // it to the temporary keystore so it can be signed:
             if ((scriptPubKey.IsPayToScriptHash() || scriptPubKey.IsPayToWitnessScriptHash()) &&
                 prevOut.exists("redeemScript")) {
                 UniValue v = prevOut["redeemScript"];

@@ -194,6 +194,8 @@ private:
      *
      * @param[out]   setFilesToPrune   The set of file indices that can be unlinked will be returned
      * @param        last_prune        The last height we're able to prune, according to the prune locks
+     * @param[in]    chain             Chainstate whose tip and role determine the prune range
+     * @param[in]    chainman          Chainstate manager providing prune parameters and shared state
      */
     void FindFilesToPrune(
         std::set<int>& setFilesToPrune,
@@ -204,14 +206,13 @@ private:
     RecursiveMutex cs_LastBlockFile;
     std::vector<CBlockFileInfo> m_blockfile_info;
 
-    //! Since assumedvalid chainstates may be syncing a range of the chain that is very
-    //! far away from the normal/background validation process, we should segment blockfiles
-    //! for assumed chainstates. Otherwise, we might have wildly different height ranges
-    //! mixed into the same block files, which would impair our ability to prune
-    //! effectively.
+    //! An assumeutxo snapshot-backed chainstate can sync a range of the chain that is very
+    //! far away from the background validation chainstate, so we segment its blockfiles.
+    //! Otherwise, widely separated height ranges could be mixed into the same block files,
+    //! which would impair pruning.
     //!
     //! This data structure maintains separate blockfile number cursors for each
-    //! BlockfileType. The ASSUMED state is initialized, when necessary, in FindNextBlockPos().
+    //! BlockfileType. The ASSUMED cursor is initialized lazily in FindNextBlockPos().
     //!
     //! The first element is the NORMAL cursor, second is ASSUMED.
     std::array<std::optional<BlockfileCursor>, BlockfileType::NUM_TYPES>
@@ -280,13 +281,13 @@ public:
      * The height of the base block of an assumeutxo snapshot, if one is in use.
      *
      * This controls how blockfiles are segmented by chainstate type to avoid
-     * comingling different height regions of the chain when an assumedvalid chainstate
-     * is in use. If heights are drastically different in the same blockfile, pruning
-     * suffers.
+     * commingling distant height ranges while an assumeutxo snapshot-backed
+     * chainstate is in use. If heights are drastically different in the same
+     * blockfile, pruning suffers.
      *
      * This is set during ActivateSnapshot() or upon LoadBlockIndex() if a snapshot
-     * had been previously loaded. After the snapshot is validated, this is unset to
-     * restore normal LoadBlockIndex behavior.
+     * had been previously loaded. After the snapshot is validated, this is unset so
+     * blockfile placement returns to NORMAL-only behavior.
      */
     std::optional<int> m_snapshot_height;
 

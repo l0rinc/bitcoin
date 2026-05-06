@@ -86,8 +86,8 @@ struct SimTxGraph
         return ret;
     }
 
-    /** Check whether this graph is oversized (contains a connected component whose number of
-     *  transactions exceeds max_cluster_count. */
+    /** Check whether this graph is oversized (contains a connected component whose transaction
+     *  count exceeds max_cluster_count, or whose total size exceeds max_cluster_size). */
     bool IsOversized()
     {
         if (!oversized.has_value()) {
@@ -668,7 +668,8 @@ FUZZ_TARGET(txgraph)
             } else if (block_builders.empty() && sims.size() > 1 && command-- == 0) {
                 // CommitStaging.
                 real->CommitStaging();
-                // Resulting main level is only guaranteed to be optimal if all levels are
+                // The resulting main level is only guaranteed to remain known-optimal if every
+                // materialized level was known-optimal before the commit.
                 const bool main_optimal = std::all_of(sims.cbegin(), sims.cend(), [](const auto &sim) { return sim.real_is_optimal; });
                 sims.erase(sims.begin());
                 sims.front().real_is_optimal = main_optimal;
@@ -1050,8 +1051,8 @@ FUZZ_TARGET(txgraph)
         }
         assert(todo.None());
 
-        // If the real graph claims to be optimal (the last DoWork() call returned true), verify
-        // that calling Linearize on it does not improve it further.
+        // If the simulation still considers the real graph known-optimal, verify that calling
+        // Linearize on it does not improve it further.
         if (sims[0].real_is_optimal) {
             auto real_diagram = ChunkLinearization(sims[0].graph, vec1);
             auto [sim_lin, _optimal, _cost] = Linearize(sims[0].graph, 300000, rng.rand64(), vec1);

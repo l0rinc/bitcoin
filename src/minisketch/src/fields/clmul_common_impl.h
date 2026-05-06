@@ -136,7 +136,7 @@ public:
     /** Compute x such that x^2 + x = a (undefined result if no solution exists). */
     inline constexpr Elem Qrt(Elem val) const { return QRT->template Map<O>(val); }
 
-    /** Compute the inverse of x1. */
+    /** Compute the inverse of a. */
     inline Elem Inv(Elem val) const { return InvLadder<I, O, B, MUL, Sqr1, Sqr2, Sqr4, Sqr8, Sqr16>(val); }
 
     /** Generate a random field element. */

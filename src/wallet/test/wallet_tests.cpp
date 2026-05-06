@@ -212,7 +212,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
 }
 
 // This test verifies that wallet settings can be added and removed
-// concurrently, ensuring no race conditions occur during either process.
+// concurrently, and that the final stored wallet list matches expectations.
 BOOST_FIXTURE_TEST_CASE(write_wallet_settings_concurrently, TestingSetup)
 {
     auto chain = m_node.chain.get();
@@ -514,7 +514,7 @@ static size_t CalculateNestedKeyhashInputSize(bool use_max_sig)
     uint160 script_id(Hash160(inner_script));
     CScript script_pubkey = CScript() << OP_HASH160 << std::vector<unsigned char>(script_id.begin(), script_id.end()) << OP_EQUAL;
 
-    // Add inner-script to key store and key to watchonly
+    // Add the inner script and key to the signing provider.
     FillableSigningProvider keystore;
     keystore.AddCScript(inner_script);
     keystore.AddKeyPubKey(key, pubkey);
@@ -536,6 +536,30 @@ BOOST_FIXTURE_TEST_CASE(dummy_input_size_test, TestChain100Setup)
 {
     BOOST_CHECK_EQUAL(CalculateNestedKeyhashInputSize(false), DUMMY_NESTED_P2WPKH_INPUT_SIZE);
     BOOST_CHECK_EQUAL(CalculateNestedKeyhashInputSize(true), DUMMY_NESTED_P2WPKH_INPUT_SIZE);
+}
+
+BOOST_FIXTURE_TEST_CASE(external_selected_input_uses_max_signature_size, TestChain100Setup)
+{
+    CKey key = GenerateRandomKey();
+    CPubKey pubkey = key.GetPubKey();
+    BOOST_REQUIRE(pubkey.IsValid());
+
+    const CTxOut txout{COIN, GetScriptForDestination(PKHash(pubkey))};
+    CMutableTransaction tx;
+    tx.vout.emplace_back(txout);
+    const COutPoint outpoint{tx.GetHash(), 0};
+
+    CCoinControl coin_control;
+    coin_control.m_external_provider.keys.emplace(pubkey.GetID(), key);
+    coin_control.m_external_provider.pubkeys.emplace(pubkey.GetID(), pubkey);
+    coin_control.Select(outpoint).SetTxOut(txout);
+
+    const int low_r_size = CalculateMaximumSignedInputSize(txout, outpoint, &coin_control.m_external_provider, /*can_grind_r=*/true, /*coin_control=*/nullptr);
+    const int max_sig_size = CalculateMaximumSignedInputSize(txout, outpoint, &coin_control.m_external_provider, /*can_grind_r=*/false, &coin_control);
+    const int external_input_size = CalculateMaximumSignedInputSize(txout, outpoint, &coin_control.m_external_provider, /*can_grind_r=*/true, &coin_control);
+
+    BOOST_CHECK_LT(low_r_size, max_sig_size);
+    BOOST_CHECK_EQUAL(external_input_size, max_sig_size);
 }
 
 bool malformed_descriptor(std::ios_base::failure e)

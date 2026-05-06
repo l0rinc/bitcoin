@@ -20,7 +20,7 @@ void FindCoins(const NodeContext& node, std::map<COutPoint, Coin>& coins)
         if (auto c{mempool_view.GetCoin(outpoint)}) {
             coin = std::move(*c);
         } else {
-            coin.Clear(); // Either the coin is not in the CCoinsViewCache or is spent
+            coin.Clear(); // Either the coin is not available in the mempool or current chain UTXO set, or it is spent
         }
     }
 }

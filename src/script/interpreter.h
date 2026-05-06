@@ -107,7 +107,7 @@ enum : uint32_t {
     //
     SCRIPT_VERIFY_WITNESS = (1U << 11),
 
-    // Making v1-v16 witness program non-standard
+    // Making unknown witness versions and unsupported witness program forms non-standard
     //
     SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM = (1U << 12),
 
@@ -121,7 +121,7 @@ enum : uint32_t {
     //
     SCRIPT_VERIFY_NULLFAIL = (1U << 14),
 
-    // Public keys in segregated witness scripts must be compressed
+    // Public keys in witness v0 scripts must be compressed
     //
     SCRIPT_VERIFY_WITNESS_PUBKEYTYPE = (1U << 15),
 

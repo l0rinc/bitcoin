@@ -65,9 +65,9 @@ struct AddressPosition {
  * To that end:
  *  * Addresses are organized into buckets that can each store up to 64 entries.
  *    * Addresses to which our node has not successfully connected go into 1024 "new" buckets.
- *      * Based on the address range (/16 for IPv4) of the source of information, or if an asmap is provided,
- *        the AS it belongs to (for IPv4/IPv6), 64 buckets are selected at random.
- *      * The actual bucket is chosen from one of these, based on the range in which the address itself is located.
+ *      * Based on the source netgroup (legacy /16 for IPv4, or an AS for clearnet when
+ *        asmap is provided), 64 buckets are selected at random.
+ *      * The actual bucket is chosen from one of these, based on the netgroup in which the address itself is located.
  *      * The position in the bucket is chosen based on the full address.
  *      * One single address can occur in up to 8 different buckets to increase selection chances for addresses that
  *        are seen frequently. The chance for increasing this multiplicity decreases exponentially.
@@ -75,7 +75,7 @@ struct AddressPosition {
  *        unless that address is also stored in another bucket or it doesn't meet one of several quality criteria
  *        (see IsTerrible for exact criteria).
  *    * Addresses of nodes that are known to be accessible go into 256 "tried" buckets.
- *      * Each address range selects at random 8 of these buckets.
+ *      * Each address netgroup selects at random 8 of these buckets.
  *      * The actual bucket is chosen from one of these, based on the full address.
  *      * When adding a new good address to an occupied position of a bucket, a FEELER connection to the
  *        old address is attempted. The old entry is only replaced and moved back to the "new" buckets if this

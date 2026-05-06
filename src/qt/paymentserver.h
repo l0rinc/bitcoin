@@ -5,8 +5,8 @@
 #ifndef BITCOIN_QT_PAYMENTSERVER_H
 #define BITCOIN_QT_PAYMENTSERVER_H
 
-// This class handles payment requests from clicking on
-// bitcoin: URIs
+// This class handles payment requests from bitcoin: URIs
+// and related file-open events.
 //
 // This is somewhat tricky, because we have to deal with
 // the situation where the user clicks on a link during
@@ -16,20 +16,19 @@
 // So, the strategy is:
 //
 // Create the server, and register the event handler,
-// when the application is created. Save any URIs
-// received at or during startup in a list.
+// when the application is created. Save any URI or file
+// inputs received at or during startup in a set.
 //
 // When startup is finished and the main window is
 // shown, a signal is sent to slot uiReady(), which
-// emits a receivedURI() signal for any payment
-// requests that happened during startup.
+// processes any queued startup inputs.
 //
-// After startup, receivedURI() happens as usual.
+// After startup, incoming URI and file inputs are handled immediately.
 //
 // This class has one more feature: a static
-// method that finds URIs passed in the command line
-// and, if a server is running in another process,
-// sends them to the server.
+// method that finds URI or file inputs passed on the
+// command line and, if another process is already
+// running, sends them there.
 //
 
 #include <qt/sendcoinsrecipient.h>
@@ -57,22 +56,18 @@ class PaymentServer : public QObject
     Q_OBJECT
 
 public:
-    // Parse URIs on command line
-    // Returns false on error
+    // Parse and queue URI or file inputs from the command line.
     static void ipcParseCommandLine(int argc, char *argv[]);
 
-    // Returns true if there were URIs on the command line
-    // which were successfully sent to an already-running
-    // process.
-    // Note: if a payment request is given, SelectParams(MAIN/TESTNET)
-    // will be called so we startup in the right mode.
+    // Return true if queued URI or file inputs were successfully sent to an
+    // already-running process.
     static bool ipcSendCommandLine();
 
     // parent should be QApplication object
     explicit PaymentServer(QObject* parent, bool startLocalServer = true);
     ~PaymentServer();
 
-    // OptionsModel is used for getting proxy settings and display unit
+    // Store the GUI options model.
     void setOptionsModel(OptionsModel *optionsModel);
 
 Q_SIGNALS:
@@ -87,7 +82,7 @@ public Q_SLOTS:
     // to display payment requests to the user
     void uiReady();
 
-    // Handle an incoming URI, URI with local file scheme or file
+    // Handle an incoming URI or local file path.
     void handleURIOrFile(const QString& s);
 
 private Q_SLOTS:
@@ -95,7 +90,7 @@ private Q_SLOTS:
 
 protected:
     // Constructor registers this on the parent QApplication to
-    // receive QEvent::FileOpen and QEvent:Drop events
+    // receive QEvent::FileOpen events.
     bool eventFilter(QObject *object, QEvent *event) override;
 
 private:

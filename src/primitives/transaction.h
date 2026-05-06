@@ -59,9 +59,9 @@ public:
     std::string ToString() const;
 };
 
-/** An input of a transaction.  It contains the location of the previous
- * transaction's output that it claims and a signature that matches the
- * output's public key.
+/** An input of a transaction. It contains the location of the previous
+ * output it spends and the unlocking data needed to satisfy that output's
+ * spending conditions.
  */
 class CTxIn
 {
@@ -69,7 +69,7 @@ public:
     COutPoint prevout;
     CScript scriptSig;
     uint32_t nSequence;
-    CScriptWitness scriptWitness; //!< Only serialized through CTransaction
+    CScriptWitness scriptWitness; //!< Only serialized through transaction-level serialization
 
     /**
      * Setting nSequence to this value for every input in a transaction
@@ -143,8 +143,8 @@ public:
     std::string ToString() const;
 };
 
-/** An output of a transaction.  It contains the public key that the next input
- * must be able to sign with to claim it.
+/** An output of a transaction. It contains the amount and the spending
+ * conditions that a future input must satisfy to claim it.
  */
 class CTxOut
 {

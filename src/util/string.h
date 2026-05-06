@@ -98,7 +98,8 @@ void ReplaceAll(std::string& in_out, const std::string& search, const std::strin
 
 /** Split a string on any char found in separators, returning a vector.
  *
- * If sep does not occur in sp, a singleton with the entirety of sp is returned.
+ * If none of the separator characters occur in sp, a singleton with the
+ * entirety of sp is returned.
  *
  * @param[in] include_sep Whether to include the separator at the end of the left side of the splits.
  *

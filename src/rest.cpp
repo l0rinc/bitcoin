@@ -330,7 +330,7 @@ static bool rest_spent_txouts(const std::any& context, HTTPRequest* req, const s
 
     std::string hashStr;
     if (path.size() == 1) {
-        // path with query parameter: /rest/spenttxouts/<hash>
+        // path: /rest/spenttxouts/<hash>
         hashStr = path[0];
     } else {
         return RESTERR(req, HTTP_BAD_REQUEST, "Invalid URI format. Expected /rest/spenttxouts/<hash>.<ext>");
@@ -601,7 +601,7 @@ static bool rest_block_filter(const std::any& context, HTTPRequest* req, const s
     std::string param;
     const RESTResponseFormat rf = ParseDataFormat(param, uri_part);
 
-    // request is sent over URI scheme /rest/blockfilter/filtertype/blockhash
+    // Request path: /rest/blockfilter/<filtertype>/<blockhash>
     std::vector<std::string> uri_parts = SplitString(param, '/');
     if (uri_parts.size() != 2) {
         return RESTERR(req, HTTP_BAD_REQUEST, "Invalid URI format. Expected /rest/blockfilter/<filtertype>/<blockhash>");
@@ -883,7 +883,7 @@ static bool rest_getutxos(const std::any& context, HTTPRequest* req, const std::
         uriParts = SplitString(strUriParams, '/');
     }
 
-    // throw exception in case of an empty request
+    // Reject an empty request.
     std::string strRequestMutable = req->ReadBody();
     if (strRequestMutable.length() == 0 && uriParts.size() == 0)
         return RESTERR(req, HTTP_BAD_REQUEST, "Error: empty request");
@@ -897,7 +897,7 @@ static bool rest_getutxos(const std::any& context, HTTPRequest* req, const std::
 
     if (uriParts.size() > 0)
     {
-        //inputs is sent over URI scheme (/rest/getutxos/checkmempool/txid1-n/txid2-n/...)
+        // Inputs are sent in the request path (/rest/getutxos/checkmempool/txid1-n/txid2-n/...).
         if (uriParts[0] == "checkmempool") fCheckMemPool = true;
 
         for (size_t i = (fCheckMemPool) ? 1 : 0; i < uriParts.size(); i++)
@@ -932,7 +932,7 @@ static bool rest_getutxos(const std::any& context, HTTPRequest* req, const std::
 
     case RESTResponseFormat::BINARY: {
         try {
-            //deserialize only if user sent a request
+            // Deserialize only if the user sent a request body.
             if (strRequestMutable.size() > 0)
             {
                 if (fInputParsed) //don't allow sending input over URI and HTTP RAW DATA
@@ -944,7 +944,7 @@ static bool rest_getutxos(const std::any& context, HTTPRequest* req, const std::
                 oss >> vOutPoints;
             }
         } catch (const std::ios_base::failure&) {
-            // abort in case of unreadable binary data
+            // Reject unreadable binary data.
             return RESTERR(req, HTTP_BAD_REQUEST, "Parse error");
         }
         break;

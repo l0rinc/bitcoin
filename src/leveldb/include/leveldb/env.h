@@ -5,7 +5,7 @@
 // An Env is an interface used by the leveldb implementation to access
 // operating system functionality like the filesystem etc.  Callers
 // may wish to provide a custom Env object when opening a database to
-// get fine gain control; e.g., to rate limit file system operations.
+// get fine-grained control; e.g., to rate limit file system operations.
 //
 // All Env implementations are safe for concurrent access from
 // multiple threads without any external synchronization.
@@ -33,7 +33,7 @@
 // whether <windows.h> was included before or after the LevelDB
 // headers.
 //
-// To avoid headaches, we undefined DeleteFile (if defined) and
+// To avoid headaches, we undefine DeleteFile (if defined) and
 // redefine it at the bottom of this file. This way <windows.h>
 // can be included before this file (or not at all) and the
 // exported method will always be leveldb::Env::DeleteFile.
@@ -119,7 +119,7 @@ class LEVELDB_EXPORT Env {
 
   // Store in *result the names of the children of the specified directory.
   // The names are relative to "dir".
-  // Original contents of *results are dropped.
+  // Original contents of *result are dropped.
   virtual Status GetChildren(const std::string& dir,
                              std::vector<std::string>* result) = 0;
 
@@ -173,9 +173,9 @@ class LEVELDB_EXPORT Env {
   virtual void StartThread(void (*function)(void* arg), void* arg) = 0;
 
   // *path is set to a temporary directory that can be used for testing. It may
-  // or may not have just been created. The directory may or may not differ
-  // between runs of the same process, but subsequent calls will return the
-  // same directory.
+  // or may not have just been created. Implementations may return a stable
+  // process- or thread-specific directory, but callers should not assume the
+  // directory is unique or newly created.
   virtual Status GetTestDirectory(std::string* path) = 0;
 
   // Create and return a log file for storing informational messages.
@@ -210,7 +210,7 @@ class LEVELDB_EXPORT SequentialFile {
   virtual Status Read(size_t n, Slice* result, char* scratch) = 0;
 
   // Skip "n" bytes from the file. This is guaranteed to be no
-  // slower that reading the same data, but may be faster.
+  // slower than reading the same data, but may be faster.
   //
   // If end of file is reached, skipping will stop at the end of the
   // file, and Skip will return OK.

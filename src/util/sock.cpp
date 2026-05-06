@@ -300,12 +300,8 @@ std::string Sock::RecvUntilTerminator(uint8_t terminator,
     bool terminator_found{false};
 
     // We must not consume any bytes past the terminator from the socket.
-    // One option is to read one byte at a time and check if we have read a terminator.
-    // However that is very slow. Instead, we peek at what is in the socket and only read
-    // as many bytes as possible without crossing the terminator.
-    // Reading 64 MiB of random data with 262526 terminator chars takes 37 seconds to read
-    // one byte at a time VS 0.71 seconds with the "peek" solution below. Reading one byte
-    // at a time is about 50 times slower.
+    // Instead of reading one byte at a time, peek first and only consume as
+    // many bytes as possible without crossing the terminator.
 
     for (;;) {
         if (data.size() >= max_data) {

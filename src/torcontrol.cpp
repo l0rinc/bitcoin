@@ -106,9 +106,9 @@ void TorControlConnection::readcb(struct bufferevent *bev, void *ctx)
         if (ch == ' ') {
             // Final line, dispatch reply and clean up
             if (self->message.code >= 600) {
-                // (currently unused)
-                // Dispatch async notifications to async handler
-                // Synchronous and asynchronous messages are never interleaved
+                // Async notifications use 6xx reply codes. Bitcoin Core does
+                // not subscribe to them, and Tor does not interleave them with
+                // synchronous replies.
             } else {
                 if (!self->reply_handlers.empty()) {
                     // Invoke reply handler with message
@@ -396,7 +396,7 @@ void TorController::get_socks_cb(TorControlConnection& _conn, const TorControlRe
         resolved = LookupNumeric(socks_location, DEFAULT_TOR_SOCKS_PORT);
     }
     if (!resolved.IsValid()) {
-        // Fallback to old behaviour
+        // Fall back to the default localhost SOCKS port.
         resolved = LookupNumeric("127.0.0.1", DEFAULT_TOR_SOCKS_PORT);
     }
 
@@ -418,10 +418,10 @@ void TorController::get_socks_cb(TorControlConnection& _conn, const TorControlRe
         })};
 
     if (onion_allowed_by_onlynet) {
-        // If NET_ONION is reachable, then the below is a noop.
+        // If NET_ONION is already reachable, then the below is a no-op.
         //
-        // If NET_ONION is not reachable, then none of -proxy or -onion was given.
-        // Since we are here, then -torcontrol and -torpassword were given.
+        // Otherwise, make .onion reachable now that Tor control has provided a
+        // usable proxy for it.
         g_reachable_nets.Add(NET_ONION);
     }
 }

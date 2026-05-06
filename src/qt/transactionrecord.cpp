@@ -22,7 +22,7 @@ bool TransactionRecord::showTransaction()
 }
 
 /*
- * Decompose CWallet transaction to model transaction records.
+ * Decompose a wallet transaction into model transaction records.
  */
 QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interfaces::WalletTx& wtx)
 {
@@ -75,7 +75,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
                 }
                 else
                 {
-                    // Sent to IP, or other non-address transaction like OP_EVAL
+                    // Sent to a non-address destination; fall back to the wallet's stored "to" string.
                     sub.type = TransactionRecord::SendToOther;
                     sub.address = mapValue["to"];
                 }
@@ -110,7 +110,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
                 }
                 else
                 {
-                    // Received by IP connection (deprecated features), or a multisignature or other non-simple transaction
+                    // Received with legacy "from" metadata, or via a multisignature or other non-simple transaction.
                     sub.type = TransactionRecord::RecvFromOther;
                     sub.address = mapValue["from"];
                 }

@@ -22,8 +22,7 @@
 namespace {
 int64_t ConsumeBanTimeOffset(FuzzedDataProvider& fuzzed_data_provider) noexcept
 {
-    // Avoid signed integer overflow by capping to int32_t max:
-    // banman.cpp:137:73: runtime error: signed integer overflow: 1591700817 + 9223372036854775807 cannot be represented in type 'long'
+    // Cap the offset so adding it to mock time in BanMan does not overflow.
     return fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(std::numeric_limits<int64_t>::min(), std::numeric_limits<int32_t>::max());
 }
 } // namespace

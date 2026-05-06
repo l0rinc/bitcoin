@@ -56,7 +56,7 @@
 #define SECP256K1_FE_VERIFY_CONST(d7, d6, d5, d4, d3, d2, d1, d0)
 #endif
 
-/** This expands to an initializer for a secp256k1_fe valued sum((i*32) * d_i, i=0..7) mod p.
+/** This expands to an initializer for a secp256k1_fe valued sum(2^(i*32) * d_i, i=0..7) mod p.
  *
  * It has magnitude 1, unless d_i are all 0, in which case the magnitude is 0.
  * It is normalized, unless sum(2^(i*32) * d_i, i=0..7) >= p.
@@ -132,7 +132,7 @@ static int secp256k1_fe_normalizes_to_zero(const secp256k1_fe *r);
 
 /** Determine whether r represents field element 0, without constant-time guarantee.
  *
- * Identical in behavior to secp256k1_normalizes_to_zero, but not constant time in r.
+ * Identical in behavior to secp256k1_fe_normalizes_to_zero, but not constant time in r.
  */
 static int secp256k1_fe_normalizes_to_zero_var(const secp256k1_fe *r);
 
@@ -151,7 +151,7 @@ static void secp256k1_fe_clear(secp256k1_fe *a);
  * On input, a must be a valid normalized field element.
  * Returns whether a = 0 (mod p).
  *
- * This behaves identical to secp256k1_normalizes_to_zero{,_var}, but requires
+ * This behaves identically to secp256k1_fe_normalizes_to_zero{,_var}, but requires
  * normalized input (and is much faster).
  */
 static int secp256k1_fe_is_zero(const secp256k1_fe *a);

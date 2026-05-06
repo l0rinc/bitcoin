@@ -99,7 +99,7 @@ public:
         m_now += amount;
     }
 
-    /** Schedule a ForgetTxHash call at the Scheduler's current time. */
+    /** Schedule a ForgetTxHash call at the Scenario's current simulated time. */
     void ForgetTxHash(const uint256& txhash)
     {
         auto& runner = m_runner;
@@ -109,7 +109,7 @@ public:
         });
     }
 
-    /** Schedule a ReceivedInv call at the Scheduler's current time. */
+    /** Schedule a ReceivedInv call at the Scenario's current simulated time. */
     void ReceivedInv(NodeId peer, const GenTxid& gtxid, bool pref, std::chrono::microseconds reqtime)
     {
         auto& runner = m_runner;
@@ -119,7 +119,7 @@ public:
         });
     }
 
-    /** Schedule a DisconnectedPeer call at the Scheduler's current time. */
+    /** Schedule a DisconnectedPeer call at the Scenario's current simulated time. */
     void DisconnectedPeer(NodeId peer)
     {
         auto& runner = m_runner;
@@ -129,7 +129,7 @@ public:
         });
     }
 
-    /** Schedule a RequestedTx call at the Scheduler's current time. */
+    /** Schedule a RequestedTx call at the Scenario's current simulated time. */
     void RequestedTx(NodeId peer, const uint256& txhash, std::chrono::microseconds exptime)
     {
         auto& runner = m_runner;
@@ -139,7 +139,7 @@ public:
         });
     }
 
-    /** Schedule a ReceivedResponse call at the Scheduler's current time. */
+    /** Schedule a ReceivedResponse call at the Scenario's current simulated time. */
     void ReceivedResponse(NodeId peer, const uint256& txhash)
     {
         auto& runner = m_runner;
@@ -149,16 +149,17 @@ public:
         });
     }
 
-    /** Schedule calls to verify the TxRequestTracker's state at the Scheduler's current time.
+    /** Schedule calls to verify the TxRequestTracker's state at the Scenario's current simulated time.
      *
      * @param peer       The peer whose state will be inspected.
      * @param expected   The expected return value for GetRequestable(peer)
      * @param candidates The expected return value CountCandidates(peer)
      * @param inflight   The expected return value CountInFlight(peer)
      * @param completed  The expected return value of Count(peer), minus candidates and inflight.
-     * @param checkname  An arbitrary string to include in error messages, for test identificatrion.
+     * @param checkname  An arbitrary string to include in error messages, for test identification.
      * @param offset     Offset with the current time to use (must be <= 0). This allows simulations of time going
-     *                   backwards (but note that the ordering of this event only follows the scenario's m_now.
+     *                   backwards (but note that the ordering of this event only follows the scenario's m_now, not
+     *                   now + offset).
      */
     void Check(NodeId peer, const std::vector<GenTxid>& expected, size_t candidates, size_t inflight,
                size_t completed, const std::string& checkname,
@@ -469,7 +470,7 @@ void TxRequestTest::BuildBigPriorityTest(Scenario& scenario, int peers)
 /** Add to scenario a test with one peer announcing two transactions, to verify they are
  *  fetched in announcement order.
  *
- *  config is an integer in [0, 4) inclusive, and selects the variant of the test.
+ *  config is an integer in [0, 4), and selects the variant of the test.
  */
 void TxRequestTest::BuildRequestOrderTest(Scenario& scenario, int config)
 {
@@ -504,7 +505,7 @@ void TxRequestTest::BuildRequestOrderTest(Scenario& scenario, int config)
 /** Add to scenario a test that verifies behavior related to both txid and wtxid with the same
  *  hash being announced.
  *
- *  config is an integer in [0, 4) inclusive, and selects the variant of the test used.
+ *  config is an integer in [0, 4), and selects the variant of the test used.
 */
 void TxRequestTest::BuildWtxidTest(Scenario& scenario, int config)
 {

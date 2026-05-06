@@ -149,7 +149,7 @@ bool CheckTxScripts(const CTransaction& tx, const std::map<COutPoint, CScript>& 
 /*
  * Trim or fill flags to make the combination valid:
  * WITNESS must be used with P2SH
- * CLEANSTACK must be used WITNESS and P2SH
+ * CLEANSTACK must be used with WITNESS and P2SH
  */
 
 unsigned int TrimFlags(unsigned int flags)
@@ -1035,7 +1035,7 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     t.vout[0].nValue = 329;
     CheckIsNotStandard(t, "dust");
 
-    // Check future Witness Program versions dust threshold (non-32-byte pushes are undefined for version 1)
+    // Check version 1 and future witness program dust thresholds (non-32-byte pushes are undefined for version 1)
     for (int op = OP_1; op <= OP_16; op += 1) {
         t.vout[0].scriptPubKey = CScript() << (opcodetype)op << std::vector<unsigned char>(2, 0);
         t.vout[0].nValue = 240;

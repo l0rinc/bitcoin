@@ -19,13 +19,14 @@
 // destroyed.  This is trivially guaranteed by the code since we
 // never delete any skip list nodes.
 //
-// (2) The contents of a Node except for the next/prev pointers are
+// (2) The contents of a Node except for the next pointers are
 // immutable after the Node has been linked into the SkipList.
 // Only Insert() modifies the list, and it is careful to initialize
 // a node and use release-stores to publish the nodes in one or
 // more lists.
 //
-// ... prev vs. next pointer ordering ...
+// Readers only follow next pointers, so writers can publish a node by
+// initializing its next links before linking predecessors to it.
 
 #include <atomic>
 #include <cassert>

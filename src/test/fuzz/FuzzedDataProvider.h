@@ -235,8 +235,8 @@ T FuzzedDataProvider::ConsumeIntegralInRange(T min, T max) {
 }
 
 // Returns a floating point value in the range [Type's lowest, Type's max] by
-// consuming bytes from the input data. If there's no input data left, always
-// returns approximately 0.
+// consuming bytes from the input data. If there's no input data left, returns
+// |std::numeric_limits<T>::lowest()|.
 template <typename T> T FuzzedDataProvider::ConsumeFloatingPoint() {
   return ConsumeFloatingPointInRange<T>(std::numeric_limits<T>::lowest(),
                                         std::numeric_limits<T>::max());
@@ -256,7 +256,7 @@ T FuzzedDataProvider::ConsumeFloatingPointInRange(T min, T max) {
   if (max > zero && min < zero && max > min + std::numeric_limits<T>::max()) {
     // The diff |max - min| would overflow the given floating point type. Use
     // the half of the diff as the range and consume a bool to decide whether
-    // the result is in the first of the second part of the diff.
+    // the result is in the first or the second part of the diff.
     range = (max / 2.0) - (min / 2.0);
     if (ConsumeBool()) {
       result += range;
@@ -314,7 +314,6 @@ T FuzzedDataProvider::PickValueInArray(const std::array<T, size> &array) {
 
 template <typename T>
 T FuzzedDataProvider::PickValueInArray(std::initializer_list<const T> list) {
-  // TODO(Dor1s): switch to static_assert once C++14 is allowed.
   if (!list.size())
     abort();
 
@@ -381,8 +380,7 @@ TS FuzzedDataProvider::ConvertUnsignedToSigned(TU value) {
   static_assert(!std::numeric_limits<TU>::is_signed,
                 "Source type must be unsigned.");
 
-  // TODO(Dor1s): change to `if constexpr` once C++17 becomes mainstream.
-  if (std::numeric_limits<TS>::is_modulo)
+  if constexpr (std::numeric_limits<TS>::is_modulo)
     return static_cast<TS>(value);
 
   // Avoid using implementation-defined unsigned to signed conversions.

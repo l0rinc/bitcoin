@@ -188,8 +188,8 @@ public:
 };
 
 /**
- * A transaction with a bunch of additional info that only the owner cares about.
- * It includes any unrecorded transactions needed to link it back to the block chain.
+ * A wallet transaction with wallet-specific metadata, cached accounting data,
+ * and synchronization state.
  */
 class CWalletTx
 {
@@ -344,7 +344,7 @@ public:
         m_cached_from_me = std::nullopt;
     }
 
-    /** True if only scriptSigs are different */
+    /** True if only input scripts or witnesses are different */
     bool IsEquivalentTo(const CWalletTx& tx) const;
 
     bool InMempool() const;

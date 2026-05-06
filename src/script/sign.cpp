@@ -67,16 +67,16 @@ bool MutableTransactionSignatureCreator::CreateSchnorrSig(const SigningProvider&
     if (!provider.GetKeyByXOnly(pubkey, key)) return false;
 
     // BIP341/BIP342 signing needs lots of precomputed transaction data. While some
-    // (non-SIGHASH_DEFAULT) sighash modes exist that can work with just some subset
-    // of data present, for now, only support signing when everything is provided.
+    // (non-SIGHASH_DEFAULT) sighash modes can work with only a subset, this signer
+    // requires all relevant data to be present.
     if (!m_txdata || !m_txdata->m_bip341_taproot_ready || !m_txdata->m_spent_outputs_ready) return false;
 
     ScriptExecutionData execdata;
     execdata.m_annex_init = true;
-    execdata.m_annex_present = false; // Only support annex-less signing for now.
+    execdata.m_annex_present = false; // Support annex-less signing only.
     if (sigversion == SigVersion::TAPSCRIPT) {
         execdata.m_codeseparator_pos_init = true;
-        execdata.m_codeseparator_pos = 0xFFFFFFFF; // Only support non-OP_CODESEPARATOR BIP342 signing for now.
+        execdata.m_codeseparator_pos = 0xFFFFFFFF; // Support BIP342 signing only without executed OP_CODESEPARATORs.
         if (!leaf_hash) return false; // BIP342 signing needs leaf hash.
         execdata.m_tapleaf_hash_init = true;
         execdata.m_tapleaf_hash = *leaf_hash;
@@ -84,7 +84,7 @@ bool MutableTransactionSignatureCreator::CreateSchnorrSig(const SigningProvider&
     uint256 hash;
     if (!SignatureHashSchnorr(hash, execdata, m_txto, nIn, nHashType, sigversion, *m_txdata, MissingDataBehavior::FAIL)) return false;
     sig.resize(64);
-    // Use uint256{} as aux_rnd for now.
+    // Use uint256{} as aux_rnd.
     if (!key.SignSchnorr(hash, sig, merkle_root, {})) return false;
     if (nHashType) sig.push_back(nHashType);
     return true;
@@ -319,7 +319,7 @@ struct TapSatisfier: Satisfier<XOnlyPubKey> {
 
 static bool SignTaprootScript(const SigningProvider& provider, const BaseSignatureCreator& creator, SignatureData& sigdata, int leaf_version, std::span<const unsigned char> script_bytes, std::vector<valtype>& result)
 {
-    // Only BIP342 tapscript signing is supported for now.
+    // Only BIP342 tapscript signing is supported.
     if (leaf_version != TAPROOT_LEAF_TAPSCRIPT) return false;
 
     uint256 leaf_hash = ComputeTapleafHash(leaf_version, script_bytes);

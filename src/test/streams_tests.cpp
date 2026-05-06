@@ -527,7 +527,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
 
             // Pretend the file consists of a series of objects of varying
             // sizes; the boundaries of the objects can interact arbitrarily
-            // with the CBufferFile's internal buffer. These first three
+            // with BufferedFile's internal buffer. These first three
             // cases simulate objects of various sizes (1, 2, 5 bytes).
             switch (m_rng.randrange(6)) {
             case 0: {

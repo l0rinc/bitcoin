@@ -138,8 +138,8 @@ uint32_t PolyMod(const data& v)
     // v(x) mod g(x), where g(x) is the Bech32 generator,
     // x^6 + {29}x^5 + {22}x^4 + {20}x^3 + {21}x^2 + {29}x + {18}. g(x) is chosen in such a way
     // that the resulting code is a BCH code, guaranteeing detection of up to 3 errors within a
-    // window of 1023 characters. Among the various possible BCH codes, one was selected to in
-    // fact guarantee detection of up to 4 errors within a window of 89 characters.
+    // window of 1023 characters. Among the various possible BCH codes, one was selected to
+    // guarantee detection of up to 4 errors within a window of 89 characters.
 
     // Note that the coefficients are elements of GF(32), here represented as decimal numbers
     // between {}. In this finite field, addition is just XOR of the corresponding numbers. For
@@ -475,7 +475,7 @@ std::pair<std::string, std::vector<int>> LocateErrors(const std::string& str, Ch
                 // Compute the error position p1 as l_s1 - l_s0 = p1 (mod 1023)
                 size_t p1 = (l_s1 - l_s0 + 1023) % 1023; // the +1023 ensures it is positive
                 // Now because s0 = e1*(e)^(997*p1), we get e1 = s0/((e)^(997*p1)). Remember that (e)^1023 = 1,
-                // so 1/((e)^997) = (e)^(1023-997).
+                // so 1/((e)^(997*p1)) = (e)^((1023-997)*p1).
                 int l_e1 = l_s0 + (1023 - 997) * p1;
                 // Finally, some sanity checks on the result:
                 // - The error position should be within the length of the data
@@ -492,10 +492,10 @@ std::pair<std::string, std::vector<int>> LocateErrors(const std::string& str, Ch
                 // For all possible first error positions p1
                 for (size_t p1 = 0; p1 < length; ++p1) {
                     // We have guessed p1, and want to solve for p2. Recall that E(x) = e1*x^p1 + e2*x^p2, so
-                    // s0 = E((e)^997) = e1*(e)^(997^p1) + e2*(e)^(997*p2), and similar for s1 and s2.
+                    // s0 = E((e)^997) = e1*(e)^(997*p1) + e2*(e)^(997*p2), and similar for s1 and s2.
                     //
                     // Consider s2 + s1*(e)^p1
-                    //          = 2e1*(e)^(999^p1) + e2*(e)^(999*p2) + e2*(e)^(998*p2)*(e)^p1
+                    //          = 2e1*(e)^(999*p1) + e2*(e)^(999*p2) + e2*(e)^(998*p2)*(e)^p1
                     //          = e2*(e)^(999*p2) + e2*(e)^(998*p2)*(e)^p1
                     //    (Because we are working in characteristic 2.)
                     //          = e2*(e)^(998*p2) ((e)^p2 + (e)^p1)
@@ -511,7 +511,7 @@ std::pair<std::string, std::vector<int>> LocateErrors(const std::string& str, Ch
                     int l_s1_s0p1 = GF1024_LOG.at(s1_s0p1);
 
                     // So, putting these together, we can compute the second error position as
-                    // (e)^p2 = (s2 + s1^p1)/(s1 + s0^p1)
+                    // (e)^p2 = (s2 + s1*(e)^p1)/(s1 + s0*(e)^p1)
                     // p2 = log((e)^p2)
                     size_t p2 = (l_s2_s1p1 - l_s1_s0p1 + 1023) % 1023;
 
@@ -525,17 +525,17 @@ std::pair<std::string, std::vector<int>> LocateErrors(const std::string& str, Ch
                     if (s1_s0p2 == 0) continue;
                     int l_s1_s0p2 = GF1024_LOG.at(s1_s0p2);
 
-                    // And compute (the log of) 1/((e)^p1 + (e)^p2))
+                    // And compute the log of 1/((e)^p1 + (e)^p2)
                     int inv_p1_p2 = 1023 - GF1024_LOG.at(GF1024_EXP.at(p1) ^ GF1024_EXP.at(p2));
 
-                    // Then (s1 + s0*(e)^p1) * (1/((e)^p1 + (e)^p2)))
+                    // Then (s1 + s0*(e)^p1) * (1/((e)^p1 + (e)^p2))
                     //         = e2*(e)^(997*p2)
                     // Then recover e2 by dividing by (e)^(997*p2)
                     int l_e2 = l_s1_s0p1 + inv_p1_p2 + (1023 - 997) * p2;
                     // Check that e2 is in GF(32)
                     if (l_e2 % 33) continue;
 
-                    // In the same way, (s1 + s0*(e)^p2) * (1/((e)^p1 + (e)^p2)))
+                    // In the same way, (s1 + s0*(e)^p2) * (1/((e)^p1 + (e)^p2))
                     //         = e1*(e)^(997*p1)
                     // So recover e1 by dividing by (e)^(997*p1)
                     int l_e1 = l_s1_s0p2 + inv_p1_p2 + (1023 - 997) * p1;

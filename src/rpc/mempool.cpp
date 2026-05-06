@@ -113,7 +113,7 @@ static RPCHelpMan testmempoolaccept()
         "testmempoolaccept",
         "Returns result of mempool acceptance tests indicating if raw transaction(s) (serialized, hex-encoded) would be accepted by mempool.\n"
         "\nIf multiple transactions are passed in, parents must come before children and package policies apply: the transactions cannot conflict with any mempool transactions or each other.\n"
-        "\nIf one transaction fails, other transactions may not be fully validated (the 'allowed' key will be blank).\n"
+        "\nIf one transaction fails, other transactions may not be fully validated (the 'allowed' key will be omitted).\n"
         "\nThe maximum number of transactions allowed is " + ToString(MAX_PACKAGE_COUNT) + ".\n"
         "\nThis checks if transactions violate the consensus or policy rules.\n"
         "\nSee sendrawtransaction call.\n",
@@ -197,9 +197,9 @@ static RPCHelpMan testmempoolaccept()
 
             UniValue rpc_result(UniValue::VARR);
             // We will check transaction fees while we iterate through txns in order. If any transaction fee
-            // exceeds maxfeerate, we will leave the rest of the validation results blank, because it
-            // doesn't make sense to return a validation result for a transaction if its ancestor(s) would
-            // not be submitted.
+            // exceeds maxfeerate, we will omit the rest of the validation results, because it doesn't make
+            // sense to return a validation result for a transaction if its ancestor(s) would not be
+            // submitted.
             bool exit_early{false};
             for (const auto& tx : txns) {
                 UniValue result_inner(UniValue::VOBJ);

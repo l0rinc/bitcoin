@@ -27,7 +27,7 @@ static void EvictionProtectionCommon(
 
 
     bench.run([&] {
-        // creating a copy has an overhead of about 3%, so it does not influence the benchmark results much.
+        // Copy candidates so each benchmark iteration starts from identical eviction state.
         auto copy = candidates;
         ProtectEvictionCandidatesByRatio(copy);
     });
@@ -134,10 +134,10 @@ static void EvictionProtection3Networks250Candidates(benchmark::Bench& bench)
         });
 }
 
-// Candidate numbers used for the benchmarks:
-// -  50 candidates simulates a possible use of -maxconnections
-// - 100 candidates approximates an average node with default settings
-// - 250 candidates is the number of peers reported by operators of busy nodes
+// Candidate counts used for benchmark scenarios:
+// -  50 candidates covers smaller peer sets
+// - 100 candidates covers mid-sized peer sets
+// - 250 candidates covers larger peer sets
 
 // No disadvantaged networks, with 250 eviction candidates.
 BENCHMARK(EvictionProtection0Networks250Candidates, benchmark::PriorityLevel::HIGH);

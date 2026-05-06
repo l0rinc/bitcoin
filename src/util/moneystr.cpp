@@ -29,7 +29,7 @@ std::string FormatMoney(const CAmount n)
     }
     std::string str = strprintf("%d.%08d", quotient, remainder);
 
-    // Right-trim excess zeros before the decimal point:
+    // Right-trim excess zeros after the decimal point.
     int nTrim = 0;
     for (int i = str.size()-1; (str[i] == '0' && IsDigit(str[i-2])); --i)
         ++nTrim;

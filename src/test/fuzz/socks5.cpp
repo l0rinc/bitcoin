@@ -41,8 +41,7 @@ FUZZ_TARGET(socks5, .init = initialize_socks5)
     // will slow down fuzzing.
     g_socks5_recv_timeout = (fuzzed_data_provider.ConsumeBool() && std::getenv("FUZZED_SOCKET_FAKE_LATENCY") != nullptr) ? 1ms : default_socks5_recv_timeout;
     FuzzedSock fuzzed_sock = ConsumeSock(fuzzed_data_provider);
-    // This Socks5(...) fuzzing harness would have caught CVE-2017-18350 within
-    // a few seconds of fuzzing.
+    // Regression fuzz harness for CVE-2017-18350 in Socks5(...).
     auto str_dest = fuzzed_data_provider.ConsumeRandomLengthString(512);
     auto port = fuzzed_data_provider.ConsumeIntegral<uint16_t>();
     auto* auth = fuzzed_data_provider.ConsumeBool() ? &proxy_credentials : nullptr;

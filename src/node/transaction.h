@@ -46,15 +46,17 @@ static const CAmount DEFAULT_MAX_BURN_AMOUNT{0};
  * @param[out] err_string reference to std::string to fill with error string if available
  * @param[in]  max_tx_fee reject txs with fees higher than this (if 0, accept any fee)
  * @param[in]  relay flag if both mempool insertion and p2p relay are requested
- * @param[in]  wait_callback wait until callbacks have been processed to avoid stale result due to a sequentially RPC.
- * return error
+ * @param[in]  wait_callback wait until validation-interface callbacks have
+ *                           been processed to avoid stale sequential RPC or
+ *                           wallet results
+ * @returns    transaction broadcast result
  */
 [[nodiscard]] TransactionError BroadcastTransaction(NodeContext& node, CTransactionRef tx, std::string& err_string, const CAmount& max_tx_fee, bool relay, bool wait_callback);
 
 /**
  * Return transaction with a given hash.
  * If mempool is provided and block_index is not provided, check it first for the tx.
- * If -txindex is available, check it next for the tx.
+ * If -txindex is enabled, check it next for the tx.
  * Finally, if block_index is provided, check for tx by reading entire block from disk.
  *
  * @param[in]  block_index     The block to read from disk, or nullptr

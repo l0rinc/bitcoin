@@ -180,7 +180,9 @@ util::Result<PreSelectedInputs> FetchSelectedInputs(const CWallet& wallet, const
                                                     const CoinSelectionParams& coin_selection_params) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
 
 /**
- * Select a set of coins such that nTargetValue is met; never select unconfirmed coins if they are not ours
+ * Select a set of coins such that nTargetValue is met. Prefer confirmed coins
+ * and self-originated unconfirmed change before considering unconfirmed coins
+ * from others when unsafe inputs are allowed.
  * @param[in]   wallet                 The wallet which provides data necessary to spend the selected coins
  * @param[in]   available_coins        The struct of coins, organized by OutputType, available for selection prior to filtering
  * @param[in]   nTargetValue           The target value

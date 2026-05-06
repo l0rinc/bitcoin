@@ -281,7 +281,8 @@ public:
             subobj.pushKVs(std::move(wallet_detail));
             subobj.pushKV("address", EncodeDestination(embedded));
             subobj.pushKV("scriptPubKey", HexStr(subscript));
-            // Always report the pubkey at the top level, so that `getnewaddress()['pubkey']` always works.
+            // Always report the pubkey at the top level, so that
+            // `getaddressinfo(getnewaddress())["pubkey"]` works consistently.
             if (subobj.exists("pubkey")) obj.pushKV("pubkey", subobj["pubkey"]);
             obj.pushKV("embedded", std::move(subobj));
         } else if (which_type == TxoutType::MULTISIG) {

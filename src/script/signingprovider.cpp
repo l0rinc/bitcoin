@@ -215,8 +215,8 @@ bool FillableSigningProvider::GetCScript(const CScriptID &hash, CScript& redeemS
 
 CKeyID GetKeyForDestination(const SigningProvider& store, const CTxDestination& dest)
 {
-    // Only supports destinations which map to single public keys:
-    // P2PKH, P2WPKH, P2SH-P2WPKH, P2TR
+    // Only supports destinations that map to a single wallet key:
+    // P2PKH, P2WPKH, P2SH-P2WPKH, and key-path-only P2TR outputs with a known internal key.
     if (auto id = std::get_if<PKHash>(&dest)) {
         return ToKeyID(*id);
     }

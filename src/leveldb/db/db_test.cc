@@ -96,25 +96,25 @@ class TestEnv : public EnvWrapper {
   bool ignore_dot_files_;
 };
 
-// Special Env used to delay background operations.
+// Special Env used to delay background operations and inject file-system faults.
 class SpecialEnv : public EnvWrapper {
  public:
-  // sstable/log Sync() calls are blocked while this pointer is non-null.
+  // sstable/log Sync() calls are blocked while this flag is true.
   std::atomic<bool> delay_data_sync_;
 
   // sstable/log Sync() calls return an error.
   std::atomic<bool> data_sync_error_;
 
-  // Simulate no-space errors while this pointer is non-null.
+  // Simulate no-space errors while this flag is true.
   std::atomic<bool> no_space_;
 
-  // Simulate non-writable file system while this pointer is non-null.
+  // Simulate a non-writable file system while this flag is true.
   std::atomic<bool> non_writable_;
 
-  // Force sync of manifest files to fail while this pointer is non-null.
+  // Force manifest-file Sync() calls to fail while this flag is true.
   std::atomic<bool> manifest_sync_error_;
 
-  // Force write to manifest files to fail while this pointer is non-null.
+  // Force manifest-file writes to fail while this flag is true.
   std::atomic<bool> manifest_write_error_;
 
   bool count_random_reads_;
@@ -1714,7 +1714,8 @@ TEST(DBTest, Locking) {
   ASSERT_TRUE(!s.ok()) << "Locking did not prevent re-opening db";
 }
 
-// Check that number of files does not grow when we are out of space
+// Check that the number of files does not grow without bound when we are out of
+// space.
 TEST(DBTest, NoSpace) {
   Options options = CurrentOptions();
   options.env = env_;

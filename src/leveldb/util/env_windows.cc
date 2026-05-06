@@ -46,7 +46,7 @@ constexpr const size_t kWritableFileBufferSize = 65536;
 // Up to 1000 mmaps for 64-bit binaries; none for 32-bit.
 constexpr int kDefaultMmapLimit = (sizeof(void*) >= 8) ? 1000 : 0;
 
-// Can be set by by EnvWindowsTestHelper::SetReadOnlyMMapLimit().
+// Can be set by EnvWindowsTestHelper::SetReadOnlyMMapLimit().
 int g_mmap_limit = kDefaultMmapLimit;
 
 std::string GetWindowsErrorMessage(DWORD error_code) {
@@ -112,9 +112,8 @@ class ScopedHandle {
 };
 
 // Helper class to limit resource usage to avoid exhaustion.
-// Currently used to limit read-only file descriptors and mmap file usage
-// so that we do not run out of file descriptors or virtual memory, or run into
-// kernel performance problems for very large databases.
+// Used here to cap read-only mmap usage so we do not run out of virtual
+// memory or run into kernel performance problems for very large databases.
 class Limiter {
  public:
   // Limit maximum number of resources to |max_acquires|.
@@ -155,9 +154,8 @@ class WindowsSequentialFile : public SequentialFile {
 
   Status Read(size_t n, Slice* result, char* scratch) override {
     DWORD bytes_read;
-    // DWORD is 32-bit, but size_t could technically be larger. However leveldb
-    // files are limited to leveldb::Options::max_file_size which is clamped to
-    // 1<<30 or 1 GiB.
+    // DWORD is 32-bit, but size_t could technically be larger. LevelDB's file
+    // reads stay well below the DWORD limit.
     assert(n <= std::numeric_limits<DWORD>::max());
     if (!::ReadFile(handle_.get(), scratch, static_cast<DWORD>(n), &bytes_read,
                     nullptr)) {
@@ -662,8 +660,6 @@ class WindowsEnv : public Env {
 
   uint64_t NowMicros() override {
     // GetSystemTimeAsFileTime typically has a resolution of 10-20 msec.
-    // TODO(cmumford): Switch to GetSystemTimePreciseAsFileTime which is
-    // available in Windows 8 and later.
     FILETIME ft;
     ::GetSystemTimeAsFileTime(&ft);
     // Each tick represents a 100-nanosecond intervals since January 1, 1601
@@ -689,7 +685,7 @@ class WindowsEnv : public Env {
   // Instances are constructed on the thread calling Schedule() and used on the
   // background thread.
   //
-  // This structure is thread-safe beacuse it is immutable.
+  // This structure is thread-safe because it is immutable.
   struct BackgroundWorkItem {
     explicit BackgroundWorkItem(void (*function)(void* arg), void* arg)
         : function(function), arg(arg) {}
@@ -707,7 +703,7 @@ class WindowsEnv : public Env {
 
   Limiter mmap_limiter_;  // Thread-safe.
 
-  // Converts a Windows wide multi-byte UTF-16 string to a UTF-8 string.
+  // Converts a Windows UTF-16 wide-character string to a UTF-8 string.
   // See http://utf8everywhere.org/#windows
   std::string toUtf8(const std::wstring& wstr) {
     if (wstr.empty()) return std::string();
@@ -719,8 +715,7 @@ class WindowsEnv : public Env {
     return strTo;
   }
 
-  // Converts a UTF-8 string to a Windows UTF-16 multi-byte wide character
-  // string.
+  // Converts a UTF-8 string to a Windows UTF-16 wide-character string.
   // See http://utf8everywhere.org/#windows
   std::wstring toUtf16(const std::string& str) {
     if (str.empty()) return std::wstring();
@@ -785,7 +780,7 @@ void WindowsEnv::BackgroundThreadMain() {
 //
 // Intended usage:
 //   using PlatformSingletonEnv = SingletonEnv<PlatformEnv>;
-//   void ConfigurePosixEnv(int param) {
+//   void ConfigurePlatformEnv(int param) {
 //     PlatformSingletonEnv::AssertEnvNotInitialized();
 //     // set global configuration flags.
 //   }

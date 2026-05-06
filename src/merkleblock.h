@@ -104,7 +104,7 @@ public:
 
     /**
      * extract the matching txid's represented by this partial merkle tree
-     * and their respective indices within the partial tree.
+     * and their respective indices within the block transaction list.
      * returns the merkle root, or 0 in case of failure
      */
     uint256 ExtractMatches(std::vector<Txid> &vMatch, std::vector<unsigned int> &vnIndex);

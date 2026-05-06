@@ -87,10 +87,9 @@ public:
  * Descriptors may be ranged, which occurs when the public keys inside are
  * specified in the form of HD chains (xpubs).
  *
- * Descriptors always represent public information - public keys and scripts -
- * but in cases where private keys need to be conveyed along with a descriptor,
- * they can be included inside by changing public keys to private keys (WIF
- * format), and changing xpubs by xprvs.
+ * Descriptors generally represent public information - public keys and scripts
+ * - but they can also embed private key material by using WIF keys and xprvs
+ * in place of public keys and xpubs.
  *
  * Reference documentation about the descriptor language can be found in
  * doc/descriptors.md.
@@ -132,7 +131,7 @@ struct Descriptor {
      * @param[in] pos The position at which to expand the descriptor. If IsRange() is false, this is ignored.
      * @param[in] read_cache Cached expansion data.
      * @param[out] output_scripts The expanded scriptPubKeys.
-     * @param[out] out Scripts and public keys necessary for solving the expanded scriptPubKeys (may be equal to `provider`).
+     * @param[out] out Scripts and public keys necessary for solving the expanded scriptPubKeys.
      */
     virtual bool ExpandFromCache(int pos, const DescriptorCache& read_cache, std::vector<CScript>& output_scripts, FlatSigningProvider& out) const = 0;
 

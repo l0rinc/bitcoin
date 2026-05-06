@@ -219,7 +219,7 @@ public:
     CFeeRate estimateFee(int confTarget) const
         EXCLUSIVE_LOCKS_REQUIRED(!m_cs_fee_estimator);
 
-    /** Estimate feerate needed to get be included in a block within confTarget
+    /** Estimate feerate needed to be included in a block within confTarget
      *  blocks. If no answer can be given at confTarget, return an estimate at
      *  the closest target where one can be given.  'conservative' estimates are
      *  valid over longer time horizons also.
@@ -229,7 +229,7 @@ public:
 
     /** Return a specific fee estimate calculation with a given success
      * threshold and time horizon, and optionally return detailed data about
-     * calculation
+     * the calculation.
      */
     CFeeRate estimateRawFee(int confTarget, double successThreshold, FeeEstimateHorizon horizon,
                             EstimationResult* result = nullptr) const

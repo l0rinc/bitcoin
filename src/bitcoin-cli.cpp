@@ -45,9 +45,9 @@
 using util::Join;
 using util::ToString;
 
-// The server returns time values from a mockable system clock, but it is not
-// trivial to get the mocked time from the server, nor is it needed for now, so
-// just use a plain system_clock.
+// The server returns time values from a mockable clock, but bitcoin-cli has no
+// RPC to query that clock value. Use the local system clock when deriving
+// display ages from server timestamps.
 using CliClock = std::chrono::system_clock;
 
 const TranslateFn G_TRANSLATION_FUN{nullptr};
@@ -290,7 +290,7 @@ struct AddrinfoRequestHandler : BaseRequestHandler {
         if (!nodes.empty() && nodes.at(0)["network"].isNull()) {
             throw std::runtime_error("-addrinfo requires bitcoind server to be running v22.0 and up");
         }
-        // Count the number of peers known to our node, by network.
+        // Count the number of addresses known to our node, by network.
         std::array<uint64_t, NETWORKS.size()> counts{{}};
         for (const UniValue& node : nodes) {
             std::string network_name{node["network"].get_str()};
@@ -1289,7 +1289,7 @@ static int CommandLineRPC(int argc, char *argv[])
                 throw std::runtime_error("too few parameters (need at least command)");
             }
             method = args[0];
-            args.erase(args.begin()); // Remove trailing method name from arguments vector
+            args.erase(args.begin()); // Remove leading method name from arguments vector
         }
         if (nRet == 0) {
             // Perform RPC call

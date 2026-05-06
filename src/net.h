@@ -1222,15 +1222,16 @@ public:
     std::vector<AddedNodeInfo> GetAddedNodeInfo(bool include_connected) const EXCLUSIVE_LOCKS_REQUIRED(!m_added_nodes_mutex);
 
     /**
-     * Attempts to open a connection. Currently only used from tests.
+     * Attempts to open a connection.
      *
      * @param[in]   address     Address of node to try connecting to
-     * @param[in]   conn_type   ConnectionType::OUTBOUND, ConnectionType::BLOCK_RELAY,
+     * @param[in]   conn_type   ConnectionType::OUTBOUND_FULL_RELAY,
+     *                          ConnectionType::BLOCK_RELAY,
      *                          ConnectionType::ADDR_FETCH or ConnectionType::FEELER
      * @param[in]   use_v2transport  Set to true if node attempts to connect using BIP 324 v2 transport protocol.
      * @return      bool        Returns false if there are no available
      *                          slots for this connection:
-     *                          - conn_type not a supported ConnectionType
+     *                          - conn_type is not supported by this API
      *                          - Max total outbound connection capacity filled
      *                          - Max connection capacity for type is filled
      */
@@ -1280,7 +1281,7 @@ public:
 
     void WakeMessageHandler() EXCLUSIVE_LOCKS_REQUIRED(!mutexMsgProc);
 
-    /** Return true if we should disconnect the peer for failing an inactivity check. */
+    /** Return true if inactivity checks should run for this peer. */
     bool ShouldRunInactivityChecks(const CNode& node, std::chrono::seconds now) const;
 
     bool MultipleManualOrFullOutboundConns(Network net) const EXCLUSIVE_LOCKS_REQUIRED(m_nodes_mutex);

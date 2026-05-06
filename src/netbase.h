@@ -51,7 +51,8 @@ static inline bool operator&(ConnectionDirection a, ConnectionDirection b) {
  *
  * @param      name     The string provided by the user representing a local path
  *
- * @returns Whether the string has proper format, length, and points to an existing file path
+ * @returns Whether the string has proper format and length for a UNIX domain
+ *          socket path
  */
 bool IsUnixSocketPath(const std::string& name);
 

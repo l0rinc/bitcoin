@@ -34,7 +34,7 @@ public:
     /* construct 0 value by default */
     constexpr base_blob() : m_data() {}
 
-    /* constructor for constants between 1 and 255 */
+    /* constructor for values between 0 and 255 */
     constexpr explicit base_blob(uint8_t v) : m_data{v} {}
 
     constexpr explicit base_blob(std::span<const unsigned char> vch)

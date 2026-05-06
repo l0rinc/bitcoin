@@ -5,8 +5,8 @@
 #include "./crc32c_arm64.h"
 
 // In a separate source file to allow this accelerated CRC32C function to be
-// compiled with the appropriate compiler flags to enable ARM NEON CRC32C
-// instructions.
+// compiled with the appropriate compiler flags to enable the required Armv8
+// CRC32 and PMULL instructions.
 
 // This implementation is based on https://github.com/google/leveldb/pull/490.
 

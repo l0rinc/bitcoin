@@ -23,7 +23,7 @@ namespace {
 // NAT-PMP and PCP use network byte order (big-endian).
 
 // NAT-PMP (v0) protocol constants.
-//! NAT-PMP uses a fixed server port number (RFC6887 section 1.1).
+//! NAT-PMP uses a fixed server port number (5351).
 constexpr uint16_t NATPMP_SERVER_PORT = 5351;
 //! Version byte for NATPMP (RFC6886 1.1)
 constexpr uint8_t NATPMP_VERSION = 0;
@@ -76,7 +76,7 @@ constexpr size_t NATPMP_MAP_RESPONSE_EXTERNAL_PORT_OFS = 10;
 //!  Created port mapping lifetime in seconds.
 constexpr size_t NATPMP_MAP_RESPONSE_LIFETIME_OFS = 12;
 
-// Relevant NETPMP result codes (RFC6886 3.5).
+// Relevant NAT-PMP result codes (RFC6886 3.5).
 //! Result code representing success status.
 constexpr uint8_t NATPMP_RESULT_SUCCESS = 0;
 //! Result code representing unsupported version.
@@ -101,15 +101,15 @@ constexpr size_t PCP_MAX_SIZE = 1100;
 constexpr uint16_t PCP_SERVER_PORT = NATPMP_SERVER_PORT;
 //! Version byte. 0 is NAT-PMP (RFC6886), 1 is forbidden, 2 for PCP (RFC6887).
 constexpr uint8_t PCP_VERSION = 2;
-//! PCP Request Header. See RFC6887 section 7.1. Shared with NAT-PMP.
+//! PCP request opcode base. See RFC6887 section 7.1. Shared with NAT-PMP.
 constexpr uint8_t PCP_REQUEST = NATPMP_REQUEST; // R = 0
-//! PCP Response Header. See RFC6887 section 7.2. Shared with NAT-PMP.
+//! PCP response opcode base. See RFC6887 section 7.2. Shared with NAT-PMP.
 constexpr uint8_t PCP_RESPONSE = NATPMP_RESPONSE; // R = 1
 //! Map opcode. See RFC6887 section 19.2
 constexpr uint8_t PCP_OP_MAP = 0x01;
 //! TCP protocol number (IANA).
 constexpr uint16_t PCP_PROTOCOL_TCP = 6;
-//! Request and response header size in bytes (RFC6887 section 7.1).
+//! Request and response header size in bytes (RFC6887 sections 7.1 and 7.2).
 constexpr size_t PCP_HDR_SIZE = 24;
 //! Map request and response size in bytes (RFC6887 section 11.1).
 constexpr size_t PCP_MAP_SIZE = 36;
@@ -408,8 +408,8 @@ std::variant<MappingResult, MappingError> PCPRequestPortMap(const PCPMappingNonc
         return MappingError::NETWORK_ERROR;
     }
 
-    // Make sure that we send from requested destination address, anything else will be
-    // rejected by a security-conscious router.
+    // Make sure that we send from the requested bind address; some routers
+    // reject requests from a different source address.
     if (sock->Bind((struct sockaddr*)&bind_addr, bind_addrlen) != 0) {
         LogPrintLevel(BCLog::NET, BCLog::Level::Warning, "pcp: Could not bind to address: %s\n", NetworkErrorString(WSAGetLastError()));
         return MappingError::NETWORK_ERROR;

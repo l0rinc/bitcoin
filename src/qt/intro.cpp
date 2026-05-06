@@ -135,14 +135,14 @@ bool Intro::showIfNeeded(bool& did_show_intro, int64_t& prune_MiB)
 
     if(!fs::exists(GUIUtil::QStringToPath(dataDir)) || gArgs.GetBoolArg("-choosedatadir", DEFAULT_CHOOSE_DATADIR) || settings.value("fReset", false).toBool() || gArgs.GetBoolArg("-resetguisettings", false))
     {
-        /* Use selectParams here to guarantee Params() can be used by node interface */
+        /* Use SelectParams() here to guarantee Params() can be used by node interface */
         try {
             SelectParams(gArgs.GetChainType());
         } catch (const std::exception&) {
             return false;
         }
 
-        /* If current default data directory does not exist, let the user choose one */
+        /* If the selected data directory does not exist, let the user choose one */
         Intro intro(nullptr, Params().AssumedBlockchainSize(), Params().AssumedChainStateSize());
         intro.setDataDirectory(dataDir);
         intro.setWindowIcon(QIcon(":icons/bitcoin"));

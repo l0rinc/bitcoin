@@ -28,26 +28,17 @@ constexpr int kTextCloseOnExecHelperExecFailedCode = 61;
 constexpr int kTextCloseOnExecHelperDup2FailedCode = 62;
 constexpr int kTextCloseOnExecHelperFoundOpenFdCode = 63;
 
-// Global set by main() and read in TestCloseOnExec.
+// Global set by main() and read in CheckCloseOnExecDoesNotLeakFDs().
 //
-// The argv[0] value is stored in a std::vector instead of a std::string because
-// std::string does not return a mutable pointer to its buffer until C++17.
-//
-// The vector stores the string pointed to by argv[0], plus the trailing null.
-std::vector<char>* GetArgvZero() {
-  static std::vector<char> program_name;
+// The argv[0] value is stored in a std::string to provide contiguous mutable
+// storage for execv().
+std::string* GetArgvZero() {
+  static std::string program_name;
   return &program_name;
 }
 
 // Command-line switch used to run this test as the CloseOnExecSwitch helper.
 static const char kTestCloseOnExecSwitch[] = "--test-close-on-exec-helper";
-
-// Executed in a separate process by TestCloseOnExec* tests.
-//
-// main() delegates to this function when the test executable is launched with
-// a special command-line switch. TestCloseOnExec* tests fork()+exec() the test
-// executable and pass the special command-line switch.
-//
 
 // main() delegates to this function when the test executable is launched with
 // a special command-line switch. TestCloseOnExec* tests fork()+exec() the test
@@ -340,7 +331,7 @@ int main(int argc, char** argv) {
   }
 
   // Save argv[0] early, because googletest may modify argv.
-  GetArgvZero()->assign(argv[0], argv[0] + std::strlen(argv[0]) + 1);
+  GetArgvZero()->assign(argv[0]);
 #endif  // HAVE_O_CLOEXEC
 
   // All tests currently run with the same read-only file limits.

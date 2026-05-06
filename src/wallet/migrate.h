@@ -15,7 +15,7 @@ using BerkeleyROData = std::map<SerializeData, SerializeData, std::less<>>;
 
 /**
  * A class representing a BerkeleyDB file from which we can only read records.
- * This is used only for migration of legacy to descriptor wallets
+ * This is used by legacy-wallet migration and dump tooling.
  */
 class BerkeleyRODatabase : public WalletDatabase
 {
@@ -32,20 +32,16 @@ public:
 
     BerkeleyROData m_records;
 
-    /** Open the database if it is not already opened. */
+    /** Open and parse the Berkeley DB file. */
     void Open() override;
 
-    /** Rewrite the entire database on disk
-     */
+    /** Read-only parser never rewrites the source database. */
     bool Rewrite() override { return false; }
 
-    /** Back up the entire database to a file.
-     */
+    /** Copy the source database file to a backup destination. */
     bool Backup(const std::string& strDest) const override;
 
-    /** Flush to the database file and close the database.
-     *  Also close the environment if no other databases are open in it.
-     */
+    /** No-op for the in-memory read-only parser. */
     void Close() override {}
 
     /** Return path to main database file for logs and error messages. */
@@ -79,8 +75,8 @@ private:
     const BerkeleyRODatabase& m_database;
 
     bool ReadKey(DataStream&& key, DataStream& value) override;
-    // WriteKey returns true since various automatic upgrades for older wallets will expect writing to not fail.
-    // It is okay for this batch type to not actually write anything as those automatic upgrades will occur again after migration.
+    // Pretend writes succeed because legacy wallet loading may attempt
+    // automatic upgrade writes before migration or dumping.
     bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite = true) override { return true; }
     bool EraseKey(DataStream&& key) override { return false; }
     bool HasKey(DataStream&& key) override;

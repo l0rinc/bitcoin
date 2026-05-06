@@ -8,6 +8,7 @@
 #include <primitives/transaction.h>
 #include <random.h>
 #include <test/util/setup_common.h>
+#include <test/util/txmempool.h>
 #include <util/translation.h>
 #include <wallet/coincontrol.h>
 #include <wallet/coinselection.h>
@@ -79,6 +80,28 @@ static void add_coin(CoinsResult& available_coins, CWallet& wallet, const CAmoun
     CWalletTx& wtx = (*ret.first).second;
     const auto& txout = wtx.tx->vout.at(nInput);
     available_coins.Add(OutputType::BECH32, {COutPoint(wtx.GetHash(), nInput), txout, nAge, custom_size == 0 ? CalculateMaximumSignedInputSize(txout, &wallet, /*coin_control=*/nullptr) : custom_size, /*solvable=*/true, /*safe=*/true, wtx.GetTxTime(), fIsFromMe, feerate});
+}
+
+static void add_mempool_chain_coin(CoinsResult& available_coins, CWallet& wallet, CTxMemPool& mempool, const CAmount& nValue, size_t ancestor_count)
+{
+    BOOST_REQUIRE_GE(ancestor_count, 1U);
+
+    TestMemPoolEntryHelper entry;
+    const CScript script_pubkey = GetScriptForDestination(*Assert(wallet.GetNewDestination(OutputType::BECH32, "")));
+    COutPoint prevout;
+    CTransactionRef tx_ref;
+
+    for (size_t i = 0; i < ancestor_count; ++i) {
+        CMutableTransaction tx;
+        tx.nLockTime = nextLockTime++;
+        tx.vin.emplace_back(i == 0 ? COutPoint{} : prevout, CScript{}, CTxIn::MAX_SEQUENCE_NONFINAL);
+        tx.vout.emplace_back(nValue, script_pubkey);
+        tx_ref = MakeTransactionRef(tx);
+        AddToMempool(mempool, entry.Fee(0).FromTx(tx_ref));
+        prevout = COutPoint(tx_ref->GetHash(), 0);
+    }
+
+    available_coins.Add(OutputType::BECH32, {prevout, tx_ref->vout.at(0), /*depth=*/0, CalculateMaximumSignedInputSize(tx_ref->vout.at(0), &wallet, /*coin_control=*/nullptr), /*solvable=*/true, /*safe=*/true, /*time=*/0, /*from_me=*/true, CFeeRate(0)});
 }
 
 // Helpers
@@ -297,7 +320,8 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
 BOOST_AUTO_TEST_CASE(bnb_sffo_restriction)
 {
     // Verify the coin selection process does not produce a BnB solution when SFFO is enabled.
-    // This is currently problematic because it could require a change output. And BnB is specialized on changeless solutions.
+    // Subtracting fees from outputs can require change, and BnB is specialized
+    // for changeless solutions.
     std::unique_ptr<CWallet> wallet = NewWallet(m_node);
     WITH_LOCK(wallet->cs_wallet, wallet->SetLastBlockProcessed(300, uint256{})); // set a high block so internal UTXOs are selectable
 
@@ -328,7 +352,8 @@ BOOST_AUTO_TEST_CASE(bnb_sffo_restriction)
     BOOST_CHECK(result.has_value());
     BOOST_CHECK_NE(result->GetAlgo(), SelectionAlgorithm::BNB);
     BOOST_CHECK(result->GetInputSet().size() == 2);
-    // We have only considered BnB, SRD, and Knapsack. Test needs to be reevaluated if new algo is added
+    // With these feerate settings CoinGrinder is disabled, so a non-BnB result
+    // should currently come from SRD or Knapsack.
     BOOST_CHECK(result->GetAlgo() == SelectionAlgorithm::SRD || result->GetAlgo() == SelectionAlgorithm::KNAPSACK);
 }
 
@@ -392,7 +417,7 @@ BOOST_AUTO_TEST_CASE(knapsack_solver_test)
         const auto result5 = KnapsackSolver(KnapsackGroupOutputs(available_coins, *wallet, filter_confirmed), 34 * CENT, CENT);
         BOOST_CHECK(result5);
         BOOST_CHECK_EQUAL(result5->GetSelectedValue(), 35 * CENT);       // but 35 cents is closest
-        BOOST_CHECK_EQUAL(result5->GetInputSet().size(), 3U);     // the best should be 20+10+5.  it's incredibly unlikely the 1 or 2 got included (but possible)
+        BOOST_CHECK_EQUAL(result5->GetInputSet().size(), 3U);     // the best match is 20+10+5
 
         // when we try making 7 cents, the smaller coins (1,2,5) are enough.  We should see just 2+5
         const auto result6 = KnapsackSolver(KnapsackGroupOutputs(available_coins, *wallet, filter_confirmed), 7 * CENT, CENT);
@@ -501,8 +526,9 @@ BOOST_AUTO_TEST_CASE(knapsack_solver_test)
         BOOST_CHECK(result18);
         BOOST_CHECK_EQUAL(result18->GetSelectedValue(), 1 * CENT); // we should get the exact amount
 
-        // run the 'mtgox' test (see https://blockexplorer.com/tx/29a3efd3ef04f9153d47a990bd7b048a4b2d213daaa5fb8ed670fb85f13bdbcf)
-        // they tried to consolidate 10 50k coins into one 500k coin, and ended up with 50k in change
+        // Run the historical "mtgox" consolidation scenario: 10 50k-coin
+        // inputs should fund one 500k-coin payment without creating 50k in
+        // change.
         available_coins.Clear();
         for (int j = 0; j < 20; j++)
             add_coin(available_coins, *wallet, 50000 * COIN);
@@ -559,7 +585,7 @@ BOOST_AUTO_TEST_CASE(knapsack_solver_test)
     // test with many inputs
     for (CAmount amt=1500; amt < COIN; amt*=10) {
         available_coins.Clear();
-        // Create 676 inputs (=  (old MAX_STANDARD_TX_SIZE == 100000)  / 148 bytes per input)
+        // Create a large input pool to exercise Knapsack behavior with many candidates.
         for (uint16_t j = 0; j < 676; j++)
             add_coin(available_coins, *wallet, amt);
 
@@ -682,9 +708,6 @@ BOOST_AUTO_TEST_CASE(SelectCoins_test)
             add_coin(available_coins, *wallet, val);
             balance += val;
         }
-
-        // Generate a random fee rate in the range of 100 - 400
-        CFeeRate rate(rand.randrange(300) + 100);
 
         // Generate a random target value between 1000 and wallet balance
         CAmount target = rand.randrange(balance - 1000) + 1000;
@@ -1029,7 +1052,7 @@ BOOST_AUTO_TEST_CASE(coin_grinder_tests)
             add_coin(0.33 * COIN, j + 10, expected_result);
         }
         BOOST_CHECK(EquivalentResult(expected_result, *res));
-        // Demonstrate how following improvements reduce iteration count and catch any regressions in the future.
+        // Lock in the current iteration count so search-order regressions are visible.
         size_t expected_attempts = 37;
         BOOST_CHECK_MESSAGE(res->GetSelectionsEvaluated() == expected_attempts, strprintf("Expected %i attempts, but got %i", expected_attempts, res->GetSelectionsEvaluated()));
     }
@@ -1051,7 +1074,7 @@ BOOST_AUTO_TEST_CASE(coin_grinder_tests)
         add_coin(1 * COIN, 1, expected_result);
         add_coin(1 * COIN, 2, expected_result);
         BOOST_CHECK(EquivalentResult(expected_result, *res));
-        // Demonstrate how following improvements reduce iteration count and catch any regressions in the future.
+        // Lock in the current iteration count so search-order regressions are visible.
         size_t expected_attempts = 3;
         BOOST_CHECK_MESSAGE(res->GetSelectionsEvaluated() == expected_attempts, strprintf("Expected %i attempts, but got %i", expected_attempts, res->GetSelectionsEvaluated()));
     }
@@ -1080,7 +1103,7 @@ BOOST_AUTO_TEST_CASE(coin_grinder_tests)
         add_coin(13 * COIN, 2, expected_result);
         add_coin(4 * COIN, 3, expected_result);
         BOOST_CHECK(EquivalentResult(expected_result, *res));
-        // Demonstrate how following improvements reduce iteration count and catch any regressions in the future.
+        // Lock in the current iteration count so search-order regressions are visible.
         size_t expected_attempts = 92;
         BOOST_CHECK_MESSAGE(res->GetSelectionsEvaluated() == expected_attempts, strprintf("Expected %i attempts, but got %i", expected_attempts, res->GetSelectionsEvaluated()));
     }
@@ -1119,7 +1142,7 @@ BOOST_AUTO_TEST_CASE(coin_grinder_tests)
         add_coin(2 * COIN, 0, expected_result);
         add_coin(1 * COIN, 0, expected_result);
         BOOST_CHECK(EquivalentResult(expected_result, *res));
-        // Demonstrate how following improvements reduce iteration count and catch any regressions in the future.
+        // Lock in the current iteration count so search-order regressions are visible.
         size_t expected_attempts = 38;
         BOOST_CHECK_MESSAGE(res->GetSelectionsEvaluated() == expected_attempts, strprintf("Expected %i attempts, but got %i", expected_attempts, res->GetSelectionsEvaluated()));
     }
@@ -1145,7 +1168,7 @@ BOOST_AUTO_TEST_CASE(coin_grinder_tests)
         add_coin(1 * COIN, 1, expected_result);
         add_coin(1 * COIN, 2, expected_result);
         BOOST_CHECK(EquivalentResult(expected_result, *res));
-        // Demonstrate how following improvements reduce iteration count and catch any regressions in the future.
+        // Lock in the current iteration count so search-order regressions are visible.
         size_t expected_attempts = 7;
         BOOST_CHECK_MESSAGE(res->GetSelectionsEvaluated() == expected_attempts, strprintf("Expected %i attempts, but got %i", expected_attempts, res->GetSelectionsEvaluated()));
     }
@@ -1433,6 +1456,44 @@ BOOST_FIXTURE_TEST_CASE(wallet_coinsresult_test, BasicTestingSetup)
         // And verify that no extra element were removed
         BOOST_CHECK_EQUAL(available_coins.Size(), 8);
     }
+}
+
+BOOST_AUTO_TEST_CASE(select_coins_reports_long_chain_error)
+{
+    BOOST_REQUIRE(m_node.mempool);
+
+    FastRandomContext rand;
+    CoinSelectionParams cs_params{
+        rand,
+        /*change_output_size=*/34,
+        /*change_spend_size=*/68,
+        /*min_change_target=*/CENT,
+        /*effective_feerate=*/CFeeRate(0),
+        /*long_term_feerate=*/CFeeRate(0),
+        /*discard_feerate=*/CFeeRate(0),
+        /*tx_noinputs_size=*/0,
+        /*avoid_partial=*/false,
+    };
+    cs_params.m_cost_of_change = 1;
+    cs_params.min_viable_change = 1;
+
+    CCoinControl cc;
+    cc.m_allow_other_inputs = true;
+
+    std::unique_ptr<CWallet> wallet = NewWallet(m_node);
+    CoinsResult available_coins;
+    add_coin(available_coins, *wallet, 1 * COIN, /*feerate=*/CFeeRate(0), /*nAge=*/6, /*fIsFromMe=*/false, /*nInput=*/0, /*spendable=*/true);
+
+    unsigned int limit_ancestor_count{0};
+    unsigned int limit_descendant_count{0};
+    wallet->chain().getPackageLimits(limit_ancestor_count, limit_descendant_count);
+    BOOST_REQUIRE_GE(limit_ancestor_count, 2U);
+    add_mempool_chain_coin(available_coins, *wallet, *m_node.mempool, 2 * COIN, limit_ancestor_count);
+
+    LOCK(wallet->cs_wallet);
+    const auto result = SelectCoins(*wallet, available_coins, /*pre_set_inputs=*/{}, 2 * COIN, cc, cs_params);
+    BOOST_REQUIRE(!result);
+    BOOST_CHECK_EQUAL(util::ErrorString(result).original, "Unconfirmed UTXOs are available, but spending them creates a chain of transactions that will be rejected by the mempool");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

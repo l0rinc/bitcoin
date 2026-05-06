@@ -34,7 +34,7 @@ static const RPCResult RESULT_LAST_PROCESSED_BLOCK { RPCResult::Type::OBJ, "last
  * Figures out what wallet, if any, to use for a JSONRPCRequest.
  *
  * @param[in] request JSONRPCRequest that wishes to access a wallet
- * @return nullptr if no wallet should be used, or a pointer to the CWallet
+ * @return nullptr if no wallet should be used, or a shared pointer to the CWallet
  */
 std::shared_ptr<CWallet> GetWalletForJSONRPCRequest(const JSONRPCRequest& request);
 bool GetWalletNameFromJSONRPCRequest(const JSONRPCRequest& request, std::string& wallet_name);

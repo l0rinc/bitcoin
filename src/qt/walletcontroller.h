@@ -60,7 +60,7 @@ public:
     WalletModel* getOrCreateWallet(std::unique_ptr<interfaces::Wallet> wallet);
 
     //! Returns all wallet names in the wallet dir mapped to whether the wallet
-    //! is loaded.
+    //! is loaded and its detected format string.
     std::map<std::string, std::pair<bool, std::string>> listWalletDir() const;
 
     void closeWallet(WalletModel* wallet_model, QWidget* parent = nullptr);

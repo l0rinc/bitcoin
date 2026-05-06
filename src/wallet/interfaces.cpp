@@ -216,8 +216,7 @@ public:
     }
     bool setAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& value) override {
         // Note: The setAddressReceiveRequest interface used by the GUI to store
-        // receive requests is a little awkward and could be improved in the
-        // future:
+        // receive requests has a few awkward properties:
         //
         // - The same method is used to save requests and erase them, but
         //   having separate methods could be clearer and prevent bugs.
@@ -409,7 +408,8 @@ public:
         if (coin_control.HasSelected()) {
             FastRandomContext rng{};
             CoinSelectionParams params(rng);
-            // Note: for now, swallow any error.
+            // Ignore errors here and just omit selected-input amounts that
+            // could not be fetched.
             if (auto res = FetchSelectedInputs(*m_wallet, coin_control, params)) {
                 total_amount += res->total_amount;
             }

@@ -352,9 +352,10 @@ struct Peer {
      *
      *  We use this bool to decide whether a peer is eligible for gossiping
      *  addr messages. This avoids relaying to peers that are unlikely to
-     *  forward them, effectively blackholing self announcements. Reasons
-     *  peers might support addr relay on the link include that they connected
-     *  to us as a block-relay-only peer or they are a light client.
+     *  forward them, effectively blackholing self announcements. Inbound
+     *  peers that send addr-related messages, including light clients, can
+     *  still participate in addr relay even if they are not desirable
+     *  outbound candidates.
      *
      *  This field must correlate with whether m_addr_known has been
      *  initialized.*/
@@ -451,7 +452,7 @@ struct CNodeState {
     std::chrono::microseconds m_downloading_since{0us};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
-    /** Whether this peer wants invs or cmpctblocks (when possible) for block announcements. */
+    /** Whether this peer requested high-bandwidth cmpctblock announcements when possible. */
     bool m_requested_hb_cmpctblocks{false};
     /** Whether this peer will send us cmpctblocks if we request them. */
     bool m_provides_cmpctblocks{false};
@@ -994,7 +995,7 @@ private:
      * To prevent fingerprinting attacks, only send blocks/headers outside of
      * the active chain if they are no more than a month older (both in time,
      * and in best equivalent proof of work) than the best header chain we know
-     * about and we fully-validated them at some point.
+     * about and the block reached BLOCK_VALID_SCRIPTS at some point.
      */
     bool BlockRequestAllowed(const CBlockIndex* pindex) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     bool AlreadyHaveBlock(const uint256& block_hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
@@ -1247,9 +1248,9 @@ void PeerManagerImpl::MaybeSetPeerAsAnnouncingHeaderAndIDs(NodeId nodeid)
 {
     AssertLockHeld(cs_main);
 
-    // When in -blocksonly mode, never request high-bandwidth mode from peers. Our
-    // mempool will not contain the transactions necessary to reconstruct the
-    // compact block.
+    // When in -blocksonly mode, never request high-bandwidth mode from peers.
+    // Without inbound transaction relay, our mempool is not expected to be
+    // sufficiently populated for reliable compact-block reconstruction.
     if (m_opts.ignore_incoming_txs) return;
 
     CNodeState* nodestate = State(nodeid);
@@ -2318,12 +2319,12 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
             }
             if (sendMerkleBlock) {
                 MakeAndPushMessage(pfrom, NetMsgType::MERKLEBLOCK, merkleBlock);
-                // CMerkleBlock just contains hashes, so also push any transactions in the block the client did not see
-                // This avoids hurting performance by pointlessly requiring a round-trip
-                // Note that there is currently no way for a node to request any single transactions we didn't send here -
-                // they must either disconnect and retry or request the full block.
-                // Thus, the protocol spec specified allows for us to provide duplicate txn here,
-                // however we MUST always provide at least what the remote peer needs
+                // CMerkleBlock only includes the matched transaction hashes, so
+                // also push the matched transactions themselves. This avoids an
+                // extra round-trip for peers that would otherwise need to ask
+                // for them separately. The protocol allows duplicate tx
+                // delivery here, but we must at least provide the matched
+                // transactions the remote peer needs.
                 for (const auto& [tx_idx, _] : merkleBlock.vMatchedTxn)
                     MakeAndPushMessage(pfrom, NetMsgType::TX, TX_NO_WITNESS(*pblock->vtx[tx_idx]));
             }
@@ -3891,9 +3892,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             } else {
                 peer->m_addr_token_bucket -= 1.0;
             }
-            // We only bother storing full nodes, though this may include
-            // things which we would not make an outbound connection to, in
-            // part because we may make feeler connections to them.
+            // We only bother storing peers that either look capable of
+            // serving blocks themselves or claim to maintain a useful address
+            // database, though this may include peers we would only probe via
+            // feeler connections.
             if (!MayHaveUsefulAddressDB(addr.nServices) && !HasAllDesirableServiceFlags(addr.nServices))
                 continue;
 

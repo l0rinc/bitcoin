@@ -90,7 +90,7 @@ public:
      */
     std::string GetURI() const;
 
-    /** Get CService (address:ip) for the origin of the http request.
+    /** Get CService (address:port) for the origin of the HTTP request.
      */
     CService GetPeer() const;
 

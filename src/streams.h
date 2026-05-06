@@ -86,7 +86,7 @@ private:
 
 public:
     /**
-     * @param[in]  data Referenced byte vector to overwrite/append
+     * @param[in]  data Source byte span to read from
      */
     explicit SpanReader(std::span<const unsigned char> data) : m_data{std::as_bytes(data)} {}
     explicit SpanReader(std::span<const std::byte> data) : m_data{data} {}
@@ -305,7 +305,7 @@ private:
     OStream& m_ostream;
 
     /// Buffered byte waiting to be written to the output stream. The byte is
-    /// written buffer when m_offset reaches 8 or Flush() is called.
+    /// written to the stream when m_offset reaches 8 or Flush() is called.
     uint8_t m_buffer{0};
 
     /// Number of high order bits in m_buffer already written by previous
@@ -357,7 +357,9 @@ public:
 
 /** Non-refcounted RAII wrapper for FILE*
  *
- * Will automatically close the file when it goes out of scope if not null.
+ * Will automatically close the file when it goes out of scope if not null,
+ * unless the file was written to and must be closed explicitly so fclose()
+ * errors can be checked by the caller.
  * If you're returning the file pointer, return file.release().
  * If you need to close the file early, use autofile.fclose() instead of fclose(underlying_FILE).
  *
@@ -471,8 +473,9 @@ using DataBuffer = std::vector<std::byte>;
 /** Wrapper around an AutoFile& that implements a ring buffer to
  *  deserialize from. It guarantees the ability to rewind a given number of bytes.
  *
- *  Will automatically close the file when it goes out of scope if not null.
- *  If you need to close the file early, use file.fclose() instead of fclose(file).
+ *  This class does not own the AutoFile. If you need to close the underlying
+ *  file early, use file.fclose() instead of closing the wrapped FILE*
+ *  directly.
  */
 class BufferedFile
 {

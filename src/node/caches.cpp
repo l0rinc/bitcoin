@@ -16,7 +16,7 @@
 #include <algorithm>
 #include <string>
 
-// Unlike for the UTXO database, for the txindex scenario the leveldb cache make
+// Unlike for the UTXO database, for the txindex scenario the leveldb cache makes
 // a meaningful difference: https://github.com/bitcoin/bitcoin/pull/8273#issuecomment-229601991
 //! Max memory allocated to tx index DB specific cache in bytes.
 static constexpr size_t MAX_TX_INDEX_CACHE{1024_MiB};

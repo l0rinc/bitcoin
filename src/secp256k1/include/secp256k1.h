@@ -380,7 +380,7 @@ SECP256K1_API void secp256k1_context_set_illegal_callback(
  *  to abort the program.
  *
  *  This can only trigger in case of a hardware failure, miscompilation,
- *  memory corruption, serious bug in the library, or other error would can
+ *  memory corruption, serious bug in the library, or other error which can
  *  otherwise result in undefined behaviour. It will not trigger due to mere
  *  incorrect usage of the API (see secp256k1_context_set_illegal_callback
  *  for that). After this callback returns, anything may happen, including
@@ -686,8 +686,8 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_ec_seckey_verify(
 
 /** Compute the public key for a secret key.
  *
- *  Returns: 1: secret was valid, public key stores.
- *           0: secret was invalid, try again.
+ *  Returns: 1: secret key was valid and pubkey was set.
+ *           0: secret key was invalid.
  *  Args:    ctx:    pointer to a context object (not secp256k1_context_static).
  *  Out:     pubkey: pointer to the created public key.
  *  In:      seckey: pointer to a 32-byte secret key.

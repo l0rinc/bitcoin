@@ -36,8 +36,9 @@ struct TypeList
 //! Construct a template class value by deducing template arguments from the
 //! types of constructor arguments, so they don't need to be specified manually.
 //!
-//! Uses of this can go away with class template deduction in C++17
-//! (https://en.cppreference.com/w/cpp/language/class_template_argument_deduction)
+//! For plain constructors, C++17 class template argument deduction can replace
+//! this helper. It remains useful when explicit leading template arguments are
+//! needed.
 //!
 //! Example:
 //!   Make<std::pair>(5, true) // Constructs std::pair<int, bool>(5, true);
@@ -76,7 +77,7 @@ struct Split<index, TypeList<Type, _Second...>, TypeList<_First...>, false>
 template <typename Callable>
 using ResultOf = decltype(std::declval<Callable>()());
 
-//! Substitutue for std::remove_cvref_t
+//! Substitute for std::remove_cvref_t
 template <typename T>
 using RemoveCvRef = std::remove_cv_t<std::remove_reference_t<T>>;
 
@@ -209,7 +210,7 @@ void Unlock(Lock& lock, Callback&& callback)
     callback();
 }
 
-//! Format current thread name as "{exe_name}-{$pid}/{thread_name}-{$tid}".
+//! Format current thread name as "{exe_name}-{$pid}/[{thread_name}-]{$tid}".
 std::string ThreadName(const char* exe_name);
 
 //! Escape binary string for use in log so it doesn't trigger unicode decode
@@ -230,7 +231,7 @@ int SpawnProcess(int& pid, FdToArgsFn&& fd_to_args);
 //! Call execvp with vector args.
 void ExecProcess(const std::vector<std::string>& args);
 
-//! Wait for a process to exit and return its exit code.
+//! Wait for a process to exit and return its raw wait status.
 int WaitProcess(int pid);
 
 inline char* CharCast(char* c) { return c; }

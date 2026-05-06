@@ -591,12 +591,12 @@ void ProcRand(unsigned char* out, int num, RNGLevel level, bool always_use_real_
 } // namespace
 
 
-/** Internal function to set g_determinstic_rng. Only accessed from tests. */
+/** Internal function to make the global RNG output deterministic. Only called from tests. */
 void MakeRandDeterministicDANGEROUS(const uint256& seed) noexcept
 {
     GetRNGState().MakeDeterministic(seed);
 }
-std::atomic<bool> g_used_g_prng{false}; // Only accessed from tests
+std::atomic<bool> g_used_g_prng{false}; // Set by GetRandBytes() and observed/reset by tests.
 
 void GetRandBytes(std::span<unsigned char> bytes) noexcept
 {

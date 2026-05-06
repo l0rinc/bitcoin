@@ -101,12 +101,12 @@ Connection::~Connection()
     // The ProxyClient cleanup handlers are synchronous because they are fast
     // and don't do anything besides release capnp resources and reset state so
     // future calls to client methods immediately throw exceptions instead of
-    // trying to communicating across the socket. The synchronous callbacks set
+    // trying to communicate across the socket. The synchronous callbacks set
     // ProxyClient capability pointers to null, so new method calls on client
     // objects fail without triggering i/o or relying on event loop which may go
     // out of scope or trigger obscure capnp i/o errors.
     //
-    // The ProxySever cleanup handlers call user defined destructors on server
+    // The ProxyServer cleanup handlers call user-defined destructors on server
     // object, which can run arbitrary blocking bitcoin code so they have to run
     // asynchronously in a different thread. The asynchronous cleanup functions
     // intentionally aren't started until after the synchronous cleanup
@@ -117,25 +117,25 @@ Connection::~Connection()
     //
     // The context where Connection objects are destroyed and this destructor is invoked
     // is different depending on whether this is an outgoing connection being used
-    // to make an Init.makeX call() (e.g. Init.makeNode or Init.makeWalletClient) or an incoming
-    // connection implementing the Init interface and handling the Init.makeX() calls.
+    // to make an Init.makeX() call (for example Init.makeNode() or
+    // Init.makeWalletLoader()) or an incoming connection implementing the Init
+    // interface and handling the Init.makeX() calls.
     //
     // Either way when a connection is closed, capnp behavior is to call all
     // ProxyServer object destructors first, and then trigger an onDisconnect
     // callback.
     //
-    // On incoming side of the connection, the onDisconnect callback is written
-    // to delete the Connection object from the m_incoming_connections and call
-    // this destructor which calls Connection::disconnect.
+    // On the incoming side of the connection, the onDisconnect callback erases
+    // the Connection object from m_incoming_connections, which destroys it and
+    // runs this destructor.
     //
-    // On the outgoing side, the Connection object is owned by top level client
-    // object client, which onDisconnect handler doesn't have ready access to,
-    // so onDisconnect handler just calls Connection::disconnect directly
-    // instead.
+    // On the outgoing side, the Connection object is owned by the top-level
+    // client object. Its onDisconnect handler does not have ready access to
+    // that client object, so it just deletes the Connection directly instead.
     //
-    // Either way disconnect code runs in the event loop thread and called both
-    // on clean and unclean shutdowns. In unclean shutdown case when the
-    // connection is broken, sync and async cleanup lists will filled with
+    // Either way disconnect code runs in the event loop thread and is called on
+    // both clean and unclean shutdowns. In the unclean shutdown case, when the
+    // connection is broken, the sync and async cleanup lists will be filled with
     // callbacks. In the clean shutdown case both lists will be empty.
     Lock lock{m_loop->m_mutex};
     while (!m_sync_cleanup_fns.empty()) {
@@ -214,9 +214,6 @@ EventLoop::~EventLoop()
     KJ_ASSERT(m_post_fd == -1);
     KJ_ASSERT(m_num_clients == 0);
 
-    // Spin event loop. wait for any promises triggered by RPC shutdown.
-    // auto cleanup = kj::evalLater([]{});
-    // cleanup.wait(m_io_context.waitScope);
 }
 
 void EventLoop::loop()

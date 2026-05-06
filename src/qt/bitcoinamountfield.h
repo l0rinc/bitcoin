@@ -70,7 +70,7 @@ Q_SIGNALS:
     void valueChanged();
 
 protected:
-    /** Intercept focus-in event and ',' key presses */
+    /** Intercept focus-in events */
     bool eventFilter(QObject *object, QEvent *event) override;
 
 private:

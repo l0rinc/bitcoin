@@ -59,7 +59,7 @@ static CAmount GetReceived(const CWallet& wallet, const UniValue& params, bool b
     for (const auto& [_, wtx] : wallet.mapWallet) {
         int depth{wallet.GetTxDepthInMainChain(wtx)};
         if (depth < min_depth
-            // Coinbase with less than 1 confirmation is no longer in the main chain
+            // Ignore coinbase transactions unless they are confirmed in the active chain
             || (wtx.IsCoinBase() && (depth < 1))
             || (wallet.IsTxImmatureCoinBase(wtx) && !include_immature_coinbase))
         {
@@ -175,7 +175,7 @@ RPCHelpMan getbalance()
                     {"avoid_reuse", RPCArg::Type::BOOL, RPCArg::Default{true}, "(only available if avoid_reuse wallet flag is set) Do not include balance in dirty outputs; addresses are considered dirty if they have previously been used in a transaction."},
                 },
                 RPCResult{
-                    RPCResult::Type::STR_AMOUNT, "amount", "The total amount in " + CURRENCY_UNIT + " received for this wallet."
+                    RPCResult::Type::STR_AMOUNT, "amount", "The total available balance in " + CURRENCY_UNIT + " for this wallet."
                 },
                 RPCExamples{
             "\nThe total amount in the wallet with 0 or more confirmations\n"

@@ -140,7 +140,7 @@ bool RecFindRoots(std::vector<std::vector<typename F::Elem>>& stack, size_t pos,
     }
     /* 2nd degree input: use direct quadratic solver. */
     if (ppoly.size() == 3) {
-        CHECK_RETURN(ppoly[1] != 0, false); // Equations of the form (x^2 + a) have two identical solutions; contradicts square-free assumption. */
+        CHECK_RETURN(ppoly[1] != 0, false); // Equations of the form (x^2 + a) have two identical solutions, which contradicts the square-free assumption.
         auto input = field.Mul(ppoly[0], field.Sqr(field.Inv(ppoly[1])));
         auto root = field.Qrt(input);
         if ((field.Sqr(root) ^ root) != input) {
@@ -411,8 +411,8 @@ public:
 
     size_t Merge(const Sketch* other_sketch) override
     {
-        // Sad cast. This is safe only because the caller code in minisketch.cpp checks
-        // that implementation and field size match.
+        // Safe downcast because minisketch.cpp only calls Merge() with sketches
+        // that have matching implementation and field size.
         const SketchImpl* other = static_cast<const SketchImpl*>(other_sketch);
         m_syndromes.resize(std::min(m_syndromes.size(), other->m_syndromes.size()));
         for (size_t i = 0; i < m_syndromes.size(); ++i) {

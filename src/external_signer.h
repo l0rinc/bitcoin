@@ -29,7 +29,7 @@ private:
 public:
     //! @param[in] command      the command which handles interaction with the external signer
     //! @param[in] fingerprint  master key fingerprint of the signer
-    //! @param[in] chain        "main", "test", "regtest" or "signet"
+    //! @param[in] chain        "main", "test", "testnet4", "regtest", or "signet"
     //! @param[in] name         device name
     ExternalSigner(const std::string& command, const std::string chain, const std::string& fingerprint, const std::string name);
 
@@ -42,7 +42,7 @@ public:
     //! Obtain a list of signers. Calls `<command> enumerate`.
     //! @param[in]              command the command which handles interaction with the external signer
     //! @param[in,out] signers  vector to which new signers (with a unique master key fingerprint) are added
-    //! @param chain            "main", "test", "regtest" or "signet"
+    //! @param chain            "main", "test", "testnet4", "regtest", or "signet"
     //! @returns success
     static bool Enumerate(const std::string& command, std::vector<ExternalSigner>& signers, const std::string chain);
 
@@ -58,7 +58,7 @@ public:
     UniValue GetDescriptors(const int account);
 
     //! Sign PartiallySignedTransaction on the device.
-    //! Calls `<command> signtransaction` and passes the PSBT via stdin.
+    //! Calls `<command> --stdin` and passes `signtx <base64_psbt>` via stdin.
     //! @param[in,out] psbt  PartiallySignedTransaction to be signed
     bool SignTransaction(PartiallySignedTransaction& psbt, std::string& error);
 };

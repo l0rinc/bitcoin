@@ -35,9 +35,8 @@ void CustomBuildField(TypeList<std::function<FnR(FnParams...)>>,
     }
 }
 
-// ProxyCallFn class is needed because c++11 doesn't support auto lambda parameters.
-// It's equivalent c++14: [invoke_context](auto&& params) {
-// invoke_context->call(std::forward<decltype(params)>(params)...)
+// Adapter turning a ProxyClient-like object with a call() method into a
+// function object that can be passed to read_dest.construct().
 template <typename InvokeContext>
 struct ProxyCallFn
 {

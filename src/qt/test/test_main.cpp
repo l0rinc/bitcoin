@@ -59,9 +59,10 @@ int main(int argc, char* argv[])
     std::string error;
     if (!gArgs.ReadConfigFiles(error, true)) qWarning() << error.c_str();
 
-    // Prefer the "minimal" platform for the test instead of the normal default
-    // platform ("xcb", "windows", or "cocoa") so tests can't unintentionally
-    // interfere with any background GUIs and don't require extra resources.
+    // Prefer the "minimal" platform for the test instead of the GUI platform
+    // Qt would normally select (for example "xcb", "wayland", "windows", or
+    // "cocoa") so tests can't unintentionally interfere with any background
+    // GUIs and don't require extra resources.
     #if defined(WIN32)
         if (getenv("QT_QPA_PLATFORM") == nullptr) _putenv_s("QT_QPA_PLATFORM", "minimal");
     #else

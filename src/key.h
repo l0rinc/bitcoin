@@ -261,7 +261,7 @@ struct CExtKey {
  *  secret keys to libsecp256k1 functions expecting a `secp256k1_keypair`. For all other cases,
  *  CKey should be preferred.
  *
- *  A KeyPair can be created from a CKey with an optional merkle_root tweak (per BIP342). See
+ *  A KeyPair can be created from a CKey with an optional merkle_root tweak (per BIP341). See
  *  CKey::ComputeKeyPair for more details.
  */
 class KeyPair
@@ -312,11 +312,9 @@ private:
 bool ECC_InitSanityCheck();
 
 /**
- * RAII class initializing and deinitializing global state for elliptic curve support.
- * Only one instance may be initialized at a time.
- *
- * In the future global ECC state could be removed, and this class could contain
- * state and be passed as an argument to ECC key functions.
+ * RAII class initializing and deinitializing the process-global signing context
+ * for elliptic curve key operations. Only one instance may be initialized at a
+ * time.
  */
 class ECC_Context
 {

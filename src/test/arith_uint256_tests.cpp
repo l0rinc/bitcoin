@@ -400,7 +400,7 @@ BOOST_AUTO_TEST_CASE(methods) // GetHex operator= size() GetLow64 GetSerializeSi
     for (int i = 256; i > 53; --i)
         BOOST_CHECK(almostEqual((R1L>>(256-i)).getdouble(), ldexp(R1Ldouble,i)));
     uint64_t R1L64part = (R1L>>192).GetLow64();
-    for (int i = 53; i > 0; --i) // doubles can store all integers in {0,...,2^54-1} exactly
+    for (int i = 53; i > 0; --i) // doubles can store all integers in [0, 2^53] exactly
     {
         BOOST_CHECK((R1L>>(256-i)).getdouble() == (double)(R1L64part >> (64-i)));
     }

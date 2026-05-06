@@ -14,7 +14,6 @@
 #include <validation.h>
 
 namespace mp {
-// Custom serializations
 } // namespace mp
 
 #endif // BITCOIN_IPC_CAPNP_MINING_TYPES_H

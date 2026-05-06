@@ -61,8 +61,8 @@ WalletModel::~WalletModel()
 
 void WalletModel::startPollBalance()
 {
-    // Update the cached balance right away, so every view can make use of it,
-    // so them don't need to waste resources recalculating it.
+    // Update the cached balance right away, so every view can make use of it
+    // without recalculating it.
     pollBalanceChanged();
 
     // This timer will be fired repeatedly to update the balance
@@ -189,8 +189,8 @@ WalletModel::SendCoinsReturn WalletModel::prepareTransaction(WalletModelTransact
         return DuplicateAddress;
     }
 
-    // If no coin was manually selected, use the cached balance
-    // Future: can merge this call with 'createTransaction'.
+    // If no coin was manually selected, use the cached balance for this
+    // precheck instead of recalculating it through createTransaction().
     CAmount nBalance = getAvailableBalance(&coinControl);
 
     if(total > nBalance)
@@ -227,7 +227,7 @@ WalletModel::SendCoinsReturn WalletModel::prepareTransaction(WalletModelTransact
             return AbsurdFee;
         }
     } catch (const std::runtime_error& err) {
-        // Something unexpected happened, instruct user to report this bug.
+        // Surface unexpected runtime errors to the user.
         Q_EMIT message(tr("Send Coins"), QString::fromStdString(err.what()),
                        CClientUIInterface::MSG_ERROR);
         return TransactionCreationFailed;
@@ -478,7 +478,7 @@ bool WalletModel::bumpFee(Txid hash, Txid& new_hash)
         return false;
     }
 
-    // allow a user based fee verification
+    // Allow the user to verify the fee bump before proceeding.
     /*: Asks a user if they would like to manually increase the fee of a transaction that has already been created. */
     QString questionString = tr("Do you want to increase the fee?");
     questionString.append("<br />");
@@ -507,7 +507,7 @@ bool WalletModel::bumpFee(Txid hash, Txid& new_hash)
     const bool always_show_unsigned{getOptionsModel()->getEnablePSBTControls()};
     auto confirmationDialog = new SendConfirmationDialog(tr("Confirm fee bump"), questionString, "", "", SEND_CONFIRM_DELAY, enable_send, always_show_unsigned, nullptr);
     confirmationDialog->setAttribute(Qt::WA_DeleteOnClose);
-    // TODO: Replace QDialog::exec() with safer QDialog::show().
+    // This path needs a synchronous result from the confirmation dialog.
     const auto retval = static_cast<QMessageBox::StandardButton>(confirmationDialog->exec());
 
     // cancel sign&broadcast if user doesn't want to bump the fee

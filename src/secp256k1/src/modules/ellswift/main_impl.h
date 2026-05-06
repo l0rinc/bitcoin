@@ -128,7 +128,7 @@ static void secp256k1_ellswift_xswiftec_frac_var(secp256k1_fe *xn, secp256k1_fe 
     secp256k1_fe_negate(xn, &n, 2);                              /* n = -u*(c1*s+c2*g)-u*(g+s) */
 
     VERIFY_CHECK(secp256k1_ge_x_frac_on_curve_var(xn, &p));
-    /* Return x3 = n/p = -(u*(c1*s+c2*g)/(g+s)+u) */
+    /* Return x1 = n/p = -(u*(c1*s+c2*g)/(g+s)+u) */
 }
 
 /** Decode ElligatorSwift encoding (u, t) to X coordinate. */
@@ -569,9 +569,9 @@ int secp256k1_ellswift_xdh(const secp256k1_context *ctx, unsigned char *output, 
     secp256k1_fe_set_b32_mod(&t, theirs64 + 32);
     secp256k1_ellswift_xswiftec_frac_var(&xn, &xd, &u, &t);
 
-    /* Load private key (using one if invalid). */
+    /* Load private key, substituting one if invalid. */
     secp256k1_scalar_set_b32(&s, seckey32, &overflow);
-    overflow = secp256k1_scalar_is_zero(&s);
+    overflow |= secp256k1_scalar_is_zero(&s);
     secp256k1_scalar_cmov(&s, &secp256k1_scalar_one, overflow);
 
     /* Compute shared X coordinate. */

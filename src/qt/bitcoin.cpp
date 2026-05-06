@@ -593,7 +593,7 @@ int GuiMain(int argc, char* argv[])
         InitError(error->message, error->details);
         if (error->status == common::ConfigStatus::FAILED_WRITE) {
             // Show a custom error message to provide more information in the
-            // case of a datadir write error.
+            // case of a settings file write error.
             ErrorSettingsWrite(error->message, error->details);
         } else if (error->status != common::ConfigStatus::ABORTED) {
             // Show a generic message in other cases, and no additional error

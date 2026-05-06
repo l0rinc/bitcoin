@@ -477,7 +477,7 @@ public:
          */
         const bool m_package_feerates;
         /** Used for local submission of transactions to catch "absurd" fees
-         * due to fee miscalculation by wallets. std:nullopt implies unset, allowing any feerates.
+         * due to fee miscalculation by wallets. std::nullopt implies unset, allowing any feerates.
          * Any individual transaction failing this check causes immediate failure.
          */
         const std::optional<CFeeRate> m_client_maxfeerate;
@@ -2495,7 +2495,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // The search reveals a great many blocks which have an indicated height
     // greater than 1,983,702, so we simply remove the optimization to skip
     // BIP30 checking for blocks at height 1,983,702 or higher.  Before we reach
-    // that block in another 25 years or so, we should take advantage of a
+    // that block, we should take advantage of a
     // future consensus change to do a new and improved version of BIP34 that
     // will actually prevent ever creating any duplicate coinbases in the
     // future.
@@ -3526,10 +3526,9 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
                         /*index=*/*pindexNewTip,
                         /*verification_progress=*/m_chainman.GuessVerificationProgress(pindexNewTip))))
                 {
-                    // Just breaking and returning success for now. This could
-                    // be changed to bubble up the kernel::Interrupted value to
-                    // the caller so the caller could distinguish between
-                    // completed and interrupted operations.
+                    // Stop processing further tip updates in this call, but
+                    // keep the overall operation successful. The interrupt is
+                    // not surfaced to the caller yet.
                     break;
                 }
             }
@@ -3776,13 +3775,10 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* pinde
 
     // Only notify about a new block tip if the active chain was modified.
     if (pindex_was_in_chain) {
-        // Ignoring return value for now, this could be changed to bubble up
-        // kernel::Interrupted value to the caller so the caller could
-        // distinguish between completed and interrupted operations. It might
-        // also make sense for the blockTip notification to have an enum
-        // parameter indicating the source of the tip change so hooks can
-        // distinguish user-initiated invalidateblock changes from other
-        // changes.
+        // The blockTip notification is best-effort here; invalidation
+        // succeeds even if the notification requests interruption. A future
+        // API could surface that distinction to the caller and identify the
+        // source of the tip change.
         (void)m_chainman.GetNotifications().blockTip(
             /*state=*/GetSynchronizationState(m_chainman.IsInitialBlockDownload(), m_chainman.m_blockman.m_blockfiles_indexed),
             /*index=*/*to_mark_failed->pprev,
@@ -4668,7 +4664,8 @@ bool Chainstate::LoadChainTip()
 
     // Ensure KernelNotifications m_tip_block is set even if no new block arrives.
     if (this->GetRole() != ChainstateRole::BACKGROUND) {
-        // Ignoring return value for now.
+        // Keep KernelNotifications::m_tip_block in sync during startup; this
+        // caller does not currently distinguish interruption from success.
         (void)m_chainman.GetNotifications().blockTip(
             /*state=*/GetSynchronizationState(/*init=*/true, m_chainman.m_blockman.m_blockfiles_indexed),
             /*index=*/*pindex,
@@ -6161,7 +6158,8 @@ SnapshotCompletionResult ChainstateManager::MaybeCompleteSnapshotValidation()
         return SnapshotCompletionResult::STATS_FAILED;
     }
 
-    // XXX note that this function is slow and will hold cs_main for potentially minutes.
+    // MaybeCompleteSnapshotValidation() holds cs_main while computing the UTXO stats above, so
+    // reaching this point may already have taken minutes.
     if (!maybe_ibd_stats) {
         LogPrintf("[snapshot] failed to generate stats for validation coins db\n");
         // While this isn't a problem with the snapshot per se, this condition
@@ -6509,9 +6507,9 @@ bool ChainstateManager::ValidatedSnapshotCleanup()
 
 Chainstate& ChainstateManager::GetChainstateForIndexing()
 {
-    // We can't always return `m_ibd_chainstate` because after background validation
-    // has completed, `m_snapshot_chainstate == m_active_chainstate`, but it can be
-    // indexed.
+    // We can't always return `m_ibd_chainstate`: once background validation
+    // completes, only the active chainstate remains, and that active
+    // chainstate is the one to index.
     return (this->GetAll().size() > 1) ? *m_ibd_chainstate : *m_active_chainstate;
 }
 

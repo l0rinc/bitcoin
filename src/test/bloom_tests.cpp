@@ -520,7 +520,7 @@ BOOST_AUTO_TEST_CASE(rolling_bloom)
     // Expect about 5 false positives
     BOOST_CHECK_EQUAL(nHits, 3U);
 
-    // last-1000-entry, 0.01% false positive:
+    // last-1000-entry, 0.1% false positive:
     CRollingBloomFilter rb2(1000, 0.001);
     for (int i = 0; i < DATASIZE; i++) {
         rb2.insert(data[i]);

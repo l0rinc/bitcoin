@@ -177,7 +177,10 @@ const Out& AsBase(const In& x)
  * depend on run-time context in a type-safe way.
  *
  * Example use:
- *   struct BarParameter { bool fancy; ... };
+ *   struct BarParameter {
+ *     bool fancy;
+ *     SER_PARAMS_OPFUNC
+ *   };
  *   struct Bar { ... };
  *   struct FooFormatter {
  *     FORMATTER_METHODS(Bar, obj) {
@@ -192,7 +195,7 @@ const Out& AsBase(const In& x)
  * which would then be invoked as
  *   READWRITE(BarParameter{...}(Using<FooFormatter>(obj.foo)))
  *
- * parameter(obj) can be invoked anywhere in the call stack; it is
+ * SER_PARAMS(BarParameter) can be invoked anywhere in the call stack; it is
  * passed down recursively into all serialization code, until another
  * serialization parameter overrides it.
  *
@@ -386,12 +389,9 @@ uint64_t ReadCompactSize(Stream& is, bool range_check = true)
 /**
  * Mode for encoding VarInts.
  *
- * Currently there is no support for signed encodings. The default mode will not
- * compile with signed values, and the legacy "nonnegative signed" mode will
- * accept signed values, but improperly encode and decode them if they are
- * negative. In the future, the DEFAULT mode could be extended to support
- * negative numbers in a backwards compatible way, and additional modes could be
- * added to support different varint formats (e.g. zigzag encoding).
+ * DEFAULT requires unsigned types. NONNEGATIVE_SIGNED requires signed types,
+ * but callers must pass nonnegative values; negative values are encoded and
+ * decoded incorrectly.
  */
 enum class VarIntMode { DEFAULT, NONNEGATIVE_SIGNED };
 
@@ -637,12 +637,14 @@ struct LimitedStringFormatter
  * Example:
  *   struct X {
  *     std::vector<uint64_t> v;
- *     SERIALIZE_METHODS(X, obj) { READWRITE(Using<VectorFormatter<VarInt>>(obj.v)); }
+ *     SERIALIZE_METHODS(X, obj) {
+ *         READWRITE(Using<VectorFormatter<VarIntFormatter<VarIntMode::DEFAULT>>>(obj.v));
+ *     }
  *   };
  * will define a struct that contains a vector of uint64_t, which is serialized
  * as a vector of VarInt-encoded integers.
  *
- * V is not required to be an std::vector type. It works for any class that
+ * V is not required to be a std::vector type. It works for any class that
  * exposes a value_type, size, reserve, emplace_back, back, and const iterators.
  */
 template<class Formatter>
@@ -1202,7 +1204,7 @@ public:
 /**
  * Helper macro for SerParams structs
  *
- * Allows you define SerParams instances and then apply them directly
+ * Allows you to define SerParams instances and then apply them directly
  * to an object via function call syntax, eg:
  *
  *   constexpr SerParams FOO{....};

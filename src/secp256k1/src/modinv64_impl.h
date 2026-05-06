@@ -237,7 +237,8 @@ static int64_t secp256k1_modinv64_divsteps_59(int64_t zeta, uint64_t f0, uint64_
  * Implements the divsteps_n_matrix_var function from the explanation.
  */
 static int64_t secp256k1_modinv64_divsteps_62_var(int64_t eta, uint64_t f0, uint64_t g0, secp256k1_modinv64_trans2x2 *t) {
-    /* Transformation matrix; see comments in secp256k1_modinv64_divsteps_62. */
+    /* Transformation matrix; unlike secp256k1_modinv64_divsteps_59(), this starts from the
+     * unscaled identity matrix. */
     uint64_t u = 1, v = 0, q = 0, r = 1;
     uint64_t f = f0, g = g0, m;
     uint32_t w;
@@ -323,7 +324,8 @@ static int64_t secp256k1_modinv64_divsteps_62_var(int64_t eta, uint64_t f0, uint
  * Return:       final eta
  */
 static int64_t secp256k1_modinv64_posdivsteps_62_var(int64_t eta, uint64_t f0, uint64_t g0, secp256k1_modinv64_trans2x2 *t, int *jacp) {
-    /* Transformation matrix; see comments in secp256k1_modinv64_divsteps_62. */
+    /* Transformation matrix; unlike secp256k1_modinv64_divsteps_59(), this starts from the
+     * unscaled identity matrix. */
     uint64_t u = 1, v = 0, q = 0, r = 1;
     uint64_t f = f0, g = g0, m;
     uint32_t w;

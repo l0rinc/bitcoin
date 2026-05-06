@@ -141,8 +141,8 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_rebalance_caches, TestChain100Setup)
         /*cache_size_bytes=*/1 << 23, /*in_memory=*/true, /*should_wipe=*/false);
 
     // Reset IBD state so IsInitialBlockDownload() returns true and causes
-    // MaybeRebalancesCaches() to prioritize the snapshot chainstate, giving it
-    // more cache space than the snapshot chainstate. Calling ResetIbd() is
+    // MaybeRebalanceCaches() to prioritize the snapshot chainstate, giving it
+    // more cache space than the IBD chainstate. Calling ResetIbd() is
     // necessary because m_cached_finished_ibd is already latched to true before
     // the test starts due to the test setup. After ResetIbd() is called.
     // IsInitialBlockDownload will return true because at this point the active
@@ -526,7 +526,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_loadblockindex, TestChain100Setup)
     //   written broadly and applies to both.
     //
     // - It does not have any blocks after height 110 because cs1 is a background
-    //   chainstate, and only blocks where are ancestors of the snapshot block
+    //   chainstate, and only blocks that are ancestors of the snapshot block
     //   are added as candidates for the background chainstate.
     BOOST_CHECK_EQUAL(cs1.setBlockIndexCandidates.size(), 2);
     BOOST_CHECK_EQUAL(cs1.setBlockIndexCandidates.count(validated_tip), 1);

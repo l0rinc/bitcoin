@@ -77,7 +77,7 @@ struct {
  * The Branch and Bound algorithm is described in detail in Murch's Master Thesis:
  * https://murch.one/wp-content/uploads/2016/11/erhardt2016coinselection.pdf
  *
- * @param const std::vector<OutputGroup>& utxo_pool The set of UTXO groups that we are choosing from.
+ * @param std::vector<OutputGroup>& utxo_pool The set of UTXO groups that we are choosing from.
  *        These UTXO groups will be sorted in descending order by effective value and the OutputGroups'
  *        values are their effective values.
  * @param const CAmount& selection_target This is the value that we want to select. It is the lower
@@ -85,7 +85,7 @@ struct {
  * @param const CAmount& cost_of_change This is the cost of creating and spending a change output.
  *        This plus selection_target is the upper bound of the range.
  * @param int max_selection_weight The maximum allowed weight for a selection result to be valid.
- * @returns The result of this coin selection algorithm, or std::nullopt
+ * @returns The result of this coin selection algorithm, or an error.
  */
 
 static const size_t TOTAL_TRIES = 100000;
@@ -230,7 +230,7 @@ util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool
  * naive exploration of a tree with four UTXOs requires visiting all 31 nodes:
  *
  *     {} {A} {AB} {ABC} {ABCD} {ABC_} {AB_} {AB_D} {AB__} {A_} {A_C} {A_CD} {A_C_} {A__} {A__D} {A___} {_} {_B} {_BC}
- *     {_BCD} {_BC_} {_B_} {_B_D} {_B__} {__} {__C} {__CD} {__C} {___} {___D} {____}
+ *     {_BCD} {_BC_} {_B_} {_B_D} {_B__} {__} {__C} {__CD} {__C_} {___} {___D} {____}
  *
  * As powersets grow exponentially with the set size, walking the entire tree would quickly get computationally
  * infeasible with growing UTXO pools. Thanks to traversing the tree in a deterministic order, we can keep track of the
@@ -306,9 +306,10 @@ util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool
  * 1. Add `next_utxo`
  * 2. Evaluate candidate input set
  * 3. Determine `next_utxo` by deciding whether to
- *    a) EXPLORE: Add next inclusion branch, e.g. {_B} ⇒ {_B} + `next_uxto`: C
+ *    a) EXPLORE: Add next inclusion branch, e.g. {_B} ⇒ {_B} + `next_utxo`: C
  *    b) SHIFT: Replace last selected UTXO by next higher index, e.g. {A_C} ⇒ {A__} + `next_utxo`: D
- *    c) CUT: deselect last selected UTXO and shift to omission branch of penultimate UTXO, e.g. {AB_D} ⇒ {A_} + `next_utxo: C
+ *    c) CUT: Deselect the last selected UTXO and shift to the omission branch of the
+ *       penultimate UTXO, e.g. {AB_D} ⇒ {A_} + `next_utxo`: C
  *
  * The implementation then adds further optimizations by discovering further situations in which either the inclusion
  * branch can be skipped, or both the inclusion and omission branch can be skipped after evaluating the candidate input
@@ -320,7 +321,7 @@ util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool
  * @param const CAmount& selection_target This is the minimum amount that we need for the transaction without considering change.
  * @param const CAmount& change_target The minimum budget for creating a change output, by which we increase the selection_target.
  * @param int max_selection_weight The maximum allowed weight for a selection result to be valid.
- * @returns The result of this coin selection algorithm, or std::nullopt
+ * @returns The result of this coin selection algorithm, or an error.
  */
 util::Result<SelectionResult> CoinGrinder(std::vector<OutputGroup>& utxo_pool, const CAmount& selection_target, CAmount change_target, int max_selection_weight)
 {
@@ -655,7 +656,7 @@ util::Result<SelectionResult> KnapsackSolver(std::vector<OutputGroup>& groups, c
     SelectionResult result(nTargetValue, SelectionAlgorithm::KNAPSACK);
 
     bool max_weight_exceeded{false};
-    // List of values less than target
+    // Lowest-value group above the target-plus-change threshold.
     std::optional<OutputGroup> lowest_larger;
     // Groups with selection amount smaller than the target and any change we might produce.
     // Don't include groups larger than this, because they will only cause us to overshoot.
@@ -722,12 +723,13 @@ util::Result<SelectionResult> KnapsackSolver(std::vector<OutputGroup>& groups, c
             }
         }
 
-        // If the result exceeds the maximum allowed size, return closest UTXO above the target
+        // If the result exceeds the maximum allowed size, return the closest
+        // single UTXO above the target-plus-change threshold.
         if (result.GetWeight() > max_selection_weight) {
             // No coin above target, nothing to do.
             if (!lowest_larger) return ErrorMaxWeightExceeded();
 
-            // Return closest UTXO above target
+            // Return closest UTXO above the target-plus-change threshold.
             result.Clear();
             result.AddInput(*lowest_larger);
         }

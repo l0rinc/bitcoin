@@ -23,7 +23,7 @@ static SECP256K1_INLINE int64_t secp256k1_mul128(int64_t a, int64_t b, int64_t* 
     return (uint64_t)a * (uint64_t)b;
 }
 #    else
-/* On x84_64 MSVC, use native _(u)mul128 for 64x64->128 multiplications. */
+/* On x86_64 MSVC, use native _(u)mul128 for 64x64->128 multiplications. */
 #        define secp256k1_umul128 _umul128
 #        define secp256k1_mul128 _mul128
 #    endif

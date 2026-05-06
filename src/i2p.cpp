@@ -354,7 +354,7 @@ void Session::DestGenerate(const Sock& sock)
 {
     // https://geti2p.net/spec/common-structures#key-certificates
     // "7" or "EdDSA_SHA512_Ed25519" - "Recent Router Identities and Destinations".
-    // Use "7" because i2pd <2.24.0 does not recognize the textual form.
+    // Use "7" for broad compatibility with I2P routers.
     // If SIGNATURE_TYPE is not specified, then the default one is DSA_SHA1.
     const Reply& reply = SendRequestAndGetReply(sock, "DEST GENERATE SIGNATURE_TYPE=7", false);
 

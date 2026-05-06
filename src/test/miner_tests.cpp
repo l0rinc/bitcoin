@@ -194,11 +194,11 @@ void MinerTestingSetup::TestPackageSelection(const CScript& scriptPubKey, const 
         BOOST_CHECK(block.vtx[i]->GetHash() != hashLowFeeTx);
     }
 
-    // Test that packages above the min relay fee do get included, even if one
-    // of the transactions is below the min relay fee
+    // Test that packages above the block min tx fee do get included, even if
+    // one of the transactions is below that threshold on its own.
     // Remove the low fee transaction and replace with a higher fee transaction
     tx_mempool.removeRecursive(CTransaction(tx), MemPoolRemovalReason::REPLACED);
-    tx.vout[0].nValue -= 2; // Now we should be just over the min relay fee
+    tx.vout[0].nValue -= 2; // Now the package should be just over the block min tx fee threshold
     hashLowFeeTx = tx.GetHash();
     AddToMempool(tx_mempool, entry.Fee(feeToUse + 2).FromTx(tx));
 
@@ -560,10 +560,11 @@ void MinerTestingSetup::TestBasicMining(const CScript& scriptPubKey, const std::
     auto block_template = mining->createNewBlock(options);
     BOOST_REQUIRE(block_template);
 
-    // None of the of the absolute height/time locked tx should have made
-    // it into the template because we still check IsFinalTx in CreateNewBlock,
-    // but relative locked txs will if inconsistently added to mempool.
-    // For now these will still generate a valid template until BIP68 soft fork
+    // None of the absolute height/time-locked txs should have made it into the
+    // template because CreateNewBlock() still checks IsFinalTx(). Relative
+    // sequence-locked txs can still appear here if they are inconsistently
+    // added to the mempool, because block assembly does not evaluate BIP68
+    // sequence locks at template-building time.
     CBlock block{block_template->getBlock()};
     BOOST_CHECK_EQUAL(block.vtx.size(), 3U);
     // However if we advance height by 1 and time by SEQUENCE_LOCK_TIME, all of them should be mined

@@ -446,8 +446,8 @@ static DBErrors LoadWalletFlags(CWallet* pwallet, DatabaseBatch& batch) EXCLUSIV
             pwallet->WalletLogPrintf("Error reading wallet database: Unknown non-tolerable wallet flags found\n");
             return DBErrors::TOO_NEW;
         }
-        // All wallets must be descriptor wallets unless opened with a bdb_ro db
-        // bdb_ro is only used for legacy to descriptor migration.
+        // All wallets must be descriptor wallets unless opened through the
+        // read-only bdb_ro path used by legacy migration and dump tooling.
         if (pwallet->GetDatabase().Format() != "bdb_ro" && !pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
             return DBErrors::LEGACY_WALLET;
         }
@@ -1135,7 +1135,7 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 
         // Load descriptors
         result = std::max(LoadDescriptorWalletRecords(pwallet, *m_batch, last_client), result);
-        // Early return if there are unknown descriptors. Later loading of ACTIVEINTERNALSPK and ACTIVEEXTERNALEXPK
+        // Early return if there are unknown descriptors. Later loading of ACTIVEINTERNALSPK and ACTIVEEXTERNALSPK
         // may reference the unknown descriptor's ID which can result in a misleading corruption error
         // when in reality the wallet is simply too new.
         if (result == DBErrors::UNKNOWN_DESCRIPTOR) return result;
@@ -1343,7 +1343,7 @@ std::unique_ptr<WalletDatabase> MakeDatabase(const fs::path& path, const Databas
         return nullptr;
     }
 
-    // BERKELEY_RO can only be opened if require_format was set, which only occurs in migration.
+    // BERKELEY_RO can only be opened when the caller explicitly requires that format.
     if (format && format == DatabaseFormat::BERKELEY_RO && (!options.require_format || options.require_format != DatabaseFormat::BERKELEY_RO)) {
         error = Untranslated(strprintf("Failed to open database path '%s'. The wallet appears to be a Legacy wallet, please use the wallet migration tool (migratewallet RPC or the GUI option).", fs::PathToString(path)));
         status = DatabaseStatus::FAILED_LEGACY_DISABLED;

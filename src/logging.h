@@ -99,7 +99,7 @@ namespace BCLog {
     enum class Level {
         Trace = 0, // High-volume or detailed logging for development/debugging
         Debug,     // Reasonably noisy logging, but still usable in production
-        Info,      // Default
+        Info,      // Emitted regardless of debug category settings
         Warning,
         Error,
     };

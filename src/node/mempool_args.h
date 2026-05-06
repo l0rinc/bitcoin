@@ -19,6 +19,7 @@ struct MemPoolOptions;
  * Returns an error if one was encountered.
  *
  * @param[in]  argsman The ArgsManager in which to check set options.
+ * @param[in]  chainparams The chain parameters used to validate network-specific mempool settings.
  * @param[in,out] mempool_opts The MemPoolOptions to modify according to \p argsman.
  */
 [[nodiscard]] util::Result<void> ApplyArgsManOptions(const ArgsManager& argsman, const CChainParams& chainparams, kernel::MemPoolOptions& mempool_opts);

@@ -58,7 +58,7 @@ struct TxLessThan
     }
 };
 
-// queue notifications to show a non freezing progress dialog e.g. for rescan
+// Queue transaction notifications so rescans can defer GUI updates.
 struct TransactionNotification
 {
 public:
@@ -347,8 +347,9 @@ QString TransactionTableModel::formatTxDate(const TransactionRecord *wtx) const
     return QString();
 }
 
-/* Look up address in address book, if found return label (address)
-   otherwise just return (address)
+/* Look up an address in the address book.
+   Return the label, and include the address in parentheses for tooltips or
+   when no label is available.
  */
 QString TransactionTableModel::lookupAddress(const std::string &address, bool tooltip) const
 {

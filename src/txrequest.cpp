@@ -63,7 +63,7 @@ struct Announcement {
     const GenTxid m_gtxid;
     /** For CANDIDATE_{DELAYED,BEST,READY} the reqtime; for REQUESTED the expiry. */
     std::chrono::microseconds m_time;
-    /** What peer the request was from. */
+    /** What peer the announcement was from. */
     const NodeId m_peer;
     /** What sequence number this announcement has. */
     const SequenceNumber m_sequence : 59;
@@ -315,7 +315,7 @@ class TxRequestTracker::Impl {
 public:
     void SanityCheck() const
     {
-        // Recompute m_peerdata from m_index. This verifies the data in it as it should just be caching statistics
+        // Recompute m_peerinfo from m_index. This verifies the data in it as it should just be caching statistics
         // on m_index. It also verifies the invariant that no PeerInfo announcements with m_total==0 exist.
         assert(m_peerinfo == RecomputePeerInfo(m_index));
 
@@ -323,7 +323,7 @@ public:
         for (auto& item : ComputeTxHashInfo(m_index, m_computer)) {
             TxHashInfo& info = item.second;
 
-            // Cannot have only COMPLETED peer (txhash should have been forgotten already)
+            // Cannot have only COMPLETED announcements (txhash should have been forgotten already)
             assert(info.m_candidate_delayed + info.m_candidate_ready + info.m_candidate_best + info.m_requested > 0);
 
             // Can have at most 1 CANDIDATE_BEST/REQUESTED peer

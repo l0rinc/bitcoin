@@ -617,7 +617,7 @@ std::string RPCResults::ToDescriptionString() const
 {
     std::string result;
     for (const auto& r : m_results) {
-        if (r.m_type == RPCResult::Type::ANY) continue; // for testing only
+        if (r.m_type == RPCResult::Type::ANY) continue; // Catch-all results do not have structured help output.
         if (r.m_cond.empty()) {
             result += "\nResult:\n";
         } else {
@@ -1026,7 +1026,7 @@ void RPCResult::ToSections(Sections& sections, const OuterType outer_type, const
         return;
     }
     case Type::ANY: {
-        NONFATAL_UNREACHABLE(); // Only for testing
+        NONFATAL_UNREACHABLE(); // Catch-all result types are skipped before section rendering.
     }
     case Type::NONE: {
         sections.PushSection({indent + "null" + maybe_separator, Description("json null")});
@@ -1161,7 +1161,7 @@ UniValue RPCResult::MatchesType(const UniValue& result) const
         if (!m_inner.empty() && m_inner.at(0).m_type == Type::ELISION) return true;
         UniValue errors(UniValue::VOBJ);
         if (m_type == Type::OBJ_DYN) {
-            const RPCResult& doc_inner{m_inner.at(0)}; // Assume all types are the same, randomly pick the first
+            const RPCResult& doc_inner{m_inner.at(0)}; // Assume all types are the same; use the first documented value type.
             for (size_t i{0}; i < result.get_obj().size(); ++i) {
                 UniValue match{doc_inner.MatchesType(result.get_obj()[i])};
                 if (!match.isTrue()) errors.pushKV(result.getKeys()[i], std::move(match));

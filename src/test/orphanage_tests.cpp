@@ -182,7 +182,7 @@ BOOST_AUTO_TEST_CASE(peer_dos_limits)
         BOOST_CHECK(orphanage->HaveTx(children.at(3)->GetWitnessHash()));
         BOOST_CHECK(orphanage->HaveTx(children.at(4)->GetWitnessHash()));
 
-        // Eviction order is FIFO within the orphans that are read
+        // Eviction order is FIFO within the orphans that are ready to reconsider.
         const std::vector<std::pair<Wtxid, NodeId>> expected_set_c4{std::make_pair(children.at(4)->GetWitnessHash(), peer)};
         BOOST_CHECK(orphanage->AddChildrenToWorkSet(*parents.at(4), det_rand) == expected_set_c4);
         const std::vector<std::pair<Wtxid, NodeId>> expected_set_c3{std::make_pair(children.at(3)->GetWitnessHash(), peer)};
@@ -337,7 +337,7 @@ BOOST_AUTO_TEST_CASE(peer_dos_limits)
 
     // Test eviction of multiple transactions at a time
     {
-        // Create a large transaction that is 10 times larger than the normal size transaction.
+        // Create a large transaction that is just over 10 times the size of a normal transaction.
         CMutableTransaction tx_large;
         tx_large.vin.resize(1);
         BulkTransaction(tx_large, 10 * TX_SIZE);
@@ -416,12 +416,7 @@ BOOST_AUTO_TEST_CASE(peer_dos_limits)
 }
 BOOST_AUTO_TEST_CASE(DoS_mapOrphans)
 {
-    // This test had non-deterministic coverage due to
-    // randomly selected seeds.
-    // This seed is chosen so that all branches of the function
-    // ecdsa_signature_parse_der_lax are executed during this test.
-    // Specifically branches that run only when an ECDSA
-    // signature's R and S values have leading zeros.
+    // Use a fixed seed to keep the generated orphan graph deterministic.
     m_rng.Reseed(uint256{33});
 
     std::unique_ptr<node::TxOrphanage> orphanage{node::MakeTxOrphanage()};

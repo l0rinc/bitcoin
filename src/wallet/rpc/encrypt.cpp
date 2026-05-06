@@ -60,8 +60,8 @@ RPCHelpMan walletpassphrase()
         if (nSleepTime < 0) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Timeout cannot be negative.");
         }
-        // Clamp timeout
-        constexpr int64_t MAX_SLEEP_TIME = 100000000; // larger values trigger a macos/libevent bug?
+        // Clamp timeout to the documented RPC maximum.
+        constexpr int64_t MAX_SLEEP_TIME = 100000000;
         if (nSleepTime > MAX_SLEEP_TIME) {
             nSleepTime = MAX_SLEEP_TIME;
         }
@@ -90,10 +90,8 @@ RPCHelpMan walletpassphrase()
         relock_time = pwallet->nRelockTime;
     }
 
-    // Get wallet scheduler to queue up the relock callback in the future.
-    // Scheduled events don't get destructed until they are executed,
-    // and they are executed in series in a single scheduler thread so
-    // no cs_wallet lock is needed.
+    // Queue up a relock callback in the future. Scheduled callbacks keep
+    // their captures alive until execution.
     WalletContext& context = EnsureWalletContext(request.context);
     // Keep a weak pointer to the wallet so that it is possible to unload the
     // wallet before the following callback is called. If a valid shared pointer

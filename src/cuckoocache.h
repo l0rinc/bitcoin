@@ -351,9 +351,8 @@ public:
     /** setup_bytes is a convenience function which accounts for internal memory
      * usage when deciding how many elements to store. It isn't perfect because
      * it doesn't account for any overhead (struct size, MallocUsage, collection
-     * and epoch flags). This was done to simplify selecting a power of two
-     * size. In the expected use case, an extra two bits per entry should be
-     * negligible compared to the size of the elements.
+     * and epoch flags). In the expected use case, an extra two bits per entry
+     * should be negligible compared to the size of the elements.
      *
      * @param bytes the approximate number of bytes to use for this data
      * structure

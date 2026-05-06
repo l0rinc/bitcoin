@@ -118,7 +118,7 @@ BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_biger_hash_than_target)
     unsigned int nBits;
     arith_uint256 hash_arith = UintToArith256(consensus.powLimit);
     nBits = hash_arith.GetCompact();
-    hash_arith *= 2; // hash > nBits
+    hash_arith *= 2; // hash > target
     hash = ArithToUint256(hash_arith);
     BOOST_CHECK(!CheckProofOfWork(hash, nBits, consensus));
 }

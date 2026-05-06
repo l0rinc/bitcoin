@@ -67,13 +67,10 @@ bool InitError(const bilingual_str& str)
 
 bool InitError(const bilingual_str& str, const std::vector<std::string>& details)
 {
-    // For now just flatten the list of error details into a string to pass to
-    // the base InitError overload. In the future, if more init code provides
-    // error details, the details could be passed separately from the main
-    // message for rich display in the GUI. But currently the only init
-    // functions which provide error details are ones that run during early init
-    // before the GUI uiInterface is registered, so there's no point passing
-    // main messages and details separately to uiInterface yet.
+    // Flatten the list of error details into a string and pass it to the base
+    // InitError overload. CClientUIInterface doesn't expose a separate details
+    // channel, so callers that want richer GUI presentation need to show a
+    // custom dialog themselves.
     return InitError(details.empty() ? str : str + Untranslated(strprintf(":\n%s", MakeUnorderedList(details))));
 }
 

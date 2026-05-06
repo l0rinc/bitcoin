@@ -94,7 +94,7 @@ struct SettingsSpan {
     explicit SettingsSpan(const std::vector<SettingsValue>& vec) noexcept;
     const SettingsValue* begin() const; //!< Pointer to first non-negated value.
     const SettingsValue* end() const;   //!< Pointer to end of values.
-    bool empty() const;                 //!< True if there are any non-negated values.
+    bool empty() const;                 //!< True if there are no non-negated values.
     bool last_negated() const;          //!< True if the last value is negated.
     size_t negated() const;             //!< Number of negated values.
 

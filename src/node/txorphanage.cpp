@@ -39,7 +39,7 @@ class TxOrphanageImpl final : public TxOrphanage {
         const CTransactionRef m_tx;
         /** Which peer announced this tx */
         const NodeId m_announcer;
-        /** What order this transaction entered the orphanage. */
+        /** What order this announcement entered the orphanage. */
         const SequenceNumber m_entry_sequence;
         /** Whether this tx should be reconsidered. Always starts out false. A peer's workset is the collection of all
          * announcements with m_reconsider=true. */
@@ -205,10 +205,11 @@ public:
     TxOrphanage::Count TotalLatencyScore() const override;
     TxOrphanage::Usage ReservedPeerUsage() const override;
 
-    /** Maximum allowed (deduplicated) latency score for all transactions (see Announcement::GetLatencyScore()). Dynamic
-     * based on number of peers. Each peer has an equal amount, but the global maximum latency score stays constant. The
-     * number of peers times MaxPeerLatencyScore() (rounded) adds up to MaxGlobalLatencyScore().  As long as every peer's
-     * m_total_latency_score / MaxPeerLatencyScore() < 1, MaxGlobalLatencyScore() is not exceeded. */
+    /** Maximum allowed latency score per peer. Dynamic based on number of peers.
+     * Each peer gets an equal floor-divided share of MaxGlobalLatencyScore(), so the
+     * per-peer shares may sum to slightly less than the global maximum. As long as
+     * every peer's m_total_latency_score / MaxPeerLatencyScore() < 1, the global
+     * latency score is not exceeded. */
     TxOrphanage::Count MaxPeerLatencyScore() const override;
 
     /** Maximum allowed (deduplicated) memory usage for all transactions (see Announcement::GetMemUsage()). Dynamic based
@@ -308,14 +309,15 @@ bool TxOrphanageImpl::AddTx(const CTransactionRef& tx, NodeId peer)
     const auto& wtxid{tx->GetWitnessHash()};
     const auto& txid{tx->GetHash()};
 
-    // Ignore transactions above max standard size to avoid a send-big-orphans memory exhaustion attack.
+    // Ignore transactions above max standard weight to avoid a send-big-orphans
+    // memory exhaustion attack.
     TxOrphanage::Usage sz = GetTransactionWeight(*tx);
     if (sz > MAX_STANDARD_TX_WEIGHT) {
         LogDebug(BCLog::TXPACKAGES, "ignoring large orphan tx (size: %u, txid: %s, wtxid: %s)\n", sz, txid.ToString(), wtxid.ToString());
         return false;
     }
 
-    // We will return false if the tx already exists under a different peer.
+    // The return value reports whether this wtxid is new to the orphanage.
     const bool brand_new{!HaveTx(wtxid)};
 
     auto [iter, inserted] = m_orphans.get<ByWtxid>().emplace(tx, peer, m_current_sequence);
@@ -472,9 +474,9 @@ void TxOrphanageImpl::LimitOrphans()
     // This outer loop finds the peer with the highest DoS score, which is a fraction of memory and latency scores
     // over the respective allowances. We continue until the orphanage is within global limits. That means some peers
     // might still have a DoS score > 1 at the end.
-    // Note: if ratios are the same, FeeFrac tiebreaks by denominator. In practice, since the latency denominator (number of
-    // announcements and inputs) is always lower, this means that a peer with only high latency scores will be targeted
-    // before a peer using a lot of memory, even if they have the same ratios.
+    // Note: if ratios are the same, FeeFrac tiebreaks by denominator. That can
+    // cause the resource with the smaller denominator to be targeted first, even
+    // when the ratios are otherwise identical.
     do {
         Assume(!heap_peer_dos.empty());
         // This is a max-heap, so the worst peer is at the front. pop_heap()

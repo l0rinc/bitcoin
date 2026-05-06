@@ -273,7 +273,7 @@ public:
     }
 
     /**
-     * Size in bytes to allocate per chunk, currently hardcoded to a fixed size.
+     * Configured size in bytes to allocate per chunk.
      */
     [[nodiscard]] size_t ChunkSizeBytes() const
     {

@@ -62,7 +62,7 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     connman.ResetMaxOutboundCycle();
     auto& chainman = static_cast<TestChainstateManager&>(*g_setup->m_node.chainman);
     const auto block_index_size{WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size())};
-    SetMockTime(1610000000); // any time to successfully reset ibd
+    SetMockTime(1610000000); // Set mock time far enough ahead of the tip to re-enter IBD.
     chainman.ResetIbd();
     chainman.DisableNextWrite();
 

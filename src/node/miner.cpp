@@ -37,8 +37,8 @@ int64_t GetMinimumTime(const CBlockIndex* pindexPrev, const int64_t difficulty_a
     int64_t min_time{pindexPrev->GetMedianTimePast() + 1};
     // Height of block to be mined.
     const int height{pindexPrev->nHeight + 1};
-    // Account for BIP94 timewarp rule on all networks. This makes future
-    // activation safer.
+    // Apply the BIP94 timewarp floor even on chains that do not yet enforce it.
+    // That keeps generated timestamps compatible if the rule is enabled later.
     if (height % difficulty_adjustment_interval == 0) {
         min_time = std::max<int64_t>(min_time, pindexPrev->GetBlockTime() - MAX_TIMEWARP);
     }
@@ -55,7 +55,8 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
         pblock->nTime = nNewTime;
     }
 
-    // Updating time can change work required on testnet:
+    // Updating time can change work required on chains that allow
+    // min-difficulty blocks:
     if (consensusParams.fPowAllowMinDifficultyBlocks) {
         pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, consensusParams);
     }
@@ -325,12 +326,11 @@ void BlockAssembler::addPackageTxs(int& nPackagesSelected, int& nDescendantsUpda
         // Skip entries in mapTx that are already in a block or are present
         // in mapModifiedTx (which implies that the mapTx ancestor state is
         // stale due to ancestor inclusion in the block)
-        // Also skip transactions that we've already failed to add. This can happen if
-        // we consider a transaction in mapModifiedTx and it fails: we can then
-        // potentially consider it again while walking mapTx.  It's currently
-        // guaranteed to fail again, but as a belt-and-suspenders check we put it in
-        // failedTx and avoid re-evaluation, since the re-evaluation would be using
-        // cached size/sigops/fee values that are not actually correct.
+        // Also skip transactions that we've already failed to add. This can
+        // happen if we consider a transaction in mapModifiedTx and it fails:
+        // reconsidering it later while walking mapTx would fail again, and it
+        // would use cached size/sigops/fee values that no longer reflect which
+        // ancestors are already in the block.
         /** Return true if given transaction from mapTx has already been evaluated,
          * or if the transaction's cached data in mapTx is incorrect. */
         if (mi != mempool.mapTx.get<ancestor_score>().end()) {
@@ -494,7 +494,8 @@ std::unique_ptr<CBlockTemplate> WaitAndCreateNewBlock(ChainstateManager& chainma
         // Must release m_tip_block_mutex before locking cs_main, to avoid deadlocks.
         LOCK(::cs_main);
 
-        // On test networks return a minimum difficulty block after 20 minutes
+        // On chains that allow min-difficulty blocks, create a fresh template
+        // after 20 minutes so it can use the min-difficulty exception.
         if (!tip_changed && allow_min_difficulty) {
             const NodeClock::time_point tip_time{std::chrono::seconds{chainman.ActiveChain().Tip()->GetBlockTime()}};
             if (now > tip_time + 20min) {

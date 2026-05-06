@@ -210,7 +210,7 @@ BOOST_AUTO_TEST_CASE(peer_protection_test)
         random_context));
 
     // Combined test: expect having 1 localhost and 1 onion peer out of 8 to
-    // protect protect 1 localhost, 1 onion and 2 other peers (4 total), sorted
+    // protect 1 localhost, 1 onion, and 2 other peers (4 total), sorted
     // by uptime; stable sort breaks tie with array order of localhost first.
     BOOST_CHECK(IsProtected(
         8, [](NodeEvictionCandidate& c) {
@@ -294,7 +294,7 @@ BOOST_AUTO_TEST_CASE(peer_protection_test)
             c.m_is_local = false;
             if (c.id == 8 || c.id == 10) {
                 c.m_network = NET_ONION;
-            } else if (c.id == 6 || c.id == 9 || c.id == 11 || c.id == 12) {
+            } else if (c.id == 6 || c.id == 7 || c.id == 9 || c.id == 11) {
                 c.m_network = NET_I2P;
             } else {
                 c.m_network = NET_IPV4;
@@ -483,7 +483,7 @@ BOOST_AUTO_TEST_CASE(peer_protection_test)
         random_context));
 
     // Combined test: expect having 1 CJDNS, 1 I2P, 1 localhost and 1 onion peer
-    // out of 7 to protect 1 CJDNS, 0, I2P, 0 localhost, 0 onion and 2 other
+    // out of 7 to protect 1 CJDNS, 0 I2P, 0 localhost, 0 onion, and 2 other
     // peers (3 total) sorted by longest uptime; stable sort breaks tie with
     // array order of CJDNS first.
     BOOST_CHECK(IsProtected(

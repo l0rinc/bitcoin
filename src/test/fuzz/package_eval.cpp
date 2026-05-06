@@ -65,7 +65,8 @@ struct OutpointsUpdater final : public CValidationInterface {
 
     void TransactionAddedToMempool(const NewMempoolTransactionInfo& tx, uint64_t /* mempool_sequence */) override
     {
-        // for coins spent we always want to be able to rbf so they're not removed
+        // Intentionally leave spent prevouts in m_mempool_outpoints so later
+        // packages can still double-spend them via RBF.
 
         // outputs from this tx can now be spent
         for (uint32_t index{0}; index < tx.info.m_tx->vout.size(); ++index) {
@@ -102,7 +103,7 @@ struct TransactionsDelta final : public CValidationInterface {
     void TransactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t /* mempool_sequence */) override
     {
         // Transactions may be entered and booted any number of times
-         m_added.erase(tx);
+        m_added.erase(tx);
     }
 };
 
@@ -237,7 +238,7 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
                 tx_mut.nLockTime = 0;
                 // Last transaction in a package needs to be a child of parents to get further in validation
                 // so the last transaction to be generated(in a >1 package) must spend all package-made outputs
-                // Note that this test currently only spends package outputs in last transaction.
+                // In this harness, only the last transaction spends package-created outputs.
                 bool last_tx = num_txs > 1 && txs.size() == num_txs - 1;
                 const auto num_in = outpoint_to_rbf ? 2 :
                     last_tx ? fuzzed_data_provider.ConsumeIntegralInRange<int>(package_outpoints.size()/2 + 1, package_outpoints.size()) :
@@ -309,8 +310,8 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
                                    txs.back()->GetHash() :
                                    PickValue(fuzzed_data_provider, mempool_outpoints).hash;
             const auto delta = fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(-50 * COIN, +50 * COIN);
-            // We only prioritise out of mempool transactions since PrioritiseTransaction doesn't
-            // filter for ephemeral dust
+            // Only prioritise in-mempool transactions. PrioritiseTransaction()
+            // doesn't filter for ephemeral dust, so skip dusty entries here.
             if (tx_pool.exists(txid)) {
                 const auto tx_info{tx_pool.info(txid)};
                 if (GetDust(*tx_info.tx, tx_pool.m_opts.dust_relay_feerate).empty()) {
@@ -388,7 +389,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
                 tx_mut.nLockTime = fuzzed_data_provider.ConsumeBool() ? 0 : fuzzed_data_provider.ConsumeIntegral<uint32_t>();
                 // Last transaction in a package needs to be a child of parents to get further in validation
                 // so the last transaction to be generated(in a >1 package) must spend all package-made outputs
-                // Note that this test currently only spends package outputs in last transaction.
+                // In this harness, only the last transaction spends package-created outputs.
                 bool last_tx = num_txs > 1 && txs.size() == num_txs - 1;
                 const auto num_in = last_tx ? package_outpoints.size()  : fuzzed_data_provider.ConsumeIntegralInRange<int>(1, mempool_outpoints.size());
                 auto num_out = fuzzed_data_provider.ConsumeIntegralInRange<int>(1, mempool_outpoints.size() * 2);
@@ -433,7 +434,9 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
                     tx_mut.vin.emplace_back();
                 }
 
-                // Make a p2pk output to make sigops adjusted vsize to violate TRUC rules, potentially, which is never spent
+                // Make a P2PK output to inflate sigops-adjusted vsize and
+                // potentially violate TRUC rules. This output is not spent by
+                // another transaction in the same package.
                 if (last_tx && amount_in > 1000 && fuzzed_data_provider.ConsumeBool()) {
                     tx_mut.vout.emplace_back(1000, CScript() << std::vector<unsigned char>(33, 0x02) << OP_CHECKSIG);
                     // Don't add any other outputs.

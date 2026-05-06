@@ -55,13 +55,13 @@ constexpr int NUM_PEERS = 16;
 // Precomputed random durations (positive and negative, each ~exponentially distributed).
 std::chrono::microseconds TIME_SKIPS[128];
 
-static CTransactionRef MakeTransactionSpending(const std::vector<COutPoint>& outpoints, size_t num_outputs, bool add_witness)
-{
-    CMutableTransaction tx;
-    // If no outpoints are given, create a random one.
-    for (const auto& outpoint : outpoints) {
-        tx.vin.emplace_back(outpoint);
-    }
+    static CTransactionRef MakeTransactionSpending(const std::vector<COutPoint>& outpoints, size_t num_outputs, bool add_witness)
+    {
+        CMutableTransaction tx;
+        // Use the provided outpoints as inputs.
+        for (const auto& outpoint : outpoints) {
+            tx.vin.emplace_back(outpoint);
+        }
     if (add_witness) {
         tx.vin[0].scriptWitness.stack.push_back({1});
     }

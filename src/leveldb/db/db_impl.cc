@@ -632,7 +632,8 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,
 }
 
 Status DBImpl::TEST_CompactMemTable() {
-  // nullptr batch means just wait for earlier writes to be done
+  // A nullptr batch forces memtable rotation/compaction after earlier writes
+  // are done.
   Status s = Write(WriteOptions(), nullptr);
   if (s.ok()) {
     // Wait until the compaction completes
@@ -955,7 +956,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       }
 
       if (last_sequence_for_key <= compact->smallest_snapshot) {
-        // Hidden by an newer entry for same user key
+        // Hidden by a newer entry for same user key
         drop = true;  // (A)
       } else if (ikey.type == kTypeDeletion &&
                  ikey.sequence <= compact->smallest_snapshot &&

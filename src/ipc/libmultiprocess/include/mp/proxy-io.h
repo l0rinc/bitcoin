@@ -174,7 +174,7 @@ public:
 
     //! Run event loop. Does not return until shutdown. This should only be
     //! called once from the m_thread_id thread. This will block until
-    //! the m_num_clients reference count is 0.
+    //! no EventLoopRef holders and no pending async cleanup work remain.
     void loop();
 
     //! Run function on event loop thread. Does not return until function completes.
@@ -226,8 +226,8 @@ public:
     //! ID of the event loop thread
     std::thread::id m_thread_id = std::this_thread::get_id();
 
-    //! Handle of an async worker thread. Joined on destruction. Unset if async
-    //! method has not been called.
+    //! Handle of the async cleanup worker thread. Joined on destruction.
+    //! Unset until startAsyncThread() launches it.
     std::thread m_async_thread;
 
     //! Callback function to run on event loop thread during post() or sync() call.
@@ -242,8 +242,7 @@ public:
     //! Pipe write handle used to wake up the event loop thread.
     int m_post_fd = -1;
 
-    //! Number of clients holding references to ProxyServerBase objects that
-    //! reference this event loop.
+    //! Number of EventLoopRef holders keeping this event loop alive.
     int m_num_clients MP_GUARDED_BY(m_mutex) = 0;
 
     //! Mutex and condition variable used to post tasks to event loop and async
@@ -270,12 +269,11 @@ public:
     void* m_context;
 };
 
-//! Single element task queue used to handle recursive capnp calls. (If server
-//! makes an callback into the client in the middle of a request, while client
-//! thread is blocked waiting for server response, this is what allows the
-//! client to run the request in the same thread, the same way code would run in
-//! single process, with the callback sharing same thread stack as the original
-//! call.
+//! Single-element task queue used to handle recursive capnp calls. If a server
+//! makes a callback into the client in the middle of a request while the
+//! client thread is blocked waiting for the server response, this lets the
+//! client run the callback on the same thread, similar to single-process code,
+//! with the callback sharing the same thread stack as the original call.
 struct Waiter
 {
     Waiter() = default;
@@ -346,9 +344,8 @@ public:
     //! destructors of m_impl instances owned by ProxyServer objects).
     ~Connection();
 
-    //! Register synchronous cleanup function to run on event loop thread (with
-    //! access to capnp thread local variables) when disconnect() is called.
-    //! any new i/o.
+    //! Register synchronous cleanup function to run on the event loop thread,
+    //! with access to Cap'n Proto thread-local state, during disconnect().
     CleanupIt addSyncCleanup(std::function<void()> fn);
     void removeSyncCleanup(CleanupIt it);
 
@@ -438,7 +435,7 @@ ProxyClientBase<Interface, Impl>::ProxyClientBase(typename Interface::Client cli
         // an empty stub defined in the ProxyClientBase class and do nothing.
         Sub::destroy(*this);
 
-        // FIXME: Could just invoke removed addCleanup fn here instead of duplicating code
+        // FIXME: Factor this duplicated disconnect-cleanup logic into a shared helper.
         m_context.loop->sync([&]() {
             // Remove disconnect callback on cleanup so it doesn't run and try
             // to access this object after it's destroyed. This call needs to
@@ -518,7 +515,7 @@ ProxyServerBase<Interface, Impl>::~ProxyServerBase()
     assert(m_context.cleanup_fns.empty());
 }
 
-//! If the capnp interface defined a special "destroy" method, as described the
+//! If the capnp interface defined a special "destroy" method, as described in
 //! ProxyClientBase class, this method will be called and synchronously destroy
 //! m_impl before returning to the client.
 //!

@@ -639,7 +639,7 @@ bool CNetAddr::GetInAddr(struct in_addr* pipv4Addr) const
  * @param[out] pipv6Addr The in6_addr struct to which to copy.
  *
  * @returns Whether or not the operation was successful, in particular, whether
- *          or not our address was an IPv6 address.
+ *          or not our address was an IPv6 or CJDNS address.
  *
  * @see CNetAddr::IsIPv6()
  */

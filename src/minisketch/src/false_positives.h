@@ -92,7 +92,7 @@ size_t ComputeCapacity(uint32_t bits, size_t max_elements, uint32_t fpbits) {
 size_t ComputeMaxElements(uint32_t bits, size_t capacity, uint32_t fpbits) {
     if (bits == 0) return 0;
     if (capacity > 0xffffffff) return capacity;
-    // Start with max_elements=capacity, and decrease max_elements until the corresponding capacity is capacity.
+    // Start with max_elements=capacity, and decrease max_elements until the corresponding capacity equals the requested capacity.
     size_t max_elements = capacity;
     while (true) {
         size_t capacity_for_max_elements = ComputeCapacity(bits, max_elements, fpbits);
@@ -100,7 +100,7 @@ size_t ComputeMaxElements(uint32_t bits, size_t capacity, uint32_t fpbits) {
         if (capacity_for_max_elements <= capacity) return max_elements;
         size_t adjust = capacity_for_max_elements - capacity;
         // Decrementing max_elements by N will at most decrement the corresponding capacity by N.
-        // As the observed capacity is adjust too high, we can safely decrease max_elements by adjust.
+        // As the observed capacity is adjust units too high, we can safely decrease max_elements by adjust.
         // If that brings us into negative max_elements territory, no solution exists and we return 0.
         if (max_elements < adjust) return 0;
         max_elements -= adjust;

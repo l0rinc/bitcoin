@@ -322,7 +322,7 @@ void TransactionView::exportClicked()
         return;
     }
 
-    // CSV is currently the only supported format
+    // Export transaction history in CSV format.
     QString filename = GUIUtil::getSaveFileName(this,
         tr("Export Transaction History"), QString(),
         /*: Expanded name of the CSV file format.

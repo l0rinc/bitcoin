@@ -48,7 +48,7 @@ int FindFile(const InternalKeyComparator& icmp,
 // Returns true iff some file in "files" overlaps the user key range
 // [*smallest,*largest].
 // smallest==nullptr represents a key smaller than all keys in the DB.
-// largest==nullptr represents a key largest than all keys in the DB.
+// largest==nullptr represents a key larger than all keys in the DB.
 // REQUIRES: If disjoint_sorted_files, files[] contains disjoint ranges
 //           in sorted order.
 bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
@@ -69,7 +69,7 @@ class Version {
 
   // Append to *iters a sequence of iterators that will
   // yield the contents of this Version when merged together.
-  // REQUIRES: This version has been saved (see VersionSet::SaveTo)
+  // REQUIRES: This version has been populated with file metadata.
   void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
@@ -100,7 +100,7 @@ class Version {
   // Returns true iff some file in the specified level overlaps
   // some part of [*smallest_user_key,*largest_user_key].
   // smallest_user_key==nullptr represents a key smaller than all the DB's keys.
-  // largest_user_key==nullptr represents a key largest than all the DB's keys.
+  // largest_user_key==nullptr represents a key larger than all the DB's keys.
   bool OverlapInLevel(int level, const Slice* smallest_user_key,
                       const Slice* largest_user_key);
 
@@ -302,7 +302,7 @@ class VersionSet {
   uint64_t manifest_file_number_;
   uint64_t last_sequence_;
   uint64_t log_number_;
-  uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
+  uint64_t prev_log_number_;  // 0 or the log number backing the memtable being compacted
 
   // Opened lazily
   WritableFile* descriptor_file_;
@@ -374,7 +374,7 @@ class Compaction {
   // State used to check for number of overlapping grandparent files
   // (parent == level_ + 1, grandparent == level_ + 2)
   std::vector<FileMetaData*> grandparents_;
-  size_t grandparent_index_;  // Index in grandparent_starts_
+  size_t grandparent_index_;  // Index into grandparents_
   bool seen_key_;             // Some output key has been seen
   int64_t overlapped_bytes_;  // Bytes of overlap between current output
                               // and grandparent files

@@ -211,10 +211,8 @@ private:
     void onlyUnconfirmed(CTxMemPool::setEntries& testSet);
     /** Test if a new package would "fit" in the block */
     bool TestPackage(uint64_t packageSize, int64_t packageSigOpsCost) const;
-    /** Perform checks on each transaction in a package:
-      * locktime, premature-witness, serialized size (if necessary)
-      * These checks should always succeed, and they're here
-      * only as an extra check in case of suboptimal node configuration */
+    /** Perform transaction finality checks on each transaction in a package.
+      * These checks should always succeed and are only an extra sanity check. */
     bool TestPackageTransactions(const CTxMemPool::setEntries& package) const;
     /** Sort the package in an order that is valid to appear in a block */
     void SortForBlock(const CTxMemPool::setEntries& package, std::vector<CTxMemPool::txiter>& sortedEntries);
@@ -240,7 +238,7 @@ void AddMerkleRootAndCoinbase(CBlock& block, CTransactionRef coinbase, uint32_t 
 
 /**
  * Return a new block template when fees rise to a certain threshold or after a
- * new tip; return nullopt if timeout is reached.
+ * new tip; return nullptr if the wait times out or the node is shutting down.
  */
 std::unique_ptr<CBlockTemplate> WaitAndCreateNewBlock(ChainstateManager& chainman,
                                                       KernelNotifications& kernel_notifications,

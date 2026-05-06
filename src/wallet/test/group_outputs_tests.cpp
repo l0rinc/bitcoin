@@ -97,9 +97,9 @@ public:
                         int expected_without_partial_spends_size,
                         bool positive_only)
     {
-        // First avoid partial spends
+        // First allow partial spends.
         GroupVerify(type, filter, /*avoid_partial_spends=*/false, positive_only,  expected_with_partial_spends_size);
-        // Second don't avoid partial spends
+        // Then avoid partial spends.
         GroupVerify(type, filter, /*avoid_partial_spends=*/true, positive_only, expected_without_partial_spends_size);
     }
 };

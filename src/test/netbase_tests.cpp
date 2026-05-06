@@ -521,7 +521,7 @@ static constexpr const char* stream_addrv1_hex =
 
     "61bc6649"                         // time, Fri Jan  9 02:54:25 UTC 2009
     "0000000000000000"                 // service flags, NODE_NONE
-    "00000000000000000000000000000001" // address, fixed 16 bytes (IPv4 embedded in IPv6)
+    "00000000000000000000000000000001" // address, fixed 16 bytes (IPv6)
     "0000"                             // port
 
     "79627683"                         // time, Tue Nov 22 11:22:33 UTC 2039

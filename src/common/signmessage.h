@@ -15,8 +15,8 @@ class CKey;
 extern const std::string MESSAGE_MAGIC;
 
 /** The result of a signed message verification.
- * Message verification takes as an input:
- * - address (with whose private key the message is supposed to have been signed)
+ * Message verification takes as input:
+ * - legacy (P2PKH) address, with whose private key the message is supposed to have been signed
  * - signature
  * - message
  */
@@ -24,7 +24,7 @@ enum class MessageVerificationResult {
     //! The provided address is invalid.
     ERR_INVALID_ADDRESS,
 
-    //! The provided address is valid but does not refer to a public key.
+    //! The provided address is valid but is not a legacy (P2PKH) address.
     ERR_ADDRESS_NO_KEY,
 
     //! The provided signature couldn't be parsed (maybe invalid base64).
@@ -47,7 +47,7 @@ enum class SigningResult {
 };
 
 /** Verify a signed message.
- * @param[in] address Signer's bitcoin address, it must refer to a public key.
+ * @param[in] address Signer's legacy (P2PKH) bitcoin address.
  * @param[in] signature The signature in base64 format.
  * @param[in] message The message that was signed.
  * @return result code */

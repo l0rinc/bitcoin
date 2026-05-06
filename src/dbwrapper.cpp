@@ -54,7 +54,8 @@ static void HandleError(const leveldb::Status& status)
 
 class CBitcoinLevelDBLogger : public leveldb::Logger {
 public:
-    // This code is adapted from posix_logger.h, which is why it is using vsprintf.
+    // This code is adapted from posix_logger.h, which is why it uses manual
+    // buffer management around vsnprintf.
     // Please do not do this in normal code
     void Logv(const char * format, va_list ap) override {
             if (!LogAcceptCategory(BCLog::LEVELDB, BCLog::Level::Debug)) {

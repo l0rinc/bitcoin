@@ -212,8 +212,8 @@ enum opcodetype
     OP_INVALIDOPCODE = 0xff,
 };
 
-// Maximum value that an opcode can be
-static const unsigned int MAX_OPCODE = OP_NOP10;
+// Maximum opcode value accepted by HasValidOps().
+static const unsigned int MAX_OPCODE = OP_CHECKSIGADD;
 
 std::string GetOpName(opcodetype opcode);
 
@@ -556,11 +556,11 @@ public:
 
     bool IsPayToTaproot() const;
 
-    /** Called by IsStandardTx and P2SH/BIP62 VerifyScript (which makes it consensus-critical). */
+    /** Called by IsStandardTx, by SCRIPT_VERIFY_SIGPUSHONLY, and by P2SH evaluation (which makes it consensus-critical). */
     bool IsPushOnly(const_iterator pc) const;
     bool IsPushOnly() const;
 
-    /** Check if the script contains valid OP_CODES */
+    /** Check if the script contains only defined opcodes and valid push sizes. */
     bool HasValidOps() const;
 
     /**

@@ -67,8 +67,8 @@ private:
      * If this batch did not start a transaction, the semaphore is acquired transiently when writing and m_txn
      * is not set.
      *
-     * m_txn is different from HasActiveTxn() as it is only true when this batch has started the transaction,
-     * not just when any batch has started a transaction.
+     * m_txn differs from SQLiteDatabase::HasActiveTxn(): it is only true when this batch has started
+     * the transaction, not when another batch has an active transaction on the same connection.
      */
     bool m_txn{false};
 

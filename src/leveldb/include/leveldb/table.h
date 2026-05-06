@@ -32,11 +32,9 @@ class LEVELDB_EXPORT Table {
   // If successful, returns ok and sets "*table" to the newly opened
   // table.  The client should delete "*table" when no longer needed.
   // If there was an error while initializing the table, sets "*table"
-  // to nullptr and returns a non-ok status.  Does not take ownership of
-  // "*source", but the client must ensure that "source" remains live
-  // for the duration of the returned table's lifetime.
-  //
-  // *file must remain live while this Table is in use.
+  // to nullptr and returns a non-ok status. Does not take ownership of
+  // "*file", so the client must ensure that it remains live for the
+  // duration of the returned table's lifetime.
   static Status Open(const Options& options, RandomAccessFile* file,
                      uint64_t file_size, Table** table);
 

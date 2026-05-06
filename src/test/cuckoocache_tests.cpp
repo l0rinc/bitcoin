@@ -33,7 +33,8 @@ BOOST_FIXTURE_TEST_SUITE(cuckoocache_tests, BasicTestingSetup);
 
 /* Test that no values not inserted into the cache are read out of it.
  *
- * There are no repeats in the first 200000 m_rng.rand256() calls
+ * This relies on the 200000 deterministic rand256() outputs sampled below
+ * being distinct, so a hit here would indicate a false positive.
  */
 BOOST_AUTO_TEST_CASE(test_cuckoocache_no_fakes)
 {
@@ -297,10 +298,9 @@ void test_cache_generations()
     // min_hit_rate*max_rate_less_than_tight_hit_rate = 0.999*99%+0.99*1% == 99.89%
     // hit rate with low variance.
 
-    // We use deterministic values, but this test has also passed on many
-    // iterations with non-deterministic values, so it isn't "overfit" to the
-    // specific entropy in FastRandomContext(true) and implementation of the
-    // cache.
+    // Use deterministic values to keep the test reproducible. The thresholds
+    // here are regression bounds for the current cache behavior, not guarantees
+    // about one particular random run.
     SeedRandomForTest(SeedRand::ZEROS);
 
     // block_activity models a chunk of network activity. n_insert elements are
@@ -330,8 +330,8 @@ void test_cache_generations()
     };
 
     const uint32_t BLOCK_SIZE = 1000;
-    // We expect window size 60 to perform reasonably given that each epoch
-    // stores 45% of the cache size (~472k).
+    // We expect window size 60 to perform reasonably given that a full window
+    // stores about 46% of the cache's ~131k-entry capacity.
     const uint32_t WINDOW_SIZE = 60;
     const uint32_t POP_AMOUNT = (BLOCK_SIZE / WINDOW_SIZE) / 2;
     const double load = 10;

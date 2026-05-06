@@ -129,7 +129,7 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
 
     modalOverlay = new ModalOverlay(enableWallet, this->centralWidget());
 
-    // Accept D&D of URIs
+    // Accept D&D of URLs
     setAcceptDrops(true);
 
     // Create actions for the toolbar, menu bar and tray/dock icon
@@ -465,7 +465,7 @@ void BitcoinGUI::createActions()
             for (const auto& [wallet_name, info] : m_wallet_controller->listWalletDir()) {
                 const auto& [loaded, format] = info;
 
-                if (format != "bdb") { // Skip already migrated wallets
+                if (format != "bdb") { // Skip wallets that are not in the legacy BDB format
                     continue;
                 }
 
@@ -668,10 +668,10 @@ void BitcoinGUI::setClientModel(ClientModel *_clientModel, interfaces::BlockAndH
 
         OptionsModel* optionsModel = _clientModel->getOptionsModel();
         if (optionsModel && trayIcon) {
-            // be aware of the tray icon disable state change reported by the OptionsModel object.
+            // Be aware of tray icon visibility changes reported by the OptionsModel object.
             connect(optionsModel, &OptionsModel::showTrayIconChanged, trayIcon, &QSystemTrayIcon::setVisible);
 
-            // initialize the disable state of the tray icon with the current value in the model.
+            // Initialize tray icon visibility with the current value in the model.
             trayIcon->setVisible(optionsModel->getShowTrayIcon());
         }
 
@@ -1370,7 +1370,7 @@ void BitcoinGUI::incomingTransaction(const QString& date, BitcoinUnit unit, cons
 
 void BitcoinGUI::dragEnterEvent(QDragEnterEvent *event)
 {
-    // Accept only URIs
+    // Accept only dropped URLs
     if(event->mimeData()->hasUrls())
         event->acceptProposedAction();
 }

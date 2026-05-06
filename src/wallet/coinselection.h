@@ -269,13 +269,13 @@ struct OutputGroup
 };
 
 struct Groups {
-    // Stores 'OutputGroup' containing only positive UTXOs (value > 0).
+    // Stores OutputGroups with positive selection amount.
     std::vector<OutputGroup> positive_group;
     // Stores 'OutputGroup' which may contain both positive and negative UTXOs.
     std::vector<OutputGroup> mixed_group;
 };
 
-/** Stores several 'Groups' whose were mapped by output type. */
+/** Stores several 'Groups' mapped by output type. */
 struct OutputGroupTypeMap
 {
     // Maps output type to output groups.
@@ -283,7 +283,8 @@ struct OutputGroupTypeMap
     // All inserted groups, no type distinction.
     Groups all_groups;
 
-    // Based on the insert flag; appends group to the 'mixed_group' and, if value > 0, to the 'positive_group'.
+    // Based on the insert flags, appends group to the 'mixed_group' and, if
+    // its selection amount is positive, to the 'positive_group'.
     // This affects both; the groups filtered by type and the overall groups container.
     void Push(const OutputGroup& group, OutputType type, bool insert_positive, bool insert_mixed);
     // Different output types count
@@ -299,7 +300,7 @@ typedef std::map<CoinEligibilityFilter, OutputGroupTypeMap> FilteredOutputGroups
  * When payment_value <= 25ksat, the value is just 50ksat.
  *
  * Making change amounts similar to the payment value may help disguise which output(s) are payments
- * are which ones are change. Using double the payment value may increase the number of inputs
+ * and which ones are change. Using double the payment value may increase the number of inputs
  * needed (and thus be more expensive in fees), but breaks analysis techniques which assume the
  * coins selected are just sufficient to cover the payment amount ("unnecessary input" heuristic).
  *
@@ -449,7 +450,7 @@ util::Result<SelectionResult> CoinGrinder(std::vector<OutputGroup>& utxo_pool, c
 /** Select coins by Single Random Draw. OutputGroups are selected randomly from the eligible
  * outputs until the target is satisfied
  *
- * @param[in]  utxo_pool    The positive effective value OutputGroups eligible for selection
+ * @param[in]  utxo_pool    The OutputGroups with positive selection amount eligible for selection
  * @param[in]  target_value The target value to select for
  * @param[in]  rng The randomness source to shuffle coins
  * @param[in]  max_selection_weight The maximum allowed weight for a selection result to be valid

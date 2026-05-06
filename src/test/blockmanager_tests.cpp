@@ -207,8 +207,8 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
 
     // During reindex, the flat file block storage will not be written to.
     // UpdateBlockInfo will, however, update the blockfile metadata.
-    // Verify this behavior by attempting (and failing) to write block 3 data
-    // to block 2 location.
+    // Verify this behavior by updating block 3 metadata to point at block 2's
+    // location while leaving the file contents unchanged.
     CBlockFileInfo* block_data = blockman.GetBlockFileInfo(0);
     BOOST_CHECK_EQUAL(block_data->nBlocks, 2);
     blockman.UpdateBlockInfo(block3, /*nHeight=*/3, /*pos=*/pos2);

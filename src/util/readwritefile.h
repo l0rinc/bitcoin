@@ -11,12 +11,13 @@
 #include <string>
 #include <utility>
 
-/** Read full contents of a file and return them in a std::string.
+/** Read file contents into a std::string, up to maxsize bytes.
  * Returns a pair <status, string>.
  * If an error occurred, status will be false, otherwise status will be true and the data will be returned in string.
  *
- * @param maxsize Puts a maximum size limit on the file that is read. If the file is larger than this, truncated data
- *         (with len > maxsize) will be returned.
+ * @param filename Path of the file to read.
+ * @param maxsize Maximum number of bytes to read. If the file is larger than this, the returned string is truncated
+ *         to maxsize bytes.
  */
 std::pair<bool,std::string> ReadBinaryFile(const fs::path &filename, size_t maxsize=std::numeric_limits<size_t>::max());
 

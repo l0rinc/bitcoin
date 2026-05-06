@@ -44,14 +44,11 @@ ArgsManager gArgs;
 /**
  * Interpret a string argument as a boolean.
  *
- * The definition of LocaleIndependentAtoi<int>() requires that non-numeric string values
- * like "foo", return 0. This means that if a user unintentionally supplies a
- * non-integer argument here, the return value is always false. This means that
- * -foo=false does what the user probably expects, but -foo=true is well defined
- * but does not do what they probably expected.
- *
- * The return value of LocaleIndependentAtoi<int>(...) is zero when given input not
- * representable as an int.
+ * LocaleIndependentAtoi<int>() preserves atoi-like parsing. Non-numeric
+ * strings like "foo" return 0, strings with numeric prefixes like "1foo"
+ * parse as 1, and out-of-range numeric strings saturate. This means that
+ * -foo=false does what the user probably expects, but -foo=true is well
+ * defined and does not do what they probably expected.
  *
  * For a more extensive discussion of this topic (and a wide range of opinions
  * on the Right Way to change this code), see PR12713.

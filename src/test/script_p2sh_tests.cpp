@@ -60,7 +60,7 @@ BOOST_FIXTURE_TEST_SUITE(script_p2sh_tests, BasicTestingSetup)
 BOOST_AUTO_TEST_CASE(sign)
 {
     // Pay-to-script-hash looks like this:
-    // scriptSig:    <sig> <sig...> <serialized_script>
+    // scriptSig:    <data> <data...> <serialized_script>
     // scriptPubKey: HASH160 <hash> EQUAL
 
     // Test SignSignature() (and therefore the version of Solver() that signs transactions)
@@ -148,7 +148,7 @@ BOOST_AUTO_TEST_CASE(norecurse)
     BOOST_CHECK(!Verify(scriptSig, p2sh, true, err));
     BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_BAD_OPCODE, ScriptErrorString(err));
 
-    // Try to recur, and verification should succeed because
+    // Try to recurse, and verification should succeed because
     // the inner HASH160 <> EQUAL should only check the hash:
     CScript p2sh2 = GetScriptForDestination(ScriptHash(p2sh));
     CScript scriptSig2;

@@ -727,16 +727,18 @@ BOOST_AUTO_TEST_CASE(util_GetChainTypeString)
 // The test covers:
 //
 // - Combining different setting actions. Possible actions are: configuring a
-//   setting, negating a setting (adding "-no" prefix), and configuring/negating
-//   settings in a network section (adding "main." or "test." prefixes).
+//   setting, negating a setting (adding a "-no" prefix), and
+//   configuring/negating settings in network sections (for example with
+//   "main.", "test.", "testnet4.", or "signet." prefixes).
 //
 // - Combining settings from command line arguments and a config file.
 //
 // - Combining SoftSet and ForceSet calls.
 //
-// - Testing "main" and "testnet4" network values to make sure settings from network
-//   sections are applied and to check for mainnet-specific behaviors like
-//   inheriting settings from the default section.
+// - Testing "main", "test", "testnet4", and "signet" network values to make
+//   sure settings from network sections are applied, and to check
+//   mainnet-specific behavior like inheriting settings from the default
+//   section.
 //
 // - Testing network-specific settings like "-wallet", that may be ignored
 //   outside a network section, and non-network specific settings like "-server"

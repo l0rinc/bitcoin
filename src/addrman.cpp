@@ -24,9 +24,9 @@
 #include <cmath>
 #include <optional>
 
-/** Over how many buckets entries with tried addresses from a single group (/16 for IPv4) are spread */
+/** Over how many buckets entries with tried addresses from a single netgroup are spread */
 static constexpr uint32_t ADDRMAN_TRIED_BUCKETS_PER_GROUP{8};
-/** Over how many buckets entries with new addresses originating from a single group are spread */
+/** Over how many buckets entries with new addresses from a single source netgroup are spread */
 static constexpr uint32_t ADDRMAN_NEW_BUCKETS_PER_SOURCE_GROUP{64};
 /** Maximum number of times an address can occur in the new table */
 static constexpr int32_t ADDRMAN_NEW_BUCKETS_PER_ADDRESS{8};
@@ -773,7 +773,8 @@ std::pair<CAddress, NodeSeconds> AddrManImpl::Select_(bool new_only, const std::
             }
         }
 
-        // If the bucket is entirely empty, start over with a (likely) different one.
+        // If the bucket has no suitable entry, start over with a (likely)
+        // different one.
         if (i == ADDRMAN_BUCKET_SIZE) continue;
 
         // Find the entry to return.

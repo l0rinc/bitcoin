@@ -89,8 +89,7 @@ bool BaseIndex::Init()
     // May need reset if index is being restarted.
     m_interrupt.reset();
 
-    // m_chainstate member gives indexing code access to node internals. It is
-    // removed in followup https://github.com/bitcoin/bitcoin/pull/24230
+    // m_chainstate gives indexing code access to the chainstate being indexed.
     m_chainstate = WITH_LOCK(::cs_main,
         return &m_chain->context()->chainman->GetChainstateForIndexing());
     // Register to validation interface before setting the 'm_synced' flag, so that

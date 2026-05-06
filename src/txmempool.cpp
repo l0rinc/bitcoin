@@ -1044,7 +1044,7 @@ void CCoinsViewMemPool::Reset()
 
 size_t CTxMemPool::DynamicMemoryUsage() const {
     LOCK(cs);
-    // Estimate the overhead of mapTx to be 15 pointers + an allocation, as no exact formula for boost::multi_index_contained is implemented.
+    // Estimate the overhead of mapTx to be 15 pointers + an allocation, as no exact formula for boost::multi_index_container is implemented.
     return memusage::MallocUsage(sizeof(CTxMemPoolEntry) + 15 * sizeof(void*)) * mapTx.size() + memusage::DynamicUsage(mapNextTx) + memusage::DynamicUsage(mapDeltas) + memusage::DynamicUsage(txns_randomized) + cachedInnerUsage;
 }
 
@@ -1182,7 +1182,7 @@ void CTxMemPool::TrimToSize(size_t sizelimit, std::vector<COutPoint>* pvNoSpends
 }
 
 uint64_t CTxMemPool::CalculateDescendantMaximum(txiter entry) const {
-    // find parent with highest descendant count
+    // Find the root ancestor with the highest descendant count.
     std::vector<txiter> candidates;
     setEntries counted;
     candidates.push_back(entry);
@@ -1239,7 +1239,7 @@ std::vector<CTxMemPool::txiter> CTxMemPool::GatherClusters(const std::vector<Txi
     }
     // i = index of where the list of entries to process starts
     for (size_t i{0}; i < clustered_txs.size(); ++i) {
-        // DoS protection: if there are 500 or more entries to process, just quit.
+        // DoS protection: if more than 500 entries need processing, just quit.
         if (clustered_txs.size() > 500) return {};
         const txiter& tx_iter = clustered_txs.at(i);
         for (const auto& entries : {tx_iter->GetMemPoolParentsConst(), tx_iter->GetMemPoolChildrenConst()}) {
@@ -1308,14 +1308,14 @@ util::Result<std::pair<std::vector<FeeFrac>, std::vector<FeeFrac>>> CTxMemPool::
         return util::Error{Untranslated(err_string.value())};
     }
 
-    // new diagram will have chunks that consist of each ancestor of
-    // direct_conflicts that is at its own fee/size, along with the replacement
-    // tx/package at its own fee/size
+    // The new diagram will have chunks for any surviving parents of
+    // transactions being removed, along with the replacement tx/package at its
+    // own fee/size.
 
-    // old diagram will consist of the ancestors and descendants of each element of
-    // all_conflicts.  every such transaction will either be at its own feerate (followed
-    // by any descendant at its own feerate), or as a single chunk at the descendant's
-    // ancestor feerate.
+    // The old diagram will consist of the ancestors and descendants of each
+    // transaction being removed. Every such transaction will either be at its
+    // own feerate (followed by any descendant at its own feerate), or as a
+    // single chunk at the descendant's ancestor feerate.
 
     std::vector<FeeFrac> old_chunks;
     // Step 1: build the old diagram.
@@ -1363,10 +1363,11 @@ util::Result<std::pair<std::vector<FeeFrac>, std::vector<FeeFrac>>> CTxMemPool::
      * the conflicts, plus the proposed chunk
      */
 
-    // OLD - CON: Add any parents of direct conflicts that are not conflicted themselves
+    // OLD - CON: Add any parents of directly removed conflicts that are not
+    // conflicted themselves.
     for (auto direct_conflict : m_to_remove) {
-        // If a direct conflict has an ancestor that is not in all_conflicts,
-        // it can be affected by the replacement of the child.
+        // If a direct conflict has an ancestor that is not being removed, it
+        // can be affected by the replacement of the child.
         if (direct_conflict->GetMemPoolParentsConst().size() > 0) {
             // Grab the parent.
             const CTxMemPoolEntry& parent = direct_conflict->GetMemPoolParentsConst().begin()->get();

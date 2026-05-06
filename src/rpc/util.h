@@ -171,11 +171,11 @@ struct RPCArgOptions {
     std::string oneline_description{};   //!< Should be empty unless it is supposed to override the auto-generated summary line
     std::vector<std::string> type_str{}; //!< Should be empty unless it is supposed to override the auto-generated type strings. Vector length is either 0 or 2, m_opts.type_str.at(0) will override the type of the value in a key-value pair, m_opts.type_str.at(1) will override the type in the argument description.
     bool hidden{false};                  //!< For testing only
-    bool also_positional{false};         //!< If set allows a named-parameter field in an OBJ_NAMED_PARAM options object
+    bool also_positional{false};         //!< If set allows a named-parameter field in an OBJ_NAMED_PARAMS options object
                                          //!< to have the same name as a top-level parameter. By default the RPC
                                          //!< framework disallows this, because if an RPC request passes the value by
                                          //!< name, it is assigned to top-level parameter position, not to the options
-                                         //!< position, defeating the purpose of using OBJ_NAMED_PARAMS instead OBJ for
+                                         //!< position, defeating the purpose of using OBJ_NAMED_PARAMS instead of OBJ for
                                          //!< that option. But sometimes it makes sense to allow less-commonly used
                                          //!< options to be passed by name only, and more commonly used options to be
                                          //!< passed by name or position, so the RPC framework allows this as long as
@@ -193,7 +193,7 @@ struct RPCArg {
         OBJ_NAMED_PARAMS, //!< Special type that behaves almost exactly like
                           //!< OBJ, defining an options object with a list of
                           //!< pre-defined keys. The only difference between OBJ
-                          //!< and OBJ_NAMED_PARAMS is that OBJ_NAMED_PARMS
+                          //!< and OBJ_NAMED_PARAMS is that OBJ_NAMED_PARAMS
                           //!< also allows the keys to be passed as top-level
                           //!< named parameters, as a more convenient way to pass
                           //!< options to the RPC method without nesting them.
@@ -519,7 +519,7 @@ void PushWarnings(const std::vector<bilingual_str>& warnings, UniValue& obj);
 
 std::vector<RPCResult> ScriptPubKeyDoc();
 
-/***
+/**
  * Get the target for a given block index.
  *
  * @param[in] blockindex    the block

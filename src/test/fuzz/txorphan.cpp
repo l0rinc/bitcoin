@@ -170,7 +170,7 @@ FUZZ_TARGET(txorphan, .init = initialize_orphanage)
                 [&] {
                     bool have_tx = orphanage->HaveTx(tx->GetWitnessHash());
                     bool have_tx_and_peer{orphanage->HaveTxFromPeer(wtxid, peer_id)};
-                    // EraseTx should return 0 if m_orphans doesn't have the tx
+                    // EraseTx should return false if m_orphans doesn't have the tx
                     {
                         auto bytes_from_peer_before{orphanage->UsageByPeer(peer_id)};
                         Assert(have_tx == orphanage->EraseTx(tx->GetWitnessHash()));

@@ -445,7 +445,8 @@ bool Version::RecordReadSample(Slice internal_key) {
   // overwrites and deletions?  Should we have another mechanism for
   // finding such files?
   if (state.matches >= 2) {
-    // 1MB cost is about 1 seek (see comment in Builder::Apply).
+    // Charge one allowed seek to the first matching file. See the
+    // seek-to-compaction sizing rationale in Builder::Apply().
     return UpdateStats(state.stats);
   }
   return false;
@@ -1298,8 +1299,8 @@ Compaction* VersionSet::PickCompaction() {
   return c;
 }
 
-// Finds the largest key in a vector of files. Returns true if files it not
-// empty.
+// Finds the largest key in a vector of files. Returns true if the file list is
+// not empty.
 bool FindLargestKey(const InternalKeyComparator& icmp,
                     const std::vector<FileMetaData*>& files,
                     InternalKey* largest_key) {
@@ -1316,7 +1317,7 @@ bool FindLargestKey(const InternalKeyComparator& icmp,
   return true;
 }
 
-// Finds minimum file b2=(l2, u2) in level file for which l2 > u1 and
+// Finds the minimum file b2=(l2, u2) in level_files for which l2 > u1 and
 // user_key(l2) = user_key(u1)
 FileMetaData* FindSmallestBoundaryFile(
     const InternalKeyComparator& icmp,
@@ -1343,7 +1344,7 @@ FileMetaData* FindSmallestBoundaryFile(
 // file b2 (known as a boundary file) it adds it to |compaction_files| and then
 // searches again using this new upper bound.
 //
-// If there are two blocks, b1=(l1, u1) and b2=(l2, u2) and
+// If there are two files, b1=(l1, u1) and b2=(l2, u2) and
 // user_key(u1) = user_key(l2), and if we compact b1 but not b2 then a
 // subsequent get operation will yield an incorrect result because it will
 // return the record from b2 in level i rather than from b1 because it searches

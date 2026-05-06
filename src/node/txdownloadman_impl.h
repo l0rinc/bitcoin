@@ -107,12 +107,12 @@ public:
      * We use this to avoid requesting transactions that have already been
      * confirmed.
      *
-     * Blocks don't typically have more than 4000 transactions, so this should
-     * be at least six blocks (~1 hr) worth of transactions that we can store,
-     * inserting both a txid and wtxid for every observed transaction.
-     * If the number of transactions appearing in a block goes up, or if we are
-     * seeing getdata requests more than an hour after initial announcement, we
-     * can increase this number.
+     * This stores 48,000 filter entries, enough for 24,000 confirmed
+     * transactions when we insert both a txid and wtxid for every observed
+     * transaction. That is intended to cover about an hour of recently
+     * confirmed transactions. If we start seeing getdata requests much later
+     * than the initial announcement, or need to retain more confirmed
+     * transactions, we can increase this number.
      * The false positive rate of 1/1M should come out to less than 1
      * transaction per day that would be inadvertently ignored (which is the
      * same probability that we have in the reject filter).

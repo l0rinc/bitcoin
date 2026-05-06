@@ -98,10 +98,9 @@ static void Reorg(const ReorgTxns& reorg)
     disconnectpool.clear();
 }
 
-/** Add transactions from DisconnectedBlockTransactions, remove all but one (the disconnected
- * block's coinbase transaction) of them, and then pop from the front until empty. This is a reorg
- * in which all of the non-coinbase transactions in the disconnected chain also exist in the new
- * chain. */
+/** Add transactions from DisconnectedBlockTransactions and remove all but one of them.
+ * This simulates a reorg in which all but one transaction from the disconnected block are
+ * reconfirmed in the new chain. */
 static void AddAndRemoveDisconnectedBlockTransactionsAll(benchmark::Bench& bench)
 {
     const auto chains{CreateBlocks(/*num_not_shared=*/1)};
@@ -112,7 +111,7 @@ static void AddAndRemoveDisconnectedBlockTransactionsAll(benchmark::Bench& bench
     });
 }
 
-/** Add transactions from DisconnectedBlockTransactions, remove 90% of them, and then pop from the front until empty. */
+/** Add transactions from DisconnectedBlockTransactions and remove 90% of them. */
 static void AddAndRemoveDisconnectedBlockTransactions90(benchmark::Bench& bench)
 {
     const auto chains{CreateBlocks(/*num_not_shared=*/BLOCK_VTX_COUNT_10PERCENT)};
@@ -123,7 +122,7 @@ static void AddAndRemoveDisconnectedBlockTransactions90(benchmark::Bench& bench)
     });
 }
 
-/** Add transactions from DisconnectedBlockTransactions, remove 10% of them, and then pop from the front until empty. */
+/** Add transactions from DisconnectedBlockTransactions and remove 10% of them. */
 static void AddAndRemoveDisconnectedBlockTransactions10(benchmark::Bench& bench)
 {
     const auto chains{CreateBlocks(/*num_not_shared=*/BLOCK_VTX_COUNT - BLOCK_VTX_COUNT_10PERCENT)};

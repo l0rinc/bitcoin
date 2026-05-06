@@ -120,20 +120,15 @@ struct LEVELDB_EXPORT Options {
   // Default: kSnappyCompression, which gives lightweight but fast
   // compression.
   //
-  // Typical speeds of kSnappyCompression on an Intel(R) Core(TM)2 2.4GHz:
-  //    ~200-500MB/s compression
-  //    ~400-800MB/s decompression
-  // Note that these speeds are significantly faster than most
-  // persistent storage speeds, and therefore it is typically never
-  // worth switching to kNoCompression.  Even if the input data is
-  // incompressible, the kSnappyCompression implementation will
-  // efficiently detect that and will switch to uncompressed mode.
+  // Even if the input data is incompressible, the kSnappyCompression
+  // implementation efficiently detects that and stores such blocks in
+  // uncompressed form.
   CompressionType compression = kSnappyCompression;
 
   // EXPERIMENTAL: If true, append to existing MANIFEST and log files
   // when a database is opened.  This can significantly speed up open.
   //
-  // Default: currently false, but may become true later.
+  // Default: false.
   bool reuse_logs = false;
 
   // If non-null, use the specified filter policy to reduce disk reads.

@@ -37,8 +37,8 @@ const QString BITCOIN_IPC_PREFIX("bitcoin:");
 
 //
 // Create a name that is unique for:
-//  testnet / non-testnet
-//  data directory
+//  the selected chain
+//  the data directory
 //
 static QString ipcServerName()
 {
@@ -46,7 +46,7 @@ static QString ipcServerName()
 
     // Append a simple hash of the datadir
     // Note that gArgs.GetDataDirNet() returns a different path
-    // for -testnet versus main net
+    // for each chain's network-specific data directory
     QString ddir(GUIUtil::PathToQString(gArgs.GetDataDirNet()));
     name.append(QString::number(qHash(ddir)));
 
@@ -63,7 +63,7 @@ static QSet<QString> savedPaymentRequests;
 //
 // Sending to the server is done synchronously, at startup.
 // If the server isn't already running, startup continues,
-// and the items in savedPaymentRequest will be handled
+// and the items in savedPaymentRequests will be handled
 // when uiReady() is called.
 //
 // Warning: ipcSendCommandLine() is called early in init,
@@ -86,7 +86,7 @@ void PaymentServer::ipcParseCommandLine(int argc, char* argv[])
 //
 // Sending to the server is done synchronously, at startup.
 // If the server isn't already running, startup continues,
-// and the items in savedPaymentRequest will be handled
+// and the items in savedPaymentRequests will be handled
 // when uiReady() is called.
 //
 bool PaymentServer::ipcSendCommandLine()

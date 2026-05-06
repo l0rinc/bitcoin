@@ -496,7 +496,7 @@ static void secp256k1_modinv32_update_fg_30(secp256k1_modinv32_signed30 *f, secp
  *
  * Version that operates on a variable number of limbs in f and g.
  *
- * This implements the update_fg function from the explanation in modinv64_impl.h.
+ * This implements the update_fg function from the explanation.
  */
 static void secp256k1_modinv32_update_fg_30_var(int len, secp256k1_modinv32_signed30 *f, secp256k1_modinv32_signed30 *g, const secp256k1_modinv32_trans2x2 *t) {
     const int32_t M30 = (int32_t)(UINT32_MAX >> 2);
@@ -510,7 +510,7 @@ static void secp256k1_modinv32_update_fg_30_var(int len, secp256k1_modinv32_sign
     gi = g->v[0];
     cf = (int64_t)u * fi + (int64_t)v * gi;
     cg = (int64_t)q * fi + (int64_t)r * gi;
-    /* Verify that the bottom 62 bits of the result are zero, and then throw them away. */
+    /* Verify that the bottom 30 bits of the result are zero, and then throw them away. */
     VERIFY_CHECK(((int32_t)cf & M30) == 0); cf >>= 30;
     VERIFY_CHECK(((int32_t)cg & M30) == 0); cg >>= 30;
     /* Now iteratively compute limb i=1..len of t*[f,g], and store them in output limb i-1 (shifting

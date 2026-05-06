@@ -118,8 +118,8 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_block_doublespend, Dersig100Setup)
 // CHECKLOCKTIMEVERIFY (or CHECKSEQUENCEVERIFY), but the script does contain
 // OP_CHECKLOCKTIMEVERIFY (or OP_CHECKSEQUENCEVERIFY), then script execution
 // should fail.
-// Capture this interaction with the upgraded_nop argument: set it when evaluating
-// any script flag that is implemented as an upgraded NOP code.
+// This helper exercises that interaction by sampling flag combinations that
+// include DISCOURAGE_UPGRADABLE_NOPS.
 static void ValidateCheckInputsForAllFlags(const CTransaction &tx, uint32_t failing_flags, bool add_to_cache, CCoinsViewCache& active_coins_tip, ValidationCache& validation_cache) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
 {
     PrecomputedTransactionData txdata;

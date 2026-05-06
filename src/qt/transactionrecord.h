@@ -94,7 +94,7 @@ public:
     {
     }
 
-    /** Decompose CWallet transaction to model transaction records.
+    /** Decompose a wallet transaction into model transaction records.
      */
     static bool showTransaction();
     static QList<TransactionRecord> decomposeTransaction(const interfaces::WalletTx& wtx);

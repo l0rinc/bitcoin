@@ -33,12 +33,11 @@
 namespace ipc {
 namespace capnp {
 //! Construct a ParamStream wrapping a data stream with serialization parameters
-//! needed to pass transaction objects between bitcoin processes.
-//! In the future, more params may be added here to serialize other objects that
-//! require serialization parameters. Params should just be chosen to serialize
-//! objects completely and ensure that serializing and deserializing objects
-//! with the specified parameters produces equivalent objects. It's also
-//! harmless to specify serialization parameters here that are not used.
+//! needed to pass transaction objects between bitcoin processes. If more
+//! parameterized object types are serialized through this helper, choose params
+//! that fully preserve object state across serialization and deserialization.
+//! It's also harmless to specify serialization parameters here that are not
+//! used.
 template <typename S>
 auto Wrap(S& s)
 {

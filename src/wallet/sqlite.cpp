@@ -293,7 +293,7 @@ void SQLiteDatabase::Open()
     SetPragma(m_db, "fullfsync", "true", "Failed to enable fullfsync");
 
     if (m_use_unsafe_sync) {
-        // Use normal synchronous mode for the journal
+        // Disable synchronous mode for the database.
         LogPrintf("WARNING SQLite is configured to not wait for data to be flushed to disk. Data loss and corruption may occur.\n");
         SetPragma(m_db, "synchronous", "OFF", "Failed to set synchronous mode to OFF");
     }
@@ -318,7 +318,7 @@ void SQLiteDatabase::Open()
         throw std::runtime_error(strprintf("SQLiteDatabase: Failed to execute statement to check table existence: %s\n", sqlite3_errstr(ret)));
     }
 
-    // Do the db setup things because the table doesn't exist only when we are creating a new wallet
+    // If the main table does not exist, initialize a fresh wallet schema.
     if (!table_exists) {
         ret = sqlite3_exec(m_db, "CREATE TABLE main(key BLOB PRIMARY KEY NOT NULL, value BLOB NOT NULL)", nullptr, nullptr, nullptr);
         if (ret != SQLITE_OK) {

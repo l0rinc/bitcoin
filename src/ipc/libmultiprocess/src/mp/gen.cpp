@@ -128,15 +128,15 @@ static bool BoxedType(const ::capnp::Type& type)
 // src_file is path to .capnp file to generate stub code from.
 //
 // src_prefix can be used to generate outputs in a different directory than the
-// source directory. For example if src_file is "/a/b/c/d/file.canp", and
+// source directory. For example if src_file is "/a/b/c/d/file.capnp", and
 // src_prefix is "/a/b", then output files will be "c/d/file.capnp.h"
-// "c/d/file.capnp.cxx" "c/d/file.capnp.proxy.h", etc. This is equivalent to
+// "c/d/file.capnp.c++" "c/d/file.capnp.proxy.h", etc. This is equivalent to
 // the capnp "--src-prefix" option (see "capnp help compile").
 //
 // include_prefix can be used to control relative include paths used in
-// generated files. For example if src_file is "/a/b/c/d/file.canp" and
+// generated files. For example if src_file is "/a/b/c/d/file.capnp" and
 // include_prefix is "/a/b/c" include lines like
-// "#include <d/file.capnp.proxy.h>" "#include <d/file.capnp.proxy-types.h>"i
+// "#include <d/file.capnp.proxy.h>" "#include <d/file.capnp.proxy-types.h>"
 // will be generated.
 static void Generate(kj::StringPtr src_prefix,
     kj::StringPtr include_prefix,

@@ -17,9 +17,7 @@ FUZZ_TARGET(eval_script)
         if (fuzzed_data_provider.remaining_bytes() != 0) {
             return fuzzed_data_provider.ConsumeRemainingBytes<uint8_t>();
         } else {
-            // Avoid UBSan warning:
-            //   test/fuzz/FuzzedDataProvider.h:212:17: runtime error: null pointer passed as argument 1, which is declared to never be null
-            //   /usr/include/string.h:43:28: note: nonnull attribute specified here
+            // Avoid a UBSan warning triggered by ConsumeRemainingBytes() on empty input.
             return std::vector<uint8_t>();
         }
     }();

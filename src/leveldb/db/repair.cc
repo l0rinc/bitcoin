@@ -10,8 +10,8 @@
 // (3) We generate descriptor contents:
 //      - log number is set to zero
 //      - next-file-number is set to 1 + largest file number we found
-//      - last-sequence-number is set to largest sequence# found across
-//        all tables (see 2c)
+//      - last-sequence-number is set to the largest sequence# found across
+//        all tables (see 2b)
 //      - compaction pointers are cleared
 //      - every table file is added at level 0
 //
@@ -166,11 +166,10 @@ class Repairer {
     reporter.env = env_;
     reporter.info_log = options_.info_log;
     reporter.lognum = log;
-    // We intentionally make log::Reader do checksumming so that
-    // corruptions cause entire commits to be skipped instead of
-    // propagating bad information (like overly large sequence
-    // numbers).
-    log::Reader reader(lfile, &reporter, false /*do not checksum*/,
+    // We intentionally skip log::Reader checksumming here so corrupted records
+    // can still be replayed as far as possible instead of discarding entire
+    // commits due to checksum failures.
+    log::Reader reader(lfile, &reporter, false /*skip checksum verification*/,
                        0 /*initial_offset*/);
 
     // Read all the records and add to a memtable

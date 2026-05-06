@@ -42,6 +42,9 @@ int TokenPipeEnd::TokenWrite(uint8_t token)
         if (result < 0) {
             // Failure. It's possible that the write was interrupted by a signal,
             // in that case retry.
+            if (errno == EPIPE) {
+                return TS_EOS;
+            }
             if (errno != EINTR) {
                 return TS_ERR;
             }

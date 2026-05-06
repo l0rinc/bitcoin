@@ -256,10 +256,10 @@ public:
     // Return whether HD enabled.
     virtual bool hdEnabled() = 0;
 
-    // Return whether the wallet is blank.
+    // Return whether the wallet can provide new addresses.
     virtual bool canGetAddresses() = 0;
 
-    // Return whether private keys enabled.
+    // Return whether private keys are disabled.
     virtual bool privateKeysDisabled() = 0;
 
     // Return whether the wallet contains a Taproot scriptPubKeyMan
@@ -301,7 +301,7 @@ public:
     using TransactionChangedFn = std::function<void(const Txid& txid, ChangeType status)>;
     virtual std::unique_ptr<Handler> handleTransactionChanged(TransactionChangedFn fn) = 0;
 
-    //! Register handler for keypool changed messages.
+    //! Register handler for address-availability changed messages.
     using CanGetAddressesChangedFn = std::function<void()>;
     virtual std::unique_ptr<Handler> handleCanGetAddressesChanged(CanGetAddressesChangedFn fn) = 0;
 
@@ -330,7 +330,7 @@ public:
     //! Migrate a wallet
     virtual util::Result<WalletMigrationResult> migrateWallet(const std::string& name, const SecureString& passphrase) = 0;
 
-    //! Returns true if wallet stores encryption keys
+    //! Returns true if wallet has master encryption keys
     virtual bool isEncrypted(const std::string& wallet_name) = 0;
 
     //! Return available wallets in wallet directory.

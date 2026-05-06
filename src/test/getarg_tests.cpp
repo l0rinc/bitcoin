@@ -181,7 +181,7 @@ BOOST_AUTO_TEST_CASE(boolarg)
     BOOST_CHECK(local_args.GetBoolArg("-foo", false));
     BOOST_CHECK(local_args.GetBoolArg("-foo", true));
 
-    // New 0.6 feature: auto-map -nosomething to !-something:
+    // Auto-map -nosomething to !-something.
     ResetArgs(local_args, "-nofoo");
     BOOST_CHECK(!local_args.GetBoolArg("-foo", false));
     BOOST_CHECK(!local_args.GetBoolArg("-foo", true));
@@ -202,7 +202,7 @@ BOOST_AUTO_TEST_CASE(boolarg)
     BOOST_CHECK(local_args.GetBoolArg("-foo", false));
     BOOST_CHECK(local_args.GetBoolArg("-foo", true));
 
-    // New 0.6 feature: treat -- same as -:
+    // Treat -- the same as -.
     ResetArgs(local_args, "--foo=1");
     BOOST_CHECK(local_args.GetBoolArg("-foo", false));
     BOOST_CHECK(local_args.GetBoolArg("-foo", true));
@@ -362,13 +362,12 @@ BOOST_AUTO_TEST_CASE(patharg)
     ResetArgs(local_args, "-dir=user/.bitcoin/.//");
     BOOST_CHECK_EQUAL(local_args.GetPathArg("-dir"), relative_path);
 
-    // Check negated and default argument handling. Specifying an empty argument
-    // is the same as not specifying the argument. This is convenient for
-    // scripting so later command line arguments can override earlier command
-    // line arguments or bitcoin.conf values. Currently the -dir= case cannot be
-    // distinguished from -dir case with no assignment, but #16545 would add the
-    // ability to distinguish these in the future (and treat the no-assign case
-    // like an imperative command or an error).
+    // Check negated and default argument handling. Specifying an empty
+    // argument is the same as not specifying the argument. This is convenient
+    // for scripting so later command line arguments can override earlier
+    // command line arguments or bitcoin.conf values. In the current parsing
+    // logic, -dir= and bare -dir are treated the same here and both fall back
+    // to the default path.
     ResetArgs(local_args, "");
     BOOST_CHECK_EQUAL(local_args.GetPathArg("-dir", "default"), fs::path{"default"});
     ResetArgs(local_args, "-dir=override");

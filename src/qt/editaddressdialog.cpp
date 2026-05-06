@@ -103,10 +103,10 @@ void EditAddressDialog::accept()
         switch(model->getEditStatus())
         {
         case AddressTableModel::OK:
-            // Failed with unknown reason. Just reject.
+            // Failed with unknown reason. Leave the dialog open.
             break;
         case AddressTableModel::NO_CHANGES:
-            // No changes were made during edit operation. Just reject.
+            // No changes were made during edit operation. Leave the dialog open.
             break;
         case AddressTableModel::INVALID_ADDRESS:
             QMessageBox::warning(this, windowTitle(),

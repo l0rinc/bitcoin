@@ -19,7 +19,7 @@ void CustomBuildField(TypeList<LocalType>, Priority<2>, InvokeContext& invoke_co
     CustomBuildMessage(invoke_context, value, std::move(output.init()));
 }
 
-//! Overload CustomReadField to serialize objects that have CustomReadMessage
+//! Overload CustomReadField to read objects that have CustomReadMessage
 //! overloads. Defining a CustomReadMessage overload is simpler than defining a
 //! CustomReadField overload because it only requires defining a normal
 //! function, not a template function, but less flexible.
@@ -46,7 +46,7 @@ template <typename Accessor>
     return {};
 }
 
-//! Overload CustomPassField to serialize objects that have CustomPassMessage
+//! Overload CustomPassField to pass objects that have CustomPassMessage
 //! overloads. Defining a CustomPassMessage overload is simpler than defining a
 //! CustomPassField overload because it only requires defining a normal
 //! function, not a template function, but less flexible.

@@ -89,7 +89,7 @@ public:
     //! If false, only safe inputs will be used
     bool m_include_unsafe_inputs = false;
     //! If true, the selection process can add extra unselected inputs from the wallet
-    //! while requires all selected inputs be used
+    //! while still requiring all selected inputs to be used
     bool m_allow_other_inputs = true;
     //! Override automatic min/max checks on fee, m_feerate must be set if true
     bool fOverrideFeeRate = false;

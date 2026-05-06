@@ -96,7 +96,7 @@ void BenchTxGraphTrim(benchmark::Bench& bench)
             // Unless this is the last dependency being added, remove from top_components, as
             // the component will be merged with that one.
             if (dep < deps - 1) {
-                // Move entry top the back.
+                // Move entry to the back.
                 if (idx != top_components.size() - 1) std::swap(top_components.back(), top_components[idx]);
                 // And pop it.
                 top_components.pop_back();
@@ -115,7 +115,7 @@ void BenchTxGraphTrim(benchmark::Bench& bench)
     });
 
     assert(!graph->IsOversized(TxGraph::Level::TOP));
-    // At least 99% of chains must survive.
+    // At least 99% of the top-chain transactions must survive.
     assert(graph->GetTransactionCount(TxGraph::Level::TOP) >= (NUM_TOP_CHAINS * NUM_TX_PER_TOP_CHAIN * 99) / 100);
 }
 

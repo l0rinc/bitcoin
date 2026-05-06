@@ -519,14 +519,14 @@ fs::path static StartupShortcutPath()
     ChainType chain = gArgs.GetChainType();
     if (chain == ChainType::MAIN)
         return GetSpecialFolderPath(CSIDL_STARTUP) / "Bitcoin.lnk";
-    if (chain == ChainType::TESTNET) // Remove this special case when testnet CBaseChainParams::DataDir() is incremented to "testnet4"
+    if (chain == ChainType::TESTNET) // Preserve the historical shortcut name instead of switching to "Bitcoin (test).lnk".
         return GetSpecialFolderPath(CSIDL_STARTUP) / "Bitcoin (testnet).lnk";
     return GetSpecialFolderPath(CSIDL_STARTUP) / fs::u8path(strprintf("Bitcoin (%s).lnk", ChainTypeToString(chain)));
 }
 
 bool GetStartOnSystemStartup()
 {
-    // check for Bitcoin*.lnk
+    // Check for the expected startup shortcut.
     return fs::exists(StartupShortcutPath());
 }
 
@@ -553,7 +553,7 @@ bool SetStartOnSystemStartup(bool fAutoStart)
 
             // Start client minimized
             QString strArgs = "-min";
-            // Set -testnet /-regtest options
+            // Set the chain option.
             strArgs += QString::fromStdString(strprintf(" -chain=%s", gArgs.GetChainTypeString()));
 
             // Set the path to the shortcut target

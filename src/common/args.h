@@ -186,15 +186,13 @@ protected:
     [[nodiscard]] bool ReadConfigFiles(std::string& error, bool ignore_invalid_keys = false);
 
     /**
-     * Log warnings for options in m_section_only_args when
-     * they are specified in the default section but not overridden
-     * on the command line or in a network-specific section in the
-     * config file.
+     * Return network-only args that are set only in the default config
+     * section and therefore may be ignored for the selected network.
      */
     std::set<std::string> GetUnsuitableSectionOnlyArgs() const;
 
     /**
-     * Log warnings for unrecognized section names in the config file.
+     * Return unrecognized section names found in the config file.
      */
     std::list<SectionInfo> GetUnrecognizedSections() const;
 
@@ -239,36 +237,33 @@ protected:
     void ClearPathCache();
 
     /**
-     * Return a vector of strings of the given argument
+     * Return all resolved non-negated values of the given setting as strings.
      *
      * @param strArg Argument to get (e.g. "-foo")
-     * @return command-line arguments
      */
     std::vector<std::string> GetArgs(const std::string& strArg) const;
 
     /**
-     * Return true if the given argument has been manually set
+     * Return true if the given setting resolves to any value.
      *
      * @param strArg Argument to get (e.g. "-foo")
-     * @return true if the argument has been set
      */
     bool IsArgSet(const std::string& strArg) const;
 
     /**
-     * Return true if the argument was originally passed as a negated option,
-     * i.e. -nofoo.
+     * Return true if the resolved setting value is boolean false.
+     * For command-line and config-file options, this corresponds to an
+     * explicit negation like -nofoo.
      *
      * @param strArg Argument to get (e.g. "-foo")
-     * @return true if the argument was passed negated
      */
     bool IsArgNegated(const std::string& strArg) const;
 
     /**
-     * Return string argument or default value
+     * Return the resolved setting value as a string, or the default value.
      *
      * @param strArg Argument to get (e.g. "-foo")
      * @param strDefault (e.g. "1")
-     * @return command-line argument or default value
      */
     std::string GetArg(const std::string& strArg, const std::string& strDefault) const;
     std::optional<std::string> GetArg(const std::string& strArg) const;
@@ -278,29 +273,29 @@ protected:
      *
      * @param arg Argument to get a path from (e.g., "-datadir", "-blocksdir" or "-walletdir")
      * @param default_value Optional default value to return instead of the empty path.
-     * @return normalized path if argument is set, with redundant "." and ".."
+     * @return normalized path if argument is set and not negated, with redundant "." and ".."
      * path components and trailing separators removed (see patharg unit test
-     * for examples or implementation for details). If argument is empty or not
-     * set, default_value is returned unchanged.
+     * for examples or implementation for details). If argument is negated,
+     * the empty path is returned. If argument is empty or not set,
+     * default_value is returned unchanged.
      */
     fs::path GetPathArg(std::string arg, const fs::path& default_value = {}) const;
 
     /**
-     * Return integer argument or default value
+     * Return the resolved setting value as an integer, or the default value.
      *
      * @param strArg Argument to get (e.g. "-foo")
      * @param nDefault (e.g. 1)
-     * @return command-line argument (0 if invalid number) or default value
+     * @return resolved setting value (0 if an invalid string is parsed) or default value
      */
     int64_t GetIntArg(const std::string& strArg, int64_t nDefault) const;
     std::optional<int64_t> GetIntArg(const std::string& strArg) const;
 
     /**
-     * Return boolean argument or default value
+     * Return the resolved setting value as a boolean, or the default value.
      *
      * @param strArg Argument to get (e.g. "-foo")
      * @param fDefault (true or false)
-     * @return command-line argument or default value
      */
     bool GetBoolArg(const std::string& strArg, bool fDefault) const;
     std::optional<bool> GetBoolArg(const std::string& strArg) const;

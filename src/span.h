@@ -107,7 +107,9 @@ concept BasicByte = requires { UCharCast(std::span<B>{}.data()); };
 // Helper function to safely convert a span to a span<[const] unsigned char>.
 template <typename T, size_t N> constexpr auto UCharSpanCast(std::span<T, N> s) { return std::span<std::remove_pointer_t<decltype(UCharCast(s.data()))>, N>{UCharCast(s.data()), s.size()}; }
 
-/** Like the std::span constructor, but for (const) unsigned char member types only. Only works for (un)signed char containers. */
+/** Like the std::span constructor, but returns a span of `(const) unsigned char`
+ * from containers of `char`, `signed char`, `unsigned char`, or `std::byte`.
+ */
 template <typename V> constexpr auto MakeUCharSpan(const V& v) -> decltype(UCharSpanCast(std::span{v})) { return UCharSpanCast(std::span{v}); }
 template <typename V> constexpr auto MakeWritableUCharSpan(V&& v) -> decltype(UCharSpanCast(std::span{std::forward<V>(v)})) { return UCharSpanCast(std::span{std::forward<V>(v)}); }
 

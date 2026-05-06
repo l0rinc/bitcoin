@@ -190,8 +190,7 @@ static RPCHelpMan getpeerinfo()
                                                       "of unknown message types are listed under '"+NET_MESSAGE_TYPE_OTHER+"'."}
                     }},
                     {RPCResult::Type::STR, "connection_type", "Type of connection: \n" + Join(CONNECTION_TYPE_DOC, ",\n") + ".\n"
-                                                              "Please note this output is unlikely to be stable in upcoming releases as we iterate to\n"
-                                                              "best capture connection behaviors."},
+                                                              "These categories are implementation details and may evolve as connection behavior is refined."},
                     {RPCResult::Type::STR, "transport_protocol_type", "Type of transport protocol: \n" + Join(TRANSPORT_TYPE_DOC, ",\n") + ".\n"},
                     {RPCResult::Type::STR, "session_id", "The session ID for this connection, or \"\" if there is none (\"v2\" transport protocol only).\n"},
                 }},
@@ -501,7 +500,7 @@ static RPCHelpMan getaddednodeinfo()
                         {
                             {RPCResult::Type::STR, "addednode", "The node IP address or name (as provided to addnode)"},
                             {RPCResult::Type::BOOL, "connected", "If connected"},
-                            {RPCResult::Type::ARR, "addresses", "Only when connected = true",
+                            {RPCResult::Type::ARR, "addresses", "Connection details. Empty when connected = false",
                             {
                                 {RPCResult::Type::OBJ, "", "",
                                 {
@@ -712,7 +711,7 @@ static RPCHelpMan getnetworkinfo()
     }
     obj.pushKV("networks",      GetNetworksInfo());
     if (node.mempool) {
-        // Those fields can be deprecated, to be replaced by the getmempoolinfo fields
+        // These legacy fields duplicate values exposed by getmempoolinfo.
         obj.pushKV("relayfee", ValueFromAmount(node.mempool->m_opts.min_relay_feerate.GetFeePerK()));
         obj.pushKV("incrementalfee", ValueFromAmount(node.mempool->m_opts.incremental_relay_feerate.GetFeePerK()));
     }
@@ -1148,9 +1147,9 @@ UniValue AddrmanTableToJSON(const std::vector<std::pair<AddrInfo, AddressPositio
         AddressPosition location = e.second;
         std::ostringstream key;
         key << location.bucket << "/" << location.position;
-        // Address manager tables have unique entries so there is no advantage
-        // in using UniValue::pushKV, which checks if the key already exists
-        // in O(N). UniValue::pushKVEnd is used instead which currently is O(1).
+        // Address manager tables have unique entries, so there is no need for
+        // the duplicate-key checks performed by UniValue::pushKV. Use the
+        // append-only helper instead.
         table.pushKVEnd(key.str(), AddrmanEntryToJSON(info, connman));
     }
     return table;
@@ -1159,7 +1158,7 @@ UniValue AddrmanTableToJSON(const std::vector<std::pair<AddrInfo, AddressPositio
 static RPCHelpMan getrawaddrman()
 {
     return RPCHelpMan{"getrawaddrman",
-        "EXPERIMENTAL warning: this call may be changed in future releases.\n"
+        "EXPERIMENTAL warning: this call and its output format may change.\n"
         "\nReturns information on all address manager entries for the new and tried tables.\n",
         {},
         RPCResult{

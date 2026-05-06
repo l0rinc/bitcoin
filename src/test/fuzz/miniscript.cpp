@@ -308,7 +308,7 @@ const struct KeyComparator {
     }
 } KEY_COMP;
 
-// A dummy scriptsig to pass to VerifyScript (we always use Segwit v0).
+// A dummy scriptSig to pass to VerifyScript for witness spends.
 const CScript DUMMY_SCRIPTSIG;
 
 //! Construct a miniscript node as a shared_ptr.

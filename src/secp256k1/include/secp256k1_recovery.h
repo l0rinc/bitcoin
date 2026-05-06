@@ -14,8 +14,8 @@ extern "C" {
  *  guaranteed to be portable between different platforms or versions. It is
  *  however guaranteed to be 65 bytes in size, and can be safely copied/moved.
  *  If you need to convert to a format suitable for storage or transmission, use
- *  the secp256k1_ecdsa_signature_serialize_* and
- *  secp256k1_ecdsa_signature_parse_* functions.
+ *  the secp256k1_ecdsa_recoverable_signature_serialize_compact and
+ *  secp256k1_ecdsa_recoverable_signature_parse_compact functions.
  *
  *  Furthermore, it is guaranteed that identical signatures (including their
  *  recoverability) will have identical representation, so they can be

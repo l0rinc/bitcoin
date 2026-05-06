@@ -28,8 +28,8 @@
  * The following (classes of) functions interact with that state by mixing in new
  * entropy, and optionally extracting random output from it:
  *
- * - GetRandBytes, GetRandHash, GetRandDur, as well as construction of FastRandomContext
- *   objects, perform 'fast' seeding, consisting of mixing in:
+ * - GetRandBytes, GetRandHash, and the first use of default-constructed
+ *   FastRandomContext objects perform 'fast' seeding, consisting of mixing in:
  *   - A stack pointer (indirectly committing to calling thread and call stack)
  *   - A high-precision timestamp (rdtsc when available, c++ high_resolution_clock otherwise)
  *   - 64 bits from the hardware RNG (rdrand) when available.
@@ -133,8 +133,8 @@ void GetStrongRandBytes(std::span<unsigned char> bytes) noexcept;
  *
  * In this section, 3 classes are defined:
  * - RandomMixin:            a base class that adds functionality to all RNG classes.
- * - FastRandomContext:      a cryptographic RNG (seeded through GetRandBytes in its default
- *                           constructor).
+ * - FastRandomContext:      a cryptographic RNG (seeded from GetRandHash() on first use in
+ *                           its default constructor).
  * - InsecureRandomContext:  a non-cryptographic, very fast, RNG.
  */
 
@@ -391,7 +391,7 @@ private:
     void RandomSeed() noexcept;
 
 public:
-    /** Construct a FastRandomContext with GetRandHash()-based entropy (or zero key if fDeterministic). */
+    /** Construct a FastRandomContext that seeds itself from GetRandHash() on first use (or stays zero-keyed if fDeterministic). */
     explicit FastRandomContext(bool fDeterministic = false) noexcept;
 
     /** Initialize with explicit seed (only for testing) */

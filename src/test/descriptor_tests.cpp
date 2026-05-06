@@ -288,7 +288,7 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
     for (size_t i = 0; i < max; ++i) {
         // Call the expected result scripts `ref`.
         const auto& ref = scripts[(flags & RANGE) ? i : 0];
-        // When t=0, evaluate the `prv` descriptor; when t=1, evaluate the `pub` descriptor.
+        // When t=0, evaluate the `pub` descriptor; when t=1, evaluate the `prv` descriptor.
         for (int t = 0; t < 2; ++t) {
             // When the descriptor is hardened, evaluate with access to the private keys inside.
             const FlatSigningProvider& key_provider = (flags & HARDENED) ? keys_priv : keys_pub;
@@ -309,7 +309,7 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
             BOOST_CHECK(script_provider.scripts == script_provider_cached.scripts);
             BOOST_CHECK(GetKeyOriginData(script_provider, flags) == GetKeyOriginData(script_provider_cached, flags));
 
-            // Check whether keys are in the cache
+            // Check whether the expected xpub data is in the cache.
             const auto& der_xpub_cache = desc_cache.GetCachedDerivedExtPubKeys();
             const auto& parent_xpub_cache = desc_cache.GetCachedParentExtPubKeys();
             size_t num_xpubs = CountXpubs(pub1);
@@ -319,8 +319,8 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
                 num_unique_xpubs++;
             }
             if ((flags & RANGE) && !(flags & (DERIVE_HARDENED))) {
-                // For ranged, unhardened derivation, None of the keys in origins should appear in the cache but the cache should have parent keys
-                // But we can derive one level from each of those parent keys and find them all
+                // For ranged, unhardened derivation, the cache should store parent xpubs rather than derived keys.
+                // Deriving one level from each cached parent xpub should recover all cached-origin pubkeys.
                 BOOST_CHECK(der_xpub_cache.empty());
                 BOOST_CHECK(parent_xpub_cache.size() > 0);
                 std::set<CPubKey> pubkeys;
@@ -349,7 +349,7 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
                     }
                 }
             } else if (num_xpubs > 0) {
-                // For ranged, hardened derivation, or not ranged, but has an xpub, all of the keys should appear in the cache
+                // For ranged hardened derivation, or any non-ranged descriptor with xpubs, all referenced xpubs should appear in the cache.
                 BOOST_CHECK_EQUAL(der_xpub_cache.size() + parent_xpub_cache.size(), num_xpubs);
                 if (!(flags & MIXED_PUBKEYS)) {
                     if (flags & UNIQUE_XPUBS) {
@@ -452,8 +452,8 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
                 BOOST_CHECK(GetKeyOriginData(provider_inferred, flags) == GetKeyOriginData(script_provider, flags));
             }
 
-            // Test whether the observed key path is present in the 'paths' variable (which contains expected, unobserved paths),
-            // and then remove it from that set.
+            // Test whether the observed key path is present in the expected
+            // path set, and then remove it from left_paths.
             for (const auto& origin : script_provider.origins) {
                 BOOST_CHECK_MESSAGE(paths.count(origin.second.second.path), "Unexpected key path: " + prv);
                 left_paths.erase(origin.second.second.path);

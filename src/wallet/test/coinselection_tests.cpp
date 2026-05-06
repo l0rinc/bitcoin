@@ -18,9 +18,9 @@ static FastRandomContext default_rand;
 static const int P2WPKH_INPUT_VSIZE = 68;
 static const int P2WPKH_OUTPUT_VSIZE = 31;
 
-/** Default coin selection parameters (dcsp) allow us to only explicitly set
- * parameters when a diverging value is relevant in the context of a test.
- * We use P2WPKH input and output weights for the change weights. */
+/** Default coin selection parameters (dcsp) let tests override only the
+ * parameters that matter for a given case.
+ * We use P2WPKH input and output virtual sizes for the change sizes. */
 static CoinSelectionParams init_default_params()
 {
     CoinSelectionParams dcsp{
@@ -31,7 +31,7 @@ static CoinSelectionParams init_default_params()
         /*effective_feerate=*/CFeeRate(5000),
         /*long_term_feerate=*/CFeeRate(10'000),
         /*discard_feerate=*/CFeeRate(3000),
-        /*tx_noinputs_size=*/11 + P2WPKH_OUTPUT_VSIZE, //static header size + output size
+        /*tx_noinputs_size=*/11 + P2WPKH_OUTPUT_VSIZE, // static header size + output size
         /*avoid_partial=*/false,
     };
     dcsp.m_change_fee = /*155 sats=*/dcsp.m_effective_feerate.GetFee(dcsp.change_output_size);
@@ -46,7 +46,7 @@ static const CoinSelectionParams default_cs_params = init_default_params();
 /** Make one OutputGroup with a single UTXO that either has a given effective value (default) or a given amount (`is_eff_value = false`). */
 static OutputGroup MakeCoin(const CAmount& amount, bool is_eff_value = true, CoinSelectionParams cs_params = default_cs_params, int custom_spending_vsize = P2WPKH_INPUT_VSIZE)
 {
-    // Always assume that we only have one input
+    // Model each test coin as a single spendable input.
     CMutableTransaction tx;
     tx.vout.resize(1);
     CAmount fees = cs_params.m_effective_feerate.GetFee(custom_spending_vsize);

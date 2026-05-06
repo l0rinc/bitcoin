@@ -128,7 +128,7 @@ SECP256K1_INLINE static void secp256k1_fe_mul_inner(uint64_t *r, const uint64_t 
     secp256k1_u128_accum_mul(&d, a3, b[4]);
     secp256k1_u128_accum_mul(&d, a4, b[3]);
     VERIFY_BITS_128(&d, 114);
-    /* [d 0 0 t4 t3 c t1 r0] = [p8 p7 p6 p5 p4 p3 p2 p1 p0] */
+    /* [d 0 0 t4 t3 c r1 r0] = [p8 p7 p6 p5 p4 p3 p2 p1 p0] */
     secp256k1_u128_accum_mul(&c, R, secp256k1_u128_to_u64(&d)); secp256k1_u128_rshift(&d, 64);
     VERIFY_BITS_128(&c, 115);
     VERIFY_BITS_128(&d, 50);

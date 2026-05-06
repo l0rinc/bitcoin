@@ -353,7 +353,7 @@ bool SpendsNonAnchorWitnessProg(const CTransaction& tx, const CCoinsViewCache& p
             return true;
         }
 
-        // For P2SH extract the redeem script and check if it spends a non-Taproot witness program. Note
+        // For P2SH extract the redeem script and check if it spends a witness program. Note
         // this is fine to call EvalScript (as done in AreInputsStandard/IsWitnessStandard) because this
         // function is only ever called after IsStandardTx, which checks the scriptsig is pushonly.
         if (prev_spk.IsPayToScriptHash()) {

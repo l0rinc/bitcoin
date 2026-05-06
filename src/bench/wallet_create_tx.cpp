@@ -143,7 +143,7 @@ static void WalletCreateTx(benchmark::Bench& bench, const OutputType output_type
 
     CAmount target = 0;
     if (preset_inputs) {
-        // Select inputs, each has 48 BTC
+        // Preselect a fixed number of wallet inputs and add their values to the target.
         wallet::CoinFilterParams filter_coins;
         filter_coins.max_count = preset_inputs->num_of_internal_inputs;
         const auto& res = WITH_LOCK(wallet.cs_wallet,
@@ -155,7 +155,8 @@ static void WalletCreateTx(benchmark::Bench& bench, const OutputType output_type
         }
     }
 
-    // If automatic coin selection is enabled, add the value of another UTXO to the target
+    // If automatic coin selection is enabled, add 50 BTC to force automatic selection
+    // to supplement the preset inputs.
     if (coin_control.m_allow_other_inputs) target += 50 * COIN;
     std::vector<wallet::CRecipient> recipients = {{dest, target, true}};
 

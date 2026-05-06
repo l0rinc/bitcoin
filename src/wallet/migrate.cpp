@@ -17,7 +17,7 @@
 #include <vector>
 
 namespace wallet {
-// Magic bytes in both endianness's
+// Magic bytes in both byte orders.
 constexpr uint32_t BTREE_MAGIC = 0x00053162;    // If the file endianness matches our system, we see this magic
 constexpr uint32_t BTREE_MAGIC_OE = 0x62310500; // If the file endianness is the other one, we will see this magic
 
@@ -196,7 +196,7 @@ public:
             throw std::runtime_error("Unexpected page type, should be 9 (BTree Metadata)");
         }
 
-        // Only supported meta-flag is subdatabase
+        // Only supported Btree flag is subdatabase.
         if (flags != BTreeFlags::SUBDB) {
             throw std::runtime_error("Unexpected database flags, should only be 0x20 (subdatabases)");
         }
@@ -208,7 +208,7 @@ class RecordHeader
 {
 public:
     uint16_t len;    // Key/data item length
-    RecordType type; // Page type (BDB has this include a DELETE FLAG that we track separately)
+    RecordType type; // Record type (BDB includes the DELETE flag in this field, which we track separately)
     bool deleted;    // Whether the DELETE flag was set on type
 
     static constexpr size_t SIZE = 3; // The record header is 3 bytes
@@ -465,7 +465,7 @@ public:
     }
 };
 
-/** A page of records in the database */
+/** A page of internal records in the database. */
 class InternalPage
 {
 public:
@@ -566,9 +566,10 @@ void BerkeleyRODatabase::Open()
         throw std::runtime_error("BDB builtin encryption is not supported");
     }
 
-    // Check all Log Sequence Numbers (LSN) point to file 0 and offset 1 which indicates that the LSNs were
-    // reset and that the log files are not necessary to get all of the data in the database.
-    for (uint32_t i = 0; i < outer_meta.last_page; ++i) {
+    // Check that all Log Sequence Numbers (LSNs) point to file 0 and offset 1,
+    // which indicates that the LSNs were reset and the log files are not
+    // necessary to recover the database contents.
+    for (uint32_t i = 0; i <= outer_meta.last_page; ++i) {
         // The LSN is composed of 2 32-bit ints, the first is a file id, the second an offset
         // It will always be the first 8 bytes of a page, so we deserialize it directly for every page
         uint32_t file;

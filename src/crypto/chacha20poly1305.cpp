@@ -54,7 +54,7 @@ void ComputeTag(ChaCha20& chacha20, std::span<const std::byte> aad, std::span<co
     // - Process the padded ciphertext with Poly1305.
     const unsigned cipher_padding_length = (16 - (cipher.size() % 16)) % 16;
     poly1305.Update(cipher).Update(std::span{PADDING}.first(cipher_padding_length));
-    // - Process the AAD and plaintext length with Poly1305.
+    // - Process the AAD and ciphertext length with Poly1305.
     std::byte length_desc[Poly1305::TAGLEN];
     WriteLE64(length_desc, aad.size());
     WriteLE64(length_desc + 8, cipher.size());

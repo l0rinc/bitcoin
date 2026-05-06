@@ -195,13 +195,13 @@ public:
         Assume(m_val != 0);
         return std::bit_width(m_val) - 1;
     }
-    /** Set this object's bits to be the binary AND between respective bits from this and a. */
-    constexpr IntBitSet& operator|=(const IntBitSet& a) noexcept { m_val |= a.m_val; return *this; }
     /** Set this object's bits to be the binary OR between respective bits from this and a. */
+    constexpr IntBitSet& operator|=(const IntBitSet& a) noexcept { m_val |= a.m_val; return *this; }
+    /** Set this object's bits to be the binary AND between respective bits from this and a. */
     constexpr IntBitSet& operator&=(const IntBitSet& a) noexcept { m_val &= a.m_val; return *this; }
     /** Set this object's bits to be the binary AND NOT between respective bits from this and a. */
     constexpr IntBitSet& operator-=(const IntBitSet& a) noexcept { m_val &= ~a.m_val; return *this; }
-    /** Set this object's bits to be the binary XOR between respective bits from this as a. */
+    /** Set this object's bits to be the binary XOR between respective bits from this and a. */
     constexpr IntBitSet& operator^=(const IntBitSet& a) noexcept { m_val ^= a.m_val; return *this; }
     /** Check if the intersection between two sets is non-empty. */
     constexpr bool Overlaps(const IntBitSet& a) const noexcept { return m_val & a.m_val; }

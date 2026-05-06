@@ -744,7 +744,7 @@ static RPCHelpMan getblock()
         "If verbosity is 0, returns a string that is serialized, hex-encoded data for block 'hash'.\n"
                 "If verbosity is 1, returns an Object with information about block <hash>.\n"
                 "If verbosity is 2, returns an Object with information about block <hash> and information about each transaction.\n"
-                "If verbosity is 3, returns an Object with information about block <hash> and information about each transaction, including prevout information for inputs (only for unpruned blocks in the current best chain).\n",
+                "If verbosity is 3, returns an Object with information about block <hash> and information about each transaction, including prevout information for inputs (only for unpruned blocks with available undo data).\n",
                 {
                     {"blockhash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The block hash"},
                     {"verbosity|verbose", RPCArg::Type::NUM, RPCArg::Default{1}, "0 for hex-encoded data, 1 for a JSON object, 2 for JSON object with transaction data, and 3 for JSON object with transaction data including prevout information for inputs",
@@ -864,7 +864,8 @@ std::optional<int> GetPruneHeight(const BlockManager& blockman, const CChain& ch
     // If there are no blocks after the genesis block, or no blocks at all, nothing is pruned.
     if (!first_block || !chain_tip) return std::nullopt;
 
-    // If the chain tip is pruned, everything is pruned.
+    // If the chain tip itself is missing block or undo data, it is the highest
+    // pruned height.
     if (!((chain_tip->nStatus & BLOCK_HAVE_MASK) == BLOCK_HAVE_MASK)) return chain_tip->nHeight;
 
     const auto& first_unpruned{*CHECK_NONFATAL(blockman.GetFirstBlock(*chain_tip, /*status_mask=*/BLOCK_HAVE_MASK, first_block))};
@@ -1002,7 +1003,7 @@ static RPCHelpMan gettxoutsetinfo()
                         {RPCResult::Type::NUM, "txouts", "The number of unspent transaction outputs"},
                         {RPCResult::Type::NUM, "bogosize", "Database-independent, meaningless metric indicating the UTXO set size"},
                         {RPCResult::Type::STR_HEX, "hash_serialized_3", /*optional=*/true, "The serialized hash (only present if 'hash_serialized_3' hash_type is chosen)"},
-                        {RPCResult::Type::STR_HEX, "muhash", /*optional=*/true, "The serialized hash (only present if 'muhash' hash_type is chosen)"},
+                        {RPCResult::Type::STR_HEX, "muhash", /*optional=*/true, "The MuHash value (only present if 'muhash' hash_type is chosen)"},
                         {RPCResult::Type::NUM, "transactions", /*optional=*/true, "The number of transactions with unspent outputs (not available when coinstatsindex is used)"},
                         {RPCResult::Type::NUM, "disk_size", /*optional=*/true, "The estimated size of the chainstate on disk (not available when coinstatsindex is used)"},
                         {RPCResult::Type::STR_AMOUNT, "total_amount", "The total amount of coins in the UTXO set"},
@@ -1520,7 +1521,7 @@ static RPCHelpMan getchaintips()
 {
     return RPCHelpMan{"getchaintips",
                 "Return information about all known tips in the block tree,"
-                " including the main chain as well as orphaned branches.\n",
+                " including the main chain as well as non-active branches.\n",
                 {},
                 RPCResult{
                     RPCResult::Type::ARR, "", "",
@@ -1535,7 +1536,8 @@ static RPCHelpMan getchaintips()
             "2.  \"headers-only\"          Not all blocks for this branch are available, but the headers are valid\n"
             "3.  \"valid-headers\"         All blocks are available for this branch, but they were never fully validated\n"
             "4.  \"valid-fork\"            This branch is not part of the active chain, but is fully validated\n"
-            "5.  \"active\"                This is the tip of the active main chain, which is certainly valid"},
+            "5.  \"active\"                This is the tip of the active main chain, which is certainly valid\n"
+            "6.  \"unknown\"               This branch is in an unexpected intermediate state"},
                         }}}},
                 RPCExamples{
                     HelpExampleCli("getchaintips", "")
@@ -1548,11 +1550,15 @@ static RPCHelpMan getchaintips()
     CChain& active_chain = chainman.ActiveChain();
 
     /*
-     * Idea: The set of chain tips is the active chain tip, plus orphan blocks which do not have another orphan building off of them.
+     * Idea: The set of chain tips is the active chain tip, plus blocks outside
+     * the active chain that do not have another non-active block building off
+     * of them.
      * Algorithm:
-     *  - Make one pass through BlockIndex(), picking out the orphan blocks, and also storing a set of the orphan block's pprev pointers.
-     *  - Iterate through the orphan blocks. If the block isn't pointed to by another orphan, it is a chain tip.
-     *  - Add the active chain tip
+     *  - Make one pass through BlockIndex(), collecting blocks not in the
+     *    active chain, and also storing their pprev pointers.
+     *  - Iterate through those non-active blocks. If a block is not pointed to
+     *    by another non-active block, it is a chain tip.
+     *  - Add the active chain tip.
      */
     std::set<const CBlockIndex*, CompareBlocksByHeight> setTips;
     std::set<const CBlockIndex*> setOrphans;
@@ -1601,7 +1607,7 @@ static RPCHelpMan getchaintips()
             // The headers for this block are valid, but it has not been validated. It was probably never part of the most-work chain.
             status = "valid-headers";
         } else {
-            // No clue.
+            // Fallback for unexpected status combinations.
             status = "unknown";
         }
         obj.pushKV("status", status);
@@ -1898,7 +1904,7 @@ static RPCHelpMan getblockstats()
 {
     return RPCHelpMan{
         "getblockstats",
-        "Compute per block statistics for a given window. All amounts are in satoshis.\n"
+        "Compute statistics for a given block. All amounts are in satoshis.\n"
                 "It won't work for some heights with pruning.\n",
                 {
                     {"hash_or_height", RPCArg::Type::NUM, RPCArg::Optional::NO, "The block hash or height of the target block",
@@ -1906,7 +1912,7 @@ static RPCHelpMan getblockstats()
                          .skip_type_check = true,
                          .type_str = {"", "string or numeric"},
                      }},
-                    {"stats", RPCArg::Type::ARR, RPCArg::DefaultHint{"all values"}, "Values to plot (see result below)",
+                    {"stats", RPCArg::Type::ARR, RPCArg::DefaultHint{"all values"}, "Statistics to return (see result below)",
                         {
                             {"height", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Selected statistic"},
                             {"time", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Selected statistic"},
@@ -2156,7 +2162,7 @@ static RPCHelpMan getblockstats()
 }
 
 namespace {
-//! Search for a given set of pubkey scripts
+//! Search for a given set of scriptPubKeys.
 bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& should_abort, int64_t& count, CCoinsViewCursor* cursor, const std::set<CScript>& needles, std::map<COutPoint, Coin>& out_results, std::function<void()>& interruption_point)
 {
     scan_progress = 0;
@@ -2168,12 +2174,12 @@ bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& 
         if (++count % 8192 == 0) {
             interruption_point();
             if (should_abort) {
-                // allow to abort the scan via the abort reference
+                // Allow the scan to be aborted via the shared abort flag.
                 return false;
             }
         }
         if (count % 256 == 0) {
-            // update progress reference every 256 item
+            // Update the shared progress indicator every 256 items.
             uint32_t high = 0x100 * *UCharCast(key.hash.begin()) + *(UCharCast(key.hash.begin()) + 1);
             scan_progress = (int)(high * 100.0 / 65536.0 + 0.5);
         }
@@ -2275,7 +2281,7 @@ static RPCHelpMan scantxoutset()
         "\nIn the above, <pubkey> either refers to a fixed public key in hexadecimal notation, or to an xpub/xprv optionally followed by one\n"
         "or more path elements separated by \"/\", and optionally ending in \"/*\" (unhardened), or \"/*'\" or \"/*h\" (hardened) to specify all\n"
         "unhardened or hardened child keys.\n"
-        "In the latter case, a range needs to be specified by below if different from 1000.\n"
+        "In the latter case, a range needs to be specified below if different from 1000.\n"
         "For more information on output descriptors, see the documentation in the doc/descriptors.md file.\n",
         {
             scan_action_arg_desc,
@@ -2994,8 +3000,8 @@ public:
 };
 
 /**
- * RAII class that temporarily rolls back the local chain in it's constructor
- * and rolls it forward again in it's destructor.
+ * RAII class that temporarily rolls back the local chain in its constructor
+ * and rolls it forward again in its destructor.
  */
 class TemporaryRollback
 {
@@ -3115,7 +3121,7 @@ static RPCHelpMan dumptxoutset()
 
         // Suspend network activity for the duration of the process when we are
         // rolling back the chain to get a utxo set from a past height. We do
-        // this so we don't punish peers that send us that send us data that
+        // this so we don't punish peers that send us data that
         // seems wrong in this temporary state. For example a normal new block
         // would be classified as a block connecting an invalid block.
         // Skip if the network is already disabled because this
@@ -3368,8 +3374,9 @@ static RPCHelpMan loadtxoutset()
         throw JSONRPCError(RPC_INTERNAL_ERROR, strprintf("Unable to load UTXO snapshot: %s. (%s)", util::ErrorString(activation_result).original, path.utf8string()));
     }
 
-    // Because we can't provide historical blocks during tip or background sync.
-    // Update local services to reflect we are a limited peer until we are fully sync.
+    // Because we can't provide historical blocks during tip sync or background
+    // validation, advertise limited service until the snapshot chainstate is
+    // fully synced and validated.
     node.connman->RemoveLocalServices(NODE_NETWORK);
     // Setting the limited state is usually redundant because the node can always
     // provide the last 288 blocks, but it doesn't hurt to set it.

@@ -334,9 +334,8 @@ BOOST_AUTO_TEST_CASE(util_ParseISO8601DateTime)
     BOOST_CHECK_EQUAL(ParseISO8601DateTime("2100-12-31T23:59:59Z").value(), 4133980799);
     BOOST_CHECK_EQUAL(ParseISO8601DateTime("9999-12-31T23:59:59Z").value(), 253402300799);
 
-    // Accept edge-cases, where the time overflows. They are not produced by
-    // FormatISO8601DateTime, so this can be changed in the future, if needed.
-    // For now, keep compatibility with the previous implementation.
+    // Accept overflowed time components for compatibility with the existing
+    // parser behavior, even though FormatISO8601DateTime never emits them.
     BOOST_CHECK_EQUAL(ParseISO8601DateTime("2000-01-01T99:00:00Z").value(), 947041200);
     BOOST_CHECK_EQUAL(ParseISO8601DateTime("2000-01-01T00:99:00Z").value(), 946690740);
     BOOST_CHECK_EQUAL(ParseISO8601DateTime("2000-01-01T00:00:99Z").value(), 946684899);
@@ -1001,7 +1000,7 @@ BOOST_AUTO_TEST_CASE(test_LockDirectory)
 #ifndef WIN32
     // Fork another process for testing before creating the lock, so that we
     // won't fork while holding the lock (which might be undefined, and is not
-    // relevant as test case as that is avoided with -daemonize).
+    // relevant to the production path, which avoids this with `-daemon`).
     int fd[2];
     BOOST_CHECK_EQUAL(socketpair(AF_UNIX, SOCK_STREAM, 0, fd), 0);
     pid_t pid = fork();
@@ -1349,7 +1348,7 @@ struct Tracker
 {
     //! Points to the original object (possibly itself) we moved/copied from
     const Tracker* origin;
-    //! How many copies where involved between the original object and this one (moves are not counted)
+    //! How many copies were involved between the original object and this one (moves are not counted)
     int copies{0};
 
     Tracker() noexcept : origin(this) {}
@@ -1447,8 +1446,8 @@ BOOST_AUTO_TEST_CASE(test_tracked_vector)
 BOOST_AUTO_TEST_CASE(message_sign)
 {
     const std::array<unsigned char, 32> privkey_bytes = {
-        // just some random data
-        // derived address from this private key: 15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs
+        // Arbitrary test vector.
+        // Legacy P2PKH address derived from this private key: 15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs
         0xD9, 0x7F, 0x51, 0x08, 0xF1, 0x1C, 0xDA, 0x6E,
         0xEE, 0xBA, 0xAA, 0x42, 0x0F, 0xEF, 0x07, 0x26,
         0xB1, 0xF8, 0x98, 0x06, 0x0B, 0x98, 0x48, 0x9F,

@@ -80,16 +80,16 @@ FUZZ_TARGET(str_printf)
     if (format_string.find('%') != std::string::npos && format_string.find('c') != std::string::npos) {
         // Avoid triggering the following:
         // * strprintf("%c", 1.31783e+38);
-        // tinyformat.h:244:36: runtime error: 1.31783e+38 is outside the range of representable values of type 'char'
+        // UBSan reports an out-of-range conversion to char inside tinyformat.
         return;
     }
 
     if (format_string.find('%') != std::string::npos && format_string.find('*') != std::string::npos) {
         // Avoid triggering the following:
         // * strprintf("%*", -2.33527e+38);
-        // tinyformat.h:283:65: runtime error: -2.33527e+38 is outside the range of representable values of type 'int'
+        // UBSan reports out-of-range conversion in tinyformat's '*' width handling.
         // * strprintf("%*", -2147483648);
-        // tinyformat.h:763:25: runtime error: negation of -2147483648 cannot be represented in type 'int'; cast to an unsigned type to negate this value to itself
+        // tinyformat can also hit undefined behavior when negating INT_MIN here.
         return;
     }
 

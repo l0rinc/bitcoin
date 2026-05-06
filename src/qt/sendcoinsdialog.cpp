@@ -287,7 +287,8 @@ bool SendCoinsDialog::PrepareSendText(QString& question_string, QString& informa
     updateCoinControlState();
 
     CCoinControl coin_control = *m_coin_control;
-    coin_control.m_allow_other_inputs = !coin_control.HasSelected(); // future, could introduce a checkbox to customize this value.
+    // If inputs were manually selected, keep the transaction constrained to them.
+    coin_control.m_allow_other_inputs = !coin_control.HasSelected();
     prepareStatus = model->prepareTransaction(*m_current_transaction, coin_control);
 
     // process prepareStatus and on error generate message shown to user
@@ -472,7 +473,8 @@ bool SendCoinsDialog::signWithExternalSigner(PartiallySignedTransaction& psbtx, 
         processSendCoinsReturn(WalletModel::TransactionCreationFailed);
         return false;
     }
-    // fillPSBT does not always properly finalize
+    // FillPSBT() reports PSBT completeness; finalize and extract here before
+    // deciding whether the transaction is ready to broadcast.
     complete = FinalizeAndExtractPSBT(psbtx, mtx);
     return true;
 }
@@ -491,7 +493,8 @@ void SendCoinsDialog::sendButtonClicked([[maybe_unused]] bool checked)
     const bool always_show_unsigned{model->getOptionsModel()->getEnablePSBTControls()};
     auto confirmationDialog = new SendConfirmationDialog(confirmation, question_string, informative_text, detailed_text, SEND_CONFIRM_DELAY, enable_send, always_show_unsigned, this);
     confirmationDialog->setAttribute(Qt::WA_DeleteOnClose);
-    // TODO: Replace QDialog::exec() with safer QDialog::show().
+    // TODO: Replace this blocking confirmation flow with an asynchronous
+    // show()/finished path.
     const auto retval = static_cast<QMessageBox::StandardButton>(confirmationDialog->exec());
 
     if(retval != QMessageBox::Yes && retval != QMessageBox::Save)
@@ -729,8 +732,8 @@ void SendCoinsDialog::processSendCoinsReturn(const WalletModel::SendCoinsReturn 
     // Default to a warning message, override if error message is needed
     msgParams.second = CClientUIInterface::MSG_WARNING;
 
-    // This comment is specific to SendCoinsDialog usage of WalletModel::SendCoinsReturn.
-    // All status values are used only in WalletModel::prepareTransaction()
+    // This dialog handles the statuses surfaced by prepareTransaction(), plus
+    // TransactionCreationFailed from the external-signer path.
     switch(sendCoinsReturn.status)
     {
     case WalletModel::InvalidAddress:

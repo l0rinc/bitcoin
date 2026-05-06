@@ -51,7 +51,7 @@ public:
     virtual bool WithEncryptionKey(std::function<bool (const CKeyingMaterial&)> cb) const = 0;
     virtual bool HasEncryptionKeys() const = 0;
     virtual bool IsLocked() const = 0;
-    //! Callback function for after TopUp completes containing any scripts that were added by a SPKMan
+    //! Callback when a ScriptPubKeyMan adds scriptPubKeys to the wallet cache.
     virtual void TopUpCallback(const std::set<CScript>&, ScriptPubKeyMan*) = 0;
 };
 
@@ -185,7 +185,7 @@ private:
     CHDChain m_hd_chain;
     std::unordered_map<CKeyID, CHDChain, SaltedSipHasher> m_inactive_hd_chains;
 
-    //! keeps track of whether Unlock has run a thorough check before
+    //! Tracks whether CheckDecryptionKey() has already verified every encrypted key.
     bool fDecryptionThoroughlyChecked = true;
 
     bool AddWatchOnlyInMem(const CScript &dest);
@@ -194,7 +194,6 @@ private:
 
     // Helper function to retrieve a conservative superset of all output scripts that may be relevant to this LegacyDataSPKM.
     // It may include scripts that are invalid or not actually watched by this LegacyDataSPKM.
-    // Used only in migration.
     std::unordered_set<CScript, SaltedSipHasher> GetCandidateScriptPubKeys() const;
 
     bool IsMine(const CScript& script) const override;
@@ -287,7 +286,7 @@ private:
     KeyMap m_map_keys GUARDED_BY(cs_desc_man);
     CryptedKeyMap m_map_crypted_keys GUARDED_BY(cs_desc_man);
 
-    //! keeps track of whether Unlock has run a thorough check before
+    //! Tracks whether CheckDecryptionKey() has already verified every encrypted key.
     bool m_decryption_thoroughly_checked = false;
 
     //! Number of pre-generated keys/scripts (part of the look-ahead process, used to detect payments)

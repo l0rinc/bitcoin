@@ -33,7 +33,7 @@ enum class Result
 //! Return whether transaction can be bumped.
 bool TransactionCanBeBumped(const CWallet& wallet, const Txid& txid);
 
-/** Create bumpfee transaction based on feerate estimates.
+/** Create a bumpfee transaction using fee estimates or an explicit feerate.
  *
  * @param[in] wallet The wallet to use for this bumping
  * @param[in] txid The txid of the transaction to bump
@@ -57,15 +57,14 @@ Result CreateRateBumpTransaction(CWallet& wallet,
     const std::vector<CTxOut>& outputs,
     std::optional<uint32_t> original_change_index = std::nullopt);
 
-//! Sign the new transaction,
-//! @return false if the tx couldn't be found or if it was
-//! impossible to create the signature(s)
+//! Sign the new transaction.
+//! @return false if signing or finalization failed.
 bool SignTransaction(CWallet& wallet, CMutableTransaction& mtx);
 
 //! Commit the bumpfee transaction.
-//! @return success in case of CWallet::CommitTransaction was successful,
-//! but sets errors if the tx could not be added to the mempool (will try later)
-//! or if the old transaction could not be marked as replaced.
+//! @return OK after the transaction is committed to the wallet. If marking the
+//! original transaction as replaced fails, errors is populated but the result
+//! remains OK.
 Result CommitTransaction(CWallet& wallet,
     const Txid& txid,
     CMutableTransaction&& mtx,

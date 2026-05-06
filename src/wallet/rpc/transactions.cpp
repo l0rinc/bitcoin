@@ -300,6 +300,7 @@ static void MaybePushAddress(UniValue & entry, const CTxDestination &dest)
  * @param  fLong          Whether to include the JSON version of the transaction.
  * @param  ret            The vector into which the result is stored.
  * @param  filter_label   Optional label string to filter incoming transactions.
+ * @param  include_change Whether to include change outputs in the reported amounts.
  */
 template <class Vec>
 static void ListTransactions(const CWallet& wallet, const CWalletTx& wtx, int nMinDepth, bool fLong,

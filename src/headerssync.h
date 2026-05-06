@@ -57,7 +57,7 @@ struct CompressedHeader {
  * We wish to download a peer's headers chain in a DoS-resistant way.
  *
  * The Bitcoin protocol does not offer an easy way to determine the work on a
- * peer's chain. Currently, we can query a peer's headers by using a GETHEADERS
+ * peer's chain. We can query a peer's headers by using a GETHEADERS
  * message, and our peer can return a set of up to 2000 headers that connect to
  * something we know. If a peer's chain has more than 2000 blocks, then we need
  * a way to verify that the chain actually has enough work on it to be useful to
@@ -128,7 +128,7 @@ public:
     arith_uint256 GetPresyncWork() const { return m_current_chain_work; }
 
     /** Construct a HeadersSyncState object representing a headers sync via this
-     *  download-twice mechanism).
+     *  download-twice mechanism.
      *
      * id: node id (for logging)
      * consensus_params: parameters needed for difficulty adjustment validation
@@ -265,9 +265,10 @@ private:
     /** The accumulated work on the redownloaded chain. */
     arith_uint256 m_redownload_chain_work;
 
-    /** Set this to true once we encounter the target blockheader during phase
-     * 2 (REDOWNLOAD). At this point, we can process and store all remaining
-     * headers still in m_redownloaded_headers.
+    /** Set this to true once the redownloaded chain reaches
+     * m_minimum_required_work during phase 2 (REDOWNLOAD). At that point, we
+     * can process and store all remaining headers still in
+     * m_redownloaded_headers.
      */
     bool m_process_all_remaining_headers{false};
 

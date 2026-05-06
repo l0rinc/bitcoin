@@ -153,7 +153,7 @@ struct MempoolAcceptResult {
      * transaction's wtxid and may include others if this transaction was validated as part of a
      * package. This is not necessarily equivalent to the list of transactions passed to
      * ProcessNewPackage().
-     * Only present when m_result_type = ResultType::VALID. */
+     * Present for valid results and fee-related invalid results. */
     const std::optional<std::vector<Wtxid>> m_wtxids_fee_calculations;
 
     /** The wtxid of the transaction in the mempool which has the same txid but different witness. */
@@ -253,8 +253,8 @@ struct PackageMempoolAcceptResult
 };
 
 /**
- * Try to add a transaction to the mempool. This is an internal function and is exposed only for testing.
- * Client code should use ChainstateManager::ProcessTransaction()
+ * Try to add a transaction to the mempool. This is an internal function;
+ * most callers should use ChainstateManager::ProcessTransaction().
  *
  * @param[in]  active_chainstate  Reference to the active chainstate.
  * @param[in]  tx                 The transaction to submit for mempool acceptance.
@@ -900,14 +900,14 @@ private:
     //! The chainstate used under normal operation (i.e. "regular" IBD) or, if
     //! a snapshot is in use, for background validation.
     //!
-    //! Its contents (including on-disk data) will be deleted *upon shutdown*
-    //! after background validation of the snapshot has completed. We do not
-    //! free the chainstate contents immediately after it finishes validation
-    //! to cautiously avoid a case where some other part of the system is still
-    //! using this pointer (e.g. net_processing).
+    //! If background validation of a snapshot completes, we keep this
+    //! chainstate alive until shutdown or the next-startup cleanup path. We do
+    //! not free the chainstate contents immediately after it finishes
+    //! validation to cautiously avoid a case where some other part of the
+    //! system is still using this pointer (e.g. net_processing).
     //!
-    //! Once this pointer is set to a corresponding chainstate, it will not
-    //! be reset until init.cpp:Shutdown().
+    //! Once this pointer is set to a corresponding chainstate, it is only
+    //! reset during shutdown or the validated-snapshot cleanup path.
     //!
     //! It is important for the pointer to not be deleted until shutdown,
     //! because cs_main is not always held when the pointer is accessed, for
@@ -916,10 +916,12 @@ private:
     std::unique_ptr<Chainstate> m_ibd_chainstate GUARDED_BY(::cs_main);
 
     //! A chainstate initialized on the basis of a UTXO snapshot. If this is
-    //! non-null, it is always our active chainstate.
+    //! usable, it is our active chainstate.
     //!
-    //! Once this pointer is set to a corresponding chainstate, it will not
-    //! be reset until init.cpp:Shutdown().
+    //! If snapshot validation later fails, this pointer may remain non-null
+    //! but inactive until shutdown. Once this pointer is set to a
+    //! corresponding chainstate, it is only reset during shutdown or the
+    //! validated-snapshot cleanup path.
     //!
     //! It is important for the pointer to not be deleted until shutdown,
     //! because cs_main is not always held when the pointer is accessed, for

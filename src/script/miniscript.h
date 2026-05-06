@@ -271,10 +271,10 @@ constexpr uint32_t MaxScriptSize(MiniscriptContext ms_ctx)
 {
     if (IsTapscript(ms_ctx)) {
         // Leaf scripts under Tapscript are not explicitly limited in size. They are only implicitly
-        // bounded by the maximum standard size of a spending transaction. Let the maximum script
+        // bounded by the maximum standard weight of a spending transaction. Let the maximum script
         // size conservatively be small enough such that even a maximum sized witness and a reasonably
         // sized spending transaction can spend an output paying to this script without running into
-        // the maximum standard tx size limit.
+        // the maximum standard tx weight limit.
         constexpr auto max_size{MAX_STANDARD_TX_WEIGHT - TX_BODY_LEEWAY_WEIGHT - MAX_TAPSCRIPT_SAT_SIZE};
         return max_size - GetSizeOfCompactSize(max_size);
     }
@@ -331,7 +331,7 @@ struct InputStack {
 static const auto ZERO = InputStack(std::vector<unsigned char>());
 /** A stack consisting of a single malleable 32-byte 0x0000...0000 element (for dissatisfying hash challenges). */
 static const auto ZERO32 = InputStack(std::vector<unsigned char>(32, 0)).SetMalleable();
-/** A stack consisting of a single 0x01 element (interpreted as 1 by the script interpreted in numeric context). */
+/** A stack consisting of a single 0x01 element (interpreted as 1 by the script interpreter in numeric context). */
 static const auto ONE = InputStack(Vector((unsigned char)1));
 /** The empty stack. */
 static const auto EMPTY = InputStack();
@@ -424,7 +424,7 @@ struct SatInfo {
     const bool valid;
     //! How much higher the stack size at start of execution can be compared to at the end.
     const int32_t netdiff;
-    //! Mow much higher the stack size can be during execution compared to at the end.
+    //! How much higher the stack size can be during execution compared to at the end.
     const int32_t exec;
 
     /** Empty script set. */
@@ -508,14 +508,14 @@ struct Node {
     const uint32_t k = 0;
     //! The keys used by this expression (only for PK_K/PK_H/MULTI)
     const std::vector<Key> keys;
-    //! The data bytes in this expression (only for HASH160/HASH256/SHA256/RIPEMD10).
+    //! The data bytes in this expression (only for HASH160/HASH256/SHA256/RIPEMD160).
     const std::vector<unsigned char> data;
     //! Subexpressions (for WRAP_*/AND_*/OR_*/ANDOR/THRESH)
     mutable std::vector<NodeRef<Key>> subs;
     //! The Script context for this node. Either P2WSH or Tapscript.
     const MiniscriptContext m_script_ctx;
 
-    /* Destroy the shared pointers iteratively to avoid a stack-overflow due to recursive calls
+    /* Destroy the child nodes iteratively to avoid a stack-overflow due to recursive calls
      * to the subs' destructors. */
     ~Node() {
         while (!subs.empty()) {

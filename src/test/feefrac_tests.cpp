@@ -83,7 +83,7 @@ BOOST_AUTO_TEST_CASE(feefrac_operators)
     BOOST_CHECK(p2 << p1); // strictly lower feerate
 
     // "empty" comparisons
-    BOOST_CHECK(!(p1 >> empty)); // << will always result in false
+    BOOST_CHECK(!(p1 >> empty)); // >> will always result in false
     BOOST_CHECK(!(p1 << empty));
     BOOST_CHECK(!(empty >> empty));
     BOOST_CHECK(!(empty << empty));

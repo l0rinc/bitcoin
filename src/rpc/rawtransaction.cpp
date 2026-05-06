@@ -821,11 +821,11 @@ const RPCResult decodepsbt_inputs{
     {
         {RPCResult::Type::OBJ, "", "",
         {
-            {RPCResult::Type::OBJ, "non_witness_utxo", /*optional=*/true, "Decoded network transaction for non-witness UTXOs",
+            {RPCResult::Type::OBJ, "non_witness_utxo", /*optional=*/true, "Decoded network transaction for the prevout",
             {
                 {RPCResult::Type::ELISION, "",""},
             }},
-            {RPCResult::Type::OBJ, "witness_utxo", /*optional=*/true, "Transaction output for witness UTXOs",
+            {RPCResult::Type::OBJ, "witness_utxo", /*optional=*/true, "Transaction output for the prevout",
             {
                 {RPCResult::Type::NUM, "amount", "The value in " + CURRENCY_UNIT},
                 {RPCResult::Type::OBJ, "scriptPubKey", "",
@@ -1191,7 +1191,7 @@ static RPCHelpMan decodepsbt()
             if (MoneyRange(txout.nValue) && MoneyRange(total_in + txout.nValue)) {
                 total_in += txout.nValue;
             } else {
-                // Hack to just not show fee later
+                // Skip the fee field if the input total cannot be accumulated safely.
                 have_all_utxos = false;
             }
         } else {
@@ -1541,7 +1541,7 @@ static RPCHelpMan decodepsbt()
         if (MoneyRange(psbtx.tx->vout[i].nValue) && MoneyRange(output_value + psbtx.tx->vout[i].nValue)) {
             output_value += psbtx.tx->vout[i].nValue;
         } else {
-            // Hack to just not show fee later
+            // Skip the fee field if the output total cannot be accumulated safely.
             have_all_utxos = false;
         }
     }
@@ -1775,7 +1775,7 @@ static RPCHelpMan utxoupdatepsbt()
 {
     return RPCHelpMan{
         "utxoupdatepsbt",
-        "Updates all segwit inputs and outputs in a PSBT with data from output descriptors, the UTXO set, txindex, or the mempool.\n",
+        "Updates PSBT inputs and outputs with data from output descriptors, and augments input UTXO data from the UTXO set, txindex, or the mempool when available.\n",
             {
                 {"psbt", RPCArg::Type::STR, RPCArg::Optional::NO, "A base64 string of a PSBT"},
                 {"descriptors", RPCArg::Type::ARR, RPCArg::Optional::OMITTED, "An array of either strings or objects", {
@@ -1787,7 +1787,7 @@ static RPCHelpMan utxoupdatepsbt()
                 }},
             },
             RPCResult {
-                    RPCResult::Type::STR, "", "The base64-encoded partially signed transaction with inputs updated"
+                    RPCResult::Type::STR, "", "The base64-encoded partially signed transaction with inputs and outputs updated"
             },
             RPCExamples {
                 HelpExampleCli("utxoupdatepsbt", "\"psbt\"")
@@ -2034,8 +2034,8 @@ RPCHelpMan descriptorprocesspsbt()
 {
     return RPCHelpMan{
         "descriptorprocesspsbt",
-        "Update all segwit inputs in a PSBT with information from output descriptors, the UTXO set or the mempool. \n"
-                "Then, sign the inputs we are able to with information from the output descriptors. ",
+        "Update PSBT inputs and outputs with information from output descriptors, and augment input UTXO data from the UTXO set, txindex, or the mempool when available.\n"
+                "Then sign the inputs we are able to with information from the output descriptors.",
                 {
                     {"psbt", RPCArg::Type::STR, RPCArg::Optional::NO, "The transaction base64 string"},
                     {"descriptors", RPCArg::Type::ARR, RPCArg::Optional::NO, "An array of either strings or objects", {
@@ -2060,8 +2060,8 @@ RPCHelpMan descriptorprocesspsbt()
                     RPCResult::Type::OBJ, "", "",
                     {
                         {RPCResult::Type::STR, "psbt", "The base64-encoded partially signed transaction"},
-                        {RPCResult::Type::BOOL, "complete", "If the transaction has a complete set of signatures"},
-                        {RPCResult::Type::STR_HEX, "hex", /*optional=*/true, "The hex-encoded network transaction if complete"},
+                        {RPCResult::Type::BOOL, "complete", "If all inputs are finalized"},
+                        {RPCResult::Type::STR_HEX, "hex", /*optional=*/true, "The hex-encoded network transaction if all inputs are finalized"},
                     }
                 },
                 RPCExamples{
@@ -2089,7 +2089,7 @@ RPCHelpMan descriptorprocesspsbt()
         sighash_type,
         finalize);
 
-    // Check whether or not all of the inputs are now signed
+    // Check whether all inputs are now finalized.
     bool complete = true;
     for (const auto& input : psbtx.inputs) {
         complete &= PSBTInputSigned(input);

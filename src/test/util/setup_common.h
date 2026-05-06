@@ -90,9 +90,9 @@ struct BasicTestingSetup {
      * 2. If m_args is not accessible, use m_node.args as a fallback.
      * 3. Avoid direct references to gArgs in test code.
      *
-     * Note: Currently, m_node.args points to gArgs for backwards
-     * compatibility. In the future, it will point to m_args to further isolate
-     * test environments.
+     * Note: m_node.args still points to gArgs for backwards compatibility,
+     * even though m_args is intended to be the primary test-local source of
+     * settings.
      *
      * @see https://github.com/bitcoin/bitcoin/issues/25055 for additional context.
      */
@@ -230,7 +230,7 @@ struct TestChain100Setup : public TestingSetup {
      * signatures, or violate some other consensus rules. They should only be used for testing
      * mempool consistency. All transactions will have some random number of inputs and outputs
      * (between 1 and 24). Transactions may or may not be dependent upon each other; if dependencies
-     * exit, every parent will always be somewhere in the list before the child so each transaction
+     * exist, every parent will always be somewhere in the list before the child so each transaction
      * can be submitted in the same order they appear in the list.
      * @param[in]   submit      When true, submit transactions to the mempool.
      *                          When false, return them but don't submit them.

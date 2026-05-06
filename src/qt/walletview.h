@@ -85,10 +85,7 @@ public Q_SLOTS:
     /** Show Sign/Verify Message dialog and switch to verify message tab */
     void gotoVerifyMessageTab(QString addr = "");
 
-    /** Show incoming transaction notification for new transactions.
-
-        The new items are those between start and end inclusive, under the given parent item.
-    */
+    /** Show an incoming transaction notification for the first newly inserted item. */
     void processNewTransaction(const QModelIndex& parent, int start, int /*end*/);
     /** Encrypt the wallet */
     void encryptWallet();

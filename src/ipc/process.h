@@ -27,7 +27,7 @@ public:
     //! it.
     virtual int spawn(const std::string& new_exe_name, const fs::path& argv0_path, int& pid) = 0;
 
-    //! Wait for spawned process to exit and return its exit code.
+    //! Wait for a spawned process to exit and return its raw wait status.
     virtual int waitSpawned(int pid) = 0;
 
     //! Parse command line and determine if current process is a spawned child

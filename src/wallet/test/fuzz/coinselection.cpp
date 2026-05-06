@@ -300,8 +300,10 @@ void FuzzCoinSelectionAlgorithm(std::span<const uint8_t> buffer) {
 
         CAmount change_target{GenerateChangeTarget(target, coin_params.m_change_fee, fast_random_context)};
         auto result_knapsack = KnapsackSolver(group_all, target, change_target, fast_random_context, max_selection_weight);
-        // If the total balance is sufficient for the target and we are not using
-        // effective values, Knapsack should always find a solution (unless the selection exceeded the max tx weight).
+        // If the total balance is sufficient for the target and
+        // subtract_fee_outputs makes selection use real values instead of
+        // effective values, Knapsack should always find a solution (unless the
+        // selection exceeded the max tx weight).
         if (total_balance >= target && subtract_fee_outputs && !HasErrorMsg(result_knapsack)) {
             assert(result_knapsack);
         }

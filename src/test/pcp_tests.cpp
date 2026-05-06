@@ -152,7 +152,7 @@ public:
     int Bind(const sockaddr* sa, socklen_t sa_len) const override {
         CService service;
         if (service.SetSockAddr(sa, sa_len)) {
-            // Can only bind to one of our local ips
+            // Can only bind to a local IP, or to the bind-any address.
             if (!service.IsBindAny() && service != m_local_ip) {
                 return -1;
             }
@@ -270,7 +270,7 @@ BOOST_AUTO_TEST_CASE(natpmp_ipv4)
             2ms, TestOp::RECV,
             {
                 0x00, 0x80, 0x00, 0x00, // version, opcode (external IP), result code (success)
-                0x66, 0xfd, 0xa1, 0xee, // seconds sinds start of epoch
+                0x66, 0xfd, 0xa1, 0xee, // seconds since start of epoch
                 0x01, 0x02, 0x03, 0x04, // external IP address
             }, 0
         },
@@ -286,7 +286,7 @@ BOOST_AUTO_TEST_CASE(natpmp_ipv4)
             2ms, TestOp::RECV,
             {
                 0x00, 0x82, 0x00, 0x00, // version, opcode (mapped TCP)
-                0x66, 0xfd, 0xa1, 0xee, // seconds sinds start of epoch
+                0x66, 0xfd, 0xa1, 0xee, // seconds since start of epoch
                 0x04, 0xd2, 0x04, 0xd2, // internal port, mapped external port
                 0x00, 0x00, 0x01, 0xf4, // mapping lifetime in seconds
             }, 0
@@ -376,7 +376,7 @@ BOOST_AUTO_TEST_CASE(pcp_ipv6)
                 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, // nonce
                 0x06, 0x00, 0x00, 0x00, // protocol (TCP), reserved
                 0x04, 0xd2, 0x04, 0xd2, // internal port, assigned external port
-                0x2a, 0x10, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, // suggested external IP
+                0x2a, 0x10, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, // assigned external IP
             }, 0
         },
     };
@@ -485,7 +485,7 @@ BOOST_AUTO_TEST_CASE(pcp_ipv6_timeout_success)
                 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, // nonce
                 0x06, 0x00, 0x00, 0x00, // protocol (TCP), reserved
                 0x04, 0xd2, 0x04, 0xd2, // internal port, assigned external port
-                0x2a, 0x10, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, // suggested external IP
+                0x2a, 0x10, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, // assigned external IP
             }, 0
         },
     };
@@ -579,7 +579,7 @@ BOOST_AUTO_TEST_CASE(pcp_ipv4_fail_unsupported_version)
     BOOST_CHECK_EQUAL(*err, MappingError::UNSUPP_VERSION);
 }
 
-// NAT-PMP IPv4 protocol error scenarii.
+// NAT-PMP IPv4 protocol error scenarios.
 BOOST_AUTO_TEST_CASE(natpmp_protocol_error)
 {
     // First scenario: non-0 result code when requesting external IP.
@@ -594,7 +594,7 @@ BOOST_AUTO_TEST_CASE(natpmp_protocol_error)
             2ms, TestOp::RECV,
             {
                 0x00, 0x80, 0x00, 0x42, // version, opcode (external IP), result code (*NOT* success)
-                0x66, 0xfd, 0xa1, 0xee, // seconds sinds start of epoch
+                0x66, 0xfd, 0xa1, 0xee, // seconds since start of epoch
                 0x01, 0x02, 0x03, 0x04, // external IP address
             }, 0
         },
@@ -610,7 +610,7 @@ BOOST_AUTO_TEST_CASE(natpmp_protocol_error)
     BOOST_REQUIRE(err);
     BOOST_CHECK_EQUAL(*err, MappingError::PROTOCOL_ERROR);
 
-    // First scenario: non-0 result code when requesting port mapping.
+    // Second scenario: non-0 result code when requesting port mapping.
     script = {
         {
             0ms, TestOp::SEND,
@@ -622,7 +622,7 @@ BOOST_AUTO_TEST_CASE(natpmp_protocol_error)
             2ms, TestOp::RECV,
             {
                 0x00, 0x80, 0x00, 0x00, // version, opcode (external IP), result code (success)
-                0x66, 0xfd, 0xa1, 0xee, // seconds sinds start of epoch
+                0x66, 0xfd, 0xa1, 0xee, // seconds since start of epoch
                 0x01, 0x02, 0x03, 0x04, // external IP address
             }, 0
         },
@@ -638,7 +638,7 @@ BOOST_AUTO_TEST_CASE(natpmp_protocol_error)
             2ms, TestOp::RECV,
             {
                 0x00, 0x82, 0x00, 0x43, // version, opcode (mapped TCP)
-                0x66, 0xfd, 0xa1, 0xee, // seconds sinds start of epoch
+                0x66, 0xfd, 0xa1, 0xee, // seconds since start of epoch
                 0x04, 0xd2, 0x04, 0xd2, // internal port, mapped external port
                 0x00, 0x00, 0x01, 0xf4, // mapping lifetime in seconds
             }, 0
@@ -698,4 +698,3 @@ BOOST_AUTO_TEST_CASE(pcp_protocol_error)
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-

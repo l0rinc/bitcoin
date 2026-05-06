@@ -132,7 +132,7 @@ BOOST_AUTO_TEST_CASE(db_cursor_prefix_byte_test)
     for (const auto& database : TestDatabases(m_path_root)) {
         std::unique_ptr<DatabaseBatch> batch = database->MakeBatch();
 
-        // Write elements to it if not berkeleyro
+        // Write the test elements.
         for (const auto& [k, v] : {e, p, ps, f, fs, ff, ffs}) {
             batch->Write(std::span{k}, std::span{v});
         }
@@ -274,12 +274,11 @@ BOOST_AUTO_TEST_CASE(concurrent_txn_dont_interfere)
     BOOST_CHECK(handler->Write(key, value));
     BOOST_CHECK(handler->Exists(key));
 
-    // But, the same key, does not exist in another handler
+    // Another handler on the same SQLite connection can observe the uncommitted record.
     std::unique_ptr<DatabaseBatch> handler2 = Assert(database)->MakeBatch();
     BOOST_CHECK(handler2->Exists(key));
 
-    // Attempt to commit the handler txn calling the handler2 methods.
-    // Which, must not be possible.
+    // Attempting to control the transaction through handler2 must fail.
     BOOST_CHECK(!handler2->TxnCommit());
     BOOST_CHECK(!handler2->TxnAbort());
 

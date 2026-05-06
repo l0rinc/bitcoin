@@ -38,7 +38,7 @@ void OpenURIDialog::accept()
 {
     SendCoinsRecipient rcp;
     if (GUIUtil::parseBitcoinURI(getURI(), &rcp)) {
-        /* Only accept value URIs */
+        /* Only accept valid bitcoin: URIs. */
         QDialog::accept();
     } else {
         ui->uriEdit->setValid(false);

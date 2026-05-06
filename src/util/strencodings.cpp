@@ -245,9 +245,9 @@ std::string FormatParagraph(std::string_view in, size_t width, size_t indent)
  * 10^18-1 is the largest arbitrary decimal that will fit in a signed 64-bit integer.
  * Larger integers cannot consist of arbitrary combinations of 0-9:
  *
- *   999999999999999999  1^18-1
+ *   999999999999999999  10^18-1
  *  9223372036854775807  (1<<63)-1  (max int64_t)
- *  9999999999999999999  1^19-1     (would overflow)
+ *  9999999999999999999  10^19-1    (would overflow)
  */
 static const int64_t UPPER_BOUND = 1000000000000000000LL - 1LL;
 

@@ -125,7 +125,7 @@ public:
 
     /** Encrypt a message (given split into plain1 + plain2) with a specified aad.
      *
-     * Requires cipher.size() = plain.size() + EXPANSION.
+     * Requires cipher.size() = plain1.size() + plain2.size() + EXPANSION.
      */
     void Encrypt(std::span<const std::byte> plain1, std::span<const std::byte> plain2, std::span<const std::byte> aad, std::span<std::byte> cipher) noexcept;
 

@@ -214,7 +214,7 @@ struct FlatSigningProvider final : public SigningProvider
     std::map<CKeyID, CPubKey> pubkeys;
     std::map<CKeyID, std::pair<CPubKey, KeyOriginInfo>> origins;
     std::map<CKeyID, CKey> keys;
-    std::map<XOnlyPubKey, TaprootBuilder> tr_trees; /** Map from output key to Taproot tree (which can then make the TaprootSpendData */
+    std::map<XOnlyPubKey, TaprootBuilder> tr_trees; /** Map from output key to Taproot tree, which can then produce TaprootSpendData. */
     std::map<CPubKey, std::vector<CPubKey>> aggregate_pubkeys; /** MuSig2 aggregate pubkeys */
 
     bool GetCScript(const CScriptID& scriptid, CScript& script) const override;
@@ -229,7 +229,7 @@ struct FlatSigningProvider final : public SigningProvider
     FlatSigningProvider& Merge(FlatSigningProvider&& b) LIFETIMEBOUND;
 };
 
-/** Fillable signing provider that keeps keys in an address->secret map */
+/** Fillable signing provider that keeps keys in a key-id-to-secret map. */
 class FillableSigningProvider : public SigningProvider
 {
 protected:
@@ -263,9 +263,9 @@ protected:
      * Some of the scripts stored in mapScripts are memory-only and
      * intentionally not saved to disk. Specifically, scripts added by
      * ImplicitlyLearnRelatedKeyScripts(pubkey) calls are not written to disk so
-     * future wallet code can have flexibility to be more selective about what
-     * transaction outputs it recognizes as payments, instead of having to treat
-     * all outputs spending to keys it knows as payments. By contrast,
+     * wallet code can remain selective about which outputs it recognizes as
+     * payments, instead of having to treat all outputs spending to known keys
+     * as payments. By contrast,
      * mapScripts entries added by AddCScript(script),
      * LearnRelatedScripts(pubkey, type), and LearnAllRelatedScripts(pubkey)
      * calls are saved because they are all intentionally used to receive

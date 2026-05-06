@@ -39,7 +39,7 @@ class LEVELDB_EXPORT Cache {
   Cache& operator=(const Cache&) = delete;
 
   // Destroys all existing entries by calling the "deleter"
-  // function that was passed to the constructor.
+  // function that was passed to Insert().
   virtual ~Cache();
 
   // Opaque handle to an entry stored in the cache.

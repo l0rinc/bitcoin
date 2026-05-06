@@ -39,7 +39,7 @@ namespace leveldb {
 
 namespace {
 
-// Set by EnvPosixTestHelper::SetReadOnlyMMapLimit() and MaxOpenFiles().
+// Set by EnvPosixTestHelper::SetReadOnlyFDLimit() and MaxOpenFiles().
 int g_open_read_only_file_limit = -1;
 
 // Up to 4096 mmap regions for 64-bit binaries; none for 32-bit.
@@ -150,7 +150,8 @@ class PosixSequentialFile final : public SequentialFile {
 class PosixRandomAccessFile final : public RandomAccessFile {
  public:
   // The new instance takes ownership of |fd|. |fd_limiter| must outlive this
-  // instance, and will be used to determine if .
+  // instance, and determines whether the file descriptor stays open for the
+  // lifetime of the object or is reopened on each read.
   PosixRandomAccessFile(std::string filename, int fd, Limiter* fd_limiter)
       : has_permanent_fd_(fd_limiter->Acquire()),
         fd_(has_permanent_fd_ ? fd : -1),
@@ -214,11 +215,11 @@ class PosixRandomAccessFile final : public RandomAccessFile {
 class PosixMmapReadableFile final : public RandomAccessFile {
  public:
   // mmap_base[0, length-1] points to the memory-mapped contents of the file. It
-  // must be the result of a successful call to mmap(). This instances takes
+  // must be the result of a successful call to mmap(). This instance takes
   // over the ownership of the region.
   //
   // |mmap_limiter| must outlive this instance. The caller must have already
-  // aquired the right to use one mmap region, which will be released when this
+  // acquired the right to use one mmap region, which will be released when this
   // instance is destroyed.
   PosixMmapReadableFile(std::string filename, char* mmap_base, size_t length,
                         Limiter* mmap_limiter)
@@ -741,7 +742,7 @@ class PosixEnv : public Env {
   // Instances are constructed on the thread calling Schedule() and used on the
   // background thread.
   //
-  // This structure is thread-safe beacuse it is immutable.
+  // This structure is thread-safe because it is immutable.
   struct BackgroundWorkItem {
     explicit BackgroundWorkItem(void (*function)(void* arg), void* arg)
         : function(function), arg(arg) {}
@@ -833,7 +834,7 @@ void PosixEnv::BackgroundThreadMain() {
 
 namespace {
 
-// Wraps an Env instance whose destructor is never created.
+// Wraps an Env instance whose destructor is never run.
 //
 // Intended usage:
 //   using PlatformSingletonEnv = SingletonEnv<PlatformEnv>;

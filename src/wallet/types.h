@@ -18,11 +18,11 @@
 
 namespace wallet {
 /**
- * Address purpose field that has been been stored with wallet sending and
- * receiving addresses since BIP70 payment protocol support was added in
- * https://github.com/bitcoin/bitcoin/pull/2539. This field is not currently
- * used for any logic inside the wallet, but it is still shown in RPC and GUI
- * interfaces and saved for new addresses. It is basically redundant with an
+ * Address purpose field stored with wallet address-book entries since BIP70
+ * payment protocol support was added in
+ * https://github.com/bitcoin/bitcoin/pull/2539. It is exposed through RPC and
+ * GUI interfaces, used by migration logic, and may be absent in older wallet
+ * data. For common send/receive entries it is often redundant with the
  * address's IsMine() result.
  */
 enum class AddressPurpose {

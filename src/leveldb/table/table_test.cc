@@ -619,9 +619,8 @@ TEST(Harness, Empty) {
   }
 }
 
-// Special test for a block with no restart entries.  The C++ leveldb
-// code never generates such blocks, but the Java version of leveldb
-// seems to.
+// Special test for a block with no restart entries. BlockBuilder never
+// generates such blocks, but the reader should still handle them.
 TEST(Harness, ZeroRestartPointsInBlock) {
   char data[sizeof(uint32_t)];
   memset(data, 0, sizeof(data));
@@ -711,7 +710,7 @@ TEST(Harness, RandomizedLongDB) {
   }
   Test(&rnd);
 
-  // We must have created enough data to force merging
+  // We must have created enough data to flush at least one table file.
   int files = 0;
   for (int level = 0; level < config::kNumLevels; level++) {
     std::string value;

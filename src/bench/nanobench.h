@@ -186,7 +186,7 @@ class BigO;
  *
  *    Apart from these tags, it is also possible to use some mathematical operations on the measurement data. The operations
  *    are of the form `{{command(name)}}`.  Currently `name` can be one of `elapsed`, `iterations`. If performance counters
- *    are available (currently only on current Linux systems), you also have `pagefaults`, `cpucycles`,
+ *    are available (currently only on Linux systems with performance counter support), you also have `pagefaults`, `cpucycles`,
  *    `contextswitches`, `instructions`, `branchinstructions`, and `branchmisses`. All the measures (except `iterations`) are
  *    provided for a single iteration (so `elapsed` is the time a single iteration took). The following tags are available:
  *
@@ -472,7 +472,7 @@ ANKERL_NANOBENCH(IGNORE_PADDED_POP)
  * An extremely fast random generator. Currently, this implements *RomuDuoJr*, developed by Mark Overton. Source:
  * http://www.romu-random.org/
  *
- * RomuDuoJr is extremely fast and provides reasonable good randomness. Not enough for large jobs, but definitely
+ * RomuDuoJr is extremely fast and provides reasonably good randomness. Not enough for large jobs, but definitely
  * good enough for a benchmarking framework.
  *
  *  * Estimated capacity: @f$ 2^{51} @f$ bytes
@@ -562,7 +562,7 @@ public:
      *
      * The algorithm only produces 32bit numbers, and is slightly biased. The effect is quite small unless your range is close to the
      * maximum value of an integer. It is possible to correct the bias with rejection sampling (see
-     * [here](https://lemire.me/blog/2016/06/30/fast-random-shuffling/), but this is most likely irrelevant in practices for the
+     * [here](https://lemire.me/blog/2016/06/30/fast-random-shuffling/), but this is most likely irrelevant in practice for the
      * purposes of this Rng.
      *
      * See Daniel Lemire's blog post [A fast alternative to the modulo
@@ -763,7 +763,7 @@ public:
     ANKERL_NANOBENCH(NODISCARD) std::ostream* output() const noexcept;
 
     /**
-     * Modern processors have a very accurate clock, being able to measure as low as 20 nanoseconds. This is the main trick nanobech to
+     * Modern processors have a very accurate clock, being able to measure as low as 20 nanoseconds. This is the main trick nanobench to
      * be so fast: we find out how accurate the clock is, then run the benchmark only so often that the clock's accuracy is good enough
      * for accurate measurements.
      *
@@ -887,7 +887,7 @@ public:
      * @brief Enables/disables performance counters.
      *
      * On Linux nanobench has a powerful feature to use performance counters. This enables counting of retired instructions, count
-     * number of branches, missed branches, etc. On default this is enabled, but you can disable it if you don't need that feature.
+     * number of branches, missed branches, etc. By default this is enabled, but you can disable it if you don't need that feature.
      *
      * @param showPerformanceCounters True to enable, false to disable.
      */
@@ -1777,7 +1777,7 @@ static void generateResult(std::vector<Node> const& nodes, size_t idx, std::vect
 
 } // namespace templates
 
-// helper stuff that only intended to be used internally
+// helper stuff that is only intended to be used internally
 namespace detail {
 
 char const* getEnv(char const* name);
@@ -3260,7 +3260,7 @@ std::chrono::nanoseconds Bench::maxEpochTime() const noexcept {
     return mConfig.mMaxEpochTime;
 }
 
-// Sets the maximum time each epoch should take. Default is 100ms.
+// Sets the minimum time each epoch should take. Default is 0ns.
 Bench& Bench::minEpochTime(std::chrono::nanoseconds t) noexcept {
     mConfig.mMinEpochTime = t;
     return *this;

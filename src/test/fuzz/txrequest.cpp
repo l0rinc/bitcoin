@@ -19,10 +19,10 @@ namespace {
 constexpr int MAX_TXHASHES = 16;
 constexpr int MAX_PEERS = 16;
 
-//! Randomly generated txhashes used in this test (length is MAX_TXHASHES).
+//! Deterministically generated txhashes used in this test (length is MAX_TXHASHES).
 uint256 TXHASHES[MAX_TXHASHES];
 
-//! Precomputed random durations (positive and negative, each ~exponentially distributed).
+//! Precomputed deterministic durations (positive and negative, each ~exponentially distributed).
 std::chrono::microseconds DELAYS[256];
 
 struct Initializer

@@ -165,11 +165,13 @@ static bool AppInit(NodeContext& node)
     ArgsManager& args = *Assert(node.args);
 
 #if HAVE_DECL_FORK
-    // Communication with parent after daemonizing. This is used for signalling in the following ways:
-    // - a boolean token is sent when the initialization process (all the Init* functions) have finished to indicate
-    // that the parent process can quit, and whether it was successful/unsuccessful.
-    // - an unexpected shutdown of the child process creates an unexpected end of stream at the parent
-    // end, which is interpreted as failure to start.
+    // Communication with the parent after daemonizing:
+    // - without -daemonwait, the child sends an early success token after
+    //   daemonization so the parent can exit immediately;
+    // - with -daemonwait, the child sends a success/failure token after the
+    //   initialization process (all the Init* functions) finishes;
+    // - an unexpected shutdown of the child process creates an unexpected end
+    //   of stream at the parent end, which is interpreted as failure to start.
     TokenPipeEnd daemon_ep;
 #endif
     std::any context{&node};

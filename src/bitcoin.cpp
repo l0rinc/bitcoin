@@ -40,6 +40,7 @@ Additional less commonly used commands:
   chainstate [ARGS] Run bitcoin kernel chainstate util, equivalent to running 'bitcoin-chainstate [ARGS]'.
   test [ARGS]       Run unit tests, equivalent to running 'test_bitcoin [ARGS]'.
   test-gui [ARGS]   Run GUI unit tests, equivalent to running 'test_bitcoin-qt [ARGS]'.
+  util [ARGS]       Run bitcoin kernel util, equivalent to running 'bitcoin-util [ARGS]'.
 )";
 
 static constexpr auto HELP_SHORT = R"(

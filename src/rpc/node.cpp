@@ -333,11 +333,10 @@ static RPCHelpMan echoipc()
                 echo = init->makeEcho();
                 ipc->addCleanup(*echo, [init = init.release()] { delete init; });
             } else {
-                // IPC support is not available because this is a bitcoind
-                // process not a bitcoind-node process, so just create a local
-                // interfaces::Echo object and return it so the `echoipc` RPC
-                // method will work, and the python test calling `echoipc`
-                // can expect the same result.
+                // IPC support is not available in this process, so just create
+                // a local interfaces::Echo object and return it. This keeps
+                // the `echoipc` RPC method working and lets the python test
+                // expect the same result.
                 echo = local_init.makeEcho();
             }
             return echo->echo(request.params[0].get_str());

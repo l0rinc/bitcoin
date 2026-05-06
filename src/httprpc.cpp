@@ -58,8 +58,7 @@ static void JSONErrorReply(HTTPRequest* req, UniValue objError, const JSONRPCReq
     req->WriteReply(nStatus, strReply);
 }
 
-//This function checks username and password against -rpcauth
-//entries from config file.
+// Check username and password against the configured rpcauth-style entries.
 static bool CheckUserAuthorized(std::string_view user, std::string_view pass)
 {
     for (const auto& fields : g_rpcauth) {

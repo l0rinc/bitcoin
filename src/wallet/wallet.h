@@ -183,7 +183,6 @@ static const std::map<std::string, WalletFlags> STRING_TO_WALLET_FLAG{
 /** A wrapper to reserve an address from a wallet
  *
  * ReserveDestination is used to reserve an address.
- * It is currently only used inside of CreateTransaction.
  *
  * Instantiating a ReserveDestination does not reserve an address. To do so,
  * GetReservedDestination() needs to be called on the object. Once an address has been
@@ -248,9 +247,10 @@ struct CAddressBookData
     std::optional<std::string> label;
 
     /**
-     * Address purpose which was originally recorded for payment protocol
-     * support but now serves as a cached IsMine value. Wallet code should
-     * not rely on this field being set.
+     * Address purpose recorded in the address book and exposed through wallet
+     * RPC and GUI interfaces. Older wallet entries may leave this unset, in
+     * which case callers often infer a default RECEIVE or SEND value from
+     * IsMine().
      */
     std::optional<AddressPurpose> purpose;
 
@@ -264,11 +264,11 @@ struct CAddressBookData
     bool previously_spent{false};
 
     /**
-     * Map containing data about previously generated receive requests
-     * requesting funds to be sent to this address. Only present for IsMine
-     * addresses. Map keys are decimal numbers uniquely identifying each
-     * request, and map values are serialized RecentRequestEntry objects
-     * containing BIP21 URI information including message and amount.
+     * Map containing previously generated receive requests for this address.
+     * Map keys are decimal numbers uniquely identifying each request, and map
+     * values are serialized RecentRequestEntry objects containing BIP21 URI
+     * information including message and amount. The storage layer does not
+     * require the address to be IsMine.
      */
     std::map<std::string, std::string> receive_requests{};
 

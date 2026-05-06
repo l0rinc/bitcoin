@@ -95,8 +95,8 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
 
             if (wait_callback && node.validation_signals) {
                 // For transactions broadcast from outside the wallet, make sure
-                // that the wallet has been notified of the transaction before
-                // continuing.
+                // validation interface clients, including wallet observers, have
+                // been notified of the transaction before continuing.
                 //
                 // This prevents a race where a user might call sendrawtransaction
                 // with a transaction to/from their wallet, immediately call some

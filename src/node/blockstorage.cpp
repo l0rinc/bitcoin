@@ -165,8 +165,10 @@ bool CBlockIndexWorkComparator::operator()(const CBlockIndex* pa, const CBlockIn
     if (pa->nSequenceId < pb->nSequenceId) return false;
     if (pa->nSequenceId > pb->nSequenceId) return true;
 
-    // Use pointer address as tie breaker (should only happen with blocks
-    // loaded from disk, as those all have id 0).
+    // Use pointer address as a final tie breaker. This can happen for block
+    // index entries with the same sequence id, including entries loaded from
+    // disk and header-only blocks that have not been assigned a receive
+    // sequence yet.
     if (pa < pb) return false;
     if (pa > pb) return true;
 
@@ -415,8 +417,8 @@ bool BlockManager::LoadBlockIndex(const std::optional<uint256>& snapshot_blockha
         CBlockIndex* base{LookupBlockIndex(*snapshot_blockhash)};
 
         // Since m_chain_tx_count (responsible for estimated progress) isn't persisted
-        // to disk, we must bootstrap the value for assumedvalid chainstates
-        // from the hardcoded assumeutxo chainparams.
+        // to disk, we must bootstrap the value for the assumeutxo snapshot-backed
+        // chainstate from the hardcoded assumeutxo chainparams.
         base->m_chain_tx_count = au_data.m_chain_tx_count;
         LogInfo("[snapshot] set m_chain_tx_count=%d for %s", au_data.m_chain_tx_count, snapshot_blockhash->ToString());
     } else {
@@ -744,9 +746,10 @@ bool BlockManager::FlushChainstateBlockFile(int tip_height)
 {
     LOCK(cs_LastBlockFile);
     auto& cursor = m_blockfile_cursors[BlockfileTypeForHeight(tip_height)];
-    // If the cursor does not exist, it means an assumeutxo snapshot is loaded,
-    // but no blocks past the snapshot height have been written yet, so there
-    // is no data associated with the chainstate, and it is safe not to flush.
+    // If the cursor does not exist, blockfile cursors may not have been
+    // initialized yet (for example during early startup), or an assumeutxo
+    // snapshot may be loaded with no blocks written past the snapshot height
+    // yet. In either case there is no chainstate-specific file data to flush.
     if (cursor) {
         return FlushBlockFile(cursor->file_num, /*fFinalize=*/false, /*finalize_undo=*/false);
     }
@@ -1126,9 +1129,10 @@ static auto InitBlocksdirXorKey(const BlockManager::Options& opts)
     // size of the XOR-key file.
     std::array<std::byte, Obfuscation::KEY_SIZE> obfuscation{};
 
-    // Consider this to be the first run if the blocksdir contains only hidden
-    // files (those which start with a .). Checking for a fully-empty dir would
-    // be too aggressive as a .lock file may have already been written.
+    // Treat the blocksdir as newly initialized if it contains only hidden
+    // regular files (those which start with a .). Checking for a fully-empty
+    // dir would be too aggressive as a .lock file may have already been
+    // written.
     bool first_run = true;
     for (const auto& entry : fs::directory_iterator(opts.blocks_dir)) {
         const std::string path = fs::PathToString(entry.path().filename());
@@ -1139,8 +1143,8 @@ static auto InitBlocksdirXorKey(const BlockManager::Options& opts)
     }
 
     if (opts.use_xor && first_run) {
-        // Only use random fresh key when the boolean option is set and on the
-        // very first start of the program.
+        // Only generate a random fresh key when the option is set and the
+        // blocksdir appears newly initialized.
         FastRandomContext{}.fillrand(obfuscation);
     }
 

@@ -36,7 +36,7 @@ MiniMiner::MiniMiner(const CTxMemPool& mempool, const std::vector<COutPoint>& ou
             continue;
         }
 
-        // UXTO is created by transaction in mempool, add to map.
+        // UTXO is created by a transaction in the mempool, add it to the map.
         // Note: This will either create a missing entry or add the outpoint to an existing entry
         m_requested_outpoints_by_txid[outpoint.hash].push_back(outpoint);
 
@@ -174,7 +174,7 @@ MiniMiner::MiniMiner(const std::vector<MiniMinerMempoolEntry>& manual_entries,
 // Compare by min(ancestor feerate, individual feerate), then txid
 //
 // Under the ancestor-based mining approach, high-feerate children can pay for parents, but high-feerate
-// parents do not incentive inclusion of their children. Therefore the mining algorithm only considers
+// parents do not incentivize inclusion of their children. Therefore the mining algorithm only considers
 // transactions for inclusion on basis of the minimum of their own feerate or their ancestor feerate.
 struct AncestorFeerateComparator
 {
@@ -313,8 +313,9 @@ std::map<COutPoint, CAmount> MiniMiner::CalculateBumpFees(const CFeeRate& target
     // Build a block template until the target feerate is hit.
     BuildMockTemplate(target_feerate);
 
-    // Each transaction that "made it into the block" has a bumpfee of 0, i.e. they are part of an
-    // ancestor package with at least the target feerate and don't need to be bumped.
+    // Each transaction that "made it into the block" has a bump fee of 0: by
+    // construction, both its individual feerate and ancestor-package feerate
+    // already meet the target.
     for (const auto& txid : m_in_block) {
         // Not all of the block transactions were necessarily requested.
         auto it = m_requested_outpoints_by_txid.find(txid);
@@ -326,9 +327,8 @@ std::map<COutPoint, CAmount> MiniMiner::CalculateBumpFees(const CFeeRate& target
         }
     }
 
-    // A transactions and its ancestors will only be picked into a block when
-    // both the ancestor set feerate and the individual feerate meet the target
-    // feerate.
+    // A transaction will only be picked into a block when both its ancestor-set
+    // feerate and its individual feerate meet the target feerate.
     //
     // We had to convince ourselves that after running the mini miner and
     // picking all eligible transactions into our MockBlockTemplate, there
@@ -397,8 +397,7 @@ std::optional<CAmount> MiniMiner::CalculateTotalBumpFees(const CFeeRate& target_
     std::set<MockEntryMap::iterator, IteratorComparator> ancestors;
     std::set<MockEntryMap::iterator, IteratorComparator> to_process;
     for (const auto& [txid, outpoints] : m_requested_outpoints_by_txid) {
-        // Skip any ancestors that already have a miner score higher than the target feerate
-        // (already "made it" into the block)
+        // Skip requested transactions that already "made it" into the block.
         if (m_in_block.count(txid)) continue;
         auto iter = m_entries_by_txid.find(txid);
         if (iter == m_entries_by_txid.end()) continue;

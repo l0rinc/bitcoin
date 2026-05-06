@@ -278,7 +278,7 @@ void PSBTOperationsDialog::showTransactionStatus(const PartiallySignedTransactio
                 need_sig_text += " " + tr("(But this wallet cannot sign transactions.)");
                 level = StatusLevel::WARN;
             } else if (n_could_sign < 1) {
-                need_sig_text += " " + tr("(But this wallet does not have the right keys.)"); // XXX wording
+                need_sig_text += " " + tr("(But this wallet cannot sign any of this transaction's inputs.)");
                 level = StatusLevel::WARN;
             }
             showStatus(need_sig_text, level);

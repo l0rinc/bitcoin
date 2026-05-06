@@ -346,6 +346,20 @@ void run_ellswift_tests(void) {
         /* And compare: */
         CHECK(secp256k1_memcmp_var(share32a, share32b, 32) == 0);
 
+        /* Verify zero and overflowing secret keys are rejected. */
+        memset(sec32a_bad, 0, sizeof(sec32a_bad));
+        ret = secp256k1_ellswift_xdh(CTX, share32_bad, ell64a, ell64b, sec32a_bad, 0, hash_function, data);
+        CHECK(!ret);
+        memset(sec32b_bad, 0, sizeof(sec32b_bad));
+        ret = secp256k1_ellswift_xdh(CTX, share32_bad, ell64a, ell64b, sec32b_bad, 1, hash_function, data);
+        CHECK(!ret);
+        memset(sec32a_bad, 0xff, sizeof(sec32a_bad));
+        ret = secp256k1_ellswift_xdh(CTX, share32_bad, ell64a, ell64b, sec32a_bad, 0, hash_function, data);
+        CHECK(!ret);
+        memset(sec32b_bad, 0xff, sizeof(sec32b_bad));
+        ret = secp256k1_ellswift_xdh(CTX, share32_bad, ell64a, ell64b, sec32b_bad, 1, hash_function, data);
+        CHECK(!ret);
+
         /* Verify that the shared secret doesn't match if other side's public key is incorrect. */
         /* For A (using a bad public key for B): */
         memcpy(ell64b_bad, ell64b, sizeof(ell64a_bad));

@@ -28,8 +28,7 @@ namespace wallet {
 
 typedef std::vector<unsigned char> valtype;
 
-// Legacy wallet IsMine(). Used only in migration
-// DO NOT USE ANYTHING IN THIS NAMESPACE OUTSIDE OF MIGRATION
+// Legacy wallet IsMine() helpers. Keep this namespace private to this file.
 namespace {
 
 /**
@@ -824,7 +823,9 @@ bool LegacyDataSPKM::DeleteRecordsWithDB(WalletBatch& batch)
 
 util::Result<CTxDestination> DescriptorScriptPubKeyMan::GetNewDestination(const OutputType type)
 {
-    // Returns true if this descriptor supports getting new addresses. Conditions where we may be unable to fetch them (e.g. locked) are caught later
+    // Reject descriptors that cannot issue new addresses at all. Conditions
+    // that may temporarily block address generation (for example a locked
+    // wallet) are caught later.
     if (!CanGetAddresses()) {
         return util::Error{_("No addresses available")};
     }
@@ -1381,7 +1382,7 @@ std::optional<PSBTError> DescriptorScriptPubKeyMan::FillPSBT(PartiallySignedTran
         bool signed_one = PSBTInputSigned(input);
         if (n_signed && (signed_one || !sign)) {
             // If sign is false, we assume that we _could_ sign if we get here. This
-            // will never have false negatives; it is hard to tell under what i
+            // will never have false negatives; it is hard to tell under what
             // circumstances it could have false positives.
             (*n_signed)++;
         }

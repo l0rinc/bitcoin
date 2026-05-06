@@ -39,7 +39,7 @@ enum Network {
     /// IPv6
     NET_IPV6,
 
-    /// TOR (v2 or v3)
+    /// Tor v3
     NET_ONION,
 
     /// I2P

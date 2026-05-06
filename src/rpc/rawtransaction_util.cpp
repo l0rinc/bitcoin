@@ -254,14 +254,15 @@ void ParsePrevouts(const UniValue& prevTxsUnival, FlatSigningProvider* keystore,
                 std::vector<unsigned char> scriptData(!ws.isNull() ? ParseHexV(ws, "witnessScript") : ParseHexV(rs, "redeemScript"));
                 CScript script(scriptData.begin(), scriptData.end());
                 keystore->scripts.emplace(CScriptID(script), script);
-                // Automatically also add the P2WSH wrapped version of the script (to deal with P2SH-P2WSH).
-                // This is done for redeemScript only for compatibility, it is encouraged to use the explicit witnessScript field instead.
+                // Automatically also add the P2WSH-wrapped version of the script (to deal with
+                // P2SH-P2WSH). This keeps redeemScript-only callers working, though the explicit
+                // witnessScript field is preferred.
                 CScript witness_output_script{GetScriptForDestination(WitnessV0ScriptHash(script))};
                 keystore->scripts.emplace(CScriptID(witness_output_script), witness_output_script);
 
                 if (!ws.isNull() && !rs.isNull()) {
                     // if both witnessScript and redeemScript are provided,
-                    // they should either be the same (for backwards compat),
+                    // they should either be the same (for compatibility with legacy callers),
                     // or the redeemScript should be the encoded form of
                     // the witnessScript (ie, for p2sh-p2wsh)
                     if (ws.get_str() != rs.get_str()) {
@@ -277,27 +278,20 @@ void ParsePrevouts(const UniValue& prevTxsUnival, FlatSigningProvider* keystore,
                     const CTxDestination p2sh{ScriptHash(script)};
                     const CTxDestination p2sh_p2wsh{ScriptHash(witness_output_script)};
                     if (scriptPubKey == GetScriptForDestination(p2sh)) {
-                        // traditional p2sh; arguably an error if
-                        // we got here with rs.IsNull(), because
-                        // that means the p2sh script was specified
-                        // via witnessScript param, but for now
-                        // we'll just quietly accept it
+                        // traditional p2sh; this path also accepts the script when it was
+                        // provided through witnessScript instead of redeemScript.
                     } else if (scriptPubKey == GetScriptForDestination(p2sh_p2wsh)) {
-                        // p2wsh encoded as p2sh; ideally the witness
-                        // script was specified in the witnessScript
-                        // param, but also support specifying it via
-                        // redeemScript param for backwards compat
-                        // (in which case ws.IsNull() == true)
+                        // p2wsh encoded as p2sh; the witness script is ideally specified in the
+                        // witnessScript field, but the redeemScript field is also accepted for
+                        // compatibility with legacy callers (in which case ws.IsNull() == true).
                     } else {
                         // otherwise, can't generate scriptPubKey from
                         // either script, so we got unusable parameters
                         throw JSONRPCError(RPC_INVALID_PARAMETER, "redeemScript/witnessScript does not match scriptPubKey");
                     }
                 } else if (is_p2wsh) {
-                    // plain p2wsh; could throw an error if script
-                    // was specified by redeemScript rather than
-                    // witnessScript (ie, ws.IsNull() == true), but
-                    // accept it for backwards compat
+                    // plain p2wsh; the witness script is ideally specified in witnessScript, but
+                    // redeemScript is also accepted for compatibility with legacy callers.
                     const CTxDestination p2wsh{WitnessV0ScriptHash(script)};
                     if (scriptPubKey != GetScriptForDestination(p2wsh)) {
                         throw JSONRPCError(RPC_INVALID_PARAMETER, "redeemScript/witnessScript does not match scriptPubKey");

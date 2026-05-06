@@ -228,7 +228,7 @@ BOOST_AUTO_TEST_CASE(MempoolIndexingTest)
     setAncestors.insert(pool.GetIter(tx7.GetHash()).value());
     AddToMempool(pool, entry.Fee(0LL).Time(NodeSeconds{2s}).FromTx(tx8));
 
-    // Now tx8 should be sorted low, but tx6/tx both high
+    // Now tx8 should be sorted low, but tx6/tx7 both high
     sortedOrder.insert(sortedOrder.begin(), tx8.GetHash().ToString());
     CheckSort<descendant_score>(pool, sortedOrder);
 
@@ -724,8 +724,8 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     // ty1          1 (ty1)             6 (ty1,2,3,4,5,6)
     // ty2          2 (ty1,2)           6 (ty1,2,3,4,5,6)
     // ty3          3 (ty1,2,3)         6 (ty1,2,3,4,5,6)
-    // ty4          4 (y1234)           6 (ty1,2,3,4,5,6)
-    // ty5          5 (y12345)          6 (ty1,2,3,4,5,6)
+    // ty4          4 (ty1234)          6 (ty1,2,3,4,5,6)
+    // ty5          5 (ty12345)         6 (ty1,2,3,4,5,6)
     // ty6          9 (tx123, ty123456) 6 (ty1,2,3,4,5,6)
     pool.GetTransactionAncestry(tx1->GetHash(), ancestors, descendants);
     BOOST_CHECK_EQUAL(ancestors, 1ULL);
@@ -786,7 +786,7 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTestsDiamond)
     // Ancestors / descendants should be:
     // transaction  ancestors           descendants
     // ============ =================== ===========
-    // ta           1 (ta               4 (ta,tb,tc,td)
+    // ta           1 (ta)              4 (ta,tb,tc,td)
     // tb           2 (ta,tb)           4 (ta,tb,tc,td)
     // tc           3 (ta,tb,tc)        4 (ta,tb,tc,td)
     // td           4 (ta,tb,tc,td)     4 (ta,tb,tc,td)

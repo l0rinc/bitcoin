@@ -26,11 +26,11 @@ enum WalletFlags : uint64_t {
     // Indicates that the descriptor cache has been upgraded to cache last hardened xpubs
     WALLET_FLAG_LAST_HARDENED_XPUB_CACHED = (1ULL << 2),
 
-    // will enforce the rule that the wallet can't contain any private keys (only watch-only/pubkeys)
+    // Enforces that the wallet cannot contain private keys.
     WALLET_FLAG_DISABLE_PRIVATE_KEYS = (1ULL << 32),
 
     //! Flag set when a wallet contains no HD seed and no private keys, scripts,
-    //! addresses, and other watch only things, and is therefore "blank."
+    //! addresses, and other watch-only things, and is therefore "blank."
     //!
     //! The main function this flag serves is to distinguish a blank wallet from
     //! a newly created wallet when the wallet database is loaded, to avoid
@@ -39,7 +39,7 @@ enum WalletFlags : uint64_t {
     //! A secondary function of this flag, which applies to descriptor wallets
     //! only, is to serve as an ongoing indication that descriptors in the
     //! wallet should be created manually, and that the wallet should not
-    //! generate automatically generate new descriptors if it is later
+    //! automatically generate new descriptors if it is later
     //! encrypted. To support this behavior, descriptor wallets unlike legacy
     //! wallets do not automatically unset the BLANK flag when things are
     //! imported.
@@ -67,7 +67,7 @@ public:
     uint256 id; // Descriptor ID (calculated once at descriptor initialization/deserialization)
     uint64_t creation_time = 0;
     int32_t range_start = 0; // First item in range; start of range, inclusive, i.e. [range_start, range_end). This never changes.
-    int32_t range_end = 0; // Item after the last; end of range, exclusive, i.e. [range_start, range_end). This will increment with each TopUp()
+    int32_t range_end = 0; // Item after the last; end of range, exclusive, i.e. [range_start, range_end). This may grow during TopUp() calls.
     int32_t next_index = 0; // Position of the next item to generate
     DescriptorCache cache;
 

@@ -118,7 +118,7 @@ QVariant RecentRequestsTableModel::headerData(int section, Qt::Orientation orien
     return QVariant();
 }
 
-/** Updates the column title to "Amount (DisplayUnit)" and emits headerDataChanged() signal for table headers to react. */
+/** Updates the amount column title and emits headerDataChanged() for table headers to react. */
 void RecentRequestsTableModel::updateAmountColumnTitle()
 {
     columns[Amount] = getAmountTitle();

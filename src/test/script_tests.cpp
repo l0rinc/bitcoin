@@ -921,15 +921,17 @@ BOOST_AUTO_TEST_CASE(script_json_test)
             unsigned int i=0;
             for (i = 0; i < test[pos].size()-1; i++) {
                 auto element = test[pos][i].get_str();
-                // We use #SCRIPT# to flag a non-hex script that we can read using ParseScript
-                // Taproot script must be third from the last element in witness stack
+                // We use #SCRIPT# to flag a non-hex script that we can read using ParseScript.
+                // For a Taproot script-path spend, the script must be the
+                // second-to-last element in the witness stack.
                 static const std::string SCRIPT_FLAG{"#SCRIPT#"};
                 if (element.starts_with(SCRIPT_FLAG)) {
                     CScript script = ParseScript(element.substr(SCRIPT_FLAG.size()));
                     witness.stack.push_back(ToByteVector(script));
                 } else if (element == "#CONTROLBLOCK#") {
-                    // Taproot script control block - second from the last element in witness stack
-                    // If #CONTROLBLOCK# we auto-generate the control block
+                    // For a Taproot script-path spend, the control block must
+                    // be the last element in the witness stack. If
+                    // #CONTROLBLOCK# is present, auto-generate the control block.
                     taprootBuilder.Add(/*depth=*/0, witness.stack.back(), TAPROOT_LEAF_TAPSCRIPT, /*track=*/true);
                     taprootBuilder.Finalize(XOnlyPubKey(keys.key0.GetPubKey()));
                     auto controlblocks = taprootBuilder.GetSpendData().scripts[{witness.stack.back(), TAPROOT_LEAF_TAPSCRIPT}];
@@ -1608,6 +1610,8 @@ BOOST_AUTO_TEST_CASE(script_HasValidOps)
     script = ToScript("76a9141234567890abcdefa1a2a3a4a5a6a7a8a9a0aaab88ac"_hex); // Normal script
     BOOST_CHECK(script.HasValidOps());
     script = ToScript("76a914ff34567890abcdefa1a2a3a4a5a6a7a8a9a0aaab88ac"_hex);
+    BOOST_CHECK(script.HasValidOps());
+    script = CScript() << OP_CHECKSIGADD;
     BOOST_CHECK(script.HasValidOps());
     script = ToScript("ff88ac"_hex); // Script with OP_INVALIDOPCODE explicit
     BOOST_CHECK(!script.HasValidOps());

@@ -340,7 +340,7 @@ bool BlockFilterIndex::CustomRemove(const interfaces::BlockInfo& block)
     batch.Write(DB_FILTER_POS, m_next_filter_pos);
     if (!m_db->WriteBatch(batch)) return false;
 
-    // Update cached header to the previous block hash
+    // Update cached filter header to the previous block's filter header.
     m_last_header = *Assert(ReadFilterHeader(block.height - 1, *Assert(block.prev_hash)));
     return true;
 }

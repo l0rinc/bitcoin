@@ -124,8 +124,8 @@ BOOST_FIXTURE_TEST_CASE(chainstate_update_tip, TestChain100Setup)
     const CChainParams& chainparams = Params();
     bool newblock = false;
 
-    // TODO: much of this is inlined from ProcessNewBlock(); just reuse PNB()
-    // once it is changed to support multiple chainstates.
+    // TODO: Reuse a shared ProcessNewBlock helper here; this path needs one
+    // that can target a non-active chainstate.
     {
         LOCK(::cs_main);
         bool checked = CheckBlock(*pblockone, state, chainparams.GetConsensus());

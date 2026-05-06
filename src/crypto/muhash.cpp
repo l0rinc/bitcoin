@@ -111,7 +111,7 @@ inline void addnextract2(limb_t& c0, limb_t& c1, const limb_t& a, limb_t& n)
 
 } // namespace
 
-/** Indicates whether d is larger than the modulus. */
+/** Indicates whether d is at least the modulus. */
 bool Num3072::IsOverflow() const
 {
     if (this->limbs[0] <= std::numeric_limits<limb_t>::max() - MAX_PRIME_DIFF) return false;
@@ -246,7 +246,7 @@ inline limb_t ComputeDivstepMatrix(signed_limb_t eta, limb_t f, limb_t g, Signed
         0x97, 0xAD, 0x8B, 0xE1, 0xDF, 0x35, 0x13, 0x29, 0xA7, 0x3D, 0x1B, 0xF1,
         0xEF, 0xC5, 0xA3, 0x39, 0xB7, 0xCD, 0xAB, 0x01
     };
-    // Coefficients of returned SignedMatrix; starts off as identity matrix. */
+    // Coefficients of the returned SignedMatrix; start off as the identity matrix.
     limb_t u = 1, v = 0, q = 0, r = 1;
     // The number of divsteps still left.
     int i = SIGNED_LIMB_SIZE;
@@ -337,7 +337,7 @@ inline void UpdateDE(Num3072Signed& d, Num3072Signed& e, const SignedMatrix& t)
     ce += (signed_double_limb_t)me << FINAL_LIMB_MODULUS_BITS;
     d.limbs[SIGNED_LIMBS - 2] = (signed_limb_t)cd & MAX_SIGNED_LIMB; cd >>= SIGNED_LIMB_SIZE;
     e.limbs[SIGNED_LIMBS - 2] = (signed_limb_t)ce & MAX_SIGNED_LIMB; ce >>= SIGNED_LIMB_SIZE;
-    /* What remains goes into output limb SINGED_LIMBS-1 */
+    /* What remains goes into output limb SIGNED_LIMBS-1. */
     d.limbs[SIGNED_LIMBS - 1] = (signed_limb_t)cd;
     e.limbs[SIGNED_LIMBS - 1] = (signed_limb_t)ce;
 }
@@ -358,13 +358,13 @@ inline void UpdateFG(Num3072Signed& f, Num3072Signed& g, const SignedMatrix& t, 
     gi = g.limbs[0];
     cf = (signed_double_limb_t)u * fi + (signed_double_limb_t)v * gi;
     cg = (signed_double_limb_t)q * fi + (signed_double_limb_t)r * gi;
-    /* Verify that the bottom SIGNED_LIMB_BITS bits of the result are zero, and then throw them away. */
+    /* Verify that the bottom SIGNED_LIMB_SIZE bits of the result are zero, and then throw them away. */
     Assume((cf & MAX_SIGNED_LIMB) == 0);
     Assume((cg & MAX_SIGNED_LIMB) == 0);
     cf >>= SIGNED_LIMB_SIZE;
     cg >>= SIGNED_LIMB_SIZE;
-    /* Now iteratively compute limb i=1..SIGNED_LIMBS-1 of t*[f,g], and store them in output limb i-1 (shifting
-     * down by SIGNED_LIMB_BITS bits). */
+    /* Now iteratively compute limb i=1..len-1 of t*[f,g], and store them in output limb i-1 (shifting
+     * down by SIGNED_LIMB_SIZE bits). */
     for (int i = 1; i < len; ++i) {
         fi = f.limbs[i];
         gi = g.limbs[i];
@@ -373,7 +373,7 @@ inline void UpdateFG(Num3072Signed& f, Num3072Signed& g, const SignedMatrix& t, 
         f.limbs[i - 1] = (signed_limb_t)cf & MAX_SIGNED_LIMB; cf >>= SIGNED_LIMB_SIZE;
         g.limbs[i - 1] = (signed_limb_t)cg & MAX_SIGNED_LIMB; cg >>= SIGNED_LIMB_SIZE;
     }
-    /* What remains is limb SIGNED_LIMBS of t*[f,g]; store it as output limb SIGNED_LIMBS-1. */
+    /* What remains is limb len of t*[f,g]; store it as output limb len-1. */
     f.limbs[len - 1] = (signed_limb_t)cf;
     g.limbs[len - 1] = (signed_limb_t)cg;
 
@@ -457,7 +457,7 @@ void Num3072::Multiply(const Num3072& a)
     limb_t c0 = 0, c1 = 0, c2 = 0;
     Num3072 tmp;
 
-    /* Compute limbs 0..N-2 of this*a into tmp, including one reduction. */
+    /* Compute limbs 0..LIMBS-2 of this*a into tmp, including one reduction. */
     for (int j = 0; j < LIMBS - 1; ++j) {
         limb_t d0 = 0, d1 = 0, d2 = 0;
         mul(d0, d1, this->limbs[1 + j], a.limbs[LIMBS + j - (1 + j)]);
@@ -467,7 +467,7 @@ void Num3072::Multiply(const Num3072& a)
         extract3(c0, c1, c2, tmp.limbs[j]);
     }
 
-    /* Compute limb N-1 of a*b into tmp. */
+    /* Compute limb LIMBS-1 of this*a into tmp. */
     assert(c2 == 0);
     for (int i = 0; i < LIMBS; ++i) muladd3(c0, c1, c2, this->limbs[i], a.limbs[LIMBS - 1 - i]);
     extract3(c0, c1, c2, tmp.limbs[LIMBS - 1]);
@@ -481,10 +481,9 @@ void Num3072::Multiply(const Num3072& a)
     assert(c1 == 0);
     assert(c0 == 0 || c0 == 1);
 
-    /* Perform up to two more reductions if the internal state has already
-     * overflown the MAX of Num3072 or if it is larger than the modulus or
-     * if both are the case.
-     * */
+    /* Perform up to two more reductions if the internal state still has an extra
+     * carry beyond the Num3072 range, is at least the modulus, or both.
+     */
     if (this->IsOverflow()) this->FullReduce();
     if (c0) this->FullReduce();
 }

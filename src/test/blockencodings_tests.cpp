@@ -156,7 +156,7 @@ BOOST_AUTO_TEST_CASE(NonCoinbasePreforwardRTTest)
 
     Txid txhash;
 
-    // Test with pre-forwarding tx 1, but not coinbase
+    // Test with tx 1 prefilled, but not the coinbase
     {
         TestHeaderAndShortIDs shortIDs(block, rand_ctx);
         shortIDs.prefilledtxn.resize(1);
@@ -227,7 +227,7 @@ BOOST_AUTO_TEST_CASE(SufficientPreforwardRTTest)
 
     Txid txhash;
 
-    // Test with pre-forwarding coinbase + tx 2 with tx 1 in mempool
+    // Test with the coinbase and tx 2 prefilled, and tx 1 in the mempool
     {
         TestHeaderAndShortIDs shortIDs(block, rand_ctx);
         shortIDs.prefilledtxn.resize(2);
@@ -284,7 +284,7 @@ BOOST_AUTO_TEST_CASE(EmptyBlockRoundTripTest)
     assert(!mutated);
     while (!CheckProofOfWork(block.GetHash(), block.nBits, Params().GetConsensus())) ++block.nNonce;
 
-    // Test simple header round-trip with only coinbase
+    // Test simple compact-block round-trip with only coinbase
     {
         CBlockHeaderAndShortTxIDs shortIDs{block, rand_ctx.rand64()};
 
@@ -413,12 +413,13 @@ BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationOverflowTest) {
     BlockTransactionsRequest req1;
     try {
         stream >> req1;
-        // before patch: deserialize above succeeds and this check fails, demonstrating the overflow
+        // If deserialization incorrectly accepts the overflow, the decoded
+        // indexes will no longer be strictly increasing.
         BOOST_CHECK(req1.indexes[1] < req1.indexes[2]);
-        // this shouldn't be reachable before or after patch
+        // This should be unreachable.
         BOOST_CHECK(0);
     } catch(std::ios_base::failure &) {
-        // deserialize should fail
+        // Deserialization should fail.
         BOOST_CHECK(true); // Needed to suppress "Test case [...] did not check any assertions"
     }
 }

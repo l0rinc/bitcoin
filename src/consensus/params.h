@@ -49,16 +49,15 @@ struct BIP9Deployment {
     /** Timeout/expiry MedianTime for the deployment attempt. */
     int64_t nTimeout{NEVER_ACTIVE};
     /** If lock in occurs, delay activation until at least this block
-     *  height.  Note that activation will only occur on a retarget
+     *  height. Note that activation will only occur on a signalling-period
      *  boundary.
      */
     int min_activation_height{0};
-    /** Period of blocks to check signalling in (usually retarget period, ie params.DifficultyAdjustmentInterval()) */
+    /** Number of blocks in a signalling period. */
     uint32_t period{2016};
     /**
-     * Minimum blocks including miner confirmation of the total of 2016 blocks in a retargeting period,
-     * which is also used for BIP9 deployments.
-     * Examples: 1916 for 95%, 1512 for testchains.
+     * Minimum signalling blocks required within one signalling period.
+     * Examples: 1815 of 2016 for 90%, 1512 of 2016 for 75%, 108 of 144 for regtest.
      */
     uint32_t threshold{1916};
 

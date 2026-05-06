@@ -65,7 +65,7 @@ BOOST_AUTO_TEST_CASE(compress_amounts)
 
 BOOST_AUTO_TEST_CASE(compress_script_to_ckey_id)
 {
-    // case CKeyID
+    // Case: CKeyID
     CKey key = GenerateRandomKey();
     CPubKey pubkey = key.GetPubKey();
 
@@ -79,12 +79,12 @@ BOOST_AUTO_TEST_CASE(compress_script_to_ckey_id)
     // Check compressed script
     BOOST_CHECK_EQUAL(out.size(), 21U);
     BOOST_CHECK_EQUAL(out[0], 0x00);
-    BOOST_CHECK_EQUAL(memcmp(out.data() + 1, script.data() + 3, 20), 0); // compare the 20 relevant chars of the CKeyId in the script
+    BOOST_CHECK_EQUAL(memcmp(out.data() + 1, script.data() + 3, 20), 0); // Compare the 20 relevant bytes of the CKeyID in the script.
 }
 
 BOOST_AUTO_TEST_CASE(compress_script_to_cscript_id)
 {
-    // case CScriptID
+    // Case: CScriptID
     CScript script, redeemScript;
     script << OP_HASH160 << ToByteVector(CScriptID(redeemScript)) << OP_EQUAL;
     BOOST_CHECK_EQUAL(script.size(), 23U);
@@ -96,12 +96,12 @@ BOOST_AUTO_TEST_CASE(compress_script_to_cscript_id)
     // Check compressed script
     BOOST_CHECK_EQUAL(out.size(), 21U);
     BOOST_CHECK_EQUAL(out[0], 0x01);
-    BOOST_CHECK_EQUAL(memcmp(out.data() + 1, script.data() + 2, 20), 0); // compare the 20 relevant chars of the CScriptId in the script
+    BOOST_CHECK_EQUAL(memcmp(out.data() + 1, script.data() + 2, 20), 0); // Compare the 20 relevant bytes of the CScriptID in the script.
 }
 
 BOOST_AUTO_TEST_CASE(compress_script_to_compressed_pubkey_id)
 {
-    CKey key = GenerateRandomKey(); // case compressed PubKeyID
+    CKey key = GenerateRandomKey(); // Case: compressed pubkey
 
     CScript script = CScript() << ToByteVector(key.GetPubKey()) << OP_CHECKSIG; // COMPRESSED_PUBLIC_KEY_SIZE (33)
     BOOST_CHECK_EQUAL(script.size(), 35U);
@@ -113,14 +113,14 @@ BOOST_AUTO_TEST_CASE(compress_script_to_compressed_pubkey_id)
     // Check compressed script
     BOOST_CHECK_EQUAL(out.size(), 33U);
     BOOST_CHECK_EQUAL(memcmp(out.data(), script.data() + 1, 1), 0);
-    BOOST_CHECK_EQUAL(memcmp(out.data() + 1, script.data() + 2, 32), 0); // compare the 32 chars of the compressed CPubKey
+    BOOST_CHECK_EQUAL(memcmp(out.data() + 1, script.data() + 2, 32), 0); // Compare the 32 payload bytes of the compressed CPubKey.
 }
 
 BOOST_AUTO_TEST_CASE(compress_script_to_uncompressed_pubkey_id)
 {
-    CKey key = GenerateRandomKey(/*compressed=*/false); // case uncompressed PubKeyID
+    CKey key = GenerateRandomKey(/*compressed=*/false); // Case: uncompressed pubkey
     CScript script =  CScript() << ToByteVector(key.GetPubKey()) << OP_CHECKSIG; // PUBLIC_KEY_SIZE (65)
-    BOOST_CHECK_EQUAL(script.size(), 67U);                   // 1 char code + 65 char pubkey + OP_CHECKSIG
+    BOOST_CHECK_EQUAL(script.size(), 67U);                   // 1-byte push opcode + 65-byte pubkey + OP_CHECKSIG
 
     CompressedScript out;
     bool done = CompressScript(script, out);
@@ -128,8 +128,8 @@ BOOST_AUTO_TEST_CASE(compress_script_to_uncompressed_pubkey_id)
 
     // Check compressed script
     BOOST_CHECK_EQUAL(out.size(), 33U);
-    BOOST_CHECK_EQUAL(memcmp(out.data() + 1, script.data() + 2, 32), 0); // first 32 chars of CPubKey are copied into out[1:]
-    BOOST_CHECK_EQUAL(out[0], 0x04 | (script[65] & 0x01)); // least significant bit (lsb) of last char of pubkey is mapped into out[0]
+    BOOST_CHECK_EQUAL(memcmp(out.data() + 1, script.data() + 2, 32), 0); // The first 32 bytes of the CPubKey payload are copied into out[1:].
+    BOOST_CHECK_EQUAL(out[0], 0x04 | (script[65] & 0x01)); // The least significant bit of the last pubkey byte is mapped into out[0].
 }
 
 BOOST_AUTO_TEST_CASE(compress_p2pk_scripts_not_on_curve)

@@ -26,12 +26,10 @@ public:
     //! Return Init interface that forwards requests over given socket descriptor.
     //! Socket communication is handled on a background thread.
     //!
-    //! @note It could be potentially useful in the future to add
-    //! std::function<void()> on_disconnect callback argument here. But there
-    //! isn't an immediate need, because the protocol implementation can clean
-    //! up its own state (calling ProxyServer destructors, etc) on disconnect,
-    //! and any client calls will just throw ipc::Exception errors after a
-    //! disconnect.
+    //! @note Protocol implementations are expected to clean up their own state
+    //! on disconnect (calling ProxyServer destructors, etc), and client calls
+    //! after a disconnect just throw ipc::Exception errors, so this interface
+    //! does not expose a separate disconnect callback.
     virtual std::unique_ptr<interfaces::Init> connect(int fd, const char* exe_name) = 0;
 
     //! Listen for connections on provided socket descriptor, accept them, and
