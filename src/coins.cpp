@@ -328,12 +328,16 @@ void CCoinsViewCache::Compact()
 {
     if (m_spent_fresh_count == 0) return;
 
+    auto previous{&m_sentinel};
     for (auto it{m_sentinel.second.Next()}; it != &m_sentinel;) {
         const auto next{it->second.Next()};
         if (it->second.IsFresh() && it->second.coin.IsSpent()) {
             Assume(!it->second.IsDirty());
+            CCoinsCacheEntry::UnlinkAfter(*previous, *it);
             cacheCoins.erase(it->first);
             Assume(TrySub(m_spent_fresh_count, true));
+        } else {
+            previous = it;
         }
         it = next;
     }
@@ -388,9 +392,6 @@ void CCoinsViewCache::SanityCheck() const
     size_t count_linked = 0;
     size_t count_spent_fresh = 0;
     for (auto it = m_sentinel.second.Next(); it != &m_sentinel; it = it->second.Next()) {
-        // Verify linked list integrity.
-        assert(it->second.Next()->second.Prev() == it);
-        assert(it->second.Prev()->second.Next() == it);
         // Verify they are actually flagged.
         assert(it->second.IsDirty() || it->second.IsFresh());
         // Count the number of entries actually in the list.
