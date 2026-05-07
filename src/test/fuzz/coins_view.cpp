@@ -212,7 +212,8 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                     if (fresh) CCoinsCacheEntry::SetFresh(*it, sentinel);
                     dirty_count += dirty;
                 }
-                auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, coins_map, /*will_erase=*/true)};
+                size_t spent_fresh_count{0};
+                auto cursor{CoinsViewCacheCursor(dirty_count, spent_fresh_count, sentinel, coins_map, /*will_erase=*/true)};
                 uint256 best_block{coins_view_cache.GetBestBlock()};
                 if (fuzzed_data_provider.ConsumeBool()) best_block = ConsumeUInt256(fuzzed_data_provider);
                 // Set best block hash to non-null to satisfy the assertion in CCoinsViewDB::BatchWrite().

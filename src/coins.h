@@ -105,6 +105,7 @@ using CoinsCachePair = std::pair<const COutPoint, CCoinsCacheEntry>;
  * - unspent, not FRESH, DIRTY (e.g. a coin changed in the cache during a reorg)
  * - unspent, not FRESH, not DIRTY (e.g. an unspent coin fetched from the parent cache)
  * - spent, not FRESH, DIRTY (e.g. a coin is spent and spentness needs to be flushed to the parent)
+ * - spent, FRESH, not DIRTY (e.g. a fresh coin was spent before being flushed and awaits compaction)
  */
 struct CCoinsCacheEntry
 {
@@ -180,6 +181,12 @@ public:
         m_flags = 0;
         m_prev = m_next = nullptr;
     }
+
+    void ClearDirty() noexcept
+    {
+        Assume(m_flags & FRESH);
+        m_flags &= ~DIRTY;
+    }
     bool IsDirty() const noexcept { return m_flags & DIRTY; }
     bool IsFresh() const noexcept { return m_flags & FRESH; }
 
@@ -254,7 +261,7 @@ private:
  *
  * However, the receiver can still call CoinsViewCacheCursor::WillErase to see if the
  * caller will erase the entry after BatchWrite returns. If so, the receiver can
- * perform optimizations such as moving the coin out of the CCoinsCachEntry instead
+ * perform optimizations such as moving the coin out of the CCoinsCacheEntry instead
  * of copying it.
  */
 struct CoinsViewCacheCursor
@@ -267,10 +274,15 @@ struct CoinsViewCacheCursor
     //! Calling CCoinsMap::clear() afterwards is faster because a CoinsCachePair cannot be coerced back into a
     //! CCoinsMap::iterator to be erased, and must therefore be looked up again by key in the CCoinsMap before being erased.
     CoinsViewCacheCursor(size_t& dirty_count LIFETIMEBOUND,
+                         size_t& spent_fresh_count LIFETIMEBOUND,
                          CoinsCachePair& sentinel LIFETIMEBOUND,
                          CCoinsMap& map LIFETIMEBOUND,
                          bool will_erase) noexcept
-        : m_dirty_count(dirty_count), m_sentinel(sentinel), m_map(map), m_will_erase(will_erase) {}
+        : m_dirty_count(dirty_count),
+          m_spent_fresh_count(spent_fresh_count),
+          m_sentinel(sentinel),
+          m_map(map),
+          m_will_erase(will_erase) {}
 
     inline CoinsCachePair* Begin() const noexcept { return m_sentinel.second.Next(); }
     inline CoinsCachePair* End() const noexcept { return &m_sentinel; }
@@ -280,11 +292,13 @@ struct CoinsViewCacheCursor
     {
         const auto next_entry{current.second.Next()};
         Assume(TrySub(m_dirty_count, current.second.IsDirty()));
+        const bool spent_fresh{current.second.IsFresh() && current.second.coin.IsSpent() && !current.second.IsDirty()};
         // If we are not going to erase the cache, we must still erase spent entries.
         // Otherwise, clear the state of the entry.
         if (!m_will_erase) {
             if (current.second.coin.IsSpent()) {
                 assert(current.second.coin.DynamicMemoryUsage() == 0); // scriptPubKey was already cleared in SpendCoin
+                Assume(TrySub(m_spent_fresh_count, spent_fresh));
                 m_map.erase(current.first);
             } else {
                 current.second.SetClean();
@@ -298,6 +312,7 @@ struct CoinsViewCacheCursor
     size_t GetTotalCount() const noexcept { return m_map.size(); }
 private:
     size_t& m_dirty_count;
+    size_t& m_spent_fresh_count;
     CoinsCachePair& m_sentinel;
     CCoinsMap& m_map;
     bool m_will_erase;
@@ -410,6 +425,8 @@ protected:
     mutable size_t cachedCoinsUsage{0};
     /* Running count of dirty Coin cache entries. */
     mutable size_t m_dirty_count{0};
+    /* Running count of spent FRESH entries waiting for linked-list compaction. */
+    mutable size_t m_spent_fresh_count{0};
 
     /**
      * Discard all modifications made to this cache without flushing to the base view.
@@ -498,6 +515,12 @@ public:
     void Sync();
 
     /**
+     * Remove spent FRESH entries that were left behind as tombstones.
+     * This only scans the linked list of flagged entries, not the whole cache.
+     */
+    void Compact();
+
+    /**
      * Removes the UTXO with the given outpoint from the cache, if it is
      * not modified.
      */
@@ -508,6 +531,9 @@ public:
 
     //! Number of dirty cache entries (transaction outputs)
     size_t GetDirtyCount() const noexcept { return m_dirty_count; }
+
+    //! Number of spent FRESH entries waiting for compaction
+    size_t GetSpentFreshCount() const noexcept { return m_spent_fresh_count; }
 
     //! Calculate the size of the cache (in bytes)
     size_t DynamicMemoryUsage() const;
