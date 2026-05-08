@@ -4,7 +4,7 @@ Upstream-Contact: Luke Dashjr <luke+knots+debian@dashjr.org>
 Source: https://github.com/bitcoinknots/bitcoin
 
 Files: *
-Copyright: 2009-2025, Bitcoin Core & Knots Developers
+Copyright: 2009-2026, Bitcoin Core & Knots Developers
 License: Expat
 Comment: The Bitcoin Core & Knots Developers encompasses all contributors to the
          project, listed in the release notes or the git log.
@@ -12,6 +12,7 @@ Comment: The Bitcoin Core & Knots Developers encompasses all contributors to the
 Files: debian/*
 Copyright: 2010-2011, Jonas Smedegaard <dr@jones.dk>
            2011, Matt Corallo <matt@bluematt.me>
+           2017, Luke Dashjr <luke+knots+debian@dashjr.org>
 License: GPL-2+
 
 Files: src/qt/res/icons/add.png
