@@ -5,6 +5,7 @@
 #include <common/system.h>
 #include <support/lockedpool.h>
 
+#include <cstddef>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -17,11 +18,9 @@ BOOST_AUTO_TEST_SUITE(allocator_tests)
 
 BOOST_AUTO_TEST_CASE(arena_tests)
 {
-    // Fake memory base address for testing
-    // without actually using memory.
-    void *synth_base = reinterpret_cast<void*>(0x08000000);
     const size_t synth_size = 1024*1024;
-    Arena b(synth_base, synth_size, 16);
+    std::vector<std::byte> memory(synth_size);
+    Arena b(memory.data(), synth_size, 16);
     void *chunk = b.alloc(1000);
 #ifdef ARENA_DEBUG
     b.walk();
@@ -147,7 +146,8 @@ public:
                 *lockingSuccess = true;
             }
 
-            return reinterpret_cast<void*>(uint64_t{static_cast<uint64_t>(0x08000000) + (count << 24)}); // Fake address, do not actually use this memory
+            arenas.emplace_back(len);
+            return arenas.back().data();
         }
         return nullptr;
     }
@@ -161,6 +161,7 @@ public:
 private:
     int count;
     int lockedcount;
+    std::vector<std::vector<std::byte>> arenas;
 };
 
 BOOST_AUTO_TEST_CASE(lockedpool_tests_mock)
