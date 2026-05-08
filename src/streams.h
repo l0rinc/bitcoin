@@ -333,7 +333,8 @@ public:
 
         while (nbits > 0) {
             int bits = std::min(8 - m_offset, nbits);
-            m_buffer |= (data << (64 - nbits)) >> (64 - 8 + m_offset);
+            const uint8_t chunk = (data >> (nbits - bits)) & ((uint64_t{1} << bits) - 1);
+            m_buffer |= chunk << (8 - m_offset - bits);
             m_offset += bits;
             nbits -= bits;
 

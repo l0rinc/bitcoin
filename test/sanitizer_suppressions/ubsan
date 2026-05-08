@@ -61,7 +61,6 @@ implicit-signed-integer-truncation:crypto/
 implicit-unsigned-integer-truncation:crypto/
 shift-base:arith_uint256.cpp
 shift-base:crypto/
-shift-base:streams.h
 shift-base:InsecureRandomContext::rand64
 shift-base:RandomMixin<*>::randbits
 shift-base:RandomMixin<*>::randbits<*>
