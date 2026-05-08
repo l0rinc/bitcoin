@@ -48,7 +48,6 @@ unsigned-integer-overflow:crypto/
 unsigned-integer-overflow:MurmurHash3
 unsigned-integer-overflow:InsecureRandomContext::rand64
 unsigned-integer-overflow:InsecureRandomContext::SplitMix64
-unsigned-integer-overflow:bitset_detail::PopCount
 implicit-integer-sign-change:crypto/
 implicit-integer-sign-change:EvalScript
 implicit-signed-integer-truncation:crypto/
