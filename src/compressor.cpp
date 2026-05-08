@@ -8,6 +8,8 @@
 #include <pubkey.h>
 #include <script/script.h>
 
+#include <limits>
+
 /*
  * These check for scripts for which a special case with a shorter encoding is defined.
  * They are implemented separately from the CScript test, as these test for exact byte
@@ -148,6 +150,8 @@ bool DecompressScript(CScript& script, unsigned int nSize, const CompressedScrip
 
 uint64_t CompressAmount(uint64_t n)
 {
+    static constexpr uint64_t MAX_AMOUNT{std::numeric_limits<uint64_t>::max()};
+
     if (n == 0)
         return 0;
     int e = 0;
@@ -159,14 +163,22 @@ uint64_t CompressAmount(uint64_t n)
         int d = (n % 10);
         assert(d >= 1 && d <= 9);
         n /= 10;
+        if (n > ((MAX_AMOUNT - e - 1) / 10 - (d - 1)) / 9) {
+            return MAX_AMOUNT;
+        }
         return 1 + (n*9 + d - 1)*10 + e;
     } else {
+        if (n - 1 > (MAX_AMOUNT - 10) / 10) {
+            return MAX_AMOUNT;
+        }
         return 1 + (n - 1)*10 + 9;
     }
 }
 
 uint64_t DecompressAmount(uint64_t x)
 {
+    static constexpr uint64_t MAX_AMOUNT{std::numeric_limits<uint64_t>::max()};
+
     // x = 0  OR  x = 1+10*(9*n + d - 1) + e  OR  x = 1+10*(n - 1) + 9
     if (x == 0)
         return 0;
@@ -180,11 +192,20 @@ uint64_t DecompressAmount(uint64_t x)
         int d = (x % 9) + 1;
         x /= 9;
         // x = n
+        if (x > (MAX_AMOUNT - d) / 10) {
+            return MAX_AMOUNT;
+        }
         n = x*10 + d;
     } else {
+        if (x == MAX_AMOUNT) {
+            return MAX_AMOUNT;
+        }
         n = x+1;
     }
     while (e) {
+        if (n > MAX_AMOUNT / 10) {
+            return MAX_AMOUNT;
+        }
         n *= 10;
         e--;
     }

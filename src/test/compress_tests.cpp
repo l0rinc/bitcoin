@@ -63,6 +63,9 @@ BOOST_AUTO_TEST_CASE(compress_amounts)
 
     for (uint64_t i = 0; i < 100000; i++)
         BOOST_CHECK(TestDecode(i));
+
+    BOOST_CHECK_EQUAL(CompressAmount(std::numeric_limits<uint64_t>::max()), std::numeric_limits<uint64_t>::max());
+    BOOST_CHECK_EQUAL(DecompressAmount(std::numeric_limits<uint64_t>::max()), std::numeric_limits<uint64_t>::max());
 }
 
 BOOST_AUTO_TEST_CASE(compress_amount_deserialize_out_of_range)
