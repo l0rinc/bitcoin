@@ -287,8 +287,10 @@ double TxConfirmStats::EstimateMedianVal(int confTarget, double sufficientTxVal,
         partialNum += txCtAvg[bucket];
         totalNum += txCtAvg[bucket];
         failNum += failAvg[periodTarget - 1][bucket];
-        for (unsigned int confct = confTarget; confct < GetMaxConfirms(); confct++)
-            extraNum += unconfTxs[(nBlockHeight - confct) % bins][bucket];
+        for (unsigned int confct = confTarget; confct < GetMaxConfirms(); confct++) {
+            const unsigned int block_index{(nBlockHeight % bins + bins - confct % bins) % bins};
+            extraNum += unconfTxs[block_index][bucket];
+        }
         extraNum += oldUnconfTxs[bucket];
         // If we have enough transaction data points in this range of buckets,
         // we can test for success
@@ -484,16 +486,14 @@ unsigned int TxConfirmStats::NewTx(unsigned int nBlockHeight, double val)
 
 void TxConfirmStats::removeTx(unsigned int entryHeight, unsigned int nBestSeenHeight, unsigned int bucketindex, bool inBlock)
 {
-    //nBestSeenHeight is not updated yet for the new block
-    int blocksAgo = nBestSeenHeight - entryHeight;
-    if (nBestSeenHeight == 0)  // the BlockPolicyEstimator hasn't seen any blocks yet
-        blocksAgo = 0;
-    if (blocksAgo < 0) {
+    // nBestSeenHeight is not updated yet for the new block
+    if (nBestSeenHeight != 0 && entryHeight > nBestSeenHeight) {
         LogDebug(BCLog::ESTIMATEFEE, "Blockpolicy error, blocks ago is negative for mempool tx\n");
-        return;  //This can't happen because we call this with our best seen height, no entries can have higher
+        return; // This can't happen because we call this with our best seen height, no entries can have higher
     }
+    const unsigned int blocksAgo{nBestSeenHeight == 0 ? 0 : nBestSeenHeight - entryHeight};
 
-    if (blocksAgo >= (int)unconfTxs.size()) {
+    if (blocksAgo >= unconfTxs.size()) {
         if (oldUnconfTxs[bucketindex] > 0) {
             oldUnconfTxs[bucketindex]--;
         } else {
