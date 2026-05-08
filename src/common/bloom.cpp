@@ -43,7 +43,8 @@ CBloomFilter::CBloomFilter(const unsigned int nElements, const double nFPRate, c
 inline unsigned int CBloomFilter::Hash(unsigned int nHashNum, std::span<const unsigned char> vDataToHash) const
 {
     // 0xFBA4C795 chosen as it guarantees a reasonable bit difference between nHashNum values.
-    return MurmurHash3(nHashNum * 0xFBA4C795 + nTweak, vDataToHash) % (vData.size() * 8);
+    const auto seed{static_cast<unsigned int>(uint64_t{nHashNum} * 0xFBA4C795 + nTweak)};
+    return MurmurHash3(seed, vDataToHash) % (vData.size() * 8);
 }
 
 void CBloomFilter::insert(std::span<const unsigned char> vKey)
@@ -189,7 +190,8 @@ CRollingBloomFilter::CRollingBloomFilter(const unsigned int nElements, const dou
 /* Similar to CBloomFilter::Hash */
 static inline uint32_t RollingBloomHash(unsigned int nHashNum, uint32_t nTweak, std::span<const unsigned char> vDataToHash)
 {
-    return MurmurHash3(nHashNum * 0xFBA4C795 + nTweak, vDataToHash);
+    const auto seed{static_cast<unsigned int>(uint64_t{nHashNum} * 0xFBA4C795 + nTweak)};
+    return MurmurHash3(seed, vDataToHash);
 }
 
 void CRollingBloomFilter::insert(std::span<const unsigned char> vKey)
@@ -200,8 +202,8 @@ void CRollingBloomFilter::insert(std::span<const unsigned char> vKey)
         if (nGeneration == 4) {
             nGeneration = 1;
         }
-        uint64_t nGenerationMask1 = 0 - (uint64_t)(nGeneration & 1);
-        uint64_t nGenerationMask2 = 0 - (uint64_t)(nGeneration >> 1);
+        uint64_t nGenerationMask1 = (nGeneration & 1) ? ~uint64_t{0} : uint64_t{0};
+        uint64_t nGenerationMask2 = (nGeneration >> 1) ? ~uint64_t{0} : uint64_t{0};
         /* Wipe old entries that used this generation number. */
         for (uint32_t p = 0; p < data.size(); p += 2) {
             uint64_t p1 = data[p], p2 = data[p + 1];

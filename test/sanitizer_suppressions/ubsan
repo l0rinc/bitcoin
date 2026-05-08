@@ -44,9 +44,6 @@ shift-base:test/fuzz/crypto_diff_fuzz_chacha20.cpp
 # list is used to suppress -fsanitize=integer warnings when running UBSan
 # locally or in CI.
 unsigned-integer-overflow:arith_uint256.h
-unsigned-integer-overflow:CBloomFilter::Hash
-unsigned-integer-overflow:CRollingBloomFilter::insert
-unsigned-integer-overflow:RollingBloomHash
 unsigned-integer-overflow:crypto/
 unsigned-integer-overflow:MurmurHash3
 unsigned-integer-overflow:InsecureRandomContext::rand64
