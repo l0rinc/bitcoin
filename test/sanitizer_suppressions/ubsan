@@ -49,7 +49,6 @@ unsigned-integer-overflow:MurmurHash3
 unsigned-integer-overflow:InsecureRandomContext::rand64
 unsigned-integer-overflow:InsecureRandomContext::SplitMix64
 implicit-integer-sign-change:crypto/
-implicit-integer-sign-change:EvalScript
 implicit-signed-integer-truncation:crypto/
 implicit-unsigned-integer-truncation:crypto/
 shift-base:arith_uint256.cpp
