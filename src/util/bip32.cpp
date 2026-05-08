@@ -52,7 +52,7 @@ std::string FormatHDKeypath(const std::vector<uint32_t>& path, bool apostrophe)
 {
     std::string ret;
     for (auto i : path) {
-        ret += strprintf("/%i", (i << 1) >> 1);
+        ret += strprintf("/%i", i & 0x7fffffff);
         if (i >> 31) ret += apostrophe ? '\'' : 'h';
     }
     return ret;
