@@ -891,7 +891,7 @@ class FullBlockTest(BitcoinTestFramework):
         self.log.info("Submit a genesis fork")
         self.tip = None
         fork_blocks = [self.next_block("fork" + str(h)) for h in range(1, DUPLICATE_COINBASE_HEIGHT + 2)]
-        self.send_blocks(fork_blocks[:-1], success=False)  # TODO: A stronger fork aborts on duplicate coinbase txids.
+        self.send_blocks(fork_blocks, success=True)
         # Invalidate the base so no equal-work fork block remains
         node.invalidateblock(fork_blocks[0].hash_hex)
         assert_equal(node.getbestblockhash(), b_dup_2.hash_hex)

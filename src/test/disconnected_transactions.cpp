@@ -6,23 +6,21 @@
 #include <core_memusage.h>
 #include <kernel/disconnected_transactions.h>
 #include <test/util/setup_common.h>
-#include <util/check.h>
 
 BOOST_AUTO_TEST_SUITE(disconnected_transactions)
 
 BOOST_AUTO_TEST_CASE(disconnectpool_duplicate_txids_across_blocks)
 {
-    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
     DisconnectedBlockTransactions disconnectpool{MAX_DISCONNECTED_TX_POOL_BYTES};
     auto tx{MakeTransactionRef(CMutableTransaction{})};
 
     BOOST_CHECK(disconnectpool.AddTransactionsFromBlock({tx}).empty());
-    BOOST_CHECK_THROW((void)disconnectpool.AddTransactionsFromBlock({tx}).empty(), NonFatalCheckError); // TODO: Ignore txids already queued from another block.
-    BOOST_CHECK_EQUAL(disconnectpool.size(), 2); // TODO: Keep only the indexed transaction.
+    BOOST_CHECK(disconnectpool.AddTransactionsFromBlock({tx}).empty());
+    BOOST_CHECK_EQUAL(disconnectpool.size(), 1);
 
     disconnectpool.removeForBlock({tx});
-    BOOST_CHECK_EQUAL(disconnectpool.size(), 1); // TODO: Leave no unindexed duplicate behind.
-    BOOST_CHECK_EQUAL(disconnectpool.take().size(), 1); // TODO: Leave the pool empty after removal.
+    BOOST_CHECK_EQUAL(disconnectpool.size(), 0);
+    BOOST_CHECK_EQUAL(disconnectpool.take().size(), 0);
 }
 
 //! Tests that DisconnectedBlockTransactions limits its own memory properly
