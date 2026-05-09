@@ -83,6 +83,7 @@ class CBrokenBlock(CBlock):
         return super().serialize()
 
 
+DUPLICATE_COINBASE_HEIGHT = 120
 DUPLICATE_COINBASE_SCRIPT_SIG = b'\x01\x78'  # Valid for block at height 120
 
 
@@ -883,6 +884,11 @@ class FullBlockTest(BitcoinTestFramework):
         # The duplicate has less confirmations
         assert_equal(self.nodes[0].gettxout(txid=duplicate_tx.txid_hex, n=0)['confirmations'], 1)
 
+        self.log.info("Submit an equal-work genesis fork without disconnecting the duplicate coinbases")
+        self.submit_genesis_fork('bip30_genesis_fork', height=DUPLICATE_COINBASE_HEIGHT, success=False)
+        assert_equal(node.getbestblockhash(), b_dup_2.hash_hex)
+        self.move_tip('dup_2')
+
         # Test tx.isFinal is properly rejected (not an exhaustive tx.isFinal test, that should be in data-driven transaction tests)
         #
         # -> b_spend_dup_cb (b_dup_cb) -> b_dup_2 ()
@@ -1442,6 +1448,15 @@ class FullBlockTest(BitcoinTestFramework):
         method reconnects the p2p and restarts the network thread."""
         self.nodes[0].disconnect_p2ps()
         self.bootstrap_p2p(timeout=timeout)
+
+    def submit_genesis_fork(self, name, *, height, success):
+        """Build and submit a competing branch that forks from genesis."""
+        self.tip = None
+        blocks = []
+        for block_height in range(1, height + 1):
+            blocks.append(self.next_block(f'{name}.{block_height}'))
+        self.send_blocks(blocks, success=success)
+        return blocks[-1]
 
     def send_blocks(self, blocks, success=True, reject_reason=None, force_send=False, reconnect=False, timeout=960):
         """Sends blocks to test node. Syncs and verifies that tip has advanced to most recent block.
