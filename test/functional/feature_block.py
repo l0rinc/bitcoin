@@ -884,8 +884,12 @@ class FullBlockTest(BitcoinTestFramework):
         # The duplicate has less confirmations
         assert_equal(self.nodes[0].gettxout(txid=duplicate_tx.txid_hex, n=0)['confirmations'], 1)
 
-        self.log.info("Submit an equal-work genesis fork without disconnecting the duplicate coinbases")
-        self.submit_genesis_fork('bip30_genesis_fork', height=DUPLICATE_COINBASE_HEIGHT, success=False)
+        self.log.info("Reorg to a stronger genesis fork that disconnects both duplicate coinbase blocks")
+        genesis_fork_tip = self.submit_genesis_fork('bip30_genesis_fork', height=DUPLICATE_COINBASE_HEIGHT + 1, success=True)
+        assert_equal(node.getbestblockhash(), genesis_fork_tip.hash_hex)
+
+        self.log.info("Invalidate the genesis fork and return to the duplicate coinbase branch")
+        node.invalidateblock(genesis_fork_tip.hash_hex)
         assert_equal(node.getbestblockhash(), b_dup_2.hash_hex)
         self.move_tip('dup_2')
 

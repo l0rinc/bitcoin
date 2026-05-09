@@ -50,9 +50,12 @@ size_t DisconnectedBlockTransactions::DynamicMemoryUsage() const
 {
     iters_by_txid.reserve(iters_by_txid.size() + vtx.size());
     for (auto block_it = vtx.rbegin(); block_it != vtx.rend(); ++block_it) {
-        auto it = queuedTx.insert(queuedTx.end(), *block_it);
-        auto [_, inserted] = iters_by_txid.emplace((*block_it)->GetHash(), it);
-        assert(inserted); // callers may never pass multiple transactions with the same txid
+        auto [iter, inserted] = iters_by_txid.try_emplace((*block_it)->GetHash(), queuedTx.end());
+        if (!inserted) {
+            // Historical duplicate coinbase txids can reach here; after BIP54, this can become an assert.
+            continue;
+        }
+        iter->second = queuedTx.insert(queuedTx.end(), *block_it);
         cachedInnerUsage += RecursiveDynamicUsage(*block_it);
     }
     return LimitMemoryUsage();
