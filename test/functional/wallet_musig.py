@@ -12,6 +12,7 @@ from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
     assert_greater_than,
+    assert_not_equal,
 )
 
 PRIVKEY_RE = re.compile(r"^tr\((.+?)/.+\)#.{8}$")
@@ -176,9 +177,26 @@ class WalletMuSigTest(BitcoinTestFramework):
 
         first = wallets[0].walletprocesspsbt(psbt=psbt)
         assert_equal(first["complete"], False)
+        first_decoded = self.nodes[0].decodepsbt(first["psbt"])
+        assert_equal(len(first_decoded["inputs"][0]["musig2_pubnonces"]), 1)
 
         second = wallets[0].walletprocesspsbt(psbt=psbt)
         assert_equal(second["complete"], False)
+        second_decoded = self.nodes[0].decodepsbt(second["psbt"])
+        assert_equal(len(second_decoded["inputs"][0]["musig2_pubnonces"]), 1)
+        first_pubnonce = first_decoded["inputs"][0]["musig2_pubnonces"][0]["pubnonce"]
+        second_pubnonce = second_decoded["inputs"][0]["musig2_pubnonces"][0]["pubnonce"]
+        assert_not_equal(first_pubnonce, second_pubnonce)
+
+        counterparty = wallets[1].walletprocesspsbt(psbt=psbt)
+        assert_equal(counterparty["complete"], False)
+
+        for nonce_psbt in [first["psbt"], second["psbt"]]:
+            combined = self.nodes[0].combinepsbt([nonce_psbt, counterparty["psbt"]])
+            processed = wallets[0].walletprocesspsbt(psbt=combined)
+            assert_equal(processed["complete"], False)
+            decoded = self.nodes[0].decodepsbt(processed["psbt"])
+            assert_equal(len(decoded["inputs"][0]["musig2_partial_sigs"]), 1)
 
     def test_success_case(self, comment, pattern, sighash_type=None, scriptpath=False, nosign_wallets=None, only_one_musig_wallet=False):
         self.log.info(f"Testing {comment}")
