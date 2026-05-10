@@ -168,6 +168,18 @@ class WalletMuSigTest(BitcoinTestFramework):
         assert "musig2_pubnonces" in dec["inputs"][0]
         assert "musig2_partial_sigs" not in dec["inputs"][0]
 
+    def test_nonce_retry(self, comment, pat):
+        self.log.info(f"Testing {comment}")
+        wallets, psbt = self.setup_musig_scenario(pat)
+
+        assert "musig2_pubnonces" not in self.nodes[0].decodepsbt(psbt)["inputs"][0]
+
+        first = wallets[0].walletprocesspsbt(psbt=psbt)
+        assert_equal(first["complete"], False)
+
+        second = wallets[0].walletprocesspsbt(psbt=psbt)
+        assert_equal(second["complete"], False)
+
     def test_success_case(self, comment, pattern, sighash_type=None, scriptpath=False, nosign_wallets=None, only_one_musig_wallet=False):
         self.log.info(f"Testing {comment}")
         has_internal = MULTIPATH_TWO_RE.search(pattern) is not None
@@ -342,6 +354,7 @@ class WalletMuSigTest(BitcoinTestFramework):
         self.test_failure_case_1("missing participant nonce", "tr(musig($0/<0;1>/*,$1/<1;2>/*,$2/<2;3>/*))")
         self.test_failure_case_2("insufficient partial signatures", "rawtr(musig($0/<0;1>/*,$1/<1;2>/*,$2/<2;3>/*))")
         self.test_failure_case_3("finalize without partial sigs", "rawtr(musig($0/<0;1>/*,$1/<1;2>/*))")
+        self.test_nonce_retry("retry nonce-less PSBT processing", "tr(musig($0/<0;1>/*,$1/<2;3>/*))")
 
 if __name__ == '__main__':
     WalletMuSigTest(__file__).main()
