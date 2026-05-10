@@ -42,6 +42,7 @@ size_t CCoinsViewCache::DynamicMemoryUsage() const {
 //! Move a coin into a cache entry, overwriting any existing coin.
 void CCoinsViewCache::MoveCoin(CCoinsCacheEntry& dest_entry, Coin&& source_coin) const
 {
+    Assert(!source_coin.IsSpent());
     if (dest_entry.coin) {
         // Deconstruct the existing unspent coin, but for efficiency use its existing memory for the new coin.
         Assume(TrySub(cachedCoinsUsage, dest_entry.coin->DynamicMemoryUsage()));
@@ -143,7 +144,7 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possi
 void CCoinsViewCache::EmplaceCoinInternalDANGER(COutPoint&& outpoint, Coin&& coin) {
     auto [it, inserted] = cacheCoins.try_emplace(std::move(outpoint));
     if (inserted) {
-        MoveCoin(it->second, std::move(coin));
+        if (!coin.IsSpent()) MoveCoin(it->second, std::move(coin));
         CCoinsCacheEntry::SetDirty(*it, m_sentinel);
         ++m_dirty_count;
     }
@@ -234,6 +235,7 @@ void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& in
         CCoinsCacheEntry& dest_entry{itUs->second};
 
         const auto MoveOrCopyCoin{[this, &cursor, &source_entry, &dest_entry]() -> void {
+            Assume(source_entry.coin && !source_entry.coin->IsSpent());
             if (cursor.WillClear()) {
                 // Since this entry will be erased,
                 // we can move the coin into us instead of copying it
@@ -252,7 +254,7 @@ void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& in
             } else {
                 // The parent cache does not have an entry, while the child cache does.
                 // Move the data up and mark it as dirty.
-                if (source_entry.coin) MoveOrCopyCoin();
+                if (source_entry.coin && !source_entry.coin->IsSpent()) MoveOrCopyCoin();
                 CCoinsCacheEntry::SetDirty(*itUs, m_sentinel);
                 ++m_dirty_count;
                 // We can mark it FRESH in the parent if it was FRESH in the child
@@ -378,6 +380,7 @@ void CCoinsViewCache::SanityCheck() const
     size_t count_dirty = 0;
     for (const auto& [_, entry] : cacheCoins) {
         if (entry.IsSpent()) {
+            assert(!entry.coin); // Spent entries are canonically represented as nullptr.
             assert(entry.IsDirty() && !entry.IsFresh()); // A spent coin must be dirty and cannot be fresh
         } else {
             assert(entry.IsDirty() || !entry.IsFresh()); // An unspent coin must not be fresh if not dirty

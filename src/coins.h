@@ -451,7 +451,7 @@ protected:
     mutable CoinsCachePair m_sentinel;
     mutable CCoinsMap cacheCoins;
 
-    /* Cached dynamic memory usage for the inner Coin objects. */
+    /* Cached dynamic memory usage for inner Coin script buffers. */
     mutable size_t cachedCoinsUsage{0};
     /* Running count of dirty Coin cache entries. */
     mutable size_t m_dirty_count{0};
