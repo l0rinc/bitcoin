@@ -58,7 +58,13 @@ void CCoinsViewCache::MoveCoin(CCoinsCacheEntry& dest_entry, Coin&& source_coin)
 void CCoinsViewCache::FreeCoin(CCoinsCacheEntry& entry) const noexcept
 {
     assert(entry.coin);
-    Assume(TrySub(cachedCoinsUsage, entry.coin->DynamicMemoryUsage()));
+    FreeCoin(entry, entry.coin->DynamicMemoryUsage());
+}
+
+void CCoinsViewCache::FreeCoin(CCoinsCacheEntry& entry, size_t mem_usage) const noexcept
+{
+    assert(entry.coin);
+    Assume(TrySub(cachedCoinsUsage, mem_usage));
     entry.coin->~Coin();
     m_cache_coins_memory_resource.Deallocate(entry.coin, sizeof(Coin), alignof(Coin));
     entry.coin = nullptr;
@@ -167,10 +173,16 @@ bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {
            (int64_t)(it->second.coin ? it->second.coin->out.nValue : coinEmpty.out.nValue),
            (bool)(it->second.coin ? it->second.coin->IsCoinBase() : coinEmpty.IsCoinBase()));
     if (moveout) {
-        //*moveout = std::move(it->second.coin ? *it->second.coin : Coin{});
-        *moveout = it->second.coin ? std::move(*it->second.coin) : Coin{};
+        if (it->second.coin) {
+            const auto mem_usage{it->second.coin->DynamicMemoryUsage()};
+            *moveout = std::move(*it->second.coin);
+            FreeCoin(it->second, mem_usage);
+        } else {
+            *moveout = Coin{};
+        }
+    } else if (it->second.coin) {
+        FreeCoin(it->second);
     }
-    if (it->second.coin) FreeCoin(it->second);
     if (it->second.IsFresh()) {
         cacheCoins.erase(it);
     } else {
@@ -325,7 +337,7 @@ void CCoinsViewCache::Uncache(const COutPoint& hash)
         TRACEPOINT(utxocache, uncache,
                hash.hash.data(),
                (uint32_t)hash.n,
-               (uint32_t)(it->second.coin ? it->second.coin.nHeight : coinEmpty.nHeight),
+               (uint32_t)(it->second.coin ? it->second.coin->nHeight : coinEmpty.nHeight),
                (int64_t)(it->second.coin ? it->second.coin->out.nValue : coinEmpty.out.nValue),
                (bool)(it->second.coin ? it->second.coin->IsCoinBase() : coinEmpty.IsCoinBase())
         );
