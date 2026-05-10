@@ -41,11 +41,8 @@ void ReadSigNetArgs(const ArgsManager& args, CChainParams::SigNetOptions& option
     }
 }
 
-void ReadRegTestArgs(const ArgsManager& args, CChainParams::RegTestOptions& options)
+static void HandleDeploymentArgs(const ArgsManager& args, CChainParams::DeploymentOptions& options)
 {
-    if (auto value = args.GetBoolArg("-fastprune")) options.fastprune = *value;
-    if (HasTestOption(args, "bip94")) options.enforce_bip94 = true;
-
     for (const std::string& arg : args.GetArgs("-testactivationheight")) {
         const auto found{arg.find('@')};
         if (found == std::string::npos) {
@@ -105,6 +102,14 @@ void ReadRegTestArgs(const ArgsManager& args, CChainParams::RegTestOptions& opti
             throw std::runtime_error(strprintf("Invalid deployment (%s)", vDeploymentParams[0]));
         }
     }
+}
+
+void ReadRegTestArgs(const ArgsManager& args, CChainParams::RegTestOptions& options)
+{
+    if (auto value = args.GetBoolArg("-fastprune")) options.fastprune = *value;
+    if (HasTestOption(args, "bip94")) options.enforce_bip94 = true;
+
+    HandleDeploymentArgs(args, options.dep_opts);
 }
 
 static std::unique_ptr<const CChainParams> globalChainParams;
