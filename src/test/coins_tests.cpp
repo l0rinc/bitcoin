@@ -649,7 +649,7 @@ static void AddCoin(CCoinsMapMemoryResource& resource, CCoinsCacheEntry& entry)
     entry.coin = static_cast<Coin*>(resource.Allocate(sizeof(Coin), alignof(Coin)));
     new (entry.coin) Coin();
 }
-        
+
 static void FreeAllCoins(CCoinsMap& map, CCoinsMapMemoryResource& resource)
 {
     for (auto& entry : map) if (entry.second.coin) FreeCoin(resource, entry.second);

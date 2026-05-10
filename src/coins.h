@@ -286,7 +286,7 @@ private:
  *
  * However, the receiver can still call CoinsViewCacheCursor::WillClear to see if the
  * caller will erase the entry after BatchWrite returns. If so, the receiver can
- * perform optimizations such as moving the coin out of the CCoinsCachEntry instead
+ * perform optimizations such as moving the coin out of the CCoinsCacheEntry instead
  * of copying it.
  */
 struct CoinsViewCacheCursor
@@ -327,14 +327,6 @@ struct CoinsViewCacheCursor
                 current.second.SetClean();
             }
         }
-        /* XXX should not be needed, we will call FreeAllCoins
-        else if (current.second.coin) {
-            // Clearing the map doesn't delete the coins; that must be done explicitly.
-            current.second.coin->~Coin();
-            m_memory.Deallocate(current.second.coin, sizeof(Coin), alignof(Coin));
-            current.second.coin = nullptr;
-        }
-        */
         return next_entry;
     }
 
@@ -532,8 +524,9 @@ public:
     //! Move a coin into a cache entry, overwriting any existing coin.
     void MoveCoin(CCoinsCacheEntry& entry, Coin&& coin) const;
 
-    //! Free (deallocate) a coin (TODO - is noexcept ok here?)
+    //! Free (deallocate) a coin.
     void FreeCoin(CCoinsCacheEntry& entry) const noexcept;
+    //! Free a coin using a memory usage value captured before the coin is moved from.
     void FreeCoin(CCoinsCacheEntry& entry, size_t mem_usage) const noexcept;
 
     //! Call FreeCoin() on all the coins within this cache.
