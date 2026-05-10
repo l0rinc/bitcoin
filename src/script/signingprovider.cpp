@@ -122,13 +122,14 @@ std::map<CPubKey, std::vector<CPubKey>> FlatSigningProvider::GetAllMuSig2Partici
 void FlatSigningProvider::SetMuSig2SecNonce(const uint256& session_id, const std::vector<uint8_t>& pubnonce, MuSig2SecNonce&& nonce) const
 {
     if (!Assume(musig2_secnonces)) return;
-    musig2_secnonces->insert_or_assign(session_id, std::move(nonce));
+    const bool inserted{musig2_secnonces->try_emplace(MuSig2SecNonceKey{session_id, pubnonce}, std::move(nonce)).second};
+    Assume(inserted);
 }
 
 std::optional<std::reference_wrapper<MuSig2SecNonce>> FlatSigningProvider::GetMuSig2SecNonce(const uint256& session_id, const std::vector<uint8_t>& pubnonce) const
 {
     if (!Assume(musig2_secnonces)) return std::nullopt;
-    const auto& it = musig2_secnonces->find(session_id);
+    const auto& it = musig2_secnonces->find(MuSig2SecNonceKey{session_id, pubnonce});
     if (it == musig2_secnonces->end()) return std::nullopt;
     return it->second;
 }
@@ -136,7 +137,7 @@ std::optional<std::reference_wrapper<MuSig2SecNonce>> FlatSigningProvider::GetMu
 void FlatSigningProvider::DeleteMuSig2Session(const uint256& session_id, const std::vector<uint8_t>& pubnonce) const
 {
     if (!Assume(musig2_secnonces)) return;
-    musig2_secnonces->erase(session_id);
+    musig2_secnonces->erase(MuSig2SecNonceKey{session_id, pubnonce});
 }
 
 FlatSigningProvider& FlatSigningProvider::Merge(FlatSigningProvider&& b)

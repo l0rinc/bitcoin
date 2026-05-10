@@ -28,6 +28,8 @@ struct ShortestVectorFirstComparator
     }
 };
 
+using MuSig2SecNonceKey = std::pair<uint256, std::vector<uint8_t>>;
+
 struct TaprootSpendData
 {
     /** The BIP341 internal key. */
@@ -228,7 +230,7 @@ struct FlatSigningProvider final : public SigningProvider
     std::map<CKeyID, CKey> keys;
     std::map<XOnlyPubKey, TaprootBuilder> tr_trees; /** Map from output key to Taproot tree (which can then make the TaprootSpendData */
     std::map<CPubKey, std::vector<CPubKey>> aggregate_pubkeys; /** MuSig2 aggregate pubkeys */
-    std::map<uint256, MuSig2SecNonce>* musig2_secnonces{nullptr};
+    std::map<MuSig2SecNonceKey, MuSig2SecNonce>* musig2_secnonces{nullptr};
 
     bool GetCScript(const CScriptID& scriptid, CScript& script) const override;
     bool GetPubKey(const CKeyID& keyid, CPubKey& pubkey) const override;
