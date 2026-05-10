@@ -1150,6 +1150,27 @@ BOOST_AUTO_TEST_CASE(ccoins_emplace_duplicate_keeps_usage_balanced)
     BOOST_CHECK(cache.AccessCoin(outpoint) == coin1);
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_spend_moveout_keeps_usage_balanced)
+{
+    CCoinsViewCacheTest base{&CoinsViewEmpty::Get()};
+    CCoinsViewCacheTest cache{&base};
+
+    const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin coin{CTxOut{m_rng.randrange(10), CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+
+    base.AddCoin(outpoint, Coin{coin}, /*possible_overwrite=*/false);
+    base.SelfTest();
+
+    BOOST_CHECK(cache.HaveCoin(outpoint));
+    cache.SelfTest();
+
+    Coin moveout;
+    BOOST_CHECK(cache.SpendCoin(outpoint, &moveout));
+    BOOST_CHECK(moveout == coin);
+    BOOST_CHECK_EQUAL(GetCoinsMapEntry(cache.map(), outpoint), SPENT_DIRTY);
+    cache.SelfTest();
+}
+
 BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
 {
     CCoinsViewTest root{m_rng};
