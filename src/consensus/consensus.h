@@ -32,6 +32,6 @@ static constexpr unsigned int LOCKTIME_VERIFY_SEQUENCE = (1 << 0);
  * block of a difficulty adjustment period is allowed to
  * be earlier than the last block of the previous period (BIP94).
  */
-static constexpr int64_t MAX_TIMEWARP = 600;
+static constexpr int64_t MAX_TIMEWARP_TESTNET4 = 600;
 
 #endif // BITCOIN_CONSENSUS_CONSENSUS_H
