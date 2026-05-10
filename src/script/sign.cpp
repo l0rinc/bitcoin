@@ -123,7 +123,7 @@ std::vector<uint8_t> MutableTransactionSignatureCreator::CreateMuSig2Nonce(const
     if (out.empty()) return {};
 
     // Store the secnonce in the SigningProvider
-    provider.SetMuSig2SecNonce(MuSig2SessionID(script_pubkey, part_pubkey, *sighash), std::move(secnonce));
+    provider.SetMuSig2SecNonce(MuSig2SessionID(script_pubkey, part_pubkey, *sighash), out, std::move(secnonce));
 
     return out;
 }
@@ -150,6 +150,9 @@ bool MutableTransactionSignatureCreator::CreateMuSig2PartialSig(const SigningPro
 
     // Check if enough pubnonces
     if (pubnonces.size() != pubkeys.size()) return false;
+    // Retrieve our pubnonce to disambiguate the stored secnonce session.
+    auto our_pubnonce = pubnonces.find(part_pubkey);
+    if (our_pubnonce == pubnonces.end()) return false;
 
     // Compute sighash
     std::optional<uint256> sighash = ComputeSchnorrSignatureHash(leaf_hash, sigversion);
@@ -157,7 +160,7 @@ bool MutableTransactionSignatureCreator::CreateMuSig2PartialSig(const SigningPro
 
     // Retrieve the secnonce
     uint256 session_id = MuSig2SessionID(script_pubkey, part_pubkey, *sighash);
-    std::optional<std::reference_wrapper<MuSig2SecNonce>> secnonce = provider.GetMuSig2SecNonce(session_id);
+    std::optional<std::reference_wrapper<MuSig2SecNonce>> secnonce = provider.GetMuSig2SecNonce(session_id, our_pubnonce->second);
     if (!secnonce || !secnonce->get().IsValid()) return false;
 
     // Compute the sig
@@ -167,7 +170,7 @@ bool MutableTransactionSignatureCreator::CreateMuSig2PartialSig(const SigningPro
 
     // Delete the secnonce now that we're done with it
     assert(!secnonce->get().IsValid());
-    provider.DeleteMuSig2Session(session_id);
+    provider.DeleteMuSig2Session(session_id, our_pubnonce->second);
 
     return true;
 }

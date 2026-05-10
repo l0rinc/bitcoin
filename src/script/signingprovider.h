@@ -167,9 +167,9 @@ public:
     virtual bool GetTaprootBuilder(const XOnlyPubKey& output_key, TaprootBuilder& builder) const { return false; }
     virtual std::vector<CPubKey> GetMuSig2ParticipantPubkeys(const CPubKey& pubkey) const { return {}; }
     virtual std::map<CPubKey, std::vector<CPubKey>> GetAllMuSig2ParticipantPubkeys() const {return {}; }
-    virtual void SetMuSig2SecNonce(const uint256& id, MuSig2SecNonce&& nonce) const {}
-    virtual std::optional<std::reference_wrapper<MuSig2SecNonce>> GetMuSig2SecNonce(const uint256& session_id) const { return std::nullopt; }
-    virtual void DeleteMuSig2Session(const uint256& session_id) const {}
+    virtual void SetMuSig2SecNonce(const uint256& id, const std::vector<uint8_t>& pubnonce, MuSig2SecNonce&& nonce) const {}
+    virtual std::optional<std::reference_wrapper<MuSig2SecNonce>> GetMuSig2SecNonce(const uint256& session_id, const std::vector<uint8_t>& pubnonce) const { return std::nullopt; }
+    virtual void DeleteMuSig2Session(const uint256& session_id, const std::vector<uint8_t>& pubnonce) const {}
 
     bool GetKeyByXOnly(const XOnlyPubKey& pubkey, CKey& key) const
     {
@@ -215,9 +215,9 @@ public:
     bool GetTaprootBuilder(const XOnlyPubKey& output_key, TaprootBuilder& builder) const override;
     std::vector<CPubKey> GetMuSig2ParticipantPubkeys(const CPubKey& pubkey) const override;
     std::map<CPubKey, std::vector<CPubKey>> GetAllMuSig2ParticipantPubkeys() const override;
-    void SetMuSig2SecNonce(const uint256& id, MuSig2SecNonce&& nonce) const override;
-    std::optional<std::reference_wrapper<MuSig2SecNonce>> GetMuSig2SecNonce(const uint256& session_id) const override;
-    void DeleteMuSig2Session(const uint256& session_id) const override;
+    void SetMuSig2SecNonce(const uint256& id, const std::vector<uint8_t>& pubnonce, MuSig2SecNonce&& nonce) const override;
+    std::optional<std::reference_wrapper<MuSig2SecNonce>> GetMuSig2SecNonce(const uint256& session_id, const std::vector<uint8_t>& pubnonce) const override;
+    void DeleteMuSig2Session(const uint256& session_id, const std::vector<uint8_t>& pubnonce) const override;
 };
 
 struct FlatSigningProvider final : public SigningProvider
@@ -239,9 +239,9 @@ struct FlatSigningProvider final : public SigningProvider
     bool GetTaprootBuilder(const XOnlyPubKey& output_key, TaprootBuilder& builder) const override;
     std::vector<CPubKey> GetMuSig2ParticipantPubkeys(const CPubKey& pubkey) const override;
     std::map<CPubKey, std::vector<CPubKey>> GetAllMuSig2ParticipantPubkeys() const override;
-    void SetMuSig2SecNonce(const uint256& id, MuSig2SecNonce&& nonce) const override;
-    std::optional<std::reference_wrapper<MuSig2SecNonce>> GetMuSig2SecNonce(const uint256& session_id) const override;
-    void DeleteMuSig2Session(const uint256& session_id) const override;
+    void SetMuSig2SecNonce(const uint256& id, const std::vector<uint8_t>& pubnonce, MuSig2SecNonce&& nonce) const override;
+    std::optional<std::reference_wrapper<MuSig2SecNonce>> GetMuSig2SecNonce(const uint256& session_id, const std::vector<uint8_t>& pubnonce) const override;
+    void DeleteMuSig2Session(const uint256& session_id, const std::vector<uint8_t>& pubnonce) const override;
 
     FlatSigningProvider& Merge(FlatSigningProvider&& b) LIFETIMEBOUND;
 };

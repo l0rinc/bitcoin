@@ -63,19 +63,19 @@ std::map<CPubKey, std::vector<CPubKey>> HidingSigningProvider::GetAllMuSig2Parti
     return m_provider->GetAllMuSig2ParticipantPubkeys();
 }
 
-void HidingSigningProvider::SetMuSig2SecNonce(const uint256& id, MuSig2SecNonce&& nonce) const
+void HidingSigningProvider::SetMuSig2SecNonce(const uint256& id, const std::vector<uint8_t>& pubnonce, MuSig2SecNonce&& nonce) const
 {
-    m_provider->SetMuSig2SecNonce(id, std::move(nonce));
+    m_provider->SetMuSig2SecNonce(id, pubnonce, std::move(nonce));
 }
 
-std::optional<std::reference_wrapper<MuSig2SecNonce>> HidingSigningProvider::GetMuSig2SecNonce(const uint256& session_id) const
+std::optional<std::reference_wrapper<MuSig2SecNonce>> HidingSigningProvider::GetMuSig2SecNonce(const uint256& session_id, const std::vector<uint8_t>& pubnonce) const
 {
-    return m_provider->GetMuSig2SecNonce(session_id);
+    return m_provider->GetMuSig2SecNonce(session_id, pubnonce);
 }
 
-void HidingSigningProvider::DeleteMuSig2Session(const uint256& session_id) const
+void HidingSigningProvider::DeleteMuSig2Session(const uint256& session_id, const std::vector<uint8_t>& pubnonce) const
 {
-    m_provider->DeleteMuSig2Session(session_id);
+    m_provider->DeleteMuSig2Session(session_id, pubnonce);
 }
 
 bool FlatSigningProvider::GetCScript(const CScriptID& scriptid, CScript& script) const { return LookupHelper(scripts, scriptid, script); }
@@ -119,13 +119,13 @@ std::map<CPubKey, std::vector<CPubKey>> FlatSigningProvider::GetAllMuSig2Partici
     return aggregate_pubkeys;
 }
 
-void FlatSigningProvider::SetMuSig2SecNonce(const uint256& session_id, MuSig2SecNonce&& nonce) const
+void FlatSigningProvider::SetMuSig2SecNonce(const uint256& session_id, const std::vector<uint8_t>& pubnonce, MuSig2SecNonce&& nonce) const
 {
     if (!Assume(musig2_secnonces)) return;
     musig2_secnonces->insert_or_assign(session_id, std::move(nonce));
 }
 
-std::optional<std::reference_wrapper<MuSig2SecNonce>> FlatSigningProvider::GetMuSig2SecNonce(const uint256& session_id) const
+std::optional<std::reference_wrapper<MuSig2SecNonce>> FlatSigningProvider::GetMuSig2SecNonce(const uint256& session_id, const std::vector<uint8_t>& pubnonce) const
 {
     if (!Assume(musig2_secnonces)) return std::nullopt;
     const auto& it = musig2_secnonces->find(session_id);
@@ -133,7 +133,7 @@ std::optional<std::reference_wrapper<MuSig2SecNonce>> FlatSigningProvider::GetMu
     return it->second;
 }
 
-void FlatSigningProvider::DeleteMuSig2Session(const uint256& session_id) const
+void FlatSigningProvider::DeleteMuSig2Session(const uint256& session_id, const std::vector<uint8_t>& pubnonce) const
 {
     if (!Assume(musig2_secnonces)) return;
     musig2_secnonces->erase(session_id);
