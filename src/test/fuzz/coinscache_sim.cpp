@@ -171,25 +171,30 @@ public:
     {
         for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)) {
             if (it->second.IsDirty()) {
-                if (it->second.coin.IsSpent()) {
+                if (it->second.IsSpent()) {
                     m_data.erase(it->first);
                 } else {
-                    if (cursor.WillErase(*it)) {
-                        m_data[it->first] = std::move(it->second.coin);
-                    } else {
-                        m_data[it->first] = it->second.coin;
+                    if (it->second.coin) {
+                        if (cursor.WillClear()) {
+                            m_data[it->first] = std::move(*it->second.coin);
+                        } else {
+                            m_data[it->first] = *it->second.coin;
+                        }
+                    } else { // create a spent coin
+                        m_data[it->first] = Coin{};
                     }
                 }
             } else {
                 /* For non-dirty entries being written, compare them with what we have. */
                 auto it2 = m_data.find(it->first);
-                if (it->second.coin.IsSpent()) {
+                if (it->second.IsSpent()) {
                     assert(it2 == m_data.end());
                 } else {
                     assert(it2 != m_data.end());
-                    assert(it->second.coin.out == it2->second.out);
-                    assert(it->second.coin.fCoinBase == it2->second.fCoinBase);
-                    assert(it->second.coin.nHeight == it2->second.nHeight);
+                    Coin coin(it->second.coin ? *it->second.coin : Coin{});
+                    assert(coin.out == it2->second.out);
+                    assert(coin.fCoinBase == it2->second.fCoinBase);
+                    assert(coin.nHeight == it2->second.nHeight);
                 }
             }
         }

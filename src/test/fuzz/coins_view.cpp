@@ -66,7 +66,7 @@ private:
         snapshot.reserve(cacheCoins.size());
 
         for (const auto& [outpoint, entry] : cacheCoins) {
-            snapshot.emplace_back(outpoint, entry.IsDirty(), entry.IsFresh(), entry.coin);
+            snapshot.emplace_back(outpoint, entry.IsDirty(), entry.IsFresh(), entry.coin ? *entry.coin : EMPTY_COIN);
         }
 
         std::ranges::sort(snapshot, std::less<>{}, &CacheCoinSnapshot::outpoint);
@@ -230,33 +230,56 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 size_t dirty_count{0};
                 CCoinsMapMemoryResource resource;
                 CCoinsMap coins_map{0, SaltedOutpointHasher{/*deterministic=*/true}, CCoinsMap::key_equal{}, &resource};
+                    
+                auto freeCoinsEntry{[&resource](CCoinsCacheEntry& entry) -> void
+                {
+                    assert(entry.coin);
+                    entry.coin->~Coin();
+                    resource.Deallocate(entry.coin, sizeof(Coin), alignof(Coin));
+                    entry.coin = nullptr;
+                }};
+
+                auto freeCoins{[freeCoinsEntry, &coins_map]() -> void
+                {
+                    for (auto& entry : coins_map) if (entry.second.coin) freeCoinsEntry(entry.second);
+                }};
+
                 LIMITED_WHILE(good_data && fuzzed_data_provider.ConsumeBool(), 10'000)
                 {
                     CCoinsCacheEntry coins_cache_entry;
                     if (fuzzed_data_provider.ConsumeBool()) {
-                        coins_cache_entry.coin = random_coin;
+                        coins_cache_entry.coin = static_cast<Coin*>(resource.Allocate(sizeof(Coin), alignof(Coin)));
+                        new (coins_cache_entry.coin) Coin(random_coin);
                     } else {
                         const std::optional<Coin> opt_coin = ConsumeDeserializable<Coin>(fuzzed_data_provider);
                         if (!opt_coin) {
                             good_data = false;
+                            freeCoins();
                             return;
                         }
-                        coins_cache_entry.coin = *opt_coin;
+                        coins_cache_entry.coin = static_cast<Coin*>(resource.Allocate(sizeof(Coin), alignof(Coin)));
+                        new (coins_cache_entry.coin) Coin(*opt_coin);
                     }
                     // Avoid setting FRESH for an outpoint that already exists unspent in the parent view.
                     bool fresh{!coins_view_cache.PeekCoin(random_out_point) && fuzzed_data_provider.ConsumeBool()};
                     bool dirty{fresh || fuzzed_data_provider.ConsumeBool()};
-                    auto it{coins_map.emplace(random_out_point, std::move(coins_cache_entry)).first};
+                    auto [it, inserted]{coins_map.try_emplace(random_out_point)};
+                    if (inserted) {
+                        it->second.coin = coins_cache_entry.coin;
+                        coins_cache_entry.coin = nullptr;
+                    }
                     if (dirty) CCoinsCacheEntry::SetDirty(*it, sentinel);
                     if (fresh) CCoinsCacheEntry::SetFresh(*it, sentinel);
                     dirty_count += dirty;
+                    if (coins_cache_entry.coin) freeCoinsEntry(coins_cache_entry);
                 }
-                auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, coins_map, /*will_erase=*/true)};
+                auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, coins_map, resource, /*will_clear=*/true)};
                 uint256 best_block{coins_view_cache.GetBestBlock()};
                 if (fuzzed_data_provider.ConsumeBool()) best_block = ConsumeUInt256(fuzzed_data_provider);
                 // Set best block hash to non-null to satisfy the assertion in CCoinsViewDB::BatchWrite().
                 if (is_db && best_block.IsNull()) best_block = uint256::ONE;
                 coins_view_cache.BatchWrite(cursor, best_block);
+                freeCoins();
             });
     }
 
@@ -298,7 +321,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 }
                 if (is_spent) {
                     // Avoid:
-                    // coins.cpp:69: void CCoinsViewCache::AddCoin(const COutPoint &, Coin &&, bool): Assertion `!coin.IsSpent()' failed.
+                    // coins.cpp:97: void CCoinsViewCache::AddCoin(const COutPoint &, Coin &&, bool): Assertion `!coin.IsSpent()' failed.
                     return;
                 }
                 const int height{int(fuzzed_data_provider.ConsumeIntegral<uint32_t>() >> 1)};
