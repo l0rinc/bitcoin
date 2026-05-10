@@ -135,13 +135,15 @@ void CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block
     batch.Erase(DB_BEST_BLOCK);
     batch.Write(DB_HEAD_BLOCKS, Vector(block_hash, old_tip));
 
+    size_t spent_count{0};
     for (auto it{cursor.Begin()}; it != cursor.End();) {
         if (it->second.IsDirty()) {
             CoinEntry entry(&it->first);
-            if (it->second.coin.IsSpent()) {
+            if (it->second.IsSpent()) {
                 batch.Erase(entry);
+                ++spent_count;
             } else {
-                batch.Write(entry, it->second.coin);
+                batch.Write(entry, *it->second.coin);
             }
         }
         count++;
@@ -167,7 +169,7 @@ void CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block
 
     LogDebug(BCLog::COINDB, "Writing final batch of %.2f MiB\n", batch.ApproximateSize() / double(1_MiB));
     m_db->WriteBatch(batch);
-    LogDebug(BCLog::COINDB, "Committed %u changed transaction outputs (out of %u) to coin database...", (unsigned int)dirty_count, (unsigned int)count);
+    LogDebug(BCLog::COINDB, "Committed %u changed (%u spent) transaction outputs (out of %u) to coin database...", (unsigned int)dirty_count, (unsigned int)spent_count, (unsigned int)count);
 }
 
 size_t CCoinsViewDB::EstimateSize() const
