@@ -180,9 +180,7 @@ public:
     CCoinsCacheEntry() noexcept = default;
     ~CCoinsCacheEntry()
     {
-        while (coin);
         Assume(coin == nullptr);
-        if (coin) coin->~Coin();
         SetClean();
     }
     // copying an entry would copy the coin pointer!
@@ -190,8 +188,9 @@ public:
 
     // Move Constructor
     CCoinsCacheEntry(CCoinsCacheEntry&& other) noexcept
-        : m_flags(other.m_flags), coin(other.coin)
+        : coin(other.coin)
     {
+        Assume(!other.m_flags);
         other.coin = nullptr; // Ensure the source is nulled
     }
 
@@ -200,8 +199,9 @@ public:
     {
         if (this != &other) {
             Assume(!coin);
+            Assume(!m_flags);
+            Assume(!other.m_flags);
             coin = other.coin;
-            m_flags = other.m_flags;
             other.coin = nullptr;
         }
         return *this;
@@ -546,6 +546,7 @@ public:
 
     //! Free (deallocate) a coin (TODO - is noexcept ok here?)
     void FreeCoin(CCoinsCacheEntry& entry) const noexcept;
+    void FreeCoin(CCoinsCacheEntry& entry, size_t mem_usage) const noexcept;
 
     //! Call FreeCoin() on all the coins within this cache.
     void FreeAllCoins() const noexcept;
