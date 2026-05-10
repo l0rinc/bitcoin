@@ -1,0 +1,337 @@
+LLM handoff: duplicate txids in DisconnectedBlockTransactions
+==============================================================
+
+Task context
+------------
+
+We investigated a Bitcoin Cash Node disconnect-pool change:
+
+  BCHN commit: da7daae0559790178005a6300fb0276b7f11c49e
+  Subject: Improve `DisconnectedBlockTransactions::addForBlock` performance
+  MR: bitcoin-cash-node/bitcoin-cash-node!1923
+
+The initial suspicion was that this might hide a duplicate-txid or reorg
+bookkeeping bug relevant to Bitcoin Core. A local Bitcoin Core patch was made in
+commit:
+
+  40f6c0ab43 reorg: handle duplicate txids in disconnect pool
+
+Important correction
+--------------------
+
+Do not claim that BCHN previously allowed duplicate txids into its disconnect
+pool container.
+
+BCHN's disconnect pool uses a boost::multi_index_container with a hashed_unique
+txid index. Before BCHN !1923, its addForBlock path already checked whether a
+txid was present before calling addTransaction:
+
+  auto it = queuedTx.find(tx->GetId());
+  if (it != queuedTx.end()) {
+      continue;
+  }
+  addTransaction(tx);
+
+After !1923, BCHN also changed addTransaction so cachedInnerUsage is incremented
+only when queuedTx.insert(tx).second is true. That is defensive accounting, not
+by itself proof that duplicate entries were being inserted before. In BCHN, a
+failed insert would not create a duplicate queue entry because the unique index
+rejects it.
+
+Why Bitcoin Core still had a real issue
+---------------------------------------
+
+Bitcoin Core's current DisconnectedBlockTransactions implementation is different
+from BCHN's. Core uses two separate data structures:
+
+  1. queuedTx: std::list<CTransactionRef>
+  2. iters_by_txid: std::unordered_map<Txid, list iterator>
+
+These two structures must stay in sync. queuedTx stores the ordered transactions
+that may be reaccepted to the mempool after a reorg. iters_by_txid is used to
+find and remove queued transactions efficiently when a transaction appears in a
+newly connected block.
+
+Before the local patch, Core's AddTransactionsFromBlock did this:
+
+  auto it = queuedTx.insert(queuedTx.end(), *block_it);
+  auto [_, inserted] = iters_by_txid.emplace((*block_it)->GetHash(), it);
+  assert(inserted);
+  cachedInnerUsage += RecursiveDynamicUsage(*block_it);
+
+This is unsafe for duplicate txids because the std::list insertion always
+succeeds before the map insertion detects the duplicate.
+
+Failure mode before the patch
+-----------------------------
+
+If AddTransactionsFromBlock sees a txid already present in iters_by_txid:
+
+  - In debug/assert builds, assert(inserted) aborts the node.
+  - In non-assert builds, queuedTx already contains an extra list entry.
+  - iters_by_txid has no entry pointing to that extra list entry.
+  - cachedInnerUsage is incremented for the extra list entry.
+  - Later removeForBlock can only remove the mapped entry, leaving the unmapped
+    queued entry behind.
+
+That means the disconnect pool's core invariants can be violated:
+
+  - queuedTx and iters_by_txid no longer describe the same set of txids.
+  - cachedInnerUsage no longer matches the entries that can be removed through
+    iters_by_txid.
+  - Reorg mempool resurrection may process stale duplicate entries that should
+    have been removed.
+
+Why duplicate txids are reachable enough to care about
+-----------------------------------------------------
+
+This is not about making new duplicate txids valid. Bitcoin Core consensus rules
+already reject new BIP30-style overwrites except for the historical exceptions,
+and BIP34 prevents ordinary post-activation duplicate coinbase creation.
+
+The relevant edge case is historical duplicate coinbase txids. Bitcoin mainnet
+has known BIP30 duplicate coinbase pairs. During deep reorg or invalidation
+handling, blocks are disconnected and their transactions are added to
+DisconnectedBlockTransactions. Coinbase transactions are still added to the
+disconnect pool before MaybeUpdateMempoolForReorg later skips coinbases for
+mempool reacceptance. Therefore duplicate historical coinbase txids can still
+exercise this data structure even though those coinbases will not be reaccepted
+to the mempool.
+
+High-level solution
+-------------------
+
+Make Core's AddTransactionsFromBlock explicitly skip txids that are already in
+iters_by_txid before inserting into queuedTx.
+
+The local patch does two things:
+
+  1. Count how many txids are not already present and reserve only for those.
+  2. During insertion, check iters_by_txid first and continue if the txid is
+     already queued.
+
+Conceptually:
+
+  if (iters_by_txid.contains(txid)) {
+      continue;
+  }
+  list_it = queuedTx.insert(...);
+  inserted = iters_by_txid.emplace(txid, list_it);
+  assert(inserted);
+  cachedInnerUsage += RecursiveDynamicUsage(tx);
+
+This keeps the list, map, and cached memory usage coherent.
+
+Scope of the fix
+----------------
+
+This is a local reorg bookkeeping fix. It is not:
+
+  - a consensus change,
+  - a soft fork,
+  - a hard fork,
+  - a mempool acceptance policy change,
+  - a P2P behavior change, or
+  - a change that makes duplicate transactions valid.
+
+It does not reactivate historical overwritten BIP30 outputs. Reorg mempool
+resurrection still skips coinbase transactions, and ConnectBlock's BIP30/BIP34
+logic is untouched.
+
+Performance considerations
+--------------------------
+
+The fix adds unordered_map lookups while disconnecting blocks during reorg
+handling. This is not the normal block relay or script-verification hot path.
+The operation already walks every transaction being disconnected. The extra
+lookups are expected to be negligible in normal operation.
+
+One subtle point: the first reserve pass currently counts txids not already in
+the map. It may overcount duplicates within the same input vector because it
+does not track txids newly seen during that pass. For consensus-valid blocks this
+does not matter: duplicate non-coinbase txids inside one valid block are not
+allowed, and duplicate coinbase txids are only relevant across different blocks.
+The second insertion pass is the authoritative guard that keeps the data
+structures correct.
+
+Relevant files
+--------------
+
+Core patch:
+
+  src/kernel/disconnected_transactions.cpp
+  src/kernel/disconnected_transactions.h
+  src/test/disconnected_transactions.cpp
+
+Context/report file:
+
+  bchn-disconnectpool-fix-notes.txt
+
+The report file includes an older phrasing that should be read carefully: the
+statement that BCHN addTransaction increments cachedInnerUsage only on successful
+insert is true, but it should not be interpreted as evidence that BCHN previously
+allowed duplicates into queuedTx. BCHN's unique-index container and preexisting
+duplicate skip already prevented duplicate queue entries. The Core bug is
+Core-specific because Core uses a std::list plus a separate unordered_map.
+
+Test coverage
+-------------
+
+The regression test added in src/test/disconnected_transactions.cpp:
+
+  - creates a disconnect pool,
+  - adds two coinbase transactions,
+  - attempts to add one of the txids again,
+  - checks the size and memory usage are unchanged,
+  - removes the duplicate txid via removeForBlock,
+  - verifies the remaining queued transaction is still correct.
+
+Focused checks run before the handoff was written:
+
+  git diff --check
+  cmake --build build-gcc-coins --target test_bitcoin -j$(nproc)
+  ./build-gcc-coins/bin/test_bitcoin --run_test=disconnected_transactions --catch_system_errors=no --log_level=test_suite
+  ./build-gcc-coins/bin/test_bitcoin --run_test=blockencodings_tests --catch_system_errors=no --log_level=test_suite
+
+Functional test reproduction design
+-----------------------------------
+
+A realistic functional reproduction should mirror the BIP30/BIP34 duplicate
+coinbase shape already used in test/functional/feature_block.py.
+
+Relevant BIPs and rules:
+
+  - BIP30: a block may not overwrite an older transaction unless the older
+    transaction is fully spent. This is the rule that rejects unspent duplicate
+    txids.
+  - BIP34: after activation, the coinbase scriptSig must start with the block
+    height. This normally prevents future duplicate coinbases because each
+    height creates a different coinbase scriptSig.
+  - The edge case is a pre-BIP34 block whose coinbase scriptSig already encodes
+    a future height. If that earlier coinbase is fully spent before the future
+    height is reached, BIP30 allows the future block to contain an identical
+    coinbase transaction.
+
+Concrete regtest shape:
+
+  1. Start the node with BIP34 activating at height 2:
+
+       -testactivationheight=bip34@2
+
+     This matches feature_block.py. Height 1 is pre-BIP34, so its coinbase can
+     use an arbitrary scriptSig. Height 2 and later enforce BIP34.
+
+  2. Choose future duplicate height 120.
+
+     In the Python test framework, the BIP34 script for height 120 is:
+
+       b"\x01\x78"
+
+     feature_block.py names this:
+
+       DUPLICATE_COINBASE_SCRIPT_SIG = b'\x01\x78'
+
+  3. Mine block 1 with a coinbase that is intentionally valid for future height
+     120 instead of height 1:
+
+       b1 = create_block(genesis_hash, create_coinbase(1, coinbase_pubkey))
+       b1.vtx[0].vin[0].scriptSig = b"\x01\x78"
+       b1.rehash / recompute merkle / solve
+
+     Because BIP34 is not active until height 2, this block is valid. Save
+     b1.vtx[0] as duplicate_tx.
+
+  4. Mine enough blocks for the block 1 coinbase to mature.
+
+     Coinbase maturity is 100. A simple plan is to build blocks 2 through 118
+     normally. At this point the height-1 coinbase is mature enough to spend in
+     block 119.
+
+  5. Mine block 119 with a transaction that spends duplicate_tx completely.
+
+     This is essential. Without this spend, the duplicate at height 120 is a
+     BIP30 violation and is rejected with bad-txns-BIP30.
+
+     feature_block.py already contains the core pattern:
+
+       tx = CTransaction()
+       tx.vin.append(CTxIn(COutPoint(duplicate_tx.txid_int, 0)))
+       tx.vout.append(CTxOut(0, CScript([OP_TRUE])))
+       sign tx against duplicate_tx
+       put tx in block 119
+
+  6. Mine block 120 with an identical coinbase transaction.
+
+     create_coinbase(120, coinbase_pubkey) naturally gives the same scriptSig
+     b"\x01\x78", but create_coinbase also sets nLockTime = height - 1. To make
+     the txid identical to the height-1 coinbase, set nLockTime back to 0:
+
+       b120 = create_block(block119.hash, create_coinbase(120, coinbase_pubkey))
+       b120.vtx[0].nLockTime = 0
+       b120.vtx[0].vin[0].scriptSig = b"\x01\x78"
+       recompute merkle / solve
+       assert_equal(duplicate_tx.serialize(), b120.vtx[0].serialize())
+
+     This block should be accepted because the earlier duplicate_tx output was
+     fully spent in block 119.
+
+  7. Trigger one reorg/disconnect operation that disconnects both duplicate
+     coinbase blocks in the same DisconnectedBlockTransactions instance.
+
+     Two possible ways:
+
+       A. Simpler crash reproducer: call invalidateblock on block 1 after the
+          active chain reaches block 120. This disconnects blocks 120 down to 1.
+
+       B. Cleaner reorg reproducer: build a competing branch from genesis with
+          more work/height than the 120-block branch, then submit it. The active
+          chain switch disconnects blocks 120 down to 1 before connecting the
+          alternate branch.
+
+     The disconnect order is descending height. AddTransactionsFromBlock sees
+     the duplicate txid first in block 120, then sees the same txid again when
+     block 1 is disconnected.
+
+Expected behavior before the local fix:
+
+  - In a debug/assert build, the node aborts at:
+
+      assert(inserted);
+
+    inside DisconnectedBlockTransactions::AddTransactionsFromBlock when block 1
+    is disconnected, because iters_by_txid already contains the txid from block
+    120.
+
+  - In a non-assert build, the duplicate coinbase case is less visible from the
+    outside. The list/map/memory-accounting invariant is still violated inside
+    the disconnect pool, but MaybeUpdateMempoolForReorg later skips coinbases
+    and take() clears the pool. A functional test is therefore most convincing
+    when run against an assert-enabled build, or when paired with the unit test
+    that directly checks the disconnect-pool invariant.
+
+Expected behavior after the local fix:
+
+  - The reorg/invalidation completes.
+  - AddTransactionsFromBlock skips the second occurrence of the duplicate txid.
+  - queuedTx, iters_by_txid, and cachedInnerUsage remain coherent.
+
+The existing feature_block.py BIP30 section is the best starting point for
+implementation. It already demonstrates:
+
+  - BIP34 activation at height 2,
+  - a pre-BIP34 duplicate coinbase scriptSig b"\x01\x78",
+  - rejection when the earlier duplicate is unspent,
+  - acceptance when the earlier duplicate is spent before the second occurrence,
+  - the exact serialization equality check for the two coinbases.
+
+The new test would extend that scenario by forcing a disconnect/reorg across
+both duplicate blocks, so the disconnect pool sees both txids in one reorg.
+
+Recommended next step
+---------------------
+
+If another LLM continues this work, it should first decide whether the local
+Core patch should remain as-is or be amended to tighten the report wording in
+bchn-disconnectpool-fix-notes.txt. The code fix itself should be evaluated on
+Core's own data structure invariant, not on an overclaim about BCHN duplicate
+insertion behavior.
