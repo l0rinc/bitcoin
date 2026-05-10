@@ -1410,6 +1410,37 @@ BOOST_AUTO_TEST_CASE(sign_invalid_miniscript)
     BOOST_CHECK(!SignSignature(keystore, CTransaction(prev), curr, 0, SIGHASH_ALL, sig_data));
 }
 
+BOOST_AUTO_TEST_CASE(sign_taproot_keypath)
+{
+    FlatSigningProvider keystore;
+    SignatureData sig_data;
+    CMutableTransaction prev, curr;
+
+    CKey key;
+    key.MakeNewKey(/*fCompressedIn=*/true);
+    const auto pubkey{key.GetPubKey()};
+    TaprootBuilder builder;
+    builder.Finalize(XOnlyPubKey{pubkey});
+    const auto script_pubkey{GetScriptForDestination(builder.GetOutput())};
+
+    constexpr CAmount amount{1000};
+    prev.vout.emplace_back(amount, script_pubkey);
+    curr.vin.emplace_back(COutPoint{prev.GetHash(), 0});
+    curr.vout.emplace_back(amount, CScript{});
+
+    keystore.keys[pubkey.GetID()] = key;
+    sig_data.tr_spenddata = builder.GetSpendData();
+    BOOST_CHECK(SignSignature(keystore, script_pubkey, curr, 0, amount, std::vector<CTxOut>{prev.vout[0]}, SIGHASH_DEFAULT, sig_data));
+
+    PrecomputedTransactionData txdata;
+    txdata.Init(curr, std::vector<CTxOut>{prev.vout[0]}, /*force=*/true);
+    const MutableTransactionSignatureChecker checker{&curr, 0, amount, txdata, MissingDataBehavior::ASSERT_FAIL};
+    ScriptError error;
+    BOOST_CHECK(VerifyScript(curr.vin[0].scriptSig, script_pubkey, &curr.vin[0].scriptWitness,
+                             SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT, checker, &error));
+    BOOST_CHECK_EQUAL(error, SCRIPT_ERR_OK);
+}
+
 /* P2A input should be considered signed. */
 BOOST_AUTO_TEST_CASE(sign_paytoanchor)
 {

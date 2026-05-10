@@ -7,6 +7,8 @@
 #include <script/signingprovider.h>
 #include <test/util/transaction_utils.h>
 
+#include <utility>
+
 CMutableTransaction BuildCreditingTransaction(const CScript& scriptPubKey, int nValue)
 {
     CMutableTransaction txCredit;
@@ -96,6 +98,21 @@ bool SignSignature(const SigningProvider &provider, const CScript& fromPubKey, C
     assert(nIn < txTo.vin.size());
 
     MutableTransactionSignatureCreator creator(txTo, nIn, amount, {.sighash_type = nHashType});
+
+    bool ret = ProduceSignature(provider, creator, fromPubKey, sig_data);
+    UpdateInput(txTo.vin.at(nIn), sig_data);
+    return ret;
+}
+
+bool SignSignature(const SigningProvider &provider, const CScript& fromPubKey, CMutableTransaction& txTo,
+                   unsigned int nIn, const CAmount& amount, std::vector<CTxOut>&& spent_outputs,
+                   int nHashType, SignatureData& sig_data)
+{
+    assert(nIn < txTo.vin.size());
+
+    PrecomputedTransactionData txdata;
+    txdata.Init(txTo, std::move(spent_outputs), /*force=*/true);
+    MutableTransactionSignatureCreator creator(txTo, nIn, amount, &txdata, {.sighash_type = nHashType});
 
     bool ret = ProduceSignature(provider, creator, fromPubKey, sig_data);
     UpdateInput(txTo.vin.at(nIn), sig_data);
