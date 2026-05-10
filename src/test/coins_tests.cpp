@@ -686,7 +686,12 @@ static void WriteCoinsViewEntry(CCoinsView& view, const MaybeCoin& cache_coin)
     if (cache_coin) InsertCoinsMapEntry(map, sentinel, resource, *cache_coin);
     size_t dirty_count{cache_coin && cache_coin->IsDirty()};
     auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, map, resource, /*will_clear=*/true)};
-    view.BatchWrite(cursor, {});
+    try {
+        view.BatchWrite(cursor, {});
+    } catch (...) {
+        FreeAllCoins(map, resource);
+        throw;
+    }
     BOOST_CHECK_EQUAL(dirty_count, 0U);
     FreeAllCoins(map, resource);
 }
