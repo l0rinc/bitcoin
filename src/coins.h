@@ -151,7 +151,10 @@ private:
     }
 
 public:
-    Coin coin; // The actual cached data.
+    /**
+     * Pointer to the actual coin, pool-allocated, nullptr if spent (or freshly initialized).
+     * */
+    Coin* coin{nullptr};
 
     enum Flags {
         /**
@@ -175,10 +178,33 @@ public:
     };
 
     CCoinsCacheEntry() noexcept = default;
-    explicit CCoinsCacheEntry(Coin&& coin_) noexcept : coin(std::move(coin_)) {}
     ~CCoinsCacheEntry()
     {
+        while (coin);
+        Assume(coin == nullptr);
+        if (coin) coin->~Coin();
         SetClean();
+    }
+    // copying an entry would copy the coin pointer!
+    CCoinsCacheEntry(const CCoinsCacheEntry&) = delete;
+
+    // Move Constructor
+    CCoinsCacheEntry(CCoinsCacheEntry&& other) noexcept
+        : m_flags(other.m_flags), coin(other.coin)
+    {
+        other.coin = nullptr; // Ensure the source is nulled
+    }
+
+    // Move Assignment
+    CCoinsCacheEntry& operator=(CCoinsCacheEntry&& other) noexcept
+    {
+        if (this != &other) {
+            Assume(!coin);
+            coin = other.coin;
+            m_flags = other.m_flags;
+            other.coin = nullptr;
+        }
+        return *this;
     }
 
     static void SetDirty(CoinsCachePair& pair, CoinsCachePair& sentinel) noexcept { AddFlags(DIRTY, pair, sentinel); }
@@ -194,6 +220,12 @@ public:
     }
     bool IsDirty() const noexcept { return m_flags & DIRTY; }
     bool IsFresh() const noexcept { return m_flags & FRESH; }
+
+    // It's acceptable for higher-level code to directly test if coin is nullptr.
+    bool IsSpent() const noexcept
+    {
+        return !coin || coin->IsSpent();
+    }
 
     //! Only call Next when this entry is DIRTY, FRESH, or both
     CoinsCachePair* Next() const noexcept
@@ -264,25 +296,26 @@ private:
  * of CCoinsView::BatchWrite to iterate through the flagged entries without knowing
  * the caller's intent.
  *
- * However, the receiver can still call CoinsViewCacheCursor::WillErase to see if the
+ * However, the receiver can still call CoinsViewCacheCursor::WillClear to see if the
  * caller will erase the entry after BatchWrite returns. If so, the receiver can
  * perform optimizations such as moving the coin out of the CCoinsCachEntry instead
  * of copying it.
  */
 struct CoinsViewCacheCursor
 {
-    //! If will_erase is not set, iterating through the cursor will erase spent coins from the map,
+    //! If will_clear is not set, iterating through the cursor will erase spent coins from the map,
     //! and other coins will be unflagged (removing them from the linked list).
-    //! If will_erase is set, the underlying map and linked list will not be modified,
+    //! If will_clear is set, the underlying map and linked list will not be modified,
     //! as the caller is expected to wipe the entire map anyway.
-    //! This is an optimization compared to erasing all entries as the cursor iterates them when will_erase is set.
+    //! This is an optimization compared to erasing all entries as the cursor iterates them when will_clear is set.
     //! Calling CCoinsMap::clear() afterwards is faster because a CoinsCachePair cannot be coerced back into a
     //! CCoinsMap::iterator to be erased, and must therefore be looked up again by key in the CCoinsMap before being erased.
     CoinsViewCacheCursor(size_t& dirty_count LIFETIMEBOUND,
                          CoinsCachePair& sentinel LIFETIMEBOUND,
                          CCoinsMap& map LIFETIMEBOUND,
-                         bool will_erase) noexcept
-        : m_dirty_count(dirty_count), m_sentinel(sentinel), m_map(map), m_will_erase(will_erase) {}
+                         CCoinsMapMemoryResource& memory LIFETIMEBOUND,
+                         bool will_clear) noexcept
+        : m_dirty_count(dirty_count), m_sentinel(sentinel), m_map(map), m_memory(memory), m_will_clear(will_clear) {}
 
     inline CoinsCachePair* Begin() const noexcept { return m_sentinel.second.Next(); }
     inline CoinsCachePair* End() const noexcept { return &m_sentinel; }
@@ -294,25 +327,38 @@ struct CoinsViewCacheCursor
         Assume(TrySub(m_dirty_count, current.second.IsDirty()));
         // If we are not going to erase the cache, we must still erase spent entries.
         // Otherwise, clear the state of the entry.
-        if (!m_will_erase) {
-            if (current.second.coin.IsSpent()) {
-                assert(current.second.coin.DynamicMemoryUsage() == 0); // scriptPubKey was already cleared in SpendCoin
+        if (!m_will_clear) {
+            if (current.second.IsSpent()) {
+                if (current.second.coin) {
+                    current.second.coin->~Coin();
+                    m_memory.Deallocate(current.second.coin, sizeof(Coin), alignof(Coin));
+                    current.second.coin = nullptr;
+                }
                 m_map.erase(current.first);
             } else {
                 current.second.SetClean();
             }
         }
+        /* XXX should not be needed, we will call FreeAllCoins
+        else if (current.second.coin) {
+            // Clearing the map doesn't delete the coins; that must be done explicitly.
+            current.second.coin->~Coin();
+            m_memory.Deallocate(current.second.coin, sizeof(Coin), alignof(Coin));
+            current.second.coin = nullptr;
+        }
+        */
         return next_entry;
     }
 
-    inline bool WillErase(CoinsCachePair& current) const noexcept { return m_will_erase || current.second.coin.IsSpent(); }
+    bool WillClear() const noexcept { return m_will_clear; }
     size_t GetDirtyCount() const noexcept { return m_dirty_count; }
     size_t GetTotalCount() const noexcept { return m_map.size(); }
 private:
     size_t& m_dirty_count;
     CoinsCachePair& m_sentinel;
     CCoinsMap& m_map;
-    bool m_will_erase;
+    CCoinsMapMemoryResource& m_memory;
+    bool m_will_clear;
 };
 
 /** Pure abstract view on the open txout dataset. */
@@ -440,6 +486,9 @@ public:
      */
     CCoinsViewCache(const CCoinsViewCache &) = delete;
 
+    // Coins need to be deconstructed explicitly.
+    ~CCoinsViewCache() { FreeAllCoins(); }
+
     // Standard CCoinsView methods
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
     std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override;
@@ -491,6 +540,15 @@ public:
      * has no effect.
      */
     bool SpendCoin(const COutPoint &outpoint, Coin* moveto = nullptr);
+
+    //! Move a coin into a cache entry, overwriting any existing coin.
+    void MoveCoin(CCoinsCacheEntry& entry, Coin&& coin) const;
+
+    //! Free (deallocate) a coin (TODO - is noexcept ok here?)
+    void FreeCoin(CCoinsCacheEntry& entry) const noexcept;
+
+    //! Call FreeCoin() on all the coins within this cache.
+    void FreeAllCoins() const noexcept;
 
     /**
      * Push the modifications applied to this cache to its base and wipe local state.
