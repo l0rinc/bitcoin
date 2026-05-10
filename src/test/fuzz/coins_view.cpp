@@ -230,7 +230,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 size_t dirty_count{0};
                 CCoinsMapMemoryResource resource;
                 CCoinsMap coins_map{0, SaltedOutpointHasher{/*deterministic=*/true}, CCoinsMap::key_equal{}, &resource};
-                    
+
                 auto freeCoinsEntry{[&resource](CCoinsCacheEntry& entry) -> void
                 {
                     assert(entry.coin);

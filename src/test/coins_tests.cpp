@@ -649,7 +649,7 @@ static void AddCoin(CCoinsMapMemoryResource& resource, CCoinsCacheEntry& entry)
     entry.coin = static_cast<Coin*>(resource.Allocate(sizeof(Coin), alignof(Coin)));
     new (entry.coin) Coin();
 }
-        
+
 static void FreeAllCoins(CCoinsMap& map, CCoinsMapMemoryResource& resource)
 {
     for (auto& entry : map) if (entry.second.coin) FreeCoin(resource, entry.second);
@@ -660,7 +660,6 @@ static size_t InsertCoinsMapEntry(CCoinsMap& map, CoinsCachePair& sentinel, CCoi
     CCoinsCacheEntry entry;
     AddCoin(resource, entry);
     SetCoinsValue(cache_coin.value, *entry.coin);
-    //auto [iter, inserted] = map.emplace(std::piecewise_construct, std::forward_as_tuple(OUTPOINT), std::forward_as_tuple(std::move(entry)));
     auto [iter, inserted] = map.emplace(OUTPOINT, std::move(entry));
     assert(inserted);
     if (cache_coin.IsDirty()) CCoinsCacheEntry::SetDirty(*iter, sentinel);

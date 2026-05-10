@@ -151,9 +151,7 @@ private:
     }
 
 public:
-    /**
-     * Pointer to the actual coin, pool-allocated, nullptr if spent (or freshly initialized).
-     * */
+    //! Pool-allocated coin data, or nullptr for spent entries.
     Coin* coin{nullptr};
 
     enum Flags {
@@ -183,18 +181,16 @@ public:
         Assume(coin == nullptr);
         SetClean();
     }
-    // copying an entry would copy the coin pointer!
+    //! Copying would duplicate ownership of the coin pointer.
     CCoinsCacheEntry(const CCoinsCacheEntry&) = delete;
 
-    // Move Constructor
     CCoinsCacheEntry(CCoinsCacheEntry&& other) noexcept
         : coin(other.coin)
     {
         Assume(!other.m_flags);
-        other.coin = nullptr; // Ensure the source is nulled
+        other.coin = nullptr;
     }
 
-    // Move Assignment
     CCoinsCacheEntry& operator=(CCoinsCacheEntry&& other) noexcept
     {
         if (this != &other) {
@@ -221,7 +217,6 @@ public:
     bool IsDirty() const noexcept { return m_flags & DIRTY; }
     bool IsFresh() const noexcept { return m_flags & FRESH; }
 
-    // It's acceptable for higher-level code to directly test if coin is nullptr.
     bool IsSpent() const noexcept
     {
         return !coin || coin->IsSpent();
@@ -298,7 +293,7 @@ private:
  *
  * However, the receiver can still call CoinsViewCacheCursor::WillClear to see if the
  * caller will erase the entry after BatchWrite returns. If so, the receiver can
- * perform optimizations such as moving the coin out of the CCoinsCachEntry instead
+ * perform optimizations such as moving the coin out of the CCoinsCacheEntry instead
  * of copying it.
  */
 struct CoinsViewCacheCursor
@@ -339,14 +334,6 @@ struct CoinsViewCacheCursor
                 current.second.SetClean();
             }
         }
-        /* XXX should not be needed, we will call FreeAllCoins
-        else if (current.second.coin) {
-            // Clearing the map doesn't delete the coins; that must be done explicitly.
-            current.second.coin->~Coin();
-            m_memory.Deallocate(current.second.coin, sizeof(Coin), alignof(Coin));
-            current.second.coin = nullptr;
-        }
-        */
         return next_entry;
     }
 
@@ -486,7 +473,7 @@ public:
      */
     CCoinsViewCache(const CCoinsViewCache &) = delete;
 
-    // Coins need to be deconstructed explicitly.
+    //! Coins need to be destroyed explicitly because entries only store pool-backed pointers.
     ~CCoinsViewCache() { FreeAllCoins(); }
 
     // Standard CCoinsView methods
@@ -544,8 +531,9 @@ public:
     //! Move a coin into a cache entry, overwriting any existing coin.
     void MoveCoin(CCoinsCacheEntry& entry, Coin&& coin) const;
 
-    //! Free (deallocate) a coin (TODO - is noexcept ok here?)
+    //! Free (deallocate) a coin.
     void FreeCoin(CCoinsCacheEntry& entry) const noexcept;
+    //! Free a coin using a memory usage value captured before the coin is moved from.
     void FreeCoin(CCoinsCacheEntry& entry, size_t mem_usage) const noexcept;
 
     //! Call FreeCoin() on all the coins within this cache.
