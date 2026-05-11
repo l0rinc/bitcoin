@@ -306,6 +306,35 @@ MacOS: `brew install doxygen graphviz`
 
 Refer to [/test/functional/README.md#style-guidelines](/test/functional/README.md#style-guidelines).
 
+## General Testing
+
+As a rule of thumb, an externally observable change (new feature, bug fix, or
+changed default) should be accompanied by an automated test.
+New tests are usually not needed for simple behavior-preserving work,
+such as moving code, renaming, or mechanical refactors.
+When an automated test would be brittle or have limited long-term value,
+a manual testing recipe in the commit message or PR description is an
+acceptable alternative.
+
+### Commit Structure for Tests
+
+Tests should usually be placed near the commit they cover. When existing tests
+already cover the affected behavior, update them in the same commit as the
+change. The edited assertion records the old and new expectations together and
+shows the change was intentional.
+
+For non-trivial refactors, if the relevant invariant is not already covered by
+automated tests, first add that coverage in a separate test commit. A refactor
+commit should not need to update test expectations.
+
+For an uncovered case, a simple feature or bug fix can often add its test in
+the same commit. For a non-trivial change to existing behavior without coverage,
+first add a behavior-preserving [characterization test](https://en.wikipedia.org/wiki/Characterization_test)
+that records the current result. Mark any assertion that captures an incorrect
+or temporary result with a `TODO` comment so it is not mistaken for the intended
+result later; the following commit removes the comment as it updates the
+assertion.
+
 ## Development tips and tricks
 
 ### Compiling for debugging
