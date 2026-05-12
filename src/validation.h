@@ -570,7 +570,7 @@ protected:
     //! Cached result of LookupBlockIndex(*m_target_blockhash)
     mutable const CBlockIndex* m_cached_target_block GUARDED_BY(::cs_main){nullptr};
 
-    std::optional<const char*> m_last_script_check_reason_logged GUARDED_BY(::cs_main){};
+    std::optional<const char*> m_last_assumevalid_check_reason_logged GUARDED_BY(::cs_main){};
 
 public:
     //! Reference to a BlockManager instance which itself is shared across all

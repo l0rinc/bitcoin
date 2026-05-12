@@ -2339,9 +2339,9 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         return true;
     }
 
-    const char* script_check_reason;
+    const char* assumevalid_check_reason;
     if (m_chainman.AssumedValidBlock().IsNull()) {
-        script_check_reason = "assumevalid=0 (always verify)";
+        assumevalid_check_reason = "assumevalid=0 (always verify)";
     } else {
         constexpr int64_t TWO_WEEKS_IN_SECONDS{60 * 60 * 24 * 7 * 2};
         // We've been configured with the hash of a block which has been externally verified to have a valid history.
@@ -2351,15 +2351,15 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         //  effectively caching the result of part of the verification.
         BlockMap::const_iterator it{m_blockman.m_block_index.find(m_chainman.AssumedValidBlock())};
         if (it == m_blockman.m_block_index.end()) {
-            script_check_reason = "assumevalid hash not in headers";
+            assumevalid_check_reason = "assumevalid hash not in headers";
         } else if (it->second.GetAncestor(pindex->nHeight) != pindex) {
-            script_check_reason = (pindex->nHeight > it->second.nHeight) ? "block height above assumevalid height" : "block not in assumevalid chain";
+            assumevalid_check_reason = (pindex->nHeight > it->second.nHeight) ? "block height above assumevalid height" : "block not in assumevalid chain";
         } else if (m_chainman.m_best_header->GetAncestor(pindex->nHeight) != pindex) {
-            script_check_reason = "block not in best header chain";
+            assumevalid_check_reason = "block not in best header chain";
         } else if (m_chainman.m_best_header->nChainWork < m_chainman.MinimumChainWork()) {
-            script_check_reason = "best header chainwork below minimumchainwork";
+            assumevalid_check_reason = "best header chainwork below minimumchainwork";
         } else if (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= TWO_WEEKS_IN_SECONDS) {
-            script_check_reason = "block too recent relative to best header";
+            assumevalid_check_reason = "block too recent relative to best header";
         } else {
             // This block is a member of the assumed verified chain and an ancestor of the best header.
             // Script verification is skipped when connecting blocks under the
@@ -2375,7 +2375,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             //  artificially set the default assumed verified block further back.
             // The test against the minimum chain work prevents the skipping when denied access to any chain at
             //  least as good as the expected chain.
-            script_check_reason = nullptr;
+            assumevalid_check_reason = nullptr;
         }
     }
 
@@ -2488,17 +2488,17 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
              Ticks<SecondsDouble>(m_chainman.time_forks),
              Ticks<MillisecondsDouble>(m_chainman.time_forks) / m_chainman.num_blocks_total);
 
-    const bool fScriptChecks{!!script_check_reason};
+    const bool fScriptChecks{!!assumevalid_check_reason};
     const kernel::ChainstateRole role{GetRole()};
-    if (script_check_reason != m_last_script_check_reason_logged && role.validated && !role.historical) {
+    if (assumevalid_check_reason != m_last_assumevalid_check_reason_logged && role.validated && !role.historical) {
         if (fScriptChecks) {
             LogInfo("Enabling script verification at block #%d (%s): %s.",
-                    pindex->nHeight, block_hash.ToString(), script_check_reason);
+                    pindex->nHeight, block_hash.ToString(), assumevalid_check_reason);
         } else {
             LogInfo("Disabling script verification at block #%d (%s).",
                     pindex->nHeight, block_hash.ToString());
         }
-        m_last_script_check_reason_logged = script_check_reason;
+        m_last_assumevalid_check_reason_logged = assumevalid_check_reason;
     }
 
     CBlockUndo blockundo;
