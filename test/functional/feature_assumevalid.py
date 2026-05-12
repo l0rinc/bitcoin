@@ -39,6 +39,7 @@ import copy
 
 from test_framework.blocktools import (
     COINBASE_MATURITY,
+    MAX_BLOCK_SIGOPS,
     create_block,
     create_coinbase,
 )
@@ -54,8 +55,11 @@ from test_framework.messages import (
 from test_framework.p2p import P2PInterface
 from test_framework.script import (
     CScript,
+    OP_CHECKSIG,
     OP_TRUE,
+    sign_input_legacy,
 )
+from test_framework.script_util import script_to_p2sh_script
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import assert_equal
 from test_framework.wallet_util import generate_keypair
@@ -71,7 +75,7 @@ class BaseNode(P2PInterface):
 class AssumeValidTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
-        self.num_nodes = 6
+        self.num_nodes = 7
         self.rpc_timeout = 120
         self.bip34_arg = "-testactivationheight=bip34@2203"
         self.extra_args = [[self.bip34_arg] for _ in range(self.num_nodes)]
@@ -91,7 +95,12 @@ class AssumeValidTest(BitcoinTestFramework):
         self.blocks = []
 
         # Get a pubkey for the coinbase TXO
-        _, coinbase_pubkey = generate_keypair()
+        coinbase_key, coinbase_pubkey = generate_keypair()
+
+        p2sh_sigops_per_input = 500
+        p2sh_sigop_inputs = MAX_BLOCK_SIGOPS // p2sh_sigops_per_input + 1
+        redeem_script = CScript([OP_CHECKSIG] * p2sh_sigops_per_input)
+        p2sh_script = script_to_p2sh_script(redeem_script)
 
         # Create the first block with a coinbase output to our key
         height = 1
@@ -105,18 +114,28 @@ class AssumeValidTest(BitcoinTestFramework):
         height += 1
 
         # Bury the block 100 deep so the coinbase output is spendable
+        p2sh_funding_tx = None
         for _ in range(100):
-            block = create_block(self.tip, height=height, ntime=self.block_time)
+            txlist = []
+            if height == COINBASE_MATURITY + 1:
+                p2sh_funding_tx = CTransaction()
+                p2sh_funding_tx.vin.append(CTxIn(COutPoint(self.block1.vtx[0].txid_int, 0)))
+                for _ in range(2 * p2sh_sigop_inputs):
+                    p2sh_funding_tx.vout.append(CTxOut(1, p2sh_script))
+                sign_input_legacy(p2sh_funding_tx, 0, self.block1.vtx[0].vout[0].scriptPubKey, coinbase_key)
+                txlist.append(p2sh_funding_tx)
+            block = create_block(self.tip, height=height, ntime=self.block_time, txlist=txlist)
             block.solve()
             self.blocks.append(block)
             self.tip = block.hash_int
             self.block_time += 1
             height += 1
+        assert p2sh_funding_tx is not None
 
-        # Create a transaction spending the coinbase output with an invalid (null) signature
         tx = CTransaction()
-        tx.vin.append(CTxIn(COutPoint(self.block1.vtx[0].txid_int, 0), scriptSig=b""))
-        tx.vout.append(CTxOut(49 * 100000000, CScript([OP_TRUE])))
+        for output_index in range(p2sh_sigop_inputs):
+            tx.vin.append(CTxIn(COutPoint(p2sh_funding_tx.txid_int, output_index), CScript([redeem_script])))
+        tx.vout.append(CTxOut(1, CScript([OP_TRUE])))
 
         duplicate_coinbase = copy.deepcopy(self.blocks[1].vtx[0])
         block102 = create_block(self.tip, coinbase=duplicate_coinbase, ntime=self.block_time, txlist=[tx])
@@ -126,6 +145,15 @@ class AssumeValidTest(BitcoinTestFramework):
         self.tip = block102.hash_int
         self.block_time += 1
         height += 1
+
+        post_assumevalid_sigops_tx = CTransaction()
+        for output_index in range(p2sh_sigop_inputs, 2 * p2sh_sigop_inputs):
+            post_assumevalid_sigops_tx.vin.append(CTxIn(COutPoint(p2sh_funding_tx.txid_int, output_index), CScript([redeem_script])))
+        post_assumevalid_sigops_tx.vout.append(CTxOut(1, CScript([OP_TRUE])))
+        post_assumevalid_sigops = create_block(self.tip, height=height, ntime=self.block_time, txlist=[post_assumevalid_sigops_tx])
+        post_assumevalid_sigops.solve()
+        post_assumevalid_bip30 = create_block(self.tip, coinbase=copy.deepcopy(self.blocks[2].vtx[0]), ntime=self.block_time)
+        post_assumevalid_bip30.solve()
 
         # Bury the assumed valid block 2100 deep
         for _ in range(2100):
@@ -141,7 +169,8 @@ class AssumeValidTest(BitcoinTestFramework):
         self.start_node(2, extra_args=[self.bip34_arg, f"-assumevalid={block102.hash_hex}"])
         self.start_node(3, extra_args=[self.bip34_arg, f"-assumevalid={block102.hash_hex}"])
         self.start_node(4, extra_args=[self.bip34_arg, f"-assumevalid={block102.hash_hex}"])
-        self.start_node(5)
+        self.start_node(5, extra_args=[self.bip34_arg, f"-assumevalid={block102.hash_hex}"])
+        self.start_node(6)
 
         # nodes[0]
         self.log.info("Send blocks to node0. Block 102 will be rejected.")
@@ -231,21 +260,48 @@ class AssumeValidTest(BitcoinTestFramework):
             assert_equal(self.nodes[4].getblockcount(), 1)
 
         # nodes[5]
-        self.log.info("Reindex to hit specific assumevalid gates (no races with header downloads/chainwork during startup).")
+        self.log.info("Send blocks through assumevalid to node5, then reject invalid blocks after assumevalid.")
         p2p5 = self.nodes[5].add_p2p_connection(BaseNode())
-        p2p5.send_header_for_blocks(self.blocks[0:200])
-        p2p5.send_without_ping(msg_block(self.blocks[0]))
-        self.wait_until(lambda: self.nodes[5].getblockcount() == 1)
+        p2p5.send_header_for_blocks(self.blocks[0:2000])
+        p2p5.send_header_for_blocks(self.blocks[2000:])
         with self.nodes[5].assert_debug_log(expected_msgs=[
+            f"Disabling script verification at block #1 ({self.blocks[0].hash_hex}).",
+        ]):
+            for i in range(102):
+                p2p5.send_without_ping(msg_block(self.blocks[i]))
+            p2p5.sync_with_ping(timeout=960)
+            assert_equal(self.nodes[5].getblockcount(), 102)
+        with self.nodes[5].assert_debug_log(expected_msgs=[
+            f"Enabling script verification at block #103 ({post_assumevalid_sigops.hash_hex}): block height above assumevalid height.",
+            "Block validation error: bad-blk-sigops",
+        ]):
+            p2p5.send_without_ping(msg_block(post_assumevalid_sigops))
+            p2p5.wait_for_disconnect()
+            assert_equal(self.nodes[5].getblockcount(), 102)
+        p2p5 = self.nodes[5].add_p2p_connection(BaseNode())
+        with self.nodes[5].assert_debug_log(expected_msgs=[
+            "Block validation error: bad-txns-BIP30",
+        ]):
+            p2p5.send_without_ping(msg_block(post_assumevalid_bip30))
+            p2p5.wait_for_disconnect()
+            assert_equal(self.nodes[5].getblockcount(), 102)
+
+        # nodes[6]
+        self.log.info("Reindex to hit specific assumevalid gates (no races with header downloads/chainwork during startup).")
+        p2p6 = self.nodes[6].add_p2p_connection(BaseNode())
+        p2p6.send_header_for_blocks(self.blocks[0:200])
+        p2p6.send_without_ping(msg_block(self.blocks[0]))
+        self.wait_until(lambda: self.nodes[6].getblockcount() == 1)
+        with self.nodes[6].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #1 ({block_1_hash}): assumevalid hash not in headers.",
         ]):
-            self.restart_node(5, extra_args=[self.bip34_arg, "-reindex-chainstate", "-assumevalid=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"])
-            assert_equal(self.nodes[5].getblockcount(), 1)
-        with self.nodes[5].assert_debug_log(expected_msgs=[
+            self.restart_node(6, extra_args=[self.bip34_arg, "-reindex-chainstate", "-assumevalid=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"])
+            assert_equal(self.nodes[6].getblockcount(), 1)
+        with self.nodes[6].assert_debug_log(expected_msgs=[
             f"Enabling script verification at block #1 ({block_1_hash}): best header chainwork below minimumchainwork.",
         ]):
-            self.restart_node(5, extra_args=[self.bip34_arg, "-reindex-chainstate", f"-assumevalid={block102.hash_hex}", "-minimumchainwork=0xffff"])
-            assert_equal(self.nodes[5].getblockcount(), 1)
+            self.restart_node(6, extra_args=[self.bip34_arg, "-reindex-chainstate", f"-assumevalid={block102.hash_hex}", "-minimumchainwork=0xffff"])
+            assert_equal(self.nodes[6].getblockcount(), 1)
 
 
 if __name__ == '__main__':
