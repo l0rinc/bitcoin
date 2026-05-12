@@ -45,7 +45,7 @@ class TxValidationState;
  * Does context-less checks about a single transaction.
  * @returns false if the fee is non-zero and dust exists, populating state. True otherwise.
  */
-bool PreCheckEphemeralTx(const CTransaction& tx, CFeeRate dust_relay_rate, CAmount base_fee, CAmount mod_fee, TxValidationState& state);
+[[nodiscard]] bool PreCheckEphemeralTx(const CTransaction& tx, CFeeRate dust_relay_rate, CAmount base_fee, CAmount mod_fee, TxValidationState& state);
 
 /** Called for each transaction(package) if any dust is in the package.
  *  Checks that each transaction's parents have their dust spent by the child,
@@ -53,6 +53,6 @@ bool PreCheckEphemeralTx(const CTransaction& tx, CFeeRate dust_relay_rate, CAmou
  *  Sets out_child_state and out_child_wtxid on failure.
  *  @returns true if all dust is properly spent.
  */
-bool CheckEphemeralSpends(const Package& package, CFeeRate dust_relay_rate, const CTxMemPool& tx_pool, TxValidationState& out_child_state, Wtxid& out_child_wtxid);
+[[nodiscard]] bool CheckEphemeralSpends(const Package& package, CFeeRate dust_relay_rate, const CTxMemPool& tx_pool, TxValidationState& out_child_state, Wtxid& out_child_wtxid);
 
 #endif // BITCOIN_POLICY_EPHEMERAL_POLICY_H

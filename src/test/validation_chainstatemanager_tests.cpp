@@ -81,7 +81,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager, TestChain100Setup)
         for (const auto& cs : manager.m_chainstates) {
             cs->ClearBlockIndexCandidates();
         }
-        c2.LoadChainTip();
+        BOOST_REQUIRE(c2.LoadChainTip());
         for (const auto& cs : manager.m_chainstates) {
             cs->PopulateBlockIndexCandidates();
         }
@@ -498,7 +498,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_loadblockindex, TestChain100Setup)
             cs->ClearBlockIndexCandidates();
             BOOST_CHECK(cs->setBlockIndexCandidates.empty());
         }
-        chainman.LoadBlockIndex();
+        BOOST_REQUIRE(chainman.LoadBlockIndex());
         for (const auto& cs : chainman.m_chainstates) {
             cs->PopulateBlockIndexCandidates();
         }
@@ -611,7 +611,7 @@ BOOST_FIXTURE_TEST_CASE(loadblockindex_invalid_descendants, TestChain100Setup)
     child->nStatus = (child->nStatus & ~BLOCK_FAILED_VALID);
 
     // Reload block index to recompute block status validity flags.
-    m_node.chainman->LoadBlockIndex();
+    BOOST_REQUIRE(m_node.chainman->LoadBlockIndex());
 
     // check grand_parent, parent, child is marked as BLOCK_FAILED_VALID after reloading the block index
     BOOST_CHECK(grand_parent->nStatus & BLOCK_FAILED_VALID);
@@ -664,7 +664,7 @@ BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
         chainstate.ResetBlockFailureFlags(block99);
         chainman.RecalculateBestHeader();
     }
-    chainstate.ActivateBestChain(state);
+    BOOST_REQUIRE(chainstate.ActivateBestChain(state));
     BOOST_REQUIRE(WITH_LOCK(cs_main, return chainman.ActiveChain().Tip()) == block100);
 
     {
@@ -696,7 +696,7 @@ BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
         chainstate.ResetBlockFailureFlags(block99);
         chainman.RecalculateBestHeader();
     }
-    chainstate.ActivateBestChain(state);
+    BOOST_REQUIRE(chainstate.ActivateBestChain(state));
     {
         LOCK(chainman.GetMutex());
         BOOST_CHECK(!(block98->nStatus & BLOCK_FAILED_VALID));

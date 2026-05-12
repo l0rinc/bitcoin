@@ -24,14 +24,14 @@ class arith_uint256;
  * @return              the proof-of-work target or nullopt if the nBits value
  *                      is invalid (due to overflow or exceeding pow_limit)
  */
-std::optional<arith_uint256> DeriveTarget(unsigned int nBits, uint256 pow_limit);
+[[nodiscard]] std::optional<arith_uint256> DeriveTarget(unsigned int nBits, uint256 pow_limit);
 
-unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params&);
-unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nFirstBlockTime, const Consensus::Params&);
+[[nodiscard]] unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params&);
+[[nodiscard]] unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nFirstBlockTime, const Consensus::Params&);
 
 /** Check whether a block hash satisfies the proof-of-work requirement specified by nBits */
-bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&);
-bool CheckProofOfWorkImpl(uint256 hash, unsigned int nBits, const Consensus::Params&);
+[[nodiscard]] bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&);
+[[nodiscard]] bool CheckProofOfWorkImpl(uint256 hash, unsigned int nBits, const Consensus::Params&);
 
 /**
  * Return false if the proof-of-work requirement specified by new_nbits at a

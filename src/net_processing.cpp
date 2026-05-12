@@ -3426,7 +3426,10 @@ void PeerManagerImpl::ProcessGetCFCheckPt(CNode& node, Peer& peer, DataStream& v
 void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked)
 {
     bool new_block{false};
-    m_chainman.ProcessNewBlock(block, force_processing, min_pow_checked, &new_block);
+    const bool processed{m_chainman.ProcessNewBlock(block, force_processing, min_pow_checked, &new_block)};
+    if (!processed) {
+        LogDebug(BCLog::NET, "Block %s was not processed\n", block->GetHash().ToString());
+    }
     if (new_block) {
         node.m_last_block_time = GetTime<std::chrono::seconds>();
         // In case this block came from a different peer than we requested

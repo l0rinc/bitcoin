@@ -66,9 +66,9 @@ RBFTransactionState IsRBFOptInEmptyMempool(const CTransaction& tx);
  *                                  remain in the set.
  * @returns an error message if the number of affected clusters would exceed MAX_REPLACEMENT_CANDIDATES, std::nullopt otherwise
  */
-std::optional<std::string> GetEntriesForConflicts(const CTransaction& tx, CTxMemPool& pool,
-                                                  const CTxMemPool::setEntries& iters_conflicting,
-                                                  CTxMemPool::setEntries& all_conflicts)
+[[nodiscard]] std::optional<std::string> GetEntriesForConflicts(const CTransaction& tx, CTxMemPool& pool,
+                                                                const CTxMemPool::setEntries& iters_conflicting,
+                                                                CTxMemPool::setEntries& all_conflicts)
     EXCLUSIVE_LOCKS_REQUIRED(pool.cs);
 
 /** Check the intersection between two sets of transactions (a set of mempool entries and a set of
@@ -80,9 +80,9 @@ std::optional<std::string> GetEntriesForConflicts(const CTransaction& tx, CTxMem
  * @param[in]   txid                Transaction ID, included in the error message if violation occurs.
  * @returns error message if the sets intersect, std::nullopt if they are disjoint.
  */
-std::optional<std::string> EntriesAndTxidsDisjoint(const CTxMemPool::setEntries& ancestors,
-                                                   const std::set<Txid>& direct_conflicts,
-                                                   const Txid& txid);
+[[nodiscard]] std::optional<std::string> EntriesAndTxidsDisjoint(const CTxMemPool::setEntries& ancestors,
+                                                                 const std::set<Txid>& direct_conflicts,
+                                                                 const Txid& txid);
 
 /** The replacement transaction must pay more fees than the original transactions. The additional
  * fees must pay for the replacement's bandwidth at or above the incremental relay feerate.
@@ -93,17 +93,17 @@ std::optional<std::string> EntriesAndTxidsDisjoint(const CTxMemPool::setEntries&
  * @param[in]   txid                Transaction ID, included in the error message if violation occurs.
  * @returns error string if fees are insufficient, otherwise std::nullopt.
  */
-std::optional<std::string> PaysForRBF(CAmount original_fees,
-                                      CAmount replacement_fees,
-                                      size_t replacement_vsize,
-                                      CFeeRate relay_fee,
-                                      const Txid& txid);
+[[nodiscard]] std::optional<std::string> PaysForRBF(CAmount original_fees,
+                                                    CAmount replacement_fees,
+                                                    size_t replacement_vsize,
+                                                    CFeeRate relay_fee,
+                                                    const Txid& txid);
 
 /**
  * The replacement transaction must improve the feerate diagram of the mempool.
  * @param[in]   changeset           The changeset containing proposed additions/removals
  * @returns error type and string if mempool diagram doesn't improve, otherwise std::nullopt.
  */
-std::optional<std::pair<DiagramCheckError, std::string>> ImprovesFeerateDiagram(CTxMemPool::ChangeSet& changeset);
+[[nodiscard]] std::optional<std::pair<DiagramCheckError, std::string>> ImprovesFeerateDiagram(CTxMemPool::ChangeSet& changeset);
 
 #endif // BITCOIN_POLICY_RBF_H

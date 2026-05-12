@@ -49,18 +49,18 @@ BOOST_AUTO_TEST_CASE(validation_chainstate_resize_caches)
 
         BOOST_CHECK(c1.CoinsTip().HaveCoinInCache(outpoint));
 
-        c1.ResizeCoinsCaches(
+        BOOST_REQUIRE(c1.ResizeCoinsCaches(
             16_MiB, // upsizing the coinsview cache
             4_MiB // downsizing the coinsdb cache
-        );
+        ));
 
         // View should still have the coin cached, since we haven't destructed the cache on upsize.
         BOOST_CHECK(c1.CoinsTip().HaveCoinInCache(outpoint));
 
-        c1.ResizeCoinsCaches(
+        BOOST_REQUIRE(c1.ResizeCoinsCaches(
             4_MiB, // downsizing the coinsview cache
             8_MiB // upsizing the coinsdb cache
-        );
+        ));
 
         // The view cache should be empty since we had to destruct to downsize.
         BOOST_CHECK(!c1.CoinsTip().HaveCoinInCache(outpoint));
@@ -116,7 +116,7 @@ BOOST_FIXTURE_TEST_CASE(chainstate_update_tip, TestChain100Setup)
     std::shared_ptr<CBlock> pblockone = std::make_shared<CBlock>();
     {
         LOCK(::cs_main);
-        chainman.m_blockman.ReadBlock(*pblockone, *chainman.ActiveChain()[1]);
+        BOOST_REQUIRE(chainman.m_blockman.ReadBlock(*pblockone, *chainman.ActiveChain()[1]));
     }
 
     BOOST_REQUIRE(CreateAndActivateUTXOSnapshot(
