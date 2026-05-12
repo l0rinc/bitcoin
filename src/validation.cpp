@@ -1797,7 +1797,9 @@ MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, const CTra
     }
     // After we've (potentially) uncached entries, ensure our coins cache is still within its size limits
     BlockValidationState state_dummy;
-    active_chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC);
+    if (!active_chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC)) {
+        LogWarning("%s: failed to periodically flush state (%s)", __func__, state_dummy.ToString());
+    }
     return result;
 }
 
@@ -1829,7 +1831,9 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
     }
     // Ensure the coins cache is still within limits.
     BlockValidationState state_dummy;
-    active_chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC);
+    if (!active_chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC)) {
+        LogWarning("%s: failed to periodically flush state (%s)", __func__, state_dummy.ToString());
+    }
     return result;
 }
 
@@ -4379,7 +4383,9 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     // the block files may be pruned, so we can just call this on one
     // chainstate (particularly if we haven't implemented pruning with
     // background validation yet).
-    ActiveChainstate().FlushStateToDisk(state, FlushStateMode::NONE);
+    if (!ActiveChainstate().FlushStateToDisk(state, FlushStateMode::NONE)) {
+        return false;
+    }
 
     CheckBlockIndex();
 
@@ -5647,9 +5653,11 @@ util::Result<CBlockIndex*> ChainstateManager::ActivateSnapshot(
 
         // Temporarily resize the active coins cache to make room for the newly-created
         // snapshot chain.
-        this->ActiveChainstate().ResizeCoinsCaches(
+        if (!this->ActiveChainstate().ResizeCoinsCaches(
             static_cast<size_t>(current_coinstip_cache_size * IBD_CACHE_PERC),
-            static_cast<size_t>(current_coinsdb_cache_size * IBD_CACHE_PERC));
+            static_cast<size_t>(current_coinsdb_cache_size * IBD_CACHE_PERC))) {
+            return util::Error{Untranslated("Failed to resize active chainstate caches for snapshot activation")};
+        }
     }
 
     auto snapshot_chainstate = WITH_LOCK(::cs_main,
@@ -6073,6 +6081,14 @@ Chainstate& ChainstateManager::ActiveChainstate() const
     return CurrentChainstate();
 }
 
+static void ResizeCoinsCachesOrLog(Chainstate& chainstate, size_t coinstip_size, size_t coinsdb_size)
+    EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+{
+    if (!chainstate.ResizeCoinsCaches(coinstip_size, coinsdb_size)) {
+        LogWarning("[%s] failed to resize coins caches", chainstate.ToString());
+    }
+}
+
 void ChainstateManager::MaybeRebalanceCaches()
 {
     AssertLockHeld(::cs_main);
@@ -6081,25 +6097,29 @@ void ChainstateManager::MaybeRebalanceCaches()
     if (!historical_cs && !current_cs.m_from_snapshot_blockhash) {
         // Allocate everything to the IBD chainstate. This will always happen
         // when we are not using a snapshot.
-        current_cs.ResizeCoinsCaches(m_total_coinstip_cache, m_total_coinsdb_cache);
+        ResizeCoinsCachesOrLog(current_cs, m_total_coinstip_cache, m_total_coinsdb_cache);
     } else if (!historical_cs) {
         // If background validation has completed and snapshot is our active chain...
         LogInfo("[snapshot] allocating all cache to the snapshot chainstate");
         // Allocate everything to the snapshot chainstate.
-        current_cs.ResizeCoinsCaches(m_total_coinstip_cache, m_total_coinsdb_cache);
+        ResizeCoinsCachesOrLog(current_cs, m_total_coinstip_cache, m_total_coinsdb_cache);
     } else {
         // If both chainstates exist, determine who needs more cache based on IBD status.
         //
         // Note: shrink caches first so that we don't inadvertently overwhelm available memory.
         if (IsInitialBlockDownload()) {
-            historical_cs->ResizeCoinsCaches(
+            ResizeCoinsCachesOrLog(
+                *historical_cs,
                 m_total_coinstip_cache * 0.05, m_total_coinsdb_cache * 0.05);
-            current_cs.ResizeCoinsCaches(
+            ResizeCoinsCachesOrLog(
+                current_cs,
                 m_total_coinstip_cache * 0.95, m_total_coinsdb_cache * 0.95);
         } else {
-            current_cs.ResizeCoinsCaches(
+            ResizeCoinsCachesOrLog(
+                current_cs,
                 m_total_coinstip_cache * 0.05, m_total_coinsdb_cache * 0.05);
-            historical_cs->ResizeCoinsCaches(
+            ResizeCoinsCachesOrLog(
+                *historical_cs,
                 m_total_coinstip_cache * 0.95, m_total_coinsdb_cache * 0.95);
         }
     }
