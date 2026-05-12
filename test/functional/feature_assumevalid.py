@@ -2,19 +2,21 @@
 # Copyright (c) 2014-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""Test logic for skipping signature validation on old blocks.
+"""Test logic for skipping validation checks on old blocks.
 
-Test logic for skipping signature validation on blocks which we've assumed
+Test logic for skipping validation checks on blocks which we've assumed
 valid (https://github.com/bitcoin/bitcoin/pull/9484)
 
-We build a chain that includes an invalid signature for one of the transactions:
+We build a chain that includes a duplicate coinbase, too many P2SH sigops, and
+invalid P2SH script spends:
 
     0:        genesis block
     1:        block 1 with coinbase transaction output.
-    2-101:    bury that block with 100 blocks so the coinbase transaction
-              output can be spent
-    102:      a block containing a transaction spending the coinbase
-              transaction output. The transaction has an invalid signature.
+    2-100:    bury that block so the coinbase transaction output can be spent
+    101:      spend the block 1 coinbase output to P2SH outputs
+    102:      a block containing a duplicate coinbase and a transaction
+              spending enough P2SH outputs to exceed the sigops limit. The
+              P2SH spends also fail script validation.
     103-2202: bury the bad block with just over two weeks' worth of blocks
               (2100 blocks)
 
@@ -31,7 +33,9 @@ Start a few nodes:
       competing headers-only branch so block #1 is not on the best header chain.
     - node4 has -assumevalid set to the hash of block 102. Submit an alternative
       block #1 that is not part of the assumevalid chain.
-    - node5 starts with no -assumevalid parameter. Reindex to hit
+    - node5 has -assumevalid set to the hash of block 102. Submit blocks after
+      block 102 to show that sigops and BIP30 checks are enforced again.
+    - node6 starts with no -assumevalid parameter. Reindex to hit
       "assumevalid hash not in headers" and "below minimum chainwork".
 """
 
@@ -83,8 +87,8 @@ class AssumeValidTest(BitcoinTestFramework):
     def setup_network(self):
         self.add_nodes(self.num_nodes, self.extra_args)
         # Start node0. We don't start the other nodes yet since
-        # we need to pre-mine a block with an invalid transaction
-        # signature so we can pass in the block hash as assumevalid.
+        # we need to pre-mine a block with invalid transactions
+        # so we can pass in the block hash as assumevalid.
         self.start_node(0)
 
     def run_test(self):
@@ -178,7 +182,7 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p0.send_header_for_blocks(self.blocks[0:2000])
         p2p0.send_header_for_blocks(self.blocks[2000:])
         with self.nodes[0].assert_debug_log(expected_msgs=[
-            f"Enabling script verification at block #1 ({block_1_hash}): assumevalid=0 (always verify).",
+            f"Enabling script, BIP30, and sigops checks at block #1 ({block_1_hash}): assumevalid=0 (always verify).",
         ]):
             p2p0.send_and_ping(msg_block(self.blocks[0]))
         with self.nodes[0].assert_debug_log(expected_msgs=[
@@ -196,11 +200,11 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p1.send_header_for_blocks(self.blocks[0:2000])
         p2p1.send_header_for_blocks(self.blocks[2000:])
         with self.nodes[1].assert_debug_log(expected_msgs=[
-            f"Disabling script verification at block #1 ({self.blocks[0].hash_hex}).",
+            f"Disabling script, BIP30, and sigops checks at block #1 ({self.blocks[0].hash_hex}).",
         ]):
             p2p1.send_and_ping(msg_block(self.blocks[0]))
         with self.nodes[1].assert_debug_log(expected_msgs=[
-            f"Enabling script verification at block #103 ({self.blocks[102].hash_hex}): block height above assumevalid height.",
+            f"Enabling script, BIP30, and sigops checks at block #103 ({self.blocks[102].hash_hex}): block height above assumevalid height.",
         ]):
             for i in range(1, 2202):
                 p2p1.send_without_ping(msg_block(self.blocks[i]))
@@ -213,7 +217,7 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p2 = self.nodes[2].add_p2p_connection(BaseNode())
         p2p2.send_header_for_blocks(self.blocks[0:200])
         with self.nodes[2].assert_debug_log(expected_msgs=[
-            f"Enabling script verification at block #1 ({block_1_hash}): block too recent relative to best header.",
+            f"Enabling script, BIP30, and sigops checks at block #1 ({block_1_hash}): block too recent relative to best header.",
         ]):
             p2p2.send_and_ping(msg_block(self.blocks[0]))
         with self.nodes[2].assert_debug_log(expected_msgs=[
@@ -240,7 +244,7 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p3.send_header_for_blocks(second_chain)
         p2p3.send_header_for_blocks(self.blocks[0:103])
         with self.nodes[3].assert_debug_log(expected_msgs=[
-            f"Enabling script verification at block #1 ({block_1_hash}): block not in best header chain.",
+            f"Enabling script, BIP30, and sigops checks at block #1 ({block_1_hash}): block not in best header chain.",
         ]):
             p2p3.send_and_ping(msg_block(self.blocks[0]))
             assert_equal(self.nodes[3].getblockcount(), 1)
@@ -254,7 +258,7 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p4 = self.nodes[4].add_p2p_connection(BaseNode())
         p2p4.send_header_for_blocks(self.blocks[0:103])
         with self.nodes[4].assert_debug_log(expected_msgs=[
-            f"Enabling script verification at block #1 ({alt1.hash_hex}): block not in assumevalid chain.",
+            f"Enabling script, BIP30, and sigops checks at block #1 ({alt1.hash_hex}): block not in assumevalid chain.",
         ]):
             p2p4.send_and_ping(msg_block(alt1))
             assert_equal(self.nodes[4].getblockcount(), 1)
@@ -265,14 +269,14 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p5.send_header_for_blocks(self.blocks[0:2000])
         p2p5.send_header_for_blocks(self.blocks[2000:])
         with self.nodes[5].assert_debug_log(expected_msgs=[
-            f"Disabling script verification at block #1 ({self.blocks[0].hash_hex}).",
+            f"Disabling script, BIP30, and sigops checks at block #1 ({self.blocks[0].hash_hex}).",
         ]):
             for i in range(102):
                 p2p5.send_without_ping(msg_block(self.blocks[i]))
             p2p5.sync_with_ping(timeout=960)
             assert_equal(self.nodes[5].getblockcount(), 102)
         with self.nodes[5].assert_debug_log(expected_msgs=[
-            f"Enabling script verification at block #103 ({post_assumevalid_sigops.hash_hex}): block height above assumevalid height.",
+            f"Enabling script, BIP30, and sigops checks at block #103 ({post_assumevalid_sigops.hash_hex}): block height above assumevalid height.",
             "Block validation error: bad-blk-sigops",
         ]):
             p2p5.send_without_ping(msg_block(post_assumevalid_sigops))
@@ -293,12 +297,12 @@ class AssumeValidTest(BitcoinTestFramework):
         p2p6.send_without_ping(msg_block(self.blocks[0]))
         self.wait_until(lambda: self.nodes[6].getblockcount() == 1)
         with self.nodes[6].assert_debug_log(expected_msgs=[
-            f"Enabling script verification at block #1 ({block_1_hash}): assumevalid hash not in headers.",
+            f"Enabling script, BIP30, and sigops checks at block #1 ({block_1_hash}): assumevalid hash not in headers.",
         ]):
             self.restart_node(6, extra_args=[self.bip34_arg, "-reindex-chainstate", "-assumevalid=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"])
             assert_equal(self.nodes[6].getblockcount(), 1)
         with self.nodes[6].assert_debug_log(expected_msgs=[
-            f"Enabling script verification at block #1 ({block_1_hash}): best header chainwork below minimumchainwork.",
+            f"Enabling script, BIP30, and sigops checks at block #1 ({block_1_hash}): best header chainwork below minimumchainwork.",
         ]):
             self.restart_node(6, extra_args=[self.bip34_arg, "-reindex-chainstate", f"-assumevalid={block102.hash_hex}", "-minimumchainwork=0xffff"])
             assert_equal(self.nodes[6].getblockcount(), 1)

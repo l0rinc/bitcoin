@@ -2362,10 +2362,10 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             assumevalid_check_reason = "block too recent relative to best header";
         } else {
             // This block is a member of the assumed verified chain and an ancestor of the best header.
-            // Script verification is skipped when connecting blocks under the
+            // Script, BIP30, and sigops checks are skipped when connecting blocks under the
             //  assumevalid block. Assuming the assumevalid block is valid this
             //  is safe because block merkle hashes are still computed and checked,
-            // Of course, if an assumed valid block is invalid due to false scriptSigs
+            // Of course, if an assumed valid block is invalid due to invalid scripts
             //  this optimization would allow an invalid chain to be accepted.
             // The equivalent time check discourages hash power from extorting the network via DOS attack
             //  into accepting an invalid block through telling users they must manually set assumevalid.
@@ -2492,10 +2492,10 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     const kernel::ChainstateRole role{GetRole()};
     if (assumevalid_check_reason != m_last_assumevalid_check_reason_logged && role.validated && !role.historical) {
         if (fScriptChecks) {
-            LogInfo("Enabling script verification at block #%d (%s): %s.",
+            LogInfo("Enabling script, BIP30, and sigops checks at block #%d (%s): %s.",
                     pindex->nHeight, block_hash.ToString(), assumevalid_check_reason);
         } else {
-            LogInfo("Disabling script verification at block #%d (%s).",
+            LogInfo("Disabling script, BIP30, and sigops checks at block #%d (%s).",
                     pindex->nHeight, block_hash.ToString());
         }
         m_last_assumevalid_check_reason_logged = assumevalid_check_reason;
