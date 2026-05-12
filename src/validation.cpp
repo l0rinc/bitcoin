@@ -3514,7 +3514,9 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
 
     // Genesis block can't be invalidated
     assert(pindex);
-    if (pindex->nHeight == 0) return false;
+    if (pindex->nHeight == 0) {
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-invalidating-genesis", "Genesis block cannot be invalidated");
+    }
 
     // We do not allow ActivateBestChain() to run while InvalidateBlock() is
     // running, as that could cause the tip to change while we disconnect
