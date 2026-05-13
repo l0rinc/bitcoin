@@ -344,7 +344,7 @@ void WriteCompactSize(Stream& os, uint64_t nSize)
  * check is performed. When used as a generic number encoding, range_check should be set to false.
  */
 template<typename Stream>
-uint64_t ReadCompactSize(Stream& is, bool range_check = true)
+ALWAYS_INLINE uint64_t ReadCompactSize(Stream& is, bool range_check = true)
 {
     uint8_t chSize = ser_readdata8(is);
     if (chSize < 253) [[likely]] return chSize;
