@@ -878,9 +878,16 @@ void Unserialize(Stream& is, std::vector<T, A>& v)
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
         unsigned int nSize = ReadCompactSize(is);
+        if (nSize == 0) return;
+        constexpr unsigned int max_read = 1 + 4999999 / sizeof(T);
+        if (nSize <= max_read) {
+            v.resize(nSize);
+            is.read(std::as_writable_bytes(std::span{v.data(), v.size()}));
+            return;
+        }
         unsigned int i = 0;
         while (i < nSize) {
-            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
+            unsigned int blk = std::min(nSize - i, max_read);
             v.resize(i + blk);
             is.read(std::as_writable_bytes(std::span{&v[i], blk}));
             i += blk;
