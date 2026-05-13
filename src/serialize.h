@@ -832,7 +832,7 @@ void Unserialize(Stream& is, prevector<N, T>& v)
         constexpr unsigned int max_read = 1 + 4999999 / sizeof(T);
         if (nSize <= max_read) {
             v.resize_uninitialized(nSize);
-            is.read(std::as_writable_bytes(std::span{&v[0], v.size()}));
+            is.read(std::as_writable_bytes(std::span{&v[0], nSize}));
             return;
         }
         unsigned int i = 0;
