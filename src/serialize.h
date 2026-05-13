@@ -332,12 +332,9 @@ template<typename Stream>
 uint64_t ReadCompactSize(Stream& is, bool range_check = true)
 {
     uint8_t chSize = ser_readdata8(is);
+    if (chSize < 253) return chSize;
     uint64_t nSizeRet = 0;
-    if (chSize < 253)
-    {
-        nSizeRet = chSize;
-    }
-    else if (chSize == 253)
+    if (chSize == 253)
     {
         nSizeRet = ser_readdata16(is);
         if (nSizeRet < 253)
