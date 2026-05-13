@@ -306,18 +306,24 @@ void WriteCompactSize(Stream& os, uint64_t nSize)
     }
     else if (nSize <= std::numeric_limits<uint16_t>::max())
     {
-        ser_writedata8(os, 253);
-        ser_writedata16(os, nSize);
+        uint8_t data[sizeof(uint8_t) + sizeof(uint16_t)]{253};
+        const uint16_t raw{htole16_internal(static_cast<uint16_t>(nSize))};
+        std::memcpy(data + sizeof(uint8_t), &raw, sizeof(raw));
+        os.write(std::as_bytes(std::span{data}));
     }
     else if (nSize <= std::numeric_limits<unsigned int>::max())
     {
-        ser_writedata8(os, 254);
-        ser_writedata32(os, nSize);
+        uint8_t data[sizeof(uint8_t) + sizeof(uint32_t)]{254};
+        const uint32_t raw{htole32_internal(static_cast<uint32_t>(nSize))};
+        std::memcpy(data + sizeof(uint8_t), &raw, sizeof(raw));
+        os.write(std::as_bytes(std::span{data}));
     }
     else
     {
-        ser_writedata8(os, 255);
-        ser_writedata64(os, nSize);
+        uint8_t data[sizeof(uint8_t) + sizeof(uint64_t)]{255};
+        const uint64_t raw{htole64_internal(nSize)};
+        std::memcpy(data + sizeof(uint8_t), &raw, sizeof(raw));
+        os.write(std::as_bytes(std::span{data}));
     }
     return;
 }
