@@ -1813,7 +1813,7 @@ static RPCMethod getchaintxstats()
                         {RPCResult::Type::NUM_TIME, "time", "The timestamp for the final block in the window, expressed in " + UNIX_EPOCH_TIME},
                         {RPCResult::Type::NUM, "txcount", /*optional=*/true,
                          "The total number of transactions in the chain up to that point, if known. "
-                         "It may be unknown when using assumeutxo."},
+                         "It may be unknown for blocks without known chain transaction counts."},
                         {RPCResult::Type::STR_HEX, "window_final_block_hash", "The hash of the final block in the window"},
                         {RPCResult::Type::NUM, "window_final_block_height", "The height of the final block in the window."},
                         {RPCResult::Type::NUM, "window_block_count", "Size of the window in number of blocks"},

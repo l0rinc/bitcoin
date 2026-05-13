@@ -17,12 +17,10 @@ namespace kernel {
 //! Information about chainstate that notifications are sent from.
 struct ChainstateRole {
     //! Whether this is a notification from a chainstate that's been fully
-    //! validated starting from the genesis block. False if it is from an
-    //! assumeutxo snapshot chainstate that has not been validated yet.
+    //! validated starting from the genesis block.
     bool validated{true};
 
-    //! Whether this is a historical chainstate downloading old blocks to
-    //! validate an assumeutxo snapshot, not syncing to the network tip.
+    //! Whether this is a historical chainstate, not syncing to the network tip.
     bool historical{false};
 };
 } // namespace kernel

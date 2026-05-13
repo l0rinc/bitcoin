@@ -443,9 +443,7 @@ bool BlockManager::LoadBlockIndex()
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + GetBlockProof(*pindex);
         pindex->nTimeMax = (pindex->pprev ? std::max(pindex->pprev->nTimeMax, pindex->nTime) : pindex->nTime);
 
-        // We can link the chain of blocks for which we've received transactions at some point, or
-        // blocks that are assumed-valid on the basis of snapshot load (see
-        // PopulateAndValidateSnapshot()).
+        // We can link the chain of blocks for which we've received transactions at some point.
         // Pruned nodes may have deleted the block.
         if (pindex->nTx > 0) {
             if (pindex->pprev) {
