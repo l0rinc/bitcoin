@@ -436,19 +436,23 @@ inline void WriteVarInt(SizeComputer& os, I n);
 template<typename Stream, VarIntMode Mode, typename I>
 void WriteVarInt(Stream& os, I n)
 {
-    CheckVarIntMode<Mode, I>();
-    if (n <= 0x7F) [[likely]] {
-        ser_writedata8(os, n);
-        return;
+    if constexpr (ContainsSizeComputer<Stream>) {
+        os.GetStream().seek(GetSizeOfVarInt<Mode, I>(n));
+    } else {
+        CheckVarIntMode<Mode, I>();
+        if (n <= 0x7F) [[likely]] {
+            ser_writedata8(os, n);
+            return;
+        }
+        unsigned char tmp[CeilDiv(sizeof(n) * 8, 7u)];
+        size_t pos{sizeof(tmp)};
+        tmp[--pos] = n & 0x7F;
+        while (n > 0x7F) {
+            n = (n >> 7) - 1;
+            tmp[--pos] = (n & 0x7F) | 0x80;
+        }
+        os.write(std::as_bytes(std::span{tmp}.subspan(pos)));
     }
-    unsigned char tmp[CeilDiv(sizeof(n) * 8, 7u)];
-    size_t pos{sizeof(tmp)};
-    tmp[--pos] = n & 0x7F;
-    while (n > 0x7F) {
-        n = (n >> 7) - 1;
-        tmp[--pos] = (n & 0x7F) | 0x80;
-    }
-    os.write(std::as_bytes(std::span{tmp}.subspan(pos)));
 }
 
 template<typename Stream, VarIntMode Mode, typename I>
