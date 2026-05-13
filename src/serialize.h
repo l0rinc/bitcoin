@@ -87,7 +87,7 @@ template<typename Stream> inline void ser_writedata64(Stream &s, uint64_t obj)
     obj = htole64_internal(obj);
     s.write(std::as_bytes(std::span{&obj, 1}));
 }
-template<typename Stream> inline uint8_t ser_readdata8(Stream &s)
+template<typename Stream> ALWAYS_INLINE uint8_t ser_readdata8(Stream &s)
 {
     uint8_t obj;
     s.read(std::as_writable_bytes(std::span{&obj, 1}));
