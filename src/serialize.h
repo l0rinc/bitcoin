@@ -413,11 +413,9 @@ template<VarIntMode Mode, typename I>
 inline unsigned int GetSizeOfVarInt(I n)
 {
     CheckVarIntMode<Mode, I>();
-    int nRet = 0;
-    while(true) {
-        nRet++;
-        if (n <= 0x7F)
-            break;
+    unsigned int nRet = 1;
+    while (n > 0x7F) {
+        ++nRet;
         n = (n >> 7) - 1;
     }
     return nRet;
