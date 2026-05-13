@@ -882,7 +882,7 @@ void Unserialize(Stream& is, std::vector<T, A>& v)
         constexpr unsigned int max_read = 1 + 4999999 / sizeof(T);
         if (nSize <= max_read) {
             v.resize(nSize);
-            is.read(std::as_writable_bytes(std::span{v.data(), v.size()}));
+            is.read(std::as_writable_bytes(std::span{v.data(), nSize}));
             return;
         }
         unsigned int i = 0;
