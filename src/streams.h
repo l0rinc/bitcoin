@@ -12,7 +12,6 @@
 #include <util/check.h>
 #include <util/log.h>
 #include <util/obfuscation.h>
-#include <util/overflow.h>
 #include <util/syserror.h>
 
 #include <algorithm>
@@ -213,32 +212,32 @@ public:
         if (dst.size() == 0) return;
 
         // Read from the beginning of the buffer
-        auto next_read_pos{CheckedAdd(m_read_pos, dst.size())};
-        if (!next_read_pos.has_value() || next_read_pos.value() > vch.size()) {
+        const auto available{size()};
+        if (dst.size() > available) {
             throw std::ios_base::failure("DataStream::read(): end of data");
         }
         memcpy(dst.data(), &vch[m_read_pos], dst.size());
-        if (next_read_pos.value() == vch.size()) {
+        if (dst.size() == available) {
             // If fully consumed, reset to empty state.
             clear();
             return;
         }
-        m_read_pos = next_read_pos.value();
+        m_read_pos += dst.size();
     }
 
     void ignore(size_t num_ignore)
     {
         // Ignore from the beginning of the buffer
-        auto next_read_pos{CheckedAdd(m_read_pos, num_ignore)};
-        if (!next_read_pos.has_value() || next_read_pos.value() > vch.size()) {
+        const auto available{size()};
+        if (num_ignore > available) {
             throw std::ios_base::failure("DataStream::ignore(): end of data");
         }
-        if (next_read_pos.value() == vch.size()) {
+        if (num_ignore == available) {
             // If all bytes are ignored, reset to empty state.
             clear();
             return;
         }
-        m_read_pos = next_read_pos.value();
+        m_read_pos += num_ignore;
     }
 
     void write(std::span<const value_type> src)
