@@ -466,7 +466,7 @@ I ReadVarInt(Stream& is)
            throw std::ios_base::failure("ReadVarInt(): size too large");
         }
         n = (n << 7) | (chData & 0x7F);
-        if (chData & 0x80) {
+        if (chData & 0x80) [[unlikely]] {
             if (n == std::numeric_limits<I>::max()) {
                 throw std::ios_base::failure("ReadVarInt(): size too large");
             }
