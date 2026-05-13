@@ -2314,7 +2314,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 bool StartIndexBackgroundSync(NodeContext& node)
 {
     ChainstateManager& chainman = *Assert(node.chainman);
-    const Chainstate& chainstate = WITH_LOCK(::cs_main, return chainman.ValidatedChainstate());
+    const Chainstate& chainstate = WITH_LOCK(::cs_main, return chainman.ActiveChainstate());
     const CChain& index_chain = chainstate.m_chain;
     const int current_height = WITH_LOCK(::cs_main, return index_chain.Height());
 

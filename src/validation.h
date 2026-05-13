@@ -947,12 +947,10 @@ public:
         because CBlockIndexWorkComparator tiebreaker rules are not applied. */
     CBlockIndex* m_best_header GUARDED_BY(::cs_main){nullptr};
 
-    //! The total number of bytes available for us to use across all in-memory
-    //! coins caches. This will be split somehow across chainstates.
+    //! The total number of bytes available for the in-memory coins cache.
     size_t m_total_coinstip_cache{0};
     //
-    //! The total number of bytes available for us to use across all leveldb
-    //! coins databases. This will be split somehow across chainstates.
+    //! The total number of bytes available for the leveldb coins database.
     size_t m_total_coinsdb_cache{0};
 
     //! Instantiate a new chainstate.
@@ -961,40 +959,9 @@ public:
     //                                  constructor
     Chainstate& InitializeChainstate(CTxMemPool* mempool) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
-    //! Return current chainstate targeting the most-work, network tip.
-    Chainstate& CurrentChainstate() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex())
-    {
-        return *Assert(m_chainstates.front());
-    }
-
-    //! Return historical chainstate targeting a specific block, if any.
-    Chainstate* HistoricalChainstate() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex())
-    {
-        return nullptr;
-    }
-
-    //! Return fully validated chainstate that should be used for indexing.
-    Chainstate& ValidatedChainstate() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex())
-    {
-        return CurrentChainstate();
-    }
-
-    //! Remove a chainstate.
-    std::unique_ptr<Chainstate> RemoveChainstate(Chainstate& chainstate) EXCLUSIVE_LOCKS_REQUIRED(GetMutex())
-    {
-        auto it{std::find_if(m_chainstates.begin(), m_chainstates.end(), [&](auto& cs) { return cs.get() == &chainstate; })};
-        if (it != m_chainstates.end()) {
-            auto ret{std::move(*it)};
-            m_chainstates.erase(it);
-            return ret;
-        }
-        return nullptr;
-    }
-
-    //! Alternatives to CurrentChainstate() used by older code to query latest
-    //! chainstate information without locking cs_main. Newer code should avoid
-    //! querying ChainstateManager and use Chainstate objects directly, or
-    //! should use CurrentChainstate() instead.
+    //! Alternatives used by older code to query latest chainstate information
+    //! without locking cs_main. Newer code should avoid querying
+    //! ChainstateManager and use Chainstate objects directly.
     //! @{
     Chainstate& ActiveChainstate() const;
     CChain& ActiveChain() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex()) { return ActiveChainstate().m_chain; }
@@ -1159,9 +1126,6 @@ public:
     void ReportHeadersPresync(int64_t height, int64_t timestamp);
 
     void ResetChainstates() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
-
-    //! Get range of historical blocks to download.
-    std::optional<std::pair<const CBlockIndex*, const CBlockIndex*>> GetHistoricalBlockRange() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     //! Call ActivateBestChain() on every chainstate.
     util::Result<void> ActivateBestChains() LOCKS_EXCLUDED(::cs_main);

@@ -3215,7 +3215,7 @@ void ChainstateManager::UpdateIBDStatus()
     AssertLockHeld(cs_main);
     if (!m_cached_is_ibd.load(std::memory_order_relaxed)) return;
     if (m_blockman.LoadingBlocks()) return;
-    if (!CurrentChainstate().m_chain.IsTipRecent(MinimumChainWork(), m_options.max_tip_age)) return;
+    if (!Assert(m_chainstates.front())->m_chain.IsTipRecent(MinimumChainWork(), m_options.max_tip_age)) return;
     LogInfo("Leaving InitialBlockDownload (latching to false)");
     m_cached_is_ibd.store(false, std::memory_order_relaxed);
 }
@@ -4309,13 +4309,6 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
         return false;
     }
 
-    Chainstate* bg_chain{WITH_LOCK(cs_main, return HistoricalChainstate())};
-    BlockValidationState bg_state;
-    if (bg_chain && !bg_chain->ActivateBestChain(bg_state, block)) {
-        LogError("%s: [background] ActivateBestChain failed (%s)\n", __func__, bg_state.ToString());
-        return false;
-     }
-
     return true;
 }
 
@@ -5361,13 +5354,13 @@ Chainstate& ChainstateManager::InitializeChainstate(CTxMemPool* mempool)
 Chainstate& ChainstateManager::ActiveChainstate() const
 {
     LOCK(::cs_main);
-    return CurrentChainstate();
+    return *Assert(m_chainstates.front());
 }
 
 void ChainstateManager::MaybeRebalanceCaches()
 {
     AssertLockHeld(::cs_main);
-    Chainstate& current_cs{CurrentChainstate()};
+    Chainstate& current_cs{*Assert(m_chainstates.front())};
     current_cs.ResizeCoinsCaches(m_total_coinstip_cache, m_total_coinsdb_cache);
 }
 
@@ -5461,11 +5454,6 @@ std::pair<int, int> Chainstate::GetPruneRange(int last_height_can_prune) const
     int prune_end = std::min(last_height_can_prune, max_prune);
 
     return {prune_start, prune_end};
-}
-
-std::optional<std::pair<const CBlockIndex*, const CBlockIndex*>> ChainstateManager::GetHistoricalBlockRange() const
-{
-    return {};
 }
 
 util::Result<void> ChainstateManager::ActivateBestChains()

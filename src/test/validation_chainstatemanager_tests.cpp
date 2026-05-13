@@ -45,9 +45,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager, TestChain100Setup)
 
     {
         LOCK(manager.GetMutex());
-        BOOST_CHECK_EQUAL(manager.HistoricalChainstate(), nullptr);
-        BOOST_CHECK_EQUAL(&manager.ValidatedChainstate(), &active_chainstate);
-        BOOST_CHECK_EQUAL(&manager.CurrentChainstate(), &active_chainstate);
+        BOOST_CHECK_EQUAL(&manager.ActiveChainstate(), &active_chainstate);
     }
 
     // Let scheduler events finish running to avoid accessing memory that is going to be unloaded
