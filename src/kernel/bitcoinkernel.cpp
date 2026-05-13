@@ -910,7 +910,7 @@ const btck_BlockTreeEntry* btck_block_tree_entry_get_previous(const btck_BlockTr
 const btck_BlockTreeEntry* btck_block_tree_entry_get_ancestor(const btck_BlockTreeEntry* block_tree_entry, int32_t height)
 {
     const auto* ancestor{btck_BlockTreeEntry::get(block_tree_entry).GetAncestor(height)};
-    assert(ancestor);
+    if (!ancestor) return nullptr;
     return btck_BlockTreeEntry::ref(ancestor);
 }
 
