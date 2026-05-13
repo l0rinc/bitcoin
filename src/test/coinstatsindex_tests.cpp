@@ -6,15 +6,12 @@
 #include <index/coinstatsindex.h>
 #include <interfaces/chain.h>
 #include <kernel/coinstats.h>
-#include <kernel/types.h>
 #include <test/util/setup_common.h>
 #include <test/util/validation.h>
 #include <util/byte_units.h>
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
-
-using kernel::ChainstateRole;
 
 BOOST_AUTO_TEST_SUITE(coinstatsindex_tests)
 
@@ -97,7 +94,7 @@ BOOST_FIXTURE_TEST_CASE(coinstatsindex_unclean_shutdown, TestChain100Setup)
         // Send block connected notification, then stop the index without
         // sending a chainstate flushed notification. Prior to #24138, this
         // would cause the index to be corrupted and fail to reload.
-        ValidationInterfaceTest::BlockConnected(ChainstateRole{}, index, new_block, new_block_index);
+        ValidationInterfaceTest::BlockConnected(index, new_block, new_block_index);
         index.Stop();
     }
 

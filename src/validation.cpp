@@ -26,7 +26,6 @@
 #include <kernel/mempool_entry.h>
 #include <kernel/messagestartchars.h>
 #include <kernel/notifications_interface.h>
-#include <kernel/types.h>
 #include <kernel/warning.h>
 #include <logging/timer.h>
 #include <node/blockstorage.h>
@@ -76,7 +75,6 @@
 #include <tuple>
 #include <utility>
 
-using kernel::ChainstateRole;
 using kernel::Notifications;
 
 using fsbridge::FopenFn;
@@ -2443,8 +2441,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
              Ticks<MillisecondsDouble>(m_chainman.time_forks) / m_chainman.num_blocks_total);
 
     const bool fScriptChecks{!!script_check_reason};
-    const kernel::ChainstateRole role{GetRole()};
-    if (script_check_reason != m_last_script_check_reason_logged && role.validated && !role.historical) {
+    if (script_check_reason != m_last_script_check_reason_logged) {
         if (fScriptChecks) {
             LogInfo("Enabling script verification at block #%d (%s): %s.",
                     pindex->nHeight, block_hash.ToString(), script_check_reason);
@@ -2780,7 +2777,7 @@ bool Chainstate::FlushStateToDisk(
     }
     if (full_flush_completed && m_chainman.m_options.signals) {
         // Update best block in wallet (so we can detect restored wallets).
-        m_chainman.m_options.signals->ChainStateFlushed(this->GetRole(), GetLocator(m_chain.Tip()));
+        m_chainman.m_options.signals->ChainStateFlushed(GetLocator(m_chain.Tip()));
     }
     } catch (const std::runtime_error& e) {
         return FatalError(m_chainman.GetNotifications(), state, strprintf(_("System error while flushing: %s"), e.what()));
@@ -2832,17 +2829,6 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
 {
     AssertLockHeld(::cs_main);
     const auto& coins_tip = this->CoinsTip();
-
-    // The remainder of the function isn't relevant if we are not acting on
-    // the active chainstate, so return if need be.
-    if (this != &m_chainman.ActiveChainstate()) {
-        // Only log every so often so that we don't bury log messages at the tip.
-        constexpr int BACKGROUND_LOG_INTERVAL = 2000;
-        if (pindexNew->nHeight % BACKGROUND_LOG_INTERVAL == 0) {
-            UpdateTipLog(m_chainman, coins_tip, pindexNew, __func__, "[background validation] ", "");
-        }
-        return;
-    }
 
     // New best block
     if (m_mempool) {
@@ -3302,7 +3288,6 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
 
                 bool fInvalidFound = false;
                 std::shared_ptr<const CBlock> nullBlockPtr;
-               const ChainstateRole chainstate_role{this->GetRole()};
                 if (!ActivateBestChainStep(state, *pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connected_blocks)) {
                     // A system error occurred
                     return false;
@@ -3317,7 +3302,7 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
 
                 for (auto& [index, block] : std::move(connected_blocks)) {
                     if (m_chainman.m_options.signals) {
-                        m_chainman.m_options.signals->BlockConnected(chainstate_role, std::move(Assert(block)), Assert(index));
+                        m_chainman.m_options.signals->BlockConnected(std::move(Assert(block)), Assert(index));
                     }
                 }
 
@@ -4257,9 +4242,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     // data, so we should move this to ChainstateManager so that we can be more
     // intelligent about how we flush.
     // For now, since FlushStateMode::NONE is used, all that can happen is that
-    // the block files may be pruned, so we can just call this on one
-    // chainstate (particularly if we haven't implemented pruning with
-    // background validation yet).
+    // the block files may be pruned.
     ActiveChainstate().FlushStateToDisk(state, FlushStateMode::NONE);
 
     CheckBlockIndex();
@@ -4447,13 +4430,11 @@ bool Chainstate::LoadChainTip()
               m_chainman.GuessVerificationProgress(tip));
 
     // Ensure KernelNotifications m_tip_block is set even if no new block arrives.
-    if (!this->GetRole().historical) {
-        // Ignoring return value for now.
-        (void)m_chainman.GetNotifications().blockTip(
-            /*state=*/GetSynchronizationState(/*init=*/true, m_chainman.m_blockman.m_blockfiles_indexed),
-            /*index=*/*pindex,
-            /*verification_progress=*/m_chainman.GuessVerificationProgress(tip));
-    }
+    // Ignoring return value for now.
+    (void)m_chainman.GetNotifications().blockTip(
+        /*state=*/GetSynchronizationState(/*init=*/true, m_chainman.m_blockman.m_blockfiles_indexed),
+        /*index=*/*pindex,
+        /*verification_progress=*/m_chainman.GuessVerificationProgress(tip));
 
     CheckForkWarningConditions();
 
@@ -5399,11 +5380,6 @@ bool IsBIP30Unspendable(const uint256& block_hash, int block_height)
 {
     return (block_height==91722 && block_hash == uint256{"00000000000271a2dc26e7667f8419f2e15416dc6955e5a6c6cdf3f2574dd08e"}) ||
            (block_height==91812 && block_hash == uint256{"00000000000af0aed4792b1acee3d966af36cf5def14935db8de83d6f9306f2f"});
-}
-
-ChainstateRole Chainstate::GetRole() const
-{
-    return ChainstateRole{};
 }
 
 void ChainstateManager::RecalculateBestHeader()

@@ -34,9 +34,6 @@ enum class RBFTransactionState;
 struct bilingual_str;
 struct CBlockLocator;
 struct FeeCalculation;
-namespace kernel {
-struct ChainstateRole;
-} // namespace kernel
 namespace node {
 struct NodeContext;
 } // namespace node
@@ -308,10 +305,10 @@ public:
         virtual ~Notifications() = default;
         virtual void transactionAddedToMempool(const CTransactionRef& tx) {}
         virtual void transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason) {}
-        virtual void blockConnected(const kernel::ChainstateRole& role, const BlockInfo& block) {}
+        virtual void blockConnected(const BlockInfo& block) {}
         virtual void blockDisconnected(const BlockInfo& block) {}
         virtual void updatedBlockTip() {}
-        virtual void chainStateFlushed(const kernel::ChainstateRole& role, const CBlockLocator& locator) {}
+        virtual void chainStateFlushed(const CBlockLocator& locator) {}
     };
 
     //! Options specifying which chain notifications are required.

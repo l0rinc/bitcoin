@@ -9,7 +9,6 @@
 #include <dbwrapper.h>
 #include <interfaces/chain.h>
 #include <interfaces/types.h>
-#include <kernel/types.h>
 #include <node/abort.h>
 #include <node/blockstorage.h>
 #include <node/context.h>
@@ -41,8 +40,6 @@
 #include <thread>
 #include <utility>
 #include <vector>
-
-using kernel::ChainstateRole;
 
 constexpr uint8_t DB_BEST_BLOCK{'B'};
 
@@ -331,16 +328,8 @@ bool BaseIndex::Rewind(const CBlockIndex* current_tip, const CBlockIndex* new_ti
     return true;
 }
 
-void BaseIndex::BlockConnected(const ChainstateRole& role, const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex)
+void BaseIndex::BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex)
 {
-    // Ignore events from not fully validated chains to avoid out-of-order indexing.
-    //
-    // TODO at some point we could parameterize whether a particular index can be
-    // built out of order, but for now just do the conservative simple thing.
-    if (!role.validated) {
-        return;
-    }
-
     // Ignore BlockConnected signals until we have fully indexed the chain.
     if (!m_synced) {
         return;
@@ -383,13 +372,8 @@ void BaseIndex::BlockConnected(const ChainstateRole& role, const std::shared_ptr
     }
 }
 
-void BaseIndex::ChainStateFlushed(const ChainstateRole& role, const CBlockLocator& locator)
+void BaseIndex::ChainStateFlushed(const CBlockLocator& locator)
 {
-    // Ignore events from not fully validated chains to avoid out-of-order indexing.
-    if (!role.validated) {
-        return;
-    }
-
     if (!m_synced) {
         return;
     }

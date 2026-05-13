@@ -58,9 +58,6 @@ struct ChainTxData;
 class DisconnectedBlockTransactions;
 struct PrecomputedTransactionData;
 struct LockPoints;
-namespace kernel {
-struct ChainstateRole;
-} // namespace kernel
 namespace Consensus {
 struct Params;
 } // namespace Consensus
@@ -570,12 +567,6 @@ public:
     //! Return path to chainstate leveldb directory.
     fs::path StoragePath() const;
 
-    //! Return the current role of the chainstate. See `ChainstateManager`
-    //! documentation for a description of the different types of chainstates.
-    //!
-    //! @sa ChainstateRole
-    kernel::ChainstateRole GetRole() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
-
     /**
      * Initialize the CoinsViews UTXO set database management data structures. The in-memory
      * cache is initialized separately.
@@ -851,8 +842,7 @@ private:
     //! A queue for script verifications that have to be performed by worker threads.
     CCheckQueue<CScriptCheck> m_script_check_queue;
 
-    //! Timers and counters used for benchmarking validation in both background
-    //! and active chainstates.
+    //! Timers and counters used for benchmarking validation.
     SteadyClock::duration GUARDED_BY(::cs_main) time_check{};
     SteadyClock::duration GUARDED_BY(::cs_main) time_forks{};
     SteadyClock::duration GUARDED_BY(::cs_main) time_connect{};

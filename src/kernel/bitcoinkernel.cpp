@@ -55,7 +55,6 @@ namespace Consensus {
 struct Params;
 } // namespace Consensus
 
-using kernel::ChainstateRole;
 using util::ImmediateTaskRunner;
 
 // Define G_TRANSLATION_FUN symbol in libbitcoinkernel library so users of the
@@ -365,7 +364,7 @@ protected:
         }
     }
 
-    void BlockConnected(const ChainstateRole& role, const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
+    void BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
     {
         if (m_cbs.block_connected) {
             m_cbs.block_connected(m_cbs.user_data,
