@@ -22,14 +22,12 @@
 #include <util/translation.h>
 #include <validation.h>
 
-#include <algorithm>
 #include <cassert>
-#include <vector>
 
 using kernel::CacheSizes;
 
 namespace node {
-// Complete initialization of chainstates after the initial call has been made
+// Complete initialization of the chainstate after the initial call has been made
 // to ChainstateManager::InitializeChainstate().
 static ChainstateLoadResult CompleteChainstateInitialization(
     ChainstateManager& chainman,
@@ -76,66 +74,61 @@ static ChainstateLoadResult CompleteChainstateInitialization(
     // At this point we're either in reindex or we've loaded a useful
     // block tree into BlockIndex()!
 
-    for (const auto& chainstate : chainman.m_chainstates) {
-        LogInfo("Initializing chainstate %s", chainstate->ToString());
+    Chainstate& chainstate{chainman.ActiveChainstate()};
+    LogInfo("Initializing chainstate %s", chainstate.ToString());
 
-        try {
-            chainstate->InitCoinsDB(
-                /*cache_size_bytes=*/chainman.m_total_coinsdb_cache,
-                /*in_memory=*/options.coins_db_in_memory,
-                /*should_wipe=*/options.wipe_chainstate_db);
-        } catch (dbwrapper_error& err) {
-            LogError("%s\n", err.what());
-            return {ChainstateLoadStatus::FAILURE, _("Error opening coins database")};
-        }
-
-        if (options.coins_error_cb) {
-            chainstate->CoinsErrorCatcher().AddReadErrCallback(options.coins_error_cb);
-        }
-
-        // Refuse to load unsupported database format.
-        // This is a no-op if we cleared the coinsviewdb with -reindex or -reindex-chainstate
-        if (chainstate->CoinsDB().NeedsUpgrade()) {
-            return {ChainstateLoadStatus::FAILURE_INCOMPATIBLE_DB, _("Unsupported chainstate database format found. "
-                                                                     "Please restart with -reindex-chainstate. This will "
-                                                                     "rebuild the chainstate database.")};
-        }
-
-        // ReplayBlocks is a no-op if we cleared the coinsviewdb with -reindex or -reindex-chainstate
-        if (!chainstate->ReplayBlocks()) {
-            return {ChainstateLoadStatus::FAILURE, _("Unable to replay blocks. You will need to rebuild the database using -reindex-chainstate.")};
-        }
-
-        // The on-disk coinsdb is now in a good state, create the cache
-        chainstate->InitCoinsCache(chainman.m_total_coinstip_cache);
-        assert(chainstate->CanFlushToDisk());
-
-        if (!is_coinsview_empty(*chainstate)) {
-            // LoadChainTip initializes the chain based on CoinsTip()'s best block
-            if (!chainstate->LoadChainTip()) {
-                return {ChainstateLoadStatus::FAILURE, _("Error initializing block database")};
-            }
-            assert(chainstate->m_chain.Tip() != nullptr);
-        }
+    try {
+        chainstate.InitCoinsDB(
+            /*cache_size_bytes=*/chainman.m_total_coinsdb_cache,
+            /*in_memory=*/options.coins_db_in_memory,
+            /*should_wipe=*/options.wipe_chainstate_db);
+    } catch (dbwrapper_error& err) {
+        LogError("%s\n", err.what());
+        return {ChainstateLoadStatus::FAILURE, _("Error opening coins database")};
     }
 
-    // Populate setBlockIndexCandidates in a separate loop, after all LoadChainTip()
-    // calls have finished modifying nSequenceId. Because nSequenceId is used in the
+    if (options.coins_error_cb) {
+        chainstate.CoinsErrorCatcher().AddReadErrCallback(options.coins_error_cb);
+    }
+
+    // Refuse to load unsupported database format.
+    // This is a no-op if we cleared the coinsviewdb with -reindex or -reindex-chainstate
+    if (chainstate.CoinsDB().NeedsUpgrade()) {
+        return {ChainstateLoadStatus::FAILURE_INCOMPATIBLE_DB, _("Unsupported chainstate database format found. "
+                                                                 "Please restart with -reindex-chainstate. This will "
+                                                                 "rebuild the chainstate database.")};
+    }
+
+    // ReplayBlocks is a no-op if we cleared the coinsviewdb with -reindex or -reindex-chainstate
+    if (!chainstate.ReplayBlocks()) {
+        return {ChainstateLoadStatus::FAILURE, _("Unable to replay blocks. You will need to rebuild the database using -reindex-chainstate.")};
+    }
+
+    // The on-disk coinsdb is now in a good state, create the cache
+    chainstate.InitCoinsCache(chainman.m_total_coinstip_cache);
+    assert(chainstate.CanFlushToDisk());
+
+    if (!is_coinsview_empty(chainstate)) {
+        // LoadChainTip initializes the chain based on CoinsTip()'s best block
+        if (!chainstate.LoadChainTip()) {
+            return {ChainstateLoadStatus::FAILURE, _("Error initializing block database")};
+        }
+        assert(chainstate.m_chain.Tip() != nullptr);
+    }
+
+    // Populate setBlockIndexCandidates after LoadChainTip() has finished
+    // modifying nSequenceId. Because nSequenceId is used in the
     // set's comparator, changing it while blocks are in the set would be UB.
-    for (const auto& chainstate : chainman.m_chainstates) {
-        chainstate->PopulateBlockIndexCandidates();
-    }
+    chainstate.PopulateBlockIndexCandidates();
 
-    const auto& chainstates{chainman.m_chainstates};
-    if (std::any_of(chainstates.begin(), chainstates.end(),
-                    [](const auto& cs) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return cs->NeedsRedownload(); })) {
+    if (chainstate.NeedsRedownload()) {
         return {ChainstateLoadStatus::FAILURE, strprintf(_("Witness data for blocks after height %d requires validation. Please restart with -reindex."),
                                                          chainman.GetConsensus().SegwitHeight)};
     };
 
-    // Now that chainstates are loaded and we're able to flush to
+    // Now that the chainstate is loaded and we're able to flush to
     // disk, rebalance the coins caches to desired levels based
-    // on the condition of each chainstate.
+    // on the condition of the chainstate.
     chainman.MaybeRebalanceCaches();
 
     return {ChainstateLoadStatus::SUCCESS, {}};
@@ -183,34 +176,33 @@ ChainstateLoadResult VerifyLoadedChainstate(ChainstateManager& chainman, const C
 
     LOCK(cs_main);
 
-    for (auto& chainstate : chainman.m_chainstates) {
-        if (!is_coinsview_empty(*chainstate)) {
-            const CBlockIndex* tip = chainstate->m_chain.Tip();
-            if (tip && tip->nTime > GetTime() + MAX_FUTURE_BLOCK_TIME) {
-                return {ChainstateLoadStatus::FAILURE, _("The block database contains a block which appears to be from the future. "
-                                                         "This may be due to your computer's date and time being set incorrectly. "
-                                                         "Only rebuild the block database if you are sure that your computer's date and time are correct")};
-            }
-
-            VerifyDBResult result = CVerifyDB(chainman.GetNotifications()).VerifyDB(
-                *chainstate, chainman.GetConsensus(), chainstate->CoinsDB(),
-                options.check_level,
-                options.check_blocks);
-            switch (result) {
-            case VerifyDBResult::SUCCESS:
-            case VerifyDBResult::SKIPPED_MISSING_BLOCKS:
-                break;
-            case VerifyDBResult::INTERRUPTED:
-                return {ChainstateLoadStatus::INTERRUPTED, _("Block verification was interrupted")};
-            case VerifyDBResult::CORRUPTED_BLOCK_DB:
-                return {ChainstateLoadStatus::FAILURE, _("Corrupted block database detected")};
-            case VerifyDBResult::SKIPPED_L3_CHECKS:
-                if (options.require_full_verification) {
-                    return {ChainstateLoadStatus::FAILURE_INSUFFICIENT_DBCACHE, _("Insufficient dbcache for block verification")};
-                }
-                break;
-            } // no default case, so the compiler can warn about missing cases
+    Chainstate& chainstate{chainman.ActiveChainstate()};
+    if (!is_coinsview_empty(chainstate)) {
+        const CBlockIndex* tip = chainstate.m_chain.Tip();
+        if (tip && tip->nTime > GetTime() + MAX_FUTURE_BLOCK_TIME) {
+            return {ChainstateLoadStatus::FAILURE, _("The block database contains a block which appears to be from the future. "
+                                                     "This may be due to your computer's date and time being set incorrectly. "
+                                                     "Only rebuild the block database if you are sure that your computer's date and time are correct")};
         }
+
+        VerifyDBResult result = CVerifyDB(chainman.GetNotifications()).VerifyDB(
+            chainstate, chainman.GetConsensus(), chainstate.CoinsDB(),
+            options.check_level,
+            options.check_blocks);
+        switch (result) {
+        case VerifyDBResult::SUCCESS:
+        case VerifyDBResult::SKIPPED_MISSING_BLOCKS:
+            break;
+        case VerifyDBResult::INTERRUPTED:
+            return {ChainstateLoadStatus::INTERRUPTED, _("Block verification was interrupted")};
+        case VerifyDBResult::CORRUPTED_BLOCK_DB:
+            return {ChainstateLoadStatus::FAILURE, _("Corrupted block database detected")};
+        case VerifyDBResult::SKIPPED_L3_CHECKS:
+            if (options.require_full_verification) {
+                return {ChainstateLoadStatus::FAILURE_INSUFFICIENT_DBCACHE, _("Insufficient dbcache for block verification")};
+            }
+            break;
+        } // no default case, so the compiler can warn about missing cases
     }
 
     return {ChainstateLoadStatus::SUCCESS, {}};

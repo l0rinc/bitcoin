@@ -356,10 +356,8 @@ void Shutdown(NodeContext& node)
     // FlushStateToDisk generates a ChainStateFlushed callback, which we should avoid missing
     if (node.chainman) {
         LOCK(cs_main);
-        for (const auto& chainstate : node.chainman->m_chainstates) {
-            if (chainstate->CanFlushToDisk()) {
-                chainstate->ForceFlushStateToDisk();
-            }
+        if (node.chainman->m_chainstate && node.chainman->m_chainstate->CanFlushToDisk()) {
+            node.chainman->m_chainstate->ForceFlushStateToDisk();
         }
     }
 
@@ -383,11 +381,9 @@ void Shutdown(NodeContext& node)
 
     if (node.chainman) {
         LOCK(cs_main);
-        for (const auto& chainstate : node.chainman->m_chainstates) {
-            if (chainstate->CanFlushToDisk()) {
-                chainstate->ForceFlushStateToDisk();
-                chainstate->ResetCoinsViews();
-            }
+        if (node.chainman->m_chainstate && node.chainman->m_chainstate->CanFlushToDisk()) {
+            node.chainman->m_chainstate->ForceFlushStateToDisk();
+            node.chainman->m_chainstate->ResetCoinsViews();
         }
     }
 
@@ -1923,10 +1919,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     if (chainman.m_blockman.IsPruneMode()) {
         if (chainman.m_blockman.m_blockfiles_indexed) {
             LOCK(cs_main);
-            for (const auto& chainstate : chainman.m_chainstates) {
-                uiInterface.InitMessage(_("Pruning blockstore…"));
-                chainstate->PruneAndFlush();
-            }
+            uiInterface.InitMessage(_("Pruning blockstore…"));
+            chainman.ActiveChainstate().PruneAndFlush();
         }
     } else {
         LogInfo("Setting NODE_NETWORK in non-prune mode");

@@ -953,7 +953,7 @@ public:
     //! The total number of bytes available for the leveldb coins database.
     size_t m_total_coinsdb_cache{0};
 
-    //! Instantiate a new chainstate.
+    //! Instantiate the active chainstate.
     //!
     //! @param[in] mempool              The mempool to pass to the chainstate
     //                                  constructor
@@ -1125,10 +1125,10 @@ public:
      *  information. */
     void ReportHeadersPresync(int64_t height, int64_t timestamp);
 
-    void ResetChainstates() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    void ResetChainstate() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
-    //! Call ActivateBestChain() on every chainstate.
-    util::Result<void> ActivateBestChains() LOCKS_EXCLUDED(::cs_main);
+    //! Call ActivateBestChain() on the active chainstate.
+    util::Result<void> ActivateBestChain() LOCKS_EXCLUDED(::cs_main);
 
     //! If, due to invalidation / reconsideration of blocks, the previous
     //! best header is no longer valid / guaranteed to be the most-work
@@ -1143,14 +1143,8 @@ public:
 
     ~ChainstateManager();
 
-    //! List of chainstates. Note: in general, it is not safe to delete
-    //! Chainstate objects once they are added to this list because there is no
-    //! mutex that can be locked to prevent Chainstate pointers from being used
-    //! while they are deleted. (cs_main doesn't work because it is too narrow
-    //! and is released in the middle of Chainstate::ActivateBestChain to let
-    //! notifications be processed. m_chainstate_mutex doesn't work because it
-    //! is not locked at other times when the chainstate is in use.)
-    std::vector<std::unique_ptr<Chainstate>> m_chainstates GUARDED_BY(::cs_main);
+    //! Active chainstate.
+    std::unique_ptr<Chainstate> m_chainstate GUARDED_BY(::cs_main);
 };
 
 /** Deployment* info via ChainstateManager */

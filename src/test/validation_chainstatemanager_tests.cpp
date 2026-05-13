@@ -30,8 +30,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager, TestChain100Setup)
     Chainstate& active_chainstate = manager.ActiveChainstate();
     {
         LOCK(manager.GetMutex());
-        BOOST_CHECK_EQUAL(manager.m_chainstates.size(), 1);
-        BOOST_CHECK_EQUAL(manager.m_chainstates[0].get(), &active_chainstate);
+        BOOST_CHECK_EQUAL(manager.m_chainstate.get(), &active_chainstate);
     }
 
     auto& active_chain = WITH_LOCK(manager.GetMutex(), return manager.ActiveChain());
@@ -78,7 +77,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_ibd_exit_after_loading_blocks, ChainTe
     ChainstateManager& chainman{*Assert(m_node.chainman)};
     auto apply{[&](bool cached_is_ibd, bool loading_blocks, bool tip_exists, bool enough_work, bool tip_recent) {
         LOCK(::cs_main);
-        chainman.ResetChainstates();
+        chainman.ResetChainstate();
         chainman.InitializeChainstate(m_node.mempool.get());
 
         const auto recent_time{Now<NodeSeconds>() - chainman.m_options.max_tip_age};

@@ -25,9 +25,7 @@ void TestChainstateManager::DisableNextWrite()
         void ResetNextWrite() { m_next_write = NodeClock::time_point::max() - 1s; }
     };
     LOCK(::cs_main);
-    for (const auto& cs : m_chainstates) {
-        static_cast<TestChainstate&>(*cs).ResetNextWrite();
-    }
+    static_cast<TestChainstate&>(*Assert(m_chainstate)).ResetNextWrite();
 }
 
 void TestChainstateManager::ResetIbd()
