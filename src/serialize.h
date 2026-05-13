@@ -305,7 +305,7 @@ constexpr inline unsigned int GetSizeOfCompactSize(uint64_t nSize)
 inline void WriteCompactSize(SizeComputer& os, uint64_t nSize);
 
 template<typename Stream>
-void WriteCompactSize(Stream& os, uint64_t nSize)
+ALWAYS_INLINE void WriteCompactSize(Stream& os, uint64_t nSize)
 {
     if constexpr (ContainsSizeComputer<Stream>) {
         os.GetStream().seek(GetSizeOfCompactSize(nSize));
