@@ -327,14 +327,8 @@ void BlockManager::FindFilesToPrune(
     LOCK2(cs_main, cs_LastBlockFile);
     // Compute `target` value with maximum size (in bytes) of blocks below the
     // `last_prune` height which should be preserved and not pruned. The
-    // `target` value will be derived from the -prune preference provided by the
-    // user. If there is a historical chainstate being used to populate indexes
-    // and validate the snapshot, the target is divided by two so half of the
-    // block storage will be reserved for the historical chainstate, and the
-    // other half will be reserved for the most-work chainstate.
-    const int num_chainstates{chainman.HistoricalChainstate() ? 2 : 1};
-    const auto target = std::max(
-        MIN_DISK_SPACE_FOR_BLOCK_FILES, GetPruneTarget() / num_chainstates);
+    // `target` value is derived from the -prune preference provided by the user.
+    const auto target = std::max(MIN_DISK_SPACE_FOR_BLOCK_FILES, GetPruneTarget());
     const uint64_t target_sync_height = chainman.m_best_header->nHeight;
 
     if (chain.m_chain.Height() < 0 || target == 0) {
@@ -426,36 +420,12 @@ CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)
     return pindex;
 }
 
-bool BlockManager::LoadBlockIndex(const std::optional<uint256>& snapshot_blockhash)
+bool BlockManager::LoadBlockIndex()
 {
     if (!m_block_tree_db->LoadBlockIndexGuts(
             GetConsensus(), [this](const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return this->InsertBlockIndex(hash); }, m_interrupt)) {
         return false;
     }
-
-    if (snapshot_blockhash) {
-        const std::optional<AssumeutxoData> maybe_au_data = GetParams().AssumeutxoForBlockhash(*snapshot_blockhash);
-        if (!maybe_au_data) {
-            m_opts.notifications.fatalError(strprintf(_("Assumeutxo data not found for the given blockhash '%s'."), snapshot_blockhash->ToString()));
-            return false;
-        }
-        const AssumeutxoData& au_data = *Assert(maybe_au_data);
-        m_snapshot_height = au_data.height;
-        CBlockIndex* base{LookupBlockIndex(*snapshot_blockhash)};
-
-        // Since m_chain_tx_count (responsible for estimated progress) isn't persisted
-        // to disk, we must bootstrap the value for assumedvalid chainstates
-        // from the hardcoded assumeutxo chainparams.
-        base->m_chain_tx_count = au_data.m_chain_tx_count;
-        LogInfo("[snapshot] set m_chain_tx_count=%d for %s", au_data.m_chain_tx_count, snapshot_blockhash->ToString());
-    } else {
-        // If this isn't called with a snapshot blockhash, make sure the cached snapshot height
-        // is null. This is relevant during snapshot completion, when the blockman may be loaded
-        // with a height that then needs to be cleared after the snapshot is fully validated.
-        m_snapshot_height.reset();
-    }
-
-    Assert(m_snapshot_height.has_value() == snapshot_blockhash.has_value());
 
     // Calculate nChainWork
     std::vector<CBlockIndex*> vSortedByHeight{GetAllBlockIndices()};
@@ -479,11 +449,7 @@ bool BlockManager::LoadBlockIndex(const std::optional<uint256>& snapshot_blockha
         // Pruned nodes may have deleted the block.
         if (pindex->nTx > 0) {
             if (pindex->pprev) {
-                if (m_snapshot_height && pindex->nHeight == *m_snapshot_height &&
-                        pindex->GetBlockHash() == *snapshot_blockhash) {
-                    // Should have been set above; don't disturb it with code below.
-                    Assert(pindex->m_chain_tx_count > 0);
-                } else if (pindex->pprev->m_chain_tx_count > 0) {
+                if (pindex->pprev->m_chain_tx_count > 0) {
                     pindex->m_chain_tx_count = pindex->pprev->m_chain_tx_count + pindex->nTx;
                 } else {
                     pindex->m_chain_tx_count = 0;
@@ -532,9 +498,9 @@ void BlockManager::WriteBlockIndexDB()
     m_block_tree_db->WriteBatchSync(vFiles, max_blockfile, vBlocks);
 }
 
-bool BlockManager::LoadBlockIndexDB(const std::optional<uint256>& snapshot_blockhash)
+bool BlockManager::LoadBlockIndexDB()
 {
-    if (!LoadBlockIndex(snapshot_blockhash)) {
+    if (!LoadBlockIndex()) {
         return false;
     }
     int max_blockfile_num{0};
@@ -575,8 +541,7 @@ bool BlockManager::LoadBlockIndexDB(const std::optional<uint256>& snapshot_block
         // Initialize the blockfile cursors.
         LOCK(cs_LastBlockFile);
         for (size_t i = 0; i < m_blockfile_info.size(); ++i) {
-            const auto last_height_in_file = m_blockfile_info[i].nHeightLast;
-            m_blockfile_cursors[BlockfileTypeForHeight(last_height_in_file)] = {static_cast<int>(i), 0};
+            m_blockfile_cursor = {static_cast<int>(i), 0};
         }
     }
 
@@ -774,26 +739,10 @@ bool BlockManager::FlushBlockFile(int blockfile_num, bool fFinalize, bool finali
     return success;
 }
 
-BlockfileType BlockManager::BlockfileTypeForHeight(int height)
-{
-    if (!m_snapshot_height) {
-        return BlockfileType::NORMAL;
-    }
-    return (height >= *m_snapshot_height) ? BlockfileType::ASSUMED : BlockfileType::NORMAL;
-}
-
 bool BlockManager::FlushChainstateBlockFile(int tip_height)
 {
     LOCK(cs_LastBlockFile);
-    auto& cursor = m_blockfile_cursors[BlockfileTypeForHeight(tip_height)];
-    // If the cursor does not exist, it means an assumeutxo snapshot is loaded,
-    // but no blocks past the snapshot height have been written yet, so there
-    // is no data associated with the chainstate, and it is safe not to flush.
-    if (cursor) {
-        return FlushBlockFile(cursor->file_num, /*fFinalize=*/false, /*finalize_undo=*/false);
-    }
-    // No need to log warnings in this case.
-    return true;
+    return FlushBlockFile(m_blockfile_cursor.file_num, /*fFinalize=*/false, /*finalize_undo=*/false);
 }
 
 uint64_t BlockManager::CalculateCurrentUsage()
@@ -840,16 +789,7 @@ FlatFilePos BlockManager::FindNextBlockPos(unsigned int nAddSize, unsigned int n
 {
     LOCK(cs_LastBlockFile);
 
-    const BlockfileType chain_type = BlockfileTypeForHeight(nHeight);
-
-    if (!m_blockfile_cursors[chain_type]) {
-        // If a snapshot is loaded during runtime, we may not have initialized this cursor yet.
-        assert(chain_type == BlockfileType::ASSUMED);
-        const auto new_cursor = BlockfileCursor{this->MaxBlockfileNum() + 1};
-        m_blockfile_cursors[chain_type] = new_cursor;
-        LogDebug(BCLog::BLOCKSTORAGE, "[%s] initializing blockfile cursor to %s\n", chain_type, new_cursor);
-    }
-    const int last_blockfile = m_blockfile_cursors[chain_type]->file_num;
+    const int last_blockfile = m_blockfile_cursor.file_num;
 
     int nFile = last_blockfile;
     if (static_cast<int>(m_blockfile_info.size()) <= nFile) {
@@ -873,13 +813,12 @@ FlatFilePos BlockManager::FindNextBlockPos(unsigned int nAddSize, unsigned int n
         // when the undo file is keeping up with the block file, we want to flush it explicitly
         // when it is lagging behind (more blocks arrive than are being connected), we let the
         // undo block write case handle it
-        finalize_undo = (static_cast<int>(m_blockfile_info[nFile].nHeightLast) ==
-                         Assert(m_blockfile_cursors[chain_type])->undo_height);
+        finalize_undo = static_cast<int>(m_blockfile_info[nFile].nHeightLast) == m_blockfile_cursor.undo_height;
 
         // Try the next unclaimed blockfile number
         nFile = this->MaxBlockfileNum() + 1;
         // Set to increment MaxBlockfileNum() for next iteration
-        m_blockfile_cursors[chain_type] = BlockfileCursor{nFile};
+        m_blockfile_cursor = BlockfileCursor{nFile};
 
         if (static_cast<int>(m_blockfile_info.size()) <= nFile) {
             m_blockfile_info.resize(nFile + 1);
@@ -906,7 +845,7 @@ FlatFilePos BlockManager::FindNextBlockPos(unsigned int nAddSize, unsigned int n
                           last_blockfile, finalize_undo, nFile);
         }
         // No undo data yet in the new file, so reset our undo-height tracking.
-        m_blockfile_cursors[chain_type] = BlockfileCursor{nFile};
+        m_blockfile_cursor = BlockfileCursor{nFile};
     }
 
     m_blockfile_info[nFile].AddBlock(nHeight, nTime);
@@ -931,10 +870,8 @@ void BlockManager::UpdateBlockInfo(const CBlock& block, unsigned int nHeight, co
     LOCK(cs_LastBlockFile);
 
     // Update the cursor so it points to the last file.
-    const BlockfileType chain_type{BlockfileTypeForHeight(nHeight)};
-    auto& cursor{m_blockfile_cursors[chain_type]};
-    if (!cursor || cursor->file_num < pos.nFile) {
-        m_blockfile_cursors[chain_type] = BlockfileCursor{pos.nFile};
+    if (m_blockfile_cursor.file_num < pos.nFile) {
+        m_blockfile_cursor = BlockfileCursor{pos.nFile};
     }
 
     // Update the file information with the current block.
@@ -973,8 +910,6 @@ bool BlockManager::FindUndoPos(BlockValidationState& state, int nFile, FlatFileP
 bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationState& state, CBlockIndex& block)
 {
     AssertLockHeld(::cs_main);
-    const BlockfileType type = BlockfileTypeForHeight(block.nHeight);
-    auto& cursor = *Assert(WITH_LOCK(cs_LastBlockFile, return m_blockfile_cursors[type]));
 
     // Write undo information to disk
     if (block.GetUndoPos().IsNull()) {
@@ -1018,17 +953,20 @@ bool BlockManager::WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationSt
         // in the block file info as below; note that this does not catch the case where the undo writes are keeping up
         // with the block writes (usually when a synced up node is getting newly mined blocks) -- this case is caught in
         // the FindNextBlockPos function
-        if (pos.nFile < cursor.file_num && static_cast<uint32_t>(block.nHeight) == m_blockfile_info[pos.nFile].nHeightLast) {
-            // Do not propagate the return code, a failed flush here should not
-            // be an indication for a failed write. If it were propagated here,
-            // the caller would assume the undo data not to be written, when in
-            // fact it is. Note though, that a failed flush might leave the data
-            // file untrimmed.
-            if (!FlushUndoFile(pos.nFile, true)) {
-                LogWarning("Failed to flush undo file %05i\n", pos.nFile);
+        {
+            LOCK(cs_LastBlockFile);
+            if (pos.nFile < m_blockfile_cursor.file_num && static_cast<uint32_t>(block.nHeight) == m_blockfile_info[pos.nFile].nHeightLast) {
+                // Do not propagate the return code, a failed flush here should not
+                // be an indication for a failed write. If it were propagated here,
+                // the caller would assume the undo data not to be written, when in
+                // fact it is. Note though, that a failed flush might leave the data
+                // file untrimmed.
+                if (!FlushUndoFile(pos.nFile, true)) {
+                    LogWarning("Failed to flush undo file %05i\n", pos.nFile);
+                }
+            } else if (pos.nFile == m_blockfile_cursor.file_num && block.nHeight > m_blockfile_cursor.undo_height) {
+                m_blockfile_cursor.undo_height = block.nHeight;
             }
-        } else if (pos.nFile == cursor.file_num && block.nHeight > cursor.undo_height) {
-            cursor.undo_height = block.nHeight;
         }
         // update nUndoPos in block index
         block.nUndoPos = pos.nPos;
@@ -1319,15 +1257,6 @@ void ImportBlocks(ChainstateManager& chainman, std::span<const fs::path> import_
         chainman.GetNotifications().fatalError(util::ErrorString(result));
     }
     // End scope of ImportingNow
-}
-
-std::ostream& operator<<(std::ostream& os, const BlockfileType& type) {
-    switch(type) {
-        case BlockfileType::NORMAL: os << "normal"; break;
-        case BlockfileType::ASSUMED: os << "assumed"; break;
-        default: os.setstate(std::ios_base::failbit);
-    }
-    return os;
 }
 
 std::ostream& operator<<(std::ostream& os, const BlockfileCursor& cursor) {
