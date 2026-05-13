@@ -50,6 +50,16 @@ static const unsigned int MAX_VECTOR_ALLOCATE = 5000000;
 struct deserialize_type {};
 constexpr deserialize_type deserialize {};
 
+class SizeComputer;
+
+//! Check if type contains a stream by seeing if has a GetStream() method.
+template<typename T>
+concept ContainsStream = requires(T t) { t.GetStream(); };
+
+template<typename T>
+concept ContainsSizeComputer = ContainsStream<T> &&
+    std::is_same_v<std::remove_reference_t<decltype(std::declval<T>().GetStream())>, SizeComputer>;
+
 /*
  * Lowest-level serialization and conversion.
  */
@@ -107,9 +117,6 @@ template<typename Stream> inline uint64_t ser_readdata64(Stream &s)
     s.read(std::as_writable_bytes(std::span{&obj, 1}));
     return le64toh_internal(obj);
 }
-
-
-class SizeComputer;
 
 /**
  * Convert any argument to a reference to X, maintaining constness.
@@ -300,7 +307,9 @@ inline void WriteCompactSize(SizeComputer& os, uint64_t nSize);
 template<typename Stream>
 void WriteCompactSize(Stream& os, uint64_t nSize)
 {
-    if (nSize < 253) [[likely]]
+    if constexpr (ContainsSizeComputer<Stream>) {
+        os.GetStream().seek(GetSizeOfCompactSize(nSize));
+    } else if (nSize < 253) [[likely]]
     {
         ser_writedata8(os, nSize);
     }
@@ -1086,6 +1095,9 @@ protected:
 public:
     SizeComputer() = default;
 
+    SizeComputer& GetStream() { return *this; }
+    const SizeComputer& GetStream() const { return *this; }
+
     void write(std::span<const std::byte> src)
     {
         m_size += src.size();
@@ -1126,10 +1138,6 @@ uint64_t GetSerializeSize(const T& t)
 {
     return (SizeComputer() << t).size();
 }
-
-//! Check if type contains a stream by seeing if has a GetStream() method.
-template<typename T>
-concept ContainsStream = requires(T t) { t.GetStream(); };
 
 /** Wrapper that overrides the GetParams() function of a stream. */
 template <typename SubStream, typename Params>
