@@ -834,9 +834,9 @@ void Unserialize(Stream& is, prevector<N, T>& v)
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
         unsigned int nSize = ReadCompactSize(is);
-        if (nSize == 0) return;
+        if (nSize == 0) [[unlikely]] return;
         constexpr unsigned int max_read = 1 + 4999999 / sizeof(T);
-        if (nSize <= max_read) {
+        if (nSize <= max_read) [[likely]] {
             v.resize_uninitialized(nSize);
             is.read(std::as_writable_bytes(std::span{&v[0], nSize}));
             return;
@@ -884,9 +884,9 @@ void Unserialize(Stream& is, std::vector<T, A>& v)
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
         unsigned int nSize = ReadCompactSize(is);
-        if (nSize == 0) return;
+        if (nSize == 0) [[unlikely]] return;
         constexpr unsigned int max_read = 1 + 4999999 / sizeof(T);
-        if (nSize <= max_read) {
+        if (nSize <= max_read) [[likely]] {
             v.resize(nSize);
             is.read(std::as_writable_bytes(std::span{v.data(), nSize}));
             return;
