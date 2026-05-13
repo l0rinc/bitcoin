@@ -300,7 +300,7 @@ inline void WriteCompactSize(SizeComputer& os, uint64_t nSize);
 template<typename Stream>
 void WriteCompactSize(Stream& os, uint64_t nSize)
 {
-    if (nSize < 253)
+    if (nSize < 253) [[likely]]
     {
         ser_writedata8(os, nSize);
     }
@@ -338,7 +338,7 @@ template<typename Stream>
 uint64_t ReadCompactSize(Stream& is, bool range_check = true)
 {
     uint8_t chSize = ser_readdata8(is);
-    if (chSize < 253) return chSize;
+    if (chSize < 253) [[likely]] return chSize;
     uint64_t nSizeRet = 0;
     if (chSize == 253)
     {
@@ -430,7 +430,7 @@ template<typename Stream, VarIntMode Mode, typename I>
 void WriteVarInt(Stream& os, I n)
 {
     CheckVarIntMode<Mode, I>();
-    if (n <= 0x7F) {
+    if (n <= 0x7F) [[likely]] {
         ser_writedata8(os, n);
         return;
     }
