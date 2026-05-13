@@ -456,7 +456,7 @@ void WriteVarInt(Stream& os, I n)
 }
 
 template<typename Stream, VarIntMode Mode, typename I>
-I ReadVarInt(Stream& is)
+ALWAYS_INLINE I ReadVarInt(Stream& is)
 {
     CheckVarIntMode<Mode, I>();
     I n = 0;
