@@ -14,13 +14,18 @@
 #include <util/overflow.h>
 
 #include <algorithm>
+#include <array>
 #include <concepts>
+#include <cstddef>
+#include <cstdlib>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
 #include <ios>
 #include <limits>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <span>
 #include <string>
@@ -35,6 +40,133 @@ static constexpr uint64_t MAX_SIZE = 0x02000000;
 
 /** Maximum amount of memory (in bytes) to allocate at once when deserializing vectors. */
 static const unsigned int MAX_VECTOR_ALLOCATE = 5000000;
+
+namespace serialization_stats {
+enum class Hist : size_t {
+    CompactSizeWriteWidth,
+    CompactSizeReadWidth,
+    CompactSizeWriteValue,
+    CompactSizeReadValue,
+    VarIntWriteWidth,
+    VarIntReadWidth,
+    VectorByteWriteSize,
+    VectorByteReadSize,
+    PrevectorByteWriteSize,
+    PrevectorByteReadSize,
+    IntegralWriteSize,
+    IntegralReadSize,
+    ByteArrayWriteSize,
+    ByteArrayReadSize,
+    FixedSpanWriteSize,
+    FixedSpanReadSize,
+    DynamicSpanWriteSize,
+    DynamicSpanReadSize,
+    StringWriteSize,
+    StringReadSize,
+    LimitedStringReadSize,
+    VectorBoolWriteSize,
+    VectorBoolReadSize,
+    VectorGenericWriteSize,
+    VectorGenericReadSize,
+    MapWriteSize,
+    MapReadSize,
+    SetWriteSize,
+    SetReadSize,
+    SizeComputerWriteSize,
+    SizeComputerSeekSize,
+    VectorWriterWriteSize,
+    SpanReaderReadSize,
+    SpanWriterWriteSize,
+    DataStreamReadSize,
+    DataStreamWriteSize,
+    Count,
+};
+
+inline const char* HistogramName(Hist hist)
+{
+    switch (hist) {
+    case Hist::CompactSizeWriteWidth: return "compact_size_write_width";
+    case Hist::CompactSizeReadWidth: return "compact_size_read_width";
+    case Hist::CompactSizeWriteValue: return "compact_size_write_value";
+    case Hist::CompactSizeReadValue: return "compact_size_read_value";
+    case Hist::VarIntWriteWidth: return "varint_write_width";
+    case Hist::VarIntReadWidth: return "varint_read_width";
+    case Hist::VectorByteWriteSize: return "vector_byte_write_size";
+    case Hist::VectorByteReadSize: return "vector_byte_read_size";
+    case Hist::PrevectorByteWriteSize: return "prevector_byte_write_size";
+    case Hist::PrevectorByteReadSize: return "prevector_byte_read_size";
+    case Hist::IntegralWriteSize: return "integral_write_size";
+    case Hist::IntegralReadSize: return "integral_read_size";
+    case Hist::ByteArrayWriteSize: return "byte_array_write_size";
+    case Hist::ByteArrayReadSize: return "byte_array_read_size";
+    case Hist::FixedSpanWriteSize: return "fixed_span_write_size";
+    case Hist::FixedSpanReadSize: return "fixed_span_read_size";
+    case Hist::DynamicSpanWriteSize: return "dynamic_span_write_size";
+    case Hist::DynamicSpanReadSize: return "dynamic_span_read_size";
+    case Hist::StringWriteSize: return "string_write_size";
+    case Hist::StringReadSize: return "string_read_size";
+    case Hist::LimitedStringReadSize: return "limited_string_read_size";
+    case Hist::VectorBoolWriteSize: return "vector_bool_write_size";
+    case Hist::VectorBoolReadSize: return "vector_bool_read_size";
+    case Hist::VectorGenericWriteSize: return "vector_generic_write_size";
+    case Hist::VectorGenericReadSize: return "vector_generic_read_size";
+    case Hist::MapWriteSize: return "map_write_size";
+    case Hist::MapReadSize: return "map_read_size";
+    case Hist::SetWriteSize: return "set_write_size";
+    case Hist::SetReadSize: return "set_read_size";
+    case Hist::SizeComputerWriteSize: return "size_computer_write_size";
+    case Hist::SizeComputerSeekSize: return "size_computer_seek_size";
+    case Hist::VectorWriterWriteSize: return "vector_writer_write_size";
+    case Hist::SpanReaderReadSize: return "span_reader_read_size";
+    case Hist::SpanWriterWriteSize: return "span_writer_write_size";
+    case Hist::DataStreamReadSize: return "datastream_read_size";
+    case Hist::DataStreamWriteSize: return "datastream_write_size";
+    case Hist::Count: break;
+    }
+    return "unknown";
+}
+
+class Stats
+{
+    static constexpr size_t HISTOGRAMS{static_cast<size_t>(Hist::Count)};
+
+    std::mutex m_mutex;
+    std::array<std::map<uint64_t, uint64_t>, HISTOGRAMS> m_histograms;
+
+public:
+    ~Stats()
+    {
+        const char* path{std::getenv("BITCOIN_SERIALIZE_STATS")};
+        if (path == nullptr || path[0] == '\0') return;
+
+        std::ofstream out{path};
+        out << "histogram\tvalue\tcount\n";
+        for (size_t hist{0}; hist < HISTOGRAMS; ++hist) {
+            const auto name{HistogramName(static_cast<Hist>(hist))};
+            for (const auto& [value, count] : m_histograms[hist]) {
+                out << name << '\t' << value << '\t' << count << '\n';
+            }
+        }
+    }
+
+    void Record(Hist hist, uint64_t value)
+    {
+        std::lock_guard lock{m_mutex};
+        ++m_histograms[static_cast<size_t>(hist)][value];
+    }
+};
+
+inline Stats& Global()
+{
+    static Stats stats;
+    return stats;
+}
+
+inline void Record(Hist hist, uint64_t value)
+{
+    Global().Record(hist, value);
+}
+} // namespace serialization_stats
 
 /**
  * Dummy data type to identify deserializing constructors.
@@ -244,39 +376,39 @@ concept CharNotInt8 = std::same_as<T, char> && !std::same_as<T, int8_t>;
 
 // clang-format off
 template <typename Stream, CharNotInt8 V> void Serialize(Stream&, V) = delete; // char serialization forbidden. Use uint8_t or int8_t
-template <typename Stream> void Serialize(Stream& s, std::byte a) { ser_writedata8(s, uint8_t(a)); }
-template <typename Stream> void Serialize(Stream& s, int8_t a)    { ser_writedata8(s, uint8_t(a)); }
-template <typename Stream> void Serialize(Stream& s, uint8_t a)   { ser_writedata8(s, a); }
-template <typename Stream> void Serialize(Stream& s, int16_t a)   { ser_writedata16(s, uint16_t(a)); }
-template <typename Stream> void Serialize(Stream& s, uint16_t a)  { ser_writedata16(s, a); }
-template <typename Stream> void Serialize(Stream& s, int32_t a)   { ser_writedata32(s, uint32_t(a)); }
-template <typename Stream> void Serialize(Stream& s, uint32_t a)  { ser_writedata32(s, a); }
-template <typename Stream> void Serialize(Stream& s, int64_t a)   { ser_writedata64(s, uint64_t(a)); }
-template <typename Stream> void Serialize(Stream& s, uint64_t a)  { ser_writedata64(s, a); }
+template <typename Stream> void Serialize(Stream& s, std::byte a) { serialization_stats::Record(serialization_stats::Hist::IntegralWriteSize, 1); ser_writedata8(s, uint8_t(a)); }
+template <typename Stream> void Serialize(Stream& s, int8_t a)    { serialization_stats::Record(serialization_stats::Hist::IntegralWriteSize, 1); ser_writedata8(s, uint8_t(a)); }
+template <typename Stream> void Serialize(Stream& s, uint8_t a)   { serialization_stats::Record(serialization_stats::Hist::IntegralWriteSize, 1); ser_writedata8(s, a); }
+template <typename Stream> void Serialize(Stream& s, int16_t a)   { serialization_stats::Record(serialization_stats::Hist::IntegralWriteSize, 2); ser_writedata16(s, uint16_t(a)); }
+template <typename Stream> void Serialize(Stream& s, uint16_t a)  { serialization_stats::Record(serialization_stats::Hist::IntegralWriteSize, 2); ser_writedata16(s, a); }
+template <typename Stream> void Serialize(Stream& s, int32_t a)   { serialization_stats::Record(serialization_stats::Hist::IntegralWriteSize, 4); ser_writedata32(s, uint32_t(a)); }
+template <typename Stream> void Serialize(Stream& s, uint32_t a)  { serialization_stats::Record(serialization_stats::Hist::IntegralWriteSize, 4); ser_writedata32(s, a); }
+template <typename Stream> void Serialize(Stream& s, int64_t a)   { serialization_stats::Record(serialization_stats::Hist::IntegralWriteSize, 8); ser_writedata64(s, uint64_t(a)); }
+template <typename Stream> void Serialize(Stream& s, uint64_t a)  { serialization_stats::Record(serialization_stats::Hist::IntegralWriteSize, 8); ser_writedata64(s, a); }
 
-template <typename Stream, BasicByte B, size_t N> void Serialize(Stream& s, const B (&a)[N])           { s.write(MakeByteSpan(a)); }
-template <typename Stream, BasicByte B, size_t N> void Serialize(Stream& s, const std::array<B, N>& a) { s.write(MakeByteSpan(a)); }
-template <typename Stream, BasicByte B, size_t N> void Serialize(Stream& s, std::span<B, N> span)      { s.write(std::as_bytes(span)); }
-template <typename Stream, BasicByte B>           void Serialize(Stream& s, std::span<B> span)         { s.write(std::as_bytes(span)); }
+template <typename Stream, BasicByte B, size_t N> void Serialize(Stream& s, const B (&a)[N])           { serialization_stats::Record(serialization_stats::Hist::ByteArrayWriteSize, N); s.write(MakeByteSpan(a)); }
+template <typename Stream, BasicByte B, size_t N> void Serialize(Stream& s, const std::array<B, N>& a) { serialization_stats::Record(serialization_stats::Hist::ByteArrayWriteSize, N); s.write(MakeByteSpan(a)); }
+template <typename Stream, BasicByte B, size_t N> void Serialize(Stream& s, std::span<B, N> span)      { serialization_stats::Record(serialization_stats::Hist::FixedSpanWriteSize, N); s.write(std::as_bytes(span)); }
+template <typename Stream, BasicByte B>           void Serialize(Stream& s, std::span<B> span)         { serialization_stats::Record(serialization_stats::Hist::DynamicSpanWriteSize, span.size()); s.write(std::as_bytes(span)); }
 
 template <typename Stream, CharNotInt8 V> void Unserialize(Stream&, V) = delete; // char serialization forbidden. Use uint8_t or int8_t
-template <typename Stream> void Unserialize(Stream& s, std::byte& a) { a = std::byte(ser_readdata8(s)); }
-template <typename Stream> void Unserialize(Stream& s, int8_t& a)    { a = int8_t(ser_readdata8(s)); }
-template <typename Stream> void Unserialize(Stream& s, uint8_t& a)   { a = ser_readdata8(s); }
-template <typename Stream> void Unserialize(Stream& s, int16_t& a)   { a = int16_t(ser_readdata16(s)); }
-template <typename Stream> void Unserialize(Stream& s, uint16_t& a)  { a = ser_readdata16(s); }
-template <typename Stream> void Unserialize(Stream& s, int32_t& a)   { a = int32_t(ser_readdata32(s)); }
-template <typename Stream> void Unserialize(Stream& s, uint32_t& a)  { a = ser_readdata32(s); }
-template <typename Stream> void Unserialize(Stream& s, int64_t& a)   { a = int64_t(ser_readdata64(s)); }
-template <typename Stream> void Unserialize(Stream& s, uint64_t& a)  { a = ser_readdata64(s); }
+template <typename Stream> void Unserialize(Stream& s, std::byte& a) { serialization_stats::Record(serialization_stats::Hist::IntegralReadSize, 1); a = std::byte(ser_readdata8(s)); }
+template <typename Stream> void Unserialize(Stream& s, int8_t& a)    { serialization_stats::Record(serialization_stats::Hist::IntegralReadSize, 1); a = int8_t(ser_readdata8(s)); }
+template <typename Stream> void Unserialize(Stream& s, uint8_t& a)   { serialization_stats::Record(serialization_stats::Hist::IntegralReadSize, 1); a = ser_readdata8(s); }
+template <typename Stream> void Unserialize(Stream& s, int16_t& a)   { serialization_stats::Record(serialization_stats::Hist::IntegralReadSize, 2); a = int16_t(ser_readdata16(s)); }
+template <typename Stream> void Unserialize(Stream& s, uint16_t& a)  { serialization_stats::Record(serialization_stats::Hist::IntegralReadSize, 2); a = ser_readdata16(s); }
+template <typename Stream> void Unserialize(Stream& s, int32_t& a)   { serialization_stats::Record(serialization_stats::Hist::IntegralReadSize, 4); a = int32_t(ser_readdata32(s)); }
+template <typename Stream> void Unserialize(Stream& s, uint32_t& a)  { serialization_stats::Record(serialization_stats::Hist::IntegralReadSize, 4); a = ser_readdata32(s); }
+template <typename Stream> void Unserialize(Stream& s, int64_t& a)   { serialization_stats::Record(serialization_stats::Hist::IntegralReadSize, 8); a = int64_t(ser_readdata64(s)); }
+template <typename Stream> void Unserialize(Stream& s, uint64_t& a)  { serialization_stats::Record(serialization_stats::Hist::IntegralReadSize, 8); a = ser_readdata64(s); }
 
-template <typename Stream, BasicByte B, size_t N> void Unserialize(Stream& s, B (&a)[N])            { s.read(MakeWritableByteSpan(a)); }
-template <typename Stream, BasicByte B, size_t N> void Unserialize(Stream& s, std::array<B, N>& a)  { s.read(MakeWritableByteSpan(a)); }
-template <typename Stream, BasicByte B, size_t N> void Unserialize(Stream& s, std::span<B, N> span) { s.read(std::as_writable_bytes(span)); }
-template <typename Stream, BasicByte B>           void Unserialize(Stream& s, std::span<B> span)    { s.read(std::as_writable_bytes(span)); }
+template <typename Stream, BasicByte B, size_t N> void Unserialize(Stream& s, B (&a)[N])            { serialization_stats::Record(serialization_stats::Hist::ByteArrayReadSize, N); s.read(MakeWritableByteSpan(a)); }
+template <typename Stream, BasicByte B, size_t N> void Unserialize(Stream& s, std::array<B, N>& a)  { serialization_stats::Record(serialization_stats::Hist::ByteArrayReadSize, N); s.read(MakeWritableByteSpan(a)); }
+template <typename Stream, BasicByte B, size_t N> void Unserialize(Stream& s, std::span<B, N> span) { serialization_stats::Record(serialization_stats::Hist::FixedSpanReadSize, N); s.read(std::as_writable_bytes(span)); }
+template <typename Stream, BasicByte B>           void Unserialize(Stream& s, std::span<B> span)    { serialization_stats::Record(serialization_stats::Hist::DynamicSpanReadSize, span.size()); s.read(std::as_writable_bytes(span)); }
 
-template <typename Stream> void Serialize(Stream& s, bool a)    { uint8_t f = a; ser_writedata8(s, f); }
-template <typename Stream> void Unserialize(Stream& s, bool& a) { uint8_t f = ser_readdata8(s); a = f; }
+template <typename Stream> void Serialize(Stream& s, bool a)    { serialization_stats::Record(serialization_stats::Hist::IntegralWriteSize, 1); uint8_t f = a; ser_writedata8(s, f); }
+template <typename Stream> void Unserialize(Stream& s, bool& a) { serialization_stats::Record(serialization_stats::Hist::IntegralReadSize, 1); uint8_t f = ser_readdata8(s); a = f; }
 // clang-format on
 
 
@@ -300,6 +432,8 @@ inline void WriteCompactSize(SizeComputer& os, uint64_t nSize);
 template<typename Stream>
 void WriteCompactSize(Stream& os, uint64_t nSize)
 {
+    serialization_stats::Record(serialization_stats::Hist::CompactSizeWriteWidth, GetSizeOfCompactSize(nSize));
+    serialization_stats::Record(serialization_stats::Hist::CompactSizeWriteValue, nSize);
     if (nSize < 253)
     {
         ser_writedata8(os, nSize);
@@ -332,6 +466,7 @@ template<typename Stream>
 uint64_t ReadCompactSize(Stream& is, bool range_check = true)
 {
     uint8_t chSize = ser_readdata8(is);
+    serialization_stats::Record(serialization_stats::Hist::CompactSizeReadWidth, chSize < 253 ? 1 : chSize == 253 ? 3 : chSize == 254 ? 5 : 9);
     uint64_t nSizeRet = 0;
     if (chSize < 253)
     {
@@ -358,6 +493,7 @@ uint64_t ReadCompactSize(Stream& is, bool range_check = true)
     if (range_check && nSizeRet > MAX_SIZE) {
         throw std::ios_base::failure("ReadCompactSize(): size too large");
     }
+    serialization_stats::Record(serialization_stats::Hist::CompactSizeReadValue, nSizeRet);
     return nSizeRet;
 }
 
@@ -436,6 +572,7 @@ void WriteVarInt(Stream& os, I n)
         n = (n >> 7) - 1;
         len++;
     }
+    serialization_stats::Record(serialization_stats::Hist::VarIntWriteWidth, static_cast<unsigned int>(len + 1));
     do {
         ser_writedata8(os, tmp[len]);
     } while(len--);
@@ -446,8 +583,10 @@ I ReadVarInt(Stream& is)
 {
     CheckVarIntMode<Mode, I>();
     I n = 0;
+    unsigned int bytes{0};
     while(true) {
         unsigned char chData = ser_readdata8(is);
+        ++bytes;
         if (n > (std::numeric_limits<I>::max() >> 7)) {
            throw std::ios_base::failure("ReadVarInt(): size too large");
         }
@@ -458,6 +597,7 @@ I ReadVarInt(Stream& is)
             }
             n++;
         } else {
+            serialization_stats::Record(serialization_stats::Hist::VarIntReadWidth, bytes);
             return n;
         }
     }
@@ -633,6 +773,7 @@ struct LimitedStringFormatter
     void Unser(Stream& s, std::string& v)
     {
         size_t size = ReadCompactSize(s);
+        serialization_stats::Record(serialization_stats::Hist::LimitedStringReadSize, size);
         if (size > Limit) {
             throw std::ios_base::failure("String length limit exceeded");
         }
@@ -667,6 +808,7 @@ struct VectorFormatter
     void Ser(Stream& s, const V& v)
     {
         Formatter formatter;
+        serialization_stats::Record(serialization_stats::Hist::VectorGenericWriteSize, v.size());
         WriteCompactSize(s, v.size());
         for (const typename V::value_type& elem : v) {
             formatter.Ser(s, elem);
@@ -679,6 +821,7 @@ struct VectorFormatter
         Formatter formatter;
         v.clear();
         size_t size = ReadCompactSize(s);
+        serialization_stats::Record(serialization_stats::Hist::VectorGenericReadSize, size);
         size_t allocated = 0;
         while (allocated < size) {
             // For DoS prevention, do not blindly allocate as much as the stream claims to contain.
@@ -793,6 +936,7 @@ struct DefaultFormatter
 template<typename Stream, typename C>
 void Serialize(Stream& os, const std::basic_string<C>& str)
 {
+    serialization_stats::Record(serialization_stats::Hist::StringWriteSize, str.size());
     WriteCompactSize(os, str.size());
     if (!str.empty())
         os.write(MakeByteSpan(str));
@@ -802,6 +946,7 @@ template<typename Stream, typename C>
 void Unserialize(Stream& is, std::basic_string<C>& str)
 {
     unsigned int nSize = ReadCompactSize(is);
+    serialization_stats::Record(serialization_stats::Hist::StringReadSize, nSize);
     str.resize(nSize);
     if (nSize != 0)
         is.read(MakeWritableByteSpan(str));
@@ -816,6 +961,7 @@ template <typename Stream, unsigned int N, typename T>
 void Serialize(Stream& os, const prevector<N, T>& v)
 {
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
+        serialization_stats::Record(serialization_stats::Hist::PrevectorByteWriteSize, v.size());
         WriteCompactSize(os, v.size());
         if (!v.empty()) os.write(MakeByteSpan(v));
     } else {
@@ -831,6 +977,7 @@ void Unserialize(Stream& is, prevector<N, T>& v)
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
         unsigned int nSize = ReadCompactSize(is);
+        serialization_stats::Record(serialization_stats::Hist::PrevectorByteReadSize, nSize);
         unsigned int i = 0;
         while (i < nSize) {
             unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
@@ -851,12 +998,14 @@ template <typename Stream, typename T, typename A>
 void Serialize(Stream& os, const std::vector<T, A>& v)
 {
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
+        serialization_stats::Record(serialization_stats::Hist::VectorByteWriteSize, v.size());
         WriteCompactSize(os, v.size());
         if (!v.empty()) os.write(MakeByteSpan(v));
     } else if constexpr (std::is_same_v<T, bool>) {
         // A special case for std::vector<bool>, as dereferencing
         // std::vector<bool>::const_iterator does not result in a const bool&
         // due to std::vector's special casing for bool arguments.
+        serialization_stats::Record(serialization_stats::Hist::VectorBoolWriteSize, v.size());
         WriteCompactSize(os, v.size());
         for (bool elem : v) {
             ::Serialize(os, elem);
@@ -874,12 +1023,23 @@ void Unserialize(Stream& is, std::vector<T, A>& v)
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
         unsigned int nSize = ReadCompactSize(is);
+        serialization_stats::Record(serialization_stats::Hist::VectorByteReadSize, nSize);
         unsigned int i = 0;
         while (i < nSize) {
             unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
             v.resize(i + blk);
             is.read(std::as_writable_bytes(std::span{&v[i], blk}));
             i += blk;
+        }
+    } else if constexpr (std::is_same_v<T, bool>) {
+        v.clear();
+        unsigned int nSize = ReadCompactSize(is);
+        serialization_stats::Record(serialization_stats::Hist::VectorBoolReadSize, nSize);
+        v.reserve(nSize);
+        for (unsigned int i = 0; i < nSize; ++i) {
+            bool elem;
+            ::Unserialize(is, elem);
+            v.push_back(elem);
         }
     } else {
         Unserialize(is, Using<VectorFormatter<DefaultFormatter>>(v));
@@ -912,6 +1072,7 @@ void Unserialize(Stream& is, std::pair<K, T>& item)
 template<typename Stream, typename K, typename T, typename Pred, typename A>
 void Serialize(Stream& os, const std::map<K, T, Pred, A>& m)
 {
+    serialization_stats::Record(serialization_stats::Hist::MapWriteSize, m.size());
     WriteCompactSize(os, m.size());
     for (const auto& entry : m)
         Serialize(os, entry);
@@ -922,6 +1083,7 @@ void Unserialize(Stream& is, std::map<K, T, Pred, A>& m)
 {
     m.clear();
     unsigned int nSize = ReadCompactSize(is);
+    serialization_stats::Record(serialization_stats::Hist::MapReadSize, nSize);
     typename std::map<K, T, Pred, A>::iterator mi = m.begin();
     for (unsigned int i = 0; i < nSize; i++)
     {
@@ -939,6 +1101,7 @@ void Unserialize(Stream& is, std::map<K, T, Pred, A>& m)
 template<typename Stream, typename K, typename Pred, typename A>
 void Serialize(Stream& os, const std::set<K, Pred, A>& m)
 {
+    serialization_stats::Record(serialization_stats::Hist::SetWriteSize, m.size());
     WriteCompactSize(os, m.size());
     for (typename std::set<K, Pred, A>::const_iterator it = m.begin(); it != m.end(); ++it)
         Serialize(os, (*it));
@@ -949,6 +1112,7 @@ void Unserialize(Stream& is, std::set<K, Pred, A>& m)
 {
     m.clear();
     unsigned int nSize = ReadCompactSize(is);
+    serialization_stats::Record(serialization_stats::Hist::SetReadSize, nSize);
     typename std::set<K, Pred, A>::iterator it = m.begin();
     for (unsigned int i = 0; i < nSize; i++)
     {
@@ -1073,12 +1237,14 @@ public:
 
     void write(std::span<const std::byte> src)
     {
+        serialization_stats::Record(serialization_stats::Hist::SizeComputerWriteSize, src.size());
         m_size += src.size();
     }
 
     /** Pretend this many bytes are written, without specifying them. */
     void seek(uint64_t num)
     {
+        serialization_stats::Record(serialization_stats::Hist::SizeComputerSeekSize, num);
         m_size += num;
     }
 
@@ -1098,12 +1264,17 @@ public:
 template<typename I>
 inline void WriteVarInt(SizeComputer &s, I n)
 {
-    s.seek(GetSizeOfVarInt<I>(n));
+    const unsigned int size{GetSizeOfVarInt<I>(n)};
+    serialization_stats::Record(serialization_stats::Hist::VarIntWriteWidth, size);
+    s.seek(size);
 }
 
 inline void WriteCompactSize(SizeComputer &s, uint64_t nSize)
 {
-    s.seek(GetSizeOfCompactSize(nSize));
+    const unsigned int size{GetSizeOfCompactSize(nSize)};
+    serialization_stats::Record(serialization_stats::Hist::CompactSizeWriteWidth, size);
+    serialization_stats::Record(serialization_stats::Hist::CompactSizeWriteValue, nSize);
+    s.seek(size);
 }
 
 template <typename T>
