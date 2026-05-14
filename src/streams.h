@@ -25,6 +25,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 /* Minimal stream for overwriting and/or appending to an existing byte vector
@@ -55,13 +56,20 @@ public:
     }
     void write(std::span<const std::byte> src)
     {
+        if (src.empty()) return;
         assert(nPos <= vchData.size());
+        const auto src_ptr{UCharCast(src.data())};
+        if (nPos == vchData.size()) {
+            vchData.insert(vchData.end(), src_ptr, src_ptr + src.size());
+            nPos += src.size();
+            return;
+        }
         size_t nOverwrite = std::min(src.size(), vchData.size() - nPos);
         if (nOverwrite) {
             memcpy(vchData.data() + nPos, src.data(), nOverwrite);
         }
         if (nOverwrite < src.size()) {
-            vchData.insert(vchData.end(), UCharCast(src.data()) + nOverwrite, UCharCast(src.data() + src.size()));
+            vchData.insert(vchData.end(), src_ptr + nOverwrite, src_ptr + src.size());
         }
         nPos += src.size();
     }
@@ -101,18 +109,24 @@ public:
     size_t size() const { return m_data.size(); }
     bool empty() const { return m_data.empty(); }
 
-    void read(std::span<std::byte> dst)
+    template <size_t Extent = std::dynamic_extent>
+    void read(std::span<std::byte, Extent> dst)
     {
-        if (dst.size() == 0) {
-            return;
+        if constexpr (Extent == 1) {
+            if (m_data.empty()) {
+                throw std::ios_base::failure("SpanReader::read(): end of data");
+            }
+            dst[0] = m_data[0];
+            m_data = m_data.subspan(1);
+        } else {
+            const auto n{dst.size()};
+            // Read from the beginning of the buffer
+            if (n > m_data.size()) {
+                throw std::ios_base::failure("SpanReader::read(): end of data");
+            }
+            memcpy(dst.data(), m_data.data(), n);
+            m_data = m_data.subspan(n);
         }
-
-        // Read from the beginning of the buffer
-        if (dst.size() > m_data.size()) {
-            throw std::ios_base::failure("SpanReader::read(): end of data");
-        }
-        memcpy(dst.data(), m_data.data(), dst.size());
-        m_data = m_data.subspan(dst.size());
     }
 
     void ignore(size_t n)
@@ -208,22 +222,35 @@ public:
     //
     // Stream subset
     //
-    void read(std::span<value_type> dst)
+    template <size_t Extent = std::dynamic_extent>
+    void read(std::span<value_type, Extent> dst)
     {
-        if (dst.size() == 0) return;
-
-        // Read from the beginning of the buffer
-        auto next_read_pos{CheckedAdd(m_read_pos, dst.size())};
-        if (!next_read_pos.has_value() || next_read_pos.value() > vch.size()) {
-            throw std::ios_base::failure("DataStream::read(): end of data");
+        if constexpr (Extent == 1) {
+            if (m_read_pos == vch.size()) {
+                throw std::ios_base::failure("DataStream::read(): end of data");
+            }
+            dst[0] = vch[m_read_pos];
+            ++m_read_pos;
+            if (m_read_pos == vch.size()) {
+                m_read_pos = 0;
+                vch.clear();
+            }
+        } else if constexpr (Extent > 1) {
+            const auto n{dst.size()};
+            const auto avail{vch.size() - m_read_pos};
+            if (n > avail) {
+                throw std::ios_base::failure("DataStream::read(): end of data");
+            }
+            if (n > 0) [[likely]] {
+                memcpy(dst.data(), &vch[m_read_pos], n);
+            }
+            if (n == avail) {
+                m_read_pos = 0;
+                vch.clear();
+                return;
+            }
+            m_read_pos += n;
         }
-        memcpy(dst.data(), &vch[m_read_pos], dst.size());
-        if (next_read_pos.value() == vch.size()) {
-            // If fully consumed, reset to empty state.
-            clear();
-            return;
-        }
-        m_read_pos = next_read_pos.value();
     }
 
     void ignore(size_t num_ignore)
@@ -241,10 +268,19 @@ public:
         m_read_pos = next_read_pos.value();
     }
 
-    void write(std::span<const value_type> src)
+    template <typename B, size_t Extent = std::dynamic_extent>
+        requires std::same_as<std::remove_cv_t<B>, value_type>
+    void write(std::span<B, Extent> src)
     {
+        const value_type* data{src.data()};
         // Write to the end of the buffer
-        vch.insert(vch.end(), src.begin(), src.end());
+        if constexpr (Extent == 1) {
+            vch.push_back(data[0]);
+        } else if constexpr (Extent == 32) {
+            vch.insert(vch.end(), data, data + Extent);
+        } else {
+            vch.insert(vch.end(), data, data + src.size());
+        }
     }
 
     template<typename T>
