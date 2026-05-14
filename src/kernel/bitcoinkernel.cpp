@@ -55,7 +55,6 @@ namespace Consensus {
 struct Params;
 } // namespace Consensus
 
-using kernel::ChainstateRole;
 using util::ImmediateTaskRunner;
 
 // Define G_TRANSLATION_FUN symbol in libbitcoinkernel library so users of the
@@ -365,7 +364,7 @@ protected:
         }
     }
 
-    void BlockConnected(const ChainstateRole& role, const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
+    void BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
     {
         if (m_cbs.block_connected) {
             m_cbs.block_connected(m_cbs.user_data,
@@ -1050,7 +1049,7 @@ btck_ChainstateManager* btck_chainstate_manager_create(
             LogError("Failed to verify loaded chain state from your datadir: %s", chainstate_err.original);
             return nullptr;
         }
-        if (auto result = chainman->ActivateBestChains(); !result) {
+        if (auto result = chainman->ActivateBestChain(); !result) {
             LogError("%s", util::ErrorString(result).original);
             return nullptr;
         }
@@ -1082,12 +1081,11 @@ const btck_BlockTreeEntry* btck_chainstate_manager_get_best_entry(const btck_Cha
 void btck_chainstate_manager_destroy(btck_ChainstateManager* chainman)
 {
     {
-        LOCK(btck_ChainstateManager::get(chainman).m_chainman->GetMutex());
-        for (const auto& chainstate : btck_ChainstateManager::get(chainman).m_chainman->m_chainstates) {
-            if (chainstate->CanFlushToDisk()) {
-                chainstate->ForceFlushStateToDisk();
-                chainstate->ResetCoinsViews();
-            }
+        auto& chainman_ref{*btck_ChainstateManager::get(chainman).m_chainman};
+        LOCK(chainman_ref.GetMutex());
+        if (chainman_ref.m_chainstate && chainman_ref.m_chainstate->CanFlushToDisk()) {
+            chainman_ref.m_chainstate->ForceFlushStateToDisk();
+            chainman_ref.m_chainstate->ResetCoinsViews();
         }
     }
 

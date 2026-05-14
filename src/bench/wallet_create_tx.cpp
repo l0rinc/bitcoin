@@ -11,7 +11,6 @@
 #include <consensus/merkle.h>
 #include <interfaces/chain.h>
 #include <kernel/chain.h>
-#include <kernel/types.h>
 #include <node/blockstorage.h>
 #include <outputtype.h>
 #include <policy/feerate.h>
@@ -41,7 +40,6 @@
 #include <utility>
 #include <vector>
 
-using kernel::ChainstateRole;
 using wallet::CWallet;
 using wallet::CreateMockableWalletDatabase;
 using wallet::WALLET_FLAG_DESCRIPTORS;
@@ -104,7 +102,7 @@ void generateFakeBlock(const CChainParams& params,
 
     // notify wallet
     const auto& pindex = WITH_LOCK(::cs_main, return context.chainman->ActiveChain().Tip());
-    wallet.blockConnected(ChainstateRole{}, kernel::MakeBlockInfo(pindex, &block));
+    wallet.blockConnected(kernel::MakeBlockInfo(pindex, &block));
 }
 
 struct PreSelectInputs {
