@@ -865,7 +865,7 @@ void Serialize(Stream& os, const prevector<N, T>& v)
 {
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
         WriteCompactSize(os, v.size());
-        if (!v.empty()) os.write(MakeByteSpan(v));
+        if (!v.empty()) [[likely]] os.write(MakeByteSpan(v));
     } else {
         Serialize(os, Using<VectorFormatter<DefaultFormatter>>(v));
     }
@@ -879,9 +879,16 @@ void Unserialize(Stream& is, prevector<N, T>& v)
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
         unsigned int nSize = ReadCompactSize(is);
+        if (nSize == 0) [[unlikely]] return;
+        constexpr unsigned int max_chunk{(unsigned int)(1 + 4999999 / sizeof(T))};
+        if (nSize <= max_chunk) [[likely]] {
+            v.resize_uninitialized(nSize);
+            is.read(std::as_writable_bytes(std::span{v.data(), nSize}));
+            return;
+        }
         unsigned int i = 0;
         while (i < nSize) {
-            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
+            unsigned int blk = std::min(nSize - i, max_chunk);
             v.resize_uninitialized(i + blk);
             is.read(std::as_writable_bytes(std::span{&v[i], blk}));
             i += blk;
@@ -900,7 +907,7 @@ void Serialize(Stream& os, const std::vector<T, A>& v)
 {
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
         WriteCompactSize(os, v.size());
-        if (!v.empty()) os.write(MakeByteSpan(v));
+        if (!v.empty()) [[likely]] os.write(MakeByteSpan(v));
     } else if constexpr (std::is_same_v<T, bool>) {
         // A special case for std::vector<bool>, as dereferencing
         // std::vector<bool>::const_iterator does not result in a const bool&
@@ -922,9 +929,16 @@ void Unserialize(Stream& is, std::vector<T, A>& v)
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
         unsigned int nSize = ReadCompactSize(is);
+        if (nSize == 0) [[unlikely]] return;
+        constexpr unsigned int max_chunk{(unsigned int)(1 + 4999999 / sizeof(T))};
+        if (nSize <= max_chunk) [[likely]] {
+            v.resize(nSize);
+            is.read(std::as_writable_bytes(std::span{v.data(), nSize}));
+            return;
+        }
         unsigned int i = 0;
         while (i < nSize) {
-            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
+            unsigned int blk = std::min(nSize - i, max_chunk);
             v.resize(i + blk);
             is.read(std::as_writable_bytes(std::span{&v[i], blk}));
             i += blk;
