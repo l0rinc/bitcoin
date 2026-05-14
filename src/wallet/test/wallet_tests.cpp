@@ -1215,8 +1215,8 @@ BOOST_FIXTURE_TEST_CASE(CreateWallet, TestChain100Setup)
     {
         LOCK(wallet->cs_wallet);
         BOOST_CHECK_EQUAL(wallet->GetLastBlockHash(), tip->GetBlockHash());
-        BOOST_CHECK_EQUAL(wallet->GetTxDepthInMainChain(wallet->mapWallet.at(block_tx.GetHash())), 0); // TODO: The transaction is confirmed in the active tip
-        BOOST_CHECK_EQUAL(wallet->TransactionCanBeAbandoned(block_tx.GetHash()), true); // TODO: A confirmed transaction must not be eligible for abandonment
+        BOOST_CHECK_EQUAL(wallet->GetTxDepthInMainChain(wallet->mapWallet.at(block_tx.GetHash())), 1);
+        BOOST_CHECK_EQUAL(wallet->TransactionCanBeAbandoned(block_tx.GetHash()), false);
     }
     TestUnloadWallet(std::move(wallet));
 }
