@@ -87,31 +87,31 @@ template<typename Stream> inline void ser_writedata64(Stream &s, uint64_t obj)
     obj = htole64_internal(obj);
     s.write(std::as_bytes(std::span<uint64_t, 1>{&obj, 1}));
 }
-template<typename Stream> inline uint8_t ser_readdata8(Stream &s)
+template<typename Stream> ALWAYS_INLINE uint8_t ser_readdata8(Stream &s)
 {
     uint8_t obj;
     s.read(std::as_writable_bytes(std::span<uint8_t, 1>{&obj, 1}));
     return obj;
 }
-template<typename Stream> inline uint16_t ser_readdata16(Stream &s)
+template<typename Stream> ALWAYS_INLINE uint16_t ser_readdata16(Stream &s)
 {
     uint16_t obj;
     s.read(std::as_writable_bytes(std::span<uint16_t, 1>{&obj, 1}));
     return le16toh_internal(obj);
 }
-template<typename Stream> inline uint32_t ser_readdata32(Stream &s)
+template<typename Stream> ALWAYS_INLINE uint32_t ser_readdata32(Stream &s)
 {
     uint32_t obj;
     s.read(std::as_writable_bytes(std::span<uint32_t, 1>{&obj, 1}));
     return le32toh_internal(obj);
 }
-template<typename Stream> inline uint32_t ser_readdata32be(Stream &s)
+template<typename Stream> ALWAYS_INLINE uint32_t ser_readdata32be(Stream &s)
 {
     uint32_t obj;
     s.read(std::as_writable_bytes(std::span<uint32_t, 1>{&obj, 1}));
     return be32toh_internal(obj);
 }
-template<typename Stream> inline uint64_t ser_readdata64(Stream &s)
+template<typename Stream> ALWAYS_INLINE uint64_t ser_readdata64(Stream &s)
 {
     uint64_t obj;
     s.read(std::as_writable_bytes(std::span<uint64_t, 1>{&obj, 1}));
@@ -452,40 +452,65 @@ template<VarIntMode Mode, typename I>
 constexpr unsigned int GetSizeOfVarInt(I n)
 {
     CheckVarIntMode<Mode, I>();
-    int nRet = 0;
-    while(true) {
-        nRet++;
-        if (n <= 0x7F)
-            break;
+    unsigned int nRet = 1;
+    while (n > 0x7F) {
+        ++nRet;
         n = (n >> 7) - 1;
     }
     return nRet;
 }
 
+template <size_t N, typename Stream, typename I>
+ALWAYS_INLINE void WriteVarIntFixed(Stream& os, I n)
+{
+    static_assert(N == 2 || N == 3);
+    unsigned char out[N];
+    if constexpr (N == 2) {
+        out[0] = static_cast<unsigned char>(((n >> 7) - 1) | 0x80);
+        out[1] = static_cast<unsigned char>(n & 0x7F);
+    } else {
+        I x = n;
+        out[N - 1] = static_cast<unsigned char>(x & 0x7F);
+        x = (x >> 7) - 1;
+        out[1] = static_cast<unsigned char>((x & 0x7F) | 0x80);
+        x = (x >> 7) - 1;
+        out[0] = static_cast<unsigned char>((x & 0x7F) | 0x80);
+    }
+    os.write(std::as_bytes(std::span{out}));
+}
+
 template<typename Stream, VarIntMode Mode, typename I>
-void WriteVarInt(Stream& os, I n)
+ALWAYS_INLINE void WriteVarInt(Stream& os, I n)
 {
     if constexpr (ContainsSizeComputer<Stream>) {
         os.GetStream().seek(GetSizeOfVarInt<Mode, I>(n));
     } else {
         CheckVarIntMode<Mode, I>();
-        unsigned char tmp[CeilDiv(sizeof(n) * 8, 7u)];
-        int len=0;
-        while(true) {
-            tmp[len] = (n & 0x7F) | (len ? 0x80 : 0x00);
-            if (n <= 0x7F)
-                break;
-            n = (n >> 7) - 1;
-            len++;
+        if (n <= 0x7F) [[likely]] {
+            ser_writedata8(os, n);
+            return;
         }
-        do {
-            ser_writedata8(os, tmp[len]);
-        } while(len--);
+        if (n <= 0x407F) {
+            WriteVarIntFixed<2>(os, n);
+            return;
+        }
+        if (n <= 0x20407F) {
+            WriteVarIntFixed<3>(os, n);
+            return;
+        }
+        unsigned char tmp[CeilDiv(sizeof(n) * 8, 7u)];
+        size_t pos = std::size(tmp);
+        tmp[--pos] = n & 0x7F;
+        while (n > 0x7F) {
+            n = (n >> 7) - 1;
+            tmp[--pos] = (n & 0x7F) | 0x80;
+        }
+        os.write(std::as_bytes(std::span{tmp}.subspan(pos)));
     }
 }
 
 template<typename Stream, VarIntMode Mode, typename I>
-I ReadVarInt(Stream& is)
+ALWAYS_INLINE I ReadVarInt(Stream& is)
 {
     CheckVarIntMode<Mode, I>();
     I n = 0;
@@ -495,7 +520,7 @@ I ReadVarInt(Stream& is)
            throw std::ios_base::failure("ReadVarInt(): size too large");
         }
         n = (n << 7) | (chData & 0x7F);
-        if (chData & 0x80) {
+        if (chData & 0x80) [[unlikely]] {
             if (n == std::numeric_limits<I>::max()) {
                 throw std::ios_base::failure("ReadVarInt(): size too large");
             }
