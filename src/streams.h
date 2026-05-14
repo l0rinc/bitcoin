@@ -55,7 +55,6 @@ public:
     }
     void write(std::span<const std::byte> src)
     {
-        serialization_stats::Record(serialization_stats::Hist::VectorWriterWriteSize, src.size());
         assert(nPos <= vchData.size());
         size_t nOverwrite = std::min(src.size(), vchData.size() - nPos);
         if (nOverwrite) {
@@ -104,7 +103,6 @@ public:
 
     void read(std::span<std::byte> dst)
     {
-        serialization_stats::Record(serialization_stats::Hist::SpanReaderReadSize, dst.size());
         if (dst.size() == 0) {
             return;
         }
@@ -212,7 +210,6 @@ public:
     //
     void read(std::span<value_type> dst)
     {
-        serialization_stats::Record(serialization_stats::Hist::DataStreamReadSize, dst.size());
         if (dst.size() == 0) return;
 
         // Read from the beginning of the buffer
@@ -246,7 +243,6 @@ public:
 
     void write(std::span<const value_type> src)
     {
-        serialization_stats::Record(serialization_stats::Hist::DataStreamWriteSize, src.size());
         // Write to the end of the buffer
         vch.insert(vch.end(), src.begin(), src.end());
     }

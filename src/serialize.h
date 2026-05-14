@@ -14,18 +14,13 @@
 #include <util/overflow.h>
 
 #include <algorithm>
-#include <array>
 #include <concepts>
-#include <cstddef>
-#include <cstdlib>
 #include <cstdint>
 #include <cstring>
-#include <fstream>
 #include <ios>
 #include <limits>
 #include <map>
 #include <memory>
-#include <mutex>
 #include <set>
 #include <span>
 #include <string>
@@ -40,89 +35,6 @@ static constexpr uint64_t MAX_SIZE = 0x02000000;
 
 /** Maximum amount of memory (in bytes) to allocate at once when deserializing vectors. */
 static const unsigned int MAX_VECTOR_ALLOCATE = 5000000;
-
-namespace serialization_stats {
-enum class Hist : size_t {
-    CompactSizeWriteWidth,
-    CompactSizeReadWidth,
-    CompactSizeWriteValue,
-    CompactSizeReadValue,
-    VarIntWriteWidth,
-    VarIntReadWidth,
-    VectorByteWriteSize,
-    VectorByteReadSize,
-    PrevectorByteWriteSize,
-    PrevectorByteReadSize,
-    VectorWriterWriteSize,
-    SpanReaderReadSize,
-    DataStreamReadSize,
-    DataStreamWriteSize,
-    Count,
-};
-
-inline const char* HistogramName(Hist hist)
-{
-    switch (hist) {
-    case Hist::CompactSizeWriteWidth: return "compact_size_write_width";
-    case Hist::CompactSizeReadWidth: return "compact_size_read_width";
-    case Hist::CompactSizeWriteValue: return "compact_size_write_value";
-    case Hist::CompactSizeReadValue: return "compact_size_read_value";
-    case Hist::VarIntWriteWidth: return "varint_write_width";
-    case Hist::VarIntReadWidth: return "varint_read_width";
-    case Hist::VectorByteWriteSize: return "vector_byte_write_size";
-    case Hist::VectorByteReadSize: return "vector_byte_read_size";
-    case Hist::PrevectorByteWriteSize: return "prevector_byte_write_size";
-    case Hist::PrevectorByteReadSize: return "prevector_byte_read_size";
-    case Hist::VectorWriterWriteSize: return "vector_writer_write_size";
-    case Hist::SpanReaderReadSize: return "span_reader_read_size";
-    case Hist::DataStreamReadSize: return "datastream_read_size";
-    case Hist::DataStreamWriteSize: return "datastream_write_size";
-    case Hist::Count: break;
-    }
-    return "unknown";
-}
-
-class Stats
-{
-    static constexpr size_t HISTOGRAMS{static_cast<size_t>(Hist::Count)};
-
-    std::mutex m_mutex;
-    std::array<std::map<uint64_t, uint64_t>, HISTOGRAMS> m_histograms;
-
-public:
-    ~Stats()
-    {
-        const char* path{std::getenv("BITCOIN_SERIALIZE_STATS")};
-        if (path == nullptr || path[0] == '\0') return;
-
-        std::ofstream out{path};
-        out << "histogram\tvalue\tcount\n";
-        for (size_t hist{0}; hist < HISTOGRAMS; ++hist) {
-            const auto name{HistogramName(static_cast<Hist>(hist))};
-            for (const auto& [value, count] : m_histograms[hist]) {
-                out << name << '\t' << value << '\t' << count << '\n';
-            }
-        }
-    }
-
-    void Record(Hist hist, uint64_t value)
-    {
-        std::lock_guard lock{m_mutex};
-        ++m_histograms[static_cast<size_t>(hist)][value];
-    }
-};
-
-inline Stats& Global()
-{
-    static Stats stats;
-    return stats;
-}
-
-inline void Record(Hist hist, uint64_t value)
-{
-    Global().Record(hist, value);
-}
-} // namespace serialization_stats
 
 /**
  * Dummy data type to identify deserializing constructors.
@@ -388,8 +300,6 @@ inline void WriteCompactSize(SizeComputer& os, uint64_t nSize);
 template<typename Stream>
 void WriteCompactSize(Stream& os, uint64_t nSize)
 {
-    serialization_stats::Record(serialization_stats::Hist::CompactSizeWriteWidth, GetSizeOfCompactSize(nSize));
-    serialization_stats::Record(serialization_stats::Hist::CompactSizeWriteValue, nSize);
     if (nSize < 253)
     {
         ser_writedata8(os, nSize);
@@ -422,7 +332,6 @@ template<typename Stream>
 uint64_t ReadCompactSize(Stream& is, bool range_check = true)
 {
     uint8_t chSize = ser_readdata8(is);
-    serialization_stats::Record(serialization_stats::Hist::CompactSizeReadWidth, chSize < 253 ? 1 : chSize == 253 ? 3 : chSize == 254 ? 5 : 9);
     uint64_t nSizeRet = 0;
     if (chSize < 253)
     {
@@ -449,7 +358,6 @@ uint64_t ReadCompactSize(Stream& is, bool range_check = true)
     if (range_check && nSizeRet > MAX_SIZE) {
         throw std::ios_base::failure("ReadCompactSize(): size too large");
     }
-    serialization_stats::Record(serialization_stats::Hist::CompactSizeReadValue, nSizeRet);
     return nSizeRet;
 }
 
@@ -528,7 +436,6 @@ void WriteVarInt(Stream& os, I n)
         n = (n >> 7) - 1;
         len++;
     }
-    serialization_stats::Record(serialization_stats::Hist::VarIntWriteWidth, static_cast<unsigned int>(len + 1));
     do {
         ser_writedata8(os, tmp[len]);
     } while(len--);
@@ -539,10 +446,8 @@ I ReadVarInt(Stream& is)
 {
     CheckVarIntMode<Mode, I>();
     I n = 0;
-    unsigned int bytes{0};
     while(true) {
         unsigned char chData = ser_readdata8(is);
-        ++bytes;
         if (n > (std::numeric_limits<I>::max() >> 7)) {
            throw std::ios_base::failure("ReadVarInt(): size too large");
         }
@@ -553,7 +458,6 @@ I ReadVarInt(Stream& is)
             }
             n++;
         } else {
-            serialization_stats::Record(serialization_stats::Hist::VarIntReadWidth, bytes);
             return n;
         }
     }
@@ -912,7 +816,6 @@ template <typename Stream, unsigned int N, typename T>
 void Serialize(Stream& os, const prevector<N, T>& v)
 {
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
-        serialization_stats::Record(serialization_stats::Hist::PrevectorByteWriteSize, v.size());
         WriteCompactSize(os, v.size());
         if (!v.empty()) os.write(MakeByteSpan(v));
     } else {
@@ -928,7 +831,6 @@ void Unserialize(Stream& is, prevector<N, T>& v)
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
         unsigned int nSize = ReadCompactSize(is);
-        serialization_stats::Record(serialization_stats::Hist::PrevectorByteReadSize, nSize);
         unsigned int i = 0;
         while (i < nSize) {
             unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
@@ -949,7 +851,6 @@ template <typename Stream, typename T, typename A>
 void Serialize(Stream& os, const std::vector<T, A>& v)
 {
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
-        serialization_stats::Record(serialization_stats::Hist::VectorByteWriteSize, v.size());
         WriteCompactSize(os, v.size());
         if (!v.empty()) os.write(MakeByteSpan(v));
     } else if constexpr (std::is_same_v<T, bool>) {
@@ -973,7 +874,6 @@ void Unserialize(Stream& is, std::vector<T, A>& v)
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
         unsigned int nSize = ReadCompactSize(is);
-        serialization_stats::Record(serialization_stats::Hist::VectorByteReadSize, nSize);
         unsigned int i = 0;
         while (i < nSize) {
             unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
@@ -1198,17 +1098,12 @@ public:
 template<typename I>
 inline void WriteVarInt(SizeComputer &s, I n)
 {
-    const unsigned int size{GetSizeOfVarInt<I>(n)};
-    serialization_stats::Record(serialization_stats::Hist::VarIntWriteWidth, size);
-    s.seek(size);
+    s.seek(GetSizeOfVarInt<I>(n));
 }
 
 inline void WriteCompactSize(SizeComputer &s, uint64_t nSize)
 {
-    const unsigned int size{GetSizeOfCompactSize(nSize)};
-    serialization_stats::Record(serialization_stats::Hist::CompactSizeWriteWidth, size);
-    serialization_stats::Record(serialization_stats::Hist::CompactSizeWriteValue, nSize);
-    s.seek(size);
+    s.seek(GetSizeOfCompactSize(nSize));
 }
 
 template <typename T>
