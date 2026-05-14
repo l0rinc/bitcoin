@@ -339,13 +339,13 @@ constexpr inline unsigned int GetSizeOfCompactSize(uint64_t nSize)
 }
 
 template<typename Stream>
-void WriteCompactSize(Stream& os, uint64_t nSize)
+ALWAYS_INLINE void WriteCompactSize(Stream& os, uint64_t nSize)
 {
     if constexpr (ContainsSizeComputer<Stream>)
     {
         os.GetStream().seek(GetSizeOfCompactSize(nSize));
     }
-    else if (nSize < 253)
+    else if (nSize < 253) [[likely]]
     {
         ser_writedata8(os, nSize);
     }
@@ -374,15 +374,12 @@ void WriteCompactSize(Stream& os, uint64_t nSize)
  * check is performed. When used as a generic number encoding, range_check should be set to false.
  */
 template<typename Stream>
-uint64_t ReadCompactSize(Stream& is, bool range_check = true)
+ALWAYS_INLINE uint64_t ReadCompactSize(Stream& is, bool range_check = true)
 {
     uint8_t chSize = ser_readdata8(is);
+    if (chSize < 253) [[likely]] return chSize;
     uint64_t nSizeRet = 0;
-    if (chSize < 253)
-    {
-        nSizeRet = chSize;
-    }
-    else if (chSize == 253)
+    if (chSize == 253)
     {
         nSizeRet = ser_readdata16(is);
         if (nSizeRet < 253)
