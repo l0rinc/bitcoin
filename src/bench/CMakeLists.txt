@@ -34,6 +34,7 @@ add_executable(bench_bitcoin
   logging.cpp
   mempool_ephemeral_spends.cpp
   mempool_eviction.cpp
+  mempool_persist.cpp
   mempool_stress.cpp
   merkle_root.cpp
   obfuscation.cpp
