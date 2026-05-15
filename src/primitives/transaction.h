@@ -32,6 +32,7 @@ public:
     uint32_t n;
 
     static constexpr uint32_t NULL_INDEX = std::numeric_limits<uint32_t>::max();
+    static constexpr auto SERIALIZED_SIZE{Txid::size() + sizeof(uint32_t)};
 
     COutPoint(): n(NULL_INDEX) { }
     COutPoint(const Txid& hashIn, uint32_t nIn): hash(hashIn), n(nIn) { }
