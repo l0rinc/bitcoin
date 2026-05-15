@@ -667,6 +667,7 @@ static RPCMethod getblockheader()
     if (!fVerbose)
     {
         DataStream ssBlock{};
+        ssBlock.reserve(CBlockHeader::SERIALIZED_SIZE);
         ssBlock << pblockindex->GetBlockHeader();
         std::string strHex = HexStr(ssBlock);
         return strHex;
