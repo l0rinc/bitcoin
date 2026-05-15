@@ -62,6 +62,7 @@ void CBloomFilter::insert(std::span<const unsigned char> vKey)
 void CBloomFilter::insert(const COutPoint& outpoint)
 {
     DataStream stream{};
+    stream.reserve(COutPoint::SERIALIZED_SIZE);
     stream << outpoint;
     insert(MakeUCharSpan(stream));
 }
@@ -83,6 +84,7 @@ bool CBloomFilter::contains(std::span<const unsigned char> vKey) const
 bool CBloomFilter::contains(const COutPoint& outpoint) const
 {
     DataStream stream{};
+    stream.reserve(COutPoint::SERIALIZED_SIZE);
     stream << outpoint;
     return contains(MakeUCharSpan(stream));
 }

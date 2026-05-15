@@ -4,6 +4,7 @@
 
 #include <hash.h>
 #include <primitives/block.h>
+#include <primitives/transaction.h>
 #include <serialize.h>
 #include <streams.h>
 #include <test/util/common.h>
@@ -102,6 +103,7 @@ BOOST_AUTO_TEST_CASE(sizes)
     BOOST_CHECK_EQUAL(GetSerializeSize(std::array<uint8_t, 1>{0}), 1U);
     BOOST_CHECK_EQUAL(GetSerializeSize(std::array<uint8_t, 2>{0, 0}), 2U);
     BOOST_CHECK_EQUAL(CBlockHeader::SERIALIZED_SIZE, GetSerializeSize(CBlockHeader{}));
+    BOOST_CHECK_EQUAL(COutPoint::SERIALIZED_SIZE, GetSerializeSize(COutPoint{}));
 }
 
 BOOST_AUTO_TEST_CASE(varints)
