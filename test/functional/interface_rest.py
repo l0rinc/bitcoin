@@ -309,7 +309,33 @@ class RESTTest (BitcoinTestFramework):
         json_obj = self.test_rest_request(f"/blockfilterheaders/basic/{bb_hash}", query_params={"count": 5})
         first_filter_header = json_obj[0]
         assert_equal(len(json_obj), 5)  # now we should have 5 filter header objects
+        expected_filter_headers = b''.join(bytes.fromhex(header)[::-1] for header in json_obj)
+        filter_headers_bin = self.test_rest_request(
+            f"/blockfilterheaders/basic/{bb_hash}",
+            req_type=ReqType.BIN,
+            ret_type=RetType.BYTES,
+            query_params={"count": 5},
+        )
+        filter_headers_hex = self.test_rest_request(
+            f"/blockfilterheaders/basic/{bb_hash}",
+            req_type=ReqType.HEX,
+            ret_type=RetType.BYTES,
+            query_params={"count": 5},
+        )
+        assert_equal(filter_headers_bin, expected_filter_headers)
+        assert_equal(filter_headers_hex.rstrip(b'\n'), expected_filter_headers.hex().encode())
         json_obj = self.test_rest_request(f"/blockfilter/basic/{bb_hash}")
+        filter_bytes = self.test_rest_request(
+            f"/blockfilter/basic/{bb_hash}",
+            req_type=ReqType.BIN,
+            ret_type=RetType.BYTES,
+        )
+        filter_hex = self.test_rest_request(
+            f"/blockfilter/basic/{bb_hash}",
+            req_type=ReqType.HEX,
+            ret_type=RetType.BYTES,
+        )
+        assert_equal(filter_hex.rstrip(b'\n'), filter_bytes.hex().encode())
 
         # Compare with normal RPC blockfilter response
         rpc_blockfilter = self.nodes[0].getblockfilter(bb_hash)
