@@ -83,12 +83,15 @@ public:
         // Manually recompute the dynamic usage of the whole data, and compare it.
         size_t ret = memusage::DynamicUsage(cacheCoins);
         size_t count = 0;
+        size_t spent_fresh_count = 0;
         for (const auto& entry : cacheCoins) {
             ret += entry.second.coin.DynamicMemoryUsage();
             ++count;
+            spent_fresh_count += entry.second.IsFresh() && entry.second.coin.IsSpent() && !entry.second.IsDirty();
         }
         BOOST_CHECK_EQUAL(GetCacheSize(), count);
         BOOST_CHECK_EQUAL(DynamicMemoryUsage(), ret);
+        BOOST_CHECK_EQUAL(GetSpentFreshCount(), spent_fresh_count);
         if (sanity_check) {
             SanityCheck();
         }
@@ -98,6 +101,7 @@ public:
     CoinsCachePair& sentinel() const { return m_sentinel; }
     size_t& usage() const { return cachedCoinsUsage; }
     size_t& dirty() const { return m_dirty_count; }
+    size_t& spent_fresh() const { return m_spent_fresh_count; }
 };
 
 } // namespace
@@ -660,7 +664,8 @@ static void WriteCoinsViewEntry(CCoinsView& view, const MaybeCoin& cache_coin)
     CCoinsMap map{0, CCoinsMap::hasher{}, CCoinsMap::key_equal{}, &resource};
     if (cache_coin) InsertCoinsMapEntry(map, sentinel, *cache_coin);
     size_t dirty_count{cache_coin && cache_coin->IsDirty()};
-    auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, map, /*will_erase=*/true)};
+    size_t spent_fresh_count{cache_coin && cache_coin->IsFresh() && cache_coin->value == SPENT && !cache_coin->IsDirty()};
+    auto cursor{CoinsViewCacheCursor(dirty_count, spent_fresh_count, sentinel, map, /*will_erase=*/true)};
     view.BatchWrite(cursor, {});
     BOOST_CHECK_EQUAL(dirty_count, 0U);
 }
@@ -675,6 +680,7 @@ public:
         if (cache_coin) {
             cache.usage() += InsertCoinsMapEntry(cache.map(), cache.sentinel(), *cache_coin);
             cache.dirty() += cache_coin->IsDirty();
+            cache.spent_fresh() += cache_coin->IsFresh() && cache_coin->value == SPENT && !cache_coin->IsDirty();
         }
     }
 
@@ -732,15 +738,29 @@ BOOST_AUTO_TEST_CASE(ccoins_spend)
         CheckSpendCoins(base_value, MISSING,            base_value == VALUE1 ? SPENT_DIRTY : MISSING);
 
         CheckSpendCoins(base_value, SPENT_CLEAN,        SPENT_DIRTY);
-        CheckSpendCoins(base_value, SPENT_FRESH,        MISSING    );
+        CheckSpendCoins(base_value, SPENT_FRESH,        SPENT_FRESH);
         CheckSpendCoins(base_value, SPENT_DIRTY,        SPENT_DIRTY);
-        CheckSpendCoins(base_value, SPENT_DIRTY_FRESH,  MISSING    );
+        CheckSpendCoins(base_value, SPENT_DIRTY_FRESH,  SPENT_FRESH);
 
         CheckSpendCoins(base_value, VALUE2_CLEAN,       SPENT_DIRTY);
-        CheckSpendCoins(base_value, VALUE2_FRESH,       MISSING    );
+        CheckSpendCoins(base_value, VALUE2_FRESH,       SPENT_FRESH);
         CheckSpendCoins(base_value, VALUE2_DIRTY,       SPENT_DIRTY);
-        CheckSpendCoins(base_value, VALUE2_DIRTY_FRESH, MISSING    );
+        CheckSpendCoins(base_value, VALUE2_DIRTY_FRESH, SPENT_FRESH);
     }
+}
+
+BOOST_AUTO_TEST_CASE(ccoins_compact_spent_fresh)
+{
+    SingleEntryCacheTest test{ABSENT, VALUE2_DIRTY_FRESH};
+    BOOST_CHECK(test.cache.SpendCoin(OUTPOINT));
+    test.cache.SelfTest();
+    BOOST_CHECK_EQUAL(GetCoinsMapEntry(test.cache.map()), SPENT_FRESH);
+    BOOST_CHECK_EQUAL(test.cache.GetSpentFreshCount(), 1U);
+
+    test.cache.Compact();
+    test.cache.SelfTest();
+    BOOST_CHECK_EQUAL(GetCoinsMapEntry(test.cache.map()), MISSING);
+    BOOST_CHECK_EQUAL(test.cache.GetSpentFreshCount(), 0U);
 }
 
 static void CheckAddCoin(const CAmount base_value, const MaybeCoin& cache_coin, const CAmount modify_value, const CoinOrError& expected, const bool coinbase)
@@ -821,12 +841,12 @@ BOOST_AUTO_TEST_CASE(ccoins_write)
 
     CheckWriteCoins(SPENT_CLEAN,        SPENT_DIRTY,        SPENT_DIRTY        );
     CheckWriteCoins(SPENT_CLEAN,        SPENT_DIRTY_FRESH,  SPENT_DIRTY        );
-    CheckWriteCoins(SPENT_FRESH,        SPENT_DIRTY,        MISSING            );
-    CheckWriteCoins(SPENT_FRESH,        SPENT_DIRTY_FRESH,  MISSING            );
+    CheckWriteCoins(SPENT_FRESH,        SPENT_DIRTY,        SPENT_FRESH        );
+    CheckWriteCoins(SPENT_FRESH,        SPENT_DIRTY_FRESH,  SPENT_FRESH        );
     CheckWriteCoins(SPENT_DIRTY,        SPENT_DIRTY,        SPENT_DIRTY        );
     CheckWriteCoins(SPENT_DIRTY,        SPENT_DIRTY_FRESH,  SPENT_DIRTY        );
-    CheckWriteCoins(SPENT_DIRTY_FRESH,  SPENT_DIRTY,        MISSING            );
-    CheckWriteCoins(SPENT_DIRTY_FRESH,  SPENT_DIRTY_FRESH,  MISSING            );
+    CheckWriteCoins(SPENT_DIRTY_FRESH,  SPENT_DIRTY,        SPENT_FRESH        );
+    CheckWriteCoins(SPENT_DIRTY_FRESH,  SPENT_DIRTY_FRESH,  SPENT_FRESH        );
 
     CheckWriteCoins(SPENT_CLEAN,        VALUE2_DIRTY,       VALUE2_DIRTY       );
     CheckWriteCoins(SPENT_CLEAN,        VALUE2_DIRTY_FRESH, VALUE2_DIRTY       );
@@ -843,11 +863,11 @@ BOOST_AUTO_TEST_CASE(ccoins_write)
     CheckWriteCoins(VALUE1_DIRTY_FRESH, MISSING,            VALUE1_DIRTY_FRESH );
     CheckWriteCoins(VALUE1_CLEAN,       SPENT_DIRTY,        SPENT_DIRTY        );
     CheckWriteCoins(VALUE1_CLEAN,       SPENT_DIRTY_FRESH,  EX_FRESH_MISAPPLIED);
-    CheckWriteCoins(VALUE1_FRESH,       SPENT_DIRTY,        MISSING            );
+    CheckWriteCoins(VALUE1_FRESH,       SPENT_DIRTY,        SPENT_FRESH        );
     CheckWriteCoins(VALUE1_FRESH,       SPENT_DIRTY_FRESH,  EX_FRESH_MISAPPLIED);
     CheckWriteCoins(VALUE1_DIRTY,       SPENT_DIRTY,        SPENT_DIRTY        );
     CheckWriteCoins(VALUE1_DIRTY,       SPENT_DIRTY_FRESH,  EX_FRESH_MISAPPLIED);
-    CheckWriteCoins(VALUE1_DIRTY_FRESH, SPENT_DIRTY,        MISSING            );
+    CheckWriteCoins(VALUE1_DIRTY_FRESH, SPENT_DIRTY,        SPENT_FRESH        );
     CheckWriteCoins(VALUE1_DIRTY_FRESH, SPENT_DIRTY_FRESH,  EX_FRESH_MISAPPLIED);
 
     CheckWriteCoins(VALUE1_CLEAN,       VALUE2_DIRTY,       VALUE2_DIRTY       );

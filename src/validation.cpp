@@ -2713,6 +2713,13 @@ bool Chainstate::FlushStateToDisk(
         bool fFlushForPrune = false;
 
         CoinsCacheSizeState cache_state = GetCoinsCacheSizeState();
+        const bool compact_for_memory{
+            (mode == FlushStateMode::PERIODIC && cache_state >= CoinsCacheSizeState::LARGE) ||
+            (mode == FlushStateMode::IF_NEEDED && cache_state >= CoinsCacheSizeState::CRITICAL)};
+        if (compact_for_memory && CoinsTip().GetSpentFreshCount() > 0) {
+            CoinsTip().Compact();
+            cache_state = GetCoinsCacheSizeState();
+        }
         LOCK(m_blockman.cs_LastBlockFile);
         if (m_blockman.IsPruneMode() && (m_blockman.m_check_for_pruning || nManualPruneHeight > 0) && m_chainman.m_blockman.m_blockfiles_indexed) {
             // make sure we don't prune above any of the prune locks bestblocks

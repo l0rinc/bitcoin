@@ -105,13 +105,15 @@ using CoinsCachePair = std::pair<const COutPoint, CCoinsCacheEntry>;
  * - unspent, not FRESH, DIRTY (e.g. a coin changed in the cache during a reorg)
  * - unspent, not FRESH, not DIRTY (e.g. an unspent coin fetched from the parent cache)
  * - spent, not FRESH, DIRTY (e.g. a coin is spent and spentness needs to be flushed to the parent)
+ * - spent, FRESH, not DIRTY (e.g. a fresh coin was spent before being flushed and awaits compaction)
  */
 struct CCoinsCacheEntry
 {
 private:
     /**
-     * These are used to create a doubly linked list of flagged entries.
-     * They are set in SetDirty, SetFresh, and unset in SetClean.
+     * This is used to create a singly linked list of flagged entries.
+     * It is set in SetDirty and SetFresh, and unset when the entry is
+     * removed from the linked list.
      * A flagged entry is any entry that is either DIRTY, FRESH, or both.
      *
      * DIRTY entries are tracked so that only modified entries can be passed to
@@ -119,7 +121,6 @@ private:
      * compared to giving all entries in the cache to the parent and having the
      * parent scan for only modified entries.
      */
-    CoinsCachePair* m_prev{nullptr};
     CoinsCachePair* m_next{nullptr};
     uint8_t m_flags{0};
 
@@ -128,14 +129,18 @@ private:
     {
         Assume(flags & (DIRTY | FRESH));
         if (!pair.second.m_flags) {
-            Assume(!pair.second.m_prev && !pair.second.m_next);
-            pair.second.m_prev = sentinel.second.m_prev;
-            pair.second.m_next = &sentinel;
-            sentinel.second.m_prev = &pair;
-            pair.second.m_prev->second.m_next = &pair;
+            Assume(!pair.second.m_next);
+            pair.second.m_next = sentinel.second.m_next;
+            sentinel.second.m_next = &pair;
         }
-        Assume(pair.second.m_prev && pair.second.m_next);
+        Assume(pair.second.m_next);
         pair.second.m_flags |= flags;
+    }
+
+    void SetClean() noexcept
+    {
+        m_flags = 0;
+        m_next = nullptr;
     }
 
 public:
@@ -172,13 +177,17 @@ public:
     static void SetDirty(CoinsCachePair& pair, CoinsCachePair& sentinel) noexcept { AddFlags(DIRTY, pair, sentinel); }
     static void SetFresh(CoinsCachePair& pair, CoinsCachePair& sentinel) noexcept { AddFlags(FRESH, pair, sentinel); }
 
-    void SetClean() noexcept
+    static void UnlinkAfter(CoinsCachePair& previous, CoinsCachePair& pair) noexcept
     {
-        if (!m_flags) return;
-        m_next->second.m_prev = m_prev;
-        m_prev->second.m_next = m_next;
-        m_flags = 0;
-        m_prev = m_next = nullptr;
+        Assume(previous.second.m_next == &pair);
+        previous.second.m_next = pair.second.m_next;
+        pair.second.SetClean();
+    }
+
+    void ClearDirty() noexcept
+    {
+        Assume(m_flags & FRESH);
+        m_flags &= ~DIRTY;
     }
     bool IsDirty() const noexcept { return m_flags & DIRTY; }
     bool IsFresh() const noexcept { return m_flags & FRESH; }
@@ -190,18 +199,10 @@ public:
         return m_next;
     }
 
-    //! Only call Prev when this entry is DIRTY, FRESH, or both
-    CoinsCachePair* Prev() const noexcept
-    {
-        Assume(m_flags);
-        return m_prev;
-    }
-
     //! Only use this for initializing the linked list sentinel
     void SelfRef(CoinsCachePair& pair) noexcept
     {
         Assume(&pair.second == this);
-        m_prev = &pair;
         m_next = &pair;
         // Set sentinel to DIRTY so we can call Next on it
         m_flags = DIRTY;
@@ -254,7 +255,7 @@ private:
  *
  * However, the receiver can still call CoinsViewCacheCursor::WillErase to see if the
  * caller will erase the entry after BatchWrite returns. If so, the receiver can
- * perform optimizations such as moving the coin out of the CCoinsCachEntry instead
+ * perform optimizations such as moving the coin out of the CCoinsCacheEntry instead
  * of copying it.
  */
 struct CoinsViewCacheCursor
@@ -267,12 +268,21 @@ struct CoinsViewCacheCursor
     //! Calling CCoinsMap::clear() afterwards is faster because a CoinsCachePair cannot be coerced back into a
     //! CCoinsMap::iterator to be erased, and must therefore be looked up again by key in the CCoinsMap before being erased.
     CoinsViewCacheCursor(size_t& dirty_count LIFETIMEBOUND,
+                         size_t& spent_fresh_count LIFETIMEBOUND,
                          CoinsCachePair& sentinel LIFETIMEBOUND,
                          CCoinsMap& map LIFETIMEBOUND,
                          bool will_erase) noexcept
-        : m_dirty_count(dirty_count), m_sentinel(sentinel), m_map(map), m_will_erase(will_erase) {}
+        : m_dirty_count(dirty_count),
+          m_spent_fresh_count(spent_fresh_count),
+          m_sentinel(sentinel),
+          m_map(map),
+          m_will_erase(will_erase) {}
 
-    inline CoinsCachePair* Begin() const noexcept { return m_sentinel.second.Next(); }
+    inline CoinsCachePair* Begin() noexcept
+    {
+        m_previous = &m_sentinel;
+        return m_sentinel.second.Next();
+    }
     inline CoinsCachePair* End() const noexcept { return &m_sentinel; }
 
     //! Return the next entry after current, possibly erasing current
@@ -280,14 +290,15 @@ struct CoinsViewCacheCursor
     {
         const auto next_entry{current.second.Next()};
         Assume(TrySub(m_dirty_count, current.second.IsDirty()));
+        const bool spent_fresh{current.second.IsFresh() && current.second.coin.IsSpent() && !current.second.IsDirty()};
         // If we are not going to erase the cache, we must still erase spent entries.
         // Otherwise, clear the state of the entry.
         if (!m_will_erase) {
+            CCoinsCacheEntry::UnlinkAfter(*m_previous, current);
             if (current.second.coin.IsSpent()) {
                 assert(current.second.coin.DynamicMemoryUsage() == 0); // scriptPubKey was already cleared in SpendCoin
+                Assume(TrySub(m_spent_fresh_count, spent_fresh));
                 m_map.erase(current.first);
-            } else {
-                current.second.SetClean();
             }
         }
         return next_entry;
@@ -298,8 +309,10 @@ struct CoinsViewCacheCursor
     size_t GetTotalCount() const noexcept { return m_map.size(); }
 private:
     size_t& m_dirty_count;
+    size_t& m_spent_fresh_count;
     CoinsCachePair& m_sentinel;
     CCoinsMap& m_map;
+    CoinsCachePair* m_previous{nullptr};
     bool m_will_erase;
 };
 
@@ -402,7 +415,7 @@ protected:
      */
     mutable uint256 m_block_hash;
     mutable CCoinsMapMemoryResource m_cache_coins_memory_resource{};
-    /* The starting sentinel of the flagged entry circular doubly linked list. */
+    /* The starting sentinel of the flagged entry circular singly linked list. */
     mutable CoinsCachePair m_sentinel;
     mutable CCoinsMap cacheCoins;
 
@@ -410,6 +423,8 @@ protected:
     mutable size_t cachedCoinsUsage{0};
     /* Running count of dirty Coin cache entries. */
     mutable size_t m_dirty_count{0};
+    /* Running count of spent FRESH entries waiting for linked-list compaction. */
+    mutable size_t m_spent_fresh_count{0};
 
     /**
      * Discard all modifications made to this cache without flushing to the base view.
@@ -498,6 +513,12 @@ public:
     void Sync();
 
     /**
+     * Remove spent FRESH entries that were left behind as tombstones.
+     * This only scans the linked list of flagged entries, not the whole cache.
+     */
+    void Compact();
+
+    /**
      * Removes the UTXO with the given outpoint from the cache, if it is
      * not modified.
      */
@@ -508,6 +529,9 @@ public:
 
     //! Number of dirty cache entries (transaction outputs)
     size_t GetDirtyCount() const noexcept { return m_dirty_count; }
+
+    //! Number of spent FRESH entries waiting for compaction
+    size_t GetSpentFreshCount() const noexcept { return m_spent_fresh_count; }
 
     //! Calculate the size of the cache (in bytes)
     size_t DynamicMemoryUsage() const;
