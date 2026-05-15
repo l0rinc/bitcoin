@@ -2549,7 +2549,7 @@ bool CConnman::MaybePickPreferredNetwork(std::optional<Network>& network)
     return false;
 }
 
-void CConnman::ThreadOpenConnections(const std::vector<std::string> connect, std::span<const std::string> seed_nodes)
+void CConnman::ThreadOpenConnections(const std::vector<std::string>& connect, std::span<const std::string> seed_nodes)
 {
     AssertLockNotHeld(m_nodes_mutex);
     AssertLockNotHeld(m_reconnections_mutex);
@@ -3419,7 +3419,7 @@ CConnman::CConnman(uint64_t nSeed0In,
     , m_netgroupman{netgroupman}
     , nSeed0(nSeed0In)
     , nSeed1(nSeed1In)
-    , m_interrupt_net{interrupt_net}
+    , m_interrupt_net{std::move(interrupt_net)}
     , m_params(params)
 {
     SetTryNewOutboundPeer(false);
@@ -4023,10 +4023,10 @@ CNode::CNode(NodeId idIn,
              ConnectionType conn_type_in,
              bool inbound_onion,
              uint64_t network_key,
-             CNodeOptions&& node_opts)
+             CNodeOptions node_opts)
     : m_transport{MakeTransport(idIn, node_opts.use_v2transport, conn_type_in == ConnectionType::INBOUND)},
       m_permission_flags{node_opts.permission_flags},
-      m_sock{sock},
+      m_sock{std::move(sock)},
       m_connected{NodeClock::now()},
       addr{addrIn},
       addrBind{addrBindIn},
@@ -4163,7 +4163,7 @@ void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
     if (nBytesSent) RecordBytesSent(nBytesSent);
 }
 
-bool CConnman::ForNode(NodeId id, std::function<bool(CNode* pnode)> func)
+bool CConnman::ForNode(NodeId id, const std::function<bool(CNode* pnode)>& func)
 {
     AssertLockNotHeld(m_nodes_mutex);
 

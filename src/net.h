@@ -46,6 +46,7 @@
 #include <string_view>
 #include <thread>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 class AddrMan;
@@ -907,7 +908,7 @@ public:
           ConnectionType conn_type_in,
           bool inbound_onion,
           uint64_t network_key,
-          CNodeOptions&& node_opts = {});
+          CNodeOptions node_opts = {});
     CNode(const CNode&) = delete;
     CNode& operator=(const CNode&) = delete;
 
@@ -1261,7 +1262,7 @@ public:
     // alias for thread safety annotations only, not defined
     Mutex& GetNodesMutex() const LOCK_RETURNED(m_nodes_mutex);
 
-    bool ForNode(NodeId id, std::function<bool(CNode* pnode)> func) EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex);
+    bool ForNode(NodeId id, const std::function<bool(CNode* pnode)>& func) EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex);
 
     void PushMessage(CNode* pnode, CSerializedNetMsg&& msg) EXCLUSIVE_LOCKS_REQUIRED(!m_total_bytes_sent_mutex);
 
@@ -1409,7 +1410,7 @@ private:
         std::shared_ptr<Sock> sock;
         inline void AddSocketPermissionFlags(NetPermissionFlags& flags) const { NetPermissions::AddFlag(flags, m_permissions); }
         ListenSocket(std::shared_ptr<Sock> sock_, NetPermissionFlags permissions_)
-            : sock{sock_}, m_permissions{permissions_}
+            : sock{std::move(sock_)}, m_permissions{permissions_}
         {
         }
 
@@ -1436,7 +1437,7 @@ private:
                                                      !m_nodes_mutex,
                                                      !m_unused_i2p_sessions_mutex);
 
-    void ThreadOpenConnections(std::vector<std::string> connect, std::span<const std::string> seed_nodes)
+    void ThreadOpenConnections(const std::vector<std::string>& connect, std::span<const std::string> seed_nodes)
         EXCLUSIVE_LOCKS_REQUIRED(!m_added_nodes_mutex,
                                  !m_addr_fetches_mutex,
                                  !m_nodes_mutex,

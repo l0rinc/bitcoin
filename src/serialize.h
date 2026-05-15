@@ -50,6 +50,16 @@ static const unsigned int MAX_VECTOR_ALLOCATE = 5000000;
 struct deserialize_type {};
 constexpr deserialize_type deserialize {};
 
+class SizeComputer;
+
+//! Check if type contains a stream by seeing if has a GetStream() method.
+template<typename T>
+concept ContainsStream = requires(T t) { t.GetStream(); };
+
+template<typename T>
+concept ContainsSizeComputer = ContainsStream<T> &&
+    std::is_same_v<std::remove_reference_t<decltype(std::declval<T>().GetStream())>, SizeComputer>;
+
 /*
  * Lowest-level serialization and conversion.
  */
@@ -77,7 +87,7 @@ template<typename Stream> inline void ser_writedata64(Stream &s, uint64_t obj)
     obj = htole64_internal(obj);
     s.write(std::as_bytes(std::span{&obj, 1}));
 }
-template<typename Stream> inline uint8_t ser_readdata8(Stream &s)
+template<typename Stream> ALWAYS_INLINE uint8_t ser_readdata8(Stream &s)
 {
     uint8_t obj;
     s.read(std::as_writable_bytes(std::span{&obj, 1}));
@@ -107,9 +117,6 @@ template<typename Stream> inline uint64_t ser_readdata64(Stream &s)
     s.read(std::as_writable_bytes(std::span{&obj, 1}));
     return le64toh_internal(obj);
 }
-
-
-class SizeComputer;
 
 /**
  * Convert any argument to a reference to X, maintaining constness.
@@ -298,26 +305,34 @@ constexpr inline unsigned int GetSizeOfCompactSize(uint64_t nSize)
 inline void WriteCompactSize(SizeComputer& os, uint64_t nSize);
 
 template<typename Stream>
-void WriteCompactSize(Stream& os, uint64_t nSize)
+ALWAYS_INLINE void WriteCompactSize(Stream& os, uint64_t nSize)
 {
-    if (nSize < 253)
+    if constexpr (ContainsSizeComputer<Stream>) {
+        os.GetStream().seek(GetSizeOfCompactSize(nSize));
+    } else if (nSize < 253) [[likely]]
     {
         ser_writedata8(os, nSize);
     }
     else if (nSize <= std::numeric_limits<uint16_t>::max())
     {
-        ser_writedata8(os, 253);
-        ser_writedata16(os, nSize);
+        uint8_t data[sizeof(uint8_t) + sizeof(uint16_t)]{253};
+        const uint16_t raw{htole16_internal(static_cast<uint16_t>(nSize))};
+        std::memcpy(data + sizeof(uint8_t), &raw, sizeof(raw));
+        os.write(std::as_bytes(std::span{data}));
     }
     else if (nSize <= std::numeric_limits<unsigned int>::max())
     {
-        ser_writedata8(os, 254);
-        ser_writedata32(os, nSize);
+        uint8_t data[sizeof(uint8_t) + sizeof(uint32_t)]{254};
+        const uint32_t raw{htole32_internal(static_cast<uint32_t>(nSize))};
+        std::memcpy(data + sizeof(uint8_t), &raw, sizeof(raw));
+        os.write(std::as_bytes(std::span{data}));
     }
     else
     {
-        ser_writedata8(os, 255);
-        ser_writedata64(os, nSize);
+        uint8_t data[sizeof(uint8_t) + sizeof(uint64_t)]{255};
+        const uint64_t raw{htole64_internal(nSize)};
+        std::memcpy(data + sizeof(uint8_t), &raw, sizeof(raw));
+        os.write(std::as_bytes(std::span{data}));
     }
     return;
 }
@@ -329,15 +344,12 @@ void WriteCompactSize(Stream& os, uint64_t nSize)
  * check is performed. When used as a generic number encoding, range_check should be set to false.
  */
 template<typename Stream>
-uint64_t ReadCompactSize(Stream& is, bool range_check = true)
+ALWAYS_INLINE uint64_t ReadCompactSize(Stream& is, bool range_check = true)
 {
     uint8_t chSize = ser_readdata8(is);
+    if (chSize < 253) [[likely]] return chSize;
     uint64_t nSizeRet = 0;
-    if (chSize < 253)
-    {
-        nSizeRet = chSize;
-    }
-    else if (chSize == 253)
+    if (chSize == 253)
     {
         nSizeRet = ser_readdata16(is);
         if (nSizeRet < 253)
@@ -410,11 +422,9 @@ template<VarIntMode Mode, typename I>
 inline unsigned int GetSizeOfVarInt(I n)
 {
     CheckVarIntMode<Mode, I>();
-    int nRet = 0;
-    while(true) {
-        nRet++;
-        if (n <= 0x7F)
-            break;
+    unsigned int nRet = 1;
+    while (n > 0x7F) {
+        ++nRet;
         n = (n >> 7) - 1;
     }
     return nRet;
@@ -426,23 +436,27 @@ inline void WriteVarInt(SizeComputer& os, I n);
 template<typename Stream, VarIntMode Mode, typename I>
 void WriteVarInt(Stream& os, I n)
 {
-    CheckVarIntMode<Mode, I>();
-    unsigned char tmp[CeilDiv(sizeof(n) * 8, 7u)];
-    int len=0;
-    while(true) {
-        tmp[len] = (n & 0x7F) | (len ? 0x80 : 0x00);
-        if (n <= 0x7F)
-            break;
-        n = (n >> 7) - 1;
-        len++;
+    if constexpr (ContainsSizeComputer<Stream>) {
+        os.GetStream().seek(GetSizeOfVarInt<Mode, I>(n));
+    } else {
+        CheckVarIntMode<Mode, I>();
+        if (n <= 0x7F) [[likely]] {
+            ser_writedata8(os, n);
+            return;
+        }
+        unsigned char tmp[CeilDiv(sizeof(n) * 8, 7u)];
+        size_t pos{sizeof(tmp)};
+        tmp[--pos] = n & 0x7F;
+        while (n > 0x7F) {
+            n = (n >> 7) - 1;
+            tmp[--pos] = (n & 0x7F) | 0x80;
+        }
+        os.write(std::as_bytes(std::span{tmp}.subspan(pos)));
     }
-    do {
-        ser_writedata8(os, tmp[len]);
-    } while(len--);
 }
 
 template<typename Stream, VarIntMode Mode, typename I>
-I ReadVarInt(Stream& is)
+ALWAYS_INLINE I ReadVarInt(Stream& is)
 {
     CheckVarIntMode<Mode, I>();
     I n = 0;
@@ -452,7 +466,7 @@ I ReadVarInt(Stream& is)
            throw std::ios_base::failure("ReadVarInt(): size too large");
         }
         n = (n << 7) | (chData & 0x7F);
-        if (chData & 0x80) {
+        if (chData & 0x80) [[unlikely]] {
             if (n == std::numeric_limits<I>::max()) {
                 throw std::ios_base::failure("ReadVarInt(): size too large");
             }
@@ -817,7 +831,7 @@ void Serialize(Stream& os, const prevector<N, T>& v)
 {
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
         WriteCompactSize(os, v.size());
-        if (!v.empty()) os.write(MakeByteSpan(v));
+        if (!v.empty()) [[likely]] os.write(MakeByteSpan(v));
     } else {
         Serialize(os, Using<VectorFormatter<DefaultFormatter>>(v));
     }
@@ -831,9 +845,16 @@ void Unserialize(Stream& is, prevector<N, T>& v)
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
         unsigned int nSize = ReadCompactSize(is);
+        if (nSize == 0) [[unlikely]] return;
+        constexpr unsigned int max_read = 1 + 4999999 / sizeof(T);
+        if (nSize <= max_read) [[likely]] {
+            v.resize_uninitialized(nSize);
+            is.read(std::as_writable_bytes(std::span{&v[0], nSize}));
+            return;
+        }
         unsigned int i = 0;
         while (i < nSize) {
-            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
+            unsigned int blk = std::min(nSize - i, max_read);
             v.resize_uninitialized(i + blk);
             is.read(std::as_writable_bytes(std::span{&v[i], blk}));
             i += blk;
@@ -852,7 +873,7 @@ void Serialize(Stream& os, const std::vector<T, A>& v)
 {
     if constexpr (BasicByte<T>) { // Use optimized version for unformatted basic bytes
         WriteCompactSize(os, v.size());
-        if (!v.empty()) os.write(MakeByteSpan(v));
+        if (!v.empty()) [[likely]] os.write(MakeByteSpan(v));
     } else if constexpr (std::is_same_v<T, bool>) {
         // A special case for std::vector<bool>, as dereferencing
         // std::vector<bool>::const_iterator does not result in a const bool&
@@ -874,9 +895,16 @@ void Unserialize(Stream& is, std::vector<T, A>& v)
         // Limit size per read so bogus size value won't cause out of memory
         v.clear();
         unsigned int nSize = ReadCompactSize(is);
+        if (nSize == 0) [[unlikely]] return;
+        constexpr unsigned int max_read = 1 + 4999999 / sizeof(T);
+        if (nSize <= max_read) [[likely]] {
+            v.resize(nSize);
+            is.read(std::as_writable_bytes(std::span{v.data(), nSize}));
+            return;
+        }
         unsigned int i = 0;
         while (i < nSize) {
-            unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
+            unsigned int blk = std::min(nSize - i, max_read);
             v.resize(i + blk);
             is.read(std::as_writable_bytes(std::span{&v[i], blk}));
             i += blk;
@@ -927,7 +955,7 @@ void Unserialize(Stream& is, std::map<K, T, Pred, A>& m)
     {
         std::pair<K, T> item;
         Unserialize(is, item);
-        mi = m.insert(mi, item);
+        mi = m.insert(mi, std::move(item));
     }
 }
 
@@ -954,7 +982,7 @@ void Unserialize(Stream& is, std::set<K, Pred, A>& m)
     {
         K key;
         Unserialize(is, key);
-        it = m.insert(it, key);
+        it = m.insert(it, std::move(key));
     }
 }
 
@@ -1071,6 +1099,9 @@ protected:
 public:
     SizeComputer() = default;
 
+    SizeComputer& GetStream() { return *this; }
+    const SizeComputer& GetStream() const { return *this; }
+
     void write(std::span<const std::byte> src)
     {
         m_size += src.size();
@@ -1111,10 +1142,6 @@ uint64_t GetSerializeSize(const T& t)
 {
     return (SizeComputer() << t).size();
 }
-
-//! Check if type contains a stream by seeing if has a GetStream() method.
-template<typename T>
-concept ContainsStream = requires(T t) { t.GetStream(); };
 
 /** Wrapper that overrides the GetParams() function of a stream. */
 template <typename SubStream, typename Params>
