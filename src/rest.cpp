@@ -237,6 +237,7 @@ static bool rest_headers(const std::any& context,
     switch (rf) {
     case RESTResponseFormat::BINARY: {
         DataStream ssHeader{};
+        ssHeader.reserve(headers.size() * CBlockHeader::SERIALIZED_SIZE);
         for (const CBlockIndex *pindex : headers) {
             ssHeader << pindex->GetBlockHeader();
         }
@@ -248,6 +249,7 @@ static bool rest_headers(const std::any& context,
 
     case RESTResponseFormat::HEX: {
         DataStream ssHeader{};
+        ssHeader.reserve(headers.size() * CBlockHeader::SERIALIZED_SIZE);
         for (const CBlockIndex *pindex : headers) {
             ssHeader << pindex->GetBlockHeader();
         }

@@ -26,6 +26,8 @@
 class CBlockHeader
 {
 public:
+    static constexpr auto SERIALIZED_SIZE{sizeof(int32_t) + 2 * uint256::size() + 3 * sizeof(uint32_t)};
+
     // header
     int32_t nVersion;
     uint256 hashPrevBlock;
