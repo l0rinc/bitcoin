@@ -682,9 +682,13 @@ static bool rest_block_filter(const std::any& context, HTTPRequest* req, const s
         return RESTERR(req, HTTP_NOT_FOUND, errmsg);
     }
 
+    const size_t filter_response_size{
+        sizeof(uint8_t) + uint256::size() + GetSerializeSize(filter.GetEncodedFilter())};
+
     switch (rf) {
     case RESTResponseFormat::BINARY: {
         DataStream ssResp{};
+        ssResp.reserve(filter_response_size);
         ssResp << filter;
 
         req->WriteHeader("Content-Type", "application/octet-stream");
@@ -693,6 +697,7 @@ static bool rest_block_filter(const std::any& context, HTTPRequest* req, const s
     }
     case RESTResponseFormat::HEX: {
         DataStream ssResp{};
+        ssResp.reserve(filter_response_size);
         ssResp << filter;
 
         std::string strHex = HexStr(ssResp) + "\n";
