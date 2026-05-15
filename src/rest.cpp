@@ -585,6 +585,7 @@ static bool rest_filter_header(const std::any& context, HTTPRequest* req, const 
     switch (rf) {
     case RESTResponseFormat::BINARY: {
         DataStream ssHeader{};
+        ssHeader.reserve(filter_headers.size() * uint256::size());
         for (const uint256& header : filter_headers) {
             ssHeader << header;
         }
@@ -595,6 +596,7 @@ static bool rest_filter_header(const std::any& context, HTTPRequest* req, const 
     }
     case RESTResponseFormat::HEX: {
         DataStream ssHeader{};
+        ssHeader.reserve(filter_headers.size() * uint256::size());
         for (const uint256& header : filter_headers) {
             ssHeader << header;
         }
@@ -1117,6 +1119,7 @@ static bool rest_blockhash_by_height(const std::any& context, HTTPRequest* req,
     switch (rf) {
     case RESTResponseFormat::BINARY: {
         DataStream ss_blockhash{};
+        ss_blockhash.reserve(uint256::size());
         ss_blockhash << pblockindex->GetBlockHash();
         req->WriteHeader("Content-Type", "application/octet-stream");
         req->WriteReply(HTTP_OK, ss_blockhash);
