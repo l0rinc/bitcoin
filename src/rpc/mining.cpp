@@ -1135,7 +1135,9 @@ static RPCMethod submitheader()
     }
 
     BlockValidationState state;
-    chainman.ProcessNewBlockHeaders({{h}}, /*min_pow_checked=*/true, state);
+    if (!chainman.ProcessNewBlockHeaders({{h}}, /*min_pow_checked=*/true, state) && state.IsValid()) {
+        throw JSONRPCError(RPC_VERIFY_ERROR, "Block header was not processed");
+    }
     if (state.IsValid()) return UniValue::VNULL;
     if (state.IsError()) {
         throw JSONRPCError(RPC_VERIFY_ERROR, state.ToString());

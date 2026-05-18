@@ -362,7 +362,7 @@ BOOST_AUTO_TEST_CASE(tx_oversized)
     auto maxPayloadSize = maxTransactionSize - oversizedTransactionBaseSize;
     {
         TxValidationState state;
-        CheckTransaction(createTransaction(maxPayloadSize), state);
+        BOOST_CHECK(CheckTransaction(createTransaction(maxPayloadSize), state));
         BOOST_CHECK(state.GetRejectReason() != "bad-txns-oversize");
     }
 

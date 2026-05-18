@@ -80,7 +80,7 @@ static void MempoolCheckEphemeralSpends(benchmark::Bench& bench)
 
     bench.run([&]() NO_THREAD_SAFETY_ANALYSIS {
 
-        CheckEphemeralSpends({tx2_r}, /*dust_relay_rate=*/CFeeRate(iteration * COIN / 10), pool, dummy_state, dummy_wtxid);
+        ankerl::nanobench::doNotOptimizeAway(CheckEphemeralSpends({tx2_r}, /*dust_relay_rate=*/CFeeRate(iteration * COIN / 10), pool, dummy_state, dummy_wtxid));
         iteration++;
     });
 }

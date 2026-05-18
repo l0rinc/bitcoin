@@ -71,18 +71,18 @@ bool IsConsistentPackage(const Package& txns);
  * 3. If any dependencies exist between transactions, parents must appear before children.
  * 4. Transactions cannot conflict, i.e., spend the same inputs.
  */
-bool IsWellFormedPackage(const Package& txns, PackageValidationState& state);
+[[nodiscard]] bool IsWellFormedPackage(const Package& txns, PackageValidationState& state);
 
 /** Context-free check that a package is exactly one child and its parents; not all parents need to
  * be present, but the package must not contain any transactions that are not the child's parents.
  * It is expected to be sorted, which means the last transaction must be the child.
  */
-bool IsChildWithParents(const Package& package);
+[[nodiscard]] bool IsChildWithParents(const Package& package);
 
 /** Context-free check that a package IsChildWithParents() and none of the parents depend on each
  * other (the package is a "tree").
  */
-bool IsChildWithParentsTree(const Package& package);
+[[nodiscard]] bool IsChildWithParentsTree(const Package& package);
 
 /** Get the hash of the concatenated wtxids of transactions, with wtxids
  * treated as a little-endian numbers and sorted in ascending numeric order.

@@ -85,7 +85,7 @@ CreateAndActivateUTXOSnapshot(
             chain.InitCoinsDB(1_MiB, /*in_memory=*/true, /*should_wipe=*/false);
             chain.InitCoinsCache(1_MiB);
             chain.CoinsTip().SetBestBlock(gen_hash);
-            chain.LoadChainTip();
+            Assert(chain.LoadChainTip());
             node.chainman->MaybeRebalanceCaches();
 
             // Reset the HAVE_DATA flags below the snapshot height, simulating
