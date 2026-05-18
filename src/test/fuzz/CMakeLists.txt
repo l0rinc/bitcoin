@@ -14,6 +14,7 @@ add_executable(fuzz
   base_encode_decode.cpp
   bech32.cpp
   bip324.cpp
+  bip54.cpp
   bitdeque.cpp
   bitset.cpp
   block.cpp
@@ -87,6 +88,7 @@ add_executable(fuzz
   parse_script.cpp
   parse_univalue.cpp
   partially_downloaded_block.cpp
+  policy_legacy_sigops.cpp
   policy_estimator.cpp
   policy_estimator_io.cpp
   poolresource.cpp

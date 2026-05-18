@@ -1428,6 +1428,16 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     const ArgsManager& args = *Assert(node.args);
     const CChainParams& chainparams = Params();
 
+    // Prevent setting deployment parameters on mainnet.
+    if (chainparams.GetChainType() == ChainType::MAIN) {
+        if (args.IsArgSet("-testactivationheight")) {
+            return InitError(_("The -testactivationheight option may not be used on mainnet."));
+        }
+        if (args.IsArgSet("-vbparams")) {
+            return InitError(_("The -vbparams option may not be used on mainnet."));
+        }
+    }
+
     auto opt_max_upload = ParseByteUnits(args.GetArg("-maxuploadtarget", DEFAULT_MAX_UPLOAD_TARGET), ByteUnit::M);
     if (!opt_max_upload) {
         return InitError(strprintf(_("Unable to parse -maxuploadtarget: '%s'"), args.GetArg("-maxuploadtarget", "")));
