@@ -9,6 +9,7 @@
 #include <uint256.h>
 #include <util/asmap.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 
@@ -98,10 +99,10 @@ uint32_t NetGroupManager::GetMappedAS(const CNetAddr& address) const
     } else {
         // Use all 128 bits of the IPv6 address otherwise
         assert(address.IsIPv6());
-        auto addr_bytes = address.GetAddrBytes();
-        assert(addr_bytes.size() == ip_bytes.size());
-        std::copy_n(std::as_bytes(std::span{addr_bytes}).begin(),
-                    addr_bytes.size(), ip_bytes.begin());
+        in6_addr ipv6;
+        const bool ok{address.GetIn6Addr(&ipv6)};
+        assert(ok);
+        std::copy_n(std::as_bytes(std::span{&ipv6, 1}).begin(), ip_bytes.size(), ip_bytes.begin());
     }
     uint32_t mapped_as = Interpret(m_asmap, ip_bytes);
     return mapped_as;
