@@ -82,7 +82,7 @@ inline bool ConsumeBitBE(uint8_t& bitpos, std::span<const std::byte> bytes) noex
  * - Then, a "0"-bit, unless k is the highest class
  * - Lastly, bit_sizes[k] bits encoding in big endian the position within that class
  */
-uint32_t DecodeBits(size_t& bitpos, const std::span<const std::byte> data, uint8_t minval, const std::span<const uint8_t> bit_sizes)
+inline uint32_t DecodeBits(size_t& bitpos, const std::span<const std::byte> data, uint8_t minval, const std::span<const uint8_t> bit_sizes)
 {
     uint32_t val = minval;  // Start with minimum encodable value
     bool bit;
