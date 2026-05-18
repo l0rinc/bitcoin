@@ -9,6 +9,7 @@
 #include <util/asmap.h>
 #include <util/log.h>
 
+#include <array>
 #include <cstddef>
 
 uint256 NetGroupManager::GetAsmapVersion() const
@@ -85,8 +86,8 @@ uint32_t NetGroupManager::GetMappedAS(const CNetAddr& address) const
     if (m_asmap.empty() || (net_class != NET_IPV4 && net_class != NET_IPV6)) {
         return 0; // Indicates not found, safe because AS0 is reserved per RFC7607.
     }
-    std::vector<std::byte> ip_bytes(16);
-    if (address.HasLinkedIPv4()) {
+    std::array<std::byte, ADDR_IPV6_SIZE> ip_bytes{};
+    if (net_class == NET_IPV4) {
         // For lookup, treat as if it was just an IPv4 address (IPV4_IN_IPV6_PREFIX + IPv4 bits)
         std::copy_n(std::as_bytes(std::span{IPV4_IN_IPV6_PREFIX}).begin(),
                     IPV4_IN_IPV6_PREFIX.size(), ip_bytes.begin());
