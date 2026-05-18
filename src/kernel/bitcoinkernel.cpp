@@ -451,6 +451,7 @@ public:
 struct ChainstateManagerOptions {
     mutable Mutex m_mutex;
     ChainstateManager::Options m_chainman_options GUARDED_BY(m_mutex);
+    kernel::CacheSizes m_cache_sizes GUARDED_BY(m_mutex){DEFAULT_KERNEL_CACHE};
     node::BlockManager::Options m_blockman_options GUARDED_BY(m_mutex);
     std::shared_ptr<const Context> m_context;
     node::ChainstateLoadOptions m_chainstate_load_options GUARDED_BY(m_mutex);
@@ -467,7 +468,7 @@ struct ChainstateManagerOptions {
               .notifications = *context->m_notifications,
               .block_tree_db_params = DBParams{
                   .path = data_dir / "blocks" / "index",
-                  .cache_bytes = kernel::CacheSizes{DEFAULT_KERNEL_CACHE}.block_tree_db,
+                  .cache_bytes = m_cache_sizes.block_tree_db,
               }}},
           m_context{context}, m_chainstate_load_options{node::ChainstateLoadOptions{}}
     {
@@ -986,6 +987,14 @@ void btck_chainstate_manager_options_set_worker_threads_num(btck_ChainstateManag
     btck_ChainstateManagerOptions::get(opts).m_chainman_options.worker_threads_num = worker_threads;
 }
 
+void btck_chainstate_manager_options_set_database_cache_bytes(btck_ChainstateManagerOptions* chainman_opts, size_t database_cache_bytes)
+{
+    auto& opts{btck_ChainstateManagerOptions::get(chainman_opts)};
+    LOCK(opts.m_mutex);
+    opts.m_cache_sizes = kernel::CacheSizes{database_cache_bytes};
+    opts.m_blockman_options.block_tree_db_params.cache_bytes = opts.m_cache_sizes.block_tree_db;
+}
+
 void btck_chainstate_manager_options_destroy(btck_ChainstateManagerOptions* options)
 {
     delete options;
@@ -1027,18 +1036,19 @@ btck_ChainstateManager* btck_chainstate_manager_create(
 {
     auto& opts{btck_ChainstateManagerOptions::get(chainman_opts)};
     std::unique_ptr<ChainstateManager> chainman;
+    node::ChainstateLoadOptions chainstate_load_opts;
+    kernel::CacheSizes cache_sizes{DEFAULT_KERNEL_CACHE};
     try {
         LOCK(opts.m_mutex);
         chainman = std::make_unique<ChainstateManager>(*opts.m_context->m_interrupt, opts.m_chainman_options, opts.m_blockman_options);
+        chainstate_load_opts = opts.m_chainstate_load_options;
+        cache_sizes = opts.m_cache_sizes;
     } catch (const std::exception& e) {
         LogError("Failed to create chainstate manager: %s", e.what());
         return nullptr;
     }
 
     try {
-        const auto chainstate_load_opts{WITH_LOCK(opts.m_mutex, return opts.m_chainstate_load_options)};
-
-        kernel::CacheSizes cache_sizes{DEFAULT_KERNEL_CACHE};
         auto [status, chainstate_err]{node::LoadChainstate(*chainman, cache_sizes, chainstate_load_opts)};
         if (status != node::ChainstateLoadStatus::SUCCESS) {
             LogError("Failed to load chain state from your data directory: %s", chainstate_err.original);

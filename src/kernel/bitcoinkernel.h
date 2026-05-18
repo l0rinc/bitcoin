@@ -1177,6 +1177,19 @@ BITCOINKERNEL_API void btck_chainstate_manager_options_set_worker_threads_num(
     int worker_threads) BITCOINKERNEL_ARG_NONNULL(1);
 
 /**
+ * @brief Set the total database cache used by the chainstate manager.
+ *
+ * The cache is split internally between the block tree database, chainstate
+ * database, and in-memory coins cache. The default is 450 MiB.
+ *
+ * @param[in] chainstate_manager_options Non-null, options to be set.
+ * @param[in] database_cache_bytes       The total database cache size in bytes.
+ */
+BITCOINKERNEL_API void btck_chainstate_manager_options_set_database_cache_bytes(
+    btck_ChainstateManagerOptions* chainstate_manager_options,
+    size_t database_cache_bytes) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
  * @brief Sets wipe db in the options. In combination with calling
  * @ref btck_chainstate_manager_import_blocks this triggers either a full reindex,
  * or a reindex of just the chainstate database.

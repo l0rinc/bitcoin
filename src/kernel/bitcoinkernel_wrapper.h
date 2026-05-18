@@ -1144,6 +1144,11 @@ public:
         btck_chainstate_manager_options_set_worker_threads_num(get(), worker_threads);
     }
 
+    void SetDatabaseCacheBytes(size_t database_cache_bytes)
+    {
+        btck_chainstate_manager_options_set_database_cache_bytes(get(), database_cache_bytes);
+    }
+
     bool SetWipeDbs(bool wipe_block_tree, bool wipe_chainstate)
     {
         return btck_chainstate_manager_options_set_wipe_dbs(get(), wipe_block_tree, wipe_chainstate) == 0;
