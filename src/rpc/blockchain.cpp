@@ -56,6 +56,7 @@
 
 #include <cstdint>
 
+#include <bitset>
 #include <condition_variable>
 #include <iterator>
 #include <memory>
@@ -2229,8 +2230,31 @@ static RPCMethod getblockstats()
 }
 
 namespace {
+// Keep common scriptPubKey lengths in a fixed-size filter; larger scripts fall
+// back to exact lookup.
+static constexpr size_t MAX_FILTERED_SCRIPT_SIZE{127};
+
+using ScriptSizeFilter = std::bitset<MAX_FILTERED_SCRIPT_SIZE + 1>;
+
+bool MayContainScriptSize(const ScriptSizeFilter& sizes, size_t size)
+{
+    return size > MAX_FILTERED_SCRIPT_SIZE || sizes[size];
+}
+
+void AddScriptSize(ScriptSizeFilter& sizes, size_t size)
+{
+    if (size <= MAX_FILTERED_SCRIPT_SIZE) sizes.set(size);
+}
+
 //! Search for a given set of pubkey scripts
-bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& should_abort, int64_t& count, CCoinsViewCursor* cursor, const std::set<CScript>& needles, std::map<COutPoint, Coin>& out_results, std::function<void()>& interruption_point)
+bool FindScriptPubKey(std::atomic<int>& scan_progress,
+                      const std::atomic<bool>& should_abort,
+                      int64_t& count,
+                      CCoinsViewCursor* cursor,
+                      const std::set<CScript>& needles,
+                      const ScriptSizeFilter& script_size_filter,
+                      std::map<COutPoint, Coin>& out_results,
+                      std::function<void()>& interruption_point)
 {
     scan_progress = 0;
     count = 0;
@@ -2250,7 +2274,7 @@ bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& 
             uint32_t high = 0x100 * *UCharCast(key.hash.begin()) + *(UCharCast(key.hash.begin()) + 1);
             scan_progress = (int)(high * 100.0 / 65536.0 + 0.5);
         }
-        if (needles.contains(coin.out.scriptPubKey)) {
+        if (MayContainScriptSize(script_size_filter, coin.out.scriptPubKey.size()) && needles.contains(coin.out.scriptPubKey)) {
             out_results.emplace(key, coin);
         }
         cursor->Next();
@@ -2421,6 +2445,7 @@ static RPCMethod scantxoutset()
         }
 
         std::set<CScript> needles;
+        ScriptSizeFilter script_size_filter;
         std::map<CScript, std::string> descriptors;
         CAmount total_in = 0;
 
@@ -2431,6 +2456,7 @@ static RPCMethod scantxoutset()
             for (CScript& script : scripts) {
                 std::string inferred = InferDescriptor(script, provider)->ToString();
                 needles.emplace(script);
+                AddScriptSize(script_size_filter, script.size());
                 descriptors.emplace(std::move(script), std::move(inferred));
             }
         }
@@ -2452,7 +2478,7 @@ static RPCMethod scantxoutset()
             pcursor = CHECK_NONFATAL(active_chainstate.CoinsDB().Cursor());
             tip = CHECK_NONFATAL(active_chainstate.m_chain.Tip());
         }
-        bool res = FindScriptPubKey(g_scan_progress, g_should_abort_scan, count, pcursor.get(), needles, coins, node.rpc_interruption_point);
+        bool res = FindScriptPubKey(g_scan_progress, g_should_abort_scan, count, pcursor.get(), needles, script_size_filter, coins, node.rpc_interruption_point);
         result.pushKV("success", res);
         result.pushKV("txouts", count);
         result.pushKV("height", tip->nHeight);
