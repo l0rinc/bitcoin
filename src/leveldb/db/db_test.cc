@@ -735,15 +735,15 @@ TEST(DBTest, GetPicksCorrectFile) {
   } while (ChangeOptions());
 }
 
-TEST(DBTest, GetEncountersEmptyLevel) {
+TEST(DBTest, GetEncountersEmptyLevelDoesNotSeekCompact) {
   do {
     // Arrange for the following to happen:
     //   * sstable A in level 0
     //   * nothing in level 1
     //   * sstable B in level 2
-    // Then do enough Get() calls to arrange for an automatic compaction
-    // of sstable A.  A bug would cause the compaction to be marked as
-    // occurring at level 1 (instead of the correct level 0).
+    // Then do enough Get() calls that upstream LevelDB would trigger an
+    // automatic seek compaction of sstable A. This fork disables those read seek
+    // compactions, so the level layout should remain unchanged.
 
     // Step 1: First place sstables in levels 0 and 2
     int compaction_count = 0;
@@ -766,10 +766,12 @@ TEST(DBTest, GetEncountersEmptyLevel) {
       ASSERT_EQ("NOT_FOUND", Get("missing"));
     }
 
-    // Step 4: Wait for compaction to finish
+    // Step 4: Wait long enough for any mistakenly scheduled compaction to run.
     DelayMilliseconds(1000);
 
-    ASSERT_EQ(NumTableFilesAtLevel(0), 0);
+    ASSERT_EQ(NumTableFilesAtLevel(0), 1);
+    ASSERT_EQ(NumTableFilesAtLevel(1), 0);
+    ASSERT_EQ(NumTableFilesAtLevel(2), 1);
   } while (ChangeOptions());
 }
 

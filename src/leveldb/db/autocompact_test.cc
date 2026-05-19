@@ -54,8 +54,9 @@ static const int kValueSize = 200 * 1024;
 static const int kTotalSize = 100 * 1024 * 1024;
 static const int kCount = kTotalSize / kValueSize;
 
-// Read through the first n keys repeatedly and check that they get
-// compacted (verified by checking the size of the key space).
+// Read through the first n keys repeatedly and check that the reads do not
+// schedule seek-triggered compactions. Size and manual compactions are still
+// enabled elsewhere.
 void AutoCompactTest::DoReads(int n) {
   std::string value(kValueSize, 'x');
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
@@ -76,10 +77,11 @@ void AutoCompactTest::DoReads(int n) {
   const int64_t initial_size = Size(Key(0), Key(n));
   const int64_t initial_other_size = Size(Key(n), Key(kCount));
 
-  // Read until size drops significantly.
+  // Repeated reads used to trigger automatic seek compaction and make this
+  // range shrink significantly. That path is disabled, so the size should stay
+  // close to the initial measurement.
   std::string limit_key = Key(n);
-  for (int read = 0; true; read++) {
-    ASSERT_LT(read, 100) << "Taking too long to compact";
+  for (int read = 0; read < 10; read++) {
     Iterator* iter = db_->NewIterator(ReadOptions());
     for (iter->SeekToFirst();
          iter->Valid() && iter->key().ToString() < limit_key; iter->Next()) {
@@ -91,9 +93,7 @@ void AutoCompactTest::DoReads(int n) {
     uint64_t size = Size(Key(0), Key(n));
     fprintf(stderr, "iter %3d => %7.3f MB [other %7.3f MB]\n", read + 1,
             size / 1048576.0, Size(Key(n), Key(kCount)) / 1048576.0);
-    if (size <= initial_size / 10) {
-      break;
-    }
+    ASSERT_GT(size, initial_size / 2);
   }
 
   // Verify that the size of the key space not touched by the reads
