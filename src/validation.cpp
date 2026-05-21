@@ -1939,6 +1939,13 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
     m_coins_views->InitCache(m_chainman.m_options.inputfetch_threads_num);
 }
 
+void Chainstate::CompactCoinsDBOnIbdExit()
+{
+    AssertLockNotHeld(::cs_main);
+    // The caller keeps this Chainstate alive while the returned pointer is used.
+    WITH_LOCK(::cs_main, return &CoinsDB())->CompactOnIbdExit();
+}
+
 // Lock-free: depends on `m_cached_is_ibd`, which is latched by `UpdateIBDStatus()`.
 bool ChainstateManager::IsInitialBlockDownload() const noexcept
 {
@@ -3341,6 +3348,7 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
     CBlockIndex *pindexMostWork = nullptr;
     CBlockIndex *pindexNewTip = nullptr;
     bool exited_ibd{false};
+    bool checked_compaction_on_ibd_exit{false};
     do {
         // Block until the validation queue drains. This should largely
         // never happen in normal operation, however may happen during
@@ -3454,6 +3462,18 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
             }
 
             reached_target = ReachedTarget();
+        }
+
+        // Use the best-effort periodic flush above. Forcing a full flush here
+        // would add more synchronous work at the IBD edge, so dirty cache
+        // entries may be written after compaction.
+        // This follows the manager-global IBD latch, so it applies to the
+        // active chainstate only. The background assumeutxo chainstate is
+        // temporary and cleaned up after snapshot validation, so compacting
+        // it would add redundant write I/O.
+        if (exited_ibd && !checked_compaction_on_ibd_exit) {
+            CompactCoinsDBOnIbdExit();
+            checked_compaction_on_ibd_exit = true;
         }
 
         if (reached_target) {
