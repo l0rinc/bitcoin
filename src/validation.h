@@ -615,6 +615,10 @@ public:
     //! is verified).
     void InitCoinsCache(size_t cache_size_bytes) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
+    //! Compact the on-disk coins database after IBD, unless it has already been
+    //! compacted after IBD.
+    void CompactCoinsDBOnIbdExit() LOCKS_EXCLUDED(::cs_main);
+
     //! @returns whether or not the CoinsViews object has been fully initialized and we can
     //!          safely flush this object to disk.
     bool CanFlushToDisk() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)

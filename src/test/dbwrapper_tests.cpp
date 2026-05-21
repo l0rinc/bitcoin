@@ -194,6 +194,37 @@ BOOST_AUTO_TEST_CASE(dbwrapper_batch)
     }
 }
 
+BOOST_AUTO_TEST_CASE(dbwrapper_compact)
+{
+    constexpr uint8_t KEY_COUNT{8};
+    const auto value{[](uint8_t key) { return std::string(16 * 1024, 'x') + ToString(key); }};
+    CDBWrapper dbw{{.path = m_args.GetDataDirBase() / "dbwrapper_compact", .cache_bytes = 1_MiB, .wipe_data = true}};
+
+    for (uint8_t key{0}; key < KEY_COUNT; ++key) {
+        dbw.Write(key, value(key));
+    }
+
+    BOOST_CHECK_EQUAL(dbw.EstimateSize(uint8_t{0}, KEY_COUNT), 0);
+    dbw.Compact();
+
+    const size_t populated_size{dbw.EstimateSize(uint8_t{0}, KEY_COUNT)};
+    BOOST_REQUIRE_GT(populated_size, 0);
+
+    for (uint8_t key{0}; key < KEY_COUNT; ++key) {
+        std::string read_value{};
+        BOOST_REQUIRE(dbw.Read(key, read_value));
+        BOOST_CHECK_EQUAL(read_value, value(key));
+        dbw.Erase(key);
+    }
+    dbw.Compact();
+
+    BOOST_CHECK_EQUAL(dbw.EstimateSize(uint8_t{0}, KEY_COUNT), 0);
+    for (uint8_t key{0}; key < KEY_COUNT; ++key) {
+        std::string read_value{};
+        BOOST_CHECK(!dbw.Read(key, read_value));
+    }
+}
+
 BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
 {
     // Perform tests both obfuscated and non-obfuscated.

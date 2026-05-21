@@ -6,7 +6,6 @@
 
 #include <common/args.h>
 #include <node/blockstorage.h>
-#include <node/database_args.h>
 #include <tinyformat.h>
 #include <util/byte_units.h>
 #include <util/result.h>
@@ -35,8 +34,6 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& args, BlockManager::Op
     opts.prune_target = nPruneTarget;
 
     if (auto value{args.GetBoolArg("-fastprune")}) opts.fast_prune = *value;
-
-    ReadDatabaseArgs(args, opts.block_tree_db_params.options);
 
     return {};
 }
