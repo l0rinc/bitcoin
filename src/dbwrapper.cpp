@@ -24,6 +24,7 @@
 #include <util/log.h>
 #include <util/obfuscation.h>
 #include <util/strencodings.h>
+#include <util/time.h>
 
 #include <algorithm>
 #include <cassert>
@@ -271,9 +272,11 @@ CDBWrapper::CDBWrapper(const DBParams& params)
     LogInfo("Opened LevelDB successfully");
 
     if (params.options.force_compact) {
-        LogInfo("Starting database compaction of %s", fs::PathToString(params.path));
-        DBContext().pdb->CompactRange(nullptr, nullptr);
-        LogInfo("Finished database compaction of %s", fs::PathToString(params.path));
+        const auto path{fs::PathToString(params.path)};
+        const auto start{SteadyClock::now()};
+        LogInfo("Starting database compaction of %s", path);
+        CompactFull();
+        LogInfo("Finished database compaction of %s in %is", path, TicksSeconds(SteadyClock::now() - start));
     }
 
     if (!Read(OBFUSCATION_KEY, m_obfuscation) && params.obfuscate && IsEmpty()) {
@@ -302,6 +305,11 @@ CDBWrapper::~CDBWrapper()
     DBContext().options.block_cache = nullptr;
     delete DBContext().penv;
     DBContext().options.env = nullptr;
+}
+
+void CDBWrapper::CompactFull()
+{
+    DBContext().pdb->CompactRange(nullptr, nullptr);
 }
 
 void CDBWrapper::WriteBatch(CDBBatch& batch, bool fSync)

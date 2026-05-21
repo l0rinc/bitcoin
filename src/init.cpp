@@ -2034,6 +2034,16 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         // Import blocks and ActivateBestChain()
         ImportBlocks(chainman, vImportFiles);
         WITH_LOCK(::cs_main, chainman.UpdateIBDStatus());
+        // ImportBlocks() keeps LoadingBlocks() true while it runs, so its
+        // ActivateBestChain() calls cannot latch IBD off and run post-IBD
+        // compaction until import completes.
+        const bool imported_blocks{do_reindex || do_reindex_chainstate || !vImportFiles.empty()};
+        if (imported_blocks) {
+            BlockValidationState state;
+            if (!chainman.ActiveChainstate().MaybeCompactCoinsDBOnIbdExit(state)) {
+                LogWarning("Failed to compact chainstate after leaving IBD (%s)", state.ToString());
+            }
+        }
         if (args.GetBoolArg("-stopafterblockimport", DEFAULT_STOPAFTERBLOCKIMPORT)) {
             LogInfo("Stopping after block import");
             if (!(Assert(node.shutdown_request))()) {

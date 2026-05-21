@@ -131,6 +131,7 @@ BASE_SCRIPTS = [
     'p2p_orphan_handling.py',
     'wallet_basic.py',
     'feature_maxtipage.py',
+    'feature_compactchainstate.py',
     'wallet_multiwallet.py',
     'wallet_multiwallet.py --usecli',
     'p2p_dns_seeds.py',

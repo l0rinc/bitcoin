@@ -1939,6 +1939,36 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
     m_coins_views->InitCache(m_chainman.m_options.inputfetch_threads_num);
 }
 
+bool Chainstate::MaybeCompactCoinsDBOnIbdExit(BlockValidationState& state)
+{
+    AssertLockNotHeld(::cs_main);
+
+    if (m_chainman.IsInitialBlockDownload()) return true;
+
+    // The IBD latch belongs to the current chainstate. During assumeutxo,
+    // the historical chainstate continues connecting blocks while the snapshot
+    // chainstate is current, so skip the historical chainstate here.
+    //
+    // The pointer is used after releasing cs_main so the force flush and
+    // compaction do not run while holding it. The current chainstate's coins
+    // views are not reset concurrently with block connection; CCoinsViewDB
+    // serializes compaction against ResizeCache() internally.
+    CCoinsViewDB* coins_db{WITH_LOCK(::cs_main, return this == &m_chainman.CurrentChainstate()
+        ? &CoinsDB()
+        : nullptr)};
+    if (!coins_db) return true;
+
+    const bool needs_compaction{coins_db->NeedsCompactOnIbdExit()};
+    if (!needs_compaction) return true;
+
+    if (!FlushStateToDisk(state, FlushStateMode::FORCE_FLUSH)) {
+        return false;
+    }
+    LogInfo("Checking chainstate database compaction after leaving IBD");
+    coins_db->CompactOnIbdExit();
+    return true;
+}
+
 // Lock-free: depends on `m_cached_is_ibd`, which is latched by `UpdateIBDStatus()`.
 bool ChainstateManager::IsInitialBlockDownload() const noexcept
 {
@@ -3454,6 +3484,14 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
             }
 
             reached_target = ReachedTarget();
+        }
+
+        // Once out of IBD, flush all dirty cache entries before compacting so
+        // the manual compaction sees the complete chainstate and shutdown does
+        // not immediately recreate large low-level SST files. The database
+        // marker is cached in memory, so repeated post-IBD checks are cheap.
+        if (!MaybeCompactCoinsDBOnIbdExit(state)) {
+            return false;
         }
 
         if (reached_target) {
