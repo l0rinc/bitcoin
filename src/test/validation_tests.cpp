@@ -150,6 +150,27 @@ BOOST_AUTO_TEST_CASE(test_assumeutxo)
     BOOST_CHECK_EQUAL(out110_2.m_chain_tx_count, 111U);
 }
 
+BOOST_AUTO_TEST_CASE(min_assumeutxo_snapshot_height)
+{
+    class EmptyAssumeutxoParams : public CChainParams {};
+
+    auto check_min_height = [&](ChainType chain_type, int expected) {
+        auto params = CreateChainParams(*m_node.args, chain_type);
+        auto min_height = params->MinAssumeutxoSnapshotHeight();
+        BOOST_REQUIRE(min_height);
+        BOOST_CHECK_EQUAL(*min_height, expected);
+    };
+
+    check_min_height(ChainType::MAIN, 840'000);
+    check_min_height(ChainType::TESTNET, 2'500'000);
+    check_min_height(ChainType::TESTNET4, 90'000);
+    check_min_height(ChainType::SIGNET, 160'000);
+    check_min_height(ChainType::REGTEST, 110);
+
+    EmptyAssumeutxoParams params;
+    BOOST_CHECK(!params.MinAssumeutxoSnapshotHeight());
+}
+
 BOOST_AUTO_TEST_CASE(block_malleation)
 {
     // Test utilities that calls `IsBlockMutated` and then clears the validity
