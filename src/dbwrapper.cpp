@@ -33,6 +33,7 @@
 #include <cstdio>
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 
 static auto CharCast(const std::byte* data) { return reinterpret_cast<const char*>(data); }
@@ -218,6 +219,21 @@ struct LevelDBContext {
     leveldb::DB* pdb;
 };
 
+static void LogChainstateLevelDBStats(leveldb::DB& db)
+{
+    for (int level{0}; level < 7; ++level) {
+        std::string value;
+        if (db.GetProperty("leveldb.num-files-at-level" + std::to_string(level), &value)) {
+            LogInfo(util::log::NO_RATE_LIMIT, "chainstate-leveldb-files level=%d files=%s\n", level, value);
+        }
+    }
+
+    std::string stats;
+    if (db.GetProperty("leveldb.stats", &stats)) {
+        LogInfo(util::log::NO_RATE_LIMIT, "chainstate-leveldb-stats\n%s", stats);
+    }
+}
+
 CDBWrapper::CDBWrapper(const DBParams& params)
     : m_db_context{std::make_unique<LevelDBContext>()}, m_name{fs::PathToString(params.path.stem())}
 {
@@ -276,6 +292,9 @@ CDBWrapper::CDBWrapper(const DBParams& params)
 
 CDBWrapper::~CDBWrapper()
 {
+    if (m_name == "chainstate") {
+        LogChainstateLevelDBStats(*DBContext().pdb);
+    }
     delete DBContext().pdb;
     DBContext().pdb = nullptr;
     delete DBContext().options.filter_policy;
