@@ -5742,6 +5742,13 @@ static void SnapshotUTXOHashBreakpoint(const util::SignalInterrupt& interrupt)
     if (interrupt) throw StopHashingException();
 }
 
+static std::optional<AssumeutxoHash> ComputeAssumeutxoHash(CCoinsView* coins_db, node::BlockManager& blockman, const util::SignalInterrupt& interrupt)
+{
+    auto stats{ComputeUTXOStats(CoinStatsHashType::HASH_SERIALIZED, coins_db, blockman, [&interrupt] { SnapshotUTXOHashBreakpoint(interrupt); })};
+    if (!stats) return std::nullopt;
+    return AssumeutxoHash{stats->hashSerialized};
+}
+
 util::Result<void> ChainstateManager::PopulateAndValidateSnapshot(
     Chainstate& snapshot_chainstate,
     AutoFile& coins_file,
@@ -5889,9 +5896,7 @@ util::Result<void> ChainstateManager::PopulateAndValidateSnapshot(
 
     std::optional<AssumeutxoHash> maybe_hash;
     try {
-        auto maybe_stats{ComputeUTXOStats(
-            CoinStatsHashType::HASH_SERIALIZED, snapshot_coinsdb, m_blockman, [&interrupt = m_interrupt] { SnapshotUTXOHashBreakpoint(interrupt); })};
-        if (maybe_stats) maybe_hash = AssumeutxoHash{maybe_stats->hashSerialized};
+        maybe_hash = ComputeAssumeutxoHash(snapshot_coinsdb, m_blockman, m_interrupt);
     } catch (StopHashingException const&) {
         return util::Error{Untranslated("Aborting after an interrupt was requested")};
     }
@@ -6024,12 +6029,7 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
     LogInfo("[snapshot] computing UTXO stats for background chainstate to validate "
         "snapshot - this could take a few minutes");
     try {
-        auto validated_cs_stats{ComputeUTXOStats(
-            CoinStatsHashType::HASH_SERIALIZED,
-            &validated_coins_db,
-            m_blockman,
-            [&interrupt = m_interrupt] { SnapshotUTXOHashBreakpoint(interrupt); })};
-        if (validated_cs_stats) validated_cs_hash = AssumeutxoHash{validated_cs_stats->hashSerialized};
+        validated_cs_hash = ComputeAssumeutxoHash(&validated_coins_db, m_blockman, m_interrupt);
     } catch (StopHashingException const&) {
         return SnapshotCompletionResult::STATS_FAILED;
     }
