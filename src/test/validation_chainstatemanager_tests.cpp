@@ -5,6 +5,7 @@
 #include <chainparams.h>
 #include <consensus/validation.h>
 #include <kernel/disconnected_transactions.h>
+#include <logging.h>
 #include <node/chainstatemanager_args.h>
 #include <node/kernel_notifications.h>
 #include <node/utxo_snapshot.h>
@@ -115,6 +116,29 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager, TestChain100Setup)
 
     // Let scheduler events finish running to avoid accessing memory that is going to be unloaded
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
+}
+
+BOOST_FIXTURE_TEST_CASE(chainstatemanager_verifies_assumeutxo_hash_during_ibd, TestChain100Setup)
+{
+    ChainstateManager& chainman = *m_node.chainman;
+
+    LogInstance().SetLogLevel(BCLog::Level::Debug);
+    LogInstance().EnableCategory(BCLog::ALL);
+
+    {
+        ASSERT_DEBUG_LOG("[snapshot] verified assumeutxo hash at height 110");
+        mineBlocks(10);
+    }
+
+    BOOST_CHECK_EQUAL(WITH_LOCK(chainman.GetMutex(), return chainman.ActiveHeight()), 110);
+
+    {
+        ASSERT_DEBUG_LOG("[snapshot] assumeutxo block hash or transaction count mismatch at height 200: expected [385901ccbd69dff6bbd00065d01fb8a9e464dede7cfe0372443884f9b1dcf6b9, 201], got [");
+        mineBlocks(90);
+    }
+    mineBlocks(10);
+
+    BOOST_CHECK_EQUAL(WITH_LOCK(chainman.GetMutex(), return chainman.ActiveHeight()), 210);
 }
 
 //! Test rebalancing the caches associated with each chainstate.

@@ -3089,6 +3089,12 @@ bool Chainstate::ConnectTip(
              Ticks<SecondsDouble>(m_chainman.time_total),
              Ticks<MillisecondsDouble>(m_chainman.time_total) / m_chainman.num_blocks_total);
 
+    if (auto min_height{m_chainman.GetParams().MinAssumeutxoSnapshotHeight()}; min_height && pindexNew->nHeight >= *min_height) {
+        if (auto au_data{m_chainman.GetParams().AssumeutxoForHeight(pindexNew->nHeight)}) {
+            m_chainman.VerifyAssumeutxoData(*this, *pindexNew, *au_data);
+        }
+    }
+
     // See if this chainstate has reached a target block and can be used to
     // validate an assumeutxo snapshot. If it can, hashing the UTXO database
     // will be slow, and cs_main could remain locked here for several minutes.
@@ -6066,6 +6072,37 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
     this->MaybeRebalanceCaches();
 
     return SnapshotCompletionResult::SUCCESS;
+}
+
+void ChainstateManager::VerifyAssumeutxoData(
+    Chainstate& chainstate,
+    const CBlockIndex& tip,
+    const AssumeutxoData& au_data)
+{
+    AssertLockHeld(cs_main);
+    auto tip_hash{tip.GetBlockHash()};
+    // Skip unvalidated snapshot chainstates and the snapshot base already checked by MaybeValidateSnapshot().
+    if (chainstate.m_assumeutxo != Assumeutxo::VALIDATED || (chainstate.m_target_blockhash && *chainstate.m_target_blockhash == tip_hash)) return;
+
+    if (tip_hash != au_data.blockhash || tip.m_chain_tx_count != au_data.m_chain_tx_count) {
+        LogError("[snapshot] assumeutxo block hash or transaction count mismatch at height %d: expected [%s, %d], got [%s, %d]",
+                 tip.nHeight, au_data.blockhash.ToString(), au_data.m_chain_tx_count, tip_hash.ToString(), tip.m_chain_tx_count);
+        return;
+    }
+
+    chainstate.CoinsTip().Sync();
+
+    try {
+        auto hash{ComputeAssumeutxoHash(&chainstate.CoinsDB(), m_blockman, m_interrupt)};
+        if (hash && *hash == au_data.hash_serialized) {
+            LogDebug(BCLog::VALIDATION, "[snapshot] verified assumeutxo hash at height %d: %s", tip.nHeight, au_data.hash_serialized.ToString());
+        } else {
+            LogError("[snapshot] assumeutxo hash verification failed at height %d: expected %s, got %s",
+                tip.nHeight, au_data.hash_serialized.ToString(), hash ? hash->ToString() : "unavailable");
+        }
+    } catch (StopHashingException const&) {
+        LogDebug(BCLog::VALIDATION, "[snapshot] assumeutxo hash verification interrupted at height %d", tip.nHeight);
+    }
 }
 
 Chainstate& ChainstateManager::ActiveChainstate() const
