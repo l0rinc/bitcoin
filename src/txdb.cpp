@@ -14,16 +14,19 @@
 #include <uint256.h>
 #include <util/byte_units.h>
 #include <util/log.h>
+#include <util/time.h>
 #include <util/vector.h>
 
 #include <cassert>
 #include <cstdlib>
 #include <iterator>
+#include <string>
 #include <utility>
 
 static constexpr uint8_t DB_COIN{'C'};
 static constexpr uint8_t DB_BEST_BLOCK{'B'};
 static constexpr uint8_t DB_HEAD_BLOCKS{'H'};
+static constexpr uint8_t DB_POST_IBD_COMPACTED{'I'};
 // Keys used in previous version that might still be found in the DB:
 static constexpr uint8_t DB_COINS{'c'};
 
@@ -61,6 +64,7 @@ void CCoinsViewDB::ResizeCache(size_t new_cache_size)
     // We can't do this operation with an in-memory DB since we'll lose all the coins upon
     // reset.
     if (!m_db_params.memory_only) {
+        LOCK(m_db_mutex);
         // Have to do a reset first to get the original `m_db` state to release its
         // filesystem lock.
         m_db.reset();
@@ -68,6 +72,43 @@ void CCoinsViewDB::ResizeCache(size_t new_cache_size)
         m_db_params.wipe_data = false;
         m_db = std::make_unique<CDBWrapper>(m_db_params);
     }
+}
+
+void CCoinsViewDB::Compact()
+{
+    AssertLockNotHeld(::cs_main);
+
+    const auto path{fs::PathToString(m_db_params.path)};
+    const auto start{SteadyClock::now()};
+    LogInfo("Starting chainstate database compaction of %s", path);
+    {
+        LOCK(m_db_mutex);
+        m_db->Compact();
+    }
+    LogInfo("Finished chainstate database compaction of %s in %is", path, TicksSeconds(SteadyClock::now() - start));
+}
+
+void CCoinsViewDB::CompactOnIbdExit()
+{
+    AssertLockNotHeld(::cs_main);
+
+    const auto path{fs::PathToString(m_db_params.path)};
+    const auto start{SteadyClock::now()};
+    {
+        LOCK(m_db_mutex);
+        if (m_db->Exists(DB_POST_IBD_COMPACTED)) return;
+
+        LogInfo("Starting chainstate database compaction of %s", path);
+        m_db->Compact();
+        m_db->Write(DB_POST_IBD_COMPACTED, true);
+    }
+    LogInfo("Finished chainstate database compaction of %s in %is", path, TicksSeconds(SteadyClock::now() - start));
+}
+
+bool CCoinsViewDB::NeedsCompactOnIbdExit()
+{
+    LOCK(m_db_mutex);
+    return !m_db->Exists(DB_POST_IBD_COMPACTED);
 }
 
 std::optional<Coin> CCoinsViewDB::GetCoin(const COutPoint& outpoint) const

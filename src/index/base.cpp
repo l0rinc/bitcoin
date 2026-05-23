@@ -5,7 +5,6 @@
 #include <index/base.h>
 
 #include <chain.h>
-#include <common/args.h>
 #include <dbwrapper.h>
 #include <interfaces/chain.h>
 #include <interfaces/types.h>
@@ -13,7 +12,6 @@
 #include <node/abort.h>
 #include <node/blockstorage.h>
 #include <node/context.h>
-#include <node/database_args.h>
 #include <node/interface_ui.h>
 #include <primitives/block.h>
 #include <sync.h>
@@ -71,8 +69,7 @@ BaseIndex::DB::DB(const fs::path& path, size_t n_cache_size, bool f_memory, bool
         .cache_bytes = n_cache_size,
         .memory_only = f_memory,
         .wipe_data = f_wipe,
-        .obfuscate = f_obfuscate,
-        .options = [] { DBOptions options; node::ReadDatabaseArgs(gArgs, options); return options; }()}}
+        .obfuscate = f_obfuscate}}
 {}
 
 CBlockLocator BaseIndex::DB::ReadBestBlock() const

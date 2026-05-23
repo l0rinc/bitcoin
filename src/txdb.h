@@ -36,7 +36,10 @@ class CCoinsViewDB final : public CCoinsView
 protected:
     DBParams m_db_params;
     CoinsViewOptions m_options;
+    //! Prevents Compact() from using m_db while ResizeCache() replaces it.
+    Mutex m_db_mutex;
     std::unique_ptr<CDBWrapper> m_db;
+
 public:
     explicit CCoinsViewDB(DBParams db_params, CoinsViewOptions options);
 
@@ -53,7 +56,17 @@ public:
     size_t EstimateSize() const override;
 
     //! Dynamically alter the underlying leveldb cache size.
-    void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_db_mutex);
+
+    //! Compact the entire chainstate database.
+    void Compact() EXCLUSIVE_LOCKS_REQUIRED(!m_db_mutex) LOCKS_EXCLUDED(cs_main);
+
+    //! Compact the chainstate database after IBD, unless this database has already
+    //! been compacted after IBD.
+    void CompactOnIbdExit() EXCLUSIVE_LOCKS_REQUIRED(!m_db_mutex) LOCKS_EXCLUDED(cs_main);
+
+    //! Whether the chainstate database still needs its post-IBD compaction.
+    bool NeedsCompactOnIbdExit() EXCLUSIVE_LOCKS_REQUIRED(!m_db_mutex);
 };
 
 #endif // BITCOIN_TXDB_H
