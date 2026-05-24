@@ -24,6 +24,7 @@
 static constexpr uint8_t DB_COIN{'C'};
 static constexpr uint8_t DB_BEST_BLOCK{'B'};
 static constexpr uint8_t DB_HEAD_BLOCKS{'H'};
+static constexpr uint8_t DB_NEXT_FULL_COMPACTION{'F'};
 // Keys used in previous version that might still be found in the DB:
 static constexpr uint8_t DB_COINS{'c'};
 
@@ -61,6 +62,7 @@ void CCoinsViewDB::ResizeCache(size_t new_cache_size)
     // We can't do this operation with an in-memory DB since we'll lose all the coins upon
     // reset.
     if (!m_db_params.memory_only) {
+        LOCK(m_db_mutex);
         // Have to do a reset first to get the original `m_db` state to release its
         // filesystem lock.
         m_db.reset();
@@ -173,6 +175,33 @@ void CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block
 size_t CCoinsViewDB::EstimateSize() const
 {
     return m_db->EstimateSize(DB_COIN, uint8_t(DB_COIN + 1));
+}
+
+void CCoinsViewDB::CompactFull()
+{
+    LOCK(m_db_mutex);
+    m_db->CompactFull();
+}
+
+bool CCoinsViewDB::CompactFullIfDue(NodeSeconds now, NodeSeconds next_time, bool due_if_no_next_time)
+{
+    LOCK(m_db_mutex);
+
+    int64_t next_time_seconds;
+    if (!m_db->Read(DB_NEXT_FULL_COMPACTION, next_time_seconds)) {
+        if (!due_if_no_next_time) {
+            m_db->Write(DB_NEXT_FULL_COMPACTION, TicksSinceEpoch<std::chrono::seconds>(next_time));
+            return false;
+        }
+    } else if (NodeSeconds{std::chrono::seconds{next_time_seconds}} > now) {
+        return false;
+    }
+
+    LogInfo("Starting scheduled chainstate database compaction of %s", fs::PathToString(m_db_params.path));
+    m_db->CompactFull();
+    m_db->Write(DB_NEXT_FULL_COMPACTION, TicksSinceEpoch<std::chrono::seconds>(next_time));
+    LogInfo("Finished scheduled chainstate database compaction of %s", fs::PathToString(m_db_params.path));
+    return true;
 }
 
 /** Specialization of CCoinsViewCursor to iterate over a CCoinsViewDB */

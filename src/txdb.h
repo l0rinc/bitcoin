@@ -12,6 +12,7 @@
 #include <kernel/cs_main.h>
 #include <sync.h>
 #include <util/fs.h>
+#include <util/time.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -36,6 +37,8 @@ class CCoinsViewDB final : public CCoinsView
 protected:
     DBParams m_db_params;
     CoinsViewOptions m_options;
+    //! Serializes cs_main-free compaction methods with ResizeCache() replacing m_db.
+    Mutex m_db_mutex;
     std::unique_ptr<CDBWrapper> m_db;
 public:
     explicit CCoinsViewDB(DBParams db_params, CoinsViewOptions options);
@@ -53,7 +56,14 @@ public:
     size_t EstimateSize() const override;
 
     //! Dynamically alter the underlying leveldb cache size.
-    void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_db_mutex);
+
+    //! Force a full compaction of the underlying LevelDB.
+    void CompactFull() EXCLUSIVE_LOCKS_REQUIRED(!m_db_mutex);
+
+    //! Compact the entire underlying LevelDB database if the scheduled
+    //! compaction time has passed, then store the next scheduled time.
+    bool CompactFullIfDue(NodeSeconds now, NodeSeconds next_time, bool due_if_no_next_time) EXCLUSIVE_LOCKS_REQUIRED(!m_db_mutex);
 };
 
 #endif // BITCOIN_TXDB_H

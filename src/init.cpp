@@ -65,6 +65,7 @@
 #include <policy/policy.h>
 #include <policy/settings.h>
 #include <protocol.h>
+#include <random.h>
 #include <rpc/blockchain.h>
 #include <rpc/register.h>
 #include <rpc/server.h>
@@ -1423,6 +1424,32 @@ static ChainstateLoadResult InitAndLoadChainstate(
     return {status, error};
 };
 
+static void ScheduleCoinsDBCompaction(CScheduler& scheduler, ChainstateManager& chainman, bool was_ibd)
+{
+    const auto delta{50min + FastRandomContext{}.randrange<std::chrono::milliseconds>(20min)};
+    scheduler.scheduleFromNow([&scheduler, &chainman, was_ibd] {
+        bool is_ibd;
+        CCoinsViewDB* coins_db{nullptr};
+        {
+            LOCK(::cs_main);
+            is_ibd = chainman.IsInitialBlockDownload();
+            if (!is_ibd && chainman.m_chainstates.size() == 1) {
+                coins_db = &chainman.ActiveChainstate().CoinsDB();
+            }
+        }
+        if (coins_db) {
+            const NodeSeconds now{std::chrono::time_point_cast<std::chrono::seconds>(NodeClock::now())};
+            const auto next_time{now + std::chrono::days{5} + FastRandomContext{}.randrange<std::chrono::seconds>(std::chrono::days{5})};
+            try {
+                coins_db->CompactFullIfDue(now, next_time, /*due_if_no_next_time=*/was_ibd);
+            } catch (const std::exception& e) {
+                LogWarning("Failed scheduled chainstate database compaction (%s)", e.what());
+            }
+        }
+        ScheduleCoinsDBCompaction(scheduler, chainman, is_ibd);
+    }, delta);
+}
+
 bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 {
     const ArgsManager& args = *Assert(node.args);
@@ -2328,6 +2355,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     }, DUMP_BANS_INTERVAL);
 
     if (node.peerman) node.peerman->StartScheduledTasks(scheduler);
+
+    ScheduleCoinsDBCompaction(scheduler, chainman, chainman.IsInitialBlockDownload());
 
 #if HAVE_SYSTEM
     StartupNotify(args);
