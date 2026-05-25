@@ -27,6 +27,9 @@ static constexpr uint8_t DB_HEAD_BLOCKS{'H'};
 // Keys used in previous version that might still be found in the DB:
 static constexpr uint8_t DB_COINS{'c'};
 
+static constexpr int FULL_COMPACTION_INTERVAL{10'000};
+static constexpr int FULL_COMPACTION_WINDOW{10};
+
 // Threshold for warning when writing this many dirty cache entries to disk.
 static constexpr size_t WARN_FLUSH_COINS_COUNT{10'000'000};
 
@@ -54,6 +57,7 @@ struct CoinEntry {
 CCoinsViewDB::CCoinsViewDB(DBParams db_params, CoinsViewOptions options) :
     m_db_params{std::move(db_params)},
     m_options{std::move(options)},
+    m_full_compaction_height_offset{FastRandomContext{}.randrange(2 * FULL_COMPACTION_WINDOW + 1) - FULL_COMPACTION_WINDOW},
     m_db{std::make_unique<CDBWrapper>(m_db_params)} { }
 
 void CCoinsViewDB::ResizeCache(size_t new_cache_size)
@@ -61,6 +65,7 @@ void CCoinsViewDB::ResizeCache(size_t new_cache_size)
     // We can't do this operation with an in-memory DB since we'll lose all the coins upon
     // reset.
     if (!m_db_params.memory_only) {
+        LOCK(m_db_mutex);
         // Have to do a reset first to get the original `m_db` state to release its
         // filesystem lock.
         m_db.reset();
@@ -173,6 +178,22 @@ void CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block
 size_t CCoinsViewDB::EstimateSize() const
 {
     return m_db->EstimateSize(DB_COIN, uint8_t(DB_COIN + 1));
+}
+
+bool CCoinsViewDB::NeedsFullCompaction(int current_height, bool force_if_unscheduled) const
+{
+    return force_if_unscheduled || (current_height - m_full_compaction_height_offset) % FULL_COMPACTION_INTERVAL == 0;
+}
+
+void CCoinsViewDB::CompactFull()
+{
+    AssertLockNotHeld(::cs_main);
+
+    LOCK(m_db_mutex);
+    LogInfo("Starting scheduled chainstate database compaction of %s", fs::PathToString(m_db_params.path));
+    m_db->LogLevelDBStats();
+    m_db->CompactFull();
+    LogInfo("Finished scheduled chainstate database compaction of %s", fs::PathToString(m_db_params.path));
 }
 
 /** Specialization of CCoinsViewCursor to iterate over a CCoinsViewDB */

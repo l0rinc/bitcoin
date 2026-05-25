@@ -153,6 +153,7 @@ BASE_SCRIPTS = [
     # vv Tests less than 30s vv
     'p2p_invalid_messages.py',
     'rpc_createmultisig.py',
+    'feature_compactchainstate.py',
     'p2p_timeouts.py --v1transport',
     'p2p_timeouts.py --v2transport',
     'rpc_signer.py',

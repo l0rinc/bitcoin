@@ -69,6 +69,7 @@
 #include <cassert>
 #include <chrono>
 #include <deque>
+#include <exception>
 #include <numeric>
 #include <optional>
 #include <ranges>
@@ -1939,6 +1940,34 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
     m_coins_views->InitCache(m_chainman.m_options.inputfetch_threads_num);
 }
 
+bool Chainstate::MaybeScheduleCoinsDBCompaction(BlockValidationState& state, bool force_if_unscheduled)
+{
+    AssertLockNotHeld(::cs_main);
+
+    if (m_chainman.IsInitialBlockDownload() || !m_chainman.m_options.signals) return true;
+
+    int tip_height;
+    CCoinsViewDB* coins_db;
+    {
+        LOCK(::cs_main);
+        if (m_chainman.m_chainstates.size() != 1 || !m_chain.Tip()) return true;
+        tip_height = m_chain.Height();
+        coins_db = &CoinsDB();
+    }
+
+    if (!coins_db->NeedsFullCompaction(tip_height, force_if_unscheduled)) return true;
+    if (!FlushStateToDisk(state, FlushStateMode::FORCE_FLUSH)) return false;
+
+    m_chainman.m_options.signals->CallFunctionInValidationInterfaceQueue([coins_db] {
+        try {
+            coins_db->CompactFull();
+        } catch (const std::exception& e) {
+            LogWarning("Failed scheduled chainstate database compaction (%s)", e.what());
+        }
+    });
+    return true;
+}
+
 // Lock-free: depends on `m_cached_is_ibd`, which is latched by `UpdateIBDStatus()`.
 bool ChainstateManager::IsInitialBlockDownload() const noexcept
 {
@@ -3454,6 +3483,12 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
             }
 
             reached_target = ReachedTarget();
+        }
+
+        const bool force_compaction{exited_ibd};
+        exited_ibd = false;
+        if (!MaybeScheduleCoinsDBCompaction(state, /*force_if_unscheduled=*/force_compaction)) {
+            return false;
         }
 
         if (reached_target) {

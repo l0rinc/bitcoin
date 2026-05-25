@@ -2034,6 +2034,15 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         // Import blocks and ActivateBestChain()
         ImportBlocks(chainman, vImportFiles);
         WITH_LOCK(::cs_main, chainman.UpdateIBDStatus());
+        if (do_reindex || do_reindex_chainstate || !vImportFiles.empty()) {
+            // ImportBlocks() keeps LoadingBlocks() true, so the explicit
+            // UpdateIBDStatus() above is the first chance to schedule the
+            // post-IBD compaction after import finishes.
+            BlockValidationState state;
+            if (!chainman.ActiveChainstate().MaybeScheduleCoinsDBCompaction(state, /*force_if_unscheduled=*/true)) {
+                LogWarning("Failed to schedule chainstate compaction after import (%s)", state.ToString());
+            }
+        }
         if (args.GetBoolArg("-stopafterblockimport", DEFAULT_STOPAFTERBLOCKIMPORT)) {
             LogInfo("Stopping after block import");
             if (!(Assert(node.shutdown_request))()) {

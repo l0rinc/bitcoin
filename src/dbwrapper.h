@@ -211,6 +211,12 @@ public:
     CDBWrapper(const CDBWrapper&) = delete;
     CDBWrapper& operator=(const CDBWrapper&) = delete;
 
+    //! Force a full compaction of the underlying LevelDB. Blocks until complete.
+    void CompactFull();
+
+    //! Log LevelDB table statistics.
+    void LogLevelDBStats() const;
+
     template <typename K, typename V>
     bool Read(const K& key, V& value) const
     {

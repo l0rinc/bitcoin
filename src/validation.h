@@ -744,6 +744,9 @@ public:
         FlushStateMode mode,
         int nManualPruneHeight = 0);
 
+    //! Flush and schedule a chainstate database compaction if the current tip height is due.
+    bool MaybeScheduleCoinsDBCompaction(BlockValidationState& state, bool force_if_unscheduled) LOCKS_EXCLUDED(::cs_main);
+
     //! Flush all changes to disk.
     void ForceFlushStateToDisk(bool wipe_cache = true);
 

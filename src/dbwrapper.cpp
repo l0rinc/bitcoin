@@ -272,7 +272,7 @@ CDBWrapper::CDBWrapper(const DBParams& params)
 
     if (params.options.force_compact) {
         LogInfo("Starting database compaction of %s", fs::PathToString(params.path));
-        DBContext().pdb->CompactRange(nullptr, nullptr);
+        CompactFull();
         LogInfo("Finished database compaction of %s", fs::PathToString(params.path));
     }
 
@@ -290,7 +290,7 @@ CDBWrapper::CDBWrapper(const DBParams& params)
 CDBWrapper::~CDBWrapper()
 {
     if (m_name == "chainstate") {
-        LogChainstateLevelDBStats(*DBContext().pdb);
+        LogLevelDBStats();
     }
     delete DBContext().pdb;
     DBContext().pdb = nullptr;
@@ -302,6 +302,16 @@ CDBWrapper::~CDBWrapper()
     DBContext().options.block_cache = nullptr;
     delete DBContext().penv;
     DBContext().options.env = nullptr;
+}
+
+void CDBWrapper::CompactFull()
+{
+    DBContext().pdb->CompactRange(nullptr, nullptr);
+}
+
+void CDBWrapper::LogLevelDBStats() const
+{
+    LogChainstateLevelDBStats(*DBContext().pdb);
 }
 
 void CDBWrapper::WriteBatch(CDBBatch& batch, bool fSync)
