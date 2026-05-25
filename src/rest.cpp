@@ -237,6 +237,7 @@ static bool rest_headers(const std::any& context,
     switch (rf) {
     case RESTResponseFormat::BINARY: {
         DataStream ssHeader{};
+        ssHeader.reserve(headers.size() * CBlockHeader::SERIALIZED_SIZE);
         for (const CBlockIndex *pindex : headers) {
             ssHeader << pindex->GetBlockHeader();
         }
@@ -248,6 +249,7 @@ static bool rest_headers(const std::any& context,
 
     case RESTResponseFormat::HEX: {
         DataStream ssHeader{};
+        ssHeader.reserve(headers.size() * CBlockHeader::SERIALIZED_SIZE);
         for (const CBlockIndex *pindex : headers) {
             ssHeader << pindex->GetBlockHeader();
         }
@@ -583,6 +585,7 @@ static bool rest_filter_header(const std::any& context, HTTPRequest* req, const 
     switch (rf) {
     case RESTResponseFormat::BINARY: {
         DataStream ssHeader{};
+        ssHeader.reserve(filter_headers.size() * uint256::size());
         for (const uint256& header : filter_headers) {
             ssHeader << header;
         }
@@ -593,6 +596,7 @@ static bool rest_filter_header(const std::any& context, HTTPRequest* req, const 
     }
     case RESTResponseFormat::HEX: {
         DataStream ssHeader{};
+        ssHeader.reserve(filter_headers.size() * uint256::size());
         for (const uint256& header : filter_headers) {
             ssHeader << header;
         }
@@ -678,9 +682,13 @@ static bool rest_block_filter(const std::any& context, HTTPRequest* req, const s
         return RESTERR(req, HTTP_NOT_FOUND, errmsg);
     }
 
+    const size_t filter_response_size{
+        sizeof(uint8_t) + uint256::size() + GetSerializeSize(filter.GetEncodedFilter())};
+
     switch (rf) {
     case RESTResponseFormat::BINARY: {
         DataStream ssResp{};
+        ssResp.reserve(filter_response_size);
         ssResp << filter;
 
         req->WriteHeader("Content-Type", "application/octet-stream");
@@ -689,6 +697,7 @@ static bool rest_block_filter(const std::any& context, HTTPRequest* req, const s
     }
     case RESTResponseFormat::HEX: {
         DataStream ssResp{};
+        ssResp.reserve(filter_response_size);
         ssResp << filter;
 
         std::string strHex = HexStr(ssResp) + "\n";
@@ -1115,6 +1124,7 @@ static bool rest_blockhash_by_height(const std::any& context, HTTPRequest* req,
     switch (rf) {
     case RESTResponseFormat::BINARY: {
         DataStream ss_blockhash{};
+        ss_blockhash.reserve(uint256::size());
         ss_blockhash << pblockindex->GetBlockHash();
         req->WriteHeader("Content-Type", "application/octet-stream");
         req->WriteReply(HTTP_OK, ss_blockhash);

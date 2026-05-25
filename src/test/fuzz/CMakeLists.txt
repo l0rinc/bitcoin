@@ -118,6 +118,7 @@ add_executable(fuzz
   signature_checker.cpp
   signet.cpp
   socks5.cpp
+  serialization_equivalence.cpp
   span.cpp
   string.cpp
   strprintf.cpp

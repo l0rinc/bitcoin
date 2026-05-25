@@ -304,6 +304,23 @@ BOOST_AUTO_TEST_CASE(streams_vector_reader_rvalue)
     BOOST_CHECK(reader.empty());
 }
 
+BOOST_AUTO_TEST_CASE(streams_empty_read)
+{
+    std::vector<std::byte> empty;
+
+    DataStream stream{};
+    BOOST_CHECK_NO_THROW(stream.read(std::span{empty}));
+    BOOST_CHECK(stream.empty());
+
+    stream << uint8_t{1};
+    BOOST_CHECK_NO_THROW(stream.read(std::span{empty}));
+    BOOST_CHECK_EQUAL(stream.size(), 1U);
+
+    SpanReader reader{std::span<const std::byte>{}};
+    BOOST_CHECK_NO_THROW(reader.read(std::span{empty}));
+    BOOST_CHECK(reader.empty());
+}
+
 BOOST_AUTO_TEST_CASE(bitstream_reader_writer)
 {
     DataStream data{};
