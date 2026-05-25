@@ -301,6 +301,24 @@ BOOST_FIXTURE_TEST_CASE(coins_cache_dbbase_simulation_test, CacheTest)
     SimulationTest(&db_base, true);
 }
 
+BOOST_AUTO_TEST_CASE(coins_db_needs_full_compaction)
+{
+    CCoinsViewDB db_base{{.path = "test", .cache_bytes = 8_MiB, .memory_only = true}, {}};
+
+    BOOST_CHECK(db_base.NeedsFullCompaction(/*current_height=*/0, /*force_if_unscheduled=*/true));
+
+    std::optional<int> last_due_height;
+    int due_height_count{0};
+    for (int height{0}; height <= 20'010; ++height) {
+        if (!db_base.NeedsFullCompaction(height, /*force_if_unscheduled=*/false)) continue;
+        ++due_height_count;
+        if (last_due_height) BOOST_CHECK_EQUAL(height - *last_due_height, 10'000);
+        last_due_height = height;
+    }
+    BOOST_CHECK(due_height_count >= 2);
+    BOOST_CHECK(due_height_count <= 3);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_FIXTURE_TEST_SUITE(coins_tests, BasicTestingSetup)

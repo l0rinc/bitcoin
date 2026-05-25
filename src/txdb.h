@@ -36,6 +36,10 @@ class CCoinsViewDB final : public CCoinsView
 protected:
     DBParams m_db_params;
     CoinsViewOptions m_options;
+    //! Prevents CompactFull() from using m_db while ResizeCache() replaces it.
+    Mutex m_db_mutex;
+    //! Randomizes recurring compaction heights by up to ten blocks.
+    const int m_full_compaction_height_offset;
     std::unique_ptr<CDBWrapper> m_db;
 public:
     explicit CCoinsViewDB(DBParams db_params, CoinsViewOptions options);
@@ -53,7 +57,13 @@ public:
     size_t EstimateSize() const override;
 
     //! Dynamically alter the underlying leveldb cache size.
-    void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_db_mutex);
+
+    //! Whether the current height is due for full compaction.
+    bool NeedsFullCompaction(int current_height, bool force_if_unscheduled) const;
+
+    //! Force a full compaction of the underlying LevelDB. Blocks until complete.
+    void CompactFull() EXCLUSIVE_LOCKS_REQUIRED(!m_db_mutex) LOCKS_EXCLUDED(cs_main);
 };
 
 #endif // BITCOIN_TXDB_H
