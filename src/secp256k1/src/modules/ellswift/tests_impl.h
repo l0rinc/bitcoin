@@ -394,11 +394,15 @@ void ellswift_xdh_correctness_tests(void) {
         testrand_flip(sec32a_bad, sizeof(sec32a_bad));
         ret = secp256k1_ellswift_xdh(CTX, share32_bad, ell64a, ell64b, sec32a_bad, 0, hash_function, data);
         CHECK(!ret || secp256k1_memcmp_var(share32_bad, share32a, 32) != 0);
+        ret = secp256k1_ellswift_xdh(CTX, share32_bad, ell64a, ell64b, secp256k1_group_order_bytes, 0, hash_function, data);
+        CHECK(!ret);
         /* For B: */
         memcpy(sec32b_bad, sec32b, sizeof(sec32b_bad));
         testrand_flip(sec32b_bad, sizeof(sec32b_bad));
         ret = secp256k1_ellswift_xdh(CTX, share32_bad, ell64a, ell64b, sec32b_bad, 1, hash_function, data);
         CHECK(!ret || secp256k1_memcmp_var(share32_bad, share32b, 32) != 0);
+        ret = secp256k1_ellswift_xdh(CTX, share32_bad, ell64a, ell64b, secp256k1_group_order_bytes, 1, hash_function, data);
+        CHECK(!ret);
 
         if (hash_function != ellswift_xdh_hash_x32) {
             /* Verify that the shared secret doesn't match when a different encoding of the same public key is used. */

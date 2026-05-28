@@ -65,6 +65,10 @@ static int secp256k1_ge_x_on_curve_var(const secp256k1_fe *x);
 /** Determine whether fraction xn/xd is a valid X coordinate on the curve (xd != 0). */
 static int secp256k1_ge_x_frac_on_curve_var(const secp256k1_fe *xn, const secp256k1_fe *xd);
 
+/** Determine whether fraction xn/xd is a valid X coordinate on the curve (xd != 0).
+ *  xd2 must equal xd^2, and have magnitude not exceeding 8. */
+static int secp256k1_ge_x_frac_on_curve_xd2_var(const secp256k1_fe *xn, const secp256k1_fe *xd, const secp256k1_fe *xd2);
+
 /** Check whether a group element is the point at infinity. */
 static int secp256k1_ge_is_infinity(const secp256k1_ge *a);
 

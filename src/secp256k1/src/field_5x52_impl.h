@@ -269,38 +269,10 @@ static int secp256k1_fe_impl_set_b32_limit(secp256k1_fe *r, const unsigned char 
 
 /** Convert a field element to a 32-byte big endian value. Requires the input to be normalized */
 static void secp256k1_fe_impl_get_b32(unsigned char *r, const secp256k1_fe *a) {
-    r[0] = (a->n[4] >> 40) & 0xFF;
-    r[1] = (a->n[4] >> 32) & 0xFF;
-    r[2] = (a->n[4] >> 24) & 0xFF;
-    r[3] = (a->n[4] >> 16) & 0xFF;
-    r[4] = (a->n[4] >> 8) & 0xFF;
-    r[5] = a->n[4] & 0xFF;
-    r[6] = (a->n[3] >> 44) & 0xFF;
-    r[7] = (a->n[3] >> 36) & 0xFF;
-    r[8] = (a->n[3] >> 28) & 0xFF;
-    r[9] = (a->n[3] >> 20) & 0xFF;
-    r[10] = (a->n[3] >> 12) & 0xFF;
-    r[11] = (a->n[3] >> 4) & 0xFF;
-    r[12] = ((a->n[2] >> 48) & 0xF) | ((a->n[3] & 0xF) << 4);
-    r[13] = (a->n[2] >> 40) & 0xFF;
-    r[14] = (a->n[2] >> 32) & 0xFF;
-    r[15] = (a->n[2] >> 24) & 0xFF;
-    r[16] = (a->n[2] >> 16) & 0xFF;
-    r[17] = (a->n[2] >> 8) & 0xFF;
-    r[18] = a->n[2] & 0xFF;
-    r[19] = (a->n[1] >> 44) & 0xFF;
-    r[20] = (a->n[1] >> 36) & 0xFF;
-    r[21] = (a->n[1] >> 28) & 0xFF;
-    r[22] = (a->n[1] >> 20) & 0xFF;
-    r[23] = (a->n[1] >> 12) & 0xFF;
-    r[24] = (a->n[1] >> 4) & 0xFF;
-    r[25] = ((a->n[0] >> 48) & 0xF) | ((a->n[1] & 0xF) << 4);
-    r[26] = (a->n[0] >> 40) & 0xFF;
-    r[27] = (a->n[0] >> 32) & 0xFF;
-    r[28] = (a->n[0] >> 24) & 0xFF;
-    r[29] = (a->n[0] >> 16) & 0xFF;
-    r[30] = (a->n[0] >> 8) & 0xFF;
-    r[31] = a->n[0] & 0xFF;
+    secp256k1_write_be64(&r[0], (a->n[4] << 16) | (a->n[3] >> 36));
+    secp256k1_write_be64(&r[8], (a->n[3] << 28) | (a->n[2] >> 24));
+    secp256k1_write_be64(&r[16], (a->n[2] << 40) | (a->n[1] >> 12));
+    secp256k1_write_be64(&r[24], (a->n[1] << 52) | a->n[0]);
 }
 
 SECP256K1_INLINE static void secp256k1_fe_impl_negate_unchecked(secp256k1_fe *r, const secp256k1_fe *a, int m) {
@@ -338,26 +310,25 @@ SECP256K1_INLINE static void secp256k1_fe_impl_add(secp256k1_fe *r, const secp25
     r->n[4] += a->n[4];
 }
 
-SECP256K1_INLINE static void secp256k1_fe_impl_mul(secp256k1_fe *r, const secp256k1_fe *a, const secp256k1_fe * SECP256K1_RESTRICT b) {
+SECP256K1_ALWAYS_INLINE static void secp256k1_fe_impl_mul(secp256k1_fe *r, const secp256k1_fe *a, const secp256k1_fe * SECP256K1_RESTRICT b) {
     secp256k1_fe_mul_inner(r->n, a->n, b->n);
 }
 
-SECP256K1_INLINE static void secp256k1_fe_impl_sqr(secp256k1_fe *r, const secp256k1_fe *a) {
+SECP256K1_ALWAYS_INLINE static void secp256k1_fe_impl_sqr(secp256k1_fe *r, const secp256k1_fe *a) {
     secp256k1_fe_sqr_inner(r->n, a->n);
 }
 
 SECP256K1_INLINE static void secp256k1_fe_impl_cmov(secp256k1_fe *r, const secp256k1_fe *a, int flag) {
-    uint64_t mask0, mask1;
+    uint64_t mask;
     volatile int vflag = flag;
     VERIFY_CHECK(flag == 0 || flag == 1);
     SECP256K1_CHECKMEM_CHECK_VERIFY(r->n, sizeof(r->n));
-    mask0 = vflag + ~((uint64_t)0);
-    mask1 = ~mask0;
-    r->n[0] = (r->n[0] & mask0) | (a->n[0] & mask1);
-    r->n[1] = (r->n[1] & mask0) | (a->n[1] & mask1);
-    r->n[2] = (r->n[2] & mask0) | (a->n[2] & mask1);
-    r->n[3] = (r->n[3] & mask0) | (a->n[3] & mask1);
-    r->n[4] = (r->n[4] & mask0) | (a->n[4] & mask1);
+    mask = -(uint64_t)vflag;
+    r->n[0] ^= mask & (r->n[0] ^ a->n[0]);
+    r->n[1] ^= mask & (r->n[1] ^ a->n[1]);
+    r->n[2] ^= mask & (r->n[2] ^ a->n[2]);
+    r->n[3] ^= mask & (r->n[3] ^ a->n[3]);
+    r->n[4] ^= mask & (r->n[4] ^ a->n[4]);
 }
 
 static SECP256K1_INLINE void secp256k1_fe_impl_half(secp256k1_fe *r) {
@@ -415,16 +386,15 @@ static SECP256K1_INLINE void secp256k1_fe_impl_half(secp256k1_fe *r) {
 }
 
 static SECP256K1_INLINE void secp256k1_fe_storage_cmov(secp256k1_fe_storage *r, const secp256k1_fe_storage *a, int flag) {
-    uint64_t mask0, mask1;
+    uint64_t mask;
     volatile int vflag = flag;
     VERIFY_CHECK(flag == 0 || flag == 1);
     SECP256K1_CHECKMEM_CHECK_VERIFY(r->n, sizeof(r->n));
-    mask0 = vflag + ~((uint64_t)0);
-    mask1 = ~mask0;
-    r->n[0] = (r->n[0] & mask0) | (a->n[0] & mask1);
-    r->n[1] = (r->n[1] & mask0) | (a->n[1] & mask1);
-    r->n[2] = (r->n[2] & mask0) | (a->n[2] & mask1);
-    r->n[3] = (r->n[3] & mask0) | (a->n[3] & mask1);
+    mask = -(uint64_t)vflag;
+    r->n[0] ^= mask & (r->n[0] ^ a->n[0]);
+    r->n[1] ^= mask & (r->n[1] ^ a->n[1]);
+    r->n[2] ^= mask & (r->n[2] ^ a->n[2]);
+    r->n[3] ^= mask & (r->n[3] ^ a->n[3]);
 }
 
 static void secp256k1_fe_impl_to_storage(secp256k1_fe_storage *r, const secp256k1_fe *a) {
@@ -442,7 +412,7 @@ static SECP256K1_INLINE void secp256k1_fe_impl_from_storage(secp256k1_fe *r, con
     r->n[4] = a->n[3] >> 16;
 }
 
-static void secp256k1_fe_from_signed62(secp256k1_fe *r, const secp256k1_modinv64_signed62 *a) {
+static void secp256k1_fe_from_signed62(secp256k1_fe * SECP256K1_RESTRICT r, const secp256k1_modinv64_signed62 * SECP256K1_RESTRICT a) {
     const uint64_t M52 = UINT64_MAX >> 12;
     const uint64_t a0 = a->v[0], a1 = a->v[1], a2 = a->v[2], a3 = a->v[3], a4 = a->v[4];
 
@@ -462,7 +432,7 @@ static void secp256k1_fe_from_signed62(secp256k1_fe *r, const secp256k1_modinv64
     r->n[4] = (a3 >> 22 | a4 << 40);
 }
 
-static void secp256k1_fe_to_signed62(secp256k1_modinv64_signed62 *r, const secp256k1_fe *a) {
+static void secp256k1_fe_to_signed62(secp256k1_modinv64_signed62 * SECP256K1_RESTRICT r, const secp256k1_fe * SECP256K1_RESTRICT a) {
     const uint64_t M62 = UINT64_MAX >> 2;
     const uint64_t a0 = a->n[0], a1 = a->n[1], a2 = a->n[2], a3 = a->n[3], a4 = a->n[4];
 

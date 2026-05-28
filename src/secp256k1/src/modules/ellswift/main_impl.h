@@ -83,7 +83,7 @@ static void secp256k1_ellswift_xswiftec_frac_var(secp256k1_fe *xn, secp256k1_fe 
      * - If x2 = u*(c1*s+c2*g)/(g+s) is a valid x coordinate, return it.
      * - Return x1 = -(x2+u).
      */
-    secp256k1_fe u1, s, g, p, d, n, l;
+    secp256k1_fe u1, s, g, p, p2, d, n, l;
     u1 = *u;
     if (EXPECT(secp256k1_fe_normalizes_to_zero_var(&u1), 0)) u1 = secp256k1_fe_one;
     secp256k1_fe_sqr(&s, t);
@@ -105,6 +105,7 @@ static void secp256k1_ellswift_xswiftec_frac_var(secp256k1_fe *xn, secp256k1_fe 
     secp256k1_fe_negate(&l, &l, 1);                              /* l = -(g+s)^2 */
     secp256k1_fe_mul(&n, &d, &u1);                               /* n = 3*s*u^3 */
     secp256k1_fe_add(&n, &l);                                    /* n = 3*s*u^3-(g+s)^2 */
+    secp256k1_fe_negate(&p2, &l, 2);                              /* p2 = (g+s)^2 */
     if (secp256k1_ge_x_frac_on_curve_var(&n, &d)) {
         /* Return x3 = n/d = (3*s*u^3-(g+s)^2)/(3*s*u^2) */
         *xn = n;
@@ -116,9 +117,7 @@ static void secp256k1_ellswift_xswiftec_frac_var(secp256k1_fe *xn, secp256k1_fe 
     secp256k1_fe_mul(&n, &secp256k1_ellswift_c2, &g);            /* n = c2*g */
     secp256k1_fe_add(&n, &l);                                    /* n = c1*s+c2*g */
     secp256k1_fe_mul(&n, &n, &u1);                               /* n = u*(c1*s+c2*g) */
-    /* Possible optimization: in the invocation below, p^2 = (g+s)^2 is computed,
-     * which we already have computed above. This could be deduplicated. */
-    if (secp256k1_ge_x_frac_on_curve_var(&n, &p)) {
+    if (secp256k1_ge_x_frac_on_curve_xd2_var(&n, &p, &p2)) {
         /* Return x2 = n/p = u*(c1*s+c2*g)/(g+s) */
         *xn = n;
         return;
