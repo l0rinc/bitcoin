@@ -69,6 +69,7 @@
 #include <cassert>
 #include <chrono>
 #include <deque>
+#include <exception>
 #include <numeric>
 #include <optional>
 #include <ranges>
@@ -1935,6 +1936,34 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
     m_coins_views->InitCache();
 }
 
+void Chainstate::ScheduleChainstateCompaction()
+{
+    AssertLockNotHeld(::cs_main);
+
+    CCoinsViewDB* coins_db;
+    {
+        LOCK(::cs_main);
+        if (m_chainman.m_chainstates.size() != 1) return; // Skip assumeutxo.
+        Assert(this == &m_chainman.CurrentChainstate());
+        coins_db = &CoinsDB();
+    }
+
+    if (BlockValidationState state; !FlushStateToDisk(state, FlushStateMode::FORCE_FLUSH)) { // Ensure compaction reflects the latest chainstate.
+        LogWarning("Skipping chainstate compaction after failed force flush (%s)", state.ToString());
+        return;
+    }
+
+    if (m_chainman.m_options.signals) {
+        m_chainman.m_options.signals->CallFunctionInValidationInterfaceQueue([coins_db, &interrupt = m_chainman.m_interrupt] {
+            try {
+                if (!interrupt) coins_db->CompactFull();
+            } catch (const std::exception& e) {
+                LogWarning("Failed chainstate compaction (%s)", e.what());
+            }
+        });
+    }
+}
+
 // Lock-free: depends on `m_cached_is_ibd`, which is latched by `UpdateIBDStatus()`.
 bool ChainstateManager::IsInitialBlockDownload() const noexcept
 {
@@ -3338,6 +3367,7 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
     CBlockIndex *pindexNewTip = nullptr;
     bool exited_ibd{false};
     do {
+        bool force_compaction{false};
         // Block until the validation queue drains. This should largely
         // never happen in normal operation, however may happen during
         // reindex, causing memory blowup if we run too far ahead.
@@ -3385,6 +3415,7 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
                     pindexMostWork = nullptr;
                 }
                 pindexNewTip = m_chain.Tip();
+                force_compaction |= pindexNewTip->GetBlockHash() == m_chainman.AssumedValidBlock();
 
                 for (auto& [index, block] : std::move(connected_blocks)) {
                     if (m_chainman.m_options.signals) {
@@ -3451,6 +3482,8 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
 
             reached_target = ReachedTarget();
         }
+
+        if (force_compaction) ScheduleChainstateCompaction();
 
         if (reached_target) {
             // Chainstate has reached the target block, so exit.

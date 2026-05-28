@@ -154,6 +154,7 @@ BASE_SCRIPTS = [
     'wallet_deprecated_rbf.py',
     'p2p_invalid_messages.py',
     'rpc_createmultisig.py',
+    'feature_compactchainstate.py',
     'p2p_timeouts.py --v1transport',
     'p2p_timeouts.py --v2transport',
     'rpc_signer.py',
