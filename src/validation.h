@@ -741,6 +741,9 @@ public:
         FlushStateMode mode,
         int nManualPruneHeight = 0);
 
+    //! Flush and schedule a chainstate compaction.
+    void ScheduleChainstateCompaction() LOCKS_EXCLUDED(::cs_main);
+
     //! Flush all changes to disk.
     void ForceFlushStateToDisk(bool wipe_cache = true);
 
