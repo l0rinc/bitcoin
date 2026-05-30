@@ -10,6 +10,7 @@
 #include <node/utxo_snapshot.h>
 #include <random.h>
 #include <rpc/blockchain.h>
+#include <streams.h>
 #include <sync.h>
 #include <test/util/chainstate.h>
 #include <test/util/common.h>
@@ -19,6 +20,8 @@
 #include <test/util/validation.h>
 #include <uint256.h>
 #include <util/byte_units.h>
+#include <util/fs.h>
+#include <util/fs_helpers.h>
 #include <util/result.h>
 #include <util/vector.h>
 #include <validation.h>
@@ -115,6 +118,38 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager, TestChain100Setup)
 
     // Let scheduler events finish running to avoid accessing memory that is going to be unloaded
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
+}
+
+BOOST_FIXTURE_TEST_CASE(delete_chainstate_handles_null_mempool, TestingSetup)
+{
+    ChainstateManager& manager{*m_node.chainman};
+
+    {
+        LOCK(::cs_main);
+        manager.ResetChainstates();
+        manager.InitializeChainstate(/*mempool=*/nullptr);
+    }
+
+    const fs::path snapshot_dir{
+        gArgs.GetDataDirNet() / fs::u8path(strprintf("chainstate%s", node::SNAPSHOT_CHAINSTATE_SUFFIX))};
+    BOOST_REQUIRE(TryCreateDirectories(snapshot_dir));
+    {
+        AutoFile file{fsbridge::fopen(snapshot_dir / node::SNAPSHOT_BLOCKHASH_FILENAME, "wb")};
+        BOOST_REQUIRE(!file.IsNull());
+        file << uint256::ZERO;
+        BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    }
+
+    LOCK(::cs_main);
+    Chainstate* snapshot_chainstate{manager.LoadAssumeutxoChainstate()};
+    BOOST_REQUIRE(snapshot_chainstate);
+    BOOST_CHECK(!snapshot_chainstate->GetMempool());
+    manager.ValidatedChainstate().SetTargetBlock(nullptr);
+
+    BOOST_CHECK(manager.DeleteChainstate(*snapshot_chainstate));
+    BOOST_CHECK(!fs::exists(snapshot_dir));
+    BOOST_REQUIRE_EQUAL(manager.m_chainstates.size(), 1);
+    BOOST_CHECK(!manager.CurrentChainstate().GetMempool());
 }
 
 //! Test rebalancing the caches associated with each chainstate.
