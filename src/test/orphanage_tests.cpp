@@ -337,6 +337,19 @@ BOOST_AUTO_TEST_CASE(peer_dos_limits)
         orphanage->SanityCheck();
     }
 
+    // More peers than global latency slots.
+    {
+        auto orphanage{node::MakeTxOrphanage(/*max_global_latency_score=*/2, /*reserved_peer_usage=*/TOTAL_SIZE)};
+
+        orphanage->AddTx(txns.at(0), /*peer=*/0);
+        orphanage->AddTx(txns.at(1), /*peer=*/1);
+        orphanage->AddTx(txns.at(2), /*peer=*/2);
+
+        BOOST_CHECK_LE(orphanage->TotalLatencyScore(), orphanage->MaxGlobalLatencyScore());
+        BOOST_CHECK_LE(orphanage->CountAnnouncements(), 2);
+        orphanage->SanityCheck();
+    }
+
     // Test eviction of multiple transactions at a time
     {
         // Create a large transaction that is 10 times larger than the normal size transaction.

@@ -158,7 +158,7 @@ class TxOrphanageImpl final : public TxOrphanage {
         * A peer having a DoS score > 1 does not necessarily mean that something is wrong, since we
         * do not trim unless the orphanage exceeds global limits, but it means that this peer will
         * be selected for trimming sooner. If the global latency score or global memory usage
-        * limits are exceeded, it must be that there is a peer whose DoS score > 1. */
+        * limits are exceeded, it must be that there is a peer whose DoS score is at least 1. */
         FeeFrac GetDosScore(TxOrphanage::Count max_peer_latency_score, TxOrphanage::Usage max_peer_memory) const
         {
             assert(max_peer_latency_score > 0);
@@ -448,17 +448,19 @@ void TxOrphanageImpl::LimitOrphans()
 
     // Even though it's possible for MaxPeerLatencyScore to increase within this call to LimitOrphans
     // (e.g. if a peer's orphans are removed entirely, changing the number of peers), use consistent limits throughout.
-    const auto max_lat{MaxPeerLatencyScore()};
-    const auto max_mem{ReservedPeerUsage()};
+    const auto max_lat{std::max<TxOrphanage::Count>(MaxPeerLatencyScore(), 1)};
+    const auto max_mem{std::max<TxOrphanage::Usage>(ReservedPeerUsage(), 1)};
 
     // We have exceeded the global limit(s). Now, identify who is using too much and evict their orphans.
     // Create a heap of pairs (NodeId, DoS score), sorted by descending DoS score.
     std::vector<std::pair<NodeId, FeeFrac>> heap_peer_dos;
     heap_peer_dos.reserve(m_peer_orphanage_info.size());
     for (const auto& [nodeid, entry] : m_peer_orphanage_info) {
-        // Performance optimization: only consider peers with a DoS score > 1.
+        // Performance optimization: only consider peers with a DoS score >= 1.
+        // A score exactly equal to 1 may still require trimming if every peer
+        // is at its floor-share latency limit.
         const auto dos_score = entry.GetDosScore(max_lat, max_mem);
-        if (ByRatio{dos_score} > ByRatio{FeeFrac{1, 1}}) {
+        if (ByRatio{dos_score} >= ByRatio{FeeFrac{1, 1}}) {
             heap_peer_dos.emplace_back(nodeid, dos_score);
         }
     }
@@ -487,8 +489,8 @@ void TxOrphanageImpl::LimitOrphans()
         const auto [worst_peer, dos_score] = std::move(heap_peer_dos.back());
         heap_peer_dos.pop_back();
 
-        // If needs trim, then at least one peer has a DoS score higher than 1.
-        Assume(ByRatio{dos_score} > ByRatio{FeeFrac(1, 1)});
+        // If needs trim, then at least one peer has a DoS score of at least 1.
+        Assume(ByRatio{dos_score} >= ByRatio{FeeFrac(1, 1)});
 
         auto it_worst_peer = m_peer_orphanage_info.find(worst_peer);
 
