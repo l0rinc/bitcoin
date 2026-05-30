@@ -4,8 +4,14 @@
 
 #include <psbt.h>
 
+#include <addresstype.h>
 #include <boost/test/unit_test.hpp>
+#include <key.h>
+#include <script/signingprovider.h>
 #include <test/util/setup_common.h>
+#include <util/strencodings.h>
+
+#include <algorithm>
 
 BOOST_FIXTURE_TEST_SUITE(psbt_tests, BasicTestingSetup)
 
@@ -39,6 +45,42 @@ BOOST_AUTO_TEST_CASE(psbt2_timelock_test)
     CheckTimeLock("cHNidP8BAgQCAAAAAQMEAAAAAAEEAQIBBQEBAfsEAgAAAAABDiAPdY2/vU2nwWyKMwnDyB4RAPVh6mRttbAXUsSF4b3enwEPBAEAAAABEQSLjcRiARIEECcAAAABDiA6Gzs8g31kiep6Mdjmx91QPAAb7z4GlY51dICNaMp4pQEPBAAAAAABEQSMjcRiAAEDCE+TNXcAAAAAAQQWABQLE1LKzQPPaqG388jWOIZxs0peEQA=", 1657048460);
     CheckTimeLock("cHNidP8BAgQCAAAAAQMEAAAAAAEEAQIBBQEBAfsEAgAAAAABDiAPdY2/vU2nwWyKMwnDyB4RAPVh6mRttbAXUsSF4b3enwEPBAEAAAAAAQ4gOhs7PIN9ZInqejHY5sfdUDwAG+8+BpWOdXSAjWjKeKUBDwQAAAAAAREEjI3EYgABAwhPkzV3AAAAAAEEFgAUCxNSys0Dz2qht/PI1jiGcbNKXhEA", 1657048460);
     CheckTimeLock("cHNidP8BAgQCAAAAAQMEAAAAAAEEAQIBBQEBAfsEAgAAAAABDiAPdY2/vU2nwWyKMwnDyB4RAPVh6mRttbAXUsSF4b3enwEPBAEAAAABEgQQJwAAAAEOIDobOzyDfWSJ6nox2ObH3VA8ABvvPgaVjnV0gI1oynilAQ8EAAAAAAERBIyNxGIAAQMIT5M1dwAAAAABBBYAFAsTUsrNA89qobfzyNY4hnGzSl4RAA==", std::nullopt);
+}
+
+BOOST_AUTO_TEST_CASE(musig2_invalid_aggregate_derivation)
+{
+    const auto aggregate_bytes{ParseHex("02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9")};
+    const auto output_bytes{ParseHex("03dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659")};
+    const CPubKey aggregate_pubkey{aggregate_bytes};
+    const XOnlyPubKey output_pubkey{CPubKey{output_bytes}};
+    const CKeyID aggregate_id{aggregate_pubkey.GetID()};
+
+    auto make_psbt = [&](std::vector<uint32_t> path) {
+        CMutableTransaction tx;
+        tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
+        tx.vout.emplace_back(CAmount{0}, CScript{});
+
+        PartiallySignedTransaction psbt{tx, /*version=*/2};
+        auto& input{psbt.inputs.at(0)};
+        input.witness_utxo = CTxOut{CAmount{1000}, GetScriptForDestination(WitnessV1Taproot{output_pubkey})};
+        input.m_tap_internal_key = output_pubkey;
+        input.m_musig2_participants.emplace(aggregate_pubkey, std::vector<CPubKey>{aggregate_pubkey});
+
+        KeyOriginInfo origin;
+        std::copy_n(aggregate_id.begin(), sizeof(origin.fingerprint), origin.fingerprint);
+        origin.path = std::move(path);
+        input.m_tap_bip32_paths.emplace(output_pubkey, std::make_pair(std::set<uint256>{}, std::move(origin)));
+        return psbt;
+    };
+
+    auto check_incomplete = [](PartiallySignedTransaction psbt) {
+        const auto txdata{PrecomputePSBTData(psbt)};
+        BOOST_REQUIRE(txdata);
+        BOOST_CHECK(SignPSBTInput(DUMMY_SIGNING_PROVIDER, psbt, /*index=*/0, &*txdata, /*options=*/{}) == PSBTError::INCOMPLETE);
+    };
+
+    check_incomplete(make_psbt({0x80000000})); // Hardened derivation is invalid for synthetic xpubs.
+    check_incomplete(make_psbt({0})); // Non-hardened derivation must still match the claimed output key.
 }
 
 BOOST_AUTO_TEST_CASE(psbt2_addinput)
