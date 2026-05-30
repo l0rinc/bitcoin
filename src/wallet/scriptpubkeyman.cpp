@@ -19,6 +19,7 @@
 #include <util/translation.h>
 #include <wallet/scriptpubkeyman.h>
 
+#include <limits>
 #include <optional>
 
 using common::PSBTError;
@@ -1009,14 +1010,16 @@ bool DescriptorScriptPubKeyMan::TopUpWithDB(WalletBatch& batch, unsigned int siz
         target_size = m_keypool_size;
     }
 
-    // Calculate the new range_end
-    int32_t new_range_end = std::max(m_wallet_descriptor.next_index + (int32_t)target_size, m_wallet_descriptor.range_end);
-
     // If the descriptor is not ranged, we actually just want to fill the first cache item
+    int32_t new_range_end{1};
     if (!m_wallet_descriptor.descriptor->IsRange()) {
-        new_range_end = 1;
         m_wallet_descriptor.range_end = 1;
         m_wallet_descriptor.range_start = 0;
+    } else {
+        // Calculate the new range_end
+        const int64_t target_range_end{int64_t{m_wallet_descriptor.next_index} + target_size};
+        if (target_range_end > std::numeric_limits<int32_t>::max()) return false;
+        new_range_end = std::max(static_cast<int32_t>(target_range_end), m_wallet_descriptor.range_end);
     }
 
     FlatSigningProvider provider;
@@ -1575,7 +1578,7 @@ util::Result<void> DescriptorScriptPubKeyMan::UpdateWalletDescriptor(WalletDescr
 
     m_map_pubkeys.clear();
     m_map_script_pub_keys.clear();
-    m_max_cached_index = -1;
+    m_max_cached_index = descriptor.range_start > 0 ? descriptor.range_start - 1 : -1;
     m_wallet_descriptor = descriptor;
 
     NotifyFirstKeyTimeChanged(this, m_wallet_descriptor.creation_time);

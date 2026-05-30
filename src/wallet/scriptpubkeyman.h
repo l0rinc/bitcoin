@@ -323,6 +323,7 @@ protected:
 public:
     DescriptorScriptPubKeyMan(WalletStorage& storage, WalletDescriptor& descriptor, int64_t keypool_size)
         :   ScriptPubKeyMan(storage),
+            m_max_cached_index(descriptor.range_start > 0 ? descriptor.range_start - 1 : -1),
             m_keypool_size(keypool_size),
             m_wallet_descriptor(descriptor)
         {}

@@ -26,8 +26,9 @@
 
 #include <cstdint>
 #include <fstream>
-#include <tuple>
+#include <limits>
 #include <string>
+#include <tuple>
 
 #include <univalue.h>
 
@@ -175,6 +176,9 @@ static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, c
         } else if (parsed_descs.at(0)->IsRange()) {
             if (data.exists("range")) {
                 auto range = ParseDescriptorRange(data["range"]);
+                if (range.second >= std::numeric_limits<int32_t>::max()) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, "End of range is too high");
+                }
                 range_start = range.first;
                 range_end = range.second + 1; // Specified range end is inclusive, but we need range end as exclusive
             } else {

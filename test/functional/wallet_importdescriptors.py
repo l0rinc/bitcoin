@@ -286,6 +286,9 @@ class ImportDescriptorsTest(BitcoinTestFramework):
         self.test_importdesc({"desc": descsum_create(desc), "timestamp": "now", "range": [0, 1000001]},
                               success=False, error_code=-8, error_message='Range is too large')
 
+        self.test_importdesc({"desc": descsum_create(desc), "timestamp": "now", "range": [2**31 - 1, 2**31 - 1]},
+                              success=False, error_code=-8, error_message='End of range is too high')
+
         self.log.info("Verify we can only extend descriptor's range")
         range_request = {"desc": descsum_create(desc), "timestamp": "now", "range": [5, 10], 'active': True}
         self.test_importdesc(range_request, wallet=wpriv, success=True)
