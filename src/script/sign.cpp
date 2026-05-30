@@ -117,13 +117,15 @@ std::vector<uint8_t> MutableTransactionSignatureCreator::CreateMuSig2Nonce(const
     // Compute sighash
     std::optional<uint256> sighash = ComputeSchnorrSignatureHash(leaf_hash, sigversion);
     if (!sighash.has_value()) return {};
+    const uint256 session_id = MuSig2SessionID(script_pubkey, part_pubkey, *sighash);
+    if (provider.GetMuSig2SecNonce(session_id).has_value()) return {};
 
     MuSig2SecNonce secnonce;
     std::vector<uint8_t> out = key.CreateMuSig2Nonce(secnonce, *sighash, aggregate_pubkey, pubkeys);
     if (out.empty()) return {};
 
     // Store the secnonce in the SigningProvider
-    provider.SetMuSig2SecNonce(MuSig2SessionID(script_pubkey, part_pubkey, *sighash), std::move(secnonce));
+    provider.SetMuSig2SecNonce(session_id, std::move(secnonce));
 
     return out;
 }

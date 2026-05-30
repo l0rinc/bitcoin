@@ -111,6 +111,35 @@ class WalletMuSigTest(BitcoinTestFramework):
 
         return wallets, psbt
 
+    def test_repeated_nonce_request(self):
+        self.log.info("Testing repeated nonce request")
+        self.def_wallet = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
+        wallets, psbt = self.setup_musig_scenario("tr(musig($0/<0;1>/*,$1/<1;2>/*))")
+
+        # The first processing pass creates and stores a secret nonce, and
+        # returns the matching public nonce in the PSBT.
+        proc = wallets[0].walletprocesspsbt(psbt=psbt)
+        assert_equal(proc["complete"], False)
+        dec = self.nodes[0].decodepsbt(proc["psbt"])
+        assert_equal(len(dec["inputs"][0]["musig2_pubnonces"]), 1)
+
+        # Reprocessing the original PSBT must not try to create another nonce
+        # for the same signing session.
+        proc = wallets[0].walletprocesspsbt(psbt=psbt)
+        assert_equal(proc["complete"], False)
+        repeated_psbt = proc["psbt"]
+        dec = self.nodes[0].decodepsbt(proc["psbt"])
+        assert_equal(len(dec["inputs"][0]["musig2_pubnonces"]), 1)
+
+        # The nonce returned by the repeated request should be usable to
+        # produce a partial signature once the other participant's nonce exists.
+        other_proc = wallets[1].walletprocesspsbt(psbt=psbt)
+        combined = self.nodes[0].combinepsbt([repeated_psbt, other_proc["psbt"]])
+        proc = wallets[0].walletprocesspsbt(psbt=combined)
+        assert_equal(proc["complete"], False)
+        dec = self.nodes[0].decodepsbt(proc["psbt"])
+        assert_equal(len(dec["inputs"][0]["musig2_partial_sigs"]), 1)
+
     def test_failure_case_1(self, comment, pat):
         self.log.info(f"Testing {comment}")
         wallets, psbt = self.setup_musig_scenario(pat)
@@ -317,6 +346,8 @@ class WalletMuSigTest(BitcoinTestFramework):
 
     def run_test(self):
         self.def_wallet = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
+
+        self.test_repeated_nonce_request()
 
         self.test_success_case("rawtr(musig(keys/*))", "rawtr(musig($0/<0;1>/*,$1/<1;2>/*,$2/<2;3>/*))")
         self.test_success_case("rawtr(musig(keys/*)) with ALL|ANYONECANPAY", "rawtr(musig($0/<0;1>/*,$1/<1;2>/*,$2/<2;3>/*))", "ALL|ANYONECANPAY")
