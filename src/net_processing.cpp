@@ -1754,10 +1754,11 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         m_headers_presync_stats.erase(nodeid);
     }
     if (node.IsPrivateBroadcastConn() &&
-        !m_tx_for_private_broadcast.DidNodeConfirmReception(nodeid) &&
-        m_tx_for_private_broadcast.HavePendingTransactions()) {
-
-        m_connman.m_private_broadcast.NumToOpenAdd(1);
+        !m_tx_for_private_broadcast.DidNodeConfirmReception(nodeid)) {
+        m_tx_for_private_broadcast.RemoveUnconfirmedNode(nodeid);
+        if (m_tx_for_private_broadcast.HavePendingTransactions()) {
+            m_connman.m_private_broadcast.NumToOpenAdd(1);
+        }
     }
     LogDebug(BCLog::NET, "Cleared nodestate for peer=%d\n", nodeid);
 }
