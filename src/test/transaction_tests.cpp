@@ -483,6 +483,40 @@ BOOST_AUTO_TEST_CASE(tx_noncanonical_witness_compactsize)
     BOOST_CHECK_THROW(deserialize_tx(noncanonical_witness_stack_count), std::ios_base::failure);
 }
 
+BOOST_AUTO_TEST_CASE(tx_empty_witness_item_not_superfluous)
+{
+    const auto deserialize_tx{[](const std::string& hex) {
+        DataStream stream{ParseHex(hex)};
+        return CTransaction(deserialize, TX_WITH_WITNESS, stream);
+    }};
+
+    const std::string tx_with_empty_witness_item{
+        "01000000"
+        "0001"
+        "01"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "ffffffff"
+        "02"
+        "0101"
+        "ffffffff"
+        "01"
+        "0000000000000000"
+        "01"
+        "51"
+        "01"
+        "00"
+        "00000000"};
+    const CTransaction tx{deserialize_tx(tx_with_empty_witness_item)};
+    BOOST_CHECK(tx.HasWitness());
+    BOOST_REQUIRE_EQUAL(tx.vin.size(), 1);
+    BOOST_REQUIRE_EQUAL(tx.vin[0].scriptWitness.stack.size(), 1);
+    BOOST_CHECK(tx.vin[0].scriptWitness.stack[0].empty());
+
+    TxValidationState state;
+    BOOST_CHECK(CheckTransaction(tx, state));
+    BOOST_CHECK(state.IsValid());
+}
+
 BOOST_AUTO_TEST_CASE(basic_transaction_tests)
 {
     // Random real transaction (e2769b09e784f32f62ef849763d4f45b98e07ba658647343b915ff832b110436)
