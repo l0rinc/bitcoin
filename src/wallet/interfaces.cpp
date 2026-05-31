@@ -159,6 +159,7 @@ public:
     }
     bool getPubKey(const CScript& script, const CKeyID& address, CPubKey& pub_key) override
     {
+        LOCK(m_wallet->cs_wallet);
         std::unique_ptr<SigningProvider> provider = m_wallet->GetSolvingProvider(script);
         if (provider) {
             return provider->GetPubKey(address, pub_key);
@@ -483,6 +484,7 @@ public:
     bool hasExternalSigner() override { return m_wallet->IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER); }
     bool privateKeysDisabled() override { return m_wallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS); }
     bool taprootEnabled() override {
+        LOCK(m_wallet->cs_wallet);
         auto spk_man = m_wallet->GetScriptPubKeyMan(OutputType::BECH32M, /*internal=*/false);
         return spk_man != nullptr;
     }

@@ -1737,6 +1737,8 @@ CAmount CWallet::GetDebit(const CTransaction& tx) const
 
 bool CWallet::IsHDEnabled() const
 {
+    LOCK(cs_wallet);
+
     // All Active ScriptPubKeyMans must be HD for this to be true
     bool result = false;
     for (const auto& spk_man : GetActiveScriptPubKeyMans()) {
@@ -2275,11 +2277,12 @@ std::optional<PSBTError> CWallet::FillPSBT(PartiallySignedTransaction& psbtx, co
 
 SigningResult CWallet::SignMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig) const
 {
+    LOCK(cs_wallet);
+
     SignatureData sigdata;
     CScript script_pub_key = GetScriptForDestination(pkhash);
     for (const auto& spk_man_pair : m_spk_managers) {
         if (spk_man_pair.second->CanProvide(script_pub_key, sigdata)) {
-            LOCK(cs_wallet);  // DescriptorScriptPubKeyMan calls IsLocked which can lock cs_wallet in a deadlocking order
             return spk_man_pair.second->SignMessage(message, pkhash, str_sig);
         }
     }

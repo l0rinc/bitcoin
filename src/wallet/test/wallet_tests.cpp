@@ -4,9 +4,11 @@
 
 #include <wallet/wallet.h>
 
+#include <atomic>
 #include <cstdint>
 #include <future>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #include <addresstype.h>
@@ -88,6 +90,55 @@ BOOST_FIXTURE_TEST_CASE(update_non_range_descriptor, TestingSetup)
         // Wallet should update the non-range descriptor successfully
         BOOST_CHECK(wallet.AddWalletDescriptor(w_desc, provider, "", false));
     }
+}
+
+BOOST_FIXTURE_TEST_CASE(wallet_interface_spk_managers_threadsafe, TestingSetup)
+{
+    WalletContext context;
+    context.args = &m_args;
+    context.chain = m_node.chain.get();
+
+    auto wallet{std::make_shared<CWallet>(m_node.chain.get(), "", CreateMockableWalletDatabase())};
+    {
+        LOCK(wallet->cs_wallet);
+        wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
+    }
+
+    CKey key{GenerateRandomKey()};
+    AddKey(*wallet, key);
+
+    auto wallet_interface{interfaces::MakeWallet(context, wallet)};
+    BOOST_REQUIRE(wallet_interface);
+
+    const CPubKey pubkey{key.GetPubKey()};
+    const PKHash pkhash{pubkey};
+    const CScript script_pub_key{GetScriptForDestination(pkhash)};
+
+    std::atomic<bool> start{false};
+    std::atomic<bool> done{false};
+    std::thread reader{[&] {
+        while (!start.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+        }
+        while (!done.load(std::memory_order_acquire)) {
+            CPubKey found_pubkey;
+            (void)wallet_interface->getPubKey(script_pub_key, pubkey.GetID(), found_pubkey);
+
+            std::string signature;
+            (void)wallet_interface->signMessage("test message", pkhash, signature);
+
+            (void)wallet_interface->hdEnabled();
+            (void)wallet_interface->taprootEnabled();
+        }
+    }};
+
+    start.store(true, std::memory_order_release);
+    for (int i = 0; i < 64; ++i) {
+        AddKey(*wallet, GenerateRandomKey());
+        std::this_thread::yield();
+    }
+    done.store(true, std::memory_order_release);
+    reader.join();
 }
 
 BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
