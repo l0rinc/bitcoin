@@ -470,6 +470,7 @@ public:
     typedef std::map<unsigned int, CMasterKey> MasterKeyMap;
     MasterKeyMap mapMasterKeys;
     unsigned int nMasterKeyMaxID = 0;
+    std::atomic<bool> m_has_encryption_keys{false};
 
     /** Construct wallet with specified name and database implementation. */
     CWallet(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatabase> database)

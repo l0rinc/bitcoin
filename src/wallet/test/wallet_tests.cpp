@@ -141,6 +141,49 @@ BOOST_FIXTURE_TEST_CASE(wallet_interface_spk_managers_threadsafe, TestingSetup)
     reader.join();
 }
 
+BOOST_FIXTURE_TEST_CASE(wallet_interface_encryption_keys_threadsafe, TestingSetup)
+{
+    WalletContext context;
+    context.args = &m_args;
+    context.chain = m_node.chain.get();
+
+    auto wallet{std::make_shared<CWallet>(m_node.chain.get(), "", CreateMockableWalletDatabase())};
+    {
+        LOCK(wallet->cs_wallet);
+        wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
+    }
+
+    auto wallet_interface{interfaces::MakeWallet(context, wallet)};
+    BOOST_REQUIRE(wallet_interface);
+
+    std::atomic<bool> start{false};
+    std::atomic<bool> done{false};
+    std::thread reader{[&] {
+        while (!start.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+        }
+        while (!done.load(std::memory_order_acquire)) {
+            (void)wallet_interface->isCrypted();
+            (void)wallet_interface->isLocked();
+        }
+    }};
+
+    start.store(true, std::memory_order_release);
+    for (int i = 0; i < 1024; ++i) {
+        CMasterKey master_key;
+        {
+            LOCK(wallet->cs_wallet);
+            wallet->mapMasterKeys[++wallet->nMasterKeyMaxID] = master_key;
+            if (wallet->mapMasterKeys.size() > 4) {
+                wallet->mapMasterKeys.clear();
+            }
+        }
+        std::this_thread::yield();
+    }
+    done.store(true, std::memory_order_release);
+    reader.join();
+}
+
 BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
 {
     // Cap last block file size, and mine new block in a new block file.

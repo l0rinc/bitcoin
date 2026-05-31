@@ -406,6 +406,7 @@ bool LoadEncryptionKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue,
             return false;
         }
         pwallet->mapMasterKeys[nID] = kMasterKey;
+        pwallet->m_has_encryption_keys = true;
         if (pwallet->nMasterKeyMaxID < nID)
             pwallet->nMasterKeyMaxID = nID;
 
@@ -1183,6 +1184,7 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
             }
         }
         pwallet->mapMasterKeys.clear();
+        pwallet->m_has_encryption_keys = false;
     }
 
     return result;

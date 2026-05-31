@@ -864,6 +864,7 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
     {
         LOCK2(m_relock_mutex, cs_wallet);
         mapMasterKeys[++nMasterKeyMaxID] = master_key;
+        m_has_encryption_keys = true;
         WalletBatch* encrypted_batch = new WalletBatch(GetDatabase());
         if (!encrypted_batch->TxnBegin()) {
             delete encrypted_batch;
@@ -3582,7 +3583,7 @@ bool CWallet::WithEncryptionKey(std::function<bool (const CKeyingMaterial&)> cb)
 
 bool CWallet::HasEncryptionKeys() const
 {
-    return !mapMasterKeys.empty();
+    return m_has_encryption_keys;
 }
 
 bool CWallet::HaveCryptedKeys() const
