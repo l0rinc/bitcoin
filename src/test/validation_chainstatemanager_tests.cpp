@@ -4,6 +4,7 @@
 //
 #include <chainparams.h>
 #include <consensus/consensus.h>
+#include <consensus/merkle.h>
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <hash.h>
@@ -134,6 +135,38 @@ BOOST_AUTO_TEST_CASE(block_script_flags_nulldummy_height_ignores_activation_hash
     BOOST_CHECK(err == SCRIPT_ERR_OK);
     BOOST_CHECK(!VerifyScript(script_sig, script_pub_key, nullptr, segwit_flags, BaseSignatureChecker{}, &err));
     BOOST_CHECK(err == SCRIPT_ERR_SIG_NULLDUMMY);
+}
+
+BOOST_AUTO_TEST_CASE(block_witness_commitment_height_ignores_activation_hash)
+{
+    const int segwit_height{Params().GetConsensus().SegwitHeight};
+    const uint256 block_hash{uint256::ONE};
+    CBlockIndex prev;
+    prev.nHeight = segwit_height - 1;
+    prev.phashBlock = &block_hash;
+
+    BOOST_CHECK(DeploymentActiveAfter(&prev, *Assert(m_node.chainman), Consensus::DEPLOYMENT_SEGWIT));
+
+    std::vector<unsigned char> commitment(36);
+    commitment[0] = 0xaa;
+    commitment[1] = 0x21;
+    commitment[2] = 0xa9;
+    commitment[3] = 0xed;
+
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vin[0].scriptSig = CScript{} << segwit_height;
+    coinbase.vout.emplace_back(0, CScript{} << OP_RETURN << commitment);
+
+    CBlock block;
+    block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+
+    BOOST_CHECK_EQUAL(GetWitnessCommitmentIndex(block), 0);
+    BOOST_CHECK(!block.vtx[0]->HasWitness());
+    BOOST_CHECK(!IsBlockMutated(block, /*check_witness_root=*/false));
+    BOOST_CHECK(IsBlockMutated(block, /*check_witness_root=*/true));
 }
 
 BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_witness)
