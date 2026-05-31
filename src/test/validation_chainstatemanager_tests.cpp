@@ -39,6 +39,30 @@ using node::SnapshotMetadata;
 
 BOOST_FIXTURE_TEST_SUITE(validation_chainstatemanager_tests, TestingSetup)
 
+BOOST_AUTO_TEST_CASE(block_script_flags_csv_height_ignores_activation_hash)
+{
+    const int csv_height{Params().GetConsensus().CSVHeight};
+    const uint256 block_hash{uint256::ONE};
+    CBlockIndex pre_csv_block;
+    pre_csv_block.nHeight = csv_height - 1;
+    pre_csv_block.phashBlock = &block_hash;
+    CBlockIndex csv_block;
+    csv_block.nHeight = csv_height;
+    csv_block.phashBlock = &block_hash;
+
+    const script_verify_flags pre_csv_flags{GetBlockScriptFlags(pre_csv_block, *Assert(m_node.chainman))};
+    const script_verify_flags csv_flags{GetBlockScriptFlags(csv_block, *Assert(m_node.chainman))};
+    BOOST_CHECK(!(pre_csv_flags & SCRIPT_VERIFY_CHECKSEQUENCEVERIFY));
+    BOOST_CHECK(csv_flags & SCRIPT_VERIFY_CHECKSEQUENCEVERIFY);
+
+    const CScript script_pub_key{CScript{} << 1 << OP_CHECKSEQUENCEVERIFY << OP_DROP << OP_TRUE};
+    ScriptError err;
+    BOOST_CHECK(VerifyScript(CScript{}, script_pub_key, nullptr, pre_csv_flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_OK);
+    BOOST_CHECK(!VerifyScript(CScript{}, script_pub_key, nullptr, csv_flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_UNSATISFIED_LOCKTIME);
+}
+
 BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_witness)
 {
     CBlockIndex block_index;
