@@ -81,6 +81,35 @@ BOOST_AUTO_TEST_CASE(get_next_work_upper_limit_actual)
     BOOST_CHECK(!PermittedDifficultyTransition(chainParams->GetConsensus(), pindexLast.nHeight+1, pindexLast.nBits, invalid_nbits));
 }
 
+BOOST_AUTO_TEST_CASE(get_next_work_bip94_uses_first_period_bits)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::TESTNET4);
+    const auto consensus = chainParams->GetConsensus();
+    BOOST_REQUIRE(consensus.enforce_BIP94);
+    BOOST_REQUIRE(consensus.fPowAllowMinDifficultyBlocks);
+
+    const int interval{static_cast<int>(consensus.DifficultyAdjustmentInterval())};
+    const unsigned int first_period_bits{0x1c0ffff0U};
+    const unsigned int pow_limit_bits{UintToArith256(consensus.powLimit).GetCompact()};
+    const int64_t first_time{1700000000};
+
+    std::vector<CBlockIndex> blocks(interval);
+    for (int i = 0; i < interval; ++i) {
+        blocks[i].nHeight = interval + i;
+        blocks[i].pprev = i > 0 ? &blocks[i - 1] : nullptr;
+        blocks[i].nTime = first_time + i * consensus.nPowTargetSpacing;
+        blocks[i].nBits = pow_limit_bits;
+    }
+    blocks.front().nBits = first_period_bits;
+    blocks.back().nTime = first_time + consensus.nPowTargetTimespan;
+
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&blocks.back(), blocks.front().GetBlockTime(), consensus), first_period_bits);
+
+    auto legacy_consensus{consensus};
+    legacy_consensus.enforce_BIP94 = false;
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&blocks.back(), blocks.front().GetBlockTime(), legacy_consensus), pow_limit_bits);
+}
+
 BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_negative_target)
 {
     const auto consensus = CreateChainParams(*m_node.args, ChainType::MAIN)->GetConsensus();
