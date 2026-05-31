@@ -368,4 +368,33 @@ BOOST_AUTO_TEST_CASE(witness_commitment_index)
 
     BOOST_CHECK_EQUAL(GetWitnessCommitmentIndex(pblock), 2);
 }
+
+BOOST_AUTO_TEST_CASE(update_uncommitted_block_structures_rejects_malformed_coinbase)
+{
+    CBlock block;
+    const CBlockIndex* tip{WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain().Tip())};
+    BOOST_REQUIRE(tip != nullptr);
+    block.hashPrevBlock = tip->GetBlockHash();
+
+    CMutableTransaction tx;
+    tx.vout.resize(1);
+    tx.vout[0].scriptPubKey.resize(MINIMUM_WITNESS_COMMITMENT);
+    tx.vout[0].scriptPubKey[0] = OP_RETURN;
+    tx.vout[0].scriptPubKey[1] = 0x24;
+    tx.vout[0].scriptPubKey[2] = 0xaa;
+    tx.vout[0].scriptPubKey[3] = 0x21;
+    tx.vout[0].scriptPubKey[4] = 0xa9;
+    tx.vout[0].scriptPubKey[5] = 0xed;
+    block.vtx.push_back(MakeTransactionRef(tx));
+
+    {
+        LOCK(Assert(m_node.chainman)->GetMutex());
+        BOOST_REQUIRE(DeploymentActiveAfter(tip, *m_node.chainman, Consensus::DEPLOYMENT_SEGWIT));
+        m_node.chainman->UpdateUncommittedBlockStructures(block, tip);
+    }
+
+    BlockValidationState state;
+    BOOST_CHECK(!CheckBlock(block, state, Params().GetConsensus(), /*fCheckPOW=*/false, /*fCheckMerkleRoot=*/false));
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-cb-missing");
+}
 BOOST_AUTO_TEST_SUITE_END()
