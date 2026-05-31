@@ -98,6 +98,14 @@ public:
         EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
 
     /**
+     * Forget an unconfirmed send record after its private broadcast peer disconnects.
+     * @retval true An unconfirmed send record was removed.
+     * @retval false No unconfirmed send record existed for the node.
+     */
+    bool RemoveUnconfirmedNode(const NodeId& nodeid)
+        EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
+
+    /**
      * Check if the node has confirmed reception of the transaction.
      * @retval true Node has confirmed, `NodeConfirmedReception()` has been called.
      * @retval false Node has not confirmed, `NodeConfirmedReception()` has not been called.
@@ -155,6 +163,13 @@ private:
         }
     };
 
+    struct TxSendStatus {
+        const NodeClock::time_point time_added{NodeClock::now()};
+        size_t disconnected_unconfirmed_picks{0};
+        NodeClock::time_point last_disconnected_unconfirmed_pick{};
+        std::vector<SendStatus> send_statuses;
+    };
+
     /// A pair of a transaction and a sent status for a given node. Convenience return type of GetSendStatusByNode().
     struct TxAndSendStatusForNode {
         const CTransactionRef& tx;
@@ -179,9 +194,9 @@ private:
 
     /**
      * Derive the sending priority of a transaction.
-     * @param[in] sent_to List of nodes that the transaction has been sent to.
+     * @param[in] status Sending state for a transaction.
      */
-    static Priority DerivePriority(const std::vector<SendStatus>& sent_to);
+    static Priority DerivePriority(const TxSendStatus& status);
 
     /**
      * Find which transaction we sent to a given node (marked by PickTxForSend()).
@@ -190,10 +205,6 @@ private:
      */
     std::optional<TxAndSendStatusForNode> GetSendStatusByNode(const NodeId& nodeid)
         EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
-    struct TxSendStatus {
-        const NodeClock::time_point time_added{NodeClock::now()};
-        std::vector<SendStatus> send_statuses;
-    };
     mutable Mutex m_mutex;
     std::unordered_map<CTransactionRef, TxSendStatus, CTransactionRefHash, CTransactionRefComp>
         m_transactions GUARDED_BY(m_mutex);
