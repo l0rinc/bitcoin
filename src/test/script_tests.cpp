@@ -1834,6 +1834,36 @@ BOOST_AUTO_TEST_CASE(tapscript_sigops_budget_counts_script_and_control)
            SCRIPT_ERR_OK);
 }
 
+BOOST_AUTO_TEST_CASE(tapscript_checksigadd_unknown_pubkey_type_succeeds)
+{
+    const KeyData keys;
+    const std::vector<unsigned char> unknown_pubkey(33, 0x02);
+
+    CScript script;
+    script << std::vector<unsigned char>{0x01}
+           << 0
+           << unknown_pubkey
+           << OP_CHECKSIGADD
+           << 1
+           << OP_EQUAL;
+    const auto script_bytes{ToByteVector(script)};
+
+    TaprootBuilder builder;
+    builder.Add(/*depth=*/0, script_bytes, TAPROOT_LEAF_TAPSCRIPT, /*track=*/true);
+    builder.Finalize(XOnlyPubKey(keys.key0.GetPubKey()));
+
+    const auto controlblocks = builder.GetSpendData().scripts[{script_bytes, TAPROOT_LEAF_TAPSCRIPT}];
+
+    CScriptWitness witness;
+    witness.stack.push_back(script_bytes);
+    witness.stack.push_back(*controlblocks.begin());
+
+    DoTest(GetScriptForDestination(builder.GetOutput()), CScript{}, witness,
+           SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT,
+           "Tapscript CHECKSIGADD treats unknown pubkey type as successful",
+           SCRIPT_ERR_OK);
+}
+
 BOOST_AUTO_TEST_CASE(formatscriptflags)
 {
     // quick check that FormatScriptFlags reports any unknown/unexpected bits
