@@ -3,12 +3,14 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 //
 #include <chainparams.h>
+#include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <hash.h>
 #include <kernel/disconnected_transactions.h>
 #include <node/chainstatemanager_args.h>
 #include <node/kernel_notifications.h>
 #include <node/utxo_snapshot.h>
+#include <primitives/transaction.h>
 #include <random.h>
 #include <rpc/blockchain.h>
 #include <script/interpreter.h>
@@ -38,6 +40,28 @@ using node::KernelNotifications;
 using node::SnapshotMetadata;
 
 BOOST_FIXTURE_TEST_SUITE(validation_chainstatemanager_tests, TestingSetup)
+
+BOOST_AUTO_TEST_CASE(block_finality_bip113_height_ignores_activation_hash)
+{
+    const int csv_height{Params().GetConsensus().CSVHeight};
+    const int64_t median_time_past{LOCKTIME_THRESHOLD + 1000};
+    const uint256 block_hash{uint256::ONE};
+    CBlockIndex prev;
+    prev.nHeight = csv_height - 1;
+    prev.nTime = median_time_past;
+    prev.phashBlock = &block_hash;
+
+    BOOST_CHECK(DeploymentActiveAfter(&prev, *Assert(m_node.chainman), Consensus::DEPLOYMENT_CSV));
+
+    CMutableTransaction mutable_tx;
+    mutable_tx.nLockTime = prev.GetMedianTimePast() + 1;
+    mutable_tx.vin.resize(1);
+    mutable_tx.vin[0].nSequence = CTxIn::SEQUENCE_FINAL - 1;
+    const CTransaction tx{mutable_tx};
+
+    BOOST_CHECK(IsFinalTx(tx, csv_height, mutable_tx.nLockTime + 1));
+    BOOST_CHECK(!IsFinalTx(tx, csv_height, prev.GetMedianTimePast()));
+}
 
 BOOST_AUTO_TEST_CASE(block_script_flags_csv_height_ignores_activation_hash)
 {
