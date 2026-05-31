@@ -1099,6 +1099,9 @@ BOOST_AUTO_TEST_CASE(btck_block_tree_entry_tests)
     BOOST_CHECK(entry_2.GetAncestor(2) == entry_2);
     BOOST_CHECK(entry_2.GetAncestor(1) == entry_1);
     BOOST_CHECK(entry_2.GetAncestor(0) == entry_0);
+    BOOST_CHECK_EQUAL(btck_block_tree_entry_get_ancestor(entry_2.get(), /*height=*/-1), nullptr);
+    BOOST_CHECK_EQUAL(btck_block_tree_entry_get_ancestor(entry_2.get(), /*height=*/3), nullptr);
+    BOOST_CHECK_THROW(entry_2.GetAncestor(3), std::runtime_error);
 }
 
 BOOST_AUTO_TEST_CASE(btck_chainman_in_memory_tests)

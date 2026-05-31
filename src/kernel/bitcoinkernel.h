@@ -1127,7 +1127,7 @@ BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_tree_entry_equ
  *
  * @param[in] block_tree_entry Non-null.
  * @param[in] height           The height of the requested ancestor.
- * @return                     The ancestor at the given height.
+ * @return                     The ancestor at the given height, or null if height is out of range.
  */
 BITCOINKERNEL_API const btck_BlockTreeEntry* BITCOINKERNEL_WARN_UNUSED_RESULT btck_block_tree_entry_get_ancestor(
     const btck_BlockTreeEntry* block_tree_entry,
