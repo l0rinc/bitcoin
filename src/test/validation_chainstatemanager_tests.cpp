@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 //
 #include <chainparams.h>
+#include <consensus/consensus.h>
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <hash.h>
@@ -61,6 +62,29 @@ BOOST_AUTO_TEST_CASE(block_finality_bip113_height_ignores_activation_hash)
 
     BOOST_CHECK(IsFinalTx(tx, csv_height, mutable_tx.nLockTime + 1));
     BOOST_CHECK(!IsFinalTx(tx, csv_height, prev.GetMedianTimePast()));
+}
+
+BOOST_AUTO_TEST_CASE(block_sequence_locks_bip68_height_ignores_activation_hash)
+{
+    const int csv_height{Params().GetConsensus().CSVHeight};
+    CBlockIndex prev;
+    prev.nHeight = csv_height - 1;
+    CBlockIndex block;
+    block.nHeight = csv_height;
+    block.pprev = &prev;
+
+    BOOST_CHECK(DeploymentActiveAt(block, *Assert(m_node.chainman), Consensus::DEPLOYMENT_CSV));
+
+    CMutableTransaction mutable_tx;
+    mutable_tx.version = 2;
+    mutable_tx.vin.resize(1);
+    mutable_tx.vin[0].nSequence = 2;
+    const CTransaction tx{mutable_tx};
+
+    std::vector<int> prev_heights{csv_height - 1};
+    BOOST_CHECK(SequenceLocks(tx, 0, prev_heights, block));
+    prev_heights = {csv_height - 1};
+    BOOST_CHECK(!SequenceLocks(tx, LOCKTIME_VERIFY_SEQUENCE, prev_heights, block));
 }
 
 BOOST_AUTO_TEST_CASE(block_script_flags_csv_height_ignores_activation_hash)
