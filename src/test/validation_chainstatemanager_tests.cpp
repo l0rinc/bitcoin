@@ -63,6 +63,31 @@ BOOST_AUTO_TEST_CASE(block_script_flags_csv_height_ignores_activation_hash)
     BOOST_CHECK(err == SCRIPT_ERR_UNSATISFIED_LOCKTIME);
 }
 
+BOOST_AUTO_TEST_CASE(block_script_flags_nulldummy_height_ignores_activation_hash)
+{
+    const int segwit_height{Params().GetConsensus().SegwitHeight};
+    const uint256 block_hash{uint256::ONE};
+    CBlockIndex pre_segwit_block;
+    pre_segwit_block.nHeight = segwit_height - 1;
+    pre_segwit_block.phashBlock = &block_hash;
+    CBlockIndex segwit_block;
+    segwit_block.nHeight = segwit_height;
+    segwit_block.phashBlock = &block_hash;
+
+    const script_verify_flags pre_segwit_flags{GetBlockScriptFlags(pre_segwit_block, *Assert(m_node.chainman))};
+    const script_verify_flags segwit_flags{GetBlockScriptFlags(segwit_block, *Assert(m_node.chainman))};
+    BOOST_CHECK(!(pre_segwit_flags & SCRIPT_VERIFY_NULLDUMMY));
+    BOOST_CHECK(segwit_flags & SCRIPT_VERIFY_NULLDUMMY);
+
+    const CScript script_sig{CScript{} << 1};
+    const CScript script_pub_key{CScript{} << OP_0 << OP_0 << OP_CHECKMULTISIG};
+    ScriptError err;
+    BOOST_CHECK(VerifyScript(script_sig, script_pub_key, nullptr, pre_segwit_flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_OK);
+    BOOST_CHECK(!VerifyScript(script_sig, script_pub_key, nullptr, segwit_flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_SIG_NULLDUMMY);
+}
+
 BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_witness)
 {
     CBlockIndex block_index;
