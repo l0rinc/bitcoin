@@ -213,6 +213,32 @@ BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_p2sh)
     BOOST_CHECK(err == SCRIPT_ERR_EVAL_FALSE);
 }
 
+BOOST_AUTO_TEST_CASE(block_script_flags_p2sh_exception_hash)
+{
+    const uint256 exception_hash{
+        uint256{"00000000000002dc756eebf4f49723ed8d30cc28a5f108eb94b1ba88ac4f9c22"}};
+    CBlockIndex block_index;
+    block_index.nHeight = 170060;
+    block_index.phashBlock = &exception_hash;
+
+    const script_verify_flags flags{GetBlockScriptFlags(block_index, *Assert(m_node.chainman))};
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_P2SH));
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_WITNESS));
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_TAPROOT));
+
+    const CScript redeem_script{CScript{} << OP_FALSE};
+    const std::vector<unsigned char> redeem_script_bytes{redeem_script.begin(), redeem_script.end()};
+    const uint160 redeem_script_hash{Hash160(redeem_script_bytes)};
+    const CScript script_pub_key{CScript{} << OP_HASH160 << std::vector<unsigned char>{redeem_script_hash.begin(), redeem_script_hash.end()} << OP_EQUAL};
+    const CScript script_sig{CScript{} << redeem_script_bytes};
+
+    ScriptError err;
+    BOOST_CHECK(VerifyScript(script_sig, script_pub_key, nullptr, flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_OK);
+    BOOST_CHECK(!VerifyScript(script_sig, script_pub_key, nullptr, SCRIPT_VERIFY_P2SH, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_EVAL_FALSE);
+}
+
 BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_taproot)
 {
     CBlockIndex block_index;
