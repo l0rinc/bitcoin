@@ -4,6 +4,7 @@
 //
 #include <chainparams.h>
 #include <consensus/validation.h>
+#include <hash.h>
 #include <kernel/disconnected_transactions.h>
 #include <node/chainstatemanager_args.h>
 #include <node/kernel_notifications.h>
@@ -59,6 +60,27 @@ BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_witness)
     ScriptError err;
     BOOST_CHECK(!VerifyScript(CScript{}, script_pub_key, &empty_witness, flags, BaseSignatureChecker{}, &err));
     BOOST_CHECK(err == SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
+}
+
+BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_p2sh)
+{
+    CBlockIndex block_index;
+    const uint256 block_hash{uint256::ONE};
+    block_index.nHeight = 1;
+    block_index.phashBlock = &block_hash;
+
+    const script_verify_flags flags{GetBlockScriptFlags(block_index, *Assert(m_node.chainman))};
+    BOOST_CHECK(flags & SCRIPT_VERIFY_P2SH);
+
+    const CScript redeem_script{CScript{} << OP_FALSE};
+    const std::vector<unsigned char> redeem_script_bytes{redeem_script.begin(), redeem_script.end()};
+    const uint160 redeem_script_hash{Hash160(redeem_script_bytes)};
+    const CScript script_pub_key{CScript{} << OP_HASH160 << std::vector<unsigned char>{redeem_script_hash.begin(), redeem_script_hash.end()} << OP_EQUAL};
+    const CScript script_sig{CScript{} << redeem_script_bytes};
+
+    ScriptError err;
+    BOOST_CHECK(!VerifyScript(script_sig, script_pub_key, nullptr, flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_EVAL_FALSE);
 }
 
 BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_taproot)
