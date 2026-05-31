@@ -28,7 +28,7 @@ std::optional<size_t> PrivateBroadcast::Remove(const CTransactionRef& tx)
     LOCK(m_mutex);
     const auto handle{m_transactions.extract(tx)};
     if (handle) {
-        const auto p{DerivePriority(handle.mapped().send_statuses)};
+        const auto p{DerivePriority(handle.mapped())};
         return p.num_confirmed;
     }
     return std::nullopt;
@@ -47,7 +47,7 @@ std::optional<CTransactionRef> PrivateBroadcast::PickTxForSend(const NodeId& wil
     const auto it{std::ranges::max_element(
             m_transactions,
             [](const auto& a, const auto& b) { return a < b; },
-            [](const auto& el) { return DerivePriority(el.second.send_statuses); })};
+            [](const auto& el) { return DerivePriority(el.second); })};
 
     if (it != m_transactions.end()) {
         auto& [tx, state]{*it};
@@ -79,6 +79,30 @@ void PrivateBroadcast::NodeConfirmedReception(const NodeId& nodeid)
     }
 }
 
+bool PrivateBroadcast::RemoveUnconfirmedNode(const NodeId& nodeid)
+    EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
+{
+    LOCK(m_mutex);
+    bool removed{false};
+    for (auto& entry : m_transactions) {
+        auto& state{entry.second};
+        auto& statuses{state.send_statuses};
+        std::vector<SendStatus> retained;
+        retained.reserve(statuses.size());
+        for (const auto& status : statuses) {
+            if (status.nodeid == nodeid && !status.confirmed.has_value()) {
+                ++state.disconnected_unconfirmed_picks;
+                state.last_disconnected_unconfirmed_pick = std::max(state.last_disconnected_unconfirmed_pick, status.picked);
+                removed = true;
+            } else {
+                retained.push_back(status);
+            }
+        }
+        if (retained.size() != statuses.size()) statuses = std::move(retained);
+    }
+    return removed;
+}
+
 bool PrivateBroadcast::DidNodeConfirmReception(const NodeId& nodeid)
     EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
@@ -104,7 +128,7 @@ std::vector<CTransactionRef> PrivateBroadcast::GetStale() const
     const auto now{NodeClock::now()};
     std::vector<CTransactionRef> stale;
     for (const auto& [tx, state] : m_transactions) {
-        const Priority p{DerivePriority(state.send_statuses)};
+        const Priority p{DerivePriority(state)};
         if (p.num_confirmed == 0) {
             if (state.time_added < now - INITIAL_STALE_DURATION) stale.push_back(tx);
         } else {
@@ -133,11 +157,13 @@ std::vector<PrivateBroadcast::TxBroadcastInfo> PrivateBroadcast::GetBroadcastInf
     return entries;
 }
 
-PrivateBroadcast::Priority PrivateBroadcast::DerivePriority(const std::vector<SendStatus>& sent_to)
+PrivateBroadcast::Priority PrivateBroadcast::DerivePriority(const TxSendStatus& status)
 {
     Priority p;
-    p.num_picked = sent_to.size();
-    for (const auto& send_status : sent_to) {
+    p.num_picked = status.disconnected_unconfirmed_picks;
+    p.last_picked = status.last_disconnected_unconfirmed_pick;
+    for (const auto& send_status : status.send_statuses) {
+        ++p.num_picked;
         p.last_picked = std::max(p.last_picked, send_status.picked);
         if (send_status.confirmed.has_value()) {
             ++p.num_confirmed;
