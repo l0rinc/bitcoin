@@ -417,6 +417,9 @@ BOOST_AUTO_TEST_CASE(btck_transaction_tests)
     BOOST_CHECK_EQUAL(tx.GetLocktime(), 510826);
     auto broken_tx_data{std::span<std::byte>{tx_data.begin(), tx_data.begin() + 10}};
     BOOST_CHECK_THROW(Transaction{broken_tx_data}, std::runtime_error);
+    auto trailing_tx_data{tx_data};
+    trailing_tx_data.push_back(std::byte{0x00});
+    BOOST_CHECK_THROW(Transaction{trailing_tx_data}, std::runtime_error);
     auto input{tx.GetInput(0)};
     BOOST_CHECK_EQUAL(input.GetSequence(), 0xfffffffe);
     auto output{tx.GetOutput(tx.CountOutputs() - 1)};
@@ -739,6 +742,9 @@ BOOST_AUTO_TEST_CASE(btck_block_header_tests)
     // Test round-trip serialization of block header
     auto header_roundtrip{BlockHeader{header.ToBytes()}};
     check_equal(header_roundtrip.ToBytes(), mainnet_block_1_header);
+    auto trailing_header_data{mainnet_block_1_header};
+    trailing_header_data.push_back(std::byte{0x00});
+    BOOST_CHECK_THROW(BlockHeader{trailing_header_data}, std::runtime_error);
 
     auto raw_block = hex_string_to_byte_vec("010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e362990101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000");
     Block block{raw_block};
@@ -767,6 +773,9 @@ BOOST_AUTO_TEST_CASE(btck_block)
     BOOST_CHECK_THROW(Block{invalid_data}, std::runtime_error);
     auto empty_data = hex_string_to_byte_vec("");
     BOOST_CHECK_THROW(Block{empty_data}, std::runtime_error);
+    auto trailing_block_data{hex_string_to_byte_vec(REGTEST_BLOCK_DATA[0])};
+    trailing_block_data.push_back(std::byte{0x00});
+    BOOST_CHECK_THROW(Block{trailing_block_data}, std::runtime_error);
 }
 
 Context create_context(std::shared_ptr<TestKernelNotifications> notifications, ChainType chain_type, std::shared_ptr<TestValidationInterface> validation_interface = nullptr)

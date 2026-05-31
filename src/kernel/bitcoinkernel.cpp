@@ -512,7 +512,9 @@ btck_Transaction* btck_transaction_create(const void* raw_transaction, size_t ra
     }
     try {
         SpanReader stream{std::span{reinterpret_cast<const std::byte*>(raw_transaction), raw_transaction_len}};
-        return btck_Transaction::create(std::make_shared<const CTransaction>(deserialize, TX_WITH_WITNESS, stream));
+        auto tx{std::make_shared<const CTransaction>(deserialize, TX_WITH_WITNESS, stream)};
+        if (!stream.empty()) return nullptr;
+        return btck_Transaction::create(tx);
     } catch (...) {
         return nullptr;
     }
@@ -1154,6 +1156,7 @@ btck_Block* btck_block_create(const void* raw_block, size_t raw_block_length)
         LogDebug(BCLog::KERNEL, "Block decode failed.");
         return nullptr;
     }
+    if (!stream.empty()) return nullptr;
 
     return btck_Block::create(block);
 }
@@ -1421,6 +1424,7 @@ btck_BlockHeader* btck_block_header_create(const void* raw_block_header, size_t 
         LogError("Block header decode failed.");
         return nullptr;
     }
+    if (!stream.empty()) return nullptr;
 
     return btck_BlockHeader::ref(header.release());
 }
