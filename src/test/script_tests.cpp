@@ -90,6 +90,7 @@ static ScriptErrorDesc script_errors[]={
     {SCRIPT_ERR_WITNESS_MALLEATED_P2SH, "WITNESS_MALLEATED_P2SH"},
     {SCRIPT_ERR_WITNESS_UNEXPECTED, "WITNESS_UNEXPECTED"},
     {SCRIPT_ERR_WITNESS_PUBKEYTYPE, "WITNESS_PUBKEYTYPE"},
+    {SCRIPT_ERR_TAPSCRIPT_MINIMALIF, "TAPSCRIPT_MINIMALIF"},
     {SCRIPT_ERR_TAPSCRIPT_EMPTY_PUBKEY, "TAPSCRIPT_EMPTY_PUBKEY"},
     {SCRIPT_ERR_OP_CODESEPARATOR, "OP_CODESEPARATOR"},
     {SCRIPT_ERR_SIG_FINDANDDELETE, "SIG_FINDANDDELETE"},
@@ -1742,6 +1743,40 @@ BOOST_AUTO_TEST_CASE(taproot_future_leaf_version_requires_commitment)
            SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT,
            "Taproot future leaf version with mismatched commitment",
            SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
+}
+
+BOOST_AUTO_TEST_CASE(tapscript_minimalif_requires_minimal_boolean)
+{
+    const KeyData keys;
+    struct TestCase {
+        CScript script;
+        std::vector<unsigned char> argument;
+        std::string message;
+    };
+    const std::vector<TestCase> cases{
+        {CScript() << OP_IF << OP_TRUE << OP_ENDIF, {0x01, 0x00}, "Tapscript OP_IF with non-minimal true"},
+        {CScript() << OP_NOTIF << OP_TRUE << OP_ENDIF, {0x00}, "Tapscript OP_NOTIF with non-minimal false"},
+    };
+
+    for (const auto& test : cases) {
+        const auto script_bytes{ToByteVector(test.script)};
+
+        TaprootBuilder builder;
+        builder.Add(/*depth=*/0, script_bytes, TAPROOT_LEAF_TAPSCRIPT, /*track=*/true);
+        builder.Finalize(XOnlyPubKey(keys.key0.GetPubKey()));
+
+        const auto controlblocks = builder.GetSpendData().scripts[{script_bytes, TAPROOT_LEAF_TAPSCRIPT}];
+
+        CScriptWitness witness;
+        witness.stack.push_back(test.argument);
+        witness.stack.push_back(script_bytes);
+        witness.stack.push_back(*controlblocks.begin());
+
+        DoTest(GetScriptForDestination(builder.GetOutput()), CScript{}, witness,
+               SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT,
+               test.message,
+               SCRIPT_ERR_TAPSCRIPT_MINIMALIF);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(formatscriptflags)
