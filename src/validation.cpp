@@ -3991,6 +3991,17 @@ arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers)
     return total_work;
 }
 
+bool IsBIP94TimewarpAttack(int block_height, int64_t block_time, int64_t previous_block_time,
+                           const Consensus::Params& consensus_params)
+{
+    // Testnet4 and regtest only: Check timestamp against prev for difficulty-adjustment
+    // blocks to prevent timewarp attacks (see https://github.com/bitcoin/bitcoin/pull/15482).
+    return consensus_params.enforce_BIP94 &&
+           block_height > 0 &&
+           block_height % consensus_params.DifficultyAdjustmentInterval() == 0 &&
+           block_time < previous_block_time - MAX_TIMEWARP;
+}
+
 /** Context-dependent validity checks.
  *  By "context", we mean only the previous block headers, but not the UTXO
  *  set; UTXO-related validity checks are done in ConnectBlock().
@@ -4019,16 +4030,8 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     if (block.GetBlockTime() <= pindexPrev->GetMedianTimePast())
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-too-old", "block's timestamp is too early");
 
-    // Testnet4 and regtest only: Check timestamp against prev for difficulty-adjustment
-    // blocks to prevent timewarp attacks (see https://github.com/bitcoin/bitcoin/pull/15482).
-    if (consensusParams.enforce_BIP94) {
-        // Check timestamp for the first block of each difficulty adjustment
-        // interval, except the genesis block.
-        if (nHeight % consensusParams.DifficultyAdjustmentInterval() == 0) {
-            if (block.GetBlockTime() < pindexPrev->GetBlockTime() - MAX_TIMEWARP) {
-                return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-timewarp-attack", "block's timestamp is too early on diff adjustment block");
-            }
-        }
+    if (IsBIP94TimewarpAttack(nHeight, block.GetBlockTime(), pindexPrev->GetBlockTime(), consensusParams)) {
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-timewarp-attack", "block's timestamp is too early on diff adjustment block");
     }
 
     // Check timestamp
