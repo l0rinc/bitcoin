@@ -1779,6 +1779,35 @@ BOOST_AUTO_TEST_CASE(tapscript_minimalif_requires_minimal_boolean)
     }
 }
 
+BOOST_AUTO_TEST_CASE(tapscript_sigops_budget_counts_script_and_control)
+{
+    const KeyData keys;
+    const std::vector<unsigned char> unknown_pubkey(33, 0x02);
+
+    CScript script;
+    script << unknown_pubkey << OP_CHECKSIGVERIFY
+           << unknown_pubkey << OP_CHECKSIGVERIFY
+           << OP_TRUE;
+    const auto script_bytes{ToByteVector(script)};
+
+    TaprootBuilder builder;
+    builder.Add(/*depth=*/0, script_bytes, TAPROOT_LEAF_TAPSCRIPT, /*track=*/true);
+    builder.Finalize(XOnlyPubKey(keys.key0.GetPubKey()));
+
+    const auto controlblocks = builder.GetSpendData().scripts[{script_bytes, TAPROOT_LEAF_TAPSCRIPT}];
+
+    CScriptWitness witness;
+    witness.stack.push_back({0x01});
+    witness.stack.push_back({0x01});
+    witness.stack.push_back(script_bytes);
+    witness.stack.push_back(*controlblocks.begin());
+
+    DoTest(GetScriptForDestination(builder.GetOutput()), CScript{}, witness,
+           SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT,
+           "Tapscript sigops budget includes script and control block bytes",
+           SCRIPT_ERR_OK);
+}
+
 BOOST_AUTO_TEST_CASE(formatscriptflags)
 {
     // quick check that FormatScriptFlags reports any unknown/unexpected bits
