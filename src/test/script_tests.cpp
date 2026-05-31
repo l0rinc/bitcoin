@@ -428,6 +428,32 @@ std::string JSONPrettyPrint(const UniValue& univalue)
 
 BOOST_FIXTURE_TEST_SUITE(script_tests, ScriptTest)
 
+BOOST_AUTO_TEST_CASE(p2sh_witness_redeemscript_requires_canonical_push)
+{
+    const CScript witness_script{CScript{} << OP_TRUE};
+
+    uint256 witness_hash;
+    CSHA256().Write(witness_script.data(), witness_script.size()).Finalize(witness_hash.begin());
+    const CScript redeem_script{CScript{} << OP_0 << ToByteVector(witness_hash)};
+    const CScript script_pub_key{CScript{} << OP_HASH160 << ToByteVector(CScriptID{redeem_script}) << OP_EQUAL};
+
+    CScriptWitness witness;
+    witness.stack.emplace_back(witness_script.begin(), witness_script.end());
+
+    const CScript canonical_script_sig{CScript{} << ToByteVector(redeem_script)};
+    std::vector<unsigned char> noncanonical_script_sig_bytes{OP_PUSHDATA1, static_cast<unsigned char>(redeem_script.size())};
+    noncanonical_script_sig_bytes.insert(noncanonical_script_sig_bytes.end(), redeem_script.begin(), redeem_script.end());
+    const CScript noncanonical_script_sig{noncanonical_script_sig_bytes.begin(), noncanonical_script_sig_bytes.end()};
+
+    const script_verify_flags flags{SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS};
+    ScriptError err;
+    BOOST_CHECK(VerifyScript(canonical_script_sig, script_pub_key, &witness, flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_OK);
+
+    BOOST_CHECK(!VerifyScript(noncanonical_script_sig, script_pub_key, &witness, flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_WITNESS_MALLEATED_P2SH);
+}
+
 BOOST_AUTO_TEST_CASE(script_build)
 {
     const KeyData keys;
