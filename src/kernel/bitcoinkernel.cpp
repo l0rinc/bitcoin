@@ -637,6 +637,7 @@ btck_PrecomputedTransactionData* btck_precomputed_transaction_data_create(
             std::vector<CTxOut> spent_outputs;
             spent_outputs.reserve(spent_outputs_len);
             for (size_t i = 0; i < spent_outputs_len; i++) {
+                if (spent_outputs_[i] == nullptr) return nullptr;
                 const CTxOut& tx_out{btck_TransactionOutput::get(spent_outputs_[i])};
                 spent_outputs.push_back(tx_out);
             }

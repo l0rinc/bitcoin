@@ -534,8 +534,10 @@ BOOST_AUTO_TEST_CASE(btck_precomputed_txdata) {
 
     const auto output_0{tx.GetOutput(0)};
     const btck_TransactionOutput* spent_outputs[]{output_0.get()};
+    const btck_TransactionOutput* null_spent_outputs[]{nullptr};
     BOOST_CHECK_EQUAL(btck_precomputed_transaction_data_create(tx.get(), nullptr, 1), nullptr);
     BOOST_CHECK_EQUAL(btck_precomputed_transaction_data_create(tx.get(), spent_outputs, tx.CountInputs() + 1), nullptr);
+    BOOST_CHECK_EQUAL(btck_precomputed_transaction_data_create(tx.get(), null_spent_outputs, tx.CountInputs()), nullptr);
 }
 
 BOOST_AUTO_TEST_CASE(btck_script_verify_tests)
