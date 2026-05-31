@@ -364,7 +364,7 @@ std::vector<uint8_t> CKey::CreateMuSig2Nonce(MuSig2SecNonce& secnonce, const uin
     }
 
     // Generate randomness for nonce
-    uint256 rand;
+    std::vector<unsigned char, secure_allocator<unsigned char>> rand(32);
     GetStrongRandBytes(rand);
 
     // Generate nonce
@@ -385,8 +385,8 @@ std::vector<uint8_t> CKey::CreateMuSig2Nonce(MuSig2SecNonce& secnonce, const uin
 
 std::optional<uint256> CKey::CreateMuSig2PartialSig(const uint256& sighash, const CPubKey& aggregate_pubkey, const std::vector<CPubKey>& pubkeys, const std::map<CPubKey, std::vector<uint8_t>>& pubnonces, MuSig2SecNonce& secnonce, const std::vector<std::pair<uint256, bool>>& tweaks)
 {
-    secp256k1_keypair keypair;
-    if (!secp256k1_keypair_create(secp256k1_context_sign, &keypair, UCharCast(begin()))) return std::nullopt;
+    auto keypair{make_secure_unique<secp256k1_keypair>()};
+    if (!secp256k1_keypair_create(secp256k1_context_sign, keypair.get(), UCharCast(begin()))) return std::nullopt;
 
     // Get the keyagg cache and aggregate pubkey
     secp256k1_musig_keyagg_cache keyagg_cache;
@@ -452,7 +452,7 @@ std::optional<uint256> CKey::CreateMuSig2PartialSig(const uint256& sighash, cons
 
     // Create partial signature
     secp256k1_musig_partial_sig psig;
-    if (!secp256k1_musig_partial_sign(secp256k1_context_static, &psig, secnonce.Get(), &keypair, &keyagg_cache, &session)) {
+    if (!secp256k1_musig_partial_sign(secp256k1_context_static, &psig, secnonce.Get(), keypair.get(), &keyagg_cache, &session)) {
         return std::nullopt;
     }
     // The secnonce must be deleted after signing to prevent nonce reuse.
