@@ -9,8 +9,10 @@
 #include <hash.h>
 #include <net.h>
 #include <signet.h>
+#include <streams.h>
 #include <uint256.h>
 #include <util/chaintype.h>
+#include <util/strencodings.h>
 #include <validation.h>
 
 #include <string>
@@ -125,6 +127,42 @@ BOOST_AUTO_TEST_CASE(signet_parse_tests)
     block.vtx.at(0) = MakeTransactionRef(cb);
     BOOST_CHECK(!SignetTxs::Create(block, challenge));
     BOOST_CHECK(!CheckSignetBlockSolution(block, signet_params->GetConsensus()));
+}
+
+BOOST_AUTO_TEST_CASE(block_noncanonical_compactsize)
+{
+    const auto deserialize_block{[](const std::string& hex) {
+        DataStream stream{ParseHex(hex)};
+        CBlock block;
+        stream >> TX_WITH_WITNESS(block);
+        return block;
+    }};
+
+    const std::string header(160, '0');
+    const std::string coinbase_tx{
+        "01000000"
+        "01"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "ffffffff"
+        "02"
+        "0101"
+        "ffffffff"
+        "01"
+        "0000000000000000"
+        "01"
+        "51"
+        "00000000"};
+
+    BlockValidationState state;
+    BOOST_CHECK(CheckBlock(
+        deserialize_block(header + "01" + coinbase_tx),
+        state,
+        Params().GetConsensus(),
+        /*fCheckPOW=*/false,
+        /*fCheckMerkleRoot=*/false));
+    BOOST_CHECK(state.IsValid());
+
+    BOOST_CHECK_THROW(deserialize_block(header + "fd0100" + coinbase_tx), std::ios_base::failure);
 }
 
 //! Test retrieval of valid assumeutxo values.
