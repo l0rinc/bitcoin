@@ -9,6 +9,7 @@
 #include <core_io.h>
 #include <hash.h>
 #include <net.h>
+#include <script/script.h>
 #include <signet.h>
 #include <streams.h>
 #include <uint256.h>
@@ -93,6 +94,21 @@ BOOST_AUTO_TEST_CASE(bip30_reactivated_at_bip34_indicated_height_limit)
 
     BOOST_CHECK(!ShouldEnforceBIP30ForBlock(pre_limit_block, consensus));
     BOOST_CHECK(ShouldEnforceBIP30ForBlock(limit_block, consensus));
+}
+
+BOOST_AUTO_TEST_CASE(bip34_coinbase_height_uses_scriptnum_encoding)
+{
+    const CScript encoded_height_1{CScript{} << 1 << OP_0};
+    const CScript nominal_height_1{CScript{} << std::vector<unsigned char>{0x01} << OP_0};
+    const CScript encoded_height_16{CScript{} << 16 << OP_0};
+    const CScript nominal_height_16{CScript{} << std::vector<unsigned char>{0x10} << OP_0};
+
+    BOOST_CHECK(IsBIP34CoinbaseHeight(encoded_height_1, 1));
+    BOOST_CHECK(!IsBIP34CoinbaseHeight(nominal_height_1, 1));
+    BOOST_CHECK(IsBIP34CoinbaseHeight(encoded_height_16, 16));
+    BOOST_CHECK(!IsBIP34CoinbaseHeight(nominal_height_16, 16));
+    BOOST_CHECK(IsBIP34CoinbaseHeight(CScript{} << 17, 17));
+    BOOST_CHECK(IsBIP34CoinbaseHeight(CScript{} << 227931, 227931));
 }
 
 BOOST_AUTO_TEST_CASE(bip94_timewarp_retarget_timestamp_limit)

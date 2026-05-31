@@ -4002,6 +4002,13 @@ bool IsBIP94TimewarpAttack(int block_height, int64_t block_time, int64_t previou
            block_time < previous_block_time - MAX_TIMEWARP;
 }
 
+bool IsBIP34CoinbaseHeight(const CScript& script_sig, int height)
+{
+    const CScript expect{CScript{} << height};
+    return script_sig.size() >= expect.size() &&
+           std::equal(expect.begin(), expect.end(), script_sig.begin());
+}
+
 /** Context-dependent validity checks.
  *  By "context", we mean only the previous block headers, but not the UTXO
  *  set; UTXO-related validity checks are done in ConnectBlock().
@@ -4081,9 +4088,7 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     // Enforce rule that the coinbase starts with serialized block height
     if (DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_HEIGHTINCB))
     {
-        CScript expect = CScript() << nHeight;
-        if (block.vtx[0]->vin[0].scriptSig.size() < expect.size() ||
-            !std::equal(expect.begin(), expect.end(), block.vtx[0]->vin[0].scriptSig.begin())) {
+        if (!IsBIP34CoinbaseHeight(block.vtx[0]->vin[0].scriptSig, nHeight)) {
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-height", "block height mismatch in coinbase");
         }
     }
