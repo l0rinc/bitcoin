@@ -10,6 +10,8 @@
 #include <node/utxo_snapshot.h>
 #include <random.h>
 #include <rpc/blockchain.h>
+#include <script/interpreter.h>
+#include <script/script_error.h>
 #include <sync.h>
 #include <test/util/chainstate.h>
 #include <test/util/common.h>
@@ -35,6 +37,29 @@ using node::KernelNotifications;
 using node::SnapshotMetadata;
 
 BOOST_FIXTURE_TEST_SUITE(validation_chainstatemanager_tests, TestingSetup)
+
+BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_witness)
+{
+    CBlockIndex block_index;
+    const uint256 block_hash{uint256::ONE};
+    block_index.nHeight = 1;
+    block_index.phashBlock = &block_hash;
+
+    const script_verify_flags flags{GetBlockScriptFlags(block_index, *Assert(m_node.chainman))};
+    BOOST_CHECK(flags & SCRIPT_VERIFY_P2SH);
+    BOOST_CHECK(flags & SCRIPT_VERIFY_WITNESS);
+    BOOST_CHECK(flags & SCRIPT_VERIFY_TAPROOT);
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_DERSIG));
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY));
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_CHECKSEQUENCEVERIFY));
+    BOOST_CHECK(!(flags & SCRIPT_VERIFY_NULLDUMMY));
+
+    const CScript script_pub_key{CScript{} << OP_0 << std::vector<unsigned char>(32, 0x02)};
+    const CScriptWitness empty_witness;
+    ScriptError err;
+    BOOST_CHECK(!VerifyScript(CScript{}, script_pub_key, &empty_witness, flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
+}
 
 //! Basic tests for ChainstateManager.
 //!
