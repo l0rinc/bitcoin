@@ -422,6 +422,8 @@ BOOST_AUTO_TEST_CASE(btck_transaction_tests)
     auto output{tx.GetOutput(tx.CountOutputs() - 1)};
     BOOST_CHECK_EQUAL(output.Amount(), 42130042);
     auto script_pubkey{output.GetScriptPubkey()};
+    BOOST_CHECK_EQUAL(btck_transaction_get_output_at(tx.get(), tx.CountOutputs()), nullptr);
+    BOOST_CHECK_EQUAL(btck_transaction_get_input_at(tx.get(), tx.CountInputs()), nullptr);
     {
         auto tx_new{Transaction{tx_data}};
         // This is safe, because we now use copy assignment
@@ -529,6 +531,11 @@ BOOST_AUTO_TEST_CASE(btck_precomputed_txdata) {
         /*spent_outputs=*/{},
     }};
     CheckHandle(precomputed_txdata, precomputed_txdata_2);
+
+    const auto output_0{tx.GetOutput(0)};
+    const btck_TransactionOutput* spent_outputs[]{output_0.get()};
+    BOOST_CHECK_EQUAL(btck_precomputed_transaction_data_create(tx.get(), nullptr, 1), nullptr);
+    BOOST_CHECK_EQUAL(btck_precomputed_transaction_data_create(tx.get(), spent_outputs, tx.CountInputs() + 1), nullptr);
 }
 
 BOOST_AUTO_TEST_CASE(btck_script_verify_tests)
@@ -623,6 +630,30 @@ BOOST_AUTO_TEST_CASE(btck_script_verify_tests)
         /*amount=*/135125,
         /*input_index=*/1,
         /*taproot=*/true);
+
+    btck_ScriptVerifyStatus status{btck_ScriptVerifyStatus_OK};
+    BOOST_CHECK_EQUAL(btck_script_pubkey_verify(
+                          legacy_spent_script_pubkey.get(),
+                          /*amount=*/0,
+                          legacy_spending_tx.get(),
+                          /*precomputed_txdata=*/nullptr,
+                          legacy_spending_tx.CountInputs(),
+                          static_cast<btck_ScriptVerificationFlags>(VERIFY_ALL_PRE_SEGWIT),
+                          &status),
+                      0);
+    BOOST_CHECK_EQUAL(status, btck_ScriptVerifyStatus_ERROR_TX_INPUT_INDEX);
+
+    status = btck_ScriptVerifyStatus_OK;
+    BOOST_CHECK_EQUAL(btck_script_pubkey_verify(
+                          legacy_spent_script_pubkey.get(),
+                          /*amount=*/0,
+                          legacy_spending_tx.get(),
+                          /*precomputed_txdata=*/nullptr,
+                          /*input_index=*/0,
+                          uint32_t{1U << 31},
+                          &status),
+                      0);
+    BOOST_CHECK_EQUAL(status, btck_ScriptVerifyStatus_ERROR_INVALID_FLAGS_COMBINATION);
 }
 
 BOOST_AUTO_TEST_CASE(logging_tests)
@@ -640,6 +671,10 @@ BOOST_AUTO_TEST_CASE(logging_tests)
     logging_disable_category(LogCategory::BENCH);
     logging_enable_category(LogCategory::VALIDATION);
     logging_disable_category(LogCategory::VALIDATION);
+    btck_logging_set_level_category(/*category=*/255, btck_LogLevel_INFO);
+    btck_logging_set_level_category(btck_LogCategory_BENCH, /*level=*/255);
+    btck_logging_enable_category(/*category=*/255);
+    btck_logging_disable_category(/*category=*/255);
 
     // Check that connecting, connecting another, and then disconnecting and connecting a logger again works.
     {
@@ -669,6 +704,7 @@ BOOST_AUTO_TEST_CASE(btck_context_tests)
         ChainParams params{ChainType::MAINNET};
         ChainParams regtest_params{ChainType::REGTEST};
         CheckHandle(params, regtest_params);
+        BOOST_CHECK_EQUAL(btck_chain_parameters_create(/*chain_type=*/255), nullptr);
         options.SetChainParams(params);
         options.SetNotifications(std::make_shared<TestKernelNotifications>());
         Context context{options};
@@ -724,6 +760,7 @@ BOOST_AUTO_TEST_CASE(btck_block)
     CheckHandle(block, block_100);
     Block block_tx{hex_string_to_byte_vec(REGTEST_BLOCK_DATA[205])};
     CheckRange(block_tx.Transactions(), block_tx.CountTransactions());
+    BOOST_CHECK_EQUAL(btck_block_get_transaction_at(block_tx.get(), block_tx.CountTransactions()), nullptr);
     auto invalid_data = hex_string_to_byte_vec("012300");
     BOOST_CHECK_THROW(Block{invalid_data}, std::runtime_error);
     auto empty_data = hex_string_to_byte_vec("");
@@ -1202,6 +1239,7 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
     CheckHandle(block_spent_outputs, block_spent_outputs_prev);
     CheckRange(block_spent_outputs_prev.TxsSpentOutputs(), block_spent_outputs_prev.Count());
     BOOST_CHECK_EQUAL(block_spent_outputs.Count(), 1);
+    BOOST_CHECK_EQUAL(btck_block_spent_outputs_get_transaction_spent_outputs_at(block_spent_outputs.get(), block_spent_outputs.Count()), nullptr);
 
     // Get transaction spent outputs from the last transaction in the two blocks
     TransactionSpentOutputsView transaction_spent_outputs{block_spent_outputs.GetTxSpentOutputs(block_spent_outputs.Count() - 1)};
@@ -1209,6 +1247,7 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
     TransactionSpentOutputs owned_transaction_spent_outputs_prev{block_spent_outputs_prev.GetTxSpentOutputs(block_spent_outputs_prev.Count() - 1)};
     CheckHandle(owned_transaction_spent_outputs, owned_transaction_spent_outputs_prev);
     CheckRange(transaction_spent_outputs.Coins(), transaction_spent_outputs.Count());
+    BOOST_CHECK_EQUAL(btck_transaction_spent_outputs_get_coin_at(transaction_spent_outputs.get(), transaction_spent_outputs.Count()), nullptr);
 
     // Get the last coin from the transaction spent outputs
     CoinView coin{transaction_spent_outputs.GetCoin(transaction_spent_outputs.Count() - 1)};
