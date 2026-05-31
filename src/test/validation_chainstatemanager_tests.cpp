@@ -61,6 +61,24 @@ BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_witness)
     BOOST_CHECK(err == SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
 }
 
+BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_taproot)
+{
+    CBlockIndex block_index;
+    const uint256 block_hash{uint256::ONE};
+    block_index.nHeight = 1;
+    block_index.phashBlock = &block_hash;
+
+    const script_verify_flags flags{GetBlockScriptFlags(block_index, *Assert(m_node.chainman))};
+    BOOST_CHECK(flags & SCRIPT_VERIFY_WITNESS);
+    BOOST_CHECK(flags & SCRIPT_VERIFY_TAPROOT);
+
+    const CScript script_pub_key{CScript{} << OP_1 << std::vector<unsigned char>(32, 0x02)};
+    const CScriptWitness empty_witness;
+    ScriptError err;
+    BOOST_CHECK(!VerifyScript(CScript{}, script_pub_key, &empty_witness, flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_WITNESS_PROGRAM_WITNESS_EMPTY);
+}
+
 //! Basic tests for ChainstateManager.
 //!
 //! First create a legacy (IBD) chainstate, then create a snapshot chainstate.
