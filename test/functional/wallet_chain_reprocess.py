@@ -3,8 +3,6 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://www.opensource.org/licenses/mit-license.php.
 
-import re
-
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
@@ -67,14 +65,7 @@ class WalletChainReprocess(BitcoinTestFramework):
 
         # Check no transaction can be abandoned
         for txid in txids:
-            try:
-                assert_raises_rpc_error(-5, "Transaction not eligible for abandonment", wallet.abandontransaction, txid)  # TODO: Aborts for a stale wallet transaction.
-            except AssertionError as e:
-                assert "RemoteDisconnected" in str(e)
-                self.nodes[0].wait_until_stopped(expect_error=True, expected_ret_code=-6, expected_stderr=re.compile(r"!wtx\.isConfirmed"))
-                break
-        else:
-            assert False, "Expected abandontransaction to abort for a stale wallet transaction"
+            assert_raises_rpc_error(-5, "Transaction not eligible for abandonment", wallet.abandontransaction, txid)
 
 
     def run_test(self):
