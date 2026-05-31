@@ -1459,8 +1459,15 @@ util::Result<CreatedTransactionResult> CreateTransaction(
         return util::Error{_("Transaction must have at least one recipient")};
     }
 
-    if (std::any_of(vecSend.cbegin(), vecSend.cend(), [](const auto& recipient){ return recipient.nAmount < 0; })) {
-        return util::Error{_("Transaction amounts must not be negative")};
+    CAmount recipients_sum{0};
+    for (const auto& recipient : vecSend) {
+        if (recipient.nAmount < 0) {
+            return util::Error{_("Transaction amounts must not be negative")};
+        }
+        if (recipient.nAmount > MAX_MONEY - recipients_sum) {
+            return util::Error{_("Transaction amount too large")};
+        }
+        recipients_sum += recipient.nAmount;
     }
 
     LOCK(wallet.cs_wallet);

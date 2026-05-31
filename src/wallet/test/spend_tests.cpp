@@ -13,6 +13,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <limits>
+
 namespace wallet {
 BOOST_FIXTURE_TEST_SUITE(spend_tests, WalletTestingSetup)
 
@@ -102,6 +104,23 @@ BOOST_FIXTURE_TEST_CASE(wallet_duplicated_preset_inputs_test, TestChain100Setup)
     // Second case, don't use 'subtract_fee_from_outputs'.
     recipients[0].fSubtractFeeFromAmount = false;
     BOOST_CHECK(!CreateTransaction(*wallet, recipients, /*change_pos=*/std::nullopt, coin_control));
+}
+
+BOOST_FIXTURE_TEST_CASE(wallet_rejects_oversized_recipient_total, TestChain100Setup)
+{
+    auto wallet = CreateSyncedWallet(*m_node.chain, WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain()), coinbaseKey);
+
+    const auto recipient_count{static_cast<size_t>(std::numeric_limits<CAmount>::max() / MAX_MONEY) + 2};
+    std::vector<CRecipient> recipients;
+    recipients.reserve(recipient_count);
+    for (size_t i = 0; i < recipient_count; ++i) {
+        recipients.push_back({CNoDestination{CScript{} << OP_TRUE}, MAX_MONEY, /*fSubtractFeeFromAmount=*/false});
+    }
+
+    CCoinControl coin_control;
+    auto res = CreateTransaction(*wallet, recipients, /*change_pos=*/std::nullopt, coin_control);
+    BOOST_CHECK(!res);
+    BOOST_CHECK_EQUAL(util::ErrorString(res).original, "Transaction amount too large");
 }
 
 BOOST_AUTO_TEST_SUITE_END()
