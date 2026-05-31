@@ -1720,6 +1720,30 @@ BOOST_AUTO_TEST_CASE(compute_tapleaf)
     BOOST_CHECK_EQUAL(ComputeTapleafHash(0xc2, std::span(script)), tlc2);
 }
 
+BOOST_AUTO_TEST_CASE(taproot_future_leaf_version_requires_commitment)
+{
+    const KeyData keys;
+    const CScript script{CScript() << OP_TRUE};
+    const auto script_bytes{ToByteVector(script)};
+
+    TaprootBuilder builder;
+    builder.Add(/*depth=*/0, script_bytes, TAPROOT_LEAF_TAPSCRIPT, /*track=*/true);
+    builder.Finalize(XOnlyPubKey(keys.key0.GetPubKey()));
+
+    auto controlblocks = builder.GetSpendData().scripts[{script_bytes, TAPROOT_LEAF_TAPSCRIPT}];
+    std::vector<unsigned char> controlblock{*controlblocks.begin()};
+    controlblock[0] = (controlblock[0] & 1) | 0xc2;
+
+    CScriptWitness witness;
+    witness.stack.push_back(script_bytes);
+    witness.stack.push_back(controlblock);
+
+    DoTest(GetScriptForDestination(builder.GetOutput()), CScript{}, witness,
+           SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT,
+           "Taproot future leaf version with mismatched commitment",
+           SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
+}
+
 BOOST_AUTO_TEST_CASE(formatscriptflags)
 {
     // quick check that FormatScriptFlags reports any unknown/unexpected bits
