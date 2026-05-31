@@ -824,6 +824,16 @@ BOOST_AUTO_TEST_CASE(btck_chainman_tests)
     BOOST_CHECK(chainman_opts.SetWipeDbs(/*wipe_block_tree=*/false, /*wipe_chainstate=*/true));
     BOOST_CHECK(chainman_opts.SetWipeDbs(/*wipe_block_tree=*/false, /*wipe_chainstate=*/false));
     ChainMan chainman{context, chainman_opts};
+
+    ChainstateManagerOptions import_opts{context, PathToString(test_directory.m_directory / "import"), PathToString(test_directory.m_directory / "import_blocks")};
+    std::unique_ptr<btck_ChainstateManager, decltype(&btck_chainstate_manager_destroy)> raw_chainman{
+        btck_chainstate_manager_create(import_opts.get()), btck_chainstate_manager_destroy};
+    BOOST_REQUIRE(raw_chainman != nullptr);
+    const char* null_path{nullptr};
+    const char* paths[]{null_path};
+    size_t path_lengths[]{0};
+    BOOST_CHECK_EQUAL(btck_chainstate_manager_import_blocks(raw_chainman.get(), paths, path_lengths, 1), -1);
+    BOOST_CHECK_EQUAL(btck_chainstate_manager_import_blocks(raw_chainman.get(), paths, nullptr, 1), -1);
 }
 
 std::unique_ptr<ChainMan> create_chainman(TestDirectory& test_directory,
