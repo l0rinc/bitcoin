@@ -68,6 +68,32 @@ BOOST_AUTO_TEST_CASE(subsidy_limit_test)
     BOOST_CHECK_EQUAL(nSum, CAmount{2099999997690000});
 }
 
+BOOST_AUTO_TEST_CASE(bip30_reactivated_at_bip34_indicated_height_limit)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::TESTNET);
+    const Consensus::Params& consensus{chainParams->GetConsensus()};
+    constexpr int bip34_implies_bip30_limit{1983702};
+    const uint256 block_hash{uint256::ONE};
+
+    // The BIP30 decision only reads the candidate height and BIP34 ancestor.
+    CBlockIndex bip34_block;
+    bip34_block.nHeight = consensus.BIP34Height;
+    bip34_block.phashBlock = &consensus.BIP34Hash;
+
+    CBlockIndex pre_limit_block;
+    pre_limit_block.nHeight = bip34_implies_bip30_limit - 1;
+    pre_limit_block.pprev = &bip34_block;
+    pre_limit_block.phashBlock = &block_hash;
+
+    CBlockIndex limit_block;
+    limit_block.nHeight = bip34_implies_bip30_limit;
+    limit_block.pprev = &bip34_block;
+    limit_block.phashBlock = &block_hash;
+
+    BOOST_CHECK(!ShouldEnforceBIP30ForBlock(pre_limit_block, consensus));
+    BOOST_CHECK(ShouldEnforceBIP30ForBlock(limit_block, consensus));
+}
+
 BOOST_AUTO_TEST_CASE(signet_parse_tests)
 {
     ArgsManager signet_argsman;

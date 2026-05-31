@@ -1408,6 +1408,9 @@ bool IsBIP30Repeat(const CBlockIndex& block_index);
 /** Identifies blocks which coinbase output was subsequently overwritten in the UTXO set (see BIP30) */
 bool IsBIP30Unspendable(const uint256& block_hash, int block_height);
 
+/** Returns whether ConnectBlock must enforce BIP30 duplicate txid protection for this block. */
+bool ShouldEnforceBIP30ForBlock(const CBlockIndex& block_index, const Consensus::Params& consensus_params);
+
 // Returns the script flags which should be checked for a given block
 script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const ChainstateManager& chainman);
 
