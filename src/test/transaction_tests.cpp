@@ -374,6 +374,46 @@ BOOST_AUTO_TEST_CASE(tx_oversized)
     }
 }
 
+BOOST_AUTO_TEST_CASE(tx_noncanonical_compactsize)
+{
+    const auto deserialize_tx{[](const std::string& hex) {
+        DataStream stream{ParseHex(hex)};
+        return CTransaction(deserialize, TX_WITH_WITNESS, stream);
+    }};
+
+    const std::string canonical{
+        "01000000"
+        "01"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "ffffffff"
+        "02"
+        "0101"
+        "ffffffff"
+        "01"
+        "0000000000000000"
+        "01"
+        "51"
+        "00000000"};
+    TxValidationState state;
+    BOOST_CHECK(CheckTransaction(deserialize_tx(canonical), state));
+    BOOST_CHECK(state.IsValid());
+
+    const std::string noncanonical_input_count{
+        "01000000"
+        "fd0100"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "ffffffff"
+        "02"
+        "0101"
+        "ffffffff"
+        "01"
+        "0000000000000000"
+        "01"
+        "51"
+        "00000000"};
+    BOOST_CHECK_THROW(deserialize_tx(noncanonical_input_count), std::ios_base::failure);
+}
+
 BOOST_AUTO_TEST_CASE(basic_transaction_tests)
 {
     // Random real transaction (e2769b09e784f32f62ef849763d4f45b98e07ba658647343b915ff832b110436)
