@@ -4,6 +4,7 @@
 
 #include <chainparams.h>
 #include <consensus/amount.h>
+#include <consensus/consensus.h>
 #include <consensus/merkle.h>
 #include <core_io.h>
 #include <hash.h>
@@ -92,6 +93,26 @@ BOOST_AUTO_TEST_CASE(bip30_reactivated_at_bip34_indicated_height_limit)
 
     BOOST_CHECK(!ShouldEnforceBIP30ForBlock(pre_limit_block, consensus));
     BOOST_CHECK(ShouldEnforceBIP30ForBlock(limit_block, consensus));
+}
+
+BOOST_AUTO_TEST_CASE(bip94_timewarp_retarget_timestamp_limit)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::TESTNET4);
+    const Consensus::Params& consensus{chainParams->GetConsensus()};
+    BOOST_REQUIRE(consensus.enforce_BIP94);
+
+    const int interval{static_cast<int>(consensus.DifficultyAdjustmentInterval())};
+    constexpr int64_t previous_block_time{1700000000};
+    const int64_t first_invalid_time{previous_block_time - MAX_TIMEWARP - 1};
+
+    BOOST_CHECK(IsBIP94TimewarpAttack(interval, first_invalid_time, previous_block_time, consensus));
+    BOOST_CHECK(!IsBIP94TimewarpAttack(interval, previous_block_time - MAX_TIMEWARP, previous_block_time, consensus));
+    BOOST_CHECK(!IsBIP94TimewarpAttack(interval + 1, first_invalid_time, previous_block_time, consensus));
+    BOOST_CHECK(!IsBIP94TimewarpAttack(0, first_invalid_time, previous_block_time, consensus));
+
+    auto legacy_consensus{consensus};
+    legacy_consensus.enforce_BIP94 = false;
+    BOOST_CHECK(!IsBIP94TimewarpAttack(interval, first_invalid_time, previous_block_time, legacy_consensus));
 }
 
 BOOST_AUTO_TEST_CASE(signet_parse_tests)
