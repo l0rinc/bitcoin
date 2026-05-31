@@ -462,6 +462,25 @@ BOOST_AUTO_TEST_CASE(tx_noncanonical_witness_compactsize)
         "00"
         "00000000"};
     BOOST_CHECK_THROW(deserialize_tx(noncanonical_witness_item_length), std::ios_base::failure);
+
+    const std::string noncanonical_witness_stack_count{
+        "01000000"
+        "0001"
+        "01"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "ffffffff"
+        "02"
+        "0101"
+        "ffffffff"
+        "01"
+        "0000000000000000"
+        "01"
+        "51"
+        "fd0100"
+        "01"
+        "00"
+        "00000000"};
+    BOOST_CHECK_THROW(deserialize_tx(noncanonical_witness_stack_count), std::ios_base::failure);
 }
 
 BOOST_AUTO_TEST_CASE(basic_transaction_tests)
