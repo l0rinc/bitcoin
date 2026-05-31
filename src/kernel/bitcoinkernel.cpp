@@ -1171,6 +1171,8 @@ int btck_block_check(const btck_Block* block, const btck_ConsensusParams* consen
     auto& state = btck_BlockValidationState::get(validation_state);
     state = BlockValidationState{};
 
+    if (flags & ~btck_BlockCheckFlags_ALL) return state.Error("invalid flags");
+
     const bool check_pow    = (flags & btck_BlockCheckFlags_POW) != 0;
     const bool check_merkle = (flags & btck_BlockCheckFlags_MERKLE) != 0;
 
