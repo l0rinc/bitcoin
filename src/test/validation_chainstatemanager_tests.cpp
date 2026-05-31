@@ -169,6 +169,38 @@ BOOST_AUTO_TEST_CASE(block_witness_commitment_height_ignores_activation_hash)
     BOOST_CHECK(IsBlockMutated(block, /*check_witness_root=*/true));
 }
 
+BOOST_AUTO_TEST_CASE(block_witness_data_requires_expected_commitment)
+{
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vin[0].scriptSig = CScript{} << std::vector<unsigned char>{0x01};
+    coinbase.vin[0].scriptWitness.stack.emplace_back(32);
+    coinbase.vout.emplace_back(0, CScript{});
+
+    CBlock block;
+    block.vtx.push_back(MakeTransactionRef(std::move(coinbase)));
+
+    uint256 commitment_hash;
+    CHash256()
+        .Write(BlockWitnessMerkleRoot(block))
+        .Write(block.vtx[0]->vin[0].scriptWitness.stack[0])
+        .Finalize(commitment_hash);
+
+    std::vector<unsigned char> commitment{0xaa, 0x21, 0xa9, 0xed};
+    commitment.insert(commitment.end(), commitment_hash.begin(), commitment_hash.end());
+
+    CMutableTransaction committed_coinbase{*block.vtx[0]};
+    committed_coinbase.vout[0].scriptPubKey = CScript{} << OP_RETURN << commitment;
+    block.vtx[0] = MakeTransactionRef(std::move(committed_coinbase));
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+
+    BOOST_CHECK(block.vtx[0]->HasWitness());
+    BOOST_CHECK_EQUAL(GetWitnessCommitmentIndex(block), 0);
+    BOOST_CHECK(IsBlockMutated(block, /*check_witness_root=*/false));
+    BOOST_CHECK(!IsBlockMutated(block, /*check_witness_root=*/true));
+}
+
 BOOST_AUTO_TEST_CASE(block_script_flags_retroactive_witness)
 {
     CBlockIndex block_index;
