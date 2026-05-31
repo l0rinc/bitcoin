@@ -219,6 +219,66 @@ BOOST_AUTO_TEST_CASE(rejection_at_cap)
     BOOST_REQUIRE(pb.Remove(fresh).has_value());
     BOOST_CHECK_EQUAL(pb.Add(fresh), PrivateBroadcast::AddResult::Added);
     BOOST_CHECK_EQUAL(pb.GetBroadcastInfo().size(), num_cap);
+
+BOOST_AUTO_TEST_CASE(disconnected_unconfirmed_nodes_are_pruned)
+{
+    SetMockTime(Now<NodeSeconds>());
+
+    PrivateBroadcast pb;
+    const auto tx1{MakeDummyTx(/*id=*/101, /*num_witness=*/0)};
+    const auto tx2{MakeDummyTx(/*id=*/102, /*num_witness=*/0)};
+    BOOST_REQUIRE_EQUAL(pb.Add(tx1), PrivateBroadcast::AddResult::Added);
+    BOOST_REQUIRE_EQUAL(pb.Add(tx2), PrivateBroadcast::AddResult::Added);
+
+    in_addr ipv4Addr;
+    ipv4Addr.s_addr = 0xa0b0c001;
+
+    bool picked_tx1{false};
+    bool picked_tx2{false};
+    for (NodeId recipient{1}; recipient <= 6; ++recipient) {
+        const CService addr{ipv4Addr, static_cast<uint16_t>(1000 + recipient)};
+        const auto tx_for_recipient{pb.PickTxForSend(recipient, addr).value()};
+        picked_tx1 |= tx_for_recipient == tx1;
+        picked_tx2 |= tx_for_recipient == tx2;
+
+        auto infos{pb.GetBroadcastInfo()};
+        BOOST_REQUIRE_EQUAL(infos.size(), 2);
+        BOOST_CHECK_EQUAL(infos[0].peers.size() + infos[1].peers.size(), 1);
+
+        BOOST_CHECK(pb.RemoveUnconfirmedNode(recipient));
+        BOOST_CHECK(!pb.RemoveUnconfirmedNode(recipient));
+
+        infos = pb.GetBroadcastInfo();
+        BOOST_REQUIRE_EQUAL(infos.size(), 2);
+        BOOST_CHECK_EQUAL(infos[0].peers.size(), 0);
+        BOOST_CHECK_EQUAL(infos[1].peers.size(), 0);
+    }
+    BOOST_CHECK(picked_tx1);
+    BOOST_CHECK(picked_tx2);
+}
+
+BOOST_AUTO_TEST_CASE(confirmed_nodes_are_retained_after_disconnect)
+{
+    SetMockTime(Now<NodeSeconds>());
+
+    PrivateBroadcast pb;
+    const auto tx{MakeDummyTx(/*id=*/201, /*num_witness=*/0)};
+    BOOST_REQUIRE_EQUAL(pb.Add(tx), PrivateBroadcast::AddResult::Added);
+
+    const NodeId recipient{1};
+    in_addr ipv4Addr;
+    ipv4Addr.s_addr = 0xa0b0c001;
+    const CService addr{ipv4Addr, 1111};
+
+    BOOST_CHECK_EQUAL(pb.PickTxForSend(recipient, addr).value(), tx);
+    pb.NodeConfirmedReception(recipient);
+    BOOST_CHECK(!pb.RemoveUnconfirmedNode(recipient));
+
+    const auto infos{pb.GetBroadcastInfo()};
+    BOOST_REQUIRE_EQUAL(infos.size(), 1);
+    BOOST_REQUIRE_EQUAL(infos[0].peers.size(), 1);
+    BOOST_CHECK(infos[0].peers[0].received.has_value());
+    BOOST_CHECK_EQUAL(pb.Remove(tx).value(), 1);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
