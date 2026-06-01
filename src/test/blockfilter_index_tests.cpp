@@ -24,6 +24,7 @@
 #include <tinyformat.h>
 #include <uint256.h>
 #include <util/check.h>
+#include <util/byte_units.h>
 #include <util/fs.h>
 #include <util/time.h>
 #include <validation.h>
