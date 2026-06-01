@@ -79,7 +79,7 @@ static bool ParseAddress(std::string& address,
         if (address.size() <= 5) {
             path = data_dir / fs::PathFromString(strprintf("%s.sock", RemovePrefixView(dest_exe_name, "bitcoin-")));
         } else {
-            path = data_dir / fs::PathFromString(address.substr(5));
+            path = data_dir / fs::PathFromString(std::string{RemovePrefixView(address, "unix:")});
         }
         std::string path_str = fs::PathToString(path);
         address = strprintf("unix:%s", path_str);

@@ -9,6 +9,7 @@
 #include <span.h>
 #include <util/check.h>
 #include <util/overflow.h>
+#include <util/string.h>
 
 #include <compare>
 #include <limits>
@@ -126,8 +127,8 @@ std::optional<std::vector<unsigned char>> DecodeBase64(std::string_view str)
 
     if (str.size() % 4 != 0) return {};
     /* One or two = characters at the end are permitted. */
-    if (str.size() >= 1 && str.back() == '=') str.remove_suffix(1);
-    if (str.size() >= 1 && str.back() == '=') str.remove_suffix(1);
+    str = util::RemoveSuffixView(str, "=");
+    str = util::RemoveSuffixView(str, "=");
 
     std::vector<unsigned char> ret;
     ret.reserve((str.size() * 3) / 4);
@@ -181,10 +182,10 @@ std::optional<std::vector<unsigned char>> DecodeBase32(std::string_view str)
 
     if (str.size() % 8 != 0) return {};
     /* 1, 3, 4, or 6 padding '=' suffix characters are permitted. */
-    if (str.size() >= 1 && str.back() == '=') str.remove_suffix(1);
-    if (str.size() >= 2 && str.substr(str.size() - 2) == "==") str.remove_suffix(2);
-    if (str.size() >= 1 && str.back() == '=') str.remove_suffix(1);
-    if (str.size() >= 2 && str.substr(str.size() - 2) == "==") str.remove_suffix(2);
+    str = util::RemoveSuffixView(str, "=");
+    str = util::RemoveSuffixView(str, "==");
+    str = util::RemoveSuffixView(str, "=");
+    str = util::RemoveSuffixView(str, "==");
 
     std::vector<unsigned char> ret;
     ret.reserve((str.size() * 5) / 8);

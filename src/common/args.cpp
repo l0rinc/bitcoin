@@ -63,7 +63,7 @@ static bool InterpretBool(const std::string& strValue)
 
 static std::string SettingName(const std::string& arg)
 {
-    return arg.size() > 0 && arg[0] == '-' ? arg.substr(1) : arg;
+    return util::RemovePrefix(arg, "-");
 }
 
 /**
