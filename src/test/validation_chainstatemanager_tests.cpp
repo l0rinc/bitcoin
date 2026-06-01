@@ -12,6 +12,7 @@
 #include <node/chainstatemanager_args.h>
 #include <node/kernel_notifications.h>
 #include <node/utxo_snapshot.h>
+#include <pow.h>
 #include <primitives/transaction.h>
 #include <random.h>
 #include <rpc/blockchain.h>
@@ -86,6 +87,46 @@ BOOST_AUTO_TEST_CASE(block_sequence_locks_bip68_height_ignores_activation_hash)
     BOOST_CHECK(SequenceLocks(tx, 0, prev_heights, block));
     prev_heights = {csv_height - 1};
     BOOST_CHECK(!SequenceLocks(tx, LOCKTIME_VERIFY_SEQUENCE, prev_heights, block));
+}
+
+BOOST_FIXTURE_TEST_CASE(block_header_time_uses_parent_mtp_once, TestChain100Setup)
+{
+    const CScript coinbase_script{CScript{} << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG};
+    const auto& consensus{m_node.chainman->GetConsensus()};
+    const int64_t base_time{
+        WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Tip()->GetMedianTimePast())};
+    SetMockTime(base_time + 10'000);
+
+    auto solve_block{[&](CBlock& block) {
+        block.nNonce = 0;
+        while (!CheckProofOfWork(block.GetHash(), block.nBits, consensus)) {
+            ++block.nNonce;
+        }
+    }};
+
+    auto process_block_at_time{[&](const int64_t block_time) {
+        CBlock block{CreateBlock({}, coinbase_script)};
+        block.nTime = block_time;
+        solve_block(block);
+
+        bool new_block{false};
+        BOOST_REQUIRE(m_node.chainman->ProcessNewBlock(std::make_shared<const CBlock>(block),
+            /*force_processing=*/true, /*min_pow_checked=*/true, &new_block));
+        BOOST_REQUIRE(new_block);
+    }};
+
+    for (int64_t offset{1}; offset <= 10; ++offset) {
+        process_block_at_time(base_time + offset);
+    }
+    process_block_at_time(base_time + 1000);
+
+    const int64_t parent_mtp{
+        WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Tip()->GetMedianTimePast())};
+    BOOST_REQUIRE_EQUAL(parent_mtp, base_time + 6);
+
+    // This child is valid when compared to the parent MTP window. It would be
+    // too old if the parent timestamp were inserted into that window twice.
+    process_block_at_time(parent_mtp + 1);
 }
 
 BOOST_AUTO_TEST_CASE(block_script_flags_csv_height_ignores_activation_hash)
