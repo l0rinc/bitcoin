@@ -7,6 +7,7 @@
 #include <common/url.h>
 #include <rpc/util.h>
 #include <util/any.h>
+#include <util/string.h>
 #include <util/translation.h>
 #include <wallet/context.h>
 #include <wallet/wallet.h>
@@ -54,7 +55,7 @@ std::optional<std::string> GetWalletNameFromJSONRPCRequest(const JSONRPCRequest&
 {
     if (request.URI.starts_with(WALLET_ENDPOINT_BASE)) {
         // wallet endpoint was used
-        return UrlDecode(std::string_view{request.URI}.substr(WALLET_ENDPOINT_BASE.size()));
+        return UrlDecode(util::RemovePrefixView(request.URI, WALLET_ENDPOINT_BASE));
     }
     return std::nullopt;
 }

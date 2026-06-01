@@ -45,6 +45,7 @@
 #include <utility>
 #include <vector>
 
+using util::RemovePrefix;
 using util::SplitString;
 
 namespace {
@@ -69,7 +70,7 @@ public:
             mapOpNames[strName] = static_cast<opcodetype>(op);
             // Convenience: OP_ADD and just ADD are both recognized:
             if (strName.starts_with("OP_")) {
-                mapOpNames[strName.substr(3)] = static_cast<opcodetype>(op);
+                mapOpNames[RemovePrefix(strName, "OP_")] = static_cast<opcodetype>(op);
             }
         }
     }
@@ -311,7 +312,7 @@ std::string FormatScript(const CScript& script)
             } else if (op >= OP_NOP && op <= OP_NOP10) {
                 std::string str(GetOpName(op));
                 if (str.substr(0, 3) == std::string("OP_")) {
-                    ret += str.substr(3, std::string::npos) + " ";
+                    ret += RemovePrefix(str, "OP_") + " ";
                     continue;
                 }
             }

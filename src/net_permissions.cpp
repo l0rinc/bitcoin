@@ -6,6 +6,7 @@
 #include <common/system.h>
 #include <net_permissions.h>
 #include <netbase.h>
+#include <util/string.h>
 #include <util/translation.h>
 
 using common::ResolveErrMsg;
@@ -36,17 +37,10 @@ static bool TryParsePermissionFlags(const std::string& str, NetPermissionFlags& 
     }
     // else (ie, "perm1,perm2@xxxxx"), let's enumerate the permissions by splitting by ',' and calculate the flags
     else {
-        readen = 0;
         // permissions == perm1,perm2
         const auto permissions = str.substr(0, atSeparator);
-        while (readen < permissions.length()) {
-            const auto commaSeparator = permissions.find(',', readen);
-            const auto len = commaSeparator == std::string::npos ? permissions.length() - readen : commaSeparator - readen;
+        for (const auto& permission : util::SplitString(permissions, ',')) {
             // permission == perm1
-            const auto permission = permissions.substr(readen, len);
-            readen += len; // We read "perm1"
-            if (commaSeparator != std::string::npos) readen++; // We read ","
-
             if (permission == "bloomfilter" || permission == "bloom") NetPermissions::AddFlag(flags, NetPermissionFlags::BloomFilter);
             else if (permission == "noban") NetPermissions::AddFlag(flags, NetPermissionFlags::NoBan);
             else if (permission == "forcerelay") NetPermissions::AddFlag(flags, NetPermissionFlags::ForceRelay);
@@ -70,7 +64,7 @@ static bool TryParsePermissionFlags(const std::string& str, NetPermissionFlags& 
                 return false;
             }
         }
-        readen++;
+        readen = atSeparator + 1;
     }
 
     // By default, whitelist only applies to incoming connections
