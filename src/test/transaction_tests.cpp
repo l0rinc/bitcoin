@@ -374,6 +374,25 @@ BOOST_AUTO_TEST_CASE(tx_oversized)
     }
 }
 
+BOOST_AUTO_TEST_CASE(tx_output_money_range)
+{
+    auto check_money_range{[](std::vector<CAmount> output_values, const std::string& reject_reason) {
+        CMutableTransaction tx;
+        tx.vin.emplace_back(Txid::FromUint256(uint256::ONE), 0);
+        for (const auto value : output_values) {
+            tx.vout.emplace_back(value, CScript() << OP_TRUE);
+        }
+
+        TxValidationState state;
+        BOOST_CHECK(!CheckTransaction(CTransaction{tx}, state));
+        BOOST_CHECK(state.IsInvalid());
+        BOOST_CHECK_EQUAL(state.GetRejectReason(), reject_reason);
+    }};
+
+    check_money_range({MAX_MONEY + 1}, "bad-txns-vout-toolarge");
+    check_money_range({MAX_MONEY, 1}, "bad-txns-txouttotal-toolarge");
+}
+
 BOOST_AUTO_TEST_CASE(tx_noncanonical_compactsize)
 {
     const auto deserialize_tx{[](const std::string& hex) {
