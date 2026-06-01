@@ -338,16 +338,16 @@ void PSBTInput::FillSignatureData(SignatureData& sigdata) const
         sigdata.tap_pubkeys.emplace(Hash160(pubkey), pubkey);
     }
     for (const auto& [hash, preimage] : ripemd160_preimages) {
-        sigdata.ripemd160_preimages.emplace(std::vector<unsigned char>(hash.begin(), hash.end()), preimage);
+        sigdata.ripemd160_preimages.emplace(ToByteVector(hash), preimage);
     }
     for (const auto& [hash, preimage] : sha256_preimages) {
-        sigdata.sha256_preimages.emplace(std::vector<unsigned char>(hash.begin(), hash.end()), preimage);
+        sigdata.sha256_preimages.emplace(ToByteVector(hash), preimage);
     }
     for (const auto& [hash, preimage] : hash160_preimages) {
-        sigdata.hash160_preimages.emplace(std::vector<unsigned char>(hash.begin(), hash.end()), preimage);
+        sigdata.hash160_preimages.emplace(ToByteVector(hash), preimage);
     }
     for (const auto& [hash, preimage] : hash256_preimages) {
-        sigdata.hash256_preimages.emplace(std::vector<unsigned char>(hash.begin(), hash.end()), preimage);
+        sigdata.hash256_preimages.emplace(ToByteVector(hash), preimage);
     }
     sigdata.musig2_pubkeys.insert(m_musig2_participants.begin(), m_musig2_participants.end());
     for (const auto& [agg_key_lh, pubnonces] : m_musig2_pubnonces) {

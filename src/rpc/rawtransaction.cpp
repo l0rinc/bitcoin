@@ -1677,14 +1677,13 @@ static RPCMethod finalizepsbt()
     bool complete = FinalizeAndExtractPSBT(psbtx, mtx);
 
     UniValue result(UniValue::VOBJ);
-    DataStream ssTx{};
     std::string result_str;
 
     if (complete && extract) {
-        ssTx << TX_WITH_WITNESS(mtx);
-        result_str = HexStr(ssTx);
+        result_str = EncodeHexTx(CTransaction(mtx));
         result.pushKV("hex", result_str);
     } else {
+        DataStream ssTx{};
         ssTx << psbtx;
         result_str = EncodeBase64(ssTx.str());
         result.pushKV("psbt", result_str);
@@ -2148,9 +2147,7 @@ RPCMethod descriptorprocesspsbt()
         CMutableTransaction mtx;
         PartiallySignedTransaction psbtx_copy = psbtx;
         CHECK_NONFATAL(FinalizeAndExtractPSBT(psbtx_copy, mtx));
-        DataStream ssTx_final;
-        ssTx_final << TX_WITH_WITNESS(mtx);
-        result.pushKV("hex", HexStr(ssTx_final));
+        result.pushKV("hex", EncodeHexTx(CTransaction(mtx)));
     }
     return result;
 },

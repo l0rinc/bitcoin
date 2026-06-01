@@ -870,10 +870,7 @@ static bool rest_tx(const std::any& context, HTTPRequest* req, const std::string
     }
 
     case RESTResponseFormat::HEX: {
-        DataStream ssTx;
-        ssTx << TX_WITH_WITNESS(tx);
-
-        std::string strHex = HexStr(ssTx) + "\n";
+        std::string strHex = EncodeHexTx(*tx) + "\n";
         req->WriteHeader("Content-Type", "text/plain");
         req->WriteReply(HTTP_OK, strHex);
         return true;

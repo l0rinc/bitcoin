@@ -12,6 +12,7 @@
 #include <serialize.h>
 #include <uint256.h>
 #include <util/hash_type.h>
+#include <util/vector.h>
 
 #include <cassert>
 #include <cstddef>
@@ -585,7 +586,7 @@ struct CScriptWitness
 
     bool IsNull() const { return stack.empty(); }
 
-    void SetNull() { stack.clear(); stack.shrink_to_fit(); }
+    void SetNull() { ClearShrink(stack); }
 
     std::string ToString() const;
 

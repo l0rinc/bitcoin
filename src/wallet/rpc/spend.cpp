@@ -1662,9 +1662,7 @@ RPCMethod walletprocesspsbt()
         CMutableTransaction mtx;
         // Returns true if complete, which we already think it is.
         CHECK_NONFATAL(FinalizeAndExtractPSBT(psbtx, mtx));
-        DataStream ssTx_final;
-        ssTx_final << TX_WITH_WITNESS(mtx);
-        result.pushKV("hex", HexStr(ssTx_final));
+        result.pushKV("hex", EncodeHexTx(CTransaction(mtx)));
     }
 
     return result;
