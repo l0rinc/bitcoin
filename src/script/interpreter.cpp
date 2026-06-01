@@ -1293,12 +1293,12 @@ public:
         it = itBegin;
         while (scriptCode.GetOp(it, opcode)) {
             if (opcode == OP_CODESEPARATOR) {
-                s.write(std::as_bytes(std::span{&itBegin[0], size_t(it - itBegin - 1)}));
+                s.write(MakeByteSpan(std::span{&itBegin[0], size_t(it - itBegin - 1)}));
                 itBegin = it;
             }
         }
         if (itBegin != scriptCode.end())
-            s.write(std::as_bytes(std::span{&itBegin[0], size_t(it - itBegin)}));
+            s.write(MakeByteSpan(std::span{&itBegin[0], size_t(it - itBegin)}));
     }
 
     /** Serialize an input of txTo */

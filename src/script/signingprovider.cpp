@@ -10,7 +10,6 @@
 #include <script/keyorigin.h>
 #include <util/check.h>
 #include <util/log.h>
-#include <util/vector.h>
 
 #include <algorithm>
 #include <cstddef>

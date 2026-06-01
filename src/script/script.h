@@ -492,7 +492,7 @@ public:
     // For compatibility reasons. In new code, prefer using std::byte instead of uint8_t.
     CScript& operator<<(std::span<const value_type> b) LIFETIMEBOUND
     {
-        return *this << std::as_bytes(b);
+        return *this << MakeByteSpan(b);
     }
 
     bool GetOp(const_iterator& pc, opcodetype& opcodeRet, std::vector<unsigned char>& vchRet) const
