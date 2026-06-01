@@ -3336,6 +3336,10 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
     CBlockIndex *pindexNewTip = nullptr;
     bool exited_ibd{false};
     do {
+        ValidationSignals* active_tip_change_signals{nullptr};
+        const CBlockIndex* active_tip_change_tip{nullptr};
+        bool active_tip_change_ibd{false};
+
         // Block until the validation queue drains. This should largely
         // never happen in normal operation, however may happen during
         // reindex, causing memory blowup if we run too far ahead.
@@ -3428,9 +3432,14 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
             } // release MempoolMutex
             // Notify external listeners about the new tip, even if pindexFork == pindexNewTip.
             if (m_chainman.m_options.signals && this == &m_chainman.ActiveChainstate()) {
-                m_chainman.m_options.signals->ActiveTipChange(*Assert(pindexNewTip), m_chainman.IsInitialBlockDownload());
+                active_tip_change_signals = m_chainman.m_options.signals;
+                active_tip_change_tip = Assert(pindexNewTip);
+                active_tip_change_ibd = m_chainman.IsInitialBlockDownload();
             }
         } // release cs_main
+        if (active_tip_change_signals) {
+            active_tip_change_signals->ActiveTipChange(*active_tip_change_tip, active_tip_change_ibd);
+        }
         // When we reach this point, we switched to a new tip (stored in pindexNewTip).
 
         bool reached_target;

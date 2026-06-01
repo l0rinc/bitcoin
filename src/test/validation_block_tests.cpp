@@ -255,6 +255,43 @@ BOOST_AUTO_TEST_CASE(processnewblock_reject_blockchecked_does_not_hold_cs_main)
 
     g_debug_lockorder_abort = prev;
 }
+
+BOOST_AUTO_TEST_CASE(active_tip_change_does_not_hold_cs_main)
+{
+    const bool prev{g_debug_lockorder_abort};
+    g_debug_lockorder_abort = false;
+
+    bool new_block;
+    BOOST_REQUIRE(Assert(m_node.chainman)->ProcessNewBlock(std::make_shared<CBlock>(Params().GenesisBlock()), /*force_processing=*/true, /*min_pow_checked=*/true, &new_block));
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+
+    auto block{GoodBlock(Params().GenesisBlock().GetHash())};
+
+    Mutex callback_mutex;
+    struct Subscriber final : public CValidationInterface {
+        Mutex& m_callback_mutex;
+
+        explicit Subscriber(Mutex& callback_mutex) : m_callback_mutex{callback_mutex} {}
+
+        void ActiveTipChange(const CBlockIndex&, bool) override EXCLUSIVE_LOCKS_REQUIRED(!m_callback_mutex)
+        {
+            LOCK(m_callback_mutex);
+        }
+    } subscriber{callback_mutex};
+    m_node.validation_signals->RegisterValidationInterface(&subscriber);
+
+    BOOST_REQUIRE(Assert(m_node.chainman)->ProcessNewBlock(block, /*force_processing=*/true, /*min_pow_checked=*/true, &new_block));
+    m_node.validation_signals->UnregisterValidationInterface(&subscriber);
+
+    LOCK(callback_mutex);
+    try {
+        LOCK(::cs_main);
+    } catch (const std::logic_error& e) {
+        BOOST_FAIL(e.what());
+    }
+
+    g_debug_lockorder_abort = prev;
+}
 #endif
 
 /**
