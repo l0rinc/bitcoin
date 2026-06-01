@@ -4,6 +4,7 @@
 
 #include <common/args.h>
 #include <sync.h>
+#include <test/util/common.h>
 #include <test/util/logging.h>
 #include <test/util/setup_common.h>
 #include <test/util/str.h>
@@ -111,7 +112,7 @@ public:
 
         if (expect.error) {
             BOOST_CHECK(!success);
-            BOOST_CHECK_NE(error.find(expect.error), std::string::npos);
+            BOOST_CHECK(HasReason{expect.error}(error));
         } else {
             BOOST_CHECK(success);
             BOOST_CHECK_EQUAL(error, "");

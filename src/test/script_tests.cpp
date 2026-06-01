@@ -416,11 +416,7 @@ std::string JSONPrettyPrint(const UniValue& univalue)
 {
     std::string ret = univalue.write(4);
     // Workaround for libunivalue pretty printer, which puts a space between commas and newlines
-    size_t pos = 0;
-    while ((pos = ret.find(" \n", pos)) != std::string::npos) {
-        ret.replace(pos, 2, "\n");
-        pos++;
-    }
+    util::ReplaceAll(ret, " \n", "\n");
     return ret;
 }
 } // namespace

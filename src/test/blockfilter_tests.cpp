@@ -4,6 +4,7 @@
 
 #include <test/data/blockfilters.json.h>
 #include <test/util/common.h>
+#include <test/util/json.h>
 
 #include <blockfilter.h>
 #include <core_io.h>
@@ -129,13 +130,7 @@ BOOST_AUTO_TEST_CASE(blockfilter_basic_test)
 
 BOOST_AUTO_TEST_CASE(blockfilters_json_test)
 {
-    UniValue json;
-    if (!json.read(json_tests::blockfilters) || !json.isArray()) {
-        BOOST_ERROR("Parse error.");
-        return;
-    }
-
-    const UniValue& tests = json.get_array();
+    const UniValue tests{read_json(json_tests::blockfilters)};
     for (unsigned int i = 0; i < tests.size(); i++) {
         const UniValue& test = tests[i];
         std::string strTest = test.write();
