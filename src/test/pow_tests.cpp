@@ -170,6 +170,22 @@ BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_too_easy_target)
     BOOST_CHECK(!CheckProofOfWork(hash, nBits, consensus));
 }
 
+BOOST_AUTO_TEST_CASE(CheckProofOfWork_accepts_compact_exponent_34_target)
+{
+    auto consensus{CreateChainParams(*m_node.args, ChainType::REGTEST)->GetConsensus()};
+    constexpr uint32_t exponent_34_bits{0x22000001U};
+    bool is_negative{true};
+    bool is_overflow{true};
+    arith_uint256 target;
+    target.SetCompact(exponent_34_bits, &is_negative, &is_overflow);
+
+    BOOST_CHECK(!is_negative);
+    BOOST_CHECK(!is_overflow);
+    BOOST_CHECK(target != 0);
+    BOOST_CHECK(target <= UintToArith256(consensus.powLimit));
+    BOOST_CHECK(CheckProofOfWork(uint256::ZERO, exponent_34_bits, consensus));
+}
+
 BOOST_AUTO_TEST_CASE(CheckProofOfWork_uses_current_pow_limit)
 {
     const auto consensus{CreateChainParams(*m_node.args, ChainType::MAIN)->GetConsensus()};
