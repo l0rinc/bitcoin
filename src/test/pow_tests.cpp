@@ -170,6 +170,25 @@ BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_too_easy_target)
     BOOST_CHECK(!CheckProofOfWork(hash, nBits, consensus));
 }
 
+BOOST_AUTO_TEST_CASE(CheckProofOfWork_uses_current_pow_limit)
+{
+    const auto consensus{CreateChainParams(*m_node.args, ChainType::MAIN)->GetConsensus()};
+    constexpr uint32_t low_pow_limit_bits{0x1d00ffffU};
+    constexpr uint32_t high_pow_limit_bits{0x207fffffU};
+    constexpr uint32_t between_limits_bits{0x1d03fffcU};
+    const auto pow_limit_from_bits = [](uint32_t bits) {
+        return ArithToUint256(arith_uint256{}.SetCompact(bits));
+    };
+
+    auto high_limit_consensus{consensus};
+    high_limit_consensus.powLimit = pow_limit_from_bits(high_pow_limit_bits);
+    BOOST_CHECK(CheckProofOfWork(uint256::ZERO, between_limits_bits, high_limit_consensus));
+
+    auto low_limit_consensus{consensus};
+    low_limit_consensus.powLimit = pow_limit_from_bits(low_pow_limit_bits);
+    BOOST_CHECK(!CheckProofOfWork(uint256::ZERO, between_limits_bits, low_limit_consensus));
+}
+
 BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_biger_hash_than_target)
 {
     const auto consensus = CreateChainParams(*m_node.args, ChainType::MAIN)->GetConsensus();
