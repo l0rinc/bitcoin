@@ -4390,11 +4390,12 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
 {
     AssertLockNotHeld(cs_main);
 
-    {
-        CBlockIndex *pindex = nullptr;
-        if (new_block) *new_block = false;
-        BlockValidationState state;
+    CBlockIndex *pindex = nullptr;
+    if (new_block) *new_block = false;
+    BlockValidationState block_state;
+    bool ret;
 
+    {
         // CheckBlock() does not support multi-threaded block validation because CBlock::fChecked can cause data race.
         // Therefore, the following critical section must include the CheckBlock() call as well.
         LOCK(cs_main);
@@ -4404,18 +4405,18 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
         // malleability that cause CheckBlock() to fail; see e.g. CVE-2012-2459 and
         // https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2019-February/016697.html.  Because CheckBlock() is
         // not very expensive, the anti-DoS benefits of caching failure (of a definitely-invalid block) are not substantial.
-        bool ret = CheckBlock(*block, state, GetConsensus());
+        ret = CheckBlock(*block, block_state, GetConsensus());
         if (ret) {
             // Store to disk
-            ret = AcceptBlock(block, state, &pindex, force_processing, nullptr, new_block, min_pow_checked);
+            ret = AcceptBlock(block, block_state, &pindex, force_processing, nullptr, new_block, min_pow_checked);
         }
-        if (!ret) {
-            if (m_options.signals) {
-                m_options.signals->BlockChecked(block, state);
-            }
-            LogError("%s: AcceptBlock FAILED (%s)\n", __func__, state.ToString());
-            return false;
+    }
+    if (!ret) {
+        if (m_options.signals) {
+            m_options.signals->BlockChecked(block, block_state);
         }
+        LogError("%s: AcceptBlock FAILED (%s)\n", __func__, block_state.ToString());
+        return false;
     }
 
     NotifyHeaderTip();

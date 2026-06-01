@@ -10,6 +10,7 @@
 #include <node/miner.h>
 #include <pow.h>
 #include <random.h>
+#include <sync.h>
 #include <test/util/common.h>
 #include <test/util/random.h>
 #include <test/util/script.h>
@@ -18,6 +19,7 @@
 #include <validation.h>
 #include <validationinterface.h>
 
+#include <stdexcept>
 #include <thread>
 
 using kernel::ChainstateRole;
@@ -211,6 +213,49 @@ BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering)
     LOCK(cs_main);
     BOOST_CHECK_EQUAL(sub->m_expected_tip, m_node.chainman->ActiveChain().Tip()->GetBlockHash());
 }
+
+#ifdef DEBUG_LOCKORDER
+BOOST_AUTO_TEST_CASE(processnewblock_reject_blockchecked_does_not_hold_cs_main)
+{
+    const bool prev{g_debug_lockorder_abort};
+    g_debug_lockorder_abort = false;
+
+    auto block{std::make_shared<CBlock>(Params().GenesisBlock())};
+    block->hashMerkleRoot = uint256::ONE;
+
+    Mutex callback_mutex;
+    struct Subscriber final : public CValidationInterface {
+        Mutex& m_callback_mutex;
+        const uint256 m_expected_block;
+
+        Subscriber(Mutex& callback_mutex, const uint256& expected_block)
+            : m_callback_mutex{callback_mutex}, m_expected_block{expected_block}
+        {
+        }
+
+        void BlockChecked(const std::shared_ptr<const CBlock>& block, const BlockValidationState&) override EXCLUSIVE_LOCKS_REQUIRED(!m_callback_mutex)
+        {
+            if (block->GetHash() != m_expected_block) return;
+            LOCK(m_callback_mutex);
+        }
+    } subscriber{callback_mutex, block->GetHash()};
+    m_node.validation_signals->RegisterValidationInterface(&subscriber);
+
+    bool new_block;
+    BOOST_CHECK(!Assert(m_node.chainman)->ProcessNewBlock(block, /*force_processing=*/true, /*min_pow_checked=*/true, &new_block));
+
+    m_node.validation_signals->UnregisterValidationInterface(&subscriber);
+
+    LOCK(callback_mutex);
+    try {
+        LOCK(::cs_main);
+    } catch (const std::logic_error& e) {
+        BOOST_FAIL(e.what());
+    }
+
+    g_debug_lockorder_abort = prev;
+}
+#endif
 
 /**
  * Test that mempool updates happen atomically with reorgs.
