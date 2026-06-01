@@ -89,6 +89,43 @@ BOOST_AUTO_TEST_CASE(block_sequence_locks_bip68_height_ignores_activation_hash)
     BOOST_CHECK(!SequenceLocks(tx, LOCKTIME_VERIFY_SEQUENCE, prev_heights, block));
 }
 
+BOOST_AUTO_TEST_CASE(block_sequence_locks_time_uses_prevout_parent_mtp)
+{
+    constexpr int64_t low_time{1'600'000'000};
+    constexpr int64_t sequence_lock_time{1 << CTxIn::SEQUENCE_LOCKTIME_GRANULARITY};
+    constexpr int64_t high_time{low_time + sequence_lock_time};
+
+    std::vector<CBlockIndex> chain(12);
+    for (size_t i{0}; i < chain.size(); ++i) {
+        chain[i].nHeight = static_cast<int>(i);
+        chain[i].nTime = i <= 5 ? low_time : high_time;
+        if (i > 0) chain[i].pprev = &chain[i - 1];
+    }
+
+    CBlockIndex block;
+    block.nHeight = static_cast<int>(chain.size());
+    block.nTime = high_time + 1;
+    block.pprev = &chain.back();
+
+    BOOST_REQUIRE_EQUAL(chain[10].GetMedianTimePast(), low_time);
+    BOOST_REQUIRE_EQUAL(chain[11].GetMedianTimePast(), high_time);
+    BOOST_REQUIRE_EQUAL(block.pprev->GetMedianTimePast(), high_time);
+
+    CMutableTransaction mutable_tx;
+    mutable_tx.version = 2;
+    mutable_tx.vin.resize(1);
+    mutable_tx.vin[0].nSequence = CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG | 1;
+    const CTransaction tx{mutable_tx};
+
+    std::vector<int> prev_heights{chain.back().nHeight};
+    const auto lock_pair{CalculateSequenceLocks(tx, LOCKTIME_VERIFY_SEQUENCE, prev_heights, block)};
+    BOOST_CHECK_EQUAL(lock_pair.second, low_time + sequence_lock_time - 1);
+    BOOST_CHECK(EvaluateSequenceLocks(block, lock_pair));
+
+    prev_heights = {chain.back().nHeight};
+    BOOST_CHECK(SequenceLocks(tx, LOCKTIME_VERIFY_SEQUENCE, prev_heights, block));
+}
+
 BOOST_FIXTURE_TEST_CASE(block_header_time_uses_parent_mtp_once, TestChain100Setup)
 {
     const CScript coinbase_script{CScript{} << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG};
