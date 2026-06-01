@@ -365,7 +365,7 @@ BOOST_AUTO_TEST_CASE(rpc_ban)
     const int64_t ban_duration{o1.find_value("ban_duration").getInt<int64_t>()};
     const int64_t time_remaining{o1.find_value("time_remaining").getInt<int64_t>()};
     BOOST_CHECK_EQUAL(adr.get_str(), "127.0.0.0/24");
-    BOOST_CHECK_EQUAL(banned_until, time_remaining_expected + now.count());
+    BOOST_CHECK_EQUAL(banned_until, time_remaining_expected + count_seconds(now));
     BOOST_CHECK_EQUAL(ban_duration, banned_until - ban_created);
     BOOST_CHECK_EQUAL(time_remaining, time_remaining_expected);
 
