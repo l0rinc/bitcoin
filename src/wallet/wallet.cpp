@@ -150,12 +150,14 @@ static void RefreshMempoolStatus(CWalletTx& tx, interfaces::Chain& chain)
 
 bool AddWallet(WalletContext& context, const std::shared_ptr<CWallet>& wallet)
 {
-    LOCK(context.wallets_mutex);
     assert(wallet);
-    std::vector<std::shared_ptr<CWallet>>::const_iterator i = std::find(context.wallets.begin(), context.wallets.end(), wallet);
-    if (i != context.wallets.end()) return false;
-    context.wallets.push_back(wallet);
-    wallet->ConnectScriptPubKeyManNotifiers();
+    {
+        LOCK(context.wallets_mutex);
+        std::vector<std::shared_ptr<CWallet>>::const_iterator i = std::find(context.wallets.begin(), context.wallets.end(), wallet);
+        if (i != context.wallets.end()) return false;
+        context.wallets.push_back(wallet);
+        wallet->ConnectScriptPubKeyManNotifiers();
+    }
     wallet->NotifyCanGetAddressesChanged();
     return true;
 }

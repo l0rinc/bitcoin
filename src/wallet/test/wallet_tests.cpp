@@ -184,6 +184,35 @@ BOOST_FIXTURE_TEST_CASE(wallet_interface_encryption_keys_threadsafe, TestingSetu
     reader.join();
 }
 
+BOOST_FIXTURE_TEST_CASE(add_wallet_does_not_notify_under_wallets_mutex, TestingSetup)
+{
+#ifdef DEBUG_LOCKORDER
+    const bool prev{g_debug_lockorder_abort};
+    g_debug_lockorder_abort = false;
+#endif
+
+    WalletContext context;
+    auto wallet{std::make_shared<CWallet>(m_node.chain.get(), "", CreateMockableWalletDatabase())};
+    auto wallet_interface{interfaces::MakeWallet(context, wallet)};
+    Mutex callback_mutex;
+
+    auto handler = wallet_interface->handleCanGetAddressesChanged([&] {
+        LOCK(callback_mutex);
+    });
+    AddWallet(context, wallet);
+
+    LOCK(callback_mutex);
+    try {
+        (void)GetWallets(context);
+    } catch (const std::logic_error& e) {
+        BOOST_FAIL(e.what());
+    }
+
+#ifdef DEBUG_LOCKORDER
+    g_debug_lockorder_abort = prev;
+#endif
+}
+
 BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
 {
     // Cap last block file size, and mine new block in a new block file.
