@@ -217,17 +217,14 @@ std::shared_ptr<CWallet> GetWallet(WalletContext& context, const std::string& na
 
 std::unique_ptr<interfaces::Handler> HandleLoadWallet(WalletContext& context, LoadWalletFn load_wallet)
 {
-    LOCK(context.wallets_mutex);
-    auto it = context.wallet_load_fns.emplace(context.wallet_load_fns.end(), std::move(load_wallet));
-    return interfaces::MakeCleanupHandler([&context, it] { LOCK(context.wallets_mutex); context.wallet_load_fns.erase(it); });
+    return interfaces::MakeSignalHandler(context.wallet_load_signal.connect([&context, load_wallet{std::move(load_wallet)}](const std::shared_ptr<CWallet>& wallet) {
+        load_wallet(interfaces::MakeWallet(context, wallet));
+    }));
 }
 
 void NotifyWalletLoaded(WalletContext& context, const std::shared_ptr<CWallet>& wallet)
 {
-    LOCK(context.wallets_mutex);
-    for (auto& load_wallet : context.wallet_load_fns) {
-        load_wallet(interfaces::MakeWallet(context, wallet));
-    }
+    context.wallet_load_signal(wallet);
 }
 
 static GlobalMutex g_loading_wallet_mutex;

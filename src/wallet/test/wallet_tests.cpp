@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <future>
 #include <memory>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -212,6 +213,32 @@ BOOST_FIXTURE_TEST_CASE(add_wallet_does_not_notify_under_wallets_mutex, TestingS
     g_debug_lockorder_abort = prev;
 #endif
 }
+
+#ifdef DEBUG_LOCKORDER
+BOOST_FIXTURE_TEST_CASE(wallet_load_callbacks_do_not_hold_wallets_mutex, TestingSetup)
+{
+    const bool prev{g_debug_lockorder_abort};
+    g_debug_lockorder_abort = false;
+
+    WalletContext context;
+    auto wallet{std::make_shared<CWallet>(m_node.chain.get(), "", CreateMockableWalletDatabase())};
+    Mutex callback_mutex;
+
+    auto handler = HandleLoadWallet(context, [&](std::unique_ptr<interfaces::Wallet>) {
+        LOCK(callback_mutex);
+    });
+    NotifyWalletLoaded(context, wallet);
+
+    LOCK(callback_mutex);
+    try {
+        (void)HandleLoadWallet(context, [](std::unique_ptr<interfaces::Wallet>) {});
+    } catch (const std::logic_error& e) {
+        BOOST_FAIL(e.what());
+    }
+
+    g_debug_lockorder_abort = prev;
+}
+#endif
 
 BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
 {

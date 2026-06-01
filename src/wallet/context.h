@@ -5,10 +5,10 @@
 #ifndef BITCOIN_WALLET_CONTEXT_H
 #define BITCOIN_WALLET_CONTEXT_H
 
+#include <btcsignals.h>
 #include <sync.h>
 
 #include <functional>
-#include <list>
 #include <memory>
 #include <vector>
 
@@ -41,7 +41,7 @@ struct WalletContext {
     // this could introduce inconsistent lock ordering and cause deadlocks.
     Mutex wallets_mutex;
     std::vector<std::shared_ptr<CWallet>> wallets GUARDED_BY(wallets_mutex);
-    std::list<LoadWalletFn> wallet_load_fns GUARDED_BY(wallets_mutex);
+    btcsignals::signal<void(const std::shared_ptr<CWallet>& wallet)> wallet_load_signal;
 
     //! Declare default constructor and destructor that are not inline, so code
     //! instantiating the WalletContext struct doesn't need to #include class
