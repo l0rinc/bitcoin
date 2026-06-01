@@ -14,6 +14,7 @@
 #include <univalue.h>
 
 #include <boost/test/unit_test.hpp>
+#include <limits>
 #include <string>
 
 using namespace std::literals;
@@ -77,6 +78,7 @@ BOOST_AUTO_TEST_CASE(base58_DecodeBase58)
     BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
 
     BOOST_CHECK( DecodeBase58Check("3vQB7B6MrGQZaxCuFg4oh"s, result, 100));
+    BOOST_CHECK( DecodeBase58Check("3vQB7B6MrGQZaxCuFg4oh"s, result, std::numeric_limits<int>::max() - 3));
     BOOST_CHECK(!DecodeBase58Check("3vQB7B6MrGQZaxCuFg4oi"s, result, 100));
     BOOST_CHECK(!DecodeBase58Check("3vQB7B6MrGQZaxCuFg4oh0IOl"s, result, 100));
     BOOST_CHECK(!DecodeBase58Check("3vQB7B6MrGQZaxCuFg4oh\0" "0IOl"s, result, 100));

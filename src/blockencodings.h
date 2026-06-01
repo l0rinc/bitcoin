@@ -7,6 +7,7 @@
 
 #include <crypto/siphash.h>
 #include <primitives/block.h>
+#include <util/overflow.h>
 
 #include <functional>
 
@@ -36,8 +37,9 @@ public:
     void Unser(Stream& s, I& v)
     {
         uint64_t n = ReadCompactSize(s);
-        m_shift += n;
-        if (m_shift < n || m_shift >= std::numeric_limits<uint64_t>::max() || m_shift < std::numeric_limits<I>::min() || m_shift > std::numeric_limits<I>::max()) throw std::ios_base::failure("differential value overflow");
+        const auto next_shift{CheckedAdd(m_shift, n)};
+        if (!next_shift.has_value() || *next_shift >= std::numeric_limits<uint64_t>::max() || *next_shift < std::numeric_limits<I>::min() || *next_shift > std::numeric_limits<I>::max()) throw std::ios_base::failure("differential value overflow");
+        m_shift = *next_shift;
         v = I(m_shift++);
     }
 };
