@@ -139,6 +139,35 @@ BOOST_AUTO_TEST_CASE(get_next_work_bip94_uses_first_period_bits)
     BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&blocks.back(), blocks.front().GetBlockTime(), legacy_consensus), pow_limit_bits);
 }
 
+BOOST_AUTO_TEST_CASE(get_next_work_testnet_easy_boundary_uses_retarget_bits)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::TESTNET);
+    const auto consensus = chainParams->GetConsensus();
+    BOOST_REQUIRE(consensus.fPowAllowMinDifficultyBlocks);
+    BOOST_REQUIRE(!consensus.enforce_BIP94);
+
+    const int interval{static_cast<int>(consensus.DifficultyAdjustmentInterval())};
+    const unsigned int boundary_bits{0x1c0ffff0U};
+    const unsigned int pow_limit_bits{UintToArith256(consensus.powLimit).GetCompact()};
+    const int64_t boundary_time{1700000000};
+
+    CBlockIndex boundary;
+    boundary.nHeight = interval;
+    boundary.nTime = boundary_time;
+    boundary.nBits = boundary_bits;
+
+    CBlockIndex parent;
+    parent.nHeight = interval + 1;
+    parent.pprev = &boundary;
+    parent.nTime = boundary_time + consensus.nPowTargetSpacing * 3;
+    parent.nBits = pow_limit_bits;
+
+    CBlockHeader child;
+    child.nTime = parent.GetBlockTime() + consensus.nPowTargetSpacing;
+
+    BOOST_CHECK_EQUAL(GetNextWorkRequired(&parent, &child, consensus), boundary_bits);
+}
+
 BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_negative_target)
 {
     const auto consensus = CreateChainParams(*m_node.args, ChainType::MAIN)->GetConsensus();
