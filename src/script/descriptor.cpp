@@ -1582,15 +1582,15 @@ public:
     std::vector<unsigned char> ToPKBytes(uint32_t key) const {
         // In Tapscript keys always serialize as x-only, whether an x-only key was used in the descriptor or not.
         if (!miniscript::IsTapscript(m_script_ctx)) {
-            return {m_keys[key].begin(), m_keys[key].end()};
+            return ToByteVector(m_keys[key]);
         }
         const XOnlyPubKey xonly_pubkey{m_keys[key]};
-        return {xonly_pubkey.begin(), xonly_pubkey.end()};
+        return ToByteVector(xonly_pubkey);
     }
 
     std::vector<unsigned char> ToPKHBytes(uint32_t key) const {
         auto id = GetHash160(key);
-        return {id.begin(), id.end()};
+        return ToByteVector(id);
     }
 };
 

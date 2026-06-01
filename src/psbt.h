@@ -438,7 +438,7 @@ public:
                 const auto& [script, leaf_ver] = leaf;
                 for (const auto& control_block : control_blocks) {
                     SerializeToVector(s, PSBT_IN_TAP_LEAF_SCRIPT, std::span{control_block});
-                    std::vector<unsigned char> value_v(script.begin(), script.end());
+                    auto value_v{ToByteVector(script)};
                     value_v.push_back((uint8_t)leaf_ver);
                     s << value_v;
                 }

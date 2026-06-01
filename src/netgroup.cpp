@@ -5,6 +5,7 @@
 #include <netgroup.h>
 
 #include <hash.h>
+#include <span.h>
 #include <uint256.h>
 #include <util/asmap.h>
 #include <util/log.h>
@@ -88,7 +89,7 @@ uint32_t NetGroupManager::GetMappedAS(const CNetAddr& address) const
     std::vector<std::byte> ip_bytes(16);
     if (address.HasLinkedIPv4()) {
         // For lookup, treat as if it was just an IPv4 address (IPV4_IN_IPV6_PREFIX + IPv4 bits)
-        std::copy_n(std::as_bytes(std::span{IPV4_IN_IPV6_PREFIX}).begin(),
+        std::copy_n(MakeByteSpan(IPV4_IN_IPV6_PREFIX).begin(),
                     IPV4_IN_IPV6_PREFIX.size(), ip_bytes.begin());
         uint32_t ipv4 = address.GetLinkedIPv4();
         for (int i = 0; i < 4; ++i) {
@@ -99,7 +100,7 @@ uint32_t NetGroupManager::GetMappedAS(const CNetAddr& address) const
         assert(address.IsIPv6());
         auto addr_bytes = address.GetAddrBytes();
         assert(addr_bytes.size() == ip_bytes.size());
-        std::copy_n(std::as_bytes(std::span{addr_bytes}).begin(),
+        std::copy_n(MakeByteSpan(addr_bytes).begin(),
                     addr_bytes.size(), ip_bytes.begin());
     }
     uint32_t mapped_as = Interpret(m_asmap, ip_bytes);
