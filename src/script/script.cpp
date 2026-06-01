@@ -10,6 +10,7 @@
 #include <hash.h>
 #include <uint256.h>
 #include <util/hash_type.h>
+#include <util/string.h>
 
 #include <compare>
 #include <string>
@@ -287,14 +288,7 @@ bool CScript::IsPushOnly() const
 
 std::string CScriptWitness::ToString() const
 {
-    std::string ret = "CScriptWitness(";
-    for (unsigned int i = 0; i < stack.size(); i++) {
-        if (i) {
-            ret += ", ";
-        }
-        ret += HexStr(stack[i]);
-    }
-    return ret + ")";
+    return "CScriptWitness(" + util::Join(stack, ", ", [](const auto& item) { return HexStr(item); }) + ")";
 }
 
 bool CScript::HasValidOps() const

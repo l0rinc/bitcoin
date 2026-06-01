@@ -423,6 +423,18 @@ std::string JSONPrettyPrint(const UniValue& univalue)
 
 BOOST_FIXTURE_TEST_SUITE(script_tests, ScriptTest)
 
+BOOST_AUTO_TEST_CASE(script_witness_to_string)
+{
+    CScriptWitness witness;
+    BOOST_CHECK_EQUAL(witness.ToString(), "CScriptWitness()");
+
+    witness.stack.emplace_back(ParseHex("01"));
+    BOOST_CHECK_EQUAL(witness.ToString(), "CScriptWitness(01)");
+
+    witness.stack.emplace_back(ParseHex("0203"));
+    BOOST_CHECK_EQUAL(witness.ToString(), "CScriptWitness(01, 0203)");
+}
+
 BOOST_AUTO_TEST_CASE(script_build)
 {
     const KeyData keys;

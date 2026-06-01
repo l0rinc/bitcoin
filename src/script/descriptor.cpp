@@ -715,13 +715,9 @@ public:
 
     std::string ToString(StringType type=StringType::PUBLIC) const override
     {
-        std::string out = "musig(";
-        for (size_t i = 0; i < m_participants.size(); ++i) {
-            const auto& pubkey = m_participants.at(i);
-            if (i) out += ",";
-            out += pubkey->ToString(type);
-        }
-        out += ")";
+        std::string out{"musig(" + util::Join(m_participants, ",", [type](const auto& pubkey) {
+            return pubkey->ToString(type);
+        }) + ")"};
         out += FormatHDKeypath(m_path);
         if (IsRangedDerivation()) {
             out += "/*";
