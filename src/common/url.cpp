@@ -4,10 +4,10 @@
 
 #include <common/url.h>
 
-#include <charconv>
+#include <crypto/hex_base.h>
+
 #include <string>
 #include <string_view>
-#include <system_error>
 
 std::string UrlDecode(std::string_view url_encoded)
 {
@@ -19,13 +19,12 @@ std::string UrlDecode(std::string_view url_encoded)
         // Special handling for percent which should be followed by two hex digits
         // representing an octet values, see RFC 3986, Section 2.1 Percent-Encoding
         if (c == '%' && i + 2 < url_encoded.size()) {
-            unsigned int decoded_value{0};
-            auto [p, ec] = std::from_chars(url_encoded.data() + i + 1, url_encoded.data() + i + 3, decoded_value, 16);
+            const signed char high{HexDigit(url_encoded[i + 1])};
+            const signed char low{HexDigit(url_encoded[i + 2])};
 
-            // Only if there is no error and the pointer is set to the end of
-            // the string, we can be sure both characters were valid hex
-            if (ec == std::errc{} && p == url_encoded.data() + i + 3) {
-                res += static_cast<char>(decoded_value);
+            // Only decode when both characters are valid hex.
+            if (high >= 0 && low >= 0) {
+                res += static_cast<char>((high << 4) | low);
                 // Next two characters are part of the percent encoding
                 i += 2;
                 continue;
