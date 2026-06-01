@@ -96,6 +96,43 @@ BOOST_AUTO_TEST_CASE(bip30_reactivated_at_bip34_indicated_height_limit)
     BOOST_CHECK(ShouldEnforceBIP30ForBlock(limit_block, consensus));
 }
 
+BOOST_AUTO_TEST_CASE(bip30_historical_duplicate_coinbase_exceptions)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
+    const Consensus::Params& consensus{chainParams->GetConsensus()};
+    const uint256 exception_hash_91842{"00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec"};
+    const uint256 exception_hash_91880{"00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721"};
+    const uint256 wrong_hash{uint256::ONE};
+
+    CBlockIndex previous_91842;
+    previous_91842.nHeight = 91841;
+
+    CBlockIndex exception_91842;
+    exception_91842.nHeight = 91842;
+    exception_91842.pprev = &previous_91842;
+    exception_91842.phashBlock = &exception_hash_91842;
+
+    CBlockIndex wrong_hash_91842;
+    wrong_hash_91842.nHeight = 91842;
+    wrong_hash_91842.pprev = &previous_91842;
+    wrong_hash_91842.phashBlock = &wrong_hash;
+
+    CBlockIndex previous_91880;
+    previous_91880.nHeight = 91879;
+
+    CBlockIndex exception_91880;
+    exception_91880.nHeight = 91880;
+    exception_91880.pprev = &previous_91880;
+    exception_91880.phashBlock = &exception_hash_91880;
+
+    BOOST_CHECK(IsBIP30Repeat(exception_91842));
+    BOOST_CHECK(!ShouldEnforceBIP30ForBlock(exception_91842, consensus));
+    BOOST_CHECK(!IsBIP30Repeat(wrong_hash_91842));
+    BOOST_CHECK(ShouldEnforceBIP30ForBlock(wrong_hash_91842, consensus));
+    BOOST_CHECK(IsBIP30Repeat(exception_91880));
+    BOOST_CHECK(!ShouldEnforceBIP30ForBlock(exception_91880, consensus));
+}
+
 BOOST_AUTO_TEST_CASE(bip34_coinbase_height_uses_scriptnum_encoding)
 {
     const CScript encoded_height_1{CScript{} << 1 << OP_0};
