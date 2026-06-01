@@ -79,7 +79,7 @@ public:
 
     std::string HexKey() const
     {
-        return HexStr(std::as_bytes(std::span{&m_rotations[0], 1}));
+        return HexStr(MakeByteSpan(std::span{&m_rotations[0], 1}));
     }
 
 private:
