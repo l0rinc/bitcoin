@@ -47,6 +47,35 @@ BOOST_AUTO_TEST_CASE(get_next_work_pow_limit)
     BOOST_CHECK(PermittedDifficultyTransition(chainParams->GetConsensus(), pindexLast.nHeight+1, pindexLast.nBits, expected_nbits));
 }
 
+BOOST_AUTO_TEST_CASE(get_next_work_uses_current_pow_limit)
+{
+    auto params{CreateChainParams(*m_node.args, ChainType::MAIN)->GetConsensus()};
+    params.enforce_BIP94 = false;
+    params.fPowAllowMinDifficultyBlocks = false;
+    params.fPowNoRetargeting = false;
+    params.nPowTargetSpacing = 10 * 60;
+    params.nPowTargetTimespan = 14 * 24 * 60 * 60;
+
+    constexpr uint32_t low_pow_limit_bits{0x1d00ffffU};
+    constexpr uint32_t high_pow_limit_bits{0x207fffffU};
+    const auto pow_limit_from_bits = [](uint32_t bits) {
+        return ArithToUint256(arith_uint256{}.SetCompact(bits));
+    };
+
+    CBlockIndex pindexLast;
+    pindexLast.nHeight = params.DifficultyAdjustmentInterval() - 1;
+    pindexLast.nTime = params.nPowTargetTimespan * 4;
+    pindexLast.nBits = low_pow_limit_bits;
+
+    auto high_limit_params{params};
+    high_limit_params.powLimit = pow_limit_from_bits(high_pow_limit_bits);
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, 0, high_limit_params), 0x1d03fffcU);
+
+    auto low_limit_params{params};
+    low_limit_params.powLimit = pow_limit_from_bits(low_pow_limit_bits);
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, 0, low_limit_params), low_pow_limit_bits);
+}
+
 /* Test the constraint on the lower bound for actual time taken */
 BOOST_AUTO_TEST_CASE(get_next_work_lower_limit_actual)
 {
