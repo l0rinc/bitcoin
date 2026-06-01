@@ -46,6 +46,8 @@
 #include <vector>
 
 using util::RemovePrefix;
+using util::RemovePrefixView;
+using util::RemoveSuffixView;
 using util::SplitString;
 
 namespace {
@@ -113,9 +115,9 @@ CScript ParseScript(const std::string& s)
             }
 
             result << num.value();
-        } else if (w.starts_with("0x") && w.size() > 2 && IsHex(std::string(w.begin() + 2, w.end()))) {
+        } else if (w.starts_with("0x") && w.size() > 2 && IsHex(RemovePrefixView(w, "0x"))) {
             // Raw hex data, inserted NOT pushed onto stack:
-            std::vector<unsigned char> raw = ParseHex(std::string(w.begin() + 2, w.end()));
+            std::vector<unsigned char> raw = ParseHex(RemovePrefixView(w, "0x"));
             result.insert(result.end(), raw.begin(), raw.end());
         } else if (w.size() >= 2 && w.front() == '\'' && w.back() == '\'') {
             // Single-quoted string, pushed as data. NOTE: this is poor-man's
@@ -327,7 +329,7 @@ std::string FormatScript(const CScript& script)
         ret += strprintf("0x%x ", HexStr(std::vector<uint8_t>(it2, script.end())));
         break;
     }
-    return ret.substr(0, ret.empty() ? ret.npos : ret.size() - 1);
+    return std::string{RemoveSuffixView(ret, " ")};
 }
 
 const std::map<unsigned char, std::string> mapSigHashTypes = {

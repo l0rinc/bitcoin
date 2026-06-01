@@ -84,7 +84,7 @@ KeyInfo InterpretKey(std::string key)
         key.erase(0, option_index + 1);
     }
     if (key.starts_with("no")) {
-        key.erase(0, 2);
+        key = util::RemovePrefix(key, "no");
         result.negated = true;
     }
     result.name = key;

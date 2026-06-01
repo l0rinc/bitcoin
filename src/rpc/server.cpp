@@ -29,6 +29,7 @@
 #include <string_view>
 #include <unordered_map>
 
+using util::RemoveSuffixView;
 using util::SplitString;
 
 static GlobalMutex g_rpc_warmup_mutex;
@@ -112,7 +113,7 @@ std::string CRPCTable::help(std::string_view strCommand, const JSONRPCRequest& h
     }
     if (strRet == "")
         strRet = strprintf("help: unknown command: %s\n", strCommand);
-    strRet = strRet.substr(0,strRet.size()-1);
+    strRet = std::string{RemoveSuffixView(strRet, "\n")};
     return strRet;
 }
 

@@ -124,7 +124,7 @@ T LocaleIndependentAtoi(std::string_view str)
         if (s.length() >= 2 && s[1] == '-') {
             return 0;
         }
-        s = s.substr(1);
+        s = util::RemovePrefixView(s, "+");
     }
     auto [_, error_condition] = std::from_chars(s.data(), s.data() + s.size(), result);
     if (error_condition == std::errc::result_out_of_range) {

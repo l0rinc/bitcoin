@@ -28,6 +28,7 @@
 #endif
 
 using util::ContainsNoNUL;
+using util::RemovePrefixView;
 
 // Settings
 static GlobalMutex g_proxyinfo_mutex;
@@ -229,7 +230,7 @@ bool IsUnixSocketPath(const std::string& name)
     if (!name.starts_with(ADDR_PREFIX_UNIX)) return false;
 
     // Split off "unix:" prefix
-    std::string str{name.substr(ADDR_PREFIX_UNIX.length())};
+    std::string str{RemovePrefixView(name, ADDR_PREFIX_UNIX)};
 
     // Path size limit is platform-dependent
     // see https://manpages.ubuntu.com/manpages/xenial/en/man7/unix.7.html
@@ -690,7 +691,7 @@ std::unique_ptr<Sock> Proxy::Connect() const
         return {};
     }
 
-    const std::string path{m_unix_socket_path.substr(ADDR_PREFIX_UNIX.length())};
+    const std::string path{RemovePrefixView(m_unix_socket_path, ADDR_PREFIX_UNIX)};
 
     struct sockaddr_un addrun;
     memset(&addrun, 0, sizeof(addrun));

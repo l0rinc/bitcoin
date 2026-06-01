@@ -86,6 +86,16 @@ UniValue RPCTestingSetup::CallRPC(std::string args)
 
 BOOST_FIXTURE_TEST_SUITE(rpc_tests, RPCTestingSetup)
 
+BOOST_AUTO_TEST_CASE(rpc_help_no_trailing_newline)
+{
+    const std::string help{CallRPC("help").get_str()};
+    BOOST_REQUIRE(!help.empty());
+    BOOST_CHECK_NE(help.back(), '\n');
+
+    const std::string unknown_help{CallRPC("help unknown_method").get_str()};
+    BOOST_CHECK_EQUAL(unknown_help, "help: unknown command: unknown_method");
+}
+
 BOOST_AUTO_TEST_CASE(rpc_namedparams)
 {
     const std::vector<std::pair<std::string, bool>> arg_names{{"arg1", false}, {"arg2", false}, {"arg3", false}, {"arg4", false}, {"arg5", false}};
