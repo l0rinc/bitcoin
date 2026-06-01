@@ -177,7 +177,7 @@ bool CNetAddr::SetInternal(const std::string &name)
     }
     m_net = NET_INTERNAL;
     unsigned char hash[32] = {};
-    CSHA256().Write((const unsigned char*)name.data(), name.size()).Finalize(hash);
+    CSHA256().Write(UCharCast(name.data()), name.size()).Finalize(hash);
     m_addr.assign(hash, hash + ADDR_INTERNAL_SIZE);
     return true;
 }

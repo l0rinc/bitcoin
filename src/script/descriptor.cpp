@@ -2955,7 +2955,7 @@ uint256 DescriptorID(const Descriptor& desc)
 {
     std::string desc_str = desc.ToString(/*compat_format=*/true);
     uint256 id;
-    CSHA256().Write((unsigned char*)desc_str.data(), desc_str.size()).Finalize(id.begin());
+    CSHA256().Write(UCharCast(desc_str.data()), desc_str.size()).Finalize(id.begin());
     return id;
 }
 

@@ -7,6 +7,8 @@
 
 #include <kernel/bitcoinkernel.h>
 
+#include <span.h>
+
 #include <array>
 #include <exception>
 #include <functional>
@@ -509,7 +511,7 @@ public:
     std::array<std::byte, 32> ToBytes() const
     {
         std::array<std::byte, 32> hash;
-        btck_txid_to_bytes(impl(), reinterpret_cast<unsigned char*>(hash.data()));
+        btck_txid_to_bytes(impl(), UCharCast(hash.data()));
         return hash;
     }
 };
@@ -720,7 +722,7 @@ public:
     std::array<std::byte, 32> ToBytes() const
     {
         std::array<std::byte, 32> hash;
-        btck_block_hash_to_bytes(impl(), reinterpret_cast<unsigned char*>(hash.data()));
+        btck_block_hash_to_bytes(impl(), UCharCast(hash.data()));
         return hash;
     }
 };
@@ -735,7 +737,7 @@ class BlockHash : public Handle<btck_BlockHash, btck_block_hash_copy, btck_block
 {
 public:
     explicit BlockHash(const std::array<std::byte, 32>& hash)
-        : Handle{btck_block_hash_create(reinterpret_cast<const unsigned char*>(hash.data()))} {}
+        : Handle{btck_block_hash_create(UCharCast(hash.data()))} {}
 
     explicit BlockHash(btck_BlockHash* hash)
         : Handle{hash} {}
@@ -808,7 +810,7 @@ class BlockHeader : public Handle<btck_BlockHeader, btck_block_header_copy, btck
 {
 public:
     explicit BlockHeader(std::span<const std::byte> raw_header)
-        : Handle{btck_block_header_create(reinterpret_cast<const unsigned char*>(raw_header.data()), raw_header.size())} {}
+        : Handle{btck_block_header_create(UCharCast(raw_header.data()), raw_header.size())} {}
 
     BlockHeader(const BlockHeaderView& view)
         : Handle{view} {}
