@@ -137,7 +137,7 @@ std::string FormatRFC1123DateTime(int64_t time)
     }
     const std::chrono::sys_seconds secs{std::chrono::seconds{time}};
     const auto days{std::chrono::floor<std::chrono::days>(secs)};
-    const auto w{days.time_since_epoch().count() % 7}; // will be in the range [-6, 6]
+    const auto w{TicksSinceEpoch<std::chrono::days>(days) % 7}; // will be in the range [-6, 6]
     std::string_view weekday{weekdays.at(w >= 0 ? w : w + 7)};
     const std::chrono::year_month_day ymd{days};
     std::string_view month{months.at(unsigned{ymd.month()} - 1)};

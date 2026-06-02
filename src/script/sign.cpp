@@ -451,7 +451,7 @@ struct Satisfier {
     }
 
     //! Conversion to raw public key.
-    std::vector<unsigned char> ToPKBytes(const Key& key) const { return {key.begin(), key.end()}; }
+    std::vector<unsigned char> ToPKBytes(const Key& key) const { return ToByteVector(key); }
 
     //! Time lock satisfactions.
     bool CheckAfter(uint32_t value) const { return m_creator.Checker().CheckLockTime(CScriptNum(value)); }
@@ -674,7 +674,7 @@ static bool SignStep(const SigningProvider& provider, const BaseSignatureCreator
     case TxoutType::SCRIPTHASH: {
         uint160 h160{vSolutions[0]};
         if (GetCScript(provider, sigdata, CScriptID{h160}, scriptRet)) {
-            ret.emplace_back(scriptRet.begin(), scriptRet.end());
+            ret.push_back(ToByteVector(scriptRet));
             return true;
         }
         // Could not find redeemScript, add to missing
@@ -707,7 +707,7 @@ static bool SignStep(const SigningProvider& provider, const BaseSignatureCreator
 
     case TxoutType::WITNESS_V0_SCRIPTHASH:
         if (GetCScript(provider, sigdata, CScriptID{RIPEMD160(vSolutions[0])}, scriptRet)) {
-            ret.emplace_back(scriptRet.begin(), scriptRet.end());
+            ret.push_back(ToByteVector(scriptRet));
             return true;
         }
         // Could not find witnessScript, add to missing
@@ -788,7 +788,7 @@ bool ProduceSignature(const SigningProvider& provider, const BaseSignatureCreato
             const auto ms = miniscript::FromScript(witnessscript, ms_satisfier);
             solved = ms && ms->Satisfy(ms_satisfier, result) == miniscript::Availability::YES;
         }
-        result.emplace_back(witnessscript.begin(), witnessscript.end());
+        result.push_back(ToByteVector(witnessscript));
 
         sigdata.scriptWitness.stack = result;
         sigdata.witness = true;
@@ -805,7 +805,7 @@ bool ProduceSignature(const SigningProvider& provider, const BaseSignatureCreato
 
     if (!sigdata.witness) sigdata.scriptWitness.stack.clear();
     if (P2SH) {
-        result.emplace_back(subscript.begin(), subscript.end());
+        result.push_back(ToByteVector(subscript));
     }
     sigdata.scriptSig = PushAll(result);
 

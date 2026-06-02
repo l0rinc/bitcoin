@@ -12,6 +12,7 @@
 #include <serialize.h>
 #include <uint256.h>
 #include <util/hash_type.h>
+#include <util/vector.h>
 
 #include <cassert>
 #include <cstddef>
@@ -491,7 +492,7 @@ public:
     // For compatibility reasons. In new code, prefer using std::byte instead of uint8_t.
     CScript& operator<<(std::span<const value_type> b) LIFETIMEBOUND
     {
-        return *this << std::as_bytes(b);
+        return *this << MakeByteSpan(b);
     }
 
     bool GetOp(const_iterator& pc, opcodetype& opcodeRet, std::vector<unsigned char>& vchRet) const
@@ -585,7 +586,7 @@ struct CScriptWitness
 
     bool IsNull() const { return stack.empty(); }
 
-    void SetNull() { stack.clear(); stack.shrink_to_fit(); }
+    void SetNull() { ClearShrink(stack); }
 
     std::string ToString() const;
 

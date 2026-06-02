@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 #include <compat/compat.h>
 #include <net_permissions.h>
 #include <netaddress.h>
@@ -76,6 +77,18 @@ BOOST_AUTO_TEST_CASE(netbase_properties)
     BOOST_CHECK(CreateInternal("FD6B:88C0:8724:edb1:8e4:3588:e546:35ca").IsInternal());
     BOOST_CHECK(CreateInternal("bar.com").IsInternal());
 
+}
+
+BOOST_AUTO_TEST_CASE(netbase_unix_socket_path)
+{
+#ifdef HAVE_SOCKADDR_UN
+    BOOST_CHECK(IsUnixSocketPath("unix:/tmp/bitcoin.sock"));
+    BOOST_CHECK(IsUnixSocketPath("unix:relative.sock"));
+    BOOST_CHECK(IsUnixSocketPath("unix:"));
+    BOOST_CHECK(!IsUnixSocketPath("/tmp/bitcoin.sock"));
+#else
+    BOOST_CHECK(!IsUnixSocketPath("unix:/tmp/bitcoin.sock"));
+#endif
 }
 
 bool static TestSplitHost(const std::string& test, const std::string& host, uint16_t port, bool validPort=true)
@@ -377,9 +390,9 @@ BOOST_AUTO_TEST_CASE(netpermissions_test)
 
     // Detect invalid white bind
     BOOST_CHECK(!NetWhitebindPermissions::TryParse("", whitebindPermissions, error));
-    BOOST_CHECK(error.original.find("Cannot resolve -whitebind address") != std::string::npos);
+    BOOST_CHECK(HasReason{"Cannot resolve -whitebind address"}(error.original));
     BOOST_CHECK(!NetWhitebindPermissions::TryParse("127.0.0.1", whitebindPermissions, error));
-    BOOST_CHECK(error.original.find("Need to specify a port with -whitebind") != std::string::npos);
+    BOOST_CHECK(HasReason{"Need to specify a port with -whitebind"}(error.original));
     BOOST_CHECK(!NetWhitebindPermissions::TryParse("", whitebindPermissions, error));
 
     // If no permission flags, assume backward compatibility
@@ -444,15 +457,15 @@ BOOST_AUTO_TEST_CASE(netpermissions_test)
     BOOST_CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::None);
 
     BOOST_CHECK(!NetWhitebindPermissions::TryParse("out,forcerelay@1.2.3.4:32", whitebindPermissions, error));
-    BOOST_CHECK(error.original.find("whitebind may only be used for incoming connections (\"out\" was passed)") != std::string::npos);
+    BOOST_CHECK(HasReason{"whitebind may only be used for incoming connections (\"out\" was passed)"}(error.original));
 
     // Detect invalid flag
     BOOST_CHECK(!NetWhitebindPermissions::TryParse("bloom,forcerelay,oopsie@1.2.3.4:32", whitebindPermissions, error));
-    BOOST_CHECK(error.original.find("Invalid P2P permission") != std::string::npos);
+    BOOST_CHECK(HasReason{"Invalid P2P permission"}(error.original));
 
     // Check netmask error
     BOOST_CHECK(!NetWhitelistPermissions::TryParse("bloom,forcerelay,noban@1.2.3.4:32", whitelistPermissions, connection_direction, error));
-    BOOST_CHECK(error.original.find("Invalid netmask specified in -whitelist") != std::string::npos);
+    BOOST_CHECK(HasReason{"Invalid netmask specified in -whitelist"}(error.original));
 
     // Happy path for whitelist parsing
     BOOST_CHECK(NetWhitelistPermissions::TryParse("noban@1.2.3.4", whitelistPermissions, connection_direction, error));

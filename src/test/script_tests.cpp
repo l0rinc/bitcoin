@@ -416,16 +416,24 @@ std::string JSONPrettyPrint(const UniValue& univalue)
 {
     std::string ret = univalue.write(4);
     // Workaround for libunivalue pretty printer, which puts a space between commas and newlines
-    size_t pos = 0;
-    while ((pos = ret.find(" \n", pos)) != std::string::npos) {
-        ret.replace(pos, 2, "\n");
-        pos++;
-    }
+    util::ReplaceAll(ret, " \n", "\n");
     return ret;
 }
 } // namespace
 
 BOOST_FIXTURE_TEST_SUITE(script_tests, ScriptTest)
+
+BOOST_AUTO_TEST_CASE(script_witness_to_string)
+{
+    CScriptWitness witness;
+    BOOST_CHECK_EQUAL(witness.ToString(), "CScriptWitness()");
+
+    witness.stack.emplace_back(ParseHex("01"));
+    BOOST_CHECK_EQUAL(witness.ToString(), "CScriptWitness(01)");
+
+    witness.stack.emplace_back(ParseHex("0203"));
+    BOOST_CHECK_EQUAL(witness.ToString(), "CScriptWitness(01, 0203)");
+}
 
 BOOST_AUTO_TEST_CASE(script_build)
 {

@@ -442,7 +442,7 @@ TaprootBuilder& TaprootBuilder::Add(int depth, std::span<const unsigned char> sc
     /* Construct NodeInfo object with leaf hash and (if track is true) also leaf information. */
     NodeInfo node;
     node.hash = ComputeTapleafHash(leaf_version, script);
-    if (track) node.leaves.emplace_back(LeafInfo{std::vector<unsigned char>(script.begin(), script.end()), leaf_version, {}});
+    if (track) node.leaves.emplace_back(LeafInfo{ToByteVector(script), leaf_version, {}});
     /* Insert into the branch. */
     Insert(std::move(node), depth);
     return *this;

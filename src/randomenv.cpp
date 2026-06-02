@@ -123,7 +123,7 @@ void AddPath(CSHA512& hasher, const char *path)
 {
     struct stat sb = {};
     if (stat(path, &sb) == 0) {
-        hasher.Write((const unsigned char*)path, strlen(path) + 1);
+        hasher.Write(UCharCast(path), strlen(path) + 1);
         hasher << sb;
     }
 }
@@ -285,7 +285,7 @@ void RandAddStaticEnv(CSHA512& hasher)
 #endif
 #ifdef __VERSION__
     const char* COMPILER_VERSION = __VERSION__;
-    hasher.Write((const unsigned char*)COMPILER_VERSION, strlen(COMPILER_VERSION) + 1);
+    hasher.Write(UCharCast(COMPILER_VERSION), strlen(COMPILER_VERSION) + 1);
 #endif
 
     // Bitcoin client version
@@ -305,11 +305,11 @@ void RandAddStaticEnv(CSHA512& hasher)
 #  endif
 #  ifdef AT_PLATFORM
     const char* platform_str = (const char*)getauxval(AT_PLATFORM);
-    if (platform_str) hasher.Write((const unsigned char*)platform_str, strlen(platform_str) + 1);
+    if (platform_str) hasher.Write(UCharCast(platform_str), strlen(platform_str) + 1);
 #  endif
 #  ifdef AT_EXECFN
     const char* exec_str = (const char*)getauxval(AT_EXECFN);
-    if (exec_str) hasher.Write((const unsigned char*)exec_str, strlen(exec_str) + 1);
+    if (exec_str) hasher.Write(UCharCast(exec_str), strlen(exec_str) + 1);
 #  endif
 #endif // HAVE_STRONG_GETAUXVAL
 
@@ -331,7 +331,7 @@ void RandAddStaticEnv(CSHA512& hasher)
 #else
     char hname[256];
     if (gethostname(hname, 256) == 0) {
-        hasher.Write((const unsigned char*)hname, strnlen(hname, 256));
+        hasher.Write(UCharCast(hname), strnlen(hname, 256));
     }
 #endif
 
@@ -342,7 +342,7 @@ void RandAddStaticEnv(CSHA512& hasher)
     struct ifaddrs *ifit = ifad;
     while (ifit != nullptr) {
         hasher.Write((const unsigned char*)&ifit, sizeof(ifit));
-        hasher.Write((const unsigned char*)ifit->ifa_name, strlen(ifit->ifa_name) + 1);
+        hasher.Write(UCharCast(ifit->ifa_name), strlen(ifit->ifa_name) + 1);
         hasher.Write((const unsigned char*)&ifit->ifa_flags, sizeof(ifit->ifa_flags));
         AddSockaddr(hasher, ifit->ifa_addr);
         AddSockaddr(hasher, ifit->ifa_netmask);
@@ -356,11 +356,11 @@ void RandAddStaticEnv(CSHA512& hasher)
     // UNIX kernel information
     struct utsname name;
     if (uname(&name) != -1) {
-        hasher.Write((const unsigned char*)&name.sysname, strlen(name.sysname) + 1);
-        hasher.Write((const unsigned char*)&name.nodename, strlen(name.nodename) + 1);
-        hasher.Write((const unsigned char*)&name.release, strlen(name.release) + 1);
-        hasher.Write((const unsigned char*)&name.version, strlen(name.version) + 1);
-        hasher.Write((const unsigned char*)&name.machine, strlen(name.machine) + 1);
+        hasher.Write(UCharCast(name.sysname), strlen(name.sysname) + 1);
+        hasher.Write(UCharCast(name.nodename), strlen(name.nodename) + 1);
+        hasher.Write(UCharCast(name.release), strlen(name.release) + 1);
+        hasher.Write(UCharCast(name.version), strlen(name.version) + 1);
+        hasher.Write(UCharCast(name.machine), strlen(name.machine) + 1);
     }
 
     /* Path and filesystem provided data */
@@ -460,7 +460,7 @@ void RandAddStaticEnv(CSHA512& hasher)
     // Env variables
     if (environ) {
         for (size_t i = 0; environ[i]; ++i) {
-            hasher.Write((const unsigned char*)environ[i], strlen(environ[i]));
+            hasher.Write(UCharCast(environ[i]), strlen(environ[i]));
         }
     }
 

@@ -6,13 +6,12 @@
 
 #include <hash.h>
 #include <uint256.h>
+#include <util/overflow.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 
 #include <cassert>
 #include <cstring>
-
-#include <limits>
 
 using util::ContainsNoNUL;
 
@@ -145,7 +144,7 @@ std::string EncodeBase58Check(std::span<const unsigned char> input)
 
 [[nodiscard]] static bool DecodeBase58Check(const char* psz, std::vector<unsigned char>& vchRet, int max_ret_len)
 {
-    if (!DecodeBase58(psz, vchRet, max_ret_len > std::numeric_limits<int>::max() - 4 ? std::numeric_limits<int>::max() : max_ret_len + 4) ||
+    if (!DecodeBase58(psz, vchRet, SaturatingAdd(max_ret_len, 4)) ||
         (vchRet.size() < 4)) {
         vchRet.clear();
         return false;

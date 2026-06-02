@@ -52,4 +52,11 @@ BOOST_AUTO_TEST_CASE(parse_script)
     BOOST_CHECK_EXCEPTION(ParseScript("11111111111"), std::runtime_error, HasReason("script parse error: decimal numeric value only allowed in the range -0xFFFFFFFF...0xFFFFFFFF"));
     BOOST_CHECK_EXCEPTION(ParseScript("OP_CHECKSIGADD"), std::runtime_error, HasReason("script parse error: unknown opcode"));
 }
+
+BOOST_AUTO_TEST_CASE(format_script)
+{
+    BOOST_CHECK_EQUAL(FormatScript(CScript{}), "");
+    BOOST_CHECK_EQUAL(FormatScript(CScript{} << OP_0 << OP_1 << OP_NOP), "0 1 NOP");
+}
+
 BOOST_AUTO_TEST_SUITE_END()

@@ -13,11 +13,11 @@
 #include <test/util/json.h>
 #include <util/check.h>
 #include <util/fs.h>
+#include <util/readwritefile.h>
 #include <util/strencodings.h>
 
 #include <cstdint>
 #include <cstdlib>
-#include <fstream>
 #include <utility>
 #include <vector>
 
@@ -159,13 +159,9 @@ BOOST_AUTO_TEST_CASE(script_assets_test)
     bool exists = fs::exists(path);
     BOOST_WARN_MESSAGE(exists, "File $DIR_UNIT_TEST_DATA/script_assets_test.json not found, skipping script_assets_test");
     if (!exists) return;
-    std::ifstream file{path.std_path()};
-    BOOST_CHECK(file.is_open());
-    file.seekg(0, std::ios::end);
-    size_t length = file.tellg();
-    file.seekg(0, std::ios::beg);
-    std::string data(length, '\0');
-    file.read(data.data(), data.size());
+    const auto [read_success, data] = ReadBinaryFile(path);
+    BOOST_CHECK(read_success);
+    if (!read_success) return;
     UniValue tests = read_json(data);
     BOOST_CHECK(tests.isArray());
     BOOST_CHECK(tests.size() > 0);
@@ -173,7 +169,6 @@ BOOST_AUTO_TEST_CASE(script_assets_test)
     for (size_t i = 0; i < tests.size(); i++) {
         AssetTest(tests[i], signature_cache);
     }
-    file.close();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -12,7 +12,8 @@
 #include <test/kernel/block_data.h>
 #include <test/util/common.h>
 
-#include <charconv>
+#include <crypto/hex_base.h>
+
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -21,6 +22,7 @@
 #include <random>
 #include <ranges>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -50,14 +52,18 @@ std::vector<std::byte> hex_string_to_byte_vec(std::string_view hex)
     std::vector<std::byte> bytes;
     bytes.reserve(hex.length() / 2);
 
-    for (size_t i{0}; i < hex.length(); i += 2) {
-        uint8_t byte_value;
-        auto [ptr, ec] = std::from_chars(hex.data() + i, hex.data() + i + 2, byte_value, 16);
+    if (hex.length() % 2 != 0) {
+        throw std::invalid_argument("Invalid hex character");
+    }
 
-        if (ec != std::errc{} || ptr != hex.data() + i + 2) {
+    for (size_t i{0}; i < hex.length(); i += 2) {
+        const signed char high{HexDigit(hex[i])};
+        const signed char low{HexDigit(hex[i + 1])};
+
+        if (high < 0 || low < 0) {
             throw std::invalid_argument("Invalid hex character");
         }
-        bytes.push_back(static_cast<std::byte>(byte_value));
+        bytes.push_back(static_cast<std::byte>((high << 4) | low));
     }
     return bytes;
 }

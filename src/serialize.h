@@ -256,8 +256,8 @@ template <typename Stream> void Serialize(Stream& s, uint64_t a)  { ser_writedat
 
 template <typename Stream, BasicByte B, size_t N> void Serialize(Stream& s, const B (&a)[N])           { s.write(MakeByteSpan(a)); }
 template <typename Stream, BasicByte B, size_t N> void Serialize(Stream& s, const std::array<B, N>& a) { s.write(MakeByteSpan(a)); }
-template <typename Stream, BasicByte B, size_t N> void Serialize(Stream& s, std::span<B, N> span)      { s.write(std::as_bytes(span)); }
-template <typename Stream, BasicByte B>           void Serialize(Stream& s, std::span<B> span)         { s.write(std::as_bytes(span)); }
+template <typename Stream, BasicByte B, size_t N> void Serialize(Stream& s, std::span<B, N> span)      { s.write(MakeByteSpan(span)); }
+template <typename Stream, BasicByte B>           void Serialize(Stream& s, std::span<B> span)         { s.write(MakeByteSpan(span)); }
 
 template <typename Stream, CharNotInt8 V> void Unserialize(Stream&, V) = delete; // char serialization forbidden. Use uint8_t or int8_t
 template <typename Stream> void Unserialize(Stream& s, std::byte& a) { a = std::byte(ser_readdata8(s)); }
@@ -272,8 +272,8 @@ template <typename Stream> void Unserialize(Stream& s, uint64_t& a)  { a = ser_r
 
 template <typename Stream, BasicByte B, size_t N> void Unserialize(Stream& s, B (&a)[N])            { s.read(MakeWritableByteSpan(a)); }
 template <typename Stream, BasicByte B, size_t N> void Unserialize(Stream& s, std::array<B, N>& a)  { s.read(MakeWritableByteSpan(a)); }
-template <typename Stream, BasicByte B, size_t N> void Unserialize(Stream& s, std::span<B, N> span) { s.read(std::as_writable_bytes(span)); }
-template <typename Stream, BasicByte B>           void Unserialize(Stream& s, std::span<B> span)    { s.read(std::as_writable_bytes(span)); }
+template <typename Stream, BasicByte B, size_t N> void Unserialize(Stream& s, std::span<B, N> span) { s.read(MakeWritableByteSpan(span)); }
+template <typename Stream, BasicByte B>           void Unserialize(Stream& s, std::span<B> span)    { s.read(MakeWritableByteSpan(span)); }
 
 template <typename Stream> void Serialize(Stream& s, bool a)    { uint8_t f = a; ser_writedata8(s, f); }
 template <typename Stream> void Unserialize(Stream& s, bool& a) { uint8_t f = ser_readdata8(s); a = f; }
@@ -835,7 +835,7 @@ void Unserialize(Stream& is, prevector<N, T>& v)
         while (i < nSize) {
             unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
             v.resize_uninitialized(i + blk);
-            is.read(std::as_writable_bytes(std::span{&v[i], blk}));
+            is.read(MakeWritableByteSpan(std::span{&v[i], blk}));
             i += blk;
         }
     } else {
@@ -878,7 +878,7 @@ void Unserialize(Stream& is, std::vector<T, A>& v)
         while (i < nSize) {
             unsigned int blk = std::min(nSize - i, (unsigned int)(1 + 4999999 / sizeof(T)));
             v.resize(i + blk);
-            is.read(std::as_writable_bytes(std::span{&v[i], blk}));
+            is.read(MakeWritableByteSpan(std::span{&v[i], blk}));
             i += blk;
         }
     } else {

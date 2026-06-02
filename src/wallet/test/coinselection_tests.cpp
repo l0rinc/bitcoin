@@ -4,6 +4,7 @@
 
 #include <consensus/amount.h>
 #include <policy/policy.h>
+#include <test/util/common.h>
 #include <wallet/coinselection.h>
 #include <wallet/test/wallet_test_fixture.h>
 
@@ -133,7 +134,7 @@ static void TestBnBFail(std::string test_title, std::vector<OutputGroup>& utxo_p
 {
     const auto result = SelectCoinsBnB(utxo_pool, selection_target, /*cost_of_change=*/cs_params.m_cost_of_change, max_selection_weight);
     BOOST_CHECK_MESSAGE(!result, "BnB-Fail: " + test_title);
-    bool max_weight_exceeded = util::ErrorString(result).original.find("The inputs size exceeds the maximum weight") != std::string::npos;
+    bool max_weight_exceeded = HasReason{"The inputs size exceeds the maximum weight"}(util::ErrorString(result).original);
     BOOST_CHECK(expect_max_weight_exceeded == max_weight_exceeded);
 }
 

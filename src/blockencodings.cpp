@@ -10,6 +10,7 @@
 #include <crypto/sha256.h>
 #include <crypto/siphash.h>
 #include <random.h>
+#include <span.h>
 #include <streams.h>
 #include <txmempool.h>
 #include <util/log.h>
@@ -37,7 +38,7 @@ void CBlockHeaderAndShortTxIDs::FillShortTxIDSelector() const
     DataStream stream{};
     stream << header << nonce;
     CSHA256 hasher;
-    hasher.Write((unsigned char*)&(*stream.begin()), stream.end() - stream.begin());
+    hasher.Write(UCharCast(stream.data()), stream.size());
     uint256 shorttxidhash;
     hasher.Finalize(shorttxidhash.begin());
     m_hasher.emplace(shorttxidhash.GetUint64(0), shorttxidhash.GetUint64(1));

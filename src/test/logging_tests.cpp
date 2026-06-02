@@ -185,6 +185,8 @@ BOOST_FIXTURE_TEST_CASE(logging_LogPrintMacros_CategoryName, LogSetup)
 
 BOOST_FIXTURE_TEST_CASE(logging_SeverityLevels, LogSetup)
 {
+    BOOST_CHECK_EQUAL(LogInstance().LogLevelsString(), "info, debug, trace");
+
     LogInstance().SetLogLevel(BCLog::Level::Debug);
     LogInstance().EnableCategory(BCLog::LogFlags::ALL);
     LogInstance().SetCategoryLogLevel(/*category_str=*/"net", /*level_str=*/"info");

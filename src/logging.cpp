@@ -298,8 +298,7 @@ static constexpr std::array<BCLog::Level, 3> LogLevelsList()
 
 std::string BCLog::Logger::LogLevelsString() const
 {
-    const auto& levels = LogLevelsList();
-    return Join(std::vector<BCLog::Level>{levels.begin(), levels.end()}, ", ", [](BCLog::Level level) { return LogLevelToStr(level); });
+    return Join(LogLevelsList(), ", ", [](BCLog::Level level) { return LogLevelToStr(level); });
 }
 
 std::string BCLog::Logger::LogTimestampStr(SystemClock::time_point now, std::chrono::seconds mocktime) const

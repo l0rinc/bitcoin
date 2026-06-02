@@ -715,13 +715,9 @@ public:
 
     std::string ToString(StringType type=StringType::PUBLIC) const override
     {
-        std::string out = "musig(";
-        for (size_t i = 0; i < m_participants.size(); ++i) {
-            const auto& pubkey = m_participants.at(i);
-            if (i) out += ",";
-            out += pubkey->ToString(type);
-        }
-        out += ")";
+        std::string out{"musig(" + util::Join(m_participants, ",", [type](const auto& pubkey) {
+            return pubkey->ToString(type);
+        }) + ")"};
         out += FormatHDKeypath(m_path);
         if (IsRangedDerivation()) {
             out += "/*";
@@ -1586,15 +1582,15 @@ public:
     std::vector<unsigned char> ToPKBytes(uint32_t key) const {
         // In Tapscript keys always serialize as x-only, whether an x-only key was used in the descriptor or not.
         if (!miniscript::IsTapscript(m_script_ctx)) {
-            return {m_keys[key].begin(), m_keys[key].end()};
+            return ToByteVector(m_keys[key]);
         }
         const XOnlyPubKey xonly_pubkey{m_keys[key]};
-        return {xonly_pubkey.begin(), xonly_pubkey.end()};
+        return ToByteVector(xonly_pubkey);
     }
 
     std::vector<unsigned char> ToPKHBytes(uint32_t key) const {
         auto id = GetHash160(key);
-        return {id.begin(), id.end()};
+        return ToByteVector(id);
     }
 };
 
@@ -2959,7 +2955,7 @@ uint256 DescriptorID(const Descriptor& desc)
 {
     std::string desc_str = desc.ToString(/*compat_format=*/true);
     uint256 id;
-    CSHA256().Write((unsigned char*)desc_str.data(), desc_str.size()).Finalize(id.begin());
+    CSHA256().Write(UCharCast(desc_str.data()), desc_str.size()).Finalize(id.begin());
     return id;
 }
 

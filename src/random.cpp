@@ -430,7 +430,7 @@ public:
             // Handle requests for deterministic randomness.
             if (!always_use_real_rng && m_deterministic_prng.has_value()) [[unlikely]] {
                 // Overwrite the beginning of buf, which will be used for output.
-                m_deterministic_prng->Keystream(std::as_writable_bytes(std::span{buf, num}));
+                m_deterministic_prng->Keystream(MakeWritableByteSpan(std::span{buf, num}));
                 // Do not require strong seeding for deterministic output.
                 ret = true;
             }

@@ -86,6 +86,16 @@ UniValue RPCTestingSetup::CallRPC(std::string args)
 
 BOOST_FIXTURE_TEST_SUITE(rpc_tests, RPCTestingSetup)
 
+BOOST_AUTO_TEST_CASE(rpc_help_no_trailing_newline)
+{
+    const std::string help{CallRPC("help").get_str()};
+    BOOST_REQUIRE(!help.empty());
+    BOOST_CHECK_NE(help.back(), '\n');
+
+    const std::string unknown_help{CallRPC("help unknown_method").get_str()};
+    BOOST_CHECK_EQUAL(unknown_help, "help: unknown command: unknown_method");
+}
+
 BOOST_AUTO_TEST_CASE(rpc_namedparams)
 {
     const std::vector<std::pair<std::string, bool>> arg_names{{"arg1", false}, {"arg2", false}, {"arg3", false}, {"arg4", false}, {"arg5", false}};
@@ -355,7 +365,7 @@ BOOST_AUTO_TEST_CASE(rpc_ban)
     const int64_t ban_duration{o1.find_value("ban_duration").getInt<int64_t>()};
     const int64_t time_remaining{o1.find_value("time_remaining").getInt<int64_t>()};
     BOOST_CHECK_EQUAL(adr.get_str(), "127.0.0.0/24");
-    BOOST_CHECK_EQUAL(banned_until, time_remaining_expected + now.count());
+    BOOST_CHECK_EQUAL(banned_until, time_remaining_expected + count_seconds(now));
     BOOST_CHECK_EQUAL(ban_duration, banned_until - ban_created);
     BOOST_CHECK_EQUAL(time_remaining, time_remaining_expected);
 

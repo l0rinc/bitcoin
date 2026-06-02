@@ -212,7 +212,7 @@ TxoutType Solver(const CScript& scriptPubKey, std::vector<std::vector<unsigned c
 
 CScript GetScriptForRawPubKey(const CPubKey& pubKey)
 {
-    return CScript() << std::vector<unsigned char>(pubKey.begin(), pubKey.end()) << OP_CHECKSIG;
+    return CScript() << ToByteVector(pubKey) << OP_CHECKSIG;
 }
 
 CScript GetScriptForMultisig(int nRequired, const std::vector<CPubKey>& keys)
