@@ -58,6 +58,9 @@ public:
     //! Dynamically alter the underlying leveldb cache size.
     void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_db_mutex);
 
+    //! Perform a blocking full compaction of the underlying LevelDB.
+    void CompactFull() EXCLUSIVE_LOCKS_REQUIRED(!m_db_mutex) LOCKS_EXCLUDED(cs_main);
+
     //! Return an underlying LevelDB property value, if available.
     std::optional<std::string> GetDBProperty(const std::string& property) EXCLUSIVE_LOCKS_REQUIRED(!m_db_mutex);
 };
