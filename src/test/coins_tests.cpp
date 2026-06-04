@@ -1085,6 +1085,13 @@ BOOST_FIXTURE_TEST_CASE(coins_db_flush_baseline, FlushTest)
         BOOST_CHECK(*flushed_coin == coin);
         BOOST_CHECK_EQUAL(base.GetBestBlock(), block_hash);
     }
+
+    CCoinsViewDB compacted_base{{.path = path, .cache_bytes = 1_MiB, .options = {.force_compact = true}}, {}};
+    BOOST_CHECK_GE(level2_files(compacted_base), 1);
+    const auto compacted_coin{compacted_base.GetCoin(outpoint)};
+    BOOST_REQUIRE(compacted_coin);
+    BOOST_CHECK(*compacted_coin == coin);
+    BOOST_CHECK_EQUAL(compacted_base.GetBestBlock(), block_hash);
 }
 
 BOOST_AUTO_TEST_CASE(coins_resource_is_used)
