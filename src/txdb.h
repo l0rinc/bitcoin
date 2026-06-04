@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 class COutPoint;
@@ -36,6 +37,8 @@ class CCoinsViewDB final : public CCoinsView
 protected:
     DBParams m_db_params;
     CoinsViewOptions m_options;
+    //! Prevents using m_db while ResizeCache() is replacing it.
+    Mutex m_db_mutex;
     std::unique_ptr<CDBWrapper> m_db;
 public:
     explicit CCoinsViewDB(DBParams db_params, CoinsViewOptions options);
@@ -53,7 +56,10 @@ public:
     size_t EstimateSize() const override;
 
     //! Dynamically alter the underlying leveldb cache size.
-    void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void ResizeCache(size_t new_cache_size) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_db_mutex);
+
+    //! Return an underlying LevelDB property value, if available.
+    std::optional<std::string> GetDBProperty(const std::string& property) EXCLUSIVE_LOCKS_REQUIRED(!m_db_mutex);
 };
 
 #endif // BITCOIN_TXDB_H

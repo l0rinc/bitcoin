@@ -301,6 +301,13 @@ void CDBWrapper::WriteBatch(CDBBatch& batch, bool fSync)
     }
 }
 
+std::optional<std::string> CDBWrapper::GetProperty(const std::string& property) const
+{
+    std::string value;
+    if (!DBContext().pdb->GetProperty(property, &value)) return std::nullopt;
+    return value;
+}
+
 size_t CDBWrapper::DynamicMemoryUsage() const
 {
     std::string memory;

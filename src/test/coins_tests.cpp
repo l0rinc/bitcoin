@@ -14,6 +14,7 @@
 #include <uint256.h>
 #include <undo.h>
 #include <util/byte_units.h>
+#include <util/check.h>
 #include <util/strencodings.h>
 
 #include <map>
@@ -1057,6 +1058,32 @@ BOOST_FIXTURE_TEST_CASE(ccoins_flush_behavior, FlushTest)
     for (const auto& view : caches) {
         TestFlushBehavior(view.get(), base, caches, /*do_erasing_flush=*/false);
         TestFlushBehavior(view.get(), base, caches, /*do_erasing_flush=*/true);
+    }
+}
+
+BOOST_FIXTURE_TEST_CASE(coins_db_flush_baseline, FlushTest)
+{
+    const auto path{m_args.GetDataDirBase() / "coins_db_flush_baseline"};
+    auto level2_files{[](CCoinsViewDB& base) {
+        return *Assert(ToIntegral<int>(*Assert(base.GetDBProperty("leveldb.num-files-at-level2"))));
+    }};
+    const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), 0};
+    const Coin coin{MakeCoin()};
+    const uint256 block_hash{m_rng.rand256()};
+
+    {
+        CCoinsViewDB base{{.path = path, .cache_bytes = 1_MiB, .wipe_data = true}, {}};
+        CCoinsViewCache cache{&base};
+
+        cache.AddCoin(outpoint, Coin{coin}, /*possible_overwrite=*/false);
+        cache.SetBestBlock(block_hash);
+        cache.Flush();
+
+        BOOST_CHECK_EQUAL(level2_files(base), 0);
+        const auto flushed_coin{base.GetCoin(outpoint)};
+        BOOST_REQUIRE(flushed_coin);
+        BOOST_CHECK(*flushed_coin == coin);
+        BOOST_CHECK_EQUAL(base.GetBestBlock(), block_hash);
     }
 }
 
