@@ -582,16 +582,14 @@ private:
  * index is greater than the size of m_inputs, no more inputs can be fetched and false is returned.
  *
  * The worker claims the InputToFetch at this index, fetches the coin from the base cache and moves it into the
- * InputToFetch object. The ready flag is then set with a release memory order. This allows the ready flag to be
- * used as a memory fence, guaranteeing the coin being written to the object will have happened before another
- * thread tests the flag with an acquire memory order.
+ * InputToFetch object. The ready flag is then set and notified so the main thread can wait for the result.
  * This assumes all base->PeekCoin() paths are safe for concurrent readers and do not mutate lower cache layers.
  *
  * When a coin is requested from the cache on the main thread and is not already in cacheCoins map, FetchCoinFromBase
  * checks whether the next unconsumed entry in m_inputs has the requested outpoint. On a match, m_input_tail is advanced
- * and the entry's ready flag is waited on with an acquire memory order until a worker has finished fetching it. The
- * coin is then moved out and returned. Since the main thread is the only consumer of validation results, it blocks
- * on the specific input it needs rather than racing workers for other inputs.
+ * and the entry's ready flag is waited on until a worker has finished fetching it. The coin is then moved out and
+ * returned. Since the main thread is the only consumer of validation results, it blocks on the specific input it
+ * needs rather than racing workers for other inputs.
  *
  * StopFetching() is called before mutating operations (Flush/Sync/Reset/SetBackend). It stops fetching by moving
  * m_input_head to the end of m_inputs (so workers quickly exit), then waits for all futures to complete and clears
@@ -667,8 +665,7 @@ private:
 
         auto& input{m_inputs[i]};
         input.coin = base->PeekCoin(input.outpoint);
-        // Use release so writing coin above happens before the main thread acquires.
-        Assume(!input.ready.test_and_set(std::memory_order_release));
+        Assume(!input.ready.test_and_set(std::memory_order_relaxed));
         input.ready.notify_one();
         return true;
     }
@@ -700,8 +697,8 @@ private:
         if (m_input_tail < m_inputs.size() && m_inputs[m_input_tail].outpoint == outpoint) {
             // We advance the tail since the input is cached and not accessed through this method again.
             auto& input{m_inputs[m_input_tail++]};
-            // Wait until the coin is ready to be read. We need acquire so we match the worker thread's release.
-            input.ready.wait(/*old=*/false, std::memory_order_acquire);
+            // Wait until the coin is ready to be read.
+            input.ready.wait(/*old=*/false, std::memory_order_relaxed);
             // We can move the coin since we won't access this input again.
             return std::move(input.coin);
         }
