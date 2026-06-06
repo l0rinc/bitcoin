@@ -80,7 +80,7 @@ struct HeadersGeneratorSetup : public RegTestingSetup {
         return second_chain;
     }
 
-    HeadersSyncState CreateState()
+    HeadersSyncState CreateState(NodeSeconds now = Now<NodeSeconds>())
     {
         return {/*id=*/0,
                 Params().GetConsensus(),
@@ -89,7 +89,8 @@ struct HeadersGeneratorSetup : public RegTestingSetup {
                     .redownload_buffer_size = REDOWNLOAD_BUFFER_SIZE,
                 },
                 chain_start,
-                /*minimum_required_work=*/CHAIN_WORK};
+                /*minimum_required_work=*/CHAIN_WORK,
+                now};
     }
 
 private:

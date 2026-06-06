@@ -2788,9 +2788,9 @@ bool PeerManagerImpl::TryLowWorkHeadersSync(Peer& peer, CNode& pfrom, const CBlo
             // this logic in that case. So even if the first header in this set
             // of headers is known, some header in this set must be new, so
             // advancing to the first unknown header would be a small effect.
+            const auto now{Now<NodeSeconds>()};
             LOCK(peer.m_headers_sync_mutex);
-            peer.m_headers_sync.reset(new HeadersSyncState(peer.m_id, m_chainparams.GetConsensus(),
-                m_chainparams.HeadersSync(), chain_start_header, minimum_chain_work));
+            peer.m_headers_sync.reset(new HeadersSyncState{peer.m_id, m_chainparams.GetConsensus(), m_chainparams.HeadersSync(), chain_start_header, minimum_chain_work, now});
 
             // Now a HeadersSyncState object for tracking this synchronization
             // is created, process the headers using it as normal. Failures are
