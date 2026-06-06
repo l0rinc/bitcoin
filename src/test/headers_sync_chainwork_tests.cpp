@@ -11,6 +11,7 @@
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
+#include <util/check.h>
 #include <validation.h>
 
 #include <cstddef>
@@ -256,16 +257,12 @@ BOOST_AUTO_TEST_CASE(too_little_work)
 
 BOOST_AUTO_TEST_CASE(system_clock_lagging_behind_chain_start)
 {
-    const NodeClockContext clock_ctx{(genesis.GetBlockTime() - MAX_FUTURE_BLOCK_TIME - 1) * 1s};
-    HeadersSyncState hss{CreateState()};
+    const test_only_CheckFailuresAreExceptionsNotAborts mock_checks{};
+    NodeClockContext clock_ctx{(genesis.GetBlockTime() - MAX_FUTURE_BLOCK_TIME) * 1s};
+    BOOST_CHECK_NO_THROW(CreateState());
 
-    // TODO: The chain-start MTP is already too far in the future for a locally
-    // acceptable extension, so headers presync should fail instead of requesting more.
-    CHECK_RESULT(hss.ProcessNextHeaders({{FirstChain().front()}}, /*full_headers_message=*/true),
-        hss, /*exp_state=*/State::PRESYNC,
-        /*exp_success=*/true, /*exp_request_more=*/true,
-        /*exp_headers_size=*/0, /*exp_pow_validated_prev=*/std::nullopt,
-        /*exp_locator_hash=*/FirstChain().front().GetHash());
+    clock_ctx -= 1s;
+    BOOST_CHECK_EXCEPTION(CreateState(), NonFatalCheckError, HasReason{"Internal bug detected: max_seconds_since_start >= 0"});
 }
 
 BOOST_AUTO_TEST_SUITE_END()
