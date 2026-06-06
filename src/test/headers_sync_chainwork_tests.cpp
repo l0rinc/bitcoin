@@ -10,6 +10,8 @@
 #include <pow.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
+#include <test/util/time.h>
+#include <util/check.h>
 #include <validation.h>
 
 #include <cstddef>
@@ -79,7 +81,7 @@ struct HeadersGeneratorSetup : public RegTestingSetup {
         return second_chain;
     }
 
-    HeadersSyncState CreateState()
+    HeadersSyncState CreateState(NodeSeconds now = Now<NodeSeconds>())
     {
         return {/*id=*/0,
                 Params().GetConsensus(),
@@ -88,7 +90,8 @@ struct HeadersGeneratorSetup : public RegTestingSetup {
                     .redownload_buffer_size = REDOWNLOAD_BUFFER_SIZE,
                 },
                 chain_start,
-                /*minimum_required_work=*/CHAIN_WORK};
+                /*minimum_required_work=*/CHAIN_WORK,
+                now};
     }
 
 private:
@@ -250,6 +253,16 @@ BOOST_AUTO_TEST_CASE(too_little_work)
         /*exp_request_more=*/false,
         /*exp_headers_size=*/0, /*exp_pow_validated_prev=*/std::nullopt,
         /*exp_locator_hash=*/std::nullopt);
+}
+
+BOOST_AUTO_TEST_CASE(system_clock_lagging_behind_chain_start)
+{
+    const test_only_CheckFailuresAreExceptionsNotAborts mock_checks{};
+    NodeClockContext clock_ctx{(genesis.GetBlockTime() - MAX_FUTURE_BLOCK_TIME) * 1s};
+    BOOST_CHECK_NO_THROW(CreateState());
+
+    clock_ctx -= 1s;
+    BOOST_CHECK_EXCEPTION(CreateState(), NonFatalCheckError, HasReason{"Internal bug detected: max_seconds_since_start >= 0"});
 }
 
 BOOST_AUTO_TEST_SUITE_END()

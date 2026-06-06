@@ -13,6 +13,7 @@
 #include <uint256.h>
 #include <util/bitdeque.h>
 #include <util/hasher.h>
+#include <util/time.h>
 
 #include <deque>
 #include <vector>
@@ -135,10 +136,11 @@ public:
      * consensus_params: parameters needed for difficulty adjustment validation
      * chain_start: best known fork point that the peer's headers branch from
      * minimum_required_work: amount of chain work required to accept the chain
+     * now: local clock value used to bound possible headers commitments
      */
     HeadersSyncState(NodeId id, const Consensus::Params& consensus_params,
                      const HeadersSyncParams& params, const CBlockIndex& chain_start,
-                     const arith_uint256& minimum_required_work);
+                     const arith_uint256& minimum_required_work, NodeSeconds now);
 
     /** Result data structure for ProcessNextHeaders. */
     struct ProcessingResult {
