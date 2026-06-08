@@ -113,11 +113,22 @@ const std::vector<std::string> CHECKLEVEL_DOC {
  * */
 static constexpr int PRUNE_LOCK_BUFFER{10};
 
+// Return whether full compaction can drain a populated level into an existing deeper level.
+static bool HasCompactibleLevel(CCoinsViewDB& coins_db)
+{
+    auto files{[&](int level) {
+        return ToIntegral<uint32_t>(coins_db.GetDBProperty(strprintf("leveldb.num-files-at-level%d", level)).value_or("0")).value_or(0);
+    }};
+    return (files(6) > 0 && files(5) > 1'563) || // 50% of LevelDB's MaxBytesForLevel(), assuming 32 MiB SSTables.
+           (files(5) > 0 && files(4) > 157);
+}
+
 // Return whether the completed full flush should compact chainstate
-static bool ShouldCompactChainstate()
+static bool ShouldCompactChainstate(CCoinsViewDB& coins_db, bool in_ibd)
 {
     static constexpr uint32_t flush_ratio{1'000}; // Roughly every 6 weeks with hourly flushes
-    return FastRandomContext().randrange(flush_ratio) == 0;
+    if (sizeof(void*) < 8 || !in_ibd) return FastRandomContext().randrange(flush_ratio) == 0;
+    return HasCompactibleLevel(coins_db);
 }
 
 TRACEPOINT_SEMAPHORE(validation, block_connected);
@@ -2840,7 +2851,7 @@ bool Chainstate::FlushStateToDisk(
         }
 
         if (!m_chainman.m_interrupt && m_chainman.m_chainstates.size() == 1) { // Skip AssumeUTXO
-            if (ShouldCompactChainstate()) {
+            if (ShouldCompactChainstate(CoinsDB(), m_chainman.IsInitialBlockDownload())) {
                 CoinsDB().CompactFull();
             }
         }
