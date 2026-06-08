@@ -2834,7 +2834,11 @@ bool Chainstate::FlushStateToDisk(
 
         if (!m_chainman.m_interrupt && !m_chainman.IsInitialBlockDownload() &&
             FastRandomContext().randrange(POST_IBD_COMPACTION_FLUSH_ODDS) == 0) {
-            CoinsDB().CompactFull();
+            try {
+                CoinsDB().CompactFullAsync();
+            } catch (const std::exception& e) {
+                LogWarning("Failed to start chainstate compaction (%s)", e.what());
+            }
         }
     }
     } catch (const std::runtime_error& e) {
