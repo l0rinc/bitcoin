@@ -112,6 +112,7 @@ const std::vector<std::string> CHECKLEVEL_DOC {
  *  noticeably interfere with the pruning mechanism.
  * */
 static constexpr int PRUNE_LOCK_BUFFER{10};
+static constexpr uint32_t POST_IBD_COMPACTION_FLUSH_ODDS{320}; // Roughly every 2 weeks with hourly flushes
 
 TRACEPOINT_SEMAPHORE(validation, block_connected);
 TRACEPOINT_SEMAPHORE(utxocache, flush);
@@ -2825,9 +2826,16 @@ bool Chainstate::FlushStateToDisk(
             m_next_write = FastRandomContext().rand_uniform_delay(NodeClock::now() + DATABASE_WRITE_INTERVAL_MIN, range);
         }
     }
-    if (full_flush_completed && m_chainman.m_options.signals) {
-        // Update best block in wallet (so we can detect restored wallets).
-        m_chainman.m_options.signals->ChainStateFlushed(this->GetRole(), GetLocator(m_chain.Tip()));
+    if (full_flush_completed) {
+        if (m_chainman.m_options.signals) {
+            // Update best block in wallet (so we can detect restored wallets).
+            m_chainman.m_options.signals->ChainStateFlushed(this->GetRole(), GetLocator(m_chain.Tip()));
+        }
+
+        if (!m_chainman.m_interrupt && !m_chainman.IsInitialBlockDownload() &&
+            FastRandomContext().randrange(POST_IBD_COMPACTION_FLUSH_ODDS) == 0) {
+            CoinsDB().CompactFull();
+        }
     }
     } catch (const std::runtime_error& e) {
         return FatalError(m_chainman.GetNotifications(), state, strprintf(_("System error while flushing: %s"), e.what()));
