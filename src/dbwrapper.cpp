@@ -125,7 +125,7 @@ static void SetMaxOpenFiles(leveldb::Options *options) {
     if constexpr (sizeof(void*) < 8) {
         options->max_open_files = 64;
     } else {
-        options->max_open_files = 2048;
+        options->max_open_files = 4096;
     }
 #endif
     LogDebug(BCLog::LEVELDB, "LevelDB using max_open_files=%d (default=%d)\n",
