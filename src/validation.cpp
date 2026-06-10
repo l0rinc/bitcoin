@@ -119,9 +119,8 @@ static bool HasCompactibleLevel(CCoinsViewDB& coins_db)
     auto files{[&](int level) {
         return ToIntegral<uint32_t>(coins_db.GetDBProperty(strprintf("leveldb.num-files-at-level%d", level)).value_or("0")).value_or(0);
     }};
-    return (files(6) > 0 && files(5) > 2'813) || // 90% of LevelDB's MaxBytesForLevel(), assuming 32 MiB SSTables.
-           (files(5) > 0 && files(4) > 282);
-}
+    return (files(6) > 0 && files(5) > 625) || // 20% of LevelDB's MaxBytesForLevel(), assuming 32 MiB SSTables.
+           (files(5) > 0 && files(4) > 62);}
 
 // Return whether the completed full flush should compact chainstate
 static bool ShouldCompactChainstate(CCoinsViewDB& coins_db, bool in_ibd)
