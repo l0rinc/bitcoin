@@ -11,6 +11,7 @@
 #include <coins.h>
 #include <common/args.h>
 #include <compressor.h>
+#include <consensus/amount.h>
 #include <consensus/merkle.h>
 #include <key.h>
 #include <merkleblock.h>
@@ -232,14 +233,23 @@ FUZZ_TARGET_DESERIALIZE(blockheader_deserialize, {
 FUZZ_TARGET_DESERIALIZE(txundo_deserialize, {
     CTxUndo tu;
     DeserializeFromFuzzingInput(buffer, tu);
+    for (const auto& coin : tu.vprevout) {
+        assert(MoneyRange(coin.out.nValue));
+    }
 })
 FUZZ_TARGET_DESERIALIZE(blockundo_deserialize, {
     CBlockUndo bu;
     DeserializeFromFuzzingInput(buffer, bu);
+    for (const auto& tx_undo : bu.vtxundo) {
+        for (const auto& coin : tx_undo.vprevout) {
+            assert(MoneyRange(coin.out.nValue));
+        }
+    }
 })
 FUZZ_TARGET_DESERIALIZE(coins_deserialize, {
     Coin coin;
     DeserializeFromFuzzingInput(buffer, coin);
+    assert(MoneyRange(coin.out.nValue));
 })
 FUZZ_TARGET(netaddr_deserialize, .init = initialize_deserialize)
 {
@@ -313,6 +323,7 @@ FUZZ_TARGET_DESERIALIZE(txoutcompressor_deserialize, {
     CTxOut to;
     auto toc = Using<TxOutCompression>(to);
     DeserializeFromFuzzingInput(buffer, toc);
+    assert(MoneyRange(to.nValue));
 })
 FUZZ_TARGET_DESERIALIZE(blocktransactions_deserialize, {
     BlockTransactions bt;
