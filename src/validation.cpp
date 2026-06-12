@@ -112,7 +112,7 @@ const std::vector<std::string> CHECKLEVEL_DOC {
  *  noticeably interfere with the pruning mechanism.
  * */
 static constexpr int PRUNE_LOCK_BUFFER{10};
-static constexpr uint32_t POST_IBD_COMPACTION_FLUSH_ODDS{320}; // Roughly every 2 weeks with hourly flushes
+static constexpr uint32_t POST_IBD_COMPACTION_RATIO{320}; // 1-in-N per periodic full flush, roughly every 2 weeks
 
 TRACEPOINT_SEMAPHORE(validation, block_connected);
 TRACEPOINT_SEMAPHORE(utxocache, flush);
@@ -2707,6 +2707,7 @@ bool Chainstate::FlushStateToDisk(
     assert(this->CanFlushToDisk());
     std::set<int> setFilesToPrune;
     bool full_flush_completed = false;
+    bool periodic_full_flush_completed = false;
 
     [[maybe_unused]] const size_t coins_count{CoinsTip().GetCacheSize()};
     [[maybe_unused]] const size_t coins_mem_usage{CoinsTip().DynamicMemoryUsage()};
@@ -2812,6 +2813,7 @@ bool Chainstate::FlushStateToDisk(
                 // Flush the chainstate (which may refer to block index entries).
                 empty_cache ? CoinsTip().Flush() : CoinsTip().Sync();
                 full_flush_completed = true;
+                periodic_full_flush_completed = fPeriodicWrite;
                 TRACEPOINT(utxocache, flush,
                     int64_t{Ticks<std::chrono::microseconds>(NodeClock::now() - nNow)},
                     (uint32_t)mode,
@@ -2827,13 +2829,14 @@ bool Chainstate::FlushStateToDisk(
         }
     }
     if (full_flush_completed) {
+        const auto role{GetRole()};
         if (m_chainman.m_options.signals) {
             // Update best block in wallet (so we can detect restored wallets).
-            m_chainman.m_options.signals->ChainStateFlushed(this->GetRole(), GetLocator(m_chain.Tip()));
+            m_chainman.m_options.signals->ChainStateFlushed(role, GetLocator(m_chain.Tip()));
         }
 
-        if (!m_chainman.m_interrupt && !m_chainman.IsInitialBlockDownload() &&
-            FastRandomContext().randrange(POST_IBD_COMPACTION_FLUSH_ODDS) == 0) {
+        if (periodic_full_flush_completed && !role.historical && !m_chainman.m_interrupt && !m_chainman.IsInitialBlockDownload() &&
+            FastRandomContext().randrange(POST_IBD_COMPACTION_RATIO) == 0) {
             try {
                 CoinsDB().CompactFullAsync();
             } catch (const std::exception& e) {
