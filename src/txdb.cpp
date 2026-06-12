@@ -58,7 +58,17 @@ struct CoinEntry {
 CCoinsViewDB::CCoinsViewDB(DBParams db_params, CoinsViewOptions options) :
     m_db_params{std::move(db_params)},
     m_options{std::move(options)},
-    m_db{std::make_unique<CDBWrapper>(m_db_params)} { }
+    m_db{std::make_unique<CDBWrapper>(m_db_params)}
+{
+    if (!m_db_params.memory_only && !m_db_params.options.force_compact && m_db->NeedsLegacyFileCompaction()) {
+        try {
+            LogInfo("Legacy chainstate detected, scheduling background compaction.");
+            CompactFullAsync();
+        } catch (const std::exception& e) {
+            LogWarning("Failed to start chainstate compaction (%s)", e.what());
+        }
+    }
+}
 
 CCoinsViewDB::~CCoinsViewDB()
 {
@@ -197,7 +207,6 @@ std::optional<std::string> CCoinsViewDB::GetDBProperty(const std::string& proper
 
 std::shared_future<void> CCoinsViewDB::CompactFullAsync()
 {
-    AssertLockHeld(::cs_main);
     if (m_compaction.valid() && m_compaction.wait_for(std::chrono::seconds{0}) != std::future_status::ready) return m_compaction;
     m_compaction = std::async(std::launch::async, [this] {
         try {

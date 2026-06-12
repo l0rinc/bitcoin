@@ -323,12 +323,28 @@ class InitTest(BitcoinTestFramework):
         for option in options:
             self.restart_node(1, option)
 
+    def chainstate_compaction_test(self):
+        self.log.info("Test compaction when the chainstate contains many small files")
+        node = self.nodes[1]
+        compaction_logs = ["Legacy chainstate detected", "Starting chainstate compaction", "Finished chainstate compaction"]
+
+        with node.assert_debug_log(expected_msgs=[], unexpected_msgs=compaction_logs):
+            self.restart_node(1, ["-debug=coindb"])
+        self.stop_node(1)
+
+        for i in range(101):
+            (node.chain_path / "chainstate" / f"small_file_{i}").touch()
+        with node.assert_debug_log(expected_msgs=compaction_logs, timeout=10):
+            self.start_node(1, ["-debug=coindb"])
+            self.stop_node(1)
+
     def run_test(self):
         self.init_pid_test()
         self.init_stress_test_interrupt()
         self.init_stress_test_removals()
         self.break_wait_test()
         self.init_empty_test()
+        self.chainstate_compaction_test()
 
 
 if __name__ == '__main__':
