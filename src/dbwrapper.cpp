@@ -32,22 +32,27 @@
 #include <cstdio>
 #include <memory>
 #include <optional>
+#include <system_error>
 #include <utility>
 
 static auto CharCast(const std::byte* data) { return reinterpret_cast<const char*>(data); }
 
-static int32_t CountSmallLevelDBFiles(const fs::path& path)
+static std::optional<int32_t> CountSmallLevelDBFiles(const fs::path& path)
 {
-    try {
-        int32_t small_files{0};
-        for (auto& entry : fs::directory_iterator{path}) {
-            // A few non-table files may match; the threshold tolerates them.
-            small_files += entry.is_regular_file() && entry.file_size() < 3_MiB;
-        }
-        return small_files;
-    } catch (const fs::filesystem_error&) {
-        return -1;
+    std::error_code ec;
+    fs::directory_iterator it{path, ec};
+    if (ec) return std::nullopt;
+
+    int32_t small_files{0};
+    for (const auto& entry : it) {
+        const bool is_regular{entry.is_regular_file(ec)};
+        if (ec) return std::nullopt;
+        const auto file_size{is_regular ? entry.file_size(ec) : 0};
+        if (ec) return std::nullopt;
+        // A few non-table files may match; the threshold tolerates them.
+        small_files += is_regular && file_size < 3_MiB;
     }
+    return small_files;
 }
 
 bool DestroyDB(const std::string& path_str)
@@ -335,9 +340,9 @@ size_t CDBWrapper::DynamicMemoryUsage() const
     return parsed.value();
 }
 
-bool CDBWrapper::NeedsLegacyFileCompaction() const
+std::optional<int32_t> CDBWrapper::CountSmallFiles() const
 {
-    return CountSmallLevelDBFiles(m_path) > 100;
+    return CountSmallLevelDBFiles(m_path);
 }
 
 std::optional<std::string> CDBWrapper::ReadImpl(std::span<const std::byte> key) const

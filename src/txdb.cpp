@@ -45,6 +45,8 @@ bool CCoinsViewDB::NeedsUpgrade()
 
 namespace {
 
+static constexpr int32_t LEGACY_CHAINSTATE_SMALL_FILE_THRESHOLD{100};
+
 struct CoinEntry {
     COutPoint* outpoint;
     uint8_t key{DB_COIN};
@@ -60,12 +62,18 @@ CCoinsViewDB::CCoinsViewDB(DBParams db_params, CoinsViewOptions options) :
     m_options{std::move(options)},
     m_db{std::make_unique<CDBWrapper>(m_db_params)}
 {
-    if (!m_db_params.memory_only && !m_db_params.options.force_compact && m_db->NeedsLegacyFileCompaction()) {
-        try {
-            LogInfo("Legacy chainstate detected, scheduling background compaction.");
-            CompactFullAsync();
-        } catch (const std::exception& e) {
-            LogWarning("Failed to start chainstate compaction (%s)", e.what());
+    if (!m_db_params.memory_only && !m_db_params.options.force_compact) {
+        if (const auto small_files{m_db->CountSmallFiles()}) {
+            if (*small_files > LEGACY_CHAINSTATE_SMALL_FILE_THRESHOLD) {
+                try {
+                    LogInfo("Legacy chainstate detected in %s (%d small files), scheduling background compaction", fs::PathToString(m_db_params.path), *small_files);
+                    CompactFullAsync();
+                } catch (const std::exception& e) {
+                    LogWarning("Failed to start chainstate compaction (%s)", e.what());
+                }
+            }
+        } else {
+            LogDebug(BCLog::COINDB, "Failed to count small files in chainstate database %s", fs::PathToString(m_db_params.path));
         }
     }
 }
@@ -85,6 +93,9 @@ void CCoinsViewDB::ResizeCache(size_t new_cache_size)
     // We can't do this operation with an in-memory DB since we'll lose all the coins upon
     // reset.
     if (!m_db_params.memory_only) {
+        if (m_compaction.valid() && m_compaction.wait_for(std::chrono::seconds{0}) != std::future_status::ready) {
+            LogInfo("Waiting for background chainstate compaction of %s before resizing coins DB cache", fs::PathToString(m_db_params.path));
+        }
         LOCK(m_db_mutex);
         // Have to do a reset first to get the original `m_db` state to release its
         // filesystem lock.

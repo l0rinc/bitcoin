@@ -332,11 +332,20 @@ class InitTest(BitcoinTestFramework):
             self.restart_node(1, ["-debug=coindb"])
         self.stop_node(1)
 
-        for i in range(101):
-            (node.chain_path / "chainstate" / f"small_file_{i}").touch()
-        with node.assert_debug_log(expected_msgs=compaction_logs, timeout=10):
+        small_files = [node.chain_path / "chainstate" / f"small_file_{i}" for i in range(101)]
+        try:
+            for small_file in small_files:
+                small_file.touch()
+            with node.assert_debug_log(expected_msgs=compaction_logs, timeout=10):
+                self.start_node(1, ["-debug=coindb"])
+                self.stop_node(1)
+        finally:
+            for small_file in small_files:
+                small_file.unlink(missing_ok=True)
+
+        with node.assert_debug_log(expected_msgs=[], unexpected_msgs=compaction_logs):
             self.start_node(1, ["-debug=coindb"])
-            self.stop_node(1)
+        self.stop_node(1)
 
     def run_test(self):
         self.init_pid_test()

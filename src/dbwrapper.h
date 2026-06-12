@@ -270,8 +270,8 @@ public:
     // Get an estimate of LevelDB memory usage (in bytes).
     size_t DynamicMemoryUsage() const;
 
-    //! Return whether this database appears to use a legacy small-file layout.
-    bool NeedsLegacyFileCompaction() const;
+    //! Return the count of small files in this database directory, if available.
+    std::optional<int32_t> CountSmallFiles() const;
 
     CDBIterator* NewIterator();
 
