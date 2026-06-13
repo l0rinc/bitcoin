@@ -66,6 +66,7 @@
 #include <validationinterface.h>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <chrono>
 #include <deque>
@@ -73,6 +74,7 @@
 #include <optional>
 #include <ranges>
 #include <span>
+#include <sstream>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -113,11 +115,50 @@ const std::vector<std::string> CHECKLEVEL_DOC {
  * */
 static constexpr int PRUNE_LOCK_BUFFER{10};
 
+static std::optional<std::array<uint64_t, 7>> LevelDBLevelSizes(CCoinsViewDB& coins_db)
+{
+    const auto stats{coins_db.GetDBProperty("leveldb.stats")};
+    if (!stats) return std::nullopt;
+
+    bool found{false};
+    std::array<uint64_t, 7> level_sizes{};
+    std::istringstream stream{*stats};
+    for (std::string line; std::getline(stream, line);) {
+        std::istringstream line_stream{line};
+        int level;
+        int files;
+        double size_mib;
+        if (line_stream >> level >> files >> size_mib && level >= 0 && static_cast<size_t>(level) < level_sizes.size()) {
+            level_sizes[level] = static_cast<uint64_t>(size_mib * 1_MiB);
+            found = true;
+        }
+    }
+    if (!found) return std::nullopt;
+    return level_sizes;
+}
+
+static bool ShouldCompactChainstateDuringIBD(CCoinsViewDB& coins_db)
+{
+    // L4's LevelDB size target is 10,000 MiB. Once L5 exists, CompactRange()
+    // can compact L4 into L5 and avoid leaving the migration to ordinary
+    // background size compactions.
+    static constexpr uint64_t level4_migration_threshold{8_GiB};
+    static constexpr uint64_t level5_started_threshold{1_MiB};
+    static constexpr uint64_t level5_small_threshold{1_GiB};
+
+    const auto level_sizes{LevelDBLevelSizes(coins_db)};
+    return level_sizes &&
+           (*level_sizes)[4] >= level4_migration_threshold &&
+           (*level_sizes)[5] >= level5_started_threshold &&
+           (*level_sizes)[5] <= level5_small_threshold;
+}
+
 // Return whether the completed full flush should compact chainstate
-static bool ShouldCompactChainstate(bool in_ibd)
+static bool ShouldCompactChainstate(bool in_ibd, CCoinsViewDB& coins_db)
 {
     static constexpr uint32_t flush_ratio{320}; // Roughly every 2 weeks with hourly flushes
-    return !in_ibd && FastRandomContext().randrange(flush_ratio) == 0;
+    if (in_ibd) return ShouldCompactChainstateDuringIBD(coins_db);
+    return FastRandomContext().randrange(flush_ratio) == 0;
 }
 
 TRACEPOINT_SEMAPHORE(validation, block_connected);
@@ -2843,7 +2884,7 @@ bool Chainstate::FlushStateToDisk(
             m_chainman.m_options.signals->ChainStateFlushed(this->GetRole(), GetLocator(m_chain.Tip()));
         }
 
-        if (!m_chainman.m_interrupt && ShouldCompactChainstate(m_chainman.IsInitialBlockDownload())) {
+        if (!m_chainman.m_interrupt && ShouldCompactChainstate(m_chainman.IsInitialBlockDownload(), CoinsDB())) {
             try {
                 CoinsDB().CompactFull();
             } catch (const std::exception& e) {
