@@ -68,6 +68,7 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <cstdint>
 #include <deque>
 #include <numeric>
 #include <optional>
@@ -89,6 +90,26 @@ using node::BlockMap;
 using node::CBlockIndexHeightOnlyComparator;
 using node::CBlockIndexWorkComparator;
 using node::SnapshotMetadata;
+
+struct BlockLogStats {
+    uint64_t max_tx_size{0};
+    uint64_t max_op_return_size{0};
+};
+
+static BlockLogStats GetBlockLogStats(const CBlock& block)
+{
+    BlockLogStats stats;
+    for (const auto& tx : block.vtx) {
+        stats.max_tx_size = std::max<uint64_t>(stats.max_tx_size, GetSerializeSize(TX_WITH_WITNESS(*tx)));
+        for (const auto& txout : tx->vout) {
+            const auto& script{txout.scriptPubKey};
+            if (script.IsUnspendable() && !script.empty() && script[0] == OP_RETURN) {
+                stats.max_op_return_size = std::max<uint64_t>(stats.max_op_return_size, script.size());
+            }
+        }
+    }
+    return stats;
+}
 
 /** Time window to wait between writing blocks/block index and chainstate to disk.
  *  Randomize writing time inside the window to prevent a situation where the
@@ -2856,6 +2877,7 @@ static void UpdateTipLog(
     const ChainstateManager& chainman,
     const CCoinsViewCache& coins_tip,
     const CBlockIndex* tip,
+    const std::optional<BlockLogStats>& block_stats,
     const std::string& func_name,
     const std::string& prefix,
     const std::string& warning_messages,
@@ -2865,7 +2887,7 @@ static void UpdateTipLog(
     AssertLockHeld(::cs_main);
 
     // Disable rate limiting as this may log frequently during IBD.
-    LogInfo(util::log::NO_RATE_LIMIT, "%s%s: new best=%s height=%d version=0x%08x log2_work=%f tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)%s\n",
+    LogInfo(util::log::NO_RATE_LIMIT, "%s%s: new best=%s height=%d version=0x%08x log2_work=%f tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)%s%s\n",
                    prefix, func_name,
                    tip->GetBlockHash().ToString(), tip->nHeight, tip->nVersion,
                    log(tip->nChainWork.getdouble()) / log(2.0), tip->m_chain_tx_count,
@@ -2873,13 +2895,15 @@ static void UpdateTipLog(
                    background_validation ? chainman.GetBackgroundVerificationProgress(*tip) : chainman.GuessVerificationProgress(tip),
                    coins_tip.DynamicMemoryUsage() / double(1_MiB),
                    coins_tip.GetCacheSize(),
+                   block_stats ? strprintf(" max_tx_size=%u max_op_return_size=%u", block_stats->max_tx_size, block_stats->max_op_return_size) : "",
                    !warning_messages.empty() ? strprintf(" warning='%s'", warning_messages) : "");
 }
 
-void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
+void Chainstate::UpdateTip(const CBlockIndex* pindexNew, const CBlock* block)
 {
     AssertLockHeld(::cs_main);
     const auto& coins_tip = this->CoinsTip();
+    const std::optional<BlockLogStats> block_stats{block ? std::optional{GetBlockLogStats(*block)} : std::nullopt};
 
     // The remainder of the function isn't relevant if we are not acting on
     // the active chainstate, so return if need be.
@@ -2887,7 +2911,7 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
         // Only log every so often so that we don't bury log messages at the tip.
         constexpr int BACKGROUND_LOG_INTERVAL = 2000;
         if (pindexNew->nHeight % BACKGROUND_LOG_INTERVAL == 0) {
-            UpdateTipLog(m_chainman, coins_tip, pindexNew, __func__, "[background validation] ", "", /*background_validation=*/true);
+            UpdateTipLog(m_chainman, coins_tip, pindexNew, block_stats, __func__, "[background validation] ", "", /*background_validation=*/true);
         }
         return;
     }
@@ -2909,7 +2933,7 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
             }
         }
     }
-    UpdateTipLog(m_chainman, coins_tip, pindexNew, __func__, "",
+    UpdateTipLog(m_chainman, coins_tip, pindexNew, block_stats, __func__, "",
                  util::Join(warning_messages, Untranslated(", ")).original, /*background_validation=*/false);
 }
 
@@ -3074,7 +3098,7 @@ bool Chainstate::ConnectTip(
     // Update m_chain & related variables.
     m_chain.SetTip(*pindexNew);
     m_chainman.UpdateIBDStatus();
-    UpdateTip(pindexNew);
+    UpdateTip(pindexNew, block_to_connect.get());
 
     const auto time_6{SteadyClock::now()};
     m_chainman.time_post_connect += time_6 - time_5;

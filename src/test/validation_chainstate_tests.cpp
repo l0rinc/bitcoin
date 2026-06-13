@@ -17,6 +17,7 @@
 #include <test/util/chainstate.h>
 #include <test/util/coins.h>
 #include <test/util/common.h>
+#include <test/util/logging.h>
 #include <test/util/setup_common.h>
 #include <tinyformat.h>
 #include <uint256.h>
@@ -27,6 +28,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 class CTxMemPool;
@@ -171,6 +173,21 @@ BOOST_FIXTURE_TEST_CASE(chainstate_update_tip, TestChain100Setup)
     // validation chain.
     BOOST_CHECK(block_added);
     BOOST_CHECK_EQUAL(curr_tip, get_notify_tip());
+}
+
+BOOST_FIXTURE_TEST_CASE(chainstate_update_tip_block_stats, TestChain100Setup)
+{
+    const CScript op_return_script{CScript{} << OP_RETURN << std::vector<unsigned char>(100, 0)};
+    const CBlock block{CreateBlock(/*txns=*/{}, op_return_script)};
+    const auto max_tx_size{GetSerializeSize(TX_WITH_WITNESS(*block.vtx.at(0)))};
+    const auto max_op_return_size{op_return_script.size()};
+
+    DebugLogHelper log{"UpdateTip: new best=", [&](const std::string* line) {
+        if (line == nullptr) return true;
+        return line->find(strprintf(" max_tx_size=%u ", max_tx_size)) != std::string::npos &&
+               line->find(strprintf(" max_op_return_size=%u", max_op_return_size)) != std::string::npos;
+    }};
+    BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlock(std::make_shared<CBlock>(block), true, true, nullptr));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

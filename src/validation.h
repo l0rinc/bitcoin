@@ -52,6 +52,7 @@
 #include <vector>
 
 class Chainstate;
+class CBlock;
 class CTxMemPool;
 class ChainstateManager;
 struct ChainTxData;
@@ -885,7 +886,7 @@ protected:
         bool fAddToMempool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
 
     /** Check warning conditions and do some notifications on new chain tip set. */
-    void UpdateTip(const CBlockIndex* pindexNew)
+    void UpdateTip(const CBlockIndex* pindexNew, const CBlock* block = nullptr)
         EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     NodeClock::time_point m_next_write{NodeClock::time_point::max()};
