@@ -17,12 +17,17 @@
 #include <util/threadnames.h>
 #include <util/vector.h>
 
+#include <array>
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cstdlib>
 #include <exception>
 #include <future>
 #include <iterator>
+#include <sstream>
+#include <system_error>
+#include <thread>
 #include <utility>
 
 static constexpr uint8_t DB_COIN{'C'};
@@ -52,6 +57,89 @@ struct CoinEntry {
 
     SERIALIZE_METHODS(CoinEntry, obj) { READWRITE(obj.key, obj.outpoint->hash, VARINT(obj.outpoint->n)); }
 };
+
+struct LevelDBCompactionIO {
+    uint64_t read_bytes{0};
+    uint64_t write_bytes{0};
+};
+
+uintmax_t DirectorySize(const fs::path& path)
+{
+    uintmax_t size{0};
+    std::error_code ec;
+    fs::recursive_directory_iterator it{path, fs::directory_options::skip_permission_denied, ec};
+    const fs::recursive_directory_iterator end;
+    while (!ec && it != end) {
+        const fs::directory_entry& entry{*it};
+        std::error_code entry_ec;
+        if (entry.is_regular_file(entry_ec)) {
+            const uintmax_t file_size{entry.file_size(entry_ec)};
+            if (!entry_ec) size += file_size;
+        }
+        it.increment(ec);
+    }
+    return size;
+}
+
+LevelDBCompactionIO LevelDBCompactionStats(const CDBWrapper& db)
+{
+    LevelDBCompactionIO result;
+    if (const auto stats{db.GetProperty("leveldb.stats")}) {
+        std::istringstream stream{*stats};
+        for (std::string line; std::getline(stream, line);) {
+            std::istringstream line_stream{line};
+            int level;
+            int files;
+            double size_mib;
+            double time_seconds;
+            double read_mib;
+            double write_mib;
+            if (line_stream >> level >> files >> size_mib >> time_seconds >> read_mib >> write_mib) {
+                result.read_bytes += static_cast<uint64_t>(read_mib * 1_MiB);
+                result.write_bytes += static_cast<uint64_t>(write_mib * 1_MiB);
+            }
+        }
+    }
+    return result;
+}
+
+LevelDBCompactionIO Delta(const LevelDBCompactionIO& before, const LevelDBCompactionIO& after)
+{
+    return {
+        .read_bytes = after.read_bytes > before.read_bytes ? after.read_bytes - before.read_bytes : 0,
+        .write_bytes = after.write_bytes > before.write_bytes ? after.write_bytes - before.write_bytes : 0,
+    };
+}
+
+std::string LevelDBLevels(const CDBWrapper& db)
+{
+    std::array<std::string, 7> levels{};
+    if (const auto stats{db.GetProperty("leveldb.stats")}) {
+        std::istringstream stream{*stats};
+        for (std::string line; std::getline(stream, line);) {
+            std::istringstream line_stream{line};
+            int level;
+            int files;
+            double size_mib;
+            if (line_stream >> level >> files >> size_mib && level >= 0 && static_cast<size_t>(level) < levels.size()) {
+                levels[level] = strprintf("%d:%d:%.0f", level, files, size_mib);
+            }
+        }
+    }
+
+    std::ostringstream result;
+    for (size_t level{0}; level < levels.size(); ++level) {
+        if (level != 0) result << ',';
+        result << (levels[level].empty() ? strprintf("%d:0:0", level) : levels[level]);
+    }
+    return result.str();
+}
+
+void LogCompactionSnapshot(const char* event, const CDBWrapper& db, const fs::path& path, int height, bool in_ibd, int64_t elapsed_ms, uintmax_t baseline_disk_bytes, uintmax_t disk_bytes, uintmax_t peak_disk_bytes, const LevelDBCompactionIO& io_delta)
+{
+    LogInfo("CHAINSTATE_COMPACTION_SNAPSHOT event=%s height=%d in_ibd=%d elapsed_ms=%d baseline_disk_bytes=%u disk_bytes=%u peak_disk_bytes=%u peak_extra_bytes=%u compaction_read_bytes=%u compaction_write_bytes=%u levels=%s path=%s",
+            event, height, in_ibd, elapsed_ms, baseline_disk_bytes, disk_bytes, peak_disk_bytes, peak_disk_bytes > baseline_disk_bytes ? peak_disk_bytes - baseline_disk_bytes : 0, io_delta.read_bytes, io_delta.write_bytes, LevelDBLevels(db), fs::PathToString(path));
+}
 
 } // namespace
 
@@ -183,6 +271,7 @@ void CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block
     LogDebug(BCLog::COINDB, "Writing final batch of %.2f MiB\n", batch.ApproximateSize() / double(1_MiB));
     m_db->WriteBatch(batch);
     LogDebug(BCLog::COINDB, "Committed %u changed transaction outputs (out of %u) to coin database...", (unsigned int)dirty_count, (unsigned int)count);
+    LogInfo("CHAINSTATE_FLUSH_SNAPSHOT disk_bytes=%u levels=%s path=%s", DirectorySize(m_db_params.path), LevelDBLevels(*m_db), fs::PathToString(m_db_params.path));
 }
 
 size_t CCoinsViewDB::EstimateSize() const
@@ -195,18 +284,40 @@ std::optional<std::string> CCoinsViewDB::GetDBProperty(const std::string& proper
     return m_db->GetProperty(property);
 }
 
-std::shared_future<void> CCoinsViewDB::CompactFull()
+std::shared_future<void> CCoinsViewDB::CompactFull(int height, bool in_ibd)
 {
     AssertLockHeld(::cs_main);
     if (m_compaction.valid() && m_compaction.wait_for(std::chrono::seconds{0}) != std::future_status::ready) return m_compaction;
-    m_compaction = std::async(std::launch::async, [this] {
+    m_compaction = std::async(std::launch::async, [this, height, in_ibd] {
         try {
             util::ThreadRename("utxocompact");
             LOCK(m_db_mutex);
 
-            LogDebug(BCLog::COINDB, "Starting chainstate compaction of %s", fs::PathToString(m_db_params.path));
-            m_db->CompactFull();
-            LogDebug(BCLog::COINDB, "Finished chainstate compaction of %s", fs::PathToString(m_db_params.path));
+            const auto start{std::chrono::steady_clock::now()};
+            const uintmax_t before_disk_bytes{DirectorySize(m_db_params.path)};
+            const LevelDBCompactionIO before_io{LevelDBCompactionStats(*m_db)};
+            std::atomic<uintmax_t> peak_disk_bytes{before_disk_bytes};
+            LogCompactionSnapshot("before", *m_db, m_db_params.path, height, in_ibd, 0, before_disk_bytes, before_disk_bytes, before_disk_bytes, {});
+
+            {
+                std::jthread disk_sampler{[this, &peak_disk_bytes](std::stop_token stop_token) {
+                    while (!stop_token.stop_requested()) {
+                        const uintmax_t disk_bytes{DirectorySize(m_db_params.path)};
+                        uintmax_t previous_peak{peak_disk_bytes.load()};
+                        while (disk_bytes > previous_peak && !peak_disk_bytes.compare_exchange_weak(previous_peak, disk_bytes)) {}
+                        std::this_thread::sleep_for(std::chrono::seconds{1});
+                    }
+                }};
+                LogDebug(BCLog::COINDB, "Starting chainstate compaction of %s", fs::PathToString(m_db_params.path));
+                m_db->CompactFull();
+                LogDebug(BCLog::COINDB, "Finished chainstate compaction of %s", fs::PathToString(m_db_params.path));
+                disk_sampler.request_stop();
+            }
+
+            const uintmax_t after_disk_bytes{DirectorySize(m_db_params.path)};
+            const LevelDBCompactionIO io_delta{Delta(before_io, LevelDBCompactionStats(*m_db))};
+            if (after_disk_bytes > peak_disk_bytes.load()) peak_disk_bytes = after_disk_bytes;
+            LogCompactionSnapshot("after", *m_db, m_db_params.path, height, in_ibd, std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count(), before_disk_bytes, after_disk_bytes, peak_disk_bytes.load(), io_delta);
         } catch (const std::exception& e) {
             LogWarning("Failed chainstate compaction (%s)", e.what());
         }

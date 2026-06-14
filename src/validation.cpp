@@ -154,11 +154,12 @@ static bool ShouldCompactChainstateDuringIBD(CCoinsViewDB& coins_db)
 }
 
 // Return whether the completed full flush should compact chainstate
-static bool ShouldCompactChainstate(bool in_ibd, CCoinsViewDB& coins_db)
+static bool ShouldCompactChainstate(int height, bool in_ibd, CCoinsViewDB& coins_db)
 {
-    static constexpr uint32_t flush_ratio{320}; // Roughly every 2 weeks with hourly flushes
-    if (in_ibd) return ShouldCompactChainstateDuringIBD(coins_db);
-    return FastRandomContext().randrange(flush_ratio) == 0;
+    return false;
+    // static constexpr uint32_t flush_ratio{10}; // TEMP: compress the production 1/320 cadence for local measurements.
+    // if (in_ibd && ShouldCompactChainstateDuringIBD(coins_db)) return true; // TODO we don't care about this for now
+    // return FastRandomContext().randrange(flush_ratio) == 0;
 }
 
 TRACEPOINT_SEMAPHORE(validation, block_connected);
@@ -2884,9 +2885,9 @@ bool Chainstate::FlushStateToDisk(
             m_chainman.m_options.signals->ChainStateFlushed(this->GetRole(), GetLocator(m_chain.Tip()));
         }
 
-        if (!m_chainman.m_interrupt && ShouldCompactChainstate(m_chainman.IsInitialBlockDownload(), CoinsDB())) {
+        if (!m_chainman.m_interrupt && ShouldCompactChainstate(m_chain.Height(), m_chainman.IsInitialBlockDownload(), CoinsDB())) {
             try {
-                CoinsDB().CompactFull();
+                CoinsDB().CompactFull(m_chain.Height(), m_chainman.IsInitialBlockDownload());
             } catch (const std::exception& e) {
                 LogWarning("Failed to start chainstate compaction (%s)", e.what());
             }
