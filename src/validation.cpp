@@ -92,23 +92,15 @@ using node::CBlockIndexWorkComparator;
 using node::SnapshotMetadata;
 
 struct BlockLogStats {
-    uint64_t max_tx_size{0};
-    uint64_t max_op_return_size{0};
+    uint64_t sub_1sat_vb_tx_count{0};
 };
 
-static BlockLogStats GetBlockLogStats(const CBlock& block)
+static void UpdateBlockLogFeeStats(BlockLogStats& stats, const CTransaction& tx, CAmount txfee)
 {
-    BlockLogStats stats;
-    for (const auto& tx : block.vtx) {
-        stats.max_tx_size = std::max<uint64_t>(stats.max_tx_size, GetSerializeSize(TX_WITH_WITNESS(*tx)));
-        for (const auto& txout : tx->vout) {
-            const auto& script{txout.scriptPubKey};
-            if (script.IsUnspendable() && !script.empty() && script[0] == OP_RETURN) {
-                stats.max_op_return_size = std::max<uint64_t>(stats.max_op_return_size, script.size());
-            }
-        }
+    const int64_t tx_vsize{GetVirtualTransactionSize(tx)};
+    if (txfee < tx_vsize) {
+        ++stats.sub_1sat_vb_tx_count;
     }
-    return stats;
 }
 
 /** Time window to wait between writing blocks/block index and chainstate to disk.
@@ -2313,7 +2305,7 @@ script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
  *  Validity checks that depend on the UTXO set are also done; ConnectBlock()
  *  can fail if those validity checks fail (among other reasons). */
 bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
-                               CCoinsViewCache& view, bool fJustCheck)
+                               CCoinsViewCache& view, bool fJustCheck, BlockLogStats* block_stats)
 {
     AssertLockHeld(cs_main);
     assert(pindex);
@@ -2559,6 +2551,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                 break;
             }
             nFees += txfee;
+            if (block_stats) UpdateBlockLogFeeStats(*block_stats, tx, txfee);
             if (!MoneyRange(nFees)) {
                 state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-accumulated-fee-outofrange",
                               "accumulated fee in the block out of range");
@@ -2877,7 +2870,7 @@ static void UpdateTipLog(
     const ChainstateManager& chainman,
     const CCoinsViewCache& coins_tip,
     const CBlockIndex* tip,
-    const std::optional<BlockLogStats>& block_stats,
+    const BlockLogStats* block_stats,
     const std::string& func_name,
     const std::string& prefix,
     const std::string& warning_messages,
@@ -2895,15 +2888,14 @@ static void UpdateTipLog(
                    background_validation ? chainman.GetBackgroundVerificationProgress(*tip) : chainman.GuessVerificationProgress(tip),
                    coins_tip.DynamicMemoryUsage() / double(1_MiB),
                    coins_tip.GetCacheSize(),
-                   block_stats ? strprintf(" max_tx_size=%u max_op_return_size=%u", block_stats->max_tx_size, block_stats->max_op_return_size) : "",
+                   block_stats ? strprintf(" sub_1sat_vb_txs=%u", block_stats->sub_1sat_vb_tx_count) : "",
                    !warning_messages.empty() ? strprintf(" warning='%s'", warning_messages) : "");
 }
 
-void Chainstate::UpdateTip(const CBlockIndex* pindexNew, const CBlock* block)
+void Chainstate::UpdateTip(const CBlockIndex* pindexNew, const BlockLogStats* block_stats)
 {
     AssertLockHeld(::cs_main);
     const auto& coins_tip = this->CoinsTip();
-    const std::optional<BlockLogStats> block_stats{block ? std::optional{GetBlockLogStats(*block)} : std::nullopt};
 
     // The remainder of the function isn't relevant if we are not acting on
     // the active chainstate, so return if need be.
@@ -3052,10 +3044,11 @@ bool Chainstate::ConnectTip(
     // num_blocks_total may be zero until the ConnectBlock() call below.
     LogDebug(BCLog::BENCH, "  - Load block from disk: %.2fms\n",
              Ticks<MillisecondsDouble>(time_2 - time_1));
+    BlockLogStats block_stats;
     {
         CCoinsViewCache& view{*m_coins_views->m_connect_block_view};
         const auto reset_guard{view.CreateResetGuard()};
-        bool rv = ConnectBlock(*block_to_connect, state, pindexNew, view);
+        bool rv = ConnectBlock(*block_to_connect, state, pindexNew, view, /*fJustCheck=*/false, &block_stats);
         if (m_chainman.m_options.signals) {
             m_chainman.m_options.signals->BlockChecked(block_to_connect, state);
         }
@@ -3098,7 +3091,7 @@ bool Chainstate::ConnectTip(
     // Update m_chain & related variables.
     m_chain.SetTip(*pindexNew);
     m_chainman.UpdateIBDStatus();
-    UpdateTip(pindexNew, block_to_connect.get());
+    UpdateTip(pindexNew, &block_stats);
 
     const auto time_6{SteadyClock::now()};
     m_chainman.time_post_connect += time_6 - time_5;

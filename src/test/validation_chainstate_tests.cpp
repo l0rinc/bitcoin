@@ -9,6 +9,7 @@
 #include <consensus/validation.h>
 #include <node/blockstorage.h>
 #include <node/kernel_notifications.h>
+#include <policy/policy.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -177,15 +178,32 @@ BOOST_FIXTURE_TEST_CASE(chainstate_update_tip, TestChain100Setup)
 
 BOOST_FIXTURE_TEST_CASE(chainstate_update_tip_block_stats, TestChain100Setup)
 {
-    const CScript op_return_script{CScript{} << OP_RETURN << std::vector<unsigned char>(100, 0)};
-    const CBlock block{CreateBlock(/*txns=*/{}, op_return_script)};
-    const auto max_tx_size{GetSerializeSize(TX_WITH_WITNESS(*block.vtx.at(0)))};
-    const auto max_op_return_size{op_return_script.size()};
+    const auto coinbase_tx{m_coinbase_txns.at(0)};
+    const CAmount coinbase_value{coinbase_tx->vout.at(0).nValue};
+    auto [zero_fee_tx, zero_fee]{CreateValidTransaction(
+        /*input_transactions=*/{coinbase_tx},
+        /*inputs=*/{COutPoint{coinbase_tx->GetHash(), 0}},
+        /*input_height=*/1,
+        /*input_signing_keys=*/{coinbaseKey},
+        /*outputs=*/{CTxOut{coinbase_value, CScript{} << OP_TRUE}},
+        /*feerate=*/std::nullopt,
+        /*fee_output=*/std::nullopt)};
+    BOOST_REQUIRE_EQUAL(zero_fee, 0);
+
+    CMutableTransaction low_fee_tx;
+    low_fee_tx.vin.emplace_back(zero_fee_tx.GetHash(), 0);
+    low_fee_tx.vout.emplace_back(coinbase_value, CScript{} << OP_TRUE);
+    const CAmount low_fee{GetVirtualTransactionSize(CTransaction{low_fee_tx}) - 1};
+    low_fee_tx.vout.at(0).nValue -= low_fee;
+    const auto low_fee_tx_vsize{GetVirtualTransactionSize(CTransaction{low_fee_tx})};
+    BOOST_REQUIRE_GT(low_fee, 0);
+    BOOST_REQUIRE_LT(low_fee, low_fee_tx_vsize);
+
+    const CBlock block{CreateBlock({zero_fee_tx, low_fee_tx}, CScript{} << OP_TRUE)};
 
     DebugLogHelper log{"UpdateTip: new best=", [&](const std::string* line) {
         if (line == nullptr) return true;
-        return line->find(strprintf(" max_tx_size=%u ", max_tx_size)) != std::string::npos &&
-               line->find(strprintf(" max_op_return_size=%u", max_op_return_size)) != std::string::npos;
+        return line->find(" sub_1sat_vb_txs=2") != std::string::npos;
     }};
     BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlock(std::make_shared<CBlock>(block), true, true, nullptr));
 }

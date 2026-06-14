@@ -55,6 +55,7 @@ class Chainstate;
 class CBlock;
 class CTxMemPool;
 class ChainstateManager;
+struct BlockLogStats;
 struct ChainTxData;
 class DisconnectedBlockTransactions;
 struct PrecomputedTransactionData;
@@ -780,7 +781,7 @@ public:
     DisconnectResult DisconnectBlock(const CBlock& block, const CBlockIndex* pindex, CCoinsViewCache& view)
         EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     bool ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
-                      CCoinsViewCache& view, bool fJustCheck = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+                      CCoinsViewCache& view, bool fJustCheck = false, BlockLogStats* block_stats = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     // Apply the effects of a block disconnection on the UTXO set.
     bool DisconnectTip(BlockValidationState& state, DisconnectedBlockTransactions* disconnectpool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
@@ -886,7 +887,7 @@ protected:
         bool fAddToMempool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
 
     /** Check warning conditions and do some notifications on new chain tip set. */
-    void UpdateTip(const CBlockIndex* pindexNew, const CBlock* block = nullptr)
+    void UpdateTip(const CBlockIndex* pindexNew, const BlockLogStats* block_stats = nullptr)
         EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     NodeClock::time_point m_next_write{NodeClock::time_point::max()};
