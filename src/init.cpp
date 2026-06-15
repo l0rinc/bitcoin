@@ -520,6 +520,7 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
                              kernel::DEFAULT_XOR_BLOCKSDIR),
                    ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-fastprune", "Use smaller block files and lower minimum prune height for testing purposes", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::DEBUG_TEST);
+    argsman.AddArg("-pruneassumevalid", "Experimental low-resource pruned IBD mode. Requires -prune and an active assumevalid block, and is incompatible with assumeutxo snapshots. For the assumevalid block and its historical ancestors, request stripped blocks without witness data, connect them without writing block/undo data to disk, and drop them after updating the chainstate. This reduces bandwidth and disk writes, but skips witness download, witness validation, witness commitments, and witness availability checks, and reduces restart/reorg resilience during the assumevalid region. Disabled by default.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #if HAVE_SYSTEM
     argsman.AddArg("-blocknotify=<cmd>", "Execute command when the best block changes (%s in cmd is replaced by block hash)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #endif
@@ -1032,6 +1033,22 @@ bool AppInitParameterInteraction(const ArgsManager& args)
             return InitError(_("Prune mode is incompatible with -txospenderindex."));
         if (args.GetBoolArg("-reindex-chainstate", false)) {
             return InitError(_("Prune mode is incompatible with -reindex-chainstate. Use full -reindex instead."));
+        }
+    }
+
+    if (args.GetBoolArg("-pruneassumevalid", false)) {
+        if (!args.GetIntArg("-prune", 0)) {
+            return InitError(_("-pruneassumevalid requires pruning. Please restart with -prune."));
+        }
+        if (!g_enabled_filter_types.empty()) {
+            return InitError(_("-pruneassumevalid is incompatible with -blockfilterindex because the index requires block and undo data."));
+        }
+        if (args.GetBoolArg("-coinstatsindex", DEFAULT_COINSTATSINDEX)) {
+            return InitError(_("-pruneassumevalid is incompatible with -coinstatsindex because the index requires block and undo data."));
+        }
+        const auto value{args.GetArg("-assumevalid", chainparams.GetConsensus().defaultAssumeValid.GetHex())};
+        if (const auto assumevalid{uint256::FromUserHex(value)}; assumevalid && assumevalid->IsNull()) {
+            return InitError(_("-pruneassumevalid requires a non-zero assumevalid block. Please set -assumevalid to a block hash."));
         }
     }
 
@@ -1879,13 +1896,17 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         do_reindex_chainstate,
         kernel_cache_sizes,
         args);
-    if (status == ChainstateLoadStatus::FAILURE && !do_reindex && !ShutdownRequested(node)) {
+    if ((status == ChainstateLoadStatus::FAILURE || status == ChainstateLoadStatus::FAILURE_FULL_REINDEX) &&
+        !do_reindex && !ShutdownRequested(node)) {
         // suggest a reindex
+        const std::string recovery{status == ChainstateLoadStatus::FAILURE_FULL_REINDEX ?
+                                       ".\nPlease restart with -reindex to recover." :
+                                       ".\nPlease restart with -reindex or -reindex-chainstate to recover."};
         bool do_retry{HasTestOption(args, "reindex_after_failure_noninteractive_yes") ||
-            uiInterface.ThreadSafeQuestion(
-            error + Untranslated(".\n\n") + _("Do you want to rebuild the databases now?"),
-            error.original + ".\nPlease restart with -reindex or -reindex-chainstate to recover.",
-            CClientUIInterface::MSG_ERROR | CClientUIInterface::BTN_ABORT)};
+                      uiInterface.ThreadSafeQuestion(
+                          error + Untranslated(".\n\n") + _("Do you want to rebuild the databases now?"),
+                          error.original + recovery,
+                          CClientUIInterface::MSG_ERROR | CClientUIInterface::BTN_ABORT)};
         if (!do_retry) {
             return false;
         }
