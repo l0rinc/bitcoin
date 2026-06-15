@@ -1,52 +1,42 @@
+//  Copyright (c) 2011-present, Facebook, Inc.  All rights reserved.
+//  This source code is licensed under both the GPLv2 (found in the
+//  COPYING file in the root directory) and Apache 2.0 License
+//  (found in the LICENSE.Apache file in the root directory).
+//
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "leveldb/iterator.h"
+#include "rocksdb/iterator.h"
 
-namespace leveldb {
+#include "memory/arena.h"
+#include "table/internal_iterator.h"
+#include "table/iterator_wrapper.h"
 
-Iterator::Iterator() {
-  cleanup_head_.function = nullptr;
-  cleanup_head_.next = nullptr;
-}
+namespace ROCKSDB_NAMESPACE {
 
-Iterator::~Iterator() {
-  if (!cleanup_head_.IsEmpty()) {
-    cleanup_head_.Run();
-    for (CleanupNode* node = cleanup_head_.next; node != nullptr;) {
-      node->Run();
-      CleanupNode* next_node = node->next;
-      delete node;
-      node = next_node;
-    }
+Status Iterator::GetProperty(std::string prop_name, std::string* prop) {
+  if (prop == nullptr) {
+    return Status::InvalidArgument("prop is nullptr");
   }
-}
-
-void Iterator::RegisterCleanup(CleanupFunction func, void* arg1, void* arg2) {
-  assert(func != nullptr);
-  CleanupNode* node;
-  if (cleanup_head_.IsEmpty()) {
-    node = &cleanup_head_;
-  } else {
-    node = new CleanupNode();
-    node->next = cleanup_head_.next;
-    cleanup_head_.next = node;
+  if (prop_name == "rocksdb.iterator.is-key-pinned") {
+    *prop = "0";
+    return Status::OK();
   }
-  node->function = func;
-  node->arg1 = arg1;
-  node->arg2 = arg2;
+  if (prop_name == "rocksdb.iterator.is-value-pinned") {
+    *prop = "0";
+    return Status::OK();
+  }
+  return Status::InvalidArgument("Unidentified property.");
 }
 
 namespace {
-
 class EmptyIterator : public Iterator {
  public:
-  EmptyIterator(const Status& s) : status_(s) {}
-  ~EmptyIterator() override = default;
-
+  explicit EmptyIterator(const Status& s) : status_(s) {}
   bool Valid() const override { return false; }
-  void Seek(const Slice& target) override {}
+  void Seek(const Slice& /*target*/) override {}
+  void SeekForPrev(const Slice& /*target*/) override {}
   void SeekToFirst() override {}
   void SeekToLast() override {}
   void Next() override { assert(false); }
@@ -65,7 +55,35 @@ class EmptyIterator : public Iterator {
   Status status_;
 };
 
-}  // anonymous namespace
+template <class TValue = Slice>
+class EmptyInternalIterator : public InternalIteratorBase<TValue> {
+ public:
+  explicit EmptyInternalIterator(const Status& s) : status_(s) {}
+  bool Valid() const override { return false; }
+  void Seek(const Slice& /*target*/) override {}
+  void SeekForPrev(const Slice& /*target*/) override {}
+  void SeekToFirst() override {}
+  void SeekToLast() override {}
+  void Next() override { assert(false); }
+  void Prev() override { assert(false); }
+  Slice key() const override {
+    assert(false);
+    return Slice();
+  }
+  TValue value() const override {
+    assert(false);
+    return TValue();
+  }
+  uint64_t write_unix_time() const override {
+    assert(false);
+    return std::numeric_limits<uint64_t>::max();
+  }
+  Status status() const override { return status_; }
+
+ private:
+  Status status_;
+};
+}  // namespace
 
 Iterator* NewEmptyIterator() { return new EmptyIterator(Status::OK()); }
 
@@ -73,4 +91,48 @@ Iterator* NewErrorIterator(const Status& status) {
   return new EmptyIterator(status);
 }
 
-}  // namespace leveldb
+template <class TValue>
+InternalIteratorBase<TValue>* NewErrorInternalIterator(const Status& status) {
+  return new EmptyInternalIterator<TValue>(status);
+}
+template InternalIteratorBase<IndexValue>* NewErrorInternalIterator(
+    const Status& status);
+template InternalIteratorBase<Slice>* NewErrorInternalIterator(
+    const Status& status);
+
+template <class TValue>
+InternalIteratorBase<TValue>* NewErrorInternalIterator(const Status& status,
+                                                       Arena* arena) {
+  if (arena == nullptr) {
+    return NewErrorInternalIterator<TValue>(status);
+  } else {
+    auto mem = arena->AllocateAligned(sizeof(EmptyInternalIterator<TValue>));
+    return new (mem) EmptyInternalIterator<TValue>(status);
+  }
+}
+template InternalIteratorBase<IndexValue>* NewErrorInternalIterator(
+    const Status& status, Arena* arena);
+template InternalIteratorBase<Slice>* NewErrorInternalIterator(
+    const Status& status, Arena* arena);
+
+template <class TValue>
+InternalIteratorBase<TValue>* NewEmptyInternalIterator() {
+  return new EmptyInternalIterator<TValue>(Status::OK());
+}
+template InternalIteratorBase<IndexValue>* NewEmptyInternalIterator();
+template InternalIteratorBase<Slice>* NewEmptyInternalIterator();
+
+template <class TValue>
+InternalIteratorBase<TValue>* NewEmptyInternalIterator(Arena* arena) {
+  if (arena == nullptr) {
+    return NewEmptyInternalIterator<TValue>();
+  } else {
+    auto mem = arena->AllocateAligned(sizeof(EmptyInternalIterator<TValue>));
+    return new (mem) EmptyInternalIterator<TValue>(Status::OK());
+  }
+}
+template InternalIteratorBase<IndexValue>* NewEmptyInternalIterator(
+    Arena* arena);
+template InternalIteratorBase<Slice>* NewEmptyInternalIterator(Arena* arena);
+
+}  // namespace ROCKSDB_NAMESPACE
