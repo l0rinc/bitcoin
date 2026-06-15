@@ -1063,8 +1063,12 @@ BOOST_FIXTURE_TEST_CASE(ccoins_flush_behavior, FlushTest)
 
 BOOST_FIXTURE_TEST_CASE(coins_db_leveldb_layout, FlushTest)
 {
-    auto level2_files{[](CCoinsViewDB& base) {
-        return *Assert(ToIntegral<int>(*Assert(base.GetDBProperty("leveldb.num-files-at-level2"))));
+    auto sst_files{[](CCoinsViewDB& base) {
+        int files{0};
+        for (int level{0}; level < 7; ++level) {
+            files += *Assert(ToIntegral<int>(*Assert(base.GetDBProperty(std::string{"leveldb.num-files-at-level"} + std::to_string(level)))));
+        }
+        return files;
     }};
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), 0};
     const Coin coin{MakeCoin()};
@@ -1077,9 +1081,9 @@ BOOST_FIXTURE_TEST_CASE(coins_db_leveldb_layout, FlushTest)
     cache.SetBestBlock(block_hash);
     cache.Sync();
 
-    BOOST_CHECK_EQUAL(level2_files(base), 0);
+    BOOST_CHECK_EQUAL(sst_files(base), 0);
     WITH_LOCK(::cs_main, return base.CompactFull(/*height=*/0, /*in_ibd=*/false)).wait();
-    BOOST_CHECK_EQUAL(level2_files(base), 1);
+    BOOST_CHECK_EQUAL(sst_files(base), 1);
 
     BOOST_CHECK(*Assert(base.GetCoin(outpoint)) == coin);
     BOOST_CHECK_EQUAL(base.GetBestBlock(), block_hash);

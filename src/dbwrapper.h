@@ -20,9 +20,9 @@
 #include <stdexcept>
 #include <string>
 
-namespace leveldb {
+namespace rocksdb {
 class Env;
-} // namespace leveldb
+} // namespace rocksdb
 
 static const size_t DBWRAPPER_PREALLOC_KEY_SIZE = 64;
 static const size_t DBWRAPPER_PREALLOC_VALUE_SIZE = 1024;
@@ -51,7 +51,7 @@ struct DBParams {
     DBOptions options{};
     //! If non-null, use this as the leveldb::Env instead of the default.
     //! Caller retains ownership.
-    leveldb::Env* testing_env = nullptr;
+    rocksdb::Env* testing_env = nullptr;
     //! Maximum LevelDB SST file size. Larger values reduce the frequency
     //! of compactions but increase their duration.
     size_t max_file_size = DBWRAPPER_MAX_FILE_SIZE;
@@ -181,14 +181,14 @@ public:
     }
 };
 
-struct LevelDBContext;
+struct RocksDBContext;
 
 class CDBWrapper
 {
     friend const Obfuscation& dbwrapper_private::GetObfuscation(const CDBWrapper&);
 private:
     //! holds all leveldb-specific fields of this class
-    std::unique_ptr<LevelDBContext> m_db_context;
+    std::unique_ptr<RocksDBContext> m_db_context;
 
     //! the name of this database
     std::string m_name;
