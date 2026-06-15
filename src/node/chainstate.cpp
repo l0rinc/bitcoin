@@ -134,6 +134,14 @@ static ChainstateLoadResult CompleteChainstateInitialization(
     }
 
     const auto& chainstates{chainman.m_chainstates};
+    if (!chainman.m_options.prune_assumevalid &&
+        std::any_of(chainstates.begin(), chainstates.end(),
+                    [](const auto& cs) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return cs->HasBlocksPrunedByPruneAssumeValid(); })) {
+        return {ChainstateLoadStatus::FAILURE, _(
+            "This chainstate contains witness-era blocks pruned by -pruneassumevalid. "
+            "Please restart with -pruneassumevalid or rebuild the database using -reindex")};
+    }
+
     if (std::any_of(chainstates.begin(), chainstates.end(),
                     [](const auto& cs) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return cs->NeedsRedownload(); })) {
         return {ChainstateLoadStatus::FAILURE, strprintf(_("Witness data for blocks after height %d requires validation. Please restart with -reindex."),
@@ -156,6 +164,9 @@ ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSize
     } else {
         LogInfo("Validating signatures for all blocks.");
     }
+    if (chainman.m_options.prune_assumevalid) {
+        LogInfo("-pruneassumevalid enabled: stripped blocks in the assumevalid region will skip witness download and witness-related validation, and will not be written to block or undo files.");
+    }
     LogInfo("Setting nMinimumChainWork=%s", chainman.MinimumChainWork().GetHex());
     if (chainman.MinimumChainWork() < UintToArith256(chainman.GetConsensus().nMinimumChainWork)) {
         LogWarning("nMinimumChainWork set below default value of %s", chainman.GetConsensus().nMinimumChainWork.GetHex());
@@ -177,6 +188,9 @@ ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSize
 
     // Load a chain created from a UTXO snapshot, if any exist.
     Chainstate* assumeutxo_cs{chainman.LoadAssumeutxoChainstate()};
+    if (assumeutxo_cs && chainman.m_options.prune_assumevalid) {
+        return {ChainstateLoadStatus::FAILURE, _("-pruneassumevalid is incompatible with assumeutxo snapshots. Please restart without -pruneassumevalid or remove the snapshot chainstate")};
+    }
 
     if (assumeutxo_cs && options.wipe_chainstate_db) {
         // Reset chainstate target to network tip instead of snapshot block.

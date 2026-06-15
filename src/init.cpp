@@ -520,6 +520,7 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
                              kernel::DEFAULT_XOR_BLOCKSDIR),
                    ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-fastprune", "Use smaller block files and lower minimum prune height for testing purposes", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::DEBUG_TEST);
+    argsman.AddArg("-pruneassumevalid", "Experimental low-resource pruned IBD mode. Requires -prune and an active assumevalid block, and is incompatible with assumeutxo snapshots. For the assumevalid block and its historical ancestors, request stripped blocks without witness data, connect them without writing block/undo data to disk, and drop them after updating the chainstate. This reduces bandwidth and disk writes, but skips witness download, witness validation, witness commitments, and witness availability checks, and reduces restart/reorg resilience during the assumevalid region. Disabled by default.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #if HAVE_SYSTEM
     argsman.AddArg("-blocknotify=<cmd>", "Execute command when the best block changes (%s in cmd is replaced by block hash)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #endif
@@ -1032,6 +1033,17 @@ bool AppInitParameterInteraction(const ArgsManager& args)
             return InitError(_("Prune mode is incompatible with -txospenderindex."));
         if (args.GetBoolArg("-reindex-chainstate", false)) {
             return InitError(_("Prune mode is incompatible with -reindex-chainstate. Use full -reindex instead."));
+        }
+    } else if (args.GetBoolArg("-pruneassumevalid", false)) {
+        return InitError(_("-pruneassumevalid requires pruning. Please restart with -prune."));
+    }
+
+    if (args.GetBoolArg("-pruneassumevalid", false)) {
+        const auto value{args.GetArg("-assumevalid", chainparams.GetConsensus().defaultAssumeValid.GetHex())};
+        if (const auto assumevalid{uint256::FromUserHex(value)}) {
+            if (assumevalid->IsNull()) {
+                return InitError(_("-pruneassumevalid requires a non-zero assumevalid block. Please set -assumevalid to a block hash."));
+            }
         }
     }
 
