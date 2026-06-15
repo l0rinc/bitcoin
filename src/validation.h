@@ -429,6 +429,9 @@ bool HasValidProofOfWork(std::span<const CBlockHeader> headers, const Consensus:
 /** Check if a block has been mutated (with respect to its merkle root and witness commitments). */
 bool IsBlockMutated(const CBlock& block, bool check_witness_root);
 
+/** Check if any of the block's transactions carry witness data. */
+bool BlockHasWitness(const CBlock& block);
+
 /** Return the sum of the claimed work on a given set of headers. No verification of PoW is done. */
 arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers);
 

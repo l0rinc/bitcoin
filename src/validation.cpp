@@ -2381,7 +2381,7 @@ bool ChainstateManager::ShouldRequestStrippedPruneAssumeValidBlock(const CBlockI
     return !(block.nStatus & BLOCK_HAVE_DATA) && !HasCachedPruneAssumeValidBlock(block) && CanUsePruneAssumeValid(block);
 }
 
-static bool BlockHasWitness(const CBlock& block)
+bool BlockHasWitness(const CBlock& block)
 {
     return std::ranges::any_of(block.vtx, [](const auto& tx) { return tx->HasWitness(); });
 }
