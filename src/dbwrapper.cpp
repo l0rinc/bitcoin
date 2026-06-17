@@ -113,8 +113,8 @@ public:
 
 static void SetMaxOpenFiles(leveldb::Options *options) {
     int default_open_files = options->max_open_files;
-    // Benchmark scenario: keep only LevelDB's minimum table cache open.
-    options->max_open_files = 74;
+    // Benchmark scenario: keep the table cache large enough for all SST files.
+    options->max_open_files = 4096;
     LogDebug(BCLog::LEVELDB, "LevelDB using max_open_files=%d (default=%d)\n",
              options->max_open_files, default_open_files);
 }
