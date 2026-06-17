@@ -39,8 +39,8 @@ namespace leveldb {
 
 namespace {
 
-// Benchmark scenario: do not keep non-mmap read-only files permanently open.
-int g_open_read_only_file_limit = 0;
+// Benchmark scenario: keep non-mmap read-only files permanently open.
+int g_open_read_only_file_limit = 4096;
 
 // Benchmark scenario: disable mmap-backed table files.
 constexpr const int kDefaultMmapLimit = 0;
