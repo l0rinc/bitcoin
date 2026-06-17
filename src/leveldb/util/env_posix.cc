@@ -39,11 +39,11 @@ namespace leveldb {
 
 namespace {
 
-// Benchmark scenario: keep non-mmap read-only files permanently open.
-int g_open_read_only_file_limit = 4096;
+// Set by EnvPosixTestHelper::SetReadOnlyMMapLimit() and MaxOpenFiles().
+int g_open_read_only_file_limit = -1;
 
-// Benchmark scenario: disable mmap-backed table files.
-constexpr const int kDefaultMmapLimit = 0;
+// Benchmark scenario: keep mmap slots large enough for all SST files.
+constexpr const int kDefaultMmapLimit = 4096;
 
 // Can be set using EnvPosixTestHelper::SetReadOnlyMMapLimit().
 int g_mmap_limit = kDefaultMmapLimit;

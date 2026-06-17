@@ -43,8 +43,8 @@ namespace {
 
 constexpr const size_t kWritableFileBufferSize = 65536;
 
-// Benchmark scenario: disable mmap-backed table files.
-constexpr int kDefaultMmapLimit = 0;
+// Benchmark scenario: keep mmap slots large enough for all SST files.
+constexpr int kDefaultMmapLimit = 4096;
 
 // Can be set by by EnvWindowsTestHelper::SetReadOnlyMMapLimit().
 int g_mmap_limit = kDefaultMmapLimit;
