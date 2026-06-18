@@ -211,6 +211,52 @@ TEST(EnvPosixTest, TestOpenOnRead) {
   ASSERT_OK(env_->DeleteFile(test_file));
 }
 
+// Reads from a file opened |kNumFiles| times through |env|, asserting every
+// read returns the expected byte. This exercises the limiter fallbacks
+// (mmap region -> permanent fd -> open-on-read) when |kNumFiles| exceeds the
+// configured limits.
+static void ReadThroughEnvManyTimes(Env* env, int num_files) {
+  std::string test_dir;
+  ASSERT_OK(env->GetTestDirectory(&test_dir));
+  std::string test_file = test_dir + "/modified_limits.txt";
+
+  const char kFileData[] = "abcdefghijklmnopqrstuvwxyz";
+  ASSERT_OK(WriteStringToFile(env, kFileData, test_file));
+
+  std::vector<leveldb::RandomAccessFile*> files(num_files, nullptr);
+  for (int i = 0; i < num_files; i++) {
+    ASSERT_OK(env->NewRandomAccessFile(test_file, &files[i]));
+  }
+  char scratch;
+  Slice read_result;
+  for (int i = 0; i < num_files; i++) {
+    ASSERT_OK(files[i]->Read(i, 1, &read_result, &scratch));
+    ASSERT_EQ(kFileData[i], read_result[0]);
+  }
+  for (int i = 0; i < num_files; i++) {
+    delete files[i];
+  }
+  ASSERT_OK(env->DeleteFile(test_file));
+}
+
+TEST(EnvPosixTest, TestNewEnvWithModifiedLimits) {
+  // A custom Env with its own small limits, independent of Env::Default().
+  // The result intentionally lives for the process lifetime (never deleted).
+  Env* env = NewEnvWithModifiedLimits(/*max_open_read_only_files=*/4,
+                                      /*max_mmap_regions=*/4);
+  ASSERT_TRUE(env != nullptr);
+  // Open more handles than the sum of the limits to force every fallback path.
+  ReadThroughEnvManyTimes(env, /*num_files=*/4 + 4 + 5);
+
+  // With both limits at zero, every read goes through the open-on-read path
+  // (no permanent fds, no mmap regions). Reads must still succeed.
+  Env* unlimited_fallback_env =
+      NewEnvWithModifiedLimits(/*max_open_read_only_files=*/0,
+                               /*max_mmap_regions=*/0);
+  ASSERT_TRUE(unlimited_fallback_env != nullptr);
+  ReadThroughEnvManyTimes(unlimited_fallback_env, /*num_files=*/5);
+}
+
 #if HAVE_O_CLOEXEC
 
 TEST(EnvPosixTest, TestCloseOnExecSequentialFile) {

@@ -372,6 +372,7 @@ class WindowsFileLock : public FileLock {
 class WindowsEnv : public Env {
  public:
   WindowsEnv();
+  explicit WindowsEnv(int mmap_limit);
   ~WindowsEnv() override {
     static const char msg[] =
         "WindowsEnv singleton destroyed. Unsupported behavior!\n";
@@ -733,10 +734,12 @@ class WindowsEnv : public Env {
 // Return the maximum number of concurrent mmaps.
 int MaxMmaps() { return g_mmap_limit; }
 
-WindowsEnv::WindowsEnv()
+WindowsEnv::WindowsEnv() : WindowsEnv(MaxMmaps()) {}
+
+WindowsEnv::WindowsEnv(int mmap_limit)
     : background_work_cv_(&background_work_mutex_),
       started_background_thread_(false),
-      mmap_limiter_(MaxMmaps()) {}
+      mmap_limiter_(mmap_limit) {}
 
 void WindowsEnv::Schedule(
     void (*background_work_function)(void* background_work_arg),
@@ -844,6 +847,13 @@ void EnvWindowsTestHelper::SetReadOnlyMMapLimit(int limit) {
 Env* Env::Default() {
   static WindowsDefaultEnv env_container;
   return env_container.env();
+}
+
+Env* NewEnvWithModifiedLimits(int max_open_read_only_files,
+                              int max_mmap_regions) {
+  (void)max_open_read_only_files;  // Windows has no read-only fd limiter.
+  if (max_mmap_regions < 0) max_mmap_regions = 0;
+  return new WindowsEnv(max_mmap_regions);
 }
 
 }  // namespace leveldb

@@ -309,6 +309,24 @@ LEVELDB_EXPORT Status WriteStringToFile(Env* env, const Slice& data,
 LEVELDB_EXPORT Status ReadFileToString(Env* env, const std::string& fname,
                                        std::string* data);
 
+// Returns a new Env that behaves like Env::Default() for the current platform,
+// except that the number of read-only file descriptors it keeps open is capped
+// at |max_open_read_only_files| and the number of memory-mapped regions at
+// |max_mmap_regions|. These are the Env-level limiters (distinct from
+// Options::max_open_files, which sizes a database's table cache).
+//
+// On Windows, |max_open_read_only_files| is ignored (Windows has no read-only
+// fd limiter); only |max_mmap_regions| takes effect.
+//
+// A value of 0 disables the corresponding mechanism (no permanent fds / no
+// mmap); negative values are treated as 0.
+//
+// Like Env::Default(), the result belongs to leveldb and must never be deleted;
+// it is expected to live for the duration of the process. The result must
+// outlive any DB opened with it.
+LEVELDB_EXPORT Env* NewEnvWithModifiedLimits(int max_open_read_only_files,
+                                             int max_mmap_regions);
+
 // An implementation of Env that forwards all calls to another Env.
 // May be useful to clients who wish to override just part of the
 // functionality of another Env.

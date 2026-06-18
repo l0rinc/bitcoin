@@ -503,6 +503,7 @@ class PosixLockTable {
 class PosixEnv : public Env {
  public:
   PosixEnv();
+  PosixEnv(int mmap_limit, int fd_limit);
   ~PosixEnv() override {
     static const char msg[] =
         "PosixEnv singleton destroyed. Unsupported behavior!\n";
@@ -785,11 +786,13 @@ int MaxOpenFiles() {
 
 }  // namespace
 
-PosixEnv::PosixEnv()
+PosixEnv::PosixEnv() : PosixEnv(MaxMmaps(), MaxOpenFiles()) {}
+
+PosixEnv::PosixEnv(int mmap_limit, int fd_limit)
     : background_work_cv_(&background_work_mutex_),
       started_background_thread_(false),
-      mmap_limiter_(MaxMmaps()),
-      fd_limiter_(MaxOpenFiles()) {}
+      mmap_limiter_(mmap_limit),
+      fd_limiter_(fd_limit) {}
 
 void PosixEnv::Schedule(
     void (*background_work_function)(void* background_work_arg),
@@ -904,6 +907,13 @@ void EnvPosixTestHelper::SetReadOnlyMMapLimit(int limit) {
 Env* Env::Default() {
   static PosixDefaultEnv env_container;
   return env_container.env();
+}
+
+Env* NewEnvWithModifiedLimits(int max_open_read_only_files,
+                              int max_mmap_regions) {
+  if (max_open_read_only_files < 0) max_open_read_only_files = 0;
+  if (max_mmap_regions < 0) max_mmap_regions = 0;
+  return new PosixEnv(max_mmap_regions, max_open_read_only_files);
 }
 
 }  // namespace leveldb
