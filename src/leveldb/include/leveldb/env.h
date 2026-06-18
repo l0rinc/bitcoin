@@ -324,8 +324,15 @@ LEVELDB_EXPORT Status ReadFileToString(Env* env, const std::string& fname,
 // Like Env::Default(), the result belongs to leveldb and must never be deleted;
 // it is expected to live for the duration of the process. The result must
 // outlive any DB opened with it.
+//
+// If |log_table_file_open| is true, the Env emits a debug line to stderr for
+// every random-access (table) file it opens, reporting whether the file is
+// served via mmap, a permanent file descriptor, or a per-read temporary file
+// descriptor. This is a debugging aid for the Env-level limiters above and has
+// no effect on Windows (which only distinguishes mmap from non-mmap).
 LEVELDB_EXPORT Env* NewEnvWithModifiedLimits(int max_open_read_only_files,
-                                             int max_mmap_regions);
+                                             int max_mmap_regions,
+                                             bool log_table_file_open = false);
 
 // An implementation of Env that forwards all calls to another Env.
 // May be useful to clients who wish to override just part of the

@@ -850,8 +850,9 @@ Env* Env::Default() {
 }
 
 Env* NewEnvWithModifiedLimits(int max_open_read_only_files,
-                              int max_mmap_regions) {
+                              int max_mmap_regions, bool log_table_file_open) {
   (void)max_open_read_only_files;  // Windows has no read-only fd limiter.
+  (void)log_table_file_open;       // No per-open table-file logging on Windows.
   if (max_mmap_regions < 0) max_mmap_regions = 0;
   return new WindowsEnv(max_mmap_regions);
 }

@@ -199,6 +199,10 @@ class PosixRandomAccessFile final : public RandomAccessFile {
 
   virtual std::string GetName() const override { return filename_; }
 
+  // True if a permanent file descriptor was acquired; false if the file is
+  // (re)opened on every read. Used only for debug logging.
+  bool has_permanent_fd() const { return has_permanent_fd_; }
+
  private:
   const bool has_permanent_fd_;  // If false, the file is opened on every read.
   const int fd_;                 // -1 if has_permanent_fd_ is false.
@@ -500,10 +504,19 @@ class PosixLockTable {
   std::set<std::string> locked_files_ GUARDED_BY(mu_);
 };
 
+// Debug helper used when NewEnvWithModifiedLimits(..., log_table_file_open=true).
+// Reports, on stderr, how a random-access (table) file was opened: via mmap, a
+// permanent file descriptor ("permfile"), or a per-read temporary descriptor
+// ("tempfile").
+void ReportTableFileOpen(const std::string& filename, const char* how) {
+  std::fprintf(stderr, "leveldb: random-access open via %s: %s\n", how,
+               filename.c_str());
+}
+
 class PosixEnv : public Env {
  public:
   PosixEnv();
-  PosixEnv(int mmap_limit, int fd_limit);
+  PosixEnv(int mmap_limit, int fd_limit, bool log_table_file_open = false);
   ~PosixEnv() override {
     static const char msg[] =
         "PosixEnv singleton destroyed. Unsupported behavior!\n";
@@ -532,7 +545,13 @@ class PosixEnv : public Env {
     }
 
     if (!mmap_limiter_.Acquire()) {
-      *result = new PosixRandomAccessFile(filename, fd, &fd_limiter_);
+      PosixRandomAccessFile* file =
+          new PosixRandomAccessFile(filename, fd, &fd_limiter_);
+      *result = file;
+      if (log_table_file_open_) {
+        ReportTableFileOpen(filename,
+                            file->has_permanent_fd() ? "permfile" : "tempfile");
+      }
       return Status::OK();
     }
 
@@ -545,6 +564,9 @@ class PosixEnv : public Env {
         *result = new PosixMmapReadableFile(filename,
                                             reinterpret_cast<char*>(mmap_base),
                                             file_size, &mmap_limiter_);
+        if (log_table_file_open_) {
+          ReportTableFileOpen(filename, "mmap");
+        }
       } else {
         status = PosixError(filename, errno);
       }
@@ -761,6 +783,9 @@ class PosixEnv : public Env {
   PosixLockTable locks_;  // Thread-safe.
   Limiter mmap_limiter_;  // Thread-safe.
   Limiter fd_limiter_;    // Thread-safe.
+
+  // If true, log how each random-access (table) file is opened. Debug aid.
+  const bool log_table_file_open_;
 };
 
 // Return the maximum number of concurrent mmaps.
@@ -788,11 +813,12 @@ int MaxOpenFiles() {
 
 PosixEnv::PosixEnv() : PosixEnv(MaxMmaps(), MaxOpenFiles()) {}
 
-PosixEnv::PosixEnv(int mmap_limit, int fd_limit)
+PosixEnv::PosixEnv(int mmap_limit, int fd_limit, bool log_table_file_open)
     : background_work_cv_(&background_work_mutex_),
       started_background_thread_(false),
       mmap_limiter_(mmap_limit),
-      fd_limiter_(fd_limit) {}
+      fd_limiter_(fd_limit),
+      log_table_file_open_(log_table_file_open) {}
 
 void PosixEnv::Schedule(
     void (*background_work_function)(void* background_work_arg),
@@ -910,10 +936,11 @@ Env* Env::Default() {
 }
 
 Env* NewEnvWithModifiedLimits(int max_open_read_only_files,
-                              int max_mmap_regions) {
+                              int max_mmap_regions, bool log_table_file_open) {
   if (max_open_read_only_files < 0) max_open_read_only_files = 0;
   if (max_mmap_regions < 0) max_mmap_regions = 0;
-  return new PosixEnv(max_mmap_regions, max_open_read_only_files);
+  return new PosixEnv(max_mmap_regions, max_open_read_only_files,
+                      log_table_file_open);
 }
 
 }  // namespace leveldb
