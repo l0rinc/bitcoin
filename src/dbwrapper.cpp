@@ -34,7 +34,62 @@
 #include <optional>
 #include <utility>
 
+// LevelDB resource-limits test mode, controlled by the LEVELDB_LIMITS_TEST
+// compile-time macro (e.g. -DLEVELDB_LIMITS_TEST=2). This is a debugging aid to
+// exercise the various LevelDB file-descriptor / mmap fallback paths; it is not
+// meant to be enabled in production builds.
+//
+//   0 (or undefined) : normal behavior.
+//   1 : max_open_files very low (table cache forced to spill).
+//   2 : max_open_files very high, but a shared Env (see GetLimitsTestEnv())
+//       caps both the read-only fd limiter and the mmap limiter very low.
+//   3 : max_open_files very high, read-only fd limiter very high, mmap limiter
+//       very low (forces the read-only fd fallback when mmaps run out).
+//   4 : max_open_files, read-only fd limiter and mmap limiter all very high.
+#ifndef LEVELDB_LIMITS_TEST
+#define LEVELDB_LIMITS_TEST 0
+#endif
+
+#if LEVELDB_LIMITS_TEST != 0
+//! A deliberately small limit, to trigger the corresponding LevelDB fallback.
+static constexpr int LEVELDB_LIMITS_TEST_LOW{8};
+//! A deliberately large limit, effectively disabling the corresponding limiter.
+static constexpr int LEVELDB_LIMITS_TEST_HIGH{16384};
+#endif
+
 static auto CharCast(const std::byte* data) { return reinterpret_cast<const char*>(data); }
+
+#if LEVELDB_LIMITS_TEST != 0
+//! Return a process-wide leveldb::Env (shared by all CDBWrapper databases) whose
+//! read-only fd and mmap limiters are modified according to LEVELDB_LIMITS_TEST.
+//! All test modes (including mode 1, which only constrains max_open_files) use
+//! this Env so that behavior is comparable across modes; mode 1 leaves both Env
+//! limiters high, making it identical to mode 4 except for max_open_files.
+//! The returned Env belongs to leveldb and must outlive every DB opened with it,
+//! so it is intentionally never deleted.
+static leveldb::Env* GetLimitsTestEnv()
+{
+    static leveldb::Env* const env{[] {
+#if LEVELDB_LIMITS_TEST == 1
+        int max_read_only_fds{LEVELDB_LIMITS_TEST_HIGH};
+        int max_mmaps{LEVELDB_LIMITS_TEST_HIGH};
+#elif LEVELDB_LIMITS_TEST == 2
+        int max_read_only_fds{LEVELDB_LIMITS_TEST_LOW};
+        int max_mmaps{LEVELDB_LIMITS_TEST_LOW};
+#elif LEVELDB_LIMITS_TEST == 3
+        int max_read_only_fds{LEVELDB_LIMITS_TEST_HIGH};
+        int max_mmaps{LEVELDB_LIMITS_TEST_LOW};
+#elif LEVELDB_LIMITS_TEST == 4
+        int max_read_only_fds{LEVELDB_LIMITS_TEST_HIGH};
+        int max_mmaps{LEVELDB_LIMITS_TEST_HIGH};
+#endif
+        LogInfo("LEVELDB_LIMITS_TEST=%d: using shared Env with max_read_only_fds=%d, max_mmaps=%d",
+                LEVELDB_LIMITS_TEST, max_read_only_fds, max_mmaps);
+        return leveldb::NewEnvWithModifiedLimits(max_read_only_fds, max_mmaps, false);
+    }()};
+    return env;
+}
+#endif
 
 bool DestroyDB(const std::string& path_str)
 {
@@ -131,6 +186,11 @@ static void SetMaxOpenFiles(leveldb::Options *options) {
     if (sizeof(void*) < 8) {
         options->max_open_files = 64;
     }
+#endif
+#if LEVELDB_LIMITS_TEST == 1
+    options->max_open_files = LEVELDB_LIMITS_TEST_LOW;
+#elif LEVELDB_LIMITS_TEST >= 2
+    options->max_open_files = LEVELDB_LIMITS_TEST_HIGH;
 #endif
     LogDebug(BCLog::LEVELDB, "LevelDB using max_open_files=%d (default=%d)\n",
              options->max_open_files, default_open_files);
@@ -235,6 +295,13 @@ CDBWrapper::CDBWrapper(const DBParams& params)
         DBContext().penv = leveldb::NewMemEnv(leveldb::Env::Default());
         DBContext().options.env = DBContext().penv;
     }
+#if LEVELDB_LIMITS_TEST != 0
+    else {
+        // Use the process-wide Env with modified limiters. It is not owned by
+        // this wrapper (penv stays null), so the destructor will not delete it.
+        DBContext().options.env = GetLimitsTestEnv();
+    }
+#endif
     if (!params.memory_only) {
         if (params.wipe_data) {
             LogInfo("Wiping LevelDB in %s", fs::PathToString(params.path));

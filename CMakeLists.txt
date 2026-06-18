@@ -137,6 +137,12 @@ option(WITH_CCACHE "Attempt to use ccache for compiling." ON)
 
 option(INSTALL_MAN "Install man pages." ON)
 
+set(LEVELDB_LIMITS_TEST "0" CACHE STRING "LevelDB resource-limits test mode, a debugging aid that constrains LevelDB's file-descriptor/mmap usage (0=off; 1-4 select a mode, see src/dbwrapper.cpp). Not for production builds.")
+set_property(CACHE LEVELDB_LIMITS_TEST PROPERTY STRINGS 0 1 2 3 4)
+if(NOT LEVELDB_LIMITS_TEST MATCHES "^[0-4]$")
+  message(FATAL_ERROR "LEVELDB_LIMITS_TEST must be 0, 1, 2, 3, or 4.")
+endif()
+
 set(APPEND_CPPFLAGS "" CACHE STRING "Preprocessor flags that are appended to the command line after all other flags added by the build system. This variable is intended for debugging and special builds.")
 set(APPEND_CFLAGS "" CACHE STRING "C compiler flags that are appended to the command line after all other flags added by the build system. This variable is intended for debugging and special builds.")
 set(APPEND_CXXFLAGS "" CACHE STRING "(Objective) C++ compiler flags that are appended to the command line after all other flags added by the build system. This variable is intended for debugging and special builds.")
@@ -164,6 +170,11 @@ target_link_libraries(core_interface INTERFACE
   $<$<CONFIG:RelWithDebInfo>:core_interface_relwithdebinfo>
   $<$<CONFIG:Debug>:core_interface_debug>
 )
+
+if(NOT LEVELDB_LIMITS_TEST STREQUAL "0")
+  message(WARNING "LEVELDB_LIMITS_TEST=${LEVELDB_LIMITS_TEST} is set: this is a LevelDB resource-limits debugging build, not suitable for production.")
+  target_compile_definitions(core_interface INTERFACE LEVELDB_LIMITS_TEST=${LEVELDB_LIMITS_TEST})
+endif()
 
 #=============================
 # Option interaction

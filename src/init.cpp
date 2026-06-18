@@ -108,6 +108,7 @@
 #include <any>
 #include <cerrno>
 #include <condition_variable>
+#include <limits>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -1062,10 +1063,21 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     // Reserve enough FDs to account for the bare minimum, plus any manual connections, plus the bound interfaces
     int min_required_fds = MIN_CORE_FDS + MAX_ADDNODE_CONNECTIONS + nBind;
 
+#if defined(LEVELDB_LIMITS_TEST) && LEVELDB_LIMITS_TEST != 0
+    // In LevelDB resource-limits test builds, raise the file descriptor limit as
+    // high as the OS allows (capped at the hard rlimit), so that fd exhaustion is
+    // governed by the LevelDB limiters under test rather than the process rlimit.
+    LogInfo("LEVELDB_LIMITS_TEST=%d: raising file descriptor limit as high as possible", LEVELDB_LIMITS_TEST);
+    RaiseFileDescriptorLimit(std::numeric_limits<int>::max());
+#endif
+
     // Try raising the FD limit to what we need (available_fds may be smaller than the requested amount if this fails)
     available_fds = RaiseFileDescriptorLimit(user_max_connection + max_private + min_required_fds);
-    // If we are using select instead of poll, our actual limit may be even smaller
-#ifndef USE_POLL
+    // If we are using select instead of poll, our actual limit may be even smaller.
+    // In LevelDB resource-limits test mode we skip this cap: the test modes are not
+    // intended to exercise networking, so possibly creating non-selectable sockets
+    // is acceptable, and we want as many fds available as the OS allows.
+#if !defined(USE_POLL) && (!defined(LEVELDB_LIMITS_TEST) || LEVELDB_LIMITS_TEST == 0)
     available_fds = std::min(FD_SETSIZE, available_fds);
 #endif
     if (available_fds < min_required_fds)
