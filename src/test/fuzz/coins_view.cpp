@@ -92,7 +92,8 @@ void initialize_coins_view()
 
 void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& coins_view_cache, CCoinsView* backend_coins_view)
 {
-    const bool is_db{dynamic_cast<CCoinsViewDB*>(backend_coins_view) != nullptr};
+    CCoinsViewDB* const backend_coins_db{dynamic_cast<CCoinsViewDB*>(backend_coins_view)};
+    const bool is_db{backend_coins_db != nullptr};
     bool good_data{true};
     auto* original_backend{backend_coins_view};
 
@@ -239,7 +240,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
 
     {
         if (is_db && backend_coins_view == original_backend) {
-            assert(backend_coins_view->Cursor());
+            assert(backend_coins_db->Cursor());
         }
         (void)backend_coins_view->EstimateSize();
         (void)backend_coins_view->GetBestBlock();
