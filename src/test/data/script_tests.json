@@ -2728,6 +2728,19 @@
     "TAPSCRIPT_EMPTY_PUBKEY",
     "TAPSCRIPT: OP_CHECKSIG with empty pubkey must fail"
 ],
+[
+    [
+        "aa",
+        "0051ba5187",
+        "#CONTROLBLOCK#",
+        0.00000001
+    ],
+    "",
+    "0x51 0x20 #TAPROOTOUTPUT#",
+    "P2SH,WITNESS,TAPROOT",
+    "OK",
+    "TAPSCRIPT: OP_CHECKSIGADD with unknown pubkey type treats non-empty signature as successful"
+],
 
 ["NULLFAIL should cover all signatures and signatures only"],
 ["0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0", "0x01 0x14 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0x01 0x14 CHECKMULTISIG NOT", "DERSIG", "OK", "BIP66 and NULLFAIL-compliant"],

@@ -54,6 +54,7 @@
 class Chainstate;
 class CTxMemPool;
 class ChainstateManager;
+class CScript;
 struct ChainTxData;
 class DisconnectedBlockTransactions;
 struct PrecomputedTransactionData;
@@ -1407,6 +1408,16 @@ bool IsBIP30Repeat(const CBlockIndex& block_index);
 
 /** Identifies blocks which coinbase output was subsequently overwritten in the UTXO set (see BIP30) */
 bool IsBIP30Unspendable(const uint256& block_hash, int block_height);
+
+/** Returns whether ConnectBlock must enforce BIP30 duplicate txid protection for this block. */
+bool ShouldEnforceBIP30ForBlock(const CBlockIndex& block_index, const Consensus::Params& consensus_params);
+
+/** Returns whether a coinbase script begins with the BIP34-encoded block height. */
+bool IsBIP34CoinbaseHeight(const CScript& script_sig, int height);
+
+/** Returns whether BIP94 rejects this block timestamp at the start of a difficulty period. */
+bool IsBIP94TimewarpAttack(int block_height, int64_t block_time, int64_t previous_block_time,
+                           const Consensus::Params& consensus_params);
 
 // Returns the script flags which should be checked for a given block
 script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const ChainstateManager& chainman);
