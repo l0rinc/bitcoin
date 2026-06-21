@@ -4,16 +4,16 @@
 
 #include <dbwrapper.h>
 
-#include <leveldb/cache.h>
-#include <leveldb/db.h>
-#include <leveldb/env.h>
-#include <leveldb/filter_policy.h>
-#include <leveldb/helpers/memenv/memenv.h>
-#include <leveldb/iterator.h>
-#include <leveldb/options.h>
-#include <leveldb/slice.h>
-#include <leveldb/status.h>
-#include <leveldb/write_batch.h>
+#include <rocksdb/cache.h>
+#include <rocksdb/db.h>
+#include <rocksdb/env.h>
+#include <rocksdb/filter_policy.h>
+#include <rocksdb/iterator.h>
+#include <rocksdb/options.h>
+#include <rocksdb/slice.h>
+#include <rocksdb/status.h>
+#include <rocksdb/table.h>
+#include <rocksdb/write_batch.h>
 #include <random.h>
 #include <serialize.h>
 #include <span.h>
@@ -32,32 +32,35 @@
 #include <cstdio>
 #include <memory>
 #include <optional>
+#include <sstream>
+#include <string_view>
 #include <utility>
 
 static auto CharCast(const std::byte* data) { return reinterpret_cast<const char*>(data); }
+static std::span<const std::byte> ToByteSpan(const rocksdb::Slice& slice) { return std::as_bytes(std::span{slice.data(), slice.size()}); }
 
 bool DestroyDB(const std::string& path_str)
 {
-    return leveldb::DestroyDB(path_str, {}).ok();
+    return rocksdb::DestroyDB(path_str, {}).ok();
 }
 
 /** Handle database error by throwing dbwrapper_error exception.
  */
-static void HandleError(const leveldb::Status& status)
+static void HandleError(const rocksdb::Status& status)
 {
     if (status.ok())
         return;
-    const std::string errmsg = "Fatal LevelDB error: " + status.ToString();
+    const std::string errmsg = "Fatal RocksDB error: " + status.ToString();
     LogError("%s", errmsg);
     LogInfo("You can use -debug=leveldb to get more complete diagnostic messages");
     throw dbwrapper_error(errmsg);
 }
 
-class CBitcoinLevelDBLogger : public leveldb::Logger {
+class CBitcoinRocksDBLogger : public rocksdb::Logger {
 public:
     // This code is adapted from posix_logger.h, which is why it is using vsprintf.
     // Please do not do this in normal code
-    void Logv(const char * format, va_list ap) override {
+    void Logv(const rocksdb::InfoLogLevel, const char* format, va_list ap) override {
             if (!util::log::ShouldDebugLog(BCLog::LEVELDB)) {
                 return;
             }
@@ -111,7 +114,7 @@ public:
     }
 };
 
-static void SetMaxOpenFiles(leveldb::Options *options) {
+static void SetMaxOpenFiles(rocksdb::Options* options) {
     // On most platforms the default setting of max_open_files (which is 1000)
     // is optimal. On Windows using a large file count is OK because the handles
     // do not interfere with select() loops. On 64-bit Unix hosts this value is
@@ -132,29 +135,30 @@ static void SetMaxOpenFiles(leveldb::Options *options) {
         options->max_open_files = 64;
     }
 #endif
-    LogDebug(BCLog::LEVELDB, "LevelDB using max_open_files=%d (default=%d)\n",
+    LogDebug(BCLog::LEVELDB, "RocksDB using max_open_files=%d (default=%d)\n",
              options->max_open_files, default_open_files);
 }
 
-static leveldb::Options GetOptions(size_t nCacheSize)
+static rocksdb::Options GetOptions(size_t nCacheSize)
 {
-    leveldb::Options options;
-    options.block_cache = leveldb::NewLRUCache(nCacheSize / 2);
+    rocksdb::Options options;
     options.write_buffer_size = nCacheSize / 4; // up to two write buffers may be held in memory simultaneously
-    options.filter_policy = leveldb::NewBloomFilterPolicy(10);
-    options.compression = leveldb::kNoCompression;
-    options.info_log = new CBitcoinLevelDBLogger();
-    if (leveldb::kMajorVersion > 1 || (leveldb::kMajorVersion == 1 && leveldb::kMinorVersion >= 16)) {
-        // LevelDB versions before 1.16 consider short writes to be corruption. Only trigger error
-        // on corruption in later versions.
-        options.paranoid_checks = true;
-    }
+    options.compression = rocksdb::kNoCompression;
+    options.info_log = std::make_shared<CBitcoinRocksDBLogger>();
+    options.paranoid_checks = true;
+    options.target_file_size_base = DBWRAPPER_MAX_FILE_SIZE;
+
+    rocksdb::BlockBasedTableOptions table_options;
+    table_options.block_cache = rocksdb::NewLRUCache(nCacheSize / 2);
+    table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(10));
+    options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
+
     SetMaxOpenFiles(&options);
     return options;
 }
 
 struct CDBBatch::WriteBatchImpl {
-    leveldb::WriteBatch batch;
+    rocksdb::WriteBatch batch;
 };
 
 CDBBatch::CDBBatch(const CDBWrapper& _parent)
@@ -177,48 +181,48 @@ void CDBBatch::Clear()
 
 void CDBBatch::WriteImpl(std::span<const std::byte> key, DataStream& value)
 {
-    leveldb::Slice slKey(CharCast(key.data()), key.size());
+    rocksdb::Slice slKey(CharCast(key.data()), key.size());
     dbwrapper_private::GetObfuscation(parent)(value);
-    leveldb::Slice slValue(CharCast(value.data()), value.size());
+    rocksdb::Slice slValue(CharCast(value.data()), value.size());
     m_impl_batch->batch.Put(slKey, slValue);
 }
 
 void CDBBatch::EraseImpl(std::span<const std::byte> key)
 {
-    leveldb::Slice slKey(CharCast(key.data()), key.size());
+    rocksdb::Slice slKey(CharCast(key.data()), key.size());
     m_impl_batch->batch.Delete(slKey);
 }
 
 size_t CDBBatch::ApproximateSize() const
 {
-    return m_impl_batch->batch.ApproximateSize();
+    return m_impl_batch->batch.GetDataSize();
 }
 
-struct LevelDBContext {
+struct RocksDBContext {
     //! custom environment this database is using (may be nullptr in case of default environment)
-    leveldb::Env* penv;
+    rocksdb::Env* penv;
 
     //! database options used
-    leveldb::Options options;
+    rocksdb::Options options;
 
     //! options used when reading from the database
-    leveldb::ReadOptions readoptions;
+    rocksdb::ReadOptions readoptions;
 
     //! options used when iterating over values of the database
-    leveldb::ReadOptions iteroptions;
+    rocksdb::ReadOptions iteroptions;
 
     //! options used when writing to the database
-    leveldb::WriteOptions writeoptions;
+    rocksdb::WriteOptions writeoptions;
 
     //! options used when sync writing to the database
-    leveldb::WriteOptions syncoptions;
+    rocksdb::WriteOptions syncoptions;
 
     //! the database itself
-    leveldb::DB* pdb;
+    std::unique_ptr<rocksdb::DB> pdb;
 };
 
 CDBWrapper::CDBWrapper(const DBParams& params)
-    : m_db_context{std::make_unique<LevelDBContext>()}, m_name{fs::PathToString(params.path.stem())}
+    : m_db_context{std::make_unique<RocksDBContext>()}, m_name{fs::PathToString(params.path.stem())}
 {
     DBContext().penv = nullptr;
     DBContext().readoptions.verify_checksums = true;
@@ -227,36 +231,33 @@ CDBWrapper::CDBWrapper(const DBParams& params)
     DBContext().syncoptions.sync = true;
     DBContext().options = GetOptions(params.cache_bytes);
     DBContext().options.create_if_missing = true;
-    DBContext().options.max_file_size = params.max_file_size;
+    DBContext().options.target_file_size_base = params.max_file_size;
     assert(!(params.testing_env && params.memory_only));
     if (params.testing_env) {
         DBContext().options.env = params.testing_env;
     } else if (params.memory_only) {
-        DBContext().penv = leveldb::NewMemEnv(leveldb::Env::Default());
+        DBContext().penv = rocksdb::NewMemEnv(rocksdb::Env::Default());
         DBContext().options.env = DBContext().penv;
     }
     if (!params.memory_only) {
-        if (params.wipe_data) {
-            LogInfo("Wiping LevelDB in %s", fs::PathToString(params.path));
-            leveldb::Status result = leveldb::DestroyDB(fs::PathToString(params.path), DBContext().options);
-            HandleError(result);
-        }
         if (!params.testing_env) {
             TryCreateDirectories(params.path);
         }
-        LogInfo("Opening LevelDB in %s", fs::PathToString(params.path));
+        if (params.wipe_data) {
+            LogInfo("Wiping RocksDB in %s", fs::PathToString(params.path));
+            rocksdb::Status result = rocksdb::DestroyDB(fs::PathToString(params.path), DBContext().options);
+            HandleError(result);
+            TryCreateDirectories(params.path);
+        }
+        LogInfo("Opening RocksDB in %s", fs::PathToString(params.path));
     }
-    // PathToString() return value is safe to pass to leveldb open function,
-    // because on POSIX leveldb passes the byte string directly to ::open(), and
-    // on Windows it converts from UTF-8 to UTF-16 before calling ::CreateFileW
-    // (see env_posix.cc and env_windows.cc).
-    leveldb::Status status = leveldb::DB::Open(DBContext().options, fs::PathToString(params.path), &DBContext().pdb);
+    rocksdb::Status status = rocksdb::DB::Open(DBContext().options, fs::PathToString(params.path), &DBContext().pdb);
     HandleError(status);
-    LogInfo("Opened LevelDB successfully");
+    LogInfo("Opened RocksDB successfully");
 
     if (params.options.force_compact) {
         LogInfo("Starting database compaction of %s", fs::PathToString(params.path));
-        DBContext().pdb->CompactRange(nullptr, nullptr);
+        CompactFull();
         LogInfo("Finished database compaction of %s", fs::PathToString(params.path));
     }
 
@@ -273,14 +274,7 @@ CDBWrapper::CDBWrapper(const DBParams& params)
 
 CDBWrapper::~CDBWrapper()
 {
-    delete DBContext().pdb;
-    DBContext().pdb = nullptr;
-    delete DBContext().options.filter_policy;
-    DBContext().options.filter_policy = nullptr;
-    delete DBContext().options.info_log;
-    DBContext().options.info_log = nullptr;
-    delete DBContext().options.block_cache;
-    DBContext().options.block_cache = nullptr;
+    DBContext().pdb.reset();
     delete DBContext().penv;
     DBContext().options.env = nullptr;
 }
@@ -292,7 +286,7 @@ void CDBWrapper::WriteBatch(CDBBatch& batch, bool fSync)
     if (log_memory) {
         mem_before = DynamicMemoryUsage() / double(1_MiB);
     }
-    leveldb::Status status = DBContext().pdb->Write(fSync ? DBContext().syncoptions : DBContext().writeoptions, &batch.m_impl_batch->batch);
+    rocksdb::Status status = DBContext().pdb->Write(fSync ? DBContext().syncoptions : DBContext().writeoptions, &batch.m_impl_batch->batch);
     HandleError(status);
     if (log_memory) {
         double mem_after{DynamicMemoryUsage() / double(1_MiB)};
@@ -301,11 +295,51 @@ void CDBWrapper::WriteBatch(CDBBatch& batch, bool fSync)
     }
 }
 
+std::optional<std::string> CDBWrapper::GetProperty(const std::string& property) const
+{
+    constexpr std::string_view leveldb_prefix{"leveldb."};
+    constexpr std::string_view rocksdb_prefix{"rocksdb."};
+    std::string property_name{property};
+    if (property == "leveldb.approximate-memory-usage") {
+        property_name = rocksdb::DB::Properties::kCurSizeAllMemTables;
+    } else if (property == "leveldb.stats") {
+        property_name = "rocksdb.levelstats";
+    } else if (property_name.starts_with(leveldb_prefix)) {
+        property_name.replace(0, leveldb_prefix.size(), rocksdb_prefix.data(), rocksdb_prefix.size());
+    }
+
+    if (std::string value; DBContext().pdb->GetProperty(property_name, &value)) {
+        if (property == "leveldb.stats") {
+            std::ostringstream stats;
+            std::istringstream stream{value};
+            for (std::string line; std::getline(stream, line);) {
+                std::istringstream line_stream{line};
+                int level;
+                int files;
+                double size_mib;
+                if (line_stream >> level >> files >> size_mib) {
+                    stats << level << ' ' << files << ' ' << size_mib << " 0 0 0\n";
+                }
+            }
+            return stats.str();
+        }
+        return value;
+    }
+    return std::nullopt;
+}
+
+void CDBWrapper::CompactFull()
+{
+    rocksdb::FlushOptions flush_options;
+    flush_options.wait = true;
+    HandleError(DBContext().pdb->Flush(flush_options));
+    HandleError(DBContext().pdb->CompactRange(rocksdb::CompactRangeOptions{}, nullptr, nullptr));
+}
+
 size_t CDBWrapper::DynamicMemoryUsage() const
 {
-    std::string memory;
     std::optional<size_t> parsed;
-    if (!DBContext().pdb->GetProperty("leveldb.approximate-memory-usage", &memory) || !(parsed = ToIntegral<size_t>(memory))) {
+    if (auto memory{GetProperty("leveldb.approximate-memory-usage")}; !memory || !(parsed = ToIntegral<size_t>(*memory))) {
         LogDebug(BCLog::LEVELDB, "Failed to get approximate-memory-usage property\n");
         return 0;
     }
@@ -314,13 +348,13 @@ size_t CDBWrapper::DynamicMemoryUsage() const
 
 std::optional<std::string> CDBWrapper::ReadImpl(std::span<const std::byte> key) const
 {
-    leveldb::Slice slKey(CharCast(key.data()), key.size());
+    rocksdb::Slice slKey(CharCast(key.data()), key.size());
     std::string strValue;
-    leveldb::Status status = DBContext().pdb->Get(DBContext().readoptions, slKey, &strValue);
+    rocksdb::Status status = DBContext().pdb->Get(DBContext().readoptions, slKey, &strValue);
     if (!status.ok()) {
         if (status.IsNotFound())
             return std::nullopt;
-        LogError("LevelDB read failure: %s", status.ToString());
+        LogError("RocksDB read failure: %s", status.ToString());
         HandleError(status);
     }
     return strValue;
@@ -328,14 +362,14 @@ std::optional<std::string> CDBWrapper::ReadImpl(std::span<const std::byte> key) 
 
 bool CDBWrapper::ExistsImpl(std::span<const std::byte> key) const
 {
-    leveldb::Slice slKey(CharCast(key.data()), key.size());
+    rocksdb::Slice slKey(CharCast(key.data()), key.size());
 
     std::string strValue;
-    leveldb::Status status = DBContext().pdb->Get(DBContext().readoptions, slKey, &strValue);
+    rocksdb::Status status = DBContext().pdb->Get(DBContext().readoptions, slKey, &strValue);
     if (!status.ok()) {
         if (status.IsNotFound())
             return false;
-        LogError("LevelDB read failure: %s", status.ToString());
+        LogError("RocksDB read failure: %s", status.ToString());
         HandleError(status);
     }
     return true;
@@ -343,10 +377,10 @@ bool CDBWrapper::ExistsImpl(std::span<const std::byte> key) const
 
 size_t CDBWrapper::EstimateSizeImpl(std::span<const std::byte> key1, std::span<const std::byte> key2) const
 {
-    leveldb::Slice slKey1(CharCast(key1.data()), key1.size());
-    leveldb::Slice slKey2(CharCast(key2.data()), key2.size());
+    rocksdb::Slice slKey1(CharCast(key1.data()), key1.size());
+    rocksdb::Slice slKey2(CharCast(key2.data()), key2.size());
     uint64_t size = 0;
-    leveldb::Range range(slKey1, slKey2);
+    rocksdb::Range range(slKey1, slKey2);
     DBContext().pdb->GetApproximateSizes(&range, 1, &size);
     return size;
 }
@@ -359,9 +393,9 @@ bool CDBWrapper::IsEmpty()
 }
 
 struct CDBIterator::IteratorImpl {
-    const std::unique_ptr<leveldb::Iterator> iter;
+    const std::unique_ptr<rocksdb::Iterator> iter;
 
-    explicit IteratorImpl(leveldb::Iterator* _iter) : iter{_iter} {}
+    explicit IteratorImpl(rocksdb::Iterator* _iter) : iter{_iter} {}
 };
 
 CDBIterator::CDBIterator(const CDBWrapper& _parent, std::unique_ptr<IteratorImpl> _piter) : parent(_parent),
@@ -377,7 +411,7 @@ CDBIterator* CDBWrapper::NewIterator()
 
 void CDBIterator::SeekImpl(std::span<const std::byte> key)
 {
-    leveldb::Slice slKey(CharCast(key.data()), key.size());
+    rocksdb::Slice slKey(CharCast(key.data()), key.size());
     m_impl_iter->iter->Seek(slKey);
 }
 
@@ -385,12 +419,12 @@ std::span<const std::byte> CDBIterator::GetKeyImpl() const
 {
     // The returned span borrows from the current iterator entry and is only
     // valid until the iterator is advanced.
-    return MakeByteSpan(m_impl_iter->iter->key());
+    return ToByteSpan(m_impl_iter->iter->key());
 }
 
 std::span<const std::byte> CDBIterator::GetValueImpl() const
 {
-    return MakeByteSpan(m_impl_iter->iter->value());
+    return ToByteSpan(m_impl_iter->iter->value());
 }
 
 CDBIterator::~CDBIterator() = default;

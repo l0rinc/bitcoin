@@ -66,6 +66,7 @@
 #include <validationinterface.h>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <chrono>
 #include <deque>
@@ -73,6 +74,7 @@
 #include <optional>
 #include <ranges>
 #include <span>
+#include <sstream>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -112,6 +114,53 @@ const std::vector<std::string> CHECKLEVEL_DOC {
  *  noticeably interfere with the pruning mechanism.
  * */
 static constexpr int PRUNE_LOCK_BUFFER{10};
+
+static std::optional<std::array<uint64_t, 7>> LevelDBLevelSizes(CCoinsViewDB& coins_db)
+{
+    const auto stats{coins_db.GetDBProperty("leveldb.stats")};
+    if (!stats) return std::nullopt;
+
+    bool found{false};
+    std::array<uint64_t, 7> level_sizes{};
+    std::istringstream stream{*stats};
+    for (std::string line; std::getline(stream, line);) {
+        std::istringstream line_stream{line};
+        int level;
+        int files;
+        double size_mib;
+        if (line_stream >> level >> files >> size_mib && level >= 0 && static_cast<size_t>(level) < level_sizes.size()) {
+            level_sizes[level] = static_cast<uint64_t>(size_mib * 1_MiB);
+            found = true;
+        }
+    }
+    if (!found) return std::nullopt;
+    return level_sizes;
+}
+
+static bool ShouldCompactChainstateDuringIBD(CCoinsViewDB& coins_db)
+{
+    // L4's LevelDB size target is 10,000 MiB. Once L5 exists, CompactRange()
+    // can compact L4 into L5 and avoid leaving the migration to ordinary
+    // background size compactions.
+    static constexpr uint64_t level4_migration_threshold{8_GiB};
+    static constexpr uint64_t level5_started_threshold{1_MiB};
+    static constexpr uint64_t level5_small_threshold{1_GiB};
+
+    const auto level_sizes{LevelDBLevelSizes(coins_db)};
+    return level_sizes &&
+           (*level_sizes)[4] >= level4_migration_threshold &&
+           (*level_sizes)[5] >= level5_started_threshold &&
+           (*level_sizes)[5] <= level5_small_threshold;
+}
+
+// Return whether the completed full flush should compact chainstate
+static bool ShouldCompactChainstate(int height, bool in_ibd, CCoinsViewDB& coins_db)
+{
+    return false;
+    // static constexpr uint32_t flush_ratio{10}; // TEMP: compress the production 1/320 cadence for local measurements.
+    // if (in_ibd && ShouldCompactChainstateDuringIBD(coins_db)) return true; // TODO we don't care about this for now
+    // return FastRandomContext().randrange(flush_ratio) == 0;
+}
 
 TRACEPOINT_SEMAPHORE(validation, block_connected);
 TRACEPOINT_SEMAPHORE(utxocache, flush);
@@ -1852,11 +1901,15 @@ CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
     : m_dbview{std::move(db_params), std::move(options)},
       m_catcherview(&m_dbview) {}
 
-void CoinsViews::InitCache()
+void CoinsViews::InitCache(int32_t prevoutfetch_threads)
 {
     AssertLockHeld(::cs_main);
     m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview);
-    m_connect_block_view = std::make_unique<CoinsViewOverlay>(&*m_cacheview);
+    auto thread_pool{std::make_shared<ThreadPool>("prevoutfetch")};
+    if (prevoutfetch_threads > 0) {
+        thread_pool->Start(std::min(prevoutfetch_threads, MAX_PREVOUTFETCH_THREADS));
+    }
+    m_connect_block_view = std::make_unique<CoinsViewOverlay>(&*m_cacheview, std::move(thread_pool));
 }
 
 Chainstate::Chainstate(
@@ -1932,7 +1985,7 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
     AssertLockHeld(::cs_main);
     assert(m_coins_views != nullptr);
     m_coinstip_cache_size_bytes = cache_size_bytes;
-    m_coins_views->InitCache();
+    m_coins_views->InitCache(m_chainman.m_options.prevoutfetch_threads_num);
 }
 
 // Lock-free: depends on `m_cached_is_ibd`, which is latched by `UpdateIBDStatus()`.
@@ -2825,9 +2878,19 @@ bool Chainstate::FlushStateToDisk(
             m_next_write = FastRandomContext().rand_uniform_delay(NodeClock::now() + DATABASE_WRITE_INTERVAL_MIN, range);
         }
     }
-    if (full_flush_completed && m_chainman.m_options.signals) {
-        // Update best block in wallet (so we can detect restored wallets).
-        m_chainman.m_options.signals->ChainStateFlushed(this->GetRole(), GetLocator(m_chain.Tip()));
+    if (full_flush_completed) {
+        if (m_chainman.m_options.signals) {
+            // Update best block in wallet (so we can detect restored wallets).
+            m_chainman.m_options.signals->ChainStateFlushed(this->GetRole(), GetLocator(m_chain.Tip()));
+        }
+
+        if (!m_chainman.m_interrupt && ShouldCompactChainstate(m_chain.Height(), m_chainman.IsInitialBlockDownload(), CoinsDB())) {
+            try {
+                CoinsDB().CompactFull(m_chain.Height(), m_chainman.IsInitialBlockDownload());
+            } catch (const std::exception& e) {
+                LogWarning("Failed to start chainstate compaction (%s)", e.what());
+            }
+        }
     }
     } catch (const std::runtime_error& e) {
         return FatalError(m_chainman.GetNotifications(), state, strprintf(_("System error while flushing: %s"), e.what()));
@@ -3029,8 +3092,8 @@ bool Chainstate::ConnectTip(
     LogDebug(BCLog::BENCH, "  - Load block from disk: %.2fms\n",
              Ticks<MillisecondsDouble>(time_2 - time_1));
     {
-        CCoinsViewCache& view{*m_coins_views->m_connect_block_view};
-        const auto reset_guard{view.CreateResetGuard()};
+        CoinsViewOverlay& view{*m_coins_views->m_connect_block_view};
+        const auto reset_guard{view.StartFetching(*block_to_connect)};
         bool rv = ConnectBlock(*block_to_connect, state, pindexNew, view);
         if (m_chainman.m_options.signals) {
             m_chainman.m_options.signals->BlockChecked(block_to_connect, state);

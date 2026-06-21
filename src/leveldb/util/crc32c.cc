@@ -1,23 +1,70 @@
+//  Copyright (c) 2011-present, Facebook, Inc.  All rights reserved.
+//  This source code is licensed under both the GPLv2 (found in the
+//  COPYING file in the root directory) and Apache 2.0 License
+//  (found in the LICENSE.Apache file in the root directory).
+//
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 //
-// A portable implementation of crc32c.
-
+// A portable implementation of crc32c, optimized to handle
+// four bytes at a time.
 #include "util/crc32c.h"
 
-#include <stddef.h>
-#include <stdint.h>
+#include <array>
+#include <cstdint>
+#include <utility>
 
-#include "port/port.h"
+#include "port/lang.h"
 #include "util/coding.h"
+#include "util/crc32c_arm64.h"
+#include "util/math.h"
 
-namespace leveldb {
-namespace crc32c {
+#ifdef __powerpc64__
+#include "util/crc32c_ppc.h"
+#include "util/crc32c_ppc_constants.h"
 
-namespace {
+#if __linux__
+#ifdef ROCKSDB_AUXV_GETAUXVAL_PRESENT
+#include <sys/auxv.h>
+#endif
 
-const uint32_t kByteExtensionTable[256] = {
+#ifndef PPC_FEATURE2_VEC_CRYPTO
+#define PPC_FEATURE2_VEC_CRYPTO 0x02000000
+#endif
+
+#ifndef AT_HWCAP2
+#define AT_HWCAP2 26
+#endif
+
+#elif __FreeBSD__
+#include <machine/cpu.h>
+#include <sys/auxv.h>
+#include <sys/elf_common.h>
+#endif /* __linux__ */
+
+#endif
+
+ASSERT_FEATURE_COMPAT_HEADER();
+
+#ifdef __SSE4_2__
+#include <nmmintrin.h>
+#include <wmmintrin.h>
+#endif
+
+#if defined(HAVE_ARM64_CRC)
+bool pmull_runtime_flag = false;
+#endif
+
+namespace ROCKSDB_NAMESPACE::crc32c {
+
+#if defined(HAVE_POWER8) && defined(HAS_ALTIVEC)
+#ifdef __powerpc64__
+static int arch_ppc_crc32 = 0;
+#endif /* __powerpc64__ */
+#endif
+
+static const uint32_t table0_[256] = {
     0x00000000, 0xf26b8303, 0xe13b70f7, 0x1350f3f4, 0xc79a971f, 0x35f1141c,
     0x26a1e7e8, 0xd4ca64eb, 0x8ad958cf, 0x78b2dbcc, 0x6be22838, 0x9989ab3b,
     0x4d43cfd0, 0xbf284cd3, 0xac78bf27, 0x5e133c24, 0x105ec76f, 0xe235446c,
@@ -61,320 +108,1188 @@ const uint32_t kByteExtensionTable[256] = {
     0xf36e6f75, 0x0105ec76, 0x12551f82, 0xe03e9c81, 0x34f4f86a, 0xc69f7b69,
     0xd5cf889d, 0x27a40b9e, 0x79b737ba, 0x8bdcb4b9, 0x988c474d, 0x6ae7c44e,
     0xbe2da0a5, 0x4c4623a6, 0x5f16d052, 0xad7d5351};
+#ifndef __SSE4_2__
+static const uint32_t table1_[256] = {
+    0x00000000, 0x13a29877, 0x274530ee, 0x34e7a899, 0x4e8a61dc, 0x5d28f9ab,
+    0x69cf5132, 0x7a6dc945, 0x9d14c3b8, 0x8eb65bcf, 0xba51f356, 0xa9f36b21,
+    0xd39ea264, 0xc03c3a13, 0xf4db928a, 0xe7790afd, 0x3fc5f181, 0x2c6769f6,
+    0x1880c16f, 0x0b225918, 0x714f905d, 0x62ed082a, 0x560aa0b3, 0x45a838c4,
+    0xa2d13239, 0xb173aa4e, 0x859402d7, 0x96369aa0, 0xec5b53e5, 0xfff9cb92,
+    0xcb1e630b, 0xd8bcfb7c, 0x7f8be302, 0x6c297b75, 0x58ced3ec, 0x4b6c4b9b,
+    0x310182de, 0x22a31aa9, 0x1644b230, 0x05e62a47, 0xe29f20ba, 0xf13db8cd,
+    0xc5da1054, 0xd6788823, 0xac154166, 0xbfb7d911, 0x8b507188, 0x98f2e9ff,
+    0x404e1283, 0x53ec8af4, 0x670b226d, 0x74a9ba1a, 0x0ec4735f, 0x1d66eb28,
+    0x298143b1, 0x3a23dbc6, 0xdd5ad13b, 0xcef8494c, 0xfa1fe1d5, 0xe9bd79a2,
+    0x93d0b0e7, 0x80722890, 0xb4958009, 0xa737187e, 0xff17c604, 0xecb55e73,
+    0xd852f6ea, 0xcbf06e9d, 0xb19da7d8, 0xa23f3faf, 0x96d89736, 0x857a0f41,
+    0x620305bc, 0x71a19dcb, 0x45463552, 0x56e4ad25, 0x2c896460, 0x3f2bfc17,
+    0x0bcc548e, 0x186eccf9, 0xc0d23785, 0xd370aff2, 0xe797076b, 0xf4359f1c,
+    0x8e585659, 0x9dface2e, 0xa91d66b7, 0xbabffec0, 0x5dc6f43d, 0x4e646c4a,
+    0x7a83c4d3, 0x69215ca4, 0x134c95e1, 0x00ee0d96, 0x3409a50f, 0x27ab3d78,
+    0x809c2506, 0x933ebd71, 0xa7d915e8, 0xb47b8d9f, 0xce1644da, 0xddb4dcad,
+    0xe9537434, 0xfaf1ec43, 0x1d88e6be, 0x0e2a7ec9, 0x3acdd650, 0x296f4e27,
+    0x53028762, 0x40a01f15, 0x7447b78c, 0x67e52ffb, 0xbf59d487, 0xacfb4cf0,
+    0x981ce469, 0x8bbe7c1e, 0xf1d3b55b, 0xe2712d2c, 0xd69685b5, 0xc5341dc2,
+    0x224d173f, 0x31ef8f48, 0x050827d1, 0x16aabfa6, 0x6cc776e3, 0x7f65ee94,
+    0x4b82460d, 0x5820de7a, 0xfbc3faf9, 0xe861628e, 0xdc86ca17, 0xcf245260,
+    0xb5499b25, 0xa6eb0352, 0x920cabcb, 0x81ae33bc, 0x66d73941, 0x7575a136,
+    0x419209af, 0x523091d8, 0x285d589d, 0x3bffc0ea, 0x0f186873, 0x1cbaf004,
+    0xc4060b78, 0xd7a4930f, 0xe3433b96, 0xf0e1a3e1, 0x8a8c6aa4, 0x992ef2d3,
+    0xadc95a4a, 0xbe6bc23d, 0x5912c8c0, 0x4ab050b7, 0x7e57f82e, 0x6df56059,
+    0x1798a91c, 0x043a316b, 0x30dd99f2, 0x237f0185, 0x844819fb, 0x97ea818c,
+    0xa30d2915, 0xb0afb162, 0xcac27827, 0xd960e050, 0xed8748c9, 0xfe25d0be,
+    0x195cda43, 0x0afe4234, 0x3e19eaad, 0x2dbb72da, 0x57d6bb9f, 0x447423e8,
+    0x70938b71, 0x63311306, 0xbb8de87a, 0xa82f700d, 0x9cc8d894, 0x8f6a40e3,
+    0xf50789a6, 0xe6a511d1, 0xd242b948, 0xc1e0213f, 0x26992bc2, 0x353bb3b5,
+    0x01dc1b2c, 0x127e835b, 0x68134a1e, 0x7bb1d269, 0x4f567af0, 0x5cf4e287,
+    0x04d43cfd, 0x1776a48a, 0x23910c13, 0x30339464, 0x4a5e5d21, 0x59fcc556,
+    0x6d1b6dcf, 0x7eb9f5b8, 0x99c0ff45, 0x8a626732, 0xbe85cfab, 0xad2757dc,
+    0xd74a9e99, 0xc4e806ee, 0xf00fae77, 0xe3ad3600, 0x3b11cd7c, 0x28b3550b,
+    0x1c54fd92, 0x0ff665e5, 0x759baca0, 0x663934d7, 0x52de9c4e, 0x417c0439,
+    0xa6050ec4, 0xb5a796b3, 0x81403e2a, 0x92e2a65d, 0xe88f6f18, 0xfb2df76f,
+    0xcfca5ff6, 0xdc68c781, 0x7b5fdfff, 0x68fd4788, 0x5c1aef11, 0x4fb87766,
+    0x35d5be23, 0x26772654, 0x12908ecd, 0x013216ba, 0xe64b1c47, 0xf5e98430,
+    0xc10e2ca9, 0xd2acb4de, 0xa8c17d9b, 0xbb63e5ec, 0x8f844d75, 0x9c26d502,
+    0x449a2e7e, 0x5738b609, 0x63df1e90, 0x707d86e7, 0x0a104fa2, 0x19b2d7d5,
+    0x2d557f4c, 0x3ef7e73b, 0xd98eedc6, 0xca2c75b1, 0xfecbdd28, 0xed69455f,
+    0x97048c1a, 0x84a6146d, 0xb041bcf4, 0xa3e32483};
+static const uint32_t table2_[256] = {
+    0x00000000, 0xa541927e, 0x4f6f520d, 0xea2ec073, 0x9edea41a, 0x3b9f3664,
+    0xd1b1f617, 0x74f06469, 0x38513ec5, 0x9d10acbb, 0x773e6cc8, 0xd27ffeb6,
+    0xa68f9adf, 0x03ce08a1, 0xe9e0c8d2, 0x4ca15aac, 0x70a27d8a, 0xd5e3eff4,
+    0x3fcd2f87, 0x9a8cbdf9, 0xee7cd990, 0x4b3d4bee, 0xa1138b9d, 0x045219e3,
+    0x48f3434f, 0xedb2d131, 0x079c1142, 0xa2dd833c, 0xd62de755, 0x736c752b,
+    0x9942b558, 0x3c032726, 0xe144fb14, 0x4405696a, 0xae2ba919, 0x0b6a3b67,
+    0x7f9a5f0e, 0xdadbcd70, 0x30f50d03, 0x95b49f7d, 0xd915c5d1, 0x7c5457af,
+    0x967a97dc, 0x333b05a2, 0x47cb61cb, 0xe28af3b5, 0x08a433c6, 0xade5a1b8,
+    0x91e6869e, 0x34a714e0, 0xde89d493, 0x7bc846ed, 0x0f382284, 0xaa79b0fa,
+    0x40577089, 0xe516e2f7, 0xa9b7b85b, 0x0cf62a25, 0xe6d8ea56, 0x43997828,
+    0x37691c41, 0x92288e3f, 0x78064e4c, 0xdd47dc32, 0xc76580d9, 0x622412a7,
+    0x880ad2d4, 0x2d4b40aa, 0x59bb24c3, 0xfcfab6bd, 0x16d476ce, 0xb395e4b0,
+    0xff34be1c, 0x5a752c62, 0xb05bec11, 0x151a7e6f, 0x61ea1a06, 0xc4ab8878,
+    0x2e85480b, 0x8bc4da75, 0xb7c7fd53, 0x12866f2d, 0xf8a8af5e, 0x5de93d20,
+    0x29195949, 0x8c58cb37, 0x66760b44, 0xc337993a, 0x8f96c396, 0x2ad751e8,
+    0xc0f9919b, 0x65b803e5, 0x1148678c, 0xb409f5f2, 0x5e273581, 0xfb66a7ff,
+    0x26217bcd, 0x8360e9b3, 0x694e29c0, 0xcc0fbbbe, 0xb8ffdfd7, 0x1dbe4da9,
+    0xf7908dda, 0x52d11fa4, 0x1e704508, 0xbb31d776, 0x511f1705, 0xf45e857b,
+    0x80aee112, 0x25ef736c, 0xcfc1b31f, 0x6a802161, 0x56830647, 0xf3c29439,
+    0x19ec544a, 0xbcadc634, 0xc85da25d, 0x6d1c3023, 0x8732f050, 0x2273622e,
+    0x6ed23882, 0xcb93aafc, 0x21bd6a8f, 0x84fcf8f1, 0xf00c9c98, 0x554d0ee6,
+    0xbf63ce95, 0x1a225ceb, 0x8b277743, 0x2e66e53d, 0xc448254e, 0x6109b730,
+    0x15f9d359, 0xb0b84127, 0x5a968154, 0xffd7132a, 0xb3764986, 0x1637dbf8,
+    0xfc191b8b, 0x595889f5, 0x2da8ed9c, 0x88e97fe2, 0x62c7bf91, 0xc7862def,
+    0xfb850ac9, 0x5ec498b7, 0xb4ea58c4, 0x11abcaba, 0x655baed3, 0xc01a3cad,
+    0x2a34fcde, 0x8f756ea0, 0xc3d4340c, 0x6695a672, 0x8cbb6601, 0x29faf47f,
+    0x5d0a9016, 0xf84b0268, 0x1265c21b, 0xb7245065, 0x6a638c57, 0xcf221e29,
+    0x250cde5a, 0x804d4c24, 0xf4bd284d, 0x51fcba33, 0xbbd27a40, 0x1e93e83e,
+    0x5232b292, 0xf77320ec, 0x1d5de09f, 0xb81c72e1, 0xccec1688, 0x69ad84f6,
+    0x83834485, 0x26c2d6fb, 0x1ac1f1dd, 0xbf8063a3, 0x55aea3d0, 0xf0ef31ae,
+    0x841f55c7, 0x215ec7b9, 0xcb7007ca, 0x6e3195b4, 0x2290cf18, 0x87d15d66,
+    0x6dff9d15, 0xc8be0f6b, 0xbc4e6b02, 0x190ff97c, 0xf321390f, 0x5660ab71,
+    0x4c42f79a, 0xe90365e4, 0x032da597, 0xa66c37e9, 0xd29c5380, 0x77ddc1fe,
+    0x9df3018d, 0x38b293f3, 0x7413c95f, 0xd1525b21, 0x3b7c9b52, 0x9e3d092c,
+    0xeacd6d45, 0x4f8cff3b, 0xa5a23f48, 0x00e3ad36, 0x3ce08a10, 0x99a1186e,
+    0x738fd81d, 0xd6ce4a63, 0xa23e2e0a, 0x077fbc74, 0xed517c07, 0x4810ee79,
+    0x04b1b4d5, 0xa1f026ab, 0x4bdee6d8, 0xee9f74a6, 0x9a6f10cf, 0x3f2e82b1,
+    0xd50042c2, 0x7041d0bc, 0xad060c8e, 0x08479ef0, 0xe2695e83, 0x4728ccfd,
+    0x33d8a894, 0x96993aea, 0x7cb7fa99, 0xd9f668e7, 0x9557324b, 0x3016a035,
+    0xda386046, 0x7f79f238, 0x0b899651, 0xaec8042f, 0x44e6c45c, 0xe1a75622,
+    0xdda47104, 0x78e5e37a, 0x92cb2309, 0x378ab177, 0x437ad51e, 0xe63b4760,
+    0x0c158713, 0xa954156d, 0xe5f54fc1, 0x40b4ddbf, 0xaa9a1dcc, 0x0fdb8fb2,
+    0x7b2bebdb, 0xde6a79a5, 0x3444b9d6, 0x91052ba8};
+static const uint32_t table3_[256] = {
+    0x00000000, 0xdd45aab8, 0xbf672381, 0x62228939, 0x7b2231f3, 0xa6679b4b,
+    0xc4451272, 0x1900b8ca, 0xf64463e6, 0x2b01c95e, 0x49234067, 0x9466eadf,
+    0x8d665215, 0x5023f8ad, 0x32017194, 0xef44db2c, 0xe964b13d, 0x34211b85,
+    0x560392bc, 0x8b463804, 0x924680ce, 0x4f032a76, 0x2d21a34f, 0xf06409f7,
+    0x1f20d2db, 0xc2657863, 0xa047f15a, 0x7d025be2, 0x6402e328, 0xb9474990,
+    0xdb65c0a9, 0x06206a11, 0xd725148b, 0x0a60be33, 0x6842370a, 0xb5079db2,
+    0xac072578, 0x71428fc0, 0x136006f9, 0xce25ac41, 0x2161776d, 0xfc24ddd5,
+    0x9e0654ec, 0x4343fe54, 0x5a43469e, 0x8706ec26, 0xe524651f, 0x3861cfa7,
+    0x3e41a5b6, 0xe3040f0e, 0x81268637, 0x5c632c8f, 0x45639445, 0x98263efd,
+    0xfa04b7c4, 0x27411d7c, 0xc805c650, 0x15406ce8, 0x7762e5d1, 0xaa274f69,
+    0xb327f7a3, 0x6e625d1b, 0x0c40d422, 0xd1057e9a, 0xaba65fe7, 0x76e3f55f,
+    0x14c17c66, 0xc984d6de, 0xd0846e14, 0x0dc1c4ac, 0x6fe34d95, 0xb2a6e72d,
+    0x5de23c01, 0x80a796b9, 0xe2851f80, 0x3fc0b538, 0x26c00df2, 0xfb85a74a,
+    0x99a72e73, 0x44e284cb, 0x42c2eeda, 0x9f874462, 0xfda5cd5b, 0x20e067e3,
+    0x39e0df29, 0xe4a57591, 0x8687fca8, 0x5bc25610, 0xb4868d3c, 0x69c32784,
+    0x0be1aebd, 0xd6a40405, 0xcfa4bccf, 0x12e11677, 0x70c39f4e, 0xad8635f6,
+    0x7c834b6c, 0xa1c6e1d4, 0xc3e468ed, 0x1ea1c255, 0x07a17a9f, 0xdae4d027,
+    0xb8c6591e, 0x6583f3a6, 0x8ac7288a, 0x57828232, 0x35a00b0b, 0xe8e5a1b3,
+    0xf1e51979, 0x2ca0b3c1, 0x4e823af8, 0x93c79040, 0x95e7fa51, 0x48a250e9,
+    0x2a80d9d0, 0xf7c57368, 0xeec5cba2, 0x3380611a, 0x51a2e823, 0x8ce7429b,
+    0x63a399b7, 0xbee6330f, 0xdcc4ba36, 0x0181108e, 0x1881a844, 0xc5c402fc,
+    0xa7e68bc5, 0x7aa3217d, 0x52a0c93f, 0x8fe56387, 0xedc7eabe, 0x30824006,
+    0x2982f8cc, 0xf4c75274, 0x96e5db4d, 0x4ba071f5, 0xa4e4aad9, 0x79a10061,
+    0x1b838958, 0xc6c623e0, 0xdfc69b2a, 0x02833192, 0x60a1b8ab, 0xbde41213,
+    0xbbc47802, 0x6681d2ba, 0x04a35b83, 0xd9e6f13b, 0xc0e649f1, 0x1da3e349,
+    0x7f816a70, 0xa2c4c0c8, 0x4d801be4, 0x90c5b15c, 0xf2e73865, 0x2fa292dd,
+    0x36a22a17, 0xebe780af, 0x89c50996, 0x5480a32e, 0x8585ddb4, 0x58c0770c,
+    0x3ae2fe35, 0xe7a7548d, 0xfea7ec47, 0x23e246ff, 0x41c0cfc6, 0x9c85657e,
+    0x73c1be52, 0xae8414ea, 0xcca69dd3, 0x11e3376b, 0x08e38fa1, 0xd5a62519,
+    0xb784ac20, 0x6ac10698, 0x6ce16c89, 0xb1a4c631, 0xd3864f08, 0x0ec3e5b0,
+    0x17c35d7a, 0xca86f7c2, 0xa8a47efb, 0x75e1d443, 0x9aa50f6f, 0x47e0a5d7,
+    0x25c22cee, 0xf8878656, 0xe1873e9c, 0x3cc29424, 0x5ee01d1d, 0x83a5b7a5,
+    0xf90696d8, 0x24433c60, 0x4661b559, 0x9b241fe1, 0x8224a72b, 0x5f610d93,
+    0x3d4384aa, 0xe0062e12, 0x0f42f53e, 0xd2075f86, 0xb025d6bf, 0x6d607c07,
+    0x7460c4cd, 0xa9256e75, 0xcb07e74c, 0x16424df4, 0x106227e5, 0xcd278d5d,
+    0xaf050464, 0x7240aedc, 0x6b401616, 0xb605bcae, 0xd4273597, 0x09629f2f,
+    0xe6264403, 0x3b63eebb, 0x59416782, 0x8404cd3a, 0x9d0475f0, 0x4041df48,
+    0x22635671, 0xff26fcc9, 0x2e238253, 0xf36628eb, 0x9144a1d2, 0x4c010b6a,
+    0x5501b3a0, 0x88441918, 0xea669021, 0x37233a99, 0xd867e1b5, 0x05224b0d,
+    0x6700c234, 0xba45688c, 0xa345d046, 0x7e007afe, 0x1c22f3c7, 0xc167597f,
+    0xc747336e, 0x1a0299d6, 0x782010ef, 0xa565ba57, 0xbc65029d, 0x6120a825,
+    0x0302211c, 0xde478ba4, 0x31035088, 0xec46fa30, 0x8e647309, 0x5321d9b1,
+    0x4a21617b, 0x9764cbc3, 0xf54642fa, 0x2803e842};
 
-const uint32_t kStrideExtensionTable0[256] = {
-    0x00000000, 0x30d23865, 0x61a470ca, 0x517648af, 0xc348e194, 0xf39ad9f1,
-    0xa2ec915e, 0x923ea93b, 0x837db5d9, 0xb3af8dbc, 0xe2d9c513, 0xd20bfd76,
-    0x4035544d, 0x70e76c28, 0x21912487, 0x11431ce2, 0x03171d43, 0x33c52526,
-    0x62b36d89, 0x526155ec, 0xc05ffcd7, 0xf08dc4b2, 0xa1fb8c1d, 0x9129b478,
-    0x806aa89a, 0xb0b890ff, 0xe1ced850, 0xd11ce035, 0x4322490e, 0x73f0716b,
-    0x228639c4, 0x125401a1, 0x062e3a86, 0x36fc02e3, 0x678a4a4c, 0x57587229,
-    0xc566db12, 0xf5b4e377, 0xa4c2abd8, 0x941093bd, 0x85538f5f, 0xb581b73a,
-    0xe4f7ff95, 0xd425c7f0, 0x461b6ecb, 0x76c956ae, 0x27bf1e01, 0x176d2664,
-    0x053927c5, 0x35eb1fa0, 0x649d570f, 0x544f6f6a, 0xc671c651, 0xf6a3fe34,
-    0xa7d5b69b, 0x97078efe, 0x8644921c, 0xb696aa79, 0xe7e0e2d6, 0xd732dab3,
-    0x450c7388, 0x75de4bed, 0x24a80342, 0x147a3b27, 0x0c5c750c, 0x3c8e4d69,
-    0x6df805c6, 0x5d2a3da3, 0xcf149498, 0xffc6acfd, 0xaeb0e452, 0x9e62dc37,
-    0x8f21c0d5, 0xbff3f8b0, 0xee85b01f, 0xde57887a, 0x4c692141, 0x7cbb1924,
-    0x2dcd518b, 0x1d1f69ee, 0x0f4b684f, 0x3f99502a, 0x6eef1885, 0x5e3d20e0,
-    0xcc0389db, 0xfcd1b1be, 0xada7f911, 0x9d75c174, 0x8c36dd96, 0xbce4e5f3,
-    0xed92ad5c, 0xdd409539, 0x4f7e3c02, 0x7fac0467, 0x2eda4cc8, 0x1e0874ad,
-    0x0a724f8a, 0x3aa077ef, 0x6bd63f40, 0x5b040725, 0xc93aae1e, 0xf9e8967b,
-    0xa89eded4, 0x984ce6b1, 0x890ffa53, 0xb9ddc236, 0xe8ab8a99, 0xd879b2fc,
-    0x4a471bc7, 0x7a9523a2, 0x2be36b0d, 0x1b315368, 0x096552c9, 0x39b76aac,
-    0x68c12203, 0x58131a66, 0xca2db35d, 0xfaff8b38, 0xab89c397, 0x9b5bfbf2,
-    0x8a18e710, 0xbacadf75, 0xebbc97da, 0xdb6eafbf, 0x49500684, 0x79823ee1,
-    0x28f4764e, 0x18264e2b, 0x18b8ea18, 0x286ad27d, 0x791c9ad2, 0x49cea2b7,
-    0xdbf00b8c, 0xeb2233e9, 0xba547b46, 0x8a864323, 0x9bc55fc1, 0xab1767a4,
-    0xfa612f0b, 0xcab3176e, 0x588dbe55, 0x685f8630, 0x3929ce9f, 0x09fbf6fa,
-    0x1baff75b, 0x2b7dcf3e, 0x7a0b8791, 0x4ad9bff4, 0xd8e716cf, 0xe8352eaa,
-    0xb9436605, 0x89915e60, 0x98d24282, 0xa8007ae7, 0xf9763248, 0xc9a40a2d,
-    0x5b9aa316, 0x6b489b73, 0x3a3ed3dc, 0x0aecebb9, 0x1e96d09e, 0x2e44e8fb,
-    0x7f32a054, 0x4fe09831, 0xddde310a, 0xed0c096f, 0xbc7a41c0, 0x8ca879a5,
-    0x9deb6547, 0xad395d22, 0xfc4f158d, 0xcc9d2de8, 0x5ea384d3, 0x6e71bcb6,
-    0x3f07f419, 0x0fd5cc7c, 0x1d81cddd, 0x2d53f5b8, 0x7c25bd17, 0x4cf78572,
-    0xdec92c49, 0xee1b142c, 0xbf6d5c83, 0x8fbf64e6, 0x9efc7804, 0xae2e4061,
-    0xff5808ce, 0xcf8a30ab, 0x5db49990, 0x6d66a1f5, 0x3c10e95a, 0x0cc2d13f,
-    0x14e49f14, 0x2436a771, 0x7540efde, 0x4592d7bb, 0xd7ac7e80, 0xe77e46e5,
-    0xb6080e4a, 0x86da362f, 0x97992acd, 0xa74b12a8, 0xf63d5a07, 0xc6ef6262,
-    0x54d1cb59, 0x6403f33c, 0x3575bb93, 0x05a783f6, 0x17f38257, 0x2721ba32,
-    0x7657f29d, 0x4685caf8, 0xd4bb63c3, 0xe4695ba6, 0xb51f1309, 0x85cd2b6c,
-    0x948e378e, 0xa45c0feb, 0xf52a4744, 0xc5f87f21, 0x57c6d61a, 0x6714ee7f,
-    0x3662a6d0, 0x06b09eb5, 0x12caa592, 0x22189df7, 0x736ed558, 0x43bced3d,
-    0xd1824406, 0xe1507c63, 0xb02634cc, 0x80f40ca9, 0x91b7104b, 0xa165282e,
-    0xf0136081, 0xc0c158e4, 0x52fff1df, 0x622dc9ba, 0x335b8115, 0x0389b970,
-    0x11ddb8d1, 0x210f80b4, 0x7079c81b, 0x40abf07e, 0xd2955945, 0xe2476120,
-    0xb331298f, 0x83e311ea, 0x92a00d08, 0xa272356d, 0xf3047dc2, 0xc3d645a7,
-    0x51e8ec9c, 0x613ad4f9, 0x304c9c56, 0x009ea433};
+// Used to fetch a naturally-aligned 32-bit word in little endian byte-order
+static inline uint32_t LE_LOAD32(const uint8_t* p) {
+  return DecodeFixed32(reinterpret_cast<const char*>(p));
+}
+#endif  // !__SSE4_2__
 
-const uint32_t kStrideExtensionTable1[256] = {
-    0x00000000, 0x54075546, 0xa80eaa8c, 0xfc09ffca, 0x55f123e9, 0x01f676af,
-    0xfdff8965, 0xa9f8dc23, 0xabe247d2, 0xffe51294, 0x03eced5e, 0x57ebb818,
-    0xfe13643b, 0xaa14317d, 0x561dceb7, 0x021a9bf1, 0x5228f955, 0x062fac13,
-    0xfa2653d9, 0xae21069f, 0x07d9dabc, 0x53de8ffa, 0xafd77030, 0xfbd02576,
-    0xf9cabe87, 0xadcdebc1, 0x51c4140b, 0x05c3414d, 0xac3b9d6e, 0xf83cc828,
-    0x043537e2, 0x503262a4, 0xa451f2aa, 0xf056a7ec, 0x0c5f5826, 0x58580d60,
-    0xf1a0d143, 0xa5a78405, 0x59ae7bcf, 0x0da92e89, 0x0fb3b578, 0x5bb4e03e,
-    0xa7bd1ff4, 0xf3ba4ab2, 0x5a429691, 0x0e45c3d7, 0xf24c3c1d, 0xa64b695b,
-    0xf6790bff, 0xa27e5eb9, 0x5e77a173, 0x0a70f435, 0xa3882816, 0xf78f7d50,
-    0x0b86829a, 0x5f81d7dc, 0x5d9b4c2d, 0x099c196b, 0xf595e6a1, 0xa192b3e7,
-    0x086a6fc4, 0x5c6d3a82, 0xa064c548, 0xf463900e, 0x4d4f93a5, 0x1948c6e3,
-    0xe5413929, 0xb1466c6f, 0x18beb04c, 0x4cb9e50a, 0xb0b01ac0, 0xe4b74f86,
-    0xe6add477, 0xb2aa8131, 0x4ea37efb, 0x1aa42bbd, 0xb35cf79e, 0xe75ba2d8,
-    0x1b525d12, 0x4f550854, 0x1f676af0, 0x4b603fb6, 0xb769c07c, 0xe36e953a,
-    0x4a964919, 0x1e911c5f, 0xe298e395, 0xb69fb6d3, 0xb4852d22, 0xe0827864,
-    0x1c8b87ae, 0x488cd2e8, 0xe1740ecb, 0xb5735b8d, 0x497aa447, 0x1d7df101,
-    0xe91e610f, 0xbd193449, 0x4110cb83, 0x15179ec5, 0xbcef42e6, 0xe8e817a0,
-    0x14e1e86a, 0x40e6bd2c, 0x42fc26dd, 0x16fb739b, 0xeaf28c51, 0xbef5d917,
-    0x170d0534, 0x430a5072, 0xbf03afb8, 0xeb04fafe, 0xbb36985a, 0xef31cd1c,
-    0x133832d6, 0x473f6790, 0xeec7bbb3, 0xbac0eef5, 0x46c9113f, 0x12ce4479,
-    0x10d4df88, 0x44d38ace, 0xb8da7504, 0xecdd2042, 0x4525fc61, 0x1122a927,
-    0xed2b56ed, 0xb92c03ab, 0x9a9f274a, 0xce98720c, 0x32918dc6, 0x6696d880,
-    0xcf6e04a3, 0x9b6951e5, 0x6760ae2f, 0x3367fb69, 0x317d6098, 0x657a35de,
-    0x9973ca14, 0xcd749f52, 0x648c4371, 0x308b1637, 0xcc82e9fd, 0x9885bcbb,
-    0xc8b7de1f, 0x9cb08b59, 0x60b97493, 0x34be21d5, 0x9d46fdf6, 0xc941a8b0,
-    0x3548577a, 0x614f023c, 0x635599cd, 0x3752cc8b, 0xcb5b3341, 0x9f5c6607,
-    0x36a4ba24, 0x62a3ef62, 0x9eaa10a8, 0xcaad45ee, 0x3eced5e0, 0x6ac980a6,
-    0x96c07f6c, 0xc2c72a2a, 0x6b3ff609, 0x3f38a34f, 0xc3315c85, 0x973609c3,
-    0x952c9232, 0xc12bc774, 0x3d2238be, 0x69256df8, 0xc0ddb1db, 0x94dae49d,
-    0x68d31b57, 0x3cd44e11, 0x6ce62cb5, 0x38e179f3, 0xc4e88639, 0x90efd37f,
-    0x39170f5c, 0x6d105a1a, 0x9119a5d0, 0xc51ef096, 0xc7046b67, 0x93033e21,
-    0x6f0ac1eb, 0x3b0d94ad, 0x92f5488e, 0xc6f21dc8, 0x3afbe202, 0x6efcb744,
-    0xd7d0b4ef, 0x83d7e1a9, 0x7fde1e63, 0x2bd94b25, 0x82219706, 0xd626c240,
-    0x2a2f3d8a, 0x7e2868cc, 0x7c32f33d, 0x2835a67b, 0xd43c59b1, 0x803b0cf7,
-    0x29c3d0d4, 0x7dc48592, 0x81cd7a58, 0xd5ca2f1e, 0x85f84dba, 0xd1ff18fc,
-    0x2df6e736, 0x79f1b270, 0xd0096e53, 0x840e3b15, 0x7807c4df, 0x2c009199,
-    0x2e1a0a68, 0x7a1d5f2e, 0x8614a0e4, 0xd213f5a2, 0x7beb2981, 0x2fec7cc7,
-    0xd3e5830d, 0x87e2d64b, 0x73814645, 0x27861303, 0xdb8fecc9, 0x8f88b98f,
-    0x267065ac, 0x727730ea, 0x8e7ecf20, 0xda799a66, 0xd8630197, 0x8c6454d1,
-    0x706dab1b, 0x246afe5d, 0x8d92227e, 0xd9957738, 0x259c88f2, 0x719bddb4,
-    0x21a9bf10, 0x75aeea56, 0x89a7159c, 0xdda040da, 0x74589cf9, 0x205fc9bf,
-    0xdc563675, 0x88516333, 0x8a4bf8c2, 0xde4cad84, 0x2245524e, 0x76420708,
-    0xdfbadb2b, 0x8bbd8e6d, 0x77b471a7, 0x23b324e1};
-
-const uint32_t kStrideExtensionTable2[256] = {
-    0x00000000, 0x678efd01, 0xcf1dfa02, 0xa8930703, 0x9bd782f5, 0xfc597ff4,
-    0x54ca78f7, 0x334485f6, 0x3243731b, 0x55cd8e1a, 0xfd5e8919, 0x9ad07418,
-    0xa994f1ee, 0xce1a0cef, 0x66890bec, 0x0107f6ed, 0x6486e636, 0x03081b37,
-    0xab9b1c34, 0xcc15e135, 0xff5164c3, 0x98df99c2, 0x304c9ec1, 0x57c263c0,
-    0x56c5952d, 0x314b682c, 0x99d86f2f, 0xfe56922e, 0xcd1217d8, 0xaa9cead9,
-    0x020fedda, 0x658110db, 0xc90dcc6c, 0xae83316d, 0x0610366e, 0x619ecb6f,
-    0x52da4e99, 0x3554b398, 0x9dc7b49b, 0xfa49499a, 0xfb4ebf77, 0x9cc04276,
-    0x34534575, 0x53ddb874, 0x60993d82, 0x0717c083, 0xaf84c780, 0xc80a3a81,
-    0xad8b2a5a, 0xca05d75b, 0x6296d058, 0x05182d59, 0x365ca8af, 0x51d255ae,
-    0xf94152ad, 0x9ecfafac, 0x9fc85941, 0xf846a440, 0x50d5a343, 0x375b5e42,
-    0x041fdbb4, 0x639126b5, 0xcb0221b6, 0xac8cdcb7, 0x97f7ee29, 0xf0791328,
-    0x58ea142b, 0x3f64e92a, 0x0c206cdc, 0x6bae91dd, 0xc33d96de, 0xa4b36bdf,
-    0xa5b49d32, 0xc23a6033, 0x6aa96730, 0x0d279a31, 0x3e631fc7, 0x59ede2c6,
-    0xf17ee5c5, 0x96f018c4, 0xf371081f, 0x94fff51e, 0x3c6cf21d, 0x5be20f1c,
-    0x68a68aea, 0x0f2877eb, 0xa7bb70e8, 0xc0358de9, 0xc1327b04, 0xa6bc8605,
-    0x0e2f8106, 0x69a17c07, 0x5ae5f9f1, 0x3d6b04f0, 0x95f803f3, 0xf276fef2,
-    0x5efa2245, 0x3974df44, 0x91e7d847, 0xf6692546, 0xc52da0b0, 0xa2a35db1,
-    0x0a305ab2, 0x6dbea7b3, 0x6cb9515e, 0x0b37ac5f, 0xa3a4ab5c, 0xc42a565d,
-    0xf76ed3ab, 0x90e02eaa, 0x387329a9, 0x5ffdd4a8, 0x3a7cc473, 0x5df23972,
-    0xf5613e71, 0x92efc370, 0xa1ab4686, 0xc625bb87, 0x6eb6bc84, 0x09384185,
-    0x083fb768, 0x6fb14a69, 0xc7224d6a, 0xa0acb06b, 0x93e8359d, 0xf466c89c,
-    0x5cf5cf9f, 0x3b7b329e, 0x2a03aaa3, 0x4d8d57a2, 0xe51e50a1, 0x8290ada0,
-    0xb1d42856, 0xd65ad557, 0x7ec9d254, 0x19472f55, 0x1840d9b8, 0x7fce24b9,
-    0xd75d23ba, 0xb0d3debb, 0x83975b4d, 0xe419a64c, 0x4c8aa14f, 0x2b045c4e,
-    0x4e854c95, 0x290bb194, 0x8198b697, 0xe6164b96, 0xd552ce60, 0xb2dc3361,
-    0x1a4f3462, 0x7dc1c963, 0x7cc63f8e, 0x1b48c28f, 0xb3dbc58c, 0xd455388d,
-    0xe711bd7b, 0x809f407a, 0x280c4779, 0x4f82ba78, 0xe30e66cf, 0x84809bce,
-    0x2c139ccd, 0x4b9d61cc, 0x78d9e43a, 0x1f57193b, 0xb7c41e38, 0xd04ae339,
-    0xd14d15d4, 0xb6c3e8d5, 0x1e50efd6, 0x79de12d7, 0x4a9a9721, 0x2d146a20,
-    0x85876d23, 0xe2099022, 0x878880f9, 0xe0067df8, 0x48957afb, 0x2f1b87fa,
-    0x1c5f020c, 0x7bd1ff0d, 0xd342f80e, 0xb4cc050f, 0xb5cbf3e2, 0xd2450ee3,
-    0x7ad609e0, 0x1d58f4e1, 0x2e1c7117, 0x49928c16, 0xe1018b15, 0x868f7614,
-    0xbdf4448a, 0xda7ab98b, 0x72e9be88, 0x15674389, 0x2623c67f, 0x41ad3b7e,
-    0xe93e3c7d, 0x8eb0c17c, 0x8fb73791, 0xe839ca90, 0x40aacd93, 0x27243092,
-    0x1460b564, 0x73ee4865, 0xdb7d4f66, 0xbcf3b267, 0xd972a2bc, 0xbefc5fbd,
-    0x166f58be, 0x71e1a5bf, 0x42a52049, 0x252bdd48, 0x8db8da4b, 0xea36274a,
-    0xeb31d1a7, 0x8cbf2ca6, 0x242c2ba5, 0x43a2d6a4, 0x70e65352, 0x1768ae53,
-    0xbffba950, 0xd8755451, 0x74f988e6, 0x137775e7, 0xbbe472e4, 0xdc6a8fe5,
-    0xef2e0a13, 0x88a0f712, 0x2033f011, 0x47bd0d10, 0x46bafbfd, 0x213406fc,
-    0x89a701ff, 0xee29fcfe, 0xdd6d7908, 0xbae38409, 0x1270830a, 0x75fe7e0b,
-    0x107f6ed0, 0x77f193d1, 0xdf6294d2, 0xb8ec69d3, 0x8ba8ec25, 0xec261124,
-    0x44b51627, 0x233beb26, 0x223c1dcb, 0x45b2e0ca, 0xed21e7c9, 0x8aaf1ac8,
-    0xb9eb9f3e, 0xde65623f, 0x76f6653c, 0x1178983d};
-
-const uint32_t kStrideExtensionTable3[256] = {
-    0x00000000, 0xf20c0dfe, 0xe1f46d0d, 0x13f860f3, 0xc604aceb, 0x3408a115,
-    0x27f0c1e6, 0xd5fccc18, 0x89e52f27, 0x7be922d9, 0x6811422a, 0x9a1d4fd4,
-    0x4fe183cc, 0xbded8e32, 0xae15eec1, 0x5c19e33f, 0x162628bf, 0xe42a2541,
-    0xf7d245b2, 0x05de484c, 0xd0228454, 0x222e89aa, 0x31d6e959, 0xc3dae4a7,
-    0x9fc30798, 0x6dcf0a66, 0x7e376a95, 0x8c3b676b, 0x59c7ab73, 0xabcba68d,
-    0xb833c67e, 0x4a3fcb80, 0x2c4c517e, 0xde405c80, 0xcdb83c73, 0x3fb4318d,
-    0xea48fd95, 0x1844f06b, 0x0bbc9098, 0xf9b09d66, 0xa5a97e59, 0x57a573a7,
-    0x445d1354, 0xb6511eaa, 0x63add2b2, 0x91a1df4c, 0x8259bfbf, 0x7055b241,
-    0x3a6a79c1, 0xc866743f, 0xdb9e14cc, 0x29921932, 0xfc6ed52a, 0x0e62d8d4,
-    0x1d9ab827, 0xef96b5d9, 0xb38f56e6, 0x41835b18, 0x527b3beb, 0xa0773615,
-    0x758bfa0d, 0x8787f7f3, 0x947f9700, 0x66739afe, 0x5898a2fc, 0xaa94af02,
-    0xb96ccff1, 0x4b60c20f, 0x9e9c0e17, 0x6c9003e9, 0x7f68631a, 0x8d646ee4,
-    0xd17d8ddb, 0x23718025, 0x3089e0d6, 0xc285ed28, 0x17792130, 0xe5752cce,
-    0xf68d4c3d, 0x048141c3, 0x4ebe8a43, 0xbcb287bd, 0xaf4ae74e, 0x5d46eab0,
-    0x88ba26a8, 0x7ab62b56, 0x694e4ba5, 0x9b42465b, 0xc75ba564, 0x3557a89a,
-    0x26afc869, 0xd4a3c597, 0x015f098f, 0xf3530471, 0xe0ab6482, 0x12a7697c,
-    0x74d4f382, 0x86d8fe7c, 0x95209e8f, 0x672c9371, 0xb2d05f69, 0x40dc5297,
-    0x53243264, 0xa1283f9a, 0xfd31dca5, 0x0f3dd15b, 0x1cc5b1a8, 0xeec9bc56,
-    0x3b35704e, 0xc9397db0, 0xdac11d43, 0x28cd10bd, 0x62f2db3d, 0x90fed6c3,
-    0x8306b630, 0x710abbce, 0xa4f677d6, 0x56fa7a28, 0x45021adb, 0xb70e1725,
-    0xeb17f41a, 0x191bf9e4, 0x0ae39917, 0xf8ef94e9, 0x2d1358f1, 0xdf1f550f,
-    0xcce735fc, 0x3eeb3802, 0xb13145f8, 0x433d4806, 0x50c528f5, 0xa2c9250b,
-    0x7735e913, 0x8539e4ed, 0x96c1841e, 0x64cd89e0, 0x38d46adf, 0xcad86721,
-    0xd92007d2, 0x2b2c0a2c, 0xfed0c634, 0x0cdccbca, 0x1f24ab39, 0xed28a6c7,
-    0xa7176d47, 0x551b60b9, 0x46e3004a, 0xb4ef0db4, 0x6113c1ac, 0x931fcc52,
-    0x80e7aca1, 0x72eba15f, 0x2ef24260, 0xdcfe4f9e, 0xcf062f6d, 0x3d0a2293,
-    0xe8f6ee8b, 0x1afae375, 0x09028386, 0xfb0e8e78, 0x9d7d1486, 0x6f711978,
-    0x7c89798b, 0x8e857475, 0x5b79b86d, 0xa975b593, 0xba8dd560, 0x4881d89e,
-    0x14983ba1, 0xe694365f, 0xf56c56ac, 0x07605b52, 0xd29c974a, 0x20909ab4,
-    0x3368fa47, 0xc164f7b9, 0x8b5b3c39, 0x795731c7, 0x6aaf5134, 0x98a35cca,
-    0x4d5f90d2, 0xbf539d2c, 0xacabfddf, 0x5ea7f021, 0x02be131e, 0xf0b21ee0,
-    0xe34a7e13, 0x114673ed, 0xc4babff5, 0x36b6b20b, 0x254ed2f8, 0xd742df06,
-    0xe9a9e704, 0x1ba5eafa, 0x085d8a09, 0xfa5187f7, 0x2fad4bef, 0xdda14611,
-    0xce5926e2, 0x3c552b1c, 0x604cc823, 0x9240c5dd, 0x81b8a52e, 0x73b4a8d0,
-    0xa64864c8, 0x54446936, 0x47bc09c5, 0xb5b0043b, 0xff8fcfbb, 0x0d83c245,
-    0x1e7ba2b6, 0xec77af48, 0x398b6350, 0xcb876eae, 0xd87f0e5d, 0x2a7303a3,
-    0x766ae09c, 0x8466ed62, 0x979e8d91, 0x6592806f, 0xb06e4c77, 0x42624189,
-    0x519a217a, 0xa3962c84, 0xc5e5b67a, 0x37e9bb84, 0x2411db77, 0xd61dd689,
-    0x03e11a91, 0xf1ed176f, 0xe215779c, 0x10197a62, 0x4c00995d, 0xbe0c94a3,
-    0xadf4f450, 0x5ff8f9ae, 0x8a0435b6, 0x78083848, 0x6bf058bb, 0x99fc5545,
-    0xd3c39ec5, 0x21cf933b, 0x3237f3c8, 0xc03bfe36, 0x15c7322e, 0xe7cb3fd0,
-    0xf4335f23, 0x063f52dd, 0x5a26b1e2, 0xa82abc1c, 0xbbd2dcef, 0x49ded111,
-    0x9c221d09, 0x6e2e10f7, 0x7dd67004, 0x8fda7dfa};
-
-// CRCs are pre- and post- conditioned by xoring with all ones.
-static constexpr const uint32_t kCRC32Xor = static_cast<uint32_t>(0xffffffffU);
-
-// Reads a little-endian 32-bit integer from a 32-bit-aligned buffer.
-inline uint32_t ReadUint32LE(const uint8_t* buffer) {
-  return DecodeFixed32(reinterpret_cast<const char*>(buffer));
+static inline void DefaultCRC32(uint64_t* l, uint8_t const** p) {
+#ifndef __SSE4_2__
+  uint32_t c = static_cast<uint32_t>(*l ^ LE_LOAD32(*p));
+  *p += 4;
+  *l = table3_[c & 0xff] ^ table2_[(c >> 8) & 0xff] ^
+       table1_[(c >> 16) & 0xff] ^ table0_[c >> 24];
+  // DO it twice.
+  c = static_cast<uint32_t>(*l ^ LE_LOAD32(*p));
+  *p += 4;
+  *l = table3_[c & 0xff] ^ table2_[(c >> 8) & 0xff] ^
+       table1_[(c >> 16) & 0xff] ^ table0_[c >> 24];
+#elif defined(__LP64__) || defined(_WIN64)
+  *l = _mm_crc32_u64(*l, DecodeFixed64(reinterpret_cast<const char*>(*p)));
+  *p += 8;
+#else
+  *l = _mm_crc32_u32(static_cast<unsigned int>(*l), LE_LOAD32(*p));
+  *p += 4;
+  *l = _mm_crc32_u32(static_cast<unsigned int>(*l), LE_LOAD32(*p));
+  *p += 4;
+#endif
 }
 
-// Returns the smallest address >= the given address that is aligned to N bytes.
-//
-// N must be a power of two.
-template <int N>
-constexpr inline const uint8_t* RoundUp(const uint8_t* pointer) {
-  return reinterpret_cast<uint8_t*>(
-      (reinterpret_cast<uintptr_t>(pointer) + (N - 1)) &
-      ~static_cast<uintptr_t>(N - 1));
-}
+template <void (*CRC32)(uint64_t*, uint8_t const**)>
+uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(buf);
+  const uint8_t* e = p + size;
+  uint64_t l = crc ^ 0xffffffffu;
 
-}  // namespace
+// Align n to (1 << m) byte boundary
+#define ALIGN(n, m) ((n + ((1 << m) - 1)) & ~((1 << m) - 1))
 
-// Determine if the CPU running this program can accelerate the CRC32C
-// calculation.
-static bool CanAccelerateCRC32C() {
-  // port::AcceleretedCRC32C returns zero when unable to accelerate.
-  static const char kTestCRCBuffer[] = "TestCRCBuffer";
-  static const char kBufSize = sizeof(kTestCRCBuffer) - 1;
-  static const uint32_t kTestCRCValue = 0xdcbc59fa;
-
-  return port::AcceleratedCRC32C(0, kTestCRCBuffer, kBufSize) == kTestCRCValue;
-}
-
-uint32_t Extend(uint32_t crc, const char* data, size_t n) {
-  static bool accelerate = CanAccelerateCRC32C();
-  if (accelerate) {
-    return port::AcceleratedCRC32C(crc, data, n);
-  }
-
-  const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
-  const uint8_t* e = p + n;
-  uint32_t l = crc ^ kCRC32Xor;
-
-// Process one byte at a time.
-#define STEP1                              \
-  do {                                     \
-    int c = (l & 0xff) ^ *p++;             \
-    l = kByteExtensionTable[c] ^ (l >> 8); \
+#define STEP1                  \
+  do {                         \
+    int c = (l & 0xff) ^ *p++; \
+    l = table0_[c] ^ (l >> 8); \
   } while (0)
 
-// Process one of the 4 strides of 4-byte data.
-#define STEP4(s)                                                               \
-  do {                                                                         \
-    crc##s = ReadUint32LE(p + s * 4) ^ kStrideExtensionTable3[crc##s & 0xff] ^ \
-             kStrideExtensionTable2[(crc##s >> 8) & 0xff] ^                    \
-             kStrideExtensionTable1[(crc##s >> 16) & 0xff] ^                   \
-             kStrideExtensionTable0[crc##s >> 24];                             \
-  } while (0)
-
-// Process a 16-byte swath of 4 strides, each of which has 4 bytes of data.
-#define STEP16 \
-  do {         \
-    STEP4(0);  \
-    STEP4(1);  \
-    STEP4(2);  \
-    STEP4(3);  \
-    p += 16;   \
-  } while (0)
-
-// Process 4 bytes that were already loaded into a word.
-#define STEP4W(w)                                   \
-  do {                                              \
-    w ^= l;                                         \
-    for (size_t i = 0; i < 4; ++i) {                \
-      w = (w >> 8) ^ kByteExtensionTable[w & 0xff]; \
-    }                                               \
-    l = w;                                          \
-  } while (0)
-
-  // Point x at first 4-byte aligned byte in the buffer. This might be past the
-  // end of the buffer.
-  const uint8_t* x = RoundUp<4>(p);
+  // Point x at first 16-byte aligned byte in string.  This might be
+  // just past the end of the string.
+  const uintptr_t pval = reinterpret_cast<uintptr_t>(p);
+  const uint8_t* x = reinterpret_cast<const uint8_t*>(ALIGN(pval, 4));
   if (x <= e) {
-    // Process bytes p is 4-byte aligned.
+    // Process bytes until finished or p is 16-byte aligned
     while (p != x) {
       STEP1;
     }
   }
-
-  if ((e - p) >= 16) {
-    // Load a 16-byte swath into the stride partial results.
-    uint32_t crc0 = ReadUint32LE(p + 0 * 4) ^ l;
-    uint32_t crc1 = ReadUint32LE(p + 1 * 4);
-    uint32_t crc2 = ReadUint32LE(p + 2 * 4);
-    uint32_t crc3 = ReadUint32LE(p + 3 * 4);
-    p += 16;
-
-    // It is possible to get better speeds (at least on x86) by interleaving
-    // prefetching 256 bytes ahead with processing 64 bytes at a time. See the
-    // portable implementation in https://github.com/google/crc32c/.
-
-    // Process one 16-byte swath at a time.
-    while ((e - p) >= 16) {
-      STEP16;
-    }
-
-    // Advance one word at a time as far as possible.
-    while ((e - p) >= 4) {
-      STEP4(0);
-      uint32_t tmp = crc0;
-      crc0 = crc1;
-      crc1 = crc2;
-      crc2 = crc3;
-      crc3 = tmp;
-      p += 4;
-    }
-
-    // Combine the 4 partial stride results.
-    l = 0;
-    STEP4W(crc0);
-    STEP4W(crc1);
-    STEP4W(crc2);
-    STEP4W(crc3);
+  // Process bytes 16 at a time
+  while ((e - p) >= 16) {
+    CRC32(&l, &p);
+    CRC32(&l, &p);
   }
-
-  // Process the last few bytes.
+  // Process bytes 8 at a time
+  while ((e - p) >= 8) {
+    CRC32(&l, &p);
+  }
+  // Process the last few bytes
   while (p != e) {
     STEP1;
   }
-#undef STEP4W
-#undef STEP16
-#undef STEP4
 #undef STEP1
-  return l ^ kCRC32Xor;
+#undef ALIGN
+  return static_cast<uint32_t>(l ^ 0xffffffffu);
 }
 
-}  // namespace crc32c
-}  // namespace leveldb
+using Function = uint32_t (*)(uint32_t, const char*, size_t);
+
+#if defined(HAVE_POWER8) && defined(HAS_ALTIVEC)
+uint32_t ExtendPPCImpl(uint32_t crc, const char* buf, size_t size) {
+  return crc32c_ppc(crc, (const unsigned char*)buf, size);
+}
+
+#if __linux__
+static int arch_ppc_probe(void) {
+  arch_ppc_crc32 = 0;
+
+#if defined(__powerpc64__) && defined(ROCKSDB_AUXV_GETAUXVAL_PRESENT)
+  if (getauxval(AT_HWCAP2) & PPC_FEATURE2_VEC_CRYPTO) arch_ppc_crc32 = 1;
+#endif /* __powerpc64__ */
+
+  return arch_ppc_crc32;
+}
+#elif __FreeBSD__
+static int arch_ppc_probe(void) {
+  unsigned long cpufeatures;
+  arch_ppc_crc32 = 0;
+
+#if defined(__powerpc64__)
+  elf_aux_info(AT_HWCAP2, &cpufeatures, sizeof(cpufeatures));
+  if (cpufeatures & PPC_FEATURE2_HAS_VEC_CRYPTO) arch_ppc_crc32 = 1;
+#endif  /* __powerpc64__ */
+
+  return arch_ppc_crc32;
+}
+#endif  // __linux__
+
+static bool isAltiVec() {
+  if (arch_ppc_probe()) {
+    return true;
+  } else {
+    return false;
+  }
+}
+#endif
+
+#if defined(HAVE_ARM64_CRC)
+uint32_t ExtendARMImpl(uint32_t crc, const char* buf, size_t size) {
+  return crc32c_arm64(crc, (const unsigned char*)buf, size);
+}
+#endif
+
+std::string IsFastCrc32Supported() {
+  bool has_fast_crc = false;
+  std::string fast_zero_msg;
+  std::string arch;
+#ifdef HAVE_POWER8
+#ifdef HAS_ALTIVEC
+  if (arch_ppc_probe()) {
+    has_fast_crc = true;
+    arch = "PPC";
+  }
+#else
+  has_fast_crc = false;
+  arch = "PPC";
+#endif
+#elif defined(HAVE_ARM64_CRC)
+  if (crc32c_runtime_check()) {
+    has_fast_crc = true;
+    arch = "Arm64";
+    pmull_runtime_flag = crc32c_pmull_runtime_check();
+  } else {
+    has_fast_crc = false;
+    arch = "Arm64";
+  }
+#else
+#ifdef __SSE4_2__
+  has_fast_crc = true;
+#endif  // __SSE4_2__
+  arch = "x86";
+#endif
+  if (has_fast_crc) {
+    fast_zero_msg.append("Supported on " + arch);
+  } else {
+    fast_zero_msg.append("Not supported on " + arch);
+  }
+  return fast_zero_msg;
+}
+
+/*
+ * Copyright 2016 Ferry Toth, Exalon Delft BV, The Netherlands
+ *  This software is provided 'as-is', without any express or implied
+ * warranty.  In no event will the author be held liable for any damages
+ * arising from the use of this software.
+ *  Permission is granted to anyone to use this software for any purpose,
+ * including commercial applications, and to alter it and redistribute it
+ * freely, subject to the following restrictions:
+ *  1. The origin of this software must not be misrepresented; you must not
+ *   claim that you wrote the original software. If you use this software
+ *   in a product, an acknowledgment in the product documentation would be
+ *   appreciated but is not required.
+ * 2. Altered source versions must be plainly marked as such, and must not be
+ *   misrepresented as being the original software.
+ * 3. This notice may not be removed or altered from any source distribution.
+ *  Ferry Toth
+ * ftoth@exalondelft.nl
+ *
+ * https://github.com/htot/crc32c
+ *
+ * Modified by Facebook
+ *
+ * Original intel whitepaper:
+ * "Fast CRC Computation for iSCSI Polynomial Using CRC32 Instruction"
+ * https://www.intel.com/content/dam/www/public/us/en/documents/white-papers/crc-iscsi-polynomial-crc32-instruction-paper.pdf
+ *
+ * This version is from the folly library, created by Dave Watson
+ * <davejwatson@fb.com>
+ *
+ */
+#if defined(__SSE4_2__) && defined(__PCLMUL__)
+
+#define CRCtriplet(crc, buf, offset)                  \
+  crc##0 = _mm_crc32_u64(crc##0, *(buf##0 + offset)); \
+  crc##1 = _mm_crc32_u64(crc##1, *(buf##1 + offset)); \
+  crc##2 = _mm_crc32_u64(crc##2, *(buf##2 + offset));
+
+#define CRCduplet(crc, buf, offset)                   \
+  crc##0 = _mm_crc32_u64(crc##0, *(buf##0 + offset)); \
+  crc##1 = _mm_crc32_u64(crc##1, *(buf##1 + offset));
+
+#define CRCsinglet(crc, buf, offset) \
+  crc = _mm_crc32_u64(crc, *(uint64_t*)(buf + offset));
+
+// Numbers taken directly from intel whitepaper.
+// clang-format off
+const uint64_t clmul_constants[] = {
+    0x14cd00bd6, 0x105ec76f0, 0x0ba4fc28e, 0x14cd00bd6,
+    0x1d82c63da, 0x0f20c0dfe, 0x09e4addf8, 0x0ba4fc28e,
+    0x039d3b296, 0x1384aa63a, 0x102f9b8a2, 0x1d82c63da,
+    0x14237f5e6, 0x01c291d04, 0x00d3b6092, 0x09e4addf8,
+    0x0c96cfdc0, 0x0740eef02, 0x18266e456, 0x039d3b296,
+    0x0daece73e, 0x0083a6eec, 0x0ab7aff2a, 0x102f9b8a2,
+    0x1248ea574, 0x1c1733996, 0x083348832, 0x14237f5e6,
+    0x12c743124, 0x02ad91c30, 0x0b9e02b86, 0x00d3b6092,
+    0x018b33a4e, 0x06992cea2, 0x1b331e26a, 0x0c96cfdc0,
+    0x17d35ba46, 0x07e908048, 0x1bf2e8b8a, 0x18266e456,
+    0x1a3e0968a, 0x11ed1f9d8, 0x0ce7f39f4, 0x0daece73e,
+    0x061d82e56, 0x0f1d0f55e, 0x0d270f1a2, 0x0ab7aff2a,
+    0x1c3f5f66c, 0x0a87ab8a8, 0x12ed0daac, 0x1248ea574,
+    0x065863b64, 0x08462d800, 0x11eef4f8e, 0x083348832,
+    0x1ee54f54c, 0x071d111a8, 0x0b3e32c28, 0x12c743124,
+    0x0064f7f26, 0x0ffd852c6, 0x0dd7e3b0c, 0x0b9e02b86,
+    0x0f285651c, 0x0dcb17aa4, 0x010746f3c, 0x018b33a4e,
+    0x1c24afea4, 0x0f37c5aee, 0x0271d9844, 0x1b331e26a,
+    0x08e766a0c, 0x06051d5a2, 0x093a5f730, 0x17d35ba46,
+    0x06cb08e5c, 0x11d5ca20e, 0x06b749fb2, 0x1bf2e8b8a,
+    0x1167f94f2, 0x021f3d99c, 0x0cec3662e, 0x1a3e0968a,
+    0x19329634a, 0x08f158014, 0x0e6fc4e6a, 0x0ce7f39f4,
+    0x08227bb8a, 0x1a5e82106, 0x0b0cd4768, 0x061d82e56,
+    0x13c2b89c4, 0x188815ab2, 0x0d7a4825c, 0x0d270f1a2,
+    0x10f5ff2ba, 0x105405f3e, 0x00167d312, 0x1c3f5f66c,
+    0x0f6076544, 0x0e9adf796, 0x026f6a60a, 0x12ed0daac,
+    0x1a2adb74e, 0x096638b34, 0x19d34af3a, 0x065863b64,
+    0x049c3cc9c, 0x1e50585a0, 0x068bce87a, 0x11eef4f8e,
+    0x1524fa6c6, 0x19f1c69dc, 0x16cba8aca, 0x1ee54f54c,
+    0x042d98888, 0x12913343e, 0x1329d9f7e, 0x0b3e32c28,
+    0x1b1c69528, 0x088f25a3a, 0x02178513a, 0x0064f7f26,
+    0x0e0ac139e, 0x04e36f0b0, 0x0170076fa, 0x0dd7e3b0c,
+    0x141a1a2e2, 0x0bd6f81f8, 0x16ad828b4, 0x0f285651c,
+    0x041d17b64, 0x19425cbba, 0x1fae1cc66, 0x010746f3c,
+    0x1a75b4b00, 0x18db37e8a, 0x0f872e54c, 0x1c24afea4,
+    0x01e41e9fc, 0x04c144932, 0x086d8e4d2, 0x0271d9844,
+    0x160f7af7a, 0x052148f02, 0x05bb8f1bc, 0x08e766a0c,
+    0x0a90fd27a, 0x0a3c6f37a, 0x0b3af077a, 0x093a5f730,
+    0x04984d782, 0x1d22c238e, 0x0ca6ef3ac, 0x06cb08e5c,
+    0x0234e0b26, 0x063ded06a, 0x1d88abd4a, 0x06b749fb2,
+    0x04597456a, 0x04d56973c, 0x0e9e28eb4, 0x1167f94f2,
+    0x07b3ff57a, 0x19385bf2e, 0x0c9c8b782, 0x0cec3662e,
+    0x13a9cba9e, 0x0e417f38a, 0x093e106a4, 0x19329634a,
+    0x167001a9c, 0x14e727980, 0x1ddffc5d4, 0x0e6fc4e6a,
+    0x00df04680, 0x0d104b8fc, 0x02342001e, 0x08227bb8a,
+    0x00a2a8d7e, 0x05b397730, 0x168763fa6, 0x0b0cd4768,
+    0x1ed5a407a, 0x0e78eb416, 0x0d2c3ed1a, 0x13c2b89c4,
+    0x0995a5724, 0x1641378f0, 0x19b1afbc4, 0x0d7a4825c,
+    0x109ffedc0, 0x08d96551c, 0x0f2271e60, 0x10f5ff2ba,
+    0x00b0bf8ca, 0x00bf80dd2, 0x123888b7a, 0x00167d312,
+    0x1e888f7dc, 0x18dcddd1c, 0x002ee03b2, 0x0f6076544,
+    0x183e8d8fe, 0x06a45d2b2, 0x133d7a042, 0x026f6a60a,
+    0x116b0f50c, 0x1dd3e10e8, 0x05fabe670, 0x1a2adb74e,
+    0x130004488, 0x0de87806c, 0x000bcf5f6, 0x19d34af3a,
+    0x18f0c7078, 0x014338754, 0x017f27698, 0x049c3cc9c,
+    0x058ca5f00, 0x15e3e77ee, 0x1af900c24, 0x068bce87a,
+    0x0b5cfca28, 0x0dd07448e, 0x0ded288f8, 0x1524fa6c6,
+    0x059f229bc, 0x1d8048348, 0x06d390dec, 0x16cba8aca,
+    0x037170390, 0x0a3e3e02c, 0x06353c1cc, 0x042d98888,
+    0x0c4584f5c, 0x0d73c7bea, 0x1f16a3418, 0x1329d9f7e,
+    0x0531377e2, 0x185137662, 0x1d8d9ca7c, 0x1b1c69528,
+    0x0b25b29f2, 0x18a08b5bc, 0x19fb2a8b0, 0x02178513a,
+    0x1a08fe6ac, 0x1da758ae0, 0x045cddf4e, 0x0e0ac139e,
+    0x1a91647f2, 0x169cf9eb0, 0x1a0f717c4, 0x0170076fa,
+};
+
+// Compute the crc32c value for buffer smaller than 8
+#ifdef ROCKSDB_UBSAN_RUN
+#if defined(__clang__)
+__attribute__((__no_sanitize__("alignment")))
+#elif defined(__GNUC__)
+__attribute__((__no_sanitize_undefined__))
+#endif
+#endif
+inline void align_to_8(
+    size_t len,
+    uint64_t& crc0, // crc so far, updated on return
+    const unsigned char*& next) { // next data pointer, updated on return
+  uint32_t crc32bit = static_cast<uint32_t>(crc0);
+  if (len & 0x04) {
+    crc32bit = _mm_crc32_u32(crc32bit, *(uint32_t*)next);
+    next += sizeof(uint32_t);
+  }
+  if (len & 0x02) {
+    crc32bit = _mm_crc32_u16(crc32bit, *(uint16_t*)next);
+    next += sizeof(uint16_t);
+  }
+  if (len & 0x01) {
+    crc32bit = _mm_crc32_u8(crc32bit, *(next));
+    next++;
+  }
+  crc0 = crc32bit;
+}
+
+//
+// CombineCRC performs pclmulqdq multiplication of 2 partial CRC's and a well
+// chosen constant and xor's these with the remaining CRC.
+//
+inline uint64_t CombineCRC(
+    size_t block_size,
+    uint64_t crc0,
+    uint64_t crc1,
+    uint64_t crc2,
+    const uint64_t* next2) {
+  const auto multiplier =
+      *(reinterpret_cast<const __m128i*>(clmul_constants) + block_size - 1);
+  const auto crc0_xmm = _mm_set_epi64x(0, crc0);
+  const auto res0 = _mm_clmulepi64_si128(crc0_xmm, multiplier, 0x00);
+  const auto crc1_xmm = _mm_set_epi64x(0, crc1);
+  const auto res1 = _mm_clmulepi64_si128(crc1_xmm, multiplier, 0x10);
+  const auto res = _mm_xor_si128(res0, res1);
+  crc0 = _mm_cvtsi128_si64(res);
+  crc0 = crc0 ^ *((uint64_t*)next2 - 1);
+  crc2 = _mm_crc32_u64(crc2, crc0);
+  return crc2;
+}
+
+// Compute CRC-32C using the Intel hardware instruction.
+#ifdef ROCKSDB_UBSAN_RUN
+#if defined(__clang__)
+__attribute__((__no_sanitize__("alignment")))
+#elif defined(__GNUC__)
+__attribute__((__no_sanitize_undefined__))
+#endif
+#endif
+uint32_t crc32c_3way(uint32_t crc, const char* buf, size_t len) {
+  const unsigned char* next = (const unsigned char*)buf;
+  uint64_t count;
+  uint64_t crc0, crc1, crc2;
+  crc0 = crc ^ 0xffffffffu;
+
+
+  if (len >= 8) {
+    // if len > 216 then align and use triplets
+    if (len > 216) {
+      {
+        // Work on the bytes (< 8) before the first 8-byte alignment addr starts
+        uint64_t align_bytes = (8 - (uintptr_t)next) & 7;
+        len -= align_bytes;
+        align_to_8(align_bytes, crc0, next);
+      }
+
+      // Now work on the remaining blocks
+      count = len / 24; // number of triplets
+      len %= 24; // bytes remaining
+      uint64_t n = count >> 7; // #blocks = first block + full blocks
+      uint64_t block_size = count & 127;
+      if (block_size == 0) {
+        block_size = 128;
+      } else {
+        n++;
+      }
+      // points to the first byte of the next block
+      const uint64_t* next0 = (uint64_t*)next + block_size;
+      const uint64_t* next1 = next0 + block_size;
+      const uint64_t* next2 = next1 + block_size;
+
+      crc1 = crc2 = 0;
+      // Use Duff's device, a for() loop inside a switch()
+      // statement. This needs to execute at least once, round len
+      // down to nearest triplet multiple
+      switch (block_size) {
+        case 128:
+          do {
+            // jumps here for a full block of len 128
+            CRCtriplet(crc, next, -128);
+            FALLTHROUGH_INTENDED;
+            case 127:
+              // jumps here or below for the first block smaller
+              CRCtriplet(crc, next, -127);
+              FALLTHROUGH_INTENDED;
+            case 126:
+              CRCtriplet(crc, next, -126); // than 128
+              FALLTHROUGH_INTENDED;
+            case 125:
+              CRCtriplet(crc, next, -125);
+              FALLTHROUGH_INTENDED;
+            case 124:
+              CRCtriplet(crc, next, -124);
+              FALLTHROUGH_INTENDED;
+            case 123:
+              CRCtriplet(crc, next, -123);
+              FALLTHROUGH_INTENDED;
+            case 122:
+              CRCtriplet(crc, next, -122);
+              FALLTHROUGH_INTENDED;
+            case 121:
+              CRCtriplet(crc, next, -121);
+              FALLTHROUGH_INTENDED;
+            case 120:
+              CRCtriplet(crc, next, -120);
+              FALLTHROUGH_INTENDED;
+            case 119:
+              CRCtriplet(crc, next, -119);
+              FALLTHROUGH_INTENDED;
+            case 118:
+              CRCtriplet(crc, next, -118);
+              FALLTHROUGH_INTENDED;
+            case 117:
+              CRCtriplet(crc, next, -117);
+              FALLTHROUGH_INTENDED;
+            case 116:
+              CRCtriplet(crc, next, -116);
+              FALLTHROUGH_INTENDED;
+            case 115:
+              CRCtriplet(crc, next, -115);
+              FALLTHROUGH_INTENDED;
+            case 114:
+              CRCtriplet(crc, next, -114);
+              FALLTHROUGH_INTENDED;
+            case 113:
+              CRCtriplet(crc, next, -113);
+              FALLTHROUGH_INTENDED;
+            case 112:
+              CRCtriplet(crc, next, -112);
+              FALLTHROUGH_INTENDED;
+            case 111:
+              CRCtriplet(crc, next, -111);
+              FALLTHROUGH_INTENDED;
+            case 110:
+              CRCtriplet(crc, next, -110);
+              FALLTHROUGH_INTENDED;
+            case 109:
+              CRCtriplet(crc, next, -109);
+              FALLTHROUGH_INTENDED;
+            case 108:
+              CRCtriplet(crc, next, -108);
+              FALLTHROUGH_INTENDED;
+            case 107:
+              CRCtriplet(crc, next, -107);
+              FALLTHROUGH_INTENDED;
+            case 106:
+              CRCtriplet(crc, next, -106);
+              FALLTHROUGH_INTENDED;
+            case 105:
+              CRCtriplet(crc, next, -105);
+              FALLTHROUGH_INTENDED;
+            case 104:
+              CRCtriplet(crc, next, -104);
+              FALLTHROUGH_INTENDED;
+            case 103:
+              CRCtriplet(crc, next, -103);
+              FALLTHROUGH_INTENDED;
+            case 102:
+              CRCtriplet(crc, next, -102);
+              FALLTHROUGH_INTENDED;
+            case 101:
+              CRCtriplet(crc, next, -101);
+              FALLTHROUGH_INTENDED;
+            case 100:
+              CRCtriplet(crc, next, -100);
+              FALLTHROUGH_INTENDED;
+            case 99:
+              CRCtriplet(crc, next, -99);
+              FALLTHROUGH_INTENDED;
+            case 98:
+              CRCtriplet(crc, next, -98);
+              FALLTHROUGH_INTENDED;
+            case 97:
+              CRCtriplet(crc, next, -97);
+              FALLTHROUGH_INTENDED;
+            case 96:
+              CRCtriplet(crc, next, -96);
+              FALLTHROUGH_INTENDED;
+            case 95:
+              CRCtriplet(crc, next, -95);
+              FALLTHROUGH_INTENDED;
+            case 94:
+              CRCtriplet(crc, next, -94);
+              FALLTHROUGH_INTENDED;
+            case 93:
+              CRCtriplet(crc, next, -93);
+              FALLTHROUGH_INTENDED;
+            case 92:
+              CRCtriplet(crc, next, -92);
+              FALLTHROUGH_INTENDED;
+            case 91:
+              CRCtriplet(crc, next, -91);
+              FALLTHROUGH_INTENDED;
+            case 90:
+              CRCtriplet(crc, next, -90);
+              FALLTHROUGH_INTENDED;
+            case 89:
+              CRCtriplet(crc, next, -89);
+              FALLTHROUGH_INTENDED;
+            case 88:
+              CRCtriplet(crc, next, -88);
+              FALLTHROUGH_INTENDED;
+            case 87:
+              CRCtriplet(crc, next, -87);
+              FALLTHROUGH_INTENDED;
+            case 86:
+              CRCtriplet(crc, next, -86);
+              FALLTHROUGH_INTENDED;
+            case 85:
+              CRCtriplet(crc, next, -85);
+              FALLTHROUGH_INTENDED;
+            case 84:
+              CRCtriplet(crc, next, -84);
+              FALLTHROUGH_INTENDED;
+            case 83:
+              CRCtriplet(crc, next, -83);
+              FALLTHROUGH_INTENDED;
+            case 82:
+              CRCtriplet(crc, next, -82);
+              FALLTHROUGH_INTENDED;
+            case 81:
+              CRCtriplet(crc, next, -81);
+              FALLTHROUGH_INTENDED;
+            case 80:
+              CRCtriplet(crc, next, -80);
+              FALLTHROUGH_INTENDED;
+            case 79:
+              CRCtriplet(crc, next, -79);
+              FALLTHROUGH_INTENDED;
+            case 78:
+              CRCtriplet(crc, next, -78);
+              FALLTHROUGH_INTENDED;
+            case 77:
+              CRCtriplet(crc, next, -77);
+              FALLTHROUGH_INTENDED;
+            case 76:
+              CRCtriplet(crc, next, -76);
+              FALLTHROUGH_INTENDED;
+            case 75:
+              CRCtriplet(crc, next, -75);
+              FALLTHROUGH_INTENDED;
+            case 74:
+              CRCtriplet(crc, next, -74);
+              FALLTHROUGH_INTENDED;
+            case 73:
+              CRCtriplet(crc, next, -73);
+              FALLTHROUGH_INTENDED;
+            case 72:
+              CRCtriplet(crc, next, -72);
+              FALLTHROUGH_INTENDED;
+            case 71:
+              CRCtriplet(crc, next, -71);
+              FALLTHROUGH_INTENDED;
+            case 70:
+              CRCtriplet(crc, next, -70);
+              FALLTHROUGH_INTENDED;
+            case 69:
+              CRCtriplet(crc, next, -69);
+              FALLTHROUGH_INTENDED;
+            case 68:
+              CRCtriplet(crc, next, -68);
+              FALLTHROUGH_INTENDED;
+            case 67:
+              CRCtriplet(crc, next, -67);
+              FALLTHROUGH_INTENDED;
+            case 66:
+              CRCtriplet(crc, next, -66);
+              FALLTHROUGH_INTENDED;
+            case 65:
+              CRCtriplet(crc, next, -65);
+              FALLTHROUGH_INTENDED;
+            case 64:
+              CRCtriplet(crc, next, -64);
+              FALLTHROUGH_INTENDED;
+            case 63:
+              CRCtriplet(crc, next, -63);
+              FALLTHROUGH_INTENDED;
+            case 62:
+              CRCtriplet(crc, next, -62);
+              FALLTHROUGH_INTENDED;
+            case 61:
+              CRCtriplet(crc, next, -61);
+              FALLTHROUGH_INTENDED;
+            case 60:
+              CRCtriplet(crc, next, -60);
+              FALLTHROUGH_INTENDED;
+            case 59:
+              CRCtriplet(crc, next, -59);
+              FALLTHROUGH_INTENDED;
+            case 58:
+              CRCtriplet(crc, next, -58);
+              FALLTHROUGH_INTENDED;
+            case 57:
+              CRCtriplet(crc, next, -57);
+              FALLTHROUGH_INTENDED;
+            case 56:
+              CRCtriplet(crc, next, -56);
+              FALLTHROUGH_INTENDED;
+            case 55:
+              CRCtriplet(crc, next, -55);
+              FALLTHROUGH_INTENDED;
+            case 54:
+              CRCtriplet(crc, next, -54);
+              FALLTHROUGH_INTENDED;
+            case 53:
+              CRCtriplet(crc, next, -53);
+              FALLTHROUGH_INTENDED;
+            case 52:
+              CRCtriplet(crc, next, -52);
+              FALLTHROUGH_INTENDED;
+            case 51:
+              CRCtriplet(crc, next, -51);
+              FALLTHROUGH_INTENDED;
+            case 50:
+              CRCtriplet(crc, next, -50);
+              FALLTHROUGH_INTENDED;
+            case 49:
+              CRCtriplet(crc, next, -49);
+              FALLTHROUGH_INTENDED;
+            case 48:
+              CRCtriplet(crc, next, -48);
+              FALLTHROUGH_INTENDED;
+            case 47:
+              CRCtriplet(crc, next, -47);
+              FALLTHROUGH_INTENDED;
+            case 46:
+              CRCtriplet(crc, next, -46);
+              FALLTHROUGH_INTENDED;
+            case 45:
+              CRCtriplet(crc, next, -45);
+              FALLTHROUGH_INTENDED;
+            case 44:
+              CRCtriplet(crc, next, -44);
+              FALLTHROUGH_INTENDED;
+            case 43:
+              CRCtriplet(crc, next, -43);
+              FALLTHROUGH_INTENDED;
+            case 42:
+              CRCtriplet(crc, next, -42);
+              FALLTHROUGH_INTENDED;
+            case 41:
+              CRCtriplet(crc, next, -41);
+              FALLTHROUGH_INTENDED;
+            case 40:
+              CRCtriplet(crc, next, -40);
+              FALLTHROUGH_INTENDED;
+            case 39:
+              CRCtriplet(crc, next, -39);
+              FALLTHROUGH_INTENDED;
+            case 38:
+              CRCtriplet(crc, next, -38);
+              FALLTHROUGH_INTENDED;
+            case 37:
+              CRCtriplet(crc, next, -37);
+              FALLTHROUGH_INTENDED;
+            case 36:
+              CRCtriplet(crc, next, -36);
+              FALLTHROUGH_INTENDED;
+            case 35:
+              CRCtriplet(crc, next, -35);
+              FALLTHROUGH_INTENDED;
+            case 34:
+              CRCtriplet(crc, next, -34);
+              FALLTHROUGH_INTENDED;
+            case 33:
+              CRCtriplet(crc, next, -33);
+              FALLTHROUGH_INTENDED;
+            case 32:
+              CRCtriplet(crc, next, -32);
+              FALLTHROUGH_INTENDED;
+            case 31:
+              CRCtriplet(crc, next, -31);
+              FALLTHROUGH_INTENDED;
+            case 30:
+              CRCtriplet(crc, next, -30);
+              FALLTHROUGH_INTENDED;
+            case 29:
+              CRCtriplet(crc, next, -29);
+              FALLTHROUGH_INTENDED;
+            case 28:
+              CRCtriplet(crc, next, -28);
+              FALLTHROUGH_INTENDED;
+            case 27:
+              CRCtriplet(crc, next, -27);
+              FALLTHROUGH_INTENDED;
+            case 26:
+              CRCtriplet(crc, next, -26);
+              FALLTHROUGH_INTENDED;
+            case 25:
+              CRCtriplet(crc, next, -25);
+              FALLTHROUGH_INTENDED;
+            case 24:
+              CRCtriplet(crc, next, -24);
+              FALLTHROUGH_INTENDED;
+            case 23:
+              CRCtriplet(crc, next, -23);
+              FALLTHROUGH_INTENDED;
+            case 22:
+              CRCtriplet(crc, next, -22);
+              FALLTHROUGH_INTENDED;
+            case 21:
+              CRCtriplet(crc, next, -21);
+              FALLTHROUGH_INTENDED;
+            case 20:
+              CRCtriplet(crc, next, -20);
+              FALLTHROUGH_INTENDED;
+            case 19:
+              CRCtriplet(crc, next, -19);
+              FALLTHROUGH_INTENDED;
+            case 18:
+              CRCtriplet(crc, next, -18);
+              FALLTHROUGH_INTENDED;
+            case 17:
+              CRCtriplet(crc, next, -17);
+              FALLTHROUGH_INTENDED;
+            case 16:
+              CRCtriplet(crc, next, -16);
+              FALLTHROUGH_INTENDED;
+            case 15:
+              CRCtriplet(crc, next, -15);
+              FALLTHROUGH_INTENDED;
+            case 14:
+              CRCtriplet(crc, next, -14);
+              FALLTHROUGH_INTENDED;
+            case 13:
+              CRCtriplet(crc, next, -13);
+              FALLTHROUGH_INTENDED;
+            case 12:
+              CRCtriplet(crc, next, -12);
+              FALLTHROUGH_INTENDED;
+            case 11:
+              CRCtriplet(crc, next, -11);
+              FALLTHROUGH_INTENDED;
+            case 10:
+              CRCtriplet(crc, next, -10);
+              FALLTHROUGH_INTENDED;
+            case 9:
+              CRCtriplet(crc, next, -9);
+              FALLTHROUGH_INTENDED;
+            case 8:
+              CRCtriplet(crc, next, -8);
+              FALLTHROUGH_INTENDED;
+            case 7:
+              CRCtriplet(crc, next, -7);
+              FALLTHROUGH_INTENDED;
+            case 6:
+              CRCtriplet(crc, next, -6);
+              FALLTHROUGH_INTENDED;
+            case 5:
+              CRCtriplet(crc, next, -5);
+              FALLTHROUGH_INTENDED;
+            case 4:
+              CRCtriplet(crc, next, -4);
+              FALLTHROUGH_INTENDED;
+            case 3:
+              CRCtriplet(crc, next, -3);
+              FALLTHROUGH_INTENDED;
+            case 2:
+              CRCtriplet(crc, next, -2);
+              FALLTHROUGH_INTENDED;
+            case 1:
+              CRCduplet(crc, next, -1); // the final triplet is actually only 2
+              //{ CombineCRC(); }
+              crc0 = CombineCRC(block_size, crc0, crc1, crc2, next2);
+              if (--n > 0) {
+                crc1 = crc2 = 0;
+                block_size = 128;
+                // points to the first byte of the next block
+                next0 = next2 + 128;
+                next1 = next0 + 128; // from here on all blocks are 128 long
+                next2 = next1 + 128;
+              }
+              FALLTHROUGH_INTENDED;
+            case 0:;
+          } while (n > 0);
+      }
+      next = (const unsigned char*)next2;
+    }
+    uint64_t count2 = len >> 3; // 216 of less bytes is 27 or less singlets
+    len = len & 7;
+    next += (count2 * 8);
+    switch (count2) {
+      case 27:
+        CRCsinglet(crc0, next, -27 * 8);
+        FALLTHROUGH_INTENDED;
+      case 26:
+        CRCsinglet(crc0, next, -26 * 8);
+        FALLTHROUGH_INTENDED;
+      case 25:
+        CRCsinglet(crc0, next, -25 * 8);
+        FALLTHROUGH_INTENDED;
+      case 24:
+        CRCsinglet(crc0, next, -24 * 8);
+        FALLTHROUGH_INTENDED;
+      case 23:
+        CRCsinglet(crc0, next, -23 * 8);
+        FALLTHROUGH_INTENDED;
+      case 22:
+        CRCsinglet(crc0, next, -22 * 8);
+        FALLTHROUGH_INTENDED;
+      case 21:
+        CRCsinglet(crc0, next, -21 * 8);
+        FALLTHROUGH_INTENDED;
+      case 20:
+        CRCsinglet(crc0, next, -20 * 8);
+        FALLTHROUGH_INTENDED;
+      case 19:
+        CRCsinglet(crc0, next, -19 * 8);
+        FALLTHROUGH_INTENDED;
+      case 18:
+        CRCsinglet(crc0, next, -18 * 8);
+        FALLTHROUGH_INTENDED;
+      case 17:
+        CRCsinglet(crc0, next, -17 * 8);
+        FALLTHROUGH_INTENDED;
+      case 16:
+        CRCsinglet(crc0, next, -16 * 8);
+        FALLTHROUGH_INTENDED;
+      case 15:
+        CRCsinglet(crc0, next, -15 * 8);
+        FALLTHROUGH_INTENDED;
+      case 14:
+        CRCsinglet(crc0, next, -14 * 8);
+        FALLTHROUGH_INTENDED;
+      case 13:
+        CRCsinglet(crc0, next, -13 * 8);
+        FALLTHROUGH_INTENDED;
+      case 12:
+        CRCsinglet(crc0, next, -12 * 8);
+        FALLTHROUGH_INTENDED;
+      case 11:
+        CRCsinglet(crc0, next, -11 * 8);
+        FALLTHROUGH_INTENDED;
+      case 10:
+        CRCsinglet(crc0, next, -10 * 8);
+        FALLTHROUGH_INTENDED;
+      case 9:
+        CRCsinglet(crc0, next, -9 * 8);
+        FALLTHROUGH_INTENDED;
+      case 8:
+        CRCsinglet(crc0, next, -8 * 8);
+        FALLTHROUGH_INTENDED;
+      case 7:
+        CRCsinglet(crc0, next, -7 * 8);
+        FALLTHROUGH_INTENDED;
+      case 6:
+        CRCsinglet(crc0, next, -6 * 8);
+        FALLTHROUGH_INTENDED;
+      case 5:
+        CRCsinglet(crc0, next, -5 * 8);
+        FALLTHROUGH_INTENDED;
+      case 4:
+        CRCsinglet(crc0, next, -4 * 8);
+        FALLTHROUGH_INTENDED;
+      case 3:
+        CRCsinglet(crc0, next, -3 * 8);
+        FALLTHROUGH_INTENDED;
+      case 2:
+        CRCsinglet(crc0, next, -2 * 8);
+        FALLTHROUGH_INTENDED;
+      case 1:
+        CRCsinglet(crc0, next, -1 * 8);
+        FALLTHROUGH_INTENDED;
+      case 0:;
+    }
+  }
+  {
+    align_to_8(len, crc0, next);
+    return (uint32_t)crc0 ^ 0xffffffffu;
+  }
+}
+
+#endif //__SSE4_2__ && __PCLMUL__
+
+static inline Function Choose_Extend() {
+#ifdef HAVE_POWER8
+  return isAltiVec() ? ExtendPPCImpl : ExtendImpl<DefaultCRC32>;
+#elif defined(HAVE_ARM64_CRC)
+  if(crc32c_runtime_check()) {
+    pmull_runtime_flag = crc32c_pmull_runtime_check();
+    return ExtendARMImpl;
+  } else {
+    return ExtendImpl<DefaultCRC32>;
+  }
+#elif defined(__SSE4_2__) && defined(__PCLMUL__) && !defined NO_THREEWAY_CRC32C
+  // NOTE: runtime detection no longer supported on x86
+#ifdef _MSC_VER
+#pragma warning(disable: 4551)
+#endif
+  (void)ExtendImpl<DefaultCRC32>; // suppress unused warning
+#ifdef _MSC_VER
+#pragma warning(default: 4551)
+#endif
+  return crc32c_3way;
+#else
+  return ExtendImpl<DefaultCRC32>;
+#endif
+}
+
+static Function ChosenExtend = Choose_Extend();
+uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
+  return ChosenExtend(crc, buf, size);
+}
+
+// The code for crc32c combine, copied with permission from folly
+
+// Standard galois-field multiply.  The only modification is that a,
+// b, m, and p are all bit-reflected.
+//
+// https://en.wikipedia.org/wiki/Finite_field_arithmetic
+static constexpr uint32_t gf_multiply_sw_1(
+    size_t i, uint32_t p, uint32_t a, uint32_t b, uint32_t m) {
+  // clang-format off
+  return i == 32 ? p : gf_multiply_sw_1(
+      /* i = */ i + 1,
+      /* p = */ p ^ ((0u-((b >> 31) & 1)) & a),
+      /* a = */ (a >> 1) ^ ((0u-(a & 1)) & m),
+      /* b = */ b << 1,
+      /* m = */ m);
+  // clang-format on
+}
+static constexpr uint32_t gf_multiply_sw(uint32_t a, uint32_t b, uint32_t m) {
+  return gf_multiply_sw_1(/* i = */ 0, /* p = */ 0, a, b, m);
+}
+
+static constexpr uint32_t gf_square_sw(uint32_t a, uint32_t m) {
+  return gf_multiply_sw(a, a, m);
+}
+
+template <size_t i, uint32_t m>
+struct gf_powers_memo {
+  static constexpr uint32_t value =
+      gf_square_sw(gf_powers_memo<i - 1, m>::value, m);
+};
+template <uint32_t m>
+struct gf_powers_memo<0, m> {
+  static constexpr uint32_t value = m;
+};
+
+template <typename T, T... Ints>
+struct integer_sequence {
+  using value_type = T;
+  static constexpr size_t size() { return sizeof...(Ints); }
+};
+
+template <typename T, std::size_t N, T... Is>
+struct make_integer_sequence : make_integer_sequence<T, N - 1, N - 1, Is...> {};
+
+template <typename T, T... Is>
+struct make_integer_sequence<T, 0, Is...> : integer_sequence<T, Is...> {};
+
+template <std::size_t N>
+using make_index_sequence = make_integer_sequence<std::size_t, N>;
+
+template <uint32_t m>
+struct gf_powers_make {
+  template <size_t... i>
+  using index_sequence = integer_sequence<size_t, i...>;
+  template <size_t... i>
+  constexpr std::array<uint32_t, sizeof...(i)> operator()(
+      index_sequence<i...>) const {
+    return std::array<uint32_t, sizeof...(i)>{{gf_powers_memo<i, m>::value...}};
+  }
+};
+
+static constexpr uint32_t crc32c_m = 0x82f63b78;
+
+static constexpr std::array<uint32_t, 62> const crc32c_powers =
+    gf_powers_make<crc32c_m>{}(make_index_sequence<62>{});
+
+// Expects a "pure" crc (see Crc32cCombine)
+static uint32_t Crc32AppendZeroes(
+    uint32_t crc, size_t len_over_4, uint32_t polynomial,
+    std::array<uint32_t, 62> const& powers_array) {
+  auto powers = powers_array.data();
+  // Append by multiplying by consecutive powers of two of the zeroes
+  // array
+  size_t len_bits = len_over_4;
+
+  while (len_bits) {
+    // Advance directly to next bit set.
+    auto r = CountTrailingZeroBits(len_bits);
+    len_bits >>= r;
+    powers += r;
+
+    crc = gf_multiply_sw(crc, *powers, polynomial);
+
+    len_bits >>= 1;
+    powers++;
+  }
+
+  return crc;
+}
+
+static inline uint32_t InvertedToPure(uint32_t crc) { return ~crc; }
+
+static inline uint32_t PureToInverted(uint32_t crc) { return ~crc; }
+
+static inline uint32_t PureExtend(uint32_t crc, const char* buf, size_t size) {
+  return InvertedToPure(Extend(PureToInverted(crc), buf, size));
+}
+
+// Background:
+// RocksDB uses two kinds of crc32c values: masked and unmasked. Neither is
+// a "pure" CRC because a pure CRC satisfies (^ for xor)
+//  crc(a ^ b) = crc(a) ^ crc(b)
+// The unmasked is closest, and this function takes unmasked crc32c values.
+// The unmasked values are impure in two ways:
+// * The initial setting at the start of CRC computation is all 1 bits
+// (like -1) instead of zero.
+// * The result has all bits invered.
+// Note that together, these result in the empty string having a crc32c of
+// zero. See
+// https://en.wikipedia.org/wiki/Computation_of_cyclic_redundancy_checks#CRC_variants
+//
+// Simplified version of strategy, using xor through pure CRCs (+ for concat):
+//
+// pure_crc(str1 + str2) = pure_crc(str1 + zeros(len(str2))) ^
+//                         pure_crc(zeros(len(str1)) + str2)
+//
+// because the xor of these two zero-padded strings is str1 + str2. For pure
+// CRC, leading zeros don't affect the result, so we only need
+//
+// pure_crc(str1 + str2) = pure_crc(str1 + zeros(len(str2))) ^
+//                         pure_crc(str2)
+//
+// Considering we aren't working with pure CRCs, what is actually in the input?
+//
+// crc1 = PureToInverted(PureExtendCrc32c(-1, zeros, crc1len) ^
+//                       PureCrc32c(str1, crc1len))
+// crc2 = PureToInverted(PureExtendCrc32c(-1, zeros, crc2len) ^
+//                       PureCrc32c(str2, crc2len))
+//
+// The result we want to compute is
+// combined = PureToInverted(PureExtendCrc32c(PureExtendCrc32c(-1, zeros,
+//                                                             crc1len) ^
+//                                            PureCrc32c(str1, crc1len),
+//                                            zeros, crc2len) ^
+//                           PureCrc32c(str2, crc2len))
+//
+// Thus, in addition to extending crc1 over the length of str2 in (virtual)
+// zeros, we need to cancel out the -1 initializer that was used in computing
+// crc2. To cancel it out, we also need to extend it over crc2len in zeros.
+// To simplify, since the end of str1 and that -1 initializer for crc2 are at
+// the same logical position, we can combine them before we extend over the
+// zeros.
+uint32_t Crc32cCombine(uint32_t crc1, uint32_t crc2, size_t crc2len) {
+  uint32_t pure_crc1_with_init = InvertedToPure(crc1);
+  uint32_t pure_crc2_with_init = InvertedToPure(crc2);
+  uint32_t pure_crc2_init = static_cast<uint32_t>(-1);
+
+  // Append up to 32 bits of zeroes in the normal way
+  char zeros[4] = {0, 0, 0, 0};
+  auto len = crc2len & 3;
+  uint32_t tmp = pure_crc1_with_init ^ pure_crc2_init;
+  if (len) {
+    tmp = PureExtend(tmp, zeros, len);
+  }
+  return PureToInverted(
+      Crc32AppendZeroes(tmp, crc2len / 4, crc32c_m, crc32c_powers) ^
+      pure_crc2_with_init);
+}
+
+}  // namespace ROCKSDB_NAMESPACE::crc32c
