@@ -234,7 +234,6 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
         (void)coins_view_cache.GetBestBlock();
         (void)coins_view_cache.GetCacheSize();
         (void)coins_view_cache.GetHeadBlocks();
-        (void)coins_view_cache.HaveInputs(CTransaction{random_mutable_transaction});
     }
 
     {
