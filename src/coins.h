@@ -8,21 +8,33 @@
 
 #include <attributes.h>
 #include <compressor.h>
+#include <consensus/consensus.h>
 #include <core_memusage.h>
 #include <memusage.h>
+#include <primitives/block.h>
 #include <primitives/transaction.h>
+#include <primitives/transaction_identifier.h>
 #include <serialize.h>
 #include <support/allocators/pool.h>
 #include <uint256.h>
 #include <util/check.h>
 #include <util/overflow.h>
 #include <util/hasher.h>
+#include <util/threadpool.h>
 
 #include <cassert>
 #include <cstdint>
 
+#include <atomic>
 #include <functional>
+#include <future>
+#include <memory>
+#include <optional>
+#include <ranges>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 /**
  * A UTXO entry.
@@ -139,7 +151,8 @@ private:
     }
 
 public:
-    Coin coin; // The actual cached data.
+    //! Pool-allocated coin data, or nullptr for spent entries.
+    Coin* coin{nullptr};
 
     enum Flags {
         /**
@@ -163,10 +176,31 @@ public:
     };
 
     CCoinsCacheEntry() noexcept = default;
-    explicit CCoinsCacheEntry(Coin&& coin_) noexcept : coin(std::move(coin_)) {}
     ~CCoinsCacheEntry()
     {
+        Assume(coin == nullptr);
         SetClean();
+    }
+    //! Copying would duplicate ownership of the coin pointer.
+    CCoinsCacheEntry(const CCoinsCacheEntry&) = delete;
+
+    CCoinsCacheEntry(CCoinsCacheEntry&& other) noexcept
+        : coin(other.coin)
+    {
+        Assume(!other.m_flags);
+        other.coin = nullptr;
+    }
+
+    CCoinsCacheEntry& operator=(CCoinsCacheEntry&& other) noexcept
+    {
+        if (this != &other) {
+            Assume(!coin);
+            Assume(!m_flags);
+            Assume(!other.m_flags);
+            coin = other.coin;
+            other.coin = nullptr;
+        }
+        return *this;
     }
 
     static void SetDirty(CoinsCachePair& pair, CoinsCachePair& sentinel) noexcept { AddFlags(DIRTY, pair, sentinel); }
@@ -182,6 +216,11 @@ public:
     }
     bool IsDirty() const noexcept { return m_flags & DIRTY; }
     bool IsFresh() const noexcept { return m_flags & FRESH; }
+
+    bool IsSpent() const noexcept
+    {
+        return !coin || coin->IsSpent();
+    }
 
     //! Only call Next when this entry is DIRTY, FRESH, or both
     CoinsCachePair* Next() const noexcept
@@ -252,25 +291,26 @@ private:
  * of CCoinsView::BatchWrite to iterate through the flagged entries without knowing
  * the caller's intent.
  *
- * However, the receiver can still call CoinsViewCacheCursor::WillErase to see if the
+ * However, the receiver can still call CoinsViewCacheCursor::WillClear to see if the
  * caller will erase the entry after BatchWrite returns. If so, the receiver can
- * perform optimizations such as moving the coin out of the CCoinsCachEntry instead
+ * perform optimizations such as moving the coin out of the CCoinsCacheEntry instead
  * of copying it.
  */
 struct CoinsViewCacheCursor
 {
-    //! If will_erase is not set, iterating through the cursor will erase spent coins from the map,
+    //! If will_clear is not set, iterating through the cursor will erase spent coins from the map,
     //! and other coins will be unflagged (removing them from the linked list).
-    //! If will_erase is set, the underlying map and linked list will not be modified,
+    //! If will_clear is set, the underlying map and linked list will not be modified,
     //! as the caller is expected to wipe the entire map anyway.
-    //! This is an optimization compared to erasing all entries as the cursor iterates them when will_erase is set.
+    //! This is an optimization compared to erasing all entries as the cursor iterates them when will_clear is set.
     //! Calling CCoinsMap::clear() afterwards is faster because a CoinsCachePair cannot be coerced back into a
     //! CCoinsMap::iterator to be erased, and must therefore be looked up again by key in the CCoinsMap before being erased.
     CoinsViewCacheCursor(size_t& dirty_count LIFETIMEBOUND,
                          CoinsCachePair& sentinel LIFETIMEBOUND,
                          CCoinsMap& map LIFETIMEBOUND,
-                         bool will_erase) noexcept
-        : m_dirty_count(dirty_count), m_sentinel(sentinel), m_map(map), m_will_erase(will_erase) {}
+                         CCoinsMapMemoryResource& memory LIFETIMEBOUND,
+                         bool will_clear) noexcept
+        : m_dirty_count(dirty_count), m_sentinel(sentinel), m_map(map), m_memory(memory), m_will_clear(will_clear) {}
 
     inline CoinsCachePair* Begin() const noexcept { return m_sentinel.second.Next(); }
     inline CoinsCachePair* End() const noexcept { return &m_sentinel; }
@@ -282,9 +322,13 @@ struct CoinsViewCacheCursor
         Assume(TrySub(m_dirty_count, current.second.IsDirty()));
         // If we are not going to erase the cache, we must still erase spent entries.
         // Otherwise, clear the state of the entry.
-        if (!m_will_erase) {
-            if (current.second.coin.IsSpent()) {
-                assert(current.second.coin.DynamicMemoryUsage() == 0); // scriptPubKey was already cleared in SpendCoin
+        if (!m_will_clear) {
+            if (current.second.IsSpent()) {
+                if (current.second.coin) {
+                    current.second.coin->~Coin();
+                    m_memory.Deallocate(current.second.coin, sizeof(Coin), alignof(Coin));
+                    current.second.coin = nullptr;
+                }
                 m_map.erase(current.first);
             } else {
                 current.second.SetClean();
@@ -293,14 +337,15 @@ struct CoinsViewCacheCursor
         return next_entry;
     }
 
-    inline bool WillErase(CoinsCachePair& current) const noexcept { return m_will_erase || current.second.coin.IsSpent(); }
+    bool WillClear() const noexcept { return m_will_clear; }
     size_t GetDirtyCount() const noexcept { return m_dirty_count; }
     size_t GetTotalCount() const noexcept { return m_map.size(); }
 private:
     size_t& m_dirty_count;
     CoinsCachePair& m_sentinel;
     CCoinsMap& m_map;
-    bool m_will_erase;
+    CCoinsMapMemoryResource& m_memory;
+    bool m_will_clear;
 };
 
 /** Pure abstract view on the open txout dataset. */
@@ -376,7 +421,7 @@ protected:
 public:
     explicit CCoinsViewBacked(CCoinsView* in_view) : base{Assert(in_view)} {}
 
-    void SetBackend(CCoinsView& in_view) { base = &in_view; }
+    virtual void SetBackend(CCoinsView& in_view) { base = &in_view; }
 
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override { return base->GetCoin(outpoint); }
     std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override { return base->PeekCoin(outpoint); }
@@ -406,7 +451,7 @@ protected:
     mutable CoinsCachePair m_sentinel;
     mutable CCoinsMap cacheCoins;
 
-    /* Cached dynamic memory usage for the inner Coin objects. */
+    /* Cached dynamic memory usage for inner Coin script buffers. */
     mutable size_t cachedCoinsUsage{0};
     /* Running count of dirty Coin cache entries. */
     mutable size_t m_dirty_count{0};
@@ -415,7 +460,7 @@ protected:
      * Discard all modifications made to this cache without flushing to the base view.
      * This can be used to efficiently reuse a cache instance across multiple operations.
      */
-    void Reset() noexcept;
+    virtual void Reset() noexcept;
 
     /* Fetch the coin from base. Used for cache misses in FetchCoin. */
     virtual std::optional<Coin> FetchCoinFromBase(const COutPoint& outpoint) const;
@@ -427,6 +472,9 @@ public:
      * By deleting the copy constructor, we prevent accidentally using it when one intends to create a cache on top of a base cache.
      */
     CCoinsViewCache(const CCoinsViewCache &) = delete;
+
+    //! Coins need to be destroyed explicitly because entries only store pool-backed pointers.
+    ~CCoinsViewCache() { FreeAllCoins(); }
 
     // Standard CCoinsView methods
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override;
@@ -480,6 +528,17 @@ public:
      */
     bool SpendCoin(const COutPoint &outpoint, Coin* moveto = nullptr);
 
+    //! Move a coin into a cache entry, overwriting any existing coin.
+    void MoveCoin(CCoinsCacheEntry& entry, Coin&& coin) const;
+
+    //! Free (deallocate) a coin.
+    void FreeCoin(CCoinsCacheEntry& entry) const noexcept;
+    //! Free a coin using a memory usage value captured before the coin is moved from.
+    void FreeCoin(CCoinsCacheEntry& entry, size_t mem_usage) const noexcept;
+
+    //! Call FreeCoin() on all the coins within this cache.
+    void FreeAllCoins() const noexcept;
+
     /**
      * Push the modifications applied to this cache to its base and wipe local state.
      * Failure to call this method or Sync() before destruction will cause the changes
@@ -487,7 +546,7 @@ public:
      * If reallocate_cache is false, the cache will retain the same memory footprint
      * after flushing and should be destroyed to deallocate.
      */
-    void Flush(bool reallocate_cache = true);
+    virtual void Flush(bool reallocate_cache = true);
 
     /**
      * Push the modifications applied to this cache to its base while retaining
@@ -495,7 +554,7 @@ public:
      * Failure to call this method or Flush() before destruction will cause the changes
      * to be forgotten.
      */
-    void Sync();
+    virtual void Sync();
 
     /**
      * Removes the UTXO with the given outpoint from the cache, if it is
@@ -553,24 +612,221 @@ private:
 };
 
 /**
- * CCoinsViewCache overlay that avoids populating/mutating parent cache layers on cache misses.
+ * CCoinsViewCache subclass that asynchronously fetches all block inputs in parallel during ConnectBlock without
+ * mutating the base cache.
  *
- * This is achieved by fetching coins from the base view using PeekCoin() instead of GetCoin(),
- * so intermediate CCoinsViewCache layers are not filled.
+ * Only used in ConnectBlock to pass as an ephemeral view that can be reset if the block is invalid.
+ * It provides the same interface as CCoinsViewCache. It overrides all methods that mutate base,
+ * stopping threads before calling superclass.
+ * It adds an additional StartFetching method to provide the block.
  *
- * Used during ConnectBlock() as an ephemeral, resettable top-level view that is flushed only
- * on success, so invalid blocks don't pollute the underlying cache.
+ * When a block is passed to StartFetching, the inputs of the block are flattened into a vector of InputToFetch
+ * objects. StartFetching then submits worker tasks to a ThreadPool and keeps the returned futures alive until fetching
+ * is stopped.
+ *
+ * ProcessInput() atomically fetches and increments m_input_head, so each thread can only access a single element of the
+ * m_inputs vector at a time. Workers race to claim inputs, so they may fetch elements in any order. If the fetched
+ * index is greater than the size of m_inputs, no more inputs can be fetched and false is returned.
+ *
+ * The worker claims the InputToFetch at this index, fetches the coin from the base cache and moves it into the
+ * InputToFetch object. The ready flag is then set with a release memory order. This allows the ready flag to be
+ * used as a memory fence, guaranteeing the coin being written to the object will have happened before another
+ * thread tests the flag with an acquire memory order.
+ * This assumes all base->PeekCoin() paths are safe for concurrent readers and do not mutate lower cache layers.
+ *
+ * When a coin is requested from the cache on the main thread and is not already in cacheCoins map, FetchCoinFromBase
+ * checks whether the next unconsumed entry in m_inputs has the requested outpoint. On a match, m_input_tail is advanced
+ * and the entry's ready flag is tested with an acquire memory order. If the worker has already completed, the coin is
+ * moved out and returned. Otherwise the main thread calls ProcessInput() to make progress (by fetching other inputs)
+ * rather than blocking on a specific worker.
+ *
+ * StopFetching() is called before mutating operations (Flush/Sync/Reset/SetBackend). It stops fetching by moving
+ * m_input_head to the end of m_inputs (so workers quickly exit), then waits for all futures to complete and clears
+ * the per-block state (m_inputs and the head/tail counters).
+ *
+ *       Workers advance m_input_head to fetch inputs. Main thread advances m_input_tail to consume.
+ *
+ *       Before workers start:
+ *
+ *                 m_input_head
+ *                 m_input_tail
+ *                      │
+ *                      ▼
+ *                 ┌─────────┬─────────┬─────────┬─────────┬─────────┬─────────┬─────────┬─────────┬─────────┐
+ *       m_inputs: │ waiting │ waiting │ waiting │ waiting │ waiting │ waiting │ waiting │ waiting │ waiting │
+ *                 │         │         │         │         │         │         │         │         │         │
+ *                 └─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┘
+ *
+ *       After workers start:
+ *
+ *                                       Worker 2            Worker 0  Worker 3  Worker 1  m_input_head
+ *                                          │                   │         │         │         │
+ *                                          ▼                   ▼         ▼         ▼         ▼
+ *                 ┌─────────┬─────────┬─────────┬─────────┬─────────┬─────────┬─────────┬─────────┬─────────┐
+ *       m_inputs: │  ready  │  ready  │fetching │  ready  │fetching │fetching │fetching │ waiting │ waiting │
+ *                 │consumed │    ✓    │    ●    │    ✓    │    ●    │    ●    │    ●    │         │         │
+ *                 └─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┘
+ *                                ▲
+ *                                │
+ *                           m_input_tail
  */
 class CoinsViewOverlay : public CCoinsViewCache
 {
 private:
+    //! The latest input not yet being fetched. Workers atomically increment this when fetching.
+    mutable std::atomic_uint32_t m_input_head{0};
+    //! The latest input not yet accessed by a consumer. Only the main thread increments this.
+    mutable uint32_t m_input_tail{0};
+
+    //! The inputs of the block which is being fetched.
+    struct InputToFetch {
+        //! Workers set this after setting the coin. The main thread tests this before reading the coin.
+        mutable std::atomic_flag ready{};
+        //! The outpoint of the input to fetch.
+        const COutPoint& outpoint;
+        //! The coin that workers will fetch and main thread will insert into cache.
+        mutable std::optional<Coin> coin{std::nullopt};
+
+        //! The move constructor will never be used, since m_inputs will never need to reallocate.
+        InputToFetch(InputToFetch&& other) noexcept : outpoint{other.outpoint} { Assert(false); }
+        explicit InputToFetch(const COutPoint& o LIFETIMEBOUND) noexcept : outpoint{o} {}
+    };
+    //! Must only be mutated when m_futures is empty. Elements may be mutated when m_futures is not empty.
+    std::vector<InputToFetch> m_inputs{};
+
+    /**
+     * Claim and fetch the next input in the queue. Safe to call from any thread.
+     *
+     * @return true if there are more inputs in the queue to fetch
+     * @return false if there are no more inputs in the queue to fetch
+     */
+    bool ProcessInput() const noexcept
+    {
+        const auto i{m_input_head.fetch_add(1, std::memory_order_relaxed)};
+        if (i >= m_inputs.size()) return false;
+
+        auto& input{m_inputs[i]};
+        input.coin = base->PeekCoin(input.outpoint);
+        // Use release so writing coin above happens before the main thread acquires.
+        input.ready.test_and_set(std::memory_order_release);
+        input.ready.notify_one();
+        return true;
+    }
+
+    //! Stop all worker threads and clear fetching data.
+    void StopFetching() noexcept
+    {
+        if (m_futures.empty()) {
+            Assume(m_inputs.empty());
+            Assume(m_input_head.load(std::memory_order_relaxed) == 0);
+            Assume(m_input_tail == 0);
+            return;
+        }
+        // Skip fetching the rest of the inputs by moving the head to the end.
+        m_input_head.store(m_inputs.size(), std::memory_order_relaxed);
+        // Wait for all threads to stop.
+        for (auto& future : m_futures) future.wait();
+        m_futures.clear();
+        m_inputs.clear();
+        m_input_head.store(0, std::memory_order_relaxed);
+        m_input_tail = 0;
+    }
+
     std::optional<Coin> FetchCoinFromBase(const COutPoint& outpoint) const override
     {
+        // This assumes ConnectBlock accesses all inputs in the same order as
+        // they are added to m_inputs in StartFetching.
+        if (m_input_tail < m_inputs.size() && m_inputs[m_input_tail].outpoint == outpoint) {
+            // We advance the tail since the input is cached and not accessed through this method again.
+            auto& input{m_inputs[m_input_tail++]};
+            // Check if the coin is ready to be read. We need acquire so we match the worker thread's release.
+            while (!input.ready.test(std::memory_order_acquire)) {
+                // Work instead of waiting if the coin is not ready
+                if (!ProcessInput()) {
+                    // No more work, just wait
+                    input.ready.wait(/*old=*/false, std::memory_order_acquire);
+                    break;
+                }
+            }
+            // We can move the coin since we won't access this input again.
+            return std::move(input.coin);
+        }
+
+        // We will only get here for BIP30 checks or when parallel fetching is disabled.
         return base->PeekCoin(outpoint);
     }
 
+    //! Non-null. May have zero workers when input fetching is disabled.
+    std::shared_ptr<ThreadPool> m_thread_pool;
+    std::vector<std::future<void>> m_futures{};
+
+protected:
+    void Reset() noexcept override
+    {
+        StopFetching();
+        CCoinsViewCache::Reset();
+    }
+
 public:
-    using CCoinsViewCache::CCoinsViewCache;
+    explicit CoinsViewOverlay(CCoinsView* in_base, std::shared_ptr<ThreadPool> thread_pool,
+                              bool deterministic = false) noexcept
+        : CCoinsViewCache{in_base, deterministic}, m_thread_pool{std::move(thread_pool)}
+    {
+        Assert(m_thread_pool);
+        // Reserve to maximum theoretical number so emplace_back in StartFetching never reallocates m_inputs.
+        m_inputs.reserve(MAX_INPUTS_PER_BLOCK);
+    }
+
+    //! Start fetching inputs from block in background.
+    [[nodiscard]] ResetGuard StartFetching(const CBlock& block LIFETIMEBOUND) noexcept
+    {
+        Assume(m_futures.empty());
+        Assume(m_inputs.empty());
+        Assume(m_input_head.load(std::memory_order_relaxed) == 0);
+        Assume(m_input_tail == 0);
+        if (const auto workers_count{m_thread_pool->WorkersCount()}; workers_count > 0) {
+            // Loop through the inputs of the block and set them in the queue.
+            // Filter txs that are spending inputs created earlier in the same block.
+            std::unordered_set<Txid, SaltedTxidHasher> txids;
+            txids.reserve(block.vtx.size());
+            for (const auto& tx : block.vtx | std::views::drop(1)) {
+                for (const auto& input : tx->vin) {
+                    if (!txids.contains(input.prevout.hash)) m_inputs.emplace_back(input.prevout);
+                }
+                txids.emplace(tx->GetHash());
+            }
+            // Only start threads if we have something to fetch.
+            if (!m_inputs.empty()) {
+                std::vector<std::function<void()>> tasks(workers_count, [this] {
+                    while (ProcessInput()) {}
+                });
+                if (auto futures{m_thread_pool->Submit(std::move(tasks))}; futures.has_value()) {
+                    m_futures = std::move(*futures);
+                } else {
+                    m_inputs.clear();
+                }
+            }
+        }
+        return CreateResetGuard();
+    }
+
+    void SetBackend(CCoinsView& view) override
+    {
+        StopFetching();
+        CCoinsViewCache::SetBackend(view);
+    }
+
+    void Flush(bool reallocate_cache = true) override
+    {
+        StopFetching();
+        CCoinsViewCache::Flush(reallocate_cache);
+    }
+
+    void Sync() override
+    {
+        StopFetching();
+        CCoinsViewCache::Sync();
+    }
 };
 
 //! Utility function to add all of a transaction's outputs to a cache.

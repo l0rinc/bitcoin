@@ -61,8 +61,8 @@ public:
         for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)){
             if (it->second.IsDirty()) {
                 // Same optimization used in CCoinsViewDB is to only write dirty entries.
-                map_[it->first] = it->second.coin;
-                if (it->second.coin.IsSpent() && m_rng.randrange(3) == 0) {
+                map_[it->first] = it->second.coin ? *it->second.coin : Coin{};
+                if (it->second.IsSpent() && m_rng.randrange(3) == 0) {
                     // Randomly delete empty entries on write.
                     map_.erase(it->first);
                 }
@@ -84,7 +84,7 @@ public:
         size_t ret = memusage::DynamicUsage(cacheCoins);
         size_t count = 0;
         for (const auto& entry : cacheCoins) {
-            ret += entry.second.coin.DynamicMemoryUsage();
+            if (entry.second.coin) ret += entry.second.coin->DynamicMemoryUsage();
             ++count;
         }
         BOOST_CHECK_EQUAL(GetCacheSize(), count);
@@ -96,6 +96,7 @@ public:
 
     CCoinsMap& map() const { return cacheCoins; }
     CoinsCachePair& sentinel() const { return m_sentinel; }
+    CCoinsMapMemoryResource& resource() { return m_cache_coins_memory_resource; }
     size_t& usage() const { return cachedCoinsUsage; }
     size_t& dirty() const { return m_dirty_count; }
 };
@@ -631,22 +632,46 @@ static void SetCoinsValue(const CAmount value, Coin& coin)
     }
 }
 
-static size_t InsertCoinsMapEntry(CCoinsMap& map, CoinsCachePair& sentinel, const CoinEntry& cache_coin)
+static void FreeCoin(CCoinsMapMemoryResource& resource, CCoinsCacheEntry& entry)
+{
+    if (!entry.coin) return;
+    entry.coin->~Coin();
+    resource.Deallocate(entry.coin, sizeof(Coin), alignof(Coin));
+    entry.coin = nullptr;
+}
+
+// Add an (empty) coin to a cache entry. Unlike in the production code, a cache
+// entry can point to a spent (empty) coin.
+static void AddCoin(CCoinsMapMemoryResource& resource, CCoinsCacheEntry& entry)
+{
+    if (entry.coin) FreeCoin(resource, entry);
+    assert(!entry.coin);
+    entry.coin = static_cast<Coin*>(resource.Allocate(sizeof(Coin), alignof(Coin)));
+    new (entry.coin) Coin();
+}
+
+static void FreeAllCoins(CCoinsMap& map, CCoinsMapMemoryResource& resource)
+{
+    for (auto& entry : map) if (entry.second.coin) FreeCoin(resource, entry.second);
+}
+
+static size_t InsertCoinsMapEntry(CCoinsMap& map, CoinsCachePair& sentinel, CCoinsMapMemoryResource& resource, const CoinEntry& cache_coin)
 {
     CCoinsCacheEntry entry;
-    SetCoinsValue(cache_coin.value, entry.coin);
+    AddCoin(resource, entry);
+    SetCoinsValue(cache_coin.value, *entry.coin);
     auto [iter, inserted] = map.emplace(OUTPOINT, std::move(entry));
     assert(inserted);
     if (cache_coin.IsDirty()) CCoinsCacheEntry::SetDirty(*iter, sentinel);
     if (cache_coin.IsFresh()) CCoinsCacheEntry::SetFresh(*iter, sentinel);
-    return iter->second.coin.DynamicMemoryUsage();
+    return iter->second.coin->DynamicMemoryUsage();
 }
 
 static MaybeCoin GetCoinsMapEntry(const CCoinsMap& map, const COutPoint& outp = OUTPOINT)
 {
     if (auto it{map.find(outp)}; it != map.end()) {
         return CoinEntry{
-            it->second.coin.IsSpent() ? SPENT : it->second.coin.out.nValue,
+            (!it->second.coin || it->second.coin->IsSpent()) ? SPENT : it->second.coin->out.nValue,
             CoinEntry::ToState(it->second.IsDirty(), it->second.IsFresh())};
     }
     return MISSING;
@@ -658,11 +683,17 @@ static void WriteCoinsViewEntry(CCoinsView& view, const MaybeCoin& cache_coin)
     sentinel.second.SelfRef(sentinel);
     CCoinsMapMemoryResource resource;
     CCoinsMap map{0, CCoinsMap::hasher{}, CCoinsMap::key_equal{}, &resource};
-    if (cache_coin) InsertCoinsMapEntry(map, sentinel, *cache_coin);
+    if (cache_coin) InsertCoinsMapEntry(map, sentinel, resource, *cache_coin);
     size_t dirty_count{cache_coin && cache_coin->IsDirty()};
-    auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, map, /*will_erase=*/true)};
-    view.BatchWrite(cursor, {});
+    auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, map, resource, /*will_clear=*/true)};
+    try {
+        view.BatchWrite(cursor, {});
+    } catch (...) {
+        FreeAllCoins(map, resource);
+        throw;
+    }
     BOOST_CHECK_EQUAL(dirty_count, 0U);
+    FreeAllCoins(map, resource);
 }
 
 class SingleEntryCacheTest
@@ -673,9 +704,14 @@ public:
         auto base_cache_coin{base_value == ABSENT ? MISSING : CoinEntry{base_value, CoinEntry::State::DIRTY}};
         WriteCoinsViewEntry(base, base_cache_coin);
         if (cache_coin) {
-            cache.usage() += InsertCoinsMapEntry(cache.map(), cache.sentinel(), *cache_coin);
+            cache.usage() += InsertCoinsMapEntry(cache.map(), cache.sentinel(), cache.resource(), *cache_coin);
             cache.dirty() += cache_coin->IsDirty();
         }
+    }
+
+    ~SingleEntryCacheTest() noexcept
+    {
+        FreeAllCoins(cache.map(), cache.resource());
     }
 
     CCoinsViewCacheTest base{&CoinsViewEmpty::Get()};
@@ -1117,6 +1153,27 @@ BOOST_AUTO_TEST_CASE(ccoins_emplace_duplicate_keeps_usage_balanced)
     cache.SelfTest();
 
     BOOST_CHECK(cache.AccessCoin(outpoint) == coin1);
+}
+
+BOOST_AUTO_TEST_CASE(ccoins_spend_moveout_keeps_usage_balanced)
+{
+    CCoinsViewCacheTest base{&CoinsViewEmpty::Get()};
+    CCoinsViewCacheTest cache{&base};
+
+    const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin coin{CTxOut{m_rng.randrange(10), CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+
+    base.AddCoin(outpoint, Coin{coin}, /*possible_overwrite=*/false);
+    base.SelfTest();
+
+    BOOST_CHECK(cache.HaveCoin(outpoint));
+    cache.SelfTest();
+
+    Coin moveout;
+    BOOST_CHECK(cache.SpendCoin(outpoint, &moveout));
+    BOOST_CHECK(moveout == coin);
+    BOOST_CHECK_EQUAL(GetCoinsMapEntry(cache.map(), outpoint), SPENT_DIRTY);
+    cache.SelfTest();
 }
 
 BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
