@@ -3088,6 +3088,12 @@ bool Chainstate::ConnectTip(
              Ticks<SecondsDouble>(m_chainman.time_total),
              Ticks<MillisecondsDouble>(m_chainman.time_total) / m_chainman.num_blocks_total);
 
+    if (auto min_height{m_chainman.GetParams().MinAssumeutxoSnapshotHeight()}; min_height && pindexNew->nHeight >= *min_height) {
+        if (auto au_data{m_chainman.GetParams().AssumeutxoForHeight(pindexNew->nHeight)}) {
+            m_chainman.VerifyAssumeutxoData(*this, *pindexNew, *au_data);
+        }
+    }
+
     // See if this chainstate has reached a target block and can be used to
     // validate an assumeutxo snapshot. If it can, hashing the UTXO database
     // will be slow, and cs_main could remain locked here for several minutes.
@@ -5744,6 +5750,13 @@ static void SnapshotUTXOHashBreakpoint(const util::SignalInterrupt& interrupt)
     if (interrupt) throw StopHashingException();
 }
 
+static std::optional<AssumeutxoHash> ComputeAssumeutxoHash(CCoinsView* coins_db, node::BlockManager& blockman, const util::SignalInterrupt& interrupt)
+{
+    auto stats{ComputeUTXOStats(CoinStatsHashType::HASH_SERIALIZED, coins_db, blockman, [&interrupt] { SnapshotUTXOHashBreakpoint(interrupt); })};
+    if (!stats) return std::nullopt;
+    return AssumeutxoHash{stats->hashSerialized};
+}
+
 util::Result<void> ChainstateManager::PopulateAndValidateSnapshot(
     Chainstate& snapshot_chainstate,
     AutoFile& coins_file,
@@ -5889,22 +5902,20 @@ util::Result<void> ChainstateManager::PopulateAndValidateSnapshot(
     // about the snapshot_chainstate.
     CCoinsViewDB* snapshot_coinsdb = WITH_LOCK(::cs_main, return &snapshot_chainstate.CoinsDB());
 
-    std::optional<CCoinsStats> maybe_stats;
-
+    std::optional<AssumeutxoHash> maybe_hash;
     try {
-        maybe_stats = ComputeUTXOStats(
-            CoinStatsHashType::HASH_SERIALIZED, snapshot_coinsdb, m_blockman, [&interrupt = m_interrupt] { SnapshotUTXOHashBreakpoint(interrupt); });
+        maybe_hash = ComputeAssumeutxoHash(snapshot_coinsdb, m_blockman, m_interrupt);
     } catch (StopHashingException const&) {
         return util::Error{Untranslated("Aborting after an interrupt was requested")};
     }
-    if (!maybe_stats.has_value()) {
+    if (!maybe_hash) {
         return util::Error{Untranslated("Failed to generate coins stats")};
     }
 
     // Assert that the deserialized chainstate contents match the expected assumeutxo value.
-    if (AssumeutxoHash{maybe_stats->hashSerialized} != au_data.hash_serialized) {
+    if (*maybe_hash != au_data.hash_serialized) {
         return util::Error{Untranslated(strprintf("Bad snapshot content hash: expected %s, got %s",
-            au_data.hash_serialized.ToString(), maybe_stats->hashSerialized.ToString()))};
+            au_data.hash_serialized.ToString(), maybe_hash->ToString()))};
     }
 
     snapshot_chainstate.m_chain.SetTip(*snapshot_start_block);
@@ -6022,21 +6033,17 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
     }
 
     const AssumeutxoData& au_data = *maybe_au_data;
-    std::optional<CCoinsStats> validated_cs_stats;
+    std::optional<AssumeutxoHash> validated_cs_hash;
     LogInfo("[snapshot] computing UTXO stats for background chainstate to validate "
         "snapshot - this could take a few minutes");
     try {
-        validated_cs_stats = ComputeUTXOStats(
-            CoinStatsHashType::HASH_SERIALIZED,
-            &validated_coins_db,
-            m_blockman,
-            [&interrupt = m_interrupt] { SnapshotUTXOHashBreakpoint(interrupt); });
+        validated_cs_hash = ComputeAssumeutxoHash(&validated_coins_db, m_blockman, m_interrupt);
     } catch (StopHashingException const&) {
         return SnapshotCompletionResult::STATS_FAILED;
     }
 
     // XXX note that this function is slow and will hold cs_main for potentially minutes.
-    if (!validated_cs_stats) {
+    if (!validated_cs_hash) {
         LogWarning("[snapshot] failed to generate stats for validation coins db");
         // While this isn't a problem with the snapshot per se, this condition
         // prevents us from validating the snapshot, so we should shut down and let the
@@ -6051,9 +6058,9 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
     // TODO: For belt-and-suspenders, we could cache the UTXO set
     // hash for the snapshot when it's loaded in its chainstate's leveldb. We could then
     // reference that here for an additional check.
-    if (AssumeutxoHash{validated_cs_stats->hashSerialized} != au_data.hash_serialized) {
+    if (*validated_cs_hash != au_data.hash_serialized) {
         LogWarning("[snapshot] hash mismatch: actual=%s, expected=%s",
-            validated_cs_stats->hashSerialized.ToString(),
+            validated_cs_hash->ToString(),
             au_data.hash_serialized.ToString());
         handle_invalid_snapshot();
         return SnapshotCompletionResult::HASH_MISMATCH;
@@ -6063,10 +6070,41 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
         unvalidated_cs.m_from_snapshot_blockhash->ToString());
 
     unvalidated_cs.m_assumeutxo = Assumeutxo::VALIDATED;
-    validated_cs.m_target_utxohash = AssumeutxoHash{validated_cs_stats->hashSerialized};
+    validated_cs.m_target_utxohash = *validated_cs_hash;
     this->MaybeRebalanceCaches();
 
     return SnapshotCompletionResult::SUCCESS;
+}
+
+void ChainstateManager::VerifyAssumeutxoData(
+    Chainstate& chainstate,
+    const CBlockIndex& tip,
+    const AssumeutxoData& au_data)
+{
+    AssertLockHeld(cs_main);
+    auto tip_hash{tip.GetBlockHash()};
+    // Skip unvalidated snapshot chainstates and the snapshot base already checked by MaybeValidateSnapshot().
+    if (chainstate.m_assumeutxo != Assumeutxo::VALIDATED || (chainstate.m_target_blockhash && *chainstate.m_target_blockhash == tip_hash)) return;
+
+    if (tip_hash != au_data.blockhash || tip.m_chain_tx_count != au_data.m_chain_tx_count) {
+        LogError("[snapshot] assumeutxo block hash or transaction count mismatch at height %d: expected [%s, %d], got [%s, %d]",
+                 tip.nHeight, au_data.blockhash.ToString(), au_data.m_chain_tx_count, tip_hash.ToString(), tip.m_chain_tx_count);
+        return;
+    }
+
+    chainstate.CoinsTip().Sync();
+
+    try {
+        auto hash{ComputeAssumeutxoHash(&chainstate.CoinsDB(), m_blockman, m_interrupt)};
+        if (hash && *hash == au_data.hash_serialized) {
+            LogDebug(BCLog::VALIDATION, "[snapshot] verified assumeutxo hash at height %d: %s", tip.nHeight, au_data.hash_serialized.ToString());
+        } else {
+            LogError("[snapshot] assumeutxo hash verification failed at height %d: expected %s, got %s",
+                tip.nHeight, au_data.hash_serialized.ToString(), hash ? hash->ToString() : "unavailable");
+        }
+    } catch (StopHashingException const&) {
+        LogDebug(BCLog::VALIDATION, "[snapshot] assumeutxo hash verification interrupted at height %d", tip.nHeight);
+    }
 }
 
 Chainstate& ChainstateManager::ActiveChainstate() const
