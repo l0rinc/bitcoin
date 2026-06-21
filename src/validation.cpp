@@ -2852,10 +2852,32 @@ void Chainstate::PruneAndFlush()
     }
 }
 
+struct UpdateTipBlockStats {
+    size_t inputs{0};
+    size_t outputs{0};
+    size_t witness_bytes{0};
+    int64_t weight{0};
+};
+
+static UpdateTipBlockStats GetUpdateTipBlockStats(const CBlock& block)
+{
+    UpdateTipBlockStats stats;
+    for (const auto& tx : block.vtx) {
+        stats.inputs += tx->vin.size();
+        stats.outputs += tx->vout.size();
+    }
+    const auto stripped_size{::GetSerializeSize(TX_NO_WITNESS(block))};
+    const auto total_size{::GetSerializeSize(TX_WITH_WITNESS(block))};
+    stats.witness_bytes = total_size - stripped_size;
+    stats.weight = GetBlockWeight(block);
+    return stats;
+}
+
 static void UpdateTipLog(
     const ChainstateManager& chainman,
     const CCoinsViewCache& coins_tip,
     const CBlockIndex* tip,
+    const UpdateTipBlockStats& block_stats,
     const std::string& func_name,
     const std::string& prefix,
     const std::string& warning_messages,
@@ -2865,10 +2887,14 @@ static void UpdateTipLog(
     AssertLockHeld(::cs_main);
 
     // Disable rate limiting as this may log frequently during IBD.
-    LogInfo(util::log::NO_RATE_LIMIT, "%s%s: new best=%s height=%d version=0x%08x log2_work=%f tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)%s\n",
+    LogInfo(util::log::NO_RATE_LIMIT, "%s%s: new best=%s height=%d version=0x%08x log2_work=%f tx=%lu inputs=%u outputs=%u witnessbytes=%u weight=%d date='%s' progress=%f cache=%.1fMiB(%utxo)%s\n",
                    prefix, func_name,
                    tip->GetBlockHash().ToString(), tip->nHeight, tip->nVersion,
                    log(tip->nChainWork.getdouble()) / log(2.0), tip->m_chain_tx_count,
+                   block_stats.inputs,
+                   block_stats.outputs,
+                   block_stats.witness_bytes,
+                   block_stats.weight,
                    FormatISO8601DateTime(tip->GetBlockTime()),
                    background_validation ? chainman.GetBackgroundVerificationProgress(*tip) : chainman.GuessVerificationProgress(tip),
                    coins_tip.DynamicMemoryUsage() / double(1_MiB),
@@ -2880,6 +2906,9 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
 {
     AssertLockHeld(::cs_main);
     const auto& coins_tip = this->CoinsTip();
+    CBlock block;
+    Assert(m_blockman.ReadBlock(block, *pindexNew));
+    const auto block_stats{GetUpdateTipBlockStats(block)};
 
     // The remainder of the function isn't relevant if we are not acting on
     // the active chainstate, so return if need be.
@@ -2887,7 +2916,7 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
         // Only log every so often so that we don't bury log messages at the tip.
         constexpr int BACKGROUND_LOG_INTERVAL = 2000;
         if (pindexNew->nHeight % BACKGROUND_LOG_INTERVAL == 0) {
-            UpdateTipLog(m_chainman, coins_tip, pindexNew, __func__, "[background validation] ", "", /*background_validation=*/true);
+            UpdateTipLog(m_chainman, coins_tip, pindexNew, block_stats, __func__, "[background validation] ", "", /*background_validation=*/true);
         }
         return;
     }
@@ -2909,7 +2938,7 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
             }
         }
     }
-    UpdateTipLog(m_chainman, coins_tip, pindexNew, __func__, "",
+    UpdateTipLog(m_chainman, coins_tip, pindexNew, block_stats, __func__, "",
                  util::Join(warning_messages, Untranslated(", ")).original, /*background_validation=*/false);
 }
 
