@@ -7,7 +7,14 @@
 #include <hash.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
+#include <util/hasher.h>
 #include <util/strencodings.h>
+
+#ifdef __GLIBCXX__
+#include <bits/functional_hash.h>
+#endif
+
+#include <type_traits>
 
 #include <boost/test/unit_test.hpp>
 
@@ -44,6 +51,16 @@ BOOST_AUTO_TEST_CASE(murmurhash3)
     T(0xb4698defU, 0x00000000, "001122334455667788");
 
 #undef T
+}
+
+BOOST_AUTO_TEST_CASE(salted_outpoint_hasher_cache_policy)
+{
+    constexpr bool nothrow_invocable{std::is_nothrow_invocable_v<const SaltedOutpointHasher&, const COutPoint&>};
+    BOOST_CHECK(!nothrow_invocable);
+#ifdef __GLIBCXX__
+    // With a fast hasher, the may-throw contract above selects cached hash nodes on libstdc++.
+    BOOST_CHECK(std::__is_fast_hash<SaltedOutpointHasher>::value);
+#endif
 }
 
 /*
@@ -105,6 +122,8 @@ BOOST_AUTO_TEST_CASE(siphash)
     BOOST_CHECK_EQUAL(hasher.Finalize(),  0xe612a3cb9ecba951ull);
 
     BOOST_CHECK_EQUAL(PresaltedSipHasher(0x0706050403020100ULL, 0x0F0E0D0C0B0A0908ULL)(uint256{"1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"}), 0x7127512f72f27cceull);
+    // The jumboblock variant is intentionally non-standard and only used for already-hashed table keys.
+    BOOST_CHECK_EQUAL(PresaltedSipHasher13Jumbo(0x0706050403020100ULL, 0x0F0E0D0C0B0A0908ULL)(uint256{"1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"}, 0x0b0a0908), 0x00777e1f50b9e325ull);
 
     // Check test vectors from spec, one byte at a time
     CSipHasher hasher2(0x0706050403020100ULL, 0x0F0E0D0C0B0A0908ULL);
