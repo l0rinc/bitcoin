@@ -9,6 +9,7 @@
 #include <consensus/validation.h>
 #include <node/blockstorage.h>
 #include <node/kernel_notifications.h>
+#include <policy/policy.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -17,6 +18,7 @@
 #include <test/util/chainstate.h>
 #include <test/util/coins.h>
 #include <test/util/common.h>
+#include <test/util/logging.h>
 #include <test/util/setup_common.h>
 #include <tinyformat.h>
 #include <uint256.h>
@@ -27,6 +29,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 class CTxMemPool;
@@ -171,6 +174,38 @@ BOOST_FIXTURE_TEST_CASE(chainstate_update_tip, TestChain100Setup)
     // validation chain.
     BOOST_CHECK(block_added);
     BOOST_CHECK_EQUAL(curr_tip, get_notify_tip());
+}
+
+BOOST_FIXTURE_TEST_CASE(chainstate_update_tip_block_stats, TestChain100Setup)
+{
+    const auto coinbase_tx{m_coinbase_txns.at(0)};
+    const CAmount coinbase_value{coinbase_tx->vout.at(0).nValue};
+    auto [zero_fee_tx, zero_fee]{CreateValidTransaction(
+        /*input_transactions=*/{coinbase_tx},
+        /*inputs=*/{COutPoint{coinbase_tx->GetHash(), 0}},
+        /*input_height=*/1,
+        /*input_signing_keys=*/{coinbaseKey},
+        /*outputs=*/{CTxOut{coinbase_value, CScript{} << OP_TRUE}},
+        /*feerate=*/std::nullopt,
+        /*fee_output=*/std::nullopt)};
+    BOOST_REQUIRE_EQUAL(zero_fee, 0);
+
+    CMutableTransaction low_fee_tx;
+    low_fee_tx.vin.emplace_back(zero_fee_tx.GetHash(), 0);
+    low_fee_tx.vout.emplace_back(coinbase_value, CScript{} << OP_TRUE);
+    const CAmount low_fee{GetVirtualTransactionSize(CTransaction{low_fee_tx}) - 1};
+    low_fee_tx.vout.at(0).nValue -= low_fee;
+    const auto low_fee_tx_vsize{GetVirtualTransactionSize(CTransaction{low_fee_tx})};
+    BOOST_REQUIRE_GT(low_fee, 0);
+    BOOST_REQUIRE_LT(low_fee, low_fee_tx_vsize);
+
+    const CBlock block{CreateBlock({zero_fee_tx, low_fee_tx}, CScript{} << OP_TRUE)};
+
+    DebugLogHelper log{"UpdateTip: new best=", [&](const std::string* line) {
+        if (line == nullptr) return true;
+        return line->find(" sub_1sat_vb_txs=2") != std::string::npos;
+    }};
+    BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlock(std::make_shared<CBlock>(block), true, true, nullptr));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
