@@ -18,6 +18,7 @@
 #include <util/overflow.h>
 #include <util/hasher.h>
 
+#include <atomic>
 #include <cassert>
 #include <cstdint>
 
@@ -86,6 +87,36 @@ public:
 
     size_t DynamicMemoryUsage() const {
         return memusage::DynamicUsage(out.scriptPubKey);
+    }
+};
+
+class CCoinsCacheHasher
+{
+    static const SaltedOutpointHasher& StableRandomHasher()
+    {
+        static const SaltedOutpointHasher hasher{/*deterministic=*/false};
+        return hasher;
+    }
+
+    SaltedOutpointHasher m_hasher;
+
+public:
+    explicit CCoinsCacheHasher(bool deterministic = false) :
+        m_hasher{deterministic ? SaltedOutpointHasher{/*deterministic=*/true} : StableRandomHasher()}
+    {
+    }
+
+    size_t operator()(const COutPoint& outpoint) const noexcept
+    {
+        std::atomic_ref<size_t> cached_hash{outpoint.m_cached_salted_hash};
+        if (const size_t hash{cached_hash.load(std::memory_order_relaxed)}) {
+            return hash;
+        }
+        const size_t hash{m_hasher(outpoint)};
+        // Reserve 0 as the empty-cache marker.
+        const size_t cached{hash == 0 ? 1 : hash};
+        size_t expected{0};
+        return cached_hash.compare_exchange_strong(expected, cached, std::memory_order_relaxed) ? cached : expected;
     }
 };
 
@@ -212,16 +243,16 @@ public:
  * PoolAllocator's MAX_BLOCK_SIZE_BYTES parameter here uses sizeof the data, and adds the size
  * of 4 pointers. We do not know the exact node size used in the std::unordered_node implementation
  * because it is implementation defined. Most implementations have an overhead of 1 or 2 pointers,
- * so nodes can be connected in a linked list, and in some cases the hash value is stored as well.
- * Using an additional sizeof(void*)*4 for MAX_BLOCK_SIZE_BYTES should thus be sufficient so that
+ * so nodes can be connected in a linked list.
+ * Using an additional 4 * sizeof(void*) for MAX_BLOCK_SIZE_BYTES should thus be sufficient so that
  * all implementations can allocate the nodes from the PoolAllocator.
  */
 using CCoinsMap = std::unordered_map<COutPoint,
                                      CCoinsCacheEntry,
-                                     SaltedOutpointHasher,
+                                     CCoinsCacheHasher,
                                      std::equal_to<COutPoint>,
                                      PoolAllocator<CoinsCachePair,
-                                                   sizeof(CoinsCachePair) + sizeof(void*) * 4>>;
+                                                   sizeof(CoinsCachePair) + 4 * sizeof(void*)>>;
 
 using CCoinsMapMemoryResource = CCoinsMap::allocator_type::ResourceType;
 
