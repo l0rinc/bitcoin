@@ -6,15 +6,13 @@
 #define BITCOIN_INDEX_TXINDEX_H
 
 #include <index/base.h>
+#include <interfaces/chain.h>
 #include <primitives/transaction.h>
 
 #include <cstddef>
 #include <memory>
 
 class uint256;
-namespace interfaces {
-class Chain;
-}
 
 static constexpr bool DEFAULT_TXINDEX{false};
 
@@ -35,6 +33,10 @@ private:
 
 protected:
     bool CustomAppend(const interfaces::BlockInfo& block) override;
+
+    bool CustomRemove(const interfaces::BlockInfo& block) override;
+
+    interfaces::Chain::NotifyOptions CustomOptions() override;
 
     BaseIndex::DB& GetDB() const override;
 
