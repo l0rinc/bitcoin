@@ -45,6 +45,8 @@ public:
 
     /// Write a batch of transaction positions to the DB.
     void WriteTxs(const std::vector<std::pair<Txid, CDiskTxPos>>& v_pos);
+
+    void WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator) override;
 };
 
 TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe) :
@@ -54,6 +56,11 @@ TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe) :
 bool TxIndex::DB::ReadTxPos(const Txid& txid, CDiskTxPos& pos) const
 {
     return Read(std::make_pair(DB_TXINDEX, txid.ToUint256()), pos);
+}
+
+void TxIndex::DB::WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator)
+{
+    batch.Write(DB_BEST_BLOCK_V2, locator);
 }
 
 void TxIndex::DB::WriteTxs(const std::vector<std::pair<Txid, CDiskTxPos>>& v_pos)
