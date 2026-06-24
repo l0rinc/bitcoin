@@ -26,7 +26,7 @@ class Env;
 
 static const size_t DBWRAPPER_PREALLOC_KEY_SIZE = 64;
 static const size_t DBWRAPPER_PREALLOC_VALUE_SIZE = 1024;
-static const size_t DBWRAPPER_MAX_FILE_SIZE{64_MiB};
+static const size_t DBWRAPPER_MAX_FILE_SIZE{128_MiB};
 
 //! User-controlled performance and debug options.
 struct DBOptions {
