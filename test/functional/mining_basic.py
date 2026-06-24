@@ -23,12 +23,19 @@ from test_framework.blocktools import (
     nbits_str,
     target_str,
 )
+from test_framework.key import ECKey
 from test_framework.messages import (
     BLOCK_HEADER_SIZE,
     CBlock,
     CBlockHeader,
     COIN,
+    COutPoint,
+    CTransaction,
+    CTxIn,
+    CTxInWitness,
+    CTxOut,
     DEFAULT_BLOCK_RESERVED_WEIGHT,
+    from_hex,
     MAX_BLOCK_WEIGHT,
     MAX_SEQUENCE_NONFINAL,
     MINIMUM_BLOCK_RESERVED_WEIGHT,
@@ -36,6 +43,13 @@ from test_framework.messages import (
     WITNESS_SCALE_FACTOR,
 )
 from test_framework.p2p import P2PDataStore
+from test_framework.script import (
+    sign_input_segwitv0,
+)
+from test_framework.script_util import (
+    keys_to_multisig_script,
+    script_to_p2wsh_script,
+)
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
@@ -43,6 +57,7 @@ from test_framework.util import (
     assert_greater_than_or_equal,
     assert_raises_rpc_error,
     get_fee,
+    JSONRPCException,
 )
 from test_framework.wallet import (
     MiniWallet,
@@ -381,6 +396,238 @@ class MiningTest(BitcoinTestFramework):
             expected_msg=f"Error: -blockreservedweight ({DEFAULT_BLOCK_RESERVED_WEIGHT}) exceeds -blockmaxweight ({DEFAULT_BLOCK_RESERVED_WEIGHT - 1})",
         )
 
+    def test_witness_heavy_multisig_blocks(self):
+        self.log.info("Mine blocks from standard P2WSH multisig mempool transactions")
+        self.log.info("Each measured block contains many independent one-input, one-output monetary spends")
+        self.log.info("Each spend has one real multisig check and is accepted into the mempool before block selection")
+        node = self.nodes[0]
+        if not node.running:
+            self.start_node(0)
+        self.wallet.rescan_utxos(include_mempool=False)
+
+        spend_amount_sat = 100_000
+        spend_fee_sat = 1_000
+        funding_batch_size = 250
+        standard_p2wsh_stack_items_limit = 100
+        standard_p2wsh_stack_item_size_limit = 80
+        standard_p2wsh_script_size_limit = 3_600
+        p2wsh_policy_summary = lambda stack_items, max_item_size, script_size: f"{stack_items} non-script witness stack items, largest item {max_item_size} bytes, witness script {script_size:,} bytes"
+        segwit_ratio = lambda serialized_size, stripped_size: serialized_size / stripped_size
+        size_summary = lambda serialized_size, stripped_size, ratio, weight: f"{serialized_size:,} witness-inclusive bytes / {stripped_size:,} stripped bytes = {ratio:.2f}x, weight {weight:,}/{MAX_BLOCK_WEIGHT:,}"
+        compact_size_len = lambda count: 1 if count < 253 else 3 if count <= 0xffff else 5 if count <= 0xffffffff else 9
+
+        def make_keys(multisig_key_count):
+            keys = []
+            for private_key_number in range(1, multisig_key_count + 1):
+                key = ECKey()
+                key.set(secret=private_key_number.to_bytes(length=32, byteorder='big'), compressed=True)
+                keys.append(key)
+            return keys
+
+        def make_funding_tx(script_pubkey, output_count):
+            utxo = self.wallet.get_utxo(confirmed_only=True)
+            tx = CTransaction()
+            tx.vin = [CTxIn(COutPoint(int(utxo["txid"], 16), utxo["vout"]))]
+            tx.vout = [CTxOut(spend_amount_sat, script_pubkey) for _ in range(output_count)]
+            input_value_sat = int(utxo["value"] * COIN)
+            change_sat = input_value_sat - output_count * spend_amount_sat - output_count * spend_fee_sat
+            assert_greater_than(change_sat, 0)
+            tx.vout.append(CTxOut(change_sat, self.wallet.get_output_script()))
+            self.wallet.sign_tx(tx)
+            return tx
+
+        def make_multisig_spend(outpoint, witness_script, keys, required_signatures):
+            tx = CTransaction()
+            tx.vin = [CTxIn(outpoint, b'')]
+            tx.vout = [CTxOut(spend_amount_sat - spend_fee_sat, self.wallet.get_output_script())]
+            tx.wit.vtxinwit = [CTxInWitness()]
+            tx.wit.vtxinwit[0].scriptWitness.stack = [witness_script]
+            for key in reversed(keys[:required_signatures]):
+                sign_input_segwitv0(tx, 0, witness_script, spend_amount_sat, key)
+            signatures = tx.wit.vtxinwit[0].scriptWitness.stack[:-1]
+            # CHECKMULTISIG has a historical dummy stack item before the signatures.
+            tx.wit.vtxinwit[0].scriptWitness.stack = [b''] + signatures + [witness_script]
+            return tx
+
+        def candidate_result(txids):
+            try:
+                self.generateblock(node, output=self.wallet.get_address(), transactions=txids, submit=False, sync_fun=self.no_op)
+                return True, ""
+            except JSONRPCException as e:
+                assert "TestBlockValidity failed" in e.error["message"]
+                return False, e.error["message"]
+
+        def largest_valid_prefix(txids):
+            # This finds the exact full-block boundary quickly: N spends fit, N + 1 does not.
+            all_fit, _ = candidate_result(txids)
+            assert_equal(all_fit, False)
+            low = 0
+            high = len(txids)
+            while low < high:
+                mid = (low + high + 1) // 2
+                fits, _ = candidate_result(txids[:mid])
+                if fits:
+                    low = mid
+                else:
+                    high = mid - 1
+            next_fits, reject_reason = candidate_result(txids[:low + 1])
+            assert_equal(next_fits, False)
+            return low, reject_reason
+
+        def mine_mempool_txids(txids):
+            mempool = set(node.getrawmempool())
+            remaining = [txid for txid in txids if txid in mempool]
+            while remaining:
+                fits, _ = candidate_result(remaining)
+                to_mine = remaining
+                if not fits:
+                    count, _ = largest_valid_prefix(remaining)
+                    assert_greater_than(count, 0)
+                    to_mine = remaining[:count]
+                mined = self.generateblock(node, output=self.wallet.get_address(), transactions=to_mine, sync_fun=self.no_op)
+                assert_equal(node.getbestblockhash(), mined["hash"])
+                mempool = set(node.getrawmempool())
+                remaining = [txid for txid in remaining if txid in mempool]
+
+        existing_mempool = node.getrawmempool()
+        if existing_mempool:
+            self.log.info(f"Setup: mining {len(existing_mempool)} existing mempool transaction(s) before the demo")
+            mine_mempool_txids(existing_mempool)
+            self.wallet.rescan_utxos(include_mempool=False)
+
+        cases = [
+            ("small-2-of-2", 2, 2),
+            ("small-3-of-5", 3, 5),
+            ("custody-20-of-20", 20, 20),
+        ]
+
+        for name, required_signatures, multisig_key_count in cases:
+            multisig_name = f"{required_signatures}-of-{multisig_key_count}"
+            keys = make_keys(multisig_key_count)
+            witness_script = keys_to_multisig_script([key.get_pubkey().get_bytes() for key in keys], k=required_signatures)
+            witness_script_size = len(witness_script)
+            sigops_per_spend = witness_script.GetSigOpCount(True)
+            assert_equal(sigops_per_spend, multisig_key_count)
+            script_pubkey = script_to_p2wsh_script(witness_script)
+            script_pubkey_size = len(script_pubkey)
+            sample_tx = make_multisig_spend(COutPoint(1, 0), witness_script, keys, required_signatures)
+            sample_spend_weight = sample_tx.get_weight()
+            candidate_output_count = (MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT) // sample_spend_weight
+            candidate_output_count += max(25, candidate_output_count // 10)
+            funding_batches = []
+            outpoints = []
+            for first_output in range(0, candidate_output_count, funding_batch_size):
+                output_count = min(funding_batch_size, candidate_output_count - first_output)
+                funding_tx = make_funding_tx(script_pubkey, output_count)
+                funding_batches.append(funding_tx)
+                outpoints.extend(COutPoint(funding_tx.txid_int, vout) for vout in range(output_count))
+
+            self.log.info(f"{name}: each measured transaction spends {spend_amount_sat:,} sat and pays {spend_fee_sat:,} sat fee")
+            self.log.info(f"{name}: each P2WSH output is {script_pubkey_size} bytes, committing to a {witness_script_size:,}-byte {multisig_name} script")
+            self.log.info(f"{name}: per spend: one {multisig_name} check, {required_signatures} signatures, {sigops_per_spend} sigops, weight about {sample_spend_weight:,}")
+            self.log.info(f"{name}: setup represents {len(outpoints):,} prior P2WSH deposits created in {len(funding_batches)} standard batched funding transaction(s)")
+            self.log.info(f"{name}: the measured block below contains only the later spend transactions, not the setup deposits")
+            assert_greater_than_or_equal(standard_p2wsh_script_size_limit, witness_script_size)
+
+            funding_txids = []
+            for index, funding_tx in enumerate(funding_batches):
+                tx_hex = funding_tx.serialize().hex()
+                if index == 0:
+                    accept = node.testmempoolaccept([tx_hex])[0]
+                    assert_equal(accept["allowed"], True)
+                funding_txids.append(node.sendrawtransaction(tx_hex))
+            funding_block = self.generateblock(node, output=self.wallet.get_address(), transactions=funding_txids, sync_fun=self.no_op)
+            assert_equal(node.getbestblockhash(), funding_block["hash"])
+            self.wallet.rescan_utxos(include_mempool=False)
+
+            txids = []
+            for outpoint in outpoints:
+                spend = make_multisig_spend(outpoint, witness_script, keys, required_signatures)
+                stack = spend.wit.vtxinwit[0].scriptWitness.stack
+                non_script_items = stack[:-1]
+                assert_greater_than_or_equal(standard_p2wsh_stack_items_limit, len(non_script_items))
+                assert_greater_than_or_equal(standard_p2wsh_stack_item_size_limit, max(len(item) for item in non_script_items))
+                tx_hex = spend.serialize().hex()
+                if not txids:
+                    accept = node.testmempoolaccept([tx_hex])[0]
+                    assert_equal(accept["allowed"], True)
+                    self.log.info(f"{name}: mempool accepts the sample spend: {p2wsh_policy_summary(len(non_script_items), max(len(item) for item in non_script_items), witness_script_size)}")
+                txids.append(node.sendrawtransaction(tx_hex))
+                if len(txids) % 500 == 0:
+                    self.log.info(f"{name}: submitted {len(txids):,} standard multisig spends to the mempool")
+
+            assert_equal(set(txids).issubset(set(node.getrawmempool())), True)
+            accepted_count, reject_reason = largest_valid_prefix(txids)
+            assert_greater_than(accepted_count, 0)
+            assert_greater_than(len(txids), accepted_count)
+            self.log.info(f"{name}: largest candidate block uses {accepted_count:,} mempool spends")
+            self.log.info(f"{name}: adding one more standard spend is rejected by block validation: {reject_reason}")
+
+            spend_block = self.generateblock(node, output=self.wallet.get_address(), transactions=txids[:accepted_count], sync_fun=self.no_op)
+            assert_equal(node.getbestblockhash(), spend_block["hash"])
+            block_hex = node.getblock(spend_block["hash"], verbosity=0)
+            block = from_hex(CBlock(), block_hex)
+            serialized_size = len(bytes.fromhex(block_hex))
+            stripped_size = len(block.serialize(with_witness=False))
+            block_size_ratio = segwit_ratio(serialized_size, stripped_size)
+            block_weight = block.get_weight()
+            self.log.info(f"{name}: mined and accepted a valid block with {accepted_count:,} standard mempool {multisig_name} P2WSH spends")
+            self.log.info(f"{name}: each spend executes one {multisig_name} multisig check and moves real value")
+            self.log.info(f"{name}: serialized block size with witness: {serialized_size:,} bytes")
+            self.log.info(f"{name}: same block stripped of witness data: {stripped_size:,} bytes")
+            self.log.info(f"{name}: witness-inclusive block is {block_size_ratio:.2f}x the stripped block size, while still under the {MAX_BLOCK_WEIGHT:,} weight limit at {block_weight:,} weight")
+            self.log.info(f"{name}: summary: mined and accepted block {spend_block['hash']} has {size_summary(serialized_size, stripped_size, block_size_ratio, block_weight)}")
+            assert_greater_than(MAX_BLOCK_WEIGHT, block_weight)
+            assert_greater_than(serialized_size, stripped_size)
+            mine_mempool_txids(txids[accepted_count:])
+            self.wallet.rescan_utxos(include_mempool=False)
+
+        self.log.info("Simulate full blocks across the full single-CHECKMULTISIG size range")
+        self.log.info("A single CHECKMULTISIG is capped at 20 pubkeys, so this sweeps 1-of-1 through 20-of-20")
+        empty_block_template = self.generateblock(node, output=self.wallet.get_address(), transactions=[], submit=False, sync_fun=self.no_op)
+        empty_block_hex = empty_block_template["hex"]
+        empty_block = from_hex(CBlock(), empty_block_hex)
+        empty_serialized_size = len(bytes.fromhex(empty_block_hex))
+        empty_stripped_size = len(empty_block.serialize(with_witness=False))
+        empty_weight = empty_block.get_weight()
+
+        def simulate_full_block(sample_tx):
+            sample_serialized_size = len(sample_tx.serialize())
+            sample_stripped_size = len(sample_tx.serialize_without_witness())
+            sample_weight = sample_tx.get_weight()
+
+            def simulated_sizes(spend_count):
+                tx_count_size_delta = compact_size_len(1 + spend_count) - compact_size_len(1)
+                serialized_size = empty_serialized_size + tx_count_size_delta + spend_count * sample_serialized_size
+                stripped_size = empty_stripped_size + tx_count_size_delta + spend_count * sample_stripped_size
+                weight = empty_weight + 4 * tx_count_size_delta + spend_count * sample_weight
+                return serialized_size, stripped_size, weight
+
+            low = 0
+            high = MAX_BLOCK_WEIGHT // sample_weight + 1
+            while low < high:
+                mid = (low + high + 1) // 2
+                if simulated_sizes(mid)[2] <= MAX_BLOCK_WEIGHT:
+                    low = mid
+                else:
+                    high = mid - 1
+            assert_greater_than_or_equal(MAX_BLOCK_WEIGHT, simulated_sizes(low)[2])
+            assert_greater_than(simulated_sizes(low + 1)[2], MAX_BLOCK_WEIGHT)
+            return low, *simulated_sizes(low)
+
+        self.log.info("curve columns: multisig, witnessScript bytes, spends that fit, serialized bytes, stripped bytes, ratio, weight")
+        for multisig_key_count in range(1, 21):
+            keys = make_keys(multisig_key_count)
+            witness_script = keys_to_multisig_script([key.get_pubkey().get_bytes() for key in keys], k=multisig_key_count)
+            sample_tx = make_multisig_spend(COutPoint(multisig_key_count, 0), witness_script, keys, multisig_key_count)
+            spend_count, serialized_size, stripped_size, weight = simulate_full_block(sample_tx)
+            self.log.info(
+                f"curve {multisig_key_count:02d}-of-{multisig_key_count:02d}: "
+                f"script {len(witness_script):>4,} B, {spend_count:>5,} spends, "
+                f"serialized {serialized_size:>9,} B, stripped {stripped_size:>8,} B, "
+                f"{segwit_ratio(serialized_size, stripped_size):>5.2f}x, weight {weight:>9,}; next same spend rejected"
+            )
+
     def test_height_in_locktime(self):
         self.log.info("Sanity check generated blocks have their coinbase timelocked to their height.")
         self.generate(self.nodes[0], 1, sync_fun=self.no_op)
@@ -527,6 +774,7 @@ class MiningTest(BitcoinTestFramework):
         self.test_fees_and_sigops()
         self.test_blockmintxfee_parameter()
         self.test_block_max_weight()
+        self.test_witness_heavy_multisig_blocks()
         self.test_timewarp()
         self.test_pruning()
         self.test_height_in_locktime()
