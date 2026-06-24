@@ -43,8 +43,8 @@ namespace {
 
 constexpr const size_t kWritableFileBufferSize = 65536;
 
-// Up to 4096 mmap regions for 64-bit binaries; none for 32-bit.
-constexpr const int kDefaultMmapLimit = (sizeof(void*) >= 8) ? 4096 : 0;
+// Up to 2048 mmap regions for 64-bit binaries; none for 32-bit.
+constexpr const int kDefaultMmapLimit = (sizeof(void*) >= 8) ? 2048 : 0;
 
 // Can be set by by EnvWindowsTestHelper::SetReadOnlyMMapLimit().
 int g_mmap_limit = kDefaultMmapLimit;
