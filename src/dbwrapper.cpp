@@ -127,12 +127,12 @@ static void SetMaxOpenFiles(leveldb::Options *options) {
     // See PR #12495 for further discussion.
 
     int default_open_files = options->max_open_files;
+    options->max_open_files = 256;
 #ifndef WIN32
     if (sizeof(void*) < 8) {
         options->max_open_files = 64;
     }
 #endif
-    options->max_open_files = 128;
     LogDebug(BCLog::LEVELDB, "LevelDB using max_open_files=%d (default=%d)\n",
              options->max_open_files, default_open_files);
 }
