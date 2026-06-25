@@ -304,8 +304,7 @@ FUZZ_TARGET(ellswift_roundtrip, .init = initialize_key)
     CKey key = ConsumePrivateKey(fdp, /*compressed=*/true);
     if (!key.IsValid()) return;
 
-    auto ent32 = fdp.ConsumeBytes<std::byte>(32);
-    ent32.resize(32);
+    const auto ent32{ConsumeFixedLengthByteArray<32, std::byte>(fdp)};
 
     auto encoded_ellswift = key.EllSwiftCreate(ent32);
     auto decoded_pubkey = encoded_ellswift.Decode();
@@ -329,18 +328,15 @@ FUZZ_TARGET(bip324_ecdh, .init = initialize_key)
     if (!k2.IsValid()) return;
 
     // We construct an ellswift encoding for our key, k1_ellswift.
-    auto ent32_1 = fdp.ConsumeBytes<std::byte>(32);
-    ent32_1.resize(32);
+    const auto ent32_1{ConsumeFixedLengthByteArray<32, std::byte>(fdp)};
     auto k1_ellswift = k1.EllSwiftCreate(ent32_1);
 
     // They construct an ellswift encoding for their key, k2_ellswift.
-    auto ent32_2 = fdp.ConsumeBytes<std::byte>(32);
-    ent32_2.resize(32);
+    const auto ent32_2{ConsumeFixedLengthByteArray<32, std::byte>(fdp)};
     auto k2_ellswift = k2.EllSwiftCreate(ent32_2);
 
     // They construct another (possibly distinct) ellswift encoding for their key, k2_ellswift_bad.
-    auto ent32_2_bad = fdp.ConsumeBytes<std::byte>(32);
-    ent32_2_bad.resize(32);
+    const auto ent32_2_bad{ConsumeFixedLengthByteArray<32, std::byte>(fdp)};
     auto k2_ellswift_bad = k2.EllSwiftCreate(ent32_2_bad);
     assert((ent32_2_bad == ent32_2) == (k2_ellswift_bad == k2_ellswift));
 
