@@ -988,6 +988,7 @@ private:
         CBlockIndex** ppindex,
         bool min_pow_checked) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     bool IsAncestorOfAssumedValidBlock(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    void EraseCachedPruneAssumeValidBlock(const uint256& block_hash, const CBlockIndex& block) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     friend Chainstate;
 
     /** Most recent headers presync progress update, for rate-limiting. */
@@ -998,6 +999,8 @@ private:
 
     //! Stripped prune-assumevalid blocks that are connectable without being written to disk.
     std::unordered_map<uint256, std::shared_ptr<const CBlock>, SaltedUint256Hasher> m_prune_assumevalid_blocks GUARDED_BY(::cs_main);
+    //! Approximate dynamic memory usage of m_prune_assumevalid_blocks values.
+    size_t m_prune_assumevalid_block_cache_bytes GUARDED_BY(::cs_main){0};
     //! CBlockIndex-pointer index for fast membership checks of m_prune_assumevalid_blocks.
     std::unordered_set<const CBlockIndex*> m_prune_assumevalid_block_index GUARDED_BY(::cs_main);
     //! Highest block eligible for -pruneassumevalid under the current best header.
@@ -1039,6 +1042,8 @@ public:
     bool CanUsePruneAssumeValid(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     bool IsBlockPrunedByPruneAssumeValid(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     bool HasCachedPruneAssumeValidBlock(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    size_t CachedPruneAssumeValidBlockCount() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    size_t CachedPruneAssumeValidBlockBytes() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     bool ShouldRequestStrippedPruneAssumeValidBlock(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     kernel::Notifications& GetNotifications() const { return m_options.notifications; };
 

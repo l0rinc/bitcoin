@@ -56,6 +56,7 @@
 #include <tinyformat.h>
 #include <txmempool.h>
 #include <uint256.h>
+#include <util/byte_units.h>
 #include <util/check.h>
 #include <util/strencodings.h>
 #include <util/time.h>
@@ -1458,7 +1459,15 @@ static unsigned int GetBlockDownloadWindow(const ChainstateManager& chainman, co
     if (from.nHeight < best.nHeight) {
         if (const CBlockIndex* next{best.GetAncestor(from.nHeight + 1)};
             next && chainman.ShouldRequestStrippedPruneAssumeValidBlock(*next)) {
-            return PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_WINDOW;
+            const size_t cached_blocks{chainman.CachedPruneAssumeValidBlockCount()};
+            if (cached_blocks >= PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_WINDOW) {
+                LogDebug(BCLog::BENCH, "Prune-assumevalid block cache full; pausing stripped block requests (blocks=%u, %.1fMiB limit=%u)\n",
+                         static_cast<unsigned>(cached_blocks),
+                         chainman.CachedPruneAssumeValidBlockBytes() / double(1_MiB),
+                         PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_WINDOW);
+                return 0;
+            }
+            return PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_WINDOW - static_cast<unsigned int>(cached_blocks);
         }
     }
     return BLOCK_DOWNLOAD_WINDOW;

@@ -17,6 +17,7 @@
 #include <consensus/tx_check.h>
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
+#include <core_memusage.h>
 #include <cuckoocache.h>
 #include <flatfile.h>
 #include <hash.h>
@@ -2393,6 +2394,30 @@ bool ChainstateManager::HasCachedPruneAssumeValidBlock(const CBlockIndex& block)
     return m_prune_assumevalid_block_index.contains(&block);
 }
 
+size_t ChainstateManager::CachedPruneAssumeValidBlockCount() const
+{
+    AssertLockHeld(cs_main);
+    return m_prune_assumevalid_blocks.size();
+}
+
+size_t ChainstateManager::CachedPruneAssumeValidBlockBytes() const
+{
+    AssertLockHeld(cs_main);
+    return m_prune_assumevalid_block_cache_bytes;
+}
+
+void ChainstateManager::EraseCachedPruneAssumeValidBlock(const uint256& block_hash, const CBlockIndex& block)
+{
+    AssertLockHeld(cs_main);
+    if (auto it{m_prune_assumevalid_blocks.find(block_hash)}; it != m_prune_assumevalid_blocks.end()) {
+        const size_t block_bytes{RecursiveDynamicUsage(it->second)};
+        Assume(m_prune_assumevalid_block_cache_bytes >= block_bytes);
+        m_prune_assumevalid_block_cache_bytes -= block_bytes;
+        m_prune_assumevalid_blocks.erase(it);
+    }
+    m_prune_assumevalid_block_index.erase(&block);
+}
+
 bool ChainstateManager::ShouldRequestStrippedPruneAssumeValidBlock(const CBlockIndex& block) const
 {
     AssertLockHeld(cs_main);
@@ -3124,7 +3149,9 @@ bool Chainstate::ConnectTip(
         if (auto it{m_chainman.m_prune_assumevalid_blocks.find(block_hash)};
             it != m_chainman.m_prune_assumevalid_blocks.end() && m_chainman.CanUsePruneAssumeValid(*pindexNew)) {
             block_to_connect = it->second;
-            LogDebug(BCLog::BENCH, "  - Using cached stripped prune-assumevalid block\n");
+            LogDebug(BCLog::BENCH, "  - Using cached stripped prune-assumevalid block (cache=%u, %.1fMiB)\n",
+                     static_cast<unsigned>(m_chainman.CachedPruneAssumeValidBlockCount()),
+                     m_chainman.CachedPruneAssumeValidBlockBytes() / double(1_MiB));
         } else {
             std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
             if (!m_blockman.ReadBlock(*pblockNew, *pindexNew)) {
@@ -3155,8 +3182,7 @@ bool Chainstate::ConnectTip(
         }
         if (!rv) {
             if (prune_assumevalid) {
-                m_chainman.m_prune_assumevalid_blocks.erase(block_hash);
-                m_chainman.m_prune_assumevalid_block_index.erase(pindexNew);
+                m_chainman.EraseCachedPruneAssumeValidBlock(block_hash, *pindexNew);
             }
             if (state.IsInvalid())
                 InvalidBlockFound(pindexNew, state);
@@ -3196,8 +3222,10 @@ bool Chainstate::ConnectTip(
     // Update m_chain & related variables.
     m_chain.SetTip(*pindexNew);
     if (prune_assumevalid) {
-        m_chainman.m_prune_assumevalid_blocks.erase(block_hash);
-        m_chainman.m_prune_assumevalid_block_index.erase(pindexNew);
+        m_chainman.EraseCachedPruneAssumeValidBlock(block_hash, *pindexNew);
+        LogDebug(BCLog::BENCH, "  - Prune-assumevalid block cache: blocks=%u, %.1fMiB\n",
+                 static_cast<unsigned>(m_chainman.CachedPruneAssumeValidBlockCount()),
+                 m_chainman.CachedPruneAssumeValidBlockBytes() / double(1_MiB));
     }
     m_chainman.UpdateIBDStatus();
     UpdateTip(pindexNew);
@@ -4528,8 +4556,22 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
                 m_blockman.m_have_pruned = true;
             }
             ReceivedPruneAssumeValidBlockTransactions(block, pindex);
-            m_prune_assumevalid_blocks.insert_or_assign(block.GetHash(), pblock);
+            const uint256 block_hash{block.GetHash()};
+            const size_t block_bytes{RecursiveDynamicUsage(pblock)};
+            if (auto it{m_prune_assumevalid_blocks.find(block_hash)}; it != m_prune_assumevalid_blocks.end()) {
+                const size_t old_block_bytes{RecursiveDynamicUsage(it->second)};
+                Assume(m_prune_assumevalid_block_cache_bytes >= old_block_bytes);
+                m_prune_assumevalid_block_cache_bytes -= old_block_bytes;
+                it->second = pblock;
+            } else {
+                m_prune_assumevalid_blocks.emplace(block_hash, pblock);
+            }
+            m_prune_assumevalid_block_cache_bytes += block_bytes;
             m_prune_assumevalid_block_index.insert(pindex);
+            LogDebug(BCLog::BENCH, "  - Prune-assumevalid block cache: blocks=%u, %.1fMiB accepted_height=%d\n",
+                     static_cast<unsigned>(CachedPruneAssumeValidBlockCount()),
+                     CachedPruneAssumeValidBlockBytes() / double(1_MiB),
+                     pindex->nHeight);
             LogDebug(BCLog::VALIDATION, "Accepted stripped prune-assumevalid block %s (%d) without writing block data to disk\n",
                      block.GetHash().ToString(), pindex->nHeight);
         } else {
