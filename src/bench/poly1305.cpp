@@ -8,6 +8,7 @@
 // See https://github.com/include-what-you-use/include-what-you-use/issues/2014.
 #include <util/byte_units.h> // IWYU pragma: keep
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -20,8 +21,8 @@ static constexpr uint64_t BUFFER_SIZE_LARGE{1_MiB};
 
 static void POLY1305(benchmark::Bench& bench, size_t buffersize)
 {
-    std::vector<std::byte> tag(Poly1305::TAGLEN, {});
-    std::vector<std::byte> key(Poly1305::KEYLEN, {});
+    std::array<std::byte, Poly1305::TAGLEN> tag{};
+    std::array<std::byte, Poly1305::KEYLEN> key{};
     std::vector<std::byte> in(buffersize, {});
     bench.batch(in.size()).unit("byte").run([&] {
         Poly1305{key}.Update(in).Finalize(tag);

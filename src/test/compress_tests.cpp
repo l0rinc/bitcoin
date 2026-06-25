@@ -7,6 +7,7 @@
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 
+#include <array>
 #include <cstdint>
 
 #include <boost/test/unit_test.hpp>
@@ -141,9 +142,9 @@ BOOST_AUTO_TEST_CASE(compress_p2pk_scripts_not_on_curve)
 
     // Check that P2PK script with uncompressed pubkey [=> OP_PUSH65 <0x04 .....> OP_CHECKSIG]
     // which is not fully valid (i.e. point is not on curve) can't be compressed
-    std::vector<unsigned char> pubkey_raw(65, 0);
+    std::array<unsigned char, 65> pubkey_raw{};
     pubkey_raw[0] = 4;
-    std::copy(x_not_on_curve.begin(), x_not_on_curve.end(), &pubkey_raw[1]);
+    std::copy(x_not_on_curve.begin(), x_not_on_curve.end(), pubkey_raw.data() + 1);
     CPubKey pubkey_not_on_curve(pubkey_raw);
     assert(pubkey_not_on_curve.IsValid());
     assert(!pubkey_not_on_curve.IsFullyValid());

@@ -14,6 +14,7 @@
 #include <tinyformat.h>
 #include <uint256.h>
 
+#include <array>
 #include <cstdint>
 #include <span>
 #include <string>
@@ -96,7 +97,7 @@ static void SHA3_256_1M(benchmark::Bench& bench)
 static void SHA256_32b_STANDARD(benchmark::Bench& bench)
 {
     bench.name(strprintf("%s using the '%s' SHA256 implementation", __func__, SHA256AutoDetect(sha256_implementation::STANDARD)));
-    std::vector<uint8_t> in(32,0);
+    std::array<uint8_t, 32> in{};
     bench.batch(in.size()).unit("byte").run([&] {
         CSHA256()
             .Write(in.data(), in.size())
@@ -108,7 +109,7 @@ static void SHA256_32b_STANDARD(benchmark::Bench& bench)
 static void SHA256_32b_SSE4(benchmark::Bench& bench)
 {
     bench.name(strprintf("%s using the '%s' SHA256 implementation", __func__, SHA256AutoDetect(sha256_implementation::USE_SSE4)));
-    std::vector<uint8_t> in(32,0);
+    std::array<uint8_t, 32> in{};
     bench.batch(in.size()).unit("byte").run([&] {
         CSHA256()
             .Write(in.data(), in.size())
@@ -120,7 +121,7 @@ static void SHA256_32b_SSE4(benchmark::Bench& bench)
 static void SHA256_32b_AVX2(benchmark::Bench& bench)
 {
     bench.name(strprintf("%s using the '%s' SHA256 implementation", __func__, SHA256AutoDetect(sha256_implementation::USE_SSE4_AND_AVX2)));
-    std::vector<uint8_t> in(32,0);
+    std::array<uint8_t, 32> in{};
     bench.batch(in.size()).unit("byte").run([&] {
         CSHA256()
             .Write(in.data(), in.size())
@@ -132,7 +133,7 @@ static void SHA256_32b_AVX2(benchmark::Bench& bench)
 static void SHA256_32b_SHANI(benchmark::Bench& bench)
 {
     bench.name(strprintf("%s using the '%s' SHA256 implementation", __func__, SHA256AutoDetect(sha256_implementation::USE_SSE4_AND_SHANI)));
-    std::vector<uint8_t> in(32,0);
+    std::array<uint8_t, 32> in{};
     bench.batch(in.size()).unit("byte").run([&] {
         CSHA256()
             .Write(in.data(), in.size())

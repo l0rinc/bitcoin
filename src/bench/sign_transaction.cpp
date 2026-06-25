@@ -17,6 +17,7 @@
 #include <util/check.h>
 #include <util/translation.h>
 
+#include <array>
 #include <map>
 #include <span>
 #include <vector>
@@ -85,7 +86,7 @@ static void SignSchnorrTapTweakBenchmark(benchmark::Bench& bench, bool use_null_
     auto msg = rng.rand256();
     auto merkle_root = use_null_merkle_root ? uint256() : rng.rand256();
     auto aux = rng.rand256();
-    std::vector<unsigned char> sig(64);
+    std::array<unsigned char, 64> sig{};
 
     bench.minEpochIterations(100).run([&] {
         bool success = key.SignSchnorr(msg, sig, &merkle_root, aux);

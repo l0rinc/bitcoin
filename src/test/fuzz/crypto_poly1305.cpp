@@ -7,6 +7,7 @@
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -14,10 +15,10 @@ FUZZ_TARGET(crypto_poly1305)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
 
-    const auto key = ConsumeFixedLengthByteVector<std::byte>(fuzzed_data_provider, Poly1305::KEYLEN);
+    const auto key{ConsumeFixedLengthByteArray<Poly1305::KEYLEN, std::byte>(fuzzed_data_provider)};
     const auto in = ConsumeRandomLengthByteVector<std::byte>(fuzzed_data_provider);
 
-    std::vector<std::byte> tag_out(Poly1305::TAGLEN);
+    std::array<std::byte, Poly1305::TAGLEN> tag_out{};
     Poly1305{key}.Update(in).Finalize(tag_out);
 }
 
@@ -26,8 +27,7 @@ FUZZ_TARGET(crypto_poly1305_split)
     FuzzedDataProvider provider{buffer.data(), buffer.size()};
 
     // Read key and instantiate two Poly1305 objects with it.
-    auto key = provider.ConsumeBytes<std::byte>(Poly1305::KEYLEN);
-    key.resize(Poly1305::KEYLEN);
+    const auto key{ConsumeFixedLengthByteArray<Poly1305::KEYLEN, std::byte>(provider)};
     Poly1305 poly_full{key}, poly_split{key};
 
     // Vector that holds all bytes processed so far.

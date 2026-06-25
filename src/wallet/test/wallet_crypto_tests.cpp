@@ -7,6 +7,7 @@
 #include <util/strencodings.h>
 #include <wallet/crypter.h>
 
+#include <array>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -88,7 +89,7 @@ BOOST_AUTO_TEST_CASE(passphrase) {
                                 "cf2f2691526dd1aa220896fb8bf7c369"_hex_u8);
 
     std::string hash(GetRandHash().ToString());
-    std::vector<unsigned char> vchSalt(8);
+    std::array<unsigned char, WALLET_CRYPTO_SALT_SIZE> vchSalt{};
     GetRandBytes(vchSalt);
     uint32_t rounds = m_rng.rand32();
     if (rounds > 30000)

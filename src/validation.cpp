@@ -66,6 +66,7 @@
 #include <validationinterface.h>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <chrono>
 #include <deque>
@@ -3995,11 +3996,11 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
 void ChainstateManager::UpdateUncommittedBlockStructures(CBlock& block, const CBlockIndex* pindexPrev) const
 {
     int commitpos = GetWitnessCommitmentIndex(block);
-    static const std::vector<unsigned char> nonce(32, 0x00);
+    static constexpr std::array<unsigned char, 32> nonce{};
     if (commitpos != NO_WITNESS_COMMITMENT && DeploymentActiveAfter(pindexPrev, *this, Consensus::DEPLOYMENT_SEGWIT) && !block.vtx[0]->HasWitness()) {
         CMutableTransaction tx(*block.vtx[0]);
         tx.vin[0].scriptWitness.stack.resize(1);
-        tx.vin[0].scriptWitness.stack[0] = nonce;
+        tx.vin[0].scriptWitness.stack[0].assign(nonce.begin(), nonce.end());
         block.vtx[0] = MakeTransactionRef(std::move(tx));
     }
 }
@@ -4007,7 +4008,7 @@ void ChainstateManager::UpdateUncommittedBlockStructures(CBlock& block, const CB
 void ChainstateManager::GenerateCoinbaseCommitment(CBlock& block, const CBlockIndex* pindexPrev) const
 {
     int commitpos = GetWitnessCommitmentIndex(block);
-    std::vector<unsigned char> ret(32, 0x00);
+    std::array<unsigned char, 32> ret{};
     if (commitpos == NO_WITNESS_COMMITMENT) {
         uint256 witnessroot = BlockWitnessMerkleRoot(block);
         CHash256().Write(witnessroot).Write(ret).Finalize(witnessroot);
