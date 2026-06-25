@@ -9,6 +9,7 @@
 // See https://github.com/include-what-you-use/include-what-you-use/issues/2014.
 #include <util/byte_units.h> // IWYU pragma: keep
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -21,7 +22,7 @@ static const uint64_t BUFFER_SIZE_LARGE{1_MiB};
 
 static void CHACHA20(benchmark::Bench& bench, size_t buffersize)
 {
-    std::vector<std::byte> key(32, {});
+    std::array<std::byte, 32> key{};
     ChaCha20 ctx(key);
     ctx.Seek({0, 0}, 0);
     std::vector<std::byte> in(buffersize, {});
@@ -33,7 +34,7 @@ static void CHACHA20(benchmark::Bench& bench, size_t buffersize)
 
 static void FSCHACHA20POLY1305(benchmark::Bench& bench, size_t buffersize)
 {
-    std::vector<std::byte> key(32);
+    std::array<std::byte, 32> key{};
     FSChaCha20Poly1305 ctx(key, 224);
     std::vector<std::byte> in(buffersize);
     std::vector<std::byte> aad;
