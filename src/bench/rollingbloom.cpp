@@ -6,14 +6,13 @@
 #include <common/bloom.h>
 #include <crypto/common.h>
 
+#include <array>
 #include <cstdint>
-#include <span>
-#include <vector>
 
 static void RollingBloom(benchmark::Bench& bench)
 {
     CRollingBloomFilter filter(120000, 0.000001);
-    std::vector<unsigned char> data(32);
+    std::array<unsigned char, 32> data{};
     uint32_t count = 0;
     bench.run([&] {
         count++;
