@@ -16,7 +16,7 @@
 
 class SaltedUint256Hasher
 {
-    const PresaltedSipHasher m_hasher;
+    const PresaltedSipHasher13Jumbo m_hasher;
 
 public:
     SaltedUint256Hasher();
