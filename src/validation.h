@@ -48,6 +48,7 @@
 #include <span>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -995,7 +996,7 @@ private:
     CCheckQueue<CScriptCheck> m_script_check_queue;
 
     //! Stripped prune-assumevalid blocks that are connectable without being written to disk.
-    std::map<uint256, std::shared_ptr<const CBlock>> m_prune_assumevalid_blocks GUARDED_BY(::cs_main);
+    std::unordered_map<uint256, std::shared_ptr<const CBlock>, SaltedUint256Hasher> m_prune_assumevalid_blocks GUARDED_BY(::cs_main);
 
     //! Timers and counters used for benchmarking validation in both background
     //! and active chainstates.
