@@ -12,8 +12,8 @@
 using kernel::ChainstateRole;
 
 // Taken from validation.cpp
-static constexpr auto DATABASE_WRITE_INTERVAL_MIN{50min};
-static constexpr auto DATABASE_WRITE_INTERVAL_MAX{70min};
+static constexpr auto DATABASE_WRITE_INTERVAL_MIN{90min};
+static constexpr auto DATABASE_WRITE_INTERVAL_MAX{110min};
 
 BOOST_AUTO_TEST_SUITE(chainstate_write_tests)
 
@@ -38,7 +38,7 @@ BOOST_FIXTURE_TEST_CASE(chainstate_write_interval, TestingSetup)
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
     BOOST_CHECK(!sub->m_did_flush);
 
-    // The periodic flush interval is between 50 and 70 minutes (inclusive)
+    // The periodic flush interval is ~100 minutes on average
     clock += DATABASE_WRITE_INTERVAL_MIN - 1min;
     chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC);
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
@@ -86,7 +86,7 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
     // Set m_next_write to current time
     chainstate.FlushStateToDisk(state_dummy, FlushStateMode::FORCE_FLUSH);
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
-    // The periodic flush interval is between 50 and 70 minutes (inclusive)
+    // The periodic flush interval is ~100 minutes on average
     // The next call to a PERIODIC write will flush
     m_clock += DATABASE_WRITE_INTERVAL_MAX;
 
