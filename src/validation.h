@@ -49,6 +49,7 @@
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -986,6 +987,8 @@ private:
 
     //! Stripped prune-assumevalid blocks that are connectable without being written to disk.
     std::unordered_map<uint256, std::shared_ptr<const CBlock>, SaltedUint256Hasher> m_prune_assumevalid_blocks GUARDED_BY(::cs_main);
+    //! CBlockIndex-pointer index for fast membership checks of m_prune_assumevalid_blocks.
+    std::unordered_set<const CBlockIndex*> m_prune_assumevalid_block_index GUARDED_BY(::cs_main);
 
     //! Timers and counters used for benchmarking validation in both background
     //! and active chainstates.
