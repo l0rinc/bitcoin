@@ -9,15 +9,20 @@ from test_framework.blocktools import (
     create_block,
 )
 from test_framework.messages import (
+    BlockTransactions,
     CBlock,
     CBlockHeader,
+    HeaderAndShortIDs,
     MSG_BLOCK,
     MSG_TYPE_MASK,
     MSG_WITNESS_FLAG,
     from_hex,
     msg_block,
+    msg_blocktxn,
+    msg_cmpctblock,
     msg_headers,
     msg_no_witness_block,
+    msg_sendcmpct,
 )
 from test_framework.p2p import (
     P2PInterface,
@@ -188,6 +193,7 @@ class FeaturePruneAssumeValidTest(BitcoinTestFramework):
         block_hashes = [block.hash_hex for block in blocks]
         final_chainwork = self.nodes[0].getblockheader(block_hashes[-1])["chainwork"]
         prune_assumevalid_args = ["-prune=1", "-pruneassumevalid", f"-assumevalid={assumevalid_hash}", f"-minimumchainwork={final_chainwork}"]
+        fallback_args = ["-prune=1", "-pruneassumevalid", f"-assumevalid={assumevalid_hash}", "-minimumchainwork=0"]
         snapshot = self.nodes[0].dumptxoutset("utxos.dat", rollback=200)
 
         self.log.info("Reject -pruneassumevalid without pruning or without an active assumevalid hash")
@@ -262,6 +268,44 @@ class FeaturePruneAssumeValidTest(BitcoinTestFramework):
         assert_equal(self.requested_types(refetch_peer, 1)[-1], MSG_BLOCK | MSG_WITNESS_FLAG)
         self.stop_node(5)
 
+        self.log.info("Reuse the queued witness mode for a compact-block fallback")
+        self.start_node(1, extra_args=fallback_args)
+        prune_assumevalid_node = self.nodes[1]
+        self.submit_headers(prune_assumevalid_node, blocks)
+        prune_assumevalid_node.setmocktime(1_700_000_000)
+
+        fallback_peer = prune_assumevalid_node.add_p2p_connection(AssumeValidBlockStore(blocks, max_height_to_serve=0))
+        fallback_peer.send_and_ping(msg_sendcmpct(announce=False, version=2))
+        fallback_peer.send_headers_for_blocks(blocks)
+        self.assert_requested(fallback_peer, 1, MSG_BLOCK)
+
+        compact_block = HeaderAndShortIDs()
+        compact_block.initialize_from_block(blocks[0], prefill_list=[], use_witness=True)
+        fallback_peer.send_without_ping(msg_cmpctblock(compact_block.to_p2p()))
+        fallback_peer.wait_until(lambda: "getblocktxn" in fallback_peer.last_message, timeout=60)
+
+        genesis = from_hex(CBlock(), self.nodes[0].getblock(self.nodes[0].getblockhash(0), False))
+        alternate_headers = self.build_competing_chain(genesis, first_height=1, final_height=len(blocks) + 1)
+        alternate_peer = prune_assumevalid_node.add_p2p_connection(AssumeValidBlockStore(alternate_headers, max_height_to_serve=0))
+        alternate_peer.send_headers_for_blocks(alternate_headers)
+        alternate_peer.sync_with_ping()
+
+        wrong_blocktxn = msg_blocktxn()
+        wrong_blocktxn.block_transactions = BlockTransactions(blocks[0].hash_int, [blocks[1].vtx[0]])
+        fallback_peer.send_without_ping(wrong_blocktxn)
+        self.wait_until(lambda: len(self.requested_types(fallback_peer, 1)) >= 2, timeout=60)
+        assert_equal(self.requested_types(fallback_peer, 1)[-1], MSG_BLOCK)
+
+        fallback_peer.send_without_ping(msg_no_witness_block(blocks[0]))
+        fallback_peer.sync_with_ping()
+        assert_equal(prune_assumevalid_node.getblockcount(), 0)
+        prune_assumevalid_node.invalidateblock(alternate_headers[0].hash_hex)
+        alternate_peer.peer_disconnect()
+        alternate_peer.wait_for_disconnect()
+        fallback_peer.peer_disconnect()
+        fallback_peer.wait_for_disconnect()
+        self.stop_node(1)
+
         self.log.info("Sync assumevalid ancestors as stripped ephemeral blocks")
         self.start_node(1, extra_args=prune_assumevalid_args)
         prune_assumevalid_node = self.nodes[1]
@@ -274,6 +318,7 @@ class FeaturePruneAssumeValidTest(BitcoinTestFramework):
         self.submit_headers(prune_assumevalid_node, blocks)
         initial_sizes = self.block_file_sizes(prune_assumevalid_node)
         prune_assumevalid_node.setmocktime(1_700_000_000)
+
         prune_assumevalid_peers = [
             prune_assumevalid_node.add_p2p_connection(AssumeValidBlockStore(blocks, max_height_to_serve=0))
             for _ in range(PRUNE_ASSUMEVALID_REQUEST_PEERS)

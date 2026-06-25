@@ -829,7 +829,7 @@ private:
     /** Get a pointer to a mutable CNodeState. */
     CNodeState* State(NodeId pnode) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
-    uint32_t GetFetchFlags(const Peer& peer, const CBlockIndex* block = nullptr) const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    uint32_t GetFetchFlags(const Peer& peer, bool request_without_witness = false) const;
 
     std::map<uint64_t, std::chrono::microseconds> m_next_inv_to_inbounds_per_network_key GUARDED_BY(g_msgproc_mutex);
 
@@ -2645,11 +2645,10 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
     }
 }
 
-uint32_t PeerManagerImpl::GetFetchFlags(const Peer& peer, const CBlockIndex* block) const
-    EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+uint32_t PeerManagerImpl::GetFetchFlags(const Peer& peer, bool request_without_witness) const
 {
     uint32_t nFetchFlags = 0;
-    if (block && m_chainman.ShouldRequestStrippedPruneAssumeValidBlock(*block)) {
+    if (request_without_witness) {
         return nFetchFlags;
     }
     if (CanServeWitnesses(peer)) {
@@ -2933,17 +2932,18 @@ void PeerManagerImpl::HeadersDirectFetchBlocks(CNode& pfrom, const Peer& peer, c
                      last_header.nHeight);
         } else {
             std::vector<CInv> vGetData;
-            bool request_stripped{false};
+            bool last_request_stripped{false};
             // Download as much as possible, from earliest to latest.
             for (const CBlockIndex* pindex : vToFetch | std::views::reverse) {
                 if (nodestate->vBlocksInFlight.size() >= MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
                     // Can't download any more from this peer
                     break;
                 }
-                uint32_t nFetchFlags = GetFetchFlags(peer, pindex);
+                const bool request_stripped{m_chainman.ShouldRequestStrippedPruneAssumeValidBlock(*pindex)};
+                uint32_t nFetchFlags = GetFetchFlags(peer, request_stripped);
                 vGetData.emplace_back(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash());
-                request_stripped = m_chainman.ShouldRequestStrippedPruneAssumeValidBlock(*pindex);
                 BlockRequested(pfrom.GetId(), *pindex, /*pit=*/nullptr, request_stripped);
+                last_request_stripped = request_stripped;
                 LogDebug(BCLog::NET, "Requesting %sblock %s from peer=%d",
                          request_stripped ? "stripped prune-assumevalid " : "",
                          pindex->GetBlockHash().ToString(), pfrom.GetId());
@@ -2959,7 +2959,7 @@ void PeerManagerImpl::HeadersDirectFetchBlocks(CNode& pfrom, const Peer& peer, c
                         vGetData.size() == 1 &&
                         mapBlocksInFlight.size() == 1 &&
                         last_header.pprev->IsValid(BLOCK_VALID_CHAIN) &&
-                        !request_stripped) {
+                        !last_request_stripped) {
                     // In any case, we want to download using a compact block, not a regular one
                     vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
                 }
@@ -3562,9 +3562,9 @@ void PeerManagerImpl::ProcessCompactBlockTxns(CNode& pfrom, Peer& peer, const Bl
                 // We keep the failed partialBlock to disallow processing another compact block announcement from the same
                 // peer for the same block. We let the full block download below continue under the same m_downloading_since
                 // timer.
-                const CBlockIndex* block_index{m_chainman.m_blockman.LookupBlockIndex(block_transactions.blockhash)};
+                const bool request_stripped{range_flight.first->second.second->request_without_witness};
                 std::vector<CInv> invs;
-                invs.emplace_back(MSG_BLOCK | GetFetchFlags(peer, block_index), block_transactions.blockhash);
+                invs.emplace_back(MSG_BLOCK | GetFetchFlags(peer, request_stripped), block_transactions.blockhash);
                 MakeAndPushMessage(pfrom, NetMsgType::GETDATA, invs);
             } else {
                 RemoveBlockRequest(block_transactions.blockhash, pfrom.GetId());
@@ -4700,8 +4700,9 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             if (requested_block_from_this_peer) {
                 // We requested this block for some reason, but our mempool will probably be useless
                 // so we just grab the block via normal getdata
+                const bool request_stripped{range_flight.first->second.second->request_without_witness};
                 std::vector<CInv> vInv(1);
-                vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(peer, pindex), blockhash);
+                vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(peer, request_stripped), blockhash);
                 MakeAndPushMessage(pfrom, NetMsgType::GETDATA, vInv);
             }
             return;
@@ -4737,8 +4738,9 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                 } else if (status == READ_STATUS_FAILED) {
                     if (first_in_flight)  {
                         // Duplicate txindexes, the block is now in-flight, so just request it
+                        const bool request_stripped{(*queuedBlockIt)->request_without_witness};
                         std::vector<CInv> vInv(1);
-                        vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(peer, pindex), blockhash);
+                        vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(peer, request_stripped), blockhash);
                         MakeAndPushMessage(pfrom, NetMsgType::GETDATA, vInv);
                     } else {
                         // Give up for this peer and wait for other peer(s)
@@ -4797,8 +4799,9 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             if (requested_block_from_this_peer) {
                 // We requested this block, but its far into the future, so our
                 // mempool will probably be useless - request the block normally
+                const bool request_stripped{range_flight.first->second.second->request_without_witness};
                 std::vector<CInv> vInv(1);
-                vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(peer, pindex), blockhash);
+                vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(peer, request_stripped), blockhash);
                 MakeAndPushMessage(pfrom, NetMsgType::GETDATA, vInv);
                 return;
             } else {
@@ -6364,9 +6367,9 @@ bool PeerManagerImpl::SendMessages(CNode& node)
                     vToDownload, from_tip, historical_blocks->second);
             }
             for (const CBlockIndex *pindex : vToDownload) {
-                uint32_t nFetchFlags = GetFetchFlags(peer, pindex);
-                vGetData.emplace_back(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash());
                 const bool request_stripped{m_chainman.ShouldRequestStrippedPruneAssumeValidBlock(*pindex)};
+                uint32_t nFetchFlags = GetFetchFlags(peer, request_stripped);
+                vGetData.emplace_back(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash());
                 BlockRequested(node.GetId(), *pindex, /*pit=*/nullptr, request_stripped);
                 LogDebug(BCLog::NET, "Requesting %sblock %s (%d) peer=%d\n",
                     request_stripped ? "stripped prune-assumevalid " : "",
