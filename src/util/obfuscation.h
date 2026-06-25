@@ -6,6 +6,7 @@
 #define BITCOIN_UTIL_OBFUSCATION_H
 
 #include <crypto/hex_base.h>
+#include <prevector.h>
 #include <span.h>
 #include <tinyformat.h>
 #include <util/strencodings.h>
@@ -63,7 +64,7 @@ public:
     void Serialize(Stream& s) const
     {
         // Use vector serialization for convenient compact size prefix.
-        std::vector<std::byte> bytes{KEY_SIZE};
+        prevector<KEY_SIZE, std::byte> bytes{KEY_SIZE};
         std::memcpy(bytes.data(), &m_rotations[0], KEY_SIZE);
         s << bytes;
     }
@@ -71,10 +72,10 @@ public:
     template <typename Stream>
     void Unserialize(Stream& s)
     {
-        std::vector<std::byte> bytes{KEY_SIZE};
+        prevector<KEY_SIZE, std::byte> bytes;
         s >> bytes;
         if (bytes.size() != KEY_SIZE) throw std::ios_base::failure(strprintf("Obfuscation key size should be exactly %s bytes long", KEY_SIZE));
-        SetRotations(ToKey(std::span<std::byte, KEY_SIZE>(bytes)));
+        SetRotations(ToKey(std::span<const std::byte, KEY_SIZE>{bytes.data(), KEY_SIZE}));
     }
 
     std::string HexKey() const
