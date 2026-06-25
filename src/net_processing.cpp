@@ -903,9 +903,11 @@ private:
 
     /** Have we requested this block from a peer */
     bool IsBlockRequested(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool IsBlockRequested(const CBlockIndex& block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /** Number of peers from which we requested this block */
     size_t BlockRequestCount(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    size_t BlockRequestCount(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /** Have we requested this block from an outbound peer */
     bool IsBlockRequestedFromOutbound(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_peer_mutex);
@@ -925,8 +927,8 @@ private:
      */
     bool BlockRequested(NodeId nodeid, const CBlockIndex& block, std::list<QueuedBlock>::iterator** pit = nullptr, bool request_without_witness = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
-    void IncrementBlockRequestCount(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-    void DecrementBlockRequestCount(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void IncrementBlockRequestCount(const uint256& hash, const CBlockIndex& block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void DecrementBlockRequestCount(const uint256& hash, const CBlockIndex& block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     bool TipMayBeStale() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
@@ -970,8 +972,10 @@ private:
     /* Multimap used to preserve insertion order */
     typedef std::multimap<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator>> BlockDownloadMap;
     BlockDownloadMap mapBlocksInFlight GUARDED_BY(cs_main);
-    using BlockDownloadCountMap = std::unordered_map<uint256, size_t, SaltedUint256Hasher>;
-    BlockDownloadCountMap m_block_download_count_by_hash GUARDED_BY(cs_main);
+    using BlockDownloadHashCountMap = std::unordered_map<uint256, size_t, SaltedUint256Hasher>;
+    BlockDownloadHashCountMap m_block_download_count_by_hash GUARDED_BY(cs_main);
+    using BlockDownloadIndexCountMap = std::unordered_map<const CBlockIndex*, size_t>;
+    BlockDownloadIndexCountMap m_block_download_count_by_index GUARDED_BY(cs_main);
 
     /** When our tip was last updated. */
     std::atomic<std::chrono::seconds> m_last_tip_update{0s};
@@ -1212,24 +1216,43 @@ size_t PeerManagerImpl::BlockRequestCount(const uint256& hash) const
     return count_it == m_block_download_count_by_hash.end() ? 0 : count_it->second;
 }
 
+size_t PeerManagerImpl::BlockRequestCount(const CBlockIndex& block) const
+{
+    const auto count_it{m_block_download_count_by_index.find(&block)};
+    return count_it == m_block_download_count_by_index.end() ? 0 : count_it->second;
+}
+
 bool PeerManagerImpl::IsBlockRequested(const uint256& hash)
 {
     return BlockRequestCount(hash) > 0;
 }
 
-void PeerManagerImpl::IncrementBlockRequestCount(const uint256& hash)
+bool PeerManagerImpl::IsBlockRequested(const CBlockIndex& block)
 {
-    ++m_block_download_count_by_hash[hash];
+    return BlockRequestCount(block) > 0;
 }
 
-void PeerManagerImpl::DecrementBlockRequestCount(const uint256& hash)
+void PeerManagerImpl::IncrementBlockRequestCount(const uint256& hash, const CBlockIndex& block)
 {
-    const auto count_it{m_block_download_count_by_hash.find(hash)};
-    if (!Assume(count_it != m_block_download_count_by_hash.end())) return;
-    if (!Assume(count_it->second > 0)) return;
+    ++m_block_download_count_by_hash[hash];
+    ++m_block_download_count_by_index[&block];
+}
 
-    if (--count_it->second == 0) {
-        m_block_download_count_by_hash.erase(count_it);
+void PeerManagerImpl::DecrementBlockRequestCount(const uint256& hash, const CBlockIndex& block)
+{
+    const auto hash_count_it{m_block_download_count_by_hash.find(hash)};
+    if (!Assume(hash_count_it != m_block_download_count_by_hash.end())) return;
+    if (!Assume(hash_count_it->second > 0)) return;
+
+    const auto index_count_it{m_block_download_count_by_index.find(&block)};
+    if (!Assume(index_count_it != m_block_download_count_by_index.end())) return;
+    if (!Assume(index_count_it->second > 0)) return;
+
+    if (--hash_count_it->second == 0) {
+        m_block_download_count_by_hash.erase(hash_count_it);
+    }
+    if (--index_count_it->second == 0) {
+        m_block_download_count_by_index.erase(index_count_it);
     }
 }
 
@@ -1257,6 +1280,7 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash, std::optional<Node
 
     while (range.first != range.second) {
         const auto& [node_id, list_it]{range.first->second};
+        const CBlockIndex& block{*list_it->pindex};
 
         if (from_peer && *from_peer != node_id) {
             range.first++;
@@ -1278,7 +1302,7 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash, std::optional<Node
         state.m_stalling_since = 0us;
 
         range.first = mapBlocksInFlight.erase(range.first);
-        DecrementBlockRequestCount(hash);
+        DecrementBlockRequestCount(hash, block);
     }
 }
 
@@ -1312,7 +1336,7 @@ bool PeerManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& block, st
         m_peers_downloading_from++;
     }
     auto itInFlight = mapBlocksInFlight.insert(std::make_pair(hash, std::make_pair(nodeid, it)));
-    IncrementBlockRequestCount(hash);
+    IncrementBlockRequestCount(hash, block);
     if (pit) {
         *pit = &itInFlight->second.second;
     }
@@ -1576,10 +1600,10 @@ void PeerManagerImpl::FindNextBlocks(std::vector<const CBlockIndex*>& vBlocks, c
             }
 
             // Is block in-flight?
-            const uint256 block_hash{pindex->GetBlockHash()};
-            if (IsBlockRequested(block_hash)) {
+            if (IsBlockRequested(*pindex)) {
                 if (waitingfor == -1) {
                     // This is the first already-in-flight block.
+                    const uint256 block_hash{pindex->GetBlockHash()};
                     const auto in_flight_it{mapBlocksInFlight.find(block_hash)};
                     Assert(in_flight_it != mapBlocksInFlight.end());
                     waitingfor = in_flight_it->second.first;
@@ -1771,7 +1795,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
                 range.first++;
             } else {
                 range.first = mapBlocksInFlight.erase(range.first);
-                DecrementBlockRequestCount(hash);
+                DecrementBlockRequestCount(hash, *entry.pindex);
             }
         }
     }
@@ -1792,6 +1816,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         // Do a consistency check after the last peer is removed.
         assert(mapBlocksInFlight.empty());
         assert(m_block_download_count_by_hash.empty());
+        assert(m_block_download_count_by_index.empty());
         assert(m_num_preferred_download_peers == 0);
         assert(m_peers_downloading_from == 0);
         assert(m_outbound_peers_with_protect_from_disconnect == 0);
@@ -2944,7 +2969,7 @@ void PeerManagerImpl::HeadersDirectFetchBlocks(CNode& pfrom, const Peer& peer, c
             const bool request_stripped{m_chainman.ShouldRequestStrippedPruneAssumeValidBlock(*pindexWalk)};
             if (!(pindexWalk->nStatus & BLOCK_HAVE_DATA) &&
                     !m_chainman.HasCachedPruneAssumeValidBlock(*pindexWalk) &&
-                    !IsBlockRequested(pindexWalk->GetBlockHash()) &&
+                    !IsBlockRequested(*pindexWalk) &&
                     (request_stripped || !DeploymentActiveAt(*pindexWalk, m_chainman, Consensus::DEPLOYMENT_SEGWIT) || CanServeWitnesses(peer))) {
                 // We don't have this block, and it's not yet in flight.
                 vToFetch.push_back(pindexWalk);
@@ -4697,7 +4722,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
 
         const uint256 block_hash{pindex->GetBlockHash()};
         auto range_flight = mapBlocksInFlight.equal_range(block_hash);
-        size_t already_in_flight = BlockRequestCount(block_hash);
+        size_t already_in_flight = BlockRequestCount(*pindex);
         if (already_in_flight > 0) Assert(range_flight.first != range_flight.second);
         bool requested_block_from_this_peer{false};
 
