@@ -9,6 +9,7 @@
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -29,8 +30,7 @@ FUZZ_TARGET(crypto_aeadchacha20poly1305)
 {
     FuzzedDataProvider provider{buffer.data(), buffer.size()};
 
-    auto key = provider.ConsumeBytes<std::byte>(32);
-    key.resize(32);
+    const auto key{ConsumeFixedLengthByteArray<AEADChaCha20Poly1305::KEYLEN, std::byte>(provider)};
     AEADChaCha20Poly1305 aead(key);
 
     // Initialize RNG deterministically, to generate contents and AAD. We assume that there are no
@@ -80,7 +80,7 @@ FUZZ_TARGET(crypto_aeadchacha20poly1305)
         // damage the key
         unsigned key_position = provider.ConsumeIntegralInRange<unsigned>(0, 31);
         std::byte damage_val{(uint8_t)(1U << (key_position & 7))};
-        std::vector<std::byte> bad_key = key;
+        auto bad_key{key};
         bad_key[key_position] ^= damage_val;
 
         AEADChaCha20Poly1305 bad_aead(bad_key);
@@ -119,8 +119,7 @@ FUZZ_TARGET(crypto_fschacha20poly1305)
     FuzzedDataProvider provider{buffer.data(), buffer.size()};
 
     uint32_t rekey_interval = provider.ConsumeIntegralInRange<size_t>(32, 512);
-    auto key = provider.ConsumeBytes<std::byte>(32);
-    key.resize(32);
+    const auto key{ConsumeFixedLengthByteArray<AEADChaCha20Poly1305::KEYLEN, std::byte>(provider)};
     FSChaCha20Poly1305 enc_aead(key, rekey_interval);
     FSChaCha20Poly1305 dec_aead(key, rekey_interval);
 
@@ -163,7 +162,7 @@ FUZZ_TARGET(crypto_fschacha20poly1305)
         // damage the key
         unsigned key_position = provider.ConsumeIntegralInRange<unsigned>(0, 31);
         std::byte damage_val{(uint8_t)(1U << (key_position & 7))};
-        std::vector<std::byte> bad_key = key;
+        auto bad_key{key};
         bad_key[key_position] ^= damage_val;
 
         FSChaCha20Poly1305 bad_fs_aead(bad_key, rekey_interval);
