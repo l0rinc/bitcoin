@@ -5,6 +5,8 @@
 #include <script/script.h>
 #include <test/util/setup_common.h>
 
+#include <array>
+
 #include <boost/test/unit_test.hpp>
 
 BOOST_FIXTURE_TEST_SUITE(script_segwit_tests, BasicTestingSetup)
@@ -112,7 +114,7 @@ BOOST_AUTO_TEST_CASE(IsWitnessProgram_Valid)
 
 BOOST_AUTO_TEST_CASE(IsWitnessProgram_Invalid_Version)
 {
-    std::vector<unsigned char> program(10);
+    std::array<unsigned char, 10> program{};
     CScript nowit;
     nowit << OP_1NEGATE << program;
     BOOST_CHECK(IsNoWitnessProgram(nowit));
@@ -133,7 +135,7 @@ BOOST_AUTO_TEST_CASE(IsWitnessProgram_Invalid_Size)
 
 BOOST_AUTO_TEST_CASE(IsWitnessProgram_Invalid_Nop)
 {
-    std::vector<unsigned char> program(10);
+    std::array<unsigned char, 10> program{};
     CScript nowit;
     nowit << OP_0 << OP_NOP << program;
     BOOST_CHECK(IsNoWitnessProgram(nowit));
