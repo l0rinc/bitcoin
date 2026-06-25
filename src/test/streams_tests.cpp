@@ -12,6 +12,8 @@
 #include <util/obfuscation.h>
 #include <util/strencodings.h>
 
+#include <array>
+
 #include <boost/test/unit_test.hpp>
 
 using namespace std::string_literals;
@@ -137,7 +139,7 @@ BOOST_AUTO_TEST_CASE(xor_file)
     {
         // Read raw from disk
         AutoFile non_xor_file{raw_file("rb")};
-        std::vector<std::byte> raw(7);
+        std::array<std::byte, 7> raw{};
         non_xor_file >> std::span{raw};
         BOOST_CHECK_EQUAL(HexStr(raw), "fc01fd03fd04fa");
         // Check that no padding exists
