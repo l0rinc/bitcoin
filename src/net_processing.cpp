@@ -57,6 +57,7 @@
 #include <txmempool.h>
 #include <uint256.h>
 #include <util/check.h>
+#include <util/hasher.h>
 #include <util/strencodings.h>
 #include <util/time.h>
 #include <util/trace.h>
@@ -84,6 +85,7 @@
 #include <set>
 #include <span>
 #include <typeinfo>
+#include <unordered_map>
 #include <utility>
 
 using kernel::ChainstateRole;
@@ -902,6 +904,9 @@ private:
     /** Have we requested this block from a peer */
     bool IsBlockRequested(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
+    /** Number of peers from which we requested this block */
+    size_t BlockRequestCount(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
     /** Have we requested this block from an outbound peer */
     bool IsBlockRequestedFromOutbound(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_peer_mutex);
 
@@ -919,6 +924,9 @@ private:
      * pit will only be valid as long as the same cs_main lock is being held
      */
     bool BlockRequested(NodeId nodeid, const CBlockIndex& block, std::list<QueuedBlock>::iterator** pit = nullptr, bool request_without_witness = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+    void IncrementBlockRequestCount(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void DecrementBlockRequestCount(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     bool TipMayBeStale() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
@@ -962,6 +970,8 @@ private:
     /* Multimap used to preserve insertion order */
     typedef std::multimap<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator>> BlockDownloadMap;
     BlockDownloadMap mapBlocksInFlight GUARDED_BY(cs_main);
+    using BlockDownloadCountMap = std::unordered_map<uint256, size_t, SaltedUint256Hasher>;
+    BlockDownloadCountMap m_block_download_count_by_hash GUARDED_BY(cs_main);
 
     /** When our tip was last updated. */
     std::atomic<std::chrono::seconds> m_last_tip_update{0s};
@@ -1196,9 +1206,31 @@ std::chrono::microseconds PeerManagerImpl::NextInvToInbounds(std::chrono::micros
     return timer;
 }
 
+size_t PeerManagerImpl::BlockRequestCount(const uint256& hash) const
+{
+    const auto count_it{m_block_download_count_by_hash.find(hash)};
+    return count_it == m_block_download_count_by_hash.end() ? 0 : count_it->second;
+}
+
 bool PeerManagerImpl::IsBlockRequested(const uint256& hash)
 {
-    return mapBlocksInFlight.contains(hash);
+    return BlockRequestCount(hash) > 0;
+}
+
+void PeerManagerImpl::IncrementBlockRequestCount(const uint256& hash)
+{
+    ++m_block_download_count_by_hash[hash];
+}
+
+void PeerManagerImpl::DecrementBlockRequestCount(const uint256& hash)
+{
+    const auto count_it{m_block_download_count_by_hash.find(hash)};
+    if (!Assume(count_it != m_block_download_count_by_hash.end())) return;
+    if (!Assume(count_it->second > 0)) return;
+
+    if (--count_it->second == 0) {
+        m_block_download_count_by_hash.erase(count_it);
+    }
 }
 
 bool PeerManagerImpl::IsBlockRequestedFromOutbound(const uint256& hash)
@@ -1221,7 +1253,7 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash, std::optional<Node
     }
 
     // We should not have requested too many of this block
-    Assume(mapBlocksInFlight.count(hash) <= MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK);
+    Assume(BlockRequestCount(hash) <= MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK);
 
     while (range.first != range.second) {
         const auto& [node_id, list_it]{range.first->second};
@@ -1246,6 +1278,7 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash, std::optional<Node
         state.m_stalling_since = 0us;
 
         range.first = mapBlocksInFlight.erase(range.first);
+        DecrementBlockRequestCount(hash);
     }
 }
 
@@ -1256,7 +1289,7 @@ bool PeerManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& block, st
     CNodeState *state = State(nodeid);
     assert(state != nullptr);
 
-    Assume(mapBlocksInFlight.count(hash) <= MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK);
+    Assume(BlockRequestCount(hash) <= MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK);
 
     // Short-circuit most stuff in case it is from the same node
     for (auto range = mapBlocksInFlight.equal_range(hash); range.first != range.second; range.first++) {
@@ -1279,6 +1312,7 @@ bool PeerManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& block, st
         m_peers_downloading_from++;
     }
     auto itInFlight = mapBlocksInFlight.insert(std::make_pair(hash, std::make_pair(nodeid, it)));
+    IncrementBlockRequestCount(hash);
     if (pit) {
         *pit = &itInFlight->second.second;
     }
@@ -1542,10 +1576,13 @@ void PeerManagerImpl::FindNextBlocks(std::vector<const CBlockIndex*>& vBlocks, c
             }
 
             // Is block in-flight?
-            if (IsBlockRequested(pindex->GetBlockHash())) {
+            const uint256 block_hash{pindex->GetBlockHash()};
+            if (IsBlockRequested(block_hash)) {
                 if (waitingfor == -1) {
                     // This is the first already-in-flight block.
-                    waitingfor = mapBlocksInFlight.lower_bound(pindex->GetBlockHash())->second.first;
+                    const auto in_flight_it{mapBlocksInFlight.find(block_hash)};
+                    Assert(in_flight_it != mapBlocksInFlight.end());
+                    waitingfor = in_flight_it->second.first;
                 }
                 continue;
             }
@@ -1726,13 +1763,15 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         nSyncStarted--;
 
     for (const QueuedBlock& entry : state->vBlocksInFlight) {
-        auto range = mapBlocksInFlight.equal_range(entry.pindex->GetBlockHash());
+        const uint256 hash{entry.pindex->GetBlockHash()};
+        auto range = mapBlocksInFlight.equal_range(hash);
         while (range.first != range.second) {
             auto [node_id, list_it] = range.first->second;
             if (node_id != nodeid) {
                 range.first++;
             } else {
                 range.first = mapBlocksInFlight.erase(range.first);
+                DecrementBlockRequestCount(hash);
             }
         }
     }
@@ -1752,6 +1791,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
     if (m_node_states.empty()) {
         // Do a consistency check after the last peer is removed.
         assert(mapBlocksInFlight.empty());
+        assert(m_block_download_count_by_hash.empty());
         assert(m_num_preferred_download_peers == 0);
         assert(m_peers_downloading_from == 0);
         assert(m_outbound_peers_with_protect_from_disconnect == 0);
@@ -2263,7 +2303,7 @@ void PeerManagerImpl::BlockChecked(const std::shared_ptr<const CBlock>& block, c
     //    just check that there are currently no other blocks in flight.
     else if (state.IsValid() &&
              !m_chainman.IsInitialBlockDownload() &&
-             mapBlocksInFlight.count(hash) == mapBlocksInFlight.size()) {
+             BlockRequestCount(hash) == mapBlocksInFlight.size()) {
         if (it != mapBlockSource.end()) {
             MaybeSetPeerAsAnnouncingHeaderAndIDs(it->second.first);
         }
@@ -3506,7 +3546,8 @@ void PeerManagerImpl::ProcessCompactBlockTxns(CNode& pfrom, Peer& peer, const Bl
         LOCK(cs_main);
 
         auto range_flight = mapBlocksInFlight.equal_range(block_transactions.blockhash);
-        size_t already_in_flight = std::distance(range_flight.first, range_flight.second);
+        size_t already_in_flight = BlockRequestCount(block_transactions.blockhash);
+        if (already_in_flight > 0) Assert(range_flight.first != range_flight.second);
         bool requested_block_from_this_peer{false};
 
         // Multimap ensures ordering of outstanding requests. It's either empty or first in line.
@@ -4654,8 +4695,10 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             return;
         }
 
-        auto range_flight = mapBlocksInFlight.equal_range(pindex->GetBlockHash());
-        size_t already_in_flight = std::distance(range_flight.first, range_flight.second);
+        const uint256 block_hash{pindex->GetBlockHash()};
+        auto range_flight = mapBlocksInFlight.equal_range(block_hash);
+        size_t already_in_flight = BlockRequestCount(block_hash);
+        if (already_in_flight > 0) Assert(range_flight.first != range_flight.second);
         bool requested_block_from_this_peer{false};
 
         // Multimap ensures ordering of outstanding requests. It's either empty or first in line.
