@@ -2444,7 +2444,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // relative to a piece of software is an objective fact these defaults can be easily reviewed.
     // This setting doesn't force the selection of any particular chain but makes validating some faster by
     // effectively caching the result of part of the verification.
-    const char* script_check_reason{GetAssumeValidScriptCheckReason(*pindex, m_chainman, m_blockman)};
+    const char* script_check_reason{prune_assumevalid ? nullptr : GetAssumeValidScriptCheckReason(*pindex, m_chainman, m_blockman)};
 
     const auto time_1{SteadyClock::now()};
     m_chainman.time_check += time_1 - time_start;
