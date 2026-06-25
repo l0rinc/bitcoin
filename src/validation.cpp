@@ -2299,6 +2299,8 @@ script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
 }
 
 
+static constexpr int64_t ASSUMEVALID_MIN_WORK_SECONDS{60 * 60 * 24 * 7 * 2};
+
 static const char* GetAssumeValidScriptCheckReason(const CBlockIndex& block, const ChainstateManager& chainman, const BlockManager& blockman)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
@@ -2308,7 +2310,6 @@ static const char* GetAssumeValidScriptCheckReason(const CBlockIndex& block, con
         return "assumevalid=0 (always verify)";
     }
 
-    constexpr int64_t TWO_WEEKS_IN_SECONDS{60 * 60 * 24 * 7 * 2};
     BlockMap::const_iterator it{blockman.m_block_index.find(chainman.AssumedValidBlock())};
     if (it == blockman.m_block_index.end()) {
         return "assumevalid hash not in headers";
@@ -2325,7 +2326,7 @@ static const char* GetAssumeValidScriptCheckReason(const CBlockIndex& block, con
     if (chainman.m_best_header->nChainWork < chainman.MinimumChainWork()) {
         return "best header chainwork below minimumchainwork";
     }
-    if (GetBlockProofEquivalentTime(*chainman.m_best_header, block, *chainman.m_best_header, chainman.GetConsensus()) <= TWO_WEEKS_IN_SECONDS) {
+    if (GetBlockProofEquivalentTime(*chainman.m_best_header, block, *chainman.m_best_header, chainman.GetConsensus()) <= ASSUMEVALID_MIN_WORK_SECONDS) {
         return "block too recent relative to best header";
     }
 
@@ -2343,7 +2344,30 @@ bool ChainstateManager::IsPruneAssumeValidBlock(const CBlockIndex& block) const
 bool ChainstateManager::CanUsePruneAssumeValid(const CBlockIndex& block) const
 {
     AssertLockHeld(cs_main);
-    return IsPruneAssumeValidBlock(block) && IsInitialBlockDownload();
+    if (!IsInitialBlockDownload()) return false;
+
+    if (m_prune_assumevalid_eligibility_header != m_best_header || m_prune_assumevalid_eligibility_tip == nullptr) {
+        m_prune_assumevalid_eligibility_header = m_best_header;
+        m_prune_assumevalid_eligibility_tip = nullptr;
+
+        if (m_options.prune_assumevalid && m_blockman.IsPruneMode() &&
+            m_best_header && m_best_header->nChainWork >= MinimumChainWork() &&
+            !AssumedValidBlock().IsNull()) {
+            if (BlockMap::const_iterator it{m_blockman.m_block_index.find(AssumedValidBlock())};
+                it != m_blockman.m_block_index.end()) {
+                const CBlockIndex* eligibility_tip{LastCommonAncestor(&it->second, m_best_header)};
+                while (eligibility_tip &&
+                       GetBlockProofEquivalentTime(*m_best_header, *eligibility_tip, *m_best_header, GetConsensus()) <= ASSUMEVALID_MIN_WORK_SECONDS) {
+                    eligibility_tip = eligibility_tip->pprev;
+                }
+                m_prune_assumevalid_eligibility_tip = eligibility_tip;
+            }
+        }
+    }
+
+    return m_prune_assumevalid_eligibility_tip &&
+           block.nHeight <= m_prune_assumevalid_eligibility_tip->nHeight &&
+           m_prune_assumevalid_eligibility_tip->GetAncestor(block.nHeight) == &block;
 }
 
 bool ChainstateManager::IsBlockPrunedByPruneAssumeValid(const CBlockIndex& block) const
