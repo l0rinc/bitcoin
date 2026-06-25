@@ -1076,7 +1076,6 @@ BOOST_FIXTURE_TEST_CASE(prune_assumevalid_predicates, PruneAssumeValidPredicateS
         BOOST_CHECK(!enabled.ShouldRequestStrippedPruneAssumeValidBlock(*ancestor));
 
         enabled.m_cached_is_ibd.store(false, std::memory_order_relaxed);
-        BOOST_CHECK(enabled.IsPruneAssumeValidBlock(*assumed));
         BOOST_CHECK(!enabled.CanUsePruneAssumeValid(*assumed));
         BOOST_CHECK(!enabled.ShouldRequestStrippedPruneAssumeValidBlock(*assumed));
         BOOST_CHECK(enabled.IsBlockPrunedByPruneAssumeValid(*assumed));

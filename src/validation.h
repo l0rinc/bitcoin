@@ -1000,6 +1000,9 @@ private:
     std::unordered_map<uint256, std::shared_ptr<const CBlock>, SaltedUint256Hasher> m_prune_assumevalid_blocks GUARDED_BY(::cs_main);
     //! CBlockIndex-pointer index for fast membership checks of m_prune_assumevalid_blocks.
     std::unordered_set<const CBlockIndex*> m_prune_assumevalid_block_index GUARDED_BY(::cs_main);
+    //! Highest block eligible for -pruneassumevalid under the current best header.
+    mutable const CBlockIndex* m_prune_assumevalid_eligibility_header GUARDED_BY(::cs_main){nullptr};
+    mutable const CBlockIndex* m_prune_assumevalid_eligibility_tip GUARDED_BY(::cs_main){nullptr};
 
     //! Timers and counters used for benchmarking validation in both background
     //! and active chainstates.
@@ -1033,7 +1036,6 @@ public:
     bool ShouldCheckBlockIndex() const;
     const arith_uint256& MinimumChainWork() const { return *Assert(m_options.minimum_chain_work); }
     const uint256& AssumedValidBlock() const { return *Assert(m_options.assumed_valid_block); }
-    bool IsPruneAssumeValidBlock(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     bool CanUsePruneAssumeValid(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     bool IsBlockPrunedByPruneAssumeValid(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     bool HasCachedPruneAssumeValidBlock(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);

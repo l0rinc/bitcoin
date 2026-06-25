@@ -2301,7 +2301,9 @@ script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
 }
 
 
-static const char* GetAssumeValidScriptCheckReason(const CBlockIndex& block, const ChainstateManager& chainman, const BlockManager& blockman)
+static constexpr int64_t ASSUMEVALID_MIN_WORK_SECONDS{60 * 60 * 24 * 7 * 2};
+
+static const char* GetAssumeValidScriptCheckReason(const CBlockIndex& block, const ChainstateManager& chainman)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     AssertLockHeld(cs_main);
@@ -2310,9 +2312,8 @@ static const char* GetAssumeValidScriptCheckReason(const CBlockIndex& block, con
         return "assumevalid=0 (always verify)";
     }
 
-    constexpr int64_t TWO_WEEKS_IN_SECONDS{60 * 60 * 24 * 7 * 2};
-    BlockMap::const_iterator it{blockman.m_block_index.find(chainman.AssumedValidBlock())};
-    if (it == blockman.m_block_index.end()) {
+    BlockMap::const_iterator it{chainman.m_blockman.m_block_index.find(chainman.AssumedValidBlock())};
+    if (it == chainman.m_blockman.m_block_index.end()) {
         return "assumevalid hash not in headers";
     }
     if (it->second.GetAncestor(block.nHeight) != &block) {
@@ -2327,25 +2328,42 @@ static const char* GetAssumeValidScriptCheckReason(const CBlockIndex& block, con
     if (chainman.m_best_header->nChainWork < chainman.MinimumChainWork()) {
         return "best header chainwork below minimumchainwork";
     }
-    if (GetBlockProofEquivalentTime(*chainman.m_best_header, block, *chainman.m_best_header, chainman.GetConsensus()) <= TWO_WEEKS_IN_SECONDS) {
+    if (GetBlockProofEquivalentTime(*chainman.m_best_header, block, *chainman.m_best_header, chainman.GetConsensus()) <= ASSUMEVALID_MIN_WORK_SECONDS) {
         return "block too recent relative to best header";
     }
 
     return nullptr;
 }
 
-bool ChainstateManager::IsPruneAssumeValidBlock(const CBlockIndex& block) const
-{
-    AssertLockHeld(cs_main);
-    return m_options.prune_assumevalid &&
-           m_blockman.IsPruneMode() &&
-           GetAssumeValidScriptCheckReason(block, *this, m_blockman) == nullptr;
-}
-
 bool ChainstateManager::CanUsePruneAssumeValid(const CBlockIndex& block) const
 {
     AssertLockHeld(cs_main);
-    return IsPruneAssumeValidBlock(block) && IsInitialBlockDownload();
+    if (!IsInitialBlockDownload()) return false;
+
+    if (m_prune_assumevalid_eligibility_header != m_best_header || m_prune_assumevalid_eligibility_tip == nullptr) {
+        m_prune_assumevalid_eligibility_header = m_best_header;
+        m_prune_assumevalid_eligibility_tip = nullptr;
+
+        if (m_options.prune_assumevalid && m_blockman.IsPruneMode() &&
+            m_best_header && m_best_header->nChainWork >= MinimumChainWork() &&
+            !AssumedValidBlock().IsNull()) {
+            if (const CBlockIndex* assumed_valid{m_blockman.LookupBlockIndex(AssumedValidBlock())}) {
+                // Ancestors of the last common ancestor satisfy every chain-membership
+                // condition of the script-check oracle, so this walk only trims blocks
+                // that are too recent - but asking the oracle keeps the two eligibility
+                // notions from drifting apart.
+                const CBlockIndex* eligibility_tip{LastCommonAncestor(assumed_valid, m_best_header)};
+                while (eligibility_tip && GetAssumeValidScriptCheckReason(*eligibility_tip, *this) != nullptr) {
+                    eligibility_tip = eligibility_tip->pprev;
+                }
+                m_prune_assumevalid_eligibility_tip = eligibility_tip;
+            }
+        }
+    }
+
+    return m_prune_assumevalid_eligibility_tip &&
+           block.nHeight <= m_prune_assumevalid_eligibility_tip->nHeight &&
+           m_prune_assumevalid_eligibility_tip->GetAncestor(block.nHeight) == &block;
 }
 
 bool ChainstateManager::IsAncestorOfAssumedValidBlock(const CBlockIndex& block) const
@@ -2444,7 +2462,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // relative to a piece of software is an objective fact these defaults can be easily reviewed.
     // This setting doesn't force the selection of any particular chain but makes validating some faster by
     // effectively caching the result of part of the verification.
-    const char* script_check_reason{prune_assumevalid ? nullptr : GetAssumeValidScriptCheckReason(*pindex, m_chainman, m_blockman)};
+    const char* script_check_reason{prune_assumevalid ? nullptr : GetAssumeValidScriptCheckReason(*pindex, m_chainman)};
 
     const auto time_1{SteadyClock::now()};
     m_chainman.time_check += time_1 - time_start;
