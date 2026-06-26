@@ -48,6 +48,7 @@
 #include <univalue.h>
 #include <util/check.h>
 #include <util/fs.h>
+#include <util/hasher.h>
 #include <util/strencodings.h>
 #include <util/syserror.h>
 #include <util/translation.h>
@@ -57,6 +58,7 @@
 
 #include <cstdint>
 
+#include <bitset>
 #include <condition_variable>
 #include <iterator>
 #include <memory>
@@ -64,6 +66,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 using kernel::CCoinsStats;
@@ -2226,11 +2229,38 @@ static RPCMethod getblockstats()
 }
 
 namespace {
+// Keep common scriptPubKey lengths in a fixed-size filter; larger scripts fall
+// back to exact lookup.
+static constexpr size_t MAX_FILTERED_SCRIPT_SIZE{127};
+// For small scans, tree lookup is cheaper than hashing every plausible script.
+static constexpr size_t MIN_HASHED_SCRIPT_LOOKUP_SIZE{64};
+
+using ScriptSizeFilter = std::bitset<MAX_FILTERED_SCRIPT_SIZE + 1>;
+
+bool MayContainScriptSize(const ScriptSizeFilter& sizes, size_t size)
+{
+    return size > MAX_FILTERED_SCRIPT_SIZE || sizes[size];
+}
+
+void AddScriptSize(ScriptSizeFilter& sizes, size_t size)
+{
+    if (size <= MAX_FILTERED_SCRIPT_SIZE) sizes.set(size);
+}
+
 //! Search for a given set of pubkey scripts
-bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& should_abort, int64_t& count, CCoinsViewCursor* cursor, const std::set<CScript>& needles, std::map<COutPoint, Coin>& out_results, std::function<void()>& interruption_point)
+bool FindScriptPubKey(std::atomic<int>& scan_progress,
+                      const std::atomic<bool>& should_abort,
+                      int64_t& count,
+                      CCoinsViewCursor* cursor,
+                      const std::set<CScript>& needles,
+                      const std::unordered_set<CScript, SaltedSipHasher>& needle_hashes,
+                      const ScriptSizeFilter& script_size_filter,
+                      std::map<COutPoint, Coin>& out_results,
+                      std::function<void()>& interruption_point)
 {
     scan_progress = 0;
     count = 0;
+    const bool use_hash_lookup{!needle_hashes.empty()};
     while (cursor->Valid()) {
         COutPoint key;
         Coin coin;
@@ -2247,7 +2277,8 @@ bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& 
             uint32_t high = 0x100 * *UCharCast(key.hash.begin()) + *(UCharCast(key.hash.begin()) + 1);
             scan_progress = (int)(high * 100.0 / 65536.0 + 0.5);
         }
-        if (needles.contains(coin.out.scriptPubKey)) {
+        if (MayContainScriptSize(script_size_filter, coin.out.scriptPubKey.size()) &&
+            (use_hash_lookup ? needle_hashes.contains(coin.out.scriptPubKey) : needles.contains(coin.out.scriptPubKey))) {
             out_results.emplace(key, coin);
         }
         cursor->Next();
@@ -2418,6 +2449,7 @@ static RPCMethod scantxoutset()
         }
 
         std::set<CScript> needles;
+        ScriptSizeFilter script_size_filter;
         std::map<CScript, std::string> descriptors;
         CAmount total_in = 0;
 
@@ -2428,8 +2460,14 @@ static RPCMethod scantxoutset()
             for (CScript& script : scripts) {
                 std::string inferred = InferDescriptor(script, provider)->ToString();
                 needles.emplace(script);
+                AddScriptSize(script_size_filter, script.size());
                 descriptors.emplace(std::move(script), std::move(inferred));
             }
+        }
+        std::unordered_set<CScript, SaltedSipHasher> needle_hashes;
+        if (needles.size() >= MIN_HASHED_SCRIPT_LOOKUP_SIZE) {
+            needle_hashes.reserve(needles.size());
+            needle_hashes.insert(needles.begin(), needles.end());
         }
 
         // Scan the unspent transaction output set for inputs
@@ -2449,7 +2487,7 @@ static RPCMethod scantxoutset()
             pcursor = CHECK_NONFATAL(active_chainstate.CoinsDB().Cursor());
             tip = CHECK_NONFATAL(active_chainstate.m_chain.Tip());
         }
-        bool res = FindScriptPubKey(g_scan_progress, g_should_abort_scan, count, pcursor.get(), needles, coins, node.rpc_interruption_point);
+        bool res = FindScriptPubKey(g_scan_progress, g_should_abort_scan, count, pcursor.get(), needles, needle_hashes, script_size_filter, coins, node.rpc_interruption_point);
         result.pushKV("success", res);
         result.pushKV("txouts", count);
         result.pushKV("height", tip->nHeight);
