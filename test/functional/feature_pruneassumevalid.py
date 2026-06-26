@@ -38,20 +38,21 @@ from test_framework.wallet import MiniWallet
 
 
 MAX_BLOCKS_IN_TRANSIT_PER_PEER = 16
-PRUNE_ASSUMEVALID_REQUEST_WINDOW = 128
-PRUNE_ASSUMEVALID_REQUEST_PEERS = PRUNE_ASSUMEVALID_REQUEST_WINDOW // MAX_BLOCKS_IN_TRANSIT_PER_PEER + 1
-ASSUMEVALID_HEIGHT = max(COINBASE_MATURITY + 2, PRUNE_ASSUMEVALID_REQUEST_WINDOW + 2)
+PRUNE_ASSUMEVALID_REQUEST_PEERS = 9
+PRUNE_ASSUMEVALID_INITIAL_REQUESTS = PRUNE_ASSUMEVALID_REQUEST_PEERS * MAX_BLOCKS_IN_TRANSIT_PER_PEER
+ASSUMEVALID_HEIGHT = max(COINBASE_MATURITY + 2, PRUNE_ASSUMEVALID_INITIAL_REQUESTS + 2)
 BURIAL_BLOCKS = 2100
 
 
 class AssumeValidBlockStore(P2PInterface):
-    def __init__(self, blocks, max_height_to_serve, first_height=1, force_no_witness=False):
+    def __init__(self, blocks, max_height_to_serve, first_height=1, withheld_heights=(), force_no_witness=False):
         super().__init__()
         self.blocks = blocks
         self.first_height = first_height
         self.blocks_by_hash = {block.hash_int: block for block in blocks}
         self.height_by_hash = {block.hash_int: height for height, block in enumerate(blocks, start=first_height)}
         self.max_height_to_serve = max_height_to_serve
+        self.withheld_heights = set(withheld_heights)
         self.force_no_witness = force_no_witness
         self.pending_getdata = []
         self.request_types_by_height = {}
@@ -79,7 +80,7 @@ class AssumeValidBlockStore(P2PInterface):
             if height is None:
                 continue
             self.request_types_by_height.setdefault(height, []).append(inv.type)
-            if height <= self.max_height_to_serve:
+            if height <= self.max_height_to_serve and height not in self.withheld_heights:
                 self._send_block(inv)
             else:
                 self.pending_getdata.append(inv)
@@ -114,7 +115,7 @@ class AssumeValidBlockStore(P2PInterface):
 class FeaturePruneAssumeValidTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
-        self.num_nodes = 6
+        self.num_nodes = 7
         self.rpc_timeout = 120
 
     def setup_network(self):
@@ -305,6 +306,31 @@ class FeaturePruneAssumeValidTest(BitcoinTestFramework):
         fallback_peer.peer_disconnect()
         fallback_peer.wait_for_disconnect()
         self.stop_node(1)
+        self.log.info("Recover out-of-order stripped blocks after the peer holding their parent disconnects")
+        self.start_node(6, extra_args=prune_assumevalid_args)
+        peer_loss_node = self.nodes[6]
+        self.submit_headers(peer_loss_node, blocks)
+        peer_loss_sizes = self.block_file_sizes(peer_loss_node)
+        peer_loss_node.setmocktime(1_700_000_000)
+        gap_peer = peer_loss_node.add_p2p_connection(AssumeValidBlockStore(
+            blocks,
+            max_height_to_serve=ASSUMEVALID_HEIGHT,
+            withheld_heights={1},
+        ))
+        gap_peer.send_headers_for_blocks(blocks)
+        self.wait_until(lambda: max(self.requested_heights(gap_peer), default=0) >= ASSUMEVALID_HEIGHT, timeout=60)
+        gap_peer.sync_with_ping()
+        assert_equal(peer_loss_node.getblockcount(), 0)
+        assert_equal(self.block_file_sizes(peer_loss_node), peer_loss_sizes)
+        gap_peer.peer_disconnect()
+        gap_peer.wait_for_disconnect()
+
+        recovery_peer = peer_loss_node.add_p2p_connection(AssumeValidBlockStore(blocks, max_height_to_serve=1))
+        recovery_peer.send_headers_for_blocks(blocks)
+        self.assert_requested(recovery_peer, 1, MSG_BLOCK)
+        self.wait_until(lambda: peer_loss_node.getblockcount() == ASSUMEVALID_HEIGHT, timeout=60)
+        assert_equal(self.block_file_sizes(peer_loss_node), peer_loss_sizes)
+        self.stop_node(6)
 
         self.log.info("Sync assumevalid ancestors as stripped ephemeral blocks")
         self.start_node(1, extra_args=prune_assumevalid_args)
@@ -325,13 +351,13 @@ class FeaturePruneAssumeValidTest(BitcoinTestFramework):
         ]
         for peer in prune_assumevalid_peers:
             peer.send_headers_for_blocks(blocks[-1:])
-        self.wait_until(lambda: max(self.requested_heights(prune_assumevalid_peers), default=0) == PRUNE_ASSUMEVALID_REQUEST_WINDOW, timeout=60)
+        self.wait_until(lambda: len(self.requested_heights(prune_assumevalid_peers)) == PRUNE_ASSUMEVALID_INITIAL_REQUESTS, timeout=60)
         for peer in prune_assumevalid_peers:
             peer.sync_with_ping()
         pre_crash_prune_assumevalid_peers = prune_assumevalid_peers
         assert_equal(
             self.requested_heights(pre_crash_prune_assumevalid_peers),
-            set(range(1, PRUNE_ASSUMEVALID_REQUEST_WINDOW + 1)),
+            set(range(1, PRUNE_ASSUMEVALID_INITIAL_REQUESTS + 1)),
         )
         assert_equal(self.block_file_sizes(prune_assumevalid_node), initial_sizes)
 

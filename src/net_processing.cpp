@@ -58,6 +58,7 @@
 #include <uint256.h>
 #include <util/byte_units.h>
 #include <util/check.h>
+#include <util/overflow.h>
 #include <util/strencodings.h>
 #include <util/time.h>
 #include <util/trace.h>
@@ -146,12 +147,26 @@ static_assert(MAX_BLOCKTXN_DEPTH <= MIN_BLOCKS_TO_KEEP, "MAX_BLOCKTXN_DEPTH too 
  *  degree of disordering of blocks on disk (which make reindexing and pruning harder). We'll probably
  *  want to make this a per-peer adaptive value at some point. */
 static const unsigned int BLOCK_DOWNLOAD_WINDOW = 1024;
-/** Limit the prune-assumevalid transient block cache to one full outbound-relay set worth of in-flight blocks. */
-static const unsigned int PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_WINDOW = MAX_BLOCKS_IN_TRANSIT_PER_PEER * MAX_OUTBOUND_FULL_RELAY_CONNECTIONS;
+/** Limit the prune-assumevalid transient block cache while still allowing a normal download window for small blocks. */
+static const unsigned int PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_WINDOW = BLOCK_DOWNLOAD_WINDOW;
+static constexpr size_t PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_BYTES{256_MiB};
 /** Block download timeout base, expressed in multiples of the block interval (i.e. 10 min) */
 static constexpr double BLOCK_DOWNLOAD_TIMEOUT_BASE = 1;
 /** Additional block download timeout per parallel downloading peer (i.e. 5 min) */
 static constexpr double BLOCK_DOWNLOAD_TIMEOUT_PER_PEER = 0.5;
+
+unsigned int PruneAssumeValidDownloadWindow(size_t cached_blocks, size_t cached_bytes, unsigned int block_limit, size_t byte_limit)
+{
+    // Keep the next missing block requestable so cached descendants can drain if
+    // the peer that was serving their parent disconnects.
+    if (cached_blocks >= block_limit || cached_bytes >= byte_limit) return 1;
+    if (cached_blocks == 0 || cached_bytes == 0) return block_limit;
+
+    const size_t average_block_bytes{CeilDiv(cached_bytes, cached_blocks)};
+    const size_t byte_window{std::max<size_t>(1, byte_limit / average_block_bytes)};
+    return static_cast<unsigned int>(std::min<size_t>(block_limit, byte_window));
+}
+
 /** Maximum number of headers to announce when relaying blocks with headers message.*/
 static const unsigned int MAX_BLOCKS_TO_ANNOUNCE = 8;
 /** Minimum blocks required to signal NODE_NETWORK_LIMITED */
@@ -1456,18 +1471,22 @@ void PeerManagerImpl::UpdateBlockAvailability(NodeId nodeid, const uint256 &hash
 static unsigned int GetBlockDownloadWindow(const ChainstateManager& chainman, const CBlockIndex& from, const CBlockIndex& best)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
+    if (!chainman.m_options.prune_assumevalid) return BLOCK_DOWNLOAD_WINDOW;
+
     if (from.nHeight < best.nHeight) {
         if (const CBlockIndex* next{best.GetAncestor(from.nHeight + 1)};
             next && chainman.ShouldRequestStrippedPruneAssumeValidBlock(*next)) {
             const size_t cached_blocks{chainman.CachedPruneAssumeValidBlockCount()};
-            if (cached_blocks >= PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_WINDOW) {
-                LogDebug(BCLog::BENCH, "Prune-assumevalid block cache full; pausing stripped block requests (blocks=%u, %.1fMiB limit=%u)\n",
+            const size_t cached_bytes{chainman.CachedPruneAssumeValidBlockBytes()};
+            const unsigned int window{PruneAssumeValidDownloadWindow(cached_blocks, cached_bytes, PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_WINDOW, PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_BYTES)};
+            if (window == 1) {
+                LogDebug(BCLog::BENCH, "Prune-assumevalid block cache full; restricting stripped block requests to the next missing block (blocks=%u/%u, %.1f/%.0fMiB)\n",
                          static_cast<unsigned>(cached_blocks),
-                         chainman.CachedPruneAssumeValidBlockBytes() / double(1_MiB),
-                         PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_WINDOW);
-                return 0;
+                         PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_WINDOW,
+                         cached_bytes / double(1_MiB),
+                         PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_BYTES / double(1_MiB));
             }
-            return PRUNE_ASSUMEVALID_BLOCK_DOWNLOAD_WINDOW - static_cast<unsigned int>(cached_blocks);
+            return window;
         }
     }
     return BLOCK_DOWNLOAD_WINDOW;

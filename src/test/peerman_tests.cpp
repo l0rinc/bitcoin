@@ -19,6 +19,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 
@@ -26,6 +27,17 @@ BOOST_FIXTURE_TEST_SUITE(peerman_tests, RegTestingSetup)
 
 /** Window, in blocks, for connecting to NODE_NETWORK_LIMITED peers */
 static constexpr int64_t NODE_NETWORK_LIMITED_ALLOW_CONN_BLOCKS = 144;
+
+BOOST_AUTO_TEST_CASE(prune_assumevalid_download_window)
+{
+    static constexpr unsigned int BLOCK_LIMIT{10};
+    static constexpr size_t BYTE_LIMIT{100};
+
+    BOOST_CHECK_EQUAL(PruneAssumeValidDownloadWindow(/*cached_blocks=*/0, /*cached_bytes=*/0, BLOCK_LIMIT, BYTE_LIMIT), BLOCK_LIMIT);
+    BOOST_CHECK_EQUAL(PruneAssumeValidDownloadWindow(/*cached_blocks=*/2, /*cached_bytes=*/40, BLOCK_LIMIT, BYTE_LIMIT), 5);
+    BOOST_CHECK_EQUAL(PruneAssumeValidDownloadWindow(BLOCK_LIMIT, /*cached_bytes=*/1, BLOCK_LIMIT, BYTE_LIMIT), 1);
+    BOOST_CHECK_EQUAL(PruneAssumeValidDownloadWindow(/*cached_blocks=*/1, BYTE_LIMIT, BLOCK_LIMIT, BYTE_LIMIT), 1);
+}
 
 static void mineBlock(node::NodeContext& node, FakeNodeClock& clock, std::chrono::seconds block_time)
 {
