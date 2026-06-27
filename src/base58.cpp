@@ -131,7 +131,12 @@ bool DecodeBase58(const std::string& str, std::vector<unsigned char>& vchRet, in
     if (!ContainsNoNUL(str)) {
         return false;
     }
-    return DecodeBase58(str.c_str(), vchRet, max_ret_len);
+    const bool ret{DecodeBase58(str.c_str(), vchRet, max_ret_len)};
+    if (ret) {
+        assert(max_ret_len < 0 || vchRet.size() <= static_cast<size_t>(max_ret_len));
+        assert(EncodeBase58(vchRet) == util::TrimStringView(str));
+    }
+    return ret;
 }
 
 std::string EncodeBase58Check(std::span<const unsigned char> input)
@@ -165,5 +170,11 @@ bool DecodeBase58Check(const std::string& str, std::vector<unsigned char>& vchRe
     if (!ContainsNoNUL(str)) {
         return false;
     }
-    return DecodeBase58Check(str.c_str(), vchRet, max_ret);
+    const bool ret{DecodeBase58Check(str.c_str(), vchRet, max_ret)};
+    if (ret) {
+        assert(max_ret >= 0);
+        assert(vchRet.size() <= static_cast<size_t>(max_ret));
+        assert(EncodeBase58Check(vchRet) == util::TrimStringView(str));
+    }
+    return ret;
 }
