@@ -10,6 +10,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 FUZZ_TARGET(netaddress)
@@ -90,6 +91,30 @@ FUZZ_TARGET(netaddress)
     }
     (void)net_addr.IsValid();
     (void)net_addr.ToStringAddr();
+
+    struct in_addr ipv4_addr;
+    const bool has_ipv4_addr{net_addr.GetInAddr(&ipv4_addr)};
+    assert(has_ipv4_addr == net_addr.IsIPv4());
+    if (has_ipv4_addr) {
+        assert(CNetAddr{ipv4_addr} == net_addr);
+    }
+
+    struct in6_addr ipv6_addr;
+    const bool has_ipv6_addr{net_addr.GetIn6Addr(&ipv6_addr)};
+    assert(has_ipv6_addr == (net_addr.IsIPv6() || net_addr.IsCJDNS()));
+    if (has_ipv6_addr) {
+        const CNetAddr legacy_ipv6{ipv6_addr};
+        if (net_addr.IsIPv6()) {
+            assert(legacy_ipv6 == net_addr);
+        } else {
+            assert(net_addr.IsCJDNS());
+            assert(legacy_ipv6.IsIPv6());
+            assert(legacy_ipv6.HasCJDNSPrefix());
+            struct in6_addr legacy_ipv6_addr;
+            assert(legacy_ipv6.GetIn6Addr(&legacy_ipv6_addr));
+            assert(memcmp(&legacy_ipv6_addr, &ipv6_addr, sizeof(ipv6_addr)) == 0);
+        }
+    }
 
     const CSubNet sub_net{net_addr, fuzzed_data_provider.ConsumeIntegral<uint8_t>()};
     (void)sub_net.IsValid();
