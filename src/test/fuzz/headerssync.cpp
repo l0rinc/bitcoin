@@ -105,10 +105,24 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
         }
 
         if (headers.empty()) return;
+        const auto previous_state{headers_sync.GetState()};
         auto result = headers_sync.ProcessNextHeaders(headers, fuzzed_data_provider.ConsumeBool());
         requested_more = result.request_more;
 
         if (result.request_more) {
+            assert(result.success);
+            assert(headers_sync.GetState() != HeadersSyncState::State::FINAL);
+            const CBlockLocator locator{headers_sync.NextHeadersRequestLocator()};
+            assert(!locator.IsNull());
+            assert(locator.vHave.size() >= 2);
+            assert(locator.vHave.back() == genesis_hash);
+            if (headers_sync.GetState() == HeadersSyncState::State::PRESYNC) {
+                assert(locator.vHave.front() == headers.back().GetHash());
+            } else {
+                assert(headers_sync.GetState() == HeadersSyncState::State::REDOWNLOAD);
+                assert(locator.vHave.front() == (previous_state == HeadersSyncState::State::PRESYNC ? genesis_hash : headers.back().GetHash()));
+            }
+
             if (presync) {
                 all_headers.insert(all_headers.cend(), headers.cbegin(), headers.cend());
 
@@ -121,8 +135,6 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
                     assert(CalculateClaimedHeadersWork(all_headers) >= min_work);
                 }
             }
-
-            (void)headers_sync.NextHeadersRequestLocator();
         }
     }
 }
