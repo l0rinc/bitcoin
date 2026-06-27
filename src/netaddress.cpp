@@ -10,6 +10,7 @@
 #include <hash.h>
 #include <prevector.h>
 #include <tinyformat.h>
+#include <util/check.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 
@@ -651,7 +652,9 @@ bool CNetAddr::GetIn6Addr(struct in6_addr* pipv6Addr) const
 
 bool CNetAddr::HasLinkedIPv4() const
 {
-    return IsRoutable() && (IsIPv4() || IsRFC6145() || IsRFC6052() || IsRFC3964() || IsRFC4380());
+    const bool has_linked_ipv4{IsRoutable() && (IsIPv4() || IsRFC6145() || IsRFC6052() || IsRFC3964() || IsRFC4380())};
+    Assume(!has_linked_ipv4 || IsRoutable());
+    return has_linked_ipv4;
 }
 
 uint32_t CNetAddr::GetLinkedIPv4() const
