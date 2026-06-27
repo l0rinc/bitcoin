@@ -12,6 +12,7 @@ CFeeRate::CFeeRate(const CAmount& nFeePaid, int32_t virtual_bytes)
 {
     if (virtual_bytes > 0) {
         m_feerate = FeePerVSize(nFeePaid, virtual_bytes);
+        Assume(GetFee(virtual_bytes) == nFeePaid);
     } else {
         m_feerate = FeePerVSize();
     }
