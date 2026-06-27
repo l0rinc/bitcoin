@@ -3,19 +3,24 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <consensus/amount.h>
+#include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <util/moneystr.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 
 #include <cassert>
+#include <array>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
+#include <utility>
 
 FUZZ_TARGET(parse_numbers)
 {
     const std::string random_string(buffer.begin(), buffer.end());
+    FuzzedDataProvider provider(buffer.data(), buffer.size());
     {
         const auto i8{ToIntegral<int8_t>(random_string)};
         const auto u8{ToIntegral<uint8_t>(random_string)};
@@ -85,5 +90,30 @@ FUZZ_TARGET(parse_numbers)
     if (parsed_3 && parsed_4) {
         assert(parsed_fixed_point_4 % 10 == 0);
         assert(parsed_fixed_point_4 / 10 == parsed_fixed_point_3);
+    }
+
+    constexpr std::array byte_units{
+        std::pair{'\0', ByteUnit::NOOP},
+        std::pair{'k', ByteUnit::k},
+        std::pair{'K', ByteUnit::K},
+        std::pair{'m', ByteUnit::m},
+        std::pair{'M', ByteUnit::M},
+        std::pair{'g', ByteUnit::g},
+        std::pair{'G', ByteUnit::G},
+        std::pair{'t', ByteUnit::t},
+        std::pair{'T', ByteUnit::T},
+    };
+    const uint64_t byte_unit_amount{provider.ConsumeIntegral<uint64_t>()};
+    const auto [suffix, suffix_multiplier]{provider.PickValueInArray(byte_units)};
+    const auto default_multiplier{provider.PickValueInArray(byte_units).second};
+    std::string byte_units_input{std::to_string(byte_unit_amount)};
+    if (suffix != '\0') byte_units_input.push_back(suffix);
+    const uint64_t multiplier{static_cast<uint64_t>(suffix == '\0' ? default_multiplier : suffix_multiplier)};
+    const std::optional<uint64_t> parsed_bytes{ParseByteUnits(byte_units_input, default_multiplier)};
+    if (byte_unit_amount > std::numeric_limits<uint64_t>::max() / multiplier) {
+        assert(!parsed_bytes);
+    } else {
+        assert(parsed_bytes);
+        assert(*parsed_bytes == byte_unit_amount * multiplier);
     }
 }

@@ -437,7 +437,9 @@ std::optional<uint64_t> ParseByteUnits(std::string_view str, ByteUnit default_mu
     if (!parsed_num || parsed_num > std::numeric_limits<uint64_t>::max() / unit_amount) { // check overflow
         return std::nullopt;
     }
-    return *parsed_num * unit_amount;
+    const uint64_t result{*parsed_num * unit_amount};
+    assert(result / unit_amount == *parsed_num);
+    return result;
 }
 
 bool CaseInsensitiveEqual(std::string_view s1, std::string_view s2)
