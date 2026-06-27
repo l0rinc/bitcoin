@@ -59,4 +59,23 @@ BOOST_AUTO_TEST_CASE(span_constructor_sfinae)
     BOOST_CHECK(!Spannable(SpannableNo{}));
 }
 
+BOOST_AUTO_TEST_CASE(span_pop_back)
+{
+    std::array values{1, 2, 3, 4};
+    std::span<int> span{values};
+
+    int& popped{SpanPopBack(span)};
+    BOOST_CHECK_EQUAL(&popped, &values.back());
+    BOOST_CHECK_EQUAL(popped, 4);
+    BOOST_CHECK_EQUAL(span.size(), 3U);
+    BOOST_CHECK_EQUAL_COLLECTIONS(span.begin(), span.end(), values.begin(), values.begin() + 3);
+
+    popped = 9;
+    BOOST_CHECK_EQUAL(values.back(), 9);
+
+    BOOST_CHECK_EQUAL(SpanPopBack(span), 3);
+    BOOST_CHECK_EQUAL(span.size(), 2U);
+    BOOST_CHECK_EQUAL_COLLECTIONS(span.begin(), span.end(), values.begin(), values.begin() + 2);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
