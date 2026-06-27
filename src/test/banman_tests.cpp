@@ -40,4 +40,44 @@ BOOST_AUTO_TEST_CASE(file)
     }
 }
 
+BOOST_AUTO_TEST_CASE(clear_and_unban)
+{
+    FakeNodeClock clock{777s};
+    const fs::path banlist_path{m_args.GetDataDirBase() / "banlist_transition_test"};
+    fs::remove(banlist_path + ".json");
+
+    const CSubNet subnet{LookupSubNet("1.2.3.0/24")};
+    const CSubNet other_subnet{LookupSubNet("5.6.7.0/24")};
+    const CNetAddr subnet_addr{LookupHost("1.2.3.4", false).value()};
+    const CNetAddr other_addr{LookupHost("5.6.7.8", false).value()};
+    BOOST_REQUIRE(subnet.IsValid());
+    BOOST_REQUIRE(other_subnet.IsValid());
+
+    {
+        BanMan banman{banlist_path, /*client_interface=*/nullptr, /*default_ban_time=*/0};
+        banman.Ban(subnet, /*ban_time_offset=*/10, /*since_unix_epoch=*/false);
+        banman.Ban(other_subnet, /*ban_time_offset=*/10, /*since_unix_epoch=*/false);
+        BOOST_CHECK(banman.IsBanned(subnet_addr));
+        BOOST_CHECK(banman.IsBanned(other_addr));
+
+        BOOST_CHECK(banman.Unban(subnet));
+        BOOST_CHECK(!banman.IsBanned(subnet_addr));
+        BOOST_CHECK(banman.IsBanned(other_addr));
+        BOOST_CHECK(!banman.Unban(subnet));
+
+        banmap_t entries;
+        banman.GetBanned(entries);
+        BOOST_CHECK_EQUAL(entries.count(subnet), 0U);
+        BOOST_CHECK_EQUAL(entries.count(other_subnet), 1U);
+
+        banman.ClearBanned();
+        banman.GetBanned(entries);
+        BOOST_CHECK(entries.empty());
+        BOOST_CHECK(!banman.IsBanned(subnet_addr));
+        BOOST_CHECK(!banman.IsBanned(other_addr));
+    }
+
+    fs::remove(banlist_path + ".json");
+}
+
 BOOST_AUTO_TEST_SUITE_END()
