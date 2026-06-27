@@ -499,6 +499,17 @@ BOOST_AUTO_TEST_CASE(netbase_dont_resolve_strings_with_embedded_nul_characters)
     BOOST_CHECK(!LookupSubNet("pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion\0example.com\0"s).IsValid());
 }
 
+BOOST_AUTO_TEST_CASE(service_flags_to_str)
+{
+    BOOST_CHECK(serviceFlagsToStr(NODE_NONE).empty());
+
+    const uint64_t flags{uint64_t{NODE_NETWORK} | uint64_t{NODE_P2P_V2} | (uint64_t{1} << 24) | (uint64_t{1} << 63)};
+    const std::vector<std::string> expected{"NETWORK", "P2P_V2", "UNKNOWN[2^24]", "UNKNOWN[2^63]"};
+    const std::vector<std::string> strings{serviceFlagsToStr(flags)};
+
+    BOOST_CHECK_EQUAL_COLLECTIONS(strings.begin(), strings.end(), expected.begin(), expected.end());
+}
+
 // Since CNetAddr (un)ser is tested separately in net_tests.cpp here we only
 // try a few edge cases for port, service flags and time.
 
