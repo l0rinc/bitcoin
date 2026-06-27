@@ -152,6 +152,49 @@ BOOST_AUTO_TEST_CASE(embedded_test)
     BOOST_CHECK_EQUAL(addr1.ToStringAddr(), addr2.ToStringAddr());
 }
 
+BOOST_AUTO_TEST_CASE(netbase_get_in_addr)
+{
+    const CNetAddr ipv4{ResolveIP("1.2.3.4")};
+    const CNetAddr ipv6{ResolveIP("1:2:3:4:5:6:7:8")};
+
+    struct in_addr in4;
+    BOOST_REQUIRE(ipv4.GetInAddr(&in4));
+    BOOST_CHECK(CNetAddr{in4} == ipv4);
+    BOOST_CHECK(!ipv6.GetInAddr(&in4));
+
+    struct in6_addr in6;
+    BOOST_REQUIRE(ipv6.GetIn6Addr(&in6));
+    BOOST_CHECK(CNetAddr{in6} == ipv6);
+    BOOST_CHECK(!ipv4.GetIn6Addr(&in6));
+
+    const std::vector<unsigned char> cjdns_bytes{
+        CJDNS_PREFIX, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    DataStream stream;
+    stream << static_cast<uint8_t>(CNetAddr::BIP155Network::CJDNS);
+    stream << cjdns_bytes;
+    CNetAddr cjdns;
+    stream >> CAddress::V2_NETWORK(cjdns);
+    BOOST_REQUIRE(cjdns.IsCJDNS());
+    BOOST_REQUIRE(cjdns.GetIn6Addr(&in6));
+
+    const auto* in6_begin{reinterpret_cast<const uint8_t*>(&in6)};
+    BOOST_CHECK_EQUAL_COLLECTIONS(in6_begin, in6_begin + sizeof(in6), cjdns_bytes.begin(), cjdns_bytes.end());
+
+    const CNetAddr cjdns_as_ipv6{in6};
+    BOOST_CHECK(cjdns_as_ipv6.IsIPv6());
+    BOOST_CHECK(cjdns_as_ipv6.HasCJDNSPrefix());
+
+    struct in6_addr cjdns_as_ipv6_in6;
+    BOOST_REQUIRE(cjdns_as_ipv6.GetIn6Addr(&cjdns_as_ipv6_in6));
+    const auto* cjdns_as_ipv6_in6_begin{reinterpret_cast<const uint8_t*>(&cjdns_as_ipv6_in6)};
+    BOOST_CHECK_EQUAL_COLLECTIONS(
+        cjdns_as_ipv6_in6_begin,
+        cjdns_as_ipv6_in6_begin + sizeof(cjdns_as_ipv6_in6),
+        cjdns_bytes.begin(),
+        cjdns_bytes.end());
+}
+
 BOOST_AUTO_TEST_CASE(subnet_test)
 {
     BOOST_CHECK(LookupSubNet("1.2.3.0/24") == LookupSubNet("1.2.3.0/255.255.255.0"));
