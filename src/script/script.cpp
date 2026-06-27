@@ -9,6 +9,7 @@
 #include <crypto/hex_base.h>
 #include <hash.h>
 #include <uint256.h>
+#include <util/check.h>
 #include <util/hash_type.h>
 
 #include <compare>
@@ -158,7 +159,8 @@ std::string GetOpName(opcodetype opcode)
 
 unsigned int CScript::GetSigOpCount(bool fAccurate) const
 {
-    unsigned int n = 0;
+    unsigned int accurate = 0;
+    unsigned int inaccurate = 0;
     const_iterator pc = begin();
     opcodetype lastOpcode = OP_INVALIDOPCODE;
     while (pc < end())
@@ -166,18 +168,21 @@ unsigned int CScript::GetSigOpCount(bool fAccurate) const
         opcodetype opcode;
         if (!GetOp(pc, opcode))
             break;
-        if (opcode == OP_CHECKSIG || opcode == OP_CHECKSIGVERIFY)
-            n++;
-        else if (opcode == OP_CHECKMULTISIG || opcode == OP_CHECKMULTISIGVERIFY)
+        if (opcode == OP_CHECKSIG || opcode == OP_CHECKSIGVERIFY) {
+            accurate++;
+            inaccurate++;
+        } else if (opcode == OP_CHECKMULTISIG || opcode == OP_CHECKMULTISIGVERIFY)
         {
-            if (fAccurate && lastOpcode >= OP_1 && lastOpcode <= OP_16)
-                n += DecodeOP_N(lastOpcode);
+            if (lastOpcode >= OP_1 && lastOpcode <= OP_16)
+                accurate += DecodeOP_N(lastOpcode);
             else
-                n += MAX_PUBKEYS_PER_MULTISIG;
+                accurate += MAX_PUBKEYS_PER_MULTISIG;
+            inaccurate += MAX_PUBKEYS_PER_MULTISIG;
         }
         lastOpcode = opcode;
     }
-    return n;
+    Assume(accurate <= inaccurate);
+    return fAccurate ? accurate : inaccurate;
 }
 
 unsigned int CScript::GetSigOpCount(const CScript& scriptSig) const
@@ -206,11 +211,18 @@ unsigned int CScript::GetSigOpCount(const CScript& scriptSig) const
 
 bool CScript::IsPayToAnchor() const
 {
-    return (this->size() == 4 &&
+    const bool ret{this->size() == 4 &&
         (*this)[0] == OP_1 &&
         (*this)[1] == 0x02 &&
         (*this)[2] == 0x4e &&
-        (*this)[3] == 0x73);
+        (*this)[3] == 0x73};
+    if (ret) {
+        int version;
+        std::vector<unsigned char> program;
+        Assume(IsWitnessProgram(version, program));
+        Assume(IsPayToAnchor(version, program));
+    }
+    return ret;
 }
 
 bool CScript::IsPayToAnchor(int version, const std::vector<unsigned char>& program)
@@ -224,25 +236,45 @@ bool CScript::IsPayToAnchor(int version, const std::vector<unsigned char>& progr
 bool CScript::IsPayToScriptHash() const
 {
     // Extra-fast test for pay-to-script-hash CScripts:
-    return (this->size() == 23 &&
+    const bool ret{this->size() == 23 &&
             (*this)[0] == OP_HASH160 &&
             (*this)[1] == 0x14 &&
-            (*this)[22] == OP_EQUAL);
+            (*this)[22] == OP_EQUAL};
+    if (ret) {
+        Assume(HasValidOps());
+    }
+    return ret;
 }
 
 bool CScript::IsPayToWitnessScriptHash() const
 {
     // Extra-fast test for pay-to-witness-script-hash CScripts:
-    return (this->size() == 34 &&
+    const bool ret{this->size() == 34 &&
             (*this)[0] == OP_0 &&
-            (*this)[1] == 0x20);
+            (*this)[1] == 0x20};
+    if (ret) {
+        int version;
+        std::vector<unsigned char> program;
+        Assume(IsWitnessProgram(version, program));
+        Assume(version == 0);
+        Assume(program.size() == 32);
+    }
+    return ret;
 }
 
 bool CScript::IsPayToTaproot() const
 {
-    return (this->size() == 34 &&
+    const bool ret{this->size() == 34 &&
             (*this)[0] == OP_1 &&
-            (*this)[1] == 0x20);
+            (*this)[1] == 0x20};
+    if (ret) {
+        int version;
+        std::vector<unsigned char> program;
+        Assume(IsWitnessProgram(version, program));
+        Assume(version == 1);
+        Assume(program.size() == 32);
+    }
+    return ret;
 }
 
 // A witness program is any valid CScript that consists of a 1-byte push opcode
@@ -258,6 +290,10 @@ bool CScript::IsWitnessProgram(int& version, std::vector<unsigned char>& program
     if ((size_t)((*this)[1] + 2) == this->size()) {
         version = DecodeOP_N((opcodetype)(*this)[0]);
         program = std::vector<unsigned char>(this->begin() + 2, this->end());
+        Assume(version >= 0 && version <= 16);
+        Assume(program.size() >= 2 && program.size() <= 40);
+        Assume(program.size() + 2 == this->size());
+        Assume((*this)[1] == program.size());
         return true;
     }
     return false;

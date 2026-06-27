@@ -67,6 +67,36 @@ BOOST_AUTO_TEST_CASE(IsPayToWitnessScriptHash_Invalid_Pushdata)
     BOOST_CHECK(!CScript(bytes.begin(), bytes.end()).IsPayToWitnessScriptHash());
 }
 
+BOOST_AUTO_TEST_CASE(IsPayToTaproot)
+{
+    uint256 dummy;
+    CScript p2tr;
+    p2tr << OP_1 << ToByteVector(dummy);
+    BOOST_CHECK(p2tr.IsPayToTaproot());
+
+    int version{-1};
+    std::vector<unsigned char> program;
+    BOOST_REQUIRE(p2tr.IsWitnessProgram(version, program));
+    BOOST_CHECK_EQUAL(version, 1);
+    BOOST_CHECK(program == ToByteVector(dummy));
+
+    CScript notp2tr;
+    notp2tr << OP_0 << ToByteVector(dummy);
+    BOOST_CHECK(!notp2tr.IsPayToTaproot());
+
+    notp2tr.clear();
+    notp2tr << OP_1 << std::vector<unsigned char>(31);
+    BOOST_CHECK(!notp2tr.IsPayToTaproot());
+
+    notp2tr.clear();
+    notp2tr << OP_1 << std::vector<unsigned char>(33);
+    BOOST_CHECK(!notp2tr.IsPayToTaproot());
+
+    std::vector<unsigned char> bytes = {OP_1, OP_PUSHDATA1, 32};
+    bytes.insert(bytes.end(), 32, 0);
+    BOOST_CHECK(!CScript(bytes.begin(), bytes.end()).IsPayToTaproot());
+}
+
 namespace {
 
 bool IsExpectedWitnessProgram(const CScript& script, const int expectedVersion, const std::vector<unsigned char>& expectedProgram)
