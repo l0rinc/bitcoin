@@ -687,6 +687,20 @@ BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
         BOOST_CHECK(!(fork_block99->nStatus & BLOCK_FAILED_VALID));
     }
 
+    // Re-prioritizing a lower-work active-chain ancestor must be a no-op.
+    int32_t block99_sequence_id;
+    {
+        LOCK(chainman.GetMutex());
+        BOOST_REQUIRE_LT(block99->nChainWork, block100->nChainWork);
+        block99_sequence_id = block99->nSequenceId;
+    }
+    BOOST_REQUIRE(chainstate.PreciousBlock(state, block99));
+    {
+        LOCK(chainman.GetMutex());
+        BOOST_CHECK_EQUAL(chainman.ActiveChain().Tip(), block100);
+        BOOST_CHECK_EQUAL(block99->nSequenceId, block99_sequence_id);
+    }
+
     // Re-prioritizing the active precious tip must not make it collide with
     // older precious sequence ids from same-work fork tips.
     BOOST_REQUIRE(chainstate.PreciousBlock(state, block100));
