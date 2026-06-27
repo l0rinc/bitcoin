@@ -3523,6 +3523,19 @@ bool Chainstate::PreciousBlock(BlockValidationState& state, CBlockIndex* pindex)
         if (m_chain.Tip()->nChainWork > m_chainman.nLastPreciousChainwork) {
             // The chain has been extended since the last call, reset the counter.
             m_chainman.nBlockReverseSequenceId = -1;
+            // Same-work blocks can keep negative sequence ids after reconsidering
+            // previously invalid branches. Keep later preciousblock calls ordered
+            // ahead of any earlier same-work priorities.
+            for (const auto& [_, block_index] : m_blockman.m_block_index) {
+                if (block_index.nChainWork == pindex->nChainWork &&
+                    block_index.nSequenceId <= m_chainman.nBlockReverseSequenceId) {
+                    if (block_index.nSequenceId == std::numeric_limits<int32_t>::min()) {
+                        m_chainman.nBlockReverseSequenceId = block_index.nSequenceId;
+                    } else {
+                        m_chainman.nBlockReverseSequenceId = block_index.nSequenceId - 1;
+                    }
+                }
+            }
         }
         m_chainman.nLastPreciousChainwork = m_chain.Tip()->nChainWork;
         setBlockIndexCandidates.erase(pindex);
@@ -3535,6 +3548,13 @@ bool Chainstate::PreciousBlock(BlockValidationState& state, CBlockIndex* pindex)
         if (pindex->IsValid(BLOCK_VALID_TRANSACTIONS) && pindex->HaveNumChainTxs()) {
             setBlockIndexCandidates.insert(pindex);
             PruneBlockIndexCandidates();
+        }
+        if (pindex->nSequenceId != std::numeric_limits<int32_t>::min()) {
+            for (const auto& [_, block_index] : m_blockman.m_block_index) {
+                if (&block_index != pindex && block_index.nChainWork == pindex->nChainWork) {
+                    Assume(CBlockIndexWorkComparator()(&block_index, pindex));
+                }
+            }
         }
     }
 
