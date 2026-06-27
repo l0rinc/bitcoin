@@ -521,6 +521,13 @@ BOOST_AUTO_TEST_CASE(netpermissions_test)
     NetPermissions::AddFlag(whitebindPermissions.m_flags, NetPermissionFlags::Implicit);
     BOOST_CHECK(NetPermissions::HasFlag(whitebindPermissions.m_flags, NetPermissionFlags::Implicit));
 
+    auto explicit_and_implicit{NetPermissionFlags::Implicit | NetPermissionFlags::BloomFilter | NetPermissionFlags::ForceRelay | NetPermissionFlags::NoBan};
+    NetPermissions::ClearFlag(explicit_and_implicit, NetPermissionFlags::Implicit);
+    BOOST_CHECK_EQUAL(explicit_and_implicit, NetPermissionFlags::BloomFilter | NetPermissionFlags::ForceRelay | NetPermissionFlags::NoBan);
+    BOOST_CHECK(NetPermissions::HasFlag(explicit_and_implicit, NetPermissionFlags::Relay));
+    BOOST_CHECK(NetPermissions::HasFlag(explicit_and_implicit, NetPermissionFlags::Download));
+    BOOST_CHECK(!NetPermissions::HasFlag(explicit_and_implicit, NetPermissionFlags::Implicit));
+
     // Can set one permission
     BOOST_CHECK(NetWhitebindPermissions::TryParse("bloom@1.2.3.4:32", whitebindPermissions, error));
     BOOST_CHECK_EQUAL(whitebindPermissions.m_flags, NetPermissionFlags::BloomFilter);
