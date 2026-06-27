@@ -4,6 +4,7 @@
 
 #include <netaddress.h>
 #include <netbase.h>
+#include <util/check.h>
 
 #include <string>
 #include <type_traits>
@@ -75,7 +76,12 @@ public:
     {
         assert(f == NetPermissionFlags::Implicit);
         using t = std::underlying_type_t<NetPermissionFlags>;
-        flags = static_cast<NetPermissionFlags>(static_cast<t>(flags) & ~static_cast<t>(f));
+        const auto old_flags{static_cast<t>(flags)};
+        const auto cleared_flag{static_cast<t>(f)};
+        flags = static_cast<NetPermissionFlags>(old_flags & ~cleared_flag);
+        const auto new_flags{static_cast<t>(flags)};
+        Assume((new_flags & cleared_flag) == 0);
+        Assume((new_flags & ~cleared_flag) == (old_flags & ~cleared_flag));
     }
 };
 
