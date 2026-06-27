@@ -15,6 +15,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <limits>
+
 const std::vector<std::pair<Wtxid, CTransactionRef>> empty_extra_txn;
 
 BOOST_FIXTURE_TEST_SUITE(blockencodings_tests, RegTestingSetup)
@@ -143,6 +145,47 @@ public:
 
     SERIALIZE_METHODS(TestHeaderAndShortIDs, obj) { READWRITE(obj.header, obj.nonce, Using<VectorFormatter<CustomUintFormatter<CBlockHeaderAndShortTxIDs::SHORTTXIDS_LENGTH>>>(obj.shorttxids), obj.prefilledtxn); }
 };
+
+BOOST_AUTO_TEST_CASE(InitDataFailureResetsPartialBlock)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    auto rand_ctx(FastRandomContext(uint256{42}));
+    CBlock block(BuildBlockTestCase(rand_ctx));
+
+    TestHeaderAndShortIDs invalid_ids(block, rand_ctx);
+    CMutableTransaction null_tx;
+    invalid_ids.prefilledtxn.push_back({0, MakeTransactionRef(std::move(null_tx))});
+
+    DataStream invalid_stream{};
+    invalid_stream << invalid_ids;
+
+    CBlockHeaderAndShortTxIDs decoded_invalid;
+    invalid_stream >> decoded_invalid;
+
+    PartiallyDownloadedBlock partial_block(&pool);
+    BOOST_CHECK(partial_block.InitData(decoded_invalid, empty_extra_txn) == READ_STATUS_INVALID);
+    BOOST_CHECK(partial_block.header.IsNull());
+
+    CBlock rejected_block;
+    BOOST_CHECK(partial_block.FillBlock(rejected_block, {}, /*segwit_active=*/true) == READ_STATUS_INVALID);
+
+    CBlockHeaderAndShortTxIDs valid_ids{block, rand_ctx.rand64()};
+    BOOST_CHECK(partial_block.InitData(valid_ids, empty_extra_txn) == READ_STATUS_OK);
+    BOOST_CHECK(partial_block.IsTxAvailable(0));
+
+    TestHeaderAndShortIDs overflow_ids(block, rand_ctx);
+    overflow_ids.prefilledtxn.push_back({std::numeric_limits<uint16_t>::max(), block.vtx[0]});
+
+    DataStream overflow_stream{};
+    overflow_stream << overflow_ids;
+
+    CBlockHeaderAndShortTxIDs decoded_overflow;
+    overflow_stream >> decoded_overflow;
+
+    PartiallyDownloadedBlock overflow_block(&pool);
+    BOOST_CHECK(overflow_block.InitData(decoded_overflow, empty_extra_txn) == READ_STATUS_INVALID);
+    BOOST_CHECK(overflow_block.header.IsNull());
+}
 
 BOOST_AUTO_TEST_CASE(NonCoinbasePreforwardRTTest)
 {
