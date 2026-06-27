@@ -11,6 +11,7 @@
 #include <script/solver.h>
 #include <primitives/block.h>
 #include <util/chaintype.h>
+#include <util/check.h>
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
@@ -152,6 +153,56 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_availability, TestChain100Setup)
     first_available_block->nStatus &= ~BLOCK_HAVE_UNDO;
     BOOST_CHECK(!blockman.CheckBlockDataAvailability(tip, *first_available_block, BlockStatus{BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO}));
     BOOST_CHECK(blockman.CheckBlockDataAvailability(tip, *first_available_block, BlockStatus{BLOCK_HAVE_DATA}));
+}
+
+BOOST_FIXTURE_TEST_CASE(blockmanager_add_unlinked_block, TestingSetup)
+{
+    auto& blockman{m_node.chainman->m_blockman};
+
+    CBlockIndex parent;
+    CBlockIndex child;
+    child.pprev = &parent;
+    child.nHeight = 1;
+
+    CBlockIndex child_2;
+    child_2.pprev = &parent;
+    child_2.nHeight = 1;
+
+    LOCK(::cs_main);
+    child.nStatus = BLOCK_HAVE_DATA;
+    child_2.nStatus = BLOCK_HAVE_DATA;
+    blockman.m_blocks_unlinked.clear();
+
+    const auto count_entry{[&](CBlockIndex* parent, CBlockIndex* child) {
+        size_t count{0};
+        const auto range{blockman.m_blocks_unlinked.equal_range(parent)};
+        for (auto it{range.first}; it != range.second; ++it) {
+            if (it->second == child) ++count;
+        }
+        return count;
+    }};
+
+    blockman.AddUnlinkedBlock(&child);
+    BOOST_CHECK_EQUAL(blockman.m_blocks_unlinked.count(&parent), 1);
+    BOOST_CHECK_EQUAL(count_entry(&parent, &child), 1);
+
+    blockman.AddUnlinkedBlock(&child);
+    BOOST_CHECK_EQUAL(blockman.m_blocks_unlinked.count(&parent), 1);
+    BOOST_CHECK_EQUAL(count_entry(&parent, &child), 1);
+
+    blockman.AddUnlinkedBlock(&child_2);
+    BOOST_CHECK_EQUAL(blockman.m_blocks_unlinked.count(&parent), 2);
+    BOOST_CHECK_EQUAL(count_entry(&parent, &child), 1);
+    BOOST_CHECK_EQUAL(count_entry(&parent, &child_2), 1);
+
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        test_only_CheckFailuresAreExceptionsNotAborts mock_checks{};
+        CBlockIndex genesis_like;
+        genesis_like.nStatus = BLOCK_HAVE_DATA;
+        BOOST_CHECK_EXCEPTION(blockman.AddUnlinkedBlock(&genesis_like), NonFatalCheckError, HasReason{"block->pprev != nullptr"});
+    }
+
+    blockman.m_blocks_unlinked.clear();
 }
 
 BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_part, TestChain100Setup)
