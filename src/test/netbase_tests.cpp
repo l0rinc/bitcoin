@@ -343,6 +343,17 @@ BOOST_AUTO_TEST_CASE(netbase_getgroup)
     // baz.net sha256 hash: 12929400eb4607c4ac075f087167e75286b179c693eb059a01774b864e8fe505
     std::vector<unsigned char> internal_group = {NET_INTERNAL, 0x12, 0x92, 0x94, 0x00, 0xeb, 0x46, 0x07, 0xc4, 0xac, 0x07};
     BOOST_CHECK(netgroupman.GetGroup(CreateInternal("baz.net")) == internal_group);
+
+    BOOST_CHECK(!ResolveIP("127.0.0.1").HasLinkedIPv4());
+    BOOST_CHECK(!ResolveIP("10.0.0.1").HasLinkedIPv4());
+    BOOST_CHECK(!ResolveIP("169.254.1.1").HasLinkedIPv4());
+
+    BOOST_CHECK(ResolveIP("1.2.3.4").HasLinkedIPv4());
+    BOOST_CHECK_EQUAL(ResolveIP("1.2.3.4").GetLinkedIPv4(), 0x01020304U);
+    BOOST_CHECK_EQUAL(ResolveIP("::FFFF:0:102:304").GetLinkedIPv4(), 0x01020304U);
+    BOOST_CHECK_EQUAL(ResolveIP("64:FF9B::102:304").GetLinkedIPv4(), 0x01020304U);
+    BOOST_CHECK_EQUAL(ResolveIP("2002:102:304:9999:9999:9999:9999:9999").GetLinkedIPv4(), 0x01020304U);
+    BOOST_CHECK_EQUAL(ResolveIP("2001:0:9999:9999:9999:9999:FEFD:FCFB").GetLinkedIPv4(), 0x01020304U);
 }
 
 BOOST_AUTO_TEST_CASE(netbase_parsenetwork)
