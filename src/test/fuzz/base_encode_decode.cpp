@@ -24,6 +24,10 @@ FUZZ_TARGET(base58_encode_decode)
     const auto random_string{provider.ConsumeRandomLengthString(100)};
 
     const auto encoded{EncodeBase58(MakeUCharSpan(random_string))};
+    std::vector<unsigned char> decoded_encoded;
+    assert(DecodeBase58(encoded, decoded_encoded, static_cast<int>(random_string.size())));
+    assert(std::ranges::equal(decoded_encoded, MakeUCharSpan(random_string)));
+    assert(EncodeBase58(decoded_encoded) == encoded);
     const auto decode_input{provider.ConsumeBool() ? random_string : encoded};
     const int max_ret_len{provider.ConsumeIntegralInRange<int>(-1, decode_input.size() + 1)};
     if (std::vector<unsigned char> decoded; DecodeBase58(decode_input, decoded, max_ret_len)) {
@@ -43,6 +47,10 @@ FUZZ_TARGET(base58check_encode_decode)
     const auto random_string{provider.ConsumeRandomLengthString(100)};
 
     const auto encoded{EncodeBase58Check(MakeUCharSpan(random_string))};
+    std::vector<unsigned char> decoded_encoded;
+    assert(DecodeBase58Check(encoded, decoded_encoded, static_cast<int>(random_string.size())));
+    assert(std::ranges::equal(decoded_encoded, MakeUCharSpan(random_string)));
+    assert(EncodeBase58Check(decoded_encoded) == encoded);
     const auto decode_input{provider.ConsumeBool() ? random_string : encoded};
     const int max_ret_len{provider.ConsumeIntegralInRange<int>(-1, decode_input.size() + 1)};
     if (std::vector<unsigned char> decoded; DecodeBase58Check(decode_input, decoded, max_ret_len)) {
