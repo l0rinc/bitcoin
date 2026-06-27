@@ -224,6 +224,8 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
     // Make sure we can't call FillBlock again.
     header.SetNull();
     txn_available.clear();
+    Assume(header.IsNull());
+    Assume(txn_available.empty());
 
     if (vtx_missing.size() != tx_missing_offset) {
         return READ_STATUS_INVALID;
