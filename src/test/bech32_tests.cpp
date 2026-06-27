@@ -29,6 +29,9 @@ BOOST_AUTO_TEST_CASE(bech32_testvectors_valid)
         std::string recode = bech32::Encode(bech32::Encoding::BECH32, dec.hrp, dec.data);
         BOOST_CHECK(!recode.empty());
         BOOST_CHECK(CaseInsensitiveEqual(str, recode));
+        auto [error, error_locations] = bech32::LocateErrors(str);
+        BOOST_CHECK(error.empty());
+        BOOST_CHECK(error_locations.empty());
     }
 }
 
@@ -49,6 +52,9 @@ BOOST_AUTO_TEST_CASE(bech32m_testvectors_valid)
         std::string recode = bech32::Encode(bech32::Encoding::BECH32M, dec.hrp, dec.data);
         BOOST_CHECK(!recode.empty());
         BOOST_CHECK(CaseInsensitiveEqual(str, recode));
+        auto [error, error_locations] = bech32::LocateErrors(str);
+        BOOST_CHECK(error.empty());
+        BOOST_CHECK(error_locations.empty());
     }
 }
 
