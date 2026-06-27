@@ -30,4 +30,21 @@ FUZZ_TARGET(span)
         (void)span.subspan(idx, span.size() - idx);
         (void)span[idx];
     }
+
+    std::vector<uint8_t> bytes = fuzzed_data_provider.ConsumeBytes<uint8_t>(32);
+    std::vector<uint8_t> original{bytes};
+    std::span<uint8_t> mutable_span{bytes};
+    while (!mutable_span.empty() && fuzzed_data_provider.ConsumeBool()) {
+        const size_t old_size{mutable_span.size()};
+        uint8_t& popped{SpanPopBack(mutable_span)};
+        assert(&popped == &bytes[old_size - 1]);
+        assert(popped == original[old_size - 1]);
+        assert(mutable_span.size() == old_size - 1);
+        for (size_t i{0}; i < mutable_span.size(); ++i) {
+            assert(mutable_span[i] == original[i]);
+        }
+        const uint8_t mutated{static_cast<uint8_t>(popped ^ uint8_t{0x5a})};
+        popped = mutated;
+        assert(bytes[old_size - 1] == mutated);
+    }
 }
