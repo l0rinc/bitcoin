@@ -303,12 +303,15 @@ std::string FormatScript(const CScript& script)
         std::vector<unsigned char> vch;
         if (script.GetOp(it, op, vch)) {
             if (op == OP_0) {
+                Assume(vch.empty());
                 ret += "0 ";
                 continue;
             } else if ((op >= OP_1 && op <= OP_16) || op == OP_1NEGATE) {
+                Assume(vch.empty());
                 ret += strprintf("%i ", op - OP_1NEGATE - 1);
                 continue;
             } else if (op >= OP_NOP && op <= OP_NOP10) {
+                Assume(vch.empty());
                 std::string str(GetOpName(op));
                 if (str.substr(0, 3) == std::string("OP_")) {
                     ret += str.substr(3, std::string::npos) + " ";
@@ -316,6 +319,8 @@ std::string FormatScript(const CScript& script)
                 }
             }
             if (vch.size() > 0) {
+                Assume(static_cast<size_t>(it - it2) >= vch.size());
+                Assume(std::equal(it - vch.size(), it, vch.begin(), vch.end()));
                 ret += strprintf("0x%x 0x%x ", HexStr(std::vector<uint8_t>(it2, it - vch.size())),
                                                HexStr(std::vector<uint8_t>(it - vch.size(), it)));
             } else {
@@ -323,6 +328,8 @@ std::string FormatScript(const CScript& script)
             }
             continue;
         }
+        Assume(it >= it2);
+        Assume(it <= script.end());
         ret += strprintf("0x%x ", HexStr(std::vector<uint8_t>(it2, script.end())));
         break;
     }
