@@ -815,11 +815,15 @@ bool CService::SetSockAddr(const struct sockaddr *paddr, socklen_t addrlen)
     switch (paddr->sa_family) {
     case AF_INET:
         if (addrlen != sizeof(struct sockaddr_in)) return false;
+        Assume(addrlen == sizeof(struct sockaddr_in));
         *this = CService(*(const struct sockaddr_in*)paddr);
+        Assume(GetPort() == ntohs(((const struct sockaddr_in*)paddr)->sin_port));
         return true;
     case AF_INET6:
         if (addrlen != sizeof(struct sockaddr_in6)) return false;
+        Assume(addrlen == sizeof(struct sockaddr_in6));
         *this = CService(*(const struct sockaddr_in6*)paddr);
+        Assume(GetPort() == ntohs(((const struct sockaddr_in6*)paddr)->sin6_port));
         return true;
     default:
         return false;
