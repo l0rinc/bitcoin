@@ -77,7 +77,13 @@ FUZZ_TARGET(parse_numbers)
 
     (void)LocaleIndependentAtoi<int>(random_string);
 
-    int64_t i64;
     (void)LocaleIndependentAtoi<int64_t>(random_string);
-    (void)ParseFixedPoint(random_string, 3, &i64);
+    int64_t parsed_fixed_point_3{0};
+    const bool parsed_3{ParseFixedPoint(random_string, 3, &parsed_fixed_point_3)};
+    int64_t parsed_fixed_point_4{0};
+    const bool parsed_4{ParseFixedPoint(random_string, 4, &parsed_fixed_point_4)};
+    if (parsed_3 && parsed_4) {
+        assert(parsed_fixed_point_4 % 10 == 0);
+        assert(parsed_fixed_point_4 / 10 == parsed_fixed_point_3);
+    }
 }
