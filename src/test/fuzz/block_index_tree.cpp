@@ -38,6 +38,21 @@ bool IsAncestorOrDescendant(const CBlockIndex& pindex, const CBlockIndex& other)
     return other.GetAncestor(pindex.nHeight) == &pindex || pindex.GetAncestor(other.nHeight) == &other;
 }
 
+void AssertActiveChain(const CChain& chain)
+{
+    const CBlockIndex* tip{chain.Tip()};
+    assert(tip);
+    assert(chain.Height() == tip->nHeight);
+    assert(chain[0]->pprev == nullptr);
+    for (int height{0}; height <= chain.Height(); ++height) {
+        assert(chain[height] == tip->GetAncestor(height));
+        assert(chain[height]->nHeight == height);
+        if (height > 0) {
+            assert(chain[height]->pprev == chain[height - 1]);
+        }
+    }
+}
+
 void initialize_block_index_tree()
 {
     static const auto testing_setup = MakeNoLogFileContext<const TestingSetup>();
@@ -72,6 +87,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
             LOCK(cs_main);
             assert(genesis->nStatus == genesis_status);
             assert(chainman.ActiveChain().Tip() == tip);
+            AssertActiveChain(chainman.ActiveChain());
         }
     }
 
@@ -168,6 +184,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                         it = it->pprev;
                     }
                     chain.SetTip(*chain[fork->nHeight]);
+                    AssertActiveChain(chain);
 
                     // Prepare new blocks to connect
                     std::vector<CBlockIndex*> to_connect;
@@ -194,6 +211,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                             }
                         }
                         chain.SetTip(*block);
+                        AssertActiveChain(chain);
                         chainman.ActiveChainstate().PruneBlockIndexCandidates();
                         // ActivateBestChainStep may release cs_main / not connect all blocks in one go - but only if we have at least as much chain work as we had at the start.
                         if (block->nChainWork > old_tip->nChainWork && fuzzed_data_provider.ConsumeBool()) {
@@ -260,6 +278,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
         chainman.ResetBestInvalid();
         chainman.nBlockSequenceId = 2;
         chainman.ActiveChain().SetTip(*genesis);
+        AssertActiveChain(chainman.ActiveChain());
         chainman.ActiveChainstate().setBlockIndexCandidates.clear();
         chainman.m_cached_is_ibd = true;
         blockman.m_blocks_unlinked.clear();
