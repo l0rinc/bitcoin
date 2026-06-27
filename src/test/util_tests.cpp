@@ -1714,6 +1714,8 @@ BOOST_AUTO_TEST_CASE(util_ParseByteUnits)
 
     // check default multiplier
     BOOST_CHECK_EQUAL(ParseByteUnits("5", ByteUnit::K).value(), 5ULL << 10);
+    BOOST_CHECK_EQUAL(ParseByteUnits("18014398509481983", ByteUnit::K).value(), 18'446'744'073'709'550'592ULL);
+    BOOST_CHECK(!ParseByteUnits("18014398509481984", ByteUnit::K));
 
     // NaN
     BOOST_CHECK(!ParseByteUnits("", noop));
