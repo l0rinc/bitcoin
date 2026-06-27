@@ -556,6 +556,8 @@ std::pair<std::string, std::vector<int>> LocateErrors(const std::string& str, Ch
             }
         } else {
             // No errors
+            assert(error_locations.empty());
+            assert(VerifyChecksum(hrp, values) == encoding);
             return std::make_pair("", std::vector<int>{});
         }
 
