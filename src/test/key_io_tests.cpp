@@ -50,13 +50,21 @@ BOOST_AUTO_TEST_CASE(key_io_valid_parse)
             BOOST_CHECK_MESSAGE(std::ranges::equal(privkey, exp_payload), "key mismatch:" + strTest);
 
             // Private key must be invalid public key
-            destination = DecodeDestination(exp_base58string);
+            std::string error_msg;
+            destination = DecodeDestination(exp_base58string, error_msg);
             BOOST_CHECK_MESSAGE(!IsValidDestination(destination), "IsValid privkey as pubkey:" + strTest);
+            BOOST_CHECK_MESSAGE(!error_msg.empty(), "No pubkey decode error for privkey:" + strTest);
+            BOOST_CHECK_MESSAGE(!IsValidDestinationString(exp_base58string), "IsValidDestinationString privkey as pubkey:" + strTest);
         } else {
             // Must be valid public key
-            destination = DecodeDestination(exp_base58string);
+            std::string error_msg;
+            std::vector<int> error_locations;
+            destination = DecodeDestination(exp_base58string, error_msg, &error_locations);
             CScript script = GetScriptForDestination(destination);
             BOOST_CHECK_MESSAGE(IsValidDestination(destination), "!IsValid:" + strTest);
+            BOOST_CHECK_MESSAGE(error_msg.empty(), "Unexpected pubkey decode error:" + strTest);
+            BOOST_CHECK_MESSAGE(error_locations.empty(), "Unexpected pubkey error location:" + strTest);
+            BOOST_CHECK_MESSAGE(IsValidDestinationString(exp_base58string), "!IsValidDestinationString:" + strTest);
             BOOST_CHECK_EQUAL(HexStr(script), HexStr(exp_payload));
 
             // Try flipped case version
@@ -67,8 +75,11 @@ BOOST_AUTO_TEST_CASE(key_io_valid_parse)
                     c = (c - 'A') + 'a';
                 }
             }
-            destination = DecodeDestination(exp_base58string);
+            error_msg.clear();
+            destination = DecodeDestination(exp_base58string, error_msg);
             BOOST_CHECK_MESSAGE(IsValidDestination(destination) == try_case_flip, "!IsValid case flipped:" + strTest);
+            BOOST_CHECK_MESSAGE(error_msg.empty() == try_case_flip, "case flipped error mismatch:" + strTest);
+            BOOST_CHECK_MESSAGE(IsValidDestinationString(exp_base58string) == try_case_flip, "!IsValidDestinationString case flipped:" + strTest);
             if (IsValidDestination(destination)) {
                 script = GetScriptForDestination(destination);
                 BOOST_CHECK_EQUAL(HexStr(script), HexStr(exp_payload));
@@ -139,8 +150,11 @@ BOOST_AUTO_TEST_CASE(key_io_invalid)
         // must be invalid as public and as private key
         for (const auto& chain : {ChainType::MAIN, ChainType::TESTNET, ChainType::SIGNET, ChainType::REGTEST}) {
             SelectParams(chain);
-            destination = DecodeDestination(exp_base58string);
+            std::string error_msg;
+            destination = DecodeDestination(exp_base58string, error_msg);
             BOOST_CHECK_MESSAGE(!IsValidDestination(destination), "IsValid pubkey in mainnet:" + strTest);
+            BOOST_CHECK_MESSAGE(!error_msg.empty(), "No pubkey decode error:" + strTest);
+            BOOST_CHECK_MESSAGE(!IsValidDestinationString(exp_base58string), "IsValidDestinationString pubkey:" + strTest);
             privkey = DecodeSecret(exp_base58string);
             BOOST_CHECK_MESSAGE(!privkey.IsValid(), "IsValid privkey in mainnet:" + strTest);
         }
