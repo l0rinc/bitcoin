@@ -313,5 +313,9 @@ CBlockLocator HeadersSyncState::NextHeadersRequestLocator() const
 
     locator.insert(locator.end(), chain_start_locator.begin(), chain_start_locator.end());
 
-    return CBlockLocator{std::move(locator)};
+    CBlockLocator ret{std::move(locator)};
+    Assume(!ret.IsNull());
+    Assume(ret.vHave.size() >= 2);
+    Assume(ret.vHave.back() == m_chain_start.GetBlockHash());
+    return ret;
 }
