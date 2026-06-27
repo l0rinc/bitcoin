@@ -28,6 +28,7 @@
 #include <util/string.h>
 #include <util/translation.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -43,6 +44,7 @@ using common::ResolveErrMsg;
 using util::ContainsNoNUL;
 using util::Join;
 using util::RemovePrefix;
+using util::Split;
 using util::SplitString;
 using util::TrimString;
 
@@ -136,8 +138,22 @@ FUZZ_TARGET(string)
         (void)ParseFixedPoint(random_string_1, fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 1024), &amount_out);
     }
     {
-        const auto single_split{SplitString(random_string_1, fuzzed_data_provider.ConsumeIntegral<char>())};
+        const char separator{fuzzed_data_provider.ConsumeIntegral<char>()};
+        const std::string separator_string{separator};
+        const auto single_split{SplitString(random_string_1, separator)};
+        const size_t separator_count{static_cast<size_t>(std::count(random_string_1.begin(), random_string_1.end(), separator))};
         assert(single_split.size() >= 1);
+        assert(single_split.size() == separator_count + 1);
+        assert(Join(single_split, separator_string) == random_string_1);
+
+        const auto included_separator_split{Split<std::string>(random_string_1, separator, /*include_sep=*/true)};
+        assert(included_separator_split.size() == single_split.size());
+        assert(Join(included_separator_split, std::string{}) == random_string_1);
+        for (size_t i{0}; i + 1 < included_separator_split.size(); ++i) {
+            assert(!included_separator_split.at(i).empty());
+            assert(included_separator_split.at(i).back() == separator);
+        }
+
         const auto any_split{SplitString(random_string_1, random_string_2)};
         assert(any_split.size() >= 1);
     }
