@@ -19,6 +19,7 @@
 #include <uint256.h>
 #include <util/strencodings.h>
 
+#include <algorithm>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -497,6 +498,9 @@ BOOST_AUTO_TEST_CASE(rolling_bloom)
     rb1.reset();
     BOOST_CHECK(!rb1.contains(data[DATASIZE-1]));
 
+    CRollingBloomFilter rb_high_fp(1, 0.999);
+    BOOST_CHECK(!rb_high_fp.contains(data[0]));
+
     // Now roll through data, make sure last 100 entries
     // are always remembered:
     for (int i = 0; i < DATASIZE; i++) {
@@ -504,6 +508,9 @@ BOOST_AUTO_TEST_CASE(rolling_bloom)
             BOOST_CHECK(rb1.contains(data[i-100]));
         rb1.insert(data[i]);
         BOOST_CHECK(rb1.contains(data[i]));
+        for (int j = std::max(0, i - 99); j <= i; ++j) {
+            BOOST_CHECK(rb1.contains(data[j]));
+        }
     }
 
     // Insert 999 more random entries:
