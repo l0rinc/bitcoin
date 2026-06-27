@@ -625,16 +625,29 @@ BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
 {
     ChainstateManager& chainman = *Assert(m_node.chainman);
     Chainstate& chainstate = chainman.ActiveChainstate();
+    BlockValidationState state;
 
     // we have a chain of 100 blocks: genesis(0) <- ... <- block98 <- block99 <- block100
+    CBlockIndex* genesis;
     CBlockIndex* block98;
     CBlockIndex* block99;
     CBlockIndex* block100;
+    uint32_t genesis_status;
     {
         LOCK(chainman.GetMutex());
+        genesis = chainman.ActiveChain()[0];
         block98 = chainman.ActiveChain()[98];
         block99 = chainman.ActiveChain()[99];
         block100 = chainman.ActiveChain()[100];
+        genesis_status = genesis->nStatus;
+    }
+
+    // InvalidateBlock must treat genesis as a no-op: no failure flags and no tip change.
+    BOOST_CHECK(!chainstate.InvalidateBlock(state, genesis));
+    {
+        LOCK(chainman.GetMutex());
+        BOOST_CHECK_EQUAL(genesis->nStatus, genesis_status);
+        BOOST_CHECK_EQUAL(chainman.ActiveChain().Tip(), block100);
     }
 
     // create the following block constellation:
@@ -642,7 +655,6 @@ BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
     //                              <- block99' <- block100'
     // by temporarily invalidating block99. the chain tip now falls to block98,
     // mine 2 new blocks on top of block 98 (block99' and block100') and then restore block99 and block 100.
-    BlockValidationState state;
     BOOST_REQUIRE(chainstate.InvalidateBlock(state, block99));
     BOOST_REQUIRE(WITH_LOCK(cs_main, return chainman.ActiveChain().Tip()) == block98);
     CScript coinbase_script = CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
@@ -704,6 +716,30 @@ BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
         BOOST_CHECK(!(block100->nStatus & BLOCK_FAILED_VALID));
         BOOST_CHECK(fork_block99->nStatus & BLOCK_FAILED_VALID);
         BOOST_CHECK(fork_block100->nStatus & BLOCK_FAILED_VALID);
+    }
+
+    // Reconsidering genesis clears every failed descendant line, including sibling forks.
+    BOOST_REQUIRE(chainstate.InvalidateBlock(state, block98));
+    {
+        LOCK(chainman.GetMutex());
+        BOOST_CHECK(block98->nStatus & BLOCK_FAILED_VALID);
+        BOOST_CHECK(block99->nStatus & BLOCK_FAILED_VALID);
+        BOOST_CHECK(block100->nStatus & BLOCK_FAILED_VALID);
+        BOOST_CHECK(fork_block99->nStatus & BLOCK_FAILED_VALID);
+        BOOST_CHECK(fork_block100->nStatus & BLOCK_FAILED_VALID);
+
+        chainstate.ResetBlockFailureFlags(genesis);
+        chainman.RecalculateBestHeader();
+    }
+    BOOST_REQUIRE(chainstate.ActivateBestChain(state));
+    {
+        LOCK(chainman.GetMutex());
+        BOOST_CHECK(!(genesis->nStatus & BLOCK_FAILED_VALID));
+        BOOST_CHECK(!(block98->nStatus & BLOCK_FAILED_VALID));
+        BOOST_CHECK(!(block99->nStatus & BLOCK_FAILED_VALID));
+        BOOST_CHECK(!(block100->nStatus & BLOCK_FAILED_VALID));
+        BOOST_CHECK(!(fork_block99->nStatus & BLOCK_FAILED_VALID));
+        BOOST_CHECK(!(fork_block100->nStatus & BLOCK_FAILED_VALID));
     }
 }
 
