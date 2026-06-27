@@ -14,6 +14,7 @@
 #include <script/script.h>
 #include <streams.h>
 #include <undo.h>
+#include <util/check.h>
 #include <util/golombrice.h>
 #include <util/string.h>
 
@@ -108,6 +109,7 @@ bool GCSFilter::MatchInternal(const uint64_t* element_hashes, size_t size) const
     // Seek forward by size of N
     uint64_t N = ReadCompactSize(stream);
     assert(N == m_N);
+    Assume(N == m_N);
 
     BitStreamReader bitreader{stream};
 
