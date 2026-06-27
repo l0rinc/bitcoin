@@ -21,6 +21,15 @@ using node::AnalyzePSBT;
 using node::PSBTAnalysis;
 using node::PSBTInputAnalysis;
 
+namespace {
+std::vector<uint8_t> SerializePSBT(const PartiallySignedTransaction& psbt)
+{
+    std::vector<uint8_t> psbt_ser;
+    VectorWriter{psbt_ser, 0, psbt};
+    return psbt_ser;
+}
+} // namespace
+
 FUZZ_TARGET(psbt)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
@@ -38,8 +47,7 @@ FUZZ_TARGET(psbt)
     Assert(psbt_version == 0 || psbt_version == 2);
 
     // A PSBT must roundtrip.
-    std::vector<uint8_t> psbt_ser;
-    VectorWriter{psbt_ser, 0, psbt};
+    const std::vector<uint8_t> psbt_ser{SerializePSBT(psbt)};
     SpanReader reader{psbt_ser};
     PartiallySignedTransaction psbt_roundtrip(deserialize, reader);
 
@@ -137,13 +145,30 @@ FUZZ_TARGET(psbt)
     if (psbt_merge_res) {
         psbt_merge = *psbt_merge_res;
     }
-    psbt_mut = psbt;
-    (void)psbt_mut.Merge(psbt_merge);
-    psbt_mut = psbt;
-    std::optional<PartiallySignedTransaction> comb_res = CombinePSBTs({psbt_mut, psbt_merge});
+
+    PartiallySignedTransaction psbt_merge_seq = psbt;
+    const bool merge_res{psbt_merge_seq.Merge(psbt_merge)};
+    std::optional<PartiallySignedTransaction> comb_res = CombinePSBTs({psbt, psbt_merge});
+    Assert(merge_res == comb_res.has_value());
     if (comb_res) {
+        Assert(SerializePSBT(psbt_merge_seq) == SerializePSBT(*comb_res));
         psbt_mut = *comb_res;
+    } else {
+        Assert(SerializePSBT(psbt_merge_seq) == psbt_ser);
+        psbt_mut = psbt;
     }
+
+    PartiallySignedTransaction psbt_self_merge = psbt;
+    const bool self_merge_res{psbt_self_merge.Merge(psbt)};
+    const std::optional<PartiallySignedTransaction> self_comb_res{CombinePSBTs({psbt, psbt})};
+    Assert(self_merge_res == self_comb_res.has_value());
+    if (self_comb_res) {
+        Assert(SerializePSBT(psbt_self_merge) == psbt_ser);
+        Assert(SerializePSBT(*self_comb_res) == psbt_ser);
+    } else {
+        Assert(SerializePSBT(psbt_self_merge) == psbt_ser);
+    }
+
     for (const auto& psbt_in : psbt_merge.inputs) {
         (void)psbt_mut.AddInput(psbt_in);
     }

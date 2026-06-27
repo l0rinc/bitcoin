@@ -3,9 +3,12 @@
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 
 #include <psbt.h>
+#include <streams.h>
 
 #include <boost/test/unit_test.hpp>
 #include <test/util/setup_common.h>
+
+#include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(psbt_tests, BasicTestingSetup)
 
@@ -17,6 +20,13 @@ static PSBTProprietary MakeProprietary(uint64_t subtype, uint8_t key_data, uint8
         .key = {key_data},
         .value = {value},
     };
+}
+
+static std::vector<unsigned char> SerializePSBT(const PartiallySignedTransaction& psbt)
+{
+    std::vector<unsigned char> psbt_ser;
+    VectorWriter{psbt_ser, 0, psbt};
+    return psbt_ser;
 }
 
 void CheckTimeLock(const std::string& base64_psbt, std::optional<uint32_t> timelock)
@@ -196,6 +206,28 @@ BOOST_AUTO_TEST_CASE(merge_proprietary_fields)
     right.m_proprietary.insert(right_prop);
     right.inputs[0].m_proprietary.insert(right_prop);
     right.outputs[0].m_proprietary.insert(right_prop);
+
+    PartiallySignedTransaction sequential = left;
+    BOOST_REQUIRE(sequential.Merge(right));
+    const std::optional<PartiallySignedTransaction> combined{CombinePSBTs({left, right})};
+    BOOST_REQUIRE(combined);
+    BOOST_CHECK(SerializePSBT(sequential) == SerializePSBT(*combined));
+
+    PartiallySignedTransaction self_merge = left;
+    BOOST_REQUIRE(self_merge.Merge(left));
+    const std::optional<PartiallySignedTransaction> self_combined{CombinePSBTs({left, left})};
+    BOOST_REQUIRE(self_combined);
+    BOOST_CHECK(SerializePSBT(self_merge) == SerializePSBT(left));
+    BOOST_CHECK(SerializePSBT(*self_combined) == SerializePSBT(left));
+
+    CMutableTransaction other_tx = tx;
+    other_tx.vout[0].nValue = 1;
+    const PartiallySignedTransaction other(other_tx);
+    PartiallySignedTransaction failed_merge = left;
+    const std::vector<unsigned char> left_ser{SerializePSBT(left)};
+    BOOST_CHECK(!failed_merge.Merge(other));
+    BOOST_CHECK(SerializePSBT(failed_merge) == left_ser);
+    BOOST_CHECK(!CombinePSBTs({left, other}));
 
     BOOST_REQUIRE(left.Merge(right));
 
