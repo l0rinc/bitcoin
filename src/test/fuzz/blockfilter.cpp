@@ -3,11 +3,14 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <blockfilter.h>
+#include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <test/util/random.h>
+#include <util/check.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -29,18 +32,46 @@ FUZZ_TARGET(blockfilter)
     }
     {
         const BlockFilterType block_filter_type = block_filter->GetFilterType();
-        (void)BlockFilterTypeName(block_filter_type);
+        Assert(!BlockFilterTypeName(block_filter_type).empty());
+    }
+    {
+        DataStream serialized{};
+        serialized << *block_filter;
+        const std::vector<DataStream::value_type> serialized_bytes{serialized.begin(), serialized.end()};
+
+        DataStream roundtrip_stream{serialized_bytes};
+        BlockFilter roundtripped;
+        roundtrip_stream >> roundtripped;
+        Assert(roundtrip_stream.empty());
+
+        Assert(roundtripped.GetFilterType() == block_filter->GetFilterType());
+        Assert(roundtripped.GetBlockHash() == block_filter->GetBlockHash());
+        Assert(roundtripped.GetEncodedFilter() == block_filter->GetEncodedFilter());
+        Assert(roundtripped.GetHash() == block_filter->GetHash());
+
+        DataStream reserialized{};
+        reserialized << roundtripped;
+        const std::vector<DataStream::value_type> reserialized_bytes{reserialized.begin(), reserialized.end()};
+        Assert(reserialized_bytes == serialized_bytes);
     }
     {
         const GCSFilter gcs_filter = block_filter->GetFilter();
         (void)gcs_filter.GetN();
         (void)gcs_filter.GetParams();
         (void)gcs_filter.GetEncoded();
-        (void)gcs_filter.Match(ConsumeRandomLengthByteVector(fuzzed_data_provider));
+        Assert(!gcs_filter.MatchAny({}));
+
+        const auto element{ConsumeRandomLengthByteVector(fuzzed_data_provider)};
+        Assert(gcs_filter.MatchAny({element}) == gcs_filter.Match(element));
+
         GCSFilter::ElementSet element_set;
         LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 30000) {
             element_set.insert(ConsumeRandomLengthByteVector(fuzzed_data_provider));
         }
-        gcs_filter.MatchAny(element_set);
+        const bool match_any{gcs_filter.MatchAny(element_set)};
+        const bool any_match{std::ranges::any_of(element_set, [&](const auto& element) {
+            return gcs_filter.Match(element);
+        })};
+        Assert(match_any == any_match);
     }
 }
