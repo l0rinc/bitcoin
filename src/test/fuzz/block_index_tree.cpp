@@ -33,6 +33,11 @@ CBlockHeader ConsumeBlockHeader(FuzzedDataProvider& provider, uint256 prev_hash,
     return header;
 }
 
+bool IsAncestorOrDescendant(const CBlockIndex& pindex, const CBlockIndex& other)
+{
+    return other.GetAncestor(pindex.nHeight) == &pindex || pindex.GetAncestor(other.nHeight) == &other;
+}
+
 void initialize_block_index_tree()
 {
     static const auto testing_setup = MakeNoLogFileContext<const TestingSetup>();
@@ -53,7 +58,25 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
 
     std::vector<CBlockIndex*> pruned_blocks;
 
-    LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 1000) {
+    {
+        uint32_t genesis_status;
+        CBlockIndex* tip;
+        {
+            LOCK(cs_main);
+            genesis_status = genesis->nStatus;
+            tip = chainman.ActiveChain().Tip();
+        }
+        BlockValidationState state;
+        assert(!chainman.ActiveChainstate().InvalidateBlock(state, genesis));
+        {
+            LOCK(cs_main);
+            assert(genesis->nStatus == genesis_status);
+            assert(chainman.ActiveChain().Tip() == tip);
+        }
+    }
+
+    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 1000)
+    {
         if (abort_run) break;
         CallOneOf(
             fuzzed_data_provider,
@@ -88,6 +111,37 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                         assert(index->nStatus & BLOCK_VALID_TRANSACTIONS);
                         assert(index->nStatus & BLOCK_HAVE_DATA);
                     }
+                }
+            },
+            [&] {
+                // Reconsider a block, including genesis and same-height fork blocks. Only the chosen
+                // block's ancestor/descendant line should have failure flags cleared.
+                LOCK(cs_main);
+                CBlockIndex* index = PickValue(fuzzed_data_provider, blocks);
+                std::vector<CBlockIndex*> related_blocks;
+                std::vector<CBlockIndex*> unrelated_failed_blocks;
+                std::vector<CBlockIndex*> unrelated_unfailed_blocks;
+                for (CBlockIndex* block : blocks) {
+                    if (IsAncestorOrDescendant(*index, *block)) {
+                        related_blocks.push_back(block);
+                    } else if (block->nStatus & BLOCK_FAILED_VALID) {
+                        unrelated_failed_blocks.push_back(block);
+                    } else {
+                        unrelated_unfailed_blocks.push_back(block);
+                    }
+                }
+
+                chainman.ActiveChainstate().ResetBlockFailureFlags(index);
+                chainman.RecalculateBestHeader();
+
+                for (const CBlockIndex* block : related_blocks) {
+                    assert(!(block->nStatus & BLOCK_FAILED_VALID));
+                }
+                for (const CBlockIndex* block : unrelated_failed_blocks) {
+                    assert(block->nStatus & BLOCK_FAILED_VALID);
+                }
+                for (const CBlockIndex* block : unrelated_unfailed_blocks) {
+                    assert(!(block->nStatus & BLOCK_FAILED_VALID));
                 }
             },
             [&] {
