@@ -384,8 +384,27 @@ BOOST_AUTO_TEST_CASE(util_FormatISO8601Date)
     BOOST_CHECK_EQUAL(FormatISO8601Date(971890963199), "32767-12-31");
     BOOST_CHECK_EQUAL(FormatISO8601Date(971890876800), "32767-12-31");
 
+    BOOST_CHECK_EQUAL(FormatISO8601Date(-1), "1969-12-31");
     BOOST_CHECK_EQUAL(FormatISO8601Date(0), "1970-01-01");
     BOOST_CHECK_EQUAL(FormatISO8601Date(1317425777), "2011-09-30");
+}
+
+BOOST_AUTO_TEST_CASE(util_ISO8601DateTimeDateConsistency)
+{
+    constexpr int64_t SECONDS_PER_DAY{24 * 60 * 60};
+    constexpr std::array<int64_t, 7> TIMES{{-62167219200, -1, 0, 1, 86399, 86400, 253402300799}};
+    for (const int64_t time : TIMES) {
+        const std::string datetime{FormatISO8601DateTime(time)};
+        const std::string date{FormatISO8601Date(time)};
+        BOOST_REQUIRE_GT(datetime.size(), date.size());
+        BOOST_CHECK_EQUAL(datetime.substr(0, date.size()), date);
+        BOOST_CHECK_EQUAL(datetime.at(date.size()), 'T');
+
+        const int64_t seconds_since_midnight{((time % SECONDS_PER_DAY) + SECONDS_PER_DAY) % SECONDS_PER_DAY};
+        const auto parsed_midnight{ParseISO8601DateTime(date + "T00:00:00Z")};
+        BOOST_REQUIRE(parsed_midnight);
+        BOOST_CHECK_EQUAL(*parsed_midnight, time - seconds_since_midnight);
+    }
 }
 
 
