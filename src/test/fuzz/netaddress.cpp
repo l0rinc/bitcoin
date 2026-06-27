@@ -127,6 +127,42 @@ FUZZ_TARGET(netaddress)
     (void)CServiceHash()(service);
     (void)CServiceHash(0, 0)(service);
 
+    const bool service_has_sockaddr{service.IsIPv4() || service.IsIPv6() || service.IsCJDNS()};
+    struct sockaddr_storage sock_addr;
+    socklen_t sock_addr_len{service.GetSAFamily() == AF_INET ? static_cast<socklen_t>(sizeof(struct sockaddr_in)) :
+                                                              static_cast<socklen_t>(sizeof(struct sockaddr_in6))};
+    if (!service_has_sockaddr) {
+        sock_addr_len = sizeof(sock_addr);
+    }
+    const bool got_sockaddr{service.GetSockAddr(reinterpret_cast<struct sockaddr*>(&sock_addr), &sock_addr_len)};
+    assert(got_sockaddr == service_has_sockaddr);
+    if (got_sockaddr) {
+        assert(sock_addr_len == (service.GetSAFamily() == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6)));
+
+        CService parsed_service;
+        assert(parsed_service.SetSockAddr(reinterpret_cast<const struct sockaddr*>(&sock_addr), sock_addr_len));
+        if (service.IsCJDNS()) {
+            assert(parsed_service.IsIPv6());
+            assert(parsed_service.HasCJDNSPrefix());
+            assert(parsed_service.GetPort() == service.GetPort());
+            struct in6_addr service_in6;
+            struct in6_addr parsed_in6;
+            assert(service.GetIn6Addr(&service_in6));
+            assert(parsed_service.GetIn6Addr(&parsed_in6));
+            assert(memcmp(&parsed_in6, &service_in6, sizeof(service_in6)) == 0);
+        } else {
+            assert(parsed_service == service);
+        }
+
+        CService rejected_service{service};
+        if (sock_addr_len > 0) {
+            assert(!rejected_service.SetSockAddr(reinterpret_cast<const struct sockaddr*>(&sock_addr), sock_addr_len - 1));
+            assert(rejected_service == service);
+        }
+        assert(!rejected_service.SetSockAddr(reinterpret_cast<const struct sockaddr*>(&sock_addr), sizeof(sock_addr)));
+        assert(rejected_service == service);
+    }
+
     const CNetAddr other_net_addr = ConsumeNetAddr(fuzzed_data_provider);
     (void)net_addr.GetReachabilityFrom(other_net_addr);
     (void)sub_net.Match(other_net_addr);
