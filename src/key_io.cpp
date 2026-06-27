@@ -209,6 +209,13 @@ CTxDestination DecodeDestination(const std::string& str, const CChainParams& par
     if (error_locations) *error_locations = std::move(res.second);
     return CNoDestination();
 }
+
+bool ValidDestinationMatchesError(const CTxDestination& dest, const std::string& error_msg)
+{
+    const bool valid{IsValidDestination(dest)};
+    assert(valid == error_msg.empty());
+    return valid;
+}
 } // namespace
 
 CKey DecodeSecret(const std::string& str)
@@ -299,7 +306,9 @@ std::string EncodeDestination(const CTxDestination& dest)
 
 CTxDestination DecodeDestination(const std::string& str, std::string& error_msg, std::vector<int>* error_locations)
 {
-    return DecodeDestination(str, Params(), error_msg, error_locations);
+    CTxDestination dest{DecodeDestination(str, Params(), error_msg, error_locations)};
+    ValidDestinationMatchesError(dest, error_msg);
+    return dest;
 }
 
 CTxDestination DecodeDestination(const std::string& str)
@@ -311,7 +320,8 @@ CTxDestination DecodeDestination(const std::string& str)
 bool IsValidDestinationString(const std::string& str, const CChainParams& params)
 {
     std::string error_msg;
-    return IsValidDestination(DecodeDestination(str, params, error_msg, nullptr));
+    CTxDestination dest{DecodeDestination(str, params, error_msg, nullptr)};
+    return ValidDestinationMatchesError(dest, error_msg);
 }
 
 bool IsValidDestinationString(const std::string& str)
