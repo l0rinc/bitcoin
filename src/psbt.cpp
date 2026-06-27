@@ -839,6 +839,7 @@ bool FinalizeAndExtractPSBT(PartiallySignedTransaction& psbtx, CMutableTransacti
 
 std::optional<PartiallySignedTransaction> CombinePSBTs(const std::vector<PartiallySignedTransaction>& psbtxs)
 {
+    Assert(!psbtxs.empty());
     PartiallySignedTransaction out = psbtxs[0]; // Copy the first one
 
     // Merge
