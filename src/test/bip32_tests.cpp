@@ -9,6 +9,7 @@
 #include <key_io.h>
 #include <streams.h>
 #include <test/util/setup_common.h>
+#include <util/bip32.h>
 #include <util/strencodings.h>
 
 #include <string>
@@ -182,6 +183,39 @@ BOOST_AUTO_TEST_CASE(bip32_test5) {
         BOOST_CHECK_MESSAGE(!dec_extkey.key.IsValid(), "Decoding '" + str + "' as xprv should fail");
         BOOST_CHECK_MESSAGE(!dec_extpubkey.pubkey.IsValid(), "Decoding '" + str + "' as xpub should fail");
     }
+}
+
+BOOST_AUTO_TEST_CASE(parse_hd_keypath_output_contract)
+{
+    const std::vector<uint32_t> expected_path{
+        0,
+        1 | 0x80000000U,
+        2147483647,
+        2147483647 | 0x80000000U,
+    };
+    std::vector<uint32_t> keypath{0x11111111U, 0x22222222U};
+
+    BOOST_REQUIRE(ParseHDKeypath("m/0/1h/2147483647/2147483647'", keypath));
+    BOOST_CHECK(keypath == expected_path);
+    BOOST_CHECK_EQUAL(FormatHDKeypath(keypath), "/0/1h/2147483647/2147483647h");
+    BOOST_CHECK_EQUAL(FormatHDKeypath(keypath, /*apostrophe=*/true), "/0/1'/2147483647/2147483647'");
+    BOOST_CHECK_EQUAL(WriteHDKeypath(keypath), "m/0/1h/2147483647/2147483647h");
+    BOOST_CHECK_EQUAL(WriteHDKeypath(keypath, /*apostrophe=*/true), "m/0/1'/2147483647/2147483647'");
+
+    std::vector<uint32_t> roundtrip;
+    BOOST_REQUIRE(ParseHDKeypath(WriteHDKeypath(keypath), roundtrip));
+    BOOST_CHECK(roundtrip == expected_path);
+    BOOST_REQUIRE(ParseHDKeypath(WriteHDKeypath(keypath, /*apostrophe=*/true), roundtrip));
+    BOOST_CHECK(roundtrip == expected_path);
+
+    const std::vector<uint32_t> original_path{0x33333333U, 0x80000002U};
+    keypath = original_path;
+    BOOST_CHECK(!ParseHDKeypath("m/0/not-a-number", keypath));
+    BOOST_CHECK(keypath == original_path);
+
+    keypath = original_path;
+    BOOST_CHECK(!ParseHDKeypath("m/0/4294967296", keypath));
+    BOOST_CHECK(keypath == original_path);
 }
 
 BOOST_AUTO_TEST_CASE(bip32_max_depth) {

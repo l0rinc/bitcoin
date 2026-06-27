@@ -9,7 +9,9 @@
 #include <string>
 #include <vector>
 
-/** Parse an HD keypaths like "m/7/0'/2000". */
+/** Parse an HD keypath like "m/7/0'/2000" or "m/7/0h/2000".
+ *  On success, replace keypath. On failure, leave keypath unchanged.
+ */
 [[nodiscard]] bool ParseHDKeypath(const std::string& keypath_str, std::vector<uint32_t>& keypath);
 
 /** Write HD keypaths as strings */
