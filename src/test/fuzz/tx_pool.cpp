@@ -205,6 +205,7 @@ void CheckATMPInvariants(const MempoolAcceptResult& res, bool txid_in_mempool, b
         Assert(res.m_base_fees);
         Assert(res.m_effective_feerate);
         Assert(res.m_wtxids_fee_calculations);
+        Assert(!res.m_wtxids_fee_calculations->empty());
         Assert(!res.m_other_wtxid);
         break;
     }
@@ -221,6 +222,7 @@ void CheckATMPInvariants(const MempoolAcceptResult& res, bool txid_in_mempool, b
         // In other cases, validation may be unable or unwilling to calculate the fees.
         Assert(res.m_effective_feerate.has_value() == is_reconsiderable);
         Assert(res.m_wtxids_fee_calculations.has_value() == is_reconsiderable);
+        if (res.m_wtxids_fee_calculations) Assert(!res.m_wtxids_fee_calculations->empty());
         Assert(!res.m_other_wtxid);
         break;
     }
@@ -362,6 +364,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
         // If something went wrong due to a package-specific policy, it might not return a
         // validation result for the transaction.
         if (result_package.m_state.GetResult() != PackageValidationResult::PCKG_POLICY) {
+            Assert(!CheckPackageMempoolAcceptResult({tx}, result_package, result_package.m_state.IsValid(), nullptr));
             auto it = result_package.m_tx_results.find(tx->GetWitnessHash());
             Assert(it != result_package.m_tx_results.end());
             Assert(it->second.m_result_type == MempoolAcceptResult::ResultType::VALID ||
