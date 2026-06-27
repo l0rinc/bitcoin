@@ -27,6 +27,21 @@ int64_t ConsumeBanTimeOffset(FuzzedDataProvider& fuzzed_data_provider) noexcept
     // banman.cpp:137:73: runtime error: signed integer overflow: 1591700817 + 9223372036854775807 cannot be represented in type 'long'
     return fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(std::numeric_limits<int64_t>::min(), std::numeric_limits<int32_t>::max());
 }
+
+void AssertNoBannedEntries(BanMan& ban_man)
+{
+    banmap_t banmap;
+    ban_man.GetBanned(banmap);
+    assert(banmap.empty());
+}
+
+void AssertSubnetUnbanned(BanMan& ban_man, const CSubNet& subnet)
+{
+    banmap_t banmap;
+    ban_man.GetBanned(banmap);
+    assert(!banmap.contains(subnet));
+    assert(!ban_man.IsBanned(subnet));
+}
 } // namespace
 
 void initialize_banman()
@@ -95,6 +110,7 @@ FUZZ_TARGET(banman, .init = initialize_banman)
                 },
                 [&] {
                     ban_man.ClearBanned();
+                    AssertNoBannedEntries(ban_man);
                 },
                 [&] {
                     ban_man.IsBanned(ConsumeNetAddr(fuzzed_data_provider));
@@ -103,10 +119,19 @@ FUZZ_TARGET(banman, .init = initialize_banman)
                     ban_man.IsBanned(ConsumeSubNet(fuzzed_data_provider));
                 },
                 [&] {
-                    ban_man.Unban(ConsumeNetAddr(fuzzed_data_provider));
+                    const CNetAddr net_addr{ConsumeNetAddr(fuzzed_data_provider)};
+                    const CSubNet subnet{net_addr};
+                    const bool unbanned{ban_man.Unban(net_addr)};
+                    if (unbanned) {
+                        AssertSubnetUnbanned(ban_man, subnet);
+                    }
                 },
                 [&] {
-                    ban_man.Unban(ConsumeSubNet(fuzzed_data_provider));
+                    const CSubNet subnet{ConsumeSubNet(fuzzed_data_provider)};
+                    const bool unbanned{ban_man.Unban(subnet)};
+                    if (unbanned) {
+                        AssertSubnetUnbanned(ban_man, subnet);
+                    }
                 },
                 [&] {
                     banmap_t banmap;

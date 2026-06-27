@@ -9,6 +9,7 @@
 #include <netaddress.h>
 #include <node/interface_ui.h>
 #include <sync.h>
+#include <util/check.h>
 #include <util/log.h>
 #include <util/time.h>
 #include <util/translation.h>
@@ -74,6 +75,7 @@ void BanMan::ClearBanned()
     {
         LOCK(m_banned_mutex);
         m_banned.clear();
+        Assume(m_banned.empty());
         m_is_dirty = true;
     }
     DumpBanlist(); //store banlist to disk
@@ -164,6 +166,7 @@ bool BanMan::Unban(const CSubNet& sub_net)
     {
         LOCK(m_banned_mutex);
         if (m_banned.erase(sub_net) == 0) return false;
+        Assume(m_banned.find(sub_net) == m_banned.end());
         m_is_dirty = true;
     }
     if (m_client_interface) m_client_interface->BannedListChanged();
