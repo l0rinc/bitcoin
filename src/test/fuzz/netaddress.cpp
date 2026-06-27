@@ -71,6 +71,11 @@ FUZZ_TARGET(netaddress)
     (void)net_addr.IsRFC6145();
     (void)net_addr.IsRFC6598();
     (void)net_addr.IsRFC7343();
+    if (net_addr.HasLinkedIPv4()) {
+        assert(net_addr.IsRoutable());
+        assert(net_addr.GetNetClass() == Network::NET_IPV4);
+        (void)net_addr.GetLinkedIPv4();
+    }
     if (!net_addr.IsRoutable()) {
         assert(net_addr.GetNetwork() == Network::NET_UNROUTABLE || net_addr.GetNetwork() == Network::NET_INTERNAL);
     }
