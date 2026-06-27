@@ -7,6 +7,7 @@
 
 #include <consensus/consensus.h>
 #include <hash.h>
+#include <util/check.h>
 #include <util/overflow.h>
 
 
@@ -152,6 +153,17 @@ CPartialMerkleTree::CPartialMerkleTree() : nTransactions(0), fBad(true) {}
 
 uint256 CPartialMerkleTree::ExtractMatches(std::vector<Txid> &vMatch, std::vector<unsigned int> &vnIndex) {
     vMatch.clear();
+    vnIndex.clear();
+    const auto assume_valid_outputs{[&] {
+        Assume(vMatch.size() == vnIndex.size());
+        for (size_t i{0}; i < vnIndex.size(); ++i) {
+            Assume(vnIndex[i] < nTransactions);
+            if (i > 0) {
+                Assume(vnIndex[i] > vnIndex[i - 1]);
+            }
+        }
+    }};
+    assume_valid_outputs();
     // An empty set will not work
     if (nTransactions == 0)
         return uint256();
@@ -171,6 +183,7 @@ uint256 CPartialMerkleTree::ExtractMatches(std::vector<Txid> &vMatch, std::vecto
     // traverse the partial tree
     unsigned int nBitsUsed = 0, nHashUsed = 0;
     uint256 hashMerkleRoot = TraverseAndExtract(nHeight, 0, nBitsUsed, nHashUsed, vMatch, vnIndex);
+    assume_valid_outputs();
     // verify that no problems occurred during the tree traversal
     if (fBad)
         return uint256();
