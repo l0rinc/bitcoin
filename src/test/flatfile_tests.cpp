@@ -91,6 +91,15 @@ BOOST_AUTO_TEST_CASE(flatfile_open)
         BOOST_CHECK_THROW(file >> LIMITED_STRING(text, 256), std::ios_base::failure);
         BOOST_REQUIRE_EQUAL(file.fclose(), 0);
     }
+
+    // Opening a missing flat file read-only must not create it.
+    {
+        const FlatFilePos missing_pos{2, 0};
+        BOOST_CHECK(!fs::exists(seq.FileName(missing_pos)));
+        AutoFile file{seq.Open(missing_pos, /*read_only=*/true)};
+        BOOST_CHECK(file.IsNull());
+        BOOST_CHECK(!fs::exists(seq.FileName(missing_pos)));
+    }
 }
 
 BOOST_AUTO_TEST_CASE(flatfile_allocate)
