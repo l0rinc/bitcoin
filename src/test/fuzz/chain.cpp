@@ -3,16 +3,135 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chain.h>
+#include <arith_uint256.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <vector>
 
+namespace {
+
+const CBlockIndex* NaiveGetAncestor(const CBlockIndex* block, int height)
+{
+    while (block && block->nHeight > height) {
+        block = block->pprev;
+    }
+    return block && block->nHeight == height ? block : nullptr;
+}
+
+const CBlockIndex* NaiveLastCommonAncestor(const CBlockIndex* a, const CBlockIndex* b)
+{
+    while (a->nHeight > b->nHeight) {
+        a = a->pprev;
+    }
+    while (b->nHeight > a->nHeight) {
+        b = b->pprev;
+    }
+    while (a != b) {
+        assert(a->nHeight == b->nHeight);
+        a = a->pprev;
+        b = b->pprev;
+    }
+    return a;
+}
+
+std::vector<const CBlockIndex*> NaiveLocatorIndexes(const CBlockIndex* block)
+{
+    int step{1};
+    std::vector<const CBlockIndex*> indexes;
+    while (block) {
+        indexes.push_back(block);
+        if (block->nHeight == 0) break;
+        block = NaiveGetAncestor(block, std::max(block->nHeight - step, 0));
+        if (indexes.size() > 10) step *= 2;
+    }
+    return indexes;
+}
+
+void AssertChainContracts(FuzzedDataProvider& fuzzed_data_provider)
+{
+    const size_t block_count{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 512)};
+    std::vector<uint256> hashes;
+    hashes.reserve(block_count);
+    std::vector<std::unique_ptr<CBlockIndex>> blocks;
+    blocks.reserve(block_count);
+
+    hashes.push_back(ArithToUint256(0));
+    auto genesis{std::make_unique<CBlockIndex>()};
+    genesis->nHeight = 0;
+    genesis->phashBlock = &hashes.back();
+    genesis->BuildSkip();
+    blocks.push_back(std::move(genesis));
+
+    for (size_t i{1}; i < block_count; ++i) {
+        const size_t parent_pos{fuzzed_data_provider.ConsumeBool() ? i - 1 : fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, blocks.size() - 1)};
+        hashes.push_back(ArithToUint256(i));
+        auto block{std::make_unique<CBlockIndex>()};
+        block->pprev = blocks[parent_pos].get();
+        block->nHeight = block->pprev->nHeight + 1;
+        block->phashBlock = &hashes.back();
+        block->BuildSkip();
+        blocks.push_back(std::move(block));
+    }
+
+    CBlockIndex* active_tip{blocks[fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, blocks.size() - 1)].get()};
+    CChain chain;
+    chain.SetTip(*active_tip);
+    assert(chain.Tip() == active_tip);
+    assert(chain.Height() == active_tip->nHeight);
+    assert(chain.Genesis() == blocks.front().get());
+    assert(chain[-1] == nullptr);
+    assert(chain[chain.Height() + 1] == nullptr);
+
+    for (int height{0}; height <= chain.Height(); ++height) {
+        const CBlockIndex* ancestor{NaiveGetAncestor(active_tip, height)};
+        assert(chain[height] == ancestor);
+        assert(chain[height]->nHeight == height);
+        assert(chain.Contains(*ancestor));
+        assert(chain.FindFork(*ancestor) == ancestor);
+        assert(chain.Next(*ancestor) == (height == chain.Height() ? nullptr : NaiveGetAncestor(active_tip, height + 1)));
+    }
+
+    for (const auto& block : blocks) {
+        const bool in_active_chain{block->nHeight <= chain.Height() && NaiveGetAncestor(active_tip, block->nHeight) == block.get()};
+        assert(chain.Contains(*block) == in_active_chain);
+        assert(chain.FindFork(*block) == NaiveLastCommonAncestor(active_tip, block.get()));
+        if (in_active_chain && block.get() != active_tip) {
+            assert(chain.Next(*block) == NaiveGetAncestor(active_tip, block->nHeight + 1));
+        } else {
+            assert(chain.Next(*block) == nullptr);
+        }
+    }
+
+    const CBlockIndex* locator_tip{blocks[fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, blocks.size() - 1)].get()};
+    const std::vector<uint256> locator_entries{LocatorEntries(locator_tip)};
+    const std::vector<const CBlockIndex*> expected_locator_indexes{NaiveLocatorIndexes(locator_tip)};
+    assert(GetLocator(locator_tip).vHave == locator_entries);
+    assert(locator_entries.size() == expected_locator_indexes.size());
+    for (size_t i{0}; i < locator_entries.size(); ++i) {
+        assert(locator_entries[i] == expected_locator_indexes[i]->GetBlockHash());
+        if (i > 0) {
+            assert(expected_locator_indexes[i]->nHeight < expected_locator_indexes[i - 1]->nHeight);
+        }
+    }
+    assert(locator_entries.front() == locator_tip->GetBlockHash());
+    assert(locator_entries.back() == blocks.front()->GetBlockHash());
+    assert(LocatorEntries(nullptr).empty());
+    assert(GetLocator(nullptr).IsNull());
+}
+
+} // namespace
+
 FUZZ_TARGET(chain)
 {
+    FuzzedDataProvider chain_provider(buffer.data(), buffer.size());
+    AssertChainContracts(chain_provider);
+
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     std::optional<CDiskBlockIndex> disk_block_index = ConsumeDeserializable<CDiskBlockIndex>(fuzzed_data_provider);
     if (!disk_block_index) {
