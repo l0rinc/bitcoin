@@ -30,6 +30,7 @@
 #include <test/util/setup_common.h>
 #include <undo.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <exception>
 #include <optional>
@@ -114,6 +115,32 @@ template <typename T>
 void AssertEqualAfterSerializeDeserialize(const T& obj)
 {
     assert(Deserialize<T>(Serialize(obj)) == obj);
+}
+
+bool ExpectedMessageTypeValid(const CMessageHeader& mh)
+{
+    bool zero_seen{false};
+    for (const char ch : mh.m_msg_type) {
+        if (ch == 0) {
+            zero_seen = true;
+        } else if (zero_seen || ch < ' ' || ch > 0x7E) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void AssertMessageTypeContracts(const CMessageHeader& mh)
+{
+    const bool valid{mh.IsMessageTypeValid()};
+    assert(valid == ExpectedMessageTypeValid(mh));
+    if (valid) {
+        const std::string msg_type{mh.GetMessageType()};
+        assert(msg_type.size() <= CMessageHeader::MESSAGE_TYPE_SIZE);
+        assert(std::ranges::all_of(msg_type, [](char ch) { return ch >= ' ' && ch <= 0x7E; }));
+        const CMessageHeader canonical{mh.pchMessageStart, msg_type.c_str(), mh.nMessageSize};
+        assert(std::equal(mh.m_msg_type, mh.m_msg_type + CMessageHeader::MESSAGE_TYPE_SIZE, canonical.m_msg_type));
+    }
 }
 
 } // namespace
@@ -251,7 +278,7 @@ FUZZ_TARGET(service_deserialize, .init = initialize_deserialize)
 FUZZ_TARGET_DESERIALIZE(messageheader_deserialize, {
     CMessageHeader mh;
     DeserializeFromFuzzingInput(buffer, mh);
-    (void)mh.IsMessageTypeValid();
+    AssertMessageTypeContracts(mh);
 })
 FUZZ_TARGET(address_deserialize, .init = initialize_deserialize)
 {
