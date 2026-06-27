@@ -102,6 +102,23 @@ BOOST_AUTO_TEST_CASE(SimpleRoundTripTest)
             partialBlock = tmp;
         }
 
+        // Too many transactions
+        {
+            PartiallyDownloadedBlock tmp = partialBlock;
+            BOOST_CHECK(tmp.FillBlock(block2, {block.vtx[1], block.vtx[1]}, /*segwit_active=*/true) == READ_STATUS_INVALID);
+            BOOST_CHECK(tmp.header.IsNull());
+            BOOST_CHECK(tmp.FillBlock(block2, {block.vtx[1]}, /*segwit_active=*/true) == READ_STATUS_INVALID);
+        }
+
+        // Mutation failure
+        {
+            PartiallyDownloadedBlock tmp = partialBlock;
+            tmp.m_check_block_mutated_mock = [](const CBlock&, bool) { return true; };
+            BOOST_CHECK(tmp.FillBlock(block2, {block.vtx[1]}, /*segwit_active=*/true) == READ_STATUS_FAILED);
+            BOOST_CHECK(tmp.header.IsNull());
+            BOOST_CHECK(tmp.FillBlock(block2, {block.vtx[1]}, /*segwit_active=*/true) == READ_STATUS_INVALID);
+        }
+
         // Wrong transaction
         {
             PartiallyDownloadedBlock tmp = partialBlock;
