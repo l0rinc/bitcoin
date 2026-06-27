@@ -8,7 +8,9 @@
 #include <test/fuzz/util.h>
 #include <uint256.h>
 
+#include <cassert>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -43,7 +45,15 @@ FUZZ_TARGET(merkleblock)
             partial_merkle_tree = merkle_block.txn;
         });
     (void)partial_merkle_tree.GetNumTransactions();
-    std::vector<Txid> matches;
-    std::vector<unsigned int> indices;
-    (void)partial_merkle_tree.ExtractMatches(matches, indices);
+    std::vector<Txid> matches{Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider))};
+    std::vector<unsigned int> indices{std::numeric_limits<unsigned int>::max()};
+    const uint256 merkle_root{partial_merkle_tree.ExtractMatches(matches, indices)};
+    assert(matches.size() == indices.size());
+    for (size_t i{0}; i < indices.size(); ++i) {
+        assert(indices[i] < partial_merkle_tree.GetNumTransactions());
+        if (i > 0) {
+            assert(indices[i] > indices[i - 1]);
+        }
+    }
+    (void)merkle_root;
 }
