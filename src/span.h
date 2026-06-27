@@ -74,6 +74,7 @@
 template <typename T>
 T& SpanPopBack(std::span<T>& span)
 {
+    assert(!span.empty());
     size_t size = span.size();
     T& back = span.back();
     span = span.first(size - 1);
