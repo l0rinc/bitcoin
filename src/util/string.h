@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -123,11 +124,9 @@ std::vector<T> Split(const std::span<const char>& sp, std::string_view separator
     auto start = it;
     while (it != sp.end()) {
         if (separators.find(*it) != std::string::npos) {
-            if (include_sep) {
-                ret.emplace_back(start, it + 1);
-            } else {
-                ret.emplace_back(start, it);
-            }
+            const auto split_end{include_sep ? it + 1 : it};
+            assert(!include_sep || split_end == it + 1);
+            ret.emplace_back(start, split_end);
             start = it + 1;
         }
         ++it;
