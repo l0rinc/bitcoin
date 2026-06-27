@@ -69,6 +69,11 @@ public:
         return ByRatio{a.m_feerate} == ByRatio{b.m_feerate};
     }
     CFeeRate& operator+=(const CFeeRate& a) {
+        if (a.m_feerate.fee == 0) return *this;
+        if (m_feerate.fee == 0) {
+            m_feerate = a.m_feerate;
+            return *this;
+        }
         m_feerate = FeePerVSize(GetFeePerK() + a.GetFeePerK(), 1000);
         return *this;
     }
