@@ -27,7 +27,7 @@ BOOST_AUTO_TEST_CASE(gcsfilter_test)
         included_elements.insert(std::move(element1));
 
         GCSFilter::Element element2(32);
-        element2[1] = i;
+        element2[1] = i + 1;
         excluded_elements.insert(std::move(element2));
     }
 
@@ -39,6 +39,31 @@ BOOST_AUTO_TEST_CASE(gcsfilter_test)
         BOOST_CHECK(filter.MatchAny(excluded_elements));
         excluded_elements.erase(insertion.first);
     }
+}
+
+BOOST_AUTO_TEST_CASE(gcsfilter_matchany_equals_individual_matches)
+{
+    GCSFilter::ElementSet included_elements, query_elements;
+    for (int i = 0; i < 100; ++i) {
+        GCSFilter::Element included_element(32);
+        included_element[0] = i;
+        included_elements.insert(included_element);
+        query_elements.insert(std::move(included_element));
+
+        GCSFilter::Element excluded_element(32);
+        excluded_element[1] = i + 1;
+        query_elements.insert(std::move(excluded_element));
+    }
+
+    GCSFilter filter({0, 0, 10, 1 << 10}, included_elements);
+    BOOST_CHECK(!filter.MatchAny({}));
+
+    bool any_individual_match{false};
+    for (const auto& element : query_elements) {
+        BOOST_CHECK_EQUAL(filter.MatchAny({element}), filter.Match(element));
+        any_individual_match |= filter.Match(element);
+    }
+    BOOST_CHECK_EQUAL(filter.MatchAny(query_elements), any_individual_match);
 }
 
 BOOST_AUTO_TEST_CASE(gcsfilter_default_constructor)
