@@ -25,11 +25,23 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <utility>
 #include <vector>
 
 namespace {
 const TestingSetup* g_setup;
 } // namespace
+
+class FuzzedCBlockHeaderAndShortTxIDs : public CBlockHeaderAndShortTxIDs
+{
+public:
+    using CBlockHeaderAndShortTxIDs::CBlockHeaderAndShortTxIDs;
+
+    void AddPrefilledTx(uint16_t index, CTransactionRef tx)
+    {
+        prefilledtxn.push_back({index, std::move(tx)});
+    }
+};
 
 void initialize_pdb()
 {
@@ -75,7 +87,22 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         return;
     }
 
-    CBlockHeaderAndShortTxIDs cmpctblock{*block, fuzzed_data_provider.ConsumeIntegral<uint64_t>()};
+    FuzzedCBlockHeaderAndShortTxIDs cmpctblock{*block, fuzzed_data_provider.ConsumeIntegral<uint64_t>()};
+    const bool force_invalid_init{fuzzed_data_provider.ConsumeBool()};
+    if (force_invalid_init) {
+        CallOneOf(
+            fuzzed_data_provider,
+            [&] {
+                CMutableTransaction null_tx;
+                cmpctblock.AddPrefilledTx(0, MakeTransactionRef(std::move(null_tx)));
+            },
+            [&] {
+                cmpctblock.AddPrefilledTx(std::numeric_limits<uint16_t>::max(), block->vtx.front());
+            },
+            [&] {
+                cmpctblock.AddPrefilledTx(static_cast<uint16_t>(block->vtx.size()), block->vtx.front());
+            });
+    }
 
     bilingual_str error;
     CTxMemPool pool{MemPoolOptionsForTest(g_setup->m_node), error};
@@ -107,10 +134,19 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     }
 
     auto init_status{pdb.InitData(cmpctblock, extra_txn)};
-    if (init_status == READ_STATUS_OK) {
-        assert(pdb.AvailableTxCount() == pdb.PrefilledCount() + pdb.MempoolCount());
-        assert(pdb.ExtraCount() <= pdb.MempoolCount());
+    if (init_status != READ_STATUS_OK) {
+        assert(pdb.header.IsNull());
+        assert(pdb.AvailableTxCount() == 0);
+        assert(pdb.PrefilledCount() == 0);
+        assert(pdb.MempoolCount() == 0);
+        assert(pdb.ExtraCount() == 0);
+
+        CBlock rejected_block;
+        assert(pdb.FillBlock(rejected_block, {}, fuzzed_data_provider.ConsumeBool()) == READ_STATUS_INVALID);
+        return;
     }
+    assert(pdb.AvailableTxCount() == pdb.PrefilledCount() + pdb.MempoolCount());
+    assert(pdb.ExtraCount() <= pdb.MempoolCount());
 
     std::vector<CTransactionRef> missing;
     // Whether we skipped a transaction that should be included in `missing`.
