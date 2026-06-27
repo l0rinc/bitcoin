@@ -8,6 +8,8 @@
 #include <common/system.h>
 #include <util/check.h>
 
+#include <algorithm>
+
 CMessageHeader::CMessageHeader(const MessageStartChars& pchMessageStartIn, const char* msg_type, unsigned int nMessageSizeIn)
     : pchMessageStart{pchMessageStartIn}
 {
@@ -40,6 +42,9 @@ bool CMessageHeader::IsMessageTypeValid() const
         }
     }
 
+    const std::string msg_type{GetMessageType()};
+    const CMessageHeader canonical{pchMessageStart, msg_type.c_str(), nMessageSize};
+    assert(std::equal(m_msg_type, m_msg_type + MESSAGE_TYPE_SIZE, canonical.m_msg_type));
     return true;
 }
 
