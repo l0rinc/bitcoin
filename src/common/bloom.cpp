@@ -15,6 +15,7 @@
 #include <util/overflow.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <compare>
 #include <vector>
@@ -186,6 +187,19 @@ CRollingBloomFilter::CRollingBloomFilter(const unsigned int nElements, const dou
     reset();
 }
 
+void CRollingBloomFilter::SanityCheck() const
+{
+    assert(nEntriesPerGeneration > 0);
+    assert(nEntriesThisGeneration >= 0);
+    assert(nEntriesThisGeneration <= nEntriesPerGeneration);
+    assert(nGeneration >= 1);
+    assert(nGeneration <= 3);
+    assert(nHashFuncs >= 1);
+    assert(nHashFuncs <= 50);
+    assert(!data.empty());
+    assert(data.size() % 2 == 0);
+}
+
 /* Similar to CBloomFilter::Hash */
 static inline uint32_t RollingBloomHash(unsigned int nHashNum, uint32_t nTweak, std::span<const unsigned char> vDataToHash)
 {
@@ -194,6 +208,7 @@ static inline uint32_t RollingBloomHash(unsigned int nHashNum, uint32_t nTweak, 
 
 void CRollingBloomFilter::insert(std::span<const unsigned char> vKey)
 {
+    SanityCheck();
     if (nEntriesThisGeneration == nEntriesPerGeneration) {
         nEntriesThisGeneration = 0;
         nGeneration++;
@@ -221,10 +236,12 @@ void CRollingBloomFilter::insert(std::span<const unsigned char> vKey)
         data[pos & ~1U] = (data[pos & ~1U] & ~(uint64_t{1} << bit)) | (uint64_t(nGeneration & 1)) << bit;
         data[pos | 1] = (data[pos | 1] & ~(uint64_t{1} << bit)) | (uint64_t(nGeneration >> 1)) << bit;
     }
+    SanityCheck();
 }
 
 bool CRollingBloomFilter::contains(std::span<const unsigned char> vKey) const
 {
+    SanityCheck();
     for (int n = 0; n < nHashFuncs; n++) {
         uint32_t h = RollingBloomHash(n, nTweak, vKey);
         int bit = h & 0x3F;
@@ -243,4 +260,5 @@ void CRollingBloomFilter::reset()
     nEntriesThisGeneration = 0;
     nGeneration = 1;
     std::fill(data.begin(), data.end(), 0);
+    SanityCheck();
 }
