@@ -84,6 +84,38 @@ BOOST_AUTO_TEST_CASE(basic_tests)
     BOOST_CHECK_EQUAL(chain_0.Genesis(), nullptr);
 }
 
+BOOST_AUTO_TEST_CASE(chain_membership_and_locator_contracts)
+{
+    BOOST_CHECK(LocatorEntries(nullptr).empty());
+    BOOST_CHECK(GetLocator(nullptr).IsNull());
+
+    std::array<CBlockIndex, 4> active_blocks;
+    for (size_t i{0}; i < active_blocks.size(); ++i) {
+        active_blocks[i].nHeight = i;
+        active_blocks[i].pprev = i == 0 ? nullptr : &active_blocks[i - 1];
+        active_blocks[i].BuildSkip();
+    }
+
+    CBlockIndex fork_block_1;
+    fork_block_1.nHeight = 1;
+    fork_block_1.pprev = &active_blocks[0];
+    fork_block_1.BuildSkip();
+
+    CBlockIndex fork_block_2;
+    fork_block_2.nHeight = 2;
+    fork_block_2.pprev = &fork_block_1;
+    fork_block_2.BuildSkip();
+
+    CChain chain;
+    chain.SetTip(active_blocks.back());
+
+    BOOST_CHECK(!chain.Contains(fork_block_1));
+    BOOST_CHECK(!chain.Contains(fork_block_2));
+    BOOST_CHECK_EQUAL(chain.Next(fork_block_1), nullptr);
+    BOOST_CHECK_EQUAL(chain.Next(fork_block_2), nullptr);
+    BOOST_CHECK_EQUAL(chain.FindFork(fork_block_2), &active_blocks[0]);
+}
+
 BOOST_AUTO_TEST_CASE(findfork_tests)
 {
     // Create a forking chain
