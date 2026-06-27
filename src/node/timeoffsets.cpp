@@ -6,6 +6,7 @@
 #include <node/warnings.h>
 #include <sync.h>
 #include <tinyformat.h>
+#include <util/check.h>
 #include <util/log.h>
 #include <util/time.h>
 #include <util/translation.h>
@@ -27,6 +28,7 @@ void TimeOffsets::Add(std::chrono::seconds offset)
         m_offsets.pop_front();
     }
     m_offsets.push_back(offset);
+    Assume(m_offsets.size() <= MAX_SIZE);
     LogDebug(BCLog::NET, "Added time offset %+ds, total samples %d\n",
              Ticks<std::chrono::seconds>(offset), m_offsets.size());
 }
@@ -40,13 +42,20 @@ std::chrono::seconds TimeOffsets::Median() const
 
     auto sorted_copy = m_offsets;
     std::sort(sorted_copy.begin(), sorted_copy.end());
-    return sorted_copy[sorted_copy.size() / 2];  // approximate median is good enough, keep it simple
+    Assume(sorted_copy.size() <= MAX_SIZE);
+    Assume(std::is_sorted(sorted_copy.begin(), sorted_copy.end()));
+    const auto median{sorted_copy[sorted_copy.size() / 2]};  // approximate median is good enough, keep it simple
+    Assume(median >= sorted_copy.front());
+    Assume(median <= sorted_copy.back());
+    return median;
 }
 
 bool TimeOffsets::WarnIfOutOfSync() const
 {
-    // when median == std::numeric_limits<int64_t>::min(), calling std::chrono::abs is UB
-    auto median{std::max(Median(), std::chrono::seconds(std::numeric_limits<int64_t>::min() + 1))};
+    // When median == seconds::min(), calling std::chrono::abs is UB.
+    const auto min_safe_median{std::chrono::seconds{std::numeric_limits<std::chrono::seconds::rep>::min() + 1}};
+    auto median{std::max(Median(), min_safe_median)};
+    Assume(median > std::chrono::seconds::min());
     if (std::chrono::abs(median) <= WARN_THRESHOLD) {
         m_warnings.Unset(node::Warning::CLOCK_OUT_OF_SYNC);
         return false;
