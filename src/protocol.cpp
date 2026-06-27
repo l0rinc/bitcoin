@@ -9,6 +9,7 @@
 #include <util/check.h>
 
 #include <algorithm>
+#include <bit>
 
 CMessageHeader::CMessageHeader(const MessageStartChars& pchMessageStartIn, const char* msg_type, unsigned int nMessageSizeIn)
     : pchMessageStart{pchMessageStartIn}
@@ -121,6 +122,7 @@ std::vector<std::string> serviceFlagsToStr(uint64_t flags)
         }
     }
 
+    Assume(str_flags.size() == static_cast<size_t>(std::popcount(flags)));
     return str_flags;
 }
 
