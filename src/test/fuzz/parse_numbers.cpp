@@ -29,28 +29,36 @@ FUZZ_TARGET(parse_numbers)
         // the one with the largest bit-width.
         if (i8) {
             assert(i8 == i64);
+            assert(LocaleIndependentAtoi<int8_t>(random_string) == *i8);
         }
         if (u8) {
             assert(u8 == u64);
+            assert(LocaleIndependentAtoi<uint8_t>(random_string) == *u8);
         }
         if (i16) {
             assert(i16 == i64);
+            assert(LocaleIndependentAtoi<int16_t>(random_string) == *i16);
         }
         if (u16) {
             assert(u16 == u64);
+            assert(LocaleIndependentAtoi<uint16_t>(random_string) == *u16);
         }
         if (i32) {
             assert(i32 == i64);
+            assert(LocaleIndependentAtoi<int32_t>(random_string) == *i32);
         }
         if (u32) {
             assert(u32 == u64);
+            assert(LocaleIndependentAtoi<uint32_t>(random_string) == *u32);
         }
         constexpr auto digits{"0123456789"};
         if (i64) {
             assert(util::RemovePrefixView(random_string, "-").find_first_not_of(digits) == std::string::npos);
+            assert(LocaleIndependentAtoi<int64_t>(random_string) == *i64);
         }
         if (u64) {
             assert(random_string.find_first_not_of(digits) == std::string::npos);
+            assert(LocaleIndependentAtoi<uint64_t>(random_string) == *u64);
         }
     }
 
