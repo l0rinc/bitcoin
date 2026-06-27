@@ -44,6 +44,25 @@ PartiallyDownloadedBlock::IsBlockMutatedFn FuzzedIsBlockMutated(bool result)
     };
 }
 
+class FuzzedPartiallyDownloadedBlock : public PartiallyDownloadedBlock
+{
+public:
+    using PartiallyDownloadedBlock::PartiallyDownloadedBlock;
+
+    size_t AvailableTxCount() const
+    {
+        size_t count{0};
+        for (const auto& tx : txn_available) {
+            if (tx) ++count;
+        }
+        return count;
+    }
+
+    size_t PrefilledCount() const { return prefilled_count; }
+    size_t MempoolCount() const { return mempool_count; }
+    size_t ExtraCount() const { return extra_count; }
+};
+
 FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
@@ -61,7 +80,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     bilingual_str error;
     CTxMemPool pool{MemPoolOptionsForTest(g_setup->m_node), error};
     Assert(error.empty());
-    PartiallyDownloadedBlock pdb{&pool};
+    FuzzedPartiallyDownloadedBlock pdb{&pool};
 
     // Set of available transactions (mempool or extra_txn)
     std::set<uint16_t> available;
@@ -88,6 +107,10 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     }
 
     auto init_status{pdb.InitData(cmpctblock, extra_txn)};
+    if (init_status == READ_STATUS_OK) {
+        assert(pdb.AvailableTxCount() == pdb.PrefilledCount() + pdb.MempoolCount());
+        assert(pdb.ExtraCount() <= pdb.MempoolCount());
+    }
 
     std::vector<CTransactionRef> missing;
     // Whether we skipped a transaction that should be included in `missing`.
@@ -125,6 +148,11 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         assert(!skipped_missing);
         assert(!fail_block_mutated);
         assert(block->GetHash() == reconstructed_block.GetHash());
+        assert(block->vtx.size() == reconstructed_block.vtx.size());
+        for (size_t i{0}; i < block->vtx.size(); ++i) {
+            assert(block->vtx[i]->GetHash() == reconstructed_block.vtx[i]->GetHash());
+            assert(block->vtx[i]->GetWitnessHash() == reconstructed_block.vtx[i]->GetWitnessHash());
+        }
         break;
     case READ_STATUS_FAILED:
         assert(fail_block_mutated);
