@@ -158,6 +158,12 @@ std::string EncodeBase32(std::span<const unsigned char> input, bool pad)
             str += '=';
         }
     }
+    assert(!pad || str.size() % 8 == 0);
+    assert(str.find('=') == std::string::npos || pad);
+    assert(str.empty() || str.front() != '=');
+    if (const auto first_padding{str.find('=')}; first_padding != std::string::npos) {
+        assert(str.find_first_not_of('=', first_padding) == std::string::npos);
+    }
     return str;
 }
 
@@ -200,6 +206,7 @@ std::optional<std::vector<unsigned char>> DecodeBase32(std::string_view str)
     );
 
     if (!valid) return {};
+    assert(str.find('=') == std::string_view::npos);
 
     return ret;
 }
