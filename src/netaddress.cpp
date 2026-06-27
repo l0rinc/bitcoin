@@ -627,6 +627,8 @@ bool CNetAddr::GetInAddr(struct in_addr* pipv4Addr) const
         return false;
     assert(sizeof(*pipv4Addr) == m_addr.size());
     memcpy(pipv4Addr, m_addr.data(), m_addr.size());
+    Assume(memcmp(pipv4Addr, m_addr.data(), m_addr.size()) == 0);
+    Assume(CNetAddr{*pipv4Addr} == *this);
     return true;
 }
 
@@ -647,6 +649,8 @@ bool CNetAddr::GetIn6Addr(struct in6_addr* pipv6Addr) const
     }
     assert(sizeof(*pipv6Addr) == m_addr.size());
     memcpy(pipv6Addr, m_addr.data(), m_addr.size());
+    Assume(memcmp(pipv6Addr, m_addr.data(), m_addr.size()) == 0);
+    Assume(IsCJDNS() || CNetAddr{*pipv6Addr} == *this);
     return true;
 }
 
