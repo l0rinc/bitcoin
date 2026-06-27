@@ -25,6 +25,11 @@ uint256 TXHASHES[MAX_TXHASHES];
 //! Precomputed random durations (positive and negative, each ~exponentially distributed).
 std::chrono::microseconds DELAYS[256];
 
+GenTxid MakeGenTxid(int txhash, bool is_wtxid)
+{
+    return is_wtxid ? GenTxid{Wtxid::FromUint256(TXHASHES[txhash])} : GenTxid{Txid::FromUint256(TXHASHES[txhash])};
+}
+
 struct Initializer
 {
     Initializer()
@@ -204,8 +209,7 @@ public:
         }
 
         // Call TxRequestTracker's implementation.
-        auto gtxid = is_wtxid ? GenTxid{Wtxid::FromUint256(TXHASHES[txhash])} : GenTxid{Txid::FromUint256(TXHASHES[txhash])};
-        m_tracker.ReceivedInv(peer, gtxid, preferred, reqtime);
+        m_tracker.ReceivedInv(peer, MakeGenTxid(txhash, is_wtxid), preferred, reqtime);
     }
 
     void RequestedTx(int peer, int txhash, std::chrono::microseconds exptime)
@@ -253,8 +257,7 @@ public:
             for (int peer2 = 0; peer2 < MAX_PEERS; ++peer2) {
                 Announcement& ann2 = m_announcements[txhash][peer2];
                 if (ann2.m_state == State::REQUESTED && ann2.m_time <= m_now) {
-                    auto gtxid = ann2.m_is_wtxid ? GenTxid{Wtxid::FromUint256(TXHASHES[txhash])} : GenTxid{Txid::FromUint256(TXHASHES[txhash])};
-                    expected_expired.emplace_back(peer2, gtxid);
+                    expected_expired.emplace_back(peer2, MakeGenTxid(txhash, ann2.m_is_wtxid));
                     ann2.m_state = State::COMPLETED;
                     break;
                 }
@@ -333,7 +336,7 @@ FUZZ_TARGET(txrequest)
     // Decode the input as a sequence of instructions with parameters
     auto it = buffer.begin();
     while (it != buffer.end()) {
-        int cmd = *(it++) % 11;
+        int cmd = *(it++) % 12;
         int peer, txidnum, delaynum;
         switch (cmd) {
         case 0: // Make time jump to the next event (m_time of CANDIDATE or REQUESTED)
@@ -381,9 +384,28 @@ FUZZ_TARGET(txrequest)
             txidnum = it == buffer.end() ? 0 : *(it++);
             tester.ReceivedResponse(peer, txidnum % MAX_TXHASHES);
             break;
+        case 11: // Duplicate invs with perturbed metadata must be ignored.
+            peer = it == buffer.end() ? 0 : *(it++) % MAX_PEERS;
+            txidnum = it == buffer.end() ? 0 : *(it++);
+            delaynum = it == buffer.end() ? 0 : *(it++);
+            {
+                const int txhash = txidnum % MAX_TXHASHES;
+                const bool is_wtxid = (txidnum / MAX_TXHASHES) & 1;
+                const bool preferred = (txidnum / (2 * MAX_TXHASHES)) & 1;
+                const auto reqtime = tester.Now() + DELAYS[1 + (delaynum % 127)];
+                tester.ForgetTxHash(txhash);
+                tester.ReceivedInv(peer, txhash, is_wtxid, preferred, reqtime);
+                tester.ReceivedInv(peer, txhash, !is_wtxid, !preferred, std::chrono::microseconds::min());
+                tester.GetRequestable(peer);
+                tester.AdvanceTime(reqtime - tester.Now());
+                tester.GetRequestable(peer);
+                tester.ReceivedInv(peer, txhash, !is_wtxid, !preferred, std::chrono::microseconds::min());
+            }
+            break;
         default:
             assert(false);
         }
+        tester.Check();
     }
     tester.Check();
 }

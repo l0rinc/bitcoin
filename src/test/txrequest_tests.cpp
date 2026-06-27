@@ -749,6 +749,55 @@ void TxRequestTest::TestInterleavedScenarios()
 
 BOOST_FIXTURE_TEST_SUITE(txrequest_tests, TxRequestTest)
 
+BOOST_AUTO_TEST_CASE(duplicate_inv_ignored)
+{
+    TxRequestTracker txrequest{true};
+    const NodeId peer1{0};
+    const NodeId peer2{1};
+    const uint256 txhash{uint256::ONE};
+    const GenTxid txid{Txid::FromUint256(txhash)};
+    const GenTxid wtxid{Wtxid::FromUint256(txhash)};
+    const auto now{std::chrono::microseconds{1'000'000}};
+    const auto reqtime{now + std::chrono::microseconds{42}};
+
+    txrequest.ReceivedInv(peer1, txid, /*preferred=*/false, reqtime);
+    txrequest.ReceivedInv(peer1, wtxid, /*preferred=*/true, MIN_TIME);
+    txrequest.SanityCheck();
+
+    std::vector<std::pair<NodeId, GenTxid>> expired;
+    BOOST_CHECK(txrequest.GetRequestable(peer1, now, &expired).empty());
+    BOOST_CHECK(expired.empty());
+    txrequest.PostGetRequestableSanityCheck(now);
+    txrequest.SanityCheck();
+
+    auto requestable{txrequest.GetRequestable(peer1, reqtime, &expired)};
+    BOOST_CHECK(expired.empty());
+    BOOST_REQUIRE_EQUAL(requestable.size(), 1U);
+    BOOST_CHECK(requestable.front() == txid);
+    txrequest.PostGetRequestableSanityCheck(reqtime);
+    txrequest.SanityCheck();
+
+    txrequest.ReceivedInv(peer1, wtxid, /*preferred=*/true, MIN_TIME);
+    txrequest.SanityCheck();
+    BOOST_CHECK_EQUAL(txrequest.Count(peer1), 1U);
+    BOOST_CHECK_EQUAL(txrequest.CountCandidates(peer1), 1U);
+
+    const auto expiry{reqtime + MICROSECOND};
+    txrequest.RequestedTx(peer1, txhash, expiry);
+    txrequest.ReceivedInv(peer2, wtxid, /*preferred=*/true, reqtime);
+    txrequest.ReceivedResponse(peer1, txhash);
+    txrequest.ReceivedInv(peer1, wtxid, /*preferred=*/true, MIN_TIME);
+    txrequest.SanityCheck();
+
+    BOOST_CHECK_EQUAL(txrequest.CountCandidates(peer1), 0U);
+    BOOST_CHECK(txrequest.GetRequestable(peer1, reqtime, &expired).empty());
+    BOOST_CHECK(expired.empty());
+    requestable = txrequest.GetRequestable(peer2, reqtime, &expired);
+    BOOST_CHECK(expired.empty());
+    BOOST_REQUIRE_EQUAL(requestable.size(), 1U);
+    BOOST_CHECK(requestable.front() == wtxid);
+}
+
 BOOST_AUTO_TEST_CASE(TxRequestTest)
 {
     for (int i = 0; i < 5; ++i) {
