@@ -122,6 +122,8 @@ private:
     std::vector<uint64_t> data;
     unsigned int nTweak;
     int nHashFuncs;
+
+    void SanityCheck() const;
 };
 
 #endif // BITCOIN_COMMON_BLOOM_H
