@@ -28,9 +28,10 @@ FUZZ_TARGET(fee_rate)
     (void)fee_rate.ToString();
 
     {
-        const CAmount precise_fee{ConsumeMoney(fuzzed_data_provider)};
+        const CAmount precise_fee{fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(-MAX_MONEY, MAX_MONEY)};
         const int32_t precise_vsize{fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, std::numeric_limits<int32_t>::max())};
         const CFeeRate precise_rate{precise_fee, precise_vsize};
+        Assert(precise_rate.GetFee(precise_vsize) == precise_fee);
 
         CFeeRate add_zero{precise_rate};
         add_zero += CFeeRate{0};
