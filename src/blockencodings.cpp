@@ -15,6 +15,7 @@
 #include <util/log.h>
 #include <validation.h>
 
+#include <algorithm>
 #include <unordered_map>
 
 CBlockHeaderAndShortTxIDs::CBlockHeaderAndShortTxIDs(const CBlock& block, uint64_t nonce)
@@ -175,6 +176,10 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
 
     LogDebug(BCLog::CMPCTBLOCK, "Initialized PartiallyDownloadedBlock for block %s using a cmpctblock of %u bytes\n", cmpctblock.header.GetHash().ToString(), GetSerializeSize(cmpctblock));
 
+    assert(static_cast<size_t>(std::count_if(txn_available.begin(), txn_available.end(),
+               [](const auto& tx) { return tx != nullptr; })) == prefilled_count + mempool_count);
+    assert(extra_count <= mempool_count);
+
     return READ_STATUS_OK;
 }
 
@@ -212,6 +217,9 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
     if (vtx_missing.size() != tx_missing_offset) {
         return READ_STATUS_INVALID;
     }
+
+    assert(std::all_of(block.vtx.begin(), block.vtx.end(),
+        [](const auto& tx) { return tx != nullptr; }));
 
     // Check for possible mutations early now that we have a seemingly good block
     IsBlockMutatedFn check_mutated{m_check_block_mutated_mock ? m_check_block_mutated_mock : IsBlockMutated};
