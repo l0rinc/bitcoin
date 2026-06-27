@@ -3966,6 +3966,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         // save whether peer selects us as BIP152 high-bandwidth peer
         // (receiving sendcmpct(1) signals high-bandwidth, sendcmpct(0) low-bandwidth)
         pfrom.m_bip152_highbandwidth_from = sendcmpct_hb;
+        assert(nodestate->m_requested_hb_cmpctblocks == pfrom.m_bip152_highbandwidth_from);
         return;
     }
 
