@@ -34,6 +34,7 @@
 #include <util/strencodings.h>
 #include <util/string.h>
 
+#include <bit>
 #include <cassert>
 #include <chrono>
 #include <limits>
@@ -215,6 +216,8 @@ FUZZ_TARGET(integer, .init = initialize_integer)
     {
         const ServiceFlags service_flags = (ServiceFlags)u64;
         (void)MayHaveUsefulAddressDB(service_flags);
+        const std::vector<std::string> service_flag_strings{serviceFlagsToStr(u64)};
+        assert(service_flag_strings.size() == static_cast<size_t>(std::popcount(u64)));
     }
 
     {
