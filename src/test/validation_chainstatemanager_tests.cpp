@@ -661,8 +661,8 @@ BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
     for (int i = 0; i < 2; ++i) {
         CreateAndProcessBlock({}, coinbase_script);
     }
-    const CBlockIndex* fork_block99;
-    const CBlockIndex* fork_block100;
+    CBlockIndex* fork_block99;
+    CBlockIndex* fork_block100;
     {
         LOCK(chainman.GetMutex());
         fork_block99 = chainman.ActiveChain()[99];
@@ -686,6 +686,29 @@ BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
         BOOST_CHECK(!(fork_block100->nStatus & BLOCK_FAILED_VALID));
         BOOST_CHECK(!(fork_block99->nStatus & BLOCK_FAILED_VALID));
     }
+
+    // Re-prioritizing the active precious tip must not make it collide with
+    // older precious sequence ids from same-work fork tips.
+    BOOST_REQUIRE(chainstate.PreciousBlock(state, block100));
+    BOOST_REQUIRE(WITH_LOCK(cs_main, return chainman.ActiveChain().Tip()) == block100);
+    BOOST_REQUIRE(chainstate.PreciousBlock(state, fork_block100));
+    BOOST_REQUIRE(WITH_LOCK(cs_main, return chainman.ActiveChain().Tip()) == fork_block100);
+    {
+        LOCK(chainman.GetMutex());
+        BOOST_REQUIRE_LT(fork_block100->nSequenceId, block100->nSequenceId);
+        // Simulate a previous preciousblock call made while only the lower-work
+        // parent was active, so the next preciousblock call resets the counter.
+        chainman.nLastPreciousChainwork = block98->nChainWork;
+    }
+    BOOST_REQUIRE(chainstate.PreciousBlock(state, fork_block100));
+    {
+        LOCK(chainman.GetMutex());
+        BOOST_CHECK_EQUAL(chainman.ActiveChain().Tip(), fork_block100);
+        BOOST_CHECK_LT(fork_block100->nSequenceId, block100->nSequenceId);
+        BOOST_CHECK(chainstate.setBlockIndexCandidates.value_comp()(block100, fork_block100));
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(fork_block100), 1U);
+    }
+    chainman.CheckBlockIndex();
 
     // Invalidate block98
     BOOST_REQUIRE(chainstate.InvalidateBlock(state, block98));
