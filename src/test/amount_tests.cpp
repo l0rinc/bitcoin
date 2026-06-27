@@ -78,6 +78,8 @@ BOOST_AUTO_TEST_CASE(GetFeeTest)
     BOOST_CHECK(CFeeRate(CAmount(-1), 1000) == CFeeRate(-1));
     BOOST_CHECK(CFeeRate(CAmount(0), 1000) == CFeeRate(0));
     BOOST_CHECK(CFeeRate(CAmount(1), 1000) == CFeeRate(1));
+    BOOST_CHECK_EQUAL(CFeeRate(CAmount(1), 1001).GetFee(1001), CAmount(1));
+    BOOST_CHECK_EQUAL(CFeeRate(CAmount(-2), 1001).GetFee(1001), CAmount(-2));
     // Previously, precision was limited to three decimal digits
     // due to only supporting satoshis per kB, so CFeeRate(CAmount(1), 1001) was equal to CFeeRate(0)
     // Since #32750, higher precision is maintained.
@@ -88,6 +90,7 @@ BOOST_AUTO_TEST_CASE(GetFeeTest)
     BOOST_CHECK(CFeeRate(CAmount(27), 789) > CFeeRate(34) && CFeeRate(CAmount(27), 789) < CFeeRate(35));
     // Maximum size in bytes, should not crash
     CFeeRate(MAX_MONEY, std::numeric_limits<int32_t>::max()).GetFeePerK();
+    BOOST_CHECK_EQUAL(CFeeRate(MAX_MONEY, std::numeric_limits<int32_t>::max()).GetFee(std::numeric_limits<int32_t>::max()), MAX_MONEY);
 
     // check multiplication operator
     // check multiplying by zero
