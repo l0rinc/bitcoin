@@ -119,6 +119,9 @@ std::optional<std::string> CheckPackageMempoolAcceptResult(const Package& txns,
             return strprintf("tx %s result should %shave m_effective_feerate",
                                     wtxid.ToString(), valid ? "" : "not ");
         }
+        if (atmp_result.m_wtxids_fee_calculations && atmp_result.m_wtxids_fee_calculations->empty()) {
+            return strprintf("tx %s result should not have empty m_wtxids_fee_calculations", wtxid.ToString());
+        }
 
         if (mempool) {
             // The tx by txid should be in the mempool iff the result was not INVALID.
