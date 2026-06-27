@@ -16,6 +16,8 @@
 
 #include <cassert>
 #include <string>
+#include <utility>
+#include <vector>
 
 void initialize_block()
 {
@@ -31,21 +33,56 @@ FUZZ_TARGET(block, .init = initialize_block)
         return;
     }
     const Consensus::Params& consensus_params = Params().GetConsensus();
-    BlockValidationState validation_state_pow_and_merkle;
-    const bool valid_incl_pow_and_merkle = CheckBlock(block, validation_state_pow_and_merkle, consensus_params, /* fCheckPOW= */ true, /* fCheckMerkleRoot= */ true);
-    assert(validation_state_pow_and_merkle.IsValid() || validation_state_pow_and_merkle.IsInvalid() || validation_state_pow_and_merkle.IsError());
-    (void)validation_state_pow_and_merkle.Error("");
-    BlockValidationState validation_state_pow;
-    const bool valid_incl_pow = CheckBlock(block, validation_state_pow, consensus_params, /* fCheckPOW= */ true, /* fCheckMerkleRoot= */ false);
-    assert(validation_state_pow.IsValid() || validation_state_pow.IsInvalid() || validation_state_pow.IsError());
-    BlockValidationState validation_state_merkle;
-    const bool valid_incl_merkle = CheckBlock(block, validation_state_merkle, consensus_params, /* fCheckPOW= */ false, /* fCheckMerkleRoot= */ true);
-    assert(validation_state_merkle.IsValid() || validation_state_merkle.IsInvalid() || validation_state_merkle.IsError());
-    BlockValidationState validation_state_none;
-    const bool valid_incl_none = CheckBlock(block, validation_state_none, consensus_params, /* fCheckPOW= */ false, /* fCheckMerkleRoot= */ false);
-    assert(validation_state_none.IsValid() || validation_state_none.IsInvalid() || validation_state_none.IsError());
+    const uint256 block_hash{block.GetHash()};
+    const uint256 merkle_root{block.hashMerkleRoot};
+    std::vector<Txid> txids;
+    txids.reserve(block.vtx.size());
+    for (const auto& tx : block.vtx) {
+        txids.push_back(tx->GetHash());
+    }
+
+    bool merkle_mutated{false};
+    const bool valid_merkle_root{
+        BlockMerkleRoot(block, &merkle_mutated) == block.hashMerkleRoot && !merkle_mutated};
+
+    auto assert_block_unchanged = [&](const CBlock& checked_block) {
+        assert(checked_block.GetHash() == block_hash);
+        assert(checked_block.hashMerkleRoot == merkle_root);
+        assert(checked_block.vtx.size() == txids.size());
+        for (size_t i{0}; i < checked_block.vtx.size(); ++i) {
+            assert(checked_block.vtx[i]->GetHash() == txids[i]);
+        }
+    };
+    auto check_block = [&](const bool check_pow, const bool check_merkle_root) {
+        CBlock checked_block{block};
+        BlockValidationState validation_state;
+        const bool valid{
+            CheckBlock(checked_block, validation_state, consensus_params, check_pow, check_merkle_root)};
+        assert(validation_state.IsValid() || validation_state.IsInvalid() || validation_state.IsError());
+        assert_block_unchanged(checked_block);
+        if (check_pow && check_merkle_root) {
+            assert(checked_block.fChecked == valid);
+        } else {
+            assert(!checked_block.fChecked);
+        }
+        if (!check_pow && check_merkle_root) {
+            assert(checked_block.m_checked_merkle_root == valid_merkle_root);
+        }
+        return std::pair{valid, checked_block};
+    };
+
+    auto pow_and_merkle_check{check_block(/*check_pow=*/true, /*check_merkle_root=*/true)};
+    const bool valid_incl_pow_and_merkle{pow_and_merkle_check.first};
+    const bool valid_incl_pow{check_block(/*check_pow=*/true, /*check_merkle_root=*/false).first};
+    const bool valid_incl_merkle{check_block(/*check_pow=*/false, /*check_merkle_root=*/true).first};
+    const bool valid_incl_none{check_block(/*check_pow=*/false, /*check_merkle_root=*/false).first};
     if (valid_incl_pow_and_merkle) {
         assert(valid_incl_pow && valid_incl_merkle && valid_incl_none);
+        BlockValidationState cached_validation_state;
+        assert(CheckBlock(pow_and_merkle_check.second, cached_validation_state, consensus_params,
+            /* fCheckPOW= */ false, /* fCheckMerkleRoot= */ false));
+        assert(cached_validation_state.IsValid());
+        assert_block_unchanged(pow_and_merkle_check.second);
     } else if (valid_incl_merkle || valid_incl_pow) {
         assert(valid_incl_none);
     }
