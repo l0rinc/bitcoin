@@ -14,6 +14,7 @@
 #include <netbase.h>
 #include <netmessagemaker.h>
 #include <node/protocol_version.h>
+#include <protocol.h>
 #include <serialize.h>
 #include <span.h>
 #include <streams.h>
@@ -29,6 +30,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <ios>
 #include <memory>
@@ -51,6 +53,51 @@ BOOST_AUTO_TEST_CASE(cnode_listen_port)
     BOOST_CHECK(gArgs.SoftSetArg("-port", ToString(altPort)));
     port = GetListenPort();
     BOOST_CHECK(port == altPort);
+}
+
+BOOST_AUTO_TEST_CASE(cinv_type_contracts)
+{
+    const uint256 hash{uint256::ONE};
+
+    struct InvCase {
+        uint32_t type;
+        std::string message_type;
+        bool gen_tx;
+        bool gen_block;
+        bool wtxid;
+    };
+
+    const std::array cases{
+        InvCase{MSG_TX, NetMsgType::TX, true, false, false},
+        InvCase{MSG_WTX, "wtx", true, false, true},
+        InvCase{MSG_WITNESS_TX, "witness-tx", true, false, false},
+        InvCase{MSG_BLOCK, NetMsgType::BLOCK, false, true, false},
+        InvCase{MSG_FILTERED_BLOCK, NetMsgType::MERKLEBLOCK, false, true, false},
+        InvCase{MSG_CMPCT_BLOCK, NetMsgType::CMPCTBLOCK, false, true, false},
+        InvCase{MSG_WITNESS_BLOCK, "witness-block", false, true, false},
+    };
+
+    for (const auto& test : cases) {
+        const CInv inv{test.type, hash};
+        BOOST_CHECK_EQUAL(inv.GetMessageType(), test.message_type);
+        BOOST_CHECK_EQUAL(inv.ToString(), test.message_type + " " + hash.ToString());
+        BOOST_CHECK_EQUAL(inv.IsGenTxMsg(), test.gen_tx);
+        BOOST_CHECK_EQUAL(inv.IsGenBlkMsg(), test.gen_block);
+
+        if (test.gen_tx) {
+            const GenTxid gtxid{ToGenTxid(inv)};
+            BOOST_CHECK_EQUAL(gtxid.ToUint256().ToString(), hash.ToString());
+            BOOST_CHECK_EQUAL(gtxid.IsWtxid(), test.wtxid);
+        }
+    }
+
+    const CInv undefined_inv{UNDEFINED, hash};
+    BOOST_CHECK_THROW(undefined_inv.GetMessageType(), std::out_of_range);
+    BOOST_CHECK_EQUAL(undefined_inv.ToString(), "0x00000000 " + hash.ToString());
+
+    const CInv undefined_witness_inv{MSG_WITNESS_FLAG, hash};
+    BOOST_CHECK_THROW(undefined_witness_inv.GetMessageType(), std::out_of_range);
+    BOOST_CHECK_EQUAL(undefined_witness_inv.ToString(), "0x40000000 " + hash.ToString());
 }
 
 BOOST_AUTO_TEST_CASE(cnode_simple_test)
