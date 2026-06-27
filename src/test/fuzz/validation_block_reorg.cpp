@@ -432,9 +432,23 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
                 auto indexes{KnownBlockIndexes(chainman)};
                 if (indexes.empty()) return;
                 CBlockIndex* index{PickValue(fuzzed_data_provider, indexes)};
+                const CBlockIndex* old_tip;
+                bool lower_work;
+                int32_t old_sequence_id;
+                {
+                    LOCK(chainman.GetMutex());
+                    old_tip = chainman.ActiveChain().Tip();
+                    lower_work = index->nChainWork < old_tip->nChainWork;
+                    old_sequence_id = index->nSequenceId;
+                }
                 BlockValidationState state;
                 assert(chainman.ActiveChainstate().PreciousBlock(state, index));
                 node.validation_signals->SyncWithValidationInterfaceQueue();
+                if (lower_work) {
+                    LOCK(chainman.GetMutex());
+                    assert(chainman.ActiveChain().Tip() == old_tip);
+                    assert(index->nSequenceId == old_sequence_id);
+                }
             });
 
         node.validation_signals->SyncWithValidationInterfaceQueue();
