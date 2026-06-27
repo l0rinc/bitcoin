@@ -39,6 +39,66 @@ struct DagBlock {
 
 std::vector<DagBlock> g_blocks;
 
+struct ChainEvent {
+    bool connected;
+    uint256 hash;
+    uint256 prev_hash;
+    int height;
+};
+
+struct ValidationEventRecorder final : public CValidationInterface {
+    std::vector<ChainEvent> m_events;
+
+    ~ValidationEventRecorder() = default;
+
+    void BlockConnected(const kernel::ChainstateRole& role, const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
+    {
+        assert(block);
+        assert(pindex);
+        assert(block->GetHash() == pindex->GetBlockHash());
+        assert(WITH_LOCK(::cs_main, return !(pindex->nStatus & BLOCK_FAILED_VALID)));
+        m_events.push_back({
+            /*connected=*/true,
+            pindex->GetBlockHash(),
+            pindex->pprev ? pindex->pprev->GetBlockHash() : uint256{},
+            pindex->nHeight,
+        });
+    }
+
+    void BlockDisconnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
+    {
+        assert(block);
+        assert(pindex);
+        assert(pindex->nHeight > 0);
+        assert(pindex->pprev);
+        assert(block->GetHash() == pindex->GetBlockHash());
+        m_events.push_back({
+            /*connected=*/false,
+            pindex->GetBlockHash(),
+            pindex->pprev->GetBlockHash(),
+            pindex->nHeight,
+        });
+    }
+
+    void AssertAndClear()
+    {
+        for (size_t i{1}; i < m_events.size(); ++i) {
+            const ChainEvent& previous{m_events.at(i - 1)};
+            const ChainEvent& current{m_events.at(i)};
+            if (previous.connected && current.connected) {
+                assert(current.height == previous.height + 1);
+                assert(current.prev_hash == previous.hash);
+            } else if (!previous.connected && !current.connected) {
+                assert(current.height == previous.height - 1);
+                assert(previous.prev_hash == current.hash);
+            } else if (!previous.connected && current.connected) {
+                assert(current.height <= previous.height);
+            }
+        }
+        m_events.clear();
+    }
+};
+
 std::shared_ptr<const CBlock> MakeDagBlock(
     const CChainParams& params,
     const uint256& prev_hash,
@@ -257,8 +317,12 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
     auto& chainman{static_cast<TestChainstateManager&>(*node.chainman)};
     chainman.ResetIbd();
     chainman.DisableNextWrite();
+    auto event_recorder{std::make_shared<ValidationEventRecorder>()};
+    node.validation_signals->RegisterSharedValidationInterface(event_recorder);
 
     SeedTopology(fuzzed_data_provider, chainman);
+    node.validation_signals->SyncWithValidationInterfaceQueue();
+    event_recorder->AssertAndClear();
     AssertActiveChain(chainman);
     chainman.CheckBlockIndex();
 
@@ -328,7 +392,12 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
                 node.validation_signals->SyncWithValidationInterfaceQueue();
             });
 
+        node.validation_signals->SyncWithValidationInterfaceQueue();
+        event_recorder->AssertAndClear();
         AssertActiveChain(chainman);
         chainman.CheckBlockIndex();
     }
+
+    node.validation_signals->UnregisterSharedValidationInterface(event_recorder);
+    node.validation_signals->SyncWithValidationInterfaceQueue();
 }
