@@ -17,6 +17,8 @@
 #include <validation.h>
 
 #include <ranges>
+#include <set>
+#include <utility>
 #include <vector>
 
 const TestingSetup* g_setup;
@@ -53,6 +55,35 @@ void AssertActiveChain(const CChain& chain)
     }
 }
 
+void AssertBlockIndexTreeState(const TestBlockManager& blockman, const CChain& chain, const std::vector<CBlockIndex*>& pruned_blocks)
+    EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+{
+    AssertLockHeld(cs_main);
+
+    std::set<std::pair<const CBlockIndex*, const CBlockIndex*>> unlinked_blocks;
+    for (const auto& [parent, block] : blockman.m_blocks_unlinked) {
+        assert(parent);
+        assert(block);
+        assert(block->pprev == parent);
+        assert(block->nHeight > 0);
+        assert(block->nStatus & BLOCK_HAVE_DATA);
+        assert(unlinked_blocks.emplace(parent, block).second);
+    }
+
+    std::set<const CBlockIndex*> pruned;
+    for (const CBlockIndex* block : pruned_blocks) {
+        assert(block);
+        assert(pruned.emplace(block).second);
+        assert(!(block->nStatus & BLOCK_HAVE_DATA));
+        assert(!(block->nStatus & BLOCK_HAVE_UNDO));
+        assert(block->nFile == 0);
+        assert(block->nDataPos == 0);
+        assert(block->nUndoPos == 0);
+    }
+
+    AssertActiveChain(chain);
+}
+
 void initialize_block_index_tree()
 {
     static const auto testing_setup = MakeNoLogFileContext<const TestingSetup>();
@@ -87,7 +118,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
             LOCK(cs_main);
             assert(genesis->nStatus == genesis_status);
             assert(chainman.ActiveChain().Tip() == tip);
-            AssertActiveChain(chainman.ActiveChain());
+            AssertBlockIndexTreeState(blockman, chainman.ActiveChain(), pruned_blocks);
         }
     }
 
@@ -264,6 +295,14 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                 assert(index->nStatus & BLOCK_HAVE_DATA);
                 pruned_blocks.erase(pruned_blocks.begin() + i);
             });
+        {
+            LOCK(cs_main);
+            AssertBlockIndexTreeState(blockman, chainman.ActiveChain(), pruned_blocks);
+        }
+    }
+    {
+        LOCK(cs_main);
+        AssertBlockIndexTreeState(blockman, chainman.ActiveChain(), pruned_blocks);
     }
     if (!abort_run) {
         chainman.CheckBlockIndex();
