@@ -16,11 +16,17 @@ std::string CBlockIndex::ToString() const
 void CChain::SetTip(CBlockIndex& block)
 {
     CBlockIndex* pindex = &block;
+    assert(pindex->nHeight >= 0);
     vChain.resize(pindex->nHeight + 1);
     while (pindex && vChain[pindex->nHeight] != pindex) {
         vChain[pindex->nHeight] = pindex;
+        assert((pindex->nHeight == 0 && pindex->pprev == nullptr) ||
+               (pindex->nHeight > 0 && pindex->pprev && pindex->pprev->nHeight == pindex->nHeight - 1));
         pindex = pindex->pprev;
     }
+    assert(Tip() == &block);
+    assert(Height() == block.nHeight);
+    assert(block.nHeight == 0 || block.pprev == (*this)[block.nHeight - 1]);
 }
 
 std::vector<uint256> LocatorEntries(const CBlockIndex* index)
