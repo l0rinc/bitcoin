@@ -180,6 +180,36 @@ BOOST_AUTO_TEST_CASE(sneaky_redownload)
         /*exp_locator_hash=*/std::nullopt);
 }
 
+BOOST_AUTO_TEST_CASE(locator_retains_chain_start)
+{
+    const auto& first_chain{FirstChain()};
+    const uint256 genesis_hash{genesis.GetHash()};
+
+    HeadersSyncState hss{CreateState()};
+    CBlockLocator locator{hss.NextHeadersRequestLocator()};
+    BOOST_REQUIRE_EQUAL(locator.vHave.size(), 2);
+    BOOST_CHECK_EQUAL(locator.vHave.front(), genesis_hash);
+    BOOST_CHECK_EQUAL(locator.vHave.back(), genesis_hash);
+
+    auto result{hss.ProcessNextHeaders({{first_chain.front()}}, /*full_headers_message=*/true)};
+    BOOST_REQUIRE(result.success);
+    BOOST_REQUIRE(result.request_more);
+    BOOST_REQUIRE_EQUAL(hss.GetState(), State::PRESYNC);
+    locator = hss.NextHeadersRequestLocator();
+    BOOST_REQUIRE(locator.vHave.size() >= 2);
+    BOOST_CHECK_EQUAL(locator.vHave.front(), first_chain.front().GetHash());
+    BOOST_CHECK_EQUAL(locator.vHave.back(), genesis_hash);
+
+    result = hss.ProcessNextHeaders(std::span{first_chain}.subspan(1), /*full_headers_message=*/true);
+    BOOST_REQUIRE(result.success);
+    BOOST_REQUIRE(result.request_more);
+    BOOST_REQUIRE_EQUAL(hss.GetState(), State::REDOWNLOAD);
+    locator = hss.NextHeadersRequestLocator();
+    BOOST_REQUIRE(locator.vHave.size() >= 2);
+    BOOST_CHECK_EQUAL(locator.vHave.front(), genesis_hash);
+    BOOST_CHECK_EQUAL(locator.vHave.back(), genesis_hash);
+}
+
 BOOST_AUTO_TEST_CASE(happy_path)
 {
     const auto& first_chain{FirstChain()};
