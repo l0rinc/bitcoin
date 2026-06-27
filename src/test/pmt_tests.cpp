@@ -125,4 +125,32 @@ BOOST_AUTO_TEST_CASE(pmt_malleability)
     BOOST_CHECK(tree.ExtractMatches(vTxid, vIndex).IsNull());
 }
 
+BOOST_AUTO_TEST_CASE(pmt_extract_matches_clears_outputs)
+{
+    std::vector<Txid> txids{
+        Txid::FromUint256(uint256{1}),
+        Txid::FromUint256(uint256{2}),
+        Txid::FromUint256(uint256{3}),
+    };
+    std::vector<bool> matches_mask{true, false, true};
+    CPartialMerkleTree tree{txids, matches_mask};
+
+    std::vector<Txid> matches{Txid::FromUint256(uint256{99})};
+    std::vector<unsigned int> indices{999};
+    BOOST_CHECK(!tree.ExtractMatches(matches, indices).IsNull());
+    BOOST_REQUIRE_EQUAL(matches.size(), 2U);
+    BOOST_REQUIRE_EQUAL(indices.size(), 2U);
+    BOOST_CHECK(matches[0] == txids[0]);
+    BOOST_CHECK_EQUAL(indices[0], 0U);
+    BOOST_CHECK(matches[1] == txids[2]);
+    BOOST_CHECK_EQUAL(indices[1], 2U);
+
+    CPartialMerkleTree empty_tree;
+    matches = {Txid::FromUint256(uint256{99})};
+    indices = {999};
+    BOOST_CHECK(empty_tree.ExtractMatches(matches, indices).IsNull());
+    BOOST_CHECK(matches.empty());
+    BOOST_CHECK(indices.empty());
+}
+
 BOOST_AUTO_TEST_SUITE_END()
