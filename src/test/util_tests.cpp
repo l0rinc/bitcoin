@@ -1446,6 +1446,18 @@ BOOST_AUTO_TEST_CASE(test_SplitString)
         BOOST_TEST(SplitString("x\0a,b"s, "\0,"s) == V({"x", "a", "b"}));
         BOOST_TEST(SplitString("abcdefg", "bcd") == V({"a", "", "", "efg"}));
     }
+
+    // Splitting on one separator and joining with the same separator must
+    // reconstruct the original string, including empty fields and embedded NULs.
+    {
+        using V = std::vector<std::string>;
+        BOOST_CHECK_EQUAL(Join(SplitString("-a--b-", '-'), "-"), "-a--b-");
+        BOOST_CHECK_EQUAL(Join(SplitString("x\0a\0"s, '\0'), "\0"s), "x\0a\0"s);
+
+        const V included_sep{Split<std::string>("-a--b-"sv, '-', /*include_sep=*/true)};
+        BOOST_TEST(included_sep == V({"-", "a-", "-", "b-", ""}));
+        BOOST_CHECK_EQUAL(Join(included_sep, ""), "-a--b-");
+    }
 }
 
 BOOST_AUTO_TEST_CASE(test_LogEscapeMessage)
