@@ -195,6 +195,80 @@ BOOST_AUTO_TEST_CASE(netbase_get_in_addr)
         cjdns_bytes.end());
 }
 
+BOOST_AUTO_TEST_CASE(netbase_set_sock_addr)
+{
+    const auto check_rejected_lengths{[](CService service, const struct sockaddr_storage& storage, socklen_t exact_len) {
+        const CService before{service};
+        BOOST_CHECK(!service.SetSockAddr(reinterpret_cast<const struct sockaddr*>(&storage), exact_len - 1));
+        BOOST_CHECK(service == before);
+        BOOST_CHECK(!service.SetSockAddr(reinterpret_cast<const struct sockaddr*>(&storage), sizeof(storage)));
+        BOOST_CHECK(service == before);
+    }};
+
+    const CNetAddr ipv4_addr{ResolveIP("1.2.3.4")};
+    const CService ipv4_service{ipv4_addr, 0x1234};
+    struct sockaddr_storage storage{};
+    auto* ipv4_sock{reinterpret_cast<struct sockaddr_in*>(&storage)};
+    ipv4_sock->sin_family = AF_INET;
+    ipv4_sock->sin_port = htons(ipv4_service.GetPort());
+    BOOST_REQUIRE(ipv4_addr.GetInAddr(&ipv4_sock->sin_addr));
+
+    CService parsed;
+    BOOST_REQUIRE(parsed.SetSockAddr(reinterpret_cast<const struct sockaddr*>(&storage), sizeof(struct sockaddr_in)));
+    BOOST_CHECK(parsed == ipv4_service);
+    check_rejected_lengths(parsed, storage, sizeof(struct sockaddr_in));
+
+    const CNetAddr ipv6_addr{ResolveIP("1:2:3:4:5:6:7:8")};
+    const CService ipv6_service{ipv6_addr, 0x5678};
+    storage = {};
+    auto* ipv6_sock{reinterpret_cast<struct sockaddr_in6*>(&storage)};
+    ipv6_sock->sin6_family = AF_INET6;
+    ipv6_sock->sin6_port = htons(ipv6_service.GetPort());
+    BOOST_REQUIRE(ipv6_addr.GetIn6Addr(&ipv6_sock->sin6_addr));
+
+    parsed = CService{};
+    BOOST_REQUIRE(parsed.SetSockAddr(reinterpret_cast<const struct sockaddr*>(&storage), sizeof(struct sockaddr_in6)));
+    BOOST_CHECK(parsed == ipv6_service);
+    check_rejected_lengths(parsed, storage, sizeof(struct sockaddr_in6));
+
+    const std::vector<unsigned char> cjdns_bytes{
+        CJDNS_PREFIX, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    DataStream stream;
+    stream << static_cast<uint8_t>(CNetAddr::BIP155Network::CJDNS);
+    stream << cjdns_bytes;
+    CNetAddr cjdns;
+    stream >> CAddress::V2_NETWORK(cjdns);
+    const CService cjdns_service{cjdns, 0xbeef};
+
+    storage = {};
+    auto* cjdns_sock{reinterpret_cast<struct sockaddr_in6*>(&storage)};
+    cjdns_sock->sin6_family = AF_INET6;
+    cjdns_sock->sin6_port = htons(cjdns_service.GetPort());
+    BOOST_REQUIRE(cjdns.GetIn6Addr(&cjdns_sock->sin6_addr));
+
+    parsed = CService{};
+    BOOST_REQUIRE(parsed.SetSockAddr(reinterpret_cast<const struct sockaddr*>(&storage), sizeof(struct sockaddr_in6)));
+    BOOST_CHECK(parsed.IsIPv6());
+    BOOST_CHECK(parsed.HasCJDNSPrefix());
+    BOOST_CHECK_EQUAL(parsed.GetPort(), cjdns_service.GetPort());
+    struct in6_addr parsed_cjdns_in6;
+    BOOST_REQUIRE(parsed.GetIn6Addr(&parsed_cjdns_in6));
+    const auto* parsed_cjdns_begin{reinterpret_cast<const uint8_t*>(&parsed_cjdns_in6)};
+    BOOST_CHECK_EQUAL_COLLECTIONS(
+        parsed_cjdns_begin,
+        parsed_cjdns_begin + sizeof(parsed_cjdns_in6),
+        cjdns_bytes.begin(),
+        cjdns_bytes.end());
+    check_rejected_lengths(cjdns_service, storage, sizeof(struct sockaddr_in6));
+
+    struct sockaddr unsupported{};
+    unsupported.sa_family = AF_UNSPEC;
+    parsed = ipv4_service;
+    BOOST_CHECK(!parsed.SetSockAddr(&unsupported, sizeof(unsupported)));
+    BOOST_CHECK(parsed == ipv4_service);
+}
+
 BOOST_AUTO_TEST_CASE(subnet_test)
 {
     BOOST_CHECK(LookupSubNet("1.2.3.0/24") == LookupSubNet("1.2.3.0/255.255.255.0"));
