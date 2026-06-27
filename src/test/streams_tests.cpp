@@ -9,10 +9,14 @@
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <util/fs.h>
+#include <util/golombrice.h>
 #include <util/obfuscation.h>
 #include <util/strencodings.h>
 
 #include <boost/test/unit_test.hpp>
+
+#include <limits>
+#include <stdexcept>
 
 using namespace std::string_literals;
 using namespace util::hex_literals;
@@ -337,6 +341,57 @@ BOOST_AUTO_TEST_CASE(bitstream_reader_writer)
     BOOST_CHECK_EQUAL(bit_reader.Read(7), 7U);
     BOOST_CHECK_EQUAL(bit_reader.Read(16), 30497U);
     BOOST_CHECK_THROW(bit_reader.Read(8), std::ios_base::failure);
+}
+
+BOOST_AUTO_TEST_CASE(golomb_rice_roundtrip_valid_p_values)
+{
+    const auto check_roundtrip = [](const uint8_t p, const std::vector<uint64_t>& values) {
+        std::vector<uint8_t> encoded;
+        {
+            VectorWriter stream{encoded, 0};
+            BitStreamWriter bit_writer{stream};
+            for (const uint64_t value : values) {
+                GolombRiceEncode(bit_writer, p, value);
+            }
+            bit_writer.Flush();
+        }
+
+        SpanReader stream{encoded};
+        BitStreamReader bit_reader{stream};
+        for (const uint64_t value : values) {
+            BOOST_CHECK_EQUAL(GolombRiceDecode(bit_reader, p), value);
+        }
+        BOOST_CHECK(stream.empty());
+    };
+
+    check_roundtrip(0, {0, 1, 2, 63, 64});
+    check_roundtrip(1, {0, 1, 2, 3, 127});
+    check_roundtrip(19, {0, 1, (uint64_t{1} << 19) - 1, uint64_t{1} << 19, (uint64_t{1} << 20) + 123});
+    check_roundtrip(63, {0, 1, (uint64_t{1} << 63) - 1, uint64_t{1} << 63, std::numeric_limits<uint64_t>::max()});
+    check_roundtrip(64, {0, 1, 2});
+}
+
+BOOST_AUTO_TEST_CASE(golomb_rice_decode_uint64_overflow)
+{
+    std::vector<uint8_t> encoded;
+    {
+        VectorWriter stream{encoded, 0};
+        BitStreamWriter bit_writer{stream};
+        bit_writer.Write(1, 1);  // q = 1
+        bit_writer.Write(0, 1);
+        bit_writer.Write(0, 64);
+        bit_writer.Flush();
+    }
+
+    SpanReader stream{encoded};
+    BitStreamReader bit_reader{stream};
+    BOOST_CHECK_THROW(GolombRiceDecode(bit_reader, 64), std::ios_base::failure);
+
+    std::vector<uint8_t> out_of_range_encoded;
+    VectorWriter out_of_range_stream{out_of_range_encoded, 0};
+    BitStreamWriter bit_writer{out_of_range_stream};
+    BOOST_CHECK_THROW(GolombRiceEncode(bit_writer, 65, 0), std::out_of_range);
+    BOOST_CHECK_THROW(GolombRiceDecode(bit_reader, 65), std::out_of_range);
 }
 
 BOOST_AUTO_TEST_CASE(streams_serializedata_xor)
