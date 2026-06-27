@@ -168,6 +168,107 @@ void MinerTestingSetup::BuildChain(const uint256& root, int height, const unsign
     }
 }
 
+BOOST_AUTO_TEST_CASE(processnewblock_new_block_flag)
+{
+    auto process_block = [&](const std::shared_ptr<const CBlock>& block, bool& new_block) {
+        new_block = true;
+        const bool processed{Assert(m_node.chainman)->ProcessNewBlock(
+            block,
+            /*force_processing=*/true,
+            /*min_pow_checked=*/true,
+            &new_block)};
+        m_node.validation_signals->SyncWithValidationInterfaceQueue();
+        return processed;
+    };
+
+    bool new_block{true};
+    BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlock(
+        std::make_shared<CBlock>(Params().GenesisBlock()),
+        /*force_processing=*/true,
+        /*min_pow_checked=*/true,
+        &new_block));
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    BOOST_CHECK(!new_block);
+
+    const auto good_block{GoodBlock(Params().GenesisBlock().GetHash())};
+    BOOST_REQUIRE(process_block(good_block, new_block));
+    BOOST_CHECK(new_block);
+
+    BOOST_REQUIRE(process_block(good_block, new_block));
+    BOOST_CHECK(!new_block);
+    BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlock(
+        good_block,
+        /*force_processing=*/true,
+        /*min_pow_checked=*/true,
+        /*new_block=*/nullptr));
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+
+    const auto bad_block{BadBlock(good_block->GetHash())};
+    BOOST_REQUIRE(process_block(bad_block, new_block));
+    BOOST_CHECK(new_block);
+    BOOST_CHECK(!process_block(bad_block, new_block));
+    BOOST_CHECK(!new_block);
+
+    auto malformed_block{Block(good_block->GetHash())};
+    malformed_block->vtx.clear();
+    malformed_block->hashMerkleRoot = BlockMerkleRoot(*malformed_block);
+    while (!CheckProofOfWork(malformed_block->GetHash(), malformed_block->nBits, Params().GetConsensus())) {
+        ++malformed_block->nNonce;
+    }
+    BOOST_CHECK(!process_block(malformed_block, new_block));
+    BOOST_CHECK(!new_block);
+}
+
+BOOST_AUTO_TEST_CASE(processnewblock_genesis_replay_activates_best_chain)
+{
+    auto process_block = [&](const std::shared_ptr<const CBlock>& block, bool& new_block) {
+        new_block = true;
+        const bool processed{Assert(m_node.chainman)->ProcessNewBlock(
+            block,
+            /*force_processing=*/true,
+            /*min_pow_checked=*/true,
+            &new_block)};
+        m_node.validation_signals->SyncWithValidationInterfaceQueue();
+        return processed;
+    };
+
+    bool new_block{true};
+    const auto block1{GoodBlock(Params().GenesisBlock().GetHash())};
+    BOOST_REQUIRE(process_block(block1, new_block));
+    BOOST_CHECK(new_block);
+
+    const auto block2{GoodBlock(block1->GetHash())};
+    BOOST_REQUIRE(process_block(block2, new_block));
+    BOOST_CHECK(new_block);
+
+    CBlockIndex* block1_index{WITH_LOCK(::cs_main, return m_node.chainman->m_blockman.LookupBlockIndex(block1->GetHash()))};
+    CBlockIndex* block2_index{WITH_LOCK(::cs_main, return m_node.chainman->m_blockman.LookupBlockIndex(block2->GetHash()))};
+    BOOST_REQUIRE(block1_index);
+    BOOST_REQUIRE(block2_index);
+    BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Tip()), block2_index);
+
+    BlockValidationState state;
+    BOOST_REQUIRE(Assert(m_node.chainman)->ActiveChainstate().InvalidateBlock(state, block2_index));
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Tip()), block1_index);
+
+    {
+        LOCK(::cs_main);
+        Assert(m_node.chainman)->ActiveChainstate().ResetBlockFailureFlags(block2_index);
+        Assert(m_node.chainman)->RecalculateBestHeader();
+    }
+
+    new_block = true;
+    BOOST_REQUIRE(Assert(m_node.chainman)->ProcessNewBlock(
+        std::make_shared<CBlock>(Params().GenesisBlock()),
+        /*force_processing=*/true,
+        /*min_pow_checked=*/true,
+        &new_block));
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    BOOST_CHECK(!new_block);
+    BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Tip()), block2_index);
+}
+
 BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering)
 {
     // build a large-ish chain that's likely to have some forks

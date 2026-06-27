@@ -216,6 +216,13 @@ bool IsFailedBlock(ChainstateManager& chainman, const CBlockIndex& index)
     return index.nStatus & BLOCK_FAILED_VALID;
 }
 
+bool HasBlockData(ChainstateManager& chainman, const uint256& hash)
+{
+    LOCK(chainman.GetMutex());
+    const CBlockIndex* index{chainman.m_blockman.LookupBlockIndex(hash)};
+    return index && ((index->nStatus & BLOCK_HAVE_DATA) != 0);
+}
+
 std::vector<CBlockIndex*> KnownBlockIndexes(ChainstateManager& chainman)
 {
     std::vector<CBlockIndex*> indexes;
@@ -294,10 +301,17 @@ void SeedTopology(FuzzedDataProvider& fuzzed_data_provider, ChainstateManager& c
 
 void ProcessGenesis(ChainstateManager& chainman)
 {
+    const uint256 genesis_hash{Params().GenesisBlock().GetHash()};
+    assert(HasBlockData(chainman, genesis_hash));
     bool new_block{true};
-    const bool accepted{chainman.ProcessNewBlock(std::make_shared<const CBlock>(Params().GenesisBlock()), /*force_processing=*/true, /*min_pow_checked=*/true, &new_block)};
+    const bool accepted{chainman.ProcessNewBlock(
+        std::make_shared<const CBlock>(Params().GenesisBlock()),
+        /*force_processing=*/true,
+        /*min_pow_checked=*/true,
+        &new_block)};
     assert(accepted);
     assert(!new_block);
+    assert(HasBlockData(chainman, genesis_hash));
 }
 } // namespace
 
@@ -341,13 +355,25 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
             },
             [&] {
                 const DagBlock& dag_block{PickValue(fuzzed_data_provider, g_blocks)};
-                bool new_block{false};
-                (void)chainman.ProcessNewBlock(
+                const bool had_data{HasBlockData(chainman, dag_block.block->GetHash())};
+                bool new_block{true};
+                const bool pass_new_block_out{fuzzed_data_provider.ConsumeBool()};
+                const bool accepted{chainman.ProcessNewBlock(
                     dag_block.block,
                     /*force_processing=*/fuzzed_data_provider.ConsumeBool(),
                     /*min_pow_checked=*/fuzzed_data_provider.ConsumeBool(),
-                    &new_block);
+                    pass_new_block_out ? &new_block : nullptr)};
                 node.validation_signals->SyncWithValidationInterfaceQueue();
+
+                if (pass_new_block_out) {
+                    const bool has_data{HasBlockData(chainman, dag_block.block->GetHash())};
+                    assert(!new_block || accepted);
+                    assert(!new_block || !had_data);
+                    assert(!new_block || has_data);
+                    if (!accepted || had_data) {
+                        assert(!new_block);
+                    }
+                }
 
                 if (!dag_block.valid) {
                     if (CBlockIndex* index{LookupBlock(chainman, dag_block.block->GetHash())}) {
