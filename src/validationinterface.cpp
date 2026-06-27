@@ -16,6 +16,7 @@
 #include <util/log.h>
 #include <util/task_runner.h>
 
+#include <cassert>
 #include <future>
 #include <memory>
 #include <unordered_map>
@@ -221,6 +222,10 @@ void ValidationSignals::TransactionRemovedFromMempool(const CTransactionRef& tx,
 
 void ValidationSignals::BlockConnected(const ChainstateRole& role, std::shared_ptr<const CBlock> pblock, const CBlockIndex* pindex)
 {
+    assert(pblock);
+    assert(pindex);
+    assert(pblock->GetHash() == pindex->GetBlockHash());
+
     auto log_msg = LOG_MSG("%s: block hash=%s block height=%d", __func__,
                           pblock->GetHash().ToString(),
                           pindex->nHeight);
@@ -243,6 +248,12 @@ void ValidationSignals::MempoolTransactionsRemovedForBlock(const std::vector<Rem
 
 void ValidationSignals::BlockDisconnected(std::shared_ptr<const CBlock> pblock, const CBlockIndex* pindex)
 {
+    assert(pblock);
+    assert(pindex);
+    assert(pindex->nHeight > 0);
+    assert(pindex->pprev);
+    assert(pblock->GetHash() == pindex->GetBlockHash());
+
     auto log_msg = LOG_MSG("%s: block hash=%s block height=%d", __func__,
                           pblock->GetHash().ToString(),
                           pindex->nHeight);
