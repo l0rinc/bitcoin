@@ -259,6 +259,7 @@ void BlockManager::AddUnlinkedBlock(CBlockIndex* block)
 {
     AssertLockHeld(cs_main);
     Assume(block != nullptr);
+    Assume(block->pprev != nullptr);
     Assume(block->nStatus & BLOCK_HAVE_DATA);
     auto range = m_blocks_unlinked.equal_range(block->pprev);
     for (auto it = range.first; it != range.second; ++it) {
