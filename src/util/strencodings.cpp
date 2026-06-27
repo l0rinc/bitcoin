@@ -102,6 +102,11 @@ std::string EncodeBase64(std::span<const unsigned char> input)
     str.reserve(CeilDiv(input.size(), 3u) * 4);
     ConvertBits<8, 6, true>([&](int v) { str += pbase64[v]; }, input.begin(), input.end());
     while (str.size() % 4) str += '=';
+    assert(str.size() % 4 == 0);
+    assert(str.empty() || str.front() != '=');
+    if (const auto first_padding{str.find('=')}; first_padding != std::string::npos) {
+        assert(str.find_first_not_of('=', first_padding) == std::string::npos);
+    }
     return str;
 }
 
@@ -136,6 +141,7 @@ std::optional<std::vector<unsigned char>> DecodeBase64(std::string_view str)
         [](char c) { return decode64_table[uint8_t(c)]; }
     );
     if (!valid) return {};
+    assert(str.find('=') == std::string_view::npos);
 
     return ret;
 }
