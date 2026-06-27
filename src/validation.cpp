@@ -3541,7 +3541,10 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
 
     // Genesis block can't be invalidated
     assert(pindex);
-    if (pindex->nHeight == 0) return false;
+    if (pindex->nHeight == 0) {
+        assert(pindex->pprev == nullptr);
+        return false;
+    }
 
     // We do not allow ActivateBestChain() to run while InvalidateBlock() is
     // running, as that could cause the tip to change while we disconnect
@@ -3726,6 +3729,7 @@ void Chainstate::SetBlockFailureFlags(CBlockIndex* invalid_block)
 
 void Chainstate::ResetBlockFailureFlags(CBlockIndex *pindex) {
     AssertLockHeld(cs_main);
+    assert(pindex);
 
     int nHeight = pindex->nHeight;
 
@@ -3743,6 +3747,7 @@ void Chainstate::ResetBlockFailureFlags(CBlockIndex *pindex) {
             }
         }
     }
+    assert(!(pindex->nStatus & BLOCK_FAILED_VALID));
 }
 
 void Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
