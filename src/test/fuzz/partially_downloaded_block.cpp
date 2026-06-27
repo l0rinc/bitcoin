@@ -152,7 +152,9 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     // Whether we skipped a transaction that should be included in `missing`.
     // FillBlock should never return READ_STATUS_OK if that is the case.
     bool skipped_missing{false};
+    size_t required_missing_count{0};
     for (size_t i = 0; i < cmpctblock.BlockTxCount(); i++) {
+        const bool tx_available{pdb.IsTxAvailable(i)};
         // If init_status == READ_STATUS_OK then a available transaction in the
         // compact block (i.e. IsTxAvailable(i) == true) implies that we marked
         // that transaction as available above (i.e. available.contains(i)).
@@ -160,15 +162,23 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         // collisions (i.e. available.contains(i) does not imply
         // IsTxAvailable(i) == true).
         if (init_status == READ_STATUS_OK) {
-            assert(!pdb.IsTxAvailable(i) || available.contains(i));
+            assert(!tx_available || available.contains(i));
         }
 
         bool skip{fuzzed_data_provider.ConsumeBool()};
-        if (!pdb.IsTxAvailable(i) && !skip) {
-            missing.push_back(block->vtx[i]);
+        if (!tx_available) {
+            ++required_missing_count;
+            if (!skip) {
+                missing.push_back(block->vtx[i]);
+            }
         }
 
-        skipped_missing |= (!pdb.IsTxAvailable(i) && skip);
+        skipped_missing |= (!tx_available && skip);
+    }
+
+    const bool extra_missing{!skipped_missing && fuzzed_data_provider.ConsumeBool()};
+    if (extra_missing) {
+        missing.push_back(block->vtx[fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, block->vtx.size() - 1)]);
     }
 
     bool segwit_active{fuzzed_data_provider.ConsumeBool()};
@@ -182,6 +192,8 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     switch (fill_status) {
     case READ_STATUS_OK:
         assert(!skipped_missing);
+        assert(!extra_missing);
+        assert(missing.size() == required_missing_count);
         assert(!fail_block_mutated);
         assert(block->GetHash() == reconstructed_block.GetHash());
         assert(block->vtx.size() == reconstructed_block.vtx.size());
@@ -195,5 +207,15 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         break;
     case READ_STATUS_INVALID:
         break;
+    }
+
+    if (missing.size() >= required_missing_count) {
+        assert(pdb.header.IsNull());
+        assert(pdb.AvailableTxCount() == 0);
+        CBlock retry_block;
+        assert(pdb.FillBlock(retry_block, {}, segwit_active) == READ_STATUS_INVALID);
+    } else {
+        assert(fill_status == READ_STATUS_INVALID);
+        assert(!pdb.header.IsNull());
     }
 }
