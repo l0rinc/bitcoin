@@ -12,6 +12,7 @@
 #include <random.h>
 #include <streams.h>
 #include <txmempool.h>
+#include <util/check.h>
 #include <util/log.h>
 #include <validation.h>
 
@@ -69,20 +70,30 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
 
     header = cmpctblock.header;
     txn_available.resize(cmpctblock.BlockTxCount());
+    auto fail_init = [&](ReadStatus status) {
+        header.SetNull();
+        txn_available.clear();
+        prefilled_count = 0;
+        mempool_count = 0;
+        extra_count = 0;
+        Assume(header.IsNull());
+        Assume(txn_available.empty());
+        return status;
+    };
 
     int32_t lastprefilledindex = -1;
     for (size_t i = 0; i < cmpctblock.prefilledtxn.size(); i++) {
         if (cmpctblock.prefilledtxn[i].tx->IsNull())
-            return READ_STATUS_INVALID;
+            return fail_init(READ_STATUS_INVALID);
 
         lastprefilledindex += cmpctblock.prefilledtxn[i].index + 1; //index is a uint16_t, so can't overflow here
         if (lastprefilledindex > std::numeric_limits<uint16_t>::max())
-            return READ_STATUS_INVALID;
+            return fail_init(READ_STATUS_INVALID);
         if ((uint32_t)lastprefilledindex > cmpctblock.shorttxids.size() + i) {
             // If we are inserting a tx at an index greater than our full list of shorttxids
             // plus the number of prefilled txn we've inserted, then we have txn for which we
             // have neither a prefilled txn or a shorttxid!
-            return READ_STATUS_INVALID;
+            return fail_init(READ_STATUS_INVALID);
         }
         txn_available[lastprefilledindex] = cmpctblock.prefilledtxn[i].tx;
     }
@@ -109,10 +120,10 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         // If we assume blocks of up to 16000, allowing 12 elements per bucket should
         // only fail once per ~1 million block transfers (per peer and connection).
         if (shorttxids.bucket_size(shorttxids.bucket(cmpctblock.shorttxids[i])) > 12)
-            return READ_STATUS_FAILED;
+            return fail_init(READ_STATUS_FAILED);
     }
     if (shorttxids.size() != cmpctblock.shorttxids.size())
-        return READ_STATUS_FAILED; // Short ID collision
+        return fail_init(READ_STATUS_FAILED); // Short ID collision
 
     std::vector<bool> have_txn(txn_available.size());
     {
