@@ -323,12 +323,72 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
         return block_info;
     };
 
-    LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 1000) {
+    auto check_high_bandwidth_to_count = [&]() {
+        std::vector<CNodeStats> stats;
+        connman.GetNodeStats(stats);
+
+        // We should have at maximum 3 HB peers.
+        int num_hb = 0;
+        for (const CNodeStats& stat : stats) {
+            if (stat.m_bip152_highbandwidth_to) {
+                // HB peers cannot be feelers or other "special" connections (besides addr-fetch).
+                CNode* hb_peer = peers[stat.nodeid];
+                if (!hb_peer->fDisconnect) num_hb += 1;
+                assert(hb_peer->IsInboundConn() || hb_peer->IsOutboundOrBlockRelayConn() || hb_peer->IsManualConn() || hb_peer->IsAddrFetchConn());
+            }
+        }
+        assert(num_hb <= 3);
+
+        return stats;
+    };
+
+    auto process_net_msg = [&](CNode& random_node, CSerializedNetMsg&& net_msg) NO_THREAD_SAFETY_ANALYSIS {
+        connman.FlushSendBuffer(random_node);
+        (void)connman.ReceiveMsgFrom(random_node, std::move(net_msg));
+
+        bool more_work{true};
+        while (more_work) {
+            random_node.fPauseSend = false;
+
+            more_work = connman.ProcessMessagesOnce(random_node);
+            peerman->SendMessages(random_node);
+        }
+
+        return check_high_bandwidth_to_count();
+    };
+
+    auto check_sendcmpct_state = [&](CNode& random_node, const uint8_t hb, const uint64_t version) {
+        const bool requested_hb{hb != 0};
+        const bool valid_sendcmpct{hb <= 1 && version == CMPCTBLOCKS_VERSION};
+        const std::vector<CNodeStats> previous_stats{check_high_bandwidth_to_count()};
+        const bool previous_hb_from{previous_stats[random_node.GetId()].m_bip152_highbandwidth_from};
+        const std::vector<CNodeStats> stats{
+            process_net_msg(random_node, NetMsg::Make(NetMsgType::SENDCMPCT, hb, version))};
+
+        if (random_node.fDisconnect) return;
+
+        // Valid SENDCMPCT updates the node's state to match the message. Invalid announce fields
+        // and unsupported versions must leave the prior state unchanged.
+        const CNodeStats& random_node_stats = stats[random_node.GetId()];
+        if (valid_sendcmpct) {
+            assert(random_node_stats.m_bip152_highbandwidth_from == requested_hb);
+        } else {
+            assert(random_node_stats.m_bip152_highbandwidth_from == previous_hb_from);
+        }
+    };
+
+    check_sendcmpct_state(*peers[0], /*hb=*/1, /*version=*/CMPCTBLOCKS_VERSION);
+    check_sendcmpct_state(*peers[0], /*hb=*/0, /*version=*/CMPCTBLOCKS_VERSION + 1);
+    check_sendcmpct_state(*peers[1], /*hb=*/2, /*version=*/CMPCTBLOCKS_VERSION);
+
+    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 1000)
+    {
         CSerializedNetMsg net_msg;
         bool sent_net_msg = true;
-        bool requested_hb = false;
         bool sent_sendcmpct = false;
-        bool valid_sendcmpct = false;
+        uint8_t sendcmpct_hb = 0;
+        uint64_t sendcmpct_version = 0;
+        CNode& random_node = *PickValue(fuzzed_data_provider, peers);
 
         CallOneOf(
             fuzzed_data_provider,
@@ -432,12 +492,14 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
             },
             [&]() {
                 // Send a sendcmpct message, optionally setting hb mode.
-                bool hb = fuzzed_data_provider.ConsumeBool();
+                uint8_t hb{fuzzed_data_provider.ConsumeBool() ?
+                        static_cast<uint8_t>(fuzzed_data_provider.ConsumeBool()) :
+                        fuzzed_data_provider.ConsumeIntegral<uint8_t>()};
                 uint64_t version{fuzzed_data_provider.ConsumeBool() ? CMPCTBLOCKS_VERSION : fuzzed_data_provider.ConsumeIntegral<uint64_t>()};
-                net_msg = NetMsg::Make(NetMsgType::SENDCMPCT, /*high_bandwidth=*/hb, /*version=*/version);
-                requested_hb = hb;
+                net_msg = NetMsg::Make(NetMsgType::SENDCMPCT, hb, version);
                 sent_sendcmpct = true;
-                valid_sendcmpct = version == CMPCTBLOCKS_VERSION;
+                sendcmpct_hb = hb;
+                sendcmpct_version = version;
             },
             [&]() {
                 // Mine a block, but don't send it.
@@ -466,37 +528,10 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
             continue;
         }
 
-        CNode& random_node = *PickValue(fuzzed_data_provider, peers);
-        connman.FlushSendBuffer(random_node);
-        (void)connman.ReceiveMsgFrom(random_node, std::move(net_msg));
-
-        bool more_work{true};
-        while (more_work) {
-            random_node.fPauseSend = false;
-
-            more_work = connman.ProcessMessagesOnce(random_node);
-            peerman->SendMessages(random_node);
-        }
-
-        std::vector<CNodeStats> stats;
-        connman.GetNodeStats(stats);
-
-        // We should have at maximum 3 HB peers.
-        int num_hb = 0;
-        for (const CNodeStats& stat : stats) {
-            if (stat.m_bip152_highbandwidth_to) {
-                // HB peers cannot be feelers or other "special" connections (besides addr-fetch).
-                CNode* hb_peer = peers[stat.nodeid];
-                if (!hb_peer->fDisconnect) num_hb += 1;
-                assert(hb_peer->IsInboundConn() || hb_peer->IsOutboundOrBlockRelayConn() || hb_peer->IsManualConn() || hb_peer->IsAddrFetchConn());
-            }
-        }
-        assert(num_hb <= 3);
-
-        if (sent_sendcmpct && !random_node.fDisconnect) {
-            // If the fuzzer sent SENDCMPCT with proper version, check the node's state matches what it sent.
-            const CNodeStats& random_node_stats = stats[random_node.GetId()];
-            if (valid_sendcmpct) assert(random_node_stats.m_bip152_highbandwidth_from == requested_hb);
+        if (sent_sendcmpct) {
+            check_sendcmpct_state(random_node, sendcmpct_hb, sendcmpct_version);
+        } else {
+            (void)process_net_msg(random_node, std::move(net_msg));
         }
     }
 
