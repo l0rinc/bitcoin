@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <consensus/amount.h>
 #include <test/fuzz/fuzz.h>
 #include <util/moneystr.h>
 #include <util/strencodings.h>
@@ -53,7 +54,18 @@ FUZZ_TARGET(parse_numbers)
         }
     }
 
-    (void)ParseMoney(random_string);
+    if (const std::optional<CAmount> parsed_money{ParseMoney(random_string)}) {
+        assert(MoneyRange(*parsed_money));
+
+        const std::string formatted_money{FormatMoney(*parsed_money)};
+        const std::optional<CAmount> reparsed_money{ParseMoney(formatted_money)};
+        assert(reparsed_money);
+        assert(*reparsed_money == *parsed_money);
+
+        int64_t parsed_fixed_point;
+        assert(ParseFixedPoint(formatted_money, 8, &parsed_fixed_point));
+        assert(parsed_fixed_point == *parsed_money);
+    }
 
     (void)LocaleIndependentAtoi<int>(random_string);
 
