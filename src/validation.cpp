@@ -3518,6 +3518,7 @@ bool Chainstate::PreciousBlock(BlockValidationState& state, CBlockIndex* pindex)
         LOCK(cs_main);
         if (pindex->nChainWork < m_chain.Tip()->nChainWork) {
             // Nothing to do, this block is not at the tip.
+            assert(pindex != m_chain.Tip());
             return true;
         }
         if (m_chain.Tip()->nChainWork > m_chainman.nLastPreciousChainwork) {
