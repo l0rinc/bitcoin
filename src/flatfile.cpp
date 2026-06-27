@@ -6,6 +6,7 @@
 #include <flatfile.h>
 
 #include <tinyformat.h>
+#include <util/check.h>
 #include <util/fs_helpers.h>
 #include <util/log.h>
 #include <util/overflow.h>
@@ -58,6 +59,7 @@ FILE* FlatFileSeq::Open(const FlatFilePos& pos, bool read_only) const
 
 size_t FlatFileSeq::Allocate(const FlatFilePos& pos, size_t add_size, bool& out_of_space) const
 {
+    Assume(m_chunk_size > 0);
     out_of_space = false;
 
     unsigned int n_old_chunks = CeilDiv(pos.nPos, m_chunk_size);
@@ -65,7 +67,9 @@ size_t FlatFileSeq::Allocate(const FlatFilePos& pos, size_t add_size, bool& out_
     if (n_new_chunks > n_old_chunks) {
         size_t old_size = pos.nPos;
         size_t new_size = n_new_chunks * m_chunk_size;
+        Assume(new_size > old_size);
         size_t inc_size = new_size - old_size;
+        Assume(inc_size >= add_size);
 
         if (CheckDiskSpace(m_dir, inc_size)) {
             FILE *file = Open(pos);
