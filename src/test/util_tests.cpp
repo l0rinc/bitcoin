@@ -1206,9 +1206,11 @@ BOOST_AUTO_TEST_CASE(test_script_parsing)
 
     success = Const("Bread", sp, /*skip=*/false);
     BOOST_CHECK(!success);
+    BOOST_CHECK_EQUAL(SpanToStr(sp), "ToastHoney");
 
     success = Const("Bread", sp);
     BOOST_CHECK(!success);
+    BOOST_CHECK_EQUAL(SpanToStr(sp), "ToastHoney");
 
     success = Const("Toast", sp, /*skip=*/false);
     BOOST_CHECK(success);
@@ -1220,6 +1222,7 @@ BOOST_AUTO_TEST_CASE(test_script_parsing)
 
     success = Const("Honeybadger", sp);
     BOOST_CHECK(!success);
+    BOOST_CHECK_EQUAL(SpanToStr(sp), "Honey");
 
     success = Const("Honey", sp, /*skip=*/false);
     BOOST_CHECK(success);
@@ -1248,6 +1251,25 @@ BOOST_AUTO_TEST_CASE(test_script_parsing)
 
     success = Func("xy", sp);
     BOOST_CHECK(!success);
+    BOOST_CHECK_EQUAL(SpanToStr(sp), "xy,z()");
+
+    input = "f()";
+    sp = input;
+    success = Func("f", sp);
+    BOOST_CHECK(success);
+    BOOST_CHECK_EQUAL(SpanToStr(sp), "");
+
+    input = "f(arg";
+    sp = input;
+    success = Func("f", sp);
+    BOOST_CHECK(!success);
+    BOOST_CHECK_EQUAL(SpanToStr(sp), "f(arg");
+
+    input = "g(arg)";
+    sp = input;
+    success = Func("f", sp);
+    BOOST_CHECK(!success);
+    BOOST_CHECK_EQUAL(SpanToStr(sp), "g(arg)");
 
     // Expr(...): return expression that span begins with, update span to skip it
     std::span<const char> result;
@@ -1264,10 +1286,28 @@ BOOST_AUTO_TEST_CASE(test_script_parsing)
     BOOST_CHECK_EQUAL(SpanToStr(result), "foo");
     BOOST_CHECK_EQUAL(SpanToStr(sp), ",bar");
 
+    input = ",bar";
+    sp = input;
+    result = Expr(sp);
+    BOOST_CHECK_EQUAL(SpanToStr(result), "");
+    BOOST_CHECK_EQUAL(SpanToStr(sp), ",bar");
+
+    input = "}bar";
+    sp = input;
+    result = Expr(sp);
+    BOOST_CHECK_EQUAL(SpanToStr(result), "");
+    BOOST_CHECK_EQUAL(SpanToStr(sp), "}bar");
+
     input = "(aaaaa,bbbbb()),c";
     sp = input;
     result = Expr(sp);
     BOOST_CHECK_EQUAL(SpanToStr(result), "(aaaaa,bbbbb())");
+    BOOST_CHECK_EQUAL(SpanToStr(sp), ",c");
+
+    input = "{aaaaa,bbbbb()},c";
+    sp = input;
+    result = Expr(sp);
+    BOOST_CHECK_EQUAL(SpanToStr(result), "{aaaaa,bbbbb()}");
     BOOST_CHECK_EQUAL(SpanToStr(sp), ",c");
 
     input = "xyz)foo";
