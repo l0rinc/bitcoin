@@ -1970,6 +1970,7 @@ void Chainstate::CheckForkWarningConditions()
 void Chainstate::InvalidChainFound(CBlockIndex* pindexNew)
 {
     AssertLockHeld(cs_main);
+    assert(pindexNew->nStatus & BLOCK_FAILED_VALID);
     if (!m_chainman.m_best_invalid || pindexNew->nChainWork > m_chainman.m_best_invalid->nChainWork) {
         m_chainman.m_best_invalid = pindexNew;
     }
@@ -2994,6 +2995,9 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
     }
 
     m_chain.SetTip(*pindexDelete->pprev);
+    assert(m_chain.Tip() == pindexDelete->pprev);
+    assert(!m_chain.Contains(*pindexDelete));
+    assert(m_chain.Height() == pindexDelete->nHeight - 1);
     m_chainman.UpdateIBDStatus();
 
     UpdateTip(pindexDelete->pprev);
@@ -3090,6 +3094,9 @@ bool Chainstate::ConnectTip(
     }
     // Update m_chain & related variables.
     m_chain.SetTip(*pindexNew);
+    assert(m_chain.Tip() == pindexNew);
+    assert(m_chain.Contains(*pindexNew));
+    assert(m_chain.Height() == pindexNew->nHeight);
     m_chainman.UpdateIBDStatus();
     UpdateTip(pindexNew);
 
@@ -3684,6 +3691,8 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
         }
 
         InvalidChainFound(to_mark_failed);
+        assert(pindex->nStatus & BLOCK_FAILED_VALID);
+        assert(!m_chain.Contains(*pindex));
     }
 
     // Only notify about a new block tip if the active chain was modified.
