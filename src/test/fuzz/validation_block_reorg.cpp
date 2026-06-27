@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -38,6 +39,11 @@ struct DagBlock {
 };
 
 std::vector<DagBlock> g_blocks;
+
+bool IsAncestorOrDescendant(const CBlockIndex& a, const CBlockIndex& b)
+{
+    return a.GetAncestor(b.nHeight) == &b || b.GetAncestor(a.nHeight) == &a;
+}
 
 struct ChainEvent {
     bool connected;
@@ -373,11 +379,24 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
                 auto indexes{KnownBlockIndexes(chainman)};
                 if (indexes.empty()) return;
                 CBlockIndex* index{PickValue(fuzzed_data_provider, indexes)};
+                std::vector<std::pair<const CBlockIndex*, bool>> failed_before;
                 {
                     LOCK(chainman.GetMutex());
+                    for (auto& [_, block_index] : chainman.BlockIndex()) {
+                        failed_before.emplace_back(&block_index, block_index.nStatus & BLOCK_FAILED_VALID);
+                    }
+
                     chainman.ActiveChainstate().ResetBlockFailureFlags(index);
                     chainman.RecalculateBestHeader();
                     assert(!(index->nStatus & BLOCK_FAILED_VALID));
+
+                    for (const auto& [block, was_failed] : failed_before) {
+                        if (IsAncestorOrDescendant(*index, *block)) {
+                            assert(!(block->nStatus & BLOCK_FAILED_VALID));
+                        } else if (was_failed) {
+                            assert(block->nStatus & BLOCK_FAILED_VALID);
+                        }
+                    }
                 }
                 BlockValidationState state;
                 assert(chainman.ActiveChainstate().ActivateBestChain(state));
