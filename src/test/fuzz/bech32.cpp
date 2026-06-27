@@ -18,14 +18,21 @@ FUZZ_TARGET(bech32_random_decode)
     FuzzedDataProvider fdp(buffer.data(), buffer.size());
     auto random_string = fdp.ConsumeRandomLengthString(limit + 1);
     auto decoded = bech32::Decode(random_string, limit);
+    const auto [error, error_locations] = bech32::LocateErrors(random_string, limit);
 
     if (decoded.hrp.empty()) {
         assert(decoded.encoding == bech32::Encoding::INVALID);
         assert(decoded.data.empty());
+        assert(!error.empty());
     } else {
         assert(decoded.encoding != bech32::Encoding::INVALID);
+        assert(error.empty());
+        assert(error_locations.empty());
         auto reencoded = bech32::Encode(decoded.encoding, decoded.hrp, decoded.data);
         assert(CaseInsensitiveEqual(random_string, reencoded));
+        const auto [reencoded_error, reencoded_error_locations] = bech32::LocateErrors(reencoded, limit);
+        assert(reencoded_error.empty());
+        assert(reencoded_error_locations.empty());
     }
 }
 
