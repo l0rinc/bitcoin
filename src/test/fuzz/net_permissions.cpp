@@ -13,7 +13,23 @@
 #include <cassert>
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <vector>
+
+namespace {
+
+using NetPermissionBits = std::underlying_type_t<NetPermissionFlags>;
+
+void AssertClearImplicitPreservesExplicit(NetPermissionFlags before, NetPermissionFlags after)
+{
+    static constexpr auto implicit{static_cast<NetPermissionBits>(NetPermissionFlags::Implicit)};
+    const auto before_bits{static_cast<NetPermissionBits>(before)};
+    const auto after_bits{static_cast<NetPermissionBits>(after)};
+    assert((after_bits & implicit) == 0);
+    assert((after_bits & ~implicit) == (before_bits & ~implicit));
+}
+
+} // namespace
 
 FUZZ_TARGET(net_permissions)
 {
@@ -21,13 +37,21 @@ FUZZ_TARGET(net_permissions)
     const std::string s = fuzzed_data_provider.ConsumeRandomLengthString(1000);
     const NetPermissionFlags net_permission_flags = ConsumeWeakEnum(fuzzed_data_provider, ALL_NET_PERMISSION_FLAGS);
 
+    NetPermissionFlags flags_with_implicit{net_permission_flags};
+    NetPermissions::AddFlag(flags_with_implicit, NetPermissionFlags::Implicit);
+    const auto random_flags_before_clear{flags_with_implicit};
+    NetPermissions::ClearFlag(flags_with_implicit, NetPermissionFlags::Implicit);
+    AssertClearImplicitPreservesExplicit(random_flags_before_clear, flags_with_implicit);
+
     NetWhitebindPermissions net_whitebind_permissions;
     bilingual_str error_net_whitebind_permissions;
     if (NetWhitebindPermissions::TryParse(s, net_whitebind_permissions, error_net_whitebind_permissions)) {
         (void)NetPermissions::ToStrings(net_whitebind_permissions.m_flags);
         (void)NetPermissions::AddFlag(net_whitebind_permissions.m_flags, net_permission_flags);
         assert(NetPermissions::HasFlag(net_whitebind_permissions.m_flags, net_permission_flags));
-        (void)NetPermissions::ClearFlag(net_whitebind_permissions.m_flags, NetPermissionFlags::Implicit);
+        const auto flags_before_clear{net_whitebind_permissions.m_flags};
+        NetPermissions::ClearFlag(net_whitebind_permissions.m_flags, NetPermissionFlags::Implicit);
+        AssertClearImplicitPreservesExplicit(flags_before_clear, net_whitebind_permissions.m_flags);
         (void)NetPermissions::ToStrings(net_whitebind_permissions.m_flags);
     }
 
@@ -38,7 +62,9 @@ FUZZ_TARGET(net_permissions)
         (void)NetPermissions::ToStrings(net_whitelist_permissions.m_flags);
         (void)NetPermissions::AddFlag(net_whitelist_permissions.m_flags, net_permission_flags);
         assert(NetPermissions::HasFlag(net_whitelist_permissions.m_flags, net_permission_flags));
-        (void)NetPermissions::ClearFlag(net_whitelist_permissions.m_flags, NetPermissionFlags::Implicit);
+        const auto flags_before_clear{net_whitelist_permissions.m_flags};
+        NetPermissions::ClearFlag(net_whitelist_permissions.m_flags, NetPermissionFlags::Implicit);
+        AssertClearImplicitPreservesExplicit(flags_before_clear, net_whitelist_permissions.m_flags);
         (void)NetPermissions::ToStrings(net_whitelist_permissions.m_flags);
     }
 }
