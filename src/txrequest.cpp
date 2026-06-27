@@ -9,6 +9,7 @@
 #include <primitives/transaction.h>
 #include <random.h>
 #include <uint256.h>
+#include <util/check.h>
 
 #include <boost/multi_index/indexed_by.hpp>
 #include <boost/multi_index/ordered_index.hpp>
@@ -20,8 +21,6 @@
 #include <chrono>
 #include <unordered_map>
 #include <utility>
-
-#include <cassert>
 
 namespace {
 
@@ -575,16 +574,31 @@ public:
     void ReceivedInv(NodeId peer, const GenTxid& gtxid, bool preferred,
                      std::chrono::microseconds reqtime)
     {
+        const uint256 txhash{gtxid.ToUint256()};
+
         // Bail out if we already have a CANDIDATE_BEST announcement for this (txhash, peer) combination. The case
         // where there is a non-CANDIDATE_BEST announcement already will be caught by the uniqueness property of the
         // ByPeer index when we try to emplace the new object below.
-        if (m_index.get<ByPeer>().count(ByPeerView{peer, true, gtxid.ToUint256()})) return;
+        auto& by_peer = m_index.get<ByPeer>();
+        auto it_best = by_peer.find(ByPeerView{peer, true, txhash});
+        if (it_best != by_peer.end()) {
+            Assert(it_best->m_peer == peer);
+            Assert(it_best->m_gtxid.ToUint256() == txhash);
+            Assert(it_best->GetState() == State::CANDIDATE_BEST);
+            return;
+        }
 
         // Try creating the announcement with CANDIDATE_DELAYED state (which will fail due to the uniqueness
         // of the ByPeer index if a non-CANDIDATE_BEST announcement already exists with the same txhash and peer).
         // Bail out in that case.
-        auto ret = m_index.get<ByPeer>().emplace(gtxid, peer, preferred, reqtime, m_current_sequence);
-        if (!ret.second) return;
+        auto ret = by_peer.emplace(gtxid, peer, preferred, reqtime, m_current_sequence);
+        if (!ret.second) {
+            Assert(ret.first != by_peer.end());
+            Assert(ret.first->m_peer == peer);
+            Assert(ret.first->m_gtxid.ToUint256() == txhash);
+            Assert(ret.first->GetState() != State::CANDIDATE_BEST);
+            return;
+        }
 
         // Update accounting metadata.
         ++m_peerinfo[peer].m_total;
