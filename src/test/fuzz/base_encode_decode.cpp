@@ -82,6 +82,11 @@ FUZZ_TARGET(base64_encode_decode)
     }
     // Encode/Decode roundtrip
     const auto encoded{EncodeBase64(buffer)};
+    if (!encoded.empty()) {
+        std::string leading_padding{encoded};
+        leading_padding.front() = '=';
+        assert(!DecodeBase64(leading_padding));
+    }
     const auto decoded{DecodeBase64(encoded)};
     assert(decoded && std::ranges::equal(*decoded, buffer));
 }
