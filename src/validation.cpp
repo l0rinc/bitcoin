@@ -3550,8 +3550,10 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
     assert(pindex);
     if (pindex->nHeight == 0) {
         assert(pindex->pprev == nullptr);
+        Assume(pindex->pprev == nullptr);
         return false;
     }
+    Assume(pindex->pprev);
 
     // We do not allow ActivateBestChain() to run while InvalidateBlock() is
     // running, as that could cause the tip to change while we disconnect
@@ -3727,10 +3729,12 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
 void Chainstate::SetBlockFailureFlags(CBlockIndex* invalid_block)
 {
     AssertLockHeld(cs_main);
+    Assume(invalid_block);
 
     for (auto& [_, block_index] : m_blockman.m_block_index) {
         if (invalid_block != &block_index && block_index.GetAncestor(invalid_block->nHeight) == invalid_block) {
             block_index.nStatus |= BLOCK_FAILED_VALID;
+            Assume(block_index.nStatus & BLOCK_FAILED_VALID);
             m_blockman.m_dirty_blockindex.insert(&block_index);
         }
     }
@@ -3744,8 +3748,12 @@ void Chainstate::ResetBlockFailureFlags(CBlockIndex *pindex) {
 
     // Remove the invalidity flag from this block and all its descendants and ancestors.
     for (auto& [_, block_index] : m_blockman.m_block_index) {
-        if ((block_index.nStatus & BLOCK_FAILED_VALID) && (block_index.GetAncestor(nHeight) == pindex || pindex->GetAncestor(block_index.nHeight) == &block_index)) {
+        const bool on_same_branch_line{
+            block_index.GetAncestor(nHeight) == pindex ||
+            pindex->GetAncestor(block_index.nHeight) == &block_index};
+        if ((block_index.nStatus & BLOCK_FAILED_VALID) && on_same_branch_line) {
             block_index.nStatus &= ~BLOCK_FAILED_VALID;
+            Assume(!(block_index.nStatus & BLOCK_FAILED_VALID));
             m_blockman.m_dirty_blockindex.insert(&block_index);
             if (block_index.IsValid(BLOCK_VALID_TRANSACTIONS) && block_index.HaveNumChainTxs() && setBlockIndexCandidates.value_comp()(m_chain.Tip(), &block_index)) {
                 setBlockIndexCandidates.insert(&block_index);
@@ -3757,6 +3765,7 @@ void Chainstate::ResetBlockFailureFlags(CBlockIndex *pindex) {
         }
     }
     assert(!(pindex->nStatus & BLOCK_FAILED_VALID));
+    Assume(!(pindex->nStatus & BLOCK_FAILED_VALID));
 }
 
 void Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
