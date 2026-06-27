@@ -165,6 +165,13 @@ void CheckPackageToValidate(const node::PackageToValidate& package_to_validate, 
     Assert(package.size() == 2);
 }
 
+void CheckUniqueParents(const std::vector<Txid>& unique_parents, const CTransaction& tx)
+{
+    Assert(std::is_sorted(unique_parents.begin(), unique_parents.end()));
+    Assert(std::adjacent_find(unique_parents.begin(), unique_parents.end()) == unique_parents.end());
+    Assert(unique_parents.size() <= tx.vin.size());
+}
+
 FUZZ_TARGET(txdownloadman, .init = initialize)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
@@ -224,6 +231,7 @@ FUZZ_TARGET(txdownloadman, .init = initialize)
 
                 node::RejectedTxTodo todo = txdownloadman.MempoolRejectedTx(rand_tx, state, rand_peer, first_time_failure);
                 Assert(first_time_failure || !todo.m_should_add_extra_compact_tx);
+                CheckUniqueParents(todo.m_unique_parents, *rand_tx);
             },
             [&] {
                 auto gtxid = fuzzed_data_provider.ConsumeBool() ?
@@ -357,11 +365,9 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                 state.Invalid(fuzzed_data_provider.PickValueInArray(TESTED_TX_RESULTS), "");
                 bool first_time_failure{fuzzed_data_provider.ConsumeBool()};
 
-                bool reject_contains_wtxid{txdownload_impl.RecentRejectsFilter().contains(rand_tx->GetWitnessHash().ToUint256())};
-
                 node::RejectedTxTodo todo = txdownload_impl.MempoolRejectedTx(rand_tx, state, rand_peer, first_time_failure);
                 Assert(first_time_failure || !todo.m_should_add_extra_compact_tx);
-                if (!reject_contains_wtxid) Assert(todo.m_unique_parents.size() <= rand_tx->vin.size());
+                CheckUniqueParents(todo.m_unique_parents, *rand_tx);
             },
             [&] {
                 auto gtxid = fuzzed_data_provider.ConsumeBool() ?

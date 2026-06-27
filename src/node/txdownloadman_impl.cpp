@@ -8,9 +8,12 @@
 #include <chain.h>
 #include <consensus/validation.h>
 #include <txmempool.h>
+#include <util/check.h>
 #include <util/log.h>
 #include <validation.h>
 #include <validationinterface.h>
+
+#include <algorithm>
 
 namespace node {
 // TxDownloadManager wrappers
@@ -343,6 +346,9 @@ std::vector<Txid> TxDownloadManagerImpl::GetUniqueParents(const CTransaction& tx
 
     std::sort(unique_parents.begin(), unique_parents.end());
     unique_parents.erase(std::unique(unique_parents.begin(), unique_parents.end()), unique_parents.end());
+    Assume(std::is_sorted(unique_parents.begin(), unique_parents.end()));
+    Assume(std::adjacent_find(unique_parents.begin(), unique_parents.end()) == unique_parents.end());
+    Assume(unique_parents.size() <= tx.vin.size());
 
     return unique_parents;
 }
