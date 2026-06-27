@@ -100,6 +100,39 @@ BOOST_AUTO_TEST_CASE(cinv_type_contracts)
     BOOST_CHECK_EQUAL(undefined_witness_inv.ToString(), "0x40000000 " + hash.ToString());
 }
 
+BOOST_AUTO_TEST_CASE(message_header_type_contracts)
+{
+    auto header_with_type = [](const std::array<char, CMessageHeader::MESSAGE_TYPE_SIZE>& msg_type) {
+        CMessageHeader header;
+        std::copy(msg_type.begin(), msg_type.end(), header.m_msg_type);
+        return header;
+    };
+
+    const CMessageHeader version_header{Params().MessageStart(), NetMsgType::VERSION, 123};
+    BOOST_CHECK(version_header.IsMessageTypeValid());
+    BOOST_CHECK_EQUAL(version_header.GetMessageType(), NetMsgType::VERSION);
+
+    const CMessageHeader full_header{Params().MessageStart(), "abcdefghijkl", 0};
+    BOOST_CHECK(full_header.IsMessageTypeValid());
+    BOOST_CHECK_EQUAL(full_header.GetMessageType(), "abcdefghijkl");
+
+    std::array<char, CMessageHeader::MESSAGE_TYPE_SIZE> embedded_null{};
+    embedded_null[0] = 't';
+    embedded_null[1] = 'x';
+    embedded_null[3] = 'x';
+    const CMessageHeader embedded_null_header{header_with_type(embedded_null)};
+    BOOST_CHECK(!embedded_null_header.IsMessageTypeValid());
+    BOOST_CHECK_EQUAL(embedded_null_header.GetMessageType(), "tx");
+
+    std::array<char, CMessageHeader::MESSAGE_TYPE_SIZE> control_char{};
+    control_char[0] = '\x1f';
+    BOOST_CHECK(!header_with_type(control_char).IsMessageTypeValid());
+
+    std::array<char, CMessageHeader::MESSAGE_TYPE_SIZE> delete_char{};
+    delete_char[0] = '\x7f';
+    BOOST_CHECK(!header_with_type(delete_char).IsMessageTypeValid());
+}
+
 BOOST_AUTO_TEST_CASE(cnode_simple_test)
 {
     NodeId id = 0;
