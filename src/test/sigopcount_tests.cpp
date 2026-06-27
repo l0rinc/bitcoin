@@ -57,6 +57,12 @@ BOOST_AUTO_TEST_CASE(GetSigOpCount)
     BOOST_CHECK_EQUAL(s2.GetSigOpCount(true), 3U);
     BOOST_CHECK_EQUAL(s2.GetSigOpCount(false), 20U);
 
+    CScript boundary;
+    boundary << OP_CHECKMULTISIG << OP_16 << OP_CHECKMULTISIGVERIFY;
+    BOOST_CHECK_EQUAL(boundary.GetSigOpCount(true), 36U);
+    BOOST_CHECK_EQUAL(boundary.GetSigOpCount(false), 40U);
+    BOOST_CHECK_LE(boundary.GetSigOpCount(true), boundary.GetSigOpCount(false));
+
     p2sh = GetScriptForDestination(ScriptHash(s2));
     BOOST_CHECK_EQUAL(p2sh.GetSigOpCount(true), 0U);
     BOOST_CHECK_EQUAL(p2sh.GetSigOpCount(false), 0U);
