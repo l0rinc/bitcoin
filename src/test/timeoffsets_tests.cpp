@@ -10,6 +10,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <chrono>
+#include <limits>
 #include <vector>
 
 using namespace std::chrono_literals;
@@ -63,10 +64,34 @@ BOOST_AUTO_TEST_CASE(timeoffsets_warning)
 {
     BOOST_CHECK(IsWarningRaised({{-60min, -40min, -30min, 0min, 10min}}));
     BOOST_CHECK(IsWarningRaised({5, 11min}));
+    BOOST_CHECK(IsWarningRaised({5, -11min}));
 
     BOOST_CHECK(!IsWarningRaised({4, 60min}));
     BOOST_CHECK(!IsWarningRaised({100, 3min}));
+    BOOST_CHECK(!IsWarningRaised({5, 10min}));
+    BOOST_CHECK(!IsWarningRaised({5, -10min}));
 }
 
+BOOST_AUTO_TEST_CASE(timeoffsets_warning_min_seconds)
+{
+    node::Warnings warnings{};
+    warnings.Unset(node::Warning::PRE_RELEASE_TEST_BUILD);
+    TimeOffsets offsets{warnings};
+    const auto min_seconds{std::chrono::seconds{std::numeric_limits<std::chrono::seconds::rep>::min()}};
+
+    AddMulti(offsets, {5, min_seconds});
+
+    BOOST_CHECK(offsets.Median() == min_seconds);
+    BOOST_CHECK(offsets.WarnIfOutOfSync());
+    BOOST_CHECK_EQUAL(warnings.GetMessages().size(), 1U);
+
+    offsets.Add(0s);
+    BOOST_CHECK(offsets.WarnIfOutOfSync());
+
+    AddMulti(offsets, {50, 0s});
+    BOOST_CHECK(offsets.Median() == 0s);
+    BOOST_CHECK(!offsets.WarnIfOutOfSync());
+    BOOST_CHECK(warnings.GetMessages().empty());
+}
 
 BOOST_AUTO_TEST_SUITE_END()
