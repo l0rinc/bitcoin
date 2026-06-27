@@ -213,7 +213,10 @@ private:
         m_vsize{vsize},
         m_base_fees(fees),
         m_effective_feerate(effective_feerate),
-        m_wtxids_fee_calculations(wtxids_fee_calculations) {}
+        m_wtxids_fee_calculations(wtxids_fee_calculations)
+    {
+        Assume(!wtxids_fee_calculations.empty());
+    }
 
     /** Constructor for fee-related failure case */
     explicit MempoolAcceptResult(TxValidationState state,
@@ -222,7 +225,12 @@ private:
         : m_result_type(ResultType::INVALID),
         m_state(state),
         m_effective_feerate(effective_feerate),
-        m_wtxids_fee_calculations(wtxids_fee_calculations) {}
+        m_wtxids_fee_calculations(wtxids_fee_calculations)
+    {
+        Assume(!state.IsValid());
+        Assume(state.GetResult() == TxValidationResult::TX_RECONSIDERABLE);
+        Assume(!wtxids_fee_calculations.empty());
+    }
 
     /** Constructor for already-in-mempool case. It wouldn't replace any transactions. */
     explicit MempoolAcceptResult(int64_t vsize, CAmount fees)
