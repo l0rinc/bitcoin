@@ -133,6 +133,29 @@ BOOST_AUTO_TEST_CASE(BinaryOperatorTest)
     BOOST_CHECK(a == b);
 }
 
+BOOST_AUTO_TEST_CASE(FeeRateAdditionZeroIdentity)
+{
+    const CFeeRate fractional_rate{CAmount(1), 1001};
+    BOOST_CHECK(fractional_rate > CFeeRate(0));
+    BOOST_CHECK(fractional_rate < CFeeRate(1));
+
+    CFeeRate add_default_zero{fractional_rate};
+    add_default_zero += CFeeRate{};
+    BOOST_CHECK(add_default_zero == fractional_rate);
+
+    CFeeRate add_integer_zero{fractional_rate};
+    add_integer_zero += CFeeRate{0};
+    BOOST_CHECK(add_integer_zero == fractional_rate);
+
+    CFeeRate default_zero;
+    default_zero += fractional_rate;
+    BOOST_CHECK(default_zero == fractional_rate);
+
+    CFeeRate integer_zero{0};
+    integer_zero += fractional_rate;
+    BOOST_CHECK(integer_zero == fractional_rate);
+}
+
 BOOST_AUTO_TEST_CASE(ToStringTest)
 {
     CFeeRate feeRate;

@@ -7,6 +7,7 @@
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
+#include <util/check.h>
 
 #include <cstdint>
 #include <limits>
@@ -25,6 +26,24 @@ FUZZ_TARGET(fee_rate)
         (void)fee_rate.GetFee(bytes);
     }
     (void)fee_rate.ToString();
+
+    {
+        const CAmount precise_fee{ConsumeMoney(fuzzed_data_provider)};
+        const int32_t precise_vsize{fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, std::numeric_limits<int32_t>::max())};
+        const CFeeRate precise_rate{precise_fee, precise_vsize};
+
+        CFeeRate add_zero{precise_rate};
+        add_zero += CFeeRate{0};
+        Assert(add_zero == precise_rate);
+
+        CFeeRate default_zero;
+        default_zero += precise_rate;
+        Assert(default_zero == precise_rate);
+
+        CFeeRate integer_zero{0};
+        integer_zero += precise_rate;
+        Assert(integer_zero == precise_rate);
+    }
 
     const CAmount another_satoshis_per_k = ConsumeMoney(fuzzed_data_provider);
     CFeeRate larger_fee_rate{another_satoshis_per_k};
