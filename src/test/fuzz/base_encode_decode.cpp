@@ -67,6 +67,11 @@ FUZZ_TARGET(base32_encode_decode)
     }
     // Encode/Decode roundtrip
     const auto encoded{EncodeBase32(buffer)};
+    if (!encoded.empty()) {
+        std::string leading_padding{encoded};
+        leading_padding.front() = '=';
+        assert(!DecodeBase32(leading_padding));
+    }
     const auto decoded{DecodeBase32(encoded)};
     assert(decoded && std::ranges::equal(*decoded, buffer));
 }
