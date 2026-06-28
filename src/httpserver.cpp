@@ -520,6 +520,7 @@ bool HTTPRequest::LoadBody(LineReader& reader)
 
 void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> reply_body)
 {
+    assert(m_client);
     HTTPResponse res;
 
     // Some response headers are determined in advance and stored in the request
@@ -568,6 +569,9 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
 
     if (needs_content_length) {
         res.m_headers.Write("Content-Length", util::ToString(reply_body.size()));
+        const auto content_lengths{res.m_headers.FindAll("Content-Length")};
+        Assume(!content_lengths.empty());
+        Assume(content_lengths.back() == util::ToString(reply_body.size()));
     }
 
     if (needs_body && !res.m_headers.FindFirst("Content-Type")) {
@@ -582,6 +586,8 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
 
         res.m_headers.Write("Connection", "close");
         keep_alive = false;
+        Assume(res.m_headers.FindFirst("Connection") == "close");
+        Assume(!keep_alive);
     }
 
     m_client->m_keep_alive = keep_alive;
@@ -589,6 +595,7 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
     // Serialize the response headers
     const std::string headers{res.StringifyHeaders()};
     const auto headers_bytes{std::as_bytes(std::span{headers})};
+    const size_t response_size{headers_bytes.size() + reply_body.size()};
 
     bool send_buffer_was_empty{false};
     // Fill the send buffer with the complete serialized response headers + body
@@ -601,6 +608,7 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
         // data. The original data will go out of scope when WriteReply() returns.
         // This is analogous to the memcpy() in libevent's evbuffer_add()
         m_client->m_send_buffer.insert(m_client->m_send_buffer.end(), reply_body.begin(), reply_body.end());
+        Assume(m_client->m_send_buffer.size() >= response_size);
     }
 
     LogDebug(
@@ -621,10 +629,12 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
         // Inform HTTPServer I/O that data is ready to be sent to this client
         // in the next loop iteration.
         m_client->m_send_ready = true;
+        Assume(m_client->m_send_ready);
     }
 
     // Signal to the I/O loop that we are ready to handle the next request.
     m_client->m_req_busy = false;
+    Assume(!m_client->m_req_busy);
 }
 
 CService HTTPRequest::GetPeer() const
