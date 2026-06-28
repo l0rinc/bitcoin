@@ -30,6 +30,7 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -44,6 +45,41 @@ void initialize_miner()
     }
 }
 
+void CheckGatherClusters(const CTxMemPool& pool, const std::vector<Txid>& mempool_txids, const std::vector<COutPoint>& outpoints)
+    EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
+{
+    std::vector<Txid> query;
+    query.reserve(mempool_txids.size() * 2 + outpoints.size() + 1);
+    for (const auto& txid : mempool_txids) {
+        query.push_back(txid);
+        query.push_back(txid);
+    }
+    for (const auto& outpoint : outpoints) {
+        query.push_back(outpoint.hash);
+    }
+    query.push_back(Txid::FromUint256(uint256::ZERO));
+
+    const auto gathered{pool.GatherClusters(query)};
+    if (mempool_txids.empty()) {
+        Assert(gathered.empty());
+        return;
+    }
+    Assert(!gathered.empty());
+    Assert(gathered.size() <= 500);
+    const CTxMemPool::setEntries gathered_set{gathered.begin(), gathered.end()};
+    Assert(gathered.size() == gathered_set.size());
+
+    std::set<Txid> checked_txids;
+    for (const auto& txid : query) {
+        if (!checked_txids.insert(txid).second || !pool.exists(txid)) continue;
+        const auto single_cluster{pool.GatherClusters({txid})};
+        Assert(!single_cluster.empty());
+        for (const auto& txiter : single_cluster) {
+            Assert(gathered_set.contains(txiter));
+        }
+    }
+}
+
 // Test that the MiniMiner can run with various outpoints and feerates.
 FUZZ_TARGET(mini_miner, .init = initialize_miner)
 {
@@ -54,6 +90,7 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
     CTxMemPool pool{CTxMemPool::Options{}, error};
     Assert(error.empty());
     std::vector<COutPoint> outpoints;
+    std::vector<Txid> mempool_txids;
     std::deque<COutPoint> available_coins = g_available_coins;
     LOCK2(::cs_main, pool.cs);
     // Cluster size cannot exceed 500
@@ -74,6 +111,9 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         const CAmount fee{ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY/100000)};
         assert(MoneyRange(fee));
         TryAddToMempool(pool, entry.Fee(fee).FromTx(tx));
+        if (pool.exists(tx->GetHash())) {
+            mempool_txids.push_back(tx->GetHash());
+        }
 
         // All outputs are available to spend
         for (uint32_t n{0}; n < num_outputs; ++n) {
@@ -96,9 +136,22 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         }
     }
 
+    CheckGatherClusters(pool, mempool_txids, outpoints);
+
     const CFeeRate target_feerate{CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY/1000)}};
     std::optional<CAmount> total_bumpfee;
     CAmount sum_fees = 0;
+    {
+        node::MiniMiner mini_miner{pool, outpoints};
+        assert(mini_miner.IsReadyToCalculate());
+        const auto inclusion_order{mini_miner.Linearize()};
+        const auto template_txids{mini_miner.GetMockTemplateTxids()};
+        assert(!mini_miner.IsReadyToCalculate());
+        assert(inclusion_order.size() == template_txids.size());
+        for (const auto& [txid, _] : inclusion_order) {
+            assert(template_txids.contains(txid));
+        }
+    }
     {
         node::MiniMiner mini_miner{pool, outpoints};
         assert(mini_miner.IsReadyToCalculate());
