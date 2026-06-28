@@ -200,6 +200,7 @@ private:
     explicit MempoolAcceptResult(TxValidationState state)
         : m_result_type(ResultType::INVALID), m_state(state) {
             Assume(!state.IsValid()); // Can be invalid or error
+            Assume(state.GetResult() != TxValidationResult::TX_RECONSIDERABLE);
         }
 
     /** Constructor for success case */
