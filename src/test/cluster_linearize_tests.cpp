@@ -500,4 +500,32 @@ BOOST_AUTO_TEST_CASE(linearization_output_is_topological)
     SanityCheck(depgraph, linearization);
 }
 
+BOOST_AUTO_TEST_CASE(chunk_linearization_merges_higher_rate_suffix)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto low{depgraph.AddTransaction(FeeFrac{1, 10})};
+    const auto high{depgraph.AddTransaction(FeeFrac{10, 10})};
+    const auto tail{depgraph.AddTransaction(FeeFrac{1, 10})};
+    SanityCheck(depgraph);
+
+    const std::vector<DepGraphIndex> linearization{low, high, tail};
+    SanityCheck(depgraph, linearization);
+
+    const auto chunking{ChunkLinearization(depgraph, linearization)};
+    const auto chunking_info{ChunkLinearizationInfo(depgraph, linearization)};
+
+    BOOST_REQUIRE_EQUAL(chunking.size(), 2U);
+    BOOST_REQUIRE_EQUAL(chunking_info.size(), 2U);
+    const FeeFrac merged_chunk{11, 20};
+    const FeeFrac tail_chunk{1, 10};
+    BOOST_CHECK(chunking[0] == merged_chunk);
+    BOOST_CHECK(chunking[1] == tail_chunk);
+    BOOST_CHECK(chunking_info[0].feerate == merged_chunk);
+    BOOST_CHECK(chunking_info[1].feerate == tail_chunk);
+    const TestBitSet merged_transactions{TestBitSet::Singleton(low) | TestBitSet::Singleton(high)};
+    BOOST_CHECK(chunking_info[0].transactions == merged_transactions);
+    BOOST_CHECK(chunking_info[1].transactions == TestBitSet::Singleton(tail));
+    BOOST_CHECK(ByRatio{chunking[1]} <= ByRatio{chunking[0]});
+}
+
 BOOST_AUTO_TEST_SUITE_END()
