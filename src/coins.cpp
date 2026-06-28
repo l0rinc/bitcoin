@@ -178,8 +178,15 @@ bool CCoinsViewCache::HaveCoin(const COutPoint& outpoint) const
 }
 
 bool CCoinsViewCache::HaveCoinInCache(const COutPoint &outpoint) const {
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
     CCoinsMap::const_iterator it = cacheCoins.find(outpoint);
-    return (it != cacheCoins.end() && !it->second.coin.IsSpent());
+    const bool has_coin{it != cacheCoins.end() && !it->second.coin.IsSpent()};
+    Assume(cacheCoins.size() == cache_size);
+    Assume(cachedCoinsUsage == cache_usage);
+    Assume(m_dirty_count == dirty_count);
+    return has_coin;
 }
 
 uint256 CCoinsViewCache::GetBestBlock() const {
