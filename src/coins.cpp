@@ -27,10 +27,21 @@ CoinsViewEmpty& CoinsViewEmpty::Get()
 
 std::optional<Coin> CCoinsViewCache::PeekCoin(const COutPoint& outpoint) const
 {
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
     if (auto it{cacheCoins.find(outpoint)}; it != cacheCoins.end()) {
-        return it->second.coin.IsSpent() ? std::nullopt : std::optional{it->second.coin};
+        auto ret{it->second.coin.IsSpent() ? std::nullopt : std::optional{it->second.coin}};
+        Assume(cacheCoins.size() == cache_size);
+        Assume(cachedCoinsUsage == cache_usage);
+        Assume(m_dirty_count == dirty_count);
+        return ret;
     }
-    return base->PeekCoin(outpoint);
+    auto ret{base->PeekCoin(outpoint)};
+    Assume(cacheCoins.size() == cache_size);
+    Assume(cachedCoinsUsage == cache_usage);
+    Assume(m_dirty_count == dirty_count);
+    return ret;
 }
 
 CCoinsViewCache::CCoinsViewCache(CCoinsView* in_base, bool deterministic) :
