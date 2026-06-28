@@ -3,15 +3,21 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <common/system.h>
+#include <node/mempool_persist.h>
 #include <policy/policy.h>
+#include <streams.h>
 #include <test/util/time.h>
 #include <test/util/txmempool.h>
 #include <txmempool.h>
+#include <uint256.h>
 #include <util/time.h>
+#include <validation.h>
 
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
+#include <map>
+#include <set>
 #include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(mempool_tests, TestingSetup)
@@ -140,6 +146,33 @@ BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
     testPool.removeRecursive(CTransaction(txParent), REMOVAL_REASON_DUMMY);
     BOOST_CHECK_EQUAL(testPool.size(), poolSize - 6);
     BOOST_CHECK_EQUAL(testPool.size(), 0U);
+}
+
+BOOST_AUTO_TEST_CASE(MempoolLoadUnbroadcastRequiresMempoolEntry)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    BOOST_REQUIRE(pool.GetUnbroadcastTxs().empty());
+
+    const Txid missing_txid{Txid::FromUint256(uint256{1})};
+    pool.AddUnbroadcastTx(missing_txid);
+    BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
+
+    const fs::path mempool_path{m_args.GetDataDirBase() / "mempool_unbroadcast_requires_entry.dat"};
+    {
+        AutoFile file{fsbridge::fopen(mempool_path, "wb")};
+        BOOST_REQUIRE(!file.IsNull());
+        file << uint64_t{1}; // Legacy v1 mempool dump version, without an obfuscation key.
+        file.SetObfuscation({});
+        file << uint64_t{0}; // No transactions to load.
+        file << std::map<Txid, CAmount>{};
+        file << std::set<Txid>{missing_txid};
+        BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    }
+
+    BOOST_CHECK(node::LoadMempool(pool, mempool_path, m_node.chainman->ActiveChainstate(), {}));
+    BOOST_CHECK(!pool.exists(missing_txid));
+    BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
+    fs::remove(mempool_path);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
