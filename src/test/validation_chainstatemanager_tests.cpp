@@ -724,6 +724,23 @@ BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
     }
     chainman.CheckBlockIndex();
 
+    // Reusing a reverse sequence id that is already held by a same-work fork
+    // must not make candidate ordering fall back to pointer address.
+    {
+        LOCK(chainman.GetMutex());
+        chainman.nLastPreciousChainwork = chainman.ActiveChain().Tip()->nChainWork;
+        chainman.nBlockReverseSequenceId = fork_block100->nSequenceId;
+    }
+    BOOST_REQUIRE(chainstate.PreciousBlock(state, block100));
+    {
+        LOCK(chainman.GetMutex());
+        BOOST_CHECK_EQUAL(chainman.ActiveChain().Tip(), block100);
+        BOOST_CHECK_LT(block100->nSequenceId, fork_block100->nSequenceId);
+        BOOST_CHECK(chainstate.setBlockIndexCandidates.value_comp()(fork_block100, block100));
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(block100), 1U);
+    }
+    chainman.CheckBlockIndex();
+
     // Invalidate block98
     BOOST_REQUIRE(chainstate.InvalidateBlock(state, block98));
 
