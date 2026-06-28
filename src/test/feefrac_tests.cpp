@@ -5,6 +5,9 @@
 #include <util/feefrac.h>
 #include <random.h>
 
+#include <compare>
+#include <vector>
+
 #include <boost/test/unit_test.hpp>
 
 BOOST_AUTO_TEST_SUITE(feefrac_tests)
@@ -150,6 +153,15 @@ BOOST_AUTO_TEST_CASE(feefrac_operators)
 
     // Test for integer overflow issue (https://github.com/bitcoin/bitcoin/issues/32294)
     BOOST_CHECK_EQUAL((FeeFrac{0x7ffffffdfffffffb, 0x7ffffffd}.EvaluateFeeDown(0x7fffffff)), 0x7fffffffffffffff);
+}
+
+BOOST_AUTO_TEST_CASE(compare_chunks_equal_rate_split)
+{
+    const std::vector<FeeFrac> merged{{12, 6}, {-3, 3}};
+    const std::vector<FeeFrac> split{{4, 2}, {4, 2}, {4, 2}, {-1, 1}, {-1, 1}, {-1, 1}};
+
+    BOOST_CHECK(std::is_eq(CompareChunks(merged, split)));
+    BOOST_CHECK(std::is_eq(CompareChunks(split, merged)));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
