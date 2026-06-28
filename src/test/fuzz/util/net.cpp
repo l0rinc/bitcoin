@@ -404,8 +404,20 @@ bool FuzzedSock::IsSelectable() const
     return m_selectable;
 }
 
+static bool ValidWaitEvents(Sock::Event events)
+{
+    return (events & ~(Sock::RecvEvent | Sock::SendEvent)) == 0;
+}
+
+static bool ValidOccurredEvents(Sock::Event requested, Sock::Event occurred)
+{
+    return (occurred & ~(requested | Sock::ErrorEvent)) == 0;
+}
+
 bool FuzzedSock::Wait(std::chrono::milliseconds timeout, Event requested, Event* occurred) const
 {
+    assert(ValidWaitEvents(requested));
+
     constexpr std::array wait_errnos{
         EBADF,
         EINTR,
@@ -420,6 +432,7 @@ bool FuzzedSock::Wait(std::chrono::milliseconds timeout, Event requested, Event*
         // returns false. This avoids simulating endless waiting if the
         // FuzzedDataProvider runs out of data.
         *occurred = m_fuzzed_data_provider.ConsumeBool() ? 0 : requested;
+        assert(ValidOccurredEvents(requested, *occurred));
     }
     m_clock += timeout;
     return true;
@@ -429,10 +442,12 @@ bool FuzzedSock::WaitMany(std::chrono::milliseconds timeout, EventsPerSock& even
 {
     for (auto& [sock, events] : events_per_sock) {
         (void)sock;
+        assert(ValidWaitEvents(events.requested));
         // We simulate the requested event as occurred when ConsumeBool()
         // returns false. This avoids simulating endless waiting if the
         // FuzzedDataProvider runs out of data.
         events.occurred = m_fuzzed_data_provider.ConsumeBool() ? 0 : events.requested;
+        assert(ValidOccurredEvents(events.requested, events.occurred));
     }
     m_clock += timeout;
     return true;
