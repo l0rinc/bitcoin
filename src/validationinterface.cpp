@@ -196,6 +196,8 @@ void ValidationSignals::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlo
 
 void ValidationSignals::ActiveTipChange(const CBlockIndex& new_tip, bool is_ibd)
 {
+    Assume(new_tip.nHeight >= 0);
+    Assume(new_tip.GetAncestor(new_tip.nHeight) == &new_tip);
     LOG_EVENT("%s: new block hash=%s block height=%d", __func__, new_tip.GetBlockHash().ToString(), new_tip.nHeight);
     m_internals->Iterate([&](CValidationInterface& callbacks) { callbacks.ActiveTipChange(new_tip, is_ibd); });
 }
