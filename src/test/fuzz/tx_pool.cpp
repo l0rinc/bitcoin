@@ -116,9 +116,43 @@ void SetMempoolConstraints(ArgsManager& args, FuzzedDataProvider& fuzzed_data_pr
                      ToString(fuzzed_data_provider.ConsumeIntegralInRange<unsigned>(0, 999)));
 }
 
+void CheckTransactionAncestry(const CTxMemPool& tx_pool, const Txid& txid)
+{
+    size_t ancestors{std::numeric_limits<size_t>::max()};
+    size_t cluster_count{std::numeric_limits<size_t>::max()};
+    size_t ancestor_size{std::numeric_limits<size_t>::max()};
+    CAmount ancestor_fees{std::numeric_limits<CAmount>::max()};
+    tx_pool.GetTransactionAncestry(txid, ancestors, cluster_count, &ancestor_size, &ancestor_fees);
+
+    LOCK(tx_pool.cs);
+    const auto it{tx_pool.GetIter(txid)};
+    if (!it) {
+        Assert(ancestors == 0);
+        Assert(cluster_count == 0);
+        return;
+    }
+
+    const auto [expected_ancestors, expected_size, expected_fees]{tx_pool.CalculateAncestorData(**it)};
+    const auto expected_cluster_count{tx_pool.GetCluster(txid).size()};
+    Assert(ancestors == expected_ancestors);
+    Assert(cluster_count == expected_cluster_count);
+    Assert(ancestor_size == expected_size);
+    Assert(ancestor_fees == expected_fees);
+    Assert(ancestors > 0);
+    Assert(ancestors <= cluster_count);
+}
+
+void CheckTransactionAncestryAll(const CTxMemPool& tx_pool)
+{
+    for (const auto& info : tx_pool.infoAll()) {
+        CheckTransactionAncestry(tx_pool, info.tx->GetHash());
+    }
+}
+
 void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Chainstate& chainstate)
 {
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
+    CheckTransactionAncestryAll(tx_pool);
     {
         BlockCreateOptions options{
             .block_min_fee_rate = CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/COIN)},
@@ -149,6 +183,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         const auto& tx_to_remove = *PickValue(fuzzed_data_provider, info_all).tx;
         WITH_LOCK(tx_pool.cs, tx_pool.removeRecursive(tx_to_remove, MemPoolRemovalReason::BLOCK /* dummy */));
         assert(tx_pool.size() < info_all.size());
+        CheckTransactionAncestryAll(tx_pool);
     }
 
     if (fuzzed_data_provider.ConsumeBool()) {
@@ -162,6 +197,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         tx_pool.Expire(GetMockTime() - std::chrono::seconds(fuzzed_data_provider.ConsumeIntegral<uint32_t>()));
     }
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
+    CheckTransactionAncestryAll(tx_pool);
     g_setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
 }
 
@@ -379,6 +415,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
         bool txid_in_mempool = tx_pool.exists(tx->GetHash());
         bool wtxid_in_mempool = tx_pool.exists(tx->GetWitnessHash());
         CheckATMPInvariants(res, txid_in_mempool, wtxid_in_mempool);
+        if (txid_in_mempool) CheckTransactionAncestry(tx_pool, tx->GetHash());
 
         Assert(accepted != added.empty());
         if (accepted) {
@@ -482,6 +519,7 @@ FUZZ_TARGET(tx_pool, .init = initialize_tx_pool)
         const bool accepted = res.m_result_type == MempoolAcceptResult::ResultType::VALID;
         if (accepted) {
             txids.push_back(tx->GetHash());
+            CheckTransactionAncestry(tx_pool, tx->GetHash());
             if (!ever_bypassed_limits) {
                 CheckMempoolTRUCInvariants(tx_pool);
             }
