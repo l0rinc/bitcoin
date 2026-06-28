@@ -313,6 +313,13 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         assert_cache_clean(cache);
     };
 
+    auto assert_cache_stack_sane = [&]() {
+        for (const auto& cache : caches) {
+            assert(cache->GetDirtyCount() <= cache->GetCacheSize());
+            cache->SanityCheck();
+        }
+    };
+
     auto assert_spent_public = [&](uint32_t outpointidx) {
         const auto& outpoint{data.outpoints[outpointidx]};
         assert(!caches.back()->HaveCoin(outpoint));
@@ -572,12 +579,12 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 current_height = provider.ConsumeIntegralInRange<uint32_t>(1, current_height - 1);
             }
         );
+
+        assert_cache_stack_sane();
     }
 
     // Sanity check all the remaining caches
-    for (const auto& cache : caches) {
-        cache->SanityCheck();
-    }
+    assert_cache_stack_sane();
 
     // Full comparison between caches and simulation data, from bottom to top,
     for (unsigned sim_idx = 1; sim_idx <= caches.size(); ++sim_idx) {
