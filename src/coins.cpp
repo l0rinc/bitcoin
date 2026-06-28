@@ -268,10 +268,14 @@ void CCoinsViewCache::Flush(bool reallocate_cache)
     base->BatchWrite(cursor, m_block_hash);
     Assume(m_dirty_count == 0);
     cacheCoins.clear();
+    Assume(cacheCoins.empty());
+    Assume(m_sentinel.second.Next() == &m_sentinel);
+    Assume(m_sentinel.second.Prev() == &m_sentinel);
     if (reallocate_cache) {
         ReallocateCache();
     }
     cachedCoinsUsage = 0;
+    Assume(cachedCoinsUsage == 0);
 }
 
 void CCoinsViewCache::Sync()
@@ -283,6 +287,7 @@ void CCoinsViewCache::Sync()
         /* BatchWrite must clear flags of all entries */
         throw std::logic_error("Not all unspent flagged entries were cleared");
     }
+    Assume(m_sentinel.second.Prev() == &m_sentinel);
 }
 
 void CCoinsViewCache::Reset() noexcept
@@ -291,6 +296,11 @@ void CCoinsViewCache::Reset() noexcept
     cachedCoinsUsage = 0;
     m_dirty_count = 0;
     SetBestBlock(uint256::ZERO);
+    Assume(cacheCoins.empty());
+    Assume(cachedCoinsUsage == 0);
+    Assume(m_dirty_count == 0);
+    Assume(m_sentinel.second.Next() == &m_sentinel);
+    Assume(m_sentinel.second.Prev() == &m_sentinel);
 }
 
 void CCoinsViewCache::Uncache(const COutPoint& hash)
