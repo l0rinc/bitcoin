@@ -380,10 +380,14 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
 
             [&]() { // SpendCoin (moveto = nullptr)
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
+                // Look up in simulation data (to compare with the returned bool).
+                auto sim = lookup(outpointidx);
                 // Invoke on real caches.
-                caches.back()->SpendCoin(data.outpoints[outpointidx], nullptr);
+                const bool real = caches.back()->SpendCoin(data.outpoints[outpointidx], nullptr);
                 // Apply to simulation data.
                 sim_caches[caches.size()].entry[outpointidx].entrytype = EntryType::SPENT;
+                // Compare return value with whether there was an unspent coin to delete.
+                assert(real == sim.has_value());
             },
 
             [&]() { // SpendCoin (with moveto)
@@ -392,9 +396,11 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 auto sim = lookup(outpointidx);
                 // Invoke on real caches.
                 Coin realcoin;
-                caches.back()->SpendCoin(data.outpoints[outpointidx], &realcoin);
+                const bool real = caches.back()->SpendCoin(data.outpoints[outpointidx], &realcoin);
                 // Apply to simulation data.
                 sim_caches[caches.size()].entry[outpointidx].entrytype = EntryType::SPENT;
+                // Compare return value with whether there was an unspent coin to delete.
+                assert(real == sim.has_value());
                 // Compare *moveto with the value expected based on simulation data.
                 if (!sim.has_value()) {
                     assert(realcoin.IsSpent());
