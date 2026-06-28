@@ -128,6 +128,13 @@ BOOST_AUTO_TEST_CASE(http_headers_tests)
                                           "Sandwich: ham\r\n"
                                           "Coffee: black\r\n"
                                           "\r\n");
+        // Case-insensitive removal deletes all matching duplicates without disturbing unrelated headers.
+        headers.RemoveAll("CACHE-CONTROL");
+        BOOST_CHECK(!headers.FindFirst("Cache-Control"));
+        BOOST_CHECK(headers.FindAll("cache-control").empty());
+        BOOST_CHECK_EQUAL(headers.Stringify(), "Sandwich: ham\r\n"
+                                              "Coffee: black\r\n"
+                                              "\r\n");
     }
     {
         // Reading request headers captured from bitcoin-cli
