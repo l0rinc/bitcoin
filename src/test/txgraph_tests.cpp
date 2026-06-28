@@ -8,6 +8,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -427,6 +428,48 @@ BOOST_AUTO_TEST_CASE(txgraph_getcluster_membership_contracts)
 
     graph->CommitStaging();
     check_cluster(refs[4], TxGraph::Level::MAIN, {&refs[0], &refs[1], &refs[2], &refs[4]});
+    graph->SanityCheck();
+}
+
+BOOST_AUTO_TEST_CASE(txgraph_count_distinct_clusters_contracts)
+{
+    auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(7);
+    for (const FeePerWeight& feerate : {FeePerWeight{10, 10}, FeePerWeight{9, 10}, FeePerWeight{8, 10}, FeePerWeight{7, 10}, FeePerWeight{6, 10}}) {
+        graph->AddTransaction(refs.emplace_back(), feerate);
+    }
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
+    graph->AddDependency(/*parent=*/refs[2], /*child=*/refs[3]);
+
+    TxGraph::Ref empty_ref;
+    auto check_count = [&](std::vector<TxGraph::Ref*> query, TxGraph::Level level, uint32_t expected) {
+        BOOST_CHECK_EQUAL(graph->CountDistinctClusters(query, level), expected);
+        std::ranges::reverse(query);
+        BOOST_CHECK_EQUAL(graph->CountDistinctClusters(query, level), expected);
+        query.push_back(&empty_ref);
+        if (!query.empty()) {
+            query.push_back(query.front());
+            query.push_back(query.back());
+        }
+        BOOST_CHECK_EQUAL(graph->CountDistinctClusters(query, level), expected);
+    };
+
+    check_count({}, TxGraph::Level::TOP, 0);
+    check_count({&empty_ref}, TxGraph::Level::TOP, 0);
+    check_count({&refs[1], &refs[0], &refs[0], &refs[3], &empty_ref}, TxGraph::Level::TOP, 2);
+
+    graph->StartStaging();
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{5, 10});
+    graph->AddDependency(/*parent=*/refs[1], /*child=*/refs[5]);
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{4, 10});
+
+    check_count({&refs[5], &refs[0], &refs[3], &refs[6], &empty_ref}, TxGraph::Level::TOP, 3);
+    check_count({&refs[5], &refs[0], &refs[3], &refs[6], &empty_ref}, TxGraph::Level::MAIN, 2);
+
+    graph->CommitStaging();
+    check_count({&refs[5], &refs[0], &refs[3], &refs[6], &empty_ref}, TxGraph::Level::MAIN, 3);
     graph->SanityCheck();
 }
 
