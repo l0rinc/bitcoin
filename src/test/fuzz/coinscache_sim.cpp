@@ -318,6 +318,34 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         }
     };
 
+    struct CacheStats {
+        size_t cache_size;
+        size_t dirty_count;
+        size_t memory_usage;
+    };
+
+    auto get_cache_stats = [&]() {
+        std::vector<CacheStats> stats;
+        stats.reserve(caches.size());
+        for (const auto& cache : caches) {
+            stats.push_back({
+                cache->GetCacheSize(),
+                cache->GetDirtyCount(),
+                cache->DynamicMemoryUsage(),
+            });
+        }
+        return stats;
+    };
+
+    auto assert_cache_stats = [&](const std::vector<CacheStats>& expected) {
+        assert(caches.size() == expected.size());
+        for (size_t idx{0}; idx < caches.size(); ++idx) {
+            assert(caches[idx]->GetCacheSize() == expected[idx].cache_size);
+            assert(caches[idx]->GetDirtyCount() == expected[idx].dirty_count);
+            assert(caches[idx]->DynamicMemoryUsage() == expected[idx].memory_usage);
+        }
+    };
+
     auto assert_spent_public = [&](uint32_t outpointidx) {
         const auto& outpoint{data.outpoints[outpointidx]};
         assert(!caches.back()->HaveCoin(outpoint));
@@ -348,9 +376,12 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 // Look up in simulation data.
                 auto sim = lookup(outpointidx);
                 // Look up in real caches.
-                auto realcoin = provider.ConsumeBool() ?
+                const bool use_peek{provider.ConsumeBool()};
+                const auto cache_stats{use_peek ? get_cache_stats() : std::vector<CacheStats>{}};
+                auto realcoin = use_peek ?
                     caches.back()->PeekCoin(data.outpoints[outpointidx]) :
                     caches.back()->GetCoin(data.outpoints[outpointidx]);
+                if (use_peek) assert_cache_stats(cache_stats);
                 // Compare results.
                 if (!sim.has_value()) {
                     assert(!realcoin);
