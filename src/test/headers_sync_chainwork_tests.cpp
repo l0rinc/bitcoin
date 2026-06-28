@@ -28,6 +28,10 @@ using State = HeadersSyncState::State;
         BOOST_CHECK_EQUAL(result.success, exp_success);                                                  \
         BOOST_CHECK_EQUAL(result.request_more, exp_request_more);                                        \
         BOOST_CHECK_EQUAL(result.pow_validated_headers.size(), exp_headers_size);                        \
+        for (size_t i{1}; i < result.pow_validated_headers.size(); ++i) {                                \
+            BOOST_CHECK_EQUAL(result.pow_validated_headers.at(i).hashPrevBlock,                          \
+                              result.pow_validated_headers.at(i - 1).GetHash());                         \
+        }                                                                                                \
         const std::optional<uint256> pow_validated_prev_opt{exp_pow_validated_prev};                     \
         if (pow_validated_prev_opt) {                                                                    \
             BOOST_CHECK_EQUAL(result.pow_validated_headers.at(0).hashPrevBlock, pow_validated_prev_opt); \
