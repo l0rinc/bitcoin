@@ -62,6 +62,24 @@ BOOST_AUTO_TEST_CASE(test_query_parameters)
     uri = "/rest/endpoint/someresource.json?p1=v1&p1=v2";
     BOOST_CHECK_EQUAL(GetQueryParameterFromUri(uri, "p1"), "v1");
 
+    // Duplicate keys are detected after URL decoding.
+    uri = "/rest/endpoint/someresource.json?p%31=encoded&p1=literal";
+    BOOST_CHECK_EQUAL(GetQueryParameterFromUri(uri, "p1"), "encoded");
+
+    // A parameter without "=" exists with an empty value.
+    uri = "/rest/endpoint/someresource.json?flag&p1=v1";
+    BOOST_CHECK_EQUAL(GetQueryParameterFromUri(uri, "flag"), "");
+
+    // Empty and encoded parameter names are valid query keys.
+    uri = "/rest/endpoint/someresource.json?=empty-key&%26=amp-key";
+    BOOST_CHECK_EQUAL(GetQueryParameterFromUri(uri, ""), "empty-key");
+    BOOST_CHECK_EQUAL(GetQueryParameterFromUri(uri, "&"), "amp-key");
+
+    // Fragment contents are not part of the query.
+    uri = "/rest/endpoint/someresource.json?p1=v1#p1=v2&p2=v2";
+    BOOST_CHECK_EQUAL(GetQueryParameterFromUri(uri, "p1"), "v1");
+    BOOST_CHECK(!GetQueryParameterFromUri(uri, "p2"));
+
     // Invalid query string syntax is the same as not having parameters
     uri = "/rest/endpoint/someresource.json&p1=v1&p2=v2";
     BOOST_CHECK(!GetQueryParameterFromUri(uri, "p1"));
