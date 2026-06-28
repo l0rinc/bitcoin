@@ -461,6 +461,7 @@ bool HTTPRequest::LoadBody(LineReader& reader)
                 }
                 // Complete request has been parsed, reader is now pointing
                 // to beginning of next request or end of the buffer.
+                Assume(m_body.size() <= MAX_BODY_SIZE);
                 return true;
             }
 
@@ -489,7 +490,10 @@ bool HTTPRequest::LoadBody(LineReader& reader)
     } else {
         // No Content-length or Transfer-Encoding header means no body, see libevent evhttp_get_body()
         auto content_length_values{m_headers.FindAll("Content-Length")};
-        if (content_length_values.empty()) return true;
+        if (content_length_values.empty()) {
+            Assume(m_body.empty());
+            return true;
+        }
 
         // Duplicate Content-Length headers are allowed only if they all have the same value
         // https://www.rfc-editor.org/rfc/rfc7230#section-3.3.3
@@ -507,6 +511,8 @@ bool HTTPRequest::LoadBody(LineReader& reader)
         if (reader.Remaining() < *content_length) return false;
 
         m_body = reader.ReadLength(*content_length);
+        Assume(m_body.size() == *content_length);
+        Assume(m_body.size() <= MAX_BODY_SIZE);
 
         return true;
     }
