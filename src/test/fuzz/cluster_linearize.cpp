@@ -926,6 +926,7 @@ FUZZ_TARGET(clusterlin_sfl)
             // Verify that the diagram of GetLinearization() is at least as good as GetDiagram(),
             // from time to time.
             auto lin = sfl.GetLinearization(IndexTxOrder{});
+            SanityCheck(depgraph, lin);
             auto lin_diagram = ChunkLinearization(depgraph, lin);
             auto cmp_lin = CompareChunks(lin_diagram, diagram);
             assert(cmp_lin >= 0);
