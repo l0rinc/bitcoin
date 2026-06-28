@@ -68,7 +68,19 @@ CBlockIndex* CChain::FindEarliestAtLeast(int64_t nTime, int height) const
     std::pair<int64_t, int> blockparams = std::make_pair(nTime, height);
     std::vector<CBlockIndex*>::const_iterator lower = std::lower_bound(vChain.begin(), vChain.end(), blockparams,
         [](CBlockIndex* pBlock, const std::pair<int64_t, int>& blockparams) -> bool { return pBlock->GetBlockTimeMax() < blockparams.first || pBlock->nHeight < blockparams.second; });
-    return (lower == vChain.end() ? nullptr : *lower);
+    CBlockIndex* result{lower == vChain.end() ? nullptr : *lower};
+    if (result) {
+        Assume(result->GetBlockTimeMax() >= nTime);
+        Assume(result->nHeight >= height);
+        if (result->nHeight > 0) {
+            const CBlockIndex* prev{(*this)[result->nHeight - 1]};
+            Assume(prev);
+            Assume(prev->GetBlockTimeMax() < nTime || prev->nHeight < height);
+        }
+    } else if (const CBlockIndex* tip{Tip()}) {
+        Assume(tip->GetBlockTimeMax() < nTime || tip->nHeight < height);
+    }
+    return result;
 }
 
 /** Turn the lowest '1' bit in the binary representation of a number into a '0'. */
