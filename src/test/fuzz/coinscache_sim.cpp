@@ -265,6 +265,16 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         }
     };
 
+    auto assert_cache_clean = [](const CCoinsViewCache& cache) {
+        assert(cache.GetDirtyCount() == 0);
+        cache.SanityCheck();
+    };
+
+    auto assert_cache_empty = [&](const CCoinsViewCache& cache) {
+        assert(cache.GetCacheSize() == 0);
+        assert_cache_clean(cache);
+    };
+
     // Main simulation loop: read commands from the fuzzer input, and apply them
     // to both the real cache stack and the simulation.
     FuzzedDataProvider provider(buffer.data(), buffer.size());
@@ -437,6 +447,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 flush();
                 // Apply to real caches.
                 caches.back()->Flush(/*reallocate_cache=*/provider.ConsumeBool());
+                assert_cache_empty(*caches.back());
             },
 
             [&]() { // Sync.
@@ -445,6 +456,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 flush();
                 // Apply to real caches.
                 caches.back()->Sync();
+                assert_cache_clean(*caches.back());
             },
 
             [&]() { // Reset.
@@ -457,6 +469,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 } else {
                     (void)caches.back()->CreateResetGuard();
                 }
+                assert_cache_empty(*caches.back());
             },
 
             [&]() { // GetCacheSize
