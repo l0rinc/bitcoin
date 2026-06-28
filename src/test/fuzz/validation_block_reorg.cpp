@@ -45,11 +45,18 @@ bool IsAncestorOrDescendant(const CBlockIndex& a, const CBlockIndex& b)
     return a.GetAncestor(b.nHeight) == &b || b.GetAncestor(a.nHeight) == &a;
 }
 
+enum class ChainEventType {
+    CONNECTED,
+    DISCONNECTED,
+    UPDATED_TIP,
+};
+
 struct ChainEvent {
-    bool connected;
+    ChainEventType type;
     uint256 hash;
     uint256 prev_hash;
     int height;
+    int fork_height{-1};
 };
 
 struct ValidationEventRecorder final : public CValidationInterface {
@@ -77,7 +84,7 @@ struct ValidationEventRecorder final : public CValidationInterface {
         }
         assert(WITH_LOCK(::cs_main, return !(pindex->nStatus & BLOCK_FAILED_VALID)));
         m_events.push_back({
-            /*connected=*/true,
+            ChainEventType::CONNECTED,
             pindex->GetBlockHash(),
             pindex->pprev ? pindex->pprev->GetBlockHash() : uint256{},
             pindex->nHeight,
@@ -93,27 +100,51 @@ struct ValidationEventRecorder final : public CValidationInterface {
         assert(block->GetHash() == pindex->GetBlockHash());
         assert(block->hashPrevBlock == pindex->pprev->GetBlockHash());
         m_events.push_back({
-            /*connected=*/false,
+            ChainEventType::DISCONNECTED,
             pindex->GetBlockHash(),
             pindex->pprev->GetBlockHash(),
             pindex->nHeight,
         });
     }
 
+    void UpdatedBlockTip(const CBlockIndex* pindexNew, const CBlockIndex* pindexFork, bool fInitialDownload) override
+    {
+        assert(pindexNew);
+        assert(WITH_LOCK(::cs_main, return !(pindexNew->nStatus & BLOCK_FAILED_VALID)));
+        if (pindexFork) {
+            assert(pindexFork->nHeight <= pindexNew->nHeight);
+            assert(pindexNew->GetAncestor(pindexFork->nHeight) == pindexFork);
+        }
+        m_events.push_back({
+            ChainEventType::UPDATED_TIP,
+            pindexNew->GetBlockHash(),
+            pindexFork ? pindexFork->GetBlockHash() : uint256{},
+            pindexNew->nHeight,
+            pindexFork ? pindexFork->nHeight : -1,
+        });
+    }
+
     void AssertAndClear(const ChainstateManager& chainman)
     {
         for (const ChainEvent& event : m_events) {
-            if (event.connected) {
+            if (event.type == ChainEventType::CONNECTED) {
                 assert(event.prev_hash == m_expected_tip);
                 assert(event.height == m_expected_height + 1);
                 m_expected_tip = event.hash;
                 ++m_expected_height;
-            } else {
+            } else if (event.type == ChainEventType::DISCONNECTED) {
                 assert(event.hash == m_expected_tip);
                 assert(event.height == m_expected_height);
                 assert(m_expected_height > 0);
                 m_expected_tip = event.prev_hash;
                 --m_expected_height;
+            } else {
+                assert(event.type == ChainEventType::UPDATED_TIP);
+                assert(event.hash == m_expected_tip);
+                assert(event.height == m_expected_height);
+                if (event.fork_height >= 0) {
+                    assert(event.fork_height <= event.height);
+                }
             }
         }
         LOCK(chainman.GetMutex());
