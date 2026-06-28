@@ -653,6 +653,18 @@ BOOST_FIXTURE_TEST_CASE(calculate_cluster, TestChain100Setup)
         BOOST_CHECK_EQUAL(cluster.size(), clusterset.size());
         for (const auto& iter : vec_iters_zigzag) BOOST_CHECK(clusterset.count(iter));
     }
+    const std::vector<Txid> duplicated_same_cluster{
+        zigzag_txids[0],
+        zigzag_txids[22],
+        zigzag_txids[52],
+        zigzag_txids[0],
+        Txid::FromUint256(GetRandHash()),
+    };
+    const auto duplicated_cluster = pool.GatherClusters(duplicated_same_cluster);
+    BOOST_CHECK_EQUAL(duplicated_cluster.size(), zigzag_txids.size());
+    CTxMemPool::setEntries duplicated_clusterset{duplicated_cluster.begin(), duplicated_cluster.end()};
+    BOOST_CHECK_EQUAL(duplicated_cluster.size(), duplicated_clusterset.size());
+    for (const auto& iter : vec_iters_zigzag) BOOST_CHECK(duplicated_clusterset.count(iter));
 }
 
 BOOST_FIXTURE_TEST_CASE(manual_ctor, TestChain100Setup)
