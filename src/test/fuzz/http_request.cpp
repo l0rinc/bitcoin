@@ -21,6 +21,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 
@@ -78,6 +79,81 @@ std::vector<std::string> QueryKeysForOracle(const std::string_view uri, FuzzedDa
         pos = next + 1;
     }
     return keys;
+}
+
+std::optional<std::string> ReferenceHeaderFindFirst(const std::vector<std::pair<std::string, std::string>>& headers, const std::string_view key)
+{
+    for (const auto& [header_key, header_value] : headers) {
+        if (CaseInsensitiveEqual(key, header_key)) return header_value;
+    }
+    return std::nullopt;
+}
+
+std::vector<std::string> ReferenceHeaderFindAll(const std::vector<std::pair<std::string, std::string>>& headers, const std::string_view key)
+{
+    std::vector<std::string> ret;
+    for (const auto& [header_key, header_value] : headers) {
+        if (CaseInsensitiveEqual(key, header_key)) ret.push_back(header_value);
+    }
+    return ret;
+}
+
+std::string ReferenceHeaderStringify(const std::vector<std::pair<std::string, std::string>>& headers)
+{
+    std::string ret;
+    for (const auto& [header_key, header_value] : headers) {
+        ret += header_key + ": " + header_value + "\r\n";
+    }
+    ret += "\r\n";
+    return ret;
+}
+
+void ReferenceHeaderRemoveAll(std::vector<std::pair<std::string, std::string>>& headers, const std::string_view key)
+{
+    for (auto it{headers.begin()}; it != headers.end();) {
+        if (CaseInsensitiveEqual(key, it->first)) {
+            it = headers.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void AssertHeaderCollectionContracts(FuzzedDataProvider& fuzzed_data_provider)
+{
+    http_bitcoin::HTTPHeaders headers;
+    std::vector<std::pair<std::string, std::string>> reference_headers;
+
+    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 32)
+    {
+        const std::string key{fuzzed_data_provider.ConsumeRandomLengthString(16)};
+        const std::string value{fuzzed_data_provider.ConsumeRandomLengthString(16)};
+        const uint8_t op{fuzzed_data_provider.ConsumeIntegralInRange<uint8_t>(0, 2)};
+        if (op == 0) {
+            headers.Write(std::string{key}, std::string{value});
+            reference_headers.emplace_back(key, value);
+        } else if (op == 1) {
+            const std::string before{headers.Stringify()};
+            const bool existed{ReferenceHeaderFindFirst(reference_headers, key).has_value()};
+            headers.RemoveAll(key);
+            ReferenceHeaderRemoveAll(reference_headers, key);
+            assert(existed || headers.Stringify() == before);
+        }
+
+        const std::string query_key{fuzzed_data_provider.ConsumeBool() && !reference_headers.empty() ?
+            PickValue(fuzzed_data_provider, reference_headers).first :
+            fuzzed_data_provider.ConsumeRandomLengthString(16)};
+        const auto first{headers.FindFirst(query_key)};
+        const auto expected_first{ReferenceHeaderFindFirst(reference_headers, query_key)};
+        assert(first == expected_first);
+
+        const auto all{headers.FindAll(query_key)};
+        const auto expected_all{ReferenceHeaderFindAll(reference_headers, query_key)};
+        const std::vector<std::string> all_values{all.begin(), all.end()};
+        assert(all_values == expected_all);
+        if (!all.empty()) assert(first == std::optional<std::string>{std::string{all.front()}});
+        assert(headers.Stringify() == ReferenceHeaderStringify(reference_headers));
+    }
 }
 
 void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDataProvider& fuzzed_data_provider, FakeSteadyClock& clock)
@@ -184,6 +260,7 @@ FUZZ_TARGET(http_request)
     SetMockTime(1);
     FakeSteadyClock steady_clock;
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
+    AssertHeaderCollectionContracts(fuzzed_data_provider);
     const std::vector<std::byte> http_buffer{ConsumeRandomLengthByteVector<std::byte>(fuzzed_data_provider, 4096)};
 
     HTTPRequest http_request;
