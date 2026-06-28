@@ -482,4 +482,22 @@ BOOST_AUTO_TEST_CASE(depgraph_optimal_tests)
     TestOptimalLinearization("866faa23008646b71501851f96130282588f1103804d851c0000000003822097600100000003850a8f310200000003856e9201000000038656935f01000003855b8f5f020000018743923a0000000a812b810b010000098403a328020000068712970203000005833e98400400000200"_hex_u8, {11, 14, 1, 10, 4, 3, 5, 13, 9, 7, 6, 12, 8, 0, 2});
 }
 
+BOOST_AUTO_TEST_CASE(linearization_output_is_topological)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto parent{depgraph.AddTransaction(FeeFrac{1, 10})};
+    const auto child{depgraph.AddTransaction(FeeFrac{100, 1})};
+    depgraph.AddDependencies(TestBitSet::Singleton(parent), child);
+    SanityCheck(depgraph);
+
+    SpanningForestState<TestBitSet> state{depgraph, /*rng_seed=*/0};
+    state.MakeTopological();
+    const auto linearization{state.GetLinearization(IndexTxOrder{})};
+
+    BOOST_REQUIRE_EQUAL(linearization.size(), 2U);
+    BOOST_CHECK_EQUAL(linearization[0], parent);
+    BOOST_CHECK_EQUAL(linearization[1], child);
+    SanityCheck(depgraph, linearization);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
