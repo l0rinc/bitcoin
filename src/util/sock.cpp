@@ -26,6 +26,18 @@
 #include <poll.h>
 #endif
 
+namespace {
+bool ValidWaitEvents(Sock::Event events)
+{
+    return (events & ~(Sock::RecvEvent | Sock::SendEvent)) == 0;
+}
+
+bool ValidOccurredEvents(Sock::Event requested, Sock::Event occurred)
+{
+    return (occurred & ~(requested | Sock::ErrorEvent)) == 0;
+}
+} // namespace
+
 Sock::Sock(SOCKET s) : m_socket(s) {}
 
 Sock::Sock(Sock&& other)
@@ -140,6 +152,8 @@ bool Sock::IsSelectable() const
 
 bool Sock::Wait(std::chrono::milliseconds timeout, Event requested, Event* occurred) const
 {
+    Assume(ValidWaitEvents(requested));
+
     // We need a `shared_ptr` holding `this` for `WaitMany()`, but don't want
     // `this` to be destroyed when the `shared_ptr` goes out of scope at the
     // end of this function.
@@ -162,6 +176,11 @@ bool Sock::Wait(std::chrono::milliseconds timeout, Event requested, Event* occur
 
 bool Sock::WaitMany(std::chrono::milliseconds timeout, EventsPerSock& events_per_sock) const
 {
+    for (const auto& [sock, events] : events_per_sock) {
+        (void)sock;
+        Assume(ValidWaitEvents(events.requested));
+    }
+
 #ifdef USE_POLL
     std::vector<pollfd> pfds;
     for (const auto& [sock, events] : events_per_sock) {
@@ -194,6 +213,7 @@ bool Sock::WaitMany(std::chrono::milliseconds timeout, EventsPerSock& events_per
         if (pfds[i].revents & (POLLERR | POLLHUP)) {
             events.occurred |= ErrorEvent;
         }
+        Assume(ValidOccurredEvents(events.requested, events.occurred));
         ++i;
     }
 
@@ -240,6 +260,7 @@ bool Sock::WaitMany(std::chrono::milliseconds timeout, EventsPerSock& events_per
         if (FD_ISSET(s, &err)) {
             events.occurred |= ErrorEvent;
         }
+        Assume(ValidOccurredEvents(events.requested, events.occurred));
     }
 
     return true;
