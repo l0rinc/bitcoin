@@ -758,6 +758,54 @@ BOOST_AUTO_TEST_CASE(ccoins_spend)
     }
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_spend_lookup_postconditions)
+{
+    CCoinsViewTest base{m_rng};
+
+    auto make_coin = [&](CAmount value) {
+        return Coin{CTxOut{value, CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+    };
+    auto check_spent_public = [](CCoinsViewCacheTest& cache, const COutPoint& outpoint) {
+        BOOST_CHECK(!cache.HaveCoin(outpoint));
+        BOOST_CHECK(!cache.GetCoin(outpoint));
+        BOOST_CHECK(cache.AccessCoin(outpoint).IsSpent());
+    };
+
+    const COutPoint fresh_outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin fresh_coin{make_coin(100)};
+    CCoinsViewCacheTest fresh_cache{&base};
+    fresh_cache.AddCoin(fresh_outpoint, Coin{fresh_coin}, /*possible_overwrite=*/false);
+
+    Coin fresh_moveout;
+    BOOST_REQUIRE(fresh_cache.SpendCoin(fresh_outpoint, &fresh_moveout));
+    BOOST_CHECK(fresh_moveout == fresh_coin);
+    check_spent_public(fresh_cache, fresh_outpoint);
+    BOOST_CHECK(!fresh_cache.HaveCoinInCache(fresh_outpoint));
+    BOOST_CHECK_EQUAL(fresh_cache.GetCacheSize(), 0U);
+    fresh_cache.SelfTest();
+
+    const COutPoint parent_outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin parent_coin{make_coin(200)};
+    {
+        CCoinsViewCache write_cache{&base};
+        write_cache.AddCoin(parent_outpoint, Coin{parent_coin}, /*possible_overwrite=*/false);
+        write_cache.Flush();
+    }
+
+    CCoinsViewCacheTest child_cache{&base};
+    BOOST_REQUIRE(child_cache.HaveCoin(parent_outpoint));
+    BOOST_CHECK(child_cache.HaveCoinInCache(parent_outpoint));
+
+    Coin parent_moveout;
+    BOOST_REQUIRE(child_cache.SpendCoin(parent_outpoint, &parent_moveout));
+    BOOST_CHECK(parent_moveout == parent_coin);
+    check_spent_public(child_cache, parent_outpoint);
+    BOOST_CHECK(!child_cache.HaveCoinInCache(parent_outpoint));
+    BOOST_CHECK_EQUAL(child_cache.GetCacheSize(), 1U);
+    BOOST_CHECK_EQUAL(child_cache.GetDirtyCount(), 1U);
+    child_cache.SelfTest();
+}
+
 static void CheckAddCoin(const CAmount base_value, const MaybeCoin& cache_coin, const CAmount modify_value, const CoinOrError& expected, const bool coinbase)
 {
     SingleEntryCacheTest test{base_value, cache_coin};
