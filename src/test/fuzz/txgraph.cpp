@@ -663,6 +663,9 @@ FUZZ_TARGET(txgraph)
                 auto result = real->GetCluster(*ref, level_select);
                 // Check cluster count limit.
                 assert(result.size() <= max_cluster_count);
+                for (TxGraph::Ref* refptr : result) {
+                    assert(real->GetCluster(*refptr, level_select) == result);
+                }
                 // Require the result to be topologically valid and not contain duplicates.
                 auto left = sel_sim.graph.Positions();
                 uint64_t total_size{0};
