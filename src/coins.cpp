@@ -262,6 +262,7 @@ void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& in
         }
     }
     SetBestBlock(in_block_hash);
+    Assume(m_block_hash == in_block_hash);
 }
 
 void CCoinsViewCache::Flush(bool reallocate_cache)
