@@ -437,6 +437,8 @@ std::vector<SetInfo<SetType>> ChunkLinearizationInfo(const DepGraph<SetType>& de
             new_chunk |= ret.back();
             ret.pop_back();
         }
+        Assume(new_chunk.transactions.Any());
+        Assume(ret.empty() || !(ByRatio{new_chunk.feerate} > ByRatio{ret.back().feerate}));
         // Actually move that new chunk into the chunking.
         ret.emplace_back(std::move(new_chunk));
     }
@@ -457,6 +459,7 @@ std::vector<FeeFrac> ChunkLinearization(const DepGraph<SetType>& depgraph, std::
             new_chunk += ret.back();
             ret.pop_back();
         }
+        Assume(ret.empty() || !(ByRatio{new_chunk} > ByRatio{ret.back()}));
         // Actually move that new chunk into the chunking.
         ret.push_back(std::move(new_chunk));
     }
