@@ -12,6 +12,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <cassert>
+#include <memory>
 #include <thread>
 
 using namespace std::chrono_literals;
@@ -153,6 +154,28 @@ BOOST_AUTO_TEST_CASE(wait)
     BOOST_REQUIRE_EQUAL(socks.sender.Send("a", 1, 0), 1);
 
     waiter.join();
+}
+
+BOOST_AUTO_TEST_CASE(wait_many_reports_only_requested_events)
+{
+    TcpSocketPair socks = TcpSocketPair{};
+
+    const std::shared_ptr<const Sock> sender_ref{std::shared_ptr<const Sock>{}, &socks.sender};
+    const std::shared_ptr<const Sock> receiver_ref{std::shared_ptr<const Sock>{}, &socks.receiver};
+
+    Sock::EventsPerSock events;
+    events.emplace(sender_ref, Sock::Events{Sock::SendEvent});
+    events.emplace(receiver_ref, Sock::Events{Sock::RecvEvent});
+
+    BOOST_REQUIRE_EQUAL(socks.sender.Send("a", 1, 0), 1);
+    BOOST_REQUIRE(socks.receiver.WaitMany(0ms, events));
+
+    const auto sender_occurred{events.at(sender_ref).occurred};
+    const auto receiver_occurred{events.at(receiver_ref).occurred};
+
+    BOOST_CHECK((receiver_occurred & Sock::RecvEvent) != 0);
+    BOOST_CHECK_EQUAL(static_cast<int>(sender_occurred & ~(Sock::SendEvent | Sock::ErrorEvent)), 0);
+    BOOST_CHECK_EQUAL(static_cast<int>(receiver_occurred & ~(Sock::RecvEvent | Sock::ErrorEvent)), 0);
 }
 
 BOOST_AUTO_TEST_CASE(recv_until_terminator_limit)
