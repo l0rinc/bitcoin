@@ -54,7 +54,13 @@ struct ChainEvent {
 
 struct ValidationEventRecorder final : public CValidationInterface {
     std::vector<ChainEvent> m_events;
+    uint256 m_expected_tip;
+    int m_expected_height;
 
+    explicit ValidationEventRecorder(const CBlockIndex& tip)
+        : m_expected_tip{tip.GetBlockHash()}, m_expected_height{tip.nHeight}
+    {
+    }
     ~ValidationEventRecorder() = default;
 
     void BlockConnected(const kernel::ChainstateRole& role, const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
@@ -62,6 +68,13 @@ struct ValidationEventRecorder final : public CValidationInterface {
         assert(block);
         assert(pindex);
         assert(block->GetHash() == pindex->GetBlockHash());
+        if (pindex->nHeight == 0) {
+            assert(!pindex->pprev);
+            assert(block->hashPrevBlock.IsNull());
+        } else {
+            assert(pindex->pprev);
+            assert(block->hashPrevBlock == pindex->pprev->GetBlockHash());
+        }
         assert(WITH_LOCK(::cs_main, return !(pindex->nStatus & BLOCK_FAILED_VALID)));
         m_events.push_back({
             /*connected=*/true,
@@ -78,6 +91,7 @@ struct ValidationEventRecorder final : public CValidationInterface {
         assert(pindex->nHeight > 0);
         assert(pindex->pprev);
         assert(block->GetHash() == pindex->GetBlockHash());
+        assert(block->hashPrevBlock == pindex->pprev->GetBlockHash());
         m_events.push_back({
             /*connected=*/false,
             pindex->GetBlockHash(),
@@ -86,21 +100,27 @@ struct ValidationEventRecorder final : public CValidationInterface {
         });
     }
 
-    void AssertAndClear()
+    void AssertAndClear(const ChainstateManager& chainman)
     {
-        for (size_t i{1}; i < m_events.size(); ++i) {
-            const ChainEvent& previous{m_events.at(i - 1)};
-            const ChainEvent& current{m_events.at(i)};
-            if (previous.connected && current.connected) {
-                assert(current.height == previous.height + 1);
-                assert(current.prev_hash == previous.hash);
-            } else if (!previous.connected && !current.connected) {
-                assert(current.height == previous.height - 1);
-                assert(previous.prev_hash == current.hash);
-            } else if (!previous.connected && current.connected) {
-                assert(current.height <= previous.height);
+        for (const ChainEvent& event : m_events) {
+            if (event.connected) {
+                assert(event.prev_hash == m_expected_tip);
+                assert(event.height == m_expected_height + 1);
+                m_expected_tip = event.hash;
+                ++m_expected_height;
+            } else {
+                assert(event.hash == m_expected_tip);
+                assert(event.height == m_expected_height);
+                assert(m_expected_height > 0);
+                m_expected_tip = event.prev_hash;
+                --m_expected_height;
             }
         }
+        LOCK(chainman.GetMutex());
+        const CBlockIndex* tip{chainman.ActiveChain().Tip()};
+        assert(tip);
+        assert(m_expected_tip == tip->GetBlockHash());
+        assert(m_expected_height == tip->nHeight);
         m_events.clear();
     }
 };
@@ -337,12 +357,14 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
     auto& chainman{static_cast<TestChainstateManager&>(*node.chainman)};
     chainman.ResetIbd();
     chainman.DisableNextWrite();
-    auto event_recorder{std::make_shared<ValidationEventRecorder>()};
+    const CBlockIndex* initial_tip{WITH_LOCK(chainman.GetMutex(), return chainman.ActiveChain().Tip())};
+    assert(initial_tip);
+    auto event_recorder{std::make_shared<ValidationEventRecorder>(*initial_tip)};
     node.validation_signals->RegisterSharedValidationInterface(event_recorder);
 
     SeedTopology(fuzzed_data_provider, chainman);
     node.validation_signals->SyncWithValidationInterfaceQueue();
-    event_recorder->AssertAndClear();
+    event_recorder->AssertAndClear(chainman);
     AssertActiveChain(chainman);
     chainman.CheckBlockIndex();
 
@@ -452,7 +474,7 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
             });
 
         node.validation_signals->SyncWithValidationInterfaceQueue();
-        event_recorder->AssertAndClear();
+        event_recorder->AssertAndClear(chainman);
         AssertActiveChain(chainman);
         chainman.CheckBlockIndex();
     }
