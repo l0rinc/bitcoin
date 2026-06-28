@@ -152,10 +152,14 @@ bool TxDownloadManagerImpl::AlreadyHaveTx(const GenTxid& gtxid, bool include_rec
 void TxDownloadManagerImpl::ConnectedPeer(NodeId nodeid, const TxDownloadConnectionInfo& info)
 {
     // If already connected (shouldn't happen in practice), exit early.
-    if (m_peer_info.contains(nodeid)) return;
+    if (m_peer_info.contains(nodeid)) {
+        AssertWtxidPeerCount();
+        return;
+    }
 
     m_peer_info.try_emplace(nodeid, info);
     if (info.m_wtxid_relay) m_num_wtxid_peers += 1;
+    AssertWtxidPeerCount();
 }
 
 void TxDownloadManagerImpl::DisconnectedPeer(NodeId nodeid)
@@ -168,6 +172,9 @@ void TxDownloadManagerImpl::DisconnectedPeer(NodeId nodeid)
         m_peer_info.erase(it);
     }
 
+    Assume(m_txrequest.Count(nodeid) == 0);
+    Assume(m_orphanage->UsageByPeer(nodeid) == 0);
+    AssertWtxidPeerCount();
 }
 
 bool TxDownloadManagerImpl::AddTxAnnouncement(NodeId peer, const GenTxid& gtxid, std::chrono::microseconds now)
@@ -568,6 +575,15 @@ bool TxDownloadManagerImpl::HaveMoreWork(NodeId nodeid)
 CTransactionRef TxDownloadManagerImpl::GetTxToReconsider(NodeId nodeid)
 {
     return m_orphanage->GetTxToReconsider(nodeid);
+}
+
+void TxDownloadManagerImpl::AssertWtxidPeerCount() const
+{
+    const auto wtxid_peers{std::count_if(m_peer_info.begin(), m_peer_info.end(),
+                                         [](const auto& peer) {
+                                             return peer.second.m_connection_info.m_wtxid_relay;
+                                         })};
+    Assume(m_num_wtxid_peers == static_cast<uint32_t>(wtxid_peers));
 }
 
 void TxDownloadManagerImpl::CheckIsEmpty(NodeId nodeid)
