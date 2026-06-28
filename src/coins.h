@@ -510,7 +510,11 @@ public:
     unsigned int GetCacheSize() const;
 
     //! Number of dirty cache entries (transaction outputs)
-    size_t GetDirtyCount() const noexcept { return m_dirty_count; }
+    size_t GetDirtyCount() const noexcept
+    {
+        Assume(m_dirty_count <= cacheCoins.size());
+        return m_dirty_count;
+    }
 
     //! Calculate the size of the cache (in bytes)
     size_t DynamicMemoryUsage() const;
