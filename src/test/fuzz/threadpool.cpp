@@ -8,9 +8,12 @@
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 
+#include <algorithm>
 #include <atomic>
+#include <functional>
 #include <future>
 #include <queue>
+#include <vector>
 
 struct ExpectedException : std::runtime_error {
     explicit ExpectedException(const std::string& msg) : std::runtime_error(msg) {}
@@ -77,28 +80,60 @@ FUZZ_TARGET(threadpool, .init = setup_threadpool_test)
     uint32_t expected_task_counter{0};
     uint32_t expected_fail_tasks{0};
 
+    auto drain_future = [&](std::future<void>& future) {
+        GetFuture(future, fail_counter);
+    };
+
     std::queue<std::future<void>> futures;
-    for (uint32_t i = 0; i < num_tasks; ++i) {
-        const bool will_throw = fuzzed_data_provider.ConsumeBool();
+    for (uint32_t i = 0; i < num_tasks;) {
+        const bool submit_range = fuzzed_data_provider.ConsumeBool();
         const bool wait_immediately = fuzzed_data_provider.ConsumeBool();
 
-        std::future<void> fut;
-        if (will_throw) {
-            expected_fail_tasks++;
-            fut = *Assert(g_pool.Submit(ThrowTask{}));
+        if (submit_range) {
+            const uint32_t range_size = fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(1, std::min<uint32_t>(16, num_tasks - i));
+            std::vector<std::function<void()>> tasks;
+            tasks.reserve(range_size);
+            for (uint32_t task_idx{0}; task_idx < range_size; ++task_idx) {
+                const bool will_throw = fuzzed_data_provider.ConsumeBool();
+                if (will_throw) {
+                    expected_fail_tasks++;
+                    tasks.emplace_back(ThrowTask{});
+                } else {
+                    expected_task_counter++;
+                    tasks.emplace_back(CounterTask{task_counter});
+                }
+            }
+            auto range_futures{*Assert(g_pool.Submit(std::move(tasks)))};
+            assert(range_futures.size() == range_size);
+            for (auto& fut : range_futures) {
+                if (wait_immediately) {
+                    drain_future(fut);
+                } else {
+                    futures.emplace(std::move(fut));
+                }
+            }
+            i += range_size;
         } else {
-            expected_task_counter++;
-            fut = *Assert(g_pool.Submit(CounterTask{task_counter}));
-        }
+            const bool will_throw = fuzzed_data_provider.ConsumeBool();
+            std::future<void> fut;
+            if (will_throw) {
+                expected_fail_tasks++;
+                fut = *Assert(g_pool.Submit(ThrowTask{}));
+            } else {
+                expected_task_counter++;
+                fut = *Assert(g_pool.Submit(CounterTask{task_counter}));
+            }
 
-        // If caller wants to wait immediately, consume the future here (safe).
-        if (wait_immediately) {
-            // Waits for this task to complete immediately; prior queued tasks may also complete
-            // as they were queued earlier.
-            GetFuture(fut, fail_counter);
-        } else {
-            // Store task for a posterior check
-            futures.emplace(std::move(fut));
+            // If caller wants to wait immediately, consume the future here (safe).
+            if (wait_immediately) {
+                // Waits for this task to complete immediately; prior queued tasks may also complete
+                // as they were queued earlier.
+                drain_future(fut);
+            } else {
+                // Store task for a posterior check
+                futures.emplace(std::move(fut));
+            }
+            ++i;
         }
     }
 
