@@ -24,6 +24,15 @@ std::strong_ordering PointerComparator(const TxGraph::Ref& a, const TxGraph::Ref
     return (&a) <=> (&b);
 }
 
+void CheckDiagram(const std::vector<FeeFrac>& actual, const std::vector<FeeFrac>& expected)
+{
+    BOOST_REQUIRE_EQUAL(actual.size(), expected.size());
+    for (size_t i{0}; i < expected.size(); ++i) {
+        BOOST_CHECK_EQUAL(actual[i].fee, expected[i].fee);
+        BOOST_CHECK_EQUAL(actual[i].size, expected[i].size);
+    }
+}
+
 } // namespace
 
 BOOST_AUTO_TEST_CASE(txgraph_trim_zigzag)
@@ -449,6 +458,35 @@ BOOST_AUTO_TEST_CASE(txgraph_staging)
 
     BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), 1);
 
+    graph->SanityCheck();
+}
+
+BOOST_AUTO_TEST_CASE(txgraph_staging_diagrams_sort_equal_feerate_chunks)
+{
+    auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(5);
+
+    // Add the larger equal-feerate chunk first. GetMainStagingDiagrams() must sort equal-feerate
+    // chunks using the full public diagram order, not preserve insertion order.
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{30, 10});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{15, 5});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{7, 7});
+
+    graph->StartStaging();
+    graph->RemoveTransaction(refs[0]);
+    graph->RemoveTransaction(refs[1]);
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{30, 10});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{15, 5});
+
+    const auto [main_diagram, staging_diagram] = graph->GetMainStagingDiagrams();
+    CheckDiagram(main_diagram, {{15, 5}, {30, 10}});
+    CheckDiagram(staging_diagram, {{15, 5}, {30, 10}});
+
+    const FeeFrac main_sum{main_diagram[0] + main_diagram[1]};
+    const FeeFrac staging_sum{staging_diagram[0] + staging_diagram[1]};
+    BOOST_CHECK(staging_sum == main_sum);
     graph->SanityCheck();
 }
 

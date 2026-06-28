@@ -443,6 +443,11 @@ FUZZ_TARGET(txgraph)
         assert(real->GetTransactionCount(TxGraph::Level::TOP) == sims.back().GetTransactionCount());
         real->SanityCheck();
     };
+    auto assert_diagram_sorted = [](const std::vector<FeeFrac>& diagram) noexcept {
+        for (size_t pos{1}; pos < diagram.size(); ++pos) {
+            assert(!(ByRatioNegSize{diagram[pos - 1]} < ByRatioNegSize{diagram[pos]}));
+        }
+    };
 
     LIMITED_WHILE (provider.remaining_bytes() > 0, 200) {
         // Read a one-byte command.
@@ -814,13 +819,9 @@ FUZZ_TARGET(txgraph)
                 // diagram matches the difference in these values in the simulated graph. A more
                 // complete check of the GetMainStagingDiagrams result is performed at the end.
                 assert(sim_gain == real_gain);
-                // Check that the feerates in each diagram are monotonically decreasing.
-                for (size_t i = 1; i < real_main_diagram.size(); ++i) {
-                    assert(ByRatio{real_main_diagram[i]} <= ByRatio{real_main_diagram[i - 1]});
-                }
-                for (size_t i = 1; i < real_staged_diagram.size(); ++i) {
-                    assert(ByRatio{real_staged_diagram[i]} <= ByRatio{real_staged_diagram[i - 1]});
-                }
+                // Check that each diagram follows the production ordering contract.
+                assert_diagram_sorted(real_main_diagram);
+                assert_diagram_sorted(real_staged_diagram);
                 break;
             } else if (block_builders.size() < 4 && !main_sim.IsOversized() && command-- == 0) {
                 // GetBlockBuilder.
@@ -1273,13 +1274,9 @@ FUZZ_TARGET(txgraph)
             // When the staging graph is not oversized as well, call GetMainStagingDiagrams, and
             // fully verify the result.
             auto [main_cmp_diagram, stage_cmp_diagram] = real->GetMainStagingDiagrams();
-            // Check that the feerates in each diagram are monotonically decreasing.
-            for (size_t i = 1; i < main_cmp_diagram.size(); ++i) {
-                assert(ByRatio{main_cmp_diagram[i]} <= ByRatio{main_cmp_diagram[i - 1]});
-            }
-            for (size_t i = 1; i < stage_cmp_diagram.size(); ++i) {
-                assert(ByRatio{stage_cmp_diagram[i]} <= ByRatio{stage_cmp_diagram[i - 1]});
-            }
+            // Check that each diagram follows the production ordering contract.
+            assert_diagram_sorted(main_cmp_diagram);
+            assert_diagram_sorted(stage_cmp_diagram);
             // Treat the diagrams as sets of chunk feerates, and sort them in the same way so that
             // std::set_difference can be used on them below. The exact ordering does not matter
             // here, but it has to be consistent with the one used in main_real_diagram and
