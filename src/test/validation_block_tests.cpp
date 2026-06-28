@@ -50,28 +50,36 @@ BOOST_FIXTURE_TEST_SUITE(validation_block_tests, MinerTestingSetup)
 
 struct TestSubscriber final : public CValidationInterface {
     uint256 m_expected_tip;
+    int m_expected_height;
 
-    explicit TestSubscriber(uint256 tip) : m_expected_tip(tip) {}
+    TestSubscriber(uint256 tip, int height) : m_expected_tip(tip), m_expected_height{height} {}
 
     void UpdatedBlockTip(const CBlockIndex* pindexNew, const CBlockIndex* pindexFork, bool fInitialDownload) override
     {
         BOOST_CHECK_EQUAL(m_expected_tip, pindexNew->GetBlockHash());
+        BOOST_CHECK_EQUAL(m_expected_height, pindexNew->nHeight);
     }
 
     void BlockConnected(const ChainstateRole& role, const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
     {
+        BOOST_REQUIRE(pindex->pprev);
         BOOST_CHECK_EQUAL(m_expected_tip, block->hashPrevBlock);
         BOOST_CHECK_EQUAL(m_expected_tip, pindex->pprev->GetBlockHash());
+        BOOST_CHECK_EQUAL(m_expected_height + 1, pindex->nHeight);
 
         m_expected_tip = block->GetHash();
+        ++m_expected_height;
     }
 
     void BlockDisconnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
     {
+        BOOST_REQUIRE(pindex->pprev);
         BOOST_CHECK_EQUAL(m_expected_tip, block->GetHash());
         BOOST_CHECK_EQUAL(m_expected_tip, pindex->GetBlockHash());
+        BOOST_CHECK_EQUAL(m_expected_height, pindex->nHeight);
 
         m_expected_tip = block->hashPrevBlock;
+        --m_expected_height;
     }
 };
 
@@ -289,7 +297,7 @@ BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering)
         LOCK(cs_main);
         initial_tip = m_node.chainman->ActiveChain().Tip();
     }
-    auto sub = std::make_shared<TestSubscriber>(initial_tip->GetBlockHash());
+    auto sub = std::make_shared<TestSubscriber>(initial_tip->GetBlockHash(), initial_tip->nHeight);
     m_node.validation_signals->RegisterSharedValidationInterface(sub);
 
     // create a bunch of threads that repeatedly process a block generated above at random
@@ -325,6 +333,7 @@ BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering)
 
     LOCK(cs_main);
     BOOST_CHECK_EQUAL(sub->m_expected_tip, m_node.chainman->ActiveChain().Tip()->GetBlockHash());
+    BOOST_CHECK_EQUAL(sub->m_expected_height, m_node.chainman->ActiveChain().Height());
 }
 
 /**
