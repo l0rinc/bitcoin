@@ -276,6 +276,13 @@ FUZZ_TARGET(coinscache_sim)
         assert_cache_clean(cache);
     };
 
+    auto assert_cache_stack_sane = [&]() {
+        for (const auto& cache : caches) {
+            assert(cache->GetDirtyCount() <= cache->GetCacheSize());
+            cache->SanityCheck();
+        }
+    };
+
     auto assert_spent_public = [&](uint32_t outpointidx) {
         const auto& outpoint{data.outpoints[outpointidx]};
         assert(!caches.back()->HaveCoin(outpoint));
@@ -518,12 +525,12 @@ FUZZ_TARGET(coinscache_sim)
                 current_height = provider.ConsumeIntegralInRange<uint32_t>(1, current_height - 1);
             }
         );
+
+        assert_cache_stack_sane();
     }
 
     // Sanity check all the remaining caches
-    for (const auto& cache : caches) {
-        cache->SanityCheck();
-    }
+    assert_cache_stack_sane();
 
     // Full comparison between caches and simulation data, from bottom to top,
     // as AccessCoin on a higher cache may affect caches below it.
