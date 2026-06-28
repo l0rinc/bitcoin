@@ -1195,6 +1195,52 @@ BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
     BOOST_CHECK_EQUAL(cache.GetDirtyCount(), 0U);
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_flush_sync_reset_postconditions)
+{
+    CCoinsViewTest root{m_rng};
+    CCoinsViewCacheTest cache{&root};
+
+    auto check_clean_flags = [&] {
+        BOOST_CHECK_EQUAL(cache.GetDirtyCount(), 0U);
+        BOOST_CHECK(cache.sentinel().second.Next() == &cache.sentinel());
+        BOOST_CHECK(cache.sentinel().second.Prev() == &cache.sentinel());
+        cache.SelfTest();
+    };
+
+    auto check_empty = [&] {
+        BOOST_CHECK_EQUAL(cache.GetCacheSize(), 0U);
+        BOOST_CHECK_EQUAL(cache.usage(), 0U);
+        check_clean_flags();
+    };
+
+    const auto make_coin = [&] {
+        return Coin{CTxOut{m_rng.randrange(10), CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+    };
+
+    const COutPoint synced_outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin synced_coin{make_coin()};
+    cache.AddCoin(synced_outpoint, Coin{synced_coin}, /*possible_overwrite=*/false);
+    BOOST_CHECK_GT(cache.usage(), 0U);
+    cache.Sync();
+    check_clean_flags();
+    BOOST_CHECK(cache.HaveCoinInCache(synced_outpoint));
+    BOOST_CHECK(cache.AccessCoin(synced_outpoint) == synced_coin);
+
+    BOOST_CHECK(cache.SpendCoin(synced_outpoint));
+    cache.Flush(/*reallocate_cache=*/false);
+    check_empty();
+    BOOST_CHECK(!cache.HaveCoinInCache(synced_outpoint));
+
+    const COutPoint reset_outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    cache.AddCoin(reset_outpoint, make_coin(), /*possible_overwrite=*/false);
+    BOOST_CHECK_GT(cache.usage(), 0U);
+    {
+        const auto reset_guard{cache.CreateResetGuard()};
+    }
+    check_empty();
+    BOOST_CHECK(!root.HaveCoin(reset_outpoint));
+}
+
 BOOST_AUTO_TEST_CASE(ccoins_peekcoin)
 {
     CCoinsViewTest base{m_rng};
