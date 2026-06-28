@@ -401,6 +401,27 @@ BOOST_AUTO_TEST_CASE(txgraph_staging)
     BOOST_CHECK_EQUAL(graph->HaveStaging(), true);
     BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 1);
 
+    {
+        TxGraph::Ref aborted_ref;
+        graph->AddTransaction(aborted_ref, feerateB);
+        graph->RemoveTransaction(refs[0]);
+        BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), 1);
+        BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 1);
+
+        graph->AbortStaging();
+        BOOST_CHECK_EQUAL(graph->HaveStaging(), false);
+        BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), 1);
+        BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 1);
+        BOOST_CHECK_EQUAL(graph->Exists(refs[0], TxGraph::Level::MAIN), true);
+        BOOST_CHECK_EQUAL(graph->Exists(refs[0], TxGraph::Level::TOP), true);
+        BOOST_CHECK_EQUAL(graph->Exists(aborted_ref, TxGraph::Level::TOP), false);
+        graph->SanityCheck();
+    }
+
+    graph->StartStaging();
+    BOOST_CHECK_EQUAL(graph->HaveStaging(), true);
+    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 1);
+
     // [A, B]
     graph->AddTransaction(refs.emplace_back(), feerateB);
     BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), 1);
