@@ -740,6 +740,24 @@ FUZZ_TARGET(clusterlin_chunking)
         assert(ByRatio{chunking[i]} <= ByRatio{chunking[i - 1]});
     }
 
+    // Verify that ChunkLinearizationInfo covers the linearization by contiguous chunks.
+    TestBitSet covered;
+    size_t lin_pos{0};
+    for (const auto& chunk : chunking_info) {
+        const auto chunk_tx_count{chunk.transactions.Count()};
+        assert(chunk_tx_count > 0);
+        assert(chunk.transactions.IsSubsetOf(depgraph.Positions()));
+        assert(!covered.Overlaps(chunk.transactions));
+        assert(chunk_tx_count <= linearization.size() - lin_pos);
+        for (size_t pos{lin_pos}; pos < lin_pos + chunk_tx_count; ++pos) {
+            assert(chunk.transactions[linearization[pos]]);
+        }
+        covered |= chunk.transactions;
+        lin_pos += chunk_tx_count;
+    }
+    assert(lin_pos == linearization.size());
+    assert(covered == depgraph.Positions());
+
     // Naively recompute the chunks (each is the highest-feerate prefix of what remains).
     auto todo = depgraph.Positions();
     for (const auto& [chunk_set, chunk_feerate] : chunking_info) {
