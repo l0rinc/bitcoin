@@ -556,7 +556,9 @@ public:
         LOCK(cs);
         // Sanity check the transaction is in the mempool & insert into
         // unbroadcast set.
-        if (exists(txid)) m_unbroadcast_txids.insert(txid);
+        const bool in_mempool{mapTx.count(txid) != 0};
+        if (in_mempool) m_unbroadcast_txids.insert(txid);
+        Assume(!m_unbroadcast_txids.contains(txid) || in_mempool);
     };
 
     bool CheckPolicyLimits(const CTransactionRef& tx);
@@ -568,6 +570,9 @@ public:
     std::set<Txid> GetUnbroadcastTxs() const
     {
         LOCK(cs);
+        for (const auto& txid : m_unbroadcast_txids) {
+            Assume(mapTx.count(txid) != 0);
+        }
         return m_unbroadcast_txids;
     }
 
