@@ -2835,6 +2835,8 @@ TxGraph::GraphIndex TxGraphImpl::CountDistinctClusters(std::span<const Ref* cons
         ret += (cluster != last);
         last = cluster;
     }
+    Assume(ret <= refs.size());
+    Assume(ret <= clusterset.m_txcount);
     return ret;
 }
 
