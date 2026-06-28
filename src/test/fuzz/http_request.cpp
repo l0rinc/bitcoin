@@ -4,19 +4,119 @@
 
 #include <httpserver.h>
 #include <netaddress.h>
+#include <rpc/protocol.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
+#include <test/fuzz/util/net.h>
 #include <test/fuzz/util.h>
+#include <test/util/time.h>
 #include <util/signalinterrupt.h>
 #include <util/strencodings.h>
 
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 
 std::string_view RequestMethodString(HTTPRequestMethod m);
+
+namespace {
+void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDataProvider& fuzzed_data_provider, FakeSteadyClock& clock)
+{
+    using http_bitcoin::HTTPRemoteClient;
+
+    std::vector<HTTPStatusCode> statuses{
+        HTTP_OK,
+        HTTP_NO_CONTENT,
+        HTTP_BAD_REQUEST,
+        HTTP_UNAUTHORIZED,
+        HTTP_FORBIDDEN,
+        HTTP_NOT_FOUND,
+        HTTP_BAD_METHOD,
+        HTTP_CONTENT_TOO_LARGE,
+        HTTP_INTERNAL_SERVER_ERROR,
+        HTTP_SERVICE_UNAVAILABLE};
+    const HTTPStatusCode status{PickValue(fuzzed_data_provider, statuses)};
+    const bool needs_body{status != HTTP_NO_CONTENT};
+    const std::string reply_body{needs_body ? fuzzed_data_provider.ConsumeRandomLengthString(32) : std::string{}};
+
+    auto client{std::make_shared<HTTPRemoteClient>(
+        /*id=*/0,
+        CService{},
+        std::make_unique<FuzzedSock>(fuzzed_data_provider, clock))};
+    http_request.m_client = client;
+    client->m_req_busy = true;
+
+    constexpr std::byte queued_byte{0x42};
+    {
+        LOCK(client->m_send_mutex);
+        client->m_send_buffer.push_back(queued_byte);
+    }
+
+    const auto connection_header{http_request.GetHeader("Connection")};
+    const bool request_keep_alive{connection_header.first && ToLower(connection_header.second) == "keep-alive"};
+    const bool request_close{connection_header.first && ToLower(connection_header.second) == "close"};
+
+    bool expected_keep_alive{false};
+    bool expected_content_length{false};
+    if (http_request.m_version.major == 1 && http_request.m_version.minor == 0) {
+        expected_keep_alive = request_keep_alive;
+        expected_content_length = needs_body && request_keep_alive;
+    } else if (http_request.m_version.major == 1 && http_request.m_version.minor >= 1) {
+        expected_keep_alive = true;
+        expected_content_length = needs_body;
+    }
+    if (request_close) expected_keep_alive = false;
+
+    http_request.WriteReply(status, reply_body);
+
+    const std::vector<std::byte> sent{WITH_LOCK(client->m_send_mutex, return client->m_send_buffer)};
+    assert(sent.size() > 1);
+    assert(sent.front() == queued_byte);
+
+    std::string response;
+    response.reserve(sent.size() - 1);
+    for (auto it{sent.begin() + 1}; it != sent.end(); ++it) {
+        response.push_back(static_cast<char>(std::to_integer<unsigned char>(*it)));
+    }
+
+    const std::string status_line{
+        "HTTP/" + std::to_string(http_request.m_version.major) +
+        "." + std::to_string(http_request.m_version.minor) +
+        " " + std::to_string(status) +
+        " " + std::string{HTTPStatusReasonString(status)} + "\r\n"};
+    assert(response.starts_with(status_line));
+
+    const size_t header_end{response.find("\r\n\r\n")};
+    assert(header_end != std::string::npos);
+    const std::string response_headers{response.substr(0, header_end + 4)};
+    assert(response.substr(header_end + 4) == reply_body);
+
+    const std::string content_length_header{"Content-Length: " + std::to_string(reply_body.size()) + "\r\n"};
+    if (expected_content_length) {
+        assert(response_headers.find(content_length_header) != std::string::npos);
+    } else {
+        assert(response_headers.find("Content-Length: ") == std::string::npos);
+    }
+    if (needs_body) {
+        assert(response_headers.find("Content-Type: text/html; charset=ISO-8859-1\r\n") != std::string::npos);
+    } else {
+        assert(response_headers.find("Content-Type: ") == std::string::npos);
+    }
+    if (request_close) {
+        assert(response_headers.find("Connection: close\r\n") != std::string::npos);
+    } else if (http_request.m_version.minor == 0 && request_keep_alive) {
+        assert(response_headers.find("Connection: keep-alive\r\n") != std::string::npos);
+    }
+
+    assert(client->m_keep_alive.load() == expected_keep_alive);
+    assert(WITH_LOCK(client->m_send_mutex, return client->m_send_ready));
+    assert(!client->m_req_busy.load());
+}
+} // namespace
 
 FUZZ_TARGET(http_request)
 {
@@ -25,6 +125,8 @@ FUZZ_TARGET(http_request)
     using http_bitcoin::MAX_HEADERS_SIZE;
     using util::LineReader;
 
+    SetMockTime(1);
+    FakeSteadyClock steady_clock;
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     const std::vector<std::byte> http_buffer{ConsumeRandomLengthByteVector<std::byte>(fuzzed_data_provider, 4096)};
 
@@ -42,6 +144,7 @@ FUZZ_TARGET(http_request)
     (void)RequestMethodString(request_method);
     (void)http_request.GetURI();
     (void)http_request.GetHeader("Host");
+    AssertWriteReplyContracts(http_request, fuzzed_data_provider, steady_clock);
     std::string header = fuzzed_data_provider.ConsumeRandomLengthString(16);
     const auto request_header_before{http_request.GetHeader(header)};
     (void)http_request.WriteHeader(std::string(header), fuzzed_data_provider.ConsumeRandomLengthString(16));
