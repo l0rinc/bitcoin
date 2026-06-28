@@ -183,6 +183,16 @@ std::unique_ptr<CTxMemPool> MakeEphemeralMempool(const NodeContext& node)
     return mempool;
 }
 
+void AssertMempoolInputIndexCount(const CTxMemPool& tx_pool)
+{
+    size_t input_count{0};
+    for (const auto& tx_info : tx_pool.infoAll()) {
+        input_count += tx_info.tx->vin.size();
+    }
+    const auto indexed_input_count{WITH_LOCK(tx_pool.cs, return tx_pool.mapNextTx.size())};
+    assert(indexed_input_count == input_count);
+}
+
 // Scan mempool for a tx that has spent dust and return a
 // prevout of the child that isn't the dusty parent itself.
 // This is used to double-spend the child out of the mempool,
@@ -361,6 +371,7 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
 
         node.validation_signals->SyncWithValidationInterfaceQueue();
 
+        AssertMempoolInputIndexCount(tx_pool);
         CheckMempoolEphemeralInvariants(tx_pool);
     }
 
@@ -554,6 +565,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
             Assert(result_package.m_tx_results.size() == txs.size() || result_package.m_tx_results.empty());
         }
 
+        AssertMempoolInputIndexCount(tx_pool);
         CheckMempoolTRUCInvariants(tx_pool);
 
         // Dust checks only make sense when dust is enforced
