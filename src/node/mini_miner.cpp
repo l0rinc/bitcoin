@@ -388,6 +388,16 @@ std::map<COutPoint, CAmount> MiniMiner::CalculateBumpFees(const CFeeRate& target
             }
         }
     }
+    for (const auto& [_, outpoints] : m_requested_outpoints_by_txid) {
+        for (const auto& outpoint : outpoints) {
+            auto result{m_bump_fees.find(outpoint)};
+            Assume(result != m_bump_fees.end());
+            Assume(result->second >= 0);
+        }
+    }
+    for (const auto& [_, bump_fee] : m_bump_fees) {
+        Assume(bump_fee >= 0);
+    }
     return m_bump_fees;
 }
 
@@ -429,6 +439,8 @@ std::optional<CAmount> MiniMiner::CalculateTotalBumpFees(const CFeeRate& target_
         [](int64_t sum, const auto it) {return sum + it->second.GetTxSize();});
     const auto ancestor_package_fee = std::accumulate(ancestors.cbegin(), ancestors.cend(), CAmount{0},
         [](CAmount sum, const auto it) {return sum + it->second.GetModifiedFee();});
-    return target_feerate.GetFee(ancestor_package_size) - ancestor_package_fee;
+    const CAmount total_bump_fee{target_feerate.GetFee(ancestor_package_size) - ancestor_package_fee};
+    Assume(total_bump_fee >= 0);
+    return total_bump_fee;
 }
 } // namespace node
