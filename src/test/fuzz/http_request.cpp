@@ -21,6 +21,7 @@ std::string_view RequestMethodString(HTTPRequestMethod m);
 FUZZ_TARGET(http_request)
 {
     using http_bitcoin::HTTPRequest;
+    using http_bitcoin::MAX_BODY_SIZE;
     using http_bitcoin::MAX_HEADERS_SIZE;
     using util::LineReader;
 
@@ -42,9 +43,22 @@ FUZZ_TARGET(http_request)
     (void)http_request.GetURI();
     (void)http_request.GetHeader("Host");
     std::string header = fuzzed_data_provider.ConsumeRandomLengthString(16);
-    (void)http_request.GetHeader(header);
+    const auto request_header_before{http_request.GetHeader(header)};
     (void)http_request.WriteHeader(std::string(header), fuzzed_data_provider.ConsumeRandomLengthString(16));
-    (void)http_request.GetHeader(header);
+    assert(http_request.GetHeader(header) == request_header_before);
     const std::string body = http_request.ReadBody();
-    assert(body.empty());
+
+    const auto transfer_encoding{http_request.GetHeader("Transfer-Encoding")};
+    const bool chunked{transfer_encoding.first && ToLower(transfer_encoding.second) == "chunked"};
+    const auto content_lengths{http_request.m_headers.FindAll("Content-Length")};
+    if (chunked) {
+        assert(body.size() <= MAX_BODY_SIZE);
+    } else if (content_lengths.empty()) {
+        assert(body.empty());
+    } else {
+        const auto content_length{ToIntegral<uint64_t>(content_lengths.front())};
+        assert(content_length);
+        assert(body.size() == *content_length);
+        assert(body.size() <= MAX_BODY_SIZE);
+    }
 }
