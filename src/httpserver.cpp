@@ -295,6 +295,8 @@ void HTTPHeaders::RemoveAll(std::string_view key)
         return CaseInsensitiveEqual(key, pair.first);
     });
     m_headers.erase(moved.begin(), moved.end());
+    Assume(!FindFirst(key));
+    Assume(FindAll(key).empty());
 }
 
 bool HTTPHeaders::Read(util::LineReader& reader)
