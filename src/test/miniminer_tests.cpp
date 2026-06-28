@@ -72,6 +72,14 @@ Value Find(const std::map<Key, Value>& map, const Key& key)
     return it->second;
 }
 
+std::vector<COutPoint> ReverseWithDuplicates(const std::vector<COutPoint>& outpoints)
+{
+    std::vector<COutPoint> ret{outpoints.rbegin(), outpoints.rend()};
+    ret.insert(ret.end(), outpoints.begin(), outpoints.end());
+    if (!outpoints.empty()) ret.push_back(outpoints.front());
+    return ret;
+}
+
 BOOST_FIXTURE_TEST_CASE(miniminer_negative, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
@@ -192,6 +200,32 @@ BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
     // All nonexistent entries have a bumpfee of zero, regardless of feerate
     std::vector<COutPoint> nonexistent_outpoints({ COutPoint{Txid::FromUint256(GetRandHash()), 0}, COutPoint{Txid::FromUint256(GetRandHash()), 3} });
     for (const auto& outpoint : nonexistent_outpoints) BOOST_CHECK(!pool.isSpent(outpoint));
+    {
+        std::vector<COutPoint> mixed_outpoints{all_unspent_outpoints};
+        mixed_outpoints.insert(mixed_outpoints.end(), all_spent_outpoints.begin(), all_spent_outpoints.end());
+        mixed_outpoints.insert(mixed_outpoints.end(), nonexistent_outpoints.begin(), nonexistent_outpoints.end());
+        const auto duplicated_outpoints{ReverseWithDuplicates(mixed_outpoints)};
+        const CFeeRate target_feerate{50000};
+
+        node::MiniMiner linearize_base{pool, mixed_outpoints};
+        node::MiniMiner linearize_duplicates{pool, duplicated_outpoints};
+        BOOST_CHECK(linearize_base.IsReadyToCalculate());
+        BOOST_CHECK(linearize_duplicates.IsReadyToCalculate());
+        BOOST_CHECK(linearize_base.Linearize() == linearize_duplicates.Linearize());
+        BOOST_CHECK(linearize_base.GetMockTemplateTxids() == linearize_duplicates.GetMockTemplateTxids());
+
+        node::MiniMiner bumpfees_base{pool, mixed_outpoints};
+        node::MiniMiner bumpfees_duplicates{pool, duplicated_outpoints};
+        BOOST_CHECK(bumpfees_base.IsReadyToCalculate());
+        BOOST_CHECK(bumpfees_duplicates.IsReadyToCalculate());
+        BOOST_CHECK(bumpfees_base.CalculateBumpFees(target_feerate) == bumpfees_duplicates.CalculateBumpFees(target_feerate));
+
+        node::MiniMiner total_base{pool, mixed_outpoints};
+        node::MiniMiner total_duplicates{pool, duplicated_outpoints};
+        BOOST_CHECK(total_base.IsReadyToCalculate());
+        BOOST_CHECK(total_duplicates.IsReadyToCalculate());
+        BOOST_CHECK(total_base.CalculateTotalBumpFees(target_feerate) == total_duplicates.CalculateTotalBumpFees(target_feerate));
+    }
     for (const auto& feerate : various_normal_feerates) {
         node::MiniMiner mini_miner(pool, nonexistent_outpoints);
         BOOST_CHECK(mini_miner.IsReadyToCalculate());
