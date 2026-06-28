@@ -152,6 +152,14 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
     COutPoint random_out_point;
     Coin random_coin;
     CMutableTransaction random_mutable_transaction;
+    auto assert_cache_clean = [&] {
+        assert(coins_view_cache.GetDirtyCount() == 0);
+        coins_view_cache.SanityCheck();
+    };
+    auto assert_cache_empty = [&] {
+        assert(coins_view_cache.GetCacheSize() == 0);
+        assert_cache_clean();
+    };
     LIMITED_WHILE(good_data && fuzzed_data_provider.ConsumeBool(), 10'000)
     {
         CallOneOf(
@@ -173,10 +181,12 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
             [&] {
                 if (overlay && !overlay->AllInputsConsumed()) return; // CoinsViewOverlay::Flush() must have all inputs consumed before being called
                 coins_view_cache.Flush(/*reallocate_cache=*/fuzzed_data_provider.ConsumeBool());
+                assert_cache_empty();
             },
             [&] {
                 if (overlay) return; // CoinsViewOverlay::Sync() is never called in production code
                 coins_view_cache.Sync();
+                assert_cache_clean();
             },
             [&] {
                 if (db) WITH_LOCK(::cs_main, (void)db->CompactFullAsync());
@@ -189,6 +199,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
             },
             [&] {
                 (void)coins_view_cache.CreateResetGuard();
+                assert_cache_empty();
                 // Reset() clears the best block, so reseed db-backed caches.
                 if (is_db) {
                     const uint256 best_block{ConsumeUInt256(fuzzed_data_provider)};
@@ -213,6 +224,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                     // FRESH flags valid against the empty backend may be invalid
                     // against the original backend, so reset before restoring it.
                     (void)coins_view_cache.CreateResetGuard();
+                    assert_cache_empty();
                     // Reset() clears the best block; db backends require a non-null hash.
                     if (is_db) coins_view_cache.SetBestBlock(uint256::ONE);
                 }
