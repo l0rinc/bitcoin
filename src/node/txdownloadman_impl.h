@@ -185,6 +185,7 @@ public:
     bool HaveMoreWork(NodeId nodeid);
     CTransactionRef GetTxToReconsider(NodeId nodeid);
 
+    void AssertWtxidPeerCount() const;
     void CheckIsEmpty();
     void CheckIsEmpty(NodeId nodeid);
 
