@@ -13,6 +13,7 @@
 #include <test/util/setup_common.h>
 #include <validation.h>
 
+#include <algorithm>
 #include <array>
 
 #include <boost/test/unit_test.hpp>
@@ -109,6 +110,58 @@ static CTransactionRef CreatePlaceholderTx(bool segwit)
     auto ptx = MakeTransactionRef(mtx);
     prevout_hash = ptx->GetHash();
     return ptx;
+}
+
+static void CheckWtxidPeerCount(const node::TxDownloadManagerImpl& txdownload_impl, uint32_t expected_count)
+{
+    const auto actual_count{std::count_if(txdownload_impl.m_peer_info.begin(), txdownload_impl.m_peer_info.end(),
+                                          [](const auto& peer) {
+                                              return peer.second.m_connection_info.m_wtxid_relay;
+                                          })};
+    BOOST_CHECK_EQUAL(txdownload_impl.m_num_wtxid_peers, expected_count);
+    BOOST_CHECK_EQUAL(actual_count, expected_count);
+}
+
+BOOST_FIXTURE_TEST_CASE(wtxid_peer_accounting, TestingSetup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    FastRandomContext det_rand{true};
+    node::TxDownloadManagerImpl txdownload_impl{node::TxDownloadOptions{pool, det_rand, true}};
+    const node::TxDownloadConnectionInfo txid_info{/*m_preferred=*/true,
+                                                   /*m_relay_permissions=*/false,
+                                                   /*m_wtxid_relay=*/false};
+    const node::TxDownloadConnectionInfo wtxid_info{/*m_preferred=*/true,
+                                                    /*m_relay_permissions=*/false,
+                                                    /*m_wtxid_relay=*/true};
+
+    CheckWtxidPeerCount(txdownload_impl, 0);
+    txdownload_impl.DisconnectedPeer(0);
+    CheckWtxidPeerCount(txdownload_impl, 0);
+
+    txdownload_impl.ConnectedPeer(1, wtxid_info);
+    CheckWtxidPeerCount(txdownload_impl, 1);
+    txdownload_impl.ConnectedPeer(1, wtxid_info);
+    CheckWtxidPeerCount(txdownload_impl, 1);
+    txdownload_impl.ConnectedPeer(1, txid_info);
+    CheckWtxidPeerCount(txdownload_impl, 1);
+
+    txdownload_impl.ConnectedPeer(2, txid_info);
+    txdownload_impl.ConnectedPeer(3, wtxid_info);
+    CheckWtxidPeerCount(txdownload_impl, 2);
+
+    txdownload_impl.DisconnectedPeer(2);
+    CheckWtxidPeerCount(txdownload_impl, 2);
+    txdownload_impl.DisconnectedPeer(1);
+    CheckWtxidPeerCount(txdownload_impl, 1);
+    txdownload_impl.DisconnectedPeer(1);
+    CheckWtxidPeerCount(txdownload_impl, 1);
+
+    txdownload_impl.ConnectedPeer(2, wtxid_info);
+    CheckWtxidPeerCount(txdownload_impl, 2);
+    txdownload_impl.DisconnectedPeer(2);
+    txdownload_impl.DisconnectedPeer(3);
+    CheckWtxidPeerCount(txdownload_impl, 0);
+    txdownload_impl.CheckIsEmpty();
 }
 
 BOOST_FIXTURE_TEST_CASE(tx_rejection_types, TestChain100Setup)

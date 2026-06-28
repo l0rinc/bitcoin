@@ -24,6 +24,8 @@
 #include <validation.h>
 #include <validationinterface.h>
 
+#include <algorithm>
+
 namespace {
 
 const TestingSetup* g_setup;
@@ -288,6 +290,11 @@ static bool HasRelayPermissions(NodeId peer) { return peer == 0; }
 static void CheckInvariants(const node::TxDownloadManagerImpl& txdownload_impl)
 {
     txdownload_impl.m_orphanage->SanityCheck();
+    const auto wtxid_peers{std::count_if(txdownload_impl.m_peer_info.begin(), txdownload_impl.m_peer_info.end(),
+                                         [](const auto& peer) {
+                                             return peer.second.m_connection_info.m_wtxid_relay;
+                                         })};
+    Assert(txdownload_impl.m_num_wtxid_peers == static_cast<uint32_t>(wtxid_peers));
     // We should never have more than the maximum in-flight requests out for a peer.
     for (NodeId peer = 0; peer < NUM_PEERS; ++peer) {
         if (!HasRelayPermissions(peer)) {
@@ -431,6 +438,7 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                 }
             });
 
+        CheckInvariants(txdownload_impl);
         auto time_skip = fuzzed_data_provider.PickValueInArray(TIME_SKIPS);
         if (fuzzed_data_provider.ConsumeBool()) time_skip *= -1;
         time += time_skip;
