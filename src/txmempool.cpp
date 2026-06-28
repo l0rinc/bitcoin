@@ -444,6 +444,7 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
     CAmount check_total_fee{0};
     CAmount check_total_modified_fee{0};
     int64_t check_total_adjusted_weight{0};
+    size_t check_total_inputs{0};
     uint64_t innerUsage = 0;
 
     assert(!m_txgraph->IsOversized(TxGraph::Level::MAIN));
@@ -489,6 +490,7 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
         std::set<CTxMemPoolEntry::CTxMemPoolEntryRef, CompareIteratorByHash> setParentCheck;
         std::set<CTxMemPoolEntry::CTxMemPoolEntryRef, CompareIteratorByHash> setParentsStored;
         for (const CTxIn &txin : tx.vin) {
+            ++check_total_inputs;
             // Check that every mempool transaction's inputs refer to available coins, or other mempool tx's.
             indexed_transaction_set::const_iterator it2 = mapTx.find(txin.prevout.hash);
             if (it2 != mapTx.end()) {
@@ -542,6 +544,7 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
         indexed_transaction_set::const_iterator it2 = it->second;
         assert(it2 != mapTx.end());
     }
+    assert(mapNextTx.size() == check_total_inputs);
 
     ++diagram_iter;
     assert(diagram_iter == diagram.cend());
