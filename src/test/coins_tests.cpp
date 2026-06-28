@@ -1430,10 +1430,16 @@ BOOST_AUTO_TEST_CASE(ccoins_peekcoin)
 
     // Verify PeekCoin can read through the cache stack without mutating the intermediate cache.
     CCoinsViewCacheTest main_cache{&base};
+    const auto cache_size{main_cache.GetCacheSize()};
+    const auto dirty_count{main_cache.GetDirtyCount()};
+    const auto memory_usage{main_cache.DynamicMemoryUsage()};
     const auto fetched{main_cache.PeekCoin(outpoint)};
     BOOST_CHECK(fetched.has_value());
     BOOST_CHECK(*fetched == coin);
     BOOST_CHECK(!main_cache.HaveCoinInCache(outpoint));
+    BOOST_CHECK_EQUAL(main_cache.GetCacheSize(), cache_size);
+    BOOST_CHECK_EQUAL(main_cache.GetDirtyCount(), dirty_count);
+    BOOST_CHECK_EQUAL(main_cache.DynamicMemoryUsage(), memory_usage);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
