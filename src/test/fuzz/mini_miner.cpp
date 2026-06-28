@@ -113,6 +113,10 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         TryAddToMempool(pool, entry.Fee(fee).FromTx(tx));
         if (pool.exists(tx->GetHash())) {
             mempool_txids.push_back(tx->GetHash());
+            if (fuzzed_data_provider.ConsumeBool()) {
+                const CAmount fee_delta{ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY / 100000)};
+                pool.PrioritiseTransaction(tx->GetHash(), fuzzed_data_provider.ConsumeBool() ? fee_delta : -fee_delta);
+            }
         }
 
         // All outputs are available to spend
@@ -139,23 +143,41 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
     CheckGatherClusters(pool, mempool_txids, outpoints);
 
     const CFeeRate target_feerate{CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY/1000)}};
+    const auto duplicated_outpoints{[&] {
+        std::vector<COutPoint> ret{outpoints.rbegin(), outpoints.rend()};
+        ret.insert(ret.end(), outpoints.begin(), outpoints.end());
+        if (!outpoints.empty()) ret.push_back(outpoints.front());
+        return ret;
+    }()};
     std::optional<CAmount> total_bumpfee;
     CAmount sum_fees = 0;
     {
-        node::MiniMiner mini_miner{pool, outpoints};
-        assert(mini_miner.IsReadyToCalculate());
-        const auto inclusion_order{mini_miner.Linearize()};
-        const auto template_txids{mini_miner.GetMockTemplateTxids()};
-        assert(!mini_miner.IsReadyToCalculate());
-        assert(inclusion_order.size() == template_txids.size());
-        for (const auto& [txid, _] : inclusion_order) {
-            assert(template_txids.contains(txid));
-        }
+        const auto linearize = [&](const std::vector<COutPoint>& requested_outpoints) {
+            node::MiniMiner mini_miner{pool, requested_outpoints};
+            assert(mini_miner.IsReadyToCalculate());
+            const auto inclusion_order{mini_miner.Linearize()};
+            const auto template_txids{mini_miner.GetMockTemplateTxids()};
+            assert(!mini_miner.IsReadyToCalculate());
+            assert(inclusion_order.size() == template_txids.size());
+            for (const auto& [txid, _] : inclusion_order) {
+                assert(template_txids.contains(txid));
+            }
+            return std::make_pair(inclusion_order, template_txids);
+        };
+        const auto [inclusion_order, template_txids]{linearize(outpoints)};
+        const auto [duplicated_inclusion_order, duplicated_template_txids]{linearize(duplicated_outpoints)};
+        assert(inclusion_order == duplicated_inclusion_order);
+        assert(template_txids == duplicated_template_txids);
     }
     {
         node::MiniMiner mini_miner{pool, outpoints};
         assert(mini_miner.IsReadyToCalculate());
         const auto bump_fees = mini_miner.CalculateBumpFees(target_feerate);
+        node::MiniMiner duplicate_mini_miner{pool, duplicated_outpoints};
+        assert(duplicate_mini_miner.IsReadyToCalculate());
+        const auto duplicated_bump_fees = duplicate_mini_miner.CalculateBumpFees(target_feerate);
+        assert(!duplicate_mini_miner.IsReadyToCalculate());
+        assert(bump_fees == duplicated_bump_fees);
         for (const auto& outpoint : outpoints) {
             auto it = bump_fees.find(outpoint);
             assert(it != bump_fees.end());
@@ -168,7 +190,13 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         node::MiniMiner mini_miner{pool, outpoints};
         assert(mini_miner.IsReadyToCalculate());
         total_bumpfee = mini_miner.CalculateTotalBumpFees(target_feerate);
+        node::MiniMiner duplicate_mini_miner{pool, duplicated_outpoints};
+        assert(duplicate_mini_miner.IsReadyToCalculate());
+        const auto duplicated_total_bumpfee = duplicate_mini_miner.CalculateTotalBumpFees(target_feerate);
+        assert(!duplicate_mini_miner.IsReadyToCalculate());
+        assert(total_bumpfee == duplicated_total_bumpfee);
         assert(total_bumpfee.has_value());
+        assert(*total_bumpfee >= 0);
         assert(!mini_miner.IsReadyToCalculate());
     }
     // Overlapping ancestry across multiple outpoints can only reduce the total bump fee.
