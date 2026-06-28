@@ -256,6 +256,41 @@ BOOST_AUTO_TEST_CASE(package_validation_tests)
     BOOST_CHECK_EQUAL(m_node.mempool->size(), initialPoolSize);
 }
 
+BOOST_AUTO_TEST_CASE(package_test_accept_single_low_fee)
+{
+    LOCK(cs_main);
+    const auto initial_pool_size{m_node.mempool->size()};
+
+    // A single low-fee transaction submitted through package test-accept should
+    // preserve fee metadata on its reconsiderable per-transaction failure.
+    CKey low_fee_key = GenerateRandomKey();
+    CScript low_fee_script = GetScriptForDestination(PKHash(low_fee_key.GetPubKey()));
+    auto mtx_low_fee = CreateValidMempoolTransaction(/*input_transaction=*/m_coinbase_txns[0], /*input_vout=*/0,
+                                                     /*input_height=*/0, /*input_signing_key=*/coinbaseKey,
+                                                     /*output_destination=*/low_fee_script,
+                                                     /*output_amount=*/CAmount(50 * COIN - 1), /*submit=*/false);
+    CTransactionRef tx_low_fee = MakeTransactionRef(mtx_low_fee);
+    Package package_single_low_fee{tx_low_fee};
+    const auto result_single_low_fee = ProcessNewPackage(m_node.chainman->ActiveChainstate(), *m_node.mempool,
+                                                         package_single_low_fee, /*test_accept=*/true, /*client_maxfeerate=*/{});
+    if (auto err_single_low_fee{CheckPackageMempoolAcceptResult(package_single_low_fee, result_single_low_fee, /*expect_valid=*/false, nullptr)}) {
+        BOOST_ERROR(err_single_low_fee.value());
+    } else {
+        BOOST_CHECK_EQUAL(result_single_low_fee.m_state.GetResult(), PackageValidationResult::PCKG_TX);
+        BOOST_CHECK_EQUAL(result_single_low_fee.m_state.GetRejectReason(), "transaction failed");
+        auto it_low_fee_tx = result_single_low_fee.m_tx_results.find(tx_low_fee->GetWitnessHash());
+        BOOST_REQUIRE(it_low_fee_tx != result_single_low_fee.m_tx_results.end());
+        BOOST_CHECK(it_low_fee_tx->second.m_result_type == MempoolAcceptResult::ResultType::INVALID);
+        BOOST_CHECK_EQUAL(it_low_fee_tx->second.m_state.GetResult(), TxValidationResult::TX_RECONSIDERABLE);
+        BOOST_CHECK(it_low_fee_tx->second.m_effective_feerate.has_value());
+        BOOST_REQUIRE(it_low_fee_tx->second.m_wtxids_fee_calculations.has_value());
+        BOOST_REQUIRE_EQUAL(it_low_fee_tx->second.m_wtxids_fee_calculations->size(), 1U);
+        BOOST_CHECK_EQUAL(it_low_fee_tx->second.m_wtxids_fee_calculations->front(), tx_low_fee->GetWitnessHash());
+    }
+
+    BOOST_CHECK_EQUAL(m_node.mempool->size(), initial_pool_size);
+}
+
 BOOST_AUTO_TEST_CASE(noncontextual_package_tests)
 {
     // The signatures won't be verified so we can just use a placeholder
