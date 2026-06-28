@@ -1191,6 +1191,45 @@ BOOST_AUTO_TEST_CASE(ccoins_uncache_cache_entry_contracts)
     clean_cache.SelfTest();
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_havecoinincache_read_only)
+{
+    CCoinsViewTest base{m_rng};
+
+    auto check_have_coin_in_cache = [](CCoinsViewCacheTest& cache, const COutPoint& outpoint, bool expected) {
+        const auto cache_size{cache.GetCacheSize()};
+        const auto dirty_count{cache.GetDirtyCount()};
+        const auto cache_usage{cache.DynamicMemoryUsage()};
+        BOOST_CHECK_EQUAL(cache.HaveCoinInCache(outpoint), expected);
+        BOOST_CHECK_EQUAL(cache.HaveCoinInCache(outpoint), expected);
+        BOOST_CHECK_EQUAL(cache.GetCacheSize(), cache_size);
+        BOOST_CHECK_EQUAL(cache.GetDirtyCount(), dirty_count);
+        BOOST_CHECK_EQUAL(cache.DynamicMemoryUsage(), cache_usage);
+        cache.SelfTest();
+    };
+
+    const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin coin{CTxOut{m_rng.randrange(10), CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+    {
+        CCoinsViewCache write_cache{&base};
+        write_cache.AddCoin(outpoint, Coin{coin}, /*possible_overwrite=*/false);
+        write_cache.Flush();
+    }
+
+    CCoinsViewCacheTest cache{&base};
+
+    check_have_coin_in_cache(cache, outpoint, /*expected=*/false);
+    BOOST_CHECK_EQUAL(cache.GetCacheSize(), 0U);
+
+    BOOST_CHECK(cache.HaveCoin(outpoint));
+    check_have_coin_in_cache(cache, outpoint, /*expected=*/true);
+
+    BOOST_CHECK(cache.SpendCoin(outpoint));
+    check_have_coin_in_cache(cache, outpoint, /*expected=*/false);
+
+    const COutPoint missing_outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    check_have_coin_in_cache(cache, missing_outpoint, /*expected=*/false);
+}
+
 BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
 {
     CCoinsViewTest root{m_rng};
