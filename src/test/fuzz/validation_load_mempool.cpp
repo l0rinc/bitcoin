@@ -29,6 +29,14 @@ using node::MempoolPath;
 
 namespace {
 const TestingSetup* g_setup;
+
+void AssertMempoolPersistContracts(const CTxMemPool& pool, Chainstate& chainstate)
+{
+    WITH_LOCK(::cs_main, pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
+    for (const auto& txid : pool.GetUnbroadcastTxs()) {
+        Assert(pool.exists(txid));
+    }
+}
 } // namespace
 
 void initialize_validation_load_mempool()
@@ -58,6 +66,17 @@ FUZZ_TARGET(validation_load_mempool, .init = initialize_validation_load_mempool)
                       {
                           .mockable_fopen_function = fuzzed_fopen,
                       });
+    AssertMempoolPersistContracts(pool, chainstate);
+    if (fuzzed_data_provider.ConsumeBool()) {
+        const Txid txid{Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider))};
+        const bool in_mempool{pool.exists(txid)};
+        pool.AddUnbroadcastTx(txid);
+        if (!in_mempool) {
+            Assert(!pool.GetUnbroadcastTxs().contains(txid));
+        }
+        AssertMempoolPersistContracts(pool, chainstate);
+    }
     pool.SetLoadTried(true);
     (void)DumpMempool(pool, MempoolPath(g_setup->m_args), fuzzed_fopen, true);
+    AssertMempoolPersistContracts(pool, chainstate);
 }
