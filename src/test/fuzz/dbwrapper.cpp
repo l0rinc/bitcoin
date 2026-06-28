@@ -396,7 +396,8 @@ FUZZ_TARGET(dbwrapper_concurrent_reads, .init = [] { static auto setup{MakeNoLog
     const auto memenv{std::unique_ptr<leveldb::Env>{leveldb::NewMemEnv(leveldb::Env::Default())}};
     DeterministicEnv det_env{memenv.get()};
 
-    CDBWrapper db{ConsumeDBParams(provider, &det_env, /*obfuscate=*/provider.ConsumeBool())};
+    const bool obfuscate{provider.ConsumeBool()};
+    CDBWrapper db{ConsumeDBParams(provider, &det_env, obfuscate)};
 
     // Seed the DB. Drain work after small batches so we don't deadlock on a
     // scheduled compaction.
@@ -491,4 +492,5 @@ FUZZ_TARGET(dbwrapper_concurrent_reads, .init = [] { static auto setup{MakeNoLog
 
     for (auto& fut : futures) fut.get();
     det_env.DrainWork();
+    VerifyIterator(db, oracle, obfuscate);
 }
