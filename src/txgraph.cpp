@@ -2645,6 +2645,13 @@ void TxGraphImpl::StartStaging() noexcept
     m_staging_clusterset->m_oversized = m_main_clusterset.m_oversized;
     Assume(m_staging_clusterset->m_oversized.has_value());
     m_staging_clusterset->m_cluster_usage = 0;
+    Assume(m_staging_clusterset.has_value());
+    Assume(GetTopLevel() == 1);
+    Assume(m_staging_clusterset->m_txcount == m_main_clusterset.m_txcount);
+    Assume(m_staging_clusterset->m_txcount_oversized == m_main_clusterset.m_txcount_oversized);
+    Assume(m_staging_clusterset->m_to_remove.empty());
+    Assume(m_staging_clusterset->m_removed.empty());
+    Assume(m_staging_clusterset->m_cluster_usage == 0);
 }
 
 void TxGraphImpl::AbortStaging() noexcept
@@ -2676,6 +2683,9 @@ void TxGraphImpl::AbortStaging() noexcept
             m_main_clusterset.m_oversized = std::nullopt;
         }
     }
+    Assume(!m_staging_clusterset.has_value());
+    Assume(GetTopLevel() == 0);
+    Assume(m_main_clusterset.m_removed.empty());
 }
 
 void TxGraphImpl::CommitStaging() noexcept
@@ -2716,6 +2726,9 @@ void TxGraphImpl::CommitStaging() noexcept
     // Delete the old staging graph, after all its information was moved to main.
     m_staging_clusterset.reset();
     Compact();
+    Assume(!m_staging_clusterset.has_value());
+    Assume(GetTopLevel() == 0);
+    Assume(m_main_clusterset.m_removed.empty());
 }
 
 void GenericClusterImpl::SetFee(TxGraphImpl& graph, int level, DepGraphIndex idx, int64_t fee) noexcept
