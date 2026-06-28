@@ -2560,6 +2560,15 @@ std::vector<TxGraph::Ref*> TxGraphImpl::GetCluster(const Ref& arg, Level level_s
     MakeAcceptable(*cluster, cluster_level);
     std::vector<TxGraph::Ref*> ret(cluster->GetTxCount());
     cluster->GetClusterRefs(*this, ret, 0);
+    Assume(!ret.empty());
+    Assume(ret.size() <= m_max_cluster_count);
+    for (const Ref* ref : ret) {
+        Assume(ref);
+        Assume(GetRefGraph(*ref) == this);
+        auto [member_cluster, member_cluster_level] = FindClusterAndLevel(GetRefIndex(*ref), level);
+        Assume(member_cluster == cluster);
+        Assume(member_cluster_level == cluster_level);
+    }
     return ret;
 }
 
