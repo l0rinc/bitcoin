@@ -71,5 +71,6 @@ std::partial_ordering CompareChunks(std::span<const FeeFrac> chunks0, std::span<
     } while(true);
 
     // Otherwise compare the better_somewhere values.
+    Assume(!(better_somewhere[0] && better_somewhere[1]));
     return better_somewhere[0] <=> better_somewhere[1];
 }
