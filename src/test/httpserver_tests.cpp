@@ -219,6 +219,10 @@ BOOST_AUTO_TEST_CASE(http_request_tests)
         BOOST_CHECK_EQUAL(req.m_headers.FindFirst("Content-Length"), "46");
         BOOST_CHECK_EQUAL(req.m_body.size(), 46);
         BOOST_CHECK_EQUAL(req.m_body, R"({"method":"getblockcount","params":[],"id":1})""\n");
+        BOOST_CHECK_EQUAL(req.ReadBody(), R"({"method":"getblockcount","params":[],"id":1})""\n");
+        BOOST_CHECK_EQUAL(req.GetHeader("host").second, "127.0.0.1");
+        req.WriteHeader("Host", "response.example");
+        BOOST_CHECK_EQUAL(req.GetHeader("Host").second, "127.0.0.1");
     }
     {
         // Malformed: no spaces between data
