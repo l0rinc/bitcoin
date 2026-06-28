@@ -361,8 +361,15 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
 
             [&]() { // HaveCoinInCache
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
-                // Invoke on real cache (there is no equivalent in simulation, so nothing to compare result with).
-                (void)caches.back()->HaveCoinInCache(data.outpoints[outpointidx]);
+                const auto cache_size{caches.back()->GetCacheSize()};
+                const auto dirty_count{caches.back()->GetDirtyCount()};
+                const auto cache_usage{caches.back()->DynamicMemoryUsage()};
+                // This is only a current-cache check. It must not fetch from the backing view.
+                const bool has_coin{caches.back()->HaveCoinInCache(data.outpoints[outpointidx])};
+                assert(caches.back()->HaveCoinInCache(data.outpoints[outpointidx]) == has_coin);
+                assert(caches.back()->GetCacheSize() == cache_size);
+                assert(caches.back()->GetDirtyCount() == dirty_count);
+                assert(caches.back()->DynamicMemoryUsage() == cache_usage);
             },
 
             [&]() { // AccessCoin
