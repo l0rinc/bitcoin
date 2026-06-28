@@ -665,16 +665,23 @@ std::optional<std::string> GetQueryParameterFromUri(const std::string_view uri, 
     if (end == std::string::npos) {
         end = uri.length();
     }
+    Assume(start < uri.size());
+    Assume(end >= start + 1);
+    Assume(end <= uri.size());
     const std::string_view query{uri.data() + start + 1, end - start - 1};
     // find requested parameter in query
     const std::vector<std::string_view> params{Split<std::string_view>(query, "&")};
     for (const std::string_view& param : params) {
         size_t delim = param.find('=');
-        if (key == UrlDecode(param.substr(0, delim))) {
+        const std::string decoded_key{UrlDecode(param.substr(0, delim))};
+        if (key == decoded_key) {
+            Assume(decoded_key == key);
             if (delim == std::string::npos) {
                 return "";
             } else {
-                return std::string(UrlDecode(param.substr(delim + 1)));
+                const std::string decoded_value{UrlDecode(param.substr(delim + 1))};
+                Assume(delim < param.size());
+                return decoded_value;
             }
         }
     }
