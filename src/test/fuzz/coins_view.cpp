@@ -213,7 +213,15 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 (void)coins_view_cache.SpendCoin(random_out_point, fuzzed_data_provider.ConsumeBool() ? &move_to : nullptr);
             },
             [&] {
+                const auto before{coins_view_cache.PeekCoin(random_out_point)};
+                const auto before_backend{backend_coins_view->PeekCoin(random_out_point)};
                 coins_view_cache.Uncache(random_out_point);
+                const auto after{coins_view_cache.PeekCoin(random_out_point)};
+                // Backend-disconnected caches can intentionally lose clean local entries.
+                if (before && before_backend && *before == *before_backend) {
+                    assert(after && *after == *before);
+                }
+                if (!before && !before_backend) assert(!after);
             },
             [&] {
                 if (overlay) return; // // CoinsViewOverlay::SetBackend() is never called in production code
