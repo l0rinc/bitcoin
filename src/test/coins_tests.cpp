@@ -1158,6 +1158,39 @@ BOOST_AUTO_TEST_CASE(ccoins_emplace_duplicate_keeps_usage_balanced)
     BOOST_CHECK(cache.AccessCoin(outpoint) == coin1);
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_uncache_cache_entry_contracts)
+{
+    CCoinsViewTest base{m_rng};
+    const COutPoint dirty_outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin dirty_coin{CTxOut{m_rng.randrange(10), CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+
+    CCoinsViewCacheTest dirty_cache{&base};
+    dirty_cache.AddCoin(dirty_outpoint, Coin{dirty_coin}, /*possible_overwrite=*/false);
+    dirty_cache.Uncache(dirty_outpoint);
+    BOOST_CHECK(dirty_cache.HaveCoinInCache(dirty_outpoint));
+    BOOST_CHECK_EQUAL(dirty_cache.GetDirtyCount(), 1U);
+    BOOST_CHECK(dirty_cache.AccessCoin(dirty_outpoint) == dirty_coin);
+    dirty_cache.SelfTest();
+
+    const COutPoint clean_outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin clean_coin{CTxOut{m_rng.randrange(10), CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 2)}, 2, false};
+    {
+        CCoinsViewCache write_cache{&base};
+        write_cache.AddCoin(clean_outpoint, Coin{clean_coin}, /*possible_overwrite=*/false);
+        write_cache.Flush();
+    }
+
+    CCoinsViewCacheTest clean_cache{&base};
+    BOOST_CHECK(clean_cache.AccessCoin(clean_outpoint) == clean_coin);
+    BOOST_CHECK(clean_cache.HaveCoinInCache(clean_outpoint));
+    BOOST_CHECK_EQUAL(clean_cache.GetDirtyCount(), 0U);
+    clean_cache.Uncache(clean_outpoint);
+    BOOST_CHECK(!clean_cache.HaveCoinInCache(clean_outpoint));
+    BOOST_CHECK(clean_cache.HaveCoin(clean_outpoint));
+    BOOST_CHECK(clean_cache.AccessCoin(clean_outpoint) == clean_coin);
+    clean_cache.SelfTest();
+}
+
 BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
 {
     CCoinsViewTest root{m_rng};
