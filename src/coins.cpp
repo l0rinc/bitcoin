@@ -149,13 +149,18 @@ bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {
            (bool)it->second.coin.IsCoinBase());
     if (moveout) {
         *moveout = std::move(it->second.coin);
+        Assume(!moveout->IsSpent());
     }
     if (it->second.IsFresh()) {
         cacheCoins.erase(it);
+        Assume(!cacheCoins.contains(outpoint));
     } else {
         CCoinsCacheEntry::SetDirty(*it, m_sentinel);
         ++m_dirty_count;
         it->second.coin.Clear();
+        Assume(it->second.coin.IsSpent());
+        Assume(it->second.IsDirty());
+        Assume(!it->second.IsFresh());
     }
     return true;
 }
