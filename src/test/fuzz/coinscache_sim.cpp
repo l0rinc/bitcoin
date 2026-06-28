@@ -452,8 +452,19 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
 
             [&]() { // Uncache
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
+                auto sim = lookup(outpointidx);
                 // Apply to real caches (there is no equivalent in our simulation).
                 caches.back()->Uncache(data.outpoints[outpointidx]);
+                auto realcoin = caches.back()->PeekCoin(data.outpoints[outpointidx]);
+                if (!sim.has_value()) {
+                    assert(!realcoin);
+                } else {
+                    assert(realcoin && !realcoin->IsSpent());
+                    const auto& simcoin = data.coins[sim->first];
+                    assert(realcoin->out == simcoin.out);
+                    assert(realcoin->fCoinBase == simcoin.fCoinBase);
+                    assert(realcoin->nHeight == sim->second);
+                }
             },
 
             [&]() { // Add a cache level (if not already at the max).
