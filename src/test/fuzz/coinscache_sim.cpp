@@ -276,6 +276,13 @@ FUZZ_TARGET(coinscache_sim)
         assert_cache_clean(cache);
     };
 
+    auto assert_spent_public = [&](uint32_t outpointidx) {
+        const auto& outpoint{data.outpoints[outpointidx]};
+        assert(!caches.back()->HaveCoin(outpoint));
+        assert(!caches.back()->GetCoin(outpoint));
+        assert(caches.back()->AccessCoin(outpoint).IsSpent());
+    };
+
     // Main simulation loop: read commands from the fuzzer input, and apply them
     // to both the real cache stack and the simulation.
     FuzzedDataProvider provider(buffer.data(), buffer.size());
@@ -395,6 +402,7 @@ FUZZ_TARGET(coinscache_sim)
                 sim_caches[caches.size()].entry[outpointidx].entrytype = EntryType::SPENT;
                 // Compare return value with whether there was an unspent coin to delete.
                 assert(real == sim.has_value());
+                assert_spent_public(outpointidx);
             },
 
             [&]() { // SpendCoin (with moveto)
@@ -418,6 +426,7 @@ FUZZ_TARGET(coinscache_sim)
                     assert(simcoin.fCoinBase == realcoin.fCoinBase);
                     assert(realcoin.nHeight == sim->second);
                 }
+                assert_spent_public(outpointidx);
             },
 
             [&]() { // Uncache
