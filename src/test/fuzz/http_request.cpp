@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <httpserver.h>
+#include <common/url.h>
 #include <netaddress.h>
 #include <rpc/protocol.h>
 #include <test/fuzz/FuzzedDataProvider.h>
@@ -17,13 +18,68 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 
 std::string_view RequestMethodString(HTTPRequestMethod m);
 
 namespace {
+std::optional<std::string> ReferenceQueryParameterFromUri(const std::string_view uri, const std::string_view key)
+{
+    const size_t start{uri.find('?')};
+    if (start == std::string::npos) return std::nullopt;
+    size_t end{uri.find('#', start)};
+    if (end == std::string::npos) end = uri.size();
+
+    size_t pos{start + 1};
+    while (pos <= end) {
+        size_t next{uri.find('&', pos)};
+        if (next == std::string::npos || next > end) next = end;
+        const std::string_view param{uri.data() + pos, next - pos};
+        const size_t delim{param.find('=')};
+        if (UrlDecode(param.substr(0, delim)) == key) {
+            if (delim == std::string::npos) return "";
+            return UrlDecode(param.substr(delim + 1));
+        }
+        if (next == end) break;
+        pos = next + 1;
+    }
+    return std::nullopt;
+}
+
+std::vector<std::string> QueryKeysForOracle(const std::string_view uri, FuzzedDataProvider& fuzzed_data_provider)
+{
+    std::vector<std::string> keys{
+        "",
+        "count",
+        "p",
+        "p1",
+        "verbose",
+        fuzzed_data_provider.ConsumeRandomLengthString(16),
+    };
+
+    const size_t start{uri.find('?')};
+    if (start == std::string::npos) return keys;
+    size_t end{uri.find('#', start)};
+    if (end == std::string::npos) end = uri.size();
+
+    size_t pos{start + 1};
+    for (unsigned params{0}; pos <= end && params < 16; ++params) {
+        size_t next{uri.find('&', pos)};
+        if (next == std::string::npos || next > end) next = end;
+        const std::string_view param{uri.data() + pos, next - pos};
+        const size_t delim{param.find('=')};
+        keys.push_back(UrlDecode(param.substr(0, delim)));
+        if (delim != std::string::npos) keys.emplace_back(param.substr(0, delim));
+        if (next == end) break;
+        pos = next + 1;
+    }
+    return keys;
+}
+
 void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDataProvider& fuzzed_data_provider, FakeSteadyClock& clock)
 {
     using http_bitcoin::HTTPRemoteClient;
@@ -144,6 +200,9 @@ FUZZ_TARGET(http_request)
     (void)RequestMethodString(request_method);
     (void)http_request.GetURI();
     (void)http_request.GetHeader("Host");
+    for (const std::string& key : QueryKeysForOracle(http_request.GetURI(), fuzzed_data_provider)) {
+        assert(http_request.GetQueryParameter(key) == ReferenceQueryParameterFromUri(http_request.GetURI(), key));
+    }
     AssertWriteReplyContracts(http_request, fuzzed_data_provider, steady_clock);
     std::string header = fuzzed_data_provider.ConsumeRandomLengthString(16);
     const auto request_header_before{http_request.GetHeader(header)};
