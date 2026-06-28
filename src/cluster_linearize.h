@@ -1600,6 +1600,13 @@ public:
             }
         }
         Assume(ret.size() == m_set_info.size());
+        SetType done;
+        for (DepGraphIndex tx_idx : ret) {
+            Assume(m_transaction_idxs[tx_idx]);
+            Assume((m_depgraph.Ancestors(tx_idx) - done) == SetType::Singleton(tx_idx));
+            done.Set(tx_idx);
+        }
+        Assume(done == m_transaction_idxs);
         m_cost.GetLinearizationEnd(/*num_txns=*/m_set_info.size(), /*num_deps=*/num_deps);
         return ret;
     }
