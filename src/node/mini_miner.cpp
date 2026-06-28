@@ -303,6 +303,11 @@ void MiniMiner::BuildMockTemplate(std::optional<CFeeRate> target_feerate)
 std::map<Txid, uint32_t> MiniMiner::Linearize()
 {
     BuildMockTemplate(std::nullopt);
+    Assume(!m_ready_to_calculate);
+    Assume(m_in_block.size() == m_inclusion_order.size());
+    for (const auto& [txid, _] : m_inclusion_order) {
+        Assume(m_in_block.contains(txid));
+    }
     return m_inclusion_order;
 }
 

@@ -1005,6 +1005,11 @@ std::vector<CTxMemPool::txiter> CTxMemPool::GatherClusters(const std::vector<Txi
     if (ret.size() > 500) {
         return {};
     }
+    Assume(ret.size() <= 500);
+    std::set<const CTxMemPoolEntry*> unique_entries;
+    for (const auto& tx : ret) {
+        Assume(unique_entries.insert(&*tx).second);
+    }
     return ret;
 }
 
