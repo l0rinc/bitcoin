@@ -197,6 +197,29 @@ DBParams ConsumeDBParams(FuzzedDataProvider& provider, leveldb::Env* testing_env
     };
 }
 
+template <typename DrainWorkFn>
+void TestMalformedObfuscationKey(FuzzedDataProvider& provider, leveldb::Env* testing_env,
+                                 DrainWorkFn drain_work)
+{
+    {
+        CDBWrapper dbw{ConsumeDBParams(provider, testing_env, /*obfuscate=*/false)};
+        CDBBatch batch{dbw};
+        std::vector<std::byte> malformed_key(provider.ConsumeIntegralInRange<size_t>(0, Obfuscation::KEY_SIZE * 2));
+        if (!malformed_key.empty()) provider.ConsumeData(malformed_key.data(), malformed_key.size());
+        if (malformed_key.size() == Obfuscation::KEY_SIZE) malformed_key.push_back(std::byte{0});
+        batch.Write(OBFUSCATION_KEY, malformed_key);
+        drain_work();
+        dbw.WriteBatch(batch, /*fSync=*/provider.ConsumeBool());
+        drain_work();
+    }
+
+    try {
+        CDBWrapper dbw{ConsumeDBParams(provider, testing_env, /*obfuscate=*/provider.ConsumeBool())};
+        assert(false);
+    } catch (const dbwrapper_error&) {
+    }
+}
+
 template <typename DrainWorkFn, typename RunOneFn>
 void TestDbWrapper(FuzzedDataProvider& provider,
                       leveldb::Env* testing_env,
@@ -205,6 +228,11 @@ void TestDbWrapper(FuzzedDataProvider& provider,
                       bool allow_force_compact)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
+
+    if (provider.ConsumeBool()) {
+        TestMalformedObfuscationKey(provider, testing_env, drain_work);
+        return;
+    }
 
     const bool obfuscate{provider.ConsumeBool()};
 
