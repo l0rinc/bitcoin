@@ -40,6 +40,15 @@ const CBlockIndex* NaiveLastCommonAncestor(const CBlockIndex* a, const CBlockInd
     return a;
 }
 
+const CBlockIndex* NaiveFindEarliestAtLeast(const CChain& chain, int64_t min_time, int min_height)
+{
+    for (int height{std::max(min_height, 0)}; height <= chain.Height(); ++height) {
+        const CBlockIndex* block{chain[height]};
+        if (block->GetBlockTimeMax() >= min_time) return block;
+    }
+    return nullptr;
+}
+
 std::vector<const CBlockIndex*> NaiveLocatorIndexes(const CBlockIndex* block)
 {
     int step{1};
@@ -64,6 +73,8 @@ void AssertChainContracts(FuzzedDataProvider& fuzzed_data_provider)
     hashes.push_back(ArithToUint256(0));
     auto genesis{std::make_unique<CBlockIndex>()};
     genesis->nHeight = 0;
+    genesis->nTime = fuzzed_data_provider.ConsumeIntegral<uint32_t>();
+    genesis->nTimeMax = genesis->nTime;
     genesis->phashBlock = &hashes.back();
     genesis->BuildSkip();
     blocks.push_back(std::move(genesis));
@@ -74,6 +85,8 @@ void AssertChainContracts(FuzzedDataProvider& fuzzed_data_provider)
         auto block{std::make_unique<CBlockIndex>()};
         block->pprev = blocks[parent_pos].get();
         block->nHeight = block->pprev->nHeight + 1;
+        block->nTime = fuzzed_data_provider.ConsumeIntegral<uint32_t>();
+        block->nTimeMax = std::max(block->pprev->nTimeMax, block->nTime);
         block->phashBlock = &hashes.back();
         block->BuildSkip();
         blocks.push_back(std::move(block));
@@ -105,6 +118,19 @@ void AssertChainContracts(FuzzedDataProvider& fuzzed_data_provider)
             assert(chain.Next(*block) == NaiveGetAncestor(active_tip, block->nHeight + 1));
         } else {
             assert(chain.Next(*block) == nullptr);
+        }
+    }
+
+    for (unsigned query{0}; query < 16; ++query) {
+        const int64_t min_time{fuzzed_data_provider.ConsumeIntegral<int64_t>()};
+        const int min_height{fuzzed_data_provider.ConsumeIntegral<int>()};
+        const CBlockIndex* actual{chain.FindEarliestAtLeast(min_time, min_height)};
+        const CBlockIndex* expected{NaiveFindEarliestAtLeast(chain, min_time, min_height)};
+        assert(actual == expected);
+        if (actual) {
+            assert(chain.Contains(*actual));
+            assert(actual->GetBlockTimeMax() >= min_time);
+            assert(actual->nHeight >= min_height);
         }
     }
 
