@@ -1456,7 +1456,13 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptMultipleTransactionsInternal(con
         if (!PreChecks(args, ws)) {
             package_state.Invalid(PackageValidationResult::PCKG_TX, "transaction failed");
             // Exit early to avoid doing pointless work. Update the failed tx result; the rest are unfinished.
-            results.emplace(ws.m_ptx->GetWitnessHash(), MempoolAcceptResult::Failure(ws.m_state));
+            const auto wtxid{ws.m_ptx->GetWitnessHash()};
+            if (ws.m_state.GetResult() == TxValidationResult::TX_RECONSIDERABLE) {
+                Assume(ws.m_vsize > 0);
+                results.emplace(wtxid, MempoolAcceptResult::FeeFailure(ws.m_state, CFeeRate(ws.m_modified_fees, ws.m_vsize), {wtxid}));
+            } else {
+                results.emplace(wtxid, MempoolAcceptResult::Failure(ws.m_state));
+            }
             return PackageMempoolAcceptResult(package_state, std::move(results));
         }
 
