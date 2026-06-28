@@ -30,6 +30,20 @@ public:
     using CTxMemPool::GetMinFee;
 };
 
+static void CheckMempoolInputIndexCount(const CTxMemPool& pool)
+{
+    size_t input_count{0};
+    for (const auto& tx_info : pool.infoAll()) {
+        input_count += tx_info.tx->vin.size();
+    }
+    size_t indexed_input_count{0};
+    {
+        LOCK(pool.cs);
+        indexed_input_count = pool.mapNextTx.size();
+    }
+    BOOST_CHECK_EQUAL(indexed_input_count, input_count);
+}
+
 BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
 {
     // Test CTxMemPool::remove functionality
@@ -77,12 +91,15 @@ BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
     unsigned int poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txParent), REMOVAL_REASON_DUMMY);
     BOOST_CHECK_EQUAL(testPool.size(), poolSize);
+    CheckMempoolInputIndexCount(testPool);
 
     // Just the parent:
     TryAddToMempool(testPool, entry.FromTx(txParent));
+    CheckMempoolInputIndexCount(testPool);
     poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txParent), REMOVAL_REASON_DUMMY);
     BOOST_CHECK_EQUAL(testPool.size(), poolSize - 1);
+    CheckMempoolInputIndexCount(testPool);
 
     // Parent, children, grandchildren:
     TryAddToMempool(testPool, entry.FromTx(txParent));
@@ -91,22 +108,27 @@ BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
         TryAddToMempool(testPool, entry.FromTx(txChild[i]));
         TryAddToMempool(testPool, entry.FromTx(txGrandChild[i]));
     }
+    CheckMempoolInputIndexCount(testPool);
     // Remove Child[0], GrandChild[0] should be removed:
     poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txChild[0]), REMOVAL_REASON_DUMMY);
     BOOST_CHECK_EQUAL(testPool.size(), poolSize - 2);
+    CheckMempoolInputIndexCount(testPool);
     // ... make sure grandchild and child are gone:
     poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txGrandChild[0]), REMOVAL_REASON_DUMMY);
     BOOST_CHECK_EQUAL(testPool.size(), poolSize);
+    CheckMempoolInputIndexCount(testPool);
     poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txChild[0]), REMOVAL_REASON_DUMMY);
     BOOST_CHECK_EQUAL(testPool.size(), poolSize);
+    CheckMempoolInputIndexCount(testPool);
     // Remove parent, all children/grandchildren should go:
     poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txParent), REMOVAL_REASON_DUMMY);
     BOOST_CHECK_EQUAL(testPool.size(), poolSize - 5);
     BOOST_CHECK_EQUAL(testPool.size(), 0U);
+    CheckMempoolInputIndexCount(testPool);
 
     // Add children and grandchildren, but NOT the parent (simulate the parent being in a block)
     for (int i = 0; i < 3; i++)
@@ -114,12 +136,14 @@ BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
         TryAddToMempool(testPool, entry.FromTx(txChild[i]));
         TryAddToMempool(testPool, entry.FromTx(txGrandChild[i]));
     }
+    CheckMempoolInputIndexCount(testPool);
     // Now remove the parent, as might happen if a block-re-org occurs but the parent cannot be
     // put into the mempool (maybe because it is non-standard):
     poolSize = testPool.size();
     testPool.removeRecursive(CTransaction(txParent), REMOVAL_REASON_DUMMY);
     BOOST_CHECK_EQUAL(testPool.size(), poolSize - 6);
     BOOST_CHECK_EQUAL(testPool.size(), 0U);
+    CheckMempoolInputIndexCount(testPool);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolLoadUnbroadcastRequiresMempoolEntry)
