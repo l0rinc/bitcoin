@@ -99,6 +99,15 @@ struct TrimTxData
     uint64_t m_uf_size;
 };
 
+/** Whether a fee-rate diagram is sorted by its public diagram order. */
+bool IsSortedFeeRateDiagram(std::span<const FeeFrac> diagram) noexcept
+{
+    for (size_t pos{1}; pos < diagram.size(); ++pos) {
+        if (ByRatioNegSize{diagram[pos - 1]} < ByRatioNegSize{diagram[pos]}) return false;
+    }
+    return true;
+}
+
 /** A grouping of connected transactions inside a TxGraphImpl::ClusterSet. */
 class Cluster
 {
@@ -2843,6 +2852,8 @@ std::pair<std::vector<FeeFrac>, std::vector<FeeFrac>> TxGraphImpl::GetMainStagin
     // Sort both by decreasing feerate to obtain diagrams, and return them.
     std::ranges::sort(main_feerates, std::greater<ByRatioNegSize<FeeFrac>>{});
     std::ranges::sort(staging_feerates, std::greater<ByRatioNegSize<FeeFrac>>{});
+    Assume(IsSortedFeeRateDiagram(main_feerates));
+    Assume(IsSortedFeeRateDiagram(staging_feerates));
     return std::make_pair(std::move(main_feerates), std::move(staging_feerates));
 }
 
