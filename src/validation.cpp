@@ -5250,6 +5250,15 @@ void ChainstateManager::CheckBlockIndex() const
     }
     assert(forward.size() + best_hdr_chain.Height() + 1 == m_blockman.m_block_index.size());
 
+    for (const auto& [parent, block] : m_blockman.m_blocks_unlinked) {
+        assert(parent);
+        assert(block);
+        assert(block->pprev == parent);
+        assert(block->nStatus & BLOCK_HAVE_DATA);
+        assert(m_blockman.LookupBlockIndex(parent->GetBlockHash()) == parent);
+        assert(m_blockman.LookupBlockIndex(block->GetBlockHash()) == block);
+    }
+
     const CBlockIndex* pindex = best_hdr_chain[0];
     assert(pindex);
     // Iterate over the entire block tree, using depth-first search.
