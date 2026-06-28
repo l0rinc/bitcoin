@@ -6,6 +6,7 @@
 #include <rpc/protocol.h>
 #include <test/util/common.h>
 #include <test/util/logging.h>
+#include <test/util/net.h>
 #include <test/util/setup_common.h>
 #include <util/string.h>
 #include <util/threadpool.h>
@@ -196,6 +197,42 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
         "HTTP/1.1 200 OK\r\n"
         "Content-Length: 41\r\n"
         "\r\n");
+
+    auto client{std::make_shared<HTTPRemoteClient>(
+        /*id=*/0,
+        CService{},
+        std::make_unique<StaticContentsSock>(""))};
+    {
+        LOCK(client->m_send_mutex);
+        client->m_send_buffer.push_back(std::byte{'x'});
+    }
+
+    HTTPRequest req{client};
+    LineReader reader("GET / HTTP/1.0\r\nConnection: keep-alive\r\n\r\n", MAX_HEADERS_SIZE);
+    BOOST_REQUIRE(req.LoadControlData(reader));
+    BOOST_REQUIRE(req.LoadHeaders(reader));
+    BOOST_REQUIRE(req.LoadBody(reader));
+
+    client->m_req_busy = true;
+    req.WriteReply(HTTP_OK, "abc");
+
+    const std::vector<std::byte> sent{WITH_LOCK(client->m_send_mutex, return client->m_send_buffer)};
+    BOOST_REQUIRE_GT(sent.size(), 1);
+    BOOST_CHECK_EQUAL(std::to_integer<unsigned char>(sent.front()), 'x');
+
+    std::string response;
+    response.reserve(sent.size() - 1);
+    for (auto it{sent.begin() + 1}; it != sent.end(); ++it) {
+        response.push_back(static_cast<char>(std::to_integer<unsigned char>(*it)));
+    }
+    BOOST_CHECK(response.starts_with("HTTP/1.0 200 OK\r\n"));
+    BOOST_CHECK(response.find("Connection: keep-alive\r\n") != std::string::npos);
+    BOOST_CHECK(response.find("Content-Length: 3\r\n") != std::string::npos);
+    BOOST_CHECK(response.find("Content-Type: text/html; charset=ISO-8859-1\r\n") != std::string::npos);
+    BOOST_CHECK(response.ends_with("\r\n\r\nabc"));
+    BOOST_CHECK(client->m_keep_alive);
+    BOOST_CHECK(WITH_LOCK(client->m_send_mutex, return client->m_send_ready));
+    BOOST_CHECK(!client->m_req_busy);
 }
 
 BOOST_AUTO_TEST_CASE(http_request_tests)
