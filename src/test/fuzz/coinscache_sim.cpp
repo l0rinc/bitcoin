@@ -25,6 +25,8 @@ namespace {
 constexpr uint32_t NUM_OUTPOINTS = 256;
 /** Number of distinct Coin values used in this test (ignoring nHeight). */
 constexpr uint32_t NUM_COINS = 256;
+/** Number of distinct best block hashes used in this test. */
+constexpr uint32_t NUM_BLOCK_HASHES = 256;
 /** Maximum number CCoinsViewCache objects used in this test. */
 constexpr uint32_t MAX_CACHES = 4;
 /** Data type large enough to hold NUM_COINS-1. */
@@ -41,11 +43,15 @@ struct PrecomputedData
     //! Block with a tx containing as inputs the above outpoints.
     CBlock block;
 
+    //! Randomly generated best block hashes.
+    uint256 block_hashes[NUM_BLOCK_HASHES];
+
     PrecomputedData()
     {
         static const uint8_t PREFIX_O[1] = {'o'}; /** Hash prefix for outpoint hashes. */
         static const uint8_t PREFIX_S[1] = {'s'}; /** Hash prefix for coins scriptPubKeys. */
         static const uint8_t PREFIX_M[1] = {'m'}; /** Hash prefix for coins nValue/fCoinBase. */
+        static const uint8_t PREFIX_B[1] = {'b'}; /** Hash prefix for best block hashes. */
 
         CMutableTransaction coinbase;
         coinbase.vin.emplace_back();
@@ -110,6 +116,11 @@ struct PrecomputedData
             coins[i].out.nValue = CAmount(hash.GetUint64(0) % MAX_MONEY);
             coins[i].fCoinBase = (hash.GetUint64(1) & 7) == 0;
             coins[i].nHeight = 0; /* Real nHeight used in simulation is set dynamically. */
+        }
+
+        for (uint32_t i = 0; i < NUM_BLOCK_HASHES; ++i) {
+            const uint8_t ser[4] = {uint8_t(i), uint8_t(i >> 8), uint8_t(i >> 16), uint8_t(i >> 24)};
+            CSHA256().Write(PREFIX_B, 1).Write(ser, sizeof(ser)).Finalize(block_hashes[i].begin());
         }
     }
 };
@@ -232,6 +243,8 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
     std::unique_ptr<OverlayFetchScope> overlay_fetch_scope;
     /** Simulated cache data (sim_caches[0] matches bottom, sim_caches[i+1] matches caches[i]). */
     CacheLevel sim_caches[MAX_CACHES + 1];
+    /** Simulated local best block hash for each layer; null means inherit from the layer below. */
+    uint256 sim_best_blocks[MAX_CACHES + 1]{};
     /** Current height in the simulation. */
     uint32_t current_height = 1U;
 
@@ -254,6 +267,26 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         return std::nullopt;
     };
 
+    auto effective_best_block = [&](uint32_t sim_idx) -> uint256 {
+        while (sim_idx > 0 && sim_best_blocks[sim_idx].IsNull()) {
+            --sim_idx;
+        }
+        return sim_best_blocks[sim_idx];
+    };
+
+    auto assert_best_block = [&](uint32_t sim_idx) {
+        assert(sim_idx > 0);
+        assert(sim_idx <= caches.size());
+        const auto expected{effective_best_block(sim_idx)};
+        const auto real{caches[sim_idx - 1]->GetBestBlock()};
+        assert(real == expected);
+        // GetBestBlock caches inherited values in every null cache layer it descends through.
+        while (sim_idx > 0 && sim_best_blocks[sim_idx].IsNull()) {
+            sim_best_blocks[sim_idx] = expected;
+            --sim_idx;
+        }
+    };
+
     /** Flush changes in top cache to the one below. */
     auto flush = [&]() {
         assert(caches.size() >= 1);
@@ -264,6 +297,9 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 prev_cache.entry[outpointidx] = cache.entry[outpointidx];
                 cache.entry[outpointidx].entrytype = EntryType::NONE;
             }
+        }
+        if (caches.size() > 1) {
+            sim_best_blocks[caches.size() - 1] = sim_best_blocks[caches.size()];
         }
     };
 
@@ -288,6 +324,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         if (caches.empty()) {
             caches.emplace_back(new CCoinsViewCache(&bottom, /*deterministic=*/true));
             sim_caches[caches.size()].Wipe();
+            sim_best_blocks[caches.size()] = uint256::ZERO;
         }
 
         // Execute command.
@@ -435,14 +472,17 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                     }
                     // Apply to simulation data.
                     sim_caches[caches.size()].Wipe();
+                    sim_best_blocks[caches.size()] = uint256::ZERO;
                 }
             },
 
             [&]() { // Remove a cache level.
                 // Apply to real caches (this reduces caches.size(), implicitly doing the same on the simulation data).
                 caches.back()->SanityCheck();
+                const auto removed_idx{caches.size()};
                 overlay_fetch_scope.reset();
                 caches.pop_back();
+                sim_best_blocks[removed_idx] = uint256::ZERO;
             },
 
             [&]() { // Flush.
@@ -469,6 +509,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
 
             [&]() { // Reset.
                 sim_caches[caches.size()].Wipe();
+                sim_best_blocks[caches.size()] = uint256::ZERO;
                 // Apply to real caches. Optionally start fetching again.
                 if (overlay_fetch_scope && provider.ConsumeBool()) {
                     overlay_fetch_scope.reset();
@@ -478,6 +519,18 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                     (void)caches.back()->CreateResetGuard();
                 }
                 assert_cache_empty(*caches.back());
+            },
+
+            [&]() { // GetBestBlock
+                assert_best_block(caches.size());
+            },
+
+            [&]() { // SetBestBlock
+                const auto block_hash{provider.ConsumeBool() ?
+                    uint256::ZERO :
+                    data.block_hashes[provider.ConsumeIntegralInRange<uint32_t>(0, NUM_BLOCK_HASHES - 1)]};
+                caches.back()->SetBestBlock(block_hash);
+                sim_best_blocks[caches.size()] = block_hash;
             },
 
             [&]() { // GetCacheSize
@@ -520,9 +573,11 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
 
         // HaveCoinInCache ignores spent coins, so GetCacheSize() may exceed it.
         assert(cache.GetCacheSize() >= cache_size);
+        assert_best_block(sim_idx);
     }
 
     // Compare the bottom coinsview (not a CCoinsViewCache) with sim_cache[0].
+    assert(bottom.GetBestBlock().IsNull());
     for (uint32_t outpointidx = 0; outpointidx < NUM_OUTPOINTS; ++outpointidx) {
         auto realcoin = bottom.GetCoin(data.outpoints[outpointidx]);
         auto sim = lookup(outpointidx, 0);
