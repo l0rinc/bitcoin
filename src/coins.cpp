@@ -317,6 +317,7 @@ void CCoinsViewCache::Uncache(const COutPoint& hash)
 {
     CCoinsMap::iterator it = cacheCoins.find(hash);
     if (it != cacheCoins.end() && !it->second.IsDirty()) {
+        Assume(!it->second.IsFresh());
         Assume(TrySub(cachedCoinsUsage, it->second.coin.DynamicMemoryUsage()));
         TRACEPOINT(utxocache, uncache,
                hash.hash.data(),
@@ -325,6 +326,7 @@ void CCoinsViewCache::Uncache(const COutPoint& hash)
                (int64_t)it->second.coin.out.nValue,
                (bool)it->second.coin.IsCoinBase());
         cacheCoins.erase(it);
+        Assume(cacheCoins.find(hash) == cacheCoins.end());
     }
 }
 
