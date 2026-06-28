@@ -98,6 +98,18 @@ void PopulateChunks(FuzzedDataProvider& fuzzed_data_provider, std::vector<FeeFra
     return;
 }
 
+void CheckEqualRateSplit(FuzzedDataProvider& fuzzed_data_provider)
+{
+    const int64_t fee{fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(INT32_MIN >> 1, INT32_MAX >> 1)};
+    const int32_t size{fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, 1'000'000)};
+    const int32_t parts{fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, 16)};
+
+    const std::vector<FeeFrac> merged{{fee * parts, size * parts}};
+    const std::vector<FeeFrac> split(parts, FeeFrac{fee, size});
+    assert(std::is_eq(CompareChunks(merged, split)));
+    assert(std::is_eq(CompareChunks(split, merged)));
+}
+
 } // namespace
 
 FUZZ_TARGET(build_and_compare_feerate_diagram)
@@ -119,6 +131,8 @@ FUZZ_TARGET(build_and_compare_feerate_diagram)
     auto real = CompareChunks(chunks1, chunks2);
     auto sim = CompareDiagrams(diagram1, diagram2);
     assert(real == sim);
+
+    CheckEqualRateSplit(fuzzed_data_provider);
 
     // Do explicit evaluation at up to 1000 points, and verify consistency with the result.
     LIMITED_WHILE (fuzzed_data_provider.remaining_bytes(), 1000) {
