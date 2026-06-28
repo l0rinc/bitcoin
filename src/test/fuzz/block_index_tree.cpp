@@ -120,6 +120,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
             assert(chainman.ActiveChain().Tip() == tip);
             AssertBlockIndexTreeState(blockman, chainman.ActiveChain(), pruned_blocks);
         }
+        chainman.CheckBlockIndex();
     }
 
     LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 1000)
@@ -298,6 +299,9 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
         {
             LOCK(cs_main);
             AssertBlockIndexTreeState(blockman, chainman.ActiveChain(), pruned_blocks);
+        }
+        if (!abort_run) {
+            chainman.CheckBlockIndex();
         }
     }
     {
