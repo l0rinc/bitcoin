@@ -10,8 +10,12 @@
 #include <util/byte_units.h>
 #include <util/string.h>
 
+#include <cstddef>
 #include <memory>
 #include <ranges>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include <boost/test/unit_test.hpp>
 
@@ -332,6 +336,31 @@ BOOST_AUTO_TEST_CASE(existing_data_reindex)
     odbw.Write(key, in2);
     BOOST_CHECK(odbw.Read(key, res3));
     BOOST_CHECK_EQUAL(res3.ToString(), in2.ToString());
+}
+
+BOOST_AUTO_TEST_CASE(malformed_obfuscation_key)
+{
+    const fs::path ph{m_args.GetDataDirBase() / "malformed_obfuscation_key"};
+    constexpr std::string_view obfuscation_key{"\000obfuscate_key", 14};
+    constexpr size_t cache_size{1_MiB};
+
+    {
+        CDBWrapper dbw({.path = ph, .cache_bytes = cache_size, .memory_only = false, .wipe_data = true, .obfuscate = false});
+        dbw.Write(std::string{obfuscation_key}, std::vector<std::byte>{std::byte{0x01}, std::byte{0x02}});
+    }
+
+    const auto open_obfuscated{[&] {
+        CDBWrapper dbw({.path = ph, .cache_bytes = cache_size, .memory_only = false, .wipe_data = false, .obfuscate = true});
+    }};
+    const auto open_unobfuscated{[&] {
+        CDBWrapper dbw({.path = ph, .cache_bytes = cache_size, .memory_only = false, .wipe_data = false, .obfuscate = false});
+    }};
+
+    BOOST_CHECK_THROW(open_obfuscated(), dbwrapper_error);
+    BOOST_CHECK_THROW(open_unobfuscated(), dbwrapper_error);
+
+    CDBWrapper dbw({.path = ph, .cache_bytes = cache_size, .memory_only = false, .wipe_data = true, .obfuscate = true});
+    BOOST_CHECK(dbwrapper_private::GetObfuscation(dbw));
 }
 
 BOOST_AUTO_TEST_CASE(iterator_ordering)
