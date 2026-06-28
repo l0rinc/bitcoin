@@ -7,6 +7,7 @@
 #include <chain.h>
 #include <test/util/setup_common.h>
 
+#include <algorithm>
 #include <array>
 #include <memory>
 
@@ -38,6 +39,15 @@ const CBlockIndex* NaiveLastCommonAncestor(const CBlockIndex* a, const CBlockInd
     }
     BOOST_REQUIRE_EQUAL(a, b);
     return a;
+}
+
+const CBlockIndex* NaiveFindEarliestAtLeast(const CChain& chain, int64_t min_time, int min_height)
+{
+    for (int height{std::max(min_height, 0)}; height <= chain.Height(); ++height) {
+        const CBlockIndex* block{chain[height]};
+        if (block->GetBlockTimeMax() >= min_time) return block;
+    }
+    return nullptr;
 }
 
 } // namespace
@@ -172,6 +182,36 @@ BOOST_AUTO_TEST_CASE(findfork_tests)
     // Invalid test case. Mixing chains is not supported
     CBlockIndex block_on_unrelated_chain;
     BOOST_CHECK_EQUAL(chain_long.FindFork(block_on_unrelated_chain), nullptr);
+}
+
+BOOST_AUTO_TEST_CASE(findearliestatleast_reference_contracts)
+{
+    std::array<CBlockIndex, 8> blocks;
+    const std::array<uint32_t, 8> times{{100, 90, 140, 120, 180, 170, 220, 160}};
+    for (size_t i{0}; i < blocks.size(); ++i) {
+        blocks[i].nHeight = i;
+        blocks[i].pprev = i == 0 ? nullptr : &blocks[i - 1];
+        blocks[i].nTime = times[i];
+        blocks[i].nTimeMax = i == 0 ? times[i] : std::max(blocks[i - 1].nTimeMax, times[i]);
+        blocks[i].BuildSkip();
+    }
+
+    CChain chain;
+    chain.SetTip(blocks.back());
+
+    const std::array<int64_t, 15> min_times{{-1, 0, 99, 100, 101, 139, 140, 141, 179, 180, 181, 219, 220, 221, int64_t{1} << 33}};
+    for (int64_t min_time : min_times) {
+        for (int min_height : {-2, 0, 1, 2, 3, 4, 5, 6, 7, 8, 100}) {
+            const CBlockIndex* actual{chain.FindEarliestAtLeast(min_time, min_height)};
+            const CBlockIndex* expected{NaiveFindEarliestAtLeast(chain, min_time, min_height)};
+            BOOST_CHECK_EQUAL(actual, expected);
+            if (actual) {
+                BOOST_CHECK(chain.Contains(*actual));
+                BOOST_CHECK_GE(actual->GetBlockTimeMax(), min_time);
+                BOOST_CHECK_GE(actual->nHeight, min_height);
+            }
+        }
+    }
 }
 
 BOOST_AUTO_TEST_CASE(chain_test)
