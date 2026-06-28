@@ -59,8 +59,14 @@ struct ChainEvent {
     int fork_height{-1};
 };
 
+struct TipEvent {
+    uint256 hash;
+    int height;
+};
+
 struct ValidationEventRecorder final : public CValidationInterface {
     std::vector<ChainEvent> m_events;
+    std::vector<TipEvent> m_active_tip_events;
     uint256 m_expected_tip;
     int m_expected_height;
 
@@ -124,8 +130,30 @@ struct ValidationEventRecorder final : public CValidationInterface {
         });
     }
 
+    void ActiveTipChange(const CBlockIndex& new_tip, bool is_ibd) override
+    {
+        assert(new_tip.nHeight >= 0);
+        assert(new_tip.GetAncestor(new_tip.nHeight) == &new_tip);
+        m_active_tip_events.push_back({
+            new_tip.GetBlockHash(),
+            new_tip.nHeight,
+        });
+    }
+
     void AssertAndClear(const ChainstateManager& chainman)
     {
+        size_t active_tip_idx{0};
+        auto consume_active_tip = [&] {
+            while (active_tip_idx < m_active_tip_events.size()) {
+                const TipEvent& event{m_active_tip_events[active_tip_idx]};
+                if (event.hash != m_expected_tip || event.height != m_expected_height) {
+                    break;
+                }
+                ++active_tip_idx;
+            }
+        };
+
+        consume_active_tip();
         for (const ChainEvent& event : m_events) {
             if (event.type == ChainEventType::CONNECTED) {
                 assert(event.prev_hash == m_expected_tip);
@@ -146,13 +174,16 @@ struct ValidationEventRecorder final : public CValidationInterface {
                     assert(event.fork_height <= event.height);
                 }
             }
+            consume_active_tip();
         }
+        assert(active_tip_idx == m_active_tip_events.size());
         LOCK(chainman.GetMutex());
         const CBlockIndex* tip{chainman.ActiveChain().Tip()};
         assert(tip);
         assert(m_expected_tip == tip->GetBlockHash());
         assert(m_expected_height == tip->nHeight);
         m_events.clear();
+        m_active_tip_events.clear();
     }
 };
 
