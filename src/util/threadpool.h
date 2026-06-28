@@ -219,8 +219,9 @@ public:
         requires(!std::is_lvalue_reference_v<R>)
     [[nodiscard]] util::Expected<std::vector<RangeFuture<R>>, SubmitError> Submit(R&& fns) noexcept EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
+        const auto task_count{std::ranges::size(fns)};
         std::vector<RangeFuture<R>> futures;
-        futures.reserve(std::ranges::size(fns));
+        futures.reserve(task_count);
 
         {
             LOCK(m_mutex);
@@ -232,6 +233,7 @@ public:
                 m_work_queue.emplace(std::move(task));
             }
         }
+        Assume(futures.size() == task_count);
         m_cv.notify_all();
         return {std::move(futures)};
     }
