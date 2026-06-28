@@ -445,6 +445,17 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     pool.GetTransactionAncestry(tx4->GetHash(), ancestors, clustersize);
     BOOST_CHECK_EQUAL(ancestors, 3ULL);
     BOOST_CHECK_EQUAL(clustersize, 4ULL);
+    size_t ancestorsize;
+    CAmount ancestorfees;
+    pool.GetTransactionAncestry(tx4->GetHash(), ancestors, clustersize, &ancestorsize, &ancestorfees);
+    BOOST_CHECK_EQUAL(ancestors, 3ULL);
+    BOOST_CHECK_EQUAL(clustersize, 4ULL);
+    const auto tx4_iter{pool.GetIter(tx4->GetHash())};
+    BOOST_REQUIRE(tx4_iter.has_value());
+    const auto [expected_ancestors, expected_size, expected_fees]{pool.CalculateAncestorData(**tx4_iter)};
+    BOOST_CHECK_EQUAL(ancestors, expected_ancestors);
+    BOOST_CHECK_EQUAL(ancestorsize, expected_size);
+    BOOST_CHECK_EQUAL(ancestorfees, expected_fees);
 
     /* Make an alternate branch that is longer and connect it to tx3 */
     //
