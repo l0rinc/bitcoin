@@ -387,6 +387,49 @@ BOOST_AUTO_TEST_CASE(txgraph_chunk_chain)
     block_builder_checker({{&refs[0]}});
 }
 
+BOOST_AUTO_TEST_CASE(txgraph_getcluster_membership_contracts)
+{
+    auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(5);
+
+    for (const FeePerWeight& feerate : {FeePerWeight{10, 10}, FeePerWeight{4, 10}, FeePerWeight{8, 10}, FeePerWeight{1, 10}}) {
+        graph->AddTransaction(refs.emplace_back(), feerate);
+    }
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
+    graph->AddDependency(/*parent=*/refs[1], /*child=*/refs[2]);
+
+    auto check_cluster = [&graph](TxGraph::Ref& ref, TxGraph::Level level, const std::vector<TxGraph::Ref*>& expected) {
+        const auto cluster{graph->GetCluster(ref, level)};
+        BOOST_CHECK(cluster == expected);
+        for (TxGraph::Ref* member : cluster) {
+            BOOST_REQUIRE(member);
+            BOOST_CHECK(graph->GetCluster(*member, level) == cluster);
+        }
+    };
+
+    const std::vector<TxGraph::Ref*> main_cluster{&refs[0], &refs[1], &refs[2]};
+    check_cluster(refs[0], TxGraph::Level::MAIN, main_cluster);
+    check_cluster(refs[1], TxGraph::Level::TOP, main_cluster);
+    check_cluster(refs[3], TxGraph::Level::TOP, {&refs[3]});
+
+    TxGraph::Ref empty_ref;
+    BOOST_CHECK(graph->GetCluster(empty_ref, TxGraph::Level::TOP).empty());
+
+    graph->StartStaging();
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{9, 10});
+    graph->AddDependency(/*parent=*/refs[2], /*child=*/refs[4]);
+
+    check_cluster(refs[4], TxGraph::Level::TOP, {&refs[0], &refs[1], &refs[2], &refs[4]});
+    check_cluster(refs[2], TxGraph::Level::MAIN, main_cluster);
+    BOOST_CHECK(graph->GetCluster(refs[4], TxGraph::Level::MAIN).empty());
+
+    graph->CommitStaging();
+    check_cluster(refs[4], TxGraph::Level::MAIN, {&refs[0], &refs[1], &refs[2], &refs[4]});
+    graph->SanityCheck();
+}
+
 BOOST_AUTO_TEST_CASE(txgraph_staging)
 {
     /* Create a new graph for the test.
