@@ -284,12 +284,16 @@ std::vector<CBlockHeader> HeadersSyncState::PopHeadersReadyForAcceptance()
     Assume(m_download_state == State::REDOWNLOAD);
     if (m_download_state != State::REDOWNLOAD) return ret;
 
+    uint256 expected_prev_hash{m_redownload_buffer_first_prev_hash};
     while (m_redownloaded_headers.size() > m_params.redownload_buffer_size ||
             (m_redownloaded_headers.size() > 0 && m_process_all_remaining_headers)) {
         ret.emplace_back(m_redownloaded_headers.front().GetFullHeader(m_redownload_buffer_first_prev_hash));
         m_redownloaded_headers.pop_front();
+        Assume(ret.back().hashPrevBlock == expected_prev_hash);
+        expected_prev_hash = ret.back().GetHash();
         m_redownload_buffer_first_prev_hash = ret.back().GetHash();
     }
+    Assume(ret.empty() || m_redownload_buffer_first_prev_hash == ret.back().GetHash());
     return ret;
 }
 
