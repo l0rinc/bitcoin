@@ -10,6 +10,7 @@
 #include <consensus/consensus.h>
 #include <primitives/transaction.h>
 #include <primitives/block.h>
+#include <util/check.h>
 
 /** Index marker for when no witness commitment is present in a coinbase transaction. */
 static constexpr int NO_WITNESS_COMMITMENT{-1};
@@ -140,7 +141,10 @@ static inline int64_t GetBlockWeight(const CBlock& block)
 static inline int64_t GetTransactionInputWeight(const CTxIn& txin)
 {
     // scriptWitness size is added here because witnesses and txins are split up in segwit serialization.
-    return ::GetSerializeSize(TX_NO_WITNESS(txin)) * (WITNESS_SCALE_FACTOR - 1) + ::GetSerializeSize(TX_WITH_WITNESS(txin)) + ::GetSerializeSize(txin.scriptWitness.stack);
+    const auto no_witness_size{::GetSerializeSize(TX_NO_WITNESS(txin))};
+    const auto with_witness_size{::GetSerializeSize(TX_WITH_WITNESS(txin))};
+    Assume(no_witness_size == with_witness_size);
+    return no_witness_size * (WITNESS_SCALE_FACTOR - 1) + with_witness_size + ::GetSerializeSize(txin.scriptWitness.stack);
 }
 
 /** Compute at which vout of the block's coinbase transaction the witness commitment occurs, or -1 if not found */
