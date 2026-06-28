@@ -1209,6 +1209,46 @@ BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
     BOOST_CHECK_EQUAL(cache.GetDirtyCount(), 0U);
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_best_block_cache_stack)
+{
+    auto rand_nonzero_hash = [&] {
+        uint256 block_hash;
+        do {
+            block_hash = m_rng.rand256();
+        } while (block_hash.IsNull());
+        return block_hash;
+    };
+
+    CCoinsViewTest root{m_rng};
+    CCoinsViewCache root_cache{&root};
+    const uint256 root_best_block{rand_nonzero_hash()};
+    root_cache.SetBestBlock(root_best_block);
+    root_cache.Flush();
+
+    CCoinsViewCache parent{&root};
+    CCoinsViewCache child{&parent};
+
+    BOOST_CHECK_EQUAL(parent.GetBestBlock(), root_best_block);
+    BOOST_CHECK_EQUAL(child.GetBestBlock(), root_best_block);
+
+    uint256 child_best_block;
+    do {
+        child_best_block = rand_nonzero_hash();
+    } while (child_best_block == root_best_block);
+
+    child.SetBestBlock(child_best_block);
+    child.Sync();
+    BOOST_CHECK_EQUAL(parent.GetBestBlock(), child_best_block);
+    BOOST_CHECK_EQUAL(child.GetBestBlock(), child_best_block);
+
+    {
+        const auto reset_guard{child.CreateResetGuard()};
+    }
+    child.Sync();
+    BOOST_CHECK_EQUAL(parent.GetBestBlock(), root_best_block);
+    BOOST_CHECK_EQUAL(child.GetBestBlock(), root_best_block);
+}
+
 BOOST_AUTO_TEST_CASE(ccoins_flush_sync_reset_postconditions)
 {
     CCoinsViewTest root{m_rng};
