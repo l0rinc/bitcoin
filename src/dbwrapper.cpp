@@ -260,18 +260,27 @@ CDBWrapper::CDBWrapper(const DBParams& params)
         LogInfo("Finished database compaction of %s", fs::PathToString(params.path));
     }
 
-    if (!Read(OBFUSCATION_KEY, m_obfuscation) && params.obfuscate && IsEmpty()) {
-        // Generate and write the new obfuscation key.
-        const Obfuscation obfuscation{FastRandomContext{}.randbytes<Obfuscation::KEY_SIZE>()};
-        assert(!m_obfuscation); // Make sure the key is written without obfuscation.
-        Write(OBFUSCATION_KEY, obfuscation);
-        m_obfuscation = obfuscation;
-        LogInfo("Wrote new obfuscation key for %s: %s", fs::PathToString(params.path), m_obfuscation.HexKey());
+    if (!Read(OBFUSCATION_KEY, m_obfuscation)) {
+        if (Exists(OBFUSCATION_KEY)) {
+            Close();
+            throw dbwrapper_error{"Invalid obfuscation key in " + fs::PathToString(params.path)};
+        }
+        if (params.obfuscate && IsEmpty()) {
+            // Generate and write the new obfuscation key.
+            const Obfuscation obfuscation{FastRandomContext{}.randbytes<Obfuscation::KEY_SIZE>()};
+            assert(!m_obfuscation); // Make sure the key is written without obfuscation.
+            Write(OBFUSCATION_KEY, obfuscation);
+            Obfuscation read_obfuscation;
+            Assume(Read(OBFUSCATION_KEY, read_obfuscation));
+            Assume(read_obfuscation.HexKey() == obfuscation.HexKey());
+            m_obfuscation = obfuscation;
+            LogInfo("Wrote new obfuscation key for %s: %s", fs::PathToString(params.path), m_obfuscation.HexKey());
+        }
     }
     LogInfo("Using obfuscation key for %s: %s", fs::PathToString(params.path), m_obfuscation.HexKey());
 }
 
-CDBWrapper::~CDBWrapper()
+void CDBWrapper::Close()
 {
     delete DBContext().pdb;
     DBContext().pdb = nullptr;
@@ -282,8 +291,11 @@ CDBWrapper::~CDBWrapper()
     delete DBContext().options.block_cache;
     DBContext().options.block_cache = nullptr;
     delete DBContext().penv;
+    DBContext().penv = nullptr;
     DBContext().options.env = nullptr;
 }
+
+CDBWrapper::~CDBWrapper() { Close(); }
 
 void CDBWrapper::WriteBatch(CDBBatch& batch, bool fSync)
 {
