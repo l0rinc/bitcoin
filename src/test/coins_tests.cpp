@@ -717,8 +717,22 @@ BOOST_AUTO_TEST_CASE(ccoins_access)
 static void CheckSpendCoins(const CAmount base_value, const MaybeCoin& cache_coin, const MaybeCoin& expected)
 {
     SingleEntryCacheTest test{base_value, cache_coin};
-    test.cache.SpendCoin(OUTPOINT);
-    test.cache.SelfTest();
+    const bool expected_result{cache_coin ? cache_coin->value != SPENT : base_value == VALUE1};
+    const CAmount expected_moveout_value{cache_coin && cache_coin->value != SPENT ? cache_coin->value : base_value};
+    Coin moveout;
+    SetCoinsValue(VALUE3, moveout);
+    const Coin unchanged_moveout{moveout};
+
+    BOOST_CHECK_EQUAL(test.cache.SpendCoin(OUTPOINT, &moveout), expected_result);
+    if (expected_result) {
+        BOOST_REQUIRE(!moveout.IsSpent());
+        BOOST_CHECK_EQUAL(moveout.out.nValue, expected_moveout_value);
+    } else {
+        BOOST_CHECK(moveout == unchanged_moveout);
+    }
+
+    const bool expected_valid_cache{!expected || expected->value != SPENT || (expected->IsDirty() && !expected->IsFresh())};
+    test.cache.SelfTest(/*sanity_check=*/expected_valid_cache);
     BOOST_CHECK_EQUAL(GetCoinsMapEntry(test.cache.map()), expected);
 }
 
@@ -732,10 +746,10 @@ BOOST_AUTO_TEST_CASE(ccoins_spend)
     for (auto base_value : {ABSENT, SPENT, VALUE1}) {
         CheckSpendCoins(base_value, MISSING,            base_value == VALUE1 ? SPENT_DIRTY : MISSING);
 
-        CheckSpendCoins(base_value, SPENT_CLEAN,        SPENT_DIRTY);
-        CheckSpendCoins(base_value, SPENT_FRESH,        MISSING    );
+        CheckSpendCoins(base_value, SPENT_CLEAN,        SPENT_CLEAN);
+        CheckSpendCoins(base_value, SPENT_FRESH,        SPENT_FRESH);
         CheckSpendCoins(base_value, SPENT_DIRTY,        SPENT_DIRTY);
-        CheckSpendCoins(base_value, SPENT_DIRTY_FRESH,  MISSING    );
+        CheckSpendCoins(base_value, SPENT_DIRTY_FRESH,  SPENT_DIRTY_FRESH);
 
         CheckSpendCoins(base_value, VALUE2_CLEAN,       SPENT_DIRTY);
         CheckSpendCoins(base_value, VALUE2_FRESH,       MISSING    );
