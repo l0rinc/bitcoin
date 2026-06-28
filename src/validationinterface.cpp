@@ -225,6 +225,13 @@ void ValidationSignals::BlockConnected(const ChainstateRole& role, std::shared_p
     assert(pblock);
     assert(pindex);
     assert(pblock->GetHash() == pindex->GetBlockHash());
+    if (pindex->nHeight == 0) {
+        assert(!pindex->pprev);
+        assert(pblock->hashPrevBlock.IsNull());
+    } else {
+        assert(pindex->pprev);
+        assert(pblock->hashPrevBlock == pindex->pprev->GetBlockHash());
+    }
 
     auto log_msg = LOG_MSG("%s: block hash=%s block height=%d", __func__,
                           pblock->GetHash().ToString(),
@@ -253,6 +260,7 @@ void ValidationSignals::BlockDisconnected(std::shared_ptr<const CBlock> pblock, 
     assert(pindex->nHeight > 0);
     assert(pindex->pprev);
     assert(pblock->GetHash() == pindex->GetBlockHash());
+    assert(pblock->hashPrevBlock == pindex->pprev->GetBlockHash());
 
     auto log_msg = LOG_MSG("%s: block hash=%s block height=%d", __func__,
                           pblock->GetHash().ToString(),
