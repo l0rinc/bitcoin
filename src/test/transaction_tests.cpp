@@ -389,6 +389,28 @@ BOOST_AUTO_TEST_CASE(basic_transaction_tests)
     BOOST_CHECK_MESSAGE(!CheckTransaction(CTransaction(tx), state) || !state.IsValid(), "Transaction with duplicate txins should be invalid.");
 }
 
+BOOST_AUTO_TEST_CASE(txin_weight_helpers)
+{
+    CTxIn input{
+        COutPoint{Txid::FromUint256(uint256::ONE), 3},
+        CScript{} << OP_1 << std::vector<unsigned char>{1, 2, 3},
+        /*nSequenceIn=*/42,
+    };
+    input.scriptWitness.stack.emplace_back(72, 0x01);
+    input.scriptWitness.stack.emplace_back(std::vector<unsigned char>{4, 5, 6, 7});
+
+    const auto no_witness_size{GetSerializeSize(TX_NO_WITNESS(input))};
+    const auto with_witness_size{GetSerializeSize(TX_WITH_WITNESS(input))};
+    const int64_t expected_weight{
+        static_cast<int64_t>(no_witness_size) * (WITNESS_SCALE_FACTOR - 1) +
+        static_cast<int64_t>(with_witness_size) +
+        static_cast<int64_t>(GetSerializeSize(input.scriptWitness.stack))};
+
+    BOOST_CHECK_EQUAL(no_witness_size, with_witness_size);
+    BOOST_CHECK_EQUAL(GetTransactionInputWeight(input), expected_weight);
+    BOOST_CHECK_EQUAL(GetVirtualTransactionInputSize(input), GetVirtualTransactionSize(expected_weight, /*nSigOpCost=*/0, /*bytes_per_sigop=*/0));
+}
+
 BOOST_AUTO_TEST_CASE(test_Get)
 {
     FillableSigningProvider keystore;
