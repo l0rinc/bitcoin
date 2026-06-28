@@ -437,6 +437,12 @@ FUZZ_TARGET(txgraph)
         std::ranges::sort(chunk_feerates, std::greater<ByRatioNegSize<FeeFrac>>{});
         return chunk_feerates;
     };
+    auto assert_staging_contract = [&]() {
+        assert(real->HaveStaging() == (sims.size() > 1));
+        assert(real->GetTransactionCount(TxGraph::Level::MAIN) == sims.front().GetTransactionCount());
+        assert(real->GetTransactionCount(TxGraph::Level::TOP) == sims.back().GetTransactionCount());
+        real->SanityCheck();
+    };
 
     LIMITED_WHILE (provider.remaining_bytes() > 0, 200) {
         // Read a one-byte command.
@@ -690,6 +696,7 @@ FUZZ_TARGET(txgraph)
                 sims.emplace_back(sims.back());
                 sims.back().modified = SimTxGraph::SetType{};
                 real->StartStaging();
+                assert_staging_contract();
                 break;
             } else if (block_builders.empty() && sims.size() > 1 && command-- == 0) {
                 // CommitStaging.
@@ -698,6 +705,7 @@ FUZZ_TARGET(txgraph)
                 const bool main_optimal = std::all_of(sims.cbegin(), sims.cend(), [](const auto &sim) { return sim.real_is_optimal; });
                 sims.erase(sims.begin());
                 sims.front().real_is_optimal = main_optimal;
+                assert_staging_contract();
                 break;
             } else if (sims.size() > 1 && command-- == 0) {
                 // AbortStaging.
@@ -707,6 +715,7 @@ FUZZ_TARGET(txgraph)
                 // removals of main transactions while staging was active, then aborting will
                 // cause it to be re-evaluated in TxGraph).
                 sims.back().oversized = std::nullopt;
+                assert_staging_contract();
                 break;
             } else if (!main_sim.IsOversized() && command-- == 0) {
                 // CompareMainOrder.
