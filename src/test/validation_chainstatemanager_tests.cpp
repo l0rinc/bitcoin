@@ -782,6 +782,8 @@ BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
         BOOST_CHECK(!(block100->nStatus & BLOCK_FAILED_VALID));
         BOOST_CHECK(fork_block99->nStatus & BLOCK_FAILED_VALID);
         BOOST_CHECK(fork_block100->nStatus & BLOCK_FAILED_VALID);
+        CBlockIndex* best_invalid{static_cast<TestChainstateManager&>(chainman).BestInvalid()};
+        BOOST_CHECK(!best_invalid || (best_invalid->nStatus & BLOCK_FAILED_VALID));
     }
 
     // Reconsidering genesis clears every failed descendant line, including sibling forks.
@@ -806,6 +808,8 @@ BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
         BOOST_CHECK(!(block100->nStatus & BLOCK_FAILED_VALID));
         BOOST_CHECK(!(fork_block99->nStatus & BLOCK_FAILED_VALID));
         BOOST_CHECK(!(fork_block100->nStatus & BLOCK_FAILED_VALID));
+        CBlockIndex* best_invalid{static_cast<TestChainstateManager&>(chainman).BestInvalid()};
+        BOOST_CHECK(!best_invalid || (best_invalid->nStatus & BLOCK_FAILED_VALID));
     }
 }
 

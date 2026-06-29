@@ -350,6 +350,13 @@ void AssertFailedBlockAndDescendants(ChainstateManager& chainman, const CBlockIn
     }
 }
 
+void AssertBestInvalidIsFailed(const TestChainstateManager& chainman)
+{
+    LOCK(chainman.GetMutex());
+    const CBlockIndex* best_invalid{chainman.BestInvalid()};
+    assert(!best_invalid || (best_invalid->nStatus & BLOCK_FAILED_VALID));
+}
+
 bool ProcessDagBlock(ChainstateManager& chainman, const DagBlock& dag_block)
 {
     bool new_block{false};
@@ -448,6 +455,7 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
     node.validation_signals->SyncWithValidationInterfaceQueue();
     event_recorder->AssertAndClear(chainman);
     AssertActiveChain(chainman);
+    AssertBestInvalidIsFailed(chainman);
     chainman.CheckBlockIndex();
 
     LIMITED_WHILE(fuzzed_data_provider.remaining_bytes() > 0, 32)
@@ -567,6 +575,7 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
         node.validation_signals->SyncWithValidationInterfaceQueue();
         event_recorder->AssertAndClear(chainman);
         AssertActiveChain(chainman);
+        AssertBestInvalidIsFailed(chainman);
         chainman.CheckBlockIndex();
     }
 
