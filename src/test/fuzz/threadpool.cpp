@@ -84,6 +84,13 @@ FUZZ_TARGET(threadpool, .init = setup_threadpool_test)
         GetFuture(future, fail_counter);
     };
 
+    if (fuzzed_data_provider.ConsumeBool()) {
+        std::vector<std::function<void()>> empty_tasks;
+        auto empty_futures{*Assert(g_pool.Submit(std::move(empty_tasks)))};
+        assert(empty_futures.empty());
+        assert(g_pool.WorkQueueSize() == 0);
+    }
+
     std::queue<std::future<void>> futures;
     for (uint32_t i = 0; i < num_tasks;) {
         const bool submit_range = fuzzed_data_provider.ConsumeBool();
