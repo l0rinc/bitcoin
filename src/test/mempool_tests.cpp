@@ -629,6 +629,40 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     BOOST_CHECK_EQUAL(clustersize, 10ULL);
 }
 
+BOOST_AUTO_TEST_CASE(UpdateTransactionsFromBlockRestoresChildAncestry)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    LOCK2(::cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    CTransactionRef parent{make_tx(/*output_values=*/{10 * COIN})};
+    CTransactionRef child{make_tx(/*output_values=*/{9 * COIN}, /*inputs=*/{parent})};
+    TryAddToMempool(pool, entry.Fee(10'000).FromTx(parent));
+    TryAddToMempool(pool, entry.Fee(10'000).FromTx(child));
+
+    pool.removeForBlock({parent}, /*nBlockHeight=*/1);
+    BOOST_CHECK(!pool.exists(parent->GetHash()));
+    BOOST_REQUIRE(pool.exists(child->GetHash()));
+
+    TryAddToMempool(pool, entry.Fee(10'000).FromTx(parent));
+    const auto parent_it{pool.GetIter(parent->GetHash())};
+    const auto child_it{pool.GetIter(child->GetHash())};
+    BOOST_REQUIRE(parent_it.has_value());
+    BOOST_REQUIRE(child_it.has_value());
+
+    const auto pre_update_ancestors{pool.CalculateMemPoolAncestors(**child_it)};
+    BOOST_CHECK(!pre_update_ancestors.contains(*parent_it));
+
+    pool.UpdateTransactionsFromBlock({parent->GetHash()});
+    const auto post_update_ancestors{pool.CalculateMemPoolAncestors(**child_it)};
+    BOOST_CHECK(post_update_ancestors.contains(*parent_it));
+
+    size_t ancestors, clustersize;
+    pool.GetTransactionAncestry(child->GetHash(), ancestors, clustersize);
+    BOOST_CHECK_EQUAL(ancestors, 2U);
+    BOOST_CHECK_EQUAL(clustersize, 2U);
+}
+
 BOOST_AUTO_TEST_CASE(MempoolAncestryTestsDiamond)
 {
     size_t ancestors, descendants;
