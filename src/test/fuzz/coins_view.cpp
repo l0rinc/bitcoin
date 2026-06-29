@@ -286,16 +286,21 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                     bool fresh{!coins_view_cache.PeekCoin(random_out_point) && fuzzed_data_provider.ConsumeBool()};
                     bool dirty{fresh || fuzzed_data_provider.ConsumeBool()};
                     auto it{coins_map.emplace(random_out_point, std::move(coins_cache_entry)).first};
+                    const bool was_dirty{it->second.IsDirty()};
                     if (dirty) CCoinsCacheEntry::SetDirty(*it, sentinel);
                     if (fresh) CCoinsCacheEntry::SetFresh(*it, sentinel);
-                    dirty_count += dirty;
+                    dirty_count += !was_dirty && it->second.IsDirty();
                 }
                 auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, coins_map, /*will_erase=*/true)};
+                assert(cursor.GetDirtyCount() == dirty_count);
+                assert(cursor.GetTotalCount() == coins_map.size());
                 uint256 best_block{coins_view_cache.GetBestBlock()};
                 if (fuzzed_data_provider.ConsumeBool()) best_block = ConsumeUInt256(fuzzed_data_provider);
                 // Set best block hash to non-null to satisfy the assertion in CCoinsViewDB::BatchWrite().
                 if (is_db && best_block.IsNull()) best_block = uint256::ONE;
                 coins_view_cache.BatchWrite(cursor, best_block);
+                assert(cursor.GetDirtyCount() == 0);
+                assert(cursor.GetTotalCount() == coins_map.size());
             });
     }
 

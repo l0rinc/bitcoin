@@ -284,6 +284,7 @@ void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& in
             }
         }
     }
+    Assume(cursor.GetDirtyCount() == 0);
     SetBestBlock(in_block_hash);
     Assume(m_block_hash == in_block_hash);
 }
