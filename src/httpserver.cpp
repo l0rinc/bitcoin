@@ -1166,6 +1166,7 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
 {
     // Send as much data from this client's buffer as we can
     LOCK(m_send_mutex);
+    const bool had_data{!m_send_buffer.empty()};
     if (!m_send_buffer.empty()) {
         // Socket flags (See kernel docs for send(2) and tcp(7) for more details).
         // MSG_NOSIGNAL: If the remote end of the connection is closed,
@@ -1193,6 +1194,7 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
                 // The error can be safely ignored, try the send again on the next I/O loop.
                 m_send_ready = true;
                 m_connection_busy = true;
+                Assume(!m_send_buffer.empty());
                 Assume(m_send_ready);
                 Assume(m_connection_busy);
                 return true;
@@ -1206,6 +1208,7 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
                     NetworkErrorString(err));
                 m_send_ready = false;
                 m_disconnect = true;
+                Assume(!m_send_buffer.empty());
                 Assume(!m_send_ready);
                 Assume(m_disconnect);
 
@@ -1251,6 +1254,17 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
 
         // Finally, reset idle timeout
         m_idle_since = Now<SteadySeconds>();
+    }
+
+    if (had_data) {
+        if (m_send_buffer.empty()) {
+            Assume(!m_send_ready);
+            // m_connection_busy may already be true again if a keep-alive
+            // client sent the next request while this response was flushing.
+        } else {
+            Assume(m_send_ready);
+            Assume(m_connection_busy);
+        }
     }
 
     return true;
