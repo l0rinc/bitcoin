@@ -345,19 +345,32 @@ public:
         }
     }
 
-    void PostGetRequestableSanityCheck(std::chrono::microseconds now) const
+    template <bool USE_ASSUME>
+    void CheckTimePoint(std::chrono::microseconds now) const
     {
+        const auto check = [](bool condition) {
+            if constexpr (USE_ASSUME) {
+                Assume(condition);
+            } else {
+                assert(condition);
+            }
+        };
         for (const Announcement& ann : m_index) {
             if (ann.IsWaiting()) {
                 // REQUESTED and CANDIDATE_DELAYED must have a time in the future (they should have been converted
                 // to COMPLETED/CANDIDATE_READY respectively).
-                assert(ann.m_time > now);
+                check(ann.m_time > now);
             } else if (ann.IsSelectable()) {
                 // CANDIDATE_READY and CANDIDATE_BEST cannot have a time in the future (they should have remained
                 // CANDIDATE_DELAYED, or should have been converted back to it if time went backwards).
-                assert(ann.m_time <= now);
+                check(ann.m_time <= now);
             }
         }
+    }
+
+    void PostGetRequestableSanityCheck(std::chrono::microseconds now) const
+    {
+        CheckTimePoint</*USE_ASSUME=*/false>(now);
     }
 
 private:
@@ -507,6 +520,9 @@ private:
             } else {
                 break;
             }
+        }
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            CheckTimePoint</*USE_ASSUME=*/true>(now);
         }
     }
 
