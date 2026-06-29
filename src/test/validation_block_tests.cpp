@@ -237,6 +237,60 @@ BOOST_AUTO_TEST_CASE(processnewblock_new_block_flag)
     BOOST_CHECK(!new_block);
 }
 
+BOOST_AUTO_TEST_CASE(processnewblockheaders_min_pow_checked_contract)
+{
+    auto make_unsubmitted_block = [&] {
+        auto pblock{Block(Params().GenesisBlock().GetHash())};
+        const CBlockIndex* prev_block{WITH_LOCK(::cs_main, return m_node.chainman->m_blockman.LookupBlockIndex(pblock->hashPrevBlock))};
+        BOOST_REQUIRE(prev_block);
+        m_node.chainman->GenerateCoinbaseCommitment(*pblock, prev_block);
+
+        pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
+
+        while (!CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus())) {
+            ++pblock->nNonce;
+        }
+
+        return pblock;
+    };
+
+    const auto block{make_unsubmitted_block()};
+    const uint256 block_hash{block->GetHash()};
+    const auto lookup_block = [&] {
+        return WITH_LOCK(::cs_main, return m_node.chainman->m_blockman.LookupBlockIndex(block_hash));
+    };
+    const auto has_block_data = [&] {
+        return WITH_LOCK(::cs_main, {
+            const CBlockIndex* index{m_node.chainman->m_blockman.LookupBlockIndex(block_hash)};
+            return index && (index->nStatus & BLOCK_HAVE_DATA);
+        });
+    };
+
+    BOOST_REQUIRE(!lookup_block());
+
+    const CBlockIndex* low_work_index{nullptr};
+    BlockValidationState low_work_state;
+    BOOST_CHECK(!Assert(m_node.chainman)->ProcessNewBlockHeaders({{*block}}, /*min_pow_checked=*/false, low_work_state, &low_work_index));
+    BOOST_CHECK(low_work_state.GetResult() == BlockValidationResult::BLOCK_HEADER_LOW_WORK);
+    BOOST_CHECK_EQUAL(low_work_state.GetRejectReason(), "too-little-chainwork");
+    BOOST_CHECK(low_work_index == nullptr);
+    BOOST_CHECK(!lookup_block());
+
+    const CBlockIndex* accepted_index{nullptr};
+    BlockValidationState accepted_state;
+    BOOST_REQUIRE(Assert(m_node.chainman)->ProcessNewBlockHeaders({{*block}}, /*min_pow_checked=*/true, accepted_state, &accepted_index));
+    BOOST_REQUIRE(accepted_index);
+    BOOST_CHECK_EQUAL(accepted_index->GetBlockHash(), block_hash);
+    BOOST_CHECK_EQUAL(lookup_block(), accepted_index);
+    BOOST_CHECK(!has_block_data());
+
+    const CBlockIndex* duplicate_index{nullptr};
+    BlockValidationState duplicate_state;
+    BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlockHeaders({{*block}}, /*min_pow_checked=*/false, duplicate_state, &duplicate_index));
+    BOOST_CHECK_EQUAL(duplicate_index, accepted_index);
+    BOOST_CHECK(!has_block_data());
+}
+
 BOOST_AUTO_TEST_CASE(processnewblock_genesis_replay_activates_best_chain)
 {
     auto process_block = [&](const std::shared_ptr<const CBlock>& block, bool& new_block) {
