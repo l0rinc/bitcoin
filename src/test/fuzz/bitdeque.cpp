@@ -7,6 +7,7 @@
 #include <test/fuzz/util.h>
 #include <util/bitdeque.h>
 
+#include <algorithm>
 #include <deque>
 #include <vector>
 
@@ -45,6 +46,19 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
     const auto& cdeq = deq;
     const auto& cbitdeq = bitdeq;
 
+    const auto compare_fn = [](const std::deque<bool>& expected, const bitdeque_type& actual) {
+        assert(expected.size() == actual.size());
+        assert(expected.empty() == actual.empty());
+        assert((expected.begin() == expected.end()) == (actual.begin() == actual.end()));
+        assert((expected.rbegin() == expected.rend()) == (actual.rbegin() == actual.rend()));
+        assert(std::equal(expected.begin(), expected.end(), actual.begin(), actual.end()));
+        assert(std::equal(expected.rbegin(), expected.rend(), actual.rbegin(), actual.rend()));
+        if (!expected.empty()) {
+            assert(expected.front() == actual.front());
+            assert(expected.back() == actual.back());
+        }
+    };
+
     size_t initlen = provider.ConsumeIntegralInRange<size_t>(0, maxlen);
     while (initlen) {
         bool val = ctx.randbool();
@@ -52,6 +66,7 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
         bitdeq.push_back(val);
         --initlen;
     }
+    compare_fn(deq, bitdeq);
 
     const auto iter_limit{maxlen > 6000 ? 90U : 900U};
     LIMITED_WHILE (provider.remaining_bytes() > 0, iter_limit) {
@@ -525,16 +540,7 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                     assert(bitit == bitdeq.begin() + before);
                 }
             });
+        compare_fn(deq, bitdeq);
     }
-    {
-        assert(deq.size() == bitdeq.size());
-        auto it = deq.begin();
-        auto bitit = bitdeq.begin();
-        auto itend = deq.end();
-        while (it != itend) {
-            assert(*it == *bitit);
-            ++it;
-            ++bitit;
-        }
-    }
+    compare_fn(deq, bitdeq);
 }
