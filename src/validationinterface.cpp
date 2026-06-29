@@ -6,6 +6,7 @@
 #include <validationinterface.h>
 
 #include <chain.h>
+#include <consensus/amount.h>
 #include <consensus/validation.h>
 #include <kernel/mempool_entry.h>
 #include <kernel/mempool_removal_reason.h>
@@ -177,6 +178,13 @@ void ValidationSignals::SyncWithValidationInterfaceQueue()
 #define LOG_EVENT(fmt, ...) \
     LogDebug(BCLog::VALIDATION, fmt, __VA_ARGS__)
 
+static void AssumeValidTransactionInfo(const TransactionInfo& info)
+{
+    Assume(info.m_tx);
+    Assume(MoneyRange(info.m_fee));
+    Assume(info.m_virtual_transaction_size > 0);
+}
+
 void ValidationSignals::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlockIndex *pindexFork, bool fInitialDownload) {
     // Dependencies exist that require UpdatedBlockTip events to be delivered in the order in which
     // the chain actually updates. One way to ensure this is for the caller to invoke this signal
@@ -204,6 +212,9 @@ void ValidationSignals::ActiveTipChange(const CBlockIndex& new_tip, bool is_ibd)
 
 void ValidationSignals::TransactionAddedToMempool(const NewMempoolTransactionInfo& tx, uint64_t mempool_sequence)
 {
+    AssumeValidTransactionInfo(tx.info);
+    Assume(mempool_sequence > 0);
+
     auto log_msg = LOG_MSG("%s: txid=%s wtxid=%s", __func__,
                           tx.info.m_tx->GetHash().ToString(),
                           tx.info.m_tx->GetWitnessHash().ToString());
@@ -214,6 +225,9 @@ void ValidationSignals::TransactionAddedToMempool(const NewMempoolTransactionInf
 }
 
 void ValidationSignals::TransactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t mempool_sequence) {
+    Assume(tx);
+    Assume(mempool_sequence > 0);
+
     auto log_msg = LOG_MSG("%s: txid=%s wtxid=%s reason=%s", __func__,
                           tx->GetHash().ToString(),
                           tx->GetWitnessHash().ToString(),
@@ -248,6 +262,10 @@ void ValidationSignals::BlockConnected(const ChainstateRole& role, std::shared_p
 
 void ValidationSignals::MempoolTransactionsRemovedForBlock(const std::vector<RemovedMempoolTransactionInfo>& txs_removed_for_block, unsigned int nBlockHeight)
 {
+    for (const auto& tx : txs_removed_for_block) {
+        AssumeValidTransactionInfo(tx.info);
+    }
+
     auto log_msg = LOG_MSG("%s: block height=%s txs removed=%s", __func__,
                           nBlockHeight,
                           txs_removed_for_block.size());
