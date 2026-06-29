@@ -91,7 +91,19 @@ FUZZ_TARGET(txorphan, .init = initialize_orphanage)
         // previous loop and potentially the parent of this tx.
         if (ptx_potential_parent) {
             // Set up future GetTxToReconsider call.
-            orphanage->AddChildrenToWorkSet(*ptx_potential_parent, orphanage_rng);
+            const auto reconsiderable_children{orphanage->AddChildrenToWorkSet(*ptx_potential_parent, orphanage_rng)};
+            std::set<Wtxid> reconsiderable_wtxids;
+            for (const auto& [wtxid, peer] : reconsiderable_children) {
+                Assert(reconsiderable_wtxids.insert(wtxid).second);
+                Assert(orphanage->HaveTxFromPeer(wtxid, peer));
+                Assert(orphanage->HaveTxToReconsider(peer));
+                const CTransactionRef child{orphanage->GetTx(wtxid)};
+                Assert(child);
+                Assert(std::any_of(child->vin.cbegin(), child->vin.cend(), [&](const auto& input) {
+                    return input.prevout.hash == ptx_potential_parent->GetHash();
+                }));
+            }
+            Assert(orphanage->AddChildrenToWorkSet(*ptx_potential_parent, orphanage_rng).empty());
 
             // Check that all txns returned from GetChildrenFrom* are indeed a direct child of this tx.
             NodeId peer_id = fuzzed_data_provider.ConsumeIntegral<NodeId>();
