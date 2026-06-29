@@ -302,7 +302,16 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
         (void)coins_view_cache.GetBestBlock();
         (void)coins_view_cache.GetCacheSize();
         (void)coins_view_cache.GetHeadBlocks();
-        (void)coins_view_cache.HaveInputs(CTransaction{random_mutable_transaction});
+        const CTransaction transaction{random_mutable_transaction};
+        const bool have_inputs{coins_view_cache.HaveInputs(transaction)};
+        bool expected_have_inputs{transaction.IsCoinBase()};
+        if (!expected_have_inputs) {
+            expected_have_inputs = true;
+            for (const auto& txin : transaction.vin) {
+                expected_have_inputs &= coins_view_cache.HaveCoin(txin.prevout);
+            }
+        }
+        assert(have_inputs == expected_have_inputs);
     }
 
     {
