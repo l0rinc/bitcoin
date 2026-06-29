@@ -457,6 +457,17 @@ BOOST_AUTO_TEST_CASE(stop_active_wait_drains_queue)
     WAIT_FOR(blocking_tasks);
 }
 
+BOOST_AUTO_TEST_CASE(submit_empty_range_to_active_pool)
+{
+    ThreadPool threadPool{POOL_NAME};
+    threadPool.Start(NUM_WORKERS_DEFAULT);
+
+    std::vector<std::function<int32_t()>> empty_tasks;
+    auto empty_futures{std::move(*Assert(threadPool.Submit(std::move(empty_tasks))))};
+    BOOST_CHECK(empty_futures.empty());
+    BOOST_CHECK_EQUAL(threadPool.WorkQueueSize(), 0);
+}
+
 // Test 14, submit range of tasks in one lock acquisition
 BOOST_AUTO_TEST_CASE(submit_range_of_tasks_complete_successfully)
 {
