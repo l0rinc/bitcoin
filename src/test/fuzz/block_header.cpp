@@ -14,6 +14,28 @@
 #include <string>
 #include <vector>
 
+namespace {
+void AssertNullHeader(const CBlockHeader& block_header)
+{
+    assert(block_header.IsNull());
+    assert(block_header.nVersion == 0);
+    assert(block_header.hashPrevBlock.IsNull());
+    assert(block_header.hashMerkleRoot.IsNull());
+    assert(block_header.nTime == 0);
+    assert(block_header.nBits == 0);
+    assert(block_header.nNonce == 0);
+}
+
+void AssertNullBlock(const CBlock& block)
+{
+    AssertNullHeader(block);
+    assert(block.vtx.empty());
+    assert(!block.fChecked);
+    assert(!block.m_checked_witness_commitment);
+    assert(!block.m_checked_merkle_root);
+}
+} // namespace
+
 FUZZ_TARGET(block_header)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
@@ -31,11 +53,12 @@ FUZZ_TARGET(block_header)
     {
         CBlockHeader mut_block_header = *block_header;
         mut_block_header.SetNull();
-        assert(mut_block_header.IsNull());
+        AssertNullHeader(mut_block_header);
         CBlock block{*block_header};
         assert(block.GetHash() == block_header->GetHash());
         (void)block.ToString();
         block.SetNull();
+        AssertNullBlock(block);
         assert(block.GetHash() == mut_block_header.GetHash());
     }
     {
