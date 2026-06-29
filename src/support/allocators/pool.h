@@ -8,6 +8,7 @@
 #include <array>
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <list>
 #include <memory>
 #include <new>
@@ -139,6 +140,22 @@ class PoolResource final
         return alignment <= ELEM_ALIGN_BYTES && bytes <= MAX_BLOCK_SIZE_BYTES;
     }
 
+    void SanityCheck() const noexcept
+    {
+        Assume(m_chunk_size_bytes >= MAX_BLOCK_SIZE_BYTES);
+        Assume((m_chunk_size_bytes % ELEM_ALIGN_BYTES) == 0);
+        if (m_allocated_chunks.empty()) {
+            Assume(m_available_memory_it == nullptr);
+            Assume(m_available_memory_end == nullptr);
+            return;
+        }
+        const std::byte* last_chunk{m_allocated_chunks.back()};
+        Assume(m_available_memory_it >= last_chunk);
+        Assume(m_available_memory_it <= m_available_memory_end);
+        Assume(m_available_memory_end == last_chunk + m_chunk_size_bytes);
+        Assume((reinterpret_cast<std::uintptr_t>(m_available_memory_it) & (ELEM_ALIGN_BYTES - 1)) == 0);
+    }
+
     /**
      * Replaces node with placement constructed ListNode that points to the previous node
      */
@@ -156,8 +173,14 @@ class PoolResource final
     void AllocateChunk()
     {
         // if there is still any available memory left, put it into the freelist.
-        size_t remaining_available_bytes = m_available_memory_end - m_available_memory_it;
+        size_t remaining_available_bytes{0};
+        if (m_available_memory_it != nullptr) {
+            SanityCheck();
+            remaining_available_bytes = m_available_memory_end - m_available_memory_it;
+        }
         if (0 != remaining_available_bytes) {
+            Assume((remaining_available_bytes % ELEM_ALIGN_BYTES) == 0);
+            Assume(remaining_available_bytes <= MAX_BLOCK_SIZE_BYTES);
             ASAN_UNPOISON_MEMORY_REGION(m_available_memory_it, sizeof(ListNode));
             PlacementAddToList(m_available_memory_it, m_free_lists[remaining_available_bytes / ELEM_ALIGN_BYTES]);
             ASAN_POISON_MEMORY_REGION(m_available_memory_it, sizeof(ListNode));
@@ -168,6 +191,7 @@ class PoolResource final
         m_available_memory_end = m_available_memory_it + m_chunk_size_bytes;
         ASAN_POISON_MEMORY_REGION(m_available_memory_it, m_chunk_size_bytes);
         m_allocated_chunks.emplace_back(m_available_memory_it);
+        SanityCheck();
     }
 
     /**
@@ -185,6 +209,7 @@ public:
     {
         assert(m_chunk_size_bytes >= MAX_BLOCK_SIZE_BYTES);
         AllocateChunk();
+        SanityCheck();
     }
 
     /**
@@ -218,6 +243,9 @@ public:
      */
     void* Allocate(std::size_t bytes, std::size_t alignment)
     {
+        SanityCheck();
+        Assume(alignment > 0);
+        Assume((alignment & (alignment - 1)) == 0);
         if (IsFreeListUsable(bytes, alignment)) {
             const std::size_t num_alignments = NumElemAlignBytes(bytes);
             if (nullptr != m_free_lists[num_alignments]) {
@@ -228,7 +256,9 @@ public:
                 auto* next{m_free_lists[num_alignments]->m_next};
                 ASAN_POISON_MEMORY_REGION(m_free_lists[num_alignments], sizeof(ListNode));
                 ASAN_UNPOISON_MEMORY_REGION(m_free_lists[num_alignments], bytes);
-                return std::exchange(m_free_lists[num_alignments], next);
+                void* ret{std::exchange(m_free_lists[num_alignments], next)};
+                SanityCheck();
+                return ret;
             }
 
             // freelist is empty: get one allocation from allocated chunk memory.
@@ -240,11 +270,15 @@ public:
 
             // Make sure we use the right amount of bytes for that freelist (might be rounded up),
             ASAN_UNPOISON_MEMORY_REGION(m_available_memory_it, round_bytes);
-            return std::exchange(m_available_memory_it, m_available_memory_it + round_bytes);
+            void* ret{std::exchange(m_available_memory_it, m_available_memory_it + round_bytes)};
+            SanityCheck();
+            return ret;
         }
 
         // Can't use the pool => use operator new()
-        return ::operator new (bytes, std::align_val_t{alignment});
+        void* ret{::operator new (bytes, std::align_val_t{alignment})};
+        SanityCheck();
+        return ret;
     }
 
     /**
@@ -252,6 +286,10 @@ public:
      */
     void Deallocate(void* p, std::size_t bytes, std::size_t alignment) noexcept
     {
+        SanityCheck();
+        Assume(p != nullptr);
+        Assume(alignment > 0);
+        Assume((alignment & (alignment - 1)) == 0);
         if (IsFreeListUsable(bytes, alignment)) {
             const std::size_t num_alignments = NumElemAlignBytes(bytes);
             // put the memory block into the linked list. We can placement construct the FreeList
@@ -263,6 +301,7 @@ public:
             // Can't use the pool => forward deallocation to ::operator delete().
             ::operator delete (p, std::align_val_t{alignment});
         }
+        SanityCheck();
     }
 
     /**
