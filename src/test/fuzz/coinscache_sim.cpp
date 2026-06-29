@@ -465,6 +465,30 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 }
             },
 
+            [&]() { // AccessByTxid
+                uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
+                const auto& txid{data.outpoints[outpointidx].hash};
+                std::optional<uint32_t> first_unspent_idx;
+                for (uint32_t idx = 0; idx < NUM_OUTPOINTS; ++idx) {
+                    if (data.outpoints[idx].hash != txid || !lookup(idx)) continue;
+                    if (!first_unspent_idx || data.outpoints[idx].n < data.outpoints[*first_unspent_idx].n) {
+                        first_unspent_idx = idx;
+                    }
+                }
+                if (!first_unspent_idx) return;
+
+                const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
+                const auto& realcoin = AccessByTxid(*caches.back(), txid);
+                assert_cache_stats_if_present(parent_cache_stats);
+                const auto sim = lookup(*first_unspent_idx);
+                assert(sim);
+                assert(!realcoin.IsSpent());
+                const auto& simcoin = data.coins[sim->first];
+                assert(simcoin.out == realcoin.out);
+                assert(simcoin.fCoinBase == realcoin.fCoinBase);
+                assert(realcoin.nHeight == sim->second);
+            },
+
             [&]() { // AddCoin (only possible_overwrite if necessary)
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
                 uint32_t coinidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_COINS - 1);
