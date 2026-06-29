@@ -896,13 +896,21 @@ FUZZ_TARGET(txgraph)
             } else if (!main_sim.IsOversized() && command-- == 0) {
                 // GetWorstMainChunk.
                 auto [worst_chunk, worst_chunk_feerate] = real->GetWorstMainChunk();
-                // Just do some sanity checks here. Consistency with GetBlockBuilder is checked
-                // below.
+                std::vector<SimTxGraph::Pos> main_order;
+                for (auto i : main_sim.graph.Positions()) main_order.push_back(i);
+                auto cmp = [&](SimTxGraph::Pos a, SimTxGraph::Pos b) noexcept {
+                    return real->CompareMainOrder(*main_sim.GetRef(a), *main_sim.GetRef(b)) < 0;
+                };
+                std::ranges::sort(main_order, cmp);
+                auto chunking = ChunkLinearizationInfo(main_sim.graph, main_order);
                 if (main_sim.GetTransactionCount() == 0) {
                     assert(worst_chunk.empty());
                     assert(worst_chunk_feerate.IsEmpty());
+                    assert(chunking.empty());
                 } else {
                     assert(!worst_chunk.empty());
+                    const auto& expected_worst_chunk = chunking.back();
+                    assert(FeePerWeight::FromFeeFrac(expected_worst_chunk.feerate) == worst_chunk_feerate);
                     SimTxGraph::SetType done;
                     FeePerWeight sum;
                     for (TxGraph::Ref* ref : worst_chunk) {
@@ -915,8 +923,16 @@ FUZZ_TARGET(txgraph)
                         done.Set(simpos);
                         // All elements are preceded by all their descendants.
                         assert(main_sim.graph.Descendants(simpos).IsSubsetOf(done));
+                        // The worst chunk must match the final simulated chunk.
+                        assert(expected_worst_chunk.transactions[simpos]);
                     }
+                    assert(done == expected_worst_chunk.transactions);
                     assert(sum == worst_chunk_feerate);
+                    std::vector<TxGraph::Ref*> expected_refs;
+                    for (auto it = main_order.rbegin(); it != main_order.rend(); ++it) {
+                        if (expected_worst_chunk.transactions[*it]) expected_refs.push_back(main_sim.GetRef(*it));
+                    }
+                    assert(worst_chunk == expected_refs);
                 }
                 break;
             } else if ((block_builders.empty() || sims.size() > 1) && command-- == 0) {
