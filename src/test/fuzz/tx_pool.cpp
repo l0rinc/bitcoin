@@ -196,6 +196,26 @@ void CheckPrioritisedTransactions(const CTxMemPool& tx_pool)
     }
 }
 
+void CheckRandomizedTxIndex(const CTxMemPool& tx_pool)
+{
+    LOCK(tx_pool.cs);
+    Assert(tx_pool.txns_randomized.size() == tx_pool.mapTx.size());
+
+    std::set<Txid> randomized_txids;
+    for (size_t index{0}; index < tx_pool.txns_randomized.size(); ++index) {
+        const auto& [wtxid, it] = tx_pool.txns_randomized[index];
+        Assert(it != tx_pool.mapTx.end());
+        Assert(it->GetTx().GetWitnessHash() == wtxid);
+        Assert(it->idx_randomized == index);
+        const Txid txid{it->GetTx().GetHash()};
+        Assert(tx_pool.mapTx.find(txid) == it);
+        Assert(randomized_txids.insert(txid).second);
+    }
+    for (const auto& entry : tx_pool.mapTx) {
+        Assert(randomized_txids.contains(entry.GetTx().GetHash()));
+    }
+}
+
 void CheckUpdatedBlockDependencies(const CTxMemPool& tx_pool, const std::vector<Txid>& txids)
 {
     LOCK(tx_pool.cs);
@@ -231,6 +251,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
     CheckTransactionAncestryAll(tx_pool);
     CheckPrioritisedTransactions(tx_pool);
+    CheckRandomizedTxIndex(tx_pool);
     {
         BlockCreateOptions options{
             .block_min_fee_rate = CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/COIN)},
@@ -256,8 +277,10 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         }
         tx_pool.UpdateTransactionsFromBlock(hashes_to_update);
         CheckUpdatedBlockDependencies(tx_pool, hashes_to_update);
+        CheckRandomizedTxIndex(tx_pool);
     }
     CheckPrioritisedTransactions(tx_pool);
+    CheckRandomizedTxIndex(tx_pool);
     const auto info_all = tx_pool.infoAll();
     if (!info_all.empty()) {
         const auto& tx_to_remove = *PickValue(fuzzed_data_provider, info_all).tx;
@@ -265,21 +288,25 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         assert(tx_pool.size() < info_all.size());
         CheckTransactionAncestryAll(tx_pool);
         CheckPrioritisedTransactions(tx_pool);
+        CheckRandomizedTxIndex(tx_pool);
     }
 
     if (fuzzed_data_provider.ConsumeBool()) {
         // Try eviction
         LOCK2(::cs_main, tx_pool.cs);
         tx_pool.TrimToSize(fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0U, tx_pool.DynamicMemoryUsage() * 2));
+        CheckRandomizedTxIndex(tx_pool);
     }
     if (fuzzed_data_provider.ConsumeBool()) {
         // Try expiry
         LOCK2(::cs_main, tx_pool.cs);
         tx_pool.Expire(GetMockTime() - std::chrono::seconds(fuzzed_data_provider.ConsumeIntegral<uint32_t>()));
+        CheckRandomizedTxIndex(tx_pool);
     }
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
     CheckTransactionAncestryAll(tx_pool);
     CheckPrioritisedTransactions(tx_pool);
+    CheckRandomizedTxIndex(tx_pool);
     g_setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
 }
 
@@ -506,6 +533,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
         CheckATMPInvariants(res, tx->GetWitnessHash(), txid_in_mempool, wtxid_in_mempool);
         if (txid_in_mempool) CheckTransactionAncestry(tx_pool, tx->GetHash());
         CheckPrioritisedTransactions(tx_pool);
+        CheckRandomizedTxIndex(tx_pool);
 
         Assert(accepted != added.empty());
         if (accepted) {
@@ -552,6 +580,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
             }
         }
         CheckPrioritisedTransactions(tx_pool);
+        CheckRandomizedTxIndex(tx_pool);
     }
     Finish(fuzzed_data_provider, tx_pool, chainstate);
 }
@@ -612,6 +641,7 @@ FUZZ_TARGET(tx_pool, .init = initialize_tx_pool)
         if (accepted) {
             txids.push_back(tx->GetHash());
             CheckTransactionAncestry(tx_pool, tx->GetHash());
+            CheckRandomizedTxIndex(tx_pool);
             if (!ever_bypassed_limits) {
                 CheckMempoolTRUCInvariants(tx_pool);
             }
