@@ -50,6 +50,7 @@ enum class ChainEventType {
     CONNECTED,
     DISCONNECTED,
     UPDATED_TIP,
+    FLUSHED,
 };
 
 struct ChainEvent {
@@ -142,6 +143,20 @@ struct ValidationEventRecorder final : public CValidationInterface {
         });
     }
 
+    void ChainStateFlushed(const kernel::ChainstateRole&, const CBlockLocator& locator) override
+    {
+        assert(!locator.IsNull());
+        assert(!locator.vHave.empty());
+        const CBlockIndex* locator_tip{WITH_LOCK(::cs_main, return Assert(g_setup->m_node.chainman)->m_blockman.LookupBlockIndex(locator.vHave.front()))};
+        assert(locator_tip);
+        m_events.push_back({
+            ChainEventType::FLUSHED,
+            locator_tip->GetBlockHash(),
+            {},
+            locator_tip->nHeight,
+        });
+    }
+
     void AssertAndClear(const ChainstateManager& chainman)
     {
         size_t active_tip_idx{0};
@@ -174,8 +189,7 @@ struct ValidationEventRecorder final : public CValidationInterface {
                 assert(m_expected_height > 0);
                 m_expected_tip = event.prev_hash;
                 --m_expected_height;
-            } else {
-                assert(event.type == ChainEventType::UPDATED_TIP);
+            } else if (event.type == ChainEventType::UPDATED_TIP) {
                 assert(event.hash == m_expected_tip);
                 assert(event.height == m_expected_height);
                 if (event.fork_height >= 0) {
@@ -192,6 +206,10 @@ struct ValidationEventRecorder final : public CValidationInterface {
                     assert(event.fork_height == expected_fork->nHeight);
                 }
                 m_update_start_tip.reset();
+            } else {
+                assert(event.type == ChainEventType::FLUSHED);
+                assert(event.hash == m_expected_tip);
+                assert(event.height == m_expected_height);
             }
             consume_active_tip();
         }
@@ -570,6 +588,14 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
                     assert(chainman.ActiveChain().Tip() == old_tip);
                     assert(index->nSequenceId == old_sequence_id);
                 }
+            },
+            [&] {
+                BlockValidationState state;
+                const FlushStateMode mode{fuzzed_data_provider.ConsumeBool() ?
+                                              FlushStateMode::FORCE_FLUSH :
+                                              FlushStateMode::FORCE_SYNC};
+                assert(chainman.ActiveChainstate().FlushStateToDisk(state, mode));
+                node.validation_signals->SyncWithValidationInterfaceQueue();
             });
 
         node.validation_signals->SyncWithValidationInterfaceQueue();
