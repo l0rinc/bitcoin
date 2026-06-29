@@ -216,7 +216,9 @@ private:
         m_effective_feerate(effective_feerate),
         m_wtxids_fee_calculations(wtxids_fee_calculations)
     {
-        Assume(!wtxids_fee_calculations.empty());
+        Assume(m_vsize && *m_vsize > 0);
+        Assume(m_base_fees && MoneyRange(*m_base_fees));
+        Assume(m_wtxids_fee_calculations && !m_wtxids_fee_calculations->empty());
     }
 
     /** Constructor for fee-related failure case */
@@ -235,7 +237,11 @@ private:
 
     /** Constructor for already-in-mempool case. It wouldn't replace any transactions. */
     explicit MempoolAcceptResult(int64_t vsize, CAmount fees)
-        : m_result_type(ResultType::MEMPOOL_ENTRY), m_vsize{vsize}, m_base_fees(fees) {}
+        : m_result_type(ResultType::MEMPOOL_ENTRY), m_vsize{vsize}, m_base_fees(fees)
+    {
+        Assume(m_vsize && *m_vsize > 0);
+        Assume(m_base_fees && MoneyRange(*m_base_fees));
+    }
 
     /** Constructor for witness-swapped case. */
     explicit MempoolAcceptResult(const Wtxid& other_wtxid)
