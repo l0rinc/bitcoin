@@ -53,6 +53,13 @@ namespace {
 const TestingSetup* g_setup;
 std::vector<COutPoint> g_outpoints_coinbase_init_mature;
 
+void AssertValidTransactionInfo(const TransactionInfo& info)
+{
+    Assert(info.m_tx);
+    Assert(MoneyRange(info.m_fee));
+    Assert(info.m_virtual_transaction_size > 0);
+}
+
 struct MockedTxPool : public CTxMemPool {
     void RollingFeeUpdate() EXCLUSIVE_LOCKS_REQUIRED(!cs)
     {
@@ -86,8 +93,11 @@ struct OutpointsUpdater final : public CValidationInterface {
     explicit OutpointsUpdater(std::set<COutPoint>& r)
         : m_mempool_outpoints{r} {}
 
-    void TransactionAddedToMempool(const NewMempoolTransactionInfo& tx, uint64_t /* mempool_sequence */) override
+    void TransactionAddedToMempool(const NewMempoolTransactionInfo& tx, uint64_t mempool_sequence) override
     {
+        AssertValidTransactionInfo(tx.info);
+        Assert(mempool_sequence > 0);
+
         // for coins spent we always want to be able to rbf so they're not removed
 
         // outputs from this tx can now be spent
@@ -96,8 +106,11 @@ struct OutpointsUpdater final : public CValidationInterface {
         }
     }
 
-    void TransactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t /* mempool_sequence */) override
+    void TransactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t mempool_sequence) override
     {
+        Assert(tx);
+        Assert(mempool_sequence > 0);
+
         // outpoints spent by this tx are now available
         for (const auto& input : tx->vin) {
             // Could already exist if this was a replacement
@@ -116,16 +129,22 @@ struct TransactionsDelta final : public CValidationInterface {
     explicit TransactionsDelta(std::set<CTransactionRef>& a)
         : m_added{a} {}
 
-    void TransactionAddedToMempool(const NewMempoolTransactionInfo& tx, uint64_t /* mempool_sequence */) override
+    void TransactionAddedToMempool(const NewMempoolTransactionInfo& tx, uint64_t mempool_sequence) override
     {
+        AssertValidTransactionInfo(tx.info);
+        Assert(mempool_sequence > 0);
+
         // Transactions may be entered and booted any number of times
         m_added.insert(tx.info.m_tx);
     }
 
-    void TransactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t /* mempool_sequence */) override
+    void TransactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t mempool_sequence) override
     {
+        Assert(tx);
+        Assert(mempool_sequence > 0);
+
         // Transactions may be entered and booted any number of times
-         m_added.erase(tx);
+        m_added.erase(tx);
     }
 };
 
