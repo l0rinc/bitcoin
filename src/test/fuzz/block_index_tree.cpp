@@ -6,6 +6,7 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <flatfile.h>
+#include <pow.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <test/fuzz/FuzzedDataProvider.h>
@@ -16,6 +17,7 @@
 #include <test/util/validation.h>
 #include <validation.h>
 
+#include <algorithm>
 #include <ranges>
 #include <set>
 #include <utility>
@@ -137,6 +139,14 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                     CBlockIndex* index = blockman.AddToBlockIndex(header, chainman.m_best_header);
                     assert(index->nStatus & BLOCK_VALID_TREE);
                     assert(index->pprev == prev_block);
+                    assert(index->phashBlock);
+                    assert(*index->phashBlock == header.GetHash());
+                    assert(index->nHeight == prev_block->nHeight + 1);
+                    assert(index->GetAncestor(prev_block->nHeight) == prev_block);
+                    assert(index->nTimeMax == std::max(prev_block->nTimeMax, index->nTime));
+                    assert(index->nChainWork == prev_block->nChainWork + GetBlockProof(*index));
+                    assert(chainman.m_best_header);
+                    assert(chainman.m_best_header->nChainWork >= index->nChainWork);
                     blocks.push_back(index);
                 }
             },
