@@ -306,6 +306,12 @@ void CCoinsViewCache::Flush(bool reallocate_cache)
 
 void CCoinsViewCache::Sync()
 {
+    size_t unspent_count{0};
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        for (const auto& [_, entry] : cacheCoins) {
+            unspent_count += !entry.coin.IsSpent();
+        }
+    }
     auto cursor{CoinsViewCacheCursor(m_dirty_count, m_sentinel, cacheCoins, /*will_erase=*/false)};
     base->BatchWrite(cursor, m_block_hash);
     Assume(m_dirty_count == 0);
@@ -314,6 +320,9 @@ void CCoinsViewCache::Sync()
         throw std::logic_error("Not all unspent flagged entries were cleared");
     }
     Assume(m_sentinel.second.Prev() == &m_sentinel);
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        Assume(cacheCoins.size() == unspent_count);
+    }
 }
 
 void CCoinsViewCache::Reset() noexcept
