@@ -172,6 +172,32 @@ BOOST_AUTO_TEST_CASE(xor_file)
     }
 }
 
+BOOST_AUTO_TEST_CASE(autofile_tell_after_close)
+{
+    const fs::path path{m_args.GetDataDirBase() / "test_autofile_tell_after_close.bin"};
+
+    {
+        AutoFile file{fsbridge::fopen(path, "w+b")};
+        file << uint8_t{1};
+        BOOST_CHECK_EQUAL(file.tell(), 1);
+        BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+        BOOST_CHECK(file.IsNull());
+        BOOST_CHECK_EXCEPTION(file.tell(), std::ios_base::failure, HasReason{"AutoFile::tell: file handle is nullptr"});
+    }
+
+    {
+        AutoFile file{fsbridge::fopen(path, "rb")};
+        BOOST_CHECK_EQUAL(file.tell(), 0);
+        FILE* raw_file{file.release()};
+        BOOST_REQUIRE(raw_file != nullptr);
+        BOOST_CHECK(file.IsNull());
+        BOOST_CHECK_EXCEPTION(file.tell(), std::ios_base::failure, HasReason{"AutoFile::tell: file handle is nullptr"});
+        BOOST_REQUIRE_EQUAL(std::fclose(raw_file), 0);
+    }
+
+    fs::remove(path);
+}
+
 BOOST_AUTO_TEST_CASE(streams_vector_writer)
 {
     unsigned char a(1);
