@@ -12,13 +12,44 @@
 #include <string>
 #include <vector>
 
+namespace {
+void AssertDecodeTxContracts(
+    const std::string& tx_hex,
+    bool try_no_witness,
+    bool try_witness,
+    bool decoded,
+    const CMutableTransaction& tx)
+{
+    if (!decoded) return;
+
+    assert(try_no_witness || try_witness);
+    if (!try_witness) assert(!tx.HasWitness());
+
+    CMutableTransaction trailing_tx;
+    if (try_no_witness != try_witness) {
+        assert(!DecodeHexTx(trailing_tx, tx_hex + "00", try_no_witness, try_witness));
+    }
+
+    const CTransaction decoded_tx{tx};
+    const std::string encoded_tx{EncodeHexTx(decoded_tx)};
+    CMutableTransaction roundtrip_tx;
+    const bool roundtrip_try_witness{decoded_tx.HasWitness()};
+    assert(DecodeHexTx(roundtrip_tx, encoded_tx,
+        /*try_no_witness=*/!roundtrip_try_witness,
+        /*try_witness=*/roundtrip_try_witness));
+    assert(CTransaction{roundtrip_tx} == decoded_tx);
+}
+} // namespace
+
 FUZZ_TARGET(decode_tx)
 {
     const std::string tx_hex = HexStr(buffer);
-    CMutableTransaction mtx;
-    const bool result_none = DecodeHexTx(mtx, tx_hex, false, false);
-    const bool result_try_witness = DecodeHexTx(mtx, tx_hex, false, true);
-    const bool result_try_witness_and_maybe_no_witness = DecodeHexTx(mtx, tx_hex, true, true);
+    CMutableTransaction none_mtx;
+    const bool result_none = DecodeHexTx(none_mtx, tx_hex, false, false);
+    CMutableTransaction witness_mtx;
+    const bool result_try_witness = DecodeHexTx(witness_mtx, tx_hex, false, true);
+    CMutableTransaction witness_or_no_witness_mtx;
+    const bool result_try_witness_and_maybe_no_witness = DecodeHexTx(witness_or_no_witness_mtx, tx_hex, true, true);
     CMutableTransaction no_witness_mtx;
     const bool result_try_no_witness = DecodeHexTx(no_witness_mtx, tx_hex, true, false);
     assert(!result_none);
@@ -29,4 +60,28 @@ FUZZ_TARGET(decode_tx)
         assert(!no_witness_mtx.HasWitness());
         assert(result_try_witness_and_maybe_no_witness);
     }
+    AssertDecodeTxContracts(
+        tx_hex,
+        /*try_no_witness=*/false,
+        /*try_witness=*/false,
+        result_none,
+        none_mtx);
+    AssertDecodeTxContracts(
+        tx_hex,
+        /*try_no_witness=*/false,
+        /*try_witness=*/true,
+        result_try_witness,
+        witness_mtx);
+    AssertDecodeTxContracts(
+        tx_hex,
+        /*try_no_witness=*/true,
+        /*try_witness=*/true,
+        result_try_witness_and_maybe_no_witness,
+        witness_or_no_witness_mtx);
+    AssertDecodeTxContracts(
+        tx_hex,
+        /*try_no_witness=*/true,
+        /*try_witness=*/false,
+        result_try_no_witness,
+        no_witness_mtx);
 }
