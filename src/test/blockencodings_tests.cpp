@@ -258,6 +258,42 @@ BOOST_AUTO_TEST_CASE(FillBlockResetsPartialBlock)
     BOOST_CHECK_EQUAL(block.GetHash().ToString(), reconstructed_again.GetHash().ToString());
 }
 
+BOOST_AUTO_TEST_CASE(FillBlockTooFewTransactionsClearsPartialBlock)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    TestMemPoolEntryHelper entry;
+    auto rand_ctx(FastRandomContext(uint256{42}));
+    CBlock block(BuildBlockTestCase(rand_ctx));
+
+    {
+        LOCK2(cs_main, pool.cs);
+        TryAddToMempool(pool, entry.FromTx(block.vtx[2]));
+    }
+
+    CBlockHeaderAndShortTxIDs short_ids{block, rand_ctx.rand64()};
+    TestPartiallyDownloadedBlock partial_block(&pool);
+    BOOST_CHECK(partial_block.InitData(short_ids, empty_extra_txn) == READ_STATUS_OK);
+    BOOST_CHECK(partial_block.IsTxAvailable(0));
+    BOOST_CHECK(!partial_block.IsTxAvailable(1));
+    BOOST_CHECK(partial_block.IsTxAvailable(2));
+
+    CBlock rejected_block;
+    BOOST_CHECK(partial_block.FillBlock(rejected_block, {}, /*segwit_active=*/true) == READ_STATUS_INVALID);
+    BOOST_CHECK(partial_block.header.IsNull());
+    BOOST_CHECK_EQUAL(partial_block.AvailableTxCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.PrefilledCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 0U);
+
+    CBlock retry_block;
+    BOOST_CHECK(partial_block.FillBlock(retry_block, {block.vtx[1]}, /*segwit_active=*/true) == READ_STATUS_INVALID);
+
+    BOOST_CHECK(partial_block.InitData(short_ids, empty_extra_txn) == READ_STATUS_OK);
+    CBlock reconstructed_block;
+    BOOST_CHECK(partial_block.FillBlock(reconstructed_block, {block.vtx[1]}, /*segwit_active=*/true) == READ_STATUS_OK);
+    BOOST_CHECK_EQUAL(block.GetHash().ToString(), reconstructed_block.GetHash().ToString());
+}
+
 BOOST_AUTO_TEST_CASE(NonCoinbasePreforwardRTTest)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
