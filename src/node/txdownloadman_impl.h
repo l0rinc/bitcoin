@@ -186,6 +186,7 @@ public:
     CTransactionRef GetTxToReconsider(NodeId nodeid);
 
     void AssertWtxidPeerCount() const;
+    void AssertNoTxRequest(const uint256& txhash) const;
     void CheckIsEmpty();
     void CheckIsEmpty(NodeId nodeid);
 
