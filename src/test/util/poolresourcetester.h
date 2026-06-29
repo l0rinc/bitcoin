@@ -39,11 +39,29 @@ class PoolResourceTester
 
 public:
     /**
+     * Checks cheap structural invariants that should hold regardless of
+     * outstanding allocations.
+     */
+    template <std::size_t MAX_BLOCK_SIZE_BYTES, std::size_t ALIGN_BYTES>
+    static void CheckResourceInvariants(const PoolResource<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>& resource)
+    {
+        assert(resource.m_chunk_size_bytes >= MAX_BLOCK_SIZE_BYTES);
+        assert((resource.m_chunk_size_bytes % resource.ELEM_ALIGN_BYTES) == 0);
+        assert(!resource.m_allocated_chunks.empty());
+        const std::byte* last_chunk{resource.m_allocated_chunks.back()};
+        assert(resource.m_available_memory_it >= last_chunk);
+        assert(resource.m_available_memory_it <= resource.m_available_memory_end);
+        assert(resource.m_available_memory_end == last_chunk + resource.m_chunk_size_bytes);
+        assert((reinterpret_cast<uintptr_t>(resource.m_available_memory_it) & (resource.ELEM_ALIGN_BYTES - 1)) == 0);
+    }
+
+    /**
      * Extracts the number of elements per freelist
      */
     template <std::size_t MAX_BLOCK_SIZE_BYTES, std::size_t ALIGN_BYTES>
     static std::vector<std::size_t> FreeListSizes(const PoolResource<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>& resource)
     {
+        CheckResourceInvariants(resource);
         auto sizes = std::vector<std::size_t>();
         for (const auto* ptr : resource.m_free_lists) {
             size_t size = 0;
@@ -65,6 +83,7 @@ public:
     template <std::size_t MAX_BLOCK_SIZE_BYTES, std::size_t ALIGN_BYTES>
     static std::size_t AvailableMemoryFromChunk(const PoolResource<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>& resource)
     {
+        CheckResourceInvariants(resource);
         return resource.m_available_memory_end - resource.m_available_memory_it;
     }
 
@@ -78,6 +97,7 @@ public:
     template <std::size_t MAX_BLOCK_SIZE_BYTES, std::size_t ALIGN_BYTES>
     static void CheckAllDataAccountedFor(const PoolResource<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>& resource)
     {
+        CheckResourceInvariants(resource);
         // collect all free blocks by iterating all freelists
         std::vector<PtrAndBytes> free_blocks;
         for (std::size_t freelist_idx = 0; freelist_idx < resource.m_free_lists.size(); ++freelist_idx) {
