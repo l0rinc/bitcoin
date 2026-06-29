@@ -215,6 +215,18 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
     const size_t completed_prefilled_count{prefilled_count};
     const size_t completed_mempool_count{mempool_count};
     const size_t completed_extra_count{extra_count};
+    const auto clear_partial_state = [&]() {
+        header.SetNull();
+        txn_available.clear();
+        prefilled_count = 0;
+        mempool_count = 0;
+        extra_count = 0;
+        Assume(header.IsNull());
+        Assume(txn_available.empty());
+        Assume(prefilled_count == 0);
+        Assume(mempool_count == 0);
+        Assume(extra_count == 0);
+    };
 
     block = header;
     block.vtx.resize(txn_available.size());
@@ -223,6 +235,7 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
     for (size_t i = 0; i < txn_available.size(); i++) {
         if (!txn_available[i]) {
             if (tx_missing_offset >= vtx_missing.size()) {
+                clear_partial_state();
                 return READ_STATUS_INVALID;
             }
             block.vtx[i] = vtx_missing[tx_missing_offset++];
@@ -232,16 +245,7 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
     }
 
     // Make sure we can't call FillBlock again.
-    header.SetNull();
-    txn_available.clear();
-    prefilled_count = 0;
-    mempool_count = 0;
-    extra_count = 0;
-    Assume(header.IsNull());
-    Assume(txn_available.empty());
-    Assume(prefilled_count == 0);
-    Assume(mempool_count == 0);
-    Assume(extra_count == 0);
+    clear_partial_state();
 
     if (vtx_missing.size() != tx_missing_offset) {
         return READ_STATUS_INVALID;
