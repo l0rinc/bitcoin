@@ -246,7 +246,7 @@ public:
         m_tracker.ReceivedResponse(peer, TXHASHES[txhash]);
     }
 
-    void GetRequestable(int peer)
+    void GetRequestable(int peer, bool collect_expired)
     {
         // Implement using naive structure:
 
@@ -277,9 +277,11 @@ public:
 
         // Compare with TxRequestTracker's implementation.
         std::vector<std::pair<NodeId, GenTxid>> expired;
-        const auto actual = m_tracker.GetRequestable(peer, m_now, &expired);
-        std::sort(expired.begin(), expired.end());
-        assert(expired == expected_expired);
+        const auto actual = m_tracker.GetRequestable(peer, m_now, collect_expired ? &expired : nullptr);
+        if (collect_expired) {
+            std::sort(expired.begin(), expired.end());
+            assert(expired == expected_expired);
+        }
 
         m_tracker.PostGetRequestableSanityCheck(m_now);
         assert(result.size() == actual.size());
@@ -357,8 +359,8 @@ FUZZ_TARGET(txrequest)
             tester.AdvanceTime(DELAYS[delaynum]);
             break;
         case 2: // Query for requestable txs
-            peer = it == buffer.end() ? 0 : *(it++) % MAX_PEERS;
-            tester.GetRequestable(peer);
+            peer = it == buffer.end() ? 0 : *(it++);
+            tester.GetRequestable(peer % MAX_PEERS, peer & MAX_PEERS);
             break;
         case 3: // Peer went offline
             peer = it == buffer.end() ? 0 : *(it++) % MAX_PEERS;
@@ -406,9 +408,9 @@ FUZZ_TARGET(txrequest)
                 tester.ForgetTxHash(txhash);
                 tester.ReceivedInv(peer, txhash, is_wtxid, preferred, reqtime);
                 tester.ReceivedInv(peer, txhash, !is_wtxid, !preferred, std::chrono::microseconds::min());
-                tester.GetRequestable(peer);
+                tester.GetRequestable(peer, /*collect_expired=*/false);
                 tester.AdvanceTime(reqtime - tester.Now());
-                tester.GetRequestable(peer);
+                tester.GetRequestable(peer, /*collect_expired=*/true);
                 tester.ReceivedInv(peer, txhash, !is_wtxid, !preferred, std::chrono::microseconds::min());
             }
             break;
