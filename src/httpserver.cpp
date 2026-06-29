@@ -1182,6 +1182,8 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
                 // The error can be safely ignored, try the send again on the next I/O loop.
                 m_send_ready = true;
                 m_connection_busy = true;
+                Assume(m_send_ready);
+                Assume(m_connection_busy);
                 return true;
             } else {
                 // Unrecoverable error, log and disconnect client.
@@ -1193,6 +1195,8 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
                     NetworkErrorString(err));
                 m_send_ready = false;
                 m_disconnect = true;
+                Assume(!m_send_ready);
+                Assume(m_disconnect);
 
                 // Do not attempt to read from this client.
                 return false;
@@ -1217,10 +1221,12 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
         if (m_send_buffer.empty()) {
             m_send_ready = false;
             m_connection_busy = false;
+            Assume(!m_send_ready);
 
             // Our work is done here
             if (!m_keep_alive) {
                 m_disconnect = true;
+                Assume(m_disconnect);
                 // Do not attempt to read from this client.
                 return false;
             }
@@ -1228,6 +1234,8 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
             // The send buffer isn't flushed yet, try to push more on the next loop.
             m_send_ready = true;
             m_connection_busy = true;
+            Assume(m_send_ready);
+            Assume(m_connection_busy);
         }
 
         // Finally, reset idle timeout
