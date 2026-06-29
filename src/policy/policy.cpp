@@ -19,6 +19,7 @@
 #include <serialize.h>
 #include <span.h>
 #include <tinyformat.h>
+#include <util/check.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -40,10 +41,12 @@ CAmount GetDustThreshold(const CTxOut& txout, const CFeeRate& dustRelayFeeIn)
     // so dust is a spendable txout less than
     // 98*dustRelayFee/1000 (in satoshis).
     // 294 satoshis at the default rate of 3000 sat/kvB.
-    if (txout.scriptPubKey.IsUnspendable())
+    if (txout.scriptPubKey.IsUnspendable()) {
         return 0;
+    }
 
-    uint64_t nSize{GetSerializeSize(txout)};
+    const uint64_t txout_size{GetSerializeSize(txout)};
+    uint64_t nSize{txout_size};
     int witnessversion = 0;
     std::vector<unsigned char> witnessprogram;
 
@@ -59,13 +62,20 @@ CAmount GetDustThreshold(const CTxOut& txout, const CFeeRate& dustRelayFeeIn)
     } else {
         nSize += (32 + 4 + 1 + 107 + 4); // the 148 mentioned above
     }
+    Assume(nSize > txout_size);
 
     return dustRelayFeeIn.GetFee(nSize);
 }
 
 bool IsDust(const CTxOut& txout, const CFeeRate& dustRelayFeeIn)
 {
-    return (txout.nValue < GetDustThreshold(txout, dustRelayFeeIn));
+    const CAmount dust_threshold{GetDustThreshold(txout, dustRelayFeeIn)};
+    const bool is_dust{txout.nValue < dust_threshold};
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (txout.scriptPubKey.IsUnspendable()) Assume(dust_threshold == 0);
+        Assume(is_dust == (txout.nValue < dust_threshold));
+    }
+    return is_dust;
 }
 
 std::vector<uint32_t> GetDust(const CTransaction& tx, CFeeRate dust_relay_rate)
@@ -73,6 +83,14 @@ std::vector<uint32_t> GetDust(const CTransaction& tx, CFeeRate dust_relay_rate)
     std::vector<uint32_t> dust_outputs;
     for (uint32_t i{0}; i < tx.vout.size(); ++i) {
         if (IsDust(tx.vout[i], dust_relay_rate)) dust_outputs.push_back(i);
+    }
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        Assume(dust_outputs.size() <= tx.vout.size());
+        for (size_t i{0}; i < dust_outputs.size(); ++i) {
+            Assume(dust_outputs[i] < tx.vout.size());
+            Assume(IsDust(tx.vout[dust_outputs[i]], dust_relay_rate));
+            if (i > 0) Assume(dust_outputs[i - 1] < dust_outputs[i]);
+        }
     }
     return dust_outputs;
 }
