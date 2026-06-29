@@ -964,13 +964,15 @@ public:
 
     CNode* AddRef()
     {
-        nRefCount++;
+        const int old_ref_count{nRefCount.fetch_add(1)};
+        Assume(old_ref_count >= 0);
         return this;
     }
 
     void Release()
     {
-        nRefCount--;
+        const int old_ref_count{nRefCount.fetch_sub(1)};
+        Assume(old_ref_count > 0);
     }
 
     void CloseSocketDisconnect() EXCLUSIVE_LOCKS_REQUIRED(!m_sock_mutex);
