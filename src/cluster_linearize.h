@@ -2049,6 +2049,13 @@ void PostLinearize(const DepGraph<SetType>& depgraph, std::span<DepGraphIndex> l
         }
         Assume(done == linearization.size());
     }
+    SetType done;
+    for (DepGraphIndex tx_idx : linearization) {
+        Assume(depgraph.Positions()[tx_idx]);
+        Assume((depgraph.Ancestors(tx_idx) - done) == SetType::Singleton(tx_idx));
+        done.Set(tx_idx);
+    }
+    Assume(done == depgraph.Positions());
 }
 
 } // namespace cluster_linearize
