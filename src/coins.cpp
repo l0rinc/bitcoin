@@ -357,6 +357,7 @@ bool CCoinsViewCache::HaveInputs(const CTransaction& tx) const
             if (!HaveCoin(tx.vin[i].prevout)) {
                 return false;
             }
+            Assume(!AccessCoin(tx.vin[i].prevout).IsSpent());
         }
     }
     return true;
@@ -450,7 +451,10 @@ const Coin& AccessByTxid(const CCoinsViewCache& view, const Txid& txid)
     COutPoint iter(txid, 0);
     while (iter.n < MAX_OUTPUTS_PER_BLOCK) {
         const Coin& alternate = view.AccessCoin(iter);
-        if (!alternate.IsSpent()) return alternate;
+        if (!alternate.IsSpent()) {
+            Assume(view.HaveCoin(iter));
+            return alternate;
+        }
         ++iter.n;
     }
     return coinEmpty;
