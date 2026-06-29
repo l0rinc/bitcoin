@@ -87,6 +87,12 @@ CBlockIndex* TestChainstateManager::FindMostWorkChain()
     return static_cast<TestChainstate*>(&ActiveChainstate())->CallFindMostWorkChain();
 }
 
+CBlockIndex* TestChainstateManager::BestInvalid() const
+{
+    AssertLockHeld(::cs_main);
+    return m_best_invalid;
+}
+
 void TestChainstateManager::ResetBestInvalid()
 {
     m_best_invalid = nullptr;
