@@ -3045,6 +3045,10 @@ DescriptorCache DescriptorCache::MergeAndDiff(const DescriptorCache& other)
         }
         CacheParentExtPubKey(parent_xpub_pair.first, parent_xpub_pair.second);
         diff.CacheParentExtPubKey(parent_xpub_pair.first, parent_xpub_pair.second);
+        Assume(GetCachedParentExtPubKey(parent_xpub_pair.first, xpub));
+        Assume(xpub == parent_xpub_pair.second);
+        Assume(diff.GetCachedParentExtPubKey(parent_xpub_pair.first, xpub));
+        Assume(xpub == parent_xpub_pair.second);
     }
     for (const auto& derived_xpub_map_pair : other.GetCachedDerivedExtPubKeys()) {
         for (const auto& derived_xpub_pair : derived_xpub_map_pair.second) {
@@ -3057,6 +3061,10 @@ DescriptorCache DescriptorCache::MergeAndDiff(const DescriptorCache& other)
             }
             CacheDerivedExtPubKey(derived_xpub_map_pair.first, derived_xpub_pair.first, derived_xpub_pair.second);
             diff.CacheDerivedExtPubKey(derived_xpub_map_pair.first, derived_xpub_pair.first, derived_xpub_pair.second);
+            Assume(GetCachedDerivedExtPubKey(derived_xpub_map_pair.first, derived_xpub_pair.first, xpub));
+            Assume(xpub == derived_xpub_pair.second);
+            Assume(diff.GetCachedDerivedExtPubKey(derived_xpub_map_pair.first, derived_xpub_pair.first, xpub));
+            Assume(xpub == derived_xpub_pair.second);
         }
     }
     for (const auto& lh_xpub_pair : other.GetCachedLastHardenedExtPubKeys()) {
@@ -3069,6 +3077,10 @@ DescriptorCache DescriptorCache::MergeAndDiff(const DescriptorCache& other)
         }
         CacheLastHardenedExtPubKey(lh_xpub_pair.first, lh_xpub_pair.second);
         diff.CacheLastHardenedExtPubKey(lh_xpub_pair.first, lh_xpub_pair.second);
+        Assume(GetCachedLastHardenedExtPubKey(lh_xpub_pair.first, xpub));
+        Assume(xpub == lh_xpub_pair.second);
+        Assume(diff.GetCachedLastHardenedExtPubKey(lh_xpub_pair.first, xpub));
+        Assume(xpub == lh_xpub_pair.second);
     }
     return diff;
 }
