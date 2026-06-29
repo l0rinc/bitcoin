@@ -709,6 +709,16 @@ private:
         }
 
         // We will only get here for BIP30 checks, an invalid block, or if the threadpool has not been started.
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            if (const auto* cache{dynamic_cast<const CCoinsViewCache*>(base)}) {
+                const size_t cache_size{cache->GetCacheSize()};
+                const size_t dirty_count{cache->GetDirtyCount()};
+                auto coin{base->PeekCoin(outpoint)};
+                Assume(cache->GetCacheSize() == cache_size);
+                Assume(cache->GetDirtyCount() == dirty_count);
+                return coin;
+            }
+        }
         return base->PeekCoin(outpoint);
     }
 
