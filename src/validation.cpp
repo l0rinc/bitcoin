@@ -3816,6 +3816,11 @@ void Chainstate::ResetBlockFailureFlags(CBlockIndex *pindex) {
 void Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
 {
     AssertLockHeld(cs_main);
+    Assume(pindex);
+    const bool is_snapshot_base{pindex == SnapshotBase()};
+    Assume(!(pindex->nStatus & BLOCK_FAILED_VALID));
+    Assume(is_snapshot_base || pindex->IsValid(BLOCK_VALID_TRANSACTIONS));
+    Assume(is_snapshot_base || pindex->HaveNumChainTxs() || pindex->pprev == nullptr);
 
     // Do not continue building a chainstate that is based on an invalid
     // snapshot. This is a belt-and-suspenders type of check because if an
