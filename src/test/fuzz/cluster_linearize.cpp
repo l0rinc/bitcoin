@@ -483,10 +483,36 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
         }
     };
 
+    /** Check that AppendTopo preserves an existing prefix and appends exactly select. */
+    auto check_append_topo_fn = [&](TestBitSet prefix_set, TestBitSet select) {
+        std::vector<DepGraphIndex> linearization;
+        for (auto i : prefix_set) linearization.push_back(i);
+        const auto prefix{linearization};
+
+        real.AppendTopo(linearization, select);
+
+        assert(linearization.size() == prefix.size() + select.Count());
+        assert(std::equal(prefix.begin(), prefix.end(), linearization.begin()));
+
+        TestBitSet appended;
+        const bool acyclic{real.IsAcyclic()};
+        for (size_t pos{prefix.size()}; pos < linearization.size(); ++pos) {
+            const auto idx{linearization[pos]};
+            assert(select[idx]);
+            assert(!appended[idx]);
+            if (acyclic) {
+                assert((real.Ancestors(idx) & select).IsSubsetOf(appended | TestBitSet::Singleton(idx)));
+            }
+            appended.Set(idx);
+        }
+        assert(appended == select);
+    };
+
     auto last_compaction_pos{real.PositionRange()};
 
-    LIMITED_WHILE (provider.remaining_bytes() > 0, 1000) {
-        int command = provider.ConsumeIntegral<uint8_t>() % 4;
+    LIMITED_WHILE(provider.remaining_bytes() > 0, 1000)
+    {
+        int command = provider.ConsumeIntegral<uint8_t>() % 5;
         while (true) {
             // Iterate decreasing command until an applicable branch is found.
             if (num_tx_sim < TestBitSet::Size() && command-- == 0) {
@@ -538,6 +564,12 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
                         }
                     }
                 }
+                break;
+            } else if (num_tx_sim > 0 && command-- == 0) {
+                // AppendTopo.
+                const auto select{subset_fn()};
+                const auto prefix_set{subset_fn() - select};
+                check_append_topo_fn(prefix_set, select);
                 break;
             } else if (command-- == 0) {
                 // Compact.
