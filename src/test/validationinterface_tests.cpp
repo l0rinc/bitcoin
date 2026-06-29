@@ -3,10 +3,16 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <boost/test/unit_test.hpp>
+#include <consensus/amount.h>
 #include <consensus/validation.h>
+#include <kernel/mempool_entry.h>
+#include <kernel/mempool_removal_reason.h>
 #include <primitives/block.h>
+#include <primitives/transaction.h>
 #include <scheduler.h>
+#include <script/script.h>
 #include <test/util/setup_common.h>
+#include <test/util/txmempool.h>
 #include <util/check.h>
 #include <validationinterface.h>
 
@@ -18,6 +24,86 @@ BOOST_FIXTURE_TEST_SUITE(validationinterface_tests, ChainTestingSetup)
 struct TestSubscriberNoop final : public CValidationInterface {
     void BlockChecked(const std::shared_ptr<const CBlock>&, const BlockValidationState&) override {}
 };
+
+struct MempoolPayloadSubscriber final : public CValidationInterface {
+    const Txid m_txid;
+    const CAmount m_fee;
+    const int64_t m_vsize;
+    const unsigned int m_height;
+    int m_added{0};
+    int m_removed{0};
+    int m_removed_for_block{0};
+
+    MempoolPayloadSubscriber(Txid txid, CAmount fee, int64_t vsize, unsigned int height)
+        : m_txid{txid}, m_fee{fee}, m_vsize{vsize}, m_height{height}
+    {
+    }
+
+    void CheckInfo(const TransactionInfo& info)
+    {
+        BOOST_REQUIRE(info.m_tx);
+        BOOST_CHECK(info.m_tx->GetHash() == m_txid);
+        BOOST_CHECK(MoneyRange(info.m_fee));
+        BOOST_CHECK_EQUAL(info.m_fee, m_fee);
+        BOOST_CHECK_EQUAL(info.m_virtual_transaction_size, m_vsize);
+        BOOST_CHECK_EQUAL(info.txHeight, m_height);
+    }
+
+    void TransactionAddedToMempool(const NewMempoolTransactionInfo& tx, uint64_t mempool_sequence) override
+    {
+        CheckInfo(tx.info);
+        BOOST_CHECK_GT(mempool_sequence, 0U);
+        ++m_added;
+    }
+
+    void TransactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t mempool_sequence) override
+    {
+        BOOST_REQUIRE(tx);
+        BOOST_CHECK(tx->GetHash() == m_txid);
+        BOOST_CHECK(reason == MemPoolRemovalReason::EXPIRY);
+        BOOST_CHECK_GT(mempool_sequence, 0U);
+        ++m_removed;
+    }
+
+    void MempoolTransactionsRemovedForBlock(const std::vector<RemovedMempoolTransactionInfo>& txs_removed_for_block, unsigned int nBlockHeight) override
+    {
+        BOOST_CHECK_EQUAL(nBlockHeight, m_height + 1);
+        BOOST_REQUIRE_EQUAL(txs_removed_for_block.size(), 1);
+        CheckInfo(txs_removed_for_block.front().info);
+        ++m_removed_for_block;
+    }
+};
+
+BOOST_AUTO_TEST_CASE(mempool_signal_payload_contracts)
+{
+    CMutableTransaction mtx;
+    mtx.vin.resize(1);
+    mtx.vout.emplace_back(COIN, CScript{});
+    const CTransactionRef tx{MakeTransactionRef(mtx)};
+    const CAmount fee{1000};
+    const unsigned int height{7};
+    const CTxMemPoolEntry entry{TestMemPoolEntryHelper{}.Fee(fee).Height(height).FromTx(tx)};
+    const int64_t vsize{entry.GetTxSize()};
+
+    auto sub{std::make_shared<MempoolPayloadSubscriber>(tx->GetHash(), fee, vsize, height)};
+    m_node.validation_signals->RegisterSharedValidationInterface(sub);
+
+    const NewMempoolTransactionInfo new_tx{tx, fee, vsize, height,
+                                           /*mempool_limit_bypassed=*/false,
+                                           /*submitted_in_package=*/false,
+                                           /*chainstate_is_current=*/true,
+                                           /*has_no_mempool_parents=*/true};
+    m_node.validation_signals->TransactionAddedToMempool(new_tx, /*mempool_sequence=*/1);
+    m_node.validation_signals->TransactionRemovedFromMempool(tx, MemPoolRemovalReason::EXPIRY, /*mempool_sequence=*/2);
+
+    m_node.validation_signals->MempoolTransactionsRemovedForBlock({RemovedMempoolTransactionInfo{entry}}, height + 1);
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    m_node.validation_signals->UnregisterSharedValidationInterface(sub);
+
+    BOOST_CHECK_EQUAL(sub->m_added, 1);
+    BOOST_CHECK_EQUAL(sub->m_removed, 1);
+    BOOST_CHECK_EQUAL(sub->m_removed_for_block, 1);
+}
 
 BOOST_AUTO_TEST_CASE(unregister_validation_interface_race)
 {
