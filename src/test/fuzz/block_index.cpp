@@ -118,12 +118,18 @@ FUZZ_TARGET(block_index, .init = init_block_index)
 
     // We should be able to set and read the value of any random flag.
     const std::string flag_name = fuzzed_data_provider.ConsumeRandomLengthString(100);
-    bool flag_value;
+    bool flag_value{fuzzed_data_provider.ConsumeBool()};
+    const bool missing_flag_value{flag_value};
+    assert(!block_index.ReadFlag(flag_name, flag_value));
+    assert(flag_value == missing_flag_value);
+
     block_index.WriteFlag(flag_name, true);
-    block_index.ReadFlag(flag_name, flag_value);
+    flag_value = false;
+    assert(block_index.ReadFlag(flag_name, flag_value));
     assert(flag_value);
     block_index.WriteFlag(flag_name, false);
-    block_index.ReadFlag(flag_name, flag_value);
+    flag_value = true;
+    assert(block_index.ReadFlag(flag_name, flag_value));
     assert(!flag_value);
 
     // We should be able to load everything we've previously stored. Note to assert on the
