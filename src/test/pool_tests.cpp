@@ -83,6 +83,31 @@ BOOST_AUTO_TEST_CASE(basic_allocating)
     BOOST_TEST(expected_bytes_available == PoolResourceTester::AvailableMemoryFromChunk(resource));
 }
 
+BOOST_AUTO_TEST_CASE(chunk_rollover_preserves_leftover_freelist)
+{
+    auto resource = PoolResource<16, 8>(16);
+    BOOST_TEST(1U == resource.NumAllocatedChunks());
+    BOOST_TEST(16U == PoolResourceTester::AvailableMemoryFromChunk(resource));
+
+    void* first = resource.Allocate(8, 8);
+    BOOST_TEST(8U == PoolResourceTester::AvailableMemoryFromChunk(resource));
+    BOOST_TEST(0U == PoolResourceTester::FreeListSizes(resource)[1]);
+
+    void* second = resource.Allocate(16, 8);
+    BOOST_TEST(2U == resource.NumAllocatedChunks());
+    BOOST_TEST(0U == PoolResourceTester::AvailableMemoryFromChunk(resource));
+    BOOST_TEST(1U == PoolResourceTester::FreeListSizes(resource)[1]);
+
+    resource.Deallocate(first, 8, 8);
+    PoolResourceTester::CheckResourceInvariants(resource);
+    BOOST_TEST(2U == PoolResourceTester::FreeListSizes(resource)[1]);
+
+    resource.Deallocate(second, 16, 8);
+    PoolResourceTester::CheckAllDataAccountedFor(resource);
+    BOOST_TEST(2U == PoolResourceTester::FreeListSizes(resource)[1]);
+    BOOST_TEST(1U == PoolResourceTester::FreeListSizes(resource)[2]);
+}
+
 // Allocates from 0 to n bytes were n > the PoolResource's data, and each should work
 BOOST_AUTO_TEST_CASE(allocate_any_byte)
 {
