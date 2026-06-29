@@ -467,6 +467,21 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
 
     const auto score_with_topo{GetSortedScoreWithTopology()};
 
+    assert(txns_randomized.size() == mapTx.size());
+    std::set<Txid> randomized_txids;
+    for (size_t index{0}; index < txns_randomized.size(); ++index) {
+        const auto& [wtxid, it] = txns_randomized[index];
+        assert(it != mapTx.end());
+        assert(it->GetTx().GetWitnessHash() == wtxid);
+        assert(it->idx_randomized == index);
+        const Txid txid{it->GetTx().GetHash()};
+        assert(mapTx.find(txid) == it);
+        assert(randomized_txids.insert(txid).second);
+    }
+    for (const auto& entry : mapTx) {
+        assert(randomized_txids.contains(entry.GetTx().GetHash()));
+    }
+
     // Number of chunks is bounded by number of transactions.
     const auto diagram{GetFeerateDiagram()};
     assert(diagram.size() <= score_with_topo.size() + 1);

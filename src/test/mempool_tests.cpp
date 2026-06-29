@@ -71,6 +71,26 @@ static void CheckMempoolInputIndexCount(const CTxMemPool& pool)
     BOOST_CHECK_EQUAL(indexed_input_count, input_count);
 }
 
+static void CheckMempoolRandomizedIndex(const CTxMemPool& pool)
+{
+    LOCK(pool.cs);
+    BOOST_CHECK_EQUAL(pool.txns_randomized.size(), pool.mapTx.size());
+
+    std::set<Txid> randomized_txids;
+    for (size_t index{0}; index < pool.txns_randomized.size(); ++index) {
+        const auto& [wtxid, it] = pool.txns_randomized[index];
+        BOOST_REQUIRE(it != pool.mapTx.end());
+        BOOST_CHECK(it->GetTx().GetWitnessHash() == wtxid);
+        BOOST_CHECK_EQUAL(it->idx_randomized, index);
+        const Txid txid{it->GetTx().GetHash()};
+        BOOST_CHECK(pool.mapTx.find(txid) == it);
+        BOOST_CHECK(randomized_txids.insert(txid).second);
+    }
+    for (const auto& entry : pool.mapTx) {
+        BOOST_CHECK(randomized_txids.contains(entry.GetTx().GetHash()));
+    }
+}
+
 BOOST_AUTO_TEST_CASE(MempoolPrioritisationTest)
 {
     CTxMemPool& pool{*Assert(m_node.mempool)};
@@ -456,6 +476,31 @@ inline CTransactionRef make_tx(std::vector<CAmount>&& output_values, std::vector
         tx.vout[i].nValue = output_values[i];
     }
     return MakeTransactionRef(tx);
+}
+
+BOOST_AUTO_TEST_CASE(MempoolRandomizedIndexTest)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    LOCK2(::cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+    const auto make_witness_tx = [](uint32_t prevout_n, CAmount value) {
+        CMutableTransaction tx;
+        tx.vin.resize(1);
+        tx.vin[0].prevout = COutPoint{Txid::FromUint256(uint256{static_cast<uint8_t>(prevout_n + 1)}), prevout_n};
+        tx.vin[0].scriptWitness.stack = {std::vector<unsigned char>{static_cast<unsigned char>(prevout_n + 1)}};
+        tx.vout.emplace_back(value, CScript() << OP_11 << OP_EQUAL);
+        return MakeTransactionRef(tx);
+    };
+
+    for (uint32_t i{0}; i < 3; ++i) {
+        TryAddToMempool(pool, entry.Fee(10'000).FromTx(make_witness_tx(i, (10 + i) * COIN)));
+        CheckMempoolRandomizedIndex(pool);
+    }
+
+    BOOST_REQUIRE_GE(pool.txns_randomized.size(), 2U);
+    const CTransactionRef tx{pool.txns_randomized.front().second->GetSharedTx()};
+    pool.removeRecursive(*tx, REMOVAL_REASON_DUMMY);
+    CheckMempoolRandomizedIndex(pool);
 }
 
 
