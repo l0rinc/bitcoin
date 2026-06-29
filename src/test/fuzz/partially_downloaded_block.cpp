@@ -212,6 +212,9 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     if (missing.size() >= required_missing_count) {
         assert(pdb.header.IsNull());
         assert(pdb.AvailableTxCount() == 0);
+        assert(pdb.PrefilledCount() == 0);
+        assert(pdb.MempoolCount() == 0);
+        assert(pdb.ExtraCount() == 0);
         CBlock retry_block;
         assert(pdb.FillBlock(retry_block, {}, segwit_active) == READ_STATUS_INVALID);
     } else {
