@@ -50,9 +50,13 @@ BOOST_AUTO_TEST_CASE(validation_chainstate_resize_caches)
         LOCK(::cs_main);
         const auto outpoint = AddTestCoin(m_rng, c1.CoinsTip());
 
-        // Set a meaningless bestblock value in the coinsview cache - otherwise we won't
-        // flush during ResizecoinsCaches() and will subsequently hit an assertion.
-        c1.CoinsTip().SetBestBlock(m_rng.rand256());
+        // Set the loaded genesis block as the best block so that a cache flush has a valid
+        // block-index entry to report through ChainStateFlushed().
+        const uint256 genesis_hash{manager.GetParams().GenesisBlock().GetHash()};
+        c1.CoinsTip().SetBestBlock(genesis_hash);
+        CBlockIndex* genesis_index{manager.m_blockman.LookupBlockIndex(genesis_hash)};
+        BOOST_REQUIRE(genesis_index);
+        c1.m_chain.SetTip(*genesis_index);
 
         BOOST_CHECK(c1.CoinsTip().HaveCoinInCache(outpoint));
 
