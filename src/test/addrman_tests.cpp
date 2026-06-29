@@ -498,6 +498,39 @@ BOOST_AUTO_TEST_CASE(addrman_getaddr)
     BOOST_CHECK_EQUAL(addrman->Size(), 2006U);
 }
 
+BOOST_AUTO_TEST_CASE(addrman_getaddr_result_contracts)
+{
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    const CNetAddr source{ResolveIP("250.1.2.1")};
+
+    std::vector<CAddress> addresses{
+        CAddress{ResolveService("250.250.2.1", 8333), NODE_NONE},
+        CAddress{ResolveService("250.250.2.2", 8333), NODE_NONE},
+        CAddress{ResolveService("250.250.2.3", 8333), NODE_NONE},
+        CAddress{ResolveService("250.250.2.4", 8333), NODE_NONE},
+    };
+    CService i2p_service;
+    BOOST_REQUIRE(i2p_service.SetSpecial("UDHDrtrcetjm5sxzskjyr5ztpeszydbh4dpl3pl4utgqqw2v4jna.b32.I2P"));
+    addresses.emplace_back(i2p_service, NODE_NONE);
+
+    for (auto& addr : addresses) {
+        addr.nTime = Now<NodeSeconds>();
+    }
+
+    BOOST_REQUIRE(addrman->Add(addresses, source));
+    BOOST_REQUIRE_EQUAL(addrman->Size(), 5U);
+
+    const auto capped{addrman->GetAddr(/*max_addresses=*/2, /*max_pct=*/0, /*network=*/std::nullopt, /*filtered=*/false)};
+    BOOST_CHECK_EQUAL(capped.size(), 2U);
+
+    const auto pct_limited{addrman->GetAddr(/*max_addresses=*/0, /*max_pct=*/40, /*network=*/std::nullopt, /*filtered=*/false)};
+    BOOST_CHECK_EQUAL(pct_limited.size(), 2U);
+
+    const auto i2p_only{addrman->GetAddr(/*max_addresses=*/0, /*max_pct=*/0, /*network=*/NET_I2P, /*filtered=*/false)};
+    BOOST_REQUIRE_EQUAL(i2p_only.size(), 1U);
+    BOOST_CHECK_EQUAL(i2p_only.front().GetNetClass(), NET_I2P);
+}
+
 BOOST_AUTO_TEST_CASE(getaddr_unfiltered)
 {
     auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
