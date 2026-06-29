@@ -74,8 +74,10 @@ void BlockTreeDB::WriteReindexing(bool fReindexing)
 {
     if (fReindexing) {
         Write(DB_REINDEX_FLAG, uint8_t{'1'});
+        Assume(Exists(DB_REINDEX_FLAG));
     } else {
         Erase(DB_REINDEX_FLAG);
+        Assume(!Exists(DB_REINDEX_FLAG));
     }
 }
 
@@ -104,15 +106,21 @@ void BlockTreeDB::WriteBatchSync(const std::vector<std::pair<int, const CBlockFi
 
 void BlockTreeDB::WriteFlag(const std::string& name, bool fValue)
 {
-    Write(std::make_pair(DB_FLAG, name), fValue ? uint8_t{'1'} : uint8_t{'0'});
+    const auto key{std::make_pair(DB_FLAG, name)};
+    Write(key, fValue ? uint8_t{'1'} : uint8_t{'0'});
+    Assume(Exists(key));
 }
 
 bool BlockTreeDB::ReadFlag(const std::string& name, bool& fValue)
 {
+    const auto key{std::make_pair(DB_FLAG, name)};
     uint8_t ch;
-    if (!Read(std::make_pair(DB_FLAG, name), ch)) {
+    const bool found{Read(key, ch)};
+    Assume(found == Exists(key));
+    if (!found) {
         return false;
     }
+    Assume(ch == uint8_t{'0'} || ch == uint8_t{'1'});
     fValue = ch == uint8_t{'1'};
     return true;
 }
