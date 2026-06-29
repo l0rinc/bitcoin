@@ -389,6 +389,25 @@ BOOST_AUTO_TEST_CASE(basic_transaction_tests)
     BOOST_CHECK_MESSAGE(!CheckTransaction(CTransaction(tx), state) || !state.IsValid(), "Transaction with duplicate txins should be invalid.");
 }
 
+BOOST_AUTO_TEST_CASE(decode_hex_tx_rejects_trailing_bytes)
+{
+    CMutableTransaction tx;
+    tx.version = 1;
+    tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0}, CScript{});
+    tx.vout.emplace_back(/*nValueIn=*/0, CScript{});
+
+    const std::string tx_hex{EncodeHexTx(CTransaction{tx})};
+    CMutableTransaction decoded_tx;
+    BOOST_REQUIRE(DecodeHexTx(decoded_tx, tx_hex, /*try_no_witness=*/false, /*try_witness=*/true));
+    BOOST_REQUIRE(DecodeHexTx(decoded_tx, tx_hex, /*try_no_witness=*/true, /*try_witness=*/true));
+    BOOST_REQUIRE(DecodeHexTx(decoded_tx, tx_hex, /*try_no_witness=*/true, /*try_witness=*/false));
+
+    const std::string trailing_tx_hex{tx_hex + "00"};
+    BOOST_CHECK(!DecodeHexTx(decoded_tx, trailing_tx_hex, /*try_no_witness=*/false, /*try_witness=*/true));
+    BOOST_CHECK(!DecodeHexTx(decoded_tx, trailing_tx_hex, /*try_no_witness=*/true, /*try_witness=*/true));
+    BOOST_CHECK(!DecodeHexTx(decoded_tx, trailing_tx_hex, /*try_no_witness=*/true, /*try_witness=*/false));
+}
+
 BOOST_AUTO_TEST_CASE(txin_weight_helpers)
 {
     CTxIn input{
