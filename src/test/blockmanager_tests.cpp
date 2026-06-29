@@ -11,6 +11,7 @@
 #include <pow.h>
 #include <script/solver.h>
 #include <primitives/block.h>
+#include <util/byte_units.h>
 #include <util/chaintype.h>
 #include <util/check.h>
 #include <validation.h>
@@ -23,6 +24,7 @@
 #include <algorithm>
 
 using kernel::CBlockFileInfo;
+using kernel::BlockTreeDB;
 using node::STORAGE_HEADER_BYTES;
 using node::BlockManager;
 using node::KernelNotifications;
@@ -30,6 +32,29 @@ using node::MAX_BLOCKFILE_SIZE;
 
 // use BasicTestingSetup here for the data directory configuration, setup, and cleanup
 BOOST_FIXTURE_TEST_SUITE(blockmanager_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(blocktree_db_flag_roundtrip_reports_presence)
+{
+    BlockTreeDB block_tree_db{DBParams{
+        .path = "",
+        .cache_bytes = 1_MiB,
+        .memory_only = true,
+    }};
+
+    bool flag_value{true};
+    BOOST_CHECK(!block_tree_db.ReadFlag("missing_flag", flag_value));
+    BOOST_CHECK(flag_value);
+
+    block_tree_db.WriteFlag("roundtrip_flag", true);
+    flag_value = false;
+    BOOST_REQUIRE(block_tree_db.ReadFlag("roundtrip_flag", flag_value));
+    BOOST_CHECK(flag_value);
+
+    block_tree_db.WriteFlag("roundtrip_flag", false);
+    flag_value = true;
+    BOOST_REQUIRE(block_tree_db.ReadFlag("roundtrip_flag", flag_value));
+    BOOST_CHECK(!flag_value);
+}
 
 BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
 {
