@@ -57,7 +57,7 @@ void AssertActiveChain(const CChain& chain)
     }
 }
 
-void AssertBlockIndexTreeState(const TestBlockManager& blockman, const CChain& chain, const std::vector<CBlockIndex*>& pruned_blocks)
+void AssertBlockIndexTreeState(const TestBlockManager& blockman, const Chainstate& chainstate, const CChain& chain, const std::vector<CBlockIndex*>& pruned_blocks)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     AssertLockHeld(cs_main);
@@ -81,6 +81,23 @@ void AssertBlockIndexTreeState(const TestBlockManager& blockman, const CChain& c
         assert(block->nFile == 0);
         assert(block->nDataPos == 0);
         assert(block->nUndoPos == 0);
+    }
+
+    for (const CBlockIndex* candidate : chainstate.setBlockIndexCandidates) {
+        assert(candidate);
+        const bool is_snapshot_base{candidate == chainstate.SnapshotBase()};
+        if (candidate->nStatus & BLOCK_FAILED_VALID) {
+            assert(!chain.Contains(*candidate));
+            continue;
+        }
+        assert(is_snapshot_base || candidate->IsValid(BLOCK_VALID_TRANSACTIONS));
+        assert(is_snapshot_base || candidate->HaveNumChainTxs() || candidate->pprev == nullptr);
+        if (chain.Tip()) {
+            assert(!chainstate.setBlockIndexCandidates.value_comp()(candidate, chain.Tip()));
+        }
+        if (const CBlockIndex* target{chainstate.TargetBlock()}) {
+            assert(target->GetAncestor(candidate->nHeight) == candidate);
+        }
     }
 
     AssertActiveChain(chain);
@@ -120,7 +137,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
             LOCK(cs_main);
             assert(genesis->nStatus == genesis_status);
             assert(chainman.ActiveChain().Tip() == tip);
-            AssertBlockIndexTreeState(blockman, chainman.ActiveChain(), pruned_blocks);
+            AssertBlockIndexTreeState(blockman, chainman.ActiveChainstate(), chainman.ActiveChain(), pruned_blocks);
         }
         chainman.CheckBlockIndex();
     }
@@ -308,7 +325,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
             });
         {
             LOCK(cs_main);
-            AssertBlockIndexTreeState(blockman, chainman.ActiveChain(), pruned_blocks);
+            AssertBlockIndexTreeState(blockman, chainman.ActiveChainstate(), chainman.ActiveChain(), pruned_blocks);
         }
         if (!abort_run) {
             chainman.CheckBlockIndex();
@@ -316,7 +333,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
     }
     {
         LOCK(cs_main);
-        AssertBlockIndexTreeState(blockman, chainman.ActiveChain(), pruned_blocks);
+        AssertBlockIndexTreeState(blockman, chainman.ActiveChainstate(), chainman.ActiveChain(), pruned_blocks);
     }
     if (!abort_run) {
         chainman.CheckBlockIndex();
