@@ -50,7 +50,8 @@ class PackageValidationState : public ValidationState<PackageValidationResult> {
  * parent), checks that all parents appear somewhere in the list before their respective children.
  * No other ordering is enforced. This function cannot detect indirect dependencies (e.g. a
  * transaction's grandparent if its parent is not present).
- * @returns true if sorted. False if any tx spends the output of a tx that appears later in txns.
+ * @returns true if sorted. False if any tx spends the output of a tx that appears later in txns,
+ *          or if the package contains duplicate transactions.
  */
 bool IsTopoSortedPackage(const Package& txns);
 
