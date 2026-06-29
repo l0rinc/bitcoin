@@ -35,6 +35,28 @@ FUZZ_TARGET(blockfilter)
         Assert(!BlockFilterTypeName(block_filter_type).empty());
     }
     {
+        const auto assert_same_filter{[&](const BlockFilter& reconstructed) {
+            Assert(reconstructed.GetFilterType() == block_filter->GetFilterType());
+            Assert(reconstructed.GetBlockHash() == block_filter->GetBlockHash());
+            Assert(reconstructed.GetEncodedFilter() == block_filter->GetEncodedFilter());
+            Assert(reconstructed.GetHash() == block_filter->GetHash());
+        }};
+
+        const BlockFilter checked{
+            block_filter->GetFilterType(),
+            block_filter->GetBlockHash(),
+            block_filter->GetEncodedFilter(),
+            /*skip_decode_check=*/false};
+        assert_same_filter(checked);
+
+        const BlockFilter unchecked{
+            block_filter->GetFilterType(),
+            block_filter->GetBlockHash(),
+            block_filter->GetEncodedFilter(),
+            /*skip_decode_check=*/true};
+        assert_same_filter(unchecked);
+    }
+    {
         DataStream serialized{};
         serialized << *block_filter;
         const std::vector<DataStream::value_type> serialized_bytes{serialized.begin(), serialized.end()};
