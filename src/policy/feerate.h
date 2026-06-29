@@ -10,6 +10,7 @@
 #include <serialize.h>
 #include <util/feefrac.h>
 #include <util/fees.h>
+#include <util/overflow.h>
 
 
 #include <cstdint>
@@ -74,7 +75,7 @@ public:
             m_feerate = a.m_feerate;
             return *this;
         }
-        m_feerate = FeePerVSize(GetFeePerK() + a.GetFeePerK(), 1000);
+        m_feerate = FeePerVSize(SaturatingAdd(GetFeePerK(), a.GetFeePerK()), 1000);
         return *this;
     }
     std::string ToString(FeeRateFormat fee_rate_format = FeeRateFormat::BTC_KVB) const;
