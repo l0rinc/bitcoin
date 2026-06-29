@@ -14,6 +14,7 @@
 #include <util/signalinterrupt.h>
 #include <util/strencodings.h>
 
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -174,16 +175,25 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     const HTTPStatusCode status{PickValue(fuzzed_data_provider, statuses)};
     const bool needs_body{status != HTTP_NO_CONTENT};
     const std::string reply_body{needs_body ? fuzzed_data_provider.ConsumeRandomLengthString(32) : std::string{}};
+    const bool optimistic_send{fuzzed_data_provider.ConsumeBool()};
 
+    std::shared_ptr<DynSock::Pipes> pipes;
+    std::unique_ptr<Sock> sock;
+    if (optimistic_send) {
+        pipes = std::make_shared<DynSock::Pipes>();
+        sock = std::make_unique<DynSock>(pipes);
+    } else {
+        sock = std::make_unique<FuzzedSock>(fuzzed_data_provider, clock);
+    }
     auto client{std::make_shared<HTTPRemoteClient>(
         /*id=*/0,
         CService{},
-        std::make_unique<FuzzedSock>(fuzzed_data_provider, clock))};
+        std::move(sock))};
     http_request.m_client = client;
     client->m_req_busy = true;
 
     constexpr std::byte queued_byte{0x42};
-    {
+    if (!optimistic_send) {
         LOCK(client->m_send_mutex);
         client->m_send_buffer.push_back(queued_byte);
     }
@@ -205,14 +215,31 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
 
     http_request.WriteReply(status, reply_body);
 
-    const std::vector<std::byte> sent{WITH_LOCK(client->m_send_mutex, return client->m_send_buffer)};
-    assert(sent.size() > 1);
-    assert(sent.front() == queued_byte);
-
     std::string response;
-    response.reserve(sent.size() - 1);
-    for (auto it{sent.begin() + 1}; it != sent.end(); ++it) {
-        response.push_back(static_cast<char>(std::to_integer<unsigned char>(*it)));
+    if (optimistic_send) {
+        const std::vector<std::byte> buffered{WITH_LOCK(client->m_send_mutex, return client->m_send_buffer)};
+        assert(buffered.empty());
+        assert(WITH_LOCK(client->m_send_mutex, return !client->m_send_ready));
+        assert(!client->m_connection_busy.load());
+        assert(client->m_disconnect.load() == !expected_keep_alive);
+
+        WITH_LOCK(client->m_sock_mutex, client->m_sock.reset());
+        std::array<char, 4096> sent{};
+        const ssize_t sent_size{pipes->send.GetBytes(sent.data(), sent.size())};
+        assert(sent_size > 0);
+        response.assign(sent.data(), sent.data() + sent_size);
+    } else {
+        const std::vector<std::byte> sent{WITH_LOCK(client->m_send_mutex, return client->m_send_buffer)};
+        assert(sent.size() > 1);
+        assert(sent.front() == queued_byte);
+        assert(WITH_LOCK(client->m_send_mutex, return client->m_send_ready));
+        assert(client->m_connection_busy.load());
+        assert(!client->m_disconnect.load());
+
+        response.reserve(sent.size() - 1);
+        for (auto it{sent.begin() + 1}; it != sent.end(); ++it) {
+            response.push_back(static_cast<char>(std::to_integer<unsigned char>(*it)));
+        }
     }
 
     const std::string status_line{
@@ -245,7 +272,6 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     }
 
     assert(client->m_keep_alive.load() == expected_keep_alive);
-    assert(WITH_LOCK(client->m_send_mutex, return client->m_send_ready));
     assert(!client->m_req_busy.load());
 }
 
