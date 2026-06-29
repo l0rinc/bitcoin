@@ -3327,6 +3327,23 @@ std::pair<std::vector<TxGraph::Ref*>, FeePerWeight> TxGraphImpl::GetWorstMainChu
         }
         ret.second = chunk_end_entry.m_main_chunk_feerate;
     }
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (ret.first.empty()) {
+            Assume(ret.second.IsEmpty());
+        } else {
+            FeePerWeight sum;
+            for (Ref* ref : ret.first) {
+                Assume(ref != nullptr);
+                Assume(GetRefGraph(*ref) == this);
+                const auto& entry = m_entries[GetRefIndex(*ref)];
+                Assume(entry.m_ref == ref);
+                Assume(entry.m_locator[0].IsPresent());
+                Assume(entry.m_main_chunk_feerate == ret.second);
+                sum += entry.m_locator[0].cluster->GetIndividualFeerate(entry.m_locator[0].index);
+            }
+            Assume(sum == ret.second);
+        }
+    }
     return ret;
 }
 
