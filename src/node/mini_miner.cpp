@@ -280,6 +280,13 @@ void MiniMiner::BuildMockTemplate(std::optional<CFeeRate> target_feerate)
                 to_process.erase(iter);
             }
         }
+        for (const auto& ancestor : ancestors) {
+            for (const auto& input : ancestor->second.GetTx().vin) {
+                if (auto parent_it{m_entries_by_txid.find(input.prevout.hash)}; parent_it != m_entries_by_txid.end()) {
+                    Assume(ancestors.contains(parent_it));
+                }
+            }
+        }
         // Track the order in which transactions were selected.
         for (const auto& ancestor : ancestors) {
             m_inclusion_order.emplace(ancestor->first, sequence_num);
