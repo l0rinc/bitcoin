@@ -349,6 +349,11 @@ public:
         epoch_size = std::max(uint32_t{1}, (45 * size) / 100);
         // Initially set to wait for a whole epoch
         epoch_heuristic_counter = epoch_size;
+        Assume(size == std::max<uint32_t>(2, new_size));
+        Assume(table.size() == size);
+        Assume(epoch_flags.size() == size);
+        Assume(epoch_size >= 1);
+        Assume(epoch_heuristic_counter == epoch_size);
         return size;
     }
 
@@ -374,6 +379,8 @@ public:
         auto num_elems = setup(requested_num_elems);
 
         size_t approx_size_bytes = num_elems * sizeof(Element);
+        Assume(num_elems == std::max<uint32_t>(2, requested_num_elems));
+        Assume(approx_size_bytes == static_cast<size_t>(num_elems) * sizeof(Element));
         return std::make_pair(num_elems, approx_size_bytes);
     }
 
