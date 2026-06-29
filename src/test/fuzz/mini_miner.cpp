@@ -157,6 +157,11 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
     CheckGatherClusters(pool, mempool_txids, outpoints);
 
     const CFeeRate target_feerate{CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY/1000)}};
+    const CFeeRate alternate_target_feerate{CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY/1000)}};
+    const auto [lower_target_feerate, higher_target_feerate]{
+        target_feerate <= alternate_target_feerate ?
+            std::make_pair(target_feerate, alternate_target_feerate) :
+            std::make_pair(alternate_target_feerate, target_feerate)};
     const auto duplicated_outpoints{[&] {
         std::vector<COutPoint> ret{outpoints.rbegin(), outpoints.rend()};
         ret.insert(ret.end(), outpoints.begin(), outpoints.end());
@@ -213,6 +218,34 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         assert(total_bumpfee.has_value());
         assert(*total_bumpfee >= 0);
         assert(!mini_miner.IsReadyToCalculate());
+    }
+    {
+        node::MiniMiner lower_mini_miner{pool, outpoints};
+        node::MiniMiner higher_mini_miner{pool, outpoints};
+        assert(lower_mini_miner.IsReadyToCalculate());
+        assert(higher_mini_miner.IsReadyToCalculate());
+        const auto lower_bump_fees{lower_mini_miner.CalculateBumpFees(lower_target_feerate)};
+        const auto higher_bump_fees{higher_mini_miner.CalculateBumpFees(higher_target_feerate)};
+        assert(!lower_mini_miner.IsReadyToCalculate());
+        assert(!higher_mini_miner.IsReadyToCalculate());
+        assert(lower_bump_fees.size() == higher_bump_fees.size());
+        for (const auto& [outpoint, lower_bump_fee] : lower_bump_fees) {
+            const auto higher_it{higher_bump_fees.find(outpoint)};
+            assert(higher_it != higher_bump_fees.end());
+            assert(higher_it->second >= lower_bump_fee);
+        }
+
+        node::MiniMiner lower_total_mini_miner{pool, outpoints};
+        node::MiniMiner higher_total_mini_miner{pool, outpoints};
+        assert(lower_total_mini_miner.IsReadyToCalculate());
+        assert(higher_total_mini_miner.IsReadyToCalculate());
+        const auto lower_total_bumpfee{lower_total_mini_miner.CalculateTotalBumpFees(lower_target_feerate)};
+        const auto higher_total_bumpfee{higher_total_mini_miner.CalculateTotalBumpFees(higher_target_feerate)};
+        assert(!lower_total_mini_miner.IsReadyToCalculate());
+        assert(!higher_total_mini_miner.IsReadyToCalculate());
+        assert(lower_total_bumpfee.has_value());
+        assert(higher_total_bumpfee.has_value());
+        assert(*higher_total_bumpfee >= *lower_total_bumpfee);
     }
     // Overlapping ancestry across multiple outpoints can only reduce the total bump fee.
     assert (sum_fees >= *total_bumpfee);
