@@ -11,6 +11,7 @@
 #include <uint256.h>
 #include <util/byte_units.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -36,12 +37,19 @@ FUZZ_TARGET(cuckoocache)
     CuckooCache::cache<uint256, SignatureCacheHasher> deterministic_cache{};
     if (fuzzed_data_provider.ConsumeBool()) {
         const size_t megabytes = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 16);
-        cuckoo_cache.setup_bytes(megabytes * 1_MiB);
-        deterministic_cache.setup_bytes(megabytes * 1_MiB);
+        const size_t bytes{megabytes * 1_MiB};
+        const auto [num_elems, approx_bytes]{cuckoo_cache.setup_bytes(bytes)};
+        assert(num_elems == std::max<uint32_t>(2, bytes / sizeof(int)));
+        assert(approx_bytes == static_cast<size_t>(num_elems) * sizeof(int));
+        const auto [deterministic_num_elems, deterministic_approx_bytes]{deterministic_cache.setup_bytes(bytes)};
+        assert(deterministic_num_elems == std::max<uint32_t>(2, bytes / sizeof(uint256)));
+        assert(deterministic_approx_bytes == static_cast<size_t>(deterministic_num_elems) * sizeof(uint256));
     } else {
         const uint32_t size{fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(0, 4096)};
-        cuckoo_cache.setup(size);
-        deterministic_cache.setup(size);
+        const auto num_elems{cuckoo_cache.setup(size)};
+        assert(num_elems == std::max<uint32_t>(2, size));
+        const auto deterministic_num_elems{deterministic_cache.setup(size)};
+        assert(deterministic_num_elems == std::max<uint32_t>(2, size));
     }
     LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10000)
     {
