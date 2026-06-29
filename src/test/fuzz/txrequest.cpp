@@ -9,6 +9,7 @@
 #include <test/fuzz/fuzz.h>
 #include <txrequest.h>
 
+#include <algorithm>
 #include <bitset>
 #include <cstdint>
 #include <queue>
@@ -307,11 +308,20 @@ public:
                         expected_announcers[peer] = true;
                     }
                 }
-                std::vector<NodeId> candidate_peers;
+                const std::vector<NodeId> prefix{MAX_PEERS + 1, MAX_PEERS + 2};
+                std::vector<NodeId> candidate_peers{prefix};
                 m_tracker.GetCandidatePeers(TXHASHES[txhash], candidate_peers);
-                assert(expected_announcers.count() == candidate_peers.size());
-                for (const auto& peer : candidate_peers) {
-                    assert(expected_announcers[peer]);
+                assert(candidate_peers.size() >= prefix.size());
+                assert(std::equal(prefix.begin(), prefix.end(), candidate_peers.begin()));
+                assert(expected_announcers.count() == candidate_peers.size() - prefix.size());
+                std::bitset<MAX_PEERS> seen_announcers;
+                for (size_t pos{prefix.size()}; pos < candidate_peers.size(); ++pos) {
+                    const auto peer{candidate_peers[pos]};
+                    assert(peer >= 0 && peer < MAX_PEERS);
+                    const auto peer_idx{static_cast<size_t>(peer)};
+                    assert(expected_announcers[peer_idx]);
+                    assert(!seen_announcers[peer_idx]);
+                    seen_announcers[peer_idx] = true;
                 }
             }
             assert(m_tracker.Count(peer) == tracked);
