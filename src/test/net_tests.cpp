@@ -220,6 +220,35 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
     BOOST_CHECK_EQUAL(pnode4->ConnectedThroughNetwork(), Network::NET_ONION);
 }
 
+BOOST_AUTO_TEST_CASE(cnode_refcount_contracts)
+{
+    NodeId id{0};
+    in_addr ipv4_addr;
+    ipv4_addr.s_addr = 0xa0b0c001;
+    const CAddress addr{CService{ipv4_addr, 7777}, NODE_NETWORK};
+
+    CNode node{id,
+               /*sock=*/nullptr,
+               addr,
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               CAddress{},
+               /*addrNameIn=*/"",
+               ConnectionType::OUTBOUND_FULL_RELAY,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+
+    BOOST_CHECK_EQUAL(node.GetRefCount(), 0);
+    BOOST_CHECK_EQUAL(node.AddRef(), &node);
+    BOOST_CHECK_EQUAL(node.GetRefCount(), 1);
+    BOOST_CHECK_EQUAL(node.AddRef(), &node);
+    BOOST_CHECK_EQUAL(node.GetRefCount(), 2);
+    node.Release();
+    BOOST_CHECK_EQUAL(node.GetRefCount(), 1);
+    node.Release();
+    BOOST_CHECK_EQUAL(node.GetRefCount(), 0);
+}
+
 BOOST_AUTO_TEST_CASE(cnetaddr_basic)
 {
     CNetAddr addr;

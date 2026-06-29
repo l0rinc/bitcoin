@@ -52,13 +52,16 @@ FUZZ_TARGET(net, .init = initialize_net)
                 node.CopyStats(stats);
             },
             [&] {
+                const int old_ref_count{node.GetRefCount()};
                 const CNode* add_ref_node = node.AddRef();
                 assert(add_ref_node == &node);
+                assert(node.GetRefCount() == old_ref_count + 1);
             },
             [&] {
-                if (node.GetRefCount() > 0) {
-                    node.Release();
-                }
+                const int old_ref_count{node.GetRefCount()};
+                if (old_ref_count == 0) return;
+                node.Release();
+                assert(node.GetRefCount() == old_ref_count - 1);
             },
             [&] {
                 const std::vector<uint8_t> b = ConsumeRandomLengthByteVector(fuzzed_data_provider);
