@@ -223,7 +223,17 @@ void AssertDuplicatePackageRejected(const std::vector<CTransactionRef>& txs)
     Assert(!IsWellFormedPackage(duplicate_package, duplicate_state));
     Assert(duplicate_state.IsInvalid());
     Assert(duplicate_state.GetResult() == PackageValidationResult::PCKG_POLICY);
-    if (duplicate_package.size() <= MAX_PACKAGE_COUNT) {
+
+    int64_t duplicate_package_weight{0};
+    for (const auto& tx : duplicate_package) {
+        duplicate_package_weight += GetTransactionWeight(*tx);
+    }
+
+    if (duplicate_package.size() > MAX_PACKAGE_COUNT) {
+        Assert(duplicate_state.GetRejectReason() == "package-too-many-transactions");
+    } else if (duplicate_package.size() > 1 && duplicate_package_weight > MAX_PACKAGE_WEIGHT) {
+        Assert(duplicate_state.GetRejectReason() == "package-too-large");
+    } else {
         Assert(duplicate_state.GetRejectReason() == "package-contains-duplicates");
     }
 }
