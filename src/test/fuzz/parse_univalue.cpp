@@ -8,8 +8,25 @@
 #include <test/fuzz/fuzz.h>
 #include <util/chaintype.h>
 
+#include <cstddef>
 #include <limits>
 #include <string>
+
+namespace {
+bool EqualUniValueState(const UniValue& a, const UniValue& b)
+{
+    if (a.getType() != b.getType()) return false;
+    if (a.getValStr() != b.getValStr()) return false;
+    if (a.getType() == UniValue::VARR || a.getType() == UniValue::VOBJ) {
+        if (a.getValues().size() != b.getValues().size()) return false;
+        if (a.getType() == UniValue::VOBJ && a.getKeys() != b.getKeys()) return false;
+        for (size_t i{0}; i < a.getValues().size(); ++i) {
+            if (!EqualUniValueState(a.getValues()[i], b.getValues()[i])) return false;
+        }
+    }
+    return true;
+}
+} // namespace
 
 void initialize_parse_univalue()
 {
@@ -19,12 +36,17 @@ void initialize_parse_univalue()
 FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
 {
     const std::string random_string(buffer.begin(), buffer.end());
-    bool valid = true;
-    const UniValue univalue = [&] {
-        UniValue uv;
-        if (!uv.read(random_string)) valid = false;
-        return valid ? uv : UniValue{};
-    }();
+    UniValue fresh;
+    UniValue preloaded{UniValue::VOBJ};
+    preloaded.pushKV("sentinel", UniValue{"before"});
+    preloaded.pushKV("array", UniValue{UniValue::VARR});
+
+    const bool valid{fresh.read(random_string)};
+    const bool preloaded_valid{preloaded.read(random_string)};
+    assert(valid == preloaded_valid);
+    assert(EqualUniValueState(fresh, preloaded));
+
+    const UniValue& univalue{fresh};
     if (!valid) {
         return;
     }
