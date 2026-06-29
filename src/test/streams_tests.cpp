@@ -591,6 +591,12 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_skip)
         BOOST_CHECK(strstr(e.what(), "Attempt to position past buffer limit") != nullptr);
     }
 
+    // FindByte() also honors the transfer limit. It can find the byte at the current position
+    // before the limit, but not a later byte beyond it.
+    bf.FindByte(std::byte{12});
+    BOOST_CHECK_EQUAL(bf.GetPos(), 12U);
+    BOOST_CHECK_EXCEPTION(bf.FindByte(std::byte{14}), std::ios_base::failure, HasReason{"Attempt to position past buffer limit"});
+
     // We can position exactly to the transfer limit.
     bf.SkipTo(13);
     BOOST_CHECK_EQUAL(bf.GetPos(), 13U);
@@ -682,6 +688,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
                 size_t find = currentPos + m_rng.randrange(8);
                 if (find >= fileSize)
                     find = fileSize - 1;
+                bf.SetLimit();
                 bf.FindByte(std::byte(find));
                 // The value at each offset is the offset.
                 BOOST_CHECK_EQUAL(bf.GetPos(), find);
