@@ -16,6 +16,7 @@
 
 #include <array>
 #include <cassert>
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -334,6 +335,130 @@ void AssertReadRequestContracts(const std::vector<std::byte>& http_buffer)
     assert(client_request.m_headers.Stringify() == direct_request.m_headers.Stringify());
     assert(client_request.ReadBody() == direct_request.ReadBody());
 }
+
+class ScriptedSendSock final : public ZeroSock
+{
+public:
+    ScriptedSendSock(ssize_t result, int err) : m_result{result}, m_errno{err} {}
+
+    ssize_t Send(const void* data, size_t len, int flags) const override
+    {
+        m_send_called = true;
+        m_flags = flags;
+        const auto* bytes{static_cast<const std::byte*>(data)};
+        m_attempted.assign(bytes, bytes + len);
+        if (m_result < 0) {
+            errno = m_errno;
+            return -1;
+        }
+        assert(static_cast<size_t>(m_result) <= len);
+        return m_result;
+    }
+
+    const ssize_t m_result;
+    const int m_errno;
+    mutable bool m_send_called{false};
+    mutable int m_flags{0};
+    mutable std::vector<std::byte> m_attempted;
+};
+
+void AssertSendBufferContracts(FuzzedDataProvider& fuzzed_data_provider)
+{
+    using http_bitcoin::HTTPRemoteClient;
+
+    std::vector<std::byte> send_buffer;
+    if (fuzzed_data_provider.ConsumeBool()) {
+        send_buffer = ConsumeRandomLengthByteVector<std::byte>(fuzzed_data_provider, 256);
+        if (send_buffer.empty()) send_buffer.push_back(std::byte{0});
+    }
+
+    constexpr int send_errnos[]{
+        EAGAIN,
+        EINTR,
+        EWOULDBLOCK,
+        EINPROGRESS,
+        ECONNRESET,
+        EPIPE,
+        EBADF,
+        EINVAL,
+    };
+    const bool send_error{fuzzed_data_provider.ConsumeBool()};
+    const int send_errno{fuzzed_data_provider.PickValueInArray(send_errnos)};
+    const ssize_t send_result{send_error ? -1 : fuzzed_data_provider.ConsumeIntegralInRange<ssize_t>(0, static_cast<ssize_t>(send_buffer.size()))};
+    const bool keep_alive{fuzzed_data_provider.ConsumeBool()};
+
+    auto sock{std::make_unique<ScriptedSendSock>(send_result, send_errno)};
+    const auto* scripted_sock{sock.get()};
+    auto client{std::make_shared<HTTPRemoteClient>(
+        /*id=*/2,
+        CService{},
+        std::move(sock))};
+    {
+        LOCK(client->m_send_mutex);
+        client->m_send_buffer = send_buffer;
+    }
+    client->m_keep_alive = keep_alive;
+
+    const bool initial_send_ready{fuzzed_data_provider.ConsumeBool()};
+    const bool initial_connection_busy{fuzzed_data_provider.ConsumeBool()};
+    {
+        LOCK(client->m_send_mutex);
+        client->m_send_ready = initial_send_ready;
+    }
+    client->m_connection_busy = initial_connection_busy;
+    client->m_disconnect = false;
+
+    const bool ret{client->MaybeSendBytesFromBuffer()};
+
+    const std::vector<std::byte> remaining{WITH_LOCK(client->m_send_mutex, return client->m_send_buffer)};
+    if (send_buffer.empty()) {
+        assert(ret);
+        assert(!scripted_sock->m_send_called);
+        assert(remaining.empty());
+        assert(WITH_LOCK(client->m_send_mutex, return client->m_send_ready) == initial_send_ready);
+        assert(client->m_connection_busy.load() == initial_connection_busy);
+        assert(!client->m_disconnect.load());
+        return;
+    }
+
+    assert(scripted_sock->m_send_called);
+    assert(scripted_sock->m_attempted == send_buffer);
+    assert((scripted_sock->m_flags & MSG_NOSIGNAL) == MSG_NOSIGNAL);
+    assert((scripted_sock->m_flags & MSG_DONTWAIT) == MSG_DONTWAIT);
+#ifdef MSG_MORE
+    assert(!(scripted_sock->m_flags & MSG_MORE));
+#endif
+
+    if (send_result < 0) {
+        assert(remaining == send_buffer);
+        if (IOErrorIsPermanent(send_errno)) {
+            assert(!ret);
+            assert(WITH_LOCK(client->m_send_mutex, return !client->m_send_ready));
+            assert(client->m_disconnect.load());
+        } else {
+            assert(ret);
+            assert(WITH_LOCK(client->m_send_mutex, return client->m_send_ready));
+            assert(client->m_connection_busy.load());
+            assert(!client->m_disconnect.load());
+        }
+        return;
+    }
+
+    const auto sent_size{static_cast<size_t>(send_result)};
+    const std::vector<std::byte> expected_remaining{send_buffer.begin() + sent_size, send_buffer.end()};
+    assert(remaining == expected_remaining);
+    if (remaining.empty()) {
+        assert(WITH_LOCK(client->m_send_mutex, return !client->m_send_ready));
+        assert(!client->m_connection_busy.load());
+        assert(client->m_disconnect.load() == !keep_alive);
+        assert(ret == keep_alive);
+    } else {
+        assert(ret);
+        assert(WITH_LOCK(client->m_send_mutex, return client->m_send_ready));
+        assert(client->m_connection_busy.load());
+        assert(!client->m_disconnect.load());
+    }
+}
 } // namespace
 
 FUZZ_TARGET(http_request)
@@ -347,6 +472,7 @@ FUZZ_TARGET(http_request)
     FakeSteadyClock steady_clock;
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     AssertHeaderCollectionContracts(fuzzed_data_provider);
+    AssertSendBufferContracts(fuzzed_data_provider);
     const std::vector<std::byte> http_buffer{ConsumeRandomLengthByteVector<std::byte>(fuzzed_data_provider, 4096)};
     AssertReadRequestContracts(http_buffer);
 
