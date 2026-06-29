@@ -648,6 +648,21 @@ private:
     //! Must only be mutated when m_futures is empty. Elements may be mutated when m_futures is not empty.
     std::vector<InputToFetch> m_inputs{};
 
+    std::optional<Coin> PeekCoinFromBasePreservingCache(const COutPoint& outpoint) const
+    {
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            if (const auto* cache{dynamic_cast<const CCoinsViewCache*>(base)}) {
+                const size_t cache_size{cache->GetCacheSize()};
+                const size_t dirty_count{cache->GetDirtyCount()};
+                auto coin{base->PeekCoin(outpoint)};
+                Assume(cache->GetCacheSize() == cache_size);
+                Assume(cache->GetDirtyCount() == dirty_count);
+                return coin;
+            }
+        }
+        return base->PeekCoin(outpoint);
+    }
+
     /**
      * Claim and fetch the next input in the queue.
      *
@@ -660,7 +675,7 @@ private:
         if (i >= m_inputs.size()) return false;
 
         auto& input{m_inputs[i]};
-        input.coin = base->PeekCoin(input.outpoint);
+        input.coin = PeekCoinFromBasePreservingCache(input.outpoint);
         // Use release so writing coin above happens before the main thread acquires.
         Assert(!input.ready.test_and_set(std::memory_order_release));
         input.ready.notify_one();
@@ -701,7 +716,7 @@ private:
         }
 
         // We will only get here for BIP30 checks, an invalid block, or if the threadpool has not been started.
-        return base->PeekCoin(outpoint);
+        return PeekCoinFromBasePreservingCache(outpoint);
     }
 
     //! Non-null. May have zero workers when input fetching is disabled.
