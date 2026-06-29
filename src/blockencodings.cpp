@@ -67,6 +67,9 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         return READ_STATUS_INVALID;
 
     if (!header.IsNull() || !txn_available.empty()) return READ_STATUS_INVALID;
+    Assume(prefilled_count == 0);
+    Assume(mempool_count == 0);
+    Assume(extra_count == 0);
 
     header = cmpctblock.header;
     txn_available.resize(cmpctblock.BlockTxCount());
@@ -78,6 +81,9 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         extra_count = 0;
         Assume(header.IsNull());
         Assume(txn_available.empty());
+        Assume(prefilled_count == 0);
+        Assume(mempool_count == 0);
+        Assume(extra_count == 0);
         return status;
     };
 
@@ -206,6 +212,10 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
 {
     if (header.IsNull()) return READ_STATUS_INVALID;
 
+    const size_t completed_prefilled_count{prefilled_count};
+    const size_t completed_mempool_count{mempool_count};
+    const size_t completed_extra_count{extra_count};
+
     block = header;
     block.vtx.resize(txn_available.size());
 
@@ -224,8 +234,14 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
     // Make sure we can't call FillBlock again.
     header.SetNull();
     txn_available.clear();
+    prefilled_count = 0;
+    mempool_count = 0;
+    extra_count = 0;
     Assume(header.IsNull());
     Assume(txn_available.empty());
+    Assume(prefilled_count == 0);
+    Assume(mempool_count == 0);
+    Assume(extra_count == 0);
 
     if (vtx_missing.size() != tx_missing_offset) {
         return READ_STATUS_INVALID;
@@ -244,7 +260,7 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
         const uint256 hash{block.GetHash()};
         uint32_t tx_missing_size{0};
         for (const auto& tx : vtx_missing) tx_missing_size += tx->ComputeTotalSize();
-        LogDebug(BCLog::CMPCTBLOCK, "Successfully reconstructed block %s with %u txn prefilled, %u txn from mempool (incl at least %u from extra pool) and %u txn (%u bytes) requested\n", hash.ToString(), prefilled_count, mempool_count, extra_count, vtx_missing.size(), tx_missing_size);
+        LogDebug(BCLog::CMPCTBLOCK, "Successfully reconstructed block %s with %u txn prefilled, %u txn from mempool (incl at least %u from extra pool) and %u txn (%u bytes) requested\n", hash.ToString(), completed_prefilled_count, completed_mempool_count, completed_extra_count, vtx_missing.size(), tx_missing_size);
         if (vtx_missing.size() < 5) {
             for (const auto& tx : vtx_missing) {
                 LogDebug(BCLog::CMPCTBLOCK, "Reconstructed block %s required tx %s\n", hash.ToString(), tx->GetHash().ToString());
