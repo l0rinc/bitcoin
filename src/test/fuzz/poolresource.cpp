@@ -40,6 +40,7 @@ public:
         : m_provider{provider},
           m_test_resource{provider.ConsumeIntegralInRange<size_t>(MAX_BLOCK_SIZE_BYTES, 262144)}
     {
+        PoolResourceTester::CheckResourceInvariants(m_test_resource);
     }
 
     void Allocate(size_t size, size_t alignment)
@@ -50,6 +51,7 @@ public:
         assert((size & (alignment - 1)) == 0);      // Size must be a multiple of alignment.
 
         auto span = std::span(static_cast<std::byte*>(m_test_resource.Allocate(size, alignment)), size);
+        PoolResourceTester::CheckResourceInvariants(m_test_resource);
         m_total_allocated += size;
 
         auto ptr_val = reinterpret_cast<std::uintptr_t>(span.data());
@@ -89,6 +91,7 @@ public:
         RandomContentCheck(entry);
         m_total_allocated -= entry.span.size();
         m_test_resource.Deallocate(entry.span.data(), entry.span.size(), entry.alignment);
+        PoolResourceTester::CheckResourceInvariants(m_test_resource);
     }
 
     void Deallocate()
