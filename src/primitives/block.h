@@ -11,6 +11,7 @@
 #include <uint256.h>
 #include <util/time.h>
 
+#include <cassert>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -49,6 +50,12 @@ public:
         nTime = 0;
         nBits = 0;
         nNonce = 0;
+        assert(nVersion == 0);
+        assert(hashPrevBlock.IsNull());
+        assert(hashMerkleRoot.IsNull());
+        assert(nTime == 0);
+        assert(nBits == 0);
+        assert(nNonce == 0);
     }
 
     bool IsNull() const
@@ -104,6 +111,11 @@ public:
         fChecked = false;
         m_checked_witness_commitment = false;
         m_checked_merkle_root = false;
+        assert(IsNull());
+        assert(vtx.empty());
+        assert(!fChecked);
+        assert(!m_checked_witness_commitment);
+        assert(!m_checked_merkle_root);
     }
 
     std::string ToString() const;
