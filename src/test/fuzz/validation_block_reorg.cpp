@@ -514,6 +514,42 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
                 }
             },
             [&] {
+                const DagBlock& dag_block{PickValue(fuzzed_data_provider, g_blocks)};
+                const uint256 block_hash{dag_block.block->GetHash()};
+                const CBlockIndex* returned_index{nullptr};
+                const bool pass_index_out{fuzzed_data_provider.ConsumeBool()};
+                const bool min_pow_checked{fuzzed_data_provider.ConsumeBool()};
+                const bool had_index{LookupBlock(chainman, block_hash) != nullptr};
+                const bool had_data{HasBlockData(chainman, block_hash)};
+                CBlockIndex* parent_index{LookupBlock(chainman, dag_block.block->hashPrevBlock)};
+                const bool parent_failed{parent_index && IsFailedBlock(chainman, *parent_index)};
+
+                BlockValidationState state;
+                const bool accepted{chainman.ProcessNewBlockHeaders(
+                    {{*dag_block.block}},
+                    min_pow_checked,
+                    state,
+                    pass_index_out ? &returned_index : nullptr)};
+                node.validation_signals->SyncWithValidationInterfaceQueue();
+
+                CBlockIndex* index_after{LookupBlock(chainman, block_hash)};
+                if (accepted) {
+                    assert(index_after);
+                    if (pass_index_out) {
+                        assert(returned_index == index_after);
+                        assert(returned_index->GetBlockHash() == block_hash);
+                    }
+                    // Header-only processing must not create block data.
+                    if (!had_data) assert(!HasBlockData(chainman, block_hash));
+                } else if (!had_index) {
+                    assert(!index_after);
+                    if (!min_pow_checked && parent_index && !parent_failed) {
+                        assert(state.GetResult() == BlockValidationResult::BLOCK_HEADER_LOW_WORK);
+                        assert(state.GetRejectReason() == "too-little-chainwork");
+                    }
+                }
+            },
+            [&] {
                 auto indexes{KnownBlockIndexes(chainman)};
                 if (indexes.empty()) return;
                 CBlockIndex* index{PickValue(fuzzed_data_provider, indexes)};
