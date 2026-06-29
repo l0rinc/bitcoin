@@ -12,6 +12,7 @@
 #include <util/threadpool.h>
 
 #include <algorithm>
+#include <array>
 
 #include <boost/test/unit_test.hpp>
 
@@ -260,6 +261,41 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
     BOOST_CHECK(client->m_keep_alive);
     BOOST_CHECK(WITH_LOCK(client->m_send_mutex, return client->m_send_ready));
     BOOST_CHECK(!client->m_req_busy);
+
+    auto optimistic_pipes{std::make_shared<DynSock::Pipes>()};
+    auto optimistic_client{std::make_shared<HTTPRemoteClient>(
+        /*id=*/1,
+        CService{},
+        std::make_unique<DynSock>(optimistic_pipes))};
+
+    HTTPRequest optimistic_req{optimistic_client};
+    LineReader optimistic_reader("GET / HTTP/1.1\r\nConnection: close\r\n\r\n", MAX_HEADERS_SIZE);
+    BOOST_REQUIRE(optimistic_req.LoadControlData(optimistic_reader));
+    BOOST_REQUIRE(optimistic_req.LoadHeaders(optimistic_reader));
+    BOOST_REQUIRE(optimistic_req.LoadBody(optimistic_reader));
+
+    optimistic_client->m_req_busy = true;
+    optimistic_req.WriteReply(HTTP_OK, "abc");
+
+    BOOST_CHECK(WITH_LOCK(optimistic_client->m_send_mutex, return optimistic_client->m_send_buffer.empty()));
+    BOOST_CHECK(WITH_LOCK(optimistic_client->m_send_mutex, return !optimistic_client->m_send_ready));
+    BOOST_CHECK(!optimistic_client->m_connection_busy.load());
+    BOOST_CHECK(optimistic_client->m_disconnect.load());
+    BOOST_CHECK(!optimistic_client->m_keep_alive.load());
+    BOOST_CHECK(!optimistic_client->m_req_busy.load());
+
+    WITH_LOCK(optimistic_client->m_sock_mutex, optimistic_client->m_sock.reset());
+    std::array<char, 1024> optimistic_sent{};
+    const ssize_t optimistic_sent_size{
+        optimistic_pipes->send.GetBytes(optimistic_sent.data(), optimistic_sent.size())};
+    BOOST_REQUIRE_GT(optimistic_sent_size, 0);
+    const std::string optimistic_response{
+        optimistic_sent.data(),
+        static_cast<size_t>(optimistic_sent_size)};
+    BOOST_CHECK(optimistic_response.starts_with("HTTP/1.1 200 OK\r\n"));
+    BOOST_CHECK(optimistic_response.find("Connection: close\r\n") != std::string::npos);
+    BOOST_CHECK(optimistic_response.find("Content-Length: 3\r\n") != std::string::npos);
+    BOOST_CHECK(optimistic_response.ends_with("\r\n\r\nabc"));
 }
 
 BOOST_AUTO_TEST_CASE(http_request_tests)
