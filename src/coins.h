@@ -281,7 +281,23 @@ struct CoinsViewCacheCursor
                          CoinsCachePair& sentinel LIFETIMEBOUND,
                          CCoinsMap& map LIFETIMEBOUND,
                          bool will_erase) noexcept
-        : m_dirty_count(dirty_count), m_sentinel(sentinel), m_map(map), m_will_erase(will_erase) {}
+        : m_dirty_count(dirty_count), m_sentinel(sentinel), m_map(map), m_will_erase(will_erase)
+    {
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            size_t recomputed_dirty{0};
+            for (const auto& [_, entry] : m_map) {
+                recomputed_dirty += entry.IsDirty();
+            }
+
+            size_t linked_dirty{0};
+            for (auto* it{m_sentinel.second.Next()}; it != &m_sentinel; it = it->second.Next()) {
+                linked_dirty += it->second.IsDirty();
+            }
+
+            Assume(m_dirty_count == recomputed_dirty);
+            Assume(m_dirty_count == linked_dirty);
+        }
+    }
 
     inline CoinsCachePair* Begin() const noexcept { return m_sentinel.second.Next(); }
     inline CoinsCachePair* End() const noexcept { return &m_sentinel; }
@@ -370,6 +386,7 @@ public:
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256&) override
     {
         for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)) { }
+        Assume(cursor.GetDirtyCount() == 0);
     }
     size_t EstimateSize() const override { return 0; }
 };
