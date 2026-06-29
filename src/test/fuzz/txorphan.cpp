@@ -26,6 +26,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <set>
 #include <utility>
@@ -753,6 +754,24 @@ FUZZ_TARGET(txorphanage_sim)
 
 
     auto all_orphans = real->GetOrphanTransactions();
+    std::map<Wtxid, std::pair<CTransactionRef, std::set<NodeId>>> expected_orphans;
+    for (const auto& ann : sim_announcements) {
+        auto [it, inserted] = expected_orphans.try_emplace(txn[ann.tx]->GetWitnessHash(), txn[ann.tx], std::set<NodeId>{});
+        assert(it->second.first == txn[ann.tx]);
+        assert(it->second.second.insert(ann.announcer).second);
+    }
+    assert(all_orphans.size() == expected_orphans.size());
+    std::set<Wtxid> exported_wtxids;
+    for (const auto& orphan : all_orphans) {
+        assert(orphan.tx);
+        assert(!orphan.announcers.empty());
+        const auto wtxid{orphan.tx->GetWitnessHash()};
+        assert(exported_wtxids.insert(wtxid).second);
+        auto expected_it{expected_orphans.find(wtxid)};
+        assert(expected_it != expected_orphans.end());
+        assert(orphan.tx == expected_it->second.first);
+        assert(orphan.announcers == expected_it->second.second);
+    }
     node::TxOrphanage::Usage orphan_usage{0};
     std::vector<node::TxOrphanage::Usage> usage_by_peer(NUM_PEERS);
     node::TxOrphanage::Count unique_orphans{0};

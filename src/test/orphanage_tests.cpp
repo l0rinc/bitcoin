@@ -18,6 +18,8 @@
 
 #include <array>
 #include <cstdint>
+#include <set>
+#include <vector>
 
 #include <boost/test/unit_test.hpp>
 
@@ -818,6 +820,63 @@ BOOST_AUTO_TEST_CASE(multiple_announcers)
         BOOST_CHECK_EQUAL(orphanage->CountUniqueOrphans(), expected_total_count);
     }
 }
+
+BOOST_AUTO_TEST_CASE(export_groups_announcers_by_wtxid)
+{
+    const NodeId node0{0};
+    const NodeId node1{1};
+    const NodeId node2{2};
+    FastRandomContext det_rand{true};
+    std::unique_ptr<node::TxOrphanage> orphanage{node::MakeTxOrphanage()};
+
+    const auto ptx{MakeTransactionSpending({}, det_rand)};
+    const auto ptx_mutated{MakeMutation(ptx)};
+    const auto ptx_other{MakeTransactionSpending({}, det_rand)};
+
+    const auto wtxid{ptx->GetWitnessHash()};
+    const auto mutated_wtxid{ptx_mutated->GetWitnessHash()};
+    const auto other_wtxid{ptx_other->GetWitnessHash()};
+    BOOST_REQUIRE(wtxid != mutated_wtxid);
+    BOOST_REQUIRE(wtxid != other_wtxid);
+
+    BOOST_CHECK(orphanage->AddTx(ptx, node0));
+    BOOST_CHECK(!orphanage->AddTx(ptx, node1));
+    BOOST_CHECK(orphanage->AddAnnouncer(wtxid, node2));
+    BOOST_CHECK(orphanage->AddTx(ptx_mutated, node0));
+    BOOST_CHECK(orphanage->AddTx(ptx_other, node2));
+
+    auto CheckExport = [](const std::vector<node::TxOrphanage::OrphanInfo>& exports,
+                          const Wtxid& expected_wtxid,
+                          const CTransactionRef& expected_tx,
+                          const std::set<NodeId>& expected_announcers) {
+        size_t matches{0};
+        for (const auto& orphan : exports) {
+            BOOST_REQUIRE(orphan.tx);
+            BOOST_CHECK(!orphan.announcers.empty());
+            if (orphan.tx->GetWitnessHash() != expected_wtxid) continue;
+            ++matches;
+            BOOST_CHECK(orphan.tx == expected_tx);
+            BOOST_CHECK(orphan.announcers == expected_announcers);
+        }
+        BOOST_CHECK_EQUAL(matches, 1U);
+    };
+
+    auto exports{orphanage->GetOrphanTransactions()};
+    BOOST_CHECK_EQUAL(exports.size(), 3U);
+    CheckExport(exports, wtxid, ptx, {node0, node1, node2});
+    CheckExport(exports, mutated_wtxid, ptx_mutated, {node0});
+    CheckExport(exports, other_wtxid, ptx_other, {node2});
+
+    orphanage->EraseForPeer(node0);
+    exports = orphanage->GetOrphanTransactions();
+    BOOST_CHECK_EQUAL(exports.size(), 2U);
+    CheckExport(exports, wtxid, ptx, {node1, node2});
+    CheckExport(exports, other_wtxid, ptx_other, {node2});
+    BOOST_CHECK(!orphanage->HaveTx(mutated_wtxid));
+
+    orphanage->SanityCheck();
+}
+
 BOOST_AUTO_TEST_CASE(peer_worksets)
 {
     const NodeId node0{0};
