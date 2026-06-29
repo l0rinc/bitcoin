@@ -77,6 +77,14 @@ bool EqualSigningProviders(const FlatSigningProvider& a, const FlatSigningProvid
         && a.tr_trees == b.tr_trees;
 }
 
+CExtPubKey TestExtPubKey(uint32_t child, unsigned char chaincode_byte)
+{
+    CExtPubKey xpub{};
+    xpub.nChild = child;
+    xpub.chaincode = ChainCode{uint256{chaincode_byte}};
+    return xpub;
+}
+
 std::string UseHInsteadOfApostrophe(const std::string& desc)
 {
     std::string ret = desc;
@@ -595,6 +603,43 @@ void CheckInferDescriptor(const std::string& script_hex, const std::string& expe
 }
 
 BOOST_FIXTURE_TEST_SUITE(descriptor_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(descriptor_cache_merge_and_diff)
+{
+    const CExtPubKey already_cached{TestExtPubKey(1, 0x01)};
+    const CExtPubKey parent{TestExtPubKey(2, 0x02)};
+    const CExtPubKey derived{TestExtPubKey(3, 0x03)};
+    const CExtPubKey last_hardened{TestExtPubKey(4, 0x04)};
+
+    DescriptorCache cache;
+    cache.CacheParentExtPubKey(0, already_cached);
+
+    DescriptorCache other;
+    other.CacheParentExtPubKey(0, already_cached);
+    other.CacheParentExtPubKey(1, parent);
+    other.CacheDerivedExtPubKey(2, 3, derived);
+    other.CacheLastHardenedExtPubKey(4, last_hardened);
+
+    const DescriptorCache diff{cache.MergeAndDiff(other)};
+
+    CExtPubKey fetched;
+    BOOST_CHECK(cache.GetCachedParentExtPubKey(0, fetched));
+    BOOST_CHECK(fetched == already_cached);
+    BOOST_CHECK(cache.GetCachedParentExtPubKey(1, fetched));
+    BOOST_CHECK(fetched == parent);
+    BOOST_CHECK(cache.GetCachedDerivedExtPubKey(2, 3, fetched));
+    BOOST_CHECK(fetched == derived);
+    BOOST_CHECK(cache.GetCachedLastHardenedExtPubKey(4, fetched));
+    BOOST_CHECK(fetched == last_hardened);
+
+    BOOST_CHECK(!diff.GetCachedParentExtPubKey(0, fetched));
+    BOOST_CHECK(diff.GetCachedParentExtPubKey(1, fetched));
+    BOOST_CHECK(fetched == parent);
+    BOOST_CHECK(diff.GetCachedDerivedExtPubKey(2, 3, fetched));
+    BOOST_CHECK(fetched == derived);
+    BOOST_CHECK(diff.GetCachedLastHardenedExtPubKey(4, fetched));
+    BOOST_CHECK(fetched == last_hardened);
+}
 
 BOOST_AUTO_TEST_CASE(descriptor_test)
 {
