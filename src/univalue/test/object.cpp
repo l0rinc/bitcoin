@@ -454,6 +454,24 @@ void univalue_readwrite()
     BOOST_CHECK(!v.read("{} 42"));
 }
 
+void univalue_read_clears_previous_state()
+{
+    UniValue fresh;
+    UniValue preloaded(UniValue::VOBJ);
+    preloaded.pushKV("sentinel", UniValue("before"));
+    preloaded.pushKV("array", UniValue(UniValue::VARR));
+
+    BOOST_CHECK(!fresh.read(":"));
+    BOOST_CHECK(!preloaded.read(":"));
+
+    BOOST_CHECK(fresh.isNull());
+    BOOST_CHECK(preloaded.isNull());
+    BOOST_CHECK_EQUAL(fresh.getValStr(), preloaded.getValStr());
+    BOOST_CHECK_EQUAL(fresh.size(), preloaded.size());
+    BOOST_CHECK(fresh.empty());
+    BOOST_CHECK(preloaded.empty());
+}
+
 int main(int argc, char* argv[])
 {
     univalue_constructor();
@@ -463,5 +481,6 @@ int main(int argc, char* argv[])
     univalue_array();
     univalue_object();
     univalue_readwrite();
+    univalue_read_clears_previous_state();
     return 0;
 }
