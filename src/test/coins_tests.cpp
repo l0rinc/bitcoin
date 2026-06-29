@@ -306,6 +306,46 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_FIXTURE_TEST_SUITE(coins_tests, BasicTestingSetup)
 
+BOOST_AUTO_TEST_CASE(ccoins_sync_retains_unspent_cache_entries)
+{
+    CCoinsViewTest base{m_rng};
+    const auto make_coin = [](CAmount value) {
+        Coin coin;
+        coin.out.nValue = value;
+        coin.out.scriptPubKey.assign(1, OP_TRUE);
+        coin.nHeight = 1;
+        return coin;
+    };
+    const COutPoint out_clean{Txid::FromUint256(m_rng.rand256()), 0};
+    const COutPoint out_spend{Txid::FromUint256(m_rng.rand256()), 0};
+    const COutPoint out_new{Txid::FromUint256(m_rng.rand256()), 0};
+
+    {
+        CCoinsViewCacheTest seed_cache{&base};
+        seed_cache.AddCoin(out_clean, make_coin(1), /*possible_overwrite=*/false);
+        seed_cache.AddCoin(out_spend, make_coin(2), /*possible_overwrite=*/false);
+        seed_cache.Flush();
+    }
+
+    CCoinsViewCacheTest cache{&base};
+    BOOST_CHECK(!cache.AccessCoin(out_clean).IsSpent());
+    BOOST_CHECK(cache.HaveCoinInCache(out_clean));
+    cache.AddCoin(out_new, make_coin(3), /*possible_overwrite=*/false);
+    BOOST_CHECK(cache.SpendCoin(out_spend));
+    BOOST_REQUIRE(cache.map().contains(out_spend));
+    BOOST_CHECK(cache.map().at(out_spend).coin.IsSpent());
+    BOOST_CHECK_EQUAL(cache.GetCacheSize(), 3U);
+
+    cache.Sync();
+    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), 0U);
+    BOOST_CHECK(cache.HaveCoinInCache(out_clean));
+    BOOST_CHECK(cache.HaveCoinInCache(out_new));
+    BOOST_CHECK(!cache.HaveCoinInCache(out_spend));
+    BOOST_CHECK(!cache.map().contains(out_spend));
+    BOOST_CHECK_EQUAL(cache.GetCacheSize(), 2U);
+    cache.SelfTest();
+}
+
 struct UpdateTest : BasicTestingSetup {
 // Store of all necessary tx and undo data for next test
 typedef std::map<COutPoint, std::tuple<CTransaction,CTxUndo,Coin>> UtxoData;

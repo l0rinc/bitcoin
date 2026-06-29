@@ -574,11 +574,16 @@ FUZZ_TARGET(coinscache_sim)
             },
 
             [&]() { // Sync.
+                size_t expected_cached_unspent{0};
+                for (const auto& entry : sim_caches[caches.size()].entry) {
+                    expected_cached_unspent += entry.entrytype == EntryType::UNSPENT;
+                }
                 // Apply to simulation data (note that in our simulation, syncing and flushing is the same thing).
                 flush();
                 // Apply to real caches.
                 caches.back()->Sync();
                 assert_cache_clean(*caches.back());
+                assert(caches.back()->GetCacheSize() >= expected_cached_unspent);
             },
 
             [&]() { // Reset.
