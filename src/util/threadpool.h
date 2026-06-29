@@ -227,11 +227,13 @@ public:
             LOCK(m_mutex);
             if (m_workers.empty()) return util::Unexpected{SubmitError::Inactive};
             if (m_interrupt) return util::Unexpected{SubmitError::Interrupted};
+            const size_t queue_size{m_work_queue.size()};
             for (auto&& fn : fns) {
                 PackagedTask<std::ranges::range_reference_t<R>> task{std::move(fn)};
                 futures.emplace_back(task.get_future());
                 m_work_queue.emplace(std::move(task));
             }
+            Assume(m_work_queue.size() == queue_size + static_cast<size_t>(task_count));
         }
         Assume(futures.size() == task_count);
         m_cv.notify_all();
