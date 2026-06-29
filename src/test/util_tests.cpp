@@ -31,6 +31,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -1809,6 +1810,75 @@ BOOST_AUTO_TEST_CASE(clearshrink_test)
         ClearShrink(v);
         BOOST_CHECK_EQUAL(v.size(), 0);
         // std::deque has no capacity() we can observe.
+    }
+}
+
+BOOST_AUTO_TEST_CASE(bitdeque_padded_empty_boundary)
+{
+    auto check = [](const bitdeque<8>& bits, const std::deque<bool>& expected) {
+        BOOST_CHECK_EQUAL(bits.size(), expected.size());
+        BOOST_CHECK_EQUAL(bits.empty(), expected.empty());
+        BOOST_CHECK_EQUAL(bits.begin() == bits.end(), expected.empty());
+        BOOST_CHECK_EQUAL(bits.cbegin() == bits.cend(), expected.empty());
+        BOOST_CHECK_EQUAL(bits.rbegin() == bits.rend(), expected.empty());
+        BOOST_CHECK_EQUAL(bits.crbegin() == bits.crend(), expected.empty());
+        for (size_t i{0}; i < expected.size(); ++i) {
+            BOOST_CHECK_EQUAL(bits[i], expected[i]);
+        }
+        if (!expected.empty()) {
+            BOOST_CHECK_EQUAL(bits.front(), expected.front());
+            BOOST_CHECK_EQUAL(bits.back(), expected.back());
+        }
+    };
+
+    {
+        bitdeque<8> bits(1, true);
+        std::deque<bool> expected{true};
+        check(bits, expected);
+
+        bits.pop_front();
+        expected.pop_front();
+        check(bits, expected);
+
+        bits.push_front(false);
+        expected.push_front(false);
+        check(bits, expected);
+    }
+
+    {
+        bitdeque<8> bits(1, true);
+        std::deque<bool> expected{true};
+        check(bits, expected);
+
+        bits.pop_back();
+        expected.pop_back();
+        check(bits, expected);
+
+        bits.push_back(false);
+        expected.push_back(false);
+        check(bits, expected);
+    }
+
+    {
+        bitdeque<8> bits;
+        std::deque<bool> expected;
+        for (int i{0}; i < 8; ++i) {
+            bits.push_back(i % 2);
+            expected.push_back(i % 2);
+        }
+        check(bits, expected);
+
+        while (!expected.empty()) {
+            bits.pop_front();
+            expected.pop_front();
+            check(bits, expected);
+        }
+
+        bits.push_back(true);
+        expected.push_back(true);
+        bits.push_front(false);
+        expected.push_front(false);
+        check(bits, expected);
     }
 }
 
