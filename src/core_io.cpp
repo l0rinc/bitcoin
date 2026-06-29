@@ -229,7 +229,31 @@ bool DecodeHexTx(CMutableTransaction& tx, const std::string& hex_tx, bool try_no
     }
 
     std::vector<unsigned char> txData(ParseHex(hex_tx));
-    return DecodeTx(tx, txData, try_no_witness, try_witness);
+    const bool decoded{DecodeTx(tx, txData, try_no_witness, try_witness)};
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (decoded) {
+            Assume(try_no_witness || try_witness);
+            if (!try_witness) Assume(!tx.HasWitness());
+
+            if (try_no_witness != try_witness) {
+                std::vector<unsigned char> trailing_tx_data{txData};
+                trailing_tx_data.push_back(0);
+                CMutableTransaction trailing_tx;
+                Assume(!DecodeTx(trailing_tx, trailing_tx_data, try_no_witness, try_witness));
+            }
+
+            const CTransaction decoded_tx{tx};
+            const std::string encoded_tx{EncodeHexTx(decoded_tx)};
+            const std::vector<unsigned char> encoded_tx_data{ParseHex(encoded_tx)};
+            CMutableTransaction roundtrip_tx;
+            const bool roundtrip_try_witness{decoded_tx.HasWitness()};
+            Assume(DecodeTx(roundtrip_tx, encoded_tx_data,
+                /*try_no_witness=*/!roundtrip_try_witness,
+                /*try_witness=*/roundtrip_try_witness));
+            Assume(CTransaction{roundtrip_tx} == decoded_tx);
+        }
+    }
+    return decoded;
 }
 
 bool DecodeHexBlockHeader(CBlockHeader& header, const std::string& hex_header)
