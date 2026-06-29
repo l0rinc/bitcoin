@@ -315,6 +315,11 @@ public:
      */
     void AppendTopo(std::vector<DepGraphIndex>& list, const SetType& select) const noexcept
     {
+        Assume(select.IsSubsetOf(m_used));
+        std::vector<DepGraphIndex> old_prefix;
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            old_prefix = list;
+        }
         DepGraphIndex old_len = list.size();
         for (auto i : select) list.push_back(i);
         std::ranges::sort(std::span{list}.subspan(old_len), [&](DepGraphIndex a, DepGraphIndex b) noexcept {
@@ -323,6 +328,22 @@ public:
             if (a_anc_count != b_anc_count) return a_anc_count < b_anc_count;
             return a < b;
         });
+        Assume(list.size() == old_len + select.Count());
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            Assume(std::equal(old_prefix.begin(), old_prefix.end(), list.begin()));
+            SetType appended;
+            const bool acyclic{IsAcyclic()};
+            for (auto pos = old_len; pos < list.size(); ++pos) {
+                const auto idx{list[pos]};
+                Assume(select[idx]);
+                Assume(!appended[idx]);
+                if (acyclic) {
+                    Assume((Ancestors(idx) & select).IsSubsetOf(appended | SetType::Singleton(idx)));
+                }
+                appended.Set(idx);
+            }
+            Assume(appended == select);
+        }
     }
 
     /** Check if this graph is acyclic. */
