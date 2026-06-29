@@ -389,6 +389,8 @@ std::map<COutPoint, CAmount> MiniMiner::CalculateBumpFees(const CFeeRate& target
             CAmount bump_fee_with_ancestors = target_feerate.GetFee(it->second.GetSizeWithAncestors()) - it->second.GetModFeesWithAncestors();
             CAmount bump_fee_individual = target_feerate.GetFee(it->second.GetTxSize()) - it->second.GetModifiedFee();
             const CAmount bump_fee{std::max(bump_fee_with_ancestors, bump_fee_individual)};
+            Assume(bump_fee >= bump_fee_with_ancestors);
+            Assume(bump_fee >= bump_fee_individual);
             Assume(bump_fee >= 0);
             for (const auto& outpoint : outpoints) {
                 m_bump_fees.emplace(outpoint, bump_fee);
