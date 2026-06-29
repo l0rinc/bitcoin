@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -69,6 +70,7 @@ struct ValidationEventRecorder final : public CValidationInterface {
     std::vector<TipEvent> m_active_tip_events;
     uint256 m_expected_tip;
     int m_expected_height;
+    std::optional<TipEvent> m_update_start_tip;
 
     explicit ValidationEventRecorder(const CBlockIndex& tip)
         : m_expected_tip{tip.GetBlockHash()}, m_expected_height{tip.nHeight}
@@ -156,11 +158,17 @@ struct ValidationEventRecorder final : public CValidationInterface {
         consume_active_tip();
         for (const ChainEvent& event : m_events) {
             if (event.type == ChainEventType::CONNECTED) {
+                if (!m_update_start_tip) {
+                    m_update_start_tip = TipEvent{m_expected_tip, m_expected_height};
+                }
                 assert(event.prev_hash == m_expected_tip);
                 assert(event.height == m_expected_height + 1);
                 m_expected_tip = event.hash;
                 ++m_expected_height;
             } else if (event.type == ChainEventType::DISCONNECTED) {
+                if (!m_update_start_tip) {
+                    m_update_start_tip = TipEvent{m_expected_tip, m_expected_height};
+                }
                 assert(event.hash == m_expected_tip);
                 assert(event.height == m_expected_height);
                 assert(m_expected_height > 0);
@@ -172,10 +180,22 @@ struct ValidationEventRecorder final : public CValidationInterface {
                 assert(event.height == m_expected_height);
                 if (event.fork_height >= 0) {
                     assert(event.fork_height <= event.height);
+                    assert(m_update_start_tip);
+                    LOCK(chainman.GetMutex());
+                    const CBlockIndex* old_tip{chainman.m_blockman.LookupBlockIndex(m_update_start_tip->hash)};
+                    const CBlockIndex* new_tip{chainman.m_blockman.LookupBlockIndex(event.hash)};
+                    assert(old_tip);
+                    assert(new_tip);
+                    const CBlockIndex* expected_fork{LastCommonAncestor(old_tip, new_tip)};
+                    assert(expected_fork);
+                    assert(event.prev_hash == expected_fork->GetBlockHash());
+                    assert(event.fork_height == expected_fork->nHeight);
                 }
+                m_update_start_tip.reset();
             }
             consume_active_tip();
         }
+        m_update_start_tip.reset();
         assert(active_tip_idx == m_active_tip_events.size());
         LOCK(chainman.GetMutex());
         const CBlockIndex* tip{chainman.ActiveChain().Tip()};
