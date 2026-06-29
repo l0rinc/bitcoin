@@ -172,6 +172,29 @@ BOOST_AUTO_TEST_CASE(bloom_match)
     BOOST_CHECK_MESSAGE(!filter.IsRelevantAndUpdate(tx), "Simple Bloom filter matched COutPoint for an output we didn't care about");
 }
 
+BOOST_AUTO_TEST_CASE(bloom_update_outputs_after_txid_match)
+{
+    const std::vector<unsigned char> output_data{0x01, 0x02, 0x03, 0x04};
+
+    CMutableTransaction mut_tx;
+    mut_tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
+    mut_tx.vout.emplace_back(CAmount{0}, CScript{} << output_data << OP_DROP << OP_TRUE);
+    const CTransaction tx{mut_tx};
+    const COutPoint matched_outpoint{tx.GetHash(), 0};
+
+    CBloomFilter filter(10, 0.000001, 0, BLOOM_UPDATE_ALL);
+    filter.insert(tx.GetHash().ToUint256());
+    filter.insert(output_data);
+    BOOST_REQUIRE(!filter.contains(matched_outpoint));
+    BOOST_CHECK(filter.IsRelevantAndUpdate(tx));
+    BOOST_CHECK(filter.contains(matched_outpoint));
+
+    CMutableTransaction mut_spend;
+    mut_spend.vin.emplace_back(matched_outpoint);
+    mut_spend.vout.emplace_back(CAmount{0}, CScript{});
+    BOOST_CHECK(filter.IsRelevantAndUpdate(CTransaction{mut_spend}));
+}
+
 BOOST_AUTO_TEST_CASE(merkle_block_1)
 {
     CBlock block = getBlock13b8a();
