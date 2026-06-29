@@ -13,6 +13,7 @@
 #include <util/time.h>
 #include <validation.h>
 
+#include <cassert>
 #include <cstdint>
 #include <vector>
 
@@ -37,9 +38,14 @@ FUZZ_TARGET(load_external_block_file, .init = initialize_load_external_block_fil
     }
     if (fuzzed_data_provider.ConsumeBool()) {
         // Corresponds to the -reindex case (track orphan blocks across files).
-        FlatFilePos flat_file_pos;
+        FlatFilePos flat_file_pos{0, 0};
         std::multimap<uint256, FlatFilePos> blocks_with_unknown_parent;
         g_setup->m_node.chainman->LoadExternalBlockFile(fuzzed_block_file, &flat_file_pos, &blocks_with_unknown_parent);
+        for (const auto& [_, child_pos] : blocks_with_unknown_parent) {
+            assert(!child_pos.IsNull());
+            assert(child_pos.nFile == 0);
+            assert(child_pos.nPos >= 8);
+        }
     } else {
         // Corresponds to the -loadblock= case (orphan blocks aren't tracked across files).
         g_setup->m_node.chainman->LoadExternalBlockFile(fuzzed_block_file);
