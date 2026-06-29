@@ -786,6 +786,35 @@ BOOST_AUTO_TEST_CASE(test_witness)
     CheckWithFlag(output1, input1, STANDARD_SCRIPT_VERIFY_FLAGS, true);
 }
 
+BOOST_AUTO_TEST_CASE(dust_helper_contracts)
+{
+    const CFeeRate dust_relay_fee{DUST_RELAY_TX_FEE};
+    const CScript p2pkh_script{CScript{} << OP_DUP << OP_HASH160 << std::vector<unsigned char>(20, 0) << OP_EQUALVERIFY << OP_CHECKSIG};
+    const CScript p2wpkh_script{CScript{} << OP_0 << std::vector<unsigned char>(20, 0)};
+    const CScript unspendable_script{CScript{} << OP_RETURN << std::vector<unsigned char>{1, 2, 3}};
+
+    auto check_boundary = [&](const CScript& script) {
+        const CAmount threshold{GetDustThreshold(CTxOut{0, script}, dust_relay_fee)};
+        BOOST_CHECK(!IsDust(CTxOut{threshold, script}, dust_relay_fee));
+        BOOST_REQUIRE_GT(threshold, 0);
+        BOOST_CHECK(IsDust(CTxOut{threshold - 1, script}, dust_relay_fee));
+        return threshold;
+    };
+
+    BOOST_CHECK_EQUAL(check_boundary(p2pkh_script), 546);
+    BOOST_CHECK_EQUAL(check_boundary(p2wpkh_script), 294);
+
+    BOOST_CHECK_EQUAL(GetDustThreshold(CTxOut{0, unspendable_script}, dust_relay_fee), 0);
+    BOOST_CHECK(!IsDust(CTxOut{0, unspendable_script}, dust_relay_fee));
+
+    CMutableTransaction tx;
+    tx.vout.emplace_back(545, p2pkh_script);
+    tx.vout.emplace_back(546, p2pkh_script);
+    tx.vout.emplace_back(293, p2wpkh_script);
+    tx.vout.emplace_back(0, unspendable_script);
+    BOOST_CHECK((GetDust(CTransaction{tx}, dust_relay_fee) == std::vector<uint32_t>{0, 2}));
+}
+
 BOOST_AUTO_TEST_CASE(test_IsStandard)
 {
     FillableSigningProvider keystore;
