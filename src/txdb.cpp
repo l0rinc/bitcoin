@@ -175,6 +175,7 @@ void CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block
             }
         }
     }
+    Assume(cursor.GetDirtyCount() == 0);
 
     // In the last batch, mark the database as consistent with block_hash again.
     batch.Erase(DB_HEAD_BLOCKS);
