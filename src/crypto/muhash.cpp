@@ -34,6 +34,14 @@ constexpr limb_t MAX_PRIME_DIFF = 1103717;
 /** The modular inverse of (2**3072 - MAX_PRIME_DIFF) mod (MAX_SIGNED_LIMB + 1). */
 constexpr limb_t MODULUS_INVERSE = limb_t(0x70a1421da087d93);
 
+bool IsOne(const Num3072& num)
+{
+    if (num.limbs[0] != 1) return false;
+    for (int i = 1; i < LIMBS; ++i) {
+        if (num.limbs[i] != 0) return false;
+    }
+    return true;
+}
 
 /** Extract the lowest limb of [c0,c1,c2] into n, and left shift the number by 1 limb. */
 inline void extract3(limb_t& c0, limb_t& c1, limb_t& c2, limb_t& n)
@@ -553,6 +561,7 @@ void MuHash3072::Finalize(uint256& out) noexcept
 {
     m_numerator.Divide(m_denominator);
     m_denominator.SetToOne();  // Needed to keep the MuHash object valid
+    Assert(IsOne(m_denominator));
 
     unsigned char data[Num3072::BYTE_SIZE];
     m_numerator.ToBytes(data);
