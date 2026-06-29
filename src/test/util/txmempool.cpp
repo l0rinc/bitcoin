@@ -16,6 +16,8 @@
 #include <util/translation.h>
 #include <validation.h>
 
+#include <algorithm>
+
 using node::NodeContext;
 
 CTxMemPool::Options MemPoolOptionsForTest(const NodeContext& node)
@@ -75,6 +77,9 @@ std::optional<std::string> CheckPackageMempoolAcceptResult(const Package& txns,
             return strprintf("tx %s result replaced too many transactions",
                                 wtxid.ToString());
         }
+        if (!valid && !atmp_result.m_replaced_transactions.empty()) {
+            return strprintf("tx %s invalid result replaced transactions", wtxid.ToString());
+        }
 
         // Replacements can't happen for subpackages larger than 2
         if (!atmp_result.m_replaced_transactions.empty() &&
@@ -100,6 +105,12 @@ std::optional<std::string> CheckPackageMempoolAcceptResult(const Package& txns,
         if (atmp_result.m_vsize.has_value() != (valid || mempool_entry)) {
             return strprintf("tx %s result should %shave m_vsize", wtxid.ToString(), valid || mempool_entry ? "" : "not ");
         }
+        if (atmp_result.m_vsize && *atmp_result.m_vsize <= 0) {
+            return strprintf("tx %s result should have positive m_vsize", wtxid.ToString());
+        }
+        if (atmp_result.m_base_fees && !MoneyRange(*atmp_result.m_base_fees)) {
+            return strprintf("tx %s result should have MoneyRange m_base_fees", wtxid.ToString());
+        }
 
         // m_other_wtxid should exist iff the result was DIFFERENT_WITNESS
         const bool diff_witness{atmp_result.m_result_type == MempoolAcceptResult::ResultType::DIFFERENT_WITNESS};
@@ -121,6 +132,10 @@ std::optional<std::string> CheckPackageMempoolAcceptResult(const Package& txns,
         }
         if (atmp_result.m_wtxids_fee_calculations && atmp_result.m_wtxids_fee_calculations->empty()) {
             return strprintf("tx %s result should not have empty m_wtxids_fee_calculations", wtxid.ToString());
+        }
+        if (atmp_result.m_wtxids_fee_calculations &&
+            std::find(atmp_result.m_wtxids_fee_calculations->begin(), atmp_result.m_wtxids_fee_calculations->end(), wtxid) == atmp_result.m_wtxids_fee_calculations->end()) {
+            return strprintf("tx %s result should include itself in m_wtxids_fee_calculations", wtxid.ToString());
         }
 
         if (mempool) {
