@@ -18,6 +18,7 @@
 #include <boost/multi_index_container.hpp>
 #include <boost/tuple/tuple.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <unordered_map>
 #include <utility>
@@ -564,10 +565,25 @@ public:
 
     void GetCandidatePeers(const uint256& txhash, std::vector<NodeId>& result_peers) const
     {
+        const auto old_size{result_peers.size()};
         auto it = m_index.get<ByTxHash>().lower_bound(ByTxHashView{txhash, State::CANDIDATE_DELAYED, 0});
         while (it != m_index.get<ByTxHash>().end() && it->m_gtxid.ToUint256() == txhash && it->GetState() != State::COMPLETED) {
             result_peers.push_back(it->m_peer);
             ++it;
+        }
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            std::vector<NodeId> expected_peers;
+            for (const Announcement& ann : m_index) {
+                if (ann.m_gtxid.ToUint256() == txhash && ann.GetState() != State::COMPLETED) {
+                    expected_peers.push_back(ann.m_peer);
+                }
+            }
+
+            std::vector<NodeId> actual_peers{result_peers.begin() + old_size, result_peers.end()};
+            std::sort(expected_peers.begin(), expected_peers.end());
+            std::sort(actual_peers.begin(), actual_peers.end());
+            Assume(actual_peers == expected_peers);
+            Assume(std::adjacent_find(actual_peers.begin(), actual_peers.end()) == actual_peers.end());
         }
     }
 
