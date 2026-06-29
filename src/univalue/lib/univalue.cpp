@@ -5,6 +5,7 @@
 
 #include <univalue.h>
 
+#include <cassert>
 #include <iomanip>
 #include <map>
 #include <sstream>
@@ -20,6 +21,10 @@ void UniValue::clear()
     val.clear();
     keys.clear();
     values.clear();
+    assert(isNull());
+    assert(val.empty());
+    assert(keys.empty());
+    assert(values.empty());
 }
 
 void UniValue::setNull()
