@@ -299,6 +299,54 @@ BOOST_AUTO_TEST_CASE(MempoolLoadUnbroadcastRequiresMempoolEntry)
     fs::remove(mempool_path);
 }
 
+BOOST_AUTO_TEST_CASE(MempoolDumpLoadPrioritisationRoundtrip)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    BOOST_REQUIRE_EQUAL(pool.size(), 0U);
+    BOOST_REQUIRE(pool.GetPrioritisedTransactions().empty());
+    BOOST_REQUIRE(pool.GetUnbroadcastTxs().empty());
+
+    const Txid missing_txid{Txid::FromUint256(uint256{2})};
+    constexpr CAmount fee_delta{12345};
+    pool.PrioritiseTransaction(missing_txid, fee_delta);
+    pool.AddUnbroadcastTx(missing_txid);
+
+    {
+        const auto deltas{pool.GetPrioritisedTransactions()};
+        BOOST_REQUIRE_EQUAL(deltas.size(), 1U);
+        BOOST_CHECK(deltas.front().txid == missing_txid);
+        BOOST_CHECK(!deltas.front().in_mempool);
+        BOOST_CHECK_EQUAL(deltas.front().delta, fee_delta);
+        BOOST_CHECK(!deltas.front().modified_fee.has_value());
+    }
+    BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
+
+    const fs::path mempool_path{m_args.GetDataDirBase() / "mempool_prioritisation_roundtrip.dat"};
+    fs::remove(mempool_path);
+    fs::remove(mempool_path + ".new");
+    BOOST_REQUIRE(node::DumpMempool(pool, mempool_path));
+
+    {
+        LOCK(pool.cs);
+        pool.ClearPrioritisation(missing_txid);
+    }
+    BOOST_REQUIRE(pool.GetPrioritisedTransactions().empty());
+
+    BOOST_REQUIRE(node::LoadMempool(pool, mempool_path, m_node.chainman->ActiveChainstate(), {}));
+    BOOST_CHECK_EQUAL(pool.size(), 0U);
+    BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
+
+    const auto deltas{pool.GetPrioritisedTransactions()};
+    BOOST_REQUIRE_EQUAL(deltas.size(), 1U);
+    BOOST_CHECK(deltas.front().txid == missing_txid);
+    BOOST_CHECK(!deltas.front().in_mempool);
+    BOOST_CHECK_EQUAL(deltas.front().delta, fee_delta);
+    BOOST_CHECK(!deltas.front().modified_fee.has_value());
+
+    fs::remove(mempool_path);
+    fs::remove(mempool_path + ".new");
+}
+
 BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
 {
     auto& pool = static_cast<MemPoolTest&>(*Assert(m_node.mempool));
