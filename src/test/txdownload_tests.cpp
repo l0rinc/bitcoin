@@ -6,6 +6,7 @@
 #include <consensus/validation.h>
 #include <net_processing.h>
 #include <node/txdownloadman_impl.h>
+#include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
 #include <test/util/common.h>
@@ -122,6 +123,24 @@ static void CheckWtxidPeerCount(const node::TxDownloadManagerImpl& txdownload_im
     BOOST_CHECK_EQUAL(actual_count, expected_count);
 }
 
+static void CheckTxRequestPeers(const node::TxDownloadManagerImpl& txdownload_impl,
+                                const uint256& txhash,
+                                std::vector<NodeId> expected_peers)
+{
+    std::vector<NodeId> actual_peers;
+    txdownload_impl.m_txrequest.GetCandidatePeers(txhash, actual_peers);
+    std::sort(actual_peers.begin(), actual_peers.end());
+    std::sort(expected_peers.begin(), expected_peers.end());
+    BOOST_CHECK_EQUAL_COLLECTIONS(actual_peers.begin(), actual_peers.end(),
+                                  expected_peers.begin(), expected_peers.end());
+}
+
+static void CheckNoTxRequestsForTx(const node::TxDownloadManagerImpl& txdownload_impl, const CTransactionRef& tx)
+{
+    CheckTxRequestPeers(txdownload_impl, tx->GetHash().ToUint256(), {});
+    CheckTxRequestPeers(txdownload_impl, tx->GetWitnessHash().ToUint256(), {});
+}
+
 BOOST_FIXTURE_TEST_CASE(wtxid_peer_accounting, TestingSetup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
@@ -162,6 +181,48 @@ BOOST_FIXTURE_TEST_CASE(wtxid_peer_accounting, TestingSetup)
     txdownload_impl.DisconnectedPeer(3);
     CheckWtxidPeerCount(txdownload_impl, 0);
     txdownload_impl.CheckIsEmpty();
+}
+
+BOOST_FIXTURE_TEST_CASE(accepted_and_confirmed_txs_clear_requests, TestingSetup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    FastRandomContext det_rand{true};
+    node::TxDownloadOptions default_opts{pool, det_rand, true};
+    const node::TxDownloadConnectionInfo connection_info{/*m_preferred=*/true,
+                                                         /*m_relay_permissions=*/false,
+                                                         /*m_wtxid_relay=*/true};
+    const CTransactionRef tx{CreatePlaceholderTx(/*segwit=*/true)};
+    const auto& txid{tx->GetHash()};
+    const auto& wtxid{tx->GetWitnessHash()};
+    BOOST_REQUIRE(txid.ToUint256() != wtxid.ToUint256());
+    const std::chrono::microseconds now{0};
+    constexpr NodeId peer{0};
+
+    {
+        node::TxDownloadManagerImpl txdownload_impl{default_opts};
+        txdownload_impl.ConnectedPeer(peer, connection_info);
+        BOOST_CHECK(!txdownload_impl.AddTxAnnouncement(peer, txid, now));
+        BOOST_CHECK(!txdownload_impl.AddTxAnnouncement(peer, wtxid, now));
+        CheckTxRequestPeers(txdownload_impl, txid.ToUint256(), {peer});
+        CheckTxRequestPeers(txdownload_impl, wtxid.ToUint256(), {peer});
+
+        txdownload_impl.MempoolAcceptedTx(tx);
+        CheckNoTxRequestsForTx(txdownload_impl, tx);
+    }
+
+    {
+        node::TxDownloadManagerImpl txdownload_impl{default_opts};
+        txdownload_impl.ConnectedPeer(peer, connection_info);
+        BOOST_CHECK(!txdownload_impl.AddTxAnnouncement(peer, txid, now));
+        BOOST_CHECK(!txdownload_impl.AddTxAnnouncement(peer, wtxid, now));
+        CheckTxRequestPeers(txdownload_impl, txid.ToUint256(), {peer});
+        CheckTxRequestPeers(txdownload_impl, wtxid.ToUint256(), {peer});
+
+        CBlock block;
+        block.vtx.push_back(tx);
+        txdownload_impl.BlockConnected(std::make_shared<CBlock>(block));
+        CheckNoTxRequestsForTx(txdownload_impl, tx);
+    }
 }
 
 BOOST_FIXTURE_TEST_CASE(tx_rejection_types, TestChain100Setup)
