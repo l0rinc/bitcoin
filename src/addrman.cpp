@@ -1211,7 +1211,14 @@ std::vector<CAddress> AddrManImpl::GetAddr(size_t max_addresses, size_t max_pct,
 {
     LOCK(cs);
     Check();
+    const size_t max_pct_count{max_pct == 0 ? vRandom.size() : (std::min(max_pct, size_t{100}) * vRandom.size()) / 100};
+    const size_t max_count{max_addresses == 0 ? max_pct_count : std::min(max_pct_count, max_addresses)};
     auto addresses = GetAddr_(max_addresses, max_pct, network, filtered);
+    Assume(addresses.size() <= max_count);
+    for (const auto& addr : addresses) {
+        Assume(addr.IsValid());
+        if (network) Assume(addr.GetNetClass() == *network);
+    }
     Check();
     return addresses;
 }
