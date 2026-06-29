@@ -3438,6 +3438,9 @@ bool Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<
             if (!blocks_connected) return true;
 
             const CBlockIndex* pindexFork = starting_tip ? m_chain.FindFork(*starting_tip) : nullptr;
+            if (starting_tip && pindexNewTip) {
+                Assume(pindexFork == LastCommonAncestor(starting_tip, pindexNewTip));
+            }
             bool still_in_ibd = m_chainman.IsInitialBlockDownload();
 
             if (was_in_ibd && !still_in_ibd) {
