@@ -49,6 +49,17 @@ BOOST_AUTO_TEST_CASE(test_cuckoocache_no_fakes)
     }
 };
 
+BOOST_AUTO_TEST_CASE(cuckoocache_contains_erase_is_deferred)
+{
+    CuckooCache::cache<uint256, SignatureCacheHasher> cc{};
+    cc.setup(8);
+    cc.insert(uint256::ONE);
+
+    BOOST_REQUIRE(cc.contains(uint256::ONE, /*erase=*/false));
+    BOOST_REQUIRE(cc.contains(uint256::ONE, /*erase=*/true));
+    BOOST_CHECK(cc.contains(uint256::ONE, /*erase=*/false));
+}
+
 struct HitRateTest : BasicTestingSetup {
 /** This helper returns the hit rate when bytes*load worth of entries are
  * inserted into a bytes sized cache

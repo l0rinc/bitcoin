@@ -5,6 +5,7 @@
 #ifndef BITCOIN_CUCKOOCACHE_H
 #define BITCOIN_CUCKOOCACHE_H
 
+#include <util/check.h>
 #include <util/fastrange.h>
 #include <util/overflow.h>
 
@@ -264,6 +265,7 @@ private:
     inline void allow_erase(uint32_t n) const
     {
         collection_flags.bit_set(n);
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) Assume(collection_flags.bit_is_set(n));
     }
 
     /** please_keep marks the element at index `n` as an entry that should be kept.
@@ -273,6 +275,7 @@ private:
     inline void please_keep(uint32_t n) const
     {
         collection_flags.bit_unset(n);
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) Assume(!collection_flags.bit_is_set(n));
     }
 
     /** epoch_check handles the changing of epochs for elements stored in the
@@ -479,6 +482,7 @@ public:
             if (table[loc] == e) {
                 if (erase)
                     allow_erase(loc);
+                if constexpr (G_ABORT_ON_FAILED_ASSUME) Assume(table[loc] == e);
                 return true;
             }
         return false;
