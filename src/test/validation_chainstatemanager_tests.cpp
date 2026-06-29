@@ -741,6 +741,18 @@ BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
     }
     chainman.CheckBlockIndex();
 
+    // Invalidating a side branch marks that branch failed, but must not move the active tip.
+    BOOST_REQUIRE(chainstate.InvalidateBlock(state, fork_block99));
+    {
+        LOCK(chainman.GetMutex());
+        BOOST_CHECK_EQUAL(chainman.ActiveChain().Tip(), block100);
+        BOOST_CHECK(fork_block99->nStatus & BLOCK_FAILED_VALID);
+        BOOST_CHECK(fork_block100->nStatus & BLOCK_FAILED_VALID);
+        BOOST_CHECK(!(block99->nStatus & BLOCK_FAILED_VALID));
+        BOOST_CHECK(!(block100->nStatus & BLOCK_FAILED_VALID));
+    }
+    chainman.CheckBlockIndex();
+
     // Invalidate block98
     BOOST_REQUIRE(chainstate.InvalidateBlock(state, block98));
 
