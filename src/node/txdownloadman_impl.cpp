@@ -103,12 +103,17 @@ void TxDownloadManagerImpl::BlockConnected(const std::shared_ptr<const CBlock>& 
     m_orphanage->EraseForBlock(*pblock);
 
     for (const auto& ptx : pblock->vtx) {
-        RecentConfirmedTransactionsFilter().insert(ptx->GetHash().ToUint256());
+        const Txid& txid{ptx->GetHash()};
+        const Wtxid& wtxid{ptx->GetWitnessHash()};
+
+        RecentConfirmedTransactionsFilter().insert(txid.ToUint256());
         if (ptx->HasWitness()) {
-            RecentConfirmedTransactionsFilter().insert(ptx->GetWitnessHash().ToUint256());
+            RecentConfirmedTransactionsFilter().insert(wtxid.ToUint256());
         }
-        m_txrequest.ForgetTxHash(ptx->GetHash().ToUint256());
-        m_txrequest.ForgetTxHash(ptx->GetWitnessHash().ToUint256());
+        m_txrequest.ForgetTxHash(txid.ToUint256());
+        m_txrequest.ForgetTxHash(wtxid.ToUint256());
+        AssertNoTxRequest(txid.ToUint256());
+        AssertNoTxRequest(wtxid.ToUint256());
     }
 }
 
@@ -332,14 +337,19 @@ std::optional<PackageToValidate> TxDownloadManagerImpl::Find1P1CPackage(const CT
 
 void TxDownloadManagerImpl::MempoolAcceptedTx(const CTransactionRef& tx)
 {
+    const Txid& txid{tx->GetHash()};
+    const Wtxid& wtxid{tx->GetWitnessHash()};
+
     // As this version of the transaction was acceptable, we can forget about any requests for it.
     // No-op if the tx is not in txrequest.
-    m_txrequest.ForgetTxHash(tx->GetHash().ToUint256());
-    m_txrequest.ForgetTxHash(tx->GetWitnessHash().ToUint256());
+    m_txrequest.ForgetTxHash(txid.ToUint256());
+    m_txrequest.ForgetTxHash(wtxid.ToUint256());
 
     m_orphanage->AddChildrenToWorkSet(*tx, m_opts.m_rng);
     // If it came from the orphanage, remove it. No-op if the tx is not in txorphanage.
-    m_orphanage->EraseTx(tx->GetWitnessHash());
+    m_orphanage->EraseTx(wtxid);
+    AssertNoTxRequest(txid.ToUint256());
+    AssertNoTxRequest(wtxid.ToUint256());
 }
 
 std::vector<Txid> TxDownloadManagerImpl::GetUniqueParents(const CTransaction& tx)
@@ -584,6 +594,15 @@ void TxDownloadManagerImpl::AssertWtxidPeerCount() const
                                              return peer.second.m_connection_info.m_wtxid_relay;
                                          })};
     Assume(m_num_wtxid_peers == static_cast<uint32_t>(wtxid_peers));
+}
+
+void TxDownloadManagerImpl::AssertNoTxRequest(const uint256& txhash) const
+{
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        std::vector<NodeId> peers;
+        m_txrequest.GetCandidatePeers(txhash, peers);
+        Assume(peers.empty());
+    }
 }
 
 void TxDownloadManagerImpl::CheckIsEmpty(NodeId nodeid)

@@ -174,6 +174,19 @@ void CheckUniqueParents(const std::vector<Txid>& unique_parents, const CTransact
     Assert(unique_parents.size() <= tx.vin.size());
 }
 
+void AssertNoTxRequest(const node::TxDownloadManagerImpl& txdownload_impl, const uint256& txhash)
+{
+    std::vector<NodeId> peers;
+    txdownload_impl.m_txrequest.GetCandidatePeers(txhash, peers);
+    Assert(peers.empty());
+}
+
+void AssertNoTxRequestsForTx(const node::TxDownloadManagerImpl& txdownload_impl, const CTransactionRef& tx)
+{
+    AssertNoTxRequest(txdownload_impl, tx->GetHash().ToUint256());
+    AssertNoTxRequest(txdownload_impl, tx->GetWitnessHash().ToUint256());
+}
+
 FUZZ_TARGET(txdownloadman, .init = initialize)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
@@ -358,6 +371,7 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                 txdownload_impl.BlockConnected(std::make_shared<CBlock>(block));
                 // Block transactions must be removed from orphanage
                 Assert(!txdownload_impl.m_orphanage->HaveTx(rand_tx->GetWitnessHash()));
+                AssertNoTxRequestsForTx(txdownload_impl, rand_tx);
             },
             [&] {
                 txdownload_impl.BlockDisconnected();
@@ -366,6 +380,8 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
             },
             [&] {
                 txdownload_impl.MempoolAcceptedTx(rand_tx);
+                Assert(!txdownload_impl.m_orphanage->HaveTx(rand_tx->GetWitnessHash()));
+                AssertNoTxRequestsForTx(txdownload_impl, rand_tx);
             },
             [&] {
                 TxValidationState state;
