@@ -7,7 +7,10 @@
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 
+#include <algorithm>
+#include <cassert>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -25,6 +28,30 @@ struct DumbCheck {
         return 1;
     }
 };
+
+std::vector<DumbCheck> MakeChecks(const std::vector<bool>& results)
+{
+    std::vector<DumbCheck> checks;
+    checks.reserve(results.size());
+    for (const bool result : results) {
+        checks.emplace_back(result);
+    }
+    return checks;
+}
+
+std::optional<int> ExpectedResult(const std::vector<bool>& results)
+{
+    if (std::ranges::any_of(results, [](bool result) { return !result; })) {
+        return 1;
+    }
+    return std::nullopt;
+}
+
+void AssertResult(const std::optional<int>& result, const std::optional<int>& expected)
+{
+    assert(result.has_value() == expected.has_value());
+    if (result) assert(*result == *expected);
+}
 } // namespace
 
 FUZZ_TARGET(checkqueue)
@@ -34,26 +61,33 @@ FUZZ_TARGET(checkqueue)
     const unsigned int batch_size = fuzzed_data_provider.ConsumeIntegralInRange<unsigned int>(0, 1024);
     CCheckQueue<DumbCheck> check_queue_1{batch_size, /*worker_threads_num=*/0};
     CCheckQueue<DumbCheck> check_queue_2{batch_size, /*worker_threads_num=*/0};
-    std::vector<DumbCheck> checks_1;
-    std::vector<DumbCheck> checks_2;
+    std::vector<bool> check_results;
     const int size = fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 1024);
     for (int i = 0; i < size; ++i) {
-        const bool result = fuzzed_data_provider.ConsumeBool();
-        checks_1.emplace_back(result);
-        checks_2.emplace_back(result);
+        check_results.emplace_back(fuzzed_data_provider.ConsumeBool());
     }
-    if (fuzzed_data_provider.ConsumeBool()) {
-        check_queue_1.Add(std::move(checks_1));
+    const bool add_checks{fuzzed_data_provider.ConsumeBool()};
+    const bool complete_checks{fuzzed_data_provider.ConsumeBool()};
+    const std::optional<int> expected_result{add_checks ? ExpectedResult(check_results) : std::nullopt};
+
+    if (add_checks) {
+        check_queue_1.Add(MakeChecks(check_results));
     }
-    if (fuzzed_data_provider.ConsumeBool()) {
-        (void)check_queue_1.Complete();
+    if (complete_checks) {
+        const auto direct_result{check_queue_1.Complete()};
+        AssertResult(direct_result, expected_result);
+        AssertResult(check_queue_1.Complete(), std::nullopt);
     }
 
-    CCheckQueueControl<DumbCheck> check_queue_control{check_queue_2};
-    if (fuzzed_data_provider.ConsumeBool()) {
-        check_queue_control.Add(std::move(checks_2));
-    }
-    if (fuzzed_data_provider.ConsumeBool()) {
-        (void)check_queue_control.Complete();
+    {
+        CCheckQueueControl<DumbCheck> check_queue_control{check_queue_2};
+        if (add_checks) {
+            check_queue_control.Add(MakeChecks(check_results));
+        }
+        if (complete_checks) {
+            const auto control_result{check_queue_control.Complete()};
+            AssertResult(control_result, expected_result);
+            AssertResult(check_queue_control.Complete(), std::nullopt);
+        }
     }
 }
