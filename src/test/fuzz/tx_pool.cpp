@@ -195,6 +195,22 @@ void CheckPrioritisedTransactions(const CTxMemPool& tx_pool)
     }
 }
 
+void CheckUpdatedBlockDependencies(const CTxMemPool& tx_pool, const std::vector<Txid>& txids)
+{
+    LOCK(tx_pool.cs);
+    for (const auto& txid : txids) {
+        const auto parent{tx_pool.GetIter(txid)};
+        if (!parent) continue;
+        auto child_it{tx_pool.mapNextTx.lower_bound(COutPoint(txid, 0))};
+        for (; child_it != tx_pool.mapNextTx.end() && child_it->first->hash == txid; ++child_it) {
+            const auto child{child_it->second};
+            Assert(child != tx_pool.mapTx.end());
+            if (child == *parent) continue;
+            Assert(tx_pool.CalculateMemPoolAncestors(*child).contains(*parent));
+        }
+    }
+}
+
 [[nodiscard]] CAmount ConsumePriorityDelta(FuzzedDataProvider& fuzzed_data_provider)
 {
     switch (fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 4)) {
@@ -238,6 +254,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
             }
         }
         tx_pool.UpdateTransactionsFromBlock(hashes_to_update);
+        CheckUpdatedBlockDependencies(tx_pool, hashes_to_update);
     }
     CheckPrioritisedTransactions(tx_pool);
     const auto info_all = tx_pool.infoAll();
