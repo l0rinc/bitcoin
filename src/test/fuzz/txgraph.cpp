@@ -359,6 +359,8 @@ FUZZ_TARGET(txgraph)
         SimTxGraph::SetType included;
         /** The set of transactions marked as included or skipped in *builder. */
         SimTxGraph::SetType done;
+        /** The set of transactions in clusters skipped by *builder. */
+        SimTxGraph::SetType skipped_clusters;
         /** The last chunk feerate returned by *builder. IsEmpty() if none yet. */
         FeePerWeight last_feerate;
 
@@ -847,6 +849,7 @@ FUZZ_TARGET(txgraph)
                 auto& builder_data = block_builders[builder_idx];
                 auto new_included = builder_data.included;
                 auto new_done = builder_data.done;
+                SimTxGraph::SetType current_chunk;
                 auto chunk = builder_data.builder->GetCurrentChunk();
                 if (chunk) {
                     // Chunk feerates must be monotonously decreasing.
@@ -860,6 +863,8 @@ FUZZ_TARGET(txgraph)
                         // Each transaction in the chunk must exist in the main graph.
                         auto simpos = main_sim.Find(ref);
                         assert(simpos != SimTxGraph::MISSING);
+                        assert(!builder_data.skipped_clusters[simpos]);
+                        current_chunk.Set(simpos);
                         // Verify the claimed chunk feerate.
                         sum_feerate += main_sim.graph.FeeRate(simpos);
                         // Make sure no transaction is reported twice.
@@ -886,6 +891,9 @@ FUZZ_TARGET(txgraph)
                 if ((orig_command % 5) >= 3) {
                     // Skip.
                     builder_data.builder->Skip();
+                    if (current_chunk.Any()) {
+                        builder_data.skipped_clusters |= main_sim.graph.GetConnectedComponent(main_sim.graph.Positions(), current_chunk.First());
+                    }
                 } else {
                     // Include.
                     builder_data.builder->Include();
