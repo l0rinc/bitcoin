@@ -35,6 +35,7 @@
 #include <validation.h>
 #include <validationinterface.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -308,7 +309,7 @@ std::unique_ptr<CTxMemPool> MakeMempool(FuzzedDataProvider& fuzzed_data_provider
     return mempool;
 }
 
-void CheckATMPInvariants(const MempoolAcceptResult& res, bool txid_in_mempool, bool wtxid_in_mempool)
+void CheckATMPInvariants(const MempoolAcceptResult& res, const Wtxid& wtxid, bool txid_in_mempool, bool wtxid_in_mempool)
 {
 
     switch (res.m_result_type) {
@@ -320,9 +321,12 @@ void CheckATMPInvariants(const MempoolAcceptResult& res, bool txid_in_mempool, b
         Assert(!res.m_state.IsInvalid());
         Assert(res.m_vsize);
         Assert(res.m_base_fees);
+        Assert(*res.m_vsize > 0);
+        Assert(MoneyRange(*res.m_base_fees));
         Assert(res.m_effective_feerate);
         Assert(res.m_wtxids_fee_calculations);
         Assert(!res.m_wtxids_fee_calculations->empty());
+        Assert(std::find(res.m_wtxids_fee_calculations->begin(), res.m_wtxids_fee_calculations->end(), wtxid) != res.m_wtxids_fee_calculations->end());
         Assert(!res.m_other_wtxid);
         break;
     }
@@ -339,7 +343,10 @@ void CheckATMPInvariants(const MempoolAcceptResult& res, bool txid_in_mempool, b
         // In other cases, validation may be unable or unwilling to calculate the fees.
         Assert(res.m_effective_feerate.has_value() == is_reconsiderable);
         Assert(res.m_wtxids_fee_calculations.has_value() == is_reconsiderable);
-        if (res.m_wtxids_fee_calculations) Assert(!res.m_wtxids_fee_calculations->empty());
+        if (res.m_wtxids_fee_calculations) {
+            Assert(!res.m_wtxids_fee_calculations->empty());
+            Assert(std::find(res.m_wtxids_fee_calculations->begin(), res.m_wtxids_fee_calculations->end(), wtxid) != res.m_wtxids_fee_calculations->end());
+        }
         Assert(!res.m_other_wtxid);
         break;
     }
@@ -496,7 +503,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
 
         bool txid_in_mempool = tx_pool.exists(tx->GetHash());
         bool wtxid_in_mempool = tx_pool.exists(tx->GetWitnessHash());
-        CheckATMPInvariants(res, txid_in_mempool, wtxid_in_mempool);
+        CheckATMPInvariants(res, tx->GetWitnessHash(), txid_in_mempool, wtxid_in_mempool);
         if (txid_in_mempool) CheckTransactionAncestry(tx_pool, tx->GetHash());
         CheckPrioritisedTransactions(tx_pool);
 
