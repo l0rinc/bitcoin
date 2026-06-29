@@ -227,6 +227,8 @@ CBlockIndex* BlockManager::AddToBlockIndex(const CBlockHeader& block, CBlockInde
 
     auto [mi, inserted] = m_block_index.try_emplace(block.GetHash(), block);
     if (!inserted) {
+        Assume(mi->second.phashBlock == &mi->first);
+        Assume(mi->second.GetBlockHash() == block.GetHash());
         return &mi->second;
     }
     CBlockIndex* pindexNew = &(*mi).second;
@@ -246,6 +248,21 @@ CBlockIndex* BlockManager::AddToBlockIndex(const CBlockHeader& block, CBlockInde
     pindexNew->nTimeMax = (pindexNew->pprev ? std::max(pindexNew->pprev->nTimeMax, pindexNew->nTime) : pindexNew->nTime);
     pindexNew->nChainWork = (pindexNew->pprev ? pindexNew->pprev->nChainWork : 0) + GetBlockProof(*pindexNew);
     pindexNew->RaiseValidity(BLOCK_VALID_TREE);
+    Assume(pindexNew->phashBlock == &mi->first);
+    Assume(pindexNew->GetBlockHash() == block.GetHash());
+    Assume(pindexNew->nSequenceId == SEQ_ID_INIT_FROM_DISK);
+    if (pindexNew->pprev) {
+        Assume(pindexNew->pprev->GetBlockHash() == block.hashPrevBlock);
+        Assume(pindexNew->nHeight == pindexNew->pprev->nHeight + 1);
+        Assume(pindexNew->GetAncestor(pindexNew->pprev->nHeight) == pindexNew->pprev);
+        Assume(pindexNew->nTimeMax == std::max(pindexNew->pprev->nTimeMax, pindexNew->nTime));
+        Assume(pindexNew->nChainWork == pindexNew->pprev->nChainWork + GetBlockProof(*pindexNew));
+    } else {
+        Assume(pindexNew->nHeight == 0);
+        Assume(pindexNew->nTimeMax == pindexNew->nTime);
+        Assume(pindexNew->nChainWork == GetBlockProof(*pindexNew));
+    }
+    Assume(pindexNew->IsValid(BLOCK_VALID_TREE));
     if (best_header == nullptr || best_header->nChainWork < pindexNew->nChainWork) {
         best_header = pindexNew;
     }
