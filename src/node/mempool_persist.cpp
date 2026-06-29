@@ -13,6 +13,7 @@
 #include <sync.h>
 #include <txmempool.h>
 #include <uint256.h>
+#include <util/check.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
 #include <util/log.h>
@@ -168,6 +169,16 @@ bool DumpMempool(const CTxMemPool& pool, const fs::path& dump_path, FopenFn mock
         }
         vinfo = pool.infoAll();
         unbroadcast_txids = pool.GetUnbroadcastTxs();
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            std::set<Txid> mempool_txids;
+            for (const auto& info : vinfo) {
+                Assert(info.tx);
+                mempool_txids.insert(info.tx->GetHash());
+            }
+            for (const auto& txid : unbroadcast_txids) {
+                Assume(mempool_txids.contains(txid));
+            }
+        }
     }
 
     auto mid = SteadyClock::now();
