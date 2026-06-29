@@ -346,6 +346,46 @@ BOOST_AUTO_TEST_CASE(ccoins_sync_retains_unspent_cache_entries)
     cache.SelfTest();
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_cursor_dirty_count_contracts)
+{
+    CoinsCachePair sentinel{};
+    sentinel.second.SelfRef(sentinel);
+    CCoinsMapMemoryResource resource;
+    CCoinsMap map{0, SaltedOutpointHasher{/*deterministic=*/true}, CCoinsMap::key_equal{}, &resource};
+    size_t dirty_count{0};
+
+    const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin coin{CTxOut{m_rng.randrange(10), CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+
+    auto emplace_and_mark_dirty = [&](const COutPoint& out, const Coin& coin_to_insert) {
+        CCoinsCacheEntry entry{Coin{coin_to_insert}};
+        auto [it, inserted]{map.emplace(out, std::move(entry))};
+        const bool was_dirty{it->second.IsDirty()};
+        CCoinsCacheEntry::SetDirty(*it, sentinel);
+        dirty_count += !was_dirty && it->second.IsDirty();
+        return inserted;
+    };
+
+    BOOST_CHECK(emplace_and_mark_dirty(outpoint, coin));
+    BOOST_CHECK_EQUAL(dirty_count, 1U);
+    BOOST_CHECK_EQUAL(map.size(), 1U);
+
+    BOOST_CHECK(!emplace_and_mark_dirty(outpoint, coin));
+    BOOST_CHECK_EQUAL(dirty_count, 1U);
+    BOOST_CHECK_EQUAL(map.size(), 1U);
+
+    auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, map, /*will_erase=*/true)};
+    BOOST_CHECK_EQUAL(cursor.GetDirtyCount(), 1U);
+    BOOST_CHECK_EQUAL(cursor.GetTotalCount(), 1U);
+
+    for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)) {
+        BOOST_CHECK(it->second.IsDirty());
+    }
+
+    BOOST_CHECK_EQUAL(cursor.GetDirtyCount(), 0U);
+    BOOST_CHECK_EQUAL(cursor.GetTotalCount(), 1U);
+}
+
 struct UpdateTest : BasicTestingSetup {
 // Store of all necessary tx and undo data for next test
 typedef std::map<COutPoint, std::tuple<CTransaction,CTxUndo,Coin>> UtxoData;
