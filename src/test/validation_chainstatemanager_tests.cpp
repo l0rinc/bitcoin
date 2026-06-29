@@ -594,6 +594,36 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_loadblockindex, TestChain100Setup)
     BOOST_CHECK_EQUAL(cs2.setBlockIndexCandidates.size(), num_indexes - last_assumed_valid_idx + 1);
 }
 
+BOOST_FIXTURE_TEST_CASE(block_index_candidates_skip_header_only_blocks, TestChain100Setup)
+{
+    ChainstateManager& chainman = *Assert(m_node.chainman);
+    {
+        LOCK(chainman.GetMutex());
+        Chainstate& chainstate = chainman.ActiveChainstate();
+        CBlockIndex* tip{Assert(chainman.ActiveChain().Tip())};
+
+        CBlockHeader header;
+        header.nVersion = 4;
+        header.hashPrevBlock = tip->GetBlockHash();
+        header.hashMerkleRoot = uint256::ONE;
+        header.nTime = tip->nTime + 1;
+        header.nBits = tip->nBits;
+        header.nNonce = 1;
+
+        CBlockIndex* header_only{chainman.m_blockman.AddToBlockIndex(header, chainman.m_best_header)};
+        BOOST_REQUIRE(header_only);
+        BOOST_CHECK(header_only->IsValid(BLOCK_VALID_TREE));
+        BOOST_CHECK(!header_only->IsValid(BLOCK_VALID_TRANSACTIONS));
+        BOOST_CHECK(!header_only->HaveNumChainTxs());
+
+        chainstate.ClearBlockIndexCandidates();
+        chainstate.PopulateBlockIndexCandidates();
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(header_only), 0U);
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(tip), 1U);
+    }
+    chainman.CheckBlockIndex();
+}
+
 BOOST_FIXTURE_TEST_CASE(loadblockindex_invalid_descendants, TestChain100Setup)
 {
     LOCK(Assert(m_node.chainman)->GetMutex());
