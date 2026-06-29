@@ -11,6 +11,8 @@
 #include <util/string.h>
 #include <util/threadpool.h>
 
+#include <algorithm>
+
 #include <boost/test/unit_test.hpp>
 
 using http_bitcoin::GetQueryParameterFromUri;
@@ -262,6 +264,11 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
 
 BOOST_AUTO_TEST_CASE(http_request_tests)
 {
+    auto ToBytes = [](std::string_view str) {
+        auto bytes{std::as_bytes(std::span{str})};
+        return std::vector<std::byte>{bytes.begin(), bytes.end()};
+    };
+
     {
         HTTPRequest req;
         LineReader reader(full_request, MAX_HEADERS_SIZE);
@@ -569,6 +576,44 @@ BOOST_AUTO_TEST_CASE(http_request_tests)
         BOOST_CHECK(req.LoadControlData(reader2));
         BOOST_CHECK(req.LoadHeaders(reader2));
         BOOST_CHECK(req.LoadBody(reader2));
+    }
+    {
+        // HTTPRemoteClient::ReadRequest removes exactly the parsed request,
+        // leaving pipelined bytes available for the next request.
+        constexpr std::string_view first = "POST /first HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello";
+        constexpr std::string_view second = "PUT /second HTTP/1.0\r\nContent-Length: 5\r\n\r\nworld";
+
+        auto client{std::make_shared<HTTPRemoteClient>(
+            /*id=*/0,
+            CService{},
+            std::make_unique<StaticContentsSock>(""))};
+        client->m_recv_buffer = ToBytes(std::string{first} + std::string{second});
+
+        HTTPRequest first_req{client};
+        BOOST_REQUIRE(client->ReadRequest(first_req));
+        BOOST_CHECK_EQUAL(first_req.GetURI(), "/first");
+        BOOST_CHECK_EQUAL(first_req.ReadBody(), "hello");
+        const std::vector<std::byte> second_bytes{ToBytes(second)};
+        BOOST_CHECK_EQUAL(client->m_recv_buffer.size(), second_bytes.size());
+        BOOST_CHECK(std::ranges::equal(client->m_recv_buffer, second_bytes));
+
+        HTTPRequest second_req{client};
+        BOOST_REQUIRE(client->ReadRequest(second_req));
+        BOOST_CHECK_EQUAL(second_req.GetURI(), "/second");
+        BOOST_CHECK_EQUAL(second_req.ReadBody(), "world");
+        BOOST_CHECK(client->m_recv_buffer.empty());
+    }
+    {
+        auto client{std::make_shared<HTTPRemoteClient>(
+            /*id=*/0,
+            CService{},
+            std::make_unique<StaticContentsSock>(""))};
+        client->m_recv_buffer = ToBytes("POST /partial HTTP/1.1\r\nContent-Length: 5\r\n\r\nhe");
+        const std::vector<std::byte> recv_buffer_before{client->m_recv_buffer};
+
+        HTTPRequest req{client};
+        BOOST_CHECK(!client->ReadRequest(req));
+        BOOST_CHECK(client->m_recv_buffer == recv_buffer_before);
     }
 }
 
