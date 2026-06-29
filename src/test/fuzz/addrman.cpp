@@ -18,6 +18,7 @@
 #include <util/asmap.h>
 #include <util/chaintype.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <ctime>
@@ -178,7 +179,14 @@ FUZZ_TARGET(addrman, .init = initialize_addrman)
     auto max_addresses = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 4096);
     auto max_pct = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 100);
     auto filtered = fuzzed_data_provider.ConsumeBool();
-    (void)const_addr_man.GetAddr(max_addresses, max_pct, network, filtered);
+    const size_t max_pct_count{max_pct == 0 ? const_addr_man.Size() : (max_pct * const_addr_man.Size()) / 100};
+    const size_t max_count{max_addresses == 0 ? max_pct_count : std::min(max_pct_count, max_addresses)};
+    const auto addresses{const_addr_man.GetAddr(max_addresses, max_pct, network, filtered)};
+    assert(addresses.size() <= max_count);
+    for (const auto& addr : addresses) {
+        assert(addr.IsValid());
+        if (network) assert(addr.GetNetClass() == *network);
+    }
 
     std::unordered_set<Network> nets;
     for (const auto& net : ALL_NETWORKS) {
