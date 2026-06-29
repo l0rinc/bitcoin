@@ -13,6 +13,13 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
+#include <cerrno>
+#include <cstddef>
+#include <memory>
+#include <optional>
+#include <string_view>
+#include <vector>
 
 #include <boost/test/unit_test.hpp>
 
@@ -35,6 +42,40 @@ constexpr std::string_view full_request = "POST / HTTP/1.1\r\n"
                                           "Content-Length: 46\r\n"
                                           "\r\n"
                                           R"({"method":"getblockcount","params":[],"id":1})""\n";
+
+namespace {
+class ScriptedHttpSendSock final : public ZeroSock
+{
+public:
+    ScriptedHttpSendSock(ssize_t result, int err) : m_result{result}, m_errno{err} {}
+
+    ssize_t Send(const void* data, size_t len, int flags) const override
+    {
+        m_send_called = true;
+        m_flags = flags;
+        const auto* bytes{static_cast<const std::byte*>(data)};
+        m_attempted.assign(bytes, bytes + len);
+        if (m_result < 0) {
+            errno = m_errno;
+            return -1;
+        }
+        assert(static_cast<size_t>(m_result) <= len);
+        return m_result;
+    }
+
+    const ssize_t m_result;
+    const int m_errno;
+    mutable bool m_send_called{false};
+    mutable int m_flags{0};
+    mutable std::vector<std::byte> m_attempted;
+};
+
+std::vector<std::byte> ToBytes(std::string_view str)
+{
+    const auto bytes{std::as_bytes(std::span{str})};
+    return {bytes.begin(), bytes.end()};
+}
+} // namespace
 
 BOOST_FIXTURE_TEST_SUITE(httpserver_tests, SocketTestingSetup)
 
@@ -298,13 +339,79 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
     BOOST_CHECK(optimistic_response.ends_with("\r\n\r\nabc"));
 }
 
-BOOST_AUTO_TEST_CASE(http_request_tests)
+BOOST_AUTO_TEST_CASE(http_send_buffer_tests)
 {
-    auto ToBytes = [](std::string_view str) {
-        auto bytes{std::as_bytes(std::span{str})};
-        return std::vector<std::byte>{bytes.begin(), bytes.end()};
+    auto RunSendCase = [](std::string_view initial,
+                          ssize_t send_result,
+                          int send_errno,
+                          bool keep_alive,
+                          std::string_view expected_remaining,
+                          bool expected_ret,
+                          bool expected_send_ready,
+                          std::optional<bool> expected_connection_busy,
+                          bool expected_disconnect) {
+        auto sock{std::make_unique<ScriptedHttpSendSock>(send_result, send_errno)};
+        const auto* scripted_sock{sock.get()};
+        auto client{std::make_shared<HTTPRemoteClient>(
+            /*id=*/0,
+            CService{},
+            std::move(sock))};
+        const std::vector<std::byte> initial_bytes{ToBytes(initial)};
+        {
+            LOCK(client->m_send_mutex);
+            client->m_send_buffer = initial_bytes;
+        }
+        client->m_keep_alive = keep_alive;
+        {
+            LOCK(client->m_send_mutex);
+            client->m_send_ready = false;
+        }
+        client->m_connection_busy = true;
+        client->m_disconnect = false;
+
+        BOOST_CHECK_EQUAL(client->MaybeSendBytesFromBuffer(), expected_ret);
+
+        BOOST_REQUIRE(scripted_sock->m_send_called);
+        BOOST_CHECK(scripted_sock->m_attempted == initial_bytes);
+        BOOST_CHECK_EQUAL(scripted_sock->m_flags & MSG_NOSIGNAL, MSG_NOSIGNAL);
+        BOOST_CHECK_EQUAL(scripted_sock->m_flags & MSG_DONTWAIT, MSG_DONTWAIT);
+#ifdef MSG_MORE
+        BOOST_CHECK(!(scripted_sock->m_flags & MSG_MORE));
+#endif
+
+        const std::vector<std::byte> remaining{WITH_LOCK(client->m_send_mutex, return client->m_send_buffer)};
+        BOOST_CHECK(remaining == ToBytes(expected_remaining));
+        BOOST_CHECK_EQUAL(WITH_LOCK(client->m_send_mutex, return client->m_send_ready), expected_send_ready);
+        if (expected_connection_busy) {
+            BOOST_CHECK_EQUAL(client->m_connection_busy.load(), *expected_connection_busy);
+        }
+        BOOST_CHECK_EQUAL(client->m_disconnect.load(), expected_disconnect);
     };
 
+    RunSendCase("abcdef", /*send_result=*/2, /*send_errno=*/0, /*keep_alive=*/true,
+                /*expected_remaining=*/"cdef", /*expected_ret=*/true,
+                /*expected_send_ready=*/true, /*expected_connection_busy=*/true,
+                /*expected_disconnect=*/false);
+    RunSendCase("abc", /*send_result=*/3, /*send_errno=*/0, /*keep_alive=*/true,
+                /*expected_remaining=*/"", /*expected_ret=*/true,
+                /*expected_send_ready=*/false, /*expected_connection_busy=*/false,
+                /*expected_disconnect=*/false);
+    RunSendCase("abc", /*send_result=*/3, /*send_errno=*/0, /*keep_alive=*/false,
+                /*expected_remaining=*/"", /*expected_ret=*/false,
+                /*expected_send_ready=*/false, /*expected_connection_busy=*/false,
+                /*expected_disconnect=*/true);
+    RunSendCase("abc", /*send_result=*/-1, /*send_errno=*/EAGAIN, /*keep_alive=*/true,
+                /*expected_remaining=*/"abc", /*expected_ret=*/true,
+                /*expected_send_ready=*/true, /*expected_connection_busy=*/true,
+                /*expected_disconnect=*/false);
+    RunSendCase("abc", /*send_result=*/-1, /*send_errno=*/EPIPE, /*keep_alive=*/true,
+                /*expected_remaining=*/"abc", /*expected_ret=*/false,
+                /*expected_send_ready=*/false, /*expected_connection_busy=*/std::nullopt,
+                /*expected_disconnect=*/true);
+}
+
+BOOST_AUTO_TEST_CASE(http_request_tests)
+{
     {
         HTTPRequest req;
         LineReader reader(full_request, MAX_HEADERS_SIZE);
