@@ -169,6 +169,7 @@ BOOST_AUTO_TEST_CASE(package_sanitization_tests)
     BOOST_CHECK(!IsWellFormedPackage(package_duplicate_txids_empty, state_duplicates));
     BOOST_CHECK_EQUAL(state_duplicates.GetResult(), PackageValidationResult::PCKG_POLICY);
     BOOST_CHECK_EQUAL(state_duplicates.GetRejectReason(), "package-contains-duplicates");
+    BOOST_CHECK(!IsTopoSortedPackage(package_duplicate_txids_empty));
     BOOST_CHECK(!IsConsistentPackage(package_duplicate_txids_empty));
 
     // Packages can't have transactions spending the same prevout
