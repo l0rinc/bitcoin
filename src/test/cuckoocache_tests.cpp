@@ -11,6 +11,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <deque>
 #include <mutex>
 #include <shared_mutex>
@@ -31,6 +32,33 @@
  *
  */
 BOOST_FIXTURE_TEST_SUITE(cuckoocache_tests, BasicTestingSetup);
+
+BOOST_AUTO_TEST_CASE(cuckoocache_setup_return_contracts)
+{
+    auto check_setup = [](uint32_t requested) {
+        CuckooCache::cache<uint256, SignatureCacheHasher> cache{};
+        const auto actual{cache.setup(requested)};
+        BOOST_CHECK_EQUAL(actual, std::max<uint32_t>(2, requested));
+    };
+
+    check_setup(0);
+    check_setup(1);
+    check_setup(2);
+    check_setup(17);
+
+    auto check_setup_bytes = [](size_t bytes) {
+        CuckooCache::cache<uint256, SignatureCacheHasher> cache{};
+        const auto [num_elems, approx_size_bytes]{cache.setup_bytes(bytes)};
+        const auto expected_num_elems{std::max<uint32_t>(2, bytes / sizeof(uint256))};
+        BOOST_CHECK_EQUAL(num_elems, expected_num_elems);
+        BOOST_CHECK_EQUAL(approx_size_bytes, static_cast<size_t>(num_elems) * sizeof(uint256));
+    };
+
+    check_setup_bytes(0);
+    check_setup_bytes(sizeof(uint256) - 1);
+    check_setup_bytes(sizeof(uint256));
+    check_setup_bytes(17 * sizeof(uint256));
+}
 
 /* Test that no values not inserted into the cache are read out of it.
  *
