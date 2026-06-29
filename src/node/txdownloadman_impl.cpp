@@ -327,8 +327,10 @@ std::optional<PackageToValidate> TxDownloadManagerImpl::Find1P1CPackage(const CT
     // most recent) one efficiently.
     for (const auto& child : cpfp_candidates_same_peer) {
         Package maybe_cpfp_package{ptx, child};
-        if (!RecentRejectsReconsiderableFilter().contains(GetPackageHash(maybe_cpfp_package)) &&
+        const auto package_hash{GetPackageHash(maybe_cpfp_package)};
+        if (!RecentRejectsReconsiderableFilter().contains(package_hash) &&
             !RecentRejectsFilter().contains(child->GetHash().ToUint256())) {
+            Assume(!RecentRejectsReconsiderableFilter().contains(package_hash));
             return PackageToValidate{ptx, child, nodeid, nodeid};
         }
     }
@@ -522,7 +524,9 @@ node::RejectedTxTodo TxDownloadManagerImpl::MempoolRejectedTx(const CTransaction
 
 void TxDownloadManagerImpl::MempoolRejectedPackage(const Package& package)
 {
-    RecentRejectsReconsiderableFilter().insert(GetPackageHash(package));
+    const auto package_hash{GetPackageHash(package)};
+    RecentRejectsReconsiderableFilter().insert(package_hash);
+    Assume(RecentRejectsReconsiderableFilter().contains(package_hash));
 }
 
 std::pair<bool, std::optional<PackageToValidate>> TxDownloadManagerImpl::ReceivedTx(NodeId nodeid, const CTransactionRef& ptx)

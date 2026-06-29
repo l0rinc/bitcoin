@@ -266,7 +266,19 @@ FUZZ_TARGET(txdownloadman, .init = initialize)
                 // - Validate the tx, no package.
                 // The only combination that doesn't make sense is validate both tx and package.
                 Assert(!(should_validate && maybe_package.has_value()));
-                if (maybe_package.has_value()) CheckPackageToValidate(*maybe_package, rand_peer);
+                if (maybe_package.has_value()) {
+                    CheckPackageToValidate(*maybe_package, rand_peer);
+                    const auto package_hash{GetPackageHash(maybe_package->m_txns)};
+                    if (fuzzed_data_provider.ConsumeBool()) {
+                        txdownloadman.MempoolRejectedPackage(maybe_package->m_txns);
+                        const auto& [validate_after_reject, next_package] = txdownloadman.ReceivedTx(rand_peer, maybe_package->m_txns.front());
+                        Assert(!validate_after_reject);
+                        if (next_package.has_value()) {
+                            CheckPackageToValidate(*next_package, rand_peer);
+                            Assert(GetPackageHash(next_package->m_txns) != package_hash);
+                        }
+                    }
+                }
             },
             [&] {
                 txdownloadman.ReceivedNotFound(rand_peer, {rand_tx->GetWitnessHash()});
@@ -425,10 +437,21 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                     Assert(txdownload_impl.RecentRejectsReconsiderableFilter().contains(rand_tx->GetWitnessHash().ToUint256()));
                     Assert(txdownload_impl.m_orphanage->HaveTx(maybe_package->m_txns.back()->GetWitnessHash()));
                     // Package has not been rejected
-                    Assert(!txdownload_impl.RecentRejectsReconsiderableFilter().contains(GetPackageHash(package)));
+                    const auto package_hash{GetPackageHash(package)};
+                    Assert(!txdownload_impl.RecentRejectsReconsiderableFilter().contains(package_hash));
                     // Neither is in m_lazy_recent_rejects
                     Assert(!txdownload_impl.RecentRejectsFilter().contains(package.front()->GetWitnessHash().ToUint256()));
                     Assert(!txdownload_impl.RecentRejectsFilter().contains(package.back()->GetWitnessHash().ToUint256()));
+                    if (fuzzed_data_provider.ConsumeBool()) {
+                        txdownload_impl.MempoolRejectedPackage(package);
+                        Assert(txdownload_impl.RecentRejectsReconsiderableFilter().contains(package_hash));
+                        const auto& [validate_after_reject, next_package] = txdownload_impl.ReceivedTx(rand_peer, package.front());
+                        Assert(!validate_after_reject);
+                        if (next_package.has_value()) {
+                            CheckPackageToValidate(*next_package, rand_peer);
+                            Assert(GetPackageHash(next_package->m_txns) != package_hash);
+                        }
+                    }
                 }
             },
             [&] {
