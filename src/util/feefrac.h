@@ -11,6 +11,7 @@
 #include <compare>
 #include <concepts>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <utility>
 
@@ -89,6 +90,22 @@ struct FeeFrac
     int64_t fee;
     int32_t size;
 
+    template <std::integral T>
+    static constexpr T SaturatingSubtract(const T i, const T j) noexcept
+    {
+        if constexpr (std::numeric_limits<T>::is_signed) {
+            if (j > 0 && i < std::numeric_limits<T>::min() + j) {
+                return std::numeric_limits<T>::min();
+            }
+            if (j < 0 && i > std::numeric_limits<T>::max() + j) {
+                return std::numeric_limits<T>::max();
+            }
+        } else {
+            if (i < j) return 0;
+        }
+        return i - j;
+    }
+
     /** Construct an IsEmpty() FeeFrac. */
     constexpr inline FeeFrac() noexcept : fee{0}, size{0} {}
 
@@ -103,30 +120,30 @@ struct FeeFrac
         return size == 0;
     }
 
-    /** Add fee and size of another FeeFrac to this one. */
+    /** Saturating add fee and size of another FeeFrac to this one. */
     void inline operator+=(const FeeFrac& other) noexcept
     {
-        fee += other.fee;
-        size += other.size;
+        fee = SaturatingAdd(fee, other.fee);
+        size = SaturatingAdd(size, other.size);
     }
 
-    /** Subtract fee and size of another FeeFrac from this one. */
+    /** Saturating subtract fee and size of another FeeFrac from this one. */
     void inline operator-=(const FeeFrac& other) noexcept
     {
-        fee -= other.fee;
-        size -= other.size;
+        fee = SaturatingSubtract(fee, other.fee);
+        size = SaturatingSubtract(size, other.size);
     }
 
-    /** Sum fee and size. */
+    /** Saturating sum fee and size. */
     friend inline FeeFrac operator+(const FeeFrac& a, const FeeFrac& b) noexcept
     {
-        return {a.fee + b.fee, a.size + b.size};
+        return {SaturatingAdd(a.fee, b.fee), SaturatingAdd(a.size, b.size)};
     }
 
-    /** Subtract both fee and size. */
+    /** Saturating subtract both fee and size. */
     friend inline FeeFrac operator-(const FeeFrac& a, const FeeFrac& b) noexcept
     {
-        return {a.fee - b.fee, a.size - b.size};
+        return {SaturatingSubtract(a.fee, b.fee), SaturatingSubtract(a.size, b.size)};
     }
 
     /** Check if two FeeFrac objects are equal (both same fee and same size). */

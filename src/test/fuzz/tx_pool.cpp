@@ -28,6 +28,7 @@
 #include <test/util/txmempool.h>
 #include <txmempool.h>
 #include <util/check.h>
+#include <util/overflow.h>
 #include <util/string.h>
 #include <util/time.h>
 #include <util/translation.h>
@@ -149,10 +150,59 @@ void CheckTransactionAncestryAll(const CTxMemPool& tx_pool)
     }
 }
 
+void CheckPrioritisedTransactions(const CTxMemPool& tx_pool)
+{
+    const auto prioritised{tx_pool.GetPrioritisedTransactions()};
+    std::set<Txid> seen_txids;
+
+    LOCK(tx_pool.cs);
+    Assert(prioritised.size() == tx_pool.mapDeltas.size());
+    for (const auto& [txid, delta] : tx_pool.mapDeltas) {
+        Assert(delta != 0);
+    }
+    for (const auto& delta_info : prioritised) {
+        Assert(seen_txids.insert(delta_info.txid).second);
+        Assert(delta_info.delta != 0);
+        const auto delta_it{tx_pool.mapDeltas.find(delta_info.txid)};
+        Assert(delta_it != tx_pool.mapDeltas.end());
+        Assert(delta_it->second == delta_info.delta);
+
+        const auto entry{tx_pool.GetIter(delta_info.txid)};
+        Assert(delta_info.in_mempool == entry.has_value());
+        Assert(delta_info.modified_fee.has_value() == entry.has_value());
+        if (entry) {
+            const CAmount expected_modified_fee{SaturatingAdd((*entry)->GetFee(), delta_info.delta)};
+            Assert((*entry)->GetModifiedFee() == expected_modified_fee);
+            Assert(*delta_info.modified_fee == expected_modified_fee);
+        }
+    }
+    for (const auto& entry : tx_pool.mapTx) {
+        const auto txid{entry.GetTx().GetHash()};
+        const auto delta_it{tx_pool.mapDeltas.find(txid)};
+        const CAmount delta{delta_it == tx_pool.mapDeltas.end() ? 0 : delta_it->second};
+        Assert(entry.GetModifiedFee() == SaturatingAdd(entry.GetFee(), delta));
+    }
+}
+
+[[nodiscard]] CAmount ConsumePriorityDelta(FuzzedDataProvider& fuzzed_data_provider)
+{
+    switch (fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 4)) {
+    case 0:
+        return std::numeric_limits<CAmount>::max();
+    case 1:
+        return -std::numeric_limits<CAmount>::max();
+    case 2:
+        return 0;
+    default:
+        return fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(-50 * COIN, 50 * COIN);
+    }
+}
+
 void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Chainstate& chainstate)
 {
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
     CheckTransactionAncestryAll(tx_pool);
+    CheckPrioritisedTransactions(tx_pool);
     {
         BlockCreateOptions options{
             .block_min_fee_rate = CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/COIN)},
@@ -178,12 +228,14 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         }
         tx_pool.UpdateTransactionsFromBlock(hashes_to_update);
     }
+    CheckPrioritisedTransactions(tx_pool);
     const auto info_all = tx_pool.infoAll();
     if (!info_all.empty()) {
         const auto& tx_to_remove = *PickValue(fuzzed_data_provider, info_all).tx;
         WITH_LOCK(tx_pool.cs, tx_pool.removeRecursive(tx_to_remove, MemPoolRemovalReason::BLOCK /* dummy */));
         assert(tx_pool.size() < info_all.size());
         CheckTransactionAncestryAll(tx_pool);
+        CheckPrioritisedTransactions(tx_pool);
     }
 
     if (fuzzed_data_provider.ConsumeBool()) {
@@ -198,6 +250,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
     }
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
     CheckTransactionAncestryAll(tx_pool);
+    CheckPrioritisedTransactions(tx_pool);
     g_setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
 }
 
@@ -383,8 +436,9 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
             const auto& txid = fuzzed_data_provider.ConsumeBool() ?
                                    tx->GetHash() :
                                    PickValue(fuzzed_data_provider, outpoints_rbf).hash;
-            const auto delta = fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(-50 * COIN, +50 * COIN);
+            const auto delta = ConsumePriorityDelta(fuzzed_data_provider);
             tx_pool.PrioritiseTransaction(txid, delta);
+            CheckPrioritisedTransactions(tx_pool);
         }
 
         // Remember all removed and added transactions
@@ -416,6 +470,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
         bool wtxid_in_mempool = tx_pool.exists(tx->GetWitnessHash());
         CheckATMPInvariants(res, txid_in_mempool, wtxid_in_mempool);
         if (txid_in_mempool) CheckTransactionAncestry(tx_pool, tx->GetHash());
+        CheckPrioritisedTransactions(tx_pool);
 
         Assert(accepted != added.empty());
         if (accepted) {
@@ -461,6 +516,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
                 Assert(outpoints_supply.erase(p) == 1);
             }
         }
+        CheckPrioritisedTransactions(tx_pool);
     }
     Finish(fuzzed_data_provider, tx_pool, chainstate);
 }
@@ -507,8 +563,9 @@ FUZZ_TARGET(tx_pool, .init = initialize_tx_pool)
             const auto txid = fuzzed_data_provider.ConsumeBool() ?
                                    mut_tx.GetHash() :
                                    PickValue(fuzzed_data_provider, txids);
-            const auto delta = fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(-50 * COIN, +50 * COIN);
+            const auto delta = ConsumePriorityDelta(fuzzed_data_provider);
             tx_pool.PrioritiseTransaction(txid, delta);
+            CheckPrioritisedTransactions(tx_pool);
         }
 
         const bool bypass_limits{fuzzed_data_provider.ConsumeBool()};
@@ -524,6 +581,7 @@ FUZZ_TARGET(tx_pool, .init = initialize_tx_pool)
                 CheckMempoolTRUCInvariants(tx_pool);
             }
         }
+        CheckPrioritisedTransactions(tx_pool);
     }
     Finish(fuzzed_data_provider, tx_pool, chainstate);
 }
