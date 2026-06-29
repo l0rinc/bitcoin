@@ -10,6 +10,7 @@
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util/net.h>
 #include <test/fuzz/util.h>
+#include <test/util/net.h>
 #include <test/util/time.h>
 #include <util/signalinterrupt.h>
 #include <util/strencodings.h>
@@ -248,6 +249,64 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     assert(WITH_LOCK(client->m_send_mutex, return client->m_send_ready));
     assert(!client->m_req_busy.load());
 }
+
+void AssertReadRequestContracts(const std::string_view http_buffer)
+{
+    using http_bitcoin::HTTPRequest;
+    using http_bitcoin::HTTPRemoteClient;
+    using http_bitcoin::MAX_HEADERS_SIZE;
+    using util::LineReader;
+
+    HTTPRequest direct_request;
+    LineReader direct_reader(http_buffer, MAX_HEADERS_SIZE);
+
+    bool direct_complete{false};
+    bool direct_threw{false};
+    try {
+        direct_complete = direct_request.LoadControlData(direct_reader) &&
+                          direct_request.LoadHeaders(direct_reader) &&
+                          direct_request.LoadBody(direct_reader);
+    } catch (const std::runtime_error&) {
+        direct_threw = true;
+    }
+
+    auto client{std::make_shared<HTTPRemoteClient>(
+        /*id=*/1,
+        CService{},
+        std::make_unique<StaticContentsSock>(""))};
+    client->m_recv_buffer = http_buffer;
+    const std::string recv_buffer_before{client->m_recv_buffer};
+
+    HTTPRequest client_request{client};
+    if (direct_threw) {
+        try {
+            (void)client->ReadRequest(client_request);
+            assert(false);
+        } catch (const std::runtime_error&) {
+        }
+        assert(client->m_recv_buffer == recv_buffer_before);
+        return;
+    }
+
+    const bool client_complete{client->ReadRequest(client_request)};
+    assert(client_complete == direct_complete);
+
+    if (!client_complete) {
+        assert(client->m_recv_buffer == recv_buffer_before);
+        return;
+    }
+
+    assert(direct_reader.Consumed() <= recv_buffer_before.size());
+    const std::string expected_remaining{recv_buffer_before.substr(direct_reader.Consumed())};
+    assert(client->m_recv_buffer == expected_remaining);
+
+    assert(client_request.GetRequestMethod() == direct_request.GetRequestMethod());
+    assert(client_request.GetURI() == direct_request.GetURI());
+    assert(client_request.m_version.major == direct_request.m_version.major);
+    assert(client_request.m_version.minor == direct_request.m_version.minor);
+    assert(client_request.m_headers.Stringify() == direct_request.m_headers.Stringify());
+    assert(client_request.ReadBody() == direct_request.ReadBody());
+}
 } // namespace
 
 FUZZ_TARGET(http_request)
@@ -262,6 +321,7 @@ FUZZ_TARGET(http_request)
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     AssertHeaderCollectionContracts(fuzzed_data_provider);
     const std::string http_buffer{fuzzed_data_provider.ConsumeRandomLengthString(4096)};
+    AssertReadRequestContracts(http_buffer);
 
     HTTPRequest http_request;
     LineReader reader(http_buffer, MAX_HEADERS_SIZE);
