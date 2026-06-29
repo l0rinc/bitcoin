@@ -8,6 +8,7 @@
 #include <node/blockstorage.h>
 #include <node/context.h>
 #include <node/kernel_notifications.h>
+#include <pow.h>
 #include <script/solver.h>
 #include <primitives/block.h>
 #include <util/chaintype.h>
@@ -18,6 +19,8 @@
 #include <test/util/common.h>
 #include <test/util/logging.h>
 #include <test/util/setup_common.h>
+
+#include <algorithm>
 
 using kernel::CBlockFileInfo;
 using node::STORAGE_HEADER_BYTES;
@@ -59,6 +62,61 @@ BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
     // add another 8 bytes for the second block's serialization header and we get 293 + 8 = 301
     FlatFilePos actual{blockman.WriteBlock(params->GenesisBlock(), 1)};
     BOOST_CHECK_EQUAL(actual.nPos, STORAGE_HEADER_BYTES + ::GetSerializeSize(TX_WITH_WITNESS(params->GenesisBlock())) + STORAGE_HEADER_BYTES);
+}
+
+BOOST_AUTO_TEST_CASE(blockmanager_add_to_block_index_metadata)
+{
+    KernelNotifications notifications{Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings)};
+    const BlockManager::Options blockman_opts{
+        .chainparams = Params(),
+        .blocks_dir = m_args.GetBlocksDirPath(),
+        .notifications = notifications,
+        .block_tree_db_params = DBParams{
+            .path = "",
+            .cache_bytes = 0,
+            .memory_only = true,
+        },
+    };
+    BlockManager blockman{*Assert(m_node.shutdown_signal), blockman_opts};
+
+    LOCK(::cs_main);
+    CBlockIndex* best_header{nullptr};
+    const CBlockHeader genesis_header{Params().GenesisBlock()};
+    CBlockIndex* genesis{blockman.AddToBlockIndex(genesis_header, best_header)};
+    BOOST_REQUIRE(genesis);
+    BOOST_CHECK(genesis->phashBlock);
+    BOOST_CHECK(genesis->GetBlockHash() == genesis_header.GetHash());
+    BOOST_CHECK(genesis->pprev == nullptr);
+    BOOST_CHECK_EQUAL(genesis->nHeight, 0);
+    BOOST_CHECK_EQUAL(genesis->nTimeMax, genesis->nTime);
+    BOOST_CHECK(genesis->nChainWork == GetBlockProof(*genesis));
+    BOOST_CHECK(genesis->IsValid(BLOCK_VALID_TREE));
+    BOOST_CHECK(best_header == genesis);
+
+    CBlockHeader child_header;
+    child_header.nVersion = 4;
+    child_header.hashPrevBlock = genesis->GetBlockHash();
+    child_header.hashMerkleRoot = uint256::ONE;
+    child_header.nTime = genesis->nTime + 1;
+    child_header.nBits = genesis->nBits;
+    child_header.nNonce = 1;
+    CBlockIndex* child{blockman.AddToBlockIndex(child_header, best_header)};
+    BOOST_REQUIRE(child);
+    BOOST_CHECK(child->phashBlock);
+    BOOST_CHECK(child->GetBlockHash() == child_header.GetHash());
+    BOOST_CHECK(child->pprev == genesis);
+    BOOST_CHECK_EQUAL(child->nHeight, genesis->nHeight + 1);
+    BOOST_CHECK(child->GetAncestor(genesis->nHeight) == genesis);
+    BOOST_CHECK_EQUAL(child->nTimeMax, std::max(genesis->nTimeMax, child->nTime));
+    BOOST_CHECK(child->nChainWork == genesis->nChainWork + GetBlockProof(*child));
+    BOOST_CHECK(child->IsValid(BLOCK_VALID_TREE));
+    BOOST_CHECK(best_header == child);
+
+    CBlockIndex* duplicate{blockman.AddToBlockIndex(child_header, best_header)};
+    BOOST_CHECK(duplicate == child);
+    BOOST_CHECK(duplicate->phashBlock);
+    BOOST_CHECK(duplicate->GetBlockHash() == child_header.GetHash());
+    BOOST_CHECK(best_header == child);
 }
 
 BOOST_FIXTURE_TEST_CASE(blockmanager_scan_unlink_already_pruned_files, TestChain100Setup)
