@@ -170,11 +170,13 @@ FUZZ_TARGET(muhash)
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     std::vector<uint8_t> data{ConsumeRandomLengthByteVector(fuzzed_data_provider)};
     std::vector<uint8_t> data2{ConsumeRandomLengthByteVector(fuzzed_data_provider)};
+    std::vector<uint8_t> data3{ConsumeRandomLengthByteVector(fuzzed_data_provider)};
 
     MuHash3072 muhash;
 
     muhash.Insert(data);
     muhash.Insert(data2);
+    MuHash3072 expected{muhash};
 
     constexpr uint256 initial_state_hash{"dd5ad2a105c2d29495f577245c357409002329b9f4d6182c0af3dc2f462555c8"};
     uint256 out;
@@ -200,6 +202,7 @@ FUZZ_TARGET(muhash)
         [&] {
             // Test that dividing a MuHash by itself brings it back to its initial state
             muhash /= muhash;
+            expected = MuHash3072{};
             muhash.Finalize(out);
             out2 = initial_state_hash;
         },
@@ -207,8 +210,25 @@ FUZZ_TARGET(muhash)
             // Test that removing all added elements brings the object back to its initial state
             muhash.Remove(data);
             muhash.Remove(data2);
+            expected = MuHash3072{};
             muhash.Finalize(out);
             out2 = initial_state_hash;
         });
     assert(out == out2);
+
+    // Finalize folds the denominator into the numerator but must not change the
+    // represented value or make later operations observe stale denominator state.
+    uint256 out3;
+    muhash.Finalize(out3);
+    assert(out == out3);
+
+    MuHash3072 finalized_then_insert{muhash};
+    finalized_then_insert.Insert(data3);
+    uint256 finalized_then_insert_out;
+    finalized_then_insert.Finalize(finalized_then_insert_out);
+
+    expected.Insert(data3);
+    uint256 expected_out;
+    expected.Finalize(expected_out);
+    assert(finalized_then_insert_out == expected_out);
 }
