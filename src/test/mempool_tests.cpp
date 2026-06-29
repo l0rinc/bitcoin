@@ -16,6 +16,7 @@
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
+#include <limits>
 #include <map>
 #include <set>
 #include <vector>
@@ -68,6 +69,85 @@ static void CheckMempoolInputIndexCount(const CTxMemPool& pool)
         indexed_input_count = pool.mapNextTx.size();
     }
     BOOST_CHECK_EQUAL(indexed_input_count, input_count);
+}
+
+BOOST_AUTO_TEST_CASE(MempoolPrioritisationTest)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    TestMemPoolEntryHelper entry;
+
+    const auto make_tx = [](uint32_t prevout_n) {
+        CMutableTransaction tx_mut;
+        tx_mut.vin.resize(1);
+        tx_mut.vin[0].prevout = COutPoint{Txid::FromUint256(uint256{static_cast<uint8_t>(prevout_n + 1)}), prevout_n};
+        tx_mut.vin[0].scriptSig = CScript() << OP_11;
+        tx_mut.vout.resize(1);
+        tx_mut.vout[0].scriptPubKey = CScript() << OP_11 << OP_EQUAL;
+        tx_mut.vout[0].nValue = 1;
+        return MakeTransactionRef(tx_mut);
+    };
+
+    const CTransactionRef tx{make_tx(0)};
+    const Txid txid{tx->GetHash()};
+    constexpr CAmount base_fee{10'000};
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(base_fee).FromTx(tx));
+    }
+
+    const auto check_modified_fee = [&] (const CAmount expected_modified_fee) {
+        LOCK(pool.cs);
+        const auto it{pool.GetIter(txid)};
+        BOOST_REQUIRE(it.has_value());
+        BOOST_CHECK_EQUAL((*it)->GetModifiedFee(), expected_modified_fee);
+    };
+    const auto check_prioritisation = [&] (const CAmount expected_delta, const CAmount expected_modified_fee) {
+        const auto deltas{pool.GetPrioritisedTransactions()};
+        BOOST_REQUIRE_EQUAL(deltas.size(), 1U);
+        BOOST_CHECK(deltas.front().txid == txid);
+        BOOST_CHECK(deltas.front().in_mempool);
+        BOOST_CHECK_EQUAL(deltas.front().delta, expected_delta);
+        BOOST_REQUIRE(deltas.front().modified_fee.has_value());
+        BOOST_CHECK_EQUAL(*deltas.front().modified_fee, expected_modified_fee);
+        check_modified_fee(expected_modified_fee);
+    };
+
+    pool.PrioritiseTransaction(txid, 1'234);
+    check_prioritisation(/*expected_delta=*/1'234, /*expected_modified_fee=*/base_fee + 1'234);
+
+    {
+        LOCK(pool.cs);
+        pool.ClearPrioritisation(txid);
+    }
+    BOOST_CHECK(pool.GetPrioritisedTransactions().empty());
+    check_modified_fee(base_fee);
+
+    constexpr CAmount max_delta{std::numeric_limits<CAmount>::max()};
+    pool.PrioritiseTransaction(txid, max_delta);
+    check_prioritisation(max_delta, max_delta);
+
+    pool.PrioritiseTransaction(txid, -max_delta);
+    BOOST_CHECK(pool.GetPrioritisedTransactions().empty());
+    check_modified_fee(base_fee);
+
+    const CTransactionRef tx2{make_tx(1)};
+    const Txid txid2{tx2->GetHash()};
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(base_fee).FromTx(tx2));
+    }
+
+    pool.PrioritiseTransaction(txid, max_delta);
+    pool.PrioritiseTransaction(txid2, max_delta);
+    {
+        LOCK(pool.cs);
+        const auto diagram{pool.GetFeerateDiagram()};
+        BOOST_REQUIRE(!diagram.empty());
+        BOOST_CHECK_EQUAL(diagram.back().fee, max_delta);
+        pool.TrimToSize(0);
+        BOOST_CHECK(pool.mapTx.empty());
+    }
 }
 
 BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
