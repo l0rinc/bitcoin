@@ -10,6 +10,7 @@
 #include <compat/compat.h>
 #include <sync.h>
 #include <tinyformat.h>
+#include <util/check.h>
 #include <util/log.h>
 #include <util/sock.h>
 #include <util/strencodings.h>
@@ -409,6 +410,8 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
             vSocks5Init.push_back(0x01); // 1 method identifier follows...
             vSocks5Init.push_back(SOCKS5Method::NOAUTH);
         }
+        Assume(vSocks5Init.size() == (auth ? 4U : 3U));
+        Assume(vSocks5Init[1] == vSocks5Init.size() - 2);
         sock.SendComplete(vSocks5Init, g_socks5_recv_timeout, g_socks5_interrupt);
         uint8_t pchRet1[2];
         if (InterruptibleRecv(pchRet1, 2, g_socks5_recv_timeout, sock) != IntrRecvError::OK) {
@@ -431,6 +434,9 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
             vAuth.insert(vAuth.end(), auth->username.begin(), auth->username.end());
             vAuth.push_back(auth->password.size());
             vAuth.insert(vAuth.end(), auth->password.begin(), auth->password.end());
+            Assume(vAuth.size() == 3U + auth->username.size() + auth->password.size());
+            Assume(vAuth[1] == auth->username.size());
+            Assume(vAuth[2U + auth->username.size()] == auth->password.size());
             LogDebug(BCLog::PROXY, "SOCKS5 sending username/password authentication\n");
             sock.SendComplete(vAuth, g_socks5_recv_timeout, g_socks5_interrupt);
             uint8_t pchRetA[2];
@@ -457,6 +463,10 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
         vSocks5.insert(vSocks5.end(), strDest.begin(), strDest.end());
         vSocks5.push_back((port >> 8) & 0xFF);
         vSocks5.push_back((port >> 0) & 0xFF);
+        Assume(vSocks5.size() == 7U + strDest.size());
+        Assume(vSocks5[4] == strDest.size());
+        Assume(vSocks5[vSocks5.size() - 2] == ((port >> 8) & 0xFF));
+        Assume(vSocks5[vSocks5.size() - 1] == (port & 0xFF));
         sock.SendComplete(vSocks5, g_socks5_recv_timeout, g_socks5_interrupt);
         uint8_t pchRet2[4];
         if ((recvr = InterruptibleRecv(pchRet2, 4, g_socks5_recv_timeout, sock)) != IntrRecvError::OK) {

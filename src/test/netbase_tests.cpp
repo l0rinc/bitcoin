@@ -11,12 +11,15 @@
 #include <serialize.h>
 #include <streams.h>
 #include <test/util/common.h>
+#include <test/util/net.h>
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
 #include <util/translation.h>
 
-#include <string>
+#include <memory>
 #include <numeric>
+#include <string>
+#include <vector>
 
 #include <boost/test/unit_test.hpp>
 
@@ -35,6 +38,68 @@ static CNetAddr CreateInternal(const std::string& host)
     CNetAddr addr;
     addr.SetInternal(host);
     return addr;
+}
+
+static void PushBytes(DynSock::Pipe& pipe, const std::vector<uint8_t>& bytes)
+{
+    if (!bytes.empty()) pipe.PushBytes(bytes.data(), bytes.size());
+}
+
+static std::vector<uint8_t> ReadBytes(DynSock::Pipe& pipe, size_t len)
+{
+    std::vector<uint8_t> ret(len);
+    BOOST_REQUIRE_EQUAL(pipe.GetBytes(ret.data(), ret.size()), static_cast<ssize_t>(ret.size()));
+    return ret;
+}
+
+static void CheckNoBytes(DynSock::Pipe& pipe)
+{
+    uint8_t byte;
+    BOOST_CHECK_EQUAL(pipe.GetBytes(&byte, 1), -1);
+}
+
+static std::vector<uint8_t> Socks5SuccessReply(bool select_auth)
+{
+    std::vector<uint8_t> reply{
+        0x05, static_cast<uint8_t>(select_auth ? 0x02 : 0x00),
+    };
+    if (select_auth) reply.insert(reply.end(), {0x01, 0x00});
+    reply.insert(reply.end(), {0x05, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00});
+    return reply;
+}
+
+static std::vector<uint8_t> ExpectedSocks5ClientBytes(const std::string& dest, uint16_t port, const ProxyCredentials* auth)
+{
+    std::vector<uint8_t> expected{
+        0x05,
+        static_cast<uint8_t>(auth ? 0x02 : 0x01),
+        0x00,
+    };
+    if (auth) {
+        expected.push_back(0x02);
+        expected.insert(expected.end(), {0x01, static_cast<uint8_t>(auth->username.size())});
+        expected.insert(expected.end(), auth->username.begin(), auth->username.end());
+        expected.push_back(static_cast<uint8_t>(auth->password.size()));
+        expected.insert(expected.end(), auth->password.begin(), auth->password.end());
+    }
+    expected.insert(expected.end(), {0x05, 0x01, 0x00, 0x03, static_cast<uint8_t>(dest.size())});
+    expected.insert(expected.end(), dest.begin(), dest.end());
+    expected.push_back((port >> 8) & 0xFF);
+    expected.push_back(port & 0xFF);
+    return expected;
+}
+
+static void CheckSocks5Transcript(const std::string& dest, uint16_t port, const ProxyCredentials* auth)
+{
+    g_socks5_interrupt.reset();
+    auto pipes{std::make_shared<DynSock::Pipes>()};
+    PushBytes(pipes->recv, Socks5SuccessReply(auth != nullptr));
+    DynSock sock{pipes};
+
+    BOOST_CHECK(Socks5(dest, port, auth, sock));
+    const auto expected{ExpectedSocks5ClientBytes(dest, port, auth)};
+    BOOST_CHECK(ReadBytes(pipes->send, expected.size()) == expected);
+    CheckNoBytes(pipes->send);
 }
 
 BOOST_AUTO_TEST_CASE(netbase_networks)
@@ -120,6 +185,22 @@ BOOST_AUTO_TEST_CASE(netbase_splithost)
     BOOST_CHECK(TestSplitHost("www.bitcoincore.org:65536", "www.bitcoincore.org:65536", 0, false));
     BOOST_CHECK(TestSplitHost("www.bitcoincore.org:0", "www.bitcoincore.org", 0, false));
     BOOST_CHECK(TestSplitHost("www.bitcoincore.org:", "www.bitcoincore.org:", 0, false));
+}
+
+BOOST_AUTO_TEST_CASE(socks5_client_transcript)
+{
+    CheckSocks5Transcript("node.example", 8333, nullptr);
+
+    ProxyCredentials credentials;
+    credentials.username = "user";
+    credentials.password = "passphrase";
+    CheckSocks5Transcript("auth.example", 9050, &credentials);
+
+    g_socks5_interrupt.reset();
+    auto pipes{std::make_shared<DynSock::Pipes>()};
+    DynSock sock{pipes};
+    BOOST_CHECK(!Socks5(std::string(256, 'x'), 8333, nullptr, sock));
+    CheckNoBytes(pipes->send);
 }
 
 bool static TestParse(std::string src, std::string canon)
