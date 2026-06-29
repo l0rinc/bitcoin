@@ -6,6 +6,7 @@
 #include <random.h>
 
 #include <compare>
+#include <limits>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -71,6 +72,21 @@ BOOST_AUTO_TEST_CASE(feefrac_operators)
     FeeFrac p4{3000, 300};
     BOOST_CHECK(p1 == p4-p3);
     BOOST_CHECK(p1 + p3 == p4);
+
+    const FeeFrac max_frac{std::numeric_limits<int64_t>::max(), std::numeric_limits<int32_t>::max()};
+    const FeeFrac min_frac{std::numeric_limits<int64_t>::min(), std::numeric_limits<int32_t>::min()};
+    BOOST_CHECK((max_frac + FeeFrac{1, 1} == max_frac));
+    BOOST_CHECK((min_frac - FeeFrac{1, 1} == min_frac));
+    {
+        FeeFrac saturating_sum{max_frac};
+        saturating_sum += FeeFrac{1, 1};
+        BOOST_CHECK(saturating_sum == max_frac);
+    }
+    {
+        FeeFrac saturating_diff{min_frac};
+        saturating_diff -= FeeFrac{1, 1};
+        BOOST_CHECK(saturating_diff == min_frac);
+    }
 
     // Fee-rate comparison
     BOOST_CHECK(ByRatioNegSize{p1} > ByRatioNegSize{p2});
