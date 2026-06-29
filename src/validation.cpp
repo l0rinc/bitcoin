@@ -3587,6 +3587,13 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
     // running, as that could cause the tip to change while we disconnect
     // blocks.
     LOCK(m_chainstate_mutex);
+    CBlockIndex* original_tip{nullptr};
+    bool pindex_was_originally_in_chain{false};
+    {
+        LOCK(cs_main);
+        original_tip = m_chain.Tip();
+        pindex_was_originally_in_chain = m_chain.Contains(*pindex);
+    }
 
     // We'll be acquiring and releasing cs_main below, to allow the validation
     // callbacks to run. However, we should keep the block index in a
@@ -3704,6 +3711,10 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
         if (m_chain.Contains(*to_mark_failed)) {
             // If the to-be-marked invalid block is in the active chain, something is interfering and we can't proceed.
             return false;
+        }
+        Assume(pindex_was_in_chain == pindex_was_originally_in_chain);
+        if (!pindex_was_in_chain) {
+            Assume(m_chain.Tip() == original_tip);
         }
 
         // Mark pindex as invalid if it never was in the main chain

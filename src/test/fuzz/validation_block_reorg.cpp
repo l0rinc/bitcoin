@@ -471,7 +471,13 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
                 auto indexes{KnownBlockIndexes(chainman)};
                 if (indexes.empty()) return;
                 CBlockIndex* index{PickValue(fuzzed_data_provider, indexes)};
-                const uint256 old_tip{WITH_LOCK(chainman.GetMutex(), return chainman.ActiveChain().Tip()->GetBlockHash())};
+                bool was_in_active_chain;
+                uint256 old_tip;
+                {
+                    LOCK(chainman.GetMutex());
+                    was_in_active_chain = chainman.ActiveChain().Contains(*index);
+                    old_tip = chainman.ActiveChain().Tip()->GetBlockHash();
+                }
 
                 BlockValidationState state;
                 const bool invalidated{chainman.ActiveChainstate().InvalidateBlock(state, index)};
@@ -483,6 +489,9 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
                 } else {
                     assert(invalidated);
                     AssertFailedBlockAndDescendants(chainman, *index);
+                    if (!was_in_active_chain) {
+                        assert(old_tip == WITH_LOCK(chainman.GetMutex(), return chainman.ActiveChain().Tip()->GetBlockHash()));
+                    }
                 }
             },
             [&] {
