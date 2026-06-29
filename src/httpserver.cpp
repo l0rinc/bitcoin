@@ -958,7 +958,9 @@ HTTPServer::IOReadiness HTTPServer::GenerateWaitSockets() const
     IOReadiness io_readiness;
 
     for (const auto& sock : m_listen) {
-        io_readiness.events_per_sock.emplace(sock, Sock::Events{Sock::RecvEvent});
+        const auto [it, inserted]{io_readiness.events_per_sock.emplace(sock, Sock::Events{Sock::RecvEvent})};
+        Assume(inserted);
+        Assume(it->second.requested == Sock::RecvEvent);
     }
 
     for (const auto& http_client : m_connected) {
@@ -972,10 +974,16 @@ HTTPServer::IOReadiness HTTPServer::GenerateWaitSockets() const
         // MaybeSendBytesFromBuffer() locks m_send_mutex then m_sock_mutex, so nesting
         // them in the opposite order here would risk a lock-order inversion deadlock.
         const bool send_ready{WITH_LOCK(http_client->m_send_mutex, return http_client->m_send_ready;)};
-        Sock::Event event = (send_ready ? Sock::SendEvent : Sock::RecvEvent);
-        io_readiness.events_per_sock.emplace(sock, Sock::Events{event});
-        io_readiness.httpclients_per_sock.emplace(sock, http_client);
+        const Sock::Event event = (send_ready ? Sock::SendEvent : Sock::RecvEvent);
+        const auto [event_it, event_inserted]{io_readiness.events_per_sock.emplace(sock, Sock::Events{event})};
+        Assume(event_inserted);
+        Assume(event_it->second.requested == event);
+        const auto [client_it, client_inserted]{io_readiness.httpclients_per_sock.emplace(sock, http_client)};
+        Assume(client_inserted);
+        Assume(client_it->second == http_client);
     }
+    Assume(io_readiness.events_per_sock.size() == m_listen.size() + m_connected.size());
+    Assume(io_readiness.httpclients_per_sock.size() == m_connected.size());
 
     return io_readiness;
 }
