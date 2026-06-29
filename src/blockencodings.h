@@ -7,6 +7,7 @@
 
 #include <crypto/siphash.h>
 #include <primitives/block.h>
+#include <util/check.h>
 
 #include <functional>
 
@@ -51,6 +52,9 @@ public:
     SERIALIZE_METHODS(BlockTransactionsRequest, obj)
     {
         READWRITE(obj.blockhash, Using<VectorFormatter<DifferenceFormatter>>(obj.indexes));
+        for (size_t i{1}; i < obj.indexes.size(); ++i) {
+            Assume(obj.indexes[i] > obj.indexes[i - 1]);
+        }
     }
 };
 
