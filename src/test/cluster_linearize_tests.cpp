@@ -526,6 +526,24 @@ BOOST_AUTO_TEST_CASE(postlinearization_output_is_topological)
     BOOST_CHECK(CompareChunks(ChunkLinearization(depgraph, linearization), old_chunking) >= 0);
 }
 
+BOOST_AUTO_TEST_CASE(append_topo_preserves_prefix_and_orders_subset)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto parent{depgraph.AddTransaction(FeeFrac{1, 10})};
+    const auto child{depgraph.AddTransaction(FeeFrac{100, 1})};
+    const auto prefix_tx{depgraph.AddTransaction(FeeFrac{50, 1})};
+    depgraph.AddDependencies(TestBitSet::Singleton(parent), child);
+    SanityCheck(depgraph);
+
+    std::vector<DepGraphIndex> linearization{prefix_tx};
+    depgraph.AppendTopo(linearization, TestBitSet::Singleton(child) | TestBitSet::Singleton(parent));
+
+    BOOST_REQUIRE_EQUAL(linearization.size(), 3U);
+    BOOST_CHECK_EQUAL(linearization[0], prefix_tx);
+    BOOST_CHECK_EQUAL(linearization[1], parent);
+    BOOST_CHECK_EQUAL(linearization[2], child);
+}
+
 BOOST_AUTO_TEST_CASE(chunk_linearization_merges_higher_rate_suffix)
 {
     DepGraph<TestBitSet> depgraph;
