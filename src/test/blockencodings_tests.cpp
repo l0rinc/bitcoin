@@ -15,6 +15,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <limits>
 
 const std::vector<std::pair<Wtxid, CTransactionRef>> empty_extra_txn;
@@ -61,6 +62,21 @@ static CBlock BuildBlockTestCase(FastRandomContext& ctx) {
 // Number of shared use_counts we expect for a tx we haven't touched
 // (block + mempool entry + our copy from the GetSharedTx call)
 constexpr long SHARED_TX_OFFSET{3};
+
+class TestPartiallyDownloadedBlock : public PartiallyDownloadedBlock
+{
+public:
+    using PartiallyDownloadedBlock::PartiallyDownloadedBlock;
+
+    size_t AvailableTxCount() const
+    {
+        return std::count_if(txn_available.begin(), txn_available.end(), [](const auto& tx) { return tx != nullptr; });
+    }
+
+    size_t PrefilledCount() const { return prefilled_count; }
+    size_t MempoolCount() const { return mempool_count; }
+    size_t ExtraCount() const { return extra_count; }
+};
 
 BOOST_AUTO_TEST_CASE(SimpleRoundTripTest)
 {
@@ -202,6 +218,44 @@ BOOST_AUTO_TEST_CASE(InitDataFailureResetsPartialBlock)
     PartiallyDownloadedBlock overflow_block(&pool);
     BOOST_CHECK(overflow_block.InitData(decoded_overflow, empty_extra_txn) == READ_STATUS_INVALID);
     BOOST_CHECK(overflow_block.header.IsNull());
+}
+
+BOOST_AUTO_TEST_CASE(FillBlockResetsPartialBlock)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    TestMemPoolEntryHelper entry;
+    auto rand_ctx(FastRandomContext(uint256{42}));
+    CBlock block(BuildBlockTestCase(rand_ctx));
+
+    {
+        LOCK2(cs_main, pool.cs);
+        TryAddToMempool(pool, entry.FromTx(block.vtx[2]));
+    }
+
+    CBlockHeaderAndShortTxIDs short_ids{block, rand_ctx.rand64()};
+    TestPartiallyDownloadedBlock partial_block(&pool);
+    BOOST_CHECK(partial_block.InitData(short_ids, empty_extra_txn) == READ_STATUS_OK);
+    BOOST_CHECK_EQUAL(partial_block.PrefilledCount(), 1U);
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 1U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.AvailableTxCount(), 2U);
+
+    CBlock reconstructed_block;
+    BOOST_CHECK(partial_block.FillBlock(reconstructed_block, {block.vtx[1]}, /*segwit_active=*/true) == READ_STATUS_OK);
+    BOOST_CHECK(partial_block.header.IsNull());
+    BOOST_CHECK_EQUAL(partial_block.AvailableTxCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.PrefilledCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 0U);
+
+    BOOST_CHECK(partial_block.InitData(short_ids, empty_extra_txn) == READ_STATUS_OK);
+    BOOST_CHECK(partial_block.IsTxAvailable(0));
+    BOOST_CHECK(!partial_block.IsTxAvailable(1));
+    BOOST_CHECK(partial_block.IsTxAvailable(2));
+
+    CBlock reconstructed_again;
+    BOOST_CHECK(partial_block.FillBlock(reconstructed_again, {block.vtx[1]}, /*segwit_active=*/true) == READ_STATUS_OK);
+    BOOST_CHECK_EQUAL(block.GetHash().ToString(), reconstructed_again.GetHash().ToString());
 }
 
 BOOST_AUTO_TEST_CASE(NonCoinbasePreforwardRTTest)
