@@ -11,6 +11,7 @@
 #include <script/solver.h>
 #include <span.h>
 #include <streams.h>
+#include <util/check.h>
 #include <util/fastrange.h>
 #include <util/overflow.h>
 
@@ -50,14 +51,17 @@ inline unsigned int CBloomFilter::Hash(unsigned int nHashNum, std::span<const un
 
 void CBloomFilter::insert(std::span<const unsigned char> vKey)
 {
-    if (vData.empty()) // Avoid divide-by-zero (CVE-2013-5700)
+    if (vData.empty()) { // Avoid divide-by-zero (CVE-2013-5700)
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) Assume(contains(vKey));
         return;
+    }
     for (unsigned int i = 0; i < nHashFuncs; i++)
     {
         unsigned int nIndex = Hash(i, vKey);
         // Sets bit nIndex of vData
         vData[nIndex >> 3] |= (1 << (7 & nIndex));
     }
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) Assume(contains(vKey));
 }
 
 void CBloomFilter::insert(const COutPoint& outpoint)
@@ -121,15 +125,22 @@ bool CBloomFilter::IsRelevantAndUpdate(const CTransaction& tx)
             if (data.size() != 0 && contains(data))
             {
                 fFound = true;
-                if ((nFlags & BLOOM_UPDATE_MASK) == BLOOM_UPDATE_ALL)
+                bool inserted_outpoint{false};
+                if ((nFlags & BLOOM_UPDATE_MASK) == BLOOM_UPDATE_ALL) {
                     insert(COutPoint(hash, i));
+                    inserted_outpoint = true;
+                }
                 else if ((nFlags & BLOOM_UPDATE_MASK) == BLOOM_UPDATE_P2PUBKEY_ONLY)
                 {
                     std::vector<std::vector<unsigned char> > vSolutions;
                     TxoutType type = Solver(txout.scriptPubKey, vSolutions);
                     if (type == TxoutType::PUBKEY || type == TxoutType::MULTISIG) {
                         insert(COutPoint(hash, i));
+                        inserted_outpoint = true;
                     }
+                }
+                if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+                    if (inserted_outpoint) Assume(contains(COutPoint(hash, i)));
                 }
                 break;
             }
