@@ -154,9 +154,11 @@ BOOST_AUTO_TEST_CASE(package_sanitization_tests)
         total_weight += size_large;
     }
     BOOST_CHECK(package_too_large.size() <= MAX_PACKAGE_COUNT);
+    BOOST_CHECK_EQUAL(package_too_large.front()->GetHash(), package_too_large.back()->GetHash());
     PackageValidationState state_too_large;
     BOOST_CHECK(!IsWellFormedPackage(package_too_large, state_too_large));
     BOOST_CHECK_EQUAL(state_too_large.GetResult(), PackageValidationResult::PCKG_POLICY);
+    // Size is checked before duplicate txids, so this is not "package-contains-duplicates".
     BOOST_CHECK_EQUAL(state_too_large.GetRejectReason(), "package-too-large");
 
     // Packages can't contain transactions with the same txid.
