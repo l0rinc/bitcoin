@@ -798,6 +798,46 @@ BOOST_AUTO_TEST_CASE(duplicate_inv_ignored)
     BOOST_CHECK(requestable.front() == wtxid);
 }
 
+BOOST_AUTO_TEST_CASE(null_expired_outparam_still_expires_requests)
+{
+    TxRequestTracker txrequest{true};
+    const NodeId peer1{0};
+    const NodeId peer2{1};
+    const uint256 txhash{uint256::ONE};
+    const GenTxid gtxid{Txid::FromUint256(txhash)};
+    const auto now{std::chrono::microseconds{1'000'000}};
+    const auto expiry{now + MICROSECOND};
+
+    txrequest.ReceivedInv(peer1, gtxid, /*preferred=*/true, now);
+    txrequest.ReceivedInv(peer2, gtxid, /*preferred=*/false, now);
+    txrequest.SanityCheck();
+
+    std::vector<std::pair<NodeId, GenTxid>> expired;
+    auto requestable{txrequest.GetRequestable(peer1, now, &expired)};
+    BOOST_CHECK(expired.empty());
+    BOOST_REQUIRE_EQUAL(requestable.size(), 1U);
+    BOOST_CHECK(requestable.front() == gtxid);
+    txrequest.PostGetRequestableSanityCheck(now);
+
+    txrequest.RequestedTx(peer1, txhash, expiry);
+    txrequest.SanityCheck();
+    BOOST_CHECK(txrequest.GetRequestable(peer2, now, nullptr).empty());
+    txrequest.PostGetRequestableSanityCheck(now);
+
+    requestable = txrequest.GetRequestable(peer2, expiry, nullptr);
+    BOOST_REQUIRE_EQUAL(requestable.size(), 1U);
+    BOOST_CHECK(requestable.front() == gtxid);
+    txrequest.PostGetRequestableSanityCheck(expiry);
+    txrequest.SanityCheck();
+    BOOST_CHECK_EQUAL(txrequest.CountInFlight(peer1), 0U);
+    BOOST_CHECK_EQUAL(txrequest.CountCandidates(peer2), 1U);
+
+    requestable = txrequest.GetRequestable(peer2, expiry, &expired);
+    BOOST_CHECK(expired.empty());
+    BOOST_REQUIRE_EQUAL(requestable.size(), 1U);
+    BOOST_CHECK(requestable.front() == gtxid);
+}
+
 BOOST_AUTO_TEST_CASE(candidate_peers_append_non_completed)
 {
     TxRequestTracker txrequest{true};
