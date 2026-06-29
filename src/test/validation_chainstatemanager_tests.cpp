@@ -4,12 +4,16 @@
 //
 #include <chainparams.h>
 #include <consensus/validation.h>
+#include <flatfile.h>
 #include <kernel/disconnected_transactions.h>
+#include <node/blockstorage.h>
 #include <node/chainstatemanager_args.h>
 #include <node/kernel_notifications.h>
 #include <node/utxo_snapshot.h>
+#include <primitives/block.h>
 #include <random.h>
 #include <rpc/blockchain.h>
+#include <streams.h>
 #include <sync.h>
 #include <test/util/chainstate.h>
 #include <test/util/common.h>
@@ -26,6 +30,8 @@
 
 #include <tinyformat.h>
 
+#include <cstdio>
+#include <map>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -35,6 +41,44 @@ using node::KernelNotifications;
 using node::SnapshotMetadata;
 
 BOOST_FIXTURE_TEST_SUITE(validation_chainstatemanager_tests, TestingSetup)
+
+BOOST_AUTO_TEST_CASE(load_external_block_file_unknown_parent_position)
+{
+    CBlockHeader header;
+    header.nVersion = 4;
+    header.hashPrevBlock = uint256::ONE;
+    header.hashMerkleRoot = uint256{2};
+    header.nTime = Params().GenesisBlock().nTime + 1;
+    header.nBits = Params().GenesisBlock().nBits;
+    header.nNonce = 0;
+
+    DataStream stream{};
+    stream << Params().MessageStart();
+    stream << static_cast<uint32_t>(GetSerializeSize(header));
+    stream << header;
+
+    const fs::path blkfile{m_path_root / "unknown-parent-blk.dat"};
+    {
+        FILE* outfile{fsbridge::fopen(blkfile, "wb")};
+        BOOST_REQUIRE(outfile);
+        BOOST_REQUIRE_EQUAL(std::fwrite(stream.data(), 1, stream.size(), outfile), stream.size());
+        std::fclose(outfile);
+    }
+
+    AutoFile file{fsbridge::fopen(blkfile, "rb")};
+    BOOST_REQUIRE(!file.IsNull());
+
+    FlatFilePos pos{0, 0};
+    std::multimap<uint256, FlatFilePos> blocks_with_unknown_parent;
+    m_node.chainman->LoadExternalBlockFile(file, &pos, &blocks_with_unknown_parent);
+
+    BOOST_REQUIRE_EQUAL(blocks_with_unknown_parent.size(), 1);
+    const auto& [parent_hash, child_pos] = *blocks_with_unknown_parent.begin();
+    BOOST_CHECK(parent_hash == header.hashPrevBlock);
+    BOOST_CHECK(!child_pos.IsNull());
+    BOOST_CHECK_EQUAL(child_pos.nFile, 0);
+    BOOST_CHECK_EQUAL(child_pos.nPos, node::STORAGE_HEADER_BYTES);
+}
 
 //! Basic tests for ChainstateManager.
 //!
