@@ -59,6 +59,13 @@ const TestingSetup* g_setup;
 std::vector<COutPoint> g_outpoints_coinbase_init_mature;
 std::vector<COutPoint> g_outpoints_coinbase_init_immature;
 
+void AssertValidTransactionInfo(const TransactionInfo& info)
+{
+    Assert(info.m_tx);
+    Assert(MoneyRange(info.m_fee));
+    Assert(info.m_virtual_transaction_size > 0);
+}
+
 struct MockedTxPool : public CTxMemPool {
     void RollingFeeUpdate() EXCLUSIVE_LOCKS_REQUIRED(!cs)
     {
@@ -94,13 +101,17 @@ struct TransactionsDelta final : public CValidationInterface {
     explicit TransactionsDelta(std::set<CTransactionRef>& r, std::set<CTransactionRef>& a)
         : m_removed{r}, m_added{a} {}
 
-    void TransactionAddedToMempool(const NewMempoolTransactionInfo& tx, uint64_t /* mempool_sequence */) override
+    void TransactionAddedToMempool(const NewMempoolTransactionInfo& tx, uint64_t mempool_sequence) override
     {
+        AssertValidTransactionInfo(tx.info);
+        Assert(mempool_sequence > 0);
         Assert(m_added.insert(tx.info.m_tx).second);
     }
 
-    void TransactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t /* mempool_sequence */) override
+    void TransactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t mempool_sequence) override
     {
+        Assert(tx);
+        Assert(mempool_sequence > 0);
         Assert(m_removed.insert(tx).second);
     }
 };
