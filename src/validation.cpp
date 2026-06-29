@@ -5124,6 +5124,8 @@ void ChainstateManager::LoadExternalBlockFile(
                         LogDebug(BCLog::REINDEX, "%s: Out of order block %s, parent %s not known\n", __func__, hash.ToString(),
                                  header.hashPrevBlock.ToString());
                         if (dbp && blocks_with_unknown_parent) {
+                            Assume(!dbp->IsNull());
+                            Assume(dbp->nPos == nBlockPos);
                             blocks_with_unknown_parent->emplace(header.hashPrevBlock, *dbp);
                         }
                         continue;
