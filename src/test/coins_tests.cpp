@@ -1278,6 +1278,63 @@ BOOST_AUTO_TEST_CASE(ccoins_havecoinincache_read_only)
     check_have_coin_in_cache(cache, missing_outpoint, /*expected=*/false);
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_input_lookup_contracts)
+{
+    CCoinsViewTest base{m_rng};
+
+    auto make_coin = [&](CAmount value) {
+        return Coin{CTxOut{value, CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+    };
+
+    const Txid txid{Txid::FromUint256(m_rng.rand256())};
+    const COutPoint first{txid, 0};
+    const COutPoint missing{txid, 1};
+    const COutPoint second{txid, 2};
+    const Coin first_coin{make_coin(100)};
+    const Coin second_coin{make_coin(200)};
+
+    {
+        CCoinsViewCache write_cache{&base};
+        write_cache.AddCoin(first, Coin{first_coin}, /*possible_overwrite=*/false);
+        write_cache.AddCoin(second, Coin{second_coin}, /*possible_overwrite=*/false);
+        write_cache.Flush();
+    }
+
+    CCoinsViewCache cache{&base};
+
+    CMutableTransaction all_present;
+    all_present.vin.emplace_back(first);
+    all_present.vin.emplace_back(second);
+    BOOST_CHECK(cache.HaveInputs(CTransaction{all_present}));
+    BOOST_CHECK(!cache.AccessCoin(first).IsSpent());
+    BOOST_CHECK(!cache.AccessCoin(second).IsSpent());
+
+    CMutableTransaction first_missing;
+    first_missing.vin.emplace_back(missing);
+    first_missing.vin.emplace_back(second);
+    BOOST_CHECK(!cache.HaveInputs(CTransaction{first_missing}));
+
+    CMutableTransaction coinbase;
+    coinbase.vin.emplace_back(COutPoint{});
+    const auto cache_size{cache.GetCacheSize()};
+    const auto dirty_count{cache.GetDirtyCount()};
+    const auto memory_usage{cache.DynamicMemoryUsage()};
+    BOOST_CHECK(cache.HaveInputs(CTransaction{coinbase}));
+    BOOST_CHECK_EQUAL(cache.GetCacheSize(), cache_size);
+    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), dirty_count);
+    BOOST_CHECK_EQUAL(cache.DynamicMemoryUsage(), memory_usage);
+
+    BOOST_CHECK(AccessByTxid(cache, txid) == first_coin);
+    BOOST_REQUIRE(cache.SpendCoin(first));
+    BOOST_CHECK(AccessByTxid(cache, txid) == second_coin);
+
+    Txid empty_txid;
+    do {
+        empty_txid = Txid::FromUint256(m_rng.rand256());
+    } while (empty_txid == txid);
+    BOOST_CHECK(AccessByTxid(cache, empty_txid).IsSpent());
+}
+
 BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
 {
     CCoinsViewTest root{m_rng};
