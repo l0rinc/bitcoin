@@ -64,6 +64,16 @@ struct FixedCheck
     std::optional<int> operator()() const { return m_result; }
 };
 
+struct DestructorCompleteCheck
+{
+    static std::atomic<size_t> n_calls;
+    std::optional<int> operator()()
+    {
+        n_calls.fetch_add(1, std::memory_order_relaxed);
+        return std::nullopt;
+    }
+};
+
 struct UniqueCheck {
     static Mutex m;
     static std::unordered_multiset<size_t> results GUARDED_BY(m);
@@ -143,6 +153,7 @@ Mutex UniqueCheck::m;
 std::unordered_multiset<size_t> UniqueCheck::results;
 std::atomic<size_t> FakeCheckCheckCompletion::n_calls{0};
 std::atomic<size_t> MemoryCheck::fake_allocated_memory{0};
+std::atomic<size_t> DestructorCompleteCheck::n_calls{0};
 
 // Queue Typedefs
 typedef CCheckQueue<FakeCheckCheckCompletion> Correct_Queue;
@@ -151,6 +162,7 @@ typedef CCheckQueue<FixedCheck> Fixed_Queue;
 typedef CCheckQueue<UniqueCheck> Unique_Queue;
 typedef CCheckQueue<MemoryCheck> Memory_Queue;
 typedef CCheckQueue<FrozenCleanupCheck> FrozenCleanup_Queue;
+typedef CCheckQueue<DestructorCompleteCheck> DestructorComplete_Queue;
 
 
 /** This test case checks that the CCheckQueue works properly
@@ -257,6 +269,19 @@ BOOST_AUTO_TEST_CASE(test_CheckQueue_Recovers_From_Failure)
             BOOST_REQUIRE(r != end_fails);
         }
     }
+}
+
+BOOST_AUTO_TEST_CASE(test_CheckQueueControl_Destructor_Completes)
+{
+    DestructorCompleteCheck::n_calls = 0;
+    DestructorComplete_Queue queue{/*batch_size=*/0, /*worker_threads_num=*/0};
+    {
+        CCheckQueueControl<DestructorCompleteCheck> control{queue};
+        std::vector<DestructorCompleteCheck> checks(3);
+        control.Add(std::move(checks));
+    }
+    BOOST_CHECK_EQUAL(DestructorCompleteCheck::n_calls, 3U);
+    BOOST_CHECK(!queue.Complete().has_value());
 }
 
 // Test that unique checks are actually all called individually, rather than
