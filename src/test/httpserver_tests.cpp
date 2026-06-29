@@ -645,6 +645,13 @@ BOOST_AUTO_TEST_CASE(http_server_socket_tests)
                 client = requests.front()->m_client;
                 BOOST_CHECK_EQUAL(client->m_origin, "5.5.5.5:6789");
 
+                // Simulate an already queued response byte so WriteReply()
+                // leaves the socket loop to flush the full buffer.
+                {
+                    LOCK(client->m_send_mutex);
+                    client->m_send_buffer.push_back(std::byte{'x'});
+                }
+
                 // Respond to request
                 requests.front()->WriteReply(HTTP_OK, "874140\n");
 
@@ -665,14 +672,14 @@ BOOST_AUTO_TEST_CASE(http_server_socket_tests)
         ssize_t bytes_read = mock_client_socket_pipes->send.GetBytes(buf, sizeof(buf), 0);
         if (bytes_read > 0) {
             actual.append(buf, bytes_read);
-            if (actual.length() == 146) {
+            if (actual.length() == 147) {
                 break;
             }
         }
         std::this_thread::sleep_for(10ms);
         --attempts;
     }
-    BOOST_CHECK(actual.starts_with("HTTP/1.1 200 OK\r\n"));
+    BOOST_CHECK(actual.starts_with("xHTTP/1.1 200 OK\r\n"));
     BOOST_CHECK(actual.ends_with("\r\n874140\n"));
     // Headers can be sorted in any order, and will be, since we use unordered_map
     BOOST_CHECK(actual.find("Connection: close\r\n") != std::string::npos);
