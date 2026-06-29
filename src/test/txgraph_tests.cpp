@@ -388,6 +388,43 @@ BOOST_AUTO_TEST_CASE(txgraph_chunk_chain)
     block_builder_checker({{&refs[0]}});
 }
 
+BOOST_AUTO_TEST_CASE(txgraph_block_builder_skip_excludes_cluster)
+{
+    auto graph = MakeTxGraph(50, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(3);
+
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{10, 1}); // A
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{1, 1});  // B
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{5, 1});  // C
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
+    graph->SanityCheck();
+
+    {
+        auto builder = graph->GetBlockBuilder();
+        auto first_chunk = builder->GetCurrentChunk();
+        BOOST_REQUIRE(first_chunk);
+        BOOST_REQUIRE_EQUAL(first_chunk->first.size(), 1U);
+        BOOST_CHECK_EQUAL(first_chunk->first[0], &refs[0]);
+        BOOST_CHECK((first_chunk->second == FeePerWeight{10, 1}));
+    }
+
+    {
+        auto builder = graph->GetBlockBuilder();
+        builder->Skip();
+
+        auto second_chunk = builder->GetCurrentChunk();
+        BOOST_REQUIRE(second_chunk);
+        BOOST_REQUIRE_EQUAL(second_chunk->first.size(), 1U);
+        BOOST_CHECK_EQUAL(second_chunk->first[0], &refs[2]);
+        BOOST_CHECK((second_chunk->second == FeePerWeight{5, 1}));
+
+        builder->Include();
+        BOOST_CHECK(!builder->GetCurrentChunk());
+    }
+}
+
 BOOST_AUTO_TEST_CASE(txgraph_getcluster_membership_contracts)
 {
     auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);

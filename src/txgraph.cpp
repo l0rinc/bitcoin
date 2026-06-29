@@ -14,6 +14,7 @@
 #include <compare>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <set>
 #include <span>
@@ -871,7 +872,7 @@ class BlockBuilderImpl final : public TxGraph::BlockBuilder
      *  when that chunk is skipped. */
     Cluster* m_cur_cluster;
     /** Whether we know that m_cur_iter points to the last chunk of m_cur_cluster. */
-    bool m_known_end_of_cluster;
+    bool m_known_end_of_cluster{false};
 
     // Move m_cur_iter / m_cur_cluster to the next acceptable chunk.
     void Next() noexcept;
@@ -3221,6 +3222,10 @@ void BlockBuilderImpl::Next() noexcept
         // If we previously skipped a chunk from this cluster we cannot include more from it.
         if (!m_excluded_clusters.contains(m_cur_cluster->m_sequence)) break;
     }
+    if (m_cur_iter != m_graph->m_main_chunkindex.end()) {
+        Assume(m_cur_cluster != nullptr);
+        Assume(!m_excluded_clusters.contains(m_cur_cluster->m_sequence));
+    }
 }
 
 std::optional<std::pair<std::vector<TxGraph::Ref*>, FeePerWeight>> BlockBuilderImpl::GetCurrentChunk() noexcept
@@ -3292,10 +3297,15 @@ void BlockBuilderImpl::Skip() noexcept
     // the result topologically invalid. However, don't do this if the chunk is known to be the last
     // chunk of the cluster. This may significantly reduce the size of m_excluded_clusters,
     // especially when many singleton clusters are ignored.
+    std::optional<uint64_t> skipped_cluster_sequence;
     if (m_cur_cluster != nullptr && !m_known_end_of_cluster) {
+        skipped_cluster_sequence = m_cur_cluster->m_sequence;
         m_excluded_clusters.insert(m_cur_cluster->m_sequence);
     }
     Next();
+    if (skipped_cluster_sequence) {
+        Assume(m_cur_cluster == nullptr || m_cur_cluster->m_sequence != *skipped_cluster_sequence);
+    }
 }
 
 std::unique_ptr<TxGraph::BlockBuilder> TxGraphImpl::GetBlockBuilder() noexcept
