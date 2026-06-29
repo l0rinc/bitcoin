@@ -453,4 +453,48 @@ BOOST_FIXTURE_TEST_CASE(handle_missing_inputs, TestChain100Setup)
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(rejected_1p1c_package_is_not_retried, TestingSetup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    FastRandomContext det_rand{true};
+    node::TxDownloadOptions default_opts{pool, det_rand, true};
+    node::TxDownloadManagerImpl txdownload_impl{default_opts};
+    constexpr NodeId peer{0};
+    const node::TxDownloadConnectionInfo connection_info{/*m_preferred=*/true,
+                                                         /*m_relay_permissions=*/false,
+                                                         /*m_wtxid_relay=*/true};
+    txdownload_impl.ConnectedPeer(peer, connection_info);
+
+    const CTransactionRef parent{CreatePlaceholderTx(/*segwit=*/true)};
+    const CTransactionRef child{CreatePlaceholderTx(/*segwit=*/true)};
+    const Package package{parent, child};
+    BOOST_REQUIRE(IsChildWithParents(package));
+
+    TxValidationState missing_inputs;
+    missing_inputs.Invalid(TxValidationResult::TX_MISSING_INPUTS, "");
+    const auto child_orphan{txdownload_impl.MempoolRejectedTx(child, missing_inputs, peer, /*first_time_failure=*/true)};
+    std::string err_msg;
+    BOOST_REQUIRE_MESSAGE(CheckOrphanBehavior(txdownload_impl, child, child_orphan, err_msg,
+                                              /*expect_orphan=*/true, /*expect_keep=*/true, /*expected_parents=*/1),
+                          err_msg);
+
+    TxValidationState reconsiderable;
+    reconsiderable.Invalid(TxValidationResult::TX_RECONSIDERABLE, "");
+    const auto parent_reconsiderable{txdownload_impl.MempoolRejectedTx(parent, reconsiderable, peer, /*first_time_failure=*/true)};
+    BOOST_REQUIRE(parent_reconsiderable.m_package_to_validate);
+    BOOST_CHECK(parent_reconsiderable.m_package_to_validate->m_txns == package);
+    const auto package_hash{GetPackageHash(parent_reconsiderable.m_package_to_validate->m_txns)};
+    BOOST_CHECK(!txdownload_impl.RecentRejectsReconsiderableFilter().contains(package_hash));
+
+    txdownload_impl.MempoolRejectedPackage(parent_reconsiderable.m_package_to_validate->m_txns);
+    BOOST_CHECK(txdownload_impl.RecentRejectsReconsiderableFilter().contains(package_hash));
+
+    const auto package_retry{txdownload_impl.MempoolRejectedTx(parent, reconsiderable, peer, /*first_time_failure=*/true)};
+    BOOST_CHECK(!package_retry.m_package_to_validate);
+
+    const auto [validate_parent, received_retry] = txdownload_impl.ReceivedTx(peer, parent);
+    BOOST_CHECK(!validate_parent);
+    BOOST_CHECK(!received_retry);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
