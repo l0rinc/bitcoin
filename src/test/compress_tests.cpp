@@ -4,10 +4,13 @@
 
 #include <compressor.h>
 #include <script/script.h>
+#include <streams.h>
+#include <test/util/common.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 
 #include <cstdint>
+#include <limits>
 
 #include <boost/test/unit_test.hpp>
 
@@ -61,6 +64,32 @@ BOOST_AUTO_TEST_CASE(compress_amounts)
 
     for (uint64_t i = 0; i < 100000; i++)
         BOOST_CHECK(TestDecode(i));
+}
+
+BOOST_AUTO_TEST_CASE(compress_amount_serialization_range)
+{
+    CAmount amount;
+    {
+        // The largest valid amount still round-trips through the serializer.
+        DataStream stream{};
+        stream << Using<AmountCompression>(MAX_MONEY);
+        stream >> Using<AmountCompression>(amount);
+        BOOST_CHECK_EQUAL(amount, MAX_MONEY);
+    }
+    {
+        test_only_CheckFailuresAreExceptionsNotAborts mock_checks{};
+        for (const CAmount invalid_amount : {CAmount{-1}, MAX_MONEY + 1}) {
+            DataStream stream{};
+            BOOST_CHECK_EXCEPTION(stream << Using<AmountCompression>(invalid_amount), NonFatalCheckError, HasReason{"Internal bug detected: MoneyRange(val)"});
+        }
+    }
+    // Out-of-range amounts are rejected, both the smallest one and the maximal
+    // varint encoding (which wraps around during decompression).
+    for (const uint64_t encoded : {CompressAmount(MAX_MONEY + 1), std::numeric_limits<uint64_t>::max()}) {
+        DataStream stream{};
+        stream << VARINT(encoded);
+        BOOST_CHECK_THROW(stream >> Using<AmountCompression>(amount), std::ios_base::failure);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(compress_script_to_ckey_id)

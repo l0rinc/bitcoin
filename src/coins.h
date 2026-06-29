@@ -7,6 +7,7 @@
 #define BITCOIN_COINS_H
 
 #include <attributes.h>
+#include <consensus/amount.h>
 #include <compressor.h>
 #include <core_memusage.h>
 #include <memusage.h>
@@ -65,6 +66,7 @@ public:
         assert(!IsSpent());
         uint32_t code{(uint32_t{nHeight} << 1) | uint32_t{fCoinBase}};
         ::Serialize(s, VARINT(code));
+        Assume(MoneyRange(out.nValue));
         ::Serialize(s, Using<TxOutCompression>(out));
     }
 
@@ -75,6 +77,7 @@ public:
         nHeight = code >> 1;
         fCoinBase = code & 1;
         ::Unserialize(s, Using<TxOutCompression>(out));
+        Assume(MoneyRange(out.nValue));
     }
 
     /** Either this coin never existed (see e.g. coinEmpty in coins.cpp), or it

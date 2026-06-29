@@ -5829,10 +5829,7 @@ util::Result<void> ChainstateManager::PopulateAndValidateSnapshot(
                     return util::Error{Untranslated(strprintf("Bad snapshot data after deserializing %d coins",
                               coins_count - coins_left))};
                 }
-                if (!MoneyRange(coin.out.nValue)) {
-                    return util::Error{Untranslated(strprintf("Bad snapshot data after deserializing %d coins - bad tx out value",
-                              coins_count - coins_left))};
-                }
+                Assert(MoneyRange(coin.out.nValue));
                 coins_cache.EmplaceCoinInternalDANGER(std::move(outpoint), std::move(coin));
 
                 --coins_left;
