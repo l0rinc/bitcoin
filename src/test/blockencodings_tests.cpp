@@ -528,6 +528,30 @@ BOOST_AUTO_TEST_CASE(TransactionsRequestSerializationTest) {
     BOOST_CHECK_EQUAL(req1.indexes[3], req2.indexes[3]);
 }
 
+BOOST_AUTO_TEST_CASE(TransactionsRequestSerializationRejectsNonIncreasingIndexes)
+{
+    BlockTransactionsRequest valid;
+    valid.blockhash = m_rng.rand256();
+    valid.indexes = {0, 1, 0xffff};
+    DataStream valid_stream{};
+    valid_stream << valid;
+    BlockTransactionsRequest valid_roundtrip;
+    valid_stream >> valid_roundtrip;
+    BOOST_CHECK(valid_roundtrip.indexes == valid.indexes);
+
+    BlockTransactionsRequest duplicate;
+    duplicate.blockhash = m_rng.rand256();
+    duplicate.indexes = {0, 1, 1};
+    DataStream duplicate_stream{};
+    BOOST_CHECK_THROW(duplicate_stream << duplicate, std::ios_base::failure);
+
+    BlockTransactionsRequest decreasing;
+    decreasing.blockhash = m_rng.rand256();
+    decreasing.indexes = {2, 1};
+    DataStream decreasing_stream{};
+    BOOST_CHECK_THROW(decreasing_stream << decreasing, std::ios_base::failure);
+}
+
 BOOST_AUTO_TEST_CASE(TransactionsRequestDeserializationMaxTest) {
     // Check that the highest legal index is decoded correctly
     BlockTransactionsRequest req0;
