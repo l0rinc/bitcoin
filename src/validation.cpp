@@ -2844,7 +2844,13 @@ bool Chainstate::FlushStateToDisk(
     if (full_flush_completed) {
         if (m_chainman.m_options.signals) {
             // Update best block in wallet (so we can detect restored wallets).
-            m_chainman.m_options.signals->ChainStateFlushed(this->GetRole(), GetLocator(m_chain.Tip()));
+            const CBlockIndex* tip{m_chain.Tip()};
+            Assume(tip);
+            CBlockLocator locator{GetLocator(tip)};
+            Assume(!locator.IsNull());
+            Assume(!locator.vHave.empty());
+            Assume(locator.vHave.front() == tip->GetBlockHash());
+            m_chainman.m_options.signals->ChainStateFlushed(this->GetRole(), locator);
         }
 
         if (!m_chainman.m_interrupt && ShouldCompactChainstate(m_chainman.IsInitialBlockDownload())) {
