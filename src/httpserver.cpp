@@ -1131,6 +1131,7 @@ void HTTPServer::ClearConnectedClients()
 
 bool HTTPRemoteClient::ReadRequest(HTTPRequest& req)
 {
+    const size_t recv_buffer_size{m_recv_buffer.size()};
     LineReader reader(m_recv_buffer, MAX_HEADERS_SIZE);
 
     if (!req.LoadControlData(reader)) return false;
@@ -1140,9 +1141,12 @@ bool HTTPRemoteClient::ReadRequest(HTTPRequest& req)
     // Remove the bytes read out of the buffer.
     // If one of the above calls throws an error, the caller must
     // catch it and disconnect the client.
+    const size_t consumed{reader.Consumed()};
+    Assume(consumed <= recv_buffer_size);
     m_recv_buffer.erase(
         m_recv_buffer.begin(),
-        m_recv_buffer.begin() + reader.Consumed());
+        m_recv_buffer.begin() + consumed);
+    Assume(m_recv_buffer.size() == recv_buffer_size - consumed);
 
     return true;
 }
