@@ -74,8 +74,10 @@ static bool CheckFilterLookups(BlockFilterIndex& filter_index, const CBlockIndex
     BOOST_CHECK_EQUAL(filters.size(), 1U);
     BOOST_CHECK_EQUAL(filter_hashes.size(), 1U);
 
+    BOOST_CHECK_EQUAL(filter.GetBlockHash(), block_index->GetBlockHash());
     BOOST_CHECK_EQUAL(filter.GetHash(), expected_filter.GetHash());
     BOOST_CHECK_EQUAL(filter_header, expected_filter.ComputeHeader(last_header));
+    BOOST_CHECK_EQUAL(filters[0].GetBlockHash(), block_index->GetBlockHash());
     BOOST_CHECK_EQUAL(filters[0].GetHash(), expected_filter.GetHash());
     BOOST_CHECK_EQUAL(filter_hashes[0], expected_filter.GetHash());
 
