@@ -7,6 +7,7 @@
 
 #include <sync.h>
 #include <tinyformat.h>
+#include <util/check.h>
 #include <util/log.h>
 #include <util/threadnames.h>
 
@@ -86,6 +87,7 @@ private:
                     if (local_result.has_value() && !m_result.has_value()) {
                         std::swap(local_result, m_result);
                     }
+                    Assume(nTodo >= nNow);
                     nTodo -= nNow;
                     if (nTodo == 0 && !fMaster) {
                         // We processed the last element; inform the master it can exit and return the result
@@ -98,6 +100,7 @@ private:
                 // logically, the do loop starts here
                 while (queue.empty() && !m_request_stop) {
                     if (fMaster && nTodo == 0) {
+                        Assume(queue.empty());
                         nTotal--;
                         std::optional<R> to_return = std::move(m_result);
                         // reset the status for new work later
@@ -120,9 +123,12 @@ private:
                 // * Try to account for idle jobs which will instantly start helping.
                 // * Don't do batches smaller than 1 (duh), or larger than nBatchSize.
                 nNow = std::max(1U, std::min(nBatchSize, (unsigned int)queue.size() / (nTotal + nIdle + 1)));
+                Assume(nNow > 0);
+                Assume(nNow <= queue.size());
                 auto start_it = queue.end() - nNow;
                 vChecks.assign(std::make_move_iterator(start_it), std::make_move_iterator(queue.end()));
                 queue.erase(start_it, queue.end());
+                Assume(nTodo >= queue.size());
                 // Check whether we need to do work at all
                 do_work = !m_result.has_value();
             }
@@ -180,6 +186,7 @@ public:
             LOCK(m_mutex);
             queue.insert(queue.end(), std::make_move_iterator(vChecks.begin()), std::make_move_iterator(vChecks.end()));
             nTodo += vChecks.size();
+            Assume(nTodo >= queue.size());
         }
 
         if (vChecks.size() == 1) {
