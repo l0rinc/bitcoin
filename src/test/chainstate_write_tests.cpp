@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <chain.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <validation.h>
@@ -21,9 +22,13 @@ BOOST_FIXTURE_TEST_CASE(chainstate_write_interval, TestingSetup)
 {
     struct TestSubscriber final : CValidationInterface {
         bool m_did_flush{false};
-        void ChainStateFlushed(const ChainstateRole&, const CBlockLocator&) override
+        uint256 m_flushed_hash;
+        void ChainStateFlushed(const ChainstateRole&, const CBlockLocator& locator) override
         {
+            BOOST_REQUIRE(!locator.IsNull());
+            BOOST_REQUIRE(!locator.vHave.empty());
             m_did_flush = true;
+            m_flushed_hash = locator.vHave.front();
         }
     };
 
@@ -48,6 +53,7 @@ BOOST_FIXTURE_TEST_CASE(chainstate_write_interval, TestingSetup)
     chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC);
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
     BOOST_CHECK(sub->m_did_flush);
+    BOOST_CHECK(sub->m_flushed_hash == WITH_LOCK(::cs_main, return chainstate.m_chain.Tip()->GetBlockHash()));
 }
 
 // Test that we do PERIODIC flushes inside ActivateBestChain.
@@ -59,9 +65,15 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
     {
         const CBlockIndex* m_tip{nullptr};
         const CBlockIndex* m_flushed_at_block{nullptr};
-        void ChainStateFlushed(const ChainstateRole&, const CBlockLocator&) override
+        uint256 m_flushed_hash;
+        void ChainStateFlushed(const ChainstateRole&, const CBlockLocator& locator) override
         {
+            BOOST_REQUIRE(!locator.IsNull());
+            BOOST_REQUIRE(!locator.vHave.empty());
+            BOOST_REQUIRE(m_tip);
+            BOOST_CHECK(locator.vHave.front() == m_tip->GetBlockHash());
             m_flushed_at_block = m_tip;
+            m_flushed_hash = locator.vHave.front();
         }
         void UpdatedBlockTip(const CBlockIndex* block_index, const CBlockIndex*, bool) override {
             m_tip = block_index;
@@ -103,6 +115,7 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
     BOOST_CHECK_EQUAL(sub->m_flushed_at_block, second_from_tip);
     BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return chainstate.GetLastFlushedBlock()), second_from_tip);
+    BOOST_CHECK(sub->m_flushed_hash == second_from_tip->GetBlockHash());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
