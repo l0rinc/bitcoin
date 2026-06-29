@@ -500,6 +500,32 @@ BOOST_AUTO_TEST_CASE(linearization_output_is_topological)
     SanityCheck(depgraph, linearization);
 }
 
+BOOST_AUTO_TEST_CASE(postlinearization_output_is_topological)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto parent{depgraph.AddTransaction(FeeFrac{1, 10})};
+    const auto child{depgraph.AddTransaction(FeeFrac{100, 1})};
+    const auto independent{depgraph.AddTransaction(FeeFrac{50, 1})};
+    depgraph.AddDependencies(TestBitSet::Singleton(parent), child);
+    SanityCheck(depgraph);
+
+    std::vector<DepGraphIndex> linearization{parent, independent, child};
+    const auto old_chunking{ChunkLinearization(depgraph, linearization)};
+    SanityCheck(depgraph, linearization);
+
+    PostLinearize(depgraph, linearization);
+    SanityCheck(depgraph, linearization);
+
+    unsigned parent_pos{0};
+    unsigned child_pos{0};
+    for (unsigned pos{0}; pos < linearization.size(); ++pos) {
+        if (linearization[pos] == parent) parent_pos = pos;
+        if (linearization[pos] == child) child_pos = pos;
+    }
+    BOOST_CHECK_LT(parent_pos, child_pos);
+    BOOST_CHECK(CompareChunks(ChunkLinearization(depgraph, linearization), old_chunking) >= 0);
+}
+
 BOOST_AUTO_TEST_CASE(chunk_linearization_merges_higher_rate_suffix)
 {
     DepGraph<TestBitSet> depgraph;
