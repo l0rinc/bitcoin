@@ -798,6 +798,45 @@ BOOST_AUTO_TEST_CASE(duplicate_inv_ignored)
     BOOST_CHECK(requestable.front() == wtxid);
 }
 
+BOOST_AUTO_TEST_CASE(candidate_peers_append_non_completed)
+{
+    TxRequestTracker txrequest{true};
+    const NodeId peer1{0};
+    const NodeId peer2{1};
+    const NodeId prefix_peer{99};
+    const uint256 txhash{uint256::ONE};
+    const GenTxid txid{Txid::FromUint256(txhash)};
+    const GenTxid wtxid{Wtxid::FromUint256(txhash)};
+    const auto now{std::chrono::microseconds{1'000'000}};
+
+    txrequest.ReceivedInv(peer1, txid, /*preferred=*/false, now);
+    txrequest.ReceivedInv(peer2, wtxid, /*preferred=*/true, now);
+    txrequest.SanityCheck();
+
+    std::vector<NodeId> peers{peer1, prefix_peer};
+    txrequest.GetCandidatePeers(txhash, peers);
+    BOOST_REQUIRE_EQUAL(peers.size(), 4U);
+    BOOST_CHECK_EQUAL(peers[0], peer1);
+    BOOST_CHECK_EQUAL(peers[1], prefix_peer);
+
+    std::vector<NodeId> appended{peers.begin() + 2, peers.end()};
+    std::sort(appended.begin(), appended.end());
+    BOOST_REQUIRE_EQUAL(appended.size(), 2U);
+    BOOST_CHECK_EQUAL(appended[0], peer1);
+    BOOST_CHECK_EQUAL(appended[1], peer2);
+
+    const auto expiry{now + MICROSECOND};
+    txrequest.RequestedTx(peer2, txhash, expiry);
+    txrequest.ReceivedResponse(peer2, txhash);
+    txrequest.SanityCheck();
+
+    peers = {prefix_peer};
+    txrequest.GetCandidatePeers(txhash, peers);
+    BOOST_REQUIRE_EQUAL(peers.size(), 2U);
+    BOOST_CHECK_EQUAL(peers[0], prefix_peer);
+    BOOST_CHECK_EQUAL(peers[1], peer1);
+}
+
 BOOST_AUTO_TEST_CASE(TxRequestTest)
 {
     for (int i = 0; i < 5; ++i) {
