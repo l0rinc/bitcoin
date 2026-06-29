@@ -114,6 +114,25 @@ BOOST_FIXTURE_TEST_CASE(miniminer_negative, TestChain100Setup)
     BOOST_CHECK(template_txids.contains(tx_mod_negative->GetHash()));
 }
 
+BOOST_FIXTURE_TEST_CASE(miniminer_linearize_orders_ancestors_first, TestChain100Setup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    LOCK2(::cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    const auto parent = make_tx({COutPoint{m_coinbase_txns[0]->GetHash(), 0}}, /*num_outputs=*/1);
+    TryAddToMempool(pool, entry.Fee(low_fee).FromTx(parent));
+    const auto child = make_tx({COutPoint{parent->GetHash(), 0}}, /*num_outputs=*/1);
+    TryAddToMempool(pool, entry.Fee(high_fee).FromTx(child));
+
+    node::MiniMiner mini_miner{pool, {COutPoint{child->GetHash(), 0}}};
+    BOOST_REQUIRE(mini_miner.IsReadyToCalculate());
+    const auto inclusion_order{mini_miner.Linearize()};
+    BOOST_REQUIRE(inclusion_order.contains(parent->GetHash()));
+    BOOST_REQUIRE(inclusion_order.contains(child->GetHash()));
+    BOOST_CHECK_LE(inclusion_order.at(parent->GetHash()), inclusion_order.at(child->GetHash()));
+}
+
 BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);

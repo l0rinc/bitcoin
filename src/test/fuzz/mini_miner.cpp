@@ -80,6 +80,20 @@ void CheckGatherClusters(const CTxMemPool& pool, const std::vector<Txid>& mempoo
     }
 }
 
+void CheckTopologicalInclusionOrder(const CTxMemPool& pool, const std::map<Txid, uint32_t>& inclusion_order)
+    EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
+{
+    for (const auto& [txid, sequence] : inclusion_order) {
+        const auto entry{pool.GetEntry(txid)};
+        Assert(entry);
+        for (const auto& input : entry->GetTx().vin) {
+            if (const auto parent_it{inclusion_order.find(input.prevout.hash)}; parent_it != inclusion_order.end()) {
+                Assert(parent_it->second <= sequence);
+            }
+        }
+    }
+}
+
 // Test that the MiniMiner can run with various outpoints and feerates.
 FUZZ_TARGET(mini_miner, .init = initialize_miner)
 {
@@ -152,7 +166,7 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
     std::optional<CAmount> total_bumpfee;
     CAmount sum_fees = 0;
     {
-        const auto linearize = [&](const std::vector<COutPoint>& requested_outpoints) {
+        const auto linearize = [&](const std::vector<COutPoint>& requested_outpoints) EXCLUSIVE_LOCKS_REQUIRED(pool.cs) {
             node::MiniMiner mini_miner{pool, requested_outpoints};
             assert(mini_miner.IsReadyToCalculate());
             const auto inclusion_order{mini_miner.Linearize()};
@@ -162,6 +176,7 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
             for (const auto& [txid, _] : inclusion_order) {
                 assert(template_txids.contains(txid));
             }
+            CheckTopologicalInclusionOrder(pool, inclusion_order);
             return std::make_pair(inclusion_order, template_txids);
         };
         const auto [inclusion_order, template_txids]{linearize(outpoints)};
