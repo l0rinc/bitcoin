@@ -212,6 +212,22 @@ void AssertMempoolInputIndexCount(const CTxMemPool& tx_pool)
     assert(indexed_input_count == input_count);
 }
 
+void AssertDuplicatePackageRejected(const std::vector<CTransactionRef>& txs)
+{
+    Assert(!txs.empty());
+    auto duplicate_package{txs};
+    duplicate_package.push_back(txs.front());
+
+    Assert(!IsTopoSortedPackage(duplicate_package));
+    PackageValidationState duplicate_state;
+    Assert(!IsWellFormedPackage(duplicate_package, duplicate_state));
+    Assert(duplicate_state.IsInvalid());
+    Assert(duplicate_state.GetResult() == PackageValidationResult::PCKG_POLICY);
+    if (duplicate_package.size() <= MAX_PACKAGE_COUNT) {
+        Assert(duplicate_state.GetRejectReason() == "package-contains-duplicates");
+    }
+}
+
 // Scan mempool for a tx that has spent dust and return a
 // prevout of the child that isn't the dusty parent itself.
 // This is used to double-spend the child out of the mempool,
@@ -352,6 +368,7 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
                 return tx;
             }());
         }
+        AssertDuplicatePackageRejected(txs);
 
         if (fuzzed_data_provider.ConsumeBool()) {
             const auto& txid = fuzzed_data_provider.ConsumeBool() ?
@@ -518,6 +535,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
                 return tx;
             }());
         }
+        AssertDuplicatePackageRejected(txs);
 
         if (fuzzed_data_provider.ConsumeBool()) {
             MockTime(fuzzed_data_provider, chainstate);

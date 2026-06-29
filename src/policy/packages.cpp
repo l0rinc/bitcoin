@@ -45,6 +45,7 @@ bool IsTopoSortedPackage(const Package& txns)
     std::unordered_set<Txid, SaltedTxidHasher> later_txids;
     std::transform(txns.cbegin(), txns.cend(), std::inserter(later_txids, later_txids.end()),
                    [](const auto& tx) { return tx->GetHash(); });
+    if (later_txids.size() != txns.size()) return false;
 
     return IsTopoSortedPackage(txns, later_txids);
 }
