@@ -559,7 +559,8 @@ std::vector<std::pair<Wtxid, NodeId>> TxOrphanageImpl::AddChildrenToWorkSet(cons
                 Assume(!it->m_reconsider);
                 index_by_wtxid.modify(it, mark_reconsidered_modifier);
                 ret.emplace_back(wtxid, it->m_announcer);
-                m_reconsiderable_wtxids.insert(wtxid);
+                const bool inserted{m_reconsiderable_wtxids.insert(wtxid).second};
+                Assume(inserted);
 
                 LogDebug(BCLog::TXPACKAGES, "added %s (wtxid=%s) to peer %d workset\n",
                             it->m_tx->GetHash().ToString(), it->m_tx->GetWitnessHash().ToString(), it->m_announcer);
