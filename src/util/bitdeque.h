@@ -11,6 +11,7 @@
 #include <limits>
 #include <stdexcept>
 #include <tuple>
+#include <util/check.h>
 #include <util/overflow.h>
 
 /** Class that mimics std::deque<bool>, but with std::vector<bool>'s bit packing.
@@ -129,9 +130,27 @@ private:
     /** Number of unused bits at the back of m_deque.back(). */
     int m_pad_end;
 
+    /** Check internal padding invariants. */
+    void SanityCheck() const noexcept
+    {
+        Assume(m_pad_begin >= 0);
+        Assume(m_pad_begin < BITS_PER_WORD);
+        Assume(m_pad_end >= 0);
+        Assume(m_pad_end < BITS_PER_WORD);
+        if (m_deque.empty()) {
+            Assume(m_pad_begin == 0);
+            Assume(m_pad_end == 0);
+        }
+        if (m_deque.size() == 1) {
+            Assume(m_pad_begin <= BITS_PER_WORD - m_pad_end);
+        }
+    }
+
     /** Shrink the container by n bits, removing from the end. */
     void erase_back(size_type n)
     {
+        SanityCheck();
+        Assume(n <= size());
         if (n >= static_cast<size_type>(BITS_PER_WORD - m_pad_end)) {
             n -= BITS_PER_WORD - m_pad_end;
             m_pad_end = 0;
@@ -146,11 +165,13 @@ private:
                 --n;
             }
         }
+        SanityCheck();
     }
 
     /** Extend the container by n bits, adding at the end. */
     void extend_back(size_type n)
     {
+        SanityCheck();
         if (n > static_cast<size_type>(m_pad_end)) {
             n -= m_pad_end + 1;
             m_pad_end = BITS_PER_WORD - 1;
@@ -158,11 +179,14 @@ private:
             n %= BITS_PER_WORD;
         }
         m_pad_end -= n;
+        SanityCheck();
     }
 
     /** Shrink the container by n bits, removing from the beginning. */
     void erase_front(size_type n)
     {
+        SanityCheck();
+        Assume(n <= size());
         if (n >= static_cast<size_type>(BITS_PER_WORD - m_pad_begin)) {
             n -= BITS_PER_WORD - m_pad_begin;
             m_pad_begin = 0;
@@ -177,11 +201,13 @@ private:
                 --n;
             }
         }
+        SanityCheck();
     }
 
     /** Extend the container by n bits, adding at the beginning. */
     void extend_front(size_type n)
     {
+        SanityCheck();
         if (n > static_cast<size_type>(m_pad_begin)) {
             n -= m_pad_begin + 1;
             m_pad_begin = BITS_PER_WORD - 1;
@@ -189,11 +215,14 @@ private:
             n %= BITS_PER_WORD;
         }
         m_pad_begin -= n;
+        SanityCheck();
     }
 
     /** Insert a sequence of falses anywhere in the container. */
     void insert_zeroes(size_type before, size_type count)
     {
+        SanityCheck();
+        Assume(before <= size());
         size_type after = size() - before;
         if (before < after) {
             extend_front(count);
@@ -202,6 +231,7 @@ private:
             extend_back(count);
             std::move_backward(begin() + before, begin() + before + after, end());
         }
+        SanityCheck();
     }
 
 public:
@@ -221,6 +251,7 @@ public:
         if (count % BITS_PER_WORD) {
             erase_back(BITS_PER_WORD - (count % BITS_PER_WORD));
         }
+        SanityCheck();
     }
 
     /** Construct a container containing count times the value of val. */
@@ -242,12 +273,36 @@ public:
     bitdeque& operator=(bitdeque&& other) noexcept = default;
 
     // Iterator functions.
-    iterator begin() noexcept { return {m_deque.begin(), m_pad_begin}; }
-    iterator end() noexcept { return iterator{m_deque.end(), 0} - m_pad_end; }
-    const_iterator begin() const noexcept { return const_iterator{m_deque.cbegin(), m_pad_begin}; }
-    const_iterator cbegin() const noexcept { return const_iterator{m_deque.cbegin(), m_pad_begin}; }
-    const_iterator end() const noexcept { return const_iterator{m_deque.cend(), 0} - m_pad_end; }
-    const_iterator cend() const noexcept { return const_iterator{m_deque.cend(), 0} - m_pad_end; }
+    iterator begin() noexcept
+    {
+        SanityCheck();
+        return {m_deque.begin(), m_pad_begin};
+    }
+    iterator end() noexcept
+    {
+        SanityCheck();
+        return iterator{m_deque.end(), 0} - m_pad_end;
+    }
+    const_iterator begin() const noexcept
+    {
+        SanityCheck();
+        return const_iterator{m_deque.cbegin(), m_pad_begin};
+    }
+    const_iterator cbegin() const noexcept
+    {
+        SanityCheck();
+        return const_iterator{m_deque.cbegin(), m_pad_begin};
+    }
+    const_iterator end() const noexcept
+    {
+        SanityCheck();
+        return const_iterator{m_deque.cend(), 0} - m_pad_end;
+    }
+    const_iterator cend() const noexcept
+    {
+        SanityCheck();
+        return const_iterator{m_deque.cend(), 0} - m_pad_end;
+    }
     reverse_iterator rbegin() noexcept { return reverse_iterator{end()}; }
     reverse_iterator rend() noexcept { return reverse_iterator{begin()}; }
     const_reverse_iterator rbegin() const noexcept { return const_reverse_iterator{cend()}; }
@@ -256,12 +311,17 @@ public:
     const_reverse_iterator crend() const noexcept { return const_reverse_iterator{cbegin()}; }
 
     /** Count the number of bits in the container. */
-    size_type size() const noexcept { return m_deque.size() * BITS_PER_WORD - m_pad_begin - m_pad_end; }
+    size_type size() const noexcept
+    {
+        SanityCheck();
+        return m_deque.size() * BITS_PER_WORD - m_pad_begin - m_pad_end;
+    }
 
     /** Determine whether the container is empty. */
     bool empty() const noexcept
     {
-        return m_deque.size() == 0 || (m_deque.size() == 1 && (m_pad_begin + m_pad_end == BITS_PER_WORD));
+        SanityCheck();
+        return m_deque.size() == 0 || (m_deque.size() == 1 && m_pad_begin == BITS_PER_WORD - m_pad_end);
     }
 
     /** Return the maximum size of the container. */
@@ -324,12 +384,36 @@ public:
     }
 
     // Access elements of the container without bounds checking.
-    reference operator[](size_type position) { return begin()[position]; }
-    const_reference operator[](size_type position) const { return cbegin()[position]; }
-    reference front() { return *begin(); }
-    const_reference front() const { return *cbegin(); }
-    reference back() { return end()[-1]; }
-    const_reference back() const { return cend()[-1]; }
+    reference operator[](size_type position)
+    {
+        Assume(position < size());
+        return begin()[position];
+    }
+    const_reference operator[](size_type position) const
+    {
+        Assume(position < size());
+        return cbegin()[position];
+    }
+    reference front()
+    {
+        Assume(!empty());
+        return *begin();
+    }
+    const_reference front() const
+    {
+        Assume(!empty());
+        return *cbegin();
+    }
+    reference back()
+    {
+        Assume(!empty());
+        return end()[-1];
+    }
+    const_reference back() const
+    {
+        Assume(!empty());
+        return cend()[-1];
+    }
 
     /** Release unused memory. */
     void shrink_to_fit()
@@ -342,6 +426,7 @@ public:
     {
         m_deque.clear();
         m_pad_begin = m_pad_end = 0;
+        SanityCheck();
     }
 
     // Append an element to the container.
@@ -349,12 +434,14 @@ public:
     {
         extend_back(1);
         back() = val;
+        SanityCheck();
     }
     reference emplace_back(bool val)
     {
         extend_back(1);
         auto ref = back();
         ref = val;
+        SanityCheck();
         return ref;
     }
 
@@ -363,24 +450,28 @@ public:
     {
         extend_front(1);
         front() = val;
+        SanityCheck();
     }
     reference emplace_front(bool val)
     {
         extend_front(1);
         auto ref = front();
         ref = val;
+        SanityCheck();
         return ref;
     }
 
     // Remove the last element from the container.
     void pop_back()
     {
+        Assume(!empty());
         erase_back(1);
     }
 
     // Remove the first element from the container.
     void pop_front()
     {
+        Assume(!empty());
         erase_front(1);
     }
 
@@ -392,14 +483,19 @@ public:
         } else {
             extend_back(n - size());
         }
+        SanityCheck();
     }
 
     // Swap two containers.
     void swap(bitdeque& other) noexcept
     {
+        SanityCheck();
+        other.SanityCheck();
         std::swap(m_deque, other.m_deque);
         std::swap(m_pad_begin, other.m_pad_begin);
         std::swap(m_pad_end, other.m_pad_end);
+        SanityCheck();
+        other.SanityCheck();
     }
     friend void swap(bitdeque& b1, bitdeque& b2) noexcept { b1.swap(b2); }
 
