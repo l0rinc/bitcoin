@@ -282,11 +282,12 @@ FUZZ_TARGET(package_rbf, .init = initialize_package_rbf)
         // Diagram check succeeded
         auto old_sum = std::accumulate(calc_results->first.begin(), calc_results->first.end(), FeeFrac{});
         auto new_sum = std::accumulate(calc_results->second.begin(), calc_results->second.end(), FeeFrac{});
-        if (!err_tuple.has_value()) {
-            // New diagram's final fee should always match or exceed old diagram's
+        const bool improves{std::is_gt(CompareChunks(calc_results->second, calc_results->first))};
+        assert(improves == !err_tuple.has_value());
+        if (improves) {
+            // Strictly improving diagrams must not lose aggregate fees.
             assert(old_sum.fee <= new_sum.fee);
-        } else if (old_sum.fee > new_sum.fee) {
-            // Or it failed, and if old diagram had higher fees, it should be a failure
+        } else {
             assert(err_tuple.value().first == DiagramCheckError::FAILURE);
         }
     }
