@@ -1264,7 +1264,9 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
         }
 
         // Finally, reset idle timeout
-        m_idle_since = Now<SteadySeconds>();
+        const auto idle_now{Now<SteadySeconds>()};
+        m_idle_since = idle_now;
+        Assume(m_idle_since.load() == idle_now);
     }
 
     if (had_data) {
