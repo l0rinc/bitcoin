@@ -49,7 +49,13 @@ FUZZ_TARGET(net, .init = initialize_net)
             },
             [&] {
                 CNodeStats stats;
+                stats.m_mapped_as = fuzzed_data_provider.ConsumeIntegral<uint32_t>();
+                stats.m_session_id = fuzzed_data_provider.ConsumeBytesAsString(32);
                 node.CopyStats(stats);
+                assert(stats.nodeid == node.GetId());
+                assert(stats.m_mapped_as == 0);
+                assert(stats.m_session_id.empty());
+                assert(stats.m_transport_type == TransportProtocolType::V1);
             },
             [&] {
                 const int old_ref_count{node.GetRefCount()};
