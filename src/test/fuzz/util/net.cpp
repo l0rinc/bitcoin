@@ -15,6 +15,7 @@
 #include <util/time.h>
 
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <cerrno>
 #include <cstdint>
@@ -111,8 +112,17 @@ P ConsumeDeserializationParams(FuzzedDataProvider& fuzzed_data_provider) noexcep
 template CNetAddr::SerParams ConsumeDeserializationParams(FuzzedDataProvider&) noexcept;
 template CAddress::SerParams ConsumeDeserializationParams(FuzzedDataProvider&) noexcept;
 
+// Have different FuzzedSock objects use different deterministic m_socket
+// values because EqualSharedPtrSock compares m_socket.
+static std::atomic<SOCKET> g_fuzzed_sock_fd{0};
+
+void ResetFuzzedSockMockedFds()
+{
+    g_fuzzed_sock_fd.store(0);
+}
+
 FuzzedSock::FuzzedSock(FuzzedDataProvider& fuzzed_data_provider, FakeSteadyClock& clock)
-    : Sock{fuzzed_data_provider.ConsumeIntegralInRange<SOCKET>(INVALID_SOCKET - 1, INVALID_SOCKET)},
+    : Sock{g_fuzzed_sock_fd.fetch_add(1)},
       m_fuzzed_data_provider{fuzzed_data_provider},
       m_selectable{fuzzed_data_provider.ConsumeBool()},
       m_clock{clock}
@@ -123,8 +133,8 @@ FuzzedSock::~FuzzedSock()
 {
     // Sock::~Sock() will be called after FuzzedSock::~FuzzedSock() and it will call
     // close(m_socket) if m_socket is not INVALID_SOCKET.
-    // Avoid closing an arbitrary file descriptor (m_socket is just a random very high number which
-    // theoretically may concide with a real opened file descriptor).
+    // Avoid closing an arbitrary file descriptor; the mocked descriptor is only used for
+    // EventsPerSock keying.
     m_socket = INVALID_SOCKET;
 }
 
