@@ -646,6 +646,20 @@ FUZZ_TARGET(txgraph)
                 for (size_t i = 0; i < count; ++i) {
                     refs[i] = pick_fn();
                 }
+                // Steer the union path toward multiple requests in the same cluster, which
+                // exercises the cluster helper's requirement to consume a whole match group.
+                for (TxGraph::Ref* ref : refs) {
+                    auto simpos = sel_sim.Find(ref);
+                    if (simpos == SimTxGraph::MISSING) continue;
+                    const auto component = sel_sim.graph.GetConnectedComponent(sel_sim.graph.Positions(), simpos);
+                    if (component.Count() <= 1) continue;
+                    for (auto other_pos : component) {
+                        if (other_pos == simpos) continue;
+                        refs.push_back(sel_sim.GetRef(other_pos));
+                        break;
+                    }
+                    break;
+                }
                 // Their order should not matter, shuffle them.
                 std::shuffle(refs.begin(), refs.end(), rng);
                 // Invoke the real function, and convert to SimPos set.
