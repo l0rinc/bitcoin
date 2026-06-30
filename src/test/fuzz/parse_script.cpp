@@ -14,12 +14,14 @@
 FUZZ_TARGET(parse_script)
 {
     const std::string script_string(buffer.begin(), buffer.end());
+    CScript parsed;
     try {
-        const CScript parsed{ParseScript(script_string)};
-        const std::string formatted{FormatScript(parsed)};
-        const CScript reparsed{ParseScript(formatted)};
-        assert(std::ranges::equal(reparsed, parsed));
-        assert(FormatScript(reparsed) == formatted);
+        parsed = ParseScript(script_string);
     } catch (const std::runtime_error&) {
+        return;
     }
+    const std::string formatted{FormatScript(parsed)};
+    const CScript reparsed{ParseScript(formatted)};
+    assert(std::ranges::equal(reparsed, parsed));
+    assert(FormatScript(reparsed) == formatted);
 }
