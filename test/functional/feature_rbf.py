@@ -485,6 +485,30 @@ class ReplaceByFeeTest(BitcoinTestFramework):
         assert tx3a["txid"] not in mempool
         assert tx3b_txid in mempool
 
+        # 4. Check summing multiple extreme negative conflict fees does not overflow.
+        tx4_outpoints = [self.make_utxo(self.nodes[0], int(1.1 * COIN)) for _ in range(2)]
+        tx4a_txids = []
+        for outpoint in tx4_outpoints:
+            tx4a = self.wallet.send_self_transfer(
+                from_node=self.nodes[0],
+                utxo_to_spend=outpoint,
+                sequence=0,
+                fee=Decimal("0.00010000"),
+            )
+            tx4a_txids.append(tx4a["txid"])
+            self.nodes[0].prioritisetransaction(txid=tx4a["txid"], fee_delta=-(2**63))
+
+        tx4b = self.wallet.create_self_transfer_multi(
+            utxos_to_spend=tx4_outpoints,
+            sequence=0,
+            fee_per_output=10000,
+        )
+        tx4b_txid = self.nodes[0].sendrawtransaction(tx4b["hex"], 0)
+        mempool = self.nodes[0].getrawmempool()
+        for txid in tx4a_txids:
+            assert txid not in mempool
+        assert tx4b_txid in mempool
+
     def test_rpc(self):
         us0 = self.wallet.get_utxo()
         ins = [us0]

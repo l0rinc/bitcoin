@@ -55,6 +55,7 @@
 #include <util/hasher.h>
 #include <util/log.h>
 #include <util/moneystr.h>
+#include <util/overflow.h>
 #include <util/rbf.h>
 #include <util/result.h>
 #include <util/signalinterrupt.h>
@@ -119,6 +120,12 @@ static bool ShouldCompactChainstate(bool in_ibd)
 {
     static constexpr uint32_t flush_ratio{320}; // Roughly every 2 weeks with hourly flushes
     return !in_ibd && FastRandomContext().randrange(flush_ratio) == 0;
+}
+
+static CAmount SaturatingSub(const CAmount left, const CAmount right)
+{
+    if (right == std::numeric_limits<CAmount>::min()) return std::numeric_limits<CAmount>::max();
+    return SaturatingAdd(left, -right);
 }
 
 TRACEPOINT_SEMAPHORE(validation, block_connected);
@@ -1008,7 +1015,7 @@ bool MemPoolAccept::ReplacementChecks(Workspace& ws)
     // Check if it's economically rational to mine this transaction rather than the ones it
     // replaces and pays for its own relay fees. Enforce Rules #3 and #4.
     for (CTxMemPool::txiter it : all_conflicts) {
-        m_subpackage.m_conflicting_fees += it->GetModifiedFee();
+        m_subpackage.m_conflicting_fees = SaturatingAdd(m_subpackage.m_conflicting_fees, it->GetModifiedFee());
         m_subpackage.m_conflicting_size += it->GetTxSize();
     }
 
@@ -1092,7 +1099,7 @@ bool MemPoolAccept::PackageRBFChecks(const std::vector<CTransactionRef>& txns,
 
     for (CTxMemPool::txiter it : all_conflicts) {
         m_subpackage.m_changeset->StageRemoval(it);
-        m_subpackage.m_conflicting_fees += it->GetModifiedFee();
+        m_subpackage.m_conflicting_fees = SaturatingAdd(m_subpackage.m_conflicting_fees, it->GetModifiedFee());
         m_subpackage.m_conflicting_size += it->GetTxSize();
     }
 
@@ -1294,7 +1301,7 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
     if (!m_subpackage.m_replaced_transactions.empty()) {
         LogDebug(BCLog::MEMPOOL, "replaced %u mempool transactions with %u new one(s) for %s additional fees, %d delta bytes\n",
                  m_subpackage.m_replaced_transactions.size(), workspaces.size(),
-                 m_subpackage.m_total_modified_fees - m_subpackage.m_conflicting_fees,
+                 SaturatingSub(m_subpackage.m_total_modified_fees, m_subpackage.m_conflicting_fees),
                  m_subpackage.m_total_vsize - static_cast<int>(m_subpackage.m_conflicting_size));
     }
 
@@ -1428,7 +1435,7 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransactionInternal(const CTransa
     if (!m_subpackage.m_replaced_transactions.empty()) {
         LogDebug(BCLog::MEMPOOL, "replaced %u mempool transactions with 1 new transaction for %s additional fees, %d delta bytes\n",
                  m_subpackage.m_replaced_transactions.size(),
-                 ws.m_modified_fees - m_subpackage.m_conflicting_fees,
+                 SaturatingSub(ws.m_modified_fees, m_subpackage.m_conflicting_fees),
                  ws.m_vsize - static_cast<int>(m_subpackage.m_conflicting_size));
     }
 
@@ -1510,7 +1517,7 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptMultipleTransactionsInternal(con
     m_subpackage.m_total_vsize = std::accumulate(workspaces.cbegin(), workspaces.cend(), int64_t{0},
         [](int64_t sum, auto& ws) { return sum + ws.m_vsize; });
     m_subpackage.m_total_modified_fees = std::accumulate(workspaces.cbegin(), workspaces.cend(), CAmount{0},
-        [](CAmount sum, auto& ws) { return sum + ws.m_modified_fees; });
+        [](CAmount sum, auto& ws) { return SaturatingAdd(sum, ws.m_modified_fees); });
     const CFeeRate package_feerate(m_subpackage.m_total_modified_fees, m_subpackage.m_total_vsize);
     std::vector<Wtxid> all_package_wtxids;
     all_package_wtxids.reserve(workspaces.size());
