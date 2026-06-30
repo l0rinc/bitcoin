@@ -3019,6 +3019,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
     assert(m_chain.Tip() == pindexDelete->pprev);
     assert(!m_chain.Contains(*pindexDelete));
     assert(m_chain.Height() == pindexDelete->nHeight - 1);
+    Assume(CoinsTip().GetBestBlock() == pindexDelete->pprev->GetBlockHash());
     m_chainman.UpdateIBDStatus();
 
     UpdateTip(pindexDelete->pprev);
@@ -3118,6 +3119,7 @@ bool Chainstate::ConnectTip(
     assert(m_chain.Tip() == pindexNew);
     assert(m_chain.Contains(*pindexNew));
     assert(m_chain.Height() == pindexNew->nHeight);
+    Assume(CoinsTip().GetBestBlock() == pindexNew->GetBlockHash());
     m_chainman.UpdateIBDStatus();
     UpdateTip(pindexNew);
 
