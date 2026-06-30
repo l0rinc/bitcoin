@@ -191,6 +191,7 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     const std::string reply_body{response_has_body ? fuzzed_data_provider.ConsumeRandomLengthString(32) : std::string{}};
     const bool optimistic_send{fuzzed_data_provider.ConsumeBool()};
     const bool response_close{fuzzed_data_provider.ConsumeBool()};
+    const bool response_keep_alive{fuzzed_data_provider.ConsumeBool()};
     const bool response_content_type{fuzzed_data_provider.ConsumeBool()};
     std::vector<std::string> response_content_type_values{"text/plain", "application/json", "application/octet-stream"};
     const std::string response_content_type_value{response_content_type ?
@@ -246,6 +247,9 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     if (response_close) expected_keep_alive = false;
     if (response_close && http_request.m_version.major == 1 && http_request.m_version.minor == 0) {
         expected_content_length = false;
+    }
+    if (response_keep_alive && http_request.m_version.major == 1 && http_request.m_version.minor == 0 && request_keep_alive && !response_close) {
+        http_request.WriteHeader("Connection", "keep-alive");
     }
     if (response_content_length && expected_content_length) {
         http_request.WriteHeader("Content-Length", std::string{response_content_length_value});
