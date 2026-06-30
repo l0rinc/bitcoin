@@ -469,10 +469,15 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
     uint64_t checkTotal = 0;
     CAmount check_total_fee{0};
     CAmount check_total_modified_fee{0};
-    // Saturating addition is order-dependent after overflow, so fee diagram
-    // points can only be compared with the transaction-order prefix while the
-    // prefix sum remains representable.
+    CAmount check_positive_modified_fee{0};
+    CAmount check_negative_modified_fee{0};
+    // Saturating addition is order-dependent after overflow or underflow. Fee
+    // diagram chunks may aggregate same-sign modified fees before later
+    // opposite-sign fees are added, so compare diagram points with the
+    // transaction-order prefix only while the prefix and its same-sign buckets
+    // all remain representable.
     bool check_total_modified_fee_overflowed{false};
+    bool check_total_modified_fee_order_dependent{false};
     int64_t check_total_adjusted_weight{0};
     size_t check_total_inputs{0};
     uint64_t innerUsage = 0;
@@ -516,7 +521,7 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
         // size totals.
         assert(diagram_iter->size >= check_total_adjusted_weight);
         if (diagram_iter->size == check_total_adjusted_weight) {
-            if (!check_total_modified_fee_overflowed) {
+            if (!check_total_modified_fee_overflowed && !check_total_modified_fee_order_dependent) {
                 assert(diagram_iter->fee == check_total_modified_fee);
             }
             ++diagram_iter;
@@ -524,15 +529,25 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
         checkTotal += it->GetTxSize();
         check_total_adjusted_weight += it->GetAdjustedWeight();
         check_total_fee += it->GetFee();
-        const auto new_check_total_modified_fee{CheckedAdd(check_total_modified_fee, it->GetModifiedFee())};
+        const CAmount modified_fee{it->GetModifiedFee()};
+        const auto new_check_total_modified_fee{CheckedAdd(check_total_modified_fee, modified_fee)};
         check_total_modified_fee_overflowed |= !new_check_total_modified_fee.has_value();
-        check_total_modified_fee = new_check_total_modified_fee.value_or(SaturatingAdd(check_total_modified_fee, it->GetModifiedFee()));
+        check_total_modified_fee = new_check_total_modified_fee.value_or(SaturatingAdd(check_total_modified_fee, modified_fee));
+        if (modified_fee > 0) {
+            const auto new_positive_modified_fee{CheckedAdd(check_positive_modified_fee, modified_fee)};
+            check_total_modified_fee_order_dependent |= !new_positive_modified_fee.has_value();
+            check_positive_modified_fee = new_positive_modified_fee.value_or(SaturatingAdd(check_positive_modified_fee, modified_fee));
+        } else if (modified_fee < 0) {
+            const auto new_negative_modified_fee{CheckedAdd(check_negative_modified_fee, modified_fee)};
+            check_total_modified_fee_order_dependent |= !new_negative_modified_fee.has_value();
+            check_negative_modified_fee = new_negative_modified_fee.value_or(SaturatingAdd(check_negative_modified_fee, modified_fee));
+        }
         innerUsage += it->DynamicMemoryUsage();
         const CTransaction& tx = it->GetTx();
         const auto delta_it{mapDeltas.find(tx.GetHash())};
         const CAmount prioritisation_delta{delta_it == mapDeltas.end() ? 0 : delta_it->second};
         assert(delta_it == mapDeltas.end() || prioritisation_delta != 0);
-        assert(it->GetModifiedFee() == SaturatingAdd(it->GetFee(), prioritisation_delta));
+        assert(modified_fee == SaturatingAdd(it->GetFee(), prioritisation_delta));
 
         // CompareMiningScoreWithTopology should agree with GetSortedScoreWithTopology()
         if (last_wtxid) {
@@ -604,7 +619,7 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
 
     assert(totalTxSize == checkTotal);
     assert(m_total_fee == check_total_fee);
-    if (!check_total_modified_fee_overflowed) {
+    if (!check_total_modified_fee_overflowed && !check_total_modified_fee_order_dependent) {
         assert(diagram.back().fee == check_total_modified_fee);
     }
     assert(diagram.back().size == check_total_adjusted_weight);
