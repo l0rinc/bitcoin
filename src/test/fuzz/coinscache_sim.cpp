@@ -593,8 +593,10 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
             [&]() { // Uncache
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
                 auto sim = lookup(outpointidx);
+                const auto parent_cache_stats{get_cache_stats(caches.size() - 1)};
                 // Apply to real caches (there is no equivalent in our simulation).
                 caches.back()->Uncache(data.outpoints[outpointidx]);
+                assert_cache_stats(parent_cache_stats);
                 auto realcoin = caches.back()->PeekCoin(data.outpoints[outpointidx]);
                 if (!sim.has_value()) {
                     assert(!realcoin);
