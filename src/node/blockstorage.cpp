@@ -114,10 +114,12 @@ void BlockTreeDB::WriteFlag(const std::string& name, bool fValue)
 bool BlockTreeDB::ReadFlag(const std::string& name, bool& fValue)
 {
     const auto key{std::make_pair(DB_FLAG, name)};
+    const bool initial_value{fValue};
     uint8_t ch;
     const bool found{Read(key, ch)};
     Assume(found == Exists(key));
     if (!found) {
+        Assume(fValue == initial_value);
         return false;
     }
     Assume(ch == uint8_t{'0'} || ch == uint8_t{'1'});
