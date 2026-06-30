@@ -161,11 +161,15 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     }
 
     for (size_t i = 0; i < extra_txn.size(); i++) {
-        uint64_t shortid = cmpctblock.GetShortID(extra_txn[i].first);
+        const auto& [wtxid, tx] = extra_txn[i];
+        if (!tx) continue;
+        Assume(wtxid == tx->GetWitnessHash());
+
+        uint64_t shortid = cmpctblock.GetShortID(wtxid);
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {
             if (!have_txn[idit->second]) {
-                txn_available[idit->second] = extra_txn[i].second;
+                txn_available[idit->second] = tx;
                 have_txn[idit->second]  = true;
                 mempool_count++;
                 extra_count++;
@@ -177,7 +181,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                 // Note that we don't want duplication between extra_txn and mempool to
                 // trigger this case, so we compare witness hashes first
                 if (txn_available[idit->second] &&
-                        txn_available[idit->second]->GetWitnessHash() != extra_txn[i].second->GetWitnessHash()) {
+                        txn_available[idit->second]->GetWitnessHash() != tx->GetWitnessHash()) {
                     txn_available[idit->second].reset();
                     mempool_count--;
                     extra_count--;
