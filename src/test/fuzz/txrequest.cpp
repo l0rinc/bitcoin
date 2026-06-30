@@ -277,6 +277,10 @@ public:
 
         // Compare with TxRequestTracker's implementation.
         std::vector<std::pair<NodeId, GenTxid>> expired;
+        if (collect_expired) {
+            expired.emplace_back(MAX_PEERS + 1, MakeGenTxid(0, /*is_wtxid=*/false));
+            expired.emplace_back(MAX_PEERS + 2, MakeGenTxid(0, /*is_wtxid=*/true));
+        }
         const auto actual = m_tracker.GetRequestable(peer, m_now, collect_expired ? &expired : nullptr);
         if (collect_expired) {
             std::sort(expired.begin(), expired.end());
