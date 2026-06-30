@@ -137,7 +137,20 @@ bool CTxMemPool::HasDescendants(const Txid& txid) const
     LOCK(cs);
     auto entry = GetEntry(txid);
     if (!entry) return false;
-    return m_txgraph->GetDescendants(*entry, TxGraph::Level::MAIN).size() > 1;
+    const bool has_descendants{m_txgraph->GetDescendants(*entry, TxGraph::Level::MAIN).size() > 1};
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        bool has_direct_child{false};
+        auto child_it{mapNextTx.lower_bound(COutPoint(txid, 0))};
+        for (; child_it != mapNextTx.end() && child_it->first->hash == txid; ++child_it) {
+            Assume(child_it->second != mapTx.end());
+            if (&*child_it->second != entry) {
+                has_direct_child = true;
+                break;
+            }
+        }
+        Assume(has_descendants == has_direct_child);
+    }
+    return has_descendants;
 }
 
 CTxMemPool::setEntries CTxMemPool::CalculateMemPoolAncestors(const CTxMemPoolEntry &entry) const
