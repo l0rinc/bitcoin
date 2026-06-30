@@ -464,6 +464,27 @@ class ReplaceByFeeTest(BitcoinTestFramework):
 
         assert tx2b_txid in self.nodes[0].getrawmempool()
 
+        # 3. Check that extreme negative modified fees do not overflow Rule #4.
+        tx3_outpoint = self.make_utxo(self.nodes[0], int(1.1 * COIN))
+
+        tx3a = self.wallet.send_self_transfer(
+            from_node=self.nodes[0],
+            utxo_to_spend=tx3_outpoint,
+            sequence=0,
+            fee=Decimal("0.00010000"),
+        )
+        self.nodes[0].prioritisetransaction(txid=tx3a["txid"], fee_delta=-(2**63))
+
+        tx3b = self.wallet.create_self_transfer(
+            utxo_to_spend=tx3_outpoint,
+            sequence=0,
+            fee=Decimal("0.00011000"),
+        )
+        tx3b_txid = self.nodes[0].sendrawtransaction(tx3b["hex"], 0)
+        mempool = self.nodes[0].getrawmempool()
+        assert tx3a["txid"] not in mempool
+        assert tx3b_txid in mempool
+
     def test_rpc(self):
         us0 = self.wallet.get_utxo()
         ins = [us0]
