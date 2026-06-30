@@ -5,6 +5,7 @@
 #include <common/system.h>
 #include <compat/compat.h>
 #include <test/util/common.h>
+#include <test/util/net.h>
 #include <test/util/setup_common.h>
 #include <util/sock.h>
 #include <util/threadinterrupt.h>
@@ -176,6 +177,17 @@ BOOST_AUTO_TEST_CASE(wait_many_reports_only_requested_events)
     BOOST_CHECK((receiver_occurred & Sock::RecvEvent) != 0);
     BOOST_CHECK_EQUAL(static_cast<int>(sender_occurred & ~(Sock::SendEvent | Sock::ErrorEvent)), 0);
     BOOST_CHECK_EQUAL(static_cast<int>(receiver_occurred & ~(Sock::RecvEvent | Sock::ErrorEvent)), 0);
+}
+
+BOOST_AUTO_TEST_CASE(mock_sockets_have_distinct_waitmany_keys)
+{
+    const auto sock_a{std::make_shared<ZeroSock>()};
+    const auto sock_b{std::make_shared<ZeroSock>()};
+
+    Sock::EventsPerSock events;
+    BOOST_CHECK(events.emplace(sock_a, Sock::Events{Sock::RecvEvent}).second);
+    BOOST_CHECK(events.emplace(sock_b, Sock::Events{Sock::SendEvent}).second);
+    BOOST_CHECK_EQUAL(events.size(), 2U);
 }
 
 BOOST_AUTO_TEST_CASE(recv_until_terminator_limit)

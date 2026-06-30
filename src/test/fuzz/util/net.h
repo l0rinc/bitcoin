@@ -223,6 +223,9 @@ public:
     bool IsConnected(std::string& errmsg) const override;
 };
 
+/** Reset the deterministic mocked file descriptor assigned to new FuzzedSock objects. */
+void ResetFuzzedSockMockedFds();
+
 [[nodiscard]] inline FuzzedNetEvents ConsumeNetEvents(FuzzedDataProvider& fdp) noexcept
 {
     return FuzzedNetEvents{fdp};
