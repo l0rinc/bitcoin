@@ -337,6 +337,40 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
     BOOST_CHECK(optimistic_response.find("Connection: close\r\n") != std::string::npos);
     BOOST_CHECK(optimistic_response.find("Content-Length: 3\r\n") != std::string::npos);
     BOOST_CHECK(optimistic_response.ends_with("\r\n\r\nabc"));
+
+    auto response_close_client{std::make_shared<HTTPRemoteClient>(
+        /*id=*/2,
+        CService{},
+        std::make_unique<StaticContentsSock>(""))};
+    {
+        LOCK(response_close_client->m_send_mutex);
+        response_close_client->m_send_buffer.push_back(std::byte{'x'});
+    }
+
+    HTTPRequest response_close_req{response_close_client};
+    LineReader response_close_reader("GET / HTTP/1.1\r\n\r\n", MAX_HEADERS_SIZE);
+    BOOST_REQUIRE(response_close_req.LoadControlData(response_close_reader));
+    BOOST_REQUIRE(response_close_req.LoadHeaders(response_close_reader));
+    BOOST_REQUIRE(response_close_req.LoadBody(response_close_reader));
+
+    response_close_client->m_req_busy = true;
+    response_close_req.WriteHeader("Connection", "close");
+    response_close_req.WriteReply(HTTP_INTERNAL_SERVER_ERROR, "boom");
+
+    const std::vector<std::byte> response_close_sent{WITH_LOCK(response_close_client->m_send_mutex, return response_close_client->m_send_buffer)};
+    BOOST_REQUIRE_GT(response_close_sent.size(), 1);
+    std::string response_close_response;
+    response_close_response.reserve(response_close_sent.size() - 1);
+    for (auto it{response_close_sent.begin() + 1}; it != response_close_sent.end(); ++it) {
+        response_close_response.push_back(static_cast<char>(std::to_integer<unsigned char>(*it)));
+    }
+    BOOST_CHECK(response_close_response.starts_with("HTTP/1.1 500 Internal Server Error\r\n"));
+    BOOST_CHECK(response_close_response.find("Connection: close\r\n") != std::string::npos);
+    BOOST_CHECK(response_close_response.find("Content-Length: 4\r\n") != std::string::npos);
+    BOOST_CHECK(response_close_response.ends_with("\r\n\r\nboom"));
+    BOOST_CHECK(!response_close_client->m_keep_alive.load());
+    BOOST_CHECK(WITH_LOCK(response_close_client->m_send_mutex, return response_close_client->m_send_ready));
+    BOOST_CHECK(!response_close_client->m_req_busy.load());
 }
 
 BOOST_AUTO_TEST_CASE(http_send_buffer_tests)
