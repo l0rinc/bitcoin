@@ -18,6 +18,9 @@
 #include <uint256.h>
 #include <validation.h>
 
+#include <algorithm>
+#include <limits>
+
 namespace {
 constexpr uint32_t FUZZ_MAX_HEADERS_RESULTS{16};
 
@@ -52,6 +55,7 @@ public:
     void ResetAndInitialize() EXCLUSIVE_LOCKS_REQUIRED(NetEventsInterface::g_msgproc_mutex);
     void SendMessage(FuzzedDataProvider& fuzzed_data_provider, CSerializedNetMsg&& msg)
         EXCLUSIVE_LOCKS_REQUIRED(NetEventsInterface::g_msgproc_mutex);
+    void CheckNodeStateStatsOutputContracts() const;
 };
 
 void HeadersSyncSetup::ResetAndInitialize()
@@ -97,6 +101,22 @@ void HeadersSyncSetup::SendMessage(FuzzedDataProvider& fuzzed_data_provider, CSe
     } catch (const std::ios_base::failure&) {
     }
     m_node.peerman->SendMessages(connection);
+}
+
+void HeadersSyncSetup::CheckNodeStateStatsOutputContracts() const
+{
+    constexpr int stale_inflight_height{std::numeric_limits<int>::max()};
+    constexpr int64_t stale_presync_height{std::numeric_limits<int64_t>::max()};
+
+    for (const CNode* connection : m_connections) {
+        CNodeStateStats stats;
+        stats.presync_height = stale_presync_height;
+        stats.vHeightInFlight.push_back(stale_inflight_height);
+        assert(m_node.peerman->GetNodeStateStats(connection->GetId(), stats));
+        assert(stats.presync_height >= -1);
+        assert(stats.presync_height != stale_presync_height);
+        assert(std::find(stats.vHeightInFlight.begin(), stats.vHeightInFlight.end(), stale_inflight_height) == stats.vHeightInFlight.end());
+    }
 }
 
 CBlockHeader ConsumeHeader(FuzzedDataProvider& fuzzed_data_provider, const uint256& prev_hash, uint32_t prev_nbits)
@@ -173,6 +193,7 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
     LOCK(NetEventsInterface::g_msgproc_mutex);
 
     g_testing_setup->ResetAndInitialize();
+    g_testing_setup->CheckNodeStateStatsOutputContracts();
 
     // The chain is just a single block, so this is equal to 1
     size_t original_index_size{WITH_LOCK(cs_main, return chainman.m_blockman.m_block_index.size())};
@@ -204,6 +225,7 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
 
                 auto headers_msg = NetMsg::Make(NetMsgType::HEADERS, TX_WITH_WITNESS(headers));
                 g_testing_setup->SendMessage(fuzzed_data_provider, std::move(headers_msg));
+                g_testing_setup->CheckNodeStateStatsOutputContracts();
             },
             [&]() NO_THREAD_SAFETY_ANALYSIS {
                 // Send a compact block
@@ -214,6 +236,7 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
 
                 auto headers_msg = NetMsg::Make(NetMsgType::CMPCTBLOCK, TX_WITH_WITNESS(cmpct_block));
                 g_testing_setup->SendMessage(fuzzed_data_provider, std::move(headers_msg));
+                g_testing_setup->CheckNodeStateStatsOutputContracts();
             },
             [&]() NO_THREAD_SAFETY_ANALYSIS {
                 // Send a block
@@ -223,6 +246,7 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
 
                 auto headers_msg = NetMsg::Make(NetMsgType::BLOCK, TX_WITH_WITNESS(block));
                 g_testing_setup->SendMessage(fuzzed_data_provider, std::move(headers_msg));
+                g_testing_setup->CheckNodeStateStatsOutputContracts();
             });
     }
 
