@@ -5,6 +5,7 @@
 #include <chainparams.h>
 #include <common/signmessage.h>
 #include <key_io.h>
+#include <pubkey.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
@@ -29,12 +30,21 @@ FUZZ_TARGET(message, .init = initialize_message)
     const std::string random_message = fuzzed_data_provider.ConsumeRandomLengthString(1024);
     {
         CKey private_key = ConsumePrivateKey(fuzzed_data_provider);
-        std::string signature;
+        const std::string original_signature{fuzzed_data_provider.ConsumeRandomLengthString(1024)};
+        std::string signature{original_signature};
         const bool message_signed = MessageSign(private_key, random_message, signature);
         if (private_key.IsValid()) {
             assert(message_signed);
-            const MessageVerificationResult verification_result = MessageVerify(EncodeDestination(PKHash(private_key.GetPubKey().GetID())), signature, random_message);
+            const auto signature_bytes{DecodeBase64(signature)};
+            assert(signature_bytes);
+            assert(signature_bytes->size() == CPubKey::COMPACT_SIGNATURE_SIZE);
+            const std::string address{EncodeDestination(PKHash(private_key.GetPubKey().GetID()))};
+            const MessageVerificationResult verification_result = MessageVerify(address, signature, random_message);
             assert(verification_result == MessageVerificationResult::OK);
+            assert(MessageVerify(address, signature, random_message + '\0') != MessageVerificationResult::OK);
+        } else {
+            assert(!message_signed);
+            assert(signature == original_signature);
         }
     }
     {
