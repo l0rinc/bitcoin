@@ -370,6 +370,7 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
     BOOST_REQUIRE(response_close_req.LoadBody(response_close_reader));
 
     response_close_client->m_req_busy = true;
+    response_close_req.WriteHeader("Connection", "keep-alive");
     response_close_req.WriteHeader("Connection", "close");
     response_close_req.WriteReply(HTTP_INTERNAL_SERVER_ERROR, "boom");
 
