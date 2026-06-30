@@ -21,6 +21,7 @@
 #include <validation.h>
 
 #include <cassert>
+#include <string_view>
 
 void initialize_transaction()
 {
@@ -68,9 +69,23 @@ FUZZ_TARGET(transaction, .init = initialize_transaction)
 
     (void)tx.GetHash();
     (void)tx.ComputeTotalSize();
+    CAmount value_out{0};
+    bool value_out_in_range{true};
+    for (const auto& tx_out : tx.vout) {
+        if (!MoneyRange(tx_out.nValue) || !MoneyRange(value_out + tx_out.nValue)) {
+            value_out_in_range = false;
+            break;
+        }
+        value_out += tx_out.nValue;
+    }
     try {
-        (void)tx.GetValueOut();
-    } catch (const std::runtime_error&) {
+        const CAmount computed_value_out{tx.GetValueOut()};
+        assert(value_out_in_range);
+        assert(computed_value_out == value_out);
+        assert(MoneyRange(computed_value_out));
+    } catch (const std::runtime_error& e) {
+        assert(!value_out_in_range);
+        assert(std::string_view{e.what()} == "GetValueOut: value out of range");
     }
     (void)tx.GetWitnessHash();
     (void)tx.HasWitness();
