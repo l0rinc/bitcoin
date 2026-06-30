@@ -11,6 +11,7 @@
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -159,6 +160,8 @@ BOOST_FIXTURE_TEST_CASE(rbf_helper_functions, TestChain100Setup)
     BOOST_CHECK(PaysForRBF(high_fee, high_fee + 4, 20, higher_relay_feerate, unused_txid) == std::nullopt);
     BOOST_CHECK(PaysForRBF(low_fee, high_fee, 99999999, incremental_relay_feerate, unused_txid).has_value());
     BOOST_CHECK(PaysForRBF(low_fee, high_fee + 99999999, 99999999, incremental_relay_feerate, unused_txid) == std::nullopt);
+    BOOST_CHECK(PaysForRBF(std::numeric_limits<CAmount>::min() + high_fee, high_fee, 1, CFeeRate(0), unused_txid) == std::nullopt);
+    BOOST_CHECK(PaysForRBF(std::numeric_limits<CAmount>::max(), std::numeric_limits<CAmount>::max(), 1, incremental_relay_feerate, unused_txid).has_value());
 }
 
 BOOST_FIXTURE_TEST_CASE(rbf_conflicts_calculator, TestChain100Setup)
