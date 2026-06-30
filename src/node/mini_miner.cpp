@@ -448,7 +448,8 @@ std::optional<CAmount> MiniMiner::CalculateTotalBumpFees(const CFeeRate& target_
         [](int64_t sum, const auto it) {return sum + it->second.GetTxSize();});
     const auto ancestor_package_fee = std::accumulate(ancestors.cbegin(), ancestors.cend(), CAmount{0},
         [](CAmount sum, const auto it) {return sum + it->second.GetModifiedFee();});
-    const CAmount total_bump_fee{target_feerate.GetFee(ancestor_package_size) - ancestor_package_fee};
+    const CAmount raw_total_bump_fee{target_feerate.GetFee(ancestor_package_size) - ancestor_package_fee};
+    const CAmount total_bump_fee{std::max<CAmount>(0, raw_total_bump_fee)};
     Assume(total_bump_fee >= 0);
     return total_bump_fee;
 }
