@@ -354,6 +354,18 @@ void CCoinsViewCache::Reset() noexcept
 
 void CCoinsViewCache::Uncache(const COutPoint& hash)
 {
+    const CCoinsViewCache* base_cache{nullptr};
+    unsigned int base_cache_size{0};
+    size_t base_dirty_count{0};
+    size_t base_memory_usage{0};
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        base_cache = dynamic_cast<const CCoinsViewCache*>(base);
+        if (base_cache) {
+            base_cache_size = base_cache->GetCacheSize();
+            base_dirty_count = base_cache->GetDirtyCount();
+            base_memory_usage = base_cache->DynamicMemoryUsage();
+        }
+    }
     CCoinsMap::iterator it = cacheCoins.find(hash);
     if (it != cacheCoins.end() && !it->second.IsDirty()) {
         Assume(!it->second.IsFresh());
@@ -366,6 +378,13 @@ void CCoinsViewCache::Uncache(const COutPoint& hash)
                (bool)it->second.coin.IsCoinBase());
         cacheCoins.erase(it);
         Assume(!cacheCoins.contains(hash));
+    }
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (base_cache) {
+            Assume(base_cache->GetCacheSize() == base_cache_size);
+            Assume(base_cache->GetDirtyCount() == base_dirty_count);
+            Assume(base_cache->DynamicMemoryUsage() == base_memory_usage);
+        }
     }
 }
 

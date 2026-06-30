@@ -1320,6 +1320,40 @@ BOOST_AUTO_TEST_CASE(ccoins_uncache_cache_entry_contracts)
     clean_cache.SelfTest();
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_uncache_parent_cache_purity)
+{
+    CCoinsViewTest base{m_rng};
+    const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin coin{CTxOut{m_rng.randrange(10), CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+    {
+        CCoinsViewCache write_cache{&base};
+        write_cache.AddCoin(outpoint, Coin{coin}, /*possible_overwrite=*/false);
+        write_cache.Flush();
+    }
+
+    CCoinsViewCacheTest parent_cache{&base};
+    CCoinsViewCacheTest child_cache{&parent_cache};
+    const auto parent_cache_size{parent_cache.GetCacheSize()};
+    const auto parent_dirty_count{parent_cache.GetDirtyCount()};
+    const auto parent_memory_usage{parent_cache.DynamicMemoryUsage()};
+
+    child_cache.Uncache(outpoint);
+    BOOST_CHECK_EQUAL(parent_cache.GetCacheSize(), parent_cache_size);
+    BOOST_CHECK_EQUAL(parent_cache.GetDirtyCount(), parent_dirty_count);
+    BOOST_CHECK_EQUAL(parent_cache.DynamicMemoryUsage(), parent_memory_usage);
+    BOOST_CHECK_EQUAL(child_cache.GetCacheSize(), 0U);
+    BOOST_CHECK_EQUAL(child_cache.GetDirtyCount(), 0U);
+
+    const auto fetched{child_cache.PeekCoin(outpoint)};
+    BOOST_REQUIRE(fetched.has_value());
+    BOOST_CHECK(*fetched == coin);
+    BOOST_CHECK_EQUAL(parent_cache.GetCacheSize(), parent_cache_size);
+    BOOST_CHECK_EQUAL(parent_cache.GetDirtyCount(), parent_dirty_count);
+    BOOST_CHECK_EQUAL(parent_cache.DynamicMemoryUsage(), parent_memory_usage);
+    parent_cache.SelfTest();
+    child_cache.SelfTest();
+}
+
 BOOST_AUTO_TEST_CASE(ccoins_havecoinincache_read_only)
 {
     CCoinsViewTest base{m_rng};
