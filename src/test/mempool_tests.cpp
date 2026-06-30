@@ -348,6 +348,39 @@ BOOST_AUTO_TEST_CASE(MempoolDumpLoadPrioritisationRoundtrip)
     fs::remove(mempool_path + ".new");
 }
 
+BOOST_AUTO_TEST_CASE(MempoolLoadSkipsDisabledPrioritisation)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    BOOST_REQUIRE_EQUAL(pool.size(), 0U);
+    BOOST_REQUIRE(pool.GetPrioritisedTransactions().empty());
+    BOOST_REQUIRE(pool.GetUnbroadcastTxs().empty());
+
+    const Txid missing_txid{Txid::FromUint256(uint256{3})};
+    constexpr CAmount fee_delta{12345};
+    const fs::path mempool_path{m_args.GetDataDirBase() / "mempool_skip_disabled_prioritisation.dat"};
+    {
+        AutoFile file{fsbridge::fopen(mempool_path, "wb")};
+        BOOST_REQUIRE(!file.IsNull());
+        file << uint64_t{1}; // Legacy v1 mempool dump version, without an obfuscation key.
+        file.SetObfuscation({});
+        file << uint64_t{0}; // No transactions to load.
+        file << std::map<Txid, CAmount>{{missing_txid, fee_delta}};
+        file << std::set<Txid>{missing_txid};
+        BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    }
+
+    BOOST_REQUIRE(node::LoadMempool(pool, mempool_path, m_node.chainman->ActiveChainstate(),
+                                    {
+                                        .apply_fee_delta_priority = false,
+                                        .apply_unbroadcast_set = false,
+                                    }));
+    BOOST_CHECK(pool.GetPrioritisedTransactions().empty());
+    BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
+
+    fs::remove(mempool_path);
+    fs::remove(mempool_path + ".new");
+}
+
 BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
 {
     auto& pool = static_cast<MemPoolTest&>(*Assert(m_node.mempool));
