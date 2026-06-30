@@ -508,6 +508,25 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
         assert(appended == select);
     };
 
+    /** Compute the reduced dependency count from the simulation. */
+    auto count_dependencies_fn = [&]() {
+        unsigned count{0};
+        for (DepGraphIndex i = 0; i < sim.size(); ++i) {
+            if (!sim[i].has_value()) continue;
+            auto parents{sim[i]->second};
+            parents.Reset(i);
+            for (auto parent : parents) {
+                assert(sim[parent].has_value());
+                if (parents[parent]) {
+                    parents -= sim[parent]->second;
+                    parents.Set(parent);
+                }
+            }
+            count += parents.Count();
+        }
+        return count;
+    };
+
     auto last_compaction_pos{real.PositionRange()};
 
     LIMITED_WHILE(provider.remaining_bytes() > 0, 1000)
@@ -581,10 +600,13 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
                 break;
             }
         }
+        anc_update_fn();
+        assert(real.CountDependencies() == count_dependencies_fn());
     }
 
     // Compare the real obtained depgraph against the simulation.
     anc_update_fn();
+    assert(real.CountDependencies() == count_dependencies_fn());
     for (DepGraphIndex i = 0; i < sim.size(); ++i) check_fn(i);
     assert(real.TxCount() == num_tx_sim);
     // Sanity check the result (which includes round-tripping serialization, if applicable).
