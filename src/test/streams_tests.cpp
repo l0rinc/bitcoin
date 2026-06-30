@@ -631,6 +631,41 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_skip)
     fs::remove(streams_test_filename);
 }
 
+BOOST_AUTO_TEST_CASE(streams_buffered_file_setpos_limit)
+{
+    fs::path streams_test_filename = m_args.GetDataDirBase() / "streams_test_tmp";
+    {
+        AutoFile write_file{fsbridge::fopen(streams_test_filename, "w+b")};
+        for (uint8_t j = 0; j < 40; ++j) {
+            write_file << j;
+        }
+        BOOST_REQUIRE_EQUAL(write_file.fclose(), 0);
+    }
+
+    AutoFile file{fsbridge::fopen(streams_test_filename, "rb")};
+    BufferedFile bf{file, 25, 10};
+    bf.SkipTo(5);
+    BOOST_CHECK_EQUAL(bf.GetPos(), 5U);
+    BOOST_CHECK(bf.SetLimit(5));
+    BOOST_REQUIRE(!bf.SetPos(6));
+    BOOST_REQUIRE_EQUAL(bf.GetPos(), 5U);
+    BOOST_CHECK_EXCEPTION(bf.FindByte(std::byte{6}), std::ios_base::failure, HasReason{"Attempt to position past buffer limit"});
+
+    BOOST_CHECK(bf.SetLimit());
+    bf.SkipTo(40);
+    BOOST_CHECK(!bf.SetPos(0));
+    BOOST_CHECK_EQUAL(bf.GetPos(), 15U);
+    bf.FindByte(std::byte{30});
+    BOOST_CHECK_EQUAL(bf.GetPos(), 30U);
+
+    BOOST_CHECK(!bf.SetPos(41));
+    BOOST_CHECK_EQUAL(bf.GetPos(), 40U);
+    BOOST_CHECK_EXCEPTION(bf.FindByte(std::byte{0}), std::ios_base::failure, HasReason{"end of file"});
+
+    BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    fs::remove(streams_test_filename);
+}
+
 BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
 {
     // Make this test deterministic.
@@ -728,6 +763,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
                 break;
             }
             case 5: {
+                bf.SetLimit();
                 size_t requestPos = m_rng.randrange(maxPos + 4);
                 bool okay = bf.SetPos(requestPos);
                 // The new position may differ from the requested position
