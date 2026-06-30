@@ -540,6 +540,12 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
     bool needs_content_length{false};
 
     bool keep_alive{false};
+    bool response_close{false};
+
+    auto response_connection_header{res.m_headers.FindFirst("Connection")};
+    if (response_connection_header && ToLower(response_connection_header.value()) == "close") {
+        response_close = true;
+    }
 
     // See libevent evhttp_make_header_response()
     // Expected response headers depend on protocol version
@@ -547,7 +553,7 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
         // HTTP/1.0
         if (m_version.minor == 0) {
             auto connection_header{m_headers.FindFirst("Connection")};
-            if (connection_header && ToLower(connection_header.value()) == "keep-alive") {
+            if (!response_close && connection_header && ToLower(connection_header.value()) == "keep-alive") {
                 res.m_headers.Write("Connection", "keep-alive");
                 keep_alive = true;
                 // HTTP/1.0 connections are closed by default so EOF is sufficient
@@ -565,7 +571,7 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
             if (needs_body) needs_content_length = true;
 
             // Default for HTTP/1.1
-            keep_alive = true;
+            keep_alive = !response_close;
         }
     }
 
@@ -582,7 +588,7 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
     }
 
     auto connection_header{m_headers.FindFirst("Connection")};
-    if (connection_header && ToLower(connection_header.value()) == "close") {
+    if ((connection_header && ToLower(connection_header.value()) == "close") || response_close) {
         // Might not exist already but we need to replace it, not append to it
         res.m_headers.RemoveAll("Connection");
 
@@ -593,6 +599,7 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
     }
 
     m_client->m_keep_alive = keep_alive;
+    Assume(!response_close || !m_client->m_keep_alive);
 
     // Serialize the response headers
     const std::string headers{res.StringifyHeaders()};
