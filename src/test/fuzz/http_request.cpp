@@ -487,6 +487,7 @@ FUZZ_TARGET(http_request)
     using http_bitcoin::MAX_HEADERS_SIZE;
     using util::LineReader;
 
+    ResetFuzzedSockMockedFds();
     SetMockTime(1);
     FakeSteadyClock steady_clock;
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
