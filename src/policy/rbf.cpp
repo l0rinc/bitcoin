@@ -14,6 +14,7 @@
 #include <uint256.h>
 #include <util/check.h>
 #include <util/moneystr.h>
+#include <util/overflow.h>
 #include <util/rbf.h>
 
 #include <limits>
@@ -114,12 +115,16 @@ std::optional<std::string> PaysForRBF(CAmount original_fees,
     // Rule #4: The new transaction must pay for its own bandwidth. Otherwise, we have a DoS
     // vector where attackers can cause a transaction to be replaced (and relayed) repeatedly by
     // increasing the fee by tiny amounts.
-    CAmount additional_fees = replacement_fees - original_fees;
-    if (additional_fees < relay_fee.GetFee(replacement_vsize)) {
+    Assume(replacement_vsize <= static_cast<size_t>(std::numeric_limits<int32_t>::max()));
+    const CAmount relay_fee_due{relay_fee.GetFee(static_cast<int32_t>(replacement_vsize))};
+    Assume(relay_fee_due >= 0);
+    const auto required_fees{CheckedAdd(original_fees, relay_fee_due)};
+    if (!required_fees || replacement_fees < *required_fees) {
+        const CAmount additional_fees{replacement_fees - original_fees};
         return strprintf("rejecting replacement %s, not enough additional fees to relay; %s < %s",
                          txid.ToString(),
                          FormatMoney(additional_fees),
-                         FormatMoney(relay_fee.GetFee(replacement_vsize)));
+                         FormatMoney(relay_fee_due));
     }
     return std::nullopt;
 }
