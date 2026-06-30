@@ -5,6 +5,7 @@
 #include <chainparams.h>
 #include <consensus/validation.h>
 #include <flatfile.h>
+#include <kernel/coinstats.h>
 #include <kernel/disconnected_transactions.h>
 #include <node/blockstorage.h>
 #include <node/chainstatemanager_args.h>
@@ -30,6 +31,7 @@
 
 #include <tinyformat.h>
 
+#include <cstddef>
 #include <cstdio>
 #include <map>
 #include <vector>
@@ -269,6 +271,72 @@ struct SnapshotTestSetup : TestChain100Setup {
     {
     }
 
+    bool CreateAndActivateUTXOSnapshotWithDuplicateCoin()
+    {
+        ChainstateManager& chainman = *Assert(m_node.chainman);
+
+        int height;
+        WITH_LOCK(::cs_main, height = chainman.ActiveHeight());
+        const fs::path snapshot_path{m_path_root / fs::u8path(tfm::format("test_snapshot_duplicate_source.%d.dat", height))};
+        const fs::path duplicate_path{m_path_root / fs::u8path(tfm::format("test_snapshot_duplicate.%d.dat", height))};
+
+        {
+            AutoFile auto_outfile{fsbridge::fopen(snapshot_path, "wb")};
+            CreateUTXOSnapshot(m_node,
+                               chainman.ActiveChainstate(),
+                               std::move(auto_outfile),
+                               snapshot_path,
+                               snapshot_path);
+        }
+
+        SnapshotMetadata metadata{chainman.GetParams().MessageStart()};
+        DataStream duplicate_group{};
+        DataBuffer remaining_snapshot;
+        {
+            AutoFile auto_infile{fsbridge::fopen(snapshot_path, "rb")};
+            auto_infile >> metadata;
+
+            Txid txid;
+            auto_infile >> txid;
+            const uint64_t coins_per_txid{ReadCompactSize(auto_infile)};
+            duplicate_group << txid;
+            WriteCompactSize(duplicate_group, coins_per_txid);
+            for (uint64_t i{0}; i < coins_per_txid; ++i) {
+                const uint64_t out_index{ReadCompactSize(auto_infile)};
+                Coin coin;
+                auto_infile >> coin;
+                WriteCompactSize(duplicate_group, out_index);
+                duplicate_group << coin;
+            }
+
+            metadata.m_coins_count += coins_per_txid;
+            remaining_snapshot.resize(auto_infile.size() - auto_infile.tell());
+            auto_infile.read(remaining_snapshot);
+        }
+
+        {
+            AutoFile auto_outfile{fsbridge::fopen(duplicate_path, "wb")};
+            auto_outfile << metadata;
+            auto_outfile.write({duplicate_group.data(), duplicate_group.size()});
+            auto_outfile.write(remaining_snapshot);
+            auto_outfile.write({duplicate_group.data(), duplicate_group.size()});
+            assert(auto_outfile.fclose() == 0);
+        }
+
+        AutoFile auto_infile{fsbridge::fopen(duplicate_path, "rb")};
+        SnapshotMetadata duplicate_metadata{chainman.GetParams().MessageStart()};
+        auto_infile >> duplicate_metadata;
+
+        Chainstate& active_chainstate = chainman.ActiveChainstate();
+        CBlockIndex* tip = active_chainstate.m_chain.Tip();
+        if (tip->pprev) {
+            active_chainstate.m_chain.SetTip(*(tip->pprev));
+        }
+        auto res = chainman.ActivateSnapshot(auto_infile, duplicate_metadata, /*in_memory=*/false);
+        active_chainstate.m_chain.SetTip(*tip);
+        return !!res;
+    }
+
     std::tuple<Chainstate*, Chainstate*> SetupSnapshot()
     {
         ChainstateManager& chainman = *Assert(m_node.chainman);
@@ -350,6 +418,7 @@ struct SnapshotTestSetup : TestChain100Setup {
                 // Wrong hash
                 metadata.m_base_blockhash = uint256::ONE;
         }));
+        BOOST_REQUIRE(!CreateAndActivateUTXOSnapshotWithDuplicateCoin());
 
         BOOST_REQUIRE(CreateAndActivateUTXOSnapshot(this));
         BOOST_CHECK(fs::exists(*node::FindAssumeutxoChainstateDir(chainman.m_options.datadir)));
@@ -374,6 +443,12 @@ struct SnapshotTestSetup : TestChain100Setup {
         const CBlockIndex* tip = WITH_LOCK(chainman.GetMutex(), return chainman.ActiveTip());
 
         BOOST_CHECK_EQUAL(tip->m_chain_tx_count, au_data->m_chain_tx_count);
+        CCoinsViewDB* snapshot_coinsdb{WITH_LOCK(::cs_main, return &snapshot_chainstate.CoinsDB())};
+        const auto snapshot_stats{*Assert(kernel::ComputeUTXOStats(kernel::CoinStatsHashType::HASH_SERIALIZED, *snapshot_coinsdb, chainman.m_blockman))};
+        BOOST_CHECK_EQUAL(snapshot_stats.hashBlock, tip->GetBlockHash());
+        BOOST_CHECK_EQUAL(snapshot_stats.nHeight, tip->nHeight);
+        BOOST_CHECK_EQUAL(snapshot_stats.coins_count, initial_total_coins);
+        BOOST_CHECK_EQUAL(snapshot_stats.nTransactionOutputs, snapshot_stats.coins_count);
 
         // To be checked against later when we try loading a subsequent snapshot.
         uint256 loaded_snapshot_blockhash{*Assert(WITH_LOCK(chainman.GetMutex(), return chainman.CurrentChainstate().m_from_snapshot_blockhash))};
