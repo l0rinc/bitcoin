@@ -523,6 +523,7 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
                 const bool had_data{HasBlockData(chainman, block_hash)};
                 CBlockIndex* parent_index{LookupBlock(chainman, dag_block.block->hashPrevBlock)};
                 const bool parent_failed{parent_index && IsFailedBlock(chainman, *parent_index)};
+                const CBlockIndex* old_tip{WITH_LOCK(chainman.GetMutex(), return chainman.ActiveChain().Tip())};
 
                 BlockValidationState state;
                 const bool accepted{chainman.ProcessNewBlockHeaders(
@@ -531,6 +532,7 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
                     state,
                     pass_index_out ? &returned_index : nullptr)};
                 node.validation_signals->SyncWithValidationInterfaceQueue();
+                assert(WITH_LOCK(chainman.GetMutex(), return chainman.ActiveChain().Tip()) == old_tip);
 
                 CBlockIndex* index_after{LookupBlock(chainman, block_hash)};
                 if (accepted) {
