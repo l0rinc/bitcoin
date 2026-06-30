@@ -142,11 +142,30 @@ void CheckTransactionAncestry(const CTxMemPool& tx_pool, const Txid& txid)
     if (!it) {
         Assert(ancestors == 0);
         Assert(cluster_count == 0);
+        Assert(tx_pool.GetCluster(txid).empty());
         return;
     }
 
     const auto [expected_ancestors, expected_size, expected_fees]{tx_pool.CalculateAncestorData(**it)};
-    const auto expected_cluster_count{tx_pool.GetCluster(txid).size()};
+    const auto cluster{tx_pool.GetCluster(txid)};
+    const auto expected_cluster_count{cluster.size()};
+    std::set<Txid> cluster_txids;
+    for (const auto* entry : cluster) {
+        Assert(entry != nullptr);
+        const Txid entry_txid{entry->GetTx().GetHash()};
+        Assert(cluster_txids.insert(entry_txid).second);
+        Assert(tx_pool.exists(entry_txid));
+    }
+    Assert(cluster_txids.contains(txid));
+    for (const auto* entry : cluster) {
+        const auto member_cluster{tx_pool.GetCluster(entry->GetTx().GetHash())};
+        std::set<Txid> member_cluster_txids;
+        for (const auto* member_entry : member_cluster) {
+            Assert(member_entry != nullptr);
+            Assert(member_cluster_txids.insert(member_entry->GetTx().GetHash()).second);
+        }
+        Assert(member_cluster_txids == cluster_txids);
+    }
     Assert(ancestors == expected_ancestors);
     Assert(cluster_count == expected_cluster_count);
     Assert(ancestor_size == expected_size);
