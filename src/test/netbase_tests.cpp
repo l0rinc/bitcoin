@@ -667,8 +667,15 @@ BOOST_AUTO_TEST_CASE(netpermissions_test)
     BOOST_CHECK(error.original.find("Invalid P2P permission") != std::string::npos);
 
     // Check netmask error
+    whitelistPermissions.m_flags = NetPermissionFlags::Addr;
+    whitelistPermissions.m_subnet = LookupSubNet("5.6.7.8/32");
+    const auto original_whitelist_permissions{whitelistPermissions};
+    connection_direction = ConnectionDirection::Both;
     BOOST_CHECK(!NetWhitelistPermissions::TryParse("bloom,forcerelay,noban@1.2.3.4:32", whitelistPermissions, connection_direction, error));
     BOOST_CHECK(error.original.find("Invalid netmask specified in -whitelist") != std::string::npos);
+    BOOST_CHECK_EQUAL(whitelistPermissions.m_flags, original_whitelist_permissions.m_flags);
+    BOOST_CHECK(whitelistPermissions.m_subnet == original_whitelist_permissions.m_subnet);
+    BOOST_CHECK_EQUAL(connection_direction, ConnectionDirection::Both);
 
     // Happy path for whitelist parsing
     BOOST_CHECK(NetWhitelistPermissions::TryParse("noban@1.2.3.4", whitelistPermissions, connection_direction, error));
