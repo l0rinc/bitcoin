@@ -33,6 +33,7 @@
 #include <array>
 #include <cstdint>
 #include <ios>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -1776,6 +1777,45 @@ BOOST_AUTO_TEST_CASE(addlocal_onlynet_externalip)
         g_reachable_nets.Add(net);
     }
     fDiscover = discover_orig;
+}
+
+BOOST_AUTO_TEST_CASE(get_node_state_stats_overwrites_reused_output)
+{
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+
+    const CAddress addr{Lookup("1.2.3.4", 8333, /*fAllowLookup=*/false).value(), NODE_NETWORK};
+    CNode node{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/addr,
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/"",
+               /*conn_type_in=*/ConnectionType::OUTBOUND_FULL_RELAY,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+
+    auto& connman = static_cast<ConnmanTestMsg&>(*m_node.connman);
+    connman.Handshake(node,
+                      /*successfully_connected=*/true,
+                      /*remote_services=*/NODE_NETWORK,
+                      /*local_services=*/NODE_NONE,
+                      /*version=*/PROTOCOL_VERSION,
+                      /*relay_txs=*/true);
+
+    constexpr int stale_inflight_height{std::numeric_limits<int>::max()};
+    constexpr int64_t stale_presync_height{std::numeric_limits<int64_t>::max()};
+
+    CNodeStateStats statestats;
+    statestats.presync_height = stale_presync_height;
+    statestats.vHeightInFlight.push_back(stale_inflight_height);
+
+    BOOST_REQUIRE(m_node.peerman->GetNodeStateStats(node.GetId(), statestats));
+    BOOST_CHECK_EQUAL(statestats.presync_height, -1);
+    BOOST_CHECK(std::find(statestats.vHeightInFlight.begin(), statestats.vHeightInFlight.end(), stale_inflight_height) == statestats.vHeightInFlight.end());
+    BOOST_CHECK(statestats.vHeightInFlight.empty());
+
+    m_node.peerman->FinalizeNode(node);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
