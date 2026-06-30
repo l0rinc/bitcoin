@@ -12,6 +12,7 @@
 #include <util/check.h>
 #include <util/result.h>
 #include <util/strencodings.h>
+#include <util/string.h>
 
 using common::PSBTError;
 
@@ -867,6 +868,9 @@ util::Result<PartiallySignedTransaction> DecodeBase64PSBT(const std::string& bas
     auto tx_data = DecodeBase64(base64_tx);
     if (!tx_data) {
         return util::Error{Untranslated("invalid base64")};
+    }
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        Assume(EncodeBase64(*tx_data) == util::TrimStringView(base64_tx));
     }
     return DecodeRawPSBT(MakeByteSpan(*tx_data));
 }
