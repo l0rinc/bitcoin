@@ -206,14 +206,27 @@ bool CCoinsViewCache::HaveCoinInCache(const COutPoint &outpoint) const {
 }
 
 uint256 CCoinsViewCache::GetBestBlock() const {
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
     if (m_block_hash.IsNull())
         m_block_hash = base->GetBestBlock();
+    Assume(cacheCoins.size() == cache_size);
+    Assume(cachedCoinsUsage == cache_usage);
+    Assume(m_dirty_count == dirty_count);
     return m_block_hash;
 }
 
 void CCoinsViewCache::SetBestBlock(const uint256& in_block_hash)
 {
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
     m_block_hash = in_block_hash;
+    Assume(cacheCoins.size() == cache_size);
+    Assume(cachedCoinsUsage == cache_usage);
+    Assume(m_dirty_count == dirty_count);
+    Assume(m_block_hash == in_block_hash);
 }
 
 void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& in_block_hash)
