@@ -5,9 +5,13 @@
 #include <policy/fees/block_policy_estimator.h>
 #include <policy/fees/block_policy_estimator_args.h>
 #include <policy/policy.h>
+#include <serialize.h>
+#include <streams.h>
 #include <test/util/txmempool.h>
 #include <txmempool.h>
 #include <uint256.h>
+#include <util/fs.h>
+#include <util/serfloat.h>
 #include <util/time.h>
 #include <validationinterface.h>
 
@@ -15,7 +19,107 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <limits>
+#include <vector>
+
 BOOST_FIXTURE_TEST_SUITE(policyestimator_tests, ChainTestingSetup)
+
+namespace {
+
+struct FeeStatsValues {
+    double feerate_avg{0};
+    double tx_count{0};
+    double conf_avg{0};
+    double fail_avg{0};
+};
+
+struct TestEncodedDoubleFormatter {
+    template <typename Stream>
+    void Ser(Stream& s, double v)
+    {
+        s << EncodeDouble(v);
+    }
+
+    template <typename Stream>
+    void Unser(Stream& s, double& v)
+    {
+        uint64_t encoded;
+        s >> encoded;
+        v = DecodeDouble(encoded);
+    }
+};
+
+void WriteEncodedDoubleVector(AutoFile& file, const std::vector<double>& values)
+{
+    file << Using<VectorFormatter<TestEncodedDoubleFormatter>>(values);
+}
+
+void WriteEncodedDoubleMatrix(AutoFile& file, const std::vector<std::vector<double>>& values)
+{
+    file << Using<VectorFormatter<VectorFormatter<TestEncodedDoubleFormatter>>>(values);
+}
+
+void WriteFeeStats(AutoFile& file, const size_t num_buckets, const FeeStatsValues& values = {})
+{
+    file << EncodeDouble(0.5); // decay
+    file << uint32_t{1};       // scale
+    WriteEncodedDoubleVector(file, std::vector<double>(num_buckets, values.feerate_avg));
+    WriteEncodedDoubleVector(file, std::vector<double>(num_buckets, values.tx_count));
+    WriteEncodedDoubleMatrix(file, std::vector<std::vector<double>>{std::vector<double>(num_buckets, values.conf_avg)});
+    WriteEncodedDoubleMatrix(file, std::vector<std::vector<double>>{std::vector<double>(num_buckets, values.fail_avg)});
+}
+
+int CurrentFeesFileVersion(const fs::path& path)
+{
+    fs::remove(path);
+    CBlockPolicyEstimator fee_estimator{path, DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
+    {
+        AutoFile out{fsbridge::fopen(path, "wb")};
+        BOOST_REQUIRE(!out.IsNull());
+        BOOST_REQUIRE(fee_estimator.Write(out));
+        BOOST_REQUIRE_EQUAL(out.fclose(), 0);
+    }
+
+    int version;
+    {
+        AutoFile in{fsbridge::fopen(path, "rb")};
+        BOOST_REQUIRE(!in.IsNull());
+        in >> version;
+        BOOST_REQUIRE_EQUAL(in.fclose(), 0);
+    }
+    fs::remove(path);
+    return version;
+}
+
+void WriteEstimatorFile(const fs::path& path, int version, const std::vector<double>& buckets, const FeeStatsValues& values = {})
+{
+    fs::remove(path);
+    AutoFile out{fsbridge::fopen(path, "wb")};
+    BOOST_REQUIRE(!out.IsNull());
+    out << version;
+    out << uint32_t{0}; // nBestSeenHeight
+    out << uint32_t{0}; // historicalFirst
+    out << uint32_t{0}; // historicalBest
+    WriteEncodedDoubleVector(out, buckets);
+    WriteFeeStats(out, buckets.size(), values);
+    WriteFeeStats(out, buckets.size());
+    WriteFeeStats(out, buckets.size());
+    BOOST_REQUIRE_EQUAL(out.fclose(), 0);
+}
+
+bool ReadEstimatorFile(const fs::path& path, const fs::path& estimator_path)
+{
+    fs::remove(estimator_path);
+    CBlockPolicyEstimator fee_estimator{estimator_path, DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
+    AutoFile in{fsbridge::fopen(path, "rb")};
+    BOOST_REQUIRE(!in.IsNull());
+    const bool read{fee_estimator.Read(in)};
+    BOOST_REQUIRE_EQUAL(in.fclose(), 0);
+    fs::remove(estimator_path);
+    return read;
+}
+
+} // namespace
 
 BOOST_AUTO_TEST_CASE(BlockPolicyEstimates)
 {
@@ -260,6 +364,70 @@ BOOST_AUTO_TEST_CASE(BlockPolicyEstimates)
     for (int i = 2; i < 9; i++) { // At 9, the original estimate was already at the bottom (b/c scale = 2)
         BOOST_CHECK(feeEst.estimateFee(i).GetFeePerK() < origFeeEst[i-1] - deltaFee);
     }
+}
+
+BOOST_AUTO_TEST_CASE(reject_corrupt_fee_estimate_file_vectors)
+{
+    const fs::path version_path{m_args.GetDataDirBase() / "fee_estimator_version.dat"};
+    const fs::path corrupt_path{m_args.GetDataDirBase() / "fee_estimator_corrupt.dat"};
+    const fs::path estimator_path{m_args.GetDataDirBase() / "fee_estimator_unused.dat"};
+    const int current_version{CurrentFeesFileVersion(version_path)};
+    const std::vector<double> sane_buckets{100.0, 1e99};
+    const double nan{std::numeric_limits<double>::quiet_NaN()};
+    FeeStatsValues values;
+
+    WriteEstimatorFile(corrupt_path, current_version, sane_buckets);
+    BOOST_CHECK(ReadEstimatorFile(corrupt_path, estimator_path));
+
+    WriteEstimatorFile(corrupt_path, current_version, {100.0, nan});
+    BOOST_CHECK(!ReadEstimatorFile(corrupt_path, estimator_path));
+
+    WriteEstimatorFile(corrupt_path, current_version, {1000.0, 100.0});
+    BOOST_CHECK(!ReadEstimatorFile(corrupt_path, estimator_path));
+
+    WriteEstimatorFile(corrupt_path, current_version, {100.0, 1000.0});
+    BOOST_CHECK(!ReadEstimatorFile(corrupt_path, estimator_path));
+
+    values.feerate_avg = nan;
+    WriteEstimatorFile(corrupt_path, current_version, sane_buckets, values);
+    BOOST_CHECK(!ReadEstimatorFile(corrupt_path, estimator_path));
+
+    values = {};
+    values.feerate_avg = -1.0;
+    WriteEstimatorFile(corrupt_path, current_version, sane_buckets, values);
+    BOOST_CHECK(!ReadEstimatorFile(corrupt_path, estimator_path));
+
+    values = {};
+    values.tx_count = nan;
+    WriteEstimatorFile(corrupt_path, current_version, sane_buckets, values);
+    BOOST_CHECK(!ReadEstimatorFile(corrupt_path, estimator_path));
+
+    values = {};
+    values.tx_count = -1.0;
+    WriteEstimatorFile(corrupt_path, current_version, sane_buckets, values);
+    BOOST_CHECK(!ReadEstimatorFile(corrupt_path, estimator_path));
+
+    values = {};
+    values.conf_avg = nan;
+    WriteEstimatorFile(corrupt_path, current_version, sane_buckets, values);
+    BOOST_CHECK(!ReadEstimatorFile(corrupt_path, estimator_path));
+
+    values = {};
+    values.conf_avg = -1.0;
+    WriteEstimatorFile(corrupt_path, current_version, sane_buckets, values);
+    BOOST_CHECK(!ReadEstimatorFile(corrupt_path, estimator_path));
+
+    values = {};
+    values.fail_avg = nan;
+    WriteEstimatorFile(corrupt_path, current_version, sane_buckets, values);
+    BOOST_CHECK(!ReadEstimatorFile(corrupt_path, estimator_path));
+
+    values = {};
+    values.fail_avg = -1.0;
+    WriteEstimatorFile(corrupt_path, current_version, sane_buckets, values);
+    BOOST_CHECK(!ReadEstimatorFile(corrupt_path, estimator_path));
+
+    fs::remove(corrupt_path);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
