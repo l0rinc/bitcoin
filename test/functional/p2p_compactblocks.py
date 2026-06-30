@@ -4,6 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test compact blocks (BIP 152)."""
 import random
+from decimal import Decimal
 
 from test_framework.blocktools import (
     COINBASE_MATURITY,
@@ -560,6 +561,51 @@ class CompactBlocksTest(BitcoinTestFramework):
             # Shouldn't have gotten a request for any transaction
             assert "getblocktxn" not in test_node.last_message
 
+    def test_empty_compact_extra_slots(self, test_node):
+        node = self.nodes[0]
+        rbf_utxo = self.wallet.get_utxo()
+        original_tx = self.wallet.send_self_transfer(
+            from_node=node,
+            utxo_to_spend=rbf_utxo,
+            sequence=0,
+            fee=Decimal("0.00010000"),
+        )
+        replacement_tx = self.wallet.create_self_transfer(
+            utxo_to_spend=rbf_utxo,
+            sequence=0,
+            fee=Decimal("0.00011000"),
+        )
+        replacement_txid = replacement_tx["txid"]
+        test_node.send_and_ping(msg_tx(tx_from_hex(replacement_tx["hex"])))
+        mempool = node.getrawmempool()
+        assert original_tx["txid"] not in mempool
+        assert replacement_txid in mempool
+
+        utxo = self.utxos.pop(0)
+
+        block = self.build_block_with_transactions(node, utxo, 2)
+        self.utxos.append([block.vtx[-1].txid_int, 0, block.vtx[-1].vout[0].nValue])
+
+        test_node.send_and_ping(msg_tx(block.vtx[1]))
+        assert block.vtx[1].txid_hex in node.getrawmempool()
+
+        comp_block = HeaderAndShortIDs()
+        comp_block.initialize_from_block(block, prefill_list=[0], use_witness=True)
+        [k0, k1] = comp_block.get_siphash_keys()
+        comp_block.shortids[1] = calculate_shortid(k0, k1, 0)
+
+        test_node.clear_getblocktxn()
+        test_node.send_and_ping(msg_cmpctblock(comp_block.to_p2p()))
+        with p2p_lock:
+            assert "getblocktxn" in test_node.last_message
+            absolute_indexes = test_node.last_message["getblocktxn"].block_txn_request.to_absolute()
+        assert_equal(absolute_indexes, [2])
+
+        msg_bt = msg_blocktxn()
+        msg_bt.block_transactions = BlockTransactions(block.hash_int, [block.vtx[2]])
+        test_node.send_and_ping(msg_bt)
+        assert_equal(node.getbestblockhash(), block.hash_hex)
+
     # Incorrectly responding to a getblocktxn shouldn't cause the block to be
     # permanently failed.
     def test_incorrect_blocktxn_response(self, test_node):
@@ -1067,6 +1113,9 @@ class CompactBlocksTest(BitcoinTestFramework):
 
         self.log.info("Testing getblocktxn requests (segwit node)...")
         self.test_getblocktxn_requests(self.segwit_node)
+
+        self.log.info("Testing empty compact extra transaction slots...")
+        self.test_empty_compact_extra_slots(self.segwit_node)
 
         self.log.info("Testing getblocktxn handler (segwit node should return witnesses)...")
         self.test_getblocktxn_handler(self.segwit_node)
