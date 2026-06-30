@@ -495,6 +495,7 @@ private:
     void SetTimePoint(std::chrono::microseconds now, std::vector<std::pair<NodeId, GenTxid>>* expired)
     {
         if (expired) expired->clear();
+        Assume(expired == nullptr || expired->empty());
 
         // Iterate over all CANDIDATE_DELAYED and REQUESTED from old to new, as long as they're in the past,
         // and convert them to CANDIDATE_READY and COMPLETED respectively.
