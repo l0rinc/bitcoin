@@ -103,18 +103,20 @@ bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& 
         return false;
     }
     CBlockHeader header;
+    CTransactionRef candidate_tx;
     try {
         file >> header;
         file.seek(postx.nTxOffset, SEEK_CUR);
-        file >> TX_WITH_WITNESS(tx);
+        file >> TX_WITH_WITNESS(candidate_tx);
     } catch (const std::exception& e) {
         LogError("Deserialize or I/O error - %s", e.what());
         return false;
     }
-    if (tx->GetHash() != tx_hash) {
+    if (candidate_tx->GetHash() != tx_hash) {
         LogError("txid mismatch");
         return false;
     }
+    tx = std::move(candidate_tx);
     block_hash = header.GetHash();
     return true;
 }
