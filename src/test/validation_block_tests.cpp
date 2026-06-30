@@ -310,8 +310,12 @@ BOOST_AUTO_TEST_CASE(processnewblockheaders_min_pow_checked_contract)
             return index && (index->nStatus & BLOCK_HAVE_DATA);
         });
     };
+    const auto active_tip = [&] {
+        return WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Tip());
+    };
 
     BOOST_REQUIRE(!lookup_block());
+    const CBlockIndex* original_tip{active_tip()};
 
     const CBlockIndex* low_work_index{nullptr};
     BlockValidationState low_work_state;
@@ -320,6 +324,7 @@ BOOST_AUTO_TEST_CASE(processnewblockheaders_min_pow_checked_contract)
     BOOST_CHECK_EQUAL(low_work_state.GetRejectReason(), "too-little-chainwork");
     BOOST_CHECK(low_work_index == nullptr);
     BOOST_CHECK(!lookup_block());
+    BOOST_CHECK_EQUAL(active_tip(), original_tip);
 
     const CBlockIndex* accepted_index{nullptr};
     BlockValidationState accepted_state;
@@ -328,12 +333,14 @@ BOOST_AUTO_TEST_CASE(processnewblockheaders_min_pow_checked_contract)
     BOOST_CHECK_EQUAL(accepted_index->GetBlockHash(), block_hash);
     BOOST_CHECK_EQUAL(lookup_block(), accepted_index);
     BOOST_CHECK(!has_block_data());
+    BOOST_CHECK_EQUAL(active_tip(), original_tip);
 
     const CBlockIndex* duplicate_index{nullptr};
     BlockValidationState duplicate_state;
     BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlockHeaders({{*block}}, /*min_pow_checked=*/false, duplicate_state, &duplicate_index));
     BOOST_CHECK_EQUAL(duplicate_index, accepted_index);
     BOOST_CHECK(!has_block_data());
+    BOOST_CHECK_EQUAL(active_tip(), original_tip);
 }
 
 BOOST_AUTO_TEST_CASE(processnewblock_genesis_replay_activates_best_chain)
