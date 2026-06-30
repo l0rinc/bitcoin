@@ -85,9 +85,11 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
             if (non_empty && command-- == 0) {
                 /* clear() */
                 compare_fn(real[idx], sim[idx]);
+                const size_t old_cap = real[idx].capacity();
                 real[idx].clear();
                 sim[idx].clear();
                 assert(real[idx].empty());
+                assert(real[idx].capacity() == old_cap);
                 break;
             }
             if (non_empty && command-- == 0) {
