@@ -121,6 +121,18 @@ void ReferenceHeaderRemoveAll(std::vector<std::pair<std::string, std::string>>& 
     }
 }
 
+size_t CountOccurrences(std::string_view str, const std::string_view needle)
+{
+    assert(!needle.empty());
+    size_t count{0};
+    size_t pos{0};
+    while ((pos = str.find(needle, pos)) != std::string_view::npos) {
+        ++count;
+        pos += needle.size();
+    }
+    return count;
+}
+
 void AssertHeaderCollectionContracts(FuzzedDataProvider& fuzzed_data_provider)
 {
     http_bitcoin::HTTPHeaders headers;
@@ -286,10 +298,14 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     } else {
         assert(response_headers.find("Content-Type: ") == std::string::npos);
     }
+    const size_t connection_close_count{CountOccurrences(response_headers, "Connection: close\r\n")};
+    const size_t connection_keep_alive_count{CountOccurrences(response_headers, "Connection: keep-alive\r\n")};
     if (request_close || response_close) {
-        assert(response_headers.find("Connection: close\r\n") != std::string::npos);
+        assert(connection_close_count == 1);
+        assert(connection_keep_alive_count == 0);
     } else if (http_request.m_version.minor == 0 && request_keep_alive) {
-        assert(response_headers.find("Connection: keep-alive\r\n") != std::string::npos);
+        assert(connection_keep_alive_count == 1);
+        assert(connection_close_count == 0);
     }
 
     assert(client->m_keep_alive.load() == expected_keep_alive);

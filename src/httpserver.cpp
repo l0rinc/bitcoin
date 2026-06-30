@@ -598,6 +598,9 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
 
         res.m_headers.Write("Connection", "close");
         keep_alive = false;
+        const auto connection_values{res.m_headers.FindAll("Connection")};
+        Assume(connection_values.size() == 1);
+        Assume(connection_values.front() == "close");
         Assume(res.m_headers.FindFirst("Connection") == "close");
         Assume(!keep_alive);
     }
