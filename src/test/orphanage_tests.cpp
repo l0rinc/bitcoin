@@ -960,4 +960,33 @@ BOOST_AUTO_TEST_CASE(workset_parent_notification_is_idempotent)
     BOOST_CHECK_EQUAL(orphanage->GetTxToReconsider(newly_reconsiderable.front().second), tx_orphan);
     BOOST_CHECK(!orphanage->HaveTxToReconsider(newly_reconsiderable.front().second));
 }
+
+BOOST_AUTO_TEST_CASE(workset_parent_notification_requeues_after_consumption)
+{
+    const NodeId node0{0};
+    const NodeId node1{1};
+    const NodeId node2{2};
+    FastRandomContext det_rand{true};
+    std::unique_ptr<node::TxOrphanage> orphanage{node::MakeTxOrphanage()};
+
+    auto tx_missing_parent = MakeTransactionSpending({}, det_rand);
+    auto tx_orphan = MakeTransactionSpending({COutPoint{tx_missing_parent->GetHash(), 0}}, det_rand);
+    const auto orphan_wtxid{tx_orphan->GetWitnessHash()};
+
+    BOOST_CHECK(orphanage->AddTx(tx_orphan, node0));
+    BOOST_CHECK(!orphanage->AddTx(tx_orphan, node1));
+    BOOST_CHECK(orphanage->AddAnnouncer(orphan_wtxid, node2));
+
+    const auto first_workset{orphanage->AddChildrenToWorkSet(*tx_missing_parent, det_rand)};
+    BOOST_REQUIRE_EQUAL(first_workset.size(), 1);
+    BOOST_CHECK_EQUAL(first_workset.front().first, orphan_wtxid);
+    BOOST_CHECK_EQUAL(orphanage->GetTxToReconsider(first_workset.front().second), tx_orphan);
+
+    const auto second_workset{orphanage->AddChildrenToWorkSet(*tx_missing_parent, det_rand)};
+    BOOST_REQUIRE_EQUAL(second_workset.size(), 1);
+    BOOST_CHECK_EQUAL(second_workset.front().first, orphan_wtxid);
+    BOOST_CHECK(orphanage->HaveTxToReconsider(second_workset.front().second));
+
+    orphanage->SanityCheck();
+}
 BOOST_AUTO_TEST_SUITE_END()
