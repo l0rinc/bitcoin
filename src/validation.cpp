@@ -4363,6 +4363,13 @@ bool ChainstateManager::ProcessNewBlockHeaders(std::span<const CBlockHeader> hea
             }
             Assume(pindex);
             Assume(pindex->GetBlockHash() == header.GetHash());
+            if (pindex->pprev) {
+                Assume(pindex->nHeight == pindex->pprev->nHeight + 1);
+                Assume(pindex->nChainWork == pindex->pprev->nChainWork + GetBlockProof(*pindex));
+            } else {
+                Assume(pindex->nHeight == 0);
+                Assume(pindex->nChainWork == GetBlockProof(*pindex));
+            }
             if (ppindex) {
                 *ppindex = pindex;
             }
