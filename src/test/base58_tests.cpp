@@ -82,4 +82,21 @@ BOOST_AUTO_TEST_CASE(base58_DecodeBase58)
     BOOST_CHECK(!DecodeBase58Check("3vQB7B6MrGQZaxCuFg4oh\0" "0IOl"s, result, 100));
 }
 
+BOOST_AUTO_TEST_CASE(base58check_decode_failure_clears_output)
+{
+    std::vector<unsigned char> result;
+    const std::vector<unsigned char> stale{0xaa, 0xbb};
+
+    auto expect_clear = [&](const std::string& input, int max_ret_len = 100) {
+        result = stale;
+        BOOST_CHECK(!DecodeBase58Check(input, result, max_ret_len));
+        BOOST_CHECK(result.empty());
+    };
+
+    expect_clear("3vQB7B6MrGQZaxCuFg4oi"s);          // Bad checksum.
+    expect_clear("3vQB7B6MrGQZaxCuFg4oh0IOl"s);      // Invalid Base58 character.
+    expect_clear("3vQB7B6MrGQZaxCuFg4oh\0" "0IOl"s); // Embedded NUL.
+    expect_clear("3vQB7B6MrGQZaxCuFg4oh"s, 1);       // Decoded payload exceeds limit.
+}
+
 BOOST_AUTO_TEST_SUITE_END()
