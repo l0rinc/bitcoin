@@ -1383,12 +1383,31 @@ BOOST_AUTO_TEST_CASE(ccoins_input_lookup_contracts)
 
     CCoinsViewCache cache{&base};
 
+    auto snapshot_stats = [&] {
+        return std::tuple{cache.GetCacheSize(), cache.GetDirtyCount(), cache.DynamicMemoryUsage()};
+    };
+    auto check_stats = [&](const std::tuple<unsigned int, size_t, size_t>& expected) {
+        BOOST_CHECK_EQUAL(cache.GetCacheSize(), std::get<0>(expected));
+        BOOST_CHECK_EQUAL(cache.GetDirtyCount(), std::get<1>(expected));
+        BOOST_CHECK_EQUAL(cache.DynamicMemoryUsage(), std::get<2>(expected));
+    };
+
+    CMutableTransaction empty_inputs;
+    const auto empty_stats{snapshot_stats()};
+    BOOST_CHECK(cache.HaveInputs(CTransaction{empty_inputs}));
+    check_stats(empty_stats);
+
     CMutableTransaction all_present;
     all_present.vin.emplace_back(first);
     all_present.vin.emplace_back(second);
     BOOST_CHECK(cache.HaveInputs(CTransaction{all_present}));
     BOOST_CHECK(!cache.AccessCoin(first).IsSpent());
     BOOST_CHECK(!cache.AccessCoin(second).IsSpent());
+
+    CMutableTransaction duplicate_input;
+    duplicate_input.vin.emplace_back(first);
+    duplicate_input.vin.emplace_back(first);
+    BOOST_CHECK(cache.HaveInputs(CTransaction{duplicate_input}));
 
     CMutableTransaction first_missing;
     first_missing.vin.emplace_back(missing);
@@ -1397,13 +1416,9 @@ BOOST_AUTO_TEST_CASE(ccoins_input_lookup_contracts)
 
     CMutableTransaction coinbase;
     coinbase.vin.emplace_back(COutPoint{});
-    const auto cache_size{cache.GetCacheSize()};
-    const auto dirty_count{cache.GetDirtyCount()};
-    const auto memory_usage{cache.DynamicMemoryUsage()};
+    const auto coinbase_stats{snapshot_stats()};
     BOOST_CHECK(cache.HaveInputs(CTransaction{coinbase}));
-    BOOST_CHECK_EQUAL(cache.GetCacheSize(), cache_size);
-    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), dirty_count);
-    BOOST_CHECK_EQUAL(cache.DynamicMemoryUsage(), memory_usage);
+    check_stats(coinbase_stats);
 
     BOOST_CHECK(AccessByTxid(cache, txid) == first_coin);
     BOOST_REQUIRE(cache.SpendCoin(first));
