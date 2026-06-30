@@ -41,12 +41,14 @@ BOOST_AUTO_TEST_CASE(blocktree_db_flag_roundtrip_reports_presence)
         .memory_only = true,
     }};
 
-    bool flag_value{true};
-    BOOST_CHECK(!block_tree_db.ReadFlag("missing_flag", flag_value));
-    BOOST_CHECK(flag_value);
+    for (const bool initial_value : {false, true}) {
+        bool flag_value{initial_value};
+        BOOST_CHECK(!block_tree_db.ReadFlag("missing_flag", flag_value));
+        BOOST_CHECK(flag_value == initial_value);
+    }
 
     block_tree_db.WriteFlag("roundtrip_flag", true);
-    flag_value = false;
+    bool flag_value{false};
     BOOST_REQUIRE(block_tree_db.ReadFlag("roundtrip_flag", flag_value));
     BOOST_CHECK(flag_value);
 
