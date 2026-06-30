@@ -580,10 +580,11 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
     }
 
     if (needs_content_length) {
+        res.m_headers.RemoveAll("Content-Length");
         res.m_headers.Write("Content-Length", util::ToString(reply_body.size()));
         const auto content_lengths{res.m_headers.FindAll("Content-Length")};
-        Assume(!content_lengths.empty());
-        Assume(content_lengths.back() == util::ToString(reply_body.size()));
+        Assume(content_lengths.size() == 1);
+        Assume(content_lengths.front() == util::ToString(reply_body.size()));
     }
 
     if (needs_body && !res.m_headers.FindFirst("Content-Type")) {
