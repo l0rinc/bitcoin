@@ -413,6 +413,8 @@ void AssertSendBufferContracts(FuzzedDataProvider& fuzzed_data_provider)
         /*id=*/2,
         CService{},
         std::move(sock))};
+    const auto idle_before{SteadySeconds::min()};
+    client->m_idle_since = idle_before;
     {
         LOCK(client->m_send_mutex);
         client->m_send_buffer = send_buffer;
@@ -435,6 +437,7 @@ void AssertSendBufferContracts(FuzzedDataProvider& fuzzed_data_provider)
         assert(client->m_send_ready.load() == initial_send_ready);
         assert(client->m_connection_busy.load() == initial_connection_busy);
         assert(!client->m_disconnect.load());
+        assert(client->m_idle_since.load() == idle_before);
         return;
     }
 
@@ -448,6 +451,7 @@ void AssertSendBufferContracts(FuzzedDataProvider& fuzzed_data_provider)
 
     if (send_result < 0) {
         assert(remaining == send_buffer);
+        assert(client->m_idle_since.load() == idle_before);
         if (IOErrorIsPermanent(send_errno)) {
             assert(!ret);
             assert(!client->m_send_ready.load());
@@ -464,6 +468,8 @@ void AssertSendBufferContracts(FuzzedDataProvider& fuzzed_data_provider)
     const auto sent_size{static_cast<size_t>(send_result)};
     const std::vector<std::byte> expected_remaining{send_buffer.begin() + sent_size, send_buffer.end()};
     assert(remaining == expected_remaining);
+    const bool expected_idle_refreshed{!remaining.empty() || keep_alive};
+    assert((client->m_idle_since.load() != idle_before) == expected_idle_refreshed);
     if (remaining.empty()) {
         assert(!client->m_send_ready.load());
         assert(!client->m_connection_busy.load());
