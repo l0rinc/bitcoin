@@ -295,6 +295,7 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
     BOOST_REQUIRE(req.LoadBody(reader));
 
     client->m_req_busy = true;
+    req.WriteHeader("Content-Length", "999");
     req.WriteReply(HTTP_OK, "abc");
 
     const std::vector<std::byte> sent{WITH_LOCK(client->m_send_mutex, return client->m_send_buffer)};
@@ -308,7 +309,8 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
     }
     BOOST_CHECK(response.starts_with("HTTP/1.0 200 OK\r\n"));
     BOOST_CHECK(response.find("Connection: keep-alive\r\n") != std::string::npos);
-    BOOST_CHECK(response.find("Content-Length: 3\r\n") != std::string::npos);
+    BOOST_CHECK_EQUAL(CountOccurrences(response, "Content-Length: 3\r\n"), 1);
+    BOOST_CHECK_EQUAL(CountOccurrences(response, "Content-Length: "), 1);
     BOOST_CHECK(response.find("Content-Type: text/html; charset=ISO-8859-1\r\n") != std::string::npos);
     BOOST_CHECK(response.ends_with("\r\n\r\nabc"));
     BOOST_CHECK(client->m_keep_alive);
