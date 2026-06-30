@@ -128,9 +128,10 @@ bool NetWhitebindPermissions::TryParse(const std::string& str, NetWhitebindPermi
 bool NetWhitelistPermissions::TryParse(const std::string& str, NetWhitelistPermissions& output, ConnectionDirection& output_connection_direction, bilingual_str& error)
 {
     NetPermissionFlags flags;
+    ConnectionDirection connection_direction;
     size_t offset;
     // Only NetWhitebindPermissions should pass a nullptr for output_connection_direction.
-    if (!TryParsePermissionFlags(str, flags, &output_connection_direction, offset, error)) return false;
+    if (!TryParsePermissionFlags(str, flags, &connection_direction, offset, error)) return false;
 
     const std::string net = str.substr(offset);
     const CSubNet subnet{LookupSubNet(net)};
@@ -141,6 +142,8 @@ bool NetWhitelistPermissions::TryParse(const std::string& str, NetWhitelistPermi
 
     output.m_flags = flags;
     output.m_subnet = subnet;
+    output_connection_direction = connection_direction;
+    Assume(output_connection_direction == connection_direction);
     error = Untranslated("");
     return true;
 }
