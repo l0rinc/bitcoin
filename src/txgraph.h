@@ -206,10 +206,10 @@ public:
     virtual std::pair<std::vector<Ref*>, FeePerWeight> GetWorstMainChunk() noexcept = 0;
 
     /** Get the approximate memory usage for this object, just counting the main graph. If a
-     *  staging graph is present, return a number corresponding to memory usage after
-     *  AbortStaging() would be called. BlockBuilders' memory usage, memory usage of internally
-     *  queued operations, and memory due to temporary caches, is not included here. Can always be
-     *  called. */
+     *  staging graph is present, staging memory is not counted. When main's oversizedness is kept
+     *  stale while staging exists, a later AbortStaging() may renormalize main and change this
+     *  approximation. BlockBuilders' memory usage, memory usage of internally queued operations,
+     *  and memory due to temporary caches, is not included here. Can always be called. */
     virtual size_t GetMainMemoryUsage() noexcept = 0;
 
     /** Perform an internal consistency check on this object. */
