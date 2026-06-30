@@ -1818,4 +1818,29 @@ BOOST_AUTO_TEST_CASE(get_node_state_stats_overwrites_reused_output)
     m_node.peerman->FinalizeNode(node);
 }
 
+BOOST_AUTO_TEST_CASE(cnode_copy_stats_overwrites_reused_output)
+{
+    const CAddress addr{Lookup("1.2.3.4", 8333, /*fAllowLookup=*/false).value(), NODE_NETWORK};
+    CNode node{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/addr,
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/"",
+               /*conn_type_in=*/ConnectionType::OUTBOUND_FULL_RELAY,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+
+    CNodeStats stats;
+    stats.m_mapped_as = std::numeric_limits<uint32_t>::max();
+    stats.m_session_id = "stale session";
+
+    node.CopyStats(stats);
+    BOOST_CHECK_EQUAL(stats.nodeid, node.GetId());
+    BOOST_CHECK_EQUAL(stats.m_mapped_as, 0);
+    BOOST_CHECK(stats.m_session_id.empty());
+    BOOST_CHECK_EQUAL(stats.m_transport_type, TransportProtocolType::V1);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
