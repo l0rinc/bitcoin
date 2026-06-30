@@ -232,6 +232,36 @@ void CheckUpdatedBlockDependencies(const CTxMemPool& tx_pool, const std::vector<
     }
 }
 
+void CheckHasDescendants(const CTxMemPool& tx_pool)
+{
+    std::vector<Txid> txids;
+    {
+        LOCK(tx_pool.cs);
+        txids.reserve(tx_pool.mapTx.size());
+        for (const auto& entry : tx_pool.mapTx) {
+            txids.push_back(entry.GetTx().GetHash());
+        }
+    }
+
+    for (const Txid& txid : txids) {
+        bool has_direct_child{false};
+        {
+            LOCK(tx_pool.cs);
+            auto parent{tx_pool.GetIter(txid)};
+            Assert(parent);
+            auto child_it{tx_pool.mapNextTx.lower_bound(COutPoint(txid, 0))};
+            for (; child_it != tx_pool.mapNextTx.end() && child_it->first->hash == txid; ++child_it) {
+                Assert(child_it->second != tx_pool.mapTx.end());
+                if (child_it->second != *parent) {
+                    has_direct_child = true;
+                    break;
+                }
+            }
+        }
+        Assert(tx_pool.HasDescendants(txid) == has_direct_child);
+    }
+}
+
 [[nodiscard]] CAmount ConsumePriorityDelta(FuzzedDataProvider& fuzzed_data_provider)
 {
     switch (fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 4)) {
@@ -250,6 +280,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
 {
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
     CheckTransactionAncestryAll(tx_pool);
+    CheckHasDescendants(tx_pool);
     CheckPrioritisedTransactions(tx_pool);
     CheckRandomizedTxIndex(tx_pool);
     {
@@ -277,9 +308,11 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         }
         tx_pool.UpdateTransactionsFromBlock(hashes_to_update);
         CheckUpdatedBlockDependencies(tx_pool, hashes_to_update);
+        CheckHasDescendants(tx_pool);
         CheckRandomizedTxIndex(tx_pool);
     }
     CheckPrioritisedTransactions(tx_pool);
+    CheckHasDescendants(tx_pool);
     CheckRandomizedTxIndex(tx_pool);
     const auto info_all = tx_pool.infoAll();
     if (!info_all.empty()) {
@@ -287,6 +320,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         WITH_LOCK(tx_pool.cs, tx_pool.removeRecursive(tx_to_remove, MemPoolRemovalReason::BLOCK /* dummy */));
         assert(tx_pool.size() < info_all.size());
         CheckTransactionAncestryAll(tx_pool);
+        CheckHasDescendants(tx_pool);
         CheckPrioritisedTransactions(tx_pool);
         CheckRandomizedTxIndex(tx_pool);
     }
@@ -305,6 +339,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
     }
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
     CheckTransactionAncestryAll(tx_pool);
+    CheckHasDescendants(tx_pool);
     CheckPrioritisedTransactions(tx_pool);
     CheckRandomizedTxIndex(tx_pool);
     g_setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
