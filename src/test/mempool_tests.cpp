@@ -3,15 +3,18 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <common/system.h>
+#include <key_io.h>
 #include <policy/policy.h>
 #include <test/util/time.h>
 #include <test/util/txmempool.h>
 #include <txmempool.h>
 #include <util/time.h>
+#include <validation.h>
 
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
+#include <limits>
 #include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(mempool_tests, TestingSetup)
@@ -501,3 +504,39 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTestsDiamond)
 }
 
 BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_FIXTURE_TEST_CASE(MempoolCheckSaturatingFeeDiagram, TestChain100Setup)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    const CScript output_script{GetScriptForDestination(PKHash(coinbaseKey.GetPubKey()))};
+    mineBlocks(3);
+
+    constexpr CAmount fee{10'000};
+    const auto submit = [&](const CTransactionRef& tx) {
+        LOCK(cs_main);
+        const MempoolAcceptResult result{m_node.chainman->ProcessTransaction(tx)};
+        BOOST_REQUIRE_MESSAGE(result.m_result_type == MempoolAcceptResult::ResultType::VALID, result.m_state.ToString());
+    };
+
+    std::vector<CTransactionRef> txs;
+    for (size_t i{0}; i < 2; ++i) {
+        const auto& coinbase{m_coinbase_txns.at(i)};
+        auto tx{MakeTransactionRef(CreateValidMempoolTransaction(
+            coinbase, /*input_vout=*/0, /*input_height=*/0, coinbaseKey,
+            output_script, coinbase->vout.at(0).nValue - fee, /*submit=*/false))};
+        submit(tx);
+        txs.push_back(tx);
+    }
+
+    for (const auto& tx : txs) {
+        pool.PrioritiseTransaction(tx->GetHash(), std::numeric_limits<CAmount>::min());
+    }
+
+    {
+        LOCK(pool.cs);
+        const auto diagram{pool.GetFeerateDiagram()};
+        BOOST_REQUIRE(!diagram.empty());
+        BOOST_CHECK_EQUAL(diagram.back().fee, std::numeric_limits<CAmount>::min());
+    }
+    WITH_LOCK(::cs_main, pool.check(m_node.chainman->ActiveChainstate().CoinsTip(), m_node.chainman->ActiveChain().Height() + 1));
+}
