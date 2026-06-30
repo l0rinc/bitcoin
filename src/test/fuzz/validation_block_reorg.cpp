@@ -343,6 +343,17 @@ bool HasBlockData(ChainstateManager& chainman, const uint256& hash)
     return index && ((index->nStatus & BLOCK_HAVE_DATA) != 0);
 }
 
+void AssertBlockIndexLineage(const CBlockIndex& index)
+{
+    if (index.pprev) {
+        assert(index.nHeight == index.pprev->nHeight + 1);
+        assert(index.nChainWork == index.pprev->nChainWork + GetBlockProof(index));
+    } else {
+        assert(index.nHeight == 0);
+        assert(index.nChainWork == GetBlockProof(index));
+    }
+}
+
 std::vector<CBlockIndex*> KnownBlockIndexes(ChainstateManager& chainman)
 {
     std::vector<CBlockIndex*> indexes;
@@ -537,6 +548,9 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
                 CBlockIndex* index_after{LookupBlock(chainman, block_hash)};
                 if (accepted) {
                     assert(index_after);
+                    AssertBlockIndexLineage(*index_after);
+                    assert(parent_index);
+                    assert(index_after->pprev == parent_index);
                     if (pass_index_out) {
                         assert(returned_index == index_after);
                         assert(returned_index->GetBlockHash() == block_hash);
