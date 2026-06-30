@@ -536,7 +536,11 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
 
     // See libevent evhttp_response_needs_body()
     // Response headers are different if no body is needed
-    bool needs_body{status != HTTP_NO_CONTENT && (status < 100 || status >= 200)};
+    bool needs_body{
+        m_method != HTTPRequestMethod::HEAD &&
+        status != HTTP_NO_CONTENT &&
+        (status < 100 || status >= 200)};
+    Assume(m_method != HTTPRequestMethod::HEAD || !needs_body);
     bool needs_content_length{false};
 
     bool keep_alive{false};
