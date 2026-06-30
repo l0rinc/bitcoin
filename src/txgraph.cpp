@@ -3619,6 +3619,7 @@ size_t TxGraphImpl::GetMainMemoryUsage() noexcept
                    sizeof(Entry) * m_main_clusterset.m_txcount +
                    /* From the chunk index. */
                    memusage::DynamicUsage(m_main_chunkindex);
+    Assume((usage == 0) == (m_main_clusterset.m_txcount == 0));
     return usage;
 }
 
