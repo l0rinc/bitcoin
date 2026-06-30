@@ -30,6 +30,7 @@ void port_map_target_init()
 
 FUZZ_TARGET(pcp_request_port_map, .init = port_map_target_init)
 {
+    ResetFuzzedSockMockedFds();
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
 
     // Create a mocked socket between random (and potentially invalid) client and gateway addresses.
@@ -58,6 +59,7 @@ FUZZ_TARGET(pcp_request_port_map, .init = port_map_target_init)
 
 FUZZ_TARGET(natpmp_request_port_map, .init = port_map_target_init)
 {
+    ResetFuzzedSockMockedFds();
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
 
     // Create a mocked socket between random (and potentially invalid) client and gateway addresses.
