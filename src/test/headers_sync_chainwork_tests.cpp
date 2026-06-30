@@ -27,6 +27,8 @@ using State = HeadersSyncState::State;
         BOOST_REQUIRE_EQUAL(hss.GetState(), exp_state);                                                  \
         BOOST_CHECK_EQUAL(result.success, exp_success);                                                  \
         BOOST_CHECK_EQUAL(result.request_more, exp_request_more);                                        \
+        BOOST_CHECK(!result.request_more || result.success);                                             \
+        BOOST_CHECK_EQUAL(hss.GetState() != State::FINAL, result.request_more);                          \
         BOOST_CHECK_EQUAL(result.pow_validated_headers.size(), exp_headers_size);                        \
         for (size_t i{1}; i < result.pow_validated_headers.size(); ++i) {                                \
             BOOST_CHECK_EQUAL(result.pow_validated_headers.at(i).hashPrevBlock,                          \
