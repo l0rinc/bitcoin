@@ -133,6 +133,8 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessNextHeaders(
     }
 
     if (!(ret.success && ret.request_more)) Finalize();
+    Assume(!ret.request_more || ret.success);
+    Assume((m_download_state != State::FINAL) == ret.request_more);
     return ret;
 }
 
