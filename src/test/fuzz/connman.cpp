@@ -18,7 +18,9 @@
 #include <test/util/time.h>
 #include <util/translation.h>
 
+#include <array>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace {
@@ -27,6 +29,18 @@ const TestingSetup* g_setup;
 int32_t GetCheckRatio()
 {
     return std::clamp<int32_t>(g_setup->m_node.args->GetIntArg("-checkaddrman", 0), 0, 1000000);
+}
+
+void AssertDistinctFuzzedSockMapKeys()
+{
+    std::array<uint8_t, 1> bytes{};
+    FuzzedDataProvider provider{bytes.data(), bytes.size()};
+    FakeSteadyClock steady_clock;
+    auto sock_a{std::make_shared<FuzzedSock>(provider, steady_clock)};
+    auto sock_b{std::make_shared<FuzzedSock>(provider, steady_clock)};
+    Sock::EventsPerSock events;
+    assert(events.emplace(sock_a, Sock::Events{Sock::RecvEvent}).second);
+    assert(events.emplace(sock_b, Sock::Events{Sock::SendEvent}).second);
 }
 
 } // namespace
@@ -40,6 +54,9 @@ void initialize_connman()
 FUZZ_TARGET(connman, .init = initialize_connman)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
+    ResetFuzzedSockMockedFds();
+    AssertDistinctFuzzedSockMapKeys();
+    ResetFuzzedSockMockedFds();
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     FakeNodeClock clock{ConsumeTime(fuzzed_data_provider)};
     FakeSteadyClock steady_clock;
