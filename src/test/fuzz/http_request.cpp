@@ -196,6 +196,10 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     const std::string response_content_type_value{response_content_type ?
         PickValue(fuzzed_data_provider, response_content_type_values) :
         std::string{}};
+    const bool response_content_length{fuzzed_data_provider.ConsumeBool()};
+    const std::string response_content_length_value{fuzzed_data_provider.ConsumeBool() ?
+        std::to_string(reply_body.size()) :
+        fuzzed_data_provider.ConsumeRandomLengthString(16)};
 
     std::shared_ptr<DynSock::Pipes> pipes;
     std::unique_ptr<Sock> sock;
@@ -243,6 +247,9 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     if (response_close && http_request.m_version.major == 1 && http_request.m_version.minor == 0) {
         expected_content_length = false;
     }
+    if (response_content_length && expected_content_length) {
+        http_request.WriteHeader("Content-Length", std::string{response_content_length_value});
+    }
 
     http_request.WriteReply(status, reply_body);
 
@@ -286,10 +293,12 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     assert(response.substr(header_end + 4) == reply_body);
 
     const std::string content_length_header{"Content-Length: " + std::to_string(reply_body.size()) + "\r\n"};
+    const size_t content_length_count{CountOccurrences(response_headers, "Content-Length: ")};
     if (expected_content_length) {
-        assert(response_headers.find(content_length_header) != std::string::npos);
+        assert(CountOccurrences(response_headers, content_length_header) == 1);
+        assert(content_length_count == 1);
     } else {
-        assert(response_headers.find("Content-Length: ") == std::string::npos);
+        assert(content_length_count == 0);
     }
     if (response_content_type) {
         assert(response_headers.find("Content-Type: " + response_content_type_value + "\r\n") != std::string::npos);
