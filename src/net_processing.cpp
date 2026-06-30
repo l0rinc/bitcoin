@@ -1811,6 +1811,7 @@ std::vector<PeerRef> PeerManagerImpl::GetAllPeers() const
 
 bool PeerManagerImpl::GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) const
 {
+    stats = {};
     {
         LOCK(cs_main);
         const CNodeState* state = State(nodeid);
@@ -1822,6 +1823,7 @@ bool PeerManagerImpl::GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) c
             if (queue.pindex)
                 stats.vHeightInFlight.push_back(queue.pindex->nHeight);
         }
+        Assume(stats.vHeightInFlight.size() <= state->vBlocksInFlight.size());
     }
 
     PeerRef peer = GetPeerRef(nodeid);
@@ -1858,6 +1860,8 @@ bool PeerManagerImpl::GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) c
         LOCK(peer->m_headers_sync_mutex);
         if (peer->m_headers_sync) {
             stats.presync_height = peer->m_headers_sync->GetPresyncHeight();
+        } else {
+            Assume(stats.presync_height == -1);
         }
     }
     stats.time_offset = peer->m_time_offset;
