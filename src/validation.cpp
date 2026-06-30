@@ -4349,6 +4349,10 @@ bool ChainstateManager::ProcessNewBlockHeaders(std::span<const CBlockHeader> hea
     AssertLockNotHeld(cs_main);
     {
         LOCK(cs_main);
+        const CBlockIndex* active_tip{nullptr};
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            active_tip = ActiveChain().Tip();
+        }
         for (const CBlockHeader& header : headers) {
             CBlockIndex *pindex = nullptr; // Use a temp pindex instead of ppindex to avoid a const_cast
             bool accepted{AcceptBlockHeader(header, state, &pindex, min_pow_checked)};
@@ -4362,6 +4366,9 @@ bool ChainstateManager::ProcessNewBlockHeaders(std::span<const CBlockHeader> hea
             if (ppindex) {
                 *ppindex = pindex;
             }
+        }
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            Assume(ActiveChain().Tip() == active_tip);
         }
     }
     if (NotifyHeaderTip()) {
