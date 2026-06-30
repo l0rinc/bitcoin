@@ -16,6 +16,7 @@
 #include <sync.h>
 #include <tinyformat.h>
 #include <uint256.h>
+#include <util/check.h>
 #include <util/fs.h>
 #include <util/log.h>
 #include <util/serfloat.h>
@@ -31,6 +32,7 @@
 #include <exception>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 // The current format written, and the version required to read. Must be
 // increased to at least 309900+1 on the next breaking change.
@@ -64,6 +66,24 @@ struct EncodedDoubleFormatter
         v = DecodeDouble(encoded);
     }
 };
+
+bool IsSaneBucketsVector(const std::vector<double>& buckets)
+{
+    if (buckets.size() <= 1 || buckets.size() > 1000) return false;
+    double last_bucket{0};
+    for (const double bucket : buckets) {
+        if (!std::isfinite(bucket) || bucket <= last_bucket) return false;
+        last_bucket = bucket;
+    }
+    return buckets.back() >= INF_FEERATE;
+}
+
+bool IsSaneEstimatorVector(const std::vector<double>& values)
+{
+    return std::ranges::all_of(values, [](const double value) {
+        return std::isfinite(value) && value >= 0;
+    });
+}
 
 } // namespace
 
@@ -410,6 +430,14 @@ double TxConfirmStats::EstimateMedianVal(int confTarget, double sufficientTxVal,
 
 void TxConfirmStats::Write(AutoFile& fileout) const
 {
+    Assume(IsSaneEstimatorVector(m_feerate_avg));
+    Assume(IsSaneEstimatorVector(txCtAvg));
+    for (const auto& avg : confAvg) {
+        Assume(IsSaneEstimatorVector(avg));
+    }
+    for (const auto& avg : failAvg) {
+        Assume(IsSaneEstimatorVector(avg));
+    }
     fileout << Using<EncodedDoubleFormatter>(decay);
     fileout << scale;
     fileout << Using<VectorFormatter<EncodedDoubleFormatter>>(m_feerate_avg);
@@ -439,9 +467,15 @@ void TxConfirmStats::Read(AutoFile& filein, size_t numBuckets)
     if (m_feerate_avg.size() != numBuckets) {
         throw std::runtime_error("Corrupt estimates file. Mismatch in feerate average bucket count");
     }
+    if (!IsSaneEstimatorVector(m_feerate_avg)) {
+        throw std::runtime_error("Corrupt estimates file. Feerate averages must be finite and non-negative");
+    }
     filein >> Using<VectorFormatter<EncodedDoubleFormatter>>(txCtAvg);
     if (txCtAvg.size() != numBuckets) {
         throw std::runtime_error("Corrupt estimates file. Mismatch in tx count bucket count");
+    }
+    if (!IsSaneEstimatorVector(txCtAvg)) {
+        throw std::runtime_error("Corrupt estimates file. Tx counts must be finite and non-negative");
     }
     filein >> Using<VectorFormatter<VectorFormatter<EncodedDoubleFormatter>>>(confAvg);
     maxPeriods = confAvg.size();
@@ -454,6 +488,9 @@ void TxConfirmStats::Read(AutoFile& filein, size_t numBuckets)
         if (confAvg[i].size() != numBuckets) {
             throw std::runtime_error("Corrupt estimates file. Mismatch in feerate conf average bucket count");
         }
+        if (!IsSaneEstimatorVector(confAvg[i])) {
+            throw std::runtime_error("Corrupt estimates file. Confirmation averages must be finite and non-negative");
+        }
     }
 
     filein >> Using<VectorFormatter<VectorFormatter<EncodedDoubleFormatter>>>(failAvg);
@@ -463,6 +500,9 @@ void TxConfirmStats::Read(AutoFile& filein, size_t numBuckets)
     for (unsigned int i = 0; i < maxPeriods; i++) {
         if (failAvg[i].size() != numBuckets) {
             throw std::runtime_error("Corrupt estimates file. Mismatch in one of failure average bucket counts");
+        }
+        if (!IsSaneEstimatorVector(failAvg[i])) {
+            throw std::runtime_error("Corrupt estimates file. Failure averages must be finite and non-negative");
         }
     }
 
@@ -553,6 +593,7 @@ CBlockPolicyEstimator::CBlockPolicyEstimator(const fs::path& estimation_filepath
     buckets.push_back(INF_FEERATE);
     bucketMap[INF_FEERATE] = bucketIndex;
     assert(bucketMap.size() == buckets.size());
+    Assume(IsSaneBucketsVector(buckets));
 
     feeStats = std::unique_ptr<TxConfirmStats>(new TxConfirmStats(buckets, bucketMap, MED_BLOCK_PERIODS, MED_DECAY, MED_SCALE));
     shortStats = std::unique_ptr<TxConfirmStats>(new TxConfirmStats(buckets, bucketMap, SHORT_BLOCK_PERIODS, SHORT_DECAY, SHORT_SCALE));
@@ -979,6 +1020,7 @@ bool CBlockPolicyEstimator::Write(AutoFile& fileout) const
 {
     try {
         LOCK(m_cs_fee_estimator);
+        Assume(IsSaneBucketsVector(buckets));
         fileout << CURRENT_FEES_FILE_VERSION;
         fileout << nBestSeenHeight;
         if (BlockSpan() > HistoricalBlockSpan()/2) {
@@ -1024,10 +1066,10 @@ bool CBlockPolicyEstimator::Read(AutoFile& filein)
             }
             std::vector<double> fileBuckets;
             filein >> Using<VectorFormatter<EncodedDoubleFormatter>>(fileBuckets);
-            size_t numBuckets = fileBuckets.size();
-            if (numBuckets <= 1 || numBuckets > 1000) {
-                throw std::runtime_error("Corrupt estimates file. Must have between 2 and 1000 feerate buckets");
+            if (!IsSaneBucketsVector(fileBuckets)) {
+                throw std::runtime_error("Corrupt estimates file. Feerate buckets must be finite, strictly increasing, and include a terminal bucket");
             }
+            size_t numBuckets = fileBuckets.size();
 
             std::unique_ptr<TxConfirmStats> fileFeeStats(new TxConfirmStats(buckets, bucketMap, MED_BLOCK_PERIODS, MED_DECAY, MED_SCALE));
             std::unique_ptr<TxConfirmStats> fileShortStats(new TxConfirmStats(buckets, bucketMap, SHORT_BLOCK_PERIODS, SHORT_DECAY, SHORT_SCALE));
@@ -1043,6 +1085,7 @@ bool CBlockPolicyEstimator::Read(AutoFile& filein)
             for (unsigned int i = 0; i < buckets.size(); i++) {
                 bucketMap[buckets[i]] = i;
             }
+            Assume(IsSaneBucketsVector(buckets));
 
             // Destroy old TxConfirmStats and point to new ones that already reference buckets and bucketMap
             feeStats = std::move(fileFeeStats);

@@ -5,12 +5,15 @@
 """Test fee estimation code."""
 from copy import deepcopy
 from decimal import Decimal, ROUND_DOWN
+from io import BytesIO
 import os
 import random
+import struct
 import time
 
 from test_framework.messages import (
     COIN,
+    deser_compact_size,
 )
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -27,6 +30,27 @@ MAX_FILE_AGE = 60
 SECONDS_PER_HOUR = 60 * 60
 MIN_BUCKET_FEERATE = Decimal(100) / Decimal(COIN)
 TXS_COUNT = 24
+CURRENT_FEES_FILE_VERSION = 309900
+
+
+def encode_double(value):
+    return struct.pack("<d", value)
+
+
+def corrupt_fee_estimates_terminal_bucket(fee_dat):
+    data = bytearray(fee_dat.read_bytes())
+    stream = BytesIO(data)
+    version = int.from_bytes(stream.read(4), "little", signed=True)
+    assert_equal(version, CURRENT_FEES_FILE_VERSION)
+
+    # nBestSeenHeight, historicalFirst, historicalBest.
+    stream.read(12)
+    bucket_count = deser_compact_size(stream)
+    assert_greater_than(bucket_count, 1)
+    last_bucket_pos = stream.tell() + (bucket_count - 1) * 8
+    data[last_bucket_pos:last_bucket_pos + 8] = encode_double(1000.0)
+    fee_dat.write_bytes(data)
+
 
 def small_txpuzzle_randfee(
     wallet, from_node, conflist, unconflist, amount, min_fee, fee_increment, batch_reqs
@@ -401,6 +425,30 @@ class EstimateFeeTest(BitcoinTestFramework):
         self.start_node(0,extra_args=["-acceptstalefeeestimates"])
         assert_equal(self.nodes[0].estimatesmartfee(1)["feerate"], fee_rate)
 
+    def test_corrupt_fee_estimate_file(self):
+        fee_dat = self.nodes[0].chain_path / "fee_estimates.dat"
+        fee_rate = self.nodes[0].estimatesmartfee(1)["feerate"]
+        original_fee_dat = fee_dat.read_bytes()
+
+        self.stop_node(0)
+        try:
+            fee_dat.write_bytes(original_fee_dat)
+            corrupt_fee_estimates_terminal_bucket(fee_dat)
+            with self.nodes[0].assert_debug_log(expected_msgs=[
+                "Unable to read policy estimator data (non-fatal): Corrupt estimates file. Feerate buckets",
+                f"Failed to read fee estimates from {fee_dat}. Continue anyway.",
+            ]):
+                self.start_node(0)
+            assert_equal(self.nodes[0].estimatesmartfee(1)["errors"], ["Insufficient data or no feerate found"])
+            self.stop_node(0)
+        finally:
+            if self.nodes[0].running:
+                self.stop_node(0)
+            fee_dat.write_bytes(original_fee_dat)
+            self.start_node(0)
+
+        assert_equal(self.nodes[0].estimatesmartfee(1)["feerate"], fee_rate)
+
     def clear_estimates(self):
         self.log.info("Restarting node with fresh estimation")
         self.stop_node(0)
@@ -480,6 +528,9 @@ class EstimateFeeTest(BitcoinTestFramework):
 
         self.log.info("Test acceptstalefeeestimates option")
         self.test_acceptstalefeeestimates_option()
+
+        self.log.info("Test corrupt fee_estimates.dat is ignored")
+        self.test_corrupt_fee_estimate_file()
 
         self.log.info("Test reading old fee_estimates.dat")
         self.test_old_fee_estimate_file()
