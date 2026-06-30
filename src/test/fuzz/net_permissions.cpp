@@ -56,7 +56,11 @@ FUZZ_TARGET(net_permissions)
     }
 
     NetWhitelistPermissions net_whitelist_permissions;
-    ConnectionDirection connection_direction;
+    net_whitelist_permissions.m_flags = NetPermissionFlags::All;
+    net_whitelist_permissions.m_subnet = CSubNet{LookupSubNet("1.2.3.4/32")};
+    ConnectionDirection connection_direction{ConnectionDirection::Both};
+    const auto original_whitelist_permissions{net_whitelist_permissions};
+    const auto original_connection_direction{connection_direction};
     bilingual_str error_net_whitelist_permissions;
     if (NetWhitelistPermissions::TryParse(s, net_whitelist_permissions, connection_direction, error_net_whitelist_permissions)) {
         (void)NetPermissions::ToStrings(net_whitelist_permissions.m_flags);
@@ -66,5 +70,9 @@ FUZZ_TARGET(net_permissions)
         NetPermissions::ClearFlag(net_whitelist_permissions.m_flags, NetPermissionFlags::Implicit);
         AssertClearImplicitPreservesExplicit(flags_before_clear, net_whitelist_permissions.m_flags);
         (void)NetPermissions::ToStrings(net_whitelist_permissions.m_flags);
+    } else {
+        assert(net_whitelist_permissions.m_flags == original_whitelist_permissions.m_flags);
+        assert(net_whitelist_permissions.m_subnet == original_whitelist_permissions.m_subnet);
+        assert(connection_direction == original_connection_direction);
     }
 }
