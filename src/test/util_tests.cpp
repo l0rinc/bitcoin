@@ -1600,6 +1600,12 @@ BOOST_AUTO_TEST_CASE(message_sign)
 
     BOOST_CHECK_MESSAGE(!MessageSign(privkey, message, generated_signature),
         "Sign with an invalid private key");
+    BOOST_CHECK_EQUAL(generated_signature, "");
+
+    generated_signature = "preserve me";
+    BOOST_CHECK_MESSAGE(!MessageSign(privkey, message, generated_signature),
+        "Sign with an invalid private key must fail");
+    BOOST_CHECK_EQUAL(generated_signature, "preserve me");
 
     privkey.Set(privkey_bytes.begin(), privkey_bytes.end(), true);
 
@@ -1610,6 +1616,9 @@ BOOST_AUTO_TEST_CASE(message_sign)
         "Sign with a valid private key");
 
     BOOST_CHECK_EQUAL(expected_signature, generated_signature);
+    const auto signature_bytes{DecodeBase64(generated_signature)};
+    BOOST_REQUIRE(signature_bytes);
+    BOOST_CHECK_EQUAL(signature_bytes->size(), CPubKey::COMPACT_SIGNATURE_SIZE);
 }
 
 BOOST_AUTO_TEST_CASE(message_verify)
