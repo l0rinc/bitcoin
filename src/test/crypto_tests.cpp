@@ -23,6 +23,7 @@
 #include <util/strencodings.h>
 
 #include <algorithm>
+#include <array>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -1069,6 +1070,20 @@ BOOST_AUTO_TEST_CASE(hkdf_hmac_sha256_l32_tests)
                 "",
                 "",
                 "8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d");
+
+    const std::vector<unsigned char> initial_key_material{0x00, 0x01, 0x02, 0xff, 0x00, 0x42};
+    const std::string salt{"salt\0with\0null", 14};
+    const std::string info{"info\0again", 10};
+    CHKDF_HMAC_SHA256_L32 hkdf32(initial_key_material.data(), initial_key_material.size(), salt);
+    std::array<unsigned char, 32> first;
+    std::array<unsigned char, 32> repeated;
+    std::array<unsigned char, 32> fresh;
+    hkdf32.Expand32(info, first.data());
+    hkdf32.Expand32(info, repeated.data());
+    CHKDF_HMAC_SHA256_L32 fresh_hkdf32(initial_key_material.data(), initial_key_material.size(), salt);
+    fresh_hkdf32.Expand32(info, fresh.data());
+    BOOST_CHECK_EQUAL_COLLECTIONS(first.begin(), first.end(), repeated.begin(), repeated.end());
+    BOOST_CHECK_EQUAL_COLLECTIONS(first.begin(), first.end(), fresh.begin(), fresh.end());
 }
 
 BOOST_AUTO_TEST_CASE(sha256d64)
