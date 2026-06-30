@@ -29,12 +29,12 @@
 namespace {
 bool ValidWaitEvents(Sock::Event events)
 {
-    return (events & ~(Sock::RECV | Sock::SEND)) == 0;
+    return (events & ~(Sock::RecvEvent | Sock::SendEvent)) == 0;
 }
 
 bool ValidOccurredEvents(Sock::Event requested, Sock::Event occurred)
 {
-    return (occurred & ~(requested | Sock::ERR)) == 0;
+    return (occurred & ~(requested | Sock::ErrorEvent)) == 0;
 }
 } // namespace
 
