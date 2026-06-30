@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <consensus/amount.h>
 #include <node/mempool_args.h>
 #include <policy/rbf.h>
 #include <primitives/transaction.h>
@@ -15,15 +16,59 @@
 #include <test/util/txmempool.h>
 #include <txmempool.h>
 #include <util/check.h>
+#include <util/overflow.h>
 #include <util/translation.h>
 
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace {
 const BasicTestingSetup* g_setup;
+
+CAmount ConsumeModifiedFee(FuzzedDataProvider& fuzzed_data_provider)
+{
+    switch (fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 7)) {
+    case 0:
+        return std::numeric_limits<CAmount>::min();
+    case 1:
+        return std::numeric_limits<CAmount>::min() + CAmount{1};
+    case 2:
+        return -MAX_MONEY;
+    case 3:
+        return CAmount{0};
+    case 4:
+        return MAX_MONEY;
+    case 5:
+        return std::numeric_limits<CAmount>::max() - CAmount{1};
+    case 6:
+        return std::numeric_limits<CAmount>::max();
+    default:
+        return fuzzed_data_provider.ConsumeIntegral<CAmount>();
+    }
+}
+
+void CheckPaysForRBF(FuzzedDataProvider& fuzzed_data_provider)
+{
+    const CAmount original_fees{ConsumeModifiedFee(fuzzed_data_provider)};
+    const CAmount replacement_fees{ConsumeModifiedFee(fuzzed_data_provider)};
+    const int32_t replacement_vsize{fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(0, 1'000'000)};
+    const CFeeRate relay_fee{fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(0, 100'000)};
+    const Txid txid{Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider))};
+
+    const auto pays{PaysForRBF(original_fees, replacement_fees, replacement_vsize, relay_fee, txid)};
+    if (replacement_fees < original_fees) {
+        assert(pays.has_value());
+        return;
+    }
+
+    const CAmount relay_fee_due{relay_fee.GetFee(replacement_vsize)};
+    assert(relay_fee_due >= 0);
+    const auto required_fees{CheckedAdd(original_fees, relay_fee_due)};
+    assert(pays.has_value() == (!required_fees || replacement_fees < *required_fees));
+}
 } // namespace
 
 const int NUM_ITERS = 10000;
@@ -54,6 +99,7 @@ FUZZ_TARGET(rbf, .init = initialize_rbf)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
+    CheckPaysForRBF(fuzzed_data_provider);
     FakeNodeClock clock{ConsumeTime(fuzzed_data_provider)};
     std::optional<CMutableTransaction> mtx = ConsumeDeserializable<CMutableTransaction>(fuzzed_data_provider, TX_WITH_WITNESS);
     if (!mtx) {
