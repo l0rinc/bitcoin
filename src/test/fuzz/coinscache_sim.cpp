@@ -320,6 +320,12 @@ FUZZ_TARGET(coinscache_sim)
         }
     };
 
+    auto assert_best_block_preserves_cache_stats = [&](uint32_t sim_idx) {
+        const auto cache_stats{get_cache_stats(sim_idx)};
+        assert_best_block(sim_idx);
+        assert_cache_stats(cache_stats);
+    };
+
     auto get_parent_cache_stats_if_top_overlay = [&]() -> std::optional<std::vector<CacheStats>> {
         assert(cache_is_overlay.size() == caches.size());
         if (!cache_is_overlay.empty() && cache_is_overlay.back()) {
@@ -597,14 +603,16 @@ FUZZ_TARGET(coinscache_sim)
             },
 
             [&]() { // GetBestBlock
-                assert_best_block(caches.size());
+                assert_best_block_preserves_cache_stats(caches.size());
             },
 
             [&]() { // SetBestBlock
                 const auto block_hash{provider.ConsumeBool() ?
                     uint256::ZERO :
                     data.block_hashes[provider.ConsumeIntegralInRange<uint32_t>(0, NUM_BLOCK_HASHES - 1)]};
+                const auto cache_stats{get_all_cache_stats()};
                 caches.back()->SetBestBlock(block_hash);
+                assert_cache_stats(cache_stats);
                 sim_best_blocks[caches.size()] = block_hash;
             },
 
@@ -653,7 +661,7 @@ FUZZ_TARGET(coinscache_sim)
 
         // HaveCoinInCache ignores spent coins, so GetCacheSize() may exceed it.
         assert(cache.GetCacheSize() >= cache_size);
-        assert_best_block(sim_idx);
+        assert_best_block_preserves_cache_stats(sim_idx);
     }
 
     // Compare the bottom coinsview (not a CCoinsViewCache) with sim_cache[0].
