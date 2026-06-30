@@ -719,13 +719,13 @@ FUZZ_TARGET(txgraph)
                 break;
             } else if (sims.size() > 1 && command-- == 0) {
                 // AbortStaging.
-                const auto memory_usage_after_abort = real->GetMainMemoryUsage();
                 real->AbortStaging();
                 sims.pop_back();
                 // Reset the cached oversized value (if TxGraph::Ref destructions triggered
                 // removals of main transactions while staging was active, then aborting will
                 // cause it to be re-evaluated in TxGraph).
                 sims.back().oversized = std::nullopt;
+                const auto memory_usage_after_abort = real->GetMainMemoryUsage();
                 assert(real->GetMainMemoryUsage() == memory_usage_after_abort);
                 assert_staging_contract();
                 break;
