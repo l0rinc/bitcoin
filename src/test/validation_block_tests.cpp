@@ -8,6 +8,7 @@
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
 #include <interfaces/mining.h>
+#include <kernel/coinstats.h>
 #include <node/blockstorage.h>
 #include <pow.h>
 #include <primitives/block.h>
@@ -235,6 +236,50 @@ BOOST_AUTO_TEST_CASE(processnewblock_new_block_flag)
     }
     BOOST_CHECK(!process_block(malformed_block, new_block));
     BOOST_CHECK(!new_block);
+}
+
+BOOST_AUTO_TEST_CASE(processnewblock_invalid_block_preserves_utxo_stats)
+{
+    auto process_block = [&](const std::shared_ptr<const CBlock>& block) {
+        bool ignored{true};
+        const bool processed{Assert(m_node.chainman)->ProcessNewBlock(
+            block,
+            /*force_processing=*/true,
+            /*min_pow_checked=*/true,
+            &ignored)};
+        m_node.validation_signals->SyncWithValidationInterfaceQueue();
+        return processed;
+    };
+    auto get_stats = [&] {
+        LOCK(Assert(m_node.chainman)->GetMutex());
+        Chainstate& active_chainstate{Assert(m_node.chainman)->ActiveChainstate()};
+        active_chainstate.ForceFlushStateToDisk(/*wipe_cache=*/false);
+        return *Assert(kernel::ComputeUTXOStats(
+            kernel::CoinStatsHashType::HASH_SERIALIZED,
+            active_chainstate.CoinsDB(),
+            Assert(m_node.chainman)->m_blockman,
+            {}));
+    };
+    const auto check_stats_equal = [](const kernel::CCoinsStats& before, const kernel::CCoinsStats& after) {
+        BOOST_CHECK_EQUAL(before.nHeight, after.nHeight);
+        BOOST_CHECK_EQUAL(before.hashBlock, after.hashBlock);
+        BOOST_CHECK_EQUAL(before.nTransactions, after.nTransactions);
+        BOOST_CHECK_EQUAL(before.nTransactionOutputs, after.nTransactionOutputs);
+        BOOST_CHECK_EQUAL(before.nBogoSize, after.nBogoSize);
+        BOOST_CHECK(before.hashSerialized == after.hashSerialized);
+        BOOST_CHECK(before.total_amount == after.total_amount);
+        BOOST_CHECK_EQUAL(before.coins_count, after.coins_count);
+    };
+
+    const auto good_block{GoodBlock(Params().GenesisBlock().GetHash())};
+    BOOST_REQUIRE(process_block(good_block));
+
+    const kernel::CCoinsStats before{get_stats()};
+    const auto bad_block{BadBlock(good_block->GetHash())};
+    BOOST_CHECK(process_block(bad_block));
+    const kernel::CCoinsStats after{get_stats()};
+
+    check_stats_equal(before, after);
 }
 
 BOOST_AUTO_TEST_CASE(processnewblockheaders_min_pow_checked_contract)
