@@ -19,6 +19,7 @@
 
 #include <map>
 #include <string>
+#include <tuple>
 #include <variant>
 #include <vector>
 
@@ -1504,6 +1505,56 @@ BOOST_AUTO_TEST_CASE(ccoins_best_block_cache_stack)
     child.Sync();
     BOOST_CHECK_EQUAL(parent.GetBestBlock(), root_best_block);
     BOOST_CHECK_EQUAL(child.GetBestBlock(), root_best_block);
+}
+
+BOOST_AUTO_TEST_CASE(ccoins_best_block_preserves_cache_stats)
+{
+    auto rand_nonzero_hash = [&] {
+        uint256 block_hash;
+        do {
+            block_hash = m_rng.rand256();
+        } while (block_hash.IsNull());
+        return block_hash;
+    };
+
+    CCoinsViewTest root{m_rng};
+    CCoinsViewCache root_cache{&root};
+    const uint256 root_best_block{rand_nonzero_hash()};
+    root_cache.SetBestBlock(root_best_block);
+    root_cache.Flush();
+
+    CCoinsViewCacheTest cache{&root};
+    const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin coin{CTxOut{m_rng.randrange(10), CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+    cache.AddCoin(outpoint, Coin{coin}, /*possible_overwrite=*/false);
+
+    auto snapshot_stats = [&] {
+        return std::tuple{cache.GetCacheSize(), cache.GetDirtyCount(), cache.DynamicMemoryUsage()};
+    };
+    auto check_stats = [&](const std::tuple<unsigned int, size_t, size_t>& expected) {
+        BOOST_CHECK_EQUAL(cache.GetCacheSize(), std::get<0>(expected));
+        BOOST_CHECK_EQUAL(cache.GetDirtyCount(), std::get<1>(expected));
+        BOOST_CHECK_EQUAL(cache.DynamicMemoryUsage(), std::get<2>(expected));
+        BOOST_CHECK(cache.AccessCoin(outpoint) == coin);
+        cache.SelfTest();
+    };
+
+    const auto inherited_stats{snapshot_stats()};
+    BOOST_CHECK_EQUAL(cache.GetBestBlock(), root_best_block);
+    check_stats(inherited_stats);
+
+    uint256 cache_best_block;
+    do {
+        cache_best_block = rand_nonzero_hash();
+    } while (cache_best_block == root_best_block);
+
+    const auto set_stats{snapshot_stats()};
+    cache.SetBestBlock(cache_best_block);
+    check_stats(set_stats);
+
+    const auto local_stats{snapshot_stats()};
+    BOOST_CHECK_EQUAL(cache.GetBestBlock(), cache_best_block);
+    check_stats(local_stats);
 }
 
 BOOST_AUTO_TEST_CASE(ccoins_flush_sync_reset_postconditions)
