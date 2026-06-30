@@ -194,6 +194,64 @@ BOOST_FIXTURE_TEST_CASE(miniminer_bumpfee_covers_individual_shortfall, TestChain
     BOOST_CHECK_EQUAL(*total_fee, package_shortfall);
 }
 
+BOOST_FIXTURE_TEST_CASE(miniminer_total_bumpfee_clamps_overfunded_package, TestChain100Setup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    LOCK2(::cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    const auto grandparent = make_tx({COutPoint{m_coinbase_txns[0]->GetHash(), 0}}, /*num_outputs=*/2);
+    const auto parent1 = make_tx({COutPoint{grandparent->GetHash(), 0}}, /*num_outputs=*/1);
+    const auto parent2 = make_tx({COutPoint{grandparent->GetHash(), 1}}, /*num_outputs=*/1);
+    const auto child = make_tx({COutPoint{parent1->GetHash(), 0}, COutPoint{parent2->GetHash(), 0}}, /*num_outputs=*/1);
+    const COutPoint child_outpoint{child->GetHash(), 0};
+
+    const CFeeRate target_feerate{10000};
+    const int64_t grandparent_vsize{GetVirtualTransactionSize(*grandparent)};
+    const int64_t parent1_vsize{GetVirtualTransactionSize(*parent1)};
+    const int64_t parent2_vsize{GetVirtualTransactionSize(*parent2)};
+    const int64_t child_vsize{GetVirtualTransactionSize(*child)};
+    const int64_t parent1_package_vsize{grandparent_vsize + parent1_vsize};
+    const int64_t parent2_package_vsize{grandparent_vsize + parent2_vsize};
+    const int64_t child_package_vsize{grandparent_vsize + parent1_vsize + parent2_vsize + child_vsize};
+
+    const CAmount grandparent_fee{1};
+    const CAmount parent_package_shortfall{1};
+    const CAmount child_individual_shortfall{1};
+    const CAmount parent1_fee{target_feerate.GetFee(parent1_package_vsize) - grandparent_fee - parent_package_shortfall};
+    const CAmount parent2_fee{target_feerate.GetFee(parent2_package_vsize) - grandparent_fee - parent_package_shortfall};
+    const CAmount child_fee{target_feerate.GetFee(child_vsize) - child_individual_shortfall};
+    const CAmount package_fee{grandparent_fee + parent1_fee + parent2_fee + child_fee};
+
+    BOOST_REQUIRE(MoneyRange(grandparent_fee));
+    BOOST_REQUIRE(MoneyRange(parent1_fee));
+    BOOST_REQUIRE(MoneyRange(parent2_fee));
+    BOOST_REQUIRE(MoneyRange(child_fee));
+    BOOST_REQUIRE_GT(parent1_fee, 0);
+    BOOST_REQUIRE_GT(parent2_fee, 0);
+    BOOST_REQUIRE_GT(child_fee, 0);
+    BOOST_REQUIRE_EQUAL(target_feerate.GetFee(parent1_package_vsize) - (grandparent_fee + parent1_fee), parent_package_shortfall);
+    BOOST_REQUIRE_EQUAL(target_feerate.GetFee(parent2_package_vsize) - (grandparent_fee + parent2_fee), parent_package_shortfall);
+    BOOST_REQUIRE_EQUAL(target_feerate.GetFee(child_vsize) - child_fee, child_individual_shortfall);
+    BOOST_REQUIRE_GT(package_fee, target_feerate.GetFee(child_package_vsize));
+
+    TryAddToMempool(pool, entry.Fee(grandparent_fee).FromTx(grandparent));
+    TryAddToMempool(pool, entry.Fee(parent1_fee).FromTx(parent1));
+    TryAddToMempool(pool, entry.Fee(parent2_fee).FromTx(parent2));
+    TryAddToMempool(pool, entry.Fee(child_fee).FromTx(child));
+
+    node::MiniMiner bumpfees{pool, {child_outpoint}};
+    BOOST_REQUIRE(bumpfees.IsReadyToCalculate());
+    const auto fees{bumpfees.CalculateBumpFees(target_feerate)};
+    BOOST_CHECK_EQUAL(Find(fees, child_outpoint), child_individual_shortfall);
+
+    node::MiniMiner total{pool, {child_outpoint}};
+    BOOST_REQUIRE(total.IsReadyToCalculate());
+    const auto total_fee{total.CalculateTotalBumpFees(target_feerate)};
+    BOOST_REQUIRE(total_fee.has_value());
+    BOOST_CHECK_EQUAL(*total_fee, 0);
+}
+
 BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
