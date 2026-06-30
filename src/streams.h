@@ -588,15 +588,20 @@ public:
 
     //! rewind to a given reading position
     bool SetPos(uint64_t nPos) {
+        Assert(m_read_pos <= nSrcPos);
+        Assert(m_read_pos <= nReadLimit);
         size_t bufsize = vchBuf.size();
+        const uint64_t max_pos{std::min(nSrcPos, nReadLimit)};
+        if (nPos > max_pos) {
+            // Can't go this far forward, go as far as possible without
+            // crossing either the source position or the read limit.
+            m_read_pos = max_pos;
+            return false;
+        }
         if (nPos + bufsize < nSrcPos) {
             // rewinding too far, rewind as far as possible
             m_read_pos = nSrcPos - bufsize;
-            return false;
-        }
-        if (nPos > nSrcPos) {
-            // can't go this far forward, go as far as possible
-            m_read_pos = nSrcPos;
+            Assert(m_read_pos <= nReadLimit);
             return false;
         }
         m_read_pos = nPos;
@@ -621,6 +626,8 @@ public:
     //! search for a given byte in the stream, and remain positioned on it
     void FindByte(std::byte byte)
     {
+        Assert(m_read_pos <= nSrcPos);
+        Assert(m_read_pos <= nReadLimit);
         // For best performance, avoid mod operation within the loop.
         size_t buf_offset{size_t(m_read_pos % uint64_t(vchBuf.size()))};
         while (true) {
@@ -632,6 +639,7 @@ public:
                 // setting nSrcPos to one beyond the end of the new data.
                 // Throws exception if end-of-file reached.
                 Fill();
+                Assert(m_read_pos < nSrcPos);
             }
             const size_t len{static_cast<size_t>(std::min<uint64_t>({
                 static_cast<uint64_t>(vchBuf.size() - buf_offset),
