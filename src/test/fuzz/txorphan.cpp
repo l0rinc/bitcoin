@@ -129,6 +129,19 @@ FUZZ_TARGET(txorphan, .init = initialize_orphanage)
                         CTransactionRef ref = orphanage->GetTxToReconsider(peer_id);
                         if (ref) {
                             Assert(orphanage->HaveTx(ref->GetWitnessHash()));
+                            for (const auto& parent : tx_history) {
+                                const Txid parent_txid{parent->GetHash()};
+                                const bool spends_parent{std::any_of(ref->vin.cbegin(), ref->vin.cend(), [&](const auto& input) {
+                                    return input.prevout.hash == parent_txid;
+                                })};
+                                if (!spends_parent) continue;
+
+                                const auto requeued{orphanage->AddChildrenToWorkSet(*parent, orphanage_rng)};
+                                Assert(std::any_of(requeued.cbegin(), requeued.cend(), [&](const auto& entry) {
+                                    return entry.first == ref->GetWitnessHash();
+                                }));
+                                break;
+                            }
                         }
                     }
                 },
