@@ -621,6 +621,7 @@ bool CNode::IsConnectedThroughPrivacyNet() const
 #define X(name) stats.name = name
 void CNode::CopyStats(CNodeStats& stats)
 {
+    stats = {};
     stats.nodeid = this->GetId();
     X(addr);
     X(addrBind);
@@ -650,7 +651,11 @@ void CNode::CopyStats(CNodeStats& stats)
         X(nRecvBytes);
         Transport::Info info = m_transport->GetInfo();
         stats.m_transport_type = info.transport_type;
-        if (info.session_id) stats.m_session_id = HexStr(*info.session_id);
+        if (info.session_id) {
+            stats.m_session_id = HexStr(*info.session_id);
+        } else {
+            Assume(stats.m_session_id.empty());
+        }
     }
     X(m_permission_flags);
 
