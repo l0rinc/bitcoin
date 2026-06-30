@@ -118,13 +118,14 @@ FUZZ_TARGET(block_index, .init = init_block_index)
 
     // We should be able to set and read the value of any random flag.
     const std::string flag_name = fuzzed_data_provider.ConsumeRandomLengthString(100);
-    bool flag_value{fuzzed_data_provider.ConsumeBool()};
-    const bool missing_flag_value{flag_value};
-    assert(!block_index.ReadFlag(flag_name, flag_value));
-    assert(flag_value == missing_flag_value);
+    for (const bool initial_value : {false, true}) {
+        bool flag_value{initial_value};
+        assert(!block_index.ReadFlag(flag_name, flag_value));
+        assert(flag_value == initial_value);
+    }
 
     block_index.WriteFlag(flag_name, true);
-    flag_value = false;
+    bool flag_value{false};
     assert(block_index.ReadFlag(flag_name, flag_value));
     assert(flag_value);
     block_index.WriteFlag(flag_name, false);
