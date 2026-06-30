@@ -161,16 +161,20 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     }
 
     for (size_t i = 0; i < extra_txn.size(); i++) {
-        uint64_t shortid = cmpctblock.GetShortID(extra_txn[i].first);
+        const auto& [wtxid, tx] = extra_txn[i];
+        if (!tx) continue;
+        Assume(wtxid == tx->GetWitnessHash());
+
+        uint64_t shortid = cmpctblock.GetShortID(wtxid);
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {
             if (tx_source[idit->second] == TxSource::NONE) {
-                txn_available[idit->second] = extra_txn[i].second;
+                txn_available[idit->second] = tx;
                 tx_source[idit->second] = TxSource::EXTRA;
                 mempool_count++;
                 extra_count++;
             } else if (tx_source[idit->second] != TxSource::COLLIDED &&
-                       txn_available[idit->second]->GetWitnessHash() != extra_txn[i].second->GetWitnessHash()) {
+                       txn_available[idit->second]->GetWitnessHash() != tx->GetWitnessHash()) {
                 // If we find two mempool/extra txn that match the short id, just
                 // request it.
                 // This should be rare enough that the extra bandwidth doesn't matter,
