@@ -32,6 +32,7 @@
 #include <validation.h>
 #include <validationinterface.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -210,6 +211,104 @@ void AssertMempoolInputIndexCount(const CTxMemPool& tx_pool)
     }
     const auto indexed_input_count{WITH_LOCK(tx_pool.cs, return tx_pool.mapNextTx.size())};
     assert(indexed_input_count == input_count);
+}
+
+struct MempoolEntrySnapshot {
+    Txid txid;
+    Wtxid wtxid;
+    std::chrono::seconds time;
+    CAmount fee;
+    int32_t vsize;
+    int64_t fee_delta;
+
+    bool operator==(const MempoolEntrySnapshot&) const = default;
+};
+
+struct PrioritisationSnapshot {
+    Txid txid;
+    bool in_mempool;
+    CAmount delta;
+    std::optional<CAmount> modified_fee;
+
+    bool operator==(const PrioritisationSnapshot&) const = default;
+};
+
+struct InputIndexSnapshot {
+    COutPoint prevout;
+    Txid spender;
+
+    bool operator==(const InputIndexSnapshot&) const = default;
+};
+
+struct MempoolSnapshot {
+    std::vector<MempoolEntrySnapshot> entries;
+    std::vector<PrioritisationSnapshot> prioritisations;
+    std::vector<InputIndexSnapshot> input_index;
+    std::set<Txid> unbroadcast_txids;
+    uint64_t total_tx_size;
+    CAmount total_fee;
+    unsigned int transactions_updated;
+};
+
+MempoolSnapshot SnapshotMempool(const CTxMemPool& pool)
+{
+    std::vector<MempoolEntrySnapshot> entries;
+    for (const auto& info : pool.infoAll()) {
+        entries.push_back({
+            info.tx->GetHash(),
+            info.tx->GetWitnessHash(),
+            info.m_time,
+            info.fee,
+            info.vsize,
+            info.nFeeDelta,
+        });
+    }
+    std::ranges::sort(entries, {}, &MempoolEntrySnapshot::txid);
+
+    std::vector<PrioritisationSnapshot> prioritisations;
+    for (const auto& delta : pool.GetPrioritisedTransactions()) {
+        prioritisations.push_back({
+            delta.txid,
+            delta.in_mempool,
+            delta.delta,
+            delta.modified_fee,
+        });
+    }
+    std::ranges::sort(prioritisations, {}, &PrioritisationSnapshot::txid);
+
+    std::vector<InputIndexSnapshot> input_index;
+    {
+        LOCK(pool.cs);
+        input_index.reserve(pool.mapNextTx.size());
+        for (const auto& [prevout, spender] : pool.mapNextTx) {
+            input_index.push_back({*prevout, spender->GetTx().GetHash()});
+        }
+    }
+    std::ranges::sort(input_index, std::less<>{}, &InputIndexSnapshot::prevout);
+
+    const auto [total_tx_size, total_fee] = WITH_LOCK(pool.cs, return std::make_pair(pool.GetTotalTxSize(), pool.GetTotalFee()));
+
+    return {
+        entries,
+        prioritisations,
+        input_index,
+        pool.GetUnbroadcastTxs(),
+        total_tx_size,
+        total_fee,
+        pool.GetTransactionsUpdated(),
+    };
+}
+
+void AssertMempoolUnchanged(const CTxMemPool& pool, const MempoolSnapshot& expected)
+{
+    const auto actual{SnapshotMempool(pool)};
+    Assert(actual.entries == expected.entries);
+    Assert(actual.prioritisations == expected.prioritisations);
+    Assert(actual.input_index == expected.input_index);
+    Assert(actual.unbroadcast_txids == expected.unbroadcast_txids);
+    Assert(actual.total_tx_size == expected.total_tx_size);
+    Assert(actual.total_fee == expected.total_fee);
+    Assert(actual.transactions_updated == expected.transactions_updated);
 }
 
 void AssertDuplicatePackageRejected(const std::vector<CTransactionRef>& txs)
@@ -397,8 +496,21 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
 
         auto single_submit = txs.size() == 1;
 
+        std::optional<MempoolSnapshot> test_accept_mempool_snapshot;
+        std::optional<std::set<COutPoint>> test_accept_outpoints_snapshot;
+        if (single_submit) {
+            test_accept_mempool_snapshot = SnapshotMempool(tx_pool);
+            test_accept_outpoints_snapshot = mempool_outpoints;
+        }
+
         const auto result_package = WITH_LOCK(::cs_main,
                                     return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/single_submit, /*client_maxfeerate=*/{}));
+
+        if (single_submit) {
+            node.validation_signals->SyncWithValidationInterfaceQueue();
+            AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
+            Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
+        }
 
         if (single_submit && result_package.m_state.GetResult() != PackageValidationResult::PCKG_POLICY) {
             Assert(!CheckPackageMempoolAcceptResult(txs, result_package, result_package.m_state.IsValid(), nullptr));
@@ -577,8 +689,22 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
             client_maxfeerate = CFeeRate(fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(-1, 50 * COIN), 100);
         }
 
+        std::optional<MempoolSnapshot> test_accept_mempool_snapshot;
+        std::optional<std::set<COutPoint>> test_accept_outpoints_snapshot;
+        if (single_submit) {
+            test_accept_mempool_snapshot = SnapshotMempool(tx_pool);
+            test_accept_outpoints_snapshot = mempool_outpoints;
+        }
+
         const auto result_package = WITH_LOCK(::cs_main,
                                     return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/single_submit, client_maxfeerate));
+
+        if (single_submit) {
+            node.validation_signals->SyncWithValidationInterfaceQueue();
+            AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
+            Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
+            Assert(added.empty());
+        }
 
         if (single_submit && result_package.m_state.GetResult() != PackageValidationResult::PCKG_POLICY) {
             Assert(!CheckPackageMempoolAcceptResult(txs, result_package, result_package.m_state.IsValid(), nullptr));
