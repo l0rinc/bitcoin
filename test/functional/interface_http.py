@@ -26,6 +26,10 @@ NETWORK_ERRORS = (
     http.client.ResponseNotReady,    # server response not ready or connection out of sync
 )
 
+def get_header_values(header_lines, name):
+    prefix = f"{name.lower()}:"
+    return [line.split(":", 1)[1].strip() for line in header_lines if line.lower().startswith(prefix)]
+
 class BitcoinHTTPConnection:
     def __init__(self, node):
         self.url = urllib.parse.urlparse(node.url)
@@ -85,6 +89,25 @@ class BitcoinHTTPConnection:
         '''
         return self.conn.sock.recv(1024)
 
+    def recv_response(self):
+        response = b""
+        while b"\r\n\r\n" not in response:
+            chunk = self.recv_raw()
+            assert chunk
+            response += chunk
+
+        raw_headers, response_body = response.split(b"\r\n\r\n", 1)
+        header_lines = raw_headers.decode("iso-8859-1").split("\r\n")
+        content_lengths = get_header_values(header_lines[1:], "Content-Length")
+        if content_lengths:
+            body_len = int(content_lengths[-1])
+            while len(response_body) < body_len:
+                chunk = self.recv_raw()
+                assert chunk
+                response_body += chunk
+            response_body = response_body[:body_len]
+        return header_lines, response_body
+
     def expect_timeout(self, seconds):
         # Wait for response, but expect a timeout disconnection
         start = time.time()
@@ -121,6 +144,7 @@ class HTTPBasicsTest (BitcoinTestFramework):
         self.check_default_connection()
         self.check_keepalive_connection()
         self.check_close_connection()
+        self.check_head_response_headers()
         self.check_excessive_request_size()
         self.check_pipelining()
         self.check_chunked_transfer()
@@ -182,6 +206,23 @@ class HTTPBasicsTest (BitcoinTestFramework):
         assert b'"error":null' in response1
         # Connection closed after response
         assert conn.sock_closed()
+
+
+    def check_head_response_headers(self):
+        self.log.info("Checking HEAD responses do not synthesize body headers")
+        conn = BitcoinHTTPConnection(self.node)
+        raw = (
+            "HEAD / HTTP/1.1\r\n"
+            f"Host: {conn.url.hostname}\r\n"
+            f"Authorization: Basic {str_to_b64str(conn.authpair)}\r\n"
+            "\r\n"
+        ).encode("ascii")
+        conn.send_raw(raw)
+        header_lines, _ = conn.recv_response()
+        assert_equal(header_lines[0], "HTTP/1.1 405 Method Not Allowed")
+        assert_equal(get_header_values(header_lines[1:], "Content-Length"), [])
+        assert_equal(get_header_values(header_lines[1:], "Content-Type"), [])
+        conn.close_sock()
 
 
     def check_excessive_request_size(self):
