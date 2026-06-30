@@ -4,6 +4,7 @@
 
 #include <psbt.h>
 #include <streams.h>
+#include <util/strencodings.h>
 
 #include <boost/test/unit_test.hpp>
 #include <test/util/setup_common.h>
@@ -59,6 +60,28 @@ BOOST_AUTO_TEST_CASE(psbt2_timelock_test)
     CheckTimeLock("cHNidP8BAgQCAAAAAQMEAAAAAAEEAQIBBQEBAfsEAgAAAAABDiAPdY2/vU2nwWyKMwnDyB4RAPVh6mRttbAXUsSF4b3enwEPBAEAAAABEQSLjcRiARIEECcAAAABDiA6Gzs8g31kiep6Mdjmx91QPAAb7z4GlY51dICNaMp4pQEPBAAAAAABEQSMjcRiAAEDCE+TNXcAAAAAAQQWABQLE1LKzQPPaqG388jWOIZxs0peEQA=", 1657048460);
     CheckTimeLock("cHNidP8BAgQCAAAAAQMEAAAAAAEEAQIBBQEBAfsEAgAAAAABDiAPdY2/vU2nwWyKMwnDyB4RAPVh6mRttbAXUsSF4b3enwEPBAEAAAAAAQ4gOhs7PIN9ZInqejHY5sfdUDwAG+8+BpWOdXSAjWjKeKUBDwQAAAAAAREEjI3EYgABAwhPkzV3AAAAAAEEFgAUCxNSys0Dz2qht/PI1jiGcbNKXhEA", 1657048460);
     CheckTimeLock("cHNidP8BAgQCAAAAAQMEAAAAAAEEAQIBBQEBAfsEAgAAAAABDiAPdY2/vU2nwWyKMwnDyB4RAPVh6mRttbAXUsSF4b3enwEPBAEAAAABEgQQJwAAAAEOIDobOzyDfWSJ6nox2ObH3VA8ABvvPgaVjnV0gI1oynilAQ8EAAAAAAERBIyNxGIAAQMIT5M1dwAAAAABBBYAFAsTUsrNA89qobfzyNY4hnGzSl4RAA==", std::nullopt);
+}
+
+BOOST_AUTO_TEST_CASE(base64_decode_roundtrip)
+{
+    CMutableTransaction mtx;
+    mtx.vin.emplace_back(COutPoint{});
+    mtx.vout.emplace_back(1, CScript{});
+
+    const PartiallySignedTransaction psbt{mtx};
+    const std::vector<unsigned char> serialized{SerializePSBT(psbt)};
+    const std::string encoded{EncodeBase64(serialized)};
+
+    const util::Result<PartiallySignedTransaction> decoded{DecodeBase64PSBT(encoded)};
+    BOOST_REQUIRE(decoded);
+    BOOST_CHECK(SerializePSBT(*decoded) == serialized);
+
+    const std::string reencoded{EncodeBase64(SerializePSBT(*decoded))};
+    BOOST_CHECK_EQUAL(reencoded, encoded);
+
+    const util::Result<PartiallySignedTransaction> roundtrip{DecodeBase64PSBT(reencoded)};
+    BOOST_REQUIRE(roundtrip);
+    BOOST_CHECK(SerializePSBT(*roundtrip) == serialized);
 }
 
 BOOST_AUTO_TEST_CASE(psbt2_addinput)
