@@ -67,6 +67,7 @@ bool MessageSign(
     if (!privkey.SignCompact(MessageHash(message), signature_bytes)) {
         return false;
     }
+    Assume(signature_bytes.size() == CPubKey::COMPACT_SIGNATURE_SIZE);
 
     signature = EncodeBase64(signature_bytes);
 
