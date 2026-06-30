@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <set>
 #include <vector>
 
 BOOST_AUTO_TEST_SUITE(txgraph_tests)
@@ -507,6 +508,43 @@ BOOST_AUTO_TEST_CASE(txgraph_count_distinct_clusters_contracts)
 
     graph->CommitStaging();
     check_count({&refs[5], &refs[0], &refs[3], &refs[6], &empty_ref}, TxGraph::Level::MAIN, 3);
+    graph->SanityCheck();
+}
+
+BOOST_AUTO_TEST_CASE(txgraph_ancdesc_union_groups_same_cluster_queries)
+{
+    auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(5);
+    for (const FeePerWeight& feerate : {FeePerWeight{10, 10}, FeePerWeight{7, 10}, FeePerWeight{6, 10}}) {
+        graph->AddTransaction(refs.emplace_back(), feerate);
+    }
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[2]);
+
+    const auto to_set = [](const std::vector<TxGraph::Ref*>& refs) {
+        return std::set<TxGraph::Ref*>{refs.begin(), refs.end()};
+    };
+
+    std::vector<TxGraph::Ref*> sibling_query{&refs[1], &refs[2]};
+    BOOST_CHECK(to_set(graph->GetAncestorsUnion(sibling_query, TxGraph::Level::TOP)) ==
+                (std::set<TxGraph::Ref*>{&refs[0], &refs[1], &refs[2]}));
+    BOOST_CHECK(to_set(graph->GetDescendantsUnion(sibling_query, TxGraph::Level::TOP)) ==
+                (std::set<TxGraph::Ref*>{&refs[1], &refs[2]}));
+
+    graph->StartStaging();
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{5, 10});
+    graph->AddDependency(/*parent=*/refs[1], /*child=*/refs[3]);
+
+    std::vector<TxGraph::Ref*> staged_query{&refs[3], &refs[2]};
+    BOOST_CHECK(to_set(graph->GetAncestorsUnion(staged_query, TxGraph::Level::TOP)) ==
+                (std::set<TxGraph::Ref*>{&refs[0], &refs[1], &refs[2], &refs[3]}));
+    BOOST_CHECK(to_set(graph->GetDescendantsUnion(sibling_query, TxGraph::Level::TOP)) ==
+                (std::set<TxGraph::Ref*>{&refs[1], &refs[2], &refs[3]}));
+    BOOST_CHECK(to_set(graph->GetAncestorsUnion(staged_query, TxGraph::Level::MAIN)) ==
+                (std::set<TxGraph::Ref*>{&refs[0], &refs[2]}));
+
     graph->SanityCheck();
 }
 
