@@ -96,6 +96,7 @@ void initialize_socks5()
 
 FUZZ_TARGET(socks5, .init = initialize_socks5)
 {
+    ResetFuzzedSockMockedFds();
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     FakeNodeClock clock{ConsumeTime(fuzzed_data_provider)};
     FakeSteadyClock steady_clock;

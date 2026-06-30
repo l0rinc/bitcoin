@@ -2095,7 +2095,9 @@ Sock::EventsPerSock CConnman::GenerateWaitSockets(std::span<CNode* const> nodes)
     Sock::EventsPerSock events_per_sock;
 
     for (const ListenSocket& hListenSocket : vhListenSocket) {
-        events_per_sock.emplace(hListenSocket.sock, Sock::Events{Sock::RecvEvent});
+        const auto [it, inserted]{events_per_sock.emplace(hListenSocket.sock, Sock::Events{Sock::RecvEvent})};
+        Assume(inserted);
+        Assume(it->second.requested == Sock::RecvEvent);
     }
 
     for (CNode* pnode : nodes) {
@@ -2114,7 +2116,10 @@ Sock::EventsPerSock CConnman::GenerateWaitSockets(std::span<CNode* const> nodes)
         LOCK(pnode->m_sock_mutex);
         if (pnode->m_sock) {
             Sock::Event event = (select_send ? Sock::SendEvent : 0) | (select_recv ? Sock::RecvEvent : 0);
-            events_per_sock.emplace(pnode->m_sock, Sock::Events{event});
+            Assume(event != 0);
+            const auto [it, inserted]{events_per_sock.emplace(pnode->m_sock, Sock::Events{event})};
+            Assume(inserted);
+            Assume(it->second.requested == event);
         }
     }
 
