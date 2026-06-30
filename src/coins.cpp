@@ -375,13 +375,27 @@ unsigned int CCoinsViewCache::GetCacheSize() const {
 
 bool CCoinsViewCache::HaveInputs(const CTransaction& tx) const
 {
-    if (!tx.IsCoinBase()) {
-        for (unsigned int i = 0; i < tx.vin.size(); i++) {
-            if (!HaveCoin(tx.vin[i].prevout)) {
+    const bool is_coinbase{tx.IsCoinBase()};
+    const bool skips_input_lookup{is_coinbase || tx.vin.empty()};
+    const size_t cache_size{skips_input_lookup ? cacheCoins.size() : 0};
+    const size_t cache_usage{skips_input_lookup ? cachedCoinsUsage : 0};
+    const size_t dirty_count{skips_input_lookup ? m_dirty_count : 0};
+
+    if (!is_coinbase) {
+        for (const auto& txin : tx.vin) {
+            if (!HaveCoin(txin.prevout)) {
                 return false;
             }
-            Assume(!AccessCoin(tx.vin[i].prevout).IsSpent());
+            Assume(!AccessCoin(txin.prevout).IsSpent());
         }
+    } else {
+        Assume(tx.vin.size() == 1);
+        Assume(tx.vin.front().prevout.IsNull());
+    }
+    if (skips_input_lookup) {
+        Assume(cacheCoins.size() == cache_size);
+        Assume(cachedCoinsUsage == cache_usage);
+        Assume(m_dirty_count == dirty_count);
     }
     return true;
 }

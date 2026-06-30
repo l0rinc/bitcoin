@@ -437,6 +437,31 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 assert(sim.has_value() == real);
             },
 
+            [&]() { // HaveInputs
+                CMutableTransaction tx;
+                bool expected{true};
+                const bool is_coinbase{provider.ConsumeBool()};
+                if (is_coinbase) {
+                    tx.vin.emplace_back(COutPoint{});
+                } else {
+                    const auto input_count{provider.ConsumeIntegralInRange<uint32_t>(0, 8)};
+                    for (uint32_t i{0}; i < input_count; ++i) {
+                        const auto outpointidx{provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1)};
+                        tx.vin.emplace_back(data.outpoints[outpointidx]);
+                        expected &= lookup(outpointidx).has_value();
+                    }
+                }
+
+                const auto cache_stats{get_all_cache_stats()};
+                const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
+                const bool real{caches.back()->HaveInputs(CTransaction{tx})};
+                assert(real == expected);
+                assert_cache_stats_if_present(parent_cache_stats);
+                if (is_coinbase || tx.vin.empty()) {
+                    assert_cache_stats(cache_stats);
+                }
+            },
+
             [&]() { // HaveCoinInCache
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
                 const auto cache_size{caches.back()->GetCacheSize()};
