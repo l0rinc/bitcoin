@@ -360,8 +360,17 @@ public:
     unsigned CountDependencies() const noexcept
     {
         unsigned ret = 0;
+        const bool acyclic = !G_ABORT_ON_FAILED_ASSUME || IsAcyclic();
+        unsigned child_count = 0;
         for (auto i : Positions()) {
             ret += GetReducedParents(i).Count();
+            if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+                if (!acyclic) continue;
+                child_count += GetReducedChildren(i).Count();
+            }
+        }
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            if (acyclic) Assume(ret == child_count);
         }
         return ret;
     }
