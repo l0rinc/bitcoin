@@ -420,6 +420,8 @@ BOOST_AUTO_TEST_CASE(http_send_buffer_tests)
             /*id=*/0,
             CService{},
             std::move(sock))};
+        const auto idle_before{SteadySeconds::min()};
+        client->m_idle_since = idle_before;
         const std::vector<std::byte> initial_bytes{ToBytes(initial)};
         {
             LOCK(client->m_send_mutex);
@@ -450,6 +452,10 @@ BOOST_AUTO_TEST_CASE(http_send_buffer_tests)
             BOOST_CHECK_EQUAL(client->m_connection_busy.load(), *expected_connection_busy);
         }
         BOOST_CHECK_EQUAL(client->m_disconnect.load(), expected_disconnect);
+        const bool expected_idle_refreshed{
+            !initial.empty() && send_result >= 0 &&
+            (static_cast<size_t>(send_result) < initial_bytes.size() || keep_alive)};
+        BOOST_CHECK_EQUAL(client->m_idle_since.load() != idle_before, expected_idle_refreshed);
     };
 
     RunSendCase("abcdef", /*send_result=*/2, /*send_errno=*/0, /*keep_alive=*/true,
