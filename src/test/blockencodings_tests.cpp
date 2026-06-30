@@ -505,6 +505,39 @@ BOOST_AUTO_TEST_CASE(ReceiveWithExtraTransactions) {
     }
 }
 
+BOOST_AUTO_TEST_CASE(EmptyExtraTransactionsDoNotSatisfyShortIds)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    auto rand_ctx(FastRandomContext(uint256{42}));
+    CBlock block(BuildBlockTestCase(rand_ctx));
+
+    TestHeaderAndShortIDs short_ids(block, rand_ctx);
+    const Wtxid empty_wtxid{Wtxid::FromUint256(uint256::ZERO)};
+    short_ids.shorttxids[0] = short_ids.GetShortID(empty_wtxid);
+
+    DataStream stream{};
+    stream << short_ids;
+
+    CBlockHeaderAndShortTxIDs decoded_short_ids;
+    stream >> decoded_short_ids;
+
+    const std::vector<std::pair<Wtxid, CTransactionRef>> extra_txn{{empty_wtxid, CTransactionRef{}}};
+
+    TestPartiallyDownloadedBlock partial_block(&pool);
+    BOOST_CHECK(partial_block.InitData(decoded_short_ids, extra_txn) == READ_STATUS_OK);
+    BOOST_CHECK(partial_block.IsTxAvailable(0));
+    BOOST_CHECK(!partial_block.IsTxAvailable(1));
+    BOOST_CHECK(!partial_block.IsTxAvailable(2));
+    BOOST_CHECK_EQUAL(partial_block.AvailableTxCount(), 1U);
+    BOOST_CHECK_EQUAL(partial_block.PrefilledCount(), 1U);
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 0U);
+
+    CBlock reconstructed_block;
+    BOOST_CHECK(partial_block.FillBlock(reconstructed_block, {block.vtx[1], block.vtx[2]}, /*segwit_active=*/true) == READ_STATUS_OK);
+    BOOST_CHECK_EQUAL(block.GetHash().ToString(), reconstructed_block.GetHash().ToString());
+}
+
 BOOST_AUTO_TEST_CASE(TransactionsRequestSerializationTest) {
     BlockTransactionsRequest req1;
     req1.blockhash = m_rng.rand256();
