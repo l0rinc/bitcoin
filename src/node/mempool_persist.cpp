@@ -45,6 +45,13 @@ bool LoadMempool(CTxMemPool& pool, const fs::path& load_path, Chainstate& active
 {
     if (load_path.empty()) return false;
 
+    std::set<Txid> unbroadcast_before;
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (!opts.apply_unbroadcast_set) {
+            unbroadcast_before = pool.GetUnbroadcastTxs();
+        }
+    }
+
     AutoFile file{opts.mockable_fopen_function(load_path, "rb")};
     if (file.IsNull()) {
         LogInfo("Failed to open mempool file. Continuing anyway.\n");
@@ -148,6 +155,11 @@ bool LoadMempool(CTxMemPool& pool, const fs::path& load_path, Chainstate& active
     }
 
     LogInfo("Imported mempool transactions from file: %i succeeded, %i failed, %i expired, %i already there, %i waiting for initial broadcast\n", count, failed, expired, already_there, unbroadcast);
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (!opts.apply_unbroadcast_set) {
+            Assume(pool.GetUnbroadcastTxs() == unbroadcast_before);
+        }
+    }
     return true;
 }
 
