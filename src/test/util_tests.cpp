@@ -26,6 +26,7 @@
 #include <util/string.h>
 #include <util/time.h>
 #include <util/tokenbucket.h>
+#include <util/vecdeque.h>
 #include <util/vector.h>
 
 #include <array>
@@ -1890,6 +1891,32 @@ BOOST_AUTO_TEST_CASE(bitdeque_padded_empty_boundary)
         expected.push_front(false);
         check(bits, expected);
     }
+}
+
+BOOST_AUTO_TEST_CASE(vecdeque_clear_keeps_capacity)
+{
+    VecDeque<int> queue;
+    queue.reserve(8);
+    for (int i{0}; i < 6; ++i) {
+        queue.push_back(i);
+    }
+    queue.pop_front();
+    queue.pop_front();
+
+    const size_t capacity{queue.capacity()};
+    BOOST_CHECK_GT(capacity, 0U);
+    BOOST_CHECK_EQUAL(queue.size(), 4U);
+
+    queue.clear();
+    BOOST_CHECK(queue.empty());
+    BOOST_CHECK_EQUAL(queue.size(), 0U);
+    BOOST_CHECK_EQUAL(queue.capacity(), capacity);
+
+    queue.push_back(42);
+    BOOST_CHECK_EQUAL(queue.size(), 1U);
+    BOOST_CHECK_EQUAL(queue.capacity(), capacity);
+    BOOST_CHECK_EQUAL(queue.front(), 42);
+    BOOST_CHECK_EQUAL(queue.back(), 42);
 }
 
 template <typename T>
