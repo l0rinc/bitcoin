@@ -544,6 +544,38 @@ BOOST_AUTO_TEST_CASE(append_topo_preserves_prefix_and_orders_subset)
     BOOST_CHECK_EQUAL(linearization[2], child);
 }
 
+BOOST_AUTO_TEST_CASE(depgraph_count_dependencies_uses_reduced_edges)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto grandparent{depgraph.AddTransaction(FeeFrac{1, 10})};
+    const auto parent{depgraph.AddTransaction(FeeFrac{2, 10})};
+    const auto child{depgraph.AddTransaction(FeeFrac{3, 10})};
+
+    depgraph.AddDependencies(TestBitSet::Singleton(grandparent), parent);
+    depgraph.AddDependencies(TestBitSet::Singleton(parent), child);
+    depgraph.AddDependencies(TestBitSet::Singleton(grandparent), child);
+    SanityCheck(depgraph);
+
+    BOOST_CHECK(depgraph.GetReducedParents(parent) == TestBitSet::Singleton(grandparent));
+    BOOST_CHECK(depgraph.GetReducedParents(child) == TestBitSet::Singleton(parent));
+    BOOST_CHECK(depgraph.GetReducedChildren(grandparent) == TestBitSet::Singleton(parent));
+    BOOST_CHECK(depgraph.GetReducedChildren(parent) == TestBitSet::Singleton(child));
+    BOOST_CHECK_EQUAL(depgraph.CountDependencies(), 2U);
+
+    unsigned reduced_child_count{0};
+    for (auto idx : depgraph.Positions()) {
+        reduced_child_count += depgraph.GetReducedChildren(idx).Count();
+    }
+    BOOST_CHECK_EQUAL(depgraph.CountDependencies(), reduced_child_count);
+
+    depgraph.RemoveTransactions(TestBitSet::Singleton(parent));
+    SanityCheck(depgraph);
+
+    BOOST_CHECK(depgraph.GetReducedParents(child) == TestBitSet::Singleton(grandparent));
+    BOOST_CHECK(depgraph.GetReducedChildren(grandparent) == TestBitSet::Singleton(child));
+    BOOST_CHECK_EQUAL(depgraph.CountDependencies(), 1U);
+}
+
 BOOST_AUTO_TEST_CASE(chunk_linearization_merges_higher_rate_suffix)
 {
     DepGraph<TestBitSet> depgraph;
