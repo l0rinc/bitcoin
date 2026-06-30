@@ -527,6 +527,42 @@ inline CTransactionRef make_tx(std::vector<CAmount>&& output_values, std::vector
     return MakeTransactionRef(tx);
 }
 
+BOOST_AUTO_TEST_CASE(MempoolHasDescendantsMatchesChildren)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    TestMemPoolEntryHelper entry;
+
+    CTransactionRef parent{make_tx(/*output_values=*/{10 * COIN})};
+    CTransactionRef child{make_tx(/*output_values=*/{9 * COIN}, /*inputs=*/{parent})};
+    CTransactionRef unrelated{make_tx(/*output_values=*/{8 * COIN})};
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(10'000).FromTx(parent));
+        TryAddToMempool(pool, entry.Fee(10'000).FromTx(unrelated));
+    }
+
+    BOOST_CHECK(!pool.HasDescendants(parent->GetHash()));
+    BOOST_CHECK(!pool.HasDescendants(unrelated->GetHash()));
+    BOOST_CHECK(!pool.HasDescendants(Txid::FromUint256(uint256{1})));
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(10'000).FromTx(child));
+    }
+
+    BOOST_CHECK(pool.HasDescendants(parent->GetHash()));
+    BOOST_CHECK(!pool.HasDescendants(child->GetHash()));
+    BOOST_CHECK(!pool.HasDescendants(unrelated->GetHash()));
+
+    {
+        LOCK(pool.cs);
+        pool.removeRecursive(*child, REMOVAL_REASON_DUMMY);
+    }
+
+    BOOST_CHECK(!pool.HasDescendants(parent->GetHash()));
+}
+
 BOOST_AUTO_TEST_CASE(MempoolRandomizedIndexTest)
 {
     CTxMemPool& pool{*Assert(m_node.mempool)};
