@@ -301,6 +301,8 @@ BOOST_AUTO_TEST_CASE(processnewblockheaders_min_pow_checked_contract)
 
     const auto block{make_unsubmitted_block()};
     const uint256 block_hash{block->GetHash()};
+    const CBlockIndex* parent_index{WITH_LOCK(::cs_main, return m_node.chainman->m_blockman.LookupBlockIndex(block->hashPrevBlock))};
+    BOOST_REQUIRE(parent_index);
     const auto lookup_block = [&] {
         return WITH_LOCK(::cs_main, return m_node.chainman->m_blockman.LookupBlockIndex(block_hash));
     };
@@ -312,6 +314,11 @@ BOOST_AUTO_TEST_CASE(processnewblockheaders_min_pow_checked_contract)
     };
     const auto active_tip = [&] {
         return WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Tip());
+    };
+    const auto check_index_lineage = [&](const CBlockIndex& index) {
+        BOOST_CHECK_EQUAL(index.pprev, parent_index);
+        BOOST_CHECK_EQUAL(index.nHeight, parent_index->nHeight + 1);
+        BOOST_CHECK(index.nChainWork == parent_index->nChainWork + GetBlockProof(index));
     };
 
     BOOST_REQUIRE(!lookup_block());
@@ -331,6 +338,7 @@ BOOST_AUTO_TEST_CASE(processnewblockheaders_min_pow_checked_contract)
     BOOST_REQUIRE(Assert(m_node.chainman)->ProcessNewBlockHeaders({{*block}}, /*min_pow_checked=*/true, accepted_state, &accepted_index));
     BOOST_REQUIRE(accepted_index);
     BOOST_CHECK_EQUAL(accepted_index->GetBlockHash(), block_hash);
+    check_index_lineage(*accepted_index);
     BOOST_CHECK_EQUAL(lookup_block(), accepted_index);
     BOOST_CHECK(!has_block_data());
     BOOST_CHECK_EQUAL(active_tip(), original_tip);
@@ -339,6 +347,8 @@ BOOST_AUTO_TEST_CASE(processnewblockheaders_min_pow_checked_contract)
     BlockValidationState duplicate_state;
     BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlockHeaders({{*block}}, /*min_pow_checked=*/false, duplicate_state, &duplicate_index));
     BOOST_CHECK_EQUAL(duplicate_index, accepted_index);
+    BOOST_REQUIRE(duplicate_index);
+    check_index_lineage(*duplicate_index);
     BOOST_CHECK(!has_block_data());
     BOOST_CHECK_EQUAL(active_tip(), original_tip);
 }
