@@ -371,6 +371,36 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
     BOOST_CHECK(!response_close_client->m_keep_alive.load());
     BOOST_CHECK(WITH_LOCK(response_close_client->m_send_mutex, return response_close_client->m_send_ready));
     BOOST_CHECK(!response_close_client->m_req_busy.load());
+
+    auto head_pipes{std::make_shared<DynSock::Pipes>()};
+    auto head_client{std::make_shared<HTTPRemoteClient>(
+        /*id=*/3,
+        CService{},
+        std::make_unique<DynSock>(head_pipes))};
+
+    HTTPRequest head_req{head_client};
+    LineReader head_reader("HEAD / HTTP/1.1\r\n\r\n", MAX_HEADERS_SIZE);
+    BOOST_REQUIRE(head_req.LoadControlData(head_reader));
+    BOOST_REQUIRE(head_req.LoadHeaders(head_reader));
+    BOOST_REQUIRE(head_req.LoadBody(head_reader));
+
+    head_client->m_req_busy = true;
+    head_req.WriteReply(HTTP_OK, "abc");
+
+    WITH_LOCK(head_client->m_sock_mutex, head_client->m_sock.reset());
+    std::array<char, 1024> head_sent{};
+    const ssize_t head_sent_size{
+        head_pipes->send.GetBytes(head_sent.data(), head_sent.size())};
+    BOOST_REQUIRE_GT(head_sent_size, 0);
+    const std::string head_response{
+        head_sent.data(),
+        static_cast<size_t>(head_sent_size)};
+    BOOST_CHECK(head_response.starts_with("HTTP/1.1 200 OK\r\n"));
+    BOOST_CHECK(head_response.find("Content-Length: ") == std::string::npos);
+    BOOST_CHECK(head_response.find("Content-Type: ") == std::string::npos);
+    BOOST_CHECK(head_response.ends_with("\r\n\r\nabc"));
+    BOOST_CHECK(head_client->m_keep_alive.load());
+    BOOST_CHECK(!head_client->m_req_busy.load());
 }
 
 BOOST_AUTO_TEST_CASE(http_send_buffer_tests)
