@@ -75,6 +75,18 @@ std::vector<std::byte> ToBytes(std::string_view str)
     const auto bytes{std::as_bytes(std::span{str})};
     return {bytes.begin(), bytes.end()};
 }
+
+size_t CountOccurrences(std::string_view str, std::string_view needle)
+{
+    assert(!needle.empty());
+    size_t count{0};
+    size_t pos{0};
+    while ((pos = str.find(needle, pos)) != std::string_view::npos) {
+        ++count;
+        pos += needle.size();
+    }
+    return count;
+}
 } // namespace
 
 BOOST_FIXTURE_TEST_SUITE(httpserver_tests, SocketTestingSetup)
@@ -365,7 +377,8 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
         response_close_response.push_back(static_cast<char>(std::to_integer<unsigned char>(*it)));
     }
     BOOST_CHECK(response_close_response.starts_with("HTTP/1.1 500 Internal Server Error\r\n"));
-    BOOST_CHECK(response_close_response.find("Connection: close\r\n") != std::string::npos);
+    BOOST_CHECK_EQUAL(CountOccurrences(response_close_response, "Connection: close\r\n"), 1);
+    BOOST_CHECK_EQUAL(CountOccurrences(response_close_response, "Connection: keep-alive\r\n"), 0);
     BOOST_CHECK(response_close_response.find("Content-Length: 4\r\n") != std::string::npos);
     BOOST_CHECK(response_close_response.ends_with("\r\n\r\nboom"));
     BOOST_CHECK(!response_close_client->m_keep_alive.load());
