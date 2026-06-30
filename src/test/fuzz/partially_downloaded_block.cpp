@@ -41,6 +41,14 @@ public:
     {
         prefilledtxn.push_back({index, std::move(tx)});
     }
+
+    size_t ShortTxIDCount() const { return shorttxids.size(); }
+
+    void ReplaceShortTxID(size_t index, uint64_t shortid)
+    {
+        assert(index < shorttxids.size());
+        shorttxids[index] = shortid;
+    }
 };
 
 void initialize_pdb()
@@ -131,6 +139,14 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
             TryAddToMempool(pool, ConsumeTxMemPoolEntry(fuzzed_data_provider, *tx));
             available.insert(i);
         }
+    }
+
+    if (cmpctblock.ShortTxIDCount() > 0 && fuzzed_data_provider.ConsumeBool()) {
+        const Wtxid empty_wtxid{Wtxid::FromUint256(uint256::ZERO)};
+        extra_txn.emplace_back(empty_wtxid, CTransactionRef{});
+        cmpctblock.ReplaceShortTxID(
+            fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, cmpctblock.ShortTxIDCount() - 1),
+            cmpctblock.GetShortID(empty_wtxid));
     }
 
     auto init_status{pdb.InitData(cmpctblock, extra_txn)};
