@@ -25,7 +25,6 @@
 
 #include <cstdio>
 #include <exception>
-#include <ios>
 #include <string>
 #include <utility>
 #include <vector>
@@ -36,28 +35,7 @@
  * and return it if it does spend the provided outpoint.
  */
 
-// LevelDB key prefix. We only have one key for now but it will make it easier to add others if needed.
-constexpr uint8_t DB_TXOSPENDERINDEX{'s'};
-
 std::unique_ptr<TxoSpenderIndex> g_txospenderindex;
-
-struct DBKey {
-    uint64_t hash;
-    CDiskTxPos pos;
-
-    explicit DBKey(const uint64_t& hash_in, const CDiskTxPos& pos_in) : hash(hash_in), pos(pos_in) {}
-
-    SERIALIZE_METHODS(DBKey, obj)
-    {
-        uint8_t prefix{DB_TXOSPENDERINDEX};
-        READWRITE(prefix);
-        if (prefix != DB_TXOSPENDERINDEX) {
-            throw std::ios_base::failure("Invalid format for spender index DB key");
-        }
-        READWRITE(obj.hash);
-        READWRITE(obj.pos);
-    }
-};
 
 TxoSpenderIndex::TxoSpenderIndex(std::unique_ptr<interfaces::Chain> chain, size_t n_cache_size, bool f_memory, bool f_wipe)
     : BaseIndex(std::move(chain), "txospenderindex", "txospenderidx"), m_db{std::make_unique<DB>(gArgs.GetDataDirNet() / "indexes" / "txospenderindex" / "db", n_cache_size, f_memory, f_wipe)}
@@ -81,16 +59,20 @@ static uint64_t CreateKeyPrefix(std::pair<uint64_t, uint64_t> siphash_key, const
     return PresaltedSipHasher(siphash_key.first, siphash_key.second)(vout.hash.ToUint256(), vout.n);
 }
 
-static DBKey CreateKey(std::pair<uint64_t, uint64_t> siphash_key, const COutPoint& vout, const CDiskTxPos& pos)
+namespace txospenderindex {
+
+DBKey CreateKey(std::pair<uint64_t, uint64_t> siphash_key, const COutPoint& vout, const CDiskTxPos& pos)
 {
     return DBKey(CreateKeyPrefix(siphash_key, vout), pos);
 }
+
+} // namespace txospenderindex
 
 void TxoSpenderIndex::WriteSpenderInfos(const std::vector<std::pair<COutPoint, CDiskTxPos>>& items)
 {
     CDBBatch batch(*m_db);
     for (const auto& [outpoint, pos] : items) {
-        DBKey key(CreateKey(m_siphash_key, outpoint, pos));
+        txospenderindex::DBKey key(txospenderindex::CreateKey(m_siphash_key, outpoint, pos));
         // key is hash(spent outpoint) | disk pos, value is empty
         batch.Write(key, "");
     }
@@ -102,12 +84,14 @@ void TxoSpenderIndex::EraseSpenderInfos(const std::vector<std::pair<COutPoint, C
 {
     CDBBatch batch(*m_db);
     for (const auto& [outpoint, pos] : items) {
-        batch.Erase(CreateKey(m_siphash_key, outpoint, pos));
+        batch.Erase(txospenderindex::CreateKey(m_siphash_key, outpoint, pos));
     }
     m_db->WriteBatch(batch);
 }
 
-static std::vector<std::pair<COutPoint, CDiskTxPos>> BuildSpenderPositions(const interfaces::BlockInfo& block)
+namespace txospenderindex {
+
+std::vector<std::pair<COutPoint, CDiskTxPos>> BuildSpenderPositions(const interfaces::BlockInfo& block)
 {
     std::vector<std::pair<COutPoint, CDiskTxPos>> items;
     items.reserve(block.data->vtx.size());
@@ -125,16 +109,17 @@ static std::vector<std::pair<COutPoint, CDiskTxPos>> BuildSpenderPositions(const
     return items;
 }
 
+} // namespace txospenderindex
 
 bool TxoSpenderIndex::CustomAppend(const interfaces::BlockInfo& block)
 {
-    WriteSpenderInfos(BuildSpenderPositions(block));
+    WriteSpenderInfos(txospenderindex::BuildSpenderPositions(block));
     return true;
 }
 
 bool TxoSpenderIndex::CustomRemove(const interfaces::BlockInfo& block)
 {
-    EraseSpenderInfos(BuildSpenderPositions(block));
+    EraseSpenderInfos(txospenderindex::BuildSpenderPositions(block));
     return true;
 }
 
@@ -161,11 +146,11 @@ util::Expected<std::optional<TxoSpender>, std::string> TxoSpenderIndex::FindSpen
 {
     const uint64_t prefix{CreateKeyPrefix(m_siphash_key, txo)};
     std::unique_ptr<CDBIterator> it(m_db->NewIterator());
-    DBKey key(prefix, CDiskTxPos());
+    txospenderindex::DBKey key(prefix, CDiskTxPos());
 
     // find all keys that start with the outpoint hash, load the transaction at the location specified in the key
     // and return it if it does spend the provided outpoint
-    for (it->Seek(std::pair{DB_TXOSPENDERINDEX, prefix}); it->Valid() && it->GetKey(key) && key.hash == prefix; it->Next()) {
+    for (it->Seek(std::pair{txospenderindex::DBKey::PREFIX, prefix}); it->Valid() && it->GetKey(key) && key.hash == prefix; it->Next()) {
         if (const auto spender{ReadTransaction(key.pos)}) {
             for (const auto& input : spender->tx->vin) {
                 if (input.prevout == txo) {

@@ -6,20 +6,21 @@
 #define BITCOIN_INDEX_TXOSPENDERINDEX_H
 
 #include <index/base.h>
+#include <index/disktxpos.h>
 #include <interfaces/chain.h>
 #include <primitives/transaction.h>
+#include <serialize.h>
 #include <uint256.h>
 #include <util/expected.h>
 
 #include <cstddef>
 #include <cstdint>
+#include <ios>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
-
-struct CDiskTxPos;
 
 static constexpr bool DEFAULT_TXOSPENDERINDEX{false};
 
@@ -27,6 +28,34 @@ struct TxoSpender {
     CTransactionRef tx;
     uint256 block_hash;
 };
+
+namespace txospenderindex {
+
+struct DBKey {
+public:
+    static constexpr uint8_t PREFIX{'s'};
+
+    uint64_t hash;
+    CDiskTxPos pos;
+
+    explicit DBKey(const uint64_t& hash_in, const CDiskTxPos& pos_in) : hash(hash_in), pos(pos_in) {}
+
+    SERIALIZE_METHODS(DBKey, obj)
+    {
+        uint8_t prefix{PREFIX};
+        READWRITE(prefix);
+        if (prefix != PREFIX) {
+            throw std::ios_base::failure("Invalid format for spender index DB key");
+        }
+        READWRITE(obj.hash);
+        READWRITE(obj.pos);
+    }
+};
+
+DBKey CreateKey(std::pair<uint64_t, uint64_t> siphash_key, const COutPoint& vout, const CDiskTxPos& pos);
+std::vector<std::pair<COutPoint, CDiskTxPos>> BuildSpenderPositions(const interfaces::BlockInfo& block);
+
+} // namespace txospenderindex
 
 /**
  * TxoSpenderIndex is used to look up which transaction spent a given output.
