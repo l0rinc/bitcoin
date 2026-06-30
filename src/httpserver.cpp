@@ -546,9 +546,11 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
     bool keep_alive{false};
     bool response_close{false};
 
-    auto response_connection_header{res.m_headers.FindFirst("Connection")};
-    if (response_connection_header && ToLower(response_connection_header.value()) == "close") {
-        response_close = true;
+    for (const std::string_view response_connection_header : res.m_headers.FindAll("Connection")) {
+        if (ToLower(response_connection_header) == "close") {
+            response_close = true;
+            break;
+        }
     }
 
     // See libevent evhttp_make_header_response()
