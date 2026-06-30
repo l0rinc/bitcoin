@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <common/system.h>
+#include <key_io.h>
 #include <node/mempool_persist.h>
 #include <policy/policy.h>
 #include <streams.h>
@@ -802,3 +803,58 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTestsDiamond)
 }
 
 BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_FIXTURE_TEST_CASE(MempoolCheckSaturatingFeeDiagram, TestChain100Setup)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    const CScript output_script{GetScriptForDestination(PKHash(coinbaseKey.GetPubKey()))};
+    mineBlocks(3);
+
+    constexpr CAmount fee{10'000};
+    const auto submit = [&](const CTransactionRef& tx) {
+        LOCK(cs_main);
+        const MempoolAcceptResult result{m_node.chainman->ProcessTransaction(tx)};
+        BOOST_REQUIRE_MESSAGE(result.m_result_type == MempoolAcceptResult::ResultType::VALID, result.m_state.ToString());
+    };
+
+    auto independent{MakeTransactionRef(CreateValidMempoolTransaction(
+        m_coinbase_txns.at(0), /*input_vout=*/0, /*input_height=*/0, coinbaseKey,
+        output_script, m_coinbase_txns.at(0)->vout.at(0).nValue - fee, /*submit=*/false))};
+    submit(independent);
+
+    std::vector<CTransactionRef> parents;
+    std::vector<COutPoint> child_inputs;
+    CAmount child_input_value{0};
+    for (size_t i{0}; i < 3; ++i) {
+        const auto& coinbase{m_coinbase_txns.at(i + 1)};
+        auto parent{MakeTransactionRef(CreateValidMempoolTransaction(
+            coinbase, /*input_vout=*/0, /*input_height=*/0, coinbaseKey,
+            output_script, coinbase->vout.at(0).nValue - fee, /*submit=*/false))};
+        submit(parent);
+        parents.push_back(parent);
+        child_inputs.emplace_back(parent->GetHash(), 0);
+        child_input_value += parent->vout.at(0).nValue;
+    }
+
+    auto child{MakeTransactionRef(CreateValidMempoolTransaction(
+        /*input_transactions=*/parents,
+        /*inputs=*/child_inputs,
+        /*input_height=*/0,
+        /*input_signing_keys=*/{coinbaseKey},
+        /*outputs=*/{CTxOut{child_input_value - fee, output_script}},
+        /*submit=*/false))};
+    submit(child);
+
+    for (const auto& parent : parents) {
+        pool.PrioritiseTransaction(parent->GetHash(), std::numeric_limits<CAmount>::min());
+    }
+    pool.PrioritiseTransaction(child->GetHash(), std::numeric_limits<CAmount>::max());
+
+    {
+        LOCK(pool.cs);
+        const auto diagram{pool.GetFeerateDiagram()};
+        BOOST_REQUIRE(!diagram.empty());
+        BOOST_CHECK_EQUAL(diagram.back().fee, std::numeric_limits<CAmount>::min() + fee);
+    }
+    WITH_LOCK(::cs_main, pool.check(m_node.chainman->ActiveChainstate().CoinsTip(), m_node.chainman->ActiveChain().Height() + 1));
+}
