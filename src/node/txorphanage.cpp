@@ -594,14 +594,17 @@ CTransactionRef TxOrphanageImpl::GetTxToReconsider(NodeId peer)
 {
     auto it = m_orphans.get<ByPeer>().lower_bound(ByPeerView{peer, true, 0});
     if (it != m_orphans.get<ByPeer>().end() && it->m_announcer == peer && it->m_reconsider) {
+        const CTransactionRef tx{it->m_tx};
+        const Wtxid wtxid{tx->GetWitnessHash()};
         // Flip m_reconsider. Even if this transaction stays in orphanage, it shouldn't be
         // reconsidered again until there is a new reason to do so.
         static constexpr auto mark_reconsidered_modifier = [](auto& ann) { ann.m_reconsider = false; };
         m_orphans.get<ByPeer>().modify(it, mark_reconsidered_modifier);
         // As there is exactly one m_reconsider announcement per reconsiderable wtxids, flipping
         // the m_reconsider flag means the wtxid is no longer reconsiderable.
-        m_reconsiderable_wtxids.erase(it->m_tx->GetWitnessHash());
-        return it->m_tx;
+        const auto erased{m_reconsiderable_wtxids.erase(wtxid)};
+        Assume(erased == 1);
+        return tx;
     }
     return nullptr;
 }
