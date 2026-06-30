@@ -9,6 +9,7 @@
 #include <key_io.h>
 #include <pubkey.h>
 #include <uint256.h>
+#include <util/check.h>
 #include <util/strencodings.h>
 
 #include <cassert>
@@ -64,6 +65,7 @@ bool MessageSign(
     if (!privkey.SignCompact(MessageHash(message), signature_bytes)) {
         return false;
     }
+    Assume(signature_bytes.size() == CPubKey::COMPACT_SIGNATURE_SIZE);
 
     signature = EncodeBase64(signature_bytes);
 
