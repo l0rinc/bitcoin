@@ -584,6 +584,38 @@ BOOST_AUTO_TEST_CASE(txgraph_staging)
     graph->SanityCheck();
 }
 
+BOOST_AUTO_TEST_CASE(txgraph_main_memory_usage_matches_abort_staging)
+{
+    auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(4);
+
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{10, 10});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{5, 10});
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
+
+    const auto main_usage{graph->GetMainMemoryUsage()};
+    BOOST_CHECK_GT(main_usage, 0U);
+
+    graph->StartStaging();
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{4, 10});
+    graph->AddDependency(/*parent=*/refs[1], /*child=*/refs[2]);
+    graph->RemoveTransaction(refs[0]);
+
+    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::MAIN), 2U);
+    BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), 2U);
+    const auto staged_usage{graph->GetMainMemoryUsage()};
+    BOOST_CHECK_GT(staged_usage, 0U);
+
+    graph->AbortStaging();
+    BOOST_CHECK_EQUAL(graph->GetMainMemoryUsage(), staged_usage);
+    BOOST_CHECK(graph->Exists(refs[0], TxGraph::Level::MAIN));
+    BOOST_CHECK(graph->Exists(refs[1], TxGraph::Level::MAIN));
+    BOOST_CHECK(!graph->Exists(refs[2], TxGraph::Level::MAIN));
+    graph->SanityCheck();
+}
+
 BOOST_AUTO_TEST_CASE(txgraph_staging_diagrams_sort_equal_feerate_chunks)
 {
     auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
