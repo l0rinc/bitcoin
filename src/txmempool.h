@@ -404,6 +404,16 @@ public:
         for (const auto& tx : cluster) {
             ret.emplace_back(static_cast<const CTxMemPoolEntry*>(tx));
         }
+        Assume(!ret.empty());
+        Assume(ret.size() == cluster.size());
+        bool contains_query{false};
+        std::set<const CTxMemPoolEntry*> unique_entries;
+        for (const auto* entry : ret) {
+            Assume(entry != nullptr);
+            Assume(unique_entries.insert(entry).second);
+            if (entry == &**tx) contains_query = true;
+        }
+        Assume(contains_query);
         return ret;
     }
 
