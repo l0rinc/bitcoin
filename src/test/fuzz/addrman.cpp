@@ -22,8 +22,11 @@
 #include <cassert>
 #include <cstdint>
 #include <ctime>
+#include <ios>
 #include <optional>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -50,7 +53,10 @@ FUZZ_TARGET(data_stream_addr_man, .init = initialize_addrman)
     AddrMan addr_man(netgroupman, /*deterministic=*/false, GetCheckRatio());
     try {
         ReadFromStream(addr_man, data_stream);
-    } catch (const std::exception&) {
+    } catch (const InvalidAddrManVersionError&) {
+    } catch (const std::ios_base::failure&) {
+    } catch (const std::runtime_error& e) {
+        assert(std::string_view{e.what()} == "Invalid network magic number");
     }
 }
 
