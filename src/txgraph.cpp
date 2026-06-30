@@ -2505,7 +2505,9 @@ std::vector<TxGraph::Ref*> TxGraphImpl::GetAncestorsUnion(std::span<const Ref* c
     std::span match_span(matches);
     std::vector<TxGraph::Ref*> ret;
     while (!match_span.empty()) {
-        match_span.front().first->GetAncestorRefs(*this, match_span, ret);
+        Cluster* const cluster = match_span.front().first;
+        cluster->GetAncestorRefs(*this, match_span, ret);
+        Assume(match_span.empty() || match_span.front().first != cluster);
     }
     return ret;
 }
@@ -2538,7 +2540,9 @@ std::vector<TxGraph::Ref*> TxGraphImpl::GetDescendantsUnion(std::span<const Ref*
     std::span match_span(matches);
     std::vector<TxGraph::Ref*> ret;
     while (!match_span.empty()) {
-        match_span.front().first->GetDescendantRefs(*this, match_span, ret);
+        Cluster* const cluster = match_span.front().first;
+        cluster->GetDescendantRefs(*this, match_span, ret);
+        Assume(match_span.empty() || match_span.front().first != cluster);
     }
     return ret;
 }
