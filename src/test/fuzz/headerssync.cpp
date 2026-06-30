@@ -109,6 +109,8 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
         const auto previous_state{headers_sync.GetState()};
         auto result = headers_sync.ProcessNextHeaders(headers, fuzzed_data_provider.ConsumeBool());
         requested_more = result.request_more;
+        assert(!result.request_more || result.success);
+        assert((headers_sync.GetState() != HeadersSyncState::State::FINAL) == result.request_more);
 
         for (const CBlockHeader& pow_validated_header : result.pow_validated_headers) {
             assert(pow_validated_header.hashPrevBlock == next_pow_validated_prev);
@@ -143,4 +145,5 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
             }
         }
     }
+    assert(headers_sync.GetState() == HeadersSyncState::State::FINAL);
 }
