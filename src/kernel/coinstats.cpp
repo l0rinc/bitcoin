@@ -148,6 +148,7 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, CCoinsView* view,
 
     FinalizeHash(hash_obj, stats);
 
+    Assume(stats.nTransactionOutputs == stats.coins_count);
     stats.nDiskSize = view->EstimateSize();
     return stats;
 }
