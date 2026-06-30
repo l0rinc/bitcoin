@@ -324,6 +324,15 @@ void AssertActiveChain(const ChainstateManager& chainman)
     }
 }
 
+void AssertCoinsTipBestBlock(const ChainstateManager& chainman)
+{
+    LOCK(chainman.GetMutex());
+    Chainstate& chainstate{chainman.CurrentChainstate()};
+    const CBlockIndex* tip{chainstate.m_chain.Tip()};
+    assert(tip);
+    assert(chainstate.CoinsTip().GetBestBlock() == tip->GetBlockHash());
+}
+
 CBlockIndex* LookupBlock(ChainstateManager& chainman, const uint256& hash)
 {
     LOCK(chainman.GetMutex());
@@ -484,6 +493,7 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
     node.validation_signals->SyncWithValidationInterfaceQueue();
     event_recorder->AssertAndClear(chainman);
     AssertActiveChain(chainman);
+    AssertCoinsTipBestBlock(chainman);
     AssertBestInvalidIsFailed(chainman);
     chainman.CheckBlockIndex();
 
@@ -653,6 +663,7 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
         node.validation_signals->SyncWithValidationInterfaceQueue();
         event_recorder->AssertAndClear(chainman);
         AssertActiveChain(chainman);
+        AssertCoinsTipBestBlock(chainman);
         AssertBestInvalidIsFailed(chainman);
         chainman.CheckBlockIndex();
     }
