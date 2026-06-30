@@ -33,8 +33,12 @@ FUZZ_TARGET(buffered_file)
     } catch (const std::ios_base::failure&) {
     }
     if (opt_buffered_file && !fuzzed_file.IsNull()) {
-        bool setpos_fail = false;
         std::optional<uint64_t> read_limit;
+        const auto assert_position_within_limit = [&] {
+            if (read_limit) {
+                assert(opt_buffered_file->GetPos() <= *read_limit);
+            }
+        };
         LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 100)
         {
             CallOneOf(
@@ -45,37 +49,35 @@ FUZZ_TARGET(buffered_file)
                         opt_buffered_file->read({arr.data(), fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 4096)});
                     } catch (const std::ios_base::failure&) {
                     }
+                    assert_position_within_limit();
                 },
                 [&] {
                     const uint64_t limit{fuzzed_data_provider.ConsumeIntegralInRange<uint64_t>(0, 4096)};
                     if (opt_buffered_file->SetLimit(limit)) {
                         read_limit = limit;
                     }
+                    assert_position_within_limit();
                 },
                 [&] {
                     opt_buffered_file->SetLimit();
                     read_limit = std::nullopt;
                 },
                 [&] {
-                    if (!opt_buffered_file->SetPos(fuzzed_data_provider.ConsumeIntegralInRange<uint64_t>(0, 4096))) {
-                        setpos_fail = true;
-                    }
+                    const uint64_t pos{fuzzed_data_provider.ConsumeIntegralInRange<uint64_t>(0, 4096)};
+                    const bool success{opt_buffered_file->SetPos(pos)};
+                    assert(success == (opt_buffered_file->GetPos() == pos));
+                    assert_position_within_limit();
                 },
                 [&] {
-                    if (setpos_fail) {
-                        // Calling FindByte(...) after a failed SetPos(...) call may result in an infinite loop.
-                        return;
-                    }
                     try {
                         opt_buffered_file->FindByte(std::byte(fuzzed_data_provider.ConsumeIntegral<uint8_t>()));
-                        if (read_limit) {
-                            assert(opt_buffered_file->GetPos() <= *read_limit);
-                        }
                     } catch (const std::ios_base::failure&) {
                     }
+                    assert_position_within_limit();
                 },
                 [&] {
                     ReadFromStream(fuzzed_data_provider, *opt_buffered_file);
+                    assert_position_within_limit();
                 });
         }
         opt_buffered_file->GetPos();
