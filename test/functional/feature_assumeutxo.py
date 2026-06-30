@@ -12,6 +12,7 @@ The assumeutxo value generated and used here is committed to in
 import contextlib
 
 from dataclasses import dataclass
+from io import BytesIO
 from test_framework.blocktools import (
         create_block,
 )
@@ -20,6 +21,7 @@ from test_framework.compressor import (
 )
 from test_framework.messages import (
     CBlockHeader,
+    deser_varint,
     from_hex,
     MAGIC_BYTES,
     MAX_MONEY,
@@ -56,6 +58,31 @@ START_HEIGHT = 199
 SNAPSHOT_BASE_HEIGHT = 299
 FINAL_HEIGHT = 399
 COMPLETE_IDX = {'synced': True, 'best_block_height': FINAL_HEIGHT}
+SNAPSHOT_METADATA_SIZE = 5 + 2 + 4 + 32 + 8
+
+
+def skip_compressed_txout(f):
+    deser_varint(f)  # compressed amount
+    script_size = deser_varint(f)
+    if script_size < 2:
+        f.seek(20, 1)
+    elif script_size < 6:
+        f.seek(32, 1)
+    else:
+        f.seek(script_size - 6, 1)
+
+
+def get_first_snapshot_coin_group(snapshot_contents):
+    f = BytesIO(snapshot_contents)
+    f.seek(SNAPSHOT_METADATA_SIZE)
+    group_start = f.tell()
+    f.seek(32, 1)  # txid
+    coins_per_txid = deser_varint(f)
+    for _ in range(coins_per_txid):
+        deser_varint(f)  # out index
+        deser_varint(f)  # coin height/coinbase code
+        skip_compressed_txout(f)
+    return snapshot_contents[group_start:f.tell()], coins_per_txid
 
 
 class AssumeutxoTest(BitcoinTestFramework):
@@ -135,6 +162,15 @@ class AssumeutxoTest(BitcoinTestFramework):
                 f.write((valid_num_coins + off).to_bytes(8, "little"))
                 f.write(valid_snapshot_contents[43 + 8:])
             expected_error(msg="Bad snapshot - coins left over after deserializing 298 coins." if off == -1 else "Bad snapshot format or truncated snapshot after deserializing 299 coins.")
+
+        self.log.info("  - snapshot file with duplicate coin records")
+        duplicate_group, duplicate_coins = get_first_snapshot_coin_group(valid_snapshot_contents)
+        with open(bad_snapshot_path, 'wb') as f:
+            f.write(valid_snapshot_contents[:43])
+            f.write((valid_num_coins + duplicate_coins).to_bytes(8, "little"))
+            f.write(valid_snapshot_contents[43 + 8:])
+            f.write(duplicate_group)
+        expected_error(msg=f"Bad snapshot coins count: expected {valid_num_coins + duplicate_coins}, got {valid_num_coins}")
 
         self.log.info("  - snapshot file with alternated but parsable UTXO data results in different hash")
         cases = [
