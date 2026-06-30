@@ -177,6 +177,12 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     const bool needs_body{status != HTTP_NO_CONTENT};
     const std::string reply_body{needs_body ? fuzzed_data_provider.ConsumeRandomLengthString(32) : std::string{}};
     const bool optimistic_send{fuzzed_data_provider.ConsumeBool()};
+    const bool response_close{fuzzed_data_provider.ConsumeBool()};
+    const bool response_content_type{fuzzed_data_provider.ConsumeBool()};
+    std::vector<std::string> response_content_type_values{"text/plain", "application/json", "application/octet-stream"};
+    const std::string response_content_type_value{response_content_type ?
+        PickValue(fuzzed_data_provider, response_content_type_values) :
+        std::string{}};
 
     std::shared_ptr<DynSock::Pipes> pipes;
     std::unique_ptr<Sock> sock;
@@ -203,16 +209,27 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     const bool request_keep_alive{connection_header.first && ToLower(connection_header.second) == "keep-alive"};
     const bool request_close{connection_header.first && ToLower(connection_header.second) == "close"};
 
+    if (response_close) {
+        http_request.WriteHeader("Connection", "close");
+    }
+    if (response_content_type) {
+        http_request.WriteHeader("Content-Type", std::string{response_content_type_value});
+    }
+
     bool expected_keep_alive{false};
     bool expected_content_length{false};
     if (http_request.m_version.major == 1 && http_request.m_version.minor == 0) {
-        expected_keep_alive = request_keep_alive;
+        expected_keep_alive = request_keep_alive && !response_close;
         expected_content_length = needs_body && request_keep_alive;
     } else if (http_request.m_version.major == 1 && http_request.m_version.minor >= 1) {
-        expected_keep_alive = true;
+        expected_keep_alive = !response_close;
         expected_content_length = needs_body;
     }
     if (request_close) expected_keep_alive = false;
+    if (response_close) expected_keep_alive = false;
+    if (response_close && http_request.m_version.major == 1 && http_request.m_version.minor == 0) {
+        expected_content_length = false;
+    }
 
     http_request.WriteReply(status, reply_body);
 
@@ -261,12 +278,14 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     } else {
         assert(response_headers.find("Content-Length: ") == std::string::npos);
     }
-    if (needs_body) {
+    if (response_content_type) {
+        assert(response_headers.find("Content-Type: " + response_content_type_value + "\r\n") != std::string::npos);
+    } else if (needs_body) {
         assert(response_headers.find("Content-Type: text/html; charset=ISO-8859-1\r\n") != std::string::npos);
     } else {
         assert(response_headers.find("Content-Type: ") == std::string::npos);
     }
-    if (request_close) {
+    if (request_close || response_close) {
         assert(response_headers.find("Connection: close\r\n") != std::string::npos);
     } else if (http_request.m_version.minor == 0 && request_keep_alive) {
         assert(response_headers.find("Connection: keep-alive\r\n") != std::string::npos);
