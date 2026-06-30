@@ -869,6 +869,22 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTestsDiamond)
     pool.GetTransactionAncestry(td->GetHash(), ancestors, descendants);
     BOOST_CHECK_EQUAL(ancestors, 4ULL);
     BOOST_CHECK_EQUAL(descendants, 4ULL);
+
+    const auto check_cluster = [&](const CTransactionRef& query) EXCLUSIVE_LOCKS_REQUIRED(pool.cs) {
+        const auto cluster{pool.GetCluster(query->GetHash())};
+        BOOST_CHECK_EQUAL(cluster.size(), 4U);
+        std::set<Txid> cluster_txids;
+        for (const auto* entry : cluster) {
+            BOOST_REQUIRE(entry);
+            BOOST_CHECK(cluster_txids.insert(entry->GetTx().GetHash()).second);
+        }
+        for (const auto& tx : {ta, tb, tc, td}) {
+            BOOST_CHECK(cluster_txids.contains(tx->GetHash()));
+        }
+    };
+    check_cluster(ta);
+    check_cluster(td);
+    BOOST_CHECK(pool.GetCluster(Txid::FromUint256(uint256::ZERO)).empty());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -924,6 +940,66 @@ BOOST_FIXTURE_TEST_CASE(MempoolCheckSaturatingFeeDiagram, TestChain100Setup)
         const auto diagram{pool.GetFeerateDiagram()};
         BOOST_REQUIRE(!diagram.empty());
         BOOST_CHECK_EQUAL(diagram.back().fee, std::numeric_limits<CAmount>::min() + fee);
+    }
+    WITH_LOCK(::cs_main, pool.check(m_node.chainman->ActiveChainstate().CoinsTip(), m_node.chainman->ActiveChain().Height() + 1));
+}
+
+BOOST_FIXTURE_TEST_CASE(MempoolCheckMixedSignSaturatingFeeDiagram, TestChain100Setup)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    const CScript output_script{GetScriptForDestination(PKHash(coinbaseKey.GetPubKey()))};
+    mineBlocks(3);
+
+    constexpr CAmount fee{10'000};
+    const auto submit = [&](const CTransactionRef& tx) {
+        LOCK(cs_main);
+        const MempoolAcceptResult result{m_node.chainman->ProcessTransaction(tx)};
+        BOOST_REQUIRE_MESSAGE(result.m_result_type == MempoolAcceptResult::ResultType::VALID, result.m_state.ToString());
+    };
+
+    std::vector<CTransactionRef> positive_txs;
+    for (size_t i{0}; i < 3; ++i) {
+        const auto& coinbase{m_coinbase_txns.at(i)};
+        auto tx{MakeTransactionRef(CreateValidMempoolTransaction(
+            coinbase, /*input_vout=*/0, /*input_height=*/0, coinbaseKey,
+            output_script, coinbase->vout.at(0).nValue - fee, /*submit=*/false))};
+        submit(tx);
+        positive_txs.push_back(tx);
+    }
+
+    const auto& parent_coinbase{m_coinbase_txns.at(3)};
+    auto parent{MakeTransactionRef(CreateValidMempoolTransaction(
+        parent_coinbase, /*input_vout=*/0, /*input_height=*/0, coinbaseKey,
+        output_script, parent_coinbase->vout.at(0).nValue - fee, /*submit=*/false))};
+    submit(parent);
+
+    auto child{MakeTransactionRef(CreateValidMempoolTransaction(
+        parent, /*input_vout=*/0, /*input_height=*/0, coinbaseKey,
+        output_script, parent->vout.at(0).nValue - fee, /*submit=*/false))};
+    submit(child);
+
+    constexpr CAmount positive_delta{5'000'000'000};
+    constexpr CAmount negative_child_delta{-3'000'000'000};
+    for (const auto& tx : positive_txs) {
+        pool.PrioritiseTransaction(tx->GetHash(), positive_delta);
+    }
+    pool.PrioritiseTransaction(parent->GetHash(), std::numeric_limits<CAmount>::min());
+    pool.PrioritiseTransaction(child->GetHash(), negative_child_delta);
+
+    const CAmount positive_modified{SaturatingAdd(fee, positive_delta)};
+    const CAmount parent_modified{SaturatingAdd(fee, std::numeric_limits<CAmount>::min())};
+    const CAmount child_modified{SaturatingAdd(fee, negative_child_delta)};
+    CAmount transaction_order_total{0};
+    for (size_t i{0}; i < positive_txs.size(); ++i) {
+        transaction_order_total = *Assert(CheckedAdd(transaction_order_total, positive_modified));
+    }
+    transaction_order_total = *Assert(CheckedAdd(transaction_order_total, parent_modified));
+    transaction_order_total = *Assert(CheckedAdd(transaction_order_total, child_modified));
+    {
+        LOCK(pool.cs);
+        const auto diagram{pool.GetFeerateDiagram()};
+        BOOST_REQUIRE(!diagram.empty());
+        BOOST_CHECK_NE(diagram.back().fee, transaction_order_total);
     }
     WITH_LOCK(::cs_main, pool.check(m_node.chainman->ActiveChainstate().CoinsTip(), m_node.chainman->ActiveChain().Height() + 1));
 }
