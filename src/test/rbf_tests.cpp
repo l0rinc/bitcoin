@@ -339,6 +339,43 @@ BOOST_FIXTURE_TEST_CASE(improves_feerate, TestChain100Setup)
     BOOST_CHECK(res3 == std::nullopt);
 }
 
+BOOST_FIXTURE_TEST_CASE(improves_feerate_rejects_higher_fee_lower_feerate, TestChain100Setup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    LOCK2(::cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    const CAmount old_fee{50'000};
+    const auto old_tx = make_tx(/*inputs=*/{m_coinbase_txns[0]}, /*output_values=*/{10 * COIN});
+    TryAddToMempool(pool, entry.Fee(old_fee).FromTx(old_tx));
+    const auto old_entry = pool.GetIter(old_tx->GetHash()).value();
+
+    // The replacement pays more total fee, but is much larger, so the resulting single-chunk
+    // diagram is not strictly better than the old single-chunk diagram.
+    std::vector<CAmount> replacement_outputs(100, 10 * CENT);
+    const auto replacement_tx = make_tx(/*inputs=*/{m_coinbase_txns[0]}, replacement_outputs);
+    auto replacement_entry = entry.FromTx(replacement_tx);
+    const CAmount replacement_fee{old_fee + 1};
+    const CFeeRate old_feerate{old_fee, old_entry->GetTxSize()};
+    const CFeeRate replacement_feerate{replacement_fee, replacement_entry.GetTxSize()};
+    BOOST_REQUIRE_GT(replacement_entry.GetAdjustedWeight(), old_entry->GetAdjustedWeight());
+    BOOST_REQUIRE(replacement_feerate < old_feerate);
+
+    auto changeset = pool.GetChangeSet();
+    changeset->StageRemoval(old_entry);
+    changeset->StageAddition(replacement_tx, replacement_fee, 0, 1, 0, false, 4, LockPoints());
+    const auto chunks{changeset->CalculateChunksForRBF()};
+    BOOST_REQUIRE(chunks.has_value());
+    BOOST_REQUIRE_EQUAL(chunks->first.size(), 1);
+    BOOST_REQUIRE_EQUAL(chunks->second.size(), 1);
+    BOOST_CHECK_GT(chunks->second.front().fee, chunks->first.front().fee);
+    BOOST_CHECK(!std::is_gt(CompareChunks(chunks->second, chunks->first)));
+
+    const auto result{ImprovesFeerateDiagram(*changeset)};
+    BOOST_REQUIRE(result.has_value());
+    BOOST_CHECK(result->first == DiagramCheckError::FAILURE);
+}
+
 BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
