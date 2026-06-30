@@ -123,7 +123,12 @@ public:
     }
 
     /** Resize the deque to be size 0. The capacity will remain unchanged. */
-    void clear() noexcept { ResizeDown(0); }
+    void clear() noexcept
+    {
+        const size_t capacity{m_capacity};
+        ResizeDown(0);
+        Assume(m_capacity == capacity);
+    }
 
     /** Destroy a deque. */
     ~VecDeque()
