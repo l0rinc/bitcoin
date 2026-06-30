@@ -174,8 +174,9 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
         HTTP_INTERNAL_SERVER_ERROR,
         HTTP_SERVICE_UNAVAILABLE};
     const HTTPStatusCode status{PickValue(fuzzed_data_provider, statuses)};
-    const bool needs_body{status != HTTP_NO_CONTENT};
-    const std::string reply_body{needs_body ? fuzzed_data_provider.ConsumeRandomLengthString(32) : std::string{}};
+    const bool response_has_body{status != HTTP_NO_CONTENT};
+    const bool needs_body_headers{response_has_body && http_request.GetRequestMethod() != HTTPRequestMethod::HEAD};
+    const std::string reply_body{response_has_body ? fuzzed_data_provider.ConsumeRandomLengthString(32) : std::string{}};
     const bool optimistic_send{fuzzed_data_provider.ConsumeBool()};
     const bool response_close{fuzzed_data_provider.ConsumeBool()};
     const bool response_content_type{fuzzed_data_provider.ConsumeBool()};
@@ -220,10 +221,10 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     bool expected_content_length{false};
     if (http_request.m_version.major == 1 && http_request.m_version.minor == 0) {
         expected_keep_alive = request_keep_alive && !response_close;
-        expected_content_length = needs_body && request_keep_alive;
+        expected_content_length = needs_body_headers && request_keep_alive;
     } else if (http_request.m_version.major == 1 && http_request.m_version.minor >= 1) {
         expected_keep_alive = !response_close;
-        expected_content_length = needs_body;
+        expected_content_length = needs_body_headers;
     }
     if (request_close) expected_keep_alive = false;
     if (response_close) expected_keep_alive = false;
@@ -280,7 +281,7 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     }
     if (response_content_type) {
         assert(response_headers.find("Content-Type: " + response_content_type_value + "\r\n") != std::string::npos);
-    } else if (needs_body) {
+    } else if (needs_body_headers) {
         assert(response_headers.find("Content-Type: text/html; charset=ISO-8859-1\r\n") != std::string::npos);
     } else {
         assert(response_headers.find("Content-Type: ") == std::string::npos);
