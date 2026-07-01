@@ -7,8 +7,10 @@
 #include <hash.h>
 #include <uint256.h>
 #include <util/asmap.h>
+#include <util/check.h>
 #include <util/log.h>
 
+#include <algorithm>
 #include <cstddef>
 
 uint256 NetGroupManager::GetAsmapVersion() const
@@ -88,11 +90,15 @@ uint32_t NetGroupManager::GetMappedAS(const CNetAddr& address) const
     std::vector<std::byte> ip_bytes(16);
     if (address.HasLinkedIPv4()) {
         // For lookup, treat as if it was just an IPv4 address (IPV4_IN_IPV6_PREFIX + IPv4 bits)
-        std::copy_n(std::as_bytes(std::span{IPV4_IN_IPV6_PREFIX}).begin(),
-                    IPV4_IN_IPV6_PREFIX.size(), ip_bytes.begin());
+        const auto prefix{std::as_bytes(std::span{IPV4_IN_IPV6_PREFIX})};
+        std::copy_n(prefix.begin(), IPV4_IN_IPV6_PREFIX.size(), ip_bytes.begin());
         uint32_t ipv4 = address.GetLinkedIPv4();
         for (int i = 0; i < 4; ++i) {
             ip_bytes[12 + i] = std::byte((ipv4 >> (24 - i * 8)) & 0xFF);
+        }
+        Assume(std::equal(prefix.begin(), prefix.end(), ip_bytes.begin()));
+        for (int i = 0; i < 4; ++i) {
+            Assume(ip_bytes[12 + i] == std::byte((ipv4 >> (24 - i * 8)) & 0xFF));
         }
     } else {
         // Use all 128 bits of the IPv6 address otherwise
@@ -101,6 +107,7 @@ uint32_t NetGroupManager::GetMappedAS(const CNetAddr& address) const
         assert(addr_bytes.size() == ip_bytes.size());
         std::copy_n(std::as_bytes(std::span{addr_bytes}).begin(),
                     addr_bytes.size(), ip_bytes.begin());
+        Assume(std::ranges::equal(std::as_bytes(std::span{addr_bytes}), ip_bytes));
     }
     uint32_t mapped_as = Interpret(m_asmap, ip_bytes);
     return mapped_as;
