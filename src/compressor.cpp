@@ -7,6 +7,7 @@
 
 #include <pubkey.h>
 #include <script/script.h>
+#include <util/check.h>
 
 /*
  * These check for scripts for which a special case with a shorter encoding is defined.
@@ -80,6 +81,8 @@ bool CompressScript(const CScript& script, CompressedScript& out)
             return true;
         }
     }
+    out.clear();
+    Assume(out.empty());
     return false;
 }
 
@@ -125,8 +128,11 @@ bool DecompressScript(CScript& script, unsigned int nSize, const CompressedScrip
         vch[0] = nSize - 2;
         memcpy(&vch[1], in.data(), 32);
         CPubKey pubkey{vch};
-        if (!pubkey.Decompress())
+        if (!pubkey.Decompress()) {
+            script.clear();
+            Assume(script.empty());
             return false;
+        }
         assert(pubkey.size() == 65);
         script.resize(67);
         script[0] = 65;
@@ -134,6 +140,8 @@ bool DecompressScript(CScript& script, unsigned int nSize, const CompressedScrip
         script[66] = OP_CHECKSIG;
         return true;
     }
+    script.clear();
+    Assume(script.empty());
     return false;
 }
 
