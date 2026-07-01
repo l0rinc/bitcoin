@@ -10,9 +10,47 @@
 #include <test/util/setup_common.h>
 #include <util/chaintype.h>
 
+#include <optional>
+#include <vector>
+
 #include <boost/test/unit_test.hpp>
 
 BOOST_FIXTURE_TEST_SUITE(pow_tests, BasicTestingSetup)
+
+static void CheckPowTargetContracts(uint32_t nbits, const Consensus::Params& consensus)
+{
+    bool negative{false};
+    bool overflow{false};
+    arith_uint256 compact_target;
+    compact_target.SetCompact(nbits, &negative, &overflow);
+
+    CBlockHeader header;
+    header.nBits = nbits;
+    const arith_uint256 proof{GetBlockProof(header)};
+    const std::optional<arith_uint256> derived_target{DeriveTarget(nbits, consensus.powLimit)};
+
+    if (negative || overflow || compact_target == 0) {
+        BOOST_CHECK(!derived_target);
+        BOOST_CHECK(proof == 0);
+        BOOST_CHECK(!CheckProofOfWorkImpl(uint256::ZERO, nbits, consensus));
+        return;
+    }
+
+    const arith_uint256 expected_proof{(~compact_target / (compact_target + 1)) + 1};
+    BOOST_CHECK(proof == expected_proof);
+
+    const bool target_in_range{compact_target <= UintToArith256(consensus.powLimit)};
+    BOOST_CHECK_EQUAL(derived_target.has_value(), target_in_range);
+    if (!target_in_range) {
+        BOOST_CHECK(!CheckProofOfWorkImpl(ArithToUint256(compact_target), nbits, consensus));
+        return;
+    }
+
+    BOOST_CHECK(*derived_target == compact_target);
+    BOOST_CHECK(CheckProofOfWorkImpl(uint256::ZERO, nbits, consensus));
+    BOOST_CHECK(CheckProofOfWorkImpl(ArithToUint256(compact_target), nbits, consensus));
+    BOOST_CHECK(!CheckProofOfWorkImpl(ArithToUint256(compact_target + 1), nbits, consensus));
+}
 
 /* Test calculation of next difficulty target with no constraints applying */
 BOOST_AUTO_TEST_CASE(get_next_work)
@@ -133,6 +171,21 @@ BOOST_AUTO_TEST_CASE(CheckProofOfWork_test_zero_target)
     nBits = hash_arith.GetCompact();
     hash = ArithToUint256(hash_arith);
     BOOST_CHECK(!CheckProofOfWork(hash, nBits, consensus));
+}
+
+BOOST_AUTO_TEST_CASE(pow_target_contracts)
+{
+    const auto consensus = CreateChainParams(*m_node.args, ChainType::MAIN)->GetConsensus();
+
+    CheckPowTargetContracts(UintToArith256(consensus.powLimit).GetCompact(), consensus);
+    CheckPowTargetContracts(0x1c05a3f4, consensus);
+    CheckPowTargetContracts(UintToArith256(consensus.powLimit).GetCompact(true), consensus);
+    CheckPowTargetContracts(~0x00800000U, consensus);
+    CheckPowTargetContracts(0, consensus);
+
+    arith_uint256 too_easy{UintToArith256(consensus.powLimit)};
+    too_easy *= 2;
+    CheckPowTargetContracts(too_easy.GetCompact(), consensus);
 }
 
 BOOST_AUTO_TEST_CASE(GetBlockProofEquivalentTime_test)
