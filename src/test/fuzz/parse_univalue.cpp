@@ -34,6 +34,16 @@ bool EqualUniValueState(const UniValue& a, const UniValue& b)
     }
     return true;
 }
+
+void AssertJSONRPCError(const UniValue& error)
+{
+    assert(error.isObject());
+    assert(error.size() == 2);
+    assert(error.exists("code"));
+    assert(error.exists("message"));
+    assert(error["code"].isNum());
+    assert(error["message"].isStr());
+}
 } // namespace
 
 void initialize_parse_univalue()
@@ -60,66 +70,79 @@ FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
     }
     try {
         (void)ParseHashO(univalue, "A");
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
     } catch (const UniValue::type_error&) {
     }
     try {
         (void)ParseHashO(univalue, random_string);
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
     } catch (const UniValue::type_error&) {
     }
     try {
         (void)ParseHashV(univalue, "A");
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
     } catch (const UniValue::type_error&) {
     }
     try {
         (void)ParseHashV(univalue, random_string);
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
     } catch (const UniValue::type_error&) {
     }
     try {
         (void)ParseHexO(univalue, "A");
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
     }
     try {
         (void)ParseHexO(univalue, random_string);
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
     }
     try {
         (void)ParseHexV(univalue, "A");
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
     }
     try {
         (void)ParseHexV(univalue, random_string);
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
     }
     try {
         if (univalue.isNull() || univalue.isStr()) (void)ParseSighashString(univalue);
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
     }
     try {
         (void)AmountFromValue(univalue);
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
     }
     try {
         FlatSigningProvider provider;
         if (buffer.size() < 10'000) (void)EvalDescriptorStringOrObject(univalue, provider);
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
     } catch (const UniValue::type_error&) {
     } catch (const std::runtime_error& e) {
         assert(IsJsonIntegerOutOfRange(e));
     }
     try {
         (void)ParseConfirmTarget(univalue, std::numeric_limits<unsigned int>::max());
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
     } catch (const UniValue::type_error&) {
     } catch (const std::runtime_error& e) {
         assert(IsJsonIntegerOutOfRange(e));
     }
     try {
         (void)ParseDescriptorRange(univalue);
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
     } catch (const UniValue::type_error&) {
     } catch (const std::runtime_error& e) {
         assert(IsJsonIntegerOutOfRange(e));
