@@ -2804,8 +2804,10 @@ std::strong_ordering TxGraphImpl::CompareMainOrder(const Ref& a, const Ref& b) n
     ApplyDependencies(0);
     Assume(m_main_clusterset.m_deps_to_add.empty());
     // Make both involved Clusters acceptable, so chunk feerates are relevant.
-    const auto& entry_a = m_entries[GetRefIndex(a)];
-    const auto& entry_b = m_entries[GetRefIndex(b)];
+    const GraphIndex index_a{GetRefIndex(a)};
+    const GraphIndex index_b{GetRefIndex(b)};
+    const auto& entry_a = m_entries[index_a];
+    const auto& entry_b = m_entries[index_b];
     const auto& locator_a = entry_a.m_locator[0];
     const auto& locator_b = entry_b.m_locator[0];
     Assume(locator_a.IsPresent());
@@ -2813,7 +2815,9 @@ std::strong_ordering TxGraphImpl::CompareMainOrder(const Ref& a, const Ref& b) n
     MakeAcceptable(*locator_a.cluster, /*level=*/0);
     MakeAcceptable(*locator_b.cluster, /*level=*/0);
     // Invoke comparison logic.
-    return CompareMainTransactions(GetRefIndex(a), GetRefIndex(b));
+    auto ret{CompareMainTransactions(index_a, index_b)};
+    Assume((index_a == index_b) == (ret == std::strong_ordering::equal));
+    return ret;
 }
 
 TxGraph::GraphIndex TxGraphImpl::CountDistinctClusters(std::span<const Ref* const> refs, Level level_select) noexcept
