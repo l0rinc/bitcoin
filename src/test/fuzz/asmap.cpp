@@ -8,16 +8,41 @@
 #include <util/asmap.h>
 #include <util/strencodings.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 using namespace util::hex_literals;
+
+namespace {
 
 //! asmap code that consumes nothing
 static const std::vector<std::byte> IPV6_PREFIX_ASMAP = {};
 
 //! asmap code that consumes the 96 prefix bits of ::ffff:0/96 (IPv4-in-IPv6 map)
 static const auto IPV4_PREFIX_ASMAP = "fb03ec0fb03fc0fe00fb03ec0fb03fc0fe00fb03ec0fb0fffffeff"_hex_v;
+
+std::vector<std::byte> AsmapLookupBytes(const CNetAddr& address)
+{
+    std::vector<std::byte> ip_bytes(16);
+    if (address.HasLinkedIPv4()) {
+        const auto prefix{std::as_bytes(std::span{IPV4_IN_IPV6_PREFIX})};
+        std::copy_n(prefix.begin(), IPV4_IN_IPV6_PREFIX.size(), ip_bytes.begin());
+        const uint32_t ipv4{address.GetLinkedIPv4()};
+        for (int i{0}; i < 4; ++i) {
+            ip_bytes[12 + i] = std::byte((ipv4 >> (24 - i * 8)) & 0xFF);
+        }
+    } else {
+        assert(address.IsIPv6());
+        const auto addr_bytes{address.GetAddrBytes()};
+        assert(addr_bytes.size() == ip_bytes.size());
+        std::ranges::copy(std::as_bytes(std::span{addr_bytes}), ip_bytes.begin());
+    }
+    return ip_bytes;
+}
+
+} // namespace
 
 FUZZ_TARGET(asmap)
 {
@@ -43,5 +68,11 @@ FUZZ_TARGET(asmap)
         net_addr.SetIP(CNetAddr{ipv4});
     }
     auto netgroupman{NetGroupManager::WithEmbeddedAsmap(asmap)};
-    (void)netgroupman.GetMappedAS(net_addr);
+    const uint32_t mapped_as{netgroupman.GetMappedAS(net_addr)};
+    const Network net_class{net_addr.GetNetClass()};
+    if (net_class == NET_IPV4 || net_class == NET_IPV6) {
+        assert(mapped_as == Interpret(asmap, AsmapLookupBytes(net_addr)));
+    } else {
+        assert(mapped_as == 0);
+    }
 }
