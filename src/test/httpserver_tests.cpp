@@ -424,9 +424,41 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
     BOOST_CHECK(head_response.starts_with("HTTP/1.1 200 OK\r\n"));
     BOOST_CHECK(head_response.find("Content-Length: ") == std::string::npos);
     BOOST_CHECK(head_response.find("Content-Type: ") == std::string::npos);
-    BOOST_CHECK(head_response.ends_with("\r\n\r\nabc"));
+    BOOST_CHECK(head_response.ends_with("\r\n\r\n"));
+    BOOST_CHECK(head_response.find("abc") == std::string::npos);
     BOOST_CHECK(head_client->m_keep_alive.load());
     BOOST_CHECK(!head_client->m_req_busy.load());
+
+    auto no_content_pipes{std::make_shared<DynSock::Pipes>()};
+    auto no_content_client{std::make_shared<HTTPRemoteClient>(
+        /*id=*/4,
+        CService{},
+        std::make_unique<DynSock>(no_content_pipes))};
+
+    HTTPRequest no_content_req{no_content_client};
+    LineReader no_content_reader("GET / HTTP/1.1\r\nConnection: close\r\n\r\n", MAX_HEADERS_SIZE);
+    BOOST_REQUIRE(no_content_req.LoadControlData(no_content_reader));
+    BOOST_REQUIRE(no_content_req.LoadHeaders(no_content_reader));
+    BOOST_REQUIRE(no_content_req.LoadBody(no_content_reader));
+
+    no_content_client->m_req_busy = true;
+    no_content_req.WriteReply(HTTP_NO_CONTENT, "abc");
+
+    WITH_LOCK(no_content_client->m_sock_mutex, no_content_client->m_sock.reset());
+    std::array<char, 1024> no_content_sent{};
+    const ssize_t no_content_sent_size{
+        no_content_pipes->send.GetBytes(no_content_sent.data(), no_content_sent.size())};
+    BOOST_REQUIRE_GT(no_content_sent_size, 0);
+    const std::string no_content_response{
+        no_content_sent.data(),
+        static_cast<size_t>(no_content_sent_size)};
+    BOOST_CHECK(no_content_response.starts_with("HTTP/1.1 204 No Content\r\n"));
+    BOOST_CHECK(no_content_response.find("Content-Length: ") == std::string::npos);
+    BOOST_CHECK(no_content_response.find("Content-Type: ") == std::string::npos);
+    BOOST_CHECK(no_content_response.ends_with("\r\n\r\n"));
+    BOOST_CHECK(no_content_response.find("abc") == std::string::npos);
+    BOOST_CHECK(no_content_client->m_disconnect.load());
+    BOOST_CHECK(!no_content_client->m_req_busy.load());
 }
 
 BOOST_AUTO_TEST_CASE(http_send_buffer_tests)
