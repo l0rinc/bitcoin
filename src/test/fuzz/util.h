@@ -21,6 +21,7 @@
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <uint256.h>
+#include <univalue.h>
 #include <validation.h>
 
 #include <algorithm>
@@ -32,6 +33,16 @@
 #include <vector>
 
 class PeerManager;
+
+inline void AssertJSONRPCError(const UniValue& error)
+{
+    assert(error.isObject());
+    assert(error.size() == 2);
+    assert(error.exists("code"));
+    assert(error.exists("message"));
+    assert(error["code"].isNum());
+    assert(error["message"].isStr());
+}
 
 template <typename... Callables>
 size_t CallOneOf(FuzzedDataProvider& fuzzed_data_provider, Callables... callables)
