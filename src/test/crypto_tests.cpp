@@ -5,6 +5,7 @@
 #include <crypto/aes.h>
 #include <crypto/chacha20.h>
 #include <crypto/chacha20poly1305.h>
+#include <crypto/common.h>
 #include <crypto/hkdf_sha256_32.h>
 #include <crypto/hmac_sha256.h>
 #include <crypto/hmac_sha512.h>
@@ -24,6 +25,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -376,6 +378,73 @@ static std::string LongTestString()
 const std::string test1 = LongTestString();
 
 BOOST_FIXTURE_TEST_SUITE(crypto_tests, CryptoTest)
+
+BOOST_AUTO_TEST_CASE(crypto_common_endian_cross_checks)
+{
+    constexpr uint16_t value16{0x1234U};
+    constexpr uint32_t value32{0x89abcdefU};
+    constexpr uint64_t value64{0x0123456789abcdefULL};
+    const auto check_byte_array{[](const auto& byte_arr, const auto& uchar_arr) {
+        BOOST_REQUIRE_EQUAL(byte_arr.size(), uchar_arr.size());
+        for (size_t i{0}; i < byte_arr.size(); ++i) {
+            BOOST_CHECK_EQUAL(std::to_integer<unsigned char>(byte_arr[i]), uchar_arr[i]);
+        }
+    }};
+
+    std::array<unsigned char, 2> le16;
+    std::array<unsigned char, 2> be16;
+    WriteLE16(le16.data(), value16);
+    WriteBE16(be16.data(), value16);
+    BOOST_CHECK_EQUAL_COLLECTIONS(le16.begin(), le16.end(), be16.rbegin(), be16.rend());
+    BOOST_CHECK_EQUAL(ReadLE16(le16.data()), value16);
+    BOOST_CHECK_EQUAL(ReadBE16(be16.data()), value16);
+    BOOST_CHECK_EQUAL(ReadLE16(be16.data()), ReadBE16(le16.data()));
+    std::array<std::byte, 2> byte_le16;
+    std::array<std::byte, 2> byte_be16;
+    WriteLE16(byte_le16.data(), value16);
+    WriteBE16(byte_be16.data(), value16);
+    BOOST_CHECK_EQUAL(ReadLE16(byte_le16.data()), value16);
+    BOOST_CHECK_EQUAL(ReadBE16(byte_be16.data()), value16);
+    BOOST_CHECK_EQUAL(ReadLE16(byte_be16.data()), ReadBE16(byte_le16.data()));
+    check_byte_array(byte_le16, le16);
+    check_byte_array(byte_be16, be16);
+
+    std::array<unsigned char, 4> le32;
+    std::array<unsigned char, 4> be32;
+    WriteLE32(le32.data(), value32);
+    WriteBE32(be32.data(), value32);
+    BOOST_CHECK_EQUAL_COLLECTIONS(le32.begin(), le32.end(), be32.rbegin(), be32.rend());
+    BOOST_CHECK_EQUAL(ReadLE32(le32.data()), value32);
+    BOOST_CHECK_EQUAL(ReadBE32(be32.data()), value32);
+    BOOST_CHECK_EQUAL(ReadLE32(be32.data()), ReadBE32(le32.data()));
+    std::array<std::byte, 4> byte_le32;
+    std::array<std::byte, 4> byte_be32;
+    WriteLE32(byte_le32.data(), value32);
+    WriteBE32(byte_be32.data(), value32);
+    BOOST_CHECK_EQUAL(ReadLE32(byte_le32.data()), value32);
+    BOOST_CHECK_EQUAL(ReadBE32(byte_be32.data()), value32);
+    BOOST_CHECK_EQUAL(ReadLE32(byte_be32.data()), ReadBE32(byte_le32.data()));
+    check_byte_array(byte_le32, le32);
+    check_byte_array(byte_be32, be32);
+
+    std::array<unsigned char, 8> le64;
+    std::array<unsigned char, 8> be64;
+    WriteLE64(le64.data(), value64);
+    WriteBE64(be64.data(), value64);
+    BOOST_CHECK_EQUAL_COLLECTIONS(le64.begin(), le64.end(), be64.rbegin(), be64.rend());
+    BOOST_CHECK_EQUAL(ReadLE64(le64.data()), value64);
+    BOOST_CHECK_EQUAL(ReadBE64(be64.data()), value64);
+    BOOST_CHECK_EQUAL(ReadLE64(be64.data()), ReadBE64(le64.data()));
+    std::array<std::byte, 8> byte_le64;
+    std::array<std::byte, 8> byte_be64;
+    WriteLE64(byte_le64.data(), value64);
+    WriteBE64(byte_be64.data(), value64);
+    BOOST_CHECK_EQUAL(ReadLE64(byte_le64.data()), value64);
+    BOOST_CHECK_EQUAL(ReadBE64(byte_be64.data()), value64);
+    BOOST_CHECK_EQUAL(ReadLE64(byte_be64.data()), ReadBE64(byte_le64.data()));
+    check_byte_array(byte_le64, le64);
+    check_byte_array(byte_be64, be64);
+}
 
 BOOST_AUTO_TEST_CASE(ripemd160_testvectors) {
     TestRIPEMD160("", "9c1185a5c5e9fc54612808977ee8f548b2258d31");
