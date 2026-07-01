@@ -203,11 +203,10 @@ std::shared_ptr<ThreadPool> g_thread_pool{std::make_shared<ThreadPool>("cache_fu
 
 // Hold a non-movable ResetGuard on the heap so StartFetching can remain active
 // for the lifetime of a CoinsViewOverlay cache level.
-struct OverlayFetchScope
+std::unique_ptr<CCoinsViewCache::ResetGuard> StartFetchingScope(CoinsViewOverlay& view, const CBlock& block)
 {
-    CCoinsViewCache::ResetGuard guard;
-    OverlayFetchScope(CoinsViewOverlay& view, const CBlock& block) : guard(view.StartFetching(block)) {}
-};
+    return std::unique_ptr<CCoinsViewCache::ResetGuard>{new auto(view.StartFetching(block))};
+}
 
 } // namespace
 
@@ -225,7 +224,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] {
     /** Real CCoinsViewCache objects. */
     std::vector<std::unique_ptr<CCoinsViewCache>> caches;
     /** Long-lived StartFetching guard (nullptr unless corresponding level is a CoinsViewOverlay). */
-    std::unique_ptr<OverlayFetchScope> overlay_fetch_scope;
+    std::unique_ptr<CCoinsViewCache::ResetGuard> overlay_fetch_scope;
     /** Simulated cache data (sim_caches[0] matches bottom, sim_caches[i+1] matches caches[i]). */
     CacheLevel sim_caches[MAX_CACHES + 1];
     /** Current height in the simulation. */
@@ -411,7 +410,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] {
                     } else {
                         caches.emplace_back(new CoinsViewOverlay(&*caches.back(), g_thread_pool, /*deterministic=*/true));
                         auto& overlay{static_cast<CoinsViewOverlay&>(*caches.back())};
-                        overlay_fetch_scope = std::make_unique<OverlayFetchScope>(overlay, data.block);
+                        overlay_fetch_scope = StartFetchingScope(overlay, data.block);
                     }
                     // Apply to simulation data.
                     sim_caches[caches.size()].Wipe();
@@ -451,7 +450,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] {
                 if (overlay_fetch_scope && provider.ConsumeBool()) {
                     overlay_fetch_scope.reset();
                     auto& overlay{static_cast<CoinsViewOverlay&>(*caches.back())};
-                    overlay_fetch_scope = std::make_unique<OverlayFetchScope>(overlay, data.block);
+                    overlay_fetch_scope = StartFetchingScope(overlay, data.block);
                 } else {
                     (void)caches.back()->CreateResetGuard();
                 }
