@@ -18,6 +18,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -30,6 +31,11 @@ extern const char * const BITCOIN_SETTINGS_FILENAME;
 
 // Return true if -datadir option points to a valid directory or is not specified.
 bool CheckDataDirOption(const ArgsManager& args);
+
+//! Thrown when chain selection arguments are internally inconsistent or unknown.
+struct ChainSelectionError : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
 
 /**
  * Most paths passed as configuration arguments are treated as relative to
@@ -358,14 +364,14 @@ public:
 
     /**
      * Returns the appropriate chain type from the program arguments.
-     * @return ChainType::MAIN by default; raises runtime error if an invalid
+     * @return ChainType::MAIN by default; raises ChainSelectionError if an invalid
      * combination, or unknown chain is given.
      */
     ChainType GetChainType() const EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
 
     /**
      * Returns the appropriate chain type string from the program arguments.
-     * @return ChainType::MAIN string by default; raises runtime error if an
+     * @return ChainType::MAIN string by default; raises ChainSelectionError if an
      * invalid combination is given.
      */
     std::string GetChainTypeString() const EXCLUSIVE_LOCKS_REQUIRED(!cs_args);
