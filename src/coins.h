@@ -16,7 +16,6 @@
 #include <support/allocators/pool.h>
 #include <uint256.h>
 #include <util/check.h>
-#include <util/log.h>
 #include <util/overflow.h>
 #include <util/hasher.h>
 
@@ -658,66 +657,20 @@ private:
      * @return true if an input prevout was fetched
      * @return false if there are no more input prevouts in the queue to fetch
      */
-    bool ProcessInput() noexcept
-    {
-        const auto i{m_input_head.fetch_add(1, std::memory_order_relaxed)};
-        if (i >= m_inputs.size()) return false;
-
-        auto& input{m_inputs[i]};
-        input.coin = base->PeekCoin(input.outpoint);
-        // Use release so writing coin above happens before the main thread acquires.
-        Assert(!input.ready.test_and_set(std::memory_order_release));
-        input.ready.notify_one();
-        return true;
-    }
+    bool ProcessInput() noexcept;
 
     //! Stop all worker threads and clear fetching data.
     //! Calling this is idempotent, and may safely be called if not fetching.
-    void StopFetching() noexcept
-    {
-        if (m_futures.empty()) {
-            Assert(m_inputs.empty());
-            Assert(m_input_head.load(std::memory_order_relaxed) == 0);
-            Assert(m_input_tail == 0);
-            return;
-        }
-        // Skip fetching the rest of the inputs by moving the head to the end.
-        m_input_head.store(m_inputs.size(), std::memory_order_relaxed);
-        // Wait for all threads to stop.
-        for (auto& future : m_futures) future.wait();
-        m_futures.clear();
-        m_inputs.clear();
-        m_input_head.store(0, std::memory_order_relaxed);
-        m_input_tail = 0;
-    }
+    void StopFetching() noexcept;
 
-    std::optional<Coin> FetchCoinFromBase(const COutPoint& outpoint) const override
-    {
-        // This assumes ConnectBlock accesses all inputs in the same order as
-        // they are added to m_inputs in StartFetching.
-        if (m_input_tail < m_inputs.size() && m_inputs[m_input_tail].outpoint == outpoint) {
-            // We advance the tail since the input is cached and not accessed through this method again.
-            auto& input{m_inputs[m_input_tail++]};
-            // Wait until the coin is ready to be read. We need acquire so we match the worker thread's release.
-            input.ready.wait(/*old=*/false, std::memory_order_acquire);
-            // We can move the coin since we won't access this input again.
-            return std::move(input.coin);
-        }
-
-        // We will only get here for BIP30 checks, an invalid block, or if the threadpool has not been started.
-        return base->PeekCoin(outpoint);
-    }
+    std::optional<Coin> FetchCoinFromBase(const COutPoint& outpoint) const override;
 
     //! Non-null. May have zero workers when input fetching is disabled.
     std::shared_ptr<ThreadPool> m_thread_pool;
     std::vector<std::future<void>> m_futures{};
 
 protected:
-    void Reset() noexcept override
-    {
-        StopFetching();
-        CCoinsViewCache::Reset();
-    }
+    void Reset() noexcept override;
 
 public:
     explicit CoinsViewOverlay(CCoinsView* in_base, std::shared_ptr<ThreadPool> thread_pool,
@@ -732,14 +685,7 @@ public:
     //! Start fetching inputs from block.
     [[nodiscard]] ResetGuard StartFetching(const CBlock& block LIFETIMEBOUND) noexcept;
 
-    void Flush(bool reallocate_cache = true) override
-    {
-        if (!Assume(AllInputsConsumed())) {
-            LogWarning("Block %s input prevout prefetch queue was not fully consumed; inputs were accessed out of order, so prefetching degraded to serial lookups for this block.", GetBestBlock().ToString());
-        }
-        StopFetching();
-        CCoinsViewCache::Flush(reallocate_cache);
-    }
+    void Flush(bool reallocate_cache = true) override;
 
     //! Verify that all parallel fetched input prevouts have been consumed.
     bool AllInputsConsumed() const noexcept { return m_input_tail == m_inputs.size(); }
