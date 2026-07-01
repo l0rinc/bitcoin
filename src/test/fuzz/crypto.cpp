@@ -14,8 +14,30 @@
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 
+#include <algorithm>
+#include <cassert>
 #include <cstdint>
+#include <span>
 #include <vector>
+
+namespace {
+void CheckHashWrapperChunking(const std::vector<uint8_t>& data, const size_t split_pos)
+{
+    const auto input{std::span{data}};
+    const auto split{std::min(split_pos, input.size())};
+    const auto first{input.first(split)};
+    const auto second{input.subspan(split)};
+
+    uint256 hash256_split;
+    CHash256().Write(first).Write(second).Finalize(hash256_split);
+    assert(hash256_split == Hash(data));
+    assert(Hash(first, second) == Hash(data));
+
+    uint160 hash160_split;
+    CHash160().Write(first).Write(second).Finalize(hash160_split);
+    assert(hash160_split == Hash160(data));
+}
+} // namespace
 
 FUZZ_TARGET(crypto)
 {
@@ -26,6 +48,7 @@ FUZZ_TARGET(crypto)
         auto x = fuzzed_data_provider.ConsumeIntegral<uint8_t>();
         data.resize(new_size, x);
     }
+    CheckHashWrapperChunking(data, fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, data.size()));
 
     CHash160 hash160;
     CHash256 hash256;
@@ -49,6 +72,7 @@ FUZZ_TARGET(crypto)
                         auto x = fuzzed_data_provider.ConsumeIntegral<uint8_t>();
                         data.resize(new_size, x);
                     }
+                    CheckHashWrapperChunking(data, fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, data.size()));
                 }
 
                 (void)hash160.Write(data);
