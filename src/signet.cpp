@@ -14,6 +14,7 @@
 #include <script/verify_flags.h>
 #include <streams.h>
 #include <uint256.h>
+#include <util/check.h>
 #include <util/log.h>
 
 #include <algorithm>
@@ -65,6 +66,41 @@ static uint256 ComputeModifiedMerkleRoot(const CMutableTransaction& cb, const CB
         leaves.push_back(block.vtx[s]->GetHash().ToUint256());
     }
     return ComputeMerkleRoot(std::move(leaves));
+}
+
+static bool IsSignetToSpendScriptSig(const CScript& script)
+{
+    opcodetype opcode;
+    CScript::const_iterator pc{script.begin()};
+    std::vector<uint8_t> pushdata;
+    if (!script.GetOp(pc, opcode, pushdata) || opcode != OP_0 || !pushdata.empty()) return false;
+    if (!script.GetOp(pc, opcode, pushdata) || pushdata.size() != 72) return false;
+    return pc == script.end();
+}
+
+static void AssumeCreatedSignetTxs(const SignetTxs& txs, const CScript& challenge)
+{
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        Assume(txs.m_to_spend.version == 0);
+        Assume(txs.m_to_spend.nLockTime == 0);
+        Assume(txs.m_to_spend.vin.size() == 1);
+        Assume(txs.m_to_spend.vin[0].prevout.IsNull());
+        Assume(IsSignetToSpendScriptSig(txs.m_to_spend.vin[0].scriptSig));
+        Assume(txs.m_to_spend.vin[0].nSequence == 0);
+        Assume(txs.m_to_spend.vout.size() == 1);
+        Assume(txs.m_to_spend.vout[0].nValue == 0);
+        Assume(txs.m_to_spend.vout[0].scriptPubKey == challenge);
+
+        Assume(txs.m_to_sign.version == 0);
+        Assume(txs.m_to_sign.nLockTime == 0);
+        Assume(txs.m_to_sign.vin.size() == 1);
+        const COutPoint expected_prevout{txs.m_to_spend.GetHash(), 0};
+        Assume(txs.m_to_sign.vin[0].prevout == expected_prevout);
+        Assume(txs.m_to_sign.vin[0].nSequence == 0);
+        Assume(txs.m_to_sign.vout.size() == 1);
+        Assume(txs.m_to_sign.vout[0].nValue == 0);
+        Assume(txs.m_to_sign.vout[0].scriptPubKey == CScript(OP_RETURN));
+    }
 }
 
 std::optional<SignetTxs> SignetTxs::Create(const CBlock& block, const CScript& challenge)
@@ -119,7 +155,9 @@ std::optional<SignetTxs> SignetTxs::Create(const CBlock& block, const CScript& c
     tx_to_spend.vin[0].scriptSig << block_data;
     tx_spending.vin[0].prevout = COutPoint(tx_to_spend.GetHash(), 0);
 
-    return SignetTxs{tx_to_spend, tx_spending};
+    SignetTxs txs{tx_to_spend, tx_spending};
+    AssumeCreatedSignetTxs(txs, challenge);
+    return txs;
 }
 
 // Signet block solution checker
