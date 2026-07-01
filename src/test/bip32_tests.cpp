@@ -236,4 +236,57 @@ BOOST_AUTO_TEST_CASE(bip32_max_depth) {
     BOOST_CHECK(!pubkey_parent.Derive(pubkey_child, 0));
 }
 
+BOOST_AUTO_TEST_CASE(bip32_invalid_derivation_inputs)
+{
+    const CExtKey valid_key{DecodeExtKey(test1.vDerive[0].prv)};
+    const CExtPubKey valid_pubkey{DecodeExtPubKey(test1.vDerive[0].pub)};
+
+    CKey invalid_private_key;
+    CKey child_private_key{valid_key.key};
+    ChainCode child_chaincode{uint256::ONE};
+    const CKey child_private_key_before{child_private_key};
+    const ChainCode child_chaincode_before{child_chaincode};
+    BOOST_CHECK(!invalid_private_key.Derive(child_private_key, child_chaincode, 0, ChainCode{uint256::ONE}));
+    BOOST_CHECK(child_private_key == child_private_key_before);
+    BOOST_CHECK(child_chaincode == child_chaincode_before);
+
+    CPubKey invalid_public_key;
+    CPubKey child_public_key{valid_pubkey.pubkey};
+    uint256 bip32_tweak{uint256::ONE};
+    const CPubKey child_public_key_before{child_public_key};
+    const uint256 bip32_tweak_before{bip32_tweak};
+    BOOST_CHECK(!invalid_public_key.Derive(child_public_key, child_chaincode, 0, ChainCode{uint256::ONE}, &bip32_tweak));
+    BOOST_CHECK(child_public_key == child_public_key_before);
+    BOOST_CHECK(child_chaincode == child_chaincode_before);
+    BOOST_CHECK(bip32_tweak == bip32_tweak_before);
+
+    BOOST_CHECK(!valid_pubkey.pubkey.Derive(child_public_key, child_chaincode, 0x80000000U, ChainCode{uint256::ONE}, &bip32_tweak));
+    BOOST_CHECK(child_public_key == child_public_key_before);
+    BOOST_CHECK(child_chaincode == child_chaincode_before);
+    BOOST_CHECK(bip32_tweak == bip32_tweak_before);
+
+    CExtKey invalid_key;
+    CExtKey child_key{valid_key};
+    const CExtKey child_key_before{child_key};
+    BOOST_CHECK(!invalid_key.Derive(child_key, 0));
+    BOOST_CHECK(child_key == child_key_before);
+
+    CKey uncompressed_key;
+    uncompressed_key.MakeNewKey(/*fCompressed=*/false);
+    CExtKey uncompressed_ext_key{valid_pubkey, uncompressed_key};
+    child_key = valid_key;
+    BOOST_CHECK(!uncompressed_ext_key.Derive(child_key, 0));
+    BOOST_CHECK(child_key == valid_key);
+
+    CExtPubKey invalid_pubkey;
+    CExtPubKey child_pubkey{valid_pubkey};
+    const CExtPubKey child_pubkey_before{child_pubkey};
+    BOOST_CHECK(!invalid_pubkey.Derive(child_pubkey, 0));
+    BOOST_CHECK(child_pubkey == child_pubkey_before);
+
+    BOOST_CHECK(!valid_pubkey.Derive(child_pubkey, 0x80000000U, &bip32_tweak));
+    BOOST_CHECK(child_pubkey == child_pubkey_before);
+    BOOST_CHECK(bip32_tweak == bip32_tweak_before);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
