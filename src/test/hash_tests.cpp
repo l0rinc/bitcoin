@@ -9,6 +9,9 @@
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
 
+#include <span>
+#include <vector>
+
 #include <boost/test/unit_test.hpp>
 
 BOOST_FIXTURE_TEST_SUITE(hash_tests, BasicTestingSetup)
@@ -44,6 +47,32 @@ BOOST_AUTO_TEST_CASE(murmurhash3)
     T(0xb4698defU, 0x00000000, "001122334455667788");
 
 #undef T
+}
+
+BOOST_AUTO_TEST_CASE(hash_wrapper_chunking)
+{
+    std::vector<unsigned char> data(257);
+    for (size_t i{0}; i < data.size(); ++i) {
+        data[i] = static_cast<unsigned char>((i * 131U + 17U) & 0xff);
+    }
+
+    const auto all{std::span{data}};
+    const uint256 hash256_whole{Hash(data)};
+    const uint160 hash160_whole{Hash160(data)};
+
+    for (const size_t split : {0U, 1U, 31U, 32U, 33U, 63U, 64U, 65U, 127U, 128U, 129U, 256U, 257U}) {
+        const auto first{all.first(split)};
+        const auto second{all.subspan(split)};
+
+        uint256 hash256_split;
+        CHash256().Write(first).Write(second).Finalize(hash256_split);
+        BOOST_CHECK(hash256_split == hash256_whole);
+        BOOST_CHECK(Hash(first, second) == hash256_whole);
+
+        uint160 hash160_split;
+        CHash160().Write(first).Write(second).Finalize(hash160_split);
+        BOOST_CHECK(hash160_split == hash160_whole);
+    }
 }
 
 /*
