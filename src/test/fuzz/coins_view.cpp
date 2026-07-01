@@ -11,6 +11,7 @@
 #include <policy/policy.h>
 #include <primitives/transaction.h>
 #include <script/interpreter.h>
+#include <script/script.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
@@ -68,6 +69,14 @@ CoinsViewDBSnapshot SnapshotCoinsViewDB(CCoinsViewDB& db)
         assert(!coin.IsSpent());
         cursor->Next();
     }
+    COutPoint exhausted_outpoint{Txid::FromUint256(uint256::ONE), 1};
+    const COutPoint exhausted_outpoint_before{exhausted_outpoint};
+    Coin exhausted_coin{CTxOut{1, CScript{} << OP_TRUE}, 1, false};
+    const Coin exhausted_coin_before{exhausted_coin};
+    assert(!cursor->GetKey(exhausted_outpoint));
+    assert(exhausted_outpoint == exhausted_outpoint_before);
+    assert(!cursor->GetValue(exhausted_coin));
+    assert(exhausted_coin == exhausted_coin_before);
 
     return snapshot;
 }
