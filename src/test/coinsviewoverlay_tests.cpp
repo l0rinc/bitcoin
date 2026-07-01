@@ -268,10 +268,6 @@ BOOST_AUTO_TEST_CASE(fetch_state_is_reusable_after_teardown)
     }
 }
 
-BOOST_AUTO_TEST_SUITE_END()
-
-BOOST_AUTO_TEST_SUITE(coinsviewoverlay_tests_noworkers)
-
 // Test that disabled input fetching falls back to normal cache lookups via base->PeekCoin.
 BOOST_AUTO_TEST_CASE(fetch_unstarted_thread_pool)
 {
