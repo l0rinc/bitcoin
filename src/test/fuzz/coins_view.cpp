@@ -31,6 +31,7 @@
 #include <ranges>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -308,7 +309,8 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
         bool expected_code_path = false;
         try {
             (void)coins_view_cache.Cursor();
-        } catch (const std::logic_error&) {
+        } catch (const CoinsViewCursorUnsupportedError& e) {
+            assert(std::string_view{e.what()} == "CCoinsViewCache cursor iteration not supported.");
             expected_code_path = true;
         }
         assert(expected_code_path);
