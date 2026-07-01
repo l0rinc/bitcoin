@@ -53,7 +53,7 @@ struct RPCFuzzTestingSetup : public TestingSetup {
         request.strMethod = rpc_method;
         try {
             request.params = RPCConvertValues(rpc_method, arguments);
-        } catch (const std::runtime_error&) {
+        } catch (const RPCConvertError&) {
             return;
         }
         tableRPC.execute(request);
