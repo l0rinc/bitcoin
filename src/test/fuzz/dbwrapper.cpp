@@ -151,6 +151,19 @@ void VerifyRead(const CDBWrapper& dbw, const Oracle& oracle, uint16_t key)
     }
 }
 
+void AssertExhaustedIterator(CDBIterator& it)
+{
+    assert(!it.Valid());
+    uint16_t key{0x4242};
+    const uint16_t key_before{key};
+    std::vector<uint8_t> value{0x42, 0x43};
+    const std::vector<uint8_t> value_before{value};
+    assert(!it.GetKey(key));
+    assert(key == key_before);
+    assert(!it.GetValue(value));
+    assert(value == value_before);
+}
+
 /** Verify that the DB iterator matches the oracle, handling the obfuscation
  *  metadata entry (stored under a non-uint16_t key) when obfuscation is on. */
 void VerifyIterator(CDBWrapper& dbw, const Oracle& oracle,
@@ -179,6 +192,7 @@ void VerifyIterator(CDBWrapper& dbw, const Oracle& oracle,
         }
     }
     assert(oracle_it == oracle.end());
+    AssertExhaustedIterator(*it);
 }
 
 /** Maximum number of concurrent reader threads in dbwrapper_concurrent_reads. */
@@ -480,7 +494,7 @@ FUZZ_TARGET(dbwrapper_concurrent_reads, .init = [] { static auto setup{MakeNoLog
                         assert(it->GetKey(actual_key) && actual_key == oit->first);
                         assert(it->GetValue(value) && value == MakeValue(actual_key, oit->second));
                     } else {
-                        assert(!it->Valid());
+                        AssertExhaustedIterator(*it);
                     }
                     break;
                 }
