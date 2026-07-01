@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <arith_uint256.h>
 #include <chain.h>
 #include <chainparams.h>
 #include <pow.h>
@@ -13,10 +14,50 @@
 #include <util/check.h>
 #include <util/overflow.h>
 
+#include <cassert>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
+
+namespace {
+
+void AssertPowTargetContracts(uint32_t nbits, const Consensus::Params& params)
+{
+    bool negative{false};
+    bool overflow{false};
+    arith_uint256 compact_target;
+    compact_target.SetCompact(nbits, &negative, &overflow);
+
+    CBlockHeader header;
+    header.nBits = nbits;
+    const arith_uint256 proof{GetBlockProof(header)};
+    const std::optional<arith_uint256> derived_target{DeriveTarget(nbits, params.powLimit)};
+
+    if (negative || overflow || compact_target == 0) {
+        assert(!derived_target);
+        assert(proof == 0);
+        assert(!CheckProofOfWorkImpl(uint256::ZERO, nbits, params));
+        return;
+    }
+
+    const arith_uint256 expected_proof{(~compact_target / (compact_target + 1)) + 1};
+    assert(proof == expected_proof);
+
+    const bool target_in_range{compact_target <= UintToArith256(params.powLimit)};
+    assert(derived_target.has_value() == target_in_range);
+    if (!target_in_range) {
+        assert(!CheckProofOfWorkImpl(ArithToUint256(compact_target), nbits, params));
+        return;
+    }
+
+    assert(*derived_target == compact_target);
+    assert(CheckProofOfWorkImpl(uint256::ZERO, nbits, params));
+    assert(CheckProofOfWorkImpl(ArithToUint256(compact_target), nbits, params));
+    assert(!CheckProofOfWorkImpl(ArithToUint256(compact_target + 1), nbits, params));
+}
+
+} // namespace
 
 void initialize_pow()
 {
@@ -62,7 +103,7 @@ FUZZ_TARGET(pow, .init = initialize_pow)
             }
         }
         {
-            (void)GetBlockProof(current_block);
+            AssertPowTargetContracts(current_block.nBits, consensus_params);
             (void)CalculateNextWorkRequired(&current_block, fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(0, std::numeric_limits<int64_t>::max()), consensus_params);
             if (current_block.nHeight != std::numeric_limits<int>::max() && current_block.nHeight - (consensus_params.DifficultyAdjustmentInterval() - 1) >= 0) {
                 (void)GetNextWorkRequired(&current_block, &(*block_header), consensus_params);
@@ -80,7 +121,9 @@ FUZZ_TARGET(pow, .init = initialize_pow)
         {
             const std::optional<uint256> hash = ConsumeDeserializable<uint256>(fuzzed_data_provider);
             if (hash) {
-                (void)CheckProofOfWorkImpl(*hash, fuzzed_data_provider.ConsumeIntegral<unsigned int>(), consensus_params);
+                const uint32_t nbits{fuzzed_data_provider.ConsumeIntegral<unsigned int>()};
+                AssertPowTargetContracts(nbits, consensus_params);
+                (void)CheckProofOfWorkImpl(*hash, nbits, consensus_params);
             }
         }
     }
