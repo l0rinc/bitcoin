@@ -6,13 +6,49 @@
 #include <chainparams.h>
 #include <index/txindex.h>
 #include <interfaces/chain.h>
+#include <node/chainstate.h>
+#include <node/kernel_notifications.h>
 #include <test/util/setup_common.h>
+#include <util/check.h>
 #include <util/byte_units.h>
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
 
 BOOST_AUTO_TEST_SUITE(txindex_tests)
+
+BOOST_FIXTURE_TEST_CASE(txindex_block_until_synced_before_genesis_activation, ChainTestingSetup)
+{
+    auto& chainman{*Assert(m_node.chainman)};
+    node::ChainstateLoadOptions options;
+    options.mempool = Assert(m_node.mempool.get());
+    options.coins_db_in_memory = m_coins_db_in_memory;
+    options.wipe_chainstate_db = m_args.GetBoolArg("-reindex", false) || m_args.GetBoolArg("-reindex-chainstate", false);
+    options.prune = chainman.m_blockman.IsPruneMode();
+    options.check_blocks = m_args.GetIntArg("-checkblocks", DEFAULT_CHECKBLOCKS);
+    options.check_level = m_args.GetIntArg("-checklevel", DEFAULT_CHECKLEVEL);
+    options.require_full_verification = m_args.IsArgSet("-checkblocks") || m_args.IsArgSet("-checklevel");
+
+    auto [status, error]{node::LoadChainstate(chainman, m_kernel_cache_sizes, options)};
+    BOOST_REQUIRE(status == node::ChainstateLoadStatus::SUCCESS);
+    std::tie(status, error) = node::VerifyLoadedChainstate(chainman, options);
+    BOOST_REQUIRE(status == node::ChainstateLoadStatus::SUCCESS);
+    m_node.notifications->setChainstateLoaded(true);
+
+    BOOST_REQUIRE(!WITH_LOCK(::cs_main, return chainman.ActiveChain().Tip()));
+
+    TxIndex txindex(interfaces::MakeChain(m_node), 1_MiB, true);
+    BOOST_REQUIRE(txindex.Init());
+    BOOST_CHECK(txindex.BlockUntilSyncedToCurrentChain());
+
+    BlockValidationState state;
+    BOOST_REQUIRE(chainman.ActiveChainstate().ActivateBestChain(state));
+    BOOST_REQUIRE(WITH_LOCK(::cs_main, return chainman.ActiveChain().Tip() != nullptr));
+    BOOST_CHECK(txindex.BlockUntilSyncedToCurrentChain());
+    BOOST_CHECK(txindex.GetSummary().best_block_hash == Params().GenesisBlock().GetHash());
+
+    txindex.Stop();
+}
 
 BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup)
 {
