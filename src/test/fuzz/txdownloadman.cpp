@@ -181,10 +181,23 @@ void AssertNoTxRequest(const node::TxDownloadManagerImpl& txdownload_impl, const
     Assert(peers.empty());
 }
 
+void AssertNoTxRequestFromPeer(const node::TxDownloadManagerImpl& txdownload_impl, const uint256& txhash, NodeId peer)
+{
+    std::vector<NodeId> peers;
+    txdownload_impl.m_txrequest.GetCandidatePeers(txhash, peers);
+    Assert(std::find(peers.begin(), peers.end(), peer) == peers.end());
+}
+
 void AssertNoTxRequestsForTx(const node::TxDownloadManagerImpl& txdownload_impl, const CTransactionRef& tx)
 {
     AssertNoTxRequest(txdownload_impl, tx->GetHash().ToUint256());
     AssertNoTxRequest(txdownload_impl, tx->GetWitnessHash().ToUint256());
+}
+
+void AssertNoTxRequestsFromPeerForTx(const node::TxDownloadManagerImpl& txdownload_impl, const CTransactionRef& tx, NodeId peer)
+{
+    AssertNoTxRequestFromPeer(txdownload_impl, tx->GetHash().ToUint256(), peer);
+    AssertNoTxRequestFromPeer(txdownload_impl, tx->GetWitnessHash().ToUint256(), peer);
 }
 
 FUZZ_TARGET(txdownloadman, .init = initialize)
@@ -258,7 +271,6 @@ FUZZ_TARGET(txdownloadman, .init = initialize)
                 txdownloadman.GetRequestsToSend(rand_peer, time);
             },
             [&] {
-                txdownloadman.ReceivedTx(rand_peer, rand_tx);
                 const auto& [should_validate, maybe_package] = txdownloadman.ReceivedTx(rand_peer, rand_tx);
                 // The only possible results should be:
                 // - Don't validate the tx, no package.
@@ -420,6 +432,7 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
             },
             [&] {
                 const auto& [should_validate, maybe_package] = txdownload_impl.ReceivedTx(rand_peer, rand_tx);
+                AssertNoTxRequestsFromPeerForTx(txdownload_impl, rand_tx, rand_peer);
                 // The only possible results should be:
                 // - Don't validate the tx, no package.
                 // - Don't validate the tx, package.
@@ -456,6 +469,7 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
             },
             [&] {
                 txdownload_impl.ReceivedNotFound(rand_peer, {rand_tx->GetWitnessHash()});
+                AssertNoTxRequestFromPeer(txdownload_impl, rand_tx->GetWitnessHash().ToUint256(), rand_peer);
             },
             [&] {
                 const bool expect_work{txdownload_impl.HaveMoreWork(rand_peer)};
