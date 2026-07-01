@@ -129,12 +129,16 @@ std::string EncodeBase58(std::span<const unsigned char> input)
 bool DecodeBase58(const std::string& str, std::vector<unsigned char>& vchRet, int max_ret_len)
 {
     if (!ContainsNoNUL(str)) {
+        vchRet.clear();
         return false;
     }
     const bool ret{DecodeBase58(str.c_str(), vchRet, max_ret_len)};
     if (ret) {
         assert(max_ret_len < 0 || vchRet.size() <= static_cast<size_t>(max_ret_len));
         assert(EncodeBase58(vchRet) == util::TrimStringView(str));
+    } else {
+        vchRet.clear();
+        assert(vchRet.empty());
     }
     return ret;
 }
