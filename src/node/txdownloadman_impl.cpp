@@ -306,6 +306,7 @@ void TxDownloadManagerImpl::ReceivedNotFound(NodeId nodeid, const std::vector<Ge
         // If we receive a NOTFOUND message for a tx we requested, mark the announcement for it as
         // completed in TxRequestTracker.
         m_txrequest.ReceivedResponse(nodeid, gtxid.ToUint256());
+        AssertNoTxRequestFromPeer(gtxid.ToUint256(), nodeid);
     }
 }
 
@@ -536,7 +537,11 @@ std::pair<bool, std::optional<PackageToValidate>> TxDownloadManagerImpl::Receive
 
     // Mark that we have received a response
     m_txrequest.ReceivedResponse(nodeid, txid.ToUint256());
-    if (ptx->HasWitness()) m_txrequest.ReceivedResponse(nodeid, wtxid.ToUint256());
+    AssertNoTxRequestFromPeer(txid.ToUint256(), nodeid);
+    if (ptx->HasWitness()) {
+        m_txrequest.ReceivedResponse(nodeid, wtxid.ToUint256());
+        AssertNoTxRequestFromPeer(wtxid.ToUint256(), nodeid);
+    }
 
     // First check if we should drop this tx.
     // We do the AlreadyHaveTx() check using wtxid, rather than txid - in the
@@ -606,6 +611,15 @@ void TxDownloadManagerImpl::AssertNoTxRequest(const uint256& txhash) const
         std::vector<NodeId> peers;
         m_txrequest.GetCandidatePeers(txhash, peers);
         Assume(peers.empty());
+    }
+}
+
+void TxDownloadManagerImpl::AssertNoTxRequestFromPeer(const uint256& txhash, NodeId nodeid) const
+{
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        std::vector<NodeId> peers;
+        m_txrequest.GetCandidatePeers(txhash, peers);
+        Assume(std::find(peers.begin(), peers.end(), nodeid) == peers.end());
     }
 }
 

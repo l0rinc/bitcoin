@@ -187,6 +187,7 @@ public:
 
     void AssertWtxidPeerCount() const;
     void AssertNoTxRequest(const uint256& txhash) const;
+    void AssertNoTxRequestFromPeer(const uint256& txhash, NodeId nodeid) const;
     void CheckIsEmpty();
     void CheckIsEmpty(NodeId nodeid);
 
