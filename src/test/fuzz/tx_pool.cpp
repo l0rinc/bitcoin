@@ -692,6 +692,9 @@ FUZZ_TARGET(tx_pool, .init = initialize_tx_pool)
         const auto tx = MakeTransactionRef(mut_tx);
         const auto res = WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, tx, GetTime(), bypass_limits, /*test_accept=*/false));
         const bool accepted = res.m_result_type == MempoolAcceptResult::ResultType::VALID;
+        const bool txid_in_mempool{tx_pool.exists(tx->GetHash())};
+        const bool wtxid_in_mempool{tx_pool.exists(tx->GetWitnessHash())};
+        CheckATMPInvariants(res, tx->GetWitnessHash(), txid_in_mempool, wtxid_in_mempool);
         if (accepted) {
             txids.push_back(tx->GetHash());
             CheckTransactionAncestry(tx_pool, tx->GetHash());
