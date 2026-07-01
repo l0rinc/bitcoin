@@ -8,6 +8,7 @@
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 
+#include <algorithm>
 #include <boost/test/unit_test.hpp>
 
 #include <ranges>
@@ -75,6 +76,14 @@ class prevector_tester
         for (Size s = 0; s < ss1.size(); s++) {
             local_check_equal(ss1[s], ss2[s]);
         }
+        const bool real_less{std::lexicographical_compare(real_vector.begin(), real_vector.end(),
+                                                          real_vector_alt.begin(), real_vector_alt.end())};
+        const bool real_alt_less{std::lexicographical_compare(real_vector_alt.begin(), real_vector_alt.end(),
+                                                              real_vector.begin(), real_vector.end())};
+        local_check_equal(pre_vector < pre_vector_alt, real_less);
+        local_check_equal(pre_vector_alt < pre_vector, real_alt_less);
+        local_check(!(pre_vector < pre_vector));
+        local_check(!(pre_vector_alt < pre_vector_alt));
     }
 
 public:
@@ -311,6 +320,36 @@ BOOST_AUTO_TEST_CASE(PrevectorTestInt)
             }
         }
     }
+}
+
+BOOST_AUTO_TEST_CASE(prevector_lexicographical_order)
+{
+    using PreVec = prevector<8, int>;
+    const auto make_prevector{[](const std::vector<int>& values) {
+        return PreVec{values.begin(), values.end()};
+    }};
+
+    const std::vector<int> high_first_short{2};
+    const std::vector<int> low_first_long{1, 3};
+    const PreVec pre_high_first_short{make_prevector(high_first_short)};
+    const PreVec pre_low_first_long{make_prevector(low_first_long)};
+
+    BOOST_CHECK_EQUAL(pre_low_first_long < pre_high_first_short,
+                      std::lexicographical_compare(low_first_long.begin(), low_first_long.end(),
+                                                   high_first_short.begin(), high_first_short.end()));
+    BOOST_CHECK_EQUAL(pre_high_first_short < pre_low_first_long,
+                      std::lexicographical_compare(high_first_short.begin(), high_first_short.end(),
+                                                   low_first_long.begin(), low_first_long.end()));
+
+    const std::vector<int> prefix{1};
+    const std::vector<int> extension{1, 0};
+    const PreVec pre_prefix{make_prevector(prefix)};
+    const PreVec pre_extension{make_prevector(extension)};
+
+    BOOST_CHECK_EQUAL(pre_prefix < pre_extension,
+                      std::lexicographical_compare(prefix.begin(), prefix.end(), extension.begin(), extension.end()));
+    BOOST_CHECK_EQUAL(pre_extension < pre_prefix,
+                      std::lexicographical_compare(extension.begin(), extension.end(), prefix.begin(), prefix.end()));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
