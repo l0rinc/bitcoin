@@ -16,9 +16,57 @@
 #include <string>
 #include <vector>
 
+namespace {
+constexpr size_t MAX_CONSTRUCTED_GCS_ELEMENTS{64};
+constexpr size_t MAX_CONSTRUCTED_GCS_ELEMENT_SIZE{128};
+
+void AssertGCSFilterMatchesElements(const GCSFilter& filter, const GCSFilter::Params& params, const GCSFilter::ElementSet& elements)
+{
+    Assert(filter.GetParams().m_siphash_k0 == params.m_siphash_k0);
+    Assert(filter.GetParams().m_siphash_k1 == params.m_siphash_k1);
+    Assert(filter.GetParams().m_P == params.m_P);
+    Assert(filter.GetParams().m_M == params.m_M);
+    Assert(filter.GetN() == elements.size());
+    Assert(!filter.GetEncoded().empty());
+    Assert(filter.MatchAny(elements) == !elements.empty());
+    for (const auto& element : elements) {
+        Assert(filter.Match(element));
+    }
+}
+
+void AssertConstructedGCSFilter(FuzzedDataProvider& fuzzed_data_provider)
+{
+    const GCSFilter::Params params{
+        fuzzed_data_provider.ConsumeIntegral<uint64_t>(),
+        fuzzed_data_provider.ConsumeIntegral<uint64_t>(),
+        BASIC_FILTER_P,
+        BASIC_FILTER_M,
+    };
+    GCSFilter::ElementSet elements;
+    const size_t element_count{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, MAX_CONSTRUCTED_GCS_ELEMENTS)};
+    for (size_t i{0}; i < element_count; ++i) {
+        elements.insert(ConsumeRandomLengthByteVector(fuzzed_data_provider, MAX_CONSTRUCTED_GCS_ELEMENT_SIZE));
+    }
+
+    const GCSFilter constructed{params, elements};
+    AssertGCSFilterMatchesElements(constructed, params, elements);
+
+    const GCSFilter checked{params, constructed.GetEncoded(), /*skip_decode_check=*/false};
+    Assert(checked.GetEncoded() == constructed.GetEncoded());
+    AssertGCSFilterMatchesElements(checked, params, elements);
+
+    const GCSFilter unchecked{params, constructed.GetEncoded(), /*skip_decode_check=*/true};
+    Assert(unchecked.GetEncoded() == constructed.GetEncoded());
+    AssertGCSFilterMatchesElements(unchecked, params, elements);
+}
+} // namespace
+
 FUZZ_TARGET(blockfilter)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
+    FuzzedDataProvider constructed_filter_provider(buffer.data(), buffer.size());
+    AssertConstructedGCSFilter(constructed_filter_provider);
+
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     const std::optional<BlockFilter> block_filter = ConsumeDeserializable<BlockFilter>(fuzzed_data_provider);
     if (!block_filter) {
