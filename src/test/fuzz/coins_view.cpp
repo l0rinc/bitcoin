@@ -159,6 +159,11 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
         assert(coins_view_cache.GetCacheSize() == 0);
         assert_cache_clean();
     };
+    auto assert_db_best_block = [&] {
+        if (db && backend_coins_view == db) {
+            assert(db->GetBestBlock() == coins_view_cache.GetBestBlock());
+        }
+    };
     LIMITED_WHILE(good_data && fuzzed_data_provider.ConsumeBool(), 10'000)
     {
         CallOneOf(
@@ -181,14 +186,23 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 if (overlay && !overlay->AllInputsConsumed()) return; // CoinsViewOverlay::Flush() must have all inputs consumed before being called
                 coins_view_cache.Flush(/*reallocate_cache=*/fuzzed_data_provider.ConsumeBool());
                 assert_cache_empty();
+                assert_db_best_block();
             },
             [&] {
                 if (overlay) return; // CoinsViewOverlay::Sync() is never called in production code
                 coins_view_cache.Sync();
                 assert_cache_clean();
+                assert_db_best_block();
             },
             [&] {
-                if (db) WITH_LOCK(::cs_main, (void)db->CompactFullAsync());
+                if (db) {
+                    const uint256 best_block{db->GetBestBlock()};
+                    auto compaction{WITH_LOCK(::cs_main, return db->CompactFullAsync())};
+                    if (fuzzed_data_provider.ConsumeBool()) {
+                        compaction.wait();
+                        assert(db->GetBestBlock() == best_block);
+                    }
+                }
             },
             [&] {
                 uint256 best_block{ConsumeUInt256(fuzzed_data_provider)};
