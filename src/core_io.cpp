@@ -34,8 +34,8 @@
 #include <algorithm>
 #include <compare>
 #include <cstdint>
-#include <exception>
 #include <functional>
+#include <ios>
 #include <map>
 #include <memory>
 #include <optional>
@@ -176,7 +176,7 @@ static bool DecodeTx(CMutableTransaction& tx, const std::vector<unsigned char>& 
         try {
             ssData >> TX_WITH_WITNESS(tx_extended);
             if (ssData.empty()) ok_extended = true;
-        } catch (const std::exception&) {
+        } catch (const std::ios_base::failure&) {
             // Fall through.
         }
     }
@@ -194,7 +194,7 @@ static bool DecodeTx(CMutableTransaction& tx, const std::vector<unsigned char>& 
         try {
             ssData >> TX_NO_WITNESS(tx_legacy);
             if (ssData.empty()) ok_legacy = true;
-        } catch (const std::exception&) {
+        } catch (const std::ios_base::failure&) {
             // Fall through.
         }
     }
@@ -219,12 +219,22 @@ static bool DecodeTx(CMutableTransaction& tx, const std::vector<unsigned char>& 
     }
 
     // If none succeeded, we failed.
+    tx = CMutableTransaction{};
+    Assume(tx.vin.empty());
+    Assume(tx.vout.empty());
+    Assume(tx.version == CTransaction::CURRENT_VERSION);
+    Assume(tx.nLockTime == 0);
     return false;
 }
 
 bool DecodeHexTx(CMutableTransaction& tx, const std::string& hex_tx, bool try_no_witness, bool try_witness)
 {
     if (!IsHex(hex_tx)) {
+        tx = CMutableTransaction{};
+        Assume(tx.vin.empty());
+        Assume(tx.vout.empty());
+        Assume(tx.version == CTransaction::CURRENT_VERSION);
+        Assume(tx.nLockTime == 0);
         return false;
     }
 
@@ -258,12 +268,18 @@ bool DecodeHexTx(CMutableTransaction& tx, const std::string& hex_tx, bool try_no
 
 bool DecodeHexBlockHeader(CBlockHeader& header, const std::string& hex_header)
 {
-    if (!IsHex(hex_header)) return false;
+    if (!IsHex(hex_header)) {
+        header.SetNull();
+        Assume(header.IsNull());
+        return false;
+    }
 
     const std::vector<unsigned char> header_data{ParseHex(hex_header)};
     try {
         SpanReader{header_data} >> header;
-    } catch (const std::exception&) {
+    } catch (const std::ios_base::failure&) {
+        header.SetNull();
+        Assume(header.IsNull());
         return false;
     }
     return true;
@@ -271,14 +287,19 @@ bool DecodeHexBlockHeader(CBlockHeader& header, const std::string& hex_header)
 
 bool DecodeHexBlk(CBlock& block, const std::string& strHexBlk)
 {
-    if (!IsHex(strHexBlk))
+    if (!IsHex(strHexBlk)) {
+        block.SetNull();
+        Assume(block.IsNull());
         return false;
+    }
 
     std::vector<unsigned char> blockData(ParseHex(strHexBlk));
     try {
         SpanReader{blockData} >> TX_WITH_WITNESS(block);
     }
-    catch (const std::exception&) {
+    catch (const std::ios_base::failure&) {
+        block.SetNull();
+        Assume(block.IsNull());
         return false;
     }
 
