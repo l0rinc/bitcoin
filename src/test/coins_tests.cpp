@@ -307,6 +307,12 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_FIXTURE_TEST_SUITE(coins_tests, BasicTestingSetup)
 
+BOOST_AUTO_TEST_CASE(ccoins_cache_cursor_unsupported)
+{
+    CCoinsViewCache cache{&CoinsViewEmpty::Get()};
+    BOOST_CHECK_EXCEPTION(cache.Cursor(), CoinsViewCursorUnsupportedError, HasReason("CCoinsViewCache cursor iteration not supported."));
+}
+
 BOOST_AUTO_TEST_CASE(ccoins_sync_retains_unspent_cache_entries)
 {
     CCoinsViewTest base{m_rng};
