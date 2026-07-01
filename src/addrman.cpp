@@ -1203,6 +1203,30 @@ std::pair<CAddress, NodeSeconds> AddrManImpl::Select(bool new_only, const std::u
     LOCK(cs);
     Check();
     auto addrRet = Select_(new_only, networks);
+    if (addrRet.first.IsValid()) {
+        if (!networks.empty()) Assume(networks.contains(addrRet.first.GetNetClass()));
+        const auto it_addr{mapAddr.find(addrRet.first)};
+        if (Assume(it_addr != mapAddr.end())) {
+            const auto it_info{mapInfo.find(it_addr->second)};
+            if (Assume(it_info != mapInfo.end())) {
+                if (new_only) Assume(!it_info->second.fInTried);
+                Assume(addrRet.second == it_info->second.m_last_try);
+            }
+        }
+    } else {
+        size_t available{0};
+        if (networks.empty()) {
+            available = new_only ? nNew : nNew + nTried;
+        } else {
+            for (const auto network : networks) {
+                const auto it{m_network_counts.find(network)};
+                if (it == m_network_counts.end()) continue;
+                available += it->second.n_new;
+                if (!new_only) available += it->second.n_tried;
+            }
+        }
+        Assume(available == 0);
+    }
     Check();
     return addrRet;
 }
