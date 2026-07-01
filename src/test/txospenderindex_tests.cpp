@@ -3,10 +3,16 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <index/txospenderindex.h>
+#include <dbwrapper.h>
+#include <kernel/chain.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
+#include <util/byte_units.h>
+#include <util/check.h>
 #include <validation.h>
 
+#include <cstddef>
+#include <span>
 #include <utility>
 
 #include <boost/test/unit_test.hpp>
@@ -93,6 +99,35 @@ BOOST_FIXTURE_TEST_CASE(txospenderindex_initial_sync, TxoSpenderIndexTestSetup)
 
     // Shutdown sequence (c.f. Shutdown() in init.cpp)
     txospenderindex.Stop();
+}
+
+BOOST_FIXTURE_TEST_CASE(txospenderindex_value_markers, TxoSpenderIndexTestSetup)
+{
+    const auto [block, tip_hash, tip, spent, spender]{CreateSpenderBlock(2)};
+    const auto entries{txospenderindex::BuildSpenderPositions(kernel::MakeBlockInfo(tip, &block))};
+    BOOST_REQUIRE_EQUAL(entries.size(), 2U);
+
+    {
+        constexpr std::pair<uint64_t, uint64_t> siphash_key{1, 2};
+        CDBWrapper dbw({.path = m_args.GetDataDirNet() / "indexes" / "txospenderindex" / "db", .cache_bytes = 1_MiB});
+        dbw.Write("siphash_key", siphash_key);
+        CDBBatch batch(dbw);
+        batch.Write(txospenderindex::CreateKey(siphash_key, entries[0].first, entries[0].second), ""); // Old value format
+        batch.Write(txospenderindex::CreateKey(siphash_key, entries[1].first, entries[1].second), std::span<const std::byte>{}); // New value format
+        dbw.WriteBatch(batch);
+    }
+
+    TxoSpenderIndex index(interfaces::MakeChain(m_node), 1_MiB);
+    BOOST_REQUIRE(index.Init());
+
+    for (size_t i{0}; i < spent.size(); ++i) {
+        const auto tx_spender{index.FindSpender(spent[i])};
+        const auto& [tx, block_hash]{*Assert(*Assert(tx_spender))};
+        BOOST_CHECK_EQUAL(tx->GetHash(), spender[i].GetHash());
+        BOOST_CHECK_EQUAL(block_hash, tip_hash);
+    }
+
+    index.Stop();
 }
 
 BOOST_AUTO_TEST_SUITE_END()
