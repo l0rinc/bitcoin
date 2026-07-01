@@ -696,6 +696,8 @@ public:
     void getTransactionAncestry(const Txid& txid, size_t& ancestors, size_t& cluster_count, size_t* ancestorsize, CAmount* ancestorfees) override
     {
         ancestors = cluster_count = 0;
+        if (ancestorsize) *ancestorsize = 0;
+        if (ancestorfees) *ancestorfees = 0;
         if (!m_node.mempool) return;
         m_node.mempool->GetTransactionAncestry(txid, ancestors, cluster_count, ancestorsize, ancestorfees);
     }
