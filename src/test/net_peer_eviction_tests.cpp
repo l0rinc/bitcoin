@@ -592,6 +592,52 @@ bool IsEvicted(const int number_of_nodes, std::function<void(NodeEvictionCandida
     return IsEvicted(candidates, node_ids, random_context);
 }
 
+std::vector<NodeEvictionCandidate> GetEvictionProtectionCandidates()
+{
+    FastRandomContext random_context{true};
+    std::vector<NodeEvictionCandidate> candidates{GetRandomNodeEvictionCandidates(40, random_context)};
+    for (NodeEvictionCandidate& candidate : candidates) {
+        candidate.m_connected = NodeSeconds{std::chrono::seconds{candidate.id}};
+        candidate.m_min_ping_time = std::chrono::microseconds{1'000 + candidate.id};
+        candidate.m_last_block_time = std::chrono::seconds{candidate.id};
+        candidate.m_last_tx_time = std::chrono::seconds{candidate.id};
+        candidate.fRelevantServices = false;
+        candidate.m_relay_txs = true;
+        candidate.fBloomFilter = false;
+        candidate.nKeyedNetGroup = static_cast<uint64_t>(candidate.id + 1);
+        candidate.prefer_evict = false;
+        candidate.m_is_local = false;
+        candidate.m_network = NET_IPV4;
+        candidate.m_noban = false;
+        candidate.m_conn_type = ConnectionType::INBOUND;
+    }
+
+    NodeEvictionCandidate& protected_candidate{candidates.front()};
+    protected_candidate.m_connected = NodeSeconds{std::chrono::seconds{1'000}};
+    protected_candidate.m_min_ping_time = std::chrono::microseconds{1'000'000};
+    protected_candidate.m_last_block_time = std::chrono::seconds{0};
+    protected_candidate.m_last_tx_time = std::chrono::seconds{0};
+    protected_candidate.nKeyedNetGroup = 0;
+    protected_candidate.prefer_evict = true;
+
+    return candidates;
+}
+
+BOOST_AUTO_TEST_CASE(peer_eviction_protects_noban_and_outbound)
+{
+    constexpr NodeId protected_id{0};
+
+    auto noban_candidates{GetEvictionProtectionCandidates()};
+    noban_candidates.front().m_noban = true;
+    const std::optional<NodeId> noban_result{SelectNodeToEvict(std::move(noban_candidates))};
+    BOOST_CHECK(!noban_result || *noban_result != protected_id);
+
+    auto outbound_candidates{GetEvictionProtectionCandidates()};
+    outbound_candidates.front().m_conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
+    const std::optional<NodeId> outbound_result{SelectNodeToEvict(std::move(outbound_candidates))};
+    BOOST_CHECK(!outbound_result || *outbound_result != protected_id);
+}
+
 BOOST_AUTO_TEST_CASE(peer_eviction_test)
 {
     FastRandomContext random_context{true};

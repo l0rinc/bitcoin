@@ -4,6 +4,8 @@
 
 #include <node/eviction.h>
 
+#include <util/check.h>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -177,11 +179,18 @@ void ProtectEvictionCandidatesByRatio(std::vector<NodeEvictionCandidate>& evicti
 
 [[nodiscard]] std::optional<NodeId> SelectNodeToEvict(std::vector<NodeEvictionCandidate>&& vEvictionCandidates)
 {
+    const auto eviction_eligible{[](const NodeEvictionCandidate& n) {
+        return !n.m_noban && n.m_conn_type == ConnectionType::INBOUND;
+    }};
+
     // Protect connections with certain characteristics
 
     ProtectNoBanConnections(vEvictionCandidates);
+    Assume(std::all_of(vEvictionCandidates.begin(), vEvictionCandidates.end(),
+                       [](const NodeEvictionCandidate& n) { return !n.m_noban; }));
 
     ProtectOutboundConnections(vEvictionCandidates);
+    Assume(std::all_of(vEvictionCandidates.begin(), vEvictionCandidates.end(), eviction_eligible));
 
     // Deterministically select 4 peers to protect by netgroup.
     // An attacker cannot predict which netgroups will be protected
@@ -236,5 +245,6 @@ void ProtectEvictionCandidatesByRatio(std::vector<NodeEvictionCandidate>& evicti
     vEvictionCandidates = std::move(mapNetGroupNodes[naMostConnections]);
 
     // Disconnect from the network group with the most connections
+    Assume(eviction_eligible(vEvictionCandidates.front()));
     return vEvictionCandidates.front().id;
 }
