@@ -19,9 +19,12 @@ FUZZ_TARGET(node_eviction)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     std::vector<NodeEvictionCandidate> eviction_candidates;
-    LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 10000) {
+    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10000)
+    {
+        const NodeId id{static_cast<NodeId>(eviction_candidates.size())};
+        (void)fuzzed_data_provider.ConsumeIntegral<NodeId>(); // Preserve the previous byte layout.
         eviction_candidates.push_back({
-            /*id=*/fuzzed_data_provider.ConsumeIntegral<NodeId>(),
+            /*id=*/id,
             /*m_connected=*/ConsumeTime(fuzzed_data_provider),
             /*m_min_ping_time=*/ConsumeDuration<decltype(NodeEvictionCandidate::m_min_ping_time)>(fuzzed_data_provider, /*min=*/std::chrono::years{-1}, /*max=*/decltype(CNode::m_min_ping_time.load())::max()),
             /*m_last_block_time=*/ConsumeTime(fuzzed_data_provider).time_since_epoch(),
@@ -42,6 +45,12 @@ FUZZ_TARGET(node_eviction)
     const std::vector<NodeEvictionCandidate> eviction_candidates_copy = eviction_candidates;
     const std::optional<NodeId> node_to_evict = SelectNodeToEvict(std::move(eviction_candidates));
     if (node_to_evict) {
-        assert(std::any_of(eviction_candidates_copy.begin(), eviction_candidates_copy.end(), [&node_to_evict](const NodeEvictionCandidate& eviction_candidate) { return *node_to_evict == eviction_candidate.id; }));
+        const auto it{std::find_if(eviction_candidates_copy.begin(), eviction_candidates_copy.end(),
+                                   [&node_to_evict](const NodeEvictionCandidate& eviction_candidate) {
+                                       return *node_to_evict == eviction_candidate.id;
+                                   })};
+        assert(it != eviction_candidates_copy.end());
+        assert(!it->m_noban);
+        assert(it->m_conn_type == ConnectionType::INBOUND);
     }
 }
