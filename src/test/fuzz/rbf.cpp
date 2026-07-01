@@ -69,6 +69,33 @@ void CheckPaysForRBF(FuzzedDataProvider& fuzzed_data_provider)
     const auto required_fees{CheckedAdd(original_fees, relay_fee_due)};
     assert(pays.has_value() == (!required_fees || replacement_fees < *required_fees));
 }
+
+void CheckUniqueClusterCount(const CTxMemPool& pool, const CTxMemPool::setEntries& entries) EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
+{
+    CTxMemPool::setEntries remaining{entries};
+    size_t cluster_count{0};
+    while (!remaining.empty()) {
+        const auto txiter{*remaining.begin()};
+        const auto cluster{pool.GetCluster(txiter->GetTx().GetHash())};
+        assert(!cluster.empty());
+        bool contains_txiter{false};
+        for (const auto* entry : cluster) {
+            assert(entry != nullptr);
+            if (entry == &*txiter) {
+                contains_txiter = true;
+            }
+            const auto cluster_txiter{pool.GetIter(entry->GetTx().GetHash())};
+            assert(cluster_txiter);
+            remaining.erase(*cluster_txiter);
+        }
+        assert(contains_txiter);
+        ++cluster_count;
+    }
+    const size_t unique_cluster_count{pool.GetUniqueClusterCount(entries)};
+    assert(unique_cluster_count == cluster_count);
+    assert((unique_cluster_count == 0) == entries.empty());
+    assert(unique_cluster_count <= entries.size());
+}
 } // namespace
 
 const int NUM_ITERS = 10000;
@@ -236,6 +263,9 @@ FUZZ_TARGET(package_rbf, .init = initialize_package_rbf)
     for (auto& txiter : direct_conflicts) {
         pool.CalculateDescendants(txiter, all_conflicts);
     }
+
+    CheckUniqueClusterCount(pool, direct_conflicts);
+    CheckUniqueClusterCount(pool, all_conflicts);
 
     CAmount replacement_fees = ConsumeMoney(fuzzed_data_provider);
     auto changeset = pool.GetChangeSet();
