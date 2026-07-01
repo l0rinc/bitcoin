@@ -402,7 +402,7 @@ static UniValue Parse(std::string_view raw, ParamFormat format = ParamFormat::JS
 {
     UniValue parsed;
     if (!parsed.read(raw)) {
-        if (format != ParamFormat::JSON_OR_STRING) throw std::runtime_error(tfm::format("Error parsing JSON: %s", raw));
+        if (format != ParamFormat::JSON_OR_STRING) throw RPCConvertError(tfm::format("Error parsing JSON: %s", raw));
         return UniValue(std::string(raw));
     }
     return parsed;
