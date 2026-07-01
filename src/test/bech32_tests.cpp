@@ -8,9 +8,61 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <cassert>
 #include <string>
+#include <string_view>
+#include <vector>
 
 BOOST_AUTO_TEST_SUITE(bech32_tests)
+
+namespace {
+
+constexpr std::string_view BECH32_CHARSET{"qpzry9x8gf2tvdw0s3jn54khce6mua7l"};
+
+char MutatedBech32Char(char c)
+{
+    for (const char candidate : BECH32_CHARSET) {
+        if (candidate != c) return candidate;
+    }
+    assert(false);
+    return BECH32_CHARSET.front();
+}
+
+void CheckSingleCharacterErrors(bech32::Encoding encoding)
+{
+    const std::string hrp{"bc"};
+    const std::vector<uint8_t> values{
+        0, 1, 2, 3, 4, 5, 6, 7,
+        8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23,
+        24, 25, 26, 27, 28, 29, 30, 31,
+    };
+    const std::string encoded{bech32::Encode(encoding, hrp, values)};
+    BOOST_REQUIRE(!encoded.empty());
+    BOOST_REQUIRE_LE(encoded.size(), bech32::CharLimit::BECH32);
+
+    const size_t separator_pos{encoded.rfind(bech32::SEPARATOR)};
+    BOOST_REQUIRE_NE(separator_pos, encoded.npos);
+
+    for (size_t mutate_pos{0}; mutate_pos < encoded.size(); ++mutate_pos) {
+        std::string mutated{encoded};
+        mutated[mutate_pos] = MutatedBech32Char(mutated[mutate_pos]);
+
+        const auto decoded{bech32::Decode(mutated)};
+        BOOST_CHECK(decoded.encoding == bech32::Encoding::INVALID);
+        BOOST_CHECK(decoded.hrp.empty());
+        BOOST_CHECK(decoded.data.empty());
+
+        const auto [error, error_locations]{bech32::LocateErrors(mutated)};
+        BOOST_CHECK(!error.empty());
+        if (mutate_pos > separator_pos) {
+            const std::vector<int> expected_locations{static_cast<int>(mutate_pos)};
+            BOOST_CHECK(error_locations == expected_locations);
+        }
+    }
+}
+
+} // namespace
 
 BOOST_AUTO_TEST_CASE(bech32_testvectors_valid)
 {
@@ -160,6 +212,12 @@ BOOST_AUTO_TEST_CASE(bech32m_testvectors_invalid)
         BOOST_CHECK(err.second == error_locations);
         i++;
     }
+}
+
+BOOST_AUTO_TEST_CASE(bech32_single_character_errors)
+{
+    CheckSingleCharacterErrors(bech32::Encoding::BECH32);
+    CheckSingleCharacterErrors(bech32::Encoding::BECH32M);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
