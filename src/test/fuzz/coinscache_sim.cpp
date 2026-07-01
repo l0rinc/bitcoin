@@ -196,6 +196,11 @@ public:
     }
 };
 
+// Reuse a single global thread pool across fuzz iterations, started once per process in the
+// target's init. Creating and destroying a pool every iteration leaks memory, since iterations
+// can run faster than the OS can tear down the threads.
+std::shared_ptr<ThreadPool> g_thread_pool{std::make_shared<ThreadPool>("cache_fuzz")};
+
 // Hold a non-movable ResetGuard on the heap so StartFetching can remain active
 // for the lifetime of a CoinsViewOverlay cache level.
 struct OverlayFetchScope
@@ -204,23 +209,14 @@ struct OverlayFetchScope
     OverlayFetchScope(CoinsViewOverlay& view, const CBlock& block) : guard(view.StartFetching(block)) {}
 };
 
-// Reuse a single global thread pool across fuzz iterations. Creating and destroying a pool every
-// iteration leaks memory, since iterations can run faster than the OS can tear down the threads.
-std::shared_ptr<ThreadPool> g_thread_pool{std::make_shared<ThreadPool>("cache_fuzz")};
-Mutex g_thread_pool_mutex;
-
-void StartPoolIfNeeded() EXCLUSIVE_LOCKS_REQUIRED(!g_thread_pool_mutex)
-{
-    LOCK(g_thread_pool_mutex);
-    if (!g_thread_pool->WorkersCount()) g_thread_pool->Start(DEFAULT_PREVOUTFETCH_THREADS);
-}
-
 } // namespace
 
-FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<>()}; }) EXCLUSIVE_LOCKS_REQUIRED(!g_thread_pool_mutex)
+FUZZ_TARGET(coinscache_sim, .init = [] {
+    static auto setup{MakeNoLogFileContext<>()};
+    g_thread_pool->Start(DEFAULT_PREVOUTFETCH_THREADS);
+})
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
-    StartPoolIfNeeded();
     /** Precomputed COutPoint and CCoins values. */
     static const PrecomputedData data;
 

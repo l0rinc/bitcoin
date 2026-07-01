@@ -88,16 +88,10 @@ public:
     using CCoinsViewCache::CCoinsViewCache;
 };
 
-// Reuse a single global thread pool across fuzz iterations. Creating and destroying a pool every
-// iteration leaks memory, since iterations can run faster than the OS can tear down the threads.
+// Reuse a single global thread pool across fuzz iterations, started once per process in the
+// targets' init. Creating and destroying a pool every iteration leaks memory, since iterations
+// can run faster than the OS can tear down the threads.
 std::shared_ptr<ThreadPool> g_thread_pool{std::make_shared<ThreadPool>("view_fuzz")};
-Mutex g_thread_pool_mutex;
-
-void StartPoolIfNeeded() EXCLUSIVE_LOCKS_REQUIRED(!g_thread_pool_mutex)
-{
-    LOCK(g_thread_pool_mutex);
-    if (!g_thread_pool->WorkersCount()) g_thread_pool->Start(DEFAULT_PREVOUTFETCH_THREADS);
-}
 
 //! Build a random block and seed a view with utxos for its inputs.
 CBlock BuildRandomBlock(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& view)
@@ -138,6 +132,12 @@ CBlock BuildRandomBlock(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& vi
 void initialize_coins_view()
 {
     static const auto testing_setup = MakeNoLogFileContext<>();
+}
+
+void initialize_coins_view_overlay()
+{
+    initialize_coins_view();
+    g_thread_pool->Start(DEFAULT_PREVOUTFETCH_THREADS);
 }
 
 void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& coins_view_cache, CCoinsView* backend_coins_view)
@@ -438,10 +438,9 @@ FUZZ_TARGET(coins_view_db, .init = initialize_coins_view)
 // This allows us to exercise all methods on a CoinsViewOverlay, while also
 // ensuring that nothing can mutate the underlying cache until Flush or Sync is
 // called.
-FUZZ_TARGET(coins_view_overlay, .init = initialize_coins_view) EXCLUSIVE_LOCKS_REQUIRED(!g_thread_pool_mutex)
+FUZZ_TARGET(coins_view_overlay, .init = initialize_coins_view_overlay)
 {
     SeedRandomStateForTest(SeedRand::ZEROS); // for SaltedTxidHasher
-    StartPoolIfNeeded();
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     MutationGuardCoinsViewCache backend_cache{&CoinsViewEmpty::Get(), /*deterministic=*/true};
     CoinsViewOverlay coins_view_cache{&backend_cache, g_thread_pool, /*deterministic=*/true};
@@ -450,10 +449,9 @@ FUZZ_TARGET(coins_view_overlay, .init = initialize_coins_view) EXCLUSIVE_LOCKS_R
     TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_cache);
 }
 
-FUZZ_TARGET(coins_view_stacked, .init = initialize_coins_view) EXCLUSIVE_LOCKS_REQUIRED(!g_thread_pool_mutex)
+FUZZ_TARGET(coins_view_stacked, .init = initialize_coins_view_overlay)
 {
     SeedRandomStateForTest(SeedRand::ZEROS); // for SaltedTxidHasher
-    StartPoolIfNeeded();
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     auto db_params = DBParams{
         .path = "",
