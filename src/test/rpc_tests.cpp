@@ -424,6 +424,15 @@ BOOST_AUTO_TEST_CASE(rpc_convert_values_generatetoaddress)
     BOOST_CHECK_EQUAL(result[0].getInt<int>(), 1);
     BOOST_CHECK_EQUAL(result[1].get_str(), "mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU");
     BOOST_CHECK_EQUAL(result[2].getInt<int>(), 9);
+
+    BOOST_CHECK_EXCEPTION(
+        RPCConvertValues("generatetoaddress", {"not-json", "mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU"}),
+        RPCConvertError,
+        HasReason{"Error parsing JSON: not-json"});
+    BOOST_CHECK_EXCEPTION(
+        RPCConvertNamedValues("generatetoaddress", {"nblocks=not-json", "address=mhMbmE2tE9xzJYCV9aNC8jKWN31vtGrguU"}),
+        RPCConvertError,
+        HasReason{"Error parsing JSON: not-json"});
 }
 
 BOOST_AUTO_TEST_CASE(rpc_getblockstats_calculate_percentiles_by_weight)
