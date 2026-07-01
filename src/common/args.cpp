@@ -913,7 +913,7 @@ ChainType ArgsManager::GetChainType() const
 {
     std::variant<ChainType, std::string> arg = GetChainArg();
     if (auto* parsed = std::get_if<ChainType>(&arg)) return *parsed;
-    throw std::runtime_error(strprintf("Unknown chain %s.", std::get<std::string>(arg)));
+    throw ChainSelectionError(strprintf("Unknown chain %s.", std::get<std::string>(arg)));
 }
 
 std::string ArgsManager::GetChainTypeString() const
@@ -941,7 +941,7 @@ std::variant<ChainType, std::string> ArgsManager::GetChainArg() const
     const auto chain_arg = GetArg("-chain");
 
     if ((int)chain_arg.has_value() + (int)fRegTest + (int)fSigNet + (int)fTestNet + (int)fTestNet4 > 1) {
-        throw std::runtime_error("Invalid combination of -regtest, -signet, -testnet, -testnet4 and -chain. Can use at most one.");
+        throw ChainSelectionError("Invalid combination of -regtest, -signet, -testnet, -testnet4 and -chain. Can use at most one.");
     }
     if (chain_arg) {
         if (auto parsed = ChainTypeFromString(*chain_arg)) return *parsed;
