@@ -343,6 +343,18 @@ void CCoinsViewCache::Sync()
 
 void CCoinsViewCache::Reset() noexcept
 {
+    const CCoinsViewCache* base_cache{nullptr};
+    unsigned int base_cache_size{0};
+    size_t base_dirty_count{0};
+    size_t base_memory_usage{0};
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        base_cache = dynamic_cast<const CCoinsViewCache*>(base);
+        if (base_cache) {
+            base_cache_size = base_cache->GetCacheSize();
+            base_dirty_count = base_cache->GetDirtyCount();
+            base_memory_usage = base_cache->DynamicMemoryUsage();
+        }
+    }
     cacheCoins.clear();
     cachedCoinsUsage = 0;
     m_dirty_count = 0;
@@ -352,6 +364,13 @@ void CCoinsViewCache::Reset() noexcept
     Assume(m_dirty_count == 0);
     Assume(m_sentinel.second.Next() == &m_sentinel);
     Assume(m_sentinel.second.Prev() == &m_sentinel);
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (base_cache) {
+            Assume(base_cache->GetCacheSize() == base_cache_size);
+            Assume(base_cache->GetDirtyCount() == base_dirty_count);
+            Assume(base_cache->DynamicMemoryUsage() == base_memory_usage);
+        }
+    }
 }
 
 void CCoinsViewCache::Uncache(const COutPoint& hash)
