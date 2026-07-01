@@ -274,7 +274,10 @@ bool CCoinsViewDBCursor::GetKey(COutPoint &key) const
 
 bool CCoinsViewDBCursor::GetValue(Coin &coin) const
 {
-    return pcursor->GetValue(coin);
+    if (!Valid()) return false;
+    const bool found{pcursor->GetValue(coin)};
+    Assume(!found || !coin.IsSpent());
+    return found;
 }
 
 bool CCoinsViewDBCursor::Valid() const
