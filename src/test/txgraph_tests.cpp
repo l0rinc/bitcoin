@@ -511,6 +511,44 @@ BOOST_AUTO_TEST_CASE(txgraph_count_distinct_clusters_contracts)
     graph->SanityCheck();
 }
 
+BOOST_AUTO_TEST_CASE(txgraph_compare_main_order_contracts)
+{
+    auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(3);
+    for (const FeePerWeight& feerate : {FeePerWeight{3, 10}, FeePerWeight{1, 10}, FeePerWeight{2, 10}}) {
+        graph->AddTransaction(refs.emplace_back(), feerate);
+    }
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
+    graph->SanityCheck();
+
+    auto check_pair = [&](TxGraph::Ref& a, TxGraph::Ref& b) {
+        const auto ab{graph->CompareMainOrder(a, b)};
+        const auto ba{graph->CompareMainOrder(b, a)};
+        if (&a == &b) {
+            BOOST_CHECK(ab == std::strong_ordering::equal);
+            BOOST_CHECK(ba == std::strong_ordering::equal);
+        } else if (ab == std::strong_ordering::less) {
+            BOOST_CHECK(ba == std::strong_ordering::greater);
+        } else if (ab == std::strong_ordering::greater) {
+            BOOST_CHECK(ba == std::strong_ordering::less);
+        } else {
+            BOOST_ERROR("distinct transactions compared equal");
+        }
+    };
+
+    for (TxGraph::Ref& a : refs) {
+        for (TxGraph::Ref& b : refs) {
+            check_pair(a, b);
+        }
+    }
+
+    BOOST_CHECK(graph->CompareMainOrder(refs[0], refs[1]) == std::strong_ordering::less);
+    BOOST_CHECK(graph->CompareMainOrder(refs[1], refs[0]) == std::strong_ordering::greater);
+    graph->SanityCheck();
+}
+
 BOOST_AUTO_TEST_CASE(txgraph_ancdesc_union_groups_same_cluster_queries)
 {
     auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
