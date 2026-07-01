@@ -58,6 +58,7 @@ GCSFilter::GCSFilter(const Params& params, std::vector<unsigned char> encoded_fi
         throw std::ios_base::failure("N must be <2^32");
     }
     m_F = static_cast<uint64_t>(m_N) * static_cast<uint64_t>(m_params.m_M);
+    Assume(m_F == static_cast<uint64_t>(m_N) * static_cast<uint64_t>(m_params.m_M));
 
     if (skip_decode_check) return;
 
@@ -81,10 +82,13 @@ GCSFilter::GCSFilter(const Params& params, const ElementSet& elements)
         throw std::invalid_argument("N must be <2^32");
     }
     m_F = static_cast<uint64_t>(m_N) * static_cast<uint64_t>(m_params.m_M);
+    Assume(m_N == N);
+    Assume(m_F == static_cast<uint64_t>(m_N) * static_cast<uint64_t>(m_params.m_M));
 
     VectorWriter stream{m_encoded, 0};
 
     WriteCompactSize(stream, m_N);
+    Assume(!m_encoded.empty());
 
     if (elements.empty()) {
         return;
@@ -100,6 +104,7 @@ GCSFilter::GCSFilter(const Params& params, const ElementSet& elements)
     }
 
     bitwriter.Flush();
+    Assume(!m_encoded.empty());
 }
 
 bool GCSFilter::MatchInternal(const uint64_t* element_hashes, size_t size) const
