@@ -647,10 +647,12 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
             [&]() { // Remove a cache level.
                 // Apply to real caches (this reduces caches.size(), implicitly doing the same on the simulation data).
                 caches.back()->SanityCheck();
+                const auto parent_cache_stats{get_cache_stats(caches.size() - 1)};
                 const auto removed_idx{caches.size()};
                 overlay_fetch_scope.reset();
                 caches.pop_back();
                 cache_is_overlay.pop_back();
+                assert_cache_stats(parent_cache_stats);
                 sim_best_blocks[removed_idx] = uint256::ZERO;
             },
 
