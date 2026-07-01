@@ -3,10 +3,14 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chainparams.h>
+#include <consensus/amount.h>
 #include <rpc/client.h>
 #include <rpc/util.h>
 #include <test/fuzz/fuzz.h>
+#include <uint256.h>
 #include <util/chaintype.h>
+#include <util/strencodings.h>
+#include <util/string.h>
 
 #include <cassert>
 #include <cstddef>
@@ -14,11 +18,46 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace {
 bool IsJsonIntegerOutOfRange(const std::runtime_error& e)
 {
     return std::string_view{e.what()} == "JSON integer out of range";
+}
+
+void AssertParsedHash(const uint256& parsed, const UniValue& value)
+{
+    const std::string& hex{value.get_str()};
+    const auto direct{uint256::FromHex(hex)};
+    assert(direct);
+    assert(parsed == *direct);
+    assert(parsed.GetHex() == ToLower(hex));
+}
+
+void AssertParsedHex(const std::vector<unsigned char>& parsed, const UniValue& value)
+{
+    const std::string& hex{value.get_str()};
+    assert(IsHex(hex));
+    assert(parsed == ParseHex(hex));
+    assert(HexStr(parsed) == ToLower(hex));
+}
+
+void AssertParsedAmount(const CAmount amount, const UniValue& value)
+{
+    int64_t parsed{0};
+    assert(ParseFixedPoint(value.getValStr(), 8, &parsed));
+    assert(amount == parsed);
+    assert(MoneyRange(amount));
+}
+
+void AssertParsedDescriptorRange(const std::pair<int64_t, int64_t>& range)
+{
+    assert(range.first >= 0);
+    assert(range.second >= range.first);
+    assert((range.second >> 31) == 0);
+    assert(range.second < range.first + 1'000'000);
 }
 
 bool EqualUniValueState(const UniValue& a, const UniValue& b)
@@ -69,46 +108,46 @@ FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
         return;
     }
     try {
-        (void)ParseHashO(univalue, "A");
+        AssertParsedHash(ParseHashO(univalue, "A"), univalue.find_value("A"));
     } catch (const UniValue& e) {
         AssertJSONRPCError(e);
     } catch (const UniValue::type_error&) {
     }
     try {
-        (void)ParseHashO(univalue, random_string);
+        AssertParsedHash(ParseHashO(univalue, random_string), univalue.find_value(random_string));
     } catch (const UniValue& e) {
         AssertJSONRPCError(e);
     } catch (const UniValue::type_error&) {
     }
     try {
-        (void)ParseHashV(univalue, "A");
+        AssertParsedHash(ParseHashV(univalue, "A"), univalue);
     } catch (const UniValue& e) {
         AssertJSONRPCError(e);
     } catch (const UniValue::type_error&) {
     }
     try {
-        (void)ParseHashV(univalue, random_string);
+        AssertParsedHash(ParseHashV(univalue, random_string), univalue);
     } catch (const UniValue& e) {
         AssertJSONRPCError(e);
     } catch (const UniValue::type_error&) {
     }
     try {
-        (void)ParseHexO(univalue, "A");
+        AssertParsedHex(ParseHexO(univalue, "A"), univalue.find_value("A"));
     } catch (const UniValue& e) {
         AssertJSONRPCError(e);
     }
     try {
-        (void)ParseHexO(univalue, random_string);
+        AssertParsedHex(ParseHexO(univalue, random_string), univalue.find_value(random_string));
     } catch (const UniValue& e) {
         AssertJSONRPCError(e);
     }
     try {
-        (void)ParseHexV(univalue, "A");
+        AssertParsedHex(ParseHexV(univalue, "A"), univalue);
     } catch (const UniValue& e) {
         AssertJSONRPCError(e);
     }
     try {
-        (void)ParseHexV(univalue, random_string);
+        AssertParsedHex(ParseHexV(univalue, random_string), univalue);
     } catch (const UniValue& e) {
         AssertJSONRPCError(e);
     }
@@ -118,7 +157,7 @@ FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
         AssertJSONRPCError(e);
     }
     try {
-        (void)AmountFromValue(univalue);
+        AssertParsedAmount(AmountFromValue(univalue), univalue);
     } catch (const UniValue& e) {
         AssertJSONRPCError(e);
     }
@@ -132,7 +171,8 @@ FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
         assert(IsJsonIntegerOutOfRange(e));
     }
     try {
-        (void)ParseConfirmTarget(univalue, std::numeric_limits<unsigned int>::max());
+        const unsigned int confirm_target{ParseConfirmTarget(univalue, std::numeric_limits<unsigned int>::max())};
+        assert(confirm_target >= 1);
     } catch (const UniValue& e) {
         AssertJSONRPCError(e);
     } catch (const UniValue::type_error&) {
@@ -140,7 +180,7 @@ FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
         assert(IsJsonIntegerOutOfRange(e));
     }
     try {
-        (void)ParseDescriptorRange(univalue);
+        AssertParsedDescriptorRange(ParseDescriptorRange(univalue));
     } catch (const UniValue& e) {
         AssertJSONRPCError(e);
     } catch (const UniValue::type_error&) {
