@@ -192,9 +192,10 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
         HTTP_INTERNAL_SERVER_ERROR,
         HTTP_SERVICE_UNAVAILABLE};
     const HTTPStatusCode status{PickValue(fuzzed_data_provider, statuses)};
-    const bool response_has_body{status != HTTP_NO_CONTENT};
-    const bool needs_body_headers{response_has_body && http_request.GetRequestMethod() != HTTPRequestMethod::HEAD};
-    const std::string reply_body{response_has_body ? fuzzed_data_provider.ConsumeRandomLengthString(32) : std::string{}};
+    const std::string reply_body{fuzzed_data_provider.ConsumeRandomLengthString(32)};
+    const bool response_sends_body{status != HTTP_NO_CONTENT && http_request.GetRequestMethod() != HTTPRequestMethod::HEAD};
+    const std::string expected_body{response_sends_body ? reply_body : std::string{}};
+    const bool needs_body_headers{response_sends_body};
     const bool optimistic_send{fuzzed_data_provider.ConsumeBool()};
     const bool response_close{fuzzed_data_provider.ConsumeBool()};
     const bool response_keep_alive{fuzzed_data_provider.ConsumeBool()};
@@ -206,7 +207,7 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
         std::string{}};
     const bool response_content_length{fuzzed_data_provider.ConsumeBool()};
     const std::string response_content_length_value{fuzzed_data_provider.ConsumeBool() ?
-        std::to_string(reply_body.size()) :
+        std::to_string(expected_body.size()) :
         fuzzed_data_provider.ConsumeRandomLengthString(16)};
 
     std::shared_ptr<DynSock::Pipes> pipes;
@@ -304,9 +305,9 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     const size_t header_end{response.find("\r\n\r\n")};
     assert(header_end != std::string::npos);
     const std::string response_headers{response.substr(0, header_end + 4)};
-    assert(response.substr(header_end + 4) == reply_body);
+    assert(response.substr(header_end + 4) == expected_body);
 
-    const std::string content_length_header{"Content-Length: " + std::to_string(reply_body.size()) + "\r\n"};
+    const std::string content_length_header{"Content-Length: " + std::to_string(expected_body.size()) + "\r\n"};
     const size_t content_length_count{CountOccurrences(response_headers, "Content-Length: ")};
     if (expected_content_length) {
         assert(CountOccurrences(response_headers, content_length_header) == 1);
