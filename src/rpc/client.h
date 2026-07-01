@@ -6,10 +6,17 @@
 #ifndef BITCOIN_RPC_CLIENT_H
 #define BITCOIN_RPC_CLIENT_H
 
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <univalue.h>
+
+class RPCConvertError : public std::runtime_error
+{
+    using std::runtime_error::runtime_error;
+};
 
 /** Convert positional arguments to command-specific RPC representation */
 UniValue RPCConvertValues(const std::string& strMethod, const std::vector<std::string>& strParams);
