@@ -20,6 +20,7 @@
 #include <map>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -39,6 +40,37 @@ bool operator==(const Coin &a, const Coin &b) {
     return a.fCoinBase == b.fCoinBase &&
            a.nHeight == b.nHeight &&
            a.out == b.out;
+}
+
+struct CoinsViewDBSnapshot {
+    uint256 best_block;
+    std::vector<uint256> head_blocks;
+    std::vector<std::pair<COutPoint, Coin>> coins;
+
+    bool operator==(const CoinsViewDBSnapshot& other) const
+    {
+        if (best_block != other.best_block || head_blocks != other.head_blocks || coins.size() != other.coins.size()) return false;
+        for (size_t i{0}; i < coins.size(); ++i) {
+            if (coins[i].first != other.coins[i].first || !(coins[i].second == other.coins[i].second)) return false;
+        }
+        return true;
+    }
+};
+
+CoinsViewDBSnapshot SnapshotCoinsViewDB(CCoinsViewDB& db)
+{
+    CoinsViewDBSnapshot snapshot{db.GetBestBlock(), db.GetHeadBlocks(), {}};
+
+    auto cursor{db.Cursor()};
+    while (cursor->Valid()) {
+        auto& [outpoint, coin]{snapshot.coins.emplace_back()};
+        BOOST_REQUIRE(cursor->GetKey(outpoint));
+        BOOST_REQUIRE(cursor->GetValue(coin));
+        BOOST_CHECK(!coin.IsSpent());
+        cursor->Next();
+    }
+
+    return snapshot;
 }
 
 class CCoinsViewTest : public CoinsViewEmpty
@@ -1215,25 +1247,31 @@ BOOST_FIXTURE_TEST_CASE(coins_db_leveldb_layout, FlushTest)
     auto level2_files{[](CCoinsViewDB& base) {
         return *Assert(ToIntegral<int>(*Assert(base.GetDBProperty("leveldb.num-files-at-level2"))));
     }};
-    const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), 0};
-    const Coin coin{MakeCoin()};
+    const COutPoint outpoint_0{Txid::FromUint256(m_rng.rand256()), 0};
+    const COutPoint outpoint_1{Txid::FromUint256(m_rng.rand256()), 1};
+    const Coin coin_0{MakeCoin()};
+    const Coin coin_1{MakeCoin()};
     const uint256 block_hash{m_rng.rand256()};
 
     CCoinsViewDB base{{.path = m_args.GetDataDirBase() / "coins_db_leveldb_layout", .cache_bytes = 1_MiB, .wipe_data = true}, {}};
     CCoinsViewCache cache{&base};
 
-    cache.EmplaceCoinInternalDANGER(COutPoint{outpoint}, Coin{coin});
+    cache.EmplaceCoinInternalDANGER(COutPoint{outpoint_0}, Coin{coin_0});
+    cache.EmplaceCoinInternalDANGER(COutPoint{outpoint_1}, Coin{coin_1});
     cache.SetBestBlock(block_hash);
     cache.Sync();
 
-    const uint256 best_block_before{base.GetBestBlock()};
-    BOOST_CHECK_EQUAL(best_block_before, block_hash);
+    const auto snapshot_before{SnapshotCoinsViewDB(base)};
+    BOOST_CHECK_EQUAL(snapshot_before.best_block, block_hash);
+    BOOST_CHECK(snapshot_before.head_blocks.empty());
+    BOOST_REQUIRE_EQUAL(snapshot_before.coins.size(), 2U);
     BOOST_CHECK_EQUAL(level2_files(base), 0);
     WITH_LOCK(::cs_main, return base.CompactFullAsync()).wait();
     BOOST_CHECK_EQUAL(level2_files(base), 1);
+    BOOST_CHECK(SnapshotCoinsViewDB(base) == snapshot_before);
 
-    BOOST_CHECK(*Assert(base.GetCoin(outpoint)) == coin);
-    BOOST_CHECK_EQUAL(base.GetBestBlock(), best_block_before);
+    BOOST_CHECK(*Assert(base.GetCoin(outpoint_0)) == coin_0);
+    BOOST_CHECK(*Assert(base.GetCoin(outpoint_1)) == coin_1);
 }
 
 BOOST_AUTO_TEST_CASE(coins_resource_is_used)
