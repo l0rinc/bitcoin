@@ -13,6 +13,24 @@
 #include <vector>
 
 namespace {
+bool IsDefaultMutableTransaction(const CMutableTransaction& tx)
+{
+    return tx.vin.empty() &&
+           tx.vout.empty() &&
+           tx.version == CTransaction::CURRENT_VERSION &&
+           tx.nLockTime == 0;
+}
+
+CMutableTransaction MakeNonDefaultMutableTransaction()
+{
+    CMutableTransaction tx;
+    tx.version = 2;
+    tx.nLockTime = 1;
+    tx.vin.emplace_back();
+    tx.vout.emplace_back(/*nValueIn=*/0, CScript{});
+    return tx;
+}
+
 void AssertDecodeTxContracts(
     const std::string& tx_hex,
     bool try_no_witness,
@@ -20,14 +38,18 @@ void AssertDecodeTxContracts(
     bool decoded,
     const CMutableTransaction& tx)
 {
-    if (!decoded) return;
+    if (!decoded) {
+        assert(IsDefaultMutableTransaction(tx));
+        return;
+    }
 
     assert(try_no_witness || try_witness);
     if (!try_witness) assert(!tx.HasWitness());
 
-    CMutableTransaction trailing_tx;
+    CMutableTransaction trailing_tx{MakeNonDefaultMutableTransaction()};
     if (try_no_witness != try_witness) {
         assert(!DecodeHexTx(trailing_tx, tx_hex + "00", try_no_witness, try_witness));
+        assert(IsDefaultMutableTransaction(trailing_tx));
     }
 
     const CTransaction decoded_tx{tx};
@@ -44,13 +66,13 @@ void AssertDecodeTxContracts(
 FUZZ_TARGET(decode_tx)
 {
     const std::string tx_hex = HexStr(buffer);
-    CMutableTransaction none_mtx;
+    CMutableTransaction none_mtx{MakeNonDefaultMutableTransaction()};
     const bool result_none = DecodeHexTx(none_mtx, tx_hex, false, false);
-    CMutableTransaction witness_mtx;
+    CMutableTransaction witness_mtx{MakeNonDefaultMutableTransaction()};
     const bool result_try_witness = DecodeHexTx(witness_mtx, tx_hex, false, true);
-    CMutableTransaction witness_or_no_witness_mtx;
+    CMutableTransaction witness_or_no_witness_mtx{MakeNonDefaultMutableTransaction()};
     const bool result_try_witness_and_maybe_no_witness = DecodeHexTx(witness_or_no_witness_mtx, tx_hex, true, true);
-    CMutableTransaction no_witness_mtx;
+    CMutableTransaction no_witness_mtx{MakeNonDefaultMutableTransaction()};
     const bool result_try_no_witness = DecodeHexTx(no_witness_mtx, tx_hex, true, false);
     assert(!result_none);
     if (result_try_witness_and_maybe_no_witness) {
