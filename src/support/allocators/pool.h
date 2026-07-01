@@ -246,6 +246,11 @@ public:
         SanityCheck();
         Assume(alignment > 0);
         Assume((alignment & (alignment - 1)) == 0);
+        const auto check_result{[&](void* ret) {
+            Assume(ret != nullptr);
+            Assume((reinterpret_cast<std::uintptr_t>(ret) & (alignment - 1)) == 0);
+            return ret;
+        }};
         if (IsFreeListUsable(bytes, alignment)) {
             const std::size_t num_alignments = NumElemAlignBytes(bytes);
             if (nullptr != m_free_lists[num_alignments]) {
@@ -258,7 +263,7 @@ public:
                 ASAN_UNPOISON_MEMORY_REGION(m_free_lists[num_alignments], bytes);
                 void* ret{std::exchange(m_free_lists[num_alignments], next)};
                 SanityCheck();
-                return ret;
+                return check_result(ret);
             }
 
             // freelist is empty: get one allocation from allocated chunk memory.
@@ -272,13 +277,13 @@ public:
             ASAN_UNPOISON_MEMORY_REGION(m_available_memory_it, round_bytes);
             void* ret{std::exchange(m_available_memory_it, m_available_memory_it + round_bytes)};
             SanityCheck();
-            return ret;
+            return check_result(ret);
         }
 
         // Can't use the pool => use operator new()
         void* ret{::operator new (bytes, std::align_val_t{alignment})};
         SanityCheck();
-        return ret;
+        return check_result(ret);
     }
 
     /**
