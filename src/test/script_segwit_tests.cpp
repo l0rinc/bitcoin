@@ -113,9 +113,12 @@ bool IsExpectedWitnessProgram(const CScript& script, const int expectedVersion, 
 
 bool IsNoWitnessProgram(const CScript& script)
 {
-    int dummyVersion;
-    std::vector<unsigned char> dummyProgram;
-    return !script.IsWitnessProgram(dummyVersion, dummyProgram);
+    int dummyVersion{42};
+    std::vector<unsigned char> dummyProgram{0xaa};
+    const bool ret{script.IsWitnessProgram(dummyVersion, dummyProgram)};
+    BOOST_CHECK_EQUAL(dummyVersion, -1);
+    BOOST_CHECK(dummyProgram.empty());
+    return !ret;
 }
 
 } // anonymous namespace
