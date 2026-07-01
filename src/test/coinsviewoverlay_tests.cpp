@@ -52,48 +52,50 @@ CBlock CreateBlock() noexcept
     return block;
 }
 
+//! Visit each non-coinbase input, indicating whether its prevout was created by an earlier
+//! transaction in the same block (such inputs are not queued for prefetch by StartFetching).
+template <typename Fn>
+void ForEachInput(const CBlock& block, Fn visit)
+{
+    std::unordered_set<Txid, SaltedTxidHasher> earlier_txids;
+    earlier_txids.reserve(block.vtx.size() - 1);
+    for (const auto& tx : block.vtx | std::views::drop(1)) {
+        for (const auto& in : tx->vin) {
+            visit(in.prevout, /*in_block=*/earlier_txids.contains(in.prevout.hash));
+        }
+        earlier_txids.emplace(tx->GetHash());
+    }
+}
+
 void PopulateView(const CBlock& block, CCoinsView& view, bool spent = false)
 {
     CCoinsViewCache cache{&view};
     cache.SetBestBlock(uint256::ONE);
 
-    std::unordered_set<Txid, SaltedTxidHasher> txids{};
-    txids.reserve(block.vtx.size() - 1);
-    for (const auto& tx : block.vtx | std::views::drop(1)) {
-        for (const auto& in : tx->vin) {
-            if (txids.contains(in.prevout.hash)) continue;
-            Coin coin{};
-            if (!spent) coin.out.nValue = 1;
-            cache.EmplaceCoinInternalDANGER(COutPoint{in.prevout}, std::move(coin));
-        }
-        txids.emplace(tx->GetHash());
-    }
+    ForEachInput(block, [&](const COutPoint& outpoint, bool in_block) {
+        if (in_block) return;
+        Coin coin{};
+        if (!spent) coin.out.nValue = 1;
+        cache.EmplaceCoinInternalDANGER(COutPoint{outpoint}, std::move(coin));
+    });
 
     cache.Flush();
 }
 
 void CheckCache(const CBlock& block, const CCoinsViewCache& cache)
 {
-    uint32_t counter{0};
-    std::unordered_set<Txid, SaltedTxidHasher> txids{};
-    txids.reserve(block.vtx.size() - 1);
+    // The coinbase input's null prevout is never present.
+    BOOST_CHECK(!cache.HaveCoinInCache(block.vtx[0]->vin[0].prevout));
 
-    for (const auto& tx : block.vtx) {
-        if (tx->IsCoinBase()) {
-            BOOST_CHECK(!cache.HaveCoinInCache(tx->vin[0].prevout));
-        } else {
-            for (const auto& in : tx->vin) {
-                const auto& outpoint{in.prevout};
-                const auto& first{cache.AccessCoin(outpoint)};
-                const auto& second{cache.AccessCoin(outpoint)};
-                BOOST_CHECK_EQUAL(&first, &second);
-                const auto have{cache.HaveCoinInCache(outpoint)};
-                BOOST_CHECK_NE(txids.contains(outpoint.hash), have);
-                counter += have;
-            }
-            txids.emplace(tx->GetHash());
-        }
-    }
+    uint32_t counter{0};
+    ForEachInput(block, [&](const COutPoint& outpoint, bool in_block) {
+        const auto& first{cache.AccessCoin(outpoint)};
+        const auto& second{cache.AccessCoin(outpoint)};
+        BOOST_CHECK_EQUAL(&first, &second);
+        const auto have{cache.HaveCoinInCache(outpoint)};
+        BOOST_CHECK_EQUAL(have, !in_block);
+        counter += have;
+    });
     BOOST_CHECK_EQUAL(cache.GetCacheSize(), counter);
 }
 
@@ -225,14 +227,9 @@ BOOST_AUTO_TEST_CASE(fetch_out_of_order_input_uses_normal_lookup)
     PopulateView(block, main_cache);
 
     std::vector<COutPoint> fetched_inputs;
-    std::unordered_set<Txid, SaltedTxidHasher> txids;
-    txids.reserve(block.vtx.size() - 1);
-    for (const auto& tx : block.vtx | std::views::drop(1)) {
-        for (const auto& input : tx->vin) {
-            if (!txids.contains(input.prevout.hash)) fetched_inputs.push_back(input.prevout);
-        }
-        txids.emplace(tx->GetHash());
-    }
+    ForEachInput(block, [&](const COutPoint& outpoint, bool in_block) {
+        if (!in_block) fetched_inputs.push_back(outpoint);
+    });
     BOOST_REQUIRE_GE(fetched_inputs.size(), 2U);
 
     CoinsViewOverlay view{&main_cache, MakeStartedThreadPool()};
