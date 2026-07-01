@@ -86,10 +86,7 @@ void AssertBlockIndexTreeState(const TestBlockManager& blockman, const Chainstat
     for (const CBlockIndex* candidate : chainstate.setBlockIndexCandidates) {
         assert(candidate);
         const bool is_snapshot_base{candidate == chainstate.SnapshotBase()};
-        if (candidate->nStatus & BLOCK_FAILED_VALID) {
-            assert(!chain.Contains(*candidate));
-            continue;
-        }
+        assert(!(candidate->nStatus & BLOCK_FAILED_VALID));
         assert(is_snapshot_base || candidate->IsValid(BLOCK_VALID_TRANSACTIONS));
         assert(is_snapshot_base || candidate->HaveNumChainTxs() || candidate->pprev == nullptr);
         if (chain.Tip()) {
