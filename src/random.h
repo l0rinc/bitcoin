@@ -259,7 +259,12 @@ public:
         int bits = std::bit_width(maxval);
         while (true) {
             uint64_t ret = Impl().randbits(bits);
-            if (ret <= maxval) return ret;
+            if (ret <= maxval) {
+                const I result{static_cast<I>(ret)};
+                if constexpr (std::numeric_limits<I>::is_signed) Assume(result >= 0);
+                Assume(result < range);
+                return result;
+            }
         }
     }
 
