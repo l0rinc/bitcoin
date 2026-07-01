@@ -1000,6 +1000,7 @@ BOOST_FIXTURE_TEST_CASE(prune_assumevalid_predicates, PruneAssumeValidPredicateS
         LOCK(no_prune.GetMutex());
         BOOST_CHECK(!no_prune.CanUsePruneAssumeValid(*lookup(no_prune, blocks[0]->GetHash())));
         BOOST_CHECK(!no_prune.ShouldRequestStrippedPruneAssumeValidBlock(*lookup(no_prune, blocks[0]->GetHash())));
+        BOOST_CHECK(!no_prune.RelaxedPruneFlush());
     }
 
     ChainstateManager& disabled{reset_chainman(/*prune_assumevalid=*/false, BlockManager::PRUNE_TARGET_MANUAL, assumed_valid)};
@@ -1007,6 +1008,7 @@ BOOST_FIXTURE_TEST_CASE(prune_assumevalid_predicates, PruneAssumeValidPredicateS
         LOCK(disabled.GetMutex());
         BOOST_CHECK(!disabled.CanUsePruneAssumeValid(*lookup(disabled, blocks[0]->GetHash())));
         BOOST_CHECK(!disabled.ShouldRequestStrippedPruneAssumeValidBlock(*lookup(disabled, blocks[0]->GetHash())));
+        BOOST_CHECK(!disabled.RelaxedPruneFlush());
     }
 
     ChainstateManager& unknown_assumevalid{reset_chainman(/*prune_assumevalid=*/true, BlockManager::PRUNE_TARGET_MANUAL, uint256{1})};
@@ -1014,6 +1016,9 @@ BOOST_FIXTURE_TEST_CASE(prune_assumevalid_predicates, PruneAssumeValidPredicateS
         LOCK(unknown_assumevalid.GetMutex());
         BOOST_CHECK(!unknown_assumevalid.CanUsePruneAssumeValid(*lookup(unknown_assumevalid, blocks[0]->GetHash())));
         BOOST_CHECK(!unknown_assumevalid.ShouldRequestStrippedPruneAssumeValidBlock(*lookup(unknown_assumevalid, blocks[0]->GetHash())));
+        // The flush relaxation keys on the option, prune mode and IBD alone: it also
+        // covers blocks stored normally (e.g. past the assumevalid boundary).
+        BOOST_CHECK(unknown_assumevalid.RelaxedPruneFlush());
     }
 
     ChainstateManager& enabled{reset_chainman(/*prune_assumevalid=*/true, BlockManager::PRUNE_TARGET_MANUAL, assumed_valid)};
@@ -1034,6 +1039,7 @@ BOOST_FIXTURE_TEST_CASE(prune_assumevalid_predicates, PruneAssumeValidPredicateS
         BOOST_CHECK(enabled.ShouldRequestStrippedPruneAssumeValidBlock(*ancestor));
         BOOST_CHECK(enabled.CanUsePruneAssumeValid(*assumed));
         BOOST_CHECK(enabled.ShouldRequestStrippedPruneAssumeValidBlock(*assumed));
+        BOOST_CHECK(enabled.RelaxedPruneFlush());
 
         BOOST_CHECK(!enabled.CanUsePruneAssumeValid(*above_assumed));
         BOOST_CHECK(!enabled.ShouldRequestStrippedPruneAssumeValidBlock(*above_assumed));
@@ -1054,6 +1060,7 @@ BOOST_FIXTURE_TEST_CASE(prune_assumevalid_predicates, PruneAssumeValidPredicateS
         BOOST_CHECK(enabled.IsPruneAssumeValidBlock(*assumed));
         BOOST_CHECK(!enabled.CanUsePruneAssumeValid(*assumed));
         BOOST_CHECK(!enabled.ShouldRequestStrippedPruneAssumeValidBlock(*assumed));
+        BOOST_CHECK(!enabled.RelaxedPruneFlush());
     }
 }
 

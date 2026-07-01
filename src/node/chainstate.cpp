@@ -110,6 +110,12 @@ static ChainstateLoadResult CompleteChainstateInitialization(
 
         // ReplayBlocks is a no-op if we cleared the coinsviewdb with -reindex or -reindex-chainstate
         if (!chainstate->ReplayBlocks()) {
+            if (chainman.m_options.prune_assumevalid) {
+                // -reindex-chainstate is refused with pruning, and the blocks needed for a
+                // replay may never have been written to disk in this mode. A full -reindex
+                // effectively restarts the stripped initial sync.
+                return {ChainstateLoadStatus::FAILURE, _("Unable to replay blocks (block data was pruned or skipped by -pruneassumevalid). You will need to rebuild the database using -reindex.")};
+            }
             return {ChainstateLoadStatus::FAILURE, _("Unable to replay blocks. You will need to rebuild the database using -reindex-chainstate.")};
         }
 

@@ -1035,6 +1035,12 @@ public:
     size_t CachedPruneAssumeValidBlockCount() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     size_t CachedPruneAssumeValidBlockBytes() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     bool ShouldRequestStrippedPruneAssumeValidBlock(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! Whether automatic prune events may skip the otherwise-forced chainstate write.
+    //! Under -pruneassumevalid a crash during initial sync already implies redownloading
+    //! blocks that were never written to disk, so dragging the coins DB to the tip before
+    //! deleting block files buys no crash resilience. IsInitialBlockDownload() latches
+    //! false permanently, restoring the standard prune/flush coupling after initial sync.
+    bool RelaxedPruneFlush() const noexcept;
     kernel::Notifications& GetNotifications() const { return m_options.notifications; };
 
     /**

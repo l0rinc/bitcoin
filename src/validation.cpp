@@ -2417,6 +2417,11 @@ bool ChainstateManager::ShouldRequestStrippedPruneAssumeValidBlock(const CBlockI
     return !(block.nStatus & BLOCK_HAVE_DATA) && !HasCachedPruneAssumeValidBlock(block) && CanUsePruneAssumeValid(block);
 }
 
+bool ChainstateManager::RelaxedPruneFlush() const noexcept
+{
+    return m_options.prune_assumevalid && m_blockman.IsPruneMode() && IsInitialBlockDownload();
+}
+
 static bool BlockHasWitness(const CBlock& block)
 {
     return std::ranges::any_of(block.vtx, [](const auto& tx) { return tx->HasWitness(); });
@@ -2872,10 +2877,22 @@ bool Chainstate::FlushStateToDisk(
         // It's been a while since we wrote the block index and chain state to disk. Do this frequently, so we don't need to redownload or reindex after a crash.
         bool fPeriodicWrite = mode == FlushStateMode::PERIODIC && nNow >= m_next_write;
         const auto empty_cache{(mode == FlushStateMode::FORCE_FLUSH) || fCacheLarge || fCacheCritical};
-        // Combine all conditions that result in a write to disk.
-        bool should_write = (mode == FlushStateMode::FORCE_SYNC) || empty_cache || fPeriodicWrite || fFlushForPrune;
-        // Write blocks, block index and best chain related state to disk.
-        if (should_write) {
+        // During -pruneassumevalid initial sync an automatic prune event flushes block/undo
+        // files and writes the block index, but does not force a chainstate write: a crash
+        // in this mode already implies redownloading blocks, so the coins DB may lag behind
+        // pruned block files until the next periodic or cache-pressure write. The first
+        // prune event keeps the forced write while the coins DB has no best block yet, so
+        // a restart always has a chainstate to start from.
+        const bool relaxed_prune_flush{fFlushForPrune && nManualPruneHeight == 0 &&
+                                       !GetRole().historical && m_chainman.RelaxedPruneFlush() &&
+                                       !CoinsDB().GetBestBlock().IsNull()};
+        // Combine all conditions that result in a chainstate write to disk.
+        bool should_write = (mode == FlushStateMode::FORCE_SYNC) || empty_cache || fPeriodicWrite || (fFlushForPrune && !relaxed_prune_flush);
+        // Block/undo files and the block index are also written on every prune event: the
+        // index (with cleared HAVE_DATA flags) must be persisted before files are unlinked.
+        const bool should_write_files = should_write || fFlushForPrune;
+        // Write blocks and block index to disk.
+        if (should_write_files) {
             LogDebug(BCLog::COINDB, "Writing chainstate to disk: flush mode=%s, prune=%d, large=%d, critical=%d, periodic=%d",
                      FlushStateModeNames[size_t(mode)], fFlushForPrune, fCacheLarge, fCacheCritical, fPeriodicWrite);
 
@@ -2906,7 +2923,12 @@ bool Chainstate::FlushStateToDisk(
 
                 m_blockman.UnlinkPrunedFiles(setFilesToPrune);
             }
-
+            if (relaxed_prune_flush && !should_write) {
+                LogDebug(BCLog::PRUNE, "Pruned block files without chainstate flush during -pruneassumevalid IBD");
+            }
+        }
+        // Write best chain related state to disk.
+        if (should_write) {
             if (!CoinsTip().GetBestBlock().IsNull()) {
                 // Typical Coin structures on disk are around 48 bytes in size.
                 // Pushing a new one to the database can cause it to be written
@@ -5156,8 +5178,18 @@ bool Chainstate::LoadGenesisBlock()
     // m_blockman.m_block_index. Note that we can't use m_chain here, since it is
     // set based on the coins db, not the block index db, which is the only
     // thing loaded at this point.
-    if (m_blockman.m_block_index.contains(params.GenesisBlock().GetHash()))
-        return true;
+    CBlockIndex* pruned_genesis{nullptr};
+    if (const auto it{m_blockman.m_block_index.find(params.GenesisBlock().GetHash())}; it != m_blockman.m_block_index.end()) {
+        // Only -pruneassumevalid can prune the genesis block's data (its block
+        // file also holds later blocks) before the chainstate is ever written:
+        // an unclean shutdown can then leave an empty chainstate that has no
+        // genesis block to connect. Rewrite it from chainparams in that mode;
+        // a regular pruned node keeps its pruned genesis untouched, since its
+        // chainstate never lags behind the pruned region.
+        if (!m_chainman.m_options.prune_assumevalid || it->second.nStatus & BLOCK_HAVE_DATA) return true;
+        pruned_genesis = &it->second;
+        LogInfo("Rewriting pruned genesis block to disk");
+    }
 
     try {
         const CBlock& block = params.GenesisBlock();
@@ -5166,8 +5198,18 @@ bool Chainstate::LoadGenesisBlock()
             LogError("%s: writing genesis block to disk failed\n", __func__);
             return false;
         }
-        CBlockIndex* pindex = m_blockman.AddToBlockIndex(block, m_chainman.m_best_header);
-        m_chainman.ReceivedBlockTransactions(block, pindex, blockPos);
+        if (pruned_genesis) {
+            // Only restore the data position: validity and transaction counts
+            // were loaded from the block index db, and setBlockIndexCandidates
+            // must stay empty until LoadChainTip has run.
+            pruned_genesis->nFile = blockPos.nFile;
+            pruned_genesis->nDataPos = blockPos.nPos;
+            pruned_genesis->nStatus |= BLOCK_HAVE_DATA;
+            m_blockman.m_dirty_blockindex.insert(pruned_genesis);
+        } else {
+            CBlockIndex* pindex = m_blockman.AddToBlockIndex(block, m_chainman.m_best_header);
+            m_chainman.ReceivedBlockTransactions(block, pindex, blockPos);
+        }
     } catch (const std::runtime_error& e) {
         LogError("%s: failed to write genesis block: %s\n", __func__, e.what());
         return false;
