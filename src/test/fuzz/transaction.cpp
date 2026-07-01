@@ -9,6 +9,7 @@
 #include <consensus/validation.h>
 #include <core_io.h>
 #include <core_memusage.h>
+#include <hash.h>
 #include <policy/policy.h>
 #include <policy/settings.h>
 #include <primitives/transaction.h>
@@ -20,8 +21,67 @@
 #include <util/rbf.h>
 #include <validation.h>
 
+#include <algorithm>
 #include <cassert>
+#include <cstddef>
+#include <span>
 #include <string_view>
+
+namespace {
+
+void AssertCachedTransactionState(const CTransaction& tx)
+{
+    const Txid expected_txid{Txid::FromUint256((HashWriter{} << TX_NO_WITNESS(tx)).GetHash())};
+    assert(tx.GetHash() == expected_txid);
+
+    const bool expected_has_witness{std::ranges::any_of(tx.vin, [](const CTxIn& input) {
+        return !input.scriptWitness.IsNull();
+    })};
+    assert(tx.HasWitness() == expected_has_witness);
+
+    const Wtxid expected_wtxid{tx.HasWitness() ?
+        Wtxid::FromUint256((HashWriter{} << TX_WITH_WITNESS(tx)).GetHash()) :
+        Wtxid::FromUint256(tx.GetHash().ToUint256())};
+    assert(tx.GetWitnessHash() == expected_wtxid);
+
+    CMutableTransaction mutable_tx{tx};
+    assert(mutable_tx.GetHash() == tx.GetHash());
+    assert(mutable_tx.HasWitness() == tx.HasWitness());
+
+    const CTransaction rebuilt_tx{mutable_tx};
+    assert(rebuilt_tx.GetHash() == tx.GetHash());
+    assert(rebuilt_tx.GetWitnessHash() == tx.GetWitnessHash());
+    assert(rebuilt_tx.HasWitness() == tx.HasWitness());
+    assert(rebuilt_tx.ComputeTotalSize() == tx.ComputeTotalSize());
+}
+
+void AssertTransactionSerializationRoundTrip(const CTransaction& tx)
+{
+    DataStream with_witness_stream;
+    with_witness_stream << TX_WITH_WITNESS(tx);
+    assert(with_witness_stream.size() == GetSerializeSize(TX_WITH_WITNESS(tx)));
+    SpanReader with_witness_reader{std::span<const std::byte>{with_witness_stream.data(), with_witness_stream.size()}};
+    const CTransaction with_witness_roundtrip{deserialize, TX_WITH_WITNESS, with_witness_reader};
+    assert(with_witness_reader.empty());
+    assert(with_witness_roundtrip.GetHash() == tx.GetHash());
+    assert(with_witness_roundtrip.GetWitnessHash() == tx.GetWitnessHash());
+    assert(with_witness_roundtrip.HasWitness() == tx.HasWitness());
+
+    DataStream no_witness_stream;
+    no_witness_stream << TX_NO_WITNESS(tx);
+    assert(no_witness_stream.size() == GetSerializeSize(TX_NO_WITNESS(tx)));
+    SpanReader no_witness_reader{std::span<const std::byte>{no_witness_stream.data(), no_witness_stream.size()}};
+    const CTransaction no_witness_roundtrip{deserialize, TX_NO_WITNESS, no_witness_reader};
+    assert(no_witness_reader.empty());
+    assert(no_witness_roundtrip.GetHash() == tx.GetHash());
+    assert(!no_witness_roundtrip.HasWitness());
+    assert(no_witness_roundtrip.GetWitnessHash().ToUint256() == no_witness_roundtrip.GetHash().ToUint256());
+    if (!tx.HasWitness()) {
+        assert(no_witness_roundtrip.GetWitnessHash() == tx.GetWitnessHash());
+    }
+}
+
+} // namespace
 
 void initialize_transaction()
 {
@@ -52,6 +112,9 @@ FUZZ_TARGET(transaction, .init = initialize_transaction)
     if (!valid_tx) {
         return;
     }
+
+    AssertCachedTransactionState(tx);
+    AssertTransactionSerializationRoundTrip(tx);
 
     {
         TxValidationState state_with_dupe_check;
