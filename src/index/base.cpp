@@ -451,13 +451,25 @@ bool BaseIndex::BlockUntilSyncedToCurrentChain() const
         LOCK(cs_main);
         const CBlockIndex* chain_tip = m_chainstate->m_chain.Tip();
         const CBlockIndex* best_block_index = m_best_block_index.load();
-        if (best_block_index->GetAncestor(chain_tip->nHeight) == chain_tip) {
+        if (!chain_tip) {
+            Assume(!best_block_index);
+            return true;
+        }
+        if (best_block_index && best_block_index->GetAncestor(chain_tip->nHeight) == chain_tip) {
             return true;
         }
     }
 
     LogInfo("%s is catching up on block notifications", GetName());
     m_chain->context()->validation_signals->SyncWithValidationInterfaceQueue();
+    {
+        LOCK(cs_main);
+        const CBlockIndex* chain_tip = m_chainstate->m_chain.Tip();
+        const CBlockIndex* best_block_index = m_best_block_index.load();
+        if (chain_tip && Assume(best_block_index)) {
+            Assume(best_block_index->GetAncestor(chain_tip->nHeight) == chain_tip);
+        }
+    }
     return true;
 }
 
