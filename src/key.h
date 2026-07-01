@@ -227,11 +227,11 @@ public:
 CKey GenerateRandomKey(bool compressed = true) noexcept;
 
 struct CExtKey {
-    unsigned char nDepth;
-    unsigned char vchFingerprint[4];
-    unsigned int nChild;
-    ChainCode chaincode;
-    CKey key;
+    unsigned char nDepth{0};
+    unsigned char vchFingerprint[4]{};
+    unsigned int nChild{0};
+    ChainCode chaincode{};
+    CKey key{};
 
     friend bool operator==(const CExtKey& a, const CExtKey& b)
     {
