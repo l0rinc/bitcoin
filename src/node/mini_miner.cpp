@@ -309,6 +309,7 @@ void MiniMiner::BuildMockTemplate(std::optional<CFeeRate> target_feerate)
 
 std::map<Txid, uint32_t> MiniMiner::Linearize()
 {
+    if (!m_ready_to_calculate) return {};
     BuildMockTemplate(std::nullopt);
     Assume(!m_ready_to_calculate);
     Assume(m_in_block.size() == m_inclusion_order.size());
