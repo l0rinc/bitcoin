@@ -142,6 +142,8 @@ void CheckTransactionAncestry(const CTxMemPool& tx_pool, const Txid& txid)
     if (!it) {
         Assert(ancestors == 0);
         Assert(cluster_count == 0);
+        Assert(ancestor_size == 0);
+        Assert(ancestor_fees == 0);
         Assert(tx_pool.GetCluster(txid).empty());
         return;
     }
