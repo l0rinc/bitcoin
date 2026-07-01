@@ -225,6 +225,50 @@ BOOST_FIXTURE_TEST_CASE(accepted_and_confirmed_txs_clear_requests, TestingSetup)
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(received_responses_clear_peer_requests, TestingSetup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    FastRandomContext det_rand{true};
+    node::TxDownloadOptions default_opts{pool, det_rand, true};
+    node::TxDownloadManagerImpl txdownload_impl{default_opts};
+    const node::TxDownloadConnectionInfo connection_info{/*m_preferred=*/true,
+                                                         /*m_relay_permissions=*/false,
+                                                         /*m_wtxid_relay=*/true};
+    constexpr NodeId peer_0{0};
+    constexpr NodeId peer_1{1};
+    const CTransactionRef tx{CreatePlaceholderTx(/*segwit=*/true)};
+    const Txid& txid{tx->GetHash()};
+    const Wtxid& wtxid{tx->GetWitnessHash()};
+    BOOST_REQUIRE(txid.ToUint256() != wtxid.ToUint256());
+    const std::chrono::microseconds now{0};
+
+    txdownload_impl.ConnectedPeer(peer_0, connection_info);
+    txdownload_impl.ConnectedPeer(peer_1, connection_info);
+    BOOST_CHECK(!txdownload_impl.AddTxAnnouncement(peer_0, txid, now));
+    BOOST_CHECK(!txdownload_impl.AddTxAnnouncement(peer_1, txid, now));
+    BOOST_CHECK(!txdownload_impl.AddTxAnnouncement(peer_0, wtxid, now));
+    BOOST_CHECK(!txdownload_impl.AddTxAnnouncement(peer_1, wtxid, now));
+    CheckTxRequestPeers(txdownload_impl, txid.ToUint256(), {peer_0, peer_1});
+    CheckTxRequestPeers(txdownload_impl, wtxid.ToUint256(), {peer_0, peer_1});
+
+    const auto [should_validate, package_to_validate] = txdownload_impl.ReceivedTx(peer_0, tx);
+    BOOST_CHECK(should_validate);
+    BOOST_CHECK(!package_to_validate);
+    CheckTxRequestPeers(txdownload_impl, txid.ToUint256(), {peer_1});
+    CheckTxRequestPeers(txdownload_impl, wtxid.ToUint256(), {peer_1});
+
+    txdownload_impl.ReceivedNotFound(peer_1, {wtxid});
+    CheckTxRequestPeers(txdownload_impl, txid.ToUint256(), {peer_1});
+    CheckTxRequestPeers(txdownload_impl, wtxid.ToUint256(), {});
+
+    txdownload_impl.ReceivedNotFound(peer_1, {txid});
+    CheckNoTxRequestsForTx(txdownload_impl, tx);
+
+    txdownload_impl.DisconnectedPeer(peer_0);
+    txdownload_impl.DisconnectedPeer(peer_1);
+    txdownload_impl.CheckIsEmpty();
+}
+
 BOOST_FIXTURE_TEST_CASE(tx_rejection_types, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
