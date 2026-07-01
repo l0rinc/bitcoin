@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -26,6 +27,35 @@ std::string GetArgumentName(const std::string& name)
         idx = name.size();
     }
     return name.substr(0, idx);
+}
+
+void AssertChainSelectionContracts(const ArgsManager& args_manager)
+{
+    constexpr std::string_view INVALID_COMBINATION_ERROR{
+        "Invalid combination of -regtest, -signet, -testnet, -testnet4 and -chain. Can use at most one."};
+
+    try {
+        const std::string chain{args_manager.GetChainTypeString()};
+        const auto parsed_chain{ChainTypeFromString(chain)};
+        try {
+            const ChainType chain_type{args_manager.GetChainType()};
+            assert(parsed_chain);
+            assert(chain_type == *parsed_chain);
+        } catch (const ChainSelectionError& e) {
+            assert(!parsed_chain);
+            if (chain.find('\0') == std::string::npos) {
+                assert(std::string{e.what()} == "Unknown chain " + chain + ".");
+            }
+        }
+    } catch (const ChainSelectionError& e) {
+        assert(std::string_view{e.what()} == INVALID_COMBINATION_ERROR);
+        try {
+            (void)args_manager.GetChainType();
+            assert(false);
+        } catch (const ChainSelectionError& get_chain_type_error) {
+            assert(std::string_view{get_chain_type_error.what()} == INVALID_COMBINATION_ERROR);
+        }
+    }
 }
 
 FUZZ_TARGET(system, .init = initialize_system)
@@ -133,10 +163,7 @@ FUZZ_TARGET(system, .init = initialize_system)
     (void)args_manager.GetArgFlags(s1);
     (void)args_manager.GetArgs(s1);
     (void)args_manager.GetBoolArg(s1, b);
-    try {
-        (void)args_manager.GetChainTypeString();
-    } catch (const std::runtime_error&) {
-    }
+    AssertChainSelectionContracts(args_manager);
     (void)args_manager.GetHelpMessage();
     const auto command = args_manager.GetCommand();
     if (command) {
