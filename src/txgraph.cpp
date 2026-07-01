@@ -3296,7 +3296,9 @@ void BlockBuilderImpl::Include() noexcept
 {
     // The actual inclusion of the chunk is done by the calling code. All we have to do is switch
     // to the next chunk.
+    const bool was_done{m_cur_iter == m_graph->m_main_chunkindex.end()};
     Next();
+    Assume(!was_done || m_cur_iter == m_graph->m_main_chunkindex.end());
 }
 
 void BlockBuilderImpl::Skip() noexcept
@@ -3305,12 +3307,14 @@ void BlockBuilderImpl::Skip() noexcept
     // the result topologically invalid. However, don't do this if the chunk is known to be the last
     // chunk of the cluster. This may significantly reduce the size of m_excluded_clusters,
     // especially when many singleton clusters are ignored.
+    const bool was_done{m_cur_iter == m_graph->m_main_chunkindex.end()};
     std::optional<uint64_t> skipped_cluster_sequence;
     if (m_cur_cluster != nullptr && !m_known_end_of_cluster) {
         skipped_cluster_sequence = m_cur_cluster->m_sequence;
         m_excluded_clusters.insert(m_cur_cluster->m_sequence);
     }
     Next();
+    Assume(!was_done || m_cur_iter == m_graph->m_main_chunkindex.end());
     if (skipped_cluster_sequence) {
         Assume(m_cur_cluster == nullptr || m_cur_cluster->m_sequence != *skipped_cluster_sequence);
     }
