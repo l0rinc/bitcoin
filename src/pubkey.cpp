@@ -13,6 +13,7 @@
 #include <secp256k1_schnorrsig.h>
 #include <span.h>
 #include <uint256.h>
+#include <util/check.h>
 #include <util/strencodings.h>
 
 #include <algorithm>
@@ -339,14 +340,14 @@ bool CPubKey::Decompress() {
 }
 
 bool CPubKey::Derive(CPubKey& pubkeyChild, ChainCode &ccChild, unsigned int nChild, const ChainCode& cc, uint256* bip32_tweak_out) const {
-    assert(IsValid());
-    assert((nChild >> 31) == 0);
-    assert(size() == COMPRESSED_SIZE);
+    if (!IsValid() || !IsCompressed() || (nChild >> 31) != 0) return false;
     unsigned char out[64];
     BIP32Hash(cc, nChild, *begin(), begin()+1, out);
-    memcpy(ccChild.begin(), out+32, 32);
+    ChainCode child_chaincode;
+    memcpy(child_chaincode.begin(), out+32, 32);
+    uint256 bip32_tweak;
     if (bip32_tweak_out) {
-        memcpy(bip32_tweak_out->begin(), out, 32);
+        memcpy(bip32_tweak.begin(), out, 32);
     }
     secp256k1_pubkey pubkey;
     if (!secp256k1_ec_pubkey_parse(secp256k1_context_static, &pubkey, vch, size())) {
@@ -359,6 +360,11 @@ bool CPubKey::Derive(CPubKey& pubkeyChild, ChainCode &ccChild, unsigned int nChi
     size_t publen = COMPRESSED_SIZE;
     secp256k1_ec_pubkey_serialize(secp256k1_context_static, pub, &publen, &pubkey, SECP256K1_EC_COMPRESSED);
     pubkeyChild.Set(pub, pub + publen);
+    ccChild = child_chaincode;
+    if (bip32_tweak_out) {
+        *bip32_tweak_out = bip32_tweak;
+    }
+    Assume(pubkeyChild.IsFullyValid());
     return true;
 }
 
@@ -414,11 +420,23 @@ void CExtPubKey::DecodeWithVersion(const unsigned char code[BIP32_EXTKEY_WITH_VE
 
 bool CExtPubKey::Derive(CExtPubKey &out, unsigned int _nChild, uint256* bip32_tweak_out) const {
     if (nDepth == std::numeric_limits<unsigned char>::max()) return false;
+    if (!pubkey.IsValid() || !pubkey.IsCompressed() || (_nChild >> 31) != 0) return false;
+    CPubKey child_pubkey;
+    ChainCode child_chaincode;
+    uint256 bip32_tweak;
+    if (!pubkey.Derive(child_pubkey, child_chaincode, _nChild, chaincode, bip32_tweak_out ? &bip32_tweak : nullptr)) return false;
+
     out.nDepth = nDepth + 1;
     CKeyID id = pubkey.GetID();
     memcpy(out.vchFingerprint, &id, 4);
     out.nChild = _nChild;
-    return pubkey.Derive(out.pubkey, out.chaincode, _nChild, chaincode, bip32_tweak_out);
+    out.chaincode = child_chaincode;
+    out.pubkey = child_pubkey;
+    if (bip32_tweak_out) {
+        *bip32_tweak_out = bip32_tweak;
+    }
+    Assume(out.pubkey.IsFullyValid());
+    return true;
 }
 
 /* static */ bool CPubKey::CheckLowS(const std::vector<unsigned char>& vchSig) {
