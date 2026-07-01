@@ -281,11 +281,18 @@ bool CScript::IsPayToTaproot() const
 // followed by a data push between 2 and 40 bytes.
 bool CScript::IsWitnessProgram(int& version, std::vector<unsigned char>& program) const
 {
-    if (this->size() < 4 || this->size() > 42) {
+    auto fail = [&]() {
+        version = -1;
+        program.clear();
+        Assume(version == -1);
+        Assume(program.empty());
         return false;
+    };
+    if (this->size() < 4 || this->size() > 42) {
+        return fail();
     }
     if ((*this)[0] != OP_0 && ((*this)[0] < OP_1 || (*this)[0] > OP_16)) {
-        return false;
+        return fail();
     }
     if ((size_t)((*this)[1] + 2) == this->size()) {
         version = DecodeOP_N((opcodetype)(*this)[0]);
@@ -296,7 +303,7 @@ bool CScript::IsWitnessProgram(int& version, std::vector<unsigned char>& program
         Assume((*this)[1] == program.size());
         return true;
     }
-    return false;
+    return fail();
 }
 
 bool CScript::IsPushOnly(const_iterator pc) const
