@@ -778,6 +778,14 @@ BOOST_AUTO_TEST_CASE(MempoolAncestryTests)
     BOOST_CHECK_EQUAL(ancestorsize, expected_size);
     BOOST_CHECK_EQUAL(ancestorfees, expected_fees);
 
+    ancestors = clustersize = ancestorsize = std::numeric_limits<size_t>::max();
+    ancestorfees = std::numeric_limits<CAmount>::max();
+    pool.GetTransactionAncestry(Txid::FromUint256(uint256::ONE), ancestors, clustersize, &ancestorsize, &ancestorfees);
+    BOOST_CHECK_EQUAL(ancestors, 0U);
+    BOOST_CHECK_EQUAL(clustersize, 0U);
+    BOOST_CHECK_EQUAL(ancestorsize, 0U);
+    BOOST_CHECK_EQUAL(ancestorfees, 0);
+
     /* Make an alternate branch that is longer and connect it to tx3 */
     //
     // [ty1].0 <- [ty2].0 <- [ty3].0 <- [ty4].0 <- [ty5].0
