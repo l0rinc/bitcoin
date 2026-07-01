@@ -17,7 +17,7 @@ FUZZ_TARGET(parse_script)
     CScript parsed;
     try {
         parsed = ParseScript(script_string);
-    } catch (const std::runtime_error&) {
+    } catch (const ScriptParseError&) {
         return;
     }
     const std::string formatted{FormatScript(parsed)};
