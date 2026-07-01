@@ -257,6 +257,12 @@ BOOST_AUTO_TEST_CASE(dbwrapper_iterator)
 
         it->Next();
         BOOST_CHECK_EQUAL(it->Valid(), false);
+        uint8_t exhausted_key{0x42};
+        BOOST_CHECK(!it->GetKey(exhausted_key));
+        BOOST_CHECK_EQUAL(exhausted_key, 0x42);
+        uint256 exhausted_value{uint256::ONE};
+        BOOST_CHECK(!it->GetValue(exhausted_value));
+        BOOST_CHECK_EQUAL(exhausted_value, uint256::ONE);
     }
 }
 
