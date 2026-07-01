@@ -10,7 +10,45 @@
 #include <cassert>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
+
+namespace {
+
+constexpr std::string_view BECH32_CHARSET{"qpzry9x8gf2tvdw0s3jn54khce6mua7l"};
+
+char MutatedBech32Char(char c)
+{
+    for (const char candidate : BECH32_CHARSET) {
+        if (candidate != c) return candidate;
+    }
+    assert(false);
+    return BECH32_CHARSET.front();
+}
+
+void CheckSingleCharacterMutation(const std::string& encoded, size_t mutate_pos)
+{
+    assert(mutate_pos < encoded.size());
+
+    std::string mutated{encoded};
+    mutated[mutate_pos] = MutatedBech32Char(mutated[mutate_pos]);
+
+    const auto decoded = bech32::Decode(mutated);
+    assert(decoded.encoding == bech32::Encoding::INVALID);
+    assert(decoded.hrp.empty());
+    assert(decoded.data.empty());
+
+    const auto [error, error_locations] = bech32::LocateErrors(mutated);
+    assert(!error.empty());
+
+    const size_t separator_pos{encoded.rfind(bech32::SEPARATOR)};
+    assert(separator_pos != encoded.npos);
+    if (mutate_pos > separator_pos) {
+        assert((error_locations == std::vector<int>{static_cast<int>(mutate_pos)}));
+    }
+}
+
+} // namespace
 
 FUZZ_TARGET(bech32_random_decode)
 {
@@ -70,6 +108,13 @@ FUZZ_TARGET(bech32_roundtrip)
             assert(decoded.encoding == encoding);
             assert(decoded.hrp == hrp);
             assert(decoded.data == converted_input);
+
+            const auto [error, error_locations] = bech32::LocateErrors(encoded);
+            assert(error.empty());
+            assert(error_locations.empty());
+
+            const size_t mutate_pos = fdp.ConsumeIntegralInRange<size_t>(0, encoded.size() - 1);
+            CheckSingleCharacterMutation(encoded, mutate_pos);
         }
     }
 }
