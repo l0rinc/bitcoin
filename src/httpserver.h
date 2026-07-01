@@ -79,6 +79,11 @@ constexpr size_t MAX_HEADERS_SIZE{8192};
 //! Maximum size of an HTTP request body
 constexpr uint64_t MAX_BODY_SIZE{32_MiB};
 
+//! Thrown when HTTP request control data, headers, or body syntax is invalid.
+struct HTTPParseError : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
+
 //! Thrown when a request body exceeds MAX_BODY_SIZE (or *will* exceed, in chunked transfer)
 //! so the server can reply with more specific code 413 (content too large) vs general 400 (bad request)
 struct ContentTooLargeError : std::runtime_error {
@@ -172,7 +177,7 @@ public:
      * @param[in]   reader  A LineReader object constructed over a span of data.
      * @returns     true    If the request field was parsed.
      *              false   If there was not enough data in the buffer to complete the field.
-     * @throws      std::runtime_error if data is invalid.
+     * @throws      HTTPParseError if data is invalid.
      */
     /// @{
     bool LoadControlData(LineReader& reader);
