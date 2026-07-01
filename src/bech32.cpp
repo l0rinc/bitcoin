@@ -4,6 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <bech32.h>
+#include <util/strencodings.h>
 #include <util/vector.h>
 
 #include <array>
@@ -365,7 +366,10 @@ std::string Encode(Encoding encoding, const std::string& hrp, const data& values
     ret.reserve(hrp.size() + 1 + values.size() + CHECKSUM_SIZE);
     ret += hrp;
     ret += SEPARATOR;
-    for (const uint8_t& i : values) ret += CHARSET[i];
+    for (const uint8_t& i : values) {
+        assert(i < 32);
+        ret += CHARSET[i];
+    }
     for (const uint8_t& i : CreateChecksum(encoding, hrp, values)) ret += CHARSET[i];
     return ret;
 }
@@ -396,7 +400,9 @@ DecodeResult Decode(const std::string& str, CharLimit limit) {
     }
     Encoding result = VerifyChecksum(hrp, values);
     if (result == Encoding::INVALID) return {};
-    return {result, std::move(hrp), data(values.begin(), values.end() - CHECKSUM_SIZE)};
+    data decoded_data(values.begin(), values.end() - CHECKSUM_SIZE);
+    assert(CaseInsensitiveEqual(str, Encode(result, hrp, decoded_data)));
+    return {result, std::move(hrp), std::move(decoded_data)};
 }
 
 /** Find index of an incorrect character in a Bech32 string. */
