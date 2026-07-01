@@ -13,11 +13,16 @@
 #include <test/util/common.h>
 #include <test/util/net.h>
 #include <test/util/setup_common.h>
+#include <util/asmap.h>
 #include <util/strencodings.h>
 #include <util/translation.h>
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <numeric>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -56,6 +61,25 @@ static void CheckNoBytes(DynSock::Pipe& pipe)
 {
     uint8_t byte;
     BOOST_CHECK_EQUAL(pipe.GetBytes(&byte, 1), -1);
+}
+
+static std::vector<std::byte> AsmapLookupBytes(const CNetAddr& address)
+{
+    std::vector<std::byte> ip_bytes(16);
+    if (address.HasLinkedIPv4()) {
+        const auto prefix{std::as_bytes(std::span{IPV4_IN_IPV6_PREFIX})};
+        std::copy_n(prefix.begin(), IPV4_IN_IPV6_PREFIX.size(), ip_bytes.begin());
+        const uint32_t ipv4{address.GetLinkedIPv4()};
+        for (int i{0}; i < 4; ++i) {
+            ip_bytes[12 + i] = std::byte((ipv4 >> (24 - i * 8)) & 0xFF);
+        }
+    } else {
+        BOOST_REQUIRE(address.IsIPv6());
+        const auto addr_bytes{address.GetAddrBytes()};
+        BOOST_REQUIRE_EQUAL(addr_bytes.size(), ip_bytes.size());
+        std::ranges::copy(std::as_bytes(std::span{addr_bytes}), ip_bytes.begin());
+    }
+    return ip_bytes;
 }
 
 static std::vector<uint8_t> Socks5SuccessReply(bool select_auth)
@@ -867,6 +891,16 @@ BOOST_AUTO_TEST_CASE(asmap_test_vectors)
     // Construct NetGroupManager with this data.
     auto netgroup{NetGroupManager::WithEmbeddedAsmap(ASMAP_DATA)};
     BOOST_CHECK(netgroup.UsingASMap());
+
+    // This ASMap first consumes the IPv4-in-IPv6 prefix, then returns ASN 1.
+    constexpr auto IPV4_MATCH_ASMAP{
+        "fb03ec0fb03fc0fe00fb03ec0fb03fc0fe00fb03ec0fb0fffffeff000000"_hex};
+    BOOST_REQUIRE(CheckStandardAsmap(IPV4_MATCH_ASMAP));
+    auto ipv4_netgroup{NetGroupManager::WithEmbeddedAsmap(IPV4_MATCH_ASMAP)};
+    const auto ipv4_addr{ResolveIP("1.2.3.4")};
+    BOOST_CHECK_EQUAL(Interpret(IPV4_MATCH_ASMAP, AsmapLookupBytes(ipv4_addr)), 1);
+    BOOST_CHECK_EQUAL(ipv4_netgroup.GetMappedAS(ipv4_addr), 1);
+    BOOST_CHECK_EQUAL(ipv4_netgroup.GetMappedAS(ResolveIP("198.51.100.49")), 0);
 
     // Check some randomly-generated IPv6 addresses in it (biased towards the very beginning and
     // very end of the 128-bit range).
