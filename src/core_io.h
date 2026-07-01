@@ -9,6 +9,7 @@
 #include <util/result.h>
 
 #include <functional>
+#include <stdexcept>
 #include <string>
 
 class CBlock;
@@ -29,6 +30,11 @@ enum class TxVerbosity {
     SHOW_TXID,                //!< Only TXID for each block's transaction
     SHOW_DETAILS,             //!< Include TXID, inputs, outputs, and other common block's transaction information
     SHOW_DETAILS_AND_PREVOUT  //!< The same as previous option with information about prevouts if available
+};
+
+//! Thrown when a human-readable script string cannot be parsed.
+struct ScriptParseError : std::runtime_error {
+    using std::runtime_error::runtime_error;
 };
 
 CScript ParseScript(const std::string& s);
