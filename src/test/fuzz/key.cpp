@@ -48,6 +48,7 @@ FUZZ_TARGET(key, .init = initialize_key)
     if (!key.IsValid()) {
         return;
     }
+    const uint256 random_uint256 = Hash(buffer);
 
     {
         assert(key.begin() + key.size() == key.end());
@@ -62,6 +63,13 @@ FUZZ_TARGET(key, .init = initialize_key)
         assert(!invalid_key.IsCompressed());
         assert(!invalid_key.IsValid());
         assert(invalid_key.size() == 0);
+
+        std::array<unsigned char, 64> schnorr_sig;
+        schnorr_sig.fill(0xa5);
+        const auto sig_before{schnorr_sig};
+        assert(!invalid_key.SignSchnorr(random_uint256, schnorr_sig, nullptr, uint256::ZERO));
+        assert(schnorr_sig == sig_before);
+        assert(!invalid_key.ComputeKeyPair(nullptr).IsValid());
     }
 
     {
@@ -79,8 +87,6 @@ FUZZ_TARGET(key, .init = initialize_key)
         copied_key.Set(key.begin(), key.end(), key.IsCompressed());
         assert(copied_key == key);
     }
-
-    const uint256 random_uint256 = Hash(buffer);
 
     {
         CKey child_key;
