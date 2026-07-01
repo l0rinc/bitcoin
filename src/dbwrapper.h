@@ -162,6 +162,8 @@ public:
     void Next();
 
     template<typename K> bool GetKey(K& key) {
+        if (!Valid()) return false;
+        Assume(Valid());
         try {
             SpanReader ssKey{GetKeyImpl()};
             ssKey >> key;
@@ -172,6 +174,8 @@ public:
     }
 
     template<typename V> bool GetValue(V& value) {
+        if (!Valid()) return false;
+        Assume(Valid());
         try {
             ScopedDataStreamUsage scoped_scratch{m_scratch};
             m_scratch.write(GetValueImpl());
