@@ -19,9 +19,12 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <unordered_set>
+#include <vector>
 
 using namespace std::literals;
 using node::NodeContext;
@@ -322,6 +325,58 @@ BOOST_AUTO_TEST_CASE(addrman_select_by_network)
 
     BOOST_CHECK(new_selected);
     BOOST_CHECK(tried_selected);
+}
+
+BOOST_AUTO_TEST_CASE(addrman_select_result_contracts)
+{
+    auto addrman = std::make_unique<AddrMan>(EMPTY_NETGROUPMAN, DETERMINISTIC, GetCheckRatio(m_node));
+    const CNetAddr source{ResolveIP("252.2.2.2")};
+
+    const auto select_with_contract = [&](const bool new_only, const std::unordered_set<Network>& networks) {
+        const size_t eligible_count{[&] {
+            if (networks.empty()) {
+                return new_only ? addrman->Size(/*net=*/std::nullopt, /*in_new=*/true) : addrman->Size();
+            }
+            size_t count{0};
+            for (const auto network : networks) {
+                count += addrman->Size(network, /*in_new=*/true);
+                if (!new_only) count += addrman->Size(network, /*in_new=*/false);
+            }
+            return count;
+        }()};
+        const auto selected{addrman->Select(new_only, networks)};
+        if (selected.first.IsValid()) {
+            if (!networks.empty()) BOOST_CHECK(networks.contains(selected.first.GetNetClass()));
+            if (new_only) {
+                const auto new_entries{addrman->GetEntries(/*from_tried=*/false)};
+                BOOST_CHECK(std::any_of(new_entries.begin(), new_entries.end(), [&](const auto& entry) {
+                    return static_cast<const CService&>(entry.first) == static_cast<const CService&>(selected.first);
+                }));
+            }
+            BOOST_CHECK_GT(eligible_count, 0U);
+        } else {
+            BOOST_CHECK_EQUAL(eligible_count, 0U);
+        }
+        return selected;
+    };
+
+    BOOST_CHECK(!select_with_contract(/*new_only=*/false, {NET_IPV4}).first.IsValid());
+
+    const CAddress ipv4_addr{ResolveService("250.1.1.1", 8333), NODE_NONE};
+    BOOST_CHECK(addrman->Add({ipv4_addr}, source));
+    BOOST_CHECK(select_with_contract(/*new_only=*/true, {NET_IPV4}).first == ipv4_addr);
+    BOOST_CHECK(!select_with_contract(/*new_only=*/false, {NET_I2P}).first.IsValid());
+
+    BOOST_CHECK(addrman->Good(ipv4_addr));
+    BOOST_CHECK(!select_with_contract(/*new_only=*/true, {NET_IPV4}).first.IsValid());
+    BOOST_CHECK(select_with_contract(/*new_only=*/false, {NET_IPV4}).first == ipv4_addr);
+
+    CAddress i2p_addr;
+    i2p_addr.SetSpecial("udhdrtrcetjm5sxzskjyr5ztpeszydbh4dpl3pl4utgqqw2v4jna.b32.i2p");
+    BOOST_CHECK(addrman->Add({i2p_addr}, source));
+    BOOST_CHECK(select_with_contract(/*new_only=*/true, {NET_I2P}).first == i2p_addr);
+    BOOST_CHECK(select_with_contract(/*new_only=*/false, {NET_IPV4, NET_I2P}).first.IsValid());
+    BOOST_CHECK(!select_with_contract(/*new_only=*/false, {NET_IPV6, NET_ONION, NET_CJDNS}).first.IsValid());
 }
 
 BOOST_AUTO_TEST_CASE(addrman_select_special)
