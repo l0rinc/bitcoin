@@ -8,11 +8,19 @@
 #include <test/fuzz/fuzz.h>
 #include <util/chaintype.h>
 
+#include <cassert>
 #include <cstddef>
 #include <limits>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 
 namespace {
+bool IsJsonIntegerOutOfRange(const std::runtime_error& e)
+{
+    return std::string_view{e.what()} == "JSON integer out of range";
+}
+
 bool EqualUniValueState(const UniValue& a, const UniValue& b)
 {
     if (a.getType() != b.getType()) return false;
@@ -53,22 +61,22 @@ FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
     try {
         (void)ParseHashO(univalue, "A");
     } catch (const UniValue&) {
-    } catch (const std::runtime_error&) {
+    } catch (const UniValue::type_error&) {
     }
     try {
         (void)ParseHashO(univalue, random_string);
     } catch (const UniValue&) {
-    } catch (const std::runtime_error&) {
+    } catch (const UniValue::type_error&) {
     }
     try {
         (void)ParseHashV(univalue, "A");
     } catch (const UniValue&) {
-    } catch (const std::runtime_error&) {
+    } catch (const UniValue::type_error&) {
     }
     try {
         (void)ParseHashV(univalue, random_string);
     } catch (const UniValue&) {
-    } catch (const std::runtime_error&) {
+    } catch (const UniValue::type_error&) {
     }
     try {
         (void)ParseHexO(univalue, "A");
@@ -81,12 +89,10 @@ FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
     try {
         (void)ParseHexV(univalue, "A");
     } catch (const UniValue&) {
-    } catch (const std::runtime_error&) {
     }
     try {
         (void)ParseHexV(univalue, random_string);
     } catch (const UniValue&) {
-    } catch (const std::runtime_error&) {
     }
     try {
         if (univalue.isNull() || univalue.isStr()) (void)ParseSighashString(univalue);
@@ -95,22 +101,27 @@ FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
     try {
         (void)AmountFromValue(univalue);
     } catch (const UniValue&) {
-    } catch (const std::runtime_error&) {
     }
     try {
         FlatSigningProvider provider;
         if (buffer.size() < 10'000) (void)EvalDescriptorStringOrObject(univalue, provider);
     } catch (const UniValue&) {
-    } catch (const std::runtime_error&) {
+    } catch (const UniValue::type_error&) {
+    } catch (const std::runtime_error& e) {
+        assert(IsJsonIntegerOutOfRange(e));
     }
     try {
         (void)ParseConfirmTarget(univalue, std::numeric_limits<unsigned int>::max());
     } catch (const UniValue&) {
-    } catch (const std::runtime_error&) {
+    } catch (const UniValue::type_error&) {
+    } catch (const std::runtime_error& e) {
+        assert(IsJsonIntegerOutOfRange(e));
     }
     try {
         (void)ParseDescriptorRange(univalue);
     } catch (const UniValue&) {
-    } catch (const std::runtime_error&) {
+    } catch (const UniValue::type_error&) {
+    } catch (const std::runtime_error& e) {
+        assert(IsJsonIntegerOutOfRange(e));
     }
 }
