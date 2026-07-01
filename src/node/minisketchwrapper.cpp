@@ -4,6 +4,7 @@
 
 #include <node/minisketchwrapper.h>
 
+#include <util/check.h>
 #include <util/log.h>
 #include <util/time.h>
 
@@ -69,11 +70,22 @@ uint32_t Minisketch32Implementation()
 
 Minisketch MakeMinisketch32(size_t capacity)
 {
-    return Minisketch(BITS, Minisketch32Implementation(), capacity);
+    Minisketch sketch{BITS, Minisketch32Implementation(), capacity};
+    if (sketch) {
+        Assume(sketch.GetBits() == BITS);
+        Assume(sketch.GetCapacity() == capacity);
+        Assume(sketch.GetImplementation() == Minisketch32Implementation());
+    }
+    return sketch;
 }
 
 Minisketch MakeMinisketch32FP(size_t max_elements, uint32_t fpbits)
 {
-    return Minisketch::CreateFP(BITS, Minisketch32Implementation(), max_elements, fpbits);
+    Minisketch sketch{Minisketch::CreateFP(BITS, Minisketch32Implementation(), max_elements, fpbits)};
+    if (sketch) {
+        Assume(sketch.GetBits() == BITS);
+        Assume(sketch.GetImplementation() == Minisketch32Implementation());
+    }
+    return sketch;
 }
 } // namespace node
