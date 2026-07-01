@@ -634,10 +634,12 @@ FUZZ_TARGET(coinscache_sim)
             [&]() { // Reset.
                 sim_caches[caches.size()].Wipe();
                 sim_best_blocks[caches.size()] = uint256::ZERO;
+                const auto parent_cache_stats{get_cache_stats(caches.size() - 1)};
                 // Apply to real caches.
                 {
                     const auto reset_guard{caches.back()->CreateResetGuard()};
                 }
+                assert_cache_stats(parent_cache_stats);
                 assert_cache_empty(*caches.back());
             },
 
