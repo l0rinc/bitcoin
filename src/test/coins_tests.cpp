@@ -805,10 +805,24 @@ public:
 static void CheckAccessCoin(const CAmount base_value, const MaybeCoin& cache_coin, const MaybeCoin& expected)
 {
     SingleEntryCacheTest test{base_value, cache_coin};
+    const size_t dirty_count_before{test.cache.GetDirtyCount()};
     auto& coin = test.cache.AccessCoin(OUTPOINT);
+    BOOST_CHECK_EQUAL(test.cache.GetDirtyCount(), dirty_count_before);
     BOOST_CHECK_EQUAL(coin.IsSpent(), !test.cache.GetCoin(OUTPOINT));
     test.cache.SelfTest(/*sanity_check=*/false);
     BOOST_CHECK_EQUAL(GetCoinsMapEntry(test.cache.map()), expected);
+
+    const Coin coin_copy{coin};
+    const auto map_entry{GetCoinsMapEntry(test.cache.map())};
+    const unsigned int cache_size{test.cache.GetCacheSize()};
+    const size_t dirty_count{test.cache.GetDirtyCount()};
+    const size_t memory_usage{test.cache.DynamicMemoryUsage()};
+    const auto& coin_again{test.cache.AccessCoin(OUTPOINT)};
+    BOOST_CHECK(coin_again == coin_copy);
+    BOOST_CHECK_EQUAL(GetCoinsMapEntry(test.cache.map()), map_entry);
+    BOOST_CHECK_EQUAL(test.cache.GetCacheSize(), cache_size);
+    BOOST_CHECK_EQUAL(test.cache.GetDirtyCount(), dirty_count);
+    BOOST_CHECK_EQUAL(test.cache.DynamicMemoryUsage(), memory_usage);
 }
 
 BOOST_AUTO_TEST_CASE(ccoins_access)
