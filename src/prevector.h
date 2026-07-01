@@ -431,26 +431,7 @@ public:
     }
 
     bool operator<(const prevector<N, T, Size, Diff>& other) const {
-        if (size() < other.size()) {
-            return true;
-        }
-        if (size() > other.size()) {
-            return false;
-        }
-        const_iterator b1 = begin();
-        const_iterator b2 = other.begin();
-        const_iterator e1 = end();
-        while (b1 != e1) {
-            if ((*b1) < (*b2)) {
-                return true;
-            }
-            if ((*b2) < (*b1)) {
-                return false;
-            }
-            ++b1;
-            ++b2;
-        }
-        return false;
+        return std::lexicographical_compare(begin(), end(), other.begin(), other.end());
     }
 
     size_t allocated_memory() const {
