@@ -752,6 +752,13 @@ FUZZ_TARGET(txgraph)
                 // Both transactions must exist in the main graph.
                 if (sim_a == SimTxGraph::MISSING || sim_b == SimTxGraph::MISSING) break;
                 auto cmp = real->CompareMainOrder(*ref_a, *ref_b);
+                auto rev_cmp = real->CompareMainOrder(*ref_b, *ref_a);
+                assert((cmp == std::strong_ordering::equal) == (sim_a == sim_b));
+                if (cmp == std::strong_ordering::less) assert(rev_cmp == std::strong_ordering::greater);
+                if (cmp == std::strong_ordering::greater) assert(rev_cmp == std::strong_ordering::less);
+                if (cmp == std::strong_ordering::equal) assert(rev_cmp == std::strong_ordering::equal);
+                assert(real->CompareMainOrder(*ref_a, *ref_a) == std::strong_ordering::equal);
+                assert(real->CompareMainOrder(*ref_b, *ref_b) == std::strong_ordering::equal);
                 // Distinct transactions have distinct places.
                 if (sim_a != sim_b) assert(cmp != 0);
                 // Ancestors go before descendants.
