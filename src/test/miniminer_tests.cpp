@@ -926,4 +926,24 @@ BOOST_FIXTURE_TEST_CASE(manual_ctor, TestChain100Setup)
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(miniminer_not_ready_methods_fail_closed, TestChain100Setup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    const auto parent = make_tx({COutPoint{m_coinbase_txns[0]->GetHash(), 0}}, /*num_outputs=*/1);
+    const COutPoint parent_outpoint{parent->GetHash(), 0};
+    TestMemPoolEntryHelper entry;
+    LOCK2(cs_main, pool.cs);
+    TryAddToMempool(pool, entry.Fee(100).FromTx(parent));
+
+    node::MiniMiner mini_miner{pool, {parent_outpoint}};
+    BOOST_REQUIRE(mini_miner.IsReadyToCalculate());
+    const auto bump_fees{mini_miner.CalculateBumpFees(CFeeRate{1000})};
+    BOOST_CHECK(!bump_fees.empty());
+    BOOST_CHECK(!mini_miner.IsReadyToCalculate());
+
+    BOOST_CHECK(mini_miner.CalculateBumpFees(CFeeRate{1000}).empty());
+    BOOST_CHECK(!mini_miner.CalculateTotalBumpFees(CFeeRate{1000}).has_value());
+    BOOST_CHECK(mini_miner.Linearize().empty());
+}
+
 BOOST_AUTO_TEST_SUITE_END()
