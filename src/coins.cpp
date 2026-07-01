@@ -374,6 +374,9 @@ CCoinsViewCache::ResetGuard CoinsViewOverlay::StartFetching(const CBlock& block 
     Assert(m_input_head.load(std::memory_order_relaxed) == 0);
     Assert(m_input_tail == 0);
     if (const auto workers_count{m_thread_pool->WorkersCount()}; workers_count > 0) {
+        size_t input_count{0};
+        for (const auto& tx : block.vtx | std::views::drop(1)) input_count += tx->vin.size();
+        m_inputs.reserve(input_count);
         // Loop through the block inputs and set their prevouts in the queue.
         // Filter inputs that spend outputs created earlier in the same block. These outputs will be created
         // directly in the cache from the tx that creates them, so they will not be requested from a base view.
