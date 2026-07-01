@@ -82,11 +82,11 @@ FUZZ_TARGET(string)
     (void)ResolveErrMsg(random_string_1, random_string_2);
     try {
         (void)RPCConvertNamedValues(random_string_1, random_string_vector);
-    } catch (const std::runtime_error&) {
+    } catch (const RPCConvertError&) {
     }
     try {
         (void)RPCConvertValues(random_string_1, random_string_vector);
-    } catch (const std::runtime_error&) {
+    } catch (const RPCConvertError&) {
     }
     (void)SanitizeString(random_string_1);
     (void)SanitizeString(random_string_1, fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 3));
@@ -105,7 +105,7 @@ FUZZ_TARGET(string)
     (void)ContainsNoNUL(random_string_1);
     try {
         throw scriptnum_error{random_string_1};
-    } catch (const std::runtime_error&) {
+    } catch (const scriptnum_error&) {
     }
 
     {
