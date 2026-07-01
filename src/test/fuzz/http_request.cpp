@@ -133,6 +133,12 @@ size_t CountOccurrences(std::string_view str, const std::string_view needle)
     return count;
 }
 
+enum class HTTPReadError {
+    NONE,
+    PARSE,
+    CONTENT_TOO_LARGE,
+};
+
 void AssertHeaderCollectionContracts(FuzzedDataProvider& fuzzed_data_provider)
 {
     http_bitcoin::HTTPHeaders headers;
@@ -333,6 +339,8 @@ void AssertReadRequestContracts(const std::vector<std::byte>& http_buffer)
 {
     using http_bitcoin::HTTPRequest;
     using http_bitcoin::HTTPRemoteClient;
+    using http_bitcoin::ContentTooLargeError;
+    using http_bitcoin::HTTPParseError;
     using http_bitcoin::MAX_HEADERS_SIZE;
     using util::LineReader;
 
@@ -340,13 +348,18 @@ void AssertReadRequestContracts(const std::vector<std::byte>& http_buffer)
     LineReader direct_reader(http_buffer, MAX_HEADERS_SIZE);
 
     bool direct_complete{false};
-    bool direct_threw{false};
+    HTTPReadError direct_error{HTTPReadError::NONE};
+    std::string direct_error_message;
     try {
         direct_complete = direct_request.LoadControlData(direct_reader) &&
                           direct_request.LoadHeaders(direct_reader) &&
                           direct_request.LoadBody(direct_reader);
-    } catch (const std::runtime_error&) {
-        direct_threw = true;
+    } catch (const ContentTooLargeError& e) {
+        direct_error = HTTPReadError::CONTENT_TOO_LARGE;
+        direct_error_message = e.what();
+    } catch (const HTTPParseError& e) {
+        direct_error = HTTPReadError::PARSE;
+        direct_error_message = e.what();
     }
 
     auto client{std::make_shared<HTTPRemoteClient>(
@@ -357,11 +370,16 @@ void AssertReadRequestContracts(const std::vector<std::byte>& http_buffer)
     const std::vector<std::byte> recv_buffer_before{client->m_recv_buffer};
 
     HTTPRequest client_request{client};
-    if (direct_threw) {
+    if (direct_error != HTTPReadError::NONE) {
         try {
             (void)client->ReadRequest(client_request);
             assert(false);
-        } catch (const std::runtime_error&) {
+        } catch (const ContentTooLargeError& e) {
+            assert(direct_error == HTTPReadError::CONTENT_TOO_LARGE);
+            assert(direct_error_message == e.what());
+        } catch (const HTTPParseError& e) {
+            assert(direct_error == HTTPReadError::PARSE);
+            assert(direct_error_message == e.what());
         }
         assert(client->m_recv_buffer == recv_buffer_before);
         return;
@@ -523,6 +541,8 @@ void AssertSendBufferContracts(FuzzedDataProvider& fuzzed_data_provider)
 FUZZ_TARGET(http_request)
 {
     using http_bitcoin::HTTPRequest;
+    using http_bitcoin::ContentTooLargeError;
+    using http_bitcoin::HTTPParseError;
     using http_bitcoin::MAX_BODY_SIZE;
     using http_bitcoin::MAX_HEADERS_SIZE;
     using util::LineReader;
@@ -542,7 +562,9 @@ FUZZ_TARGET(http_request)
         if (!http_request.LoadControlData(reader)) return;
         if (!http_request.LoadHeaders(reader)) return;
         if (!http_request.LoadBody(reader)) return;
-    } catch (const std::runtime_error&) {
+    } catch (const ContentTooLargeError&) {
+        return;
+    } catch (const HTTPParseError&) {
         return;
     }
 
