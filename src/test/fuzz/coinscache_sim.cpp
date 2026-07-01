@@ -381,6 +381,11 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         assert(caches.back()->AccessCoin(outpoint).IsSpent());
     };
 
+    auto coins_equal = [](const Coin& a, const Coin& b) {
+        if (a.IsSpent() || b.IsSpent()) return a.IsSpent() && b.IsSpent();
+        return a.out == b.out && a.fCoinBase == b.fCoinBase && a.nHeight == b.nHeight;
+    };
+
     // Main simulation loop: read commands from the fuzzer input, and apply them
     // to both the real cache stack and the simulation.
     FuzzedDataProvider provider(buffer.data(), buffer.size());
@@ -483,6 +488,13 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
                 const auto& realcoin = caches.back()->AccessCoin(data.outpoints[outpointidx]);
                 assert_cache_stats_if_present(parent_cache_stats);
+                const Coin realcoin_copy{realcoin};
+                const auto cache_stats_after_first{get_all_cache_stats()};
+                const auto parent_cache_stats_after_first{get_parent_cache_stats_if_top_overlay()};
+                const auto& realcoin_again = caches.back()->AccessCoin(data.outpoints[outpointidx]);
+                assert(coins_equal(realcoin_again, realcoin_copy));
+                assert_cache_stats(cache_stats_after_first);
+                assert_cache_stats_if_present(parent_cache_stats_after_first);
                 // Compare results.
                 if (!sim.has_value()) {
                     assert(realcoin.IsSpent());
