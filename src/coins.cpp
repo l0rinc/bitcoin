@@ -179,7 +179,9 @@ bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {
 static const Coin coinEmpty;
 
 const Coin& CCoinsViewCache::AccessCoin(const COutPoint &outpoint) const {
+    const size_t dirty_count{m_dirty_count};
     CCoinsMap::const_iterator it = FetchCoin(outpoint);
+    Assume(m_dirty_count == dirty_count);
     if (it == cacheCoins.end()) {
         return coinEmpty;
     } else {
