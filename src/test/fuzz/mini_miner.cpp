@@ -177,6 +177,9 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
             const auto inclusion_order{mini_miner.Linearize()};
             const auto template_txids{mini_miner.GetMockTemplateTxids()};
             assert(!mini_miner.IsReadyToCalculate());
+            assert(mini_miner.Linearize().empty());
+            assert(mini_miner.CalculateBumpFees(target_feerate).empty());
+            assert(!mini_miner.CalculateTotalBumpFees(target_feerate).has_value());
             assert(inclusion_order.size() == template_txids.size());
             for (const auto& [txid, _] : inclusion_order) {
                 assert(template_txids.contains(txid));
@@ -205,6 +208,8 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
             sum_fees += it->second;
         }
         assert(!mini_miner.IsReadyToCalculate());
+        assert(mini_miner.Linearize().empty());
+        assert(!mini_miner.CalculateTotalBumpFees(target_feerate).has_value());
     }
     {
         node::MiniMiner mini_miner{pool, outpoints};
@@ -218,6 +223,8 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         assert(total_bumpfee.has_value());
         assert(*total_bumpfee >= 0);
         assert(!mini_miner.IsReadyToCalculate());
+        assert(mini_miner.Linearize().empty());
+        assert(mini_miner.CalculateBumpFees(target_feerate).empty());
     }
     {
         node::MiniMiner lower_mini_miner{pool, outpoints};
