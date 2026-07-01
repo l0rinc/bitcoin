@@ -117,7 +117,10 @@ CFeeRate ParseFeeRate(const UniValue& json)
 uint256 ParseHashV(const UniValue& v, std::string_view name)
 {
     const std::string& strHex(v.get_str());
-    if (auto rv{uint256::FromHex(strHex)}) return *rv;
+    if (auto rv{uint256::FromHex(strHex)}) {
+        Assume(rv->GetHex() == ToLower(strHex));
+        return *rv;
+    }
     if (auto expected_len{uint256::size() * 2}; strHex.length() != expected_len) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("%s must be of length %d (not %d, for '%s')", name, expected_len, strHex.length(), strHex));
     }
@@ -134,7 +137,9 @@ std::vector<unsigned char> ParseHexV(const UniValue& v, std::string_view name)
         strHex = v.get_str();
     if (!IsHex(strHex))
         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("%s must be hexadecimal string (not '%s')", name, strHex));
-    return ParseHex(strHex);
+    auto parsed{ParseHex(strHex)};
+    Assume(HexStr(parsed) == ToLower(strHex));
+    return parsed;
 }
 std::vector<unsigned char> ParseHexO(const UniValue& o, std::string_view strKey)
 {
@@ -373,6 +378,8 @@ unsigned int ParseConfirmTarget(const UniValue& value, unsigned int max_target)
     if (target < 1 || unsigned_target > max_target) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Invalid conf_target, must be between %u and %u", 1, max_target));
     }
+    Assume(unsigned_target >= 1);
+    Assume(unsigned_target <= max_target);
     return unsigned_target;
 }
 
@@ -1330,6 +1337,10 @@ std::pair<int64_t, int64_t> ParseDescriptorRange(const UniValue& value)
     if (high >= low + 1000000) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Range is too large");
     }
+    Assume(low >= 0);
+    Assume(high >= low);
+    Assume((high >> 31) == 0);
+    Assume(high < low + 1000000);
     return {low, high};
 }
 
