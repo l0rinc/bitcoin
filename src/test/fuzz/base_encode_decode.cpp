@@ -40,14 +40,18 @@ FUZZ_TARGET(base58_encode_decode)
     assert(EncodeBase58(decoded_encoded) == encoded);
     const auto decode_input{provider.ConsumeBool() ? random_string : encoded};
     const int max_ret_len{provider.ConsumeIntegralInRange<int>(-1, decode_input.size() + 1)};
-    if (std::vector<unsigned char> decoded; DecodeBase58(decode_input, decoded, max_ret_len)) {
+    std::vector<unsigned char> decoded{0x42};
+    if (DecodeBase58(decode_input, decoded, max_ret_len)) {
         const auto encoded_string{EncodeBase58(decoded)};
         assert(encoded_string == TrimStringView(decode_input));
         if (decoded.size() > 0) {
             assert(max_ret_len > 0);
             assert(decoded.size() <= static_cast<size_t>(max_ret_len));
             assert(!DecodeBase58(encoded_string, decoded, provider.ConsumeIntegralInRange<int>(0, decoded.size() - 1)));
+            assert(decoded.empty());
         }
+    } else {
+        assert(decoded.empty());
     }
 }
 
