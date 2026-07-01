@@ -419,6 +419,11 @@ void CExtKey::Decode(const unsigned char code[BIP32_EXTKEY_SIZE]) {
 
 KeyPair::KeyPair(const CKey& key, const uint256* merkle_root)
 {
+    if (!key.IsValid()) {
+        Assume(!IsValid());
+        return;
+    }
+
     static_assert(std::tuple_size<KeyType>() == sizeof(secp256k1_keypair));
     MakeKeyPairData();
     auto keypair = reinterpret_cast<secp256k1_keypair*>(m_keypair->data());
