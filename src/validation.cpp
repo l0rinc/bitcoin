@@ -94,8 +94,8 @@ using node::SnapshotMetadata;
  *  Randomize writing time inside the window to prevent a situation where the
  *  network over time settles into a few cohorts of synchronized writers.
 */
-static constexpr auto DATABASE_WRITE_INTERVAL_MIN{50min};
-static constexpr auto DATABASE_WRITE_INTERVAL_MAX{70min};
+static constexpr auto DATABASE_WRITE_INTERVAL_MIN{90min};
+static constexpr auto DATABASE_WRITE_INTERVAL_MAX{110min};
 /** Maximum age of our tip for us to be considered current for fee estimation */
 static constexpr std::chrono::hours MAX_FEE_ESTIMATION_TIP_AGE{3};
 const std::vector<std::string> CHECKLEVEL_DOC {
@@ -116,7 +116,7 @@ static constexpr int PRUNE_LOCK_BUFFER{10};
 // Return whether the completed full flush should compact chainstate
 static bool ShouldCompactChainstate(bool in_ibd)
 {
-    static constexpr uint32_t flush_ratio{320}; // Roughly every 2 weeks with hourly flushes
+    static constexpr uint32_t flush_ratio{200}; // Roughly every 2 weeks with ~100 minute flushes; missing for ~200 days is a one-in-a-million event
     return !in_ibd && FastRandomContext().randrange(flush_ratio) == 0;
 }
 
