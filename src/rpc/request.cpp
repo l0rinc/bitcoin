@@ -9,6 +9,7 @@
 #include <logging.h>
 #include <random.h>
 #include <rpc/protocol.h>
+#include <util/check.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
 #include <util/strencodings.h>
@@ -72,6 +73,12 @@ UniValue JSONRPCError(int code, const std::string& message)
     UniValue error(UniValue::VOBJ);
     error.pushKV("code", code);
     error.pushKV("message", message);
+    Assert(error.isObject());
+    Assert(error.size() == 2);
+    Assert(error.exists("code"));
+    Assert(error.exists("message"));
+    Assert(error["code"].isNum());
+    Assert(error["message"].isStr());
     return error;
 }
 

@@ -6,8 +6,10 @@
 #include <primitives/block.h>
 #include <primitives/transaction_identifier.h>
 #include <pubkey.h>
+#include <rpc/protocol.h>
 #include <rpc/util.h>
 #include <test/fuzz/fuzz.h>
+#include <test/fuzz/util.h>
 #include <uint256.h>
 #include <univalue.h>
 #include <util/strencodings.h>
@@ -60,7 +62,9 @@ FUZZ_TARGET(hex)
     }
     try {
         (void)HexToPubKey(random_hex_string);
-    } catch (const UniValue&) {
+    } catch (const UniValue& e) {
+        AssertJSONRPCError(e);
+        assert(e["code"].getInt<int>() == RPC_INVALID_ADDRESS_OR_KEY);
     }
     CBlockHeader block_header;
     (void)DecodeHexBlockHeader(block_header, random_hex_string);
