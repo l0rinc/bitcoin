@@ -684,6 +684,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
             [&]() { // Reset.
                 sim_caches[caches.size()].Wipe();
                 sim_best_blocks[caches.size()] = uint256::ZERO;
+                const auto parent_cache_stats{get_cache_stats(caches.size() - 1)};
                 // Apply to real caches. Optionally start fetching again.
                 if (overlay_fetch_scope && provider.ConsumeBool()) {
                     overlay_fetch_scope.reset();
@@ -692,6 +693,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 } else {
                     (void)caches.back()->CreateResetGuard();
                 }
+                assert_cache_stats(parent_cache_stats);
                 assert_cache_empty(*caches.back());
             },
 
