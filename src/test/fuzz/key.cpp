@@ -64,6 +64,14 @@ FUZZ_TARGET(key, .init = initialize_key)
         assert(!invalid_key.IsValid());
         assert(invalid_key.size() == 0);
 
+        CKey child_key{key};
+        ChainCode child_chaincode{random_uint256};
+        const CKey child_key_before{child_key};
+        const ChainCode child_chaincode_before{child_chaincode};
+        assert(!invalid_key.Derive(child_key, child_chaincode, 0, ChainCode{random_uint256}));
+        assert(child_key == child_key_before);
+        assert(child_chaincode == child_chaincode_before);
+
         std::array<unsigned char, 64> schnorr_sig;
         schnorr_sig.fill(0xa5);
         const auto sig_before{schnorr_sig};
@@ -289,6 +297,49 @@ FUZZ_TARGET(key, .init = initialize_key)
         assert(child_pubkey.IsValid());
         assert(child_pubkey.size() == 33);
         assert(child_chaincode != random_uint256);
+    }
+
+    {
+        CPubKey invalid_pubkey;
+        CPubKey child_pubkey{pubkey};
+        ChainCode child_chaincode{random_uint256};
+        uint256 bip32_tweak{uint256::ONE};
+        const CPubKey child_pubkey_before{child_pubkey};
+        const ChainCode child_chaincode_before{child_chaincode};
+        const uint256 bip32_tweak_before{bip32_tweak};
+        assert(!invalid_pubkey.Derive(child_pubkey, child_chaincode, 0, ChainCode{random_uint256}, &bip32_tweak));
+        assert(child_pubkey == child_pubkey_before);
+        assert(child_chaincode == child_chaincode_before);
+        assert(bip32_tweak == bip32_tweak_before);
+
+        assert(!pubkey.Derive(child_pubkey, child_chaincode, 0x80000000U, ChainCode{random_uint256}, &bip32_tweak));
+        assert(child_pubkey == child_pubkey_before);
+        assert(child_chaincode == child_chaincode_before);
+        assert(bip32_tweak == bip32_tweak_before);
+    }
+
+    {
+        CExtKey ext_key;
+        ext_key.SetSeed(std::as_bytes(std::span{buffer}));
+        const CExtPubKey ext_pubkey{ext_key.Neuter()};
+
+        CExtKey invalid_ext_key;
+        CExtKey child_ext_key{ext_key};
+        const CExtKey child_ext_key_before{child_ext_key};
+        assert(!invalid_ext_key.Derive(child_ext_key, 0));
+        assert(child_ext_key == child_ext_key_before);
+
+        CExtPubKey invalid_ext_pubkey;
+        CExtPubKey child_ext_pubkey{ext_pubkey};
+        const CExtPubKey child_ext_pubkey_before{child_ext_pubkey};
+        assert(!invalid_ext_pubkey.Derive(child_ext_pubkey, 0));
+        assert(child_ext_pubkey == child_ext_pubkey_before);
+
+        uint256 bip32_tweak{uint256::ONE};
+        const uint256 bip32_tweak_before{bip32_tweak};
+        assert(!ext_pubkey.Derive(child_ext_pubkey, 0x80000000U, &bip32_tweak));
+        assert(child_ext_pubkey == child_ext_pubkey_before);
+        assert(bip32_tweak == bip32_tweak_before);
     }
 
     const CPrivKey priv_key = key.GetPrivKey();
