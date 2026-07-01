@@ -4,6 +4,7 @@
 
 #include <common/args.h>
 #include <sync.h>
+#include <test/util/common.h>
 #include <test/util/logging.h>
 #include <test/util/setup_common.h>
 #include <test/util/str.h>
@@ -726,6 +727,12 @@ BOOST_AUTO_TEST_CASE(util_GetChainTypeString)
     // regtest in test network section is ignored
     const char* testnetconf = "testnet4=1\nregtest=0\n[testnet4]\nregtest=1";
     std::string error;
+    const auto check_invalid_combination{[&] {
+        const HasReason invalid_combination{
+            "Invalid combination of -regtest, -signet, -testnet, -testnet4 and -chain. Can use at most one."};
+        BOOST_CHECK_EXCEPTION(test_args.GetChainTypeString(), ChainSelectionError, invalid_combination);
+        BOOST_CHECK_EXCEPTION(test_args.GetChainType(), ChainSelectionError, invalid_combination);
+    }};
 
     BOOST_CHECK(test_args.ParseParameters(0, argv_testnet4, error));
     BOOST_CHECK_EQUAL(test_args.GetChainTypeString(), "main");
@@ -743,7 +750,7 @@ BOOST_AUTO_TEST_CASE(util_GetChainTypeString)
     BOOST_CHECK_EQUAL(test_args.GetChainTypeString(), "testnet4");
 
     BOOST_CHECK(test_args.ParseParameters(3, argv_both, error));
-    BOOST_CHECK_THROW(test_args.GetChainTypeString(), std::runtime_error);
+    check_invalid_combination();
 
     BOOST_CHECK(test_args.ParseParameters(0, argv_testnet4, error));
     test_args.ReadConfigString(testnetconf);
@@ -755,7 +762,7 @@ BOOST_AUTO_TEST_CASE(util_GetChainTypeString)
 
     BOOST_CHECK(test_args.ParseParameters(2, argv_regtest, error));
     test_args.ReadConfigString(testnetconf);
-    BOOST_CHECK_THROW(test_args.GetChainTypeString(), std::runtime_error);
+    check_invalid_combination();
 
     BOOST_CHECK(test_args.ParseParameters(3, argv_test_no_reg, error));
     test_args.ReadConfigString(testnetconf);
@@ -763,7 +770,7 @@ BOOST_AUTO_TEST_CASE(util_GetChainTypeString)
 
     BOOST_CHECK(test_args.ParseParameters(3, argv_both, error));
     test_args.ReadConfigString(testnetconf);
-    BOOST_CHECK_THROW(test_args.GetChainTypeString(), std::runtime_error);
+    check_invalid_combination();
 
     // check setting the network to testnet4 (and thus making
     // [testnet4] regtest=1 potentially relevant) doesn't break things
@@ -779,7 +786,7 @@ BOOST_AUTO_TEST_CASE(util_GetChainTypeString)
 
     BOOST_CHECK(test_args.ParseParameters(2, argv_regtest, error));
     test_args.ReadConfigString(testnetconf);
-    BOOST_CHECK_THROW(test_args.GetChainTypeString(), std::runtime_error);
+    check_invalid_combination();
 
     BOOST_CHECK(test_args.ParseParameters(2, argv_test_no_reg, error));
     test_args.ReadConfigString(testnetconf);
@@ -787,7 +794,16 @@ BOOST_AUTO_TEST_CASE(util_GetChainTypeString)
 
     BOOST_CHECK(test_args.ParseParameters(3, argv_both, error));
     test_args.ReadConfigString(testnetconf);
-    BOOST_CHECK_THROW(test_args.GetChainTypeString(), std::runtime_error);
+    check_invalid_combination();
+
+    {
+        TestArgsManager unknown_chain_args;
+        unknown_chain_args.SetupArgs({std::make_pair("-chain", ArgsManager::ALLOW_ANY)});
+        const char* argv_unknown_chain[] = {"cmd", "-chain=custom"};
+        BOOST_CHECK(unknown_chain_args.ParseParameters(2, argv_unknown_chain, error));
+        BOOST_CHECK_EQUAL(unknown_chain_args.GetChainTypeString(), "custom");
+        BOOST_CHECK_EXCEPTION(unknown_chain_args.GetChainType(), ChainSelectionError, HasReason("Unknown chain custom."));
+    }
 }
 
 // Test different ways settings can be merged, and verify results. This test can
