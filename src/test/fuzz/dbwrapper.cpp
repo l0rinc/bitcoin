@@ -137,6 +137,20 @@ uint32_t ConsumeValueSize(FuzzedDataProvider& provider)
     return static_cast<uint32_t>(len) * multiplier;
 }
 
+/** Verify that Read returns the oracle value when present, and does not mutate
+ *  the output parameter when the key is absent. */
+void VerifyRead(const CDBWrapper& dbw, const Oracle& oracle, uint16_t key)
+{
+    std::vector<uint8_t> value{MakeValue(key ^ uint16_t{0xffff}, 32)};
+    if (const auto it{oracle.find(key)}; it != oracle.end()) {
+        assert(dbw.Read(key, value) && value == MakeValue(key, it->second));
+    } else {
+        const auto initial_value{value};
+        assert(!dbw.Read(key, value));
+        assert(value == initial_value);
+    }
+}
+
 /** Verify that the DB iterator matches the oracle, handling the obfuscation
  *  metadata entry (stored under a non-uint16_t key) when obfuscation is on. */
 void VerifyIterator(CDBWrapper& dbw, const Oracle& oracle,
@@ -307,13 +321,7 @@ void TestDbWrapper(FuzzedDataProvider& provider,
             // --- Reads ---
             [&] {
                 const auto key{ConsumeKey(provider)};
-                std::vector<uint8_t> value;
-                const bool found{dbw->Read(key, value)};
-                if (const auto it{oracle.find(key)}; it != oracle.end()) {
-                    assert(found && value == MakeValue(key, it->second));
-                } else {
-                    assert(!found);
-                }
+                VerifyRead(*dbw, oracle, key);
             },
             [&] {
                 const auto key{ConsumeKey(provider)};
@@ -447,7 +455,6 @@ FUZZ_TARGET(dbwrapper_concurrent_reads, .init = [] { static auto setup{MakeNoLog
             std::iota(order.begin(), order.end(), size_t{0});
             std::ranges::shuffle(order, thread_rng);
             const size_t queries_to_run{std::min(queries.size(), MAX_READ_QUERIES_PER_WORKER)};
-            std::vector<uint8_t> v;
             std::string key_str;
             start_latch.arrive_and_wait();
             const std::unique_ptr<CDBIterator> it{db.NewIterator()};
@@ -456,11 +463,7 @@ FUZZ_TARGET(dbwrapper_concurrent_reads, .init = [] { static auto setup{MakeNoLog
                 const auto& [op, key] = queries[i];
                 switch (op) {
                 case ReadOp::Read:
-                    if (const auto oit{oracle.find(key)}; oit != oracle.end()) {
-                        assert(db.Read(key, v) && v == MakeValue(key, oit->second));
-                    } else {
-                        assert(!db.Read(key, v));
-                    }
+                    VerifyRead(db, oracle, key);
                     break;
                 case ReadOp::Exists:
                     assert(db.Exists(key) == oracle.contains(key));
@@ -473,8 +476,9 @@ FUZZ_TARGET(dbwrapper_concurrent_reads, .init = [] { static auto setup{MakeNoLog
                     if (const auto oit{oracle.lower_bound(key)}; oit != oracle.end()) {
                         assert(it->Valid());
                         uint16_t actual_key;
+                        std::vector<uint8_t> value;
                         assert(it->GetKey(actual_key) && actual_key == oit->first);
-                        assert(it->GetValue(v) && v == MakeValue(actual_key, oit->second));
+                        assert(it->GetValue(value) && value == MakeValue(actual_key, oit->second));
                     } else {
                         assert(!it->Valid());
                     }
