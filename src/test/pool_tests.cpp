@@ -83,6 +83,27 @@ BOOST_AUTO_TEST_CASE(basic_allocating)
     BOOST_TEST(expected_bytes_available == PoolResourceTester::AvailableMemoryFromChunk(resource));
 }
 
+BOOST_AUTO_TEST_CASE(zero_sized_overaligned_allocation_uses_fallback)
+{
+    auto resource = PoolResource<8, 8>(8);
+    const auto chunks_before{resource.NumAllocatedChunks()};
+    const auto available_before{PoolResourceTester::AvailableMemoryFromChunk(resource)};
+    const auto free_lists_before{PoolResourceTester::FreeListSizes(resource)};
+
+    void* p = resource.Allocate(0, 64);
+    BOOST_REQUIRE(p != nullptr);
+    BOOST_CHECK_EQUAL(reinterpret_cast<uintptr_t>(p) & uintptr_t{63}, uintptr_t{0});
+    BOOST_CHECK_EQUAL(resource.NumAllocatedChunks(), chunks_before);
+    BOOST_CHECK_EQUAL(PoolResourceTester::AvailableMemoryFromChunk(resource), available_before);
+    BOOST_CHECK(PoolResourceTester::FreeListSizes(resource) == free_lists_before);
+
+    resource.Deallocate(p, 0, 64);
+    PoolResourceTester::CheckAllDataAccountedFor(resource);
+    BOOST_CHECK_EQUAL(resource.NumAllocatedChunks(), chunks_before);
+    BOOST_CHECK_EQUAL(PoolResourceTester::AvailableMemoryFromChunk(resource), available_before);
+    BOOST_CHECK(PoolResourceTester::FreeListSizes(resource) == free_lists_before);
+}
+
 BOOST_AUTO_TEST_CASE(chunk_rollover_preserves_leftover_freelist)
 {
     auto resource = PoolResource<16, 8>(16);
