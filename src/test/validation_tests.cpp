@@ -8,12 +8,15 @@
 #include <core_io.h>
 #include <hash.h>
 #include <net.h>
+#include <script/script.h>
 #include <signet.h>
 #include <uint256.h>
 #include <util/chaintype.h>
 #include <validation.h>
 
+#include <optional>
 #include <string>
+#include <vector>
 
 #include <test/util/setup_common.h>
 
@@ -43,6 +46,46 @@ static void TestBlockSubsidyHalvings(int nSubsidyHalvingInterval)
     Consensus::Params consensusParams;
     consensusParams.nSubsidyHalvingInterval = nSubsidyHalvingInterval;
     TestBlockSubsidyHalvings(consensusParams);
+}
+
+static bool IsSignetToSpendScriptSig(const CScript& script)
+{
+    opcodetype opcode;
+    CScript::const_iterator pc{script.begin()};
+    std::vector<uint8_t> pushdata;
+    if (!script.GetOp(pc, opcode, pushdata) || opcode != OP_0 || !pushdata.empty()) return false;
+    if (!script.GetOp(pc, opcode, pushdata) || pushdata.size() != 72) return false;
+    return pc == script.end();
+}
+
+static void CheckSignetTxContracts(const SignetTxs& txs, const CScript& challenge)
+{
+    BOOST_CHECK_EQUAL(txs.m_to_spend.version, 0);
+    BOOST_CHECK_EQUAL(txs.m_to_spend.nLockTime, 0);
+    BOOST_CHECK_EQUAL(txs.m_to_spend.vin.size(), 1);
+    BOOST_CHECK(txs.m_to_spend.vin[0].prevout.IsNull());
+    BOOST_CHECK(IsSignetToSpendScriptSig(txs.m_to_spend.vin[0].scriptSig));
+    BOOST_CHECK_EQUAL(txs.m_to_spend.vin[0].nSequence, 0);
+    BOOST_CHECK_EQUAL(txs.m_to_spend.vout.size(), 1);
+    BOOST_CHECK_EQUAL(txs.m_to_spend.vout[0].nValue, 0);
+    BOOST_CHECK(txs.m_to_spend.vout[0].scriptPubKey == challenge);
+
+    BOOST_CHECK_EQUAL(txs.m_to_sign.version, 0);
+    BOOST_CHECK_EQUAL(txs.m_to_sign.nLockTime, 0);
+    BOOST_CHECK_EQUAL(txs.m_to_sign.vin.size(), 1);
+    const COutPoint expected_prevout{txs.m_to_spend.GetHash(), 0};
+    BOOST_CHECK(txs.m_to_sign.vin[0].prevout == expected_prevout);
+    BOOST_CHECK_EQUAL(txs.m_to_sign.vin[0].nSequence, 0);
+    BOOST_CHECK_EQUAL(txs.m_to_sign.vout.size(), 1);
+    BOOST_CHECK_EQUAL(txs.m_to_sign.vout[0].nValue, 0);
+    BOOST_CHECK(txs.m_to_sign.vout[0].scriptPubKey == CScript(OP_RETURN));
+}
+
+static void CheckSignetCreateSucceeds(const CBlock& block, const CScript& challenge)
+{
+    const std::optional<SignetTxs> signet_txs{SignetTxs::Create(block, challenge)};
+    BOOST_REQUIRE(signet_txs);
+    CheckSignetTxContracts(*signet_txs, challenge);
 }
 
 BOOST_AUTO_TEST_CASE(block_subsidy_test)
@@ -94,14 +137,14 @@ BOOST_AUTO_TEST_CASE(signet_parse_tests)
     }
     cb.vout.at(0).scriptPubKey = CScript{} << OP_RETURN << witness_commitment_section_141;
     block.vtx.at(0) = MakeTransactionRef(cb);
-    BOOST_CHECK(SignetTxs::Create(block, challenge));
+    CheckSignetCreateSucceeds(block, challenge);
     BOOST_CHECK(CheckSignetBlockSolution(block, signet_params->GetConsensus()));
 
     // no data after header, valid
     std::vector<uint8_t> witness_commitment_section_325{0xec, 0xc7, 0xda, 0xa2};
     cb.vout.at(0).scriptPubKey = CScript{} << OP_RETURN << witness_commitment_section_141 << witness_commitment_section_325;
     block.vtx.at(0) = MakeTransactionRef(cb);
-    BOOST_CHECK(SignetTxs::Create(block, challenge));
+    CheckSignetCreateSucceeds(block, challenge);
     BOOST_CHECK(CheckSignetBlockSolution(block, signet_params->GetConsensus()));
 
     // Premature end of data, invalid
@@ -116,7 +159,7 @@ BOOST_AUTO_TEST_CASE(signet_parse_tests)
     witness_commitment_section_325.push_back(0x00);
     cb.vout.at(0).scriptPubKey = CScript{} << OP_RETURN << witness_commitment_section_141 << witness_commitment_section_325;
     block.vtx.at(0) = MakeTransactionRef(cb);
-    BOOST_CHECK(SignetTxs::Create(block, challenge));
+    CheckSignetCreateSucceeds(block, challenge);
     BOOST_CHECK(CheckSignetBlockSolution(block, signet_params->GetConsensus()));
 
     // Extraneous data, invalid
