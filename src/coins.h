@@ -22,6 +22,7 @@
 #include <cstdint>
 
 #include <functional>
+#include <stdexcept>
 #include <unordered_map>
 
 /**
@@ -244,6 +245,12 @@ private:
     uint256 block_hash;
 };
 
+class CoinsViewCursorUnsupportedError : public std::logic_error
+{
+public:
+    using std::logic_error::logic_error;
+};
+
 /**
  * Cursor for iterating over the linked list of flagged entries in CCoinsViewCache.
  *
@@ -453,7 +460,7 @@ public:
     void SetBestBlock(const uint256& block_hash);
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) override;
     std::unique_ptr<CCoinsViewCursor> Cursor() const override {
-        throw std::logic_error("CCoinsViewCache cursor iteration not supported.");
+        throw CoinsViewCursorUnsupportedError{"CCoinsViewCache cursor iteration not supported."};
     }
 
     /**
