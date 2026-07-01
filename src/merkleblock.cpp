@@ -193,5 +193,6 @@ uint256 CPartialMerkleTree::ExtractMatches(std::vector<Txid> &vMatch, std::vecto
     // verify that all hashes were consumed
     if (nHashUsed != vHash.size())
         return uint256();
+    Assume(!fBad);
     return hashMerkleRoot;
 }
