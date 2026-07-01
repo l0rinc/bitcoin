@@ -263,6 +263,20 @@ void UnregisterHTTPHandler(const std::string &prefix, bool exactMatch)
 namespace http_bitcoin {
 using util::Split;
 
+namespace {
+std::optional<std::string_view> ReadHTTPLine(LineReader& reader)
+{
+    try {
+        return reader.ReadLine();
+    } catch (const std::runtime_error& e) {
+        if (std::string_view{e.what()} == "max_line_length exceeded by LineReader") {
+            throw HTTPParseError{e.what()};
+        }
+        throw;
+    }
+}
+} // namespace
+
 std::optional<std::string> HTTPHeaders::FindFirst(const std::string_view key) const
 {
     for (const auto& item : m_headers) {
@@ -303,8 +317,8 @@ bool HTTPHeaders::Read(util::LineReader& reader)
 {
     // Headers https://httpwg.org/specs/rfc9110.html#rfc.section.6.3
     // A sequence of Field Lines https://httpwg.org/specs/rfc9110.html#rfc.section.5.2
-    while (auto maybe_line = reader.ReadLine()) {
-        if (reader.Consumed() > MAX_HEADERS_SIZE) throw std::runtime_error("HTTP headers exceed size limit");
+    while (auto maybe_line = ReadHTTPLine(reader)) {
+        if (reader.Consumed() > MAX_HEADERS_SIZE) throw HTTPParseError("HTTP headers exceed size limit");
 
         const std::string_view& line = *maybe_line;
 
@@ -317,25 +331,25 @@ bool HTTPHeaders::Read(util::LineReader& reader)
         // within any protocol elements other than the content.
         // A recipient of such a bare CR MUST consider that element to be invalid...
         // https://httpwg.org/specs/rfc9112.html#rfc.section.2.2
-        if (line.find_first_of("\r\n\0", 0, 3) != std::string_view::npos) throw std::runtime_error("Header contains invalid character");
+        if (line.find_first_of("\r\n\0", 0, 3) != std::string_view::npos) throw HTTPParseError("Header contains invalid character");
 
         // Header line must have at least one ":"
         // keys are not allowed to have delimiters like ":" but values are
         // https://httpwg.org/specs/rfc9110.html#rfc.section.5.6.2
         const size_t pos{line.find(':')};
-        if (pos == std::string_view::npos) throw std::runtime_error("HTTP header missing colon (:)");
+        if (pos == std::string_view::npos) throw HTTPParseError("HTTP header missing colon (:)");
 
         // Whitespace is strictly not allowed in the field-name (key)
         // https://www.rfc-editor.org/rfc/rfc9110.html#section-5.6.2
         std::string_view key = line.substr(0, pos);
-        if (key.find_first_of(" \t\n\r\f\v") != std::string_view::npos) throw std::runtime_error("Invalid header field-name contains whitespace");
+        if (key.find_first_of(" \t\n\r\f\v") != std::string_view::npos) throw HTTPParseError("Invalid header field-name contains whitespace");
         // Whitespace is optional in the value and can be trimmed
         std::string value = util::TrimString(std::string_view(line).substr(pos + 1));
 
         // Header keys are Field Names: https://httpwg.org/specs/rfc9110.html#fields.names
         // which consist of "tokens": https://httpwg.org/specs/rfc9110.html#rfc.section.5.6.2
         // that can not be empty.
-        if (key.empty()) throw std::runtime_error("Empty HTTP header name");
+        if (key.empty()) throw HTTPParseError("Empty HTTP header name");
 
         Write(std::string(key), std::move(value));
     }
@@ -368,21 +382,21 @@ std::string HTTPResponse::StringifyHeaders() const
 
 bool HTTPRequest::LoadControlData(LineReader& reader)
 {
-    auto maybe_line = reader.ReadLine();
+    auto maybe_line = ReadHTTPLine(reader);
     if (!maybe_line) return false;
     const std::string_view& request_line = *maybe_line;
 
     // Request Line aka Control Data https://httpwg.org/specs/rfc9110.html#rfc.section.6.2
     // Three words separated by spaces, terminated by \n or \r\n
-    if (request_line.length() < MIN_REQUEST_LINE_LENGTH) throw std::runtime_error("HTTP request line too short");
+    if (request_line.length() < MIN_REQUEST_LINE_LENGTH) throw HTTPParseError("HTTP request line too short");
 
     // NUL is not a valid tchar and would silently truncate
     // C-string-based parsers rather than being rejected as malformed.
     // tchar: https://www.rfc-editor.org/info/rfc7230/#section-3.2.6
-    if (request_line.find('\0') != std::string_view::npos) throw std::runtime_error("Invalid request line contains NUL");
+    if (request_line.find('\0') != std::string_view::npos) throw HTTPParseError("Invalid request line contains NUL");
 
     const std::vector<std::string_view> parts{Split<std::string_view>(request_line, " ")};
-    if (parts.size() != 3) throw std::runtime_error("HTTP request line malformed");
+    if (parts.size() != 3) throw HTTPParseError("HTTP request line malformed");
 
     if (parts[0] == "GET") {
         m_method = HTTPRequestMethod::GET;
@@ -398,16 +412,16 @@ bool HTTPRequest::LoadControlData(LineReader& reader)
 
     m_target = parts[1];
 
-    if (parts[2].rfind("HTTP/") != 0) throw std::runtime_error("HTTP request line malformed");
+    if (parts[2].rfind("HTTP/") != 0) throw HTTPParseError("HTTP request line malformed");
 
     // Version is exactly two decimal digits separated by a decimal point
     // https://httpwg.org/specs/rfc9110.html#rfc.section.2.5
     const std::vector<std::string_view> version_parts{Split<std::string_view>(parts[2].substr(5), ".")};
-    if (version_parts.size() != 2) throw std::runtime_error("HTTP request line malformed");
-    if (version_parts[0].size() != 1 || version_parts[1].size() != 1) throw std::runtime_error("HTTP bad version");
+    if (version_parts.size() != 2) throw HTTPParseError("HTTP request line malformed");
+    if (version_parts[0].size() != 1 || version_parts[1].size() != 1) throw HTTPParseError("HTTP bad version");
     auto major = ToIntegral<uint8_t>(version_parts[0]);
     auto minor = ToIntegral<uint8_t>(version_parts[1]);
-    if (!major || !minor || major != 1 || minor > 9) throw std::runtime_error("HTTP bad version");
+    if (!major || !minor || major != 1 || minor > 9) throw HTTPParseError("HTTP bad version");
     m_version.major = major.value();
     m_version.minor = minor.value();
 
@@ -428,7 +442,7 @@ bool HTTPRequest::LoadBody(LineReader& reader)
         // Chunked Transfer Coding: https://datatracker.ietf.org/doc/html/rfc7230.html#section-4.1
         // see evhttp_handle_chunked_read() in libevent http.c
         while (reader.Remaining() > 0) {
-            auto maybe_chunk_size = reader.ReadLine();
+            auto maybe_chunk_size = ReadHTTPLine(reader);
             if (!maybe_chunk_size) return false;
 
             // Allow (but ignore) Chunk Extensions
@@ -440,7 +454,7 @@ bool HTTPRequest::LoadBody(LineReader& reader)
             }
 
             const auto chunk_size{ToIntegral<uint64_t>(util::TrimStringView(chunk_size_noext), /*base=*/16)};
-            if (!chunk_size) throw std::runtime_error("Cannot parse chunk length value");
+            if (!chunk_size) throw HTTPParseError("Cannot parse chunk length value");
 
             if ((m_body.size() > MAX_BODY_SIZE) ||
                 (*chunk_size > MAX_BODY_SIZE - m_body.size()))
@@ -454,9 +468,9 @@ bool HTTPRequest::LoadBody(LineReader& reader)
                 // See https://httpwg.org/specs/rfc9112.html#rfc.section.7.1.2
                 const size_t trailer_start{reader.Consumed()};
                 while (true) {
-                    auto maybe_trailer = reader.ReadLine();
+                    auto maybe_trailer = ReadHTTPLine(reader);
                     if (reader.Consumed() - trailer_start > MAX_HEADERS_SIZE) {
-                        throw std::runtime_error("HTTP chunked trailer exceeds size limit");
+                        throw HTTPParseError("HTTP chunked trailer exceeds size limit");
                     }
                     if (!maybe_trailer) return false;
                     if (maybe_trailer->empty()) break;
@@ -478,13 +492,13 @@ bool HTTPRequest::LoadBody(LineReader& reader)
             // Even though every chunk size is explicitly declared,
             // they are still terminated by a CRLF we don't need,
             // just consume it here.
-            auto crlf = reader.ReadLine();
+            auto crlf = ReadHTTPLine(reader);
             if (!crlf) {
                 // CRLF not found before end of buffer: it has not been received by our socket yet.
                 return false;
             }
             // CRLF was found but there was unexpected data after the chunk_sized chunk
-            if (!crlf.value().empty()) throw std::runtime_error("Improperly terminated chunk");
+            if (!crlf.value().empty()) throw HTTPParseError("Improperly terminated chunk");
         }
 
         // We read all the chunks but never got the last chunk, wait for client to send more
@@ -501,11 +515,11 @@ bool HTTPRequest::LoadBody(LineReader& reader)
         // https://www.rfc-editor.org/rfc/rfc7230#section-3.3.3
         const auto& first_content_length_value{content_length_values[0]};
         for (size_t i = 1; i < content_length_values.size(); ++i) {
-            if (content_length_values[i] != first_content_length_value) throw std::runtime_error("Differing Content-Length values");
+            if (content_length_values[i] != first_content_length_value) throw HTTPParseError("Differing Content-Length values");
         }
 
         const auto content_length{ToIntegral<uint64_t>(first_content_length_value)};
-        if (!content_length) throw std::runtime_error("Cannot parse Content-Length value");
+        if (!content_length) throw HTTPParseError("Cannot parse Content-Length value");
 
         if (*content_length > MAX_BODY_SIZE) throw ContentTooLargeError("Max body size exceeded");
 
