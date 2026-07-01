@@ -7,6 +7,8 @@
 #include <node/context.h>
 #include <rpc/blockchain.h>
 #include <rpc/client.h>
+#include <rpc/protocol.h>
+#include <rpc/request.h>
 #include <rpc/server.h>
 #include <rpc/util.h>
 #include <test/util/common.h>
@@ -16,7 +18,9 @@
 #include <util/time.h>
 
 #include <any>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include <boost/test/unit_test.hpp>
 
@@ -43,6 +47,20 @@ public:
 private:
     const std::string m_json;
 };
+
+static bool HasJSONRPCErrorShape(const UniValue& error, int expected_code, std::string_view expected_message)
+{
+    if (!error.isObject()) return false;
+    if (error.size() != 2) return false;
+    if (error.getKeys().size() != 2) return false;
+    if (error.getKeys()[0] != "code") return false;
+    if (error.getKeys()[1] != "message") return false;
+    if (!error.exists("code")) return false;
+    if (!error.exists("message")) return false;
+    if (!error["code"].isNum()) return false;
+    if (!error["message"].isStr()) return false;
+    return error["code"].getInt<int>() == expected_code && error["message"].get_str() == expected_message;
+}
 
 class RPCTestingSetup : public TestingSetup
 {
@@ -86,6 +104,28 @@ UniValue RPCTestingSetup::CallRPC(std::string args)
 
 
 BOOST_FIXTURE_TEST_SUITE(rpc_tests, RPCTestingSetup)
+
+BOOST_AUTO_TEST_CASE(jsonrpc_error_shape)
+{
+    const UniValue error{JSONRPCError(-8, "bad parameter")};
+    BOOST_CHECK(HasJSONRPCErrorShape(error, -8, "bad parameter"));
+}
+
+BOOST_AUTO_TEST_CASE(hex_to_pubkey_error_shape)
+{
+    const std::string invalid_pubkey{std::string{"02"} + std::string(64, '0')};
+    const std::vector<std::pair<std::string, std::string>> cases{
+        {"zz", "Pubkey \"zz\" must be a hex string"},
+        {"00", "Pubkey \"00\" must have a length of either 33 or 65 bytes"},
+        {invalid_pubkey, "Pubkey \"" + invalid_pubkey + "\" must be cryptographically valid."},
+    };
+
+    for (const auto& [hex, message] : cases) {
+        BOOST_CHECK_EXCEPTION(HexToPubKey(hex), UniValue, [&](const UniValue& error) {
+            return HasJSONRPCErrorShape(error, RPC_INVALID_ADDRESS_OR_KEY, message);
+        });
+    }
+}
 
 BOOST_AUTO_TEST_CASE(rpc_namedparams)
 {
