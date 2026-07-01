@@ -153,4 +153,30 @@ BOOST_AUTO_TEST_CASE(pmt_extract_matches_clears_outputs)
     BOOST_CHECK(indices.empty());
 }
 
+BOOST_AUTO_TEST_CASE(pmt_extract_matches_is_repeatable)
+{
+    const std::vector<Txid> txids{
+        Txid::FromUint256(uint256{1}),
+        Txid::FromUint256(uint256{2}),
+        Txid::FromUint256(uint256{3}),
+        Txid::FromUint256(uint256{4}),
+    };
+    const std::vector<bool> matches_mask{false, true, false, true};
+    CPartialMerkleTree tree{txids, matches_mask};
+
+    std::vector<Txid> first_matches;
+    std::vector<unsigned int> first_indices;
+    const uint256 first_root{tree.ExtractMatches(first_matches, first_indices)};
+    BOOST_REQUIRE(!first_root.IsNull());
+    BOOST_CHECK(first_matches == std::vector<Txid>({txids[1], txids[3]}));
+    BOOST_CHECK(first_indices == std::vector<unsigned int>({1, 3}));
+
+    std::vector<Txid> second_matches{Txid::FromUint256(uint256{99})};
+    std::vector<unsigned int> second_indices{999};
+    const uint256 second_root{tree.ExtractMatches(second_matches, second_indices)};
+    BOOST_CHECK(second_root == first_root);
+    BOOST_CHECK(second_matches == first_matches);
+    BOOST_CHECK(second_indices == first_indices);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
