@@ -5,6 +5,7 @@
 #include <addresstype.h>
 #include <clientversion.h>
 #include <coins.h>
+#include <script/script.h>
 #include <streams.h>
 #include <test/util/common.h>
 #include <test/util/poolresourcetester.h>
@@ -69,6 +70,14 @@ CoinsViewDBSnapshot SnapshotCoinsViewDB(CCoinsViewDB& db)
         BOOST_CHECK(!coin.IsSpent());
         cursor->Next();
     }
+    COutPoint exhausted_outpoint{Txid::FromUint256(uint256::ONE), 1};
+    const COutPoint exhausted_outpoint_before{exhausted_outpoint};
+    Coin exhausted_coin{CTxOut{1, CScript{} << OP_TRUE}, 1, false};
+    const Coin exhausted_coin_before{exhausted_coin};
+    BOOST_CHECK(!cursor->GetKey(exhausted_outpoint));
+    BOOST_CHECK(exhausted_outpoint == exhausted_outpoint_before);
+    BOOST_CHECK(!cursor->GetValue(exhausted_coin));
+    BOOST_CHECK(exhausted_coin == exhausted_coin_before);
 
     return snapshot;
 }
