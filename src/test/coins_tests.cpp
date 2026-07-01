@@ -1635,6 +1635,57 @@ BOOST_AUTO_TEST_CASE(ccoins_reset_guard_parent_cache_purity)
     BOOST_CHECK_EQUAL(child.GetBestBlock(), parent_best_block);
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_dirty_child_destructor_parent_cache_purity)
+{
+    auto rand_nonzero_hash = [&] {
+        uint256 block_hash;
+        do {
+            block_hash = m_rng.rand256();
+        } while (block_hash.IsNull());
+        return block_hash;
+    };
+
+    CCoinsViewTest root{m_rng};
+    CCoinsViewCache root_cache{&root};
+    root_cache.SetBestBlock(rand_nonzero_hash());
+    root_cache.Flush();
+
+    CCoinsViewCacheTest parent{&root};
+    const COutPoint parent_outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin parent_coin{CTxOut{1, CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+    parent.AddCoin(parent_outpoint, Coin{parent_coin}, /*possible_overwrite=*/false);
+    const uint256 parent_best_block{rand_nonzero_hash()};
+    parent.SetBestBlock(parent_best_block);
+
+    COutPoint child_outpoint;
+    do {
+        child_outpoint = COutPoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    } while (child_outpoint == parent_outpoint);
+    const Coin child_coin{CTxOut{2, CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+
+    const auto parent_size{parent.GetCacheSize()};
+    const auto parent_dirty{parent.GetDirtyCount()};
+    const auto parent_memory{parent.DynamicMemoryUsage()};
+    const auto parent_best{parent.GetBestBlock()};
+
+    {
+        CCoinsViewCache child{&parent};
+        child.AddCoin(child_outpoint, Coin{child_coin}, /*possible_overwrite=*/false);
+        child.SetBestBlock(rand_nonzero_hash());
+        BOOST_CHECK(child.HaveCoin(child_outpoint));
+        BOOST_CHECK_EQUAL(child.GetDirtyCount(), 1U);
+    }
+
+    BOOST_CHECK_EQUAL(parent.GetCacheSize(), parent_size);
+    BOOST_CHECK_EQUAL(parent.GetDirtyCount(), parent_dirty);
+    BOOST_CHECK_EQUAL(parent.DynamicMemoryUsage(), parent_memory);
+    BOOST_CHECK_EQUAL(parent.GetBestBlock(), parent_best);
+    BOOST_CHECK(parent.AccessCoin(parent_outpoint) == parent_coin);
+    BOOST_CHECK(parent.AccessCoin(child_outpoint).IsSpent());
+    BOOST_CHECK_EQUAL(parent.GetBestBlock(), parent_best_block);
+    parent.SelfTest();
+}
+
 BOOST_AUTO_TEST_CASE(ccoins_best_block_cache_stack)
 {
     auto rand_nonzero_hash = [&] {
