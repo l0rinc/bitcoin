@@ -389,7 +389,7 @@ CCoinsViewCache::ResetGuard CoinsViewOverlay::StartFetching(const CBlock& block 
             earlier_txids.emplace(tx->GetHash());
         }
         // Only submit tasks if we have something to fetch, and no more tasks than inputs.
-        if (m_inputs.size()) {
+        if (!m_inputs.empty()) {
             std::vector<std::function<void()>> tasks(std::min<size_t>(workers_count, m_inputs.size()), [this] {
                 while (ProcessInput()) {}
             });
