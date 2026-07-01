@@ -20,6 +20,31 @@
 #include <string>
 #include <vector>
 
+namespace {
+CBlockHeader MakeNonNullBlockHeader()
+{
+    CBlockHeader header;
+    header.nVersion = 1;
+    header.hashPrevBlock = uint256::ONE;
+    header.hashMerkleRoot = uint256{2};
+    header.nTime = 3;
+    header.nBits = 4;
+    header.nNonce = 5;
+    return header;
+}
+
+CBlock MakeNonNullBlock()
+{
+    CBlock block;
+    static_cast<CBlockHeader&>(block) = MakeNonNullBlockHeader();
+    block.vtx.push_back(MakeTransactionRef(CMutableTransaction{}));
+    block.fChecked = true;
+    block.m_checked_witness_commitment = true;
+    block.m_checked_merkle_root = true;
+    return block;
+}
+} // namespace
+
 FUZZ_TARGET(hex)
 {
     const std::string random_hex_string(buffer.begin(), buffer.end());
@@ -66,8 +91,22 @@ FUZZ_TARGET(hex)
         AssertJSONRPCError(e);
         assert(e["code"].getInt<int>() == RPC_INVALID_ADDRESS_OR_KEY);
     }
-    CBlockHeader block_header;
-    (void)DecodeHexBlockHeader(block_header, random_hex_string);
-    CBlock block;
-    (void)DecodeHexBlk(block, random_hex_string);
+    CBlockHeader block_header{MakeNonNullBlockHeader()};
+    if (!DecodeHexBlockHeader(block_header, random_hex_string)) {
+        assert(block_header.IsNull());
+        assert(block_header.nVersion == 0);
+        assert(block_header.hashPrevBlock.IsNull());
+        assert(block_header.hashMerkleRoot.IsNull());
+        assert(block_header.nTime == 0);
+        assert(block_header.nBits == 0);
+        assert(block_header.nNonce == 0);
+    }
+    CBlock block{MakeNonNullBlock()};
+    if (!DecodeHexBlk(block, random_hex_string)) {
+        assert(block.IsNull());
+        assert(block.vtx.empty());
+        assert(!block.fChecked);
+        assert(!block.m_checked_witness_commitment);
+        assert(!block.m_checked_merkle_root);
+    }
 }
