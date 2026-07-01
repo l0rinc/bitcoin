@@ -1226,12 +1226,14 @@ BOOST_FIXTURE_TEST_CASE(coins_db_leveldb_layout, FlushTest)
     cache.SetBestBlock(block_hash);
     cache.Sync();
 
+    const uint256 best_block_before{base.GetBestBlock()};
+    BOOST_CHECK_EQUAL(best_block_before, block_hash);
     BOOST_CHECK_EQUAL(level2_files(base), 0);
     WITH_LOCK(::cs_main, return base.CompactFullAsync()).wait();
     BOOST_CHECK_EQUAL(level2_files(base), 1);
 
     BOOST_CHECK(*Assert(base.GetCoin(outpoint)) == coin);
-    BOOST_CHECK_EQUAL(base.GetBestBlock(), block_hash);
+    BOOST_CHECK_EQUAL(base.GetBestBlock(), best_block_before);
 }
 
 BOOST_AUTO_TEST_CASE(coins_resource_is_used)
