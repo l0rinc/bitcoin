@@ -1052,6 +1052,8 @@ void CTxMemPool::GetTransactionAncestry(const Txid& txid, size_t& ancestors, siz
     LOCK(cs);
     auto it = mapTx.find(txid);
     ancestors = cluster_count = 0;
+    if (ancestorsize) *ancestorsize = 0;
+    if (ancestorfees) *ancestorfees = 0;
     if (it != mapTx.end()) {
         auto [ancestor_count, ancestor_size, ancestor_fees] = CalculateAncestorData(*it);
         const auto graph_cluster_count{m_txgraph->GetCluster(*it, TxGraph::Level::MAIN).size()};
@@ -1066,6 +1068,11 @@ void CTxMemPool::GetTransactionAncestry(const Txid& txid, size_t& ancestors, siz
         Assume(ancestors <= cluster_count);
         if (ancestorsize) Assume(*ancestorsize == ancestor_size);
         if (ancestorfees) Assume(*ancestorfees == ancestor_fees);
+    } else {
+        Assume(ancestors == 0);
+        Assume(cluster_count == 0);
+        if (ancestorsize) Assume(*ancestorsize == 0);
+        if (ancestorfees) Assume(*ancestorfees == 0);
     }
 }
 
