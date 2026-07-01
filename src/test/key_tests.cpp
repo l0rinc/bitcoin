@@ -371,6 +371,14 @@ BOOST_AUTO_TEST_CASE(bip340_test_vectors)
             BOOST_CHECK(tweaked_key.VerifySchnorr(msg256, sig64));
         }
     }
+
+    CKey invalid_key;
+    std::array<unsigned char, 64> sig64;
+    sig64.fill(0xa5);
+    const auto sig64_before{sig64};
+    BOOST_CHECK(!invalid_key.SignSchnorr(uint256::ONE, sig64, nullptr, uint256::ZERO));
+    BOOST_CHECK(sig64 == sig64_before);
+    BOOST_CHECK(!invalid_key.ComputeKeyPair(nullptr).IsValid());
 }
 
 BOOST_AUTO_TEST_CASE(key_ellswift)
