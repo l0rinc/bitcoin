@@ -145,11 +145,8 @@ FUZZ_TARGET(system, .init = initialize_system)
                 for (const std::string& random_argument : random_arguments) {
                     argv.push_back(random_argument.c_str());
                 }
-                try {
-                    std::string error;
-                    (void)args_manager.ParseParameters(argv.size(), argv.data(), error);
-                } catch (const std::logic_error&) {
-                }
+                std::string error;
+                (void)args_manager.ParseParameters(argv.size(), argv.data(), error);
             });
     }
 
