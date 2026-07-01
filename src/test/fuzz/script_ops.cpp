@@ -82,8 +82,8 @@ FUZZ_TARGET(script_ops)
         (void)script.IsPushOnly(pc);
     }
     {
-        int version{-1};
-        std::vector<uint8_t> program;
+        int version{42};
+        std::vector<uint8_t> program{0x42};
         const bool is_witness_program{script.IsWitnessProgram(version, program)};
         if (is_witness_program) {
             assert(version >= 0 && version <= 16);
@@ -100,6 +100,9 @@ FUZZ_TARGET(script_ops)
             if (CScript::IsPayToAnchor(version, program)) {
                 assert(is_p2a);
             }
+        } else {
+            assert(version == -1);
+            assert(program.empty());
         }
         if (is_p2a) {
             assert(is_witness_program);
