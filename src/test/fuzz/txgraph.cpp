@@ -914,12 +914,14 @@ FUZZ_TARGET(txgraph)
                 if ((orig_command % 5) >= 3) {
                     // Skip.
                     builder_data.builder->Skip();
+                    if (!chunk) assert(!builder_data.builder->GetCurrentChunk());
                     if (current_chunk.Any()) {
                         builder_data.skipped_clusters |= main_sim.graph.GetConnectedComponent(main_sim.graph.Positions(), current_chunk.First());
                     }
                 } else {
                     // Include.
                     builder_data.builder->Include();
+                    if (!chunk) assert(!builder_data.builder->GetCurrentChunk());
                     builder_data.included = new_included;
                 }
                 builder_data.done = new_done;
