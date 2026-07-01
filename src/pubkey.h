@@ -332,12 +332,12 @@ public:
 };
 
 struct CExtPubKey {
-    unsigned char version[4];
-    unsigned char nDepth;
-    unsigned char vchFingerprint[4];
-    unsigned int nChild;
-    ChainCode chaincode;
-    CPubKey pubkey;
+    unsigned char version[4]{};
+    unsigned char nDepth{0};
+    unsigned char vchFingerprint[4]{};
+    unsigned int nChild{0};
+    ChainCode chaincode{};
+    CPubKey pubkey{};
 
     friend bool operator==(const CExtPubKey &a, const CExtPubKey &b)
     {

@@ -301,8 +301,7 @@ bool CKey::Load(const CPrivKey &seckey, const CPubKey &vchPubKey, bool fSkipChec
 }
 
 bool CKey::Derive(CKey& keyChild, ChainCode &ccChild, unsigned int nChild, const ChainCode& cc) const {
-    assert(IsValid());
-    assert(IsCompressed());
+    if (!IsValid() || !IsCompressed()) return false;
     std::vector<unsigned char, secure_allocator<unsigned char>> vout(64);
     if ((nChild >> 31) == 0) {
         CPubKey pubkey = GetPubKey();
@@ -312,11 +311,17 @@ bool CKey::Derive(CKey& keyChild, ChainCode &ccChild, unsigned int nChild, const
         assert(size() == 32);
         BIP32Hash(cc, nChild, 0, UCharCast(begin()), vout.data());
     }
-    memcpy(ccChild.begin(), vout.data()+32, 32);
-    keyChild.Set(begin(), begin() + 32, true);
-    bool ret = secp256k1_ec_seckey_tweak_add(secp256k1_context_static, (unsigned char*)keyChild.begin(), vout.data());
-    if (!ret) keyChild.ClearKeyData();
-    return ret;
+    ChainCode child_chaincode;
+    memcpy(child_chaincode.begin(), vout.data()+32, 32);
+    CKey child_key;
+    child_key.Set(begin(), begin() + 32, true);
+    if (!secp256k1_ec_seckey_tweak_add(secp256k1_context_static, (unsigned char*)child_key.begin(), vout.data())) {
+        return false;
+    }
+    keyChild = child_key;
+    ccChild = child_chaincode;
+    Assume(keyChild.IsValid());
+    return true;
 }
 
 EllSwiftPubKey CKey::EllSwiftCreate(std::span<const std::byte> ent32) const
@@ -369,11 +374,19 @@ CKey GenerateRandomKey(bool compressed) noexcept
 
 bool CExtKey::Derive(CExtKey &out, unsigned int _nChild) const {
     if (nDepth == std::numeric_limits<unsigned char>::max()) return false;
+    if (!key.IsValid() || !key.IsCompressed()) return false;
+    CKey child_key;
+    ChainCode child_chaincode;
+    if (!key.Derive(child_key, child_chaincode, _nChild, chaincode)) return false;
+
     out.nDepth = nDepth + 1;
     CKeyID id = key.GetPubKey().GetID();
     memcpy(out.vchFingerprint, &id, 4);
     out.nChild = _nChild;
-    return key.Derive(out.key, out.chaincode, _nChild, chaincode);
+    out.chaincode = child_chaincode;
+    out.key = child_key;
+    Assume(out.key.IsValid());
+    return true;
 }
 
 void CExtKey::SetSeed(std::span<const std::byte> seed)
