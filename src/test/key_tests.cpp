@@ -6,6 +6,7 @@
 
 #include <common/system.h>
 #include <key_io.h>
+#include <secp256k1.h>
 #include <span.h>
 #include <streams.h>
 #include <secp256k1_extrakeys.h>
@@ -16,6 +17,8 @@
 #include <util/strencodings.h>
 #include <util/string.h>
 
+#include <algorithm>
+#include <array>
 #include <string>
 #include <vector>
 
@@ -23,6 +26,9 @@
 
 using namespace util::hex_literals;
 using util::ToString;
+
+int ec_seckey_import_der(const secp256k1_context* ctx, unsigned char* out32, const unsigned char* seckey, size_t seckeylen);
+int ec_seckey_export_der(const secp256k1_context* ctx, unsigned char* seckey, size_t* seckeylen, const unsigned char* key32, bool compressed);
 
 static const std::string strSecret1 = "5HxWvvfubhXpYYpS3tJkw6fq9jE9j18THftkZjHHfmFiWtmAbrj";
 static const std::string strSecret2 = "5KC4ejrDjv152FGwP386VD1i2NYc5KkfSMyv1nGy1VGDxGHqVY3";
@@ -161,6 +167,38 @@ BOOST_AUTO_TEST_CASE(key_test1)
     BOOST_CHECK(key2C.SignCompact(hashMsg, detsigc));
     BOOST_CHECK_EQUAL(HexStr(detsig), "1c52d8a32079c11e79db95af63bb9600c5b04f21a9ca33dc129c2bfa8ac9dc1cd561d8ae5e0f6c1a16bde3719c64c2fd70e404b6428ab9a69566962e8771b5944d");
     BOOST_CHECK_EQUAL(HexStr(detsigc), "2052d8a32079c11e79db95af63bb9600c5b04f21a9ca33dc129c2bfa8ac9dc1cd561d8ae5e0f6c1a16bde3719c64c2fd70e404b6428ab9a69566962e8771b5944d");
+}
+
+BOOST_AUTO_TEST_CASE(key_der_import_export_contracts)
+{
+    std::array<unsigned char, 32> out32;
+    out32.fill(0xa5);
+    const std::vector<unsigned char> invalid_der{0x30, 0x81, 0x00};
+    BOOST_CHECK_EQUAL(ec_seckey_import_der(secp256k1_context_static, out32.data(), invalid_der.data(), invalid_der.size()), 0);
+    BOOST_CHECK(std::ranges::all_of(out32, [](unsigned char byte) { return byte == 0; }));
+
+    std::array<unsigned char, 32> invalid_key{};
+    std::vector<unsigned char> seckey(CKey::SIZE, 0xa5);
+    size_t seckeylen{seckey.size()};
+    secp256k1_context* ctx{secp256k1_context_create(SECP256K1_CONTEXT_NONE)};
+    BOOST_CHECK_EQUAL(ec_seckey_export_der(ctx, seckey.data(), &seckeylen, invalid_key.data(), /*compressed=*/true), 0);
+    BOOST_CHECK_EQUAL(seckeylen, 0);
+
+    std::array<unsigned char, 32> valid_key{};
+    valid_key.back() = 1;
+    for (const bool compressed : {false, true}) {
+        std::ranges::fill(seckey, 0xa5);
+        seckeylen = seckey.size();
+        BOOST_CHECK_EQUAL(ec_seckey_export_der(ctx, seckey.data(), &seckeylen, valid_key.data(), compressed), 1);
+        const size_t expected_len{compressed ? static_cast<size_t>(CKey::COMPRESSED_SIZE) : static_cast<size_t>(CKey::SIZE)};
+        BOOST_CHECK(seckeylen == expected_len);
+        BOOST_CHECK(std::ranges::all_of(seckey.begin() + seckeylen, seckey.end(), [](unsigned char byte) { return byte == 0xa5; }));
+
+        out32.fill(0);
+        BOOST_CHECK_EQUAL(ec_seckey_import_der(secp256k1_context_static, out32.data(), seckey.data(), seckeylen), 1);
+        BOOST_CHECK(std::ranges::equal(out32, valid_key));
+    }
+    secp256k1_context_destroy(ctx);
 }
 
 BOOST_AUTO_TEST_CASE(key_signature_tests)
