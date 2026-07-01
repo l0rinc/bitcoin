@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <random>
+#include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(random_tests, BasicTestingSetup)
 
@@ -76,6 +77,35 @@ BOOST_AUTO_TEST_CASE(fastrandom_tests_deterministic)
         // Check with time-point type
         BOOST_CHECK_EQUAL(2782, ctx.rand_uniform_duration<SteadySeconds>(9h).count());
     }
+}
+
+BOOST_AUTO_TEST_CASE(fastrandom_explicit_seed_urbg_deterministic)
+{
+    FastRandomContext ctx1{uint256::ONE};
+    FastRandomContext ctx2{uint256::ONE};
+
+    BOOST_CHECK_EQUAL(ctx1(), ctx2());
+    BOOST_CHECK_EQUAL(ctx1.randbits(17), ctx2.randbits(17));
+
+    const uint64_t range{123456789};
+    const uint64_t rand1{ctx1.randrange(range)};
+    const uint64_t rand2{ctx2.randrange(range)};
+    BOOST_CHECK_EQUAL(rand1, rand2);
+    BOOST_CHECK_LT(rand1, range);
+
+    BOOST_CHECK(ctx1.randbytes<std::byte>(19) == ctx2.randbytes<std::byte>(19));
+
+    std::vector<int> shuffled1{0, 1, 2, 3, 4, 5, 6, 7};
+    std::vector<int> shuffled2{shuffled1};
+    std::shuffle(shuffled1.begin(), shuffled1.end(), ctx1);
+    std::shuffle(shuffled2.begin(), shuffled2.end(), ctx2);
+    BOOST_CHECK(shuffled1 == shuffled2);
+
+    std::vector<int> sorted_shuffled1{shuffled1};
+    std::vector<int> sorted_shuffled2{shuffled2};
+    std::sort(sorted_shuffled1.begin(), sorted_shuffled1.end());
+    std::sort(sorted_shuffled2.begin(), sorted_shuffled2.end());
+    BOOST_CHECK_EQUAL_COLLECTIONS(sorted_shuffled1.begin(), sorted_shuffled1.end(), sorted_shuffled2.begin(), sorted_shuffled2.end());
 }
 
 BOOST_AUTO_TEST_CASE(fastrandom_tests_nondeterministic)
