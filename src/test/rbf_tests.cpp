@@ -131,6 +131,14 @@ BOOST_FIXTURE_TEST_CASE(rbf_helper_functions, TestChain100Setup)
 
     const auto unused_txid = Txid::FromUint256(GetRandHash());
 
+    // Tests for GetUniqueClusterCount.
+    BOOST_CHECK_EQUAL(pool.GetUniqueClusterCount(empty_set), 0U);
+    BOOST_CHECK_EQUAL(pool.GetUniqueClusterCount({entry1_normal}), 1U);
+    BOOST_CHECK_EQUAL(pool.GetUniqueClusterCount(set_12_normal), 1U);
+    BOOST_CHECK_EQUAL(pool.GetUniqueClusterCount(set_34_cpfp), 1U);
+    BOOST_CHECK_EQUAL(pool.GetUniqueClusterCount(set_78_high), 2U);
+    BOOST_CHECK_EQUAL(pool.GetUniqueClusterCount(all_entries), 5U);
+
     // Tests for EntriesAndTxidsDisjoint
     BOOST_CHECK(EntriesAndTxidsDisjoint(empty_set, {tx1->GetHash()}, unused_txid) == std::nullopt);
     BOOST_CHECK(EntriesAndTxidsDisjoint(set_12_normal, {tx3->GetHash()}, unused_txid) == std::nullopt);
