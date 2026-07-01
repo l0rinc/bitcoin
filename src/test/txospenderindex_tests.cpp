@@ -7,46 +7,67 @@
 #include <test/util/setup_common.h>
 #include <validation.h>
 
+#include <utility>
+
 #include <boost/test/unit_test.hpp>
 
 BOOST_AUTO_TEST_SUITE(txospenderindex_tests)
 
-BOOST_FIXTURE_TEST_CASE(txospenderindex_initial_sync, TestChain100Setup)
-{
-    // Setup phase:
-    // Mine blocks for coinbase maturity, so we can spend some coinbase outputs in the test.
-    const CScript& coinbase_script = m_coinbase_txns[0]->vout[0].scriptPubKey;
-    for (int i = 0; i < 10; i++) CreateAndProcessBlock({}, coinbase_script);
+struct TxoSpenderIndexTestSetup : public TestChain100Setup {
+    struct SpenderBlock {
+        CBlock block;
+        uint256 tip_hash;
+        const CBlockIndex* tip;
+        std::vector<COutPoint> spent;
+        std::vector<CMutableTransaction> spender;
+    };
 
-    // Spend 10 outputs
-    std::vector<COutPoint> spent(10);
-    std::vector<CMutableTransaction> spender(spent.size());
-    for (size_t i = 0; i < spent.size(); i++) {
-        // Outpoint
-        auto coinbase_tx = m_coinbase_txns[i];
-        spent[i] = COutPoint(coinbase_tx->GetHash(), 0);
+    SpenderBlock CreateSpenderBlock(size_t count)
+    {
+        // Setup phase:
+        // Mine blocks for coinbase maturity, so we can spend some coinbase outputs in the test.
+        const CScript& coinbase_script = m_coinbase_txns[0]->vout[0].scriptPubKey;
+        for (int i = 0; i < 10; i++) CreateAndProcessBlock({}, coinbase_script);
 
-        // Spending tx
-        spender[i].version = 1;
-        spender[i].vin.resize(1);
-        spender[i].vin[0].prevout.hash = spent[i].hash;
-        spender[i].vin[0].prevout.n = spent[i].n;
-        spender[i].vout.resize(1);
-        spender[i].vout[0].nValue = coinbase_tx->GetValueOut();
-        spender[i].vout[0].scriptPubKey = coinbase_script;
+        // Spend outputs
+        std::vector<COutPoint> spent(count);
+        std::vector<CMutableTransaction> spender(spent.size());
+        for (size_t i = 0; i < spent.size(); i++) {
+            // Outpoint
+            auto coinbase_tx = m_coinbase_txns[i];
+            spent[i] = COutPoint(coinbase_tx->GetHash(), 0);
 
-        // Sign
-        std::vector<unsigned char> vchSig;
-        const uint256 hash = SignatureHash(coinbase_script, spender[i], 0, SIGHASH_ALL, 0, SigVersion::BASE);
-        BOOST_REQUIRE(coinbaseKey.Sign(hash, vchSig));
-        vchSig.push_back((unsigned char)SIGHASH_ALL);
-        spender[i].vin[0].scriptSig << vchSig;
+            // Spending tx
+            spender[i].version = 1;
+            spender[i].vin.resize(1);
+            spender[i].vin[0].prevout.hash = spent[i].hash;
+            spender[i].vin[0].prevout.n = spent[i].n;
+            spender[i].vout.resize(1);
+            spender[i].vout[0].nValue = coinbase_tx->GetValueOut();
+            spender[i].vout[0].scriptPubKey = coinbase_script;
+
+            // Sign
+            std::vector<unsigned char> vchSig;
+            const uint256 hash = SignatureHash(coinbase_script, spender[i], 0, SIGHASH_ALL, 0, SigVersion::BASE);
+            BOOST_REQUIRE(coinbaseKey.Sign(hash, vchSig));
+            vchSig.push_back((unsigned char)SIGHASH_ALL);
+            spender[i].vin[0].scriptSig << vchSig;
+        }
+
+        // Generate and ensure block has been fully processed
+        CBlock block{CreateAndProcessBlock(spender, coinbase_script)};
+        uint256 tip_hash{block.GetHash()};
+        m_node.validation_signals->SyncWithValidationInterfaceQueue();
+        const CBlockIndex* tip{WITH_LOCK(::cs_main, return m_node.chainman->ActiveTip())};
+        BOOST_CHECK_EQUAL(tip->GetBlockHash(), tip_hash);
+
+        return {std::move(block), tip_hash, tip, std::move(spent), std::move(spender)};
     }
+};
 
-    // Generate and ensure block has been fully processed
-    const uint256 tip_hash = CreateAndProcessBlock(spender, coinbase_script).GetHash();
-    m_node.validation_signals->SyncWithValidationInterfaceQueue();
-    BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return m_node.chainman->ActiveTip()->GetBlockHash()), tip_hash);
+BOOST_FIXTURE_TEST_CASE(txospenderindex_initial_sync, TxoSpenderIndexTestSetup)
+{
+    const auto [block, tip_hash, tip, spent, spender]{CreateSpenderBlock(10)};
 
     // Now we concluded the setup phase, run index
     TxoSpenderIndex txospenderindex(interfaces::MakeChain(m_node), 1 << 20, true);
