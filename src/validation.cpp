@@ -6148,6 +6148,7 @@ static ChainstateManager::Options&& Flatten(ChainstateManager::Options&& opts)
 //! Create the thread pool for prefetching block input prevouts.
 static std::shared_ptr<ThreadPool> MakePrevoutFetchPool(int32_t num_threads)
 {
+    num_threads = std::clamp<int32_t>(num_threads, 0, MAX_PREVOUTFETCH_THREADS);
     auto pool{std::make_shared<ThreadPool>("prevout")};
     if (num_threads > 0) {
         pool->Start(num_threads);

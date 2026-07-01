@@ -995,7 +995,8 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_args, BasicTestingSetup)
     BOOST_CHECK_EQUAL(get_valid_opts({}).prevoutfetch_threads_num, DEFAULT_PREVOUTFETCH_THREADS);
     BOOST_CHECK_EQUAL(get_valid_opts({"-prevoutfetchthreads=0"}).prevoutfetch_threads_num, 0);
     BOOST_CHECK_EQUAL(get_valid_opts({"-prevoutfetchthreads=3"}).prevoutfetch_threads_num, 3);
-    BOOST_CHECK_EQUAL(get_valid_opts({"-prevoutfetchthreads=100"}).prevoutfetch_threads_num, MAX_PREVOUTFETCH_THREADS);
+    // Values above MAX_PREVOUTFETCH_THREADS pass through; they are clamped when the thread pool is created.
+    BOOST_CHECK_EQUAL(get_valid_opts({"-prevoutfetchthreads=100"}).prevoutfetch_threads_num, 100);
     BOOST_CHECK(!get_opts({"-prevoutfetchthreads=-1"}));
 }
 
