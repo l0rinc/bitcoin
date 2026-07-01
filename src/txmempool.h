@@ -425,7 +425,10 @@ public:
             entries.emplace_back(&*it);
         }
         Assume(!m_txgraph->IsOversized(TxGraph::Level::MAIN));
-        return m_txgraph->CountDistinctClusters(entries, TxGraph::Level::MAIN);
+        const size_t cluster_count{m_txgraph->CountDistinctClusters(entries, TxGraph::Level::MAIN)};
+        Assume(cluster_count <= entries.size());
+        Assume((cluster_count == 0) == entries.empty());
+        return cluster_count;
     }
 
     /**
