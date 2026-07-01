@@ -381,6 +381,60 @@ BOOST_AUTO_TEST_CASE(MempoolLoadSkipsDisabledPrioritisation)
     fs::remove(mempool_path + ".new");
 }
 
+BOOST_AUTO_TEST_CASE(MempoolLoadDisabledMetadataPreservesExistingEntry)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    BOOST_REQUIRE_EQUAL(pool.size(), 0U);
+    BOOST_REQUIRE(pool.GetPrioritisedTransactions().empty());
+    BOOST_REQUIRE(pool.GetUnbroadcastTxs().empty());
+
+    CMutableTransaction tx_mut;
+    tx_mut.vin.resize(1);
+    tx_mut.vin[0].prevout = COutPoint{Txid::FromUint256(uint256{4}), 0};
+    tx_mut.vin[0].scriptSig = CScript() << OP_4;
+    tx_mut.vout.resize(1);
+    tx_mut.vout[0].scriptPubKey = CScript() << OP_4 << OP_EQUAL;
+    tx_mut.vout[0].nValue = 10 * COIN;
+    const CTransactionRef tx{MakeTransactionRef(tx_mut)};
+    const Txid txid{tx->GetHash()};
+
+    constexpr CAmount base_fee{10'000};
+    constexpr CAmount fee_delta{1'234};
+    TestMemPoolEntryHelper entry;
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(base_fee).FromTx(tx));
+    }
+    pool.PrioritiseTransaction(txid, fee_delta);
+    pool.AddUnbroadcastTx(txid);
+
+    const fs::path mempool_path{m_args.GetDataDirBase() / "mempool_disabled_metadata_preserves_existing.dat"};
+    fs::remove(mempool_path);
+    fs::remove(mempool_path + ".new");
+    BOOST_REQUIRE(node::DumpMempool(pool, mempool_path));
+
+    pool.RemoveUnbroadcastTx(txid);
+    BOOST_REQUIRE(pool.GetUnbroadcastTxs().empty());
+
+    BOOST_REQUIRE(node::LoadMempool(pool, mempool_path, m_node.chainman->ActiveChainstate(),
+                                    {
+                                        .apply_fee_delta_priority = false,
+                                        .apply_unbroadcast_set = false,
+                                    }));
+    BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
+
+    const auto deltas{pool.GetPrioritisedTransactions()};
+    BOOST_REQUIRE_EQUAL(deltas.size(), 1U);
+    BOOST_CHECK(deltas.front().txid == txid);
+    BOOST_CHECK(deltas.front().in_mempool);
+    BOOST_CHECK_EQUAL(deltas.front().delta, fee_delta);
+    BOOST_REQUIRE(deltas.front().modified_fee.has_value());
+    BOOST_CHECK_EQUAL(*deltas.front().modified_fee, base_fee + fee_delta);
+
+    fs::remove(mempool_path);
+    fs::remove(mempool_path + ".new");
+}
+
 BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
 {
     auto& pool = static_cast<MemPoolTest&>(*Assert(m_node.mempool));
