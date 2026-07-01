@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <core_io.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <uint256.h>
@@ -29,6 +30,29 @@ void CheckNullBlock(const CBlock& block)
     BOOST_CHECK(!block.fChecked);
     BOOST_CHECK(!block.m_checked_witness_commitment);
     BOOST_CHECK(!block.m_checked_merkle_root);
+}
+
+CBlockHeader MakeNonNullHeader()
+{
+    CBlockHeader header;
+    header.nVersion = 1;
+    header.hashPrevBlock = uint256::ONE;
+    header.hashMerkleRoot = uint256{2};
+    header.nTime = 3;
+    header.nBits = 4;
+    header.nNonce = 5;
+    return header;
+}
+
+CBlock MakeNonNullBlock()
+{
+    CBlock block;
+    static_cast<CBlockHeader&>(block) = MakeNonNullHeader();
+    block.vtx.push_back(MakeTransactionRef(CMutableTransaction{}));
+    block.fChecked = true;
+    block.m_checked_witness_commitment = true;
+    block.m_checked_merkle_root = true;
+    return block;
 }
 } // namespace
 
@@ -58,6 +82,25 @@ BOOST_AUTO_TEST_CASE(block_setnull_clears_all_fields)
     block.m_checked_merkle_root = true;
 
     block.SetNull();
+    CheckNullBlock(block);
+}
+
+BOOST_AUTO_TEST_CASE(decode_hex_block_failure_clears_output)
+{
+    CBlockHeader header{MakeNonNullHeader()};
+    BOOST_CHECK(!DecodeHexBlockHeader(header, "not hex"));
+    CheckNullHeader(header);
+
+    header = MakeNonNullHeader();
+    BOOST_CHECK(!DecodeHexBlockHeader(header, "00"));
+    CheckNullHeader(header);
+
+    CBlock block{MakeNonNullBlock()};
+    BOOST_CHECK(!DecodeHexBlk(block, "not hex"));
+    CheckNullBlock(block);
+
+    block = MakeNonNullBlock();
+    BOOST_CHECK(!DecodeHexBlk(block, "00"));
     CheckNullBlock(block);
 }
 
