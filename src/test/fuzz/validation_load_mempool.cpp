@@ -210,6 +210,13 @@ FUZZ_TARGET(validation_load_mempool, .init = initialize_validation_load_mempool)
     Assert(LoadMempool(roundtrip_pool, roundtrip_path, chainstate, {}));
     AssertMempoolPersistContracts(roundtrip_pool, chainstate);
     AssertSameMempoolSnapshot(pool, roundtrip_pool);
+    Assert(LoadMempool(roundtrip_pool, roundtrip_path, chainstate,
+                       {
+                           .apply_fee_delta_priority = false,
+                           .apply_unbroadcast_set = false,
+                       }));
+    AssertMempoolPersistContracts(roundtrip_pool, chainstate);
+    AssertSameMempoolSnapshot(pool, roundtrip_pool);
 
     const bool use_current_time{fuzzed_data_provider.ConsumeBool()};
     const bool apply_fee_delta_priority{fuzzed_data_provider.ConsumeBool()};
