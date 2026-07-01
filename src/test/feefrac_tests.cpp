@@ -180,4 +180,18 @@ BOOST_AUTO_TEST_CASE(compare_chunks_equal_rate_split)
     BOOST_CHECK(std::is_eq(CompareChunks(split, merged)));
 }
 
+BOOST_AUTO_TEST_CASE(compare_chunks_order_contracts)
+{
+    const std::vector<FeeFrac> lower{{1, 1}};
+    const std::vector<FeeFrac> higher{{2, 1}};
+    BOOST_CHECK(std::is_lt(CompareChunks(lower, higher)));
+    BOOST_CHECK(std::is_gt(CompareChunks(higher, lower)));
+    BOOST_CHECK(std::is_eq(CompareChunks(higher, higher)));
+
+    const std::vector<FeeFrac> better_early{{10, 1}, {0, 9}};
+    const std::vector<FeeFrac> better_late{{20, 10}};
+    BOOST_CHECK(CompareChunks(better_early, better_late) == std::partial_ordering::unordered);
+    BOOST_CHECK(CompareChunks(better_late, better_early) == std::partial_ordering::unordered);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
