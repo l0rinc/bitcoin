@@ -200,7 +200,31 @@ FUZZ_TARGET(addrman, .init = initialize_addrman)
             nets.insert(net);
         }
     }
-    (void)const_addr_man.Select(fuzzed_data_provider.ConsumeBool(), nets);
+    const bool new_only{fuzzed_data_provider.ConsumeBool()};
+    const auto eligible_select_count{[&] {
+        if (nets.empty()) {
+            return new_only ? const_addr_man.Size(/*net=*/std::nullopt, /*in_new=*/true) : const_addr_man.Size();
+        }
+        size_t count{0};
+        for (const auto net : nets) {
+            count += const_addr_man.Size(net, /*in_new=*/true);
+            if (!new_only) count += const_addr_man.Size(net, /*in_new=*/false);
+        }
+        return count;
+    }()};
+    const auto selected{const_addr_man.Select(new_only, nets)};
+    if (selected.first.IsValid()) {
+        if (!nets.empty()) assert(nets.contains(selected.first.GetNetClass()));
+        if (new_only) {
+            const auto new_entries{const_addr_man.GetEntries(/*from_tried=*/false)};
+            assert(std::any_of(new_entries.begin(), new_entries.end(), [&](const auto& entry) {
+                return static_cast<const CService&>(entry.first) == static_cast<const CService&>(selected.first);
+            }));
+        }
+        assert(eligible_select_count > 0);
+    } else {
+        assert(eligible_select_count == 0);
+    }
 
     std::optional<bool> in_new;
     if (fuzzed_data_provider.ConsumeBool()) {
