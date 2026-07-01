@@ -151,17 +151,24 @@ BOOST_AUTO_TEST_CASE(compress_p2pk_scripts_not_on_curve)
     BOOST_CHECK_EQUAL(script.size(), 67U);
 
     CompressedScript out;
+    out.push_back(0x42);
+    out.push_back(0x43);
     bool done = CompressScript(script, out);
     BOOST_CHECK_EQUAL(done, false);
+    BOOST_CHECK(out.empty());
 
     // Check that compressed P2PK script with uncompressed pubkey that is not fully
     // valid (i.e. x coordinate of the pubkey is not on curve) can't be decompressed
     CompressedScript compressed_script(x_not_on_curve.begin(), x_not_on_curve.end());
     for (unsigned int compression_id : {4, 5}) {
-        CScript uncompressed_script;
+        CScript uncompressed_script{CScript{} << OP_TRUE};
         bool success = DecompressScript(uncompressed_script, compression_id, compressed_script);
         BOOST_CHECK_EQUAL(success, false);
+        BOOST_CHECK(uncompressed_script.empty());
     }
+    CScript uncompressed_script{CScript{} << OP_TRUE};
+    BOOST_CHECK(!DecompressScript(uncompressed_script, /*nSize=*/6, compressed_script));
+    BOOST_CHECK(uncompressed_script.empty());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
