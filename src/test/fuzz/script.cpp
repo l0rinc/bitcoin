@@ -42,6 +42,8 @@ FUZZ_TARGET(script, .init = initialize_script)
     const CScript script{ConsumeScript(fuzzed_data_provider)};
 
     CompressedScript compressed;
+    compressed.push_back(0x42);
+    compressed.push_back(0x43);
     if (CompressScript(script, compressed)) {
         const unsigned int size = compressed[0];
         compressed.erase(compressed.begin());
@@ -50,6 +52,8 @@ FUZZ_TARGET(script, .init = initialize_script)
         const bool ok = DecompressScript(decompressed_script, size, compressed);
         assert(ok);
         assert(script == decompressed_script);
+    } else {
+        assert(compressed.empty());
     }
 
     TxoutType which_type;
@@ -99,8 +103,10 @@ FUZZ_TARGET(script, .init = initialize_script)
         compressed_script.assign(bytes.begin(), bytes.end());
         // DecompressScript(..., ..., bytes) is not guaranteed to be defined if the bytes vector is too short
         if (compressed_script.size() >= 32) {
-            CScript decompressed_script;
-            DecompressScript(decompressed_script, fuzzed_data_provider.ConsumeIntegral<unsigned int>(), compressed_script);
+            CScript decompressed_script{CScript{} << OP_TRUE};
+            if (!DecompressScript(decompressed_script, fuzzed_data_provider.ConsumeIntegral<unsigned int>(), compressed_script)) {
+                assert(decompressed_script.empty());
+            }
         }
     }
 
