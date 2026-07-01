@@ -8,6 +8,7 @@
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 
+#include <algorithm>
 #include <ranges>
 #include <vector>
 namespace {
@@ -65,6 +66,14 @@ public:
         for (Size s = 0; s < ss1.size(); s++) {
             assert(ss1[s] == ss2[s]);
         }
+        const bool real_less{std::lexicographical_compare(real_vector.begin(), real_vector.end(),
+                                                          real_vector_alt.begin(), real_vector_alt.end())};
+        const bool real_alt_less{std::lexicographical_compare(real_vector_alt.begin(), real_vector_alt.end(),
+                                                              real_vector.begin(), real_vector.end())};
+        assert((pre_vector < pre_vector_alt) == real_less);
+        assert((pre_vector_alt < pre_vector) == real_alt_less);
+        assert(!(pre_vector < pre_vector));
+        assert(!(pre_vector_alt < pre_vector_alt));
     }
 
     void resize(Size s)
