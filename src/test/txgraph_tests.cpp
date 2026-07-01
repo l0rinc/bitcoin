@@ -426,6 +426,25 @@ BOOST_AUTO_TEST_CASE(txgraph_block_builder_skip_excludes_cluster)
     }
 }
 
+BOOST_AUTO_TEST_CASE(txgraph_block_builder_exhaustion_is_stable)
+{
+    auto graph = MakeTxGraph(50, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    TxGraph::Ref ref;
+    graph->AddTransaction(ref, FeePerWeight{10, 1});
+
+    auto builder = graph->GetBlockBuilder();
+    BOOST_REQUIRE(builder->GetCurrentChunk());
+    builder->Include();
+    BOOST_CHECK(!builder->GetCurrentChunk());
+
+    builder->Include();
+    BOOST_CHECK(!builder->GetCurrentChunk());
+
+    builder->Skip();
+    BOOST_CHECK(!builder->GetCurrentChunk());
+}
+
 BOOST_AUTO_TEST_CASE(txgraph_getcluster_membership_contracts)
 {
     auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
