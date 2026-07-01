@@ -14,6 +14,9 @@
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
+#include <uint256.h>
+#include <util/strencodings.h>
+#include <util/string.h>
 #include <univalue.h>
 #include <util/time.h>
 
@@ -352,6 +355,40 @@ BOOST_AUTO_TEST_CASE(rpc_parse_monetary_values)
     BOOST_CHECK_THROW(AmountFromValue(ValueFromString("1e+11")), UniValue); //overflow error
     BOOST_CHECK_THROW(AmountFromValue(ValueFromString("1e11")), UniValue); //overflow error signless
     BOOST_CHECK_THROW(AmountFromValue(ValueFromString("93e+9")), UniValue); //overflow error
+}
+
+BOOST_AUTO_TEST_CASE(rpc_parse_helper_success_contracts)
+{
+    const std::string hash_hex{"ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789"};
+    const UniValue hash_value{hash_hex};
+    const uint256 parsed_hash{ParseHashV(hash_value, "hash")};
+    BOOST_CHECK_EQUAL(parsed_hash.GetHex(), ToLower(hash_hex));
+    BOOST_CHECK(parsed_hash == *Assert(uint256::FromHex(hash_hex)));
+
+    UniValue hash_obj{UniValue::VOBJ};
+    hash_obj.pushKV("hash", hash_hex);
+    BOOST_CHECK(ParseHashO(hash_obj, "hash") == parsed_hash);
+
+    const std::string bytes_hex{"Aa00Ff42"};
+    const UniValue bytes_value{bytes_hex};
+    const std::vector<unsigned char> parsed_bytes{ParseHexV(bytes_value, "bytes")};
+    BOOST_CHECK_EQUAL(HexStr(parsed_bytes), ToLower(bytes_hex));
+    BOOST_CHECK(parsed_bytes == ParseHex(bytes_hex));
+
+    UniValue bytes_obj{UniValue::VOBJ};
+    bytes_obj.pushKV("bytes", bytes_hex);
+    BOOST_CHECK(ParseHexO(bytes_obj, "bytes") == parsed_bytes);
+
+    BOOST_CHECK_EQUAL(ParseConfirmTarget(ValueFromString("42"), /*max_target=*/42), 42U);
+
+    const std::pair<int64_t, int64_t> expected_end_range{0, 10};
+    BOOST_CHECK(ParseDescriptorRange(ValueFromString("10")) == expected_end_range);
+
+    UniValue range{UniValue::VARR};
+    range.push_back(2);
+    range.push_back(5);
+    const std::pair<int64_t, int64_t> expected_pair_range{2, 5};
+    BOOST_CHECK(ParseDescriptorRange(range) == expected_pair_range);
 }
 
 BOOST_AUTO_TEST_CASE(rpc_ban)
