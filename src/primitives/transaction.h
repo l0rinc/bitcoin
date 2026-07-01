@@ -303,6 +303,7 @@ private:
     Wtxid ComputeWitnessHash() const;
 
     bool ComputeHasWitness() const;
+    void AssumeCachedState() const;
 
 public:
     /** Convert a CMutableTransaction into a CTransaction. */

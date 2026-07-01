@@ -14,6 +14,7 @@
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <core_io.h>
+#include <hash.h>
 #include <key.h>
 #include <policy/policy.h>
 #include <policy/settings.h>
@@ -35,8 +36,10 @@
 #include <util/string.h>
 #include <validation.h>
 
+#include <cstddef>
 #include <functional>
 #include <map>
+#include <span>
 #include <string>
 
 #include <boost/test/unit_test.hpp>
@@ -158,6 +161,77 @@ std::set<script_verify_flags> ExcludeIndividualFlags(script_verify_flags flags)
 }
 
 BOOST_FIXTURE_TEST_SUITE(transaction_tests, BasicTestingSetup)
+
+namespace {
+
+void CheckTransactionCachedHashContracts(const CTransaction& tx)
+{
+    const Txid expected_txid{Txid::FromUint256((HashWriter{} << TX_NO_WITNESS(tx)).GetHash())};
+    BOOST_CHECK(tx.GetHash() == expected_txid);
+
+    const bool expected_has_witness{std::ranges::any_of(tx.vin, [](const CTxIn& input) {
+        return !input.scriptWitness.IsNull();
+    })};
+    BOOST_CHECK_EQUAL(tx.HasWitness(), expected_has_witness);
+
+    const Wtxid expected_wtxid{tx.HasWitness() ?
+        Wtxid::FromUint256((HashWriter{} << TX_WITH_WITNESS(tx)).GetHash()) :
+        Wtxid::FromUint256(tx.GetHash().ToUint256())};
+    BOOST_CHECK(tx.GetWitnessHash() == expected_wtxid);
+
+    CMutableTransaction mutable_tx{tx};
+    BOOST_CHECK(mutable_tx.GetHash() == tx.GetHash());
+    BOOST_CHECK_EQUAL(mutable_tx.HasWitness(), tx.HasWitness());
+
+    const CTransaction rebuilt_tx{mutable_tx};
+    BOOST_CHECK(rebuilt_tx.GetHash() == tx.GetHash());
+    BOOST_CHECK(rebuilt_tx.GetWitnessHash() == tx.GetWitnessHash());
+    BOOST_CHECK_EQUAL(rebuilt_tx.HasWitness(), tx.HasWitness());
+    BOOST_CHECK_EQUAL(rebuilt_tx.ComputeTotalSize(), tx.ComputeTotalSize());
+}
+
+void CheckTransactionSerializationContracts(const CTransaction& tx)
+{
+    DataStream with_witness_stream;
+    with_witness_stream << TX_WITH_WITNESS(tx);
+    BOOST_CHECK_EQUAL(with_witness_stream.size(), GetSerializeSize(TX_WITH_WITNESS(tx)));
+    SpanReader with_witness_reader{std::span<const std::byte>{with_witness_stream.data(), with_witness_stream.size()}};
+    const CTransaction with_witness_roundtrip{deserialize, TX_WITH_WITNESS, with_witness_reader};
+    BOOST_CHECK(with_witness_reader.empty());
+    BOOST_CHECK(with_witness_roundtrip.GetHash() == tx.GetHash());
+    BOOST_CHECK(with_witness_roundtrip.GetWitnessHash() == tx.GetWitnessHash());
+    BOOST_CHECK_EQUAL(with_witness_roundtrip.HasWitness(), tx.HasWitness());
+
+    DataStream no_witness_stream;
+    no_witness_stream << TX_NO_WITNESS(tx);
+    BOOST_CHECK_EQUAL(no_witness_stream.size(), GetSerializeSize(TX_NO_WITNESS(tx)));
+    SpanReader no_witness_reader{std::span<const std::byte>{no_witness_stream.data(), no_witness_stream.size()}};
+    const CTransaction no_witness_roundtrip{deserialize, TX_NO_WITNESS, no_witness_reader};
+    BOOST_CHECK(no_witness_reader.empty());
+    BOOST_CHECK(no_witness_roundtrip.GetHash() == tx.GetHash());
+    BOOST_CHECK(!no_witness_roundtrip.HasWitness());
+    BOOST_CHECK(no_witness_roundtrip.GetWitnessHash().ToUint256() == no_witness_roundtrip.GetHash().ToUint256());
+    if (!tx.HasWitness()) {
+        BOOST_CHECK(no_witness_roundtrip.GetWitnessHash() == tx.GetWitnessHash());
+    }
+}
+
+} // namespace
+
+BOOST_AUTO_TEST_CASE(transaction_cached_hash_contracts)
+{
+    CMutableTransaction no_witness_tx;
+    no_witness_tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
+    no_witness_tx.vout.emplace_back(1, CScript{} << OP_TRUE);
+
+    CMutableTransaction witness_tx{no_witness_tx};
+    witness_tx.vin[0].scriptWitness.stack.push_back({0x01, 0x02});
+
+    for (const CTransaction& tx : {CTransaction{no_witness_tx}, CTransaction{witness_tx}}) {
+        CheckTransactionCachedHashContracts(tx);
+        CheckTransactionSerializationContracts(tx);
+    }
+}
 
 BOOST_AUTO_TEST_CASE(tx_valid)
 {
