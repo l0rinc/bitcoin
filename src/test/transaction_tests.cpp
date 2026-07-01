@@ -463,6 +463,26 @@ BOOST_AUTO_TEST_CASE(basic_transaction_tests)
     BOOST_CHECK_MESSAGE(!CheckTransaction(CTransaction(tx), state) || !state.IsValid(), "Transaction with duplicate txins should be invalid.");
 }
 
+namespace {
+void CheckDefaultMutableTransaction(const CMutableTransaction& tx)
+{
+    BOOST_CHECK(tx.vin.empty());
+    BOOST_CHECK(tx.vout.empty());
+    BOOST_CHECK(tx.version == CTransaction::CURRENT_VERSION);
+    BOOST_CHECK_EQUAL(tx.nLockTime, 0U);
+}
+
+CMutableTransaction MakeNonDefaultMutableTransaction()
+{
+    CMutableTransaction tx;
+    tx.version = 2;
+    tx.nLockTime = 1;
+    tx.vin.emplace_back();
+    tx.vout.emplace_back(/*nValueIn=*/0, CScript{});
+    return tx;
+}
+} // namespace
+
 BOOST_AUTO_TEST_CASE(decode_hex_tx_rejects_trailing_bytes)
 {
     CMutableTransaction tx;
@@ -477,9 +497,21 @@ BOOST_AUTO_TEST_CASE(decode_hex_tx_rejects_trailing_bytes)
     BOOST_REQUIRE(DecodeHexTx(decoded_tx, tx_hex, /*try_no_witness=*/true, /*try_witness=*/false));
 
     const std::string trailing_tx_hex{tx_hex + "00"};
+    decoded_tx = MakeNonDefaultMutableTransaction();
     BOOST_CHECK(!DecodeHexTx(decoded_tx, trailing_tx_hex, /*try_no_witness=*/false, /*try_witness=*/true));
+    CheckDefaultMutableTransaction(decoded_tx);
+    decoded_tx = MakeNonDefaultMutableTransaction();
     BOOST_CHECK(!DecodeHexTx(decoded_tx, trailing_tx_hex, /*try_no_witness=*/true, /*try_witness=*/true));
+    CheckDefaultMutableTransaction(decoded_tx);
+    decoded_tx = MakeNonDefaultMutableTransaction();
     BOOST_CHECK(!DecodeHexTx(decoded_tx, trailing_tx_hex, /*try_no_witness=*/true, /*try_witness=*/false));
+    CheckDefaultMutableTransaction(decoded_tx);
+    decoded_tx = MakeNonDefaultMutableTransaction();
+    BOOST_CHECK(!DecodeHexTx(decoded_tx, tx_hex, /*try_no_witness=*/false, /*try_witness=*/false));
+    CheckDefaultMutableTransaction(decoded_tx);
+    decoded_tx = MakeNonDefaultMutableTransaction();
+    BOOST_CHECK(!DecodeHexTx(decoded_tx, "not hex", /*try_no_witness=*/true, /*try_witness=*/true));
+    CheckDefaultMutableTransaction(decoded_tx);
 }
 
 BOOST_AUTO_TEST_CASE(txin_weight_helpers)
