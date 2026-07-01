@@ -9,12 +9,15 @@
 #include <crypto/hmac_sha512.h>
 #include <hash.h>
 #include <random.h>
+#include <util/check.h>
 
 #include <secp256k1.h>
 #include <secp256k1_ellswift.h>
 #include <secp256k1_extrakeys.h>
 #include <secp256k1_recovery.h>
 #include <secp256k1_schnorrsig.h>
+
+#include <algorithm>
 
 static secp256k1_context* secp256k1_context_sign = nullptr;
 
@@ -38,47 +41,52 @@ static secp256k1_context* secp256k1_context_sign = nullptr;
 int ec_seckey_import_der(const secp256k1_context* ctx, unsigned char *out32, const unsigned char *seckey, size_t seckeylen) {
     const unsigned char *end = seckey + seckeylen;
     memset(out32, 0, 32);
+    const auto fail = [&] {
+        Assume(std::all_of(out32, out32 + 32, [](unsigned char byte) { return byte == 0; }));
+        return 0;
+    };
     /* sequence header */
     if (end - seckey < 1 || *seckey != 0x30u) {
-        return 0;
+        return fail();
     }
     seckey++;
     /* sequence length constructor */
     if (end - seckey < 1 || !(*seckey & 0x80u)) {
-        return 0;
+        return fail();
     }
     ptrdiff_t lenb = *seckey & ~0x80u; seckey++;
     if (lenb < 1 || lenb > 2) {
-        return 0;
+        return fail();
     }
     if (end - seckey < lenb) {
-        return 0;
+        return fail();
     }
     /* sequence length */
     ptrdiff_t len = seckey[lenb-1] | (lenb > 1 ? seckey[lenb-2] << 8 : 0u);
     seckey += lenb;
     if (end - seckey < len) {
-        return 0;
+        return fail();
     }
     /* sequence element 0: version number (=1) */
     if (end - seckey < 3 || seckey[0] != 0x02u || seckey[1] != 0x01u || seckey[2] != 0x01u) {
-        return 0;
+        return fail();
     }
     seckey += 3;
     /* sequence element 1: octet string, up to 32 bytes */
     if (end - seckey < 2 || seckey[0] != 0x04u) {
-        return 0;
+        return fail();
     }
     ptrdiff_t oslen = seckey[1];
     seckey += 2;
     if (oslen > 32 || end - seckey < oslen) {
-        return 0;
+        return fail();
     }
     memcpy(out32 + (32 - oslen), seckey, oslen);
     if (!secp256k1_ec_seckey_verify(ctx, out32)) {
         memset(out32, 0, 32);
-        return 0;
+        return fail();
     }
+    Assume(secp256k1_ec_seckey_verify(ctx, out32));
     return 1;
 }
 
@@ -98,6 +106,7 @@ int ec_seckey_export_der(const secp256k1_context *ctx, unsigned char *seckey, si
     size_t pubkeylen = 0;
     if (!secp256k1_ec_pubkey_create(ctx, &pubkey, key32)) {
         *seckeylen = 0;
+        Assume(*seckeylen == 0);
         return 0;
     }
     if (compressed) {
@@ -124,6 +133,7 @@ int ec_seckey_export_der(const secp256k1_context *ctx, unsigned char *seckey, si
         ptr += pubkeylen;
         *seckeylen = ptr - seckey;
         assert(*seckeylen == CKey::COMPRESSED_SIZE);
+        Assume(*seckeylen == CKey::COMPRESSED_SIZE);
     } else {
         static const unsigned char begin[] = {
             0x30,0x82,0x01,0x13,0x02,0x01,0x01,0x04,0x20
@@ -150,6 +160,7 @@ int ec_seckey_export_der(const secp256k1_context *ctx, unsigned char *seckey, si
         ptr += pubkeylen;
         *seckeylen = ptr - seckey;
         assert(*seckeylen == CKey::SIZE);
+        Assume(*seckeylen == CKey::SIZE);
     }
     return 1;
 }
