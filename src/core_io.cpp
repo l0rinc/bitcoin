@@ -76,7 +76,7 @@ public:
     opcodetype Parse(const std::string& s) const
     {
         auto it = mapOpNames.find(s);
-        if (it == mapOpNames.end()) throw std::runtime_error("script parse error: unknown opcode");
+        if (it == mapOpNames.end()) throw ScriptParseError("script parse error: unknown opcode");
         return it->second;
     }
 };
@@ -107,8 +107,8 @@ CScript ParseScript(const std::string& s)
             // limit the range of numbers ParseScript accepts in decimal
             // since numbers outside -0xFFFFFFFF...0xFFFFFFFF are illegal in scripts
             if (!num.has_value() || num > int64_t{0xffffffff} || num < -1 * int64_t{0xffffffff}) {
-                throw std::runtime_error("script parse error: decimal numeric value only allowed in the "
-                                         "range -0xFFFFFFFF...0xFFFFFFFF");
+                throw ScriptParseError("script parse error: decimal numeric value only allowed in the "
+                                       "range -0xFFFFFFFF...0xFFFFFFFF");
             }
 
             result << num.value();
