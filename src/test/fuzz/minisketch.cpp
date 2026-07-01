@@ -9,8 +9,10 @@
 #include <test/fuzz/util.h>
 #include <util/check.h>
 
+#include <algorithm>
 #include <map>
 #include <numeric>
+#include <vector>
 
 namespace {
 
@@ -31,6 +33,19 @@ FUZZ_TARGET(minisketch)
 
     Minisketch sketch_a{MakeFuzzMinisketch32(capacity, impl)};
     Minisketch sketch_b{MakeFuzzMinisketch32(capacity, impl)};
+    Assert(sketch_a.GetBits() == 32);
+    Assert(sketch_b.GetBits() == 32);
+    Assert(sketch_a.GetCapacity() == capacity);
+    Assert(sketch_b.GetCapacity() == capacity);
+    Assert(sketch_a.GetImplementation() == impl);
+    Assert(sketch_b.GetImplementation() == impl);
+    Assert(sketch_a.GetSerializedSize() == capacity * sizeof(uint32_t));
+    Assert(sketch_b.GetSerializedSize() == capacity * sizeof(uint32_t));
+
+    const auto empty_serialized{sketch_a.Serialize()};
+    sketch_a.Add(0);
+    Assert(sketch_a.Serialize() == empty_serialized);
+
     sketch_a.SetSeed(fuzzed_data_provider.ConsumeIntegral<uint64_t>());
     sketch_b.SetSeed(fuzzed_data_provider.ConsumeIntegral<uint64_t>());
 
@@ -58,6 +73,12 @@ FUZZ_TARGET(minisketch)
             });
     }
     const auto num_diff{std::accumulate(diff.begin(), diff.end(), size_t{0}, [](auto n, const auto& e) { return n + e.second; })};
+    std::vector<uint64_t> expected_diff;
+    expected_diff.reserve(num_diff);
+    for (const auto& [entry, in_diff] : diff) {
+        if (in_diff) expected_diff.push_back(entry);
+    }
+    Assert(expected_diff.size() == num_diff);
 
     Minisketch sketch_ar{MakeFuzzMinisketch32(capacity, impl)};
     Minisketch sketch_br{MakeFuzzMinisketch32(capacity, impl)};
@@ -66,16 +87,24 @@ FUZZ_TARGET(minisketch)
 
     sketch_ar.Deserialize(sketch_a.Serialize());
     sketch_br.Deserialize(sketch_b.Serialize());
+    Assert(sketch_ar.Serialize() == sketch_a.Serialize());
+    Assert(sketch_br.Serialize() == sketch_b.Serialize());
 
-    Minisketch sketch_diff{std::move(fuzzed_data_provider.ConsumeBool() ? sketch_a : sketch_ar)};
+    Minisketch sketch_ab{sketch_ar};
+    sketch_ab.Merge(sketch_br);
+    Minisketch sketch_ba{sketch_br};
+    sketch_ba.Merge(sketch_ar);
+    Assert(sketch_ab.Serialize() == sketch_ba.Serialize());
+
+    Minisketch sketch_diff{fuzzed_data_provider.ConsumeBool() ? sketch_a : sketch_ar};
     sketch_diff.Merge(fuzzed_data_provider.ConsumeBool() ? sketch_b : sketch_br);
+    Assert(sketch_diff.Serialize() == sketch_ab.Serialize());
 
     if (capacity >= num_diff) {
         const auto max_elements{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(num_diff, capacity)};
         const auto dec{*Assert(sketch_diff.Decode(max_elements))};
-        Assert(dec.size() == num_diff);
-        for (auto d : dec) {
-            Assert(diff.at(d));
-        }
+        auto sorted_dec{dec};
+        std::sort(sorted_dec.begin(), sorted_dec.end());
+        Assert(sorted_dec == expected_diff);
     }
 }
