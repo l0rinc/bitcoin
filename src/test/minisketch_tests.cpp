@@ -11,7 +11,9 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <utility>
+#include <vector>
 
 using node::MakeMinisketch32;
 
@@ -48,6 +50,42 @@ BOOST_AUTO_TEST_CASE(minisketch_test)
         for (uint32_t i = 0; i < a_not_b; ++i) BOOST_CHECK_EQUAL(sols[i], start_a + i);
         for (uint32_t i = 0; i < b_not_a; ++i) BOOST_CHECK_EQUAL(sols[i + a_not_b], start_b + both + i);
     }
+}
+
+BOOST_AUTO_TEST_CASE(minisketch_wrapper_contracts)
+{
+    Minisketch sketch_a{MakeMinisketch32(4)};
+    BOOST_REQUIRE(sketch_a);
+    BOOST_CHECK_EQUAL(sketch_a.GetBits(), 32U);
+    BOOST_CHECK_EQUAL(sketch_a.GetCapacity(), 4U);
+    BOOST_CHECK_EQUAL(sketch_a.GetSerializedSize(), 4U * sizeof(uint32_t));
+
+    const auto empty_serialized{sketch_a.Serialize()};
+    sketch_a.Add(0);
+    BOOST_CHECK(sketch_a.Serialize() == empty_serialized);
+
+    sketch_a.Add(1).Add(2).Add(3);
+    Minisketch sketch_b{MakeMinisketch32(4)};
+    sketch_b.Add(3).Add(4);
+
+    Minisketch sketch_ar{MakeMinisketch32(4)};
+    sketch_ar.Deserialize(sketch_a.Serialize());
+    BOOST_CHECK(sketch_ar.Serialize() == sketch_a.Serialize());
+
+    Minisketch sketch_br{MakeMinisketch32(4)};
+    sketch_br.Deserialize(sketch_b.Serialize());
+    BOOST_CHECK(sketch_br.Serialize() == sketch_b.Serialize());
+
+    Minisketch sketch_ab{sketch_ar};
+    sketch_ab.Merge(sketch_br);
+    Minisketch sketch_ba{sketch_br};
+    sketch_ba.Merge(sketch_ar);
+    BOOST_CHECK(sketch_ab.Serialize() == sketch_ba.Serialize());
+
+    auto decoded{sketch_ab.Decode(4)};
+    BOOST_REQUIRE(decoded);
+    std::sort(decoded->begin(), decoded->end());
+    BOOST_CHECK(*decoded == std::vector<uint64_t>({1, 2, 4}));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
