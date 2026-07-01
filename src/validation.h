@@ -48,6 +48,8 @@
 #include <span>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -88,6 +90,9 @@ static const uint64_t MIN_DISK_SPACE_FOR_BLOCK_FILES{550_MiB};
 
 /** Maximum number of dedicated script-checking threads allowed */
 static constexpr int MAX_SCRIPTCHECK_THREADS{15};
+
+/** Maximum number of dedicated threads allowed for prefetching block input prevouts */
+static constexpr int32_t MAX_PREVOUTFETCH_THREADS{16};
 
 /** Current sync state passed to tip changed callbacks. */
 enum class SynchronizationState {
@@ -503,7 +508,7 @@ public:
     CoinsViews(DBParams db_params, CoinsViewOptions options);
 
     //! Initialize the CCoinsViewCache member.
-    void InitCache() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    void InitCache(int32_t prevoutfetch_threads) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 enum class CoinsCacheSizeState
@@ -779,7 +784,7 @@ public:
     DisconnectResult DisconnectBlock(const CBlock& block, const CBlockIndex* pindex, CCoinsViewCache& view)
         EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     bool ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
-                      CCoinsViewCache& view, bool fJustCheck = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+                      CCoinsViewCache& view, bool fJustCheck = false, bool prune_assumevalid = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     // Apply the effects of a block disconnection on the UTXO set.
     bool DisconnectTip(BlockValidationState& state, DisconnectedBlockTransactions* disconnectpool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
@@ -809,6 +814,9 @@ public:
 
     /** Whether the chain state needs to be redownloaded due to lack of witness data */
     [[nodiscard]] bool NeedsRedownload() const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    /** Whether the chain state contains witness-era blocks pruned by -pruneassumevalid */
+    [[nodiscard]] bool HasBlocksPrunedByPruneAssumeValid() const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
     /** Ensures we have a genesis block in the block tree, possibly writing one to disk. */
     bool LoadGenesisBlock();
 
@@ -969,6 +977,7 @@ private:
         BlockValidationState& state,
         CBlockIndex** ppindex,
         bool min_pow_checked) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void EraseCachedPruneAssumeValidBlock(const uint256& block_hash, const CBlockIndex& block) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     friend Chainstate;
 
     /** Most recent headers presync progress update, for rate-limiting. */
@@ -976,6 +985,16 @@ private:
 
     //! A queue for script verifications that have to be performed by worker threads.
     CCheckQueue<CScriptCheck> m_script_check_queue;
+
+    //! Stripped prune-assumevalid blocks that are connectable without being written to disk.
+    std::unordered_map<uint256, std::shared_ptr<const CBlock>, SaltedUint256Hasher> m_prune_assumevalid_blocks GUARDED_BY(::cs_main);
+    //! Approximate dynamic memory usage of m_prune_assumevalid_blocks values.
+    size_t m_prune_assumevalid_block_cache_bytes GUARDED_BY(::cs_main){0};
+    //! CBlockIndex-pointer index for fast membership checks of m_prune_assumevalid_blocks.
+    std::unordered_set<const CBlockIndex*> m_prune_assumevalid_block_index GUARDED_BY(::cs_main);
+    //! Highest block eligible for -pruneassumevalid under the current best header.
+    mutable const CBlockIndex* m_prune_assumevalid_eligibility_header GUARDED_BY(::cs_main){nullptr};
+    mutable const CBlockIndex* m_prune_assumevalid_eligibility_tip GUARDED_BY(::cs_main){nullptr};
 
     //! Timers and counters used for benchmarking validation in both background
     //! and active chainstates.
@@ -1009,6 +1028,19 @@ public:
     bool ShouldCheckBlockIndex() const;
     const arith_uint256& MinimumChainWork() const { return *Assert(m_options.minimum_chain_work); }
     const uint256& AssumedValidBlock() const { return *Assert(m_options.assumed_valid_block); }
+    bool IsPruneAssumeValidBlock(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    bool CanUsePruneAssumeValid(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    bool IsBlockPrunedByPruneAssumeValid(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    bool HasCachedPruneAssumeValidBlock(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    size_t CachedPruneAssumeValidBlockCount() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    size_t CachedPruneAssumeValidBlockBytes() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    bool ShouldRequestStrippedPruneAssumeValidBlock(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! Whether automatic prune events may skip the otherwise-forced chainstate write.
+    //! Under -pruneassumevalid a crash during initial sync already implies redownloading
+    //! blocks that were never written to disk, so dragging the coins DB to the tip before
+    //! deleting block files buys no crash resilience. IsInitialBlockDownload() latches
+    //! false permanently, restoring the standard prune/flush coupling after initial sync.
+    bool RelaxedPruneFlush() const noexcept;
     kernel::Notifications& GetNotifications() const { return m_options.notifications; };
 
     /**
@@ -1296,6 +1328,8 @@ public:
     bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void ReceivedPruneAssumeValidBlockTransactions(const CBlock& block, CBlockIndex* pindexNew) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void ReceivedBlockTransactionsCommon(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos* pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /**
      * Try to add a transaction to the memory pool.

@@ -22,6 +22,7 @@ class CChainParams;
 class ValidationSignals;
 
 static constexpr auto DEFAULT_MAX_TIP_AGE{24h};
+static constexpr int32_t DEFAULT_PREVOUTFETCH_THREADS{8};
 
 namespace kernel {
 
@@ -38,6 +39,8 @@ struct ChainstateManagerOpts {
     std::optional<arith_uint256> minimum_chain_work{};
     //! If set, it will override the block hash whose ancestors we will assume to have valid scripts without checking them.
     std::optional<uint256> assumed_valid_block{};
+    //! Whether to use stripped, ephemeral assumevalid block processing in pruned IBD.
+    bool prune_assumevalid{false};
     //! If the tip is older than this, the node is considered to be in initial block download.
     std::chrono::seconds max_tip_age{DEFAULT_MAX_TIP_AGE};
     DBOptions coins_db{};
@@ -46,6 +49,8 @@ struct ChainstateManagerOpts {
     ValidationSignals* signals{nullptr};
     //! Number of script check worker threads. Zero means no parallel verification.
     int worker_threads_num{0};
+    //! Number of worker threads used for prefetching block input prevouts. Zero means no parallel fetching.
+    int32_t prevoutfetch_threads_num{DEFAULT_PREVOUTFETCH_THREADS};
     size_t script_execution_cache_bytes{DEFAULT_SCRIPT_EXECUTION_CACHE_BYTES};
     size_t signature_cache_bytes{DEFAULT_SIGNATURE_CACHE_BYTES};
 };

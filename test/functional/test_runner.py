@@ -88,6 +88,7 @@ EXTENDED_SCRIPTS = [
     # These tests are not run by default.
     # Longest test should go first, to favor running tests in parallel
     'feature_pruning.py',
+    'feature_pruneassumevalid_flush.py',
     'feature_dbcrash.py',
     'feature_index_prune.py',
 ]
@@ -137,6 +138,7 @@ BASE_SCRIPTS = [
     'wallet_groups.py',
     'p2p_blockfilters.py',
     'feature_assumevalid.py',
+    'feature_pruneassumevalid.py',
     'wallet_taproot.py',
     'feature_bip68_sequence.py',
     'rpc_packages.py',
