@@ -55,5 +55,14 @@ FUZZ_TARGET(merkleblock)
             assert(indices[i] > indices[i - 1]);
         }
     }
-    (void)merkle_root;
+    if (!merkle_root.IsNull()) {
+        const std::vector<Txid> expected_matches{matches};
+        const std::vector<unsigned int> expected_indices{indices};
+        std::vector<Txid> repeated_matches{Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider))};
+        std::vector<unsigned int> repeated_indices{std::numeric_limits<unsigned int>::max()};
+        const uint256 repeated_merkle_root{partial_merkle_tree.ExtractMatches(repeated_matches, repeated_indices)};
+        assert(repeated_merkle_root == merkle_root);
+        assert(repeated_matches == expected_matches);
+        assert(repeated_indices == expected_indices);
+    }
 }
