@@ -6,13 +6,50 @@
 #include <chainparams.h>
 #include <index/txindex.h>
 #include <interfaces/chain.h>
+#include <node/mining_types.h>
+#include <test/util/mining.h>
 #include <test/util/setup_common.h>
+#include <util/check.h>
 #include <util/byte_units.h>
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
 
 BOOST_AUTO_TEST_SUITE(txindex_tests)
+
+struct TxIndexChainTestingSetup : public ChainTestingSetup {
+    TxIndexChainTestingSetup() : ChainTestingSetup{ChainType::REGTEST} {}
+};
+
+BOOST_FIXTURE_TEST_CASE(txindex_block_until_synced_before_genesis_activation, TxIndexChainTestingSetup)
+{
+    auto& chainman{*Assert(m_node.chainman)};
+    LoadVerifyChainstate();
+
+    BOOST_REQUIRE(!WITH_LOCK(::cs_main, return chainman.ActiveChain().Tip()));
+
+    TxIndex txindex(interfaces::MakeChain(m_node), 1_MiB, true);
+    BOOST_REQUIRE(txindex.Init());
+    BOOST_CHECK(txindex.BlockUntilSyncedToCurrentChain());
+
+    BlockValidationState state;
+    BOOST_REQUIRE(chainman.ActiveChainstate().ActivateBestChain(state));
+    BOOST_REQUIRE(WITH_LOCK(::cs_main, return chainman.ActiveChain().Tip() != nullptr));
+    BOOST_CHECK(txindex.BlockUntilSyncedToCurrentChain());
+
+    const COutPoint coinbase{MineBlock(m_node, {
+        .use_mempool = false,
+        .coinbase_output_script = CScript{} << OP_TRUE,
+    })};
+    BOOST_REQUIRE(!coinbase.IsNull());
+    BOOST_CHECK(txindex.BlockUntilSyncedToCurrentChain());
+    CTransactionRef tx_disk;
+    uint256 block_hash;
+    BOOST_REQUIRE(txindex.FindTx(coinbase.hash, block_hash, tx_disk));
+    BOOST_CHECK(tx_disk->GetHash() == coinbase.hash);
+
+    txindex.Stop();
+}
 
 BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup)
 {

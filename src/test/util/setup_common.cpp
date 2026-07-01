@@ -346,7 +346,7 @@ ChainTestingSetup::~ChainTestingSetup()
     m_node.scheduler.reset();
 }
 
-void ChainTestingSetup::LoadVerifyActivateChainstate()
+void ChainTestingSetup::LoadVerifyChainstate()
 {
     auto& chainman{*Assert(m_node.chainman)};
     node::ChainstateLoadOptions options;
@@ -364,9 +364,14 @@ void ChainTestingSetup::LoadVerifyActivateChainstate()
     assert(status == node::ChainstateLoadStatus::SUCCESS);
 
     m_node.notifications->setChainstateLoaded(true);
+}
+
+void ChainTestingSetup::LoadVerifyActivateChainstate()
+{
+    LoadVerifyChainstate();
 
     BlockValidationState state;
-    if (!chainman.ActiveChainstate().ActivateBestChain(state)) {
+    if (!Assert(m_node.chainman)->ActiveChainstate().ActivateBestChain(state)) {
         throw std::runtime_error(strprintf("ActivateBestChain failed. (%s)", state.ToString()));
     }
 }
