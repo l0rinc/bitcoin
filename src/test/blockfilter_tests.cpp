@@ -66,6 +66,31 @@ BOOST_AUTO_TEST_CASE(gcsfilter_matchany_equals_individual_matches)
     BOOST_CHECK_EQUAL(filter.MatchAny(query_elements), any_individual_match);
 }
 
+BOOST_AUTO_TEST_CASE(gcsfilter_constructed_roundtrip_matches_elements)
+{
+    GCSFilter::ElementSet elements;
+    elements.insert(GCSFilter::Element{});
+    elements.insert(GCSFilter::Element{0x01});
+    elements.insert(GCSFilter::Element{0x02, 0x03, 0x05});
+    elements.insert(GCSFilter::Element(65, 0xff));
+
+    const GCSFilter::Params params{0x123456789abcdef0, 0x0fedcba987654321, BASIC_FILTER_P, BASIC_FILTER_M};
+    const GCSFilter filter{params, elements};
+
+    auto check_filter{[&](const GCSFilter& candidate) {
+        BOOST_CHECK_EQUAL(candidate.GetN(), elements.size());
+        BOOST_CHECK(candidate.GetEncoded() == filter.GetEncoded());
+        BOOST_CHECK(candidate.MatchAny(elements));
+        for (const auto& element : elements) {
+            BOOST_CHECK(candidate.Match(element));
+        }
+    }};
+
+    check_filter(filter);
+    check_filter(GCSFilter{params, filter.GetEncoded(), /*skip_decode_check=*/false});
+    check_filter(GCSFilter{params, filter.GetEncoded(), /*skip_decode_check=*/true});
+}
+
 BOOST_AUTO_TEST_CASE(gcsfilter_default_constructor)
 {
     GCSFilter filter;
