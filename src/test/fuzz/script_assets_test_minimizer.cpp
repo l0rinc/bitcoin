@@ -14,7 +14,9 @@
 #include <util/string.h>
 
 #include <cstdint>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using util::SplitString;
@@ -40,9 +42,47 @@ using util::SplitString;
 
 namespace {
 
+class ScriptAssetTestInputError : public std::runtime_error
+{
+public:
+    using std::runtime_error::runtime_error;
+};
+
+const std::string& CheckedGetStr(const UniValue& univalue)
+{
+    try {
+        return univalue.get_str();
+    } catch (const UniValue::type_error& e) {
+        throw ScriptAssetTestInputError{e.what()};
+    }
+}
+
+bool CheckedGetBool(const UniValue& univalue)
+{
+    try {
+        return univalue.get_bool();
+    } catch (const UniValue::type_error& e) {
+        throw ScriptAssetTestInputError{e.what()};
+    }
+}
+
+int64_t CheckedGetInt64(const UniValue& univalue)
+{
+    try {
+        return univalue.getInt<int64_t>();
+    } catch (const UniValue::type_error& e) {
+        throw ScriptAssetTestInputError{e.what()};
+    } catch (const std::runtime_error& e) {
+        if (std::string_view{e.what()} == "JSON integer out of range") {
+            throw ScriptAssetTestInputError{e.what()};
+        }
+        throw;
+    }
+}
+
 std::vector<unsigned char> CheckedParseHex(const std::string& str)
 {
-    if (str.size() && !IsHex(str)) throw std::runtime_error("Non-hex input '" + str + "'");
+    if (str.size() && !IsHex(str)) throw ScriptAssetTestInputError{"Non-hex input '" + str + "'"};
     return ParseHex(str);
 }
 
@@ -58,21 +98,21 @@ CMutableTransaction TxFromHex(const std::string& str)
     try {
         SpanReader{CheckedParseHex(str)} >> TX_NO_WITNESS(tx);
     } catch (const std::ios_base::failure&) {
-        throw std::runtime_error("Tx deserialization failure");
+        throw ScriptAssetTestInputError{"Tx deserialization failure"};
     }
     return tx;
 }
 
 std::vector<CTxOut> TxOutsFromJSON(const UniValue& univalue)
 {
-    if (!univalue.isArray()) throw std::runtime_error("Prevouts must be array");
+    if (!univalue.isArray()) throw ScriptAssetTestInputError{"Prevouts must be array"};
     std::vector<CTxOut> prevouts;
     for (size_t i = 0; i < univalue.size(); ++i) {
         CTxOut txout;
         try {
-            SpanReader{CheckedParseHex(univalue[i].get_str())} >> txout;
+            SpanReader{CheckedParseHex(CheckedGetStr(univalue[i]))} >> txout;
         } catch (const std::ios_base::failure&) {
-            throw std::runtime_error("Prevout invalid format");
+            throw ScriptAssetTestInputError{"Prevout invalid format"};
         }
         prevouts.push_back(std::move(txout));
     }
@@ -81,10 +121,10 @@ std::vector<CTxOut> TxOutsFromJSON(const UniValue& univalue)
 
 CScriptWitness ScriptWitnessFromJSON(const UniValue& univalue)
 {
-    if (!univalue.isArray()) throw std::runtime_error("Script witness is not array");
+    if (!univalue.isArray()) throw ScriptAssetTestInputError{"Script witness is not array"};
     CScriptWitness scriptwitness;
     for (size_t i = 0; i < univalue.size(); ++i) {
-        auto bytes = CheckedParseHex(univalue[i].get_str());
+        auto bytes = CheckedParseHex(CheckedGetStr(univalue[i]));
         scriptwitness.stack.push_back(std::move(bytes));
     }
     return scriptwitness;
@@ -136,7 +176,7 @@ script_verify_flags ParseScriptFlags(const std::string& str)
 
     for (const std::string& word : words) {
         auto it = FLAG_NAMES.find(word);
-        if (it == FLAG_NAMES.end()) throw std::runtime_error("Unknown verification flag " + word);
+        if (it == FLAG_NAMES.end()) throw ScriptAssetTestInputError{"Unknown verification flag " + word};
         flags |= it->second;
     }
 
@@ -146,18 +186,20 @@ script_verify_flags ParseScriptFlags(const std::string& str)
 void Test(const std::string& str)
 {
     UniValue test;
-    if (!test.read(str) || !test.isObject()) throw std::runtime_error("Non-object test input");
+    if (!test.read(str) || !test.isObject()) throw ScriptAssetTestInputError{"Non-object test input"};
 
-    CMutableTransaction tx = TxFromHex(test["tx"].get_str());
+    CMutableTransaction tx = TxFromHex(CheckedGetStr(test["tx"]));
     const std::vector<CTxOut> prevouts = TxOutsFromJSON(test["prevouts"]);
-    if (prevouts.size() != tx.vin.size()) throw std::runtime_error("Incorrect number of prevouts");
-    size_t idx = test["index"].getInt<int64_t>();
-    if (idx >= tx.vin.size()) throw std::runtime_error("Invalid index");
-    script_verify_flags test_flags = ParseScriptFlags(test["flags"].get_str());
-    bool final = test.exists("final") && test["final"].get_bool();
+    if (prevouts.size() != tx.vin.size()) throw ScriptAssetTestInputError{"Incorrect number of prevouts"};
+    const int64_t index = CheckedGetInt64(test["index"]);
+    if (index < 0) throw ScriptAssetTestInputError{"Invalid index"};
+    const size_t idx{static_cast<size_t>(index)};
+    if (idx >= tx.vin.size()) throw ScriptAssetTestInputError{"Invalid index"};
+    script_verify_flags test_flags = ParseScriptFlags(CheckedGetStr(test["flags"]));
+    bool final = test.exists("final") && CheckedGetBool(test["final"]);
 
     if (test.exists("success")) {
-        tx.vin[idx].scriptSig = ScriptFromHex(test["success"]["scriptSig"].get_str());
+        tx.vin[idx].scriptSig = ScriptFromHex(CheckedGetStr(test["success"]["scriptSig"]));
         tx.vin[idx].scriptWitness = ScriptWitnessFromJSON(test["success"]["witness"]);
         PrecomputedTransactionData txdata;
         txdata.Init(tx, std::vector<CTxOut>(prevouts));
@@ -172,7 +214,7 @@ void Test(const std::string& str)
     }
 
     if (test.exists("failure")) {
-        tx.vin[idx].scriptSig = ScriptFromHex(test["failure"]["scriptSig"].get_str());
+        tx.vin[idx].scriptSig = ScriptFromHex(CheckedGetStr(test["failure"]["scriptSig"]));
         tx.vin[idx].scriptWitness = ScriptWitnessFromJSON(test["failure"]["witness"]);
         PrecomputedTransactionData txdata;
         txdata.Init(tx, std::vector<CTxOut>(prevouts));
@@ -194,7 +236,7 @@ FUZZ_TARGET(script_assets_test_minimizer, .init = test_init, .hidden = true)
     const std::string str((const char*)buffer.data(), buffer.size() - 2);
     try {
         Test(str);
-    } catch (const std::runtime_error&) {
+    } catch (const ScriptAssetTestInputError&) {
     }
 }
 
