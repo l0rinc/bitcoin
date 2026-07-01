@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <compare>
 #include <cstdint>
 
 #include <vector>
@@ -110,6 +111,14 @@ void CheckEqualRateSplit(FuzzedDataProvider& fuzzed_data_provider)
     assert(std::is_eq(CompareChunks(split, merged)));
 }
 
+void CheckReverseOrdering(std::partial_ordering forward, std::partial_ordering reverse)
+{
+    if (std::is_lt(forward)) assert(std::is_gt(reverse));
+    if (std::is_gt(forward)) assert(std::is_lt(reverse));
+    if (std::is_eq(forward)) assert(std::is_eq(reverse));
+    if (forward == std::partial_ordering::unordered) assert(reverse == std::partial_ordering::unordered);
+}
+
 } // namespace
 
 FUZZ_TARGET(build_and_compare_feerate_diagram)
@@ -131,6 +140,9 @@ FUZZ_TARGET(build_and_compare_feerate_diagram)
     auto real = CompareChunks(chunks1, chunks2);
     auto sim = CompareDiagrams(diagram1, diagram2);
     assert(real == sim);
+    CheckReverseOrdering(real, CompareChunks(chunks2, chunks1));
+    assert(std::is_eq(CompareChunks(chunks1, chunks1)));
+    assert(std::is_eq(CompareChunks(chunks2, chunks2)));
 
     CheckEqualRateSplit(fuzzed_data_provider);
 
