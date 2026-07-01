@@ -200,7 +200,10 @@ std::optional<std::string> CCoinsViewDB::GetDBProperty(const std::string& proper
 std::shared_future<void> CCoinsViewDB::CompactFullAsync()
 {
     AssertLockHeld(::cs_main);
-    if (m_compaction.valid() && m_compaction.wait_for(std::chrono::seconds{0}) != std::future_status::ready) return m_compaction;
+    if (m_compaction.valid() && m_compaction.wait_for(std::chrono::seconds{0}) != std::future_status::ready) {
+        Assume(m_compaction.valid());
+        return m_compaction;
+    }
     m_compaction = std::async(std::launch::async, [this] {
         try {
             util::ThreadRename("utxocompact");
@@ -213,6 +216,7 @@ std::shared_future<void> CCoinsViewDB::CompactFullAsync()
             LogWarning("Failed chainstate compaction (%s)", e.what());
         }
     }).share();
+    Assume(m_compaction.valid());
     return m_compaction;
 }
 

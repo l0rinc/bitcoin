@@ -44,6 +44,37 @@ bool operator==(const Coin& a, const Coin& b)
     return a.fCoinBase == b.fCoinBase && a.nHeight == b.nHeight && a.out == b.out;
 }
 
+struct CoinsViewDBSnapshot {
+    uint256 best_block;
+    std::vector<uint256> head_blocks;
+    std::vector<std::pair<COutPoint, Coin>> coins;
+
+    bool operator==(const CoinsViewDBSnapshot& other) const
+    {
+        if (best_block != other.best_block || head_blocks != other.head_blocks || coins.size() != other.coins.size()) return false;
+        for (size_t i{0}; i < coins.size(); ++i) {
+            if (coins[i].first != other.coins[i].first || !(coins[i].second == other.coins[i].second)) return false;
+        }
+        return true;
+    }
+};
+
+CoinsViewDBSnapshot SnapshotCoinsViewDB(CCoinsViewDB& db)
+{
+    CoinsViewDBSnapshot snapshot{db.GetBestBlock(), db.GetHeadBlocks(), {}};
+
+    auto cursor{db.Cursor()};
+    while (cursor->Valid()) {
+        auto& [outpoint, coin]{snapshot.coins.emplace_back()};
+        assert(cursor->GetKey(outpoint));
+        assert(cursor->GetValue(coin));
+        assert(!coin.IsSpent());
+        cursor->Next();
+    }
+
+    return snapshot;
+}
+
 /**
  * MutationGuardCoinsViewCache asserts that nothing mutates cacheCoins until
  * BatchWrite is called. It keeps a snapshot of the cacheCoins state, which it
@@ -198,11 +229,11 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
             },
             [&] {
                 if (db) {
-                    const uint256 best_block{db->GetBestBlock()};
+                    const auto snapshot{SnapshotCoinsViewDB(*db)};
                     auto compaction{WITH_LOCK(::cs_main, return db->CompactFullAsync())};
                     if (fuzzed_data_provider.ConsumeBool()) {
                         compaction.wait();
-                        assert(db->GetBestBlock() == best_block);
+                        assert(SnapshotCoinsViewDB(*db) == snapshot);
                     }
                 }
             },
