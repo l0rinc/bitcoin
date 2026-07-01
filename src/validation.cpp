@@ -3624,6 +3624,11 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
     // build a map once so that we can look up candidate blocks by chain
     // work as we go.
     std::multimap<const arith_uint256, CBlockIndex*> highpow_outofchain_headers;
+    auto remove_failed_candidate = [&](CBlockIndex* block) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
+        for (const auto& cs : m_chainman.m_chainstates) {
+            cs->setBlockIndexCandidates.erase(block);
+        }
+    };
 
     {
         LOCK(cs_main);
@@ -3682,7 +3687,7 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
         // nStatus" criteria for inclusion in setBlockIndexCandidates).
         disconnected_tip->nStatus |= BLOCK_FAILED_VALID;
         m_blockman.m_dirty_blockindex.insert(disconnected_tip);
-        setBlockIndexCandidates.erase(disconnected_tip);
+        remove_failed_candidate(disconnected_tip);
         setBlockIndexCandidates.insert(new_tip);
 
         // Mark out-of-chain descendants of the invalidated block as invalid
@@ -3704,6 +3709,7 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
                 m_blockman.m_dirty_blockindex.insert(candidate);
                 // If invalidated, the block is irrelevant for setBlockIndexCandidates
                 // and for m_best_header and can be removed from the cache.
+                remove_failed_candidate(candidate);
                 candidate_it = highpow_outofchain_headers.erase(candidate_it);
                 continue;
             }
@@ -3742,7 +3748,7 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
         if (!pindex_was_in_chain && !(pindex->nStatus & BLOCK_FAILED_VALID)) {
             pindex->nStatus |= BLOCK_FAILED_VALID;
             m_blockman.m_dirty_blockindex.insert(pindex);
-            setBlockIndexCandidates.erase(pindex);
+            remove_failed_candidate(pindex);
         }
 
         // If any new blocks somehow arrived while we were disconnecting
@@ -3753,7 +3759,10 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
         // Loop back over all block index entries and add any missing entries
         // to setBlockIndexCandidates.
         for (auto& [_, block_index] : m_blockman.m_block_index) {
-            if (block_index.IsValid(BLOCK_VALID_TRANSACTIONS) && block_index.HaveNumChainTxs() && !setBlockIndexCandidates.value_comp()(&block_index, m_chain.Tip())) {
+            if (!(block_index.nStatus & BLOCK_FAILED_VALID) &&
+                block_index.IsValid(BLOCK_VALID_TRANSACTIONS) &&
+                block_index.HaveNumChainTxs() &&
+                !setBlockIndexCandidates.value_comp()(&block_index, m_chain.Tip())) {
                 setBlockIndexCandidates.insert(&block_index);
             }
         }
@@ -3791,11 +3800,19 @@ void Chainstate::SetBlockFailureFlags(CBlockIndex* invalid_block)
     AssertLockHeld(cs_main);
     Assume(invalid_block);
 
+    auto remove_failed_candidate = [&](CBlockIndex* block) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
+        for (const auto& cs : m_chainman.m_chainstates) {
+            cs->setBlockIndexCandidates.erase(block);
+        }
+    };
+
+    remove_failed_candidate(invalid_block);
     for (auto& [_, block_index] : m_blockman.m_block_index) {
         if (invalid_block != &block_index && block_index.GetAncestor(invalid_block->nHeight) == invalid_block) {
             block_index.nStatus |= BLOCK_FAILED_VALID;
             Assume(block_index.nStatus & BLOCK_FAILED_VALID);
             m_blockman.m_dirty_blockindex.insert(&block_index);
+            remove_failed_candidate(&block_index);
         }
     }
 }
@@ -3912,8 +3929,13 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
             }
             pindex->m_chain_tx_count = prev_tx_sum(*pindex);
             pindex->nSequenceId = nBlockSequenceId++;
-            for (const auto& c : m_chainstates) {
-                c->TryAddBlockIndexCandidate(pindex);
+            // A descendant can be invalidated while waiting for an unlinked
+            // parent. Keep chain transaction counts, but do not make failed
+            // blocks chain candidates.
+            if (!(pindex->nStatus & BLOCK_FAILED_VALID)) {
+                for (const auto& c : m_chainstates) {
+                    c->TryAddBlockIndexCandidate(pindex);
+                }
             }
             std::pair<std::multimap<CBlockIndex*, CBlockIndex*>::iterator, std::multimap<CBlockIndex*, CBlockIndex*>::iterator> range = m_blockman.m_blocks_unlinked.equal_range(pindex);
             while (range.first != range.second) {
@@ -5439,6 +5461,7 @@ void ChainstateManager::CheckBlockIndex() const
         // Chainstate-specific checks on setBlockIndexCandidates
         for (const auto& c : m_chainstates) {
             if (c->m_chain.Tip() == nullptr) continue;
+            assert(pindexFirstInvalid == nullptr || !c->setBlockIndexCandidates.contains(pindex));
             // Two main factors determine whether pindex is a candidate in
             // setBlockIndexCandidates:
             //
@@ -5454,8 +5477,7 @@ void ChainstateManager::CheckBlockIndex() const
             //   also a potential candidate.
             if (!CBlockIndexWorkComparator()(pindex, c->m_chain.Tip()) && (pindexFirstNeverProcessed == nullptr || pindex == snap_base)) {
                 // If pindex was detected as invalid (pindexFirstInvalid is
-                // non-null), it is not required to be in
-                // setBlockIndexCandidates.
+                // non-null), it must not be in setBlockIndexCandidates.
                 if (pindexFirstInvalid == nullptr) {
                     // If pindex and all its parents back to the genesis block
                     // or an assumeutxo snapshot block downloaded transactions,
