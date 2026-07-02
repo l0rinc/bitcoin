@@ -422,6 +422,42 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         return a.out == b.out && a.fCoinBase == b.fCoinBase && a.nHeight == b.nHeight;
     };
 
+    auto assert_coin_matches_sim = [&](const std::optional<Coin>& realcoin, std::optional<std::pair<coinidx_type, uint32_t>> sim) {
+        if (!sim.has_value()) {
+            assert(!realcoin);
+        } else {
+            assert(realcoin && !realcoin->IsSpent());
+            const auto& simcoin = data.coins[sim->first];
+            assert(realcoin->out == simcoin.out);
+            assert(realcoin->fCoinBase == simcoin.fCoinBase);
+            assert(realcoin->nHeight == sim->second);
+        }
+    };
+
+    auto assert_cache_peek_matches_sim = [&](unsigned sim_idx) {
+        assert(sim_idx > 0);
+        assert(sim_idx <= caches.size());
+        const auto cache_stats{get_cache_stats(sim_idx)};
+        const auto& cache{*caches[sim_idx - 1]};
+        for (uint32_t outpointidx = 0; outpointidx < NUM_OUTPOINTS; ++outpointidx) {
+            assert_coin_matches_sim(cache.PeekCoin(data.outpoints[outpointidx]), lookup(outpointidx, sim_idx));
+        }
+        assert_cache_stats(cache_stats);
+    };
+
+    auto assert_stack_peek_matches_sim = [&]() {
+        for (unsigned sim_idx = 1; sim_idx <= caches.size(); ++sim_idx) {
+            assert_cache_peek_matches_sim(sim_idx);
+        }
+    };
+
+    auto assert_bottom_matches_sim = [&]() {
+        assert(bottom.GetBestBlock() == sim_best_blocks[0]);
+        for (uint32_t outpointidx = 0; outpointidx < NUM_OUTPOINTS; ++outpointidx) {
+            assert_coin_matches_sim(bottom.GetCoin(data.outpoints[outpointidx]), lookup(outpointidx, 0));
+        }
+    };
+
     // Main simulation loop: read commands from the fuzzer input, and apply them
     // to both the real cache stack and the simulation.
     FuzzedDataProvider provider(buffer.data(), buffer.size());
@@ -799,6 +835,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
 
     // Sanity check all the remaining caches
     assert_cache_stack_sane();
+    assert_stack_peek_matches_sim();
 
     // Keep this bottom-to-top comparison read-only while overlay workers may still access lower caches.
     const auto cache_stats{get_all_cache_stats()};
@@ -827,17 +864,5 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
     assert_cache_stats(cache_stats);
 
     // Compare the bottom coinsview (not a CCoinsViewCache) with sim_cache[0].
-    assert(bottom.GetBestBlock() == sim_best_blocks[0]);
-    for (uint32_t outpointidx = 0; outpointidx < NUM_OUTPOINTS; ++outpointidx) {
-        auto realcoin = bottom.GetCoin(data.outpoints[outpointidx]);
-        auto sim = lookup(outpointidx, 0);
-        if (!sim.has_value()) {
-            assert(!realcoin);
-        } else {
-            assert(realcoin && !realcoin->IsSpent());
-            assert(realcoin->out == data.coins[sim->first].out);
-            assert(realcoin->fCoinBase == data.coins[sim->first].fCoinBase);
-            assert(realcoin->nHeight == sim->second);
-        }
-    }
+    assert_bottom_matches_sim();
 }
