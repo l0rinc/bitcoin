@@ -283,6 +283,64 @@ void CheckHasDescendants(const CTxMemPool& tx_pool)
     }
 }
 
+void CheckDirectMempoolEdges(const CTxMemPool& tx_pool)
+{
+    LOCK(tx_pool.cs);
+    for (const auto& entry : tx_pool.mapTx) {
+        const Txid txid{entry.GetTx().GetHash()};
+        std::set<Txid> expected_parents;
+        for (const CTxIn& txin : entry.GetTx().vin) {
+            if (tx_pool.mapTx.find(txin.prevout.hash) != tx_pool.mapTx.end()) {
+                expected_parents.insert(txin.prevout.hash);
+            }
+        }
+
+        std::set<Txid> actual_parents;
+        for (const auto& parent : tx_pool.GetParents(entry)) {
+            const Txid parent_txid{parent.get().GetTx().GetHash()};
+            Assert(actual_parents.insert(parent_txid).second);
+            Assert(expected_parents.contains(parent_txid));
+
+            bool found_child{false};
+            for (const auto& child : tx_pool.GetChildren(parent.get())) {
+                const Txid child_txid{child.get().GetTx().GetHash()};
+                Assert(child_txid != parent_txid);
+                if (child_txid == txid) found_child = true;
+            }
+            Assert(found_child);
+        }
+        Assert(actual_parents == expected_parents);
+
+        std::set<Txid> expected_children;
+        auto child_it{tx_pool.mapNextTx.lower_bound(COutPoint(txid, 0))};
+        for (; child_it != tx_pool.mapNextTx.end() && child_it->first->hash == txid; ++child_it) {
+            const auto child{child_it->second};
+            Assert(child != tx_pool.mapTx.end());
+            const Txid child_txid{child->GetTx().GetHash()};
+            if (child_txid == txid) continue;
+            Assert(std::ranges::any_of(child->GetTx().vin, [&](const CTxIn& txin) {
+                return txin.prevout.hash == txid;
+            }));
+            expected_children.insert(child_txid);
+        }
+
+        std::set<Txid> actual_children;
+        for (const auto& child : tx_pool.GetChildren(entry)) {
+            const Txid child_txid{child.get().GetTx().GetHash()};
+            Assert(child_txid != txid);
+            Assert(actual_children.insert(child_txid).second);
+            Assert(expected_children.contains(child_txid));
+
+            bool found_parent{false};
+            for (const auto& parent : tx_pool.GetParents(child.get())) {
+                if (parent.get().GetTx().GetHash() == txid) found_parent = true;
+            }
+            Assert(found_parent);
+        }
+        Assert(actual_children == expected_children);
+    }
+}
+
 [[nodiscard]] CAmount ConsumePriorityDelta(FuzzedDataProvider& fuzzed_data_provider)
 {
     switch (fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 4)) {
@@ -302,6 +360,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
     CheckTransactionAncestryAll(tx_pool);
     CheckHasDescendants(tx_pool);
+    CheckDirectMempoolEdges(tx_pool);
     CheckPrioritisedTransactions(tx_pool);
     CheckRandomizedTxIndex(tx_pool);
     {
@@ -330,10 +389,12 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         tx_pool.UpdateTransactionsFromBlock(hashes_to_update);
         CheckUpdatedBlockDependencies(tx_pool, hashes_to_update);
         CheckHasDescendants(tx_pool);
+        CheckDirectMempoolEdges(tx_pool);
         CheckRandomizedTxIndex(tx_pool);
     }
     CheckPrioritisedTransactions(tx_pool);
     CheckHasDescendants(tx_pool);
+    CheckDirectMempoolEdges(tx_pool);
     CheckRandomizedTxIndex(tx_pool);
     const auto info_all = tx_pool.infoAll();
     if (!info_all.empty()) {
@@ -342,6 +403,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         assert(tx_pool.size() < info_all.size());
         CheckTransactionAncestryAll(tx_pool);
         CheckHasDescendants(tx_pool);
+        CheckDirectMempoolEdges(tx_pool);
         CheckPrioritisedTransactions(tx_pool);
         CheckRandomizedTxIndex(tx_pool);
     }
@@ -361,6 +423,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
     CheckTransactionAncestryAll(tx_pool);
     CheckHasDescendants(tx_pool);
+    CheckDirectMempoolEdges(tx_pool);
     CheckPrioritisedTransactions(tx_pool);
     CheckRandomizedTxIndex(tx_pool);
     g_setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
@@ -588,6 +651,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
         bool wtxid_in_mempool = tx_pool.exists(tx->GetWitnessHash());
         CheckATMPInvariants(res, tx->GetWitnessHash(), txid_in_mempool, wtxid_in_mempool);
         if (txid_in_mempool) CheckTransactionAncestry(tx_pool, tx->GetHash());
+        CheckDirectMempoolEdges(tx_pool);
         CheckPrioritisedTransactions(tx_pool);
         CheckRandomizedTxIndex(tx_pool);
 
@@ -636,6 +700,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
             }
         }
         CheckPrioritisedTransactions(tx_pool);
+        CheckDirectMempoolEdges(tx_pool);
         CheckRandomizedTxIndex(tx_pool);
     }
     Finish(fuzzed_data_provider, tx_pool, chainstate);
@@ -700,11 +765,13 @@ FUZZ_TARGET(tx_pool, .init = initialize_tx_pool)
         if (accepted) {
             txids.push_back(tx->GetHash());
             CheckTransactionAncestry(tx_pool, tx->GetHash());
+            CheckDirectMempoolEdges(tx_pool);
             CheckRandomizedTxIndex(tx_pool);
             if (!ever_bypassed_limits) {
                 CheckMempoolTRUCInvariants(tx_pool);
             }
         }
+        CheckDirectMempoolEdges(tx_pool);
         CheckPrioritisedTransactions(tx_pool);
     }
     Finish(fuzzed_data_provider, tx_pool, chainstate);
