@@ -360,6 +360,15 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         return dirty_counts;
     };
 
+    auto get_cache_sizes = [&]() {
+        std::vector<size_t> cache_sizes;
+        cache_sizes.reserve(caches.size());
+        for (const auto& cache : caches) {
+            cache_sizes.push_back(cache->GetCacheSize());
+        }
+        return cache_sizes;
+    };
+
     auto assert_cache_stats = [&](const std::vector<CacheStats>& expected) {
         assert(expected.size() <= caches.size());
         for (size_t idx{0}; idx < expected.size(); ++idx) {
@@ -373,6 +382,13 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         assert(expected.size() == caches.size());
         for (size_t idx{0}; idx < expected.size(); ++idx) {
             assert(caches[idx]->GetDirtyCount() == expected[idx]);
+        }
+    };
+
+    auto assert_cache_sizes = [&](const std::vector<size_t>& expected) {
+        assert(expected.size() == caches.size());
+        for (size_t idx{0}; idx < expected.size(); ++idx) {
+            assert(caches[idx]->GetCacheSize() == expected[idx]);
         }
     };
 
@@ -545,9 +561,20 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 }
                 if (!first_unspent_idx) return;
 
+                const auto dirty_counts{get_dirty_counts()};
                 const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
                 const auto& realcoin = AccessByTxid(*caches.back(), txid);
+                assert_dirty_counts(dirty_counts);
                 assert_cache_stats_if_present(parent_cache_stats);
+                const Coin realcoin_copy{realcoin};
+                const auto cache_sizes_after_first{get_cache_sizes()};
+                const auto dirty_counts_after_first{get_dirty_counts()};
+                const auto parent_cache_stats_after_first{get_parent_cache_stats_if_top_overlay()};
+                const auto& realcoin_again = AccessByTxid(*caches.back(), txid);
+                assert(coins_equal(realcoin_again, realcoin_copy));
+                assert_cache_sizes(cache_sizes_after_first);
+                assert_dirty_counts(dirty_counts_after_first);
+                assert_cache_stats_if_present(parent_cache_stats_after_first);
                 const auto sim = lookup(*first_unspent_idx);
                 assert(sim);
                 assert(!realcoin.IsSpent());
