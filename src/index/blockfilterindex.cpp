@@ -422,15 +422,17 @@ bool BlockFilterIndex::LookupFilterRange(int start_height, const CBlockIndex* st
         return false;
     }
 
-    filters_out.resize(entries.size());
-    auto filter_pos_it = filters_out.begin();
+    std::vector<BlockFilter> filters;
+    filters.reserve(entries.size());
     for (const auto& entry : entries) {
-        if (!ReadFilterFromDisk(entry.second.pos, entry.second.hash, entry.first, *filter_pos_it)) {
+        BlockFilter filter;
+        if (!ReadFilterFromDisk(entry.second.pos, entry.second.hash, entry.first, filter)) {
             return false;
         }
-        ++filter_pos_it;
+        filters.push_back(std::move(filter));
     }
 
+    filters_out = std::move(filters);
     return true;
 }
 
