@@ -42,6 +42,11 @@ public:
         prefilledtxn.push_back({index, std::move(tx)});
     }
 
+    void ResizePrefilledTx(size_t size)
+    {
+        prefilledtxn.resize(size);
+    }
+
     size_t ShortTxIDCount() const { return shorttxids.size(); }
 
     void ReplaceShortTxID(size_t index, uint64_t shortid)
@@ -103,6 +108,9 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
             [&] {
                 CMutableTransaction null_tx;
                 cmpctblock.AddPrefilledTx(0, MakeTransactionRef(std::move(null_tx)));
+            },
+            [&] {
+                cmpctblock.ResizePrefilledTx(2);
             },
             [&] {
                 cmpctblock.AddPrefilledTx(std::numeric_limits<uint16_t>::max(), block->vtx.front());
