@@ -12,6 +12,7 @@
 #include <streams.h>
 #include <undo.h>
 #include <univalue.h>
+#include <util/check.h>
 #include <util/strencodings.h>
 
 #include <boost/test/unit_test.hpp>
@@ -175,6 +176,17 @@ BOOST_AUTO_TEST_CASE(blockfilter_basic_test)
     BOOST_CHECK_EQUAL(default_ctor_block_filter_1.GetFilterType(), default_ctor_block_filter_2.GetFilterType());
     BOOST_CHECK_EQUAL(default_ctor_block_filter_1.GetBlockHash(), default_ctor_block_filter_2.GetBlockHash());
     BOOST_CHECK(default_ctor_block_filter_1.GetEncodedFilter() == default_ctor_block_filter_2.GetEncodedFilter());
+}
+
+BOOST_AUTO_TEST_CASE(blockfilter_rejects_null_tx_refs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+
+    CBlock block;
+    block.vtx.resize(1);
+    CBlockUndo block_undo;
+
+    BOOST_CHECK_THROW(BlockFilter(BlockFilterType::BASIC, block, block_undo), NonFatalCheckError);
 }
 
 BOOST_AUTO_TEST_CASE(blockfilters_json_test)
