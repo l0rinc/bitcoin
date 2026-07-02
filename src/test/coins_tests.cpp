@@ -1858,4 +1858,50 @@ BOOST_AUTO_TEST_CASE(ccoins_peekcoin)
     BOOST_CHECK_EQUAL(main_cache.DynamicMemoryUsage(), memory_usage);
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_set_backend_preserves_cache_state)
+{
+    CCoinsViewTest first_base{m_rng};
+    CCoinsViewTest second_base{m_rng};
+
+    const auto make_coin = [](CAmount value) {
+        Coin coin;
+        coin.out.nValue = value;
+        coin.out.scriptPubKey.assign(1, OP_TRUE);
+        coin.nHeight = 1;
+        return coin;
+    };
+
+    const COutPoint cached_outpoint{Txid::FromUint256(m_rng.rand256()), 0};
+    const COutPoint second_base_outpoint{Txid::FromUint256(m_rng.rand256()), 0};
+    const Coin cached_coin{make_coin(1)};
+    const Coin second_base_coin{make_coin(2)};
+    {
+        CCoinsViewCache cache{&first_base};
+        cache.AddCoin(cached_outpoint, Coin{cached_coin}, /*possible_overwrite=*/false);
+        cache.Flush();
+    }
+    {
+        CCoinsViewCache cache{&second_base};
+        cache.AddCoin(second_base_outpoint, Coin{second_base_coin}, /*possible_overwrite=*/false);
+        cache.Flush();
+    }
+
+    CCoinsViewCacheTest cache{&first_base};
+    BOOST_CHECK(cache.HaveCoin(cached_outpoint));
+    BOOST_CHECK(cache.HaveCoinInCache(cached_outpoint));
+    BOOST_CHECK(!cache.HaveCoin(second_base_outpoint));
+
+    const auto cache_size{cache.GetCacheSize()};
+    const auto dirty_count{cache.GetDirtyCount()};
+    const auto memory_usage{cache.DynamicMemoryUsage()};
+    cache.SetBackend(second_base);
+    BOOST_CHECK_EQUAL(cache.GetCacheSize(), cache_size);
+    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), dirty_count);
+    BOOST_CHECK_EQUAL(cache.DynamicMemoryUsage(), memory_usage);
+
+    BOOST_CHECK(cache.HaveCoin(cached_outpoint));
+    BOOST_CHECK(cache.HaveCoin(second_base_outpoint));
+    BOOST_CHECK(cache.AccessCoin(second_base_outpoint) == second_base_coin);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
