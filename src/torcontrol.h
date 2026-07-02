@@ -8,6 +8,7 @@
 #ifndef BITCOIN_TORCONTROL_H
 #define BITCOIN_TORCONTROL_H
 
+#include <cstddef>
 #include <netaddress.h>
 #include <util/fs.h>
 #include <util/sock.h>
@@ -48,6 +49,8 @@ public:
         lines.clear();
     }
 };
+
+struct TorControlConnectionTest;
 
 /** Low-level handling for Tor control connection.
  * Speaks the SMTP-like protocol as defined in torspec/control-spec.txt
@@ -100,6 +103,8 @@ public:
     bool ReceiveAndProcess();
 
 private:
+    friend struct TorControlConnectionTest;
+
     /** Reference to interrupt object for clean shutdown */
     CThreadInterrupt& m_interrupt;
     /** Socket for the connection */
