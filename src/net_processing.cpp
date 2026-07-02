@@ -4231,7 +4231,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             std::vector<unsigned char> feature_data_vec;
             vRecv >> LIMITED_VECTOR(feature_data_vec, MAX_FEATUREDATA_LENGTH);
             feature_data = DataStream(feature_data_vec);
-        } catch (const std::exception&) {
+        } catch (const std::ios_base::failure&) {
             feature_id.clear(); // use empty feature_id as error indicator
         }
         if (feature_id.size() < 4 || !vRecv.empty()) {
@@ -4239,6 +4239,8 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             pfrom.fDisconnect = true;
             return;
         }
+        Assume(feature_id.size() <= MAX_FEATUREID_LENGTH);
+        Assume(feature_data.size() <= MAX_FEATUREDATA_LENGTH);
 
         // if (feature_id == NetMsgFeature::FOO) {
         //     ...
