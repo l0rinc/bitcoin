@@ -790,7 +790,7 @@ CFeeRate CBlockPolicyEstimator::estimateRawFee(int confTarget, double successThr
     // Return failure if trying to analyze a target we're not tracking
     if (confTarget <= 0 || (unsigned int)confTarget > stats->GetMaxConfirms())
         return CFeeRate(0);
-    if (successThreshold > 1)
+    if (!std::isfinite(successThreshold) || successThreshold < 0 || successThreshold > 1)
         return CFeeRate(0);
 
     double median = stats->EstimateMedianVal(confTarget, sufficientTxs, successThreshold, nBestSeenHeight, result);
