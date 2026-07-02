@@ -233,6 +233,22 @@ void MiniMiner::SanityCheck() const
     // m_entries, m_entries_by_txid, and m_descendant_set_by_txid all same size
     Assume(m_entries.size() == m_entries_by_txid.size());
     Assume(m_entries.size() == m_descendant_set_by_txid.size());
+    for (const auto& entry : m_entries) {
+        Assume(m_entries_by_txid.contains(entry->first));
+    }
+    for (const auto& [txid, _] : m_entries_by_txid) {
+        const auto descendant_it{m_descendant_set_by_txid.find(txid)};
+        Assume(descendant_it != m_descendant_set_by_txid.end());
+        bool includes_self{false};
+        for (const auto& descendant : descendant_it->second) {
+            Assume(m_entries_by_txid.contains(descendant->first));
+            includes_self |= descendant->first == txid;
+        }
+        Assume(includes_self);
+    }
+    for (const auto& [txid, _] : m_descendant_set_by_txid) {
+        Assume(m_entries_by_txid.contains(txid));
+    }
     // Cached ancestor values should be at least as large as the transaction's own size
     Assume(std::all_of(m_entries.begin(), m_entries.end(), [](const auto& entry) {
         return entry->second.GetSizeWithAncestors() >= entry->second.GetTxSize();}));
