@@ -276,6 +276,24 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_ibd_exit_after_loading_blocks, ChainTe
     }
 }
 
+BOOST_AUTO_TEST_CASE(read_snapshot_base_blockhash_truncated)
+{
+    const fs::path snapshot_chainstate_dir{m_path_root / "chainstate_snapshot"};
+    fs::create_directories(snapshot_chainstate_dir);
+    const fs::path base_blockhash_path{snapshot_chainstate_dir / node::SNAPSHOT_BLOCKHASH_FILENAME};
+
+    {
+        AutoFile outfile{fsbridge::fopen(base_blockhash_path, "wb")};
+        BOOST_REQUIRE(!outfile.IsNull());
+        std::vector<std::byte> truncated_blockhash(31);
+        outfile.write(truncated_blockhash);
+        BOOST_REQUIRE_EQUAL(outfile.fclose(), 0);
+    }
+
+    LOCK(::cs_main);
+    BOOST_CHECK(!node::ReadSnapshotBaseBlockhash(snapshot_chainstate_dir));
+}
+
 struct SnapshotTestSetup : TestChain100Setup {
     // Run with coinsdb on the filesystem to support, e.g., moving invalidated
     // chainstate dirs to "*_invalid".
