@@ -8,8 +8,10 @@
 #include <core_memusage.h>
 #include <memusage.h>
 #include <primitives/transaction.h>
+#include <util/check.h>
 #include <util/hasher.h>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -48,6 +50,7 @@ size_t DisconnectedBlockTransactions::DynamicMemoryUsage() const
 
 [[nodiscard]] std::vector<CTransactionRef> DisconnectedBlockTransactions::AddTransactionsFromBlock(const std::vector<CTransactionRef>& vtx)
 {
+    Assert(std::all_of(vtx.cbegin(), vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
     iters_by_txid.reserve(iters_by_txid.size() + vtx.size());
     for (auto block_it = vtx.rbegin(); block_it != vtx.rend(); ++block_it) {
         auto it = queuedTx.insert(queuedTx.end(), *block_it);
@@ -60,6 +63,7 @@ size_t DisconnectedBlockTransactions::DynamicMemoryUsage() const
 
 void DisconnectedBlockTransactions::removeForBlock(const std::vector<CTransactionRef>& vtx)
 {
+    Assert(std::all_of(vtx.cbegin(), vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
     // Short-circuit in the common case of a block being added to the tip
     if (queuedTx.empty()) {
         return;

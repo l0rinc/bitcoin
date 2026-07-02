@@ -7,6 +7,7 @@
 #include <consensus/validation.h>
 #include <policy/policy.h>
 #include <primitives/transaction.h>
+#include <util/check.h>
 #include <util/feefrac.h>
 #include <util/hasher.h>
 #include <util/log.h>
@@ -17,6 +18,7 @@
 #include <boost/multi_index/tag.hpp>
 #include <boost/multi_index_container.hpp>
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <unordered_map>
@@ -618,6 +620,7 @@ bool TxOrphanageImpl::HaveTxToReconsider(NodeId peer)
 
 void TxOrphanageImpl::EraseForBlock(const CBlock& block)
 {
+    Assert(std::all_of(block.vtx.cbegin(), block.vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
     if (m_orphans.empty()) return;
 
     std::set<Wtxid> wtxids_to_erase;
