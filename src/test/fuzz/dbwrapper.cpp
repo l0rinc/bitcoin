@@ -31,6 +31,7 @@
 #include <optional>
 #include <set>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -127,6 +128,11 @@ using Oracle = std::map<uint16_t, uint32_t, LevelDBBytewiseU16Cmp>;
 struct FailUnserialize {
     template <typename Stream>
     void Unserialize(Stream&) { throw std::ios_base::failure{"always fail"}; }
+};
+
+struct UnexpectedFailUnserialize {
+    template <typename Stream>
+    void Unserialize(Stream&) { throw std::runtime_error{"unexpected dbwrapper deserialize error"}; }
 };
 
 uint16_t ConsumeKey(FuzzedDataProvider& provider) { return provider.ConsumeIntegral<uint16_t>(); }
@@ -342,16 +348,22 @@ void TestDbWrapper(FuzzedDataProvider& provider,
                 assert(dbw->Exists(key) == oracle.contains(key));
             },
             [&] {
-                uint16_t key{};
-                if (!oracle.empty() && provider.ConsumeBool()) {
-                    auto it{oracle.begin()};
-                    std::advance(it, provider.ConsumeIntegralInRange<size_t>(0, oracle.size() - 1));
-                    key = it->first;
-                } else {
-                    key = ConsumeKey(provider);
-                }
+                const uint16_t key{ConsumeKey(provider)};
                 FailUnserialize wrong_type;
                 assert(!dbw->Read(key, wrong_type));
+            },
+            [&] {
+                if (oracle.empty()) return;
+                auto it{oracle.begin()};
+                std::advance(it, provider.ConsumeIntegralInRange<size_t>(0, oracle.size() - 1));
+
+                UnexpectedFailUnserialize unexpected;
+                try {
+                    (void)dbw->Read(it->first, unexpected);
+                    assert(false);
+                } catch (const std::runtime_error& e) {
+                    assert(std::string{e.what()} == "unexpected dbwrapper deserialize error");
+                }
             },
             [&] {
                 const auto seek_key{provider.ConsumeBool()
