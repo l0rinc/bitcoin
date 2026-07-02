@@ -6,6 +6,7 @@
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <uint256.h>
+#include <util/check.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -13,6 +14,19 @@
 #include <vector>
 
 BOOST_AUTO_TEST_SUITE(merkleblock_tests)
+
+BOOST_AUTO_TEST_CASE(merkleblock_rejects_invalid_block_tx_refs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+    std::set<Txid> txids;
+
+    BOOST_CHECK_THROW(CMerkleBlock(CBlock{}, txids), NonFatalCheckError);
+
+    CBloomFilter filter{10, 0.000001, 0, BLOOM_UPDATE_NONE};
+    CBlock resized_block;
+    resized_block.vtx.resize(1);
+    BOOST_CHECK_THROW(CMerkleBlock(resized_block, filter), NonFatalCheckError);
+}
 
 /**
  * Create a CMerkleBlock using a list of txids which will be found in the
