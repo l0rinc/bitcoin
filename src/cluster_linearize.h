@@ -1889,7 +1889,10 @@ std::tuple<std::vector<DepGraphIndex>, bool, uint64_t> Linearize(
             }
         } while (forest.GetCost() < max_cost);
     }
-    return {forest.GetLinearization(fallback_order), optimal, forest.GetCost()};
+    auto linearization = forest.GetLinearization(fallback_order);
+    const uint64_t cost{forest.GetCost()};
+    Assume(optimal || cost >= max_cost);
+    return {std::move(linearization), optimal, cost};
 }
 
 /** Improve a given linearization.
