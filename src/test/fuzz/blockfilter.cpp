@@ -3,11 +3,13 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <blockfilter.h>
+#include <primitives/block.h>
 #include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <test/util/random.h>
+#include <undo.h>
 #include <util/check.h>
 
 #include <algorithm>
@@ -66,6 +68,20 @@ FUZZ_TARGET(blockfilter)
     SeedRandomStateForTest(SeedRand::ZEROS);
     FuzzedDataProvider constructed_filter_provider(buffer.data(), buffer.size());
     AssertConstructedGCSFilter(constructed_filter_provider);
+
+    FuzzedDataProvider constructed_block_filter_provider(buffer.data(), buffer.size());
+    if (const auto block{ConsumeDeserializable<CBlock>(constructed_block_filter_provider, TX_WITH_WITNESS)}) {
+        Assert(std::ranges::all_of(block->vtx, [](const auto& tx) { return tx != nullptr; }));
+
+        CBlockUndo block_undo;
+        if (auto opt_block_undo{ConsumeDeserializable<CBlockUndo>(constructed_block_filter_provider)}) {
+            block_undo = std::move(*opt_block_undo);
+        }
+        const BlockFilter constructed{BlockFilterType::BASIC, *block, block_undo};
+        Assert(constructed.GetFilterType() == BlockFilterType::BASIC);
+        Assert(constructed.GetBlockHash() == block->GetHash());
+        Assert(!constructed.GetEncodedFilter().empty());
+    }
 
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     const std::optional<BlockFilter> block_filter = ConsumeDeserializable<BlockFilter>(fuzzed_data_provider);
