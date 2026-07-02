@@ -4,6 +4,7 @@
 #include <node/mini_miner.h>
 #include <random.h>
 #include <txmempool.h>
+#include <util/check.h>
 #include <util/time.h>
 
 #include <test/util/setup_common.h>
@@ -864,6 +865,47 @@ BOOST_FIXTURE_TEST_CASE(calculate_cluster, TestChain100Setup)
     CTxMemPool::setEntries duplicated_clusterset{duplicated_cluster.begin(), duplicated_cluster.end()};
     BOOST_CHECK_EQUAL(duplicated_cluster.size(), duplicated_clusterset.size());
     for (const auto& iter : vec_iters_zigzag) BOOST_CHECK(duplicated_clusterset.count(iter));
+}
+
+BOOST_FIXTURE_TEST_CASE(manual_ctor_descendant_cache_contracts, TestChain100Setup)
+{
+    const auto parent = make_tx({COutPoint{m_coinbase_txns[0]->GetHash(), 0}}, /*num_outputs=*/1);
+    const auto child = make_tx({COutPoint{parent->GetHash(), 0}}, /*num_outputs=*/1);
+    const auto unrelated = make_tx({COutPoint{m_coinbase_txns[1]->GetHash(), 0}}, /*num_outputs=*/1);
+
+    const int64_t parent_vsize{GetVirtualTransactionSize(*parent)};
+    const int64_t child_vsize{GetVirtualTransactionSize(*child)};
+    std::vector<node::MiniMinerMempoolEntry> manual_entries;
+    manual_entries.emplace_back(parent, parent_vsize, parent_vsize, med_fee, med_fee);
+    manual_entries.emplace_back(child, child_vsize, parent_vsize + child_vsize, low_fee, med_fee + low_fee);
+
+    const std::map<Txid, std::set<Txid>> valid_caches{
+        {parent->GetHash(), {parent->GetHash(), child->GetHash()}},
+        {child->GetHash(), {child->GetHash()}},
+    };
+    node::MiniMiner valid{manual_entries, valid_caches};
+    BOOST_REQUIRE(valid.IsReadyToCalculate());
+    const auto inclusion_order{valid.Linearize()};
+    BOOST_CHECK_EQUAL(Find(inclusion_order, parent->GetHash()), 0);
+    BOOST_CHECK_LE(Find(inclusion_order, parent->GetHash()), Find(inclusion_order, child->GetHash()));
+
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        test_only_CheckFailuresAreExceptionsNotAborts failed_assumes_throw{};
+        auto missing_self{valid_caches};
+        missing_self.at(parent->GetHash()).erase(parent->GetHash());
+        BOOST_CHECK_THROW(([&] {
+            node::MiniMiner invalid{manual_entries, missing_self};
+            (void)invalid;
+        }()), NonFatalCheckError);
+
+        auto mismatched_keys{valid_caches};
+        mismatched_keys.erase(child->GetHash());
+        BOOST_REQUIRE(mismatched_keys.emplace(unrelated->GetHash(), std::set<Txid>{parent->GetHash()}).second);
+        BOOST_CHECK_THROW(([&] {
+            node::MiniMiner invalid{manual_entries, mismatched_keys};
+            (void)invalid;
+        }()), NonFatalCheckError);
+    }
 }
 
 BOOST_FIXTURE_TEST_CASE(manual_ctor, TestChain100Setup)
