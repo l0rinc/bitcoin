@@ -94,6 +94,53 @@ void CheckTopologicalInclusionOrder(const CTxMemPool& pool, const std::map<Txid,
     }
 }
 
+void CheckManualMiniMinerLinearize(const CTxMemPool& pool, const std::vector<Txid>& mempool_txids)
+    EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
+{
+    if (mempool_txids.empty()) return;
+
+    const auto cluster{pool.GatherClusters(mempool_txids)};
+    if (cluster.empty()) return;
+
+    const CTxMemPool::setEntries cluster_set{cluster.begin(), cluster.end()};
+    std::vector<node::MiniMinerMempoolEntry> manual_entries;
+    manual_entries.reserve(cluster.size());
+    std::map<Txid, std::set<Txid>> descendant_caches;
+
+    for (const auto& txiter : cluster) {
+        const auto [_, ancestor_size, ancestor_fee]{pool.CalculateAncestorData(*txiter)};
+        manual_entries.emplace_back(txiter->GetSharedTx(),
+                                    txiter->GetTxSize(),
+                                    static_cast<int64_t>(ancestor_size),
+                                    txiter->GetModifiedFee(),
+                                    ancestor_fee);
+    }
+
+    for (const auto& txiter : cluster) {
+        CTxMemPool::setEntries descendants;
+        pool.CalculateDescendants(txiter, descendants);
+        std::set<Txid> descendant_txids;
+        for (const auto& descendant : descendants) {
+            Assert(cluster_set.contains(descendant));
+            descendant_txids.insert(descendant->GetTx().GetHash());
+        }
+        Assert(descendant_txids.contains(txiter->GetTx().GetHash()));
+        Assert(descendant_caches.emplace(txiter->GetTx().GetHash(), std::move(descendant_txids)).second);
+    }
+
+    node::MiniMiner manual_mini_miner{manual_entries, descendant_caches};
+    assert(manual_mini_miner.IsReadyToCalculate());
+    const auto inclusion_order{manual_mini_miner.Linearize()};
+    assert(inclusion_order.size() == cluster.size());
+    assert(manual_mini_miner.GetMockTemplateTxids().size() == cluster.size());
+    for (const auto& txiter : cluster) {
+        const auto txid{txiter->GetTx().GetHash()};
+        assert(inclusion_order.contains(txid));
+        assert(manual_mini_miner.GetMockTemplateTxids().contains(txid));
+    }
+    CheckTopologicalInclusionOrder(pool, inclusion_order);
+}
+
 // Test that the MiniMiner can run with various outpoints and feerates.
 FUZZ_TARGET(mini_miner, .init = initialize_miner)
 {
@@ -155,6 +202,7 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
     }
 
     CheckGatherClusters(pool, mempool_txids, outpoints);
+    CheckManualMiniMinerLinearize(pool, mempool_txids);
 
     const CFeeRate target_feerate{CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY/1000)}};
     const CFeeRate alternate_target_feerate{CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY/1000)}};
