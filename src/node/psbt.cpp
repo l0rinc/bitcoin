@@ -9,6 +9,7 @@
 #include <policy/policy.h>
 #include <policy/settings.h>
 #include <tinyformat.h>
+#include <util/check.h>
 
 #include <numeric>
 
@@ -17,11 +18,26 @@ PSBTAnalysis AnalyzePSBT(PartiallySignedTransaction psbtx)
 {
     // Go through each input and build status
     PSBTAnalysis result;
+    const auto return_checked_result = [&]() {
+        Assume(result.estimated_vsize.has_value() == result.estimated_feerate.has_value());
+        Assume(!result.estimated_feerate.has_value() || result.fee.has_value());
+        if (result.error.empty()) {
+            Assume(result.inputs.size() == psbtx.inputs.size());
+            Assume(result.next > PSBTRole::CREATOR);
+        } else {
+            Assume(result.inputs.empty());
+            Assume(!result.estimated_vsize.has_value());
+            Assume(!result.estimated_feerate.has_value());
+            Assume(!result.fee.has_value());
+            Assume(result.next == PSBTRole::CREATOR);
+        }
+        return result;
+    };
 
     std::optional<CMutableTransaction> unsigned_tx = psbtx.GetUnsignedTx();
     if (!unsigned_tx) {
         result.SetInvalid("PSBT cannot be made into a valid transaction");
-        return result;
+        return return_checked_result();
     }
     CMutableTransaction& mtx = *unsigned_tx;
 
@@ -46,14 +62,14 @@ PSBTAnalysis AnalyzePSBT(PartiallySignedTransaction psbtx)
         if (input.GetUTXO(utxo)) {
             if (!MoneyRange(utxo.nValue) || !MoneyRange(in_amt + utxo.nValue)) {
                 result.SetInvalid(strprintf("PSBT is not valid. Input %u has invalid value", i));
-                return result;
+                return return_checked_result();
             }
             in_amt += utxo.nValue;
             input_analysis.has_utxo = true;
         } else {
             if (input.non_witness_utxo && input.prev_out >= input.non_witness_utxo->vout.size()) {
                 result.SetInvalid(strprintf("PSBT is not valid. Input %u specifies invalid prevout", i));
-                return result;
+                return return_checked_result();
             }
             input_analysis.has_utxo = false;
             input_analysis.is_final = false;
@@ -63,7 +79,7 @@ PSBTAnalysis AnalyzePSBT(PartiallySignedTransaction psbtx)
 
         if (!utxo.IsNull() && utxo.scriptPubKey.IsUnspendable()) {
             result.SetInvalid(strprintf("PSBT is not valid. Input %u spends unspendable output", i));
-            return result;
+            return return_checked_result();
         }
 
         // Check if it is final
@@ -115,7 +131,7 @@ PSBTAnalysis AnalyzePSBT(PartiallySignedTransaction psbtx)
         );
         if (!MoneyRange(out_amt)) {
             result.SetInvalid("PSBT is not valid. Output amount invalid");
-            return result;
+            return return_checked_result();
         }
 
         // Get the fee
@@ -152,6 +168,6 @@ PSBTAnalysis AnalyzePSBT(PartiallySignedTransaction psbtx)
 
     }
 
-    return result;
+    return return_checked_result();
 }
 } // namespace node
