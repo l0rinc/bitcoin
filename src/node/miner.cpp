@@ -87,6 +87,7 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
 
 void RegenerateCommitments(CBlock& block, ChainstateManager& chainman)
 {
+    Assert(std::all_of(block.vtx.cbegin(), block.vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
     const int commitpos{GetWitnessCommitmentIndex(block)};
     Assert(commitpos != NO_WITNESS_COMMITMENT);
     CMutableTransaction tx{*block.vtx.at(0)};
