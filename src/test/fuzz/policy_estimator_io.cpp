@@ -12,10 +12,70 @@
 #include <util/check.h>
 
 #include <array>
+#include <cassert>
+#include <cstdint>
 #include <memory>
 
 namespace {
 const BasicTestingSetup* g_setup;
+
+bool EqualBuckets(const EstimatorBucket& a, const EstimatorBucket& b)
+{
+    return a.start == b.start &&
+           a.end == b.end &&
+           a.withinTarget == b.withinTarget &&
+           a.totalConfirmed == b.totalConfirmed &&
+           a.inMempool == b.inMempool &&
+           a.leftMempool == b.leftMempool;
+}
+
+bool EqualResults(const EstimationResult& a, const EstimationResult& b)
+{
+    return EqualBuckets(a.pass, b.pass) &&
+           EqualBuckets(a.fail, b.fail) &&
+           a.decay == b.decay &&
+           a.scale == b.scale;
+}
+
+bool EqualFeeCalculations(const FeeCalculation& a, const FeeCalculation& b)
+{
+    return EqualResults(a.est, b.est) &&
+           a.reason == b.reason &&
+           a.desiredTarget == b.desiredTarget &&
+           a.returnedTarget == b.returnedTarget &&
+           a.best_height == b.best_height;
+}
+
+struct FeeEstimatorSnapshot {
+    std::array<unsigned int, ALL_FEE_ESTIMATE_HORIZONS.size()> targets;
+    std::array<CAmount, ALL_FEE_ESTIMATE_HORIZONS.size()> raw_fees;
+    std::array<EstimationResult, ALL_FEE_ESTIMATE_HORIZONS.size()> raw_results;
+    CAmount smart_fee;
+    FeeCalculation smart_calc;
+};
+
+FeeEstimatorSnapshot SnapshotEstimator(const CBlockPolicyEstimator& estimator)
+{
+    FeeEstimatorSnapshot snapshot;
+    for (size_t i{0}; i < ALL_FEE_ESTIMATE_HORIZONS.size(); ++i) {
+        const auto horizon{ALL_FEE_ESTIMATE_HORIZONS[i]};
+        snapshot.targets[i] = estimator.HighestTargetTracked(horizon);
+        snapshot.raw_fees[i] = estimator.estimateRawFee(1, 0.0, horizon, &snapshot.raw_results[i]).GetFeePerK();
+    }
+    snapshot.smart_fee = estimator.estimateSmartFee(2, &snapshot.smart_calc, /*conservative=*/false).GetFeePerK();
+    return snapshot;
+}
+
+void AssertEqualSnapshots(const FeeEstimatorSnapshot& a, const FeeEstimatorSnapshot& b)
+{
+    assert(a.targets == b.targets);
+    assert(a.raw_fees == b.raw_fees);
+    for (size_t i{0}; i < ALL_FEE_ESTIMATE_HORIZONS.size(); ++i) {
+        assert(EqualResults(a.raw_results[i], b.raw_results[i]));
+    }
+    assert(a.smart_fee == b.smart_fee);
+    assert(EqualFeeCalculations(a.smart_calc, b.smart_calc));
+}
 } // namespace
 
 void initialize_policy_estimator_io()
@@ -36,6 +96,7 @@ FUZZ_TARGET(policy_estimator_io, .init = initialize_policy_estimator_io)
         block_policy_estimator.HighestTargetTracked(FeeEstimateHorizon::MED_HALFLIFE),
         block_policy_estimator.HighestTargetTracked(FeeEstimateHorizon::LONG_HALFLIFE),
     };
+    const FeeEstimatorSnapshot snapshot_before{SnapshotEstimator(block_policy_estimator)};
     if (block_policy_estimator.Read(fuzzed_auto_file)) {
         const auto horizon{fuzzed_data_provider.PickValueInArray(ALL_FEE_ESTIMATE_HORIZONS)};
         const unsigned int max_target{block_policy_estimator.HighestTargetTracked(horizon)};
@@ -60,6 +121,7 @@ FUZZ_TARGET(policy_estimator_io, .init = initialize_policy_estimator_io)
         Assert(targets_before[0] == block_policy_estimator.HighestTargetTracked(FeeEstimateHorizon::SHORT_HALFLIFE));
         Assert(targets_before[1] == block_policy_estimator.HighestTargetTracked(FeeEstimateHorizon::MED_HALFLIFE));
         Assert(targets_before[2] == block_policy_estimator.HighestTargetTracked(FeeEstimateHorizon::LONG_HALFLIFE));
+        AssertEqualSnapshots(snapshot_before, SnapshotEstimator(block_policy_estimator));
     }
     (void)fuzzed_auto_file.fclose();
 }
