@@ -6,6 +6,7 @@
 
 #include <chain.h>
 #include <test/util/setup_common.h>
+#include <util/check.h>
 
 #include <algorithm>
 #include <array>
@@ -92,6 +93,38 @@ BOOST_AUTO_TEST_CASE(basic_tests)
 
     BOOST_CHECK_EQUAL(chain_2.Genesis(), &genesis);
     BOOST_CHECK_EQUAL(chain_0.Genesis(), nullptr);
+}
+
+BOOST_AUTO_TEST_CASE(settip_rejects_broken_block_index_links)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+
+    {
+        CBlockIndex negative_height;
+        negative_height.nHeight = -1;
+        CChain chain;
+        BOOST_CHECK_THROW(chain.SetTip(negative_height), NonFatalCheckError);
+    }
+
+    {
+        CBlockIndex missing_genesis;
+        missing_genesis.nHeight = 1;
+        missing_genesis.pprev = nullptr;
+        CChain chain;
+        BOOST_CHECK_THROW(chain.SetTip(missing_genesis), NonFatalCheckError);
+    }
+
+    {
+        CBlockIndex genesis;
+        genesis.nHeight = 0;
+
+        CBlockIndex skipped_height;
+        skipped_height.nHeight = 2;
+        skipped_height.pprev = &genesis;
+
+        CChain chain;
+        BOOST_CHECK_THROW(chain.SetTip(skipped_height), NonFatalCheckError);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(chain_membership_and_locator_contracts)
