@@ -7,6 +7,7 @@
 
 #include <hash.h>
 #include <tinyformat.h>
+#include <util/check.h>
 
 #include <memory>
 #include <sstream>
@@ -27,6 +28,7 @@ std::string CBlock::ToString() const
         nTime, nBits, nNonce,
         vtx.size());
     for (const auto& tx : vtx) {
+        Assert(tx != nullptr);
         s << "  " << tx->ToString() << "\n";
     }
     return s.str();
