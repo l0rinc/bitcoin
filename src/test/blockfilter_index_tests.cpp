@@ -287,6 +287,18 @@ BOOST_FIXTURE_TEST_CASE(blockfilter_index_initial_sync, BuildChainTestingSetup)
     BOOST_CHECK_EQUAL(filters.size(), tip->nHeight + 1U);
     BOOST_CHECK_EQUAL(filter_hashes.size(), tip->nHeight + 1U);
 
+    filters.resize(1);
+    const uint256 preserved_block_hash{filters[0].GetBlockHash()};
+    const uint256 preserved_filter_hash{filters[0].GetHash()};
+    const fs::path filter_file{
+        m_args.GetDataDirNet() / "indexes" / "blockfilter" /
+        fs::u8path(BlockFilterTypeName(BlockFilterType::BASIC)) / "fltr00000.dat"};
+    BOOST_CHECK(fs::remove(filter_file));
+    BOOST_CHECK(!filter_index.LookupFilterRange(0, tip, filters));
+    BOOST_CHECK_EQUAL(filters.size(), 1U);
+    BOOST_CHECK_EQUAL(filters[0].GetBlockHash(), preserved_block_hash);
+    BOOST_CHECK_EQUAL(filters[0].GetHash(), preserved_filter_hash);
+
     filters.clear();
     filter_hashes.clear();
 
