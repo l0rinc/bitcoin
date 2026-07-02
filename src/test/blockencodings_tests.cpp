@@ -78,6 +78,17 @@ public:
     size_t ExtraCount() const { return extra_count; }
 };
 
+class TestCBlockHeaderAndShortTxIDs : public CBlockHeaderAndShortTxIDs
+{
+public:
+    using CBlockHeaderAndShortTxIDs::CBlockHeaderAndShortTxIDs;
+
+    void ResizePrefilledTx(size_t size)
+    {
+        prefilledtxn.resize(size);
+    }
+};
+
 BOOST_AUTO_TEST_CASE(SimpleRoundTripTest)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
@@ -218,6 +229,13 @@ BOOST_AUTO_TEST_CASE(InitDataFailureResetsPartialBlock)
     PartiallyDownloadedBlock overflow_block(&pool);
     BOOST_CHECK(overflow_block.InitData(decoded_overflow, empty_extra_txn) == READ_STATUS_INVALID);
     BOOST_CHECK(overflow_block.header.IsNull());
+
+    TestCBlockHeaderAndShortTxIDs null_prefilled_ids{block, rand_ctx.rand64()};
+    null_prefilled_ids.ResizePrefilledTx(2);
+
+    PartiallyDownloadedBlock null_prefilled_block(&pool);
+    BOOST_CHECK(null_prefilled_block.InitData(null_prefilled_ids, empty_extra_txn) == READ_STATUS_INVALID);
+    BOOST_CHECK(null_prefilled_block.header.IsNull());
 }
 
 BOOST_AUTO_TEST_CASE(FillBlockResetsPartialBlock)
