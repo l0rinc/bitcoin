@@ -442,10 +442,9 @@ public:
 
     bool HasDescendants(const Txid& txid) const;
 
-    /** Collect the entire cluster of connected transactions for each transaction in txids.
-     * All txids must correspond to transaction entries in the mempool, otherwise this returns an
-     * empty vector. This call will also exit early and return an empty vector if it collects 500 or
-     * more transactions as a DoS protection. */
+    /** Collect the entire cluster of connected transactions for each mempool transaction in txids.
+     * Txids that are missing from the mempool are ignored. This call will also exit early and
+     * return an empty vector if it collects more than 500 transactions as a DoS protection. */
     std::vector<txiter> GatherClusters(const std::vector<Txid>& txids) const EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     /** Populate setDescendants with all in-mempool descendants of given transaction.
