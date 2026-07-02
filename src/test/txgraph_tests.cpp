@@ -445,6 +445,41 @@ BOOST_AUTO_TEST_CASE(txgraph_block_builder_exhaustion_is_stable)
     BOOST_CHECK(!builder->GetCurrentChunk());
 }
 
+BOOST_AUTO_TEST_CASE(txgraph_block_builder_current_chunk_ref_contract)
+{
+    auto graph = MakeTxGraph(50, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(4);
+
+    for (const FeePerWeight& feerate : {FeePerWeight{2, 10}, FeePerWeight{1, 10}, FeePerWeight{2, 10}, FeePerWeight{4, 10}}) {
+        graph->AddTransaction(refs.emplace_back(), feerate);
+    }
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
+    graph->AddDependency(/*parent=*/refs[1], /*child=*/refs[2]);
+    graph->AddDependency(/*parent=*/refs[2], /*child=*/refs[3]);
+
+    auto builder = graph->GetBlockBuilder();
+    auto chunk = builder->GetCurrentChunk();
+    BOOST_REQUIRE(chunk);
+    BOOST_REQUIRE_EQUAL(chunk->first.size(), refs.size());
+    BOOST_CHECK((chunk->second == FeePerWeight{9, 40}));
+
+    FeePerWeight sum;
+    for (TxGraph::Ref* ref : chunk->first) {
+        BOOST_REQUIRE(ref);
+        BOOST_CHECK(graph->Exists(*ref, TxGraph::Level::MAIN));
+        BOOST_CHECK(graph->GetMainChunkFeerate(*ref) == chunk->second);
+        sum += graph->GetIndividualFeerate(*ref);
+    }
+    BOOST_CHECK(sum == chunk->second);
+    BOOST_CHECK(chunk->first == std::vector<TxGraph::Ref*>({&refs[0], &refs[1], &refs[2], &refs[3]}));
+
+    builder->Include();
+    BOOST_CHECK(!builder->GetCurrentChunk());
+    graph->SanityCheck();
+}
+
 BOOST_AUTO_TEST_CASE(txgraph_getcluster_membership_contracts)
 {
     auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
