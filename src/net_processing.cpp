@@ -3909,6 +3909,9 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         const int greatest_common_version = std::min(nVersion, pfrom.AdvertisedVersion());
         pfrom.SetCommonVersion(greatest_common_version);
         pfrom.nVersion = nVersion;
+        Assume(pfrom.nVersion.load() == nVersion);
+        Assume(pfrom.GetCommonVersion() == greatest_common_version);
+        Assume(pfrom.GetCommonVersion() == std::min(pfrom.nVersion.load(), pfrom.AdvertisedVersion()));
 
         pfrom.m_has_all_wanted_services = HasAllDesirableServiceFlags(nServices);
         peer.m_their_services = nServices;
@@ -4104,6 +4107,8 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         }
 
         if (pfrom.IsPrivateBroadcastConn()) {
+            Assume(pfrom.nVersion != 0);
+            Assume(pfrom.GetCommonVersion() == std::min(pfrom.nVersion.load(), pfrom.AdvertisedVersion()));
             pfrom.fSuccessfullyConnected = true;
             // The peer may intend to later send us NetMsgType::FEEFILTER limiting
             // cheap transactions, but we don't wait for that and thus we may send
@@ -4142,6 +4147,8 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             });
         }
 
+        Assume(pfrom.nVersion != 0);
+        Assume(pfrom.GetCommonVersion() == std::min(pfrom.nVersion.load(), pfrom.AdvertisedVersion()));
         pfrom.fSuccessfullyConnected = true;
         return;
     }
