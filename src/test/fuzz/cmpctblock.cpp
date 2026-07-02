@@ -407,6 +407,9 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
                 }
 
                 uint64_t nonce = fuzzed_data_provider.ConsumeIntegral<uint64_t>();
+                for (const auto& tx : cblock->vtx) {
+                    Assert(tx != nullptr);
+                }
                 FuzzedCBlockHeaderAndShortTxIDs cmpctblock(*cblock, nonce);
 
                 if (fuzzed_data_provider.ConsumeBool()) {
