@@ -32,10 +32,7 @@ bool PreCheckEphemeralTx(const CTransaction& tx, CFeeRate dust_relay_rate, CAmou
 
 bool CheckEphemeralSpends(const Package& package, CFeeRate dust_relay_rate, const CTxMemPool& tx_pool, TxValidationState& out_child_state, Wtxid& out_child_wtxid)
 {
-    if (!Assume(std::ranges::all_of(package, [](const auto& tx){return tx != nullptr;}))) {
-        // Bail out of spend checks if caller gave us an invalid package
-        return true;
-    }
+    Assert(std::all_of(package.cbegin(), package.cend(), [](const auto& tx) { return tx != nullptr; }));
 
     std::map<Txid, CTransactionRef> map_txid_ref;
     for (const auto& tx : package) {

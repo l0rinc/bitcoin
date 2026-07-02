@@ -165,6 +165,26 @@ static inline CTransactionRef make_ephemeral_tx(const std::vector<COutPoint>& in
     return MakeTransactionRef(mtx);
 }
 
+BOOST_FIXTURE_TEST_CASE(package_policy_helpers_reject_null_tx_refs, RegTestingSetup)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    LOCK2(cs_main, pool.cs);
+
+    Package package{make_tx(random_outpoints(1), /*version=*/2)};
+    package.resize(2);
+
+    TxValidationState child_state;
+    Wtxid child_wtxid;
+    BOOST_CHECK_THROW((void)CheckEphemeralSpends(package, CFeeRate(DUST_RELAY_TX_FEE), pool, child_state, child_wtxid),
+                      NonFatalCheckError);
+
+    std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> empty_parents;
+    BOOST_CHECK_THROW((void)PackageTRUCChecks(pool, package.front(), GetVirtualTransactionSize(*package.front()),
+                          package, empty_parents),
+                      NonFatalCheckError);
+}
+
 BOOST_FIXTURE_TEST_CASE(ephemeral_tests, RegTestingSetup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
