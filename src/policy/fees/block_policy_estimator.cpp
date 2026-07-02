@@ -1043,8 +1043,29 @@ bool CBlockPolicyEstimator::Write(AutoFile& fileout) const
 
 bool CBlockPolicyEstimator::Read(AutoFile& filein)
 {
+    bool snapshot_taken{false};
+    unsigned int nBestSeenHeight_before{0};
+    unsigned int firstRecordedHeight_before{0};
+    unsigned int historicalFirst_before{0};
+    unsigned int historicalBest_before{0};
+    unsigned int feeStats_max_confirms_before{0};
+    unsigned int shortStats_max_confirms_before{0};
+    unsigned int longStats_max_confirms_before{0};
+    std::vector<double> buckets_before;
+    std::map<double, unsigned int> bucketMap_before;
     try {
         LOCK(m_cs_fee_estimator);
+        nBestSeenHeight_before = nBestSeenHeight;
+        firstRecordedHeight_before = firstRecordedHeight;
+        historicalFirst_before = historicalFirst;
+        historicalBest_before = historicalBest;
+        feeStats_max_confirms_before = feeStats->GetMaxConfirms();
+        shortStats_max_confirms_before = shortStats->GetMaxConfirms();
+        longStats_max_confirms_before = longStats->GetMaxConfirms();
+        buckets_before = buckets;
+        bucketMap_before = bucketMap;
+        snapshot_taken = true;
+
         int nVersionRequired;
         filein >> nVersionRequired;
         if (nVersionRequired > CURRENT_FEES_FILE_VERSION) {
@@ -1098,6 +1119,18 @@ bool CBlockPolicyEstimator::Read(AutoFile& filein)
         }
     }
     catch (const std::exception& e) {
+        if (snapshot_taken) {
+            LOCK(m_cs_fee_estimator);
+            Assume(nBestSeenHeight == nBestSeenHeight_before);
+            Assume(firstRecordedHeight == firstRecordedHeight_before);
+            Assume(historicalFirst == historicalFirst_before);
+            Assume(historicalBest == historicalBest_before);
+            Assume(feeStats->GetMaxConfirms() == feeStats_max_confirms_before);
+            Assume(shortStats->GetMaxConfirms() == shortStats_max_confirms_before);
+            Assume(longStats->GetMaxConfirms() == longStats_max_confirms_before);
+            Assume(buckets == buckets_before);
+            Assume(bucketMap == bucketMap_before);
+        }
         LogWarning("Unable to read policy estimator data (non-fatal): %s", e.what());
         return false;
     }
