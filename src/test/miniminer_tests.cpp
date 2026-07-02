@@ -827,6 +827,19 @@ BOOST_FIXTURE_TEST_CASE(calculate_cluster, TestChain100Setup)
     const auto vec_iters_500 = pool.GetIterVec(chain_txids);
     for (const auto& iter : vec_iters_500) BOOST_CHECK(cluster_500tx_set.count(iter));
 
+    const auto selected_clusters_with_missing = pool.GatherClusters({
+        last_txs.at(0),
+        last_txs.at(0),
+        last_txs.at(2),
+        Txid::FromUint256(GetRandHash()),
+    });
+    CTxMemPool::setEntries selected_cluster_set{selected_clusters_with_missing.begin(), selected_clusters_with_missing.end()};
+    BOOST_CHECK_EQUAL(selected_clusters_with_missing.size(), 100);
+    BOOST_CHECK_EQUAL(selected_clusters_with_missing.size(), selected_cluster_set.size());
+    for (size_t i{0}; i < vec_iters_500.size(); ++i) {
+        BOOST_CHECK_EQUAL(selected_cluster_set.contains(vec_iters_500.at(i)), i < 50 || (i >= 100 && i < 150));
+    }
+
     // GatherClusters stops at 500 transactions.
     const auto tx_501 = make_tx({COutPoint{lasttx->GetHash(), 0}}, /*num_outputs=*/1);
     TryAddToMempool(pool, entry.Fee(CENT).FromTx(tx_501));
