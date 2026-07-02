@@ -7,6 +7,7 @@
 #include <util/check.h>
 
 #include <array>
+#include <compare>
 #include <cstddef>
 
 std::partial_ordering CompareChunks(std::span<const FeeFrac> chunks0, std::span<const FeeFrac> chunks1)
@@ -49,6 +50,7 @@ std::partial_ordering CompareChunks(std::span<const FeeFrac> chunks0, std::span<
             // If a single side has no points left, act as if AB has slope tail_feerate(of 0).
             Assume(!(done_0 && done_1));
             cmp = ByRatio{slope_ap} <=> ByRatio{FeeFrac(0, 1)};
+            Assume((slope_ap.fee == 0) == std::is_eq(cmp));
         } else {
             // If both sides have points left, compute B, and the slope of AB explicitly.
             const FeeFrac& point_b = next_point(!unproc_side);
