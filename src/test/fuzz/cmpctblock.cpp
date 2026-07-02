@@ -45,6 +45,7 @@
 
 #include <boost/multi_index/detail/hash_index_iterator.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -474,6 +475,8 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
                     block_txn.txn.push_back(cblock->vtx[i]);
                 }
 
+                assert(std::all_of(block_txn.txn.cbegin(), block_txn.txn.cend(),
+                    [](const auto& tx) { return tx != nullptr; }));
                 net_msg = NetMsg::Make(NetMsgType::BLOCKTXN, block_txn);
             },
             [&]() {
