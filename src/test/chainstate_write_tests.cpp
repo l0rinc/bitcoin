@@ -16,23 +16,47 @@ using kernel::ChainstateRole;
 static constexpr auto DATABASE_WRITE_INTERVAL_MIN{50min};
 static constexpr auto DATABASE_WRITE_INTERVAL_MAX{70min};
 
+static void CheckLocatorForTip(const CBlockLocator& locator, const CBlockIndex& tip, const ChainstateManager& chainman)
+{
+    BOOST_REQUIRE(!locator.IsNull());
+    BOOST_REQUIRE(!locator.vHave.empty());
+    BOOST_CHECK(locator.vHave.front() == tip.GetBlockHash());
+
+    LOCK(::cs_main);
+    const CBlockIndex* previous_locator{nullptr};
+    for (const uint256& locator_hash : locator.vHave) {
+        const CBlockIndex* locator_index{chainman.m_blockman.LookupBlockIndex(locator_hash)};
+        BOOST_REQUIRE(locator_index);
+        BOOST_CHECK_EQUAL(tip.GetAncestor(locator_index->nHeight), locator_index);
+        if (previous_locator) {
+            BOOST_CHECK_LT(locator_index->nHeight, previous_locator->nHeight);
+        }
+        previous_locator = locator_index;
+    }
+    BOOST_REQUIRE(previous_locator);
+    BOOST_CHECK_EQUAL(previous_locator->nHeight, 0);
+}
+
 BOOST_AUTO_TEST_SUITE(chainstate_write_tests)
 
 BOOST_FIXTURE_TEST_CASE(chainstate_write_interval, TestingSetup)
 {
     struct TestSubscriber final : CValidationInterface {
+        ChainstateManager& m_chainman;
         bool m_did_flush{false};
         uint256 m_flushed_hash;
+        explicit TestSubscriber(ChainstateManager& chainman) : m_chainman{chainman} {}
         void ChainStateFlushed(const ChainstateRole&, const CBlockLocator& locator) override
         {
-            BOOST_REQUIRE(!locator.IsNull());
-            BOOST_REQUIRE(!locator.vHave.empty());
+            const CBlockIndex* tip{WITH_LOCK(::cs_main, return m_chainman.ActiveChain().Tip())};
+            BOOST_REQUIRE(tip);
+            CheckLocatorForTip(locator, *tip, m_chainman);
             m_did_flush = true;
             m_flushed_hash = locator.vHave.front();
         }
     };
 
-    const auto sub{std::make_shared<TestSubscriber>()};
+    const auto sub{std::make_shared<TestSubscriber>(*Assert(m_node.chainman))};
     m_node.validation_signals->RegisterSharedValidationInterface(sub);
     auto& chainstate{Assert(m_node.chainman)->ActiveChainstate()};
     BlockValidationState state_dummy{};
@@ -63,15 +87,15 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
 {
     struct TestSubscriber final : CValidationInterface
     {
+        ChainstateManager& m_chainman;
         const CBlockIndex* m_tip{nullptr};
         const CBlockIndex* m_flushed_at_block{nullptr};
         uint256 m_flushed_hash;
+        explicit TestSubscriber(ChainstateManager& chainman) : m_chainman{chainman} {}
         void ChainStateFlushed(const ChainstateRole&, const CBlockLocator& locator) override
         {
-            BOOST_REQUIRE(!locator.IsNull());
-            BOOST_REQUIRE(!locator.vHave.empty());
             BOOST_REQUIRE(m_tip);
-            BOOST_CHECK(locator.vHave.front() == m_tip->GetBlockHash());
+            CheckLocatorForTip(locator, *m_tip, m_chainman);
             m_flushed_at_block = m_tip;
             m_flushed_hash = locator.vHave.front();
         }
@@ -102,7 +126,7 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
     // The next call to a PERIODIC write will flush
     m_clock += DATABASE_WRITE_INTERVAL_MAX;
 
-    const auto sub{std::make_shared<TestSubscriber>()};
+    const auto sub{std::make_shared<TestSubscriber>(*Assert(m_node.chainman))};
     m_node.validation_signals->RegisterSharedValidationInterface(sub);
 
     // ActivateBestChain back to tip
