@@ -140,6 +140,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         return fail_init(READ_STATUS_FAILED); // Short ID collision
 
     std::vector<bool> have_txn(txn_available.size());
+    std::vector<bool> have_extra_txn(txn_available.size());
     {
     LOCK(pool->cs);
     for (const auto& [wtxid, txit] : pool->txns_randomized) {
@@ -179,6 +180,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
             if (!have_txn[idit->second]) {
                 txn_available[idit->second] = tx;
                 have_txn[idit->second]  = true;
+                have_extra_txn[idit->second] = true;
                 mempool_count++;
                 extra_count++;
             } else {
@@ -192,7 +194,10 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                         txn_available[idit->second]->GetWitnessHash() != tx->GetWitnessHash()) {
                     txn_available[idit->second].reset();
                     mempool_count--;
-                    extra_count--;
+                    if (have_extra_txn[idit->second]) {
+                        have_extra_txn[idit->second] = false;
+                        extra_count--;
+                    }
                 }
             }
         }
@@ -207,6 +212,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
 
     assert(static_cast<size_t>(std::count_if(txn_available.begin(), txn_available.end(),
                [](const auto& tx) { return tx != nullptr; })) == prefilled_count + mempool_count);
+    assert(static_cast<size_t>(std::count(have_extra_txn.begin(), have_extra_txn.end(), true)) == extra_count);
     assert(extra_count <= mempool_count);
 
     return READ_STATUS_OK;
