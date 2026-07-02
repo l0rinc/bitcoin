@@ -77,7 +77,10 @@ CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint) const 
 
 std::optional<Coin> CCoinsViewCache::GetCoin(const COutPoint& outpoint) const
 {
-    if (auto it{FetchCoin(outpoint)}; it != cacheCoins.end() && !it->second.coin.IsSpent()) return it->second.coin;
+    const size_t dirty_count{m_dirty_count};
+    CCoinsMap::const_iterator it = FetchCoin(outpoint);
+    Assume(m_dirty_count == dirty_count);
+    if (it != cacheCoins.end() && !it->second.coin.IsSpent()) return it->second.coin;
     return std::nullopt;
 }
 
@@ -201,7 +204,9 @@ const Coin& CCoinsViewCache::AccessCoin(const COutPoint &outpoint) const {
 
 bool CCoinsViewCache::HaveCoin(const COutPoint& outpoint) const
 {
+    const size_t dirty_count{m_dirty_count};
     CCoinsMap::const_iterator it = FetchCoin(outpoint);
+    Assume(m_dirty_count == dirty_count);
     return (it != cacheCoins.end() && !it->second.coin.IsSpent());
 }
 
@@ -429,11 +434,12 @@ bool CCoinsViewCache::HaveInputs(const CTransaction& tx) const
     const bool skips_input_lookup{is_coinbase || tx.vin.empty()};
     const size_t cache_size{skips_input_lookup ? cacheCoins.size() : 0};
     const size_t cache_usage{skips_input_lookup ? cachedCoinsUsage : 0};
-    const size_t dirty_count{skips_input_lookup ? m_dirty_count : 0};
+    const size_t dirty_count{m_dirty_count};
 
     if (!is_coinbase) {
         for (const auto& txin : tx.vin) {
             if (!HaveCoin(txin.prevout)) {
+                Assume(m_dirty_count == dirty_count);
                 return false;
             }
             Assume(!AccessCoin(txin.prevout).IsSpent());
@@ -442,10 +448,10 @@ bool CCoinsViewCache::HaveInputs(const CTransaction& tx) const
         Assume(tx.vin.size() == 1);
         Assume(tx.vin.front().prevout.IsNull());
     }
+    Assume(m_dirty_count == dirty_count);
     if (skips_input_lookup) {
         Assume(cacheCoins.size() == cache_size);
         Assume(cachedCoinsUsage == cache_usage);
-        Assume(m_dirty_count == dirty_count);
     }
     return true;
 }
