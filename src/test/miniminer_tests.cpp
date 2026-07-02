@@ -12,6 +12,7 @@
 
 #include <boost/test/unit_test.hpp>
 #include <optional>
+#include <set>
 #include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(miniminer_tests, TestingSetup)
@@ -357,7 +358,13 @@ BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
         node::MiniMiner bumpfees_duplicates{pool, duplicated_outpoints};
         BOOST_CHECK(bumpfees_base.IsReadyToCalculate());
         BOOST_CHECK(bumpfees_duplicates.IsReadyToCalculate());
-        BOOST_CHECK(bumpfees_base.CalculateBumpFees(target_feerate) == bumpfees_duplicates.CalculateBumpFees(target_feerate));
+        const auto bump_fees{bumpfees_base.CalculateBumpFees(target_feerate)};
+        BOOST_CHECK(bump_fees == bumpfees_duplicates.CalculateBumpFees(target_feerate));
+        const std::set<COutPoint> unique_outpoints{mixed_outpoints.begin(), mixed_outpoints.end()};
+        BOOST_CHECK_EQUAL(bump_fees.size(), unique_outpoints.size());
+        for (const auto& [outpoint, _] : bump_fees) {
+            BOOST_CHECK(unique_outpoints.contains(outpoint));
+        }
 
         node::MiniMiner total_base{pool, mixed_outpoints};
         node::MiniMiner total_duplicates{pool, duplicated_outpoints};
