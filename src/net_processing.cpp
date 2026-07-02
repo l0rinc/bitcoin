@@ -2649,6 +2649,8 @@ void PeerManagerImpl::SendBlockTransactions(CNode& pfrom, Peer& peer, const CBlo
         }
         resp.txn[i] = block.vtx[req.indexes[i]];
     }
+    assert(std::all_of(resp.txn.begin(), resp.txn.end(),
+        [](const auto& tx) { return tx != nullptr; }));
 
     if (util::log::ShouldDebugLog(BCLog::CMPCTBLOCK)) {
         uint32_t tx_requested_size{0};
