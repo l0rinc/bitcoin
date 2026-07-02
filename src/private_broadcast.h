@@ -211,6 +211,10 @@ private:
      */
     std::optional<TxAndSendStatusForNode> GetSendStatusByNode(const NodeId& nodeid)
         EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
+
+    void AssertInvariants() const
+        EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
+
     struct TxSendStatus {
         const NodeClock::time_point time_added{NodeClock::now()};
         std::vector<SendStatus> send_statuses;
