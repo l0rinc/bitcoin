@@ -99,6 +99,9 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         block->vtx.size() >= std::numeric_limits<uint16_t>::max()) {
         return;
     }
+    for (const auto& tx : block->vtx) {
+        Assert(tx != nullptr);
+    }
 
     FuzzedCBlockHeaderAndShortTxIDs cmpctblock{*block, fuzzed_data_provider.ConsumeIntegral<uint64_t>()};
     const bool force_invalid_init{fuzzed_data_provider.ConsumeBool()};
