@@ -12,6 +12,7 @@
 #include <signet.h>
 #include <uint256.h>
 #include <util/chaintype.h>
+#include <util/check.h>
 #include <validation.h>
 
 #include <optional>
@@ -107,6 +108,22 @@ BOOST_AUTO_TEST_CASE(subsidy_limit_test)
         BOOST_CHECK(MoneyRange(nSum));
     }
     BOOST_CHECK_EQUAL(nSum, CAmount{2099999997690000});
+}
+
+BOOST_AUTO_TEST_CASE(signet_rejects_null_block_tx_refs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+    const CScript challenge{OP_TRUE};
+
+    CBlock resized_block;
+    resized_block.vtx.resize(1);
+    BOOST_CHECK_THROW((void)SignetTxs::Create(resized_block, challenge), NonFatalCheckError);
+
+    CMutableTransaction cb;
+    cb.vout.emplace_back(0, CScript{});
+    resized_block.vtx[0] = MakeTransactionRef(cb);
+    resized_block.vtx.resize(2);
+    BOOST_CHECK_THROW((void)SignetTxs::Create(resized_block, challenge), NonFatalCheckError);
 }
 
 BOOST_AUTO_TEST_CASE(signet_parse_tests)
