@@ -59,6 +59,8 @@ std::optional<std::string> PackageTRUCChecks(const CTxMemPool& pool, const CTran
                                            const std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef>& mempool_parents)
 {
     AssertLockHeld(pool.cs);
+    Assert(ptx != nullptr);
+    Assert(std::all_of(package.cbegin(), package.cend(), [](const auto& tx) { return tx != nullptr; }));
     // This function is specialized for these limits, and must be reimplemented if they ever change.
     static_assert(TRUC_ANCESTOR_LIMIT == 2);
     static_assert(TRUC_DESCENDANT_LIMIT == 2);
