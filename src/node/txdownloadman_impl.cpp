@@ -285,12 +285,14 @@ std::vector<GenTxid> TxDownloadManagerImpl::GetRequestsToSend(NodeId nodeid, std
         LogDebug(BCLog::NET, "timeout of inflight %s %s from peer=%d\n", gtxid.IsWtxid() ? "wtx" : "tx",
                  gtxid.ToUint256().ToString(), expired_nodeid);
     }
+    const auto in_flight_before{m_txrequest.CountInFlight(nodeid)};
     for (const GenTxid& gtxid : requestable) {
         if (!AlreadyHaveTx(gtxid, /*include_reconsiderable=*/false)) {
             LogDebug(BCLog::NET, "Requesting %s %s peer=%d\n", gtxid.IsWtxid() ? "wtx" : "tx",
                      gtxid.ToUint256().ToString(), nodeid);
             requests.emplace_back(gtxid);
             m_txrequest.RequestedTx(nodeid, gtxid.ToUint256(), current_time + GETDATA_TX_INTERVAL);
+            Assert(m_txrequest.CountInFlight(nodeid) == in_flight_before + requests.size());
         } else {
             // We have already seen this transaction, no need to download. This is just a belt-and-suspenders, as
             // this should already be called whenever a transaction becomes AlreadyHaveTx().
