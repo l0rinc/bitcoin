@@ -790,6 +790,30 @@ void MinerTestingSetup::TestPrioritisedMining(const CScript& scriptPubKey, const
 }
 
 // NOTE: These tests rely on CreateNewBlock doing its own self-validation!
+BOOST_AUTO_TEST_CASE(RegenerateCommitmentsRejectsMissingWitnessCommitment)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+
+    auto mining{MakeMining()};
+    BOOST_REQUIRE(mining);
+
+    BlockCreateOptions options{
+        .coinbase_output_script = CScript() << OP_TRUE,
+    };
+    std::unique_ptr<BlockTemplate> block_template = mining->createNewBlock(options, /*cooldown=*/false);
+    BOOST_REQUIRE(block_template);
+
+    CBlock block{block_template->getBlock()};
+    BOOST_REQUIRE_EQUAL(block.vtx.size(), 1U);
+    const int commitpos{GetWitnessCommitmentIndex(block)};
+    BOOST_REQUIRE(commitpos != NO_WITNESS_COMMITMENT);
+
+    CMutableTransaction coinbase{*block.vtx[0]};
+    coinbase.vout.erase(coinbase.vout.begin() + commitpos);
+    block.vtx[0] = MakeTransactionRef(std::move(coinbase));
+    BOOST_CHECK_THROW(node::RegenerateCommitments(block, *Assert(m_node.chainman)), NonFatalCheckError);
+}
+
 BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
 {
     auto mining{MakeMining()};
