@@ -14,6 +14,7 @@
 
 #include <cassert>
 #include <cstdio>
+#include <ios>
 #include <optional>
 #include <string>
 
@@ -70,12 +71,18 @@ std::optional<uint256> ReadSnapshotBaseBlockhash(fs::path chaindir)
             read_from_str);
         return std::nullopt;
     }
-    afile >> base_blockhash;
+    try {
+        afile >> base_blockhash;
 
-    int64_t position = afile.tell();
-    afile.seek(0, SEEK_END);
-    if (position != afile.tell()) {
-        LogWarning("[snapshot] unexpected trailing data in %s", read_from_str);
+        int64_t position = afile.tell();
+        afile.seek(0, SEEK_END);
+        if (position != afile.tell()) {
+            LogWarning("[snapshot] unexpected trailing data in %s", read_from_str);
+        }
+    } catch (const std::ios_base::failure& e) {
+        LogWarning("[snapshot] failed to read base blockhash from %s: %s",
+            read_from_str, e.what());
+        return std::nullopt;
     }
     return base_blockhash;
 }
