@@ -6,8 +6,19 @@
 #include <core_memusage.h>
 #include <kernel/disconnected_transactions.h>
 #include <test/util/setup_common.h>
+#include <util/check.h>
 
 BOOST_AUTO_TEST_SUITE(disconnected_transactions)
+
+BOOST_AUTO_TEST_CASE(disconnectpool_rejects_null_tx_refs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+    DisconnectedBlockTransactions disconnectpool{MAX_DISCONNECTED_TX_POOL_BYTES};
+    std::vector<CTransactionRef> resized_block_vtx(1);
+
+    BOOST_CHECK_THROW((void)disconnectpool.AddTransactionsFromBlock(resized_block_vtx), NonFatalCheckError);
+    BOOST_CHECK_THROW(disconnectpool.removeForBlock(resized_block_vtx), NonFatalCheckError);
+}
 
 //! Tests that DisconnectedBlockTransactions limits its own memory properly
 BOOST_FIXTURE_TEST_CASE(disconnectpool_memory_limits, TestChain100Setup)
