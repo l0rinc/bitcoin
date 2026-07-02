@@ -167,7 +167,7 @@ public:
         try {
             SpanReader ssKey{GetKeyImpl()};
             ssKey >> key;
-        } catch (const std::exception&) {
+        } catch (const std::ios_base::failure&) {
             return false;
         }
         return true;
@@ -181,7 +181,7 @@ public:
             m_scratch.write(GetValueImpl());
             dbwrapper_private::GetObfuscation(parent)(m_scratch);
             m_scratch >> value;
-        } catch (const std::exception&) {
+        } catch (const std::ios_base::failure&) {
             return false;
         }
         return true;
@@ -233,7 +233,7 @@ public:
             std::span ssValue{MakeWritableByteSpan(*strValue)};
             m_obfuscation(ssValue);
             SpanReader{ssValue} >> value;
-        } catch (const std::exception&) {
+        } catch (const std::ios_base::failure&) {
             return false;
         }
         return true;
