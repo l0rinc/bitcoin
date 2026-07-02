@@ -14,6 +14,7 @@
 #include <util/overflow.h>
 
 #include <algorithm>
+#include <cassert>
 #include <concepts>
 #include <cstdint>
 #include <cstring>
@@ -1030,6 +1031,7 @@ void Unserialize(Stream& is, std::unique_ptr<const T>& p)
 template<typename Stream, typename T> void
 Serialize(Stream& os, const std::shared_ptr<const T>& p)
 {
+    assert(p != nullptr);
     Serialize(os, *p);
 }
 
