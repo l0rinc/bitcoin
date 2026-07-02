@@ -311,6 +311,31 @@ BOOST_AUTO_TEST_CASE(MempoolLoadUnbroadcastRequiresMempoolEntry)
     fs::remove(mempool_path);
 }
 
+BOOST_AUTO_TEST_CASE(MempoolLoadTruncatedMetadata)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    BOOST_REQUIRE_EQUAL(pool.size(), 0U);
+    BOOST_REQUIRE(pool.GetPrioritisedTransactions().empty());
+    BOOST_REQUIRE(pool.GetUnbroadcastTxs().empty());
+
+    const fs::path mempool_path{m_args.GetDataDirBase() / "mempool_truncated_metadata.dat"};
+    {
+        AutoFile file{fsbridge::fopen(mempool_path, "wb")};
+        BOOST_REQUIRE(!file.IsNull());
+        file << uint64_t{1}; // Legacy v1 mempool dump version, without an obfuscation key.
+        file.SetObfuscation({});
+        file << uint64_t{0}; // No transactions to load.
+        file << std::map<Txid, CAmount>{};
+        BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    }
+
+    BOOST_CHECK(!node::LoadMempool(pool, mempool_path, m_node.chainman->ActiveChainstate(), {}));
+    BOOST_CHECK_EQUAL(pool.size(), 0U);
+    BOOST_CHECK(pool.GetPrioritisedTransactions().empty());
+    BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
+    fs::remove(mempool_path);
+}
+
 BOOST_AUTO_TEST_CASE(MempoolDumpLoadPrioritisationRoundtrip)
 {
     CTxMemPool& pool{*Assert(m_node.mempool)};
