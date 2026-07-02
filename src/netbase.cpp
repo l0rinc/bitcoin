@@ -153,7 +153,10 @@ static std::vector<CNetAddr> LookupIntern(const std::string& name, unsigned int 
         // getaddrinfo to decode them and it wouldn't make sense to resolve
         // them, we return a network address representing it instead. See
         // CNetAddr::SetSpecial(const std::string&) for more details.
-        if (addr.SetSpecial(name)) return {addr};
+        if (addr.SetSpecial(name)) {
+            Assume(!addr.IsInternal());
+            return {addr};
+        }
     }
 
     std::vector<CNetAddr> addresses;
@@ -168,6 +171,10 @@ static std::vector<CNetAddr> LookupIntern(const std::string& name, unsigned int 
         }
     }
 
+    Assume(nMaxSolutions == 0 || addresses.size() <= nMaxSolutions);
+    for (const auto& address : addresses) {
+        Assume(!address.IsInternal());
+    }
     return addresses;
 }
 
@@ -202,8 +209,14 @@ std::vector<CService> Lookup(const std::string& name, uint16_t portDefault, bool
     if (addresses.empty()) return {};
     std::vector<CService> services;
     services.reserve(addresses.size());
-    for (const auto& addr : addresses)
+    for (const auto& addr : addresses) {
         services.emplace_back(addr, port);
+    }
+    Assume(services.size() == addresses.size());
+    for (const auto& service : services) {
+        Assume(!service.IsInternal());
+        Assume(service.GetPort() == port);
+    }
     return services;
 }
 
@@ -221,7 +234,9 @@ CService LookupNumeric(const std::string& name, uint16_t portDefault, DNSLookupF
     }
     // "1.2:345" will fail to resolve the ip, but will still set the port.
     // If the ip fails to resolve, re-init the result.
-    return Lookup(name, portDefault, /*fAllowLookup=*/false, dns_lookup_function).value_or(CService{});
+    CService service{Lookup(name, portDefault, /*fAllowLookup=*/false, dns_lookup_function).value_or(CService{})};
+    Assume(!service.IsInternal());
+    return service;
 }
 
 bool IsUnixSocketPath(const std::string& name)
