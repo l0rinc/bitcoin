@@ -19,7 +19,8 @@ HeadersSyncState::HeadersSyncState(NodeId id,
                                    const HeadersSyncParams& params,
                                    const CBlockIndex& chain_start,
                                    const arith_uint256& minimum_required_work)
-    : m_commit_offset((assert(params.commitment_period > 0), // HeadersSyncParams field must be initialized to non-zero.
+    : m_commit_offset((assert(params.commitment_period > 0), // HeadersSyncParams fields must be initialized to non-zero.
+                       assert(params.redownload_buffer_size > 0),
                        FastRandomContext().randrange(params.commitment_period))),
       m_id(id),
       m_consensus_params(consensus_params),
@@ -75,6 +76,8 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessNextHeaders(
 
     Assume(m_download_state != State::FINAL);
     if (m_download_state == State::FINAL) return ret;
+
+    const State previous_state{m_download_state};
 
     if (m_download_state == State::PRESYNC) {
         // During PRESYNC, we minimally validate block headers and
@@ -133,6 +136,11 @@ HeadersSyncState::ProcessingResult HeadersSyncState::ProcessNextHeaders(
     }
 
     if (!(ret.success && ret.request_more)) Finalize();
+    Assume(previous_state == State::PRESYNC || previous_state == State::REDOWNLOAD);
+    Assume(m_download_state == State::FINAL || m_download_state == previous_state ||
+           (previous_state == State::PRESYNC && m_download_state == State::REDOWNLOAD));
+    Assume(ret.success || ret.pow_validated_headers.empty());
+    Assume(ret.pow_validated_headers.empty() || previous_state == State::REDOWNLOAD);
     Assume(!ret.request_more || ret.success);
     Assume((m_download_state != State::FINAL) == ret.request_more);
     return ret;
@@ -171,6 +179,9 @@ bool HeadersSyncState::ValidateAndStoreHeadersCommitments(std::span<const CBlock
         m_redownload_buffer_last_hash = m_chain_start.GetBlockHash();
         m_redownload_chain_work = m_chain_start.nChainWork;
         m_download_state = State::REDOWNLOAD;
+        Assume(m_redownloaded_headers.empty());
+        Assume(m_redownload_buffer_first_prev_hash == m_redownload_buffer_last_hash);
+        Assume(m_redownload_chain_work == m_chain_start.nChainWork);
         LogDebug(BCLog::NET, "Initial headers sync transition with peer=%d: reached sufficient work at height=%i, redownloading from height=%i\n", m_id, m_current_height, m_redownload_buffer_last_height);
     }
     return true;
@@ -276,6 +287,8 @@ bool HeadersSyncState::ValidateAndStoreRedownloadedHeader(const CBlockHeader& he
     m_redownload_buffer_last_height = next_height;
     m_redownload_buffer_last_hash = header.GetHash();
 
+    Assume(!m_redownloaded_headers.empty());
+    Assume(m_redownload_buffer_last_hash == header.GetHash());
     return true;
 }
 
@@ -296,6 +309,9 @@ std::vector<CBlockHeader> HeadersSyncState::PopHeadersReadyForAcceptance()
         m_redownload_buffer_first_prev_hash = ret.back().GetHash();
     }
     Assume(ret.empty() || m_redownload_buffer_first_prev_hash == ret.back().GetHash());
+    Assume(m_redownloaded_headers.size() <= m_params.redownload_buffer_size);
+    Assume(!m_process_all_remaining_headers || m_redownloaded_headers.empty());
+    Assume(!m_redownloaded_headers.empty() || m_redownload_buffer_first_prev_hash == m_redownload_buffer_last_hash);
     return ret;
 }
 
@@ -323,5 +339,11 @@ CBlockLocator HeadersSyncState::NextHeadersRequestLocator() const
     Assume(!ret.IsNull());
     Assume(ret.vHave.size() >= 2);
     Assume(ret.vHave.back() == m_chain_start.GetBlockHash());
+    if (m_download_state == State::PRESYNC) {
+        Assume(ret.vHave.front() == m_last_header_received.GetHash());
+    } else {
+        Assume(m_download_state == State::REDOWNLOAD);
+        Assume(ret.vHave.front() == m_redownload_buffer_last_hash);
+    }
     return ret;
 }
