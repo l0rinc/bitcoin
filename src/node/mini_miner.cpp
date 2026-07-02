@@ -28,6 +28,7 @@ MiniMiner::MiniMiner(const CTxMemPool& mempool, const std::vector<COutPoint>& ou
     // Anything that's spent by the mempool is to-be-replaced
     // Anything otherwise unavailable just has a bump fee of 0
     for (const auto& outpoint : outpoints) {
+        m_requested_outpoints.insert(outpoint);
         if (!mempool.exists(outpoint.hash)) {
             // This UTXO is either confirmed or not yet submitted to mempool.
             // If it's confirmed, no bump fee is required.
@@ -126,6 +127,7 @@ MiniMiner::MiniMiner(const CTxMemPool& mempool, const std::vector<COutPoint>& ou
     // Release the mempool lock; we now have all the information we need for a subset of the entries
     // we care about. We will solely operate on the MiniMinerMempoolEntry map from now on.
     Assume(m_in_block.empty());
+    Assume(m_requested_outpoints.size() <= outpoints.size());
     Assume(m_requested_outpoints_by_txid.size() <= outpoints.size());
     SanityCheck();
 }
@@ -166,6 +168,7 @@ MiniMiner::MiniMiner(const std::vector<MiniMinerMempoolEntry>& manual_entries,
         m_descendant_set_by_txid.emplace(txid, descendants);
     }
     Assume(m_to_be_replaced.empty());
+    Assume(m_requested_outpoints.empty());
     Assume(m_requested_outpoints_by_txid.empty());
     Assume(m_bump_fees.empty());
     Assume(m_inclusion_order.empty());
@@ -421,8 +424,13 @@ std::map<COutPoint, CAmount> MiniMiner::CalculateBumpFees(const CFeeRate& target
             Assume(result->second >= 0);
         }
     }
-    for (const auto& [_, bump_fee] : m_bump_fees) {
+    Assume(m_bump_fees.size() == m_requested_outpoints.size());
+    for (const auto& [outpoint, bump_fee] : m_bump_fees) {
+        Assume(m_requested_outpoints.contains(outpoint));
         Assume(bump_fee >= 0);
+    }
+    for (const auto& outpoint : m_requested_outpoints) {
+        Assume(m_bump_fees.contains(outpoint));
     }
     return m_bump_fees;
 }
