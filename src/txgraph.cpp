@@ -9,6 +9,7 @@
 #include <util/bitset.h>
 #include <util/check.h>
 #include <util/feefrac.h>
+#include <util/overflow.h>
 #include <util/vector.h>
 
 #include <compare>
@@ -30,6 +31,35 @@ static constexpr int MAX_LEVELS{2};
 
 // Forward declare the TxGraph implementation class.
 class TxGraphImpl;
+
+struct CheckedFeePerWeightSum
+{
+    FeePerWeight sum;
+    bool fee_overflow{false};
+    bool size_overflow{false};
+
+    void Add(const FeePerWeight& add) noexcept
+    {
+        if (const auto fee{CheckedAdd(sum.fee, add.fee)}) {
+            sum.fee = *fee;
+        } else {
+            sum.fee = SaturatingAdd(sum.fee, add.fee);
+            fee_overflow = true;
+        }
+        if (const auto size{CheckedAdd(sum.size, add.size)}) {
+            sum.size = *size;
+        } else {
+            sum.size = SaturatingAdd(sum.size, add.size);
+            size_overflow = true;
+        }
+    }
+
+    void AssumeMatches(const FeePerWeight& expected) const noexcept
+    {
+        if (!fee_overflow) Assume(sum.fee == expected.fee);
+        if (!size_overflow) Assume(sum.size == expected.size);
+    }
+};
 
 /** Position of a DepGraphIndex within a Cluster::m_linearization. */
 using LinearizationIndex = uint32_t;
@@ -3263,13 +3293,17 @@ std::optional<std::pair<std::vector<TxGraph::Ref*>, FeePerWeight>> BlockBuilderI
         ret->second = chunk_end_entry.m_main_chunk_feerate;
         if constexpr (G_ABORT_ON_FAILED_ASSUME) {
             Assume(!ret->first.empty());
-            FeePerWeight sum;
+            CheckedFeePerWeightSum sum;
             for (TxGraph::Ref* ref : ret->first) {
                 Assume(ref != nullptr);
-                Assume(m_graph->GetMainChunkFeerate(*ref) == ret->second);
-                sum += m_graph->GetIndividualFeerate(*ref);
+                Assume(TxGraphImpl::GetRefGraph(*ref) == m_graph);
+                const auto& entry = m_graph->m_entries[TxGraphImpl::GetRefIndex(*ref)];
+                Assume(entry.m_ref == ref);
+                Assume(entry.m_locator[0].IsPresent());
+                Assume(entry.m_main_chunk_feerate == ret->second);
+                sum.Add(entry.m_locator[0].cluster->GetIndividualFeerate(entry.m_locator[0].index));
             }
-            Assume(sum == ret->second);
+            sum.AssumeMatches(ret->second);
         }
     }
     return ret;
@@ -3363,7 +3397,7 @@ std::pair<std::vector<TxGraph::Ref*>, FeePerWeight> TxGraphImpl::GetWorstMainChu
         if (ret.first.empty()) {
             Assume(ret.second.IsEmpty());
         } else {
-            FeePerWeight sum;
+            CheckedFeePerWeightSum sum;
             for (Ref* ref : ret.first) {
                 Assume(ref != nullptr);
                 Assume(GetRefGraph(*ref) == this);
@@ -3371,9 +3405,9 @@ std::pair<std::vector<TxGraph::Ref*>, FeePerWeight> TxGraphImpl::GetWorstMainChu
                 Assume(entry.m_ref == ref);
                 Assume(entry.m_locator[0].IsPresent());
                 Assume(entry.m_main_chunk_feerate == ret.second);
-                sum += entry.m_locator[0].cluster->GetIndividualFeerate(entry.m_locator[0].index);
+                sum.Add(entry.m_locator[0].cluster->GetIndividualFeerate(entry.m_locator[0].index));
             }
-            Assume(sum == ret.second);
+            sum.AssumeMatches(ret.second);
         }
     }
     return ret;
