@@ -214,6 +214,15 @@ class AssumeutxoTest(BitcoinTestFramework):
         self.stop_node(0)
         chainstate_snapshot_path = self.nodes[0].chain_path / "chainstate_snapshot"
         chainstate_snapshot_path.mkdir()
+
+        self.log.info("  - snapshot chainstate with truncated base blockhash file")
+        with open(chainstate_snapshot_path / "base_blockhash", 'wb') as f:
+            f.write(b'z' * 31)
+        with self.nodes[0].assert_debug_log(["failed to read base blockhash"]):
+            self.start_node(0)
+        self.stop_node(0)
+        (chainstate_snapshot_path / "base_blockhash").unlink()
+
         with open(chainstate_snapshot_path / "base_blockhash", 'wb') as f:
             f.write(b'z' * 32)
 
