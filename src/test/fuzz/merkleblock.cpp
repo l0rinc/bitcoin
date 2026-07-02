@@ -7,7 +7,9 @@
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <uint256.h>
+#include <util/check.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <limits>
@@ -33,6 +35,7 @@ FUZZ_TARGET(merkleblock)
             CBloomFilter bloom_filter;
             std::set<Txid> txids;
             if (opt_block && !opt_block->vtx.empty()) {
+                Assert(std::all_of(opt_block->vtx.cbegin(), opt_block->vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
                 if (fuzzed_data_provider.ConsumeBool()) {
                     merkle_block = CMerkleBlock{*opt_block, bloom_filter};
                 } else if (fuzzed_data_provider.ConsumeBool()) {
