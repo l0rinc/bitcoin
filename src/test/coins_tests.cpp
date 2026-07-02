@@ -938,8 +938,15 @@ BOOST_AUTO_TEST_CASE(ccoins_spend_lookup_postconditions)
         return Coin{CTxOut{value, CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
     };
     auto check_spent_public = [](CCoinsViewCacheTest& cache, const COutPoint& outpoint) {
+        const auto cache_size{cache.GetCacheSize()};
+        const auto dirty_count{cache.GetDirtyCount()};
+        const auto memory_usage{cache.DynamicMemoryUsage()};
         BOOST_CHECK(!cache.HaveCoin(outpoint));
         BOOST_CHECK(!cache.GetCoin(outpoint));
+        BOOST_CHECK(!cache.PeekCoin(outpoint));
+        BOOST_CHECK_EQUAL(cache.GetCacheSize(), cache_size);
+        BOOST_CHECK_EQUAL(cache.GetDirtyCount(), dirty_count);
+        BOOST_CHECK_EQUAL(cache.DynamicMemoryUsage(), memory_usage);
         BOOST_CHECK(cache.AccessCoin(outpoint).IsSpent());
     };
 
