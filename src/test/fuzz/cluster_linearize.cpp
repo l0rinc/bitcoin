@@ -356,6 +356,31 @@ std::vector<DepGraphIndex> ReadLinearization(const DepGraph<BS>& depgraph, SpanR
     return linearization;
 }
 
+void CheckEqualRateChunkBoundaries(FuzzedDataProvider& fuzzed_data_provider)
+{
+    const int64_t fee_unit{fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(-1'000'000, 1'000'000)};
+    const int32_t size_unit{fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, 1'000'000)};
+    const int32_t first_scale{fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, 16)};
+    const int32_t second_scale{fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, 16)};
+
+    DepGraph<TestBitSet> depgraph;
+    const auto first{depgraph.AddTransaction(FeeFrac{fee_unit * first_scale, size_unit * first_scale})};
+    const auto second{depgraph.AddTransaction(FeeFrac{fee_unit * second_scale, size_unit * second_scale})};
+    const std::vector<DepGraphIndex> linearization{first, second};
+
+    const auto chunking{ChunkLinearization(depgraph, linearization)};
+    const auto chunking_info{ChunkLinearizationInfo(depgraph, linearization)};
+
+    assert(chunking.size() == 2);
+    assert(chunking_info.size() == 2);
+    assert(chunking[0] == depgraph.FeeRate(first));
+    assert(chunking[1] == depgraph.FeeRate(second));
+    assert(chunking_info[0].feerate == depgraph.FeeRate(first));
+    assert(chunking_info[1].feerate == depgraph.FeeRate(second));
+    assert(chunking_info[0].transactions == TestBitSet::Singleton(first));
+    assert(chunking_info[1].transactions == TestBitSet::Singleton(second));
+}
+
 /** Given a dependency graph, construct a tree-structured graph.
  *
  * Copies the nodes from the depgraph, but only keeps the first parent (even direction)
@@ -767,6 +792,7 @@ FUZZ_TARGET(clusterlin_make_connected)
 FUZZ_TARGET(clusterlin_chunking)
 {
     // Verify the correctness of the ChunkLinearization function.
+    FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
 
     // Construct a graph by deserializing.
     SpanReader reader(buffer);
@@ -831,6 +857,9 @@ FUZZ_TARGET(clusterlin_chunking)
         todo -= best.transactions;
     }
     assert(todo.None());
+
+    // Adjacent chunks with equal fee rate are already monotonic, and must stay separate.
+    CheckEqualRateChunkBoundaries(fuzzed_data_provider);
 }
 
 static constexpr auto MAX_SIMPLE_ITERATIONS = 300000;
