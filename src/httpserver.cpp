@@ -569,6 +569,7 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
     }
 
     if (needs_content_length) {
+        res.m_headers.RemoveAll("Content-Length");
         res.m_headers.Write("Content-Length", util::ToString(reply_body.size()));
     }
 

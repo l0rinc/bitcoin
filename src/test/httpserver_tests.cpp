@@ -204,8 +204,46 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
         "Content-Length: 41\r\n"
         "\r\n");
 
-    auto response_close_client{std::make_shared<HTTPRemoteClient>(
+    auto content_length_client{std::make_shared<HTTPRemoteClient>(
         /*id=*/0,
+        CService{},
+        std::make_unique<StaticContentsSock>(""))};
+    {
+        LOCK(content_length_client->m_send_mutex);
+        content_length_client->m_send_buffer.push_back(std::byte{'x'});
+    }
+
+    HTTPRequest content_length_req{content_length_client};
+    LineReader content_length_reader{"GET / HTTP/1.0\r\nConnection: keep-alive\r\n\r\n", MAX_HEADERS_SIZE};
+    BOOST_REQUIRE(content_length_req.LoadControlData(content_length_reader));
+    BOOST_REQUIRE(content_length_req.LoadHeaders(content_length_reader));
+    BOOST_REQUIRE(content_length_req.LoadBody(content_length_reader));
+
+    content_length_client->m_req_busy = true;
+    content_length_req.WriteHeader("Content-Length", "999");
+    content_length_req.WriteReply(HTTP_OK, "abc");
+
+    const std::vector<std::byte> content_length_sent{WITH_LOCK(content_length_client->m_send_mutex, return content_length_client->m_send_buffer)};
+    BOOST_REQUIRE_GT(content_length_sent.size(), 1);
+    BOOST_CHECK_EQUAL(std::to_integer<unsigned char>(content_length_sent.front()), 'x');
+
+    std::string content_length_response;
+    content_length_response.reserve(content_length_sent.size() - 1);
+    for (auto it{content_length_sent.begin() + 1}; it != content_length_sent.end(); ++it) {
+        content_length_response.push_back(static_cast<char>(std::to_integer<unsigned char>(*it)));
+    }
+    BOOST_CHECK(content_length_response.starts_with("HTTP/1.0 200 OK\r\n"));
+    BOOST_CHECK(content_length_response.find("Connection: keep-alive\r\n") != std::string::npos);
+    BOOST_CHECK_EQUAL(CountOccurrences(content_length_response, "Content-Length: 3\r\n"), 1);
+    BOOST_CHECK_EQUAL(CountOccurrences(content_length_response, "Content-Length: "), 1);
+    BOOST_CHECK(content_length_response.find("Content-Type: text/html; charset=ISO-8859-1\r\n") != std::string::npos);
+    BOOST_CHECK(content_length_response.ends_with("\r\n\r\nabc"));
+    BOOST_CHECK(content_length_client->m_keep_alive.load());
+    BOOST_CHECK(content_length_client->m_send_ready.load());
+    BOOST_CHECK(!content_length_client->m_req_busy.load());
+
+    auto response_close_client{std::make_shared<HTTPRemoteClient>(
+        /*id=*/1,
         CService{},
         std::make_unique<StaticContentsSock>(""))};
     {
