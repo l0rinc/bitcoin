@@ -5,6 +5,7 @@
 #include <banman.h>
 #include <net.h>
 #include <net_processing.h>
+#include <node/protocol_version.h>
 #include <protocol.h>
 #include <sync.h>
 #include <test/fuzz/FuzzedDataProvider.h>
@@ -18,6 +19,7 @@
 #include <util/time.h>
 #include <validationinterface.h>
 
+#include <algorithm>
 #include <ios>
 #include <utility>
 #include <vector>
@@ -30,6 +32,24 @@ void initialize()
     static const auto testing_setup = MakeNoLogFileContext<TestingSetup>(
         /*chain_type=*/ChainType::REGTEST);
     g_setup = testing_setup.get();
+}
+
+void AssertHandshakeState(const std::vector<CNode*>& peers)
+{
+    for (const CNode* peer : peers) {
+        const int version{peer->nVersion.load()};
+        if (version == 0) {
+            Assert(!peer->fSuccessfullyConnected.load());
+            Assert(peer->GetCommonVersion() == INIT_PROTO_VERSION);
+            continue;
+        }
+
+        Assert(version >= MIN_PEER_PROTO_VERSION);
+        Assert(peer->GetCommonVersion() == std::min(version, peer->AdvertisedVersion()));
+        if (peer->fSuccessfullyConnected.load()) {
+            Assert(version != 0);
+        }
+    }
 }
 } // namespace
 
@@ -103,7 +123,9 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
             }
             node.peerman->SendMessages(connection);
         }
+        AssertHandshakeState(peers);
     }
 
+    AssertHandshakeState(peers);
     node.connman->StopNodes();
 }
