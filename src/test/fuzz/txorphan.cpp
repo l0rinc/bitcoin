@@ -544,10 +544,10 @@ FUZZ_TARGET(txorphanage_sim)
         }
         return mask.count();
     };
-    /** Determine if we have any reconsiderable announcements of a given transaction. */
-    auto have_reconsiderable_fn = [&](unsigned tx) -> bool {
+    /** Determine if we have any reconsiderable announcements of a given wtxid. */
+    auto have_reconsiderable_wtxid_fn = [&](const Wtxid& wtxid) -> bool {
         for (auto& ann : sim_announcements) {
-            if (ann.reconsider && ann.tx == tx) return true;
+            if (ann.reconsider && txn[ann.tx]->GetWitnessHash() == wtxid) return true;
         }
         return false;
     };
@@ -657,28 +657,41 @@ FUZZ_TARGET(txorphanage_sim)
             } else if (command-- == 0) {
                 // AddChildrenToWorkSet
                 auto tx = read_tx_fn();
-                FastRandomContext rand_ctx(rng.rand256());
-                auto added = real->AddChildrenToWorkSet(*txn[tx], rand_ctx);
-                /** Set of not-already-reconsiderable child wtxids. */
-                std::set<Wtxid> child_wtxids;
-                for (unsigned child_tx = 0; child_tx < NUM_TX; ++child_tx) {
-                    if (!have_tx_fn(child_tx)) continue;
-                    if (have_reconsiderable_fn(child_tx)) continue;
-                    bool child_of = false;
-                    for (auto& txin : txn[child_tx]->vin) {
-                        if (txin.prevout.hash == txn[tx]->GetHash()) {
-                            child_of = true;
-                            break;
+                const uint256 workset_seed{rng.rand256()};
+                FastRandomContext rand_ctx(workset_seed);
+                FastRandomContext sim_rand_ctx(workset_seed);
+                std::vector<std::pair<Wtxid, NodeId>> expected_added;
+                std::set<Wtxid> expected_reconsiderable_wtxids;
+                for (const auto& ann : sim_announcements) {
+                    if (ann.reconsider) expected_reconsiderable_wtxids.insert(txn[ann.tx]->GetWitnessHash());
+                }
+                const Txid parent_txid{txn[tx]->GetHash()};
+                for (size_t output{0}; output < txn[tx]->vout.size(); ++output) {
+                    const COutPoint prevout{parent_txid, static_cast<uint32_t>(output)};
+                    std::set<Wtxid> child_wtxids;
+                    for (const auto& ann : sim_announcements) {
+                        const auto wtxid{txn[ann.tx]->GetWitnessHash()};
+                        if (expected_reconsiderable_wtxids.contains(wtxid)) continue;
+                        if (std::any_of(txn[ann.tx]->vin.cbegin(), txn[ann.tx]->vin.cend(), [&](const auto& input) {
+                            return input.prevout == prevout;
+                        })) {
+                            child_wtxids.insert(wtxid);
                         }
                     }
-                    if (child_of) {
-                        child_wtxids.insert(txn[child_tx]->GetWitnessHash());
+                    for (const auto& wtxid : child_wtxids) {
+                        std::vector<NodeId> announcers;
+                        for (const auto& ann : sim_announcements) {
+                            if (txn[ann.tx]->GetWitnessHash() == wtxid) announcers.push_back(ann.announcer);
+                        }
+                        std::sort(announcers.begin(), announcers.end());
+                        assert(!announcers.empty());
+                        expected_added.emplace_back(wtxid, announcers.at(sim_rand_ctx.randrange(announcers.size())));
+                        expected_reconsiderable_wtxids.insert(wtxid);
                     }
                 }
+                auto added = real->AddChildrenToWorkSet(*txn[tx], rand_ctx);
+                assert(added == expected_added);
                 for (auto& [wtxid, peer] : added) {
-                    // Wtxid must be a child of tx that is not yet reconsiderable.
-                    auto child_wtxid_it = child_wtxids.find(wtxid);
-                    assert(child_wtxid_it != child_wtxids.end());
                     // Announcement must exist.
                     auto sim_ann_it = find_announce_wtxid_fn(wtxid, peer);
                     assert(sim_ann_it != sim_announcements.end());
@@ -686,13 +699,11 @@ FUZZ_TARGET(txorphanage_sim)
                     assert(sim_ann_it->reconsider == false);
                     // Make reconsiderable.
                     sim_ann_it->reconsider = true;
-                    // Remove from child_wtxids map, to disallow it being reported a second time in added.
-                    child_wtxids.erase(wtxid);
                 }
-                // Verify that AddChildrenToWorkSet does not select announcements that were already reconsiderable:
-                // Check all child wtxids which did not occur at least once in the result were already reconsiderable
-                // due to a previous AddChildrenToWorkSet.
-                assert(child_wtxids.empty());
+                // Verify that every returned wtxid is now represented as reconsiderable in the model.
+                for (const auto& [wtxid, _] : added) {
+                    assert(have_reconsiderable_wtxid_fn(wtxid));
+                }
                 break;
             } else if (command-- == 0) {
                 // GetTxToReconsider.
