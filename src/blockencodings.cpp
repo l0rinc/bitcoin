@@ -229,6 +229,8 @@ bool PartiallyDownloadedBlock::IsTxAvailable(size_t index) const
 ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<CTransactionRef>& vtx_missing, bool segwit_active)
 {
     if (header.IsNull()) return READ_STATUS_INVALID;
+    Assert(std::all_of(vtx_missing.cbegin(), vtx_missing.cend(),
+        [](const auto& tx) { return tx != nullptr; }));
 
     const size_t completed_prefilled_count{prefilled_count};
     const size_t completed_mempool_count{mempool_count};
@@ -269,7 +271,7 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
         return READ_STATUS_INVALID;
     }
 
-    assert(std::all_of(block.vtx.begin(), block.vtx.end(),
+    Assert(std::all_of(block.vtx.cbegin(), block.vtx.cend(),
         [](const auto& tx) { return tx != nullptr; }));
 
     // Check for possible mutations early now that we have a seemingly good block
