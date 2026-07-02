@@ -9,8 +9,10 @@
 #include <primitives/transaction.h>
 #include <serialize.h>
 #include <uint256.h>
+#include <util/check.h>
 #include <util/time.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <string>
@@ -101,6 +103,8 @@ public:
 
     SERIALIZE_METHODS(CBlock, obj)
     {
+        SER_WRITE(obj, Assert(std::all_of(obj.vtx.cbegin(), obj.vtx.cend(),
+            [](const auto& tx) { return tx != nullptr; })););
         READWRITE(AsBase<CBlockHeader>(obj), obj.vtx);
     }
 
