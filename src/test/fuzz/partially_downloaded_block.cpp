@@ -19,6 +19,7 @@
 #include <util/time.h>
 #include <util/translation.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -215,6 +216,8 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     pdb.m_check_block_mutated_mock = FuzzedIsBlockMutated(fail_block_mutated);
 
     CBlock reconstructed_block;
+    assert(std::all_of(missing.cbegin(), missing.cend(),
+        [](const auto& tx) { return tx != nullptr; }));
     auto fill_status{pdb.FillBlock(reconstructed_block, missing, segwit_active)};
     switch (fill_status) {
     case READ_STATUS_OK:

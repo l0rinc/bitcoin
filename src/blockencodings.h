@@ -72,7 +72,7 @@ public:
 
     SERIALIZE_METHODS(BlockTransactions, obj)
     {
-        SER_WRITE(obj, assert(std::all_of(obj.txn.begin(), obj.txn.end(),
+        SER_WRITE(obj, Assert(std::all_of(obj.txn.cbegin(), obj.txn.cend(),
             [](const auto& tx) { return tx != nullptr; })););
         READWRITE(obj.blockhash, TX_WITH_WITNESS(Using<VectorFormatter<TransactionCompression>>(obj.txn)));
     }
