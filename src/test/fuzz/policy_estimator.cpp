@@ -13,12 +13,32 @@
 #include <test/fuzz/util/mempool.h>
 #include <test/util/setup_common.h>
 
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <vector>
 
 namespace {
 const BasicTestingSetup* g_setup;
+
+bool EqualBuckets(const EstimatorBucket& a, const EstimatorBucket& b)
+{
+    return a.start == b.start &&
+           a.end == b.end &&
+           a.withinTarget == b.withinTarget &&
+           a.totalConfirmed == b.totalConfirmed &&
+           a.inMempool == b.inMempool &&
+           a.leftMempool == b.leftMempool;
+}
+
+bool EqualResults(const EstimationResult& a, const EstimationResult& b)
+{
+    return EqualBuckets(a.pass, b.pass) &&
+           EqualBuckets(a.fail, b.fail) &&
+           a.decay == b.decay &&
+           a.scale == b.scale;
+}
 } // namespace
 
 void initialize_policy_estimator()
@@ -90,11 +110,40 @@ FUZZ_TARGET(policy_estimator, .init = initialize_policy_estimator)
             });
         (void)block_policy_estimator.estimateFee(fuzzed_data_provider.ConsumeIntegral<int>());
         EstimationResult result;
+        result.pass.start = 17;
+        result.pass.end = 19;
+        result.pass.withinTarget = 23;
+        result.pass.totalConfirmed = 29;
+        result.pass.inMempool = 31;
+        result.pass.leftMempool = 37;
+        result.fail.start = 41;
+        result.fail.end = 43;
+        result.fail.withinTarget = 47;
+        result.fail.totalConfirmed = 53;
+        result.fail.inMempool = 59;
+        result.fail.leftMempool = 61;
+        result.decay = 67;
+        result.scale = 71;
+        const EstimationResult result_before{result};
         auto conf_target = fuzzed_data_provider.ConsumeIntegral<int>();
-        auto success_threshold = fuzzed_data_provider.ConsumeFloatingPoint<double>();
+        constexpr double invalid_thresholds[]{
+            -std::numeric_limits<double>::infinity(),
+            std::numeric_limits<double>::quiet_NaN(),
+            -1.0,
+            1.0 + std::numeric_limits<double>::epsilon(),
+            std::numeric_limits<double>::infinity(),
+        };
+        const double success_threshold = fuzzed_data_provider.ConsumeBool() ?
+            fuzzed_data_provider.ConsumeFloatingPoint<double>() :
+            fuzzed_data_provider.PickValueInArray(invalid_thresholds);
         auto horizon = fuzzed_data_provider.PickValueInArray(ALL_FEE_ESTIMATE_HORIZONS);
         auto* result_ptr = fuzzed_data_provider.ConsumeBool() ? &result : nullptr;
-        (void)block_policy_estimator.estimateRawFee(conf_target, success_threshold, horizon, result_ptr);
+        const CFeeRate raw_fee{block_policy_estimator.estimateRawFee(conf_target, success_threshold, horizon, result_ptr)};
+        assert(raw_fee.GetFeePerK() >= 0);
+        if (!std::isfinite(success_threshold) || success_threshold < 0 || success_threshold > 1) {
+            assert(raw_fee == CFeeRate(0));
+            if (result_ptr) assert(EqualResults(result, result_before));
+        }
 
         FeeCalculation fee_calculation;
         conf_target = fuzzed_data_provider.ConsumeIntegral<int>();
