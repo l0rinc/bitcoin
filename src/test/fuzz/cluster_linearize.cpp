@@ -1162,6 +1162,7 @@ FUZZ_TARGET(clusterlin_linearize)
         /*is_topological=*/claim_topological_input);
     SanityCheck(depgraph, linearization);
     auto chunking = ChunkLinearization(depgraph, linearization);
+    assert(optimal || cost >= max_cost);
 
     // Linearization must always be as good as the old one, if provided and topological (even when
     // not claimed to be topological).
