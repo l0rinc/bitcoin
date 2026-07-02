@@ -111,6 +111,35 @@ void CheckEqualRateSplit(FuzzedDataProvider& fuzzed_data_provider)
     assert(std::is_eq(CompareChunks(split, merged)));
 }
 
+std::vector<FeeFrac> WithZeroFeeTail(const std::span<const FeeFrac> chunks, const int32_t tail_size)
+{
+    std::vector<FeeFrac> with_tail{chunks.begin(), chunks.end()};
+    with_tail.emplace_back(0, tail_size);
+    return with_tail;
+}
+
+void CheckZeroFeeTailIdentity(FuzzedDataProvider& fuzzed_data_provider, const std::span<const FeeFrac> chunks)
+{
+    const int32_t tail_size{fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, 1'000'000)};
+    const auto with_tail{WithZeroFeeTail(chunks, tail_size)};
+    assert(std::is_eq(CompareChunks(chunks, with_tail)));
+    assert(std::is_eq(CompareChunks(with_tail, chunks)));
+}
+
+void CheckZeroFeeTailPreservesOrdering(FuzzedDataProvider& fuzzed_data_provider,
+                                       const std::span<const FeeFrac> chunks1,
+                                       const std::span<const FeeFrac> chunks2,
+                                       std::partial_ordering original)
+{
+    const int32_t tail_size1{fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, 1'000'000)};
+    const int32_t tail_size2{fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, 1'000'000)};
+    const auto with_tail1{WithZeroFeeTail(chunks1, tail_size1)};
+    const auto with_tail2{WithZeroFeeTail(chunks2, tail_size2)};
+    assert(CompareChunks(with_tail1, chunks2) == original);
+    assert(CompareChunks(chunks1, with_tail2) == original);
+    assert(CompareChunks(with_tail1, with_tail2) == original);
+}
+
 void CheckReverseOrdering(std::partial_ordering forward, std::partial_ordering reverse)
 {
     if (std::is_lt(forward)) assert(std::is_gt(reverse));
@@ -143,6 +172,9 @@ FUZZ_TARGET(build_and_compare_feerate_diagram)
     CheckReverseOrdering(real, CompareChunks(chunks2, chunks1));
     assert(std::is_eq(CompareChunks(chunks1, chunks1)));
     assert(std::is_eq(CompareChunks(chunks2, chunks2)));
+    CheckZeroFeeTailIdentity(fuzzed_data_provider, chunks1);
+    CheckZeroFeeTailIdentity(fuzzed_data_provider, chunks2);
+    CheckZeroFeeTailPreservesOrdering(fuzzed_data_provider, chunks1, chunks2, real);
 
     CheckEqualRateSplit(fuzzed_data_provider);
 
