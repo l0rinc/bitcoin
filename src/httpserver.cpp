@@ -547,6 +547,7 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
         if (m_version.minor == 0) {
             auto connection_header{m_headers.FindFirst("Connection")};
             if (!response_close && connection_header && ToLower(connection_header.value()) == "keep-alive") {
+                res.m_headers.RemoveAll("Connection");
                 res.m_headers.Write("Connection", "keep-alive");
                 keep_alive = true;
                 // HTTP/1.0 connections are closed by default so EOF is sufficient
