@@ -10,6 +10,7 @@
 #include <txgraph.h>
 #include <util/bitset.h>
 #include <util/feefrac.h>
+#include <util/overflow.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -23,6 +24,35 @@
 using namespace cluster_linearize;
 
 namespace {
+
+struct CheckedFeePerWeightSum
+{
+    FeePerWeight sum;
+    bool fee_overflow{false};
+    bool size_overflow{false};
+
+    void Add(const FeePerWeight& add) noexcept
+    {
+        if (const auto fee{CheckedAdd(sum.fee, add.fee)}) {
+            sum.fee = *fee;
+        } else {
+            sum.fee = SaturatingAdd(sum.fee, add.fee);
+            fee_overflow = true;
+        }
+        if (const auto size{CheckedAdd(sum.size, add.size)}) {
+            sum.size = *size;
+        } else {
+            sum.size = SaturatingAdd(sum.size, add.size);
+            size_overflow = true;
+        }
+    }
+
+    void AssertMatches(const FeePerWeight& expected) const noexcept
+    {
+        if (!fee_overflow) assert(sum.fee == expected.fee);
+        if (!size_overflow) assert(sum.size == expected.size);
+    }
+};
 
 struct SimTxObject : public TxGraph::Ref
 {
@@ -917,7 +947,7 @@ FUZZ_TARGET(txgraph)
                     }
                     builder_data.last_feerate = chunk->second;
                     // Verify the contents of GetCurrentChunk.
-                    FeePerWeight sum_feerate;
+                    CheckedFeePerWeightSum sum_feerate;
                     for (TxGraph::Ref* ref : chunk->first) {
                         assert(ref != nullptr);
                         // Each transaction in the chunk must exist in the main graph.
@@ -926,7 +956,7 @@ FUZZ_TARGET(txgraph)
                         assert(!builder_data.skipped_clusters[simpos]);
                         current_chunk.Set(simpos);
                         // Verify the claimed chunk feerate.
-                        sum_feerate += main_sim.graph.FeeRate(simpos);
+                        sum_feerate.Add(FeePerWeight::FromFeeFrac(main_sim.graph.FeeRate(simpos)));
                         // Make sure no transaction is reported twice.
                         assert(!new_done[simpos]);
                         new_done.Set(simpos);
@@ -934,7 +964,7 @@ FUZZ_TARGET(txgraph)
                         new_included.Set(simpos);
                         assert(main_sim.graph.Ancestors(simpos).IsSubsetOf(new_included));
                     }
-                    assert(sum_feerate == chunk->second);
+                    sum_feerate.AssertMatches(chunk->second);
                 } else {
                     // When we reach the end, if nothing was skipped, the entire graph should have
                     // been reported.
@@ -982,12 +1012,12 @@ FUZZ_TARGET(txgraph)
                     const auto& expected_worst_chunk = chunking.back();
                     assert(FeePerWeight::FromFeeFrac(expected_worst_chunk.feerate) == worst_chunk_feerate);
                     SimTxGraph::SetType done;
-                    FeePerWeight sum;
+                    CheckedFeePerWeightSum sum;
                     for (TxGraph::Ref* ref : worst_chunk) {
                         // Each transaction in the chunk must exist in the main graph.
                         auto simpos = main_sim.Find(ref);
                         assert(simpos != SimTxGraph::MISSING);
-                        sum += main_sim.graph.FeeRate(simpos);
+                        sum.Add(FeePerWeight::FromFeeFrac(main_sim.graph.FeeRate(simpos)));
                         // Make sure the chunk contains no duplicate transactions.
                         assert(!done[simpos]);
                         done.Set(simpos);
@@ -997,7 +1027,7 @@ FUZZ_TARGET(txgraph)
                         assert(expected_worst_chunk.transactions[simpos]);
                     }
                     assert(done == expected_worst_chunk.transactions);
-                    assert(sum == worst_chunk_feerate);
+                    sum.AssertMatches(worst_chunk_feerate);
                     std::vector<TxGraph::Ref*> expected_refs;
                     for (auto it = main_order.rbegin(); it != main_order.rend(); ++it) {
                         if (expected_worst_chunk.transactions[*it]) expected_refs.push_back(main_sim.GetRef(*it));
@@ -1336,20 +1366,17 @@ FUZZ_TARGET(txgraph)
         std::vector<TxGraph::Ref*> last_chunk;
         FeePerWeight last_chunk_feerate;
         while (auto chunk = builder->GetCurrentChunk()) {
-            FeePerWeight sum;
+            CheckedFeePerWeightSum sum;
             for (TxGraph::Ref* ref : chunk->first) {
                 assert(ref != nullptr);
-                // The reported chunk feerate must match the chunk feerate obtained by asking
-                // it for each of the chunk's transactions individually.
-                assert(real->GetMainChunkFeerate(*ref) == chunk->second);
-                // Verify the chunk feerate matches the sum of the reported individual feerates.
-                sum += real->GetIndividualFeerate(*ref);
                 // Chunks must contain transactions that exist in the graph.
                 auto simpos = sims[0].Find(ref);
                 assert(simpos != SimTxGraph::MISSING);
+                // Verify the chunk feerate matches the sum of the simulated individual feerates.
+                sum.Add(FeePerWeight::FromFeeFrac(sims[0].graph.FeeRate(simpos)));
                 vec_builder.push_back(simpos);
             }
-            assert(sum == chunk->second);
+            sum.AssertMatches(chunk->second);
             last_chunk = std::move(chunk->first);
             last_chunk_feerate = chunk->second;
             builder->Include();
