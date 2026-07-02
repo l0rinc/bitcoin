@@ -2864,6 +2864,19 @@ bool Chainstate::FlushStateToDisk(
             Assume(!locator.IsNull());
             Assume(!locator.vHave.empty());
             Assume(locator.vHave.front() == flushed_block->GetBlockHash());
+            if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+                const CBlockIndex* previous_locator{nullptr};
+                for (const uint256& locator_hash : locator.vHave) {
+                    const CBlockIndex* locator_index{m_blockman.LookupBlockIndex(locator_hash)};
+                    Assume(locator_index);
+                    Assume(flushed_block->GetAncestor(locator_index->nHeight) == locator_index);
+                    if (previous_locator) {
+                        Assume(locator_index->nHeight < previous_locator->nHeight);
+                    }
+                    previous_locator = locator_index;
+                }
+                Assume(previous_locator && previous_locator->nHeight == 0);
+            }
             m_chainman.m_options.signals->ChainStateFlushed(this->GetRole(), locator);
         }
 
