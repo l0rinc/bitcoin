@@ -57,6 +57,27 @@ FUZZ_TARGET(block, .init = initialize_block)
             assert(checked_block.vtx[i]->GetHash() == txids[i]);
         }
     };
+
+    DataStream serialized_block;
+    serialized_block << TX_WITH_WITNESS(block);
+    CBlock deserialized_block;
+    serialized_block >> TX_WITH_WITNESS(deserialized_block);
+    assert_block_unchanged(deserialized_block);
+
+    if (!buffer.empty() && (buffer.back() & 1U)) {
+        CBlock resized_block{block};
+        resized_block.vtx.resize(resized_block.vtx.size() + 1);
+        test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+        DataStream invalid_serialized_block;
+        bool caught_null_ref{false};
+        try {
+            invalid_serialized_block << TX_WITH_WITNESS(resized_block);
+        } catch (const NonFatalCheckError&) {
+            caught_null_ref = true;
+        }
+        assert(caught_null_ref);
+    }
+
     auto check_block = [&](const bool check_pow, const bool check_merkle_root) {
         CBlock checked_block{block};
         BlockValidationState validation_state;
