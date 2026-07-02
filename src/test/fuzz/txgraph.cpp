@@ -407,6 +407,38 @@ FUZZ_TARGET(txgraph)
         return &empty_ref;
     };
 
+    auto chunk_linearization_info_fn = [](const SimTxGraph& sim, std::span<const SimTxGraph::Pos> linearization) noexcept {
+        SimTxGraph::SetType left;
+        for (auto pos : linearization) {
+            assert(pos != SimTxGraph::MISSING);
+            assert(sim.graph.Positions()[pos]);
+            assert(!left[pos]);
+            left.Set(pos);
+        }
+
+        std::vector<SetInfo<SimTxGraph::SetType>> ret;
+        for (auto pos : linearization) {
+            assert(left[pos]);
+            left.Reset(pos);
+            assert(!sim.graph.Ancestors(pos).Overlaps(left));
+            SetInfo<SimTxGraph::SetType> new_chunk{sim.graph, pos};
+            while (!ret.empty() && ByRatio{new_chunk.feerate} > ByRatio{ret.back().feerate}) {
+                new_chunk |= ret.back();
+                ret.pop_back();
+            }
+            ret.push_back(std::move(new_chunk));
+        }
+        assert(left.None());
+        return ret;
+    };
+    auto chunk_linearization_fn = [&](const SimTxGraph& sim, std::span<const SimTxGraph::Pos> linearization) noexcept {
+        std::vector<FeeFrac> ret;
+        for (const auto& chunk : chunk_linearization_info_fn(sim, linearization)) {
+            ret.push_back(chunk.feerate);
+        }
+        return ret;
+    };
+
     /** Function to construct the correct fee-size diagram a real graph has based on its graph
      *  order (as reported by GetCluster(), so it works for both main and staging). */
     auto get_diagram_fn = [&](TxGraph::Level level_select) -> std::vector<FeeFrac> {
@@ -425,8 +457,12 @@ FUZZ_TARGET(txgraph)
             num_tx += cluster.size();
             std::vector<SimTxGraph::Pos> linearization;
             linearization.reserve(cluster.size());
-            for (auto refptr : cluster) linearization.push_back(sim.Find(refptr));
-            for (const FeeFrac& chunk_feerate : ChunkLinearization(sim.graph, linearization)) {
+            for (auto refptr : cluster) {
+                auto simpos = sim.Find(refptr);
+                assert(simpos != SimTxGraph::MISSING);
+                linearization.push_back(simpos);
+            }
+            for (const FeeFrac& chunk_feerate : chunk_linearization_fn(sim, linearization)) {
                 chunk_feerates.push_back(chunk_feerate);
             }
         }
@@ -1430,7 +1466,7 @@ FUZZ_TARGET(txgraph)
                     // Construct a chunking object for the simulated graph, using the reported cluster
                     // linearization as ordering, and compare it against the reported chunk feerates.
                     if (sims.size() == 1 || level == TxGraph::Level::MAIN) {
-                        auto simlinchunk = ChunkLinearizationInfo(sim.graph, simlin);
+                        auto simlinchunk = chunk_linearization_info_fn(sim, simlin);
                         DepGraphIndex idx{0};
                         for (auto& chunk : simlinchunk) {
                             // Require that the chunks of cluster linearizations are connected (this must
