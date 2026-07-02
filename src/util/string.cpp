@@ -4,6 +4,8 @@
 
 #include <util/string.h>
 
+#include <util/check.h>
+
 #include <iterator>
 #include <memory>
 #include <regex>
@@ -37,6 +39,7 @@ std::optional<std::string_view> LineReader::ReadLine()
             std::string_view line{line_start, m_it - 1};
             if (!line.empty() && line.back() == '\r')
                 line.remove_suffix(1);
+            Assume(line.size() <= m_max_line_length);
             return line;
         }
         // If the character we just consumed gives us a line length greater
@@ -60,8 +63,11 @@ std::string_view LineReader::ReadLength(size_t len)
 {
     if (len == 0) return {};
     if (Remaining() < len) throw std::runtime_error("Not enough data in buffer");
+    const size_t consumed_before{Consumed()};
     std::string_view out(std::to_address(m_it), len);
     m_it += len;
+    Assume(out.size() == len);
+    Assume(Consumed() == consumed_before + len);
     return out;
 }
 
