@@ -371,6 +371,8 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         auto assembler = BlockAssembler{chainstate, &tx_pool, options};
         auto block_template = assembler.CreateNewBlock();
         Assert(block_template->block.vtx.size() >= 1);
+        Assert(std::all_of(block_template->block.vtx.cbegin(), block_template->block.vtx.cend(),
+            [](const auto& tx) { return tx != nullptr; }));
 
         // Try updating the mempool for this block, as though it were mined.
         LOCK2(::cs_main, tx_pool.cs);
