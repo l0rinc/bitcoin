@@ -269,6 +269,7 @@ FUZZ_TARGET(txdownloadman, .init = initialize)
             },
             [&] {
                 txdownloadman.GetRequestsToSend(rand_peer, time);
+                Assert(txdownloadman.GetRequestsToSend(rand_peer, time).empty());
             },
             [&] {
                 const auto& [should_validate, maybe_package] = txdownloadman.ReceivedTx(rand_peer, rand_tx);
@@ -426,9 +427,19 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                 const auto getdata_requests = txdownload_impl.GetRequestsToSend(rand_peer, time);
                 // TxDownloadManager should not be telling us to request things we already have.
                 // Exclude m_lazy_recent_rejects_reconsiderable because it may request low-feerate parent of orphan.
+                std::vector<uint256> requested_hashes;
                 for (const auto& gtxid : getdata_requests) {
                     Assert(!txdownload_impl.AlreadyHaveTx(gtxid, /*include_reconsiderable=*/false));
+                    const auto txhash{gtxid.ToUint256()};
+                    Assert(std::find(requested_hashes.begin(), requested_hashes.end(), txhash) == requested_hashes.end());
+                    requested_hashes.push_back(txhash);
+
+                    std::vector<NodeId> peers;
+                    txdownload_impl.m_txrequest.GetCandidatePeers(txhash, peers);
+                    Assert(std::find(peers.begin(), peers.end(), rand_peer) != peers.end());
                 }
+                Assert(txdownload_impl.m_txrequest.CountInFlight(rand_peer) >= getdata_requests.size());
+                Assert(txdownload_impl.GetRequestsToSend(rand_peer, time).empty());
             },
             [&] {
                 const auto& [should_validate, maybe_package] = txdownload_impl.ReceivedTx(rand_peer, rand_tx);
