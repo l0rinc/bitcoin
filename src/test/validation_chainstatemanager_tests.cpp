@@ -12,6 +12,7 @@
 #include <node/kernel_notifications.h>
 #include <node/utxo_snapshot.h>
 #include <primitives/block.h>
+#include <primitives/transaction.h>
 #include <random.h>
 #include <rpc/blockchain.h>
 #include <streams.h>
@@ -58,7 +59,7 @@ CBlockHeader ChildHeader(const CBlockIndex& parent, uint32_t nonce)
 CBlock DummyBlockWithTransactions(size_t tx_count)
 {
     CBlock block;
-    block.vtx.resize(tx_count);
+    block.vtx.assign(tx_count, MakeTransactionRef(CMutableTransaction{}));
     return block;
 }
 } // namespace
