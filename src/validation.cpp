@@ -71,6 +71,7 @@
 #include <cassert>
 #include <chrono>
 #include <deque>
+#include <ios>
 #include <numeric>
 #include <optional>
 #include <ranges>
@@ -5166,7 +5167,7 @@ void ChainstateManager::LoadExternalBlockFile(
                 blkdat >> nSize;
                 if (nSize < 80 || nSize > MAX_BLOCK_SERIALIZED_SIZE)
                     continue;
-            } catch (const std::exception&) {
+            } catch (const std::ios_base::failure&) {
                 // no valid block header found; don't complain
                 // (this happens at the end of every blk.dat file)
                 break;
@@ -5279,7 +5280,7 @@ void ChainstateManager::LoadExternalBlockFile(
                         NotifyHeaderTip();
                     }
                 }
-            } catch (const std::exception& e) {
+            } catch (const std::ios_base::failure& e) {
                 // historical bugs added extra data to the block files that does not deserialize cleanly.
                 // commonly this data is between readable blocks, but it does not really matter. such data is not fatal to the import process.
                 // the code that reads the block files deals with invalid data by simply ignoring it.
