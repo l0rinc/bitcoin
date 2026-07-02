@@ -994,6 +994,43 @@ BOOST_AUTO_TEST_CASE(ccoins_add)
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(ccoins_addcoin_unspendable_is_noop, BasicTestingSetup)
+{
+    CCoinsViewCacheTest cache{&CoinsViewEmpty::Get()};
+
+    auto spendable_coin = [&](CAmount value) {
+        return Coin{CTxOut{value, CScript{} << OP_TRUE}, 1, false};
+    };
+    auto unspendable_coin = [&](CAmount value) {
+        Coin coin{CTxOut{value, CScript{} << OP_RETURN}, 2, false};
+        BOOST_REQUIRE(coin.out.scriptPubKey.IsUnspendable());
+        return coin;
+    };
+    auto snapshot_stats = [&] {
+        return std::tuple{cache.GetCacheSize(), cache.GetDirtyCount(), cache.DynamicMemoryUsage()};
+    };
+    auto check_stats = [&](const std::tuple<unsigned int, size_t, size_t>& expected) {
+        BOOST_CHECK_EQUAL(cache.GetCacheSize(), std::get<0>(expected));
+        BOOST_CHECK_EQUAL(cache.GetDirtyCount(), std::get<1>(expected));
+        BOOST_CHECK_EQUAL(cache.DynamicMemoryUsage(), std::get<2>(expected));
+        cache.SelfTest();
+    };
+
+    const COutPoint cached_outpoint{Txid::FromUint256(uint256::ONE), 0};
+    const Coin cached_coin{spendable_coin(1)};
+    cache.AddCoin(cached_outpoint, Coin{cached_coin}, /*possible_overwrite=*/false);
+    const auto populated_stats{snapshot_stats()};
+    cache.AddCoin(cached_outpoint, unspendable_coin(2), /*possible_overwrite=*/false);
+    check_stats(populated_stats);
+    BOOST_CHECK(cache.AccessCoin(cached_outpoint) == cached_coin);
+
+    const COutPoint missing_outpoint{Txid::FromUint256(uint256::ONE), 1};
+    cache.AddCoin(missing_outpoint, unspendable_coin(3), /*possible_overwrite=*/true);
+    check_stats(populated_stats);
+    BOOST_CHECK(cache.AccessCoin(cached_outpoint) == cached_coin);
+    BOOST_CHECK(cache.AccessCoin(missing_outpoint).IsSpent());
+}
+
 static void CheckWriteCoins(const MaybeCoin& parent, const MaybeCoin& child, const CoinOrError& expected)
 {
     SingleEntryCacheTest test{ABSENT, parent};
