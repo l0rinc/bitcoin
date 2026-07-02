@@ -6,21 +6,25 @@
 #include <util/check.h>
 
 #include <algorithm>
-
+#include <unordered_set>
 
 bool PrivateBroadcast::Add(const CTransactionRef& tx)
     EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
+    Assert(tx != nullptr);
     LOCK(m_mutex);
     const bool inserted{m_transactions.try_emplace(tx).second};
+    AssertInvariants();
     return inserted;
 }
 
 std::optional<size_t> PrivateBroadcast::Remove(const CTransactionRef& tx)
     EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
+    Assert(tx != nullptr);
     LOCK(m_mutex);
     const auto handle{m_transactions.extract(tx)};
+    AssertInvariants();
     if (handle) {
         const auto p{DerivePriority(handle.mapped().send_statuses)};
         return p.num_confirmed;
@@ -32,6 +36,7 @@ std::optional<CTransactionRef> PrivateBroadcast::PickTxForSend(const NodeId& wil
     EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
+    Assert(!GetSendStatusByNode(will_send_to_nodeid).has_value());
 
     const auto it{std::ranges::max_element(
             m_transactions,
@@ -41,6 +46,7 @@ std::optional<CTransactionRef> PrivateBroadcast::PickTxForSend(const NodeId& wil
     if (it != m_transactions.end()) {
         auto& [tx, state]{*it};
         state.send_statuses.emplace_back(will_send_to_nodeid, will_send_to_address, NodeClock::now());
+        AssertInvariants();
         return tx;
     }
 
@@ -66,6 +72,7 @@ void PrivateBroadcast::NodeConfirmedReception(const NodeId& nodeid)
     if (tx_and_status.has_value()) {
         tx_and_status.value().send_status.confirmed = NodeClock::now();
     }
+    AssertInvariants();
 }
 
 bool PrivateBroadcast::DidNodeConfirmReception(const NodeId& nodeid)
@@ -148,4 +155,33 @@ std::optional<PrivateBroadcast::TxAndSendStatusForNode> PrivateBroadcast::GetSen
         }
     }
     return std::nullopt;
+}
+
+void PrivateBroadcast::AssertInvariants() const
+    EXCLUSIVE_LOCKS_REQUIRED(m_mutex)
+{
+    AssertLockHeld(m_mutex);
+    std::unordered_set<NodeId> sent_nodes;
+    for (const auto& [tx, state] : m_transactions) {
+        Assert(tx != nullptr);
+
+        size_t num_confirmed{0};
+        NodeClock::time_point last_picked{};
+        NodeClock::time_point last_confirmed{};
+        for (const auto& send_status : state.send_statuses) {
+            const auto [_, inserted]{sent_nodes.insert(send_status.nodeid)};
+            Assert(inserted);
+            last_picked = std::max(last_picked, send_status.picked);
+            if (send_status.confirmed.has_value()) {
+                ++num_confirmed;
+                last_confirmed = std::max(last_confirmed, *send_status.confirmed);
+            }
+        }
+
+        const Priority p{DerivePriority(state.send_statuses)};
+        Assert(p.num_picked == state.send_statuses.size());
+        Assert(p.last_picked == last_picked);
+        Assert(p.num_confirmed == num_confirmed);
+        Assert(p.last_confirmed == last_confirmed);
+    }
 }
