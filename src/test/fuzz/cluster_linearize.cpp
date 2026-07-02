@@ -617,9 +617,15 @@ FUZZ_TARGET(clusterlin_depgraph_sim)
                 break;
             } else if (command-- == 0) {
                 // Compact.
+                const DepGraph<TestBitSet> real_before{real};
+                const auto position_range_before{real.PositionRange()};
+                const auto dependency_count_before{real.CountDependencies()};
                 const size_t mem_before{real.DynamicMemoryUsage()};
                 real.Compact();
                 const size_t mem_after{real.DynamicMemoryUsage()};
+                assert(real.PositionRange() == position_range_before);
+                assert(real.CountDependencies() == dependency_count_before);
+                assert(real == real_before);
                 assert(real.PositionRange() < last_compaction_pos ? mem_after < mem_before : mem_after <= mem_before);
                 last_compaction_pos = real.PositionRange();
                 break;
