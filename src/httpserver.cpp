@@ -352,6 +352,8 @@ bool HTTPHeaders::Read(util::LineReader& reader)
         if (key.empty()) throw HTTPParseError("Empty HTTP header name");
 
         Write(std::string(key), std::move(value));
+        Assume(!m_headers.empty());
+        Assume(m_headers.back().first == key);
     }
 
     return false;
