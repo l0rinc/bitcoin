@@ -9,6 +9,7 @@
 #include <streams.h>
 #include <test/util/random.h>
 #include <test/util/txmempool.h>
+#include <util/check.h>
 
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
@@ -161,6 +162,23 @@ BOOST_AUTO_TEST_CASE(SimpleRoundTripTest)
         BOOST_CHECK_EQUAL(block.hashMerkleRoot.ToString(), BlockMerkleRoot(block3, &mutated).ToString());
         BOOST_CHECK(!mutated);
     }
+}
+
+BOOST_AUTO_TEST_CASE(HeaderAndShortIDsRejectsInvalidBlockTxRefs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+    auto rand_ctx(FastRandomContext(uint256{42}));
+
+    CBlock empty_block;
+    BOOST_CHECK_THROW(CBlockHeaderAndShortTxIDs(empty_block, rand_ctx.rand64()), NonFatalCheckError);
+
+    CBlock resized_block;
+    resized_block.vtx.resize(1);
+    BOOST_CHECK_THROW(CBlockHeaderAndShortTxIDs(resized_block, rand_ctx.rand64()), NonFatalCheckError);
+
+    resized_block.vtx[0] = MakeTransactionRef(BuildTransactionTestCase());
+    resized_block.vtx.resize(2);
+    BOOST_CHECK_THROW(CBlockHeaderAndShortTxIDs(resized_block, rand_ctx.rand64()), NonFatalCheckError);
 }
 
 class TestHeaderAndShortIDs {
