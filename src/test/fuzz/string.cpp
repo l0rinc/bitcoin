@@ -33,8 +33,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <ios>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using common::AmountErrMsg;
@@ -43,6 +45,7 @@ using common::FeeModeFromString;
 using common::ResolveErrMsg;
 using util::ContainsNoNUL;
 using util::Join;
+using util::LineReader;
 using util::RemovePrefix;
 using util::Split;
 using util::SplitString;
@@ -156,6 +159,56 @@ FUZZ_TARGET(string)
 
         const auto any_split{SplitString(random_string_1, random_string_2)};
         assert(any_split.size() >= 1);
+    }
+    {
+        const std::string line_buffer{fuzzed_data_provider.ConsumeRandomLengthString(128)};
+        const size_t max_line_length{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 64)};
+        LineReader reader{line_buffer, max_line_length};
+        const std::string_view buffer_view{line_buffer};
+
+        const auto newline_pos{buffer_view.find('\n')};
+        const bool read_line_should_throw{newline_pos == std::string_view::npos ?
+            buffer_view.size() > max_line_length :
+            newline_pos > max_line_length};
+
+        try {
+            const std::optional<std::string_view> line{reader.ReadLine()};
+            assert(!read_line_should_throw);
+            if (newline_pos == std::string_view::npos) {
+                assert(!line);
+                assert(reader.Consumed() == 0);
+                assert(reader.Remaining() == buffer_view.size());
+            } else {
+                std::string_view expected_line{buffer_view.substr(0, newline_pos)};
+                expected_line = util::RemoveSuffixView(expected_line, "\r");
+                assert(line.has_value());
+                assert(*line == expected_line);
+                assert(reader.Consumed() == newline_pos + 1);
+                assert(reader.Remaining() == buffer_view.size() - reader.Consumed());
+            }
+        } catch (const std::runtime_error& e) {
+            assert(std::string_view{e.what()} == "max_line_length exceeded by LineReader");
+            assert(read_line_should_throw);
+            assert(reader.Consumed() == 0);
+            assert(reader.Remaining() == buffer_view.size());
+        }
+
+        const size_t consumed_before{reader.Consumed()};
+        const size_t remaining_before{reader.Remaining()};
+        const size_t read_length{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, buffer_view.size() + 2)};
+        try {
+            const std::string_view chunk{reader.ReadLength(read_length)};
+            assert(read_length <= remaining_before);
+            assert(chunk == buffer_view.substr(consumed_before, read_length));
+            assert(reader.Consumed() == consumed_before + read_length);
+            assert(reader.Remaining() == remaining_before - read_length);
+        } catch (const std::runtime_error& e) {
+            assert(std::string_view{e.what()} == "Not enough data in buffer");
+            assert(read_length > remaining_before);
+            assert(reader.Consumed() == consumed_before);
+            assert(reader.Remaining() == remaining_before);
+        }
+        assert(reader.Consumed() + reader.Remaining() == buffer_view.size());
     }
     {
         (void)Untranslated(random_string_1);
