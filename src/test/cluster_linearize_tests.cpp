@@ -576,6 +576,28 @@ BOOST_AUTO_TEST_CASE(depgraph_count_dependencies_uses_reduced_edges)
     BOOST_CHECK_EQUAL(depgraph.CountDependencies(), 1U);
 }
 
+BOOST_AUTO_TEST_CASE(depgraph_compact_has_no_observable_effect)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto first{depgraph.AddTransaction(FeeFrac{1, 10})};
+    const auto removed{depgraph.AddTransaction(FeeFrac{2, 10})};
+    const auto child{depgraph.AddTransaction(FeeFrac{3, 10})};
+    depgraph.AddDependencies(TestBitSet::Singleton(first), child);
+    depgraph.RemoveTransactions(TestBitSet::Singleton(removed));
+    SanityCheck(depgraph);
+
+    const DepGraph<TestBitSet> before{depgraph};
+    const auto position_range_before{depgraph.PositionRange()};
+    const auto dependency_count_before{depgraph.CountDependencies()};
+
+    depgraph.Compact();
+
+    BOOST_CHECK(depgraph == before);
+    BOOST_CHECK_EQUAL(depgraph.PositionRange(), position_range_before);
+    BOOST_CHECK_EQUAL(depgraph.CountDependencies(), dependency_count_before);
+    SanityCheck(depgraph);
+}
+
 BOOST_AUTO_TEST_CASE(chunk_linearization_merges_higher_rate_suffix)
 {
     DepGraph<TestBitSet> depgraph;
