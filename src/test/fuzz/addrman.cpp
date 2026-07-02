@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <ctime>
 #include <ios>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -120,6 +121,75 @@ void FillAddrman(AddrMan& addrman, FuzzedDataProvider& fuzzed_data_provider)
     }
 }
 
+void AssertEntriesMatchSizes(const AddrMan& addrman)
+{
+    struct EntryStats {
+        size_t new_occurrences{0};
+        size_t tried_occurrences{0};
+        Network network{NET_UNROUTABLE};
+    };
+
+    const auto new_entries{addrman.GetEntries(/*from_tried=*/false)};
+    const auto tried_entries{addrman.GetEntries(/*from_tried=*/true)};
+    std::map<CService, EntryStats> stats;
+    std::map<Network, std::pair<size_t, size_t>> network_counts;
+
+    for (const auto& [info, position] : new_entries) {
+        assert(!position.tried);
+        assert(!info.fInTried);
+        assert(info.IsValid());
+        assert(position.bucket >= 0 && position.bucket < ADDRMAN_NEW_BUCKET_COUNT);
+        assert(position.position >= 0 && position.position < ADDRMAN_BUCKET_SIZE);
+        assert(position.multiplicity == info.nRefCount);
+        assert(position.multiplicity >= 1);
+        assert(position.multiplicity <= ADDRMAN_NEW_BUCKETS_PER_ADDRESS);
+        auto& entry_stats{stats[static_cast<const CService&>(info)]};
+        ++entry_stats.new_occurrences;
+        entry_stats.network = info.GetNetwork();
+    }
+
+    for (const auto& [info, position] : tried_entries) {
+        assert(position.tried);
+        assert(info.fInTried);
+        assert(info.IsValid());
+        assert(position.bucket >= 0 && position.bucket < ADDRMAN_TRIED_BUCKET_COUNT);
+        assert(position.position >= 0 && position.position < ADDRMAN_BUCKET_SIZE);
+        assert(position.multiplicity == 1);
+        auto& entry_stats{stats[static_cast<const CService&>(info)]};
+        ++entry_stats.tried_occurrences;
+        entry_stats.network = info.GetNetwork();
+    }
+
+    size_t new_unique{0};
+    size_t tried_unique{0};
+    for (const auto& [service, entry_stats] : stats) {
+        assert(entry_stats.new_occurrences == 0 || entry_stats.tried_occurrences == 0);
+        if (entry_stats.new_occurrences > 0) {
+            ++new_unique;
+            ++network_counts[entry_stats.network].first;
+        }
+        if (entry_stats.tried_occurrences > 0) {
+            ++tried_unique;
+            ++network_counts[entry_stats.network].second;
+        }
+    }
+
+    for (const auto& [info, position] : new_entries) {
+        assert(stats.at(static_cast<const CService&>(info)).new_occurrences == static_cast<size_t>(position.multiplicity));
+    }
+    for (const auto& [info, _] : tried_entries) {
+        assert(stats.at(static_cast<const CService&>(info)).tried_occurrences == 1);
+    }
+
+    assert(new_unique == addrman.Size(/*net=*/std::nullopt, /*in_new=*/true));
+    assert(tried_unique == addrman.Size(/*net=*/std::nullopt, /*in_new=*/false));
+    assert(new_unique + tried_unique == addrman.Size());
+    for (const auto network : ALL_NETWORKS) {
+        assert(network_counts[network].first == addrman.Size(network, /*in_new=*/true));
+        assert(network_counts[network].second == addrman.Size(network, /*in_new=*/false));
+    }
+}
+
 FUZZ_TARGET(addrman, .init = initialize_addrman)
 {
     SeedRandomStateForTest(SeedRand::ZEROS);
@@ -178,6 +248,7 @@ FUZZ_TARGET(addrman, .init = initialize_addrman)
             });
     }
     const AddrMan& const_addr_man{addr_man};
+    AssertEntriesMatchSizes(const_addr_man);
     std::optional<Network> network;
     if (fuzzed_data_provider.ConsumeBool()) {
         network = fuzzed_data_provider.PickValueInArray(ALL_NETWORKS);
