@@ -13,6 +13,7 @@
 #include <test/fuzz/util.h>
 #include <test/util/setup_common.h>
 #include <util/chaintype.h>
+#include <util/check.h>
 
 #include <cassert>
 #include <cstdint>
@@ -68,6 +69,10 @@ FUZZ_TARGET(signet, .init = initialize_signet)
     if (!block) {
         return;
     }
+    for (const auto& tx : block->vtx) {
+        Assert(tx != nullptr);
+    }
+
     const auto& consensus{Params().GetConsensus()};
     const CScript consensus_challenge{consensus.signet_challenge.begin(), consensus.signet_challenge.end()};
     const std::optional<SignetTxs> consensus_txs{SignetTxs::Create(*block, consensus_challenge)};
