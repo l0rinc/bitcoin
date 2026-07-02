@@ -541,15 +541,18 @@ static const uint64_t MAX_OUTPUTS_PER_BLOCK{MAX_BLOCK_WEIGHT / MIN_TRANSACTION_O
 
 const Coin& AccessByTxid(const CCoinsViewCache& view, const Txid& txid)
 {
+    const size_t dirty_count{view.GetDirtyCount()};
     COutPoint iter(txid, 0);
     while (iter.n < MAX_OUTPUTS_PER_BLOCK) {
         const Coin& alternate = view.AccessCoin(iter);
         if (!alternate.IsSpent()) {
             Assume(view.HaveCoin(iter));
+            Assume(view.GetDirtyCount() == dirty_count);
             return alternate;
         }
         ++iter.n;
     }
+    Assume(view.GetDirtyCount() == dirty_count);
     return coinEmpty;
 }
 
