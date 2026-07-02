@@ -6,6 +6,7 @@
 #include <test/util/common.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
+#include <util/check.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -146,6 +147,18 @@ BOOST_AUTO_TEST_CASE(merkle_test)
     }
 }
 
+BOOST_AUTO_TEST_CASE(merkle_null_tx_ref_asserts)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+
+    CBlock block;
+    block.vtx.resize(2);
+    block.vtx[0] = MakeTransactionRef(CMutableTransaction{});
+
+    BOOST_CHECK_THROW(BlockMerkleRoot(block), NonFatalCheckError);
+    BOOST_CHECK_THROW(BlockWitnessMerkleRoot(block), NonFatalCheckError);
+    BOOST_CHECK_THROW(TransactionMerklePath(block, 0), NonFatalCheckError);
+}
 
 BOOST_AUTO_TEST_CASE(merkle_test_empty_block)
 {
