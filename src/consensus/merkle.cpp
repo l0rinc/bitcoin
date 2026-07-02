@@ -63,8 +63,16 @@ uint256 ComputeMerkleRoot(std::vector<uint256> hashes, bool* mutated) {
 }
 
 
+static void AssertBlockTransactions(const CBlock& block)
+{
+    for (const auto& tx : block.vtx) {
+        Assert(tx != nullptr);
+    }
+}
+
 uint256 BlockMerkleRoot(const CBlock& block, bool* mutated)
 {
+    AssertBlockTransactions(block);
     std::vector<uint256> leaves;
     leaves.reserve((block.vtx.size() + 1) & ~1ULL); // capacity rounded up to even
     for (size_t s = 0; s < block.vtx.size(); s++) {
@@ -75,6 +83,7 @@ uint256 BlockMerkleRoot(const CBlock& block, bool* mutated)
 
 uint256 BlockWitnessMerkleRoot(const CBlock& block)
 {
+    AssertBlockTransactions(block);
     std::vector<uint256> leaves;
     leaves.reserve((block.vtx.size() + 1) & ~1ULL); // capacity rounded up to even
     leaves.emplace_back(); // The witness hash of the coinbase is 0.
@@ -171,6 +180,7 @@ static std::vector<uint256> ComputeMerklePath(const std::vector<uint256>& leaves
 
 std::vector<uint256> TransactionMerklePath(const CBlock& block, uint32_t position)
 {
+    AssertBlockTransactions(block);
     std::vector<uint256> leaves;
     leaves.resize(block.vtx.size());
     for (size_t s = 0; s < block.vtx.size(); s++) {
