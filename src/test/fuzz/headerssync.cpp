@@ -67,7 +67,7 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
 
     const HeadersSyncParams params{
         .commitment_period = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, Params().HeadersSync().commitment_period * 2),
-        .redownload_buffer_size = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, Params().HeadersSync().redownload_buffer_size * 2),
+        .redownload_buffer_size = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, Params().HeadersSync().redownload_buffer_size * 2),
     };
     arith_uint256 min_work{UintToArith256(ConsumeUInt256(fuzzed_data_provider))};
     FuzzedHeadersSyncState headers_sync(
@@ -109,8 +109,14 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
         const auto previous_state{headers_sync.GetState()};
         auto result = headers_sync.ProcessNextHeaders(headers, fuzzed_data_provider.ConsumeBool());
         requested_more = result.request_more;
+        const auto current_state{headers_sync.GetState()};
+        assert(previous_state == HeadersSyncState::State::PRESYNC || previous_state == HeadersSyncState::State::REDOWNLOAD);
+        assert(current_state == HeadersSyncState::State::FINAL || current_state == previous_state ||
+               (previous_state == HeadersSyncState::State::PRESYNC && current_state == HeadersSyncState::State::REDOWNLOAD));
+        assert(result.success || result.pow_validated_headers.empty());
+        assert(result.pow_validated_headers.empty() || previous_state == HeadersSyncState::State::REDOWNLOAD);
         assert(!result.request_more || result.success);
-        assert((headers_sync.GetState() != HeadersSyncState::State::FINAL) == result.request_more);
+        assert((current_state != HeadersSyncState::State::FINAL) == result.request_more);
 
         for (const CBlockHeader& pow_validated_header : result.pow_validated_headers) {
             assert(pow_validated_header.hashPrevBlock == next_pow_validated_prev);
@@ -119,22 +125,22 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
 
         if (result.request_more) {
             assert(result.success);
-            assert(headers_sync.GetState() != HeadersSyncState::State::FINAL);
+            assert(current_state != HeadersSyncState::State::FINAL);
             const CBlockLocator locator{headers_sync.NextHeadersRequestLocator()};
             assert(!locator.IsNull());
             assert(locator.vHave.size() >= 2);
             assert(locator.vHave.back() == genesis_hash);
-            if (headers_sync.GetState() == HeadersSyncState::State::PRESYNC) {
+            if (current_state == HeadersSyncState::State::PRESYNC) {
                 assert(locator.vHave.front() == headers.back().GetHash());
             } else {
-                assert(headers_sync.GetState() == HeadersSyncState::State::REDOWNLOAD);
+                assert(current_state == HeadersSyncState::State::REDOWNLOAD);
                 assert(locator.vHave.front() == (previous_state == HeadersSyncState::State::PRESYNC ? genesis_hash : headers.back().GetHash()));
             }
 
             if (presync) {
                 all_headers.insert(all_headers.cend(), headers.cbegin(), headers.cend());
 
-                if (headers_sync.GetState() == HeadersSyncState::State::REDOWNLOAD) {
+                if (current_state == HeadersSyncState::State::REDOWNLOAD) {
                     presync = false;
                     redownloaded_it = all_headers.cbegin();
 
