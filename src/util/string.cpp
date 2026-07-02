@@ -4,6 +4,8 @@
 
 #include <util/string.h>
 
+#include <util/check.h>
+
 #include <iterator>
 #include <memory>
 #include <regex>
@@ -38,7 +40,9 @@ std::optional<std::string_view> LineReader::ReadLine()
         if (c == '\n') {
             const std::string_view untrimmed_line(reinterpret_cast<const char*>(std::to_address(line_start)), count);
             std::string_view line = RemoveSuffixView(untrimmed_line, "\n");
-            return RemoveSuffixView(line, "\r");
+            line = RemoveSuffixView(line, "\r");
+            Assume(line.size() <= max_line_length);
+            return line;
         }
         // If the character we just consumed gives us a line length greater
         // than max_line_length, and we are not at the end of the line (or buffer) yet,
@@ -61,8 +65,11 @@ std::string_view LineReader::ReadLength(size_t len)
 {
     if (len == 0) return {};
     if (Remaining() < len) throw std::runtime_error("Not enough data in buffer");
+    const size_t consumed_before{Consumed()};
     std::string_view out(reinterpret_cast<const char*>(std::to_address(it)), len);
     it += len;
+    Assume(out.size() == len);
+    Assume(Consumed() == consumed_before + len);
     return out;
 }
 
