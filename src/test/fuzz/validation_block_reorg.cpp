@@ -59,6 +59,7 @@ struct ChainEvent {
     uint256 prev_hash;
     int height;
     int fork_height{-1};
+    std::vector<uint256> locator;
 };
 
 struct TipEvent {
@@ -97,6 +98,8 @@ struct ValidationEventRecorder final : public CValidationInterface {
             pindex->GetBlockHash(),
             pindex->pprev ? pindex->pprev->GetBlockHash() : uint256{},
             pindex->nHeight,
+            -1,
+            {},
         });
     }
 
@@ -113,6 +116,8 @@ struct ValidationEventRecorder final : public CValidationInterface {
             pindex->GetBlockHash(),
             pindex->pprev->GetBlockHash(),
             pindex->nHeight,
+            -1,
+            {},
         });
     }
 
@@ -130,6 +135,7 @@ struct ValidationEventRecorder final : public CValidationInterface {
             pindexFork ? pindexFork->GetBlockHash() : uint256{},
             pindexNew->nHeight,
             pindexFork ? pindexFork->nHeight : -1,
+            {},
         });
     }
 
@@ -154,6 +160,8 @@ struct ValidationEventRecorder final : public CValidationInterface {
             locator_tip->GetBlockHash(),
             {},
             locator_tip->nHeight,
+            -1,
+            locator.vHave,
         });
     }
 
@@ -210,6 +218,21 @@ struct ValidationEventRecorder final : public CValidationInterface {
                 assert(event.type == ChainEventType::FLUSHED);
                 assert(event.hash == m_expected_tip);
                 assert(event.height == m_expected_height);
+                assert(!event.locator.empty());
+                LOCK(chainman.GetMutex());
+                const CBlockIndex* flush_tip{chainman.m_blockman.LookupBlockIndex(m_expected_tip)};
+                assert(flush_tip);
+                const CBlockIndex* previous_locator{nullptr};
+                for (const uint256& locator_hash : event.locator) {
+                    const CBlockIndex* locator_index{chainman.m_blockman.LookupBlockIndex(locator_hash)};
+                    assert(locator_index);
+                    assert(flush_tip->GetAncestor(locator_index->nHeight) == locator_index);
+                    if (previous_locator) {
+                        assert(locator_index->nHeight < previous_locator->nHeight);
+                    }
+                    previous_locator = locator_index;
+                }
+                assert(previous_locator && previous_locator->nHeight == 0);
             }
             consume_active_tip();
         }

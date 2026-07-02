@@ -10,11 +10,34 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <optional>
+
 using kernel::ChainstateRole;
 
 // Taken from validation.cpp
 static constexpr auto DATABASE_WRITE_INTERVAL_MIN{50min};
 static constexpr auto DATABASE_WRITE_INTERVAL_MAX{70min};
+
+static void CheckLocatorForTip(const CBlockLocator& locator, const CBlockIndex& tip, const ChainstateManager& chainman)
+{
+    BOOST_REQUIRE(!locator.IsNull());
+    BOOST_REQUIRE(!locator.vHave.empty());
+    BOOST_CHECK(locator.vHave.front() == tip.GetBlockHash());
+
+    LOCK(::cs_main);
+    const CBlockIndex* previous_locator{nullptr};
+    for (const uint256& locator_hash : locator.vHave) {
+        const CBlockIndex* locator_index{chainman.m_blockman.LookupBlockIndex(locator_hash)};
+        BOOST_REQUIRE(locator_index);
+        BOOST_CHECK_EQUAL(tip.GetAncestor(locator_index->nHeight), locator_index);
+        if (previous_locator) {
+            BOOST_CHECK_LT(locator_index->nHeight, previous_locator->nHeight);
+        }
+        previous_locator = locator_index;
+    }
+    BOOST_REQUIRE(previous_locator);
+    BOOST_CHECK_EQUAL(previous_locator->nHeight, 0);
+}
 
 BOOST_AUTO_TEST_SUITE(chainstate_write_tests)
 
@@ -22,13 +45,11 @@ BOOST_FIXTURE_TEST_CASE(chainstate_write_interval, TestingSetup)
 {
     struct TestSubscriber final : CValidationInterface {
         bool m_did_flush{false};
-        uint256 m_flushed_hash;
+        std::optional<CBlockLocator> m_locator;
         void ChainStateFlushed(const ChainstateRole&, const CBlockLocator& locator) override
         {
-            BOOST_REQUIRE(!locator.IsNull());
-            BOOST_REQUIRE(!locator.vHave.empty());
             m_did_flush = true;
-            m_flushed_hash = locator.vHave.front();
+            m_locator = locator;
         }
     };
 
@@ -53,7 +74,10 @@ BOOST_FIXTURE_TEST_CASE(chainstate_write_interval, TestingSetup)
     chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC);
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
     BOOST_CHECK(sub->m_did_flush);
-    BOOST_CHECK(sub->m_flushed_hash == WITH_LOCK(::cs_main, return chainstate.m_chain.Tip()->GetBlockHash()));
+    BOOST_REQUIRE(sub->m_locator);
+    const CBlockIndex* tip{WITH_LOCK(::cs_main, return chainstate.m_chain.Tip())};
+    BOOST_REQUIRE(tip);
+    CheckLocatorForTip(*sub->m_locator, *tip, *Assert(m_node.chainman));
 }
 
 // Test that we do PERIODIC flushes inside ActivateBestChain.
@@ -65,15 +89,11 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
     {
         const CBlockIndex* m_tip{nullptr};
         const CBlockIndex* m_flushed_at_block{nullptr};
-        uint256 m_flushed_hash;
+        std::optional<CBlockLocator> m_locator;
         void ChainStateFlushed(const ChainstateRole&, const CBlockLocator& locator) override
         {
-            BOOST_REQUIRE(!locator.IsNull());
-            BOOST_REQUIRE(!locator.vHave.empty());
-            BOOST_REQUIRE(m_tip);
-            BOOST_CHECK(locator.vHave.front() == m_tip->GetBlockHash());
             m_flushed_at_block = m_tip;
-            m_flushed_hash = locator.vHave.front();
+            m_locator = locator;
         }
         void UpdatedBlockTip(const CBlockIndex* block_index, const CBlockIndex*, bool) override {
             m_tip = block_index;
@@ -113,9 +133,12 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
     // second block from tip, since FlushStateToDisk is called with PERIODIC
     // inside the outer loop.
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    BOOST_REQUIRE(sub->m_flushed_at_block);
+    BOOST_REQUIRE(sub->m_locator);
+    CheckLocatorForTip(*sub->m_locator, *sub->m_flushed_at_block, *Assert(m_node.chainman));
     BOOST_CHECK_EQUAL(sub->m_flushed_at_block, second_from_tip);
     BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return chainstate.GetLastFlushedBlock()), second_from_tip);
-    BOOST_CHECK(sub->m_flushed_hash == second_from_tip->GetBlockHash());
+    BOOST_CHECK(sub->m_locator->vHave.front() == second_from_tip->GetBlockHash());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
