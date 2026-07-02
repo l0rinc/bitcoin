@@ -27,6 +27,7 @@
 #include <cstdio>
 #include <exception>
 #include <functional>
+#include <ios>
 #include <map>
 #include <memory>
 #include <set>
@@ -149,13 +150,16 @@ bool LoadMempool(CTxMemPool& pool, const fs::path& load_path, Chainstate& active
                 if (pool.get(txid) != nullptr) pool.AddUnbroadcastTx(txid);
             }
         }
-    } catch (const std::exception& e) {
+    } catch (const std::ios_base::failure& e) {
         LogInfo("Failed to deserialize mempool data on file: %s. Continuing anyway.\n", e.what());
         return false;
     }
 
     LogInfo("Imported mempool transactions from file: %i succeeded, %i failed, %i expired, %i already there, %i waiting for initial broadcast\n", count, failed, expired, already_there, unbroadcast);
     if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        for (const auto& txid : pool.GetUnbroadcastTxs()) {
+            Assume(pool.exists(txid));
+        }
         if (!opts.apply_unbroadcast_set) {
             Assume(pool.GetUnbroadcastTxs() == unbroadcast_before);
         }
