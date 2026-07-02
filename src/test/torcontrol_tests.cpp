@@ -5,14 +5,25 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <test/util/torcontrol.h>
+#include <torcontrol.h>
+
+#include <cstddef>
 #include <map>
 #include <string>
 #include <utility>
-
+#include <vector>
 
 std::pair<std::string, std::string> SplitTorReplyLine(const std::string& s);
 std::map<std::string, std::string> ParseTorReplyMapping(const std::string& s);
 
+namespace {
+std::vector<std::byte> ToBytes(std::string_view str)
+{
+    const auto* data{reinterpret_cast<const std::byte*>(str.data())};
+    return {data, data + str.size()};
+}
+} // namespace
 
 BOOST_AUTO_TEST_SUITE(torcontrol_tests)
 
@@ -197,6 +208,39 @@ BOOST_AUTO_TEST_CASE(util_ParseTorReplyMapping)
     CheckParseTorReplyMapping("MORE  ARGS", {});
     CheckParseTorReplyMapping("EVEN more=ARGS", {});
     CheckParseTorReplyMapping("EVEN+more ARGS", {});
+}
+
+BOOST_AUTO_TEST_CASE(torcontrol_process_buffer_preserves_suffix)
+{
+    CThreadInterrupt interrupt;
+    TorControlConnection conn{interrupt};
+
+    std::vector<TorControlReply> replies;
+    for (int i{0}; i < 2; ++i) {
+        TorControlConnectionTest::ReplyHandlers(conn).emplace_back(
+            [&](TorControlConnection&, const TorControlReply& reply) {
+                replies.push_back(reply);
+            });
+    }
+
+    constexpr std::string_view first_reply{"250-PROTOCOLINFO 1\r\n250 OK\r\n"};
+    constexpr std::string_view second_reply{"250 AUTHENTICATE\r\n"};
+    constexpr std::string_view suffix{"250-AUTH METHODS=NULL"};
+    TorControlConnectionTest::ReceiveBuffer(conn) = ToBytes(std::string{first_reply} + std::string{second_reply} + std::string{suffix});
+
+    BOOST_CHECK(TorControlConnectionTest::ProcessBuffer(conn));
+
+    BOOST_REQUIRE_EQUAL(replies.size(), 2U);
+    BOOST_CHECK_EQUAL(replies[0].code, TOR_REPLY_OK);
+    BOOST_TEST(replies[0].lines == std::vector<std::string>({"PROTOCOLINFO 1", "OK"}));
+    BOOST_CHECK_EQUAL(replies[1].code, TOR_REPLY_OK);
+    BOOST_TEST(replies[1].lines == std::vector<std::string>({"AUTHENTICATE"}));
+    BOOST_CHECK(TorControlConnectionTest::Message(conn).lines.empty());
+    BOOST_CHECK(TorControlConnectionTest::ReceiveBuffer(conn) == ToBytes(suffix));
+
+    const std::vector<std::byte> partial_before{TorControlConnectionTest::ReceiveBuffer(conn)};
+    BOOST_CHECK(TorControlConnectionTest::ProcessBuffer(conn));
+    BOOST_CHECK(TorControlConnectionTest::ReceiveBuffer(conn) == partial_before);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
