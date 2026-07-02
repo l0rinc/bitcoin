@@ -3,9 +3,11 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <core_io.h>
+#include <core_memusage.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <uint256.h>
+#include <util/check.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -102,6 +104,17 @@ BOOST_AUTO_TEST_CASE(decode_hex_block_failure_clears_output)
     block = MakeNonNullBlock();
     BOOST_CHECK(!DecodeHexBlk(block, "00"));
     CheckNullBlock(block);
+}
+
+BOOST_AUTO_TEST_CASE(block_helpers_reject_null_tx_refs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+
+    CBlock block;
+    block.vtx.resize(1);
+
+    BOOST_CHECK_THROW(block.ToString(), NonFatalCheckError);
+    BOOST_CHECK_THROW(RecursiveDynamicUsage(block), NonFatalCheckError);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
