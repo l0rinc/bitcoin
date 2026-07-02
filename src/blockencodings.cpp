@@ -19,12 +19,20 @@
 #include <algorithm>
 #include <unordered_map>
 
+static size_t ShortTxIDCountForBlock(const CBlock& block)
+{
+    Assert(!block.vtx.empty());
+    return block.vtx.size() - 1;
+}
+
 CBlockHeaderAndShortTxIDs::CBlockHeaderAndShortTxIDs(const CBlock& block, uint64_t nonce)
     : nonce(nonce),
-      shorttxids(block.vtx.size() - 1),
+      shorttxids(ShortTxIDCountForBlock(block)),
       prefilledtxn(1),
       header(block)
 {
+    Assert(std::all_of(block.vtx.cbegin(), block.vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
+
     FillShortTxIDSelector();
     // TODO: Use our mempool prior to block acceptance to predictively fill more than just the coinbase
     prefilledtxn[0] = {0, block.vtx[0]};
