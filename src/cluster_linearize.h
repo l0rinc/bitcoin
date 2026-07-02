@@ -458,8 +458,10 @@ struct SetInfo
 template<typename SetType>
 std::vector<SetInfo<SetType>> ChunkLinearizationInfo(const DepGraph<SetType>& depgraph, std::span<const DepGraphIndex> linearization) noexcept
 {
+    Assume(linearization.size() == depgraph.TxCount());
     std::vector<SetInfo<SetType>> ret;
     for (DepGraphIndex i : linearization) {
+        Assume(depgraph.Positions()[i]);
         /** The new chunk to be added, initially a singleton. */
         SetInfo<SetType> new_chunk(depgraph, i);
         // As long as the new chunk has a higher feerate than the last chunk so far, absorb it.
@@ -480,8 +482,10 @@ std::vector<SetInfo<SetType>> ChunkLinearizationInfo(const DepGraph<SetType>& de
 template<typename SetType>
 std::vector<FeeFrac> ChunkLinearization(const DepGraph<SetType>& depgraph, std::span<const DepGraphIndex> linearization) noexcept
 {
+    Assume(linearization.size() == depgraph.TxCount());
     std::vector<FeeFrac> ret;
     for (DepGraphIndex i : linearization) {
+        Assume(depgraph.Positions()[i]);
         /** The new chunk to be added, initially a singleton. */
         auto new_chunk = depgraph.FeeRate(i);
         // As long as the new chunk has a higher feerate than the last chunk so far, absorb it.
