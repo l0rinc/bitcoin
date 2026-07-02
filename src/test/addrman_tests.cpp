@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <unordered_set>
@@ -50,6 +51,79 @@ static CService ResolveService(const std::string& ip, uint16_t port = 0)
     const std::optional<CService> serv{Lookup(ip, port, false)};
     BOOST_CHECK_MESSAGE(serv.has_value(), strprintf("failed to resolve: %s:%i", ip, port));
     return serv.value_or(CService{});
+}
+
+static void CheckGetEntriesContracts(const AddrMan& addrman)
+{
+    struct EntryStats {
+        size_t new_occurrences{0};
+        size_t tried_occurrences{0};
+        Network network{NET_UNROUTABLE};
+    };
+
+    const auto new_entries{addrman.GetEntries(/*from_tried=*/false)};
+    const auto tried_entries{addrman.GetEntries(/*from_tried=*/true)};
+    std::map<CService, EntryStats> stats;
+    std::map<Network, std::pair<size_t, size_t>> network_counts;
+
+    for (const auto& [info, position] : new_entries) {
+        BOOST_CHECK(!position.tried);
+        BOOST_CHECK(!info.fInTried);
+        BOOST_CHECK(info.IsValid());
+        BOOST_CHECK_GE(position.bucket, 0);
+        BOOST_CHECK_LT(position.bucket, ADDRMAN_NEW_BUCKET_COUNT);
+        BOOST_CHECK_GE(position.position, 0);
+        BOOST_CHECK_LT(position.position, ADDRMAN_BUCKET_SIZE);
+        BOOST_CHECK_EQUAL(position.multiplicity, info.nRefCount);
+        BOOST_CHECK_GE(position.multiplicity, 1);
+        BOOST_CHECK_LE(position.multiplicity, ADDRMAN_NEW_BUCKETS_PER_ADDRESS);
+        auto& entry_stats{stats[static_cast<const CService&>(info)]};
+        ++entry_stats.new_occurrences;
+        entry_stats.network = info.GetNetwork();
+    }
+
+    for (const auto& [info, position] : tried_entries) {
+        BOOST_CHECK(position.tried);
+        BOOST_CHECK(info.fInTried);
+        BOOST_CHECK(info.IsValid());
+        BOOST_CHECK_GE(position.bucket, 0);
+        BOOST_CHECK_LT(position.bucket, ADDRMAN_TRIED_BUCKET_COUNT);
+        BOOST_CHECK_GE(position.position, 0);
+        BOOST_CHECK_LT(position.position, ADDRMAN_BUCKET_SIZE);
+        BOOST_CHECK_EQUAL(position.multiplicity, 1);
+        auto& entry_stats{stats[static_cast<const CService&>(info)]};
+        ++entry_stats.tried_occurrences;
+        entry_stats.network = info.GetNetwork();
+    }
+
+    size_t new_unique{0};
+    size_t tried_unique{0};
+    for (const auto& [_, entry_stats] : stats) {
+        BOOST_CHECK(entry_stats.new_occurrences == 0 || entry_stats.tried_occurrences == 0);
+        if (entry_stats.new_occurrences > 0) {
+            ++new_unique;
+            ++network_counts[entry_stats.network].first;
+        }
+        if (entry_stats.tried_occurrences > 0) {
+            ++tried_unique;
+            ++network_counts[entry_stats.network].second;
+        }
+    }
+
+    for (const auto& [info, position] : new_entries) {
+        BOOST_CHECK_EQUAL(stats.at(static_cast<const CService&>(info)).new_occurrences, static_cast<size_t>(position.multiplicity));
+    }
+    for (const auto& [info, _] : tried_entries) {
+        BOOST_CHECK_EQUAL(stats.at(static_cast<const CService&>(info)).tried_occurrences, 1U);
+    }
+
+    BOOST_CHECK_EQUAL(new_unique, addrman.Size(/*net=*/std::nullopt, /*in_new=*/true));
+    BOOST_CHECK_EQUAL(tried_unique, addrman.Size(/*net=*/std::nullopt, /*in_new=*/false));
+    BOOST_CHECK_EQUAL(new_unique + tried_unique, addrman.Size());
+    for (const auto network : ALL_NETWORKS) {
+        BOOST_CHECK_EQUAL(network_counts[network].first, addrman.Size(network, /*in_new=*/true));
+        BOOST_CHECK_EQUAL(network_counts[network].second, addrman.Size(network, /*in_new=*/false));
+    }
 }
 
 BOOST_FIXTURE_TEST_SUITE(addrman_tests, BasicTestingSetup)
@@ -461,6 +535,7 @@ BOOST_AUTO_TEST_CASE(addrman_new_multiplicity)
     BOOST_CHECK_EQUAL(addr_pos_multi.multiplicity, 8U);
     // multiplicity doesn't affect size
     BOOST_CHECK_EQUAL(addrman->Size(), 1U);
+    CheckGetEntriesContracts(*addrman);
 }
 
 BOOST_AUTO_TEST_CASE(addrman_tried_collisions)
@@ -1331,6 +1406,7 @@ BOOST_AUTO_TEST_CASE(addrman_size)
     BOOST_CHECK_EQUAL(addrman->Size(/*net=*/NET_I2P, /*in_new=*/true), 1U);
     BOOST_CHECK_EQUAL(addrman->Size(/*net=*/std::nullopt, /*in_new=*/true), 2U);
     BOOST_CHECK_EQUAL(addrman->Size(/*net=*/std::nullopt, /*in_new=*/false), 1U);
+    CheckGetEntriesContracts(*addrman);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
