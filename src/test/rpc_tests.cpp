@@ -5,6 +5,7 @@
 #include <core_io.h>
 #include <interfaces/chain.h>
 #include <node/context.h>
+#include <primitives/block.h>
 #include <rpc/blockchain.h>
 #include <rpc/client.h>
 #include <rpc/protocol.h>
@@ -15,6 +16,7 @@
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <uint256.h>
+#include <util/check.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <univalue.h>
@@ -589,6 +591,20 @@ BOOST_AUTO_TEST_CASE(rpc_getblockstats_calculate_percentiles_by_weight)
     for (int64_t i = 0; i < NUM_GETBLOCKSTATS_PERCENTILES; i++) {
         BOOST_CHECK_EQUAL(result4[i], 1);
     }
+}
+
+BOOST_AUTO_TEST_CASE(block_to_json_rejects_null_tx_refs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+
+    CBlock resized_block;
+    resized_block.vtx.resize(1);
+
+    const CBlockIndex* tip{WITH_LOCK(::cs_main, return Assert(m_node.chainman)->ActiveChain().Tip();)};
+    BOOST_REQUIRE(tip);
+    BOOST_CHECK_THROW((void)blockToJSON(Assert(m_node.chainman)->m_blockman, resized_block, *tip, *tip,
+                          TxVerbosity::SHOW_TXID, Params().GetConsensus().powLimit),
+                      NonFatalCheckError);
 }
 
 // Make sure errors are triggered appropriately if parameters have the same names.
