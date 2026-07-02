@@ -12,6 +12,7 @@
 #include <streams.h>
 #include <test/fuzz/fuzz.h>
 #include <util/chaintype.h>
+#include <util/check.h>
 #include <validation.h>
 
 #include <cassert>
@@ -31,6 +32,9 @@ FUZZ_TARGET(block, .init = initialize_block)
         SpanReader{buffer} >> TX_WITH_WITNESS(block);
     } catch (const std::ios_base::failure&) {
         return;
+    }
+    for (const auto& tx : block.vtx) {
+        Assert(tx != nullptr);
     }
     const Consensus::Params& consensus_params = Params().GetConsensus();
     const uint256 block_hash{block.GetHash()};
