@@ -17,6 +17,7 @@
 #include <util/log.h>
 #include <util/task_runner.h>
 
+#include <algorithm>
 #include <cassert>
 #include <future>
 #include <memory>
@@ -185,6 +186,11 @@ static void AssumeValidTransactionInfo(const TransactionInfo& info)
     Assume(info.m_virtual_transaction_size > 0);
 }
 
+static void AssertBlockTxRefs(const CBlock& block)
+{
+    Assert(std::all_of(block.vtx.cbegin(), block.vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
+}
+
 void ValidationSignals::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlockIndex *pindexFork, bool fInitialDownload) {
     // Dependencies exist that require UpdatedBlockTip events to be delivered in the order in which
     // the chain actually updates. One way to ensure this is for the caller to invoke this signal
@@ -250,6 +256,7 @@ void ValidationSignals::BlockConnected(const ChainstateRole& role, std::shared_p
         assert(pindex->pprev);
         assert(pblock->hashPrevBlock == pindex->pprev->GetBlockHash());
     }
+    AssertBlockTxRefs(*pblock);
 
     auto log_msg = LOG_MSG("%s: block hash=%s block height=%d", __func__,
                           pblock->GetHash().ToString(),
@@ -283,6 +290,7 @@ void ValidationSignals::BlockDisconnected(std::shared_ptr<const CBlock> pblock, 
     assert(pindex->pprev);
     assert(pblock->GetHash() == pindex->GetBlockHash());
     assert(pblock->hashPrevBlock == pindex->pprev->GetBlockHash());
+    AssertBlockTxRefs(*pblock);
 
     auto log_msg = LOG_MSG("%s: block hash=%s block height=%d", __func__,
                           pblock->GetHash().ToString(),
@@ -311,6 +319,11 @@ void ValidationSignals::BlockChecked(const std::shared_ptr<const CBlock>& block,
 }
 
 void ValidationSignals::NewPoWValidBlock(const CBlockIndex *pindex, const std::shared_ptr<const CBlock> &block) {
+    assert(block);
+    assert(pindex);
+    assert(block->GetHash() == pindex->GetBlockHash());
+    AssertBlockTxRefs(*block);
+
     LOG_EVENT("%s: block hash=%s", __func__, block->GetHash().ToString());
     m_internals->Iterate([&](CValidationInterface& callbacks) { callbacks.NewPoWValidBlock(pindex, block); });
 }
