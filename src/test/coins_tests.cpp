@@ -1561,6 +1561,19 @@ BOOST_AUTO_TEST_CASE(ccoins_input_lookup_contracts)
         BOOST_CHECK_EQUAL(cache.GetDirtyCount(), std::get<1>(expected));
         BOOST_CHECK_EQUAL(cache.DynamicMemoryUsage(), std::get<2>(expected));
     };
+    auto check_access_by_txid = [&](CCoinsViewCache& view, const Txid& lookup_txid, const Coin& expected) {
+        const size_t dirty_count_before{view.GetDirtyCount()};
+        const Coin coin{AccessByTxid(view, lookup_txid)};
+        BOOST_CHECK_EQUAL(view.GetDirtyCount(), dirty_count_before);
+        BOOST_CHECK(coin == expected);
+
+        const auto cache_size{view.GetCacheSize()};
+        const auto dirty_count{view.GetDirtyCount()};
+        const Coin coin_again{AccessByTxid(view, lookup_txid)};
+        BOOST_CHECK(coin_again == coin);
+        BOOST_CHECK_EQUAL(view.GetCacheSize(), cache_size);
+        BOOST_CHECK_EQUAL(view.GetDirtyCount(), dirty_count);
+    };
 
     CMutableTransaction empty_inputs;
     const auto empty_stats{snapshot_stats()};
@@ -1596,15 +1609,20 @@ BOOST_AUTO_TEST_CASE(ccoins_input_lookup_contracts)
     BOOST_CHECK(cache.HaveInputs(CTransaction{coinbase}));
     check_stats(coinbase_stats);
 
-    BOOST_CHECK(AccessByTxid(cache, txid) == first_coin);
-    BOOST_REQUIRE(cache.SpendCoin(first));
-    BOOST_CHECK(AccessByTxid(cache, txid) == second_coin);
+    CCoinsViewCache access_by_txid_cache{&base};
+    check_access_by_txid(access_by_txid_cache, txid, first_coin);
+    BOOST_REQUIRE(access_by_txid_cache.SpendCoin(first));
+    check_access_by_txid(access_by_txid_cache, txid, second_coin);
 
     Txid empty_txid;
     do {
         empty_txid = Txid::FromUint256(m_rng.rand256());
     } while (empty_txid == txid);
+    const auto missing_cache_size{cache.GetCacheSize()};
+    const auto missing_dirty_count{cache.GetDirtyCount()};
     BOOST_CHECK(AccessByTxid(cache, empty_txid).IsSpent());
+    BOOST_CHECK_EQUAL(cache.GetCacheSize(), missing_cache_size);
+    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), missing_dirty_count);
 }
 
 BOOST_AUTO_TEST_CASE(ccoins_reset_guard)
