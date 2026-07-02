@@ -87,8 +87,10 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
 
 void RegenerateCommitments(CBlock& block, ChainstateManager& chainman)
 {
+    const int commitpos{GetWitnessCommitmentIndex(block)};
+    Assert(commitpos != NO_WITNESS_COMMITMENT);
     CMutableTransaction tx{*block.vtx.at(0)};
-    tx.vout.erase(tx.vout.begin() + GetWitnessCommitmentIndex(block));
+    tx.vout.erase(tx.vout.begin() + commitpos);
     block.vtx.at(0) = MakeTransactionRef(tx);
 
     const CBlockIndex* prev_block = WITH_LOCK(::cs_main, return chainman.m_blockman.LookupBlockIndex(block.hashPrevBlock));
