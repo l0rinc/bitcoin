@@ -430,4 +430,50 @@ BOOST_AUTO_TEST_CASE(reject_corrupt_fee_estimate_file_vectors)
     fs::remove(corrupt_path);
 }
 
+BOOST_AUTO_TEST_CASE(estimate_raw_fee_rejects_invalid_threshold)
+{
+    const fs::path version_path{m_args.GetDataDirBase() / "fee_estimator_version.dat"};
+    const fs::path estimator_data_path{m_args.GetDataDirBase() / "fee_estimator_threshold.dat"};
+    const fs::path estimator_path{m_args.GetDataDirBase() / "fee_estimator_unused.dat"};
+    const int current_version{CurrentFeesFileVersion(version_path)};
+
+    FeeStatsValues values;
+    values.feerate_avg = 1000;
+    values.tx_count = 1;
+    values.conf_avg = 1;
+    WriteEstimatorFile(estimator_data_path, current_version, {100.0, 1e99}, values);
+
+    fs::remove(estimator_path);
+    CBlockPolicyEstimator fee_estimator{estimator_path, DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
+    {
+        AutoFile in{fsbridge::fopen(estimator_data_path, "rb")};
+        BOOST_REQUIRE(!in.IsNull());
+        BOOST_REQUIRE(fee_estimator.Read(in));
+        BOOST_REQUIRE_EQUAL(in.fclose(), 0);
+    }
+    BOOST_REQUIRE_GT(fee_estimator.estimateRawFee(1, 0.0, FeeEstimateHorizon::MED_HALFLIFE).GetFeePerK(), 0);
+
+    const auto check_invalid_threshold{[&](const double threshold) {
+        EstimationResult result;
+        result.pass.start = 17;
+        result.fail.start = 19;
+        result.decay = 23;
+        result.scale = 29;
+        BOOST_CHECK(fee_estimator.estimateRawFee(1, threshold, FeeEstimateHorizon::MED_HALFLIFE, &result) == CFeeRate(0));
+        BOOST_CHECK_EQUAL(result.pass.start, 17);
+        BOOST_CHECK_EQUAL(result.fail.start, 19);
+        BOOST_CHECK_EQUAL(result.decay, 23);
+        BOOST_CHECK_EQUAL(result.scale, 29U);
+    }};
+
+    check_invalid_threshold(-std::numeric_limits<double>::infinity());
+    check_invalid_threshold(std::numeric_limits<double>::quiet_NaN());
+    check_invalid_threshold(-1.0);
+    check_invalid_threshold(1.0 + std::numeric_limits<double>::epsilon());
+    check_invalid_threshold(std::numeric_limits<double>::infinity());
+
+    fs::remove(estimator_data_path);
+    fs::remove(estimator_path);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
