@@ -334,8 +334,15 @@ BOOST_AUTO_TEST_CASE(FillBlockTooFewTransactionsClearsPartialBlock)
     BOOST_CHECK(!partial_block.IsTxAvailable(1));
     BOOST_CHECK(partial_block.IsTxAvailable(2));
 
-    CBlock rejected_block;
+    CBlock rejected_block{block};
+    rejected_block.vtx = {block.vtx[0]};
+    const uint256 rejected_block_hash{rejected_block.GetHash()};
+    const CTransactionRef rejected_block_tx{rejected_block.vtx[0]};
+
     BOOST_CHECK(partial_block.FillBlock(rejected_block, {}, /*segwit_active=*/true) == READ_STATUS_INVALID);
+    BOOST_CHECK_EQUAL(rejected_block.GetHash().ToString(), rejected_block_hash.ToString());
+    BOOST_REQUIRE_EQUAL(rejected_block.vtx.size(), 1U);
+    BOOST_CHECK(rejected_block.vtx[0] == rejected_block_tx);
     BOOST_CHECK(partial_block.header.IsNull());
     BOOST_CHECK_EQUAL(partial_block.AvailableTxCount(), 0U);
     BOOST_CHECK_EQUAL(partial_block.PrefilledCount(), 0U);
@@ -397,12 +404,12 @@ BOOST_AUTO_TEST_CASE(NonCoinbasePreforwardRTTest)
         // Wrong transaction
         {
             PartiallyDownloadedBlock tmp = partialBlock;
-            partialBlock.FillBlock(block2, {block.vtx[1]}, /*segwit_active=*/true); // Current implementation doesn't check txn here, but don't require that
+            BOOST_CHECK(partialBlock.FillBlock(block2, {block.vtx[1]}, /*segwit_active=*/true) == READ_STATUS_FAILED);
+            BOOST_CHECK(block2.vtx.empty());
             partialBlock = tmp;
         }
-        BOOST_CHECK_EQUAL(pool.get(block.vtx[2]->GetHash()).use_count(), SHARED_TX_OFFSET + 2); // +2 because of partialBlock and block2
+        BOOST_CHECK_EQUAL(pool.get(block.vtx[2]->GetHash()).use_count(), SHARED_TX_OFFSET + 1); // +1 because of partialBlock
         bool mutated;
-        BOOST_CHECK(block.hashMerkleRoot != BlockMerkleRoot(block2, &mutated));
 
         CBlock block3;
         PartiallyDownloadedBlock partialBlockCopy = partialBlock;
@@ -411,7 +418,7 @@ BOOST_AUTO_TEST_CASE(NonCoinbasePreforwardRTTest)
         BOOST_CHECK_EQUAL(block.hashMerkleRoot.ToString(), BlockMerkleRoot(block3, &mutated).ToString());
         BOOST_CHECK(!mutated);
 
-        BOOST_CHECK_EQUAL(pool.get(block.vtx[2]->GetHash()).use_count(), SHARED_TX_OFFSET + 3); // +2 because of partialBlock and block2 and block3
+        BOOST_CHECK_EQUAL(pool.get(block.vtx[2]->GetHash()).use_count(), SHARED_TX_OFFSET + 2); // +2 because of partialBlockCopy and block3
 
         txhash = block.vtx[2]->GetHash();
         block.vtx.clear();
