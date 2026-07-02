@@ -1,208 +1,274 @@
-// Copyright (c) 2025-present The Bitcoin Core developers
+// Copyright (c) 2026-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// file COPYING or https://opensource.org/license/mit/.
 
-#include <consensus/tx_check.h>
-#include <consensus/validation.h>
-#include <net.h>
-#include <primitives/transaction.h>
+#include <netaddress.h>
 #include <private_broadcast.h>
+#include <primitives/transaction.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
-#include <test/fuzz/util/net.h>
-#include <test/util/setup_common.h>
 #include <test/util/time.h>
-#include <util/overflow.h>
+#include <uint256.h>
+#include <util/check.h>
 #include <util/time.h>
 
-#include <unordered_set>
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <map>
+#include <optional>
+#include <set>
+#include <tuple>
+#include <vector>
 
-struct CTransactionRefHash {
-    size_t operator()(const CTransactionRef& tx) const
-    {
-        return static_cast<size_t>(tx->GetWitnessHash().ToUint256().GetUint64(0));
-    }
+namespace {
+constexpr NodeId MAX_NODE_ID{7};
+
+struct ModelPeer {
+    NodeId nodeid;
+    CService address;
+    NodeClock::time_point sent;
+    std::optional<NodeClock::time_point> received;
 };
 
-struct CTransactionRefComp {
-    bool operator()(const CTransactionRef& a, const CTransactionRef& b) const
-    {
-        return a->GetWitnessHash() == b->GetWitnessHash();
-    }
+struct ModelTx {
+    CTransactionRef tx;
+    NodeClock::time_point time_added;
+    std::vector<ModelPeer> peers;
 };
+
+using Model = std::map<uint256, ModelTx>;
+
+CTransactionRef MakeDummyTx(uint32_t id, size_t num_witness)
+{
+    CMutableTransaction mtx;
+    mtx.vin.resize(1);
+    mtx.vin[0].nSequence = id;
+    if (num_witness > 0) {
+        mtx.vin[0].scriptWitness = CScriptWitness{};
+        mtx.vin[0].scriptWitness.stack.resize(num_witness);
+    }
+    return MakeTransactionRef(mtx);
+}
+
+uint256 Key(const CTransactionRef& tx)
+{
+    Assert(tx != nullptr);
+    return tx->GetWitnessHash().ToUint256();
+}
+
+CService AddressForNode(NodeId nodeid)
+{
+    in_addr ipv4_addr;
+    ipv4_addr.s_addr = static_cast<uint32_t>(0x0a000001U + static_cast<uint32_t>(nodeid));
+    return CService{ipv4_addr, static_cast<uint16_t>(10000 + nodeid)};
+}
+
+std::tuple<size_t, size_t, NodeClock::time_point, NodeClock::time_point> PriorityTuple(const ModelTx& tx)
+{
+    size_t num_confirmed{0};
+    NodeClock::time_point last_picked{};
+    NodeClock::time_point last_confirmed{};
+    for (const auto& peer : tx.peers) {
+        last_picked = std::max(last_picked, peer.sent);
+        if (peer.received.has_value()) {
+            ++num_confirmed;
+            last_confirmed = std::max(last_confirmed, *peer.received);
+        }
+    }
+    return {tx.peers.size(), num_confirmed, last_picked, last_confirmed};
+}
+
+std::set<uint256> ExpectedStale(const Model& model)
+{
+    const auto now{NodeClock::now()};
+    std::set<uint256> ret;
+    for (const auto& [key, tx] : model) {
+        const auto [num_picked, num_confirmed, last_picked, last_confirmed]{PriorityTuple(tx)};
+        (void)num_picked;
+        (void)last_picked;
+        if (num_confirmed == 0) {
+            if (tx.time_added < now - PrivateBroadcast::INITIAL_STALE_DURATION) ret.insert(key);
+        } else {
+            if (last_confirmed < now - PrivateBroadcast::STALE_DURATION) ret.insert(key);
+        }
+    }
+    return ret;
+}
+
+std::optional<uint256> ExpectedTxForNode(const Model& model, NodeId nodeid)
+{
+    for (const auto& [key, tx] : model) {
+        for (const auto& peer : tx.peers) {
+            if (peer.nodeid == nodeid) return key;
+        }
+    }
+    return std::nullopt;
+}
+
+bool ExpectedConfirmedForNode(const Model& model, NodeId nodeid)
+{
+    for (const auto& [_, tx] : model) {
+        for (const auto& peer : tx.peers) {
+            if (peer.nodeid == nodeid) return peer.received.has_value();
+        }
+    }
+    return false;
+}
+
+std::optional<NodeId> PickUnassignedNode(FuzzedDataProvider& provider, const Model& model)
+{
+    std::vector<NodeId> unassigned;
+    for (NodeId nodeid{0}; nodeid <= MAX_NODE_ID; ++nodeid) {
+        if (!ExpectedTxForNode(model, nodeid).has_value()) unassigned.push_back(nodeid);
+    }
+    if (unassigned.empty()) return std::nullopt;
+    return PickValue(provider, unassigned);
+}
+
+void AssertMatchesModel(PrivateBroadcast& pb, const Model& model)
+{
+    const auto infos{pb.GetBroadcastInfo()};
+    Assert(pb.HavePendingTransactions() == !model.empty());
+    Assert(infos.size() == model.size());
+
+    std::set<uint256> seen;
+    for (const auto& info : infos) {
+        Assert(info.tx != nullptr);
+        const auto key{Key(info.tx)};
+        Assert(seen.insert(key).second);
+        const auto model_it{model.find(key)};
+        Assert(model_it != model.end());
+        const ModelTx& expected{model_it->second};
+        Assert(info.tx == expected.tx);
+        Assert(info.time_added == expected.time_added);
+        Assert(info.peers.size() == expected.peers.size());
+        for (size_t i{0}; i < info.peers.size(); ++i) {
+            Assert(info.peers[i].address == expected.peers[i].address);
+            Assert(info.peers[i].sent == expected.peers[i].sent);
+            Assert(info.peers[i].received == expected.peers[i].received);
+        }
+    }
+
+    for (NodeId nodeid{0}; nodeid <= MAX_NODE_ID; ++nodeid) {
+        const auto expected_tx{ExpectedTxForNode(model, nodeid)};
+        const auto actual_tx{pb.GetTxForNode(nodeid)};
+        Assert(actual_tx.has_value() == expected_tx.has_value());
+        if (actual_tx.has_value()) Assert(Key(*actual_tx) == *expected_tx);
+        Assert(pb.DidNodeConfirmReception(nodeid) == ExpectedConfirmedForNode(model, nodeid));
+    }
+
+    std::set<uint256> stale_actual;
+    for (const auto& tx : pb.GetStale()) stale_actual.insert(Key(tx));
+    Assert(stale_actual == ExpectedStale(model));
+}
+
+std::vector<uint256> BestPickKeys(const Model& model)
+{
+    std::vector<uint256> ret;
+    if (model.empty()) return ret;
+    const auto best_priority{std::ranges::min_element(model, {}, [](const auto& entry) { return PriorityTuple(entry.second); })->second};
+    const auto best_tuple{PriorityTuple(best_priority)};
+    for (const auto& [key, tx] : model) {
+        if (PriorityTuple(tx) == best_tuple) ret.push_back(key);
+    }
+    return ret;
+}
+} // namespace
 
 FUZZ_TARGET(private_broadcast)
 {
-    SeedRandomStateForTest(SeedRand::ZEROS);
-    FuzzedDataProvider fdp(buffer.data(), buffer.size());
-    FakeNodeClock clock_ctx{ConsumeTime(fdp)};
+    FuzzedDataProvider provider(buffer.data(), buffer.size());
+    FakeNodeClock clock{std::chrono::seconds{1'600'000'000}};
 
-    const size_t cap{fdp.ConsumeIntegralInRange<size_t>(1, 12)};
-    PrivateBroadcast pb{cap};
-
-    // Random transaction that the test generated and passed to Add(). Trimmed when Remove() is called.
-    // The values are the number of times a transaction was picked for sending.
-    std::unordered_map<CTransactionRef, size_t, CTransactionRefHash, CTransactionRefComp> transactions;
-
-    // Ids of nodes that were passed to PickTxForSend(). Trimmed when Remove() is called.
-    std::unordered_set<NodeId> nodes_sent_to;
-
-    // A subset of `nodes_sent_to`, node ids passed to NodeConfirmedReception(). Trimmed when Remove() is called.
-    std::unordered_set<NodeId> nodes_that_confirmed_reception;
-
-    NodeId next_nodeid{0}; // Generate unique node ids.
-
-    const auto ExistentOrNewNodeId = [&next_nodeid, &fdp](){
-        if (next_nodeid == 0 || fdp.ConsumeBool()) {
-            return next_nodeid++;
-        }
-        return fdp.ConsumeIntegralInRange<NodeId>(0, next_nodeid - 1);
+    const std::vector<CTransactionRef> txs{
+        MakeDummyTx(/*id=*/0, /*num_witness=*/0),
+        MakeDummyTx(/*id=*/0, /*num_witness=*/1),
+        MakeDummyTx(/*id=*/1, /*num_witness=*/0),
+        MakeDummyTx(/*id=*/2, /*num_witness=*/0),
+        MakeDummyTx(/*id=*/3, /*num_witness=*/2),
+        MakeDummyTx(/*id=*/4, /*num_witness=*/0),
+        MakeDummyTx(/*id=*/5, /*num_witness=*/1),
+        MakeDummyTx(/*id=*/6, /*num_witness=*/0),
     };
+    Assert(txs[0]->GetHash() == txs[1]->GetHash());
+    Assert(txs[0]->GetWitnessHash() != txs[1]->GetWitnessHash());
 
-    LIMITED_WHILE (fdp.ConsumeBool(), 10000) {
+    const size_t cap{provider.ConsumeIntegralInRange<size_t>(1, txs.size())};
+    PrivateBroadcast pb{cap};
+    Model model;
+    AssertMatchesModel(pb, model);
+
+    LIMITED_WHILE(provider.remaining_bytes() > 0, 500)
+    {
         CallOneOf(
-            fdp,
-            [&] { // Add()
-                CTransactionRef tx;
-                if (transactions.empty() || fdp.ConsumeBool()) {
-                    tx = MakeTransactionRef(ConsumeTransaction(fdp, std::nullopt));
+            provider,
+            [&] {
+                const auto& tx{PickValue(provider, txs)};
+                const auto key{Key(tx)};
+                const auto result{pb.Add(tx)};
+                if (model.contains(key)) {
+                    Assert(result == PrivateBroadcast::AddResult::AlreadyPresent);
+                } else if (model.size() >= cap) {
+                    Assert(result == PrivateBroadcast::AddResult::QueueFull);
                 } else {
-                    tx = PickIterator(fdp, transactions)->first;
-                }
-
-                const bool present_before{transactions.contains(tx)};
-                const auto res{pb.Add(tx)};
-                if (present_before) {
-                    Assert(res == PrivateBroadcast::AddResult::AlreadyPresent);
-                } else if (transactions.size() >= cap) {
-                    Assert(res == PrivateBroadcast::AddResult::QueueFull);
-                } else {
-                    Assert(res == PrivateBroadcast::AddResult::Added);
-                    transactions.emplace(tx, 0);
-                }
-            },
-            [&] { // Remove()
-                if (transactions.empty()) {
-                    return;
-                }
-                const auto transactions_it{PickIterator(fdp, transactions)};
-                const CTransactionRef& tx{transactions_it->first};
-
-                size_t num_nodes_that_confirmed_tx{0};
-
-                // Remove relevant entries from nodes_sent_to[] and nodes_that_confirmed_reception[] if any.
-                for (auto it = nodes_sent_to.begin(); it != nodes_sent_to.end();) {
-                    const NodeId nodeid{*it};
-                    const auto opt_tx_for_node{pb.GetTxForNode(nodeid)};
-                    if (opt_tx_for_node.has_value() && opt_tx_for_node.value() == tx) {
-                        it = nodes_sent_to.erase(it);
-                        if (nodes_that_confirmed_reception.erase(nodeid) > 0) {
-                            ++num_nodes_that_confirmed_tx;
-                        }
-                    } else {
-                        ++it;
-                    }
-                }
-
-                const auto opt_num_confirmed{pb.Remove(tx)};
-
-                Assert(opt_num_confirmed.has_value());
-                Assert(opt_num_confirmed.value() == num_nodes_that_confirmed_tx);
-                Assert(!pb.Remove(tx).has_value());
-                transactions.erase(transactions_it);
-            },
-            [&] { // PickTxForSend()
-                // Only give pristine node ids to PickTxForSend() as required.
-                const NodeId will_send_to_nodeid{next_nodeid++};
-                const CService will_send_to_address{ConsumeService(fdp)};
-
-                const auto opt_tx{pb.PickTxForSend(will_send_to_nodeid, will_send_to_address)};
-
-                if (opt_tx.has_value()) {
-                    Assert(transactions.contains(opt_tx.value()));
-
-                    // "Number of times picked for sending" is the primary key in Priority's comparison
-                    // (fewest sends = highest priority), so PickTxForSend() must return a transaction
-                    // with the minimum send count of any in the queue. Ties are broken by state we
-                    // don't model, so only check this key.
-                    const size_t min_picked{std::ranges::min_element(
-                        transactions, {}, [](const auto& el) { return el.second; })->second};
-                    const auto picked_it{transactions.find(opt_tx.value())};
-                    Assert(picked_it != transactions.end());
-                    Assert(picked_it->second == min_picked); // picked the least-sent transaction
-                    ++picked_it->second; // PickTxForSend() recorded exactly one send
-
-                    const auto& [_, inserted]{nodes_sent_to.emplace(will_send_to_nodeid)};
-                    Assert(inserted);
-                } else {
-                    Assert(transactions.empty());
-                }
-            },
-            [&] { // GetTxForNode()
-                const NodeId nodeid{ExistentOrNewNodeId()};
-
-                const auto opt_tx{pb.GetTxForNode(nodeid)};
-
-                if (nodes_sent_to.contains(nodeid)) {
-                    Assert(opt_tx.has_value());
-                    Assert(transactions.contains(opt_tx.value()));
-                } else {
-                    Assert(!opt_tx.has_value());
-                }
-            },
-            [&] { // NodeConfirmedReception()
-                const NodeId nodeid{ExistentOrNewNodeId()};
-
-                pb.NodeConfirmedReception(nodeid);
-
-                if (nodes_sent_to.contains(nodeid)) {
-                    // nodeid was previously passed to PickTxForSend(), so NodeConfirmedReception()
-                    // must have changed the internal state. Remember this to later check that
-                    // DidNodeConfirmReception() works correctly.
-                    nodes_that_confirmed_reception.emplace(nodeid);
-                }
-            },
-            [&] { // DidNodeConfirmReception()
-                const NodeId nodeid{ExistentOrNewNodeId()};
-
-                const bool confirmed{pb.DidNodeConfirmReception(nodeid)};
-
-                if (nodes_that_confirmed_reception.contains(nodeid)) {
-                    Assert(confirmed);
-                } else {
-                    Assert(!confirmed);
-                }
-            },
-            [&] { // HavePendingTransactions()
-                if (pb.HavePendingTransactions()) {
-                    Assert(!transactions.empty());
-                } else {
-                    Assert(transactions.empty());
-                }
-            },
-            [&] { // GetStale()
-                const auto stale{pb.GetStale()};
-
-                Assert(stale.size() <= transactions.size());
-
-                for (const auto& stale_tx : stale) {
-                    Assert(transactions.contains(stale_tx));
-                }
-            },
-            [&] { // GetBroadcastInfo()
-                const auto all_broadcast_info{pb.GetBroadcastInfo()};
-
-                Assert(all_broadcast_info.size() == transactions.size());
-
-                for (const auto& info : all_broadcast_info) {
-                    const auto it{transactions.find(info.tx)};
-                    Assert(it != transactions.end());
-                    Assert(info.peers.size() == it->second); // exactly the sends we recorded
+                    Assert(result == PrivateBroadcast::AddResult::Added);
+                    model.emplace(key, ModelTx{.tx = tx, .time_added = NodeClock::now(), .peers = {}});
                 }
             },
             [&] {
-                clock_ctx.set(ConsumeTime(fdp));
+                const auto& tx{PickValue(provider, txs)};
+                const auto key{Key(tx)};
+                const auto model_it{model.find(key)};
+                const auto removed{pb.Remove(tx)};
+                if (model_it == model.end()) {
+                    Assert(!removed.has_value());
+                } else {
+                    Assert(removed.has_value());
+                    const auto [_, num_confirmed, last_picked, last_confirmed]{PriorityTuple(model_it->second)};
+                    (void)last_picked;
+                    (void)last_confirmed;
+                    Assert(*removed == num_confirmed);
+                    model.erase(model_it);
+                }
+            },
+            [&] {
+                const auto nodeid{PickUnassignedNode(provider, model)};
+                if (!nodeid.has_value()) return;
+                const auto address{AddressForNode(*nodeid)};
+                const auto picked{pb.PickTxForSend(*nodeid, address)};
+                if (model.empty()) {
+                    Assert(!picked.has_value());
+                    return;
+                }
+                Assert(picked.has_value());
+                const auto picked_key{Key(*picked)};
+                const auto best_keys{BestPickKeys(model)};
+                Assert(std::ranges::find(best_keys, picked_key) != best_keys.end());
+                model.at(picked_key).peers.emplace_back(ModelPeer{.nodeid = *nodeid, .address = address, .sent = NodeClock::now(), .received = std::nullopt});
+            },
+            [&] {
+                const NodeId nodeid{provider.ConsumeIntegralInRange<NodeId>(0, MAX_NODE_ID)};
+                pb.NodeConfirmedReception(nodeid);
+                if (const auto expected_tx{ExpectedTxForNode(model, nodeid)}) {
+                    auto& peers{model.at(*expected_tx).peers};
+                    const auto it{std::ranges::find(peers, nodeid, &ModelPeer::nodeid)};
+                    Assert(it != peers.end());
+                    it->received = NodeClock::now();
+                }
+            },
+            [&] {
+                const NodeId nodeid{provider.ConsumeIntegralInRange<NodeId>(0, MAX_NODE_ID)};
+                const auto tx{pb.GetTxForNode(nodeid)};
+                const auto expected_tx{ExpectedTxForNode(model, nodeid)};
+                Assert(tx.has_value() == expected_tx.has_value());
+                if (tx.has_value()) Assert(Key(*tx) == *expected_tx);
+            },
+            [&] {
+                const auto seconds{provider.ConsumeIntegralInRange<int64_t>(0, 600)};
+                clock += std::chrono::seconds{seconds};
             });
+        AssertMatchesModel(pb, model);
     }
 }
