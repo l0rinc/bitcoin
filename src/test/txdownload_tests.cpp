@@ -225,6 +225,38 @@ BOOST_FIXTURE_TEST_CASE(accepted_and_confirmed_txs_clear_requests, TestingSetup)
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(requests_to_send_mark_inflight, TestingSetup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    FastRandomContext det_rand{true};
+    node::TxDownloadOptions default_opts{pool, det_rand, true};
+    node::TxDownloadManagerImpl txdownload_impl{default_opts};
+    const node::TxDownloadConnectionInfo connection_info{/*m_preferred=*/true,
+                                                         /*m_relay_permissions=*/false,
+                                                         /*m_wtxid_relay=*/true};
+    constexpr NodeId peer{0};
+    const CTransactionRef tx{CreatePlaceholderTx(/*segwit=*/true)};
+    const Wtxid& wtxid{tx->GetWitnessHash()};
+    const std::chrono::microseconds now{0};
+
+    txdownload_impl.ConnectedPeer(peer, connection_info);
+    BOOST_CHECK(!txdownload_impl.AddTxAnnouncement(peer, wtxid, now));
+    BOOST_CHECK_EQUAL(txdownload_impl.m_txrequest.CountInFlight(peer), 0);
+
+    const auto requests{txdownload_impl.GetRequestsToSend(peer, now)};
+    BOOST_REQUIRE_EQUAL(requests.size(), 1);
+    BOOST_CHECK(requests.front().IsWtxid());
+    BOOST_CHECK(requests.front().ToUint256() == wtxid.ToUint256());
+    BOOST_CHECK_EQUAL(txdownload_impl.m_txrequest.CountInFlight(peer), 1);
+    CheckTxRequestPeers(txdownload_impl, wtxid.ToUint256(), {peer});
+    BOOST_CHECK(txdownload_impl.GetRequestsToSend(peer, now).empty());
+
+    txdownload_impl.ReceivedNotFound(peer, {wtxid});
+    CheckNoTxRequestsForTx(txdownload_impl, tx);
+    txdownload_impl.DisconnectedPeer(peer);
+    txdownload_impl.CheckIsEmpty();
+}
+
 BOOST_FIXTURE_TEST_CASE(received_responses_clear_peer_requests, TestingSetup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
