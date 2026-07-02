@@ -248,8 +248,8 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
         Assume(extra_count == 0);
     };
 
-    block = header;
-    block.vtx.resize(txn_available.size());
+    CBlock candidate_block{header};
+    candidate_block.vtx.resize(txn_available.size());
 
     size_t tx_missing_offset = 0;
     for (size_t i = 0; i < txn_available.size(); i++) {
@@ -258,9 +258,9 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
                 clear_partial_state();
                 return READ_STATUS_INVALID;
             }
-            block.vtx[i] = vtx_missing[tx_missing_offset++];
+            candidate_block.vtx[i] = vtx_missing[tx_missing_offset++];
         } else {
-            block.vtx[i] = std::move(txn_available[i]);
+            candidate_block.vtx[i] = std::move(txn_available[i]);
         }
     }
 
@@ -271,17 +271,17 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
         return READ_STATUS_INVALID;
     }
 
-    Assert(std::all_of(block.vtx.cbegin(), block.vtx.cend(),
+    Assert(std::all_of(candidate_block.vtx.cbegin(), candidate_block.vtx.cend(),
         [](const auto& tx) { return tx != nullptr; }));
 
     // Check for possible mutations early now that we have a seemingly good block
     IsBlockMutatedFn check_mutated{m_check_block_mutated_mock ? m_check_block_mutated_mock : IsBlockMutated};
-    if (check_mutated(/*block=*/block, /*check_witness_root=*/segwit_active)) {
+    if (check_mutated(/*block=*/candidate_block, /*check_witness_root=*/segwit_active)) {
         return READ_STATUS_FAILED; // Possible Short ID collision
     }
 
     if (util::log::ShouldDebugLog(BCLog::CMPCTBLOCK)) {
-        const uint256 hash{block.GetHash()};
+        const uint256 hash{candidate_block.GetHash()};
         uint32_t tx_missing_size{0};
         for (const auto& tx : vtx_missing) tx_missing_size += tx->ComputeTotalSize();
         LogDebug(BCLog::CMPCTBLOCK, "Successfully reconstructed block %s with %u txn prefilled, %u txn from mempool (incl at least %u from extra pool) and %u txn (%u bytes) requested\n", hash.ToString(), completed_prefilled_count, completed_mempool_count, completed_extra_count, vtx_missing.size(), tx_missing_size);
@@ -292,5 +292,8 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
         }
     }
 
+    block = std::move(candidate_block);
+    Assume(std::all_of(block.vtx.cbegin(), block.vtx.cend(),
+        [](const auto& tx) { return tx != nullptr; }));
     return READ_STATUS_OK;
 }
