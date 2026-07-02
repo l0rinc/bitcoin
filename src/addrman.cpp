@@ -23,6 +23,7 @@
 #include <util/time.h>
 
 #include <cmath>
+#include <map>
 #include <optional>
 
 
@@ -1252,6 +1253,40 @@ std::vector<std::pair<AddrInfo, AddressPosition>> AddrManImpl::GetEntries(bool f
     LOCK(cs);
     Check();
     auto addrInfos = GetEntries_(from_tried);
+    if (from_tried) {
+        Assume(addrInfos.size() == static_cast<size_t>(nTried));
+    } else {
+        Assume(addrInfos.size() >= static_cast<size_t>(nNew));
+        Assume(addrInfos.size() <= static_cast<size_t>(nNew) * ADDRMAN_NEW_BUCKETS_PER_ADDRESS);
+    }
+    for (const auto& [info, position] : addrInfos) {
+        Assume(position.tried == from_tried);
+        Assume(info.fInTried == from_tried);
+        Assume(info.IsValid());
+        Assume(position.bucket >= 0);
+        Assume(position.position >= 0);
+        Assume(position.position < ADDRMAN_BUCKET_SIZE);
+        if (from_tried) {
+            Assume(position.bucket < ADDRMAN_TRIED_BUCKET_COUNT);
+            Assume(position.multiplicity == 1);
+        } else {
+            Assume(position.bucket < ADDRMAN_NEW_BUCKET_COUNT);
+            Assume(position.multiplicity == info.nRefCount);
+            Assume(position.multiplicity >= 1);
+            Assume(position.multiplicity <= ADDRMAN_NEW_BUCKETS_PER_ADDRESS);
+        }
+    }
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        std::map<CService, size_t> occurrences;
+        for (const auto& [info, _] : addrInfos) {
+            ++occurrences[static_cast<const CService&>(info)];
+        }
+        Assume(occurrences.size() == static_cast<size_t>(from_tried ? nTried : nNew));
+        for (const auto& [info, position] : addrInfos) {
+            const size_t expected_multiplicity{from_tried ? 1U : static_cast<size_t>(position.multiplicity)};
+            Assume(occurrences.at(static_cast<const CService&>(info)) == expected_multiplicity);
+        }
+    }
     Check();
     return addrInfos;
 }
