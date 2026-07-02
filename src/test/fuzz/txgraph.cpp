@@ -919,6 +919,7 @@ FUZZ_TARGET(txgraph)
                     // Verify the contents of GetCurrentChunk.
                     FeePerWeight sum_feerate;
                     for (TxGraph::Ref* ref : chunk->first) {
+                        assert(ref != nullptr);
                         // Each transaction in the chunk must exist in the main graph.
                         auto simpos = main_sim.Find(ref);
                         assert(simpos != SimTxGraph::MISSING);
@@ -1337,6 +1338,7 @@ FUZZ_TARGET(txgraph)
         while (auto chunk = builder->GetCurrentChunk()) {
             FeePerWeight sum;
             for (TxGraph::Ref* ref : chunk->first) {
+                assert(ref != nullptr);
                 // The reported chunk feerate must match the chunk feerate obtained by asking
                 // it for each of the chunk's transactions individually.
                 assert(real->GetMainChunkFeerate(*ref) == chunk->second);
