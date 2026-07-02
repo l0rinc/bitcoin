@@ -180,6 +180,26 @@ BOOST_AUTO_TEST_CASE(compare_chunks_equal_rate_split)
     BOOST_CHECK(std::is_eq(CompareChunks(split, merged)));
 }
 
+BOOST_AUTO_TEST_CASE(compare_chunks_zero_fee_tail_identity)
+{
+    const std::vector<FeeFrac> empty;
+    const std::vector<FeeFrac> empty_with_tail{{0, 1}};
+    BOOST_CHECK(std::is_eq(CompareChunks(empty, empty_with_tail)));
+    BOOST_CHECK(std::is_eq(CompareChunks(empty_with_tail, empty)));
+
+    const std::vector<FeeFrac> chunks{{8, 2}, {-3, 3}, {2, 1}};
+    const std::vector<FeeFrac> chunks_with_tail{{8, 2}, {-3, 3}, {2, 1}, {0, 7}};
+    BOOST_CHECK(std::is_eq(CompareChunks(chunks, chunks_with_tail)));
+    BOOST_CHECK(std::is_eq(CompareChunks(chunks_with_tail, chunks)));
+
+    const std::vector<FeeFrac> other{{4, 4}, {3, 2}};
+    const std::vector<FeeFrac> other_with_tail{{4, 4}, {3, 2}, {0, 5}};
+    const auto original_cmp{CompareChunks(chunks, other)};
+    BOOST_CHECK(CompareChunks(chunks_with_tail, other) == original_cmp);
+    BOOST_CHECK(CompareChunks(chunks, other_with_tail) == original_cmp);
+    BOOST_CHECK(CompareChunks(chunks_with_tail, other_with_tail) == original_cmp);
+}
+
 BOOST_AUTO_TEST_CASE(compare_chunks_order_contracts)
 {
     const std::vector<FeeFrac> lower{{1, 1}};
