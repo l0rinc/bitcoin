@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <memory>
 #include <ranges>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -436,6 +437,55 @@ struct StringContentsSerializer {
         }
     }
 };
+
+struct ThrowingUnserializer {
+    enum class Failure {
+        Ios,
+        Runtime,
+    };
+
+    Failure failure{Failure::Ios};
+
+    template<typename Stream>
+    void Unserialize(Stream&)
+    {
+        switch (failure) {
+        case Failure::Ios:
+            throw std::ios_base::failure{"expected dbwrapper deserialize failure"};
+        case Failure::Runtime:
+            throw std::runtime_error{"unexpected dbwrapper deserialize error"};
+        }
+        assert(false);
+    }
+};
+
+BOOST_AUTO_TEST_CASE(dbwrapper_deserialize_failure_classification)
+{
+    const fs::path path{m_args.GetDataDirBase() / "dbwrapper_deserialize_failure_classification"};
+    CDBWrapper dbw{{.path = path, .cache_bytes = 1_MiB, .memory_only = true}};
+
+    const uint8_t key{0x42};
+    const uint8_t value{0x43};
+    dbw.Write(key, value);
+
+    ThrowingUnserializer parsed{ThrowingUnserializer::Failure::Ios};
+    BOOST_CHECK(!dbw.Read(key, parsed));
+
+    parsed.failure = ThrowingUnserializer::Failure::Runtime;
+    BOOST_CHECK_EXCEPTION(dbw.Read(key, parsed), std::runtime_error, HasReason{"unexpected dbwrapper deserialize error"});
+
+    const std::unique_ptr<CDBIterator> it{dbw.NewIterator()};
+    it->Seek(key);
+    BOOST_REQUIRE(it->Valid());
+
+    parsed.failure = ThrowingUnserializer::Failure::Ios;
+    BOOST_CHECK(!it->GetKey(parsed));
+    BOOST_CHECK(!it->GetValue(parsed));
+
+    parsed.failure = ThrowingUnserializer::Failure::Runtime;
+    BOOST_CHECK_EXCEPTION(it->GetKey(parsed), std::runtime_error, HasReason{"unexpected dbwrapper deserialize error"});
+    BOOST_CHECK_EXCEPTION(it->GetValue(parsed), std::runtime_error, HasReason{"unexpected dbwrapper deserialize error"});
+}
 
 BOOST_AUTO_TEST_CASE(iterator_string_ordering)
 {
