@@ -6,6 +6,7 @@
 #include <core_memusage.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
+#include <streams.h>
 #include <uint256.h>
 #include <util/check.h>
 
@@ -115,6 +116,9 @@ BOOST_AUTO_TEST_CASE(block_helpers_reject_null_tx_refs)
 
     BOOST_CHECK_THROW(block.ToString(), NonFatalCheckError);
     BOOST_CHECK_THROW(RecursiveDynamicUsage(block), NonFatalCheckError);
+
+    DataStream stream;
+    BOOST_CHECK_THROW(stream << TX_WITH_WITNESS(block), NonFatalCheckError);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
