@@ -122,6 +122,8 @@ std::optional<SignetTxs> SignetTxs::Create(const CBlock& block, const CScript& c
 
     // find and delete signet signature
     if (block.vtx.empty()) return std::nullopt; // no coinbase tx in block; invalid
+    Assert(std::all_of(block.vtx.cbegin(), block.vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
+
     CMutableTransaction modified_cb(*block.vtx.at(0));
 
     const int cidx = GetWitnessCommitmentIndex(block);
