@@ -2,10 +2,6 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <mutex>
-#include <set>
-#include <string_view>
-
 #include <blockfilter.h>
 #include <crypto/siphash.h>
 #include <hash.h>
@@ -17,6 +13,11 @@
 #include <util/check.h>
 #include <util/golombrice.h>
 #include <util/string.h>
+
+#include <algorithm>
+#include <mutex>
+#include <set>
+#include <string_view>
 
 using util::Join;
 
@@ -229,6 +230,8 @@ BlockFilter::BlockFilter(BlockFilterType filter_type, const uint256& block_hash,
 BlockFilter::BlockFilter(BlockFilterType filter_type, const CBlock& block, const CBlockUndo& block_undo)
     : m_filter_type(filter_type), m_block_hash(block.GetHash())
 {
+    Assert(std::all_of(block.vtx.cbegin(), block.vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
+
     GCSFilter::Params params;
     if (!BuildParams(params)) {
         throw std::invalid_argument("unknown filter_type");
