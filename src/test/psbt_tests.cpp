@@ -2,7 +2,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 
+#include <consensus/amount.h>
+#include <node/psbt.h>
 #include <psbt.h>
+#include <script/script.h>
 #include <streams.h>
 #include <util/strencodings.h>
 
@@ -82,6 +85,24 @@ BOOST_AUTO_TEST_CASE(base64_decode_roundtrip)
     const util::Result<PartiallySignedTransaction> roundtrip{DecodeBase64PSBT(reencoded)};
     BOOST_REQUIRE(roundtrip);
     BOOST_CHECK(SerializePSBT(*roundtrip) == serialized);
+}
+
+BOOST_AUTO_TEST_CASE(analyzepsbt_invalid_result_contract)
+{
+    CMutableTransaction mtx;
+    mtx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), /*nIn=*/0});
+    mtx.vout.emplace_back(MAX_MONEY + 1, CScript{} << OP_TRUE);
+
+    PartiallySignedTransaction psbt{mtx};
+    psbt.inputs.at(0).witness_utxo = CTxOut{1, CScript{} << OP_TRUE};
+
+    const node::PSBTAnalysis analysis{node::AnalyzePSBT(psbt)};
+    BOOST_CHECK_EQUAL(analysis.error, "PSBT is not valid. Output amount invalid");
+    BOOST_CHECK(analysis.inputs.empty());
+    BOOST_CHECK(!analysis.estimated_vsize.has_value());
+    BOOST_CHECK(!analysis.estimated_feerate.has_value());
+    BOOST_CHECK(!analysis.fee.has_value());
+    BOOST_CHECK(analysis.next == PSBTRole::CREATOR);
 }
 
 BOOST_AUTO_TEST_CASE(psbt2_addinput)
