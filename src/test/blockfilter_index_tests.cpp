@@ -11,6 +11,7 @@
 #include <index/blockfilterindex.h>
 #include <interfaces/chain.h>
 #include <interfaces/mining.h>
+#include <kernel/types.h>
 #include <key.h>
 #include <node/blockstorage.h>
 #include <pow.h>
@@ -22,6 +23,7 @@
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
+#include <test/util/validation.h>
 #include <tinyformat.h>
 #include <uint256.h>
 #include <util/check.h>
@@ -30,6 +32,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <compare>
 #include <cstddef>
 #include <cstdint>
@@ -376,6 +379,67 @@ public:
         return true;
     }
 };
+
+class IndexTxRefCheck : public BaseIndex
+{
+private:
+    std::unique_ptr<BaseIndex::DB> m_db;
+    bool m_saw_invalid_block{false};
+
+public:
+    explicit IndexTxRefCheck(std::unique_ptr<interfaces::Chain> chain)
+        : BaseIndex(std::move(chain), "txref test index", "txrefidx")
+    {
+        const fs::path path = gArgs.GetDataDirNet() / "index_txref_check";
+        fs::create_directories(path);
+        m_db = std::make_unique<BaseIndex::DB>(path / "db", /*n_cache_size=*/0, /*f_memory=*/true, /*f_wipe=*/false);
+    }
+
+    bool AllowPrune() const override { return false; }
+    BaseIndex::DB& GetDB() const override { return *m_db; }
+
+    bool CustomAppend(const interfaces::BlockInfo& block) override
+    {
+        if (block.data && std::any_of(block.data->vtx.cbegin(), block.data->vtx.cend(), [](const auto& tx) { return tx == nullptr; })) {
+            m_saw_invalid_block = true;
+        }
+        return true;
+    }
+
+    bool SawInvalidBlock() const { return m_saw_invalid_block; }
+};
+
+BOOST_FIXTURE_TEST_CASE(index_rejects_null_block_tx_refs, BuildChainTestingSetup)
+{
+    IndexTxRefCheck index{interfaces::MakeChain(m_node)};
+    BOOST_REQUIRE(index.Init());
+    index.Sync();
+
+    CBlockIndex* tip{WITH_LOCK(cs_main, return m_node.chainman->ActiveChain().Tip())};
+    BOOST_REQUIRE(tip);
+
+    CBlock resized_block;
+    resized_block.hashPrevBlock = tip->GetBlockHash();
+    resized_block.vtx.resize(1);
+
+    const uint256 resized_block_hash{resized_block.GetHash()};
+    CBlockIndex resized_block_index;
+    resized_block_index.phashBlock = &resized_block_hash;
+    resized_block_index.pprev = tip;
+    resized_block_index.nHeight = tip->nHeight + 1;
+    resized_block_index.nTime = tip->nTime + 1;
+    resized_block_index.nTimeMax = std::max(tip->nTimeMax, resized_block_index.nTime);
+    resized_block_index.BuildSkip();
+
+    {
+        test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+        BOOST_CHECK_THROW(ValidationInterfaceTest::BlockConnected(kernel::ChainstateRole{}, index, std::make_shared<CBlock>(resized_block), &resized_block_index),
+                          NonFatalCheckError);
+    }
+    BOOST_CHECK(!index.SawInvalidBlock());
+
+    index.Stop();
+}
 
 BOOST_FIXTURE_TEST_CASE(index_reorg_crash, BuildChainTestingSetup)
 {
