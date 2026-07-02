@@ -10,6 +10,7 @@
 #include <util/check.h>
 #include <util/overflow.h>
 
+#include <algorithm>
 
 std::vector<unsigned char> BitsToBytes(const std::vector<bool>& bits)
 {
@@ -31,6 +32,9 @@ std::vector<bool> BytesToBits(const std::vector<unsigned char>& bytes)
 
 CMerkleBlock::CMerkleBlock(const CBlock& block, CBloomFilter* filter, const std::set<Txid>* txids)
 {
+    Assert(!block.vtx.empty());
+    Assert(std::all_of(block.vtx.cbegin(), block.vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
+
     header = static_cast<const CBlockHeader&>(block);
 
     std::vector<bool> vMatch;
