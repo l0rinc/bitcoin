@@ -562,6 +562,22 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 entry.height = current_height;
             },
 
+            [&]() { // AddCoin with unspendable output
+                uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
+                uint32_t coinidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_COINS - 1);
+                const auto sim_before{lookup(outpointidx)};
+                const auto cache_stats{get_all_cache_stats()};
+
+                Coin coin = data.coins[coinidx];
+                coin.nHeight = current_height;
+                coin.out.scriptPubKey = CScript{} << OP_RETURN;
+                assert(coin.out.scriptPubKey.IsUnspendable());
+                caches.back()->AddCoin(data.outpoints[outpointidx], std::move(coin), provider.ConsumeBool());
+
+                assert(lookup(outpointidx) == sim_before);
+                assert_cache_stats(cache_stats);
+            },
+
             [&]() { // SpendCoin (moveto = nullptr)
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
                 // Look up in simulation data (to compare with the returned bool).
