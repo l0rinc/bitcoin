@@ -181,6 +181,27 @@ BOOST_AUTO_TEST_CASE(HeaderAndShortIDsRejectsInvalidBlockTxRefs)
     BOOST_CHECK_THROW(CBlockHeaderAndShortTxIDs(resized_block, rand_ctx.rand64()), NonFatalCheckError);
 }
 
+BOOST_AUTO_TEST_CASE(FillBlockRejectsNullMissingTxRefs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    auto rand_ctx(FastRandomContext(uint256{42}));
+    CBlock block(BuildBlockTestCase(rand_ctx));
+
+    CBlockHeaderAndShortTxIDs short_ids{block, rand_ctx.rand64()};
+    TestPartiallyDownloadedBlock partial_block(&pool);
+    BOOST_CHECK(partial_block.InitData(short_ids, empty_extra_txn) == READ_STATUS_OK);
+    BOOST_CHECK(!partial_block.IsTxAvailable(1));
+
+    CBlock reconstructed_block;
+    std::vector<CTransactionRef> resized_missing_tx_refs;
+    resized_missing_tx_refs.resize(1);
+    BOOST_CHECK_THROW(partial_block.FillBlock(reconstructed_block, resized_missing_tx_refs, /*segwit_active=*/true),
+                      NonFatalCheckError);
+    BOOST_CHECK(!partial_block.header.IsNull());
+    BOOST_CHECK_EQUAL(partial_block.AvailableTxCount(), 1U);
+}
+
 class TestHeaderAndShortIDs {
     // Utility to encode custom CBlockHeaderAndShortTxIDs
 public:
@@ -595,6 +616,22 @@ BOOST_AUTO_TEST_CASE(TransactionsRequestSerializationTest) {
     BOOST_CHECK_EQUAL(req1.indexes[1], req2.indexes[1]);
     BOOST_CHECK_EQUAL(req1.indexes[2], req2.indexes[2]);
     BOOST_CHECK_EQUAL(req1.indexes[3], req2.indexes[3]);
+}
+
+BOOST_AUTO_TEST_CASE(BlockTransactionsSerializationRejectsNullTxRefs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+
+    BlockTransactionsRequest req;
+    req.blockhash = m_rng.rand256();
+    req.indexes = {0};
+    BlockTransactions block_txn{req};
+
+    DataStream stream{};
+    BOOST_CHECK_THROW(stream << block_txn, NonFatalCheckError);
+
+    block_txn.txn[0] = MakeTransactionRef(BuildTransactionTestCase());
+    stream << block_txn;
 }
 
 BOOST_AUTO_TEST_CASE(TransactionsRequestSerializationRejectsNonIncreasingIndexes)
