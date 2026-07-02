@@ -614,6 +614,15 @@ inline CTransactionRef make_tx(std::vector<CAmount>&& output_values, std::vector
     return MakeTransactionRef(tx);
 }
 
+static std::set<Txid> EntryRefTxids(const std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef>& entries)
+{
+    std::set<Txid> txids;
+    for (const auto& entry : entries) {
+        BOOST_CHECK(txids.insert(entry.get().GetTx().GetHash()).second);
+    }
+    return txids;
+}
+
 BOOST_AUTO_TEST_CASE(MempoolHasDescendantsMatchesChildren)
 {
     CTxMemPool& pool{*Assert(m_node.mempool)};
@@ -648,6 +657,60 @@ BOOST_AUTO_TEST_CASE(MempoolHasDescendantsMatchesChildren)
     }
 
     BOOST_CHECK(!pool.HasDescendants(parent->GetHash()));
+}
+
+BOOST_AUTO_TEST_CASE(MempoolDirectParentChildEdges)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    TestMemPoolEntryHelper entry;
+
+    CTransactionRef parent_a{make_tx(/*output_values=*/{10 * COIN, 10 * COIN, 10 * COIN})};
+    CTransactionRef parent_b{make_tx(/*output_values=*/{10 * COIN})};
+    CTransactionRef same_parent_child{
+        make_tx(/*output_values=*/{18 * COIN}, /*inputs=*/{parent_a, parent_a}, /*input_indices=*/{0, 1})};
+    CTransactionRef multi_parent_child{
+        make_tx(/*output_values=*/{17 * COIN}, /*inputs=*/{parent_a, parent_b}, /*input_indices=*/{2, 0})};
+
+    {
+        LOCK2(::cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(10'000).FromTx(parent_a));
+        TryAddToMempool(pool, entry.Fee(10'000).FromTx(parent_b));
+        TryAddToMempool(pool, entry.Fee(10'000).FromTx(same_parent_child));
+        TryAddToMempool(pool, entry.Fee(10'000).FromTx(multi_parent_child));
+    }
+
+    LOCK(pool.cs);
+    const auto parent_a_entry{pool.GetIter(parent_a->GetHash())};
+    const auto parent_b_entry{pool.GetIter(parent_b->GetHash())};
+    const auto same_parent_child_entry{pool.GetIter(same_parent_child->GetHash())};
+    const auto multi_parent_child_entry{pool.GetIter(multi_parent_child->GetHash())};
+    BOOST_REQUIRE(parent_a_entry);
+    BOOST_REQUIRE(parent_b_entry);
+    BOOST_REQUIRE(same_parent_child_entry);
+    BOOST_REQUIRE(multi_parent_child_entry);
+
+    const auto parent_a_children{EntryRefTxids(pool.GetChildren(**parent_a_entry))};
+    BOOST_CHECK_EQUAL(parent_a_children.size(), 2U);
+    BOOST_CHECK(parent_a_children.contains(same_parent_child->GetHash()));
+    BOOST_CHECK(parent_a_children.contains(multi_parent_child->GetHash()));
+
+    const auto parent_b_children{EntryRefTxids(pool.GetChildren(**parent_b_entry))};
+    BOOST_CHECK_EQUAL(parent_b_children.size(), 1U);
+    BOOST_CHECK(parent_b_children.contains(multi_parent_child->GetHash()));
+
+    const auto same_child_parents{EntryRefTxids(pool.GetParents(**same_parent_child_entry))};
+    BOOST_CHECK_EQUAL(same_child_parents.size(), 1U);
+    BOOST_CHECK(same_child_parents.contains(parent_a->GetHash()));
+
+    const auto multi_child_parents{EntryRefTxids(pool.GetParents(**multi_parent_child_entry))};
+    BOOST_CHECK_EQUAL(multi_child_parents.size(), 2U);
+    BOOST_CHECK(multi_child_parents.contains(parent_a->GetHash()));
+    BOOST_CHECK(multi_child_parents.contains(parent_b->GetHash()));
+
+    pool.removeRecursive(*same_parent_child, REMOVAL_REASON_DUMMY);
+    const auto parent_a_children_after_remove{EntryRefTxids(pool.GetChildren(**parent_a_entry))};
+    BOOST_CHECK_EQUAL(parent_a_children_after_remove.size(), 1U);
+    BOOST_CHECK(parent_a_children_after_remove.contains(multi_parent_child->GetHash()));
 }
 
 BOOST_AUTO_TEST_CASE(MempoolRandomizedIndexTest)
