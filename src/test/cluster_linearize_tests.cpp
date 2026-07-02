@@ -482,6 +482,26 @@ BOOST_AUTO_TEST_CASE(depgraph_optimal_tests)
     TestOptimalLinearization("866faa23008646b71501851f96130282588f1103804d851c0000000003822097600100000003850a8f310200000003856e9201000000038656935f01000003855b8f5f020000018743923a0000000a812b810b010000098403a328020000068712970203000005833e98400400000200"_hex_u8, {11, 14, 1, 10, 4, 3, 5, 13, 9, 7, 6, 12, 8, 0, 2});
 }
 
+BOOST_AUTO_TEST_CASE(linearize_nonoptimal_exhausts_budget)
+{
+    DepGraph<TestBitSet> depgraph;
+    depgraph.AddTransaction(FeeFrac{1, 1});
+    depgraph.AddTransaction(FeeFrac{2, 1});
+    SanityCheck(depgraph);
+
+    constexpr uint64_t max_cost{1};
+    auto [linearization, optimal, cost] = Linearize(
+        /*depgraph=*/depgraph,
+        /*max_cost=*/max_cost,
+        /*rng_seed=*/0,
+        /*fallback_order=*/IndexTxOrder{});
+
+    SanityCheck(depgraph, linearization);
+    if (!optimal) {
+        BOOST_CHECK_GE(cost, max_cost);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(linearization_output_is_topological)
 {
     DepGraph<TestBitSet> depgraph;
