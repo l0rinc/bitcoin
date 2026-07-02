@@ -558,6 +558,12 @@ FUZZ_TARGET(txorphanage_sim)
         }
         return false;
     };
+    /** Get the oldest reconsiderable announcement from a peer in simulation order. */
+    auto find_reconsider_fn = [&](NodeId peer) {
+        return std::find_if(sim_announcements.begin(), sim_announcements.end(), [&](const auto& ann) {
+            return ann.reconsider && ann.announcer == peer;
+        });
+    };
     /** Get an iterator to an existing (wtxid, peer) pair in the simulation. */
     auto find_announce_wtxid_fn = [&](const Wtxid& wtxid, NodeId peer) -> std::vector<SimAnnouncement>::iterator {
         for (auto it = sim_announcements.begin(); it != sim_announcements.end(); ++it) {
@@ -691,21 +697,24 @@ FUZZ_TARGET(txorphanage_sim)
             } else if (command-- == 0) {
                 // GetTxToReconsider.
                 auto peer = read_peer_fn();
+                auto sim_ann_it = find_reconsider_fn(peer);
+                assert(real->HaveTxToReconsider(peer) == (sim_ann_it != sim_announcements.end()));
                 auto result = real->GetTxToReconsider(peer);
                 if (result) {
-                    // A transaction was found. It must have a corresponding reconsiderable
-                    // announcement from peer.
-                    auto sim_ann_it = find_announce_wtxid_fn(result->GetWitnessHash(), peer);
+                    // A transaction was found. It must be the oldest corresponding
+                    // reconsiderable announcement from peer.
                     assert(sim_ann_it != sim_announcements.end());
                     assert(sim_ann_it->announcer == peer);
                     assert(sim_ann_it->reconsider);
+                    assert(result->GetWitnessHash() == txn[sim_ann_it->tx]->GetWitnessHash());
                     // Make it non-reconsiderable.
                     sim_ann_it->reconsider = false;
                 } else {
                     // No reconsiderable transaction was found from peer. Verify that it does not
                     // have any.
-                    assert(!have_reconsider_fn(peer));
+                    assert(sim_ann_it == sim_announcements.end());
                 }
+                assert(real->HaveTxToReconsider(peer) == have_reconsider_fn(peer));
                 break;
             }
         }
