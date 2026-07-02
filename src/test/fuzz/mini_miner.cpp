@@ -60,24 +60,25 @@ void CheckGatherClusters(const CTxMemPool& pool, const std::vector<Txid>& mempoo
     query.push_back(Txid::FromUint256(uint256::ZERO));
 
     const auto gathered{pool.GatherClusters(query)};
-    if (mempool_txids.empty()) {
-        Assert(gathered.empty());
-        return;
-    }
-    Assert(!gathered.empty());
-    Assert(gathered.size() <= 500);
     const CTxMemPool::setEntries gathered_set{gathered.begin(), gathered.end()};
     Assert(gathered.size() == gathered_set.size());
 
+    CTxMemPool::setEntries expected_set;
     std::set<Txid> checked_txids;
     for (const auto& txid : query) {
         if (!checked_txids.insert(txid).second || !pool.exists(txid)) continue;
         const auto single_cluster{pool.GatherClusters({txid})};
         Assert(!single_cluster.empty());
-        for (const auto& txiter : single_cluster) {
-            Assert(gathered_set.contains(txiter));
-        }
+        expected_set.insert(single_cluster.cbegin(), single_cluster.cend());
     }
+
+    if (expected_set.empty()) {
+        Assert(gathered.empty());
+        return;
+    }
+    Assert(!gathered.empty());
+    Assert(gathered.size() <= 500);
+    Assert(gathered_set == expected_set);
 }
 
 void CheckTopologicalInclusionOrder(const CTxMemPool& pool, const std::map<Txid, uint32_t>& inclusion_order)
@@ -202,6 +203,11 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
     }
 
     CheckGatherClusters(pool, mempool_txids, outpoints);
+    std::vector<Txid> sampled_mempool_txids;
+    for (size_t i{0}; i < mempool_txids.size(); i += 2) {
+        sampled_mempool_txids.push_back(mempool_txids[i]);
+    }
+    CheckGatherClusters(pool, sampled_mempool_txids, outpoints);
     CheckManualMiniMinerLinearize(pool, mempool_txids);
 
     const CFeeRate target_feerate{CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY/1000)}};
