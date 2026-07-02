@@ -604,4 +604,28 @@ BOOST_AUTO_TEST_CASE(chunk_linearization_merges_higher_rate_suffix)
     BOOST_CHECK(ByRatio{chunking[1]} <= ByRatio{chunking[0]});
 }
 
+BOOST_AUTO_TEST_CASE(chunk_linearization_keeps_equal_rate_boundaries)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto first{depgraph.AddTransaction(FeeFrac{1, 2})};
+    const auto second{depgraph.AddTransaction(FeeFrac{2, 4})};
+    const auto third{depgraph.AddTransaction(FeeFrac{3, 6})};
+    SanityCheck(depgraph);
+
+    const std::vector<DepGraphIndex> linearization{first, second, third};
+    SanityCheck(depgraph, linearization);
+
+    const auto chunking{ChunkLinearization(depgraph, linearization)};
+    const auto chunking_info{ChunkLinearizationInfo(depgraph, linearization)};
+
+    BOOST_REQUIRE_EQUAL(chunking.size(), 3U);
+    BOOST_REQUIRE_EQUAL(chunking_info.size(), 3U);
+    BOOST_CHECK(chunking[0] == depgraph.FeeRate(first));
+    BOOST_CHECK(chunking[1] == depgraph.FeeRate(second));
+    BOOST_CHECK(chunking[2] == depgraph.FeeRate(third));
+    BOOST_CHECK(chunking_info[0].transactions == TestBitSet::Singleton(first));
+    BOOST_CHECK(chunking_info[1].transactions == TestBitSet::Singleton(second));
+    BOOST_CHECK(chunking_info[2].transactions == TestBitSet::Singleton(third));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
