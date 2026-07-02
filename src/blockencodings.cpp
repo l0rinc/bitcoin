@@ -206,6 +206,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
 
     assert(static_cast<size_t>(std::count_if(txn_available.begin(), txn_available.end(),
                [](const auto& tx) { return tx != nullptr; })) == prefilled_count + mempool_count);
+    assert(static_cast<size_t>(std::count(tx_source.begin(), tx_source.end(), TxSource::EXTRA)) == extra_count);
     assert(extra_count <= mempool_count);
 
     return READ_STATUS_OK;
