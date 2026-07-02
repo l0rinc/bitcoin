@@ -8,6 +8,7 @@
 #include <primitives/transaction.h>
 #include <primitives/block.h>
 #include <memusage.h>
+#include <util/check.h>
 
 static inline size_t RecursiveDynamicUsage(const CScript& script) {
     return memusage::DynamicUsage(script);
@@ -54,6 +55,7 @@ static inline size_t RecursiveDynamicUsage(const CMutableTransaction& tx) {
 static inline size_t RecursiveDynamicUsage(const CBlock& block) {
     size_t mem = memusage::DynamicUsage(block.vtx);
     for (const auto& tx : block.vtx) {
+        Assert(tx != nullptr);
         mem += memusage::DynamicUsage(tx) + RecursiveDynamicUsage(*tx);
     }
     return mem;
