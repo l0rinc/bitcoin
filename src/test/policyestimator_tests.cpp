@@ -19,6 +19,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <array>
+#include <cstdint>
 #include <limits>
 #include <vector>
 
@@ -107,6 +109,20 @@ void WriteEstimatorFile(const fs::path& path, int version, const std::vector<dou
     BOOST_REQUIRE_EQUAL(out.fclose(), 0);
 }
 
+void WriteEstimatorFileWithInvalidStats(const fs::path& path, int version, uint32_t best_height, const std::vector<double>& buckets)
+{
+    fs::remove(path);
+    AutoFile out{fsbridge::fopen(path, "wb")};
+    BOOST_REQUIRE(!out.IsNull());
+    out << version;
+    out << best_height;
+    out << uint32_t{0}; // historicalFirst
+    out << uint32_t{0}; // historicalBest
+    WriteEncodedDoubleVector(out, buckets);
+    out << EncodeDouble(0.0); // invalid TxConfirmStats decay, triggers failure after buckets are read.
+    BOOST_REQUIRE_EQUAL(out.fclose(), 0);
+}
+
 bool ReadEstimatorFile(const fs::path& path, const fs::path& estimator_path)
 {
     fs::remove(estimator_path);
@@ -117,6 +133,33 @@ bool ReadEstimatorFile(const fs::path& path, const fs::path& estimator_path)
     BOOST_REQUIRE_EQUAL(in.fclose(), 0);
     fs::remove(estimator_path);
     return read;
+}
+
+bool EqualBuckets(const EstimatorBucket& a, const EstimatorBucket& b)
+{
+    return a.start == b.start &&
+           a.end == b.end &&
+           a.withinTarget == b.withinTarget &&
+           a.totalConfirmed == b.totalConfirmed &&
+           a.inMempool == b.inMempool &&
+           a.leftMempool == b.leftMempool;
+}
+
+bool EqualResults(const EstimationResult& a, const EstimationResult& b)
+{
+    return EqualBuckets(a.pass, b.pass) &&
+           EqualBuckets(a.fail, b.fail) &&
+           a.decay == b.decay &&
+           a.scale == b.scale;
+}
+
+bool EqualFeeCalculations(const FeeCalculation& a, const FeeCalculation& b)
+{
+    return EqualResults(a.est, b.est) &&
+           a.reason == b.reason &&
+           a.desiredTarget == b.desiredTarget &&
+           a.returnedTarget == b.returnedTarget &&
+           a.best_height == b.best_height;
 }
 
 } // namespace
@@ -473,6 +516,68 @@ BOOST_AUTO_TEST_CASE(estimate_raw_fee_rejects_invalid_threshold)
     check_invalid_threshold(std::numeric_limits<double>::infinity());
 
     fs::remove(estimator_data_path);
+    fs::remove(estimator_path);
+}
+
+BOOST_AUTO_TEST_CASE(failed_read_preserves_estimator_state)
+{
+    const fs::path version_path{m_args.GetDataDirBase() / "fee_estimator_version.dat"};
+    const fs::path valid_path{m_args.GetDataDirBase() / "fee_estimator_valid.dat"};
+    const fs::path corrupt_path{m_args.GetDataDirBase() / "fee_estimator_corrupt_after_buckets.dat"};
+    const fs::path estimator_path{m_args.GetDataDirBase() / "fee_estimator_unused.dat"};
+    const int current_version{CurrentFeesFileVersion(version_path)};
+
+    FeeStatsValues values;
+    values.feerate_avg = 1000;
+    values.tx_count = 1;
+    values.conf_avg = 1;
+    WriteEstimatorFile(valid_path, current_version, {100.0, 1e99}, values);
+
+    fs::remove(estimator_path);
+    CBlockPolicyEstimator fee_estimator{estimator_path, DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
+    {
+        AutoFile in{fsbridge::fopen(valid_path, "rb")};
+        BOOST_REQUIRE(!in.IsNull());
+        BOOST_REQUIRE(fee_estimator.Read(in));
+        BOOST_REQUIRE_EQUAL(in.fclose(), 0);
+    }
+
+    const std::array<unsigned int, ALL_FEE_ESTIMATE_HORIZONS.size()> targets_before{
+        fee_estimator.HighestTargetTracked(FeeEstimateHorizon::SHORT_HALFLIFE),
+        fee_estimator.HighestTargetTracked(FeeEstimateHorizon::MED_HALFLIFE),
+        fee_estimator.HighestTargetTracked(FeeEstimateHorizon::LONG_HALFLIFE),
+    };
+    EstimationResult raw_before;
+    const CFeeRate raw_fee_before{fee_estimator.estimateRawFee(1, 0.0, FeeEstimateHorizon::MED_HALFLIFE, &raw_before)};
+    BOOST_REQUIRE_GT(raw_fee_before.GetFeePerK(), 0);
+    FeeCalculation smart_before;
+    const CFeeRate smart_fee_before{fee_estimator.estimateSmartFee(2, &smart_before, /*conservative=*/false)};
+
+    WriteEstimatorFileWithInvalidStats(corrupt_path, current_version, /*best_height=*/777, {100.0, 200.0, 1e99});
+    {
+        AutoFile in{fsbridge::fopen(corrupt_path, "rb")};
+        BOOST_REQUIRE(!in.IsNull());
+        BOOST_CHECK(!fee_estimator.Read(in));
+        BOOST_REQUIRE_EQUAL(in.fclose(), 0);
+    }
+
+    const std::array<unsigned int, ALL_FEE_ESTIMATE_HORIZONS.size()> targets_after{
+        fee_estimator.HighestTargetTracked(FeeEstimateHorizon::SHORT_HALFLIFE),
+        fee_estimator.HighestTargetTracked(FeeEstimateHorizon::MED_HALFLIFE),
+        fee_estimator.HighestTargetTracked(FeeEstimateHorizon::LONG_HALFLIFE),
+    };
+    BOOST_CHECK(targets_after == targets_before);
+
+    EstimationResult raw_after;
+    BOOST_CHECK(fee_estimator.estimateRawFee(1, 0.0, FeeEstimateHorizon::MED_HALFLIFE, &raw_after) == raw_fee_before);
+    BOOST_CHECK(EqualResults(raw_after, raw_before));
+
+    FeeCalculation smart_after;
+    BOOST_CHECK(fee_estimator.estimateSmartFee(2, &smart_after, /*conservative=*/false) == smart_fee_before);
+    BOOST_CHECK(EqualFeeCalculations(smart_after, smart_before));
+
+    fs::remove(valid_path);
+    fs::remove(corrupt_path);
     fs::remove(estimator_path);
 }
 
