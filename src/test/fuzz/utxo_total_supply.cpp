@@ -23,6 +23,7 @@
 #include <util/check.h>
 #include <validation.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -175,7 +176,12 @@ FUZZ_TARGET(utxo_total_supply)
             },
             [&] {
                 // Append the current block to the active chain
+                const size_t tx_count_before_commitment{current_block->vtx.size()};
                 node::RegenerateCommitments(*current_block, chainman);
+                assert(current_block->vtx.size() == tx_count_before_commitment);
+                assert(std::all_of(current_block->vtx.cbegin(), current_block->vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
+                assert(GetWitnessCommitmentIndex(*current_block) != NO_WITNESS_COMMITMENT);
+                assert(current_block->hashMerkleRoot == BlockMerkleRoot(*current_block));
                 const bool was_valid = !MineBlock(node, current_block).IsNull();
 
                 const kernel::CCoinsStats prev_utxo_stats{utxo_stats};
