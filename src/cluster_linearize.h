@@ -378,6 +378,14 @@ public:
     /** Reduce memory usage if possible. No observable effect. */
     void Compact() noexcept
     {
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            auto old{*this};
+            const auto old_position_range{PositionRange()};
+            entries.shrink_to_fit();
+            Assume(PositionRange() == old_position_range);
+            Assume(*this == old);
+            return;
+        }
         entries.shrink_to_fit();
     }
 
