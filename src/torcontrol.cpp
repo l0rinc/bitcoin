@@ -178,6 +178,7 @@ bool TorControlConnection::ReceiveAndProcess()
 
 bool TorControlConnection::ProcessBuffer()
 {
+    const size_t recv_buffer_size{m_recv_buffer.size()};
     util::LineReader reader(m_recv_buffer, MAX_LINE_LENGTH);
 
     while (auto line = reader.ReadLine()) {
@@ -209,7 +210,11 @@ bool TorControlConnection::ProcessBuffer()
         }
     }
 
-    m_recv_buffer.erase(m_recv_buffer.begin(), m_recv_buffer.begin() + reader.Consumed());
+    const size_t consumed{reader.Consumed()};
+    Assume(consumed <= recv_buffer_size);
+    m_recv_buffer.erase(m_recv_buffer.begin(), m_recv_buffer.begin() + consumed);
+    Assume(m_recv_buffer.size() == recv_buffer_size - consumed);
+    Assume(m_message.lines.size() <= MAX_LINE_COUNT);
     return true;
 }
 
