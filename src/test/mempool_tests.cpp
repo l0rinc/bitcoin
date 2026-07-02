@@ -11,6 +11,7 @@
 #include <test/util/txmempool.h>
 #include <txmempool.h>
 #include <uint256.h>
+#include <util/check.h>
 #include <util/time.h>
 #include <validation.h>
 
@@ -90,6 +91,16 @@ static void CheckMempoolRandomizedIndex(const CTxMemPool& pool)
     for (const auto& entry : pool.mapTx) {
         BOOST_CHECK(randomized_txids.contains(entry.GetTx().GetHash()));
     }
+}
+
+BOOST_AUTO_TEST_CASE(MempoolRemoveForBlockRejectsNullTxRefs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+    auto& pool{*Assert(m_node.mempool)};
+    std::vector<CTransactionRef> resized_block_vtx(1);
+
+    LOCK(pool.cs);
+    BOOST_CHECK_THROW(pool.removeForBlock(resized_block_vtx, /*nBlockHeight=*/1), NonFatalCheckError);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolPrioritisationTest)
