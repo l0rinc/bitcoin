@@ -32,12 +32,14 @@ std::optional<Coin> CCoinsViewCache::PeekCoin(const COutPoint& outpoint) const
     const size_t dirty_count{m_dirty_count};
     if (auto it{cacheCoins.find(outpoint)}; it != cacheCoins.end()) {
         auto ret{it->second.coin.IsSpent() ? std::nullopt : std::optional{it->second.coin}};
+        Assume(!ret || !ret->IsSpent());
         Assume(cacheCoins.size() == cache_size);
         Assume(cachedCoinsUsage == cache_usage);
         Assume(m_dirty_count == dirty_count);
         return ret;
     }
     auto ret{base->PeekCoin(outpoint)};
+    Assume(!ret || !ret->IsSpent());
     Assume(cacheCoins.size() == cache_size);
     Assume(cachedCoinsUsage == cache_usage);
     Assume(m_dirty_count == dirty_count);
@@ -80,8 +82,9 @@ std::optional<Coin> CCoinsViewCache::GetCoin(const COutPoint& outpoint) const
     const size_t dirty_count{m_dirty_count};
     CCoinsMap::const_iterator it = FetchCoin(outpoint);
     Assume(m_dirty_count == dirty_count);
-    if (it != cacheCoins.end() && !it->second.coin.IsSpent()) return it->second.coin;
-    return std::nullopt;
+    auto ret{it != cacheCoins.end() && !it->second.coin.IsSpent() ? std::optional{it->second.coin} : std::nullopt};
+    Assume(!ret || !ret->IsSpent());
+    return ret;
 }
 
 void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possible_overwrite) {
