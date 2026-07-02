@@ -6,6 +6,7 @@
 #include <private_broadcast.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
+#include <util/check.h>
 #include <util/time.h>
 
 #include <algorithm>
@@ -156,6 +157,54 @@ BOOST_AUTO_TEST_CASE(stale_unpicked_tx)
     const auto stale_state{pb.GetStale()};
     BOOST_REQUIRE_EQUAL(stale_state.size(), 1);
     BOOST_CHECK_EQUAL(stale_state[0], tx);
+}
+
+BOOST_AUTO_TEST_CASE(reject_null_transaction_ref)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+
+    PrivateBroadcast pb;
+    CTransactionRef null_tx;
+    BOOST_CHECK_THROW(pb.Add(null_tx), NonFatalCheckError);
+    BOOST_CHECK_THROW(pb.Remove(null_tx), NonFatalCheckError);
+}
+
+BOOST_AUTO_TEST_CASE(reject_duplicate_node_assignment)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+    FakeNodeClock clock{};
+
+    PrivateBroadcast pb;
+    const auto tx{MakeDummyTx(/*id=*/1, /*num_witness=*/0)};
+    BOOST_REQUIRE(pb.Add(tx));
+
+    const NodeId recipient{1};
+    in_addr ipv4Addr;
+    ipv4Addr.s_addr = 0xa0b0c001;
+    const CService addr{ipv4Addr, 1111};
+    BOOST_REQUIRE(pb.PickTxForSend(recipient, addr).has_value());
+    BOOST_CHECK_THROW(pb.PickTxForSend(recipient, addr), NonFatalCheckError);
+}
+
+BOOST_AUTO_TEST_CASE(repeated_confirmation_counts_once)
+{
+    FakeNodeClock clock{};
+
+    PrivateBroadcast pb;
+    const auto tx{MakeDummyTx(/*id=*/1, /*num_witness=*/0)};
+    BOOST_REQUIRE(pb.Add(tx));
+
+    const NodeId recipient{1};
+    in_addr ipv4Addr;
+    ipv4Addr.s_addr = 0xa0b0c001;
+    const CService addr{ipv4Addr, 1111};
+    BOOST_REQUIRE(pb.PickTxForSend(recipient, addr).has_value());
+
+    pb.NodeConfirmedReception(recipient);
+    clock += 1min;
+    pb.NodeConfirmedReception(recipient);
+    BOOST_CHECK(pb.DidNodeConfirmReception(recipient));
+    BOOST_CHECK_EQUAL(pb.Remove(tx).value(), 1);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
