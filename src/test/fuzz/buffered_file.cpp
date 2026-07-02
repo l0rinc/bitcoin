@@ -69,8 +69,14 @@ FUZZ_TARGET(buffered_file)
                     assert_position_within_limit();
                 },
                 [&] {
+                    const std::byte target{fuzzed_data_provider.ConsumeIntegral<uint8_t>()};
                     try {
-                        opt_buffered_file->FindByte(std::byte(fuzzed_data_provider.ConsumeIntegral<uint8_t>()));
+                        opt_buffered_file->FindByte(target);
+                        const uint64_t found_pos{opt_buffered_file->GetPos()};
+                        std::byte found{};
+                        opt_buffered_file->read({&found, 1});
+                        assert(found == target);
+                        assert(opt_buffered_file->SetPos(found_pos));
                     } catch (const std::ios_base::failure&) {
                     }
                     assert_position_within_limit();
