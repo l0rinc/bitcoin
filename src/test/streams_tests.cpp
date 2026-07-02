@@ -666,6 +666,41 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_setpos_limit)
     fs::remove(streams_test_filename);
 }
 
+BOOST_AUTO_TEST_CASE(streams_buffered_file_findbyte_exact_match)
+{
+    const fs::path streams_test_filename{m_args.GetDataDirBase() / "streams_test_findbyte_exact"};
+    {
+        AutoFile write_file{fsbridge::fopen(streams_test_filename, "w+b")};
+        const std::array<std::byte, 5> bytes{
+            std::byte{0x21},
+            std::byte{0x10},
+            std::byte{0x31},
+            std::byte{0x42},
+            std::byte{0x31},
+        };
+        write_file.write(bytes);
+        BOOST_REQUIRE_EQUAL(write_file.fclose(), 0);
+    }
+
+    AutoFile file{fsbridge::fopen(streams_test_filename, "rb")};
+    BufferedFile bf{file, 3, 1};
+    bf.FindByte(std::byte{0x31});
+    BOOST_CHECK_EQUAL(bf.GetPos(), 2U);
+
+    std::byte found{};
+    bf.read({&found, 1});
+    BOOST_CHECK(found == std::byte{0x31});
+    BOOST_CHECK(bf.SetPos(2));
+
+    bf.SetLimit(5);
+    bf.SkipTo(3);
+    bf.FindByte(std::byte{0x31});
+    BOOST_CHECK_EQUAL(bf.GetPos(), 4U);
+
+    BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    fs::remove(streams_test_filename);
+}
+
 BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
 {
     // Make this test deterministic.
