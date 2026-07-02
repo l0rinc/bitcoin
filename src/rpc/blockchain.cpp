@@ -55,6 +55,7 @@
 #include <validationinterface.h>
 #include <versionbits.h>
 
+#include <algorithm>
 #include <cstdint>
 
 #include <condition_variable>
@@ -213,11 +214,13 @@ UniValue blockToJSON(BlockManager& blockman, const CBlock& block, const CBlockIn
 {
     UniValue result = blockheaderToJSON(tip, blockindex, pow_limit);
 
+    CHECK_NONFATAL(!block.vtx.empty());
+    CHECK_NONFATAL(std::all_of(block.vtx.cbegin(), block.vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
+
     result.pushKV("strippedsize", ::GetSerializeSize(TX_NO_WITNESS(block)));
     result.pushKV("size", ::GetSerializeSize(TX_WITH_WITNESS(block)));
     result.pushKV("weight", ::GetBlockWeight(block));
 
-    CHECK_NONFATAL(!block.vtx.empty());
     result.pushKV("coinbase_tx", coinbaseTxToJSON(*block.vtx[0]));
 
     UniValue txs(UniValue::VARR);
