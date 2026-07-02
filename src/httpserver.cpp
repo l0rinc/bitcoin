@@ -527,7 +527,12 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
 
     // See libevent evhttp_response_needs_body()
     // Response headers are different if no body is needed
-    bool needs_body{status != HTTP_NO_CONTENT && (status < 100 || status >= 200)};
+    bool needs_body{
+        m_method != HTTPRequestMethod::HEAD &&
+        status != HTTP_NO_CONTENT &&
+        (status < 100 || status >= 200)};
+    std::span<const std::byte> response_body{reply_body};
+    if (!needs_body) response_body = {};
     bool needs_content_length{false};
 
     bool keep_alive{false};
@@ -571,7 +576,7 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
 
     if (needs_content_length) {
         res.m_headers.RemoveAll("Content-Length");
-        res.m_headers.Write("Content-Length", util::ToString(reply_body.size()));
+        res.m_headers.Write("Content-Length", util::ToString(response_body.size()));
     }
 
     if (needs_body && !res.m_headers.FindFirst("Content-Type")) {
@@ -604,14 +609,14 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
         // We've been using std::span up until now but it is finally time to copy
         // data. The original data will go out of scope when WriteReply() returns.
         // This is analogous to the memcpy() in libevent's evbuffer_add()
-        m_client->m_send_buffer.insert(m_client->m_send_buffer.end(), reply_body.begin(), reply_body.end());
+        m_client->m_send_buffer.insert(m_client->m_send_buffer.end(), response_body.begin(), response_body.end());
     }
 
     LogDebug(
         BCLog::HTTP,
         "HTTPResponse (status code: %d size: %lld) added to send buffer for client %s (id=%llu)",
         status,
-        headers_bytes.size() + reply_body.size(),
+        headers_bytes.size() + response_body.size(),
         m_client->m_origin,
         m_client->m_id);
 
