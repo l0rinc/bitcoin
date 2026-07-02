@@ -146,6 +146,23 @@ BOOST_AUTO_TEST_CASE(package_helpers_reject_null_tx_refs)
     BOOST_CHECK_THROW((void)GetPackageHash(package), NonFatalCheckError);
 }
 
+BOOST_AUTO_TEST_CASE(process_new_package_rejects_null_tx_refs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+    LOCK(cs_main);
+
+    Package package;
+    BOOST_CHECK_THROW((void)ProcessNewPackage(m_node.chainman->ActiveChainstate(), *m_node.mempool, package,
+                          /*test_accept=*/true, /*client_maxfeerate=*/{}),
+                      NonFatalCheckError);
+
+    package.push_back(create_placeholder_tx(1, 1));
+    package.resize(2);
+    BOOST_CHECK_THROW((void)ProcessNewPackage(m_node.chainman->ActiveChainstate(), *m_node.mempool, package,
+                          /*test_accept=*/true, /*client_maxfeerate=*/{}),
+                      NonFatalCheckError);
+}
+
 BOOST_AUTO_TEST_CASE(package_sanitization_tests)
 {
     // Packages can't have more than 25 transactions.
