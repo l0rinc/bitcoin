@@ -3,10 +3,12 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <boost/test/unit_test.hpp>
+#include <chain.h>
 #include <consensus/amount.h>
 #include <consensus/validation.h>
 #include <kernel/mempool_entry.h>
 #include <kernel/mempool_removal_reason.h>
+#include <kernel/types.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <scheduler.h>
@@ -23,6 +25,27 @@ BOOST_FIXTURE_TEST_SUITE(validationinterface_tests, ChainTestingSetup)
 
 struct TestSubscriberNoop final : public CValidationInterface {
     void BlockChecked(const std::shared_ptr<const CBlock>&, const BlockValidationState&) override {}
+};
+
+struct BlockNotificationSubscriber final : public CValidationInterface {
+    int m_connected{0};
+    int m_disconnected{0};
+    int m_new_pow_valid{0};
+
+    void BlockConnected(const kernel::ChainstateRole&, const std::shared_ptr<const CBlock>&, const CBlockIndex*) override
+    {
+        ++m_connected;
+    }
+
+    void BlockDisconnected(const std::shared_ptr<const CBlock>&, const CBlockIndex*) override
+    {
+        ++m_disconnected;
+    }
+
+    void NewPoWValidBlock(const CBlockIndex*, const std::shared_ptr<const CBlock>&) override
+    {
+        ++m_new_pow_valid;
+    }
 };
 
 struct MempoolPayloadSubscriber final : public CValidationInterface {
@@ -103,6 +126,44 @@ BOOST_AUTO_TEST_CASE(mempool_signal_payload_contracts)
     BOOST_CHECK_EQUAL(sub->m_added, 1);
     BOOST_CHECK_EQUAL(sub->m_removed, 1);
     BOOST_CHECK_EQUAL(sub->m_removed_for_block, 1);
+}
+
+BOOST_AUTO_TEST_CASE(block_signal_rejects_null_tx_refs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+
+    CBlock parent_block;
+    const uint256 parent_hash{parent_block.GetHash()};
+    CBlockIndex parent_index;
+    parent_index.phashBlock = &parent_hash;
+    parent_index.nHeight = 0;
+
+    CBlock resized_block;
+    resized_block.hashPrevBlock = parent_hash;
+    resized_block.vtx.resize(1);
+
+    const uint256 resized_block_hash{resized_block.GetHash()};
+    CBlockIndex resized_block_index;
+    resized_block_index.phashBlock = &resized_block_hash;
+    resized_block_index.pprev = &parent_index;
+    resized_block_index.nHeight = 1;
+
+    auto sub{std::make_shared<BlockNotificationSubscriber>()};
+    m_node.validation_signals->RegisterSharedValidationInterface(sub);
+
+    BOOST_CHECK_THROW(m_node.validation_signals->BlockConnected(kernel::ChainstateRole{}, std::make_shared<CBlock>(resized_block), &resized_block_index),
+                      NonFatalCheckError);
+    BOOST_CHECK_THROW(m_node.validation_signals->BlockDisconnected(std::make_shared<CBlock>(resized_block), &resized_block_index),
+                      NonFatalCheckError);
+    BOOST_CHECK_THROW(m_node.validation_signals->NewPoWValidBlock(&resized_block_index, std::make_shared<CBlock>(resized_block)),
+                      NonFatalCheckError);
+
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    m_node.validation_signals->UnregisterSharedValidationInterface(sub);
+
+    BOOST_CHECK_EQUAL(sub->m_connected, 0);
+    BOOST_CHECK_EQUAL(sub->m_disconnected, 0);
+    BOOST_CHECK_EQUAL(sub->m_new_pow_valid, 0);
 }
 
 BOOST_AUTO_TEST_CASE(unregister_validation_interface_race)
