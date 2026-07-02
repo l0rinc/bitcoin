@@ -9,6 +9,8 @@
 #include <primitives/block.h>
 #include <util/check.h>
 
+#include <algorithm>
+#include <cassert>
 #include <functional>
 
 class CTxMemPool;
@@ -70,6 +72,8 @@ public:
 
     SERIALIZE_METHODS(BlockTransactions, obj)
     {
+        SER_WRITE(obj, assert(std::all_of(obj.txn.begin(), obj.txn.end(),
+            [](const auto& tx) { return tx != nullptr; })););
         READWRITE(obj.blockhash, TX_WITH_WITNESS(Using<VectorFormatter<TransactionCompression>>(obj.txn)));
     }
 };
