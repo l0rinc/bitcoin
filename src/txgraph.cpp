@@ -3261,6 +3261,16 @@ std::optional<std::pair<std::vector<TxGraph::Ref*>, FeePerWeight>> BlockBuilderI
             Assume(!m_known_end_of_cluster || chunk_data.m_chunk_count > 1);
         }
         ret->second = chunk_end_entry.m_main_chunk_feerate;
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            Assume(!ret->first.empty());
+            FeePerWeight sum;
+            for (TxGraph::Ref* ref : ret->first) {
+                Assume(ref != nullptr);
+                Assume(m_graph->GetMainChunkFeerate(*ref) == ret->second);
+                sum += m_graph->GetIndividualFeerate(*ref);
+            }
+            Assume(sum == ret->second);
+        }
     }
     return ret;
 }
