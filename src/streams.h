@@ -654,6 +654,9 @@ public:
             buf_offset += inc;
             if (buf_offset >= vchBuf.size()) buf_offset = 0;
         }
+        Assume(m_read_pos < nSrcPos);
+        Assume(m_read_pos < nReadLimit);
+        Assume(vchBuf[m_read_pos % vchBuf.size()] == byte);
     }
 };
 
