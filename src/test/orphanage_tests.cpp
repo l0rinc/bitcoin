@@ -15,6 +15,7 @@
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <test/util/transaction_utils.h>
+#include <util/check.h>
 
 #include <array>
 #include <cstdint>
@@ -74,6 +75,16 @@ static bool EqualTxns(const std::set<CTransactionRef>& set_txns, const std::vect
         if (!set_txns.contains(tx)) return false;
     }
     return true;
+}
+
+BOOST_AUTO_TEST_CASE(erase_for_block_rejects_null_tx_refs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+    auto orphanage{node::MakeTxOrphanage()};
+    CBlock block;
+    block.vtx.resize(1);
+
+    BOOST_CHECK_THROW(orphanage->EraseForBlock(block), NonFatalCheckError);
 }
 
 BOOST_AUTO_TEST_CASE(peer_dos_limits)

@@ -443,6 +443,7 @@ void CTxMemPool::removeForBlock(const std::vector<CTransactionRef>& vtx, unsigne
 {
     // Remove confirmed txs and conflicts when a new block is connected, updating the fee logic
     AssertLockHeld(cs);
+    Assert(std::all_of(vtx.cbegin(), vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
     Assume(!m_have_changeset);
     std::vector<RemovedMempoolTransactionInfo> txs_removed_for_block;
     if (mapTx.size() || mapNextTx.size() || mapDeltas.size()) {
