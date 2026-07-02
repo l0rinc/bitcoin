@@ -249,6 +249,39 @@ BOOST_AUTO_TEST_CASE(netbase_lookupnumeric)
     BOOST_CHECK(TestParse("[fd6c:88c0:8724:1:2:3:4:5]", "[fd6c:88c0:8724:1:2:3:4:5]:65535"));
 }
 
+BOOST_AUTO_TEST_CASE(netbase_lookup_wrappers_filter_internal_results)
+{
+    const std::string name{"example.com"};
+    const CNetAddr first{ResolveIP("1.2.3.4")};
+    const CNetAddr second{ResolveIP("5.6.7.8")};
+    const std::vector<CNetAddr> dns_results{
+        CreateInternal("ignored-first"),
+        first,
+        CreateInternal("ignored-second"),
+        second,
+    };
+    auto dns_lookup = [&](const std::string& requested_name, bool allow_lookup) {
+        BOOST_CHECK_EQUAL(requested_name, name);
+        BOOST_CHECK(allow_lookup);
+        return dns_results;
+    };
+
+    BOOST_CHECK(LookupHost(name, 1, /*fAllowLookup=*/true, dns_lookup) == std::vector<CNetAddr>{first});
+    BOOST_CHECK(LookupHost(name, 0, /*fAllowLookup=*/true, dns_lookup) == std::vector<CNetAddr>({first, second}));
+
+    const std::optional<CNetAddr> address{LookupHost(name, /*fAllowLookup=*/true, dns_lookup)};
+    BOOST_REQUIRE(address);
+    BOOST_CHECK(*address == first);
+
+    BOOST_CHECK(Lookup(name, 8333, /*fAllowLookup=*/true, 0, dns_lookup) == std::vector<CService>({CService{first, 8333}, CService{second, 8333}}));
+    const CService explicit_port_service{first, 12345};
+    BOOST_CHECK(Lookup(name + ":12345", 8333, /*fAllowLookup=*/true, 1, dns_lookup) == std::vector<CService>{explicit_port_service});
+
+    const std::optional<CService> service{Lookup(name + ":12345", 8333, /*fAllowLookup=*/true, dns_lookup)};
+    BOOST_REQUIRE(service);
+    BOOST_CHECK(*service == explicit_port_service);
+}
+
 BOOST_AUTO_TEST_CASE(embedded_test)
 {
     CNetAddr addr1(ResolveIP("1.2.3.4"));
