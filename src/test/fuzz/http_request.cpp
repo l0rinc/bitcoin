@@ -177,6 +177,29 @@ void AssertHeaderCollectionContracts(FuzzedDataProvider& fuzzed_data_provider)
     }
 }
 
+void AssertHeaderParseRoundTrip(const std::string_view http_buffer)
+{
+    using http_bitcoin::HTTPHeaders;
+    using http_bitcoin::HTTPParseError;
+    using http_bitcoin::MAX_HEADERS_SIZE;
+    using util::LineReader;
+
+    HTTPHeaders headers;
+    LineReader reader(http_buffer, MAX_HEADERS_SIZE);
+    try {
+        if (!headers.Read(reader)) return;
+    } catch (const HTTPParseError&) {
+        return;
+    }
+
+    const std::string serialized{headers.Stringify()};
+    HTTPHeaders reparsed;
+    LineReader reparsed_reader(serialized, MAX_HEADERS_SIZE);
+    assert(reparsed.Read(reparsed_reader));
+    assert(reparsed_reader.Consumed() == serialized.size());
+    assert(reparsed.Stringify() == serialized);
+}
+
 void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDataProvider& fuzzed_data_provider, FakeSteadyClock& clock)
 {
     using http_bitcoin::HTTPRemoteClient;
@@ -554,6 +577,7 @@ FUZZ_TARGET(http_request)
     AssertHeaderCollectionContracts(fuzzed_data_provider);
     AssertSendBufferContracts(fuzzed_data_provider);
     const std::string http_buffer{fuzzed_data_provider.ConsumeRandomLengthString(4096)};
+    AssertHeaderParseRoundTrip(http_buffer);
     AssertReadRequestContracts(http_buffer);
 
     HTTPRequest http_request;
