@@ -58,6 +58,18 @@ FUZZ_TARGET(psbt)
 
     const PSBTAnalysis analysis = AnalyzePSBT(psbt);
     (void)PSBTRoleName(analysis.next);
+    Assert(analysis.estimated_vsize.has_value() == analysis.estimated_feerate.has_value());
+    Assert(!analysis.estimated_feerate.has_value() || analysis.fee.has_value());
+    if (analysis.error.empty()) {
+        Assert(analysis.inputs.size() == psbt.inputs.size());
+        Assert(analysis.next > PSBTRole::CREATOR);
+    } else {
+        Assert(analysis.inputs.empty());
+        Assert(!analysis.estimated_vsize.has_value());
+        Assert(!analysis.estimated_feerate.has_value());
+        Assert(!analysis.fee.has_value());
+        Assert(analysis.next == PSBTRole::CREATOR);
+    }
     for (const PSBTInputAnalysis& input_analysis : analysis.inputs) {
         (void)PSBTRoleName(input_analysis.next);
     }
