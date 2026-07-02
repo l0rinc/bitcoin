@@ -167,6 +167,7 @@ struct CacheLevel
 class CoinsViewBottom final : public CoinsViewEmpty
 {
     std::map<COutPoint, Coin> m_data;
+    uint256 m_best_block;
 
 public:
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const final
@@ -178,7 +179,9 @@ public:
         return std::nullopt;
     }
 
-    void BatchWrite(CoinsViewCacheCursor& cursor, const uint256&) final
+    uint256 GetBestBlock() const final { return m_best_block; }
+
+    void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) final
     {
         for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)) {
             if (it->second.IsDirty()) {
@@ -204,6 +207,8 @@ public:
                 }
             }
         }
+        m_best_block = block_hash;
+        assert(GetBestBlock() == block_hash);
     }
 };
 
@@ -299,9 +304,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 cache.entry[outpointidx].entrytype = EntryType::NONE;
             }
         }
-        if (caches.size() > 1) {
-            sim_best_blocks[caches.size() - 1] = sim_best_blocks[caches.size()];
-        }
+        sim_best_blocks[caches.size() - 1] = sim_best_blocks[caches.size()];
     };
 
     auto assert_cache_clean = [](const CCoinsViewCache& cache) {
@@ -811,7 +814,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
     }
 
     // Compare the bottom coinsview (not a CCoinsViewCache) with sim_cache[0].
-    assert(bottom.GetBestBlock().IsNull());
+    assert(bottom.GetBestBlock() == sim_best_blocks[0]);
     for (uint32_t outpointidx = 0; outpointidx < NUM_OUTPOINTS; ++outpointidx) {
         auto realcoin = bottom.GetCoin(data.outpoints[outpointidx]);
         auto sim = lookup(outpointidx, 0);
