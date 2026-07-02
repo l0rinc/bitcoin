@@ -33,6 +33,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -206,6 +207,19 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
             assert(db->GetBestBlock() == coins_view_cache.GetBestBlock());
         }
     };
+    auto assert_cache_stats_unchanged = [&](const auto& expected) {
+        const auto& [cache_size, dirty_count, memory_usage] = expected;
+        assert(coins_view_cache.GetCacheSize() == cache_size);
+        assert(coins_view_cache.GetDirtyCount() == dirty_count);
+        assert(coins_view_cache.DynamicMemoryUsage() == memory_usage);
+    };
+    auto get_cache_stats = [&] {
+        return std::tuple{
+            coins_view_cache.GetCacheSize(),
+            coins_view_cache.GetDirtyCount(),
+            coins_view_cache.DynamicMemoryUsage(),
+        };
+    };
     LIMITED_WHILE(good_data && fuzzed_data_provider.ConsumeBool(), 10'000)
     {
         CallOneOf(
@@ -292,7 +306,9 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                     if (is_db) coins_view_cache.SetBestBlock(uint256::ONE);
                 }
                 backend_coins_view = use_original_backend ? original_backend : &CoinsViewEmpty::Get();
+                const auto cache_stats{get_cache_stats()};
                 coins_view_cache.SetBackend(*backend_coins_view);
+                assert_cache_stats_unchanged(cache_stats);
             },
             [&] {
                 const std::optional<COutPoint> opt_out_point = ConsumeDeserializable<COutPoint>(fuzzed_data_provider);
