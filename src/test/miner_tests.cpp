@@ -790,6 +790,37 @@ void MinerTestingSetup::TestPrioritisedMining(const CScript& scriptPubKey, const
 }
 
 // NOTE: These tests rely on CreateNewBlock doing its own self-validation!
+BOOST_AUTO_TEST_CASE(RegenerateCommitmentsRejectsNullTxRefs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+
+    auto mining{MakeMining()};
+    BOOST_REQUIRE(mining);
+
+    std::unique_ptr<BlockTemplate> block_template = mining->createNewBlock({
+        .coinbase_output_script = CScript() << OP_TRUE,
+    }, /*cooldown=*/false);
+    BOOST_REQUIRE(block_template);
+
+    const HasReason null_tx_ref_assert{
+        "std::all_of(block.vtx.cbegin(), block.vtx.cend(), [](const auto& tx) { return tx != nullptr; })"};
+
+    CBlock resized_block{block_template->getBlock()};
+    const auto coinbase_hash_before{resized_block.vtx.front()->GetHash()};
+    const size_t tx_count_before{resized_block.vtx.size()};
+    resized_block.vtx.resize(resized_block.vtx.size() + 1);
+    BOOST_CHECK_EXCEPTION(node::RegenerateCommitments(resized_block, *Assert(m_node.chainman)), NonFatalCheckError,
+                          null_tx_ref_assert);
+    BOOST_CHECK_EQUAL(resized_block.vtx.size(), tx_count_before + 1);
+    BOOST_CHECK(!resized_block.vtx.back());
+    BOOST_CHECK_EQUAL(resized_block.vtx.front()->GetHash().ToString(), coinbase_hash_before.ToString());
+
+    CBlock null_coinbase_block;
+    null_coinbase_block.vtx.resize(1);
+    BOOST_CHECK_EXCEPTION(node::RegenerateCommitments(null_coinbase_block, *Assert(m_node.chainman)), NonFatalCheckError,
+                          null_tx_ref_assert);
+}
+
 BOOST_AUTO_TEST_CASE(RegenerateCommitmentsRejectsMissingWitnessCommitment)
 {
     test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
