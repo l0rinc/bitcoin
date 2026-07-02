@@ -230,6 +230,7 @@ FUZZ_TARGET(txorphan, .init = initialize_orphanage)
                         block_weight += tx_weight;
                         block.vtx.push_back(tx_to_remove);
                     }
+                    Assert(std::all_of(block.vtx.cbegin(), block.vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
                     orphanage->EraseForBlock(block);
                     for (const auto& tx_removed : block.vtx) {
                         Assert(!orphanage->HaveTx(tx_removed->GetWitnessHash()));
@@ -646,6 +647,7 @@ FUZZ_TARGET(txorphanage_sim)
                     }
                 }
                 std::shuffle(block.vtx.begin(), block.vtx.end(), rng);
+                Assert(std::all_of(block.vtx.cbegin(), block.vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
                 real->EraseForBlock(block);
                 std::erase_if(sim_announcements, [&](auto& ann) {
                     for (auto& txin : txn[ann.tx]->vin) {
