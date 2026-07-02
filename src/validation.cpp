@@ -3887,6 +3887,7 @@ void Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
 void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos)
 {
     AssertLockHeld(cs_main);
+    Assert(std::ranges::all_of(block.vtx, [](const auto& tx) { return tx != nullptr; }));
     pindexNew->nTx = block.vtx.size();
     // Typically m_chain_tx_count will be 0 at this point, but it can be nonzero if this
     // is a pruned block which is being downloaded again, or if this is an

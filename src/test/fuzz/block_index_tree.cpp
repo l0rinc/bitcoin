@@ -37,6 +37,13 @@ CBlockHeader ConsumeBlockHeader(FuzzedDataProvider& provider, uint256 prev_hash,
     return header;
 }
 
+CBlock DummyBlockWithTransactions(size_t tx_count)
+{
+    CBlock block;
+    block.vtx.assign(tx_count, MakeTransactionRef(CMutableTransaction{}));
+    return block;
+}
+
 bool IsAncestorOrDescendant(const CBlockIndex& pindex, const CBlockIndex& other)
 {
     return other.GetAncestor(pindex.nHeight) == &pindex || pindex.GetAncestor(other.nHeight) == &other;
@@ -176,8 +183,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                         chainman.InvalidBlockFound(index, state);
                     } else {
                         size_t nTx = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 1000);
-                        CBlock block; // Dummy block, so that ReceivedBlockTransactions can infer a nTx value.
-                        block.vtx = std::vector<CTransactionRef>(nTx);
+                        CBlock block{DummyBlockWithTransactions(nTx)}; // Only the transaction count is used.
                         FlatFilePos pos(0, fuzzed_data_provider.ConsumeIntegralInRange<int>(1, 1000));
                         chainman.ReceivedBlockTransactions(block, index, pos);
                         assert(index->nStatus & BLOCK_VALID_TRANSACTIONS);
@@ -312,8 +318,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                 size_t i = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, num_pruned - 1);
                 CBlockIndex* index = pruned_blocks[i];
                 assert(!(index->nStatus & BLOCK_HAVE_DATA));
-                CBlock block;
-                block.vtx = std::vector<CTransactionRef>(index->nTx); // Set the number of tx to the prior value.
+                CBlock block{DummyBlockWithTransactions(index->nTx)}; // Set the number of tx to the prior value.
                 FlatFilePos pos(0, fuzzed_data_provider.ConsumeIntegralInRange<int>(1, 1000));
                 chainman.ReceivedBlockTransactions(block, index, pos);
                 assert(index->nStatus & BLOCK_VALID_TRANSACTIONS);
