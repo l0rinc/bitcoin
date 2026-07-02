@@ -856,6 +856,36 @@ BOOST_AUTO_TEST_CASE(ccoins_access)
     }
 }
 
+static void CheckGetHaveCoinDirtyCounts(const CAmount base_value, const MaybeCoin& cache_coin)
+{
+    SingleEntryCacheTest test{base_value, cache_coin};
+
+    const size_t get_coin_dirty_count{test.cache.GetDirtyCount()};
+    (void)test.cache.GetCoin(OUTPOINT);
+    BOOST_CHECK_EQUAL(test.cache.GetDirtyCount(), get_coin_dirty_count);
+
+    const size_t have_coin_dirty_count{test.cache.GetDirtyCount()};
+    (void)test.cache.HaveCoin(OUTPOINT);
+    BOOST_CHECK_EQUAL(test.cache.GetDirtyCount(), have_coin_dirty_count);
+}
+
+BOOST_AUTO_TEST_CASE(ccoins_get_have_coin_dirty_counts)
+{
+    for (auto base_value : {ABSENT, SPENT, VALUE1}) {
+        CheckGetHaveCoinDirtyCounts(base_value, MISSING);
+
+        CheckGetHaveCoinDirtyCounts(base_value, SPENT_CLEAN);
+        CheckGetHaveCoinDirtyCounts(base_value, SPENT_FRESH);
+        CheckGetHaveCoinDirtyCounts(base_value, SPENT_DIRTY);
+        CheckGetHaveCoinDirtyCounts(base_value, SPENT_DIRTY_FRESH);
+
+        CheckGetHaveCoinDirtyCounts(base_value, VALUE2_CLEAN);
+        CheckGetHaveCoinDirtyCounts(base_value, VALUE2_FRESH);
+        CheckGetHaveCoinDirtyCounts(base_value, VALUE2_DIRTY);
+        CheckGetHaveCoinDirtyCounts(base_value, VALUE2_DIRTY_FRESH);
+    }
+}
+
 static void CheckSpendCoins(const CAmount base_value, const MaybeCoin& cache_coin, const MaybeCoin& expected)
 {
     SingleEntryCacheTest test{base_value, cache_coin};
@@ -1540,19 +1570,25 @@ BOOST_AUTO_TEST_CASE(ccoins_input_lookup_contracts)
     CMutableTransaction all_present;
     all_present.vin.emplace_back(first);
     all_present.vin.emplace_back(second);
+    const auto all_present_dirty_count{cache.GetDirtyCount()};
     BOOST_CHECK(cache.HaveInputs(CTransaction{all_present}));
+    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), all_present_dirty_count);
     BOOST_CHECK(!cache.AccessCoin(first).IsSpent());
     BOOST_CHECK(!cache.AccessCoin(second).IsSpent());
 
     CMutableTransaction duplicate_input;
     duplicate_input.vin.emplace_back(first);
     duplicate_input.vin.emplace_back(first);
+    const auto duplicate_input_dirty_count{cache.GetDirtyCount()};
     BOOST_CHECK(cache.HaveInputs(CTransaction{duplicate_input}));
+    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), duplicate_input_dirty_count);
 
     CMutableTransaction first_missing;
     first_missing.vin.emplace_back(missing);
     first_missing.vin.emplace_back(second);
+    const auto first_missing_dirty_count{cache.GetDirtyCount()};
     BOOST_CHECK(!cache.HaveInputs(CTransaction{first_missing}));
+    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), first_missing_dirty_count);
 
     CMutableTransaction coinbase;
     coinbase.vin.emplace_back(COutPoint{});
