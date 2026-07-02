@@ -68,6 +68,17 @@ std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> CTxMemPool::GetChildren(const C
     std::ranges::sort(ret, CompareIteratorByHash{});
     auto removed = std::ranges::unique(ret, [](auto& a, auto& b) noexcept { return &a.get() == &b.get(); });
     ret.erase(removed.begin(), removed.end());
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        for (size_t i{0}; i < ret.size(); ++i) {
+            const auto& child_tx{ret[i].get().GetTx()};
+            Assume(std::ranges::any_of(child_tx.vin, [&](const CTxIn& txin) {
+                return txin.prevout.hash == hash;
+            }));
+            for (size_t j{0}; j < i; ++j) {
+                Assume(&ret[i].get() != &ret[j].get());
+            }
+        }
+    }
     return ret;
 }
 
