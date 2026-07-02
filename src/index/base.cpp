@@ -31,6 +31,7 @@
 #include <validation.h>
 #include <validationinterface.h>
 
+#include <algorithm>
 #include <compare>
 #include <cstdint>
 #include <functional>
@@ -48,6 +49,11 @@ constexpr uint8_t DB_BEST_BLOCK{'B'};
 
 constexpr auto SYNC_LOG_INTERVAL{30s};
 constexpr auto SYNC_LOCATOR_WRITE_INTERVAL{30s};
+
+static void AssertBlockTxRefs(const CBlock& block)
+{
+    Assert(std::all_of(block.vtx.cbegin(), block.vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
+}
 
 template <typename... Args>
 void BaseIndex::FatalErrorf(util::ConstevalFormatString<sizeof...(Args)> fmt, const Args&... args)
@@ -185,6 +191,7 @@ bool BaseIndex::ProcessBlock(const CBlockIndex* pindex, const CBlock* block_data
         }
         block_info.data = &block;
     }
+    AssertBlockTxRefs(*Assert(block_info.data));
 
     CBlockUndo block_undo;
     if (CustomOptions().connect_undo_data) {
@@ -319,6 +326,7 @@ bool BaseIndex::Rewind(const CBlockIndex* current_tip, const CBlockIndex* new_ti
                 return false;
             }
             block_info.data = &block;
+            AssertBlockTxRefs(*block_info.data);
         }
         if (CustomOptions().disconnect_undo_data && iter_tip->nHeight > 0) {
             if (!m_chainstate->m_blockman.ReadBlockUndo(block_undo, *iter_tip)) {
