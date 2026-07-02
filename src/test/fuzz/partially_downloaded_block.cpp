@@ -215,7 +215,10 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     bool fail_block_mutated{fuzzed_data_provider.ConsumeBool()};
     pdb.m_check_block_mutated_mock = FuzzedIsBlockMutated(fail_block_mutated);
 
-    CBlock reconstructed_block;
+    CBlock reconstructed_block{*block};
+    reconstructed_block.vtx = {block->vtx[0]};
+    const uint256 reconstructed_block_hash{reconstructed_block.GetHash()};
+    const std::vector<CTransactionRef> reconstructed_block_txs{reconstructed_block.vtx};
     assert(std::all_of(missing.cbegin(), missing.cend(),
         [](const auto& tx) { return tx != nullptr; }));
     auto fill_status{pdb.FillBlock(reconstructed_block, missing, segwit_active)};
@@ -234,8 +237,12 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         break;
     case READ_STATUS_FAILED:
         assert(fail_block_mutated);
+        assert(reconstructed_block.GetHash() == reconstructed_block_hash);
+        assert(reconstructed_block.vtx == reconstructed_block_txs);
         break;
     case READ_STATUS_INVALID:
+        assert(reconstructed_block.GetHash() == reconstructed_block_hash);
+        assert(reconstructed_block.vtx == reconstructed_block_txs);
         break;
     }
 
