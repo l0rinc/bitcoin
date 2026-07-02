@@ -131,6 +131,21 @@ BOOST_AUTO_TEST_CASE(package_hash_tests)
     BOOST_CHECK_EQUAL(calculated_hash_123, GetPackageHash(package_321));
 }
 
+BOOST_AUTO_TEST_CASE(package_helpers_reject_null_tx_refs)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+    Package package{create_placeholder_tx(1, 1)};
+    package.resize(2);
+
+    PackageValidationState state;
+    BOOST_CHECK_THROW((void)IsTopoSortedPackage(package), NonFatalCheckError);
+    BOOST_CHECK_THROW((void)IsConsistentPackage(package), NonFatalCheckError);
+    BOOST_CHECK_THROW((void)IsWellFormedPackage(package, state), NonFatalCheckError);
+    BOOST_CHECK_THROW((void)IsChildWithParents(package), NonFatalCheckError);
+    BOOST_CHECK_THROW((void)IsChildWithParentsTree(package), NonFatalCheckError);
+    BOOST_CHECK_THROW((void)GetPackageHash(package), NonFatalCheckError);
+}
+
 BOOST_AUTO_TEST_CASE(package_sanitization_tests)
 {
     // Packages can't have more than 25 transactions.

@@ -61,6 +61,11 @@ void AssertValidTransactionInfo(const TransactionInfo& info)
     Assert(info.m_virtual_transaction_size > 0);
 }
 
+void AssertNonNullTransactionRefs(const std::vector<CTransactionRef>& txs)
+{
+    Assert(std::all_of(txs.cbegin(), txs.cend(), [](const auto& tx) { return tx != nullptr; }));
+}
+
 struct MockedTxPool : public CTxMemPool {
     void RollingFeeUpdate() EXCLUSIVE_LOCKS_REQUIRED(!cs)
     {
@@ -477,6 +482,7 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
                 return tx;
             }());
         }
+        AssertNonNullTransactionRefs(txs);
         AssertDuplicatePackageRejected(txs);
 
         if (fuzzed_data_provider.ConsumeBool()) {
@@ -657,6 +663,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
                 return tx;
             }());
         }
+        AssertNonNullTransactionRefs(txs);
         AssertDuplicatePackageRejected(txs);
 
         if (fuzzed_data_provider.ConsumeBool()) {
