@@ -216,6 +216,7 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         if (!outpoints.empty()) ret.push_back(outpoints.front());
         return ret;
     }()};
+    const std::set<COutPoint> unique_outpoints{outpoints.begin(), outpoints.end()};
     std::optional<CAmount> total_bumpfee;
     CAmount sum_fees = 0;
     {
@@ -249,6 +250,10 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         const auto duplicated_bump_fees = duplicate_mini_miner.CalculateBumpFees(target_feerate);
         assert(!duplicate_mini_miner.IsReadyToCalculate());
         assert(bump_fees == duplicated_bump_fees);
+        assert(bump_fees.size() == unique_outpoints.size());
+        for (const auto& [outpoint, _] : bump_fees) {
+            assert(unique_outpoints.contains(outpoint));
+        }
         for (const auto& outpoint : outpoints) {
             auto it = bump_fees.find(outpoint);
             assert(it != bump_fees.end());

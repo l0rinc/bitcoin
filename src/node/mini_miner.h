@@ -84,6 +84,9 @@ class MiniMiner
     // txids of to-be-replaced transactions
     std::set<Txid> m_to_be_replaced;
 
+    // Unique outpoints requested by the caller.
+    std::set<COutPoint> m_requested_outpoints;
+
     // If multiple argument outpoints correspond to the same transaction, cache them together in
     // a single entry indexed by txid. Then we can just work with txids since all outpoints from
     // the same tx will have the same bumpfee. Excludes non-mempool transactions.
