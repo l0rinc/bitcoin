@@ -80,6 +80,9 @@ FUZZ_TARGET(merkle)
         return;
     }
     const size_t num_txs = block->vtx.size();
+    for (const auto& tx : block->vtx) {
+        assert(tx != nullptr);
+    }
     std::vector<uint256> tx_hashes;
     tx_hashes.reserve(num_txs);
 
