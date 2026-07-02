@@ -237,6 +237,17 @@ BOOST_AUTO_TEST_CASE(line_reader_test)
         BOOST_CHECK(!reader.ReadLine());
     }
     {
+        // Preserve embedded NUL bytes in line views.
+        const std::string input{"a\0b\r\nc", 6};
+        LineReader reader(input, /*max_line_length=*/4);
+        const auto line{reader.ReadLine()};
+        BOOST_REQUIRE(line);
+        BOOST_CHECK_EQUAL(line->size(), 3U);
+        BOOST_CHECK(line->compare(std::string_view{input.data(), 3}) == 0);
+        BOOST_CHECK_EQUAL(reader.Consumed(), 5U);
+        BOOST_CHECK_EQUAL(reader.ReadLength(1), "c");
+    }
+    {
         // Even one character is too long, if it's not \n
         std::string_view input = "ab\n";
         LineReader reader(input, /*max_line_length=*/1);
