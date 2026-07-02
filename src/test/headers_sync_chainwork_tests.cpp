@@ -259,6 +259,28 @@ BOOST_AUTO_TEST_CASE(happy_path)
     }
 }
 
+BOOST_AUTO_TEST_CASE(discontinuous_redownload)
+{
+    const auto& first_chain{FirstChain()};
+
+    HeadersSyncState hss{CreateState()};
+
+    CHECK_RESULT(hss.ProcessNextHeaders(first_chain, /*full_headers_message=*/true),
+        hss, /*exp_state=*/State::REDOWNLOAD,
+        /*exp_success=*/true, /*exp_request_more=*/true,
+        /*exp_headers_size=*/0, /*exp_pow_validated_prev=*/std::nullopt,
+        /*exp_locator_hash=*/genesis.GetHash());
+
+    CBlockHeader disconnected_header{first_chain.front()};
+    disconnected_header.hashPrevBlock = first_chain.back().GetHash();
+
+    CHECK_RESULT(hss.ProcessNextHeaders({{disconnected_header}}, /*full_headers_message=*/true),
+        hss, /*exp_state=*/State::FINAL,
+        /*exp_success=*/false, /*exp_request_more=*/false,
+        /*exp_headers_size=*/0, /*exp_pow_validated_prev=*/std::nullopt,
+        /*exp_locator_hash=*/std::nullopt);
+}
+
 BOOST_AUTO_TEST_CASE(too_little_work)
 {
     const auto& second_chain{SecondChain()};
