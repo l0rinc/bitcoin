@@ -163,6 +163,7 @@ void CheckPackageToValidate(const node::PackageToValidate& package_to_validate, 
 
     // Package is a 1p1c
     const auto& package = package_to_validate.m_txns;
+    Assert(std::all_of(package.cbegin(), package.cend(), [](const auto& tx) { return tx != nullptr; }));
     Assert(IsChildWithParents(package));
     Assert(package.size() == 2);
 }

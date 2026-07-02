@@ -9,15 +9,24 @@
 #include <util/check.h>
 
 #include <algorithm>
-#include <cassert>
 #include <iterator>
 #include <memory>
 #include <numeric>
+
+namespace {
+
+void AssertNonNullTransactionRefs(const std::vector<CTransactionRef>& txns)
+{
+    Assert(std::all_of(txns.cbegin(), txns.cend(), [](const auto& tx) { return tx != nullptr; }));
+}
+
+} // namespace
 
 /** IsTopoSortedPackage where a set of txids has been pre-populated. The set is assumed to be correct and
  * is mutated within this function (even if return value is false). */
 bool IsTopoSortedPackage(const Package& txns, std::unordered_set<Txid, SaltedTxidHasher>& later_txids)
 {
+    AssertNonNullTransactionRefs(txns);
     // Avoid misusing this function: later_txids should contain the txids of txns.
     Assume(txns.size() == later_txids.size());
 
@@ -42,6 +51,7 @@ bool IsTopoSortedPackage(const Package& txns, std::unordered_set<Txid, SaltedTxi
 
 bool IsTopoSortedPackage(const Package& txns)
 {
+    AssertNonNullTransactionRefs(txns);
     std::unordered_set<Txid, SaltedTxidHasher> later_txids;
     std::transform(txns.cbegin(), txns.cend(), std::inserter(later_txids, later_txids.end()),
                    [](const auto& tx) { return tx->GetHash(); });
@@ -52,6 +62,7 @@ bool IsTopoSortedPackage(const Package& txns)
 
 bool IsConsistentPackage(const Package& txns)
 {
+    AssertNonNullTransactionRefs(txns);
     // Don't allow any conflicting transactions, i.e. spending the same inputs, in a package.
     std::unordered_set<COutPoint, SaltedOutpointHasher> inputs_seen;
     for (const auto& tx : txns) {
@@ -79,6 +90,7 @@ bool IsConsistentPackage(const Package& txns)
 
 bool IsWellFormedPackage(const Package& txns, PackageValidationState& state)
 {
+    AssertNonNullTransactionRefs(txns);
     const unsigned int package_count = txns.size();
 
     if (package_count > MAX_PACKAGE_COUNT) {
@@ -119,7 +131,7 @@ bool IsWellFormedPackage(const Package& txns, PackageValidationState& state)
 
 bool IsChildWithParents(const Package& package)
 {
-    assert(std::all_of(package.cbegin(), package.cend(), [](const auto& tx){return tx != nullptr;}));
+    AssertNonNullTransactionRefs(package);
     if (package.size() < 2) return false;
 
     // The package is expected to be sorted, so the last transaction is the child.
@@ -151,6 +163,7 @@ bool IsChildWithParentsTree(const Package& package)
 
 uint256 GetPackageHash(const std::vector<CTransactionRef>& transactions)
 {
+    AssertNonNullTransactionRefs(transactions);
     // Create a vector of the wtxids.
     std::vector<Wtxid> wtxids_copy;
     std::transform(transactions.cbegin(), transactions.cend(), std::back_inserter(wtxids_copy),
