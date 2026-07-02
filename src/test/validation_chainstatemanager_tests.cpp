@@ -104,6 +104,41 @@ BOOST_AUTO_TEST_CASE(load_external_block_file_unknown_parent_position)
     BOOST_CHECK_EQUAL(child_pos.nPos, node::STORAGE_HEADER_BYTES);
 }
 
+BOOST_AUTO_TEST_CASE(load_external_block_file_truncated_payload)
+{
+    CBlockHeader header;
+    header.nVersion = 4;
+    header.hashPrevBlock = uint256::ONE;
+    header.hashMerkleRoot = uint256{2};
+    header.nTime = Params().GenesisBlock().nTime + 1;
+    header.nBits = Params().GenesisBlock().nBits;
+    header.nNonce = 0;
+
+    DataStream stream{};
+    stream << Params().MessageStart();
+    stream << static_cast<uint32_t>(GetSerializeSize(header) + 1);
+    stream << header;
+
+    const fs::path blkfile{m_path_root / "truncated-payload-blk.dat"};
+    {
+        FILE* outfile{fsbridge::fopen(blkfile, "wb")};
+        BOOST_REQUIRE(outfile);
+        BOOST_REQUIRE_EQUAL(std::fwrite(stream.data(), 1, stream.size(), outfile), stream.size());
+        std::fclose(outfile);
+    }
+
+    AutoFile file{fsbridge::fopen(blkfile, "rb")};
+    BOOST_REQUIRE(!file.IsNull());
+
+    const CBlockIndex* tip_before{WITH_LOCK(::cs_main, return m_node.chainman->ActiveTip())};
+    FlatFilePos pos{0, 0};
+    std::multimap<uint256, FlatFilePos> blocks_with_unknown_parent;
+    m_node.chainman->LoadExternalBlockFile(file, &pos, &blocks_with_unknown_parent);
+
+    BOOST_CHECK(blocks_with_unknown_parent.empty());
+    BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return m_node.chainman->ActiveTip()), tip_before);
+}
+
 //! Basic tests for ChainstateManager.
 //!
 //! First create a legacy (IBD) chainstate, then create a snapshot chainstate.
