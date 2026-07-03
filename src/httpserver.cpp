@@ -552,6 +552,11 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
 
     // See libevent evhttp_response_needs_body()
     // Response headers are different if no body is needed
+    Assume(m_method == HTTPRequestMethod::GET ||
+           m_method == HTTPRequestMethod::POST ||
+           m_method == HTTPRequestMethod::HEAD ||
+           m_method == HTTPRequestMethod::PUT ||
+           m_method == HTTPRequestMethod::UNKNOWN);
     bool needs_body{
         m_method != HTTPRequestMethod::HEAD &&
         status != HTTP_NO_CONTENT &&
@@ -1075,7 +1080,7 @@ void HTTPServer::MaybeDispatchRequestsFromClient(const std::shared_ptr<HTTPRemot
             req->WriteReply(HTTP_CONTENT_TOO_LARGE);
             client->m_disconnect = true;
             return;
-        } catch (const std::runtime_error& e) {
+        } catch (const HTTPParseError& e) {
             LogDebug(
                 BCLog::HTTP,
                 "Error reading HTTP request from client %s (id=%llu): %s",
