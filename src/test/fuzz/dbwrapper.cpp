@@ -122,8 +122,8 @@ struct LevelDBBytewiseU16Cmp {
     bool operator()(uint16_t a, uint16_t b) const { return internal_bswap_16(a) < internal_bswap_16(b); }
 };
 
-/** key → value-size map ordered by LevelDB's bytewise comparator. */
-using Oracle = std::map<uint16_t, uint32_t, LevelDBBytewiseU16Cmp>;
+/** key → value map ordered by LevelDB's bytewise comparator. */
+using Oracle = std::map<uint16_t, std::vector<uint8_t>, LevelDBBytewiseU16Cmp>;
 
 struct FailUnserialize {
     template <typename Stream>
@@ -149,7 +149,7 @@ void VerifyRead(const CDBWrapper& dbw, const Oracle& oracle, uint16_t key)
 {
     std::vector<uint8_t> value{MakeValue(key ^ uint16_t{0xffff}, 32)};
     if (const auto it{oracle.find(key)}; it != oracle.end()) {
-        assert(dbw.Read(key, value) && value == MakeValue(key, it->second));
+        assert(dbw.Read(key, value) && value == it->second);
     } else {
         const auto initial_value{value};
         assert(!dbw.Read(key, value));
@@ -188,7 +188,7 @@ void VerifyIterator(CDBWrapper& dbw, const Oracle& oracle,
         if (oracle_it != oracle.end() && db_key == oracle_it->first) {
             std::vector<uint8_t> db_value;
             assert(it->GetValue(db_value));
-            assert(db_value == MakeValue(db_key, oracle_it->second));
+            assert(db_value == oracle_it->second);
             ++oracle_it;
         } else {
             assert(obfuscate);
@@ -285,9 +285,10 @@ void TestDbWrapper(FuzzedDataProvider& provider,
             [&] {
                 const auto key{ConsumeKey(provider)};
                 const auto size{ConsumeValueSize(provider)};
+                const auto value{MakeValue(key, size)};
                 drain_work();
-                dbw->Write(key, MakeValue(key, size), /*fSync=*/provider.ConsumeBool());
-                oracle[key] = size;
+                dbw->Write(key, value, /*fSync=*/provider.ConsumeBool());
+                oracle[key] = value;
             },
             [&] {
                 const auto key{ConsumeKey(provider)};
@@ -297,15 +298,16 @@ void TestDbWrapper(FuzzedDataProvider& provider,
             },
             [&] {
                 CDBBatch batch{*dbw};
-                std::map<uint16_t, uint32_t> batch_writes;
+                Oracle batch_writes;
                 std::set<uint16_t> batch_erases;
                 const auto fill{[&] {
                     LIMITED_WHILE (provider.ConsumeBool(), 20) {
                         const auto key{ConsumeKey(provider)};
                         if (provider.ConsumeBool()) {
                             const auto size{ConsumeValueSize(provider)};
-                            batch.Write(key, MakeValue(key, size));
-                            batch_writes[key] = size;
+                            const auto value{MakeValue(key, size)};
+                            batch.Write(key, value);
+                            batch_writes[key] = value;
                             batch_erases.erase(key);
                         } else {
                             batch.Erase(key);
@@ -446,9 +448,10 @@ FUZZ_TARGET(dbwrapper_concurrent_reads, .init = [] { static auto setup{MakeNoLog
         for (size_t i{start}; i < end; ++i) {
             const auto k{ConsumeKey(provider)};
             const auto size{ConsumeValueSize(provider)};
-            batch.Write(k, MakeValue(k, size));
+            const auto value{MakeValue(k, size)};
+            batch.Write(k, value);
             keys.push_back(k);
-            oracle[k] = size;
+            oracle[k] = value;
         }
         det_env.DrainWork();
         db.WriteBatch(batch, /*fSync=*/true);
@@ -504,7 +507,7 @@ FUZZ_TARGET(dbwrapper_concurrent_reads, .init = [] { static auto setup{MakeNoLog
                         uint16_t actual_key;
                         std::vector<uint8_t> value;
                         assert(it->GetKey(actual_key) && actual_key == oit->first);
-                        assert(it->GetValue(value) && value == MakeValue(actual_key, oit->second));
+                        assert(it->GetValue(value) && value == oit->second);
                     } else {
                         AssertExhaustedIterator(*it);
                     }
