@@ -183,9 +183,11 @@ bool TorControlConnection::ProcessBuffer()
     auto start = reader.it;
 
     while (auto line = reader.ReadLine()) {
+        Assume(line->size() <= MAX_LINE_LENGTH);
         if (m_message.lines.size() == MAX_LINE_COUNT) {
             throw std::runtime_error(strprintf("Control port reply exceeded %d lines, disconnecting", MAX_LINE_COUNT));
         }
+        Assume(m_message.lines.size() < MAX_LINE_COUNT);
         // Skip short lines
         if (line->size() < 4) continue;
 
@@ -193,6 +195,7 @@ bool TorControlConnection::ProcessBuffer()
         // <status>(-|+| )<data>
         m_message.code = ToIntegral<int>(line->substr(0, 3)).value_or(0);
         m_message.lines.emplace_back(line->substr(4));
+        Assume(m_message.lines.size() <= MAX_LINE_COUNT);
         char separator = (*line)[3]; // '-', '+', or ' '
 
         if (separator == ' ') {
