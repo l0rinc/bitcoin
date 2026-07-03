@@ -36,8 +36,6 @@ static void GetFuture(std::future<void>& future, uint32_t& fail_counter)
         future.get();
     } catch (const ExpectedException&) {
         fail_counter++;
-    } catch (...) {
-        assert(false && "Unexpected exception type");
     }
 }
 
