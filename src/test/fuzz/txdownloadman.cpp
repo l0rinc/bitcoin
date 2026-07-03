@@ -417,6 +417,9 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                 node::RejectedTxTodo todo = txdownload_impl.MempoolRejectedTx(rand_tx, state, rand_peer, first_time_failure);
                 Assert(first_time_failure || !todo.m_should_add_extra_compact_tx);
                 CheckUniqueParents(todo.m_unique_parents, *rand_tx);
+                if (state.GetResult() != TxValidationResult::TX_MISSING_INPUTS) {
+                    Assert(!txdownload_impl.m_orphanage->HaveTx(rand_tx->GetWitnessHash()));
+                }
             },
             [&] {
                 auto gtxid = fuzzed_data_provider.ConsumeBool() ?
