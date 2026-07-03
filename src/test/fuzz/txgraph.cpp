@@ -686,10 +686,23 @@ FUZZ_TARGET(txgraph)
                 if (simpos == SimTxGraph::MISSING) {
                     assert(feerate.IsEmpty());
                 } else {
-                    // Just do some quick checks that the reported value is in range. A full
-                    // recomputation of expected chunk feerates is done at the end.
-                    assert(feerate.size >= main_sim.graph.FeeRate(simpos).size);
-                    assert(feerate.size <= main_sim.SumAll().size);
+                    auto cluster = real->GetCluster(*ref, TxGraph::Level::MAIN);
+                    std::vector<SimTxGraph::Pos> cluster_linearization;
+                    cluster_linearization.reserve(cluster.size());
+                    for (TxGraph::Ref* cluster_ref : cluster) {
+                        auto cluster_pos = main_sim.Find(cluster_ref);
+                        assert(cluster_pos != SimTxGraph::MISSING);
+                        cluster_linearization.push_back(cluster_pos);
+                    }
+                    bool found_chunk{false};
+                    for (const auto& chunk : chunk_linearization_info_fn(main_sim, cluster_linearization)) {
+                        if (chunk.transactions[simpos]) {
+                            assert(FeePerWeight::FromFeeFrac(chunk.feerate) == feerate);
+                            found_chunk = true;
+                            break;
+                        }
+                    }
+                    assert(found_chunk);
                 }
                 break;
             } else if (!sel_sim.IsOversized() && command-- == 0) {
