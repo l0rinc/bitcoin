@@ -321,6 +321,14 @@ BOOST_AUTO_TEST_CASE(package_test_accept_single_low_fee)
         BOOST_REQUIRE(it_low_fee_tx->second.m_wtxids_fee_calculations.has_value());
         BOOST_REQUIRE_EQUAL(it_low_fee_tx->second.m_wtxids_fee_calculations->size(), 1U);
         BOOST_CHECK_EQUAL(it_low_fee_tx->second.m_wtxids_fee_calculations->front(), tx_low_fee->GetWitnessHash());
+
+        PackageMempoolAcceptResult wrapped_single{tx_low_fee->GetWitnessHash(), it_low_fee_tx->second};
+        if (auto err_wrapped{CheckPackageMempoolAcceptResult(package_single_low_fee, wrapped_single, /*expect_valid=*/false, nullptr)}) {
+            BOOST_ERROR(err_wrapped.value());
+        } else {
+            BOOST_CHECK_EQUAL(wrapped_single.m_state.GetResult(), PackageValidationResult::PCKG_TX);
+            BOOST_CHECK_EQUAL(wrapped_single.m_state.GetRejectReason(), "transaction failed");
+        }
     }
 
     BOOST_CHECK_EQUAL(m_node.mempool->size(), initial_pool_size);
