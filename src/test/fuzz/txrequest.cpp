@@ -19,6 +19,7 @@ namespace {
 
 constexpr int MAX_TXHASHES = 16;
 constexpr int MAX_PEERS = 16;
+constexpr int MAX_COMMANDS = 1024;
 
 //! Randomly generated txhashes used in this test (length is MAX_TXHASHES).
 uint256 TXHASHES[MAX_TXHASHES];
@@ -297,6 +298,30 @@ public:
 
     void Check()
     {
+        for (int txhash = 0; txhash < MAX_TXHASHES; ++txhash) {
+            std::bitset<MAX_PEERS> expected_announcers;
+            for (int peer = 0; peer < MAX_PEERS; ++peer) {
+                if (m_announcements[txhash][peer].m_state == State::CANDIDATE || m_announcements[txhash][peer].m_state == State::REQUESTED) {
+                    expected_announcers[peer] = true;
+                }
+            }
+            const std::vector<NodeId> prefix{MAX_PEERS + 1, MAX_PEERS + 2};
+            std::vector<NodeId> candidate_peers{prefix};
+            m_tracker.GetCandidatePeers(TXHASHES[txhash], candidate_peers);
+            assert(candidate_peers.size() >= prefix.size());
+            assert(std::equal(prefix.begin(), prefix.end(), candidate_peers.begin()));
+            assert(expected_announcers.count() == candidate_peers.size() - prefix.size());
+            std::bitset<MAX_PEERS> seen_announcers;
+            for (size_t pos{prefix.size()}; pos < candidate_peers.size(); ++pos) {
+                const auto peer{candidate_peers[pos]};
+                assert(peer >= 0 && peer < MAX_PEERS);
+                const auto peer_idx{static_cast<size_t>(peer)};
+                assert(expected_announcers[peer_idx]);
+                assert(!seen_announcers[peer_idx]);
+                seen_announcers[peer_idx] = true;
+            }
+        }
+
         // Compare CountTracked and CountLoad with naive structure.
         size_t total = 0;
         for (int peer = 0; peer < MAX_PEERS; ++peer) {
@@ -307,28 +332,6 @@ public:
                 tracked += m_announcements[txhash][peer].m_state != State::NOTHING;
                 inflight += m_announcements[txhash][peer].m_state == State::REQUESTED;
                 candidates += m_announcements[txhash][peer].m_state == State::CANDIDATE;
-
-                std::bitset<MAX_PEERS> expected_announcers;
-                for (int peer = 0; peer < MAX_PEERS; ++peer) {
-                    if (m_announcements[txhash][peer].m_state == State::CANDIDATE || m_announcements[txhash][peer].m_state == State::REQUESTED) {
-                        expected_announcers[peer] = true;
-                    }
-                }
-                const std::vector<NodeId> prefix{MAX_PEERS + 1, MAX_PEERS + 2};
-                std::vector<NodeId> candidate_peers{prefix};
-                m_tracker.GetCandidatePeers(TXHASHES[txhash], candidate_peers);
-                assert(candidate_peers.size() >= prefix.size());
-                assert(std::equal(prefix.begin(), prefix.end(), candidate_peers.begin()));
-                assert(expected_announcers.count() == candidate_peers.size() - prefix.size());
-                std::bitset<MAX_PEERS> seen_announcers;
-                for (size_t pos{prefix.size()}; pos < candidate_peers.size(); ++pos) {
-                    const auto peer{candidate_peers[pos]};
-                    assert(peer >= 0 && peer < MAX_PEERS);
-                    const auto peer_idx{static_cast<size_t>(peer)};
-                    assert(expected_announcers[peer_idx]);
-                    assert(!seen_announcers[peer_idx]);
-                    seen_announcers[peer_idx] = true;
-                }
             }
             assert(m_tracker.Count(peer) == tracked);
             assert(m_tracker.CountInFlight(peer) == inflight);
@@ -351,7 +354,7 @@ FUZZ_TARGET(txrequest)
 
     // Decode the input as a sequence of instructions with parameters
     auto it = buffer.begin();
-    while (it != buffer.end()) {
+    for (int command_count{0}; it != buffer.end() && command_count < MAX_COMMANDS; ++command_count) {
         int cmd = *(it++) % 12;
         int peer, txidnum, delaynum;
         switch (cmd) {
