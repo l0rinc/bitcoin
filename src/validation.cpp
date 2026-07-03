@@ -3005,6 +3005,58 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
     return true;
 }
 
+bool Chainstate::DisconnectTipRange(CBlockIndex& pindex, CBlockIndex*& last_disconnected)
+{
+    AssertLockHeld(cs_main);
+    if (m_mempool) AssertLockHeld(m_mempool->cs);
+    assert(m_chain.Contains(pindex));
+
+    if (m_mempool) {
+        m_mempool->TrimToSize(/*sizelimit=*/0);
+    }
+
+    CBlockIndex* batch_tip{m_chain.Tip()};
+    last_disconnected = nullptr;
+    CCoinsViewCache view(&CoinsTip());
+    while (batch_tip->nHeight >= pindex.nHeight) {
+        if (m_chainman.m_interrupt) break;
+
+        CBlockIndex* const pindex_delete{batch_tip};
+        assert(pindex_delete->pprev);
+        assert(view.GetBestBlock() == pindex_delete->GetBlockHash());
+
+        CBlock block;
+        if (!m_blockman.ReadBlock(block, *pindex_delete)) {
+            LogError("DisconnectTipRange(): Failed to read block\n");
+            return false;
+        }
+        if (DisconnectBlock(block, pindex_delete, view) != DISCONNECT_OK) {
+            LogError("DisconnectTipRange(): DisconnectBlock %s failed\n", pindex_delete->GetBlockHash().ToString());
+            return false;
+        }
+
+        last_disconnected = pindex_delete;
+        batch_tip = pindex_delete->pprev;
+    }
+
+    if (!last_disconnected) return true;
+
+    view.Flush(/*reallocate_cache=*/false);
+
+    // Prune locks that began at or after the new tip should be moved backward so they get a chance to reorg.
+    const int max_height_first{batch_tip->nHeight};
+    for (auto& prune_lock : m_blockman.m_prune_locks) {
+        if (prune_lock.second.height_first <= max_height_first) continue;
+
+        prune_lock.second.height_first = max_height_first;
+        LogDebug(BCLog::PRUNE, "%s prune lock moved back to %d\n", prune_lock.first, max_height_first);
+    }
+
+    m_chain.SetTip(*batch_tip);
+    m_chainman.UpdateIBDStatus();
+    return true;
+}
+
 struct ConnectedBlock {
     const CBlockIndex* pindex;
     std::shared_ptr<const CBlock> pblock;
@@ -3542,116 +3594,22 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
     // blocks.
     LOCK(m_chainstate_mutex);
 
-    // We'll be acquiring and releasing cs_main below, to allow the validation
-    // callbacks to run. However, we should keep the block index in a
-    // consistent state as we disconnect blocks -- in particular we need to
-    // add equal-work blocks to setBlockIndexCandidates as we disconnect.
-    // To avoid walking the block index repeatedly in search of candidates,
-    // build a map once so that we can look up candidate blocks by chain
-    // work as we go.
-    std::multimap<const arith_uint256, CBlockIndex*> highpow_outofchain_headers;
-
-    {
-        LOCK(cs_main);
-        for (auto& entry : m_blockman.m_block_index) {
-            CBlockIndex& candidate = entry.second;
-            // We don't need to put anything in our active chain into the
-            // multimap, because those candidates will be found and considered
-            // as we disconnect.
-            // Instead, consider only non-active-chain blocks that score
-            // at least as good with CBlockIndexWorkComparator as the new tip.
-            if (!m_chain.Contains(candidate) &&
-                !CBlockIndexWorkComparator()(&candidate, pindex->pprev) &&
-                !(candidate.nStatus & BLOCK_FAILED_VALID)) {
-                highpow_outofchain_headers.insert({candidate.nChainWork, &candidate});
-            }
-        }
-    }
-
     CBlockIndex* to_mark_failed = pindex;
     bool pindex_was_in_chain = false;
-    int disconnected = 0;
 
-    // Disconnect (descendants of) pindex, and mark them invalid.
-    while (true) {
-        if (m_chainman.m_interrupt) break;
-
-        // Make sure the queue of validation callbacks doesn't grow unboundedly.
-        if (m_chainman.m_options.signals) LimitValidationInterfaceQueue(*m_chainman.m_options.signals);
-
+    if (!m_chainman.m_interrupt) {
         LOCK(cs_main);
-        // Lock for as long as disconnectpool is in scope to make sure MaybeUpdateMempoolForReorg is
-        // called after DisconnectTip without unlocking in between
         LOCK(MempoolMutex());
-        if (!m_chain.Contains(*pindex)) break;
-        pindex_was_in_chain = true;
-        CBlockIndex* const disconnected_tip{m_chain.Tip()};
+        if (m_chain.Contains(*pindex)) {
+            pindex_was_in_chain = true;
+            CBlockIndex* last_disconnected{nullptr};
+            if (!DisconnectTipRange(*pindex, last_disconnected)) return false;
 
-        // ActivateBestChain considers blocks already in m_chain
-        // unconditionally valid already, so force disconnect away from it.
-        DisconnectedBlockTransactions disconnectpool{MAX_DISCONNECTED_TX_POOL_BYTES};
-        bool ret = DisconnectTip(state, &disconnectpool);
-        // DisconnectTip will add transactions to disconnectpool.
-        // Adjust the mempool to be consistent with the new tip, adding
-        // transactions back to the mempool if disconnecting was successful,
-        // and we're not doing a very deep invalidation (in which case
-        // keeping the mempool up to date is probably futile anyway).
-        MaybeUpdateMempoolForReorg(disconnectpool, /* fAddToMempool = */ (++disconnected <= 10) && ret);
-        if (!ret) return false;
-        CBlockIndex* new_tip{m_chain.Tip()};
-        assert(disconnected_tip->pprev == new_tip);
-
-        // We immediately mark the disconnected blocks as invalid.
-        // This prevents a case where pruned nodes may fail to invalidateblock
-        // and be left unable to start as they have no tip candidates (as there
-        // are no blocks that meet the "have data and are not invalid per
-        // nStatus" criteria for inclusion in setBlockIndexCandidates).
-        disconnected_tip->nStatus |= BLOCK_FAILED_VALID;
-        m_blockman.m_dirty_blockindex.insert(disconnected_tip);
-        setBlockIndexCandidates.erase(disconnected_tip);
-        setBlockIndexCandidates.insert(new_tip);
-
-        // Mark out-of-chain descendants of the invalidated block as invalid
-        // Add any equal or more work headers that are not invalidated to setBlockIndexCandidates
-        // Recalculate m_best_header if it became invalid.
-        auto candidate_it = highpow_outofchain_headers.lower_bound(new_tip->nChainWork);
-
-        const bool best_header_needs_update{m_chainman.m_best_header->GetAncestor(disconnected_tip->nHeight) == disconnected_tip};
-        if (best_header_needs_update) {
-            // new_tip is definitely still valid at this point, but there may be better ones
-            m_chainman.m_best_header = new_tip;
+            if (last_disconnected) {
+                to_mark_failed = last_disconnected;
+            }
         }
-
-        while (candidate_it != highpow_outofchain_headers.end()) {
-            CBlockIndex* candidate{candidate_it->second};
-            if (candidate->GetAncestor(disconnected_tip->nHeight) == disconnected_tip) {
-                // Children of failed blocks are marked as BLOCK_FAILED_VALID.
-                candidate->nStatus |= BLOCK_FAILED_VALID;
-                m_blockman.m_dirty_blockindex.insert(candidate);
-                // If invalidated, the block is irrelevant for setBlockIndexCandidates
-                // and for m_best_header and can be removed from the cache.
-                candidate_it = highpow_outofchain_headers.erase(candidate_it);
-                continue;
-            }
-            if (!CBlockIndexWorkComparator()(candidate, new_tip) &&
-                candidate->IsValid(BLOCK_VALID_TRANSACTIONS) &&
-                candidate->HaveNumChainTxs()) {
-                setBlockIndexCandidates.insert(candidate);
-                // Do not remove candidate from the highpow_outofchain_headers cache, because it might be a descendant of the block being invalidated
-                // which needs to be marked failed later.
-            }
-            if (best_header_needs_update &&
-                m_chainman.m_best_header->nChainWork < candidate->nChainWork) {
-                m_chainman.m_best_header = candidate;
-            }
-            ++candidate_it;
-        }
-
-        // Track the last disconnected block to call InvalidChainFound on it.
-        to_mark_failed = disconnected_tip;
     }
-
-    m_chainman.CheckBlockIndex();
 
     {
         LOCK(cs_main);
@@ -3660,28 +3618,30 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
             return false;
         }
 
-        // Mark pindex as invalid if it never was in the main chain
-        if (!pindex_was_in_chain && !(pindex->nStatus & BLOCK_FAILED_VALID)) {
-            pindex->nStatus |= BLOCK_FAILED_VALID;
-            m_blockman.m_dirty_blockindex.insert(pindex);
-            setBlockIndexCandidates.erase(pindex);
-        }
-
-        // If any new blocks somehow arrived while we were disconnecting
-        // (above), then the pre-calculation of what should go into
-        // setBlockIndexCandidates may have missed entries. This would
-        // technically be an inconsistency in the block index, but if we clean
-        // it up here, this should be an essentially unobservable error.
-        // Loop back over all block index entries and add any missing entries
-        // to setBlockIndexCandidates.
-        for (auto& [_, block_index] : m_blockman.m_block_index) {
-            if (block_index.IsValid(BLOCK_VALID_TRANSACTIONS) && block_index.HaveNumChainTxs() && !setBlockIndexCandidates.value_comp()(&block_index, m_chain.Tip())) {
-                setBlockIndexCandidates.insert(&block_index);
-            }
+        if (!(to_mark_failed->nStatus & BLOCK_FAILED_VALID)) {
+            to_mark_failed->nStatus |= BLOCK_FAILED_VALID;
+            m_blockman.m_dirty_blockindex.insert(to_mark_failed);
         }
 
         InvalidChainFound(to_mark_failed);
+        ClearBlockIndexCandidates();
+        PopulateBlockIndexCandidates();
+
+        if (pindex_was_in_chain) {
+            UpdateTip(m_chain.Tip());
+
+            if (!FlushStateToDisk(state, FlushStateMode::IF_NEEDED)) {
+                return false;
+            }
+
+            if (m_mempool) {
+                LOCK(m_mempool->cs);
+                m_mempool->check(this->CoinsTip(), this->m_chain.Height() + 1);
+            }
+        }
     }
+
+    m_chainman.CheckBlockIndex();
 
     // Only notify about a new block tip if the active chain was modified.
     if (pindex_was_in_chain) {
