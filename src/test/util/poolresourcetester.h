@@ -12,6 +12,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 /**
@@ -85,6 +86,29 @@ public:
     {
         CheckResourceInvariants(resource);
         return resource.m_available_memory_end - resource.m_available_memory_it;
+    }
+
+    /**
+     * Checks that all non-empty spans currently handed out to callers are
+     * pairwise disjoint.
+     */
+    static void CheckLiveSpansDisjoint(std::span<const std::span<std::byte>> spans)
+    {
+        std::vector<PtrAndBytes> live_blocks;
+        live_blocks.reserve(spans.size());
+        for (const auto& span : spans) {
+            if (span.empty()) continue;
+            live_blocks.emplace_back(span.data(), span.size());
+        }
+
+        std::sort(live_blocks.begin(), live_blocks.end());
+        uintptr_t previous_end{0};
+        for (const auto& block : live_blocks) {
+            const uintptr_t block_end{block.ptr + block.size};
+            assert(block_end >= block.ptr);
+            assert(block.ptr >= previous_end);
+            previous_end = block_end;
+        }
     }
 
     /**
