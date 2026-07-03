@@ -13,6 +13,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -22,7 +23,7 @@ constexpr size_t MAX_TOR_LINE_LENGTH{100000};
 constexpr size_t MAX_TOR_LINE_COUNT{1000};
 
 struct TorProcessBufferModel {
-    bool throws{false};
+    std::optional<std::string> error;
     size_t consumed{0};
     size_t remaining_handlers{0};
     std::vector<TorControlReply> handled_replies;
@@ -38,7 +39,7 @@ TorProcessBufferModel ModelTorProcessBuffer(const std::vector<std::byte>& recv_b
     try {
         while (auto line = reader.ReadLine()) {
             if (message.lines.size() == MAX_TOR_LINE_COUNT) {
-                throw std::runtime_error("Control port reply exceeded line limit");
+                throw std::runtime_error("Control port reply exceeded 1000 lines, disconnecting");
             }
             if (line->size() < 4) continue;
 
@@ -53,8 +54,8 @@ TorProcessBufferModel ModelTorProcessBuffer(const std::vector<std::byte>& recv_b
             }
         }
         model.consumed = reader.Consumed();
-    } catch (const std::runtime_error&) {
-        model.throws = true;
+    } catch (const std::runtime_error& e) {
+        model.error = e.what();
     }
 
     return model;
@@ -77,9 +78,10 @@ void AssertProcessBufferContracts(const std::vector<std::byte>& recv_buffer, siz
     const TorProcessBufferModel model{ModelTorProcessBuffer(recv_buffer, handler_count)};
     try {
         assert(TorControlConnectionTest::ProcessBuffer(conn));
-        assert(!model.throws);
-    } catch (const std::runtime_error&) {
-        assert(model.throws);
+        assert(!model.error);
+    } catch (const std::runtime_error& e) {
+        assert(model.error);
+        assert(*model.error == e.what());
         assert(TorControlConnectionTest::ReceiveBuffer(conn) == recv_buffer);
         return;
     }
