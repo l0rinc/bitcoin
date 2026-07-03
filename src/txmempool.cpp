@@ -809,7 +809,16 @@ std::vector<CTxMemPool::delta_info> CTxMemPool::GetPrioritisedTransactions() con
 const CTransaction* CTxMemPool::GetConflictTx(const COutPoint& prevout) const
 {
     const auto it = mapNextTx.find(prevout);
-    return it == mapNextTx.end() ? nullptr : &(it->second->GetTx());
+    if (it == mapNextTx.end()) return nullptr;
+
+    const CTransaction& tx{it->second->GetTx()};
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        Assume(it->second != mapTx.end());
+        Assume(std::ranges::any_of(tx.vin, [&](const CTxIn& txin) {
+            return txin.prevout == prevout;
+        }));
+    }
+    return &tx;
 }
 
 std::optional<CTxMemPool::txiter> CTxMemPool::GetIter(const Txid& txid) const
