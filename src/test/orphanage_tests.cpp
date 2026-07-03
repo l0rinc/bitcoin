@@ -81,6 +81,11 @@ BOOST_AUTO_TEST_CASE(erase_for_block_rejects_null_tx_refs)
 {
     test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
     auto orphanage{node::MakeTxOrphanage()};
+    CTransactionRef null_tx;
+
+    BOOST_CHECK_THROW(orphanage->AddTx(null_tx, /*peer=*/0), NonFatalCheckError);
+    BOOST_CHECK_THROW(orphanage->GetChildrenFromSamePeer(null_tx, /*nodeid=*/0), NonFatalCheckError);
+
     CBlock block;
     block.vtx.resize(1);
 
