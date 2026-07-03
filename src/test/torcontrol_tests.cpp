@@ -10,7 +10,9 @@
 
 #include <cstddef>
 #include <map>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -241,6 +243,27 @@ BOOST_AUTO_TEST_CASE(torcontrol_process_buffer_preserves_suffix)
     const std::vector<std::byte> partial_before{TorControlConnectionTest::ReceiveBuffer(conn)};
     BOOST_CHECK(TorControlConnectionTest::ProcessBuffer(conn));
     BOOST_CHECK(TorControlConnectionTest::ReceiveBuffer(conn) == partial_before);
+}
+
+BOOST_AUTO_TEST_CASE(torcontrol_process_buffer_rejects_excess_reply_lines)
+{
+    CThreadInterrupt interrupt;
+    TorControlConnection conn{interrupt};
+
+    std::string reply;
+    for (size_t i{0}; i < 1001; ++i) {
+        reply += "250-line\r\n";
+    }
+    const std::vector<std::byte> original_buffer{ToBytes(reply)};
+    TorControlConnectionTest::ReceiveBuffer(conn) = original_buffer;
+
+    BOOST_CHECK_EXCEPTION(
+        TorControlConnectionTest::ProcessBuffer(conn),
+        std::runtime_error,
+        [](const std::runtime_error& e) {
+            return std::string_view{e.what()} == "Control port reply exceeded 1000 lines, disconnecting";
+        });
+    BOOST_CHECK(TorControlConnectionTest::ReceiveBuffer(conn) == original_buffer);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
