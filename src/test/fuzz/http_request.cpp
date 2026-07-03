@@ -396,6 +396,7 @@ void AssertReadRequestContracts(const std::string_view http_buffer)
 
     HTTPRequest client_request{client};
     if (direct_error != HTTPReadError::NONE) {
+        assert(direct_request.ReadBody().empty());
         try {
             (void)client->ReadRequest(client_request);
             assert(false);
@@ -414,6 +415,7 @@ void AssertReadRequestContracts(const std::string_view http_buffer)
     assert(client_complete == direct_complete);
 
     if (!client_complete) {
+        assert(direct_request.ReadBody().empty());
         assert(client->m_recv_buffer == recv_buffer_before);
         return;
     }
