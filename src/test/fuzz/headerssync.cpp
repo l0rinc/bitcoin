@@ -82,6 +82,9 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
     bool presync{true};
     bool requested_more{true};
     uint256 next_pow_validated_prev{genesis_hash};
+    int64_t expected_presync_height{start_index.nHeight};
+    uint32_t expected_presync_time{genesis_header.nTime};
+    arith_uint256 expected_presync_work{start_index.nChainWork};
 
     while (requested_more) {
         std::vector<CBlockHeader> headers;
@@ -110,6 +113,13 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
         auto result = headers_sync.ProcessNextHeaders(headers, fuzzed_data_provider.ConsumeBool());
         requested_more = result.request_more;
         const auto current_state{headers_sync.GetState()};
+        if (previous_state == HeadersSyncState::State::PRESYNC && result.success) {
+            for (const CBlockHeader& header : headers) {
+                ++expected_presync_height;
+                expected_presync_time = header.nTime;
+                expected_presync_work += GetBlockProof(header);
+            }
+        }
         assert(previous_state == HeadersSyncState::State::PRESYNC || previous_state == HeadersSyncState::State::REDOWNLOAD);
         assert(current_state == HeadersSyncState::State::FINAL || current_state == previous_state ||
                (previous_state == HeadersSyncState::State::PRESYNC && current_state == HeadersSyncState::State::REDOWNLOAD));
@@ -117,6 +127,11 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
         assert(result.pow_validated_headers.empty() || previous_state == HeadersSyncState::State::REDOWNLOAD);
         assert(!result.request_more || result.success);
         assert((current_state != HeadersSyncState::State::FINAL) == result.request_more);
+        if (current_state != HeadersSyncState::State::FINAL) {
+            assert(headers_sync.GetPresyncHeight() == expected_presync_height);
+            assert(headers_sync.GetPresyncTime() == expected_presync_time);
+            assert(headers_sync.GetPresyncWork() == expected_presync_work);
+        }
 
         for (const CBlockHeader& pow_validated_header : result.pow_validated_headers) {
             assert(pow_validated_header.hashPrevBlock == next_pow_validated_prev);
