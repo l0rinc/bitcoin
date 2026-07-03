@@ -18,13 +18,24 @@ using common::StringForFeeReason;
 FUZZ_TARGET(fees)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
+    static constexpr CAmount MAX_FILTER_FEERATE{10'000'000};
     const CFeeRate minimal_incremental_fee{ConsumeMoney(fuzzed_data_provider)};
     FastRandomContext rng{/*fDeterministic=*/true};
+    FastRandomContext replay_rng{/*fDeterministic=*/true};
     FeeFilterRounder fee_filter_rounder{minimal_incremental_fee, rng};
-    LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 10000) {
-        const CAmount current_minimum_fee = ConsumeMoney(fuzzed_data_provider);
+    FeeFilterRounder replay_fee_filter_rounder{minimal_incremental_fee, replay_rng};
+    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10000)
+    {
+        const CAmount current_minimum_fee{fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(-MAX_MONEY, MAX_MONEY)};
         const CAmount rounded_fee = fee_filter_rounder.round(current_minimum_fee);
+        const CAmount replay_rounded_fee = replay_fee_filter_rounder.round(current_minimum_fee);
+        assert(rounded_fee == replay_rounded_fee);
         assert(MoneyRange(rounded_fee));
+        assert(rounded_fee >= 0);
+        assert(rounded_fee <= MAX_FILTER_FEERATE);
+        if (current_minimum_fee <= 0) {
+            assert(rounded_fee == 0);
+        }
     }
     const FeeReason fee_reason = fuzzed_data_provider.PickValueInArray({FeeReason::NONE, FeeReason::HALF_ESTIMATE, FeeReason::FULL_ESTIMATE, FeeReason::DOUBLE_ESTIMATE, FeeReason::CONSERVATIVE, FeeReason::MEMPOOL_MIN, FeeReason::FALLBACK, FeeReason::REQUIRED});
     (void)StringForFeeReason(fee_reason);
