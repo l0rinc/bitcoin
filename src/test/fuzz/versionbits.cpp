@@ -61,6 +61,12 @@ public:
         return m_blocks.empty() ? nullptr : m_blocks.back().get();
     }
 
+    CBlockIndex* at(size_t height) const
+    {
+        assert(height < m_blocks.size());
+        return m_blocks.at(height).get();
+    }
+
     CBlockIndex* mine_block(bool signal)
     {
         CBlockHeader header;
@@ -339,6 +345,33 @@ FUZZ_TARGET(versionbits, .init = initialize)
         // for signalled deployments, the initial state is always DEFINED
         assert(since > 0 || state == ThresholdState::DEFINED);
         assert(exp_since > 0 || exp_state == ThresholdState::DEFINED);
+    }
+
+    const auto check_cache_query_consistency = [&](const CBlockIndex* pindex_prev) {
+        const ThresholdState cached_state = checker.GetStateFor(pindex_prev);
+        const int cached_since = checker.GetStateSinceHeightFor(pindex_prev);
+
+        TestConditionChecker fresh_state_checker(dep);
+        assert(cached_state == fresh_state_checker.GetStateFor(pindex_prev));
+        TestConditionChecker fresh_since_checker(dep);
+        assert(cached_since == fresh_since_checker.GetStateSinceHeightFor(pindex_prev));
+
+        if (pindex_prev != nullptr) {
+            const CBlockIndex* period_parent{pindex_prev->GetAncestor(pindex_prev->nHeight - ((pindex_prev->nHeight + 1) % period))};
+            assert(cached_state == checker.GetStateFor(period_parent));
+            assert(cached_since == checker.GetStateSinceHeightFor(period_parent));
+        }
+    };
+
+    check_cache_query_consistency(nullptr);
+    check_cache_query_consistency(blocks.tip());
+    check_cache_query_consistency(blocks.at(0));
+    check_cache_query_consistency(blocks.at(blocks.size() / 2));
+    for (size_t height{period - 1}; height < blocks.size(); height += period) {
+        check_cache_query_consistency(blocks.at(height));
+        if (height + 1 < blocks.size()) {
+            check_cache_query_consistency(blocks.at(height + 1));
+        }
     }
 }
 } // namespace
