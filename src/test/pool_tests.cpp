@@ -12,6 +12,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
@@ -127,6 +128,56 @@ BOOST_AUTO_TEST_CASE(chunk_rollover_preserves_leftover_freelist)
     PoolResourceTester::CheckAllDataAccountedFor(resource);
     BOOST_TEST(2U == PoolResourceTester::FreeListSizes(resource)[1]);
     BOOST_TEST(1U == PoolResourceTester::FreeListSizes(resource)[2]);
+}
+
+BOOST_AUTO_TEST_CASE(live_allocations_are_disjoint)
+{
+    struct LiveAlloc {
+        std::span<std::byte> span;
+        size_t alignment;
+    };
+
+    auto resource = PoolResource<16, 8>(16);
+    std::vector<LiveAlloc> live_allocs;
+
+    auto check_live_allocs{[&] {
+        std::vector<std::span<std::byte>> spans;
+        spans.reserve(live_allocs.size());
+        for (const auto& alloc : live_allocs) {
+            spans.push_back(alloc.span);
+        }
+        PoolResourceTester::CheckLiveSpansDisjoint(spans);
+    }};
+
+    auto allocate{[&](size_t bytes, size_t alignment) {
+        auto* ptr{static_cast<std::byte*>(resource.Allocate(bytes, alignment))};
+        live_allocs.push_back({std::span{ptr, bytes}, alignment});
+        check_live_allocs();
+    }};
+
+    allocate(8, 8);
+    allocate(8, 8);
+    allocate(16, 8);
+    allocate(32, 8); // Fallback allocation, outside the pool chunks.
+
+    while (!live_allocs.empty()) {
+        const auto alloc{live_allocs.back()};
+        resource.Deallocate(alloc.span.data(), alloc.span.size(), alloc.alignment);
+        live_allocs.pop_back();
+        check_live_allocs();
+    }
+
+    allocate(8, 8); // Reuses a freed block from the freelist.
+    allocate(8, 8); // Must not return that same block again while it is live.
+
+    while (!live_allocs.empty()) {
+        const auto alloc{live_allocs.back()};
+        resource.Deallocate(alloc.span.data(), alloc.span.size(), alloc.alignment);
+        live_allocs.pop_back();
+        check_live_allocs();
+    }
+
+    PoolResourceTester::CheckAllDataAccountedFor(resource);
 }
 
 // Allocates from 0 to n bytes were n > the PoolResource's data, and each should work
