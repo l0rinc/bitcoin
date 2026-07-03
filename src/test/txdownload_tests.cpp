@@ -301,6 +301,44 @@ BOOST_FIXTURE_TEST_CASE(received_responses_clear_peer_requests, TestingSetup)
     txdownload_impl.CheckIsEmpty();
 }
 
+BOOST_FIXTURE_TEST_CASE(non_missing_rejection_erases_orphan, TestingSetup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    FastRandomContext det_rand{true};
+    node::TxDownloadManagerImpl txdownload_impl{node::TxDownloadOptions{pool, det_rand, true}};
+    const node::TxDownloadConnectionInfo connection_info{/*m_preferred=*/true,
+                                                         /*m_relay_permissions=*/false,
+                                                         /*m_wtxid_relay=*/true};
+    constexpr NodeId peer{0};
+
+    txdownload_impl.ConnectedPeer(peer, connection_info);
+
+    const CTransactionRef parent{CreatePlaceholderTx(/*segwit=*/true)};
+    const CTransactionRef child{CreatePlaceholderTx(/*segwit=*/true)};
+    BOOST_REQUIRE(IsChildWithParents(Package{parent, child}));
+
+    TxValidationState missing_inputs;
+    missing_inputs.Invalid(TxValidationResult::TX_MISSING_INPUTS, "");
+    const auto orphan_ret{txdownload_impl.MempoolRejectedTx(child, missing_inputs, peer, /*first_time_failure=*/true)};
+    std::string err_msg;
+    BOOST_REQUIRE_MESSAGE(CheckOrphanBehavior(txdownload_impl, child, orphan_ret, err_msg,
+                                              /*expect_orphan=*/true, /*expect_keep=*/true, /*expected_parents=*/1),
+                          err_msg);
+
+    TxValidationState policy_failure;
+    policy_failure.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "");
+    const auto reject_ret{txdownload_impl.MempoolRejectedTx(child, policy_failure, peer, /*first_time_failure=*/false)};
+
+    BOOST_CHECK(!reject_ret.m_should_add_extra_compact_tx);
+    BOOST_CHECK(reject_ret.m_unique_parents.empty());
+    BOOST_CHECK(!reject_ret.m_package_to_validate);
+    BOOST_CHECK(!txdownload_impl.m_orphanage->HaveTx(child->GetWitnessHash()));
+    BOOST_CHECK(txdownload_impl.RecentRejectsFilter().contains(child->GetWitnessHash().ToUint256()));
+
+    txdownload_impl.DisconnectedPeer(peer);
+    txdownload_impl.CheckIsEmpty();
+}
+
 BOOST_FIXTURE_TEST_CASE(tx_rejection_types, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
