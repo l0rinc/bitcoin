@@ -743,7 +743,16 @@ BOOST_AUTO_TEST_CASE(MempoolDirectParentChildEdges)
     BOOST_CHECK(multi_child_parents.contains(parent_a->GetHash()));
     BOOST_CHECK(multi_child_parents.contains(parent_b->GetHash()));
 
+    BOOST_CHECK_EQUAL(pool.GetConflictTx(COutPoint{parent_a->GetHash(), 0}), same_parent_child.get());
+    BOOST_CHECK_EQUAL(pool.GetConflictTx(COutPoint{parent_a->GetHash(), 1}), same_parent_child.get());
+    BOOST_CHECK_EQUAL(pool.GetConflictTx(COutPoint{parent_a->GetHash(), 2}), multi_parent_child.get());
+    BOOST_CHECK_EQUAL(pool.GetConflictTx(COutPoint{parent_b->GetHash(), 0}), multi_parent_child.get());
+    BOOST_CHECK_EQUAL(pool.GetConflictTx(COutPoint{parent_b->GetHash(), 1}), nullptr);
+
     pool.removeRecursive(*same_parent_child, REMOVAL_REASON_DUMMY);
+    BOOST_CHECK_EQUAL(pool.GetConflictTx(COutPoint{parent_a->GetHash(), 0}), nullptr);
+    BOOST_CHECK_EQUAL(pool.GetConflictTx(COutPoint{parent_a->GetHash(), 1}), nullptr);
+    BOOST_CHECK_EQUAL(pool.GetConflictTx(COutPoint{parent_a->GetHash(), 2}), multi_parent_child.get());
     const auto parent_a_children_after_remove{EntryRefTxids(pool.GetChildren(**parent_a_entry))};
     BOOST_CHECK_EQUAL(parent_a_children_after_remove.size(), 1U);
     BOOST_CHECK(parent_a_children_after_remove.contains(multi_parent_child->GetHash()));
