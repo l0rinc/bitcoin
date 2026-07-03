@@ -272,7 +272,12 @@ struct PackageMempoolAcceptResult
 
     /** Constructor to create a PackageMempoolAcceptResult from a single MempoolAcceptResult */
     explicit PackageMempoolAcceptResult(const Wtxid& wtxid, const MempoolAcceptResult& result)
-        : m_tx_results{ {wtxid, result} } {}
+        : m_tx_results{ {wtxid, result} }
+    {
+        if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
+            m_state.Invalid(PackageValidationResult::PCKG_TX, "transaction failed");
+        }
+    }
 };
 
 /**
