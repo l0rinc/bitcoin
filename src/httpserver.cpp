@@ -443,6 +443,7 @@ bool HTTPRequest::LoadBody(LineReader& reader)
         // Transfer-Encoding: https://datatracker.ietf.org/doc/html/rfc7230.html#section-3.3.1
         // Chunked Transfer Coding: https://datatracker.ietf.org/doc/html/rfc7230.html#section-4.1
         // see evhttp_handle_chunked_read() in libevent http.c
+        std::string body;
         while (reader.Remaining() > 0) {
             auto maybe_chunk_size = ReadHTTPLine(reader);
             if (!maybe_chunk_size) return false;
@@ -458,8 +459,8 @@ bool HTTPRequest::LoadBody(LineReader& reader)
             const auto chunk_size{ToIntegral<uint64_t>(util::TrimStringView(chunk_size_noext), /*base=*/16)};
             if (!chunk_size) throw HTTPParseError("Cannot parse chunk length value");
 
-            if ((m_body.size() > MAX_BODY_SIZE) ||
-                (*chunk_size > MAX_BODY_SIZE - m_body.size()))
+            if ((body.size() > MAX_BODY_SIZE) ||
+                (*chunk_size > MAX_BODY_SIZE - body.size()))
                 throw ContentTooLargeError("Chunk will exceed max body size");
 
             // Last chunk has size 0
@@ -479,6 +480,7 @@ bool HTTPRequest::LoadBody(LineReader& reader)
                 }
                 // Complete request has been parsed, reader is now pointing
                 // to beginning of next request or end of the buffer.
+                m_body = std::move(body);
                 Assume(m_body.size() <= MAX_BODY_SIZE);
                 return true;
             }
@@ -489,7 +491,7 @@ bool HTTPRequest::LoadBody(LineReader& reader)
             }
 
             // Pack chunk onto body
-            m_body += reader.ReadLength(*chunk_size);
+            body += reader.ReadLength(*chunk_size);
 
             // Even though every chunk size is explicitly declared,
             // they are still terminated by a CRLF we don't need,
