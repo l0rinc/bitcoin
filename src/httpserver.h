@@ -155,7 +155,7 @@ class HTTPRemoteClient;
 class HTTPRequest
 {
 public:
-    HTTPRequestMethod m_method;
+    HTTPRequestMethod m_method{HTTPRequestMethod::UNKNOWN};
     std::string m_target;
     HTTPVersion m_version;
     HTTPHeaders m_headers;
