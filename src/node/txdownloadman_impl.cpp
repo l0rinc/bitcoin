@@ -517,6 +517,9 @@ node::RejectedTxTodo TxDownloadManagerImpl::MempoolRejectedTx(const CTransaction
     if (state.GetResult() != TxValidationResult::TX_MISSING_INPUTS && m_orphanage->EraseTx(ptx->GetWitnessHash())) {
         LogDebug(BCLog::TXPACKAGES, "   removed orphan tx %s (wtxid=%s)\n", ptx->GetHash().ToString(), ptx->GetWitnessHash().ToString());
     }
+    if (state.GetResult() != TxValidationResult::TX_MISSING_INPUTS) {
+        Assume(!m_orphanage->HaveTx(ptx->GetWitnessHash()));
+    }
 
     return RejectedTxTodo{
         .m_should_add_extra_compact_tx = add_extra_compact_tx,
