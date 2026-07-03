@@ -400,19 +400,18 @@ bool HTTPRequest::LoadControlData(LineReader& reader)
     const std::vector<std::string_view> parts{Split<std::string_view>(request_line, " ")};
     if (parts.size() != 3) throw HTTPParseError("HTTP request line malformed");
 
+    HTTPRequestMethod method;
     if (parts[0] == "GET") {
-        m_method = HTTPRequestMethod::GET;
+        method = HTTPRequestMethod::GET;
     } else if (parts[0] == "POST") {
-        m_method = HTTPRequestMethod::POST;
+        method = HTTPRequestMethod::POST;
     } else if (parts[0] == "HEAD") {
-        m_method = HTTPRequestMethod::HEAD;
+        method = HTTPRequestMethod::HEAD;
     } else if (parts[0] == "PUT") {
-        m_method = HTTPRequestMethod::PUT;
+        method = HTTPRequestMethod::PUT;
     } else {
-        m_method = HTTPRequestMethod::UNKNOWN;
+        method = HTTPRequestMethod::UNKNOWN;
     }
-
-    m_target = parts[1];
 
     if (parts[2].rfind("HTTP/") != 0) throw HTTPParseError("HTTP request line malformed");
 
@@ -424,15 +423,26 @@ bool HTTPRequest::LoadControlData(LineReader& reader)
     auto major = ToIntegral<uint8_t>(version_parts[0]);
     auto minor = ToIntegral<uint8_t>(version_parts[1]);
     if (!major || !minor || major != 1 || minor > 9) throw HTTPParseError("HTTP bad version");
+
+    m_method = method;
+    m_target = parts[1];
     m_version.major = major.value();
     m_version.minor = minor.value();
+    Assume(m_method == method);
+    Assume(m_target == parts[1]);
+    Assume(m_version.major == major.value());
+    Assume(m_version.minor == minor.value());
 
     return true;
 }
 
 bool HTTPRequest::LoadHeaders(LineReader& reader)
 {
-    return m_headers.Read(reader);
+    HTTPHeaders headers;
+    if (!headers.Read(reader)) return false;
+
+    m_headers = std::move(headers);
+    return true;
 }
 
 bool HTTPRequest::LoadBody(LineReader& reader)
@@ -511,6 +521,7 @@ bool HTTPRequest::LoadBody(LineReader& reader)
         // No Content-length or Transfer-Encoding header means no body, see libevent evhttp_get_body()
         auto content_length_values{m_headers.FindAll("Content-Length")};
         if (content_length_values.empty()) {
+            m_body.clear();
             Assume(m_body.empty());
             return true;
         }
@@ -530,7 +541,8 @@ bool HTTPRequest::LoadBody(LineReader& reader)
         // Not enough data in buffer for expected body
         if (reader.Remaining() < *content_length) return false;
 
-        m_body = reader.ReadLength(*content_length);
+        std::string body{reader.ReadLength(*content_length)};
+        m_body = std::move(body);
         Assume(m_body.size() == *content_length);
         Assume(m_body.size() <= MAX_BODY_SIZE);
 
