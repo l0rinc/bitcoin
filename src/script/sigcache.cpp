@@ -10,6 +10,7 @@
 #include <random.h>
 #include <script/interpreter.h>
 #include <uint256.h>
+#include <util/check.h>
 #include <util/log.h>
 
 #include <mutex>
@@ -51,7 +52,11 @@ void SignatureCache::ComputeEntrySchnorr(uint256& entry, const uint256& hash, st
 bool SignatureCache::Get(const uint256& entry, const bool erase)
 {
     std::shared_lock<std::shared_mutex> lock(cs_sigcache);
-    return setValid.contains(entry, erase);
+    const bool found{setValid.contains(entry, erase)};
+    if (found && erase) {
+        Assume(setValid.contains(entry, /*erase=*/false));
+    }
+    return found;
 }
 
 void SignatureCache::Set(const uint256& entry)
