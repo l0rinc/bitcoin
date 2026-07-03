@@ -18,6 +18,7 @@
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
+#include <cstddef>
 #include <limits>
 #include <map>
 #include <set>
@@ -91,6 +92,32 @@ static void CheckMempoolRandomizedIndex(const CTxMemPool& pool)
     for (const auto& entry : pool.mapTx) {
         BOOST_CHECK(randomized_txids.contains(entry.GetTx().GetHash()));
     }
+}
+
+static void WriteFileBytes(const fs::path& path, const std::vector<std::byte>& bytes)
+{
+    AutoFile file{fsbridge::fopen(path, "wb")};
+    BOOST_REQUIRE(!file.IsNull());
+    file.write({bytes.data(), bytes.size()});
+    BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+}
+
+static std::vector<std::byte> ReadFileBytes(const fs::path& path)
+{
+    AutoFile file{fsbridge::fopen(path, "rb")};
+    BOOST_REQUIRE(!file.IsNull());
+    std::vector<std::byte> bytes(file.size());
+    file.read({bytes.data(), bytes.size()});
+    return bytes;
+}
+
+static void CheckFailedDumpPreservesFile(const CTxMemPool& pool, const fs::path& path, const std::vector<std::byte>& existing_bytes, fsbridge::FopenFn mockable_fopen_function = fsbridge::fopen)
+{
+    fs::remove_all(path);
+    fs::remove_all(path + ".new");
+    WriteFileBytes(path, existing_bytes);
+    BOOST_CHECK(!node::DumpMempool(pool, path, std::move(mockable_fopen_function)));
+    BOOST_CHECK(ReadFileBytes(path) == existing_bytes);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolRemoveForBlockRejectsNullTxRefs)
@@ -309,6 +336,39 @@ BOOST_AUTO_TEST_CASE(MempoolLoadUnbroadcastRequiresMempoolEntry)
     BOOST_CHECK(!pool.exists(missing_txid));
     BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
     fs::remove(mempool_path);
+}
+
+BOOST_AUTO_TEST_CASE(MempoolDumpFailurePreservesExistingFile)
+{
+    const CTxMemPool& pool{*Assert(m_node.mempool)};
+    const fs::path mempool_path{m_args.GetDataDirBase() / "mempool_dump_failure_preserves_existing.dat"};
+    const fs::path redirected_path{m_args.GetDataDirBase() / "mempool_dump_failure_redirected.dat"};
+    const std::vector<std::byte> existing_bytes{
+        std::byte{0x6d},
+        std::byte{0x65},
+        std::byte{0x6d},
+        std::byte{0x70},
+        std::byte{0x6f},
+        std::byte{0x6f},
+        std::byte{0x6c},
+    };
+
+    fs::remove_all(mempool_path);
+    fs::remove_all(mempool_path + ".new");
+    WriteFileBytes(mempool_path, existing_bytes);
+    BOOST_REQUIRE(fs::create_directory(mempool_path + ".new"));
+    BOOST_CHECK(!node::DumpMempool(pool, mempool_path));
+    BOOST_CHECK(ReadFileBytes(mempool_path) == existing_bytes);
+    fs::remove_all(mempool_path + ".new");
+
+    fs::remove_all(redirected_path);
+    CheckFailedDumpPreservesFile(pool, mempool_path, existing_bytes, [&](const fs::path&, const char* mode) {
+        return fsbridge::fopen(redirected_path, mode);
+    });
+
+    fs::remove_all(mempool_path);
+    fs::remove_all(mempool_path + ".new");
+    fs::remove_all(redirected_path);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolLoadTruncatedMetadata)
