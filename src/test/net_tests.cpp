@@ -42,6 +42,17 @@ using namespace std::literals;
 using namespace util::hex_literals;
 using util::ToString;
 
+namespace {
+size_t QueuedSendMemoryUsage(const CNode& node) EXCLUSIVE_LOCKS_REQUIRED(node.cs_vSend)
+{
+    size_t memory_usage{0};
+    for (const auto& msg : node.vSendMsg) {
+        memory_usage += msg.GetMemoryUsage();
+    }
+    return memory_usage;
+}
+} // namespace
+
 BOOST_FIXTURE_TEST_SUITE(net_tests, RegTestingSetup)
 
 BOOST_AUTO_TEST_CASE(cnode_listen_port)
@@ -248,6 +259,44 @@ BOOST_AUTO_TEST_CASE(cnode_refcount_contracts)
     BOOST_CHECK_EQUAL(node.GetRefCount(), 1);
     node.Release();
     BOOST_CHECK_EQUAL(node.GetRefCount(), 0);
+}
+
+BOOST_AUTO_TEST_CASE(cnode_send_queue_memory_usage_contracts)
+{
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    const CAddress addr{Lookup("1.2.3.4", 8333, /*fAllowLookup=*/false).value(), NODE_NETWORK};
+    CNode node{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/addr,
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/"",
+               /*conn_type_in=*/ConnectionType::OUTBOUND_FULL_RELAY,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+
+    auto assert_send_queue_memory_usage{[&] {
+        LOCK(node.cs_vSend);
+        node.AssertSendQueueMemoryUsage();
+        BOOST_CHECK_EQUAL(node.m_send_memusage, QueuedSendMemoryUsage(node));
+    }};
+
+    assert_send_queue_memory_usage();
+    connman.PushMessage(&node, NetMsg::Make(NetMsgType::PING, uint64_t{0}));
+    assert_send_queue_memory_usage();
+
+    connman.PushMessage(&node, NetMsg::Make(NetMsgType::PONG, uint64_t{1}));
+    connman.PushMessage(&node, NetMsg::Make(NetMsgType::SENDADDRV2));
+    {
+        LOCK(node.cs_vSend);
+        BOOST_REQUIRE_EQUAL(node.vSendMsg.size(), 2);
+        BOOST_CHECK_GT(node.m_send_memusage, 0U);
+        BOOST_CHECK_EQUAL(node.m_send_memusage, QueuedSendMemoryUsage(node));
+    }
+
+    connman.FlushSendBuffer(node);
+    assert_send_queue_memory_usage();
 }
 
 BOOST_AUTO_TEST_CASE(cnetaddr_basic)
