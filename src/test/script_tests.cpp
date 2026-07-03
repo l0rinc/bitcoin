@@ -90,6 +90,7 @@ static ScriptErrorDesc script_errors[]={
     {SCRIPT_ERR_WITNESS_MALLEATED_P2SH, "WITNESS_MALLEATED_P2SH"},
     {SCRIPT_ERR_WITNESS_UNEXPECTED, "WITNESS_UNEXPECTED"},
     {SCRIPT_ERR_WITNESS_PUBKEYTYPE, "WITNESS_PUBKEYTYPE"},
+    {SCRIPT_ERR_TAPSCRIPT_MINIMALIF, "TAPSCRIPT_MINIMALIF"},
     {SCRIPT_ERR_TAPSCRIPT_EMPTY_PUBKEY, "TAPSCRIPT_EMPTY_PUBKEY"},
     {SCRIPT_ERR_OP_CODESEPARATOR, "OP_CODESEPARATOR"},
     {SCRIPT_ERR_SIG_FINDANDDELETE, "SIG_FINDANDDELETE"},
@@ -426,6 +427,32 @@ std::string JSONPrettyPrint(const UniValue& univalue)
 } // namespace
 
 BOOST_FIXTURE_TEST_SUITE(script_tests, ScriptTest)
+
+BOOST_AUTO_TEST_CASE(p2sh_witness_redeemscript_requires_canonical_push)
+{
+    const CScript witness_script{CScript{} << OP_TRUE};
+
+    uint256 witness_hash;
+    CSHA256().Write(witness_script.data(), witness_script.size()).Finalize(witness_hash.begin());
+    const CScript redeem_script{CScript{} << OP_0 << ToByteVector(witness_hash)};
+    const CScript script_pub_key{CScript{} << OP_HASH160 << ToByteVector(CScriptID{redeem_script}) << OP_EQUAL};
+
+    CScriptWitness witness;
+    witness.stack.emplace_back(witness_script.begin(), witness_script.end());
+
+    const CScript canonical_script_sig{CScript{} << ToByteVector(redeem_script)};
+    std::vector<unsigned char> noncanonical_script_sig_bytes{OP_PUSHDATA1, static_cast<unsigned char>(redeem_script.size())};
+    noncanonical_script_sig_bytes.insert(noncanonical_script_sig_bytes.end(), redeem_script.begin(), redeem_script.end());
+    const CScript noncanonical_script_sig{noncanonical_script_sig_bytes.begin(), noncanonical_script_sig_bytes.end()};
+
+    const script_verify_flags flags{SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS};
+    ScriptError err;
+    BOOST_CHECK(VerifyScript(canonical_script_sig, script_pub_key, &witness, flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_OK);
+
+    BOOST_CHECK(!VerifyScript(noncanonical_script_sig, script_pub_key, &witness, flags, BaseSignatureChecker{}, &err));
+    BOOST_CHECK(err == SCRIPT_ERR_WITNESS_MALLEATED_P2SH);
+}
 
 BOOST_AUTO_TEST_CASE(script_build)
 {
@@ -1718,6 +1745,123 @@ BOOST_AUTO_TEST_CASE(compute_tapleaf)
 
     BOOST_CHECK_EQUAL(ComputeTapleafHash(0xc0, std::span(script)), tlc0);
     BOOST_CHECK_EQUAL(ComputeTapleafHash(0xc2, std::span(script)), tlc2);
+}
+
+BOOST_AUTO_TEST_CASE(taproot_future_leaf_version_requires_commitment)
+{
+    const KeyData keys;
+    const CScript script{CScript() << OP_TRUE};
+    const auto script_bytes{ToByteVector(script)};
+
+    TaprootBuilder builder;
+    builder.Add(/*depth=*/0, script_bytes, TAPROOT_LEAF_TAPSCRIPT, /*track=*/true);
+    builder.Finalize(XOnlyPubKey(keys.key0.GetPubKey()));
+
+    auto controlblocks = builder.GetSpendData().scripts[{script_bytes, TAPROOT_LEAF_TAPSCRIPT}];
+    std::vector<unsigned char> controlblock{*controlblocks.begin()};
+    controlblock[0] = (controlblock[0] & 1) | 0xc2;
+
+    CScriptWitness witness;
+    witness.stack.push_back(script_bytes);
+    witness.stack.push_back(controlblock);
+
+    DoTest(GetScriptForDestination(builder.GetOutput()), CScript{}, witness,
+           SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT,
+           "Taproot future leaf version with mismatched commitment",
+           SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
+}
+
+BOOST_AUTO_TEST_CASE(tapscript_minimalif_requires_minimal_boolean)
+{
+    const KeyData keys;
+    struct TestCase {
+        CScript script;
+        std::vector<unsigned char> argument;
+        std::string message;
+    };
+    const std::vector<TestCase> cases{
+        {CScript() << OP_IF << OP_TRUE << OP_ENDIF, {0x01, 0x00}, "Tapscript OP_IF with non-minimal true"},
+        {CScript() << OP_NOTIF << OP_TRUE << OP_ENDIF, {0x00}, "Tapscript OP_NOTIF with non-minimal false"},
+    };
+
+    for (const auto& test : cases) {
+        const auto script_bytes{ToByteVector(test.script)};
+
+        TaprootBuilder builder;
+        builder.Add(/*depth=*/0, script_bytes, TAPROOT_LEAF_TAPSCRIPT, /*track=*/true);
+        builder.Finalize(XOnlyPubKey(keys.key0.GetPubKey()));
+
+        const auto controlblocks = builder.GetSpendData().scripts[{script_bytes, TAPROOT_LEAF_TAPSCRIPT}];
+
+        CScriptWitness witness;
+        witness.stack.push_back(test.argument);
+        witness.stack.push_back(script_bytes);
+        witness.stack.push_back(*controlblocks.begin());
+
+        DoTest(GetScriptForDestination(builder.GetOutput()), CScript{}, witness,
+               SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT,
+               test.message,
+               SCRIPT_ERR_TAPSCRIPT_MINIMALIF);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(tapscript_sigops_budget_counts_script_and_control)
+{
+    const KeyData keys;
+    const std::vector<unsigned char> unknown_pubkey(33, 0x02);
+
+    CScript script;
+    script << unknown_pubkey << OP_CHECKSIGVERIFY
+           << unknown_pubkey << OP_CHECKSIGVERIFY
+           << OP_TRUE;
+    const auto script_bytes{ToByteVector(script)};
+
+    TaprootBuilder builder;
+    builder.Add(/*depth=*/0, script_bytes, TAPROOT_LEAF_TAPSCRIPT, /*track=*/true);
+    builder.Finalize(XOnlyPubKey(keys.key0.GetPubKey()));
+
+    const auto controlblocks = builder.GetSpendData().scripts[{script_bytes, TAPROOT_LEAF_TAPSCRIPT}];
+
+    CScriptWitness witness;
+    witness.stack.push_back({0x01});
+    witness.stack.push_back({0x01});
+    witness.stack.push_back(script_bytes);
+    witness.stack.push_back(*controlblocks.begin());
+
+    DoTest(GetScriptForDestination(builder.GetOutput()), CScript{}, witness,
+           SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT,
+           "Tapscript sigops budget includes script and control block bytes",
+           SCRIPT_ERR_OK);
+}
+
+BOOST_AUTO_TEST_CASE(tapscript_checksigadd_unknown_pubkey_type_succeeds)
+{
+    const KeyData keys;
+    const std::vector<unsigned char> unknown_pubkey(33, 0x02);
+
+    CScript script;
+    script << std::vector<unsigned char>{0x01}
+           << 0
+           << unknown_pubkey
+           << OP_CHECKSIGADD
+           << 1
+           << OP_EQUAL;
+    const auto script_bytes{ToByteVector(script)};
+
+    TaprootBuilder builder;
+    builder.Add(/*depth=*/0, script_bytes, TAPROOT_LEAF_TAPSCRIPT, /*track=*/true);
+    builder.Finalize(XOnlyPubKey(keys.key0.GetPubKey()));
+
+    const auto controlblocks = builder.GetSpendData().scripts[{script_bytes, TAPROOT_LEAF_TAPSCRIPT}];
+
+    CScriptWitness witness;
+    witness.stack.push_back(script_bytes);
+    witness.stack.push_back(*controlblocks.begin());
+
+    DoTest(GetScriptForDestination(builder.GetOutput()), CScript{}, witness,
+           SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT,
+           "Tapscript CHECKSIGADD treats unknown pubkey type as successful",
+           SCRIPT_ERR_OK);
 }
 
 BOOST_AUTO_TEST_CASE(formatscriptflags)

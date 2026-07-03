@@ -2405,72 +2405,8 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // Now that the whole chain is irreversibly beyond that time it is applied to all blocks except the
     // two in the chain that violate it. This prevents exploiting the issue against nodes during their
     // initial block download.
-    bool fEnforceBIP30 = !IsBIP30Repeat(*pindex);
-
-    // Once BIP34 activated it was not possible to create new duplicate coinbases and thus other than starting
-    // with the 2 existing duplicate coinbase pairs, not possible to create overwriting txs.  But by the
-    // time BIP34 activated, in each of the existing pairs the duplicate coinbase had overwritten the first
-    // before the first had been spent.  Since those coinbases are sufficiently buried it's no longer possible to create further
-    // duplicate transactions descending from the known pairs either.
-    // If we're on the known chain at height greater than where BIP34 activated, we can save the db accesses needed for the BIP30 check.
-
-    // BIP34 requires that a block at height X (block X) has its coinbase
-    // scriptSig start with a CScriptNum of X (indicated height X).  The above
-    // logic of no longer requiring BIP30 once BIP34 activates is flawed in the
-    // case that there is a block X before the BIP34 height of 227,931 which has
-    // an indicated height Y where Y is greater than X.  The coinbase for block
-    // X would also be a valid coinbase for block Y, which could be a BIP30
-    // violation.  An exhaustive search of all mainnet coinbases before the
-    // BIP34 height which have an indicated height greater than the block height
-    // reveals many occurrences. The 3 lowest indicated heights found are
-    // 209,921, 490,897, and 1,983,702 and thus coinbases for blocks at these 3
-    // heights would be the first opportunity for BIP30 to be violated.
-
-    // The search reveals a great many blocks which have an indicated height
-    // greater than 1,983,702, so we simply remove the optimization to skip
-    // BIP30 checking for blocks at height 1,983,702 or higher.  Before we reach
-    // that block in another 25 years or so, we should take advantage of a
-    // future consensus change to do a new and improved version of BIP34 that
-    // will actually prevent ever creating any duplicate coinbases in the
-    // future.
-    static constexpr int BIP34_IMPLIES_BIP30_LIMIT = 1983702;
-
-    // There is no potential to create a duplicate coinbase at block 209,921
-    // because this is still before the BIP34 height and so explicit BIP30
-    // checking is still active.
-
-    // The final case is block 176,684 which has an indicated height of
-    // 490,897. Unfortunately, this issue was not discovered until about 2 weeks
-    // before block 490,897 so there was not much opportunity to address this
-    // case other than to carefully analyze it and determine it would not be a
-    // problem. Block 490,897 was, in fact, mined with a different coinbase than
-    // block 176,684, but it is important to note that even if it hadn't been or
-    // is remined on an alternate fork with a duplicate coinbase, we would still
-    // not run into a BIP30 violation.  This is because the coinbase for 176,684
-    // is spent in block 185,956 in transaction
-    // d4f7fbbf92f4a3014a230b2dc70b8058d02eb36ac06b4a0736d9d60eaa9e8781.  This
-    // spending transaction can't be duplicated because it also spends coinbase
-    // 0328dd85c331237f18e781d692c92de57649529bd5edf1d01036daea32ffde29.  This
-    // coinbase has an indicated height of over 4.2 billion, and wouldn't be
-    // duplicatable until that height, and it's currently impossible to create a
-    // chain that long. Nevertheless we may wish to consider a future soft fork
-    // which retroactively prevents block 490,897 from creating a duplicate
-    // coinbase. The two historical BIP30 violations often provide a confusing
-    // edge case when manipulating the UTXO and it would be simpler not to have
-    // another edge case to deal with.
-
-    // testnet3 has no blocks before the BIP34 height with indicated heights
-    // post BIP34 before approximately height 486,000,000. After block
-    // 1,983,702 testnet3 starts doing unnecessary BIP30 checking again.
-    assert(pindex->pprev);
-    CBlockIndex* pindexBIP34height = pindex->pprev->GetAncestor(params.GetConsensus().BIP34Height);
-    //Only continue to enforce if we're below BIP34 activation height or the block hash at that height doesn't correspond.
-    fEnforceBIP30 = fEnforceBIP30 && (!pindexBIP34height || !(pindexBIP34height->GetBlockHash() == params.GetConsensus().BIP34Hash));
-
-    // TODO: Remove BIP30 checking from block height 1,983,702 on, once we have a
-    // consensus change that ensures coinbases at those heights cannot
-    // duplicate earlier coinbases.
-    if (fEnforceBIP30 || pindex->nHeight >= BIP34_IMPLIES_BIP30_LIMIT) {
+    const bool fEnforceBIP30{ShouldEnforceBIP30ForBlock(*pindex, params.GetConsensus())};
+    if (fEnforceBIP30) {
         for (const auto& tx : block.vtx) {
             for (size_t o = 0; o < tx->vout.size(); o++) {
                 if (view.HaveCoin(COutPoint(tx->GetHash(), o))) {
@@ -4074,6 +4010,24 @@ arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers)
     return total_work;
 }
 
+bool IsBIP94TimewarpAttack(int block_height, int64_t block_time, int64_t previous_block_time,
+                           const Consensus::Params& consensus_params)
+{
+    // Testnet4 and regtest only: Check timestamp against prev for difficulty-adjustment
+    // blocks to prevent timewarp attacks (see https://github.com/bitcoin/bitcoin/pull/15482).
+    return consensus_params.enforce_BIP94 &&
+           block_height > 0 &&
+           block_height % consensus_params.DifficultyAdjustmentInterval() == 0 &&
+           block_time < previous_block_time - MAX_TIMEWARP;
+}
+
+bool IsBIP34CoinbaseHeight(const CScript& script_sig, int height)
+{
+    const CScript expect{CScript{} << height};
+    return script_sig.size() >= expect.size() &&
+           std::equal(expect.begin(), expect.end(), script_sig.begin());
+}
+
 /** Context-dependent validity checks.
  *  By "context", we mean only the previous block headers, but not the UTXO
  *  set; UTXO-related validity checks are done in ConnectBlock().
@@ -4102,16 +4056,8 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     if (block.GetBlockTime() <= pindexPrev->GetMedianTimePast())
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-too-old", "block's timestamp is too early");
 
-    // Testnet4 and regtest only: Check timestamp against prev for difficulty-adjustment
-    // blocks to prevent timewarp attacks (see https://github.com/bitcoin/bitcoin/pull/15482).
-    if (consensusParams.enforce_BIP94) {
-        // Check timestamp for the first block of each difficulty adjustment
-        // interval, except the genesis block.
-        if (nHeight % consensusParams.DifficultyAdjustmentInterval() == 0) {
-            if (block.GetBlockTime() < pindexPrev->GetBlockTime() - MAX_TIMEWARP) {
-                return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-timewarp-attack", "block's timestamp is too early on diff adjustment block");
-            }
-        }
+    if (IsBIP94TimewarpAttack(nHeight, block.GetBlockTime(), pindexPrev->GetBlockTime(), consensusParams)) {
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-timewarp-attack", "block's timestamp is too early on diff adjustment block");
     }
 
     // Check timestamp
@@ -4161,9 +4107,7 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     // Enforce rule that the coinbase starts with serialized block height
     if (DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_HEIGHTINCB))
     {
-        CScript expect = CScript() << nHeight;
-        if (block.vtx[0]->vin[0].scriptSig.size() < expect.size() ||
-            !std::equal(expect.begin(), expect.end(), block.vtx[0]->vin[0].scriptSig.begin())) {
+        if (!IsBIP34CoinbaseHeight(block.vtx[0]->vin[0].scriptSig, nHeight)) {
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-height", "block height mismatch in coinbase");
         }
     }
@@ -6208,6 +6152,76 @@ bool IsBIP30Unspendable(const uint256& block_hash, int block_height)
 {
     return (block_height==91722 && block_hash == uint256{"00000000000271a2dc26e7667f8419f2e15416dc6955e5a6c6cdf3f2574dd08e"}) ||
            (block_height==91812 && block_hash == uint256{"00000000000af0aed4792b1acee3d966af36cf5def14935db8de83d6f9306f2f"});
+}
+
+bool ShouldEnforceBIP30ForBlock(const CBlockIndex& block_index, const Consensus::Params& consensus_params)
+{
+    bool fEnforceBIP30 = !IsBIP30Repeat(block_index);
+
+    // Once BIP34 activated it was not possible to create new duplicate coinbases and thus other than starting
+    // with the 2 existing duplicate coinbase pairs, not possible to create overwriting txs. But by the
+    // time BIP34 activated, in each of the existing pairs the duplicate coinbase had overwritten the first
+    // before the first had been spent. Since those coinbases are sufficiently buried it's no longer possible to create further
+    // duplicate transactions descending from the known pairs either.
+    // If we're on the known chain at height greater than where BIP34 activated, we can save the db accesses needed for the BIP30 check.
+
+    // BIP34 requires that a block at height X (block X) has its coinbase
+    // scriptSig start with a CScriptNum of X (indicated height X). The above
+    // logic of no longer requiring BIP30 once BIP34 activates is flawed in the
+    // case that there is a block X before the BIP34 height of 227,931 which has
+    // an indicated height Y where Y is greater than X. The coinbase for block
+    // X would also be a valid coinbase for block Y, which could be a BIP30
+    // violation. An exhaustive search of all mainnet coinbases before the
+    // BIP34 height which have an indicated height greater than the block height
+    // reveals many occurrences. The 3 lowest indicated heights found are
+    // 209,921, 490,897, and 1,983,702 and thus coinbases for blocks at these 3
+    // heights would be the first opportunity for BIP30 to be violated.
+
+    // The search reveals a great many blocks which have an indicated height
+    // greater than 1,983,702, so we simply remove the optimization to skip
+    // BIP30 checking for blocks at height 1,983,702 or higher. Before we reach
+    // that block in another 25 years or so, we should take advantage of a
+    // future consensus change to do a new and improved version of BIP34 that
+    // will actually prevent ever creating any duplicate coinbases in the
+    // future.
+    static constexpr int BIP34_IMPLIES_BIP30_LIMIT = 1983702;
+
+    // There is no potential to create a duplicate coinbase at block 209,921
+    // because this is still before the BIP34 height and so explicit BIP30
+    // checking is still active.
+
+    // The final case is block 176,684 which has an indicated height of
+    // 490,897. Unfortunately, this issue was not discovered until about 2 weeks
+    // before block 490,897 so there was not much opportunity to address this
+    // case other than to carefully analyze it and determine it would not be a
+    // problem. Block 490,897 was, in fact, mined with a different coinbase than
+    // block 176,684, but it is important to note that even if it hadn't been or
+    // is remined on an alternate fork with a duplicate coinbase, we would still
+    // not run into a BIP30 violation. This is because the coinbase for 176,684
+    // is spent in block 185,956 in transaction
+    // d4f7fbbf92f4a3014a230b2dc70b8058d02eb36ac06b4a0736d9d60eaa9e8781. This
+    // spending transaction can't be duplicated because it also spends coinbase
+    // 0328dd85c331237f18e781d692c92de57649529bd5edf1d01036daea32ffde29. This
+    // coinbase has an indicated height of over 4.2 billion, and wouldn't be
+    // duplicatable until that height, and it's currently impossible to create a
+    // chain that long. Nevertheless we may wish to consider a future soft fork
+    // which retroactively prevents block 490,897 from creating a duplicate
+    // coinbase. The two historical BIP30 violations often provide a confusing
+    // edge case when manipulating the UTXO and it would be simpler not to have
+    // another edge case to deal with.
+
+    // testnet3 has no blocks before the BIP34 height with indicated heights
+    // post BIP34 before approximately height 486,000,000. After block
+    // 1,983,702 testnet3 starts doing unnecessary BIP30 checking again.
+    assert(block_index.pprev);
+    const CBlockIndex* pindexBIP34height = block_index.pprev->GetAncestor(consensus_params.BIP34Height);
+    // Only continue to enforce if we're below BIP34 activation height or the block hash at that height doesn't correspond.
+    fEnforceBIP30 = fEnforceBIP30 && (!pindexBIP34height || !(pindexBIP34height->GetBlockHash() == consensus_params.BIP34Hash));
+
+    // TODO: Remove BIP30 checking from block height 1,983,702 on, once we have a
+    // consensus change that ensures coinbases at those heights cannot
+    // duplicate earlier coinbases.
+    return fEnforceBIP30 || block_index.nHeight >= BIP34_IMPLIES_BIP30_LIMIT;
 }
 
 util::Result<void> Chainstate::InvalidateCoinsDBOnDisk()
