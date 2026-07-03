@@ -43,6 +43,44 @@ namespace {
 const std::vector<std::shared_ptr<CBlock>>* g_chain;
 TestingSetup* g_setup{nullptr};
 
+struct ChainstateSnapshotState {
+    size_t chainstates;
+    const Chainstate* current;
+    const CBlockIndex* tip;
+    std::optional<uint256> from_snapshot_blockhash;
+    std::optional<uint256> target_blockhash;
+    size_t coinstip_cache_size;
+    size_t coinsdb_cache_size;
+};
+
+ChainstateSnapshotState CaptureChainstateSnapshotState(ChainstateManager& chainman)
+{
+    LOCK(::cs_main);
+    const Chainstate& current{chainman.CurrentChainstate()};
+    return {
+        chainman.m_chainstates.size(),
+        &current,
+        current.m_chain.Tip(),
+        current.m_from_snapshot_blockhash,
+        current.m_target_blockhash,
+        current.m_coinstip_cache_size_bytes,
+        current.m_coinsdb_cache_size_bytes,
+    };
+}
+
+void AssertSnapshotActivationFailurePreserved(ChainstateManager& chainman, const ChainstateSnapshotState& before)
+{
+    LOCK(::cs_main);
+    const Chainstate& current{chainman.CurrentChainstate()};
+    Assert(chainman.m_chainstates.size() == before.chainstates);
+    Assert(&current == before.current);
+    Assert(current.m_chain.Tip() == before.tip);
+    Assert(current.m_from_snapshot_blockhash == before.from_snapshot_blockhash);
+    Assert(current.m_target_blockhash == before.target_blockhash);
+    Assert(current.m_coinstip_cache_size_bytes == before.coinstip_cache_size);
+    Assert(current.m_coinsdb_cache_size_bytes == before.coinsdb_cache_size);
+}
+
 /** Sanity check the assumeutxo values hardcoded in chainparams for the fuzz target. */
 void sanity_check_snapshot()
 {
@@ -174,15 +212,21 @@ void utxo_snapshot_fuzz(FuzzBufferType buffer)
     }
 
     const auto ActivateFuzzedSnapshot{[&] {
+        const auto before_activation{CaptureChainstateSnapshotState(chainman)};
         AutoFile infile{fsbridge::fopen(snapshot_path, "rb")};
         auto msg_start = chainman.GetParams().MessageStart();
         SnapshotMetadata metadata{msg_start};
         try {
             infile >> metadata;
         } catch (const std::ios_base::failure&) {
+            AssertSnapshotActivationFailurePreserved(chainman, before_activation);
             return false;
         }
-        return !!chainman.ActivateSnapshot(infile, metadata, /*in_memory=*/true);
+        const bool activated{!!chainman.ActivateSnapshot(infile, metadata, /*in_memory=*/true)};
+        if (!activated) {
+            AssertSnapshotActivationFailurePreserved(chainman, before_activation);
+        }
+        return activated;
     }};
 
     if (fuzzed_data_provider.ConsumeBool()) {
