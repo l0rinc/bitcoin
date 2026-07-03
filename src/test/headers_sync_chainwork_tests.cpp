@@ -216,6 +216,49 @@ BOOST_AUTO_TEST_CASE(locator_retains_chain_start)
     BOOST_CHECK_EQUAL(locator.vHave.back(), genesis_hash);
 }
 
+BOOST_AUTO_TEST_CASE(presync_summary_tracks_headers)
+{
+    const auto& second_chain{SecondChain()};
+
+    HeadersSyncState hss{CreateState()};
+    int64_t expected_height{chain_start.nHeight};
+    uint32_t expected_time{genesis.nTime};
+    arith_uint256 expected_work{chain_start.nChainWork};
+
+    auto check_presync_summary = [&] {
+        BOOST_CHECK_EQUAL(hss.GetPresyncHeight(), expected_height);
+        BOOST_CHECK_EQUAL(hss.GetPresyncTime(), expected_time);
+        BOOST_CHECK(hss.GetPresyncWork() == expected_work);
+    };
+    auto apply_expected = [&](std::span<const CBlockHeader> headers) {
+        for (const CBlockHeader& header : headers) {
+            ++expected_height;
+            expected_time = header.nTime;
+            expected_work += GetBlockProof(header);
+        }
+    };
+
+    check_presync_summary();
+
+    const auto first_header{std::span{second_chain}.first(1)};
+    auto result{hss.ProcessNextHeaders(first_header, /*full_headers_message=*/true)};
+    BOOST_REQUIRE_EQUAL(hss.GetState(), State::PRESYNC);
+    BOOST_REQUIRE(result.success);
+    BOOST_REQUIRE(result.request_more);
+    BOOST_CHECK(result.pow_validated_headers.empty());
+    apply_expected(first_header);
+    check_presync_summary();
+
+    const auto next_headers{std::span{second_chain}.subspan(1, 2)};
+    result = hss.ProcessNextHeaders(next_headers, /*full_headers_message=*/true);
+    BOOST_REQUIRE_EQUAL(hss.GetState(), State::PRESYNC);
+    BOOST_REQUIRE(result.success);
+    BOOST_REQUIRE(result.request_more);
+    BOOST_CHECK(result.pow_validated_headers.empty());
+    apply_expected(next_headers);
+    check_presync_summary();
+}
+
 BOOST_AUTO_TEST_CASE(happy_path)
 {
     const auto& first_chain{FirstChain()};
