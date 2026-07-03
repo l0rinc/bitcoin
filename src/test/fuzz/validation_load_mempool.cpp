@@ -21,6 +21,7 @@
 #include <validation.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -155,6 +156,32 @@ void AssertMempoolSnapshotMatchesImportOptions(const CTxMemPool& expected,
         Assert(actual.GetUnbroadcastTxs().empty());
     }
 }
+
+void WriteFileBytes(const fs::path& path, const std::vector<std::byte>& bytes)
+{
+    AutoFile file{fsbridge::fopen(path, "wb")};
+    Assert(!file.IsNull());
+    file.write({bytes.data(), bytes.size()});
+    Assert(file.fclose() == 0);
+}
+
+std::vector<std::byte> ReadFileBytes(const fs::path& path)
+{
+    AutoFile file{fsbridge::fopen(path, "rb")};
+    Assert(!file.IsNull());
+    std::vector<std::byte> bytes(file.size());
+    file.read({bytes.data(), bytes.size()});
+    return bytes;
+}
+
+void AssertFailedDumpPreservesFile(const CTxMemPool& pool, const fs::path& path, const std::vector<std::byte>& existing_bytes, fsbridge::FopenFn mockable_fopen_function = fsbridge::fopen)
+{
+    fs::remove_all(path);
+    fs::remove_all(path + ".new");
+    WriteFileBytes(path, existing_bytes);
+    Assert(!DumpMempool(pool, path, std::move(mockable_fopen_function)));
+    Assert(ReadFileBytes(path) == existing_bytes);
+}
 } // namespace
 
 void initialize_validation_load_mempool()
@@ -235,6 +262,25 @@ FUZZ_TARGET(validation_load_mempool, .init = initialize_validation_load_mempool)
     AssertMempoolSnapshotMatchesImportOptions(pool, options_pool, use_current_time, apply_fee_delta_priority, apply_unbroadcast_set);
     chainstate.SetMempool(&pool);
 
+    const std::vector<std::byte> existing_dump{ConsumeRandomLengthByteVector<std::byte>(fuzzed_data_provider, 128)};
+    const fs::path atomic_path{g_setup->m_args.GetDataDirBase() / "validation_load_mempool_atomic.dat"};
+    fs::remove_all(atomic_path);
+    fs::remove_all(atomic_path + ".new");
+    WriteFileBytes(atomic_path, existing_dump);
+    Assert(fs::create_directory(atomic_path + ".new"));
+    Assert(!DumpMempool(pool, atomic_path));
+    Assert(ReadFileBytes(atomic_path) == existing_dump);
+    fs::remove_all(atomic_path + ".new");
+
+    const fs::path redirected_path{g_setup->m_args.GetDataDirBase() / "validation_load_mempool_redirected.dat"};
+    fs::remove_all(redirected_path);
+    AssertFailedDumpPreservesFile(pool, atomic_path, existing_dump, [&](const fs::path&, const char* mode) {
+        return fsbridge::fopen(redirected_path, mode);
+    });
+    fs::remove_all(redirected_path);
+
     fs::remove(roundtrip_path);
     fs::remove(roundtrip_path + ".new");
+    fs::remove_all(atomic_path);
+    fs::remove_all(atomic_path + ".new");
 }
