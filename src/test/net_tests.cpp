@@ -37,6 +37,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 using namespace std::literals;
 using namespace util::hex_literals;
@@ -50,6 +51,22 @@ size_t QueuedSendMemoryUsage(const CNode& node) EXCLUSIVE_LOCKS_REQUIRED(node.cs
         memory_usage += msg.GetMemoryUsage();
     }
     return memory_usage;
+}
+
+CSerializedNetMsg MakeSerializedNetMsg(std::string type, std::vector<unsigned char> data)
+{
+    CSerializedNetMsg msg;
+    msg.m_type = std::move(type);
+    msg.data = std::move(data);
+    return msg;
+}
+
+void CheckRejectedSendPreservesMessage(Transport& transport, CSerializedNetMsg msg)
+{
+    const CSerializedNetMsg expected{msg.Copy()};
+    BOOST_CHECK(!transport.SetMessageToSend(msg));
+    BOOST_CHECK_EQUAL(msg.m_type, expected.m_type);
+    BOOST_CHECK(msg.data == expected.data);
 }
 } // namespace
 
@@ -1650,6 +1667,21 @@ public:
 };
 
 } // namespace
+
+BOOST_AUTO_TEST_CASE(transport_rejected_send_preserves_message)
+{
+    {
+        V1Transport transport{NodeId{0}};
+        auto first{MakeSerializedNetMsg("version", {0x01, 0x02, 0x03})};
+        BOOST_REQUIRE(transport.SetMessageToSend(first));
+        CheckRejectedSendPreservesMessage(transport, MakeSerializedNetMsg("tx", {0x04, 0x05}));
+    }
+
+    {
+        V2Transport transport{NodeId{0}, /*initiating=*/true};
+        CheckRejectedSendPreservesMessage(transport, MakeSerializedNetMsg("version", {0x06, 0x07}));
+    }
+}
 
 BOOST_AUTO_TEST_CASE(v2transport_test)
 {
