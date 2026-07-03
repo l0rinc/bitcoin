@@ -49,6 +49,12 @@ void ResetChainman(TestingSetup& setup)
         MineBlock(setup.m_node, options);
     }
 }
+
+void AssertSendQueueMemoryUsage(CNode& node)
+{
+    LOCK(node.cs_vSend);
+    node.AssertSendQueueMemoryUsage();
+}
 } // namespace
 
 void initialize_process_messages()
@@ -119,7 +125,9 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
         CNode& random_node = *PickValue(fuzzed_data_provider, peers);
 
         connman.FlushSendBuffer(random_node);
+        AssertSendQueueMemoryUsage(random_node);
         (void)connman.ReceiveMsgFrom(random_node, std::move(net_msg));
+        AssertSendQueueMemoryUsage(random_node);
 
         bool more_work{true};
         while (more_work) { // Ensure that every message is eventually processed in some way or another
@@ -130,7 +138,11 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
             } catch (const std::ios_base::failure&) {
             }
             node.peerman->SendMessages(random_node);
+            AssertSendQueueMemoryUsage(random_node);
         }
+    }
+    for (CNode* peer : peers) {
+        AssertSendQueueMemoryUsage(*peer);
     }
     node.validation_signals->SyncWithValidationInterfaceQueue();
     node.validation_signals->UnregisterValidationInterface(node.peerman.get());
