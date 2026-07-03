@@ -35,6 +35,16 @@ class PoolResourceFuzzer
 
     std::vector<Entry> m_entries;
 
+    void AssertLiveAllocationsDisjoint() const
+    {
+        std::vector<std::span<std::byte>> live_spans;
+        live_spans.reserve(m_entries.size());
+        for (const auto& entry : m_entries) {
+            live_spans.push_back(entry.span);
+        }
+        PoolResourceTester::CheckLiveSpansDisjoint(live_spans);
+    }
+
 public:
     PoolResourceFuzzer(FuzzedDataProvider& provider)
         : m_provider{provider},
@@ -58,6 +68,7 @@ public:
 
         uint64_t seed = m_sequence++;
         RandomContentFill(m_entries.emplace_back(span, alignment, seed));
+        AssertLiveAllocationsDisjoint();
     }
 
     void
@@ -108,6 +119,7 @@ public:
             m_entries[idx] = std::move(m_entries.back());
         }
         m_entries.pop_back();
+        AssertLiveAllocationsDisjoint();
     }
 
     void Clear()
