@@ -61,7 +61,8 @@ FUZZ_TARGET(txorphan, .init = initialize_orphanage)
         // construct transaction
         const CTransactionRef tx = [&] {
             CMutableTransaction tx_mut;
-            const auto num_in = fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(1, outpoints.size());
+            const auto max_inputs{std::min<size_t>(outpoints.size(), 1'000)};
+            const auto num_in{fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(1, static_cast<uint32_t>(max_inputs))};
             const auto num_out = fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(1, 256);
             // pick outpoints from outpoints as input. We allow input duplicates on purpose, given we are not
             // running any transaction validation logic before adding transactions to the orphanage
@@ -87,6 +88,7 @@ FUZZ_TARGET(txorphan, .init = initialize_orphanage)
         tx_history.push_back(tx);
 
         const auto wtxid{tx->GetWitnessHash()};
+        const auto tx_weight{GetTransactionWeight(*tx)};
 
         // Trigger orphanage functions that are called using parents. ptx_potential_parent is a tx we constructed in a
         // previous loop and potentially the parent of this tx.
@@ -120,7 +122,6 @@ FUZZ_TARGET(txorphan, .init = initialize_orphanage)
             NodeId peer_id = fuzzed_data_provider.ConsumeIntegral<NodeId>();
             const auto total_bytes_start{orphanage->TotalOrphanUsage()};
             const auto total_peer_bytes_start{orphanage->UsageByPeer(peer_id)};
-            const auto tx_weight{GetTransactionWeight(*tx)};
 
             CallOneOf(
                 fuzzed_data_provider,
@@ -325,11 +326,13 @@ FUZZ_TARGET(txorphan_protected, .init = initialize_orphanage)
         }();
 
         const auto wtxid{tx->GetWitnessHash()};
+        const auto tx_weight{GetTransactionWeight(*tx)};
+        const auto max_commands{std::min<unsigned int>(10 * global_latency_score_limit, 10'000)};
 
         // orphanage functions
-        LIMITED_WHILE (fuzzed_data_provider.remaining_bytes(), 10 * global_latency_score_limit) {
+        LIMITED_WHILE(fuzzed_data_provider.remaining_bytes(), max_commands)
+        {
             NodeId peer_id = fuzzed_data_provider.ConsumeIntegralInRange<NodeId>(0, num_peers - 1);
-            const auto tx_weight{GetTransactionWeight(*tx)};
 
             // This protected peer will never send orphans that would
             // exceed their own personal allotment, so is never evicted.
