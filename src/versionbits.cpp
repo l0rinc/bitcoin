@@ -11,6 +11,13 @@
 
 using enum ThresholdState;
 
+namespace {
+bool IsPeriodParent(const CBlockIndex* pindex_prev, int period)
+{
+    return pindex_prev == nullptr || (pindex_prev->nHeight + 1) % period == 0;
+}
+} // namespace
+
 std::string StateName(ThresholdState state)
 {
     switch (state) {
@@ -31,6 +38,11 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(const CBlockIndex*
     int64_t nTimeStart = BeginTime();
     int64_t nTimeTimeout = EndTime();
 
+    Assume(nPeriod > 0);
+    Assume(nThreshold > 0);
+    Assume(nThreshold <= nPeriod);
+    Assume(min_activation_height >= 0);
+
     // Check if this deployment is always active.
     if (nTimeStart == Consensus::BIP9Deployment::ALWAYS_ACTIVE) {
         return ThresholdState::ACTIVE;
@@ -45,10 +57,12 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(const CBlockIndex*
     if (pindexPrev != nullptr) {
         pindexPrev = pindexPrev->GetAncestor(pindexPrev->nHeight - ((pindexPrev->nHeight + 1) % nPeriod));
     }
+    Assume(IsPeriodParent(pindexPrev, nPeriod));
 
     // Walk backwards in steps of nPeriod to find a pindexPrev whose information is known
     std::vector<const CBlockIndex*> vToCompute;
     while (!cache.contains(pindexPrev)) {
+        Assume(IsPeriodParent(pindexPrev, nPeriod));
         if (pindexPrev == nullptr) {
             // The genesis block is by definition defined.
             cache[pindexPrev] = ThresholdState::DEFINED;
@@ -61,6 +75,7 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(const CBlockIndex*
         }
         vToCompute.push_back(pindexPrev);
         pindexPrev = pindexPrev->GetAncestor(pindexPrev->nHeight - nPeriod);
+        Assume(IsPeriodParent(pindexPrev, nPeriod));
     }
 
     // At this point, cache[pindexPrev] is known
@@ -110,6 +125,7 @@ ThresholdState AbstractThresholdConditionChecker::GetStateFor(const CBlockIndex*
                 break;
             }
         }
+        Assume(IsPeriodParent(pindexPrev, nPeriod));
         cache[pindexPrev] = state = stateNext;
     }
 
@@ -169,6 +185,7 @@ int AbstractThresholdConditionChecker::GetStateSinceHeightFor(const CBlockIndex*
     }
 
     const int nPeriod = Period();
+    Assume(nPeriod > 0);
 
     // A block's state is always the same as that of the first of its period, so it is computed based on a pindexPrev whose height equals a multiple of nPeriod - 1.
     // To ease understanding of the following height calculation, it helps to remember that
@@ -177,10 +194,12 @@ int AbstractThresholdConditionChecker::GetStateSinceHeightFor(const CBlockIndex*
     // if we are computing for the first block of a period, then pindexPrev points to the last block of the previous period.
     // The parent of the genesis block is represented by nullptr.
     pindexPrev = Assert(pindexPrev->GetAncestor(pindexPrev->nHeight - ((pindexPrev->nHeight + 1) % nPeriod)));
+    Assume(IsPeriodParent(pindexPrev, nPeriod));
 
     const CBlockIndex* previousPeriodParent = pindexPrev->GetAncestor(pindexPrev->nHeight - nPeriod);
 
     while (previousPeriodParent != nullptr && GetStateFor(previousPeriodParent, cache) == initialState) {
+        Assume(IsPeriodParent(previousPeriodParent, nPeriod));
         pindexPrev = previousPeriodParent;
         previousPeriodParent = pindexPrev->GetAncestor(pindexPrev->nHeight - nPeriod);
     }

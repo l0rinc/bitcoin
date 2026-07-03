@@ -182,6 +182,7 @@ public:
     VersionBitsTester& TestActiveDelayed() { return TestState(ThresholdState::ACTIVE, ThresholdState::LOCKED_IN); }
 
     CBlockIndex* Tip() { return vpblock.empty() ? nullptr : vpblock.back(); }
+    const CBlockIndex* At(unsigned int height) const { return vpblock.at(height); }
 };
 
 BOOST_FIXTURE_TEST_SUITE(versionbits_tests, BasicTestingSetup)
@@ -253,6 +254,52 @@ BOOST_AUTO_TEST_CASE(versionbits_test)
                            .Mine(7000, TestTime(20000), 0x100).TestFailed().TestStateSinceHeight(6000)
                            .Mine(24000, TestTime(20000), 0x100).TestFailed().TestStateSinceHeight(6000) // stay in FAILED no matter how much we signal
         ;
+    }
+}
+
+BOOST_AUTO_TEST_CASE(versionbits_cache_query_order)
+{
+    const Deployments deployments;
+    const int period{static_cast<int>(deployments.normal.period)};
+
+    VersionBitsTester chain{m_rng, VERSIONBITS_TOP_BITS};
+    chain.Mine(1000, TestTime(9999), 0)
+         .Mine(2000, TestTime(10000), 0x100)
+         .Mine(3000, TestTime(10010), 0x100)
+         .Mine(4000, TestTime(10020), 0);
+
+    TestConditionChecker cached_checker{deployments.normal};
+    const auto check_query = [&](const CBlockIndex* pindex_prev) {
+        const ThresholdState cached_state{cached_checker.StateFor(pindex_prev)};
+        const int cached_since{cached_checker.StateSinceHeightFor(pindex_prev)};
+
+        TestConditionChecker fresh_state_checker{deployments.normal};
+        BOOST_CHECK_MESSAGE(cached_state == fresh_state_checker.StateFor(pindex_prev),
+                            strprintf("cached state differs from fresh state at height %d",
+                                      pindex_prev ? pindex_prev->nHeight : -1));
+        TestConditionChecker fresh_since_checker{deployments.normal};
+        BOOST_CHECK_EQUAL(cached_since, fresh_since_checker.StateSinceHeightFor(pindex_prev));
+
+        if (pindex_prev != nullptr) {
+            const CBlockIndex* period_parent{pindex_prev->GetAncestor(pindex_prev->nHeight - ((pindex_prev->nHeight + 1) % period))};
+            BOOST_CHECK_MESSAGE(cached_state == cached_checker.StateFor(period_parent),
+                                strprintf("period state differs at height %d", pindex_prev->nHeight));
+            BOOST_CHECK_EQUAL(cached_since, cached_checker.StateSinceHeightFor(period_parent));
+        }
+    };
+
+    for (const CBlockIndex* pindex_prev : {
+             chain.At(3500),
+             chain.At(0),
+             chain.At(1999),
+             chain.At(1000),
+             chain.At(2999),
+             chain.At(999),
+             chain.At(3999),
+             static_cast<const CBlockIndex*>(nullptr),
+             chain.At(2500),
+         }) {
+        check_query(pindex_prev);
     }
 }
 
