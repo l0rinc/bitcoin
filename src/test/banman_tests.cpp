@@ -80,4 +80,28 @@ BOOST_AUTO_TEST_CASE(clear_and_unban)
     fs::remove(banlist_path + ".json");
 }
 
+BOOST_AUTO_TEST_CASE(expired_at_boundary_is_not_returned)
+{
+    FakeNodeClock clock{777s};
+    const fs::path banlist_path{m_args.GetDataDirBase() / "banlist_expiry_boundary_test"};
+    fs::remove(banlist_path + ".json");
+
+    const CSubNet subnet{LookupSubNet("1.2.3.0/24")};
+    const CNetAddr subnet_addr{LookupHost("1.2.3.4", false).value()};
+    BOOST_REQUIRE(subnet.IsValid());
+
+    {
+        BanMan banman{banlist_path, /*client_interface=*/nullptr, /*default_ban_time=*/0};
+        banman.Ban(subnet, /*ban_time_offset=*/777, /*since_unix_epoch=*/true);
+        BOOST_CHECK(!banman.IsBanned(subnet));
+        BOOST_CHECK(!banman.IsBanned(subnet_addr));
+
+        banmap_t entries;
+        banman.GetBanned(entries);
+        BOOST_CHECK(entries.empty());
+    }
+
+    fs::remove(banlist_path + ".json");
+}
+
 BOOST_AUTO_TEST_SUITE_END()
