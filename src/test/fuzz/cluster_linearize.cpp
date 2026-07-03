@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -317,15 +318,15 @@ template<typename BS>
 std::vector<DepGraphIndex> ReadLinearization(const DepGraph<BS>& depgraph, SpanReader& reader, bool topological=true)
 {
     std::vector<DepGraphIndex> linearization;
-    TestBitSet todo = depgraph.Positions();
+    BS todo = depgraph.Positions();
     // In every iteration one transaction is appended to linearization.
     while (todo.Any()) {
         // Compute the set of transactions to select from.
-        TestBitSet potential_next;
+        BS potential_next;
         if (topological) {
             // Find all transactions with no not-yet-included ancestors.
             for (auto j : todo) {
-                if ((depgraph.Ancestors(j) & todo) == TestBitSet::Singleton(j)) {
+                if ((depgraph.Ancestors(j) & todo) == BS::Singleton(j)) {
                     potential_next.Set(j);
                 }
             }
@@ -418,6 +419,85 @@ DepGraph<BS> BuildTreeGraph(const DepGraph<BS>& depgraph, uint8_t direction)
     }
 
     return depgraph_tree;
+}
+
+template<typename SetType>
+DepGraph<SetType> DecodeDepGraph(std::span<const unsigned char> buffer)
+{
+    SpanReader reader(buffer);
+    DepGraph<SetType> depgraph;
+    try {
+        reader >> Using<DepGraphFormatter>(depgraph);
+    } catch (const std::ios_base::failure&) {}
+    SanityCheck(depgraph);
+    return depgraph;
+}
+
+template<typename FirstSetType, typename SecondSetType>
+void AssertSetEqual(const FirstSetType& first, const SecondSetType& second, DepGraphIndex position_range)
+{
+    for (DepGraphIndex pos{0}; pos < position_range; ++pos) {
+        assert(first[pos] == second[pos]);
+    }
+}
+
+template<typename FirstSetType, typename SecondSetType>
+void AssertDepGraphEqual(const DepGraph<FirstSetType>& first, const DepGraph<SecondSetType>& second)
+{
+    assert(first.TxCount() == second.TxCount());
+    assert(first.PositionRange() == second.PositionRange());
+    AssertSetEqual(first.Positions(), second.Positions(), first.PositionRange());
+
+    for (DepGraphIndex pos{0}; pos < first.PositionRange(); ++pos) {
+        if (!first.Positions()[pos]) continue;
+        assert(first.FeeRate(pos) == second.FeeRate(pos));
+        AssertSetEqual(first.Ancestors(pos), second.Ancestors(pos), first.PositionRange());
+        AssertSetEqual(first.Descendants(pos), second.Descendants(pos), first.PositionRange());
+    }
+}
+
+template<typename FirstSetType, typename SecondSetType>
+void AssertChunkingInfoEqual(const std::vector<SetInfo<FirstSetType>>& first,
+                             const std::vector<SetInfo<SecondSetType>>& second,
+                             DepGraphIndex position_range)
+{
+    assert(first.size() == second.size());
+    for (size_t chunk_pos{0}; chunk_pos < first.size(); ++chunk_pos) {
+        assert(first[chunk_pos].feerate == second[chunk_pos].feerate);
+        AssertSetEqual(first[chunk_pos].transactions, second[chunk_pos].transactions, position_range);
+    }
+}
+
+template<typename SetType>
+void AssertLinearizeBackendEquivalent(std::span<const unsigned char> graph_buffer,
+                                      const DepGraph<BitSet<64>>& expected_depgraph,
+                                      const std::vector<DepGraphIndex>& expected_linearization,
+                                      const std::vector<FeeFrac>& expected_chunking,
+                                      const std::vector<SetInfo<BitSet<64>>>& expected_chunking_info,
+                                      bool expected_optimal,
+                                      uint64_t expected_cost,
+                                      uint64_t max_cost,
+                                      uint64_t rng_seed,
+                                      const std::vector<DepGraphIndex>& old_linearization,
+                                      bool is_topological)
+{
+    auto depgraph{DecodeDepGraph<SetType>(graph_buffer)};
+    AssertDepGraphEqual(expected_depgraph, depgraph);
+
+    auto [linearization, optimal, cost] = Linearize(
+        /*depgraph=*/depgraph,
+        /*max_cost=*/max_cost,
+        /*rng_seed=*/rng_seed,
+        /*fallback_order=*/IndexTxOrder{},
+        /*old_linearization=*/old_linearization,
+        /*is_topological=*/is_topological);
+    SanityCheck(depgraph, linearization);
+
+    assert(linearization == expected_linearization);
+    assert(optimal == expected_optimal);
+    assert(cost == expected_cost);
+    assert(ChunkLinearization(depgraph, linearization) == expected_chunking);
+    AssertChunkingInfoEqual(expected_chunking_info, ChunkLinearizationInfo(depgraph, linearization), depgraph.PositionRange());
 }
 
 } // namespace
@@ -1265,6 +1345,59 @@ FUZZ_TARGET(clusterlin_linearize)
         assert(optimal2);
         assert(linearization2 == linearization);
     }
+}
+
+FUZZ_TARGET(clusterlin_backend_equivalence)
+{
+    // Verify that arbitrary 64-position graphs linearize identically across the bitset backends
+    // that can represent TxGraph-sized clusters.
+    FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
+    const uint64_t max_cost{fuzzed_data_provider.ConsumeIntegral<uint64_t>() & 0xffff};
+    const uint64_t rng_seed{fuzzed_data_provider.ConsumeIntegral<uint64_t>()};
+    const uint8_t flags{fuzzed_data_provider.ConsumeIntegral<uint8_t>()};
+    const std::vector<unsigned char> graph_buffer{fuzzed_data_provider.ConsumeRemainingBytes<unsigned char>()};
+
+    SpanReader reader(graph_buffer);
+    DepGraph<BitSet<64>> depgraph;
+    try {
+        reader >> Using<DepGraphFormatter>(depgraph);
+    } catch (const std::ios_base::failure&) {}
+    SanityCheck(depgraph);
+
+    const bool provide_input{(flags & 1) != 0};
+    const bool provide_topological_input{(flags & 2) != 0};
+    const bool claim_topological_input{provide_input && provide_topological_input && (flags & 4) != 0};
+
+    std::vector<DepGraphIndex> old_linearization;
+    if (provide_input) {
+        old_linearization = ReadLinearization(depgraph, reader, /*topological=*/provide_topological_input);
+        if (provide_topological_input) SanityCheck(depgraph, old_linearization);
+    }
+
+    auto [linearization, optimal, cost] = Linearize(
+        /*depgraph=*/depgraph,
+        /*max_cost=*/max_cost,
+        /*rng_seed=*/rng_seed,
+        /*fallback_order=*/IndexTxOrder{},
+        /*old_linearization=*/old_linearization,
+        /*is_topological=*/claim_topological_input);
+    SanityCheck(depgraph, linearization);
+
+    const auto chunking{ChunkLinearization(depgraph, linearization)};
+    const auto chunking_info{ChunkLinearizationInfo(depgraph, linearization)};
+
+    AssertLinearizeBackendEquivalent<bitset_detail::IntBitSet<uint64_t>>(
+        graph_buffer, depgraph, linearization, chunking, chunking_info, optimal, cost, max_cost,
+        rng_seed, old_linearization, claim_topological_input);
+    AssertLinearizeBackendEquivalent<bitset_detail::MultiIntBitSet<uint64_t, 1>>(
+        graph_buffer, depgraph, linearization, chunking, chunking_info, optimal, cost, max_cost,
+        rng_seed, old_linearization, claim_topological_input);
+    AssertLinearizeBackendEquivalent<bitset_detail::MultiIntBitSet<uint32_t, 2>>(
+        graph_buffer, depgraph, linearization, chunking, chunking_info, optimal, cost, max_cost,
+        rng_seed, old_linearization, claim_topological_input);
+    AssertLinearizeBackendEquivalent<bitset_detail::MultiIntBitSet<uint8_t, 8>>(
+        graph_buffer, depgraph, linearization, chunking, chunking_info, optimal, cost, max_cost,
+        rng_seed, old_linearization, claim_topological_input);
 }
 
 FUZZ_TARGET(clusterlin_postlinearize)
