@@ -218,10 +218,16 @@ bool HeadersSyncState::ValidateAndProcessSingleHeader(const CBlockHeader& curren
         }
     }
 
-    m_current_chain_work += GetBlockProof(current);
+    const arith_uint256 previous_chain_work{m_current_chain_work};
+    const arith_uint256 current_work{GetBlockProof(current)};
+    m_current_chain_work += current_work;
     m_last_header_received = current;
     m_current_height = next_height;
 
+    Assume(m_current_chain_work == previous_chain_work + current_work);
+    Assume(m_last_header_received.GetHash() == current.GetHash());
+    Assume(m_last_header_received.nTime == current.nTime);
+    Assume(m_current_height == next_height);
     return true;
 }
 
