@@ -53,4 +53,19 @@ BOOST_AUTO_TEST_CASE(base32_padding)
     BOOST_CHECK( DecodeBase32("aaaaaaa="));
 }
 
+BOOST_AUTO_TEST_CASE(base32_rejects_nonzero_padding_bits)
+{
+    BOOST_CHECK(DecodeBase32("my======"));
+    BOOST_CHECK(!DecodeBase32("mz======"));
+
+    BOOST_CHECK(DecodeBase32("mzxq===="));
+    BOOST_CHECK(!DecodeBase32("mzxr===="));
+
+    BOOST_CHECK(DecodeBase32("mzxw6==="));
+    BOOST_CHECK(!DecodeBase32("mzxw7==="));
+
+    BOOST_CHECK(DecodeBase32("mzxw6yq="));
+    BOOST_CHECK(!DecodeBase32("mzxw6yr="));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
