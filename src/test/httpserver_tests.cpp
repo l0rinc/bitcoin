@@ -886,6 +886,28 @@ BOOST_AUTO_TEST_CASE(http_request_tests)
         BOOST_CHECK(!client->ReadRequest(req));
         BOOST_CHECK(client->m_recv_buffer == recv_buffer_before);
     }
+    {
+        // Error responses for unreadable requests are written before a method
+        // can be parsed, so the default method must be usable by WriteReply().
+        auto pipes{std::make_shared<DynSock::Pipes>()};
+        auto client{std::make_shared<HTTPRemoteClient>(
+            /*id=*/0,
+            CService{},
+            std::make_unique<DynSock>(pipes))};
+        client->m_req_busy = true;
+
+        HTTPRequest req{client};
+        BOOST_CHECK_EQUAL(req.GetRequestMethod(), HTTPRequestMethod::UNKNOWN);
+        req.WriteReply(HTTP_BAD_REQUEST);
+        BOOST_CHECK(!client->m_req_busy);
+
+        char buf[4096]{};
+        const ssize_t bytes_read{pipes->send.GetBytes(buf, sizeof(buf), 0)};
+        BOOST_REQUIRE_GT(bytes_read, 0);
+        const std::string response{buf, static_cast<size_t>(bytes_read)};
+        BOOST_CHECK(response.starts_with("HTTP/1.1 400 Bad Request\r\n"));
+        BOOST_CHECK(response.find("Content-Length: 0\r\n") != std::string::npos);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(http_server_socket_tests)
@@ -1005,6 +1027,36 @@ BOOST_AUTO_TEST_CASE(http_server_socket_tests)
 
     // Wait up to one minute for connection to be automatically closed, because
     // keep-alive was not set by the client and we are done responding to their request.
+    attempts = 6000;
+    while (server.GetConnectionsCount() != 0) {
+        std::this_thread::sleep_for(10ms);
+        BOOST_REQUIRE(--attempts > 0);
+    }
+
+    constexpr std::string_view malformed_request{"GET/HTTP/1.0\r\n\r\n"};
+    const std::shared_ptr<DynSock::Pipes> malformed_client_socket_pipes{
+        ConnectClient(std::as_bytes(std::span{malformed_request}))};
+
+    std::string malformed_response;
+    attempts = 6000;
+    while (attempts > 0) {
+        ssize_t bytes_read = malformed_client_socket_pipes->send.GetBytes(buf, sizeof(buf), 0);
+        if (bytes_read > 0) {
+            malformed_response.append(buf, bytes_read);
+            if (malformed_response.find("\r\n\r\n") != std::string::npos) {
+                break;
+            }
+        }
+        std::this_thread::sleep_for(10ms);
+        --attempts;
+    }
+    BOOST_CHECK(malformed_response.starts_with("HTTP/1.1 400 Bad Request\r\n"));
+    BOOST_CHECK(malformed_response.find("Content-Length: 0\r\n") != std::string::npos);
+    {
+        LOCK(requests_mutex);
+        BOOST_CHECK_EQUAL(requests.size(), 1U);
+    }
+
     attempts = 6000;
     while (server.GetConnectionsCount() != 0) {
         std::this_thread::sleep_for(10ms);
