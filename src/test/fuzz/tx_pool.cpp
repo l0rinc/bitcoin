@@ -652,6 +652,8 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
         bool txid_in_mempool = tx_pool.exists(tx->GetHash());
         bool wtxid_in_mempool = tx_pool.exists(tx->GetWitnessHash());
         CheckATMPInvariants(res, tx->GetWitnessHash(), txid_in_mempool, wtxid_in_mempool);
+        Assert(!CheckPackageMempoolAcceptResult({tx}, PackageMempoolAcceptResult{tx->GetWitnessHash(), res},
+                                                accepted, nullptr));
         if (txid_in_mempool) CheckTransactionAncestry(tx_pool, tx->GetHash());
         CheckDirectMempoolEdges(tx_pool);
         CheckPrioritisedTransactions(tx_pool);
@@ -764,6 +766,8 @@ FUZZ_TARGET(tx_pool, .init = initialize_tx_pool)
         const bool txid_in_mempool{tx_pool.exists(tx->GetHash())};
         const bool wtxid_in_mempool{tx_pool.exists(tx->GetWitnessHash())};
         CheckATMPInvariants(res, tx->GetWitnessHash(), txid_in_mempool, wtxid_in_mempool);
+        Assert(!CheckPackageMempoolAcceptResult({tx}, PackageMempoolAcceptResult{tx->GetWitnessHash(), res},
+                                                accepted, nullptr));
         if (accepted) {
             txids.push_back(tx->GetHash());
             CheckTransactionAncestry(tx_pool, tx->GetHash());
