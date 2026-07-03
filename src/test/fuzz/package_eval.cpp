@@ -208,14 +208,32 @@ std::unique_ptr<CTxMemPool> MakeEphemeralMempool(const NodeContext& node)
     return mempool;
 }
 
-void AssertMempoolInputIndexCount(const CTxMemPool& tx_pool)
+void AssertMempoolInputIndex(const CTxMemPool& tx_pool)
 {
+    LOCK(tx_pool.cs);
+
     size_t input_count{0};
-    for (const auto& tx_info : tx_pool.infoAll()) {
-        input_count += tx_info.tx->vin.size();
+    for (const auto& entry : tx_pool.mapTx) {
+        const CTransaction& tx{entry.GetTx()};
+        for (const CTxIn& txin : tx.vin) {
+            ++input_count;
+            const auto input_index{tx_pool.mapNextTx.find(txin.prevout)};
+            assert(input_index != tx_pool.mapNextTx.end());
+            assert(input_index->first == &txin.prevout);
+            assert(input_index->second != tx_pool.mapTx.end());
+            assert(&input_index->second->GetTx() == &tx);
+            assert(tx_pool.GetConflictTx(txin.prevout) == &tx);
+        }
     }
-    const auto indexed_input_count{WITH_LOCK(tx_pool.cs, return tx_pool.mapNextTx.size())};
-    assert(indexed_input_count == input_count);
+    assert(tx_pool.mapNextTx.size() == input_count);
+    for (const auto& [prevout, spender] : tx_pool.mapNextTx) {
+        assert(spender != tx_pool.mapTx.end());
+        const CTransaction& tx{spender->GetTx()};
+        assert(std::ranges::any_of(tx.vin, [&](const CTxIn& txin) {
+            return txin.prevout == *prevout;
+        }));
+        assert(tx_pool.GetConflictTx(*prevout) == &tx);
+    }
 }
 
 struct MempoolEntrySnapshot {
@@ -535,7 +553,7 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
 
         node.validation_signals->SyncWithValidationInterfaceQueue();
 
-        AssertMempoolInputIndexCount(tx_pool);
+        AssertMempoolInputIndex(tx_pool);
         CheckMempoolEphemeralInvariants(tx_pool);
     }
 
@@ -745,7 +763,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
             Assert(result_package.m_tx_results.size() == txs.size() || result_package.m_tx_results.empty());
         }
 
-        AssertMempoolInputIndexCount(tx_pool);
+        AssertMempoolInputIndex(tx_pool);
         CheckMempoolTRUCInvariants(tx_pool);
 
         // Dust checks only make sense when dust is enforced
