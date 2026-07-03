@@ -308,6 +308,8 @@ TxOrphanage::Count TxOrphanageImpl::LatencyScoreFromPeer(NodeId peer) const {
 
 bool TxOrphanageImpl::AddTx(const CTransactionRef& tx, NodeId peer)
 {
+    Assert(tx != nullptr);
+
     const auto& wtxid{tx->GetWitnessHash()};
     const auto& txid{tx->GetHash()};
 
@@ -656,6 +658,8 @@ void TxOrphanageImpl::EraseForBlock(const CBlock& block)
 
 std::vector<CTransactionRef> TxOrphanageImpl::GetChildrenFromSamePeer(const CTransactionRef& parent, NodeId peer) const
 {
+    Assert(parent != nullptr);
+
     std::vector<CTransactionRef> children_found;
     const auto& parent_txid{parent->GetHash()};
 
