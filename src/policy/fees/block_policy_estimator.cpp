@@ -1185,11 +1185,18 @@ FeeFilterRounder::FeeFilterRounder(const CFeeRate& minIncrementalFee, FastRandom
 CAmount FeeFilterRounder::round(CAmount currentMinFee)
 {
     AssertLockNotHeld(m_insecure_rand_mutex);
+    Assume(!m_fee_set.empty());
     std::set<double>::iterator it = m_fee_set.lower_bound(currentMinFee);
     if (it == m_fee_set.end() ||
         (it != m_fee_set.begin() &&
          WITH_LOCK(m_insecure_rand_mutex, return insecure_rand.rand32()) % 3 != 0)) {
         --it;
     }
-    return static_cast<CAmount>(*it);
+    const CAmount rounded_fee{static_cast<CAmount>(*it)};
+    Assume(rounded_fee >= 0);
+    Assume(rounded_fee <= MAX_FILTER_FEERATE);
+    if (currentMinFee <= 0) {
+        Assume(rounded_fee == 0);
+    }
+    return rounded_fee;
 }
