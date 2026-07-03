@@ -97,11 +97,17 @@ private:
                     // first iteration
                     nTotal++;
                 }
+                Assume(nTotal > 0);
+                Assume(nIdle >= 0);
+                Assume(nIdle <= nTotal);
+                Assume(nTodo >= queue.size());
                 // logically, the do loop starts here
                 while (queue.empty() && !m_request_stop) {
                     if (fMaster && nTodo == 0) {
                         Assume(queue.empty());
                         nTotal--;
+                        Assume(nTotal >= 0);
+                        Assume(nIdle <= nTotal);
                         std::optional<R> to_return = std::move(m_result);
                         // reset the status for new work later
                         m_result = std::nullopt;
@@ -109,8 +115,10 @@ private:
                         return to_return;
                     }
                     nIdle++;
+                    Assume(nIdle <= nTotal);
                     cond.wait(lock); // wait
                     nIdle--;
+                    Assume(nIdle >= 0);
                 }
                 if (m_request_stop) {
                     // return value does not matter, because m_request_stop is only set in the destructor.
@@ -122,6 +130,9 @@ private:
                 //   all workers finish approximately simultaneously.
                 // * Try to account for idle jobs which will instantly start helping.
                 // * Don't do batches smaller than 1 (duh), or larger than nBatchSize.
+                Assume(nTotal > 0);
+                Assume(nIdle >= 0);
+                Assume(nIdle <= nTotal);
                 nNow = std::max(1U, std::min(nBatchSize, (unsigned int)queue.size() / (nTotal + nIdle + 1)));
                 Assume(nNow > 0);
                 Assume(nNow <= queue.size());
