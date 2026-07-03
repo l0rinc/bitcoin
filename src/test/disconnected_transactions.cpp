@@ -92,4 +92,22 @@ BOOST_FIXTURE_TEST_CASE(disconnectpool_memory_limits, TestChain100Setup)
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(disconnectpool_duplicate_txids, TestChain100Setup)
+{
+    DisconnectedBlockTransactions disconnect_pool{MAX_DISCONNECTED_TX_POOL_BYTES};
+
+    BOOST_CHECK(disconnect_pool.AddTransactionsFromBlock({m_coinbase_txns[0], m_coinbase_txns[1]}).empty());
+    BOOST_CHECK_EQUAL(disconnect_pool.size(), 2);
+
+    BOOST_CHECK(disconnect_pool.AddTransactionsFromBlock({m_coinbase_txns[0]}).empty());
+    BOOST_CHECK_EQUAL(disconnect_pool.size(), 2);
+
+    disconnect_pool.removeForBlock({m_coinbase_txns[0]});
+    BOOST_CHECK_EQUAL(disconnect_pool.size(), 1);
+
+    const auto queued_tx{disconnect_pool.take()};
+    BOOST_REQUIRE_EQUAL(queued_tx.size(), 1);
+    BOOST_CHECK(queued_tx.front()->GetHash() == m_coinbase_txns[1]->GetHash());
+}
+
 BOOST_AUTO_TEST_SUITE_END()
