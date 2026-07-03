@@ -14,6 +14,7 @@
 
 #include <cassert>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <ranges>
 
@@ -25,6 +26,18 @@ std::vector<unsigned char> SerializePSBT(const PartiallySignedTransaction& psbt)
     std::vector<unsigned char> psbt_ser;
     VectorWriter{psbt_ser, 0, psbt};
     return psbt_ser;
+}
+
+std::string MutateTrailingPaddingBits(std::string encoded, std::string_view alphabet)
+{
+    const auto padding_pos{encoded.find('=')};
+    assert(padding_pos != std::string::npos);
+    assert(padding_pos > 0);
+    const auto alphabet_pos{alphabet.find(encoded[padding_pos - 1])};
+    assert(alphabet_pos != std::string_view::npos);
+    assert((alphabet_pos & 1U) == 0);
+    encoded[padding_pos - 1] = alphabet[alphabet_pos | 1U];
+    return encoded;
 }
 } // namespace
 
@@ -99,6 +112,9 @@ FUZZ_TARGET(base32_encode_decode)
     }
     const auto decoded{DecodeBase32(encoded)};
     assert(decoded && std::ranges::equal(*decoded, buffer));
+    if (encoded.find('=') != std::string::npos) {
+        assert(!DecodeBase32(MutateTrailingPaddingBits(encoded, "abcdefghijklmnopqrstuvwxyz234567")));
+    }
 
     const auto unpadded{EncodeBase32(buffer, false)};
     assert(encoded.starts_with(unpadded));
@@ -129,6 +145,9 @@ FUZZ_TARGET(base64_encode_decode)
     }
     const auto decoded{DecodeBase64(encoded)};
     assert(decoded && std::ranges::equal(*decoded, buffer));
+    if (encoded.find('=') != std::string::npos) {
+        assert(!DecodeBase64(MutateTrailingPaddingBits(encoded, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")));
+    }
 }
 
 FUZZ_TARGET(psbt_base64_decode)
