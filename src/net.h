@@ -706,6 +706,17 @@ public:
     Mutex m_sock_mutex;
     Mutex cs_vRecv;
 
+    void AssertSendQueueMemoryUsage() const EXCLUSIVE_LOCKS_REQUIRED(cs_vSend)
+    {
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            size_t memory_usage{0};
+            for (const auto& msg : vSendMsg) {
+                memory_usage += msg.GetMemoryUsage();
+            }
+            Assume(m_send_memusage == memory_usage);
+        }
+    }
+
     uint64_t nRecvBytes GUARDED_BY(cs_vRecv){0};
 
     std::atomic<NodeClock::time_point> m_last_send{NodeClock::epoch};
