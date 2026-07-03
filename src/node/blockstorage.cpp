@@ -99,7 +99,9 @@ void BlockTreeDB::WriteBatchSync(const std::vector<std::pair<int, const CBlockFi
     }
     batch.Write(DB_LAST_BLOCK, nLastFile);
     for (const CBlockIndex* bi : blockinfo) {
-        batch.Write(std::make_pair(DB_BLOCK_INDEX, bi->GetBlockHash()), CDiskBlockIndex{bi});
+        const CDiskBlockIndex disk_block_index{bi};
+        Assume(disk_block_index.ConstructBlockHash() == bi->GetBlockHash());
+        batch.Write(std::make_pair(DB_BLOCK_INDEX, bi->GetBlockHash()), disk_block_index);
     }
     WriteBatch(batch, true);
 }
