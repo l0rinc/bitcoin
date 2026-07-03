@@ -1611,6 +1611,8 @@ Transport::Info V2Transport::GetInfo() const noexcept
 
 std::pair<size_t, bool> CConnman::SocketSendData(CNode& node) const
 {
+    node.AssertSendQueueMemoryUsage();
+
     auto it = node.vSendMsg.begin();
     size_t nSentSize = 0;
     bool data_left{false}; //!< second return value (whether unsent data remains)
@@ -1685,6 +1687,7 @@ std::pair<size_t, bool> CConnman::SocketSendData(CNode& node) const
         assert(node.m_send_memusage == 0);
     }
     node.vSendMsg.erase(node.vSendMsg.begin(), it);
+    node.AssertSendQueueMemoryUsage();
     return {nSentSize, data_left};
 }
 
@@ -4192,6 +4195,7 @@ void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
         if (pnode->m_send_memusage + pnode->m_transport->GetSendMemoryUsage() > nSendBufferMaxSize) pnode->fPauseSend = true;
         // Move message to vSendMsg queue.
         pnode->vSendMsg.push_back(std::move(msg));
+        pnode->AssertSendQueueMemoryUsage();
 
         // If there was nothing to send before, and there is now (predicted by the "more" value
         // returned by the GetBytesToSend call above), attempt "optimistic write":
@@ -4202,6 +4206,7 @@ void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
         // still be in the handshake).
         if (queue_was_empty && more) {
             std::tie(nBytesSent, std::ignore) = SocketSendData(*pnode);
+            pnode->AssertSendQueueMemoryUsage();
         }
     }
     if (nBytesSent) RecordBytesSent(nBytesSent);
