@@ -139,6 +139,36 @@ enum class HTTPReadError {
     CONTENT_TOO_LARGE,
 };
 
+struct RequestFields
+{
+    HTTPRequestMethod method;
+    std::string target;
+    http_bitcoin::HTTPVersion version;
+    std::string headers;
+    std::string body;
+};
+
+RequestFields SnapshotRequestFields(const http_bitcoin::HTTPRequest& request)
+{
+    return {
+        request.m_method,
+        request.m_target,
+        request.m_version,
+        request.m_headers.Stringify(),
+        request.m_body,
+    };
+}
+
+void AssertRequestFieldsEqual(const RequestFields& actual, const RequestFields& expected)
+{
+    assert(actual.method == expected.method);
+    assert(actual.target == expected.target);
+    assert(actual.version.major == expected.version.major);
+    assert(actual.version.minor == expected.version.minor);
+    assert(actual.headers == expected.headers);
+    assert(actual.body == expected.body);
+}
+
 void AssertHeaderCollectionContracts(FuzzedDataProvider& fuzzed_data_provider)
 {
     http_bitcoin::HTTPHeaders headers;
@@ -357,6 +387,83 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
 
     assert(client->m_keep_alive.load() == expected_keep_alive);
     assert(!client->m_req_busy.load());
+}
+
+void AssertParserStageAtomicityContracts(const std::vector<std::byte>& http_buffer)
+{
+    using http_bitcoin::HTTPRequest;
+    using http_bitcoin::ContentTooLargeError;
+    using http_bitcoin::HTTPParseError;
+    using http_bitcoin::MAX_HEADERS_SIZE;
+    using util::LineReader;
+
+    {
+        HTTPRequest request;
+        request.m_method = HTTPRequestMethod::PUT;
+        request.m_target = "/sentinel";
+        request.m_version = {1, 0};
+        request.m_headers.Write("X-Sentinel", "1");
+        request.m_body = "old-body";
+        const auto before{SnapshotRequestFields(request)};
+
+        LineReader reader(http_buffer, MAX_HEADERS_SIZE);
+        try {
+            if (!request.LoadControlData(reader)) {
+                AssertRequestFieldsEqual(SnapshotRequestFields(request), before);
+            }
+        } catch (const HTTPParseError&) {
+            AssertRequestFieldsEqual(SnapshotRequestFields(request), before);
+        }
+    }
+    {
+        HTTPRequest request;
+        request.m_headers.Write("X-Sentinel", "1");
+        const auto before{SnapshotRequestFields(request)};
+
+        LineReader reader(http_buffer, MAX_HEADERS_SIZE);
+        try {
+            if (!request.LoadHeaders(reader)) {
+                AssertRequestFieldsEqual(SnapshotRequestFields(request), before);
+            }
+        } catch (const HTTPParseError&) {
+            AssertRequestFieldsEqual(SnapshotRequestFields(request), before);
+        }
+    }
+    {
+        HTTPRequest request;
+        request.m_body = "old-body";
+
+        LineReader reader(http_buffer, MAX_HEADERS_SIZE);
+        assert(request.LoadBody(reader));
+        assert(request.ReadBody().empty());
+    }
+    {
+        HTTPRequest request;
+        request.m_headers.Write("Content-Length", std::to_string(http_buffer.size() + 1));
+        request.m_body = "old-body";
+        const auto before{SnapshotRequestFields(request)};
+
+        LineReader reader(http_buffer, MAX_HEADERS_SIZE);
+        assert(!request.LoadBody(reader));
+        AssertRequestFieldsEqual(SnapshotRequestFields(request), before);
+    }
+    {
+        HTTPRequest request;
+        request.m_headers.Write("Transfer-Encoding", "chunked");
+        request.m_body = "old-body";
+        const auto before{SnapshotRequestFields(request)};
+
+        LineReader reader(http_buffer, MAX_HEADERS_SIZE);
+        try {
+            if (!request.LoadBody(reader)) {
+                AssertRequestFieldsEqual(SnapshotRequestFields(request), before);
+            }
+        } catch (const HTTPParseError&) {
+            AssertRequestFieldsEqual(SnapshotRequestFields(request), before);
+        } catch (const ContentTooLargeError&) {
+            AssertRequestFieldsEqual(SnapshotRequestFields(request), before);
+        }
+    }
 }
 
 void AssertReadRequestContracts(const std::vector<std::byte>& http_buffer)
@@ -581,6 +688,7 @@ FUZZ_TARGET(http_request)
     AssertSendBufferContracts(fuzzed_data_provider);
     const std::vector<std::byte> http_buffer{ConsumeRandomLengthByteVector<std::byte>(fuzzed_data_provider, 4096)};
     AssertHeaderParseRoundTrip(http_buffer);
+    AssertParserStageAtomicityContracts(http_buffer);
     AssertReadRequestContracts(http_buffer);
 
     HTTPRequest http_request;
