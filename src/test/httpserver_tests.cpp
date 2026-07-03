@@ -841,12 +841,14 @@ BOOST_AUTO_TEST_CASE(http_request_tests)
         BOOST_CHECK(req.LoadControlData(reader1));
         BOOST_CHECK(req.LoadHeaders(reader1));
         BOOST_CHECK(!req.LoadBody(reader1));
+        BOOST_CHECK_EQUAL(req.ReadBody(), "");
         // more data arrives!
         delayed_chunked += "\n0\n\n";
         LineReader reader2(delayed_chunked, MAX_HEADERS_SIZE);
         BOOST_CHECK(req.LoadControlData(reader2));
         BOOST_CHECK(req.LoadHeaders(reader2));
         BOOST_CHECK(req.LoadBody(reader2));
+        BOOST_CHECK_EQUAL(req.ReadBody(), R"({"method":"getblockcount"})");
     }
     {
         // HTTPRemoteClient::ReadRequest removes exactly the parsed request,
