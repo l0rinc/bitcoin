@@ -35,6 +35,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <map>
+#include <optional>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -61,6 +62,44 @@ CBlock DummyBlockWithTransactions(size_t tx_count)
     CBlock block;
     block.vtx.assign(tx_count, MakeTransactionRef(CMutableTransaction{}));
     return block;
+}
+
+struct ChainstateSnapshotState {
+    size_t chainstates;
+    const Chainstate* current;
+    const CBlockIndex* tip;
+    std::optional<uint256> from_snapshot_blockhash;
+    std::optional<uint256> target_blockhash;
+    size_t coinstip_cache_size;
+    size_t coinsdb_cache_size;
+};
+
+ChainstateSnapshotState CaptureChainstateSnapshotState(ChainstateManager& chainman)
+{
+    LOCK(::cs_main);
+    const Chainstate& current{chainman.CurrentChainstate()};
+    return {
+        chainman.m_chainstates.size(),
+        &current,
+        current.m_chain.Tip(),
+        current.m_from_snapshot_blockhash,
+        current.m_target_blockhash,
+        current.m_coinstip_cache_size_bytes,
+        current.m_coinsdb_cache_size_bytes,
+    };
+}
+
+void CheckSnapshotActivationFailurePreserved(ChainstateManager& chainman, const ChainstateSnapshotState& before)
+{
+    LOCK(::cs_main);
+    const Chainstate& current{chainman.CurrentChainstate()};
+    BOOST_CHECK_EQUAL(chainman.m_chainstates.size(), before.chainstates);
+    BOOST_CHECK_EQUAL(&current, before.current);
+    BOOST_CHECK_EQUAL(current.m_chain.Tip(), before.tip);
+    BOOST_CHECK(current.m_from_snapshot_blockhash == before.from_snapshot_blockhash);
+    BOOST_CHECK(current.m_target_blockhash == before.target_blockhash);
+    BOOST_CHECK_EQUAL(current.m_coinstip_cache_size_bytes, before.coinstip_cache_size);
+    BOOST_CHECK_EQUAL(current.m_coinsdb_cache_size_bytes, before.coinsdb_cache_size);
 }
 } // namespace
 
@@ -444,8 +483,16 @@ struct SnapshotTestSetup : TestChain100Setup {
 
         Chainstate& validation_chainstate = chainman.ActiveChainstate();
 
+        auto expect_snapshot_activation_failure = [&](const auto& activate_snapshot) {
+            const auto before_activation{CaptureChainstateSnapshotState(chainman)};
+            BOOST_REQUIRE(!activate_snapshot());
+            CheckSnapshotActivationFailurePreserved(chainman, before_activation);
+        };
+
         // Snapshot should refuse to load at this height.
-        BOOST_REQUIRE(!CreateAndActivateUTXOSnapshot(this));
+        expect_snapshot_activation_failure([&] {
+            return CreateAndActivateUTXOSnapshot(this);
+        });
         BOOST_CHECK(!chainman.ActiveChainstate().m_from_snapshot_blockhash);
 
         // Mine 10 more blocks, putting at us height 110 where a valid assumeutxo value can
@@ -456,44 +503,56 @@ struct SnapshotTestSetup : TestChain100Setup {
         initial_total_coins += 10;
 
         // Should not load malleated snapshots
-        BOOST_REQUIRE(!CreateAndActivateUTXOSnapshot(
-            this, [](AutoFile& auto_infile, SnapshotMetadata& metadata) {
-                // A UTXO is missing but count is correct
-                metadata.m_coins_count -= 1;
+        expect_snapshot_activation_failure([&] {
+            return CreateAndActivateUTXOSnapshot(
+                this, [](AutoFile& auto_infile, SnapshotMetadata& metadata) {
+                    // A UTXO is missing but count is correct
+                    metadata.m_coins_count -= 1;
 
-                Txid txid;
-                auto_infile >> txid;
-                // coins size
-                (void)ReadCompactSize(auto_infile);
-                // vout index
-                (void)ReadCompactSize(auto_infile);
-                Coin coin;
-                auto_infile >> coin;
-        }));
+                    Txid txid;
+                    auto_infile >> txid;
+                    // coins size
+                    (void)ReadCompactSize(auto_infile);
+                    // vout index
+                    (void)ReadCompactSize(auto_infile);
+                    Coin coin;
+                    auto_infile >> coin;
+                });
+        });
 
         BOOST_CHECK(!node::FindAssumeutxoChainstateDir(chainman.m_options.datadir));
 
-        BOOST_REQUIRE(!CreateAndActivateUTXOSnapshot(
-            this, [](AutoFile& auto_infile, SnapshotMetadata& metadata) {
-                // Coins count is larger than coins in file
-                metadata.m_coins_count += 1;
-        }));
-        BOOST_REQUIRE(!CreateAndActivateUTXOSnapshot(
-            this, [](AutoFile& auto_infile, SnapshotMetadata& metadata) {
-                // Coins count is smaller than coins in file
-                metadata.m_coins_count -= 1;
-        }));
-        BOOST_REQUIRE(!CreateAndActivateUTXOSnapshot(
-            this, [](AutoFile& auto_infile, SnapshotMetadata& metadata) {
-                // Wrong hash
-                metadata.m_base_blockhash = uint256::ZERO;
-        }));
-        BOOST_REQUIRE(!CreateAndActivateUTXOSnapshot(
-            this, [](AutoFile& auto_infile, SnapshotMetadata& metadata) {
-                // Wrong hash
-                metadata.m_base_blockhash = uint256::ONE;
-        }));
-        BOOST_REQUIRE(!CreateAndActivateUTXOSnapshotWithDuplicateCoin());
+        expect_snapshot_activation_failure([&] {
+            return CreateAndActivateUTXOSnapshot(
+                this, [](AutoFile& auto_infile, SnapshotMetadata& metadata) {
+                    // Coins count is larger than coins in file
+                    metadata.m_coins_count += 1;
+                });
+        });
+        expect_snapshot_activation_failure([&] {
+            return CreateAndActivateUTXOSnapshot(
+                this, [](AutoFile& auto_infile, SnapshotMetadata& metadata) {
+                    // Coins count is smaller than coins in file
+                    metadata.m_coins_count -= 1;
+                });
+        });
+        expect_snapshot_activation_failure([&] {
+            return CreateAndActivateUTXOSnapshot(
+                this, [](AutoFile& auto_infile, SnapshotMetadata& metadata) {
+                    // Wrong hash
+                    metadata.m_base_blockhash = uint256::ZERO;
+                });
+        });
+        expect_snapshot_activation_failure([&] {
+            return CreateAndActivateUTXOSnapshot(
+                this, [](AutoFile& auto_infile, SnapshotMetadata& metadata) {
+                    // Wrong hash
+                    metadata.m_base_blockhash = uint256::ONE;
+                });
+        });
+        expect_snapshot_activation_failure([&] {
+            return CreateAndActivateUTXOSnapshotWithDuplicateCoin();
+        });
 
         BOOST_REQUIRE(CreateAndActivateUTXOSnapshot(this));
         BOOST_CHECK(fs::exists(*node::FindAssumeutxoChainstateDir(chainman.m_options.datadir)));
@@ -589,7 +648,9 @@ struct SnapshotTestSetup : TestChain100Setup {
         }
 
         // Snapshot should refuse to load after one has already loaded.
-        BOOST_REQUIRE(!CreateAndActivateUTXOSnapshot(this));
+        expect_snapshot_activation_failure([&] {
+            return CreateAndActivateUTXOSnapshot(this);
+        });
 
         // Snapshot blockhash should be unchanged.
         BOOST_CHECK_EQUAL(

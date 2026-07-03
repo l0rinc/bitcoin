@@ -5863,6 +5863,11 @@ util::Result<CBlockIndex*> ChainstateManager::ActivateSnapshot(
 
     auto cleanup_bad_snapshot = [&](bilingual_str reason) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
         this->MaybeRebalanceCaches();
+        Chainstate& current_chainstate{this->CurrentChainstate()};
+        Assume(!current_chainstate.m_from_snapshot_blockhash);
+        Assume(!current_chainstate.m_target_blockhash);
+        Assume(current_chainstate.m_coinstip_cache_size_bytes == m_total_coinstip_cache);
+        Assume(current_chainstate.m_coinsdb_cache_size_bytes == m_total_coinsdb_cache);
 
         // PopulateAndValidateSnapshot can return (in error) before the leveldb datadir
         // has been created, so only attempt removal if we got that far.
