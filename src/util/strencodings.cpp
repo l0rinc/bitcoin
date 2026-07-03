@@ -112,6 +112,7 @@ std::string EncodeBase64(std::span<const unsigned char> input)
 
 std::optional<std::vector<unsigned char>> DecodeBase64(std::string_view str)
 {
+    const std::string_view original{str};
     static const int8_t decode64_table[256]{
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -142,6 +143,7 @@ std::optional<std::vector<unsigned char>> DecodeBase64(std::string_view str)
     );
     if (!valid) return {};
     assert(str.find('=') == std::string_view::npos);
+    assert(EncodeBase64(ret) == original);
 
     return ret;
 }
@@ -174,6 +176,7 @@ std::string EncodeBase32(std::string_view str, bool pad)
 
 std::optional<std::vector<unsigned char>> DecodeBase32(std::string_view str)
 {
+    const std::string_view original{str};
     static const int8_t decode32_table[256]{
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -207,6 +210,7 @@ std::optional<std::vector<unsigned char>> DecodeBase32(std::string_view str)
 
     if (!valid) return {};
     assert(str.find('=') == std::string_view::npos);
+    assert(EncodeBase32(ret) == ToLower(original));
 
     return ret;
 }
