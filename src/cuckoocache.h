@@ -64,11 +64,16 @@ public:
      */
     explicit bit_packed_atomic_flags(uint32_t size)
     {
+        const uint32_t bit_count{size};
         // pad out the size if needed
         size = CeilDiv(size, 8u);
         mem.reset(new std::atomic<uint8_t>[size]);
         for (uint32_t i = 0; i < size; ++i)
             mem[i].store(0xFF);
+        if (bit_count > 0) {
+            Assume(bit_is_set(0));
+            Assume(bit_is_set(bit_count - 1));
+        }
     };
 
     /** setup marks all entries and ensures that bit_packed_atomic_flags can store

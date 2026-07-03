@@ -71,6 +71,35 @@ BOOST_AUTO_TEST_CASE(cuckoocache_setup_return_contracts)
     check_setup_bytes(17 * sizeof(uint256));
 }
 
+BOOST_AUTO_TEST_CASE(cuckoocache_bit_packed_atomic_flags_contracts)
+{
+    CuckooCache::bit_packed_atomic_flags byte_flags{8};
+    BOOST_CHECK(byte_flags.bit_is_set(7));
+
+    CuckooCache::bit_packed_atomic_flags flags{9};
+    for (uint32_t idx{0}; idx < 9; ++idx) {
+        BOOST_CHECK(flags.bit_is_set(idx));
+    }
+
+    flags.bit_unset(0);
+    flags.bit_unset(7);
+    flags.bit_unset(8);
+    BOOST_CHECK(!flags.bit_is_set(0));
+    BOOST_CHECK(!flags.bit_is_set(7));
+    BOOST_CHECK(!flags.bit_is_set(8));
+
+    flags.bit_set(7);
+    BOOST_CHECK(!flags.bit_is_set(0));
+    BOOST_CHECK(flags.bit_is_set(7));
+    BOOST_CHECK(!flags.bit_is_set(8));
+
+    flags.setup(17);
+    BOOST_CHECK(flags.bit_is_set(0));
+    BOOST_CHECK(flags.bit_is_set(7));
+    BOOST_CHECK(flags.bit_is_set(8));
+    BOOST_CHECK(flags.bit_is_set(16));
+}
+
 /* Test that no values not inserted into the cache are read out of it.
  *
  * There are no repeats in the first 200000 m_rng.rand256() calls
