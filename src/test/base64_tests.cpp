@@ -56,4 +56,13 @@ BOOST_AUTO_TEST_CASE(base64_padding)
     BOOST_CHECK( DecodeBase64("YWE="));
 }
 
+BOOST_AUTO_TEST_CASE(base64_rejects_nonzero_padding_bits)
+{
+    BOOST_CHECK(DecodeBase64("Zg=="));
+    BOOST_CHECK(!DecodeBase64("Zh=="));
+
+    BOOST_CHECK(DecodeBase64("Zm8="));
+    BOOST_CHECK(!DecodeBase64("Zm9="));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
