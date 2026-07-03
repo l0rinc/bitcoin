@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -87,6 +88,36 @@ size_t CountOccurrences(std::string_view str, std::string_view needle)
         pos += needle.size();
     }
     return count;
+}
+
+struct RequestFields
+{
+    HTTPRequestMethod method;
+    std::string target;
+    http_bitcoin::HTTPVersion version;
+    std::string headers;
+    std::string body;
+};
+
+RequestFields SnapshotRequestFields(const HTTPRequest& request)
+{
+    return {
+        request.m_method,
+        request.m_target,
+        request.m_version,
+        request.m_headers.Stringify(),
+        request.m_body,
+    };
+}
+
+void CheckRequestFieldsEqual(const RequestFields& actual, const RequestFields& expected)
+{
+    BOOST_CHECK(actual.method == expected.method);
+    BOOST_CHECK_EQUAL(actual.target, expected.target);
+    BOOST_CHECK_EQUAL(actual.version.major, expected.version.major);
+    BOOST_CHECK_EQUAL(actual.version.minor, expected.version.minor);
+    BOOST_CHECK_EQUAL(actual.headers, expected.headers);
+    BOOST_CHECK_EQUAL(actual.body, expected.body);
 }
 } // namespace
 
@@ -909,6 +940,69 @@ BOOST_AUTO_TEST_CASE(http_request_tests)
         const std::string response{buf, static_cast<size_t>(bytes_read)};
         BOOST_CHECK(response.starts_with("HTTP/1.1 400 Bad Request\r\n"));
         BOOST_CHECK(response.find("Content-Length: 0\r\n") != std::string::npos);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(http_request_parse_failure_preserves_fields)
+{
+    {
+        HTTPRequest req;
+        req.m_method = HTTPRequestMethod::PUT;
+        req.m_target = "/sentinel";
+        req.m_version = {1, 0};
+        req.m_headers.Write("X-Sentinel", "1");
+        req.m_body = "old-body";
+        const auto before{SnapshotRequestFields(req)};
+
+        LineReader reader("POST /mutated HTTP/1.x\r\n", MAX_HEADERS_SIZE);
+        BOOST_CHECK_EXCEPTION(req.LoadControlData(reader), HTTPParseError, HasReason{"HTTP bad version"});
+        CheckRequestFieldsEqual(SnapshotRequestFields(req), before);
+    }
+    {
+        HTTPRequest req;
+        req.m_headers.Write("X-Sentinel", "1");
+        const auto before{SnapshotRequestFields(req)};
+
+        LineReader reader("Good: 1\r\nBad\r\n\r\n", MAX_HEADERS_SIZE);
+        BOOST_CHECK_EXCEPTION(req.LoadHeaders(reader), HTTPParseError, HasReason{"HTTP header missing colon (:)"});
+        CheckRequestFieldsEqual(SnapshotRequestFields(req), before);
+    }
+    {
+        HTTPRequest req;
+        req.m_headers.Write("X-Sentinel", "1");
+        const auto before{SnapshotRequestFields(req)};
+
+        LineReader reader("Good: 1\r\nPartial", MAX_HEADERS_SIZE);
+        BOOST_CHECK(!req.LoadHeaders(reader));
+        CheckRequestFieldsEqual(SnapshotRequestFields(req), before);
+    }
+    {
+        HTTPRequest req;
+        req.m_body = "old-body";
+
+        LineReader reader("bytes without a declared body", MAX_HEADERS_SIZE);
+        BOOST_CHECK(req.LoadBody(reader));
+        BOOST_CHECK_EQUAL(req.ReadBody(), "");
+    }
+    {
+        HTTPRequest req;
+        req.m_headers.Write("Content-Length", "5");
+        req.m_body = "old-body";
+        const auto before{SnapshotRequestFields(req)};
+
+        LineReader reader("he", MAX_HEADERS_SIZE);
+        BOOST_CHECK(!req.LoadBody(reader));
+        CheckRequestFieldsEqual(SnapshotRequestFields(req), before);
+    }
+    {
+        HTTPRequest req;
+        req.m_headers.Write("Transfer-Encoding", "chunked");
+        req.m_body = "old-body";
+        const auto before{SnapshotRequestFields(req)};
+
+        LineReader reader("5\r\nhello\r\n", MAX_HEADERS_SIZE);
+        BOOST_CHECK(!req.LoadBody(reader));
+        CheckRequestFieldsEqual(SnapshotRequestFields(req), before);
     }
 }
 
