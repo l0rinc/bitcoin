@@ -14,6 +14,7 @@
 #include <common/args.h>
 #include <consensus/amount.h>
 #include <consensus/params.h>
+#include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <core_io.h>
 #include <deploymentinfo.h>
@@ -38,6 +39,8 @@
 #include <rpc/server_util.h>
 #include <rpc/util.h>
 #include <script/descriptor.h>
+#include <script/interpreter.h>
+#include <script/sigcache.h>
 #include <serialize.h>
 #include <streams.h>
 #include <sync.h>
@@ -55,6 +58,7 @@
 #include <validationinterface.h>
 #include <versionbits.h>
 
+#include <atomic>
 #include <cstdint>
 
 #include <condition_variable>
@@ -1296,6 +1300,219 @@ static RPCMethod verifychain()
     Chainstate& active_chainstate = chainman.ActiveChainstate();
     return CVerifyDB(chainman.GetNotifications()).VerifyDB(
                active_chainstate, chainman.GetParams().GetConsensus(), active_chainstate.CoinsTip(), check_level, check_depth) == VerifyDBResult::SUCCESS;
+},
+    };
+}
+
+static std::atomic<bool> g_revalidate_chain_running{false};
+
+class RevalidateChainReserver
+{
+private:
+    bool m_could_reserve{false};
+
+public:
+    bool reserve()
+    {
+        CHECK_NONFATAL(!m_could_reserve);
+        if (g_revalidate_chain_running.exchange(true)) {
+            return false;
+        }
+        m_could_reserve = true;
+        return true;
+    }
+
+    ~RevalidateChainReserver()
+    {
+        if (m_could_reserve) {
+            g_revalidate_chain_running = false;
+        }
+    }
+};
+
+struct RevalidateChainBlock
+{
+    const CBlockIndex* index;
+    script_verify_flags flags;
+};
+
+struct RevalidateChainStats
+{
+    uint64_t blocks{0};
+    uint64_t transactions{0};
+    uint64_t noncoinbase_transactions{0};
+    uint64_t txins{0};
+    uint64_t script_checks{0};
+    int64_t sigop_cost{0};
+};
+
+static int64_t CalculateRevalidationSigOpCost(const CTransaction& tx, const CTxUndo& txundo, script_verify_flags flags)
+{
+    CCoinsViewCache view{&CoinsViewEmpty::Get()};
+    for (size_t input_index{0}; input_index < tx.vin.size(); ++input_index) {
+        view.AddCoin(tx.vin[input_index].prevout, Coin{txundo.vprevout[input_index]}, /*possible_overwrite=*/true);
+    }
+    return GetTransactionSigOpCost(tx, view, flags);
+}
+
+static RPCMethod revalidatechain()
+{
+    return RPCMethod{
+        "revalidatechain",
+        "Read-only revalidation of active-chain input scripts from genesis using block undo data.\n"
+        "This reruns the consensus script checks currently skipped by assumevalid. It may take many hours.\n"
+        "Progress is written to the debug log about every 10 minutes.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "", {
+                        {RPCResult::Type::BOOL, "valid", "Whether revalidation finished successfully."},
+                        {RPCResult::Type::NUM, "height", "Height of the active-chain tip that was revalidated."},
+                        {RPCResult::Type::NUM, "blocks", "Number of blocks read."},
+                        {RPCResult::Type::NUM, "transactions", "Number of transactions read, including coinbase transactions."},
+                        {RPCResult::Type::NUM, "noncoinbase_transactions", "Number of non-coinbase transactions revalidated."},
+                        {RPCResult::Type::NUM, "txins", "Number of transaction inputs revalidated."},
+                        {RPCResult::Type::NUM, "script_checks", "Number of input script checks performed."},
+                        {RPCResult::Type::NUM, "sigop_cost", "Consensus sigop cost of the revalidated transactions."},
+                        {RPCResult::Type::STR_HEX, "bestblockhash", "Block hash of the active-chain tip that was revalidated."},
+                        {RPCResult::Type::NUM, "time", "Elapsed revalidation time in seconds."},
+                    }},
+                RPCExamples{
+                    HelpExampleCli("revalidatechain", "")
+            + HelpExampleRpc("revalidatechain", "")
+                },
+        [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
+{
+    ChainstateManager& chainman = EnsureAnyChainman(request.context);
+    NodeContext& node = EnsureAnyNodeContext(request.context);
+
+    RevalidateChainReserver reserver;
+    if (!reserver.reserve()) {
+        throw JSONRPCError(RPC_MISC_ERROR, "Chain revalidation already in progress");
+    }
+
+    std::vector<RevalidateChainBlock> chain;
+    const CBlockIndex* tip{nullptr};
+    {
+        LOCK(cs_main);
+        Chainstate& active_chainstate = chainman.ActiveChainstate();
+        tip = active_chainstate.m_chain.Tip();
+        const CBlockIndex* genesis = active_chainstate.m_chain.Genesis();
+        if (!tip || !genesis) {
+            throw JSONRPCError(RPC_MISC_ERROR, "Active chain is empty");
+        }
+        const BlockStatus required_data{tip->nHeight == 0 ?
+                BLOCK_HAVE_DATA :
+                static_cast<BlockStatus>(BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO)};
+        if (!chainman.m_blockman.CheckBlockDataAvailability(
+                *tip,
+                *genesis,
+                required_data)) {
+            throw JSONRPCError(RPC_MISC_ERROR, "Full block and undo data is not available for the active chain");
+        }
+
+        chain.reserve(tip->nHeight + 1);
+        for (int height{0}; height <= tip->nHeight; ++height) {
+            const CBlockIndex* block_index{active_chainstate.m_chain[height]};
+            chain.push_back({block_index, GetBlockScriptFlags(*block_index, chainman)});
+        }
+    }
+
+    RevalidateChainStats stats;
+    SignatureCache signature_cache{DEFAULT_SIGNATURE_CACHE_BYTES};
+    const auto start_time{SteadyClock::now()};
+    auto next_log_time{start_time + std::chrono::minutes{10}};
+
+    LogInfo("revalidatechain: started active-chain script revalidation from genesis to height=%d hash=%s",
+            tip->nHeight, tip->GetBlockHash().ToString());
+
+    for (const RevalidateChainBlock& chain_block : chain) {
+        node.rpc_interruption_point();
+
+        const CBlockIndex& block_index{*chain_block.index};
+        CBlock block;
+        if (!chainman.m_blockman.ReadBlock(block, block_index)) {
+            throw JSONRPCError(RPC_MISC_ERROR, strprintf("Failed to read block %s at height %d",
+                                                         block_index.GetBlockHash().ToString(), block_index.nHeight));
+        }
+
+        ++stats.blocks;
+        stats.transactions += block.vtx.size();
+
+        if (block_index.nHeight > 0) {
+            CBlockUndo block_undo;
+            if (!chainman.m_blockman.ReadBlockUndo(block_undo, block_index)) {
+                throw JSONRPCError(RPC_MISC_ERROR, strprintf("Failed to read undo data for block %s at height %d",
+                                                             block_index.GetBlockHash().ToString(), block_index.nHeight));
+            }
+            if (block_undo.vtxundo.size() + 1 != block.vtx.size()) {
+                throw JSONRPCError(RPC_INTERNAL_ERROR, strprintf("Undo data size mismatch for block %s at height %d",
+                                                                 block_index.GetBlockHash().ToString(), block_index.nHeight));
+            }
+
+            for (size_t tx_index{1}; tx_index < block.vtx.size(); ++tx_index) {
+                const CTransaction& tx{*block.vtx[tx_index]};
+                const CTxUndo& txundo{block_undo.vtxundo[tx_index - 1]};
+                if (txundo.vprevout.size() != tx.vin.size()) {
+                    throw JSONRPCError(RPC_INTERNAL_ERROR, strprintf("Undo input size mismatch for transaction %s in block %s at height %d",
+                                                                     tx.GetHash().ToString(), block_index.GetBlockHash().ToString(), block_index.nHeight));
+                }
+
+                std::vector<CTxOut> spent_outputs;
+                spent_outputs.reserve(txundo.vprevout.size());
+                for (const Coin& coin : txundo.vprevout) {
+                    spent_outputs.push_back(coin.out);
+                }
+
+                PrecomputedTransactionData txdata;
+                txdata.Init(tx, std::move(spent_outputs));
+                stats.sigop_cost += CalculateRevalidationSigOpCost(tx, txundo, chain_block.flags);
+
+                for (size_t input_index{0}; input_index < tx.vin.size(); ++input_index) {
+                    CScriptCheck check{
+                        txundo.vprevout[input_index].out,
+                        tx,
+                        signature_cache,
+                        static_cast<unsigned int>(input_index),
+                        chain_block.flags,
+                        /*cacheIn=*/true,
+                        &txdata};
+                    if (const auto result{check()}) {
+                        throw JSONRPCError(RPC_VERIFY_ERROR, strprintf("block-script-verify-flag-failed (%s): %s in block %s at height %d",
+                                                                       ScriptErrorString(result->first), result->second,
+                                                                       block_index.GetBlockHash().ToString(), block_index.nHeight));
+                    }
+                    ++stats.txins;
+                    ++stats.script_checks;
+                }
+                ++stats.noncoinbase_transactions;
+            }
+        }
+
+        const auto now{SteadyClock::now()};
+        if (now >= next_log_time) {
+            LogInfo("revalidatechain: height=%d/%d blocks=%u txs=%u txins=%u script_checks=%u sigop_cost=%d elapsed=%ds",
+                    block_index.nHeight, tip->nHeight, stats.blocks, stats.transactions, stats.txins,
+                    stats.script_checks, stats.sigop_cost, Ticks<std::chrono::seconds>(now - start_time));
+            next_log_time = now + std::chrono::minutes{10};
+        }
+    }
+
+    const auto elapsed{Ticks<std::chrono::seconds>(SteadyClock::now() - start_time)};
+    LogInfo("revalidatechain: completed height=%d blocks=%u txs=%u txins=%u script_checks=%u sigop_cost=%d elapsed=%ds",
+            tip->nHeight, stats.blocks, stats.transactions, stats.txins, stats.script_checks, stats.sigop_cost, elapsed);
+
+    UniValue ret{UniValue::VOBJ};
+    ret.pushKV("valid", true);
+    ret.pushKV("height", tip->nHeight);
+    ret.pushKV("blocks", stats.blocks);
+    ret.pushKV("transactions", stats.transactions);
+    ret.pushKV("noncoinbase_transactions", stats.noncoinbase_transactions);
+    ret.pushKV("txins", stats.txins);
+    ret.pushKV("script_checks", stats.script_checks);
+    ret.pushKV("sigop_cost", stats.sigop_cost);
+    ret.pushKV("bestblockhash", tip->GetBlockHash().ToString());
+    ret.pushKV("time", elapsed);
+    return ret;
 },
     };
 }
@@ -3656,6 +3873,7 @@ void RegisterBlockchainRPCCommands(CRPCTable& t)
         {"blockchain", &gettxoutsetinfo},
         {"blockchain", &pruneblockchain},
         {"blockchain", &verifychain},
+        {"blockchain", &revalidatechain},
         {"blockchain", &preciousblock},
         {"blockchain", &scantxoutset},
         {"blockchain", &scanblocks},
