@@ -33,6 +33,31 @@ FUZZ_TARGET(cuckoocache)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     fuzzed_data_provider_ptr = &fuzzed_data_provider;
+    uint32_t flag_size{fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(0, 4096)};
+    CuckooCache::bit_packed_atomic_flags flags{flag_size};
+    std::vector<bool> expected_flags(flag_size, true);
+    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 1000) {
+        if (fuzzed_data_provider.ConsumeBool()) {
+            flag_size = fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(0, 4096);
+            flags.setup(flag_size);
+            expected_flags.assign(flag_size, true);
+            continue;
+        }
+        if (expected_flags.empty()) continue;
+        const uint32_t idx{fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(0, flag_size - 1)};
+        CallOneOf(
+            fuzzed_data_provider,
+            [&] {
+                flags.bit_set(idx);
+                expected_flags[idx] = true;
+            },
+            [&] {
+                flags.bit_unset(idx);
+                expected_flags[idx] = false;
+            },
+            [&] {});
+        assert(flags.bit_is_set(idx) == expected_flags[idx]);
+    }
     CuckooCache::cache<int, RandomHasher> cuckoo_cache{};
     CuckooCache::cache<uint256, SignatureCacheHasher> deterministic_cache{};
     if (fuzzed_data_provider.ConsumeBool()) {
