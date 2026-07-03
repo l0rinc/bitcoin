@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <cuckoocache.h>
+#include <pubkey.h>
 #include <random.h>
 #include <script/sigcache.h>
 #include <test/util/random.h>
@@ -17,6 +18,16 @@
 #include <shared_mutex>
 #include <thread>
 #include <vector>
+
+namespace {
+void CheckSignatureCacheEntry(SignatureCache& cache, const uint256& entry)
+{
+    cache.Set(entry);
+    BOOST_REQUIRE(cache.Get(entry, /*erase=*/false));
+    BOOST_REQUIRE(cache.Get(entry, /*erase=*/true));
+    BOOST_CHECK(cache.Get(entry, /*erase=*/false));
+}
+} // namespace
 
 /** Test Suite for CuckooCache
  *
@@ -86,6 +97,35 @@ BOOST_AUTO_TEST_CASE(cuckoocache_contains_erase_is_deferred)
     BOOST_REQUIRE(cc.contains(uint256::ONE, /*erase=*/false));
     BOOST_REQUIRE(cc.contains(uint256::ONE, /*erase=*/true));
     BOOST_CHECK(cc.contains(uint256::ONE, /*erase=*/false));
+}
+
+BOOST_AUTO_TEST_CASE(signature_cache_entry_contracts)
+{
+    const uint256 sighash{uint256::ONE};
+
+    SignatureCache ecdsa_cache{/*max_size_bytes=*/0};
+    const std::vector<unsigned char> ecdsa_sig{0x30, 0x01, 0x01};
+    std::vector<unsigned char> pubkey_bytes(CPubKey::COMPRESSED_SIZE);
+    pubkey_bytes[0] = 0x02;
+    const CPubKey pubkey{pubkey_bytes.begin(), pubkey_bytes.end()};
+
+    uint256 ecdsa_entry;
+    uint256 repeat_ecdsa_entry;
+    ecdsa_cache.ComputeEntryECDSA(ecdsa_entry, sighash, ecdsa_sig, pubkey);
+    ecdsa_cache.ComputeEntryECDSA(repeat_ecdsa_entry, sighash, ecdsa_sig, pubkey);
+    BOOST_CHECK(ecdsa_entry == repeat_ecdsa_entry);
+    CheckSignatureCacheEntry(ecdsa_cache, ecdsa_entry);
+
+    SignatureCache schnorr_cache{/*max_size_bytes=*/0};
+    const std::vector<unsigned char> schnorr_sig(64, 0x01);
+    const XOnlyPubKey xonly_pubkey{uint256::ONE};
+
+    uint256 schnorr_entry;
+    uint256 repeat_schnorr_entry;
+    schnorr_cache.ComputeEntrySchnorr(schnorr_entry, sighash, schnorr_sig, xonly_pubkey);
+    schnorr_cache.ComputeEntrySchnorr(repeat_schnorr_entry, sighash, schnorr_sig, xonly_pubkey);
+    BOOST_CHECK(schnorr_entry == repeat_schnorr_entry);
+    CheckSignatureCacheEntry(schnorr_cache, schnorr_entry);
 }
 
 struct HitRateTest : BasicTestingSetup {
