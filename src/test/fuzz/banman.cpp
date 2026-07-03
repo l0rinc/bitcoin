@@ -13,6 +13,7 @@
 #include <test/util/time.h>
 #include <util/fs.h>
 #include <util/readwritefile.h>
+#include <util/time.h>
 
 #include <cassert>
 #include <cstdint>
@@ -41,6 +42,18 @@ void AssertSubnetUnbanned(BanMan& ban_man, const CSubNet& subnet)
     ban_man.GetBanned(banmap);
     assert(!banmap.contains(subnet));
     assert(!ban_man.IsBanned(subnet));
+}
+
+void AssertBannedEntriesActive(BanMan& ban_man)
+{
+    banmap_t banmap;
+    ban_man.GetBanned(banmap);
+    const int64_t now{GetTime()};
+    for (const auto& [subnet, ban_entry] : banmap) {
+        assert(subnet.IsValid());
+        assert(now < ban_entry.nBanUntil);
+        assert(ban_man.IsBanned(subnet));
+    }
 }
 } // namespace
 
@@ -136,9 +149,15 @@ FUZZ_TARGET(banman, .init = initialize_banman)
                 [&] {
                     banmap_t banmap;
                     ban_man.GetBanned(banmap);
+                    AssertBannedEntriesActive(ban_man);
                 },
                 [&] {
                     ban_man.DumpBanlist();
+                    AssertBannedEntriesActive(ban_man);
+                },
+                [&] {
+                    clock.set(ConsumeTime(fuzzed_data_provider));
+                    AssertBannedEntriesActive(ban_man);
                 },
                 [&] {
                     ban_man.Discourage(ConsumeNetAddr(fuzzed_data_provider));
@@ -152,9 +171,11 @@ FUZZ_TARGET(banman, .init = initialize_banman)
             clock.set(ConsumeTime(fuzzed_data_provider));
             banmap_t banmap;
             ban_man.GetBanned(banmap);
+            AssertBannedEntriesActive(ban_man);
             BanMan ban_man_read{banlist_file, /*client_interface=*/nullptr, /*default_ban_time=*/0};
             banmap_t banmap_read;
             ban_man_read.GetBanned(banmap_read);
+            AssertBannedEntriesActive(ban_man_read);
             if (!contains_invalid) {
                 assert(banmap == banmap_read);
             }
