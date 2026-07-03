@@ -152,7 +152,7 @@ class AssumeutxoTest(BitcoinTestFramework):
                 # txid + coins per txid + vout + coin height
                 32 + 1 + 1 + 2,
                 None,
-                "Bad snapshot data after deserializing 0 coins - bad tx out value"
+                "Bad snapshot format or truncated snapshot after deserializing 0 coins"
             ],  # Amount exceeds MAX_MONEY
         ]
 
