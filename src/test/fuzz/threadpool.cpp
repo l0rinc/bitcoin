@@ -89,6 +89,25 @@ FUZZ_TARGET(threadpool, .init = setup_threadpool_test)
         assert(g_pool.WorkQueueSize() == 0);
     }
 
+    if (fuzzed_data_provider.ConsumeBool()) {
+        const auto range_size{fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(0, 32)};
+        std::vector<uint32_t> expected_results;
+        std::vector<std::function<uint32_t()>> ordered_tasks;
+        expected_results.reserve(range_size);
+        ordered_tasks.reserve(range_size);
+        for (uint32_t task_idx{0}; task_idx < range_size; ++task_idx) {
+            const uint32_t result{fuzzed_data_provider.ConsumeIntegral<uint32_t>()};
+            expected_results.push_back(result);
+            ordered_tasks.emplace_back([result] { return result; });
+        }
+        auto ordered_futures{*Assert(g_pool.Submit(std::move(ordered_tasks)))};
+        assert(ordered_futures.size() == expected_results.size());
+        for (size_t idx{0}; idx < ordered_futures.size(); ++idx) {
+            assert(ordered_futures[idx].get() == expected_results[idx]);
+        }
+        assert(g_pool.WorkQueueSize() == 0);
+    }
+
     std::queue<std::future<void>> futures;
     for (uint32_t i = 0; i < num_tasks;) {
         const bool submit_range = fuzzed_data_provider.ConsumeBool();
