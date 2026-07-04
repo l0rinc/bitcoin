@@ -762,7 +762,10 @@ CFeeRate CBlockPolicyEstimator::estimateFee(int confTarget) const
     if (confTarget <= 1)
         return CFeeRate(0);
 
-    return estimateRawFee(confTarget, DOUBLE_SUCCESS_PCT, FeeEstimateHorizon::MED_HALFLIFE);
+    Assume(confTarget > 1);
+    const CFeeRate fee{estimateRawFee(confTarget, DOUBLE_SUCCESS_PCT, FeeEstimateHorizon::MED_HALFLIFE)};
+    Assume(fee.GetFeePerK() >= 0);
+    return fee;
 }
 
 CFeeRate CBlockPolicyEstimator::estimateRawFee(int confTarget, double successThreshold, FeeEstimateHorizon horizon, EstimationResult* result) const
