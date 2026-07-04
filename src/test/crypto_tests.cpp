@@ -718,6 +718,27 @@ BOOST_AUTO_TEST_CASE(aes_cbc_testvectors) {
                   "b2eb05e2c39be9fcda6c19078c6a9d1b3f461796d6b0d6b2e0c2a72b4d80e644");
 }
 
+BOOST_AUTO_TEST_CASE(aes_cbc_invalid_length_preserves_output)
+{
+    const std::vector<unsigned char> key{ParseHex("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4")};
+    const std::vector<unsigned char> iv{ParseHex("000102030405060708090a0b0c0d0e0f")};
+    const std::vector<unsigned char> invalid_plaintext{ParseHex("001122")};
+    const std::vector<unsigned char> invalid_ciphertext{ParseHex("0011223344")};
+    const int invalid_plaintext_size{static_cast<int>(invalid_plaintext.size())};
+    const int invalid_ciphertext_size{static_cast<int>(invalid_ciphertext.size())};
+
+    AES256CBCEncrypt enc{key.data(), iv.data(), /*padIn=*/false};
+    AES256CBCDecrypt dec{key.data(), iv.data(), /*padIn=*/false};
+
+    std::vector<unsigned char> out(AES_BLOCKSIZE * 2, 0xa5);
+    const std::vector<unsigned char> before{out};
+    BOOST_CHECK_EQUAL(enc.Encrypt(invalid_plaintext.data(), invalid_plaintext_size, out.data()), 0);
+    BOOST_CHECK(out == before);
+
+    BOOST_CHECK_EQUAL(dec.Decrypt(invalid_ciphertext.data(), invalid_ciphertext_size, out.data()), 0);
+    BOOST_CHECK(out == before);
+}
+
 
 BOOST_AUTO_TEST_CASE(chacha20_testvector)
 {
