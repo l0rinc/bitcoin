@@ -278,6 +278,8 @@ public:
             ret &= todo;
             to_add = ret - old;
         } while (to_add.Any());
+        Assume(ret.IsSubsetOf(todo));
+        Assume(ret[tx]);
         return ret;
     }
 
