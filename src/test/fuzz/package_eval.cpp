@@ -360,6 +360,44 @@ void AssertDuplicatePackageRejected(const std::vector<CTransactionRef>& txs)
     }
 }
 
+void AssertATMPResultShape(const MempoolAcceptResult& res, const Wtxid& wtxid, bool submitted, bool txid_in_mempool, bool wtxid_in_mempool)
+{
+    switch (res.m_result_type) {
+    case MempoolAcceptResult::ResultType::VALID:
+        if (submitted) {
+            Assert(txid_in_mempool);
+            Assert(wtxid_in_mempool);
+        }
+        Assert(res.m_state.IsValid());
+        Assert(!res.m_state.IsInvalid());
+        Assert(res.m_vsize && *res.m_vsize > 0);
+        Assert(res.m_base_fees && MoneyRange(*res.m_base_fees));
+        Assert(res.m_effective_feerate);
+        Assert(res.m_wtxids_fee_calculations);
+        Assert(std::ranges::find(*res.m_wtxids_fee_calculations, wtxid) != res.m_wtxids_fee_calculations->end());
+        Assert(!res.m_other_wtxid);
+        break;
+    case MempoolAcceptResult::ResultType::INVALID:
+    {
+        Assert(!res.m_state.IsValid());
+        Assert(res.m_state.IsInvalid());
+        Assert(!res.m_vsize);
+        Assert(!res.m_base_fees);
+        const bool is_reconsiderable{res.m_state.GetResult() == TxValidationResult::TX_RECONSIDERABLE};
+        Assert(res.m_effective_feerate.has_value() == is_reconsiderable);
+        Assert(res.m_wtxids_fee_calculations.has_value() == is_reconsiderable);
+        if (res.m_wtxids_fee_calculations) {
+            Assert(std::ranges::find(*res.m_wtxids_fee_calculations, wtxid) != res.m_wtxids_fee_calculations->end());
+        }
+        Assert(!res.m_other_wtxid);
+        break;
+    }
+    case MempoolAcceptResult::ResultType::MEMPOOL_ENTRY:
+    case MempoolAcceptResult::ResultType::DIFFERENT_WITNESS:
+        Assert(false);
+    }
+}
+
 // Scan mempool for a tx that has spent dust and return a
 // prevout of the child that isn't the dusty parent itself.
 // This is used to double-spend the child out of the mempool,
@@ -542,6 +580,11 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
 
         const auto res = WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, txs.back(), GetTime(),
                                    /*bypass_limits=*/false, /*test_accept=*/!single_submit));
+        const bool passed = res.m_result_type == MempoolAcceptResult::ResultType::VALID;
+        AssertATMPResultShape(res, txs.back()->GetWitnessHash(), /*submitted=*/single_submit,
+                              tx_pool.exists(txs.back()->GetHash()), tx_pool.exists(txs.back()->GetWitnessHash()));
+        Assert(!CheckPackageMempoolAcceptResult({txs.back()}, PackageMempoolAcceptResult{txs.back()->GetWitnessHash(), res},
+                                                passed, nullptr));
 
         if (!single_submit && result_package.m_state.GetResult() != PackageValidationResult::PCKG_POLICY) {
             // We don't know anything about the validity since transactions were randomly generated, so
@@ -740,6 +783,10 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
         const auto res = WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, txs.back(), GetTime(),
                                    /*bypass_limits=*/false, /*test_accept=*/!single_submit));
         const bool passed = res.m_result_type == MempoolAcceptResult::ResultType::VALID;
+        AssertATMPResultShape(res, txs.back()->GetWitnessHash(), /*submitted=*/single_submit,
+                              tx_pool.exists(txs.back()->GetHash()), tx_pool.exists(txs.back()->GetWitnessHash()));
+        Assert(!CheckPackageMempoolAcceptResult({txs.back()}, PackageMempoolAcceptResult{txs.back()->GetWitnessHash(), res},
+                                                passed, nullptr));
 
         node.validation_signals->SyncWithValidationInterfaceQueue();
         node.validation_signals->UnregisterSharedValidationInterface(txr);
