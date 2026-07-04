@@ -29,6 +29,19 @@ using util::ToString;
 
 int ec_seckey_import_der(const secp256k1_context* ctx, unsigned char* out32, const unsigned char* seckey, size_t seckeylen);
 int ec_seckey_export_der(const secp256k1_context* ctx, unsigned char* seckey, size_t* seckeylen, const unsigned char* key32, bool compressed);
+int ecdsa_signature_parse_der_lax(secp256k1_ecdsa_signature* sig, const unsigned char* input, size_t inputlen);
+
+static std::array<unsigned char, 64> SerializeCompactSignature(const secp256k1_ecdsa_signature& sig)
+{
+    std::array<unsigned char, 64> compact_sig{};
+    BOOST_REQUIRE(secp256k1_ecdsa_signature_serialize_compact(secp256k1_context_static, compact_sig.data(), &sig));
+    return compact_sig;
+}
+
+static bool IsZeroCompactSignature(const std::array<unsigned char, 64>& compact_sig)
+{
+    return std::all_of(compact_sig.begin(), compact_sig.end(), [](unsigned char byte) { return byte == 0; });
+}
 
 static const std::string strSecret1 = "5HxWvvfubhXpYYpS3tJkw6fq9jE9j18THftkZjHHfmFiWtmAbrj";
 static const std::string strSecret2 = "5KC4ejrDjv152FGwP386VD1i2NYc5KkfSMyv1nGy1VGDxGHqVY3";
@@ -199,6 +212,36 @@ BOOST_AUTO_TEST_CASE(key_der_import_export_contracts)
         BOOST_CHECK(std::ranges::equal(out32, valid_key));
     }
     secp256k1_context_destroy(ctx);
+}
+
+BOOST_AUTO_TEST_CASE(key_ecdsa_der_lax_parse_contracts)
+{
+    const auto check_invalid_parse = [](const std::vector<unsigned char>& invalid_sig) {
+        const uint8_t empty_data{0};
+        const unsigned char* sig_data{invalid_sig.empty() ? &empty_data : invalid_sig.data()};
+        secp256k1_ecdsa_signature sig;
+        BOOST_CHECK_EQUAL(ecdsa_signature_parse_der_lax(&sig, sig_data, invalid_sig.size()), 0);
+        BOOST_CHECK(IsZeroCompactSignature(SerializeCompactSignature(sig)));
+    };
+    check_invalid_parse({});
+    check_invalid_parse({0x31});
+    check_invalid_parse({0x30, 0x81, 0x04, 0x02, 0x01, 0x01});
+
+    CKey key{DecodeSecret(strSecret1C)};
+    BOOST_REQUIRE(key.IsValid());
+    std::vector<unsigned char> strict_der_sig;
+    BOOST_REQUIRE(key.Sign(Hash(std::string{"strict DER lax parser contract"}), strict_der_sig));
+
+    secp256k1_ecdsa_signature strict_sig;
+    const int strict_parsed{secp256k1_ecdsa_signature_parse_der(
+        secp256k1_context_static,
+        &strict_sig,
+        strict_der_sig.data(),
+        strict_der_sig.size())};
+    BOOST_REQUIRE_EQUAL(strict_parsed, 1);
+    secp256k1_ecdsa_signature lax_sig;
+    BOOST_REQUIRE_EQUAL(ecdsa_signature_parse_der_lax(&lax_sig, strict_der_sig.data(), strict_der_sig.size()), 1);
+    BOOST_CHECK(SerializeCompactSignature(lax_sig) == SerializeCompactSignature(strict_sig));
 }
 
 BOOST_AUTO_TEST_CASE(key_signature_tests)
