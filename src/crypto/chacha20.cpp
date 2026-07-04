@@ -8,6 +8,7 @@
 #include <crypto/common.h>
 #include <crypto/chacha20.h>
 #include <support/cleanse.h>
+#include <util/check.h>
 
 #include <algorithm>
 #include <bit>
@@ -280,6 +281,7 @@ inline void ChaCha20Aligned::Crypt(std::span<const std::byte> in_bytes, std::spa
 
 void ChaCha20::Keystream(std::span<std::byte> out) noexcept
 {
+    Assume(m_bufleft < ChaCha20Aligned::BLOCKLEN);
     if (out.empty()) return;
     if (m_bufleft) {
         unsigned reuse = std::min<size_t>(m_bufleft, out.size());
@@ -297,11 +299,13 @@ void ChaCha20::Keystream(std::span<std::byte> out) noexcept
         std::copy(m_buffer.begin(), m_buffer.begin() + out.size(), out.begin());
         m_bufleft = m_aligned.BLOCKLEN - out.size();
     }
+    Assume(m_bufleft < ChaCha20Aligned::BLOCKLEN);
 }
 
 void ChaCha20::Crypt(std::span<const std::byte> input, std::span<std::byte> output) noexcept
 {
     assert(input.size() == output.size());
+    Assume(m_bufleft < ChaCha20Aligned::BLOCKLEN);
 
     if (!input.size()) return;
     if (m_bufleft) {
@@ -326,6 +330,7 @@ void ChaCha20::Crypt(std::span<const std::byte> input, std::span<std::byte> outp
         }
         m_bufleft = m_aligned.BLOCKLEN - input.size();
     }
+    Assume(m_bufleft < ChaCha20Aligned::BLOCKLEN);
 }
 
 ChaCha20::~ChaCha20()
@@ -337,6 +342,7 @@ void ChaCha20::SetKey(std::span<const std::byte> key) noexcept
 {
     m_aligned.SetKey(key);
     m_bufleft = 0;
+    Assume(m_bufleft < ChaCha20Aligned::BLOCKLEN);
     memory_cleanse(m_buffer.data(), m_buffer.size());
 }
 
