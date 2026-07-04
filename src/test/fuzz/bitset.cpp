@@ -37,38 +37,50 @@ void TestType(FuzzBufferType buffer)
     // Up to 4 std::bitsets with the same corresponding contents.
     std::vector<Sim> sim(2);
 
-    /* Compare sim[idx] with real[idx], using all inspector operations. */
-    auto compare_fn = [&](unsigned idx) {
+    /* Compare simulated and real sets using all inspector operations. */
+    auto compare_sets = [&](const S& real_set, const Sim& sim_set) {
         /* iterators and operator[] */
-        auto it = real[idx].begin();
+        auto it = real_set.begin();
         unsigned first = S::Size();
         unsigned last = S::Size();
         for (unsigned i = 0; i < S::Size(); ++i) {
-            bool match = (it != real[idx].end()) && *it == i;
-            assert(sim[idx][i] == real[idx][i]);
-            assert(match == real[idx][i]);
-            assert((it == real[idx].end()) != (it != real[idx].end()));
+            bool match = (it != real_set.end()) && *it == i;
+            assert(sim_set[i] == real_set[i]);
+            assert(match == real_set[i]);
+            assert((it == real_set.end()) != (it != real_set.end()));
             if (match) {
                 ++it;
                 if (first == S::Size()) first = i;
                 last = i;
             }
         }
-        assert(it == real[idx].end());
-        assert(!(it != real[idx].end()));
+        assert(it == real_set.end());
+        assert(!(it != real_set.end()));
         /* Any / None */
-        assert(sim[idx].any() == real[idx].Any());
-        assert(sim[idx].none() == real[idx].None());
+        assert(sim_set.any() == real_set.Any());
+        assert(sim_set.none() == real_set.None());
         /* First / Last */
-        if (sim[idx].any()) {
-            assert(first == real[idx].First());
-            assert(last == real[idx].Last());
+        if (sim_set.any()) {
+            assert(first == real_set.First());
+            assert(last == real_set.Last());
         }
         /* Count */
-        assert(sim[idx].count() == real[idx].Count());
+        assert(sim_set.count() == real_set.Count());
     };
 
-    LIMITED_WHILE (buffer.size() > 0, 1000) {
+    /* Compare sim[idx] with real[idx], using all inspector operations. */
+    auto compare_fn = [&](unsigned idx) {
+        compare_sets(real[idx], sim[idx]);
+    };
+
+    Sim empty_sim;
+    compare_sets(S::Fill(0), empty_sim);
+    Sim full_sim;
+    full_sim.set();
+    compare_sets(S::Fill(S::Size()), full_sim);
+
+    LIMITED_WHILE(buffer.size() > 0, 1000)
+    {
         // Read one byte to determine which operation to execute on the BitSets.
         int command = ReadByte(buffer) % 64;
         // Read another byte that determines which bitsets will be involved.
@@ -175,7 +187,8 @@ void TestType(FuzzBufferType buffer)
                 break;
             } else if (dest < sim.size() && command-- == 0) {
                 /* Fill() + copy assign. */
-                unsigned len = ReadByte(buffer) % S::Size();
+                unsigned len = ReadByte(buffer);
+                if (len > S::Size()) len = S::Size();
                 compare_fn(dest);
                 sim[dest].reset();
                 for (unsigned i = 0; i < len; ++i) sim[dest][i] = true;
