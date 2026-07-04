@@ -189,7 +189,7 @@ static RPCMethod createmultisig()
 
             FlatSigningProvider keystore;
             CScript inner;
-            const CTxDestination dest = AddAndGetMultisigDestination(required, pubkeys, output_type.value(), keystore, inner, sort);
+            const CTxDestination dest = AddAndGetMultisigDestination(required, pubkeys, output_type, keystore, inner, sort);
 
             // Make the descriptor
             std::unique_ptr<Descriptor> descriptor = InferDescriptor(GetScriptForDestination(dest), keystore);
@@ -200,7 +200,7 @@ static RPCMethod createmultisig()
             result.pushKV("descriptor", descriptor->ToString());
 
             UniValue warnings(UniValue::VARR);
-            if (descriptor->GetOutputType() != output_type.value()) {
+            if (descriptor->GetOutputType() != output_type) {
                 // Only warns if the user has explicitly chosen an address type we cannot generate
                 warnings.push_back("Unable to make chosen address type, please ensure no uncompressed public keys are present.");
             }

@@ -148,6 +148,11 @@ bool WalletBatch::WriteCryptedKey(const CPubKey& vchPubKey,
     return true;
 }
 
+bool WalletBatch::WriteCScript(const uint160& hash, const CScript& script)
+{
+    return WriteIC(std::make_pair(DBKeys::CSCRIPT, hash), script);
+}
+
 bool WalletBatch::WriteMasterKey(unsigned int nID, const CMasterKey& kMasterKey)
 {
     return WriteIC(std::make_pair(DBKeys::MASTER_KEY, nID), kMasterKey, true);

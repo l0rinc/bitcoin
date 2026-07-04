@@ -203,6 +203,11 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
                             help="Explicitly use v1 transport (can be used to overwrite global --v2transport option)")
         parser.add_argument("--test_methods", dest="test_methods", nargs='*',
                             help="Run specified test methods sequentially instead of the full test. Use only for methods that do not depend on any context set up in run_test or other methods.")
+        wallet_group = parser.add_mutually_exclusive_group()
+        wallet_group.add_argument("--descriptors", dest="descriptors", default=True, action="store_true",
+                                  help="Use descriptor wallets. This is the default.")
+        wallet_group.add_argument("--legacy-wallet", dest="descriptors", action="store_false",
+                                  help="Use legacy wallets.")
 
         self.add_options(parser)
         # Running TestShell in a Jupyter notebook causes an additional -f argument
@@ -404,7 +409,7 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         if wallet_name is not False:
             n = self.nodes[node]
             if wallet_name is not None:
-                n.createwallet(wallet_name=wallet_name, load_on_startup=True)
+                n.createwallet(wallet_name=wallet_name, descriptors=self.options.descriptors, load_on_startup=True)
             wallet_importprivkey(n.get_wallet_rpc(wallet_name), n.get_deterministic_priv_key().key, 0, label="coinbase")
 
     def run_test(self):

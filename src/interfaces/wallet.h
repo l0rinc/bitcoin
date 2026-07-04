@@ -17,6 +17,7 @@
 #include <util/fs.h>
 #include <util/result.h>
 #include <util/ui_change_type.h>
+#include <wallet/types.h>
 
 #include <cstdint>
 #include <functional>
@@ -227,16 +228,16 @@ public:
     virtual CAmount getAvailableBalance(const wallet::CCoinControl& coin_control) = 0;
 
     //! Return whether transaction input belongs to wallet.
-    virtual bool txinIsMine(const CTxIn& txin) = 0;
+    virtual wallet::isminetype txinIsMine(const CTxIn& txin) = 0;
 
     //! Return whether transaction output belongs to wallet.
-    virtual bool txoutIsMine(const CTxOut& txout) = 0;
+    virtual wallet::isminetype txoutIsMine(const CTxOut& txout) = 0;
 
     //! Return debit amount if transaction input belongs to wallet.
-    virtual CAmount getDebit(const CTxIn& txin) = 0;
+    virtual CAmount getDebit(const CTxIn& txin, wallet::isminefilter filter = wallet::ISMINE_SPENDABLE) = 0;
 
     //! Return credit amount if transaction input belongs to wallet.
-    virtual CAmount getCredit(const CTxOut& txout) = 0;
+    virtual CAmount getCredit(const CTxOut& txout, wallet::isminefilter filter = wallet::ISMINE_SPENDABLE) = 0;
 
     //! Return AvailableCoins + LockedCoins grouped by wallet address.
     //! (put change in one group with wallet address)

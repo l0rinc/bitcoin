@@ -196,11 +196,14 @@ RPCMethod getbalance()
 
     LOCK(pwallet->cs_wallet);
 
-    if (self.MaybeArg<std::string_view>("dummy").value_or("*") != "*") {
+    const auto dummy_value{self.MaybeArg<std::string_view>("dummy")};
+    if (dummy_value.value_or("*") != "*") {
         throw JSONRPCError(RPC_METHOD_DEPRECATED, "dummy first argument must be excluded or set to \"*\".");
     }
 
     const auto min_depth{dummy_value ? self.Arg<int>("minconf") : 0};
+
+    bool include_watchonly = ParseIncludeWatchonly(request.params[2], *pwallet);
 
     bool avoid_reuse = GetAvoidReuseFlag(*pwallet, request.params[3]);
 
@@ -217,19 +220,19 @@ RPCMethod getbalance()
 
     const auto bal = GetBalance(*pwallet, min_depth, avoid_reuse);
 
-    return ValueFromAmount(bal.m_mine_trusted + (include_watchonly ? bal.m_watchonly_trusted : 0));
+    return ValueFromAmount(bal.m_mine_trusted);
 },
     };
 }
 
-RPCHelpMan getunconfirmedbalance()
+RPCMethod getunconfirmedbalance()
 {
-    return RPCHelpMan{"getunconfirmedbalance",
+    return RPCMethod{"getunconfirmedbalance",
                 "DEPRECATED\nIdentical to getbalances().mine.untrusted_pending\n",
                 {},
                 RPCResult{RPCResult::Type::NUM, "", "The balance"},
                 RPCExamples{""},
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        [&](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
     const std::shared_ptr<const CWallet> pwallet = GetWalletForJSONRPCRequest(request);
     if (!pwallet) return UniValue::VNULL;
@@ -531,7 +534,7 @@ RPCMethod listunspent()
                             {RPCResult::Type::STR_AMOUNT, "ancestorfees", /*optional=*/true, "The total fees of in-mempool ancestors (including this one) with fee deltas used for mining priority in " + CURRENCY_ATOM + " (if transaction is in the mempool)"},
                             {RPCResult::Type::STR_HEX, "redeemScript", /*optional=*/true, "The redeem script if the output script is P2SH"},
                             {RPCResult::Type::STR, "witnessScript", /*optional=*/true, "witness script if the output script is P2WSH or P2SH-P2WSH"},
-                            {RPCResult::Type::BOOL, "spendable", "(DEPRECATED) Always true"},
+                            {RPCResult::Type::BOOL, "spendable", "Whether we have the private keys to spend this output"},
                             {RPCResult::Type::BOOL, "solvable", "Whether we know how to spend this output, ignoring the lack of keys"},
                             {RPCResult::Type::BOOL, "reused", /*optional=*/true, "(only present if avoid_reuse is set) Whether this output is reused/dirty (sent to an address that was previously spent from)"},
                             {RPCResult::Type::STR, "desc", /*optional=*/true, "(only when solvable) A descriptor for spending this output"},
@@ -631,6 +634,7 @@ RPCMethod listunspent()
         cctl.m_min_depth = nMinDepth;
         cctl.m_max_depth = nMaxDepth;
         cctl.m_include_unsafe_inputs = include_unsafe;
+        filter_coins.only_spendable = false;
         filter_coins.check_version_trucness = false;
         LOCK(pwallet->cs_wallet);
         vecOutputs = AvailableCoins(*pwallet, &cctl, /*feerate=*/std::nullopt, filter_coins).All();
@@ -706,7 +710,7 @@ RPCMethod listunspent()
                 entry.pushKV("ancestorfees", ancestor_fees);
             }
         }
-        entry.pushKV("spendable", true); // Any coins we list are always spendable
+        entry.pushKV("spendable", out.spendable);
         entry.pushKV("solvable", out.solvable);
         if (out.solvable) {
             std::unique_ptr<SigningProvider> provider = pwallet->GetSolvingProvider(scriptPubKey);

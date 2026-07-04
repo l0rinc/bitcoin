@@ -1622,25 +1622,26 @@ void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRe
 
 void CWallet::blockConnected(const ChainstateRole& role, const interfaces::BlockInfo& block)
 {
+    if (role.historical) {
+        LOCK(cs_wallet);
+        m_background_validation_height = block.height;
+        return;
+    }
+
     assert(block.data);
     LOCK(cs_wallet);
 
-    switch (role) {
-        case ChainstateRole::BACKGROUND:
-            m_background_validation_height = block.height;
-            return;
-        case ChainstateRole::ASSUMEDVALID:
-            if (m_background_validation_height == -1) {
-                m_background_validation_height = 0;
-            }
-            break;
-        case ChainstateRole::NORMAL:
-            m_background_validation_height = -1;
-            break;
-    } // no default case, so the compiler can warn about missing cases
+    if (!role.validated) {
+        if (m_background_validation_height == -1) {
+            m_background_validation_height = 0;
+        }
+    } else {
+        m_background_validation_height = -1;
+    }
 
-    m_last_block_processed_height = block.height;
-    m_last_block_processed = block.hash;
+    // Update the best block in memory first. This will set the best block's height, which is
+    // needed by MarkConflicted.
+    SetLastBlockProcessedInMem(block.height, block.hash);
 
     // No need to scan block if it was created before the wallet birthday.
     // Uses chain max time and twice the grace period to adjust time for block time variability.
@@ -1722,45 +1723,48 @@ void CWallet::BlockUntilSyncedToCurrentChain() const {
 }
 
 // Note that this function doesn't distinguish between a 0-valued input,
-// and a not-"is mine" input.
-CAmount CWallet::GetDebit(const CTxIn &txin) const
+// and a not-"is mine" (according to the filter) input.
+CAmount CWallet::GetDebit(const CTxIn &txin, const isminefilter& filter) const
 {
     LOCK(cs_wallet);
     auto txo = GetTXO(txin.prevout);
     if (txo) {
-        return txo->GetTxOut().nValue;
+        const CTxOut& prevout = txo->GetTxOut();
+        if (IsMine(prevout) & filter) {
+            return prevout.nValue;
+        }
     }
     return 0;
 }
 
-bool CWallet::IsMine(const CTxOut& txout) const
+isminetype CWallet::IsMine(const CTxOut& txout) const
 {
     AssertLockHeld(cs_wallet);
     return IsMine(txout.scriptPubKey);
 }
 
-bool CWallet::IsMine(const CTxDestination& dest) const
+isminetype CWallet::IsMine(const CTxDestination& dest) const
 {
     AssertLockHeld(cs_wallet);
     return IsMine(GetScriptForDestination(dest));
 }
 
-bool CWallet::IsMine(const CScript& script) const
+isminetype CWallet::IsMine(const CScript& script) const
 {
     AssertLockHeld(cs_wallet);
 
     // Search the cache so that IsMine is called only on the relevant SPKMs instead of on everything in m_spk_managers
     const auto& it = m_cached_spks.find(script);
     if (it != m_cached_spks.end()) {
-        bool res = false;
+        isminetype res = ISMINE_NO;
         for (const auto& spkm : it->second) {
-            res = res || spkm->IsMine(script);
+            res = std::max(res, spkm->IsMine(script));
         }
-        Assume(res);
+        Assume(res != ISMINE_NO);
         return res;
     }
 
-    return false;
+    return ISMINE_NO;
 }
 
 bool CWallet::IsMine(const CTransaction& tx) const
@@ -1772,15 +1776,15 @@ bool CWallet::IsMine(const CTransaction& tx) const
     return false;
 }
 
-bool CWallet::IsMine(const COutPoint& outpoint) const
+isminetype CWallet::IsMine(const COutPoint& outpoint) const
 {
     AssertLockHeld(cs_wallet);
     auto wtx = GetWalletTx(outpoint.hash);
     if (!wtx) {
-        return false;
+        return ISMINE_NO;
     }
     if (outpoint.n >= wtx->tx->vout.size()) {
-        return false;
+        return ISMINE_NO;
     }
     return IsMine(wtx->tx->vout[outpoint.n]);
 }
@@ -1796,12 +1800,12 @@ bool CWallet::IsFromMe(const CTransaction& tx) const
     return false;
 }
 
-CAmount CWallet::GetDebit(const CTransaction& tx) const
+CAmount CWallet::GetDebit(const CTransaction& tx, const isminefilter& filter) const
 {
     CAmount nDebit = 0;
     for (const CTxIn& txin : tx.vin)
     {
-        nDebit += GetDebit(txin);
+        nDebit += GetDebit(txin, filter);
         if (!MoneyRange(nDebit))
             throw std::runtime_error(std::string(__func__) + ": value out of range");
     }
@@ -1909,6 +1913,51 @@ void CWallet::MaybeUpdateBirthTime(int64_t time)
     if (time < birthtime) {
         m_birth_time = time;
     }
+}
+
+bool CWallet::ImportScripts(const std::set<CScript> scripts, int64_t timestamp)
+{
+    LegacyDataSPKM* spk_man{GetLegacyDataSPKM()};
+    if (!spk_man) return false;
+    LOCK(spk_man->cs_KeyStore);
+    return spk_man->ImportScripts(scripts, timestamp);
+}
+
+bool CWallet::ImportPrivKeys(const std::map<CKeyID, CKey>& privkey_map, const int64_t timestamp)
+{
+    LegacyDataSPKM* spk_man{GetLegacyDataSPKM()};
+    if (!spk_man) return false;
+    LOCK(spk_man->cs_KeyStore);
+    return spk_man->ImportPrivKeys(privkey_map, timestamp);
+}
+
+bool CWallet::ImportPubKeys(const std::vector<std::pair<CKeyID, bool>>& ordered_pubkeys, const std::map<CKeyID, CPubKey>& pubkey_map, const std::map<CKeyID, std::pair<CPubKey, KeyOriginInfo>>& key_origins, const bool add_keypool, const int64_t timestamp)
+{
+    LegacyDataSPKM* spk_man{GetLegacyDataSPKM()};
+    if (!spk_man) return false;
+    LOCK(spk_man->cs_KeyStore);
+    return spk_man->ImportPubKeys(ordered_pubkeys, pubkey_map, key_origins, add_keypool, timestamp);
+}
+
+bool CWallet::ImportScriptPubKeys(const std::string& label, const std::set<CScript>& script_pub_keys, const bool have_solving_data, const bool apply_label, const int64_t timestamp)
+{
+    LegacyDataSPKM* spk_man{GetLegacyDataSPKM()};
+    if (!spk_man) return false;
+    LOCK(spk_man->cs_KeyStore);
+    if (!spk_man->ImportScriptPubKeys(script_pub_keys, have_solving_data, timestamp)) {
+        return false;
+    }
+    if (apply_label) {
+        WalletBatch batch(GetDatabase());
+        for (const CScript& script : script_pub_keys) {
+            CTxDestination dest;
+            ExtractDestination(script, dest);
+            if (IsValidDestination(dest)) {
+                SetAddressBookWithDB(batch, dest, label, AddressPurpose::RECEIVE);
+            }
+        }
+    }
+    return true;
 }
 
 /**
@@ -2916,6 +2965,56 @@ void CWallet::ListLockedCoins(std::vector<COutPoint>& vOutpts) const
     }
 }
 
+void CWallet::GetKeyBirthTimes(std::map<CKeyID, int64_t>& mapKeyBirth) const
+{
+    AssertLockHeld(cs_wallet);
+    mapKeyBirth.clear();
+
+    LegacyDataSPKM* spk_man{GetLegacyDataSPKM()};
+    if (!spk_man) return;
+
+    std::map<CKeyID, const TxStateConfirmed*> mapKeyFirstBlock;
+    TxStateConfirmed max_confirm{uint256{}, /*height=*/-1, /*index=*/-1};
+    max_confirm.confirmed_block_height = GetLastBlockHeight() > 144 ? GetLastBlockHeight() - 144 : 0;
+    CHECK_NONFATAL(chain().findAncestorByHeight(GetLastBlockHash(), max_confirm.confirmed_block_height, FoundBlock().hash(max_confirm.confirmed_block_hash)));
+
+    LOCK(spk_man->cs_KeyStore);
+
+    for (const auto& entry : spk_man->mapKeyMetadata) {
+        if (entry.second.nCreateTime) {
+            mapKeyBirth[entry.first] = entry.second.nCreateTime;
+        }
+    }
+
+    for (const CKeyID& keyid : spk_man->GetKeys()) {
+        if (mapKeyBirth.count(keyid) == 0) {
+            mapKeyFirstBlock[keyid] = &max_confirm;
+        }
+    }
+
+    if (mapKeyFirstBlock.empty()) return;
+
+    for (const auto& entry : mapWallet) {
+        const CWalletTx& wtx = entry.second;
+        if (auto* conf = wtx.state<TxStateConfirmed>()) {
+            for (const CTxOut& txout : wtx.tx->vout) {
+                for (const auto& keyid : GetAffectedKeys(txout.scriptPubKey, *spk_man)) {
+                    auto rit = mapKeyFirstBlock.find(keyid);
+                    if (rit != mapKeyFirstBlock.end() && conf->confirmed_block_height < rit->second->confirmed_block_height) {
+                        rit->second = conf;
+                    }
+                }
+            }
+        }
+    }
+
+    for (const auto& entry : mapKeyFirstBlock) {
+        int64_t block_time{0};
+        CHECK_NONFATAL(chain().findBlock(entry.second->confirmed_block_hash, FoundBlock().time(block_time)));
+        mapKeyBirth[entry.first] = block_time - TIMESTAMP_WINDOW;
+    }
+}
+
 /**
  * Compute smart timestamp for a transaction being added to the wallet.
  *
@@ -3172,6 +3271,25 @@ bool CWallet::LoadWalletArgs(std::shared_ptr<CWallet> wallet, const WalletContex
                                _("This is the transaction fee you may discard if change is smaller than dust at this level"));
         }
         wallet->m_discard_rate = CFeeRate{discard_fee.value()};
+    }
+
+    if (const auto arg{args.GetArg("-paytxfee")}) {
+        std::optional<CAmount> pay_tx_fee = ParseMoney(*arg);
+        if (!pay_tx_fee) {
+            error = AmountErrMsg("paytxfee", *arg);
+            return false;
+        } else if (pay_tx_fee.value() > HIGH_TX_FEE_PER_KB) {
+            warnings.push_back(AmountHighWarn("-paytxfee") + Untranslated(" ") +
+                               _("This is the transaction fee you will pay if you send a transaction."));
+        }
+
+        wallet->m_pay_tx_fee = CFeeRate{pay_tx_fee.value(), 1000};
+
+        if (chain && wallet->m_pay_tx_fee < chain->relayMinFee()) {
+            error = strprintf(_("Invalid amount for %s=<amount>: '%s' (must be at least %s)"),
+                "-paytxfee", *arg, chain->relayMinFee().ToString());
+            return false;
+        }
     }
 
     if (const auto arg{args.GetArg("-maxtxfee")}) {
@@ -4675,7 +4793,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
         // Restore the backup
         // Convert the backup file to the wallet db file by renaming it and moving it into the wallet's directory.
         bilingual_str restore_error;
-        const auto& ptr_wallet = RestoreWallet(context, backup_path, wallet_name, /*load_on_start=*/std::nullopt, status, restore_error, warnings, /*load_after_restore=*/was_loaded);
+        const auto& ptr_wallet = RestoreWallet(context, backup_path, wallet_name, /*load_on_start=*/std::nullopt, status, restore_error, warnings, /*load_after_restore=*/false, /*allow_unnamed=*/true);
         if (!restore_error.empty()) {
             error += restore_error + _("\nUnable to restore backup of wallet.");
             return util::Error{error};

@@ -63,6 +63,7 @@ enum class FeeReason {
     DOUBLE_ESTIMATE,
     CONSERVATIVE,
     MEMPOOL_MIN,
+    PAYTXFEE,
     FALLBACK,
     REQUIRED,
 };

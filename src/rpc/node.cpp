@@ -204,9 +204,9 @@ static RPCMethod getmemoryinfo()
     };
 }
 
-static RPCHelpMan getgeneralinfo()
+static RPCMethod getgeneralinfo()
 {
-    return RPCHelpMan{"getgeneralinfo",
+    return RPCMethod{"getgeneralinfo",
                 "Returns data about the bitcoin daemon.\n",
                 {},
                 RPCResult{
@@ -223,7 +223,7 @@ static RPCHelpMan getgeneralinfo()
                     HelpExampleCli("getgeneralinfo", "")
             + HelpExampleRpc("getgeneralinfo", "")
                 },
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        [&](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
         const ArgsManager& args{EnsureAnyArgsman(request.context)};
 
@@ -232,7 +232,7 @@ static RPCHelpMan getgeneralinfo()
         obj.pushKV("useragent", strSubVersion);
         obj.pushKV("datadir", fs::PathToString(args.GetDataDirNet()));
         obj.pushKV("blocksdir", fs::PathToString(args.GetBlocksDirPath()));
-        obj.pushKV("startuptime", GetStartupTime());
+        obj.pushKV("startuptime", TicksSinceEpoch<std::chrono::seconds>(NodeClock::now() - GetUptime()));
         return obj;
 },
     };

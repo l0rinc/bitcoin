@@ -277,6 +277,8 @@ class NetTest(BitcoinTestFramework):
         assert_equal(added_nodes[0]['addednode'], "11.22.33.44")
         self.log.info("Check that an invalid command returns an error")
         assert_raises_rpc_error(-1, 'addnode "node" "command"', self.nodes[0].addnode, node=ip_port, command='abc')
+        self.log.info("Check that onetry rejects inbound connection_type instead of crashing")
+        assert_raises_rpc_error(-8, "Cannot open an inbound connection with addnode onetry", self.nodes[0].addnode, node=ip_port, command='onetry', connection_type="inbound")
         self.log.info("Check that trying to remove the node again returns an error")
         assert_raises_rpc_error(-24, "Node could not be removed", self.nodes[0].addnode, node=ip_port, command='remove')
         self.log.info("Check that a non-existent node returns an error")

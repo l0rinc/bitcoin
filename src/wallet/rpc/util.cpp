@@ -30,6 +30,14 @@ bool GetAvoidReuseFlag(const CWallet& wallet, const UniValue& param) {
     return avoid_reuse;
 }
 
+bool ParseIncludeWatchonly(const UniValue& include_watchonly, const CWallet& wallet)
+{
+    if (include_watchonly.isNull()) {
+        return wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
+    }
+    return include_watchonly.get_bool();
+}
+
 std::string EnsureUniqueWalletName(const JSONRPCRequest& request, std::optional<std::string_view> wallet_name)
 {
     if (auto endpoint_wallet{GetWalletNameFromJSONRPCRequest(request)}) {

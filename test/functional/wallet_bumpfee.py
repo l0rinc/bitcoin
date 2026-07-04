@@ -14,6 +14,7 @@ added in the future, they should try to follow the same convention and not
 make assumptions about execution order.
 """
 from decimal import Decimal
+import re
 
 from test_framework.blocktools import (
     COINBASE_MATURITY,
@@ -39,6 +40,8 @@ from test_framework.wallet import MiniWallet
 
 WALLET_PASSPHRASE = "test"
 WALLET_PASSPHRASE_TIMEOUT = 3600
+WALLETRBF_DEPRECATED_WARNING = "Warning: -walletrbf is deprecated and will be fully removed in the next release."
+WALLETRBF_DEPRECATED_RE = re.compile(f"^(?:{re.escape(WALLETRBF_DEPRECATED_WARNING)})?$")
 
 # Fee rates (sat/vB)
 INSUFFICIENT =      1
@@ -68,6 +71,15 @@ class BumpFeeTest(BitcoinTestFramework):
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
+
+    def restart_node(self, i, extra_args=None, clear_addrman=False, *, expected_stderr=WALLETRBF_DEPRECATED_RE):
+        super().restart_node(i, extra_args, clear_addrman, expected_stderr=expected_stderr)
+
+    def stop_nodes(self, wait=0):
+        for node in self.nodes:
+            node.stop_node(wait=wait, wait_until_stopped=False)
+        for node in self.nodes:
+            node.wait_until_stopped(expected_stderr=WALLETRBF_DEPRECATED_RE)
 
     def clear_mempool(self):
         # Clear mempool between subtests. The subtests may only depend on chainstate (utxos)
@@ -895,7 +907,7 @@ def test_bumpfee_with_feerate_ignores_walletincrementalrelayfee(self, rbf_node, 
     assert_raises_rpc_error(-8, "Insufficient total fee", rbf_node.bumpfee, tx["txid"], {"fee_rate": 2.05})
 
     # You can fee bump as long as the new fee set from fee_rate is at least (original fee + incrementalrelayfee)
-    rbf_node.bumpfee(tx["txid"], {"fee_rate": 2.1})
+    rbf_node.bumpfee(tx["txid"], {"fee_rate": 3})
     self.clear_mempool()
 
 

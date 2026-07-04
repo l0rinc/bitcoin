@@ -705,7 +705,7 @@ static RPCMethod getmempoolfeeratediagram()
 static RPCMethod maxmempool()
 {
     return RPCMethod{"maxmempool",
-        "\nSets the allocated memory for the memory pool.\n",
+        "Sets the allocated memory for the memory pool.\n",
         {
             {"megabytes", RPCArg::Type::NUM, RPCArg::Optional::NO, "The memory allocated in MB"},
         },
@@ -739,7 +739,7 @@ static RPCMethod maxmempool()
 static RPCMethod listmempooltransactions()
 {
     return RPCMethod{"listmempooltransactions",
-        "\nReturns all transactions in the mempool. Can be filtered by mempool_sequence\n"
+        "Returns all transactions in the mempool. Can be filtered by mempool_sequence\n"
         "\nAllows for syncing with current mempool entries via polling (not zmq).",
         {
             {"start_sequence", RPCArg::Type::NUM, RPCArg::Default{0}, "The mempool_sequence to start the results to. Defaults to 0 (zero, all transactions)."},

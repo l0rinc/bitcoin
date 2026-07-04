@@ -769,7 +769,7 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
         BOOST_CHECK(IsStandardTx(CTransaction{t}, g_mempool_opts, reason));
         BOOST_CHECK(reason.empty());
     };
-    constexpr auto CheckIsNotStandard = [](const auto& t, const std::string& reason_in, const unsigned int max_op_return_relay = MAX_OP_RETURN_RELAY) {
+    constexpr auto CheckIsNotStandard = [](const auto& t, const std::string& reason_in) {
         std::string reason;
         BOOST_CHECK(!IsStandardTx(CTransaction{t}, g_mempool_opts, reason));
         BOOST_CHECK_EQUAL(reason_in, reason);
@@ -777,9 +777,12 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
 
     CheckIsStandard(t);
 
+    const CScript default_script_sig{t.vin[0].scriptSig};
+    t.vin[0].scriptSig.clear();
     g_script_size_policy_limit = static_cast<unsigned int>(t.vout[0].scriptPubKey.size() - 1);
     CheckIsNotStandard(t, "scriptpubkey-size");
     g_script_size_policy_limit = DEFAULT_SCRIPT_SIZE_POLICY_LIMIT;
+    t.vin[0].scriptSig = default_script_sig;
     CheckIsStandard(t);
 
     t.nLockTime = 21;
@@ -919,28 +922,21 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     CheckIsNotStandard(t, "tokens-runes");
     g_mempool_opts.reject_tokens = false;
 
-    // Multiple TxoutType::NULL_DATA are permitted
+    // Only one TxoutType::NULL_DATA is permitted in all cases.
     t.vout.resize(2);
     t.vout[0].scriptPubKey = CScript() << OP_RETURN << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38"_hex;
     t.vout[0].nValue = 0;
     t.vout[1].scriptPubKey = CScript() << OP_RETURN << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38"_hex;
     t.vout[1].nValue = 0;
-    CheckIsStandard(t);
+    CheckIsNotStandard(t, "multi-op-return");
 
     t.vout[0].scriptPubKey = CScript() << OP_RETURN << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38"_hex;
     t.vout[1].scriptPubKey = CScript() << OP_RETURN;
-    CheckIsStandard(t);
+    CheckIsNotStandard(t, "multi-op-return");
 
     t.vout[0].scriptPubKey = CScript() << OP_RETURN;
     t.vout[1].scriptPubKey = CScript() << OP_RETURN;
-    CheckIsStandard(t);
-
-    t.vout[0].scriptPubKey = CScript() << OP_RETURN << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3804678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38"_hex;
-    t.vout[1].scriptPubKey = CScript() << OP_RETURN << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3804678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38"_hex;
-    const auto datacarrier_size = t.vout[0].scriptPubKey.size() + t.vout[1].scriptPubKey.size();
-    CheckIsStandard(t); // Default max relay should never trigger
-    CheckIsStandard(t, /*max_op_return_relay=*/datacarrier_size);
-    CheckIsNotStandard(t, "datacarrier", /*max_op_return_relay=*/datacarrier_size-1);
+    CheckIsNotStandard(t, "multi-op-return");
 
     // Test permitbaredatacarrier
     g_mempool_opts.permitbaredatacarrier = false;

@@ -45,8 +45,7 @@ static void WalletCreate(CWallet* wallet_instance, uint64_t wallet_creation_flag
     }
 
     if (!wallet_instance->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
-        auto spk_man = wallet_instance->GetOrCreateLegacyScriptPubKeyMan();
-        spk_man->SetupGeneration(false);
+        wallet_instance->SetupLegacyScriptPubKeyMan();
     } else {
         wallet_instance->SetupDescriptorScriptPubKeyMans();
     }
@@ -110,8 +109,7 @@ static void WalletShowInfo(CWallet* wallet_instance)
 
 static bool ReadAndParseColdcardFile(const fs::path& path, UniValue& decriptors)
 {
-    std::ifstream file;
-    file.open(path);
+    std::ifstream file{path.std_path()};
     if (!file.is_open()) {
         tfm::format(std::cerr, "%s. Please check permissions.\n", fs::PathToString(path));
         return false;

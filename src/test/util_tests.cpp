@@ -613,15 +613,6 @@ BOOST_AUTO_TEST_CASE(util_ticksseconds)
     BOOST_CHECK_EQUAL(TicksSeconds(1500ms), 1);
 }
 
-BOOST_AUTO_TEST_CASE(util_ticksseconds)
-{
-    BOOST_CHECK_EQUAL(TicksSeconds(0s), 0);
-    BOOST_CHECK_EQUAL(TicksSeconds(1s), 1);
-    BOOST_CHECK_EQUAL(TicksSeconds(999ms), 0);
-    BOOST_CHECK_EQUAL(TicksSeconds(1000ms), 1);
-    BOOST_CHECK_EQUAL(TicksSeconds(1500ms), 1);
-}
-
 BOOST_AUTO_TEST_CASE(test_IsDigit)
 {
     BOOST_CHECK_EQUAL(IsDigit('0'), true);
@@ -941,7 +932,10 @@ BOOST_AUTO_TEST_CASE(test_FormatSubVersion)
     BOOST_CHECK_EQUAL(FormatSubVersion("Test", 99900, std::vector<std::string>(), true),std::string("/Test:9.99.0/"));
     BOOST_CHECK_EQUAL(FormatSubVersion("Test", 99900, comments, true),std::string("/Test:9.99.0(comment1)/"));
     BOOST_CHECK_EQUAL(FormatSubVersion("Test", 99900, comments2, true),std::string("/Test:9.99.0(comment1; Comment2; .,_?@-; )/"));
-    BOOST_CHECK_EQUAL(FormatSubVersion("Test", 99900, std::vector<std::string>()),std::string("/Test:9.99.0/Knots:20250205/"));
+    const auto build{FormatFullVersion()};
+    const auto knots_pos{build.find(".knots")};
+    BOOST_REQUIRE(knots_pos != std::string::npos);
+    BOOST_CHECK_EQUAL(FormatSubVersion("Test", 99900, std::vector<std::string>()), "/Test:9.99.0/Knots:" + build.substr(knots_pos + 6) + "/");
 }
 
 BOOST_AUTO_TEST_CASE(test_ParseFixedPoint)

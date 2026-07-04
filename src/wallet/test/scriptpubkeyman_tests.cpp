@@ -56,7 +56,6 @@ BOOST_AUTO_TEST_CASE(Descriptor_IsKeyActive)
     CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
     {
         LOCK(wallet.cs_wallet);
-        wallet.LoadMinVersion(FEATURE_LATEST);
         wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
         wallet.m_keypool_size = 10;
         wallet.SetupDescriptorScriptPubKeyMans();

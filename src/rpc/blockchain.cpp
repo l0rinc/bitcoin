@@ -816,7 +816,7 @@ static RPCMethod getblock()
 {
     return RPCMethod{
         "getblock",
-        "\nIf verbosity is 0, returns a string that is serialized, hex-encoded data for block 'hash'.\n"
+        "If verbosity is 0, returns a string that is serialized, hex-encoded data for block 'hash'.\n"
                 "If verbosity is 1, returns an Object with information about block <hash>.\n"
                 "If verbosity is 2, returns an Object with information about block <hash> and information about each transaction.\n"
                 "If verbosity is 3, returns an Object with information about block <hash> and information about each transaction, including prevout information for inputs (only for unpruned blocks in the current best chain).\n",
@@ -928,7 +928,7 @@ std::optional<int> GetPruneHeight(const BlockManager& blockman, const CChain& ch
 static RPCMethod listprunelocks()
 {
     return RPCMethod{"listprunelocks",
-        "\nReturns a list of pruning locks.\n",
+        "Returns a list of pruning locks.\n",
         {},
         RPCResult{
             RPCResult::Type::OBJ, "", "",
@@ -988,7 +988,7 @@ static RPCMethod listprunelocks()
 static RPCMethod setprunelock()
 {
     return RPCMethod{"setprunelock",
-        "\nManipulate pruning locks.\n",
+        "Manipulate pruning locks.\n",
         {
             {"id", RPCArg::Type::STR, RPCArg::Optional::NO, "The unique id of the manipulated prune lock (or \"*\" if deleting all)"},
             {"lock_info", RPCArg::Type::OBJ, RPCArg::Optional::NO, "An object describing the desired lock",
@@ -1475,10 +1475,10 @@ static RPCMethod verifychain()
     };
 }
 
-static RPCHelpMan scriptthreadsinfo()
+static RPCMethod scriptthreadsinfo()
 {
-    return RPCHelpMan{"scriptthreadsinfo",
-                "\nShow information about the script verification threads.\n",
+    return RPCMethod{"scriptthreadsinfo",
+                "Show information about the script verification threads.\n",
                 {},
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -1491,7 +1491,7 @@ static RPCHelpMan scriptthreadsinfo()
                     HelpExampleCli("scriptthreadsinfo", "")
             + HelpExampleRpc("scriptthreadsinfo", "")
                 },
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        [&](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     UniValue ret(UniValue::VOBJ);
@@ -1503,10 +1503,10 @@ static RPCHelpMan scriptthreadsinfo()
     };
 }
 
-static RPCHelpMan setscriptthreadsenabled()
+static RPCMethod setscriptthreadsenabled()
 {
-    return RPCHelpMan{"setscriptthreadsenabled",
-                "\nDisable/enable script verification threads, thereby reducing CPU usage on multicore systems on demand.\n"
+    return RPCMethod{"setscriptthreadsenabled",
+                "Disable/enable script verification threads, thereby reducing CPU usage on multicore systems on demand.\n"
                 "Disabling script verification threads may result in a significant slow-down during synchronisation.\n"
                 "Has no effect on single core machines or if started with -par=<-<numcores>\n",
                 {
@@ -1517,7 +1517,7 @@ static RPCHelpMan setscriptthreadsenabled()
                     HelpExampleCli("setscriptthreadsenabled", "false")
             + HelpExampleRpc("setscriptthreadsenabled", "false")
                 },
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        [&](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     LOCK(cs_main);
@@ -1579,15 +1579,13 @@ static void SoftForkDescPushBack(const CBlockIndex* blockindex, UniValue& softfo
     // BIP9 signalling status, if applicable
     if (info.stats.has_value()) {
         UniValue statsUV(UniValue::VOBJ);
-        std::vector<bool> signals;
-        BIP9Stats statsStruct = g_versionbitscache.Statistics(blockindex, consensusParams, id, &signals);
-        statsUV.pushKV("period", statsStruct.period);
-        statsUV.pushKV("period_start", blockindex->nHeight + 1 - statsStruct.elapsed);
-        statsUV.pushKV("elapsed", statsStruct.elapsed);
-        statsUV.pushKV("count", statsStruct.count);
-        if (ThresholdState::LOCKED_IN != current_state) {
-            statsUV.pushKV("threshold", statsStruct.threshold);
-            statsUV.pushKV("possible", statsStruct.possible);
+        statsUV.pushKV("period", info.stats->period);
+        statsUV.pushKV("period_start", blockindex->nHeight + 1 - info.stats->elapsed);
+        statsUV.pushKV("elapsed", info.stats->elapsed);
+        statsUV.pushKV("count", info.stats->count);
+        if (info.stats->threshold > 0 || info.stats->possible) {
+            statsUV.pushKV("threshold", info.stats->threshold);
+            statsUV.pushKV("possible", info.stats->possible);
         }
         bip9.pushKV("statistics", std::move(statsUV));
 
@@ -2504,7 +2502,7 @@ static RPCMethod sweepprivkeys()
 {
     return RPCMethod{
         "sweepprivkeys",
-        "\nSends bitcoins controlled by private keys to a new address in the local wallet.\n",
+        "Sends bitcoins controlled by private keys to a new address in the local wallet.\n",
         {
             {"options", RPCArg::Type::OBJ_NAMED_PARAMS, RPCArg::Optional::NO, "",
                 {
@@ -4193,9 +4191,9 @@ return RPCMethod{
     };
 }
 
-static RPCHelpMan getblockfileinfo()
+static RPCMethod getblockfileinfo()
 {
-    return RPCHelpMan{
+    return RPCMethod{
             "getblockfileinfo",
             "Retrieves information about a certain block file.",
             {
@@ -4212,17 +4210,17 @@ static RPCHelpMan getblockfileinfo()
                     }
             },
             RPCExamples{ HelpExampleCli("getblockfileinfo", "0") },
-            [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue {
+            [&](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
                 NodeContext& node = EnsureAnyNodeContext(request.context);
                 ChainstateManager& chainman = EnsureChainman(node);
 
                 int block_num = request.params[0].getInt<int>();
                 if (block_num < 0) throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid block number");
 
-                CBlockFileInfo info;
+                kernel::CBlockFileInfo info;
                 {
                     LOCK(cs_main);
-                    CBlockFileInfo* file_info = chainman.m_blockman.GetBlockFileInfo(block_num);
+                    kernel::CBlockFileInfo* file_info = chainman.m_blockman.GetBlockFileInfo(block_num);
                     if (!file_info) throw JSONRPCError(RPC_INVALID_PARAMETER, "block file not found");
                     info = *file_info;
                 }
@@ -4239,10 +4237,10 @@ static RPCHelpMan getblockfileinfo()
     };
 }
 
-static RPCHelpMan getblocklocations()
+static RPCMethod getblocklocations()
 {
-    return RPCHelpMan{"getblocklocations",
-                "\nEXPERIMENTAL warning: this call may be removed or changed in future releases.\n"
+    return RPCMethod{"getblocklocations",
+                "EXPERIMENTAL warning: this call may be removed or changed in future releases.\n"
                 "\nReturns a JSON for the file system location of 'blockhash' block and undo data.\n"
                 "\nIt is possible to return also the locations of previous blocks, by specifying 'nblocks' > 1.\n",
                 {
@@ -4266,7 +4264,7 @@ static RPCHelpMan getblocklocations()
                 RPCExamples{
                     HelpExampleCli("getblocklocations", "\"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09\" 10")
                 },
-                [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue {
+                [&](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue {
 
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     if (chainman.m_blockman.IsPruneMode()) {

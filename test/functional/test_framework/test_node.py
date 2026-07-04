@@ -122,7 +122,7 @@ class TestNode():
         self.rpchost = rpchost
         self.rpc_timeout = timewait  # Already multiplied by timeout_factor
         self.timeout_factor = timeout_factor
-        self.binary = bitcoind
+        self.binaries = binaries
         self.coverage_dir = coverage_dir
         self.cwd = cwd
         self.has_explicit_bind = False

@@ -16,6 +16,8 @@
 #include <index/txindex.h>
 #include <node/blockstorage.h>
 #include <node/context.h>
+#include <policy/feerate.h>
+#include <policy/fees/block_policy_estimator.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <rpc/blockchain.h>
@@ -29,10 +31,10 @@
 #include <undo.h>
 #include <util/any.h>
 #include <util/check.h>
+#include <util/fees.h>
 #include <util/overflow.h>
 #include <util/strencodings.h>
 #include <validation.h>
-#include <policy/fees.h>
 
 #include <any>
 #include <optional>

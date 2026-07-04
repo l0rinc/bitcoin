@@ -4,6 +4,7 @@
 
 #include <bech32.h>
 #include <codex32.h>
+#include <crypto/hex_base.h>
 #include <test/util/str.h>
 
 #include <boost/test/unit_test.hpp>

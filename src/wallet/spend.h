@@ -85,6 +85,8 @@ struct CoinFilterParams {
     bool include_immature_coinbase{false};
     // By default, skip locked UTXOs
     bool skip_locked{true};
+    // By default, return only outputs spendable by this wallet
+    bool only_spendable{true};
     // When true, filter unconfirmed coins by whether their
     // version's TRUCness matches what is set by CCoinControl.
     bool check_version_trucness{true};

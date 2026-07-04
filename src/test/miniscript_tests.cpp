@@ -295,32 +295,28 @@ using miniscript::operator""_mst;
 using Node = miniscript::Node<CPubKey>;
 
 /** Compute all challenges (pubkeys, hashes, timelocks) that occur in a given Miniscript. */
-std::set<Challenge> FindChallenges(const NodeRef& root)
+std::set<Challenge> FindChallenges(const Node& root)
 {
     std::set<Challenge> chal;
 
-    for (std::vector stack{root.get()}; !stack.empty();) {
-        const Node* ref{stack.back()};
+    for (std::vector stack{&root}; !stack.empty();) {
+        const auto* ref{stack.back()};
         stack.pop_back();
 
-    for (const auto& key : ref->keys) {
-        chal.emplace(ChallengeType::PK, ChallengeNumber(key));
-    }
-    if (ref->fragment == miniscript::Fragment::OLDER) {
-        chal.emplace(ChallengeType::OLDER, ref->k);
-    } else if (ref->fragment == miniscript::Fragment::AFTER) {
-        chal.emplace(ChallengeType::AFTER, ref->k);
-    } else if (ref->fragment == miniscript::Fragment::SHA256) {
-        chal.emplace(ChallengeType::SHA256, ChallengeNumber(ref->data));
-    } else if (ref->fragment == miniscript::Fragment::RIPEMD160) {
-        chal.emplace(ChallengeType::RIPEMD160, ChallengeNumber(ref->data));
-    } else if (ref->fragment == miniscript::Fragment::HASH256) {
-        chal.emplace(ChallengeType::HASH256, ChallengeNumber(ref->data));
-    } else if (ref->fragment == miniscript::Fragment::HASH160) {
-        chal.emplace(ChallengeType::HASH160, ChallengeNumber(ref->data));
-    }
-    for (const auto& sub : ref->subs) {
-            stack.push_back(sub.get());
+        for (const auto& key : ref->Keys()) {
+            chal.emplace(ChallengeType::PK, ChallengeNumber(key));
+        }
+        switch (ref->Fragment()) {
+        case Fragment::OLDER: chal.emplace(ChallengeType::OLDER, ref->K()); break;
+        case Fragment::AFTER: chal.emplace(ChallengeType::AFTER, ref->K()); break;
+        case Fragment::SHA256: chal.emplace(ChallengeType::SHA256, ChallengeNumber(ref->Data())); break;
+        case Fragment::RIPEMD160: chal.emplace(ChallengeType::RIPEMD160, ChallengeNumber(ref->Data())); break;
+        case Fragment::HASH256: chal.emplace(ChallengeType::HASH256, ChallengeNumber(ref->Data())); break;
+        case Fragment::HASH160: chal.emplace(ChallengeType::HASH160, ChallengeNumber(ref->Data())); break;
+        default: break;
+        }
+        for (const auto& sub : ref->Subs()) {
+            stack.push_back(&sub);
         }
     }
     return chal;
@@ -348,9 +344,10 @@ void SatisfactionToWitness(miniscript::MiniscriptContext ctx, CScriptWitness& wi
 
 struct MiniScriptTest : BasicTestingSetup {
 /** Run random satisfaction tests. */
-void TestSatisfy(const KeyConverter& converter, const std::string& testcase, const NodeRef& node) {
-    auto script = node->ToScript(converter);
-    auto challenges = FindChallenges(node); // Find all challenges in the generated miniscript.
+void TestSatisfy(const KeyConverter& converter, const Node& node)
+{
+    auto script = node.ToScript(converter);
+    const auto challenges{FindChallenges(node)}; // Find all challenges in the generated miniscript.
     std::vector<Challenge> challist(challenges.begin(), challenges.end());
     for (int iter = 0; iter < 3; ++iter) {
         std::shuffle(challist.begin(), challist.end(), m_rng);
@@ -391,13 +388,25 @@ void TestSatisfy(const KeyConverter& converter, const std::string& testcase, con
                 // Test non-malleable satisfaction.
                 ScriptError serror;
                 bool res = VerifyScript(CScript(), script_pubkey, &witness_nonmal, STANDARD_SCRIPT_VERIFY_FLAGS, checker, &serror);
-                // Non-malleable satisfactions are guaranteed to be valid if ValidSatisfactions().
-                if (node.ValidSatisfactions()) BOOST_CHECK(res);
+                // Non-malleable satisfactions are guaranteed to be valid if ValidSatisfactions(), unless REDUCED_DATA rules are violated.
+                if (node.ValidSatisfactions()) {
+                    BOOST_CHECK(res ||
+                                serror == ScriptError::SCRIPT_ERR_PUSH_SIZE ||
+                                serror == ScriptError::SCRIPT_ERR_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM ||
+                                serror == ScriptError::SCRIPT_ERR_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION ||
+                                serror == ScriptError::SCRIPT_ERR_DISCOURAGE_OP_SUCCESS ||
+                                serror == ScriptError::SCRIPT_ERR_TAPSCRIPT_MINIMALIF);
+                }
                 // More detailed: non-malleable satisfactions must be valid, or could fail with ops count error (if CheckOpsLimit failed),
-                // or with a stack size error (if CheckStackSize check fails).
+                // or with a stack size error (if CheckStackSize check fails), or with REDUCED_DATA-related errors.
                 BOOST_CHECK(res ||
                             (!node.CheckOpsLimit() && serror == ScriptError::SCRIPT_ERR_OP_COUNT) ||
-                            (!node.CheckStackSize() && serror == ScriptError::SCRIPT_ERR_STACK_SIZE));
+                            (!node.CheckStackSize() && serror == ScriptError::SCRIPT_ERR_STACK_SIZE) ||
+                            (serror == ScriptError::SCRIPT_ERR_PUSH_SIZE) ||
+                            (serror == ScriptError::SCRIPT_ERR_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM) ||
+                            (serror == ScriptError::SCRIPT_ERR_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION) ||
+                            (serror == ScriptError::SCRIPT_ERR_DISCOURAGE_OP_SUCCESS) ||
+                            (serror == ScriptError::SCRIPT_ERR_TAPSCRIPT_MINIMALIF));
             }
 
             if (mal_success && (!nonmal_success || witness_mal.stack != witness_nonmal.stack)) {
@@ -405,8 +414,15 @@ void TestSatisfy(const KeyConverter& converter, const std::string& testcase, con
                 ScriptError serror;
                 bool res = VerifyScript(CScript(), script_pubkey, &witness_mal, STANDARD_SCRIPT_VERIFY_FLAGS, checker, &serror);
                 // Malleable satisfactions are not guaranteed to be valid under any conditions, but they can only
-                // fail due to stack or ops limits.
-                BOOST_CHECK(res || serror == ScriptError::SCRIPT_ERR_OP_COUNT || serror == ScriptError::SCRIPT_ERR_STACK_SIZE);
+                // fail due to stack or ops limits, or REDUCED_DATA-related errors.
+                BOOST_CHECK(res ||
+                            serror == ScriptError::SCRIPT_ERR_OP_COUNT ||
+                            serror == ScriptError::SCRIPT_ERR_STACK_SIZE ||
+                            serror == ScriptError::SCRIPT_ERR_PUSH_SIZE ||
+                            serror == ScriptError::SCRIPT_ERR_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM ||
+                            serror == ScriptError::SCRIPT_ERR_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION ||
+                            serror == ScriptError::SCRIPT_ERR_DISCOURAGE_OP_SUCCESS ||
+                            serror == ScriptError::SCRIPT_ERR_TAPSCRIPT_MINIMALIF);
             }
 
             if (node.IsSane()) {

@@ -34,7 +34,7 @@ bool SystemNeedsMemoryReleased()
         if (mem_status.dwMemoryLoad >= 99 ||
             mem_status.ullAvailPhys < g_low_memory_threshold ||
             mem_status.ullAvailVirtual < g_low_memory_threshold) {
-            LogPrintf("%s: YES: %s%% memory load; %s available physical memory; %s available virtual memory\n", __func__, int(mem_status.dwMemoryLoad), size_t(mem_status.ullAvailPhys), size_t(mem_status.ullAvailVirtual));
+            LogInfo("SystemNeedsMemoryReleased: YES: %s%% memory load; %s available physical memory; %s available virtual memory", int(mem_status.dwMemoryLoad), size_t(mem_status.ullAvailPhys), size_t(mem_status.ullAvailVirtual));
             return true;
         }
     }
@@ -46,7 +46,7 @@ bool SystemNeedsMemoryReleased()
         const uint64_t free_ram = uint64_t(sys_info.freeram) * sys_info.mem_unit;
         const uint64_t buffer_ram = uint64_t(sys_info.bufferram) * sys_info.mem_unit;
         if (free_ram + buffer_ram < g_low_memory_threshold) {
-            LogPrintf("%s: YES: %s free RAM + %s buffer RAM\n", __func__, free_ram, buffer_ram);
+            LogInfo("SystemNeedsMemoryReleased: YES: %s free RAM + %s buffer RAM", free_ram, buffer_ram);
             return true;
         }
     }

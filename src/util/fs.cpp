@@ -4,11 +4,10 @@
 
 #include <util/check.h>
 #include <util/fs.h>
-
-#include <util/check.h>
 #include <util/syserror.h>
 
 #include <cerrno>
+#include <cstring>
 #include <string>
 
 #ifndef WIN32

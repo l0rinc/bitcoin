@@ -72,6 +72,24 @@ class RPCSignerTest(BitcoinTestFramework):
         )
         self.clear_mock_result(self.nodes[1])
 
+        self.set_mock_result(self.nodes[1], '0 [{"type": "trezor", "model": "trezor_t", "fingerprint": "0000001"}]')
+        assert_raises_rpc_error(-1, 'received invalid fingerprint',
+            self.nodes[1].enumeratesigners
+        )
+        self.clear_mock_result(self.nodes[1])
+
+        self.set_mock_result(self.nodes[1], '0 [{"type": "trezor", "model": "trezor_t", "fingerprint": "000000001"}]')
+        assert_raises_rpc_error(-1, 'received invalid fingerprint',
+            self.nodes[1].enumeratesigners
+        )
+        self.clear_mock_result(self.nodes[1])
+
+        self.set_mock_result(self.nodes[1], '0 [{"type": "trezor", "model": "trezor_t", "fingerprint": "0000000z"}]')
+        assert_raises_rpc_error(-1, 'received invalid fingerprint',
+            self.nodes[1].enumeratesigners
+        )
+        self.clear_mock_result(self.nodes[1])
+
         # Duplicate fingerprints
         self.set_mock_result(self.nodes[1],
             '0 ['

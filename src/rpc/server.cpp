@@ -241,10 +241,10 @@ static RPCMethod getrpcinfo()
     };
 }
 
-static RPCHelpMan getrpcwhitelist()
+static RPCMethod getrpcwhitelist()
 {
-    return RPCHelpMan{"getrpcwhitelist",
-                "\nReturns whitelisted RPCs for the current user.\n",
+    return RPCMethod{"getrpcwhitelist",
+                "Returns whitelisted RPCs for the current user.\n",
                 {},
                 RPCResult{
                     RPCResult::Type::OBJ, "", "",
@@ -262,7 +262,7 @@ static RPCHelpMan getrpcwhitelist()
                 RPCExamples{
                     HelpExampleCli("getrpcwhitelist", "")
                 + HelpExampleRpc("getrpcwhitelist", "")},
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        [&](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
     UniValue whitelisted_rpcs(UniValue::VOBJ);
     const std::set<std::string>& whitelist = GetWhitelistedRpcs(request.authUser);

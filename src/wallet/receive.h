@@ -11,13 +11,13 @@
 #include <wallet/wallet.h>
 
 namespace wallet {
-bool InputIsMine(const CWallet& wallet, const CTxIn& txin) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
+isminetype InputIsMine(const CWallet& wallet, const CTxIn& txin) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
 
-/** Returns whether all of the inputs belong to the wallet*/
-bool AllInputsMine(const CWallet& wallet, const CTransaction& tx);
+/** Returns whether all of the inputs match the filter. */
+bool AllInputsMine(const CWallet& wallet, const CTransaction& tx, const isminefilter& filter = ISMINE_SPENDABLE);
 
-CAmount OutputGetCredit(const CWallet& wallet, const CTxOut& txout);
-CAmount TxGetCredit(const CWallet& wallet, const CTransaction& tx);
+CAmount OutputGetCredit(const CWallet& wallet, const CTxOut& txout, const isminefilter& filter = ISMINE_SPENDABLE);
+CAmount TxGetCredit(const CWallet& wallet, const CTransaction& tx, const isminefilter& filter = ISMINE_SPENDABLE);
 
 bool ScriptIsChange(const CWallet& wallet, const CScript& script) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
 bool OutputIsChange(const CWallet& wallet, const CTxOut& txout) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);

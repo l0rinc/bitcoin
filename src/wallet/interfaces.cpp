@@ -9,7 +9,7 @@
 #include <interfaces/chain.h>
 #include <interfaces/handler.h>
 #include <key_io.h>
-#include <policy/fees.h>
+#include <policy/fees/block_policy_estimator.h>
 #include <primitives/transaction.h>
 #include <rpc/server.h>
 #include <scheduler.h>
@@ -82,7 +82,7 @@ WalletTx MakeWalletTx(CWallet& wallet, const CWalletTx& wtx)
         result.txout_is_change.push_back(OutputIsChange(wallet, txout));
         result.txout_address.emplace_back();
         result.txout_address_is_mine.emplace_back(ExtractDestination(txout.scriptPubKey, result.txout_address.back()) ?
-                                                      wallet.IsMine(result.txout_address.back()) :
+                                                      bool(wallet.IsMine(result.txout_address.back()) & ISMINE_SPENDABLE) :
                                                       false);
     }
     result.credit = CachedTxGetCredit(wallet, wtx, /*avoid_reuse=*/true);
@@ -456,25 +456,25 @@ public:
 
         return total_amount;
     }
-    bool txinIsMine(const CTxIn& txin) override
+    isminetype txinIsMine(const CTxIn& txin) override
     {
         LOCK(m_wallet->cs_wallet);
         return InputIsMine(*m_wallet, txin);
     }
-    bool txoutIsMine(const CTxOut& txout) override
+    isminetype txoutIsMine(const CTxOut& txout) override
     {
         LOCK(m_wallet->cs_wallet);
         return m_wallet->IsMine(txout);
     }
-    CAmount getDebit(const CTxIn& txin) override
+    CAmount getDebit(const CTxIn& txin, isminefilter filter) override
     {
         LOCK(m_wallet->cs_wallet);
-        return m_wallet->GetDebit(txin);
+        return m_wallet->GetDebit(txin, filter);
     }
-    CAmount getCredit(const CTxOut& txout) override
+    CAmount getCredit(const CTxOut& txout, isminefilter filter) override
     {
         LOCK(m_wallet->cs_wallet);
-        return OutputGetCredit(*m_wallet, txout);
+        return OutputGetCredit(*m_wallet, txout, filter);
     }
     CoinsList listCoins() override
     {

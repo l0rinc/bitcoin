@@ -810,7 +810,19 @@ class RawTransactionsTest(BitcoinTestFramework):
         }]
         wwatch.importdescriptors(desc_import)
 
-        # Backward compatibility test (2nd params is includeWatching)
+        unspent = wwatch.listunspent(minconf=0)
+        watchonly_coin = next(utxo for utxo in unspent if utxo["txid"] == self.watchonly_utxo["txid"])
+        assert_equal(watchonly_coin["solvable"], True)
+        assert_equal(watchonly_coin["spendable"], False)
+
+        assert_raises_rpc_error(-4, "Insufficient funds", wwatch.fundrawtransaction, rawtx, {"include_watching": False})
+
+        result = wwatch.fundrawtransaction(rawtx)
+        res_dec = self.nodes[0].decoderawtransaction(result["hex"])
+        assert_equal(len(res_dec["vin"]), 1)
+        assert_equal(res_dec["vin"][0]["txid"], self.watchonly_utxo['txid'])
+
+        # Backward compatibility test (2nd param is includeWatching)
         result = wwatch.fundrawtransaction(rawtx, True)
         res_dec = self.nodes[0].decoderawtransaction(result["hex"])
         assert_equal(len(res_dec["vin"]), 1)
@@ -1594,7 +1606,13 @@ class RawTransactionsTest(BitcoinTestFramework):
         default_wallet.sendtoaddress(wallet.getnewaddress(address_type="legacy"), 10)
         self.generate(self.nodes[0], 1)
 
-        assert_equal(wallet.listunspent(), watchonly.listunspent())
+        spendable_unspent = wallet.listunspent()
+        watchonly_unspent = watchonly.listunspent()
+        assert_equal(len(spendable_unspent), 1)
+        assert_equal(len(watchonly_unspent), 1)
+        assert_equal(spendable_unspent[0].pop("spendable"), True)
+        assert_equal(watchonly_unspent[0].pop("spendable"), False)
+        assert_equal(spendable_unspent, watchonly_unspent)
 
         ret_addr = default_wallet.getnewaddress()
         tx = wallet.createrawtransaction([], [{ret_addr: 5}])

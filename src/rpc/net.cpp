@@ -410,6 +410,9 @@ static RPCMethod addnode()
 
     if (command == "onetry")
     {
+        if (connection_type == ConnectionType::INBOUND) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Cannot open an inbound connection with addnode onetry");
+        }
         CAddress addr;
         connman.OpenNetworkConnection(/*addrConnect=*/addr,
                                       /*fCountFailure=*/false,
@@ -427,7 +430,7 @@ static RPCMethod addnode()
             throw JSONRPCError(RPC_INVALID_PARAMETER, "connection_type != manual is only supported for the \"onetry\" command for now");
         }
 
-        if (!connman.AddNode({node_arg, use_v2transport})) {
+        if (!connman.AddNode(AddedNodeParams{std::string{node_arg}, use_v2transport})) {
             throw JSONRPCError(RPC_CLIENT_NODE_ALREADY_ADDED, "Error: Node already added");
         }
     }
@@ -531,21 +534,21 @@ static RPCMethod disconnectnode()
 
     if (address && !node_id) {
         /* handle disconnect-by-address */
-        const bool only_subnet{address_arg.get_str().find('/') != std::string::npos};
+        const bool only_subnet{address->find('/') != std::string_view::npos};
         if (only_subnet) {
             success = false;
         } else {
-            success = connman.DisconnectNode(address_arg.get_str());
+            success = connman.DisconnectNode(std::string{*address});
         }
         if (!success) {
-            const CSubNet subnet = LookupSubNet(address_arg.get_str());
+            const CSubNet subnet = LookupSubNet(std::string{*address});
             if (subnet.IsValid()) {
                 success = connman.DisconnectNode(subnet);
             } else if (only_subnet) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid subnet");
             }
         }
-    } else if (!id_arg.isNull() && (address_arg.isNull() || (address_arg.isStr() && address_arg.get_str().empty()))) {
+    } else if (node_id && (!address || address->empty())) {
         /* handle disconnect-by-id */
         success = connman.DisconnectNode(*node_id);
     } else {

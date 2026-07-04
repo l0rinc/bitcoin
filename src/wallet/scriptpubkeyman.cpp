@@ -245,10 +245,11 @@ isminetype LegacyDataSPKM::IsMine(const CScript& script) const
     switch (LegacyWalletIsMineInnerDONOTUSE(*this, script, IsMineSigVersion::TOP)) {
     case IsMineResult::INVALID:
     case IsMineResult::NO:
-        return false;
+        return ISMINE_NO;
     case IsMineResult::WATCH_ONLY:
+        return ISMINE_WATCH_ONLY;
     case IsMineResult::SPENDABLE:
-        return true;
+        return ISMINE_SPENDABLE;
     }
     assert(false);
 }
@@ -360,6 +361,21 @@ bool LegacyDataSPKM::IsKeyActive(const CScript& script) const
     return false;
 }
 
+std::vector<CKeyID> GetAffectedKeys(const CScript& spk, const SigningProvider& provider)
+{
+    std::vector<CScript> dummy;
+    FlatSigningProvider out;
+    auto descriptor{InferDescriptor(spk, provider)};
+    if (!descriptor) return {};
+    descriptor->Expand(0, DUMMY_SIGNING_PROVIDER, dummy, out);
+    std::vector<CKeyID> ret;
+    ret.reserve(out.pubkeys.size());
+    for (const auto& entry : out.pubkeys) {
+        ret.push_back(entry.first);
+    }
+    return ret;
+}
+
 bool LegacyDataSPKM::LoadKey(const CKey& key, const CPubKey &pubkey)
 {
     return AddKeyPubKeyInner(key, pubkey);
@@ -424,6 +440,12 @@ bool LegacyDataSPKM::HaveWatchOnly(const CScript &dest) const
     return setWatchOnly.contains(dest);
 }
 
+bool LegacyDataSPKM::HaveWatchOnly() const
+{
+    LOCK(cs_KeyStore);
+    return !setWatchOnly.empty();
+}
+
 bool LegacyDataSPKM::LoadWatchOnly(const CScript &dest)
 {
     return AddWatchOnlyInMem(dest);
@@ -446,6 +468,141 @@ bool LegacyDataSPKM::AddWatchOnlyInMem(const CScript &dest)
         ImplicitlyLearnRelatedKeyScripts(pubKey);
     }
     return true;
+}
+
+bool LegacyDataSPKM::ImportScripts(const std::set<CScript> scripts, int64_t timestamp)
+{
+    AssertLockHeld(cs_KeyStore);
+    WalletBatch batch(m_storage.GetDatabase());
+    for (const auto& script : scripts) {
+        const CScriptID id(script);
+        if (HaveCScript(id)) {
+            WalletLogPrintf("Already have script %s, skipping\n", HexStr(script));
+            continue;
+        }
+        if (!FillableSigningProvider::AddCScript(script)) {
+            return false;
+        }
+        if (!batch.WriteCScript(Hash160(script), script)) {
+            return false;
+        }
+        if (timestamp > 0) {
+            m_script_metadata[id].nCreateTime = timestamp;
+        }
+        m_storage.UnsetBlankWalletFlag(batch);
+    }
+    return true;
+}
+
+bool LegacyDataSPKM::ImportPrivKeys(const std::map<CKeyID, CKey>& privkey_map, const int64_t timestamp)
+{
+    AssertLockHeld(cs_KeyStore);
+    WalletBatch batch(m_storage.GetDatabase());
+    for (const auto& [id, key] : privkey_map) {
+        const CPubKey pubkey{key.GetPubKey()};
+        assert(key.VerifyPubKey(pubkey));
+        if (HaveKey(id)) {
+            WalletLogPrintf("Already have key with pubkey %s, skipping\n", HexStr(pubkey));
+            continue;
+        }
+
+        CKeyMetadata& meta{mapKeyMetadata[id]};
+        meta.nCreateTime = timestamp;
+
+        if (m_storage.HasEncryptionKeys()) {
+            if (m_storage.IsLocked()) return false;
+            CKeyingMaterial secret{UCharCast(key.begin()), UCharCast(key.end())};
+            std::vector<unsigned char> crypted_secret;
+            if (!m_storage.WithEncryptionKey([&](const CKeyingMaterial& encryption_key) {
+                    return EncryptSecret(encryption_key, secret, pubkey.GetHash(), crypted_secret);
+                })) {
+                return false;
+            }
+            if (!AddCryptedKeyInner(pubkey, crypted_secret)) {
+                return false;
+            }
+            if (!batch.WriteCryptedKey(pubkey, crypted_secret, meta)) {
+                return false;
+            }
+        } else {
+            if (!AddKeyPubKeyInner(key, pubkey)) {
+                return false;
+            }
+            if (!batch.WriteKey(pubkey, key.GetPrivKey(), meta)) {
+                return false;
+            }
+        }
+        m_storage.UnsetBlankWalletFlag(batch);
+    }
+    return true;
+}
+
+bool LegacyDataSPKM::ImportPubKeys(const std::vector<std::pair<CKeyID, bool>>& ordered_pubkeys, const std::map<CKeyID, CPubKey>& pubkey_map, const std::map<CKeyID, std::pair<CPubKey, KeyOriginInfo>>& key_origins, const bool add_keypool, const int64_t timestamp)
+{
+    AssertLockHeld(cs_KeyStore);
+    WalletBatch batch(m_storage.GetDatabase());
+    for (const auto& [_, pubkey_origin] : key_origins) {
+        const CPubKey& pubkey{pubkey_origin.first};
+        const KeyOriginInfo& origin{pubkey_origin.second};
+        CKeyMetadata& meta{mapKeyMetadata[pubkey.GetID()]};
+        std::copy(origin.fingerprint, origin.fingerprint + 4, meta.key_origin.fingerprint);
+        meta.key_origin.path = origin.path;
+        meta.has_key_origin = true;
+        meta.hdKeypath = WriteHDKeypath(origin.path, /*apostrophe=*/true);
+        if (!batch.WriteKeyMetadata(meta, pubkey, /*overwrite=*/true)) {
+            return false;
+        }
+    }
+    for (const auto& [id, internal] : ordered_pubkeys) {
+        auto entry{pubkey_map.find(id)};
+        if (entry == pubkey_map.end()) continue;
+        const CPubKey& pubkey{entry->second};
+        CPubKey temp;
+        if (GetPubKey(id, temp)) {
+            WalletLogPrintf("Already have pubkey %s, skipping\n", HexStr(temp));
+            continue;
+        }
+        const CScript script{GetScriptForRawPubKey(pubkey)};
+        m_script_metadata[CScriptID(script)].nCreateTime = timestamp;
+        if (!AddWatchOnlyInMem(script)) {
+            return false;
+        }
+        if (!batch.WriteWatchOnly(script, m_script_metadata[CScriptID(script)])) {
+            return false;
+        }
+        mapKeyMetadata[id].nCreateTime = timestamp;
+        m_storage.UnsetBlankWalletFlag(batch);
+        if (add_keypool) {
+            WalletLogPrintf("Legacy keypool import is not available for migration-only legacy wallets; imported pubkey %s as watch-only\n", HexStr(pubkey));
+        }
+        (void)internal;
+    }
+    return true;
+}
+
+bool LegacyDataSPKM::ImportScriptPubKeys(const std::set<CScript>& script_pub_keys, const bool have_solving_data, const int64_t timestamp)
+{
+    AssertLockHeld(cs_KeyStore);
+    WalletBatch batch(m_storage.GetDatabase());
+    for (const CScript& script : script_pub_keys) {
+        if (!have_solving_data || !IsMine(script)) {
+            m_script_metadata[CScriptID(script)].nCreateTime = timestamp;
+            if (!AddWatchOnlyInMem(script)) {
+                return false;
+            }
+            if (!batch.WriteWatchOnly(script, m_script_metadata[CScriptID(script)])) {
+                return false;
+            }
+            m_storage.UnsetBlankWalletFlag(batch);
+        }
+    }
+    return true;
+}
+
+const std::map<CKeyID, int64_t>& LegacyDataSPKM::GetAllReserveKeys() const
+{
+    static const std::map<CKeyID, int64_t> EMPTY_RESERVE_KEYS;
+    return EMPTY_RESERVE_KEYS;
 }
 
 void LegacyDataSPKM::LoadHDChain(const CHDChain& chain)
@@ -1008,10 +1165,10 @@ util::Result<CTxDestination> DescriptorScriptPubKeyMan::GetNewDestination(const 
     }
 }
 
-bool DescriptorScriptPubKeyMan::IsMine(const CScript& script) const
+isminetype DescriptorScriptPubKeyMan::IsMine(const CScript& script) const
 {
     LOCK(cs_desc_man);
-    return m_map_script_pub_keys.contains(script);
+    return m_map_script_pub_keys.contains(script) ? ISMINE_SPENDABLE : ISMINE_NO;
 }
 
 bool DescriptorScriptPubKeyMan::CheckDecryptionKey(const CKeyingMaterial& master_key)
