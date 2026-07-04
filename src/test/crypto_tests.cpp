@@ -342,6 +342,25 @@ void TestFSChaCha20Poly1305(const std::string& plain_hex, const std::string& aad
     }
 }
 
+template <typename DecryptFn>
+void CheckFailedDecryptPreservesOutput(size_t plain_size, DecryptFn decrypt)
+{
+    std::vector<std::byte> out(plain_size, std::byte{0xa5});
+    const std::vector<std::byte> before{out};
+    BOOST_CHECK(!decrypt(out));
+    BOOST_CHECK(out == before);
+}
+
+template <typename DecryptFn>
+void CheckFailedSplitDecryptPreservesOutput(size_t plain_size, DecryptFn decrypt)
+{
+    std::vector<std::byte> out(plain_size, std::byte{0xa5});
+    const std::vector<std::byte> before{out};
+    const size_t split{plain_size / 2};
+    BOOST_CHECK(!decrypt(out, split));
+    BOOST_CHECK(out == before);
+}
+
 void TestHKDF_SHA256_32(const std::string &ikm_hex, const std::string &salt_hex, const std::string &info_hex, const std::string &okm_check_hex) {
     std::vector<unsigned char> initial_key_material = ParseHex(ikm_hex);
     std::vector<unsigned char> salt = ParseHex(salt_hex);
@@ -1119,6 +1138,40 @@ BOOST_AUTO_TEST_CASE(chacha20poly1305_testvectors)
                            "30a6757ff8439b975363f166a0fa0e36722ab35936abd704297948f45083f4d4"
                            "99433137ce931f7fca28a0acd3bc30f57b550acbc21cbd45bbef0739d9caf30c"
                            "14b94829deb27f0b1923a2af704ae5d6");
+}
+
+BOOST_AUTO_TEST_CASE(chacha20poly1305_failed_decrypt_preserves_output)
+{
+    const auto key{"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"_hex};
+    const auto plain{"00112233445566778899aabbccddeeff1020304050607080"_hex};
+    const auto aad{"a0a1a2a3a4a5a6a7"_hex};
+    constexpr AEADChaCha20Poly1305::Nonce96 nonce{0x11223344, 0x5566778899aabbcc};
+
+    std::vector<std::byte> cipher(plain.size() + AEADChaCha20Poly1305::EXPANSION);
+    AEADChaCha20Poly1305 aead{key};
+    aead.Encrypt(plain, aad, nonce, cipher);
+    cipher.back() ^= std::byte{0x01};
+
+    CheckFailedDecryptPreservesOutput(plain.size(), [&](std::vector<std::byte>& out) {
+        return aead.Decrypt(cipher, aad, nonce, out);
+    });
+    CheckFailedSplitDecryptPreservesOutput(plain.size(), [&](std::vector<std::byte>& out, size_t split) {
+        return aead.Decrypt(cipher, aad, nonce, std::span{out}.first(split), std::span{out}.subspan(split));
+    });
+
+    std::vector<std::byte> fs_cipher(plain.size() + FSChaCha20Poly1305::EXPANSION);
+    FSChaCha20Poly1305 fs_enc{key, 32};
+    fs_enc.Encrypt(plain, aad, fs_cipher);
+    fs_cipher.back() ^= std::byte{0x01};
+
+    CheckFailedDecryptPreservesOutput(plain.size(), [&](std::vector<std::byte>& out) {
+        FSChaCha20Poly1305 fs_dec{key, 32};
+        return fs_dec.Decrypt(fs_cipher, aad, out);
+    });
+    CheckFailedSplitDecryptPreservesOutput(plain.size(), [&](std::vector<std::byte>& out, size_t split) {
+        FSChaCha20Poly1305 fs_dec{key, 32};
+        return fs_dec.Decrypt(fs_cipher, aad, std::span{out}.first(split), std::span{out}.subspan(split));
+    });
 }
 
 BOOST_AUTO_TEST_CASE(hkdf_hmac_sha256_l32_tests)
