@@ -398,6 +398,10 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                 // Block transactions must be removed from orphanage
                 Assert(!txdownload_impl.m_orphanage->HaveTx(rand_tx->GetWitnessHash()));
                 AssertNoTxRequestsForTx(txdownload_impl, rand_tx);
+                Assert(txdownload_impl.RecentConfirmedTransactionsFilter().contains(rand_tx->GetHash().ToUint256()));
+                if (rand_tx->HasWitness()) {
+                    Assert(txdownload_impl.RecentConfirmedTransactionsFilter().contains(rand_tx->GetWitnessHash().ToUint256()));
+                }
             },
             [&] {
                 txdownload_impl.BlockDisconnected();

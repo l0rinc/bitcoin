@@ -100,6 +100,8 @@ void TxDownloadManagerImpl::ActiveTipChange()
 
 void TxDownloadManagerImpl::BlockConnected(const std::shared_ptr<const CBlock>& pblock)
 {
+    Assert(pblock);
+    Assert(std::all_of(pblock->vtx.cbegin(), pblock->vtx.cend(), [](const auto& tx) { return tx != nullptr; }));
     m_orphanage->EraseForBlock(*pblock);
 
     for (const auto& ptx : pblock->vtx) {
@@ -109,6 +111,10 @@ void TxDownloadManagerImpl::BlockConnected(const std::shared_ptr<const CBlock>& 
         RecentConfirmedTransactionsFilter().insert(txid.ToUint256());
         if (ptx->HasWitness()) {
             RecentConfirmedTransactionsFilter().insert(wtxid.ToUint256());
+        }
+        Assume(RecentConfirmedTransactionsFilter().contains(txid.ToUint256()));
+        if (ptx->HasWitness()) {
+            Assume(RecentConfirmedTransactionsFilter().contains(wtxid.ToUint256()));
         }
         m_txrequest.ForgetTxHash(txid.ToUint256());
         m_txrequest.ForgetTxHash(wtxid.ToUint256());
