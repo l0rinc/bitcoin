@@ -670,9 +670,15 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
                 // Look up in simulation data (to compare with the returned bool).
                 auto sim = lookup(outpointidx);
+                const auto failed_spend_cache_sizes{
+                    sim ? std::optional<std::vector<size_t>>{} : std::optional{get_cache_sizes()}};
+                const auto failed_spend_dirty_counts{
+                    sim ? std::optional<std::vector<size_t>>{} : std::optional{get_dirty_counts()}};
                 // Invoke on real caches.
                 const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
                 const bool real = caches.back()->SpendCoin(data.outpoints[outpointidx], nullptr);
+                if (failed_spend_cache_sizes) assert_cache_sizes(*failed_spend_cache_sizes);
+                if (failed_spend_dirty_counts) assert_dirty_counts(*failed_spend_dirty_counts);
                 assert_cache_stats_if_present(parent_cache_stats);
                 // Apply to simulation data.
                 sim_caches[caches.size()].entry[outpointidx].entrytype = EntryType::SPENT;
@@ -685,10 +691,18 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
                 // Look up in simulation data (to compare the returned *moveto with).
                 auto sim = lookup(outpointidx);
+                const auto failed_spend_cache_sizes{
+                    sim ? std::optional<std::vector<size_t>>{} : std::optional{get_cache_sizes()}};
+                const auto failed_spend_dirty_counts{
+                    sim ? std::optional<std::vector<size_t>>{} : std::optional{get_dirty_counts()}};
                 // Invoke on real caches.
-                Coin realcoin;
+                Coin realcoin = data.coins[provider.ConsumeIntegralInRange<uint32_t>(0, NUM_COINS - 1)];
+                realcoin.nHeight = current_height;
+                const Coin realcoin_before{realcoin};
                 const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
                 const bool real = caches.back()->SpendCoin(data.outpoints[outpointidx], &realcoin);
+                if (failed_spend_cache_sizes) assert_cache_sizes(*failed_spend_cache_sizes);
+                if (failed_spend_dirty_counts) assert_dirty_counts(*failed_spend_dirty_counts);
                 assert_cache_stats_if_present(parent_cache_stats);
                 // Apply to simulation data.
                 sim_caches[caches.size()].entry[outpointidx].entrytype = EntryType::SPENT;
@@ -696,7 +710,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 assert(real == sim.has_value());
                 // Compare *moveto with the value expected based on simulation data.
                 if (!sim.has_value()) {
-                    assert(realcoin.IsSpent());
+                    assert(coins_equal(realcoin, realcoin_before));
                 } else {
                     assert(!realcoin.IsSpent());
                     const auto& simcoin = data.coins[sim->first];
