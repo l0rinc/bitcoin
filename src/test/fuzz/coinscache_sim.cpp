@@ -819,6 +819,20 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 assert_cache_empty(*caches.back());
             },
 
+            [&]() { // ReallocateCache on an already-empty cache.
+                if (caches.back()->GetCacheSize() != 0) return;
+                assert(caches.back()->GetDirtyCount() == 0);
+                assert_best_block_preserves_cache_stats(caches.size());
+                const auto best_block{effective_best_block(caches.size())};
+                const auto parent_cache_stats{get_cache_stats(caches.size() - 1)};
+
+                caches.back()->ReallocateCache();
+
+                assert_cache_stats(parent_cache_stats);
+                assert_cache_empty(*caches.back());
+                assert(caches.back()->GetBestBlock() == best_block);
+            },
+
             [&]() { // GetBestBlock
                 assert_best_block_preserves_cache_stats(caches.size());
             },
