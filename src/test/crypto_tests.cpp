@@ -991,6 +991,41 @@ BOOST_AUTO_TEST_CASE(chacha20_midblock)
     BOOST_CHECK(std::ranges::equal(std::span{block}.last(52), b3));
 }
 
+BOOST_AUTO_TEST_CASE(chacha20_crypt_matches_keystream_after_empty_ops)
+{
+    auto key = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"_hex;
+    constexpr ChaCha20::Nonce96 nonce{0x09000000, 0x4a000000};
+    constexpr uint32_t counter{1};
+
+    ChaCha20 stream{key};
+    ChaCha20 crypt{key};
+    stream.Seek(nonce, counter);
+    crypt.Seek(nonce, counter);
+
+    std::array<std::byte, 257> plain;
+    std::array<std::byte, 257> cipher;
+    std::array<std::byte, 257> keystream;
+    for (size_t i{0}; i < plain.size(); ++i) {
+        plain[i] = std::byte((i * 131U + 17U) & 0xff);
+    }
+
+    auto check_chunk = [&](const size_t offset, const size_t len) {
+        stream.Keystream(std::span{keystream}.subspan(offset, len));
+        crypt.Crypt(std::span{plain}.subspan(offset, len), std::span{cipher}.subspan(offset, len));
+        for (size_t i{offset}; i < offset + len; ++i) {
+            BOOST_CHECK(cipher[i] == (plain[i] ^ keystream[i]));
+        }
+    };
+
+    check_chunk(0, 17);
+    stream.Keystream(std::span<std::byte>{});
+    crypt.Crypt(std::span<const std::byte>{}, std::span<std::byte>{});
+    check_chunk(17, 64);
+    stream.Keystream(std::span<std::byte>{});
+    crypt.Crypt(std::span<const std::byte>{}, std::span<std::byte>{});
+    check_chunk(81, plain.size() - 81);
+}
+
 BOOST_AUTO_TEST_CASE(poly1305_testvector)
 {
     // RFC 7539, section 2.5.2.
