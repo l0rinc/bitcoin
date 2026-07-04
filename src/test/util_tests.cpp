@@ -16,6 +16,7 @@
 #include <uint256.h>
 #include <univalue.h>
 #include <util/bitdeque.h>
+#include <util/bitset.h>
 #include <util/byte_units.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
@@ -1916,6 +1917,41 @@ BOOST_AUTO_TEST_CASE(vecdeque_clear_keeps_capacity)
     BOOST_CHECK_EQUAL(queue.capacity(), capacity);
     BOOST_CHECK_EQUAL(queue.front(), 42);
     BOOST_CHECK_EQUAL(queue.back(), 42);
+}
+
+template <typename Set>
+void CheckBitSetFillBoundary()
+{
+    const Set empty{Set::Fill(0)};
+    BOOST_CHECK(empty.None());
+    BOOST_CHECK(!empty.Any());
+    BOOST_CHECK_EQUAL(empty.Count(), 0U);
+    for (unsigned i{0}; i < Set::Size(); ++i) {
+        BOOST_CHECK(!empty[i]);
+    }
+
+    const Set full{Set::Fill(Set::Size())};
+    BOOST_REQUIRE(full.Any());
+    BOOST_CHECK(!full.None());
+    BOOST_CHECK_EQUAL(full.Count(), Set::Size());
+    BOOST_CHECK_EQUAL(full.First(), 0U);
+    BOOST_CHECK_EQUAL(full.Last(), Set::Size() - 1);
+    for (unsigned i{0}; i < Set::Size(); ++i) {
+        BOOST_CHECK(full[i]);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(bitset_fill_boundaries)
+{
+    CheckBitSetFillBoundary<bitset_detail::IntBitSet<uint16_t>>();
+    CheckBitSetFillBoundary<bitset_detail::IntBitSet<uint32_t>>();
+    CheckBitSetFillBoundary<bitset_detail::IntBitSet<uint64_t>>();
+    CheckBitSetFillBoundary<bitset_detail::MultiIntBitSet<uint16_t, 1>>();
+    CheckBitSetFillBoundary<bitset_detail::MultiIntBitSet<uint16_t, 3>>();
+    CheckBitSetFillBoundary<bitset_detail::MultiIntBitSet<uint32_t, 4>>();
+    CheckBitSetFillBoundary<bitset_detail::MultiIntBitSet<uint64_t, 4>>();
+    CheckBitSetFillBoundary<BitSet<32>>();
+    CheckBitSetFillBoundary<BitSet<65>>();
 }
 
 template <typename T>
