@@ -142,6 +142,33 @@ static void CheckCompare(const int64_t& num1, const int64_t& num2)
     BOOST_CHECK((bignum1 <= bignum2) ==  (scriptnum1 <= num2));
 }
 
+static void CheckBitwiseAnd(const int64_t& num1, const int64_t& num2)
+{
+    const CScriptNum scriptnum1(num1);
+    const CScriptNum scriptnum2(num2);
+    const CScriptNum expected(num1 & num2);
+
+    BOOST_CHECK_EQUAL((scriptnum1 & scriptnum2).GetInt64(), expected.GetInt64());
+    BOOST_CHECK_EQUAL((scriptnum2 & scriptnum1).GetInt64(), expected.GetInt64());
+    BOOST_CHECK_EQUAL((scriptnum1 & num2).GetInt64(), expected.GetInt64());
+    BOOST_CHECK_EQUAL((scriptnum2 & num1).GetInt64(), expected.GetInt64());
+    BOOST_CHECK_EQUAL((expected & scriptnum1).GetInt64(), expected.GetInt64());
+    BOOST_CHECK_EQUAL((expected & scriptnum2).GetInt64(), expected.GetInt64());
+
+    CScriptNum assigned_scriptnum(num1);
+    assigned_scriptnum &= scriptnum2;
+    BOOST_CHECK_EQUAL(assigned_scriptnum.GetInt64(), expected.GetInt64());
+
+    CScriptNum assigned_int(num1);
+    assigned_int &= num2;
+    BOOST_CHECK_EQUAL(assigned_int.GetInt64(), expected.GetInt64());
+
+    BOOST_CHECK_EQUAL((scriptnum1 & CScriptNum(0)).GetInt64(), 0);
+    BOOST_CHECK_EQUAL((scriptnum1 & 0).GetInt64(), 0);
+    BOOST_CHECK_EQUAL((scriptnum1 & CScriptNum(-1)).GetInt64(), num1);
+    BOOST_CHECK_EQUAL((scriptnum1 & -1).GetInt64(), num1);
+}
+
 static void RunCreate(const int64_t& num)
 {
     CheckCreateInt(num);
@@ -193,6 +220,37 @@ BOOST_AUTO_TEST_CASE(operators)
             RunOperators(values[i] + values[j], values[i] - values[j]);
             RunOperators(values[i] - values[j], values[i] + values[j]);
             RunOperators(values[i] - values[j], values[i] - values[j]);
+        }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(bitwise_and)
+{
+    static const int64_t bitwise_values[] = {
+        0,
+        1,
+        -1,
+        2,
+        -2,
+        127,
+        128,
+        -128,
+        255,
+        -255,
+        256,
+        -256,
+        std::numeric_limits<int>::max(),
+        std::numeric_limits<int>::min(),
+        std::numeric_limits<int64_t>::max(),
+        std::numeric_limits<int64_t>::min(),
+        0x00ff00ff00ff00ffLL,
+        0x7f00ff00aa55cc33LL,
+        -0x0102030405060708LL,
+    };
+
+    for (const int64_t num1 : bitwise_values) {
+        for (const int64_t num2 : bitwise_values) {
+            CheckBitwiseAnd(num1, num2);
         }
     }
 }
