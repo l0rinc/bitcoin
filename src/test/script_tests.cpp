@@ -1028,6 +1028,24 @@ BOOST_AUTO_TEST_CASE(script_cltv_truncated)
     BOOST_CHECK_EQUAL(err, SCRIPT_ERR_INVALID_STACK_OPERATION);
 }
 
+BOOST_AUTO_TEST_CASE(eval_script_result_matches_error)
+{
+    auto check_result_matches_error = [](const CScript& script) {
+        std::vector<std::vector<unsigned char>> stack;
+        ScriptError err{SCRIPT_ERR_OK};
+        const bool result{EvalScript(stack, script, SCRIPT_VERIFY_NONE, BaseSignatureChecker(), SigVersion::BASE, &err)};
+        BOOST_CHECK_EQUAL(result, err == SCRIPT_ERR_OK);
+
+        std::vector<std::vector<unsigned char>> stack_without_error;
+        const bool result_without_error{EvalScript(stack_without_error, script, SCRIPT_VERIFY_NONE, BaseSignatureChecker(), SigVersion::BASE, nullptr)};
+        BOOST_CHECK_EQUAL(result_without_error, result);
+        BOOST_CHECK(stack_without_error == stack);
+    };
+
+    check_result_matches_error(CScript{} << OP_1);
+    check_result_matches_error(CScript{} << OP_RETURN);
+}
+
 static CScript
 sign_multisig(const CScript& scriptPubKey, const std::vector<CKey>& keys, const CTransaction& transaction)
 {
