@@ -489,6 +489,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                     caches.back()->PeekCoin(data.outpoints[outpointidx]) :
                     caches.back()->GetCoin(data.outpoints[outpointidx]);
                 if (use_peek) assert_cache_stats(cache_stats);
+                if (!use_peek) assert(caches.back()->HaveCoinInCache(data.outpoints[outpointidx]) == realcoin.has_value());
                 assert_dirty_counts(dirty_counts);
                 assert_cache_stats_if_present(parent_cache_stats);
                 // Compare results.
@@ -511,6 +512,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 const auto dirty_counts{get_dirty_counts()};
                 const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
                 auto real = caches.back()->HaveCoin(data.outpoints[outpointidx]);
+                assert(caches.back()->HaveCoinInCache(data.outpoints[outpointidx]) == real);
                 assert_dirty_counts(dirty_counts);
                 assert_cache_stats_if_present(parent_cache_stats);
                 // Compare results.
