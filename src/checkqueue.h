@@ -251,8 +251,10 @@ public:
 
     ~CCheckQueueControl() UNLOCK_FUNCTION()
     {
-        if (!fDone)
+        if (!fDone) {
             Complete();
+        }
+        Assume(fDone);
     }
 };
 
