@@ -84,6 +84,7 @@ std::optional<Coin> CCoinsViewCache::GetCoin(const COutPoint& outpoint) const
     Assume(m_dirty_count == dirty_count);
     auto ret{it != cacheCoins.end() && !it->second.coin.IsSpent() ? std::optional{it->second.coin} : std::nullopt};
     Assume(!ret || !ret->IsSpent());
+    Assume(ret.has_value() == HaveCoinInCache(outpoint));
     return ret;
 }
 
@@ -224,7 +225,9 @@ bool CCoinsViewCache::HaveCoin(const COutPoint& outpoint) const
     const size_t dirty_count{m_dirty_count};
     CCoinsMap::const_iterator it = FetchCoin(outpoint);
     Assume(m_dirty_count == dirty_count);
-    return (it != cacheCoins.end() && !it->second.coin.IsSpent());
+    const bool ret{it != cacheCoins.end() && !it->second.coin.IsSpent()};
+    Assume(ret == HaveCoinInCache(outpoint));
+    return ret;
 }
 
 bool CCoinsViewCache::HaveCoinInCache(const COutPoint &outpoint) const {
