@@ -15,6 +15,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <limits>
 #include <stdexcept>
 
@@ -696,6 +697,36 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_findbyte_exact_match)
     bf.SkipTo(3);
     bf.FindByte(std::byte{0x31});
     BOOST_CHECK_EQUAL(bf.GetPos(), 4U);
+
+    BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    fs::remove(streams_test_filename);
+}
+
+BOOST_AUTO_TEST_CASE(streams_buffered_file_read_exact_bytes)
+{
+    const fs::path streams_test_filename{m_args.GetDataDirBase() / "streams_test_read_exact"};
+    const Obfuscation obfuscation{"0102030405060708"_hex};
+    const std::array<std::byte, 6> bytes{
+        std::byte{0x00},
+        std::byte{0xff},
+        std::byte{0x10},
+        std::byte{0xff},
+        std::byte{0x20},
+        std::byte{0x30},
+    };
+    {
+        AutoFile write_file{fsbridge::fopen(streams_test_filename, "w+b"), obfuscation};
+        write_file.write(bytes);
+        BOOST_REQUIRE_EQUAL(write_file.fclose(), 0);
+    }
+
+    AutoFile file{fsbridge::fopen(streams_test_filename, "rb"), obfuscation};
+    BufferedFile bf{file, 4, 1};
+
+    std::array<std::byte, bytes.size()> actual{};
+    bf.read(actual);
+    BOOST_CHECK(std::equal(actual.begin(), actual.end(), bytes.begin()));
+    BOOST_CHECK_EQUAL(bf.GetPos(), bytes.size());
 
     BOOST_REQUIRE_EQUAL(file.fclose(), 0);
     fs::remove(streams_test_filename);
