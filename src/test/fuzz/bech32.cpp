@@ -7,6 +7,7 @@
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <util/strencodings.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <string>
@@ -48,6 +49,17 @@ void CheckSingleCharacterMutation(const std::string& encoded, size_t mutate_pos)
     }
 }
 
+void CheckDecodedCanonicalShape(const std::string& encoded, const bech32::DecodeResult& decoded)
+{
+    assert(decoded.encoding == bech32::Encoding::BECH32 || decoded.encoding == bech32::Encoding::BECH32M);
+    assert(std::all_of(decoded.hrp.begin(), decoded.hrp.end(), [](unsigned char c) { return c < 'A' || c > 'Z'; }));
+    assert(std::all_of(decoded.data.begin(), decoded.data.end(), [](uint8_t value) { return value < 32; }));
+
+    const auto reencoded = bech32::Encode(decoded.encoding, decoded.hrp, decoded.data);
+    assert(reencoded.size() == encoded.size());
+    assert(reencoded == ToLower(encoded));
+}
+
 } // namespace
 
 FUZZ_TARGET(bech32_random_decode)
@@ -68,6 +80,7 @@ FUZZ_TARGET(bech32_random_decode)
         assert(error_locations.empty());
         auto reencoded = bech32::Encode(decoded.encoding, decoded.hrp, decoded.data);
         assert(CaseInsensitiveEqual(random_string, reencoded));
+        CheckDecodedCanonicalShape(random_string, decoded);
         const auto [reencoded_error, reencoded_error_locations] = bech32::LocateErrors(reencoded, limit);
         assert(reencoded_error.empty());
         assert(reencoded_error_locations.empty());
@@ -108,6 +121,7 @@ FUZZ_TARGET(bech32_roundtrip)
             assert(decoded.encoding == encoding);
             assert(decoded.hrp == hrp);
             assert(decoded.data == converted_input);
+            CheckDecodedCanonicalShape(encoded, decoded);
 
             const auto [error, error_locations] = bech32::LocateErrors(encoded);
             assert(error.empty());
