@@ -33,13 +33,30 @@ constexpr bool G_ABORT_ON_FAILED_ASSUME{G_FUZZING_BUILD ||
 #endif
 };
 
+extern std::atomic<bool> g_enable_dynamic_fuzz_determinism;
+
+inline bool EnableFuzzDeterminism()
+{
+    if constexpr (G_FUZZING_BUILD) {
+        return true;
+    } else if constexpr (!G_ABORT_ON_FAILED_ASSUME) {
+        // Running fuzz tests is always disabled if Assume() doesn't abort
+        // (ie, non-fuzz non-debug builds), as otherwise tests which
+        // should fail due to a failing Assume may still pass. As such,
+        // we also statically disable fuzz determinism in that case.
+        return false;
+    } else {
+        return g_enable_dynamic_fuzz_determinism;
+    }
+}
+
 extern bool g_detail_test_only_CheckFailuresAreExceptionsNotAborts;
 struct test_only_CheckFailuresAreExceptionsNotAborts {
     test_only_CheckFailuresAreExceptionsNotAborts() { g_detail_test_only_CheckFailuresAreExceptionsNotAborts = true; };
     ~test_only_CheckFailuresAreExceptionsNotAborts() { g_detail_test_only_CheckFailuresAreExceptionsNotAborts = false; };
 };
 
-std::string StrFormatInternalBug(std::string_view msg, std::string_view file, int line, std::string_view func);
+std::string StrFormatInternalBug(std::string_view msg, const std::source_location& loc);
 
 class NonFatalCheckError : public std::runtime_error
 {
