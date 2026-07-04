@@ -19,6 +19,7 @@
 #include <memory>
 #include <ranges>
 #include <set>
+#include <span>
 #include <utility>
 
 using namespace cluster_linearize;
@@ -542,6 +543,13 @@ FUZZ_TARGET(txgraph)
             assert(!(ByRatioNegSize{diagram[pos - 1]} < ByRatioNegSize{diagram[pos]}));
         }
     };
+    auto assert_unique_refs = [](std::span<TxGraph::Ref* const> refs) noexcept {
+        std::set<TxGraph::Ref*> unique_refs;
+        for (TxGraph::Ref* ref : refs) {
+            assert(ref);
+            assert(unique_refs.insert(ref).second);
+        }
+    };
 
     LIMITED_WHILE (provider.remaining_bytes() > 0, 200) {
         // Read a one-byte command.
@@ -742,6 +750,7 @@ FUZZ_TARGET(txgraph)
                 auto ref = pick_fn();
                 auto result = alt ? real->GetDescendants(*ref, level_select)
                                   : real->GetAncestors(*ref, level_select);
+                assert_unique_refs(result);
                 assert(result.size() <= max_cluster_count);
                 auto result_set = sel_sim.MakeSet(result);
                 assert(result.size() == result_set.Count());
@@ -776,6 +785,7 @@ FUZZ_TARGET(txgraph)
                 // Invoke the real function, and convert to SimPos set.
                 auto result = alt ? real->GetDescendantsUnion(refs, level_select)
                                   : real->GetAncestorsUnion(refs, level_select);
+                assert_unique_refs(result);
                 auto result_set = sel_sim.MakeSet(result);
                 assert(result.size() == result_set.Count());
                 // Compute the expected result.
