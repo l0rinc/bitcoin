@@ -11,6 +11,8 @@
 
 #include <algorithm>
 #include <functional>
+#include <map>
+#include <set>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -174,6 +176,20 @@ public:
             for (const auto& entry : expired_now) {
                 runner.expired.insert(entry);
             }
+            runner.txrequest.SanityCheck();
+            runner.txrequest.PostGetRequestableSanityCheck(now + offset);
+            const auto size_before_second{runner.txrequest.Size()};
+            const auto count_before_second{runner.txrequest.Count(peer)};
+            const auto candidates_before_second{runner.txrequest.CountCandidates(peer)};
+            const auto in_flight_before_second{runner.txrequest.CountInFlight(peer)};
+            std::vector<std::pair<NodeId, GenTxid>> expired_again{{peer, GenTxid{Txid::FromUint256(uint256::ONE)}}};
+            auto ret_again = runner.txrequest.GetRequestable(peer, now + offset, &expired_again);
+            BOOST_CHECK_MESSAGE(ret_again == ret, strprintf("[%s] unstable requestables", comment));
+            BOOST_CHECK_MESSAGE(expired_again.empty(), strprintf("[%s] repeated GetRequestable expired again", comment));
+            BOOST_CHECK_EQUAL(runner.txrequest.Size(), size_before_second);
+            BOOST_CHECK_EQUAL(runner.txrequest.Count(peer), count_before_second);
+            BOOST_CHECK_EQUAL(runner.txrequest.CountCandidates(peer), candidates_before_second);
+            BOOST_CHECK_EQUAL(runner.txrequest.CountInFlight(peer), in_flight_before_second);
             runner.txrequest.SanityCheck();
             runner.txrequest.PostGetRequestableSanityCheck(now + offset);
             size_t total = candidates + inflight + completed;
