@@ -25,7 +25,6 @@
 #include <limits>
 #include <memory>
 #include <optional>
-#include <set>
 #include <utility>
 #include <vector>
 
@@ -54,6 +53,32 @@ public:
     {
         assert(index < shorttxids.size());
         shorttxids[index] = shortid;
+    }
+
+    std::vector<std::optional<CTransactionRef>> PrefilledTxsByPosition() const
+    {
+        std::vector<std::optional<CTransactionRef>> ret(BlockTxCount());
+        int32_t last_prefilled_index{-1};
+        for (const auto& prefilled : prefilledtxn) {
+            last_prefilled_index += prefilled.index + 1;
+            if (last_prefilled_index < 0 || static_cast<size_t>(last_prefilled_index) >= ret.size()) break;
+            ret[last_prefilled_index] = prefilled.tx;
+        }
+        return ret;
+    }
+
+    std::vector<std::optional<uint64_t>> ShortTxIDsByPosition() const
+    {
+        std::vector<std::optional<uint64_t>> ret(BlockTxCount());
+        const auto prefilled_by_position{PrefilledTxsByPosition()};
+        size_t short_txid_pos{0};
+        for (size_t pos{0}; pos < ret.size(); ++pos) {
+            if (prefilled_by_position[pos]) continue;
+            assert(short_txid_pos < shorttxids.size());
+            ret[pos] = shorttxids[short_txid_pos++];
+        }
+        assert(short_txid_pos == shorttxids.size());
+        return ret;
     }
 };
 
@@ -87,6 +112,11 @@ public:
     size_t PrefilledCount() const { return prefilled_count; }
     size_t MempoolCount() const { return mempool_count; }
     size_t ExtraCount() const { return extra_count; }
+    const CTransactionRef& AvailableTx(size_t index) const
+    {
+        assert(index < txn_available.size());
+        return txn_available[index];
+    }
 };
 
 FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
@@ -129,11 +159,6 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     Assert(error.empty());
     FuzzedPartiallyDownloadedBlock pdb{&pool};
 
-    // Set of available transactions (mempool or extra_txn)
-    std::set<uint16_t> available;
-    // The coinbase is always available
-    available.insert(0);
-
     std::vector<std::pair<Wtxid, CTransactionRef>> extra_txn;
     for (size_t i = 1; i < block->vtx.size(); ++i) {
         auto tx{block->vtx[i]};
@@ -143,13 +168,11 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
 
         if (add_to_extra_txn) {
             extra_txn.emplace_back(tx->GetWitnessHash(), tx);
-            available.insert(i);
         }
 
         if (add_to_mempool && !pool.exists(tx->GetHash())) {
             LOCK2(cs_main, pool.cs);
             TryAddToMempool(pool, ConsumeTxMemPoolEntry(fuzzed_data_provider, *tx));
-            available.insert(i);
         }
     }
 
@@ -176,6 +199,9 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     assert(pdb.AvailableTxCount() == pdb.PrefilledCount() + pdb.MempoolCount());
     assert(pdb.ExtraCount() <= pdb.MempoolCount());
 
+    const auto prefilled_by_position{cmpctblock.PrefilledTxsByPosition()};
+    const auto shorttxids_by_position{cmpctblock.ShortTxIDsByPosition()};
+
     std::vector<CTransactionRef> missing;
     // Whether we skipped a transaction that should be included in `missing`.
     // FillBlock should never return READ_STATUS_OK if that is the case.
@@ -183,14 +209,15 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     size_t required_missing_count{0};
     for (size_t i = 0; i < cmpctblock.BlockTxCount(); i++) {
         const bool tx_available{pdb.IsTxAvailable(i)};
-        // If init_status == READ_STATUS_OK then a available transaction in the
-        // compact block (i.e. IsTxAvailable(i) == true) implies that we marked
-        // that transaction as available above (i.e. available.contains(i)).
-        // The reverse is not true, due to possible compact block short id
-        // collisions (i.e. available.contains(i) does not imply
-        // IsTxAvailable(i) == true).
-        if (init_status == READ_STATUS_OK) {
-            assert(!tx_available || available.contains(i));
+        const CTransactionRef& available_tx{pdb.AvailableTx(i)};
+        assert(static_cast<bool>(available_tx) == tx_available);
+        if (tx_available) {
+            if (prefilled_by_position[i]) {
+                assert(available_tx == *prefilled_by_position[i]);
+            } else {
+                assert(shorttxids_by_position[i]);
+                assert(cmpctblock.GetShortID(available_tx->GetWitnessHash()) == *shorttxids_by_position[i]);
+            }
         }
 
         bool skip{fuzzed_data_provider.ConsumeBool()};
