@@ -26,6 +26,8 @@ AES256Encrypt::~AES256Encrypt()
 
 void AES256Encrypt::Encrypt(unsigned char ciphertext[16], const unsigned char plaintext[16]) const
 {
+    Assume(ciphertext != nullptr);
+    Assume(plaintext != nullptr);
     AES256_encrypt(ctx, 1, ciphertext, plaintext);
 }
 
@@ -42,6 +44,8 @@ AES256Decrypt::~AES256Decrypt()
 
 void AES256Decrypt::Decrypt(unsigned char plaintext[16], const unsigned char ciphertext[16]) const
 {
+    Assume(plaintext != nullptr);
+    Assume(ciphertext != nullptr);
     AES256_decrypt(ctx, 1, plaintext, ciphertext);
 }
 
