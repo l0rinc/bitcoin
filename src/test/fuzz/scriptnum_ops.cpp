@@ -22,13 +22,42 @@ bool IsValidSubtraction(const CScriptNum& lhs, const CScriptNum& rhs)
 {
     return rhs == 0 || (rhs > 0 && lhs >= CScriptNum{std::numeric_limits<int64_t>::min()} + rhs) || (rhs < 0 && lhs <= CScriptNum{std::numeric_limits<int64_t>::max()} + rhs);
 }
+
+void AssertBitwiseAndContracts(const CScriptNum& lhs, const CScriptNum& rhs)
+{
+    const CScriptNum expected{lhs.GetInt64() & rhs.GetInt64()};
+    assert((lhs & rhs) == expected);
+    assert((rhs & lhs) == expected);
+    assert((lhs & rhs.GetInt64()) == expected);
+    assert((rhs & lhs.GetInt64()) == expected);
+    assert((expected & lhs) == expected);
+    assert((expected & rhs) == expected);
+
+    CScriptNum assigned_script_num{lhs.GetInt64()};
+    assigned_script_num &= rhs;
+    assert(assigned_script_num == expected);
+
+    CScriptNum assigned_int{lhs.GetInt64()};
+    assigned_int &= rhs.GetInt64();
+    assert(assigned_int == expected);
+}
+
+void AssertBitwiseIdentityContracts(const CScriptNum& script_num)
+{
+    AssertBitwiseAndContracts(script_num, CScriptNum{0});
+    AssertBitwiseAndContracts(script_num, CScriptNum{-1});
+    assert((script_num & 0) == 0);
+    assert((script_num & -1) == script_num);
+}
 } // namespace
 
 FUZZ_TARGET(scriptnum_ops)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     CScriptNum script_num = ConsumeScriptNum(fuzzed_data_provider);
-    LIMITED_WHILE (fuzzed_data_provider.remaining_bytes() > 0, 1000000) {
+    AssertBitwiseIdentityContracts(script_num);
+    LIMITED_WHILE(fuzzed_data_provider.remaining_bytes() > 0, 1000000)
+    {
         CallOneOf(
             fuzzed_data_provider,
             [&] {
@@ -82,13 +111,19 @@ FUZZ_TARGET(scriptnum_ops)
                 script_num -= random_script_num;
             },
             [&] {
-                script_num = script_num & fuzzed_data_provider.ConsumeIntegral<int64_t>();
+                const int64_t random_integer = fuzzed_data_provider.ConsumeIntegral<int64_t>();
+                AssertBitwiseAndContracts(script_num, CScriptNum{random_integer});
+                script_num = script_num & random_integer;
             },
             [&] {
-                script_num = script_num & ConsumeScriptNum(fuzzed_data_provider);
+                const CScriptNum random_script_num = ConsumeScriptNum(fuzzed_data_provider);
+                AssertBitwiseAndContracts(script_num, random_script_num);
+                script_num = script_num & random_script_num;
             },
             [&] {
-                script_num &= ConsumeScriptNum(fuzzed_data_provider);
+                const CScriptNum random_script_num = ConsumeScriptNum(fuzzed_data_provider);
+                AssertBitwiseAndContracts(script_num, random_script_num);
+                script_num &= random_script_num;
             },
             [&] {
                 if (script_num == CScriptNum{std::numeric_limits<int64_t>::min()}) {
@@ -120,9 +155,12 @@ FUZZ_TARGET(scriptnum_ops)
                 script_num -= random_integer;
             },
             [&] {
-                script_num &= fuzzed_data_provider.ConsumeIntegral<int64_t>();
+                const int64_t random_integer = fuzzed_data_provider.ConsumeIntegral<int64_t>();
+                AssertBitwiseAndContracts(script_num, CScriptNum{random_integer});
+                script_num &= random_integer;
             });
         (void)script_num.getint();
         (void)script_num.getvch();
+        AssertBitwiseIdentityContracts(script_num);
     }
 }
