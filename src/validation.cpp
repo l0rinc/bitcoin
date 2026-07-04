@@ -1574,7 +1574,13 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptMultipleTransactionsInternal(con
         }
     }
 
-    if (args.m_test_accept) return PackageMempoolAcceptResult(package_state, std::move(results));
+    if (args.m_test_accept) {
+        Assume(results.size() == txns.size());
+        Assume(std::all_of(txns.cbegin(), txns.cend(), [&](const auto& tx) {
+            return results.contains(tx->GetWitnessHash());
+        }));
+        return PackageMempoolAcceptResult(package_state, std::move(results));
+    }
 
     if (!SubmitPackage(args, workspaces, package_state, results)) {
         // PackageValidationState filled in by SubmitPackage().
