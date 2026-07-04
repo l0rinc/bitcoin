@@ -117,12 +117,18 @@ FUZZ_TARGET(bip324_cipher_roundtrip, .init=Initialize)
         }
 
         // Decrypt
-        std::vector<std::byte> decrypt(dec_length);
-        bool dec_ignore{false};
+        std::vector<std::byte> decrypt(dec_length, std::byte{0x3c});
+        const std::vector<std::byte> decrypt_before{decrypt};
+        bool dec_ignore{!ignore};
+        const bool dec_ignore_before{dec_ignore};
         bool ok = receiver.Decrypt(std::span{ciphertext}.subspan(initiator.LENGTH_LEN), aad, dec_ignore, decrypt);
         // Decryption *must* fail if the packet was damaged, and succeed if it wasn't.
         assert(!ok == damage);
-        if (!ok) break;
+        if (!ok) {
+            assert(decrypt == decrypt_before);
+            assert(dec_ignore == dec_ignore_before);
+            break;
+        }
         assert(ignore == dec_ignore);
         assert(decrypt == contents);
     }
