@@ -307,7 +307,8 @@ public:
     const std::vector<CTxIn> vin;
     const std::vector<CTxOut> vout;
     const uint32_t version;
-    const uint32_t nLockTime;
+    const uint32_t m_nLockTime;
+    uint32_t nLockTime() const { return m_nLockTime; }
 
 private:
     /** Memory only. */
@@ -427,7 +428,7 @@ inline const std::vector<CTxIn>& vin(const CMutableTransaction& tx) { return tx.
 inline const std::vector<CTxOut>& vout(const CTransaction& tx) { return tx.vout; }
 inline const std::vector<CTxOut>& vout(const CMutableTransaction& tx) { return tx.vout; }
 
-inline uint32_t nLockTime(const CTransaction& tx) { return tx.nLockTime; }
+inline uint32_t nLockTime(const CTransaction& tx) { return tx.nLockTime(); }
 inline uint32_t nLockTime(const CMutableTransaction& tx) { return tx.nLockTime; }
 } // namespace tx_detail
 

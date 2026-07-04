@@ -542,7 +542,7 @@ const btck_TransactionInput* btck_transaction_get_input_at(const btck_Transactio
 
 uint32_t btck_transaction_get_locktime(const btck_Transaction* transaction)
 {
-    return btck_Transaction::get(transaction)->nLockTime;
+    return btck_Transaction::get(transaction)->nLockTime();
 }
 
 const btck_Txid* btck_transaction_get_txid(const btck_Transaction* transaction)

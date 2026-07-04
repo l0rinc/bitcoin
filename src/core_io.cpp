@@ -435,7 +435,7 @@ void TxToUniv(const CTransaction& tx, const uint256& block_hash, UniValue& entry
     entry.pushKV("size", tx.ComputeTotalSize());
     entry.pushKV("vsize", (GetTransactionWeight(tx) + WITNESS_SCALE_FACTOR - 1) / WITNESS_SCALE_FACTOR);
     entry.pushKV("weight", GetTransactionWeight(tx));
-    entry.pushKV("locktime", tx.nLockTime);
+    entry.pushKV("locktime", tx.nLockTime());
 
     UniValue vin{UniValue::VARR};
     vin.reserve(tx.vin.size());
