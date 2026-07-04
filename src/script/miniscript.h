@@ -764,6 +764,8 @@ private:
         while (!queue.empty()) {
             const auto& [a, b] = queue.back();
             queue.pop_back();
+            if (a.m_script_ctx < b.m_script_ctx) return -1;
+            if (b.m_script_ctx < a.m_script_ctx) return 1;
             if (std::tie(a.fragment, a.k, a.keys, a.data) < std::tie(b.fragment, b.k, b.keys, b.data)) return -1;
             if (std::tie(b.fragment, b.k, b.keys, b.data) < std::tie(a.fragment, a.k, a.keys, a.data)) return 1;
             if (a.subs.size() < b.subs.size()) return -1;
