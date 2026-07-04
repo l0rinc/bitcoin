@@ -373,7 +373,15 @@ void CCoinsViewCache::Sync()
     }
     Assume(m_sentinel.second.Prev() == &m_sentinel);
     if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        size_t recomputed_usage{0};
+        for (const auto& [_, entry] : cacheCoins) {
+            Assume(!entry.coin.IsSpent());
+            Assume(!entry.IsDirty());
+            Assume(!entry.IsFresh());
+            recomputed_usage += entry.coin.DynamicMemoryUsage();
+        }
         Assume(cacheCoins.size() == unspent_count);
+        Assume(cachedCoinsUsage == recomputed_usage);
     }
 }
 
