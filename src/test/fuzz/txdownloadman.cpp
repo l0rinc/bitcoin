@@ -339,6 +339,10 @@ static void CheckInvariants(const node::TxDownloadManagerImpl& txdownload_impl)
         if (!HasRelayPermissions(peer)) {
             Assert(txdownload_impl.m_txrequest.Count(peer) <= node::MAX_PEER_TX_ANNOUNCEMENTS);
         }
+        if (!txdownload_impl.m_peer_info.contains(peer)) {
+            Assert(txdownload_impl.m_txrequest.Count(peer) == 0);
+            Assert(txdownload_impl.m_orphanage->UsageByPeer(peer) == 0);
+        }
     }
     txdownload_impl.m_txrequest.SanityCheck();
 }
