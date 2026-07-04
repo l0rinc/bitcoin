@@ -618,6 +618,31 @@ BOOST_AUTO_TEST_CASE(depgraph_compact_has_no_observable_effect)
     SanityCheck(depgraph);
 }
 
+BOOST_AUTO_TEST_CASE(depgraph_connected_component_skips_omitted_intermediary)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto grandparent{depgraph.AddTransaction(FeeFrac{1, 10})};
+    const auto parent{depgraph.AddTransaction(FeeFrac{2, 10})};
+    const auto child{depgraph.AddTransaction(FeeFrac{3, 10})};
+    const auto isolated{depgraph.AddTransaction(FeeFrac{4, 10})};
+    depgraph.AddDependencies(TestBitSet::Singleton(grandparent), parent);
+    depgraph.AddDependencies(TestBitSet::Singleton(parent), child);
+    SanityCheck(depgraph);
+
+    const auto connected_without_parent{TestBitSet::Singleton(grandparent) | TestBitSet::Singleton(child)};
+    const auto with_isolated{connected_without_parent | TestBitSet::Singleton(isolated)};
+
+    BOOST_CHECK(depgraph.GetConnectedComponent(connected_without_parent, grandparent) == connected_without_parent);
+    BOOST_CHECK(depgraph.GetConnectedComponent(connected_without_parent, child) == connected_without_parent);
+    BOOST_CHECK(depgraph.FindConnectedComponent(connected_without_parent) == connected_without_parent);
+    BOOST_CHECK(depgraph.IsConnected(connected_without_parent));
+
+    BOOST_CHECK(depgraph.GetConnectedComponent(with_isolated, grandparent) == connected_without_parent);
+    BOOST_CHECK(depgraph.GetConnectedComponent(with_isolated, child) == connected_without_parent);
+    BOOST_CHECK(depgraph.GetConnectedComponent(with_isolated, isolated) == TestBitSet::Singleton(isolated));
+    BOOST_CHECK(!depgraph.IsConnected(with_isolated));
+}
+
 BOOST_AUTO_TEST_CASE(chunk_linearization_merges_higher_rate_suffix)
 {
     DepGraph<TestBitSet> depgraph;

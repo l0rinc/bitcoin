@@ -421,6 +421,31 @@ DepGraph<BS> BuildTreeGraph(const DepGraph<BS>& depgraph, uint8_t direction)
     return depgraph_tree;
 }
 
+void CheckConnectedComponentThroughOmittedIntermediary()
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto grandparent{depgraph.AddTransaction(FeeFrac{1, 10})};
+    const auto parent{depgraph.AddTransaction(FeeFrac{2, 10})};
+    const auto child{depgraph.AddTransaction(FeeFrac{3, 10})};
+    const auto isolated{depgraph.AddTransaction(FeeFrac{4, 10})};
+    depgraph.AddDependencies(TestBitSet::Singleton(grandparent), parent);
+    depgraph.AddDependencies(TestBitSet::Singleton(parent), child);
+    SanityCheck(depgraph);
+
+    const auto connected_without_parent{TestBitSet::Singleton(grandparent) | TestBitSet::Singleton(child)};
+    const auto with_isolated{connected_without_parent | TestBitSet::Singleton(isolated)};
+
+    assert(depgraph.GetConnectedComponent(connected_without_parent, grandparent) == connected_without_parent);
+    assert(depgraph.GetConnectedComponent(connected_without_parent, child) == connected_without_parent);
+    assert(depgraph.FindConnectedComponent(connected_without_parent) == connected_without_parent);
+    assert(depgraph.IsConnected(connected_without_parent));
+
+    assert(depgraph.GetConnectedComponent(with_isolated, grandparent) == connected_without_parent);
+    assert(depgraph.GetConnectedComponent(with_isolated, child) == connected_without_parent);
+    assert(depgraph.GetConnectedComponent(with_isolated, isolated) == TestBitSet::Singleton(isolated));
+    assert(!depgraph.IsConnected(with_isolated));
+}
+
 template<typename SetType>
 DepGraph<SetType> DecodeDepGraph(std::span<const unsigned char> buffer)
 {
@@ -772,6 +797,7 @@ FUZZ_TARGET(clusterlin_depgraph_serialization)
 FUZZ_TARGET(clusterlin_components)
 {
     // Verify the behavior of DepGraphs's FindConnectedComponent and IsConnected functions.
+    CheckConnectedComponentThroughOmittedIntermediary();
 
     // Construct a depgraph.
     SpanReader reader(buffer);
