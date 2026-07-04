@@ -145,9 +145,17 @@ BOOST_AUTO_TEST_CASE(basic)
 
     BOOST_CHECK_EQUAL(pb.GetStale().size(), 2);
 
-    BOOST_CHECK_EQUAL(pb.Remove(tx_for_recipient1).value(), 1);
+    const auto remove_recipient1{pb.Remove(tx_for_recipient1).value()};
+    BOOST_CHECK_EQUAL(remove_recipient1.num_picked, 1);
+    BOOST_CHECK_EQUAL(remove_recipient1.num_confirmed, 1);
+    BOOST_CHECK_EQUAL(remove_recipient1.num_unconfirmed_disconnected, 0);
+    BOOST_CHECK_EQUAL(remove_recipient1.NumUnstarted(/*target_attempts=*/3), 2);
     BOOST_CHECK(!pb.Remove(tx_for_recipient1).has_value());
-    BOOST_CHECK_EQUAL(pb.Remove(tx_for_recipient2).value(), 0);
+    const auto remove_recipient2{pb.Remove(tx_for_recipient2).value()};
+    BOOST_CHECK_EQUAL(remove_recipient2.num_picked, 1);
+    BOOST_CHECK_EQUAL(remove_recipient2.num_confirmed, 0);
+    BOOST_CHECK_EQUAL(remove_recipient2.num_unconfirmed_disconnected, 0);
+    BOOST_CHECK_EQUAL(remove_recipient2.NumUnstarted(/*target_attempts=*/3), 2);
     BOOST_CHECK(!pb.Remove(tx_for_recipient2).has_value());
 
     BOOST_CHECK_EQUAL(pb.GetBroadcastInfo().size(), 0);
@@ -270,7 +278,64 @@ BOOST_AUTO_TEST_CASE(repeated_confirmation_counts_once)
     clock += 1min;
     pb.NodeConfirmedReception(recipient);
     BOOST_CHECK(pb.DidNodeConfirmReception(recipient));
-    BOOST_CHECK_EQUAL(pb.Remove(tx).value(), 1);
+    const auto removed{pb.Remove(tx).value()};
+    BOOST_CHECK_EQUAL(removed.num_picked, 1);
+    BOOST_CHECK_EQUAL(removed.num_confirmed, 1);
+    BOOST_CHECK_EQUAL(removed.num_unconfirmed_disconnected, 0);
+    BOOST_CHECK_EQUAL(removed.NumUnstarted(/*target_attempts=*/3), 2);
+}
+
+BOOST_AUTO_TEST_CASE(disconnected_send_statuses_are_counted_for_removal)
+{
+    FakeNodeClock clock{};
+
+    PrivateBroadcast pb;
+    const auto tx{MakeDummyTx(/*id=*/1, /*num_witness=*/0)};
+    BOOST_REQUIRE(pb.Add(tx) == PrivateBroadcast::AddResult::Added);
+
+    in_addr ipv4Addr;
+    ipv4Addr.s_addr = 0xa0b0c001;
+    const CService addr{ipv4Addr, 1111};
+    const NodeId confirmed_recipient{1};
+    const NodeId disconnected_recipient{2};
+    BOOST_REQUIRE(pb.PickTxForSend(confirmed_recipient, addr).has_value());
+    BOOST_REQUIRE(pb.PickTxForSend(disconnected_recipient, addr).has_value());
+
+    pb.NodeConfirmedReception(confirmed_recipient);
+    BOOST_CHECK(!pb.MarkNodeDisconnected(confirmed_recipient));
+    BOOST_CHECK(pb.MarkNodeDisconnected(disconnected_recipient));
+
+    const auto removed{pb.Remove(tx).value()};
+    BOOST_CHECK_EQUAL(removed.num_picked, 2);
+    BOOST_CHECK_EQUAL(removed.num_confirmed, 1);
+    BOOST_CHECK_EQUAL(removed.num_unconfirmed_disconnected, 1);
+    BOOST_CHECK_EQUAL(removed.NumUnstarted(/*target_attempts=*/3), 2);
+}
+
+BOOST_AUTO_TEST_CASE(disconnect_after_remove_does_not_retry_other_pending_transactions)
+{
+    FakeNodeClock clock{};
+
+    PrivateBroadcast pb;
+    const auto tx1{MakeDummyTx(/*id=*/1, /*num_witness=*/0)};
+    const auto tx2{MakeDummyTx(/*id=*/2, /*num_witness=*/0)};
+    BOOST_REQUIRE(pb.Add(tx1) == PrivateBroadcast::AddResult::Added);
+
+    const NodeId recipient{1};
+    in_addr ipv4Addr;
+    ipv4Addr.s_addr = 0xa0b0c001;
+    const CService addr{ipv4Addr, 1111};
+    BOOST_REQUIRE_EQUAL(pb.PickTxForSend(recipient, addr).value(), tx1);
+
+    BOOST_REQUIRE(pb.Add(tx2) == PrivateBroadcast::AddResult::Added);
+    const auto removed{pb.Remove(tx1).value()};
+    BOOST_CHECK_EQUAL(removed.num_picked, 1);
+    BOOST_CHECK_EQUAL(removed.num_confirmed, 0);
+    BOOST_CHECK_EQUAL(removed.num_unconfirmed_disconnected, 0);
+    BOOST_CHECK_EQUAL(removed.NumUnstarted(/*target_attempts=*/3), 2);
+
+    BOOST_CHECK(!pb.MarkNodeDisconnected(recipient));
+    BOOST_CHECK(pb.HavePendingTransactions());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

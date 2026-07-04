@@ -30,6 +30,7 @@ struct ModelPeer {
     CService address;
     NodeClock::time_point sent;
     std::optional<NodeClock::time_point> received;
+    bool disconnected{false};
 };
 
 struct ModelTx {
@@ -107,6 +108,11 @@ std::optional<uint256> ExpectedTxForNode(const Model& model, NodeId nodeid)
     return std::nullopt;
 }
 
+bool ContainsRemovedActiveNode(const std::set<NodeId>& removed_active_nodes, NodeId nodeid)
+{
+    return removed_active_nodes.contains(nodeid);
+}
+
 bool ExpectedConfirmedForNode(const Model& model, NodeId nodeid)
 {
     for (const auto& [_, tx] : model) {
@@ -117,11 +123,13 @@ bool ExpectedConfirmedForNode(const Model& model, NodeId nodeid)
     return false;
 }
 
-std::optional<NodeId> PickUnassignedNode(FuzzedDataProvider& provider, const Model& model)
+std::optional<NodeId> PickUnassignedNode(FuzzedDataProvider& provider, const Model& model, const std::set<NodeId>& removed_active_nodes)
 {
     std::vector<NodeId> unassigned;
     for (NodeId nodeid{0}; nodeid <= MAX_NODE_ID; ++nodeid) {
-        if (!ExpectedTxForNode(model, nodeid).has_value()) unassigned.push_back(nodeid);
+        if (!ExpectedTxForNode(model, nodeid).has_value() && !ContainsRemovedActiveNode(removed_active_nodes, nodeid)) {
+            unassigned.push_back(nodeid);
+        }
     }
     if (unassigned.empty()) return std::nullopt;
     return PickValue(provider, unassigned);
@@ -198,6 +206,7 @@ FUZZ_TARGET(private_broadcast)
     const size_t cap{provider.ConsumeIntegralInRange<size_t>(1, txs.size())};
     PrivateBroadcast pb{cap};
     Model model;
+    std::set<NodeId> removed_active_nodes;
     AssertMatchesModel(pb, model);
 
     LIMITED_WHILE(provider.remaining_bytes() > 0, 500)
@@ -226,15 +235,27 @@ FUZZ_TARGET(private_broadcast)
                     Assert(!removed.has_value());
                 } else {
                     Assert(removed.has_value());
-                    const auto [_, num_confirmed, last_picked, last_confirmed]{PriorityTuple(model_it->second)};
+                    const auto [num_picked, num_confirmed, last_picked, last_confirmed]{PriorityTuple(model_it->second)};
                     (void)last_picked;
                     (void)last_confirmed;
-                    Assert(*removed == num_confirmed);
+                    size_t num_unconfirmed_disconnected{0};
+                    for (const auto& peer : model_it->second.peers) {
+                        if (!peer.received.has_value() && peer.disconnected) ++num_unconfirmed_disconnected;
+                        if (!peer.disconnected) removed_active_nodes.insert(peer.nodeid);
+                    }
+                    Assert(removed->num_picked == num_picked);
+                    Assert(removed->num_confirmed == num_confirmed);
+                    Assert(removed->num_unconfirmed_disconnected == num_unconfirmed_disconnected);
+                    const size_t counter_slots_consumed{num_picked - num_unconfirmed_disconnected};
+                    for (const size_t target_attempts : {size_t{0}, size_t{1}, size_t{3}, size_t{8}}) {
+                        const size_t expected_unstarted{target_attempts > counter_slots_consumed ? target_attempts - counter_slots_consumed : 0};
+                        Assert(removed->NumUnstarted(target_attempts) == expected_unstarted);
+                    }
                     model.erase(model_it);
                 }
             },
             [&] {
-                const auto nodeid{PickUnassignedNode(provider, model)};
+                const auto nodeid{PickUnassignedNode(provider, model, removed_active_nodes)};
                 if (!nodeid.has_value()) return;
                 const auto address{AddressForNode(*nodeid)};
                 const auto picked{pb.PickTxForSend(*nodeid, address)};
@@ -246,7 +267,7 @@ FUZZ_TARGET(private_broadcast)
                 const auto picked_key{Key(*picked)};
                 const auto best_keys{BestPickKeys(model)};
                 Assert(std::ranges::find(best_keys, picked_key) != best_keys.end());
-                model.at(picked_key).peers.emplace_back(ModelPeer{.nodeid = *nodeid, .address = address, .sent = NodeClock::now(), .received = std::nullopt});
+                model.at(picked_key).peers.emplace_back(ModelPeer{.nodeid = *nodeid, .address = address, .sent = NodeClock::now(), .received = std::nullopt, .disconnected = false});
             },
             [&] {
                 const NodeId nodeid{provider.ConsumeIntegralInRange<NodeId>(0, MAX_NODE_ID)};
@@ -257,6 +278,24 @@ FUZZ_TARGET(private_broadcast)
                     Assert(it != peers.end());
                     it->received = NodeClock::now();
                 }
+            },
+            [&] {
+                const NodeId nodeid{provider.ConsumeIntegralInRange<NodeId>(0, MAX_NODE_ID)};
+                const bool retry{pb.MarkNodeDisconnected(nodeid)};
+                bool expected_retry{false};
+                const auto removed_node{removed_active_nodes.find(nodeid)};
+                if (removed_node != removed_active_nodes.end()) {
+                    removed_active_nodes.erase(removed_node);
+                } else if (const auto expected_tx{ExpectedTxForNode(model, nodeid)}) {
+                    auto& peers{model.at(*expected_tx).peers};
+                    const auto it{std::ranges::find(peers, nodeid, &ModelPeer::nodeid)};
+                    Assert(it != peers.end());
+                    expected_retry = !it->disconnected && !it->received.has_value();
+                    it->disconnected = true;
+                } else {
+                    expected_retry = !model.empty();
+                }
+                Assert(retry == expected_retry);
             },
             [&] {
                 const NodeId nodeid{provider.ConsumeIntegralInRange<NodeId>(0, MAX_NODE_ID)};
