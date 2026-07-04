@@ -726,6 +726,26 @@ BOOST_AUTO_TEST_CASE(fixed_tests)
     g_testdata.reset();
 }
 
+BOOST_AUTO_TEST_CASE(node_equality_includes_context)
+{
+    g_testdata.reset(new TestData());
+
+    constexpr KeyConverter wsh_converter{miniscript::MiniscriptContext::P2WSH};
+    constexpr KeyConverter tap_converter{miniscript::MiniscriptContext::TAPSCRIPT};
+    const std::string ms{"pk(03d30199d74fb5a22d47b6e054e2f378cedacffcb89904a61d75d0dbd407143e65)"};
+
+    const auto wsh_node{miniscript::FromString(ms, wsh_converter)};
+    const auto tap_node{miniscript::FromString(ms, tap_converter)};
+    BOOST_REQUIRE(wsh_node);
+    BOOST_REQUIRE(tap_node);
+    BOOST_CHECK(wsh_node->GetMsCtx() == miniscript::MiniscriptContext::P2WSH);
+    BOOST_CHECK(tap_node->GetMsCtx() == miniscript::MiniscriptContext::TAPSCRIPT);
+    BOOST_CHECK(!(*wsh_node == *tap_node));
+    BOOST_CHECK(wsh_node->ToScript(wsh_converter) != tap_node->ToScript(tap_converter));
+
+    g_testdata.reset();
+}
+
 // Confirm that ~Node(), Node::Clone() and operator=(Node&&) are stack-safe.
 BOOST_AUTO_TEST_CASE(node_stress_stack)
 {
