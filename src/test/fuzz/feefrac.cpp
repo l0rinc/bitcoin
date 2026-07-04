@@ -82,6 +82,15 @@ FUZZ_TARGET(feefrac)
     FeeFrac fr2(f2, s2);
     assert(fr2.IsEmpty() == (s2 == 0));
 
+    // Compound assignment must match the corresponding binary saturating operation.
+    FeeFrac sum_compound{fr1};
+    sum_compound += fr2;
+    assert(sum_compound == fr1 + fr2);
+
+    FeeFrac diff_compound{fr1};
+    diff_compound -= fr2;
+    assert(diff_compound == fr1 - fr2);
+
     // Feerate comparisons
     auto cmp_feerate = MulCompare(f1, s2, f2, s1);
     assert((ByRatio{fr1} <=> ByRatio{fr2}) == cmp_feerate);
