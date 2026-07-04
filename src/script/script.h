@@ -320,6 +320,7 @@ public:
     inline CScriptNum& operator&=( const int64_t& rhs)
     {
         m_value &= rhs;
+        assert((m_value & rhs) == m_value);
         return *this;
     }
 
