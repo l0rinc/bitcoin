@@ -906,6 +906,22 @@ BOOST_AUTO_TEST_CASE(isbadport)
 }
 
 
+BOOST_AUTO_TEST_CASE(asmap_sanity_check_input_length_monotonicity)
+{
+    // RETURN 1 with zero padding is valid without consuming any address bits,
+    // so accepting it for 0 bits must imply accepting it for every longer input.
+    const auto return_one{"000000"_hex};
+    for (int bits = 0; bits <= 128; ++bits) {
+        BOOST_CHECK(SanityCheckAsmap(return_one, bits));
+    }
+    BOOST_CHECK(CheckStandardAsmap(return_one));
+
+    const std::vector<std::byte> no_addr;
+    const auto one_addr{"ff"_hex};
+    BOOST_CHECK_EQUAL(Interpret(return_one, no_addr), 1);
+    BOOST_CHECK_EQUAL(Interpret(return_one, one_addr), 1);
+}
+
 BOOST_AUTO_TEST_CASE(asmap_test_vectors)
 {
     // Randomly generated encoded ASMap with 128 ranges, up to 20-bit AS numbers.
