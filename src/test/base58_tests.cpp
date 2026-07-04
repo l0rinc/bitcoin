@@ -77,6 +77,8 @@ BOOST_AUTO_TEST_CASE(base58_DecodeBase58)
     BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
 
     BOOST_CHECK( DecodeBase58Check("3vQB7B6MrGQZaxCuFg4oh"s, result, 100));
+    BOOST_CHECK( DecodeBase58Check(" \t\n\v\f\r 3vQB7B6MrGQZaxCuFg4oh \r\f\v\n\t "s, result, 100));
+    BOOST_CHECK_EQUAL(EncodeBase58Check(result), "3vQB7B6MrGQZaxCuFg4oh");
     BOOST_CHECK(!DecodeBase58Check("3vQB7B6MrGQZaxCuFg4oi"s, result, 100));
     BOOST_CHECK(!DecodeBase58Check("3vQB7B6MrGQZaxCuFg4oh0IOl"s, result, 100));
     BOOST_CHECK(!DecodeBase58Check("3vQB7B6MrGQZaxCuFg4oh\0" "0IOl"s, result, 100));
@@ -113,6 +115,7 @@ BOOST_AUTO_TEST_CASE(base58check_decode_failure_clears_output)
 
     expect_clear("3vQB7B6MrGQZaxCuFg4oi"s);          // Bad checksum.
     expect_clear("3vQB7B6MrGQZaxCuFg4oh0IOl"s);      // Invalid Base58 character.
+    expect_clear("3vQB7B6MrGQZaxCuFg4o h"s);         // Internal whitespace.
     expect_clear("3vQB7B6MrGQZaxCuFg4oh\0" "0IOl"s); // Embedded NUL.
     expect_clear("3vQB7B6MrGQZaxCuFg4oh"s, 1);       // Decoded payload exceeds limit.
 }
