@@ -16,6 +16,7 @@
 #include <vector>
 
 using node::MakeMinisketch32;
+using node::MakeMinisketch32FP;
 
 BOOST_FIXTURE_TEST_SUITE(minisketch_tests, BasicTestingSetup)
 
@@ -54,35 +55,53 @@ BOOST_AUTO_TEST_CASE(minisketch_test)
 
 BOOST_AUTO_TEST_CASE(minisketch_wrapper_contracts)
 {
+    auto check_shape = [](const Minisketch& sketch, size_t capacity) {
+        BOOST_REQUIRE(sketch);
+        BOOST_CHECK_EQUAL(sketch.GetBits(), 32U);
+        BOOST_CHECK_EQUAL(sketch.GetCapacity(), capacity);
+        BOOST_CHECK_EQUAL(sketch.GetSerializedSize(), capacity * sizeof(uint32_t));
+        BOOST_CHECK_EQUAL(sketch.Serialize().size(), sketch.GetSerializedSize());
+    };
+
     Minisketch sketch_a{MakeMinisketch32(4)};
-    BOOST_REQUIRE(sketch_a);
-    BOOST_CHECK_EQUAL(sketch_a.GetBits(), 32U);
-    BOOST_CHECK_EQUAL(sketch_a.GetCapacity(), 4U);
-    BOOST_CHECK_EQUAL(sketch_a.GetSerializedSize(), 4U * sizeof(uint32_t));
+    check_shape(sketch_a, 4);
+
+    Minisketch sketch_fp{MakeMinisketch32FP(/*max_elements=*/3, /*fpbits=*/8)};
+    check_shape(sketch_fp, Minisketch::ComputeCapacity(32, /*max_elements=*/3, /*fpbits=*/8));
+    sketch_fp.SetSeed(1).Add(42);
+    check_shape(sketch_fp, Minisketch::ComputeCapacity(32, /*max_elements=*/3, /*fpbits=*/8));
 
     const auto empty_serialized{sketch_a.Serialize()};
     sketch_a.Add(0);
     BOOST_CHECK(sketch_a.Serialize() == empty_serialized);
+    check_shape(sketch_a, 4);
 
     sketch_a.Add(1).Add(2).Add(3);
+    check_shape(sketch_a, 4);
     Minisketch sketch_b{MakeMinisketch32(4)};
     sketch_b.Add(3).Add(4);
+    check_shape(sketch_b, 4);
 
     Minisketch sketch_ar{MakeMinisketch32(4)};
     sketch_ar.Deserialize(sketch_a.Serialize());
+    check_shape(sketch_ar, 4);
     BOOST_CHECK(sketch_ar.Serialize() == sketch_a.Serialize());
 
     Minisketch sketch_br{MakeMinisketch32(4)};
     sketch_br.Deserialize(sketch_b.Serialize());
+    check_shape(sketch_br, 4);
     BOOST_CHECK(sketch_br.Serialize() == sketch_b.Serialize());
 
     Minisketch sketch_ab{sketch_ar};
     sketch_ab.Merge(sketch_br);
+    check_shape(sketch_ab, 4);
     Minisketch sketch_ba{sketch_br};
     sketch_ba.Merge(sketch_ar);
+    check_shape(sketch_ba, 4);
     BOOST_CHECK(sketch_ab.Serialize() == sketch_ba.Serialize());
 
     auto decoded{sketch_ab.Decode(4)};
+    check_shape(sketch_ab, 4);
     BOOST_REQUIRE(decoded);
     std::sort(decoded->begin(), decoded->end());
     BOOST_CHECK(*decoded == std::vector<uint64_t>({1, 2, 4}));
