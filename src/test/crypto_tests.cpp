@@ -688,6 +688,38 @@ BOOST_AUTO_TEST_CASE(aes_testvectors) {
     TestAES256("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4", "f69f2445df4f9b17ad2b417be66c3710", "23304b7a39f9f3ff067d8d8f9e24ecc7");
 }
 
+BOOST_AUTO_TEST_CASE(aes_block_io_boundaries)
+{
+    constexpr size_t guard_size{8};
+    constexpr unsigned char guard{0xa5};
+
+    const std::vector<unsigned char> key{ParseHex("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")};
+    const std::vector<unsigned char> plaintext{ParseHex("00112233445566778899aabbccddeeff")};
+    const std::vector<unsigned char> expected_ciphertext{ParseHex("8ea2b7ca516745bfeafc49904b496089")};
+
+    std::array<unsigned char, AES_BLOCKSIZE + 2 * guard_size> guarded_plaintext;
+    guarded_plaintext.fill(guard);
+    std::copy(plaintext.begin(), plaintext.end(), guarded_plaintext.begin() + guard_size);
+    const auto guarded_plaintext_before{guarded_plaintext};
+
+    std::array<unsigned char, AES_BLOCKSIZE + 2 * guard_size> guarded_ciphertext;
+    guarded_ciphertext.fill(guard);
+    AES256Encrypt{key.data()}.Encrypt(guarded_ciphertext.data() + guard_size, guarded_plaintext.data() + guard_size);
+    BOOST_CHECK(guarded_plaintext == guarded_plaintext_before);
+    BOOST_CHECK(std::equal(expected_ciphertext.begin(), expected_ciphertext.end(), guarded_ciphertext.begin() + guard_size));
+    BOOST_CHECK(std::all_of(guarded_ciphertext.begin(), guarded_ciphertext.begin() + guard_size, [](unsigned char value) { return value == guard; }));
+    BOOST_CHECK(std::all_of(guarded_ciphertext.end() - guard_size, guarded_ciphertext.end(), [](unsigned char value) { return value == guard; }));
+
+    std::array<unsigned char, AES_BLOCKSIZE + 2 * guard_size> guarded_decrypted;
+    guarded_decrypted.fill(guard);
+    const auto guarded_ciphertext_before{guarded_ciphertext};
+    AES256Decrypt{key.data()}.Decrypt(guarded_decrypted.data() + guard_size, guarded_ciphertext.data() + guard_size);
+    BOOST_CHECK(guarded_ciphertext == guarded_ciphertext_before);
+    BOOST_CHECK(std::equal(plaintext.begin(), plaintext.end(), guarded_decrypted.begin() + guard_size));
+    BOOST_CHECK(std::all_of(guarded_decrypted.begin(), guarded_decrypted.begin() + guard_size, [](unsigned char value) { return value == guard; }));
+    BOOST_CHECK(std::all_of(guarded_decrypted.end() - guard_size, guarded_decrypted.end(), [](unsigned char value) { return value == guard; }));
+}
+
 BOOST_AUTO_TEST_CASE(aes_cbc_testvectors) {
     // NIST AES CBC 256-bit encryption test-vectors
     TestAES256CBC("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4", \
