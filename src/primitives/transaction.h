@@ -306,7 +306,8 @@ public:
     // structure, including the hash.
     const std::vector<CTxIn> vin;
     const std::vector<CTxOut> vout;
-    const uint32_t version;
+    const uint32_t m_version;
+    uint32_t version() const { return m_version; }
     const uint32_t m_nLockTime;
     uint32_t nLockTime() const { return m_nLockTime; }
 
@@ -419,7 +420,7 @@ struct CMutableTransaction
 
 namespace tx_detail {
 // Field access for code templated over CTransaction and CMutableTransaction.
-inline uint32_t version(const CTransaction& tx) { return tx.version; }
+inline uint32_t version(const CTransaction& tx) { return tx.version(); }
 inline uint32_t version(const CMutableTransaction& tx) { return tx.version; }
 
 inline const std::vector<CTxIn>& vin(const CTransaction& tx) { return tx.vin; }

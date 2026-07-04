@@ -1456,7 +1456,7 @@ void CWallet::transactionAddedToMempool(const CTransactionRef& tx) {
 
     }
 
-    if (tx->version == TRUC_VERSION) {
+    if (tx->version() == TRUC_VERSION) {
         // Unconfirmed TRUC transactions are only allowed a 1-parent-1-child topology.
         // For any unconfirmed v3 parents (there should be a maximum of 1 except in reorgs),
         // record this child so the wallet doesn't try to spend any other outputs
@@ -1526,7 +1526,7 @@ void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRe
         }
     }
 
-    if (tx->version == TRUC_VERSION) {
+    if (tx->version() == TRUC_VERSION) {
         // If this tx has a parent, unset its truc_child_in_mempool to make it possible
         // to spend from the parent again. If this tx was replaced by another
         // child of the same parent, transactionAddedToMempool

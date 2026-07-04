@@ -197,7 +197,7 @@ UniValue coinbaseTxToJSON(const CTransaction& coinbase_tx)
     CHECK_NONFATAL(!coinbase_tx.vin.empty());
     const CTxIn& vin_0{coinbase_tx.vin[0]};
     UniValue coinbase_tx_obj(UniValue::VOBJ);
-    coinbase_tx_obj.pushKV("version", coinbase_tx.version);
+    coinbase_tx_obj.pushKV("version", coinbase_tx.version());
     coinbase_tx_obj.pushKV("locktime", coinbase_tx.nLockTime());
     coinbase_tx_obj.pushKV("sequence", vin_0.nSequence);
     coinbase_tx_obj.pushKV("coinbase", HexStr(vin_0.scriptSig));
