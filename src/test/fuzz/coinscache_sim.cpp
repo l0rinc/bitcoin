@@ -789,6 +789,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 // Apply to real caches.
                 caches.back()->Flush(/*reallocate_cache=*/provider.ConsumeBool());
                 assert_cache_empty(*caches.back());
+                assert_stack_peek_matches_sim();
             },
 
             [&]() { // Sync.
@@ -803,6 +804,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 caches.back()->Sync();
                 assert_cache_clean(*caches.back());
                 assert(caches.back()->GetCacheSize() >= expected_cached_unspent);
+                assert_stack_peek_matches_sim();
             },
 
             [&]() { // Reset.
@@ -819,6 +821,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 }
                 assert_cache_stats(parent_cache_stats);
                 assert_cache_empty(*caches.back());
+                assert_cache_peek_matches_sim(caches.size());
             },
 
             [&]() { // ReallocateCache on an already-empty cache.
