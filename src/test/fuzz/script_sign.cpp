@@ -25,6 +25,39 @@
 #include <string>
 #include <vector>
 
+namespace {
+
+void AssertHDKeypathsRoundTrip(const std::map<CPubKey, KeyOriginInfo>& hd_keypaths, uint8_t type)
+{
+    DataStream serialized{};
+    SerializeHDKeypaths(serialized, hd_keypaths, CompactSizeWriter(type));
+
+    std::map<CPubKey, KeyOriginInfo> deserialized_hd_keypaths;
+    while (!serialized.empty()) {
+        std::vector<unsigned char> key;
+        serialized >> key;
+        assert(!key.empty());
+
+        SpanReader key_reader{key};
+        assert(ReadCompactSize(key_reader) == type);
+
+        std::map<CPubKey, KeyOriginInfo> entry;
+        DeserializeHDKeypaths(serialized, key, entry);
+        assert(entry.size() == 1);
+
+        const auto& [pubkey, origin] = *entry.begin();
+        const auto expected{hd_keypaths.find(pubkey)};
+        assert(expected != hd_keypaths.end());
+        assert(expected->second == origin);
+
+        const auto [_, inserted]{deserialized_hd_keypaths.emplace(pubkey, origin)};
+        assert(inserted);
+    }
+    assert(deserialized_hd_keypaths == hd_keypaths);
+}
+
+} // namespace
+
 void initialize_script_sign()
 {
     static ECC_Context ecc_context{};
@@ -71,6 +104,21 @@ FUZZ_TARGET(script_sign, .init = initialize_script_sign)
         } catch (const std::ios_base::failure&) {
         }
         assert(hd_keypaths.size() >= deserialized_hd_keypaths.size());
+    }
+
+    {
+        std::map<CPubKey, KeyOriginInfo> hd_keypaths;
+        LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 100) {
+            const CKey private_key{ConsumePrivateKey(fuzzed_data_provider)};
+            const std::optional<KeyOriginInfo> key_origin_info = ConsumeDeserializable<KeyOriginInfo>(fuzzed_data_provider);
+            if (!key_origin_info) {
+                break;
+            }
+            if (private_key.IsValid()) {
+                hd_keypaths[private_key.GetPubKey()] = *key_origin_info;
+            }
+        }
+        AssertHDKeypathsRoundTrip(hd_keypaths, fuzzed_data_provider.PickValueInArray({PSBT_IN_BIP32_DERIVATION, PSBT_OUT_BIP32_DERIVATION}));
     }
 
     {
