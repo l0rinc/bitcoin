@@ -4,7 +4,9 @@
 
 #include <crypto/aes.h>
 #include <support/allocators/secure.h>
+#include <util/check.h>
 
+#include <cstdint>
 #include <cstring>
 
 extern "C" {
@@ -130,7 +132,12 @@ AES256CBCEncrypt::AES256CBCEncrypt(const unsigned char key[AES256_KEYSIZE], cons
 
 int AES256CBCEncrypt::Encrypt(const unsigned char* data, int size, unsigned char* out) const
 {
-    return CBCEncrypt(enc, iv, data, size, pad, out);
+    Assume(size >= 0);
+    const int ret{CBCEncrypt(enc, iv, data, size, pad, out)};
+    Assume(ret >= 0);
+    Assume(static_cast<int64_t>(ret) <= static_cast<int64_t>(size) + AES_BLOCKSIZE);
+    if (ret != 0) Assume(ret % AES_BLOCKSIZE == 0);
+    return ret;
 }
 
 AES256CBCEncrypt::~AES256CBCEncrypt()
@@ -148,7 +155,12 @@ AES256CBCDecrypt::AES256CBCDecrypt(const unsigned char key[AES256_KEYSIZE], cons
 
 int AES256CBCDecrypt::Decrypt(const unsigned char* data, int size, unsigned char* out) const
 {
-    return CBCDecrypt(dec, iv, data, size, pad, out);
+    Assume(size >= 0);
+    const int ret{CBCDecrypt(dec, iv, data, size, pad, out)};
+    Assume(ret >= 0);
+    Assume(ret <= size);
+    if (!pad && ret != 0) Assume(ret % AES_BLOCKSIZE == 0);
+    return ret;
 }
 
 AES256CBCDecrypt::~AES256CBCDecrypt()
