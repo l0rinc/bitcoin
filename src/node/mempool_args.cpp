@@ -11,6 +11,7 @@
 #include <common/messages.h>
 #include <common/settings.h>
 #include <consensus/amount.h>
+#include <consensus/consensus.h>
 #include <kernel/chainparams.h>
 #include <node/interface_ui.h>
 #include <policy/feerate.h>
@@ -210,6 +211,10 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& argsman, const CChainP
 
     if (argsman.GetBoolArg("-datacarrier", DEFAULT_ACCEPT_DATACARRIER)) {
         mempool_opts.max_datacarrier_bytes = argsman.GetIntArg("-datacarriersize", MAX_OP_RETURN_RELAY);
+        if (mempool_opts.max_datacarrier_bytes.value() > MAX_OUTPUT_DATA_SIZE) {
+            LogWarning("Limiting datacarriersize to %u", MAX_OUTPUT_DATA_SIZE);
+            mempool_opts.max_datacarrier_bytes = MAX_OUTPUT_DATA_SIZE;
+        }
     } else {
         mempool_opts.max_datacarrier_bytes = std::nullopt;
     }

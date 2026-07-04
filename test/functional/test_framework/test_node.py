@@ -28,7 +28,10 @@ from .authproxy import (
     serialization_fallback,
 )
 from . import coverage
-from .messages import NODE_P2P_V2
+from .messages import (
+    MAX_OP_RETURN_RELAY,
+    NODE_P2P_V2,
+)
 from .p2p import P2P_SERVICES, P2P_SUBVERSION
 from .util import (
     MAX_NODES,
@@ -266,6 +269,12 @@ class TestNode():
             extra_args.append(f"-bind=127.0.0.1:{tor_port(self.index)}=onion")
 
         self.use_v2transport = "-v2transport=1" in extra_args or (self.default_to_v2 and "-v2transport=0" not in extra_args)
+
+        for arg in extra_args:
+            if arg.startswith("-datacarriersize=") and int(arg[17:]) > MAX_OP_RETURN_RELAY:
+                extra_args = list(extra_args)
+                extra_args.append("-acceptnonstdtxn=1")
+                break
 
         # Add a new stdout and stderr file each time bitcoind is started
         if stderr is None:
