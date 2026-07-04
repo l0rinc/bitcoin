@@ -7,6 +7,7 @@
 
 #include <compare>
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -178,6 +179,27 @@ BOOST_AUTO_TEST_CASE(compare_chunks_equal_rate_split)
 
     BOOST_CHECK(std::is_eq(CompareChunks(merged, split)));
     BOOST_CHECK(std::is_eq(CompareChunks(split, merged)));
+}
+
+BOOST_AUTO_TEST_CASE(feefrac_compound_assignment_contracts)
+{
+    const std::vector<std::pair<FeeFrac, FeeFrac>> cases{
+        {{1000, 100}, {500, 300}},
+        {{1000, 100}, {500, -300}},
+        {{-1000, 100}, {500, 300}},
+        {{std::numeric_limits<int64_t>::max(), std::numeric_limits<int32_t>::max()}, {1, 1}},
+        {{std::numeric_limits<int64_t>::min(), std::numeric_limits<int32_t>::min()}, {1, 1}},
+    };
+
+    for (const auto& [left, right] : cases) {
+        FeeFrac sum{left};
+        sum += right;
+        BOOST_CHECK(sum == left + right);
+
+        FeeFrac diff{left};
+        diff -= right;
+        BOOST_CHECK(diff == left - right);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(compare_chunks_zero_fee_tail_identity)
