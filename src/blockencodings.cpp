@@ -214,6 +214,15 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                [](const auto& tx) { return tx != nullptr; })) == prefilled_count + mempool_count);
     assert(static_cast<size_t>(std::count(have_extra_txn.begin(), have_extra_txn.end(), true)) == extra_count);
     assert(extra_count <= mempool_count);
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        for (size_t i{0}; i < txn_available.size(); ++i) {
+            if (!have_txn[i]) continue;
+            Assert(txn_available[i] != nullptr);
+            const auto idit{shorttxids.find(cmpctblock.GetShortID(txn_available[i]->GetWitnessHash()))};
+            Assert(idit != shorttxids.end());
+            Assert(idit->second == i);
+        }
+    }
 
     return READ_STATUS_OK;
 }
