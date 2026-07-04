@@ -355,10 +355,11 @@ void CCoinsViewCache::Flush(bool reallocate_cache)
     Assume(cacheCoins.empty());
     Assume(m_sentinel.second.Next() == &m_sentinel);
     Assume(m_sentinel.second.Prev() == &m_sentinel);
+    cachedCoinsUsage = 0;
+    Assume(cachedCoinsUsage == 0);
     if (reallocate_cache) {
         ReallocateCache();
     }
-    cachedCoinsUsage = 0;
     Assume(cachedCoinsUsage == 0);
 }
 
@@ -487,10 +488,20 @@ void CCoinsViewCache::ReallocateCache()
 {
     // Cache should be empty when we're calling this.
     assert(cacheCoins.size() == 0);
+    Assume(cacheCoins.empty());
+    Assume(cachedCoinsUsage == 0);
+    Assume(m_dirty_count == 0);
+    Assume(m_sentinel.second.Next() == &m_sentinel);
+    Assume(m_sentinel.second.Prev() == &m_sentinel);
     cacheCoins.~CCoinsMap();
     m_cache_coins_memory_resource.~CCoinsMapMemoryResource();
     ::new (&m_cache_coins_memory_resource) CCoinsMapMemoryResource{};
-    ::new (&cacheCoins) CCoinsMap{0, SaltedCoinsCacheHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
+    ::new (&cacheCoins) CCoinsMap{0, SaltedOutpointHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
+    Assume(cacheCoins.empty());
+    Assume(cachedCoinsUsage == 0);
+    Assume(m_dirty_count == 0);
+    Assume(m_sentinel.second.Next() == &m_sentinel);
+    Assume(m_sentinel.second.Prev() == &m_sentinel);
 }
 
 void CCoinsViewCache::SanityCheck() const
