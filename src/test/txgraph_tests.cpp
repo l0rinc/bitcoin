@@ -640,6 +640,52 @@ BOOST_AUTO_TEST_CASE(txgraph_ancdesc_union_groups_same_cluster_queries)
     graph->SanityCheck();
 }
 
+BOOST_AUTO_TEST_CASE(txgraph_ref_move_preserves_removed_entry)
+{
+    auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    TxGraph::Ref parent;
+    TxGraph::Ref child;
+    graph->AddTransaction(parent, FeePerWeight{10, 10});
+    graph->AddTransaction(child, FeePerWeight{1, 10});
+    graph->AddDependency(/*parent=*/parent, /*child=*/child);
+
+    BOOST_CHECK(graph->Exists(child, TxGraph::Level::TOP));
+    graph->RemoveTransaction(child);
+    BOOST_CHECK(!graph->Exists(child, TxGraph::Level::TOP));
+    graph->SanityCheck();
+
+    {
+        TxGraph::Ref moved_child{std::move(child)};
+        BOOST_CHECK(!graph->Exists(child, TxGraph::Level::TOP));
+        BOOST_CHECK(!graph->Exists(moved_child, TxGraph::Level::TOP));
+        graph->AddDependency(/*parent=*/parent, /*child=*/moved_child);
+        BOOST_CHECK(!graph->Exists(moved_child, TxGraph::Level::TOP));
+        graph->SanityCheck();
+    }
+
+    BOOST_CHECK(graph->Exists(parent, TxGraph::Level::TOP));
+    graph->SanityCheck();
+}
+
+BOOST_AUTO_TEST_CASE(txgraph_ref_move_after_graph_destruction_is_empty)
+{
+    TxGraph::Ref ref;
+    {
+        auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+        graph->AddTransaction(ref, FeePerWeight{10, 10});
+        BOOST_CHECK(graph->Exists(ref, TxGraph::Level::TOP));
+        graph->SanityCheck();
+    }
+
+    TxGraph::Ref moved_ref{std::move(ref)};
+
+    auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+    BOOST_CHECK(!graph->Exists(ref, TxGraph::Level::TOP));
+    BOOST_CHECK(!graph->Exists(moved_ref, TxGraph::Level::TOP));
+    graph->SanityCheck();
+}
+
 BOOST_AUTO_TEST_CASE(txgraph_staging)
 {
     /* Create a new graph for the test.
