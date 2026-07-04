@@ -12,6 +12,8 @@
 #include <boost/test/unit_test.hpp>
 #include <test/util/setup_common.h>
 
+#include <limits>
+#include <map>
 #include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(psbt_tests, BasicTestingSetup)
@@ -85,6 +87,35 @@ BOOST_AUTO_TEST_CASE(base64_decode_roundtrip)
     const util::Result<PartiallySignedTransaction> roundtrip{DecodeBase64PSBT(reencoded)};
     BOOST_REQUIRE(roundtrip);
     BOOST_CHECK(SerializePSBT(*roundtrip) == serialized);
+}
+
+BOOST_AUTO_TEST_CASE(hd_keypaths_roundtrip)
+{
+    const std::vector<unsigned char> pubkey_bytes{ParseHex("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")};
+    const CPubKey pubkey{pubkey_bytes.begin(), pubkey_bytes.end()};
+    BOOST_REQUIRE(pubkey.IsFullyValid());
+
+    const KeyOriginInfo origin{
+        {0x12, 0x34, 0x56, 0x78},
+        {0, 1 | 0x80000000U, std::numeric_limits<uint32_t>::max()},
+    };
+    const std::map<CPubKey, KeyOriginInfo> hd_keypaths{{pubkey, origin}};
+
+    DataStream serialized{};
+    SerializeHDKeypaths(serialized, hd_keypaths, CompactSizeWriter(PSBT_IN_BIP32_DERIVATION));
+
+    std::vector<unsigned char> key;
+    serialized >> key;
+    SpanReader key_reader{key};
+    BOOST_CHECK_EQUAL(ReadCompactSize(key_reader), PSBT_IN_BIP32_DERIVATION);
+
+    std::map<CPubKey, KeyOriginInfo> roundtrip;
+    DeserializeHDKeypaths(serialized, key, roundtrip);
+    BOOST_CHECK(serialized.empty());
+    BOOST_REQUIRE_EQUAL(roundtrip.size(), 1);
+    BOOST_CHECK(roundtrip.begin()->first == pubkey);
+    BOOST_CHECK(roundtrip.begin()->second == origin);
+    BOOST_CHECK(roundtrip == hd_keypaths);
 }
 
 BOOST_AUTO_TEST_CASE(analyzepsbt_invalid_result_contract)
