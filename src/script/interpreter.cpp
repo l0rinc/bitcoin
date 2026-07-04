@@ -15,6 +15,7 @@
 #include <span.h>
 #include <tinyformat.h>
 #include <uint256.h>
+#include <util/check.h>
 
 #include <algorithm>
 #include <cassert>
@@ -36,6 +37,7 @@ inline bool set_success(ScriptError* ret)
 
 inline bool set_error(ScriptError* ret, const ScriptError serror)
 {
+    Assume(serror != SCRIPT_ERR_OK);
     if (ret)
         *ret = serror;
     return false;
