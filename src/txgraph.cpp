@@ -139,6 +139,17 @@ bool IsSortedFeeRateDiagram(std::span<const FeeFrac> diagram) noexcept
     return true;
 }
 
+void AssumeUniqueRefs(std::span<TxGraph::Ref* const> refs) noexcept
+{
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        std::set<TxGraph::Ref*> unique_refs;
+        for (TxGraph::Ref* ref : refs) {
+            Assume(ref);
+            Assume(unique_refs.insert(ref).second);
+        }
+    }
+}
+
 /** A grouping of connected transactions inside a TxGraphImpl::ClusterSet. */
 class Cluster
 {
@@ -2486,6 +2497,7 @@ std::vector<TxGraph::Ref*> TxGraphImpl::GetAncestors(const Ref& arg, Level level
     auto matches = std::span(&match, 1);
     std::vector<TxGraph::Ref*> ret;
     cluster->GetAncestorRefs(*this, matches, ret);
+    AssumeUniqueRefs(ret);
     return ret;
 }
 
@@ -2507,6 +2519,7 @@ std::vector<TxGraph::Ref*> TxGraphImpl::GetDescendants(const Ref& arg, Level lev
     auto matches = std::span(&match, 1);
     std::vector<TxGraph::Ref*> ret;
     cluster->GetDescendantRefs(*this, matches, ret);
+    AssumeUniqueRefs(ret);
     return ret;
 }
 
@@ -2542,6 +2555,7 @@ std::vector<TxGraph::Ref*> TxGraphImpl::GetAncestorsUnion(std::span<const Ref* c
         cluster->GetAncestorRefs(*this, match_span, ret);
         Assume(match_span.empty() || match_span.front().first != cluster);
     }
+    AssumeUniqueRefs(ret);
     return ret;
 }
 
@@ -2577,6 +2591,7 @@ std::vector<TxGraph::Ref*> TxGraphImpl::GetDescendantsUnion(std::span<const Ref*
         cluster->GetDescendantRefs(*this, match_span, ret);
         Assume(match_span.empty() || match_span.front().first != cluster);
     }
+    AssumeUniqueRefs(ret);
     return ret;
 }
 
