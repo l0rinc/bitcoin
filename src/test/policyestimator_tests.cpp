@@ -61,14 +61,14 @@ void WriteEncodedDoubleMatrix(AutoFile& file, const std::vector<std::vector<doub
     file << Using<VectorFormatter<VectorFormatter<TestEncodedDoubleFormatter>>>(values);
 }
 
-void WriteFeeStats(AutoFile& file, const size_t num_buckets, const FeeStatsValues& values = {})
+void WriteFeeStats(AutoFile& file, const size_t num_buckets, const FeeStatsValues& values = {}, const size_t max_periods = 1)
 {
     file << EncodeDouble(0.5); // decay
     file << uint32_t{1};       // scale
     WriteEncodedDoubleVector(file, std::vector<double>(num_buckets, values.feerate_avg));
     WriteEncodedDoubleVector(file, std::vector<double>(num_buckets, values.tx_count));
-    WriteEncodedDoubleMatrix(file, std::vector<std::vector<double>>{std::vector<double>(num_buckets, values.conf_avg)});
-    WriteEncodedDoubleMatrix(file, std::vector<std::vector<double>>{std::vector<double>(num_buckets, values.fail_avg)});
+    WriteEncodedDoubleMatrix(file, std::vector<std::vector<double>>(max_periods, std::vector<double>(num_buckets, values.conf_avg)));
+    WriteEncodedDoubleMatrix(file, std::vector<std::vector<double>>(max_periods, std::vector<double>(num_buckets, values.fail_avg)));
 }
 
 int CurrentFeesFileVersion(const fs::path& path)
@@ -93,7 +93,7 @@ int CurrentFeesFileVersion(const fs::path& path)
     return version;
 }
 
-void WriteEstimatorFile(const fs::path& path, int version, const std::vector<double>& buckets, const FeeStatsValues& values = {})
+void WriteEstimatorFile(const fs::path& path, int version, const std::vector<double>& buckets, const FeeStatsValues& values = {}, const size_t max_periods = 1)
 {
     fs::remove(path);
     AutoFile out{fsbridge::fopen(path, "wb")};
@@ -103,9 +103,9 @@ void WriteEstimatorFile(const fs::path& path, int version, const std::vector<dou
     out << uint32_t{0}; // historicalFirst
     out << uint32_t{0}; // historicalBest
     WriteEncodedDoubleVector(out, buckets);
-    WriteFeeStats(out, buckets.size(), values);
-    WriteFeeStats(out, buckets.size());
-    WriteFeeStats(out, buckets.size());
+    WriteFeeStats(out, buckets.size(), values, max_periods);
+    WriteFeeStats(out, buckets.size(), {}, max_periods);
+    WriteFeeStats(out, buckets.size(), {}, max_periods);
     BOOST_REQUIRE_EQUAL(out.fclose(), 0);
 }
 
@@ -514,6 +514,38 @@ BOOST_AUTO_TEST_CASE(estimate_raw_fee_rejects_invalid_threshold)
     check_invalid_threshold(-1.0);
     check_invalid_threshold(1.0 + std::numeric_limits<double>::epsilon());
     check_invalid_threshold(std::numeric_limits<double>::infinity());
+
+    fs::remove(estimator_data_path);
+    fs::remove(estimator_path);
+}
+
+BOOST_AUTO_TEST_CASE(estimate_fee_matches_medium_double_success_raw_fee)
+{
+    const fs::path version_path{m_args.GetDataDirBase() / "fee_estimator_version.dat"};
+    const fs::path estimator_data_path{m_args.GetDataDirBase() / "fee_estimator_legacy.dat"};
+    const fs::path estimator_path{m_args.GetDataDirBase() / "fee_estimator_unused.dat"};
+    const int current_version{CurrentFeesFileVersion(version_path)};
+
+    FeeStatsValues values;
+    values.feerate_avg = 1000;
+    values.tx_count = 1;
+    values.conf_avg = 0.9;
+    WriteEstimatorFile(estimator_data_path, current_version, {100.0, 1e99}, values, /*max_periods=*/2);
+
+    fs::remove(estimator_path);
+    CBlockPolicyEstimator fee_estimator{estimator_path, DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
+    {
+        AutoFile in{fsbridge::fopen(estimator_data_path, "rb")};
+        BOOST_REQUIRE(!in.IsNull());
+        BOOST_REQUIRE(fee_estimator.Read(in));
+        BOOST_REQUIRE_EQUAL(in.fclose(), 0);
+    }
+
+    BOOST_CHECK(fee_estimator.estimateRawFee(2, 0.85, FeeEstimateHorizon::MED_HALFLIFE).GetFeePerK() > 0);
+    const CFeeRate double_success_fee{fee_estimator.estimateRawFee(2, 0.95, FeeEstimateHorizon::MED_HALFLIFE)};
+    BOOST_CHECK_EQUAL(double_success_fee.GetFeePerK(), 0);
+    BOOST_CHECK(fee_estimator.estimateFee(2) == double_success_fee);
+    BOOST_CHECK(fee_estimator.estimateFee(1) == CFeeRate(0));
 
     fs::remove(estimator_data_path);
     fs::remove(estimator_path);
