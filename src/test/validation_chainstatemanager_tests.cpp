@@ -683,6 +683,75 @@ BOOST_FIXTURE_TEST_CASE(received_block_transactions_skips_failed_unlinked_child,
     chainman.CheckBlockIndex();
 }
 
+BOOST_FIXTURE_TEST_CASE(invalidate_block_removes_out_of_chain_candidate, TestChain100Setup)
+{
+    ChainstateManager& chainman{*Assert(m_node.chainman)};
+    Chainstate& chainstate{chainman.ActiveChainstate()};
+    CBlockIndex* parent;
+    CBlockIndex* child;
+
+    {
+        LOCK(chainman.GetMutex());
+        CBlockIndex* tip{chainman.ActiveChain().Tip()};
+        parent = chainman.m_blockman.AddToBlockIndex(ChildHeader(*tip, /*nonce=*/3), chainman.m_best_header);
+        child = chainman.m_blockman.AddToBlockIndex(ChildHeader(*parent, /*nonce=*/4), chainman.m_best_header);
+
+        CBlock parent_block{DummyBlockWithTransactions(/*tx_count=*/1)};
+        chainman.ReceivedBlockTransactions(parent_block, parent, FlatFilePos{0, 3});
+        CBlock child_block{DummyBlockWithTransactions(/*tx_count=*/1)};
+        chainman.ReceivedBlockTransactions(child_block, child, FlatFilePos{0, 4});
+        BOOST_REQUIRE(parent->HaveNumChainTxs());
+        BOOST_REQUIRE(child->HaveNumChainTxs());
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(parent), 1U);
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(child), 1U);
+    }
+
+    BlockValidationState state;
+    BOOST_REQUIRE(chainstate.InvalidateBlock(state, parent));
+
+    {
+        LOCK(chainman.GetMutex());
+        BOOST_CHECK(parent->nStatus & BLOCK_FAILED_VALID);
+        BOOST_CHECK(child->nStatus & BLOCK_FAILED_VALID);
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(parent), 0U);
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(child), 0U);
+    }
+
+    chainman.CheckBlockIndex();
+}
+
+BOOST_FIXTURE_TEST_CASE(invalidate_block_removes_out_of_chain_descendant_during_disconnect, TestChain100Setup)
+{
+    ChainstateManager& chainman{*Assert(m_node.chainman)};
+    Chainstate& chainstate{chainman.ActiveChainstate()};
+    CBlockIndex* tip;
+    CBlockIndex* child;
+
+    {
+        LOCK(chainman.GetMutex());
+        tip = chainman.ActiveChain().Tip();
+        child = chainman.m_blockman.AddToBlockIndex(ChildHeader(*tip, /*nonce=*/5), chainman.m_best_header);
+
+        CBlock child_block{DummyBlockWithTransactions(/*tx_count=*/1)};
+        chainman.ReceivedBlockTransactions(child_block, child, FlatFilePos{0, 5});
+        BOOST_REQUIRE(child->HaveNumChainTxs());
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(child), 1U);
+    }
+
+    BlockValidationState state;
+    BOOST_REQUIRE(chainstate.InvalidateBlock(state, tip));
+
+    {
+        LOCK(chainman.GetMutex());
+        BOOST_CHECK(tip->nStatus & BLOCK_FAILED_VALID);
+        BOOST_CHECK(child->nStatus & BLOCK_FAILED_VALID);
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(tip), 0U);
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(child), 0U);
+    }
+
+    chainman.CheckBlockIndex();
+}
+
 //! Verify that ReconsiderBlock clears failure flags for the target block, its ancestors, and descendants,
 //! but not for sibling forks that diverge from a shared ancestor.
 BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
