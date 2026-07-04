@@ -93,6 +93,8 @@ void ProtectNoBanConnections(std::vector<NodeEvictionCandidate>& eviction_candid
                                                  return n.m_noban;
                                              }),
                               eviction_candidates.end());
+    Assume(std::none_of(eviction_candidates.begin(), eviction_candidates.end(),
+                        [](const NodeEvictionCandidate& n) { return n.m_noban; }));
 }
 
 void ProtectOutboundConnections(std::vector<NodeEvictionCandidate>& eviction_candidates)
@@ -102,6 +104,10 @@ void ProtectOutboundConnections(std::vector<NodeEvictionCandidate>& eviction_can
                                                  return n.m_conn_type != ConnectionType::INBOUND;
                                              }),
                               eviction_candidates.end());
+    Assume(std::all_of(eviction_candidates.begin(), eviction_candidates.end(),
+                       [](const NodeEvictionCandidate& n) {
+                           return n.m_conn_type == ConnectionType::INBOUND;
+                       }));
 }
 
 void ProtectEvictionCandidatesByRatio(std::vector<NodeEvictionCandidate>& eviction_candidates)
