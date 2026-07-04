@@ -162,9 +162,23 @@ void AddCoins(CCoinsViewCache& cache, const CTransaction &tx, int nHeight, bool 
 }
 
 bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
+    const auto assume_failed_spend_noop = [&] {
+        Assume(cacheCoins.size() == cache_size);
+        Assume(cachedCoinsUsage == cache_usage);
+        Assume(m_dirty_count == dirty_count);
+    };
     CCoinsMap::iterator it = FetchCoin(outpoint);
-    if (it == cacheCoins.end()) return false;
-    if (it->second.coin.IsSpent()) return false;
+    if (it == cacheCoins.end()) {
+        assume_failed_spend_noop();
+        return false;
+    }
+    if (it->second.coin.IsSpent()) {
+        assume_failed_spend_noop();
+        return false;
+    }
     Assume(!it->second.coin.IsSpent());
     Assume(TrySub(m_dirty_count, it->second.IsDirty()));
     Assume(TrySub(cachedCoinsUsage, it->second.coin.DynamicMemoryUsage()));
