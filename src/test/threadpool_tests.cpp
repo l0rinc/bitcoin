@@ -495,8 +495,11 @@ BOOST_AUTO_TEST_CASE(submit_range_of_tasks_complete_successfully)
     BOOST_CHECK_EQUAL(futures.size(), static_cast<size_t>(num_tasks * 2));
 
     auto squares_sum{0};
-    for (auto& future : futures) {
-        squares_sum += future.get();
+    for (size_t idx{0}; idx < futures.size(); ++idx) {
+        const int32_t i{static_cast<int32_t>(idx % num_tasks) + 1};
+        const int32_t square{futures[idx].get()};
+        BOOST_CHECK_EQUAL(square, i * i);
+        squares_sum += square;
     }
 
     // 2x Gauss sum.
