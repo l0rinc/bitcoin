@@ -1885,6 +1885,58 @@ BOOST_AUTO_TEST_CASE(ccoins_dirty_child_destructor_parent_cache_purity)
     parent.SelfTest();
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_reallocate_empty_cache_contracts)
+{
+    auto rand_nonzero_hash = [&] {
+        uint256 block_hash;
+        do {
+            block_hash = m_rng.rand256();
+        } while (block_hash.IsNull());
+        return block_hash;
+    };
+
+    CCoinsViewTest root{m_rng};
+    CCoinsViewCache root_cache{&root};
+    root_cache.SetBestBlock(rand_nonzero_hash());
+    root_cache.Flush();
+
+    CCoinsViewCacheTest parent{&root};
+    const COutPoint parent_outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin parent_coin{CTxOut{1, CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+    parent.AddCoin(parent_outpoint, Coin{parent_coin}, /*possible_overwrite=*/false);
+
+    CCoinsViewCacheTest child{&parent};
+    const uint256 child_best_block{rand_nonzero_hash()};
+    child.SetBestBlock(child_best_block);
+
+    const COutPoint child_outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin child_coin{CTxOut{2, CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 2)}, 2, false};
+    child.AddCoin(child_outpoint, Coin{child_coin}, /*possible_overwrite=*/false);
+    child.Flush(/*reallocate_cache=*/false);
+    BOOST_CHECK_EQUAL(child.GetCacheSize(), 0U);
+    BOOST_CHECK_EQUAL(child.GetDirtyCount(), 0U);
+
+    const auto parent_size{parent.GetCacheSize()};
+    const auto parent_dirty{parent.GetDirtyCount()};
+    const auto parent_memory{parent.DynamicMemoryUsage()};
+    const auto parent_best{parent.GetBestBlock()};
+
+    child.ReallocateCache();
+
+    BOOST_CHECK_EQUAL(child.GetCacheSize(), 0U);
+    BOOST_CHECK_EQUAL(child.GetDirtyCount(), 0U);
+    BOOST_CHECK_EQUAL(child.GetBestBlock(), child_best_block);
+    child.SelfTest();
+
+    BOOST_CHECK_EQUAL(parent.GetCacheSize(), parent_size);
+    BOOST_CHECK_EQUAL(parent.GetDirtyCount(), parent_dirty);
+    BOOST_CHECK_EQUAL(parent.DynamicMemoryUsage(), parent_memory);
+    BOOST_CHECK_EQUAL(parent.GetBestBlock(), parent_best);
+    BOOST_CHECK(parent.AccessCoin(parent_outpoint) == parent_coin);
+    BOOST_CHECK(parent.AccessCoin(child_outpoint) == child_coin);
+    parent.SelfTest();
+}
+
 BOOST_AUTO_TEST_CASE(ccoins_best_block_cache_stack)
 {
     auto rand_nonzero_hash = [&] {
