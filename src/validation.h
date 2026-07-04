@@ -161,7 +161,8 @@ struct MempoolAcceptResult {
      * transaction's wtxid and may include others if this transaction was validated as part of a
      * package. This is not necessarily equivalent to the list of transactions passed to
      * ProcessNewPackage().
-     * Only present when m_result_type = ResultType::VALID. */
+     * Only present when m_result_type = ResultType::VALID or
+     * m_state.GetResult() = TxValidationResult::TX_RECONSIDERABLE. */
     const std::optional<std::vector<Wtxid>> m_wtxids_fee_calculations;
 
     /** The wtxid of the transaction in the mempool which has the same txid but different witness. */
@@ -201,6 +202,11 @@ private:
         : m_result_type(ResultType::INVALID), m_state(state) {
             Assume(!state.IsValid()); // Can be invalid or error
             Assume(state.GetResult() != TxValidationResult::TX_RECONSIDERABLE);
+            Assume(!m_vsize);
+            Assume(!m_base_fees);
+            Assume(!m_effective_feerate);
+            Assume(!m_wtxids_fee_calculations);
+            Assume(!m_other_wtxid);
         }
 
     /** Constructor for success case */
@@ -216,9 +222,12 @@ private:
         m_effective_feerate(effective_feerate),
         m_wtxids_fee_calculations(wtxids_fee_calculations)
     {
+        Assume(m_state.IsValid());
         Assume(m_vsize && *m_vsize > 0);
         Assume(m_base_fees && MoneyRange(*m_base_fees));
+        Assume(m_effective_feerate);
         Assume(m_wtxids_fee_calculations && !m_wtxids_fee_calculations->empty());
+        Assume(!m_other_wtxid);
     }
 
     /** Constructor for fee-related failure case */
@@ -232,20 +241,36 @@ private:
     {
         Assume(!state.IsValid());
         Assume(state.GetResult() == TxValidationResult::TX_RECONSIDERABLE);
-        Assume(!wtxids_fee_calculations.empty());
+        Assume(!m_vsize);
+        Assume(!m_base_fees);
+        Assume(m_effective_feerate);
+        Assume(m_wtxids_fee_calculations && !wtxids_fee_calculations.empty());
+        Assume(!m_other_wtxid);
     }
 
     /** Constructor for already-in-mempool case. It wouldn't replace any transactions. */
     explicit MempoolAcceptResult(int64_t vsize, CAmount fees)
         : m_result_type(ResultType::MEMPOOL_ENTRY), m_vsize{vsize}, m_base_fees(fees)
     {
+        Assume(m_state.IsValid());
         Assume(m_vsize && *m_vsize > 0);
         Assume(m_base_fees && MoneyRange(*m_base_fees));
+        Assume(!m_effective_feerate);
+        Assume(!m_wtxids_fee_calculations);
+        Assume(!m_other_wtxid);
     }
 
     /** Constructor for witness-swapped case. */
     explicit MempoolAcceptResult(const Wtxid& other_wtxid)
-        : m_result_type(ResultType::DIFFERENT_WITNESS), m_other_wtxid(other_wtxid) {}
+        : m_result_type(ResultType::DIFFERENT_WITNESS), m_other_wtxid(other_wtxid)
+    {
+        Assume(m_state.IsValid());
+        Assume(!m_vsize);
+        Assume(!m_base_fees);
+        Assume(!m_effective_feerate);
+        Assume(!m_wtxids_fee_calculations);
+        Assume(m_other_wtxid);
+    }
 };
 
 /**
