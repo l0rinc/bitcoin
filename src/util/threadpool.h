@@ -189,8 +189,10 @@ public:
             LOCK(m_mutex);
             if (m_workers.empty()) return util::Unexpected{SubmitError::Inactive};
             if (m_interrupt) return util::Unexpected{SubmitError::Interrupted};
+            const size_t queue_size{m_work_queue.size()};
 
             m_work_queue.emplace(std::move(task));
+            Assume(m_work_queue.size() == queue_size + 1);
         }
         m_cv.notify_one();
         return {std::move(future)};
@@ -250,10 +252,12 @@ public:
         {
             LOCK(m_mutex);
             if (m_work_queue.empty()) return false;
+            const size_t queue_size{m_work_queue.size()};
 
             // Pop the task
             task = std::move(m_work_queue.front());
             m_work_queue.pop();
+            Assume(m_work_queue.size() + 1 == queue_size);
         }
         task();
         return true;
