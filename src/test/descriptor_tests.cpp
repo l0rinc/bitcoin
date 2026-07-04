@@ -604,6 +604,37 @@ void CheckInferDescriptor(const std::string& script_hex, const std::string& expe
 
 BOOST_FIXTURE_TEST_SUITE(descriptor_tests, BasicTestingSetup)
 
+BOOST_AUTO_TEST_CASE(descriptor_parse_checksum_modes_equivalent)
+{
+    const std::string descriptor{"pk(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)"};
+    const std::string checksummed_descriptor{descriptor + "#" + GetDescriptorChecksum(descriptor)};
+
+    FlatSigningProvider without_required_provider;
+    std::string error;
+    const auto without_required{Parse(descriptor, without_required_provider, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_EQUAL(without_required.size(), 1U);
+
+    FlatSigningProvider missing_required_provider;
+    error.clear();
+    const auto missing_required{Parse(descriptor, missing_required_provider, error, /*require_checksum=*/true)};
+    BOOST_CHECK(missing_required.empty());
+    BOOST_CHECK_EQUAL(error, "Missing checksum");
+
+    FlatSigningProvider with_required_provider;
+    error.clear();
+    const auto with_required{Parse(checksummed_descriptor, with_required_provider, error, /*require_checksum=*/true)};
+    BOOST_REQUIRE_EQUAL(with_required.size(), 1U);
+    BOOST_CHECK_EQUAL(without_required[0]->ToString(), with_required[0]->ToString());
+    BOOST_CHECK(EqualSigningProviders(without_required_provider, with_required_provider));
+
+    FlatSigningProvider with_optional_provider;
+    error.clear();
+    const auto with_optional{Parse(checksummed_descriptor, with_optional_provider, error, /*require_checksum=*/false)};
+    BOOST_REQUIRE_EQUAL(with_optional.size(), 1U);
+    BOOST_CHECK_EQUAL(with_required[0]->ToString(), with_optional[0]->ToString());
+    BOOST_CHECK(EqualSigningProviders(with_required_provider, with_optional_provider));
+}
+
 BOOST_AUTO_TEST_CASE(descriptor_cache_merge_and_diff)
 {
     const CExtPubKey already_cached{TestExtPubKey(1, 0x01)};
