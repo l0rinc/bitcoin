@@ -985,6 +985,54 @@ BOOST_AUTO_TEST_CASE(ccoins_spend_lookup_postconditions)
     child_cache.SelfTest();
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_failed_spend_noop)
+{
+    CCoinsViewTest base{m_rng};
+
+    auto make_coin = [&](CAmount value) {
+        return Coin{CTxOut{value, CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+    };
+    auto cache_stats = [](const CCoinsViewCacheTest& cache) {
+        return std::tuple{cache.GetCacheSize(), cache.GetDirtyCount(), cache.usage()};
+    };
+    auto check_stats = [&](const CCoinsViewCacheTest& cache, const auto& expected) {
+        BOOST_CHECK_EQUAL(cache.GetCacheSize(), std::get<0>(expected));
+        BOOST_CHECK_EQUAL(cache.GetDirtyCount(), std::get<1>(expected));
+        BOOST_CHECK_EQUAL(cache.usage(), std::get<2>(expected));
+        cache.SelfTest();
+    };
+    auto check_failed_spend = [&](CCoinsViewCacheTest& cache, const COutPoint& outpoint) {
+        Coin moveout{make_coin(999)};
+        const Coin moveout_before{moveout};
+        const auto stats_before{cache_stats(cache)};
+        BOOST_CHECK(!cache.SpendCoin(outpoint, &moveout));
+        BOOST_CHECK(moveout == moveout_before);
+        check_stats(cache, stats_before);
+    };
+
+    CCoinsViewCacheTest parent_cache{&base};
+    CCoinsViewCacheTest child_cache{&parent_cache};
+    const COutPoint missing_outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const auto parent_stats{cache_stats(parent_cache)};
+    const auto child_stats{cache_stats(child_cache)};
+    check_failed_spend(child_cache, missing_outpoint);
+    check_stats(parent_cache, parent_stats);
+    check_stats(child_cache, child_stats);
+
+    const COutPoint spent_outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin parent_coin{make_coin(100)};
+    {
+        CCoinsViewCache write_cache{&base};
+        write_cache.AddCoin(spent_outpoint, Coin{parent_coin}, /*possible_overwrite=*/false);
+        write_cache.Flush();
+    }
+    CCoinsViewCacheTest spend_cache{&base};
+    BOOST_REQUIRE(spend_cache.SpendCoin(spent_outpoint));
+    BOOST_CHECK(!spend_cache.HaveCoin(spent_outpoint));
+    BOOST_CHECK_EQUAL(spend_cache.GetDirtyCount(), 1U);
+    check_failed_spend(spend_cache, spent_outpoint);
+}
+
 static void CheckAddCoin(const CAmount base_value, const MaybeCoin& cache_coin, const CAmount modify_value, const CoinOrError& expected, const bool coinbase)
 {
     SingleEntryCacheTest test{base_value, cache_coin};
