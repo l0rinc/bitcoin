@@ -146,6 +146,7 @@ public:
         IntBitSet ret;
         Assume(count <= MAX_SIZE);
         if (count) ret.m_val = I(~I{0}) >> (MAX_SIZE - count);
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) Assume(ret.Count() == count);
         return ret;
     }
     /** Set a bit to 1. */
@@ -363,6 +364,7 @@ public:
     static constexpr MultiIntBitSet Fill(unsigned count) noexcept
     {
         Assume(count <= MAX_SIZE);
+        const unsigned original_count{count};
         MultiIntBitSet ret;
         if (count) {
             unsigned i = 0;
@@ -372,6 +374,7 @@ public:
             }
             ret.m_val[i] = I(~I{0}) >> (LIMB_BITS - count);
         }
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) Assume(ret.Count() == original_count);
         return ret;
     }
     /** Return the number of bits that this object holds. */
