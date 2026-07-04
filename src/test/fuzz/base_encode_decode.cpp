@@ -39,6 +39,23 @@ std::string MutateTrailingPaddingBits(std::string encoded, std::string_view alph
     encoded[padding_pos - 1] = alphabet[alphabet_pos | 1U];
     return encoded;
 }
+
+char ConsumeWhitespace(FuzzedDataProvider& provider)
+{
+    static constexpr std::string_view whitespace{" \f\n\r\t\v"};
+    return whitespace[provider.ConsumeIntegralInRange<size_t>(0, whitespace.size() - 1)];
+}
+
+std::string ConsumeWhitespaceString(FuzzedDataProvider& provider)
+{
+    std::string ret;
+    const auto size{provider.ConsumeIntegralInRange<size_t>(0, 16)};
+    ret.reserve(size);
+    for (size_t i{0}; i < size; ++i) {
+        ret.push_back(ConsumeWhitespace(provider));
+    }
+    return ret;
+}
 } // namespace
 
 FUZZ_TARGET(base58_encode_decode)
@@ -51,6 +68,21 @@ FUZZ_TARGET(base58_encode_decode)
     assert(DecodeBase58(encoded, decoded_encoded, static_cast<int>(random_string.size())));
     assert(std::ranges::equal(decoded_encoded, MakeUCharSpan(random_string)));
     assert(EncodeBase58(decoded_encoded) == encoded);
+
+    const auto padded_encoded{ConsumeWhitespaceString(provider) + encoded + ConsumeWhitespaceString(provider)};
+    std::vector<unsigned char> decoded_padded{0x42};
+    assert(DecodeBase58(padded_encoded, decoded_padded, static_cast<int>(random_string.size())));
+    assert(std::ranges::equal(decoded_padded, MakeUCharSpan(random_string)));
+    assert(EncodeBase58(decoded_padded) == encoded);
+
+    if (encoded.size() > 1) {
+        std::string internally_padded{encoded};
+        internally_padded.insert(provider.ConsumeIntegralInRange<size_t>(1, encoded.size() - 1), 1, ConsumeWhitespace(provider));
+        std::vector<unsigned char> decoded_internal{0x42};
+        assert(!DecodeBase58(internally_padded, decoded_internal, static_cast<int>(random_string.size())));
+        assert(decoded_internal.empty());
+    }
+
     const auto decode_input{provider.ConsumeBool() ? random_string : encoded};
     const int max_ret_len{provider.ConsumeIntegralInRange<int>(-1, decode_input.size() + 1)};
     std::vector<unsigned char> decoded{0x42};
@@ -78,6 +110,21 @@ FUZZ_TARGET(base58check_encode_decode)
     assert(DecodeBase58Check(encoded, decoded_encoded, static_cast<int>(random_string.size())));
     assert(std::ranges::equal(decoded_encoded, MakeUCharSpan(random_string)));
     assert(EncodeBase58Check(decoded_encoded) == encoded);
+
+    const auto padded_encoded{ConsumeWhitespaceString(provider) + encoded + ConsumeWhitespaceString(provider)};
+    std::vector<unsigned char> decoded_padded{0x42};
+    assert(DecodeBase58Check(padded_encoded, decoded_padded, static_cast<int>(random_string.size())));
+    assert(std::ranges::equal(decoded_padded, MakeUCharSpan(random_string)));
+    assert(EncodeBase58Check(decoded_padded) == encoded);
+
+    if (encoded.size() > 1) {
+        std::string internally_padded{encoded};
+        internally_padded.insert(provider.ConsumeIntegralInRange<size_t>(1, encoded.size() - 1), 1, ConsumeWhitespace(provider));
+        std::vector<unsigned char> decoded_internal{0x42};
+        assert(!DecodeBase58Check(internally_padded, decoded_internal, static_cast<int>(random_string.size())));
+        assert(decoded_internal.empty());
+    }
+
     const auto decode_input{provider.ConsumeBool() ? random_string : encoded};
     const int max_ret_len{provider.ConsumeIntegralInRange<int>(-1, decode_input.size() + 1)};
     std::vector<unsigned char> decoded{0x42};
