@@ -9,6 +9,7 @@
 #include <test/fuzz/util.h>
 
 #include <array>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -19,6 +20,7 @@ FUZZ_TARGET(crypto_chacha20)
 
     const auto key = ConsumeFixedLengthByteVector<std::byte>(fuzzed_data_provider, ChaCha20::KEYLEN);
     ChaCha20 chacha20{key};
+    ChaCha20 oracle{key};
 
     LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 10000) {
         CallOneOf(
@@ -26,21 +28,32 @@ FUZZ_TARGET(crypto_chacha20)
             [&] {
                 auto key = ConsumeFixedLengthByteVector<std::byte>(fuzzed_data_provider, ChaCha20::KEYLEN);
                 chacha20.SetKey(key);
+                oracle.SetKey(key);
             },
             [&] {
                 ChaCha20::Nonce96 nonce{
                     fuzzed_data_provider.ConsumeIntegral<uint32_t>(),
                     fuzzed_data_provider.ConsumeIntegral<uint64_t>()};
-                chacha20.Seek(nonce, fuzzed_data_provider.ConsumeIntegral<uint32_t>());
+                const uint32_t counter{fuzzed_data_provider.ConsumeIntegral<uint32_t>()};
+                chacha20.Seek(nonce, counter);
+                oracle.Seek(nonce, counter);
             },
             [&] {
                 std::vector<uint8_t> output(fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 4096));
                 chacha20.Keystream(MakeWritableByteSpan(output));
+                std::vector<uint8_t> expected(output.size());
+                oracle.Keystream(MakeWritableByteSpan(expected));
+                assert(output == expected);
             },
             [&] {
                 std::vector<std::byte> output(fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 4096));
                 const auto input = ConsumeFixedLengthByteVector<std::byte>(fuzzed_data_provider, output.size());
                 chacha20.Crypt(input, output);
+                std::vector<std::byte> keystream(output.size());
+                oracle.Keystream(keystream);
+                for (size_t i{0}; i < output.size(); ++i) {
+                    assert(output[i] == (input[i] ^ keystream[i]));
+                }
             });
     }
 }
