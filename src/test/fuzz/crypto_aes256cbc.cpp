@@ -9,6 +9,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 FUZZ_TARGET(crypto_aes256cbc)
@@ -23,12 +24,29 @@ FUZZ_TARGET(crypto_aes256cbc)
 
     LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 10000) {
         const std::vector<uint8_t> plaintext = ConsumeRandomLengthByteVector(fuzzed_data_provider);
-        std::vector<uint8_t> ciphertext(plaintext.size() + AES_BLOCKSIZE);
-        const int encrypt_ret = encrypt.Encrypt(plaintext.data(), plaintext.size(), ciphertext.data());
+        assert(plaintext.size() <= static_cast<size_t>(std::numeric_limits<int>::max()));
+        const int plaintext_size{static_cast<int>(plaintext.size())};
+        std::vector<uint8_t> ciphertext(plaintext.size() + AES_BLOCKSIZE, 0xa5);
+        const std::vector<uint8_t> ciphertext_before{ciphertext};
+        const int encrypt_ret = encrypt.Encrypt(plaintext.data(), plaintext_size, ciphertext.data());
+        const bool encrypt_should_succeed{!plaintext.empty() && (pad || plaintext.size() % AES_BLOCKSIZE == 0)};
+        if (encrypt_should_succeed) {
+            const int expected_encrypt_ret{pad ? plaintext_size + AES_BLOCKSIZE - (plaintext_size % AES_BLOCKSIZE) : plaintext_size};
+            assert(encrypt_ret == expected_encrypt_ret);
+            assert(encrypt_ret % AES_BLOCKSIZE == 0);
+        } else {
+            assert(encrypt_ret == 0);
+            assert(ciphertext == ciphertext_before);
+        }
         ciphertext.resize(encrypt_ret);
-        std::vector<uint8_t> decrypted_plaintext(ciphertext.size());
+        std::vector<uint8_t> decrypted_plaintext(ciphertext.size(), 0x3c);
+        const std::vector<uint8_t> decrypted_plaintext_before{decrypted_plaintext};
         const int decrypt_ret = decrypt.Decrypt(ciphertext.data(), ciphertext.size(), decrypted_plaintext.data());
+        if (ciphertext.empty() || (!pad && ciphertext.size() % AES_BLOCKSIZE != 0)) {
+            assert(decrypt_ret == 0);
+            assert(decrypted_plaintext == decrypted_plaintext_before);
+        }
         decrypted_plaintext.resize(decrypt_ret);
-        assert(decrypted_plaintext == plaintext || (!pad && plaintext.size() % AES_BLOCKSIZE != 0 && encrypt_ret == 0 && decrypt_ret == 0));
+        assert(decrypted_plaintext == plaintext || (!encrypt_should_succeed && decrypt_ret == 0));
     }
 }
