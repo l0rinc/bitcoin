@@ -398,6 +398,24 @@ void AssertATMPResultShape(const MempoolAcceptResult& res, const Wtxid& wtxid, b
     }
 }
 
+void AssertPackageResultSubsetShape(const Package& txs,
+                                    const PackageMempoolAcceptResult& result,
+                                    const CTxMemPool& tx_pool,
+                                    bool submitted)
+{
+    std::map<Wtxid, CTransactionRef> package_tx_by_wtxid;
+    for (const auto& tx : txs) {
+        package_tx_by_wtxid.emplace(tx->GetWitnessHash(), tx);
+    }
+
+    for (const auto& [wtxid, tx_result] : result.m_tx_results) {
+        const auto tx_it{package_tx_by_wtxid.find(wtxid)};
+        Assert(tx_it != package_tx_by_wtxid.end());
+        AssertATMPResultShape(tx_result, wtxid, submitted,
+                              tx_pool.exists(tx_it->second->GetHash()), tx_pool.exists(wtxid));
+    }
+}
+
 // Scan mempool for a tx that has spent dust and return a
 // prevout of the child that isn't the dusty parent itself.
 // This is used to double-spend the child out of the mempool,
@@ -556,25 +574,29 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
             }
         }
 
-        auto single_submit = txs.size() == 1;
+        const bool single_submit{txs.size() == 1};
+        const bool package_test_accept{single_submit || (txs.size() > 1 && fuzzed_data_provider.ConsumeBool())};
 
         std::optional<MempoolSnapshot> test_accept_mempool_snapshot;
         std::optional<std::set<COutPoint>> test_accept_outpoints_snapshot;
-        if (single_submit) {
+        if (package_test_accept) {
             test_accept_mempool_snapshot = SnapshotMempool(tx_pool);
             test_accept_outpoints_snapshot = mempool_outpoints;
         }
 
         const auto result_package = WITH_LOCK(::cs_main,
-                                    return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/single_submit, /*client_maxfeerate=*/{}));
+                                    return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/package_test_accept, /*client_maxfeerate=*/{}));
 
-        if (single_submit) {
+        if (package_test_accept) {
             node.validation_signals->SyncWithValidationInterfaceQueue();
             AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
         }
 
-        if (single_submit && result_package.m_state.GetResult() != PackageValidationResult::PCKG_POLICY) {
+        if (package_test_accept) {
+            AssertPackageResultSubsetShape(txs, result_package, tx_pool, /*submitted=*/false);
+        }
+        if (package_test_accept && result_package.m_state.IsValid()) {
             Assert(!CheckPackageMempoolAcceptResult(txs, result_package, result_package.m_state.IsValid(), nullptr));
         }
 
@@ -586,7 +608,16 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
         Assert(!CheckPackageMempoolAcceptResult({txs.back()}, PackageMempoolAcceptResult{txs.back()->GetWitnessHash(), res},
                                                 passed, nullptr));
 
-        if (!single_submit && result_package.m_state.GetResult() != PackageValidationResult::PCKG_POLICY) {
+        if (package_test_accept && !single_submit) {
+            node.validation_signals->SyncWithValidationInterfaceQueue();
+            AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
+            Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
+        }
+
+        if (!single_submit && result_package.m_state.GetResult() == PackageValidationResult::PCKG_POLICY) {
+            // This is empty if it fails early checks, or "full" if transactions are looked at deeper.
+            Assert(result_package.m_tx_results.size() == txs.size() || result_package.m_tx_results.empty());
+        } else if (!package_test_accept && result_package.m_state.GetResult() != PackageValidationResult::PCKG_POLICY) {
             // We don't know anything about the validity since transactions were randomly generated, so
             // just use result_package.m_state here. This makes the expect_valid check meaningless, but
             // we can still verify that the contents of m_tx_results are consistent with m_state.
@@ -746,10 +777,11 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
         auto txr = std::make_shared<TransactionsDelta>(added);
         node.validation_signals->RegisterSharedValidationInterface(txr);
 
-        // When there are multiple transactions in the package, we call ProcessNewPackage(txs, test_accept=false)
-        // and AcceptToMemoryPool(txs.back(), test_accept=true). When there is only 1 transaction, we might flip it
-        // (the package is a test accept and ATMP is a submission).
-        auto single_submit = txs.size() == 1 && fuzzed_data_provider.ConsumeBool();
+        // When there is only 1 transaction, we can run package test-accept followed by an ATMP submission.
+        // Multi-transaction package test-accept keeps ATMP in test-accept mode so the whole iteration must
+        // leave mempool state unchanged.
+        const bool single_submit{txs.size() == 1 && fuzzed_data_provider.ConsumeBool()};
+        const bool package_test_accept{single_submit || (txs.size() > 1 && fuzzed_data_provider.ConsumeBool())};
 
         // Exercise client_maxfeerate logic
         std::optional<CFeeRate> client_maxfeerate{};
@@ -759,22 +791,25 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
 
         std::optional<MempoolSnapshot> test_accept_mempool_snapshot;
         std::optional<std::set<COutPoint>> test_accept_outpoints_snapshot;
-        if (single_submit) {
+        if (package_test_accept) {
             test_accept_mempool_snapshot = SnapshotMempool(tx_pool);
             test_accept_outpoints_snapshot = mempool_outpoints;
         }
 
         const auto result_package = WITH_LOCK(::cs_main,
-                                    return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/single_submit, client_maxfeerate));
+                                    return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/package_test_accept, client_maxfeerate));
 
-        if (single_submit) {
+        if (package_test_accept) {
             node.validation_signals->SyncWithValidationInterfaceQueue();
             AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
             Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
             Assert(added.empty());
         }
 
-        if (single_submit && result_package.m_state.GetResult() != PackageValidationResult::PCKG_POLICY) {
+        if (package_test_accept) {
+            AssertPackageResultSubsetShape(txs, result_package, tx_pool, /*submitted=*/false);
+        }
+        if (package_test_accept && result_package.m_state.IsValid()) {
             Assert(!CheckPackageMempoolAcceptResult(txs, result_package, result_package.m_state.IsValid(), nullptr));
         }
 
@@ -791,6 +826,12 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
         node.validation_signals->SyncWithValidationInterfaceQueue();
         node.validation_signals->UnregisterSharedValidationInterface(txr);
 
+        if (package_test_accept && !single_submit) {
+            AssertMempoolUnchanged(tx_pool, *test_accept_mempool_snapshot);
+            Assert(mempool_outpoints == *test_accept_outpoints_snapshot);
+            Assert(added.empty());
+        }
+
         // There is only 1 transaction in the package. We did a test-package-accept and a ATMP
         if (single_submit) {
             Assert(passed != added.empty());
@@ -799,15 +840,15 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
                 Assert(added.size() == 1);
                 Assert(txs.back() == *added.begin());
             }
-        } else if (result_package.m_state.GetResult() != PackageValidationResult::PCKG_POLICY) {
+        } else if (result_package.m_state.GetResult() == PackageValidationResult::PCKG_POLICY) {
+            // This is empty if it fails early checks, or "full" if transactions are looked at deeper
+            Assert(result_package.m_tx_results.size() == txs.size() || result_package.m_tx_results.empty());
+        } else if (!package_test_accept) {
             // We don't know anything about the validity since transactions were randomly generated, so
             // just use result_package.m_state here. This makes the expect_valid check meaningless, but
             // we can still verify that the contents of m_tx_results are consistent with m_state.
             const bool expect_valid{result_package.m_state.IsValid()};
             Assert(!CheckPackageMempoolAcceptResult(txs, result_package, expect_valid, &tx_pool));
-        } else {
-            // This is empty if it fails early checks, or "full" if transactions are looked at deeper
-            Assert(result_package.m_tx_results.size() == txs.size() || result_package.m_tx_results.empty());
         }
 
         AssertMempoolInputIndex(tx_pool);
