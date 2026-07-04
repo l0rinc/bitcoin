@@ -23,7 +23,7 @@ bool InputIsMine(const CWallet& wallet, const CTxIn& txin)
 bool AllInputsMine(const CWallet& wallet, const CTransaction& tx)
 {
     LOCK(wallet.cs_wallet);
-    for (const CTxIn& txin : tx.vin) {
+    for (const CTxIn& txin : tx.vin()) {
         if (!InputIsMine(wallet, txin)) return false;
     }
     return true;
@@ -121,7 +121,7 @@ CAmount CachedTxGetCredit(const CWallet& wallet, const CWalletTx& wtx, bool avoi
 
 CAmount CachedTxGetDebit(const CWallet& wallet, const CWalletTx& wtx, bool avoid_reuse)
 {
-    if (wtx.tx->vin.empty())
+    if (wtx.tx->vin().empty())
         return 0;
 
     return GetCachableAmount(wallet, wtx, CWalletTx::DEBIT, avoid_reuse);
@@ -218,7 +218,7 @@ bool CachedTxIsTrusted(const CWallet& wallet, const CWalletTx& wtx, std::set<Txi
     if (!wtx.InMempool()) return false;
 
     // Trusted if all inputs are from us and are in the mempool:
-    for (const CTxIn& txin : wtx.tx->vin)
+    for (const CTxIn& txin : wtx.tx->vin())
     {
         // Transactions not sent by us: not trusted
         const CWalletTx* parent = wallet.GetWalletTx(txin.prevout.hash);
@@ -332,11 +332,11 @@ std::set< std::set<CTxDestination> > GetAddressGroupings(const CWallet& wallet)
     {
         const CWalletTx& wtx = walletEntry.second;
 
-        if (wtx.tx->vin.size() > 0)
+        if (wtx.tx->vin().size() > 0)
         {
             bool any_mine = false;
             // group all input addresses with each other
-            for (const CTxIn& txin : wtx.tx->vin)
+            for (const CTxIn& txin : wtx.tx->vin())
             {
                 CTxDestination address;
                 if(!InputIsMine(wallet, txin)) /* If this input isn't mine, ignore it */

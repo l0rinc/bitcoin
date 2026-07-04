@@ -172,7 +172,7 @@ FUZZ_TARGET(utxo_total_supply)
                 if (was_valid) {
                     if (duplicate_coinbase_height == ActiveHeight()) {
                         // we mined the duplicate coinbase
-                        assert(current_block->vtx.at(0)->vin.at(0).scriptSig == duplicate_coinbase_script);
+                        assert(current_block->vtx.at(0)->vin().at(0).scriptSig == duplicate_coinbase_script);
                     }
 
                     circulation += GetBlockSubsidy(ActiveHeight(), Params().GetConsensus());

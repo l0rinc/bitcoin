@@ -138,7 +138,7 @@ bool CBloomFilter::IsRelevantAndUpdate(const CTransaction& tx)
     if (fFound)
         return true;
 
-    for (const CTxIn& txin : tx.vin)
+    for (const CTxIn& txin : tx.vin())
     {
         // Match if the filter contains an outpoint tx spends
         if (contains(txin.prevout))

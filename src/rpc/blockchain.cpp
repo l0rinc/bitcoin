@@ -194,8 +194,8 @@ UniValue blockheaderToJSON(const CBlockIndex& tip, const CBlockIndex& blockindex
 /** Serialize coinbase transaction metadata */
 UniValue coinbaseTxToJSON(const CTransaction& coinbase_tx)
 {
-    CHECK_NONFATAL(!coinbase_tx.vin.empty());
-    const CTxIn& vin_0{coinbase_tx.vin[0]};
+    CHECK_NONFATAL(!coinbase_tx.vin().empty());
+    const CTxIn& vin_0{coinbase_tx.vin()[0]};
     UniValue coinbase_tx_obj(UniValue::VOBJ);
     coinbase_tx_obj.pushKV("version", coinbase_tx.version());
     coinbase_tx_obj.pushKV("locktime", coinbase_tx.nLockTime());
@@ -2109,7 +2109,7 @@ static RPCMethod getblockstats()
             continue;
         }
 
-        inputs += tx->vin.size(); // Don't count coinbase's fake input
+        inputs += tx->vin().size(); // Don't count coinbase's fake input
         total_out += tx_total_out; // Don't count coinbase reward
 
         int64_t tx_size = 0;
@@ -2884,9 +2884,9 @@ static RPCMethod getdescriptoractivity()
                 // skip coinbase; spends can't happen there.
                 const auto& txundo = block_undo.vtxundo.at(i - 1);
 
-                for (size_t vin_idx = 0; vin_idx < tx->vin.size(); ++vin_idx) {
+                for (size_t vin_idx = 0; vin_idx < tx->vin().size(); ++vin_idx) {
                     const auto& coin = txundo.vprevout.at(vin_idx);
-                    const auto& txin = tx->vin.at(vin_idx);
+                    const auto& txin = tx->vin().at(vin_idx);
                     if (scripts_to_watch.contains(coin.out.scriptPubKey)) {
                         activity.push_back(AddSpend(
                                     coin.out.scriptPubKey, coin.out.nValue, tx, vin_idx, txin, blockindex));
@@ -2917,10 +2917,10 @@ static RPCMethod getdescriptoractivity()
         for (const CTxMemPoolEntry& e : mempool.entryAll()) {
             const auto& tx = e.GetSharedTx();
 
-            for (size_t vin_idx = 0; vin_idx < tx->vin.size(); ++vin_idx) {
+            for (size_t vin_idx = 0; vin_idx < tx->vin().size(); ++vin_idx) {
                 CScript scriptPubKey;
                 CAmount value;
-                const auto& txin = tx->vin.at(vin_idx);
+                const auto& txin = tx->vin().at(vin_idx);
                 std::optional<Coin> coin = coins_view.GetCoin(txin.prevout);
 
                 // Check if the previous output is in the chain

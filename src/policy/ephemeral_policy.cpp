@@ -46,7 +46,7 @@ bool CheckEphemeralSpends(const Package& package, CFeeRate dust_relay_rate, cons
         std::unordered_set<Txid, SaltedTxidHasher> processed_parent_set;
         std::unordered_set<COutPoint, SaltedOutpointHasher> unspent_parent_dust;
 
-        for (const auto& tx_input : tx->vin) {
+        for (const auto& tx_input : tx->vin()) {
             const Txid& parent_txid{tx_input.prevout.hash};
             // Skip parents we've already checked dust for
             if (processed_parent_set.contains(parent_txid)) continue;
@@ -78,7 +78,7 @@ bool CheckEphemeralSpends(const Package& package, CFeeRate dust_relay_rate, cons
 
         // Now that we have gathered parents' dust, make sure it's spent
         // by the child
-        for (const auto& tx_input : tx->vin) {
+        for (const auto& tx_input : tx->vin()) {
             unspent_parent_dust.erase(tx_input.prevout);
         }
 

@@ -304,7 +304,8 @@ public:
     // actually immutable; deserialization and assignment are implemented,
     // and bypass the constness. This is safe, as they update the entire
     // structure, including the hash.
-    const std::vector<CTxIn> vin;
+    const std::vector<CTxIn> m_vin;
+    const std::vector<CTxIn>& vin() const LIFETIMEBOUND { return m_vin; }
     const std::vector<CTxOut> m_vout;
     const std::vector<CTxOut>& vout() const LIFETIMEBOUND { return m_vout; }
     const uint32_t m_version;
@@ -341,7 +342,7 @@ public:
     CTransaction(deserialize_type, Stream& s) : CTransaction(CMutableTransaction(deserialize, s)) {}
 
     bool IsNull() const {
-        return vin.empty() && m_vout.empty();
+        return m_vin.empty() && m_vout.empty();
     }
 
     const Txid& GetHash() const LIFETIMEBOUND { return hash; }
@@ -359,7 +360,7 @@ public:
 
     bool IsCoinBase() const
     {
-        return (vin.size() == 1 && vin[0].prevout.IsNull());
+        return (m_vin.size() == 1 && m_vin[0].prevout.IsNull());
     }
 
     friend bool operator==(const CTransaction& a, const CTransaction& b)
@@ -424,7 +425,7 @@ namespace tx_detail {
 inline uint32_t version(const CTransaction& tx) { return tx.version(); }
 inline uint32_t version(const CMutableTransaction& tx) { return tx.version; }
 
-inline const std::vector<CTxIn>& vin(const CTransaction& tx) { return tx.vin; }
+inline const std::vector<CTxIn>& vin(const CTransaction& tx) { return tx.vin(); }
 inline const std::vector<CTxIn>& vin(const CMutableTransaction& tx) { return tx.vin; }
 
 inline const std::vector<CTxOut>& vout(const CTransaction& tx) { return tx.vout(); }

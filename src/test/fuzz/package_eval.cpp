@@ -99,7 +99,7 @@ struct OutpointsUpdater final : public CValidationInterface {
     void TransactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t /* mempool_sequence */) override
     {
         // outpoints spent by this tx are now available
-        for (const auto& input : tx->vin) {
+        for (const auto& input : tx->vin()) {
             // Could already exist if this was a replacement
             m_mempool_outpoints.insert(input.prevout);
         }
@@ -200,7 +200,7 @@ std::optional<COutPoint> GetChildEvictingPrevout(const CTxMemPool& tx_pool)
                 Assert(children.size() == 1);
                 // Find an input that doesn't spend from parent's txid
                 const auto& only_child = children.begin()->get().GetTx();
-                for (const auto& tx_input : only_child.vin) {
+                for (const auto& tx_input : only_child.vin()) {
                     if (tx_input.prevout.hash != tx_info.tx->GetHash()) {
                         return tx_input.prevout;
                     }
@@ -309,7 +309,7 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
                 auto tx = MakeTransactionRef(tx_mut);
                 // Restore previously removed outpoints, except in-package outpoints (to allow RBF)
                 if (!last_tx) {
-                    for (const auto& in : tx->vin) {
+                    for (const auto& in : tx->vin()) {
                         Assert(outpoints.insert(in.prevout).second);
                     }
                     // Cache the in-package outpoints being made
@@ -470,7 +470,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
                 auto tx = MakeTransactionRef(tx_mut);
                 // Restore previously removed outpoints, except in-package outpoints
                 if (!last_tx) {
-                    for (const auto& in : tx->vin) {
+                    for (const auto& in : tx->vin()) {
                         // It's a fake input, or a new input, or a duplicate
                         Assert(in == CTxIn() || outpoints.insert(in.prevout).second || dup_input);
                     }

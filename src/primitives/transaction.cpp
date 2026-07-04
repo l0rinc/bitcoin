@@ -64,7 +64,7 @@ std::string CTxOut::ToString() const
 }
 
 CMutableTransaction::CMutableTransaction() : version{CTransaction::CURRENT_VERSION}, nLockTime{0} {}
-CMutableTransaction::CMutableTransaction(const CTransaction& tx) : vin(tx.vin), vout(tx.vout()), version{tx.version()}, nLockTime{tx.nLockTime()} {}
+CMutableTransaction::CMutableTransaction(const CTransaction& tx) : vin(tx.vin()), vout(tx.vout()), version{tx.version()}, nLockTime{tx.nLockTime()} {}
 
 Txid CMutableTransaction::GetHash() const
 {
@@ -73,7 +73,7 @@ Txid CMutableTransaction::GetHash() const
 
 bool CTransaction::ComputeHasWitness() const
 {
-    return std::any_of(vin.begin(), vin.end(), [](const auto& input) {
+    return std::any_of(m_vin.begin(), m_vin.end(), [](const auto& input) {
         return !input.scriptWitness.IsNull();
     });
 }
@@ -92,8 +92,8 @@ Wtxid CTransaction::ComputeWitnessHash() const
     return Wtxid::FromUint256((HashWriter{} << TX_WITH_WITNESS(*this)).GetHash());
 }
 
-CTransaction::CTransaction(const CMutableTransaction& tx) : vin(tx.vin), m_vout(tx.vout), m_version{tx.version}, m_nLockTime{tx.nLockTime}, m_has_witness{ComputeHasWitness()}, hash{ComputeHash()}, m_witness_hash{ComputeWitnessHash()} {}
-CTransaction::CTransaction(CMutableTransaction&& tx) : vin(std::move(tx.vin)), m_vout(std::move(tx.vout)), m_version{tx.version}, m_nLockTime{tx.nLockTime}, m_has_witness{ComputeHasWitness()}, hash{ComputeHash()}, m_witness_hash{ComputeWitnessHash()} {}
+CTransaction::CTransaction(const CMutableTransaction& tx) : m_vin(tx.vin), m_vout(tx.vout), m_version{tx.version}, m_nLockTime{tx.nLockTime}, m_has_witness{ComputeHasWitness()}, hash{ComputeHash()}, m_witness_hash{ComputeWitnessHash()} {}
+CTransaction::CTransaction(CMutableTransaction&& tx) : m_vin(std::move(tx.vin)), m_vout(std::move(tx.vout)), m_version{tx.version}, m_nLockTime{tx.nLockTime}, m_has_witness{ComputeHasWitness()}, hash{ComputeHash()}, m_witness_hash{ComputeWitnessHash()} {}
 
 CAmount CTransaction::GetValueOut() const
 {
@@ -118,12 +118,12 @@ std::string CTransaction::ToString() const
     str += strprintf("CTransaction(hash=%s, ver=%u, vin.size=%u, vout.size=%u, nLockTime=%u)\n",
         GetHash().ToString().substr(0,10),
         m_version,
-        vin.size(),
+        m_vin.size(),
         m_vout.size(),
         m_nLockTime);
-    for (const auto& tx_in : vin)
+    for (const auto& tx_in : m_vin)
         str += "    " + tx_in.ToString() + "\n";
-    for (const auto& tx_in : vin)
+    for (const auto& tx_in : m_vin)
         str += "    " + tx_in.scriptWitness.ToString() + "\n";
     for (const auto& tx_out : m_vout)
         str += "    " + tx_out.ToString() + "\n";

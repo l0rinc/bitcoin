@@ -161,7 +161,7 @@ bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
 
                 for (size_t j = 0; j < tx_undo.vprevout.size(); ++j) {
                     const Coin& coin{tx_undo.vprevout[j]};
-                    const COutPoint outpoint{tx->vin[j].prevout.hash, tx->vin[j].prevout.n};
+                    const COutPoint outpoint{tx->vin()[j].prevout.hash, tx->vin()[j].prevout.n};
 
                     RemoveCoinHash(m_muhash, outpoint, coin);
 
@@ -374,7 +374,7 @@ bool CoinStatsIndex::RevertBlock(const interfaces::BlockInfo& block)
 
             for (size_t j = 0; j < tx_undo.vprevout.size(); ++j) {
                 const Coin& coin{tx_undo.vprevout[j]};
-                const COutPoint outpoint{tx->vin[j].prevout.hash, tx->vin[j].prevout.n};
+                const COutPoint outpoint{tx->vin()[j].prevout.hash, tx->vin()[j].prevout.n};
                 ApplyCoinHash(m_muhash, outpoint, coin);
             }
         }

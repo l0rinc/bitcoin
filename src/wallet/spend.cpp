@@ -144,7 +144,7 @@ static std::optional<int64_t> GetSignedTxinWeight(const CWallet* wallet, const C
 TxSize CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *wallet, const std::vector<CTxOut>& txouts, const CCoinControl* coin_control)
 {
     // version + nLockTime + input count + output count
-    int64_t weight = (4 + 4 + GetSizeOfCompactSize(tx.vin.size()) + GetSizeOfCompactSize(tx.vout().size())) * WITNESS_SCALE_FACTOR;
+    int64_t weight = (4 + 4 + GetSizeOfCompactSize(tx.vin().size()) + GetSizeOfCompactSize(tx.vout().size())) * WITNESS_SCALE_FACTOR;
     // Whether any input spends a witness program. Necessary to run before the next loop over the
     // inputs in order to accurately compute the compactSize length for the witness data per input.
     bool is_segwit = std::any_of(txouts.begin(), txouts.end(), [&](const CTxOut& txo) {
@@ -160,7 +160,7 @@ TxSize CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *walle
 
     // Add the size of the transaction inputs as if they were signed.
     for (uint32_t i = 0; i < txouts.size(); i++) {
-        const auto txin_weight = GetSignedTxinWeight(wallet, coin_control, tx.vin[i], txouts[i], is_segwit, wallet->CanGrindR());
+        const auto txin_weight = GetSignedTxinWeight(wallet, coin_control, tx.vin()[i], txouts[i], is_segwit, wallet->CanGrindR());
         if (!txin_weight) return TxSize{-1, -1};
         assert(*txin_weight > -1);
         weight += *txin_weight;
@@ -174,7 +174,7 @@ TxSize CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *walle
 {
     std::vector<CTxOut> txouts;
     // Look up the inputs. The inputs are either in the wallet, or in coin_control.
-    for (const CTxIn& input : tx.vin) {
+    for (const CTxIn& input : tx.vin()) {
         const auto mi = wallet->mapWallet.find(input.prevout.hash);
         // Can not estimate size without knowing the input details
         if (mi != wallet->mapWallet.end()) {
@@ -528,8 +528,8 @@ const CTxOut& FindNonChangeParentOutput(const CWallet& wallet, const COutPoint& 
 
     const CTransaction* ptx = wtx->tx.get();
     int n = outpoint.n;
-    while (OutputIsChange(wallet, ptx->vout()[n]) && ptx->vin.size() > 0) {
-        const COutPoint& prevout = ptx->vin[0].prevout;
+    while (OutputIsChange(wallet, ptx->vout()[n]) && ptx->vin().size() > 0) {
+        const COutPoint& prevout = ptx->vin()[0].prevout;
         const CWalletTx* it = wallet.GetWalletTx(prevout.hash);
         if (!it || it->tx->vout().size() <= prevout.n ||
             !wallet.IsMine(it->tx->vout()[prevout.n])) {
@@ -1544,7 +1544,7 @@ util::Result<CreatedTransactionResult> FundTransaction(CWallet& wallet, const CM
     }
 
     if (lockUnspents) {
-        for (const CTxIn& txin : res->tx->vin) {
+        for (const CTxIn& txin : res->tx->vin()) {
             wallet.LockCoin(txin.prevout, /*persist=*/false);
         }
     }

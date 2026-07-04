@@ -60,8 +60,8 @@ WalletTx MakeWalletTx(CWallet& wallet, const CWalletTx& wtx)
     LOCK(wallet.cs_wallet);
     WalletTx result;
     result.tx = wtx.tx;
-    result.txin_is_mine.reserve(wtx.tx->vin.size());
-    for (const auto& txin : wtx.tx->vin) {
+    result.txin_is_mine.reserve(wtx.tx->vin().size());
+    for (const auto& txin : wtx.tx->vin()) {
         result.txin_is_mine.emplace_back(InputIsMine(wallet, txin));
     }
     result.txout_is_mine.reserve(wtx.tx->vout().size());

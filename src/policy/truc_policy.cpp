@@ -20,7 +20,7 @@ std::vector<size_t> FindInPackageParents(const Package& package, const CTransact
     std::vector<size_t> in_package_parents;
 
     std::set<Txid> possible_parents;
-    for (auto &input : ptx->vin) {
+    for (auto &input : ptx->vin()) {
         possible_parents.insert(input.prevout.hash);
     }
 
@@ -123,7 +123,7 @@ std::optional<std::string> PackageTRUCChecks(const CTxMemPool& pool, const CTran
                 // Skip same tx.
                 if (&(*package_tx) == &(*ptx)) continue;
 
-                for (auto& input : package_tx->vin) {
+                for (auto& input : package_tx->vin()) {
                     // Fail if we find another tx with the same parent. We don't check whether the
                     // sibling is to-be-replaced (done in SingleTRUCChecks) because these transactions
                     // are within the same package.

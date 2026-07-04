@@ -77,7 +77,7 @@ static std::vector<CTransactionRef> CreateCoinCluster(FastRandomContext& det_ran
                 tx.vin.back().scriptSig = CScript() << coin.tx_count;
                 tx.vin.back().scriptWitness.stack.push_back(CScriptNum(coin.tx_count).getvch());
             }
-            if (coin.vin_left == coin.ref->vin.size()) {
+            if (coin.vin_left == coin.ref->vin().size()) {
                 coin = available_coins.back();
                 available_coins.pop_back();
             }

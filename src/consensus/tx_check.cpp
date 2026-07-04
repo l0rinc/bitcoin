@@ -11,7 +11,7 @@
 bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
 {
     // Basic checks that don't depend on any context
-    if (tx.vin.empty())
+    if (tx.vin().empty())
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-vin-empty");
     if (tx.vout().empty())
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-vout-empty");
@@ -39,19 +39,19 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
     // Failure to run this check will result in either a crash or an inflation bug, depending on the implementation of
     // the underlying coins database.
     std::set<COutPoint> vInOutPoints;
-    for (const auto& txin : tx.vin) {
+    for (const auto& txin : tx.vin()) {
         if (!vInOutPoints.insert(txin.prevout).second)
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-inputs-duplicate");
     }
 
     if (tx.IsCoinBase())
     {
-        if (tx.vin[0].scriptSig.size() < 2 || tx.vin[0].scriptSig.size() > 100)
+        if (tx.vin()[0].scriptSig.size() < 2 || tx.vin()[0].scriptSig.size() > 100)
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-cb-length");
     }
     else
     {
-        for (const auto& txin : tx.vin)
+        for (const auto& txin : tx.vin())
             if (txin.prevout.IsNull())
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-prevout-null");
     }

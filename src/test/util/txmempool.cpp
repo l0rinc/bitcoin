@@ -173,7 +173,7 @@ void CheckMempoolEphemeralInvariants(const CTxMemPool& tx_pool)
         // Only-child should be spending the dust
         const auto& only_child = children.begin()->get().GetTx();
         COutPoint dust_outpoint{tx_info.tx->GetHash(), dust_indexes[0]};
-        Assert(std::any_of(only_child.vin.begin(), only_child.vin.end(), [&dust_outpoint](const CTxIn& txin) {
+        Assert(std::any_of(only_child.vin().begin(), only_child.vin().end(), [&dust_outpoint](const CTxIn& txin) {
             return txin.prevout == dust_outpoint;
             }));
     }

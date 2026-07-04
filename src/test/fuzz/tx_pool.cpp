@@ -330,7 +330,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
 
             auto tx = MakeTransactionRef(tx_mut);
             // Restore previously removed outpoints
-            for (const auto& in : tx->vin) {
+            for (const auto& in : tx->vin()) {
                 Assert(outpoints_rbf.insert(in.prevout).second);
             }
             return tx;
@@ -396,7 +396,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
                     Assert(set.get().emplace(tx.GetHash(), i).second);
                 }
             }
-            for (const auto& in : tx.vin) {
+            for (const auto& in : tx.vin()) {
                 for (auto& set : consumed_by_tx) {
                     Assert(set.get().insert(in.prevout).second);
                 }

@@ -138,8 +138,8 @@ bool CheckSignetBlockSolution(const CBlock& block, const Consensus::Params& cons
         return false;
     }
 
-    const CScript& scriptSig = signet_txs->m_to_sign.vin[0].scriptSig;
-    const CScriptWitness& witness = signet_txs->m_to_sign.vin[0].scriptWitness;
+    const CScript& scriptSig = signet_txs->m_to_sign.vin()[0].scriptSig;
+    const CScriptWitness& witness = signet_txs->m_to_sign.vin()[0].scriptWitness;
 
     PrecomputedTransactionData txdata;
     txdata.Init(signet_txs->m_to_sign, {signet_txs->m_to_spend.vout()[0]});

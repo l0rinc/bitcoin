@@ -945,7 +945,7 @@ static RPCMethod getblocktemplate()
         entry.pushKV("hash", tx.GetWitnessHash().GetHex());
 
         UniValue deps(UniValue::VARR);
-        for (const CTxIn &in : tx.vin)
+        for (const CTxIn &in : tx.vin())
         {
             if (setTxIndex.contains(in.prevout.hash))
                 deps.push_back(setTxIndex[in.prevout.hash]);

@@ -190,11 +190,11 @@ Result CreateRateBumpTransaction(CWallet& wallet, const Txid& txid, const CCoinC
     std::map<COutPoint, Coin> coins;
     CAmount input_value = 0;
     std::vector<CTxOut> spent_outputs;
-    for (const CTxIn& txin : wtx.tx->vin) {
+    for (const CTxIn& txin : wtx.tx->vin()) {
         coins[txin.prevout]; // Create empty map entry keyed by prevout.
     }
     wallet.chain().findCoins(coins);
-    for (const CTxIn& txin : wtx.tx->vin) {
+    for (const CTxIn& txin : wtx.tx->vin()) {
         const Coin& coin = coins.at(txin.prevout);
         if (coin.out.IsNull()) {
             errors.emplace_back(Untranslated(strprintf("%s:%u is already spent", txin.prevout.hash.GetHex(), txin.prevout.n)));
@@ -211,8 +211,8 @@ Result CreateRateBumpTransaction(CWallet& wallet, const Txid& txid, const CCoinC
     // Figure out if we need to compute the input weight, and do so if necessary
     PrecomputedTransactionData txdata;
     txdata.Init(*wtx.tx, std::move(spent_outputs), /* force=*/ true);
-    for (unsigned int i = 0; i < wtx.tx->vin.size(); ++i) {
-        const CTxIn& txin = wtx.tx->vin.at(i);
+    for (unsigned int i = 0; i < wtx.tx->vin().size(); ++i) {
+        const CTxIn& txin = wtx.tx->vin().at(i);
         const Coin& coin = coins.at(txin.prevout);
 
         if (new_coin_control.IsExternalSelected(txin.prevout)) {
@@ -305,7 +305,7 @@ Result CreateRateBumpTransaction(CWallet& wallet, const Txid& txid, const CCoinC
     // A2 and A3 where A2 and A3 don't conflict (or alternatively bump A to A2 and A2
     // to A3 where A and A3 don't conflict). If both later get confirmed then the sender
     // has accidentally double paid.
-    for (const auto& inputs : wtx.tx->vin) {
+    for (const auto& inputs : wtx.tx->vin()) {
         new_coin_control.Select(COutPoint(inputs.prevout));
     }
     new_coin_control.m_allow_other_inputs = true;
