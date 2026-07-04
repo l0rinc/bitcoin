@@ -2084,11 +2084,11 @@ static RPCMethod getblockstats()
 
     for (size_t i = 0; i < block.vtx.size(); ++i) {
         const auto& tx = block.vtx.at(i);
-        outputs += tx->vout.size();
+        outputs += tx->vout().size();
 
         CAmount tx_total_out = 0;
         if (loop_outputs) {
-            for (const CTxOut& out : tx->vout) {
+            for (const CTxOut& out : tx->vout()) {
                 tx_total_out += out.nValue;
 
                 uint64_t out_size{GetSerializeSize(out) + PER_UTXO_OVERHEAD};
@@ -2521,7 +2521,7 @@ static bool CheckBlockFilterMatches(BlockManager& blockman, const CBlockIndex& b
 
     // Check if any of the outputs match the scriptPubKey
     for (const auto& tx : block.vtx) {
-        if (std::any_of(tx->vout.cbegin(), tx->vout.cend(), [&](const auto& txout) {
+        if (std::any_of(tx->vout().cbegin(), tx->vout().cend(), [&](const auto& txout) {
                 return needles.contains(std::vector<unsigned char>(txout.scriptPubKey.begin(), txout.scriptPubKey.end()));
             })) {
             return true;
@@ -2894,8 +2894,8 @@ static RPCMethod getdescriptoractivity()
                 }
             }
 
-            for (size_t vout_idx = 0; vout_idx < tx->vout.size(); ++vout_idx) {
-                const auto& vout = tx->vout.at(vout_idx);
+            for (size_t vout_idx = 0; vout_idx < tx->vout().size(); ++vout_idx) {
+                const auto& vout = tx->vout().at(vout_idx);
                 if (scripts_to_watch.contains(vout.scriptPubKey)) {
                     activity.push_back(AddReceive(vout, blockindex, vout_idx, tx));
                 }
@@ -2929,10 +2929,10 @@ static RPCMethod getdescriptoractivity()
                     // child transaction of another transaction in the mempool.
                     CTransactionRef prev_tx = CHECK_NONFATAL(mempool.get(txin.prevout.hash));
 
-                    if (txin.prevout.n >= prev_tx->vout.size()) {
+                    if (txin.prevout.n >= prev_tx->vout().size()) {
                         throw std::runtime_error("Invalid output index");
                     }
-                    const CTxOut& out = prev_tx->vout[txin.prevout.n];
+                    const CTxOut& out = prev_tx->vout()[txin.prevout.n];
                     scriptPubKey = out.scriptPubKey;
                     value = out.nValue;
                 } else {
@@ -2949,8 +2949,8 @@ static RPCMethod getdescriptoractivity()
                 }
             }
 
-            for (size_t vout_idx = 0; vout_idx < tx->vout.size(); ++vout_idx) {
-                const auto& vout = tx->vout.at(vout_idx);
+            for (size_t vout_idx = 0; vout_idx < tx->vout().size(); ++vout_idx) {
+                const auto& vout = tx->vout().at(vout_idx);
                 if (scripts_to_watch.contains(vout.scriptPubKey)) {
                     activity.push_back(AddReceive(vout, nullptr, vout_idx, tx));
                 }

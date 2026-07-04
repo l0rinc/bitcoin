@@ -533,7 +533,7 @@ std::vector<std::pair<Wtxid, NodeId>> TxOrphanageImpl::AddChildrenToWorkSet(cons
 {
     std::vector<std::pair<Wtxid, NodeId>> ret;
     auto& index_by_wtxid = m_orphans.get<ByWtxid>();
-    for (unsigned int i = 0; i < tx.vout.size(); i++) {
+    for (unsigned int i = 0; i < tx.vout().size(); i++) {
         const auto it_by_prev = m_outpoint_to_orphan_wtxids.find(COutPoint(tx.GetHash(), i));
         if (it_by_prev != m_outpoint_to_orphan_wtxids.end()) {
             for (const auto& wtxid : it_by_prev->second) {

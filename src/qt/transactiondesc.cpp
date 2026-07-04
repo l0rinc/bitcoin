@@ -179,7 +179,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
         // Coinbase
         //
         CAmount nUnmatured = 0;
-        for (const CTxOut& txout : wtx.tx->vout)
+        for (const CTxOut& txout : wtx.tx->vout())
             nUnmatured += wallet.getCredit(txout);
         strHTML += "<b>" + tr("Credit") + ":</b> ";
         if (status.is_in_main_chain)
@@ -205,7 +205,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
             // Debit
             //
             auto mine = wtx.txout_is_mine.begin();
-            for (const CTxOut& txout : wtx.tx->vout)
+            for (const CTxOut& txout : wtx.tx->vout())
             {
                 // Ignore change
                 bool toSelf = *(mine++);
@@ -260,7 +260,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
                 }
             }
             mine = wtx.txout_is_mine.begin();
-            for (const CTxOut& txout : wtx.tx->vout) {
+            for (const CTxOut& txout : wtx.tx->vout()) {
                 if (*(mine++)) {
                     strHTML += "<b>" + tr("Credit") + ":</b> " + BitcoinUnits::formatHtmlWithUnit(unit, wallet.getCredit(txout)) + "<br>";
                 }
@@ -320,7 +320,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
         for (const CTxIn& txin : wtx.tx->vin)
             if(wallet.txinIsMine(txin))
                 strHTML += "<b>" + tr("Debit") + ":</b> " + BitcoinUnits::formatHtmlWithUnit(unit, -wallet.getDebit(txin)) + "<br>";
-        for (const CTxOut& txout : wtx.tx->vout)
+        for (const CTxOut& txout : wtx.tx->vout())
             if(wallet.txoutIsMine(txout))
                 strHTML += "<b>" + tr("Credit") + ":</b> " + BitcoinUnits::formatHtmlWithUnit(unit, wallet.getCredit(txout)) + "<br>";
 

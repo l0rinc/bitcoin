@@ -440,7 +440,7 @@ FUZZ_TARGET(txorphanage_sim)
                 if (child == t) {
                     auto& partx = txn[txorder[parent]];
                     assert(partx->version() == 1);
-                    COutPoint outpoint(partx->GetHash(), rng.randrange<size_t>(partx->vout.size()));
+                    COutPoint outpoint(partx->GetHash(), rng.randrange<size_t>(partx->vout().size()));
                     tx.vin.emplace_back(outpoint);
                     tx.vin.back().scriptSig.resize(provider.ConsumeIntegralInRange<unsigned>(16, 200));
                 }

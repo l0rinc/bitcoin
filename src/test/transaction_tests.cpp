@@ -429,8 +429,8 @@ static void CreateCreditAndSpend(const FillableSigningProvider& keystore, const 
     ssout >> TX_WITH_WITNESS(output);
     assert(output->vin.size() == 1);
     assert(output->vin[0] == outputm.vin[0]);
-    assert(output->vout.size() == 1);
-    assert(output->vout[0] == outputm.vout[0]);
+    assert(output->vout().size() == 1);
+    assert(output->vout()[0] == outputm.vout[0]);
 
     CMutableTransaction inputm;
     inputm.version = 1;
@@ -457,7 +457,7 @@ static void CheckWithFlag(const CTransactionRef& output, const CMutableTransacti
 {
     ScriptError error;
     CTransaction inputi(input);
-    bool ret = VerifyScript(inputi.vin[0].scriptSig, output->vout[0].scriptPubKey, &inputi.vin[0].scriptWitness, flags, TransactionSignatureChecker(&inputi, 0, output->vout[0].nValue, MissingDataBehavior::ASSERT_FAIL), &error);
+    bool ret = VerifyScript(inputi.vin[0].scriptSig, output->vout()[0].scriptPubKey, &inputi.vin[0].scriptWitness, flags, TransactionSignatureChecker(&inputi, 0, output->vout()[0].nValue, MissingDataBehavior::ASSERT_FAIL), &error);
     assert(ret == success);
 }
 
@@ -561,9 +561,9 @@ BOOST_AUTO_TEST_CASE(test_big_witness_transaction)
 SignatureData CombineSignatures(const CMutableTransaction& input1, const CMutableTransaction& input2, const CTransactionRef tx)
 {
     SignatureData sigdata;
-    sigdata = DataFromTransaction(input1, 0, tx->vout[0]);
-    sigdata.MergeSignatureData(DataFromTransaction(input2, 0, tx->vout[0]));
-    ProduceSignature(DUMMY_SIGNING_PROVIDER, MutableTransactionSignatureCreator(input1, 0, tx->vout[0].nValue, {.sighash_type = SIGHASH_DEFAULT}), tx->vout[0].scriptPubKey, sigdata);
+    sigdata = DataFromTransaction(input1, 0, tx->vout()[0]);
+    sigdata.MergeSignatureData(DataFromTransaction(input2, 0, tx->vout()[0]));
+    ProduceSignature(DUMMY_SIGNING_PROVIDER, MutableTransactionSignatureCreator(input1, 0, tx->vout()[0].nValue, {.sighash_type = SIGHASH_DEFAULT}), tx->vout()[0].scriptPubKey, sigdata);
     return sigdata;
 }
 

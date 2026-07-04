@@ -493,7 +493,7 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
             indexed_transaction_set::const_iterator it2 = mapTx.find(txin.prevout.hash);
             if (it2 != mapTx.end()) {
                 const CTransaction& tx2 = it2->GetTx();
-                assert(tx2.vout.size() > txin.prevout.n && !tx2.vout[txin.prevout.n].IsNull());
+                assert(tx2.vout().size() > txin.prevout.n && !tx2.vout()[txin.prevout.n].IsNull());
                 setParentCheck.insert(*it2);
             }
             // We are iterating through the mempool entries sorted
@@ -761,8 +761,8 @@ std::optional<Coin> CCoinsViewMemPool::GetCoin(const COutPoint& outpoint) const
     // transactions. First checking the underlying cache risks returning a pruned entry instead.
     CTransactionRef ptx = mempool.get(outpoint.hash);
     if (ptx) {
-        if (outpoint.n < ptx->vout.size()) {
-            Coin coin(ptx->vout[outpoint.n], MEMPOOL_HEIGHT, false);
+        if (outpoint.n < ptx->vout().size()) {
+            Coin coin(ptx->vout()[outpoint.n], MEMPOOL_HEIGHT, false);
             m_non_base_coins.emplace(outpoint);
             return coin;
         }
@@ -773,8 +773,8 @@ std::optional<Coin> CCoinsViewMemPool::GetCoin(const COutPoint& outpoint) const
 
 void CCoinsViewMemPool::PackageAddTransaction(const CTransactionRef& tx)
 {
-    for (unsigned int n = 0; n < tx->vout.size(); ++n) {
-        m_temp_added.emplace(COutPoint(tx->GetHash(), n), Coin(tx->vout[n], MEMPOOL_HEIGHT, false));
+    for (unsigned int n = 0; n < tx->vout().size(); ++n) {
+        m_temp_added.emplace(COutPoint(tx->GetHash(), n), Coin(tx->vout()[n], MEMPOOL_HEIGHT, false));
         m_non_base_coins.emplace(tx->GetHash(), n);
     }
 }

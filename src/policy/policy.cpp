@@ -71,8 +71,8 @@ bool IsDust(const CTxOut& txout, const CFeeRate& dustRelayFeeIn)
 std::vector<uint32_t> GetDust(const CTransaction& tx, CFeeRate dust_relay_rate)
 {
     std::vector<uint32_t> dust_outputs;
-    for (uint32_t i{0}; i < tx.vout.size(); ++i) {
-        if (IsDust(tx.vout[i], dust_relay_rate)) dust_outputs.push_back(i);
+    for (uint32_t i{0}; i < tx.vout().size(); ++i) {
+        if (IsDust(tx.vout()[i], dust_relay_rate)) dust_outputs.push_back(i);
     }
     return dust_outputs;
 }
@@ -136,7 +136,7 @@ bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_dat
 
     unsigned int datacarrier_bytes_left = max_datacarrier_bytes.value_or(0);
     TxoutType whichType;
-    for (const CTxOut& txout : tx.vout) {
+    for (const CTxOut& txout : tx.vout()) {
         if (!::IsStandard(txout.scriptPubKey, whichType)) {
             reason = "scriptpubkey";
             return false;

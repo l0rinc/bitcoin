@@ -1477,7 +1477,7 @@ RPCMethod sendall()
                         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Input not available. UTXO (%s:%d) was already spent.", input.prevout.hash.ToString(), input.prevout.n));
                     }
                     const CWalletTx* tx{pwallet->GetWalletTx(input.prevout.hash)};
-                    if (!tx || input.prevout.n >= tx->tx->vout.size() || !pwallet->IsMine(tx->tx->vout[input.prevout.n])) {
+                    if (!tx || input.prevout.n >= tx->tx->vout().size() || !pwallet->IsMine(tx->tx->vout()[input.prevout.n])) {
                         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Input not found. UTXO (%s:%d) is not part of wallet.", input.prevout.hash.ToString(), input.prevout.n));
                     }
                     if (pwallet->GetTxDepthInMainChain(*tx) == 0) {
@@ -1487,7 +1487,7 @@ RPCMethod sendall()
                             throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Can't spend unconfirmed version %d pre-selected input with a version 3 tx", tx->tx->version()));
                         }
                     }
-                    total_input_value += tx->tx->vout[input.prevout.n].nValue;
+                    total_input_value += tx->tx->vout()[input.prevout.n].nValue;
                 }
             } else {
                 CoinFilterParams coins_params;

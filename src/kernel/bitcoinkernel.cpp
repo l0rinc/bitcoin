@@ -519,14 +519,14 @@ btck_Transaction* btck_transaction_create(const void* raw_transaction, size_t ra
 
 size_t btck_transaction_count_outputs(const btck_Transaction* transaction)
 {
-    return btck_Transaction::get(transaction)->vout.size();
+    return btck_Transaction::get(transaction)->vout().size();
 }
 
 const btck_TransactionOutput* btck_transaction_get_output_at(const btck_Transaction* transaction, size_t output_index)
 {
     const CTransaction& tx = *btck_Transaction::get(transaction);
-    assert(output_index < tx.vout.size());
-    return btck_TransactionOutput::ref(&tx.vout[output_index]);
+    assert(output_index < tx.vout().size());
+    return btck_TransactionOutput::ref(&tx.vout()[output_index]);
 }
 
 size_t btck_transaction_count_inputs(const btck_Transaction* transaction)

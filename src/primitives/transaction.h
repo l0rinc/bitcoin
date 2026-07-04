@@ -305,7 +305,8 @@ public:
     // and bypass the constness. This is safe, as they update the entire
     // structure, including the hash.
     const std::vector<CTxIn> vin;
-    const std::vector<CTxOut> vout;
+    const std::vector<CTxOut> m_vout;
+    const std::vector<CTxOut>& vout() const LIFETIMEBOUND { return m_vout; }
     const uint32_t m_version;
     uint32_t version() const { return m_version; }
     const uint32_t m_nLockTime;
@@ -340,7 +341,7 @@ public:
     CTransaction(deserialize_type, Stream& s) : CTransaction(CMutableTransaction(deserialize, s)) {}
 
     bool IsNull() const {
-        return vin.empty() && vout.empty();
+        return vin.empty() && m_vout.empty();
     }
 
     const Txid& GetHash() const LIFETIMEBOUND { return hash; }
@@ -426,7 +427,7 @@ inline uint32_t version(const CMutableTransaction& tx) { return tx.version; }
 inline const std::vector<CTxIn>& vin(const CTransaction& tx) { return tx.vin; }
 inline const std::vector<CTxIn>& vin(const CMutableTransaction& tx) { return tx.vin; }
 
-inline const std::vector<CTxOut>& vout(const CTransaction& tx) { return tx.vout; }
+inline const std::vector<CTxOut>& vout(const CTransaction& tx) { return tx.vout(); }
 inline const std::vector<CTxOut>& vout(const CMutableTransaction& tx) { return tx.vout; }
 
 inline uint32_t nLockTime(const CTransaction& tx) { return tx.nLockTime(); }

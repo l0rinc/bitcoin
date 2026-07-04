@@ -216,8 +216,8 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
         coinbase_tx.witness = uint256(witness_stack[0]);
     }
     if (const int witness_index = GetWitnessCommitmentIndex(*pblock); witness_index != NO_WITNESS_COMMITMENT) {
-        Assert(witness_index >= 0 && static_cast<size_t>(witness_index) < final_coinbase->vout.size());
-        coinbase_tx.required_outputs.push_back(final_coinbase->vout[witness_index]);
+        Assert(witness_index >= 0 && static_cast<size_t>(witness_index) < final_coinbase->vout().size());
+        coinbase_tx.required_outputs.push_back(final_coinbase->vout()[witness_index]);
     }
 
     LogInfo("CreateNewBlock(): block weight: %u txs: %u fees: %ld sigops %d\n", GetBlockWeight(*pblock), nBlockTx, nFees, nBlockSigOpsCost);

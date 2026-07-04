@@ -425,8 +425,8 @@ static bool CheckInputsFromMempoolAndCache(const CTransaction& tx, TxValidationS
         const CTransactionRef& txFrom = pool.get(txin.prevout.hash);
         if (txFrom) {
             assert(txFrom->GetHash() == txin.prevout.hash);
-            assert(txFrom->vout.size() > txin.prevout.n);
-            assert(txFrom->vout[txin.prevout.n] == coin.out);
+            assert(txFrom->vout().size() > txin.prevout.n);
+            assert(txFrom->vout()[txin.prevout.n] == coin.out);
         } else {
             const Coin& coinFromUTXOSet = coins_tip.AccessCoin(txin.prevout);
             assert(!coinFromUTXOSet.IsSpent());
@@ -860,7 +860,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         // later (via coins_to_uncache) if this tx turns out to be invalid.
         if (!m_view.HaveCoin(txin.prevout)) {
             // Are inputs missing because we already have the tx?
-            for (size_t out = 0; out < tx.vout.size(); out++) {
+            for (size_t out = 0; out < tx.vout().size(); out++) {
                 // Optimistically just do efficient check of cache for outputs
                 if (coins_cache.HaveCoinInCache(COutPoint(hash, out))) {
                     return state.Invalid(TxValidationResult::TX_CONFLICT, "txn-already-known");
@@ -2216,12 +2216,12 @@ DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIn
 
         // Check that all outputs are available and match the outputs in the block itself
         // exactly.
-        for (size_t o = 0; o < tx.vout.size(); o++) {
-            if (!tx.vout[o].scriptPubKey.IsUnspendable()) {
+        for (size_t o = 0; o < tx.vout().size(); o++) {
+            if (!tx.vout()[o].scriptPubKey.IsUnspendable()) {
                 COutPoint out(hash, o);
                 Coin coin;
                 bool is_spent = view.SpendCoin(out, &coin);
-                if (!is_spent || tx.vout[o] != coin.out || pindex->nHeight != coin.nHeight || is_coinbase != coin.IsCoinBase()) {
+                if (!is_spent || tx.vout()[o] != coin.out || pindex->nHeight != coin.nHeight || is_coinbase != coin.IsCoinBase()) {
                     if (!is_bip30_exception) {
                         fClean = false; // transaction output mismatch
                     }
@@ -2472,7 +2472,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // duplicate earlier coinbases.
     if (fEnforceBIP30 || pindex->nHeight >= BIP34_IMPLIES_BIP30_LIMIT) {
         for (const auto& tx : block.vtx) {
-            for (size_t o = 0; o < tx->vout.size(); o++) {
+            for (size_t o = 0; o < tx->vout().size(); o++) {
                 if (view.HaveCoin(COutPoint(tx->GetHash(), o))) {
                     state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-BIP30",
                                   "tried to overwrite transaction");
@@ -3900,7 +3900,7 @@ static bool CheckWitnessMalleation(const CBlock& block, bool expect_witness_comm
             uint256 hash_witness = BlockWitnessMerkleRoot(block);
 
             CHash256().Write(hash_witness).Write(witness_stack[0]).Finalize(hash_witness);
-            if (memcmp(hash_witness.begin(), &block.vtx[0]->vout[commitpos].scriptPubKey[6], 32)) {
+            if (memcmp(hash_witness.begin(), &block.vtx[0]->vout()[commitpos].scriptPubKey[6], 32)) {
                 return state.Invalid(
                     /*result=*/BlockValidationResult::BLOCK_MUTATED,
                     /*reject_reason=*/"bad-witness-merkle-match",

@@ -491,9 +491,9 @@ void TxToUniv(const CTransaction& tx, const uint256& block_hash, UniValue& entry
     entry.pushKV("vin", std::move(vin));
 
     UniValue vout(UniValue::VARR);
-    vout.reserve(tx.vout.size());
-    for (unsigned int i = 0; i < tx.vout.size(); i++) {
-        const CTxOut& txout = tx.vout[i];
+    vout.reserve(tx.vout().size());
+    for (unsigned int i = 0; i < tx.vout().size(); i++) {
+        const CTxOut& txout = tx.vout()[i];
 
         UniValue out(UniValue::VOBJ);
 

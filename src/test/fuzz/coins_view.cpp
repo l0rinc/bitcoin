@@ -257,7 +257,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
             [&] {
                 const CTransaction transaction{random_mutable_transaction};
                 bool is_spent = false;
-                for (const CTxOut& tx_out : transaction.vout) {
+                for (const CTxOut& tx_out : transaction.vout()) {
                     if (Coin{tx_out, 0, transaction.IsCoinBase()}.IsSpent()) {
                         is_spent = true;
                     }
@@ -269,7 +269,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 }
                 const int height{int(fuzzed_data_provider.ConsumeIntegral<uint32_t>() >> 1)};
                 const bool check_for_overwrite{transaction.IsCoinBase() || [&] {
-                    for (uint32_t i{0}; i < transaction.vout.size(); ++i) {
+                    for (uint32_t i{0}; i < transaction.vout().size(); ++i) {
                         if (coins_view_cache.PeekCoin(COutPoint{transaction.GetHash(), i})) return true;
                     }
                     return fuzzed_data_provider.ConsumeBool();

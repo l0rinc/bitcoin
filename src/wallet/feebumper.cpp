@@ -180,7 +180,7 @@ Result CreateRateBumpTransaction(CWallet& wallet, const Txid& txid, const CCoinC
     const CWalletTx& wtx = it->second;
 
     // Make sure that original_change_index is valid
-    if (original_change_index.has_value() && original_change_index.value() >= wtx.tx->vout.size()) {
+    if (original_change_index.has_value() && original_change_index.value() >= wtx.tx->vout().size()) {
         errors.emplace_back(Untranslated("Change position is out of range"));
         return Result::INVALID_PARAMETER;
     }
@@ -239,7 +239,7 @@ Result CreateRateBumpTransaction(CWallet& wallet, const Txid& txid, const CCoinC
 
     // Calculate the old output amount.
     CAmount output_value = 0;
-    for (const auto& old_output : wtx.tx->vout) {
+    for (const auto& old_output : wtx.tx->vout()) {
         output_value += old_output.nValue;
     }
 
@@ -250,7 +250,7 @@ Result CreateRateBumpTransaction(CWallet& wallet, const Txid& txid, const CCoinC
     // outputs with its contents, otherwise use original outputs.
     std::vector<CRecipient> recipients;
     CAmount new_outputs_value = 0;
-    const auto& txouts = outputs.empty() ? wtx.tx->vout : outputs;
+    const auto& txouts = outputs.empty() ? wtx.tx->vout() : outputs;
     for (size_t i = 0; i < txouts.size(); ++i) {
         const CTxOut& output = txouts.at(i);
         CTxDestination dest;

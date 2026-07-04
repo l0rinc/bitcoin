@@ -91,7 +91,7 @@ struct OutpointsUpdater final : public CValidationInterface {
         // for coins spent we always want to be able to rbf so they're not removed
 
         // outputs from this tx can now be spent
-        for (uint32_t index{0}; index < tx.info.m_tx->vout.size(); ++index) {
+        for (uint32_t index{0}; index < tx.info.m_tx->vout().size(); ++index) {
             m_mempool_outpoints.insert(COutPoint{tx.info.m_tx->GetHash(), index});
         }
     }
@@ -104,7 +104,7 @@ struct OutpointsUpdater final : public CValidationInterface {
             m_mempool_outpoints.insert(input.prevout);
         }
         // outpoints created by this tx no longer exist
-        for (uint32_t index{0}; index < tx->vout.size(); ++index) {
+        for (uint32_t index{0}; index < tx->vout().size(); ++index) {
             m_mempool_outpoints.erase(COutPoint{tx->GetHash(), index});
         }
     }
@@ -313,13 +313,13 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
                         Assert(outpoints.insert(in.prevout).second);
                     }
                     // Cache the in-package outpoints being made
-                    for (size_t i = 0; i < tx->vout.size(); ++i) {
+                    for (size_t i = 0; i < tx->vout().size(); ++i) {
                         package_outpoints.emplace(tx->GetHash(), i);
                     }
                 }
                 // We need newly-created values for the duration of this run
-                for (size_t i = 0; i < tx->vout.size(); ++i) {
-                    outpoints_value[COutPoint(tx->GetHash(), i)] = tx->vout[i].nValue;
+                for (size_t i = 0; i < tx->vout().size(); ++i) {
+                    outpoints_value[COutPoint(tx->GetHash(), i)] = tx->vout()[i].nValue;
                 }
                 return tx;
             }());
@@ -475,13 +475,13 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
                         Assert(in == CTxIn() || outpoints.insert(in.prevout).second || dup_input);
                     }
                     // Cache the in-package outpoints being made
-                    for (size_t i = 0; i < tx->vout.size(); ++i) {
+                    for (size_t i = 0; i < tx->vout().size(); ++i) {
                         package_outpoints.emplace(tx->GetHash(), i);
                     }
                 }
                 // We need newly-created values for the duration of this run
-                for (size_t i = 0; i < tx->vout.size(); ++i) {
-                    outpoints_value[COutPoint(tx->GetHash(), i)] = tx->vout[i].nValue;
+                for (size_t i = 0; i < tx->vout().size(); ++i) {
+                    outpoints_value[COutPoint(tx->GetHash(), i)] = tx->vout()[i].nValue;
                 }
                 return tx;
             }());

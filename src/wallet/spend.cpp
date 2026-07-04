@@ -144,7 +144,7 @@ static std::optional<int64_t> GetSignedTxinWeight(const CWallet* wallet, const C
 TxSize CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *wallet, const std::vector<CTxOut>& txouts, const CCoinControl* coin_control)
 {
     // version + nLockTime + input count + output count
-    int64_t weight = (4 + 4 + GetSizeOfCompactSize(tx.vin.size()) + GetSizeOfCompactSize(tx.vout.size())) * WITNESS_SCALE_FACTOR;
+    int64_t weight = (4 + 4 + GetSizeOfCompactSize(tx.vin.size()) + GetSizeOfCompactSize(tx.vout().size())) * WITNESS_SCALE_FACTOR;
     // Whether any input spends a witness program. Necessary to run before the next loop over the
     // inputs in order to accurately compute the compactSize length for the witness data per input.
     bool is_segwit = std::any_of(txouts.begin(), txouts.end(), [&](const CTxOut& txo) {
@@ -156,7 +156,7 @@ TxSize CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *walle
     if (is_segwit) weight += 2;
 
     // Add the size of the transaction outputs.
-    for (const auto& txo : tx.vout) weight += GetSerializeSize(txo) * WITNESS_SCALE_FACTOR;
+    for (const auto& txo : tx.vout()) weight += GetSerializeSize(txo) * WITNESS_SCALE_FACTOR;
 
     // Add the size of the transaction inputs as if they were signed.
     for (uint32_t i = 0; i < txouts.size(); i++) {
@@ -178,8 +178,8 @@ TxSize CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *walle
         const auto mi = wallet->mapWallet.find(input.prevout.hash);
         // Can not estimate size without knowing the input details
         if (mi != wallet->mapWallet.end()) {
-            assert(input.prevout.n < mi->second.tx->vout.size());
-            txouts.emplace_back(mi->second.tx->vout.at(input.prevout.n));
+            assert(input.prevout.n < mi->second.tx->vout().size());
+            txouts.emplace_back(mi->second.tx->vout().at(input.prevout.n));
         } else if (coin_control) {
             const auto& txout{coin_control->GetExternalOutput(input.prevout)};
             if (!txout) return TxSize{-1, -1};
@@ -528,17 +528,17 @@ const CTxOut& FindNonChangeParentOutput(const CWallet& wallet, const COutPoint& 
 
     const CTransaction* ptx = wtx->tx.get();
     int n = outpoint.n;
-    while (OutputIsChange(wallet, ptx->vout[n]) && ptx->vin.size() > 0) {
+    while (OutputIsChange(wallet, ptx->vout()[n]) && ptx->vin.size() > 0) {
         const COutPoint& prevout = ptx->vin[0].prevout;
         const CWalletTx* it = wallet.GetWalletTx(prevout.hash);
-        if (!it || it->tx->vout.size() <= prevout.n ||
-            !wallet.IsMine(it->tx->vout[prevout.n])) {
+        if (!it || it->tx->vout().size() <= prevout.n ||
+            !wallet.IsMine(it->tx->vout()[prevout.n])) {
             break;
         }
         ptx = it->tx.get();
         n = prevout.n;
     }
-    return ptx->vout[n];
+    return ptx->vout()[n];
 }
 
 std::map<CTxDestination, std::vector<COutput>> ListCoins(const CWallet& wallet)
@@ -1477,7 +1477,7 @@ util::Result<CreatedTransactionResult> CreateTransaction(
 
         // Reuse the change destination from the first creation attempt to avoid skipping BIP44 indexes
         if (txr_ungrouped.change_pos) {
-            ExtractDestination(txr_ungrouped.tx->vout[*txr_ungrouped.change_pos].scriptPubKey, tmp_cc.destChange);
+            ExtractDestination(txr_ungrouped.tx->vout()[*txr_ungrouped.change_pos].scriptPubKey, tmp_cc.destChange);
         }
 
         auto txr_grouped = CreateTransactionInternal(wallet, vecSend, change_pos, tmp_cc, sign);
