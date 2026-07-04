@@ -638,6 +638,40 @@ BOOST_AUTO_TEST_CASE(peer_eviction_protects_noban_and_outbound)
     BOOST_CHECK(!outbound_result || *outbound_result != protected_id);
 }
 
+BOOST_AUTO_TEST_CASE(peer_eviction_ignores_protected_candidates)
+{
+    const std::vector<NodeEvictionCandidate> candidates{GetEvictionProtectionCandidates()};
+    const std::optional<NodeId> original_result{SelectNodeToEvict(std::vector<NodeEvictionCandidate>{candidates})};
+    BOOST_REQUIRE(original_result);
+
+    NodeEvictionCandidate noban_candidate{candidates.front()};
+    noban_candidate.id = 1000;
+    noban_candidate.m_connected = NodeClock::time_point::max();
+    noban_candidate.m_min_ping_time = NodeClock::duration::max();
+    noban_candidate.m_last_block_time = std::chrono::seconds::min();
+    noban_candidate.m_last_tx_time = std::chrono::seconds::min();
+    noban_candidate.fRelevantServices = false;
+    noban_candidate.m_relay_txs = true;
+    noban_candidate.fBloomFilter = false;
+    noban_candidate.nKeyedNetGroup = 0;
+    noban_candidate.m_noban = true;
+    noban_candidate.m_conn_type = ConnectionType::INBOUND;
+    noban_candidate.prefer_evict = true;
+
+    NodeEvictionCandidate outbound_candidate{noban_candidate};
+    outbound_candidate.id = 1001;
+    outbound_candidate.m_noban = false;
+    outbound_candidate.m_conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
+
+    std::vector<NodeEvictionCandidate> with_protected_noise{candidates};
+    with_protected_noise.push_back(noban_candidate);
+    with_protected_noise.push_back(outbound_candidate);
+    BOOST_CHECK(SelectNodeToEvict(std::move(with_protected_noise)) == original_result);
+
+    std::vector<NodeEvictionCandidate> protected_only{noban_candidate, outbound_candidate};
+    BOOST_CHECK(!SelectNodeToEvict(std::move(protected_only)));
+}
+
 BOOST_AUTO_TEST_CASE(peer_eviction_test)
 {
     FastRandomContext random_context{true};
