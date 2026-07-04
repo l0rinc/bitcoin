@@ -17,6 +17,7 @@
 #include <util/strencodings.h>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 
 using namespace util::hex_literals;
@@ -49,44 +50,54 @@ int ecdsa_signature_parse_der_lax(secp256k1_ecdsa_signature* sig, const unsigned
     size_t lenbyte;
     unsigned char tmpsig[64] = {0};
     int overflow = 0;
+    const auto sig_is_zero = [&] {
+        std::array<unsigned char, 64> compact_sig{};
+        return secp256k1_ecdsa_signature_serialize_compact(secp256k1_context_static, compact_sig.data(), sig) &&
+               std::all_of(compact_sig.begin(), compact_sig.end(), [](unsigned char byte) { return byte == 0; });
+    };
+    const auto fail = [&] {
+        Assume(sig_is_zero());
+        return 0;
+    };
 
     /* Hack to initialize sig with a correctly-parsed but invalid signature. */
     secp256k1_ecdsa_signature_parse_compact(secp256k1_context_static, sig, tmpsig);
+    Assume(sig_is_zero());
 
     /* Sequence tag byte */
     if (pos == inputlen || input[pos] != 0x30) {
-        return 0;
+        return fail();
     }
     pos++;
 
     /* Sequence length bytes */
     if (pos == inputlen) {
-        return 0;
+        return fail();
     }
     lenbyte = input[pos++];
     if (lenbyte & 0x80) {
         lenbyte -= 0x80;
         if (lenbyte > inputlen - pos) {
-            return 0;
+            return fail();
         }
         pos += lenbyte;
     }
 
     /* Integer tag byte for R */
     if (pos == inputlen || input[pos] != 0x02) {
-        return 0;
+        return fail();
     }
     pos++;
 
     /* Integer length for R */
     if (pos == inputlen) {
-        return 0;
+        return fail();
     }
     lenbyte = input[pos++];
     if (lenbyte & 0x80) {
         lenbyte -= 0x80;
         if (lenbyte > inputlen - pos) {
-            return 0;
+            return fail();
         }
         while (lenbyte > 0 && input[pos] == 0) {
             pos++;
@@ -94,7 +105,7 @@ int ecdsa_signature_parse_der_lax(secp256k1_ecdsa_signature* sig, const unsigned
         }
         static_assert(sizeof(size_t) >= 4, "size_t too small");
         if (lenbyte >= 4) {
-            return 0;
+            return fail();
         }
         rlen = 0;
         while (lenbyte > 0) {
@@ -106,26 +117,26 @@ int ecdsa_signature_parse_der_lax(secp256k1_ecdsa_signature* sig, const unsigned
         rlen = lenbyte;
     }
     if (rlen > inputlen - pos) {
-        return 0;
+        return fail();
     }
     rpos = pos;
     pos += rlen;
 
     /* Integer tag byte for S */
     if (pos == inputlen || input[pos] != 0x02) {
-        return 0;
+        return fail();
     }
     pos++;
 
     /* Integer length for S */
     if (pos == inputlen) {
-        return 0;
+        return fail();
     }
     lenbyte = input[pos++];
     if (lenbyte & 0x80) {
         lenbyte -= 0x80;
         if (lenbyte > inputlen - pos) {
-            return 0;
+            return fail();
         }
         while (lenbyte > 0 && input[pos] == 0) {
             pos++;
@@ -133,7 +144,7 @@ int ecdsa_signature_parse_der_lax(secp256k1_ecdsa_signature* sig, const unsigned
         }
         static_assert(sizeof(size_t) >= 4, "size_t too small");
         if (lenbyte >= 4) {
-            return 0;
+            return fail();
         }
         slen = 0;
         while (lenbyte > 0) {
@@ -145,7 +156,7 @@ int ecdsa_signature_parse_der_lax(secp256k1_ecdsa_signature* sig, const unsigned
         slen = lenbyte;
     }
     if (slen > inputlen - pos) {
-        return 0;
+        return fail();
     }
     spos = pos;
 
@@ -181,6 +192,11 @@ int ecdsa_signature_parse_der_lax(secp256k1_ecdsa_signature* sig, const unsigned
            signature if parsing failed. */
         memset(tmpsig, 0, 64);
         secp256k1_ecdsa_signature_parse_compact(secp256k1_context_static, sig, tmpsig);
+        Assume(sig_is_zero());
+    }
+    {
+        std::array<unsigned char, 64> compact_sig{};
+        Assume(secp256k1_ecdsa_signature_serialize_compact(secp256k1_context_static, compact_sig.data(), sig));
     }
     return 1;
 }
