@@ -11,8 +11,15 @@
 #include <util/chaintype.h>
 #include <util/strencodings.h>
 
+#include <cassert>
+#include <cstddef>
+#include <optional>
+#include <string>
+#include <vector>
+
 //! The converter of mocked descriptors, needs to be initialized when the target is.
 MockedDescriptorConverter MOCKED_DESC_CONVERTER;
+constexpr size_t MAX_CHECKSUM_ORACLE_DESCRIPTOR_SIZE{10'000};
 
 /** Test a successfully parsed descriptor. */
 static void TestDescriptor(const Descriptor& desc, FlatSigningProvider& sig_provider, std::string& dummy, std::optional<bool>& is_ranged, std::optional<bool>& is_solvable)
@@ -71,6 +78,27 @@ static void TestDescriptor(const Descriptor& desc, FlatSigningProvider& sig_prov
     assert((max_key_expr == 0 && key_count == 0) || max_key_expr + 1 == key_count);
 }
 
+static std::optional<std::vector<std::string>> ParseAndTestDescriptor(const std::string& descriptor, const bool require_checksum, const bool run_expansion_checks = true)
+{
+    FlatSigningProvider signing_provider;
+    std::string error;
+    const auto desc = Parse(descriptor, signing_provider, error, require_checksum);
+    if (desc.empty()) return std::nullopt;
+
+    std::optional<bool> is_ranged;
+    std::optional<bool> is_solvable;
+    std::vector<std::string> descriptor_strings;
+    descriptor_strings.reserve(desc.size());
+    for (const auto& d : desc) {
+        assert(d);
+        if (run_expansion_checks) {
+            TestDescriptor(*d, signing_provider, error, is_ranged, is_solvable);
+        }
+        descriptor_strings.push_back(d->ToString());
+    }
+    return descriptor_strings;
+}
+
 void initialize_descriptor_parse()
 {
     static ECC_Context ecc_context{};
@@ -88,15 +116,7 @@ FUZZ_TARGET(mocked_descriptor_parse, .init = initialize_mocked_descriptor_parse)
     const std::string mocked_descriptor{buffer.begin(), buffer.end()};
     if (const auto descriptor = MOCKED_DESC_CONVERTER.GetDescriptor(mocked_descriptor)) {
         if (IsTooExpensive(MakeUCharSpan(*descriptor))) return;
-        FlatSigningProvider signing_provider;
-        std::string error;
-        const auto desc = Parse(*descriptor, signing_provider, error);
-        std::optional<bool> is_ranged;
-        std::optional<bool> is_solvable;
-        for (const auto& d : desc) {
-            assert(d);
-            TestDescriptor(*d, signing_provider, error, is_ranged, is_solvable);
-        }
+        (void)ParseAndTestDescriptor(*descriptor, /*require_checksum=*/false);
     }
 }
 
@@ -105,15 +125,20 @@ FUZZ_TARGET(descriptor_parse, .init = initialize_descriptor_parse)
     if (IsTooExpensive(buffer)) return;
 
     const std::string descriptor(buffer.begin(), buffer.end());
-    FlatSigningProvider signing_provider;
-    std::string error;
-    for (const bool require_checksum : {true, false}) {
-        const auto desc = Parse(descriptor, signing_provider, error, require_checksum);
-        std::optional<bool> is_ranged;
-        std::optional<bool> is_solvable;
-        for (const auto& d : desc) {
-            assert(d);
-            TestDescriptor(*d, signing_provider, error, is_ranged, is_solvable);
-        }
+    const auto without_required_checksum{ParseAndTestDescriptor(descriptor, /*require_checksum=*/false)};
+    if (descriptor.size() > MAX_CHECKSUM_ORACLE_DESCRIPTOR_SIZE) return;
+
+    const auto with_required_checksum{ParseAndTestDescriptor(descriptor, /*require_checksum=*/true, /*run_expansion_checks=*/false)};
+    if (with_required_checksum) {
+        assert(without_required_checksum);
+        assert(*without_required_checksum == *with_required_checksum);
+    }
+
+    if (without_required_checksum && descriptor.find('#') == std::string::npos) {
+        const std::string checksum{GetDescriptorChecksum(descriptor)};
+        assert(!checksum.empty());
+        const auto with_added_checksum{ParseAndTestDescriptor(descriptor + "#" + checksum, /*require_checksum=*/true, /*run_expansion_checks=*/false)};
+        assert(with_added_checksum);
+        assert(*without_required_checksum == *with_added_checksum);
     }
 }
