@@ -3817,8 +3817,11 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
             }
             pindex->m_chain_tx_count = prev_tx_sum(*pindex);
             pindex->nSequenceId = nBlockSequenceId++;
-            for (const auto& c : m_chainstates) {
-                c->TryAddBlockIndexCandidate(pindex);
+            // Failed descendants still need chain transaction counts for reconsideration, but must not be candidates.
+            if (!(pindex->nStatus & BLOCK_FAILED_VALID)) {
+                for (const auto& c : m_chainstates) {
+                    c->TryAddBlockIndexCandidate(pindex);
+                }
             }
             std::pair<std::multimap<CBlockIndex*, CBlockIndex*>::iterator, std::multimap<CBlockIndex*, CBlockIndex*>::iterator> range = m_blockman.m_blocks_unlinked.equal_range(pindex);
             while (range.first != range.second) {

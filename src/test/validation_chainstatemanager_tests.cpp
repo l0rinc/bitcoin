@@ -4,10 +4,12 @@
 //
 #include <chainparams.h>
 #include <consensus/validation.h>
+#include <flatfile.h>
 #include <kernel/disconnected_transactions.h>
 #include <node/chainstatemanager_args.h>
 #include <node/kernel_notifications.h>
 #include <node/utxo_snapshot.h>
+#include <primitives/block.h>
 #include <random.h>
 #include <rpc/blockchain.h>
 #include <sync.h>
@@ -26,6 +28,7 @@
 
 #include <tinyformat.h>
 
+#include <cstddef>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -33,6 +36,27 @@
 using node::BlockManager;
 using node::KernelNotifications;
 using node::SnapshotMetadata;
+
+namespace {
+CBlockHeader ChildHeader(const CBlockIndex& parent, uint32_t nonce)
+{
+    CBlockHeader header;
+    header.nVersion = 4;
+    header.hashPrevBlock = parent.GetBlockHash();
+    header.hashMerkleRoot = uint256{static_cast<uint8_t>(nonce)};
+    header.nTime = parent.GetBlockTime() + 1;
+    header.nBits = Params().GenesisBlock().nBits;
+    header.nNonce = nonce;
+    return header;
+}
+
+CBlock DummyBlockWithTransactions(size_t tx_count)
+{
+    CBlock block;
+    block.vtx.resize(tx_count);
+    return block;
+}
+} // namespace
 
 BOOST_FIXTURE_TEST_SUITE(validation_chainstatemanager_tests, TestingSetup)
 
@@ -617,6 +641,46 @@ BOOST_FIXTURE_TEST_CASE(loadblockindex_invalid_descendants, TestChain100Setup)
     BOOST_CHECK(grand_parent->nStatus & BLOCK_FAILED_VALID);
     BOOST_CHECK(parent->nStatus & BLOCK_FAILED_VALID);
     BOOST_CHECK(child->nStatus & BLOCK_FAILED_VALID);
+}
+
+BOOST_FIXTURE_TEST_CASE(received_block_transactions_skips_failed_unlinked_child, TestChain100Setup)
+{
+    ChainstateManager& chainman{*Assert(m_node.chainman)};
+    Chainstate& chainstate{chainman.ActiveChainstate()};
+    CBlockIndex* parent;
+    CBlockIndex* child;
+
+    {
+        LOCK(chainman.GetMutex());
+        CBlockIndex* tip{chainman.ActiveChain().Tip()};
+        parent = chainman.m_blockman.AddToBlockIndex(ChildHeader(*tip, /*nonce=*/1), chainman.m_best_header);
+        child = chainman.m_blockman.AddToBlockIndex(ChildHeader(*parent, /*nonce=*/2), chainman.m_best_header);
+
+        CBlock child_block{DummyBlockWithTransactions(/*tx_count=*/1)};
+        chainman.ReceivedBlockTransactions(child_block, child, FlatFilePos{0, 1});
+        BOOST_CHECK(child->nStatus & BLOCK_HAVE_DATA);
+        BOOST_CHECK(!child->HaveNumChainTxs());
+    }
+
+    BlockValidationState state;
+    BOOST_REQUIRE(chainstate.InvalidateBlock(state, child));
+
+    {
+        LOCK(chainman.GetMutex());
+        BOOST_REQUIRE(child->nStatus & BLOCK_FAILED_VALID);
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(child), 0U);
+
+        CBlock parent_block{DummyBlockWithTransactions(/*tx_count=*/1)};
+        chainman.ReceivedBlockTransactions(parent_block, parent, FlatFilePos{0, 2});
+
+        BOOST_CHECK(parent->HaveNumChainTxs());
+        BOOST_CHECK(child->HaveNumChainTxs());
+        BOOST_CHECK(child->nStatus & BLOCK_FAILED_VALID);
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(child), 0U);
+        BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(parent), 1U);
+    }
+
+    chainman.CheckBlockIndex();
 }
 
 //! Verify that ReconsiderBlock clears failure flags for the target block, its ancestors, and descendants,
