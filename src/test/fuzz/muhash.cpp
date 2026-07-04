@@ -5,6 +5,7 @@
 #include <arith_uint256.h>
 #include <crypto/muhash.h>
 #include <span.h>
+#include <streams.h>
 #include <uint256.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
@@ -92,6 +93,24 @@ const arith_uint6144 ZERO{0};
 const arith_uint6144 ONE{1};
 const arith_uint6144 MODULUS{MODULUS_BYTES};
 
+uint256 FinalizeCopy(MuHash3072 muhash)
+{
+    uint256 out;
+    muhash.Finalize(out);
+    return out;
+}
+
+void AssertMuHashSerializationRoundTrip(const MuHash3072& muhash)
+{
+    DataStream stream{};
+    stream << muhash;
+
+    MuHash3072 decoded;
+    stream >> decoded;
+    assert(stream.empty());
+    assert(FinalizeCopy(decoded) == FinalizeCopy(muhash));
+}
+
 /** Update value to be the modulus of the input modulo MODULUS. */
 void Reduce(arith_uint6144& value)
 {
@@ -177,6 +196,7 @@ FUZZ_TARGET(muhash)
     muhash.Insert(data);
     muhash.Insert(data2);
     MuHash3072 expected{muhash};
+    AssertMuHashSerializationRoundTrip(muhash);
 
     constexpr uint256 initial_state_hash{"dd5ad2a105c2d29495f577245c357409002329b9f4d6182c0af3dc2f462555c8"};
     uint256 out;
@@ -215,6 +235,13 @@ FUZZ_TARGET(muhash)
             out2 = initial_state_hash;
         });
     assert(out == out2);
+    AssertMuHashSerializationRoundTrip(muhash);
+
+    MuHash3072 inserted_removed{muhash};
+    inserted_removed.Insert(data3);
+    inserted_removed.Remove(data3);
+    assert(FinalizeCopy(inserted_removed) == FinalizeCopy(muhash));
+    AssertMuHashSerializationRoundTrip(inserted_removed);
 
     // Finalize folds the denominator into the numerator but must not change the
     // represented value or make later operations observe stale denominator state.
