@@ -6,8 +6,10 @@
 #include <util/asmap.h>
 #include <test/fuzz/fuzz.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 #include <cassert>
@@ -28,6 +30,16 @@ std::vector<std::byte> BitsToBytes(std::span<const uint8_t> bits) noexcept
     if (next_byte_bits) ret.push_back(std::byte(next_byte));
 
     return ret;
+}
+
+void AssertSanityCheckInputLengthMonotonic(const std::span<const std::byte> asmap, const size_t ip_len)
+{
+    assert(ip_len <= 128);
+    assert(SanityCheckAsmap(asmap, static_cast<int>(ip_len)));
+    if (ip_len < 128) {
+        assert(SanityCheckAsmap(asmap, static_cast<int>(ip_len + 1)));
+    }
+    assert(SanityCheckAsmap(asmap, 128));
 }
 
 FUZZ_TARGET(asmap_direct)
@@ -52,6 +64,8 @@ FUZZ_TARGET(asmap_direct)
     // Checks on asmap
     auto asmap = BitsToBytes(buffer.first(sep_pos));
     if (SanityCheckAsmap(asmap, ip_len)) {
+        AssertSanityCheckInputLengthMonotonic(asmap, ip_len);
+
         // Verify that for valid asmaps, no prefix (except up to 7 zero padding bits) is valid.
         for (size_t prefix_len = sep_pos - 1; prefix_len > 0; --prefix_len) {
             auto prefix = BitsToBytes(buffer.first(prefix_len));
