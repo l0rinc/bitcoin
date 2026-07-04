@@ -92,8 +92,8 @@ FUZZ_TARGET(checkqueue)
         }
     }
 
+    std::atomic<size_t> control_calls{0};
     {
-        std::atomic<size_t> control_calls{0};
         CCheckQueueControl<DumbCheck> check_queue_control{check_queue_2};
         if (add_checks) {
             check_queue_control.Add(MakeChecks(check_results, &control_calls));
@@ -106,5 +106,9 @@ FUZZ_TARGET(checkqueue)
                 assert(control_calls.load(std::memory_order_relaxed) == check_results.size());
             }
         }
+    }
+    AssertResult(check_queue_2.Complete(), std::nullopt);
+    if (add_checks && !expected_result.has_value()) {
+        assert(control_calls.load(std::memory_order_relaxed) == check_results.size());
     }
 }
