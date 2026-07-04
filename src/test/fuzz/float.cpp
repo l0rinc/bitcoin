@@ -13,9 +13,51 @@
 #include <limits>
 #include <optional>
 
+namespace {
+
+constexpr uint64_t DOUBLE_EXP_MASK{0x7FF0000000000000};
+constexpr uint64_t DOUBLE_MAN_MASK{0x000FFFFFFFFFFFFF};
+constexpr uint64_t DOUBLE_CANONICAL_NAN{0x7ff8000000000000};
+
+bool IsDoubleNaNEncoding(uint64_t encoded)
+{
+    return (encoded & DOUBLE_EXP_MASK) == DOUBLE_EXP_MASK && (encoded & DOUBLE_MAN_MASK) != 0;
+}
+
+void AssertDoubleEncodingContract(uint64_t raw)
+{
+    const double decoded{DecodeDouble(raw)};
+    const uint64_t reencoded{EncodeDouble(decoded)};
+
+    if (IsDoubleNaNEncoding(raw)) {
+        assert(std::isnan(decoded));
+        assert(reencoded == DOUBLE_CANONICAL_NAN);
+    } else {
+        assert(!std::isnan(decoded));
+        assert(reencoded == raw);
+    }
+
+    const double decoded_again{DecodeDouble(reencoded)};
+    assert(std::isnan(decoded) == std::isnan(decoded_again));
+    assert(std::isnan(decoded) || decoded == decoded_again);
+}
+
+} // namespace
+
 FUZZ_TARGET(float)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
+
+    AssertDoubleEncodingContract(fuzzed_data_provider.ConsumeIntegral<uint64_t>());
+    AssertDoubleEncodingContract(0x0000000000000000);
+    AssertDoubleEncodingContract(0x8000000000000000);
+    AssertDoubleEncodingContract(0x0000000000000001);
+    AssertDoubleEncodingContract(0x8000000000000001);
+    AssertDoubleEncodingContract(0x7ff0000000000000);
+    AssertDoubleEncodingContract(0xfff0000000000000);
+    AssertDoubleEncodingContract(0x7ff0000000000001);
+    AssertDoubleEncodingContract(0xfff0000000000001);
+    AssertDoubleEncodingContract(0x7fffffffffffffff);
 
     {
         const double d{[&] {
@@ -48,6 +90,9 @@ FUZZ_TARGET(float)
         (void)memusage::DynamicUsage(d);
 
         uint64_t encoded = EncodeDouble(d);
+        if (std::isnan(d)) {
+            assert(encoded == DOUBLE_CANONICAL_NAN);
+        }
         if constexpr (std::numeric_limits<double>::is_iec559) {
             if (!std::isnan(d)) {
                 uint64_t encoded_in_memory;
@@ -58,5 +103,6 @@ FUZZ_TARGET(float)
         double d_deserialized = DecodeDouble(encoded);
         assert(std::isnan(d) == std::isnan(d_deserialized));
         assert(std::isnan(d) || d == d_deserialized);
+        assert(EncodeDouble(d_deserialized) == encoded);
     }
 }
