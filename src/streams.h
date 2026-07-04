@@ -547,6 +547,8 @@ private:
         size_t bytes_until_source_pos{static_cast<size_t>(nSrcPos - m_read_pos)};
         size_t advance{std::min({length, buffer_available, bytes_until_source_pos})};
         m_read_pos += advance;
+        Assume(m_read_pos <= nSrcPos);
+        Assume(m_read_pos <= nReadLimit);
         return std::make_pair(&vchBuf[buffer_offset], advance);
     }
 
@@ -571,6 +573,8 @@ public:
             memcpy(dst.data(), buffer_pointer, length);
             dst = dst.subspan(length);
         }
+        Assume(m_read_pos <= nSrcPos);
+        Assume(m_read_pos <= nReadLimit);
     }
 
     //! Move the read position ahead in the stream to the given position.
@@ -579,6 +583,8 @@ public:
     {
         assert(file_pos >= m_read_pos);
         while (m_read_pos < file_pos) AdvanceStream(file_pos - m_read_pos);
+        Assume(m_read_pos == file_pos);
+        Assume(m_read_pos <= nReadLimit);
     }
 
     //! return the current reading position
@@ -602,9 +608,12 @@ public:
             // rewinding too far, rewind as far as possible
             m_read_pos = nSrcPos - bufsize;
             Assert(m_read_pos <= nReadLimit);
+            Assume(m_read_pos <= nSrcPos);
             return false;
         }
         m_read_pos = nPos;
+        Assume(m_read_pos <= nSrcPos);
+        Assume(m_read_pos <= nReadLimit);
         return true;
     }
 
@@ -614,6 +623,8 @@ public:
         if (nPos < m_read_pos)
             return false;
         nReadLimit = nPos;
+        Assume(m_read_pos <= nReadLimit);
+        Assume(nReadLimit == nPos);
         return true;
     }
 
