@@ -123,15 +123,23 @@ struct FeeFrac
     /** Saturating add fee and size of another FeeFrac to this one. */
     void inline operator+=(const FeeFrac& other) noexcept
     {
-        fee = SaturatingAdd(fee, other.fee);
-        size = SaturatingAdd(size, other.size);
+        const int64_t new_fee{SaturatingAdd(fee, other.fee)};
+        const int32_t new_size{SaturatingAdd(size, other.size)};
+        fee = new_fee;
+        size = new_size;
+        Assume(fee == new_fee);
+        Assume(size == new_size);
     }
 
     /** Saturating subtract fee and size of another FeeFrac from this one. */
     void inline operator-=(const FeeFrac& other) noexcept
     {
-        fee = SaturatingSubtract(fee, other.fee);
-        size = SaturatingSubtract(size, other.size);
+        const int64_t new_fee{SaturatingSubtract(fee, other.fee)};
+        const int32_t new_size{SaturatingSubtract(size, other.size)};
+        fee = new_fee;
+        size = new_size;
+        Assume(fee == new_fee);
+        Assume(size == new_size);
     }
 
     /** Saturating sum fee and size. */
