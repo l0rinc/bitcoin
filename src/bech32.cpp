@@ -4,9 +4,11 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <bech32.h>
+#include <util/check.h>
 #include <util/strencodings.h>
 #include <util/vector.h>
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <numeric>
@@ -401,6 +403,9 @@ DecodeResult Decode(const std::string& str, CharLimit limit) {
     Encoding result = VerifyChecksum(hrp, values);
     if (result == Encoding::INVALID) return {};
     data decoded_data(values.begin(), values.end() - CHECKSUM_SIZE);
+    Assume(result == Encoding::BECH32 || result == Encoding::BECH32M);
+    Assume(std::all_of(hrp.begin(), hrp.end(), [](unsigned char c) { return c < 'A' || c > 'Z'; }));
+    Assume(std::all_of(decoded_data.begin(), decoded_data.end(), [](uint8_t value) { return value < 32; }));
     assert(CaseInsensitiveEqual(str, Encode(result, hrp, decoded_data)));
     return {result, std::move(hrp), std::move(decoded_data)};
 }
