@@ -84,7 +84,7 @@ bool AEADChaCha20Poly1305::Decrypt(std::span<const std::byte> cipher, std::span<
 {
     assert(cipher.size() == plain1.size() + plain2.size() + EXPANSION);
 
-    // Verify tag (using key drawn from block 0).
+    // Verify tag before writing plaintext; failed authentication leaves output spans untouched.
     m_chacha20.Seek(nonce, 0);
     std::byte expected_tag[EXPANSION];
     ComputeTag(m_chacha20, aad, cipher.first(cipher.size() - EXPANSION), expected_tag);
