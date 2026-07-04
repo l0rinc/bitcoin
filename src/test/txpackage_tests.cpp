@@ -21,6 +21,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <list>
+
 using namespace util::hex_literals;
 
 // A fee amount that is above 1sat/vB but below 5sat/vB for most transactions created within these
@@ -47,6 +49,58 @@ inline CTransactionRef create_placeholder_tx(size_t num_inputs, size_t num_outpu
     return MakeTransactionRef(mtx);
 }
 }; // struct TxPackageTest
+
+namespace {
+void CheckMempoolAcceptResultFields(const MempoolAcceptResult& result, MempoolAcceptResult::ResultType type)
+{
+    BOOST_CHECK(result.m_result_type == type);
+    switch (type) {
+    case MempoolAcceptResult::ResultType::VALID:
+        BOOST_CHECK(result.m_state.IsValid());
+        BOOST_REQUIRE(result.m_vsize);
+        BOOST_CHECK_GT(*result.m_vsize, 0);
+        BOOST_REQUIRE(result.m_base_fees);
+        BOOST_CHECK(MoneyRange(*result.m_base_fees));
+        BOOST_CHECK(result.m_effective_feerate.has_value());
+        BOOST_REQUIRE(result.m_wtxids_fee_calculations);
+        BOOST_CHECK(!result.m_wtxids_fee_calculations->empty());
+        BOOST_CHECK(!result.m_other_wtxid);
+        break;
+    case MempoolAcceptResult::ResultType::INVALID:
+        BOOST_CHECK(result.m_state.IsInvalid());
+        BOOST_CHECK(!result.m_vsize);
+        BOOST_CHECK(!result.m_base_fees);
+        BOOST_CHECK(!result.m_other_wtxid);
+        if (result.m_state.GetResult() == TxValidationResult::TX_RECONSIDERABLE) {
+            BOOST_CHECK(result.m_effective_feerate.has_value());
+            BOOST_REQUIRE(result.m_wtxids_fee_calculations);
+            BOOST_CHECK(!result.m_wtxids_fee_calculations->empty());
+        } else {
+            BOOST_CHECK(!result.m_effective_feerate);
+            BOOST_CHECK(!result.m_wtxids_fee_calculations);
+        }
+        break;
+    case MempoolAcceptResult::ResultType::MEMPOOL_ENTRY:
+        BOOST_CHECK(result.m_state.IsValid());
+        BOOST_REQUIRE(result.m_vsize);
+        BOOST_CHECK_GT(*result.m_vsize, 0);
+        BOOST_REQUIRE(result.m_base_fees);
+        BOOST_CHECK(MoneyRange(*result.m_base_fees));
+        BOOST_CHECK(!result.m_effective_feerate);
+        BOOST_CHECK(!result.m_wtxids_fee_calculations);
+        BOOST_CHECK(!result.m_other_wtxid);
+        break;
+    case MempoolAcceptResult::ResultType::DIFFERENT_WITNESS:
+        BOOST_CHECK(result.m_state.IsValid());
+        BOOST_CHECK(!result.m_vsize);
+        BOOST_CHECK(!result.m_base_fees);
+        BOOST_CHECK(!result.m_effective_feerate);
+        BOOST_CHECK(!result.m_wtxids_fee_calculations);
+        BOOST_CHECK(result.m_other_wtxid.has_value());
+        break;
+    }
+}
+} // namespace
 
 BOOST_FIXTURE_TEST_SUITE(txpackage_tests, TxPackageTest)
 
@@ -144,6 +198,32 @@ BOOST_AUTO_TEST_CASE(package_helpers_reject_null_tx_refs)
     BOOST_CHECK_THROW((void)IsChildWithParents(package), NonFatalCheckError);
     BOOST_CHECK_THROW((void)IsChildWithParentsTree(package), NonFatalCheckError);
     BOOST_CHECK_THROW((void)GetPackageHash(package), NonFatalCheckError);
+}
+
+BOOST_AUTO_TEST_CASE(mempool_accept_result_field_contracts)
+{
+    const Wtxid wtxid{Wtxid::FromUint256(uint256::ONE)};
+    const std::vector<Wtxid> fee_wtxids{wtxid};
+
+    CheckMempoolAcceptResultFields(
+        MempoolAcceptResult::Success(std::list<CTransactionRef>{}, /*vsize=*/123, /*fees=*/456,
+                                     CFeeRate{/*nFeePaid=*/456, /*num_bytes=*/123}, fee_wtxids),
+        MempoolAcceptResult::ResultType::VALID);
+
+    TxValidationState invalid_state;
+    invalid_state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "policy-fail");
+    CheckMempoolAcceptResultFields(MempoolAcceptResult::Failure(invalid_state),
+                                   MempoolAcceptResult::ResultType::INVALID);
+
+    TxValidationState fee_state;
+    fee_state.Invalid(TxValidationResult::TX_RECONSIDERABLE, "mempool full");
+    CheckMempoolAcceptResultFields(MempoolAcceptResult::FeeFailure(fee_state, CFeeRate{1}, fee_wtxids),
+                                   MempoolAcceptResult::ResultType::INVALID);
+
+    CheckMempoolAcceptResultFields(MempoolAcceptResult::MempoolTx(/*vsize=*/123, /*fees=*/456),
+                                   MempoolAcceptResult::ResultType::MEMPOOL_ENTRY);
+    CheckMempoolAcceptResultFields(MempoolAcceptResult::MempoolTxDifferentWitness(wtxid),
+                                   MempoolAcceptResult::ResultType::DIFFERENT_WITNESS);
 }
 
 BOOST_AUTO_TEST_CASE(process_new_package_rejects_null_tx_refs)
