@@ -183,6 +183,24 @@ BOOST_FIXTURE_TEST_CASE(wtxid_peer_accounting, TestingSetup)
     txdownload_impl.CheckIsEmpty();
 }
 
+BOOST_FIXTURE_TEST_CASE(check_empty_tracks_peer_registry, TestingSetup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    FastRandomContext det_rand{true};
+    node::TxDownloadManagerImpl txdownload_impl{node::TxDownloadOptions{pool, det_rand, true}};
+    const node::TxDownloadConnectionInfo txid_info{/*m_preferred=*/true,
+                                                   /*m_relay_permissions=*/false,
+                                                   /*m_wtxid_relay=*/false};
+    constexpr NodeId peer{42};
+
+    txdownload_impl.ConnectedPeer(peer, txid_info);
+    BOOST_REQUIRE(txdownload_impl.m_peer_info.contains(peer));
+
+    txdownload_impl.DisconnectedPeer(peer);
+    txdownload_impl.CheckIsEmpty(peer);
+    txdownload_impl.CheckIsEmpty();
+}
+
 BOOST_FIXTURE_TEST_CASE(accepted_and_confirmed_txs_clear_requests, TestingSetup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);

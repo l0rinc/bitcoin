@@ -638,12 +638,14 @@ void TxDownloadManagerImpl::CheckIsEmpty(NodeId nodeid)
 {
     assert(m_txrequest.Count(nodeid) == 0);
     assert(m_orphanage->UsageByPeer(nodeid) == 0);
+    assert(!m_peer_info.contains(nodeid));
 }
 void TxDownloadManagerImpl::CheckIsEmpty()
 {
     assert(m_orphanage->TotalOrphanUsage() == 0);
     assert(m_orphanage->CountUniqueOrphans() == 0);
     assert(m_txrequest.Size() == 0);
+    assert(m_peer_info.empty());
     assert(m_num_wtxid_peers == 0);
 }
 std::vector<TxOrphanage::OrphanInfo> TxDownloadManagerImpl::GetOrphanTransactions() const
