@@ -2940,11 +2940,14 @@ bool CheckChecksum(std::span<const char>& sp, bool require_checksum, std::string
         error = "Invalid characters in payload";
         return false;
     }
+    Assume(!require_checksum || check_split.size() == 2);
+    Assume(checksum.size() == 8);
     if (check_split.size() == 2) {
         if (!std::equal(checksum.begin(), checksum.end(), check_split[1].begin())) {
             error = strprintf("Provided checksum '%s' does not match computed checksum '%s'", std::string(check_split[1].begin(), check_split[1].end()), checksum);
             return false;
         }
+        Assume(check_split[1].size() == 8);
     }
     if (out_checksum) *out_checksum = std::move(checksum);
     sp = check_split[0];
