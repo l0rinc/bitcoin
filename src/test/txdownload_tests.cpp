@@ -225,6 +225,31 @@ BOOST_FIXTURE_TEST_CASE(accepted_and_confirmed_txs_clear_requests, TestingSetup)
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(block_connected_tracks_recent_confirmed_hashes, TestingSetup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    FastRandomContext det_rand{true};
+    node::TxDownloadManagerImpl txdownload_impl{node::TxDownloadOptions{pool, det_rand, true}};
+
+    const CTransactionRef witness_tx{CreatePlaceholderTx(/*segwit=*/true)};
+    const CTransactionRef legacy_tx{CreatePlaceholderTx(/*segwit=*/false)};
+    BOOST_REQUIRE(witness_tx->GetHash().ToUint256() != witness_tx->GetWitnessHash().ToUint256());
+    BOOST_REQUIRE(legacy_tx->GetHash().ToUint256() == legacy_tx->GetWitnessHash().ToUint256());
+
+    CBlock block;
+    block.vtx = {witness_tx, legacy_tx};
+    txdownload_impl.BlockConnected(std::make_shared<CBlock>(block));
+
+    BOOST_CHECK(txdownload_impl.RecentConfirmedTransactionsFilter().contains(witness_tx->GetHash().ToUint256()));
+    BOOST_CHECK(txdownload_impl.RecentConfirmedTransactionsFilter().contains(witness_tx->GetWitnessHash().ToUint256()));
+    BOOST_CHECK(txdownload_impl.RecentConfirmedTransactionsFilter().contains(legacy_tx->GetHash().ToUint256()));
+
+    txdownload_impl.BlockDisconnected();
+    BOOST_CHECK(!txdownload_impl.RecentConfirmedTransactionsFilter().contains(witness_tx->GetHash().ToUint256()));
+    BOOST_CHECK(!txdownload_impl.RecentConfirmedTransactionsFilter().contains(witness_tx->GetWitnessHash().ToUint256()));
+    BOOST_CHECK(!txdownload_impl.RecentConfirmedTransactionsFilter().contains(legacy_tx->GetHash().ToUint256()));
+}
+
 BOOST_FIXTURE_TEST_CASE(requests_to_send_mark_inflight, TestingSetup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
