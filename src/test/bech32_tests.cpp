@@ -110,6 +110,23 @@ BOOST_AUTO_TEST_CASE(bech32m_testvectors_valid)
     }
 }
 
+BOOST_AUTO_TEST_CASE(bech32_decode_normalizes_uppercase)
+{
+    const std::vector<uint8_t> values{0, 1, 2, 3, 4, 5, 30, 31};
+
+    for (const auto encoding : {bech32::Encoding::BECH32, bech32::Encoding::BECH32M}) {
+        const std::string lowercase{bech32::Encode(encoding, "bc", values)};
+        const std::string encoded{ToUpper(lowercase)};
+        const auto decoded{bech32::Decode(encoded)};
+        BOOST_REQUIRE(decoded.encoding == encoding);
+        BOOST_CHECK_EQUAL(decoded.hrp, "bc");
+        BOOST_CHECK(decoded.data == values);
+
+        const std::string reencoded{bech32::Encode(decoded.encoding, decoded.hrp, decoded.data)};
+        BOOST_CHECK_EQUAL(reencoded, lowercase);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(bech32_testvectors_invalid)
 {
     static const std::string CASES[] = {
