@@ -15,6 +15,47 @@
 #include <optional>
 #include <vector>
 
+namespace {
+bool EvictionEligible(const NodeEvictionCandidate& candidate)
+{
+    return !candidate.m_noban && candidate.m_conn_type == ConnectionType::INBOUND;
+}
+
+NodeEvictionCandidate ProtectedNoiseCandidate(NodeId id)
+{
+    return {
+        /*id=*/id,
+        /*m_connected=*/NodeClock::time_point::max(),
+        /*m_min_ping_time=*/NodeClock::duration::max(),
+        /*m_last_block_time=*/std::chrono::seconds::min(),
+        /*m_last_tx_time=*/std::chrono::seconds::min(),
+        /*fRelevantServices=*/false,
+        /*m_relay_txs=*/true,
+        /*fBloomFilter=*/false,
+        /*nKeyedNetGroup=*/0,
+        /*prefer_evict=*/true,
+        /*m_is_local=*/false,
+        /*m_network=*/NET_IPV4,
+        /*m_noban=*/true,
+        /*m_conn_type=*/ConnectionType::INBOUND,
+    };
+}
+
+void AppendProtectedNoise(std::vector<NodeEvictionCandidate>& candidates)
+{
+    const NodeId first_noise_id{static_cast<NodeId>(candidates.size())};
+    NodeEvictionCandidate noban{ProtectedNoiseCandidate(first_noise_id)};
+    noban.m_noban = true;
+    noban.m_conn_type = ConnectionType::INBOUND;
+    candidates.push_back(noban);
+
+    NodeEvictionCandidate outbound{ProtectedNoiseCandidate(first_noise_id + 1)};
+    outbound.m_noban = false;
+    outbound.m_conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
+    candidates.push_back(outbound);
+}
+} // namespace
+
 FUZZ_TARGET(node_eviction)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
@@ -44,6 +85,11 @@ FUZZ_TARGET(node_eviction)
     // indeterminate state after the SelectNodeToEvict(&&) call.
     const std::vector<NodeEvictionCandidate> eviction_candidates_copy = eviction_candidates;
     const std::optional<NodeId> node_to_evict = SelectNodeToEvict(std::move(eviction_candidates));
+    const bool has_eligible_candidate{
+        std::any_of(eviction_candidates_copy.begin(), eviction_candidates_copy.end(), EvictionEligible)};
+    if (!has_eligible_candidate) {
+        assert(!node_to_evict);
+    }
     if (node_to_evict) {
         const auto it{std::find_if(eviction_candidates_copy.begin(), eviction_candidates_copy.end(),
                                    [&node_to_evict](const NodeEvictionCandidate& eviction_candidate) {
@@ -53,4 +99,8 @@ FUZZ_TARGET(node_eviction)
         assert(!it->m_noban);
         assert(it->m_conn_type == ConnectionType::INBOUND);
     }
+
+    std::vector<NodeEvictionCandidate> with_protected_noise{eviction_candidates_copy};
+    AppendProtectedNoise(with_protected_noise);
+    assert(SelectNodeToEvict(std::move(with_protected_noise)) == node_to_evict);
 }
