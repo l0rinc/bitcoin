@@ -25,6 +25,12 @@ constexpr static inline void crypt_till_rekey(FSChaCha20Poly1305& aead, int reke
     }
 }
 
+void AssertFailedDecryptLeftOutputUntouched(bool ok, const std::vector<std::byte>& before, const std::vector<std::byte>& after)
+{
+    assert(!ok);
+    assert(before == after);
+}
+
 FUZZ_TARGET(crypto_aeadchacha20poly1305)
 {
     FuzzedDataProvider provider{buffer.data(), buffer.size()};
@@ -73,7 +79,7 @@ FUZZ_TARGET(crypto_aeadchacha20poly1305)
             assert((plain[i] ^ keystream[i]) == cipher[i]);
         }
 
-        std::vector<std::byte> decrypted_contents(length);
+        std::vector<std::byte> decrypted_contents(length, std::byte{0xa5});
         bool ok{false};
 
         // damage the key
@@ -83,8 +89,9 @@ FUZZ_TARGET(crypto_aeadchacha20poly1305)
         bad_key[key_position] ^= damage_val;
 
         AEADChaCha20Poly1305 bad_aead(bad_key);
+        const std::vector<std::byte> failed_key_decrypt_contents{decrypted_contents};
         ok = bad_aead.Decrypt(cipher, aad, nonce, decrypted_contents);
-        assert(!ok);
+        AssertFailedDecryptLeftOutputUntouched(ok, failed_key_decrypt_contents, decrypted_contents);
 
         // Optionally damage 1 bit in either the cipher (corresponding to a change in transit)
         // or the aad (to make sure that decryption will fail if the AAD mismatches).
@@ -99,6 +106,8 @@ FUZZ_TARGET(crypto_aeadchacha20poly1305)
             }
         }
 
+        const std::vector<std::byte> before_decrypt_contents(length, std::byte{0x3c});
+        decrypted_contents = before_decrypt_contents;
         if (use_splits && length > 0) {
             size_t split_index = provider.ConsumeIntegralInRange<size_t>(1, length);
             ok = aead.Decrypt(cipher, aad, nonce, std::span{decrypted_contents}.first(split_index), std::span{decrypted_contents}.subspan(split_index));
@@ -108,7 +117,10 @@ FUZZ_TARGET(crypto_aeadchacha20poly1305)
 
         // Decryption *must* fail if the packet was damaged, and succeed if it wasn't.
         assert(!ok == damage);
-        if (!ok) break;
+        if (!ok) {
+            assert(decrypted_contents == before_decrypt_contents);
+            break;
+        }
         assert(decrypted_contents == plain);
     }
 }
@@ -155,7 +167,7 @@ FUZZ_TARGET(crypto_fschacha20poly1305)
             enc_aead.Encrypt(plain, aad, cipher);
         }
 
-        std::vector<std::byte> decrypted_contents(length);
+        std::vector<std::byte> decrypted_contents(length, std::byte{0xa5});
         bool ok{false};
 
         // damage the key
@@ -166,8 +178,9 @@ FUZZ_TARGET(crypto_fschacha20poly1305)
 
         FSChaCha20Poly1305 bad_fs_aead(bad_key, rekey_interval);
         crypt_till_rekey(bad_fs_aead, rekey_interval, false);
+        const std::vector<std::byte> failed_key_decrypt_contents{decrypted_contents};
         ok = bad_fs_aead.Decrypt(cipher, aad, decrypted_contents);
-        assert(!ok);
+        AssertFailedDecryptLeftOutputUntouched(ok, failed_key_decrypt_contents, decrypted_contents);
 
         // Optionally damage 1 bit in either the cipher (corresponding to a change in transit)
         // or the aad (to make sure that decryption will fail if the AAD mismatches).
@@ -182,6 +195,8 @@ FUZZ_TARGET(crypto_fschacha20poly1305)
             }
         }
 
+        const std::vector<std::byte> before_decrypt_contents(length, std::byte{0x3c});
+        decrypted_contents = before_decrypt_contents;
         crypt_till_rekey(dec_aead, rekey_interval, false);
         if (use_splits && length > 0) {
             size_t split_index = provider.ConsumeIntegralInRange<size_t>(1, length);
@@ -192,7 +207,10 @@ FUZZ_TARGET(crypto_fschacha20poly1305)
 
         // Decryption *must* fail if the packet was damaged, and succeed if it wasn't.
         assert(!ok == damage);
-        if (!ok) break;
+        if (!ok) {
+            assert(decrypted_contents == before_decrypt_contents);
+            break;
+        }
         assert(decrypted_contents == plain);
     }
 }
