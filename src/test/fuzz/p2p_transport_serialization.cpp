@@ -89,19 +89,40 @@ FUZZ_TARGET(p2p_transport_serialization, .init = initialize_p2p_transport_serial
             assert(msg.m_type.size() <= CMessageHeader::MESSAGE_TYPE_SIZE);
             assert(msg.m_raw_message_size <= mutable_msg_bytes.size());
             assert(msg.m_raw_message_size == CMessageHeader::HEADER_SIZE + msg.m_message_size);
+            assert(msg.m_recv.size() == msg.m_message_size);
             assert(msg.m_time == time);
 
             std::vector<unsigned char> header;
             auto msg2 = NetMsg::Make(msg.m_type, std::span{msg.m_recv});
             bool queued = send_transport.SetMessageToSend(msg2);
             assert(queued);
+            std::optional<V1Transport> roundtrip_transport;
+            if (!reject_message) roundtrip_transport.emplace(NodeId{2});
             std::optional<bool> known_more;
             while (true) {
                 const auto& [to_send, more, _msg_type] = send_transport.GetBytesToSend(false);
                 if (known_more) assert(!to_send.empty() == *known_more);
                 if (to_send.empty()) break;
+                if (roundtrip_transport) {
+                    std::span<const uint8_t> roundtrip_bytes{to_send};
+                    while (!roundtrip_bytes.empty()) {
+                        assert(roundtrip_transport->ReceivedBytes(roundtrip_bytes));
+                    }
+                }
                 send_transport.MarkBytesSent(to_send.size());
                 known_more = more;
+            }
+            if (roundtrip_transport) {
+                assert(roundtrip_transport->ReceivedMessageComplete());
+                bool roundtrip_reject{true};
+                CNetMessage roundtrip_msg = roundtrip_transport->GetReceivedMessage(time, roundtrip_reject);
+                assert(!roundtrip_reject);
+                assert(roundtrip_msg.m_type == msg.m_type);
+                assert(roundtrip_msg.m_message_size == msg.m_message_size);
+                assert(roundtrip_msg.m_raw_message_size == msg.m_raw_message_size);
+                assert(roundtrip_msg.m_recv.size() == roundtrip_msg.m_message_size);
+                assert(roundtrip_msg.m_time == time);
+                assert(std::ranges::equal(roundtrip_msg.m_recv, msg.m_recv));
             }
         }
     }
