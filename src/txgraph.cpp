@@ -763,6 +763,9 @@ public:
     {
         auto& entry = m_entries[idx];
         Assume(entry.m_ref != nullptr);
+        Assume(GetRefGraph(new_location) == nullptr);
+        Assume(GetRefGraph(*entry.m_ref) == this);
+        Assume(GetRefIndex(*entry.m_ref) == idx);
         entry.m_ref = &new_location;
     }
 
@@ -3692,11 +3695,14 @@ TxGraph::Ref::~Ref()
 
 TxGraph::Ref::Ref(Ref&& other) noexcept
 {
+    const bool was_linked{other.m_graph != nullptr};
     // Inform the TxGraph of other that its Ref is being moved.
     if (other.m_graph) other.m_graph->UpdateRef(other.m_index, *this);
     // Actually move the contents.
     std::swap(m_graph, other.m_graph);
     std::swap(m_index, other.m_index);
+    assert(other.m_graph == nullptr);
+    assert(!was_linked || m_graph != nullptr);
 }
 
 std::unique_ptr<TxGraph> MakeTxGraph(
