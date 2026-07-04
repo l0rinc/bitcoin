@@ -284,6 +284,26 @@ BOOST_AUTO_TEST_CASE(test_CheckQueueControl_Destructor_Completes)
     BOOST_CHECK(!queue.Complete().has_value());
 }
 
+BOOST_AUTO_TEST_CASE(test_CheckQueueControl_Destructor_Failure_Resets)
+{
+    Fixed_Queue queue{/*batch_size=*/0, /*worker_threads_num=*/0};
+    {
+        CCheckQueueControl<FixedCheck> control{queue};
+        std::vector<FixedCheck> checks;
+        checks.emplace_back(std::make_optional<int>(5));
+        control.Add(std::move(checks));
+    }
+    BOOST_CHECK(!queue.Complete().has_value());
+
+    {
+        CCheckQueueControl<FixedCheck> control{queue};
+        std::vector<FixedCheck> checks;
+        checks.emplace_back(std::nullopt);
+        control.Add(std::move(checks));
+        BOOST_CHECK(!control.Complete().has_value());
+    }
+}
+
 // Test that unique checks are actually all called individually, rather than
 // just one check being called repeatedly. Test that checks are not called
 // more than once as well
