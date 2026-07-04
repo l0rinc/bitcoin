@@ -17,6 +17,7 @@
 #include <span.h>
 #include <streams.h>
 #include <uint256.h>
+#include <util/check.h>
 #include <util/result.h>
 
 #include <optional>
@@ -174,6 +175,7 @@ void DeserializeHDKeypaths(Stream& s, const std::vector<unsigned char>& key, std
     if (!pubkey.IsFullyValid()) {
        throw std::ios_base::failure("Invalid pubkey");
     }
+    Assume(pubkey.size() + 1 == key.size());
 
     KeyOriginInfo keypath;
     DeserializeHDKeypath(s, keypath);
@@ -208,6 +210,7 @@ void SerializeHDKeypaths(Stream& s, const std::map<CPubKey, KeyOriginInfo>& hd_k
         if (!keypath_pair.first.IsValid()) {
             throw std::ios_base::failure("Invalid CPubKey being serialized");
         }
+        Assume(keypath_pair.first.size() == CPubKey::SIZE || keypath_pair.first.size() == CPubKey::COMPRESSED_SIZE);
         SerializeToVector(s, type, std::span{keypath_pair.first});
         SerializeHDKeypath(s, keypath_pair.second);
     }
