@@ -15,7 +15,9 @@
 #include <util/time.h>
 #include <validation.h>
 
+#include <algorithm>
 #include <iterator>
+#include <memory>
 #include <vector>
 
 static void initialize_headers_sync_state_fuzz()
@@ -25,14 +27,14 @@ static void initialize_headers_sync_state_fuzz()
 }
 
 void MakeHeadersContinuous(
-    const CBlockHeader& genesis_header,
+    const CBlockHeader& chain_start_header,
     const std::vector<CBlockHeader>& all_headers,
     std::vector<CBlockHeader>& new_headers)
 {
     Assume(!new_headers.empty());
 
     const CBlockHeader* prev_header{
-        all_headers.empty() ? &genesis_header : &all_headers.back()};
+        all_headers.empty() ? &chain_start_header : &all_headers.back()};
 
     for (auto& header : new_headers) {
         header.hashPrevBlock = prev_header->GetHash();
@@ -54,16 +56,55 @@ public:
 
 FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
 {
+    constexpr int64_t MAINNET_GENESIS_TIME{1231006505};
+    constexpr uint32_t MAX_FUZZ_TIME{4102444799};
+
     SeedRandomStateForTest(SeedRand::ZEROS);
+    SetMockTime(MAINNET_GENESIS_TIME);
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
 
     CBlockHeader genesis_header{Params().GenesisBlock()};
-    CBlockIndex start_index(genesis_header);
+    const uint256 genesis_hash = genesis_header.GetHash();
+
+    const size_t chain_start_height{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 32)};
+    std::vector<uint256> start_hashes;
+    start_hashes.reserve(chain_start_height + 1);
+    start_hashes.push_back(genesis_hash);
+
+    std::vector<std::unique_ptr<CBlockIndex>> start_indexes;
+    start_indexes.reserve(chain_start_height + 1);
+    auto genesis_index{std::make_unique<CBlockIndex>(genesis_header)};
+    genesis_index->phashBlock = &start_hashes.back();
+    genesis_index->nHeight = 0;
+    genesis_index->nChainWork = GetBlockProof(*genesis_index);
+    genesis_index->BuildSkip();
+    start_indexes.push_back(std::move(genesis_index));
+
+    for (size_t i{0}; i < chain_start_height; ++i) {
+        CBlockHeader header;
+        header.nVersion = fuzzed_data_provider.ConsumeIntegral<int32_t>();
+        header.hashPrevBlock = start_hashes.back();
+        header.hashMerkleRoot = ConsumeUInt256(fuzzed_data_provider);
+        header.nTime = fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(genesis_header.nTime, MAX_FUZZ_TIME);
+        header.nBits = genesis_header.nBits;
+        header.nNonce = fuzzed_data_provider.ConsumeIntegral<uint32_t>();
+
+        start_hashes.push_back(header.GetHash());
+        auto index{std::make_unique<CBlockIndex>(header)};
+        index->phashBlock = &start_hashes.back();
+        index->pprev = start_indexes.back().get();
+        index->nHeight = index->pprev->nHeight + 1;
+        index->nChainWork = index->pprev->nChainWork + GetBlockProof(*index);
+        index->BuildSkip();
+        start_indexes.push_back(std::move(index));
+    }
+
+    const CBlockIndex& start_index{*start_indexes.back()};
+    const CBlockHeader chain_start_header{start_index.GetBlockHeader()};
+    const uint256 chain_start_hash{start_index.GetBlockHash()};
+    const std::vector<uint256> chain_start_locator{LocatorEntries(&start_index)};
 
     FakeNodeClock clock{ConsumeTime(fuzzed_data_provider, /*min=*/start_index.GetMedianTimePast())};
-
-    const uint256 genesis_hash = genesis_header.GetHash();
-    start_index.phashBlock = &genesis_hash;
 
     const HeadersSyncParams params{
         .commitment_period = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, Params().HeadersSync().commitment_period * 2),
@@ -81,9 +122,9 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
     std::vector<CBlockHeader>::const_iterator redownloaded_it;
     bool presync{true};
     bool requested_more{true};
-    uint256 next_pow_validated_prev{genesis_hash};
+    uint256 next_pow_validated_prev{chain_start_hash};
     int64_t expected_presync_height{start_index.nHeight};
-    uint32_t expected_presync_time{genesis_header.nTime};
+    uint32_t expected_presync_time{chain_start_header.nTime};
     arith_uint256 expected_presync_work{start_index.nChainWork};
 
     while (requested_more) {
@@ -96,7 +137,7 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
             if (!deser_headers || deser_headers->empty()) return;
 
             if (fuzzed_data_provider.ConsumeBool()) {
-                MakeHeadersContinuous(genesis_header, all_headers, *deser_headers);
+                MakeHeadersContinuous(chain_start_header, all_headers, *deser_headers);
             }
 
             headers.swap(*deser_headers);
@@ -143,13 +184,14 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
             assert(current_state != HeadersSyncState::State::FINAL);
             const CBlockLocator locator{headers_sync.NextHeadersRequestLocator()};
             assert(!locator.IsNull());
-            assert(locator.vHave.size() >= 2);
+            assert(locator.vHave.size() == chain_start_locator.size() + 1);
+            assert(std::equal(locator.vHave.begin() + 1, locator.vHave.end(), chain_start_locator.begin(), chain_start_locator.end()));
             assert(locator.vHave.back() == genesis_hash);
             if (current_state == HeadersSyncState::State::PRESYNC) {
                 assert(locator.vHave.front() == headers.back().GetHash());
             } else {
                 assert(current_state == HeadersSyncState::State::REDOWNLOAD);
-                assert(locator.vHave.front() == (previous_state == HeadersSyncState::State::PRESYNC ? genesis_hash : headers.back().GetHash()));
+                assert(locator.vHave.front() == (previous_state == HeadersSyncState::State::PRESYNC ? chain_start_hash : headers.back().GetHash()));
             }
 
             if (presync) {
@@ -161,7 +203,7 @@ FUZZ_TARGET(headers_sync_state, .init = initialize_headers_sync_state_fuzz)
 
                     // If we get to redownloading, the presynced headers need
                     // to have the min amount of work on them.
-                    assert(CalculateClaimedHeadersWork(all_headers) >= min_work);
+                    assert(start_index.nChainWork + CalculateClaimedHeadersWork(all_headers) >= min_work);
                 }
             }
         }

@@ -13,6 +13,7 @@
 #include <validation.h>
 
 #include <cstddef>
+#include <memory>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -95,6 +96,34 @@ struct HeadersGeneratorSetup : public RegTestingSetup {
                 },
                 chain_start,
                 /*minimum_required_work=*/CHAIN_WORK};
+    }
+
+    std::vector<std::unique_ptr<CBlockIndex>> CreateIndexChain(std::span<const CBlockHeader> headers, std::vector<uint256>& hashes)
+    {
+        hashes.clear();
+        hashes.reserve(headers.size() + 1);
+        hashes.push_back(genesis.GetHash());
+
+        std::vector<std::unique_ptr<CBlockIndex>> indexes;
+        indexes.reserve(headers.size() + 1);
+        auto genesis_index{std::make_unique<CBlockIndex>(genesis)};
+        genesis_index->phashBlock = &hashes.back();
+        genesis_index->nHeight = 0;
+        genesis_index->nChainWork = GetBlockProof(*genesis_index);
+        genesis_index->BuildSkip();
+        indexes.push_back(std::move(genesis_index));
+
+        for (const CBlockHeader& header : headers) {
+            hashes.push_back(header.GetHash());
+            auto index{std::make_unique<CBlockIndex>(header)};
+            index->phashBlock = &hashes.back();
+            index->pprev = indexes.back().get();
+            index->nHeight = index->pprev->nHeight + 1;
+            index->nChainWork = index->pprev->nChainWork + GetBlockProof(*index);
+            index->BuildSkip();
+            indexes.push_back(std::move(index));
+        }
+        return indexes;
     }
 
 private:
@@ -214,6 +243,52 @@ BOOST_AUTO_TEST_CASE(locator_retains_chain_start)
     BOOST_REQUIRE(locator.vHave.size() >= 2);
     BOOST_CHECK_EQUAL(locator.vHave.front(), genesis_hash);
     BOOST_CHECK_EQUAL(locator.vHave.back(), genesis_hash);
+}
+
+BOOST_AUTO_TEST_CASE(locator_retains_non_genesis_chain_start)
+{
+    const auto& first_chain{FirstChain()};
+    constexpr size_t chain_start_height{12};
+    static_assert(chain_start_height < TARGET_BLOCKS);
+
+    std::vector<uint256> chain_hashes;
+    const auto chain_indexes{CreateIndexChain(std::span{first_chain}.first(chain_start_height), chain_hashes)};
+    const CBlockIndex& chain_start{*chain_indexes.back()};
+    const auto chain_start_locator{LocatorEntries(&chain_start)};
+    const auto continuation_header{first_chain.at(chain_start_height)};
+
+    auto check_locator = [&](const CBlockLocator& locator, const uint256& expected_front) {
+        BOOST_REQUIRE_EQUAL(locator.vHave.size(), chain_start_locator.size() + 1);
+        BOOST_CHECK_EQUAL(locator.vHave.front(), expected_front);
+        BOOST_CHECK_EQUAL_COLLECTIONS(locator.vHave.begin() + 1, locator.vHave.end(),
+                                      chain_start_locator.begin(), chain_start_locator.end());
+    };
+
+    {
+        HeadersSyncState hss{/*id=*/0, Params().GetConsensus(),
+                             HeadersSyncParams{.commitment_period = COMMITMENT_PERIOD, .redownload_buffer_size = REDOWNLOAD_BUFFER_SIZE},
+                             chain_start,
+                             /*minimum_required_work=*/chain_start.nChainWork + GetBlockProof(continuation_header) + 1};
+        check_locator(hss.NextHeadersRequestLocator(), chain_start.GetBlockHash());
+
+        const auto result{hss.ProcessNextHeaders({{continuation_header}}, /*full_headers_message=*/true)};
+        BOOST_REQUIRE(result.success);
+        BOOST_REQUIRE(result.request_more);
+        BOOST_REQUIRE_EQUAL(hss.GetState(), State::PRESYNC);
+        check_locator(hss.NextHeadersRequestLocator(), continuation_header.GetHash());
+    }
+
+    {
+        HeadersSyncState hss{/*id=*/0, Params().GetConsensus(),
+                             HeadersSyncParams{.commitment_period = COMMITMENT_PERIOD, .redownload_buffer_size = REDOWNLOAD_BUFFER_SIZE},
+                             chain_start,
+                             /*minimum_required_work=*/chain_start.nChainWork};
+        const auto result{hss.ProcessNextHeaders({{continuation_header}}, /*full_headers_message=*/true)};
+        BOOST_REQUIRE(result.success);
+        BOOST_REQUIRE(result.request_more);
+        BOOST_REQUIRE_EQUAL(hss.GetState(), State::REDOWNLOAD);
+        check_locator(hss.NextHeadersRequestLocator(), chain_start.GetBlockHash());
+    }
 }
 
 BOOST_AUTO_TEST_CASE(presync_summary_tracks_headers)

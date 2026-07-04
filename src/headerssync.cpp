@@ -10,6 +10,8 @@
 #include <util/time.h>
 #include <util/vector.h>
 
+#include <algorithm>
+
 // Our memory analysis in headerssync-params.py assumes this many bytes for a
 // CompressedHeader (we should re-calculate parameters if we compress further).
 static_assert(sizeof(CompressedHeader) == 48);
@@ -344,7 +346,10 @@ CBlockLocator HeadersSyncState::NextHeadersRequestLocator() const
     CBlockLocator ret{std::move(locator)};
     Assume(!ret.IsNull());
     Assume(ret.vHave.size() >= 2);
-    Assume(ret.vHave.back() == m_chain_start.GetBlockHash());
+    Assume(ret.vHave.size() == chain_start_locator.size() + 1);
+    Assume(!chain_start_locator.empty());
+    Assume(ret.vHave.back() == chain_start_locator.back());
+    Assume(std::equal(ret.vHave.begin() + 1, ret.vHave.end(), chain_start_locator.begin(), chain_start_locator.end()));
     if (m_download_state == State::PRESYNC) {
         Assume(ret.vHave.front() == m_last_header_received.GetHash());
     } else {
