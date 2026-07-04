@@ -108,7 +108,15 @@ FUZZ_TARGET(policy_estimator, .init = initialize_policy_estimator)
             [&] {
                 block_policy_estimator.FlushUnconfirmed();
             });
-        (void)block_policy_estimator.estimateFee(fuzzed_data_provider.ConsumeIntegral<int>());
+        const int legacy_target{fuzzed_data_provider.ConsumeIntegral<int>()};
+        const CFeeRate legacy_fee{block_policy_estimator.estimateFee(legacy_target)};
+        assert(legacy_fee.GetFeePerK() >= 0);
+        if (legacy_target == 1) {
+            assert(legacy_fee == CFeeRate(0));
+        } else {
+            assert(legacy_fee == block_policy_estimator.estimateRawFee(
+                                     legacy_target, 0.95, FeeEstimateHorizon::MED_HALFLIFE));
+        }
         EstimationResult result;
         result.pass.start = 17;
         result.pass.end = 19;
