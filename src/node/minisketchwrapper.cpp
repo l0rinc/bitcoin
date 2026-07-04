@@ -65,6 +65,14 @@ uint32_t Minisketch32Implementation()
     return best;
 }
 
+void AssumeMinisketch32Shape(const Minisketch& sketch, size_t capacity)
+{
+    Assume(sketch.GetBits() == BITS);
+    Assume(sketch.GetCapacity() == capacity);
+    Assume(sketch.GetImplementation() == Minisketch32Implementation());
+    Assume(sketch.GetSerializedSize() == capacity * sizeof(uint32_t));
+}
+
 } // namespace
 
 
@@ -72,19 +80,17 @@ Minisketch MakeMinisketch32(size_t capacity)
 {
     Minisketch sketch{BITS, Minisketch32Implementation(), capacity};
     if (sketch) {
-        Assume(sketch.GetBits() == BITS);
-        Assume(sketch.GetCapacity() == capacity);
-        Assume(sketch.GetImplementation() == Minisketch32Implementation());
+        AssumeMinisketch32Shape(sketch, capacity);
     }
     return sketch;
 }
 
 Minisketch MakeMinisketch32FP(size_t max_elements, uint32_t fpbits)
 {
+    const size_t capacity{Minisketch::ComputeCapacity(BITS, max_elements, fpbits)};
     Minisketch sketch{Minisketch::CreateFP(BITS, Minisketch32Implementation(), max_elements, fpbits)};
     if (sketch) {
-        Assume(sketch.GetBits() == BITS);
-        Assume(sketch.GetImplementation() == Minisketch32Implementation());
+        AssumeMinisketch32Shape(sketch, capacity);
     }
     return sketch;
 }
