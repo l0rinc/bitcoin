@@ -68,6 +68,42 @@ void CheckRejectedSendPreservesMessage(Transport& transport, CSerializedNetMsg m
     BOOST_CHECK_EQUAL(msg.m_type, expected.m_type);
     BOOST_CHECK(msg.data == expected.data);
 }
+
+std::vector<uint8_t> CollectTransportBytes(Transport& transport, CSerializedNetMsg msg)
+{
+    BOOST_REQUIRE(transport.SetMessageToSend(msg));
+    std::vector<uint8_t> bytes;
+    std::optional<bool> known_more;
+    while (true) {
+        const auto& [to_send, more, _msg_type] = transport.GetBytesToSend(false);
+        if (known_more) BOOST_CHECK_EQUAL(!to_send.empty(), *known_more);
+        if (to_send.empty()) break;
+        bytes.insert(bytes.end(), to_send.begin(), to_send.end());
+        transport.MarkBytesSent(to_send.size());
+        known_more = more;
+    }
+    return bytes;
+}
+
+CNetMessage ReceiveV1TransportMessage(std::span<const uint8_t> bytes, NodeClock::time_point time, bool& reject)
+{
+    V1Transport transport{NodeId{1}};
+    while (!bytes.empty()) {
+        BOOST_REQUIRE(transport.ReceivedBytes(bytes));
+    }
+    BOOST_REQUIRE(transport.ReceivedMessageComplete());
+    return transport.GetReceivedMessage(time, reject);
+}
+
+void CheckNetMessage(const CNetMessage& msg, const CSerializedNetMsg& expected, NodeClock::time_point time)
+{
+    BOOST_CHECK_EQUAL(msg.m_type, expected.m_type);
+    BOOST_CHECK_EQUAL(msg.m_message_size, expected.data.size());
+    BOOST_CHECK_EQUAL(msg.m_raw_message_size, CMessageHeader::HEADER_SIZE + expected.data.size());
+    BOOST_CHECK_EQUAL(msg.m_recv.size(), expected.data.size());
+    BOOST_CHECK(msg.m_time == time);
+    BOOST_CHECK(std::ranges::equal(msg.m_recv, MakeByteSpan(expected.data)));
+}
 } // namespace
 
 BOOST_FIXTURE_TEST_SUITE(net_tests, RegTestingSetup)
@@ -1681,6 +1717,29 @@ BOOST_AUTO_TEST_CASE(transport_rejected_send_preserves_message)
         V2Transport transport{NodeId{0}, /*initiating=*/true};
         CheckRejectedSendPreservesMessage(transport, MakeSerializedNetMsg("version", {0x06, 0x07}));
     }
+}
+
+BOOST_AUTO_TEST_CASE(transport_v1_roundtrip_message_contract)
+{
+    const auto time{NodeClock::time_point{123s}};
+    const auto expected{MakeSerializedNetMsg(NetMsgType::PING, {0x01, 0x02, 0x03, 0x04})};
+
+    V1Transport send_transport{NodeId{0}};
+    const std::vector<uint8_t> encoded{CollectTransportBytes(send_transport, expected.Copy())};
+
+    bool reject{true};
+    CNetMessage decoded{ReceiveV1TransportMessage(encoded, time, reject)};
+    BOOST_REQUIRE(!reject);
+    CheckNetMessage(decoded, expected, time);
+
+    V1Transport resend_transport{NodeId{2}};
+    const std::vector<uint8_t> reencoded{
+        CollectTransportBytes(resend_transport, NetMsg::Make(decoded.m_type, std::span{decoded.m_recv}))};
+
+    bool roundtrip_reject{true};
+    const CNetMessage roundtrip_decoded{ReceiveV1TransportMessage(reencoded, time, roundtrip_reject)};
+    BOOST_REQUIRE(!roundtrip_reject);
+    CheckNetMessage(roundtrip_decoded, expected, time);
 }
 
 BOOST_AUTO_TEST_CASE(v2transport_test)
