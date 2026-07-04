@@ -10,6 +10,7 @@
 #include <txrequest.h>
 
 #include <algorithm>
+#include <array>
 #include <bitset>
 #include <cstdint>
 #include <queue>
@@ -294,6 +295,30 @@ public:
             assert(TXHASHES[std::get<1>(result[pos])] == actual[pos].ToUint256());
             assert(std::get<2>(result[pos]) == actual[pos].IsWtxid());
         }
+
+        const auto size_before_second{m_tracker.Size()};
+        std::array<size_t, MAX_PEERS> count_before_second;
+        std::array<size_t, MAX_PEERS> candidates_before_second;
+        std::array<size_t, MAX_PEERS> in_flight_before_second;
+        for (int peer_idx = 0; peer_idx < MAX_PEERS; ++peer_idx) {
+            count_before_second[peer_idx] = m_tracker.Count(peer_idx);
+            candidates_before_second[peer_idx] = m_tracker.CountCandidates(peer_idx);
+            in_flight_before_second[peer_idx] = m_tracker.CountInFlight(peer_idx);
+        }
+        std::vector<std::pair<NodeId, GenTxid>> expired_again;
+        if (collect_expired) {
+            expired_again.emplace_back(MAX_PEERS + 3, MakeGenTxid(0, /*is_wtxid=*/false));
+        }
+        const auto actual_again{m_tracker.GetRequestable(peer, m_now, collect_expired ? &expired_again : nullptr)};
+        assert(actual_again == actual);
+        if (collect_expired) assert(expired_again.empty());
+        assert(m_tracker.Size() == size_before_second);
+        for (int peer_idx = 0; peer_idx < MAX_PEERS; ++peer_idx) {
+            assert(m_tracker.Count(peer_idx) == count_before_second[peer_idx]);
+            assert(m_tracker.CountCandidates(peer_idx) == candidates_before_second[peer_idx]);
+            assert(m_tracker.CountInFlight(peer_idx) == in_flight_before_second[peer_idx]);
+        }
+        m_tracker.PostGetRequestableSanityCheck(m_now);
     }
 
     void Check()

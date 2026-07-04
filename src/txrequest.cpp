@@ -665,6 +665,17 @@ public:
         std::transform(selected.begin(), selected.end(), std::back_inserter(ret), [](const Announcement* ann) {
             return ann->m_gtxid;
         });
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            Assume(ret.size() == selected.size());
+            for (size_t pos{0}; pos < ret.size(); ++pos) {
+                Assume(selected[pos]->m_peer == peer);
+                Assume(selected[pos]->GetState() == State::CANDIDATE_BEST);
+                Assume(ret[pos] == selected[pos]->m_gtxid);
+                if (pos > 0) {
+                    Assume(selected[pos - 1]->m_sequence < selected[pos]->m_sequence);
+                }
+            }
+        }
         return ret;
     }
 
