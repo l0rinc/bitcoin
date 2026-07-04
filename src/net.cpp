@@ -825,6 +825,8 @@ CNetMessage V1Transport::GetReceivedMessage(NodeClock::time_point time, bool& re
     msg.m_time = time;
     msg.m_message_size = hdr.nMessageSize;
     msg.m_raw_message_size = hdr.nMessageSize + CMessageHeader::HEADER_SIZE;
+    Assume(msg.m_recv.size() == msg.m_message_size);
+    Assume(msg.m_raw_message_size == CMessageHeader::HEADER_SIZE + msg.m_message_size);
 
     uint256 hash = GetMessageHash();
 
@@ -1481,6 +1483,9 @@ CNetMessage V2Transport::GetReceivedMessage(NodeClock::time_point time, bool& re
         msg.m_message_size = contents.size();
         msg.m_recv.resize(contents.size());
         std::copy(contents.begin(), contents.end(), UCharCast(msg.m_recv.data()));
+        Assume(msg.m_recv.size() == msg.m_message_size);
+        Assume(msg.m_raw_message_size >= msg.m_message_size + BIP324Cipher::EXPANSION + 1);
+        Assume(msg.m_raw_message_size <= msg.m_message_size + BIP324Cipher::EXPANSION + 1 + CMessageHeader::MESSAGE_TYPE_SIZE);
     } else {
         LogDebug(BCLog::NET, "V2 transport error: invalid message type (%u bytes contents), peer=%d\n", m_recv_decode_buffer.size(), m_nodeid);
         reject_message = true;
