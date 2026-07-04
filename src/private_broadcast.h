@@ -14,6 +14,7 @@
 #include <optional>
 #include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 /**
@@ -50,6 +51,14 @@ public:
         std::vector<PeerSendInfo> peers;
     };
 
+    struct RemoveResult {
+        size_t num_picked{0};
+        size_t num_confirmed{0};
+        size_t num_unconfirmed_disconnected{0};
+
+        size_t NumUnstarted(size_t target_attempts) const;
+    };
+
     /**
      * Add a transaction to the storage.
      * @param[in] tx The transaction to add.
@@ -62,11 +71,10 @@ public:
     /**
      * Forget a transaction.
      * @param[in] tx Transaction to forget.
-     * @retval !nullopt The number of times the transaction was sent and confirmed
-     * by the recipient (if the transaction existed and was removed).
+     * @retval !nullopt Send status summary (if the transaction existed and was removed).
      * @retval nullopt The transaction was not in the storage.
      */
-    std::optional<size_t> Remove(const CTransactionRef& tx)
+    std::optional<RemoveResult> Remove(const CTransactionRef& tx)
         EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
 
     /**
@@ -106,6 +114,14 @@ public:
         EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
 
     /**
+     * Mark a private broadcast node as disconnected.
+     * @retval true A replacement connection should be scheduled.
+     * @retval false No replacement connection is needed.
+     */
+    bool MarkNodeDisconnected(const NodeId& nodeid)
+        EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
+
+    /**
      * Check if there are transactions that need to be broadcast.
      */
     bool HavePendingTransactions()
@@ -134,6 +150,8 @@ private:
         const NodeClock::time_point picked;
         /// When was the transaction reception confirmed by the node (by PONG).
         std::optional<NodeClock::time_point> confirmed;
+        /// Whether the node has disconnected and a replacement has already been scheduled.
+        bool disconnected{false};
 
         SendStatus(const NodeId& nodeid, const CService& address, const NodeClock::time_point& picked) : nodeid{nodeid}, address{address}, picked{picked} {}
     };
@@ -201,6 +219,7 @@ private:
     mutable Mutex m_mutex;
     std::unordered_map<CTransactionRef, TxSendStatus, CTransactionRefHash, CTransactionRefComp>
         m_transactions GUARDED_BY(m_mutex);
+    std::unordered_set<NodeId> m_removed_active_nodes GUARDED_BY(m_mutex);
 };
 
 #endif // BITCOIN_PRIVATE_BROADCAST_H

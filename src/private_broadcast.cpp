@@ -8,6 +8,14 @@
 #include <algorithm>
 #include <unordered_set>
 
+size_t PrivateBroadcast::RemoveResult::NumUnstarted(size_t target_attempts) const
+{
+    Assert(num_confirmed <= num_picked);
+    Assert(num_unconfirmed_disconnected <= num_picked - num_confirmed);
+    const size_t counter_slots_consumed{num_picked - num_unconfirmed_disconnected};
+    return target_attempts > counter_slots_consumed ? target_attempts - counter_slots_consumed : 0;
+}
+
 bool PrivateBroadcast::Add(const CTransactionRef& tx)
     EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
@@ -18,17 +26,32 @@ bool PrivateBroadcast::Add(const CTransactionRef& tx)
     return inserted;
 }
 
-std::optional<size_t> PrivateBroadcast::Remove(const CTransactionRef& tx)
+std::optional<PrivateBroadcast::RemoveResult> PrivateBroadcast::Remove(const CTransactionRef& tx)
     EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     Assert(tx != nullptr);
     LOCK(m_mutex);
     const auto handle{m_transactions.extract(tx)};
-    AssertInvariants();
     if (handle) {
-        const auto p{DerivePriority(handle.mapped().send_statuses)};
-        return p.num_confirmed;
+        RemoveResult result;
+        for (const auto& send_status : handle.mapped().send_statuses) {
+            ++result.num_picked;
+            if (send_status.confirmed.has_value()) {
+                ++result.num_confirmed;
+            } else if (send_status.disconnected) {
+                ++result.num_unconfirmed_disconnected;
+            }
+            if (!send_status.disconnected) {
+                const auto [_, inserted]{m_removed_active_nodes.insert(send_status.nodeid)};
+                Assert(inserted);
+            }
+        }
+        Assert(result.num_confirmed <= result.num_picked);
+        Assert(result.num_unconfirmed_disconnected <= result.num_picked - result.num_confirmed);
+        AssertInvariants();
+        return result;
     }
+    AssertInvariants();
     return std::nullopt;
 }
 
@@ -37,6 +60,7 @@ std::optional<CTransactionRef> PrivateBroadcast::PickTxForSend(const NodeId& wil
 {
     LOCK(m_mutex);
     Assert(!GetSendStatusByNode(will_send_to_nodeid).has_value());
+    Assert(!m_removed_active_nodes.contains(will_send_to_nodeid));
 
     const auto it{std::ranges::max_element(
             m_transactions,
@@ -84,6 +108,29 @@ bool PrivateBroadcast::DidNodeConfirmReception(const NodeId& nodeid)
         return tx_and_status.value().send_status.confirmed.has_value();
     }
     return false;
+}
+
+bool PrivateBroadcast::MarkNodeDisconnected(const NodeId& nodeid)
+    EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
+{
+    LOCK(m_mutex);
+    if (m_removed_active_nodes.erase(nodeid) > 0) {
+        AssertInvariants();
+        return false;
+    }
+
+    const auto tx_and_status{GetSendStatusByNode(nodeid)};
+    if (tx_and_status.has_value()) {
+        auto& send_status{tx_and_status.value().send_status};
+        const bool should_retry{!send_status.disconnected && !send_status.confirmed.has_value()};
+        send_status.disconnected = true;
+        AssertInvariants();
+        return should_retry;
+    }
+
+    const bool should_retry{!m_transactions.empty()};
+    AssertInvariants();
+    return should_retry;
 }
 
 bool PrivateBroadcast::HavePendingTransactions()
@@ -171,8 +218,10 @@ void PrivateBroadcast::AssertInvariants() const
         for (const auto& send_status : state.send_statuses) {
             const auto [_, inserted]{sent_nodes.insert(send_status.nodeid)};
             Assert(inserted);
+            Assert(!m_removed_active_nodes.contains(send_status.nodeid));
             last_picked = std::max(last_picked, send_status.picked);
             if (send_status.confirmed.has_value()) {
+                Assert(send_status.picked <= *send_status.confirmed);
                 ++num_confirmed;
                 last_confirmed = std::max(last_confirmed, *send_status.confirmed);
             }
@@ -183,5 +232,8 @@ void PrivateBroadcast::AssertInvariants() const
         Assert(p.last_picked == last_picked);
         Assert(p.num_confirmed == num_confirmed);
         Assert(p.last_confirmed == last_confirmed);
+    }
+    for (const NodeId nodeid : m_removed_active_nodes) {
+        Assert(!sent_nodes.contains(nodeid));
     }
 }
