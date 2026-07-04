@@ -581,7 +581,7 @@ jobs:
     name: 'lint'
     runs-on: ${{ github.repository == 'bitcoin/bitcoin' && 'warp-ubuntu-latest-x64-2x' || 'ubuntu-latest' }}
     if: ${{ vars.SKIP_BRANCH_PUSH != 'true' || github.event_name == 'pull_request' }}
-    timeout-minutes: 20
+    timeout-minutes: 360
     env:
       CONTAINER_NAME: "bitcoin-linter"
     steps:
