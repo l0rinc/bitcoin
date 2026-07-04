@@ -60,6 +60,8 @@ struct SimTxObject : public TxGraph::Ref
     const uint64_t m_txid{0};
     SimTxObject() noexcept = default;
     explicit SimTxObject(uint64_t txid) noexcept : m_txid(txid) {}
+    SimTxObject(SimTxObject&& other) noexcept : TxGraph::Ref(std::move(other)), m_txid(other.m_txid) {}
+    SimTxObject& operator=(SimTxObject&& other) noexcept = delete;
 };
 
 /** Data type representing a naive simulated TxGraph, keeping all transactions (even from
@@ -437,6 +439,30 @@ FUZZ_TARGET(txgraph)
         return &empty_ref;
     };
 
+    /** Move-construct a SimTxObject, preserving its graph entry while changing the Ref address. */
+    auto move_ref_fn = [&](SimTxObject* ref) {
+        if (ref == &empty_ref) return;
+
+        std::shared_ptr<SimTxObject> moved_ref;
+        auto get_moved_ref = [&]() -> const std::shared_ptr<SimTxObject>& {
+            if (!moved_ref) moved_ref = std::make_shared<SimTxObject>(std::move(*ref));
+            return moved_ref;
+        };
+
+        for (auto& sim : sims) {
+            if (const auto simpos{sim.Find(ref)}; simpos != SimTxGraph::MISSING) {
+                sim.simrevmap.erase(ref);
+                sim.simrevmap.emplace(get_moved_ref().get(), simpos);
+                sim.simmap[simpos] = get_moved_ref();
+            }
+            for (auto& removed : sim.removed) {
+                if (removed.get() == ref) {
+                    removed = get_moved_ref();
+                }
+            }
+        }
+    };
+
     auto chunk_linearization_info_fn = [](const SimTxGraph& sim, std::span<const SimTxGraph::Pos> linearization) noexcept {
         SimTxGraph::SetType left;
         for (auto pos : linearization) {
@@ -612,6 +638,12 @@ FUZZ_TARGET(txgraph)
                     std::swap(sel_sim.removed[removed_pos], sel_sim.removed.back());
                 }
                 sel_sim.removed.pop_back();
+                break;
+            } else if (block_builders.empty() && command-- == 0) {
+                // Move-construct a Ref. Moving a Ref must preserve the graph entry, but change the
+                // address returned by future inspector calls.
+                move_ref_fn(pick_fn());
+                real->SanityCheck();
                 break;
             } else if (block_builders.empty() && command-- == 0) {
                 // ~Ref (of any transaction).
