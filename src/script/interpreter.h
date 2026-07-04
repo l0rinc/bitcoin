@@ -187,7 +187,7 @@ struct PrecomputedTransactionData
     /** Initialize this PrecomputedTransactionData with transaction data.
      *
      * @param[in]   tx             The transaction for which data is being precomputed.
-     * @param[in]   spent_outputs  The CTxOuts being spent, one for each tx.vin, in order.
+     * @param[in]   spent_outputs  The CTxOuts being spent, one for each input, in order.
      * @param[in]   force          Whether to precompute data for all optional features,
      *                             regardless of what is in the inputs (used at signing
      *                             time, when the inputs aren't filled in yet). */

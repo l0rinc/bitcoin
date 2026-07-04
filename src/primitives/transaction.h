@@ -295,25 +295,14 @@ inline CAmount CalculateOutputValue(const TxType& tx)
  */
 class CTransaction
 {
-public:
-    // Default transaction version.
-    static const uint32_t CURRENT_VERSION{2};
-
-    // The local variables are made const to prevent unintended modification
-    // without updating the cached hash value. However, CTransaction is not
-    // actually immutable; deserialization and assignment are implemented,
-    // and bypass the constness. This is safe, as they update the entire
-    // structure, including the hash.
-    const std::vector<CTxIn> m_vin;
-    const std::vector<CTxIn>& vin() const LIFETIMEBOUND { return m_vin; }
-    const std::vector<CTxOut> m_vout;
-    const std::vector<CTxOut>& vout() const LIFETIMEBOUND { return m_vout; }
-    const uint32_t m_version;
-    uint32_t version() const { return m_version; }
-    const uint32_t m_nLockTime;
-    uint32_t nLockTime() const { return m_nLockTime; }
-
 private:
+    // Transaction data is const to prevent unintended modification without
+    // updating the cached hash values.
+    const std::vector<CTxIn> m_vin;
+    const std::vector<CTxOut> m_vout;
+    const uint32_t m_version;
+    const uint32_t m_nLockTime;
+
     /** Memory only. */
     const bool m_has_witness;
     const Txid hash;
@@ -325,9 +314,20 @@ private:
     bool ComputeHasWitness() const;
 
 public:
+    // Default transaction version.
+    static const uint32_t CURRENT_VERSION{2};
+
     /** Convert a CMutableTransaction into a CTransaction. */
     explicit CTransaction(const CMutableTransaction& tx);
     explicit CTransaction(CMutableTransaction&& tx);
+
+    CTransaction(const CTransaction&) = default;
+    CTransaction& operator=(const CTransaction&) = delete;
+
+    const std::vector<CTxIn>& vin() const LIFETIMEBOUND { return m_vin; }
+    const std::vector<CTxOut>& vout() const LIFETIMEBOUND { return m_vout; }
+    uint32_t version() const { return m_version; }
+    uint32_t nLockTime() const { return m_nLockTime; }
 
     template <typename Stream>
     inline void Serialize(Stream& s) const {

@@ -21,7 +21,7 @@ bool IsFinalTx(const CTransaction &tx, int nBlockHeight, int64_t nBlockTime)
     if ((int64_t)tx.nLockTime() < ((int64_t)tx.nLockTime() < LOCKTIME_THRESHOLD ? (int64_t)nBlockHeight : nBlockTime))
         return true;
 
-    // Even if tx.nLockTime isn't satisfied by nBlockHeight/nBlockTime, a
+    // Even if the transaction's nLockTime isn't satisfied by nBlockHeight/nBlockTime, a
     // transaction is still considered final if all inputs' nSequence ==
     // SEQUENCE_FINAL (0xffffffff), in which case nLockTime is ignored.
     //

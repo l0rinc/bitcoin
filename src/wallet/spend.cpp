@@ -140,7 +140,7 @@ static std::optional<int64_t> GetSignedTxinWeight(const CWallet* wallet, const C
     return {};
 }
 
-// txouts needs to be in the order of tx.vin
+// txouts need to be in the same order as tx inputs.
 TxSize CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *wallet, const std::vector<CTxOut>& txouts, const CCoinControl* coin_control)
 {
     // version + nLockTime + input count + output count
