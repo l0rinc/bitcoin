@@ -209,6 +209,7 @@ uint32_t Interpret(const std::span<const std::byte> asmap, const std::span<const
             uint32_t match = DecodeMatch(pos, asmap);
             if (match == INVALID) break; // Match bits straddle EOF
             int matchlen = std::bit_width(match) - 1;  // An n-bit value matches n-1 input bits
+            Assume(matchlen >= 1 && matchlen <= 8);
             if ((ip_bits_end - ip_bit) < matchlen) break; // Not enough input bits
             for (int bit = 0; bit < matchlen; bit++) {
                 if (ConsumeBitBE(ip_bit, ip) != ((match >> (matchlen - 1 - bit)) & 1)) {
@@ -259,11 +260,14 @@ bool SanityCheckAsmap(const std::span<const std::byte> asmap, int bits)
                 while (pos != endpos) {
                     if (ConsumeBitLE(pos, asmap)) return false; // Nonzero padding bit
                 }
+                Assume(jumps.empty());
+                Assume(pos == endpos);
                 return true; // Sanely reached EOF
             } else {
                 // Continue by pretending we jumped to the next instruction
                 if (pos != jumps.back().first) return false; // Unreachable code
                 bits = jumps.back().second; // Restore the number of bits we would have had left after this jump
+                Assume(bits >= 0);
                 jumps.pop_back();
                 prevopcode = Instruction::JUMP;
             }
@@ -273,6 +277,7 @@ bool SanityCheckAsmap(const std::span<const std::byte> asmap, int bits)
             if (int64_t{jump} > static_cast<int64_t>(endpos - pos)) return false; // Jump out of range
             if (bits == 0) return false; // Consuming bits past the end of the input
             --bits;
+            Assume(bits >= 0);
             uint32_t jump_offset = pos + jump;
             if (!jumps.empty() && jump_offset >= jumps.back().first) return false; // Intersecting jumps
             jumps.emplace_back(jump_offset, bits);  // Queue jump target for validation
@@ -281,12 +286,14 @@ bool SanityCheckAsmap(const std::span<const std::byte> asmap, int bits)
             uint32_t match = DecodeMatch(pos, asmap);
             if (match == INVALID) return false; // Match bits straddle EOF
             int matchlen = std::bit_width(match) - 1;
+            Assume(matchlen >= 1 && matchlen <= 8);
             if (prevopcode != Instruction::MATCH) had_incomplete_match = false;
             // Within a sequence of matches only at most one should be incomplete
             if (matchlen < 8 && had_incomplete_match) return false;
             had_incomplete_match = (matchlen < 8);
             if (bits < matchlen) return false; // Consuming bits past the end of the input
             bits -= matchlen;
+            Assume(bits >= 0);
             prevopcode = Instruction::MATCH;
         } else if (opcode == Instruction::DEFAULT) {
             // There should not be two successive DEFAULTs (they could be combined into one)
