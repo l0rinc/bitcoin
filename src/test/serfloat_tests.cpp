@@ -18,6 +18,15 @@ BOOST_FIXTURE_TEST_SUITE(serfloat_tests, BasicTestingSetup)
 
 namespace {
 
+constexpr uint64_t DOUBLE_EXP_MASK{0x7FF0000000000000};
+constexpr uint64_t DOUBLE_MAN_MASK{0x000FFFFFFFFFFFFF};
+constexpr uint64_t DOUBLE_CANONICAL_NAN{0x7ff8000000000000};
+
+bool IsDoubleNaNEncoding(uint64_t encoded)
+{
+    return (encoded & DOUBLE_EXP_MASK) == DOUBLE_EXP_MASK && (encoded & DOUBLE_MAN_MASK) != 0;
+}
+
 uint64_t TestDouble(double f) {
     uint64_t i = EncodeDouble(f);
     double f2 = DecodeDouble(i);
@@ -32,6 +41,19 @@ uint64_t TestDouble(double f) {
         BOOST_CHECK_EQUAL(i, i2);
     }
     return i;
+}
+
+void TestDoubleEncoding(uint64_t raw)
+{
+    const double decoded{DecodeDouble(raw)};
+    const uint64_t reencoded{EncodeDouble(decoded)};
+    if (IsDoubleNaNEncoding(raw)) {
+        BOOST_CHECK(std::isnan(decoded));
+        BOOST_CHECK_EQUAL(reencoded, DOUBLE_CANONICAL_NAN);
+    } else {
+        BOOST_CHECK(!std::isnan(decoded));
+        BOOST_CHECK_EQUAL(reencoded, raw);
+    }
 }
 
 } // namespace
@@ -118,6 +140,34 @@ BOOST_AUTO_TEST_CASE(double_serfloat_tests) {
             memcpy(&f, &v, 8);
             TestDouble(f);
         }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(double_serfloat_encoding_contracts)
+{
+    for (const uint64_t raw : {
+             uint64_t{0x0000000000000000},
+             uint64_t{0x8000000000000000},
+             uint64_t{0x0000000000000001},
+             uint64_t{0x8000000000000001},
+             uint64_t{0x000fffffffffffff},
+             uint64_t{0x800fffffffffffff},
+             uint64_t{0x0010000000000000},
+             uint64_t{0x8010000000000000},
+             uint64_t{0x7fefffffffffffff},
+             uint64_t{0xffefffffffffffff},
+             uint64_t{0x7ff0000000000000},
+             uint64_t{0xfff0000000000000},
+             uint64_t{0x4088888880000000},
+             uint64_t{0xc088888880000000},
+             uint64_t{0x7ff8000000000000},
+             uint64_t{0xfff8000000000000},
+             uint64_t{0x7ff0000000000001},
+             uint64_t{0xfff0000000000001},
+             uint64_t{0x7fffffffffffffff},
+             uint64_t{0xffffffffffffffff},
+         }) {
+        TestDoubleEncoding(raw);
     }
 }
 
