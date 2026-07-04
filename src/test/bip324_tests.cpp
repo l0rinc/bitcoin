@@ -300,4 +300,44 @@ BOOST_AUTO_TEST_CASE(packet_test_vectors) {
         "1a7f3fb83ad2b050b663b8df6b7c2cc2d8e169a869a58bf7ef5ab5db97a505c84a812e100d9445da4fc39a1176d6aed3995f6868631224b86f10603217c8d13270e0c6d054ad9e0d0b7dc0c8e59a37cd05a0a45faa14b4ffc8d12b641f62e6f1b71c1f72b737e9ce3fe74be779b25e70bf11d98766b3876d0fa28d3c669087fc");
 }
 
+BOOST_AUTO_TEST_CASE(failed_decrypt_preserves_outputs)
+{
+    SelectParams(ChainType::MAIN);
+
+    auto make_key = [](std::string_view hex) {
+        const auto bytes{ParseHex(hex)};
+        CKey key;
+        key.Set(bytes.begin(), bytes.end(), /*fCompressedIn=*/true);
+        BOOST_REQUIRE(key.IsValid());
+        return key;
+    };
+
+    const CKey init_key{make_key("61062ea5071d800bbfd59e2e8b53d47d194b095ae5a4df04936b49772ef0d4d7")};
+    const CKey resp_key{make_key("6f312890ec83bbb26798abaadd574684a53e74ccef7953b790fcc29409080246")};
+    const auto init_entropy{ParseHex<std::byte>("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")};
+    const auto resp_entropy{ParseHex<std::byte>("202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f")};
+
+    BIP324Cipher initiator{init_key, init_entropy};
+    BIP324Cipher responder{resp_key, resp_entropy};
+    initiator.Initialize(responder.GetOurPubKey(), /*initiator=*/true);
+    responder.Initialize(initiator.GetOurPubKey(), /*initiator=*/false);
+
+    const auto contents{ParseHex<std::byte>("000102030405060708")};
+    const auto aad{ParseHex<std::byte>("aabbccdd")};
+    std::vector<std::byte> ciphertext(contents.size() + BIP324Cipher::EXPANSION);
+    initiator.Encrypt(contents, aad, /*ignore=*/false, ciphertext);
+
+    BOOST_CHECK_EQUAL(responder.DecryptLength(std::span{ciphertext}.first(BIP324Cipher::LENGTH_LEN)), contents.size());
+
+    auto damaged_ciphertext{ciphertext};
+    damaged_ciphertext.back() ^= std::byte{0x01};
+
+    std::vector<std::byte> decrypted(contents.size(), std::byte{0x3c});
+    const auto decrypted_before{decrypted};
+    bool ignore{true};
+    BOOST_CHECK(!responder.Decrypt(std::span{damaged_ciphertext}.subspan(BIP324Cipher::LENGTH_LEN), aad, ignore, decrypted));
+    BOOST_CHECK(decrypted == decrypted_before);
+    BOOST_CHECK(ignore);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

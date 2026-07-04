@@ -14,6 +14,7 @@
 #include <span.h>
 #include <support/cleanse.h>
 #include <uint256.h>
+#include <util/check.h>
 
 #include <algorithm>
 #include <cassert>
@@ -21,6 +22,12 @@
 #include <cstdint>
 #include <iterator>
 #include <string>
+
+namespace {
+
+constexpr size_t MAX_CONTENTS_LEN{0xFFFFFF};
+
+} // namespace
 
 BIP324Cipher::BIP324Cipher(const CKey& key, std::span<const std::byte> ent32) noexcept
     : m_key(key)
@@ -73,6 +80,7 @@ void BIP324Cipher::Initialize(const EllSwiftPubKey& their_pubkey, bool initiator
 void BIP324Cipher::Encrypt(std::span<const std::byte> contents, std::span<const std::byte> aad, bool ignore, std::span<std::byte> output) noexcept
 {
     assert(output.size() == contents.size() + EXPANSION);
+    Assume(contents.size() <= MAX_CONTENTS_LEN);
 
     // Encrypt length.
     std::byte len[LENGTH_LEN];
