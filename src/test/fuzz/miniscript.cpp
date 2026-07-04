@@ -1037,6 +1037,7 @@ void TestNode(const MsCtx script_ctx, const std::optional<Node>& node, FuzzedDat
     assert(str);
     auto parsed = miniscript::FromString(*str, parser_ctx);
     assert(parsed);
+    assert(parsed->GetMsCtx() == script_ctx);
     assert(*parsed == *node);
 
     // Check consistency between script size estimation and real size.
@@ -1056,6 +1057,7 @@ void TestNode(const MsCtx script_ctx, const std::optional<Node>& node, FuzzedDat
     // Check roundtrip to script
     auto decoded = miniscript::FromScript(script, parser_ctx);
     assert(decoded);
+    assert(decoded->GetMsCtx() == script_ctx);
     // Note we can't use *decoded == *node because the miniscript representation may differ, so we check that:
     // - The script corresponding to that decoded form matches exactly
     // - The type matches exactly
@@ -1243,11 +1245,13 @@ FUZZ_TARGET(miniscript_string, .init = FuzzInit)
     const ParserContext parser_ctx{(MsCtx)provider.ConsumeBool()};
     auto parsed = miniscript::FromString(str, parser_ctx);
     if (!parsed) return;
+    assert(parsed->GetMsCtx() == parser_ctx.MsContext());
 
     const auto str2 = parsed->ToString(parser_ctx);
     assert(str2);
     auto parsed2 = miniscript::FromString(*str2, parser_ctx);
     assert(parsed2);
+    assert(parsed2->GetMsCtx() == parser_ctx.MsContext());
     assert(*parsed == *parsed2);
 }
 
@@ -1261,6 +1265,7 @@ FUZZ_TARGET(miniscript_script)
     const ScriptParserContext script_parser_ctx{(MsCtx)fuzzed_data_provider.ConsumeBool()};
     const auto ms = miniscript::FromScript(*script, script_parser_ctx);
     if (!ms) return;
+    assert(ms->GetMsCtx() == script_parser_ctx.MsContext());
 
     assert(ms->ToScript(script_parser_ctx) == *script);
 }
