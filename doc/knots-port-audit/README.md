@@ -297,6 +297,15 @@ Other missing/adapted Knots pieces found during this pass:
   now gives index-specific disable instructions for missing pruned block data
   and missing pruned undo data (`881949b28d`), and `feature_index_prune.py`
   asserts the new block-filter and coinstatsindex messages.
+- The prune-lock review confirmed the port has Knots' public prune-lock RPCs
+  and persistence support (`0b4bd4e134`, `4822c21812`,
+  `1d1c92d40d`, `162f0dba2f`), adapted to current Core's void-returning
+  `CDBWrapper` write API. Current Core still has only internal index prune
+  locks, no `listprunelocks`/`setprunelock` RPCs, and no persisted
+  `DB_PRUNE_LOCK` entries. The port now has a focused `rpc_prunelocks.py`
+  functional test covering the `temporary` field, restart persistence,
+  temporary non-persistence, persistent-to-temporary disk erasure, delete-all,
+  and invalid wildcard usage.
 - A shared `libbitcoinkernel` build exposed rebase-only kernel/CMake omissions:
   the port had Knots' three-argument `Notifications::warningSet(...)` interface
   but Core master's C API adapter still used the old two-argument override; the
@@ -1322,6 +1331,19 @@ under different commits. They are not all proven exploitable.
   `InterpretBool(...)`. This is local configuration robustness and removes a
   surprising abort-on-access path for numeric settings.
 
+- Prune-lock reorg rollback and persistence:
+  `8ee1214157`, `0b4bd4e134`, `4822c21812`
+
+  Current Core master still moves internal prune locks backward only when their
+  first protected height is above `pindexDelete->nHeight - 1`, setting the lock
+  directly to that height. Knots and this port instead decrement locks at or
+  above that boundary, so a lock at the disconnected tip boundary gets moved
+  back one block and still has a chance to survive a reorg. Knots also exposes
+  and persists operator-created prune locks; current Core has no public
+  prune-lock RPCs or `DB_PRUNE_LOCK` persistence. The port's existing
+  `feature_index_prune.py` asserts the reorg movement log, and the new
+  `rpc_prunelocks.py` covers RPC persistence and temporary-lock semantics.
+
 - Wallet symlink/reparse-point path hardening:
   `39f48a142f`, `1f118f18c4`, `ee042e9ad6`
 
@@ -1955,6 +1977,12 @@ Functional tests:
 - `python3 test/functional/feature_notifications.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_notifications_multi`
 - `python3 test/functional/feature_index_prune.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_index_prune.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_index_prune_prunelock_review`
+- `python3 test/functional/rpc_prunelocks.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_prunelocks`
+- `build/bin/test_bitcoin --run_test=blockmanager_tests/prune_lock_update_and_delete
+  --catch_system_error=no --log_level=error --report_level=short`
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_sync_coins_tip_after_chain_sync`
