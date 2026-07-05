@@ -105,6 +105,13 @@ Other missing/adapted Knots pieces found during this pass:
   Tor/local-port warning on stderr, and parse the fake Tor command as
   `LOG -f TORRC`, matching the port's `-torexecute` launch contract
   (`6fe0c50345`).
+- The runtime notification review confirmed Knots' support for multiple
+  `-startupnotify`, `-blocknotify`, `-alertnotify`, and `-walletnotify`
+  commands (`f1e300838a`) is present in the port and absent from current Core.
+  This is operator-facing behavior rather than a security or consensus change.
+  The port now extends `feature_startupnotify.py` and
+  `feature_notifications.py` as `a9ddf9043e` so startup, block, alert, and
+  wallet notifications each exercise multiple configured commands.
 - Knots-added RPC coverage for `getblocklocations`, `getgeneralinfo`, and
   BIP67 multisig sorting now passes on the port. `rpc_sort_multisig.py` had
   dropped the original Knots `assert_raises_rpc_error` import during the rebase;
@@ -1215,6 +1222,10 @@ Functional tests:
 - `python3 test/functional/feature_fee_estimates_persist.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_segwit.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_segwit_mempool_hash`
+- `python3 test/functional/feature_startupnotify.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_startupnotify_multi`
+- `python3 test/functional/feature_notifications.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_notifications_multi`
 - `python3 test/functional/feature_index_prune.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_softwareexpiry.py --configfile build/test/config.ini`
