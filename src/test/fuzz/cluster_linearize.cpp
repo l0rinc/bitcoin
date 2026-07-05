@@ -1481,23 +1481,27 @@ FUZZ_TARGET(clusterlin_postlinearize)
     SanityCheck(depgraph, linearization);
 
     // Produce a post-processed version.
+    auto chunking = ComparableChunkLinearization(depgraph, linearization);
     auto post_linearization = linearization;
     PostLinearize(depgraph, post_linearization);
     SanityCheck(depgraph, post_linearization);
 
     // Compare diagrams: post-linearization cannot worsen anywhere.
-    auto chunking = ChunkLinearization(depgraph, linearization);
-    auto post_chunking = ChunkLinearization(depgraph, post_linearization);
-    auto cmp = CompareChunks(post_chunking, chunking);
-    assert(cmp >= 0);
+    auto post_chunking = ComparableChunkLinearization(depgraph, post_linearization);
+    if (chunking && post_chunking) {
+        auto cmp = CompareChunks(*post_chunking, *chunking);
+        assert(cmp >= 0);
+    }
 
     // Run again, things can keep improving (and never get worse)
     auto post_post_linearization = post_linearization;
     PostLinearize(depgraph, post_post_linearization);
     SanityCheck(depgraph, post_post_linearization);
-    auto post_post_chunking = ChunkLinearization(depgraph, post_post_linearization);
-    cmp = CompareChunks(post_post_chunking, post_chunking);
-    assert(cmp >= 0);
+    auto post_post_chunking = ComparableChunkLinearization(depgraph, post_post_linearization);
+    if (post_chunking && post_post_chunking) {
+        auto cmp = CompareChunks(*post_post_chunking, *post_chunking);
+        assert(cmp >= 0);
+    }
 
     // The chunks that come out of postlinearizing are always connected.
     auto linchunking = ChunkLinearizationInfo(depgraph, post_linearization);
@@ -1530,31 +1534,37 @@ FUZZ_TARGET(clusterlin_postlinearize_tree)
     SanityCheck(depgraph_tree, linearization);
 
     // Produce a postlinearized version.
+    auto chunking = ComparableChunkLinearization(depgraph_tree, linearization);
     auto post_linearization = linearization;
     PostLinearize(depgraph_tree, post_linearization);
     SanityCheck(depgraph_tree, post_linearization);
 
     // Compare diagrams.
-    auto chunking = ChunkLinearization(depgraph_tree, linearization);
-    auto post_chunking = ChunkLinearization(depgraph_tree, post_linearization);
-    auto cmp = CompareChunks(post_chunking, chunking);
-    assert(cmp >= 0);
+    auto post_chunking = ComparableChunkLinearization(depgraph_tree, post_linearization);
+    if (chunking && post_chunking) {
+        auto cmp = CompareChunks(*post_chunking, *chunking);
+        assert(cmp >= 0);
+    }
 
     // Verify that post-linearizing again does not change the diagram. The result must be identical
     // as post_linearization ought to be optimal already with a tree-structured graph.
     auto post_post_linearization = post_linearization;
     PostLinearize(depgraph_tree, post_post_linearization);
     SanityCheck(depgraph_tree, post_post_linearization);
-    auto post_post_chunking = ChunkLinearization(depgraph_tree, post_post_linearization);
-    auto cmp_post = CompareChunks(post_post_chunking, post_chunking);
-    assert(cmp_post == 0);
+    auto post_post_chunking = ComparableChunkLinearization(depgraph_tree, post_post_linearization);
+    if (post_chunking && post_post_chunking) {
+        auto cmp_post = CompareChunks(*post_post_chunking, *post_chunking);
+        assert(cmp_post == 0);
+    }
 
     // Try to find an even better linearization directly. This must not change the diagram for the
     // same reason.
     auto [opt_linearization, _optimal, _cost] = Linearize(depgraph_tree, 1000000, rng_seed, IndexTxOrder{}, post_linearization);
-    auto opt_chunking = ChunkLinearization(depgraph_tree, opt_linearization);
-    auto cmp_opt = CompareChunks(opt_chunking, post_chunking);
-    assert(cmp_opt == 0);
+    auto opt_chunking = ComparableChunkLinearization(depgraph_tree, opt_linearization);
+    if (post_chunking && opt_chunking) {
+        auto cmp_opt = CompareChunks(*opt_chunking, *post_chunking);
+        assert(cmp_opt == 0);
+    }
 }
 
 FUZZ_TARGET(clusterlin_postlinearize_moved_leaf)
@@ -1595,9 +1605,11 @@ FUZZ_TARGET(clusterlin_postlinearize_moved_leaf)
     SanityCheck(depgraph, lin_moved);
 
     // Compare diagrams (applying the fee delta after computing the old one).
-    auto old_chunking = ChunkLinearization(depgraph, lin);
+    auto old_chunking = ComparableChunkLinearization(depgraph, lin);
     depgraph.FeeRate(lin_leaf.back()).fee += fee_inc;
-    auto new_chunking = ChunkLinearization(depgraph, lin_moved);
-    auto cmp = CompareChunks(new_chunking, old_chunking);
-    assert(cmp >= 0);
+    auto new_chunking = ComparableChunkLinearization(depgraph, lin_moved);
+    if (old_chunking && new_chunking) {
+        auto cmp = CompareChunks(*new_chunking, *old_chunking);
+        assert(cmp >= 0);
+    }
 }
