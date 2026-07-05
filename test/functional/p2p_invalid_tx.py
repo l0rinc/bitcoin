@@ -137,14 +137,14 @@ class InvalidTxRequestTest(BitcoinTestFramework):
 
         assert_equal(expected_mempool, set(node.getrawmempool()))
 
-        self.log.info('Test orphanage can store more than 100 transactions')
+        self.log.info('Test orphan pool overflow')
         orphan_tx_pool = [CTransaction() for _ in range(101)]
         for i in range(len(orphan_tx_pool)):
             orphan_tx_pool[i].vin.append(CTxIn(outpoint=COutPoint(i, 333)))
             orphan_tx_pool[i].vout.append(CTxOut(nValue=11 * COIN, scriptPubKey=SCRIPT_PUB_KEY_OP_TRUE))
 
-        node.p2ps[0].send_txs_and_test(orphan_tx_pool, node, success=False)
-        self.wait_until(lambda: len(node.getorphantxs()) >= 101)
+        with node.assert_debug_log(['orphanage count limit, removed 1 tx']):
+            node.p2ps[0].send_txs_and_test(orphan_tx_pool, node, success=False)
 
         self.log.info('Test orphan with rejected parents')
         rejected_parent = CTransaction()
