@@ -86,6 +86,12 @@ Other missing/adapted Knots pieces found during this pass:
   hashes through properties (`hash`, `hash_int`, and `sha256`). The port removes
   the stale call as `1486393769`; the test now passes and covers the
   `getblockfileinfo` pruning assertions.
+- `rpc_bind.py` has port-side coverage for Knots' stricter explicit RPC-bind
+  behavior, but the expected message was attached to the wrong output stream.
+  An unmodified Knots build exits with `Error: Unable to start HTTP server. See
+  debug log for details.` on stderr and logs `Unable to bind all endpoints for
+  RPC server` in `debug.log`. The port test now asserts both surfaces as
+  `afa1750abe`.
 
 ## Original Knots Defects Confirmed
 
@@ -166,7 +172,10 @@ under different commits. They are not all proven exploitable.
   Knots fails initialization when any explicitly requested RPC bind fails,
   while current Core only requires at least one endpoint to bind. This is
   configuration-safety/availability hardening rather than a confirmed
-  vulnerability.
+  vulnerability. Direct reproduction on unmodified Knots with one occupied
+  `-rpcbind` endpoint and one free endpoint returned exit code 1, the generic
+  HTTP startup error on stderr, and the specific bind-all-endpoints error in
+  `debug.log`; the port covers this in `rpc_bind.py`.
 
 - External or Knots-only surfaces:
   `d637873230` fixes `GetBlockFileInfo` bounds handling, but the obvious
@@ -243,6 +252,7 @@ Functional tests:
 - `python3 test/functional/rpc_signer.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_bind.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
