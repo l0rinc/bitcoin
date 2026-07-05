@@ -1326,7 +1326,13 @@ under different commits. They are not all proven exploitable.
   `-norpcauth`. It also treats a blank `-rpcauth` token as a no-op without
   disrupting other nonblank `-rpcauth` tokens. Current Core's `httprpc.cpp`
   still parses only direct `-rpcauth` values and errors on blank entries. This
-  is local configuration hardening, not a remote bypass by itself.
+  is local configuration hardening, not a remote bypass by itself. Source
+  comparison confirmed the port carries Knots' `-rpcauthfile` argument,
+  wallet-restriction propagation through `JSONRPCRequest`, and blank-token
+  skip behavior. The full `rpc_users.py` auth coverage passes on both the port
+  and unmodified Knots, including auth files with one entry, multiple entries,
+  blank lines, no trailing newline, wallet restrictions, blank direct
+  `-rpcauth`, and `-norpcauth` interactions.
 
 - Numeric `settings.json` boolean handling:
   `577c04c80e`
@@ -1849,6 +1855,21 @@ Builds:
   "maxstaleoutbound|consensusrules|privatebroadcast|subdustfeepenalty" -C 2`
 - `rg -n "maxstaleoutbound|consensusrules|privatebroadcast|subdustfeepenalty"
   doc/man/bitcoind.1 doc/man/bitcoin-qt.1 share/examples/bitcoin.conf`
+- `rg -n
+  "rpcauthfile|rpcauth|wallet_restriction|m_wallet_restriction|Method not available for wallet-restricted"
+  src/init.cpp src/httprpc.cpp src/rpc/request.h src/rpc/util.cpp
+  src/rpc/util.h src/wallet/rpc/util.cpp test/functional/rpc_users.py`
+- `git grep -n
+  "rpcauthfile|wallet_restriction|m_wallet_restriction|Method not available for wallet-restricted"
+  origin/master -- src/init.cpp src/httprpc.cpp src/rpc/request.h
+  src/rpc/util.cpp src/rpc/util.h src/wallet/rpc/util.cpp
+  test/functional/rpc_users.py` returned no matches for the Knots-only
+  auth-file/wallet-restriction surface.
+- `git -C ../knots grep -n
+  "rpcauthfile|wallet_restriction|m_wallet_restriction|Method not available for wallet-restricted"
+  29.x-knots -- src/init.cpp src/httprpc.cpp src/rpc/request.h
+  src/rpc/util.cpp src/rpc/util.h src/wallet/rpc/util.cpp
+  test/functional/rpc_users.py`
 - `BUILDDIR=$PWD/build contrib/devtools/gen-manpages.py
   --skip-missing-binaries` failed after skipping the disabled `bitcoin`,
   `bitcoin-tx`, `bitcoin-util`, and `bitcoin-qt` binaries because `help2man` is
@@ -2036,7 +2057,12 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_users_cookie_replace`
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_users_auth_review`
+- `python3 test/functional/rpc_users.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_users_rpcauth_review_port --portseed=26411`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_getrpcwhitelist_auth_review_port
+  --portseed=26412`
 - `python3 test/functional/rpc_bind.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_current_tip`
@@ -2201,6 +2227,11 @@ Functional tests:
   (the invalid-fingerprint redaction checks pass first, then unmodified Knots
   fails the duplicate-then-unique signer enumeration case by returning only
   `00000001`)
+- Original Knots cross-check:
+  `python3 test/functional/rpc_users.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_rpc_users_rpcauth_review --portseed=26413`
+  passed on unmodified Knots, confirming the port's auth-file, wallet-restricted
+  auth, blank `-rpcauth`, and `-norpcauth` behavior is inherited Knots
+  behavior rather than port-introduced.
 - Original Knots cross-check:
   minimal startup with `../knots/build-repro/bin/bitcoind -regtest`, replacing
   `regtest/.cookie` with `__cookie__:replaced-by-another-process`, then
