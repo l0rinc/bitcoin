@@ -393,6 +393,16 @@ Other missing/adapted Knots pieces found during this pass:
   matches the live `dump_all_command_conversions` metadata as `b2cd725240`.
   `interface_bitcoin_cli.py` also now treats the old `-paytxfee` display line
   as optional when scale-checking `-getinfo` output (`b1c4cd76e5`).
+- The wallet `getbalance` review confirmed Knots' current behavior is present
+  in the port's adapted `RPCMethod` implementation: the no-dummy path rejects
+  `minconf`, legacy `getbalance("*")` still uses the legacy balance path, and
+  an avoid-reuse wallet errors if `getbalance("*")` would ignore the flag.
+  Functional testing also exposed a port omission, not an original Knots bug:
+  `getunconfirmedbalance` was implemented but not registered, and the
+  deprecated `getwalletinfo` fields `balance`, `unconfirmed_balance`, and
+  `immature_balance` were missing after rebasing onto Core master. Actual Knots
+  still registers and returns these compatibility surfaces. The port restores
+  them and updates `wallet_balance.py` / `wallet_avoidreuse.py` coverage.
 - Raw transaction, package, and PSBT RPC coverage now passes against the port.
   This covers Knots-touched max burn handling, package max fee/burn arguments,
   and PSBT base64 parameter handling with `=` padding characters.
@@ -944,6 +954,7 @@ Builds:
 - `cmake --build build --target bitcoind bitcoin-cli test_bitcoin -j4`
 - `cmake --build build --target bitcoind -j4`
 - `cmake --build build --target bitcoin-cli -j4`
+- `cmake --build build --target bitcoind bitcoin-cli -j4`
 - `cmake -S . -B /tmp/bitcoin-zmq-build -DWITH_ZMQ=ON -DBUILD_TESTS=OFF
   -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DBUILD_GUI=OFF
   -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
@@ -1154,6 +1165,10 @@ Functional tests:
 - `python3 test/functional/wallet_startup.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_assumeutxo.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_assumeutxo_after_fix`
+- `python3 test/functional/wallet_balance.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_balance_getbalance_4`
+- `python3 test/functional/wallet_avoidreuse.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_avoidreuse_getbalance_4`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_backup.py --configfile build/test/config.ini`
