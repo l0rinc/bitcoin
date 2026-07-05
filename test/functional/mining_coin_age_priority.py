@@ -14,6 +14,8 @@ from test_framework.util import (
 )
 from test_framework.wallet import MiniWallet
 
+FRESH_GBT_REQUEST_PARAMS = {**NORMAL_GBT_REQUEST_PARAMS, "blockreservedsize": 1001}
+
 
 class MiningCoinAgePriorityTest(BitcoinTestFramework):
     def set_test_params(self):
@@ -31,7 +33,7 @@ class MiningCoinAgePriorityTest(BitcoinTestFramework):
         return [tx["txid"] for tx in self.block_template()["transactions"]]
 
     def block_template(self):
-        return self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
+        return self.nodes[0].getblocktemplate(FRESH_GBT_REQUEST_PARAMS)
 
     def run_test(self):
         node = self.nodes[0]
