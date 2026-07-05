@@ -11,6 +11,7 @@
 #include <util/overflow.h>
 
 #include <algorithm>
+#include <limits>
 
 std::vector<unsigned char> BitsToBytes(const std::vector<bool>& bits)
 {
@@ -18,15 +19,22 @@ std::vector<unsigned char> BitsToBytes(const std::vector<bool>& bits)
     for (unsigned int p = 0; p < bits.size(); p++) {
         ret[p / 8] |= bits[p] << (p % 8);
     }
+    Assume(ret.size() == CeilDiv(bits.size(), 8u));
+    if (const auto used_bits{bits.size() % 8}) {
+        const auto padding_mask{static_cast<unsigned char>(0xffU << used_bits)};
+        Assume((ret.back() & padding_mask) == 0);
+    }
     return ret;
 }
 
 std::vector<bool> BytesToBits(const std::vector<unsigned char>& bytes)
 {
+    Assume(bytes.size() <= std::numeric_limits<size_t>::max() / 8);
     std::vector<bool> ret(bytes.size() * 8);
     for (unsigned int p = 0; p < ret.size(); p++) {
         ret[p] = (bytes[p / 8] & (1 << (p % 8))) != 0;
     }
+    Assume(ret.size() == bytes.size() * 8);
     return ret;
 }
 
