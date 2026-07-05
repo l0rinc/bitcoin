@@ -748,7 +748,9 @@ Other missing/adapted Knots pieces found during this pass:
   `descriptorprocesspsbt` `prevtxs` through the options/named-parameter path,
   not a sixth positional argument. `rpc_psbt.py` covers filling and signing a
   child PSBT from provided parent transaction hex, irrelevant prevtxs being a
-  no-op, duplicate txid rejection, and too-few-outputs rejection.
+  no-op, duplicate txid rejection, and too-few-outputs rejection. The latest
+  full `rpc_psbt.py` reruns against both the port and actual Knots exercised
+  these assertions before the funded-PSBT locktime checks.
 - The same PSBT review confirmed Knots' options-object compatibility for
   `walletprocesspsbt` (`e5160731d2`) and `descriptorprocesspsbt`
   (`a22be508da`) is present in the port and absent from current Core. Both RPCs
@@ -1658,7 +1660,11 @@ under different commits. They are not all proven exploitable.
   caller-provided previous transaction hex. Knots and this port can use those
   provided transactions to fill and sign dependent PSBT chains that are not yet
   in the mempool or UTXO set. This is transaction-construction functionality,
-  not consensus behavior.
+  not consensus behavior. The current source comparison shows Knots and the
+  port parse `prevtxs`, reject duplicate provided txids, and search those
+  transactions before txindex/mempool, while current Core still exposes only
+  descriptors for `utxoupdatepsbt` and has no `descriptorprocesspsbt` `prevtxs`
+  option.
 
 - `getblockfrompeer` without a known header:
   `6c78d40b89`, `aebfd947d2`, `2b67ea465c`
@@ -1791,6 +1797,16 @@ Source/manifest checks:
   current Core's `walletcreatefundedpsbt` path returns the funded transaction
   as a PSBT without applying the default anti-fee-sniping locktime, while Knots
   and the port apply it when the explicit locktime argument is omitted.
+- `git show origin/master:src/rpc/rawtransaction.cpp | rg -n
+  "prevtxs|utxoupdatepsbt|descriptorprocesspsbt|ProcessPSBT" -C 5`,
+  `git -C ../knots show 29.x-knots:src/rpc/rawtransaction.cpp | rg -n
+  "prevtxs|utxoupdatepsbt|descriptorprocesspsbt|ProcessPSBT|prev_tx_map"
+  -C 5`, and `rg -n
+  "prevtxs|utxoupdatepsbt|descriptorprocesspsbt|ProcessPSBT|prev_tx_map"
+  src/rpc/rawtransaction.cpp test/functional/rpc_psbt.py` show current Core's
+  PSBT update/signing RPCs lack caller-provided previous transaction injection,
+  while Knots and the port support it and test duplicate/irrelevant/short
+  previous-transaction cases.
 - `git log origin/master --follow --oneline -- <remaining source-looking
   missing path>` for old `core_write`, fee, libevent, orphanage, transaction
   identifier, epochguard, and test-helper paths
