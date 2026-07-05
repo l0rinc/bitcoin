@@ -140,10 +140,20 @@ Other missing/adapted Knots pieces found during this pass:
   rebase-only adjustments: use a dedicated onion bind to avoid Knots' common
   Tor/local-port warning on stderr, and parse the fake Tor command as
   `LOG -f TORRC`, matching the port's `-torexecute` launch contract
-  (`6fe0c50345`). The port now also adds direct `system_tests` coverage for
-  the underlying subprocess behavior by opening a parent file descriptor,
-  proving a mock child inherits it when `close_fds` is off, and proving it is
-  closed when `close_fds` is on.
+  (`6fe0c50345`). A later source check also confirmed the port has Knots/Core
+  Tor-control PoW enablement and fallback (`6df8bf7673`, `d4e12697e2`,
+  `fca97c11b3`), excessive-line OOM defense (`4110843327`), completed-line
+  length enforcement and reconnect (`3eb50531a5`, `0d747bbc55`), and empty
+  `AUTHCHALLENGE` logging (`ce574bd1e6`). The port now also adds direct
+  `system_tests` coverage for the underlying subprocess behavior by opening a
+  parent file descriptor, proving a mock child inherits it when `close_fds` is
+  off, and proving it is closed when `close_fds` is on.
+- The I2P SAM redaction review confirmed Knots/Core's `SESSION CREATE` private
+  key redaction (`6f9467ff97`) is present in the port. The port now adds
+  `i2p_tests/session_create_error_redacts_private_key` (`0bd1f283ae`) to force
+  a `SESSION CREATE` failure after loading a known private key and assert the
+  resulting log/error path contains `SESSION CREATE ...` without the encoded
+  private key or `DESTINATION=` request body.
 - The runtime notification review confirmed Knots' support for multiple
   `-startupnotify`, `-blocknotify`, `-alertnotify`, and `-walletnotify`
   commands (`f1e300838a`) is present in the port and absent from current Core.
@@ -1528,6 +1538,10 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=util_tests/outputtype_implicit_segwit`
 - `build/bin/test_bitcoin --run_test=system_tests/subprocess_close_fds`
 - `build/bin/test_bitcoin --run_test=system_tests`
+- `build/bin/test_bitcoin --run_test=i2p_tests/session_create_error_redacts_private_key
+  --catch_system_error=no --log_level=nothing --report_level=no`
+- `build/bin/test_bitcoin --run_test=i2p_tests --catch_system_error=no
+  --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=node_warnings_tests
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `./build/src/secp256k1/bin/tests --target=ellswift_xdh_bad_scalar_tests --iterations=16`
@@ -1594,6 +1608,8 @@ Functional tests:
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_softwareexpiry.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_torcontrol.py --configfile build/test/config.ini`
+- `test/functional/feature_torcontrol.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_torcontrol_audit`
 - `python3 test/functional/interface_bitcoin_cli.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_help.py --configfile build/test/config.ini`
 - `python3 test/functional/tool_cli_completion.py --configfile build/test/config.ini`
