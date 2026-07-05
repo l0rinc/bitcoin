@@ -152,8 +152,10 @@ class P2PEvict(BitcoinTestFramework):
         for peer in peerinfo:
             if "30202" in peer["addrbind"]:
                 assert peer["forced_inbound"]
+                assert "forceinbound" in peer["permissions"]
             else:
                 assert not peer["forced_inbound"]
+                assert "forceinbound" not in peer["permissions"]
 
         self.log.debug("Generic inbound gets rejected when whitebind peer is filling inbound slot")
         with node.assert_debug_log(["failed to find an eviction candidate - connection dropped (full)"]):

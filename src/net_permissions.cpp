@@ -104,6 +104,7 @@ std::vector<std::string> NetPermissions::ToStrings(NetPermissionFlags flags)
     if (NetPermissions::HasFlag(flags, NetPermissionFlags::Mempool)) strings.emplace_back("mempool");
     if (NetPermissions::HasFlag(flags, NetPermissionFlags::Download)) strings.emplace_back("download");
     if (NetPermissions::HasFlag(flags, NetPermissionFlags::Addr)) strings.emplace_back("addr");
+    if (NetPermissions::HasFlag(flags, NetPermissionFlags::ForceInbound)) strings.emplace_back("forceinbound");
     return strings;
 }
 

@@ -95,6 +95,7 @@ class P2PPermissionsTests(BitcoinTestFramework):
                 "relay",
                 "download",
                 "addr",
+                "forceinbound",
             ])
 
         for flag, permissions in [(["-whitelist=noban,out@127.0.0.1"], ["bloomfilter", "noban", "download"]), (["-whitelist=noban@127.0.0.1"], ["bloomfilter"])]:
