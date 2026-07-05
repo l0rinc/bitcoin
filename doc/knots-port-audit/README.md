@@ -470,6 +470,20 @@ Other missing/adapted Knots pieces found during this pass:
   history, traffic graph tooltips, mempool stats, and the Network Watch GUI
   are all present in the current tree. These were not new omissions or original
   Knots defects from this pass.
+- The remaining source-looking paths from a final file-presence sweep were
+  classified against current Core history and live references rather than
+  restored mechanically. The old `core_write.cpp` module is merged into
+  `core_io`; `policy/fees*` is now
+  `policy/fees/block_policy_estimator*`; `txorphanage.*` is under
+  `src/node`; `transaction_identifier.h` is under `src/primitives`;
+  `support/events.h`, `FindLibevent.cmake`, `libevent.mk`, and
+  `raii_event_tests.cpp` disappeared with the current Core HTTP/libevent
+  removal; `policy_fee_tests.cpp` is `feerounder_tests.cpp`; the old
+  compiler-bug test and `epochguard.h` were removed upstream; and Knots'
+  `test/util/str.cpp` `CaseInsensitiveEqual` helper is now covered by
+  `util/strencodings` and `util_string_tests`. The functional runner lists
+  resolve to existing files after the legacy-wallet test restoration, and no
+  additional live runtime/client omission was found in this sweep.
 
 ## Original Knots Defects Confirmed
 
@@ -697,6 +711,17 @@ cpp-subprocess memory/Windows fixes.
   exhaustive cross-client block corpus.
 
 ## Verification
+
+Source/manifest checks:
+
+- `comm -23 <(git ls-tree -r --name-only knots/29.x-knots | sort)
+  <(git ls-files | sort)`
+- `rg -n "FindLibevent|libevent|mempool-limits|system_ram\\.h|core_write\\.cpp|policy/fees|fees_args|support/events\\.h|compilerbug_tests|policy_fee_tests|raii_event_tests|test/util/index|test/util/str|txorphanage\\.h|txorphanage\\.cpp|epochguard|transaction_identifier\\.h|mempool_package_onemore|rpcauth-test" . -g '!test/cache/**' -g '!build/**' -g '!depends/work/**' -g '!depends/built/**' -g '!depends/sources/**'`
+- `git log origin/master --follow --oneline -- <remaining source-looking
+  missing path>` for old `core_write`, fee, libevent, orphanage, transaction
+  identifier, epochguard, and test-helper paths
+- Direct import of `test/functional/test_runner.py` with
+  `test/functional` on `sys.path` returned `missing_count 0`
 
 Builds:
 
