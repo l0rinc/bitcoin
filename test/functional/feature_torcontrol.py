@@ -14,6 +14,7 @@ from test_framework.util import (
     assert_equal,
     ensure_for,
     p2p_port,
+    tor_port,
 )
 
 
@@ -116,12 +117,16 @@ class TorControlTest(BitcoinTestFramework):
         return p2p_port(self.num_nodes + self._port_counter)
 
     def restart_with_mock(self, mock_tor, extra_args=None):
+        extra_args = extra_args or []
+        onion_bind_args = [] if any(arg.startswith("-bind=") and arg.endswith("=onion") for arg in extra_args) else [
+            f"-bind=127.0.0.1:{tor_port(0)}=onion",
+        ]
         mock_tor.start()
         self.restart_node(0, extra_args=[
             f"-torcontrol=127.0.0.1:{mock_tor.port}",
             "-listenonion=1",
             "-debug=tor",
-        ] + (extra_args or []))
+        ] + onion_bind_args + extra_args)
 
         # Wait for connection and PROTOCOLINFO command
         mock_tor.conn_ready.wait(timeout=10)
@@ -289,11 +294,11 @@ def read_controlport_path(torrc_path):
             return Path(line.split(" ", 1)[1])
     raise SystemExit("missing ControlPortWriteToFile")
 
-if len(sys.argv) != 4 or sys.argv[1] != "-f":
-    raise SystemExit("usage: fake_tor.py -f TORRC LOG")
+if len(sys.argv) != 4 or sys.argv[2] != "-f":
+    raise SystemExit("usage: fake_tor.py LOG -f TORRC")
 
-controlport_file = read_controlport_path(sys.argv[2])
-log_path = Path(sys.argv[3])
+log_path = Path(sys.argv[1])
+controlport_file = read_controlport_path(sys.argv[3])
 log_path.write_text("")
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -350,6 +355,7 @@ if owned:
             f"-torcontrol=127.0.0.1:{self.next_port()}",
             "-listenonion=1",
             "-debug=tor",
+            f"-bind=127.0.0.1:{tor_port(0)}=onion",
             f"-torexecute={sys.executable} {fake_tor_script} {fake_tor_log}",
         ])
 
