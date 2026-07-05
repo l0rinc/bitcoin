@@ -1365,6 +1365,9 @@ void BitcoinGUI::message(const QString& title, QString message, unsigned int sty
     int nMBoxIcon = QMessageBox::Information;
     int nNotifyIcon = Notificator::Information;
 
+    const bool is_rich_text = message.startsWith("<qt>");
+    if (is_rich_text) message.remove(0, 4);
+
     QString msgType;
     if (!title.isEmpty()) {
         msgType = title;
@@ -1407,7 +1410,7 @@ void BitcoinGUI::message(const QString& title, QString message, unsigned int sty
 
         showNormalIfMinimized();
         QMessageBox mBox(static_cast<QMessageBox::Icon>(nMBoxIcon), strTitle, message, buttons, this);
-        mBox.setTextFormat(Qt::PlainText);
+        mBox.setTextFormat(is_rich_text ? Qt::RichText : Qt::PlainText);
         mBox.setDetailedText(detailed_message);
         int r = mBox.exec();
         if (ret != nullptr)
@@ -1702,6 +1705,10 @@ void BitcoinGUI::showModalOverlay()
     style &= ~CClientUIInterface::SECURE;
     bool ret = false;
 
+    const QString msg = modal
+        ? ("<qt>" + GUIUtil::MakeHtmlLink(GUIUtil::HtmlEscape(QString::fromStdString(message.translated), true)))
+        : QString::fromStdString(message.translated);
+
     QString detailed_message; // This is original message, in English, for googling and referencing.
     if (message.original != message.translated) {
         detailed_message = BitcoinGUI::tr("Original message:") + "\n" + QString::fromStdString(message.original);
@@ -1714,7 +1721,7 @@ void BitcoinGUI::showModalOverlay()
     bool invoked = QMetaObject::invokeMethod(gui, "message",
                                modal ? GUIUtil::blockingGUIThreadConnection() : Qt::QueuedConnection,
                                Q_ARG(QString, title),
-                               Q_ARG(QString, QString::fromStdString(message.translated)),
+                               Q_ARG(QString, msg),
                                Q_ARG(unsigned int, style),
                                Q_ARG(bool*, &ret),
                                Q_ARG(QString, detailed_message));

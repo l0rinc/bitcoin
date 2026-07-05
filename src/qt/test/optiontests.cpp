@@ -149,3 +149,22 @@ void OptionTests::extractFilter()
     filter = QString("Image (*.png *.jpg)");
     QCOMPARE(GUIUtil::ExtractFirstSuffixFromFilter(filter), "png");
 }
+
+void OptionTests::makeHtmlLink()
+{
+    QCOMPARE(
+        GUIUtil::MakeHtmlLink(QStringLiteral("Open https://bitcoinknots.org")),
+        QStringLiteral(R"(Open <a href="https://bitcoinknots.org">https&#x2060;:&#x2060;/&#x2060;/&#x2060;bitcoinknots.org</a>)"));
+
+    QCOMPARE(
+        GUIUtil::MakeHtmlLink(QStringLiteral("Open https://bitcoinknots.org.")),
+        QStringLiteral(R"(Open <a href="https://bitcoinknots.org">https&#x2060;:&#x2060;/&#x2060;/&#x2060;bitcoinknots.org</a>.)"));
+
+    QCOMPARE(
+        GUIUtil::MakeHtmlLink(QStringLiteral("<qt>https://bitcoinknots.org</qt>")),
+        QStringLiteral(R"(<qt><a href="https://bitcoinknots.org">https&#x2060;:&#x2060;/&#x2060;/&#x2060;bitcoinknots.org</a></qt>)"));
+
+    QCOMPARE(
+        GUIUtil::MakeHtmlLink(QStringLiteral("Open http://bitcoinknots.org")),
+        QStringLiteral("Open http://bitcoinknots.org"));
+}
