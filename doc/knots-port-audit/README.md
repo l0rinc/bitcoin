@@ -140,6 +140,25 @@ Other missing/adapted Knots pieces found during this pass:
   qualification, `mini_miner`'s current miner/test helpers, direct mempool
   `Txid` lookups, and move-only `CTxMemPoolEntry` handling. These are now fixed
   as `f1f3f4ae7c`, and a fuzz-enabled compile of the `fuzz` target passes.
+- The exact-patch review found Knots' actionable pruned-index startup error
+  (`4a4e4e253e`) was still missing after adapting onto the port's newer
+  two-stage block/undo-data availability check. Actual Knots already contains
+  the fix, so this was a port omission, not an original Knots defect. The port
+  now gives index-specific disable instructions for missing pruned block data
+  and missing pruned undo data (`881949b28d`), and `feature_index_prune.py`
+  asserts the new block-filter and coinstatsindex messages.
+- A shared `libbitcoinkernel` build exposed rebase-only kernel/CMake omissions:
+  the port had Knots' three-argument `Notifications::warningSet(...)` interface
+  but Core master's C API adapter still used the old two-argument override; the
+  C API warning/result conversion also lacked Knots' added warning IDs and
+  `BLOCK_CHECKPOINT`; the kernel target still referenced a stale
+  `kernel_warn_interface`; and `dbwrapper.cpp` needed the LevelDB `memenv`
+  helper include path. The same pass restored Knots' missing
+  `external_lib_interface` link for `bitcoinkernel` (`31e5d8d6c3`) and the
+  sanitizer guard around `--no-undefined` (`f4ee30ffa5`). These are fixed as
+  `881949b28d`. Actual Knots already carries the relevant Knots CMake fixes;
+  the compile failures were introduced by this port's current-Core kernel API
+  adaptation.
 - Compact-block extra-transaction coverage now uses the current P2P test
   framework send helper and hash/wtxid properties (`77d2b2c025`).
   `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
@@ -560,6 +579,23 @@ Builds:
   -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_GUI=OFF -DWITH_CCACHE=OFF
   -DRDTS_CONSENT=IMPLICIT`
 - `cmake --build /tmp/bitcoin-fuzz-wallet-bdb --target fuzz -j4`
+- `cmake --build build --target bitcoind test_bitcoin -j4`
+- `cmake -S . -B /tmp/bitcoin-kernel-after -DBUILD_KERNEL_LIB=ON
+  -DBUILD_SHARED_LIBS=ON -DBUILD_DAEMON=OFF -DBUILD_CLI=OFF
+  -DBUILD_BITCOINCONSENSUS_LIB=OFF -DBUILD_TX=OFF -DBUILD_UTIL=OFF
+  -DBUILD_UTIL_CHAINSTATE=OFF -DBUILD_WALLET_TOOL=OFF -DBUILD_GUI=OFF
+  -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_ZMQ=OFF
+  -DENABLE_WALLET=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
+- `cmake --build /tmp/bitcoin-kernel-after --target bitcoinkernel -j4`
+- `TMPDIR=/mnt/my_storage/tmp cmake -S . -B /tmp/bitcoin-asan-consensus-after
+  -DBUILD_BITCOINCONSENSUS_LIB=ON -DBUILD_SHARED_LIBS=ON
+  -DSANITIZERS=address -DBUILD_DAEMON=OFF -DBUILD_CLI=OFF -DBUILD_TX=OFF
+  -DBUILD_UTIL=OFF -DBUILD_UTIL_CHAINSTATE=OFF -DBUILD_KERNEL_LIB=OFF
+  -DBUILD_WALLET_TOOL=OFF -DBUILD_GUI=OFF -DBUILD_TESTS=OFF
+  -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_ZMQ=OFF
+  -DENABLE_WALLET=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
+- `TMPDIR=/mnt/my_storage/tmp cmake --build /tmp/bitcoin-asan-consensus-after
+  --target bitcoinconsensus -j1`
 - Original Knots repro build:
   `cmake -S ../knots -B ../knots/build-repro -DRDTS_CONSENT=RUNTIME_WARN`
   and `cmake --build ../knots/build-repro --target bitcoind bitcoin-cli -j4`
@@ -585,6 +621,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=miner_tests`
 - `build/bin/test_bitcoin --run_test=policyestimator_tests`
 - `build/bin/test_bitcoin --run_test=codex32_tests`
+- `build/bin/test_bitcoin --run_test=blockfilter_index_tests`
+- `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
 
 Functional tests:
@@ -609,6 +647,7 @@ Functional tests:
 - `python3 test/functional/feature_help.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_includeconf.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_fee_estimates_persist.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_index_prune.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_softwareexpiry.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_torcontrol.py --configfile build/test/config.ini`
