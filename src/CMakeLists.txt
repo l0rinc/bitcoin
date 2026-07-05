@@ -271,6 +271,7 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   node/chainstate.cpp
   node/chainstatemanager_args.cpp
   node/coin.cpp
+  node/dbcache.cpp
   node/coins_view_args.cpp
   node/connection_types.cpp
   node/context.cpp

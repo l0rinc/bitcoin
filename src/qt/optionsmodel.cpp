@@ -693,7 +693,7 @@ QVariant OptionsModel::getOption(OptionID option, const std::string& suffix) con
                suffix.empty()          ? getOption(option, "-prev") :
                                          DEFAULT_PRUNE_TARGET_MiB;
     case DatabaseCache:
-        return qlonglong(SettingTo<int64_t>(setting(), node::GetDefaultDBCache() >> 20));
+        return qlonglong(SettingTo<int64_t>(setting(), node::GetDefaultDBCache() / 1_MiB));
     case ThreadsScriptVerif:
         return qlonglong(SettingTo<int64_t>(setting(), DEFAULT_SCRIPTCHECK_THREADS));
     case Listen:
@@ -1554,7 +1554,7 @@ void OptionsModel::checkAndMigrate()
         // see https://github.com/bitcoin/bitcoin/pull/8273
         // force people to upgrade to the new value if they are using 100MB
         if (settingsVersion < 130000 && settings.contains("nDatabaseCache") && settings.value("nDatabaseCache").toLongLong() == 100)
-            settings.setValue("nDatabaseCache", (qint64)(DEFAULT_DB_CACHE >> 20));
+            settings.setValue("nDatabaseCache", (qint64)(node::GetDefaultDBCache() / 1_MiB));
 
         settings.setValue(strSettingsVersionKey, CLIENT_VERSION);
     }
