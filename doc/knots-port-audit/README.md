@@ -313,6 +313,19 @@ Other missing/adapted Knots pieces found during this pass:
   a consensus issue. `wallet_multiwallet.py` now asserts the symlink-scan
   warning, and the same run exposed and fixed a stale missing `Decimal` import
   in that Knots test.
+- The same wallet cleanup review found Knots' failed restore/migration cleanup
+  guard (`0388bfc6e`) was still missing from the port. Actual Knots already
+  checks that newly created wallet directories are still empty before removing
+  them; current Core master still has the older unconditional
+  `Assume(fs::is_empty(...)); fs::remove(...)` pattern. The port now uses a
+  shared wallet cleanup helper, logs and leaves unexpectedly non-empty
+  directories alone, and covers both helper branches in `wallet_tests`. Rerunning
+  `wallet_backup.py` also exposed a Knots/Core behavior conflict:
+  Knots' `restorewallet` coverage (`9ea84c08d7`) expects restoring the unnamed
+  default wallet to work, while current Core later rejected empty restore names.
+  The port now lets the `restorewallet` RPC pass `allow_unnamed=true`, while
+  keeping the lower-level guard available for other callers. The same test run
+  adapted stale pruned-wallet error-string literals to the current source text.
 - CLI/help verification exposed a port-side bitcoin-cli conversion-table drift:
   current server metadata no longer advertises legacy-only `sethdseed` and
   `addmultisigaddress` conversions, while descriptor-compatible legacy import
@@ -603,6 +616,16 @@ under different commits. They are not all proven exploitable.
   symlink/reparse point from being accepted as a legacy top-level wallet file.
   This is local path-safety hardening around wallet discovery/loading.
 
+- Wallet failed-cleanup directory hardening:
+  `0388bfc6e`
+
+  Current Core master still assumes newly created restore/migration wallet
+  directories are empty before removing them during failure cleanup. Knots logs
+  and leaves the directory alone if it is unexpectedly non-empty, avoiding an
+  unintended removal attempt against a path that no longer has the shape the
+  cleanup code expected. This is local wallet data-safety hardening, not a
+  consensus issue.
+
 - Subprocess fd cleanup before exec:
   `214047ecd3`, `ed5a3b3604`
 
@@ -856,6 +879,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
 - `build/bin/test_bitcoin --run_test=db_tests,walletdb_tests,wallet_tests`
 - `build/bin/test_bitcoin --run_test=fs_tests,walletdb_tests,wallet_tests`
+- `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
 - `./build/src/secp256k1/bin/tests --target=ellswift_xdh_bad_scalar_tests --iterations=16`
 - `./build/src/secp256k1/bin/tests --target=ellswift --iterations=16`
@@ -911,6 +935,9 @@ Functional tests:
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_backup.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_migration.py --configfile build/test/config.ini`
+  (skipped: previous releases not available or disabled)
 - `python3 test/functional/wallet_sweepprivkeys.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_import_with_label.py --configfile build/test/config.ini --legacy-wallet`
