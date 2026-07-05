@@ -980,7 +980,10 @@ Other missing/adapted Knots pieces found during this pass:
   onto current Core's log format. The port now percent-escapes that log value
   and `p2p_handshake.py` checks both surfaces: RPC preserves
   `/User/Agent: test![]{}~/`, while `debug.log` contains
-  `/User/Agent: test%21%5B%5D%7B%7D%7E/`.
+  `/User/Agent: test%21%5B%5D%7B%7D%7E/`. A source comparison shows current
+  Core still stores `SanitizeString(strSubVer)` and logs that value directly,
+  while actual Knots and the port store `SAFE_CHARS_PRINTABLE` output and
+  escape the receive-version log value.
 - Knots' merkle mutation early-exit change (`42b25bbd93`) is present in the
   port while current Core still scans the rest of the level after finding a
   duplicate pair. This is consensus-adjacent but behavior-equivalent: the root
@@ -1550,7 +1553,8 @@ under different commits. They are not all proven exploitable.
   log/UI integrity hardening against confusing or spoofed peer user-agent text.
   The strengthened `p2p_handshake.py` user-agent test passes against
   unmodified Knots and the fixed port, confirming the earlier missing log
-  escape was port-introduced.
+  escape was port-introduced. The latest rerun used the full handshake test
+  because the user-agent assertion is inline in `run_test`.
 
 - ZMQ notification resilience and read-block logging:
   `1c4d2d54d8`, `268fb1e0e3`, `ba28af94bd`
@@ -1747,6 +1751,16 @@ Source/manifest checks:
   "Can't read block|zmqError" src/zmq/zmqpublishnotifier.cpp -C 3` show
   current Core still logs raw-block disk-read failures via `zmqError`, while
   Knots and the port log the failing block hash directly.
+- `git show origin/master:src/net_processing.cpp | rg -n
+  "cleanSubVer = SanitizeString|receive version message" -C 2`,
+  `git -C ../knots show 29.x-knots:src/net_processing.cpp | rg -n
+  "SAFE_CHARS_PRINTABLE|SanitizeString\\(cleanSubVer|receive version message"
+  -C 2`, and `rg -n
+  "SAFE_CHARS_PRINTABLE|log_subver|receive version message"
+  src/net_processing.cpp src/util/strencodings.* test/functional/p2p_handshake.py`
+  show that current Core strips user-agent printable punctuation before
+  storing/logging, while Knots and the port preserve it for RPC display and
+  escape it at receive-version log time.
 - `git -C ../knots show 29.x-knots:src/node/blockmanager_args.cpp | rg -n
   "pruneduringinit|PRUNE_TARGET_MANUAL"` confirms actual Knots converts
   `-pruneduringinit=0` to manual pruning during init.
@@ -2048,6 +2062,13 @@ Functional tests:
   --portseed=26443`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_ua_escape_3`
+- `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_review_port2
+  --portseed=26444`
+- `python3 test/functional/p2p_handshake.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_review_knots2
+  --portseed=26445`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_rdts_gate_fixed3`
 - `python3 test/functional/p2p_eviction.py --configfile build/test/config.ini
@@ -2361,7 +2382,7 @@ Functional tests:
   stopping via `bitcoin-cli -rpcuser=__cookie__ -rpcpassword=<generated>`
   preserved the replacement (`cookie_after_stop=__cookie__:replaced-by-another-process`)
 - Original Knots cross-check:
-  `python3 /mnt/my_storage/bitcoin/test/functional/p2p_handshake.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_handshake_ua_escape`
+  `python3 test/functional/p2p_handshake.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_review_knots2 --portseed=26445`
   (passes on unmodified Knots, confirming the missing user-agent log escape was
   introduced by the port)
 - Original Knots cross-check:
