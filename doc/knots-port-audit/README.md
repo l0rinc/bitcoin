@@ -242,6 +242,12 @@ Other missing/adapted Knots pieces found during this pass:
   `wallet_fundrawtransaction.py` coverage for an unsolvable native-segwit
   watch-only output: the RPC returns `Insufficient funds` instead of
   dereferencing a null signing provider.
+- The DNS seed follow-up found Knots' removal of the Peter Todd DNS seeds
+  (`277edb9009`) was still missing from the port. Current Core master still
+  includes `seed.btc.petertodd.net.` and `seed.tbtc.petertodd.net.` in the
+  mainnet and testnet DNS seed lists. The port now matches Knots as
+  `0899f88da9`, with `chainparams_tests` coverage asserting those seed names
+  are absent.
 
 ## Original Knots Defects Confirmed
 
@@ -346,6 +352,14 @@ under different commits. They are not all proven exploitable.
   resolution in `AddNode()`. Knots flips RFC4193-looking CJDNS addresses before
   comparison and rejects CJDNS duplicates even when the port differs, avoiding
   repeated manual-connection entries to the same CJDNS node.
+
+- DNS seed bootstrap policy:
+  `277edb9009`
+
+  Current Core still queries the Peter Todd DNS seeds on mainnet and testnet.
+  Knots removes those two seed hostnames. This changes the bootstrap trust and
+  availability surface, but the audit does not have evidence that it is a
+  vulnerability fix or a consensus issue.
 
 - User-agent sanitization/log escaping:
   `b9d2634b81`
@@ -458,6 +472,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=versionbits_tests`
 - `build/bin/test_bitcoin --run_test=script_tests`
 - `build/bin/test_bitcoin --run_test=streams_tests`
+- `build/bin/test_bitcoin --run_test=chainparams_tests`
 - `build/bin/test_bitcoin --run_test=mempool_tests`
 - `build/bin/test_bitcoin --run_test=transaction_tests`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests`
