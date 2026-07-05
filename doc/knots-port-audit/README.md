@@ -274,6 +274,17 @@ Other missing/adapted Knots pieces found during this pass:
   command-option validation and unnamed-wallet rejection (`91fc10bc4c`).
   `rpc_mempool_info.py` and `tool_wallet.py` pass on the local build, while
   the restored legacy-wallet tests reach the expected current-Core skip path.
+- A follow-up comparison with final Knots' runner restored additional
+  legacy-wallet coverage that current Core had removed:
+  `wallet_importmulti.py`, `wallet_inactive_hdchains.py`,
+  `wallet_pruning.py`, and `wallet_watchonly.py`, plus the `get_key` and
+  `get_multisig` wallet test helpers they need (`9b6cd9284d`). These tests
+  also reach the expected current-Core skip path in this descriptor-only build.
+  The remaining Knots-only `mempool_package_onemore.py` test was checked but
+  not restored: it asserts the old ancestor/descendant package carve-out
+  behavior, while current Core has replaced that policy surface with cluster
+  limits covered by `mempool_package_limits.py`, `mempool_packages.py`, and
+  `mempool_cluster.py`.
 - CLI/help verification exposed a port-side bitcoin-cli conversion-table drift:
   current server metadata no longer advertises legacy-only `sethdseed` and
   `addmultisigaddress` conversions, while descriptor-compatible legacy import
@@ -815,9 +826,19 @@ Functional tests:
 - `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_import_with_label.py --configfile build/test/config.ini --legacy-wallet`
   (skipped: legacy wallets can no longer be created)
+- `python3 test/functional/wallet_importmulti.py --configfile build/test/config.ini --legacy-wallet`
+  (skipped: legacy wallets can no longer be created)
 - `python3 test/functional/wallet_upgradewallet.py --configfile build/test/config.ini --legacy-wallet`
   (skipped: legacy wallets can no longer be created)
 - `python3 test/functional/wallet_implicitsegwit.py --configfile build/test/config.ini`
+  (skipped: legacy wallets can no longer be created)
+- `python3 test/functional/wallet_inactive_hdchains.py --configfile build/test/config.ini --legacy-wallet`
+  (skipped: legacy wallets can no longer be created)
+- `python3 test/functional/wallet_pruning.py --configfile build/test/config.ini --legacy-wallet`
+  (skipped: legacy wallets can no longer be created)
+- `python3 test/functional/wallet_watchonly.py --configfile build/test/config.ini --legacy-wallet`
+  (skipped: legacy wallets can no longer be created)
+- `python3 test/functional/wallet_watchonly.py --configfile build/test/config.ini --usecli --legacy-wallet`
   (skipped: legacy wallets can no longer be created)
 - `python3 test/functional/wallet_dump.py --configfile build/test/config.ini`
   (skipped: legacy wallets can no longer be created)
