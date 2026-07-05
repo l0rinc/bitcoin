@@ -2622,6 +2622,7 @@ std::vector<TxGraph::Ref*> TxGraphImpl::GetCluster(const Ref& arg, Level level_s
         Assume(member_cluster == cluster);
         Assume(member_cluster_level == cluster_level);
     }
+    AssumeUniqueRefs(ret);
     return ret;
 }
 
