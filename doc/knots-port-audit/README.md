@@ -127,6 +127,11 @@ Other missing/adapted Knots pieces found during this pass:
   could read past the later share's data. The port now matches Knots as
   `65c72eb817`, with `codex32_tests` and `wallet_importseed.py` coverage for
   valid decoded shares with inconsistent lengths.
+- The same exact-patch review checked Knots' `-consensusrules` / RDTS consent
+  commits (`fbfa7482c6`, `e60eea4260`). The port carries the behavior in an
+  adapted form: unknown rule names fail startup, `rdts` is accepted, and mainnet
+  consent handling is skipped on test chains. `feature_config_args.py` now covers
+  the parser/startup surface directly as `31f7b8f005`.
 - Compact-block extra-transaction coverage now uses the current P2P test
   framework send helper and hash/wtxid properties (`77d2b2c025`).
   `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
