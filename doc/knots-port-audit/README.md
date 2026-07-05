@@ -399,6 +399,21 @@ Other missing/adapted Knots pieces found during this pass:
   27.2, and 28.0, plus old release-note fragments intentionally omitted from
   the patch-id evidence set. No additional runtime/client omission has been
   identified from that historical-release-note bucket.
+- A follow-up exact-patch mismatch pass rechecked several older and 2025
+  runtime buckets that still do not match by patch-id because they were adapted
+  to current Core or squashed with surrounding port work. The reviewed surfaces
+  are present: help-option negation is rejected through
+  `ArgsManager::DISALLOW_NEGATION`; Knots' libevent HTTP bind tolerance/cleanup
+  series is superseded by the current `Sock`-based `HTTPServer` listener with
+  `IsIgnoredDefaultBindError()` and RAII socket ownership; prune-lock RPCs,
+  dynamic `maxmempool`, fee histograms, `listmempooltransactions`,
+  `getrpcwhitelist`, script-thread RPCs, BIP322 signing/verification,
+  `deriveaddresses(require_checksum)`, wallet implicit-segwit controls,
+  restored `-blockmaxsize`, named-pipe/human-readable `dumptxoutset`,
+  AutoFile explicit-close checks, low-memory cache flushing, GUI settings/RPC
+  history, traffic graph tooltips, mempool stats, and the Network Watch GUI
+  are all present in the current tree. These were not new omissions or original
+  Knots defects from this pass.
 
 ## Original Knots Defects Confirmed
 
