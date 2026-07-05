@@ -1421,8 +1421,9 @@ under different commits. They are not all proven exploitable.
   `-listen=0 -natpmp=1` can survive until `StartMapPort(...)`. This is local
   network-surface/privacy hardening, not a consensus issue. A minimal
   unmodified Knots startup with `-listen=0 -upnp=1 -natpmp=1` logged both
-  forced-disable messages, confirming this is not port-introduced. The port now
-  covers the direct explicit-argument case in `feature_config_args.py`, in
+  forced-disable messages, confirming this is not port-introduced; rerunning
+  the port's direct functional method against `../knots` also passes. The port
+  now covers the direct explicit-argument case in `feature_config_args.py`, in
   addition to the existing `-connect=0` / `-noconnect` interaction coverage.
 
 - HTTP RPC bind failure behavior:
@@ -2061,6 +2062,19 @@ Functional tests:
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_config_args_port_mapping_2`
+- `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
+  --test_methods test_port_mapping_disabled_when_not_listening
+  --tmpdir=/mnt/my_storage/tmp_feature_config_port_mapping_direct
+  --portseed=26431`
+- `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
+  --test_methods test_connect_with_seednode
+  --tmpdir=/mnt/my_storage/tmp_feature_config_port_mapping_connect
+  --portseed=26432`
+- `python3 test/functional/feature_config_args.py --configfile
+  ../knots/build-repro/test/config.ini
+  --test_methods test_port_mapping_disabled_when_not_listening
+  --tmpdir=/mnt/my_storage/tmp_knots_feature_config_port_mapping_direct
+  --portseed=26433`
 - `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_config_args_acceptnonstd_main_3`
 - `python3 test/functional/feature_help.py --configfile build/test/config.ini`
