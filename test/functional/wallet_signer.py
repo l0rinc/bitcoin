@@ -82,7 +82,12 @@ class WalletSignerTest(BitcoinTestFramework):
         assert_equal(not_hww.getwalletinfo()["external_signer"], False)
 
         # Flag can be set
-        not_hww.setwalletflag("external_signer", True)
+        set_flag_result = not_hww.setwalletflag("external_signer", True)
+        assert_equal(
+            set_flag_result["warnings"],
+            "Wallet must be unloaded and loaded for change to take effect. "
+            "The ability to toggle this flag may be removed in a future update.",
+        )
         assert_equal(not_hww.getwalletinfo()["external_signer"], True)
 
         # Flag can be unset
