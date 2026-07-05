@@ -113,7 +113,12 @@ void PrivateBroadcast::NodeConfirmedReception(const NodeId& nodeid)
     LOCK(m_mutex);
     const auto tx_and_status{GetSendStatusByNode(nodeid)};
     if (tx_and_status.has_value()) {
-        tx_and_status.value().send_status.confirmed = NodeClock::now();
+        auto& send_status{tx_and_status.value().send_status};
+        const bool was_confirmed{send_status.confirmed.has_value()};
+        if (!send_status.disconnected) {
+            send_status.confirmed = NodeClock::now();
+        }
+        Assert(!send_status.disconnected || (send_status.confirmed.has_value() == was_confirmed));
     }
     AssertInvariants();
 }
