@@ -54,6 +54,10 @@ class GetBlockFilterTest(BitcoinTestFramework):
         genesis_hash = self.nodes[0].getblockhash(0)
         assert_raises_rpc_error(-5, "Unknown filtertype", self.nodes[0].getblockfilter, genesis_hash, "unknown")
 
+        # Bare -blockfilterindex only enables selected default filters, currently basic.
+        assert_raises_rpc_error(-1, "Index is not enabled for filtertype v0",
+                                self.nodes[0].getblockfilter, genesis_hash, "v0")
+
         # Test getblockfilter fails on node without compact block filter index
         self.restart_node(0, extra_args=["-blockfilterindex=0"])
         for filter_type in FILTER_TYPES:
