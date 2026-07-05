@@ -225,6 +225,14 @@ Other missing/adapted Knots pieces found during this pass:
   were not original Knots defects; unmodified Knots uses the older
   `ChainstateRole` and transaction-hash APIs. The ZMQ-enabled
   `interface_zmq.py` run now passes.
+- The fee-estimator follow-up confirmed Knots' `TxConfirmStats::Read` overflow
+  guard (`163d3e5c13`, ported as `aeaf84b7d5`) is present while current Core
+  still multiplies `scale * maxPeriods` before checking the one-week bound.
+  The same pass classified the fee-histogram unsigned-decrement fix
+  (`85c8d477b0`, ported as `759e1d76b3`) as Knots-surface hardening because
+  current Core has no `getmempoolinfo(with_fee_histogram=...)` or REST
+  histogram surface. `policyestimator_tests` and `mempool_fee_histogram.py`
+  pass with the ported code.
 
 ## Original Knots Defects Confirmed
 
@@ -349,12 +357,24 @@ under different commits. They are not all proven exploitable.
   text. This is notification availability and diagnostics hardening, not a
   consensus issue.
 
+- Fee-estimator file read overflow guard:
+  `163d3e5c13`
+
+  Current Core still computes `scale * maxPeriods` before checking whether a
+  serialized fee-estimates file tracks more than one week of confirmations.
+  Knots checks `scale > 1008 / maxPeriods` first and only multiplies after the
+  corrupt-file bound has passed. This is local corrupt-file hardening for
+  `fee_estimates.dat`, not remote network exposure.
+
 - External or Knots-only surfaces:
   `d637873230` fixes `GetBlockFileInfo` bounds handling, but the obvious
   RPC-facing caller is Knots' `getblockfileinfo`. Current Core's corresponding
-  callers are internal/tests. The BDB cleanup/data-loss fixes matter for this
-  port because BDB support is retained, but current Core master no longer has
-  the same BDB write-environment files.
+  callers are internal/tests. The `85c8d477b0` fee-histogram unsigned-decrement
+  fix matters for Knots' `getmempoolinfo(with_fee_histogram=...)` and
+  `/rest/mempool/info/with_fee_histogram`, but current Core has no
+  corresponding histogram surface. The BDB cleanup/data-loss fixes matter for
+  this port because BDB support is retained, but current Core master no longer
+  has the same BDB write-environment files.
 
 - Ephemeral-dust reorg policy hardening:
   Knots' mempool policy keeps an unswept ephemeral-dust child from re-entering
@@ -436,6 +456,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=validation_tests`
 - `build/bin/test_bitcoin --run_test=validation_block_tests`
 - `build/bin/test_bitcoin --run_test=merkle_tests`
+- `build/bin/test_bitcoin --run_test=policyestimator_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
 
 Functional tests:
