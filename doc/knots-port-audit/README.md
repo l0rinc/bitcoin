@@ -92,6 +92,14 @@ Other missing/adapted Knots pieces found during this pass:
   debug log for details.` on stderr and logs `Unable to bind all endpoints for
   RPC server` in `debug.log`. The port test now asserts both surfaces as
   `afa1750abe`.
+- `feature_torcontrol.py` now passes against the current port, covering Tor
+  control partial responses, oversized-line disconnects, excessive-line
+  disconnects, bind-any onion target mapping, PoW fallback, and the private Tor
+  subprocess path that uses `subprocess::close_fds`. The test needed two
+  rebase-only adjustments: use a dedicated onion bind to avoid Knots' common
+  Tor/local-port warning on stderr, and parse the fake Tor command as
+  `LOG -f TORRC`, matching the port's `-torexecute` launch contract
+  (`6fe0c50345`).
 
 ## Original Knots Defects Confirmed
 
@@ -249,6 +257,7 @@ Functional tests:
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini`
 - `python3 test/functional/interface_rest.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_torcontrol.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_signer.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
