@@ -1414,7 +1414,13 @@ uint256 GetSpentScriptsSHA256(const std::vector<CTxOut>& outputs_spent)
 template <class T>
 void PrecomputedTransactionData::Init(const T& txTo, std::vector<CTxOut>&& spent_outputs, bool force)
 {
-    assert(!m_spent_outputs_ready);
+    // Permit callers to reuse a PrecomputedTransactionData object for another
+    // transaction. Optional readiness flags must not leak from the previous
+    // transaction into a later one that does not request the same precomputes.
+    m_spent_outputs.clear();
+    m_spent_outputs_ready = false;
+    m_bip143_segwit_ready = false;
+    m_bip341_taproot_ready = false;
 
     m_spent_outputs = std::move(spent_outputs);
     if (!m_spent_outputs.empty()) {
@@ -1461,6 +1467,10 @@ void PrecomputedTransactionData::Init(const T& txTo, std::vector<CTxOut>&& spent
         m_spent_scripts_single_hash = GetSpentScriptsSHA256(m_spent_outputs);
         m_bip341_taproot_ready = true;
     }
+
+    Assume(m_spent_outputs_ready == !m_spent_outputs.empty());
+    if (m_spent_outputs_ready) Assume(m_spent_outputs.size() == txTo.vin.size());
+    Assume(!m_bip341_taproot_ready || m_spent_outputs_ready);
 }
 
 template <class T>
