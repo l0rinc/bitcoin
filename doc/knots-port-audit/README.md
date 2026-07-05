@@ -1488,8 +1488,8 @@ under different commits. They are not all proven exploitable.
   resolution in `AddNode()`. Knots flips RFC4193-looking CJDNS addresses before
   comparison and rejects CJDNS duplicates even when the port differs, avoiding
   repeated manual-connection entries to the same CJDNS node. The focused
-  `rpc_net.py` CJDNS duplicate test passes on the port and as an isolated
-  cross-check against unmodified Knots.
+  `rpc_net.py --test_methods test_addnode_cjdns_duplicate` run passes on the
+  port and as an isolated cross-check against unmodified Knots.
 
 - V2-only clearnet outbound option:
   `cbfbefd8f3`, `7c06acab77`, `f4fc3f03f4`, `5891703ba0`
@@ -2060,6 +2060,15 @@ Functional tests:
 - `build/test/functional/p2p_filter.py`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_cjdns_addnode_3`
+- `python3 test/functional/rpc_net.py --configfile build/test/config.ini
+  --test_methods test_addnode_cjdns_duplicate
+  --tmpdir=/mnt/my_storage/tmp_rpc_net_cjdns_addnode_review_port
+  --portseed=26440`
+- `python3 test/functional/rpc_net.py --configfile
+  ../knots/build-repro/test/config.ini
+  --test_methods test_addnode_cjdns_duplicate
+  --tmpdir=/mnt/my_storage/tmp_rpc_net_cjdns_addnode_review_knots
+  --portseed=26441`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_addconnection`
 - `build/test/functional/rpc_net.py`
