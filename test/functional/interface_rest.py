@@ -398,7 +398,28 @@ class RESTTest (BitcoinTestFramework):
 
         # Check the mempool transactions response
         json_obj = self.test_rest_request("/mempool/transactions/info")
+        rpc_obj = self.nodes[0].listmempooltransactions()
+        assert_equal(json_obj, rpc_obj)
         assert_equal({tx["txid"] for tx in json_obj["txs"]}, set(txs))
+
+        max_entry_sequence = max(tx["entry_sequence"] for tx in json_obj["txs"])
+        filtered_rpc_obj = self.nodes[0].listmempooltransactions(max_entry_sequence)
+        assert all(tx["entry_sequence"] >= max_entry_sequence for tx in filtered_rpc_obj["txs"])
+        assert_greater_than(len(filtered_rpc_obj["txs"]), 0)
+        assert_equal(
+            self.test_rest_request("/mempool/transactions/info", query_params={"sequence_start": max_entry_sequence}),
+            filtered_rpc_obj,
+        )
+
+        empty_rpc_obj = self.nodes[0].listmempooltransactions(rpc_obj["mempool_sequence"] + 1)
+        assert_equal(empty_rpc_obj["mempool_sequence"], rpc_obj["mempool_sequence"])
+        assert_equal(empty_rpc_obj["txs"], [])
+
+        verbose_rpc_obj = self.nodes[0].listmempooltransactions(0, True)
+        verbose_rest_obj = self.test_rest_request("/mempool/transactions/contents")
+        assert_equal(verbose_rest_obj, verbose_rpc_obj)
+        assert_equal({tx["txid"] for tx in verbose_rpc_obj["txs"]}, set(txs))
+        assert all("vin" in tx and "vout" in tx and "hex" not in tx for tx in verbose_rpc_obj["txs"])
 
         # Check for error response if sequence_start cannot be parsed
         resp = self.test_rest_request("/mempool/transactions/info", ret_type=RetType.OBJ, status=400, query_params={"sequence_start": "bad"})
