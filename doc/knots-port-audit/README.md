@@ -293,14 +293,16 @@ Other missing/adapted Knots pieces found during this pass:
   `mempool_cluster.py`.
 - The same file-presence sweep found a port-side Berkeley DB build-system
   omission: the port retained `WITH_BDB` and wallet BDB source, but lacked
-  Knots' CMake discovery module, depends package, depends BDB patch, and wallet
-  package selection wiring. This was not an original Knots defect or consensus
-  issue. The port now restores `FindBerkeleyDB.cmake`, `depends/packages/bdb.mk`,
-  the BDB clang patch, and BDB/SQLite wallet dependency selection as
-  `ef814e1135`. A BDB-enabled CMake probe and `bitcoin_wallet` target build
-  pass locally using system Berkeley DB 5.3 with
-  `WARN_INCOMPATIBLE_BDB=OFF`, proving the restored wiring rather than portable
-  Berkeley DB 4.8 compatibility.
+  Knots' CMake discovery module, depends package, depends BDB patch, wallet
+  package selection wiring, and BDB wallet target wiring. The first restoration
+  (`ef814e1135`) added the package/discovery files; the stronger BDB compile
+  probes then showed that `bitcoin_wallet` had still been SQLite-only and that
+  `bdb.cpp`/`salvage.cpp` had stale current-Core database-interface calls. The
+  port now restores `WITH_SQLITE`, conditional SQLite/BDB wallet sources,
+  `salvage.h`, and current API adaptations as `90c0118d62`. This was not an
+  original Knots defect or consensus issue. Full legacy wallet loading/creation
+  remains disabled on this current-Core base; the BDB work here restores build
+  coverage and the configured BDB backend objects.
 - CLI/help verification exposed a port-side bitcoin-cli conversion-table drift:
   current server metadata no longer advertises legacy-only `sethdseed` and
   `addmultisigaddress` conversions, while descriptor-compatible legacy import
@@ -757,11 +759,23 @@ Builds:
   Qt5_FOUND)`
 - `make -C depends print-bdb_packages print-bdb_packages_ print-wallet_packages_
   NO_QT=1 NO_ZMQ=1 NO_UPNP=1 NO_USDT=1`
-- `cmake -S . -B /tmp/bitcoin-bdb-probe -DWITH_BDB=ON
+- `cmake -S . -B /tmp/bitcoin-bdb-sqlite-probe -DWITH_BDB=ON
   -DWARN_INCOMPATIBLE_BDB=OFF -DBUILD_GUI=OFF -DBUILD_TESTS=OFF
   -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_CCACHE=OFF
   -DRDTS_CONSENT=IMPLICIT`
-- `cmake --build /tmp/bitcoin-bdb-probe --target bitcoin_wallet -j2`
+- `cmake --build /tmp/bitcoin-bdb-sqlite-probe --target bitcoin_wallet -j2`
+- `cmake -S . -B /tmp/bitcoin-bdb-only-probe -DWITH_SQLITE=OFF
+  -DWITH_BDB=ON -DWARN_INCOMPATIBLE_BDB=OFF -DBUILD_GUI=OFF
+  -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF
+  -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
+- `cmake --build /tmp/bitcoin-bdb-only-probe --target bitcoin_wallet -j2`
+- `cmake --build /tmp/bitcoin-bdb-only-probe --target bitcoind -j2`
+- `cmake -S . -B /tmp/bitcoin-bdb-only-tests-probe -DWITH_SQLITE=OFF
+  -DWITH_BDB=ON -DWARN_INCOMPATIBLE_BDB=OFF -DBUILD_GUI=OFF
+  -DBUILD_TESTS=ON -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF
+  -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
+- `cmake --build /tmp/bitcoin-bdb-only-tests-probe --target test_util
+  bitcoin_wallet -j2`
 - Original Knots repro build:
   `cmake -S ../knots -B ../knots/build-repro -DRDTS_CONSENT=RUNTIME_WARN`
   and `cmake --build ../knots/build-repro --target bitcoind bitcoin-cli -j4`
@@ -793,6 +807,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=hash_tests`
 - `build/bin/test_bitcoin --run_test=blockfilter_index_tests`
 - `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
+- `build/bin/test_bitcoin --run_test=db_tests,walletdb_tests,wallet_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
 - `./build/src/secp256k1/bin/tests --target=ellswift_xdh_bad_scalar_tests --iterations=16`
 - `./build/src/secp256k1/bin/tests --target=ellswift --iterations=16`
