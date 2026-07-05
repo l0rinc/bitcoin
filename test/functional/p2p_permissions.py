@@ -98,6 +98,8 @@ class P2PPermissionsTests(BitcoinTestFramework):
                 "forceinbound",
             ])
 
+        self.check_onion_inbound_not_whitelisted()
+
         for flag, permissions in [(["-whitelist=noban,out@127.0.0.1"], ["bloomfilter", "noban", "download"]), (["-whitelist=noban@127.0.0.1"], ["bloomfilter"])]:
             self.restart_node(0, flag)
             self.connect_nodes(0, 1)
@@ -153,6 +155,20 @@ class P2PPermissionsTests(BitcoinTestFramework):
             success=False,
             reject_reason='Not relaying non-mempool transaction {} (wtxid={}) from forcerelay peer=0'.format(txid, tx.wtxid_hex)
         )
+
+    def check_onion_inbound_not_whitelisted(self):
+        self.log.debug("Check that onion inbound peers do not receive address-based whitelist permissions")
+        self.restart_node(1, [
+            "-peerbloomfilters=0",
+            "-whitelist=noban@127.0.0.1",
+            f"-bind=127.0.0.1:{tor_port(self.nodes[1].index)}=onion",
+        ])
+
+        self.nodes[0].addnode(node=f"127.0.0.1:{tor_port(self.nodes[1].index)}", command="onetry")
+        self.wait_until(lambda: len(self.nodes[1].getpeerinfo()) == 1)
+        peerinfo = self.nodes[1].getpeerinfo()[0]
+        assert_equal(peerinfo["network"], "onion")
+        assert_equal(peerinfo["permissions"], [])
 
     def checkpermission(self, args, expectedPermissions):
         self.restart_node(1, ['-peerbloomfilters=0'] + args)
