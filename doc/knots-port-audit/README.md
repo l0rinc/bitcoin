@@ -1000,7 +1000,8 @@ Other missing/adapted Knots pieces found during this pass:
   `ChainstateRole` and transaction-hash APIs. The ZMQ-enabled
   `interface_zmq.py` run now passes, including a fresh rerun from
   `/mnt/my_storage/build-zmq-audit`, a separate tree configured with
-  `-DWITH_ZMQ=ON`.
+  `-DWITH_ZMQ=ON`; the latest check rebuilt `bitcoind`/`bitcoin-cli` there
+  before rerunning the functional suite.
 - The fee-estimator follow-up confirmed Knots' `TxConfirmStats::Read` overflow
   guard (`163d3e5c13`, ported as `aeaf84b7d5`) is present while current Core
   still multiplies `scale * maxPeriods` before checking the one-week bound.
@@ -2270,6 +2271,10 @@ Functional tests:
 - `python3 test/functional/interface_zmq.py --configfile
   /mnt/my_storage/build-zmq-audit/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_interface_zmq_audit_rerun`
+- `python3 test/functional/interface_zmq.py --configfile
+  /mnt/my_storage/build-zmq-audit/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_interface_zmq_review_rerun
+  --portseed=26446`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_dos_header_tree_checkpoint`
