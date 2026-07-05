@@ -145,6 +145,13 @@ Other missing/adapted Knots pieces found during this pass:
   qualification, `mini_miner`'s current miner/test helpers, direct mempool
   `Txid` lookups, and move-only `CTxMemPoolEntry` handling. These are now fixed
   as `f1f3f4ae7c`, and a fuzz-enabled compile of the `fuzz` target passes.
+- The BDB hardening review confirmed Knots' overflow-length, BTree-level, and
+  last-page LSN checks are present in the port. It also found an original Knots
+  fuzz-target gap: the parser can now throw `Overflow record has an impossible
+  length` and `Overflow record data is larger than stated size`, but neither
+  actual Knots `29.x-knots` nor current Core master lists those malformed-input
+  errors in `wallet_bdb_parser`. The port now accepts those expected parser
+  failures as `daeaa28b49`.
 - The exact-patch review found Knots' actionable pruned-index startup error
   (`4a4e4e253e`) was still missing after adapting onto the port's newer
   two-stage block/undo-data availability check. Actual Knots already contains
@@ -797,6 +804,11 @@ Builds:
   -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_GUI=OFF -DWITH_CCACHE=OFF
   -DRDTS_CONSENT=IMPLICIT`
 - `cmake --build /tmp/bitcoin-fuzz-wallet-bdb --target fuzz -j4`
+- `cmake -S . -B build-fuzz-check -GNinja -DBUILD_FOR_FUZZING=ON
+  -DBUILD_FUZZ_BINARY=ON -DBUILD_GUI=OFF -DBUILD_BENCH=OFF
+  -DBUILD_KERNEL_LIB=OFF`
+- `ninja -C build-fuzz-check
+  src/test/fuzz/CMakeFiles/fuzz.dir/__/__/wallet/test/fuzz/wallet_bdb_parser.cpp.o`
 - `cmake --build build --target bitcoind test_bitcoin -j4`
 - `cmake -S . -B /tmp/bitcoin-kernel-after -DBUILD_KERNEL_LIB=ON
   -DBUILD_SHARED_LIBS=ON -DBUILD_DAEMON=OFF -DBUILD_CLI=OFF
