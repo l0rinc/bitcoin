@@ -173,6 +173,15 @@ Other missing/adapted Knots pieces found during this pass:
   adapted form: unknown rule names fail startup, `rdts` is accepted, and mainnet
   consent handling is skipped on test chains. `feature_config_args.py` now covers
   the parser/startup surface directly as `31f7b8f005`.
+- The mainnet policy-argument review confirmed Knots' opt-in
+  `-acceptnonstdtxn` relaxation (`2e2f48f871`) is present in the port and
+  absent from current Core. Current Core still treats the option as
+  test-network/debug-only and rejects it on main chain; Knots and this port
+  allow authenticated operators to disable standardness policy on mainnet while
+  keeping the default unchanged. This is mempool/mining policy behavior, not a
+  consensus-rule change, but it is a high-visibility Knots-vs-Core divergence.
+  `feature_config_args.py` now covers main-chain startup with
+  `acceptnonstdtxn=1`.
 - The versionbits warning review exposed a port-introduced regression from
   rebasing Knots' stronger unknown-signalling warnings onto current Core's
   BIP323 constant split. The port had kept `VERSIONBITS_NUM_BITS = 5`, so
@@ -1373,6 +1382,8 @@ Functional tests:
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_config_args_portmap_2`
+- `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_config_args_acceptnonstd_main_3`
 - `python3 test/functional/feature_help.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_includeconf.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_fee_estimates_persist.py --configfile build/test/config.ini`
