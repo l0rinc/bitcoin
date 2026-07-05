@@ -139,12 +139,15 @@ BOOST_AUTO_TEST_CASE(load_external_block_file_unknown_parent_position)
         std::fclose(outfile);
     }
 
-    AutoFile file{fsbridge::fopen(blkfile, "rb")};
-    BOOST_REQUIRE(!file.IsNull());
+    const CBlockIndex* tip_before{WITH_LOCK(::cs_main, return m_node.chainman->ActiveTip())};
 
     FlatFilePos pos{0, 0};
     std::multimap<uint256, FlatFilePos> blocks_with_unknown_parent;
-    m_node.chainman->LoadExternalBlockFile(file, &pos, &blocks_with_unknown_parent);
+    {
+        AutoFile file{fsbridge::fopen(blkfile, "rb")};
+        BOOST_REQUIRE(!file.IsNull());
+        m_node.chainman->LoadExternalBlockFile(file, &pos, &blocks_with_unknown_parent);
+    }
 
     BOOST_REQUIRE_EQUAL(blocks_with_unknown_parent.size(), 1);
     const auto& [parent_hash, child_pos] = *blocks_with_unknown_parent.begin();
@@ -152,6 +155,19 @@ BOOST_AUTO_TEST_CASE(load_external_block_file_unknown_parent_position)
     BOOST_CHECK(!child_pos.IsNull());
     BOOST_CHECK_EQUAL(child_pos.nFile, 0);
     BOOST_CHECK_EQUAL(child_pos.nPos, node::STORAGE_HEADER_BYTES);
+    BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return m_node.chainman->ActiveTip()), tip_before);
+
+    {
+        AutoFile file{fsbridge::fopen(blkfile, "rb")};
+        BOOST_REQUIRE(!file.IsNull());
+        m_node.chainman->LoadExternalBlockFile(file);
+    }
+    BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return m_node.chainman->ActiveTip()), tip_before);
+    {
+        LOCK(::cs_main);
+        BOOST_CHECK(!m_node.chainman->m_blockman.LookupBlockIndex(header.hashPrevBlock));
+        BOOST_CHECK(!m_node.chainman->m_blockman.LookupBlockIndex(header.GetHash()));
+    }
 }
 
 BOOST_AUTO_TEST_CASE(load_external_block_file_truncated_payload)

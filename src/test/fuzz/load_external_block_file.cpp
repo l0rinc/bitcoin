@@ -63,15 +63,16 @@ void AssertUnknownParentImport(FuzzedDataProvider& fuzzed_data_provider)
     fs::remove(blkfile);
     WriteBlockFile(blkfile, stream);
 
-    AutoFile file{fsbridge::fopen(blkfile, "rb")};
-    assert(!file.IsNull());
-
     const CBlockIndex* tip_before{WITH_LOCK(::cs_main, return chainman.ActiveTip())};
     assert(tip_before);
     const int file_num{fuzzed_data_provider.ConsumeIntegral<uint8_t>()};
     FlatFilePos pos{file_num, 0};
     std::multimap<uint256, FlatFilePos> blocks_with_unknown_parent;
-    chainman.LoadExternalBlockFile(file, &pos, &blocks_with_unknown_parent);
+    {
+        AutoFile file{fsbridge::fopen(blkfile, "rb")};
+        assert(!file.IsNull());
+        chainman.LoadExternalBlockFile(file, &pos, &blocks_with_unknown_parent);
+    }
 
     assert(WITH_LOCK(::cs_main, return chainman.ActiveTip()) == tip_before);
     assert(blocks_with_unknown_parent.size() == 1);
@@ -81,6 +82,18 @@ void AssertUnknownParentImport(FuzzedDataProvider& fuzzed_data_provider)
     assert(child_pos.nPos == prefix.size() + node::STORAGE_HEADER_BYTES);
     assert(pos.nFile == file_num);
     assert(pos.nPos == child_pos.nPos);
+    {
+        LOCK(::cs_main);
+        assert(!chainman.m_blockman.LookupBlockIndex(header.hashPrevBlock));
+        assert(!chainman.m_blockman.LookupBlockIndex(header.GetHash()));
+    }
+
+    {
+        AutoFile file{fsbridge::fopen(blkfile, "rb")};
+        assert(!file.IsNull());
+        chainman.LoadExternalBlockFile(file);
+    }
+    assert(WITH_LOCK(::cs_main, return chainman.ActiveTip()) == tip_before);
     {
         LOCK(::cs_main);
         assert(!chainman.m_blockman.LookupBlockIndex(header.hashPrevBlock));
