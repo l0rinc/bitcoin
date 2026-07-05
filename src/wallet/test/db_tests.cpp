@@ -14,7 +14,10 @@
 #include <wallet/test/util.h>
 #include <wallet/walletutil.h>
 
+#include <algorithm>
+#include <cstdint>
 #include <cstddef>
+#include <fstream>
 #include <memory>
 #include <span>
 #include <string>
@@ -41,6 +44,107 @@ static SerializeData StringData(std::string_view str)
 {
     auto bytes = StringBytes(str);
     return SerializeData{bytes.begin(), bytes.end()};
+}
+
+static constexpr std::string_view BDB_LSN_ERROR{"LSNs are not reset, this database is not completely flushed. Please reopen then close the database with a version that has BDB support"};
+static constexpr uint32_t BDB_TEST_PAGE_SIZE{512};
+static constexpr uint32_t BDB_TEST_LAST_PAGE{3};
+static constexpr uint32_t BDB_TEST_BTREE_MAGIC{0x00053162};
+static constexpr uint32_t BDB_TEST_BTREE_VERSION{9};
+static constexpr uint32_t BDB_TEST_BTREE_FLAGS_SUBDB{0x20};
+static constexpr uint8_t BDB_TEST_PAGE_BTREE_META{9};
+static constexpr uint8_t BDB_TEST_PAGE_BTREE_LEAF{5};
+static constexpr uint8_t BDB_TEST_RECORD_KEYDATA{1};
+
+static void WriteByte(std::vector<std::byte>& data, size_t offset, uint8_t value)
+{
+    data.at(offset) = std::byte{value};
+}
+
+static void WriteLE16(std::vector<std::byte>& data, size_t offset, uint16_t value)
+{
+    WriteByte(data, offset, value & 0xff);
+    WriteByte(data, offset + 1, value >> 8);
+}
+
+static void WriteLE32(std::vector<std::byte>& data, size_t offset, uint32_t value)
+{
+    WriteByte(data, offset, value & 0xff);
+    WriteByte(data, offset + 1, (value >> 8) & 0xff);
+    WriteByte(data, offset + 2, (value >> 16) & 0xff);
+    WriteByte(data, offset + 3, value >> 24);
+}
+
+static void WriteBE32(std::vector<std::byte>& data, size_t offset, uint32_t value)
+{
+    WriteByte(data, offset, value >> 24);
+    WriteByte(data, offset + 1, (value >> 16) & 0xff);
+    WriteByte(data, offset + 2, (value >> 8) & 0xff);
+    WriteByte(data, offset + 3, value & 0xff);
+}
+
+static void WriteBytes(std::vector<std::byte>& data, size_t offset, std::span<const std::byte> bytes)
+{
+    std::copy(bytes.begin(), bytes.end(), data.begin() + offset);
+}
+
+static void WriteBdbMetaPage(std::vector<std::byte>& data, uint32_t page_num, uint32_t root_page)
+{
+    const size_t page_offset{page_num * BDB_TEST_PAGE_SIZE};
+    WriteLE32(data, page_offset + 4, 1); // clean LSN
+    WriteLE32(data, page_offset + 8, page_num);
+    WriteLE32(data, page_offset + 12, BDB_TEST_BTREE_MAGIC);
+    WriteLE32(data, page_offset + 16, BDB_TEST_BTREE_VERSION);
+    WriteLE32(data, page_offset + 20, BDB_TEST_PAGE_SIZE);
+    WriteByte(data, page_offset + 25, BDB_TEST_PAGE_BTREE_META);
+    WriteLE32(data, page_offset + 32, BDB_TEST_LAST_PAGE);
+    WriteLE32(data, page_offset + 48, BDB_TEST_BTREE_FLAGS_SUBDB);
+    WriteLE32(data, page_offset + 88, root_page);
+}
+
+static void WriteBdbPageHeader(std::vector<std::byte>& data, uint32_t page_num, uint16_t entries, uint8_t level, uint8_t type, bool dirty_lsn = false)
+{
+    const size_t page_offset{page_num * BDB_TEST_PAGE_SIZE};
+    WriteLE32(data, page_offset, dirty_lsn ? 1 : 0);
+    WriteLE32(data, page_offset + 4, dirty_lsn ? 2 : 1);
+    WriteLE32(data, page_offset + 8, page_num);
+    WriteLE16(data, page_offset + 20, entries);
+    WriteByte(data, page_offset + 24, level);
+    WriteByte(data, page_offset + 25, type);
+}
+
+static void WriteBdbDataRecord(std::vector<std::byte>& data, size_t offset, std::span<const std::byte> value)
+{
+    WriteLE16(data, offset, static_cast<uint16_t>(value.size()));
+    WriteByte(data, offset + 2, BDB_TEST_RECORD_KEYDATA);
+    WriteBytes(data, offset + 3, value);
+}
+
+static std::vector<std::byte> MinimalBerkeleyROFile(bool dirty_final_page_lsn)
+{
+    std::vector<std::byte> data((BDB_TEST_LAST_PAGE + 1) * BDB_TEST_PAGE_SIZE);
+
+    WriteBdbMetaPage(data, /*page_num=*/0, /*root_page=*/1);
+    WriteBdbPageHeader(data, /*page_num=*/1, /*entries=*/2, /*level=*/1, BDB_TEST_PAGE_BTREE_LEAF);
+    WriteLE16(data, BDB_TEST_PAGE_SIZE + 26, 40);
+    WriteLE16(data, BDB_TEST_PAGE_SIZE + 28, 48);
+    WriteBdbDataRecord(data, BDB_TEST_PAGE_SIZE + 40, StringBytes("main"));
+    std::vector<std::byte> main_page(4);
+    WriteBE32(main_page, 0, 2);
+    WriteBdbDataRecord(data, BDB_TEST_PAGE_SIZE + 48, main_page);
+
+    WriteBdbMetaPage(data, /*page_num=*/2, /*root_page=*/3);
+    WriteBdbPageHeader(data, /*page_num=*/3, /*entries=*/0, /*level=*/1, BDB_TEST_PAGE_BTREE_LEAF, dirty_final_page_lsn);
+
+    return data;
+}
+
+static void WriteBinaryFile(const fs::path& path, std::span<const std::byte> bytes)
+{
+    std::ofstream file{fs::PathToString(path), std::ios::binary};
+    BOOST_REQUIRE(file.is_open());
+    file.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    BOOST_REQUIRE(file.good());
 }
 
 static void CheckPrefix(DatabaseBatch& batch, std::span<const std::byte> prefix, MockableData expected)
@@ -143,6 +247,34 @@ BOOST_AUTO_TEST_CASE(db_cursor_prefix_byte_test)
         CheckPrefix(*batch, StringBytes("\xff\xff"), {ff, ffs});
         batch.reset();
         database->Close();
+    }
+}
+
+BOOST_AUTO_TEST_CASE(berkeley_ro_checks_final_page_lsn)
+{
+    const fs::path wallet_path{m_path_root / "bdb_final_page_lsn"};
+    fs::create_directories(wallet_path);
+    const fs::path data_file{wallet_path / "wallet.dat"};
+    DatabaseOptions options;
+    {
+        const auto data{MinimalBerkeleyROFile(/*dirty_final_page_lsn=*/false)};
+        WriteBinaryFile(data_file, data);
+        DatabaseStatus status;
+        bilingual_str error;
+        auto database{MakeBerkeleyRODatabase(wallet_path, options, status, error)};
+        BOOST_REQUIRE(database);
+        BOOST_CHECK(status == DatabaseStatus::SUCCESS);
+        database->Close();
+    }
+    {
+        const auto data{MinimalBerkeleyROFile(/*dirty_final_page_lsn=*/true)};
+        WriteBinaryFile(data_file, data);
+        DatabaseStatus status;
+        bilingual_str error;
+        auto database{MakeBerkeleyRODatabase(wallet_path, options, status, error)};
+        BOOST_CHECK(!database);
+        BOOST_CHECK(status == DatabaseStatus::FAILED_LOAD);
+        BOOST_CHECK_EQUAL(error.original, std::string{BDB_LSN_ERROR});
     }
 }
 
