@@ -13,6 +13,8 @@
 
 #include <db_cxx.h>
 
+#include <span>
+
 namespace wallet {
 /* End of headers, beginning of key/value data */
 static const char *HEADER_END = "HEADER=END";
@@ -33,14 +35,13 @@ private:
     bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite=true) override { return true; }
     bool EraseKey(DataStream&& key) override { return true; }
     bool HasKey(DataStream&& key) override { return true; }
-    bool ErasePrefix(Span<const std::byte> prefix) override { return true; }
+    bool ErasePrefix(std::span<const std::byte> prefix) override { return true; }
 
 public:
-    void Flush() override {}
     void Close() override {}
 
     std::unique_ptr<DatabaseCursor> GetNewCursor() override { return std::make_unique<DummyCursor>(); }
-    std::unique_ptr<DatabaseCursor> GetNewPrefixCursor(Span<const std::byte> prefix) override { return GetNewCursor(); }
+    std::unique_ptr<DatabaseCursor> GetNewPrefixCursor(std::span<const std::byte> prefix) override { return GetNewCursor(); }
     bool TxnBegin() override { return true; }
     bool TxnCommit() override { return true; }
     bool TxnAbort() override { return true; }
@@ -53,19 +54,13 @@ class DummyDatabase : public WalletDatabase
 {
 public:
     void Open() override {};
-    void AddRef() override {}
-    void RemoveRef() override {}
-    bool Rewrite(const char* pszSkip=nullptr) override { return true; }
+    bool Rewrite() override { return true; }
     bool Backup(const std::string& strDest) const override { return true; }
     void Close() override {}
-    void Flush() override {}
-    bool PeriodicFlush() override { return true; }
-    void IncrementUpdateCounter() override { ++nUpdateCounter; }
-    void ReloadDbEnv() override {}
     std::string Filename() override { return "dummy"; }
     std::vector<fs::path> Files() override { return {}; }
     std::string Format() override { return "dummy"; }
-    std::unique_ptr<DatabaseBatch> MakeBatch(bool flush_on_close = true) override { return std::make_unique<DummyBatch>(); }
+    std::unique_ptr<DatabaseBatch> MakeBatch() override { return std::make_unique<DummyBatch>(); }
 };
 
 bool RecoverDatabaseFile(const ArgsManager& args, const fs::path& file_path, bilingual_str& error, std::vector<bilingual_str>& warnings)

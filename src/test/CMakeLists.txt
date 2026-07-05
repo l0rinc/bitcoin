@@ -172,7 +172,7 @@ target_link_libraries(test_bitcoin
   $<TARGET_NAME_IF_EXISTS:USDT::headers>
 )
 
-if(ENABLE_WALLET)
+if(USE_SQLITE)
   add_subdirectory(${PROJECT_SOURCE_DIR}/src/wallet/test wallet)
 endif()
 

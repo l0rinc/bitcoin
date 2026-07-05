@@ -19,8 +19,13 @@
 #include <util/fs.h>
 #include <util/time.h>
 #include <util/translation.h>
+#ifdef USE_BDB
+#include <wallet/bdb.h>
+#endif
 #include <wallet/migrate.h>
+#ifdef USE_SQLITE
 #include <wallet/sqlite.h>
+#endif
 #include <wallet/wallet.h>
 
 #include <atomic>
@@ -66,7 +71,12 @@ const std::unordered_set<std::string> LEGACY_TYPES{CRYPTED_KEY, CSCRIPT, DEFAULT
 void LogDBInfo()
 {
     // Add useful DB information here. This will be printed during startup.
+#ifdef USE_SQLITE
     LogInfo("Using SQLite Version %s", SQLiteDatabaseVersion());
+#endif
+#ifdef USE_BDB
+    LogInfo("Using BerkeleyDB version %s", BerkeleyDatabaseVersion());
+#endif
 }
 
 //
@@ -1363,11 +1373,23 @@ std::unique_ptr<WalletDatabase> MakeDatabase(const fs::path& path, const Databas
     }
 
     if (format == DatabaseFormat::SQLITE) {
+#ifdef USE_SQLITE
         return MakeSQLiteDatabase(path, options, status, error);
+#else
+        error = Untranslated(strprintf("Failed to open database path '%s'. Build does not support SQLite database format.", fs::PathToString(path)));
+        status = DatabaseStatus::FAILED_BAD_FORMAT;
+        return nullptr;
+#endif
     }
 
     if (format == DatabaseFormat::BERKELEY_RO) {
         return MakeBerkeleyRODatabase(path, options, status, error);
+    }
+
+    if (format == DatabaseFormat::BERKELEY || format == DatabaseFormat::BERKELEY_SWAP) {
+        error = Untranslated(strprintf("Failed to open database path '%s'. Legacy wallet loading is disabled.", fs::PathToString(path)));
+        status = DatabaseStatus::FAILED_LEGACY_DISABLED;
+        return nullptr;
     }
 
     error = Untranslated(STR_INTERNAL_BUG("Could not determine wallet format"));

@@ -17,14 +17,14 @@ add_library(test_util STATIC EXCLUDE_FROM_ALL
   transaction_utils.cpp
   txmempool.cpp
   validation.cpp
-  $<$<BOOL:${ENABLE_WALLET}>:${PROJECT_SOURCE_DIR}/src/wallet/test/util.cpp>
+  $<$<BOOL:${USE_SQLITE}>:${PROJECT_SOURCE_DIR}/src/wallet/test/util.cpp>
 )
 
 target_link_libraries(test_util
   PRIVATE
     core_interface
     $<TARGET_NAME_IF_EXISTS:Boost::headers>
-    $<$<BOOL:${ENABLE_WALLET}>:SQLite3::SQLite3>
+    $<$<BOOL:${USE_SQLITE}>:SQLite3::SQLite3>
   PUBLIC
     univalue
 )

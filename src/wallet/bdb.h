@@ -17,6 +17,7 @@
 #include <condition_variable>
 #include <map>
 #include <memory>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -100,12 +101,12 @@ public:
 
     /** Rewrite the entire database on disk, with the exception of key pszSkip if non-zero
      */
-    bool Rewrite(const char* pszSkip=nullptr) override;
+    bool Rewrite() override;
 
     /** Indicate that a new database user has begun using the database. */
-    void AddRef() override;
+    void AddRef();
     /** Indicate that database user has stopped using the database and that it could be flushed or closed. */
-    void RemoveRef() override;
+    void RemoveRef();
 
     /** Back up the entire database to a file.
      */
@@ -113,18 +114,16 @@ public:
 
     /** Make sure all changes are flushed to database file.
      */
-    void Flush() override;
+    void Flush();
     /** Flush to the database file and close the database.
      *  Also close the environment if no other databases are open in it.
      */
     void Close() override;
     /* flush the wallet passively (TRY_LOCK)
        ideal to be called periodically */
-    bool PeriodicFlush() override;
+    bool PeriodicFlush();
 
-    void IncrementUpdateCounter() override;
-
-    void ReloadDbEnv() override;
+    void ReloadDbEnv();
 
     /** Verifies the environment and database file */
     bool Verify(bilingual_str& error);
@@ -156,7 +155,7 @@ public:
     int64_t m_max_log_mb;
 
     /** Make a BerkeleyBatch connected to this database */
-    std::unique_ptr<DatabaseBatch> MakeBatch(bool flush_on_close = true) override;
+    std::unique_ptr<DatabaseBatch> MakeBatch() override;
 };
 
 class BerkeleyCursor : public DatabaseCursor
@@ -169,7 +168,7 @@ private:
 public:
     // Constructor for cursor for records matching the prefix
     // To match all records, an empty prefix may be provided.
-    explicit BerkeleyCursor(BerkeleyDatabase& database, const BerkeleyBatch& batch, Span<const std::byte> prefix = {});
+    explicit BerkeleyCursor(BerkeleyDatabase& database, const BerkeleyBatch& batch, std::span<const std::byte> prefix = {});
     ~BerkeleyCursor() override;
 
     Status Next(DataStream& key, DataStream& value) override;
@@ -184,7 +183,7 @@ private:
     bool WriteKey(DataStream&& key, DataStream&& value, bool overwrite = true) override;
     bool EraseKey(DataStream&& key) override;
     bool HasKey(DataStream&& key) override;
-    bool ErasePrefix(Span<const std::byte> prefix) override;
+    bool ErasePrefix(std::span<const std::byte> prefix) override;
 
 protected:
     Db* pdb{nullptr};
@@ -202,11 +201,11 @@ public:
     BerkeleyBatch(const BerkeleyBatch&) = delete;
     BerkeleyBatch& operator=(const BerkeleyBatch&) = delete;
 
-    void Flush() override;
+    void Flush();
     void Close() override;
 
     std::unique_ptr<DatabaseCursor> GetNewCursor() override;
-    std::unique_ptr<DatabaseCursor> GetNewPrefixCursor(Span<const std::byte> prefix) override;
+    std::unique_ptr<DatabaseCursor> GetNewPrefixCursor(std::span<const std::byte> prefix) override;
     bool TxnBegin() override;
     bool TxnCommit() override;
     bool TxnAbort() override;
