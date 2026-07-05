@@ -791,6 +791,12 @@ Other missing/adapted Knots pieces found during this pass:
   it in the peer's `permissions` array. The port now reports the permission as
   `e53bce279f`, with unit coverage for `NetPermissionFlags::All` and
   functional coverage in `p2p_eviction.py` and `p2p_permissions.py`.
+- The `getpeerinfo` metadata review confirmed Knots' `last_block_announcement`
+  (`a4e4e17feb`) and optional per-peer `cpu_load` (`9084ea96ac`) fields are
+  present in the port and absent from current Core. These are diagnostic RPC
+  fields, not policy or consensus behavior; `rpc_net.py` accounts for both
+  fields, including the fact that `cpu_load` is absent before the version
+  handshake completes.
 - The onion-inbound whitelist review confirmed Knots' guard against applying
   address-based whitelist permissions to Tor inbound peers (`61cdc04a83`) is
   already present in current Core and in this port, so it is not a
