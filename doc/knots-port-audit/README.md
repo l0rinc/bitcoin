@@ -548,6 +548,21 @@ Other missing/adapted Knots pieces found during this pass:
   command-option validation and unnamed-wallet rejection (`91fc10bc4c`).
   `rpc_mempool_info.py` and `tool_wallet.py` pass on the local build, while
   the restored legacy-wallet tests reach the expected current-Core skip path.
+- The `bitcoin-wallet importfromcoldcard` review confirmed the Knots-only
+  command (`e3d45ed809`, `0b7664c038`, `f72496a06a`) is present in the port and
+  absent from current Core. Malformed Coldcard export files exposed an original
+  Knots crash: both the port and an actual `../knots` `29.x-knots`
+  `bitcoin-wallet` build aborted with exit 134 and `std::out_of_range` when no
+  `importdescriptors '[{...}]'` line was found. The port now keeps the command
+  but fails cleanly before creating a wallet (`730764bc9f`). This is a local
+  wallet-tool crash/DoS in a Knots-only command, not a consensus or network
+  issue and not a Core-missing covert fix. Coverage in `tool_wallet.py` now
+  checks missing, nonexistent, and malformed dump files plus a successful
+  Coldcard-style descriptor import. Verification run: `cmake --build build
+  --target bitcoin-wallet -j4`, `python3 test/functional/tool_wallet.py
+  --configfile build/test/config.ini --test_methods test_importfromcoldcard
+  --tmpdir=/mnt/my_storage/tmp_tool_wallet_coldcard`, and the default
+  `tool_wallet.py` run with `--tmpdir=/mnt/my_storage/tmp_tool_wallet_full`.
 - A follow-up comparison with final Knots' runner restored additional
   legacy-wallet coverage that current Core had removed:
   `wallet_importmulti.py`, `wallet_inactive_hdchains.py`,
