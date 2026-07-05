@@ -100,6 +100,20 @@ BOOST_AUTO_TEST_CASE(flatfile_open)
         BOOST_CHECK(file.IsNull());
         BOOST_CHECK(!fs::exists(seq.FileName(missing_pos)));
     }
+
+    // Opening a missing flat file read-only must not create a missing parent directory.
+    {
+        const fs::path missing_parent_dir{data_dir / "read_only_missing_parent"};
+        fs::remove_all(missing_parent_dir);
+        FlatFileSeq missing_parent_seq{missing_parent_dir, "r", 16 * 1024};
+        const FlatFilePos missing_pos{0, 0};
+        const fs::path missing_path{missing_parent_seq.FileName(missing_pos)};
+        BOOST_CHECK(!fs::exists(missing_path.parent_path()));
+        AutoFile file{missing_parent_seq.Open(missing_pos, /*read_only=*/true)};
+        BOOST_CHECK(file.IsNull());
+        BOOST_CHECK(!fs::exists(missing_path));
+        BOOST_CHECK(!fs::exists(missing_path.parent_path()));
+    }
 }
 
 BOOST_AUTO_TEST_CASE(flatfile_allocate)
