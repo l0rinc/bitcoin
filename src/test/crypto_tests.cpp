@@ -991,6 +991,40 @@ BOOST_AUTO_TEST_CASE(chacha20_midblock)
     BOOST_CHECK(std::ranges::equal(std::span{block}.last(52), b3));
 }
 
+BOOST_AUTO_TEST_CASE(chacha20_counter_overflow_continuation)
+{
+    auto key = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"_hex;
+    constexpr ChaCha20::Nonce96 nonce{0x10203040, 0xdeadbeef12345678};
+
+    ChaCha20 stream{key};
+    stream.Seek(nonce, 0xffffffff);
+    std::array<std::byte, 64> before_wrap_stream{};
+    std::array<std::byte, 64> after_wrap_stream{};
+    stream.Keystream(before_wrap_stream);
+    stream.Keystream(after_wrap_stream);
+
+    ChaCha20 expected_stream{key};
+    expected_stream.Seek({nonce.first + 1, nonce.second}, 0);
+    std::array<std::byte, 64> expected_after_wrap{};
+    expected_stream.Keystream(expected_after_wrap);
+    BOOST_CHECK(std::ranges::equal(after_wrap_stream, expected_after_wrap));
+
+    ChaCha20 crypt{key};
+    crypt.Seek(nonce, 0xffffffff);
+    std::array<std::byte, 64> ignored_plain{};
+    std::array<std::byte, 64> ignored_cipher{};
+    std::array<std::byte, 64> plain{};
+    std::array<std::byte, 64> cipher{};
+    for (size_t i{0}; i < plain.size(); ++i) {
+        plain[i] = std::byte{static_cast<unsigned char>((i * 29U + 3U) & 0xff)};
+    }
+    crypt.Crypt(ignored_plain, ignored_cipher);
+    crypt.Crypt(plain, cipher);
+    for (size_t i{0}; i < plain.size(); ++i) {
+        BOOST_CHECK(cipher[i] == (plain[i] ^ expected_after_wrap[i]));
+    }
+}
+
 BOOST_AUTO_TEST_CASE(chacha20_crypt_matches_keystream_after_empty_ops)
 {
     auto key = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"_hex;
