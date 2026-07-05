@@ -1226,6 +1226,16 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
     // Send as much data from this client's buffer as we can
     LOCK(m_send_mutex);
     const bool had_data{!m_send_buffer.empty()};
+    if (!had_data) {
+        // A worker can append data behind an existing send buffer while the I/O
+        // thread is flushing it. If the I/O thread drains the buffer before the
+        // worker stores m_send_ready=true, the next I/O loop may observe stale
+        // send readiness with no bytes left to send.
+        m_send_ready = false;
+        Assume(!m_send_ready);
+        Assume(m_send_buffer.empty());
+        return true;
+    }
     if (!m_send_buffer.empty()) {
         // Socket flags (See kernel docs for send(2) and tcp(7) for more details).
         // MSG_NOSIGNAL: If the remote end of the connection is closed,
