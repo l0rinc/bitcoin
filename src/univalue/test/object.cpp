@@ -454,6 +454,27 @@ void univalue_readwrite()
     BOOST_CHECK(!v.read("{} 42"));
 }
 
+void univalue_write_escaped_key_roundtrip()
+{
+    std::string key{"quote\"backslash\\nul"};
+    key.push_back('\0');
+    key += "del";
+    key.push_back('\x7f');
+    key += "line\n";
+
+    UniValue obj(UniValue::VOBJ);
+    obj.pushKV(key, "value");
+
+    const std::string encoded{obj.write()};
+    BOOST_CHECK_EQUAL(encoded, "{\"quote\\\"backslash\\\\nul\\u0000del\\u007fline\\n\":\"value\"}");
+
+    UniValue reparsed;
+    BOOST_CHECK(reparsed.read(encoded));
+    BOOST_CHECK(reparsed.exists(key));
+    BOOST_CHECK_EQUAL(reparsed[key].get_str(), "value");
+    BOOST_CHECK_EQUAL(reparsed.write(), encoded);
+}
+
 void univalue_read_clears_previous_state()
 {
     UniValue fresh;
@@ -481,6 +502,7 @@ int main(int argc, char* argv[])
     univalue_array();
     univalue_object();
     univalue_readwrite();
+    univalue_write_escaped_key_roundtrip();
     univalue_read_clears_previous_state();
     return 0;
 }
