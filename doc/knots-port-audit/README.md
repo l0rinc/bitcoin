@@ -618,6 +618,14 @@ Other missing/adapted Knots pieces found during this pass:
   compatibility behavior, not consensus. `wallet_address_types.py` now covers
   p2sh-segwit-default and bech32-default wallets sending to a bech32m recipient
   without upgrading change past the user's preferred type.
+- The wallet/IPC shutdown review confirmed Knots/Core's validation-interface
+  drain on wallet notification disconnect (`41d1ce75e3`) and chain-client
+  `ipc::Exception` handling for disconnected `bitcoin-wallet` children
+  (`a9f11b76fb`) are present in the port. Wallet unload and failed
+  chain-attach paths call `CWallet::DisconnectChainNotifications()`, which
+  disconnects the handler and waits for pending notifications, and `Shutdown()`
+  catches IPC disconnect exceptions while stopping chain clients. This is
+  shutdown robustness rather than consensus or wallet-balance behavior.
 - Raw transaction, package, and PSBT RPC coverage now passes against the port.
   This covers Knots-touched max burn handling, package max fee/burn arguments,
   and PSBT base64 parameter handling with `=` padding characters.
@@ -1363,6 +1371,8 @@ Source/manifest checks:
 - Direct import of `test/functional/test_runner.py` with
   `test/functional` on `sys.path` returned `missing_count 0`
 - `bash -n contrib/guix/libexec/build.sh`
+- `rg -n "DisconnectChainNotifications|ipc::Exception|client->stop"
+  src/wallet src/init.cpp`
 
 Builds:
 
