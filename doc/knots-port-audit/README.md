@@ -66,6 +66,14 @@ Other missing/adapted Knots pieces found during this pass:
   `12eefda89a`, `ee39394ad3`) is already present in this port via the earlier
   wallet/RPC reconciliation commit `e8c2b257ee`, with invalid-fingerprint
   coverage in `rpc_signer.py`.
+- The external signer wallet-flag review confirmed Knots' mutable
+  `external_signer` flag support (`dc97030bfc`, `6925c383d3`) is present in
+  the port and absent from current Core's `setwalletflag` mutable flag set.
+  This is a wallet-management compatibility/control change, not consensus or
+  network security behavior: Knots allows toggling the flag only for descriptor
+  watch-only wallets when external signer support is compiled in, and warns
+  that the wallet must be reloaded before the change takes effect.
+  `wallet_signer.py` now asserts both the flag state and the reload warning.
 - Knots' `bumpfee`/`psbtbumpfee` null-dereference guard for txids absent from
   the wallet (`7e125f8ed2`) is present in the port source: the RBF pre-check
   now tests the `GetWalletTx(...)` result before reading `wtx->tx`, allowing
@@ -93,11 +101,16 @@ Other missing/adapted Knots pieces found during this pass:
   `getblockfileinfo` pruning assertions.
 - The `getblockfrompeer` review confirmed Knots' no-header and pruned-node
   future-block behavior (`6c78d40b89`, `aebfd947d2`) is present in the port and
-  absent from current Core master. The port matches final Knots by allowing
-  requests for blocks whose header is not yet known and by disabling Core's
-  prune-mode synced-past-height rejection. `rpc_getblockfrompeer.py` covers the
-  no-header request, a pruned node fetching a block it has not seen, and a
-  pruned node fetching a block it has not synced past.
+  absent from current Core master. The same review confirmed Knots' restored
+  duplicate-request error (`2b67ea465c`, ported as `0946c66e3a`): current Core
+  still removes the prior in-flight block request before checking whether the
+  selected peer was already asked, while Knots and this port return `Already
+  requested from this peer`. The port matches final Knots by allowing requests
+  for blocks whose header is not yet known and by disabling Core's prune-mode
+  synced-past-height rejection. `rpc_getblockfrompeer.py` covers the
+  same-peer duplicate request, the no-header request, a pruned node fetching a
+  block it has not seen, and a pruned node fetching a block it has not synced
+  past.
 - `rpc_bind.py` has port-side coverage for Knots' stricter explicit RPC-bind
   behavior, but the expected message was attached to the wrong output stream.
   An unmodified Knots build exits with `Error: Unable to start HTTP server. See
@@ -1068,14 +1081,17 @@ under different commits. They are not all proven exploitable.
   not consensus behavior.
 
 - `getblockfrompeer` without a known header:
-  `6c78d40b89`, `aebfd947d2`
+  `6c78d40b89`, `aebfd947d2`, `2b67ea465c`
 
   Current Core master still requires the block header before
   `getblockfrompeer` can request the block, and rejects future-height requests
-  in prune mode. Knots and this port can request an arbitrary block hash from a
-  selected peer, including in pruned-node scenarios where the node has not seen
-  or synced past the header yet. This is RPC/operator recovery functionality,
-  not consensus behavior.
+  in prune mode. Core also still drops the old in-flight block request before
+  checking whether the same peer was already asked, so it does not preserve
+  Knots' duplicate-request error. Knots and this port can request an arbitrary
+  block hash from a selected peer, including in pruned-node scenarios where the
+  node has not seen or synced past the header yet, and report repeated same-peer
+  requests as `Already requested from this peer`. This is RPC/operator recovery
+  functionality, not consensus behavior.
 
 High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
@@ -1338,6 +1354,8 @@ Functional tests:
 - `python3 test/functional/rpc_help.py --configfile build/test/config.ini`
 - `python3 test/functional/tool_cli_completion.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_signer.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_signer.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_signer_warning`
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_bind.py --configfile build/test/config.ini`
