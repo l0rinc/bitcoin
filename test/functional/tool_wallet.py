@@ -5,21 +5,31 @@
 """Test bitcoin-wallet."""
 
 import os
+import random
 import stat
+import string
 import subprocess
 import textwrap
 
 from collections import OrderedDict
 
+from test_framework.bdb import dump_bdb_kv
+from test_framework.messages import ser_string
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
     assert_greater_than,
     sha256sum_file,
 )
+from test_framework.wallet import getnewdestination
 
 
 class ToolWalletTest(BitcoinTestFramework):
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
+        parser.add_argument("--bdbro", action="store_true", help="Use the BerkeleyRO internal parser when dumping a Berkeley DB wallet file")
+        parser.add_argument("--swap-bdb-endian", action="store_true", help="When making Legacy BDB wallets, always make them byte swapped internally")
+
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
@@ -95,6 +105,12 @@ class ToolWalletTest(BitcoinTestFramework):
             file_magic = f.read(16)
             assert_equal(file_magic, b'SQLite format 3\x00')
 
+    def assert_is_bdb(self, filename):
+        with open(filename, 'rb') as f:
+            f.seek(12, 0)
+            file_magic = f.read(4)
+            assert file_magic == b'\x00\x05\x31\x62' or file_magic == b'\x62\x31\x05\x00'
+
     def write_dump(self, dump, filename, magic=None, skip_checksum=False):
         if magic is None:
             magic = "BITCOIN_CORE_WALLET_DUMP"
@@ -110,12 +126,36 @@ class ToolWalletTest(BitcoinTestFramework):
                 row = ",".join(["checksum", dump["checksum"]]) + "\n"
                 f.write(row)
 
-    def do_tool_createfromdump(self, wallet_name, dumpfile):
+    def assert_dump(self, expected, received):
+        e = expected.copy()
+        r = received.copy()
+
+        # BDB will add a "version" record that is not present in sqlite. In
+        # that case, ignore the record and checksum from both dumps.
+        v_key = "0776657273696f6e" # Version key
+        if v_key in e and v_key not in r:
+            del e[v_key]
+            del e["checksum"]
+            del r["checksum"]
+        if v_key not in e and v_key in r:
+            del r[v_key]
+            del e["checksum"]
+            del r["checksum"]
+
+        assert_equal(len(e), len(r))
+        for k, v in e.items():
+            assert_equal(v, r[k])
+
+    def do_tool_createfromdump(self, wallet_name, dumpfile, file_format=None):
         dumppath = self.nodes[0].datadir_path / dumpfile
         rt_dumppath = self.nodes[0].datadir_path / "rt-{}.dump".format(wallet_name)
 
+        dump_data = self.read_dump(dumppath)
+
         args = ["-wallet={}".format(wallet_name),
                 "-dumpfile={}".format(dumppath)]
+        if file_format is not None:
+            args.append("-format={}".format(file_format))
         args.append("createfromdump")
 
         load_output = ""
@@ -126,8 +166,12 @@ class ToolWalletTest(BitcoinTestFramework):
 
         self.assert_tool_output('', '-wallet={}'.format(wallet_name), '-dumpfile={}'.format(rt_dumppath), 'dump', stderr="The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n")
 
+        rt_dump_data = self.read_dump(rt_dumppath)
         wallet_dat = self.nodes[0].wallets_path / wallet_name / "wallet.dat"
-        self.assert_is_sqlite(wallet_dat)
+        if rt_dump_data["format"] == "bdb":
+            self.assert_is_bdb(wallet_dat)
+        else:
+            self.assert_is_sqlite(wallet_dat)
 
     def test_invalid_tool_commands_and_args(self):
         self.log.info('Testing that various invalid commands raise with specific error messages')
@@ -279,11 +323,11 @@ class ToolWalletTest(BitcoinTestFramework):
         self.log.info('Checking createfromdump arguments')
         self.assert_raises_tool_error('No dump file provided. To use createfromdump, -dumpfile=<filename> must be provided.', '-wallet=todump', 'createfromdump')
         non_exist_dump = self.nodes[0].datadir_path / "wallet.nodump"
-        self.assert_raises_tool_error(f'{expected_warnings_restore}Unknown wallet file format "notaformat" provided. Please provide one of "bdb" or "sqlite".', '-wallet=todump', '-format=notaformat', '-dumpfile={}'.format(wallet_dump), 'createfromdump')
+        self.assert_raises_tool_error('Error parsing command line arguments: Invalid parameter -format=notaformat', '-wallet=todump', '-format=notaformat', '-dumpfile={}'.format(wallet_dump), 'createfromdump')
         self.assert_raises_tool_error('Dump file {} does not exist.'.format(non_exist_dump), '-wallet=todump', '-dumpfile={}'.format(non_exist_dump), 'createfromdump')
         wallet_path = self.nodes[0].wallets_path / "todump2"
         self.assert_raises_tool_error(f'{expected_warnings_restore}Failed to create database path \'{wallet_path}\'. Database already exists.', '-wallet=todump2', '-dumpfile={}'.format(wallet_dump), 'createfromdump')
-        self.assert_raises_tool_error("The -descriptors option can only be used with the 'create' command.", '-descriptors', '-wallet=todump2', '-dumpfile={}'.format(wallet_dump), 'createfromdump')
+        self.assert_raises_tool_error("Invalid parameter -descriptors", '-descriptors', '-wallet=todump2', '-dumpfile={}'.format(wallet_dump), 'createfromdump')
 
         self.log.info('Checking createfromdump')
         self.do_tool_createfromdump("load", "wallet.dump")
@@ -331,28 +375,17 @@ class ToolWalletTest(BitcoinTestFramework):
         if not self.options.descriptors:
             os.rename(self.nodes[0].wallets_path / "wallet.dat", self.nodes[0].wallets_path / "../default.wallet.dat")
             (self.nodes[0].wallets_path / "db.log").unlink(missing_ok=True)
-        self.assert_raises_tool_error('Error: Checksum is not the correct size', '-wallet=', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
+        self.assert_raises_tool_error('Wallet name cannot be empty', '-wallet=', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
         assert self.nodes[0].wallets_path.exists()
         assert not (self.nodes[0].wallets_path / "wallet.dat").exists()
         if not self.options.descriptors:
             assert not (self.nodes[0].wallets_path / "db.log").exists()
 
-        self.log.info('Checking createfromdump with an unnamed wallet')
-        self.do_tool_createfromdump("", "wallet.dump")
-        assert (self.nodes[0].wallets_path / "wallet.dat").exists()
-        os.unlink(self.nodes[0].wallets_path / "wallet.dat")
+        self.log.info('Checking createfromdump rejects an unnamed wallet')
+        self.assert_raises_tool_error('Wallet name cannot be empty', '-wallet=', '-dumpfile={}'.format(wallet_dump), 'createfromdump')
+        assert not (self.nodes[0].wallets_path / "wallet.dat").exists()
         if not self.options.descriptors:
             os.rename(self.nodes[0].wallets_path / "../default.wallet.dat", self.nodes[0].wallets_path / "wallet.dat")
-
-            self.log.info('Checking createfromdump with multiple non-directory wallets')
-            assert not (self.nodes[0].wallets_path / "wallet.dat").is_dir()
-            assert (self.nodes[0].wallets_path / "db.log").exists()
-            os.rename(self.nodes[0].wallets_path / "wallet.dat", self.nodes[0].wallets_path / "test.dat")
-            self.assert_raises_tool_error('Error: Checksum is not the correct size', '-wallet=', '-dumpfile={}'.format(bad_sum_wallet_dump), 'createfromdump')
-            assert not (self.nodes[0].wallets_path / "wallet.dat").exists()
-            assert (self.nodes[0].wallets_path / "test.dat").exists()
-            assert (self.nodes[0].wallets_path / "db.log").exists()
-            os.rename(self.nodes[0].wallets_path / "test.dat", self.nodes[0].wallets_path / "wallet.dat")
 
     def test_chainless_conflicts(self):
         self.log.info("Test wallet tool when wallet contains conflicting transactions")
@@ -475,14 +508,39 @@ class ToolWalletTest(BitcoinTestFramework):
         assert not (self.nodes[0].wallets_path / "legacy").exists()
         self.assert_raises_tool_error("The -dumpfile option cannot be used with the 'create' command.", "-wallet=legacy", "-dumpfile=wallet.dump", "create")
 
-    def test_no_create_unnamed(self):
-        self.log.info("Test that unnamed (default) wallets cannot be created")
+    def test_dump_unclean_lsns(self):
+        if not self.options.bdbro:
+            return
+        self.log.info("Test that a legacy wallet that has not been compacted is not dumped by bdbro")
 
-        # File can be dumped after reload it normally
+        self.start_node(0, extra_args=["-flushwallet=0"])
+        self.nodes[0].createwallet("unclean_lsn")
+        wallet = self.nodes[0].get_wallet_rpc("unclean_lsn")
+        # First unload and load normally to make sure everything is written.
+        wallet.unloadwallet()
+        self.nodes[0].loadwallet("unclean_lsn")
+        # Next cause a bunch of writes by filling the keypool.
+        wallet.keypoolrefill(wallet.getwalletinfo()["keypoolsize"] + 100)
+        # Lastly kill bitcoind so that the LSNs don't get reset.
+        self.nodes[0].kill_process()
+
+        wallet_dump = self.nodes[0].datadir_path / "unclean_lsn.dump"
+        self.assert_raises_tool_error("LSNs are not reset, this database is not completely flushed. Please reopen then close the database with a version that has BDB support", "-wallet=unclean_lsn", f"-dumpfile={wallet_dump}", "dump")
+
+        # File can be dumped after reloading it normally.
         self.start_node(0)
         self.nodes[0].loadwallet("unclean_lsn")
         self.stop_node(0)
         self.assert_tool_output('', "-wallet=unclean_lsn", f"-dumpfile={wallet_dump}", "dump", stderr="The dumpfile may contain private keys. To ensure the safety of your Bitcoin, do not share the dumpfile.\n")
+
+    def test_no_create_unnamed(self):
+        self.log.info("Test that unnamed (default) wallets cannot be created")
+
+        self.assert_raises_tool_error("Wallet name cannot be empty", "-wallet=", "create")
+        assert not (self.nodes[0].wallets_path / "wallet.dat").exists()
+
+        self.assert_raises_tool_error("Wallet name cannot be empty", "-wallet=", "-dumpfile=wallet.dump", "createfromdump")
+        assert not (self.nodes[0].wallets_path / "wallet.dat").exists()
 
     def test_compare_legacy_dump_with_framework_bdb_parser(self):
         self.log.info("Verify that legacy wallet database dump matches the one from the test framework's BDB parser")
@@ -532,9 +590,14 @@ class ToolWalletTest(BitcoinTestFramework):
         self.test_getwalletinfo_on_different_wallet()
         self.test_dump_createfromdump()
         self.test_chainless_conflicts()
+        if not self.options.descriptors:
+            self.test_dump_endianness()
+            self.test_dump_unclean_lsns()
         self.test_dump_very_large_records()
         self.test_no_create_legacy()
         self.test_no_create_unnamed()
+        if not self.options.descriptors and self.is_bdb_compiled() and not self.options.swap_bdb_endian:
+            self.test_compare_legacy_dump_with_framework_bdb_parser()
 
 
 if __name__ == '__main__':
