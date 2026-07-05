@@ -6,8 +6,10 @@
 #include <clientversion.h>
 #include <streams.h>
 #include <uint256.h>
+#include <util/strencodings.h>
 #include <wallet/test/util.h>
 #include <wallet/wallet.h>
+#include <wallet/walletdb.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -27,6 +29,28 @@ BOOST_AUTO_TEST_CASE(walletdb_readkeyvalue)
     DataStream ssValue{};
     uint256 dummy;
     BOOST_CHECK_THROW(ssValue >> dummy, std::ios_base::failure);
+}
+
+BOOST_AUTO_TEST_CASE(key_metadata_preserves_unsupported_flags)
+{
+    constexpr int version_with_flags{2};
+    DataStream serialized{};
+    serialized << version_with_flags;
+    serialized << int64_t{123456789};
+    serialized << uint8_t{0xa5};
+
+    DataStream input{serialized};
+    CKeyMetadata metadata;
+    input >> metadata;
+
+    BOOST_CHECK(input.empty());
+    BOOST_CHECK_EQUAL(metadata.nVersion, version_with_flags);
+    BOOST_CHECK_EQUAL(metadata.nCreateTime, int64_t{123456789});
+    BOOST_CHECK_EQUAL(metadata.unsupported_key_flags, uint8_t{0xa5});
+
+    DataStream roundtrip{};
+    roundtrip << metadata;
+    BOOST_CHECK_EQUAL(HexStr(serialized), HexStr(roundtrip));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
