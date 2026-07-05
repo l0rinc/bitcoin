@@ -403,6 +403,12 @@ Other missing/adapted Knots pieces found during this pass:
   `immature_balance` were missing after rebasing onto Core master. Actual Knots
   still registers and returns these compatibility surfaces. The port restores
   them and updates `wallet_balance.py` / `wallet_avoidreuse.py` coverage.
+- The wallet funding RPC review confirmed Knots' deprecated `min_conf` option
+  for `fundrawtransaction` and `walletcreatefundedpsbt` is present in the port,
+  including the negative-value guard and the conflict check against modern
+  `minconf`. This is backwards-compatibility behavior, not a security or
+  consensus change. `wallet_fundrawtransaction.py` and `rpc_psbt.py` now cover
+  positive selection, negative `min_conf`, and `min_conf`/`minconf` conflicts.
 - Raw transaction, package, and PSBT RPC coverage now passes against the port.
   This covers Knots-touched max burn handling, package max fee/burn arguments,
   and PSBT base64 parameter handling with `=` padding characters.
@@ -1164,6 +1170,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_txoutproof`
 - `python3 test/functional/rpc_packages.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_min_conf`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_mempool_info.py --configfile build/test/config.ini`
@@ -1184,6 +1192,8 @@ Functional tests:
 - `python3 test/functional/wallet_avoidreuse.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_avoidreuse_getbalance_4`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_fundrawtransaction_min_conf`
 - `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_backup.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_migration.py --configfile build/test/config.ini`
