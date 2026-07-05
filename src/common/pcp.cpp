@@ -184,6 +184,21 @@ std::string PCPResultString(uint8_t result_code)
     return strprintf("%s (code %d)", result_i == PCP_RESULT_STR.end() ? "(unknown)" : result_i->second,  result_code);
 }
 
+//! Return whether response is the NAT-PMP unsupported-version reply to our PCP MAP request.
+bool IsNATPMPUnsupportedVersionResponse(const std::span<const uint8_t> response)
+{
+    if (response.size() != NATPMP_RESPONSE_HDR_SIZE) return false;
+    if (response[NATPMP_HDR_VERSION_OFS] != NATPMP_VERSION) return false;
+    if (response[NATPMP_HDR_OP_OFS] != (NATPMP_RESPONSE | PCP_OP_MAP)) return false;
+
+    const uint16_t result_code{ReadBE16(response.data() + NATPMP_RESPONSE_HDR_RESULT_OFS)};
+    if (result_code != NATPMP_RESULT_UNSUPP_VERSION) return false;
+
+    Assume(response[NATPMP_HDR_OP_OFS] == (NATPMP_RESPONSE | PCP_OP_MAP));
+    Assume(result_code == NATPMP_RESULT_UNSUPP_VERSION);
+    return true;
+}
+
 //! Wrap address in IPv6 according to RFC6887. wrapped_addr needs to be able to store 16 bytes.
 [[nodiscard]] bool PCPWrapAddress(std::span<uint8_t> wrapped_addr, const CNetAddr &addr)
 {
@@ -478,7 +493,7 @@ std::variant<MappingResult, MappingError> PCPRequestPortMap(const PCPMappingNonc
     auto recv_res = PCPSendRecv(*sock, "pcp", request, num_tries, timeout_per_try,
         [&](const std::span<const uint8_t> response) -> bool {
             // Unsupported version according to RFC6887 appendix A and RFC6886 section 3.5, can fall back to NAT-PMP.
-            if (response.size() == NATPMP_RESPONSE_HDR_SIZE && response[PCP_HDR_VERSION_OFS] == NATPMP_VERSION && response[PCP_RESPONSE_HDR_RESULT_OFS] == NATPMP_RESULT_UNSUPP_VERSION) {
+            if (IsNATPMPUnsupportedVersionResponse(response)) {
                 is_natpmp = true;
                 return true; // Let it through to caller.
             }

@@ -573,6 +573,35 @@ BOOST_AUTO_TEST_CASE(pcp_ipv4_fail_unsupported_version)
     BOOST_CHECK_EQUAL(*err, MappingError::UNSUPP_VERSION);
 }
 
+BOOST_AUTO_TEST_CASE(pcp_ipv4_rejects_malformed_natpmp_downgrade)
+{
+    auto check_rejected = [&](const std::vector<uint8_t>& response) {
+        const std::vector<TestOp> script{
+            {0ms, TestOp::SEND, {}, 0},
+            {2ms, TestOp::RECV, response, 0},
+        };
+        CreateSock = [this, &script](int domain, int type, int protocol) {
+            if (domain == AF_INET && type == SOCK_DGRAM && protocol == IPPROTO_UDP) return std::make_unique<PCPTestSock>(default_local_ipv4, default_gateway_ipv4, script);
+            return std::unique_ptr<PCPTestSock>();
+        };
+
+        auto res = PCPRequestPortMap(TEST_NONCE, default_gateway_ipv4, bind_any_ipv4, 1234, 1000, g_interrupt, 1, 1000ms);
+
+        MappingError* err = std::get_if<MappingError>(&res);
+        BOOST_REQUIRE(err);
+        BOOST_CHECK_EQUAL(*err, MappingError::NETWORK_ERROR);
+    };
+
+    check_rejected({
+        0x00, 0x81, 0xff, 0x01, // valid opcode, but result is 0xff01, not UNSUPP_VERSION
+        0x00, 0x00, 0x00, 0x00,
+    });
+    check_rejected({
+        0x00, 0x80, 0x00, 0x01, // valid result, but wrong opcode for a PCP MAP response
+        0x00, 0x00, 0x00, 0x00,
+    });
+}
+
 // NAT-PMP IPv4 protocol error scenarii.
 BOOST_AUTO_TEST_CASE(natpmp_protocol_error)
 {
@@ -692,4 +721,3 @@ BOOST_AUTO_TEST_CASE(pcp_protocol_error)
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-
