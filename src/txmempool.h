@@ -285,7 +285,12 @@ private:
 
     static TxMempoolInfo GetInfo(CTxMemPool::indexed_transaction_set::const_iterator it)
     {
-        return TxMempoolInfo{it->GetSharedTx(), it->GetTime(), it->GetFee(), it->GetTxSize(), it->GetModifiedFee() - it->GetFee()};
+        TxMempoolInfo info{it->GetSharedTx(), it->GetTime(), it->GetFee(), it->GetTxSize(), it->GetModifiedFee() - it->GetFee()};
+        Assume(info.tx);
+        Assume(info.tx == it->GetSharedTx());
+        Assume(info.fee == it->GetFee());
+        Assume(info.vsize == it->GetTxSize());
+        return info;
     }
 
     // Helper to remove all transactions that conflict with a given
@@ -544,8 +549,22 @@ public:
     TxMempoolInfo info(const T& id) const
     {
         LOCK(cs);
+        const size_t tx_count{mapTx.size()};
+        const size_t input_count{mapNextTx.size()};
+        const size_t delta_count{mapDeltas.size()};
+        const size_t randomized_count{txns_randomized.size()};
         auto i{GetIter(id)};
-        return i.has_value() ? GetInfo(*i) : TxMempoolInfo{};
+        auto ret{i.has_value() ? GetInfo(*i) : TxMempoolInfo{}};
+        Assume(mapTx.size() == tx_count);
+        Assume(mapNextTx.size() == input_count);
+        Assume(mapDeltas.size() == delta_count);
+        Assume(txns_randomized.size() == randomized_count);
+        if (i.has_value()) {
+            Assume(ret.tx == i.value()->GetSharedTx());
+        } else {
+            Assume(!ret.tx);
+        }
+        return ret;
     }
 
     /** Returns info for a transaction if its entry_sequence < last_sequence */
@@ -553,8 +572,23 @@ public:
     TxMempoolInfo info_for_relay(const T& id, uint64_t last_sequence) const
     {
         LOCK(cs);
+        const size_t tx_count{mapTx.size()};
+        const size_t input_count{mapNextTx.size()};
+        const size_t delta_count{mapDeltas.size()};
+        const size_t randomized_count{txns_randomized.size()};
         auto i{GetIter(id)};
-        return (i.has_value() && i.value()->GetSequence() < last_sequence) ? GetInfo(*i) : TxMempoolInfo{};
+        const bool eligible{i.has_value() && i.value()->GetSequence() < last_sequence};
+        auto ret{eligible ? GetInfo(*i) : TxMempoolInfo{}};
+        Assume(mapTx.size() == tx_count);
+        Assume(mapNextTx.size() == input_count);
+        Assume(mapDeltas.size() == delta_count);
+        Assume(txns_randomized.size() == randomized_count);
+        if (eligible) {
+            Assume(ret.tx == i.value()->GetSharedTx());
+        } else {
+            Assume(!ret.tx);
+        }
+        return ret;
     }
 
     std::vector<CTxMemPoolEntryRef> entryAll() const EXCLUSIVE_LOCKS_REQUIRED(cs);
