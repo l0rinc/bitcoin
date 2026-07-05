@@ -187,6 +187,14 @@ Other missing/adapted Knots pieces found during this pass:
   earlier-expiring new bans reschedule stale callbacks with a sequence guard.
   `banman_tests` covers exact-expiry removal and scheduled UI notification,
   while `rpc_setban.py` covers the RPC-visible exact-expiry boundary.
+- The same review found Knots' `SaltedOutpointHasher` hash-code caching change
+  (`6d2d191c0f`, after reverting the Core noexcept optimization in
+  `2969207e15`) was missing from the port. This is a runtime
+  performance/resource-use divergence for `CCoinsMap` and other outpoint hash
+  tables, not a consensus or original Knots defect. The port now matches Knots'
+  libstdc++ cache-selection contract as `2c3de42230`, and `hash_tests` asserts
+  both the may-throw invocability contract and libstdc++ fast-hash
+  classification.
 - Compact-block extra-transaction coverage now uses the current P2P test
   framework send helper and hash/wtxid properties (`77d2b2c025`).
   `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
@@ -668,6 +676,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=caches_tests`
 - `build/bin/test_bitcoin --run_test=sanity_tests`
 - `build/bin/test_bitcoin --run_test=banman_tests`
+- `build/bin/test_bitcoin --run_test=hash_tests`
 - `build/bin/test_bitcoin --run_test=blockfilter_index_tests`
 - `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
