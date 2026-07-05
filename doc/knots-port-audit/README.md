@@ -739,7 +739,8 @@ Other missing/adapted Knots pieces found during this pass:
   fallback locktime, including PSBTv0 output. Current Core already carries the
   related `send` and `sendall` behavior but still leaves this
   `walletcreatefundedpsbt` default at zero. `rpc_psbt.py` covers the ported
-  PSBT behavior.
+  PSBT behavior, and actual Knots' own `rpc_psbt.py` now passes against the
+  local unmodified Knots build as a same-repo cross-check.
 - The raw-transaction PSBT review confirmed Knots' user-provided previous
   transaction support for `utxoupdatepsbt` and `descriptorprocesspsbt`
   (`bdb4ca4195`, `eea8588f07`) is present in the port and absent from current
@@ -1643,7 +1644,11 @@ under different commits. They are not all proven exploitable.
   constructs default PSBTs with zero fallback locktime. Knots and this port
   apply the same height-based anti-fee-sniping default to funded PSBTs, and the
   port also covers PSBTv0 locktime output. This is wallet privacy and
-  miner-incentive hardening, not a consensus-rule change.
+  miner-incentive hardening, not a consensus-rule change. The current source
+  comparison shows Core funds the PSBT and immediately constructs the returned
+  PSBT, while Knots and the port assign `rawTx = CMutableTransaction(*txr.tx)`
+  and call `MaybeDiscourageFeeSniping2(...)` when the locktime parameter was
+  omitted.
 
 - PSBT previous-transaction injection for RPC updating/signing:
   `bdb4ca4195`, `eea8588f07`
@@ -1780,6 +1785,12 @@ Source/manifest checks:
   transaction max-fee as a plain-vsize absolute amount, while Knots and the
   port pass `CFeeRate` into `BroadcastTransaction` and convert it with the
   mempool accept result's `m_vsize`.
+- `git show origin/master:src/wallet/rpc/spend.cpp | sed -n '1757,1815p'`,
+  `git -C ../knots show 29.x-knots:src/wallet/rpc/spend.cpp | sed -n
+  '1901,1940p'`, and `sed -n '1968,2002p' src/wallet/rpc/spend.cpp` show
+  current Core's `walletcreatefundedpsbt` path returns the funded transaction
+  as a PSBT without applying the default anti-fee-sniping locktime, while Knots
+  and the port apply it when the explicit locktime argument is omitted.
 - `git log origin/master --follow --oneline -- <remaining source-looking
   missing path>` for old `core_write`, fee, libevent, orphanage, transaction
   identifier, epochguard, and test-helper paths
@@ -2289,6 +2300,13 @@ Functional tests:
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_anti_fee_sniping`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_psbt_anti_fee_sniping_review_port
+  --portseed=26453`
+- `python3 ../knots/test/functional/rpc_psbt.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_psbt_anti_fee_sniping_review_knots
+  --portseed=26454`
+- `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_prevtxs`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini
@@ -2432,6 +2450,10 @@ Functional tests:
 - Original Knots cross-check:
   `python3 test/functional/mempool_sigoplimit.py --configfile ../knots/build-repro/test/config.ini --test_methods test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_maxfeerate_review_knots --portseed=26450`
   passed on unmodified Knots
+- Original Knots cross-check:
+  `python3 ../knots/test/functional/rpc_psbt.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_rpc_psbt_anti_fee_sniping_review_knots --portseed=26454`
+  passed on unmodified Knots, including Knots' native
+  `walletcreatefundedpsbt` anti-fee-sniping assertion
 - Original Knots cross-check:
   a one-off subclass of `rpc_net.py` running only
   `test_addnode_cjdns_duplicate` with
