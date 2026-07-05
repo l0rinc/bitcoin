@@ -216,6 +216,23 @@ class CompactFiltersTest(BitcoinTestFramework):
                 peer_1.send_without_ping(request)
                 peer_1.wait_for_disconnect()
 
+        self.log.info("Check that blockfilters permission serves filters without -peerblockfilters")
+        self.restart_node(1, extra_args=["-blockfilterindex", "-peerbloomfilters=0", "-whitelist=blockfilters@127.0.0.1"])
+        permission_peer = self.nodes[1].add_p2p_connection(FiltersClient())
+        assert_not_equal(permission_peer.nServices & NODE_COMPACT_FILTERS, 0)
+        assert_equal(self.nodes[1].getpeerinfo()[0]["permissions"], ["blockfilters"])
+
+        permission_tip = self.nodes[1].getbestblockhash()
+        request = msg_getcfcheckpt(
+            filter_type=FILTER_TYPE_BASIC,
+            stop_hash=int(permission_tip, 16),
+        )
+        permission_peer.send_and_ping(request)
+        response = permission_peer.last_message['cfcheckpt']
+        assert_equal(response.filter_type, request.filter_type)
+        assert_equal(response.stop_hash, request.stop_hash)
+        assert_equal(response.headers[-1], int(self.nodes[1].getblockfilter(permission_tip, 'basic')['header'], 16))
+
         self.log.info("Check that invalid requests result in disconnection.")
         requests = [
             # Requesting too many filters results in disconnection.
