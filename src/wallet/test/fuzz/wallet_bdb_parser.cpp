@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
@@ -9,12 +10,22 @@
 #include <util/fs.h>
 #include <util/time.h>
 #include <util/translation.h>
+#ifdef USE_BDB
+#include <wallet/bdb.h>
+#endif
 #include <wallet/db.h>
 #include <wallet/dump.h>
 #include <wallet/migrate.h>
 
 #include <fstream>
 #include <iostream>
+
+// There is an inconsistency in BDB on Windows.
+// See: https://github.com/bitcoin/bitcoin/pull/26606#issuecomment-2322763212
+#undef USE_BDB_NON_MSVC
+#if defined(USE_BDB) && !defined(_MSC_VER)
+#define USE_BDB_NON_MSVC
+#endif
 
 using wallet::DatabaseOptions;
 using wallet::DatabaseStatus;
@@ -31,6 +42,7 @@ void initialize_wallet_bdb_parser()
 
 FUZZ_TARGET(wallet_bdb_parser, .init = initialize_wallet_bdb_parser)
 {
+    SeedRandomStateForTest(SeedRand::ZEROS);  // for IsDirWritable
     const auto wallet_path = g_setup->m_args.GetDataDirNet() / "fuzzed_wallet.dat";
 
     {
@@ -49,10 +61,17 @@ FUZZ_TARGET(wallet_bdb_parser, .init = initialize_wallet_bdb_parser)
     }
     g_setup->m_args.ForceSetArg("-dumpfile", fs::PathToString(bdb_ro_dumpfile));
 
+#ifdef USE_BDB_NON_MSVC
+    bool bdb_ro_err = false;
+    bool bdb_ro_strict_err = false;
+#endif
     auto db{MakeBerkeleyRODatabase(wallet_path, options, status, error)};
     if (db) {
         assert(DumpWallet(*db, error, fs::PathToString(bdb_ro_dumpfile)));
     } else {
+#ifdef USE_BDB_NON_MSVC
+        bdb_ro_err = true;
+#endif
         if (error.original.starts_with("AutoFile::ignore: end of file") ||
             error.original.starts_with("AutoFile::read: end of file") ||
             error.original.starts_with("AutoFile::seek: ") ||
@@ -76,19 +95,24 @@ FUZZ_TARGET(wallet_bdb_parser, .init = initialize_wallet_bdb_parser)
             error.original == "Records page has odd number of records" ||
             error.original == "Bad overflow record page type" ||
             error.original == "BTree page has an unexpected level" ||
-            error.original == "BTree Leaf page is not at level 1" ||
+            error.original == "BTree Leaf page is not at level 1") {
+            // Do nothing
+        } else if (
             error.original == "Subdatabase last page is greater than database last page" ||
             error.original == "Page number is greater than database last page" ||
             error.original == "Last page number could not fit in file" ||
             error.original == "Subdatabase has an unexpected name" ||
             error.original == "Unsupported BDB data file version number" ||
             error.original == "BDB builtin encryption is not supported") {
+#ifdef USE_BDB_NON_MSVC
+            bdb_ro_strict_err = true;
+#endif
         } else {
             throw std::runtime_error(error.original);
         }
     }
 
-#ifdef USE_BDB
+#ifdef USE_BDB_NON_MSVC
     // Try opening with BDB
     fs::path bdb_dumpfile{g_setup->m_args.GetDataDirNet() / "fuzzed_dumpfile_bdb.dump"};
     if (fs::exists(bdb_dumpfile)) { // Writing into an existing dump file will throw an exception

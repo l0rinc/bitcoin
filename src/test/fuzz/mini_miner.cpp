@@ -6,6 +6,7 @@
 
 #include <consensus/amount.h>
 #include <kernel/cs_main.h>
+#include <node/miner.h>
 #include <policy/feerate.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
@@ -36,10 +37,12 @@
 
 namespace {
 
+const TestingSetup* g_setup;
 std::deque<COutPoint> g_available_coins;
 void initialize_miner()
 {
     static const auto testing_setup = MakeNoLogFileContext<const TestingSetup>();
+    g_setup = testing_setup.get();
     MineBlock(testing_setup->m_node, {.coinbase_output_script = CScript() << OP_FALSE});
     for (uint32_t i = 0; i < uint32_t{100}; ++i) {
         g_available_coins.emplace_back(Txid::FromUint256(uint256::ZERO), i);
@@ -173,7 +176,7 @@ FUZZ_TARGET(mini_miner_selection, .init = initialize_miner)
         TestMemPoolEntryHelper entry;
         const CAmount fee{ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY/100000)};
         assert(MoneyRange(fee));
-        AddToMempool(pool, entry.Fee(fee).FromTx(tx));
+        TryAddToMempool(pool, entry.Fee(fee).FromTx(tx));
         transactions.push_back(tx);
     }
     std::vector<COutPoint> outpoints;
@@ -181,7 +184,7 @@ FUZZ_TARGET(mini_miner_selection, .init = initialize_miner)
         if (!pool.GetConflictTx(coin)) outpoints.push_back(coin);
     }
     for (const auto& tx : transactions) {
-        assert(pool.exists(GenTxid::Txid(tx->GetHash())));
+        assert(pool.exists(tx->GetHash()));
         for (uint32_t n{0}; n < tx->vout.size(); ++n) {
             COutPoint coin{tx->GetHash(), n};
             if (!pool.GetConflictTx(coin)) outpoints.push_back(coin);
