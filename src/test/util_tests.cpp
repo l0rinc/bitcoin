@@ -2097,6 +2097,16 @@ BOOST_AUTO_TEST_CASE(ceil_div_test)
     // `flatfile.cpp` mixed unsigned/size_t pattern.
     BOOST_CHECK_EQUAL(CeilDiv(unsigned{10}, size_t{4}), size_t{3});
 
+    // Boundary cases where `(dividend + divisor - 1) / divisor` would overflow.
+    BOOST_CHECK_EQUAL(CeilDiv(std::numeric_limits<uint32_t>::max(), 2u),
+                      std::numeric_limits<uint32_t>::max() / 2 + 1);
+    BOOST_CHECK_EQUAL(CeilDiv(std::numeric_limits<size_t>::max(), size_t{2}),
+                      std::numeric_limits<size_t>::max() / 2 + 1);
+    BOOST_CHECK_EQUAL(CeilDiv(std::numeric_limits<uint64_t>::max(), uint64_t{2}),
+                      std::numeric_limits<uint64_t>::max() / 2 + 1);
+    BOOST_CHECK_EQUAL(CeilDiv(std::numeric_limits<uint64_t>::max(), uint64_t{1}),
+                      std::numeric_limits<uint64_t>::max());
+
     // `util/feefrac.h` fast-path rounding-up pattern.
     constexpr int64_t fee{12345};
     constexpr int32_t at_size{67};

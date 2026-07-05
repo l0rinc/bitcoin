@@ -70,7 +70,13 @@ template <std::unsigned_integral Dividend, std::unsigned_integral Divisor>
 [[nodiscard]] constexpr auto CeilDiv(const Dividend dividend, const Divisor divisor)
 {
     assert(divisor > 0);
-    return dividend / divisor + (dividend % divisor != 0);
+    const auto quotient{dividend / divisor};
+    const auto remainder{dividend % divisor};
+    const auto result{quotient + (remainder != 0)};
+    if (Assume(result >= quotient)) {
+        Assume(result - quotient == static_cast<decltype(result)>(remainder != 0));
+    }
+    return result;
 }
 
 /**
