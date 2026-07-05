@@ -328,6 +328,17 @@ class InitTest(BitcoinTestFramework):
         for option in options:
             self.restart_node(1, option)
 
+    def init_lowmem_test(self):
+        self.log.info("Test -lowmem startup threshold handling")
+        node = self.nodes[1]
+        threshold_msg = "Flushing caches if available system memory drops below"
+
+        with node.assert_debug_log(expected_msgs=[threshold_msg]):
+            self.restart_node(1, ["-lowmem=1"])
+
+        with node.assert_debug_log(expected_msgs=[], unexpected_msgs=[threshold_msg]):
+            self.restart_node(1, ["-lowmem=-1"])
+
     def restart_node_with_fd_limit(self, limit):
         """Restart node 1 with a given soft RLIMIT_NOFILE. Skips if the limit cannot be set."""
         import resource
@@ -368,6 +379,7 @@ class InitTest(BitcoinTestFramework):
         self.init_stress_test_removals()
         self.break_wait_test()
         self.init_empty_test()
+        self.init_lowmem_test()
         self.init_rlimit_test()
         self.init_rlimit_large_test()
 
