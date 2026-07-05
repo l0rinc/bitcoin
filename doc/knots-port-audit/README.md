@@ -721,11 +721,15 @@ Other missing/adapted Knots pieces found during this pass:
   IPv4/IPv6 clearnet peers; V1 onion behavior remains allowed. The existing
   `p2p_v2_encrypted.py` coverage passes for V2 clearnet success, V1 clearnet
   refusal, and V1 onion allowance.
-- Knots' user-agent sanitization hardening (`b9d2634b81`) is present in the
-  port as `eacc171127`: received peer user agents keep printable punctuation in
-  `cleanSubVer`, then percent-escape characters outside the default log-safe
-  set when logging the version message. The port now adds focused `util_tests`
-  coverage for `SAFE_CHARS_PRINTABLE` and log-style escaping.
+- Knots' user-agent sanitization hardening (`b9d2634b81`) was mostly present in
+  the port as `eacc171127`: received peer user agents kept printable
+  punctuation in `cleanSubVer`, and `util_tests` covered
+  `SAFE_CHARS_PRINTABLE` plus log-style escaping. A later audit found the final
+  receive-version log call still used `cleanSubVer` directly after rebasing
+  onto current Core's log format. The port now percent-escapes that log value
+  and `p2p_handshake.py` checks both surfaces: RPC preserves
+  `/User/Agent: test![]{}~/`, while `debug.log` contains
+  `/User/Agent: test%21%5B%5D%7B%7D%7E/`.
 - Knots' merkle mutation early-exit change (`42b25bbd93`) is present in the
   port while current Core still scans the rest of the level after finding a
   duplicate pair. This is consensus-adjacent but behavior-equivalent: the root
@@ -1160,6 +1164,9 @@ under different commits. They are not all proven exploitable.
   value directly. Knots preserves the full printable user-agent string for peer
   display and percent-escapes unsafe printable characters at log time. This is
   log/UI integrity hardening against confusing or spoofed peer user-agent text.
+  The strengthened `p2p_handshake.py` user-agent test passes against
+  unmodified Knots and the fixed port, confirming the earlier missing log
+  escape was port-introduced.
 
 - ZMQ notification resilience and read-block logging:
   `1c4d2d54d8`, `268fb1e0e3`, `ba28af94bd`
@@ -1485,7 +1492,8 @@ Functional tests:
 - `python3 test/functional/feature_bip9_max_activation_height.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_versionbits_warning.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_versionbits_warning`
-- `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini`
+- `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_ua_escape_3`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_rdts_gate_fixed3`
 - `python3 test/functional/p2p_eviction.py --configfile build/test/config.ini
@@ -1670,6 +1678,10 @@ Functional tests:
   `regtest/.cookie` with `__cookie__:replaced-by-another-process`, then
   stopping via `bitcoin-cli -rpcuser=__cookie__ -rpcpassword=<generated>`
   preserved the replacement (`cookie_after_stop=__cookie__:replaced-by-another-process`)
+- Original Knots cross-check:
+  `python3 /mnt/my_storage/bitcoin/test/functional/p2p_handshake.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_handshake_ua_escape`
+  (passes on unmodified Knots, confirming the missing user-agent log escape was
+  introduced by the port)
 - Original Knots cross-check:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_versionbits_warning.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_versionbits_warning_check`
   (passes on unmodified Knots, confirming the earlier warning-range failure was
