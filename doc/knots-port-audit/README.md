@@ -452,6 +452,16 @@ Other missing/adapted Knots pieces found during this pass:
   `minconf`. This is backwards-compatibility behavior, not a security or
   consensus change. `wallet_fundrawtransaction.py` and `rpc_psbt.py` now cover
   positive selection, negative `min_conf`, and `min_conf`/`minconf` conflicts.
+- The `setfeerate` review confirmed Knots' sat/vB wallet fee-rate RPC
+  (`1d3a37aa64`, with `63fd84f7f1`, `d302fef9a3`, and follow-up test commits)
+  is present in the port and absent from current Core's wallet RPC table. This
+  is a wallet fee-control compatibility change: it sets the same non-persistent
+  per-wallet `m_pay_tx_fee` as `settxfee`, but accepts sat/vB, reports the
+  resulting fee rate through `ValueFromFeeRate`, and returns structured
+  unchanged-setting errors instead of throwing for range failures.
+  `wallet_create_tx.py` and `wallet_bumpfee.py` cover successful setting,
+  unsetting, rounding, wallet min fee, relay min fee, wallet max fee, and
+  replacement-fee interactions.
 - The descriptor-wallet `importaddress` review confirmed Knots'
   descriptor-compatible behavior (`be3ae51ece`) is present in the port. The
   existing restored `wallet_descriptor.py` coverage carried an original Knots
@@ -1411,6 +1421,10 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_avoidreuse_getbalance_4`
 - `python3 test/functional/wallet_descriptor.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_descriptor_importaddress_4`
+- `python3 test/functional/wallet_create_tx.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_create_tx_setfeerate`
+- `python3 test/functional/wallet_bumpfee.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_bumpfee_setfeerate`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_fundrawtransaction_min_conf`
