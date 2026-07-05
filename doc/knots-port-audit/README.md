@@ -645,7 +645,9 @@ Other missing/adapted Knots pieces found during this pass:
   `GetVirtualTransactionSize(*tx)`, so it can disagree with policy-adjusted
   vsize when `-bytespersigop` dominates. `mempool_sigoplimit.py` now covers
   this by requiring `testmempoolaccept` and `sendrawtransaction` to make the
-  same max-feerate decision for a high-sigop, low-weight P2WSH spend.
+  same max-feerate decision for a high-sigop, low-weight P2WSH spend. The
+  isolated max-feerate subtest also passes against unmodified Knots; the full
+  cross-run hits an unrelated package-error string drift before that subtest.
 - The RPC authentication follow-up confirmed Knots' blank `-rpcauth`,
   `-rpcauthfile`, `-norpcauth`, wallet-restricted rpcauth, and cookie
   permission/replacement hardening is present in the port. Current Core master
@@ -1221,7 +1223,9 @@ under different commits. They are not all proven exploitable.
   `-bytespersigop` and other non-weight vsize adjustments are included in the
   same way as `testmempoolaccept` and mempool policy. This is wallet/RPC
   self-protection rather than remote consensus risk, but it is a real
-  user-facing fee-limit correctness fix.
+  user-facing fee-limit correctness fix. The focused port run and an isolated
+  unmodified Knots run both accept the high-sigop transaction under a
+  `maxfeerate` that would be too low if plain transaction vsize were used.
 
 - Descriptor-wallet `importaddress` compatibility:
   `be3ae51ece`
@@ -1513,7 +1517,8 @@ Functional tests:
 - `python3 test/functional/mempool_datacarrier.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_dust.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_subdust_fee_penalty.py --configfile build/test/config.ini`
-- `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini`
+- `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_mempool_sigoplimit_maxfeerate`
 - `python3 test/functional/mempool_limit.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_mempool_limit_maxmempool_rpc`
 - `python3 test/functional/mining_coin_age_priority.py --configfile build/test/config.ini`
@@ -1682,6 +1687,12 @@ Functional tests:
   `python3 /mnt/my_storage/bitcoin/test/functional/p2p_handshake.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_handshake_ua_escape`
   (passes on unmodified Knots, confirming the missing user-agent log escape was
   introduced by the port)
+- Original Knots cross-check:
+  a one-off subclass of `mempool_sigoplimit.py` running only
+  `test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize` with
+  `--configfile /mnt/my_storage/knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_knots_mempool_sigoplimit_maxfeerate_only2`
+  passed on unmodified Knots
 - Original Knots cross-check:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_versionbits_warning.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_versionbits_warning_check`
   (passes on unmodified Knots, confirming the earlier warning-range failure was
