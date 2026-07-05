@@ -49,6 +49,9 @@ static RPCMethod getwalletinfo()
                         {RPCResult::Type::STR, "walletname", "the wallet name"},
                         {RPCResult::Type::NUM, "walletversion", "(DEPRECATED) only related to unsupported legacy wallet, returns the latest version 169900 for backwards compatibility"},
                         {RPCResult::Type::STR, "format", "the database format (only sqlite)"},
+                        {RPCResult::Type::STR_AMOUNT, "balance", "DEPRECATED. Identical to getbalances().mine.trusted"},
+                        {RPCResult::Type::STR_AMOUNT, "unconfirmed_balance", "DEPRECATED. Identical to getbalances().mine.untrusted_pending"},
+                        {RPCResult::Type::STR_AMOUNT, "immature_balance", "DEPRECATED. Identical to getbalances().mine.immature"},
                         {RPCResult::Type::NUM, "txcount", "the total number of transactions in the wallet"},
                         {RPCResult::Type::NUM, "keypoolsize", "how many new keys are pre-generated (only counts external keys)"},
                         {RPCResult::Type::NUM, "keypoolsize_hd_internal", /*optional=*/true, "how many new keys are pre-generated for internal use (used for change outputs, only appears if the wallet is using this feature, otherwise external keys are used)"},
@@ -94,9 +97,13 @@ static RPCMethod getwalletinfo()
     const int latest_legacy_wallet_minversion{169900};
 
     size_t kpExternalSize = pwallet->KeypoolCountExternalKeys();
+    const auto bal = GetBalance(*pwallet);
     obj.pushKV("walletname", pwallet->GetName());
     obj.pushKV("walletversion", latest_legacy_wallet_minversion);
     obj.pushKV("format", pwallet->GetDatabase().Format());
+    obj.pushKV("balance", ValueFromAmount(bal.m_mine_trusted));
+    obj.pushKV("unconfirmed_balance", ValueFromAmount(bal.m_mine_untrusted_pending));
+    obj.pushKV("immature_balance", ValueFromAmount(bal.m_mine_immature));
     obj.pushKV("txcount", pwallet->mapWallet.size());
     obj.pushKV("keypoolsize", kpExternalSize);
     obj.pushKV("keypoolsize_hd_internal", pwallet->GetKeyPoolSize() - kpExternalSize);
@@ -1044,6 +1051,7 @@ RPCMethod restorewallet();
 RPCMethod getreceivedbyaddress();
 RPCMethod getreceivedbylabel();
 RPCMethod getbalance();
+RPCMethod getunconfirmedbalance();
 RPCMethod lockunspent();
 RPCMethod listlockunspent();
 RPCMethod getbalances();
@@ -1109,6 +1117,7 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &getreceivedbyaddress},
         {"wallet", &getreceivedbylabel},
         {"wallet", &gettransaction},
+        {"wallet", &getunconfirmedbalance},
         {"wallet", &getbalances},
         {"wallet", &getwalletinfo},
         {"wallet", &importaddress},

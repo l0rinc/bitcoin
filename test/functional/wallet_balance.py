@@ -222,7 +222,7 @@ class WalletTest(BitcoinTestFramework):
         self.log.info('Check that wallet txs not in the mempool are untrusted')
         assert txid not in self.nodes[0].getrawmempool()
         assert_equal(self.nodes[0].gettransaction(txid)['trusted'], False)
-        assert_equal(self.nodes[0].getbalances()['mine']['trusted'], 0)
+        assert_equal(self.nodes[0].getbalance(), 0)
 
         self.log.info("Test replacement and reorg of non-mempool tx")
         tx_orig = self.nodes[0].gettransaction(txid)['hex']
@@ -239,12 +239,12 @@ class WalletTest(BitcoinTestFramework):
 
         # Now confirm tx_replace
         block_reorg = self.generatetoaddress(self.nodes[1], 1, ADDRESS_WATCHONLY)[0]
-        assert_equal(self.nodes[0].getbalances()['mine']['trusted'], total_amount)
+        assert_equal(self.nodes[0].getbalance(), total_amount)
 
         self.log.info('Put txs back into mempool of node 1 (not node 0)')
         self.nodes[0].invalidateblock(block_reorg)
         self.nodes[1].invalidateblock(block_reorg)
-        assert_equal(self.nodes[0].getbalances()['mine']['trusted'], 0)  # wallet txs not in the mempool are untrusted
+        assert_equal(self.nodes[0].getbalance(), 0)  # wallet txs not in the mempool are untrusted
         self.generatetoaddress(self.nodes[0], 1, ADDRESS_WATCHONLY, sync_fun=self.no_op)
 
         # Now confirm tx_orig
@@ -253,7 +253,7 @@ class WalletTest(BitcoinTestFramework):
         self.sync_blocks()
         self.nodes[1].sendrawtransaction(tx_orig)
         self.generatetoaddress(self.nodes[1], 1, ADDRESS_WATCHONLY)
-        assert_equal(self.nodes[0].getbalances()['mine']['trusted'], total_amount + 1)  # The reorg recovered our fee of 1 coin
+        assert_equal(self.nodes[0].getbalance(), total_amount + 1)  # The reorg recovered our fee of 1 coin
 
         # Tests the lastprocessedblock JSON object in getbalances, getwalletinfo
         # and gettransaction by checking for valid hex strings and by comparing
