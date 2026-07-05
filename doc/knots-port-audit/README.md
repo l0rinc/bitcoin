@@ -210,6 +210,21 @@ Other missing/adapted Knots pieces found during this pass:
   `cleanSubVer`, then percent-escape characters outside the default log-safe
   set when logging the version message. The port now adds focused `util_tests`
   coverage for `SAFE_CHARS_PRINTABLE` and log-style escaping.
+- Knots' merkle mutation early-exit change (`42b25bbd93`) is present in the
+  port while current Core still scans the rest of the level after finding a
+  duplicate pair. This is consensus-adjacent but behavior-equivalent: the root
+  and `mutated` result are unchanged, and `merkle_tests` still compares the
+  current implementation against the legacy merkle-tree implementation.
+- The ZMQ follow-up found the Knots notification-failure hardening
+  (`1c4d2d54d8`, `268fb1e0e3`, `ba28af94bd`) is present in the port and still
+  missing from current Core. A temporary ZMQ-enabled build exposed
+  port-introduced API drift: `CZMQNotificationInterface::BlockConnected` needed
+  the current `kernel::ChainstateRole` qualifier, wallet ZMQ publishers needed
+  `Txid::ToUint256()`, and the wallet-topic checks in `interface_zmq.py` needed
+  the current lazy `txid_hex` helper instead of removed `calc_sha256()`. These
+  were not original Knots defects; unmodified Knots uses the older
+  `ChainstateRole` and transaction-hash APIs. The ZMQ-enabled
+  `interface_zmq.py` run now passes.
 
 ## Original Knots Defects Confirmed
 
@@ -324,6 +339,16 @@ under different commits. They are not all proven exploitable.
   display and percent-escapes unsafe printable characters at log time. This is
   log/UI integrity hardening against confusing or spoofed peer user-agent text.
 
+- ZMQ notification resilience and read-block logging:
+  `1c4d2d54d8`, `268fb1e0e3`, `ba28af94bd`
+
+  Current Core still shuts down and removes a ZMQ notifier after one failed
+  notification and still routes raw-block disk-read failures through
+  `zmq_strerror(errno)`. Knots keeps notifiers active after transient send/read
+  failures and logs the failing block hash without using unrelated ZMQ errno
+  text. This is notification availability and diagnostics hardening, not a
+  consensus issue.
+
 - External or Knots-only surfaces:
   `d637873230` fixes `GetBlockFileInfo` bounds handling, but the obvious
   RPC-facing caller is Knots' `getblockfileinfo`. Current Core's corresponding
@@ -386,6 +411,11 @@ Builds:
 - `cmake --build build --target bitcoind bitcoin-cli test_bitcoin -j4`
 - `cmake --build build --target bitcoind -j4`
 - `cmake --build build --target bitcoin-cli -j4`
+- `cmake -S . -B /tmp/bitcoin-zmq-build -DWITH_ZMQ=ON -DBUILD_TESTS=OFF
+  -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DBUILD_GUI=OFF
+  -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
+- `cmake --build /tmp/bitcoin-zmq-build --target bitcoin_zmq -j2`
+- `cmake --build /tmp/bitcoin-zmq-build --target bitcoind bitcoin-cli -j2`
 - Original Knots repro build:
   `cmake -S ../knots -B ../knots/build-repro -DRDTS_CONSENT=RUNTIME_WARN`
   and `cmake --build ../knots/build-repro --target bitcoind bitcoin-cli -j4`
@@ -405,6 +435,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=rest_tests`
 - `build/bin/test_bitcoin --run_test=validation_tests`
 - `build/bin/test_bitcoin --run_test=validation_block_tests`
+- `build/bin/test_bitcoin --run_test=merkle_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
 
 Functional tests:
@@ -439,6 +470,7 @@ Functional tests:
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_bind.py --configfile build/test/config.ini`
+- `python3 test/functional/interface_zmq.py --configfile /tmp/bitcoin-zmq-build/test/config.ini`
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_sort_multisig.py --configfile build/test/config.ini`
