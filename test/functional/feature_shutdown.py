@@ -23,6 +23,7 @@ class ShutdownTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 1
+        self.extra_args = [["-rpcthreads=4"]]
 
     def run_test(self):
         waitfornewblock_node = self.nodes[0].create_new_rpc_connection()
