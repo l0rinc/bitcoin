@@ -1918,7 +1918,7 @@ RPCMethod restorewallet()
     bilingual_str error;
     std::vector<bilingual_str> warnings;
 
-    const std::shared_ptr<CWallet> wallet = RestoreWallet(context, backup_file, wallet_name, load_on_start, status, error, warnings);
+    const std::shared_ptr<CWallet> wallet = RestoreWallet(context, backup_file, wallet_name, load_on_start, status, error, warnings, /*load_after_restore=*/true, /*allow_unnamed=*/true);
 
     HandleWalletError(wallet, status, error);
 

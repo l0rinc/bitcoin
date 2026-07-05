@@ -7,6 +7,7 @@
 #include <chainparams.h>
 #include <common/args.h>
 #include <key_io.h>
+#include <util/check.h>
 #include <util/log.h>
 
 namespace wallet {
@@ -30,6 +31,17 @@ fs::path GetWalletDir()
     }
 
     return path;
+}
+
+bool RemoveCreatedWalletDirIfEmpty(const fs::path& wallet_path, std::string_view log_context)
+{
+    if (Assume(fs::is_empty(wallet_path))) {
+        fs::remove(wallet_path);
+        return true;
+    }
+
+    LogInfo("%s: Directory %s is not empty; leaving it alone\n", log_context, fs::PathToString(wallet_path));
+    return false;
 }
 
 WalletDescriptor GenerateWalletDescriptor(const CExtPubKey& master_key, const OutputType& addr_type, bool internal)

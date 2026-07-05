@@ -8,6 +8,7 @@
 #include <script/descriptor.h>
 #include <util/fs.h>
 
+#include <string_view>
 #include <vector>
 
 namespace wallet {
@@ -58,6 +59,10 @@ enum WalletFlags : uint64_t {
 
 //! Get the path of the wallet directory.
 fs::path GetWalletDir();
+
+//! Remove a wallet directory created during a failed operation, but only if it
+//! is still empty. Returns true if the directory was removed.
+bool RemoveCreatedWalletDirIfEmpty(const fs::path& wallet_path, std::string_view log_context);
 
 /** Descriptor with some wallet metadata */
 class WalletDescriptor
