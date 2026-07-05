@@ -262,6 +262,18 @@ Other missing/adapted Knots pieces found during this pass:
   security issue. The local build is Linux/non-GUI and cannot compile this
   Windows Qt path; source review, `git diff --check`, and a non-GUI
   `test_bitcoin` rebuild were used locally.
+- The same pass found the functional test runner still referenced three Knots
+  tests that were absent from the port: `rpc_mempool_info.py`,
+  `wallet_import_with_label.py`, and `wallet_upgradewallet.py`. Restoring
+  `wallet_upgradewallet.py` also exposed the missing Knots BDB dump parser
+  helper, `test_framework/bdb.py`, and a half-applied `tool_wallet.py` merge:
+  Knots' BDB dump/createfromdump helper calls were present but the helper
+  definitions and BDB-only subtest gating were not. This was a port-side
+  test-coverage omission, not an original Knots defect. The port restores the
+  missing tests/helper and adapts `tool_wallet.py` to current Core's
+  command-option validation and unnamed-wallet rejection (`91fc10bc4c`).
+  `rpc_mempool_info.py` and `tool_wallet.py` pass on the local build, while
+  the restored legacy-wallet tests reach the expected current-Core skip path.
 - CLI/help verification exposed a port-side bitcoin-cli conversion-table drift:
   current server metadata no longer advertises legacy-only `sethdseed` and
   `addmultisigaddress` conversions, while descriptor-compatible legacy import
@@ -792,13 +804,19 @@ Functional tests:
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_mempool_info.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_block_times.py --configfile build/test/config.ini`
+- `python3 test/functional/tool_wallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_sweepprivkeys.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_import_with_label.py --configfile build/test/config.ini --legacy-wallet`
+  (skipped: legacy wallets can no longer be created)
+- `python3 test/functional/wallet_upgradewallet.py --configfile build/test/config.ini --legacy-wallet`
+  (skipped: legacy wallets can no longer be created)
 - `python3 test/functional/wallet_implicitsegwit.py --configfile build/test/config.ini`
   (skipped: legacy wallets can no longer be created)
 - `python3 test/functional/wallet_dump.py --configfile build/test/config.ini`
