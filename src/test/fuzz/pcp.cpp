@@ -49,9 +49,15 @@ CNetAddr IPv4Addr(uint32_t addr)
 class PCPResponseSock final : public ZeroSock
 {
 public:
-    PCPResponseSock(CNetAddr local_addr, std::array<uint8_t, 8> response)
-        : m_local_addr{std::move(local_addr)}, m_response{response}
+    PCPResponseSock(CNetAddr local_addr, std::array<uint8_t, 8> response, size_t* send_count = nullptr)
+        : m_local_addr{std::move(local_addr)}, m_response{response}, m_send_count{send_count}
     {
+    }
+
+    ssize_t Send(const void* data, size_t len, int flags) const override
+    {
+        if (m_send_count) ++*m_send_count;
+        return ZeroSock::Send(data, len, flags);
     }
 
     ssize_t Recv(void* buf, size_t len, int) const override
@@ -80,6 +86,7 @@ public:
 private:
     const CNetAddr m_local_addr;
     const std::array<uint8_t, 8> m_response;
+    size_t* const m_send_count;
     mutable bool m_consumed{false};
 };
 
@@ -104,6 +111,38 @@ void AssertMalformedPCPDowngradeRejected(const std::array<uint8_t, 8>& response)
     const MappingError* err{std::get_if<MappingError>(&res)};
     Assert(err);
     Assert(*err == MappingError::NETWORK_ERROR);
+}
+
+void AssertInterruptedPortMapDoesNotSend(bool use_pcp)
+{
+    MockableSteadyClock::SetMockTime(MockableSteadyClock::INITIAL_MOCK_TIME);
+
+    const CNetAddr gateway_addr{IPv4Addr(0xc0a80001)}; // 192.168.0.1
+    const CNetAddr local_addr{IPv4Addr(0xc0a80006)}; // 192.168.0.6
+    in_addr bind_any;
+    bind_any.s_addr = htonl(INADDR_ANY);
+
+    size_t send_count{0};
+    bool created_sock{false};
+    CreateSock = [local_addr, &send_count, &created_sock](int domain, int type, int protocol) -> std::unique_ptr<Sock> {
+        if (domain == AF_INET && type == SOCK_DGRAM && protocol == IPPROTO_UDP) {
+            created_sock = true;
+            return std::make_unique<PCPResponseSock>(local_addr, std::array<uint8_t, 8>{}, &send_count);
+        }
+        return nullptr;
+    };
+
+    CThreadInterrupt interrupt;
+    interrupt();
+    const auto res{use_pcp ?
+        PCPRequestPortMap(PCP_NONCE, gateway_addr, CNetAddr{bind_any}, 1234, 1000, interrupt, 1, TIMEOUT) :
+        NATPMPRequestPortMap(gateway_addr, 1234, 1000, interrupt, 1, TIMEOUT)};
+
+    const MappingError* err{std::get_if<MappingError>(&res)};
+    Assert(err);
+    Assert(*err == MappingError::NETWORK_ERROR);
+    Assert(created_sock);
+    Assert(send_count == 0);
 }
 
 } // namespace
@@ -146,6 +185,7 @@ FUZZ_TARGET(pcp_request_port_map, .init = port_map_target_init)
         0x00, 0x80, 0x00, 0x01, // valid result, but wrong opcode for a PCP MAP response
         0x00, 0x00, 0x00, 0x00,
     });
+    AssertInterruptedPortMapDoesNotSend(/*use_pcp=*/true);
     CreateSock = CreateSockOrig;
 }
 
@@ -177,6 +217,6 @@ FUZZ_TARGET(natpmp_request_port_map, .init = port_map_target_init)
         Assert(mapping->internal.GetPort() == port);
         mapping->ToString();
     }
-
+    AssertInterruptedPortMapDoesNotSend(/*use_pcp=*/false);
     CreateSock = CreateSockOrig;
 }
