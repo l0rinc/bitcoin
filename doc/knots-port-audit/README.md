@@ -81,6 +81,11 @@ Other missing/adapted Knots pieces found during this pass:
   (`Compiled without bdb support`) for the same legacy-wallet creation attempt.
   Core master already rejects `descriptors=false`; the port restores that
   behavior as `6cd89c9b09` and covers it in `wallet_createwallet.py`.
+- `rpc_getblockfrompeer.py` still used Knots' older mutable block-hash helper
+  (`CBlock.calc_sha256()`), while the current port framework exposes block
+  hashes through properties (`hash`, `hash_int`, and `sha256`). The port removes
+  the stale call as `1486393769`; the test now passes and covers the
+  `getblockfileinfo` pruning assertions.
 
 ## Original Knots Defects Confirmed
 
@@ -238,6 +243,8 @@ Functional tests:
 - `python3 test/functional/rpc_signer.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
+- `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_implicitsegwit.py --configfile build/test/config.ini`
