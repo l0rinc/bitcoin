@@ -79,8 +79,11 @@ public:
         return *this;
     }
     std::string ToString(FeeRateFormat fee_rate_format = FeeRateFormat::BTC_KVB) const;
-    friend CFeeRate operator*(const CFeeRate& f, int a) { return CFeeRate(a * f.m_feerate.fee, f.m_feerate.size); }
-    friend CFeeRate operator*(int a, const CFeeRate& f) { return CFeeRate(a * f.m_feerate.fee, f.m_feerate.size); }
+    friend CFeeRate operator*(const CFeeRate& f, int a)
+    {
+        return CFeeRate(SaturatingMul(f.m_feerate.fee, int64_t{a}), f.m_feerate.size);
+    }
+    friend CFeeRate operator*(int a, const CFeeRate& f) { return f * a; }
 
     SERIALIZE_METHODS(CFeeRate, obj) { READWRITE(obj.m_feerate.fee, obj.m_feerate.size); }
 };
