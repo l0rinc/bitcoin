@@ -112,6 +112,16 @@ Other missing/adapted Knots pieces found during this pass:
   (`dc0ed81797`). `mining_coin_age_priority.py`,
   `mining_prioritisetransaction.py`, and `feature_maxuploadtarget.py` pass with
   this helper.
+- Header-tree DoS coverage exposed a port omission in Knots' reintroduced
+  checkpoint enforcement: original Knots retains the testnet3 checkpoint at
+  height 546, while the port only had mainnet checkpoint data. This was not an
+  original Knots bug and is now restored as `0dbc321ca0`, along with the Knots
+  testnet3 header fixture and test framework network magic needed by
+  `p2p_dos_header_tree.py`.
+- Compact-block extra-transaction coverage now uses the current P2P test
+  framework send helper and hash/wtxid properties (`77d2b2c025`).
+  `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
+  `p2p_block_times.py` pass.
 
 ## Original Knots Defects Confirmed
 
@@ -282,6 +292,9 @@ Functional tests:
 - `python3 test/functional/rpc_sort_multisig.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
+- `python3 test/functional/p2p_compactblocks_extratxs.py --configfile build/test/config.ini`
+- `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini`
+- `python3 test/functional/p2p_block_times.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_implicitsegwit.py --configfile build/test/config.ini`
