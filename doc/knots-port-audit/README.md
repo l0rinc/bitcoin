@@ -91,6 +91,13 @@ Other missing/adapted Knots pieces found during this pass:
   hashes through properties (`hash`, `hash_int`, and `sha256`). The port removes
   the stale call as `1486393769`; the test now passes and covers the
   `getblockfileinfo` pruning assertions.
+- The `getblockfrompeer` review confirmed Knots' no-header and pruned-node
+  future-block behavior (`6c78d40b89`, `aebfd947d2`) is present in the port and
+  absent from current Core master. The port matches final Knots by allowing
+  requests for blocks whose header is not yet known and by disabling Core's
+  prune-mode synced-past-height rejection. `rpc_getblockfrompeer.py` covers the
+  no-header request, a pruned node fetching a block it has not seen, and a
+  pruned node fetching a block it has not synced past.
 - `rpc_bind.py` has port-side coverage for Knots' stricter explicit RPC-bind
   behavior, but the expected message was attached to the wrong output stream.
   An unmodified Knots build exits with `Error: Unable to start HTTP server. See
@@ -1055,6 +1062,16 @@ under different commits. They are not all proven exploitable.
   in the mempool or UTXO set. This is transaction-construction functionality,
   not consensus behavior.
 
+- `getblockfrompeer` without a known header:
+  `6c78d40b89`, `aebfd947d2`
+
+  Current Core master still requires the block header before
+  `getblockfrompeer` can request the block, and rejects future-height requests
+  in prune mode. Knots and this port can request an arbitrary block hash from a
+  selected peer, including in pruned-node scenarios where the node has not seen
+  or synced past the header yet. This is RPC/operator recovery functionality,
+  not consensus behavior.
+
 High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
 key handling, `LocalServiceInfo::nScore` saturation, miner `addPackageTxs`
@@ -1345,6 +1362,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_prevtxs`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_getblockfrompeer_no_header`
 - `python3 test/functional/rpc_mempool_info.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini`
