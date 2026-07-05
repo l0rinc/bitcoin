@@ -29,7 +29,10 @@ template <class T>
     if (AdditionOverflow(i, j)) {
         return std::nullopt;
     }
-    return i + j;
+    const T result = static_cast<T>(i + j);
+    Assume(result - i == j);
+    Assume(result - j == i);
+    return result;
 }
 
 template <std::integral T>
@@ -84,19 +87,12 @@ template <std::unsigned_integral T, std::unsigned_integral U>
 template <std::integral T>
 [[nodiscard]] T SaturatingAdd(const T i, const T j) noexcept
 {
+    if (const auto result{CheckedAdd(i, j)}) return *result;
     if constexpr (std::numeric_limits<T>::is_signed) {
-        if (i > 0 && j > std::numeric_limits<T>::max() - i) {
-            return std::numeric_limits<T>::max();
-        }
-        if (i < 0 && j < std::numeric_limits<T>::min() - i) {
-            return std::numeric_limits<T>::min();
-        }
+        return i < 0 ? std::numeric_limits<T>::min() : std::numeric_limits<T>::max();
     } else {
-        if (std::numeric_limits<T>::max() - i < j) {
-            return std::numeric_limits<T>::max();
-        }
+        return std::numeric_limits<T>::max();
     }
-    return i + j;
 }
 
 /**
