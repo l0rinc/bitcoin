@@ -93,8 +93,8 @@ class MaxActivationHeightTest(BitcoinTestFramework):
         import subprocess
         import os
 
-        # Get the bitcoind binary path from the test framework
-        bitcoind_path = self.options.bitcoind
+        # Get the bitcoind command from the test framework.
+        bitcoind_cmd = self.get_binaries().node_argv()
 
         # Create a temporary datadir for this test
         import tempfile
@@ -102,7 +102,7 @@ class MaxActivationHeightTest(BitcoinTestFramework):
             try:
                 # Run bitcoind with invalid vbparams (both timeout and max_activation_height)
                 result = subprocess.run(
-                    [bitcoind_path, f'-datadir={tmpdir}', '-regtest',
+                    bitcoind_cmd + [f'-datadir={tmpdir}', '-regtest',
                      '-vbparams=testdummy:0:1:0:432'],  # timeout=1, max_activation_height=432
                     capture_output=True,
                     text=True,

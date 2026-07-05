@@ -60,6 +60,10 @@ MAX_ELEMENT_SIZE_REDUCED = 256
 VIOLATION_SIZE = 300  # Violates reduced (256) but OK for standard (520)
 
 
+def assert_reduced_data_rejected(result):
+    assert result is not None and 'Push value size limit exceeded' in result, f"Expected REDUCED_DATA rejection, got: {result}"
+
+
 class ReducedDataUTXOHeightTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
@@ -304,7 +308,7 @@ class ReducedDataUTXOHeightTest(BitcoinTestFramework):
         # Try to mine block with new_spending_tx (has 300-byte witness element)
         block = self.create_test_block([new_spending_tx], signal=False)
         result = node.submitblock(block.serialize().hex())
-        assert result is not None and 'mandatory-script-verify-flag-failed' in result, f"Expected rejection, got: {result}"
+        assert_reduced_data_rejected(result)
 
         self.log.info(f"✓ SUCCESS: New UTXO with {VIOLATION_SIZE}-byte witness element was REJECTED (correctly enforced)")
 
@@ -342,7 +346,7 @@ class ReducedDataUTXOHeightTest(BitcoinTestFramework):
         self.log.info(f"        Spending boundary UTXO with {VIOLATION_SIZE}-byte witness (should be REJECTED)")
         block = self.create_test_block([boundary_spending_tx], signal=False)
         result = node.submitblock(block.serialize().hex())
-        assert result is not None and 'mandatory-script-verify-flag-failed' in result, f"Expected rejection, got: {result}"
+        assert_reduced_data_rejected(result)
 
         self.log.info(f"✓ SUCCESS: UTXO at exactly activation height {ACTIVATION_HEIGHT} is SUBJECT to rules (not exempt)")
 
@@ -430,7 +434,7 @@ class ReducedDataUTXOHeightTest(BitcoinTestFramework):
         self.mine_blocks(2, signal=False)
         block = self.create_test_block([mixed_tx], signal=False)
         result = node.submitblock(block.serialize().hex())
-        assert result is not None and 'mandatory-script-verify-flag-failed' in result, f"Expected rejection, got: {result}"
+        assert_reduced_data_rejected(result)
 
         self.log.info("✓ SUCCESS: Mixed transaction REJECTED (new input violated rules, even though old input was exempt)")
 
@@ -483,8 +487,7 @@ class ReducedDataUTXOHeightTest(BitcoinTestFramework):
         # Same spend is now non-exempt and must be rejected.
         attack_block = self.create_test_block([spend_tx], signal=False)  # 433
         result = node.submitblock(attack_block.serialize().hex())
-        assert result is not None and 'Push value size limit exceeded' in result, \
-            f"Expected rejection after boundary-crossing reorg, got: {result}"
+        assert_reduced_data_rejected(result)
 
         self.log.info("✓ SUCCESS: Cache poisoning via activation-boundary reorg correctly prevented")
 

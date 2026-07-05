@@ -366,7 +366,7 @@ class ReducedDataTest(BitcoinTestFramework):
 
         # Mine the funding transaction in a block
         block_height = node.getblockcount() + 1
-        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), int(node.getblockheader(node.getbestblockhash())['time']) + 1)
+        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), ntime=int(node.getblockheader(node.getbestblockhash())['time']) + 1)
         block.vtx.append(funding_tx)
         add_witness_commitment(block)
         block.solve()
@@ -404,7 +404,7 @@ class ReducedDataTest(BitcoinTestFramework):
 
         # Mine the funding transaction in a block
         block_height2 = node.getblockcount() + 1
-        block2 = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height2), int(node.getblockheader(node.getbestblockhash())['time']) + 1)
+        block2 = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height2), ntime=int(node.getblockheader(node.getbestblockhash())['time']) + 1)
         block2.vtx.append(funding_tx2)
         add_witness_commitment(block2)
         block2.solve()
@@ -474,7 +474,7 @@ class ReducedDataTest(BitcoinTestFramework):
         funding_txid_valid = funding_tx_valid.rehash()
 
         block_height = node.getblockcount() + 1
-        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), int(node.getblockheader(node.getbestblockhash())['time']) + 1)
+        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), ntime=int(node.getblockheader(node.getbestblockhash())['time']) + 1)
         block.vtx.append(funding_tx_valid)
         add_witness_commitment(block)
         block.solve()
@@ -518,7 +518,7 @@ class ReducedDataTest(BitcoinTestFramework):
         funding_txid_invalid = funding_tx_invalid.rehash()
 
         block_height = node.getblockcount() + 1
-        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), int(node.getblockheader(node.getbestblockhash())['time']) + 1)
+        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), ntime=int(node.getblockheader(node.getbestblockhash())['time']) + 1)
         block.vtx.append(funding_tx_invalid)
         add_witness_commitment(block)
         block.solve()
@@ -570,7 +570,7 @@ class ReducedDataTest(BitcoinTestFramework):
         funding_txid_valid = funding_tx_valid.rehash()
 
         block_height = node.getblockcount() + 1
-        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), int(node.getblockheader(node.getbestblockhash())['time']) + 1)
+        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), ntime=int(node.getblockheader(node.getbestblockhash())['time']) + 1)
         block.vtx.append(funding_tx_valid)
         add_witness_commitment(block)
         block.solve()
@@ -610,7 +610,7 @@ class ReducedDataTest(BitcoinTestFramework):
             funding_txid_invalid = funding_tx_invalid.rehash()
 
             block_height = node.getblockcount() + 1
-            block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), int(node.getblockheader(node.getbestblockhash())['time']) + 1)
+            block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), ntime=int(node.getblockheader(node.getbestblockhash())['time']) + 1)
             block.vtx.append(funding_tx_invalid)
             add_witness_commitment(block)
             block.solve()
@@ -656,7 +656,7 @@ class ReducedDataTest(BitcoinTestFramework):
         funding_txid_if = funding_tx_if.rehash()
 
         block_height = node.getblockcount() + 1
-        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), int(node.getblockheader(node.getbestblockhash())['time']) + 1)
+        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), ntime=int(node.getblockheader(node.getbestblockhash())['time']) + 1)
         block.vtx.append(funding_tx_if)
         add_witness_commitment(block)
         block.solve()
@@ -693,7 +693,7 @@ class ReducedDataTest(BitcoinTestFramework):
         funding_txid_notif = funding_tx_notif.rehash()
 
         block_height = node.getblockcount() + 1
-        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), int(node.getblockheader(node.getbestblockhash())['time']) + 1)
+        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), ntime=int(node.getblockheader(node.getbestblockhash())['time']) + 1)
         block.vtx.append(funding_tx_notif)
         add_witness_commitment(block)
         block.solve()
@@ -867,7 +867,7 @@ class ReducedDataTest(BitcoinTestFramework):
         funding_txid = funding_tx.rehash()
 
         block_height = node.getblockcount() + 1
-        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), int(node.getblockheader(node.getbestblockhash())['time']) + 1)
+        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), ntime=int(node.getblockheader(node.getbestblockhash())['time']) + 1)
         block.vtx.append(funding_tx)
         add_witness_commitment(block)
         block.solve()
@@ -991,7 +991,7 @@ class ReducedDataTest(BitcoinTestFramework):
         p2a_value = p2a_funding.vout[0].nValue
 
         block_height = node.getblockcount() + 1
-        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), int(node.getblockheader(node.getbestblockhash())['time']) + 1)
+        block = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), ntime=int(node.getblockheader(node.getbestblockhash())['time']) + 1)
         block.vtx.append(p2a_funding)
         add_witness_commitment(block)
         block.solve()
@@ -1010,7 +1010,7 @@ class ReducedDataTest(BitcoinTestFramework):
         p2a_spend.rehash()
 
         block_height = node.getblockcount() + 1
-        block_bad = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), int(node.getblockheader(node.getbestblockhash())['time']) + 1)
+        block_bad = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), ntime=int(node.getblockheader(node.getbestblockhash())['time']) + 1)
         block_bad.vtx.append(p2a_spend)
         add_witness_commitment(block_bad)
         block_bad.solve()
@@ -1030,7 +1030,7 @@ class ReducedDataTest(BitcoinTestFramework):
         p2a_spend_empty.rehash()
 
         block_height = node.getblockcount() + 1
-        block_good = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), int(node.getblockheader(node.getbestblockhash())['time']) + 1)
+        block_good = create_block(int(node.getbestblockhash(), 16), create_coinbase(block_height), ntime=int(node.getblockheader(node.getbestblockhash())['time']) + 1)
         block_good.vtx.append(p2a_spend_empty)
         add_witness_commitment(block_good)
         block_good.solve()

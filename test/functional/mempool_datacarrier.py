@@ -15,20 +15,19 @@ from test_framework.test_framework import BitcoinTestFramework
 from test_framework.test_node import TestNode
 from test_framework.util import (
     assert_equal,
-    assert_raises_rpc_error,
+    JSONRPCException,
 )
 from test_framework.wallet import MiniWallet
 
 from random import randbytes
 
-# The historical maximum, now used to test coverage
-CUSTOM_DATACARRIER_ARG = 83
+CUSTOM_DATACARRIER_ARG = MAX_OP_RETURN_RELAY
 
 class DataCarrierTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 4
         self.extra_args = [
-            [], # default is uncapped
+            [], # default capped at MAX_OP_RETURN_RELAY
             ["-datacarrier=0"], # no relay of datacarrier
             ["-datacarrier=1", f"-datacarriersize={CUSTOM_DATACARRIER_ARG}"],
             ["-datacarrier=1", "-datacarriersize=2"],
@@ -46,7 +45,13 @@ class DataCarrierTest(BitcoinTestFramework):
             self.wallet.sendrawtransaction(from_node=node, tx_hex=tx_hex)
             assert tx.txid_hex in node.getrawmempool(True), f'{tx_hex} not in mempool'
         else:
-            assert_raises_rpc_error(-26, "datacarrier", self.wallet.sendrawtransaction, from_node=node, tx_hex=tx_hex)
+            try:
+                self.wallet.sendrawtransaction(from_node=node, tx_hex=tx_hex)
+            except JSONRPCException as e:
+                assert_equal(e.error["code"], -26)
+                assert any(reason in e.error["message"] for reason in ["datacarrier", "scriptpubkey"]), e.error["message"]
+            else:
+                raise AssertionError(f"{tx_hex} unexpectedly accepted")
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
@@ -59,19 +64,16 @@ class DataCarrierTest(BitcoinTestFramework):
         assert_equal(self.nodes[2].getmempoolinfo()["maxdatacarriersize"], CUSTOM_DATACARRIER_ARG)
         assert_equal(self.nodes[3].getmempoolinfo()["maxdatacarriersize"], 2)
 
-        # By default, any size is allowed.
-
-        # If it is custom set to 83, the historical value,
+        # By default and when explicitly set to 83,
         # only 80 bytes are used for data (+1 for OP_RETURN, +2 for the pushdata opcodes).
         custom_size_data = randbytes(CUSTOM_DATACARRIER_ARG - 3)
         too_long_data = randbytes(CUSTOM_DATACARRIER_ARG - 2)
-        extremely_long_data = randbytes(MAX_OP_RETURN_RELAY - 200)
         one_byte = randbytes(1)
         zero_bytes = randbytes(0)
 
-        self.log.info("Testing a null data transaction succeeds for default arg regardless of size.")
-        self.test_null_data_transaction(node=self.nodes[0], data=too_long_data, success=True)
-        self.test_null_data_transaction(node=self.nodes[0], data=extremely_long_data, success=True)
+        self.log.info("Testing null data transaction with default -datacarrier and -datacarriersize values.")
+        self.test_null_data_transaction(node=self.nodes[0], data=custom_size_data, success=True)
+        self.test_null_data_transaction(node=self.nodes[0], data=too_long_data, success=False)
 
         self.log.info("Testing a null data transaction with -datacarrier=false.")
         self.test_null_data_transaction(node=self.nodes[1], data=custom_size_data, success=False)

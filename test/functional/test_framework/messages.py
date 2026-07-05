@@ -617,7 +617,7 @@ class CTxWitness:
 
 
 class CTransaction:
-    __slots__ = ("nLockTime", "version", "vin", "vout", "wit")
+    __slots__ = ("hash", "nLockTime", "sha256", "version", "vin", "vout", "wit")
 
     def __init__(self, tx=None):
         if tx is None:
@@ -626,12 +626,16 @@ class CTransaction:
             self.vout = []
             self.wit = CTxWitness()
             self.nLockTime = 0
+            self.sha256 = None
+            self.hash = None
         else:
             self.version = tx.version
             self.vin = copy.deepcopy(tx.vin)
             self.vout = copy.deepcopy(tx.vout)
             self.nLockTime = tx.nLockTime
             self.wit = copy.deepcopy(tx.wit)
+            self.sha256 = tx.sha256
+            self.hash = tx.hash
 
     def deserialize(self, f):
         self.version = int.from_bytes(f.read(4), "little")
@@ -719,6 +723,12 @@ class CTransaction:
         """Return txid (transaction hash without witness) as integer."""
         return uint256_from_str(self.txid)
 
+    def rehash(self):
+        """Compatibility helper for tests that expect mutable tx hash refresh."""
+        self.sha256 = self.txid_int
+        self.hash = self.txid_hex
+        return self.hash
+
     def is_valid(self):
         for tout in self.vout:
             if tout.nValue < 0 or tout.nValue > 21000000 * COIN:
@@ -793,6 +803,20 @@ class CBlockHeader:
     def hash_int(self):
         """Return block header hash as integer."""
         return uint256_from_str(hash256(self._serialize_header()))
+
+    @property
+    def hash(self):
+        """Compatibility alias for the block header hash as hex string."""
+        return self.hash_hex
+
+    @property
+    def sha256(self):
+        """Compatibility alias for the block header hash as integer."""
+        return self.hash_int
+
+    def rehash(self):
+        """Compatibility helper for tests that expect mutable block hash refresh."""
+        return self.hash
 
     def __repr__(self):
         return "CBlockHeader(nVersion=%i hashPrevBlock=%064x hashMerkleRoot=%064x nTime=%s nBits=%08x nNonce=%08x)" \

@@ -161,7 +161,10 @@ void DoTest(const CScript& scriptPubKey, const CScript& scriptSig, const CScript
     const uint32_t libconsensus_flags{static_cast<uint32_t>((flags & consensus_flags).as_int())};
     if (script_verify_flags::from_int(libconsensus_flags) == flags) {
         int expectedSuccessCode = expect ? 1 : 0;
-        if (flags & SCRIPT_VERIFY_WITNESS) {
+        if (flags & SCRIPT_VERIFY_TAPROOT) {
+            const UTXO spent_output{scriptPubKey.data(), static_cast<unsigned int>(scriptPubKey.size()), txCredit.vout[0].nValue};
+            BOOST_CHECK_MESSAGE(bitcoinconsensus_verify_script_with_spent_outputs(scriptPubKey.data(), scriptPubKey.size(), txCredit.vout[0].nValue, UCharCast(stream.data()), stream.size(), &spent_output, 1, 0, libconsensus_flags, nullptr) == expectedSuccessCode, message);
+        } else if (flags & SCRIPT_VERIFY_WITNESS) {
             BOOST_CHECK_MESSAGE(bitcoinconsensus_verify_script_with_amount(scriptPubKey.data(), scriptPubKey.size(), txCredit.vout[0].nValue, UCharCast(stream.data()), stream.size(), 0, libconsensus_flags, nullptr) == expectedSuccessCode, message);
         } else {
             BOOST_CHECK_MESSAGE(bitcoinconsensus_verify_script_with_amount(scriptPubKey.data(), scriptPubKey.size(), 0, UCharCast(stream.data()), stream.size(), 0, libconsensus_flags, nullptr) == expectedSuccessCode, message);

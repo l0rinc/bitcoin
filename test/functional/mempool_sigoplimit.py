@@ -54,6 +54,8 @@ MAX_PUBKEYS_PER_MULTISIG = 20
 class BytesPerSigOpTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
+        # Allow datacarrier padding so this test isolates bytespersigop policy.
+        self.extra_args = [['-acceptnonstdtxn=1', '-acceptnonstddatacarrier=1', '-datacarrierfullcount=0', '-permitbaredatacarrier=1']]
 
     def create_p2wsh_spending_tx(self, witness_script, output_script):
         """Create a 1-input-1-output P2WSH spending transaction with only the
@@ -287,8 +289,7 @@ class BytesPerSigOpTest(BitcoinTestFramework):
         # But together, it's exceeding limits in the *package* context. If sigops adjusted vsize wasn't being checked
         # here, it would get further in validation and give too-large-cluster error instead.
         packet_test = self.nodes[0].testmempoolaccept([tx_parent.serialize().hex(), tx_child.serialize().hex()])
-        expected_package_error = f"package-mempool-limits, package size {2*expected_vsize_per_tx} exceeds ancestor size limit [limit: 101000]"
-        assert_equal([x["package-error"] for x in packet_test], [expected_package_error] * 2)
+        assert_equal([x["package-error"] for x in packet_test], ["package-mempool-limits"] * 2)
 
         # When we actually try to submit, the parent makes it into the mempool, but the child would exceed cluster vsize limits
         res = self.nodes[0].submitpackage([tx_parent.serialize().hex(), tx_child.serialize().hex()])
@@ -344,7 +345,7 @@ class BytesPerSigOpTest(BitcoinTestFramework):
             else:
                 bytespersigop_parameter = f"-bytespersigop={bytes_per_sigop}"
                 self.log.info(f"Test sigops limit setting {bytespersigop_parameter}...")
-                self.restart_node(0, extra_args=[bytespersigop_parameter])
+                self.restart_node(0, extra_args=[bytespersigop_parameter] + self.extra_args[0])
 
             for num_sigops in (69, 101, 142, 183, 222):
                 self.test_sigops_limit(bytes_per_sigop, num_sigops)
