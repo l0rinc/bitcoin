@@ -62,6 +62,15 @@ Other missing/adapted Knots pieces found during this pass:
   (`f9f7587b59`, ported as `7985bced24`). Without the clamp, a negative
   user-provided threshold is assigned through the unsigned byte-count path. The
   port adds `feature_init.py` coverage for both `-lowmem=1` and `-lowmem=-1`.
+- The same low-memory review confirmed the underlying Knots dbcache flush
+  pressure series is present in the port and absent from current Core:
+  `SystemNeedsMemoryReleased()` checks Windows and Linux available-memory
+  signals, `FlushStateToDisk(IF_NEEDED)` treats memory pressure like a critical
+  coins-cache condition, the threshold is operator-configurable through
+  `-lowmem=<MiB>`, and deterministic tests can disable it by setting the
+  threshold to zero. This is local availability/resource hardening, not
+  consensus behavior or a remote trigger. Focused `feature_init.py`
+  `init_lowmem_test` runs pass against both the port and unmodified Knots.
 - The `GetArg` / `GetBoolArg` numeric settings review confirmed Knots'
   `577c04c80e` is present in the port and still absent from current Core
   master. Core's `SettingToBool(...)` still falls through to `value.get_str()`
@@ -1456,6 +1465,18 @@ under different commits. They are not all proven exploitable.
   location so `CoinsViewOptions`, `bitcoind -help-debug`, and the unit test all
   agree with unmodified Knots.
 
+- Low-memory-triggered dbcache flushing:
+  `10e7dc80ee`, `d95f134d11`, `ebf7df30c2`, `da690b5a69`, `f9f7587b59`
+
+  Current Core still flushes the coins cache during `IF_NEEDED` only when the
+  cache itself crosses its size limit. Knots and this port can also flush when
+  the host is under memory pressure, using Windows memory status and Linux
+  `sysinfo` data, and expose `-lowmem=<MiB>` so operators can choose the
+  threshold or disable the feature with `0`. This is availability hardening for
+  memory-constrained nodes and avoids keeping dirty UTXO cache entries in RAM
+  while the OS is likely to swap. It is not consensus behavior and not remotely
+  triggerable by itself.
+
 - Prune-lock reorg rollback and persistence:
   `8ee1214157`, `0b4bd4e134`, `4822c21812`
 
@@ -2001,6 +2022,16 @@ Source/manifest checks:
   actual Knots uses a 64 MiB `-dbbatchsize` default, current Core uses 32 MiB,
   and the port now carries the 64 MiB default at Core's current constant
   location without the stale unused `nDefaultDbBatchSize`.
+- `git -C ../knots show --stat --patch --minimal 10e7dc80ee`,
+  `git show origin/master:src/init.cpp origin/master:src/validation.cpp
+  origin/master:src/common/system.cpp origin/master:src/common/system.h | rg
+  -n "lowmem|SystemNeedsMemoryReleased|HAVE_LINUX_SYSINFO|memory pressure|FlushStateToDisk\\(state, FlushStateMode::IF_NEEDED\\)|g_low_memory_threshold"
+  -C 5`, `rg -n
+  "g_low_memory_threshold|SystemNeedsMemoryReleased|AvailableMemory|lowmem|freeram|bufferram|GlobalMemoryStatusEx|sysinfo"
+  src cmake CMakeLists.txt test/functional/feature_init.py src/test`, and
+  the matching actual-Knots source checks show that Knots and the port carry
+  configurable low-memory-triggered dbcache flushing, while current Core lacks
+  both the `-lowmem` option and the `SystemNeedsMemoryReleased()` flush hook.
 - `git show origin/master:src/zmq/zmqnotificationinterface.cpp | rg -n
   "TryForEachAndRemoveFailed|notifier->Shutdown|notifiers.erase" -C 4`,
   `git -C ../knots show 29.x-knots:src/zmq/zmqnotificationinterface.cpp |
@@ -2423,6 +2454,12 @@ Functional tests:
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_proxy_tor_alias_knots_2
   --portseed=27623`
+- `python3 test/functional/feature_init.py --configfile build/test/config.ini
+  --test_methods init_lowmem_test
+  --tmpdir=/mnt/my_storage/tmp_feature_init_lowmem_port --portseed=27630`
+- `python3 test/functional/feature_init.py --configfile
+  ../knots/build-repro/test/config.ini --test_methods init_lowmem_test
+  --tmpdir=/mnt/my_storage/tmp_feature_init_lowmem_knots --portseed=27631`
 - `python3 test/functional/feature_rdts.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile
