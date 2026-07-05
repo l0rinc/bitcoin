@@ -454,8 +454,13 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                 Assert(txdownload_impl.GetRequestsToSend(rand_peer, time).empty());
             },
             [&] {
+                const bool known_peer{txdownload_impl.m_peer_info.contains(rand_peer)};
                 const auto& [should_validate, maybe_package] = txdownload_impl.ReceivedTx(rand_peer, rand_tx);
                 AssertNoTxRequestsFromPeerForTx(txdownload_impl, rand_tx, rand_peer);
+                if (!known_peer) {
+                    Assert(!should_validate);
+                    Assert(!maybe_package.has_value());
+                }
                 // The only possible results should be:
                 // - Don't validate the tx, no package.
                 // - Don't validate the tx, package.
