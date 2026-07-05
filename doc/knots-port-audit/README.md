@@ -289,6 +289,16 @@ Other missing/adapted Knots pieces found during this pass:
   block-manager argument parser. Current Core master has no `-pruneduringinit`
   option. `blockmanager_tests/blockmanager_args_prune_during_init` covers the
   `0`, `1`, minimum-target, disable, and invalid-value cases.
+- The corrupt-data startup recovery review confirmed Knots' `-reindex=auto`
+  feature (`35698ab7f4`) is present in the port and absent from current Core.
+  Knots and this port treat `-reindex=auto` as false for the initial
+  `GetBoolArg("-reindex", false)` check, then if chainstate loading fails they
+  bypass the GUI/user prompt and retry once with full reindexing. This is local
+  availability/recovery behavior for corrupted block-index or chainstate data,
+  not consensus behavior or a remote trigger. `feature_init.py` now deletes a
+  block-index LevelDB file and verifies that `-reindex=auto` logs
+  `Automatically running a reindex.` and restarts successfully at the original
+  height; the same focused method passes on both the port and unmodified Knots.
 - The first-startup disk-space warning review confirmed Knots'
   `4f06564f36` is present in the port and absent from current Core. Knots and
   this port treat `AssumedBlockchainSize()` as decimal GB, matching the
@@ -1423,6 +1433,18 @@ under different commits. They are not all proven exploitable.
   (`4ecd895b33`) to assert the public helper does not truncate or clobber
   existing bytes and still extends the requested range with zeroes.
 
+- Automatic reindex on corrupted block data:
+  `35698ab7f4`
+
+  Current Core master still offers only boolean `-reindex` and an interactive
+  GUI retry prompt after chainstate-load failure. Knots and this port accept
+  `-reindex=auto`; if block-index or chainstate loading fails, they skip the
+  prompt and retry once with full reindexing. This is local
+  availability/recovery hardening for corrupt on-disk chain data, not consensus
+  behavior. The port's `feature_init.py` now covers deletion of a block-index
+  LevelDB file and confirms that `-reindex=auto` automatically reindexes back
+  to the same height; the same method passes on unmodified Knots.
+
 - External signer fingerprint hardening:
   `6d2c2259ee`, `12eefda89a`, `ee39394ad3`
 
@@ -2099,6 +2121,17 @@ Source/manifest checks:
   src/init.cpp` show current Core still uses `1_GiB` for the first-startup
   block-storage warning threshold while actual Knots and the port use decimal
   `1'000'000'000` bytes.
+- `git -C ../knots show --stat --patch --minimal 35698ab7f4`,
+  `git show origin/master:src/init.cpp | rg -n -C 5 --
+  "-reindex|do_reindex|Automatically running|reindex_after_failure|auto"`,
+  `git -C ../knots show 29.x-knots:src/init.cpp | rg -n -C 5 --
+  "-reindex|do_reindex|Automatically running|reindex_after_failure|auto"`,
+  and `rg -n --
+  "-reindex|do_reindex|Automatically running|reindex_after_failure|init_auto_reindex_test"
+  src/init.cpp test/functional/feature_init.py` show Knots and the port accept
+  `-reindex=auto` and retry chainstate loading with `do_reindex=true` after a
+  startup failure, while current Core still has only boolean `-reindex` plus
+  the GUI/user-prompt retry path.
 - `git -C ../knots show --stat --patch --minimal 2104df3209`,
   `git show origin/master:src/kernel/caches.h origin/master:src/txdb.h
   origin/master:src/init.cpp | rg -n
@@ -2724,6 +2757,16 @@ Functional tests:
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_init_wait_port --portseed=27522`
+- `python3 test/functional/feature_init.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_init_reindex_auto_port_5
+  --portseed=32100 --test_methods init_auto_reindex_test`
+- `python3 test/functional/feature_init.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_init_reindex_auto_knots_3
+  --portseed=32110 --test_methods init_auto_reindex_test`
+- `python3 test/functional/feature_init.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_init_full_reindex_auto_port
+  --portseed=32120`
 - `python3 test/functional/feature_chain_tiebreaks.py --configfile
   build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_chain_tiebreaks_port
   --portseed=27530`
