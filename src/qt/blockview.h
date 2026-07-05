@@ -7,9 +7,9 @@
 
 #include <consensus/amount.h>
 #include <primitives/transaction.h>
+#include <primitives/transaction_identifier.h>
 #include <sync.h>
 #include <threadsafety.h>
-#include <util/transaction_identifier.h>
 
 #include <atomic>
 #include <map>
