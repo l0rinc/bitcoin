@@ -57,13 +57,11 @@ class TestP2PConn(P2PInterface):
 
     def on_cmpctblock(self, message):
         self.block_announced = True
-        self.last_message["cmpctblock"].header_and_shortids.header.calc_sha256()
         self.announced_blockhashes.add(self.last_message["cmpctblock"].header_and_shortids.header.sha256)
 
     def on_headers(self, message):
         self.block_announced = True
         for x in self.last_message["headers"].headers:
-            x.calc_sha256()
             self.announced_blockhashes.add(x.sha256)
 
     def on_inv(self, message):
@@ -186,7 +184,7 @@ class CompactBlocksBlockReconstructionLimitTest(BitcoinTestFramework):
         for i in range(num_txs):
             tx_info = self.create_policy_rejected_tx(rejection_type, target_size=target_size)
             tx_obj = tx_from_hex(tx_info['hex'])
-            self.segwit_node.send_message(msg_tx(tx_obj))
+            self.segwit_node.send_without_ping(msg_tx(tx_obj))
             rejected_txs.append(tx_info)
 
         self.segwit_node.sync_with_ping()
@@ -250,13 +248,13 @@ class CompactBlocksBlockReconstructionLimitTest(BitcoinTestFramework):
             tx_info = self.create_policy_rejected_tx(rejection_type)
 
             tx_obj = tx_from_hex(tx_info['hex'])
-            self.segwit_node.send_message(msg_tx(tx_obj))
+            self.segwit_node.send_without_ping(msg_tx(tx_obj))
 
             rejected_txs.append({
                 'type': rejection_type,
                 'tx_info': tx_info,
                 'txid': tx_info['tx'].hash,
-                'wtxid': tx_info['tx'].getwtxid()
+                'wtxid': tx_info['tx'].wtxid_int
             })
 
         self.segwit_node.sync_with_ping()
