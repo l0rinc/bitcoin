@@ -17,6 +17,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
+#include <ios>
 #include <limits>
 
 const std::vector<std::pair<Wtxid, CTransactionRef>> empty_extra_txn;
@@ -235,6 +236,21 @@ struct TestPartiallyDownloadedBlock : PartiallyDownloadedBlock {
     size_t GetMempoolCount() const { return mempool_count; }
     size_t GetExtraCount() const { return extra_count; }
 };
+
+BOOST_AUTO_TEST_CASE(HeaderAndShortIDsDeserializationRejectsTooManyTransactions)
+{
+    auto rand_ctx(FastRandomContext(uint256{42}));
+    CBlock block(BuildBlockTestCase(rand_ctx));
+    TestHeaderAndShortIDs ids(block, rand_ctx);
+    ids.prefilledtxn.clear();
+    ids.shorttxids.resize(std::numeric_limits<uint16_t>::max() + 1U);
+
+    DataStream stream{};
+    stream << ids;
+
+    CBlockHeaderAndShortTxIDs decoded;
+    BOOST_CHECK_EXCEPTION(stream >> decoded, std::ios_base::failure, HasReason("indexes overflowed 16 bits"));
+}
 
 BOOST_AUTO_TEST_CASE(InitDataFailureResetsPartialBlock)
 {
