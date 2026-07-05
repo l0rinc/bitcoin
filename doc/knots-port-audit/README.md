@@ -379,6 +379,17 @@ Other missing/adapted Knots pieces found during this pass:
   consensus or mempool policy. `rpc_deriveaddresses.py` now covers the default
   missing-checksum error, both opt-out calling forms, bad-checksum rejection
   while opted out, and the bitcoin-cli conversion path.
+- The wallet address-activity review confirmed Knots' `getaddressinfo`
+  `isactive` field and `CWallet::IsDestinationActive(...)` helper
+  (`0dfff334dc`, `514cceac30`, `8eb77c4742`) are present in the port and absent
+  from current Core. Rerunning the restored coverage first exposed a port-side
+  test drift: the port had Knots' `isactive` assertions in `wallet_keypool.py`
+  but had lost Knots' explicit `-keypool=10` setup and matching drain/refill
+  counts, so the test derived index 9 while the framework default
+  `keypool=1` was in effect. Unmodified Knots passes its own test with that
+  setup. The port now restores the controlled keypool setup adapted to the
+  descriptor-only current base. This is wallet RPC observability for active
+  vs imported or old-seed destinations, not consensus or mempool policy.
 - Wallet sweep coverage passes on the current descriptor-wallet base:
   `wallet_sweepprivkeys.py` rejects invalid/unfunded keys and sweeps both
   unconfirmed and confirmed P2PKH outputs. Legacy-only Knots tests
@@ -1517,6 +1528,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_send_fee_mode`
 - `python3 test/functional/wallet_migration.py --configfile build/test/config.ini`
   (skipped: previous releases not available or disabled)
+- `python3 test/functional/wallet_keypool.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_keypool_isactive_fixed`
 - `python3 test/functional/wallet_sweepprivkeys.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_import_with_label.py --configfile build/test/config.ini --legacy-wallet`
@@ -1558,6 +1571,10 @@ Functional tests:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_versionbits_warning.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_versionbits_warning_check`
   (passes on unmodified Knots, confirming the earlier warning-range failure was
   introduced by the port's current-Core BIP323 adaptation)
+- Original Knots cross-check:
+  `python3 ../knots/test/functional/wallet_keypool.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_wallet_keypool_isactive_repro`
+  (passes on unmodified Knots, confirming the local `wallet_keypool.py`
+  failure was port-side test drift from losing Knots' explicit keypool setup)
 - Original Knots expected-failure repro with a temporary
   `/mnt/my_storage/knots-assumeutxo-repro` worktree and the port's added
   post-validation raw-transaction assertion:
