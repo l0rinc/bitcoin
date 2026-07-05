@@ -125,7 +125,6 @@ class GetBlockFromPeerTest(BitcoinTestFramework):
         assert_equal(len(node1_peers), 1)
         node1_interface_id = node1_peers[0]["id"]
         assert_equal(self.nodes[1].getblockfrompeer(blockhash, node1_interface_id), {})
-        block.calc_sha256()
         p2p_i.wait_for_getdata([block.sha256])
         p2p_i.send_and_ping(msg_block(block))
         assert_equal(block_hex, self.nodes[1].getblock(blockhash, 0))
