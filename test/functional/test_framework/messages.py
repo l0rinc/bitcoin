@@ -71,6 +71,7 @@ MSG_WTX = 5
 MSG_WITNESS_FLAG = 1 << 30
 MSG_TYPE_MASK = 0xffffffff >> 2
 MSG_WITNESS_TX = MSG_TX | MSG_WITNESS_FLAG
+MSG_FILTERED_WITNESS_BLOCK = MSG_FILTERED_BLOCK | MSG_WITNESS_FLAG
 
 FILTER_TYPE_BASIC = 0
 
@@ -431,6 +432,7 @@ class CInv:
         MSG_TX | MSG_WITNESS_FLAG: "WitnessTx",
         MSG_BLOCK | MSG_WITNESS_FLAG: "WitnessBlock",
         MSG_FILTERED_BLOCK: "filtered Block",
+        MSG_FILTERED_WITNESS_BLOCK: "filtered WitnessBlock",
         MSG_CMPCT_BLOCK: "CompactBlock",
         MSG_WTX: "WTX",
     }

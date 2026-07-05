@@ -14,6 +14,7 @@ from test_framework.messages import (
     MSG_WTX,
     MSG_BLOCK,
     MSG_FILTERED_BLOCK,
+    MSG_FILTERED_WITNESS_BLOCK,
     msg_filteradd,
     msg_filterclear,
     msg_filterload,
@@ -34,6 +35,7 @@ from test_framework.wallet import (
     MiniWallet,
     getnewdestination,
 )
+from test_framework.util import assert_equal
 
 
 class P2PBloomFilter(P2PInterface):
@@ -48,8 +50,9 @@ class P2PBloomFilter(P2PInterface):
         nFlags=1,
     )
 
-    def __init__(self):
+    def __init__(self, filtered_block_type=MSG_FILTERED_BLOCK):
         super().__init__()
+        self.filtered_block_type = filtered_block_type
         self._tx_received = False
         self._merkleblock_received = False
 
@@ -58,7 +61,7 @@ class P2PBloomFilter(P2PInterface):
         for i in message.inv:
             # inv messages can only contain TX or BLOCK, so translate BLOCK to FILTERED_BLOCK
             if i.type == MSG_BLOCK:
-                want.inv.append(CInv(MSG_FILTERED_BLOCK, i.hash))
+                want.inv.append(CInv(self.filtered_block_type, i.hash))
             else:
                 want.inv.append(i)
         if len(want.inv):
@@ -222,6 +225,25 @@ class FilterTest(BitcoinTestFramework):
         filter_peer.send_and_ping(msg_filteradd(data=b'letstrytocrashthisnode'))
         self.nodes[0].disconnect_p2ps()
 
+    def test_filtered_witness_block(self):
+        self.log.info('Check that MSG_FILTERED_WITNESS_BLOCK returns matched txs with witness data')
+        tx = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=P2PBloomFilter.watch_script_pubkey, amount=1 * COIN)
+        assert not tx["tx"].wit.is_null()
+
+        filter_peer = self.nodes[0].add_p2p_connection(P2PBloomFilter(filtered_block_type=MSG_FILTERED_WITNESS_BLOCK))
+        filter_peer.send_and_ping(filter_peer.watch_filter_init)
+
+        block_hash = self.generate(self.nodes[0], 1)[0]
+        filter_peer.wait_for_merkleblock(block_hash)
+        filter_peer.wait_for_tx(tx["txid"])
+        with p2p_lock:
+            received_tx = filter_peer.last_message["tx"].tx
+
+        assert_equal(received_tx.txid_hex, tx["txid"])
+        assert_equal(received_tx.wtxid_hex, tx["wtxid"])
+        assert not received_tx.wit.is_null()
+        self.nodes[0].disconnect_p2ps()
+
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
 
@@ -248,6 +270,7 @@ class FilterTest(BitcoinTestFramework):
         self.test_frelay_false(filter_peer_without_nrelay)
         self.test_filter(filter_peer_without_nrelay)
 
+        self.test_filtered_witness_block()
         self.test_msg_mempool()
 
 
