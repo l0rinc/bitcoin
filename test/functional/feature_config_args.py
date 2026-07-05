@@ -248,6 +248,19 @@ class ConfArgsTest(BitcoinTestFramework):
             self.start_node(0, extra_args=['-nolisten=0'])
         self.stop_node(0)
 
+    def test_port_mapping_disabled_when_not_listening(self):
+        self.log.info('Test explicit port mapping is disabled when listening is disabled')
+        self.nodes[0].replace_in_config([("bind=", "#bind=")])
+        try:
+            with self.nodes[0].assert_debug_log(expected_msgs=[
+                    "parameter interaction: -listen=0 -> setting -upnp=0",
+                    "parameter interaction: -listen=0 -> setting -natpmp=0",
+            ]):
+                self.start_node(0, extra_args=['-listen=0', '-upnp=1', '-natpmp=1'])
+        finally:
+            self.nodes[0].replace_in_config([("#bind=", "bind=")])
+        self.stop_node(0)
+
     def test_args_log(self):
         self.log.info('Test config args logging')
         with self.nodes[0].assert_debug_log(
@@ -541,6 +554,7 @@ class ConfArgsTest(BitcoinTestFramework):
 
     def run_test(self):
         self.test_log_buffer()
+        self.test_port_mapping_disabled_when_not_listening()
         self.test_args_log()
         self.test_seed_peers()
         self.test_networkactive()
