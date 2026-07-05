@@ -50,6 +50,7 @@ std::optional<std::vector<Byte>> TryParseHex(std::string_view str)
 {
     std::vector<Byte> vch;
     vch.reserve(str.size() / 2); // two hex characters form a single byte
+    size_t hex_digits{0};
 
     auto it = str.begin();
     while (it != str.end()) {
@@ -62,7 +63,9 @@ std::optional<std::vector<Byte>> TryParseHex(std::string_view str)
         auto c2 = HexDigit(*(it++));
         if (c1 < 0 || c2 < 0) return std::nullopt;
         vch.push_back(Byte(c1 << 4) | Byte(c2));
+        hex_digits += 2;
     }
+    assert(hex_digits == vch.size() * 2);
     return vch;
 }
 template std::optional<std::vector<std::byte>> TryParseHex(std::string_view);
