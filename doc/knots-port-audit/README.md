@@ -427,6 +427,19 @@ Other missing/adapted Knots pieces found during this pass:
   `minconf`. This is backwards-compatibility behavior, not a security or
   consensus change. `wallet_fundrawtransaction.py` and `rpc_psbt.py` now cover
   positive selection, negative `min_conf`, and `min_conf`/`minconf` conflicts.
+- The descriptor-wallet `importaddress` review confirmed Knots'
+  descriptor-compatible behavior (`be3ae51ece`) is present in the port. The
+  existing restored `wallet_descriptor.py` coverage carried an original Knots
+  test bug: actual Knots `29.x-knots` still calls wallet RPCs as
+  `recv_wrpc.rpc.importprivkey`, which targets the nonexistent RPC method
+  `rpc.importprivkey`. A direct Knots runtime reproduction was attempted in a
+  temporary build configured with `RDTS_CONSENT=IMPLICIT`, but the build hit
+  `No space left on device` while archiving `libbitcoin_common.a`; the
+  source/blame proof still shows this is not port-introduced. The port fixes
+  the test calls, adapts removed current-Core wallet methods to
+  `Method not found`, and extends coverage for descriptor wallets with private
+  keys enabled, `addr(...)` imports, `raw(...)` imports, and the descriptor
+  raw-script P2SH rejection (`d208db82c5`).
 - The wallet PSBT review confirmed Knots' anti-fee-sniping default for
   `walletcreatefundedpsbt` (`c5448df366`) is present in the port: when the
   caller omits explicit `locktime`, the funded PSBT uses a height-based
@@ -996,6 +1009,16 @@ under different commits. They are not all proven exploitable.
   self-protection rather than remote consensus risk, but it is a real
   user-facing fee-limit correctness fix.
 
+- Descriptor-wallet `importaddress` compatibility:
+  `be3ae51ece`
+
+  Current Core master no longer registers the legacy `importaddress` wallet
+  RPC. Knots and this port keep it available for descriptor watch-only wallets
+  by translating addresses into `addr(...)` descriptors and hex scripts into
+  `raw(...)` descriptors, while rejecting descriptor wallets with private keys
+  enabled and descriptor raw-script P2SH imports. This is RPC compatibility and
+  watch-only wallet ergonomics, not consensus or network security hardening.
+
 - `walletcreatefundedpsbt` anti-fee-sniping:
   `c5448df366`
 
@@ -1310,6 +1333,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_balance_getbalance_4`
 - `python3 test/functional/wallet_avoidreuse.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_avoidreuse_getbalance_4`
+- `python3 test/functional/wallet_descriptor.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_descriptor_importaddress_4`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_fundrawtransaction_min_conf`
