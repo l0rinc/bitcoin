@@ -219,6 +219,17 @@ class ImportDescriptorsTest(BitcoinTestFramework):
                 "ms10leetsllhdmn9m42vcsamx24zrxgs3qrl7ahwvhw4fnzrhve25gvezzyqqtum9pgv99ycma",
             ]],
         )
+        assert_raises_rpc_error(
+            -5,
+            "input shares had inconsistent lengths",
+            w3.importdescriptors,
+            [{"desc": descriptor1_chk, "timestamp": test_start, "active": True, "range": 10}],
+            [[
+                "ms13cashallhdmn9m42vcsamx24zrxgs3qrl7ahwvhw4fnzrhve25gvezzyqqyvzd5kp4x46cl",
+                "ms13cashcqqgjyv6y24n80zye42aueh0wluqpzg3ng32kvaugnx4thnxaamlsfmqtvjcxxmzuu",
+                "ms13cashd0wsedstcdcts64cd7wvy4m90lm28w4ffupqs7rm",
+            ]],
+        )
         # Wallet still doesn't work, even the descriptor whose seed was correctly specified
         assert_raises_rpc_error(
             -4,

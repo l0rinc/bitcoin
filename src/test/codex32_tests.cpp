@@ -175,6 +175,13 @@ BOOST_AUTO_TEST_CASE(codex32_bip93_vector_3)
     BOOST_CHECK(g3.IsValid());
     const auto err_s3 = codex32::Result{{a, c, g3}, 's'};
     BOOST_CHECK_EQUAL(err_s3.error(), codex32::MISMATCH_LENGTH);
+
+    const auto long_a = codex32::Result{"ms13cashallhdmn9m42vcsamx24zrxgs3qrl7ahwvhw4fnzrhve25gvezzyqqyvzd5kp4x46cl"};
+    const auto long_c = codex32::Result{"ms13cashcqqgjyv6y24n80zye42aueh0wluqpzg3ng32kvaugnx4thnxaamlsfmqtvjcxxmzuu"};
+    BOOST_CHECK(long_a.IsValid());
+    BOOST_CHECK(long_c.IsValid());
+    const auto err_s4 = codex32::Result{{long_a, long_c, d}, 's'};
+    BOOST_CHECK_EQUAL(err_s4.error(), codex32::MISMATCH_LENGTH);
 }
 
 BOOST_AUTO_TEST_CASE(codex32_bip93_vector_4)
