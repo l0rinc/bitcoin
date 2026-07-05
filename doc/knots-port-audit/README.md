@@ -183,6 +183,15 @@ Other missing/adapted Knots pieces found during this pass:
   the wrapped `AutoFile` is closed when `BufferedFile` is destroyed. The same
   pass removed a duplicate `cleanSubVer` assignment left after applying Knots'
   version-message ordering fix.
+- The same follow-up confirmed Knots' raw transaction max-feerate accounting
+  fix (`4b3cc3d48e`, `1cee5b1ac7`, `335d928d96`) is present in the port:
+  `sendrawtransaction` passes a `CFeeRate` into `BroadcastTransaction`, which
+  converts it to an absolute fee using the mempool accept result's adjusted
+  `m_vsize`. Current Core still precomputes the absolute maximum from plain
+  `GetVirtualTransactionSize(*tx)`, so it can disagree with policy-adjusted
+  vsize when `-bytespersigop` dominates. `mempool_sigoplimit.py` now covers
+  this by requiring `testmempoolaccept` and `sendrawtransaction` to make the
+  same max-feerate decision for a high-sigop, low-weight P2WSH spend.
 
 ## Original Knots Defects Confirmed
 
@@ -282,6 +291,18 @@ under different commits. They are not all proven exploitable.
   unswept child to resurrect. This looks like mempool policy hardening rather
   than a consensus issue, and it was confirmed on an unmodified local Knots
   build before updating the port test.
+
+- Raw transaction max-feerate accounting with policy-adjusted vsize:
+  `4b3cc3d48e`, `1cee5b1ac7`, `335d928d96`
+
+  Core's current `sendrawtransaction` still turns the user-supplied
+  `maxfeerate` into an absolute fee limit with plain
+  `GetVirtualTransactionSize(*tx)`. Knots passes the `CFeeRate` into
+  `BroadcastTransaction` and uses the test-accept result's `m_vsize`, so
+  `-bytespersigop` and other non-weight vsize adjustments are included in the
+  same way as `testmempoolaccept` and mempool policy. This is wallet/RPC
+  self-protection rather than remote consensus risk, but it is a real
+  user-facing fee-limit correctness fix.
 
 High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
