@@ -254,6 +254,26 @@ BOOST_FIXTURE_TEST_CASE(miniminer_total_bumpfee_clamps_overfunded_package, TestC
     BOOST_CHECK_EQUAL(*total_fee, 0);
 }
 
+BOOST_FIXTURE_TEST_CASE(miniminer_same_tx_outputs_share_bumpfee, TestChain100Setup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    LOCK2(::cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    const auto tx = make_tx({COutPoint{m_coinbase_txns[0]->GetHash(), 0}}, /*num_outputs=*/2);
+    TryAddToMempool(pool, entry.Fee(low_fee).FromTx(tx));
+
+    const COutPoint output0{tx->GetHash(), 0};
+    const COutPoint output1{tx->GetHash(), 1};
+    const CFeeRate target_feerate{50000};
+
+    node::MiniMiner mini_miner{pool, {output0, output1}};
+    BOOST_REQUIRE(mini_miner.IsReadyToCalculate());
+    const auto bump_fees{mini_miner.CalculateBumpFees(target_feerate)};
+    BOOST_REQUIRE_EQUAL(bump_fees.size(), 2);
+    BOOST_CHECK_EQUAL(Find(bump_fees, output0), Find(bump_fees, output1));
+}
+
 BOOST_FIXTURE_TEST_CASE(miniminer_1p1c, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);

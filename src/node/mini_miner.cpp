@@ -15,6 +15,7 @@
 #include <util/check.h>
 
 #include <algorithm>
+#include <map>
 #include <numeric>
 #include <ranges>
 #include <utility>
@@ -428,6 +429,11 @@ std::map<COutPoint, CAmount> MiniMiner::CalculateBumpFees(const CFeeRate& target
     for (const auto& [outpoint, bump_fee] : m_bump_fees) {
         Assume(m_requested_outpoints.contains(outpoint));
         Assume(bump_fee >= 0);
+    }
+    std::map<Txid, CAmount> bump_fee_by_txid;
+    for (const auto& [outpoint, bump_fee] : m_bump_fees) {
+        const auto [it, inserted]{bump_fee_by_txid.emplace(outpoint.hash, bump_fee)};
+        Assume(inserted || it->second == bump_fee);
     }
     for (const auto& outpoint : m_requested_outpoints) {
         Assume(m_bump_fees.contains(outpoint));
