@@ -377,6 +377,10 @@ class ConfArgsTest(BitcoinTestFramework):
         addcon_thread_started = ['addcon thread start\n']
         dnsseed_disabled = "parameter interaction: -connect or -maxconnections=0 set -> setting -dnsseed=0"
         listen_disabled = "parameter interaction: -connect or -maxconnections=0 set -> setting -listen=0"
+        port_mapping_disabled = [
+            "parameter interaction: -listen=0 -> setting -upnp=0",
+            "parameter interaction: -listen=0 -> setting -natpmp=0",
+        ]
 
         # When -connect is supplied, expanding addrman via getaddr calls to ADDR_FETCH(-seednode)
         # nodes is irrelevant and -seednode is ignored.
@@ -409,6 +413,14 @@ class ConfArgsTest(BitcoinTestFramework):
             with self.nodes[0].assert_debug_log(expected_msgs=[dnsseed_disabled, listen_disabled]):
                 self.restart_node(0, extra_args=[connect_arg])
             self.nodes[0].replace_in_config([("#bind=", "bind="), ("#dnsseed=", "dnsseed=")])
+
+            # Explicit port mapping is still disabled if the node is not listening.
+            self.nodes[0].replace_in_config([("bind=", "#bind=")])
+            try:
+                with self.nodes[0].assert_debug_log(expected_msgs=port_mapping_disabled):
+                    self.restart_node(0, extra_args=[connect_arg, '-upnp=1', '-natpmp=1'])
+            finally:
+                self.nodes[0].replace_in_config([("#bind=", "bind=")])
 
             # Make sure -proxy and -noconnect warn about -dnsseed setting being
             # ignored, just like -proxy and -connect do.
