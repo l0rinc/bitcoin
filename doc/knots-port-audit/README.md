@@ -308,8 +308,13 @@ Other missing/adapted Knots pieces found during this pass:
   has no Qt, `bitcoin-tx`, or `bitcoin-util` binaries, so the patch was limited
   to option blocks verified against current `bitcoind --help`; the Qt manpage
   mirrors the same shared node option text.
-- `feature_fee_estimates_persist.py` passes, covering the `savefeeestimates`
-  RPC and shutdown persistence path.
+- The fee-estimator persistence review confirmed Knots' `savefeeestimates` RPC
+  (`eefa24ea3e`) is present in the port and absent from current Core master.
+  The port matches Knots' `FlushFeeEstimates()` success/failure return path and
+  registers the RPC while keeping it out of RPC fuzzing. This is operator
+  persistence/control functionality, not consensus or network security
+  behavior. `feature_fee_estimates_persist.py` covers RPC success, write
+  failure, and equivalence with the normal shutdown dump.
 - Wallet sweep coverage passes on the current descriptor-wallet base:
   `wallet_sweepprivkeys.py` rejects invalid/unfunded keys and sweeps both
   unconfirmed and confirmed P2PKH outputs. Legacy-only Knots tests
@@ -1316,6 +1321,9 @@ Functional tests:
 - `python3 test/functional/feature_help.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_includeconf.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_fee_estimates_persist.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_fee_estimates_persist.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_fee_estimates_persist_save_rpc`
 - `python3 test/functional/feature_segwit.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_segwit_mempool_hash`
 - `python3 test/functional/feature_startupnotify.py --configfile build/test/config.ini
