@@ -51,8 +51,11 @@ FUZZ_TARGET(hex)
     const std::vector<unsigned char> data = ParseHex(random_hex_string);
     const std::vector<std::byte> bytes{ParseHex<std::byte>(random_hex_string)};
     assert(std::ranges::equal(std::as_bytes(std::span{data}), bytes));
+    const auto parsed_hex{TryParseHex<unsigned char>(random_hex_string)};
+    const auto parsed_bytes{TryParseHex<std::byte>(random_hex_string)};
+    assert(parsed_hex.has_value() == parsed_bytes.has_value());
     const std::string hex_data = HexStr(data);
-    if (const auto parsed_hex{TryParseHex<unsigned char>(random_hex_string)}) {
+    if (parsed_hex && parsed_bytes) {
         std::string normalized_hex;
         normalized_hex.reserve(random_hex_string.size());
         for (const char c : random_hex_string) {
@@ -66,6 +69,12 @@ FUZZ_TARGET(hex)
         assert(normalized_hex.size() == parsed_hex->size() * 2);
         assert(HexStr(*parsed_hex) == ToLower(normalized_hex));
         assert(std::ranges::equal(data, *parsed_hex));
+        assert(std::ranges::equal(bytes, *parsed_bytes));
+    } else {
+        assert(!parsed_hex);
+        assert(!parsed_bytes);
+        assert(data.empty());
+        assert(bytes.empty());
     }
     if (IsHex(random_hex_string)) {
         assert(ToLower(random_hex_string) == hex_data);
