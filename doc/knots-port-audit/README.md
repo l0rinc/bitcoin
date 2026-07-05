@@ -1403,10 +1403,14 @@ under different commits. They are not all proven exploitable.
 
   Knots implements `close_fds` cleanup with `/proc/self/fd`, then replaces it
   with `close_range`/fallback closing to avoid non-async-signal-safe work after
-  `fork()`. Core's current `RunCommandParseJSON` path does not request
-  `close_fds`, but the Knots/port Tor subprocess path does. The port now has a
-  focused `system_tests/subprocess_close_fds` regression that verifies file
-  descriptors are inherited without `close_fds` and closed with it.
+  `fork()`. This is not port-introduced: unmodified Knots carries the
+  `close_fds` option, the Tor subprocess call passes `subprocess::close_fds`
+  on `29.x-knots`, and the port's `src/util/subprocess.cpp` matches Knots for
+  the child-side `close_range`/fallback helper. Core master has no
+  `close_fds` option or `src/util/subprocess.cpp`; its current
+  `RunCommandParseJSON` path does not request descriptor cleanup. The port now
+  has a focused `system_tests/subprocess_close_fds` regression that verifies
+  file descriptors are inherited without `close_fds` and closed with it.
 
 - Port mapping disabled when not listening:
   `95c8a63102`
@@ -1982,8 +1986,10 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=util_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
 - `build/bin/test_bitcoin --run_test=util_tests/outputtype_implicit_segwit`
-- `build/bin/test_bitcoin --run_test=system_tests/subprocess_close_fds`
-- `build/bin/test_bitcoin --run_test=system_tests`
+- `build/bin/test_bitcoin --run_test=system_tests/subprocess_close_fds
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=system_tests --catch_system_error=no
+  --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=i2p_tests/session_create_error_redacts_private_key
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=i2p_tests --catch_system_error=no
