@@ -943,7 +943,11 @@ Other missing/adapted Knots pieces found during this pass:
   connection type: inbound, manual, feeler, and `noban` peers are tolerated;
   outbound full-relay, block-relay, address-fetch, and private-broadcast peers
   are disconnected without discouraging their address. `net_tests` now covers
-  that full matrix.
+  that full matrix, and `p2p_invalid_block.py` now runs with an ordinary
+  inbound peer to prove non-mutated consensus-invalid blocks stay connected.
+  The same functional test also documents the separate mutated-block pre-check:
+  Knots and the port still disconnect an ordinary inbound peer before that
+  path reaches `MaybePunishNodeForBlock(...)`.
 - The compact-block duplicate-`blocktxn` review found Knots' empty partial
   header guard (`569ceb0df4`) missing from the port, even though current Core
   master and unmodified Knots both carry it. A failed compact-block
@@ -1413,10 +1417,13 @@ under different commits. They are not all proven exploitable.
 
   Current Core still marks peers as misbehaving/discouraged for several invalid
   block/header paths in `MaybePunishNodeForBlock(...)`. Knots instead routes
-  those paths through `CNode::PunishInvalidBlocks()`: inbound, manual, feeler,
-  and `noban` peers are tolerated, while outbound full-relay, block-relay,
-  address-fetch, and this port's private-broadcast peers are simply
-  disconnected rather than discouraged. This is network partition/availability
+  non-mutated invalid-block validation results through
+  `CNode::PunishInvalidBlocks()`: inbound, manual, feeler, and `noban` peers
+  are tolerated, while outbound full-relay, block-relay, address-fetch, and
+  this port's private-broadcast peers are simply disconnected rather than
+  discouraged. The direct mutated-block pre-check is still handled as ordinary
+  misbehavior and can disconnect an inbound peer before
+  `MaybePunishNodeForBlock(...)` runs. This is network partition/availability
   hardening rather than a consensus-rule change. Current Core already carries
   the related transaction-relay cleanup (`drop MaybePunishNodeForTx`) and the
   single script-check path and onion-inbound whitelist permission suppression;
@@ -1846,6 +1853,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=net_tests`
 - `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks
   --catch_system_error=no --log_level=nothing --report_level=no`
+- `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_get_block_file_info_empty`
 - `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_readblock_hash_mismatch
   --catch_system_error=no --log_level=nothing --report_level=no`
@@ -2054,6 +2063,8 @@ Functional tests:
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_compactblocks_header_guard_final`
+- `python3 test/functional/p2p_invalid_block.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_p2p_invalid_block_inbound_punish2`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_dos_header_tree_checkpoint`
@@ -2186,6 +2197,12 @@ Functional tests:
   reached and passed the repeated-`blocktxn` section on unmodified Knots,
   logging `previous compact block reconstruction attempt failed`, then failed
   later on an unrelated invalid-`sendcmpct` disconnect expectation.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_invalid_block.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_invalid_block_inbound_punish`
+  passed on unmodified Knots after removing the automatic `noban` whitelist,
+  confirming that ordinary inbound peers are tolerated for non-mutated
+  consensus-invalid blocks and disconnected for the separate mutated-block
+  pre-check.
 - Original Knots cross-check:
   `test/functional/rpc_scanblocks.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_rpc_scanblocks_invalid_action`
   passed on unmodified Knots, including the new in-progress
