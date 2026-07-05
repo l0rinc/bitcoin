@@ -303,6 +303,8 @@ void ValidationSignals::BlockDisconnected(std::shared_ptr<const CBlock> pblock, 
 
 void ValidationSignals::ChainStateFlushed(const ChainstateRole& role, const CBlockLocator& locator)
 {
+    Assume(!locator.IsNull());
+
     auto log_msg = LOG_MSG("%s: block hash=%s", __func__,
                           locator.IsNull() ? "null" : locator.vHave.front().ToString());
     auto event = [role, locator, this] {

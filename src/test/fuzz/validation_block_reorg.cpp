@@ -6,6 +6,7 @@
 #include <chainparams.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
+#include <kernel/types.h>
 #include <pow.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
@@ -689,6 +690,23 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
                                               FlushStateMode::FORCE_FLUSH :
                                               FlushStateMode::FORCE_SYNC};
                 assert(chainman.ActiveChainstate().FlushStateToDisk(state, mode));
+                node.validation_signals->SyncWithValidationInterfaceQueue();
+            },
+            [&] {
+                kernel::ChainstateRole role;
+                CBlockLocator locator;
+                uint256 tip_hash;
+                {
+                    LOCK(chainman.GetMutex());
+                    const CBlockIndex* tip{chainman.ActiveChain().Tip()};
+                    assert(tip);
+                    role = chainman.ActiveChainstate().GetRole();
+                    tip_hash = tip->GetBlockHash();
+                    locator = GetLocator(tip);
+                }
+                assert(!locator.IsNull());
+                assert(locator.vHave.front() == tip_hash);
+                node.validation_signals->ChainStateFlushed(role, locator);
                 node.validation_signals->SyncWithValidationInterfaceQueue();
             });
 
