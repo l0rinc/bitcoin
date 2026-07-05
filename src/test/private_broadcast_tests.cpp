@@ -312,6 +312,32 @@ BOOST_AUTO_TEST_CASE(disconnected_send_statuses_are_counted_for_removal)
     BOOST_CHECK_EQUAL(removed.NumUnstarted(/*target_attempts=*/3), 2);
 }
 
+BOOST_AUTO_TEST_CASE(confirmation_after_disconnect_is_ignored)
+{
+    FakeNodeClock clock{};
+
+    PrivateBroadcast pb;
+    const auto tx{MakeDummyTx(/*id=*/1, /*num_witness=*/0)};
+    BOOST_REQUIRE(pb.Add(tx) == PrivateBroadcast::AddResult::Added);
+
+    const NodeId recipient{1};
+    in_addr ipv4Addr;
+    ipv4Addr.s_addr = 0xa0b0c001;
+    const CService addr{ipv4Addr, 1111};
+    BOOST_REQUIRE(pb.PickTxForSend(recipient, addr).has_value());
+
+    BOOST_CHECK(pb.MarkNodeDisconnected(recipient));
+    clock += 1min;
+    pb.NodeConfirmedReception(recipient);
+    BOOST_CHECK(!pb.DidNodeConfirmReception(recipient));
+
+    const auto removed{pb.Remove(tx).value()};
+    BOOST_CHECK_EQUAL(removed.num_picked, 1);
+    BOOST_CHECK_EQUAL(removed.num_confirmed, 0);
+    BOOST_CHECK_EQUAL(removed.num_unconfirmed_disconnected, 1);
+    BOOST_CHECK_EQUAL(removed.NumUnstarted(/*target_attempts=*/3), 3);
+}
+
 BOOST_AUTO_TEST_CASE(disconnect_after_remove_does_not_retry_other_pending_transactions)
 {
     FakeNodeClock clock{};
