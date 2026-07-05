@@ -849,7 +849,7 @@ private:
     /** Number of peers with wtxid relay. */
     std::atomic<int> m_wtxid_relay_peers{0};
 
-    /** Number of outbound peers without NODE_REDUCED_DATA (BIP-110). Limited to 2. */
+    /** Number of outbound peers without NODE_REDUCED_DATA (BIP-110). */
     std::atomic<unsigned int> m_num_non_bip110_outbound{0};
 
     /** Number of outbound peers with m_chain_sync.m_protect. */
@@ -3837,8 +3837,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             MakeAndPushMessage(pfrom, NetMsgType::SENDADDRV2);
         }
 
-        pfrom.m_has_all_wanted_services = HasAllDesirableServiceFlags(nServices);
-        // BIP-110: Allow up to 2 non-BIP110 outbound peers.
+        // BIP-110: Allow up to -maxstaleoutbound non-BIP110 outbound peers.
         if (pfrom.ExpectServicesFromConn() && !(nServices & NODE_REDUCED_DATA)) {
             if (m_num_non_bip110_outbound >= m_opts.maxstaleoutbound) {
                 LogDebug(BCLog::NET, "peer lacks NODE_REDUCED_DATA and already have %u non-BIP110 outbound peers (limit %u), %s\n",
@@ -3854,25 +3853,6 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                      m_num_non_bip110_outbound.load(),
                      m_opts.maxstaleoutbound,
                      pfrom.ConnectionTypeAsString());
-        }
-        peer.m_their_services = nServices;
-        pfrom.SetAddrLocal(addrMe);
-
-        // Only initialize the Peer::TxRelay m_relay_txs data structure if:
-        // - this isn't an outbound block-relay-only connection, and
-        // - this isn't an outbound feeler connection, and
-        // - fRelay=true (the peer wishes to receive transaction announcements)
-        //   or we're offering NODE_BLOOM to this peer. NODE_BLOOM means that
-        //   the peer may turn on transaction relay later.
-        if (!pfrom.IsBlockOnlyConn() &&
-            !pfrom.IsFeelerConn() &&
-            (fRelay || (peer.m_our_services & NODE_BLOOM))) {
-            auto* const tx_relay = peer.SetTxRelay();
-            {
-                LOCK(tx_relay->m_bloom_filter_mutex);
-                tx_relay->m_relay_txs = fRelay; // set to true after we get the first filter* message
-            }
-            if (fRelay) pfrom.m_relays_txs = true;
         }
 
         if (greatest_common_version >= WTXID_RELAY_VERSION && m_txreconciliation) {

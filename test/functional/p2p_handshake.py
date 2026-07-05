@@ -44,10 +44,14 @@ FULL_SERVICE_FLAGS_PRUNED = NODE_NETWORK_LIMITED | NODE_WITNESS | NODE_REDUCED_D
 
 class P2PHandshakeTest(BitcoinTestFramework):
     def set_test_params(self):
-        self.num_nodes = 1
+        self.num_nodes = 2
         self.extra_args = [
             ["-maxstaleoutbound=2",],
+            ["-maxstaleoutbound=0",],
         ]
+
+    def setup_network(self):
+        self.setup_nodes()
 
     def add_outbound_connection(self, node, connection_type, services, wait_for_disconnect):
         peer = node.add_outbound_p2p_connection(
@@ -83,7 +87,7 @@ class P2PHandshakeTest(BitcoinTestFramework):
 
     def generate_at_mocktime(self, time):
         self.nodes[0].setmocktime(time)
-        self.generate(self.nodes[0], 1)
+        self.generate(self.nodes[0], 1, sync_fun=self.no_op)
         self.nodes[0].setmocktime(0)
 
     def run_test(self):
@@ -128,6 +132,17 @@ class P2PHandshakeTest(BitcoinTestFramework):
         peer1.wait_for_disconnect()
         peer2.wait_for_disconnect()
         self.wait_until(lambda: len(node.getpeerinfo()) == 0)
+
+        self.log.info("Check that -maxstaleoutbound=0 rejects the first non-BIP110 peer")
+        limit_zero_node = self.nodes[1]
+        with limit_zero_node.assert_debug_log(["peer lacks NODE_REDUCED_DATA and already have 0 non-BIP110 outbound peers (limit 0)"]):
+            limit_zero_node.add_outbound_p2p_connection(
+                P2PInterface(), p2p_idx=0, wait_for_disconnect=True,
+                connection_type="outbound-full-relay", services=non_bip110_services,
+                supports_v2_p2p=self.options.v2transport, advertise_v2_p2p=self.options.v2transport)
+
+        self.log.info("Check that -maxstaleoutbound=0 still accepts BIP110 peers")
+        self.add_outbound_connection(limit_zero_node, "outbound-full-relay", FULL_SERVICE_FLAGS_FULL, wait_for_disconnect=False)
 
         self.log.info("Check that BIP110 peers always connect")
         self.test_desirable_service_flags(node, [NODE_NETWORK | NODE_WITNESS | NODE_REDUCED_DATA],

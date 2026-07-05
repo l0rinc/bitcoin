@@ -890,7 +890,7 @@ public:
     std::atomic_bool m_has_all_wanted_services{false};
 
     /** Whether this is a non-BIP110 outbound peer (lacks NODE_REDUCED_DATA).
-     *  Used to exclude from outbound connection counts. Limited to 2 such peers. */
+     *  Used to exclude from outbound connection counts and enforce -maxstaleoutbound. */
     std::atomic_bool m_is_non_bip110_outbound{false};
 
     /** Whether we should relay transactions to this peer. This only changes
