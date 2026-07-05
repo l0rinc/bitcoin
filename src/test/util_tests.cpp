@@ -698,6 +698,53 @@ BOOST_AUTO_TEST_CASE(util_overflow)
     TestAddMatrix<signed>();
 }
 
+/* Check for multiplication overflow */
+template <typename T>
+static void TestMulMatrixOverflow()
+{
+    constexpr T MAXI{std::numeric_limits<T>::max()};
+    BOOST_CHECK(!CheckedMul(MAXI, T{2}));
+    BOOST_CHECK(!CheckedMul(T{2}, MAXI));
+    BOOST_CHECK_EQUAL(MAXI, SaturatingMul(MAXI, T{2}));
+    BOOST_CHECK_EQUAL(MAXI, SaturatingMul(T{2}, MAXI));
+
+    BOOST_CHECK_EQUAL(T{0}, CheckedMul(T{0}, MAXI).value());
+    BOOST_CHECK_EQUAL(MAXI, CheckedMul(T{1}, MAXI).value());
+    BOOST_CHECK_EQUAL(MAXI - 1, CheckedMul(T{1}, MAXI - 1).value());
+    BOOST_CHECK_EQUAL(T{6}, CheckedMul(T{2}, T{3}).value());
+    BOOST_CHECK_EQUAL(T{6}, SaturatingMul(T{2}, T{3}));
+}
+
+/* Check for multiplication overflow or underflow */
+template <typename T>
+static void TestMulMatrix()
+{
+    TestMulMatrixOverflow<T>();
+    constexpr T MINI{std::numeric_limits<T>::min()};
+    constexpr T MAXI{std::numeric_limits<T>::max()};
+    BOOST_CHECK(!CheckedMul(MINI, T{-1}));
+    BOOST_CHECK(!CheckedMul(MINI, T{2}));
+    BOOST_CHECK(!CheckedMul(MAXI, T{2}));
+    BOOST_CHECK_EQUAL(MAXI, SaturatingMul(MINI, T{-1}));
+    BOOST_CHECK_EQUAL(MINI, SaturatingMul(MINI, T{2}));
+    BOOST_CHECK_EQUAL(MAXI, SaturatingMul(MAXI, T{2}));
+
+    BOOST_CHECK_EQUAL(MINI, CheckedMul(MINI, T{1}).value());
+    BOOST_CHECK_EQUAL(MAXI, CheckedMul(MAXI, T{1}).value());
+    BOOST_CHECK_EQUAL(T{-2}, CheckedMul(T{-1}, T{2}).value());
+    BOOST_CHECK_EQUAL(T{2}, CheckedMul(T{-1}, T{-2}).value());
+    BOOST_CHECK_EQUAL(T{-2}, SaturatingMul(T{-1}, T{2}));
+    BOOST_CHECK_EQUAL(T{2}, SaturatingMul(T{-1}, T{-2}));
+}
+
+BOOST_AUTO_TEST_CASE(util_multiplication_overflow)
+{
+    TestMulMatrixOverflow<unsigned>();
+    TestMulMatrixOverflow<uint64_t>();
+    TestMulMatrix<signed>();
+    TestMulMatrix<int64_t>();
+}
+
 template <typename T>
 static void RunToIntegralTests()
 {
