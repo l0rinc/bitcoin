@@ -170,9 +170,14 @@ Other missing/adapted Knots pieces found during this pass:
   `feature_notifications.py` as `a9ddf9043e` so startup, block, alert, and
   wallet notifications each exercise multiple configured commands.
 - Knots-added RPC coverage for `getblocklocations`, `getgeneralinfo`, and
-  BIP67 multisig sorting now passes on the port. `rpc_sort_multisig.py` had
-  dropped the original Knots `assert_raises_rpc_error` import during the rebase;
-  the port restores that test helper import as `dcf97bd63b`.
+  BIP67 multisig sorting now passes on the port. The `getblocklocations`
+  review confirmed the port carries Knots' locking, help/example,
+  result-schema, and fuzz-registration fixes (`91c9e14639`, `32c2b6e326`,
+  `e56f5e7255`, `e1a10af807`). Current Core master has no
+  `getblocklocations` RPC, so these are Knots-only operator/debugging RPC
+  fixes rather than Core-missing hardening. `rpc_sort_multisig.py` had dropped
+  the original Knots `assert_raises_rpc_error` import during the rebase; the
+  port restores that test helper import as `dcf97bd63b`.
 - The `getblock` / `getrawtransaction` fixup review confirmed Knots'
   user-facing RPC help and result-documentation cleanups (`20130089e3`,
   `8765a4ce0e`, `35cdcb3309`) are present after adapting them to the current
@@ -1984,7 +1989,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_interface_zmq_review`
 - `python3 test/functional/p2p_v2_encrypted.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_v2_encrypted`
-- `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblocklocations_review`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
 - `build/test/functional/rpc_scanblocks.py`
 - `python3 test/functional/rpc_sort_multisig.py --configfile build/test/config.ini`
