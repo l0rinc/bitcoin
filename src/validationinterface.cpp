@@ -315,6 +315,9 @@ void ValidationSignals::ChainStateFlushed(const ChainstateRole& role, const CBlo
 
 void ValidationSignals::BlockChecked(const std::shared_ptr<const CBlock>& block, const BlockValidationState& state)
 {
+    Assert(block);
+    AssertBlockTxRefs(*block);
+
     LOG_EVENT("%s: block hash=%s state=%s", __func__,
               block->GetHash().ToString(), state.ToString());
     m_internals->Iterate([&](CValidationInterface& callbacks) { callbacks.BlockChecked(block, state); });
