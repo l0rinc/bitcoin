@@ -435,6 +435,14 @@ Other missing/adapted Knots pieces found during this pass:
   (`28823f30dc`) remains a port-only network correctness fix. The port carries
   it as `bcd1387ae6`, and `net_peer_connection_tests` covers both connected
   CJDNS addnode reporting and duplicate CJDNS addnode rejection.
+- The ForceInbound eviction review confirmed Knots' trusted-inbound eviction
+  behavior (`3544a26256`, `711dadb546`, `067f80e1b5`, `3db935abd1`) is
+  present in the port and absent from current Core. It also found an original
+  Knots RPC reporting gap: `forceinbound` is accepted by the parser and listed
+  in `getpeerinfo` help, but `NetPermissions::ToStrings(...)` did not include
+  it in the peer's `permissions` array. The port now reports the permission as
+  `e53bce279f`, with unit coverage for `NetPermissionFlags::All` and
+  functional coverage in `p2p_eviction.py` and `p2p_permissions.py`.
 - The v2-transport privacy review confirmed Knots' randomized Tor
   stream-isolation credential prefix (`10397d85ca`) is already present in
   current Core under different commits, so it is not a Core-missing fix. The
@@ -626,6 +634,24 @@ Result on original Knots:
 The port preserves rejection but rejects during the policy script check, before
 the internal consensus-fallback bug log can be triggered.
 
+The ForceInbound `getpeerinfo.permissions` omission was confirmed on an
+unmodified local build of Knots `29.x-knots` by running the port's strengthened
+eviction functional test against Knots' binaries:
+
+```text
+python3 /mnt/my_storage/bitcoin/test/functional/p2p_eviction.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_eviction_forceinbound_repro
+```
+
+Result on original Knots:
+
+- ForceInbound still worked well enough for the whitebind peer to connect.
+- The test failed because the ForceInbound peer's `getpeerinfo` permissions
+  array omitted `forceinbound`.
+
+This was not introduced by the port. The port now includes `forceinbound` in
+`NetPermissions::ToStrings(...)`, so RPC output matches the accepted permission
+and help text.
+
 ## Core-Missing Hardening Candidates
 
 The following items are the strongest remaining security-shaped candidates
@@ -718,6 +744,16 @@ under different commits. They are not all proven exploitable.
   the related transaction-relay cleanup (`drop MaybePunishNodeForTx`) and the
   single script-check path; the remaining Core difference is invalid-block
   peer-punishment behavior.
+
+- ForceInbound trusted-inbound eviction:
+  `3544a26256`, `711dadb546`, `067f80e1b5`, `3db935abd1`
+
+  Current Core does not expose Knots' `forceinbound` P2P permission. Knots and
+  this port can mark selected inbound peers as trusted enough to force an
+  eviction attempt when inbound slots are full, choosing a random unprotected
+  inbound peer if the regular protection logic would otherwise leave no
+  candidate. This is local operator availability/DoS hardening, not a
+  consensus change.
 
 - CJDNS addnode duplicate detection:
   `28823f30dc`
@@ -966,6 +1002,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=script_p2sh_tests/ValidateInputsStandardness`
 - `build/bin/test_bitcoin --run_test=peerman_tests`
 - `build/bin/test_bitcoin --run_test=net_tests`
+- `build/bin/test_bitcoin --run_test=netbase_tests/netpermissions_test
+  --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=net_peer_connection_tests`
 - `build/bin/test_bitcoin --run_test=rest_tests`
 - `build/bin/test_bitcoin --run_test=validation_tests`
@@ -998,6 +1036,10 @@ Functional tests:
 - `python3 test/functional/feature_reduced_data_temporary_deployment.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_bip9_max_activation_height.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini`
+- `python3 test/functional/p2p_eviction.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_eviction_forceinbound`
+- `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_forceinbound`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_accept.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_datacarrier.py --configfile build/test/config.ini`
@@ -1086,6 +1128,10 @@ Functional tests:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_rdts.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini`
   (fails on the inherited RDTS `ignore_rejects` internal-bug log described
   above)
+- Original Knots expected-failure repro:
+  `python3 /mnt/my_storage/bitcoin/test/functional/p2p_eviction.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_eviction_forceinbound_repro`
+  (fails on unmodified Knots because the ForceInbound peer's
+  `getpeerinfo.permissions` array omits `forceinbound`)
 - Original Knots expected-failure repro with a temporary
   `/mnt/my_storage/knots-assumeutxo-repro` worktree and the port's added
   post-validation raw-transaction assertion:
