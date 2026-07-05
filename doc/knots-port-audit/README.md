@@ -248,6 +248,25 @@ Other missing/adapted Knots pieces found during this pass:
   mainnet and testnet DNS seed lists. The port now matches Knots as
   `0899f88da9`, with `chainparams_tests` coverage asserting those seed names
   are absent.
+- The `ignore_rejects` follow-up found an original Knots RDTS policy-bypass
+  edge in `PolicyScriptVerifyFlags()`: the broad
+  `non-mandatory-script-verify-flag` ignore and the grouped
+  `non-mandatory-script-verify-flag-upgradable` ignore could remove
+  `REDUCED_DATA_MANDATORY_VERIFY_FLAGS` from the policy script check. The
+  later consensus script check still rejected the transaction, so this was not
+  a mempool consensus bypass, but it did trigger the internal
+  `BUG! PLEASE REPORT THIS! CheckInputScripts failed against latest-block but
+  not STANDARD flags` log path. The port now keeps RDTS flags enforced through
+  those legacy bypass names, and `feature_rdts.py` covers both the broad
+  PUSHDATA path and grouped unknown-witness path while asserting the consensus
+  fallback log is not hit.
+- While rerunning focused units, Core's newer
+  `script_p2sh_tests/ValidateInputsStandardness` expectations were still
+  written for Core's generic `bad-txns-nonstandard-inputs` reason. The ported
+  Knots helper returns specific ignore-reject names such as
+  `bad-txns-input-scriptcheck-sigops`, and intentionally defers a non-push-only
+  P2SH scriptSig after `IsStandardTx()` is ignored so consensus script checks
+  catch it. The unit now matches the ported Knots behavior.
 - A recent patch-id sweep left only two unmatched 2026 Knots commits:
   `33f9de6b91` and `c4c558b2c4`. Both are historical reverts, not final Knots
   tree deltas. Current unmodified Knots `29.x-knots` has Windows taskbar
@@ -303,6 +322,28 @@ This was not introduced by the port. The port now registers the longer
 `/rest/mempool/transactions/` prefix before `/rest/mempool/`, and
 `interface_rest.py` covers both a successful request and the malformed
 `sequence_start` parse-error path.
+
+The RDTS `ignore_rejects` internal-bug log was confirmed on an unmodified
+local build of Knots `29.x-knots` by running the port's strengthened RDTS
+functional test against Knots' binaries:
+
+```text
+python3 /mnt/my_storage/bitcoin/test/functional/feature_rdts.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini
+```
+
+Result on original Knots:
+
+- The test failed during
+  `ignore_rejects=["non-mandatory-script-verify-flag"]`.
+- `testmempoolaccept` still rejected the RDTS-invalid transaction, so no
+  mempool consensus bypass was observed.
+- `debug.log` contained:
+  `BUG! PLEASE REPORT THIS! CheckInputScripts failed against latest-block but
+  not STANDARD flags ... mempool-script-verify-flag-failed (Push value size
+  limit exceeded)`.
+
+The port preserves rejection but rejects during the policy script check, before
+the internal consensus-fallback bug log can be triggered.
 
 ## Core-Missing Hardening Candidates
 
@@ -453,11 +494,6 @@ cpp-subprocess memory/Windows fixes.
 
 ## Open Risks
 
-- The `ignore_rejects` policy surface still deserves focused review. Knots
-  removes individual bypass names for unknown witness/taproot/op-success policy
-  flags, but the broad `non-mandatory-script-verify-flag` bypass may still be
-  able to mask policy checks outside the consensus-enforced RDTS path. The
-  current RDTS functional test verifies consensus checks are not bypassed.
 - Legacy-wallet creation is a non-consensus divergence from Knots on this
   current-Core base. Core master no longer creates new legacy wallets, and this
   port now preserves Core's explicit RPC error instead of crashing. Ported
@@ -496,6 +532,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=transaction_tests`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests`
 - `build/bin/test_bitcoin --run_test=txvalidation_tests`
+- `build/bin/test_bitcoin --run_test=script_p2sh_tests/ValidateInputsStandardness`
 - `build/bin/test_bitcoin --run_test=peerman_tests`
 - `build/bin/test_bitcoin --run_test=net_tests`
 - `build/bin/test_bitcoin --run_test=net_peer_connection_tests`
@@ -562,3 +599,7 @@ Functional tests:
   (skipped: legacy wallets can no longer be created)
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini --legacy-wallet`
   (skipped: legacy wallets can no longer be created)
+- Original Knots expected-failure repro:
+  `python3 /mnt/my_storage/bitcoin/test/functional/feature_rdts.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini`
+  (fails on the inherited RDTS `ignore_rejects` internal-bug log described
+  above)
