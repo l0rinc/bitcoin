@@ -13,6 +13,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <limits>
+
 BOOST_FIXTURE_TEST_SUITE(banman_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(file)
@@ -99,6 +101,42 @@ BOOST_AUTO_TEST_CASE(expired_at_boundary_is_not_returned)
         banmap_t entries;
         banman.GetBanned(entries);
         BOOST_CHECK(entries.empty());
+    }
+
+    fs::remove(banlist_path + ".json");
+}
+
+BOOST_AUTO_TEST_CASE(relative_ban_time_saturates)
+{
+    FakeNodeClock clock{777s};
+    const fs::path banlist_path{m_args.GetDataDirBase() / "banlist_saturating_time_test"};
+    fs::remove(banlist_path + ".json");
+
+    const CSubNet subnet{LookupSubNet("1.2.3.0/24")};
+    const CNetAddr subnet_addr{LookupHost("1.2.3.4", false).value()};
+    BOOST_REQUIRE(subnet.IsValid());
+
+    {
+        BanMan banman{banlist_path, /*client_interface=*/nullptr, /*default_ban_time=*/0};
+        banman.Ban(subnet, /*ban_time_offset=*/std::numeric_limits<int64_t>::max(), /*since_unix_epoch=*/false);
+
+        BOOST_CHECK(banman.IsBanned(subnet));
+        BOOST_CHECK(banman.IsBanned(subnet_addr));
+
+        banmap_t entries;
+        banman.GetBanned(entries);
+        BOOST_REQUIRE_EQUAL(entries.count(subnet), 1U);
+        BOOST_CHECK_EQUAL(entries.at(subnet).nBanUntil, std::numeric_limits<int64_t>::max());
+    }
+
+    {
+        BanMan banman{banlist_path, /*client_interface=*/nullptr, /*default_ban_time=*/0};
+
+        banmap_t entries;
+        banman.GetBanned(entries);
+        BOOST_REQUIRE_EQUAL(entries.count(subnet), 1U);
+        BOOST_CHECK_EQUAL(entries.at(subnet).nBanUntil, std::numeric_limits<int64_t>::max());
+        BOOST_CHECK(banman.IsBanned(subnet_addr));
     }
 
     fs::remove(banlist_path + ".json");
