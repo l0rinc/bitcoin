@@ -1476,7 +1476,9 @@ under different commits. They are not all proven exploitable.
   the outgoing whitelist ranges to automatic outbound connection types as well,
   so operator-granted permissions such as `noban`/`download` are not silently
   limited to `addnode`/manual peers. This is local network permission semantics,
-  not a consensus change.
+  not a consensus change. The isolated
+  `p2p_permissions.py --test_methods check_automatic_outbound_permissions`
+  run passes against both the port and unmodified Knots.
 
 - CJDNS addnode duplicate detection:
   `28823f30dc`
@@ -2041,6 +2043,15 @@ Functional tests:
   --portseed=26437`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_outbound_auto`
+- `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
+  --test_methods check_automatic_outbound_permissions
+  --tmpdir=/mnt/my_storage/tmp_p2p_permissions_outbound_auto_review_port
+  --portseed=26438`
+- `python3 test/functional/p2p_permissions.py --configfile
+  ../knots/build-repro/test/config.ini
+  --test_methods check_automatic_outbound_permissions
+  --tmpdir=/mnt/my_storage/tmp_p2p_permissions_outbound_auto_review_knots
+  --portseed=26439`
 - `python3 test/functional/p2p_blockfilters.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_blockfilters_permission_2`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
