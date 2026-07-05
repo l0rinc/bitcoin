@@ -1005,7 +1005,11 @@ under different commits. They are not all proven exploitable.
   preallocation behavior. Knots disables the buggy macOS path, calls
   `posix_fallocate` only on the intended range, avoids Windows truncation, and
   makes the fallback preserve existing bytes. These are already present in this
-  port as `bb2d44ee65` through `33a24d08ea`.
+  port as `bb2d44ee65` through `33a24d08ea`. Source comparison against
+  unmodified Knots confirmed this was not introduced by the port; the port now
+  also has `fs_tests/allocate_file_range_preserves_existing_bytes`
+  (`4ecd895b33`) to assert the public helper does not truncate or clobber
+  existing bytes and still extends the requested range with zeroes.
 
 - External signer fingerprint hardening:
   `6d2c2259ee`, `12eefda89a`, `ee39394ad3`
@@ -1484,6 +1488,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
 - `build/bin/test_bitcoin --run_test=db_tests,walletdb_tests,wallet_tests`
 - `build/bin/test_bitcoin --run_test=fs_tests,walletdb_tests,wallet_tests`
+- `build/bin/test_bitcoin --run_test=fs_tests/allocate_file_range_preserves_existing_bytes`
 - `build/bin/test_bitcoin --run_test=db_tests --catch_system_error=no
   --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty`
