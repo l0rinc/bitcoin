@@ -583,6 +583,15 @@ Other missing/adapted Knots pieces found during this pass:
   a consensus issue. `wallet_multiwallet.py` now asserts the symlink-scan
   warning, and the same run exposed and fixed a stale missing `Decimal` import
   in that Knots test.
+- A follow-up wallet directory review confirmed Knots' node-data skip list
+  (`283cd1f065`) is present in the port and absent from current Core master.
+  Current Core has the later iterator error-handling shape, but its
+  `ListDatabases(...)` still recurses through `blocks`, `chainstate`,
+  `indexes`, and network subdirectories when `-walletdir` points at the chain
+  datadir. The port matches actual Knots by disabling recursion into those
+  top-level node data directories. `wallet_multiwallet.py` now writes a fake
+  SQLite wallet marker under an ordinary directory and another under
+  `blocks/`; `listwalletdir` lists only the ordinary marker.
 - The same wallet cleanup review found Knots' failed restore/migration cleanup
   guard (`0388bfc6e`) was still missing from the port. Actual Knots already
   checks that newly created wallet directories are still empty before removing
@@ -1218,6 +1227,16 @@ under different commits. They are not all proven exploitable.
   symlink/reparse point from being accepted as a legacy top-level wallet file.
   This is local path-safety hardening around wallet discovery/loading.
 
+- Wallet node-data directory scan skip:
+  `283cd1f065`
+
+  Current Core master still recurses through node data directories when
+  `-walletdir` is pointed at the chain datadir. Knots skips top-level node
+  storage paths such as `blocks`, `chainstate`, `coins`, `database`, `indexes`,
+  and network subdirectories during wallet discovery. This reduces accidental
+  wallet detection and expensive traversal of non-wallet storage, and is local
+  wallet-discovery hardening rather than a consensus change.
+
 - Wallet failed-cleanup directory hardening:
   `0388bfc6e`
 
@@ -1492,6 +1511,10 @@ Source/manifest checks:
 - `ls -la ../knots/build-repro/bin` showed only `bitcoind` and `bitcoin-cli`,
   so `../knots/build-repro/bin/test_bitcoin --run_test=sanity_tests` was not
   available.
+- `git show origin/master:src/wallet/db.cpp | sed -n '20,70p'` and
+  `git -C ../knots show 29.x-knots:src/wallet/db.cpp | sed -n '20,75p'`
+  show that current Core lacks Knots' `ignore_paths` skip list in
+  `ListDatabases(...)`.
 - `git log origin/master --follow --oneline -- <remaining source-looking
   missing path>` for old `core_write`, fee, libevent, orphanage, transaction
   identifier, epochguard, and test-helper paths
@@ -1878,6 +1901,17 @@ Functional tests:
 - `python3 test/functional/wallet_basic.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_basic_use_txids_fixed`
 - `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_multiwallet_skip_node_dirs_control`
+- Manual Knots walletdir check: start
+  `../knots/build-repro/bin/bitcoind -regtest -daemon
+  -datadir=/mnt/my_storage/tmp_knots_walletdir_skip_manual_control
+  -walletdir=/mnt/my_storage/tmp_knots_walletdir_skip_manual_control/regtest
+  -nowallet`, place SQLite-looking `wallet.dat` markers under
+  `ordinary_sqlite_marker` and `blocks/skipped_wallet`, then
+  `../knots/build-repro/bin/bitcoin-cli -regtest
+  -datadir=/mnt/my_storage/tmp_knots_walletdir_skip_manual_control
+  listwalletdir`; actual Knots returned only `ordinary_sqlite_marker`.
 - `python3 test/functional/wallet_backup.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_send.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_send_fee_mode`
