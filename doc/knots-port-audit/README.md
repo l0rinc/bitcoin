@@ -416,6 +416,13 @@ Other missing/adapted Knots pieces found during this pass:
   consensus changes. `wallet_send.py` covers mixed-case `economical`, mixed-case
   `unset`, and missing-`conf_target` errors for both positional and options
   object forms.
+- The wallet change-output review confirmed Knots' preference guard
+  (`70dcdd7aa7`) is present in the port: a wallet does not choose bech32m
+  change merely because it is paying a Taproot/bech32m recipient unless the
+  wallet's preferred address type is also bech32m. This is wallet privacy and
+  compatibility behavior, not consensus. `wallet_address_types.py` now covers
+  p2sh-segwit-default and bech32-default wallets sending to a bech32m recipient
+  without upgrading change past the user's preferred type.
 - Raw transaction, package, and PSBT RPC coverage now passes against the port.
   This covers Knots-touched max burn handling, package max fee/burn arguments,
   and PSBT base64 parameter handling with `=` padding characters.
@@ -1194,6 +1201,8 @@ Functional tests:
 - `python3 test/functional/wallet_startup.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_assumeutxo.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_assumeutxo_after_fix`
+- `python3 test/functional/wallet_address_types.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_address_types_change_pref`
 - `python3 test/functional/wallet_balance.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_balance_getbalance_4`
 - `python3 test/functional/wallet_avoidreuse.py --configfile build/test/config.ini
