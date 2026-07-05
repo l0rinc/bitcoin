@@ -734,6 +734,9 @@ Other missing/adapted Knots pieces found during this pass:
 - The fee-estimator follow-up confirmed Knots' `TxConfirmStats::Read` overflow
   guard (`163d3e5c13`, ported as `aeaf84b7d5`) is present while current Core
   still multiplies `scale * maxPeriods` before checking the one-week bound.
+  The port now adds `policyestimator_tests` coverage that serializes a
+  corrupt `fee_estimates.dat`-style record with an impossible scale and
+  verifies that `CBlockPolicyEstimator::Read(...)` rejects it cleanly.
   The same pass classified the fee-histogram unsigned-decrement fix
   (`85c8d477b0`, ported as `759e1d76b3`) as Knots-surface hardening because
   current Core has no `getmempoolinfo(with_fee_histogram=...)` or REST
@@ -1400,6 +1403,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=validation_block_tests`
 - `build/bin/test_bitcoin --run_test=merkle_tests`
 - `build/bin/test_bitcoin --run_test=miner_tests`
+- `build/bin/test_bitcoin
+  --run_test=policyestimator_tests/read_rejects_fee_estimates_with_oversized_scale`
 - `build/bin/test_bitcoin --run_test=policyestimator_tests`
 - `build/bin/test_bitcoin --run_test=codex32_tests`
 - `build/bin/test_bitcoin --run_test=caches_tests`
