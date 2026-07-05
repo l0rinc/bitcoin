@@ -4,6 +4,7 @@
 
 #include <crypto/common.h>
 #include <crypto/poly1305.h>
+#include <util/check.h>
 
 namespace poly1305_donna {
 
@@ -33,9 +34,11 @@ void poly1305_init(poly1305_context *st, const unsigned char key[32]) noexcept {
 
     st->leftover = 0;
     st->final = 0;
+    Assume(st->leftover < POLY1305_BLOCK_SIZE);
 }
 
 static void poly1305_blocks(poly1305_context *st, const unsigned char *m, size_t bytes) noexcept {
+    Assume((bytes % POLY1305_BLOCK_SIZE) == 0);
     const uint32_t hibit = (st->final) ? 0 : (1UL << 24); /* 1 << 128 */
     uint32_t r0,r1,r2,r3,r4;
     uint32_t s1,s2,s3,s4;
@@ -96,6 +99,7 @@ static void poly1305_blocks(poly1305_context *st, const unsigned char *m, size_t
 }
 
 void poly1305_finish(poly1305_context *st, unsigned char mac[16]) noexcept {
+    Assume(st->leftover < POLY1305_BLOCK_SIZE);
     uint32_t h0,h1,h2,h3,h4,c;
     uint32_t g0,g1,g2,g3,g4;
     uint64_t f;
@@ -182,6 +186,7 @@ void poly1305_finish(poly1305_context *st, unsigned char mac[16]) noexcept {
 }
 
 void poly1305_update(poly1305_context *st, const unsigned char *m, size_t bytes) noexcept {
+    Assume(st->leftover < POLY1305_BLOCK_SIZE);
     size_t i;
 
     /* handle leftover */
@@ -196,9 +201,13 @@ void poly1305_update(poly1305_context *st, const unsigned char *m, size_t bytes)
         bytes -= want;
         m += want;
         st->leftover += want;
-        if (st->leftover < POLY1305_BLOCK_SIZE) return;
+        if (st->leftover < POLY1305_BLOCK_SIZE) {
+            Assume(st->leftover < POLY1305_BLOCK_SIZE);
+            return;
+        }
         poly1305_blocks(st, st->buffer, POLY1305_BLOCK_SIZE);
         st->leftover = 0;
+        Assume(st->leftover < POLY1305_BLOCK_SIZE);
     }
 
     /* process full blocks */
@@ -216,6 +225,7 @@ void poly1305_update(poly1305_context *st, const unsigned char *m, size_t bytes)
         }
         st->leftover += bytes;
     }
+    Assume(st->leftover < POLY1305_BLOCK_SIZE);
 }
 
 }  // namespace poly1305_donna
