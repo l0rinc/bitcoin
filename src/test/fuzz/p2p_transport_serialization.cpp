@@ -234,6 +234,7 @@ void SimulationTest(Transport& initiator, Transport& responder, R& rng, FuzzedDa
         // Try to send (a copy of) the message in next_msg[side].
         CSerializedNetMsg msg = next_msg[side].Copy();
         const CSerializedNetMsg before{msg.Copy()};
+        assert(msg.m_type.size() <= CMessageHeader::MESSAGE_TYPE_SIZE);
         bool queued = transports[side]->SetMessageToSend(msg);
         if (!queued) {
             assert(NetMsgEqual(msg, before));
