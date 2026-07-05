@@ -171,6 +171,13 @@ Other missing/adapted Knots pieces found during this pass:
   resource-selection behavior as `96d1c6c8a9`, with unit coverage for the
   formula/warning thresholds and a shared `libbitcoinkernel` build proving the
   new kernel C API dependency is linked.
+- The LevelDB exact-patch review found Knots' embedded-LevelDB sanity-check
+  guard (`a4fc0050f1`) was missing. On this current Core base the embedded
+  LevelDB fork still exposes the runtime version getters, so this was not a
+  reproducible build failure or original Knots defect. The port now still
+  matches Knots' intended build distinction as `7d4c61ea3a`: system-LevelDB
+  builds keep the header/runtime version check, while embedded-LevelDB builds
+  define `EMBEDDED_LEVELDB` and skip the redundant runtime comparison.
 - Compact-block extra-transaction coverage now uses the current P2P test
   framework send helper and hash/wtxid properties (`77d2b2c025`).
   `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
@@ -606,6 +613,13 @@ Builds:
   -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_ZMQ=OFF
   -DENABLE_WALLET=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
 - `cmake --build /tmp/bitcoin-kernel-dbcache --target bitcoinkernel -j4`
+- `cmake -S . -B /tmp/bitcoin-kernel-leveldb -DBUILD_KERNEL_LIB=ON
+  -DBUILD_SHARED_LIBS=ON -DBUILD_DAEMON=OFF -DBUILD_CLI=OFF
+  -DBUILD_BITCOINCONSENSUS_LIB=OFF -DBUILD_TX=OFF -DBUILD_UTIL=OFF
+  -DBUILD_UTIL_CHAINSTATE=OFF -DBUILD_WALLET_TOOL=OFF -DBUILD_GUI=OFF
+  -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_ZMQ=OFF
+  -DENABLE_WALLET=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
+- `cmake --build /tmp/bitcoin-kernel-leveldb --target bitcoinkernel -j4`
 - `TMPDIR=/mnt/my_storage/tmp cmake -S . -B /tmp/bitcoin-asan-consensus-after
   -DBUILD_BITCOINCONSENSUS_LIB=ON -DBUILD_SHARED_LIBS=ON
   -DSANITIZERS=address -DBUILD_DAEMON=OFF -DBUILD_CLI=OFF -DBUILD_TX=OFF
@@ -641,6 +655,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=policyestimator_tests`
 - `build/bin/test_bitcoin --run_test=codex32_tests`
 - `build/bin/test_bitcoin --run_test=caches_tests`
+- `build/bin/test_bitcoin --run_test=sanity_tests`
 - `build/bin/test_bitcoin --run_test=blockfilter_index_tests`
 - `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
