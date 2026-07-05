@@ -285,6 +285,16 @@ Other missing/adapted Knots pieces found during this pass:
   behavior, while current Core has replaced that policy surface with cluster
   limits covered by `mempool_package_limits.py`, `mempool_packages.py`, and
   `mempool_cluster.py`.
+- The same file-presence sweep found a port-side Berkeley DB build-system
+  omission: the port retained `WITH_BDB` and wallet BDB source, but lacked
+  Knots' CMake discovery module, depends package, depends BDB patch, and wallet
+  package selection wiring. This was not an original Knots defect or consensus
+  issue. The port now restores `FindBerkeleyDB.cmake`, `depends/packages/bdb.mk`,
+  the BDB clang patch, and BDB/SQLite wallet dependency selection as
+  `ef814e1135`. A BDB-enabled CMake probe and `bitcoin_wallet` target build
+  pass locally using system Berkeley DB 5.3 with
+  `WARN_INCOMPATIBLE_BDB=OFF`, proving the restored wiring rather than portable
+  Berkeley DB 4.8 compatibility.
 - CLI/help verification exposed a port-side bitcoin-cli conversion-table drift:
   current server metadata no longer advertises legacy-only `sethdseed` and
   `addmultisigaddress` conversions, while descriptor-compatible legacy import
@@ -737,6 +747,13 @@ Builds:
   -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_CCACHE=OFF
   -DRDTS_CONSENT=IMPLICIT` failed with `Could NOT find Qt (missing: Qt5_DIR
   Qt5_FOUND)`
+- `make -C depends print-bdb_packages print-bdb_packages_ print-wallet_packages_
+  NO_QT=1 NO_ZMQ=1 NO_UPNP=1 NO_USDT=1`
+- `cmake -S . -B /tmp/bitcoin-bdb-probe -DWITH_BDB=ON
+  -DWARN_INCOMPATIBLE_BDB=OFF -DBUILD_GUI=OFF -DBUILD_TESTS=OFF
+  -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_CCACHE=OFF
+  -DRDTS_CONSENT=IMPLICIT`
+- `cmake --build /tmp/bitcoin-bdb-probe --target bitcoin_wallet -j2`
 - Original Knots repro build:
   `cmake -S ../knots -B ../knots/build-repro -DRDTS_CONSENT=RUNTIME_WARN`
   and `cmake --build ../knots/build-repro --target bitcoind bitcoin-cli -j4`
