@@ -154,6 +154,9 @@ Other missing/adapted Knots pieces found during this pass:
   matches the live `dump_all_command_conversions` metadata as `b2cd725240`.
   `interface_bitcoin_cli.py` also now treats the old `-paytxfee` display line
   as optional when scale-checking `-getinfo` output (`b1c4cd76e5`).
+- Raw transaction, package, and PSBT RPC coverage now passes against the port.
+  This covers Knots-touched max burn handling, package max fee/burn arguments,
+  and PSBT base64 parameter handling with `=` padding characters.
 
 ## Original Knots Defects Confirmed
 
@@ -334,6 +337,9 @@ Functional tests:
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_sort_multisig.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_rawtransaction.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_packages.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile build/test/config.ini`
