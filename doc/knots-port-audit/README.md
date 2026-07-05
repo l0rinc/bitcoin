@@ -1366,7 +1366,11 @@ under different commits. They are not all proven exploitable.
   Knots adds an `IsSymlink(...)` helper that detects Windows reparse points,
   avoids recursing such entries while scanning `listwalletdir`, and prevents a
   symlink/reparse point from being accepted as a legacy top-level wallet file.
-  This is local path-safety hardening around wallet discovery/loading.
+  This is local path-safety hardening around wallet discovery/loading. Source
+  comparison confirmed the port matches Knots' scanner shape while current Core
+  lacks the helper call and recursion guard. The full `wallet_multiwallet.py`
+  run passes and covers the symlink-recursion warning plus symlinked wallet
+  load rejection on platforms where symlink checks are enabled.
 
 - Wallet node-data directory scan skip:
   `283cd1f065`
@@ -1376,7 +1380,11 @@ under different commits. They are not all proven exploitable.
   storage paths such as `blocks`, `chainstate`, `coins`, `database`, `indexes`,
   and network subdirectories during wallet discovery. This reduces accidental
   wallet detection and expensive traversal of non-wallet storage, and is local
-  wallet-discovery hardening rather than a consensus change.
+  wallet-discovery hardening rather than a consensus change. The current port
+  and actual Knots both carry the skip list in `ListDatabases(...)`, while
+  current Core's corresponding scanner still has no node-data skip list. The
+  fresh `wallet_multiwallet.py` run covers this by placing a fake wallet marker
+  under `blocks/` and proving `listwalletdir` ignores it.
 
 - Wallet failed-cleanup directory hardening:
   `0388bfc6e`
@@ -1386,7 +1394,9 @@ under different commits. They are not all proven exploitable.
   and leaves the directory alone if it is unexpectedly non-empty, avoiding an
   unintended removal attempt against a path that no longer has the shape the
   cleanup code expected. This is local wallet data-safety hardening, not a
-  consensus issue.
+  consensus issue. The port factors this into
+  `RemoveCreatedWalletDirIfEmpty(...)`; `wallet_tests` now asserts the empty
+  directory removal path and the non-empty sentinel-preservation path.
 
 - Subprocess fd cleanup before exec:
   `214047ecd3`, `ed5a3b3604`
@@ -1889,6 +1899,13 @@ Builds:
   sed -n '421,475p'`
 - `git -C ../knots grep -n
   "maxConfirms|maxPeriods = confAvg.size|scale >" 29.x-knots -- src`
+- `sed -n '20,95p' src/wallet/db.cpp && sed -n '430,452p'
+  src/util/fs_helpers.cpp && sed -n '95,116p' src/wallet/test/wallet_tests.cpp`
+- `git show origin/master:src/wallet/db.cpp | sed -n '20,95p' &&
+  git show origin/master:src/wallet/wallet.cpp | sed -n '520,534p'`
+- `git -C ../knots show 29.x-knots:src/wallet/db.cpp | sed -n '20,95p'
+  && git -C ../knots show 29.x-knots:src/wallet/wallet.cpp |
+  sed -n '548,560p'`
 - `BUILDDIR=$PWD/build contrib/devtools/gen-manpages.py
   --skip-missing-binaries` failed after skipping the disabled `bitcoin`,
   `bitcoin-tx`, `bitcoin-util`, and `bitcoin-qt` binaries because `help2man` is
@@ -1958,6 +1975,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=db_tests/berkeley_ro_checks_final_page_lsn
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty`
+- `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=getarg_tests/setting_args
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=util_tests`
@@ -2189,6 +2208,8 @@ Functional tests:
 - `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_multiwallet_skip_node_dirs_control`
+- `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_wallet_multiwallet_path_hardening --portseed=26421`
 - Manual Knots walletdir check: start
   `../knots/build-repro/bin/bitcoind -regtest -daemon
   -datadir=/mnt/my_storage/tmp_knots_walletdir_skip_manual_control
