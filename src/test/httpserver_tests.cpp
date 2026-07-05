@@ -494,6 +494,32 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
 
 BOOST_AUTO_TEST_CASE(http_send_buffer_tests)
 {
+    {
+        auto sock{std::make_unique<ScriptedHttpSendSock>(/*result=*/0, /*err=*/0)};
+        const auto* scripted_sock{sock.get()};
+        auto client{std::make_shared<HTTPRemoteClient>(
+            /*id=*/0,
+            CService{},
+            std::move(sock))};
+        const auto idle_before{SteadySeconds::min()};
+        client->m_idle_since = idle_before;
+        {
+            LOCK(client->m_send_mutex);
+            client->m_send_ready = true;
+        }
+        client->m_connection_busy = false;
+        client->m_disconnect = false;
+
+        BOOST_CHECK(client->MaybeSendBytesFromBuffer());
+
+        BOOST_CHECK(!scripted_sock->m_send_called);
+        BOOST_CHECK(WITH_LOCK(client->m_send_mutex, return client->m_send_buffer.empty()));
+        BOOST_CHECK(WITH_LOCK(client->m_send_mutex, return !client->m_send_ready));
+        BOOST_CHECK(!client->m_connection_busy.load());
+        BOOST_CHECK(!client->m_disconnect.load());
+        BOOST_CHECK_EQUAL(client->m_idle_since.load(), idle_before);
+    }
+
     auto RunSendCase = [](std::string_view initial,
                           ssize_t send_result,
                           int send_errno,
