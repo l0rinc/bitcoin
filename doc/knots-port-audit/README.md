@@ -660,7 +660,10 @@ Other missing/adapted Knots pieces found during this pass:
   `AddNode()` duplicate detection for CJDNS addresses with alternate ports
   (`28823f30dc`) remains a port-only network correctness fix. The port carries
   it as `bcd1387ae6`, and `net_peer_connection_tests` covers both connected
-  CJDNS addnode reporting and duplicate CJDNS addnode rejection.
+  CJDNS addnode reporting and duplicate CJDNS addnode rejection. The port now
+  also covers the RPC-facing `addnode add` path in `rpc_net.py` by restarting
+  with `-cjdnsreachable`, adding `[fc00:...]:8333`, and rejecting the same
+  CJDNS address on a different port.
 - The P2P RPC connection-management follow-up confirmed Knots intentionally
   exposes the hidden `addconnection` RPC outside regtest
   (`2fcf74eb45`, ported as `4feeb3a87b`), while current Core still rejects it
@@ -1120,7 +1123,9 @@ under different commits. They are not all proven exploitable.
   compares new addnode entries against existing entries using plain IPv6
   resolution in `AddNode()`. Knots flips RFC4193-looking CJDNS addresses before
   comparison and rejects CJDNS duplicates even when the port differs, avoiding
-  repeated manual-connection entries to the same CJDNS node.
+  repeated manual-connection entries to the same CJDNS node. The focused
+  `rpc_net.py` CJDNS duplicate test passes on the port and as an isolated
+  cross-check against unmodified Knots.
 
 - V2-only clearnet outbound option:
   `cbfbefd8f3`, `7c06acab77`, `f4fc3f03f4`, `5891703ba0`
@@ -1508,7 +1513,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_blockfilters_permission_2`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_blockfilters`
-- `python3 test/functional/rpc_net.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_net.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_cjdns_addnode_3`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_addconnection`
 - `python3 test/functional/p2p_add_connections.py --configfile build/test/config.ini
@@ -1693,6 +1699,12 @@ Functional tests:
   `--configfile /mnt/my_storage/knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_knots_mempool_sigoplimit_maxfeerate_only2`
   passed on unmodified Knots
+- Original Knots cross-check:
+  a one-off subclass of `rpc_net.py` running only
+  `test_addnode_cjdns_duplicate` with
+  `--configfile /mnt/my_storage/knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_knots_rpc_net_cjdns_addnode_only` passed on
+  unmodified Knots
 - Original Knots cross-check:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_versionbits_warning.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_versionbits_warning_check`
   (passes on unmodified Knots, confirming the earlier warning-range failure was
