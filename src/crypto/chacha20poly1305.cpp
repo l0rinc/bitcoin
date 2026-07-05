@@ -9,6 +9,7 @@
 #include <crypto/poly1305.h>
 #include <span.h>
 #include <support/cleanse.h>
+#include <util/check.h>
 
 #include <cassert>
 #include <cstddef>
@@ -105,6 +106,8 @@ void AEADChaCha20Poly1305::Keystream(Nonce96 nonce, std::span<std::byte> keystre
 
 void FSChaCha20Poly1305::NextPacket() noexcept
 {
+    Assume(m_rekey_interval > 0);
+    Assume(m_packet_counter < m_rekey_interval);
     if (++m_packet_counter == m_rekey_interval) {
         // Generate a full block of keystream, to avoid needing the ChaCha20 buffer, even though
         // we only need KEYLEN (32) bytes.
@@ -119,6 +122,7 @@ void FSChaCha20Poly1305::NextPacket() noexcept
         m_packet_counter = 0;
         ++m_rekey_counter;
     }
+    Assume(m_packet_counter < m_rekey_interval);
 }
 
 void FSChaCha20Poly1305::Encrypt(std::span<const std::byte> plain1, std::span<const std::byte> plain2, std::span<const std::byte> aad, std::span<std::byte> cipher) noexcept
