@@ -168,7 +168,10 @@ Other missing/adapted Knots pieces found during this pass:
   This is operator-facing behavior rather than a security or consensus change.
   The port now extends `feature_startupnotify.py` and
   `feature_notifications.py` as `a9ddf9043e` so startup, block, alert, and
-  wallet notifications each exercise multiple configured commands.
+  wallet notifications each exercise multiple configured commands. A follow-up
+  check also confirmed the port and actual Knots carry `99bd4320f8`'s
+  `-alertnotify` double-quote substitution for Windows `cmd.exe`, while current
+  Core still substitutes the sanitized alert text inside single quotes.
 - Knots-added RPC coverage for `getblocklocations`, `getgeneralinfo`, and
   BIP67 multisig sorting now passes on the port. The `getblocklocations`
   review confirmed the port carries Knots' locking, help/example,
@@ -1748,9 +1751,10 @@ reindex-chainstate periodic dbcache flushes (`ac7c0590ef`, rebased from Core
 requested-block `ReadBlock(..., expected_hash)` checks in net processing,
 equal-work active-chain tie-break persistence across restart and complex
 reorgs (`5689ba8fde`, `b1378e3f48`, `dbca0cc4d3`, and `24ffe06d2f`),
-BaseIndex rewind no-commit state persistence (`16b1710d97`), `SetStdinEcho`
-UB, fd-limit overflow/RLIMIT_INFINITY handling, RPC credentials hashed in
-memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, randomized Tor
+BaseIndex rewind no-commit state persistence (`16b1710d97`) and stale
+`current_tip == m_best_block_index` assert removal (`c4de297c26`),
+`SetStdinEcho` UB, fd-limit overflow/RLIMIT_INFINITY handling, RPC credentials
+hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, randomized Tor
 stream-isolation credential prefixes, feebumper combined-fee crash, wallet
 coin-selection boolean amount fix, precomputed transaction-data lifetime
 hardening (CVE-2024-52911), Tor-control excessive-line OOM hardening, I2P SAM
@@ -1849,7 +1853,18 @@ Source/manifest checks:
   src/index/base.cpp` and equivalent `origin/master` and `../knots` checks
   show Core, Knots, and the port already avoid committing index state inside
   `BaseIndex::Rewind`, preventing the index state from being persisted ahead
-  of the flushed chainstate after reorgs.
+  of the flushed chainstate after reorgs. `git show --stat --patch --minimal
+  c4de297c26`, `git show origin/master:src/index/base.cpp | rg -n
+  "assert\\(current_tip == m_best_block_index\\)|BaseIndex::Rewind" -C 3`, and
+  the matching port/Knots checks show the older stale
+  `current_tip == m_best_block_index` assert is also absent in all three trees.
+- `git show --stat --patch --minimal 99bd4320f8`,
+  `git show origin/master:src/node/kernel_notifications.cpp | sed -n
+  '28,48p'`, `git -C ../knots show 29.x-knots:src/node/kernel_notifications.cpp
+  | sed -n '28,48p'`, and `sed -n '28,48p'
+  src/node/kernel_notifications.cpp` show current Core still wraps
+  `-alertnotify`'s `%s` substitution in single quotes, while actual Knots and
+  the port use double quotes for Windows `cmd.exe` compatibility.
 - `git show origin/master:src/net_processing.cpp | rg -n
   "previous compact block reconstruction attempt failed|header.IsNull"` and
   `git -C ../knots show 29.x-knots:src/net_processing.cpp | rg -n
