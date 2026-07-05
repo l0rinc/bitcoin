@@ -993,6 +993,7 @@ High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
 key handling, `LocalServiceInfo::nScore` saturation, miner `addPackageTxs`
 overflow, compact-block witness mutation checks, `LoadChainTip` UB,
+requested-block `ReadBlock(..., expected_hash)` checks in net processing,
 `SetStdinEcho` UB, fd-limit overflow/RLIMIT_INFINITY handling, RPC credentials
 hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, randomized Tor
 stream-isolation credential prefixes, feebumper combined-fee crash, wallet
@@ -1163,6 +1164,8 @@ Unit tests:
   --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=net_tests`
 - `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks
+  --catch_system_error=no --log_level=nothing --report_level=no`
+- `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_readblock_hash_mismatch
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=netbase_tests/netpermissions_test
   --catch_system_error=no --log_level=nothing --report_level=no`
