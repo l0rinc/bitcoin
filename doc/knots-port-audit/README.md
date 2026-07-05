@@ -1435,7 +1435,8 @@ under different commits. They are not all proven exploitable.
   vulnerability. Direct reproduction on unmodified Knots with one occupied
   `-rpcbind` endpoint and one free endpoint returned exit code 1, the generic
   HTTP startup error on stderr, and the specific bind-all-endpoints error in
-  `debug.log`; the port covers this in `rpc_bind.py`.
+  `debug.log`; rerunning the port's current `rpc_bind.py` against both the
+  port and `../knots` passes, including the explicit partial-bind failure case.
 
 - Invalid-block peer punishment relaxation:
   `7c7b5839f4`
@@ -2127,6 +2128,13 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_rpc_getrpcwhitelist_auth_review_port
   --portseed=26412`
 - `python3 test/functional/rpc_bind.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_bind.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_bind_explicit_failure_port
+  --portseed=26434`
+- `python3 test/functional/rpc_bind.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_bind_explicit_failure_knots
+  --portseed=26435`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_current_tip`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
