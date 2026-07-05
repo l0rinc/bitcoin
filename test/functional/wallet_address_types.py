@@ -44,9 +44,11 @@ verifies that spending coins sent to all these address types works.
 
 Test that the nodes generate the correct change address type:
     - node0 always uses a legacy change address.
-    - node1 uses a bech32 addresses for change if any destination address is bech32.
+    - node1 uses a bech32 address for change if any destination address is bech32,
+      but not a bech32m address unless its preferred address type is bech32m.
     - node2 always uses a bech32 address for change
-    - node3 always uses a bech32 address for change
+    - node3 always uses a bech32 address for change, even when sending to a
+      bech32m address.
     - node4 always uses p2sh/segwit output for change.
 """
 
@@ -318,6 +320,7 @@ class AddressTypeTest(BitcoinTestFramework):
         to_address_p2sh = self.nodes[2].getnewaddress()
         to_address_bech32_1 = self.nodes[3].getnewaddress()
         to_address_bech32_2 = self.nodes[3].getnewaddress()
+        to_address_bech32m = self.nodes[4].getnewaddress("", "bech32m")
 
         # Fund node 4:
         self.nodes[5].sendtoaddress(self.nodes[4].getnewaddress(), Decimal("1"))
@@ -332,6 +335,7 @@ class AddressTypeTest(BitcoinTestFramework):
         self.test_change_output_type(1, [to_address_bech32_1], 'bech32')
         self.test_change_output_type(1, [to_address_p2sh, to_address_bech32_1], 'bech32')
         self.test_change_output_type(1, [to_address_bech32_1, to_address_bech32_2], 'bech32')
+        self.test_change_output_type(1, [to_address_bech32m], 'p2sh-segwit')
 
         self.log.info("Nodes with change_type=bech32 always use a P2WPKH change output:")
         self.test_change_output_type(2, [to_address_bech32_1], 'bech32')
@@ -340,6 +344,7 @@ class AddressTypeTest(BitcoinTestFramework):
         self.log.info("Nodes with addresstype=bech32 match the change output (unless changetype is set otherwise):")
         self.test_change_output_type(3, [to_address_bech32_1], 'bech32')
         self.test_change_output_type(3, [to_address_p2sh], 'p2sh-segwit')
+        self.test_change_output_type(3, [to_address_bech32m], 'bech32')
 
         self.log.info('getrawchangeaddress defaults to addresstype if -changetype is not set and argument is absent')
         self.test_address(3, self.nodes[3].getrawchangeaddress(), multisig=False, typ='bech32')
