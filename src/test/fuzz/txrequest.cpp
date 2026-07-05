@@ -369,6 +369,25 @@ public:
         // Invoke internal consistency check of TxRequestTracker object.
         m_tracker.SanityCheck();
     }
+
+    void DisconnectAll()
+    {
+        for (int peer = 0; peer < MAX_PEERS; ++peer) {
+            DisconnectedPeer(peer);
+        }
+        Check();
+        assert(m_tracker.Size() == 0);
+        for (int peer = 0; peer < MAX_PEERS; ++peer) {
+            assert(m_tracker.Count(peer) == 0);
+            assert(m_tracker.CountCandidates(peer) == 0);
+            assert(m_tracker.CountInFlight(peer) == 0);
+        }
+        for (int txhash = 0; txhash < MAX_TXHASHES; ++txhash) {
+            std::vector<NodeId> candidate_peers;
+            m_tracker.GetCandidatePeers(TXHASHES[txhash], candidate_peers);
+            assert(candidate_peers.empty());
+        }
+    }
 };
 } // namespace
 
@@ -451,5 +470,5 @@ FUZZ_TARGET(txrequest)
         }
         tester.Check();
     }
-    tester.Check();
+    tester.DisconnectAll();
 }
