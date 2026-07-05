@@ -20,6 +20,17 @@ BOOST_AUTO_TEST_CASE(disconnectpool_rejects_null_tx_refs)
     BOOST_CHECK_THROW(disconnectpool.removeForBlock(resized_block_vtx), NonFatalCheckError);
 }
 
+BOOST_AUTO_TEST_CASE(disconnectpool_rejects_duplicate_txids)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
+    DisconnectedBlockTransactions disconnectpool{MAX_DISCONNECTED_TX_POOL_BYTES};
+    const CTransactionRef tx{MakeTransactionRef(CMutableTransaction{})};
+    const std::vector<CTransactionRef> duplicate_block_vtx{tx, tx};
+
+    BOOST_CHECK_THROW((void)disconnectpool.AddTransactionsFromBlock(duplicate_block_vtx), NonFatalCheckError);
+    disconnectpool.clear();
+}
+
 //! Tests that DisconnectedBlockTransactions limits its own memory properly
 BOOST_FIXTURE_TEST_CASE(disconnectpool_memory_limits, TestChain100Setup)
 {
