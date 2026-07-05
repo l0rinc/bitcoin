@@ -1463,7 +1463,10 @@ under different commits. They are not all proven exploitable.
   eviction attempt when inbound slots are full, choosing a random unprotected
   inbound peer if the regular protection logic would otherwise leave no
   candidate. This is local operator availability/DoS hardening, not a
-  consensus change.
+  consensus change. The port's latest `p2p_eviction.py`, `p2p_permissions.py`,
+  and `netbase_tests/netpermissions_test` runs cover the forced-inbound
+  connection path plus the port-side fix for Knots' missing
+  `getpeerinfo.permissions` string.
 
 - Outgoing whitelist permissions for automatic outbound peers:
   `a9f6f721aa`
@@ -1950,6 +1953,8 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=netbase_tests/netpermissions_test
   --catch_system_error=no --log_level=nothing --report_level=no`
+- `build/bin/test_bitcoin --run_test=netbase_tests/netpermissions_test
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=net_peer_connection_tests`
 - `build/bin/test_bitcoin --run_test=rest_tests`
 - `build/bin/test_bitcoin --run_test=validation_tests`
@@ -2026,8 +2031,14 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_rdts_gate_fixed3`
 - `python3 test/functional/p2p_eviction.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_eviction_forceinbound`
+- `python3 test/functional/p2p_eviction.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_p2p_eviction_forceinbound_review_port
+  --portseed=26436`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_onion_whitelist`
+- `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_p2p_permissions_forceinbound_review_port
+  --portseed=26437`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_outbound_auto`
 - `python3 test/functional/p2p_blockfilters.py --configfile build/test/config.ini
