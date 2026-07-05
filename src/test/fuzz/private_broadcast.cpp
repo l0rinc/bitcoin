@@ -276,7 +276,9 @@ FUZZ_TARGET(private_broadcast)
                     auto& peers{model.at(*expected_tx).peers};
                     const auto it{std::ranges::find(peers, nodeid, &ModelPeer::nodeid)};
                     Assert(it != peers.end());
-                    it->received = NodeClock::now();
+                    if (!it->disconnected) {
+                        it->received = NodeClock::now();
+                    }
                 }
             },
             [&] {
