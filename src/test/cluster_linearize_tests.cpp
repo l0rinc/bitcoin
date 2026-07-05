@@ -502,6 +502,66 @@ BOOST_AUTO_TEST_CASE(linearize_nonoptimal_exhausts_budget)
     }
 }
 
+BOOST_AUTO_TEST_CASE(linearize_preserves_old_topological_diagram)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto low{depgraph.AddTransaction(FeeFrac{1, 10})};
+    const auto mid{depgraph.AddTransaction(FeeFrac{2, 10})};
+    const auto high{depgraph.AddTransaction(FeeFrac{20, 10})};
+    SanityCheck(depgraph);
+
+    const std::vector<DepGraphIndex> old_linearization{low, mid, high};
+    SanityCheck(depgraph, old_linearization);
+    const auto old_chunking{ChunkLinearization(depgraph, old_linearization)};
+
+    auto [linearization, _optimal, _cost] = Linearize(
+        /*depgraph=*/depgraph,
+        /*max_cost=*/0,
+        /*rng_seed=*/0,
+        /*fallback_order=*/IndexTxOrder{},
+        /*old_linearization=*/old_linearization,
+        /*is_topological=*/true);
+
+    SanityCheck(depgraph, linearization);
+    BOOST_CHECK(CompareChunks(ChunkLinearization(depgraph, linearization), old_chunking) >= 0);
+}
+
+BOOST_AUTO_TEST_CASE(linearize_skips_old_diagram_compare_when_chunk_sums_overflow)
+{
+    DepGraph<TestBitSet> depgraph;
+    depgraph.AddTransaction(FeeFrac{-9223372035859341307, 720});
+    depgraph.AddTransaction(FeeFrac{-9223372035860389883, 720});
+    depgraph.AddTransaction(FeeFrac{-9223372035860389883, 720});
+    depgraph.AddTransaction(FeeFrac{7703192717, 720});
+    depgraph.AddTransaction(FeeFrac{5984657177, 720});
+    const auto child{depgraph.AddTransaction(FeeFrac{18529615539, 1727})};
+    TestBitSet parents;
+    for (DepGraphIndex idx{0}; idx < 5; ++idx) parents.Set(idx);
+    depgraph.AddDependencies(parents, child);
+    BOOST_CHECK(depgraph.IsAcyclic());
+
+    const std::vector<DepGraphIndex> old_linearization{0, 1, 2, 3, 4, 5};
+    SanityCheck(depgraph, old_linearization);
+    BOOST_CHECK(!ComparableChunkLinearization(depgraph, old_linearization));
+
+    auto check_linearize = [&](bool claim_topological) {
+        constexpr uint64_t max_cost{75000};
+        auto [linearization, optimal, cost] = Linearize(
+            /*depgraph=*/depgraph,
+            /*max_cost=*/max_cost,
+            /*rng_seed=*/12087495752913477510ULL,
+            /*fallback_order=*/IndexTxOrder{},
+            /*old_linearization=*/old_linearization,
+            /*is_topological=*/claim_topological);
+
+        SanityCheck(depgraph, linearization);
+        BOOST_CHECK(optimal || cost >= max_cost);
+    };
+
+    check_linearize(/*claim_topological=*/false);
+    check_linearize(/*claim_topological=*/true);
+}
+
 BOOST_AUTO_TEST_CASE(linearization_output_is_topological)
 {
     DepGraph<TestBitSet> depgraph;
