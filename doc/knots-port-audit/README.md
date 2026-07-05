@@ -164,6 +164,15 @@ Other missing/adapted Knots pieces found during this pass:
   `881949b28d`. Actual Knots already carries the relevant Knots CMake fixes;
   the compile failures were introduced by this port's current-Core kernel API
   adaptation.
+- The depends review found Knots' `miniupnpc` package bump (`18a8022ef2`) was
+  still missing from the port. Current Core master still packages 2.3.3; Knots
+  uses the `2.3.4_pre20260407` commit tarball. The port now uses the Knots
+  commit hash, SHA256, and custom extraction path. Exercising that target also
+  exposed a port-introduced depends regression: the local `fetch_file` macro had
+  one extra closing parenthesis, making `miniupnpc_fetched` and existing
+  custom-download packages such as `qrencode_fetched` fail before download.
+  Current Core and actual Knots do not have that syntax error, and the port now
+  restores the fixed macro.
 - The exact-patch review found Knots' dynamic `-dbcache` default series was
   only partially present after rebasing onto current Core. Core master already
   has the simpler 1 GiB high default, but actual Knots `29.x-knots` has the
@@ -838,6 +847,16 @@ Builds:
   Qt5_FOUND)`
 - `make -C depends print-bdb_packages print-bdb_packages_ print-wallet_packages_
   NO_QT=1 NO_ZMQ=1 NO_UPNP=1 NO_USDT=1`
+- `make -C depends print-upnp_packages print-packages NO_QT=1 NO_ZMQ=1
+  NO_USDT=1`
+- `make -C depends print-miniupnpc_download_path
+  print-miniupnpc_download_file print-miniupnpc_file_name
+  print-miniupnpc_sha256_hash print-miniupnpc_source
+  print-miniupnpc_all_sources NO_QT=1 NO_ZMQ=1 NO_USDT=1`
+- `make -C depends miniupnpc_fetched V=1 NO_QT=1 NO_ZMQ=1 NO_USDT=1`
+- `make -C depends miniupnpc_extracted V=1 NO_QT=1 NO_ZMQ=1 NO_USDT=1`
+- `make -C depends miniupnpc_preprocessed V=1 NO_QT=1 NO_ZMQ=1 NO_USDT=1`
+- `make -C depends miniupnpc_built V=1 NO_QT=1 NO_ZMQ=1 NO_USDT=1`
 - `cmake -S . -B /tmp/bitcoin-bdb-sqlite-probe -DWITH_BDB=ON
   -DWARN_INCOMPATIBLE_BDB=OFF -DBUILD_GUI=OFF -DBUILD_TESTS=OFF
   -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_CCACHE=OFF
