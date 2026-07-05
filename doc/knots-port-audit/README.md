@@ -247,6 +247,13 @@ Other missing/adapted Knots pieces found during this pass:
   `wallet_dump.py` and `wallet_import_rescan.py` now reach the expected
   current-Core skip path after restoring the ported `AddressType` test helper
   and current `BitcoinTestFramework(__file__)` constructors (`9bfe1fb892`).
+- A later file-presence sweep found the Qt wrapper for the same sweep feature
+  was still missing even though the RPC and functional test were already
+  ported. The port now restores Knots' `SweepPrivKeyDialog`, wires it through
+  `WalletView`, `WalletFrame`, and the File menu (`28b2294989`). This is a
+  user-facing wallet GUI omission, not a consensus issue or original Knots
+  defect. `wallet_sweepprivkeys.py` was rerun after the GUI restoration; local
+  Qt compilation remains unavailable because Qt5 is not installed.
 - CLI/help verification exposed a port-side bitcoin-cli conversion-table drift:
   current server metadata no longer advertises legacy-only `sethdseed` and
   `addmultisigaddress` conversions, while descriptor-compatible legacy import
