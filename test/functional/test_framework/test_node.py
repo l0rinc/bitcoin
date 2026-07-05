@@ -653,6 +653,7 @@ class TestNode():
         yield
 
         while True:
+            found = True
             with open(self.debug_log_path, "rb") as dl:
                 dl.seek(prev_size)
                 log = dl.read()
