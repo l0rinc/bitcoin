@@ -326,6 +326,15 @@ Other missing/adapted Knots pieces found during this pass:
   original Knots defect or consensus issue. Full legacy wallet loading/creation
   remains disabled on this current-Core base; the BDB work here restores build
   coverage and the configured BDB backend objects.
+- A BDB follow-up review confirmed the port also carries Knots' BDB-specific
+  wallet hardening around non-writable directories and environment cleanup:
+  `MakeBerkeleyDatabase(...)` catches open/verify exceptions, BDB directory
+  errors report the non-writable path, checkpoint/LSN reset failures do not mark
+  a database as detached, and BDB cleanup avoids deleting the `database`
+  subdirectory on normal shutdown. Current Core master already has the SQLite
+  non-writable-directory guard and tests, but has no BDB backend. The port's
+  BDB side is covered by `wallet_createwallet.py`, `wallet_startup.py`, and
+  `db_tests`.
 - The high-signal exact-patch review found Knots' wallet symlink/reparse-point
   guard series (`39f48a142f`, `1f118f18c4`, `ee042e9ad6`) was still missing
   from the port. Actual Knots already carries it, while current Core master
@@ -921,6 +930,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
 - `build/bin/test_bitcoin --run_test=db_tests,walletdb_tests,wallet_tests`
 - `build/bin/test_bitcoin --run_test=fs_tests,walletdb_tests,wallet_tests`
+- `build/bin/test_bitcoin --run_test=db_tests --catch_system_error=no
+  --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
 - `./build/src/secp256k1/bin/tests --target=ellswift_xdh_bad_scalar_tests --iterations=16`
@@ -975,6 +986,7 @@ Functional tests:
 - `python3 test/functional/p2p_block_times.py --configfile build/test/config.ini`
 - `python3 test/functional/tool_wallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_startup.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_backup.py --configfile build/test/config.ini`
