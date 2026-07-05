@@ -95,6 +95,16 @@ void CheckTopologicalInclusionOrder(const CTxMemPool& pool, const std::map<Txid,
     }
 }
 
+void CheckSameTxidBumpFees(const std::map<COutPoint, CAmount>& bump_fees)
+{
+    std::map<Txid, CAmount> bump_fee_by_txid;
+    for (const auto& [outpoint, bump_fee] : bump_fees) {
+        assert(bump_fee >= 0);
+        const auto [it, inserted]{bump_fee_by_txid.emplace(outpoint.hash, bump_fee)};
+        assert(inserted || it->second == bump_fee);
+    }
+}
+
 void CheckManualMiniMinerLinearize(const CTxMemPool& pool, const std::vector<Txid>& mempool_txids)
     EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
 {
@@ -251,9 +261,11 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         node::MiniMiner mini_miner{pool, outpoints};
         assert(mini_miner.IsReadyToCalculate());
         const auto bump_fees = mini_miner.CalculateBumpFees(target_feerate);
+        CheckSameTxidBumpFees(bump_fees);
         node::MiniMiner duplicate_mini_miner{pool, duplicated_outpoints};
         assert(duplicate_mini_miner.IsReadyToCalculate());
         const auto duplicated_bump_fees = duplicate_mini_miner.CalculateBumpFees(target_feerate);
+        CheckSameTxidBumpFees(duplicated_bump_fees);
         assert(!duplicate_mini_miner.IsReadyToCalculate());
         assert(bump_fees == duplicated_bump_fees);
         assert(bump_fees.size() == unique_outpoints.size());
@@ -292,6 +304,8 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         assert(higher_mini_miner.IsReadyToCalculate());
         const auto lower_bump_fees{lower_mini_miner.CalculateBumpFees(lower_target_feerate)};
         const auto higher_bump_fees{higher_mini_miner.CalculateBumpFees(higher_target_feerate)};
+        CheckSameTxidBumpFees(lower_bump_fees);
+        CheckSameTxidBumpFees(higher_bump_fees);
         assert(!lower_mini_miner.IsReadyToCalculate());
         assert(!higher_mini_miner.IsReadyToCalculate());
         assert(lower_bump_fees.size() == higher_bump_fees.size());
