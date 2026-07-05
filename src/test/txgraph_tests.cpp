@@ -496,6 +496,8 @@ BOOST_AUTO_TEST_CASE(txgraph_getcluster_membership_contracts)
     auto check_cluster = [&graph](TxGraph::Ref& ref, TxGraph::Level level, const std::vector<TxGraph::Ref*>& expected) {
         const auto cluster{graph->GetCluster(ref, level)};
         BOOST_CHECK(cluster == expected);
+        const std::set<TxGraph::Ref*> unique_cluster_refs{cluster.begin(), cluster.end()};
+        BOOST_CHECK_EQUAL(unique_cluster_refs.size(), cluster.size());
         for (TxGraph::Ref* member : cluster) {
             BOOST_REQUIRE(member);
             BOOST_CHECK(graph->GetCluster(*member, level) == cluster);
