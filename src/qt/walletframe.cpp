@@ -265,6 +265,14 @@ void WalletFrame::gotoLoadPSBT(bool from_clipboard)
     GUIUtil::ShowModalDialogAsynchronously(dlg, Qt::NonModal);
 }
 
+void WalletFrame::gotoSweepPrivKeyDialog()
+{
+    WalletView* walletView{currentWalletView()};
+    if (walletView) {
+        walletView->gotoSweepPrivKeyDialog();
+    }
+}
+
 void WalletFrame::encryptWallet()
 {
     WalletView *walletView = currentWalletView();

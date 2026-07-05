@@ -92,6 +92,9 @@ public Q_SLOTS:
     /** Load Partially Signed Bitcoin Transaction */
     void gotoLoadPSBT(bool from_clipboard = false);
 
+    /** Show private-key sweep dialog */
+    void gotoSweepPrivKeyDialog();
+
     /** Encrypt the wallet */
     void encryptWallet();
     /** Backup the wallet */
