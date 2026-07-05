@@ -603,7 +603,35 @@ BOOST_AUTO_TEST_CASE(postlinearization_output_is_topological)
         if (linearization[pos] == child) child_pos = pos;
     }
     BOOST_CHECK_LT(parent_pos, child_pos);
-    BOOST_CHECK(CompareChunks(ChunkLinearization(depgraph, linearization), old_chunking) >= 0);
+    const auto post_chunking{ChunkLinearization(depgraph, linearization)};
+    BOOST_CHECK(CompareChunks(post_chunking, old_chunking) >= 0);
+
+    auto post_post_linearization{linearization};
+    PostLinearize(depgraph, post_post_linearization);
+    SanityCheck(depgraph, post_post_linearization);
+    BOOST_CHECK(CompareChunks(ChunkLinearization(depgraph, post_post_linearization), post_chunking) >= 0);
+}
+
+BOOST_AUTO_TEST_CASE(postlinearize_skips_diagram_compare_when_chunk_sums_overflow)
+{
+    DepGraph<TestBitSet> depgraph;
+    depgraph.AddTransaction(FeeFrac{-9223372035859341307, 720});
+    depgraph.AddTransaction(FeeFrac{-9223372035860389883, 720});
+    depgraph.AddTransaction(FeeFrac{-9223372035860389883, 720});
+    depgraph.AddTransaction(FeeFrac{7703192717, 720});
+    depgraph.AddTransaction(FeeFrac{5984657177, 720});
+    const auto child{depgraph.AddTransaction(FeeFrac{18529615539, 1727})};
+    TestBitSet parents;
+    for (DepGraphIndex idx{0}; idx < 5; ++idx) parents.Set(idx);
+    depgraph.AddDependencies(parents, child);
+    BOOST_CHECK(depgraph.IsAcyclic());
+
+    std::vector<DepGraphIndex> linearization{0, 1, 2, 3, 4, 5};
+    SanityCheck(depgraph, linearization);
+    BOOST_CHECK(!ComparableChunkLinearization(depgraph, linearization));
+
+    PostLinearize(depgraph, linearization);
+    SanityCheck(depgraph, linearization);
 }
 
 BOOST_AUTO_TEST_CASE(append_topo_preserves_prefix_and_orders_subset)
