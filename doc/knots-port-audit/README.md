@@ -390,6 +390,20 @@ Other missing/adapted Knots pieces found during this pass:
   setup. The port now restores the controlled keypool setup adapted to the
   descriptor-only current base. This is wallet RPC observability for active
   vs imported or old-seed destinations, not consensus or mempool policy.
+- The BIP322 message-signing review confirmed Knots' signing and verification
+  stack (`5689da7144`, `b9c6d98dfe`, `5501bfe28e`, `3d056b0314`,
+  `5fa31318bd`, `f32c5267ae`, `fa9048636b`, `b7e42cd6b9`, `ef728f7963`,
+  `a5375f9c39`, `d07851730b`, `0e79f97800`) is present in the port and absent
+  from current Core's wallet/utility RPC behavior. The port matches actual
+  Knots by verifying Electrum/BIP137/BIP322 signatures for SegWit addresses,
+  supporting BIP322 simple signatures for wallet-owned non-P2PKH destinations,
+  preferring legacy message signatures for P2PKH `signmessage`, and throwing
+  for inconclusive proof-of-funds or unsupported script cases. This is
+  wallet/RPC signature functionality, not transaction or block consensus.
+  `wallet_signmessagewithaddress.py` now covers wallet-created BIP322
+  signatures for native SegWit and Taproot addresses in addition to the
+  existing legacy signing, util-level BIP322 vectors, and
+  `rpc_signmessagewithprivkey.py` verification vectors.
 - Wallet sweep coverage passes on the current descriptor-wallet base:
   `wallet_sweepprivkeys.py` rejects invalid/unfunded keys and sweeps both
   unconfirmed and confirmed P2PKH outputs. Legacy-only Knots tests
@@ -1387,6 +1401,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=db_tests --catch_system_error=no
   --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty`
+- `build/bin/test_bitcoin --run_test=util_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
 - `build/bin/test_bitcoin --run_test=util_tests/outputtype_implicit_segwit`
 - `build/bin/test_bitcoin --run_test=node_warnings_tests
@@ -1530,6 +1545,10 @@ Functional tests:
   (skipped: previous releases not available or disabled)
 - `python3 test/functional/wallet_keypool.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_keypool_isactive_fixed`
+- `python3 test/functional/wallet_signmessagewithaddress.py --configfile
+  build/test/config.ini --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_signmessage_bip322`
+- `python3 test/functional/rpc_signmessagewithprivkey.py --configfile
+  build/test/config.ini --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_signmessage_bip322`
 - `python3 test/functional/wallet_sweepprivkeys.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_import_with_label.py --configfile build/test/config.ini --legacy-wallet`
