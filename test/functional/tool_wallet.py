@@ -4,6 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test bitcoin-wallet."""
 
+import json
 import os
 import random
 import stat
@@ -14,6 +15,7 @@ import textwrap
 from collections import OrderedDict
 
 from test_framework.bdb import dump_bdb_kv
+from test_framework.descriptors import descsum_create
 from test_framework.messages import ser_string
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -387,6 +389,74 @@ class ToolWalletTest(BitcoinTestFramework):
         if not self.options.descriptors:
             os.rename(self.nodes[0].wallets_path / "../default.wallet.dat", self.nodes[0].wallets_path / "wallet.dat")
 
+    def test_importfromcoldcard(self):
+        self.log.info("Checking importfromcoldcard")
+        if self.nodes[0].running:
+            self.stop_node(0)
+
+        warning = 'WARNING: The "importfromcoldcard" command is experimental and will likely be removed or changed incompatibly in a future version.\n'
+
+        self.log.info("Checking importfromcoldcard arguments")
+        self.assert_raises_tool_error(
+            "To use importfromcoldcard, -dumpfile=<filename> must be provided.",
+            "-wallet=coldcard_missing_file",
+            "importfromcoldcard",
+        )
+        assert not (self.nodes[0].wallets_path / "coldcard_missing_file").exists()
+
+        missing_dump = self.nodes[0].datadir_path / "coldcard-missing.txt"
+        self.assert_raises_tool_error(
+            f"File {missing_dump} does not exist.",
+            "-wallet=coldcard_missing_dump",
+            f"-dumpfile={missing_dump}",
+            "importfromcoldcard",
+        )
+        assert not (self.nodes[0].wallets_path / "coldcard_missing_dump").exists()
+
+        self.log.info("Checking importfromcoldcard malformed dump handling")
+        malformed_dump = self.nodes[0].datadir_path / "coldcard-malformed.txt"
+        malformed_dump.write_text("not a Coldcard export\n", encoding="utf8")
+        self.assert_raises_tool_error(
+            (1, warning + f"Unable to parse {malformed_dump}"),
+            "-wallet=coldcard_malformed",
+            f"-dumpfile={malformed_dump}",
+            "importfromcoldcard",
+        )
+        assert not (self.nodes[0].wallets_path / "coldcard_malformed").exists()
+
+        self.log.info("Checking importfromcoldcard descriptor import")
+        _, _, address = getnewdestination("bech32")
+        descriptor = descsum_create(f"addr({address})")
+        coldcard_dump = self.nodes[0].datadir_path / "coldcard-valid.txt"
+        coldcard_dump.write_text(
+            "# Coldcard descriptor export\n"
+            f"importdescriptors '{json.dumps([{'desc': descriptor, 'timestamp': 'now', 'label': 'coldcard import'}])}'\n",
+            encoding="utf8",
+        )
+
+        wallet_name = "coldcard_import"
+        p = self.bitcoin_wallet_process(
+            f"-wallet={wallet_name}",
+            f"-dumpfile={coldcard_dump}",
+            "importfromcoldcard",
+        )
+        stdout, stderr = p.communicate()
+        assert_equal(p.poll(), 0)
+        assert_equal(stderr, warning + '{\n  "success": true\n}\n')
+        assert_equal(stdout, textwrap.dedent(f"""\
+            Wallet info
+            ===========
+            Name: {wallet_name}
+            Format: sqlite
+            Descriptors: yes
+            Encrypted: no
+            HD (hd seed available): no
+            Keypool Size: 0
+            Transactions: 0
+            Address Book: 1
+        """))
+        self.assert_is_sqlite(self.nodes[0].wallets_path / wallet_name / "wallet.dat")
+
     def test_chainless_conflicts(self):
         self.log.info("Test wallet tool when wallet contains conflicting transactions")
         self.restart_node(0)
@@ -589,6 +659,7 @@ class ToolWalletTest(BitcoinTestFramework):
         self.test_tool_wallet_create_on_existing_wallet()
         self.test_getwalletinfo_on_different_wallet()
         self.test_dump_createfromdump()
+        self.test_importfromcoldcard()
         self.test_chainless_conflicts()
         if not self.options.descriptors:
             self.test_dump_endianness()

@@ -16,6 +16,7 @@
 #include <cassert>
 #include <fstream>
 #include <string>
+#include <string_view>
 
 namespace wallet {
 
@@ -107,7 +108,7 @@ static void WalletShowInfo(CWallet* wallet_instance)
     tfm::format(std::cout, "Address Book: %zu\n", wallet_instance->m_address_book.size());
 }
 
-static bool ReadAndParseColdcardFile(const fs::path& path, UniValue& decriptors)
+static bool ReadAndParseColdcardFile(const fs::path& path, UniValue& descriptors)
 {
     std::ifstream file{path.std_path()};
     if (!file.is_open()) {
@@ -115,20 +116,32 @@ static bool ReadAndParseColdcardFile(const fs::path& path, UniValue& decriptors)
         return false;
     }
 
+    static constexpr std::string_view IMPORT_DESCRIPTORS_PREFIX{"importdescriptors '"};
+    static constexpr std::string_view IMPORT_DESCRIPTORS_ARRAY_PREFIX{"importdescriptors '[{\""};
+
     std::string line;
+    bool found{false};
     while (std::getline(file, line)) {
-        if (line.substr(0, 22) == "importdescriptors \'[{\"") break;
+        if (line.starts_with(IMPORT_DESCRIPTORS_ARRAY_PREFIX)) {
+            found = true;
+            break;
+        }
     }
 
     file.close();
 
-    decriptors.clear();
-    if (!decriptors.read(line.substr(19, line.size() - 20))) {
+    if (!found || !line.ends_with("'")) {
         tfm::format(std::cerr, "Unable to parse %s\n", fs::PathToString(path));
         return false;
     }
 
-    assert(decriptors.isArray());
+    descriptors.clear();
+    if (!descriptors.read(line.substr(IMPORT_DESCRIPTORS_PREFIX.size(), line.size() - IMPORT_DESCRIPTORS_PREFIX.size() - 1))) {
+        tfm::format(std::cerr, "Unable to parse %s\n", fs::PathToString(path));
+        return false;
+    }
+
+    assert(descriptors.isArray());
     return true;
 }
 
