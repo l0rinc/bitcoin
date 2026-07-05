@@ -387,6 +387,15 @@ Other missing/adapted Knots pieces found during this pass:
   resource-selection behavior as `96d1c6c8a9`, with unit coverage for the
   formula/warning thresholds and a shared `libbitcoinkernel` build proving the
   new kernel C API dependency is linked.
+- The UTXO LevelDB batch-size review found a port omission from adapting
+  Knots' `2104df3209` onto current Core's later `DEFAULT_DB_CACHE_BATCH`
+  location. Actual Knots defaults `-dbbatchsize` to 64 MiB, while current Core
+  now defaults it to 32 MiB. The port had a stale `nDefaultDbBatchSize = 64 <<
+  20` in `txdb.h`, but the live `CoinsViewOptions` default and help text still
+  used Core's `DEFAULT_DB_CACHE_BATCH{32_MiB}`. This was not an original Knots
+  defect. The port now sets `DEFAULT_DB_CACHE_BATCH{64_MiB}` in
+  `kernel/caches.h`, removes the unused stale constant, and pins the live
+  default in `caches_tests/default_db_batch_size`.
 - The LevelDB exact-patch review found Knots' embedded-LevelDB sanity-check
   guard (`a4fc0050f1`) was missing. On this current Core base the embedded
   LevelDB fork still exposes the runtime version getters, so this was not a
@@ -1435,6 +1444,18 @@ under different commits. They are not all proven exploitable.
   free space for `N GiB`. This is local operator warning/resource-estimation
   correctness, not consensus or network security behavior.
 
+- UTXO LevelDB write-batch default:
+  `2104df3209`
+
+  Current Core master now defaults `-dbbatchsize` to 32 MiB after merging the
+  upstream version of the UTXO flush optimization. Knots keeps the more
+  aggressive 64 MiB default, which reduces the number of LevelDB write batches
+  during large UTXO flushes at the cost of a larger temporary memory peak. This
+  is performance/resource-selection behavior, not consensus behavior. The port
+  now applies the Knots value at Core's current `DEFAULT_DB_CACHE_BATCH`
+  location so `CoinsViewOptions`, `bitcoind -help-debug`, and the unit test all
+  agree with unmodified Knots.
+
 - Prune-lock reorg rollback and persistence:
   `8ee1214157`, `0b4bd4e134`, `4822c21812`
 
@@ -1968,6 +1989,18 @@ Source/manifest checks:
   src/init.cpp` show current Core still uses `1_GiB` for the first-startup
   block-storage warning threshold while actual Knots and the port use decimal
   `1'000'000'000` bytes.
+- `git -C ../knots show --stat --patch --minimal 2104df3209`,
+  `git show origin/master:src/kernel/caches.h origin/master:src/txdb.h
+  origin/master:src/init.cpp | rg -n
+  "DEFAULT_DB_CACHE_BATCH|dbbatchsize|batch_write_bytes|32_MiB|64_MiB" -C 3`,
+  `git -C ../knots show 29.x-knots:src/txdb.h
+  29.x-knots:src/node/coins_view_args.cpp 29.x-knots:src/init.cpp | rg -n
+  "nDefaultDbBatchSize|dbbatchsize|batch_write_bytes|64 << 20" -C 4`, and
+  `rg -n "DEFAULT_DB_CACHE_BATCH|nDefaultDbBatchSize|dbbatchsize"
+  src/kernel/caches.h src/txdb.h src/test/caches_tests.cpp src/init.cpp` show
+  actual Knots uses a 64 MiB `-dbbatchsize` default, current Core uses 32 MiB,
+  and the port now carries the 64 MiB default at Core's current constant
+  location without the stale unused `nDefaultDbBatchSize`.
 - `git show origin/master:src/zmq/zmqnotificationinterface.cpp | rg -n
   "TryForEachAndRemoveFailed|notifier->Shutdown|notifiers.erase" -C 4`,
   `git -C ../knots show 29.x-knots:src/zmq/zmqnotificationinterface.cpp |
@@ -2330,6 +2363,9 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=policyestimator_tests`
 - `build/bin/test_bitcoin --run_test=codex32_tests`
 - `build/bin/test_bitcoin --run_test=caches_tests`
+- `cmake --build build --target test_bitcoin -j4`
+- `build/bin/test_bitcoin --run_test=caches_tests/default_db_batch_size
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=sanity_tests`
 - `build/bin/test_bitcoin --run_test=banman_tests`
 - `build/bin/test_bitcoin --run_test=hash_tests`
@@ -2373,6 +2409,8 @@ Unit tests:
 - `build/bin/test_bitcoin --catch_system_error=no --log_level=error
   --report_level=short` passed with all assertions successful
 - `cmake --build build --target bitcoind -j4`
+- `build/bin/bitcoind -help-debug | rg -n "dbbatchsize" -C 1`
+- `../knots/build-repro/bin/bitcoind -help-debug | rg -n "dbbatchsize" -C 1`
 - `./build/src/secp256k1/bin/tests --target=ellswift_xdh_bad_scalar_tests --iterations=16`
 - `./build/src/secp256k1/bin/tests --target=ellswift --iterations=16`
 
