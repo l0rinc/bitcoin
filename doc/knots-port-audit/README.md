@@ -619,6 +619,21 @@ Other missing/adapted Knots pieces found during this pass:
   `minconf`. This is backwards-compatibility behavior, not a security or
   consensus change. `wallet_fundrawtransaction.py` and `rpc_psbt.py` now cover
   positive selection, negative `min_conf`, and `min_conf`/`minconf` conflicts.
+- Knots' address-usage tracking series (`fc7954a148`, `022887d933`,
+  `a00bc6f395`, `82908e28a5`) is present in the port and absent from current
+  Core: wallets keep in-memory script-use metadata and `getaddressinfo` returns
+  `use_txids` for wallet transactions that received to the queried address.
+  `wallet_basic.py` covers empty and reused-address `use_txids`, and a manual
+  unmodified-Knots RPC check under
+  `/mnt/my_storage/tmp_knots_use_txids_manual` confirmed that a mined-to wallet
+  address reports a non-empty `use_txids` array. While rerunning this area, the
+  test exposed a port-only integration bug from carrying Knots' older generic
+  wallet chain-limit error across current Core's cluster-mempool interface:
+  `-walletrejectlongchains` returned `mempool policy limits exceeded` instead
+  of Core's detailed `too many unconfirmed transactions in cluster`. Actual
+  Knots cannot reproduce that exact path because it lacks the current
+  `-limitclustercount` option. The port now restores the detailed current-Core
+  rejection string.
 - The `setfeerate` review confirmed Knots' sat/vB wallet fee-rate RPC
   (`1d3a37aa64`, with `63fd84f7f1`, `d302fef9a3`, and follow-up test commits)
   is present in the port and absent from current Core's wallet RPC table. This
@@ -1842,6 +1857,8 @@ Functional tests:
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_fundrawtransaction_min_conf`
+- `python3 test/functional/wallet_basic.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_basic_use_txids_fixed`
 - `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_backup.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_send.py --configfile build/test/config.ini
