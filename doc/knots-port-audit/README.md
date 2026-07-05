@@ -1012,7 +1012,8 @@ Other missing/adapted Knots pieces found during this pass:
   (`85c8d477b0`, ported as `759e1d76b3`) as Knots-surface hardening because
   current Core has no `getmempoolinfo(with_fee_histogram=...)` or REST
   histogram surface. `policyestimator_tests` and `mempool_fee_histogram.py`
-  pass with the ported code.
+  pass with the ported code; a same-test run against unmodified Knots confirms
+  the fee-histogram behavior is inherited rather than port-created.
 - The mempool-entry RPC review confirmed Knots' transaction-serialization
   `hash` field in mempool entry output (`2f7b38db86`) is present in the port
   and absent from current Core's `entryToJSON(...)`. This is RPC compatibility
@@ -2259,6 +2260,13 @@ Functional tests:
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_prevtxs`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
+- `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_fee_histogram_review_port
+  --portseed=26447`
+- `python3 test/functional/mempool_fee_histogram.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_fee_histogram_review_knots
+  --portseed=26448`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_getblockfrompeer_no_header`
