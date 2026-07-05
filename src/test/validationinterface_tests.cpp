@@ -29,9 +29,15 @@ struct TestSubscriberNoop final : public CValidationInterface {
 };
 
 struct BlockNotificationSubscriber final : public CValidationInterface {
+    int m_checked{0};
     int m_connected{0};
     int m_disconnected{0};
     int m_new_pow_valid{0};
+
+    void BlockChecked(const std::shared_ptr<const CBlock>&, const BlockValidationState&) override
+    {
+        ++m_checked;
+    }
 
     void BlockConnected(const kernel::ChainstateRole&, const std::shared_ptr<const CBlock>&, const CBlockIndex*) override
     {
@@ -139,7 +145,7 @@ BOOST_AUTO_TEST_CASE(mempool_signal_payload_contracts)
     BOOST_CHECK_EQUAL(sub->m_removed_for_block, 1);
 }
 
-BOOST_AUTO_TEST_CASE(block_signal_rejects_null_tx_refs)
+BOOST_AUTO_TEST_CASE(block_signal_rejects_invalid_block_payloads)
 {
     test_only_CheckFailuresAreExceptionsNotAborts failed_asserts_throw{};
 
@@ -162,6 +168,11 @@ BOOST_AUTO_TEST_CASE(block_signal_rejects_null_tx_refs)
     auto sub{std::make_shared<BlockNotificationSubscriber>()};
     m_node.validation_signals->RegisterSharedValidationInterface(sub);
 
+    BlockValidationState state_dummy;
+    BOOST_CHECK_THROW(m_node.validation_signals->BlockChecked({}, state_dummy),
+                      NonFatalCheckError);
+    BOOST_CHECK_THROW(m_node.validation_signals->BlockChecked(std::make_shared<CBlock>(resized_block), state_dummy),
+                      NonFatalCheckError);
     BOOST_CHECK_THROW(m_node.validation_signals->BlockConnected(kernel::ChainstateRole{}, std::make_shared<CBlock>(resized_block), &resized_block_index),
                       NonFatalCheckError);
     BOOST_CHECK_THROW(m_node.validation_signals->BlockDisconnected(std::make_shared<CBlock>(resized_block), &resized_block_index),
@@ -172,6 +183,7 @@ BOOST_AUTO_TEST_CASE(block_signal_rejects_null_tx_refs)
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
     m_node.validation_signals->UnregisterSharedValidationInterface(sub);
 
+    BOOST_CHECK_EQUAL(sub->m_checked, 0);
     BOOST_CHECK_EQUAL(sub->m_connected, 0);
     BOOST_CHECK_EQUAL(sub->m_disconnected, 0);
     BOOST_CHECK_EQUAL(sub->m_new_pow_valid, 0);
