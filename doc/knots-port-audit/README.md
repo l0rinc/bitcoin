@@ -815,6 +815,10 @@ Other missing/adapted Knots pieces found during this pass:
   same max-feerate decision for a high-sigop, low-weight P2WSH spend. The
   isolated max-feerate subtest also passes against unmodified Knots; the full
   cross-run hits an unrelated package-error string drift before that subtest.
+  A later focused rerun exposed only a port-side test-method isolation issue:
+  the subtest assumed `run_test()` had already created `self.wallet`. The port
+  now initializes the MiniWallet lazily as `e14bfdfd03`, so the documented
+  focused command exercises the intended path directly.
 - The RPC authentication follow-up confirmed Knots' blank `-rpcauth`,
   `-rpcauthfile`, `-norpcauth`, wallet-restricted rpcauth, and cookie
   permission/replacement hardening is present in the port. Current Core master
@@ -1905,7 +1909,10 @@ Functional tests:
 - `python3 test/functional/mempool_dust.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_subdust_fee_penalty.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini
-  --tmpdir=/mnt/my_storage/tmp_bitcoin_mempool_sigoplimit_maxfeerate`
+  --test_methods test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize
+  --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_maxfeerate_3`
+- `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_full`
 - `python3 test/functional/mempool_limit.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_mempool_limit_maxmempool_rpc`
 - `python3 test/functional/mining_coin_age_priority.py --configfile build/test/config.ini`
