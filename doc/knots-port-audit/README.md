@@ -427,6 +427,13 @@ Other missing/adapted Knots pieces found during this pass:
   `minconf`. This is backwards-compatibility behavior, not a security or
   consensus change. `wallet_fundrawtransaction.py` and `rpc_psbt.py` now cover
   positive selection, negative `min_conf`, and `min_conf`/`minconf` conflicts.
+- The wallet PSBT review confirmed Knots' anti-fee-sniping default for
+  `walletcreatefundedpsbt` (`c5448df366`) is present in the port: when the
+  caller omits explicit `locktime`, the funded PSBT uses a height-based
+  fallback locktime, including PSBTv0 output. Current Core already carries the
+  related `send` and `sendall` behavior but still leaves this
+  `walletcreatefundedpsbt` default at zero. `rpc_psbt.py` covers the ported
+  PSBT behavior.
 - The same wallet RPC review confirmed Knots' case-insensitive fee-estimation
   mode parsing (`8d40addbd2`) and `estimate_mode`/`conf_target` coupling
   validation (`be8ae64b82`) are present in the port's shared fee-estimation
@@ -989,6 +996,16 @@ under different commits. They are not all proven exploitable.
   self-protection rather than remote consensus risk, but it is a real
   user-facing fee-limit correctness fix.
 
+- `walletcreatefundedpsbt` anti-fee-sniping:
+  `c5448df366`
+
+  Current Core master already discourages fee sniping for `send` and `sendall`
+  when no explicit locktime is supplied, but `walletcreatefundedpsbt` still
+  constructs default PSBTs with zero fallback locktime. Knots and this port
+  apply the same height-based anti-fee-sniping default to funded PSBTs, and the
+  port also covers PSBTv0 locktime output. This is wallet privacy and
+  miner-incentive hardening, not a consensus-rule change.
+
 High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
 key handling, `LocalServiceInfo::nScore` saturation, miner `addPackageTxs`
@@ -1268,6 +1285,8 @@ Functional tests:
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_min_conf`
+- `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_anti_fee_sniping`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_mempool_info.py --configfile build/test/config.ini`
