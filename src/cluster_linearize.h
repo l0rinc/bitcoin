@@ -18,6 +18,7 @@
 #include <random.h>
 #include <span.h>
 #include <util/feefrac.h>
+#include <util/overflow.h>
 #include <util/vecdeque.h>
 
 namespace cluster_linearize {
@@ -510,6 +511,41 @@ std::vector<FeeFrac> ChunkLinearization(const DepGraph<SetType>& depgraph, std::
     return ret;
 }
 
+/** Check whether a chunk diagram satisfies CompareChunks' cumulative-sum precondition. */
+inline bool CanCompareChunks(std::span<const FeeFrac> chunks) noexcept
+{
+    FeeFrac sum;
+    for (const auto& chunk : chunks) {
+        if (AdditionOverflow(sum.fee, chunk.fee)) return false;
+        if (AdditionOverflow(sum.size, chunk.size)) return false;
+        sum.fee += chunk.fee;
+        sum.size += chunk.size;
+    }
+    return true;
+}
+
+/** Compute ChunkLinearization(), unless any intermediate or cumulative sum would overflow. */
+template<typename SetType>
+std::optional<std::vector<FeeFrac>> ComparableChunkLinearization(const DepGraph<SetType>& depgraph, std::span<const DepGraphIndex> linearization) noexcept
+{
+    Assume(linearization.size() == depgraph.TxCount());
+    std::vector<FeeFrac> ret;
+    for (DepGraphIndex i : linearization) {
+        Assume(depgraph.Positions()[i]);
+        auto new_chunk = depgraph.FeeRate(i);
+        while (!ret.empty() && ByRatio{new_chunk} > ByRatio{ret.back()}) {
+            if (AdditionOverflow(new_chunk.fee, ret.back().fee)) return std::nullopt;
+            if (AdditionOverflow(new_chunk.size, ret.back().size)) return std::nullopt;
+            new_chunk.fee += ret.back().fee;
+            new_chunk.size += ret.back().size;
+            ret.pop_back();
+        }
+        ret.push_back(std::move(new_chunk));
+    }
+    if (!CanCompareChunks(ret)) return std::nullopt;
+    return ret;
+}
+
 /** Concept for function objects that return std::strong_ordering when invoked with two Args. */
 template<typename F, typename Arg>
 concept StrongComparator =
@@ -693,10 +729,11 @@ public:
  * - Merge downwards: merge a chunk with the highest-feerate other chunk that depends on it, among
  *                    those with higher or equal feerate than itself.
  *
- * Using these strategies in the improvement loop above guarantees that the output linearization
- * after a deactivate + merge step is never worse or incomparable (in the convexified feerate
- * diagram sense) than the output linearization that would be produced before the step. With that,
- * we can refine the high-level algorithm to:
+ * Using these strategies in the improvement loop above guarantees, when the compared diagrams
+ * satisfy CompareChunks' cumulative-sum precondition, that the output linearization after a
+ * deactivate + merge step is never worse or incomparable (in the convexified feerate diagram
+ * sense) than the output linearization that would be produced before the step. With that, we can
+ * refine the high-level algorithm to:
  * - Start with all dependencies inactive.
  * - Perform merges as described until none are possible anymore, making the state topological.
  * - Loop until optimal or time runs out:
@@ -708,8 +745,9 @@ public:
  * - Output the chunks from high to low feerate, each internally sorted topologically.
  *
  * Instead of performing merges arbitrarily to make the initial state topological, it is possible
- * to do so guided by an existing linearization. This has the advantage that the state's would-be
- * output linearization is immediately as good as the existing linearization it was based on:
+ * to do so guided by an existing topological linearization. This has the advantage that the
+ * state's would-be output linearization is immediately as good as the existing linearization it
+ * was based on:
  * - Start with all dependencies inactive.
  * - For each transaction t in the existing linearization:
  *   - Find the chunk C that transaction is in (which will be singleton).
@@ -1846,10 +1884,12 @@ public:
  *                                for details.
  * @param[in] old_linearization   An existing linearization for the cluster, or empty.
  * @param[in] is_topological      (Only relevant if old_linearization is not empty) Whether
- *                                old_linearization is topologically valid.
+ *                                old_linearization is known to be topologically valid.
  * @return                        A tuple of:
- *                                - The resulting linearization. It is guaranteed to be at least as
- *                                  good (in the feerate diagram sense) as old_linearization.
+ *                                - The resulting linearization. If is_topological is true, and the
+ *                                  resulting and old feerate diagrams satisfy CompareChunks'
+ *                                  cumulative-sum precondition, it is guaranteed to be at least as
+ *                                  good as old_linearization.
  *                                - A boolean indicating whether the result is guaranteed to be
  *                                  optimal with minimal chunks.
  *                                - How many optimization steps were actually performed.
@@ -1863,6 +1903,22 @@ std::tuple<std::vector<DepGraphIndex>, bool, uint64_t> Linearize(
     std::span<const DepGraphIndex> old_linearization = {},
     bool is_topological = true) noexcept
 {
+    std::optional<std::vector<FeeFrac>> old_topological_chunking;
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (!old_linearization.empty() && is_topological) {
+            Assume(old_linearization.size() == depgraph.TxCount());
+            SetType done;
+            for (DepGraphIndex idx : old_linearization) {
+                Assume(idx < depgraph.PositionRange());
+                Assume(depgraph.Positions()[idx]);
+                Assume((depgraph.Ancestors(idx) - done) == SetType::Singleton(idx));
+                done.Set(idx);
+            }
+            Assume(done == depgraph.Positions());
+            old_topological_chunking = ComparableChunkLinearization(depgraph, old_linearization);
+        }
+    }
+
     /** Initialize a spanning forest data structure for this cluster. */
     SpanningForestState forest(depgraph, rng_seed);
     if (!old_linearization.empty()) {
@@ -1893,6 +1949,13 @@ std::tuple<std::vector<DepGraphIndex>, bool, uint64_t> Linearize(
     }
     auto linearization = forest.GetLinearization(fallback_order);
     const uint64_t cost{forest.GetCost()};
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (old_topological_chunking) {
+            if (const auto new_chunking{ComparableChunkLinearization(depgraph, linearization)}) {
+                Assume(CompareChunks(*new_chunking, *old_topological_chunking) >= 0);
+            }
+        }
+    }
     Assume(optimal || cost >= max_cost);
     return {std::move(linearization), optimal, cost};
 }
