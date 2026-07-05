@@ -1677,7 +1677,12 @@ under different commits. They are not all proven exploitable.
   block hash from a selected peer, including in pruned-node scenarios where the
   node has not seen or synced past the header yet, and report repeated same-peer
   requests as `Already requested from this peer`. This is RPC/operator recovery
-  functionality, not consensus behavior.
+  functionality, not consensus behavior. Fresh source comparison shows Core
+  still throws `Block header missing` before calling `FetchBlock`, while Knots
+  and the port pass the hash and optional block index through to peerman.
+  Peerman-side comparison also shows Core calls `RemoveBlockRequest(...)`
+  before duplicate detection, while Knots and the port check
+  `IsBlockRequestedFromPeer(...)` first.
 
 High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
@@ -1807,6 +1812,16 @@ Source/manifest checks:
   PSBT update/signing RPCs lack caller-provided previous transaction injection,
   while Knots and the port support it and test duplicate/irrelevant/short
   previous-transaction cases.
+- `git show origin/master:src/rpc/blockchain.cpp | sed -n '524,585p'`,
+  `git -C ../knots show 29.x-knots:src/rpc/blockchain.cpp | sed -n
+  '499,545p'`, `sed -n '550,600p' src/rpc/blockchain.cpp`,
+  `git show origin/master:src/net_processing.cpp | sed -n '1987,2010p'`,
+  `git -C ../knots show 29.x-knots:src/net_processing.cpp | sed -n
+  '1888,1910p'`, and `sed -n '2055,2085p' src/net_processing.cpp` show
+  current Core still requires `getblockfrompeer` callers to have the header and
+  drops prior in-flight state before same-peer duplicate detection, while Knots
+  and the port can fetch by hash without a known header and preserve the
+  duplicate same-peer error.
 - `git log origin/master --follow --oneline -- <remaining source-looking
   missing path>` for old `core_write`, fee, libevent, orphanage, transaction
   identifier, epochguard, and test-helper paths
@@ -2335,6 +2350,10 @@ Functional tests:
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_getblockfrompeer_no_header`
+- `python3 test/functional/rpc_getblockfrompeer.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_review_port
+  --portseed=26455`
 - `python3 test/functional/rpc_mempool_info.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks.py --configfile build/test/config.ini
@@ -2470,6 +2489,10 @@ Functional tests:
   `python3 ../knots/test/functional/rpc_psbt.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_rpc_psbt_anti_fee_sniping_review_knots --portseed=26454`
   passed on unmodified Knots, including Knots' native
   `walletcreatefundedpsbt` anti-fee-sniping assertion
+- Original Knots cross-check:
+  `python3 ../knots/test/functional/rpc_getblockfrompeer.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_review_knots --portseed=26456`
+  passed on unmodified Knots, including no-header fetches, duplicate same-peer
+  request errors, and pruned-node refetch coverage.
 - Original Knots cross-check:
   a one-off subclass of `rpc_net.py` running only
   `test_addnode_cjdns_duplicate` with
