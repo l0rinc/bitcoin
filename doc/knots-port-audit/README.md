@@ -122,6 +122,25 @@ Other missing/adapted Knots pieces found during this pass:
   framework send helper and hash/wtxid properties (`77d2b2c025`).
   `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
   `p2p_block_times.py` pass.
+- Knots' software-expiry behavior is present and should be treated as a
+  visible non-Core divergence: by default the client has an expiry timestamp,
+  warns four weeks before expiry, refuses block-template creation after expiry,
+  keeps accepting blocks for 144 expired-MTP blocks, then rejects new blocks
+  with `node-expired`, and refuses startup after expiry unless overridden.
+  `feature_softwareexpiry.py` exposed a port-side no-UI warning regression from
+  Core's newer no-caption UI signal API: Knots passed `"Warning"`/`"Error"`
+  captions with non-modal icon styles, while the port printed the message
+  without prefixes. The port now derives no-UI prefixes from warning/error icon
+  bits as `0bbf2e8bb3`.
+- `feature_sync_coins_tip_after_chain_sync.py` now uses the current
+  `create_block(..., ntime=...)` and P2P send helpers (`0216a33c43`), and the
+  post-IBD chainstate disk-sync coverage passes.
+- CLI completion coverage exposed stale generated artifacts: `exportasmap` now
+  completes as a file argument, and the zsh `bitcoin-cli` completion file from
+  Knots had not been carried into the port. The generated bash/zsh completions
+  are now refreshed as `c45749ae43`, and `tool_cli_completion.py` passes.
+- `feature_fee_estimates_persist.py` passes, covering the `savefeeestimates`
+  RPC and shutdown persistence path.
 
 ## Original Knots Defects Confirmed
 
@@ -284,7 +303,11 @@ Functional tests:
 - `python3 test/functional/feature_maxuploadtarget.py --configfile build/test/config.ini`
 - `python3 test/functional/interface_rest.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_fee_estimates_persist.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_softwareexpiry.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_torcontrol.py --configfile build/test/config.ini`
+- `python3 test/functional/tool_cli_completion.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_signer.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
