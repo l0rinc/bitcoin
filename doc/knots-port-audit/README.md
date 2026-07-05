@@ -836,15 +836,18 @@ Other missing/adapted Knots pieces found during this pass:
   that replacement at activation, expiry, and activation-boundary reorg points.
 - The RDTS P2P-service review found a port-introduced handshake cleanup issue
   after adapting Knots' preferential RDTS peering and `-maxstaleoutbound`
-  behavior (`7f57236043`, `44d7e88dba`) onto current Core's newer VERSION
-  handling. The port had retained Core's earlier peer-service/tx-relay setup
-  and also inserted Knots' later setup block after the RDTS stale-peer gate, so
-  accepted transaction-relay peers called `Peer::SetTxRelay()` twice and hit
-  its `Assume(!m_tx_relay)` invariant. Unmodified Knots sets this state once
-  after the RDTS gate, and current Core has no RDTS gate. The port now removes
-  the duplicate setup as `d10d97fd54`, updates stale fixed-limit comments, and
-  extends `peerman_tests` / `p2p_handshake.py` to cover `-maxstaleoutbound`
-  parsing and the zero-tolerance non-BIP110 path.
+  behavior (`7f57236043`, `44d7e88dba`, `c146ef8c7a`) onto current Core's
+  newer VERSION handling. The port had retained Core's earlier
+  peer-service/tx-relay setup and also inserted Knots' later setup block after
+  the RDTS stale-peer gate, so accepted transaction-relay peers called
+  `Peer::SetTxRelay()` twice and hit its `Assume(!m_tx_relay)` invariant.
+  Unmodified Knots sets this state once after the RDTS gate, and current Core
+  has no RDTS gate. The port now removes the duplicate setup as `d10d97fd54`,
+  updates stale fixed-limit comments, and extends `peerman_tests` /
+  `p2p_handshake.py` to cover `-maxstaleoutbound` parsing and the
+  zero-tolerance non-BIP110 path. A follow-up check confirmed the later Knots
+  default of eight stale outbound peers is present as
+  `DEFAULT_MAXSTALEOUTBOUND{8}`.
 - The versionbits RPC review confirmed Knots' `period_start` field for
   BIP9 signalling statistics (`5e04731447`) is present in the port and covered
   by `rpc_blockchain.py`. Current Core master still reports `period`,
@@ -887,12 +890,14 @@ Other missing/adapted Knots pieces found during this pass:
   history, traffic graph tooltips, mempool stats, and the Network Watch GUI
   are all present in the current tree. These were not new omissions or original
   Knots defects from this pass.
-- A refreshed 2026 exact-patch mismatch pass found three final-tree omissions
+- A refreshed 2026 exact-patch mismatch pass found four final-tree omissions
   that were not suspicious but should be carried for release parity:
   Knots' pruning help text warning that wallets and indexes must stay active
   while pruning is enabled (`5a75f172bb`, ported as `dbccc5fe0d`), the Debian
   copyright update (`d0ddf66a2c`, ported as `6bd131f112`), and the Boost 1.91
-  multi-index workaround (`4d22aa2b70`, ported as `c9af9b3a49`). The Boost
+  multi-index workaround (`4d22aa2b70`, ported as `c9af9b3a49`), and the Guix
+  Darwin linker flag for identical-code-folding parity (`bea657ca5b`, ported
+  as `39792fee03`). The Boost
   commit was adapted because current Core's cluster-mempool miner no longer
   has Knots' old `CTxMemPoolModifiedEntry_Indices` container; the live
   `CTxMemPoolEntry` and `Announcement` containers now use the Knots
@@ -1347,6 +1352,7 @@ Source/manifest checks:
   identifier, epochguard, and test-helper paths
 - Direct import of `test/functional/test_runner.py` with
   `test/functional` on `sys.path` returned `missing_count 0`
+- `bash -n contrib/guix/libexec/build.sh`
 
 Builds:
 
