@@ -16,9 +16,13 @@ from test_framework.util import (
 )
 from test_framework.wallet_util import WalletUnlock
 
+TEST_KEYPOOL_SIZE = 10
+TEST_NEW_KEYPOOL_SIZE = TEST_KEYPOOL_SIZE + 2
+
 class KeyPoolTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
+        self.extra_args = [[f"-keypool={TEST_KEYPOOL_SIZE}"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -125,26 +129,24 @@ class KeyPoolTest(BitcoinTestFramework):
             }
         ])
         nodes[0].walletlock()
-        # Keep creating keys
+        # Keep creating keys until we run out.
+        for _ in range(TEST_KEYPOOL_SIZE - 1):
+            nodes[0].getnewaddress()
         addr = nodes[0].getnewaddress()
         addr_data = nodes[0].getaddressinfo(addr)
         assert_not_equal(addr_before_encrypting_data['hdmasterfingerprint'], addr_data['hdmasterfingerprint'])
         assert_raises_rpc_error(-12, "Error: Keypool ran out, please call keypoolrefill first", nodes[0].getnewaddress)
 
-        # put six (plus 2) new keys in the keypool (100% external-, +100% internal-keys, 1 in min)
+        # Put new keys in the keypool.
         with WalletUnlock(nodes[0], 'test'):
-            nodes[0].keypoolrefill(6)
+            nodes[0].keypoolrefill(TEST_NEW_KEYPOOL_SIZE)
         wi = nodes[0].getwalletinfo()
-        assert_equal(wi['keypoolsize_hd_internal'], 24)
-        assert_equal(wi['keypoolsize'], 24)
+        assert_equal(wi['keypoolsize_hd_internal'], TEST_NEW_KEYPOOL_SIZE * 4)
+        assert_equal(wi['keypoolsize'], TEST_NEW_KEYPOOL_SIZE * 4)
 
         # drain the internal keys
-        nodes[0].getrawchangeaddress()
-        nodes[0].getrawchangeaddress()
-        nodes[0].getrawchangeaddress()
-        nodes[0].getrawchangeaddress()
-        nodes[0].getrawchangeaddress()
-        nodes[0].getrawchangeaddress()
+        for _ in range(TEST_NEW_KEYPOOL_SIZE):
+            nodes[0].getrawchangeaddress()
         # remember keypool sizes
         wi = nodes[0].getwalletinfo()
         kp_size_before = [wi['keypoolsize_hd_internal'], wi['keypoolsize']]
@@ -157,13 +159,9 @@ class KeyPoolTest(BitcoinTestFramework):
 
         # drain the external keys
         addr = set()
-        addr.add(nodes[0].getnewaddress(address_type="bech32"))
-        addr.add(nodes[0].getnewaddress(address_type="bech32"))
-        addr.add(nodes[0].getnewaddress(address_type="bech32"))
-        addr.add(nodes[0].getnewaddress(address_type="bech32"))
-        addr.add(nodes[0].getnewaddress(address_type="bech32"))
-        addr.add(nodes[0].getnewaddress(address_type="bech32"))
-        assert_equal(len(addr), 6)
+        for _ in range(TEST_NEW_KEYPOOL_SIZE):
+            addr.add(nodes[0].getnewaddress(address_type="bech32"))
+        assert_equal(len(addr), TEST_NEW_KEYPOOL_SIZE)
         # remember keypool sizes
         wi = nodes[0].getwalletinfo()
         kp_size_before = [wi['keypoolsize_hd_internal'], wi['keypoolsize']]
@@ -174,9 +172,10 @@ class KeyPoolTest(BitcoinTestFramework):
         kp_size_after = [wi['keypoolsize_hd_internal'], wi['keypoolsize']]
         assert_equal(kp_size_before, kp_size_after)
 
-        # refill keypool with three new addresses
+        # Refill the keypool. At this point the keypool has more than 45 keys
+        # in it, so calling keypoolrefill with anything smaller is a no-op.
         nodes[0].walletpassphrase('test', 1)
-        nodes[0].keypoolrefill(3)
+        nodes[0].keypoolrefill(50)
 
         # test walletpassphrase timeout
         # CScheduler relies on condition_variable::wait_until() which does not
@@ -185,7 +184,7 @@ class KeyPoolTest(BitcoinTestFramework):
         nodes[0].wait_until(lambda: nodes[0].getwalletinfo()["unlocked_until"] == 0, timeout=5)
 
         # drain the keypool
-        for _ in range(3):
+        for _ in range(50):
             nodes[0].getnewaddress()
         assert_raises_rpc_error(-12, "Keypool ran out", nodes[0].getnewaddress)
 
