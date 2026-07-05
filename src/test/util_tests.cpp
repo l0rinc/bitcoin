@@ -695,7 +695,9 @@ static void TestAddMatrix()
 BOOST_AUTO_TEST_CASE(util_overflow)
 {
     TestAddMatrixOverflow<unsigned>();
+    TestAddMatrixOverflow<uint64_t>();
     TestAddMatrix<signed>();
+    TestAddMatrix<int64_t>();
 }
 
 /* Check for multiplication overflow */
