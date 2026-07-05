@@ -62,6 +62,10 @@ Other missing/adapted Knots pieces found during this pass:
   (`f9f7587b59`, ported as `7985bced24`). Without the clamp, a negative
   user-provided threshold is assigned through the unsigned byte-count path. The
   port adds `feature_init.py` coverage for both `-lowmem=1` and `-lowmem=-1`.
+- Knots' external signer fingerprint hardening (`6d2c2259ee`,
+  `12eefda89a`, `ee39394ad3`) is already present in this port via the earlier
+  wallet/RPC reconciliation commit `e8c2b257ee`, with invalid-fingerprint
+  coverage in `rpc_signer.py`.
 
 ## Original Knots Defects Confirmed
 
@@ -211,3 +215,4 @@ Functional tests:
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini`
 - `python3 test/functional/interface_rest.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_signer.py --configfile build/test/config.ini`
