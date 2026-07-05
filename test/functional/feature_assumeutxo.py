@@ -477,16 +477,40 @@ class AssumeutxoTest(BitcoinTestFramework):
         assumed_tx_height = START_HEIGHT
         assumed_tx_block_hash = blocks[assumed_tx_height].hash
         assumed_txid = n0.getblock(assumed_tx_block_hash, verbosity=2)['tx'][0]['txid']
+        assumed_confirmations = 1 + SNAPSHOT_BASE_HEIGHT - assumed_tx_height
+        validated_confirmations = 1 + FINAL_HEIGHT - assumed_tx_height
 
         def check_getrawtransaction_assumed_confirmations(node):
             tx = node.getrawtransaction(assumed_txid, 1, assumed_tx_block_hash)
             assert_equal(tx['confirmations'], 0)
-            assert_equal(tx['confirmations_assumed'], 1 + SNAPSHOT_BASE_HEIGHT - assumed_tx_height)
+            assert_equal(tx['confirmations_assumed'], assumed_confirmations)
 
         def check_getrawtransaction_validated_confirmations(node):
             tx = node.getrawtransaction(assumed_txid, 1, assumed_tx_block_hash)
-            assert_equal(tx['confirmations'], 1 + FINAL_HEIGHT - assumed_tx_height)
+            assert_equal(tx['confirmations'], validated_confirmations)
             assert 'confirmations_assumed' not in tx
+
+        def check_gettxout_assumed_confirmations(node):
+            txout = node.gettxout(assumed_txid, 0)
+            assert_equal(txout['confirmations'], 0)
+            assert_equal(txout['confirmations_assumed'], assumed_confirmations)
+
+        def check_gettxout_validated_confirmations(node):
+            txout = node.gettxout(assumed_txid, 0)
+            assert_equal(txout['confirmations'], validated_confirmations)
+            assert 'confirmations_assumed' not in txout
+
+        def check_txoutproof_assumed_confirmations(node):
+            proof = node.gettxoutproof([assumed_txid], assumed_tx_block_hash, prove_witness=True)
+            proven = node.verifytxoutproof(proof['proof'], verify_witness=True)
+            assert_equal(proven['confirmations'], 0)
+            assert_equal(proven['confirmations_assumed'], assumed_confirmations)
+
+        def check_txoutproof_validated_confirmations(node):
+            proof = node.gettxoutproof([assumed_txid], assumed_tx_block_hash, prove_witness=True)
+            proven = node.verifytxoutproof(proof['proof'], verify_witness=True)
+            assert_equal(proven['confirmations'], validated_confirmations)
+            assert 'confirmations_assumed' not in proven
 
         # Mine more blocks on top of the snapshot that n1 hasn't yet seen. This
         # will allow us to test n1's sync-to-tip on top of a snapshot.
@@ -766,8 +790,10 @@ class AssumeutxoTest(BitcoinTestFramework):
         assert_equal(snapshot['snapshot_blockhash'], dump_output['base_hash'])
         assert_equal(snapshot['validated'], False)
 
-        self.log.info("Check that getrawtransaction separates assumed confirmations")
+        self.log.info("Check that pre-snapshot RPCs separate assumed confirmations")
         check_getrawtransaction_assumed_confirmations(n2)
+        check_gettxout_assumed_confirmations(n2)
+        check_txoutproof_assumed_confirmations(n2)
 
         self.log.info("Check that loading the snapshot again will fail because there is already an active snapshot.")
         msg = "Unable to load UTXO snapshot: Can't activate a snapshot-based chainstate more than once"
@@ -795,8 +821,10 @@ class AssumeutxoTest(BitcoinTestFramework):
         }
         self.wait_until(lambda: n2.getindexinfo() == completed_idx_state)
 
-        self.log.info("Check that getrawtransaction reports validated confirmations after background validation")
+        self.log.info("Check that pre-snapshot RPCs report validated confirmations after background validation")
         check_getrawtransaction_validated_confirmations(n2)
+        check_gettxout_validated_confirmations(n2)
+        check_txoutproof_validated_confirmations(n2)
 
         for i in (0, 2):
             n = self.nodes[i]

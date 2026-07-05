@@ -675,6 +675,17 @@ public:
      */
     const CBlockIndex* SnapshotBase() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
+    /**
+     * The base of the snapshot this chainstate is validating.
+     *
+     * nullptr if this chainstate was not created from a snapshot or the
+     * snapshot has already been validated.
+     */
+    const CBlockIndex* UnvalidatedSnapshotBase() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        return m_assumeutxo == Assumeutxo::UNVALIDATED ? SnapshotBase() : nullptr;
+    }
+
     //! Return target block which chainstate tip is expected to reach, if this
     //! is a historic chainstate being used to validate a snapshot, or null if
     //! chainstate targets the most-work block.
@@ -1385,8 +1396,8 @@ public:
     //! Get range of historical blocks to download.
     std::optional<std::pair<const CBlockIndex*, const CBlockIndex*>> GetHistoricalBlockRange() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
-    //! Return the height of the base block of the snapshot in use, if one exists.
-    std::optional<int> GetSnapshotBaseHeight() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! Return the height of the base block of the unvalidated snapshot in use, if one exists.
+    std::optional<int> GetUnvalidatedSnapshotBaseHeight() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     //! Call ActivateBestChain() on every chainstate.
     util::Result<void> ActivateBestChains() LOCKS_EXCLUDED(::cs_main);

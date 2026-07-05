@@ -6908,9 +6908,9 @@ std::optional<std::pair<const CBlockIndex*, const CBlockIndex*>> ChainstateManag
     return std::make_pair(chainstate->m_chain.Tip(), chainstate->TargetBlock());
 }
 
-std::optional<int> ChainstateManager::GetSnapshotBaseHeight() const
+std::optional<int> ChainstateManager::GetUnvalidatedSnapshotBaseHeight() const
 {
-    const CBlockIndex* base{CurrentChainstate().SnapshotBase()};
+    const CBlockIndex* base{CurrentChainstate().UnvalidatedSnapshotBase()};
     return base ? std::optional<int>{base->nHeight} : std::nullopt;
 }
 

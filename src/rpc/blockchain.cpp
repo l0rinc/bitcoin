@@ -358,9 +358,22 @@ static RPCMethod waitfornewblock()
     NodeContext& node = EnsureAnyNodeContext(request.context);
     Mining& miner = EnsureMining(node);
 
+    // If the caller provided a current_tip value, pass it to waitTipChanged().
+    //
+    // If the caller did not provide a current tip hash, call getTip() to get
+    // one and wait for the tip to be different from this value. This mode is
+    // less reliable because if the tip changed between waitfornewblock calls,
+    // it will need to change a second time before this call returns.
     auto block{CHECK_NONFATAL(miner.getTip()).value()};
-    std::optional<BlockRef> new_block = timeout ? miner.waitTipChanged(block.hash, std::chrono::milliseconds(timeout)) :
-                                              miner.waitTipChanged(block.hash);
+
+    uint256 tip_hash{request.params[1].isNull()
+        ? block.hash
+        : ParseHashV(request.params[1], "current_tip")};
+
+    // If the user provided an invalid current_tip then this call immediately
+    // returns the current tip.
+    std::optional<BlockRef> new_block = timeout ? miner.waitTipChanged(tip_hash, std::chrono::milliseconds(timeout)) :
+                                              miner.waitTipChanged(tip_hash);
 
     // Return current block upon shutdown
     if (new_block) block = *new_block;
@@ -1425,12 +1438,12 @@ static RPCMethod gettxout()
     if (coin->nHeight == MEMPOOL_HEIGHT) {
         ret.pushKV("confirmations", 0);
     } else {
-        const auto assumed_base_height = chainman.GetSnapshotBaseHeight();
+        const auto assumed_base_height = chainman.GetUnvalidatedSnapshotBaseHeight();
         if (assumed_base_height && coin->nHeight < *assumed_base_height) {
             ret.pushKV("confirmations", 0);
             ret.pushKV("confirmations_assumed", (int64_t)(pindex->nHeight - coin->nHeight + 1));
         } else {
-        ret.pushKV("confirmations", (int64_t)(pindex->nHeight - coin->nHeight + 1));
+            ret.pushKV("confirmations", (int64_t)(pindex->nHeight - coin->nHeight + 1));
         }
     }
     ret.pushKV("value", ValueFromAmount(coin->out.nValue));

@@ -295,7 +295,7 @@ static RPCMethod verifytxoutproof()
 
                     const auto pindex_tip = active_chain.Tip();
                     CHECK_NONFATAL(pindex_tip);
-                    const auto assumed_base_height = chainman.GetSnapshotBaseHeight();
+                    const auto assumed_base_height = chainman.GetUnvalidatedSnapshotBaseHeight();
                     if (assumed_base_height && pindex->nHeight < *assumed_base_height) {
                         res.pushKV("confirmations", 0);
                         res.pushKV("confirmations_assumed", (int64_t)(pindex_tip->nHeight - pindex->nHeight + 1));

@@ -75,7 +75,7 @@ static void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& 
         const CBlockIndex* pindex = active_chainstate.m_blockman.LookupBlockIndex(hashBlock);
         if (pindex) {
             if (active_chainstate.m_chain.Contains(*pindex)) {
-                const auto assumed_base{active_chainstate.SnapshotBase()};
+                const auto assumed_base{active_chainstate.UnvalidatedSnapshotBase()};
                 if (assumed_base && pindex->nHeight < assumed_base->nHeight) {
                     entry.pushKV("confirmations", 0);
                     entry.pushKV("confirmations_assumed", 1 + active_chainstate.m_chain.Height() - pindex->nHeight);
