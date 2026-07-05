@@ -682,6 +682,18 @@ Other missing/adapted Knots pieces found during this pass:
   for a real localhost peer connecting through a dedicated `=onion` bind while
   `-whitelist=noban@127.0.0.1` is configured; the peer is reported as
   `network="onion"` and receives no whitelist permissions.
+- The block-filter permission review confirmed Knots' `blockfilters`
+  whitebind/whitelist permission (`d153093ba2`, `aa2885797e`) is present in
+  the port and absent from current Core. The permission lets an explicitly
+  trusted peer receive `NODE_COMPACT_FILTERS` and request BIP157 compact
+  filters even when global `-peerblockfilters` is off, while startup still
+  rejects granting it without `-blockfilterindex`. The port now covers this in
+  `p2p_blockfilters.py` by disabling default localhost `bloomfilter`
+  permission, whitelisting only `blockfilters`, checking
+  `getpeerinfo.permissions`, checking the advertised service bit, and
+  requesting a `cfcheckpt`. `p2p_permissions.py` also covers permission
+  reporting and merging. This is explicit peer-service control, not consensus
+  behavior.
 - The invalid-block peer-punishment review confirmed Knots' relaxation
   (`7c7b5839f4`) is present in the port while current Core still routes the
   same block/header validation failures through `Misbehaving(...)`. The port
@@ -1424,6 +1436,10 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_eviction_forceinbound`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_onion_whitelist`
+- `python3 test/functional/p2p_blockfilters.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_blockfilters_permission_2`
+- `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_blockfilters`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_addconnection`
