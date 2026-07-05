@@ -482,7 +482,8 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
         BOOST_CHECK(replace_cpfp_child->second == expected_new_chunks);
     }
 
-    // third transaction causes the topology check to fail
+    // A third transaction in the same cluster is still calculable on the
+    // current TxGraph-backed mempool.
     const auto normal_tx = make_tx(/*inputs=*/ {high_tx}, /*output_values=*/ {995 * CENT});
     TryAddToMempool(pool, entry.Fee(normal_fee).FromTx(normal_tx));
     const auto entry_normal = pool.GetIter(normal_tx->GetHash()).value();
@@ -494,8 +495,7 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
         changeset->StageRemoval(entry_normal);
         RBFTestStageAddition(*changeset, replacement_tx, high_fee);
         const auto replace_too_large{changeset->CalculateChunksForRBF()};
-        BOOST_CHECK(!replace_too_large.has_value());
-        BOOST_CHECK_EQUAL(util::ErrorString(replace_too_large).original, strprintf("%s has 2 ancestors, max 1 allowed", normal_tx->GetHash().GetHex()));
+        BOOST_CHECK(replace_too_large.has_value());
     }
 
     // Make a size 2 cluster that is itself two chunks; evict both txns
@@ -566,10 +566,11 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
         BOOST_CHECK(replace_multiple_clusters_2->second.size() == 1);
     }
 
-    // Add another descendant to conflict_1, making the cluster size > 2 should fail at this point.
+    // Add another descendant to conflict_1; the current TxGraph-backed mempool
+    // can still calculate the replacement diagram.
     const auto conflict_1_grand_child = make_tx(/*inputs=*/{conflict_1_child}, /*output_values=*/ {995 * CENT});
     TryAddToMempool(pool, entry.Fee(high_fee).FromTx(conflict_1_grand_child));
-    const auto conflict_1_grand_child_entry = pool.GetIter(conflict_1_child->GetHash()).value();
+    const auto conflict_1_grand_child_entry = pool.GetIter(conflict_1_grand_child->GetHash()).value();
 
     {
         auto changeset = pool.GetChangeSet();
@@ -581,8 +582,7 @@ BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
         RBFTestStageAddition(*changeset, replacement_tx, high_fee);
         const auto replace_cluster_size_3{changeset->CalculateChunksForRBF()};
 
-        BOOST_CHECK(!replace_cluster_size_3.has_value());
-        BOOST_CHECK_EQUAL(util::ErrorString(replace_cluster_size_3).original, strprintf("%s has both ancestor and descendant, exceeding cluster limit of 2", conflict_1_child->GetHash().GetHex()));
+        BOOST_CHECK(replace_cluster_size_3.has_value());
     }
 }
 
