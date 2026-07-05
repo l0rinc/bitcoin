@@ -758,9 +758,11 @@ private:
             if (const auto* cache{dynamic_cast<const CCoinsViewCache*>(base)}) {
                 const size_t cache_size{cache->GetCacheSize()};
                 const size_t dirty_count{cache->GetDirtyCount()};
+                const size_t memory_usage{cache->DynamicMemoryUsage()};
                 auto coin{base->PeekCoin(outpoint)};
                 Assume(cache->GetCacheSize() == cache_size);
                 Assume(cache->GetDirtyCount() == dirty_count);
+                Assume(cache->DynamicMemoryUsage() == memory_usage);
                 return coin;
             }
         }
