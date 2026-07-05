@@ -267,6 +267,16 @@ Other missing/adapted Knots pieces found during this pass:
   `bad-txns-input-scriptcheck-sigops`, and intentionally defers a non-push-only
   P2SH scriptSig after `IsStandardTx()` is ignored so consensus script checks
   catch it. The unit now matches the ported Knots behavior.
+- The RDTS consensus-equivalence follow-up compared the port against Knots'
+  `interpreter`, `tx_verify`, `validation`, `deploymentstatus`, `versionbits`,
+  and chain-parameter paths. The script, output-size, generation-transaction,
+  per-input old-UTXO exemption, and temporary-deployment state-machine logic
+  match Knots after adapting from Knots' global BIP9 window/threshold fields to
+  Core master's per-deployment `period`/`threshold` fields. The only material
+  API adaptation in `ConnectBlock()` is replacing Knots'
+  `StateSinceHeight(pindex->pprev, ...)` activation-height query with Core's
+  `Info(*pindex, ...).active_since`; the focused RDTS activation tests cover
+  that replacement at activation, expiry, and activation-boundary reorg points.
 - A recent patch-id sweep left only two unmatched 2026 Knots commits:
   `33f9de6b91` and `c4c558b2c4`. Both are historical reverts, not final Knots
   tree deltas. Current unmodified Knots `29.x-knots` has Windows taskbar
@@ -499,11 +509,14 @@ cpp-subprocess memory/Windows fixes.
   port now preserves Core's explicit RPC error instead of crashing. Ported
   legacy-only wallet tests are skipped by the framework when `--legacy-wallet`
   mode is selected.
-- BIP-110/RDTS consensus equivalence still needs dedicated review. The current
-  pass mapped the Knots RDTS subjects to replayed/adapted port commits and
-  reran the focused RDTS, UTXO-height, temporary-deployment, peer-manager, net,
-  and P2P handshake tests. That is focused regression evidence, not a full
-  consensus-equivalence proof against Knots or Core.
+- BIP-110/RDTS consensus equivalence remains the main consensus-risk area
+  because it is an intentional soft-fork divergence from Core. The current pass
+  mapped the Knots RDTS subjects to replayed/adapted port commits, compared the
+  consensus-critical source paths against Knots, and reran the focused RDTS,
+  UTXO-height, temporary-deployment, versionbits, script, tx-validation, and
+  P2P handshake tests. That is focused regression evidence and source-level
+  adaptation evidence, not a full independent consensus-equivalence proof or
+  exhaustive cross-client block corpus.
 
 ## Verification
 
