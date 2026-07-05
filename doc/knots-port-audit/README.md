@@ -159,6 +159,18 @@ Other missing/adapted Knots pieces found during this pass:
   `881949b28d`. Actual Knots already carries the relevant Knots CMake fixes;
   the compile failures were introduced by this port's current-Core kernel API
   adaptation.
+- The exact-patch review found Knots' dynamic `-dbcache` default series was
+  only partially present after rebasing onto current Core. Core master already
+  has the simpler 1 GiB high default, but actual Knots `29.x-knots` has the
+  later RAM-aware formula, `node/dbcache.{h,cpp}` split, auto-default startup
+  logging, platform-dependent help text, GUI migration through
+  `node::GetDefaultDBCache()`, and bitcoinkernel default-cache routing
+  (`7e1fd61a38`, `54fa06dfd6`, `aa55dd574d`, `be3eb860b8`,
+  `595b246cf9`, `5e367d4ba5`, plus follow-ups). This was a port omission, not
+  an original Knots defect or consensus issue. The port now matches Knots'
+  resource-selection behavior as `96d1c6c8a9`, with unit coverage for the
+  formula/warning thresholds and a shared `libbitcoinkernel` build proving the
+  new kernel C API dependency is linked.
 - Compact-block extra-transaction coverage now uses the current P2P test
   framework send helper and hash/wtxid properties (`77d2b2c025`).
   `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
@@ -587,6 +599,13 @@ Builds:
   -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_ZMQ=OFF
   -DENABLE_WALLET=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
 - `cmake --build /tmp/bitcoin-kernel-after --target bitcoinkernel -j4`
+- `cmake -S . -B /tmp/bitcoin-kernel-dbcache -DBUILD_KERNEL_LIB=ON
+  -DBUILD_SHARED_LIBS=ON -DBUILD_DAEMON=OFF -DBUILD_CLI=OFF
+  -DBUILD_BITCOINCONSENSUS_LIB=OFF -DBUILD_TX=OFF -DBUILD_UTIL=OFF
+  -DBUILD_UTIL_CHAINSTATE=OFF -DBUILD_WALLET_TOOL=OFF -DBUILD_GUI=OFF
+  -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_ZMQ=OFF
+  -DENABLE_WALLET=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
+- `cmake --build /tmp/bitcoin-kernel-dbcache --target bitcoinkernel -j4`
 - `TMPDIR=/mnt/my_storage/tmp cmake -S . -B /tmp/bitcoin-asan-consensus-after
   -DBUILD_BITCOINCONSENSUS_LIB=ON -DBUILD_SHARED_LIBS=ON
   -DSANITIZERS=address -DBUILD_DAEMON=OFF -DBUILD_CLI=OFF -DBUILD_TX=OFF
@@ -621,6 +640,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=miner_tests`
 - `build/bin/test_bitcoin --run_test=policyestimator_tests`
 - `build/bin/test_bitcoin --run_test=codex32_tests`
+- `build/bin/test_bitcoin --run_test=caches_tests`
 - `build/bin/test_bitcoin --run_test=blockfilter_index_tests`
 - `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
