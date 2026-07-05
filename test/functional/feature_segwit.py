@@ -245,12 +245,14 @@ class SegWitTest(BitcoinTestFramework):
         tx1_hex = self.nodes[0].gettransaction(txid1)['hex']
         tx1 = tx_from_hex(tx1_hex)
 
-        # Check that wtxid is properly reported in mempool entry (txid1)
-        assert_equal(self.nodes[0].getmempoolentry(txid1)["wtxid"], tx1.wtxid_hex)
+        # Check that hash and wtxid are properly reported in mempool entry (txid1)
+        entry = self.nodes[0].getmempoolentry(txid1)
+        assert_equal(entry["hash"], tx1.wtxid_hex)
+        assert_equal(entry["wtxid"], tx1.wtxid_hex)
 
         # Check that weight and vsize are properly reported in mempool entry (txid1)
-        assert_equal(self.nodes[0].getmempoolentry(txid1)["vsize"], tx1.get_vsize())
-        assert_equal(self.nodes[0].getmempoolentry(txid1)["weight"], tx1.get_weight())
+        assert_equal(entry["vsize"], tx1.get_vsize())
+        assert_equal(entry["weight"], tx1.get_weight())
 
         # Now create tx2, which will spend from txid1.
         tx = CTransaction()
@@ -261,12 +263,14 @@ class SegWitTest(BitcoinTestFramework):
         tx = tx_from_hex(tx2_hex)
         assert not tx.wit.is_null()
 
-        # Check that wtxid is properly reported in mempool entry (txid2)
-        assert_equal(self.nodes[0].getmempoolentry(txid2)["wtxid"], tx.wtxid_hex)
+        # Check that hash and wtxid are properly reported in mempool entry (txid2)
+        entry = self.nodes[0].getmempoolentry(txid2)
+        assert_equal(entry["hash"], tx.wtxid_hex)
+        assert_equal(entry["wtxid"], tx.wtxid_hex)
 
         # Check that weight and vsize are properly reported in mempool entry (txid2)
-        assert_equal(self.nodes[0].getmempoolentry(txid2)["vsize"], tx.get_vsize())
-        assert_equal(self.nodes[0].getmempoolentry(txid2)["weight"], tx.get_weight())
+        assert_equal(entry["vsize"], tx.get_vsize())
+        assert_equal(entry["weight"], tx.get_weight())
 
         # Now create tx3, which will spend from txid2
         tx = CTransaction()
@@ -283,12 +287,14 @@ class SegWitTest(BitcoinTestFramework):
         assert txid2 in template_txids
         assert txid3 in template_txids
 
-        # Check that wtxid is properly reported in mempool entry (txid3)
-        assert_equal(self.nodes[0].getmempoolentry(txid3)["wtxid"], tx.wtxid_hex)
+        # Check that hash and wtxid are properly reported in mempool entry (txid3)
+        entry = self.nodes[0].getmempoolentry(txid3)
+        assert_equal(entry["hash"], tx.wtxid_hex)
+        assert_equal(entry["wtxid"], tx.wtxid_hex)
 
         # Check that weight and vsize are properly reported in mempool entry (txid3)
-        assert_equal(self.nodes[0].getmempoolentry(txid3)["vsize"], tx.get_vsize())
-        assert_equal(self.nodes[0].getmempoolentry(txid3)["weight"], tx.get_weight())
+        assert_equal(entry["vsize"], tx.get_vsize())
+        assert_equal(entry["weight"], tx.get_weight())
 
         # Mine a block to clear the gbt cache again.
         self.generate(self.nodes[0], 1)
