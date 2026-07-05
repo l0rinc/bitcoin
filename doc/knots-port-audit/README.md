@@ -968,7 +968,10 @@ Other missing/adapted Knots pieces found during this pass:
   it skips outbound V1 attempts and V2-to-V1 fallback reconnections only for
   IPv4/IPv6 clearnet peers; V1 onion behavior remains allowed. The existing
   `p2p_v2_encrypted.py` coverage passes for V2 clearnet success, V1 clearnet
-  refusal, and V1 onion allowance.
+  refusal, and V1 onion allowance, and `feature_config_args.py` now covers the
+  startup guard that rejects `-v2onlyclearnet=1` when v2 transport is disabled.
+  The same focused startup-guard test passes against unmodified Knots, so this
+  is native Knots behavior rather than a port-introduced validation change.
 - Knots' user-agent sanitization hardening (`b9d2634b81`) was mostly present in
   the port as `eacc171127`: received peer user agents kept printable
   punctuation in `cleanSubVer`, and `util_tests` covered
@@ -2047,6 +2050,16 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_interface_zmq_review`
 - `python3 test/functional/p2p_v2_encrypted.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_v2_encrypted`
+- `python3 test/functional/feature_config_args.py --configfile
+  build/test/config.ini --test_methods
+  test_v2onlyclearnet_requires_v2transport
+  --tmpdir=/mnt/my_storage/tmp_feature_config_v2onlyclearnet_port
+  --portseed=26401`
+- `python3 test/functional/feature_config_args.py --configfile
+  build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_config_args_v2only_full
+  --portseed=26404`
+- `python3 test/functional/p2p_v2_encrypted.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_port --portseed=26403`
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_getblocklocations_review`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
@@ -2212,6 +2225,10 @@ Functional tests:
 - Original Knots cross-check:
   `test/functional/p2p_feefilter.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_feefilter_option`
   passed on unmodified Knots, including the new `-nofeefilter` assertion.
+- Original Knots cross-check:
+  `python3 test/functional/feature_config_args.py --configfile ../knots/build-repro/test/config.ini --test_methods test_v2onlyclearnet_requires_v2transport --tmpdir=/mnt/my_storage/tmp_feature_config_v2onlyclearnet_knots --portseed=26402`
+  passed on unmodified Knots, confirming the `-v2onlyclearnet=1` plus
+  `-v2transport=0` startup guard is inherited Knots behavior.
 - Original Knots cross-check:
   `test/functional/p2p_filter.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_filter_filtered_witness`
   passed on unmodified Knots, including the new
