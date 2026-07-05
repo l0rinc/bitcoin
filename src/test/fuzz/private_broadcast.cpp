@@ -123,6 +123,21 @@ bool ExpectedConfirmedForNode(const Model& model, NodeId nodeid)
     return false;
 }
 
+void AssertSameBroadcastInfo(const std::vector<PrivateBroadcast::TxBroadcastInfo>& a, const std::vector<PrivateBroadcast::TxBroadcastInfo>& b)
+{
+    Assert(a.size() == b.size());
+    for (size_t tx_pos{0}; tx_pos < a.size(); ++tx_pos) {
+        Assert(a[tx_pos].tx == b[tx_pos].tx);
+        Assert(a[tx_pos].time_added == b[tx_pos].time_added);
+        Assert(a[tx_pos].peers.size() == b[tx_pos].peers.size());
+        for (size_t peer_pos{0}; peer_pos < a[tx_pos].peers.size(); ++peer_pos) {
+            Assert(a[tx_pos].peers[peer_pos].address == b[tx_pos].peers[peer_pos].address);
+            Assert(a[tx_pos].peers[peer_pos].sent == b[tx_pos].peers[peer_pos].sent);
+            Assert(a[tx_pos].peers[peer_pos].received == b[tx_pos].peers[peer_pos].received);
+        }
+    }
+}
+
 std::optional<NodeId> PickUnassignedNode(FuzzedDataProvider& provider, const Model& model, const std::set<NodeId>& removed_active_nodes)
 {
     std::vector<NodeId> unassigned;
@@ -170,6 +185,11 @@ void AssertMatchesModel(PrivateBroadcast& pb, const Model& model)
     std::set<uint256> stale_actual;
     for (const auto& tx : pb.GetStale()) stale_actual.insert(Key(tx));
     Assert(stale_actual == ExpectedStale(model));
+
+    Assert(pb.HavePendingTransactions() == !model.empty());
+    const auto infos_after_queries{pb.GetBroadcastInfo()};
+    AssertSameBroadcastInfo(infos_after_queries, infos);
+    AssertSameBroadcastInfo(pb.GetBroadcastInfo(), infos);
 }
 
 std::vector<uint256> BestPickKeys(const Model& model)
