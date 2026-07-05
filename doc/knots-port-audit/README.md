@@ -596,6 +596,17 @@ Other missing/adapted Knots pieces found during this pass:
   `StateSinceHeight(pindex->pprev, ...)` activation-height query with Core's
   `Info(*pindex, ...).active_since`; the focused RDTS activation tests cover
   that replacement at activation, expiry, and activation-boundary reorg points.
+- The RDTS P2P-service review found a port-introduced handshake cleanup issue
+  after adapting Knots' preferential RDTS peering and `-maxstaleoutbound`
+  behavior (`7f57236043`, `44d7e88dba`) onto current Core's newer VERSION
+  handling. The port had retained Core's earlier peer-service/tx-relay setup
+  and also inserted Knots' later setup block after the RDTS stale-peer gate, so
+  accepted transaction-relay peers called `Peer::SetTxRelay()` twice and hit
+  its `Assume(!m_tx_relay)` invariant. Unmodified Knots sets this state once
+  after the RDTS gate, and current Core has no RDTS gate. The port now removes
+  the duplicate setup as `d10d97fd54`, updates stale fixed-limit comments, and
+  extends `peerman_tests` / `p2p_handshake.py` to cover `-maxstaleoutbound`
+  parsing and the zero-tolerance non-BIP110 path.
 - Earlier exact patch-id sweeps were useful for finding simple omissions, but
   they are not a complete proof because many Knots changes are adapted,
   squashed, or present through current Core under different commits. After the
@@ -1101,7 +1112,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests`
 - `build/bin/test_bitcoin --run_test=txvalidation_tests`
 - `build/bin/test_bitcoin --run_test=script_p2sh_tests/ValidateInputsStandardness`
-- `build/bin/test_bitcoin --run_test=peerman_tests`
+- `build/bin/test_bitcoin --run_test=peerman_tests --catch_system_error=no
+  --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=net_tests`
 - `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks
   --catch_system_error=no --log_level=nothing --report_level=no`
@@ -1143,6 +1155,8 @@ Functional tests:
 - `python3 test/functional/feature_versionbits_warning.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_versionbits_warning`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini`
+- `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_rdts_gate_fixed3`
 - `python3 test/functional/p2p_eviction.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_eviction_forceinbound`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
