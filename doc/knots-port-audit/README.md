@@ -199,6 +199,12 @@ Other missing/adapted Knots pieces found during this pass:
   port's `rpc_users.py` coverage exercises multi-entry auth files, blank
   `-rpcauth` around nonblank entries, `-norpcauth`, wallet-restricted auth
   entries, and cookie permission/replacement behavior.
+- The CJDNS addnode follow-up confirmed current Core already has the
+  `GetAddedNodeInfo()` CJDNS conversion from `f8fec8f26d`, while Knots' later
+  `AddNode()` duplicate detection for CJDNS addresses with alternate ports
+  (`28823f30dc`) remains a port-only network correctness fix. The port carries
+  it as `bcd1387ae6`, and `net_peer_connection_tests` covers both connected
+  CJDNS addnode reporting and duplicate CJDNS addnode rejection.
 
 ## Original Knots Defects Confirmed
 
@@ -295,6 +301,15 @@ under different commits. They are not all proven exploitable.
   HTTP startup error on stderr, and the specific bind-all-endpoints error in
   `debug.log`; the port covers this in `rpc_bind.py`.
 
+- CJDNS addnode duplicate detection:
+  `28823f30dc`
+
+  Current Core has the earlier CJDNS `GetAddedNodeInfo()` fix, but still
+  compares new addnode entries against existing entries using plain IPv6
+  resolution in `AddNode()`. Knots flips RFC4193-looking CJDNS addresses before
+  comparison and rejects CJDNS duplicates even when the port differs, avoiding
+  repeated manual-connection entries to the same CJDNS node.
+
 - External or Knots-only surfaces:
   `d637873230` fixes `GetBlockFileInfo` bounds handling, but the obvious
   RPC-facing caller is Knots' `getblockfileinfo`. Current Core's corresponding
@@ -372,6 +387,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=txvalidation_tests`
 - `build/bin/test_bitcoin --run_test=peerman_tests`
 - `build/bin/test_bitcoin --run_test=net_tests`
+- `build/bin/test_bitcoin --run_test=net_peer_connection_tests`
 - `build/bin/test_bitcoin --run_test=rest_tests`
 - `build/bin/test_bitcoin --run_test=validation_tests`
 - `build/bin/test_bitcoin --run_test=validation_block_tests`
