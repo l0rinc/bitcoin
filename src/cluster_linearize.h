@@ -1972,13 +1972,18 @@ std::tuple<std::vector<DepGraphIndex>, bool, uint64_t> Linearize(
  *   transactions have at most one parent), the result is optimal.
  * - Given a linearization L1 and a leaf transaction T in it. Let L2 be L1 with T moved to the end,
  *   optionally with its fee increased. Let L3 be the postlinearization of L2. L3 will be at least
- *   as good as L1. This means that replacing transactions with same-size higher-fee transactions
- *   will not worsen linearizations through a "drop conflicts, append new transactions,
- *   postlinearize" process.
+ *   as good as L1 when their diagrams satisfy CompareChunks' cumulative-sum precondition. This
+ *   means that replacing transactions with same-size higher-fee transactions will not worsen
+ *   linearizations through a "drop conflicts, append new transactions, postlinearize" process.
  */
 template<typename SetType>
 void PostLinearize(const DepGraph<SetType>& depgraph, std::span<DepGraphIndex> linearization)
 {
+    std::optional<std::vector<FeeFrac>> input_chunking;
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        input_chunking = ComparableChunkLinearization(depgraph, linearization);
+    }
+
     // This algorithm performs a number of passes (currently 2); the even ones operate from back to
     // front, the odd ones from front to back. Each results in an equal-or-better linearization
     // than the one started from.
@@ -2166,6 +2171,13 @@ void PostLinearize(const DepGraph<SetType>& depgraph, std::span<DepGraphIndex> l
         done.Set(tx_idx);
     }
     Assume(done == depgraph.Positions());
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (input_chunking) {
+            if (const auto output_chunking{ComparableChunkLinearization(depgraph, linearization)}) {
+                Assume(CompareChunks(*output_chunking, *input_chunking) >= 0);
+            }
+        }
+    }
 }
 
 } // namespace cluster_linearize
