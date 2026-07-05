@@ -745,6 +745,18 @@ Other missing/adapted Knots pieces found during this pass:
   requesting a `cfcheckpt`. `p2p_permissions.py` also covers permission
   reporting and merging. This is explicit peer-service control, not consensus
   behavior.
+- The feefilter and filtered-witness-block review confirmed Knots'
+  restored `-feefilter` option (`8fb8c3a1f7`) and
+  `MSG_FILTERED_WITNESS_BLOCK` handling (`9eaa8b5350`) are present in the
+  port and absent from current Core master. Current Core has no `-feefilter`
+  argument and still comments `MSG_FILTERED_WITNESS_BLOCK` out as unused. The
+  port now covers `-nofeefilter` in `p2p_feefilter.py`, and `p2p_filter.py`
+  requests a filtered witness block for a block containing a taproot-spending
+  transaction and asserts that the matched transaction is returned with its
+  witness-preserving `wtxid`. Both strengthened tests pass against
+  unmodified Knots, confirming these are native Knots behaviors rather than
+  port-introduced changes. This is P2P relay/service compatibility and
+  operator control, not consensus behavior.
 - The invalid-block peer-punishment review confirmed Knots' relaxation
   (`7c7b5839f4`) is present in the port while current Core still routes the
   same block/header validation failures through `Misbehaving(...)`. The port
@@ -1631,6 +1643,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_blockfilters_permission_2`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_blockfilters`
+- `build/test/functional/p2p_feefilter.py`
+- `build/test/functional/p2p_filter.py`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_cjdns_addnode_3`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
@@ -1829,6 +1843,13 @@ Functional tests:
   `--configfile /mnt/my_storage/knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_knots_rpc_net_cjdns_addnode_only` passed on
   unmodified Knots
+- Original Knots cross-check:
+  `test/functional/p2p_feefilter.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_feefilter_option`
+  passed on unmodified Knots, including the new `-nofeefilter` assertion.
+- Original Knots cross-check:
+  `test/functional/p2p_filter.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_filter_filtered_witness`
+  passed on unmodified Knots, including the new
+  `MSG_FILTERED_WITNESS_BLOCK` witness-preservation assertion.
 - Original Knots cross-check:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_versionbits_warning.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_versionbits_warning_check`
   (passes on unmodified Knots, confirming the earlier warning-range failure was
