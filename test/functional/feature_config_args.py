@@ -145,6 +145,15 @@ class ConfArgsTest(BitcoinTestFramework):
         main_conf_file_path = self.nodes[0].datadir_path / "bitcoin_main.conf"
         util.write_config(main_conf_file_path, n=0, chain='', extra_config=f'includeconf={inc_conf_file_path}\n')
 
+        self.log.info("Check acceptnonstdtxn is accepted on main chain")
+        with open(inc_conf_file_path, 'w') as conf:
+            conf.write('acceptnonstdtxn=1\n')
+        self.nodes[0].start([f"-conf={main_conf_file_path}", "-allowignoredconf"])
+        time.sleep(3)
+        assert self.nodes[0].process.poll() is None
+        self.nodes[0].process.terminate()
+        self.nodes[0].wait_until_stopped(expected_stderr=re.compile(".*", re.DOTALL))
+
         with open(inc_conf_file_path, 'w') as conf:
             conf.write('nono\n')
         self.nodes[0].assert_start_raises_init_error(expected_msg='Error: Error reading configuration file: parse error on line 1: nono, if you intended to specify a negated option, use nono=1 instead')
