@@ -24,6 +24,22 @@ static SpanReader& operator>>(SpanReader& ds, script_verify_flags& f)
     return ds;
 }
 
+static bool VerifyScriptWithErrorContract(const CScript& script_sig,
+                                          const CScript& script_pub_key,
+                                          const CScriptWitness& witness,
+                                          script_verify_flags flags,
+                                          const BaseSignatureChecker& checker)
+{
+    ScriptError error{SCRIPT_ERR_UNKNOWN_ERROR};
+    const bool result{VerifyScript(script_sig, script_pub_key, &witness, flags, checker, &error)};
+    assert(result == (error == SCRIPT_ERR_OK));
+
+    const bool result_without_error{VerifyScript(script_sig, script_pub_key, &witness, flags, checker, nullptr)};
+    assert(result_without_error == result);
+
+    return result;
+}
+
 FUZZ_TARGET(script_flags)
 {
     if (buffer.size() > 100'000) return;
@@ -58,9 +74,7 @@ FUZZ_TARGET(script_flags)
             const CTxOut& prevout = txdata.m_spent_outputs.at(i);
             const TransactionSignatureChecker checker{&tx, i, prevout.nValue, txdata, MissingDataBehavior::ASSERT_FAIL};
 
-            ScriptError serror;
-            const bool ret = VerifyScript(tx.vin.at(i).scriptSig, prevout.scriptPubKey, &tx.vin.at(i).scriptWitness, verify_flags, checker, &serror);
-            assert(ret == (serror == SCRIPT_ERR_OK));
+            const bool ret = VerifyScriptWithErrorContract(tx.vin.at(i).scriptSig, prevout.scriptPubKey, tx.vin.at(i).scriptWitness, verify_flags, checker);
 
             // Verify that removing flags from a passing test or adding flags to a failing test does not change the result
             if (ret) {
@@ -70,9 +84,7 @@ FUZZ_TARGET(script_flags)
             }
             if (!IsValidFlagCombination(verify_flags)) return;
 
-            ScriptError serror_fuzzed;
-            const bool ret_fuzzed = VerifyScript(tx.vin.at(i).scriptSig, prevout.scriptPubKey, &tx.vin.at(i).scriptWitness, verify_flags, checker, &serror_fuzzed);
-            assert(ret_fuzzed == (serror_fuzzed == SCRIPT_ERR_OK));
+            const bool ret_fuzzed = VerifyScriptWithErrorContract(tx.vin.at(i).scriptSig, prevout.scriptPubKey, tx.vin.at(i).scriptWitness, verify_flags, checker);
 
             assert(ret_fuzzed == ret);
         }
