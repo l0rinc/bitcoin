@@ -20,7 +20,6 @@
 #include <validationinterface.h>
 
 #include <algorithm>
-#include <ios>
 #include <utility>
 #include <vector>
 
@@ -122,10 +121,7 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
         while (more_work) {
             connection.fPauseSend = false;
 
-            try {
-                more_work = connman.ProcessMessagesOnce(connection);
-            } catch (const std::ios_base::failure&) {
-            }
+            more_work = connman.ProcessMessagesOnce(connection);
             node.peerman->SendMessages(connection);
         }
         if (send_late_feature) Assert(connection.fDisconnect.load());
