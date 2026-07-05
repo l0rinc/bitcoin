@@ -32,6 +32,47 @@ template <class T>
     return i + j;
 }
 
+template <std::integral T>
+[[nodiscard]] bool MultiplicationOverflow(const T i, const T j) noexcept
+{
+    if constexpr (std::numeric_limits<T>::is_signed) {
+        if (i > 0) {
+            if (j > 0) {
+                return i > (std::numeric_limits<T>::max() / j);
+            }
+            return j < (std::numeric_limits<T>::min() / i);
+        }
+        if (j > 0) {
+            return i < (std::numeric_limits<T>::min() / j);
+        }
+        return i != 0 && (j < (std::numeric_limits<T>::max() / i));
+    } else {
+        return j != 0 && i > std::numeric_limits<T>::max() / j;
+    }
+}
+
+template <std::integral T>
+[[nodiscard]] std::optional<T> CheckedMul(const T i, const T j) noexcept
+{
+    if (MultiplicationOverflow(i, j)) {
+        return std::nullopt;
+    }
+    const T result = static_cast<T>(i * j);
+    Assume(i == 0 || result / i == j);
+    return result;
+}
+
+template <std::integral T>
+[[nodiscard]] T SaturatingMul(const T i, const T j) noexcept
+{
+    if (const auto result{CheckedMul(i, j)}) return *result;
+    if constexpr (std::numeric_limits<T>::is_signed) {
+        return (i < 0) != (j < 0) ? std::numeric_limits<T>::min() : std::numeric_limits<T>::max();
+    } else {
+        return std::numeric_limits<T>::max();
+    }
+}
+
 template <std::unsigned_integral T, std::unsigned_integral U>
 [[nodiscard]] constexpr bool TrySub(T& i, const U j) noexcept
 {
