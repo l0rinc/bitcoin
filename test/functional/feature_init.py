@@ -249,6 +249,39 @@ class InitTest(BitcoinTestFramework):
                 self.cleanup_folder(node.chain_path / dir)
                 shutil.move(node.chain_path / f"{dir}_bak", node.chain_path / dir)
 
+    def init_auto_reindex_test(self):
+        """Test that -reindex=auto retries startup with a full reindex after corruption."""
+        self.log.info("Test automatic reindex startup recovery")
+        node = self.nodes[0]
+
+        if node.running:
+            self.restart_node(0)
+        else:
+            node.start()
+            node.wait_for_rpc_connection()
+
+        height = node.getblockcount()
+        if height < 200:
+            self.generate(node, 200 - height, sync_fun=self.no_op)
+
+        height = node.getblockcount()
+        assert_equal(200, height)
+        self.stop_node(0)
+
+        target_files = list(node.chain_path.glob('blocks/index/*.ldb'))
+        assert target_files, "Failed to find expected block index files"
+        for target_file in target_files:
+            self.log.info(f"Deleting file to trigger automatic reindex {target_file}")
+            target_file.unlink()
+
+        with node.busy_wait_for_debug_log([b"Automatically running a reindex."]):
+            node.start(extra_args=['-reindex=auto'])
+
+        node.wait_for_rpc_connection()
+        height = node.getblockcount()
+        assert_equal(200, height)
+        self.stop_node(0)
+
     def init_pid_test(self):
         BITCOIN_PID_FILENAME_CUSTOM = "my_fancy_bitcoin_pid_file.foobar"
 
@@ -377,6 +410,7 @@ class InitTest(BitcoinTestFramework):
         self.init_pid_test()
         self.init_stress_test_interrupt()
         self.init_stress_test_removals()
+        self.init_auto_reindex_test()
         self.break_wait_test()
         self.init_empty_test()
         self.init_lowmem_test()
