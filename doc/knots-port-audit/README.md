@@ -48,6 +48,20 @@ Other missing/adapted Knots pieces found during this pass:
   generic `/rest/mempool/` prefix and was also registered without the trailing
   slash expected by its parser. The port fixes that and adds functional coverage
   in `interface_rest.py` (`de98ad9122`).
+- The completion audit found Knots' extra transaction weight saturation fix
+  (`86cf9d6ee8`, ported as `09cb8ea993`). Without it, extreme input-side
+  datacarrier accounting could overflow the `int32_t` return path. The port
+  adds a `script_tests` regression that checks both normal accounting and
+  saturation at `int32_t` max.
+- `feature_init.py` verification exposed a port-side test-framework regression
+  in `busy_wait_for_debug_log`: after an early miss, the helper never reset its
+  match state and could time out even when the expected log line was present.
+  This was not an original Knots defect; Knots' helper resets `found` every
+  loop. The port restores that behavior as `01608b0fa4`.
+- The completion audit found Knots' negative `-lowmem` clamp
+  (`f9f7587b59`, ported as `7985bced24`). Without the clamp, a negative
+  user-provided threshold is assigned through the unsigned byte-count path. The
+  port adds `feature_init.py` coverage for both `-lowmem=1` and `-lowmem=-1`.
 
 ## Original Knots Defects Confirmed
 
@@ -87,61 +101,64 @@ This was not introduced by the port. The port now registers the longer
 
 ## Core-Missing Hardening Candidates
 
-The following Knots commits are `git cherry` `+` candidates relative to
-`origin/master`, meaning no equivalent patch-id was found in Core during this
-pass. They are security-relevant, but not all are proven exploitable.
+The following items are the strongest remaining security-shaped candidates
+found in Knots after filtering out changes already present in current Core
+under different commits. They are not all proven exploitable.
+
+- AllocateFileRange data-corruption hardening:
+  `cab5e8d861`, `4a9f8c78f6`, `8e9c114fa`, `476861713`, `2c113ebc2`
+
+  Core master still has the older macOS, POSIX, Windows, and fallback
+  preallocation behavior. Knots disables the buggy macOS path, calls
+  `posix_fallocate` only on the intended range, avoids Windows truncation, and
+  makes the fallback preserve existing bytes. These are already present in this
+  port as `bb2d44ee65` through `33a24d08ea`.
 
 - External signer fingerprint hardening:
   `6d2c2259ee`, `12eefda89a`, `ee39394ad3`
 
-  Validate fingerprint hex before shell-command use, require exactly eight hex
-  characters, and avoid logging untrusted fingerprint text.
+  Knots validates signer fingerprints before command use, requires exactly
+  eight hex characters, and avoids logging untrusted fingerprint text. This is
+  local external-signer hardening, not a remote P2P issue.
 
 - RPC cookie replacement and permission hardening:
   `e49dfac324`, `7140e1f149`, `622b768945`, `50b7a50a61`, `198466d5d3`
 
-  Set temporary cookie permissions before writing, delete stale temp files,
-  delete before replace, and avoid deleting a cookie replaced by another process.
-
-- Tor-control resource and isolation hardening:
-  `4110843327`, `3eb50531a5`, `0d747bbc55`, `6df8bf7673`, `10397d85ca`
-
-  Bound tor-control line handling to avoid OOM, reconnect after overlong-line
-  disconnects, enable PoW defenses for created hidden services, and randomize
-  Tor stream isolation credentials.
+  Knots sets temporary cookie permissions before writing, deletes stale temp
+  files, deletes before replace, and avoids deleting a cookie replaced by
+  another process. These are local RPC-auth file robustness improvements.
 
 - Subprocess fd cleanup before exec:
   `214047ecd3`, `ed5a3b3604`
 
-  Iterate `/proc/self/fd` and use `close_range`/fallback closing so child
-  processes do not inherit unintended file descriptors.
+  Knots implements `close_fds` cleanup with `/proc/self/fd`, then replaces it
+  with `close_range`/fallback closing to avoid non-async-signal-safe work after
+  `fork()`. Core's current `RunCommandParseJSON` path does not request
+  `close_fds`, but the Knots/port Tor subprocess path does.
 
-- Local file/resource robustness:
-  `163d3e5c13`, `d637873230`, `1953393f48`, `0f92fc907f`, `6c89453ca`,
-  `126d6df18d`, `8caf0836a8`, `1e2eaebd79`, `98d9237d3e`
+- HTTP RPC bind failure behavior:
+  `57becdf59e` plus follow-up listen/bind cleanup commits
 
-  These cover fee-estimator corrupt-file overflow avoidance, blockfile bounds
-  underflow, fd-limit overflow/RLIMIT_INFINITY handling, a codex32 OOB read,
-  service-score saturation, LevelDB uninitialized size, and terminal echo UB.
+  Knots fails initialization when any explicitly requested RPC bind fails,
+  while current Core only requires at least one endpoint to bind. This is
+  configuration-safety/availability hardening rather than a confirmed
+  vulnerability.
 
-- RPC/HTTP/ZMQ race or failure containment:
-  `c3dafb49ca`, `57becdf59e`, `fbe185ce7a`, `91c9e14639`,
-  `268fb1e0e3`, `1c4d2d54d8`
+- External or Knots-only surfaces:
+  `d637873230` fixes `GetBlockFileInfo` bounds handling, but the obvious
+  RPC-facing caller is Knots' `getblockfileinfo`. Current Core's corresponding
+  callers are internal/tests. The BDB cleanup/data-loss fixes matter for this
+  port because BDB support is retained, but current Core master no longer has
+  the same BDB write-environment files.
 
-  These cover lazy initialization to avoid static-order issues, stricter HTTP
-  bind/listen cleanup, locking around `getblocklocations`, and ZMQ notifier
-  failure handling.
-
-- Wallet crash/null-deref fixes still Knots-only by patch-id:
-  `7e125f8ed2`, `2a09a34129`
-
-  These avoid null dereferences in bumpfee and `AvailableCoins` paths.
-
-High-signal hardening already present in Core by patch-id and therefore not
-counted as missing here: PSBT bounds assert (`b2f6128338`), v2-to-v1 reconnect
-UAF (`f44b206a5e`), miner package overflow (`aff95a8a60`), feebumper combined
-fee crash (`4b202bc91c`), BDB overflow data lengths (`885a34eceb`), miniscript
-assert guards (`e0be30901c`), and most cpp-subprocess memory/Windows fixes.
+High-signal hardening already present in Core under the same or different
+commits and therefore not counted as missing here: secp256k1 ellswift overflow
+key handling, `LocalServiceInfo::nScore` saturation, miner `addPackageTxs`
+overflow, compact-block witness mutation checks, `LoadChainTip` UB,
+`SetStdinEcho` UB, fd-limit overflow/RLIMIT_INFINITY handling, RPC credentials
+hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, feebumper
+combined-fee crash, BDB overflow data lengths, miniscript assert guards, and
+most cpp-subprocess memory/Windows fixes.
 
 ## Open Risks
 
@@ -160,6 +177,7 @@ Builds:
 
 - `cmake -B build -DRDTS_CONSENT=RUNTIME_WARN`
 - `cmake --build build --target bitcoind bitcoin-cli test_bitcoin -j4`
+- `cmake --build build --target bitcoind -j4`
 - Original Knots repro build:
   `cmake -S ../knots -B ../knots/build-repro -DRDTS_CONSENT=RUNTIME_WARN`
   and `cmake --build ../knots/build-repro --target bitcoind bitcoin-cli -j4`
@@ -192,3 +210,4 @@ Functional tests:
 - `python3 test/functional/mempool_subdust_fee_penalty.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini`
 - `python3 test/functional/interface_rest.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_init.py --configfile build/test/config.ini`
