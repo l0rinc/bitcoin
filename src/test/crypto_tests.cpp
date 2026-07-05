@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <span>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -237,6 +238,22 @@ void TestPoly1305(const std::string &hexmessage, const std::string &hexkey, cons
     std::vector<std::byte> tagres(Poly1305::TAGLEN);
     Poly1305{key}.Update(m).Finalize(tagres);
     BOOST_CHECK_EQUAL(HexStr(tagres), hextag);
+
+    tagres.assign(Poly1305::TAGLEN, std::byte{});
+    Poly1305{key}.Update(std::span<const std::byte>{}).Update(m).Update(std::span<const std::byte>{}).Finalize(tagres);
+    BOOST_CHECK_EQUAL(HexStr(tagres), hextag);
+
+    if (m.size() <= 256) {
+        for (size_t split{0}; split <= m.size(); ++split) {
+            tagres.assign(Poly1305::TAGLEN, std::byte{});
+            Poly1305 poly1305{key};
+            poly1305.Update(std::span{m}.first(split));
+            poly1305.Update(std::span<const std::byte>{});
+            poly1305.Update(std::span{m}.subspan(split));
+            poly1305.Finalize(tagres);
+            BOOST_CHECK_EQUAL(HexStr(tagres), hextag);
+        }
+    }
 
     // Test incremental interface
     for (int splits = 0; splits < 10; ++splits) {
