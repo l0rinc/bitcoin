@@ -459,6 +459,14 @@ Other missing/adapted Knots pieces found during this pass:
   for a real localhost peer connecting through a dedicated `=onion` bind while
   `-whitelist=noban@127.0.0.1` is configured; the peer is reported as
   `network="onion"` and receives no whitelist permissions.
+- The invalid-block peer-punishment review confirmed Knots' relaxation
+  (`7c7b5839f4`) is present in the port while current Core still routes the
+  same block/header validation failures through `Misbehaving(...)`. The port
+  also extends Knots' decision matrix to the port-only private-broadcast
+  connection type: inbound, manual, feeler, and `noban` peers are tolerated;
+  outbound full-relay, block-relay, address-fetch, and private-broadcast peers
+  are disconnected without discouraging their address. `net_tests` now covers
+  that full matrix.
 - The v2-transport privacy review confirmed Knots' randomized Tor
   stream-isolation credential prefix (`10397d85ca`) is already present in
   current Core under different commits, so it is not a Core-missing fix. The
@@ -1046,6 +1054,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=script_p2sh_tests/ValidateInputsStandardness`
 - `build/bin/test_bitcoin --run_test=peerman_tests`
 - `build/bin/test_bitcoin --run_test=net_tests`
+- `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks
+  --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=netbase_tests/netpermissions_test
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=net_peer_connection_tests`
