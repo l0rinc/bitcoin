@@ -133,7 +133,10 @@ Other missing/adapted Knots pieces found during this pass:
   rebase-only adjustments: use a dedicated onion bind to avoid Knots' common
   Tor/local-port warning on stderr, and parse the fake Tor command as
   `LOG -f TORRC`, matching the port's `-torexecute` launch contract
-  (`6fe0c50345`).
+  (`6fe0c50345`). The port now also adds direct `system_tests` coverage for
+  the underlying subprocess behavior by opening a parent file descriptor,
+  proving a mock child inherits it when `close_fds` is off, and proving it is
+  closed when `close_fds` is on.
 - The runtime notification review confirmed Knots' support for multiple
   `-startupnotify`, `-blocknotify`, `-alertnotify`, and `-walletnotify`
   commands (`f1e300838a`) is present in the port and absent from current Core.
@@ -1018,7 +1021,9 @@ under different commits. They are not all proven exploitable.
   Knots implements `close_fds` cleanup with `/proc/self/fd`, then replaces it
   with `close_range`/fallback closing to avoid non-async-signal-safe work after
   `fork()`. Core's current `RunCommandParseJSON` path does not request
-  `close_fds`, but the Knots/port Tor subprocess path does.
+  `close_fds`, but the Knots/port Tor subprocess path does. The port now has a
+  focused `system_tests/subprocess_close_fds` regression that verifies file
+  descriptors are inherited without `close_fds` and closed with it.
 
 - Port mapping disabled when not listening:
   `95c8a63102`
@@ -1421,6 +1426,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=util_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
 - `build/bin/test_bitcoin --run_test=util_tests/outputtype_implicit_segwit`
+- `build/bin/test_bitcoin --run_test=system_tests/subprocess_close_fds`
+- `build/bin/test_bitcoin --run_test=system_tests`
 - `build/bin/test_bitcoin --run_test=node_warnings_tests
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `./build/src/secp256k1/bin/tests --target=ellswift_xdh_bad_scalar_tests --iterations=16`
