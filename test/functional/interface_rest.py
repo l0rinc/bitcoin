@@ -50,14 +50,12 @@ def filter_output_indices_by_value(vouts, value):
             yield vout['n']
 
 class RESTTest (BitcoinTestFramework):
-    def add_options(self, parser):
-        self.add_wallet_options(parser)
-
     def set_test_params(self):
         self.num_nodes = 2
         self.extra_args = [["-rest", "-blockfilterindex=1"], []]
         # whitelist peers to speed up tx relay / mempool sync
         self.noban_tx_relay = True
+        self.uses_wallet = None
 
     def test_rest_request(
             self,
@@ -397,6 +395,14 @@ class RESTTest (BitcoinTestFramework):
         # Check for error response if mempool_sequence is not "true" or "false"
         resp = self.test_rest_request("/mempool/contents", ret_type=RetType.OBJ, status=400, query_params={"verbose": "false", "mempool_sequence": "TRUE"})
         assert_equal(resp.read().decode('utf-8').strip(), 'The "mempool_sequence" query parameter must be either "true" or "false".')
+
+        # Check the mempool transactions response
+        json_obj = self.test_rest_request("/mempool/transactions/info")
+        assert_equal({tx["txid"] for tx in json_obj["txs"]}, set(txs))
+
+        # Check for error response if sequence_start cannot be parsed
+        resp = self.test_rest_request("/mempool/transactions/info", ret_type=RetType.OBJ, status=400, query_params={"sequence_start": "bad"})
+        assert_equal(resp.read().decode('utf-8').strip(), "Parse error")
 
         # Now mine the transactions
         newblockhash = self.generate(self.nodes[1], 1)
