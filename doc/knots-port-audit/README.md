@@ -118,6 +118,15 @@ Other missing/adapted Knots pieces found during this pass:
   original Knots bug and is now restored as `0dbc321ca0`, along with the Knots
   testnet3 header fixture and test framework network magic needed by
   `p2p_dos_header_tree.py`.
+- A high-risk review of exact patch-id misses found Knots' codex32 early-return
+  fix (`126d6df18d`) was missing from the port. Actual Knots `29.x-knots`
+  already contains the fix, so this was a port omission rather than an original
+  Knots defect. Without the return, share derivation could continue after
+  setting `MISMATCH_K`, `MISMATCH_ID`, `MISMATCH_LENGTH`, or `DUPLICATE_SHARE`;
+  when an earlier share was longer than a later share, the interpolation loop
+  could read past the later share's data. The port now matches Knots as
+  `65c72eb817`, with `codex32_tests` and `wallet_importseed.py` coverage for
+  valid decoded shares with inconsistent lengths.
 - Compact-block extra-transaction coverage now uses the current P2P test
   framework send helper and hash/wtxid properties (`77d2b2c025`).
   `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
@@ -277,25 +286,28 @@ Other missing/adapted Knots pieces found during this pass:
   `StateSinceHeight(pindex->pprev, ...)` activation-height query with Core's
   `Info(*pindex, ...).active_since`; the focused RDTS activation tests cover
   that replacement at activation, expiry, and activation-boundary reorg points.
-- A recent patch-id sweep left only two unmatched 2026 Knots commits:
-  `33f9de6b91` and `c4c558b2c4`. Both are historical reverts, not final Knots
-  tree deltas. Current unmodified Knots `29.x-knots` has Windows taskbar
-  progress support restored by later merges, and its miner code uses the same
-  overflow-safe `nBlockWeight + BLOCK_FULL_ENOUGH_WEIGHT_DELTA` check as this
-  port/current Core.
-- Extending the patch-id sweep to all non-merge Knots commits since
-  2025-01-01 left only four misses: those two historical reverts, a historical
-  CI-only `MAKEJOBS` revert (`5f7f1cf181`) superseded by Knots' later Cirrus
-  runner workflow, and archived 28.1 release notes (`bb5f76ee01`) that are
-  already present byte-for-byte in this tree but were intentionally excluded
-  from the patch-id evidence set with other historical release notes. The CI
-  mismatch is not a runtime/client delta; the port retains current Core's
-  newer CI workflow on the rebased base.
-- Extending the same sweep to Knots non-merge commits since 2024-01-01
-  produced no additional runtime/client misses. The extra unmatched commits are
+- Earlier exact patch-id sweeps were useful for finding simple omissions, but
+  they are not a complete proof because many Knots changes are adapted,
+  squashed, or present through current Core under different commits. After the
+  codex32 follow-up above, the remaining manually reviewed 2026 exact-patch
+  misses include `33f9de6b91` and `c4c558b2c4`; both are historical reverts,
+  not final Knots tree deltas. Current unmodified Knots `29.x-knots` has
+  Windows taskbar progress support restored by later merges, and its miner code
+  uses the same overflow-safe `nBlockWeight + BLOCK_FULL_ENOUGH_WEIGHT_DELTA`
+  check as this port/current Core.
+- Extending the same review to non-merge Knots commits since 2025-01-01 also
+  covered those two historical reverts, a historical CI-only `MAKEJOBS` revert
+  (`5f7f1cf181`) superseded by Knots' later Cirrus runner workflow, and
+  archived 28.1 release notes (`bb5f76ee01`) that are already present
+  byte-for-byte in this tree but were intentionally excluded from the patch-id
+  evidence set with other historical release notes. The CI mismatch is not a
+  runtime/client delta; the port retains current Core's newer CI workflow on
+  the rebased base.
+- Extending the same review to Knots non-merge commits since 2024-01-01 covered
   historical archived release notes for Core 25.2, 26.1, 26.2, 27.0, 27.1,
   27.2, and 28.0, plus old release-note fragments intentionally omitted from
-  this patch-id proof set.
+  the patch-id evidence set. No additional runtime/client omission has been
+  identified from that historical-release-note bucket.
 
 ## Original Knots Defects Confirmed
 
@@ -499,8 +511,8 @@ overflow, compact-block witness mutation checks, `LoadChainTip` UB,
 hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, feebumper
 combined-fee crash, wallet coin-selection boolean amount fix, precomputed
 transaction-data lifetime hardening (CVE-2024-52911), Tor-control excessive-line
-OOM hardening, BDB overflow data lengths, miniscript assert guards, and most
-cpp-subprocess memory/Windows fixes.
+OOM hardening, I2P SAM `SESSION CREATE` request redaction, BDB overflow data
+lengths, miniscript assert guards, and most cpp-subprocess memory/Windows fixes.
 
 ## Open Risks
 
@@ -554,6 +566,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=validation_block_tests`
 - `build/bin/test_bitcoin --run_test=merkle_tests`
 - `build/bin/test_bitcoin --run_test=policyestimator_tests`
+- `build/bin/test_bitcoin --run_test=codex32_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
 
 Functional tests:
