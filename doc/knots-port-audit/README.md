@@ -88,6 +88,11 @@ Other missing/adapted Knots pieces found during this pass:
   made the `importmempool` wallet-restriction assertion in `rpc_users.py` pass
   a dummy `filepath`, so the RPC reaches Knots' `EnsureNotWalletRestricted`
   guard instead of the generic argument-count help path.
+- The RPC cookie replacement audit confirmed the port has Knots'
+  `g_generated_cookie` content check (`50b7a50a61`) and added functional
+  coverage that overwrites `.cookie` after startup, stops through the original
+  in-memory cookie credentials, and verifies the externally replaced file is
+  not deleted during shutdown.
 - A legacy-wallet test run exposed a port-introduced RPC assertion crash:
   Knots' older `createwallet descriptors=false` path had overwritten Core
   master's descriptor-only guard, while current Core's wallet creation code
@@ -1007,7 +1012,11 @@ under different commits. They are not all proven exploitable.
 
   Knots sets temporary cookie permissions before writing, deletes stale temp
   files, deletes before replace, and avoids deleting a cookie replaced by
-  another process. These are local RPC-auth file robustness improvements.
+  another process. These are local RPC-auth file robustness improvements. A
+  minimal unmodified Knots startup preserved
+  `__cookie__:replaced-by-another-process` after shutdown when the node was
+  stopped with the original generated credentials; the port now covers the same
+  shutdown invariant in `rpc_users.py`.
 
 - RPC auth-file and blank-token handling:
   `9f6d3fbe78`, `39bde96b6`, `51588287fb`, `a7a205dc7d`, `edb3686495`,
@@ -1533,7 +1542,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_signer_fingerprint_2`
 - `python3 test/functional/wallet_signer.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_signer_warning`
-- `python3 test/functional/rpc_users.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_users.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_users_cookie_replace`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_bind.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
@@ -1655,6 +1665,11 @@ Functional tests:
   (the invalid-fingerprint redaction checks pass first, then unmodified Knots
   fails the duplicate-then-unique signer enumeration case by returning only
   `00000001`)
+- Original Knots cross-check:
+  minimal startup with `../knots/build-repro/bin/bitcoind -regtest`, replacing
+  `regtest/.cookie` with `__cookie__:replaced-by-another-process`, then
+  stopping via `bitcoin-cli -rpcuser=__cookie__ -rpcpassword=<generated>`
+  preserved the replacement (`cookie_after_stop=__cookie__:replaced-by-another-process`)
 - Original Knots cross-check:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_versionbits_warning.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_versionbits_warning_check`
   (passes on unmodified Knots, confirming the earlier warning-range failure was
