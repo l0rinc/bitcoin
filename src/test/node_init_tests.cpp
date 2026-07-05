@@ -39,9 +39,11 @@ public:
 
 BOOST_AUTO_TEST_CASE(init_test)
 {
-    // Clear state set by BasicTestingSetup that AppInitMain assumes is unset.
+    // BasicTestingSetup parses command-line arguments but does not read config
+    // files. AppInitMain's logging expects both config paths to be initialized.
     LogInstance().DisconnectTestLogger();
-    m_node.args->SetConfigFilePath({});
+    std::string error;
+    BOOST_REQUIRE_MESSAGE(m_node.args->ReadConfigFiles(error, /*ignore_invalid_keys=*/true), error);
 
     // Prevent the test from trying to listen on ports 8332 and 8333.
     m_node.args->ForceSetArg("-server", "0");
