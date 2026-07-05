@@ -104,6 +104,8 @@ BOOST_AUTO_TEST_CASE(SimpleRoundTripTest)
         {
             PartiallyDownloadedBlock tmp = partialBlock;
             partialBlock.FillBlock(block2, {block.vtx[2]}, /*segwit_active=*/true); // Current implementation doesn't check txn here, but don't require that
+            BOOST_CHECK(partialBlock.header.IsNull());
+            BOOST_CHECK(partialBlock.FillBlock(block2, {block.vtx[1]}, /*segwit_active=*/true) == READ_STATUS_INVALID);
             partialBlock = tmp;
         }
         bool mutated;
