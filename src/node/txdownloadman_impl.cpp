@@ -546,6 +546,14 @@ std::pair<bool, std::optional<PackageToValidate>> TxDownloadManagerImpl::Receive
     const Txid& txid = ptx->GetHash();
     const Wtxid& wtxid = ptx->GetWitnessHash();
 
+    if (!m_peer_info.contains(nodeid)) {
+        AssertNoTxRequestFromPeer(txid.ToUint256(), nodeid);
+        if (ptx->HasWitness()) {
+            AssertNoTxRequestFromPeer(wtxid.ToUint256(), nodeid);
+        }
+        return {false, std::nullopt};
+    }
+
     // Mark that we have received a response
     m_txrequest.ReceivedResponse(nodeid, txid.ToUint256());
     AssertNoTxRequestFromPeer(txid.ToUint256(), nodeid);
