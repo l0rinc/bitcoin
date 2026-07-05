@@ -46,7 +46,10 @@ import tempfile
 
 from test_framework.socks5 import Socks5Configuration, Socks5Command, Socks5Server, AddressType
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.util import assert_equal
+from test_framework.util import (
+    assert_equal,
+    p2p_port,
+)
 from test_framework.netutil import test_ipv6_local, test_unix_socket
 
 # Networks returned by RPC getpeerinfo.
