@@ -13,7 +13,7 @@
 //! Suggested default amount of cache reserved for the kernel (bytes)
 static constexpr uint64_t DEFAULT_KERNEL_CACHE{450_MiB};
 //! Default LevelDB write batch size
-static constexpr uint64_t DEFAULT_DB_CACHE_BATCH{32_MiB};
+static constexpr uint64_t DEFAULT_DB_CACHE_BATCH{64_MiB};
 
 //! Max memory allocated to block tree DB specific cache (bytes)
 static constexpr uint64_t MAX_BLOCK_DB_CACHE{2_MiB};

@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://opensource.org/license/mit.
 
+#include <kernel/caches.h>
 #include <node/dbcache.h>
 #include <util/byte_units.h>
 
@@ -23,6 +24,11 @@ void CheckDbCacheWarnThreshold(uint64_t threshold, uint64_t total_ram)
 } // namespace
 
 BOOST_AUTO_TEST_SUITE(caches_tests)
+
+BOOST_AUTO_TEST_CASE(default_db_batch_size)
+{
+    BOOST_CHECK_EQUAL(DEFAULT_DB_CACHE_BATCH, 64_MiB);
+}
 
 BOOST_AUTO_TEST_CASE(default_dbcache_formula_by_total_ram)
 {

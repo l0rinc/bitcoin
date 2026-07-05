@@ -24,9 +24,6 @@
 class COutPoint;
 class uint256;
 
-//! -dbbatchsize default (bytes)
-static const int64_t nDefaultDbBatchSize = 64 << 20;
-
 //! User-controlled performance and debug options.
 struct CoinsViewOptions {
     //! Maximum database write batch size in bytes.
