@@ -1046,6 +1046,21 @@ BOOST_AUTO_TEST_CASE(eval_script_result_matches_error)
     check_result_matches_error(CScript{} << OP_RETURN);
 }
 
+BOOST_AUTO_TEST_CASE(verify_script_result_matches_error)
+{
+    auto check_result_matches_error = [](const CScript& script_pub_key) {
+        ScriptError err{SCRIPT_ERR_UNKNOWN_ERROR};
+        const bool result{VerifyScript(CScript{}, script_pub_key, nullptr, SCRIPT_VERIFY_NONE, BaseSignatureChecker(), &err)};
+        BOOST_CHECK_EQUAL(result, err == SCRIPT_ERR_OK);
+
+        const bool result_without_error{VerifyScript(CScript{}, script_pub_key, nullptr, SCRIPT_VERIFY_NONE, BaseSignatureChecker(), nullptr)};
+        BOOST_CHECK_EQUAL(result_without_error, result);
+    };
+
+    check_result_matches_error(CScript{} << OP_1);
+    check_result_matches_error(CScript{} << OP_RETURN);
+}
+
 static CScript
 sign_multisig(const CScript& scriptPubKey, const std::vector<CKey>& keys, const CTransaction& transaction)
 {
