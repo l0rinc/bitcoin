@@ -111,6 +111,15 @@ Other missing/adapted Knots pieces found during this pass:
   same-peer duplicate request, the no-header request, a pruned node fetching a
   block it has not seen, and a pruned node fetching a block it has not synced
   past.
+- The script verification thread-control review found a port omission in
+  Knots' `scriptthreadsinfo` / `setscriptthreadsenabled` RPC surface
+  (`daccde46e4` plus doc/fuzz follow-ups): the RPCs were registered and
+  reported disabled state, but the port's current-Core `ConnectBlock`
+  adaptation still created `CCheckQueueControl` whenever worker threads existed.
+  Actual Knots gates parallel script checks on
+  `m_script_check_queue_enabled`; the port now does the same. This is runtime
+  operator CPU-control behavior, not a consensus-rule change. `rpc_blockchain.py`
+  now covers the enable/disable RPC surface.
 - `rpc_bind.py` has port-side coverage for Knots' stricter explicit RPC-bind
   behavior, but the expected message was attached to the wrong output stream.
   An unmodified Knots build exits with `Error: Unable to start HTTP server. See
@@ -1269,6 +1278,7 @@ Builds:
   bitcoin_wallet -j2`
 - `cmake --build build --target test_bitcoin -j2`
 - `cmake --build build --target bitcoind -j2`
+- `cmake --build build --target bitcoind test_bitcoin -j4`
 - `cmake --build build --target bitcoind bitcoin-cli bitcoin-wallet -j4`
 - `build/bin/bitcoind --help | rg -n
   "maxstaleoutbound|consensusrules|privatebroadcast|subdustfeepenalty" -C 2`
@@ -1392,6 +1402,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_current_tip`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_period_start`
+- `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_scriptthreads`
 - `python3 test/functional/interface_zmq.py --configfile /tmp/bitcoin-zmq-build/test/config.ini`
 - `python3 test/functional/p2p_v2_encrypted.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_v2_encrypted`
