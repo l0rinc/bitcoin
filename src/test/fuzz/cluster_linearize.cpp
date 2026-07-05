@@ -290,7 +290,9 @@ SetType ReadTopologicalSet(const DepGraph<SetType>& depgraph, const SetType& tod
     uint64_t mask{0};
     try {
         reader >> VARINT(mask);
-    } catch(const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
     if (mask != uint64_t(-1)) mask += non_empty;
 
     SetType ret;
