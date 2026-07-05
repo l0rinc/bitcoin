@@ -622,12 +622,22 @@ BOOST_AUTO_TEST_CASE(txgraph_ancdesc_union_groups_same_cluster_queries)
         BOOST_CHECK_EQUAL(refs.size(), expected.size());
         BOOST_CHECK(unique_refs == expected);
     };
+    const auto check_single_ref_union = [&graph, &check_refs](TxGraph::Ref& ref, TxGraph::Level level) {
+        std::vector<TxGraph::Ref*> query{&ref};
+        const auto ancestors{graph->GetAncestors(ref, level)};
+        const std::set<TxGraph::Ref*> ancestor_set{ancestors.begin(), ancestors.end()};
+        check_refs(graph->GetAncestorsUnion(query, level), ancestor_set);
+        const auto descendants{graph->GetDescendants(ref, level)};
+        const std::set<TxGraph::Ref*> descendant_set{descendants.begin(), descendants.end()};
+        check_refs(graph->GetDescendantsUnion(query, level), descendant_set);
+    };
 
     std::vector<TxGraph::Ref*> sibling_query{&refs[1], &refs[2]};
     check_refs(graph->GetAncestorsUnion(sibling_query, TxGraph::Level::TOP),
                {&refs[0], &refs[1], &refs[2]});
     check_refs(graph->GetDescendantsUnion(sibling_query, TxGraph::Level::TOP),
                {&refs[1], &refs[2]});
+    check_single_ref_union(refs[1], TxGraph::Level::TOP);
 
     graph->StartStaging();
     graph->AddTransaction(refs.emplace_back(), FeePerWeight{5, 10});
@@ -640,6 +650,8 @@ BOOST_AUTO_TEST_CASE(txgraph_ancdesc_union_groups_same_cluster_queries)
                {&refs[1], &refs[2], &refs[3]});
     check_refs(graph->GetAncestorsUnion(staged_query, TxGraph::Level::MAIN),
                {&refs[0], &refs[2]});
+    check_single_ref_union(refs[3], TxGraph::Level::TOP);
+    check_single_ref_union(refs[3], TxGraph::Level::MAIN);
 
     graph->SanityCheck();
 }
