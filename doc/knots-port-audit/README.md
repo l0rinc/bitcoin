@@ -205,6 +205,11 @@ Other missing/adapted Knots pieces found during this pass:
   (`28823f30dc`) remains a port-only network correctness fix. The port carries
   it as `bcd1387ae6`, and `net_peer_connection_tests` covers both connected
   CJDNS addnode reporting and duplicate CJDNS addnode rejection.
+- Knots' user-agent sanitization hardening (`b9d2634b81`) is present in the
+  port as `eacc171127`: received peer user agents keep printable punctuation in
+  `cleanSubVer`, then percent-escape characters outside the default log-safe
+  set when logging the version message. The port now adds focused `util_tests`
+  coverage for `SAFE_CHARS_PRINTABLE` and log-style escaping.
 
 ## Original Knots Defects Confirmed
 
@@ -310,6 +315,15 @@ under different commits. They are not all proven exploitable.
   comparison and rejects CJDNS duplicates even when the port differs, avoiding
   repeated manual-connection entries to the same CJDNS node.
 
+- User-agent sanitization/log escaping:
+  `b9d2634b81`
+
+  Core currently strips printable characters outside `SAFE_CHARS_DEFAULT` from
+  received peer user agents before storing `cleanSubVer`, and logs that stored
+  value directly. Knots preserves the full printable user-agent string for peer
+  display and percent-escapes unsafe printable characters at log time. This is
+  log/UI integrity hardening against confusing or spoofed peer user-agent text.
+
 - External or Knots-only surfaces:
   `d637873230` fixes `GetBlockFileInfo` bounds handling, but the obvious
   RPC-facing caller is Knots' `getblockfileinfo`. Current Core's corresponding
@@ -391,6 +405,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=rest_tests`
 - `build/bin/test_bitcoin --run_test=validation_tests`
 - `build/bin/test_bitcoin --run_test=validation_block_tests`
+- `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
 
 Functional tests:
 
