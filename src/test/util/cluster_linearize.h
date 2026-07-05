@@ -12,8 +12,11 @@
 #include <util/bitset.h>
 #include <util/feefrac.h>
 
+#include <cassert>
 #include <cstdint>
+#include <ios>
 #include <numeric>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -22,6 +25,18 @@ namespace {
 using namespace cluster_linearize;
 
 using TestBitSet = BitSet<32>;
+
+inline bool IsExpectedClusterLinearizeReadFailure(const std::ios_base::failure& e) noexcept
+{
+    const std::string_view what{e.what()};
+    return what.find("SpanReader::read(): end of data") != std::string_view::npos ||
+           what.find("ReadVarInt(): size too large") != std::string_view::npos;
+}
+
+inline void AssertExpectedClusterLinearizeReadFailure(const std::ios_base::failure& e) noexcept
+{
+    assert(IsExpectedClusterLinearizeReadFailure(e));
+}
 
 /** A formatter for a bespoke serialization for acyclic DepGraph objects.
  *
@@ -232,8 +247,9 @@ struct DepGraphFormatter
                         --diff;
                     }
                 }
-            } catch (const std::ios_base::failure&) {
+            } catch (const std::ios_base::failure& e) {
                 // Continue even if a read error was encountered.
+                AssertExpectedClusterLinearizeReadFailure(e);
                 read_error = true;
             }
             // Construct a new transaction whenever we made it past the new_feerate construction.
