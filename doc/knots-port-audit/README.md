@@ -727,7 +727,10 @@ Other missing/adapted Knots pieces found during this pass:
   full-relay, block-relay, address-fetch, or feeler connections. The port now
   runs `p2p_add_connections.py` on signet to cover this behavior, and
   `rpc_net.py` also asserts that the port-only `private-broadcast` connection
-  type cannot be manually selected through `addnode onetry`.
+  type cannot be manually selected through `addnode onetry`. The same
+  coverage now exercises Knots' old positional `addnode ... onetry
+  <connection_type>` compatibility slot and confirms the port rejects
+  `inbound` there before reaching `OpenNetworkConnection`.
 - The same RPC connection-management review confirmed Knots' `disconnectnode`
   IP-without-port and subnet support (`7e3988fe54`, `6d2bc57f0e`, with
   coverage from `dc36f2b555` and `12a8863b80`) is present in the port. Current
@@ -1010,6 +1013,9 @@ Result on original Knots:
 
 - `bitcoind` aborted with exit code 134.
 - Assertion: `net.cpp:3058: ... OpenNetworkConnection(...): Assertion 'conn_type != ConnectionType::INBOUND' failed.`
+- The older positional compatibility form
+  `bitcoin-cli -regtest addnode 127.0.0.1:18445 onetry '"inbound"'`
+  reaches the same assertion in unmodified Knots.
 
 This was not introduced by the port. The port rejects this input with
 `RPC_INVALID_PARAMETER`, and `rpc_net.py` now covers the regression path.
@@ -1668,6 +1674,7 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_cjdns_addnode_3`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_addconnection`
+- `build/test/functional/rpc_net.py`
 - `python3 test/functional/p2p_add_connections.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_add_connections_signet`
 - `python3 test/functional/mempool_accept.py --configfile build/test/config.ini`
@@ -1877,6 +1884,12 @@ Functional tests:
   passed on unmodified Knots, including the new in-progress
   `relevant_blocks` status assertion and the existing invalid-action error
   check.
+- Original Knots expected-failure repro:
+  foreground `../knots/build-repro/bin/bitcoind -regtest` plus
+  `bitcoin-cli -regtest addnode 127.0.0.1:18445 onetry '"inbound"'` under
+  `/mnt/my_storage/tmp_knots_addnode_positional_inbound_json_stderr`
+  aborted with exit code 134 and stderr
+  `Assertion 'conn_type != ConnectionType::INBOUND' failed.`
 - Original Knots cross-check:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_versionbits_warning.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_versionbits_warning_check`
   (passes on unmodified Knots, confirming the earlier warning-range failure was
