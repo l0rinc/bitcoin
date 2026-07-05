@@ -235,9 +235,11 @@ most cpp-subprocess memory/Windows fixes.
   port now preserves Core's explicit RPC error instead of crashing. Ported
   legacy-only wallet tests are skipped by the framework when `--legacy-wallet`
   mode is selected.
-- BIP-110/RDTS consensus equivalence still needs dedicated review. This pass
-  verified the replayed tests and fixed issues they exposed; it does not prove
-  consensus equivalence to Knots or Core.
+- BIP-110/RDTS consensus equivalence still needs dedicated review. The current
+  pass mapped the Knots RDTS subjects to replayed/adapted port commits and
+  reran the focused RDTS, UTXO-height, temporary-deployment, peer-manager, net,
+  and P2P handshake tests. That is focused regression evidence, not a full
+  consensus-equivalence proof against Knots or Core.
 
 ## Verification
 
