@@ -100,11 +100,13 @@ std::optional<CTransactionRef> PrivateBroadcast::GetTxForNode(const NodeId& node
     EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
+    std::optional<CTransactionRef> ret;
     const auto tx_and_status{GetSendStatusByNode(nodeid)};
     if (tx_and_status.has_value()) {
-        return tx_and_status.value().tx;
+        ret = tx_and_status.value().tx;
     }
-    return std::nullopt;
+    AssertInvariants();
+    return ret;
 }
 
 void PrivateBroadcast::NodeConfirmedReception(const NodeId& nodeid)
@@ -127,11 +129,13 @@ bool PrivateBroadcast::DidNodeConfirmReception(const NodeId& nodeid)
     EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
+    bool ret{false};
     const auto tx_and_status{GetSendStatusByNode(nodeid)};
     if (tx_and_status.has_value()) {
-        return tx_and_status.value().send_status.confirmed.has_value();
+        ret = tx_and_status.value().send_status.confirmed.has_value();
     }
-    return false;
+    AssertInvariants();
+    return ret;
 }
 
 bool PrivateBroadcast::MarkNodeDisconnected(const NodeId& nodeid)
@@ -161,7 +165,9 @@ bool PrivateBroadcast::HavePendingTransactions()
     EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
 {
     LOCK(m_mutex);
-    return !m_transactions.empty();
+    const bool ret{!m_transactions.empty()};
+    AssertInvariants();
+    return ret;
 }
 
 std::vector<CTransactionRef> PrivateBroadcast::GetStale() const
@@ -178,6 +184,7 @@ std::vector<CTransactionRef> PrivateBroadcast::GetStale() const
             if (p.last_confirmed < now - STALE_DURATION) stale.push_back(tx);
         }
     }
+    AssertInvariants();
     return stale;
 }
 
@@ -197,6 +204,7 @@ std::vector<PrivateBroadcast::TxBroadcastInfo> PrivateBroadcast::GetBroadcastInf
         entries.emplace_back(TxBroadcastInfo{.tx = tx, .time_added = state.time_added, .peers = std::move(peers)});
     }
 
+    AssertInvariants();
     return entries;
 }
 
