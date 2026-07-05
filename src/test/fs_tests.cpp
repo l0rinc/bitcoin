@@ -5,9 +5,11 @@
 #include <test/util/setup_common.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
+#include <util/readwritefile.h>
 
 #include <boost/test/unit_test.hpp>
 
+#include <cstdio>
 #include <fstream>
 #include <ios>
 #include <string>
@@ -137,6 +139,35 @@ BOOST_AUTO_TEST_CASE(rename)
         BOOST_CHECK_EQUAL(contents, path1_contents);
     }
     fs::remove(path2);
+}
+
+BOOST_AUTO_TEST_CASE(allocate_file_range_preserves_existing_bytes)
+{
+    const fs::path path{m_args.GetDataDirBase() / "allocate_file_range.dat"};
+    const std::string original{"0123456789"};
+
+    BOOST_REQUIRE(WriteBinaryFile(path, original));
+    {
+        FILE* file{fsbridge::fopen(path, "r+b")};
+        BOOST_REQUIRE(file);
+        AllocateFileRange(file, 2, 4);
+        BOOST_REQUIRE_EQUAL(std::fclose(file), 0);
+    }
+    auto [read_ok, contents]{ReadBinaryFile(path)};
+    BOOST_REQUIRE(read_ok);
+    BOOST_CHECK_EQUAL(contents, original);
+
+    {
+        FILE* file{fsbridge::fopen(path, "r+b")};
+        BOOST_REQUIRE(file);
+        AllocateFileRange(file, original.size(), 3);
+        BOOST_REQUIRE_EQUAL(std::fclose(file), 0);
+    }
+    auto [extended_ok, extended_contents]{ReadBinaryFile(path)};
+    BOOST_REQUIRE(extended_ok);
+    BOOST_REQUIRE_EQUAL(extended_contents.size(), original.size() + 3);
+    BOOST_CHECK_EQUAL(extended_contents.substr(0, original.size()), original);
+    BOOST_CHECK(extended_contents.substr(original.size()) == std::string(3, '\0'));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
