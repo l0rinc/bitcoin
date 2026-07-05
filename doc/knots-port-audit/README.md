@@ -156,6 +156,15 @@ Other missing/adapted Knots pieces found during this pass:
   `system_tests` coverage for the underlying subprocess behavior by opening a
   parent file descriptor, proving a mock child inherits it when `close_fds` is
   off, and proving it is closed when `close_fds` is on.
+- The per-network proxy review confirmed Knots' `-proxy=...=tor` alias is
+  present in the port and actual Knots while current Core's parser still
+  accepts only `onion` despite help text that advertises `tor`. Rerunning
+  `feature_proxy.py` exposed a port-side test drift: the test used
+  `p2p_port(...)` for Knots' common Tor/local-port warning assertion but had
+  lost the helper import during the rebase. Actual Knots' test already imports
+  it, so this was not an original Knots defect. The port restores the import,
+  and the full proxy functional test now passes against both the port and an
+  unmodified Knots build.
 - The I2P SAM redaction review confirmed Knots/Core's `SESSION CREATE` private
   key redaction (`6f9467ff97`) is present in the port. The port now adds
   `i2p_tests/session_create_error_redacts_private_key` (`0bd1f283ae`) to force
@@ -1487,6 +1496,19 @@ under different commits. They are not all proven exploitable.
   now covers the direct explicit-argument case in `feature_config_args.py`, in
   addition to the existing `-connect=0` / `-noconnect` interaction coverage.
 
+- Per-network proxy `tor` alias:
+  `77f1a82318`
+
+  Knots and this port accept both `-proxy=...=tor` and `-proxy=...=onion` for
+  the Tor/onion network selector. Current Core's help text says the network can
+  be `ipv4`, `ipv6`, `tor`, or `cjdns`, but the parser branch still checks only
+  `net_str == "onion"` before falling through to `Unrecognized network`. This
+  is a configuration compatibility/UX shortcoming rather than a remote security
+  issue: the failure is startup-time and explicit, but an operator following
+  help text or Knots-compatible config syntax gets a surprising rejection. The
+  existing `feature_proxy.py` "Test overriding the Tor proxy" path covers the
+  `=tor` spelling and now passes against both the port and unmodified Knots.
+
 - PCP/NAT-PMP explicit-warning preservation:
   `00354e1161`
 
@@ -1844,6 +1866,14 @@ Source/manifest checks:
   test/functional/test_framework/util.py` show the port and actual Knots retain
   the direct `shutdown_request` wait-wakeup while current Core only wakes these
   long-poll waiters through the later `Interrupt()` path.
+- `git show origin/master:src/init.cpp | rg -n
+  "proxy=.*\\[=<network>|net_str == \"tor\"|net_str == \"onion\"" -C 3`
+  shows current Core advertises per-network `-proxy` selectors including
+  `tor`, but the parser branch accepts only `onion`; `rg -n
+  "proxy=.*\\[=<network>|net_str == \"tor\"|net_str == \"onion\"|proxy=127\\.2\\.2\\.2:2222=tor"
+  src/init.cpp test/functional/feature_proxy.py ../knots/src/init.cpp
+  ../knots/test/functional/feature_proxy.py` shows the port and actual Knots
+  accept `tor || onion` and cover the `=tor` spelling in the functional test.
 - `git show origin/master:src/wallet/db.cpp | sed -n '20,70p'` and
   `git -C ../knots show 29.x-knots:src/wallet/db.cpp | sed -n '20,75p'`
   show that current Core lacks Knots' `ignore_paths` skip list in
@@ -2318,6 +2348,13 @@ Unit tests:
 
 Functional tests:
 
+- `python3 test/functional/feature_proxy.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_proxy_tor_alias_port_2
+  --portseed=27622`
+- `python3 test/functional/feature_proxy.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_proxy_tor_alias_knots_2
+  --portseed=27623`
 - `python3 test/functional/feature_rdts.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile
