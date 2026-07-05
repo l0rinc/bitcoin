@@ -83,6 +83,11 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                 bitdeq.clear();
             },
             [&] {
+                // shrink_to_fit()
+                deq.shrink_to_fit();
+                bitdeq.shrink_to_fit();
+            },
+            [&] {
                 // resize()
                 auto count = provider.ConsumeIntegralInRange<size_t>(0, maxlen);
                 deq.resize(count);
