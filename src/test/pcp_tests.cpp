@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <common/pcp.h>
+#include <logging.h>
 #include <netbase.h>
 #include <test/util/logging.h>
 #include <test/util/common.h>
@@ -13,6 +14,7 @@
 
 #include <algorithm>
 #include <deque>
+#include <unordered_map>
 
 using namespace std::literals;
 
@@ -247,6 +249,105 @@ private:
 };
 
 BOOST_FIXTURE_TEST_SUITE(pcp_tests, PCPTestingSetup)
+
+BOOST_AUTO_TEST_CASE(pcp_not_authorized_explicit_warning)
+{
+    struct LogLevelGuard {
+        std::unordered_map<BCLog::LogFlags, BCLog::Level> prev_category_levels{LogInstance().CategoryLevels()};
+        BCLog::Level prev_log_level{LogInstance().LogLevel()};
+        BCLog::CategoryMask prev_category_mask{LogInstance().GetCategoryMask()};
+
+        ~LogLevelGuard()
+        {
+            LogInstance().SetLogLevel(prev_log_level);
+            LogInstance().SetCategoryLogLevel(prev_category_levels);
+            LogInstance().DisableCategory(BCLog::LogFlags::ALL);
+            LogInstance().EnableCategory(BCLog::LogFlags{prev_category_mask});
+        }
+    } log_level_guard;
+
+    LogInstance().SetLogLevel(BCLog::Level::Info);
+    LogInstance().SetCategoryLogLevel({});
+    LogInstance().DisableCategory(BCLog::LogFlags::ALL);
+
+    const bool prev_pcp_warn_for_unauthorized{g_pcp_warn_for_unauthorized};
+    int not_authorized_logs{0};
+    auto print_connection{LogInstance().PushBackCallback([&](const std::string& line) {
+        if (line.find("pcp: Mapping failed with result NOT_AUTHORIZED") != std::string::npos) {
+            ++not_authorized_logs;
+        }
+    })};
+
+    auto run_not_authorized = [&] {
+        const std::vector<TestOp> script{
+            {
+                0ms, TestOp::SEND,
+                {
+                    0x02, 0x01, 0x00, 0x00, // version, opcode
+                    0x00, 0x00, 0x03, 0xe8, // lifetime
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0xff, 0xff,
+                    0xc0, 0xa8, 0x00, 0x06, // internal IP
+                    0x11, 0x22, 0x33, 0x44,
+                    0x55, 0x66, 0x77, 0x88,
+                    0x99, 0xaa, 0xbb, 0xcc, // nonce
+                    0x06, 0x00, 0x00, 0x00, // protocol (TCP), reserved
+                    0x04, 0xd2, 0x04, 0xd2, // internal port, suggested external port
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0xff, 0xff,
+                    0x00, 0x00, 0x00, 0x00, // suggested external IP
+                }, 0
+            },
+            {
+                250ms, TestOp::RECV,
+                {
+                    0x02, 0x81, 0x00, 0x02, // version, opcode, reserved, NOT_AUTHORIZED result
+                    0x00, 0x00, 0x01, 0xf4, // granted lifetime
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, // reserved
+                    0x11, 0x22, 0x33, 0x44,
+                    0x55, 0x66, 0x77, 0x88,
+                    0x99, 0xaa, 0xbb, 0xcc, // nonce
+                    0x06, 0x00, 0x00, 0x00, // protocol (TCP), reserved
+                    0x04, 0xd2, 0x04, 0xd2, // internal port, assigned external port
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0xff, 0xff,
+                    0x01, 0x02, 0x03, 0x04, // assigned external IP
+                }, 0
+            },
+        };
+        CreateSock = [this, &script](int domain, int type, int protocol) {
+            if (domain == AF_INET && type == SOCK_DGRAM && protocol == IPPROTO_UDP) return std::make_unique<PCPTestSock>(default_local_ipv4, default_gateway_ipv4, script);
+            return std::unique_ptr<PCPTestSock>();
+        };
+
+        auto res = PCPRequestPortMap(TEST_NONCE, default_gateway_ipv4, bind_any_ipv4, 1234, 1000, 1, 1000ms);
+
+        MappingError* err = std::get_if<MappingError>(&res);
+        BOOST_TEST(err != nullptr);
+        if (err != nullptr) {
+            BOOST_CHECK_EQUAL(*err, MappingError::PROTOCOL_ERROR);
+        }
+    };
+
+    g_pcp_warn_for_unauthorized = false;
+    run_not_authorized();
+    run_not_authorized();
+    BOOST_CHECK_EQUAL(not_authorized_logs, 1);
+
+    g_pcp_warn_for_unauthorized = true;
+    run_not_authorized();
+    run_not_authorized();
+    BOOST_CHECK_EQUAL(not_authorized_logs, 3);
+
+    LogInstance().DeleteCallback(print_connection);
+    g_pcp_warn_for_unauthorized = prev_pcp_warn_for_unauthorized;
+}
 
 // NAT-PMP IPv4 good-weather scenario.
 BOOST_AUTO_TEST_CASE(natpmp_ipv4)
@@ -690,4 +791,3 @@ BOOST_AUTO_TEST_CASE(pcp_protocol_error)
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-
