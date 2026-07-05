@@ -209,6 +209,15 @@ Other missing/adapted Knots pieces found during this pass:
   `bitcoind`/`test_bitcoin`; the current local build configuration has no Qt
   target, so `src/qt/modaloverlay.cpp` was source-reviewed against Knots but
   not compiled in this build.
+- The exact-patch review found Knots' GUI HTTPS linkification for modal
+  thread-safe message boxes (`32285d83f4`, `ed0a0f6138`) was still missing.
+  This is user-facing GUI behavior, not a security or consensus issue. The port
+  now HTML-escapes modal message text, marks it as rich text only after adding
+  trusted links, and keeps non-modal notifications plain (`216fa2dd81`).
+  `OptionTests::makeHtmlLink` covers plain HTTPS URLs, trailing punctuation,
+  rich-text context, and non-HTTPS text. Local Qt execution was not possible:
+  the current configured build has no Qt target, and a GUI configure probe
+  failed because Qt5 is not installed.
 - Compact-block extra-transaction coverage now uses the current P2P test
   framework send helper and hash/wtxid properties (`77d2b2c025`).
   `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
@@ -666,6 +675,14 @@ Builds:
   -DENABLE_WALLET=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
 - `TMPDIR=/mnt/my_storage/tmp cmake --build /tmp/bitcoin-asan-consensus-after
   --target bitcoinconsensus -j1`
+- `git diff --check`
+- `cmake --build build --target help | rg -n
+  "(qt|bitcoin-qt|test_bitcoin-qt|test_bitcoin_qt)"` returned no configured Qt
+  target
+- `cmake -S . -B /tmp/bitcoin-qt-check -DBUILD_GUI=ON -DBUILD_TESTS=ON
+  -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_CCACHE=OFF
+  -DRDTS_CONSENT=IMPLICIT` failed with `Could NOT find Qt (missing: Qt5_DIR
+  Qt5_FOUND)`
 - Original Knots repro build:
   `cmake -S ../knots -B ../knots/build-repro -DRDTS_CONSENT=RUNTIME_WARN`
   and `cmake --build ../knots/build-repro --target bitcoind bitcoin-cli -j4`
