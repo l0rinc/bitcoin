@@ -618,7 +618,7 @@ void AssertSendBufferContracts(FuzzedDataProvider& fuzzed_data_provider)
         assert(ret);
         assert(!scripted_sock->m_send_called);
         assert(remaining.empty());
-        assert(client->m_send_ready.load() == initial_send_ready);
+        assert(!client->m_send_ready.load());
         assert(client->m_connection_busy.load() == initial_connection_busy);
         assert(!client->m_disconnect.load());
         assert(client->m_idle_since.load() == idle_before);
