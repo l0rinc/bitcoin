@@ -234,6 +234,12 @@ class ConfArgsTest(BitcoinTestFramework):
                     extra_args=[f'-nowallet={value}'],
                 )
 
+    def test_v2onlyclearnet_requires_v2transport(self):
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=['-v2transport=0', '-v2onlyclearnet=1'],
+            expected_msg='Error: Cannot set -v2onlyclearnet to true when v2transport is disabled.',
+        )
+
     def test_consensusrules(self):
         self.log.info('Test -consensusrules option validation')
         self.nodes[0].assert_start_raises_init_error(
@@ -566,6 +572,7 @@ class ConfArgsTest(BitcoinTestFramework):
         self.test_config_file_parser()
         self.test_config_file_log()
         self.test_invalid_command_line_options()
+        self.test_v2onlyclearnet_requires_v2transport()
         self.test_consensusrules()
         self.test_ignored_conf()
         self.test_ignored_default_conf()
