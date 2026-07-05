@@ -1536,7 +1536,9 @@ under different commits. They are not all proven exploitable.
   Knots removes those two seed hostnames. This changes the bootstrap trust and
   availability surface, but the audit does not have evidence that it is a
   vulnerability fix or a consensus issue. The port pins this with
-  `chainparams_tests/dns_seed_removals`.
+  `chainparams_tests/dns_seed_removals`; source comparison shows Core still
+  lists `seed.btc.petertodd.net.` and `seed.tbtc.petertodd.net.`, while both
+  Knots and the port omit them.
 
 - User-agent sanitization/log escaping:
   `b9d2634b81`
@@ -1940,6 +1942,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=chainparams_tests --catch_system_error=no
   --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=chainparams_tests/dns_seed_removals`
+- `build/bin/test_bitcoin --run_test=chainparams_tests/dns_seed_removals
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=mempool_tests`
 - `build/bin/test_bitcoin --run_test=mempool_tests,txrequest_tests,miner_tests
   --catch_system_error=no --log_level=nothing --report_level=no`
