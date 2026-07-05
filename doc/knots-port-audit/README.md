@@ -327,6 +327,20 @@ Other missing/adapted Knots pieces found during this pass:
   rich-text context, and non-HTTPS text. Local Qt execution was not possible:
   the current configured build has no Qt target, and a GUI configure probe
   failed because Qt5 is not installed.
+- The GUI review found Knots' RPC console `/clearhistory` command
+  (`aafe2f8d9`) and status-bar sync progress expansion (`c3aa589495`) were
+  still missing from the port. These are user-facing Qt behavior changes, not
+  consensus or network security changes. The port now carries `/clearhistory`
+  as `e1445679c3`, the expanded progress bar as `7db09de6d9`, and Qt test
+  coverage for the clear-history command as `2e0ff4068b`. The local build still
+  has `BUILD_GUI=OFF`, so the Qt test target could not be executed here.
+- The same Qt source pass found port-introduced GUI compile drift, not original
+  Knots defects: `src/qt/transactionfilterproxy.cpp` had duplicated naked
+  filter-change fragments after the current-Core Qt 6.10 modernization, and
+  `src/qt/rpcconsole.h` had two identical `PlainCopyTextEdit` class
+  definitions. Actual Knots `29.x-knots` has only one `PlainCopyTextEdit` and
+  does not have the current-Core transaction-filter fragment duplication. The
+  port now fixes these as `e94cbbbe9c` and `9d032f4b21`.
 - Compact-block extra-transaction coverage now uses the current P2P test
   framework send helper and hash/wtxid properties (`77d2b2c025`).
   `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
@@ -908,6 +922,21 @@ Other missing/adapted Knots pieces found during this pass:
   history, traffic graph tooltips, mempool stats, and the Network Watch GUI
   are all present in the current tree. These were not new omissions or original
   Knots defects from this pass.
+- The full non-GUI unit run exposed three integration issues from combining
+  Knots behavior with current Core tests/APIs. `node_init_tests/init_test`
+  aborted because current Core's init test never initialized Knots'
+  `bitcoin_rw.conf` path; the port now runs `ReadConfigFiles()` before
+  `AppInitMain` as `f41907fc25`. `rpc_tests/rpc_convert_values_dumptxoutset`
+  exposed a port-introduced `bitcoin-cli -named dumptxoutset ... separator=:`
+  conversion bug caused by current Core's string-positional heuristic; the
+  port now registers `separator` as a string parameter as `cc59b7ea37`.
+  Unmodified Knots `29.x-knots` accepted the same named command and wrote a
+  colon-delimited human-readable dump after generating a regtest UTXO, so this
+  was not an original Knots defect. The RBF feerate-diagram test still carried
+  Knots 29.x expectations that larger conflict topologies were uncalculable;
+  current Core's TxGraph-backed mempool can calculate those diagrams, so the
+  port adapts the coverage and fixes the grandchild lookup typo as
+  `73e8138d49`.
 - A refreshed 2026 exact-patch mismatch pass found four final-tree omissions
   that were not suspicious but should be carried for release parity:
   Knots' pruning help text warning that wallets and indexes must stay active
@@ -1433,11 +1462,28 @@ Builds:
 - `TMPDIR=/mnt/my_storage/tmp cmake --build /tmp/bitcoin-asan-consensus-after
   --target bitcoinconsensus -j1`
 - `git diff --check`
+- `cmake -LA -N build | rg -n
+  "BUILD_GUI|BUILD_GUI_TESTS|WITH_QT|ENABLE_WALLET"` reported
+  `BUILD_GUI=OFF`, `ENABLE_WALLET=ON`, and `WITH_QT_VERSION=5`
 - `build/bin/bitcoind -help | sed -n '147,160p'`
 - `cmake --build build --target test_bitcoin -j2`
+- `cmake --build build --target bitcoin-qt -j4` failed with
+  `ninja: error: unknown target 'bitcoin-qt'`
+- `cmake --build build --target test_bitcoin-qt -j4` failed with
+  `ninja: error: unknown target 'test_bitcoin-qt'`
 - `cmake --build build --target help | rg -n
   "(qt|bitcoin-qt|test_bitcoin-qt|test_bitcoin_qt)"` returned no configured Qt
   target
+- `rg -n "/clearhistory|ClearCommandHistory|Console Commands|Command history
+  and console output cleared" src/qt/rpcconsole.cpp src/qt/rpcconsole.h
+  src/qt/test/apptests.cpp`
+- `rg -n "progressBar->setSizePolicy|statusBar\\(\\)->addWidget\\(progressBar,
+  1\\)" src/qt/bitcoingui.cpp`
+- `rg -n "class PlainCopyTextEdit" src/qt/rpcconsole.h` returned a single
+  class definition
+- `nl -ba src/qt/transactionfilterproxy.cpp | sed -n '51,127p'`
+- `rg -n "dumptxoutset.*separator|separator.*dumptxoutset"
+  src/rpc/client.cpp src/test/rpc_tests.cpp src/rpc/blockchain.cpp`
 - `rg -n "util/transaction_identifier\\.h" src test -g '!test/cache/**'`
   returned no matches after the Qt block visualizer include update
 - `python3 -c "import xml.etree.ElementTree as ET;
@@ -1554,6 +1600,14 @@ Unit tests:
   --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=node_warnings_tests
   --catch_system_error=no --log_level=nothing --report_level=no`
+- `build/bin/test_bitcoin --run_test=node_init_tests/init_test
+  --catch_system_error=no --log_level=nothing --report_level=no`
+- `build/bin/test_bitcoin --run_test=rbf_tests/calc_feerate_diagram_rbf
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=rpc_tests/rpc_convert_values_dumptxoutset
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --catch_system_error=no --log_level=error
+  --report_level=short` passed with all assertions successful
 - `./build/src/secp256k1/bin/tests --target=ellswift_xdh_bad_scalar_tests --iterations=16`
 - `./build/src/secp256k1/bin/tests --target=ellswift --iterations=16`
 
@@ -1783,6 +1837,14 @@ Functional tests:
   `python3 ../knots/test/functional/wallet_keypool.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_wallet_keypool_isactive_repro`
   (passes on unmodified Knots, confirming the local `wallet_keypool.py`
   failure was port-side test drift from losing Knots' explicit keypool setup)
+- Original Knots cross-check:
+  unmodified `../knots/build-repro/bin/bitcoind -regtest` accepted
+  `bitcoin-cli -regtest -named dumptxoutset path=<tmp>/utxo.txt
+  format='["txid","vout"]' show_header=false separator=':'` after one
+  `generatetoaddress` block, and the output row used `:` between `txid` and
+  `vout`. This confirms the port's missing `separator` CLI conversion was
+  introduced by rebasing onto current Core's named-argument heuristic, not
+  inherited from Knots.
 - Original Knots expected-failure repro with a temporary
   `/mnt/my_storage/knots-assumeutxo-repro` worktree and the port's added
   post-validation raw-transaction assertion:
