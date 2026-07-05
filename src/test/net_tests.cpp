@@ -69,6 +69,17 @@ void CheckRejectedSendPreservesMessage(Transport& transport, CSerializedNetMsg m
     BOOST_CHECK(msg.data == expected.data);
 }
 
+bool TrySendPreservingRejectedMessage(Transport& transport, CSerializedNetMsg msg)
+{
+    const CSerializedNetMsg expected{msg.Copy()};
+    const bool queued{transport.SetMessageToSend(msg)};
+    if (!queued) {
+        BOOST_CHECK_EQUAL(msg.m_type, expected.m_type);
+        BOOST_CHECK(msg.data == expected.data);
+    }
+    return queued;
+}
+
 std::vector<uint8_t> CollectTransportBytes(Transport& transport, CSerializedNetMsg msg)
 {
     BOOST_REQUIRE(transport.SetMessageToSend(msg));
@@ -1527,6 +1538,12 @@ public:
         m_msg_to_send.push_back(std::move(msg));
     }
 
+    /** Try to enqueue a message immediately, checking rejection leaves it intact. */
+    bool TrySendMessage(CSerializedNetMsg msg)
+    {
+        return TrySendPreservingRejectedMessage(m_transport, std::move(msg));
+    }
+
     /** Expect ellswift key to have been received from transport and process it.
      *
      * Many other V2TransportTester functions cannot be called until after ReceiveKey() has been
@@ -1706,6 +1723,13 @@ public:
 
 BOOST_AUTO_TEST_CASE(transport_rejected_send_preserves_message)
 {
+    const std::string overlong_type(CMessageHeader::MESSAGE_TYPE_SIZE + 2, 'a');
+
+    {
+        V1Transport transport{NodeId{0}};
+        CheckRejectedSendPreservesMessage(transport, MakeSerializedNetMsg(overlong_type, {0x08}));
+    }
+
     {
         V1Transport transport{NodeId{0}};
         auto first{MakeSerializedNetMsg("version", {0x01, 0x02, 0x03})};
@@ -1716,6 +1740,23 @@ BOOST_AUTO_TEST_CASE(transport_rejected_send_preserves_message)
     {
         V2Transport transport{NodeId{0}, /*initiating=*/true};
         CheckRejectedSendPreservesMessage(transport, MakeSerializedNetMsg("version", {0x06, 0x07}));
+    }
+
+    {
+        V2TransportTester tester(m_rng, /*test_initiator=*/true);
+        auto ret{tester.Interact()};
+        BOOST_REQUIRE(ret && ret->empty());
+        tester.SendKey();
+        tester.SendGarbage();
+        tester.ReceiveKey();
+        tester.SendGarbageTerm();
+        tester.SendVersion();
+        ret = tester.Interact();
+        BOOST_REQUIRE(ret && ret->empty());
+        tester.ReceiveGarbage();
+        tester.ReceiveVersion();
+        tester.CompareSessionIDs();
+        BOOST_CHECK(!tester.TrySendMessage(MakeSerializedNetMsg(overlong_type, {0x09})));
     }
 }
 
