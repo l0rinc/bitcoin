@@ -795,6 +795,14 @@ public:
         }
 
         auto res = m_builder->GetCurrentChunk();
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            const auto res_again{m_builder->GetCurrentChunk()};
+            Assume(res_again.has_value() == res.has_value());
+            if (res && res_again) {
+                Assume(res_again->first == res->first);
+                Assume(res_again->second == res->second);
+            }
+        }
         if (!res) {
             Assume(entries.size() == entries_size);
             return {};
