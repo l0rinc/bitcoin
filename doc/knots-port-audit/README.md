@@ -66,6 +66,21 @@ Other missing/adapted Knots pieces found during this pass:
   `12eefda89a`, `ee39394ad3`) is already present in this port via the earlier
   wallet/RPC reconciliation commit `e8c2b257ee`, with invalid-fingerprint
   coverage in `rpc_signer.py`.
+- The RPC cookie and wallet-restricted authentication tests exposed missing
+  compatibility for Knots-style `add_wallet_options(...)` calls after rebasing
+  onto current Core's common `--descriptors` / `--legacy-wallet` parser. This
+  was a port-side test-framework issue, fixed as `6f1d551e45`. The same pass
+  made the `importmempool` wallet-restriction assertion in `rpc_users.py` pass
+  a dummy `filepath`, so the RPC reaches Knots' `EnsureNotWalletRestricted`
+  guard instead of the generic argument-count help path.
+- A legacy-wallet test run exposed a port-introduced RPC assertion crash:
+  Knots' older `createwallet descriptors=false` path had overwritten Core
+  master's descriptor-only guard, while current Core's wallet creation code
+  still asserts that new wallets are descriptor wallets. This was not an
+  original Knots crash: an unmodified local Knots build returned RPC `-4`
+  (`Compiled without bdb support`) for the same legacy-wallet creation attempt.
+  Core master already rejects `descriptors=false`; the port restores that
+  behavior as `6cd89c9b09` and covers it in `wallet_createwallet.py`.
 
 ## Original Knots Defects Confirmed
 
@@ -171,6 +186,11 @@ most cpp-subprocess memory/Windows fixes.
   flags, but the broad `non-mandatory-script-verify-flag` bypass may still be
   able to mask policy checks outside the consensus-enforced RDTS path. The
   current RDTS functional test verifies consensus checks are not bypassed.
+- Legacy-wallet creation is a non-consensus divergence from Knots on this
+  current-Core base. Core master no longer creates new legacy wallets, and this
+  port now preserves Core's explicit RPC error instead of crashing. Ported
+  legacy-only wallet tests are skipped by the framework when `--legacy-wallet`
+  mode is selected.
 - BIP-110/RDTS consensus equivalence still needs dedicated review. This pass
   verified the replayed tests and fixed issues they exposed; it does not prove
   consensus equivalence to Knots or Core.
@@ -216,3 +236,11 @@ Functional tests:
 - `python3 test/functional/interface_rest.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_signer.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_users.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_implicitsegwit.py --configfile build/test/config.ini`
+  (skipped: legacy wallets can no longer be created)
+- `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini --legacy-wallet`
+  (skipped: legacy wallets can no longer be created)
