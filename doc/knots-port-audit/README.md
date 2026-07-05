@@ -618,6 +618,11 @@ Other missing/adapted Knots pieces found during this pass:
   the duplicate setup as `d10d97fd54`, updates stale fixed-limit comments, and
   extends `peerman_tests` / `p2p_handshake.py` to cover `-maxstaleoutbound`
   parsing and the zero-tolerance non-BIP110 path.
+- The versionbits RPC review confirmed Knots' `period_start` field for
+  BIP9 signalling statistics (`5e04731447`) is present in the port and covered
+  by `rpc_blockchain.py`. Current Core master still reports `period`,
+  `elapsed`, and `count` without `period_start`. This is RPC observability
+  rather than a security or consensus change.
 - Earlier exact patch-id sweeps were useful for finding simple omissions, but
   they are not a complete proof because many Knots changes are adapted,
   squashed, or present through current Core under different commits. After the
@@ -1214,6 +1219,8 @@ Functional tests:
 - `python3 test/functional/rpc_bind.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_current_tip`
+- `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_period_start`
 - `python3 test/functional/interface_zmq.py --configfile /tmp/bitcoin-zmq-build/test/config.ini`
 - `python3 test/functional/p2p_v2_encrypted.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_v2_encrypted`
