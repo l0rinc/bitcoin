@@ -18,6 +18,8 @@ from test_framework.util import (
     assert_fee_amount,
     assert_greater_than,
     assert_raises_rpc_error,
+    create_lots_of_big_transactions,
+    gen_return_txouts,
 )
 from test_framework.wallet import (
     COIN,
@@ -317,6 +319,46 @@ class MempoolLimitTest(BitcoinTestFramework):
         assert cpfp_parent["txid"] not in resulting_mempool_txids
         assert child["txid"] not in resulting_mempool_txids
 
+    def test_maxmempool_rpc(self):
+        node = self.nodes[0]
+        self.log.info("Check maxmempool RPC updates the limit and trims the mempool")
+
+        self.restart_node(0, extra_args=self.extra_args[0] + ["-persistmempool=0"])
+        assert_equal(node.getrawmempool(), [])
+
+        rpc_wallet = MiniWallet(node, tag_name="maxmempool_rpc_wallet")
+        self.generate(rpc_wallet, 10)
+        fill_mempool(self, node)
+
+        info = node.getmempoolinfo()
+        assert_equal(info["maxmempool"], 5_000_000)
+        assert_greater_than(info["maxmempool"], info["usage"])
+
+        assert_raises_rpc_error(-8, "MaxMempool size 4 is too small", node.maxmempool, 4)
+        assert_raises_rpc_error(-8, "MaxMempool size -1 is too small", node.maxmempool, -1)
+
+        assert_equal(node.maxmempool(6), None)
+        assert_equal(node.getmempoolinfo()["maxmempool"], 6_000_000)
+
+        rpc_wallet.rescan_utxos()
+        txouts = gen_return_txouts()
+        added_txids = []
+        for _ in range(8):
+            if node.getmempoolinfo()["usage"] > 5_000_000:
+                break
+            fee = node.getmempoolinfo()["mempoolminfee"] * Decimal("100")
+            added_txids.extend(create_lots_of_big_transactions(rpc_wallet, node, fee, 1, txouts))
+        assert added_txids
+        before_shrink = node.getmempoolinfo()
+        assert_greater_than(before_shrink["usage"], 5_000_000)
+        before_shrink_count = len(node.getrawmempool())
+
+        assert_equal(node.maxmempool(5), None)
+        after_shrink = node.getmempoolinfo()
+        assert_equal(after_shrink["maxmempool"], 5_000_000)
+        assert_greater_than(after_shrink["maxmempool"], after_shrink["usage"])
+        assert_greater_than(before_shrink_count, len(node.getrawmempool()))
+
 
     def run_test(self):
         node = self.nodes[0]
@@ -410,6 +452,7 @@ class MempoolLimitTest(BitcoinTestFramework):
 
         self.test_mid_package_eviction_success()
         self.test_mid_package_replacement()
+        self.test_maxmempool_rpc()
 
 
 if __name__ == '__main__':
