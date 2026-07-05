@@ -835,6 +835,16 @@ Other missing/adapted Knots pieces found during this pass:
   for a real localhost peer connecting through a dedicated `=onion` bind while
   `-whitelist=noban@127.0.0.1` is configured; the peer is reported as
   `network="onion"` and receives no whitelist permissions.
+- The outgoing whitelist-permission review confirmed Knots'
+  `-whitelist=...,out@...` automatic-outbound behavior (`a9f6f721aa`) is
+  present in the port and absent from current Core. Current Core only applies
+  outgoing whitelist permissions to manual connections in `ConnectNode(...)`;
+  Knots and this port apply the configured outgoing ranges to every outgoing
+  connection type. This is operator permission semantics, not consensus
+  behavior. `p2p_permissions.py` now covers both sides directly: an automatic
+  `outbound-full-relay` peer receives `noban`/`download` when the whitelist is
+  `noban,out@127.0.0.1`, and receives no such permissions when the whitelist is
+  incoming-only.
 - The block-filter permission review confirmed Knots' `blockfilters`
   whitebind/whitelist permission (`d153093ba2`, `aa2885797e`) is present in
   the port and absent from current Core. The permission lets an explicitly
@@ -1331,6 +1341,16 @@ under different commits. They are not all proven exploitable.
   candidate. This is local operator availability/DoS hardening, not a
   consensus change.
 
+- Outgoing whitelist permissions for automatic outbound peers:
+  `a9f6f721aa`
+
+  Current Core still applies `-whitelist=...,out@...` permissions only when
+  `ConnectNode(...)` is opening a manual connection. Knots and this port apply
+  the outgoing whitelist ranges to automatic outbound connection types as well,
+  so operator-granted permissions such as `noban`/`download` are not silently
+  limited to `addnode`/manual peers. This is local network permission semantics,
+  not a consensus change.
+
 - CJDNS addnode duplicate detection:
   `28823f30dc`
 
@@ -1549,6 +1569,12 @@ Source/manifest checks:
   "previous compact block reconstruction attempt failed|header.IsNull"` show
   that current Core and unmodified Knots both carry the repeated-`blocktxn`
   empty-header guard that was missing from the port.
+- `git show origin/master:src/net.cpp | sed -n '512,522p'`,
+  `git show knots/29.x-knots:src/net.cpp | sed -n '536,544p'`, and
+  `sed -n '529,536p' src/net.cpp` show that current Core gates outgoing
+  whitelist permission application on `ConnectionType::MANUAL`, while actual
+  Knots and the port pass `vWhitelistedRangeOutgoing` for every outgoing
+  connection.
 - `git show origin/master:src/wallet/migrate.cpp | rg -n
   "for \\(uint32_t i = 0; i <= outer_meta.last_page|LSNs are not reset"` and
   `git -C ../knots show 29.x-knots:src/wallet/migrate.cpp | rg -n
@@ -1798,6 +1824,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_eviction_forceinbound`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_onion_whitelist`
+- `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_outbound_auto`
 - `python3 test/functional/p2p_blockfilters.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_blockfilters_permission_2`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
