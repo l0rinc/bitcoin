@@ -409,6 +409,13 @@ Other missing/adapted Knots pieces found during this pass:
   `minconf`. This is backwards-compatibility behavior, not a security or
   consensus change. `wallet_fundrawtransaction.py` and `rpc_psbt.py` now cover
   positive selection, negative `min_conf`, and `min_conf`/`minconf` conflicts.
+- The same wallet RPC review confirmed Knots' case-insensitive fee-estimation
+  mode parsing (`8d40addbd2`) and `estimate_mode`/`conf_target` coupling
+  validation (`be8ae64b82`) are present in the port's shared fee-estimation
+  helper. These are RPC compatibility/argument-validation behaviors, not
+  consensus changes. `wallet_send.py` covers mixed-case `economical`, mixed-case
+  `unset`, and missing-`conf_target` errors for both positional and options
+  object forms.
 - Raw transaction, package, and PSBT RPC coverage now passes against the port.
   This covers Knots-touched max burn handling, package max fee/burn arguments,
   and PSBT base64 parameter handling with `=` padding characters.
@@ -1196,6 +1203,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_fundrawtransaction_min_conf`
 - `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_backup.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_send.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_send_fee_mode`
 - `python3 test/functional/wallet_migration.py --configfile build/test/config.ini`
   (skipped: previous releases not available or disabled)
 - `python3 test/functional/wallet_sweepprivkeys.py --configfile build/test/config.ini`
