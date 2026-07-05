@@ -57,9 +57,14 @@ class BytesPerSigOpTest(BitcoinTestFramework):
         # Allow datacarrier padding so this test isolates bytespersigop policy.
         self.extra_args = [['-acceptnonstdtxn=1', '-acceptnonstddatacarrier=1', '-datacarrierfullcount=0', '-permitbaredatacarrier=1']]
 
+    def init_wallet(self):
+        if not hasattr(self, "wallet"):
+            self.wallet = MiniWallet(self.nodes[0])
+
     def create_p2wsh_spending_tx(self, witness_script, output_script):
         """Create a 1-input-1-output P2WSH spending transaction with only the
            witness script in the witness stack and the given output script."""
+        self.init_wallet()
         # create P2WSH address and fund it via MiniWallet first
         fund = self.wallet.send_to(
             from_node=self.nodes[0],
@@ -217,6 +222,7 @@ class BytesPerSigOpTest(BitcoinTestFramework):
 
     def test_sigops_package(self):
         self.log.info("Test a overly-large sigops-vbyte hits package limits")
+        self.init_wallet()
         # Make a 2-transaction package which fails vbyte checks even though
         # separately they would work.
         #
@@ -301,6 +307,7 @@ class BytesPerSigOpTest(BitcoinTestFramework):
 
     def test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize(self):
         self.log.info("Test sendrawtransaction maxfeerate uses sigops-adjusted vsize")
+        self.init_wallet()
 
         self.restart_node(0, extra_args=["-bytespersigop=5000"] + self.extra_args[0])
 
@@ -331,6 +338,7 @@ class BytesPerSigOpTest(BitcoinTestFramework):
 
     def test_legacy_sigops_stdness(self):
         self.log.info("Test a transaction with too many legacy sigops in its inputs is non-standard.")
+        self.init_wallet()
 
         # Restart with the test settings
         self.restart_node(0, extra_args=[f'-maxtxlegacysigops={MAX_STD_LEGACY_SIGOPS}'])
@@ -367,7 +375,7 @@ class BytesPerSigOpTest(BitcoinTestFramework):
         self.generateblock(self.nodes[0], output="raw(42)", transactions=[nonstd_tx.serialize().hex()])
 
     def run_test(self):
-        self.wallet = MiniWallet(self.nodes[0])
+        self.init_wallet()
 
         for bytes_per_sigop in (DEFAULT_BYTES_PER_SIGOP, 43, 81, 165, 327, 649, 1072):
             if bytes_per_sigop == DEFAULT_BYTES_PER_SIGOP:
