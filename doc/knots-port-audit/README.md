@@ -262,6 +262,11 @@ Other missing/adapted Knots pieces found during this pass:
   from the patch-id evidence set with other historical release notes. The CI
   mismatch is not a runtime/client delta; the port retains current Core's
   newer CI workflow on the rebased base.
+- Extending the same sweep to Knots non-merge commits since 2024-01-01
+  produced no additional runtime/client misses. The extra unmatched commits are
+  historical archived release notes for Core 25.2, 26.1, 26.2, 27.0, 27.1,
+  27.2, and 28.0, plus old release-note fragments intentionally omitted from
+  this patch-id proof set.
 
 ## Original Knots Defects Confirmed
 
