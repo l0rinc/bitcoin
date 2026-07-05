@@ -34,13 +34,13 @@ class P2PBlockDelay(P2PDataStore):
             self.getdata_requests.append(inv.hash)
             if (inv.type & MSG_TYPE_MASK) == MSG_BLOCK:
                 if inv.hash != self.delay_block:
-                    self.send_message(msg_block(self.block_store[inv.hash]))
+                    self.send_without_ping(msg_block(self.block_store[inv.hash]))
 
     def on_getheaders(self, message):
         pass
 
     def send_delayed(self):
-        self.send_message(msg_block(self.block_store[self.delay_block]))
+        self.send_without_ping(msg_block(self.block_store[self.delay_block]))
 
 
 SYNC_CHECK_INTERVAL = 30
@@ -66,7 +66,7 @@ class SyncCoinsTipAfterChainSyncTest(BitcoinTestFramework):
         # Prepare blocks without sending them to the node
         block_dict = {}
         for _ in range(NUM_BLOCKS):
-            blocks.append(create_block(tip, create_coinbase(height), block_time))
+            blocks.append(create_block(tip, create_coinbase(height), ntime=block_time))
             blocks[-1].solve()
             tip = blocks[-1].sha256
             block_time += 1
@@ -87,7 +87,7 @@ class SyncCoinsTipAfterChainSyncTest(BitcoinTestFramework):
         )
         headers_message = msg_headers()
         headers_message.headers = [CBlockHeader(blocks[0])]
-        peer.send_message(headers_message)
+        peer.send_without_ping(headers_message)
         peer.sync_with_ping()
         assert_equal(node.getblockchaininfo()["initialblockdownload"], True)
         with node.assert_debug_log(
@@ -99,7 +99,7 @@ class SyncCoinsTipAfterChainSyncTest(BitcoinTestFramework):
             "Send headers message for second block, verify it won't sync because node height has changed"
         )
         headers_message.headers = [CBlockHeader(blocks[1])]
-        peer.send_message(headers_message)
+        peer.send_without_ping(headers_message)
         peer.sync_with_ping()
         assert_equal(node.getblockchaininfo()["initialblockdownload"], False)
         with node.assert_debug_log(
@@ -113,7 +113,7 @@ class SyncCoinsTipAfterChainSyncTest(BitcoinTestFramework):
             "Send headers message for last block, verify it won't sync because node is still downloading the block"
         )
         headers_message.headers = [CBlockHeader(blocks[2])]
-        peer.send_message(headers_message)
+        peer.send_without_ping(headers_message)
         peer.sync_with_ping()
         with node.assert_debug_log(
             [
