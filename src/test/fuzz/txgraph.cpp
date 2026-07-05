@@ -756,6 +756,13 @@ FUZZ_TARGET(txgraph)
                 assert(result.size() == result_set.Count());
                 auto expect_set = sel_sim.GetAncDesc(ref, alt);
                 assert(result_set == expect_set);
+                std::vector<TxGraph::Ref*> singleton_query{ref};
+                auto union_result = alt ? real->GetDescendantsUnion(singleton_query, level_select)
+                                        : real->GetAncestorsUnion(singleton_query, level_select);
+                assert_unique_refs(union_result);
+                auto union_set = sel_sim.MakeSet(union_result);
+                assert(union_result.size() == union_set.Count());
+                assert(union_set == result_set);
                 break;
             } else if (!sel_sim.IsOversized() && command-- == 0) {
                 // GetAncestorsUnion/GetDescendantsUnion.
