@@ -563,6 +563,13 @@ Other missing/adapted Knots pieces found during this pass:
   current Core has no `getmempoolinfo(with_fee_histogram=...)` or REST
   histogram surface. `policyestimator_tests` and `mempool_fee_histogram.py`
   pass with the ported code.
+- The mempool-entry RPC review confirmed Knots' transaction-serialization
+  `hash` field in mempool entry output (`2f7b38db86`) is present in the port
+  and absent from current Core's `entryToJSON(...)`. This is RPC compatibility
+  and observability rather than a security or consensus change. The port now
+  restores the original Knots-style `feature_segwit.py` coverage as
+  `6166d553d1`, asserting that `hash` and `wtxid` both match the witness hash
+  for witness and non-witness mempool transactions.
 - The wallet witness-only follow-up confirmed Knots' null-provider guard for
   `fundrawtransaction(..., {"segwit_inputs_only": true})` (`2a09a34129`) is
   present in the port. Current Core does not expose the `segwit_inputs_only`
@@ -1206,6 +1213,8 @@ Functional tests:
 - `python3 test/functional/feature_help.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_includeconf.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_fee_estimates_persist.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_segwit.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_segwit_mempool_hash`
 - `python3 test/functional/feature_index_prune.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_softwareexpiry.py --configfile build/test/config.ini`
