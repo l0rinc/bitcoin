@@ -677,6 +677,20 @@ under different commits. They are not all proven exploitable.
   HTTP startup error on stderr, and the specific bind-all-endpoints error in
   `debug.log`; the port covers this in `rpc_bind.py`.
 
+- Invalid-block peer punishment relaxation:
+  `7c7b5839f4`
+
+  Current Core still marks peers as misbehaving/discouraged for several invalid
+  block/header paths in `MaybePunishNodeForBlock(...)`. Knots instead routes
+  those paths through `CNode::PunishInvalidBlocks()`: inbound, manual, feeler,
+  and `noban` peers are tolerated, while outbound full-relay, block-relay,
+  address-fetch, and this port's private-broadcast peers are simply
+  disconnected rather than discouraged. This is network partition/availability
+  hardening rather than a consensus-rule change. Current Core already carries
+  the related transaction-relay cleanup (`drop MaybePunishNodeForTx`) and the
+  single script-check path; the remaining Core difference is invalid-block
+  peer-punishment behavior.
+
 - CJDNS addnode duplicate detection:
   `28823f30dc`
 
@@ -984,6 +998,8 @@ Functional tests:
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_block_times.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_block.py --configfile build/test/config.ini
+  --skipreorg --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_block_skip`
 - `python3 test/functional/tool_wallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_startup.py --configfile build/test/config.ini`
@@ -1020,3 +1036,8 @@ Functional tests:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_rdts.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini`
   (fails on the inherited RDTS `ignore_rejects` internal-bug log described
   above)
+
+The full `feature_block.py` run reached the large-reorg section but failed
+because `/tmp` was full and the node shut down with `Disk space is too low!`;
+the `--skipreorg` rerun above passed on a temp directory under
+`/mnt/my_storage`.
