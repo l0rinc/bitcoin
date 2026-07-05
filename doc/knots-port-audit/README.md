@@ -141,6 +141,12 @@ Other missing/adapted Knots pieces found during this pass:
   are now refreshed as `c45749ae43`, and `tool_cli_completion.py` passes.
 - `feature_fee_estimates_persist.py` passes, covering the `savefeeestimates`
   RPC and shutdown persistence path.
+- Wallet sweep coverage passes on the current descriptor-wallet base:
+  `wallet_sweepprivkeys.py` rejects invalid/unfunded keys and sweeps both
+  unconfirmed and confirmed P2PKH outputs. Legacy-only Knots tests
+  `wallet_dump.py` and `wallet_import_rescan.py` now reach the expected
+  current-Core skip path after restoring the ported `AddressType` test helper
+  and current `BitcoinTestFramework(__file__)` constructors (`9bfe1fb892`).
 
 ## Original Knots Defects Confirmed
 
@@ -321,8 +327,13 @@ Functional tests:
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_block_times.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_sweepprivkeys.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_implicitsegwit.py --configfile build/test/config.ini`
+  (skipped: legacy wallets can no longer be created)
+- `python3 test/functional/wallet_dump.py --configfile build/test/config.ini`
+  (skipped: legacy wallets can no longer be created)
+- `python3 test/functional/wallet_import_rescan.py --configfile build/test/config.ini`
   (skipped: legacy wallets can no longer be created)
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini --legacy-wallet`
   (skipped: legacy wallets can no longer be created)
