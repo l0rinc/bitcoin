@@ -69,13 +69,14 @@ class RPCBindTest(BitcoinTestFramework):
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(('127.0.0.1', self.defaultport))
             sock.listen()
-            self.nodes[0].assert_start_raises_init_error([
-                '-disablewallet',
-                '-nolisten',
-                '-rpcallowip=127.0.0.1',
-                '-rpcbind=127.0.0.1',
-                f'-rpcbind=127.0.0.1:{rpc_port(1)}',
-            ], 'Error: Unable to bind all endpoints for RPC server')
+            with self.nodes[0].assert_debug_log(['Unable to bind all endpoints for RPC server']):
+                self.nodes[0].assert_start_raises_init_error([
+                    '-disablewallet',
+                    '-nolisten',
+                    '-rpcallowip=127.0.0.1',
+                    '-rpcbind=127.0.0.1',
+                    f'-rpcbind=127.0.0.1:{rpc_port(1)}',
+                ], 'Error: Unable to start HTTP server. See debug log for details.')
 
     def run_allowip_test(self, allow_ips, rpchost, rpcport):
         '''
