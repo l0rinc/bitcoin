@@ -710,6 +710,8 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nStartTime = Consensus::BIP9Deployment::NEVER_ACTIVE;
         consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].min_activation_height = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].threshold = 108; // 75%
+        consensus.vDeployments[Consensus::DEPLOYMENT_REDUCED_DATA].period = 144; // Faster than normal for regtest (144 instead of 2016)
 
         consensus.nMinimumChainWork = uint256{};
         consensus.defaultAssumeValid = uint256{};
