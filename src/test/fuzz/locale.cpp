@@ -33,6 +33,27 @@ bool IsAvailableLocale(const std::string& locale_identifier)
     }
     return true;
 }
+
+class DecimalCommaNumpunct final : public std::numpunct<char>
+{
+    char do_decimal_point() const override { return ','; }
+    char do_thousands_sep() const override { return '\''; }
+    std::string do_grouping() const override { return "\3"; }
+};
+
+class ScopedGlobalLocale
+{
+    const std::locale m_previous;
+
+public:
+    explicit ScopedGlobalLocale(const std::locale& locale) : m_previous{std::locale::global(locale)} {}
+    ~ScopedGlobalLocale() { std::locale::global(m_previous); }
+};
+
+std::locale DecimalCommaLocale()
+{
+    return {std::locale::classic(), new DecimalCommaNumpunct};
+}
 } // namespace
 
 FUZZ_TARGET(locale)
@@ -47,20 +68,36 @@ FUZZ_TARGET(locale)
 
     const std::string random_string = fuzzed_data_provider.ConsumeRandomLengthString(5);
     const int64_t random_int64 = fuzzed_data_provider.ConsumeIntegral<int64_t>();
-    const std::string tostring_without_locale = util::ToString(random_int64);
-    const std::string strprintf_int_without_locale = strprintf("%d", random_int64);
     const double random_double = fuzzed_data_provider.ConsumeFloatingPoint<double>();
+    const std::string tostring_without_locale = util::ToString(random_int64);
+    const std::string tostring_double_without_locale = util::ToString(random_double);
+    const std::string strprintf_int_without_locale = strprintf("%d", random_int64);
     const std::string strprintf_double_without_locale = strprintf("%f", random_double);
+    const std::string strprintf_space_double_without_locale = strprintf("% f", random_double);
 
     const char* new_locale = std::setlocale(LC_ALL, locale_identifier.c_str());
     assert(new_locale != nullptr);
 
     const std::string tostring_with_locale = util::ToString(random_int64);
     assert(tostring_without_locale == tostring_with_locale);
+    const std::string tostring_double_with_locale = util::ToString(random_double);
+    assert(tostring_double_without_locale == tostring_double_with_locale);
     const std::string strprintf_int_with_locale = strprintf("%d", random_int64);
     assert(strprintf_int_without_locale == strprintf_int_with_locale);
     const std::string strprintf_double_with_locale = strprintf("%f", random_double);
     assert(strprintf_double_without_locale == strprintf_double_with_locale);
+    const std::string strprintf_space_double_with_locale = strprintf("% f", random_double);
+    assert(strprintf_space_double_without_locale == strprintf_space_double_with_locale);
+
+    {
+        const ScopedGlobalLocale scoped_locale{DecimalCommaLocale()};
+        assert(std::locale{} != std::locale::classic());
+        assert(util::ToString(random_int64) == tostring_without_locale);
+        assert(util::ToString(random_double) == tostring_double_without_locale);
+        assert(strprintf("%d", random_int64) == strprintf_int_without_locale);
+        assert(strprintf("%f", random_double) == strprintf_double_without_locale);
+        assert(strprintf("% f", random_double) == strprintf_space_double_without_locale);
+    }
 
     const std::locale current_cpp_locale;
     assert(current_cpp_locale == std::locale::classic());
