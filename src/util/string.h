@@ -249,6 +249,7 @@ std::string ToString(const T& t)
 {
     std::ostringstream oss;
     oss.imbue(std::locale::classic());
+    assert(oss.getloc() == std::locale::classic());
     oss << t;
     return oss.str();
 }
