@@ -454,6 +454,16 @@ Other missing/adapted Knots pieces found during this pass:
   (`28823f30dc`) remains a port-only network correctness fix. The port carries
   it as `bcd1387ae6`, and `net_peer_connection_tests` covers both connected
   CJDNS addnode reporting and duplicate CJDNS addnode rejection.
+- The P2P RPC connection-management follow-up confirmed Knots intentionally
+  exposes the hidden `addconnection` RPC outside regtest
+  (`2fcf74eb45`, ported as `4feeb3a87b`), while current Core still rejects it
+  unless `Params().GetChainType() == REGTEST`. This is a Knots-vs-Core network
+  control surface expansion, not a consensus issue or hardening fix:
+  RPC-authenticated users on signet/testnet/mainnet can force outbound
+  full-relay, block-relay, address-fetch, or feeler connections. The port now
+  runs `p2p_add_connections.py` on signet to cover this behavior, and
+  `rpc_net.py` also asserts that the port-only `private-broadcast` connection
+  type cannot be manually selected through `addnode onetry`.
 - The ForceInbound eviction review confirmed Knots' trusted-inbound eviction
   behavior (`3544a26256`, `711dadb546`, `067f80e1b5`, `3db935abd1`) is
   present in the port and absent from current Core. It also found an original
@@ -1110,6 +1120,10 @@ Functional tests:
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_onion_whitelist`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_net.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_addconnection`
+- `python3 test/functional/p2p_add_connections.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_add_connections_signet`
 - `python3 test/functional/mempool_accept.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_datacarrier.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_dust.py --configfile build/test/config.ini`
