@@ -447,6 +447,14 @@ Other missing/adapted Knots pieces found during this pass:
   related `send` and `sendall` behavior but still leaves this
   `walletcreatefundedpsbt` default at zero. `rpc_psbt.py` covers the ported
   PSBT behavior.
+- The raw-transaction PSBT review confirmed Knots' user-provided previous
+  transaction support for `utxoupdatepsbt` and `descriptorprocesspsbt`
+  (`bdb4ca4195`, `eea8588f07`) is present in the port and absent from current
+  Core master. The port follows the Knots follow-up that exposes
+  `descriptorprocesspsbt` `prevtxs` through the options/named-parameter path,
+  not a sixth positional argument. `rpc_psbt.py` covers filling and signing a
+  child PSBT from provided parent transaction hex, irrelevant prevtxs being a
+  no-op, duplicate txid rejection, and too-few-outputs rejection.
 - The same wallet RPC review confirmed Knots' case-insensitive fee-estimation
   mode parsing (`8d40addbd2`) and `estimate_mode`/`conf_target` coupling
   validation (`be8ae64b82`) are present in the port's shared fee-estimation
@@ -1037,6 +1045,16 @@ under different commits. They are not all proven exploitable.
   port also covers PSBTv0 locktime output. This is wallet privacy and
   miner-incentive hardening, not a consensus-rule change.
 
+- PSBT previous-transaction injection for RPC updating/signing:
+  `bdb4ca4195`, `eea8588f07`
+
+  Current Core master can populate PSBT input UTXOs from the UTXO set, mempool,
+  and txindex, but `utxoupdatepsbt` and `descriptorprocesspsbt` do not accept
+  caller-provided previous transaction hex. Knots and this port can use those
+  provided transactions to fill and sign dependent PSBT chains that are not yet
+  in the mempool or UTXO set. This is transaction-construction functionality,
+  not consensus behavior.
+
 High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
 key handling, `LocalServiceInfo::nScore` saturation, miner `addPackageTxs`
@@ -1323,6 +1341,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_min_conf`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_anti_fee_sniping`
+- `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_prevtxs`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_mempool_info.py --configfile build/test/config.ini`
