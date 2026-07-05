@@ -1149,8 +1149,12 @@ under different commits. They are not all proven exploitable.
 - External or Knots-only surfaces:
   `d637873230` fixes `GetBlockFileInfo` bounds handling, but the obvious
   RPC-facing caller is Knots' `getblockfileinfo`. Current Core's corresponding
-  callers are internal/tests. The `85c8d477b0` fee-histogram unsigned-decrement
-  fix matters for Knots' `getmempoolinfo(with_fee_histogram=...)` and
+  callers are internal/tests. Actual Knots and the port return `nullptr` when
+  the block-file info vector is empty; current Core's older `size() - 1` check
+  can underflow before calling `.at(n)`. The port now covers the empty lookup in
+  `blockmanager_tests/blockmanager_get_block_file_info_empty`. The
+  `85c8d477b0` fee-histogram unsigned-decrement fix matters for Knots'
+  `getmempoolinfo(with_fee_histogram=...)` and
   `/rest/mempool/info/with_fee_histogram`, but current Core has no
   corresponding histogram surface. The wallet `2a09a34129` null-provider guard
   matters for Knots' `segwit_inputs_only` coin-control option, but current Core
@@ -1400,8 +1404,10 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=net_tests`
 - `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks
   --catch_system_error=no --log_level=nothing --report_level=no`
+- `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_get_block_file_info_empty`
 - `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_readblock_hash_mismatch
   --catch_system_error=no --log_level=nothing --report_level=no`
+- `build/bin/test_bitcoin --run_test=blockmanager_tests`
 - `build/bin/test_bitcoin --run_test=netbase_tests/netpermissions_test
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=net_peer_connection_tests`
