@@ -41,6 +41,11 @@ Other missing/adapted Knots pieces found during this pass:
 - `mempool_accept.py` was further adapted for Knots' data-output policy:
   Core's v30-era unbounded/multiple OP_RETURN expectations are now rejected by
   the port's `scriptpubkey`/`multi-op-return` policy paths (`2635a090c3`).
+- The same test now covers Knots' `-spkreuse=0` inter-transaction policy
+  conflict path (`2748eaf91f`, `49c780eae8`, `5847aee675`): duplicate outputs
+  inside one transaction are rejected, while a higher-fee transaction claiming
+  a scriptPubKey already claimed by an opt-in replaceable mempool transaction
+  is handled through the replacement path.
 - The completion audit found Knots' REST parse-error guard for
   `/rest/mempool/transactions/<info|contents>.json?sequence_start=...`
   (`11f97670fe`, ported as `412914b0d9`). The same area exposed an original
@@ -1802,6 +1807,21 @@ under different commits. They are not all proven exploitable.
   build before updating the port test. The latest verification reran the full
   functional test because the reorg helper depends on setup from `run_test`.
 
+- ScriptPubKey-reuse mempool policy:
+  Knots' `-spkreuse=0` mode is present in the port and absent from current Core.
+  The port carries the later Knots pointer-based `mapUsedSPK` representation
+  and routes inter-transaction scriptPubKey conflicts through the same
+  replacement machinery as opt-in input conflicts, while keeping
+  same-transaction twin outputs and input/change reuse as direct policy
+  rejections. This is mempool policy for address/script reuse and spam
+  reduction, not consensus. The strengthened port test covers both the direct
+  twin-output rejection and the replacement-style inter-transaction conflict.
+  Source comparison shows unmodified Knots has the same `m_conflicts_incl_policy`
+  and `mapUsedSPK` handling; the full current port `mempool_accept.py` cannot
+  be run unchanged against that Knots build because it expects a newer
+  `getmempoolinfo.permitbaremultisig` result field before reaching the
+  `-spkreuse` section.
+
 - Raw transaction max-feerate accounting with policy-adjusted vsize:
   `4b3cc3d48e`, `1cee5b1ac7`, `335d928d96`
 
@@ -2505,6 +2525,8 @@ Unit tests:
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=rbf_tests/calc_feerate_diagram_rbf
   --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=rbf_tests --catch_system_error=no
+  --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=rpc_tests/rpc_convert_values_dumptxoutset
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --catch_system_error=no --log_level=error
@@ -2627,6 +2649,15 @@ Functional tests:
 - `python3 test/functional/p2p_add_connections.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_add_connections_signet`
 - `python3 test/functional/mempool_accept.py --configfile build/test/config.ini`
+- `python3 test/functional/mempool_accept.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_accept_spkreuse_port_2
+  --portseed=32010`
+- `python3 test/functional/mempool_accept.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_accept_spkreuse_knots
+  --portseed=32020` stopped before the `-spkreuse` section because
+  unmodified Knots' `getmempoolinfo` result lacked the current port test's
+  expected `permitbaremultisig` field.
 - `python3 test/functional/mempool_datacarrier.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_dust.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_ephemeral_dust.py --configfile
