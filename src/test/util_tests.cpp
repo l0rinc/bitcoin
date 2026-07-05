@@ -938,6 +938,15 @@ BOOST_AUTO_TEST_CASE(test_FormatSubVersion)
     BOOST_CHECK_EQUAL(FormatSubVersion("Test", 99900, std::vector<std::string>()), "/Test:9.99.0/Knots:" + build.substr(knots_pos + 6) + "/");
 }
 
+BOOST_AUTO_TEST_CASE(test_sanitize_string_printable_chars)
+{
+    const std::string printable_ua{"User/Agent: test![]{}~"};
+
+    BOOST_CHECK_EQUAL(SanitizeString(printable_ua, SAFE_CHARS_DEFAULT), "User/Agent: test");
+    BOOST_CHECK_EQUAL(SanitizeString(printable_ua, SAFE_CHARS_PRINTABLE), printable_ua);
+    BOOST_CHECK_EQUAL(SanitizeString(printable_ua, SAFE_CHARS_DEFAULT, /*escape=*/true), "User/Agent: test%21%5B%5D%7B%7D%7E");
+}
+
 BOOST_AUTO_TEST_CASE(test_ParseFixedPoint)
 {
     int64_t amount = 0;
