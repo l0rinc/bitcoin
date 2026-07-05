@@ -41,8 +41,15 @@ Other missing/adapted Knots pieces found during this pass:
 - `mempool_accept.py` was further adapted for Knots' data-output policy:
   Core's v30-era unbounded/multiple OP_RETURN expectations are now rejected by
   the port's `scriptpubkey`/`multi-op-return` policy paths (`2635a090c3`).
+- The completion audit found Knots' REST parse-error guard for
+  `/rest/mempool/transactions/<info|contents>.json?sequence_start=...`
+  (`11f97670fe`, ported as `412914b0d9`). The same area exposed an original
+  Knots route-registration bug: the transactions endpoint was hidden behind the
+  generic `/rest/mempool/` prefix and was also registered without the trailing
+  slash expected by its parser. The port fixes that and adds functional coverage
+  in `interface_rest.py` (`de98ad9122`).
 
-## Original Knots Defect Confirmed
+## Original Knots Defects Confirmed
 
 The `addnode` RPC crash was confirmed on an unmodified local build of Knots
 `29.x-knots`:
@@ -58,6 +65,25 @@ Result on original Knots:
 
 This was not introduced by the port. The port rejects this input with
 `RPC_INVALID_PARAMETER`, and `rpc_net.py` now covers the regression path.
+
+The REST mempool-transactions route bug was also confirmed on an unmodified
+local build of Knots `29.x-knots`:
+
+```text
+/rest/mempool/transactions/info.json
+/rest/mempool/transactions/info.json?sequence_start=bad
+```
+
+Both requests were handled by the generic mempool endpoint and returned:
+
+```text
+Invalid URI format. Expected /rest/mempool/<info|info/with_fee_histogram|contents>.json
+```
+
+This was not introduced by the port. The port now registers the longer
+`/rest/mempool/transactions/` prefix before `/rest/mempool/`, and
+`interface_rest.py` covers both a successful request and the malformed
+`sequence_start` parse-error path.
 
 ## Core-Missing Hardening Candidates
 
@@ -148,6 +174,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=txvalidation_tests`
 - `build/bin/test_bitcoin --run_test=peerman_tests`
 - `build/bin/test_bitcoin --run_test=net_tests`
+- `build/bin/test_bitcoin --run_test=rest_tests`
 - `build/bin/test_bitcoin --run_test=validation_tests`
 - `build/bin/test_bitcoin --run_test=validation_block_tests`
 
@@ -164,3 +191,4 @@ Functional tests:
 - `python3 test/functional/mempool_dust.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_subdust_fee_penalty.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini`
+- `python3 test/functional/interface_rest.py --configfile build/test/config.ini`
