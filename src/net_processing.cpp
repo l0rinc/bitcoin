@@ -2843,6 +2843,7 @@ bool PeerManagerImpl::TryLowWorkHeadersSync(Peer& peer, CNode& pfrom, const CBlo
         // The peer has not yet given us a chain that meets our work threshold,
         // so we want to prevent further processing of the headers in any case.
         headers = {};
+        Assume(headers.empty());
         return true;
     }
 
