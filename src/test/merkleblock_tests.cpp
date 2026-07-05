@@ -10,6 +10,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <set>
 #include <vector>
 
@@ -26,6 +27,28 @@ BOOST_AUTO_TEST_CASE(merkleblock_rejects_invalid_block_tx_refs)
     CBlock resized_block;
     resized_block.vtx.resize(1);
     BOOST_CHECK_THROW(CMerkleBlock(resized_block, filter), NonFatalCheckError);
+}
+
+BOOST_AUTO_TEST_CASE(merkleblock_bit_byte_roundtrip_padding)
+{
+    const auto check_roundtrip = [](const std::vector<bool>& bits) {
+        const std::vector<unsigned char> bytes{BitsToBytes(bits)};
+        const std::vector<bool> decoded{BytesToBits(bytes)};
+
+        BOOST_CHECK_EQUAL(bytes.size(), (bits.size() + 7) / 8);
+        BOOST_CHECK_EQUAL(decoded.size(), bytes.size() * 8);
+        BOOST_CHECK(decoded.size() >= bits.size());
+        BOOST_CHECK(std::equal(bits.begin(), bits.end(), decoded.begin()));
+        BOOST_CHECK(std::all_of(decoded.begin() + bits.size(), decoded.end(),
+            [](bool bit) { return !bit; }));
+        BOOST_CHECK(BitsToBytes(decoded) == bytes);
+    };
+
+    check_roundtrip({});
+    check_roundtrip({true});
+    check_roundtrip({false, true, false, true, true});
+    check_roundtrip({true, false, true, false, true, false, true, false});
+    check_roundtrip({true, true, false, false, true, false, false, true, true});
 }
 
 /**
