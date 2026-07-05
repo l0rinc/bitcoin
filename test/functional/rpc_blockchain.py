@@ -18,6 +18,8 @@ Test the following RPCs:
     - getblockhash
     - getbestblockhash
     - verifychain
+    - scriptthreadsinfo
+    - setscriptthreadsenabled
 
 Tests correspond to code in rpc/blockchain.cpp.
 """
@@ -96,6 +98,7 @@ class BlockchainTest(BitcoinTestFramework):
         self._test_getblockheader()
         self._test_getdifficulty()
         self._test_getnetworkhashps()
+        self._test_scriptthreads()
         self._test_stopatheight()
         self._test_waitforblock() # also tests waitfornewblock
         self._test_waitforblockheight()
@@ -539,6 +542,23 @@ class BlockchainTest(BitcoinTestFramework):
         # Ensure long lookups get truncated to chain length
         hashes_per_second = self.nodes[0].getnetworkhashps(self.nodes[0].getblockcount() + 1000)
         assert hashes_per_second > 0.003
+
+    def _test_scriptthreads(self):
+        self.log.info("Test script verification thread control")
+        node = self.nodes[0]
+
+        original_info = node.scriptthreadsinfo()
+        assert_equal(original_info["enabled"], True)
+        assert_greater_than(original_info["num_script_check_threads"], 1)
+
+        assert_equal(node.setscriptthreadsenabled(False), None)
+        assert_equal(node.scriptthreadsinfo(), {
+            "enabled": False,
+            "num_script_check_threads": 1,
+        })
+
+        assert_equal(node.setscriptthreadsenabled(True), None)
+        assert_equal(node.scriptthreadsinfo(), original_info)
 
     def _test_stopatheight(self):
         self.log.info("Test stopping at height")
