@@ -90,6 +90,7 @@ class SignRawTransactionWithKeyTest(BitcoinTestFramework):
         spending_tx = self.nodes[0].createrawtransaction([unspent_output], {getnewdestination()[2]: Decimal("49.998")})
         spending_tx_signed = self.nodes[0].signrawtransactionwithkey(spending_tx, [embedded_privkey], [unspent_output])
         self.assert_signing_completed_successfully(spending_tx_signed)
+        assert_equal(spending_tx_signed["fee"], Decimal("0.00100000"))
 
         # Now test with P2PKH and P2PK scripts as the witnessScript
         for tx_type in ['P2PKH', 'P2PK']:  # these tests are order-independent
