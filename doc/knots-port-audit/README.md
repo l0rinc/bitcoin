@@ -1441,6 +1441,15 @@ under different commits. They are not all proven exploitable.
   blank lines, no trailing newline, wallet restrictions, blank direct
   `-rpcauth`, and `-norpcauth` interactions.
 
+  Knots' follow-up to store cookie and `-rpcuser`/`-rpcpassword` credentials
+  hashed in memory (`f06169f019`) was rechecked separately because it looks
+  like a covert-security candidate. It is present in unmodified Knots and in
+  this port's adapted wallet-restriction-aware auth path, but current Core
+  master already has equivalent hashing from bitcoin/bitcoin#32423, so it is
+  not a Core-missing hardening candidate. The remaining Core-missing surface in
+  this auth area is Knots' auth-file, wallet restriction, and blank-token
+  handling described above.
+
 - Numeric `settings.json` boolean handling:
   `577c04c80e`
 
@@ -2306,6 +2315,17 @@ Builds:
   29.x-knots -- src/init.cpp src/httprpc.cpp src/rpc/request.h
   src/rpc/util.cpp src/rpc/util.h src/wallet/rpc/util.cpp
   test/functional/rpc_users.py`
+- `rg -n
+  "CheckUserAuthorized|strRPCUserColonPass|user_colon_pass|GenerateAuthCookie|g_rpcauth.push_back|CHMAC_SHA256"
+  src/httprpc.cpp src/rpc/request.cpp src/rpc/request.h`, `git show
+  origin/master:src/httprpc.cpp | rg -n
+  "CheckUserAuthorized|strRPCUserColonPass|user_colon_pass|GenerateAuthCookie|g_rpcauth.push_back|CHMAC_SHA256"
+  -C 4`, and `git -C ../knots show 29.x-knots:src/httprpc.cpp | rg -n
+  "multiUserAuthorized|CheckUserAuthorized|strRPCUserColonPass|user_colon_pass|GenerateAuthCookie|g_rpcauth.push_back|CHMAC_SHA256"
+  -C 4` show cookie and `-rpcuser` credentials are hashed before storage in
+  the port, current Core, and unmodified Knots; Knots' old
+  `strRPCUserColonPass` spelling is only a local variable in
+  `InitRPCAuthentication()`.
 - `git show origin/master:src/common/pcp.cpp | rg -n
   "g_pcp_warn_for_unauthorized|NOT_AUTHORIZED|already_warned|Mapping failed"
   -C 4`, `git show origin/master:src/node/interfaces.cpp | rg -n
@@ -2706,6 +2726,12 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_users_auth_review`
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_users_rpcauth_review_port --portseed=26411`
+- `python3 test/functional/rpc_users.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_users_hashed_auth_review_port
+  --portseed=31930`
+- `python3 test/functional/rpc_whitelist.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_whitelist_hashed_auth_review_port
+  --portseed=31940`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_getrpcwhitelist_auth_review_port
