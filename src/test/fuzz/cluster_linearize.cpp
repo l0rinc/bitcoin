@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <utility>
 #include <vector>
@@ -1278,9 +1279,15 @@ FUZZ_TARGET(clusterlin_linearize)
 
     // Optionally construct an old linearization for it.
     std::vector<DepGraphIndex> old_linearization;
+    std::optional<std::vector<FeeFrac>> old_topological_chunking;
     if (provide_input) {
         old_linearization = ReadLinearization(depgraph, reader, /*topological=*/provide_topological_input);
-        if (provide_topological_input) SanityCheck(depgraph, old_linearization);
+        if (provide_topological_input) {
+            SanityCheck(depgraph, old_linearization);
+            if (claim_topological_input) {
+                old_topological_chunking = ComparableChunkLinearization(depgraph, old_linearization);
+            }
+        }
     }
 
     // Invoke Linearize().
@@ -1296,12 +1303,13 @@ FUZZ_TARGET(clusterlin_linearize)
     auto chunking = ChunkLinearization(depgraph, linearization);
     assert(optimal || cost >= max_cost);
 
-    // Linearization must always be as good as the old one, if provided and topological (even when
-    // not claimed to be topological).
-    if (provide_topological_input) {
-        auto old_chunking = ChunkLinearization(depgraph, old_linearization);
-        auto cmp = CompareChunks(chunking, old_chunking);
-        assert(cmp >= 0);
+    // Linearization must always be as good as the old one if it was provided and claimed
+    // topological, and both diagrams can be compared without overflowing their cumulative sums.
+    if (old_topological_chunking) {
+        if (const auto comparable_chunking{ComparableChunkLinearization(depgraph, linearization)}) {
+            auto cmp = CompareChunks(*comparable_chunking, *old_topological_chunking);
+            assert(cmp >= 0);
+        }
     }
 
     // If the maximum amount of work is sufficiently high, an optimal linearization must be found.
