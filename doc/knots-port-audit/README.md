@@ -368,6 +368,17 @@ Other missing/adapted Knots pieces found during this pass:
   `interface_rest.py` now covers non-empty RPC/REST equality, sequence
   filtering, empty future-sequence results, verbose decoded output, and the
   parse-error path.
+- The descriptor utility review confirmed Knots' `deriveaddresses` checksum
+  option (`4bddd82227`, `4283bc2a2d`, `f8424c940c`) is present in the port and
+  absent from current Core, which still hard-requires descriptor checksums for
+  this RPC. The port matches actual Knots by defaulting `require_checksum` to
+  true, accepting an explicit false value through both the options object and
+  named `require_checksum` parameter, and still verifying a checksum when the
+  descriptor includes one. This is RPC compatibility for callers deriving from
+  descriptors with independent checksums, such as WIF-backed descriptors, not
+  consensus or mempool policy. `rpc_deriveaddresses.py` now covers the default
+  missing-checksum error, both opt-out calling forms, bad-checksum rejection
+  while opted out, and the bitcoin-cli conversion path.
 - Wallet sweep coverage passes on the current descriptor-wallet base:
   `wallet_sweepprivkeys.py` rejects invalid/unfunded keys and sweeps both
   unconfirmed and confirmed P2PKH outputs. Legacy-only Knots tests
@@ -1447,6 +1458,10 @@ Functional tests:
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_sort_multisig.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_deriveaddresses.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_deriveaddresses_checksum`
+- `python3 test/functional/rpc_deriveaddresses.py --usecli --configfile
+  build/test/config.ini --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_deriveaddresses_checksum_cli`
 - `python3 test/functional/rpc_setban.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_disconnect_ban.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_disconnect_ban_ip_subnet`
