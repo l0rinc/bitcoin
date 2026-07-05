@@ -300,6 +300,41 @@ BOOST_FIXTURE_TEST_CASE(requests_to_send_mark_inflight, TestingSetup)
     txdownload_impl.CheckIsEmpty();
 }
 
+BOOST_FIXTURE_TEST_CASE(unknown_peer_tx_response_is_ignored, TestingSetup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    FastRandomContext det_rand{true};
+    node::TxDownloadOptions default_opts{pool, det_rand, true};
+    const node::TxDownloadConnectionInfo connection_info{/*m_preferred=*/true,
+                                                         /*m_relay_permissions=*/false,
+                                                         /*m_wtxid_relay=*/true};
+    constexpr NodeId peer{0};
+    const CTransactionRef tx{CreatePlaceholderTx(/*segwit=*/true)};
+    const auto& wtxid{tx->GetWitnessHash()};
+    const std::chrono::microseconds now{0};
+
+    {
+        node::TxDownloadManagerImpl txdownload_impl{default_opts};
+        const auto [should_validate, package_to_validate] = txdownload_impl.ReceivedTx(peer, tx);
+        BOOST_CHECK(!should_validate);
+        BOOST_CHECK(!package_to_validate);
+        txdownload_impl.CheckIsEmpty();
+    }
+
+    {
+        node::TxDownloadManagerImpl txdownload_impl{default_opts};
+        txdownload_impl.ConnectedPeer(peer, connection_info);
+        BOOST_CHECK(!txdownload_impl.AddTxAnnouncement(peer, wtxid, now));
+        txdownload_impl.DisconnectedPeer(peer);
+        txdownload_impl.CheckIsEmpty(peer);
+
+        const auto [should_validate, package_to_validate] = txdownload_impl.ReceivedTx(peer, tx);
+        BOOST_CHECK(!should_validate);
+        BOOST_CHECK(!package_to_validate);
+        txdownload_impl.CheckIsEmpty();
+    }
+}
+
 BOOST_FIXTURE_TEST_CASE(received_responses_clear_peer_requests, TestingSetup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
