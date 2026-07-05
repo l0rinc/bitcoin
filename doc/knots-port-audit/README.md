@@ -887,6 +887,19 @@ Other missing/adapted Knots pieces found during this pass:
   history, traffic graph tooltips, mempool stats, and the Network Watch GUI
   are all present in the current tree. These were not new omissions or original
   Knots defects from this pass.
+- A refreshed 2026 exact-patch mismatch pass found three final-tree omissions
+  that were not suspicious but should be carried for release parity:
+  Knots' pruning help text warning that wallets and indexes must stay active
+  while pruning is enabled (`5a75f172bb`, ported as `dbccc5fe0d`), the Debian
+  copyright update (`d0ddf66a2c`, ported as `6bd131f112`), and the Boost 1.91
+  multi-index workaround (`4d22aa2b70`, ported as `c9af9b3a49`). The Boost
+  commit was adapted because current Core's cluster-mempool miner no longer
+  has Knots' old `CTxMemPoolModifiedEntry_Indices` container; the live
+  `CTxMemPoolEntry` and `Announcement` containers now use the Knots
+  version-gated alias form. The same pass checked Knots'
+  precomputed-transaction-data lifetime fix (`29b4e281a7`, CVE-2024-52911)
+  and confirmed the port/current Core source already declares `txsdata` before
+  `CCheckQueueControl`, so the check queue is destroyed first.
 - The remaining source-looking paths from a final file-presence sweep were
   classified against current Core history and live references rather than
   restored mechanically. The old `core_write.cpp` module is merged into
@@ -1394,6 +1407,7 @@ Builds:
 - `TMPDIR=/mnt/my_storage/tmp cmake --build /tmp/bitcoin-asan-consensus-after
   --target bitcoinconsensus -j1`
 - `git diff --check`
+- `build/bin/bitcoind -help | sed -n '147,160p'`
 - `cmake --build build --target test_bitcoin -j2`
 - `cmake --build build --target help | rg -n
   "(qt|bitcoin-qt|test_bitcoin-qt|test_bitcoin_qt)"` returned no configured Qt
@@ -1462,6 +1476,8 @@ Unit tests:
   --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=chainparams_tests/dns_seed_removals`
 - `build/bin/test_bitcoin --run_test=mempool_tests`
+- `build/bin/test_bitcoin --run_test=mempool_tests,txrequest_tests,miner_tests
+  --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=transaction_tests`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests`
 - `build/bin/test_bitcoin --run_test=txvalidation_tests`
