@@ -195,6 +195,15 @@ Other missing/adapted Knots pieces found during this pass:
   libstdc++ cache-selection contract as `2c3de42230`, and `hash_tests` asserts
   both the may-throw invocability contract and libstdc++ fast-hash
   classification.
+- The GUI/header-sync review found Knots' stale-header progress truncation
+  (`823dccc962`) was missing from the port. This is a user-visible logging/UI
+  correctness fix, not a consensus issue or original Knots defect: progress is
+  truncated to one decimal instead of rounded, avoiding misleading `100.0%`
+  header sync displays when headers are still stale. The port now matches Knots
+  as `ded4a059d8`. The validation-side logging code was rebuilt with
+  `bitcoind`/`test_bitcoin`; the current local build configuration has no Qt
+  target, so `src/qt/modaloverlay.cpp` was source-reviewed against Knots but
+  not compiled in this build.
 - Compact-block extra-transaction coverage now uses the current P2P test
   framework send helper and hash/wtxid properties (`77d2b2c025`).
   `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
