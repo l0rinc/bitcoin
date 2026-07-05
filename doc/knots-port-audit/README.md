@@ -343,6 +343,15 @@ Other missing/adapted Knots pieces found during this pass:
   `wallet_hd.py` path passes and confirms `dumpmasterprivkey` rejects
   descriptor wallets; the legacy `wallet_dump.py` runtime path still skips
   because new legacy wallets can no longer be created.
+- The implicit-SegWit wallet option review confirmed Knots'
+  `-walletimplicitsegwit` surface (`9eabba7220`, `2733d2c4ce`) is present in
+  the port and absent from current Core. The option controls legacy-wallet
+  implicit P2SH-SegWit/P2WPKH script learning and sets `-addresstype=legacy`
+  when disabled, so this is legacy wallet recovery/import behavior rather than
+  consensus or network security behavior. The direct unit coverage
+  `util_tests/outputtype_implicit_segwit` passes; the functional
+  `wallet_implicitsegwit.py` path still skips on this base because new legacy
+  wallets can no longer be created.
 - A later file-presence sweep found the Qt wrapper for the same sweep feature
   was still missing even though the RPC and functional test were already
   ported. The port now restores Knots' `SweepPrivKeyDialog`, wires it through
@@ -1316,6 +1325,7 @@ Unit tests:
   --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
+- `build/bin/test_bitcoin --run_test=util_tests/outputtype_implicit_segwit`
 - `build/bin/test_bitcoin --run_test=node_warnings_tests
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `./build/src/secp256k1/bin/tests --target=ellswift_xdh_bad_scalar_tests --iterations=16`
