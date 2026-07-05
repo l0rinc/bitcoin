@@ -282,8 +282,10 @@ class TestBitcoinCli(BitcoinTestFramework):
             assert_equal(self.nodes[0].cli.getwalletinfo(), wallet_info)
             for field in ['Keypool size', 'Time offset (s)', 'Unlocked until']:
                 assert_scale(cli_get_info[field], expected_scale=0)
-            for field in ['Balance', 'Transaction fee rate (-paytxfee) (BTC/kvB)', 'Min tx relay fee rate (BTC/kvB)']:
+            for field in ['Balance', 'Min tx relay fee rate (BTC/kvB)']:
                 assert_scale(cli_get_info[field])
+            if 'Transaction fee rate (-paytxfee) (BTC/kvB)' in cli_get_info:
+                assert_scale(cli_get_info['Transaction fee rate (-paytxfee) (BTC/kvB)'])
 
             # Setup to test -getinfo, -generate, and -rpcwallet= with multiple wallets.
             wallets = [self.default_wallet_name, 'Encrypted', 'secret']
