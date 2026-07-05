@@ -316,6 +316,47 @@ void CheckMempoolInfoViews(const CTxMemPool& tx_pool)
     }
 }
 
+void CheckMempoolBlockBuilder(const CTxMemPool& tx_pool)
+{
+    LOCK(tx_pool.cs);
+    const auto diagram{tx_pool.GetFeerateDiagram()};
+    Assert(!diagram.empty());
+    Assert(diagram.front() == FeePerWeight{});
+
+    std::vector<FeePerWeight> builder_diagram{FeePerWeight{}};
+    std::set<const CTxMemPoolEntry*> seen_entries;
+
+    tx_pool.StartBlockBuilding();
+    while (true) {
+        std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> entries;
+        const FeePerWeight chunk_feerate{tx_pool.GetBlockBuilderChunk(entries)};
+        if (chunk_feerate == FeePerWeight{}) {
+            Assert(entries.empty());
+            break;
+        }
+
+        Assert(!entries.empty());
+        for (const auto& entry_ref : entries) {
+            const CTxMemPoolEntry& entry{entry_ref.get()};
+            const auto it{tx_pool.mapTx.find(entry.GetTx().GetHash())};
+            Assert(it != tx_pool.mapTx.end());
+            Assert(&*it == &entry);
+            Assert(seen_entries.insert(&entry).second);
+            Assert(tx_pool.GetMainChunkFeerate(entry) == chunk_feerate);
+        }
+
+        builder_diagram.push_back(FeePerWeight{
+            SaturatingAdd(builder_diagram.back().fee, chunk_feerate.fee),
+            SaturatingAdd(builder_diagram.back().size, chunk_feerate.size),
+        });
+        tx_pool.IncludeBuilderChunk();
+    }
+    tx_pool.StopBlockBuilding();
+
+    Assert(builder_diagram == diagram);
+    Assert(seen_entries.size() == tx_pool.mapTx.size());
+}
+
 void CheckUpdatedBlockDependencies(const CTxMemPool& tx_pool, const std::vector<Txid>& txids)
 {
     LOCK(tx_pool.cs);
@@ -443,6 +484,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
     CheckPrioritisedTransactions(tx_pool);
     CheckRandomizedTxIndex(tx_pool);
     CheckMempoolInfoViews(tx_pool);
+    CheckMempoolBlockBuilder(tx_pool);
     {
         BlockCreateOptions options{
             .block_min_fee_rate = CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/COIN)},
@@ -514,6 +556,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
     CheckPrioritisedTransactions(tx_pool);
     CheckRandomizedTxIndex(tx_pool);
     CheckMempoolInfoViews(tx_pool);
+    CheckMempoolBlockBuilder(tx_pool);
     g_setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
 }
 
