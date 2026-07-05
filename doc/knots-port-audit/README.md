@@ -303,6 +303,16 @@ Other missing/adapted Knots pieces found during this pass:
   original Knots defect or consensus issue. Full legacy wallet loading/creation
   remains disabled on this current-Core base; the BDB work here restores build
   coverage and the configured BDB backend objects.
+- The high-signal exact-patch review found Knots' wallet symlink/reparse-point
+  guard series (`39f48a142f`, `1f118f18c4`, `ee042e9ad6`) was still missing
+  from the port. Actual Knots already carries it, while current Core master
+  still lacks `IsSymlink(...)` in the wallet directory scanner and regular-file
+  wallet path check. The port now restores the common helper, avoids recursing
+  symlink/reparse-point wallet-dir entries, and rejects symlinked regular wallet
+  files through `GetWalletPath(...)`. This is local wallet-path hardening, not
+  a consensus issue. `wallet_multiwallet.py` now asserts the symlink-scan
+  warning, and the same run exposed and fixed a stale missing `Decimal` import
+  in that Knots test.
 - CLI/help verification exposed a port-side bitcoin-cli conversion-table drift:
   current server metadata no longer advertises legacy-only `sethdseed` and
   `addmultisigaddress` conversions, while descriptor-compatible legacy import
@@ -583,6 +593,16 @@ under different commits. They are not all proven exploitable.
   still parses only direct `-rpcauth` values and errors on blank entries. This
   is local configuration hardening, not a remote bypass by itself.
 
+- Wallet symlink/reparse-point path hardening:
+  `39f48a142f`, `1f118f18c4`, `ee042e9ad6`
+
+  Current Core master still uses ordinary `std::filesystem` symlink checks in
+  the wallet directory scan and regular-file wallet path compatibility case.
+  Knots adds an `IsSymlink(...)` helper that detects Windows reparse points,
+  avoids recursing such entries while scanning `listwalletdir`, and prevents a
+  symlink/reparse point from being accepted as a legacy top-level wallet file.
+  This is local path-safety hardening around wallet discovery/loading.
+
 - Subprocess fd cleanup before exec:
   `214047ecd3`, `ed5a3b3604`
 
@@ -801,6 +821,8 @@ Builds:
   -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
 - `cmake --build /tmp/bitcoin-bdb-only-tests-probe --target test_util
   bitcoin_wallet -j2`
+- `cmake --build build --target test_bitcoin -j2`
+- `cmake --build build --target bitcoind -j2`
 - Original Knots repro build:
   `cmake -S ../knots -B ../knots/build-repro -DRDTS_CONSENT=RUNTIME_WARN`
   and `cmake --build ../knots/build-repro --target bitcoind bitcoin-cli -j4`
@@ -833,6 +855,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=blockfilter_index_tests`
 - `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
 - `build/bin/test_bitcoin --run_test=db_tests,walletdb_tests,wallet_tests`
+- `build/bin/test_bitcoin --run_test=fs_tests,walletdb_tests,wallet_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
 - `./build/src/secp256k1/bin/tests --target=ellswift_xdh_bad_scalar_tests --iterations=16`
 - `./build/src/secp256k1/bin/tests --target=ellswift --iterations=16`
@@ -887,6 +910,7 @@ Functional tests:
 - `python3 test/functional/tool_wallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_sweepprivkeys.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_import_with_label.py --configfile build/test/config.ini --legacy-wallet`
