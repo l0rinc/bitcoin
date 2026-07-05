@@ -297,4 +297,38 @@ BOOST_AUTO_TEST_CASE(sighash_caching)
     }
 }
 
+BOOST_AUTO_TEST_CASE(precomputed_transaction_data_reuse)
+{
+    CMutableTransaction stale_tx;
+    RandomTransaction(stale_tx, /*fSingle=*/false);
+
+    CMutableTransaction tx;
+    RandomTransaction(tx, /*fSingle=*/false);
+    for (auto& input : tx.vin) {
+        input.scriptWitness.SetNull();
+    }
+
+    CScript scriptcode;
+    RandomScript(scriptcode);
+    const auto in_index{static_cast<uint32_t>(m_rng.randrange(tx.vin.size()))};
+    const auto amount{m_rng.rand<CAmount>()};
+
+    PrecomputedTransactionData txdata;
+    txdata.Init(stale_tx, /*spent_outputs=*/{}, /*force=*/true);
+    BOOST_CHECK(txdata.m_bip143_segwit_ready);
+    BOOST_CHECK(!txdata.m_spent_outputs_ready);
+
+    txdata.Init(tx, /*spent_outputs=*/{}, /*force=*/false);
+    BOOST_CHECK(!txdata.m_bip143_segwit_ready);
+    BOOST_CHECK(!txdata.m_bip341_taproot_ready);
+    BOOST_CHECK(!txdata.m_spent_outputs_ready);
+
+    const int hash_types[]{SIGHASH_ALL, SIGHASH_NONE, SIGHASH_SINGLE, SIGHASH_ALL | SIGHASH_ANYONECANPAY};
+    for (const int hash_type : hash_types) {
+        BOOST_CHECK_EQUAL(
+            SignatureHash(scriptcode, tx, in_index, hash_type, amount, SigVersion::WITNESS_V0),
+            SignatureHash(scriptcode, tx, in_index, hash_type, amount, SigVersion::WITNESS_V0, &txdata));
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()

@@ -54,6 +54,7 @@ FUZZ_TARGET(sighash_cache)
 
     // Get inputs to the sighash function that won't change across types.
     const auto scriptcode{ConsumeScript(provider)};
+    const auto stale_tx{ConsumeTransaction(provider, std::nullopt)};
     const auto tx{ConsumeTransaction(provider, std::nullopt)};
     if (tx.vin.empty()) return;
     const auto in_index{provider.ConsumeIntegralInRange<uint32_t>(0, tx.vin.size() - 1)};
@@ -69,4 +70,11 @@ FUZZ_TARGET(sighash_cache)
         const auto cache_res{SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &sighash_cache)};
         Assert(nocache_res == cache_res);
     }
+
+    PrecomputedTransactionData reused_txdata;
+    reused_txdata.Init(stale_tx, /*spent_outputs=*/{}, /*force=*/true);
+    reused_txdata.Init(tx, /*spent_outputs=*/{}, /*force=*/false);
+    const auto hash_type{provider.ConsumeIntegral<int32_t>()};
+    Assert(SignatureHash(scriptcode, tx, in_index, hash_type, amount, SigVersion::WITNESS_V0) ==
+           SignatureHash(scriptcode, tx, in_index, hash_type, amount, SigVersion::WITNESS_V0, &reused_txdata));
 }
