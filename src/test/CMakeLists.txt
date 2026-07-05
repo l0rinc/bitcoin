@@ -29,6 +29,7 @@ add_executable(test_bitcoin
   btcsignals_tests.cpp
   caches_tests.cpp
   chain_tests.cpp
+  chainparams_tests.cpp
   chainstate_write_tests.cpp
   checkqueue_tests.cpp
   cluster_linearize_tests.cpp
