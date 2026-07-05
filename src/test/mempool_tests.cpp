@@ -209,6 +209,53 @@ BOOST_AUTO_TEST_CASE(MempoolPrioritisationTest)
     }
 }
 
+BOOST_AUTO_TEST_CASE(MempoolBlockBuilderChunkIdempotent)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    TestMemPoolEntryHelper entry;
+
+    const auto make_tx = [](uint32_t prevout_n, CAmount value) {
+        CMutableTransaction tx_mut;
+        tx_mut.vin.resize(1);
+        tx_mut.vin[0].prevout = COutPoint{Txid::FromUint256(uint256{static_cast<uint8_t>(prevout_n + 1)}), prevout_n};
+        tx_mut.vin[0].scriptSig = CScript() << OP_11;
+        tx_mut.vout.resize(1);
+        tx_mut.vout[0].scriptPubKey = CScript() << OP_11 << OP_EQUAL;
+        tx_mut.vout[0].nValue = value;
+        return MakeTransactionRef(tx_mut);
+    };
+    const auto same_entries = [](const auto& a, const auto& b) {
+        if (a.size() != b.size()) return false;
+        for (size_t i{0}; i < a.size(); ++i) {
+            if (&a[i].get() != &b[i].get()) return false;
+        }
+        return true;
+    };
+
+    TryAddToMempool(pool, entry.Fee(20'000).FromTx(make_tx(/*prevout_n=*/0, /*value=*/2)));
+    TryAddToMempool(pool, entry.Fee(10'000).FromTx(make_tx(/*prevout_n=*/1, /*value=*/1)));
+
+    bool first_chunk_empty{true};
+    bool same_chunk{false};
+    bool same_feerate{false};
+    {
+        LOCK(pool.cs);
+        pool.StartBlockBuilding();
+        std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> first_entries;
+        const FeePerWeight first_feerate{pool.GetBlockBuilderChunk(first_entries)};
+        std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> second_entries;
+        const FeePerWeight second_feerate{pool.GetBlockBuilderChunk(second_entries)};
+        first_chunk_empty = first_entries.empty();
+        same_chunk = same_entries(first_entries, second_entries);
+        same_feerate = first_feerate == second_feerate;
+        pool.StopBlockBuilding();
+    }
+
+    BOOST_CHECK(!first_chunk_empty);
+    BOOST_CHECK(same_chunk);
+    BOOST_CHECK(same_feerate);
+}
+
 BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
 {
     // Test CTxMemPool::remove functionality
