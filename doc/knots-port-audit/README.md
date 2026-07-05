@@ -65,7 +65,9 @@ Other missing/adapted Knots pieces found during this pass:
 - Knots' external signer fingerprint hardening (`6d2c2259ee`,
   `12eefda89a`, `ee39394ad3`) is already present in this port via the earlier
   wallet/RPC reconciliation commit `e8c2b257ee`, with invalid-fingerprint
-  coverage in `rpc_signer.py`.
+  coverage in `rpc_signer.py`. The strengthened coverage now also asserts that
+  rejected untrusted fingerprint values are absent from both the RPC error text
+  and the new `debug.log` slice.
 - The external signer wallet-flag review confirmed Knots' mutable
   `external_signer` flag support (`dc97030bfc`, `6925c383d3`) is present in
   the port and absent from current Core's `setwalletflag` mutable flag set.
@@ -955,6 +957,25 @@ This was not introduced by the port. The port now includes `forceinbound` in
 `NetPermissions::ToStrings(...)`, so RPC output matches the accepted permission
 and help text.
 
+The external signer duplicate-fingerprint enumeration bug was confirmed on an
+unmodified local build of Knots `29.x-knots` with the mock signer returning
+`00000001`, duplicate `00000001`, then valid `00000002`:
+
+```text
+bitcoin-cli -regtest enumeratesigners
+```
+
+Result on original Knots:
+
+- Only `00000001` was returned; `00000002` was silently skipped.
+- Source inspection explains the behavior: Knots uses `if (duplicate) break;`
+  in `ExternalSigner::Enumerate(...)`, while current Core and this port use
+  `continue`.
+
+This was not introduced by the port. The port inherits current Core's
+`continue` behavior, and `rpc_signer.py` covers the duplicate-then-unique
+enumeration case.
+
 ## Core-Missing Hardening Candidates
 
 The following items are the strongest remaining security-shaped candidates
@@ -975,7 +996,11 @@ under different commits. They are not all proven exploitable.
 
   Knots validates signer fingerprints before command use, requires exactly
   eight hex characters, and avoids logging untrusted fingerprint text. This is
-  local external-signer hardening, not a remote P2P issue.
+  local external-signer hardening, not a remote P2P issue. A minimal
+  unmodified Knots startup with `not-a-secret-fingerprint` returned the generic
+  invalid-fingerprint error without echoing that value in either RPC output or
+  `debug.log`; the port's `rpc_signer.py` now checks the same non-echo
+  invariant.
 
 - RPC cookie replacement and permission hardening:
   `e49dfac324`, `7140e1f149`, `622b768945`, `50b7a50a61`, `198466d5d3`
@@ -1504,7 +1529,8 @@ Functional tests:
 - `python3 test/functional/interface_bitcoin_cli.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_help.py --configfile build/test/config.ini`
 - `python3 test/functional/tool_cli_completion.py --configfile build/test/config.ini`
-- `python3 test/functional/rpc_signer.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_signer.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_signer_fingerprint_2`
 - `python3 test/functional/wallet_signer.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_signer_warning`
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini`
@@ -1624,6 +1650,11 @@ Functional tests:
   `python3 /mnt/my_storage/bitcoin/test/functional/p2p_eviction.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_eviction_forceinbound_repro`
   (fails on unmodified Knots because the ForceInbound peer's
   `getpeerinfo.permissions` array omits `forceinbound`)
+- Original Knots expected-failure repro:
+  `python3 /mnt/my_storage/bitcoin/test/functional/rpc_signer.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_rpc_signer_fingerprint`
+  (the invalid-fingerprint redaction checks pass first, then unmodified Knots
+  fails the duplicate-then-unique signer enumeration case by returning only
+  `00000001`)
 - Original Knots cross-check:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_versionbits_warning.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_versionbits_warning_check`
   (passes on unmodified Knots, confirming the earlier warning-range failure was
