@@ -790,7 +790,9 @@ Other missing/adapted Knots pieces found during this pass:
   includes `seed.btc.petertodd.net.` and `seed.tbtc.petertodd.net.` in the
   mainnet and testnet DNS seed lists. The port now matches Knots as
   `0899f88da9`, with `chainparams_tests` coverage asserting those seed names
-  are absent.
+  are absent. The focused `chainparams_tests/dns_seed_removals` target passes
+  on the port; the local Knots tree has no matching test file, but source
+  inspection confirms the seed names are absent there too.
 - The custom signet review confirmed Knots' `-signetblocktime` option
   (`d8434da3c1`) is present in the port and absent from current Core. This
   changes the proof-of-work target spacing only for a custom signet that also
@@ -1161,7 +1163,8 @@ under different commits. They are not all proven exploitable.
   Current Core still queries the Peter Todd DNS seeds on mainnet and testnet.
   Knots removes those two seed hostnames. This changes the bootstrap trust and
   availability surface, but the audit does not have evidence that it is a
-  vulnerability fix or a consensus issue.
+  vulnerability fix or a consensus issue. The port pins this with
+  `chainparams_tests/dns_seed_removals`.
 
 - User-agent sanitization/log escaping:
   `b9d2634b81`
@@ -1444,6 +1447,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=streams_tests`
 - `build/bin/test_bitcoin --run_test=chainparams_tests --catch_system_error=no
   --log_level=nothing --report_level=no`
+- `build/bin/test_bitcoin --run_test=chainparams_tests/dns_seed_removals`
 - `build/bin/test_bitcoin --run_test=mempool_tests`
 - `build/bin/test_bitcoin --run_test=transaction_tests`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests`
