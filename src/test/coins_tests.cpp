@@ -17,8 +17,10 @@
 #include <util/byte_units.h>
 #include <util/check.h>
 #include <util/strencodings.h>
+#include <util/threadpool.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -1650,6 +1652,35 @@ BOOST_AUTO_TEST_CASE(ccoins_uncache_parent_cache_purity)
     BOOST_CHECK_EQUAL(parent_cache.DynamicMemoryUsage(), parent_memory_usage);
     parent_cache.SelfTest();
     child_cache.SelfTest();
+}
+
+BOOST_AUTO_TEST_CASE(ccoins_overlay_parent_cache_purity)
+{
+    CCoinsViewTest base{m_rng};
+    const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin coin{CTxOut{m_rng.randrange(10), CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 1)}, 1, false};
+    {
+        CCoinsViewCache write_cache{&base};
+        write_cache.AddCoin(outpoint, Coin{coin}, /*possible_overwrite=*/false);
+        write_cache.Flush();
+    }
+
+    CCoinsViewCacheTest parent_cache{&base};
+    auto thread_pool{std::make_shared<ThreadPool>("coins_overlay_parent_cache_purity")};
+    CoinsViewOverlay overlay_cache{&parent_cache, thread_pool};
+    const auto parent_cache_size{parent_cache.GetCacheSize()};
+    const auto parent_dirty_count{parent_cache.GetDirtyCount()};
+    const auto parent_memory_usage{parent_cache.DynamicMemoryUsage()};
+
+    const auto fetched{overlay_cache.GetCoin(outpoint)};
+    BOOST_REQUIRE(fetched.has_value());
+    BOOST_CHECK(*fetched == coin);
+    BOOST_CHECK(overlay_cache.HaveCoinInCache(outpoint));
+
+    BOOST_CHECK_EQUAL(parent_cache.GetCacheSize(), parent_cache_size);
+    BOOST_CHECK_EQUAL(parent_cache.GetDirtyCount(), parent_dirty_count);
+    BOOST_CHECK_EQUAL(parent_cache.DynamicMemoryUsage(), parent_memory_usage);
+    parent_cache.SelfTest();
 }
 
 BOOST_AUTO_TEST_CASE(ccoins_havecoinincache_read_only)
