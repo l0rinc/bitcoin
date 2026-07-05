@@ -3160,6 +3160,8 @@ static RPCMethod scanblocks()
         ret.pushKV("relevant_blocks", std::move(relevant_blocks));
         ret.pushKV("completed", completed);
         reserver.release(); // ensure this is before cs_relevant_blocks is released, so status doesn't try to use moved relevant_blocks
+    } else {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Invalid action '%s'", std::string{action}));
     }
     return ret;
 },
