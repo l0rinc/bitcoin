@@ -834,8 +834,9 @@ Other missing/adapted Knots pieces found during this pass:
   vsize when `-bytespersigop` dominates. `mempool_sigoplimit.py` now covers
   this by requiring `testmempoolaccept` and `sendrawtransaction` to make the
   same max-feerate decision for a high-sigop, low-weight P2WSH spend. The
-  isolated max-feerate subtest also passes against unmodified Knots; the full
-  cross-run hits an unrelated package-error string drift before that subtest.
+  focused max-feerate subtest also passes directly against unmodified Knots;
+  the full cross-run hits an unrelated package-error string drift before that
+  subtest.
   A later focused rerun exposed only a port-side test-method isolation issue:
   the subtest assumed `run_test()` had already created `self.wallet`. The port
   now initializes the MiniWallet lazily as `e14bfdfd03`, so the documented
@@ -1617,7 +1618,9 @@ under different commits. They are not all proven exploitable.
   self-protection rather than remote consensus risk, but it is a real
   user-facing fee-limit correctness fix. The focused port run and an isolated
   unmodified Knots run both accept the high-sigop transaction under a
-  `maxfeerate` that would be too low if plain transaction vsize were used.
+  `maxfeerate` that would be too low if plain transaction vsize were used; the
+  latest unmodified-Knots check uses the direct `--test_methods` form rather
+  than the older one-off subclass.
 
 - Descriptor-wallet `importaddress` compatibility:
   `be3ae51ece`
@@ -1766,6 +1769,14 @@ Source/manifest checks:
 - `git -C ../knots show 29.x-knots:src/node/blockmanager_args.cpp | rg -n
   "pruneduringinit|PRUNE_TARGET_MANUAL"` confirms actual Knots converts
   `-pruneduringinit=0` to manual pruning during init.
+- `git show origin/master:src/node/transaction.cpp | sed -n '32,105p'`,
+  `git show origin/master:src/rpc/mempool.cpp | sed -n '110,158p'`,
+  `git -C ../knots show 29.x-knots:src/node/transaction.cpp | sed -n
+  '34,100p'`, and `sed -n '32,92p' src/node/transaction.cpp && sed -n
+  '136,154p' src/rpc/mempool.cpp` show current Core precomputes the raw
+  transaction max-fee as a plain-vsize absolute amount, while Knots and the
+  port pass `CFeeRate` into `BroadcastTransaction` and convert it with the
+  mempool accept result's `m_vsize`.
 - `git log origin/master --follow --oneline -- <remaining source-looking
   missing path>` for old `core_write`, fee, libevent, orphanage, transaction
   identifier, epochguard, and test-helper paths
@@ -2124,6 +2135,15 @@ Functional tests:
   --test_methods test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize
   --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_maxfeerate_3`
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini
+  --test_methods test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize
+  --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_maxfeerate_review_port
+  --portseed=26449`
+- `python3 test/functional/mempool_sigoplimit.py --configfile
+  ../knots/build-repro/test/config.ini --test_methods
+  test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize
+  --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_maxfeerate_review_knots
+  --portseed=26450`
+- `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_full`
 - `python3 test/functional/mempool_limit.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_mempool_limit_maxmempool_rpc`
@@ -2399,10 +2419,7 @@ Functional tests:
   (passes on unmodified Knots, confirming the missing user-agent log escape was
   introduced by the port)
 - Original Knots cross-check:
-  a one-off subclass of `mempool_sigoplimit.py` running only
-  `test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize` with
-  `--configfile /mnt/my_storage/knots/build-repro/test/config.ini
-  --tmpdir=/mnt/my_storage/tmp_knots_mempool_sigoplimit_maxfeerate_only2`
+  `python3 test/functional/mempool_sigoplimit.py --configfile ../knots/build-repro/test/config.ini --test_methods test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_maxfeerate_review_knots --portseed=26450`
   passed on unmodified Knots
 - Original Knots cross-check:
   a one-off subclass of `rpc_net.py` running only
