@@ -298,6 +298,21 @@ Other missing/adapted Knots pieces found during this pass:
   value, so the warning threshold is about 7.4% higher than the displayed
   estimate. This is local operator warning/resource-estimation correctness, not
   consensus behavior or a remote security issue.
+- The chain-parameter sync review checked Knots' later
+  `defaultAssumeValid`/`nMinimumChainWork` update (`cb074d52a87`) and its
+  historical testnet4 assumeutxo addition (`80f8f9a38b`). Current Core and this
+  port are already ahead of Knots `29.x-knots`: mainnet, testnet3, testnet4,
+  and signet use newer `nMinimumChainWork` and `defaultAssumeValid` values,
+  and testnet4 has assumeutxo entries at heights `90'000` and `120'000`.
+  Current unmodified Knots still has older values, and its current testnet4
+  assumeutxo table is empty because the historical height-90000 addition was
+  later reverted by `f1cc17e0f0` (`Revert test chain parameter changes etc`).
+  This is not an original Knots consensus bug: `nMinimumChainWork`,
+  `defaultAssumeValid`, and assumeutxo snapshot metadata affect local sync
+  gating and snapshot acceptance, not block validity. The port intentionally
+  keeps current Core's newer data, and `chainparams_tests` now pins these
+  values so a future rebase cannot silently downgrade them to older Knots
+  parameters.
 - The versionbits warning review exposed a port-introduced regression from
   rebasing Knots' stronger unknown-signalling warnings onto current Core's
   BIP323 constant split. The port had kept `VERSIONBITS_NUM_BITS = 5`, so
@@ -2019,6 +2034,20 @@ Source/manifest checks:
   "assert\\(current_tip == m_best_block_index\\)|BaseIndex::Rewind" -C 3`, and
   the matching port/Knots checks show the older stale
   `current_tip == m_best_block_index` assert is also absent in all three trees.
+- `rg -n
+  "nMinimumChainWork|defaultAssumeValid|m_assumeutxo_data|height = 90|height = 120|hash_serialized|m_chain_tx_count|blockhash = uint256"
+  src/kernel/chainparams.cpp`,
+  `git show origin/master:src/kernel/chainparams.cpp | rg -n
+  "nMinimumChainWork|defaultAssumeValid|m_assumeutxo_data|height = 90|height = 120|hash_serialized|m_chain_tx_count|blockhash = uint256"`,
+  and `git -C ../knots show 29.x-knots:src/kernel/chainparams.cpp | rg -n
+  "nMinimumChainWork|defaultAssumeValid|m_assumeutxo_data|height = 90|height = 120|hash_serialized|m_chain_tx_count|blockhash = uint256"`
+  show the port matches current Core's newer chain security parameters and
+  testnet4 assumeutxo data while unmodified Knots `29.x-knots` remains on
+  older values with an empty testnet4 assumeutxo table. `git -C ../knots log
+  --oneline --grep="assumeutxo" -- src/kernel/chainparams.cpp` shows the
+  historical Knots height-90000 addition, and `git -C ../knots log --oneline
+  --grep="test chain parameter" -- src/kernel/chainparams.cpp` shows the later
+  `f1cc17e0f0` revert.
 - `git show --stat --patch --minimal 99bd4320f8`,
   `git show origin/master:src/node/kernel_notifications.cpp | sed -n
   '28,48p'`, `git -C ../knots show 29.x-knots:src/node/kernel_notifications.cpp
@@ -2432,8 +2461,9 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=streams_tests --catch_system_error=no
   --log_level=error --report_level=short`
-- `build/bin/test_bitcoin --run_test=chainparams_tests --catch_system_error=no
-  --log_level=nothing --report_level=no`
+- `cmake --build build --target test_bitcoin && build/bin/test_bitcoin
+  --run_test=chainparams_tests --catch_system_error=no --log_level=error
+  --report_level=short`
 - `build/bin/test_bitcoin --run_test=chainparams_tests/dns_seed_removals`
 - `build/bin/test_bitcoin --run_test=chainparams_tests/dns_seed_removals
   --catch_system_error=no --log_level=error --report_level=short`
