@@ -75,6 +75,7 @@
 #include <validationinterface.h>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <chrono>
 #include <deque>
@@ -3270,9 +3271,12 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
             warning_messages.push_back(warning);
         }
 
-        // Check the version of the last 100 blocks to see if we need to upgrade:
-        int unexpected_bit_count[VERSIONBITS_NUM_BITS], nonversionbit_count = 0;
-        for (size_t i = 0; i < VERSIONBITS_NUM_BITS; ++i) unexpected_bit_count[i] = 0;
+        // Check the version of the last 100 blocks to see if we need to upgrade.
+        // This warning scans all historical BIP9 signal bits. It is deliberately
+        // wider than VERSIONBITS_NUM_BITS, which is limited to BIP323-available
+        // deployment bits on current Core.
+        std::array<int, VERSIONBITS_NUM_WARNING_BITS> unexpected_bit_count{};
+        int nonversionbit_count = 0;
         // NOTE: The warning_threshold_hit* variables are static to ensure the warnings persist even after the condition changes, until the node is restarted
         static std::set<uint8_t> warning_threshold_hit_bits;
         static int32_t warning_threshold_hit_int{-1};
@@ -3292,7 +3296,7 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
                     }
                 }
             } else if ((pindex->nVersion & ~nExpectedVersion) != 0) {
-                for (int bit = 0; bit < VERSIONBITS_NUM_BITS; ++bit) {
+                for (int bit = 0; bit < VERSIONBITS_NUM_WARNING_BITS; ++bit) {
                     const int32_t mask = 1 << bit;
                     if ((pindex->nVersion & mask) && !(nExpectedVersion & mask)) {
                         const int warning_threshold = (bit > 12 ? 75 : 50);

@@ -23,6 +23,8 @@ static const int32_t VERSIONBITS_TOP_BITS = 0x20000000UL;
 static const int32_t VERSIONBITS_TOP_MASK = 0xE0000000UL;
 /** Total bits available for versionbits (BIP 323) */
 static const int32_t VERSIONBITS_NUM_BITS = 5;
+/** Total historical BIP9 signal bits scanned for warnings */
+static const int32_t VERSIONBITS_NUM_WARNING_BITS = 29;
 
 /** Opaque type for BIP9 state. See versionbits_impl.h for details. */
 enum class ThresholdState : uint8_t;
@@ -78,7 +80,7 @@ class VersionBitsCache
 {
 private:
     Mutex m_mutex;
-    std::array<ThresholdConditionCache,VERSIONBITS_NUM_BITS> m_warning_caches GUARDED_BY(m_mutex);
+    std::array<ThresholdConditionCache,VERSIONBITS_NUM_WARNING_BITS> m_warning_caches GUARDED_BY(m_mutex);
     std::array<ThresholdConditionCache,Consensus::MAX_VERSION_BITS_DEPLOYMENTS> m_caches GUARDED_BY(m_mutex);
 
 public:
