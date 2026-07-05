@@ -1275,6 +1275,62 @@ BOOST_AUTO_TEST_CASE(malformed_feature_payload_disconnects)
     m_node.peerman->FinalizeNode(peer);
 }
 
+BOOST_AUTO_TEST_CASE(feature_after_verack_disconnects)
+{
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    auto& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+
+    const CAddress addr{Lookup("1.2.3.4", 8333, /*fAllowLookup=*/false).value(), NODE_NETWORK};
+    CNode peer{/*id=*/0,
+               /*sock=*/nullptr,
+               /*addrIn=*/addr,
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               /*addrBindIn=*/CService{},
+               /*addrNameIn=*/std::string{},
+               /*conn_type_in=*/ConnectionType::OUTBOUND_FULL_RELAY,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+
+    m_node.peerman->InitializeNode(peer, NODE_NETWORK);
+    m_node.peerman->SendMessages(peer);
+    connman.FlushSendBuffer(peer); // Drop sent version message.
+
+    constexpr uint64_t services{NODE_NETWORK | NODE_WITNESS};
+    BOOST_REQUIRE(connman.ReceiveMsgFrom(peer, NetMsg::Make(NetMsgType::VERSION,
+                                                           PROTOCOL_VERSION,
+                                                           services,
+                                                           int64_t{},
+                                                           services,
+                                                           CAddress::V1_NETWORK(CService{}))));
+    peer.fPauseSend = false;
+    BOOST_CHECK(!connman.ProcessMessagesOnce(peer));
+
+    m_node.peerman->SendMessages(peer);
+    connman.FlushSendBuffer(peer); // Drop sent verack message.
+
+    BOOST_REQUIRE(connman.ReceiveMsgFrom(peer, NetMsg::Make(NetMsgType::VERACK)));
+    peer.fPauseSend = false;
+    BOOST_CHECK(!connman.ProcessMessagesOnce(peer));
+    BOOST_REQUIRE(peer.fSuccessfullyConnected.load());
+    BOOST_REQUIRE(!peer.fDisconnect.load());
+    BOOST_REQUIRE_EQUAL(peer.GetCommonVersion(), FEATURE_VERSION);
+    m_node.peerman->SendMessages(peer);
+    connman.FlushSendBuffer(peer);
+
+    BOOST_REQUIRE(connman.ReceiveMsgFrom(peer, NetMsg::Make(NetMsgType::FEATURE,
+                                                           std::string{"test"},
+                                                           std::vector<unsigned char>{0, 1})));
+    peer.fPauseSend = false;
+    BOOST_CHECK(!connman.ProcessMessagesOnce(peer));
+    BOOST_CHECK(peer.fDisconnect.load());
+    BOOST_CHECK(peer.fSuccessfullyConnected.load());
+    BOOST_CHECK_EQUAL(peer.nVersion.load(), PROTOCOL_VERSION);
+    BOOST_CHECK_EQUAL(peer.GetCommonVersion(), FEATURE_VERSION);
+
+    m_node.peerman->FinalizeNode(peer);
+}
+
 
 BOOST_AUTO_TEST_CASE(advertise_local_address)
 {
