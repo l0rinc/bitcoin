@@ -801,7 +801,9 @@ Other missing/adapted Knots pieces found during this pass:
   Core's current test expectations: original Knots does not resurrect an
   unswept ephemeral-dust child after a reorg, but does resurrect the child when
   it sweeps the dust. This was verified by running the unmodified Knots
-  functional test locally; the port now matches Knots' behavior.
+  functional test locally; a fresh full rerun against both the port and
+  unmodified Knots reaches the reorg section and passes. The port now matches
+  Knots' behavior.
 - `p2p_invalid_tx.py` and `p2p_segwit.py` now match the port's current
   validation surfaces: orphanage overflow is still capped at 100 stored
   orphans, but the Core-current log string is `orphanage count limit`, and
@@ -1604,7 +1606,8 @@ under different commits. They are not all proven exploitable.
   re-entry when the child sweeps the dust. Core's current test expected the
   unswept child to resurrect. This looks like mempool policy hardening rather
   than a consensus issue, and it was confirmed on an unmodified local Knots
-  build before updating the port test.
+  build before updating the port test. The latest verification reran the full
+  functional test because the reorg helper depends on setup from `run_test`.
 
 - Raw transaction max-feerate accounting with policy-adjusted vsize:
   `4b3cc3d48e`, `1cee5b1ac7`, `335d928d96`
@@ -2130,6 +2133,14 @@ Functional tests:
 - `python3 test/functional/mempool_accept.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_datacarrier.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_dust.py --configfile build/test/config.ini`
+- `python3 test/functional/mempool_ephemeral_dust.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_ephemeral_dust_review_port
+  --portseed=26451`
+- `python3 test/functional/mempool_ephemeral_dust.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_ephemeral_dust_review_knots
+  --portseed=26452`
 - `python3 test/functional/mempool_subdust_fee_penalty.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini
   --test_methods test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize
