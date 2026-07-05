@@ -12,10 +12,12 @@
 #include <test/util/net.h>
 #include <test/util/setup_common.h>
 #include <util/readwritefile.h>
+#include <util/strencodings.h>
 #include <util/threadinterrupt.h>
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <memory>
 #include <string>
 
@@ -170,6 +172,40 @@ BOOST_AUTO_TEST_CASE(damaged_private_key)
             BOOST_CHECK(!session.Connect(CService{}, conn, proxy_error));
         }
     }
+}
+
+BOOST_AUTO_TEST_CASE(session_create_error_redacts_private_key)
+{
+    CreateSock = [](int, int, int) {
+        return std::make_unique<StaticContentsSock>(
+            "HELLO REPLY RESULT=OK VERSION=3.1\n"
+            "SESSION STATUS RESULT=I2P_ERROR MESSAGE=\"simulated failure\"\n");
+    };
+
+    const std::string private_key{"i2p private key must stay out of logs"};
+    std::string private_key_b64{EncodeBase64(private_key)};
+    std::ranges::replace(private_key_b64, '+', '-');
+    std::ranges::replace(private_key_b64, '/', '~');
+
+    const auto i2p_private_key_file = m_args.GetDataDirNet() / "test_i2p_private_key_redaction";
+    BOOST_REQUIRE(WriteBinaryFile(i2p_private_key_file, private_key));
+
+    auto interrupt{std::make_shared<CThreadInterrupt>()};
+    const CService addr{in6_addr(COMPAT_IN6ADDR_LOOPBACK_INIT), /*port=*/7656};
+    const Proxy sam_proxy{addr, /*tor_stream_isolation=*/false};
+    i2p::sam::Session session(i2p_private_key_file, sam_proxy, interrupt);
+
+    DebugLogHelper redacted_session_create{
+        "Couldn't listen:",
+        [&](const std::string* line) {
+            if (line == nullptr) return true;
+            return line->find("Reply to \"SESSION CREATE ...\"") != std::string::npos &&
+                   line->find(private_key_b64) == std::string::npos &&
+                   line->find("DESTINATION=") == std::string::npos;
+        }};
+
+    i2p::Connection conn;
+    BOOST_CHECK(!session.Listen(conn));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
