@@ -672,6 +672,14 @@ Other missing/adapted Knots pieces found during this pass:
   not a sixth positional argument. `rpc_psbt.py` covers filling and signing a
   child PSBT from provided parent transaction hex, irrelevant prevtxs being a
   no-op, duplicate txid rejection, and too-few-outputs rejection.
+- The same PSBT review confirmed Knots' options-object compatibility for
+  `walletprocesspsbt` (`e5160731d2`) and `descriptorprocesspsbt`
+  (`a22be508da`) is present in the port and absent from current Core. Both RPCs
+  still accept the older positional arguments, while named/options calls can set
+  `sighashtype`, `bip32derivs`, and `finalize`; `walletprocesspsbt` also
+  accepts `sign` in that object. This is RPC client compatibility, not
+  consensus behavior. `rpc_psbt.py` covers equality between positional and
+  options-object calls for both RPCs.
 - The same wallet RPC review confirmed Knots' case-insensitive fee-estimation
   mode parsing (`8d40addbd2`) and `estimate_mode`/`conf_target` coupling
   validation (`be8ae64b82`) are present in the port's shared fee-estimation
@@ -1822,6 +1830,8 @@ Functional tests:
 - `python3 test/functional/rpc_packages.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_options_review`
+- `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_min_conf`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_anti_fee_sniping`
@@ -1861,6 +1871,8 @@ Functional tests:
 - `python3 test/functional/wallet_bumpfee.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_bumpfee_setfeerate`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_fundrawtransaction_witness_options_review`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_fundrawtransaction_min_conf`
 - `python3 test/functional/wallet_basic.py --configfile build/test/config.ini
