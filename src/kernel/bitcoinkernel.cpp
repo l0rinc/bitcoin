@@ -225,10 +225,18 @@ btck_SynchronizationState cast_state(SynchronizationState state)
 btck_Warning cast_btck_warning(kernel::Warning warning)
 {
     switch (warning) {
+    case kernel::Warning::RULES_NOT_CONSENTED:
+        return btck_Warning_RULES_NOT_CONSENTED;
     case kernel::Warning::UNKNOWN_NEW_RULES_ACTIVATED:
         return btck_Warning_UNKNOWN_NEW_RULES_ACTIVATED;
     case kernel::Warning::LARGE_WORK_INVALID_CHAIN:
         return btck_Warning_LARGE_WORK_INVALID_CHAIN;
+    case kernel::Warning::UNKNOWN_NEW_RULES_SIGNAL_VBITS:
+        return btck_Warning_UNKNOWN_NEW_RULES_SIGNAL_VBITS;
+    case kernel::Warning::UNKNOWN_NEW_RULES_SIGNAL_INTVER:
+        return btck_Warning_UNKNOWN_NEW_RULES_SIGNAL_INTVER;
+    case kernel::Warning::SOFTWARE_EXPIRY:
+        return btck_Warning_SOFTWARE_EXPIRY;
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }
@@ -314,7 +322,7 @@ public:
     {
         if (m_cbs.progress) m_cbs.progress(m_cbs.user_data, title.original.c_str(), title.original.length(), progress_percent, resume_possible ? 1 : 0);
     }
-    void warningSet(kernel::Warning id, const bilingual_str& message) override
+    void warningSet(kernel::Warning id, const bilingual_str& message, bool) override
     {
         if (m_cbs.warning_set) m_cbs.warning_set(m_cbs.user_data, cast_btck_warning(id), message.original.c_str(), message.original.length());
     }
@@ -1001,6 +1009,8 @@ btck_BlockValidationResult btck_block_validation_state_get_block_validation_resu
         return btck_BlockValidationResult_TIME_FUTURE;
     case BlockValidationResult::BLOCK_HEADER_LOW_WORK:
         return btck_BlockValidationResult_HEADER_LOW_WORK;
+    case BlockValidationResult::BLOCK_CHECKPOINT:
+        return btck_BlockValidationResult_CHECKPOINT;
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }

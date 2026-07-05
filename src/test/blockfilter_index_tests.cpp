@@ -347,6 +347,7 @@ public:
     }
 
     bool AllowPrune() const override { return false; }
+    bilingual_str GetDisableAction() const override { return Untranslated("disable test index"); }
     BaseIndex::DB& GetDB() const override { return *m_db; }
 
     bool CustomAppend(const interfaces::BlockInfo& block) override

@@ -39,6 +39,7 @@ private:
     std::unique_ptr<BaseIndex::DB> m_db;
     std::pair<uint64_t, uint64_t> m_siphash_key;
     bool AllowPrune() const override { return false; }
+    bilingual_str GetDisableAction() const override { return _("set -txospenderindex=0"); }
     void WriteSpenderInfos(const std::vector<std::pair<COutPoint, CDiskTxPos>>& items);
     void EraseSpenderInfos(const std::vector<std::pair<COutPoint, CDiskTxPos>>& items);
     util::Expected<TxoSpender, std::string> ReadTransaction(const CDiskTxPos& pos) const;

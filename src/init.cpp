@@ -2807,6 +2807,17 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
 bool StartIndexBackgroundSync(NodeContext& node)
 {
+    auto pruned_index_error = [](const BaseIndex& index, bool include_undo_data) {
+        if (include_undo_data) {
+            return strprintf(
+                _("Index \"%s\" needs block data (including undo data) that has been pruned.\nRestart with -reindex to rebuild (re-downloading the entire blockchain), or %s to disable."),
+                index.GetName(), index.GetDisableAction());
+        }
+        return strprintf(
+            _("Index \"%s\" needs block data that has been pruned.\nRestart with -reindex to rebuild (re-downloading the entire blockchain), or %s to disable."),
+            index.GetName(), index.GetDisableAction());
+    };
+
     ChainstateManager& chainman = *Assert(node.chainman);
     const Chainstate& chainstate = WITH_LOCK(::cs_main, return chainman.ValidatedChainstate());
     const CChain& index_chain = chainstate.m_chain;
@@ -2827,11 +2838,11 @@ bool StartIndexBackgroundSync(NodeContext& node)
         // though currently block and undo data availability are synchronized on disk
         // under normal circumstances.
         std::optional<const CBlockIndex*> block_start;
-        std::string block_start_name;
+        BaseIndex* block_start_index{nullptr};
         std::optional<const CBlockIndex*> undo_start;
-        std::string undo_start_name;
+        BaseIndex* undo_start_index{nullptr};
 
-        for (const auto& index : node.indexes) {
+        for (auto* index : node.indexes) {
             const IndexSummary& summary = index->GetSummary();
             if (summary.synced) continue;
 
@@ -2853,18 +2864,18 @@ bool StartIndexBackgroundSync(NodeContext& node)
 
             bool need_undo = index->CustomOptions().connect_undo_data;
             auto& op_start_index = need_undo ? undo_start : block_start;
-            auto& name_index = need_undo ? undo_start_name : block_start_name;
+            auto& start_index = need_undo ? undo_start_index : block_start_index;
 
             if (op_start_index && pindex->nHeight >= op_start_index.value()->nHeight) continue;
             op_start_index = pindex;
-            name_index = summary.name;
+            start_index = index;
         }
 
         // Verify all blocks needed to sync to current tip are present including undo data.
         if (undo_start) {
             LOCK(::cs_main);
             if (!chainman.m_blockman.CheckBlockDataAvailability(*index_chain.Tip(), *Assert(undo_start.value()), BlockStatus{BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO})) {
-                return InitError(Untranslated(strprintf("%s best block of the index goes beyond pruned data (including undo data). Please disable the index or reindex (which will download the whole blockchain again)", undo_start_name)));
+                return InitError(pruned_index_error(*Assert(undo_start_index), /*include_undo_data=*/true));
             }
         }
 
@@ -2872,7 +2883,7 @@ bool StartIndexBackgroundSync(NodeContext& node)
         if (block_start && !(undo_start && undo_start.value()->nHeight <= block_start.value()->nHeight)) {
             LOCK(::cs_main);
             if (!chainman.m_blockman.CheckBlockDataAvailability(*index_chain.Tip(), *Assert(block_start.value()), BlockStatus{BLOCK_HAVE_DATA})) {
-                return InitError(Untranslated(strprintf("%s best block of the index goes beyond pruned data. Please disable the index or reindex (which will download the whole blockchain again)", block_start_name)));
+                return InitError(pruned_index_error(*Assert(block_start_index), /*include_undo_data=*/false));
             }
         }
     }

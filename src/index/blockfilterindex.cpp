@@ -23,6 +23,7 @@
 #include <util/hasher.h>
 #include <util/log.h>
 #include <util/syserror.h>
+#include <util/translation.h>
 
 #include <cerrno>
 #include <exception>
@@ -95,6 +96,11 @@ BlockFilterIndex::BlockFilterIndex(std::unique_ptr<interfaces::Chain> chain, Blo
 
     m_db = std::make_unique<BaseIndex::DB>(path / "db", n_cache_size, f_memory, f_wipe);
     m_filter_fileseq = std::make_unique<FlatFileSeq>(std::move(path), "fltr", FLTR_FILE_CHUNK_SIZE);
+}
+
+bilingual_str BlockFilterIndex::GetDisableAction() const
+{
+    return strprintf(_("remove \"%s\" from -blockfilterindex"), BlockFilterTypeName(m_filter_type));
 }
 
 interfaces::Chain::NotifyOptions BlockFilterIndex::CustomOptions()

@@ -348,6 +348,10 @@ typedef uint8_t btck_SynchronizationState;
 typedef uint8_t btck_Warning;
 #define btck_Warning_UNKNOWN_NEW_RULES_ACTIVATED ((btck_Warning)(0))
 #define btck_Warning_LARGE_WORK_INVALID_CHAIN ((btck_Warning)(1))
+#define btck_Warning_RULES_NOT_CONSENTED ((btck_Warning)(2))
+#define btck_Warning_UNKNOWN_NEW_RULES_SIGNAL_VBITS ((btck_Warning)(3))
+#define btck_Warning_UNKNOWN_NEW_RULES_SIGNAL_INTVER ((btck_Warning)(4))
+#define btck_Warning_SOFTWARE_EXPIRY ((btck_Warning)(5))
 
 /** Callback function types */
 
@@ -410,6 +414,7 @@ typedef uint32_t btck_BlockValidationResult;
 #define btck_BlockValidationResult_INVALID_PREV ((btck_BlockValidationResult)(6))    //!< A block this one builds on is invalid
 #define btck_BlockValidationResult_TIME_FUTURE ((btck_BlockValidationResult)(7))     //!< block timestamp was > 2 hours in the future (or our clock is bad)
 #define btck_BlockValidationResult_HEADER_LOW_WORK ((btck_BlockValidationResult)(8)) //!< the block header may be on a too-little-work chain
+#define btck_BlockValidationResult_CHECKPOINT ((btck_BlockValidationResult)(9))      //!< the block failed to meet one of our checkpoints
 
 /**
  * Indicates the reason why a transaction failed validation. The subset of

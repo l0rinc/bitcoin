@@ -94,14 +94,18 @@ target_compile_definitions(bitcoinkernel
 target_link_libraries(bitcoinkernel
   PRIVATE
     core_interface
-    kernel_warn_interface
+    external_lib_interface
     secp256k1_objs
     $<$<PLATFORM_ID:Windows>:bcrypt>
     $<TARGET_NAME_IF_EXISTS:USDT::headers>
     Boost::headers
 )
 
-target_include_directories(bitcoinkernel PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/leveldb/include>)
+target_include_directories(bitcoinkernel
+  PRIVATE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/leveldb/include>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/leveldb/helpers/memenv>
+)
 
 # Add a convenience libbitcoinkernel target as a synonym for bitcoinkernel.
 add_custom_target(libbitcoinkernel)
