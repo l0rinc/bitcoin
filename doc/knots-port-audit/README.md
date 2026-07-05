@@ -960,6 +960,15 @@ Other missing/adapted Knots pieces found during this pass:
   requesting a `cfcheckpt`. `p2p_permissions.py` also covers permission
   reporting and merging. This is explicit peer-service control, not consensus
   behavior.
+- The compact-filter index default review confirmed Knots' `b85232d7462` is
+  present in the port and absent from current Core. Bare `-blockfilterindex`
+  and `-blockfilterindex=1` enable only the selected default filter set
+  (currently `basic`) in Knots and the port, while current Core still expands
+  those forms to `AllBlockFilterTypes()`, currently including `v0`. This is
+  index resource-control behavior, not consensus or P2P protocol behavior. The
+  port now pins it in `rpc_getblockfilter.py` by proving `v0` is a known filter
+  type but is not enabled by bare `-blockfilterindex`; the same test file also
+  passes against unmodified Knots.
 - The feefilter and filtered-witness-block review confirmed Knots'
   restored `-feefilter` option (`8fb8c3a1f7`) and
   `MSG_FILTERED_WITNESS_BLOCK` handling (`9eaa8b5350`) are present in the
@@ -1877,6 +1886,16 @@ Source/manifest checks:
   whitelist permission application on `ConnectionType::MANUAL`, while actual
   Knots and the port pass `vWhitelistedRangeOutgoing` for every outgoing
   connection.
+- `git show --stat --patch --minimal b85232d7462`, `git show
+  origin/master:src/init.cpp | rg -n
+  "blockfilterindex_value|AllBlockFilterTypes|BlockFilterType::BASIC|certain indexes|indexes for all known types"
+  -C 5`, `git -C ../knots show 29.x-knots:src/init.cpp | rg -n
+  "blockfilterindex_value|AllBlockFilterTypes|BlockFilterType::BASIC|certain indexes|indexes for all known types"
+  -C 5`, and `rg -n
+  "blockfilterindex_value|AllBlockFilterTypes|BlockFilterType::BASIC|certain indexes|indexes for all known types"
+  src/init.cpp test/functional/rpc_getblockfilter.py` show bare
+  `-blockfilterindex` still enables all known filter types in current Core, but
+  only the selected default set (`basic`) in actual Knots and the port.
 - `git show origin/master:src/wallet/migrate.cpp | rg -n
   "for \\(uint32_t i = 0; i <= outer_meta.last_page|LSNs are not reset"` and
   `git -C ../knots show 29.x-knots:src/wallet/migrate.cpp | rg -n
@@ -2366,6 +2385,13 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_blockfilters_permission_2`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_blockfilters`
+- `python3 test/functional/rpc_getblockfilter.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblockfilter_basic_default_port
+  --portseed=27610`
+- `python3 test/functional/rpc_getblockfilter.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblockfilter_basic_default_knots
+  --portseed=27611`
 - `build/test/functional/p2p_feefilter.py`
 - `build/test/functional/p2p_filter.py`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
