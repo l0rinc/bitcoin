@@ -330,6 +330,13 @@ void CheckMempoolBlockBuilder(const CTxMemPool& tx_pool)
     while (true) {
         std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> entries;
         const FeePerWeight chunk_feerate{tx_pool.GetBlockBuilderChunk(entries)};
+        std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> entries_again;
+        const FeePerWeight chunk_feerate_again{tx_pool.GetBlockBuilderChunk(entries_again)};
+        Assert(chunk_feerate_again == chunk_feerate);
+        Assert(entries_again.size() == entries.size());
+        for (size_t i{0}; i < entries.size(); ++i) {
+            Assert(&entries_again[i].get() == &entries[i].get());
+        }
         if (chunk_feerate == FeePerWeight{}) {
             Assert(entries.empty());
             break;
