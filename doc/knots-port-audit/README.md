@@ -435,6 +435,15 @@ Other missing/adapted Knots pieces found during this pass:
   (`28823f30dc`) remains a port-only network correctness fix. The port carries
   it as `bcd1387ae6`, and `net_peer_connection_tests` covers both connected
   CJDNS addnode reporting and duplicate CJDNS addnode rejection.
+- The v2-transport privacy review confirmed Knots' randomized Tor
+  stream-isolation credential prefix (`10397d85ca`) is already present in
+  current Core under different commits, so it is not a Core-missing fix. The
+  same review confirmed Knots' `-v2onlyclearnet` option is present in the port
+  and actual Knots, while current Core has no matching option. When enabled,
+  it skips outbound V1 attempts and V2-to-V1 fallback reconnections only for
+  IPv4/IPv6 clearnet peers; V1 onion behavior remains allowed. The existing
+  `p2p_v2_encrypted.py` coverage passes for V2 clearnet success, V1 clearnet
+  refusal, and V1 onion allowance.
 - Knots' user-agent sanitization hardening (`b9d2634b81`) is present in the
   port as `eacc171127`: received peer user agents keep printable punctuation in
   `cleanSubVer`, then percent-escape characters outside the default log-safe
@@ -719,6 +728,15 @@ under different commits. They are not all proven exploitable.
   comparison and rejects CJDNS duplicates even when the port differs, avoiding
   repeated manual-connection entries to the same CJDNS node.
 
+- V2-only clearnet outbound option:
+  `cbfbefd8f3`, `7c06acab77`, `f4fc3f03f4`, `5891703ba0`
+
+  Current Core supports BIP324/v2 transport but does not expose Knots'
+  debug-only `-v2onlyclearnet` policy switch. Knots and this port can refuse
+  outbound V1 and V2-to-V1 fallback connections on IPv4/IPv6 while still
+  allowing V1 on non-clearnet networks such as onion. This is default-off
+  transport-policy hardening, not a consensus change.
+
 - DNS seed bootstrap policy:
   `277edb9009`
 
@@ -792,15 +810,16 @@ commits and therefore not counted as missing here: secp256k1 ellswift overflow
 key handling, `LocalServiceInfo::nScore` saturation, miner `addPackageTxs`
 overflow, compact-block witness mutation checks, `LoadChainTip` UB,
 `SetStdinEcho` UB, fd-limit overflow/RLIMIT_INFINITY handling, RPC credentials
-hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, feebumper
-combined-fee crash, wallet coin-selection boolean amount fix, precomputed
-transaction-data lifetime hardening (CVE-2024-52911), Tor-control excessive-line
-OOM hardening, I2P SAM `SESSION CREATE` request redaction, BDB overflow data
-lengths and btree-level validation, PSBT proprietary-field preservation during
-combining, monotonic `uptime`, first-run pruned-disk-space warning rounding,
-Windows exclusive `wbx` opens, LevelDB file-size initialization, wallet
-`sendall` transaction-size error handling, miniscript assert guards, and most
-cpp-subprocess memory/Windows fixes.
+hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, randomized Tor
+stream-isolation credential prefixes, feebumper combined-fee crash, wallet
+coin-selection boolean amount fix, precomputed transaction-data lifetime
+hardening (CVE-2024-52911), Tor-control excessive-line OOM hardening, I2P SAM
+`SESSION CREATE` request redaction, BDB overflow data lengths and btree-level
+validation, PSBT proprietary-field preservation during combining, monotonic
+`uptime`, first-run pruned-disk-space warning rounding, Windows exclusive `wbx`
+opens, LevelDB file-size initialization, wallet `sendall` transaction-size
+error handling, miniscript assert guards, and most cpp-subprocess
+memory/Windows fixes.
 
 ## Open Risks
 
@@ -1008,6 +1027,8 @@ Functional tests:
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_current_tip`
 - `python3 test/functional/interface_zmq.py --configfile /tmp/bitcoin-zmq-build/test/config.ini`
+- `python3 test/functional/p2p_v2_encrypted.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_v2_encrypted`
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_sort_multisig.py --configfile build/test/config.ini`
