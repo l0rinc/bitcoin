@@ -197,6 +197,15 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
 
     // The chain is just a single block, so this is equal to 1
     size_t original_index_size{WITH_LOCK(cs_main, return chainman.m_blockman.m_block_index.size())};
+    uint256 original_best_header_hash;
+    uint256 original_active_tip_hash;
+    {
+        LOCK(cs_main);
+        assert(chainman.m_best_header != nullptr);
+        assert(chainman.ActiveChain().Tip() != nullptr);
+        original_best_header_hash = chainman.m_best_header->GetBlockHash();
+        original_active_tip_hash = chainman.ActiveChain().Tip()->GetBlockHash();
+    }
     arith_uint256 total_work{WITH_LOCK(cs_main, return chainman.m_best_header->nChainWork)};
 
     std::vector<CBlockHeader> all_headers;
@@ -262,4 +271,12 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
     // to meet the anti-DoS work threshold. So, if at any point the block index grew in size, then there's a bug
     // in the headers pre-sync logic.
     assert(WITH_LOCK(cs_main, return chainman.m_blockman.m_block_index.size()) == original_index_size);
+    {
+        LOCK(cs_main);
+        assert(chainman.m_best_header != nullptr);
+        assert(chainman.ActiveChain().Tip() != nullptr);
+        assert(chainman.m_best_header->GetBlockHash() == original_best_header_hash);
+        assert(chainman.ActiveChain().Tip()->GetBlockHash() == original_active_tip_hash);
+    }
+    g_testing_setup->CheckNodeStateStatsOutputContracts();
 }
