@@ -13,6 +13,7 @@ import sys
 
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
+    JSONRPCException,
     assert_equal,
     assert_raises_rpc_error,
 )
@@ -43,6 +44,24 @@ class RPCSignerTest(BitcoinTestFramework):
     def clear_mock_result(self, node):
         os.remove(os.path.join(node.cwd, "mock_result"))
 
+    def assert_invalid_fingerprint_rejected_without_echo(self, node, fingerprint):
+        self.set_mock_result(node, f'0 [{{"type": "trezor", "model": "trezor_t", "fingerprint": "{fingerprint}"}}]')
+        rpc_error = None
+        try:
+            with node.assert_debug_log(expected_msgs=[], unexpected_msgs=[fingerprint]):
+                try:
+                    node.enumeratesigners()
+                except JSONRPCException as e:
+                    rpc_error = e.error
+        finally:
+            self.clear_mock_result(node)
+
+        if rpc_error is None:
+            raise AssertionError("No exception raised")
+        assert_equal(rpc_error["code"], -1)
+        assert "received invalid fingerprint: must be exactly 8 hex characters" in rpc_error["message"]
+        assert fingerprint not in rpc_error["message"]
+
     def run_test(self):
         self.log.debug(f"-signer={self.mock_signer_path()}")
 
@@ -72,23 +91,10 @@ class RPCSignerTest(BitcoinTestFramework):
         )
         self.clear_mock_result(self.nodes[1])
 
-        self.set_mock_result(self.nodes[1], '0 [{"type": "trezor", "model": "trezor_t", "fingerprint": "0000001"}]')
-        assert_raises_rpc_error(-1, 'received invalid fingerprint',
-            self.nodes[1].enumeratesigners
-        )
-        self.clear_mock_result(self.nodes[1])
-
-        self.set_mock_result(self.nodes[1], '0 [{"type": "trezor", "model": "trezor_t", "fingerprint": "000000001"}]')
-        assert_raises_rpc_error(-1, 'received invalid fingerprint',
-            self.nodes[1].enumeratesigners
-        )
-        self.clear_mock_result(self.nodes[1])
-
-        self.set_mock_result(self.nodes[1], '0 [{"type": "trezor", "model": "trezor_t", "fingerprint": "0000000z"}]')
-        assert_raises_rpc_error(-1, 'received invalid fingerprint',
-            self.nodes[1].enumeratesigners
-        )
-        self.clear_mock_result(self.nodes[1])
+        self.assert_invalid_fingerprint_rejected_without_echo(self.nodes[1], "0000001")
+        self.assert_invalid_fingerprint_rejected_without_echo(self.nodes[1], "000000001")
+        self.assert_invalid_fingerprint_rejected_without_echo(self.nodes[1], "0000000z")
+        self.assert_invalid_fingerprint_rejected_without_echo(self.nodes[1], "not-a-secret-fingerprint")
 
         # Duplicate fingerprints
         self.set_mock_result(self.nodes[1],
