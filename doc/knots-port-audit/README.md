@@ -165,6 +165,17 @@ Other missing/adapted Knots pieces found during this pass:
   BIP67 multisig sorting now passes on the port. `rpc_sort_multisig.py` had
   dropped the original Knots `assert_raises_rpc_error` import during the rebase;
   the port restores that test helper import as `dcf97bd63b`.
+- The `scanblocks` status review confirmed Knots' in-progress
+  `relevant_blocks` reporting (`4c9dc4bbe6`) is present in the port and absent
+  from current Core master. The review also exposed a port-introduced bug:
+  rebasing the Knots `scanblocks` implementation onto the current `RPCMethod`
+  helper dropped the final invalid-action `else`, so `scanblocks "foobar"`
+  returned an empty object and triggered the RPC result checker's internal-bug
+  error instead of `Invalid action 'foobar'`. Actual Knots still has the
+  invalid-action throw, and the strengthened `rpc_scanblocks.py` passes against
+  unmodified Knots. The port restores the throw and now also covers status-time
+  `relevant_blocks` by running a concurrent block-filter scan and checking
+  `scanblocks "status"` before aborting the scan.
 - Mining priority coverage now passes against Knots' policy defaults. The
   coin-age priority test uses a cache-bypassing `getblocktemplate` request when
   checking immediate `prioritisetransaction` effects, and the shared large
@@ -1620,6 +1631,7 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --catch_system_error=no --log_level=error
   --report_level=short` passed with all assertions successful
+- `cmake --build build --target bitcoind -j4`
 - `./build/src/secp256k1/bin/tests --target=ellswift_xdh_bad_scalar_tests --iterations=16`
 - `./build/src/secp256k1/bin/tests --target=ellswift --iterations=16`
 
@@ -1714,6 +1726,7 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_v2_encrypted`
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
+- `build/test/functional/rpc_scanblocks.py`
 - `python3 test/functional/rpc_sort_multisig.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_deriveaddresses.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_deriveaddresses_checksum`
@@ -1850,6 +1863,11 @@ Functional tests:
   `test/functional/p2p_filter.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_filter_filtered_witness`
   passed on unmodified Knots, including the new
   `MSG_FILTERED_WITNESS_BLOCK` witness-preservation assertion.
+- Original Knots cross-check:
+  `test/functional/rpc_scanblocks.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_rpc_scanblocks_invalid_action`
+  passed on unmodified Knots, including the new in-progress
+  `relevant_blocks` status assertion and the existing invalid-action error
+  check.
 - Original Knots cross-check:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_versionbits_warning.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_versionbits_warning_check`
   (passes on unmodified Knots, confirming the earlier warning-range failure was
