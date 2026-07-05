@@ -254,6 +254,13 @@ Other missing/adapted Knots pieces found during this pass:
   user-facing wallet GUI omission, not a consensus issue or original Knots
   defect. `wallet_sweepprivkeys.py` was rerun after the GUI restoration; local
   Qt compilation remains unavailable because Qt5 is not installed.
+- The high-signal Qt review found Knots' script-verification-thread warning
+  (`f23f08cb01`) was still missing from the port. Actual Knots already adds a
+  red options-dialog warning when `-par` is set above the CPU core count, while
+  current Core master has no matching `threadsWarning` widget. The port now
+  restores the label and visibility hook. Local Qt compilation is still
+  unavailable, so this pass verified the UI XML parses and the expected widget
+  and `GetNumCores()` visibility checks are present in source.
 - The same file-presence sweep found Knots' native Windows taskbar progress
   helper (`5f4e34a556`) was missing from the port. The port now replaces the
   Qt5 `WinExtras`/`dwmapi` path with Knots' native COM `WinTaskbarProgress`
@@ -821,6 +828,10 @@ Builds:
   target
 - `rg -n "util/transaction_identifier\\.h" src test -g '!test/cache/**'`
   returned no matches after the Qt block visualizer include update
+- `python3 -c "import xml.etree.ElementTree as ET;
+  ET.parse('src/qt/forms/optionsdialog.ui')"`
+- `rg -n "threadsWarning|Using more threads than CPU cores|value >
+  GetNumCores\\(\\)" src/qt/forms/optionsdialog.ui src/qt/optionsdialog.cpp`
 - `cmake -S . -B /tmp/bitcoin-qt-check -DBUILD_GUI=ON -DBUILD_TESTS=ON
   -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_CCACHE=OFF
   -DRDTS_CONSENT=IMPLICIT` failed with `Could NOT find Qt (missing: Qt5_DIR
