@@ -10,7 +10,10 @@ Test that permissions are correctly calculated and applied
 from test_framework.messages import (
     SEQUENCE_FINAL,
 )
-from test_framework.p2p import P2PDataStore
+from test_framework.p2p import (
+    P2PDataStore,
+    P2PInterface,
+)
 from test_framework.test_node import ErrorMatch
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -106,6 +109,8 @@ class P2PPermissionsTests(BitcoinTestFramework):
             peerinfo = self.nodes[0].getpeerinfo()[0]
             assert_equal(peerinfo['permissions'], permissions)
 
+        self.check_automatic_outbound_permissions()
+
         self.stop_node(1)
         self.nodes[1].assert_start_raises_init_error(["-whitelist=in,out@127.0.0.1"], "Only direction was set, no permissions", match=ErrorMatch.PARTIAL_REGEX)
         self.nodes[1].assert_start_raises_init_error(["-whitelist=oopsie@127.0.0.1"], "Invalid P2P permission", match=ErrorMatch.PARTIAL_REGEX)
@@ -169,6 +174,18 @@ class P2PPermissionsTests(BitcoinTestFramework):
         peerinfo = self.nodes[1].getpeerinfo()[0]
         assert_equal(peerinfo["network"], "onion")
         assert_equal(peerinfo["permissions"], [])
+
+    def check_automatic_outbound_permissions(self):
+        self.log.debug("Check that outgoing whitelist permissions apply to automatic outbound peers")
+        for p2p_idx, args, expected_permissions in [
+            (0, ["-peerbloomfilters=0", "-whitelist=noban,out@127.0.0.1"], ["noban", "download"]),
+            (1, ["-peerbloomfilters=0", "-whitelist=noban@127.0.0.1"], []),
+        ]:
+            self.restart_node(0, args)
+            self.nodes[0].add_outbound_p2p_connection(P2PInterface(), p2p_idx=p2p_idx, connection_type="outbound-full-relay")
+            peerinfo = self.nodes[0].getpeerinfo()[0]
+            assert_equal(peerinfo["connection_type"], "outbound-full-relay")
+            assert_equal(peerinfo["permissions"], expected_permissions)
 
     def checkpermission(self, args, expectedPermissions):
         self.restart_node(1, ['-peerbloomfilters=0'] + args)
