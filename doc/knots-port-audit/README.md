@@ -1496,7 +1496,12 @@ under different commits. They are not all proven exploitable.
   Knots and this port join all active warnings with newlines, matching the
   non-deprecated array mode's visibility instead of silently dropping earlier
   warnings. This is operator/security visibility hardening for deprecated RPC
-  clients, not a consensus change.
+  clients, not a consensus change. The source delta is isolated to
+  `node::GetWarningsForRpc(...)`: current Core still returns
+  `all_messages.back().original` in deprecated mode, while Knots and this port
+  use `util::Join(all_messages, Untranslated("\n")).original`. The port's
+  `node_warnings_tests` now asserts both the array form and the newline-joined
+  deprecated string form.
 
 - DNS seed bootstrap policy:
   `277edb9009`
@@ -1870,6 +1875,12 @@ Builds:
   29.x-knots -- src/init.cpp src/httprpc.cpp src/rpc/request.h
   src/rpc/util.cpp src/rpc/util.h src/wallet/rpc/util.cpp
   test/functional/rpc_users.py`
+- `git show origin/master:src/node/warnings.cpp | rg -n
+  "all_messages\\.back|Join\\(all_messages" -C 3`
+- `git -C ../knots show 29.x-knots:src/node/warnings.cpp | rg -n
+  "all_messages\\.back|Join\\(all_messages" -C 3`
+- `rg -n "all_messages\\.back|Join\\(all_messages|warning 1"
+  src/node/warnings.cpp src/test/node_warnings_tests.cpp`
 - `BUILDDIR=$PWD/build contrib/devtools/gen-manpages.py
   --skip-missing-binaries` failed after skipping the disabled `bitcoin`,
   `bitcoin-tx`, `bitcoin-util`, and `bitcoin-qt` binaries because `help2man` is
@@ -1949,6 +1960,8 @@ Unit tests:
   --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=node_warnings_tests
   --catch_system_error=no --log_level=nothing --report_level=no`
+- `build/bin/test_bitcoin --run_test=node_warnings_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=node_init_tests/init_test
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=rbf_tests/calc_feerate_diagram_rbf
