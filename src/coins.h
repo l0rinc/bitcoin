@@ -312,17 +312,34 @@ struct CoinsViewCacheCursor
     //! Return the next entry after current, possibly erasing current
     inline CoinsCachePair* NextAndMaybeErase(CoinsCachePair& current) noexcept
     {
+        const size_t dirty_count{m_dirty_count};
+        const size_t total_count{m_map.size()};
+        const bool is_dirty{current.second.IsDirty()};
+        const bool is_spent{current.second.coin.IsSpent()};
+        const COutPoint current_key{current.first};
         const auto next_entry{current.second.Next()};
-        Assume(TrySub(m_dirty_count, current.second.IsDirty()));
+        Assume(&current != &m_sentinel);
+        Assume(current.second.Prev()->second.Next() == &current);
+        Assume(next_entry->second.Prev() == &current);
+
+        Assume(TrySub(m_dirty_count, is_dirty));
+        Assume(m_dirty_count + is_dirty == dirty_count);
         // If we are not going to erase the cache, we must still erase spent entries.
         // Otherwise, clear the state of the entry.
         if (!m_will_erase) {
-            if (current.second.coin.IsSpent()) {
+            if (is_spent) {
                 assert(current.second.coin.DynamicMemoryUsage() == 0); // scriptPubKey was already cleared in SpendCoin
                 m_map.erase(current.first);
+                Assume(!m_map.contains(current_key));
+                Assume(m_map.size() + 1 == total_count);
             } else {
                 current.second.SetClean();
+                Assume(!current.second.IsDirty());
+                Assume(!current.second.IsFresh());
+                Assume(m_map.size() == total_count);
             }
+        } else {
+            Assume(m_map.size() == total_count);
         }
         return next_entry;
     }
