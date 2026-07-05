@@ -780,23 +780,42 @@ private:
     // callbacks).
     void addNewTransaction(CTxMemPool::txiter it) EXCLUSIVE_LOCKS_REQUIRED(cs);
 public:
-    void StartBlockBuilding() const EXCLUSIVE_LOCKS_REQUIRED(cs) { assert(!m_builder); m_builder = m_txgraph->GetBlockBuilder(); }
+    void StartBlockBuilding() const EXCLUSIVE_LOCKS_REQUIRED(cs)
+    {
+        assert(!m_builder);
+        m_builder = m_txgraph->GetBlockBuilder();
+        Assume(m_builder != nullptr);
+    }
     FeePerWeight GetBlockBuilderChunk(std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef>& entries) const EXCLUSIVE_LOCKS_REQUIRED(cs)
     {
-        if (!m_builder) { return {}; }
+        const size_t entries_size{entries.size()};
+        if (!m_builder) {
+            Assume(entries.size() == entries_size);
+            return {};
+        }
 
         auto res = m_builder->GetCurrentChunk();
-        if (!res) { return {}; }
+        if (!res) {
+            Assume(entries.size() == entries_size);
+            return {};
+        }
 
         auto [chunk_entries, chunk_feerate] = *res;
+        Assume(!chunk_entries.empty());
+        Assume(!chunk_feerate.IsEmpty());
         for (TxGraph::Ref* ref : chunk_entries) {
+            Assume(ref != nullptr);
             entries.emplace_back(static_cast<const CTxMemPoolEntry&>(*ref));
+        }
+        Assume(entries.size() == entries_size + chunk_entries.size());
+        for (size_t index{entries_size}; index < entries.size(); ++index) {
+            Assume(GetMainChunkFeerate(entries[index].get()) == chunk_feerate);
         }
         return chunk_feerate;
     }
-    void IncludeBuilderChunk() const EXCLUSIVE_LOCKS_REQUIRED(cs) { m_builder->Include(); }
-    void SkipBuilderChunk() const EXCLUSIVE_LOCKS_REQUIRED(cs) { m_builder->Skip(); }
-    void StopBlockBuilding() const EXCLUSIVE_LOCKS_REQUIRED(cs) { m_builder.reset(); }
+    void IncludeBuilderChunk() const EXCLUSIVE_LOCKS_REQUIRED(cs) { Assume(m_builder != nullptr); m_builder->Include(); }
+    void SkipBuilderChunk() const EXCLUSIVE_LOCKS_REQUIRED(cs) { Assume(m_builder != nullptr); m_builder->Skip(); }
+    void StopBlockBuilding() const EXCLUSIVE_LOCKS_REQUIRED(cs) { m_builder.reset(); Assume(m_builder == nullptr); }
 };
 
 /**
