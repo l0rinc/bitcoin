@@ -380,9 +380,14 @@ Other missing/adapted Knots pieces found during this pass:
   captions with non-modal icon styles, while the port printed the message
   without prefixes. The port now derives no-UI prefixes from warning/error icon
   bits as `0bbf2e8bb3`.
-- `feature_sync_coins_tip_after_chain_sync.py` now uses the current
+- Knots' post-IBD chainstate disk-sync hardening (`2f1bf089f7`) is present in
+  the port and absent from current Core: once IBD is over, the scheduler waits
+  for stable height and no validated block downloads, then calls
+  `CoinsTip().Sync()` to reduce data-loss exposure after initial sync. This is
+  not consensus behavior, but it is a storage-safety divergence. The port's
+  adapted `feature_sync_coins_tip_after_chain_sync.py` uses the current
   `create_block(..., ntime=...)` and P2P send helpers (`0216a33c43`), and the
-  post-IBD chainstate disk-sync coverage passes.
+  coverage passes against both the port and unmodified Knots.
 - CLI completion coverage exposed stale generated artifacts: `exportasmap` now
   completes as a file argument, and the zsh `bitcoin-cli` completion file from
   Knots had not been carried into the port. The generated bash/zsh completions
@@ -1717,6 +1722,10 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_notifications_multi`
 - `python3 test/functional/feature_index_prune.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_sync_coins_tip_after_chain_sync`
+- `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_knots_sync_coins_tip_after_chain_sync`
 - `python3 test/functional/feature_softwareexpiry.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_torcontrol.py --configfile build/test/config.ini`
 - `test/functional/feature_torcontrol.py --configfile build/test/config.ini
