@@ -494,6 +494,25 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file)
     fs::remove(streams_test_filename);
 }
 
+BOOST_AUTO_TEST_CASE(streams_buffered_file_closes_source)
+{
+    fs::path streams_test_filename = m_args.GetDataDirBase() / "streams_test_tmp";
+    AutoFile file{fsbridge::fopen(streams_test_filename, "w+b")};
+
+    file << uint8_t{1};
+    file.seek(0, SEEK_SET);
+
+    {
+        BufferedFile bf{file, 2, 1};
+        uint8_t value;
+        bf >> value;
+        BOOST_CHECK_EQUAL(value, 1);
+    }
+
+    BOOST_CHECK(file.IsNull());
+    fs::remove(streams_test_filename);
+}
+
 BOOST_AUTO_TEST_CASE(streams_buffered_file_skip)
 {
     fs::path streams_test_filename = m_args.GetDataDirBase() / "streams_test_tmp";
