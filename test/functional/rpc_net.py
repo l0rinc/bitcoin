@@ -98,6 +98,7 @@ class NetTest(BitcoinTestFramework):
         self.test_sendmsgtopeer()
         self.test_getaddrmaninfo()
         self.test_getrawaddrman()
+        self.test_addnode_cjdns_duplicate()
 
     def test_connection_count(self):
         self.log.info("Test getconnectioncount")
@@ -289,6 +290,18 @@ class NetTest(BitcoinTestFramework):
         assert_raises_rpc_error(-24, "Node could not be removed", self.nodes[0].addnode, node=ip_port, command='remove')
         self.log.info("Check that a non-existent node returns an error")
         assert_raises_rpc_error(-24, "Node has not been added", self.nodes[0].getaddednodeinfo, '1.1.1.1')
+
+    def test_addnode_cjdns_duplicate(self):
+        self.log.info("Test addnode rejects duplicate CJDNS nodes on different ports")
+        self.restart_node(0, extra_args=self.extra_args[0] + ["-cjdnsreachable"])
+        cjdns_addr = "[fc00:3344:5566:7788:9900:aabb:ccdd:eeff]:8333"
+        cjdns_addr_other_port = "[fc00:3344:5566:7788:9900:aabb:ccdd:eeff]:18333"
+        self.nodes[0].addnode(node=cjdns_addr, command='add')
+        assert_raises_rpc_error(-23, "Node already added", self.nodes[0].addnode, node=cjdns_addr_other_port, command='add')
+        added_nodes = self.nodes[0].getaddednodeinfo()
+        assert_equal(len(added_nodes), 1)
+        assert_equal(added_nodes[0]["addednode"], cjdns_addr)
+        assert_equal(added_nodes[0]["connected"], False)
 
     def test_service_flags(self):
         self.log.info("Test service flags")
