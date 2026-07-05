@@ -317,6 +317,15 @@ Other missing/adapted Knots pieces found during this pass:
   matches Knots' intended build distinction as `7d4c61ea3a`: system-LevelDB
   builds keep the header/runtime version check, while embedded-LevelDB builds
   define `EMBEDDED_LEVELDB` and skip the redundant runtime comparison.
+- The same sanity-check review confirmed Knots' LLVM 96267 compiler
+  optimization check (`8fbdf93878`, port `25a78ddab0`) is present in the port
+  and absent from current Core. This is a startup/build-environment safety check
+  rather than consensus behavior: if the compiler misoptimizes the reproducer,
+  `SanityChecks()` aborts startup with `Compiler optimization sanity check
+  failure`. The port's `sanity_tests` covers both the LevelDB sanity check and
+  the LLVM reproducer. The unmodified Knots source carries the same check and
+  test, but its `build-repro` directory only contains `bitcoind` and
+  `bitcoin-cli`, so there was no Knots `test_bitcoin` binary to run directly.
 - The exact-patch review found Knots' BanMan expiry-sweep series was missing:
   exact-expiry removal (`2da7001df1`), scheduler-based expiry sweeps
   (`838fe961ca`), and the helper tidy-up (`9a4431e0e1`). Actual Knots already
@@ -1442,6 +1451,10 @@ Source/manifest checks:
 - `comm -23 <(git ls-tree -r --name-only knots/29.x-knots | sort)
   <(git ls-files | sort)`
 - `rg -n "FindLibevent|libevent|mempool-limits|system_ram\\.h|core_write\\.cpp|policy/fees|fees_args|support/events\\.h|compilerbug_tests|policy_fee_tests|raii_event_tests|test/util/index|test/util/str|txorphanage\\.h|txorphanage\\.cpp|epochguard|transaction_identifier\\.h|mempool_package_onemore|rpcauth-test" . -g '!test/cache/**' -g '!build/**' -g '!depends/work/**' -g '!depends/built/**' -g '!depends/sources/**'`
+- `rg -n "Clang_IndVarSimplify_Bug_SanityCheck|Compiler optimization sanity check|leveldb_major_version|EMBEDDED_LEVELDB" ../knots/src/kernel/checks.cpp ../knots/src/kernel/checks.h ../knots/src/test/sanity_tests.cpp ../knots/src/dbwrapper.cpp ../knots/src/dbwrapper.h ../knots/src/CMakeLists.txt ../knots/cmake -g '!**/build*/**'`
+- `ls -la ../knots/build-repro/bin` showed only `bitcoind` and `bitcoin-cli`,
+  so `../knots/build-repro/bin/test_bitcoin --run_test=sanity_tests` was not
+  available.
 - `git log origin/master --follow --oneline -- <remaining source-looking
   missing path>` for old `core_write`, fee, libevent, orphanage, transaction
   identifier, epochguard, and test-helper paths
