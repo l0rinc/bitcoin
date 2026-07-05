@@ -332,7 +332,9 @@ Automatically create Tor onion service (default: 1)
 .IP
 Maintain at most <n> automatic connections to peers (default: 125). This
 limit does not apply to connections manually added via \fB\-addnode\fR
-or the addnode RPC, which have a separate limit of 8.
+or the addnode RPC, which have a separate limit of 8. It does not
+apply to short\-lived private broadcast connections either, which
+have a separate limit of 64.
 .HP
 \fB\-maxreceivebuffer=\fR<n>
 .IP
@@ -342,6 +344,14 @@ Maximum per\-connection receive buffer, <n>*1000 bytes (default: 5000)
 .IP
 Maximum per\-connection memory usage for the send buffer, <n>*1000 bytes
 (default: 1000)
+.HP
+\fB\-maxstaleoutbound=\fR<n>
+.IP
+Tolerate at most <n> automatic outbound connections to peers running
+stale consensus rules (default: 8). This limit does not apply to
+connections manually added via \fB\-addnode\fR or the addnode RPC.
+Connections to full nodes will still be sought and preferred over
+stale ones.
 .HP
 \fB\-maxuploadtarget=\fR<n>
 .IP
@@ -725,6 +735,11 @@ Chain selection options:
 Use the chain <chain> (default: main). Allowed values: main, test,
 testnet4, signet, regtest
 .HP
+\fB\-consensusrules=\fR<rules>
+.IP
+Enforce the specified consensus rules (default: none). Must be rdts to
+use this software.
+.HP
 \fB\-signet\fR
 .IP
 Use the signet chain. Equivalent to \fB\-chain\fR=\fI\,signet\/\fR. Note that the network
@@ -878,6 +893,13 @@ allow ordinary output types to be considered ephemeral, and
 "dust" to allow for dust\-amount outputs rather than strictly
 zero\-value (default: anchor,\-send,\-dust)
 .HP
+\fB\-privatebroadcast\fR
+.IP
+Broadcast transactions submitted via sendrawtransaction RPC using
+short\-lived connections through the Tor or I2P networks, without
+putting them in the mempool first. Transactions submitted through
+the wallet are not affected by this option (default: 0)
+.HP
 \fB\-rejectparasites\fR
 .IP
 Refuse to relay or mine parasitic overlay protocols (default: 1)
@@ -892,6 +914,12 @@ Refuse to relay or mine transactions involving non\-bitcoin tokens
 Either "allow" to relay/mine transactions reusing addresses or other
 pubkey scripts, or "conflict" to treat them as exclusive prior to
 being mined (default: allow)
+.HP
+\fB\-subdustfeepenalty\fR
+.IP
+Reduce effective fee by the dust threshold for each sub\-dust output,
+making dust\-creating transactions require higher fees (default:
+1)
 .HP
 \fB\-whitelistforcerelay\fR
 .IP
