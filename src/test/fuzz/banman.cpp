@@ -12,21 +12,20 @@
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <util/fs.h>
+#include <util/overflow.h>
 #include <util/readwritefile.h>
 #include <util/time.h>
 
 #include <cassert>
 #include <cstdint>
-#include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace {
 int64_t ConsumeBanTimeOffset(FuzzedDataProvider& fuzzed_data_provider) noexcept
 {
-    // Avoid signed integer overflow by capping to int32_t max:
-    // banman.cpp:137:73: runtime error: signed integer overflow: 1591700817 + 9223372036854775807 cannot be represented in type 'long'
-    return fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(std::numeric_limits<int64_t>::min(), std::numeric_limits<int32_t>::max());
+    return fuzzed_data_provider.ConsumeIntegral<int64_t>();
 }
 
 void AssertNoBannedEntries(BanMan& ban_man)
@@ -52,6 +51,38 @@ void AssertBannedEntriesActive(BanMan& ban_man)
     for (const auto& [subnet, ban_entry] : banmap) {
         assert(subnet.IsValid());
         assert(now < ban_entry.nBanUntil);
+        assert(ban_man.IsBanned(subnet));
+    }
+}
+
+int64_t ExpectedBanUntil(int64_t now, int64_t default_ban_time, int64_t ban_time_offset, bool since_unix_epoch)
+{
+    if (ban_time_offset <= 0) {
+        return SaturatingAdd(now, default_ban_time);
+    }
+    return since_unix_epoch ? ban_time_offset : SaturatingAdd(now, ban_time_offset);
+}
+
+void AssertBanTransition(BanMan& ban_man, const CSubNet& subnet, const banmap_t& before, int64_t expected_ban_until, int64_t now)
+{
+    banmap_t after;
+    ban_man.GetBanned(after);
+
+    std::optional<int64_t> expected_active_until;
+    if (const auto before_it{before.find(subnet)}; before_it != before.end()) {
+        expected_active_until = before_it->second.nBanUntil;
+    }
+    if (now < expected_ban_until && (!expected_active_until || *expected_active_until < expected_ban_until)) {
+        expected_active_until = expected_ban_until;
+    }
+
+    const auto after_it{after.find(subnet)};
+    if (!expected_active_until) {
+        assert(after_it == after.end());
+        assert(!ban_man.IsBanned(subnet));
+    } else {
+        assert(after_it != after.end());
+        assert(after_it->second.nBanUntil == *expected_active_until);
         assert(ban_man.IsBanned(subnet));
     }
 }
@@ -89,7 +120,8 @@ FUZZ_TARGET(banman, .init = initialize_banman)
     }
 
     {
-        BanMan ban_man{banlist_file, /*client_interface=*/nullptr, /*default_ban_time=*/ConsumeBanTimeOffset(fuzzed_data_provider)};
+        const int64_t default_ban_time{ConsumeBanTimeOffset(fuzzed_data_provider)};
+        BanMan ban_man{banlist_file, /*client_interface=*/nullptr, /*default_ban_time=*/default_ban_time};
         // The complexity is O(N^2), where N is the input size, because each call
         // might call DumpBanlist (or other methods that are at least linear
         // complexity of the input size).
@@ -109,7 +141,14 @@ FUZZ_TARGET(banman, .init = initialize_banman)
                     }
                     auto ban_time_offset = ConsumeBanTimeOffset(fuzzed_data_provider);
                     auto since_unix_epoch = fuzzed_data_provider.ConsumeBool();
+                    banmap_t before;
+                    if (net_addr.IsValid()) ban_man.GetBanned(before);
+                    const int64_t now{GetTime()};
                     ban_man.Ban(net_addr, ban_time_offset, since_unix_epoch);
+                    if (net_addr.IsValid()) {
+                        const CSubNet subnet{net_addr};
+                        AssertBanTransition(ban_man, subnet, before, ExpectedBanUntil(now, default_ban_time, ban_time_offset, since_unix_epoch), now);
+                    }
                 },
                 [&] {
                     CSubNet subnet{ConsumeSubNet(fuzzed_data_provider)};
@@ -119,7 +158,13 @@ FUZZ_TARGET(banman, .init = initialize_banman)
                     }
                     auto ban_time_offset = ConsumeBanTimeOffset(fuzzed_data_provider);
                     auto since_unix_epoch = fuzzed_data_provider.ConsumeBool();
+                    banmap_t before;
+                    if (subnet.IsValid()) ban_man.GetBanned(before);
+                    const int64_t now{GetTime()};
                     ban_man.Ban(subnet, ban_time_offset, since_unix_epoch);
+                    if (subnet.IsValid()) {
+                        AssertBanTransition(ban_man, subnet, before, ExpectedBanUntil(now, default_ban_time, ban_time_offset, since_unix_epoch), now);
+                    }
                 },
                 [&] {
                     ban_man.ClearBanned();
