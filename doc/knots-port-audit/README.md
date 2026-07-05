@@ -254,6 +254,14 @@ Other missing/adapted Knots pieces found during this pass:
   user-facing wallet GUI omission, not a consensus issue or original Knots
   defect. `wallet_sweepprivkeys.py` was rerun after the GUI restoration; local
   Qt compilation remains unavailable because Qt5 is not installed.
+- The same file-presence sweep found Knots' native Windows taskbar progress
+  helper (`5f4e34a556`) was missing from the port. The port now replaces the
+  Qt5 `WinExtras`/`dwmapi` path with Knots' native COM `WinTaskbarProgress`
+  helper and enables taskbar progress for Windows GUI builds with Qt5 or Qt6
+  (`677f07f6c1`). This is Windows GUI/build compatibility, not a consensus or
+  security issue. The local build is Linux/non-GUI and cannot compile this
+  Windows Qt path; source review, `git diff --check`, and a non-GUI
+  `test_bitcoin` rebuild were used locally.
 - CLI/help verification exposed a port-side bitcoin-cli conversion-table drift:
   current server metadata no longer advertises legacy-only `sethdseed` and
   `addmultisigaddress` conversions, while descriptor-compatible legacy import
@@ -389,10 +397,10 @@ Other missing/adapted Knots pieces found during this pass:
   squashed, or present through current Core under different commits. After the
   codex32 follow-up above, the remaining manually reviewed 2026 exact-patch
   misses include `33f9de6b91` and `c4c558b2c4`; both are historical reverts,
-  not final Knots tree deltas. Current unmodified Knots `29.x-knots` has
-  Windows taskbar progress support restored by later merges, and its miner code
-  uses the same overflow-safe `nBlockWeight + BLOCK_FULL_ENOUGH_WEIGHT_DELTA`
-  check as this port/current Core.
+  not final Knots tree deltas. The Windows taskbar progress support restored
+  by later Knots merges is now present in this port, and Knots' miner code uses
+  the same overflow-safe `nBlockWeight + BLOCK_FULL_ENOUGH_WEIGHT_DELTA` check
+  as this port/current Core.
 - Extending the same review to non-merge Knots commits since 2025-01-01 also
   covered those two historical reverts, a historical CI-only `MAKEJOBS` revert
   (`5f7f1cf181`) superseded by Knots' later Cirrus runner workflow, and
@@ -698,6 +706,7 @@ Builds:
 - `TMPDIR=/mnt/my_storage/tmp cmake --build /tmp/bitcoin-asan-consensus-after
   --target bitcoinconsensus -j1`
 - `git diff --check`
+- `cmake --build build --target test_bitcoin -j2`
 - `cmake --build build --target help | rg -n
   "(qt|bitcoin-qt|test_bitcoin-qt|test_bitcoin_qt)"` returned no configured Qt
   target
