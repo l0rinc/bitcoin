@@ -24,6 +24,13 @@ Other missing/adapted Knots pieces found during this pass:
 - Regtest `reduced_data` now uses the fast 144-block period and 108-block
   threshold expected by the Knots tests under Core's current per-deployment
   versionbits model (`c26c475e4d`).
+- The completion audit found Knots policy commits that had not yet been
+  replayed: OPNet witness accounting for `-datacarriersize`
+  (`2d00c4c315`, ported as `9bfc680467`) and the sub-dust fee penalty stack
+  (`3cadc6dcdc`, `20b2e7c4ec`, `640689b0b4`, `484ef9c541`, ported as
+  `3f3da51691`, `7d6256aacb`, `1bb6094f8a`, `727af3dfc8`). These add OPNet
+  datacarrier coverage, `-subdustfeepenalty`, the GUI option, the default-on
+  policy setting, and `mempool_subdust_fee_penalty.py`.
 - The test harness now restores compatibility aliases for mutable transaction
   and block hashes and uses the spent-output libconsensus API for taproot script
   vectors (`490d4f78cf`).
@@ -31,6 +38,9 @@ Other missing/adapted Knots pieces found during this pass:
   `create_block(..., ntime=...)`, current binary path lookup, capped
   datacarrier defaults, and sigop tests that isolate bytespersigop policy from
   datacarrier policy (`490d4f78cf`).
+- `mempool_accept.py` was further adapted for Knots' data-output policy:
+  Core's v30-era unbounded/multiple OP_RETURN expectations are now rejected by
+  the port's `scriptpubkey`/`multi-op-return` policy paths (`2635a090c3`).
 
 ## Original Knots Defect Confirmed
 
@@ -132,8 +142,10 @@ Unit tests:
 
 - `build/bin/test_bitcoin --run_test=versionbits_tests`
 - `build/bin/test_bitcoin --run_test=script_tests`
+- `build/bin/test_bitcoin --run_test=mempool_tests`
 - `build/bin/test_bitcoin --run_test=transaction_tests`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests`
+- `build/bin/test_bitcoin --run_test=txvalidation_tests`
 - `build/bin/test_bitcoin --run_test=peerman_tests`
 - `build/bin/test_bitcoin --run_test=net_tests`
 - `build/bin/test_bitcoin --run_test=validation_tests`
@@ -147,5 +159,8 @@ Functional tests:
 - `python3 test/functional/feature_bip9_max_activation_height.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini`
+- `python3 test/functional/mempool_accept.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_datacarrier.py --configfile build/test/config.ini`
+- `python3 test/functional/mempool_dust.py --configfile build/test/config.ini`
+- `python3 test/functional/mempool_subdust_fee_penalty.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini`
