@@ -1093,6 +1093,20 @@ class RawTransactionsTest(BitcoinTestFramework):
         unspent = self.nodes[3].listunspent()
         assert len(unspent) == 1
         input_confs = unspent[0]['confirmations']
+        assert_raises_rpc_error(
+            -8,
+            "Negative min_conf",
+            self.nodes[3].fundrawtransaction,
+            rawtx,
+            {'min_conf': -1},
+        )
+        assert_raises_rpc_error(
+            -8,
+            "min_conf and minconf options should not both be set. Use minconf (min_conf is deprecated).",
+            self.nodes[3].fundrawtransaction,
+            rawtx,
+            {'min_conf': input_confs, 'minconf': input_confs},
+        )
         assert_raises_rpc_error(-4, "Insufficient funds", self.nodes[3].fundrawtransaction, rawtx,  {'min_conf': input_confs + 1})
         result = self.nodes[3].fundrawtransaction(rawtx, {'min_conf': input_confs})
 

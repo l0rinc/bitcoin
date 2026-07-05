@@ -597,6 +597,22 @@ class PSBTTest(BitcoinTestFramework):
         assert_raises_rpc_error(-22, f"Previous tx has too few outputs for PSBT input {parent_txid}", self.nodes[0].utxoupdatepsbt, psbt=psbtx_bad_child, prevtxs=prev_txs)
 
         # Create and fund a raw tx for sending 10 BTC
+        assert_raises_rpc_error(
+            -8,
+            "Negative min_conf",
+            self.nodes[0].walletcreatefundedpsbt,
+            inputs=[],
+            outputs={self.nodes[2].getnewaddress(): 1},
+            options={'min_conf': -1},
+        )
+        assert_raises_rpc_error(
+            -8,
+            "min_conf and minconf options should not both be set. Use minconf (min_conf is deprecated).",
+            self.nodes[0].walletcreatefundedpsbt,
+            inputs=[],
+            outputs={self.nodes[2].getnewaddress(): 1},
+            options={'min_conf': 1, 'minconf': 1},
+        )
         assert_raises_rpc_error(-4, "Insufficient funds", self.nodes[0].walletcreatefundedpsbt, inputs=[], outputs={self.nodes[2].getnewaddress():1}, options={'min_conf': 201})
         psbtx1 = self.nodes[0].walletcreatefundedpsbt(inputs=[], outputs={self.nodes[2].getnewaddress():11}, options={'min_conf': 200})['psbt']
 
