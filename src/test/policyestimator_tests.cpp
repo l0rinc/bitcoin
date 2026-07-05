@@ -5,9 +5,13 @@
 #include <policy/fees/block_policy_estimator.h>
 #include <policy/fees/block_policy_estimator_args.h>
 #include <policy/policy.h>
+#include <serialize.h>
+#include <streams.h>
 #include <test/util/txmempool.h>
 #include <txmempool.h>
 #include <uint256.h>
+#include <util/fs.h>
+#include <util/serfloat.h>
 #include <util/time.h>
 #include <validationinterface.h>
 
@@ -15,7 +19,73 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <cstdint>
+#include <limits>
+#include <vector>
+
+namespace {
+
+struct TestEncodedDoubleFormatter
+{
+    template<typename Stream> void Ser(Stream& s, double v)
+    {
+        s << EncodeDouble(v);
+    }
+
+    template<typename Stream> void Unser(Stream& s, double& v)
+    {
+        uint64_t encoded;
+        s >> encoded;
+        v = DecodeDouble(encoded);
+    }
+};
+
+void WriteEstimatorStats(AutoFile& file, unsigned int scale, size_t periods, size_t num_buckets)
+{
+    const std::vector<double> bucket_stats(num_buckets, 0.0);
+    const std::vector<std::vector<double>> period_stats(periods, bucket_stats);
+
+    file << Using<TestEncodedDoubleFormatter>(0.5);
+    file << scale;
+    file << Using<VectorFormatter<TestEncodedDoubleFormatter>>(bucket_stats);
+    file << Using<VectorFormatter<TestEncodedDoubleFormatter>>(bucket_stats);
+    file << Using<VectorFormatter<VectorFormatter<TestEncodedDoubleFormatter>>>(period_stats);
+    file << Using<VectorFormatter<VectorFormatter<TestEncodedDoubleFormatter>>>(period_stats);
+}
+
+} // namespace
+
 BOOST_FIXTURE_TEST_SUITE(policyestimator_tests, ChainTestingSetup)
+
+BOOST_AUTO_TEST_CASE(read_rejects_fee_estimates_with_oversized_scale)
+{
+    const fs::path estimates_path{m_args.GetDataDirBase() / "overflow_fee_estimates.dat"};
+    constexpr int current_fees_file_version{309900};
+    constexpr unsigned int best_seen_height{2};
+    constexpr size_t num_buckets{2};
+
+    {
+        AutoFile file{fsbridge::fopen(estimates_path, "w+b")};
+        BOOST_REQUIRE(!file.IsNull());
+        file << current_fees_file_version;
+        file << best_seen_height;
+        file << 1U << best_seen_height;
+        file << Using<VectorFormatter<TestEncodedDoubleFormatter>>(std::vector<double>{1.0, 2.0});
+
+        // Exercise Knots' pre-multiplication bound check with a serialized
+        // scale that can never be a valid under-one-week estimate.
+        const unsigned int oversized_scale{std::numeric_limits<unsigned int>::max() / 2 + 500};
+        WriteEstimatorStats(file, oversized_scale, /*periods=*/2, num_buckets);
+        WriteEstimatorStats(file, /*scale=*/1, /*periods=*/1, num_buckets);
+        WriteEstimatorStats(file, /*scale=*/1, /*periods=*/1, num_buckets);
+        BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    }
+
+    CBlockPolicyEstimator estimator{m_args.GetDataDirBase() / "unused_fee_estimates.dat", DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
+    AutoFile file{fsbridge::fopen(estimates_path, "rb")};
+    BOOST_REQUIRE(!file.IsNull());
+    BOOST_CHECK(!estimator.Read(file));
+}
 
 BOOST_AUTO_TEST_CASE(BlockPolicyEstimates)
 {
