@@ -111,27 +111,11 @@ void TransactionFilterProxy::setMinAmount(const CAmount& minimum)
 #endif
 }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
-    invalidateFilter();
-#endif
-}
-
 void TransactionFilterProxy::setShowInactive(bool _showInactive)
 {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
     beginFilterChange();
 #endif
-
-    this->showInactive = _showInactive;
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
-    invalidateFilter();
-#endif
-}
 
     this->showInactive = _showInactive;
 
