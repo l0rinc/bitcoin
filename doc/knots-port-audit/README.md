@@ -1032,7 +1032,11 @@ under different commits. They are not all proven exploitable.
   interaction leaves the node with `-listen=0`. Current Core no longer exposes
   UPnP, but its NAT-PMP interaction still uses a soft disable, so an explicit
   `-listen=0 -natpmp=1` can survive until `StartMapPort(...)`. This is local
-  network-surface/privacy hardening, not a consensus issue.
+  network-surface/privacy hardening, not a consensus issue. A minimal
+  unmodified Knots startup with `-listen=0 -upnp=1 -natpmp=1` logged both
+  forced-disable messages, confirming this is not port-introduced. The port now
+  covers the direct explicit-argument case in `feature_config_args.py`, in
+  addition to the existing `-connect=0` / `-noconnect` interaction coverage.
 
 - HTTP RPC bind failure behavior:
   `57becdf59e` plus follow-up listen/bind cleanup commits
@@ -1472,7 +1476,7 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_interface_rest_listmempooltransactions`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
-  --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_config_args_portmap_2`
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_config_args_port_mapping_2`
 - `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_config_args_acceptnonstd_main_3`
 - `python3 test/functional/feature_help.py --configfile build/test/config.ini`
