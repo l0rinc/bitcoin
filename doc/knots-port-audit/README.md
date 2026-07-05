@@ -243,7 +243,13 @@ Other missing/adapted Knots pieces found during this pass:
   while the port only had mainnet checkpoint data. This was not an original
   Knots bug and is now restored as `0dbc321ca0`, along with the Knots testnet3
   header fixture and test framework network magic needed by
-  `p2p_dos_header_tree.py`.
+  `p2p_dos_header_tree.py`. A later checkpoint-data pass also confirmed the
+  port carries Knots' updated mainnet checkpoint table (`bb1949adc6`),
+  including the final checkpoint at height `908765` with hash
+  `00000000000000000001b64acb5fe4b40b84092159b6406a6244f46a37fa6c6b`;
+  current Core master has no equivalent checkpoint table. This remains local
+  validation hardening, not a consensus rule difference. `checkpoint_sanity`
+  now pins the latest mainnet checkpoint height and hash.
 - A high-risk review of exact patch-id misses found Knots' codex32 early-return
   fix (`126d6df18d`) was missing from the port. Actual Knots `29.x-knots`
   already contains the fix, so this was a port omission rather than an original
@@ -2070,6 +2076,15 @@ Source/manifest checks:
   historical Knots height-90000 addition, and `git -C ../knots log --oneline
   --grep="test chain parameter" -- src/kernel/chainparams.cpp` shows the later
   `f1cc17e0f0` revert.
+- `git -C ../knots show --stat --patch --minimal bb1949adc6`,
+  `rg -n "checkpointData|908765|CheckBlock\\(908765|checkpoint_sanity"
+  src/kernel/chainparams.cpp src/test/validation_tests.cpp`,
+  `git -C ../knots show 29.x-knots:src/kernel/chainparams.cpp | rg -n
+  "checkpointData|908765|546" -C 4`, and
+  `git show origin/master:src/kernel/chainparams.cpp | rg -n
+  "checkpointData|908765|546" -C 4` show the port matches actual Knots'
+  latest mainnet checkpoint table and testnet3 checkpoint while current Core
+  lacks the restored checkpoint data.
 - `git show --stat --patch --minimal 99bd4320f8`,
   `git show origin/master:src/node/kernel_notifications.cpp | sed -n
   '28,48p'`, `git -C ../knots show 29.x-knots:src/node/kernel_notifications.cpp
@@ -2509,6 +2524,9 @@ Unit tests:
   --run_test=txvalidationcache_tests/checkinputs_flags_per_input_cache_safety
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=txvalidation_tests`
+- `cmake --build build --target test_bitcoin && build/bin/test_bitcoin
+  --run_test=validation_tests/checkpoint_sanity --catch_system_error=no
+  --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=script_p2sh_tests/ValidateInputsStandardness`
 - `build/bin/test_bitcoin --run_test=peerman_tests --catch_system_error=no
   --log_level=nothing --report_level=no`
