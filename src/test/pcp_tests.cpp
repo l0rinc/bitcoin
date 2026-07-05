@@ -86,11 +86,12 @@ class PCPTestSock final : public Sock
 public:
     // Note: we awkwardly mark all methods as const, and properties as mutable,
     // because Sock expects all networking calls to be const.
-    explicit PCPTestSock(const CNetAddr &local_ip, const CNetAddr &gateway_ip, const std::vector<TestOp> &script)
+    explicit PCPTestSock(const CNetAddr &local_ip, const CNetAddr &gateway_ip, const std::vector<TestOp> &script, size_t* send_count = nullptr)
         : Sock{INVALID_SOCKET},
           m_script(script),
           m_local_ip(local_ip),
-          m_gateway_ip(gateway_ip)
+          m_gateway_ip(gateway_ip),
+          m_send_count{send_count}
     {
         PrepareOp();
     }
@@ -103,6 +104,7 @@ public:
 
     ssize_t Send(const void* data, size_t len, int) const override {
         if (!m_connected) return -1;
+        if (m_send_count) ++*m_send_count;
         std::span in_pkt = std::span(static_cast<const uint8_t*>(data), len);
         if (AtEndOfScript() || CurOp().op != TestOp::SEND) {
             // Ignore sends after end of script, or sends when we expect a receive.
@@ -227,6 +229,7 @@ private:
     mutable CService m_bound;
     mutable CNetAddr m_local_ip;
     mutable CNetAddr m_gateway_ip;
+    size_t* const m_send_count;
 
     bool AtEndOfScript() const { return m_script_ptr == m_script.size(); }
     const TestOp &CurOp() const {
@@ -436,6 +439,38 @@ BOOST_AUTO_TEST_CASE(pcp_connrefused)
     MappingError* err = std::get_if<MappingError>(&res);
     BOOST_REQUIRE(err);
     BOOST_CHECK_EQUAL(*err, MappingError::NETWORK_ERROR);
+}
+
+BOOST_AUTO_TEST_CASE(portmap_interrupt_before_send)
+{
+    const std::vector<TestOp> script{};
+
+    auto check_interrupted = [&](bool use_pcp) {
+        size_t send_count{0};
+        bool created_sock{false};
+        CreateSock = [this, &script, &send_count, &created_sock](int domain, int type, int protocol) -> std::unique_ptr<Sock> {
+            if (domain == AF_INET && type == SOCK_DGRAM && protocol == IPPROTO_UDP) {
+                created_sock = true;
+                return std::make_unique<PCPTestSock>(default_local_ipv4, default_gateway_ipv4, script, &send_count);
+            }
+            return nullptr;
+        };
+
+        CThreadInterrupt interrupt;
+        interrupt();
+        auto res = use_pcp ?
+            PCPRequestPortMap(TEST_NONCE, default_gateway_ipv4, bind_any_ipv4, 1234, 1000, interrupt, 3, 1000ms) :
+            NATPMPRequestPortMap(default_gateway_ipv4, 1234, 1000, interrupt, 3, 1000ms);
+
+        MappingError* err = std::get_if<MappingError>(&res);
+        BOOST_REQUIRE(err);
+        BOOST_CHECK_EQUAL(*err, MappingError::NETWORK_ERROR);
+        BOOST_CHECK(created_sock);
+        BOOST_CHECK_EQUAL(send_count, 0U);
+    };
+
+    check_interrupted(/*use_pcp=*/true);
+    check_interrupted(/*use_pcp=*/false);
 }
 
 // PCP IPv6 success after one timeout.
