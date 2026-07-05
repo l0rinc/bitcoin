@@ -176,6 +176,13 @@ Other missing/adapted Knots pieces found during this pass:
   Knots-style SegWit block failures use mandatory-script reject reasons. The
   SegWit test also restores hash refreshes needed by the current mutable
   transaction helpers.
+- The follow-up cherry audit found Knots' `BufferedFile` close-on-destruction
+  fix (`88fe778d9d`) only half-applied in the port: the fuzz test expected
+  `BufferedFile::fclose()`, but `BufferedFile` still lacked the method and
+  destructor. The port now restores both and adds `streams_tests` coverage that
+  the wrapped `AutoFile` is closed when `BufferedFile` is destroyed. The same
+  pass removed a duplicate `cleanSubVer` assignment left after applying Knots'
+  version-message ordering fix.
 
 ## Original Knots Defects Confirmed
 
@@ -319,6 +326,7 @@ Unit tests:
 
 - `build/bin/test_bitcoin --run_test=versionbits_tests`
 - `build/bin/test_bitcoin --run_test=script_tests`
+- `build/bin/test_bitcoin --run_test=streams_tests`
 - `build/bin/test_bitcoin --run_test=mempool_tests`
 - `build/bin/test_bitcoin --run_test=transaction_tests`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests`
