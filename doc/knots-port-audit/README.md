@@ -777,6 +777,16 @@ Other missing/adapted Knots pieces found during this pass:
   the wrapped `AutoFile` is closed when `BufferedFile` is destroyed. The same
   pass removed a duplicate `cleanSubVer` assignment left after applying Knots'
   version-message ordering fix.
+- The version-message ordering review confirmed Knots'
+  `df874f848a` is present in the port as `9cb0591f30`: the peer's sanitized
+  `cleanSubVer` is stored under `m_subver_mutex` before `nVersion` is published
+  as nonzero. Current Core master still assigns `nVersion` first, leaving a
+  narrow window where readers that use nonzero `nVersion` as the handshake
+  marker can observe an empty `cleanSubVer`. This is peer-display/RPC state
+  hardening, not consensus behavior. Existing `p2p_handshake.py` coverage
+  checks the visible user-agent preservation path; the ordering itself is
+  verified by source comparison because the race is not deterministic enough
+  for a reliable functional assertion.
 - The same follow-up confirmed Knots' raw transaction max-feerate accounting
   fix (`4b3cc3d48e`, `1cee5b1ac7`, `335d928d96`) is present in the port:
   `sendrawtransaction` passes a `CFeeRate` into `BroadcastTransaction`, which
