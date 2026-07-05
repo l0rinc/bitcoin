@@ -62,6 +62,14 @@ Other missing/adapted Knots pieces found during this pass:
   (`f9f7587b59`, ported as `7985bced24`). Without the clamp, a negative
   user-provided threshold is assigned through the unsigned byte-count path. The
   port adds `feature_init.py` coverage for both `-lowmem=1` and `-lowmem=-1`.
+- The `GetArg` / `GetBoolArg` numeric settings review confirmed Knots'
+  `577c04c80e` is present in the port and still absent from current Core
+  master. Core's `SettingToBool(...)` still falls through to `value.get_str()`
+  for non-bool values, so numeric JSON values in `settings.json` throw where
+  string values are accepted. Knots and the port switch on `UniValue` type and
+  call `getValStr()` for both strings and numbers. This is local configuration
+  robustness, not consensus behavior, and is already pinned by
+  `getarg_tests/setting_args`.
 - Knots' external signer fingerprint hardening (`6d2c2259ee`,
   `12eefda89a`, `ee39394ad3`) is already present in this port via the earlier
   wallet/RPC reconciliation commit `e8c2b257ee`, with invalid-fingerprint
@@ -1287,6 +1295,17 @@ under different commits. They are not all proven exploitable.
   still parses only direct `-rpcauth` values and errors on blank entries. This
   is local configuration hardening, not a remote bypass by itself.
 
+- Numeric `settings.json` boolean handling:
+  `577c04c80e`
+
+  Current Core master still implements `SettingToBool(...)` as null/bool/string
+  handling with `value.get_str()` for every non-bool value. Numeric
+  `settings.json` values therefore throw in `GetBoolArg`, even though
+  equivalent string settings are interpreted. Knots and this port treat
+  `UniValue::VNUM` like `UniValue::VSTR` by passing `getValStr()` to
+  `InterpretBool(...)`. This is local configuration robustness and removes a
+  surprising abort-on-access path for numeric settings.
+
 - Wallet symlink/reparse-point path hardening:
   `39f48a142f`, `1f118f18c4`, `ee042e9ad6`
 
@@ -1615,6 +1634,12 @@ Source/manifest checks:
   "for \\(uint32_t i = 0; i <= outer_meta.last_page|LSNs are not reset"` show
   that current Core, actual Knots, and the port all scan the final Berkeley DB
   page when checking LSN cleanliness.
+- `git show origin/master:src/common/args.cpp | rg -n -C 12
+  "SettingToBool"` and `git show origin/master:src/test/getarg_tests.cpp |
+  rg -n -C 8 "set_foo\\(99\\)|set_foo\\(3\\.25\\)|set_foo\\(0\\)"`
+  show current Core still uses the older `value.get_str()` numeric-setting
+  path and expects numeric `GetBoolArg` values to throw, while Knots
+  `577c04c80e` changes those cases to `InterpretBool(value.getValStr())`.
 - `git -C ../knots show 29.x-knots:src/node/blockmanager_args.cpp | rg -n
   "pruneduringinit|PRUNE_TARGET_MANUAL"` confirms actual Knots converts
   `-pruneduringinit=0` to manual pruning during init.
@@ -1819,6 +1844,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=db_tests/berkeley_ro_checks_final_page_lsn
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty`
+- `build/bin/test_bitcoin --run_test=getarg_tests/setting_args
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=util_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
 - `build/bin/test_bitcoin --run_test=util_tests/outputtype_implicit_segwit`
