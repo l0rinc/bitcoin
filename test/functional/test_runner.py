@@ -90,6 +90,7 @@ EXTENDED_SCRIPTS = [
     'feature_pruning.py',
     'feature_dbcrash.py',
     'feature_index_prune.py',
+    'wallet_pruning.py --legacy-wallet',
 ]
 
 # Special script to run each bench sanity check
@@ -163,6 +164,7 @@ BASE_SCRIPTS = [
     'p2p_timeouts.py --v2transport',
     'rpc_signer.py',
     'wallet_signer.py',
+    'wallet_importmulti.py --legacy-wallet',
     'mempool_limit.py',
     'rpc_txoutproof.py',
     'rpc_orphans.py',
@@ -215,6 +217,8 @@ BASE_SCRIPTS = [
     'wallet_createwallet.py --legacy-wallet',
     'wallet_createwallet.py --usecli',
     'wallet_createwallet.py',
+    'wallet_watchonly.py --legacy-wallet',
+    'wallet_watchonly.py --usecli --legacy-wallet',
     'wallet_reindex.py',
     'wallet_reorgsrestore.py',
     'interface_http.py',
@@ -346,6 +350,7 @@ BASE_SCRIPTS = [
     'wallet_send.py',
     'wallet_sendall.py',
     'wallet_sendmany.py',
+    'wallet_inactive_hdchains.py --legacy-wallet',
     'wallet_spend_unconfirmed.py',
     'wallet_rescan_unconfirmed.py',
     'p2p_fingerprint.py',
