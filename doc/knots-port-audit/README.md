@@ -262,6 +262,12 @@ Other missing/adapted Knots pieces found during this pass:
   security issue. The local build is Linux/non-GUI and cannot compile this
   Windows Qt path; source review, `git diff --check`, and a non-GUI
   `test_bitcoin` rebuild were used locally.
+- The same sweep found a port-side Qt block visualizer include drift: final
+  Knots' `blockview.h` includes `util/transaction_identifier.h`, but current
+  Core moved that header to `primitives/transaction_identifier.h`. Original
+  Knots is not affected because the old header path still exists there. The
+  port now uses the current include path as `d749d3deb1`; local Qt compilation
+  remains unavailable because Qt5 is not installed.
 - The same pass found the functional test runner still referenced three Knots
   tests that were absent from the port: `rpc_mempool_info.py`,
   `wallet_import_with_label.py`, and `wallet_upgradewallet.py`. Restoring
@@ -743,6 +749,8 @@ Builds:
 - `cmake --build build --target help | rg -n
   "(qt|bitcoin-qt|test_bitcoin-qt|test_bitcoin_qt)"` returned no configured Qt
   target
+- `rg -n "util/transaction_identifier\\.h" src test -g '!test/cache/**'`
+  returned no matches after the Qt block visualizer include update
 - `cmake -S . -B /tmp/bitcoin-qt-check -DBUILD_GUI=ON -DBUILD_TESTS=ON
   -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_CCACHE=OFF
   -DRDTS_CONSENT=IMPLICIT` failed with `Could NOT find Qt (missing: Qt5_DIR
