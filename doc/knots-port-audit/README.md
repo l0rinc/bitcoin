@@ -192,6 +192,13 @@ Other missing/adapted Knots pieces found during this pass:
   vsize when `-bytespersigop` dominates. `mempool_sigoplimit.py` now covers
   this by requiring `testmempoolaccept` and `sendrawtransaction` to make the
   same max-feerate decision for a high-sigop, low-weight P2WSH spend.
+- The RPC authentication follow-up confirmed Knots' blank `-rpcauth`,
+  `-rpcauthfile`, `-norpcauth`, wallet-restricted rpcauth, and cookie
+  permission/replacement hardening is present in the port. Current Core master
+  still lacks the `-rpcauthfile` and per-token blank `-rpcauth` behavior. The
+  port's `rpc_users.py` coverage exercises multi-entry auth files, blank
+  `-rpcauth` around nonblank entries, `-norpcauth`, wallet-restricted auth
+  entries, and cookie permission/replacement behavior.
 
 ## Original Knots Defects Confirmed
 
@@ -257,6 +264,17 @@ under different commits. They are not all proven exploitable.
   Knots sets temporary cookie permissions before writing, deletes stale temp
   files, deletes before replace, and avoids deleting a cookie replaced by
   another process. These are local RPC-auth file robustness improvements.
+
+- RPC auth-file and blank-token handling:
+  `9f6d3fbe78`, `39bde96b6`, `51588287fb`, `a7a205dc7d`, `edb3686495`,
+  `a34ee591e3`, `0545fb9215`, `a5e2475758`, `adccd25c27`, `1369150c00`
+
+  Knots supports loading rpcauth entries from files, multiple auth entries per
+  file, wallet-restricted rpcauth entries, and explicit disabling with
+  `-norpcauth`. It also treats a blank `-rpcauth` token as a no-op without
+  disrupting other nonblank `-rpcauth` tokens. Current Core's `httprpc.cpp`
+  still parses only direct `-rpcauth` values and errors on blank entries. This
+  is local configuration hardening, not a remote bypass by itself.
 
 - Subprocess fd cleanup before exec:
   `214047ecd3`, `ed5a3b3604`
