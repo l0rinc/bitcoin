@@ -654,7 +654,11 @@ Other missing/adapted Knots pieces found during this pass:
   still lacks the `-rpcauthfile` and per-token blank `-rpcauth` behavior. The
   port's `rpc_users.py` coverage exercises multi-entry auth files, blank
   `-rpcauth` around nonblank entries, `-norpcauth`, wallet-restricted auth
-  entries, and cookie permission/replacement behavior.
+  entries, and cookie permission/replacement behavior. The lingering test
+  `FIXME` about reviving an earlier command-line `-rpcauth=*` after
+  `-norpcauth` is inherited from actual Knots and was not introduced by the
+  port; the test asserts the current Knots behavior around config-file auth
+  restoration.
 - The CJDNS addnode follow-up confirmed current Core already has the
   `GetAddedNodeInfo()` CJDNS conversion from `f8fec8f26d`, while Knots' later
   `AddNode()` duplicate detection for CJDNS addresses with alternate ports
@@ -1572,6 +1576,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_signer_warning`
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_users_cookie_replace`
+- `python3 test/functional/rpc_users.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_users_auth_review`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_bind.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
