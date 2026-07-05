@@ -144,6 +144,7 @@ namespace tfm = tinyformat;
 #include <algorithm>
 #include <attributes.h> // Added for Bitcoin Core
 #include <iostream>
+#include <locale> // Added for Bitcoin Core
 #include <sstream>
 #include <stdexcept> // Added for Bitcoin Core
 #include <util/string.h> // Added for Bitcoin Core
@@ -303,11 +304,23 @@ struct convertToInt<T,true>
     static int invoke(const T& value) { return static_cast<int>(value); }
 };
 
+inline void imbueStreamLocale(std::ostream& out, const std::locale& locale)
+{
+    out.imbue(locale);
+    TINYFORMAT_ASSERT(out.getloc() == locale);
+}
+
+inline void imbueClassicLocale(std::ostream& out)
+{
+    imbueStreamLocale(out, std::locale::classic());
+}
+
 // Format at most ntrunc characters to the given stream.
 template<typename T>
 inline void formatTruncated(std::ostream& out, const T& value, int ntrunc)
 {
     std::ostringstream tmp;
+    imbueStreamLocale(tmp, out.getloc());
     tmp << value;
     std::string result = tmp.str();
     out.write(result.c_str(), (std::min)(ntrunc, static_cast<int>(result.size())));
@@ -929,6 +942,7 @@ inline void formatImpl(std::ostream& out, const char* fmt,
             // munging the resulting string.
             std::ostringstream tmpStream;
             tmpStream.copyfmt(out);
+            TINYFORMAT_ASSERT(tmpStream.getloc() == out.getloc());
             tmpStream.setf(std::ios::showpos);
             arg.format(tmpStream, fmt, fmtEnd, ntrunc);
             std::string result = tmpStream.str(); // allocates... yuck.
@@ -1087,6 +1101,7 @@ template<typename... Args>
 std::string format(FormatStringCheck<sizeof...(Args)> fmt, const Args&... args)
 {
     std::ostringstream oss;
+    detail::imbueClassicLocale(oss);
     format(oss, fmt, args...);
     return oss.str();
 }
@@ -1116,6 +1131,7 @@ inline void format(std::ostream& out, const char* fmt)
 inline std::string format(const char* fmt)
 {
     std::ostringstream oss;
+    detail::imbueClassicLocale(oss);
     format(oss, fmt);
     return oss.str();
 }
@@ -1143,6 +1159,7 @@ template<TINYFORMAT_ARGTYPES(n)>                                          \
 std::string format(const char* fmt, TINYFORMAT_VARARGS(n))                \
 {                                                                         \
     std::ostringstream oss;                                               \
+    detail::imbueClassicLocale(oss);                                      \
     format(oss, fmt, TINYFORMAT_PASSARGS(n));                             \
     return oss.str();                                                     \
 }                                                                         \
