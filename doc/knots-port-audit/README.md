@@ -452,6 +452,13 @@ Other missing/adapted Knots pieces found during this pass:
   it in the peer's `permissions` array. The port now reports the permission as
   `e53bce279f`, with unit coverage for `NetPermissionFlags::All` and
   functional coverage in `p2p_eviction.py` and `p2p_permissions.py`.
+- The onion-inbound whitelist review confirmed Knots' guard against applying
+  address-based whitelist permissions to Tor inbound peers (`61cdc04a83`) is
+  already present in current Core and in this port, so it is not a
+  Core-missing hardening item. The port now adds `p2p_permissions.py` coverage
+  for a real localhost peer connecting through a dedicated `=onion` bind while
+  `-whitelist=noban@127.0.0.1` is configured; the peer is reported as
+  `network="onion"` and receives no whitelist permissions.
 - The v2-transport privacy review confirmed Knots' randomized Tor
   stream-isolation credential prefix (`10397d85ca`) is already present in
   current Core under different commits, so it is not a Core-missing fix. The
@@ -760,8 +767,8 @@ under different commits. They are not all proven exploitable.
   disconnected rather than discouraged. This is network partition/availability
   hardening rather than a consensus-rule change. Current Core already carries
   the related transaction-relay cleanup (`drop MaybePunishNodeForTx`) and the
-  single script-check path; the remaining Core difference is invalid-block
-  peer-punishment behavior.
+  single script-check path and onion-inbound whitelist permission suppression;
+  the remaining Core difference is invalid-block peer-punishment behavior.
 
 - ForceInbound trusted-inbound eviction:
   `3544a26256`, `711dadb546`, `067f80e1b5`, `3db935abd1`
@@ -1080,7 +1087,7 @@ Functional tests:
 - `python3 test/functional/p2p_eviction.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_eviction_forceinbound`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
-  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_forceinbound`
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_onion_whitelist`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_accept.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_datacarrier.py --configfile build/test/config.ini`
