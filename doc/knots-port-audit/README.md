@@ -305,6 +305,18 @@ Other missing/adapted Knots pieces found during this pass:
   call started. Current Core and actual Knots both retain the `current_tip`
   logic. The port now restores it and updates `rpc_blockchain.py` for the
   current no-UI `Error:` stderr prefix (`bf459451a2`).
+- The shutdown/wait RPC review confirmed Knots' retained
+  `m_tip_block_cv` wake-up from `node.shutdown_request` (`d2c1bd10db`, ported
+  as `1ba5009294`) is present in the port and still absent from current Core's
+  direct `node.shutdown_request` path. Core already wakes waiters from
+  `Interrupt()`, but Knots and the port also cover GUI-triggered shutdowns that
+  call `shutdown_request` directly. This is RPC/shutdown hardening, not
+  consensus. Rerunning the strengthened port `feature_shutdown.py` exposed a
+  port-side test starvation bug: the framework defaults to `rpcthreads=2`, and
+  the test occupied both workers with `waitfornewblock` and
+  `waitforblockheight` before polling `getrpcinfo`. Actual Knots' own shutdown
+  test starts only one long call and passes. The port test now sets
+  `-rpcthreads=4` as `29e4c5fb39`.
 - The exact-patch review found Knots' actionable pruned-index startup error
   (`4a4e4e253e`) was still missing after adapting onto the port's newer
   two-stage block/undo-data availability check. Actual Knots already contains
@@ -1804,6 +1816,18 @@ Source/manifest checks:
   test/functional/feature_reduced_data_utxo_height.py
   test/functional/p2p_handshake.py` shows the current source/test coverage for
   the RDTS activation-boundary and BIP110 service-limit paths.
+- `git show --stat --patch --minimal 1ba5009294 8fad5801e0 d2c1bd10db`,
+  `git show origin/master:src/init.cpp | rg -n
+  "shutdown_request|Interrupt\\(|m_tip_block_cv|notify_all" -C 5`,
+  `git -C ../knots show 29.x-knots:src/init.cpp | rg -n
+  "shutdown_request|Interrupt\\(|m_tip_block_cv|notify_all" -C 5`, and
+  `rg -n
+  "shutdown_request|m_tip_block_cv|waitTipChanged|waitfornewblock|waitforblockheight|rpcthreads"
+  src/init.cpp src/node/interfaces.cpp src/rpc/blockchain.cpp
+  test/functional/feature_shutdown.py test/functional/feature_init.py
+  test/functional/test_framework/util.py` show the port and actual Knots retain
+  the direct `shutdown_request` wait-wakeup while current Core only wakes these
+  long-poll waiters through the later `Interrupt()` path.
 - `git show origin/master:src/wallet/db.cpp | sed -n '20,70p'` and
   `git -C ../knots show 29.x-knots:src/wallet/db.cpp | sed -n '20,75p'`
   show that current Core lacks Knots' `ignore_paths` skip list in
@@ -2362,6 +2386,13 @@ Functional tests:
 - `python3 test/functional/interface_rest.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_interface_rest_listmempooltransactions`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_init.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_init_wait_port --portseed=27522`
+- `python3 ../knots/test/functional/feature_shutdown.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_shutdown_wait_knots --portseed=27521`
+- `python3 test/functional/feature_shutdown.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_shutdown_wait_port2 --portseed=27523`
 - `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_config_args_port_mapping_2`
 - `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
