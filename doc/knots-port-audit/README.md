@@ -791,6 +791,16 @@ under different commits. They are not all proven exploitable.
   reserved-bit signalling thresholds. This is operator/security visibility
   hardening around possible soft-fork signalling, not a consensus-rule change.
 
+- RPC multi-warning string-mode visibility:
+  `e4e4a81317`
+
+  Current Core's deprecated `getblockchaininfo`, `getmininginfo`, and
+  `getnetworkinfo` warning string mode returns only the last active warning.
+  Knots and this port join all active warnings with newlines, matching the
+  non-deprecated array mode's visibility instead of silently dropping earlier
+  warnings. This is operator/security visibility hardening for deprecated RPC
+  clients, not a consensus change.
+
 - DNS seed bootstrap policy:
   `277edb9009`
 
@@ -1044,6 +1054,8 @@ Unit tests:
   --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
+- `build/bin/test_bitcoin --run_test=node_warnings_tests
+  --catch_system_error=no --log_level=nothing --report_level=no`
 - `./build/src/secp256k1/bin/tests --target=ellswift_xdh_bad_scalar_tests --iterations=16`
 - `./build/src/secp256k1/bin/tests --target=ellswift --iterations=16`
 
