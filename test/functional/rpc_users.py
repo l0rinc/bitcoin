@@ -11,6 +11,7 @@ from test_framework.util import (
 )
 
 import http.client
+import json
 import os
 from pathlib import Path
 import platform
@@ -22,13 +23,14 @@ import sys
 from typing import Optional
 
 
-def call_with_auth(node, user, password, *, uripath='/', method='getbestblockhash'):
+def call_with_auth(node, user, password, *, uripath='/', method='getbestblockhash', params=None):
     url = urllib.parse.urlparse(node.url)
     headers = {"Authorization": "Basic " + str_to_b64str('{}:{}'.format(user, password))}
+    body = json.dumps({"method": method, "params": [] if params is None else params})
 
     conn = http.client.HTTPConnection(url.hostname, url.port)
     conn.connect()
-    conn.request('POST', uripath, f'{{"method": "{method}"}}', headers)
+    conn.request('POST', uripath, body, headers)
     resp = conn.getresponse()
     resp.data = resp.read()
     conn.close()
@@ -174,7 +176,7 @@ class HTTPBasicsTest(BitcoinTestFramework):
                     assert b'"Requested wallet does not exist or is not loaded"' in resp.data
             if wallet_restrictions:
                 self.log.info('importmempool...')
-                resp = call_with_auth(node, user, password, method='importmempool')
+                resp = call_with_auth(node, user, password, method='importmempool', params=[str(node.datadir_path / 'missing-mempool.dat')])
                 assert_equal(404, resp.status)
                 assert b'"Method not available for wallet-restricted RPC users"' in resp.data
 

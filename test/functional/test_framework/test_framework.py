@@ -112,6 +112,10 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         self.rpc_timeout = 60  # Wait for up to 60 seconds for the RPC server to respond
         self.supports_cli = True
         self.bind_to_localhost_only = True
+        self._wallet_option_descriptors = True
+        self._wallet_option_legacy = True
+        self._wallet_option_restrict = False
+        self._wallet_options_added = False
         self.parse_args(test_file)
         self.default_wallet_name = "default_wallet"
         self.wallet_data_filename = "wallet.dat"
@@ -124,7 +128,7 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         # By default the wallet is not required. Set to true by skip_if_no_wallet().
         # Can also be set to None to indicate that the wallet will be used if available.
         # When False or None, we ignore wallet_names in setup_nodes().
-        self.uses_wallet = False
+        self.uses_wallet = None if self._wallet_options_added else False
         # Disable ThreadOpenConnections by default, so that adding entries to
         # addrman will not result in automatic connections to them.
         self.disable_autoconnect = True
@@ -215,6 +219,10 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         # source: https://stackoverflow.com/questions/48796169/how-to-fix-ipykernel-launcher-py-error-unrecognized-arguments-in-jupyter/56349168#56349168
         parser.add_argument("-f", "--fff", help="a dummy argument to fool ipython", default="1")
         self.options = parser.parse_args()
+        if self._wallet_option_restrict:
+            assert self._wallet_option_descriptors != self._wallet_option_legacy
+            if self.options.descriptors != self._wallet_option_descriptors:
+                parser.error("--descriptors is not supported by this test" if not self._wallet_option_descriptors else "--legacy-wallet is not supported by this test")
         if self.options.timeout_factor == 0:
             self.options.timeout_factor = 999
         self.options.timeout_factor = self.options.timeout_factor or (4 if self.options.valgrind else 1)
@@ -417,6 +425,21 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         raise NotImplementedError
 
     # Public helper methods. These can be accessed by the subclass test scripts.
+
+    def add_wallet_options(self, parser, *, descriptors=True, legacy=True):
+        """Declare wallet types supported by this test.
+
+        The common parser already provides --descriptors/--legacy-wallet. This
+        compatibility helper records restrictions for ported Knots tests without
+        adding duplicate command-line options.
+        """
+        assert descriptors or legacy
+        self._wallet_options_added = True
+        self._wallet_option_descriptors = descriptors
+        self._wallet_option_legacy = legacy
+        self._wallet_option_restrict = descriptors != legacy
+        if self._wallet_option_restrict:
+            parser.set_defaults(descriptors=descriptors)
 
     def add_nodes(self, num_nodes: int, extra_args=None, *, rpchost=None, versions=None):
         """Instantiate TestNode objects.
@@ -1047,6 +1070,8 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         self.uses_wallet = True
         if not self.is_wallet_compiled():
             raise SkipTest("wallet has not been compiled.")
+        if not self.options.descriptors:
+            raise SkipTest("legacy wallets can no longer be created.")
 
     def skip_if_no_wallet_tool(self):
         """Skip the running test if bitcoin-wallet has not been compiled."""
