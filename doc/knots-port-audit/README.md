@@ -729,6 +729,15 @@ under different commits. They are not all proven exploitable.
   `fork()`. Core's current `RunCommandParseJSON` path does not request
   `close_fds`, but the Knots/port Tor subprocess path does.
 
+- Port mapping disabled when not listening:
+  `95c8a63102`
+
+  Knots force-disables explicit `-upnp=1` and `-natpmp=1` values when parameter
+  interaction leaves the node with `-listen=0`. Current Core no longer exposes
+  UPnP, but its NAT-PMP interaction still uses a soft disable, so an explicit
+  `-listen=0 -natpmp=1` can survive until `StartMapPort(...)`. This is local
+  network-surface/privacy hardening, not a consensus issue.
+
 - HTTP RPC bind failure behavior:
   `57becdf59e` plus follow-up listen/bind cleanup commits
 
@@ -1083,7 +1092,8 @@ Functional tests:
 - `python3 test/functional/feature_maxuploadtarget.py --configfile build/test/config.ini`
 - `python3 test/functional/interface_rest.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
-- `python3 test/functional/feature_config_args.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_config_args_portmap_2`
 - `python3 test/functional/feature_help.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_includeconf.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_fee_estimates_persist.py --configfile build/test/config.ini`
