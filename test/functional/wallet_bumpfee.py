@@ -142,6 +142,10 @@ class BumpFeeTest(BitcoinTestFramework):
         self.sync_mempools((rbf_node, peer_node))
         assert rbfid in rbf_node.getrawmempool() and rbfid in peer_node.getrawmempool()
 
+        non_wallet_txid = "ff" * 32
+        for rpc in (rbf_node.bumpfee, rbf_node.psbtbumpfee):
+            assert_raises_rpc_error(-5, "Invalid or non-wallet transaction id", rpc, non_wallet_txid)
+
         for key in ["totalFee", "feeRate"]:
             assert_raises_rpc_error(-3, "Unexpected key {}".format(key), rbf_node.bumpfee, rbfid, {key: NORMAL})
 
