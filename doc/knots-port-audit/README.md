@@ -992,8 +992,9 @@ Other missing/adapted Knots pieces found during this pass:
   the current lazy `txid_hex` helper instead of removed `calc_sha256()`. These
   were not original Knots defects; unmodified Knots uses the older
   `ChainstateRole` and transaction-hash APIs. The ZMQ-enabled
-  `interface_zmq.py` run now passes, including a fresh rerun from a separate
-  `build-zmq` tree configured with `-DWITH_ZMQ=ON`.
+  `interface_zmq.py` run now passes, including a fresh rerun from
+  `/mnt/my_storage/build-zmq-audit`, a separate tree configured with
+  `-DWITH_ZMQ=ON`.
 - The fee-estimator follow-up confirmed Knots' `TxConfirmStats::Read` overflow
   guard (`163d3e5c13`, ported as `aeaf84b7d5`) is present while current Core
   still multiplies `scale * maxPeriods` before checking the one-week bound.
@@ -1516,8 +1517,9 @@ under different commits. They are not all proven exploitable.
   notification and still routes raw-block disk-read failures through
   `zmq_strerror(errno)`. Knots keeps notifiers active after transient send/read
   failures and logs the failing block hash without using unrelated ZMQ errno
-  text. This is notification availability and diagnostics hardening, not a
-  consensus issue.
+  text; the helper's name is stale in the port, but its body now matches
+  Knots' "call all notifiers and do not erase failed ones" behavior. This is
+  notification availability and diagnostics hardening, not a consensus issue.
 
 - Fee-estimator file read overflow guard:
   `163d3e5c13`
@@ -1685,6 +1687,21 @@ Source/manifest checks:
   show current Core still uses the older `value.get_str()` numeric-setting
   path and expects numeric `GetBoolArg` values to throw, while Knots
   `577c04c80e` changes those cases to `InterpretBool(value.getValStr())`.
+- `git show origin/master:src/zmq/zmqnotificationinterface.cpp | rg -n
+  "TryForEachAndRemoveFailed|notifier->Shutdown|notifiers.erase" -C 4`,
+  `git -C ../knots show 29.x-knots:src/zmq/zmqnotificationinterface.cpp |
+  rg -n "TryForEachAndRemoveFailed|notifier->Shutdown|notifiers.erase" -C 4`,
+  and `rg -n "TryForEachAndRemoveFailed|notifier->Shutdown|notifiers.erase"
+  src/zmq/zmqnotificationinterface.cpp -C 4` show current Core still shuts
+  down and erases failed ZMQ notifiers, while Knots and the port keep the
+  notifier list intact.
+- `git show origin/master:src/zmq/zmqpublishnotifier.cpp | rg -n
+  "Can't read block|zmqError" -C 3`, `git -C ../knots show
+  29.x-knots:src/zmq/zmqpublishnotifier.cpp | rg -n
+  "Can't read block|zmqError" -C 3`, and `rg -n
+  "Can't read block|zmqError" src/zmq/zmqpublishnotifier.cpp -C 3` show
+  current Core still logs raw-block disk-read failures via `zmqError`, while
+  Knots and the port log the failing block hash directly.
 - `git -C ../knots show 29.x-knots:src/node/blockmanager_args.cpp | rg -n
   "pruneduringinit|PRUNE_TARGET_MANUAL"` confirms actual Knots converts
   `-pruneduringinit=0` to manual pruning during init.
@@ -1713,6 +1730,10 @@ Builds:
   -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DBUILD_GUI=OFF
   -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
 - `cmake --build build-zmq --target bitcoind bitcoin-cli -j4`
+- `cmake -S . -B /mnt/my_storage/build-zmq-audit -DWITH_ZMQ=ON
+  -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF
+  -DBUILD_GUI=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
+- `cmake --build /mnt/my_storage/build-zmq-audit --target bitcoind bitcoin-cli -j4`
 - `cmake -S . -B /tmp/bitcoin-fuzz-wallet-bdb -DBUILD_FUZZ_BINARY=ON
   -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_GUI=OFF -DWITH_CCACHE=OFF
   -DRDTS_CONSENT=IMPLICIT`
@@ -2065,6 +2086,9 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_compactblocks_header_guard_final`
 - `python3 test/functional/p2p_invalid_block.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_p2p_invalid_block_inbound_punish2`
+- `python3 test/functional/interface_zmq.py --configfile
+  /mnt/my_storage/build-zmq-audit/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_interface_zmq_audit_rerun`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_dos_header_tree_checkpoint`
