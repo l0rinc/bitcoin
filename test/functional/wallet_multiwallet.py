@@ -6,6 +6,7 @@
 
 Verify that a bitcoind node can load multiple wallet files
 """
+from decimal import Decimal
 from threading import Thread
 import os
 import platform
@@ -112,7 +113,7 @@ class MultiWalletTest(BitcoinTestFramework):
         self.start_node(0)
         with node.assert_debug_log(unexpected_msgs=['Error scanning directory entries under'], expected_msgs=[]):
             result = node.listwalletdir()
-            assert_equal(result, {'wallets': [{'name': self.default_wallet_name}]})
+            assert_equal(result, {'wallets': [{'name': self.default_wallet_name, "warnings": []}]})
         os.chmod(data_dir(node, 'wallets'), 0)
         with node.assert_debug_log(expected_msgs=['Error scanning directory entries under']):
             result = node.listwalletdir()
@@ -199,9 +200,14 @@ class MultiWalletTest(BitcoinTestFramework):
             return
 
         self.log.info("Test for errors from too many levels of symbolic links")
+        os.mkdir(wallet_dir(node, 'directory_symlink_target'))
+        os.symlink('directory_symlink_target', wallet_dir(node, 'directory_symlink'))
         os.mkdir(wallet_dir(node, 'self_walletdat_symlink'))
         os.symlink('wallet.dat', wallet_dir(node, 'self_walletdat_symlink/wallet.dat'))
-        with node.assert_debug_log(expected_msgs=["Error while scanning wallet dir"]):
+        with node.assert_debug_log(expected_msgs=[
+            "Not recursively searching symlink/reparse point",
+            "Error while scanning wallet dir",
+        ]):
             walletlist = node.listwalletdir()['wallets']
         assert_equal(sorted(map(lambda w: w['name'], walletlist)), sorted(in_wallet_dir))
 
