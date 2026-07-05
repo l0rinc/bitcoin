@@ -48,10 +48,13 @@ void AssertWriteReadRoundTrip(const FlatFileSeq& seq, const FlatFilePos& pos, co
 
 void AssertReadOnlyMissingDoesNotCreate(const FlatFileSeq& seq, const FlatFilePos& pos)
 {
-    assert(!fs::exists(seq.FileName(pos)));
+    const fs::path path{seq.FileName(pos)};
+    const bool parent_exists{fs::exists(path.parent_path())};
+    assert(!fs::exists(path));
     FILE* file{seq.Open(pos, /*read_only=*/true)};
     assert(file == nullptr);
-    assert(!fs::exists(seq.FileName(pos)));
+    assert(!fs::exists(path));
+    assert(fs::exists(path.parent_path()) == parent_exists);
 }
 } // namespace
 
@@ -76,6 +79,11 @@ FUZZ_TARGET(flatfile, .init = initialize_flatfile)
 
     assert(seq.Open(FlatFilePos{}, fuzzed_data_provider.ConsumeBool()) == nullptr);
     AssertReadOnlyMissingDoesNotCreate(seq, FlatFilePos{100, 0});
+    const fs::path missing_parent_dir{data_dir / "read_only_missing_parent"};
+    fs::remove_all(missing_parent_dir);
+    FlatFileSeq missing_parent_seq{missing_parent_dir, "m", chunk_size};
+    AssertReadOnlyMissingDoesNotCreate(missing_parent_seq, FlatFilePos{0, 0});
+    assert(!fs::exists(missing_parent_dir));
 
     LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 100)
     {
