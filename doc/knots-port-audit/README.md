@@ -1508,6 +1508,11 @@ under different commits. They are not all proven exploitable.
   for unknown version schemas, individual unexpected versionbits, or BIP320
   reserved-bit signalling thresholds. This is operator/security visibility
   hardening around possible soft-fork signalling, not a consensus-rule change.
+  The port keeps current Core's BIP323 deployment width at
+  `VERSIONBITS_NUM_BITS = 5` while scanning the historical 29 BIP9 signal bits
+  through `VERSIONBITS_NUM_WARNING_BITS`, and the refreshed
+  `feature_versionbits_warning.py` run passes against both the port and
+  unmodified Knots.
 
 - RPC multi-warning string-mode visibility:
   `e4e4a81317`
@@ -1928,6 +1933,8 @@ Builds:
 Unit tests:
 
 - `build/bin/test_bitcoin --run_test=versionbits_tests`
+- `build/bin/test_bitcoin --run_test=versionbits_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=script_tests`
 - `build/bin/test_bitcoin --run_test=streams_tests`
 - `build/bin/test_bitcoin --run_test=chainparams_tests --catch_system_error=no
@@ -2027,6 +2034,14 @@ Functional tests:
 - `python3 test/functional/feature_bip9_max_activation_height.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_versionbits_warning.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_versionbits_warning`
+- `python3 test/functional/feature_versionbits_warning.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_review_port
+  --portseed=26442`
+- `python3 test/functional/feature_versionbits_warning.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_review_knots
+  --portseed=26443`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_ua_escape_3`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
