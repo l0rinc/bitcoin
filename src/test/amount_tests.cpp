@@ -113,6 +113,17 @@ BOOST_AUTO_TEST_CASE(GetFeeTest)
     feeRate = CFeeRate(maxInt);
     BOOST_CHECK(feeRate * 2 == CFeeRate(static_cast<int64_t>(maxInt) * 2));
     BOOST_CHECK(2 * feeRate == CFeeRate(static_cast<int64_t>(maxInt) * 2));
+    // Check that CFeeRate multiplication saturates instead of overflowing.
+    const CAmount max_amount{std::numeric_limits<CAmount>::max()};
+    const CAmount min_amount{std::numeric_limits<CAmount>::min()};
+    BOOST_CHECK(CFeeRate(max_amount) * 2 == CFeeRate(max_amount));
+    BOOST_CHECK(2 * CFeeRate(max_amount) == CFeeRate(max_amount));
+    BOOST_CHECK(CFeeRate(min_amount) * 2 == CFeeRate(min_amount));
+    BOOST_CHECK(2 * CFeeRate(min_amount) == CFeeRate(min_amount));
+    BOOST_CHECK(CFeeRate(min_amount) * -1 == CFeeRate(max_amount));
+    BOOST_CHECK(-1 * CFeeRate(min_amount) == CFeeRate(max_amount));
+    BOOST_CHECK(CFeeRate(max_amount) * -2 == CFeeRate(min_amount));
+    BOOST_CHECK(-2 * CFeeRate(max_amount) == CFeeRate(min_amount));
     // check with zero fee rate
     feeRate = CFeeRate(0);
     BOOST_CHECK(feeRate * 5 == CFeeRate(0));
