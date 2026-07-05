@@ -44,6 +44,17 @@ CBlock DummyBlockWithTransactions(size_t tx_count)
     return block;
 }
 
+void AssertReceivedBlockMetadata(const CBlockIndex& index, const CBlock& block, const FlatFilePos& pos)
+    EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+{
+    assert(index.nTx == block.vtx.size());
+    assert(index.nFile == pos.nFile);
+    assert(index.nDataPos == pos.nPos);
+    assert(index.nUndoPos == 0);
+    assert(index.nStatus & BLOCK_VALID_TRANSACTIONS);
+    assert(index.nStatus & BLOCK_HAVE_DATA);
+}
+
 bool IsAncestorOrDescendant(const CBlockIndex& pindex, const CBlockIndex& other)
 {
     return other.GetAncestor(pindex.nHeight) == &pindex || pindex.GetAncestor(other.nHeight) == &other;
@@ -184,8 +195,11 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                     } else {
                         size_t nTx = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 1000);
                         CBlock block{DummyBlockWithTransactions(nTx)}; // Only the transaction count is used.
-                        FlatFilePos pos(0, fuzzed_data_provider.ConsumeIntegralInRange<int>(1, 1000));
+                        FlatFilePos pos(
+                            fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 1000),
+                            fuzzed_data_provider.ConsumeIntegralInRange<int>(1, 1000));
                         chainman.ReceivedBlockTransactions(block, index, pos);
+                        AssertReceivedBlockMetadata(*index, block, pos);
                         assert(index->nStatus & BLOCK_VALID_TRANSACTIONS);
                         assert(index->nStatus & BLOCK_HAVE_DATA);
                     }
@@ -319,8 +333,11 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                 CBlockIndex* index = pruned_blocks[i];
                 assert(!(index->nStatus & BLOCK_HAVE_DATA));
                 CBlock block{DummyBlockWithTransactions(index->nTx)}; // Set the number of tx to the prior value.
-                FlatFilePos pos(0, fuzzed_data_provider.ConsumeIntegralInRange<int>(1, 1000));
+                FlatFilePos pos(
+                    fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 1000),
+                    fuzzed_data_provider.ConsumeIntegralInRange<int>(1, 1000));
                 chainman.ReceivedBlockTransactions(block, index, pos);
+                AssertReceivedBlockMetadata(*index, block, pos);
                 assert(index->nStatus & BLOCK_VALID_TRANSACTIONS);
                 assert(index->nStatus & BLOCK_HAVE_DATA);
                 pruned_blocks.erase(pruned_blocks.begin() + i);
