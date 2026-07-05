@@ -233,6 +233,15 @@ Other missing/adapted Knots pieces found during this pass:
   current Core has no `getmempoolinfo(with_fee_histogram=...)` or REST
   histogram surface. `policyestimator_tests` and `mempool_fee_histogram.py`
   pass with the ported code.
+- The wallet witness-only follow-up confirmed Knots' null-provider guard for
+  `fundrawtransaction(..., {"segwit_inputs_only": true})` (`2a09a34129`) is
+  present in the port. Current Core does not expose the `segwit_inputs_only`
+  coin-control option, so this is Knots-only wallet RPC crash hardening rather
+  than a Core-missing fix. It was not introduced by this port, and current
+  unmodified Knots `29.x-knots` already contains the fix. The port now adds
+  `wallet_fundrawtransaction.py` coverage for an unsolvable native-segwit
+  watch-only output: the RPC returns `Insufficient funds` instead of
+  dereferencing a null signing provider.
 
 ## Original Knots Defects Confirmed
 
@@ -372,9 +381,11 @@ under different commits. They are not all proven exploitable.
   callers are internal/tests. The `85c8d477b0` fee-histogram unsigned-decrement
   fix matters for Knots' `getmempoolinfo(with_fee_histogram=...)` and
   `/rest/mempool/info/with_fee_histogram`, but current Core has no
-  corresponding histogram surface. The BDB cleanup/data-loss fixes matter for
-  this port because BDB support is retained, but current Core master no longer
-  has the same BDB write-environment files.
+  corresponding histogram surface. The wallet `2a09a34129` null-provider guard
+  matters for Knots' `segwit_inputs_only` coin-control option, but current Core
+  has no matching option. The BDB cleanup/data-loss fixes matter for this port
+  because BDB support is retained, but current Core master no longer has the
+  same BDB write-environment files.
 
 - Ephemeral-dust reorg policy hardening:
   Knots' mempool policy keeps an unswept ephemeral-dust child from re-entering
@@ -402,8 +413,10 @@ key handling, `LocalServiceInfo::nScore` saturation, miner `addPackageTxs`
 overflow, compact-block witness mutation checks, `LoadChainTip` UB,
 `SetStdinEcho` UB, fd-limit overflow/RLIMIT_INFINITY handling, RPC credentials
 hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, feebumper
-combined-fee crash, wallet coin-selection boolean amount fix, BDB overflow data
-lengths, miniscript assert guards, and most cpp-subprocess memory/Windows fixes.
+combined-fee crash, wallet coin-selection boolean amount fix, precomputed
+transaction-data lifetime hardening (CVE-2024-52911), Tor-control excessive-line
+OOM hardening, BDB overflow data lengths, miniscript assert guards, and most
+cpp-subprocess memory/Windows fixes.
 
 ## Open Risks
 
@@ -504,6 +517,7 @@ Functional tests:
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_block_times.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_sweepprivkeys.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_implicitsegwit.py --configfile build/test/config.ini`
