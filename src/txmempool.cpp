@@ -682,6 +682,7 @@ std::vector<CTxMemPoolEntryRef> CTxMemPool::entryAll() const
     for (const auto& it : GetSortedScoreWithTopology()) {
         ret.emplace_back(*it);
     }
+    Assume(ret.size() == mapTx.size());
     return ret;
 }
 
@@ -696,6 +697,7 @@ std::vector<TxMempoolInfo> CTxMemPool::infoAll() const
         ret.push_back(GetInfo(it));
     }
 
+    Assume(ret.size() == mapTx.size());
     return ret;
 }
 
