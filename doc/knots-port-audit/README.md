@@ -682,6 +682,14 @@ Other missing/adapted Knots pieces found during this pass:
 - Raw transaction, package, and PSBT RPC coverage now passes against the port.
   This covers Knots-touched max burn handling, package max fee/burn arguments,
   and PSBT base64 parameter handling with `=` padding characters.
+- Knots' `signrawtransaction*` fee-result extension (`83c29e9702`,
+  `6ea56f2c1a`) is present in the port and absent from current Core. When all
+  signed inputs expose known amounts and witness data, the RPC result includes
+  `fee` as input amounts minus outputs. Existing `feature_segwit.py` covers the
+  wallet RPC path; the port now also asserts the deterministic
+  `signrawtransactionwithkey` P2SH-P2WSH fee result, and the strengthened test
+  passes against unmodified Knots. This is wallet/RPC metadata, not consensus
+  behavior.
 - Mempool/TRUC verification exposed a port-introduced validation omission:
   the legacy `AcceptToMemoryPool(..., bypass_limits=true)` wrapper did not
   include Knots' `"truc"` ignore token. As a result, disconnected-block
@@ -1729,6 +1737,10 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_fee_estimates_persist_save_rpc`
 - `python3 test/functional/feature_segwit.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_segwit_mempool_hash`
+- `python3 test/functional/rpc_signrawtransactionwithkey.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_signrawtransactionwithkey_fee`
+- `python3 test/functional/rpc_signrawtransactionwithkey.py --configfile ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_knots_rpc_signrawtransactionwithkey_fee`
 - `python3 test/functional/feature_startupnotify.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_startupnotify_multi`
 - `python3 test/functional/feature_notifications.py --configfile build/test/config.ini
