@@ -12,6 +12,7 @@
 #include <test/fuzz/util.h>
 #include <util/translation.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <optional>
@@ -55,4 +56,19 @@ FUZZ_TARGET(kitchen_sink)
     const std::vector<bool> bits = BytesToBits(bytes);
     const std::vector<uint8_t> bytes_decoded = BitsToBytes(bits);
     assert(bytes == bytes_decoded);
+
+    const size_t bit_count{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 512)};
+    std::vector<bool> arbitrary_bits;
+    arbitrary_bits.reserve(bit_count);
+    for (size_t i{0}; i < bit_count; ++i) {
+        arbitrary_bits.push_back(fuzzed_data_provider.ConsumeBool());
+    }
+    const std::vector<uint8_t> encoded_bits{BitsToBytes(arbitrary_bits)};
+    const std::vector<bool> decoded_bits{BytesToBits(encoded_bits)};
+    assert(decoded_bits.size() == encoded_bits.size() * 8);
+    assert(decoded_bits.size() >= arbitrary_bits.size());
+    assert(std::equal(arbitrary_bits.begin(), arbitrary_bits.end(), decoded_bits.begin()));
+    assert(std::all_of(decoded_bits.begin() + arbitrary_bits.size(), decoded_bits.end(),
+        [](bool bit) { return !bit; }));
+    assert(BitsToBytes(decoded_bits) == encoded_bits);
 }
