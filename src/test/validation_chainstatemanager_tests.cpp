@@ -64,6 +64,17 @@ CBlock DummyBlockWithTransactions(size_t tx_count)
     return block;
 }
 
+void CheckReceivedBlockTransactionsMetadata(const CBlockIndex& index, const CBlock& block, const FlatFilePos& pos)
+    EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+{
+    BOOST_CHECK_EQUAL(index.nTx, block.vtx.size());
+    BOOST_CHECK_EQUAL(index.nFile, pos.nFile);
+    BOOST_CHECK_EQUAL(index.nDataPos, pos.nPos);
+    BOOST_CHECK_EQUAL(index.nUndoPos, 0U);
+    BOOST_CHECK(index.nStatus & BLOCK_VALID_TRANSACTIONS);
+    BOOST_CHECK(index.nStatus & BLOCK_HAVE_DATA);
+}
+
 struct ChainstateSnapshotState {
     size_t chainstates;
     const Chainstate* current;
@@ -941,6 +952,24 @@ BOOST_FIXTURE_TEST_CASE(received_block_transactions_skips_failed_unlinked_child,
         BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(parent), 1U);
     }
 
+    chainman.CheckBlockIndex();
+}
+
+BOOST_FIXTURE_TEST_CASE(received_block_transactions_records_block_metadata, TestChain100Setup)
+{
+    ChainstateManager& chainman{*Assert(m_node.chainman)};
+
+    LOCK(chainman.GetMutex());
+    CBlockIndex* tip{chainman.ActiveChain().Tip()};
+    CBlockIndex* child{chainman.m_blockman.AddToBlockIndex(ChildHeader(*tip, /*nonce=*/6), chainman.m_best_header)};
+
+    CBlock block{DummyBlockWithTransactions(/*tx_count=*/3)};
+    const FlatFilePos pos{7, 11};
+    chainman.ReceivedBlockTransactions(block, child, pos);
+
+    CheckReceivedBlockTransactionsMetadata(*child, block, pos);
+    BOOST_REQUIRE(child->HaveNumChainTxs());
+    BOOST_CHECK_EQUAL(chainman.ActiveChainstate().setBlockIndexCandidates.count(child), 1U);
     chainman.CheckBlockIndex();
 }
 
