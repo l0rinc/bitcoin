@@ -287,7 +287,7 @@ static RPCMethod getrawtransaction()
     const std::vector<RPCResult> verbosity_1_block{
         {RPCResult::Type::BOOL, "in_active_chain", /*optional=*/true, "Whether specified block is in the active chain or not (only present with explicit \"blockhash\" argument)"},
         {RPCResult::Type::STR_HEX, "blockhash", /*optional=*/true, "the block hash"},
-        {RPCResult::Type::NUM, "confirmations", /*optional=*/true, "The confirmations"},
+        {RPCResult::Type::NUM, "confirmations", /*optional=*/true, "The number of confirmations"},
         {RPCResult::Type::NUM, "confirmations_assumed", /*optional=*/true, "The number of unverified confirmations (eg, in an assumed-valid UTXO set)"},
         {RPCResult::Type::NUM_TIME, "blocktime", /*optional=*/true, "The block time expressed in " + UNIX_EPOCH_TIME},
         {RPCResult::Type::NUM, "time", /*optional=*/true, "Same as \"blocktime\""},
