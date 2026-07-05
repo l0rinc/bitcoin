@@ -225,6 +225,15 @@ class ConfArgsTest(BitcoinTestFramework):
                     extra_args=[f'-nowallet={value}'],
                 )
 
+    def test_consensusrules(self):
+        self.log.info('Test -consensusrules option validation')
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=['-consensusrules=unknown'],
+            expected_msg='Error: Unknown rule specified in -consensusrules: unknown',
+        )
+        self.start_node(0, extra_args=['-consensusrules=rdts'])
+        self.stop_node(0)
+
     def test_log_buffer(self):
         with self.nodes[0].assert_debug_log(expected_msgs=["[warning] Parsed potentially confusing double-negative -listen=0\n"]):
             self.start_node(0, extra_args=['-nolisten=0'])
@@ -522,6 +531,7 @@ class ConfArgsTest(BitcoinTestFramework):
         self.test_config_file_parser()
         self.test_config_file_log()
         self.test_invalid_command_line_options()
+        self.test_consensusrules()
         self.test_ignored_conf()
         self.test_ignored_default_conf()
         self.test_testnet3_deprecation_msg()
