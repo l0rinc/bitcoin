@@ -594,7 +594,11 @@ hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, feebumper
 combined-fee crash, wallet coin-selection boolean amount fix, precomputed
 transaction-data lifetime hardening (CVE-2024-52911), Tor-control excessive-line
 OOM hardening, I2P SAM `SESSION CREATE` request redaction, BDB overflow data
-lengths, miniscript assert guards, and most cpp-subprocess memory/Windows fixes.
+lengths and btree-level validation, PSBT proprietary-field preservation during
+combining, monotonic `uptime`, first-run pruned-disk-space warning rounding,
+Windows exclusive `wbx` opens, LevelDB file-size initialization, wallet
+`sendall` transaction-size error handling, miniscript assert guards, and most
+cpp-subprocess memory/Windows fixes.
 
 ## Open Risks
 
@@ -694,6 +698,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=blockfilter_index_tests`
 - `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
+- `./build/src/secp256k1/bin/tests --target=ellswift_xdh_bad_scalar_tests --iterations=16`
+- `./build/src/secp256k1/bin/tests --target=ellswift --iterations=16`
 
 Functional tests:
 
