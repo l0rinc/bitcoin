@@ -592,6 +592,13 @@ Other missing/adapted Knots pieces found during this pass:
   mainnet and testnet DNS seed lists. The port now matches Knots as
   `0899f88da9`, with `chainparams_tests` coverage asserting those seed names
   are absent.
+- The custom signet review confirmed Knots' `-signetblocktime` option
+  (`d8434da3c1`) is present in the port and absent from current Core. This
+  changes the proof-of-work target spacing only for a custom signet that also
+  sets `-signetchallenge`; it is not a mainnet/testnet consensus change. The
+  port now adds `chainparams_tests` coverage as `3316d65fcc` for the default
+  600-second signet spacing, a 30-second custom spacing, and the missing
+  challenge / non-positive value error paths.
 - The `ignore_rejects` follow-up found an original Knots RDTS policy-bypass
   edge in `PolicyScriptVerifyFlags()`: the broad
   `non-mandatory-script-verify-flag` ignore and the grouped
@@ -1145,7 +1152,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=versionbits_tests`
 - `build/bin/test_bitcoin --run_test=script_tests`
 - `build/bin/test_bitcoin --run_test=streams_tests`
-- `build/bin/test_bitcoin --run_test=chainparams_tests`
+- `build/bin/test_bitcoin --run_test=chainparams_tests --catch_system_error=no
+  --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=mempool_tests`
 - `build/bin/test_bitcoin --run_test=transaction_tests`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests`
