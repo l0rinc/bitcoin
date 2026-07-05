@@ -14,6 +14,7 @@ import shutil
 import stat
 
 from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.messages import MAGIC_BYTES
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.test_node import ErrorMatch
 from test_framework.util import (
@@ -65,6 +66,14 @@ class MultiWalletTest(BitcoinTestFramework):
         if os.path.isdir(wallet_dir(node, name)):
             return wallet_dir(node, name, "wallet.dat")
         return wallet_dir(node, name)
+
+    def write_fake_sqlite_wallet(self, path):
+        wallet_data = bytearray(512)
+        wallet_data[:16] = b"SQLite format 3\x00"
+        wallet_data[68:72] = MAGIC_BYTES["regtest"]
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(wallet_data)
 
     def run_test(self):
         self.check_chmod = True
@@ -251,6 +260,11 @@ class MultiWalletTest(BitcoinTestFramework):
         # now if wallets/ exists again, but the rootdir is specified as the walletdir, w4 and w5 should still be loaded
         os.rename(wallet_dir2, wallet_dir(node))
         self.restart_node(0, ['-nowallet', '-walletdir=' + data_dir(node)])
+        self.write_fake_sqlite_wallet(data_dir(node, "ordinary_sqlite_marker", self.wallet_data_filename))
+        self.write_fake_sqlite_wallet(data_dir(node, "blocks", "skipped_wallet", self.wallet_data_filename))
+        wallet_names_from_dir = [wallet["name"] for wallet in node.listwalletdir()["wallets"]]
+        assert "ordinary_sqlite_marker" in wallet_names_from_dir
+        assert all("skipped_wallet" not in wallet_name for wallet_name in wallet_names_from_dir)
         node.loadwallet("w4")
         node.loadwallet("w5")
         assert_equal(set(node.listwallets()), {"w4", "w5"})
