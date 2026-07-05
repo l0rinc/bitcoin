@@ -334,6 +334,15 @@ Other missing/adapted Knots pieces found during this pass:
   `wallet_dump.py` and `wallet_import_rescan.py` now reach the expected
   current-Core skip path after restoring the ported `AddressType` test helper
   and current `BitcoinTestFramework(__file__)` constructors (`9bfe1fb892`).
+- The wallet backup/export review confirmed Knots' legacy-wallet export
+  surfaces are present in the port source: `dumpmasterprivkey` (`e4acb761d4`)
+  is registered, and `dumpwallet` writes HD key paths and HD seed ids as
+  parseable key parameters instead of hiding them in comments (`2504a07906`,
+  `66a0e619dd`). This is backup/restore correctness for legacy wallets, not a
+  consensus or network issue. On the current Core base the descriptor-wallet
+  `wallet_hd.py` path passes and confirms `dumpmasterprivkey` rejects
+  descriptor wallets; the legacy `wallet_dump.py` runtime path still skips
+  because new legacy wallets can no longer be created.
 - A later file-presence sweep found the Qt wrapper for the same sweep feature
   was still missing even though the RPC and functional test were already
   ported. The port now restores Knots' `SweepPrivKeyDialog`, wires it through
@@ -1452,7 +1461,12 @@ Functional tests:
   (skipped: legacy wallets can no longer be created)
 - `python3 test/functional/wallet_watchonly.py --configfile build/test/config.ini --usecli --legacy-wallet`
   (skipped: legacy wallets can no longer be created)
+- `python3 test/functional/wallet_hd.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_hd_dumpmaster`
 - `python3 test/functional/wallet_dump.py --configfile build/test/config.ini`
+  (skipped: legacy wallets can no longer be created)
+- `python3 test/functional/wallet_dump.py --configfile build/test/config.ini
+  --legacy-wallet --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_dump_hd_metadata_legacy`
   (skipped: legacy wallets can no longer be created)
 - `python3 test/functional/wallet_import_rescan.py --configfile build/test/config.ini`
   (skipped: legacy wallets can no longer be created)
