@@ -147,6 +147,13 @@ Other missing/adapted Knots pieces found during this pass:
   `wallet_dump.py` and `wallet_import_rescan.py` now reach the expected
   current-Core skip path after restoring the ported `AddressType` test helper
   and current `BitcoinTestFramework(__file__)` constructors (`9bfe1fb892`).
+- CLI/help verification exposed a port-side bitcoin-cli conversion-table drift:
+  current server metadata no longer advertises legacy-only `sethdseed` and
+  `addmultisigaddress` conversions, while descriptor-compatible legacy import
+  RPCs still advertise their boolean arguments. The client conversion table now
+  matches the live `dump_all_command_conversions` metadata as `b2cd725240`.
+  `interface_bitcoin_cli.py` also now treats the old `-paytxfee` display line
+  as optional when scale-checking `-getinfo` output (`b1c4cd76e5`).
 
 ## Original Knots Defects Confirmed
 
@@ -273,6 +280,7 @@ Builds:
 - `cmake -B build -DRDTS_CONSENT=RUNTIME_WARN`
 - `cmake --build build --target bitcoind bitcoin-cli test_bitcoin -j4`
 - `cmake --build build --target bitcoind -j4`
+- `cmake --build build --target bitcoin-cli -j4`
 - Original Knots repro build:
   `cmake -S ../knots -B ../knots/build-repro -DRDTS_CONSENT=RUNTIME_WARN`
   and `cmake --build ../knots/build-repro --target bitcoind bitcoin-cli -j4`
@@ -309,10 +317,15 @@ Functional tests:
 - `python3 test/functional/feature_maxuploadtarget.py --configfile build/test/config.ini`
 - `python3 test/functional/interface_rest.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_config_args.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_help.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_includeconf.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_fee_estimates_persist.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_softwareexpiry.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_torcontrol.py --configfile build/test/config.ini`
+- `python3 test/functional/interface_bitcoin_cli.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_help.py --configfile build/test/config.ini`
 - `python3 test/functional/tool_cli_completion.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_signer.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini`
