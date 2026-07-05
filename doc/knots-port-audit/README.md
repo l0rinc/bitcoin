@@ -283,6 +283,17 @@ Other missing/adapted Knots pieces found during this pass:
   completes as a file argument, and the zsh `bitcoin-cli` completion file from
   Knots had not been carried into the port. The generated bash/zsh completions
   are now refreshed as `c45749ae43`, and `tool_cli_completion.py` passes.
+- A final generated-release-artifact review against Knots' tip update
+  (`f41f01e1e6`) found `doc/man/bitcoind.1`,
+  `doc/man/bitcoin-qt.1`, and `share/examples/bitcoin.conf` were still stale
+  for several live port options: Knots' `-maxstaleoutbound`,
+  `-consensusrules`, and `-subdustfeepenalty`, plus the current-base
+  `-privatebroadcast` and its `-maxconnections` note. The port now refreshes
+  those entries as `5fd414d066`. Full manpage regeneration was not possible in
+  this local build because `help2man` is unavailable and the configured build
+  has no Qt, `bitcoin-tx`, or `bitcoin-util` binaries, so the patch was limited
+  to option blocks verified against current `bitcoind --help`; the Qt manpage
+  mirrors the same shared node option text.
 - `feature_fee_estimates_persist.py` passes, covering the `savefeeestimates`
   RPC and shutdown persistence path.
 - Wallet sweep coverage passes on the current descriptor-wallet base:
@@ -1097,6 +1108,15 @@ Builds:
   bitcoin_wallet -j2`
 - `cmake --build build --target test_bitcoin -j2`
 - `cmake --build build --target bitcoind -j2`
+- `cmake --build build --target bitcoind bitcoin-cli bitcoin-wallet -j4`
+- `build/bin/bitcoind --help | rg -n
+  "maxstaleoutbound|consensusrules|privatebroadcast|subdustfeepenalty" -C 2`
+- `rg -n "maxstaleoutbound|consensusrules|privatebroadcast|subdustfeepenalty"
+  doc/man/bitcoind.1 doc/man/bitcoin-qt.1 share/examples/bitcoin.conf`
+- `BUILDDIR=$PWD/build contrib/devtools/gen-manpages.py
+  --skip-missing-binaries` failed after skipping the disabled `bitcoin`,
+  `bitcoin-tx`, `bitcoin-util`, and `bitcoin-qt` binaries because `help2man` is
+  not installed locally
 - Original Knots repro build:
   `cmake -S ../knots -B ../knots/build-repro -DRDTS_CONSENT=RUNTIME_WARN`
   and `cmake --build ../knots/build-repro --target bitcoind bitcoin-cli -j4`
