@@ -9,9 +9,17 @@
 #include <test/util/time.h>
 
 #include <common/pcp.h>
+#include <compat/compat.h>
 #include <logging.h>
+#include <netaddress.h>
 #include <util/check.h>
 #include <util/threadinterrupt.h>
+#include <util/time.h>
+
+#include <algorithm>
+#include <array>
+#include <cstring>
+#include <utility>
 
 using namespace std::literals;
 
@@ -28,6 +36,77 @@ void port_map_target_init()
 {
     LogInstance().DisableLogging();
 }
+
+namespace {
+
+CNetAddr IPv4Addr(uint32_t addr)
+{
+    in_addr ipv4;
+    ipv4.s_addr = htonl(addr);
+    return CNetAddr{ipv4};
+}
+
+class PCPResponseSock final : public ZeroSock
+{
+public:
+    PCPResponseSock(CNetAddr local_addr, std::array<uint8_t, 8> response)
+        : m_local_addr{std::move(local_addr)}, m_response{response}
+    {
+    }
+
+    ssize_t Recv(void* buf, size_t len, int) const override
+    {
+        if (m_consumed) return -1;
+
+        const size_t copy_len{std::min(len, m_response.size())};
+        std::memcpy(buf, m_response.data(), copy_len);
+        m_consumed = true;
+        return copy_len;
+    }
+
+    int GetSockName(sockaddr* name, socklen_t* name_len) const override
+    {
+        return CService{m_local_addr, 1}.GetSockAddr(name, name_len) ? 0 : -1;
+    }
+
+    bool Wait(std::chrono::milliseconds, Event requested, Event* occurred = nullptr) const override
+    {
+        if (occurred != nullptr) {
+            *occurred = m_consumed ? 0 : requested;
+        }
+        return true;
+    }
+
+private:
+    const CNetAddr m_local_addr;
+    const std::array<uint8_t, 8> m_response;
+    mutable bool m_consumed{false};
+};
+
+void AssertMalformedPCPDowngradeRejected(const std::array<uint8_t, 8>& response)
+{
+    MockableSteadyClock::SetMockTime(MockableSteadyClock::INITIAL_MOCK_TIME);
+
+    const CNetAddr gateway_addr{IPv4Addr(0xc0a80001)}; // 192.168.0.1
+    const CNetAddr local_addr{IPv4Addr(0xc0a80006)}; // 192.168.0.6
+    in_addr bind_any;
+    bind_any.s_addr = htonl(INADDR_ANY);
+
+    CreateSock = [local_addr, response](int domain, int type, int protocol) -> std::unique_ptr<Sock> {
+        if (domain == AF_INET && type == SOCK_DGRAM && protocol == IPPROTO_UDP) {
+            return std::make_unique<PCPResponseSock>(local_addr, response);
+        }
+        return std::unique_ptr<Sock>();
+    };
+
+    CThreadInterrupt interrupt;
+    const auto res{PCPRequestPortMap(PCP_NONCE, gateway_addr, CNetAddr{bind_any}, 1234, 1000, interrupt, 1, TIMEOUT)};
+    const MappingError* err{std::get_if<MappingError>(&res)};
+    Assert(err);
+    Assert(*err == MappingError::NETWORK_ERROR);
+}
+
+} // namespace
 
 FUZZ_TARGET(pcp_request_port_map, .init = port_map_target_init)
 {
@@ -59,6 +138,14 @@ FUZZ_TARGET(pcp_request_port_map, .init = port_map_target_init)
         mapping->ToString();
     }
 
+    AssertMalformedPCPDowngradeRejected({
+        0x00, 0x81, 0xff, 0x01, // valid opcode, but result is 0xff01, not UNSUPP_VERSION
+        0x00, 0x00, 0x00, 0x00,
+    });
+    AssertMalformedPCPDowngradeRejected({
+        0x00, 0x80, 0x00, 0x01, // valid result, but wrong opcode for a PCP MAP response
+        0x00, 0x00, 0x00, 0x00,
+    });
     CreateSock = CreateSockOrig;
 }
 
