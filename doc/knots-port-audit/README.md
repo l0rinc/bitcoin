@@ -853,6 +853,18 @@ Other missing/adapted Knots pieces found during this pass:
   outbound full-relay, block-relay, address-fetch, and private-broadcast peers
   are disconnected without discouraging their address. `net_tests` now covers
   that full matrix.
+- The compact-block duplicate-`blocktxn` review found Knots' empty partial
+  header guard (`569ceb0df4`) missing from the port, even though current Core
+  master and unmodified Knots both carry it. A failed compact-block
+  reconstruction clears the `PartiallyDownloadedBlock` header while leaving the
+  partial-block pointer available for fallback block download; a duplicate
+  `blocktxn` response from the same peer then reached the port's
+  `Assume(LookupBlockIndex(partialBlock.header.hashPrevBlock))` path with an
+  empty header. The port now removes the request and marks the peer
+  misbehaving before using the empty header. The same pass restored the active
+  duplicate-`blocktxn` functional coverage by removing a stale duplicate test
+  definition and dropped a current-Core disconnect expectation that conflicts
+  with Knots' invalid-block punishment relaxation.
 - The v2-transport privacy review confirmed Knots' randomized Tor
   stream-isolation credential prefix (`10397d85ca`) is already present in
   current Core under different commits, so it is not a Core-missing fix. The
@@ -1468,7 +1480,8 @@ under different commits. They are not all proven exploitable.
 High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
 key handling, `LocalServiceInfo::nScore` saturation, miner `addPackageTxs`
-overflow, compact-block witness mutation checks, `LoadChainTip` UB,
+overflow, compact-block witness mutation checks and repeated-`blocktxn`
+empty-header guard, `LoadChainTip` UB,
 reindex-chainstate periodic dbcache flushes (`ac7c0590ef`, rebased from Core
 `84820561dc`; current Core carries this through `1d4e3d1b18`),
 requested-block `ReadBlock(..., expected_hash)` checks in net processing,
@@ -1515,6 +1528,12 @@ Source/manifest checks:
   `git -C ../knots show 29.x-knots:src/wallet/db.cpp | sed -n '20,75p'`
   show that current Core lacks Knots' `ignore_paths` skip list in
   `ListDatabases(...)`.
+- `git show origin/master:src/net_processing.cpp | rg -n
+  "previous compact block reconstruction attempt failed|header.IsNull"` and
+  `git -C ../knots show 29.x-knots:src/net_processing.cpp | rg -n
+  "previous compact block reconstruction attempt failed|header.IsNull"` show
+  that current Core and unmodified Knots both carry the repeated-`blocktxn`
+  empty-header guard that was missing from the port.
 - `git log origin/master --follow --oneline -- <remaining source-looking
   missing path>` for old `core_write`, fee, libevent, orphanage, transaction
   identifier, epochguard, and test-helper paths
@@ -1702,6 +1721,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=sanity_tests`
 - `build/bin/test_bitcoin --run_test=banman_tests`
 - `build/bin/test_bitcoin --run_test=hash_tests`
+- `build/bin/test_bitcoin --run_test=blockencodings_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=blockfilter_index_tests`
 - `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
 - `build/bin/test_bitcoin --run_test=db_tests,walletdb_tests,wallet_tests`
@@ -1866,6 +1887,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_getblockfrompeer_no_header`
 - `python3 test/functional/rpc_mempool_info.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile build/test/config.ini`
+- `python3 test/functional/p2p_compactblocks.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_compactblocks_header_guard_final`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_dos_header_tree_checkpoint`
@@ -1993,6 +2016,11 @@ Functional tests:
   `test/functional/p2p_filter.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_filter_filtered_witness`
   passed on unmodified Knots, including the new
   `MSG_FILTERED_WITNESS_BLOCK` witness-preservation assertion.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_compactblocks.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_compactblocks_header_guard`
+  reached and passed the repeated-`blocktxn` section on unmodified Knots,
+  logging `previous compact block reconstruction attempt failed`, then failed
+  later on an unrelated invalid-`sendcmpct` disconnect expectation.
 - Original Knots cross-check:
   `test/functional/rpc_scanblocks.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_rpc_scanblocks_invalid_action`
   passed on unmodified Knots, including the new in-progress
