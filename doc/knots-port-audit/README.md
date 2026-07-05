@@ -102,9 +102,10 @@ Other missing/adapted Knots pieces found during this pass:
   compatibility for Knots-style `add_wallet_options(...)` calls after rebasing
   onto current Core's common `--descriptors` / `--legacy-wallet` parser. This
   was a port-side test-framework issue, fixed as `6f1d551e45`. The same pass
-  made the `importmempool` wallet-restriction assertion in `rpc_users.py` pass
-  a dummy `filepath`, so the RPC reaches Knots' `EnsureNotWalletRestricted`
-  guard instead of the generic argument-count help path.
+  made the wallet-restriction assertions in `rpc_users.py` pass dummy
+  filepaths and already-loaded wallet names, so the RPCs reach Knots'
+  `EnsureNotWalletRestricted` / wallet-name guards instead of generic
+  argument-count or file-access paths.
 - The RPC cookie replacement audit confirmed the port has Knots'
   `g_generated_cookie` content check (`50b7a50a61`) and added functional
   coverage that overwrites `.cookie` after startup, stops through the original
@@ -1450,6 +1451,15 @@ under different commits. They are not all proven exploitable.
   this auth area is Knots' auth-file, wallet restriction, and blank-token
   handling described above.
 
+  A follow-up test pass also covered Knots' method-level wallet-restriction
+  hardening (`5edd9495d8`, `52db62f6fa`, `78b8b5f465`, `32ce5f22c0`):
+  wallet-restricted users cannot call `importmempool`, `dumptxoutset`,
+  `loadtxoutset`, `restorewallet`, wallet import/export/backup/restore, or
+  `migratewallet`; and `createwallet`, `loadwallet`, and `unloadwallet` cannot
+  operate on a different loaded wallet. The strengthened `rpc_users.py` passes
+  on both the port and unmodified Knots, so this did not expose an original
+  Knots defect.
+
 - Numeric `settings.json` boolean handling:
   `577c04c80e`
 
@@ -2732,6 +2742,12 @@ Functional tests:
 - `python3 test/functional/rpc_whitelist.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_whitelist_hashed_auth_review_port
   --portseed=31940`
+- `python3 test/functional/rpc_users.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_users_wallet_restricted_matrix_port
+  --portseed=31980`
+- `python3 test/functional/rpc_users.py --configfile ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_users_wallet_restricted_matrix_knots
+  --portseed=31990`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_getrpcwhitelist_auth_review_port
