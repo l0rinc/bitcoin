@@ -1942,6 +1942,41 @@ BOOST_AUTO_TEST_CASE(bitdeque_padded_empty_boundary)
     }
 }
 
+BOOST_AUTO_TEST_CASE(bitdeque_shrink_to_fit_preserves_contents)
+{
+    bitdeque<8> bits;
+    std::deque<bool> expected;
+    for (int i{0}; i < 19; ++i) {
+        bits.push_back(i % 3 == 0);
+        expected.push_back(i % 3 == 0);
+    }
+    for (int i{0}; i < 5; ++i) {
+        bits.pop_front();
+        expected.pop_front();
+    }
+    for (int i{0}; i < 3; ++i) {
+        bits.pop_back();
+        expected.pop_back();
+    }
+
+    bits.shrink_to_fit();
+    BOOST_CHECK_EQUAL(bits.size(), expected.size());
+    BOOST_CHECK_EQUAL(bits.empty(), expected.empty());
+    for (size_t i{0}; i < expected.size(); ++i) {
+        BOOST_CHECK_EQUAL(bits[i], expected[i]);
+    }
+
+    bits.push_front(false);
+    expected.push_front(false);
+    bits.push_back(true);
+    expected.push_back(true);
+    BOOST_CHECK_EQUAL(bits.front(), expected.front());
+    BOOST_CHECK_EQUAL(bits.back(), expected.back());
+    for (size_t i{0}; i < expected.size(); ++i) {
+        BOOST_CHECK_EQUAL(bits[i], expected[i]);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(vecdeque_clear_keeps_capacity)
 {
     VecDeque<int> queue;
