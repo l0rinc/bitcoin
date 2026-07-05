@@ -1542,7 +1542,10 @@ under different commits. They are not all proven exploitable.
   serialized fee-estimates file tracks more than one week of confirmations.
   Knots checks `scale > 1008 / maxPeriods` first and only multiplies after the
   corrupt-file bound has passed. This is local corrupt-file hardening for
-  `fee_estimates.dat`, not remote network exposure.
+  `fee_estimates.dat`, not remote network exposure. Source comparison confirmed
+  actual Knots carries the same guard in its older `src/policy/fees.cpp`, while
+  the port carries it in current Core's split
+  `src/policy/fees/block_policy_estimator.cpp`.
 
 - External or Knots-only surfaces:
   `d637873230` fixes `GetBlockFileInfo` bounds handling, but the obvious
@@ -1881,6 +1884,11 @@ Builds:
   "all_messages\\.back|Join\\(all_messages" -C 3`
 - `rg -n "all_messages\\.back|Join\\(all_messages|warning 1"
   src/node/warnings.cpp src/test/node_warnings_tests.cpp`
+- `sed -n '421,475p' src/policy/fees/block_policy_estimator.cpp`
+- `git show origin/master:src/policy/fees/block_policy_estimator.cpp |
+  sed -n '421,475p'`
+- `git -C ../knots grep -n
+  "maxConfirms|maxPeriods = confAvg.size|scale >" 29.x-knots -- src`
 - `BUILDDIR=$PWD/build contrib/devtools/gen-manpages.py
   --skip-missing-binaries` failed after skipping the disabled `bitcoin`,
   `bitcoin-tx`, `bitcoin-util`, and `bitcoin-qt` binaries because `help2man` is
@@ -1929,6 +1937,9 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=miner_tests`
 - `build/bin/test_bitcoin
   --run_test=policyestimator_tests/read_rejects_fee_estimates_with_oversized_scale`
+- `build/bin/test_bitcoin
+  --run_test=policyestimator_tests/read_rejects_fee_estimates_with_oversized_scale
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=policyestimator_tests`
 - `build/bin/test_bitcoin --run_test=codex32_tests`
 - `build/bin/test_bitcoin --run_test=caches_tests`
