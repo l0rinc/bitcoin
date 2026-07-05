@@ -36,6 +36,7 @@
 #include <deque>
 #include <fstream>
 #include <limits>
+#include <locale>
 #include <map>
 #include <optional>
 #include <string>
@@ -96,6 +97,27 @@ public:
         return Assume(get_ip1() != 5);
     }
 };
+
+class DecimalCommaNumpunct final : public std::numpunct<char>
+{
+    char do_decimal_point() const override { return ','; }
+    char do_thousands_sep() const override { return '\''; }
+    std::string do_grouping() const override { return "\3"; }
+};
+
+class ScopedGlobalLocale
+{
+    const std::locale m_previous;
+
+public:
+    explicit ScopedGlobalLocale(const std::locale& locale) : m_previous{std::locale::global(locale)} {}
+    ~ScopedGlobalLocale() { std::locale::global(m_previous); }
+};
+
+std::locale DecimalCommaLocale()
+{
+    return {std::locale::classic(), new DecimalCommaNumpunct};
+}
 } // namespace
 
 BOOST_AUTO_TEST_CASE(util_check)
@@ -608,6 +630,27 @@ BOOST_AUTO_TEST_CASE(strprintf_numbers)
 }
 #undef B
 #undef E
+
+BOOST_AUTO_TEST_CASE(strprintf_locale_independent)
+{
+    const std::string strprintf_double_classic{strprintf("%.2f", 1234.5)};
+    const std::string strprintf_space_double_classic{strprintf("% .2f", 1234.5)};
+    const std::string tostring_double_classic{util::ToString(1234.5)};
+
+    BOOST_CHECK_EQUAL(strprintf_double_classic, "1234.50");
+    BOOST_CHECK_EQUAL(strprintf_space_double_classic, " 1234.50");
+    BOOST_CHECK_EQUAL(tostring_double_classic, "1234.5");
+
+    {
+        const ScopedGlobalLocale scoped_locale{DecimalCommaLocale()};
+        BOOST_CHECK(std::locale{} != std::locale::classic());
+        BOOST_CHECK_EQUAL(strprintf("%.2f", 1234.5), strprintf_double_classic);
+        BOOST_CHECK_EQUAL(strprintf("% .2f", 1234.5), strprintf_space_double_classic);
+        BOOST_CHECK_EQUAL(util::ToString(1234.5), tostring_double_classic);
+    }
+
+    BOOST_CHECK(std::locale{} == std::locale::classic());
+}
 
 BOOST_AUTO_TEST_CASE(util_mocktime)
 {
