@@ -8,6 +8,7 @@
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <util/check.h>
+#include <util/overflow.h>
 
 #include <cstdint>
 #include <limits>
@@ -44,6 +45,18 @@ FUZZ_TARGET(fee_rate)
         CFeeRate integer_zero{0};
         integer_zero += precise_rate;
         Assert(integer_zero == precise_rate);
+    }
+
+    {
+        const CAmount multiplier_fee{fuzzed_data_provider.ConsumeIntegral<CAmount>()};
+        const int multiplier{fuzzed_data_provider.ConsumeIntegral<int>()};
+        const CFeeRate multiplier_rate{multiplier_fee};
+        const CFeeRate expected_rate{SaturatingMul(multiplier_fee, int64_t{multiplier})};
+        Assert(multiplier_rate * multiplier == expected_rate);
+        Assert(multiplier * multiplier_rate == expected_rate);
+        Assert(multiplier_rate * multiplier == multiplier * multiplier_rate);
+        Assert(multiplier_rate * 0 == CFeeRate{0});
+        Assert(0 * multiplier_rate == CFeeRate{0});
     }
 
     const CAmount another_satoshis_per_k = ConsumeMoney(fuzzed_data_provider);
