@@ -612,6 +612,15 @@ Other missing/adapted Knots pieces found during this pass:
   a consensus issue. `wallet_multiwallet.py` now asserts the symlink-scan
   warning, and the same run exposed and fixed a stale missing `Decimal` import
   in that Knots test.
+- The wallet metadata compatibility review confirmed Knots'
+  `5321a6a55a` is present in the port and absent from current Core master:
+  version-2 `CKeyMetadata` records contain one unsupported key-origin flag byte
+  between create time and later HD metadata, and Knots preserves that byte even
+  though the flag semantics are no longer supported. Current Core still
+  deserializes only version/create-time for this legacy version and would leave
+  the byte unread/drop it on rewrite. This is old wallet metadata preservation,
+  not consensus behavior. The port now pins it with
+  `walletdb_tests/key_metadata_preserves_unsupported_flags`.
 - A follow-up wallet directory review confirmed Knots' node-data skip list
   (`283cd1f065`) is present in the port and absent from current Core master.
   Current Core has the later iterator error-handling shape, but its
