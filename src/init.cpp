@@ -1681,12 +1681,12 @@ bool UserProtocolRulesCheck()
 bool UserProtocolRulesConsent()
 {
     if (g_rdts_consent == RDTSConsentFlag::IMPLICIT) {
-        LogPrintf("User already consented to '%s' consensus rules (at installation)\n", CONSENSUSRULES_REQUIRED);
+        LogInfo("User already consented to '%s' consensus rules (at installation)", CONSENSUSRULES_REQUIRED);
         return true;
     }
     for (const auto& rulesok : gArgs.GetArgs(CONSENSUSRULES_CONFIG_NAME)) {
         if (rulesok == CONSENSUSRULES_REQUIRED) {
-            LogPrintf("User already consented to '%s' consensus rules (in config)\n", CONSENSUSRULES_REQUIRED);
+            LogInfo("User already consented to '%s' consensus rules (in config)", CONSENSUSRULES_REQUIRED);
             return true;
         }
     }
@@ -1721,13 +1721,13 @@ bool UserProtocolRulesConsent()
 
     const bool consent = uiInterface.ThreadSafeQuestion(
         _("Attention:") + Untranslated(" ") + msg,
-        msg_manual.original
-        , "Attention", CClientUIInterface::MSG_WARNING | CClientUIInterface::BTN_ABORT);
+        msg_manual.original,
+        CClientUIInterface::MSG_WARNING | CClientUIInterface::BTN_ABORT);
 
     if (consent) {
         if (gArgs.GetSettingsPath()) {
             // Write to settings.json so we don't ask anymore
-            LogPrintf("User interactively consented to '%s' consensus rules (%s)\n", CONSENSUSRULES_REQUIRED, "remembering for next time");
+            LogInfo("User interactively consented to '%s' consensus rules (%s)", CONSENSUSRULES_REQUIRED, "remembering for next time");
             gArgs.LockSettings([&](common::Settings& settings) {
                 auto& setting = settings.rw_settings[CONSENSUSRULES_CONFIG_NAME];
                 if (setting.isArray()) {
@@ -1739,7 +1739,7 @@ bool UserProtocolRulesConsent()
             });
             gArgs.WriteSettingsFile();
         } else {
-            LogPrintf("User interactively consented to '%s' consensus rules (%s)\n", CONSENSUSRULES_REQUIRED, "settings disabled, so can't save");
+            LogInfo("User interactively consented to '%s' consensus rules (%s)", CONSENSUSRULES_REQUIRED, "settings disabled, so can't save");
         }
     }
 

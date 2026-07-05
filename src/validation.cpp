@@ -2615,8 +2615,6 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
     uint256 block_hash{block.GetHash()};
     assert(*pindex->phashBlock == block_hash);
-    const bool parallel_script_checks{m_chainman.m_script_check_queue_enabled && m_chainman.GetCheckQueue().HasThreads()};
-
     const auto time_start{SteadyClock::now()};
     const CChainParams& params{m_chainman.GetParams()};
 
@@ -2838,7 +2836,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
     // For BIP9 deployments, get the activation height dynamically
     const auto reduced_data_start_height = DeploymentActiveAt(*pindex, m_chainman, Consensus::DEPLOYMENT_REDUCED_DATA)
-        ? m_chainman.m_versionbitscache.StateSinceHeight(pindex->pprev, params.GetConsensus(), Consensus::DEPLOYMENT_REDUCED_DATA)
+        ? m_chainman.m_versionbitscache.Info(*pindex, params.GetConsensus(), Consensus::DEPLOYMENT_REDUCED_DATA).active_since.value_or(std::numeric_limits<int>::max())
         : std::numeric_limits<int>::max();
 
     const CheckTxInputsRules chk_input_rules{DeploymentActiveAt(*pindex, m_chainman, Consensus::DEPLOYMENT_REDUCED_DATA) ? CheckTxInputsRules::OutputSizeLimit : CheckTxInputsRules::None};

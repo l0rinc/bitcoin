@@ -3848,7 +3848,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                 LogDebug(BCLog::NET, "peer lacks NODE_REDUCED_DATA and already have %u non-BIP110 outbound peers (limit %u), %s\n",
                          m_num_non_bip110_outbound,
                          m_opts.maxstaleoutbound,
-                         pfrom.DisconnectMsg(fLogIPs));
+                         pfrom.DisconnectMsg());
                 pfrom.fDisconnect = true;
                 return;
             }
@@ -3859,9 +3859,8 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                      m_opts.maxstaleoutbound,
                      pfrom.ConnectionTypeAsString());
         }
-        peer->m_their_services = nServices;
+        peer.m_their_services = nServices;
         pfrom.SetAddrLocal(addrMe);
-        peer->m_starting_height = starting_height;
 
         // Only initialize the Peer::TxRelay m_relay_txs data structure if:
         // - this isn't an outbound block-relay-only connection, and
@@ -3871,8 +3870,8 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         //   the peer may turn on transaction relay later.
         if (!pfrom.IsBlockOnlyConn() &&
             !pfrom.IsFeelerConn() &&
-            (fRelay || (peer->m_our_services & NODE_BLOOM))) {
-            auto* const tx_relay = peer->SetTxRelay();
+            (fRelay || (peer.m_our_services & NODE_BLOOM))) {
+            auto* const tx_relay = peer.SetTxRelay();
             {
                 LOCK(tx_relay->m_bloom_filter_mutex);
                 tx_relay->m_relay_txs = fRelay; // set to true after we get the first filter* message
