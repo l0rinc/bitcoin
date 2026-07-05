@@ -62,6 +62,10 @@ inline void ChaCha20Aligned::Keystream(std::span<std::byte> output) noexcept
     std::byte* c = output.data();
     size_t blocks = output.size() / BLOCKLEN;
     assert(blocks * BLOCKLEN == output.size());
+    const size_t initial_blocks{blocks};
+    const uint64_t final_block_counter{static_cast<uint64_t>(input[8]) + initial_blocks};
+    const uint32_t final_counter{static_cast<uint32_t>(final_block_counter)};
+    const uint32_t final_nonce_first{input[9] + static_cast<uint32_t>(final_block_counter >> 32)};
 
     uint32_t x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15;
     uint32_t j4, j5, j6, j7, j8, j9, j10, j11, j12, j13, j14, j15;
@@ -151,6 +155,8 @@ inline void ChaCha20Aligned::Keystream(std::span<std::byte> output) noexcept
         if (blocks == 1) {
             input[8] = j12;
             input[9] = j13;
+            Assume(input[8] == final_counter);
+            Assume(input[9] == final_nonce_first);
             return;
         }
         blocks -= 1;
@@ -165,6 +171,10 @@ inline void ChaCha20Aligned::Crypt(std::span<const std::byte> in_bytes, std::spa
     std::byte* c = out_bytes.data();
     size_t blocks = out_bytes.size() / BLOCKLEN;
     assert(blocks * BLOCKLEN == out_bytes.size());
+    const size_t initial_blocks{blocks};
+    const uint64_t final_block_counter{static_cast<uint64_t>(input[8]) + initial_blocks};
+    const uint32_t final_counter{static_cast<uint32_t>(final_block_counter)};
+    const uint32_t final_nonce_first{input[9] + static_cast<uint32_t>(final_block_counter >> 32)};
 
     uint32_t x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15;
     uint32_t j4, j5, j6, j7, j8, j9, j10, j11, j12, j13, j14, j15;
@@ -271,6 +281,8 @@ inline void ChaCha20Aligned::Crypt(std::span<const std::byte> in_bytes, std::spa
         if (blocks == 1) {
             input[8] = j12;
             input[9] = j13;
+            Assume(input[8] == final_counter);
+            Assume(input[9] == final_nonce_first);
             return;
         }
         blocks -= 1;
