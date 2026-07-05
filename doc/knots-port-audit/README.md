@@ -1010,6 +1010,8 @@ High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
 key handling, `LocalServiceInfo::nScore` saturation, miner `addPackageTxs`
 overflow, compact-block witness mutation checks, `LoadChainTip` UB,
+reindex-chainstate periodic dbcache flushes (`ac7c0590ef`, rebased from Core
+`84820561dc`; current Core carries this through `1d4e3d1b18`),
 requested-block `ReadBlock(..., expected_hash)` checks in net processing,
 `SetStdinEcho` UB, fd-limit overflow/RLIMIT_INFINITY handling, RPC credentials
 hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, randomized Tor
