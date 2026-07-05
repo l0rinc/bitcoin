@@ -366,7 +366,16 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                     if (fresh) CCoinsCacheEntry::SetFresh(*it, sentinel);
                     dirty_count += !was_dirty && it->second.IsDirty();
                 }
-                auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, coins_map, /*will_erase=*/true)};
+                const bool will_erase{fuzzed_data_provider.ConsumeBool()};
+                const size_t expected_total_count{[&] {
+                    if (will_erase) return coins_map.size();
+                    size_t count{coins_map.size()};
+                    for (const auto& [_, entry] : coins_map) {
+                        count -= (entry.IsDirty() || entry.IsFresh()) && entry.coin.IsSpent();
+                    }
+                    return count;
+                }()};
+                auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, coins_map, will_erase)};
                 assert(cursor.GetDirtyCount() == dirty_count);
                 assert(cursor.GetTotalCount() == coins_map.size());
                 uint256 best_block{coins_view_cache.GetBestBlock()};
@@ -375,7 +384,13 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 if (is_db && best_block.IsNull()) best_block = uint256::ONE;
                 coins_view_cache.BatchWrite(cursor, best_block);
                 assert(cursor.GetDirtyCount() == 0);
-                assert(cursor.GetTotalCount() == coins_map.size());
+                assert(cursor.GetTotalCount() == expected_total_count);
+                if (!will_erase) {
+                    for (const auto& [_, entry] : coins_map) {
+                        assert(!entry.IsDirty());
+                        assert(!entry.IsFresh());
+                    }
+                }
             });
     }
 
