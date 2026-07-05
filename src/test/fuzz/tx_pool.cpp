@@ -390,7 +390,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
 
         // Helper to insert spent and created outpoints of a tx into collections
         using Sets = std::vector<std::reference_wrapper<std::set<COutPoint>>>;
-        const auto insert_tx = [](Sets created_by_tx, Sets consumed_by_tx, const auto& tx) {
+        const auto insert_tx = [](Sets created_by_tx, Sets consumed_by_tx, const CTransaction& tx) {
             for (size_t i{0}; i < tx.vout.size(); ++i) {
                 for (auto& set : created_by_tx) {
                     Assert(set.get().emplace(tx.GetHash(), i).second);

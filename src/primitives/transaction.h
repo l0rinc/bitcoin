@@ -171,6 +171,7 @@ public:
     std::string ToString() const;
 };
 
+class CTransaction;
 struct CMutableTransaction;
 
 struct TransactionSerParams {
@@ -179,6 +180,21 @@ struct TransactionSerParams {
 };
 static constexpr TransactionSerParams TX_WITH_WITNESS{.allow_witness = true};
 static constexpr TransactionSerParams TX_NO_WITNESS{.allow_witness = false};
+
+namespace tx_detail {
+// Field access for code templated over CTransaction and CMutableTransaction.
+inline uint32_t version(const CTransaction& tx);
+inline uint32_t version(const CMutableTransaction& tx);
+
+inline const std::vector<CTxIn>& vin(const CTransaction& tx);
+inline const std::vector<CTxIn>& vin(const CMutableTransaction& tx);
+
+inline const std::vector<CTxOut>& vout(const CTransaction& tx);
+inline const std::vector<CTxOut>& vout(const CMutableTransaction& tx);
+
+inline uint32_t nLockTime(const CTransaction& tx);
+inline uint32_t nLockTime(const CMutableTransaction& tx);
+} // namespace tx_detail
 
 /**
  * Basic transaction serialization format:
@@ -242,7 +258,7 @@ void SerializeTransaction(const TxType& tx, Stream& s, const TransactionSerParam
 {
     const bool fAllowWitness = params.allow_witness;
 
-    s << tx.version;
+    s << tx_detail::version(tx);
     unsigned char flags = 0;
     // Consistency check
     if (fAllowWitness) {
@@ -257,14 +273,14 @@ void SerializeTransaction(const TxType& tx, Stream& s, const TransactionSerParam
         s << vinDummy;
         s << flags;
     }
-    s << tx.vin;
-    s << tx.vout;
+    s << tx_detail::vin(tx);
+    s << tx_detail::vout(tx);
     if (flags & 1) {
-        for (size_t i = 0; i < tx.vin.size(); i++) {
-            s << tx.vin[i].scriptWitness.stack;
+        for (size_t i = 0; i < tx_detail::vin(tx).size(); i++) {
+            s << tx_detail::vin(tx)[i].scriptWitness.stack;
         }
     }
-    s << tx.nLockTime;
+    s << tx_detail::nLockTime(tx);
 }
 
 template<typename TxType>
@@ -399,6 +415,21 @@ struct CMutableTransaction
         return false;
     }
 };
+
+namespace tx_detail {
+// Field access for code templated over CTransaction and CMutableTransaction.
+inline uint32_t version(const CTransaction& tx) { return tx.version; }
+inline uint32_t version(const CMutableTransaction& tx) { return tx.version; }
+
+inline const std::vector<CTxIn>& vin(const CTransaction& tx) { return tx.vin; }
+inline const std::vector<CTxIn>& vin(const CMutableTransaction& tx) { return tx.vin; }
+
+inline const std::vector<CTxOut>& vout(const CTransaction& tx) { return tx.vout; }
+inline const std::vector<CTxOut>& vout(const CMutableTransaction& tx) { return tx.vout; }
+
+inline uint32_t nLockTime(const CTransaction& tx) { return tx.nLockTime; }
+inline uint32_t nLockTime(const CMutableTransaction& tx) { return tx.nLockTime; }
+} // namespace tx_detail
 
 typedef std::shared_ptr<const CTransaction> CTransactionRef;
 template <typename Tx> static inline CTransactionRef MakeTransactionRef(Tx&& txIn) { return std::make_shared<const CTransaction>(std::forward<Tx>(txIn)); }
