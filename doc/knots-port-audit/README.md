@@ -137,6 +137,15 @@ Other missing/adapted Knots pieces found during this pass:
   adapted form: unknown rule names fail startup, `rdts` is accepted, and mainnet
   consent handling is skipped on test chains. `feature_config_args.py` now covers
   the parser/startup surface directly as `31f7b8f005`.
+- The versionbits warning review exposed a port-introduced regression from
+  rebasing Knots' stronger unknown-signalling warnings onto current Core's
+  BIP323 constant split. The port had kept `VERSIONBITS_NUM_BITS = 5`, so
+  Knots' last-100-block warnings and unknown-activation warning cache only
+  scanned bits 0-4 even though the restored Knots test signals bits 12 and 13.
+  Actual Knots `29.x-knots` still scans the historical 29 BIP9 signal bits and
+  passes the same functional test. The port now separates the warning scan
+  width from the BIP323 deployment width as `dac70fed98`; `versionbits_tests`
+  and `feature_versionbits_warning.py` pass.
 - The follow-up fuzz-build pass found Knots' `wallet_bdb_parser` deterministic
   seeding fix (`30f578a081`) was missing from the port. Actual Knots
   `29.x-knots` already contains the fix, so this was a port test omission rather
@@ -773,6 +782,15 @@ under different commits. They are not all proven exploitable.
   allowing V1 on non-clearnet networks such as onion. This is default-off
   transport-policy hardening, not a consensus change.
 
+- Persistent unexpected block-version signalling warnings:
+  `78d5cb210b`, `771ee9fbb4`, `e94eba4e03`, `c17e9d41d5`
+
+  Current Core warns on unknown versionbits activation for BIP323-available
+  bits, but does not keep Knots' additional persistent last-100-block warnings
+  for unknown version schemas, individual unexpected versionbits, or BIP320
+  reserved-bit signalling thresholds. This is operator/security visibility
+  hardening around possible soft-fork signalling, not a consensus-rule change.
+
 - DNS seed bootstrap policy:
   `277edb9009`
 
@@ -1035,6 +1053,8 @@ Functional tests:
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_temporary_deployment.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_bip9_max_activation_height.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_versionbits_warning.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_versionbits_warning`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_eviction.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_eviction_forceinbound`
@@ -1132,6 +1152,10 @@ Functional tests:
   `python3 /mnt/my_storage/bitcoin/test/functional/p2p_eviction.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_eviction_forceinbound_repro`
   (fails on unmodified Knots because the ForceInbound peer's
   `getpeerinfo.permissions` array omits `forceinbound`)
+- Original Knots cross-check:
+  `python3 /mnt/my_storage/bitcoin/test/functional/feature_versionbits_warning.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_versionbits_warning_check`
+  (passes on unmodified Knots, confirming the earlier warning-range failure was
+  introduced by the port's current-Core BIP323 adaptation)
 - Original Knots expected-failure repro with a temporary
   `/mnt/my_storage/knots-assumeutxo-repro` worktree and the port's added
   post-validation raw-transaction assertion:
