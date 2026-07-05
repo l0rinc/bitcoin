@@ -83,6 +83,15 @@ void AssertJSONRPCError(const UniValue& error)
     assert(error["code"].isNum());
     assert(error["message"].isStr());
 }
+
+void AssertWriteRoundTrip(const UniValue& value)
+{
+    const std::string encoded{value.write()};
+    UniValue reparsed;
+    assert(reparsed.read(encoded));
+    assert(EqualUniValueState(value, reparsed));
+    assert(reparsed.write() == encoded);
+}
 } // namespace
 
 void initialize_parse_univalue()
@@ -107,6 +116,7 @@ FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
     if (!valid) {
         return;
     }
+    AssertWriteRoundTrip(univalue);
     try {
         AssertParsedHash(ParseHashO(univalue, "A"), univalue.find_value("A"));
     } catch (const UniValue& e) {
