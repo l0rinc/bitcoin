@@ -756,21 +756,54 @@ class ReducedDataTest(BitcoinTestFramework):
         assert 'mempool-script-verify-flag' in result_normal['reject-reason']
         self.log.info(f"    ✓ Normal testmempoolaccept correctly rejected: {result_normal['reject-reason']}")
 
-        # Test 2: Try to bypass with ignore_rejects=["non-mandatory-script-verify-flag"]
-        # Expected: Transaction is STILL REJECTED because ConsensusScriptChecks enforces consensus rules
-        self.log.info("    Test 1b: testmempoolaccept with ignore_rejects")
-        self.log.info("      This bypasses PolicyScriptChecks but NOT ConsensusScriptChecks")
-        result_bypass = node.testmempoolaccept(
+        # Test 2: An exact mempool-script reject string does not relax the script flags.
+        self.log.info("    Test 1b: testmempoolaccept with exact reject reason ignored")
+        result_exact = node.testmempoolaccept(
             rawtxs=[spending_tx_257.serialize().hex()],
             ignore_rejects=["mempool-script-verify-flag-failed"]
         )[0]
+        assert_equal(result_exact['allowed'], False)
+        self.log.info(f"    ✓ Exact reject ignore still rejected: {result_exact['reject-reason']}")
 
-        # The transaction should still be rejected because ConsensusScriptChecks
-        # uses GetBlockScriptFlags() which includes REDUCED_DATA consensus rules
-        self.log.info(f"    Result: allowed={result_bypass['allowed']}")
-        assert_equal(result_bypass['allowed'], False)
-        self.log.info(f"    ✓ Transaction correctly rejected: {result_bypass['reject-reason']}")
-        self.log.info("    ✓ ConsensusScriptChecks prevents bypass of REDUCED_DATA consensus rules")
+        def assert_policy_rejects_without_consensus_bug(rawtx, ignore_rejects, label):
+            with node.assert_debug_log(
+                expected_msgs=[],
+                unexpected_msgs=["BUG! PLEASE REPORT THIS! CheckInputScripts failed against latest-block but not STANDARD flags"],
+            ):
+                result = node.testmempoolaccept(
+                    rawtxs=[rawtx.serialize().hex()],
+                    ignore_rejects=ignore_rejects,
+                )[0]
+            assert_equal(result['allowed'], False)
+            self.log.info(f"    ✓ {label}: rejected without consensus fallback ({result['reject-reason']})")
+
+        # Test 3: The broad non-mandatory bypass must not remove REDUCED_DATA.
+        assert_policy_rejects_without_consensus_bug(
+            spending_tx_257,
+            ["non-mandatory-script-verify-flag"],
+            "Broad script-flag ignore",
+        )
+
+        # Test 4: The upgradable grouped bypass must not remove RDTS unknown-witness enforcement.
+        script_v2 = CScript([CScriptOp(OP_2), b'\x00' * 32])
+        funding_tx_v2 = self.create_test_transaction(script_v2)
+        txid_v2 = node.sendrawtransaction(funding_tx_v2.serialize().hex())
+        self.generate(node, 1)
+
+        spending_tx_v2 = CTransaction()
+        spending_tx_v2.vin = [CTxIn(COutPoint(int(txid_v2, 16), 0))]
+        spending_tx_v2.vout = [CTxOut(funding_tx_v2.vout[0].nValue - 1000, CScript([OP_1, bytes(20)]))]
+        spending_tx_v2.wit.vtxinwit = [CTxInWitness()]
+        spending_tx_v2.wit.vtxinwit[0].scriptWitness.stack = []
+        spending_tx_v2.rehash()
+
+        assert_policy_rejects_without_consensus_bug(
+            spending_tx_v2,
+            ["non-mandatory-script-verify-flag-upgradable"],
+            "Upgradable script-flag ignore",
+        )
+
+        self.log.info("    ✓ REDUCED_DATA rules are not bypassable with ignore_rejects")
 
     def test_p2wsh_multisig_witness_script_exemption(self):
         """Test that a large P2WSH witness script (>256 bytes) is exempted from the element size limit.

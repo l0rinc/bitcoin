@@ -1384,17 +1384,15 @@ script_verify_flags PolicyScriptVerifyFlags(const ignore_rejects_type& ignore_re
     if (ignore_rejects.empty()) {
         return STANDARD_SCRIPT_VERIFY_FLAGS;
     }
+    // REDUCED_DATA rules must not be relaxed through legacy policy-bypass names.
     if (ignore_rejects.count("non-mandatory-script-verify-flag")) {
-        return MANDATORY_SCRIPT_VERIFY_FLAGS;
+        return MANDATORY_SCRIPT_VERIFY_FLAGS | REDUCED_DATA_MANDATORY_VERIFY_FLAGS;
     }
 
     script_verify_flags flags = STANDARD_SCRIPT_VERIFY_FLAGS;
     if (ignore_rejects.count("non-mandatory-script-verify-flag-upgradable")) {
         constexpr script_verify_flags upgradable_policy_flags =
             SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS |
-            SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM |
-            SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION |
-            SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS |
             SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE;
         flags &= ~upgradable_policy_flags;
     } else {
@@ -1437,7 +1435,7 @@ script_verify_flags PolicyScriptVerifyFlags(const ignore_rejects_type& ignore_re
     if (ignore_rejects.count("non-mandatory-script-verify-flag-const_scriptcode")) {
         flags &= ~SCRIPT_VERIFY_CONST_SCRIPTCODE;
     }
-    flags |= MANDATORY_SCRIPT_VERIFY_FLAGS;  // for safety
+    flags |= MANDATORY_SCRIPT_VERIFY_FLAGS | REDUCED_DATA_MANDATORY_VERIFY_FLAGS;  // for safety
     return flags;
 }
 
