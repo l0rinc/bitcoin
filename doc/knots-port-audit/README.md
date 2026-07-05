@@ -165,6 +165,13 @@ Other missing/adapted Knots pieces found during this pass:
   BIP67 multisig sorting now passes on the port. `rpc_sort_multisig.py` had
   dropped the original Knots `assert_raises_rpc_error` import during the rebase;
   the port restores that test helper import as `dcf97bd63b`.
+- The `getblock` / `getrawtransaction` fixup review confirmed Knots'
+  user-facing RPC help and result-documentation cleanups (`20130089e3`,
+  `8765a4ce0e`, `35cdcb3309`) are present after adapting them to the current
+  shared `RPCMethod`/`TxDoc` helpers and the port-only `coinbase_tx` and
+  `confirmations_assumed` fields. This is RPC documentation and result-shape
+  metadata, not consensus behavior; `rpc_blockchain.py` and
+  `rpc_rawtransaction.py` pass with the adapted metadata.
 - The `scanblocks` status review confirmed Knots' in-progress
   `relevant_blocks` reporting (`4c9dc4bbe6`) is present in the port and absent
   from current Core master. The review also exposed a port-introduced bug:
@@ -1719,6 +1726,7 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_period_start`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_scriptthreads`
+- `build/test/functional/rpc_blockchain.py`
 - `python3 test/functional/interface_zmq.py --configfile /tmp/bitcoin-zmq-build/test/config.ini`
 - `python3 test/functional/interface_zmq.py --configfile build-zmq/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_interface_zmq_review`
@@ -1736,6 +1744,7 @@ Functional tests:
 - `python3 test/functional/p2p_disconnect_ban.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_disconnect_ban_ip_subnet`
 - `python3 test/functional/rpc_rawtransaction.py --configfile build/test/config.ini`
+- `build/test/functional/rpc_rawtransaction.py`
 - `python3 test/functional/rpc_invalid_address_message.py --configfile
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_invalid_address_validateaddress_compat`
