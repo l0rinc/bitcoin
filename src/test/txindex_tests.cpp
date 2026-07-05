@@ -6,6 +6,7 @@
 #include <chainparams.h>
 #include <index/txindex.h>
 #include <interfaces/chain.h>
+#include <kernel/types.h>
 #include <node/chainstate.h>
 #include <node/kernel_notifications.h>
 #include <test/util/setup_common.h>
@@ -39,6 +40,12 @@ BOOST_FIXTURE_TEST_CASE(txindex_block_until_synced_before_genesis_activation, Ch
 
     TxIndex txindex(interfaces::MakeChain(m_node), 1_MiB, true);
     BOOST_REQUIRE(txindex.Init());
+    BOOST_CHECK(txindex.BlockUntilSyncedToCurrentChain());
+
+    const uint256 genesis_hash{Params().GenesisBlock().GetHash()};
+    BOOST_REQUIRE(WITH_LOCK(::cs_main, return chainman.m_blockman.LookupBlockIndex(genesis_hash) != nullptr));
+    m_node.validation_signals->ChainStateFlushed(kernel::ChainstateRole{}, CBlockLocator{{genesis_hash}});
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
     BOOST_CHECK(txindex.BlockUntilSyncedToCurrentChain());
 
     BlockValidationState state;
