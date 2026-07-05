@@ -132,6 +132,14 @@ Other missing/adapted Knots pieces found during this pass:
   adapted form: unknown rule names fail startup, `rdts` is accepted, and mainnet
   consent handling is skipped on test chains. `feature_config_args.py` now covers
   the parser/startup surface directly as `31f7b8f005`.
+- The follow-up fuzz-build pass found Knots' `wallet_bdb_parser` deterministic
+  seeding fix (`30f578a081`) was missing from the port. Actual Knots
+  `29.x-knots` already contains the fix, so this was a port test omission rather
+  than an original Knots runtime defect. The same fuzz build exposed stale
+  current-Core API adaptations in fuzz-only sources: `kernel::CBlockFileInfo`
+  qualification, `mini_miner`'s current miner/test helpers, direct mempool
+  `Txid` lookups, and move-only `CTxMemPoolEntry` handling. These are now fixed
+  as `f1f3f4ae7c`, and a fuzz-enabled compile of the `fuzz` target passes.
 - Compact-block extra-transaction coverage now uses the current P2P test
   framework send helper and hash/wtxid properties (`77d2b2c025`).
   `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
@@ -548,6 +556,10 @@ Builds:
   -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
 - `cmake --build /tmp/bitcoin-zmq-build --target bitcoin_zmq -j2`
 - `cmake --build /tmp/bitcoin-zmq-build --target bitcoind bitcoin-cli -j2`
+- `cmake -S . -B /tmp/bitcoin-fuzz-wallet-bdb -DBUILD_FUZZ_BINARY=ON
+  -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_GUI=OFF -DWITH_CCACHE=OFF
+  -DRDTS_CONSENT=IMPLICIT`
+- `cmake --build /tmp/bitcoin-fuzz-wallet-bdb --target fuzz -j4`
 - Original Knots repro build:
   `cmake -S ../knots -B ../knots/build-repro -DRDTS_CONSENT=RUNTIME_WARN`
   and `cmake --build ../knots/build-repro --target bitcoind bitcoin-cli -j4`
@@ -570,6 +582,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=validation_tests`
 - `build/bin/test_bitcoin --run_test=validation_block_tests`
 - `build/bin/test_bitcoin --run_test=merkle_tests`
+- `build/bin/test_bitcoin --run_test=miner_tests`
 - `build/bin/test_bitcoin --run_test=policyestimator_tests`
 - `build/bin/test_bitcoin --run_test=codex32_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
