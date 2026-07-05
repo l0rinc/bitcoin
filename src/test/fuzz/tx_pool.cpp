@@ -237,6 +237,85 @@ void CheckRandomizedTxIndex(const CTxMemPool& tx_pool)
     }
 }
 
+void AssertInfoEmpty(const TxMempoolInfo& info)
+{
+    Assert(!info.tx);
+    Assert(info.m_time == std::chrono::seconds{});
+    Assert(info.fee == 0);
+    Assert(info.vsize == 0);
+    Assert(info.nFeeDelta == 0);
+}
+
+void AssertInfoEqual(const TxMempoolInfo& expected, const TxMempoolInfo& actual)
+{
+    Assert(actual.tx == expected.tx);
+    Assert(actual.m_time == expected.m_time);
+    Assert(actual.fee == expected.fee);
+    Assert(actual.vsize == expected.vsize);
+    Assert(actual.nFeeDelta == expected.nFeeDelta);
+}
+
+void CheckMempoolInfoViews(const CTxMemPool& tx_pool)
+{
+    const auto infos{tx_pool.infoAll()};
+    const auto entries{WITH_LOCK(tx_pool.cs, return tx_pool.entryAll())};
+    Assert(infos.size() == entries.size());
+
+    std::set<Txid> seen_txids;
+    std::set<Wtxid> seen_wtxids;
+    CAmount total_fee{0};
+    uint64_t total_size{0};
+
+    {
+        LOCK(tx_pool.cs);
+        Assert(infos.size() == tx_pool.mapTx.size());
+        for (size_t index{0}; index < infos.size(); ++index) {
+            const auto& info{infos[index]};
+            Assert(info.tx);
+            const auto& entry{entries[index].get()};
+            Assert(info.tx == entry.GetSharedTx());
+            Assert(info.m_time == entry.GetTime());
+            Assert(info.fee == entry.GetFee());
+            Assert(info.vsize == entry.GetTxSize());
+            Assert(info.nFeeDelta == entry.GetModifiedFee() - entry.GetFee());
+
+            const Txid txid{info.tx->GetHash()};
+            const Wtxid wtxid{info.tx->GetWitnessHash()};
+            Assert(tx_pool.mapTx.find(txid) != tx_pool.mapTx.end());
+            Assert(tx_pool.mapTx.get<index_by_wtxid>().find(wtxid) != tx_pool.mapTx.get<index_by_wtxid>().end());
+            Assert(seen_txids.insert(txid).second);
+            Assert(seen_wtxids.insert(wtxid).second);
+            total_fee += info.fee;
+            total_size += info.vsize;
+        }
+        Assert(total_fee == tx_pool.GetTotalFee());
+        Assert(total_size == tx_pool.GetTotalTxSize());
+    }
+
+    for (const auto& info : infos) {
+        const Txid txid{info.tx->GetHash()};
+        const Wtxid wtxid{info.tx->GetWitnessHash()};
+        AssertInfoEqual(info, tx_pool.info(txid));
+        AssertInfoEqual(info, tx_pool.info(wtxid));
+        AssertInfoEqual(info, tx_pool.info_for_relay(txid, std::numeric_limits<uint64_t>::max()));
+        AssertInfoEqual(info, tx_pool.info_for_relay(wtxid, std::numeric_limits<uint64_t>::max()));
+        AssertInfoEmpty(tx_pool.info_for_relay(txid, /*last_sequence=*/0));
+        AssertInfoEmpty(tx_pool.info_for_relay(wtxid, /*last_sequence=*/0));
+    }
+
+    std::vector<Txid> delta_only_txids;
+    {
+        LOCK(tx_pool.cs);
+        for (const auto& [txid, _] : tx_pool.mapDeltas) {
+            if (!seen_txids.contains(txid)) delta_only_txids.push_back(txid);
+        }
+    }
+    for (const auto& txid : delta_only_txids) {
+        AssertInfoEmpty(tx_pool.info(txid));
+        AssertInfoEmpty(tx_pool.info_for_relay(txid, std::numeric_limits<uint64_t>::max()));
+    }
+}
+
 void CheckUpdatedBlockDependencies(const CTxMemPool& tx_pool, const std::vector<Txid>& txids)
 {
     LOCK(tx_pool.cs);
@@ -363,6 +442,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
     CheckDirectMempoolEdges(tx_pool);
     CheckPrioritisedTransactions(tx_pool);
     CheckRandomizedTxIndex(tx_pool);
+    CheckMempoolInfoViews(tx_pool);
     {
         BlockCreateOptions options{
             .block_min_fee_rate = CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/COIN)},
@@ -393,11 +473,13 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         CheckHasDescendants(tx_pool);
         CheckDirectMempoolEdges(tx_pool);
         CheckRandomizedTxIndex(tx_pool);
+        CheckMempoolInfoViews(tx_pool);
     }
     CheckPrioritisedTransactions(tx_pool);
     CheckHasDescendants(tx_pool);
     CheckDirectMempoolEdges(tx_pool);
     CheckRandomizedTxIndex(tx_pool);
+    CheckMempoolInfoViews(tx_pool);
     const auto info_all = tx_pool.infoAll();
     if (!info_all.empty()) {
         const auto& tx_to_remove = *PickValue(fuzzed_data_provider, info_all).tx;
@@ -408,6 +490,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         CheckDirectMempoolEdges(tx_pool);
         CheckPrioritisedTransactions(tx_pool);
         CheckRandomizedTxIndex(tx_pool);
+        CheckMempoolInfoViews(tx_pool);
     }
 
     if (fuzzed_data_provider.ConsumeBool()) {
@@ -415,12 +498,14 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         LOCK2(::cs_main, tx_pool.cs);
         tx_pool.TrimToSize(fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0U, tx_pool.DynamicMemoryUsage() * 2));
         CheckRandomizedTxIndex(tx_pool);
+        CheckMempoolInfoViews(tx_pool);
     }
     if (fuzzed_data_provider.ConsumeBool()) {
         // Try expiry
         LOCK2(::cs_main, tx_pool.cs);
         tx_pool.Expire(GetMockTime() - std::chrono::seconds(fuzzed_data_provider.ConsumeIntegral<uint32_t>()));
         CheckRandomizedTxIndex(tx_pool);
+        CheckMempoolInfoViews(tx_pool);
     }
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
     CheckTransactionAncestryAll(tx_pool);
@@ -428,6 +513,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
     CheckDirectMempoolEdges(tx_pool);
     CheckPrioritisedTransactions(tx_pool);
     CheckRandomizedTxIndex(tx_pool);
+    CheckMempoolInfoViews(tx_pool);
     g_setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
 }
 
@@ -658,6 +744,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
         CheckDirectMempoolEdges(tx_pool);
         CheckPrioritisedTransactions(tx_pool);
         CheckRandomizedTxIndex(tx_pool);
+        CheckMempoolInfoViews(tx_pool);
 
         Assert(accepted != added.empty());
         if (accepted) {
@@ -706,6 +793,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
         CheckPrioritisedTransactions(tx_pool);
         CheckDirectMempoolEdges(tx_pool);
         CheckRandomizedTxIndex(tx_pool);
+        CheckMempoolInfoViews(tx_pool);
     }
     Finish(fuzzed_data_provider, tx_pool, chainstate);
 }
@@ -773,12 +861,14 @@ FUZZ_TARGET(tx_pool, .init = initialize_tx_pool)
             CheckTransactionAncestry(tx_pool, tx->GetHash());
             CheckDirectMempoolEdges(tx_pool);
             CheckRandomizedTxIndex(tx_pool);
+            CheckMempoolInfoViews(tx_pool);
             if (!ever_bypassed_limits) {
                 CheckMempoolTRUCInvariants(tx_pool);
             }
         }
         CheckDirectMempoolEdges(tx_pool);
         CheckPrioritisedTransactions(tx_pool);
+        CheckMempoolInfoViews(tx_pool);
     }
     Finish(fuzzed_data_provider, tx_pool, chainstate);
 }
