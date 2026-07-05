@@ -28,7 +28,6 @@
 #include <validationinterface.h>
 
 #include <functional>
-#include <ios>
 #include <memory>
 #include <optional>
 #include <string>
@@ -133,10 +132,7 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
         while (more_work) { // Ensure that every message is eventually processed in some way or another
             random_node.fPauseSend = false;
 
-            try {
-                more_work = connman.ProcessMessagesOnce(random_node);
-            } catch (const std::ios_base::failure&) {
-            }
+            more_work = connman.ProcessMessagesOnce(random_node);
             node.peerman->SendMessages(random_node);
             AssertSendQueueMemoryUsage(random_node);
         }
