@@ -227,6 +227,13 @@ Other missing/adapted Knots pieces found during this pass:
   consensus-rule change, but it is a high-visibility Knots-vs-Core divergence.
   `feature_config_args.py` now covers main-chain startup with
   `acceptnonstdtxn=1`.
+- The pruning-argument review confirmed Knots' `-pruneduringinit=0` fix
+  (`63ec908ea6`) is present in the port. Actual Knots converts `0` to manual
+  pruning during init instead of treating it as disabled pruning, and the port
+  carries the same `PRUNE_TARGET_MANUAL` adaptation through current Core's
+  block-manager argument parser. Current Core master has no `-pruneduringinit`
+  option. `blockmanager_tests/blockmanager_args_prune_during_init` covers the
+  `0`, `1`, minimum-target, disable, and invalid-value cases.
 - The versionbits warning review exposed a port-introduced regression from
   rebasing Knots' stronger unknown-signalling warnings onto current Core's
   BIP323 constant split. The port had kept `VERSIONBITS_NUM_BITS = 5`, so
@@ -573,6 +580,13 @@ Other missing/adapted Knots pieces found during this pass:
   non-writable-directory guard and tests, but has no BDB backend. The port's
   BDB side is covered by `wallet_createwallet.py`, `wallet_startup.py`, and
   `db_tests`.
+- The BDB read-only parser review confirmed Knots' last-page LSN check
+  (`2069130d80`) is present in the port and already present in current Core
+  master: the parser scans through `outer_meta.last_page` inclusively before
+  accepting a flushed Berkeley DB file. This was not introduced by the port and
+  was not a remaining Core-missing fix, but it is now pinned by
+  `db_tests/berkeley_ro_checks_final_page_lsn` with a minimal hand-built BDB
+  fixture whose final page has a dirty LSN.
 - The high-signal exact-patch review found Knots' wallet symlink/reparse-point
   guard series (`39f48a142f`, `1f118f18c4`, `ee042e9ad6`) was still missing
   from the port. Actual Knots already carries it, while current Core master
@@ -1490,8 +1504,9 @@ hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, randomized Tor
 stream-isolation credential prefixes, feebumper combined-fee crash, wallet
 coin-selection boolean amount fix, precomputed transaction-data lifetime
 hardening (CVE-2024-52911), Tor-control excessive-line OOM hardening, I2P SAM
-`SESSION CREATE` request redaction, BDB overflow data lengths and btree-level
-validation, PSBT proprietary-field preservation during combining, monotonic
+`SESSION CREATE` request redaction, BDB overflow data lengths, btree-level
+validation, and final-page LSN validation, PSBT proprietary-field preservation
+during combining, monotonic
 `uptime`, first-run pruned-disk-space warning rounding, Windows exclusive `wbx`
 opens, LevelDB file-size initialization, wallet `sendall` transaction-size
 error handling, miniscript assert guards, and most cpp-subprocess
@@ -1534,6 +1549,15 @@ Source/manifest checks:
   "previous compact block reconstruction attempt failed|header.IsNull"` show
   that current Core and unmodified Knots both carry the repeated-`blocktxn`
   empty-header guard that was missing from the port.
+- `git show origin/master:src/wallet/migrate.cpp | rg -n
+  "for \\(uint32_t i = 0; i <= outer_meta.last_page|LSNs are not reset"` and
+  `git -C ../knots show 29.x-knots:src/wallet/migrate.cpp | rg -n
+  "for \\(uint32_t i = 0; i <= outer_meta.last_page|LSNs are not reset"` show
+  that current Core, actual Knots, and the port all scan the final Berkeley DB
+  page when checking LSN cleanliness.
+- `git -C ../knots show 29.x-knots:src/node/blockmanager_args.cpp | rg -n
+  "pruneduringinit|PRUNE_TARGET_MANUAL"` confirms actual Knots converts
+  `-pruneduringinit=0` to manual pruning during init.
 - `git log origin/master --follow --oneline -- <remaining source-looking
   missing path>` for old `core_write`, fee, libevent, orphanage, transaction
   identifier, epochguard, and test-helper paths
@@ -1703,6 +1727,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_readblock_hash_mismatch
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=blockmanager_tests`
+- `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_args_prune_during_init
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=netbase_tests/netpermissions_test
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=net_peer_connection_tests`
@@ -1730,6 +1756,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=fs_tests/allocate_file_range_preserves_existing_bytes`
 - `build/bin/test_bitcoin --run_test=db_tests --catch_system_error=no
   --log_level=nothing --report_level=no`
+- `build/bin/test_bitcoin --run_test=db_tests/berkeley_ro_checks_final_page_lsn
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty`
 - `build/bin/test_bitcoin --run_test=util_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
