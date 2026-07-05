@@ -299,6 +299,36 @@ class BytesPerSigOpTest(BitcoinTestFramework):
         # Transactions are tiny in weight
         assert_greater_than(2000, tx_parent.get_weight() + tx_child.get_weight())
 
+    def test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize(self):
+        self.log.info("Test sendrawtransaction maxfeerate uses sigops-adjusted vsize")
+
+        self.restart_node(0, extra_args=["-bytespersigop=5000"] + self.extra_args[0])
+
+        num_sigops = 40
+        expected_adjusted_vsize = num_sigops * 5000 // WITNESS_SCALE_FACTOR
+        witness_script = CScript(
+            [OP_FALSE, OP_IF] +
+            [OP_CHECKMULTISIG] * (num_sigops // MAX_PUBKEYS_PER_MULTISIG) +
+            [OP_ENDIF, OP_TRUE]
+        )
+        tx = self.create_p2wsh_spending_tx(witness_script, self.wallet.get_output_script())
+        self.generate(self.nodes[0], 1)
+
+        fee = 75_000
+        maxfeerate = "0.00002000"
+        tx.vout = [CTxOut(1_000_000 - fee, self.wallet.get_output_script())]
+        tx.rehash()
+        tx_hex = tx.serialize().hex()
+
+        assert_greater_than(expected_adjusted_vsize, tx.get_vsize())
+        assert_greater_than(fee, 2 * tx.get_vsize())
+        assert_greater_than(2 * expected_adjusted_vsize, fee)
+
+        testres = self.nodes[0].testmempoolaccept([tx_hex], maxfeerate=maxfeerate)[0]
+        assert_equal(testres["allowed"], True)
+        assert_equal(testres["vsize"], expected_adjusted_vsize)
+        self.nodes[0].sendrawtransaction(hexstring=tx_hex, maxfeerate=maxfeerate)
+
     def test_legacy_sigops_stdness(self):
         self.log.info("Test a transaction with too many legacy sigops in its inputs is non-standard.")
 
@@ -353,6 +383,7 @@ class BytesPerSigOpTest(BitcoinTestFramework):
             self.generate(self.wallet, 1)
 
         self.test_sigops_package()
+        self.test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize()
         self.test_legacy_sigops_stdness()
 
 
