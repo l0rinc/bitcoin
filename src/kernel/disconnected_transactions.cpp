@@ -55,7 +55,8 @@ size_t DisconnectedBlockTransactions::DynamicMemoryUsage() const
     for (auto block_it = vtx.rbegin(); block_it != vtx.rend(); ++block_it) {
         auto it = queuedTx.insert(queuedTx.end(), *block_it);
         auto [_, inserted] = iters_by_txid.emplace((*block_it)->GetHash(), it);
-        assert(inserted); // callers may never pass multiple transactions with the same txid
+        // Callers may never pass multiple transactions with the same txid.
+        Assert(inserted);
         cachedInnerUsage += RecursiveDynamicUsage(*block_it);
     }
     return LimitMemoryUsage();
