@@ -6,6 +6,7 @@
 
 #include <common/system.h>
 #include <compressor.h>
+#include <coins.h>
 #include <core_io.h>
 #include <key.h>
 #include <policy/policy.h>
@@ -39,6 +40,7 @@
 
 #include <cstdint>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -1693,6 +1695,21 @@ BOOST_AUTO_TEST_CASE(script_DataCarrierBytes)
     BOOST_CHECK_EQUAL("0+0", DatacarrierBytesStr(olga_header, 1));
     // OGLA with extra outputs still is OLGA
     BOOST_CHECK_EQUAL("0+82", DatacarrierBytesStr(olga_header, 3));
+}
+
+BOOST_AUTO_TEST_CASE(calculate_extra_tx_weight_saturates)
+{
+    CMutableTransaction mtx;
+    mtx.vout.emplace_back(0, CScript() << OP_RETURN << std::vector<unsigned char>(83));
+    const CTransaction tx{mtx};
+    CCoinsViewCache coins{&CoinsViewEmpty::Get()};
+
+    const auto data_bytes = tx.vout[0].scriptPubKey.DatacarrierBytes(/*remaining_outputs=*/1);
+    const auto total_data_bytes = data_bytes.first + data_bytes.second;
+    BOOST_CHECK_GT(total_data_bytes, 0);
+
+    BOOST_CHECK_EQUAL(CalculateExtraTxWeight(tx, coins, WITNESS_SCALE_FACTOR + 1), int32_t(total_data_bytes));
+    BOOST_CHECK_EQUAL(CalculateExtraTxWeight(tx, coins, std::numeric_limits<unsigned int>::max()), std::numeric_limits<int32_t>::max());
 }
 
 BOOST_AUTO_TEST_CASE(script_GetScriptForTransactionInput)
