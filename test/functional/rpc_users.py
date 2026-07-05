@@ -369,6 +369,15 @@ class HTTPBasicsTest(BitcoinTestFramework):
         self.restart_node(0)
         self.stop_node(0)
 
+        self.log.info('Check that an externally replaced cookie file is not deleted on shutdown')
+        self.restart_node(0)
+        replacement_cookie = "__cookie__:replaced-by-another-process"
+        cookie_path.write_text(replacement_cookie, encoding="utf8")
+        self.stop_node(0)
+        assert cookie_path.exists()
+        assert_equal(replacement_cookie, cookie_path.read_text(encoding="utf8"))
+        cookie_path.unlink()
+
         self.test_rpccookieperms()
 
         self.test_norpccookiefile(cookie_path)
