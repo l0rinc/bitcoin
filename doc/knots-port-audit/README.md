@@ -886,6 +886,15 @@ Other missing/adapted Knots pieces found during this pass:
   the wrapped `AutoFile` is closed when `BufferedFile` is destroyed. The same
   pass removed a duplicate `cleanSubVer` assignment left after applying Knots'
   version-message ordering fix.
+- The later `BufferedFile` page-cache advice commit (`97130ac516`) was also
+  only half present in the port. The `AdviseSequential()` and
+  `CloseAndUncache()` helpers existed in `util/fs_helpers`, but the rebased
+  `BufferedFile` constructor and close path did not call them. Actual Knots
+  does call `AdviseSequential()` when wrapping the source file and
+  `CloseAndUncache()` on close. The port now matches Knots and extends
+  `streams_buffered_file_closes_source` to cover both destructor close and
+  explicit close/idempotence. This was a port omission, not an original Knots
+  defect. Current Core lacks this sequential-read/page-cache-drop behavior.
 - The version-message ordering review confirmed Knots'
   `df874f848a` is present in the port as `9cb0591f30`: the peer's sanitized
   `cleanSubVer` is stored under `m_subver_mutex` before `nVersion` is published
@@ -1293,7 +1302,8 @@ Result on original Knots:
   reaches the same assertion in unmodified Knots.
 
 This was not introduced by the port. The port rejects this input with
-`RPC_INVALID_PARAMETER`, and `rpc_net.py` now covers the regression path.
+`RPC_INVALID_PARAMETER`, and `rpc_net.py` covers both the named/new argument
+path and the old positional compatibility path.
 
 The REST mempool-transactions route bug was also confirmed on an unmodified
 local build of Knots `29.x-knots`:
@@ -1476,6 +1486,17 @@ under different commits. They are not all proven exploitable.
   memory-constrained nodes and avoids keeping dirty UTXO cache entries in RAM
   while the OS is likely to swap. It is not consensus behavior and not remotely
   triggerable by itself.
+
+- Buffered block-file page-cache advice:
+  `97130ac516`
+
+  Current Core still wraps sequential block-file reads in `BufferedFile`
+  without telling the OS about the access pattern or dropping file-backed pages
+  afterward. Knots and this port call `posix_fadvise(..., WILLNEED)` /
+  `POSIX_FADV_SEQUENTIAL` through `AdviseSequential()` and close with
+  `CloseAndUncache()` so the kernel can avoid retaining large sequentially read
+  block-file pages. This is local resource/performance hardening for reindex
+  and other sequential reads, not consensus behavior and not a remote trigger.
 
 - Prune-lock reorg rollback and persistence:
   `8ee1214157`, `0b4bd4e134`, `4822c21812`
@@ -2032,6 +2053,20 @@ Source/manifest checks:
   the matching actual-Knots source checks show that Knots and the port carry
   configurable low-memory-triggered dbcache flushing, while current Core lacks
   both the `-lowmem` option and the `SystemNeedsMemoryReleased()` flush hook.
+- `git -C ../knots show --stat --patch --minimal
+  97130ac516ffe729153122aacd0b8a23e0650100`,
+  `git show origin/master:src/util/fs_helpers.cpp
+  origin/master:src/util/fs_helpers.h origin/master:src/streams.h | rg -n
+  "AdviseSequential|CloseAndUncache|posix_fadvise|POSIX_FADV|BufferedFile\\(AutoFile|~BufferedFile|int fclose\\(" -C 5`,
+  `git -C ../knots show 29.x-knots:src/util/fs_helpers.cpp
+  29.x-knots:src/util/fs_helpers.h 29.x-knots:src/streams.h | rg -n
+  "AdviseSequential|CloseAndUncache|posix_fadvise|POSIX_FADV|BufferedFile\\(AutoFile|~BufferedFile|int fclose\\(" -C 5`,
+  and `rg -n
+  "AdviseSequential|CloseAndUncache|posix_fadvise|BufferedFile\\(AutoFile|int fclose\\(\\)|streams_buffered_file_closes_source"
+  src/streams.h src/util/fs_helpers.cpp src/util/fs_helpers.h
+  src/test/streams_tests.cpp` show actual Knots and the port wire the
+  sequential-read and close-and-uncache helpers into `BufferedFile`, while
+  current Core lacks those helpers and call sites.
 - `git show origin/master:src/zmq/zmqnotificationinterface.cpp | rg -n
   "TryForEachAndRemoveFailed|notifier->Shutdown|notifiers.erase" -C 4`,
   `git -C ../knots show 29.x-knots:src/zmq/zmqnotificationinterface.cpp |
@@ -2342,6 +2377,11 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=script_tests`
 - `build/bin/test_bitcoin --run_test=streams_tests`
+- `build/bin/test_bitcoin
+  --run_test=streams_tests/streams_buffered_file_closes_source
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=streams_tests --catch_system_error=no
+  --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=chainparams_tests --catch_system_error=no
   --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=chainparams_tests/dns_seed_removals`
@@ -2460,6 +2500,10 @@ Functional tests:
 - `python3 test/functional/feature_init.py --configfile
   ../knots/build-repro/test/config.ini --test_methods init_lowmem_test
   --tmpdir=/mnt/my_storage/tmp_feature_init_lowmem_knots --portseed=27631`
+- `python3 test/functional/rpc_net.py --configfile build/test/config.ini
+  --test_methods test_addnode_getaddednodeinfo
+  --tmpdir=/mnt/my_storage/tmp_rpc_net_addnode_guard_port
+  --portseed=31910`
 - `python3 test/functional/feature_rdts.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile
@@ -2921,10 +2965,13 @@ Functional tests:
   check.
 - Original Knots expected-failure repro:
   foreground `../knots/build-repro/bin/bitcoind -regtest` plus
-  `bitcoin-cli -regtest addnode 127.0.0.1:18445 onetry '"inbound"'` under
-  `/mnt/my_storage/tmp_knots_addnode_positional_inbound_json_stderr`
-  aborted with exit code 134 and stderr
+  `bitcoin-cli -regtest addnode 127.0.0.1:<port> onetry false inbound`
+  under `/mnt/my_storage/tmp_knots_addnode_false_inbound.yTqHQn` aborted with
+  exit code 134 and stderr
   `Assertion 'conn_type != ConnectionType::INBOUND' failed.`
+  The positional JSON-string compatibility form
+  `bitcoin-cli -regtest addnode 127.0.0.1:<port> onetry '"inbound"'` also
+  aborted under `/mnt/my_storage/tmp_knots_addnode_crash_fg.TM8tLP`.
 - Original Knots cross-check:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_versionbits_warning.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_versionbits_warning_check`
   (passes on unmodified Knots, confirming the earlier warning-range failure was
