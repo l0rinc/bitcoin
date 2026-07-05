@@ -339,6 +339,7 @@ BASE_SCRIPTS = [
     'wallet_fallbackfee.py',
     'rpc_dumptxoutset.py',
     'rpc_getblocklocations.py',
+    'rpc_prunelocks.py',
     'feature_minchainwork.py',
     'rpc_estimatefee.py',
     'p2p_private_broadcast.py',
