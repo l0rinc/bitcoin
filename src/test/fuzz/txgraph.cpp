@@ -798,6 +798,7 @@ FUZZ_TARGET(txgraph)
                 // GetCluster.
                 auto ref = pick_fn();
                 auto result = real->GetCluster(*ref, level_select);
+                assert_unique_refs(result);
                 // Check cluster count limit.
                 assert(result.size() <= max_cluster_count);
                 for (TxGraph::Ref* refptr : result) {
@@ -1530,6 +1531,7 @@ FUZZ_TARGET(txgraph)
                     assert(desc == expect_desc);
                     // Check the cluster the transaction is part of.
                     auto cluster = real->GetCluster(*sim.GetRef(i), level);
+                    assert_unique_refs(cluster);
                     assert(cluster.size() <= max_cluster_count);
                     assert(sim.MakeSet(cluster) == component);
                     // Check that the cluster is reported in a valid topological order (its
