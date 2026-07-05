@@ -730,6 +730,8 @@ public:
     int GetTopLevel() const noexcept { return m_staging_clusterset.has_value(); }
     /** Get the specified level (staging if it exists and level is TOP, main otherwise). */
     int GetSpecifiedLevel(Level level) const noexcept { return level == Level::TOP && m_staging_clusterset.has_value(); }
+    /** Assert that all refs were returned for live transactions in the specified level. */
+    void AssumeRefsPresent(std::span<Ref* const> refs, int level) const noexcept;
     /** Get a reference to the ClusterSet at the specified level (which must exist). */
     ClusterSet& GetClusterSet(int level) noexcept;
     const ClusterSet& GetClusterSet(int level) const noexcept;
@@ -900,6 +902,16 @@ const TxGraphImpl::ClusterSet& TxGraphImpl::GetClusterSet(int level) const noexc
     Assume(level == 1);
     Assume(m_staging_clusterset.has_value());
     return *m_staging_clusterset;
+}
+
+void TxGraphImpl::AssumeRefsPresent(std::span<Ref* const> refs, int level) const noexcept
+{
+    Assume(refs.size() <= GetClusterSet(level).m_txcount);
+    for (const Ref* ref : refs) {
+        Assume(ref);
+        Assume(GetRefGraph(*ref) == this);
+        Assume(FindCluster(GetRefIndex(*ref), level) != nullptr);
+    }
 }
 
 /** Implementation of the TxGraph::BlockBuilder interface. */
@@ -2498,6 +2510,7 @@ std::vector<TxGraph::Ref*> TxGraphImpl::GetAncestors(const Ref& arg, Level level
     std::vector<TxGraph::Ref*> ret;
     cluster->GetAncestorRefs(*this, matches, ret);
     AssumeUniqueRefs(ret);
+    AssumeRefsPresent(ret, level);
     return ret;
 }
 
@@ -2520,6 +2533,7 @@ std::vector<TxGraph::Ref*> TxGraphImpl::GetDescendants(const Ref& arg, Level lev
     std::vector<TxGraph::Ref*> ret;
     cluster->GetDescendantRefs(*this, matches, ret);
     AssumeUniqueRefs(ret);
+    AssumeRefsPresent(ret, level);
     return ret;
 }
 
@@ -2556,6 +2570,7 @@ std::vector<TxGraph::Ref*> TxGraphImpl::GetAncestorsUnion(std::span<const Ref* c
         Assume(match_span.empty() || match_span.front().first != cluster);
     }
     AssumeUniqueRefs(ret);
+    AssumeRefsPresent(ret, level);
     return ret;
 }
 
@@ -2592,6 +2607,7 @@ std::vector<TxGraph::Ref*> TxGraphImpl::GetDescendantsUnion(std::span<const Ref*
         Assume(match_span.empty() || match_span.front().first != cluster);
     }
     AssumeUniqueRefs(ret);
+    AssumeRefsPresent(ret, level);
     return ret;
 }
 
