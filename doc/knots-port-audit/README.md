@@ -484,6 +484,14 @@ Other missing/adapted Knots pieces found during this pass:
   runs `p2p_add_connections.py` on signet to cover this behavior, and
   `rpc_net.py` also asserts that the port-only `private-broadcast` connection
   type cannot be manually selected through `addnode onetry`.
+- The same RPC connection-management review confirmed Knots' `disconnectnode`
+  IP-without-port and subnet support (`7e3988fe54`, `6d2bc57f0e`, with
+  coverage from `dc36f2b555` and `12a8863b80`) is present in the port. Current
+  Core still documents and implements only address/port or node-id matching for
+  this RPC. This is another RPC-authenticated network-control expansion rather
+  than a consensus issue or hardening fix. The port's `p2p_disconnect_ban.py`
+  coverage exercises address+port, portless address, subnet, invalid subnet,
+  and node-id paths.
 - The ForceInbound eviction review confirmed Knots' trusted-inbound eviction
   behavior (`3544a26256`, `711dadb546`, `067f80e1b5`, `3db935abd1`) is
   present in the port and absent from current Core. It also found an original
@@ -1179,6 +1187,8 @@ Functional tests:
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_sort_multisig.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_setban.py --configfile build/test/config.ini`
+- `python3 test/functional/p2p_disconnect_ban.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_disconnect_ban_ip_subnet`
 - `python3 test/functional/rpc_rawtransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_txoutproof.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_txoutproof`
