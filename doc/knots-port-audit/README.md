@@ -346,6 +346,16 @@ Other missing/adapted Knots pieces found during this pass:
   persistence/control functionality, not consensus or network security
   behavior. `feature_fee_estimates_persist.py` covers RPC success, write
   failure, and equivalence with the normal shutdown dump.
+- The runtime mempool-limit review confirmed Knots' `maxmempool` RPC
+  (`7445c5b786`, `f3dceb936e`, `771e99c746`) is present in the port and absent
+  from current Core's RPC table. The port matches actual Knots by exposing the
+  RPC, accepting MB values through the client conversion table, rejecting values
+  below the cluster-size-derived minimum, updating `m_opts.max_size_bytes`, and
+  calling `LimitMempoolSize(...)` against the active chainstate so a lowered
+  limit evicts transactions immediately. This is an RPC-authenticated runtime
+  resource-control surface, not consensus behavior or a covert security fix.
+  `mempool_limit.py` now covers invalid runtime sizes, visible limit updates,
+  and shrink-time eviction.
 - Wallet sweep coverage passes on the current descriptor-wallet base:
   `wallet_sweepprivkeys.py` rejects invalid/unfunded keys and sweeps both
   unconfirmed and confirmed P2PKH outputs. Legacy-only Knots tests
@@ -1375,6 +1385,8 @@ Functional tests:
 - `python3 test/functional/mempool_dust.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_subdust_fee_penalty.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini`
+- `python3 test/functional/mempool_limit.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_mempool_limit_maxmempool_rpc`
 - `python3 test/functional/mining_coin_age_priority.py --configfile build/test/config.ini`
 - `python3 test/functional/mining_prioritisetransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_maxuploadtarget.py --configfile build/test/config.ini`
