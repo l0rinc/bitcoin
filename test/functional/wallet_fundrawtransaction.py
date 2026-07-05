@@ -142,6 +142,7 @@ class RawTransactionsTest(BitcoinTestFramework):
         self.test_many_inputs_fee()
         self.test_many_inputs_send()
         self.test_witness_only()
+        self.test_witness_only_unsolvable_watchonly()
         self.test_op_return()
         self.test_watchonly()
         self.test_all_watched_funds()
@@ -267,6 +268,37 @@ class RawTransactionsTest(BitcoinTestFramework):
 
         assert len(dec_tx['vin']) > 0
         assert(self.check_witness_inputs(dec_tx['vin']))
+
+    def test_witness_only_unsolvable_watchonly(self):
+        self.log.info("Test fundrawtxn witness-only mode with unsolvable watch-only input")
+
+        wallet_name = "unsolvable_watchonly"
+        self.nodes[3].createwallet(wallet_name=wallet_name, disable_private_keys=True, descriptors=True, blank=True)
+        watchonly = self.nodes[3].get_wallet_rpc(wallet_name)
+
+        watchonly_address = self.nodes[0].getnewaddress(address_type="bech32")
+        watchonly.importaddress(watchonly_address, "", False)
+        watchonly_info = watchonly.getaddressinfo(watchonly_address)
+        assert_equal(watchonly_info["ismine"], True)
+        assert_equal(watchonly_info["solvable"], False)
+
+        watchonly_utxo = self.create_outpoints(self.nodes[0], outputs=[{watchonly_address: Decimal("1.0")}])[0]
+        self.generate(self.nodes[0], 1)
+
+        watchonly_coin = next(utxo for utxo in watchonly.listunspent() if utxo["txid"] == watchonly_utxo["txid"])
+        assert_equal(watchonly_coin["solvable"], False)
+        assert_equal(watchonly_coin["spendable"], False)
+
+        rawtx = watchonly.createrawtransaction([], {self.nodes[0].getnewaddress(): Decimal("0.5")})
+        assert_raises_rpc_error(
+            -4,
+            "Insufficient funds",
+            watchonly.fundrawtransaction,
+            rawtx,
+            {"segwit_inputs_only": True, "fee_rate": self.fee_rate_sats_per_vb},
+        )
+
+        watchonly.unloadwallet()
 
 
     def test_simple_two_coins(self):
