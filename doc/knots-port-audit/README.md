@@ -66,6 +66,11 @@ Other missing/adapted Knots pieces found during this pass:
   `12eefda89a`, `ee39394ad3`) is already present in this port via the earlier
   wallet/RPC reconciliation commit `e8c2b257ee`, with invalid-fingerprint
   coverage in `rpc_signer.py`.
+- Knots' `bumpfee`/`psbtbumpfee` null-dereference guard for txids absent from
+  the wallet (`7e125f8ed2`) is present in the port source: the RBF pre-check
+  now tests the `GetWalletTx(...)` result before reading `wtx->tx`, allowing
+  the normal `Invalid or non-wallet transaction id` error path to run. This
+  pass added direct functional coverage as `eef3aeb7fc`.
 - The RPC cookie and wallet-restricted authentication tests exposed missing
   compatibility for Knots-style `add_wallet_options(...)` calls after rebasing
   onto current Core's common `--descriptors` / `--legacy-wallet` parser. This
