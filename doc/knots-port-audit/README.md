@@ -178,6 +178,15 @@ Other missing/adapted Knots pieces found during this pass:
   matches Knots' intended build distinction as `7d4c61ea3a`: system-LevelDB
   builds keep the header/runtime version check, while embedded-LevelDB builds
   define `EMBEDDED_LEVELDB` and skip the redundant runtime comparison.
+- The exact-patch review found Knots' BanMan expiry-sweep series was missing:
+  exact-expiry removal (`2da7001df1`), scheduler-based expiry sweeps
+  (`838fe961ca`), and the helper tidy-up (`9a4431e0e1`). Actual Knots already
+  carries these commits, so this was a port omission rather than an original
+  Knots defect. The port now matches Knots as `4ac9b06e0d`: bans are removed
+  when `now >= banned_until`, UI subscribers start a scheduled sweep loop, and
+  earlier-expiring new bans reschedule stale callbacks with a sequence guard.
+  `banman_tests` covers exact-expiry removal and scheduled UI notification,
+  while `rpc_setban.py` covers the RPC-visible exact-expiry boundary.
 - Compact-block extra-transaction coverage now uses the current P2P test
   framework send helper and hash/wtxid properties (`77d2b2c025`).
   `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
@@ -620,6 +629,8 @@ Builds:
   -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DWITH_ZMQ=OFF
   -DENABLE_WALLET=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
 - `cmake --build /tmp/bitcoin-kernel-leveldb --target bitcoinkernel -j4`
+- `cmake --build build --target test_bitcoin -j4`
+- `cmake --build build --target bitcoind -j4`
 - `TMPDIR=/mnt/my_storage/tmp cmake -S . -B /tmp/bitcoin-asan-consensus-after
   -DBUILD_BITCOINCONSENSUS_LIB=ON -DBUILD_SHARED_LIBS=ON
   -DSANITIZERS=address -DBUILD_DAEMON=OFF -DBUILD_CLI=OFF -DBUILD_TX=OFF
@@ -656,6 +667,7 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=codex32_tests`
 - `build/bin/test_bitcoin --run_test=caches_tests`
 - `build/bin/test_bitcoin --run_test=sanity_tests`
+- `build/bin/test_bitcoin --run_test=banman_tests`
 - `build/bin/test_bitcoin --run_test=blockfilter_index_tests`
 - `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
@@ -697,6 +709,7 @@ Functional tests:
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_sort_multisig.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_setban.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_rawtransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_packages.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini`
