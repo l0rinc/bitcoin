@@ -248,6 +248,12 @@ Other missing/adapted Knots pieces found during this pass:
   mainnet and testnet DNS seed lists. The port now matches Knots as
   `0899f88da9`, with `chainparams_tests` coverage asserting those seed names
   are absent.
+- A recent patch-id sweep left only two unmatched 2026 Knots commits:
+  `33f9de6b91` and `c4c558b2c4`. Both are historical reverts, not final Knots
+  tree deltas. Current unmodified Knots `29.x-knots` has Windows taskbar
+  progress support restored by later merges, and its miner code uses the same
+  overflow-safe `nBlockWeight + BLOCK_FULL_ENOUGH_WEIGHT_DELTA` check as this
+  port/current Core.
 
 ## Original Knots Defects Confirmed
 
