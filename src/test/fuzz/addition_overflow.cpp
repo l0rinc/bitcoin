@@ -7,16 +7,16 @@
 #include <test/fuzz/util.h>
 #include <util/overflow.h>
 
+#include <array>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
 namespace {
 template <typename T>
-void TestAdditionOverflow(FuzzedDataProvider& fuzzed_data_provider)
+void TestAdditionPair(const T i, const T j)
 {
-    const T i = fuzzed_data_provider.ConsumeIntegral<T>();
-    const T j = fuzzed_data_provider.ConsumeIntegral<T>();
     const bool is_addition_overflow_custom = AdditionOverflow(i, j);
     const auto maybe_add{CheckedAdd(i, j)};
     const auto sat_add{SaturatingAdd(i, j)};
@@ -39,6 +39,36 @@ void TestAdditionOverflow(FuzzedDataProvider& fuzzed_data_provider)
         assert(add == maybe_add.value());
         assert(add == sat_add);
     }
+}
+
+template <typename T>
+T ConsumeBoundaryValue(FuzzedDataProvider& fuzzed_data_provider)
+{
+    if constexpr (std::numeric_limits<T>::is_signed) {
+        return fuzzed_data_provider.PickValueInArray(std::array{
+            std::numeric_limits<T>::min(),
+            static_cast<T>(std::numeric_limits<T>::min() + T{1}),
+            T{-1},
+            T{0},
+            T{1},
+            static_cast<T>(std::numeric_limits<T>::max() - T{1}),
+            std::numeric_limits<T>::max(),
+        });
+    } else {
+        return fuzzed_data_provider.PickValueInArray(std::array{
+            std::numeric_limits<T>::min(),
+            T{1},
+            static_cast<T>(std::numeric_limits<T>::max() - T{1}),
+            std::numeric_limits<T>::max(),
+        });
+    }
+}
+
+template <typename T>
+void TestAdditionOverflow(FuzzedDataProvider& fuzzed_data_provider)
+{
+    TestAdditionPair<T>(fuzzed_data_provider.ConsumeIntegral<T>(), fuzzed_data_provider.ConsumeIntegral<T>());
+    TestAdditionPair<T>(ConsumeBoundaryValue<T>(fuzzed_data_provider), ConsumeBoundaryValue<T>(fuzzed_data_provider));
 }
 } // namespace
 
