@@ -753,7 +753,8 @@ Other missing/adapted Knots pieces found during this pass:
   the current lazy `txid_hex` helper instead of removed `calc_sha256()`. These
   were not original Knots defects; unmodified Knots uses the older
   `ChainstateRole` and transaction-hash APIs. The ZMQ-enabled
-  `interface_zmq.py` run now passes.
+  `interface_zmq.py` run now passes, including a fresh rerun from a separate
+  `build-zmq` tree configured with `-DWITH_ZMQ=ON`.
 - The fee-estimator follow-up confirmed Knots' `TxConfirmStats::Read` overflow
   guard (`163d3e5c13`, ported as `aeaf84b7d5`) is present while current Core
   still multiplies `scale * maxPeriods` before checking the one-week bound.
@@ -1346,6 +1347,10 @@ Builds:
   -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
 - `cmake --build /tmp/bitcoin-zmq-build --target bitcoin_zmq -j2`
 - `cmake --build /tmp/bitcoin-zmq-build --target bitcoind bitcoin-cli -j2`
+- `cmake -S . -B build-zmq -DWITH_ZMQ=ON -DBUILD_TESTS=OFF
+  -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DBUILD_GUI=OFF
+  -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
+- `cmake --build build-zmq --target bitcoind bitcoin-cli -j4`
 - `cmake -S . -B /tmp/bitcoin-fuzz-wallet-bdb -DBUILD_FUZZ_BINARY=ON
   -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_GUI=OFF -DWITH_CCACHE=OFF
   -DRDTS_CONSENT=IMPLICIT`
@@ -1587,6 +1592,8 @@ Functional tests:
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_scriptthreads`
 - `python3 test/functional/interface_zmq.py --configfile /tmp/bitcoin-zmq-build/test/config.ini`
+- `python3 test/functional/interface_zmq.py --configfile build-zmq/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_interface_zmq_review`
 - `python3 test/functional/p2p_v2_encrypted.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_v2_encrypted`
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini`
