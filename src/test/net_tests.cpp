@@ -140,6 +140,47 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
     BOOST_CHECK_EQUAL(pnode4->ConnectedThroughNetwork(), Network::NET_ONION);
 }
 
+BOOST_AUTO_TEST_CASE(cnode_punish_invalid_blocks)
+{
+    NodeId id{0};
+    in_addr ipv4Addr;
+    ipv4Addr.s_addr = 0xa0b0c001;
+    const CAddress addr{CService{ipv4Addr, 7777}, NODE_NETWORK};
+
+    const auto make_node = [&](ConnectionType conn_type, NetPermissionFlags permission_flags = NetPermissionFlags::None) {
+        return std::make_unique<CNode>(id++,
+                                       /*sock=*/nullptr,
+                                       addr,
+                                       /*nKeyedNetGroupIn=*/0,
+                                       /*nLocalHostNonceIn=*/0,
+                                       CAddress{},
+                                       /*addrNameIn=*/"",
+                                       conn_type,
+                                       /*inbound_onion=*/false,
+                                       /*network_key=*/0,
+                                       CNodeOptions{.permission_flags = permission_flags});
+    };
+
+    for (const auto conn_type : {
+             ConnectionType::OUTBOUND_FULL_RELAY,
+             ConnectionType::BLOCK_RELAY,
+             ConnectionType::ADDR_FETCH,
+             ConnectionType::PRIVATE_BROADCAST,
+         }) {
+        BOOST_CHECK(make_node(conn_type)->PunishInvalidBlocks());
+        BOOST_CHECK(!make_node(conn_type, NetPermissionFlags::NoBan)->PunishInvalidBlocks());
+    }
+
+    for (const auto conn_type : {
+             ConnectionType::INBOUND,
+             ConnectionType::MANUAL,
+             ConnectionType::FEELER,
+         }) {
+        BOOST_CHECK(!make_node(conn_type)->PunishInvalidBlocks());
+        BOOST_CHECK(!make_node(conn_type, NetPermissionFlags::NoBan)->PunishInvalidBlocks());
+    }
+}
+
 BOOST_AUTO_TEST_CASE(cnetaddr_basic)
 {
     CNetAddr addr;
