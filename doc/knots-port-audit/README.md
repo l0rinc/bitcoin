@@ -402,8 +402,8 @@ key handling, `LocalServiceInfo::nScore` saturation, miner `addPackageTxs`
 overflow, compact-block witness mutation checks, `LoadChainTip` UB,
 `SetStdinEcho` UB, fd-limit overflow/RLIMIT_INFINITY handling, RPC credentials
 hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, feebumper
-combined-fee crash, BDB overflow data lengths, miniscript assert guards, and
-most cpp-subprocess memory/Windows fixes.
+combined-fee crash, wallet coin-selection boolean amount fix, BDB overflow data
+lengths, miniscript assert guards, and most cpp-subprocess memory/Windows fixes.
 
 ## Open Risks
 
