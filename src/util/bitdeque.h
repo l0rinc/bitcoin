@@ -418,7 +418,11 @@ public:
     /** Release unused memory. */
     void shrink_to_fit()
     {
+        SanityCheck();
+        const size_type old_size{size()};
         m_deque.shrink_to_fit();
+        Assume(size() == old_size);
+        SanityCheck();
     }
 
     /** Empty the container. */
