@@ -340,7 +340,9 @@ std::vector<DepGraphIndex> ReadLinearization(const DepGraph<BS>& depgraph, SpanR
         uint64_t idx{0};
         try {
             reader >> VARINT(idx);
-        } catch (const std::ios_base::failure&) {}
+        } catch (const std::ios_base::failure& e) {
+            AssertExpectedClusterLinearizeReadFailure(e);
+        }
         idx %= potential_next.Count();
         // Find out which transaction that corresponds to.
         for (auto j : potential_next) {
@@ -453,7 +455,9 @@ DepGraph<SetType> DecodeDepGraph(std::span<const unsigned char> buffer)
     DepGraph<SetType> depgraph;
     try {
         reader >> Using<DepGraphFormatter>(depgraph);
-    } catch (const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
     SanityCheck(depgraph);
     return depgraph;
 }
@@ -759,7 +763,9 @@ FUZZ_TARGET(clusterlin_depgraph_serialization)
     DepGraphIndex par_code{0}, chl_code{0};
     try {
         reader >> Using<DepGraphFormatter>(depgraph) >> VARINT(par_code) >> VARINT(chl_code);
-    } catch (const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
     SanityCheck(depgraph);
 
     // Verify the graph is a DAG.
@@ -805,7 +811,9 @@ FUZZ_TARGET(clusterlin_components)
     std::vector<DepGraphIndex> linearization;
     try {
         reader >> Using<DepGraphFormatter>(depgraph);
-    } catch (const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
 
     TestBitSet todo = depgraph.Positions();
     while (todo.Any()) {
@@ -815,7 +823,9 @@ FUZZ_TARGET(clusterlin_components)
             uint64_t picked_num{0};
             try {
                 reader >> VARINT(picked_num);
-            } catch (const std::ios_base::failure&) {}
+            } catch (const std::ios_base::failure& e) {
+                AssertExpectedClusterLinearizeReadFailure(e);
+            }
             if (picked_num < todo.Size() && todo[picked_num]) {
                 picked = picked_num;
             }
@@ -869,7 +879,9 @@ FUZZ_TARGET(clusterlin_components)
         uint64_t subset_bits{0};
         try {
             reader >> VARINT(subset_bits);
-        } catch (const std::ios_base::failure&) {}
+        } catch (const std::ios_base::failure& e) {
+            AssertExpectedClusterLinearizeReadFailure(e);
+        }
         TestBitSet subset;
         for (DepGraphIndex i : depgraph.Positions()) {
             if (todo[i]) {
@@ -895,7 +907,9 @@ FUZZ_TARGET(clusterlin_make_connected)
     DepGraph<TestBitSet> depgraph;
     try {
         reader >> Using<DepGraphFormatter>(depgraph);
-    } catch (const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
     MakeConnected(depgraph);
     SanityCheck(depgraph);
     assert(depgraph.IsConnected());
@@ -911,7 +925,9 @@ FUZZ_TARGET(clusterlin_chunking)
     DepGraph<TestBitSet> depgraph;
     try {
         reader >> Using<DepGraphFormatter>(depgraph);
-    } catch (const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
 
     // Read a valid linearization for depgraph.
     auto linearization = ReadLinearization(depgraph, reader);
@@ -991,7 +1007,9 @@ FUZZ_TARGET(clusterlin_simple_finder)
     DepGraph<TestBitSet> depgraph;
     try {
         reader >> Using<DepGraphFormatter>(depgraph);
-    } catch (const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
 
     // Instantiate the SimpleCandidateFinder to be tested, and the ExhaustiveCandidateFinder it is
     // being tested against.
@@ -1066,7 +1084,9 @@ FUZZ_TARGET(clusterlin_simple_linearize)
     DepGraph<TestBitSet> depgraph;
     try {
         reader >> VARINT(iter_count) >> Using<DepGraphFormatter>(depgraph);
-    } catch (const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
     iter_count %= MAX_SIMPLE_ITERATIONS;
 
     // Invoke SimpleLinearize().
@@ -1111,7 +1131,9 @@ FUZZ_TARGET(clusterlin_sfl)
     uint64_t rng_seed{0};
     try {
         reader >> rng_seed >> flags >> Using<DepGraphFormatter>(depgraph);
-    } catch (const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
     if (depgraph.TxCount() <= 1) return;
     InsecureRandomContext rng(rng_seed);
     /** Whether to make the depgraph connected. */
@@ -1234,7 +1256,9 @@ FUZZ_TARGET(clusterlin_linearize)
     uint8_t flags{7};
     try {
         reader >> VARINT(max_cost) >> Using<DepGraphFormatter>(depgraph) >> rng_seed >> flags;
-    } catch (const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
     if (depgraph.TxCount() <= 1) return;
     bool make_connected = flags & 1;
     // The following 3 booleans have 4 combinations:
@@ -1387,7 +1411,9 @@ FUZZ_TARGET(clusterlin_backend_equivalence)
     DepGraph<BitSet<64>> depgraph;
     try {
         reader >> Using<DepGraphFormatter>(depgraph);
-    } catch (const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
     SanityCheck(depgraph);
 
     const bool provide_input{(flags & 1) != 0};
@@ -1435,7 +1461,9 @@ FUZZ_TARGET(clusterlin_postlinearize)
     DepGraph<TestBitSet> depgraph;
     try {
         reader >> Using<DepGraphFormatter>(depgraph);
-    } catch (const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
 
     // Retrieve a linearization from the fuzz input.
     std::vector<DepGraphIndex> linearization;
@@ -1480,7 +1508,9 @@ FUZZ_TARGET(clusterlin_postlinearize_tree)
     uint8_t direction{0};
     try {
         reader >> direction >> rng_seed >> Using<DepGraphFormatter>(depgraph_gen);
-    } catch (const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
 
     auto depgraph_tree = BuildTreeGraph(depgraph_gen, direction);
 
@@ -1533,7 +1563,9 @@ FUZZ_TARGET(clusterlin_postlinearize_moved_leaf)
         uint64_t fee_inc_code;
         reader >> Using<DepGraphFormatter>(depgraph) >> VARINT(fee_inc_code);
         fee_inc = fee_inc_code & 0x3ffff;
-    } catch (const std::ios_base::failure&) {}
+    } catch (const std::ios_base::failure& e) {
+        AssertExpectedClusterLinearizeReadFailure(e);
+    }
     if (depgraph.TxCount() == 0) return;
 
     // Retrieve two linearizations from the fuzz input.
