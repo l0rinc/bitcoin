@@ -231,6 +231,21 @@ Other missing/adapted Knots pieces found during this pass:
   adapted form: unknown rule names fail startup, `rdts` is accepted, and mainnet
   consent handling is skipped on test chains. `feature_config_args.py` now covers
   the parser/startup surface directly as `31f7b8f005`.
+- A follow-up RDTS consent audit confirmed two later Knots build-time consent
+  modes are present in the port. `RDTS_CONSENT=RUNTIME_WARN` (`dca6d162e1`,
+  ported as `ba57ec2c31`) lets daemon builds enforce RDTS while warning hourly
+  if the operator has not configured `consensusrules=rdts`; the GUI coerces
+  this mode back to runtime-check because the user is shown an explicit
+  consent/exit prompt. `RDTS_CONSENT=UNSUPPORTED_UNSAFE_NO_ENFORCEMENT`
+  (`2f0e5090a7`, ported as `603f4958d0`) is consensus-significant: it is an
+  explicit unsupported build mode that disables the reduced-data deployment and
+  clears `NODE_REDUCED_DATA` unless `-consensusrules=rdts` is supplied. A
+  daemon-only probe build verified both runtime surfaces: without
+  `-consensusrules=rdts`, `getnetworkinfo.localservicesnames` omits
+  `REDUCED_DATA?` and RPC warnings say RDTS is not enabled; with
+  `-consensusrules=rdts`, the same binary advertises `REDUCED_DATA?` and the
+  RDTS-disabled warning is absent. This is not a Core shortcoming; it is a
+  Knots-specific consensus escape hatch that should be called out explicitly.
 - The mainnet policy-argument review confirmed Knots' opt-in
   `-acceptnonstdtxn` relaxation (`2e2f48f871`) is present in the port and
   absent from current Core. Current Core still treats the option as
@@ -1088,6 +1103,17 @@ Other missing/adapted Knots pieces found during this pass:
   `StateSinceHeight(pindex->pprev, ...)` activation-height query with Core's
   `Info(*pindex, ...).active_since`; the focused RDTS activation tests cover
   that replacement at activation, expiry, and activation-boundary reorg points.
+  A later exact-patch audit mapped the current Knots activation-boundary commits
+  to adapted port commits: the UTXO-height test (`224af28c3c`) is
+  `56b84e44fd`, the per-input old-UTXO exemption and cache-safety changes
+  (`0e066c15eb`, `5524704ab0`) are `87c701dc1d`, the upgradable-witness /
+  taproot / OP_SUCCESS consensus enforcement (`e7344dff45`) is `671097f199`,
+  the output-size rule stack (`ff9a3348e8`, `d6c354e30d`, `b5ba93ec1b`) is
+  present through `0f63eae265`, and the generation-transaction output-size
+  check (`198386d383`) is present in `Consensus::CheckOutputSizes(...)` plus the
+  `ConnectBlock()` coinbase check. The focused UTXO-height test now passes on
+  both the port and an unmodified Knots build, including the
+  activation-boundary reorg/cache-poisoning scenario.
 - The RDTS P2P-service review found a port-introduced handshake cleanup issue
   after adapting Knots' preferential RDTS peering and `-maxstaleoutbound`
   behavior (`7f57236043`, `44d7e88dba`, `c146ef8c7a`) onto current Core's
@@ -1743,6 +1769,12 @@ avoided in current Core and this port because `getblock()` is registered as an
   P2P handshake tests. That is focused regression evidence and source-level
   adaptation evidence, not a full independent consensus-equivalence proof or
   exhaustive cross-client block corpus.
+- `RDTS_CONSENT=UNSUPPORTED_UNSAFE_NO_ENFORCEMENT` is an explicit unsupported
+  build-time escape hatch carried from Knots. It can produce a node that does
+  not enforce RDTS and does not advertise `NODE_REDUCED_DATA` unless the
+  operator also supplies `consensusrules=rdts`. This is intentional Knots
+  behavior, not a port-introduced bug, but it is consensus-divergent from the
+  default Knots/RDTS configuration and should not be hidden in a release note.
 
 ## Verification
 
@@ -1755,6 +1787,23 @@ Source/manifest checks:
 - `ls -la ../knots/build-repro/bin` showed only `bitcoind` and `bitcoin-cli`,
   so `../knots/build-repro/bin/test_bitcoin --run_test=sanity_tests` was not
   available.
+- `git show --stat --patch --minimal 603f4958d0`,
+  `git -C ../knots show --stat --patch --minimal 2f0e5090a7`, and `rg -n
+  "UNSUPPORTED_UNSAFE_NO_ENFORCEMENT|g_enable_rdts|NODE_REDUCED_DATA|RDTS is not enabled|fake or fraudulent"
+  CMakeLists.txt src/init.cpp src/kernel/chainparams.* src/validation.cpp`
+  show the port and actual Knots both carry the explicit unsupported build mode
+  that disables RDTS deployment and drops `NODE_REDUCED_DATA` until
+  `consensusrules=rdts` is configured.
+- `git show --stat --oneline 56b84e44fd 87c701dc1d 671097f199
+  0f63eae265 404e44d108 ba57ec2c31 538f4eda40` maps the current port's
+  adapted RDTS activation, service, consent, and bypass-hardening commits.
+- `rg -n
+  "reduced_data_start_height|flags_per_input|CheckOutputSizes\\(|generation tx|SCRIPT_VERIFY_REDUCED_DATA|DISCOURAGE_UPGRADABLE|maxstaleoutbound"
+  src/validation.cpp src/consensus/tx_verify.cpp
+  src/test/txvalidationcache_tests.cpp test/functional/feature_rdts.py
+  test/functional/feature_reduced_data_utxo_height.py
+  test/functional/p2p_handshake.py` shows the current source/test coverage for
+  the RDTS activation-boundary and BIP110 service-limit paths.
 - `git show origin/master:src/wallet/db.cpp | sed -n '20,70p'` and
   `git -C ../knots show 29.x-knots:src/wallet/db.cpp | sed -n '20,75p'`
   show that current Core lacks Knots' `ignore_paths` skip list in
@@ -1858,6 +1907,27 @@ Builds:
 
 - `cmake -B build -DRDTS_CONSENT=RUNTIME_WARN`
 - `cmake --build build --target bitcoind bitcoin-cli test_bitcoin -j4`
+- `TMPDIR=/mnt/my_storage/tmp cmake -S . -B
+  /mnt/my_storage/tmp/bitcoin-rdts-unsafe-probe -DBUILD_DAEMON=ON
+  -DBUILD_CLI=ON -DBUILD_TX=OFF -DBUILD_UTIL=OFF
+  -DBUILD_UTIL_CHAINSTATE=OFF -DBUILD_KERNEL_LIB=OFF
+  -DBUILD_WALLET_TOOL=OFF -DBUILD_GUI=OFF -DBUILD_TESTS=OFF
+  -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF -DENABLE_WALLET=OFF
+  -DWITH_ZMQ=OFF -DWITH_USDT=OFF -DWITH_CCACHE=ON
+  -DRDTS_CONSENT=UNSUPPORTED_UNSAFE_NO_ENFORCEMENT` configured successfully
+  and emitted the expected unsupported/insecure warning.
+- `TMPDIR=/mnt/my_storage/tmp cmake --build
+  /mnt/my_storage/tmp/bitcoin-rdts-unsafe-probe --target bitcoind bitcoin-cli
+  -j4`
+- `bitcoind` from the unsafe probe build started on a fresh mainnet datadir
+  without `-consensusrules=rdts`; `bitcoin-cli getnetworkinfo` showed no
+  `REDUCED_DATA?` in `localservicesnames`, `getnetworkinfo` and
+  `getblockchaininfo` warned that RDTS is not enabled, and `debug.log` included
+  `This node will NOT enforce them`.
+- The same unsafe probe build started on a fresh mainnet datadir with
+  `-consensusrules=rdts`; `bitcoin-cli getnetworkinfo` showed
+  `REDUCED_DATA?`, the RDTS-disabled warning was absent, and `debug.log`
+  included `User already consented to 'rdts' consensus rules (in config)`.
 - `cmake --build build --target bitcoind -j4`
 - `cmake --build build --target bitcoin-cli -j4`
 - `cmake --build build --target bitcoind bitcoin-cli -j4`
@@ -2082,6 +2152,9 @@ Unit tests:
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=transaction_tests`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests`
+- `build/bin/test_bitcoin
+  --run_test=txvalidationcache_tests/checkinputs_flags_per_input_cache_safety
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=txvalidation_tests`
 - `build/bin/test_bitcoin --run_test=script_p2sh_tests/ValidateInputsStandardness`
 - `build/bin/test_bitcoin --run_test=peerman_tests --catch_system_error=no
@@ -2171,6 +2244,14 @@ Functional tests:
 
 - `python3 test/functional/feature_rdts.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_reduced_data_utxo_height.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_reduced_data_utxo_height_port
+  --portseed=27510`
+- `python3 ../knots/test/functional/feature_reduced_data_utxo_height.py
+  --configfile ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_reduced_data_utxo_height_knots
+  --portseed=27511`
 - `python3 test/functional/feature_reduced_data_temporary_deployment.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_bip9_max_activation_height.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_versionbits_warning.py --configfile build/test/config.ini
@@ -2197,6 +2278,12 @@ Functional tests:
   --portseed=27501`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_rdts_gate_fixed3`
+- `python3 test/functional/p2p_handshake.py --configfile
+  build/test/config.ini --tmpdir=/mnt/my_storage/tmp_p2p_handshake_bip110_port
+  --portseed=27512`
+- `python3 ../knots/test/functional/p2p_handshake.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_p2p_handshake_bip110_knots --portseed=27513`
 - `python3 test/functional/p2p_eviction.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_eviction_forceinbound`
 - `python3 test/functional/p2p_eviction.py --configfile build/test/config.ini
