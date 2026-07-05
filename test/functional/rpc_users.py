@@ -175,10 +175,38 @@ class HTTPBasicsTest(BitcoinTestFramework):
                     assert_equal(500, resp.status)
                     assert b'"Requested wallet does not exist or is not loaded"' in resp.data
             if wallet_restrictions:
-                self.log.info('importmempool...')
-                resp = call_with_auth(node, user, password, method='importmempool', params=[str(node.datadir_path / 'missing-mempool.dat')])
-                assert_equal(404, resp.status)
-                assert b'"Method not available for wallet-restricted RPC users"' in resp.data
+                restricted_path = str(node.datadir_path / 'missing-restricted-file.dat')
+                restricted_wallet_uri = '/wallet/limitedwallet1'
+                other_wallet = 'limitedwallet2' if wallet_restrictions != 'limitedwallet2' else 'limitedwallet1'
+
+                for method, params, uripath in [
+                    ('importmempool', [restricted_path], '/'),
+                    ('dumptxoutset', [restricted_path], '/'),
+                    ('loadtxoutset', [restricted_path], '/'),
+                    ('restorewallet', ['blocked_restore', restricted_path], '/'),
+                    ('backupwallet', [restricted_path], restricted_wallet_uri),
+                    ('dumpwallet', [restricted_path], restricted_wallet_uri),
+                    ('importwallet', [restricted_path], restricted_wallet_uri),
+                    ('migratewallet', [], restricted_wallet_uri),
+                ]:
+                    self.log.info(f'{method}...')
+                    resp = call_with_auth(node, user, password, uripath=uripath, method=method, params=params)
+                    assert_equal(404, resp.status)
+                    assert b'"Method not available for wallet-restricted RPC users"' in resp.data
+
+                for method, params in [
+                    ('createwallet', [other_wallet]),
+                    ('loadwallet', [other_wallet]),
+                ]:
+                    self.log.info(f'{method} other wallet...')
+                    resp = call_with_auth(node, user, password, method=method, params=params)
+                    assert_equal(500, resp.status)
+                    assert b'"Wallet usage is restricted."' in resp.data
+
+                self.log.info('unloadwallet other wallet...')
+                resp = call_with_auth(node, user, password, method='unloadwallet', params=[other_wallet])
+                assert_equal(500, resp.status)
+                assert b'"Requested wallet does not exist or is not loaded"' in resp.data
 
     def test_rpccookieperms(self):
         p = {
