@@ -18,8 +18,12 @@ from test_framework.messages import (
     NODE_P2P_V2,
     NODE_WITNESS,
     msg_verack,
+    msg_version,
 )
 from test_framework.p2p import (
+    P2P_SERVICES,
+    P2P_VERSION,
+    P2P_VERSION_RELAY,
     P2PInterface,
 )
 from test_framework.util import (
@@ -40,6 +44,24 @@ BASE_SERVICE_FLAGS_PRUNED = NODE_NETWORK_LIMITED | NODE_WITNESS
 # Full service flags (with BIP-110)
 FULL_SERVICE_FLAGS_FULL = NODE_NETWORK | NODE_WITNESS | NODE_REDUCED_DATA
 FULL_SERVICE_FLAGS_PRUNED = NODE_NETWORK_LIMITED | NODE_WITNESS | NODE_REDUCED_DATA
+
+
+class UserAgentPeer(P2PInterface):
+    def __init__(self, subver):
+        super().__init__()
+        self.subver = subver
+
+    def peer_connect_send_version(self, services):
+        vt = msg_version()
+        vt.nVersion = P2P_VERSION
+        vt.strSubVer = self.subver
+        vt.relay = P2P_VERSION_RELAY
+        vt.nServices = services
+        vt.addrTo.ip = self.dstaddr
+        vt.addrTo.port = self.dstport
+        vt.addrFrom.ip = "0.0.0.0"
+        vt.addrFrom.port = 0
+        self.on_connection_send_msg = vt
 
 
 class P2PHandshakeTest(BitcoinTestFramework):
@@ -97,6 +119,22 @@ class P2PHandshakeTest(BitcoinTestFramework):
         verack_conn = node.add_p2p_connection(P2PInterface())
         with node.assert_debug_log(["ignoring redundant verack message"]):
             verack_conn.send_and_ping(msg_verack())
+        node.disconnect_p2ps()
+
+        self.log.info("Check that peer user agents are preserved for RPC and escaped in logs")
+        unsafe_subver = "/User/Agent: test![]{}~/"
+        escaped_subver = "/User/Agent: test%21%5B%5D%7B%7D%7E/"
+        with node.assert_debug_log(
+                expected_msgs=[f"receive version message: {escaped_subver}"],
+                unexpected_msgs=[unsafe_subver]):
+            ua_peer = node.add_p2p_connection(
+                UserAgentPeer(unsafe_subver),
+                services=P2P_SERVICES,
+                wait_for_verack=False,
+            )
+            ua_peer.wait_for_verack()
+            ua_peer.sync_with_ping()
+        assert_equal(node.getpeerinfo()[0]["subver"], unsafe_subver)
         node.disconnect_p2ps()
 
         self.log.info("Check that peers lacking base service flags are disconnected")

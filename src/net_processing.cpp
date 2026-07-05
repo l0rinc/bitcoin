@@ -3808,8 +3808,11 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         }
 
         const auto mapped_as{m_connman.GetMappedAS(pfrom.addr)};
+        const auto log_subver{cleanSubVer.empty()
+                                  ? "<no user agent>"
+                                  : SanitizeString(cleanSubVer, SAFE_CHARS_DEFAULT, /*escape=*/true)};
         LogDebug(BCLog::NET, "receive version message: %s: version %d, blocks=%d, us=%s, txrelay=%d, %s%s",
-                  cleanSubVer.empty() ? "<no user agent>" : cleanSubVer, pfrom.nVersion,
+                  log_subver, pfrom.nVersion,
                   starting_height, addrMe.ToStringAddrPort(), fRelay, pfrom.LogPeer(),
                   (mapped_as ? strprintf(", mapped_as=%d", mapped_as) : ""));
 
