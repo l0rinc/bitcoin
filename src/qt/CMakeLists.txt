@@ -392,10 +392,14 @@ if(WITH_DBUS)
   target_link_libraries(bitcoinqt PRIVATE "Qt${WITH_QT_VERSION}::DBus")
 endif()
 if(WITH_TASKBAR_PROGRESS)
+  target_sources(bitcoinqt
+    PRIVATE
+      wintaskbarprogress.cpp
+      wintaskbarprogress.h
+  )
   target_link_libraries(bitcoinqt
     PRIVATE
-      "Qt${WITH_QT_VERSION}::WinExtras"
-      $<$<PLATFORM_ID:Windows>:dwmapi>
+      $<$<PLATFORM_ID:Windows>:ole32>
   )
 endif()
 
