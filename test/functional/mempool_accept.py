@@ -119,7 +119,32 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         self.restart_node(0, extra_args=self.extra_args[0] + ['-spkreuse=0', '-persistmempool=0'])
         assert_equal(node.testmempoolaccept([raw_tx_spkreuse])[0]['reject-reason'], 'txn-spk-reused-twinoutputs')
         assert_equal(node.getmempoolinfo()['size'], self.mempool_size)
+
+        self.log.info('Check -spkreuse=0 handles mempool scriptPubKey reuse through replacement')
+        reused_spk = script_to_p2wsh_script(CScript([OP_TRUE]))
+
+        def create_spk_claim(*, fee):
+            utxo = self.wallet.get_utxo()
+            tx = CTransaction()
+            tx.vin = [CTxIn(COutPoint(int(utxo['txid'], 16), utxo['vout']), nSequence=MAX_BIP125_RBF_SEQUENCE)]
+            tx.vout = [CTxOut(int(COIN * utxo['value']) - fee, reused_spk)]
+            tx.version = 2
+            self.wallet.sign_tx(tx)
+            return tx
+
+        tx_spk_first = create_spk_claim(fee=1_000)
+        txid_spk_first = node.sendrawtransaction(hexstring=tx_spk_first.serialize().hex(), maxfeerate=0)
+        self.mempool_size += 1
+        tx_spk_second = create_spk_claim(fee=50_000)
+        assert_equal(node.testmempoolaccept([tx_spk_second.serialize().hex()], maxfeerate=0)[0]['allowed'], True)
+        assert_equal(node.getmempoolinfo()['size'], self.mempool_size)
+        txid_spk_second = node.sendrawtransaction(hexstring=tx_spk_second.serialize().hex(), maxfeerate=0)
+        assert txid_spk_first not in node.getrawmempool()
+        assert txid_spk_second in node.getrawmempool()
+        assert_equal(node.getmempoolinfo()['size'], self.mempool_size)
         self.restart_node(0, extra_args=self.extra_args[0])
+        node = self.nodes[0]
+        self.mempool_size = 0
 
         self.log.info('Should not accept garbage to testmempoolaccept')
         assert_raises_rpc_error(-3, 'JSON value of type string is not of expected type array', lambda: node.testmempoolaccept(rawtxs='ff00baar'))
