@@ -157,6 +157,25 @@ Other missing/adapted Knots pieces found during this pass:
 - Raw transaction, package, and PSBT RPC coverage now passes against the port.
   This covers Knots-touched max burn handling, package max fee/burn arguments,
   and PSBT base64 parameter handling with `=` padding characters.
+- Mempool/TRUC verification exposed a port-introduced validation omission:
+  the legacy `AcceptToMemoryPool(..., bypass_limits=true)` wrapper did not
+  include Knots' `"truc"` ignore token. As a result, disconnected-block
+  resurrection could enforce TRUC topology policy and drop transactions from a
+  reorged-out block. This was not an original Knots defect; the unmodified
+  Knots wrapper already includes `"truc"`. The port now restores it, adds
+  `tx_mempool_ignore_truc` unit coverage, and `mempool_truc.py` covers the
+  reorg path end to end.
+- `mempool_ephemeral_dust.py` exposed a security-shaped policy divergence from
+  Core's current test expectations: original Knots does not resurrect an
+  unswept ephemeral-dust child after a reorg, but does resurrect the child when
+  it sweeps the dust. This was verified by running the unmodified Knots
+  functional test locally; the port now matches Knots' behavior.
+- `p2p_invalid_tx.py` and `p2p_segwit.py` now match the port's current
+  validation surfaces: orphanage overflow is still capped at 100 stored
+  orphans, but the Core-current log string is `orphanage count limit`, and
+  Knots-style SegWit block failures use mandatory-script reject reasons. The
+  SegWit test also restores hash refreshes needed by the current mutable
+  transaction helpers.
 
 ## Original Knots Defects Confirmed
 
@@ -248,6 +267,14 @@ under different commits. They are not all proven exploitable.
   callers are internal/tests. The BDB cleanup/data-loss fixes matter for this
   port because BDB support is retained, but current Core master no longer has
   the same BDB write-environment files.
+
+- Ephemeral-dust reorg policy hardening:
+  Knots' mempool policy keeps an unswept ephemeral-dust child from re-entering
+  the mempool after its containing block is invalidated, while still allowing
+  re-entry when the child sweeps the dust. Core's current test expected the
+  unswept child to resurrect. This looks like mempool policy hardening rather
+  than a consensus issue, and it was confirmed on an unmodified local Knots
+  build before updating the port test.
 
 High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
