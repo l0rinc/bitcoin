@@ -20,6 +20,7 @@
 
 #include <atomic>
 #include <memory>
+#include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(validationinterface_tests, ChainTestingSetup)
 
@@ -45,6 +46,16 @@ struct BlockNotificationSubscriber final : public CValidationInterface {
     void NewPoWValidBlock(const CBlockIndex*, const std::shared_ptr<const CBlock>&) override
     {
         ++m_new_pow_valid;
+    }
+};
+
+struct FlushNotificationSubscriber final : public CValidationInterface {
+    int m_flushed{0};
+
+    void ChainStateFlushed(const kernel::ChainstateRole&, const CBlockLocator& locator) override
+    {
+        BOOST_CHECK(!locator.IsNull());
+        ++m_flushed;
     }
 };
 
@@ -164,6 +175,24 @@ BOOST_AUTO_TEST_CASE(block_signal_rejects_null_tx_refs)
     BOOST_CHECK_EQUAL(sub->m_connected, 0);
     BOOST_CHECK_EQUAL(sub->m_disconnected, 0);
     BOOST_CHECK_EQUAL(sub->m_new_pow_valid, 0);
+}
+
+BOOST_AUTO_TEST_CASE(chainstate_flushed_rejects_null_locator)
+{
+    auto sub{std::make_shared<FlushNotificationSubscriber>()};
+    m_node.validation_signals->RegisterSharedValidationInterface(sub);
+
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        test_only_CheckFailuresAreExceptionsNotAborts failed_assumes_throw{};
+        BOOST_CHECK_THROW(m_node.validation_signals->ChainStateFlushed(kernel::ChainstateRole{}, CBlockLocator{}),
+                          NonFatalCheckError);
+    }
+
+    m_node.validation_signals->ChainStateFlushed(kernel::ChainstateRole{}, CBlockLocator{std::vector<uint256>{uint256::ONE}});
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    m_node.validation_signals->UnregisterSharedValidationInterface(sub);
+
+    BOOST_CHECK_EQUAL(sub->m_flushed, 1);
 }
 
 BOOST_AUTO_TEST_CASE(unregister_validation_interface_race)
