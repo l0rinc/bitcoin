@@ -356,6 +356,18 @@ Other missing/adapted Knots pieces found during this pass:
   resource-control surface, not consensus behavior or a covert security fix.
   `mempool_limit.py` now covers invalid runtime sizes, visible limit updates,
   and shrink-time eviction.
+- The mempool transaction-list review confirmed Knots'
+  `listmempooltransactions` RPC and matching REST endpoints
+  (`5def0ba762`, `f706635736`) are present in the port and absent from current
+  Core. The port matches actual Knots' shared `MempoolTxsToJSON(...)` behavior:
+  each result includes the current `mempool_sequence`, filters entries whose
+  `entry_sequence` is below `sequence_start`, returns either txids or decoded
+  transactions without hex, and exposes the same data through
+  `/rest/mempool/transactions/<info|contents>.json`. This is mempool polling
+  and observability functionality, not consensus or network-policy behavior.
+  `interface_rest.py` now covers non-empty RPC/REST equality, sequence
+  filtering, empty future-sequence results, verbose decoded output, and the
+  parse-error path.
 - Wallet sweep coverage passes on the current descriptor-wallet base:
   `wallet_sweepprivkeys.py` rejects invalid/unfunded keys and sweeps both
   unconfirmed and confirmed P2PKH outputs. Legacy-only Knots tests
@@ -1391,6 +1403,8 @@ Functional tests:
 - `python3 test/functional/mining_prioritisetransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_maxuploadtarget.py --configfile build/test/config.ini`
 - `python3 test/functional/interface_rest.py --configfile build/test/config.ini`
+- `python3 test/functional/interface_rest.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_interface_rest_listmempooltransactions`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_config_args_portmap_2`
