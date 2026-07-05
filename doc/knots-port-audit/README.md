@@ -1746,8 +1746,11 @@ empty-header guard, `LoadChainTip` UB,
 reindex-chainstate periodic dbcache flushes (`ac7c0590ef`, rebased from Core
 `84820561dc`; current Core carries this through `1d4e3d1b18`),
 requested-block `ReadBlock(..., expected_hash)` checks in net processing,
-`SetStdinEcho` UB, fd-limit overflow/RLIMIT_INFINITY handling, RPC credentials
-hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, randomized Tor
+equal-work active-chain tie-break persistence across restart and complex
+reorgs (`5689ba8fde`, `b1378e3f48`, `dbca0cc4d3`, and `24ffe06d2f`),
+BaseIndex rewind no-commit state persistence (`16b1710d97`), `SetStdinEcho`
+UB, fd-limit overflow/RLIMIT_INFINITY handling, RPC credentials hashed in
+memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, randomized Tor
 stream-isolation credential prefixes, feebumper combined-fee crash, wallet
 coin-selection boolean amount fix, precomputed transaction-data lifetime
 hardening (CVE-2024-52911), Tor-control excessive-line OOM hardening, I2P SAM
@@ -1832,6 +1835,21 @@ Source/manifest checks:
   `git -C ../knots show 29.x-knots:src/wallet/db.cpp | sed -n '20,75p'`
   show that current Core lacks Knots' `ignore_paths` skip list in
   `ListDatabases(...)`.
+- `git show --stat --patch --minimal dbca0cc4d3e 5689ba8fde b1378e3f48
+  24ffe06d2f`, `rg -n
+  "SEQ_ID_BEST_CHAIN_FROM_DISK|SEQ_ID_INIT_FROM_DISK|feature_chain_tiebreaks|setBlockIndexCandidates|nSequenceId"
+  src/chain.h src/node/blockstorage.cpp src/validation.cpp
+  test/functional/feature_chain_tiebreaks.py test/functional/test_runner.py`,
+  and equivalent `origin/master` and `../knots` source checks show the
+  equal-work chain-tip tie-break persistence across restarts and complex
+  reorgs is already carried by current Core, actual Knots, and the port. This
+  is a reorg/restart safety check, not a remaining Core shortcoming.
+- `git show --stat --patch --minimal 16b1710d97` plus `rg -n
+  "BaseIndex::Rewind|committed index state must never be ahead|SetBestBlockIndex\\(new_tip\\)|Commit\\("
+  src/index/base.cpp` and equivalent `origin/master` and `../knots` checks
+  show Core, Knots, and the port already avoid committing index state inside
+  `BaseIndex::Rewind`, preventing the index state from being persisted ahead
+  of the flushed chainstate after reorgs.
 - `git show origin/master:src/net_processing.cpp | rg -n
   "previous compact block reconstruction attempt failed|header.IsNull"` and
   `git -C ../knots show 29.x-knots:src/net_processing.cpp | rg -n
@@ -2388,6 +2406,12 @@ Functional tests:
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_init_wait_port --portseed=27522`
+- `python3 test/functional/feature_chain_tiebreaks.py --configfile
+  build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_chain_tiebreaks_port
+  --portseed=27530`
+- `python3 ../knots/test/functional/feature_chain_tiebreaks.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_chain_tiebreaks_knots --portseed=27531`
 - `python3 ../knots/test/functional/feature_shutdown.py --configfile
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_shutdown_wait_knots --portseed=27521`
