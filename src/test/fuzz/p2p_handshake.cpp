@@ -94,9 +94,14 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
 
     LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 100) {
         CNode& connection = *PickValue(fuzzed_data_provider, peers);
-        if (connection.fDisconnect || connection.fSuccessfullyConnected) {
-            // Skip if the connection was disconnected or if the version
-            // handshake was already completed.
+        if (connection.fDisconnect) {
+            // Skip if the connection was disconnected.
+            continue;
+        }
+        const bool send_late_feature{connection.fSuccessfullyConnected.load() && fuzzed_data_provider.ConsumeBool()};
+        if (connection.fSuccessfullyConnected.load() && !send_late_feature) {
+            // Skip most messages once the version handshake was completed; this target is focused
+            // on handshake transitions. Still permit a late FEATURE, which must disconnect.
             continue;
         }
 
@@ -107,7 +112,7 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
         };
 
         CSerializedNetMsg net_msg;
-        net_msg.m_type = PickValue(fuzzed_data_provider, ALL_NET_MESSAGE_TYPES);
+        net_msg.m_type = send_late_feature ? NetMsgType::FEATURE : PickValue(fuzzed_data_provider, ALL_NET_MESSAGE_TYPES);
         net_msg.data = ConsumeRandomLengthByteVector(fuzzed_data_provider, MAX_PROTOCOL_MESSAGE_LENGTH);
 
         connman.FlushSendBuffer(connection);
@@ -123,6 +128,7 @@ FUZZ_TARGET(p2p_handshake, .init = ::initialize)
             }
             node.peerman->SendMessages(connection);
         }
+        if (send_late_feature) Assert(connection.fDisconnect.load());
         AssertHandshakeState(peers);
     }
 

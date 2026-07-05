@@ -4017,6 +4017,8 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
     if (msg_type == NetMsgType::FEATURE) {
         if (pfrom.fSuccessfullyConnected) {
             // Disconnect peers that send a FEATURE message after VERACK.
+            Assume(pfrom.nVersion.load() != 0);
+            Assume(pfrom.GetCommonVersion() == std::min(pfrom.nVersion.load(), pfrom.AdvertisedVersion()));
             LogDebug(BCLog::NET, "feature received after verack, %s", pfrom.DisconnectMsg());
             pfrom.fDisconnect = true;
             return;
