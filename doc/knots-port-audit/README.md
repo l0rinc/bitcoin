@@ -597,6 +597,14 @@ Other missing/adapted Knots pieces found during this pass:
   restores the original Knots-style `feature_segwit.py` coverage as
   `6166d553d1`, asserting that `hash` and `wtxid` both match the witness hash
   for witness and non-witness mempool transactions.
+- The `validateaddress` RPC compatibility review confirmed Knots' hidden
+  deprecated `address_type` parameter and deprecated `error_index` result
+  (`5ed6ea5f31`, `48c91aabdb`, `7115f632a2`) are present in the port and
+  absent from current Core master. This is compatibility for older Knots RPC
+  clients, not consensus or network security behavior. Existing
+  `rpc_invalid_address_message.py` coverage asserts accepted `address_type`,
+  `error_index`, invalid address-type values, and invalid address-type JSON
+  types.
 - The wallet witness-only follow-up confirmed Knots' null-provider guard for
   `fundrawtransaction(..., {"segwit_inputs_only": true})` (`2a09a34129`) is
   present in the port. Current Core does not expose the `segwit_inputs_only`
@@ -1304,6 +1312,9 @@ Functional tests:
 - `python3 test/functional/p2p_disconnect_ban.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_disconnect_ban_ip_subnet`
 - `python3 test/functional/rpc_rawtransaction.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_invalid_address_message.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_invalid_address_validateaddress_compat`
 - `python3 test/functional/rpc_txoutproof.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_txoutproof`
 - `python3 test/functional/rpc_packages.py --configfile build/test/config.ini`
