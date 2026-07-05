@@ -52,16 +52,21 @@ BOOST_AUTO_TEST_CASE(checkpoint_sanity)
 
     uint256 p11111 = uint256{"0000000069e244f73d78e8fd29ba2fd2ed618bd6fa2ee92559f542fdb26e7c1d"};
     uint256 p134444 = uint256{"00000000000005b12ffd4cd315cd34ffd4a594f430ac814c91184a0d42d2b0fe"};
+    uint256 p908765 = uint256{"00000000000000000001b64acb5fe4b40b84092159b6406a6244f46a37fa6c6b"};
+    BOOST_CHECK_EQUAL(checkpoints.GetHeight(), 908765);
     BOOST_CHECK(checkpoints.CheckBlock(11111, p11111));
     BOOST_CHECK(checkpoints.CheckBlock(134444, p134444));
+    BOOST_CHECK(checkpoints.CheckBlock(908765, p908765));
 
     // Wrong hashes at checkpoints should fail:
     BOOST_CHECK(!checkpoints.CheckBlock(11111, p134444));
     BOOST_CHECK(!checkpoints.CheckBlock(134444, p11111));
+    BOOST_CHECK(!checkpoints.CheckBlock(908765, p11111));
 
     // ... but any hash not at a checkpoint should succeed:
-    BOOST_CHECK(checkpoints.CheckBlock(11111+1, p134444));
-    BOOST_CHECK(checkpoints.CheckBlock(134444+1, p11111));
+    BOOST_CHECK(checkpoints.CheckBlock(11111 + 1, p134444));
+    BOOST_CHECK(checkpoints.CheckBlock(134444 + 1, p11111));
+    BOOST_CHECK(checkpoints.CheckBlock(908765 + 1, p11111));
 }
 
 BOOST_AUTO_TEST_CASE(block_subsidy_test)
