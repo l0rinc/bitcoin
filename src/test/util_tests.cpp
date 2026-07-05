@@ -225,6 +225,8 @@ BOOST_AUTO_TEST_CASE(parse_hex)
     // Non-hex is treated as invalid
     BOOST_CHECK_EQUAL(ParseHex("1234 invalid 1234").size(), 0);
     BOOST_CHECK(!TryParseHex("1234 invalid 1234").has_value());
+    BOOST_CHECK(ParseHex<std::byte>("1234 invalid 1234").empty());
+    BOOST_CHECK(!TryParseHex<std::byte>("1234 invalid 1234").has_value());
 
     // Truncated input is treated as invalid
     BOOST_CHECK_EQUAL(ParseHex("12 3").size(), 0);
