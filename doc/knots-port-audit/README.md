@@ -1721,7 +1721,12 @@ opens, LevelDB file-size initialization, wallet `sendall` transaction-size
 error handling, miniscript assert guards, and most cpp-subprocess
 memory/Windows fixes, P2P `-capturemessages` option caching, single-timepoint
 inactivity checks, and clean success exit status for initialization interrupted
-by shutdown.
+by shutdown. A follow-up patch-id audit also found that current Core already
+has the MiniMiner negative-fee assumption removal, peer/peeraddr log comma
+restoration through `CNode::LogPeer()`, and lazy `decodepsbt` result-doc
+initialization. The Knots `getblock_vin` lazy-init follow-up is structurally
+avoided in current Core and this port because `getblock()` is registered as an
+`RPCMethod` factory, rather than by namespace-scope `RPCResult` construction.
 
 ## Open Risks
 
@@ -2010,6 +2015,30 @@ Builds:
   src/test/pcp_tests.cpp` show current Core has the repeated-`NOT_AUTHORIZED`
   downgrade but not Knots' explicit-user warning override, while Knots and the
   port carry the override.
+- `git show origin/master:src/node/mini_miner.cpp | rg -n
+  "Don't check fees|GetModFeesWithAncestors\\(\\) >=|GetSizeWithAncestors"
+  -C 3` and `rg -n
+  "Don't check fees|GetModFeesWithAncestors\\(\\) >=|GetSizeWithAncestors"
+  src/node/mini_miner.cpp src/test/miniminer_tests.cpp` show current Core and
+  the port no longer assert ancestor fees are greater than self fees, so Knots'
+  negative-fee MiniMiner fix is already present.
+- `git show origin/master:src/net.cpp | rg -n "peeraddr|LogPeer" -C 3` and
+  `rg -n "peeraddr|LogPeer|peer=0, peeraddr" src/net.cpp
+  src/net_processing.cpp test/functional/feature_logging.py` show current Core
+  and the port format peer log prefixes through `CNode::LogPeer()`, preserving
+  the peer/peeraddr comma that older Knots fixed directly.
+- `git show origin/master:src/rpc/rawtransaction.cpp | rg -n
+  "DecodePSBTInputs|DecodePSBTOutputs|decodepsbt_inputs|decodepsbt_outputs"
+  -C 4`, `git show origin/master:src/rpc/blockchain.cpp | rg -n
+  "GetBlockVin|getblock_vin|RPCMethod getblock|RPCHelpMan getblock" -C 4`,
+  `git -C ../knots show 29.x-knots:src/rpc/blockchain.cpp | rg -n
+  "GetBlockVin|getblock_vin|RPCMethod getblock|RPCHelpMan getblock" -C 4`,
+  and `rg -n
+  "DecodePSBTInputs|DecodePSBTOutputs|GetBlockVin|getblock_vin|RPCMethod getblock|RPCHelpMan getblock"
+  src/rpc/rawtransaction.cpp src/rpc/blockchain.cpp` show current Core and the
+  port already lazy-initialize the `decodepsbt` result docs and avoid the
+  `getblock_vin` namespace-static pattern via the newer `RPCMethod` factory
+  registration shape; actual Knots carries the explicit `GetBlockVin()` helper.
 - `git show origin/master:src/node/warnings.cpp | rg -n
   "all_messages\\.back|Join\\(all_messages" -C 3`
 - `git -C ../knots show 29.x-knots:src/node/warnings.cpp | rg -n
@@ -2082,6 +2111,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=validation_block_tests`
 - `build/bin/test_bitcoin --run_test=merkle_tests`
 - `build/bin/test_bitcoin --run_test=miner_tests`
+- `build/bin/test_bitcoin --run_test=miniminer_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin
   --run_test=policyestimator_tests/read_rejects_fee_estimates_with_oversized_scale`
 - `build/bin/test_bitcoin
@@ -2161,6 +2192,9 @@ Functional tests:
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_review_knots2
   --portseed=26445`
+- `python3 test/functional/feature_logging.py --configfile
+  build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_logging_peeraddr
+  --portseed=27501`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_rdts_gate_fixed3`
 - `python3 test/functional/p2p_eviction.py --configfile build/test/config.ini
