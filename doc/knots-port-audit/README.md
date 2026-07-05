@@ -254,6 +254,14 @@ Other missing/adapted Knots pieces found during this pass:
   progress support restored by later merges, and its miner code uses the same
   overflow-safe `nBlockWeight + BLOCK_FULL_ENOUGH_WEIGHT_DELTA` check as this
   port/current Core.
+- Extending the patch-id sweep to all non-merge Knots commits since
+  2025-01-01 left only four misses: those two historical reverts, a historical
+  CI-only `MAKEJOBS` revert (`5f7f1cf181`) superseded by Knots' later Cirrus
+  runner workflow, and archived 28.1 release notes (`bb5f76ee01`) that are
+  already present byte-for-byte in this tree but were intentionally excluded
+  from the patch-id evidence set with other historical release notes. The CI
+  mismatch is not a runtime/client delta; the port retains current Core's
+  newer CI workflow on the rebased base.
 
 ## Original Knots Defects Confirmed
 
