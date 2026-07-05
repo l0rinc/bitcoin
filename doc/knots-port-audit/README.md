@@ -191,11 +191,18 @@ Other missing/adapted Knots pieces found during this pass:
   (`dc0ed81797`). `mining_coin_age_priority.py`,
   `mining_prioritisetransaction.py`, and `feature_maxuploadtarget.py` pass with
   this helper.
-- Header-tree DoS coverage exposed a port omission in Knots' reintroduced
-  checkpoint enforcement: original Knots retains the testnet3 checkpoint at
-  height 546, while the port only had mainnet checkpoint data. This was not an
-  original Knots bug and is now restored as `0dbc321ca0`, along with the Knots
-  testnet3 header fixture and test framework network magic needed by
+- Knots' reintroduced checkpoint enforcement (`75b826c729`, port
+  `2dd00e5000`) is a Core-missing validation hardening rather than a
+  port-introduced behavior: it rejects a header whose height exactly matches a
+  configured checkpoint but whose hash differs, even when the node has not
+  first accepted the honest chain through that checkpoint. `p2p_dos_header_tree`
+  covers both the older-than-last-known-checkpoint rejection and this
+  height-specific `checkpoint-mismatch` branch, and passes against unmodified
+  Knots. The same review exposed a port omission in the supporting testnet3
+  checkpoint data: original Knots retains the testnet3 checkpoint at height 546,
+  while the port only had mainnet checkpoint data. This was not an original
+  Knots bug and is now restored as `0dbc321ca0`, along with the Knots testnet3
+  header fixture and test framework network magic needed by
   `p2p_dos_header_tree.py`.
 - A high-risk review of exact patch-id misses found Knots' codex32 early-return
   fix (`126d6df18d`) was missing from the port. Actual Knots `29.x-knots`
@@ -1772,6 +1779,10 @@ Functional tests:
 - `python3 test/functional/rpc_mempool_info.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini`
+- `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_dos_header_tree_checkpoint`
+- `python3 test/functional/p2p_dos_header_tree.py --configfile ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_knots_p2p_dos_header_tree_checkpoint`
 - `python3 test/functional/p2p_block_times.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_block.py --configfile build/test/config.ini
   --skipreorg --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_block_skip`
