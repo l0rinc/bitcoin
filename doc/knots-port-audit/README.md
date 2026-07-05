@@ -274,6 +274,15 @@ Other missing/adapted Knots pieces found during this pass:
   block-manager argument parser. Current Core master has no `-pruneduringinit`
   option. `blockmanager_tests/blockmanager_args_prune_during_init` covers the
   `0`, `1`, minimum-target, disable, and invalid-value cases.
+- The first-startup disk-space warning review confirmed Knots'
+  `4f06564f36` is present in the port and absent from current Core. Knots and
+  this port treat `AssumedBlockchainSize()` as decimal GB, matching the
+  user-facing `GB` wording and Qt's `GB_BYTES` constant, and use the same
+  decimal divisor when reporting the warning. Current Core still checks
+  `AssumedBlockchainSize() * 1_GiB` but reports the raw decimal-size chainparam
+  value, so the warning threshold is about 7.4% higher than the displayed
+  estimate. This is local operator warning/resource-estimation correctness, not
+  consensus behavior or a remote security issue.
 - The versionbits warning review exposed a port-introduced regression from
   rebasing Knots' stronger unknown-signalling warnings onto current Core's
   BIP323 constant split. The port had kept `VERSIONBITS_NUM_BITS = 5`, so
@@ -1415,6 +1424,17 @@ under different commits. They are not all proven exploitable.
   `InterpretBool(...)`. This is local configuration robustness and removes a
   surprising abort-on-access path for numeric settings.
 
+- First-startup block-storage size warning units:
+  `4f06564f36`
+
+  Current Core master still converts `AssumedBlockchainSize()` to bytes with
+  `1_GiB`, but the chainparam value and warning text are decimal GB. Knots and
+  this port use `1'000'000'000` for both the disk-space threshold and the
+  reported warning size. This avoids a confusing false-positive warning window
+  where Core can say approximately `N GB` will be stored but require enough
+  free space for `N GiB`. This is local operator warning/resource-estimation
+  correctness, not consensus or network security behavior.
+
 - Prune-lock reorg rollback and persistence:
   `8ee1214157`, `0b4bd4e134`, `4822c21812`
 
@@ -1938,6 +1958,16 @@ Source/manifest checks:
   show current Core still uses the older `value.get_str()` numeric-setting
   path and expects numeric `GetBoolArg` values to throw, while Knots
   `577c04c80e` changes those cases to `InterpretBool(value.getValStr())`.
+- `git -C ../knots show --stat --patch --minimal 4f06564f36`,
+  `git show origin/master:src/init.cpp | rg -n
+  "AssumedBlockchainSize|assumed_chain_bytes|1_GiB|1'000'000'000|Disk space for" -C 4`,
+  `git -C ../knots show 29.x-knots:src/init.cpp | rg -n
+  "AssumedBlockchainSize|assumed_chain_bytes|1_GiB|1'000'000'000|Disk space for" -C 4`,
+  and `rg -n
+  "AssumedBlockchainSize|assumed_chain_bytes|1_GiB|1'000'000'000|Disk space for"
+  src/init.cpp` show current Core still uses `1_GiB` for the first-startup
+  block-storage warning threshold while actual Knots and the port use decimal
+  `1'000'000'000` bytes.
 - `git show origin/master:src/zmq/zmqnotificationinterface.cpp | rg -n
   "TryForEachAndRemoveFailed|notifier->Shutdown|notifiers.erase" -C 4`,
   `git -C ../knots show 29.x-knots:src/zmq/zmqnotificationinterface.cpp |
