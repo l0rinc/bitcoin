@@ -5,6 +5,8 @@
 """Test the setban rpc call."""
 
 from contextlib import ExitStack
+import time
+
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     p2p_port,
@@ -82,6 +84,18 @@ class SetBanTests(BitcoinTestFramework):
         self.nodes[1].setban("127.0.0.1", "add")
         banned = self.nodes[1].listbanned()[0]
         assert_equal(banned['ban_duration'], 1234)
+
+        self.log.info("Test large relative bantime")
+        self.nodes[1].clearbanned()
+        mocktime = int(time.time())
+        self.nodes[1].setmocktime(mocktime)
+        max_bantime = 2**63 - 1
+        self.nodes[1].setban("192.0.2.1", "add", max_bantime)
+        banned = self.nodes[1].listbanned()[0]
+        assert_equal(banned["address"], "192.0.2.1/32")
+        assert_equal(banned["banned_until"], max_bantime)
+        assert_equal(banned["ban_duration"], max_bantime - mocktime)
+        assert_equal(banned["time_remaining"], max_bantime - mocktime)
 
 if __name__ == '__main__':
     SetBanTests(__file__).main()

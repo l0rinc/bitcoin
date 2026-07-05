@@ -16,18 +16,8 @@
 
 #include <cassert>
 #include <cstdint>
-#include <limits>
 #include <string>
 #include <vector>
-
-namespace {
-int64_t ConsumeBanTimeOffset(FuzzedDataProvider& fuzzed_data_provider) noexcept
-{
-    // Avoid signed integer overflow by capping to int32_t max:
-    // banman.cpp:137:73: runtime error: signed integer overflow: 1591700817 + 9223372036854775807 cannot be represented in type 'long'
-    return fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(std::numeric_limits<int64_t>::min(), std::numeric_limits<int32_t>::max());
-}
-} // namespace
 
 void initialize_banman()
 {
@@ -61,7 +51,7 @@ FUZZ_TARGET(banman, .init = initialize_banman)
     }
 
     {
-        BanMan ban_man{banlist_file, /*client_interface=*/nullptr, /*default_ban_time=*/ConsumeBanTimeOffset(fuzzed_data_provider)};
+        BanMan ban_man{banlist_file, /*client_interface=*/nullptr, /*default_ban_time=*/fuzzed_data_provider.ConsumeIntegral<int64_t>()};
         // The complexity is O(N^2), where N is the input size, because each call
         // might call DumpBanlist (or other methods that are at least linear
         // complexity of the input size).
@@ -80,8 +70,8 @@ FUZZ_TARGET(banman, .init = initialize_banman)
                             contains_invalid = true;
                         }
                     }
-                    auto ban_time_offset = ConsumeBanTimeOffset(fuzzed_data_provider);
-                    auto since_unix_epoch = fuzzed_data_provider.ConsumeBool();
+                    const int64_t ban_time_offset{fuzzed_data_provider.ConsumeIntegral<int64_t>()};
+                    const bool since_unix_epoch{fuzzed_data_provider.ConsumeBool()};
                     ban_man.Ban(net_addr, ban_time_offset, since_unix_epoch);
                 },
                 [&] {
@@ -90,8 +80,8 @@ FUZZ_TARGET(banman, .init = initialize_banman)
                     if (!subnet.IsValid()) {
                         contains_invalid = true;
                     }
-                    auto ban_time_offset = ConsumeBanTimeOffset(fuzzed_data_provider);
-                    auto since_unix_epoch = fuzzed_data_provider.ConsumeBool();
+                    const int64_t ban_time_offset{fuzzed_data_provider.ConsumeIntegral<int64_t>()};
+                    const bool since_unix_epoch{fuzzed_data_provider.ConsumeBool()};
                     ban_man.Ban(subnet, ban_time_offset, since_unix_epoch);
                 },
                 [&] {
