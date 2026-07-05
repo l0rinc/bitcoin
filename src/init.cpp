@@ -2793,6 +2793,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     scheduler.scheduleEvery([banman]{
         banman->DumpBanlist();
     }, DUMP_BANS_INTERVAL);
+    banman->SetScheduler(scheduler);
 
     if (node.peerman) node.peerman->StartScheduledTasks(scheduler);
 
