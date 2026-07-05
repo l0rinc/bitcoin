@@ -104,6 +104,14 @@ Other missing/adapted Knots pieces found during this pass:
   BIP67 multisig sorting now passes on the port. `rpc_sort_multisig.py` had
   dropped the original Knots `assert_raises_rpc_error` import during the rebase;
   the port restores that test helper import as `dcf97bd63b`.
+- Mining priority coverage now passes against Knots' policy defaults. The
+  coin-age priority test uses a cache-bypassing `getblocktemplate` request when
+  checking immediate `prioritisetransaction` effects, and the shared large
+  transaction helper now appends standard P2WSH outputs instead of many
+  OP_RETURN outputs so it remains valid under Knots' one-data-output policy
+  (`dc0ed81797`). `mining_coin_age_priority.py`,
+  `mining_prioritisetransaction.py`, and `feature_maxuploadtarget.py` pass with
+  this helper.
 
 ## Original Knots Defects Confirmed
 
@@ -259,6 +267,9 @@ Functional tests:
 - `python3 test/functional/mempool_dust.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_subdust_fee_penalty.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini`
+- `python3 test/functional/mining_coin_age_priority.py --configfile build/test/config.ini`
+- `python3 test/functional/mining_prioritisetransaction.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_maxuploadtarget.py --configfile build/test/config.ini`
 - `python3 test/functional/interface_rest.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_torcontrol.py --configfile build/test/config.ini`
