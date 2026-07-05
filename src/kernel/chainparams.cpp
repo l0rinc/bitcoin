@@ -403,6 +403,12 @@ public:
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
 
+        checkpointData = {
+            {
+                {546, uint256{"000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70"}},
+            }
+        };
+
         m_assumeutxo_data = {
             {
                 .height = 2'500'000,
