@@ -72,6 +72,7 @@
 #include <functional>
 #include <future>
 #include <initializer_list>
+#include <ios>
 #include <iterator>
 #include <limits>
 #include <list>
@@ -83,6 +84,7 @@
 #include <ratio>
 #include <set>
 #include <span>
+#include <string_view>
 #include <typeinfo>
 #include <utility>
 
@@ -202,6 +204,27 @@ static constexpr auto PRIVATE_BROADCAST_MAX_CONNECTION_LIFETIME{3min};
 
 // Internal stuff
 namespace {
+bool IsExpectedPeerMessageDeserializationFailure(const std::exception& e) noexcept
+{
+    if (!dynamic_cast<const std::ios_base::failure*>(&e)) return false;
+    const std::string_view what{e.what()};
+    return what.find("DataStream::read(): end of data") != std::string_view::npos ||
+           what.find("DataStream::ignore(): end of data") != std::string_view::npos ||
+           what.find("non-canonical ReadCompactSize()") != std::string_view::npos ||
+           what.find("ReadCompactSize(): size too large") != std::string_view::npos ||
+           what.find("ReadVarInt(): size too large") != std::string_view::npos ||
+           what.find("CompactSize exceeds limit of type") != std::string_view::npos ||
+           what.find("String length limit exceeded") != std::string_view::npos ||
+           what.find("Vector length limit exceeded") != std::string_view::npos ||
+           what.find("CustomUintFormatter value out of range") != std::string_view::npos ||
+           what.find("differential value overflow") != std::string_view::npos ||
+           what.find("indexes overflowed 16 bits") != std::string_view::npos ||
+           what.find("Address too long:") != std::string_view::npos ||
+           what.find("BIP155 ") != std::string_view::npos ||
+           what.find("Superfluous witness record") != std::string_view::npos ||
+           what.find("Unknown transaction optional data") != std::string_view::npos;
+}
+
 /** Blocks that are in flight, and that are in the queue to be downloaded. */
 struct QueuedBlock {
     /** BlockIndex. We must have this since we only request blocks when we've already validated the header. */
@@ -4036,7 +4059,8 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             std::vector<unsigned char> feature_data_vec;
             vRecv >> LIMITED_VECTOR(feature_data_vec, MAX_FEATUREDATA_LENGTH);
             feature_data = DataStream(feature_data_vec);
-        } catch (const std::ios_base::failure&) {
+        } catch (const std::ios_base::failure& e) {
+            Assume(IsExpectedPeerMessageDeserializationFailure(e));
             feature_id.clear(); // use empty feature_id as error indicator
         }
         if (feature_id.size() < 4 || !vRecv.empty()) {
@@ -5260,8 +5284,10 @@ bool PeerManagerImpl::ProcessMessages(CNode& node, std::atomic<bool>& interruptM
         LOCK(m_tx_download_mutex);
         if (m_txdownloadman.HaveMoreWork(peer.m_id)) fMoreWork = true;
     } catch (const std::exception& e) {
+        Assume(IsExpectedPeerMessageDeserializationFailure(e));
         LogDebug(BCLog::NET, "%s(%s, %u bytes): Exception '%s' (%s) caught\n", __func__, SanitizeString(msg.m_type), msg.m_message_size, e.what(), typeid(e).name());
     } catch (...) {
+        Assume(false);
         LogDebug(BCLog::NET, "%s(%s, %u bytes): Unknown exception caught\n", __func__, SanitizeString(msg.m_type), msg.m_message_size);
     }
 
