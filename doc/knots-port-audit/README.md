@@ -100,6 +100,10 @@ Other missing/adapted Knots pieces found during this pass:
   Tor/local-port warning on stderr, and parse the fake Tor command as
   `LOG -f TORRC`, matching the port's `-torexecute` launch contract
   (`6fe0c50345`).
+- Knots-added RPC coverage for `getblocklocations`, `getgeneralinfo`, and
+  BIP67 multisig sorting now passes on the port. `rpc_sort_multisig.py` had
+  dropped the original Knots `assert_raises_rpc_error` import during the rebase;
+  the port restores that test helper import as `dcf97bd63b`.
 
 ## Original Knots Defects Confirmed
 
@@ -262,6 +266,9 @@ Functional tests:
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_bind.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_sort_multisig.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
