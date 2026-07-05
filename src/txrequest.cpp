@@ -570,6 +570,9 @@ public:
             }
             it = it_next;
         }
+        const auto remaining_peer_it = index.lower_bound(ByPeerView{peer, false, uint256::ZERO});
+        Assume(m_peerinfo.find(peer) == m_peerinfo.end());
+        Assume(remaining_peer_it == index.end() || remaining_peer_it->m_peer != peer);
     }
 
     void ForgetTxHash(const uint256& txhash)
