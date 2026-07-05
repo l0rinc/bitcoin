@@ -434,6 +434,69 @@ BOOST_AUTO_TEST_CASE(ccoins_cursor_dirty_count_contracts)
     BOOST_CHECK_EQUAL(cursor.GetTotalCount(), 1U);
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_cursor_non_erasing_postconditions)
+{
+    CoinsCachePair sentinel{};
+    sentinel.second.SelfRef(sentinel);
+    CCoinsMapMemoryResource resource;
+    CCoinsMap map{0, SaltedOutpointHasher{/*deterministic=*/true}, CCoinsMap::key_equal{}, &resource};
+    size_t dirty_count{0};
+
+    auto make_outpoint = [&](uint32_t n) {
+        return COutPoint{Txid::FromUint256(m_rng.rand256()), n};
+    };
+    auto make_coin = [](CAmount value) {
+        return Coin{CTxOut{value, CScript{} << OP_TRUE}, 1, false};
+    };
+    auto insert_entry = [&](const COutPoint& outpoint, const Coin& coin) -> CoinsCachePair& {
+        auto [it, inserted]{map.emplace(outpoint, CCoinsCacheEntry{Coin{coin}})};
+        BOOST_REQUIRE(inserted);
+        return *it;
+    };
+
+    const COutPoint dirty_outpoint{make_outpoint(0)};
+    const Coin dirty_coin{make_coin(1)};
+    auto& dirty_entry{insert_entry(dirty_outpoint, dirty_coin)};
+    CCoinsCacheEntry::SetDirty(dirty_entry, sentinel);
+    ++dirty_count;
+
+    const COutPoint spent_outpoint{make_outpoint(1)};
+    const Coin spent_coin{};
+    BOOST_REQUIRE(spent_coin.IsSpent());
+    auto& spent_entry{insert_entry(spent_outpoint, spent_coin)};
+    CCoinsCacheEntry::SetDirty(spent_entry, sentinel);
+    ++dirty_count;
+
+    const COutPoint fresh_outpoint{make_outpoint(2)};
+    const Coin fresh_coin{make_coin(2)};
+    auto& fresh_entry{insert_entry(fresh_outpoint, fresh_coin)};
+    CCoinsCacheEntry::SetFresh(fresh_entry, sentinel);
+    BOOST_REQUIRE(fresh_entry.second.IsFresh());
+    BOOST_REQUIRE(!fresh_entry.second.IsDirty());
+
+    auto cursor{CoinsViewCacheCursor(dirty_count, sentinel, map, /*will_erase=*/false)};
+    for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)) {
+    }
+
+    BOOST_CHECK_EQUAL(cursor.GetDirtyCount(), 0U);
+    BOOST_CHECK_EQUAL(cursor.GetTotalCount(), 2U);
+    BOOST_CHECK_EQUAL(map.size(), 2U);
+    BOOST_CHECK_EQUAL(sentinel.second.Next(), &sentinel);
+    BOOST_CHECK_EQUAL(sentinel.second.Prev(), &sentinel);
+
+    BOOST_REQUIRE(map.contains(dirty_outpoint));
+    BOOST_CHECK(map.at(dirty_outpoint).coin == dirty_coin);
+    BOOST_CHECK(!map.at(dirty_outpoint).IsDirty());
+    BOOST_CHECK(!map.at(dirty_outpoint).IsFresh());
+
+    BOOST_CHECK(!map.contains(spent_outpoint));
+
+    BOOST_REQUIRE(map.contains(fresh_outpoint));
+    BOOST_CHECK(map.at(fresh_outpoint).coin == fresh_coin);
+    BOOST_CHECK(!map.at(fresh_outpoint).IsDirty());
+    BOOST_CHECK(!map.at(fresh_outpoint).IsFresh());
+}
+
 struct UpdateTest : BasicTestingSetup {
 // Store of all necessary tx and undo data for next test
 typedef std::map<COutPoint, std::tuple<CTransaction,CTxUndo,Coin>> UtxoData;
