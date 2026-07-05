@@ -3929,6 +3929,12 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
         pindexNew->nStatus |= BLOCK_OPT_WITNESS;
     }
     pindexNew->RaiseValidity(BLOCK_VALID_TRANSACTIONS);
+    Assert(pindexNew->nTx == block.vtx.size());
+    Assert(pindexNew->nFile == pos.nFile);
+    Assert(pindexNew->nDataPos == pos.nPos);
+    Assert(pindexNew->nUndoPos == 0);
+    Assert(pindexNew->nStatus & BLOCK_HAVE_DATA);
+    Assert(pindexNew->IsValid(BLOCK_VALID_TRANSACTIONS));
     m_blockman.m_dirty_blockindex.insert(pindexNew);
 
     if (pindexNew->pprev == nullptr || pindexNew->pprev->HaveNumChainTxs()) {
