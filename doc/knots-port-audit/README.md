@@ -1437,6 +1437,22 @@ under different commits. They are not all proven exploitable.
   now covers the direct explicit-argument case in `feature_config_args.py`, in
   addition to the existing `-connect=0` / `-noconnect` interaction coverage.
 
+- PCP/NAT-PMP explicit-warning preservation:
+  `00354e1161`
+
+  Current Core already downgrades repeated PCP/NAT-PMP `NOT_AUTHORIZED`
+  failures to debug after the first warning, which avoids noisy logs on routers
+  that disable port mapping. Knots adds a small but operator-relevant hardening
+  nuance: if the user explicitly requested NAT-PMP/PCP, or enables it through
+  the node interface, repeated `NOT_AUTHORIZED` results stay at warning level
+  instead of being silently downgraded. This is operator visibility rather than
+  a consensus or remote crash issue. The port adapts Knots' global flag to the
+  current Core `common/pcp.cpp` split and uses an atomic flag because the port
+  mapping code can be toggled from the node interface. The new
+  `pcp_tests/pcp_not_authorized_explicit_warning` unit test asserts both sides
+  of the behavior: one warning by default, and repeated warnings when the
+  explicit-warning flag is set.
+
 - HTTP RPC bind failure behavior:
   `57becdf59e` plus follow-up listen/bind cleanup commits
 
@@ -1703,7 +1719,9 @@ during combining, monotonic
 `uptime`, first-run pruned-disk-space warning rounding, Windows exclusive `wbx`
 opens, LevelDB file-size initialization, wallet `sendall` transaction-size
 error handling, miniscript assert guards, and most cpp-subprocess
-memory/Windows fixes.
+memory/Windows fixes, P2P `-capturemessages` option caching, single-timepoint
+inactivity checks, and clean success exit status for initialization interrupted
+by shutdown.
 
 ## Open Risks
 
@@ -1978,6 +1996,20 @@ Builds:
   29.x-knots -- src/init.cpp src/httprpc.cpp src/rpc/request.h
   src/rpc/util.cpp src/rpc/util.h src/wallet/rpc/util.cpp
   test/functional/rpc_users.py`
+- `git show origin/master:src/common/pcp.cpp | rg -n
+  "g_pcp_warn_for_unauthorized|NOT_AUTHORIZED|already_warned|Mapping failed"
+  -C 4`, `git show origin/master:src/node/interfaces.cpp | rg -n
+  "mapPort|g_pcp" -C 3`, `git -C ../knots show
+  29.x-knots:src/common/pcp.cpp | rg -n
+  "g_pcp_warn_for_unauthorized|NOT_AUTHORIZED|already_warned|Mapping failed"
+  -C 4`, `git -C ../knots show
+  29.x-knots:src/node/interfaces.cpp | rg -n "mapPort|g_pcp" -C 3`, and
+  `rg -n
+  "g_pcp_warn_for_unauthorized|NOT_AUTHORIZED|already_warned|Mapping failed|mapPort\\("
+  src/common/pcp.cpp src/common/pcp.h src/init.cpp src/node/interfaces.cpp
+  src/test/pcp_tests.cpp` show current Core has the repeated-`NOT_AUTHORIZED`
+  downgrade but not Knots' explicit-user warning override, while Knots and the
+  port carry the override.
 - `git show origin/master:src/node/warnings.cpp | rg -n
   "all_messages\\.back|Join\\(all_messages" -C 3`
 - `git -C ../knots show 29.x-knots:src/node/warnings.cpp | rg -n
@@ -2041,6 +2073,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=netbase_tests/netpermissions_test
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=net_peer_connection_tests`
+- `build/bin/test_bitcoin --run_test=pcp_tests/pcp_not_authorized_explicit_warning`
+- `build/bin/test_bitcoin --run_test=pcp_tests`
 - `build/bin/test_bitcoin --run_test=rest_tests`
 - `build/bin/test_bitcoin --run_test=validation_tests`
 - `build/bin/test_bitcoin --run_test=validation_chainstatemanager_tests,wallet_tests
