@@ -152,6 +152,25 @@ Other missing/adapted Knots pieces found during this pass:
   actual Knots `29.x-knots` nor current Core master lists those malformed-input
   errors in `wallet_bdb_parser`. The port now accepts those expected parser
   failures as `daeaa28b49`.
+- The wallet/assumeutxo RPC review found an original Knots bug in the
+  Knots-only `confirmations_assumed` reporting surface. `getrawtransaction`,
+  `gettxout`, and witness `verifytxoutproof` treated any chainstate with a
+  snapshot base as still assumed, but `SnapshotBase()` remains non-null after
+  background validation has completed. A temporary test worktree against
+  unmodified Knots `29.x-knots` reproduced the raw-transaction failure after
+  background validation: the RPC still returned `confirmations: 0` when the
+  validated confirmation count was `201`. This is RPC reporting correctness,
+  not a consensus rule difference. The port now gates these fields on an
+  unvalidated snapshot base and extends `feature_assumeutxo.py` to cover
+  `getrawtransaction`, `gettxout`, and witness txoutproof before and after
+  background validation (`bf459451a2`).
+- The same RPC test pass exposed a port-introduced regression in
+  `waitfornewblock(current_tip)`: the help and test still advertised the
+  optional `current_tip` argument, but the port's long-poll shutdown adaptation
+  ignored `request.params[1]` and always waited on the tip observed when the RPC
+  call started. Current Core and actual Knots both retain the `current_tip`
+  logic. The port now restores it and updates `rpc_blockchain.py` for the
+  current no-UI `Error:` stderr prefix (`bf459451a2`).
 - The exact-patch review found Knots' actionable pruned-index startup error
   (`4a4e4e253e`) was still missing after adapting onto the port's newer
   two-stage block/undo-data availability check. Actual Knots already contains
@@ -931,6 +950,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=net_peer_connection_tests`
 - `build/bin/test_bitcoin --run_test=rest_tests`
 - `build/bin/test_bitcoin --run_test=validation_tests`
+- `build/bin/test_bitcoin --run_test=validation_chainstatemanager_tests,wallet_tests
+  --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=validation_block_tests`
 - `build/bin/test_bitcoin --run_test=merkle_tests`
 - `build/bin/test_bitcoin --run_test=miner_tests`
@@ -984,12 +1005,16 @@ Functional tests:
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_bind.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_current_tip`
 - `python3 test/functional/interface_zmq.py --configfile /tmp/bitcoin-zmq-build/test/config.ini`
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_sort_multisig.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_setban.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_rawtransaction.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_txoutproof.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_txoutproof`
 - `python3 test/functional/rpc_packages.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
@@ -1000,9 +1025,13 @@ Functional tests:
 - `python3 test/functional/p2p_block_times.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_block.py --configfile build/test/config.ini
   --skipreorg --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_block_skip`
+- `python3 test/functional/feature_assumeutxo.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_assumeutxo_after_blockchain`
 - `python3 test/functional/tool_wallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_startup.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_assumeutxo.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_assumeutxo_after_fix`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_backup.py --configfile build/test/config.ini`
@@ -1036,6 +1065,12 @@ Functional tests:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_rdts.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini`
   (fails on the inherited RDTS `ignore_rejects` internal-bug log described
   above)
+- Original Knots expected-failure repro with a temporary
+  `/mnt/my_storage/knots-assumeutxo-repro` worktree and the port's added
+  post-validation raw-transaction assertion:
+  `python3 test/functional/feature_assumeutxo.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_assumeutxo_rawtx_repro`
+  (fails on unmodified Knots with `AssertionError: not(0 == 201)`, confirming
+  the inherited stale `confirmations_assumed` reporting bug)
 
 The full `feature_block.py` run reached the large-reorg section but failed
 because `/tmp` was full and the node shut down with `Disk space is too low!`;
