@@ -247,6 +247,7 @@ std::optional<std::vector<uint8_t>> PCPSendRecv(Sock &sock, const std::string &p
     bool got_response = false;
     int recvsz = 0;
     for (int ntry = 0; !got_response && ntry < num_tries; ++ntry) {
+        if (interrupt) return std::nullopt;
         if (ntry > 0) {
             LogDebug(BCLog::NET, "%s: Retrying (%d)\n", protocol, ntry);
         }
