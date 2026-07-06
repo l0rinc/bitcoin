@@ -97,5 +97,12 @@ class SetBanTests(BitcoinTestFramework):
         assert_equal(banned["ban_duration"], max_bantime - mocktime)
         assert_equal(banned["time_remaining"], max_bantime - mocktime)
 
+        self.log.info("Test ban expiry at exact timestamp")
+        self.nodes[1].clearbanned()
+        self.nodes[1].setban("192.0.2.2", "add", mocktime + 1, absolute=True)
+        assert self.is_banned(self.nodes[1], "192.0.2.2/32")
+        self.nodes[1].setmocktime(mocktime + 1)
+        assert_equal(self.nodes[1].listbanned(), [])
+
 if __name__ == '__main__':
     SetBanTests(__file__).main()
