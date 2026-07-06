@@ -2503,10 +2503,14 @@ under different commits. They are not all proven exploitable.
 - External or Knots-only surfaces:
   `d637873230` fixes `GetBlockFileInfo` bounds handling, but the obvious
   RPC-facing caller is Knots' `getblockfileinfo`. Current Core's corresponding
-  callers are internal/tests. Actual Knots and the port return `nullptr` when
-  the block-file info vector is empty; current Core's older `size() - 1` check
-  can underflow before calling `.at(n)`. The port now covers the empty lookup in
-  `blockmanager_tests/blockmanager_get_block_file_info_empty`. The
+  callers are internal/tests, and current Core's helper still returns
+  `&m_blockfile_info.at(n)` without a `nullptr` guard. Actual Knots and the
+  port return `nullptr` when the block-file info vector is empty, letting the
+  RPC surface report "block file not found" instead of depending on `.at(n)`.
+  The port now covers the empty lookup in
+  `blockmanager_tests/blockmanager_get_block_file_info_empty`; refreshed full
+  `rpc_getblockfrompeer.py` runs also passed on both the port and unmodified
+  Knots, including the `getblockfileinfo` pruning assertions. The
   `85c8d477b0` fee-histogram unsigned-decrement fix matters for Knots'
   `getmempoolinfo(with_fee_histogram=...)` and
   `/rest/mempool/info/with_fee_histogram`, but current Core has no
@@ -3920,6 +3924,16 @@ Builds:
   sed -n '421,475p'`
 - `git -C ../knots grep -n
   "maxConfirms|maxPeriods = confAvg.size|scale >" 29.x-knots -- src`
+- `sed -n '805,818p' src/node/blockstorage.cpp`,
+  `sed -n '780,792p' ../knots/src/node/blockstorage.cpp`, and
+  `git show origin/master:src/node/blockstorage.cpp | sed -n '705,715p'`
+  show Knots and the port guard `GetBlockFileInfo(...)` with
+  `if (n >= m_blockfile_info.size()) return nullptr`, while current Core
+  directly returns `&m_blockfile_info.at(n)`.
+- `rg -n "getblockfileinfo" src/rpc/blockchain.cpp
+  ../knots/src/rpc/blockchain.cpp` shows the Knots RPC surface and the port's
+  adapted hidden RPC caller both handle `nullptr` by returning RPC
+  `block file not found`.
 - `sed -n '20,95p' src/wallet/db.cpp && sed -n '430,452p'
   src/util/fs_helpers.cpp && sed -n '95,116p' src/wallet/test/wallet_tests.cpp`
 - `git show origin/master:src/wallet/db.cpp | sed -n '20,95p' &&
@@ -4029,9 +4043,21 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_get_block_file_info_empty`
+- `build/bin/test_bitcoin
+  --run_test=blockmanager_tests/blockmanager_get_block_file_info_empty
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_readblock_hash_mismatch
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=blockmanager_tests`
+- `build/bin/test_bitcoin --run_test=blockmanager_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin
+  --run_test=blockmanager_tests/blockmanager_get_block_file_info_empty
+  --catch_system_error=no --log_level=error --report_level=short`
+  returned exit code 200 with `no test cases matching filter`, confirming the
+  strengthened empty-vector regression test is port-only.
+- `../knots/build-repro/bin/test_bitcoin --run_test=blockmanager_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_args_prune_during_init
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=netbase_tests/netpermissions_test
@@ -4995,6 +5021,14 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_nodeid_alias_knots
   --portseed=32697`
+- `python3 test/functional/rpc_getblockfrompeer.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_blockfile_port
+  --portseed=42560`
+- `python3 test/functional/rpc_getblockfrompeer.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_blockfile_knots
+  --portseed=42561`
 - `python3 test/functional/rpc_mempool_info.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile=build/test/config.ini
