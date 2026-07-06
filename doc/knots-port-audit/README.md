@@ -4813,6 +4813,24 @@ Functional tests:
   build/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_port_refresh
   --portseed=42202`
+- `python3 test/functional/feature_config_args.py --configfile
+  build/test/config.ini --cachedir=test/cache --test_methods
+  test_v2onlyclearnet_requires_v2transport
+  --tmpdir=/mnt/my_storage/tmp_feature_config_v2onlyclearnet_port_refresh2
+  --portseed=42500`
+- `python3 test/functional/p2p_v2_encrypted.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_port_refresh2
+  --portseed=42502`
+- `python3 test/functional/feature_config_args.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache --test_methods
+  test_v2onlyclearnet_requires_v2transport
+  --tmpdir=/mnt/my_storage/tmp_feature_config_v2onlyclearnet_knots_refresh2
+  --portseed=42501`
+- `python3 test/functional/p2p_v2_encrypted.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_knots_refresh2
+  --portseed=42503`
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_getblocklocations_review`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
@@ -5315,6 +5333,35 @@ Functional tests:
   passed on unmodified Knots, confirming the same V2 clearnet success, V1
   clearnet refusal, and V1 onion allowance behavior with the refreshed test
   run.
+- Port cross-check:
+  `python3 test/functional/feature_config_args.py --configfile
+  build/test/config.ini --cachedir=test/cache --test_methods
+  test_v2onlyclearnet_requires_v2transport
+  --tmpdir=/mnt/my_storage/tmp_feature_config_v2onlyclearnet_port_refresh2
+  --portseed=42500`
+  passed, confirming the startup guard rejects `-v2onlyclearnet=1` with
+  `-v2transport=0`.
+- Port cross-check:
+  `python3 test/functional/p2p_v2_encrypted.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_port_refresh2
+  --portseed=42502`
+  passed, including V2 clearnet success, V1 clearnet refusal, and V1 onion
+  allowance.
+- Original Knots cross-check:
+  `python3 test/functional/feature_config_args.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache --test_methods
+  test_v2onlyclearnet_requires_v2transport
+  --tmpdir=/mnt/my_storage/tmp_feature_config_v2onlyclearnet_knots_refresh2
+  --portseed=42501`
+  passed on unmodified Knots with the same startup guard.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_v2_encrypted.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_knots_refresh2
+  --portseed=42503`
+  passed on unmodified Knots with the same V2 clearnet success, V1 clearnet
+  refusal, and V1 onion allowance behavior.
 - Original Knots cross-check:
   `test/functional/p2p_filter.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_filter_filtered_witness`
   passed on unmodified Knots, including the new
