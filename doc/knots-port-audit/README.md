@@ -1387,6 +1387,18 @@ Other missing/adapted Knots pieces found during this pass:
   `-limitclustersize` knob instead of deprecated ancestor/descendant size
   options. Actual Knots' mining functional test passed, so this did not expose
   an original Knots consensus or remote-crash bug.
+- The policy-default/corepolicy review confirmed a non-obvious Core/Knots
+  configuration split. Current Core master defaults `-minrelaytxfee` and
+  `-incrementalrelayfee` to 100 sat/kvB and `-blockmintxfee` to 1 sat/kvB.
+  Knots restored stricter public defaults of 1000 sat/kvB for all three
+  (`48ada82ee9`, `8cc55d6dc4`, `7e020a528f`; ported as `c30b6101f8`,
+  `4c24f71e5b`, `7dda581441`) while adding `-corepolicy=1` to soft-set Core's
+  lower fee defaults and several less restrictive data-carrier/policy knobs.
+  A runtime regtest check showed the port's default
+  `getmempoolinfo`/`getmininginfo` values as `0.00001000`, `0.00001000`,
+  `0.00001000`, and the same node with `-corepolicy=1` as `0.00000100`,
+  `0.00000100`, `0.00000001`. This is a policy/config divergence, not a
+  consensus-rule difference.
 - The full non-GUI unit run exposed three integration issues from combining
   Knots behavior with current Core tests/APIs. `node_init_tests/init_test`
   aborted because current Core's init test never initialized Knots'
@@ -2518,6 +2530,21 @@ Source/manifest checks:
   test/functional/p2p_node_network_limited.py src/bitcoin-cli.cpp` show Knots
   and the port keep the compatibility constant/display name but do not
   advertise it.
+- `git show origin/master:src/policy/policy.h | rg -n
+  "DEFAULT_BLOCK_MIN_TX_FEE|DEFAULT_INCREMENTAL_RELAY_FEE|DEFAULT_MIN_RELAY_TX_FEE"`
+  and `git -C ../knots show 29.x-knots:src/policy/policy.h | rg -n
+  "DEFAULT_BLOCK_MIN_TX_FEE|DEFAULT_INCREMENTAL_RELAY_FEE|CORE_INCREMENTAL_RELAY_FEE|DEFAULT_MIN_RELAY_TX_FEE"`
+  show current Core's lower default fee constants and Knots' restored stricter
+  defaults plus `CORE_INCREMENTAL_RELAY_FEE`.
+- `build/bin/bitcoind -help | rg -n
+  "corepolicy|incrementalrelayfee|blockmintxfee|minrelaytxfee|acceptnonstddatacarrier|datacarriercost|subdustfeepenalty"
+  -C 2` shows the port exposes `-corepolicy` and the stricter default help
+  values.
+- Manual runtime check: start `build/bin/bitcoind -regtest` in a clean datadir
+  and query `getmempoolinfo`/`getmininginfo`; the default port returned
+  `minrelaytxfee=0.00001000`, `incrementalrelayfee=0.00001000`, and
+  `blockmintxfee=0.00001000`, while the same check with `-corepolicy=1`
+  returned `0.00000100`, `0.00000100`, and `0.00000001`.
 - `git show origin/master:src/policy/rbf.cpp origin/master:src/policy/rbf.h |
   rg -n "GetUniqueClusterCount|too many conflicting clusters|too many potential replacements|MAX_REPLACEMENT_CANDIDATES"`
   and `git -C ../knots show 29.x-knots:src/policy/rbf.cpp
