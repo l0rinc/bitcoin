@@ -3572,6 +3572,17 @@ path and the unit test, while current Knots still inserts directly into
 runtime hardening for pruned deep-reorg edge cases, not a consensus-rule
 change and not a deterministic Knots crash reproduced in this pass.
 
+The same pruned-chainstate cluster includes current Core `0e4b0bacec`, also
+present in the port and absent from current Knots. Core now checks
+`BLOCK_HAVE_DATA` before adding a loaded block index entry back to
+`m_blocks_unlinked` during `LoadBlockIndex()`. Current Knots still keys this
+startup insertion only on `nTx > 0`; because pruning preserves `nTx` while
+clearing `BLOCK_HAVE_DATA`, the Core commit describes a restart path where
+pruned block entries can be re-added to `m_blocks_unlinked` and later violate
+the `CheckBlockIndex()` invariant that unlinked entries have block data
+available. This is another pruned-node restart/reorg availability hardening
+difference, not a consensus-rule change.
+
 ## Open Risks
 
 - Legacy-wallet creation is a non-consensus divergence from Knots on this
@@ -3920,6 +3931,14 @@ Source/manifest checks:
   src/test/validation_chainstatemanager_tests.cpp` show the current Core and
   port duplicate-`m_blocks_unlinked` guard and unit coverage, while current
   Knots still inserts directly in `FindMostWorkChain()`.
+- `git show --stat --patch --minimal 0e4b0bacec --
+  src/node/blockstorage.cpp` and `git grep -n
+  "AddUnlinkedBlock\\|m_blocks_unlinked.insert\\|BLOCK_HAVE_DATA\\|LoadBlockIndex"
+  HEAD knots/29.x-knots origin/master -- src/node/blockstorage.cpp
+  src/validation.cpp src/test/validation_chainstatemanager_tests.cpp` show the
+  current Core and port startup guard that skips pruned block-index entries,
+  while current Knots still inserts into `m_blocks_unlinked` without checking
+  `BLOCK_HAVE_DATA` in `BlockManager::LoadBlockIndex()`.
 - `git -C ../knots show --stat --patch --minimal be0857745a5a0154d89a2aa9ddaa2a84e912598a`,
   `git show origin/master:src/validation.cpp | rg -n
   "mempool-script-verify-flag-failed|block-script-verify-flag-failed|mandatory-script-verify-flag-failed"
