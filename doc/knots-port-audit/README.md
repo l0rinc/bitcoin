@@ -2286,6 +2286,21 @@ under different commits. They are not all proven exploitable.
   `0.00001000`. Existing functional coverage also checks the RPC string and
   scheduler-updated dust feerate for both target- and mempool-based modes.
 
+- TRUC policy modes:
+  Knots' `-mempooltruc` option is present in the port and absent from current
+  Core. It lets the operator choose `reject`, `accept`, or `enforce` for
+  version-3/TRUC transactions. The actual Knots default is `accept`, so TRUC
+  transactions are handled like ordinary transactions unless the operator opts
+  into stricter policy. `-mempooltruc=enforce` or `-mempooltruc=1` enforces the
+  TRUC topology and size limits; `-mempooltruc=reject` or `0` rejects TRUC
+  transactions entirely; and `-mempooltruc=accept` or `-enforce` accepts them
+  without imposing the TRUC-specific limits. The `-corepolicy=1` interaction
+  soft-sets `-mempooltruc=enforce`. This is relay/mining policy, not
+  consensus. The functional framework starts current binaries with
+  `-corepolicy`, so the test's no-extra-args case reports `enforce`; explicit
+  `-corepolicy=0` coverage now verifies the user-facing Knots default remains
+  `accept`.
+
 - Legacy mempool.dat compatibility:
   Knots' temporary `-persistmempoolv1` option is present in the port and absent
   from current Core. Current mempool.dat version 2 includes an obfuscation key
@@ -3098,6 +3113,13 @@ Source/manifest checks:
   `-persistmempoolv1=1`, run `savemempool`, and inspect
   `od -An -t u8 -N8 regtest/mempool.dat`; the port printed `1`. The same check
   with `../knots/build-repro/bin/bitcoind` also printed `1`.
+- Manual runtime check: start `build/bin/bitcoind -regtest` in isolated
+  datadirs and RPC ports with no `-corepolicy`, with `-corepolicy=0`, and with
+  `-corepolicy=1`; `getmempoolinfo.truc_policy` returned `accept`, `accept`,
+  and `enforce`. The same sequential check with
+  `../knots/build-repro/bin/bitcoind` returned the same values. Earlier
+  parallel attempts were discarded because multiple regtest daemons contended
+  for the same default RPC port.
 - `git show origin/master:src/policy/rbf.cpp origin/master:src/policy/rbf.h |
   rg -n "GetUniqueClusterCount|too many conflicting clusters|too many potential replacements|MAX_REPLACEMENT_CANDIDATES"`
   and `git -C ../knots show 29.x-knots:src/policy/rbf.cpp
@@ -3795,6 +3817,13 @@ Functional tests:
   expected `permitbaremultisig` field.
 - `python3 test/functional/mempool_datacarrier.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_dust.py --configfile build/test/config.ini`
+- `python3 test/functional/mempool_truc.py --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_truc_policy_port
+  --portseed=32880 --test_methods test_truc_policy_option`
+- `python3 test/functional/mempool_truc.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_truc_policy_knots
+  --portseed=32881 --test_methods test_truc_policy_option`
 - `python3 test/functional/mempool_ephemeral_dust.py --configfile
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_ephemeral_dust_review_port
