@@ -297,4 +297,39 @@ BOOST_AUTO_TEST_CASE(sighash_caching)
     }
 }
 
+BOOST_AUTO_TEST_CASE(precomputed_transaction_data_reuse)
+{
+    CMutableTransaction tx;
+    tx.vin.emplace_back(Txid::FromUint256(uint256::ONE), 0);
+    tx.vout.emplace_back(1, CScript{} << OP_TRUE);
+
+    PrecomputedTransactionData txdata;
+    auto check_ready{[&](bool bip143, bool bip341, bool spent_outputs) {
+        BOOST_CHECK_EQUAL(txdata.m_bip143_segwit_ready, bip143);
+        BOOST_CHECK_EQUAL(txdata.m_bip341_taproot_ready, bip341);
+        BOOST_CHECK_EQUAL(txdata.m_spent_outputs_ready, spent_outputs);
+    }};
+
+    txdata.Init(tx, /*spent_outputs=*/{}, /*force=*/true);
+    check_ready(/*bip143=*/true, /*bip341=*/false, /*spent_outputs=*/false);
+
+    tx.vin[0].prevout.n = 1; // stale hashPrevouts
+    tx.vout[0].nValue = 2;   // stale hashOutputs
+    txdata.Init(tx, /*spent_outputs=*/{}, /*force=*/false);
+    check_ready(/*bip143=*/true, /*bip341=*/false, /*spent_outputs=*/false); // TODO: clear stale BIP143
+
+    const CScript scriptcode{CScript{} << OP_TRUE};
+    BOOST_CHECK_NE( // TODO: match uncached path
+        SignatureHash(scriptcode, tx, /*nIn=*/0, SIGHASH_ALL, /*amount=*/3, SigVersion::WITNESS_V0),
+        SignatureHash(scriptcode, tx, /*nIn=*/0, SIGHASH_ALL, /*amount=*/3, SigVersion::WITNESS_V0, &txdata));
+
+    txdata.Init(tx, /*spent_outputs=*/{CTxOut{3, CScript{} << OP_TRUE}}, /*force=*/true);
+    check_ready(/*bip143=*/true, /*bip341=*/true, /*spent_outputs=*/true);
+
+    // Match the old one-flag guard without clearing the other readiness flags
+    txdata.m_spent_outputs_ready = false;
+    txdata.Init(tx, /*spent_outputs=*/{}, /*force=*/false);
+    check_ready(/*bip143=*/true, /*bip341=*/true, /*spent_outputs=*/false); // TODO: clear stale readiness
+}
+
 BOOST_AUTO_TEST_SUITE_END()
