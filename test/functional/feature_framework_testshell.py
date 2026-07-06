@@ -34,7 +34,10 @@ def run_testshell_doc_example(functional_tests_dir):
         assert_equal(test.nodes[0].getblockchaininfo()["blocks"], 0)
         if test.is_wallet_compiled():
             res = test.nodes[0].createwallet('default')
-            assert_equal(res, {'name': 'default'})
+            assert_equal(res, {
+                'name': 'default',
+                'warnings': ['Empty string given as passphrase, wallet will not be encrypted.'],
+            })
             address = test.nodes[0].getnewaddress()
             res = test.generatetoaddress(test.nodes[0], 101, address)
             assert_equal(len(res), 101)

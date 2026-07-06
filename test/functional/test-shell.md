@@ -97,7 +97,7 @@ rewards to a wallet address owned by the mining node.
 
 ```
 >>> test.nodes[0].createwallet('default')
-{'name': 'default'}
+{'name': 'default', 'warnings': ['Empty string given as passphrase, wallet will not be encrypted.']}
 >>> address = test.nodes[0].getnewaddress()
 >>> test.generatetoaddress(test.nodes[0], 101, address)
 ['2b98dd0044aae6f1cca7f88a0acf366a4bfe053c7f7b00da3c0d115f03d67efb', ...
