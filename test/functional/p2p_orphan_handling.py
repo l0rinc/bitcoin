@@ -47,6 +47,7 @@ from test_framework.wallet import (
 # when the value of the delay is not interesting. If we want to test that the node waits x seconds
 # for one peer and y seconds for another, use specific values instead.
 TXREQUEST_TIME_SKIP = NONPREF_PEER_TX_DELAY + TXID_RELAY_DELAY + OVERLOADED_PEER_TX_DELAY + 1
+ORPHAN_HANDLING_EXTRA_ARGS = ["-acceptnonstdtxn=1", "-acceptnonstddatacarrier=1", "-datacarrierfullcount=0"]
 
 def cleanup(func):
     def wrapper(self):
@@ -59,7 +60,7 @@ def cleanup(func):
         self.wait_until(lambda: len(self.nodes[0].getorphantxs()) == 0)
         assert_equal(0, len(self.nodes[0].getrawmempool()))
 
-        self.restart_node(0, extra_args=["-persistmempool=0"])
+        self.restart_node(0, extra_args=ORPHAN_HANDLING_EXTRA_ARGS + ["-persistmempool=0"])
         # Allow use of bumpmocktime again
         self.nodes[0].setmocktime(int(time.time()))
         self.wallet.rescan_utxos(include_mempool=True)
@@ -122,7 +123,7 @@ class PeerTxRelayer(P2PTxInvStore):
 class OrphanHandlingTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [[]]
+        self.extra_args = [ORPHAN_HANDLING_EXTRA_ARGS]
 
     def create_parent_and_child(self):
         """Create package with 1 parent and 1 child, normal fees (no cpfp)."""
