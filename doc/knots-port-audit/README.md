@@ -140,8 +140,13 @@ Other missing/adapted Knots pieces found during this pass:
   still asserts that new wallets are descriptor wallets. This was not an
   original Knots crash: an unmodified local Knots build returned RPC `-4`
   (`Compiled without bdb support`) for the same legacy-wallet creation attempt.
-  Core master already rejects `descriptors=false`; the port restores that
-  behavior as `6cd89c9b09` and covers it in `wallet_createwallet.py`.
+  The crash is fixed as `6cd89c9b09` and covered in
+  `wallet_createwallet.py`, but the later `wallet_undeprecate_legacy-29`
+  source review confirmed a remaining port-completeness gap: actual Knots
+  source permits `descriptors=false` when compiled with BDB, while this
+  current-Core port still forces `WALLET_FLAG_DESCRIPTORS` and rejects legacy
+  creation before any BDB-backed path can run. This is wallet compatibility,
+  not consensus behavior or a remote security issue.
 - `rpc_getblockfrompeer.py` still used Knots' older mutable block-hash helper
   (`CBlock.calc_sha256()`), while the current port framework exposes block
   hashes through properties (`hash`, `hash_int`, and `sha256`). The port removes
@@ -2446,10 +2451,12 @@ duplicate method noted above.
 ## Open Risks
 
 - Legacy-wallet creation is a non-consensus divergence from Knots on this
-  current-Core base. Core master no longer creates new legacy wallets, and this
-  port now preserves Core's explicit RPC error instead of crashing. Ported
+  current-Core base. Knots source still supports new legacy wallet creation
+  when compiled with BDB; Core master no longer creates new legacy wallets, and
+  this port now preserves Core's explicit RPC error instead of crashing. Ported
   legacy-only wallet tests are skipped by the framework when `--legacy-wallet`
-  mode is selected.
+  mode is selected, so BDB-enabled legacy creation remains unverified and
+  unported here.
 - BIP-110/RDTS consensus equivalence remains the main consensus-risk area
   because it is an intentional soft-fork divergence from Core. The current pass
   mapped the Knots RDTS subjects to replayed/adapted port commits, compared the
@@ -3247,6 +3254,19 @@ Builds:
 - `git -C ../knots show 29.x-knots:src/wallet/db.cpp | sed -n '20,95p'
   && git -C ../knots show 29.x-knots:src/wallet/wallet.cpp |
   sed -n '548,560p'`
+- `rg -n
+  "descriptors argument must|Only descriptor wallets can be created|require_format = DatabaseFormat::SQLITE"
+  src/wallet/rpc/wallet.cpp src/wallet/wallet.cpp`,
+  `git show origin/master:src/wallet/rpc/wallet.cpp
+  origin/master:src/wallet/wallet.cpp | rg -n
+  "descriptors argument must|Only descriptor wallets can be created|require_format = DatabaseFormat::SQLITE"
+  -C 3`, and `git -C ../knots show
+  29.x-knots:src/wallet/rpc/wallet.cpp 29.x-knots:src/wallet/wallet.cpp |
+  rg -n
+  "Setting to \\\"false\\\"|Compiled without bdb support|require_format = DatabaseFormat::SQLITE|Only descriptor wallets"
+  -C 3` show the port still follows Core's descriptor-only wallet creation
+  guard, while Knots allows legacy creation when BDB is compiled and only
+  returns the BDB-disabled error under non-BDB builds.
 - `rg -n "DEFAULT_TX_CONFIRM_TARGET|m_confirm_target"
   src/wallet/wallet.h src/wallet/test/wallet_tests.cpp`,
   `git show origin/master:src/wallet/wallet.h | rg -n
@@ -4192,6 +4212,15 @@ Functional tests:
   passed on unmodified Knots, including the new in-progress
   `relevant_blocks` status assertion and the existing invalid-action error
   check.
+- Manual port/Knots legacy-wallet cross-check:
+  starting fresh regtest nodes and calling
+  `bitcoin-cli -regtest -named createwallet wallet_name=legacy descriptors=false`
+  returned RPC `-4` with
+  `descriptors argument must be set to "true"; it is no longer possible to
+  create a legacy wallet.` on the port, while unmodified Knots built without
+  BDB returned RPC `-4` with
+  `Compiled without bdb support (required for legacy wallets)`. This confirms
+  the port blocks the request before the Knots BDB-availability branch.
 - Original Knots expected-failure repro:
   foreground `../knots/build-repro/bin/bitcoind -regtest` plus
   `bitcoin-cli -regtest addnode 127.0.0.1:<port> onetry false inbound`
