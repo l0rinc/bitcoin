@@ -2528,7 +2528,9 @@ under different commits. They are not all proven exploitable.
   explicit-warning flag is set.
 
 - HTTP RPC bind failure behavior:
-  `57becdf59e` plus follow-up listen/bind cleanup commits
+  `57becdf59e`, `c89da5080b`, `a4c8d3fd17`, `22544f94ee`,
+  `a12268e51a`, `e849d70691`, `a229993220`, `582e28daf8`,
+  `682d31cb2f`, `abdc85c2af`, `fbe185ce7a`, `fc1d58d4d0`
 
   Knots fails initialization when any explicitly requested RPC bind fails,
   while current Core only requires at least one endpoint to bind. This is
@@ -2538,10 +2540,20 @@ under different commits. They are not all proven exploitable.
   HTTP startup error on stderr, and the specific bind-all-endpoints error in
   `debug.log`; a refreshed source comparison still shows current Core logging
   `Unable to bind any endpoint for RPC server` where Knots and the port require
-  `Unable to bind all endpoints for RPC server`. Rerunning the port's current
-  `rpc_bind.py` against both the port and unmodified Knots passes, including
-  the explicit partial-bind failure case; a refreshed full-test run again passed
-  on both binaries.
+  `Unable to bind all endpoints for RPC server`. The local
+  `evhttp_bind_socket_with_handle` clone and most helper-collapsing commits were
+  first adapted in the port as `a68cb67052`, `1c3e7ef896`, `4675886bb8`,
+  `54b04a7238`, `1e269da791`, `d96a5e0ad5`, `c4b74665b0`,
+  and `7aeb2311bb`, but current `HEAD` is now structurally different because it
+  uses Core's newer RAII `HTTPServer`/`Sock` listener path instead of libevent
+  accept-socket handles. The retained Knots semantics are the expanded ignored
+  default-bind error set (`abdc85c2af` as `8d4ecfe979`, plus
+  `fc1d58d4d0` as `8a34d2492d`) and failing startup on any explicit bind
+  failure. Current Core has the same RAII ownership shape, so Knots'
+  `fbe185ce7a` listen-socket leak fix is structurally avoided there too, but
+  Core still lacks the explicit-all-endpoints policy. Rerunning the port's
+  current `rpc_bind.py` against both the port and unmodified Knots passes,
+  including the explicit partial-bind failure case.
 
 - HTTP RPC ignored-bind warning visibility:
   `7498da0c2a`, `7bd80ba460`
@@ -4524,16 +4536,17 @@ Builds:
   port document the potentially incorrect orphan `vsize`, while current Core
   lacks that result-warning text.
 - `rg -n
-  "Unable to bind all endpoints|Unable to bind any endpoint|rpc_bind"
+  "IsIgnoredDefaultBindError|Unable to bind all endpoints|Unable to bind any endpoint|rpc_bind"
   src/httpserver.cpp test/functional/rpc_bind.py
   ../knots/src/httpserver.cpp ../knots/test/functional/rpc_bind.py` and
   `git grep -n -E
-  "Unable to bind all endpoints|Unable to bind any endpoint|rpc_bind"
+  "IsIgnoredDefaultBindError|Unable to bind all endpoints|Unable to bind any endpoint|rpc_bind"
   origin/master -- src/httpserver.cpp test/functional/rpc_bind.py` show current
-  Core still allows startup if any explicit RPC endpoint binds, while Knots and
-  the port abort unless every explicit RPC endpoint binds. The port's
-  `rpc_bind.py` additionally covers this with a partial-bind failure case; the
-  refreshed port and unmodified-Knots functional runs both passed.
+  Core still allows startup if any explicit RPC endpoint binds and lacks the
+  expanded ignored default-bind error helper, while Knots and the port abort
+  unless every explicit RPC endpoint binds. The port's `rpc_bind.py`
+  additionally covers this with a partial-bind failure case; the refreshed port
+  and unmodified-Knots functional runs both passed.
 - `rg -n
   "PunishInvalidBlocks|HandleDoSPunishment|MaybePunishNodeForBlock|Misbehaving"
   src/net.h src/net_processing.cpp src/test/net_tests.cpp
@@ -5717,6 +5730,14 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rpc_bind_all_endpoints_refresh_knots2
   --portseed=42610`
+- `python3 test/functional/rpc_bind.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_bind_http_bind_series_port
+  --portseed=42764`
+- `python3 test/functional/rpc_bind.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_bind_http_bind_series_knots
+  --portseed=42765`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_current_tip`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
