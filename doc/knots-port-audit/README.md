@@ -3239,7 +3239,9 @@ also present in current Core), the v2-to-v1 reconnect UAF fix
 (`f44b206a5e`, Core `167df7a98c`, clearing `m_reconnections` before
 `semOutbound` teardown and present in Knots, Core, and this port), randomized
 Tor
-stream-isolation credential prefixes, feebumper combined-fee crash
+stream-isolation credential prefixes, CJDNS/RFC4193 reachable-network setup
+before RPC allow-list parsing (`0ec0da4391`, Core `f728b6b111`), feebumper
+combined-fee crash
 (`4b202bc91c`, Core `6072a2a6a1`), wallet coin-selection boolean amount fix
 (`c0b092936e`, Core `0026b330c4`),
 precomputed transaction-data lifetime hardening (CVE-2024-52911), the
@@ -4022,6 +4024,13 @@ Source/manifest checks:
   HEAD knots/29.x-knots origin/master -- src/rpc/blockchain.cpp` shows the
   zero-height `pruneblockchain` early return in Knots and the port, while
   current Core still reaches the too-short-chain error or manual-prune path.
+- `git log --oneline origin/master --grep='Configure reachable networks before'
+  -- src/init.cpp`, `git log --oneline HEAD --grep='Configure reachable
+  networks before' -- src/init.cpp`, and `git grep -n -E
+  "StartHTTPRPC|InitHTTPServer|rpcallowip|Configure reachable networks before"
+  HEAD knots/29.x-knots origin/master -- src/init.cpp src/httpserver.cpp`
+  show the CJDNS/RFC4193 reachable-network setup is before HTTP RPC allow-list
+  parsing in Core, Knots, and the port.
 - `git show origin/master:src/node/transaction.cpp | sed -n '32,105p'`,
   `git show origin/master:src/rpc/mempool.cpp | sed -n '110,158p'`,
   `git -C ../knots show 29.x-knots:src/node/transaction.cpp | sed -n
@@ -5707,6 +5716,10 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_feature_pruning_zero_height_refresh
   --portseed=42748`
+- `python3 test/functional/rpc_bind.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_bind_cjdns_reachable_refresh
+  --portseed=42749 --ipv6`
 - `python3 test/functional/rpc_invalid_address_message.py --configfile
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_invalid_address_validateaddress_compat`
