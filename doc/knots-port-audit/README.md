@@ -2100,8 +2100,13 @@ under different commits. They are not all proven exploitable.
   remains non-standard in both Core and Knots, and consensus behavior is
   unchanged; this is an operator-controlled relay/mining policy switch for
   future-version output creation. `transaction_tests/test_IsStandard` toggles
-  the mempool option and covers both rejection and default acceptance, and the
-  same source-level expectation is present in unmodified Knots.
+  the mempool option and covers both rejection and default acceptance. The new
+  `mempool_acceptunknownwitness.py` functional test proves the externally
+  visible behavior: `-acceptunknownwitness=0` rejects a transaction creating a
+  future witness output from mempool, but the same transaction is accepted in a
+  block relayed from a permissive peer. The same functional test passes against
+  unmodified Knots, confirming this is inherited Knots policy rather than a
+  port-only divergence.
 
 - Minimum relay input age / coin-block policy:
   `fa0267d631`, `482bd5382e`
@@ -4234,6 +4239,14 @@ Functional tests:
   --catch_system_errors=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=transaction_tests/test_IsStandard
   --catch_system_errors=no --log_level=error --report_level=short`
+- `python3 test/functional/mempool_acceptunknownwitness.py
+  --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_acceptunknownwitness_port
+  --portseed=32900`
+- `python3 test/functional/mempool_acceptunknownwitness.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_acceptunknownwitness_knots
+  --portseed=32901`
 - `python3 test/functional/p2p_compactblocks.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_compactblocks_header_guard_final`
 - `python3 test/functional/p2p_compactblocks.py --configfile=build/test/config.ini
@@ -4496,9 +4509,12 @@ Functional tests:
 - Original Knots source cross-check:
   `git -C ../knots show 29.x-knots:src/test/transaction_tests.cpp | rg -n "acceptunknownwitness|scriptpubkey-unknown-witnessversion" -C 4`
   shows unmodified Knots' unit test has the same unknown-witness output
-  acceptance/rejection expectation as the port. `../knots/build-repro/bin`
-  does not include `test_bitcoin`, so this item was source-checked rather than
-  unit-run against the unmodified Knots build.
+  acceptance/rejection expectation as the port. The later
+  `python3 test/functional/mempool_acceptunknownwitness.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_acceptunknownwitness_knots
+  --portseed=32901` run also passed on unmodified Knots, including block
+  acceptance after mempool rejection.
 - Original Knots cross-check:
   `python3 test/functional/p2p_compactblocks.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_compactblocks_header_guard`
   reached and passed the repeated-`blocktxn` section on unmodified Knots,
