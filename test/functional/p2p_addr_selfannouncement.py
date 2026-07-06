@@ -62,6 +62,10 @@ class SelfAnnouncementReceiver(P2PInterface):
         assert (not self.addrv2_test)
         self.handle_addr_message(message)
 
+    def on_version(self, message):
+        self.expected.nServices = message.nServices
+        super().on_version(message)
+
 
 class AddrSelfAnnouncementTest(BitcoinTestFramework):
     def set_test_params(self):
@@ -108,7 +112,6 @@ class AddrSelfAnnouncementTest(BitcoinTestFramework):
         self.nodes[0].setmocktime(int(time.time()))
 
         expected = CAddress()
-        expected.nServices = int(netinfo["localservices"], 16)
         expected.ip = IP_TO_ANNOUNCE
         expected.port = port
         expected.time = self.nodes[0].mocktime

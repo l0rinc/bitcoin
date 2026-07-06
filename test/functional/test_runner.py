@@ -125,6 +125,7 @@ BASE_SCRIPTS = [
     'wallet_fundrawtransaction.py',
     'wallet_bumpfee.py',
     'wallet_v3_txs.py',
+    'wallet_import_rescan.py --legacy-wallet',
     'wallet_backup.py',
     'feature_segwit.py --v2transport',
     'feature_segwit.py --v1transport',
@@ -162,6 +163,7 @@ BASE_SCRIPTS = [
     'rpc_createmultisig.py',
     'p2p_timeouts.py --v1transport',
     'p2p_timeouts.py --v2transport',
+    'wallet_dump.py --legacy-wallet',
     'rpc_signer.py',
     'wallet_signer.py',
     'wallet_importmulti.py --legacy-wallet',
@@ -196,10 +198,12 @@ BASE_SCRIPTS = [
     'mempool_resurrect.py',
     'wallet_txn_doublespend.py --mineblock',
     'tool_cli_completion.py',
+    'tool_bitcoin_chainstate.py',
     'tool_wallet.py --legacy-wallet',
     'tool_wallet.py --legacy-wallet --bdbro',
     'tool_wallet.py --legacy-wallet --bdbro --swap-bdb-endian',
     'tool_wallet.py --descriptors',
+    'tool_utils.py',
     'tool_signet_miner.py --legacy-wallet',
     'tool_signet_miner.py --descriptors',
     'wallet_txn_clone.py',
@@ -309,6 +313,7 @@ BASE_SCRIPTS = [
     'wallet_balance.py',
     'p2p_initial_headers_sync.py',
     'feature_nulldummy.py',
+    'p2p_addr_selfannouncement.py',
     'mempool_accept.py',
     'mempool_bare_pubkey.py',
     'mempool_fee_histogram.py',
@@ -326,6 +331,7 @@ BASE_SCRIPTS = [
     'mining_mainnet.py',
     'feature_signet.py',
     'p2p_mutated_blocks.py',
+    'wallet_implicitsegwit.py --legacy-wallet',
     'rpc_named_arguments.py',
     'feature_startupnotify.py',
     'wallet_simulaterawtx.py',
@@ -367,6 +373,7 @@ BASE_SCRIPTS = [
     'feature_filelock.py',
     'feature_loadblock.py',
     'wallet_assumeutxo.py',
+    'p2p_dos_header_tree.py',
     'p2p_add_connections.py',
     'feature_bind_port_discover.py',
     'p2p_unrequested_blocks.py',
@@ -421,6 +428,7 @@ BASE_SCRIPTS = [
     'feature_presegwit_node_upgrade.py',
     'feature_settings.py',
     'rpc_getdescriptorinfo.py',
+    'rpc_gettxspendingprevout.py',
     'rpc_mempool_info.py',
     'rpc_getgeneralinfo.py',
     'rpc_help.py',
@@ -738,6 +746,7 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
     if not os.listdir(tmpdir):
         os.rmdir(tmpdir)
 
+    all_passed = all_passed and coverage_passed
 
     # Clean up dangling processes if any. This may only happen with --failfast option.
     # Killing the process group will also terminate the current process but that is
@@ -842,27 +851,26 @@ class TestHandler:
             procs = futures.wait(self.jobs.keys(), timeout=.5, return_when=futures.FIRST_COMPLETED)
             self.jobs = {fut: self.jobs[fut] for fut in procs.not_done}
             ret = []
-            for job in self.jobs:
-                (name, start_time, proc, testdir, log_out, log_err) = job
-                if proc.poll() is not None:
-                    log_out.seek(0), log_err.seek(0)
-                    [stdout, stderr] = [log_file.read().decode('utf-8') for log_file in (log_out, log_err)]
-                    log_out.close(), log_err.close()
-                    skip_reason = None
-                    if proc.returncode == TEST_EXIT_PASSED and stderr == "":
-                        status = "Passed"
-                    elif proc.returncode == TEST_EXIT_SKIPPED:
-                        status = "Skipped"
-                        skip_reason = re.search(r"Test Skipped: (.*)", stdout).group(1).strip()
-                    else:
-                        status = "Failed"
-                    self.num_running -= 1
-                    self.jobs.remove(job)
-                    if self.use_term_control:
-                        clearline = '\r' + (' ' * dot_count) + '\r'
-                        print(clearline, end='', flush=True)
-                    dot_count = 0
-                    ret.append((TestResult(name, status, int(time.time() - start_time)), testdir, stdout, stderr, skip_reason))
+            for job in procs.done:
+                (name, start_time, proc, testdir, log_out, log_err) = job.result()
+
+                log_out.seek(0), log_err.seek(0)
+                [stdout, stderr] = [log_file.read().decode('utf-8') for log_file in (log_out, log_err)]
+                log_out.close(), log_err.close()
+                skip_reason = None
+                if proc.returncode == TEST_EXIT_PASSED and stderr == "":
+                    status = "Passed"
+                elif proc.returncode == TEST_EXIT_SKIPPED:
+                    status = "Skipped"
+                    skip_reason = re.search(r"Test Skipped: (.*)", stdout).group(1).strip()
+                else:
+                    status = "Failed"
+
+                if self.use_term_control:
+                    clearline = '\r' + (' ' * dot_count) + '\r'
+                    print(clearline, end='', flush=True)
+                dot_count = 0
+                ret.append((TestResult(name, status, int(time.time() - start_time)), testdir, stdout, stderr, skip_reason))
             if ret:
                 return ret
             if self.use_term_control:
