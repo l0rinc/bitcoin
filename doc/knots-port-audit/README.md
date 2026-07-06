@@ -64,15 +64,17 @@ Other missing/adapted Knots pieces found during this pass:
   datacarrier accounting could overflow the `int32_t` return path. The port
   adds a `script_tests` regression that checks both normal accounting and
   saturation at `int32_t` max.
-- A follow-up compact-block review restored Knots' txref-only `extra_txn`
+- User-directed compact-block review restored Knots' txref-only `extra_txn`
   reconstruction cache (`a8203e9412`, ported as `ab4fd3568f`). Current Core
-  added the same change and then reverted it as `b9300d8d0a`, returning to
-  `<Wtxid, CTransactionRef>` pairs. Knots' retained shape removes the
-  possibility for the compact-block extra-transaction cache API to carry a
+  added the same change and then explicitly reverted it as `b9300d8d0a`,
+  returning to `<Wtxid, CTransactionRef>` pairs. Knots' retained shape removes
+  the possibility for the compact-block extra-transaction cache API to carry a
   shortid lookup key that disagrees with the transaction reference itself. The
-  port now matches Knots and the unit coverage asserts that an unrelated
-  cached transaction alone does not make the missing compact-block transaction
-  available.
+  port now matches Knots and the unit coverage asserts that an unrelated cached
+  transaction alone does not make the missing compact-block transaction
+  available. This audit records a source-confirmed Core regression relative to
+  Knots' harder-to-misuse cache API, not an independently reproduced remote
+  crash.
 - The same compact-block review restored Knots' txref-only randomized mempool
   cache (`a03aef9cec`, ported as `9d68ea0782`). Current Core also added this
   change and reverted it as `b7b249d3ad`, returning to `<Wtxid, txiter>` pairs.
