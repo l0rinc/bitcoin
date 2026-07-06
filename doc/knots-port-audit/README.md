@@ -1117,6 +1117,18 @@ Other missing/adapted Knots pieces found during this pass:
   `wallet_create_tx.py` and `wallet_bumpfee.py` cover successful setting,
   unsetting, rounding, wallet min fee, relay min fee, wallet max fee, and
   replacement-fee interactions.
+- The `bumpfee`/`psbtbumpfee` replaceability review confirmed Knots'
+  `require_replacable` option (`86272647ed`) is present in the port and absent
+  from current Core. Current Core still bumps non-BIP125 wallet transactions by
+  default; Knots and the port restore the stricter default error unless the
+  caller explicitly passes `require_replacable=false`. The later Knots null
+  guard (`7e125f8ed2`) is also present in the port, so a transaction that is
+  not in the wallet falls through to the normal fee-bumper error instead of
+  dereferencing a missing wallet transaction during the precheck. This is
+  authenticated wallet RPC behavior, not consensus or unauthenticated network
+  handling. The refreshed `wallet_bumpfee.py` run covered the explicit
+  non-RBF override, the default non-RBF rejection, and the non-replaceable
+  rebump rejection.
 - The wallet fee-introspection review confirmed Knots'
   `getwalletinfo.mintxfee` field (`d7ee746986`) is present in the port and
   absent from current Core master. Knots also uses the field in
