@@ -4308,6 +4308,14 @@ Functional tests:
   ../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_knots_refresh
   --portseed=42291`
+- `python3 test/functional/rpc_mempoolstats.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_port_refresh2
+  --portseed=42540`
+- `python3 test/functional/rpc_mempoolstats.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_knots_refresh2
+  --portseed=42541`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_rdts_gate_fixed3`
 - `python3 test/functional/p2p_handshake.py --configfile
@@ -5713,6 +5721,15 @@ Functional tests:
   `python3 test/functional/rpc_mempoolstats.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_knots_refresh --portseed=42291`,
   also passed. The now-available unmodified Knots unit binary also passes
   `../knots/build-repro/bin/test_bitcoin --run_test=stats_tests --catch_system_error=no --log_level=error --report_level=short`.
+  Refreshed `stats_tests` runs passed on both the port and unmodified Knots
+  with 9 assertions each. Refreshed functional runs
+  `python3 test/functional/rpc_mempoolstats.py --configfile build/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_port_refresh2 --portseed=42540`
+  and
+  `python3 test/functional/rpc_mempoolstats.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_knots_refresh2 --portseed=42541`
+  both passed, again covering the default-disabled daemon path and
+  `-statsenable=1` sampling path. `../knots/test/functional` has no native
+  `rpc_mempoolstats.py`, so the Knots functional proof uses the port script
+  against Knots' binaries.
 - Original Knots cross-check:
   `python3 test/functional/interface_zmq.py --configfile=../knots/build-zmq-audit/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_interface_zmq_wallet_knots --portseed=32941`
   passed on the unmodified Knots ZMQ build, including the wallet
