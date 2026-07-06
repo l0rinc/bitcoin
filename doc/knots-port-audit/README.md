@@ -2268,6 +2268,22 @@ under different commits. They are not all proven exploitable.
   `getmempoolinfo.permitbaremultisig` result field before reaching the
   `-spkreuse` section.
 
+- Maximum script-size relay/mining policy:
+  Knots' `-maxscriptsize` mode is present in the port and absent from current
+  Core. The default limit is 1650 bytes, and Knots applies it to output
+  scriptPubKeys, spent output scriptPubKeys, P2SH redeem scripts, and the
+  serialized aggregate witness stack. `-acceptnonstdtxn=1` soft-sets the limit
+  to `uint32_t` max unless the operator explicitly supplies `-maxscriptsize`,
+  so nonstandard relay intentionally disables this filter by default. This is
+  relay/mining spam-filtering policy, not consensus: blocks can still contain
+  larger valid scripts where consensus permits them. The new
+  `mempool_maxscriptsize.py` test covers the externally visible
+  `scriptpubkey-size`, `bad-txns-input-script-size`, and
+  `bad-witness-witness-size` rejection paths, plus the
+  `-acceptnonstdtxn=1` escape hatch. The same test passes against unmodified
+  Knots, confirming these are inherited Knots semantics rather than a
+  port-only behavior.
+
 - Raw transaction max-feerate accounting with policy-adjusted vsize:
   `4b3cc3d48e`, `1cee5b1ac7`, `335d928d96`
 
@@ -3657,6 +3673,14 @@ Functional tests:
   --portseed=26450`
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_full`
+- `python3 test/functional/mempool_maxscriptsize.py
+  --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_maxscriptsize_port_2
+  --portseed=32801`
+- `python3 test/functional/mempool_maxscriptsize.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_maxscriptsize_knots
+  --portseed=32802`
 - `python3 test/functional/mempool_limit.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_mempool_limit_maxmempool_rpc`
 - `python3 test/functional/mining_coin_age_priority.py --configfile build/test/config.ini`
