@@ -2230,7 +2230,9 @@ under different commits. They are not all proven exploitable.
   semantics for trusted peers, not consensus behavior or a remote crash. The
   port's `p2p_permissions.py` covers the default, `-whitelistrelay=0`, and
   `-whitelistforcerelay` implicit cases; unmodified Knots' own
-  `p2p_permissions.py` passes with the same expectations.
+  `p2p_permissions.py` passes with the same expectations. A refreshed source
+  comparison still shows current Core clearing the implicit marker without
+  adding `NetPermissionFlags::Addr`, while Knots and the port add it.
 
 - Compact-block extra-transaction memory cap:
   `390d5f80e6`, `43a4bcd7f5`, `9b78a13aea`
@@ -5153,6 +5155,12 @@ Functional tests:
   `python3 ../knots/test/functional/p2p_permissions.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_permissions_implicit_addr_knots_native --portseed=32612`
   passed on unmodified Knots, including Knots' native expectations that bare
   implicit whitelist entries include the `addr` permission.
+- Original Knots cross-check:
+  `python3 ../knots/test/functional/p2p_permissions.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_permissions_implicit_addr_knots_native_refresh
+  --portseed=42442`
+  passed on unmodified Knots, including the native implicit `addr` expectations.
 - Original Knots expected-failure repro:
   `python3 test/functional/p2p_permissions.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_permissions_implicit_addr_knots --portseed=32611`
   reached the implicit whitelist checks but later failed on the separate
