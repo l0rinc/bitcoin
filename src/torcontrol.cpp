@@ -34,6 +34,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -182,7 +183,15 @@ bool TorControlConnection::ProcessBuffer()
     util::LineReader reader(m_recv_buffer, MAX_LINE_LENGTH);
     auto start = reader.it;
 
-    while (auto line = reader.ReadLine()) {
+    while (true) {
+        std::optional<std::string_view> line;
+        try {
+            line = reader.ReadLine();
+        } catch (const std::runtime_error& e) {
+            Assume(std::string_view{e.what()} == "max_line_length exceeded by LineReader");
+            throw;
+        }
+        if (!line) break;
         Assume(line->size() <= MAX_LINE_LENGTH);
         if (m_message.lines.size() == MAX_LINE_COUNT) {
             throw std::runtime_error(strprintf("Control port reply exceeded %d lines, disconnecting", MAX_LINE_COUNT));
