@@ -1294,7 +1294,10 @@ Other missing/adapted Knots pieces found during this pass:
   `group`, or `all`. A fresh source comparison also showed that current Core
   applies cookie permissions to the final `.cookie` after `RenameOver(...)`,
   while Knots and the port set permissions on `.cookie.tmp` before writing the
-  generated credentials and before rename. This is local RPC-auth file
+  generated credentials and before rename. Knots' later follow-ups to log when
+  permissions came from `-rpccookieperms` (`16a26511e9`) and to avoid changing
+  permissions at all for `-rpccookieperms=0`/`-norpccookieperms`
+  (`e29fff81ce`) are also present in the port. This is local RPC-auth file
   compatibility and permission control, not consensus behavior or remote
   network exposure. Refreshed full `rpc_users.py` coverage passed on the port,
   with the port test against unmodified Knots, and with Knots' native test
@@ -2119,16 +2122,19 @@ under different commits. They are not all proven exploitable.
 
 - RPC cookie replacement and permission hardening:
   `e49dfac324`, `7140e1f149`, `622b768945`, `50b7a50a61`, `198466d5d3`,
-  port-adapted as `a65640f83e`, `5338949469`, `891d9442e0`, and follow-ups
+  `16a26511e9`, `e29fff81ce`, port-adapted as `a65640f83e`, `5338949469`,
+  `891d9442e0`, and follow-ups
 
   Knots sets temporary cookie permissions before writing, deletes stale temp
   files, deletes before replace, and avoids deleting a cookie replaced by
   another process. Current Core has the symbolic `-rpccookieperms` option, but
   still writes the temporary cookie and renames it before applying permissions
   to the final `.cookie`; Knots and the port apply the requested permissions to
-  `.cookie.tmp` before any generated cookie credentials are written. These are
-  local RPC-auth file robustness improvements. A minimal unmodified Knots
-  startup preserved
+  `.cookie.tmp` before any generated cookie credentials are written. Knots and
+  the port also preserve the old opt-out controls for leaving filesystem
+  permissions alone and annotate the log when `-rpccookieperms` set the
+  resulting mode. These are local RPC-auth file robustness improvements. A
+  minimal unmodified Knots startup preserved
   `__cookie__:replaced-by-another-process` after shutdown when the node was
   stopped with the original generated credentials; the port now covers the same
   shutdown invariant in `rpc_users.py`.
@@ -4295,6 +4301,12 @@ Builds:
   "GenerateAuthCookie|filepath_tmp|fs::permissions|RenameOver|rpccookieperms|rpcauthfile|g_rpcauth.push_back|CHMAC_SHA256"
   HEAD knots/29.x-knots origin/master -- src/rpc/request.cpp
   src/httprpc.cpp src/init.cpp test/functional/rpc_users.py`
+- `git grep -n
+  "Permissions used for cookie\\|set by -rpccookieperms\\|cookie_perms_set_by_arg\\|rpccookieperms=0\\|cookie_perms = std::nullopt"
+  HEAD knots/29.x-knots origin/master -- src/httprpc.cpp
+  src/rpc/request.cpp src/rpc/request.h test/functional/rpc_users.py` shows
+  the argument-origin logging and no-permission-change controls in Knots and
+  the port, while current Core only logs the final cookie mode.
 - `git show origin/master:src/common/pcp.cpp | rg -n
   "g_pcp_warn_for_unauthorized|NOT_AUTHORIZED|already_warned|Mapping failed"
   -C 4`, `git show origin/master:src/node/interfaces.cpp | rg -n
