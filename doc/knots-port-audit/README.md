@@ -1938,6 +1938,18 @@ under different commits. They are not all proven exploitable.
   latest unmodified-Knots check uses the direct `--test_methods` form rather
   than the older one-off subclass.
 
+- Legacy-sigop transaction standardness:
+  `204b965915`, `538182b27e`
+
+  The port matches Knots' BIP54-style policy limit on potentially executed
+  non-witness sigops per transaction, exposed as `-maxtxlegacysigops`, and uses
+  the specific reject reason `bad-txns-input-sigops-toomany-overall` with debug
+  text `non-witness sigops exceed bip54 limit`. Current Core still has only
+  the existing BIP141 sigop-cost standardness check in this area and no
+  `-maxtxlegacysigops` option. This is relay/mining policy hardening, not a
+  consensus rule: the functional test rejects the over-limit transaction from
+  mempool, then mines the same transaction directly in a block.
+
 - Descriptor-wallet `importaddress` compatibility:
   `be3ae51ece`
 
@@ -2185,6 +2197,17 @@ Source/manifest checks:
   current Core and the port's test code. Focused verification:
   `build/bin/test_bitcoin --run_test=httpserver_tests --catch_system_error=no --log_level=error --report_level=short`
   and `build/bin/test_bitcoin --run_test=miniscript_tests --catch_system_error=no --log_level=error --report_level=short`
+  passed.
+- `git -C ../knots show --stat --patch --minimal
+  204b96591542373dc75c6a6401b477f4b6615e69
+  538182b27e81556a3c72fbc61be1db60938edda6`, `rg -n
+  "maxtxlegacysigops|MAX_TX_LEGACY_SIGOPS|CheckSigopsBIP54|bad-txns-input-sigops-toomany-overall|non-witness sigops exceed"
+  src test/functional src/test`, and equivalent `origin/master` checks show the
+  port and actual Knots carry the BIP54-style legacy-sigop standardness limit
+  while current Core lacks the option and policy check. Focused verification:
+  `build/bin/test_bitcoin --run_test=mempool_tests/MempoolMaxTxLegacySigopsParse --catch_system_error=no --log_level=error --report_level=short`,
+  `build/bin/test_bitcoin --run_test=transaction_tests/max_standard_legacy_sigops --catch_system_error=no --log_level=error --report_level=short`,
+  and `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini --test_methods test_legacy_sigops_stdness --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_legacy_sigops --portseed=7395`
   passed.
 - `git show --stat --patch --minimal 16b1710d97` plus `rg -n
   "BaseIndex::Rewind|committed index state must never be ahead|SetBestBlockIndex\\(new_tip\\)|Commit\\("
