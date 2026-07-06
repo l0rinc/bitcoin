@@ -266,4 +266,22 @@ BOOST_AUTO_TEST_CASE(torcontrol_process_buffer_rejects_excess_reply_lines)
     BOOST_CHECK(TorControlConnectionTest::ReceiveBuffer(conn) == original_buffer);
 }
 
+BOOST_AUTO_TEST_CASE(torcontrol_process_buffer_rejects_overlong_line)
+{
+    CThreadInterrupt interrupt;
+    TorControlConnection conn{interrupt};
+
+    constexpr size_t max_line_length{100000};
+    const std::vector<std::byte> original_buffer(max_line_length + 1, std::byte{'x'});
+    TorControlConnectionTest::ReceiveBuffer(conn) = original_buffer;
+
+    BOOST_CHECK_EXCEPTION(
+        TorControlConnectionTest::ProcessBuffer(conn),
+        std::runtime_error,
+        [](const std::runtime_error& e) {
+            return std::string_view{e.what()} == "max_line_length exceeded by LineReader";
+        });
+    BOOST_CHECK(TorControlConnectionTest::ReceiveBuffer(conn) == original_buffer);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
