@@ -2195,7 +2195,8 @@ under different commits. They are not all proven exploitable.
   `Unable to bind any endpoint for RPC server` where Knots and the port require
   `Unable to bind all endpoints for RPC server`. Rerunning the port's current
   `rpc_bind.py` against both the port and unmodified Knots passes, including
-  the explicit partial-bind failure case.
+  the explicit partial-bind failure case; a refreshed full-test run again passed
+  on both binaries.
 
 - Invalid-block peer punishment relaxation:
   `7c7b5839f4`
@@ -3913,7 +3914,8 @@ Builds:
   origin/master -- src/httpserver.cpp test/functional/rpc_bind.py` show current
   Core still allows startup if any explicit RPC endpoint binds, while Knots and
   the port abort unless every explicit RPC endpoint binds. The port's
-  `rpc_bind.py` additionally covers this with a partial-bind failure case.
+  `rpc_bind.py` additionally covers this with a partial-bind failure case; the
+  refreshed port and unmodified-Knots functional runs both passed.
 - `rg -n
   "PunishInvalidBlocks|HandleDoSPunishment|MaybePunishNodeForBlock|Misbehaving"
   src/net.h src/net_processing.cpp src/test/net_tests.cpp
@@ -4970,6 +4972,14 @@ Functional tests:
   ../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rpc_bind_all_endpoints_knots_refresh
   --portseed=42411`
+- `python3 test/functional/rpc_bind.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_bind_all_endpoints_refresh_port2
+  --portseed=42609`
+- `python3 test/functional/rpc_bind.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_bind_all_endpoints_refresh_knots2
+  --portseed=42610`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_current_tip`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
