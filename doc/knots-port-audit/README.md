@@ -1195,7 +1195,9 @@ Other missing/adapted Knots pieces found during this pass:
   behavior. `p2p_permissions.py` now covers both sides directly: an automatic
   `outbound-full-relay` peer receives `noban`/`download` when the whitelist is
   `noban,out@127.0.0.1`, and receives no such permissions when the whitelist is
-  incoming-only.
+  incoming-only. A refreshed source comparison and focused test run still show
+  the behavior in the port and unmodified Knots, while current Core keeps the
+  manual-only gate.
 - The block-filter permission review confirmed Knots' `blockfilters`
   whitebind/whitelist permission (`d153093ba2`, `aa2885797e`) is present in
   the port and absent from current Core. The permission lets an explicitly
@@ -2213,7 +2215,8 @@ under different commits. They are not all proven exploitable.
   limited to `addnode`/manual peers. This is local network permission semantics,
   not a consensus change. The isolated
   `p2p_permissions.py --test_methods check_automatic_outbound_permissions`
-  run passes against both the port and unmodified Knots.
+  run passes against both the port and unmodified Knots; a refreshed source
+  comparison still shows Core's `ConnectNode(...)` manual-only gate.
 
 - Implicit whitelist `addr` permission:
   `9a79815097`
@@ -4293,6 +4296,16 @@ Functional tests:
   --test_methods check_automatic_outbound_permissions
   --tmpdir=/mnt/my_storage/tmp_p2p_permissions_outbound_auto_review_knots
   --portseed=26439`
+- `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
+  --cachedir=test/cache
+  --test_methods check_automatic_outbound_permissions
+  --tmpdir=/mnt/my_storage/tmp_p2p_permissions_outbound_auto_refresh_port
+  --portseed=42440`
+- `python3 test/functional/p2p_permissions.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --test_methods check_automatic_outbound_permissions
+  --tmpdir=/mnt/my_storage/tmp_p2p_permissions_outbound_auto_refresh_knots
+  --portseed=42441`
 - `python3 test/functional/p2p_blockfilters.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_blockfilters_permission_2`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
