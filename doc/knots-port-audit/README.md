@@ -848,6 +848,14 @@ Other missing/adapted Knots pieces found during this pass:
   `minconf`. This is backwards-compatibility behavior, not a security or
   consensus change. `wallet_fundrawtransaction.py` and `rpc_psbt.py` now cover
   positive selection, negative `min_conf`, and `min_conf`/`minconf` conflicts.
+- The wallet confirmation-target review confirmed Knots' one-day default
+  confirmation target (`a8b4eb70c0`) is present in the port and absent from
+  current Core: `DEFAULT_TX_CONFIRM_TARGET` is `144` in Knots and this port,
+  while current Core still defaults to `6`. This is a quiet wallet fee-policy
+  default change, not consensus behavior or a covert security hardening. The
+  port now pins the constructed wallet default in
+  `wallet_tests/default_confirm_target_is_one_day`; port and unmodified Knots
+  `bitcoind -help-debug` both advertise `-txconfirmtarget` default `144`.
 - Knots' address-usage tracking series (`fc7954a148`, `022887d933`,
   `a00bc6f395`, `82908e28a5`) is present in the port and absent from current
   Core: wallets keep in-memory script-use metadata and `getaddressinfo` returns
@@ -3196,6 +3204,12 @@ Builds:
 - `git -C ../knots show 29.x-knots:src/wallet/db.cpp | sed -n '20,95p'
   && git -C ../knots show 29.x-knots:src/wallet/wallet.cpp |
   sed -n '548,560p'`
+- `rg -n "DEFAULT_TX_CONFIRM_TARGET|m_confirm_target"
+  src/wallet/wallet.h src/wallet/test/wallet_tests.cpp`,
+  `git show origin/master:src/wallet/wallet.h | rg -n
+  "DEFAULT_TX_CONFIRM_TARGET|m_confirm_target" -C 2`, and
+  `git -C ../knots show 29.x-knots:src/wallet/wallet.h | rg -n
+  "DEFAULT_TX_CONFIRM_TARGET|m_confirm_target" -C 2`
 - `BUILDDIR=$PWD/build contrib/devtools/gen-manpages.py
   --skip-missing-binaries` failed after skipping the disabled `bitcoin`,
   `bitcoin-tx`, `bitcoin-util`, and `bitcoin-qt` binaries because `help2man` is
@@ -3317,6 +3331,10 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty`
 - `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty
   --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=wallet_tests/default_confirm_target_is_one_day
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/bitcoind -regtest -help-debug | sed -n '512,516p'`
+- `../knots/build-repro/bin/bitcoind -regtest -help-debug | sed -n '505,509p'`
 - `build/bin/test_bitcoin --run_test=getarg_tests/setting_args
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=util_tests`
