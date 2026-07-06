@@ -1,6 +1,6 @@
 # Knots Port Audit
 
-Audit date: 2026-07-05
+Audit date: 2026-07-06
 
 Branch: `codex/knots-current-master`
 
@@ -38,6 +38,12 @@ Other missing/adapted Knots pieces found during this pass:
   `create_block(..., ntime=...)`, current binary path lookup, capped
   datacarrier defaults, and sigop tests that isolate bytespersigop policy from
   datacarrier policy (`490d4f78cf`).
+- `feature_chain_tiebreaks.py` now restores current Core's stronger from-disk
+  equal-work regression test. A stale Knots duplicate `test_chain_split_from_disk`
+  method had been left later in the class, so Python executed the older two-way
+  restart loop instead of Core's three-way post-restart extension test. This was
+  a port-side test coverage defect, not an original Knots consensus bug, and is
+  fixed as `5c6196c636`.
 - `mempool_accept.py` was further adapted for Knots' data-output policy:
   Core's v30-era unbounded/multiple OP_RETURN expectations are now rejected by
   the port's `scriptpubkey`/`multi-op-return` policy paths (`2635a090c3`).
@@ -2004,6 +2010,14 @@ initialization. The Knots `getblock_vin` lazy-init follow-up is structurally
 avoided in current Core and this port because `getblock()` is registered as an
 `RPCMethod` factory, rather than by namespace-scope `RPCResult` construction.
 
+The `LoadChainTip` entry above covers Knots `33329f812e`. Current Core carries
+a stronger successor (`854a6d5a9a` plus test extension `20ae9b98ea`): all
+chainstates load their tips while `setBlockIndexCandidates` is empty, then
+`PopulateBlockIndexCandidates()` rebuilds the candidate sets after the
+`nSequenceId` mutations are complete. The port matches that source structure
+and now matches Core's functional regression test after removing the stale
+duplicate method noted above.
+
 ## Open Risks
 
 - Legacy-wallet creation is a non-consensus divergence from Knots on this
@@ -2097,6 +2111,18 @@ Source/manifest checks:
   equal-work chain-tip tie-break persistence across restarts and complex
   reorgs is already carried by current Core, actual Knots, and the port. This
   is a reorg/restart safety check, not a remaining Core shortcoming.
+- `git -C ../knots show --stat --patch --minimal
+  33329f812e1a159d0b6209fc826050e90d2bf4a3`, `git show --stat --patch
+  --minimal 854a6d5a9a 20ae9b98ea`, `rg -n
+  "PopulateBlockIndexCandidates|setBlockIndexCandidates|SEQ_ID_BEST_CHAIN_FROM_DISK|LoadChainTip"
+  src/validation.cpp src/validation.h src/node/chainstate.cpp
+  src/test/validation_chainstatemanager_tests.cpp
+  test/functional/feature_chain_tiebreaks.py`, and `git diff --exit-code
+  origin/master -- test/functional/feature_chain_tiebreaks.py` show the port
+  uses Core's stronger LoadChainTip/candidate-set fix and now executes Core's
+  matching functional regression test. Before `5c6196c636`, a stale duplicate
+  Knots method in the port made Python select the older two-block disk test
+  instead.
 - `git show --stat --patch --minimal 16b1710d97` plus `rg -n
   "BaseIndex::Rewind|committed index state must never be ahead|SetBestBlockIndex\\(new_tip\\)|Commit\\("
   src/index/base.cpp` and equivalent `origin/master` and `../knots` checks
@@ -2631,6 +2657,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=validation_tests`
 - `build/bin/test_bitcoin --run_test=validation_chainstatemanager_tests,wallet_tests
   --catch_system_error=no --log_level=nothing --report_level=no`
+- `build/bin/test_bitcoin --run_test=validation_chainstatemanager_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=validation_block_tests`
 - `build/bin/test_bitcoin --run_test=merkle_tests`
 - `build/bin/test_bitcoin --run_test=miner_tests`
@@ -2889,6 +2917,10 @@ Functional tests:
 - `python3 test/functional/feature_chain_tiebreaks.py --configfile
   build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_chain_tiebreaks_port
   --portseed=27530`
+- `python3 test/functional/feature_chain_tiebreaks.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_chain_tiebreaks_loadchaintip_ub_fixed
+  --portseed=7382`
 - `python3 ../knots/test/functional/feature_chain_tiebreaks.py --configfile
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_chain_tiebreaks_knots --portseed=27531`
