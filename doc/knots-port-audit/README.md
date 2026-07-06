@@ -5863,10 +5863,14 @@ Functional tests:
 - `python3 test/functional/wallet_hd.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_hd_dumpmaster`
 - `python3 test/functional/wallet_dump.py --configfile build/test/config.ini`
-  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB-enabled rerun passed as recorded below)
 - `python3 test/functional/wallet_dump.py --configfile build/test/config.ini
   --legacy-wallet --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_dump_hd_metadata_legacy`
   (historical pre-`ece3ba8d5b` skip on a descriptor-only build)
+- `python3 test/functional/wallet_dump.py
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_wallet_dump_bdb_default_verify2
+  --portseed=43981` passed.
 - `python3 test/functional/wallet_dump.py
   --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
   --legacy-wallet --tmpdir=/mnt/my_storage/tmp_wallet_dump_legacy_verify1`
