@@ -1313,6 +1313,16 @@ Other missing/adapted Knots pieces found during this pass:
   its native `streams_tests` suite still passes. This was a port omission, not
   an original Knots defect. Current Core lacks this
   sequential-read/page-cache-drop behavior.
+- A fresh patch-id miss audit found Knots' optimized arbitrary-byte SipHash
+  write path (`8463aef09f`, with diff-minimising follow-up `21a3dd4198`) had
+  been applied and then accidentally undone by the port's unrelated
+  implicit-SegWit wallet cherry-pick (`13f2c1cc1e`). Actual Knots still uses
+  the chunked `ReadLE64` path for `CSipHasher::Write(bytes)`, while current
+  Core and the previous port used the older byte loop. The port now restores
+  the optimization on top of Core's newer `SipHashState`/`PresaltedSipHasher`
+  shape and strengthens `hash_tests/siphash` with split-write/tail coverage.
+  This is local hash-performance parity, not consensus behavior, remote crash
+  hardening, or an original Knots defect.
 - The version-message ordering review confirmed Knots'
   `df874f848a` is present in the port as `9cb0591f30`: the peer's sanitized
   `cleanSubVer` is stored under `m_subver_mutex` before `nVersion` is published
@@ -4684,6 +4694,15 @@ Builds:
   src/rpc/util.cpp src/test/rpc_tests.cpp` show the Knots RPC argument-alias
   fix that remains absent from current Core but is carried and unit-tested in
   the port.
+- `git show --patch 8463aef09f 21a3dd4198 -- src/crypto/siphash.cpp
+  src/crypto/siphash.h`, `git show --patch 31a386b6c2 333bdaf434
+  13f2c1cc1e -- src/crypto/siphash.cpp src/crypto/siphash.h`, and
+  `git grep -n "ReadU64ByLenLE\\|ReadLE64(data.data()\\|CSipHasher::Write"
+  HEAD knots/29.x-knots origin/master -- src/crypto/siphash.cpp
+  src/crypto/siphash.h` show the port had briefly carried Knots' chunked
+  arbitrary-byte SipHash writer before `13f2c1cc1e` reverted it to Core's byte
+  loop; the current port again matches actual Knots' bulk-byte behavior while
+  retaining Core's newer presalted uint256 hasher API.
 - `git show origin/master:src/node/warnings.cpp | rg -n
   "all_messages\\.back|Join\\(all_messages" -C 3`
 - `git -C ../knots show 29.x-knots:src/node/warnings.cpp | rg -n
@@ -4920,6 +4939,12 @@ Unit tests:
   "WITH_SYSTEM_LEVELDB|WITH_SYSTEM_LIBSECP256K1|EMBEDDED_LEVELDB|LevelDB|secp256k1"`
 - `build/bin/test_bitcoin --run_test=banman_tests`
 - `build/bin/test_bitcoin --run_test=hash_tests`
+- `build/bin/test_bitcoin --run_test=hash_tests --catch_system_error=no
+  --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=hash_tests/siphash
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin --run_test=hash_tests/siphash
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=blockencodings_tests
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=blockfilter_index_tests`
