@@ -851,11 +851,23 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
             },
 
             [&]() { // GetCacheSize
-                (void)caches.back()->GetCacheSize();
+                const auto cache_stats{get_all_cache_stats()};
+                const auto dirty_counts{get_dirty_counts()};
+                const unsigned int size{caches.back()->GetCacheSize()};
+                assert(caches.back()->GetCacheSize() == size);
+                assert(size == cache_stats.back().cache_size);
+                assert_cache_stats(cache_stats);
+                assert_dirty_counts(dirty_counts);
             },
 
             [&]() { // DynamicMemoryUsage
-                (void)caches.back()->DynamicMemoryUsage();
+                const auto cache_stats{get_all_cache_stats()};
+                const auto dirty_counts{get_dirty_counts()};
+                const size_t usage{caches.back()->DynamicMemoryUsage()};
+                assert(caches.back()->DynamicMemoryUsage() == usage);
+                assert(usage == cache_stats.back().memory_usage);
+                assert_cache_stats(cache_stats);
+                assert_dirty_counts(dirty_counts);
             },
 
             [&]() { // Change height
