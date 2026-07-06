@@ -1107,7 +1107,9 @@ FUZZ_TARGET(txgraph)
                 // Verify that something was removed if and only if there was an oversized cluster.
                 assert(was_oversized == !removed.empty());
                 if (!was_oversized) break;
+                assert_unique_refs(removed);
                 auto removed_set = top_sim.MakeSet(removed);
+                assert(removed.size() == removed_set.Count());
                 // The removed set must contain all its own descendants.
                 for (auto simpos : removed_set) {
                     assert(top_sim.graph.Descendants(simpos).IsSubsetOf(removed_set));
@@ -1224,7 +1226,9 @@ FUZZ_TARGET(txgraph)
                 assert(removed.size() >= 1);
                 assert(removed.size() <= max_removed);
                 // The removed set must contain all its own descendants.
+                assert_unique_refs(removed);
                 auto removed_set = top_sim.MakeSet(removed);
+                assert(removed.size() == removed_set.Count());
                 for (auto simpos : removed_set) {
                     assert(top_sim.graph.Descendants(simpos).IsSubsetOf(removed_set));
                 }

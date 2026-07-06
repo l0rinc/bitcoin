@@ -3716,6 +3716,12 @@ std::vector<TxGraph::Ref*> TxGraphImpl::Trim() noexcept
     clusterset.m_group_data.reset();
     clusterset.m_oversized = false;
     Assume(!ret.empty());
+    AssumeUniqueRefs(ret);
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        for (const Ref* ref : ret) {
+            Assume(GetRefGraph(*ref) == this);
+        }
+    }
     return ret;
 }
 
