@@ -1262,7 +1262,14 @@ Other missing/adapted Knots pieces found during this pass:
   `interface_zmq.py` run now passes, including a fresh rerun from
   `/mnt/my_storage/build-zmq-audit`, a separate tree configured with
   `-DWITH_ZMQ=ON`; the latest check rebuilt `bitcoind`/`bitcoin-cli` there
-  before rerunning the functional suite.
+  before rerunning the functional suite. The same pass confirmed Knots'
+  `ipc://` ZMQ URI compatibility (`be5ba1bc7e`, merged as `9bbe4d26fc`) is
+  present in the port and absent from current Core's startup argument
+  pre-check, which still accepts only the Core `unix:` alias in
+  `CheckHostPortOptions(...)`. This is local ZMQ configuration compatibility,
+  not consensus behavior or network hardening; `interface_zmq.py` now reaches
+  and passes a native `ipc://` notifier startup check on both the port and
+  unmodified Knots ZMQ builds.
 - The fee-estimator follow-up confirmed Knots' `TxConfirmStats::Read`
   pre-multiplication bound check (`163d3e5c13`, ported as `aeaf84b7d5`) is
   present while current Core still multiplies `scale * maxPeriods` before
@@ -2863,6 +2870,14 @@ Source/manifest checks:
   "Can't read block|zmqError" src/zmq/zmqpublishnotifier.cpp -C 3` show
   current Core still logs raw-block disk-read failures via `zmqError`, while
   Knots and the port log the failing block hash directly.
+- `git show origin/master:src/init.cpp | rg -n
+  "zmqpub|ADDR_PREFIX_UNIX|ipc:" -C 4`,
+  `git -C ../knots show 29.x-knots:src/init.cpp | rg -n
+  "zmqpub|ADDR_PREFIX_UNIX|ipc:" -C 4`, and `rg -n
+  "zmqpub|ADDR_PREFIX_UNIX|ipc:" src/init.cpp test/functional/interface_zmq.py
+  -C 4` show current Core's `CheckHostPortOptions(...)` accepts only the
+  `unix:` alias for ZMQ Unix-domain sockets, while Knots and the port also
+  allow native libzmq `ipc://` URIs.
 - `git show origin/master:src/net_processing.cpp | rg -n
   "cleanSubVer = SanitizeString|receive version message" -C 2`,
   `git -C ../knots show 29.x-knots:src/net_processing.cpp | rg -n
@@ -3014,6 +3029,9 @@ Builds:
   -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF
   -DBUILD_GUI=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
 - `cmake --build /mnt/my_storage/build-zmq-audit --target bitcoind bitcoin-cli -j4`
+- `cmake -S ../knots -B ../knots/build-zmq-audit -DWITH_ZMQ=ON
+  -DRDTS_CONSENT=RUNTIME_WARN -DBUILD_GUI=OFF -DWITH_CCACHE=OFF`
+- `cmake --build ../knots/build-zmq-audit --target bitcoind bitcoin-cli -j4`
 - `cmake -S . -B /tmp/bitcoin-fuzz-wallet-bdb -DBUILD_FUZZ_BINARY=ON
   -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF -DBUILD_GUI=OFF -DWITH_CCACHE=OFF
   -DRDTS_CONSENT=IMPLICIT`
@@ -3904,6 +3922,14 @@ Functional tests:
   /mnt/my_storage/build-zmq-audit/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_interface_zmq_review_rerun
   --portseed=26446`
+- `python3 test/functional/interface_zmq.py --configfile=/mnt/my_storage/build-zmq-audit/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_interface_zmq_ipc_port
+  --portseed=32700`
+- `python3 test/functional/interface_zmq.py --configfile=../knots/build-zmq-audit/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_interface_zmq_ipc_knots
+  --portseed=32701`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_dos_header_tree_checkpoint`
