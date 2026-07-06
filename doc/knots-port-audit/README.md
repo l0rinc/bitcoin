@@ -776,7 +776,11 @@ Other missing/adapted Knots pieces found during this pass:
   `salvage.h`, and current API adaptations as `90c0118d62`. This was not an
   original Knots defect or consensus issue. Full legacy wallet loading/creation
   remains disabled on this current-Core base; the BDB work here restores build
-  coverage and the configured BDB backend objects.
+  coverage and the configured BDB backend objects. Refreshed config checks
+  still show the local port build has no `USE_BDB` component line and the
+  unmodified Knots repro build has `#USE_BDB=true`, so the latest runtime
+  checks are BDB-adjacent parser/config coverage rather than live BDB wallet
+  creation coverage.
 - A BDB follow-up review confirmed the port also carries Knots' BDB-specific
   wallet hardening around non-writable directories and environment cleanup:
   `MakeBerkeleyDatabase(...)` catches open/verify exceptions, BDB directory
@@ -805,8 +809,8 @@ Other missing/adapted Knots pieces found during this pass:
   wallet path, so this is not Core-missing data-loss hardening. Knots and the
   port additionally keep unnamed `createfromdump` compatibility and warn that
   BDB dumps/restores do not preserve the wallet id; that warning is tied to
-  Knots' retained BDB backend. A fresh `tool_wallet.py` run passes with the
-  ported behavior.
+  Knots' retained BDB backend. Refreshed `tool_wallet.py` runs passed against
+  both the port and unmodified Knots with the ported behavior.
 - The BDB read-only parser review confirmed Knots' last-page LSN check
   (`2069130d80`) is present in the port and already present in current Core
   master: the parser scans through `outer_meta.last_page` inclusively before
@@ -4139,6 +4143,12 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=blockfilter_index_tests`
 - `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
 - `build/bin/test_bitcoin --run_test=db_tests,walletdb_tests,wallet_tests`
+- `build/bin/test_bitcoin --run_test=db_tests,walletdb_tests,wallet_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin --run_test=db_tests,walletdb_tests,wallet_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=database_args_parse_wallet_debug_options
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=fs_tests,walletdb_tests,wallet_tests`
 - `build/bin/test_bitcoin --run_test=fs_tests/allocate_file_range_preserves_existing_bytes`
 - `build/bin/test_bitcoin --run_test=db_tests --catch_system_error=no
@@ -5200,6 +5210,14 @@ Functional tests:
 - `python3 test/functional/tool_wallet.py --configfile build/test/config.ini`
 - `python3 test/functional/tool_wallet.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_tool_wallet_cleanup_review --portseed=7399`
+- `python3 test/functional/tool_wallet.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_tool_wallet_bdb_refresh
+  --portseed=42590`
+- `python3 ../knots/test/functional/tool_wallet.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_tool_wallet_bdb_knots_refresh
+  --portseed=42591`
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_startup.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_assumeutxo.py --configfile build/test/config.ini
@@ -5924,6 +5942,18 @@ Functional tests:
   (7 cases, 618 assertions). Unmodified Knots' native
   `../knots/build-repro/bin/test_bitcoin --run_test=db_tests --catch_system_error=no --log_level=error --report_level=short`
   passed with 6 cases and 609 assertions.
+  Refreshed checks confirmed the same BDB-disabled runtime limit and broadened
+  the local coverage: `build/bin/test_bitcoin
+  --run_test=database_args_parse_wallet_debug_options
+  --catch_system_error=no --log_level=error --report_level=short` passed with
+  7 assertions, `build/bin/test_bitcoin
+  --run_test=db_tests,walletdb_tests,wallet_tests --catch_system_error=no
+  --log_level=error --report_level=short` passed with 25 cases and 763
+  assertions, and `../knots/build-repro/bin/test_bitcoin
+  --run_test=db_tests,walletdb_tests,wallet_tests --catch_system_error=no
+  --log_level=error --report_level=short` passed with 26 cases and 881
+  assertions. Refreshed `tool_wallet.py` runs also passed on the port and
+  unmodified Knots.
 - Original Knots expected-failure repro with a temporary
   `/mnt/my_storage/knots-assumeutxo-repro` worktree and the port's added
   post-validation raw-transaction assertion:
