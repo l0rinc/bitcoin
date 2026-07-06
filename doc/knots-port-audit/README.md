@@ -3234,8 +3234,10 @@ BaseIndex rewind no-commit state persistence (`16b1710d97`) and stale
 `SetStdinEcho` UB (`98d9237d3e`, Core `fa692974ac`), fd-limit
 overflow/RLIMIT_INFINITY handling (`0f92fc907f`, `1953393f48`,
 `6c89453ca7`; Core `4afbabdcef`, `8ab4b9fc85`), RPC credentials hashed in
-memory, the `PSBTInputSignedAndVerified` bounds assert fix (`b2f6128338`,
-also present in current Core), the v2-to-v1 reconnect UAF fix
+memory (`f06169f019`, port `29a99a5a9f`, Core `879a17bcb1`) plus the
+`rpcuser`/`rpcpassword` plaintext security warning (`e3e273e26`, Core
+`4ab9bedee9`), the `PSBTInputSignedAndVerified` bounds assert fix
+(`b2f6128338`, also present in current Core), the v2-to-v1 reconnect UAF fix
 (`f44b206a5e`, Core `167df7a98c`, clearing `m_reconnections` before
 `semOutbound` teardown and present in Knots, Core, and this port), randomized
 Tor
@@ -4403,6 +4405,12 @@ Builds:
   the port, current Core, and unmodified Knots; Knots' old
   `strRPCUserColonPass` spelling is only a local variable in
   `InitRPCAuthentication()`.
+- `git grep -n -E
+  "Using rpcuser/rpcpassword|less secure|will soon be deprecated"
+  HEAD knots/29.x-knots origin/master -- src/httprpc.cpp
+  test/functional/rpc_users.py` shows Core, Knots, and the port use the
+  plaintext-credential security warning rather than the old deprecation notice,
+  and the port's functional test pins the log wording.
 - `git grep -n
   "GenerateAuthCookie|filepath_tmp|fs::permissions|RenameOver|rpccookieperms|rpcauthfile|g_rpcauth.push_back|CHMAC_SHA256"
   HEAD knots/29.x-knots origin/master -- src/rpc/request.cpp
@@ -5604,6 +5612,10 @@ Functional tests:
   --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rpc_users_auth_native_knots3
   --portseed=42613`
+- `python3 test/functional/rpc_users.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_users_rpcpassword_warning_refresh
+  --portseed=42751`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_getrpcwhitelist_auth_review_port

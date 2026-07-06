@@ -310,6 +310,15 @@ class HTTPBasicsTest(BitcoinTestFramework):
         self.log.info('Check correctness of the rpcuser/rpcpassword config options')
         url = urllib.parse.urlparse(self.nodes[1].url)
 
+        with self.nodes[1].assert_debug_log(
+            expected_msgs=[
+                "Using rpcuser/rpcpassword authentication.",
+                "The use of rpcuser/rpcpassword is less secure",
+            ],
+            unexpected_msgs=["will soon be deprecated"],
+        ):
+            self.restart_node(1)
+
         self.test_auth(self.nodes[1], self.rpcuser, self.rpcpassword)
 
         init_error = 'Error: Unable to start HTTP server. See debug log for details.'
