@@ -3473,8 +3473,13 @@ miniscript `FindChallenges` stack-overflow avoidance in tests, P2P
 clean success exit status for initialization interrupted by shutdown. The old
 Knots/libevent HTTP listen-socket cleanup fix is structurally avoided on this
 current-Core base because the port uses Core's native `HTTPServer` with RAII
-`Sock` ownership rather than `evhttp_accept_socket_with_handle`. A follow-up
-patch-id audit also found that current Core already
+`Sock` ownership rather than `evhttp_accept_socket_with_handle`. The newer
+current-Core HTTP worker/I/O race fix (`73da2a8a52`, merge `239d6c5260`) is
+also not a current-Knots missing patch as written: it protects Core's native
+`HTTPRemoteClient` send-buffer state, while Knots 29.x remains on libevent
+`evhttp_request`/`evhttp_send_reply` and has no `m_send_ready` or
+`GenerateWaitSockets()` path. A follow-up patch-id audit also found that
+current Core already
 has the MiniMiner negative-fee assumption removal, peer/peeraddr log comma
 restoration through `CNode::LogPeer()`, and lazy `decodepsbt` result-doc
 initialization. The Knots `getblock_vin` lazy-init follow-up is structurally
@@ -3983,6 +3988,17 @@ Source/manifest checks:
   closing a listen socket when `evhttp_accept_socket_with_handle` fails is not
   a remaining port gap: current Core and the port hold the socket in a
   `std::unique_ptr<Sock>` until successful bind/listen registration.
+- `git show --stat --patch --minimal
+  73da2a8a52f75b20cf3adfe36ad3804c41047d81 -- src/httpserver.cpp
+  src/httpserver.h`, `git log --oneline HEAD knots/29.x-knots origin/master
+  --grep="HTTPServer: Prevent race condition between worker thread and I/O
+  thread"`, and `git grep -n
+  "HTTPRemoteClient\|m_send_ready\|WriteReply\|MaybeSendBytesFromBuffer\|GenerateWaitSockets\|evhttp_send_reply"
+  HEAD knots/29.x-knots origin/master -- src/httpserver.cpp src/httpserver.h
+  src/test/httpserver_tests.cpp` show the new worker/I/O `m_send_ready` race fix
+  is present in current Core and the port, absent from current Knots, and tied
+  to Core's native `HTTPRemoteClient` implementation rather than Knots'
+  libevent `evhttp_request` reply path.
 - `git -C ../knots show --stat --patch --minimal
   5da98f931d777fa13b3e4804dc01f3e84f1a32c1`, `git show
   origin/master:src/test/miniscript_tests.cpp`, and `rg -n
