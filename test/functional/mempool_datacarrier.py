@@ -10,6 +10,7 @@ from test_framework.messages import (
     CTxInWitness,
     CTxOut,
     MAX_OP_RETURN_RELAY,
+    WITNESS_SCALE_FACTOR,
 )
 from test_framework.script import (
     CScript,
@@ -102,6 +103,34 @@ class DataCarrierTest(BitcoinTestFramework):
             assert_raises_rpc_error(-26, "txn-datacarrier-exceeded",
                                     self.wallet.sendrawtransaction, from_node=node, tx_hex=tx_hex)
 
+    def create_op_return_transaction(self, data):
+        tx = self.wallet.create_self_transfer(fee_rate=0)["tx"]
+        tx.vout.append(CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN, data])))
+        tx.vout[0].nValue -= 10_000
+        tx.rehash()
+        return tx
+
+    def test_datacarriercost_adjusted_vsize(self):
+        if not hasattr(self, "wallet"):
+            self.wallet = MiniWallet(self.nodes[0])
+        data = b"a" * (MAX_OP_RETURN_RELAY - 3)
+
+        self.log.info("Testing default -datacarriercost does not add output-data weight.")
+        default_tx = self.create_op_return_transaction(data)
+        default_txid = self.wallet.sendrawtransaction(from_node=self.nodes[0], tx_hex=default_tx.serialize().hex())
+        assert_equal(self.nodes[0].getmempoolentry(default_txid)["vsize"], default_tx.get_vsize())
+        self.generate(self.nodes[0], 1, sync_fun=self.no_op)
+
+        self.log.info("Testing -datacarriercost=2 adds one extra vbyte per output data byte.")
+        self.restart_node(0, extra_args=["-datacarriercost=2", "-persistmempool=0"])
+        cost_tx = self.create_op_return_transaction(data)
+        cost_txid = self.wallet.sendrawtransaction(from_node=self.nodes[0], tx_hex=cost_tx.serialize().hex())
+        data_carrier_bytes = len(cost_tx.vout[1].scriptPubKey)
+        extra_weight = data_carrier_bytes * WITNESS_SCALE_FACTOR
+        expected_vsize = (cost_tx.get_weight() + extra_weight + WITNESS_SCALE_FACTOR - 1) // WITNESS_SCALE_FACTOR
+        assert_equal(self.nodes[0].getmempoolentry(cost_txid)["vsize"], expected_vsize)
+        self.generate(self.nodes[0], 1, sync_fun=self.no_op)
+        self.restart_node(0, extra_args=self.extra_args[0])
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
@@ -157,6 +186,8 @@ class DataCarrierTest(BitcoinTestFramework):
 
         self.log.info("Testing an OPNet transaction (just pushing 'op') with -datacarriersize=2.")
         self.test_opnet_transaction(node=self.nodes[3], success=False)
+
+        self.test_datacarriercost_adjusted_vsize()
 
 
 if __name__ == '__main__':
