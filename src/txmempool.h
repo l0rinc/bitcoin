@@ -811,6 +811,12 @@ public:
         auto [chunk_entries, chunk_feerate] = *res;
         Assume(!chunk_entries.empty());
         Assume(!chunk_feerate.IsEmpty());
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            std::set<TxGraph::Ref*> unique_chunk_entries;
+            for (TxGraph::Ref* ref : chunk_entries) {
+                Assume(unique_chunk_entries.insert(ref).second);
+            }
+        }
         for (TxGraph::Ref* ref : chunk_entries) {
             Assume(ref != nullptr);
             entries.emplace_back(static_cast<const CTxMemPoolEntry&>(*ref));
