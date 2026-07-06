@@ -492,6 +492,11 @@ void BerkeleyBatch::Flush()
     }
 }
 
+void BerkeleyDatabase::IncrementUpdateCounter()
+{
+    ++nUpdateCounter;
+}
+
 BerkeleyBatch::~BerkeleyBatch()
 {
     Close();
@@ -1008,9 +1013,9 @@ void BerkeleyDatabase::RemoveRef()
     if (env) env->m_db_in_use.notify_all();
 }
 
-std::unique_ptr<DatabaseBatch> BerkeleyDatabase::MakeBatch()
+std::unique_ptr<DatabaseBatch> BerkeleyDatabase::MakeBatch(bool flush_on_close)
 {
-    return std::make_unique<BerkeleyBatch>(*this, false);
+    return std::make_unique<BerkeleyBatch>(*this, false, flush_on_close);
 }
 
 std::unique_ptr<BerkeleyDatabase> MakeBerkeleyDatabase(const fs::path& path, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error)

@@ -683,6 +683,7 @@ void CWallet::SetLastBlockProcessed(int block_height, uint256 block_hash)
 
     SetLastBlockProcessedInMem(block_height, block_hash);
     WriteBestBlock();
+    GetDatabase().IncrementUpdateCounter();
 }
 
 std::set<Txid> CWallet::GetConflicts(const Txid& txid) const
@@ -1656,6 +1657,7 @@ void CWallet::blockConnected(const ChainstateRole& role, const interfaces::Block
     // Update on disk if this block resulted in us updating a tx, or periodically every 144 blocks (~1 day)
     if (wallet_updated || block.height % 144 == 0) {
         WriteBestBlock();
+        GetDatabase().IncrementUpdateCounter();
     }
 }
 

@@ -46,7 +46,10 @@ public:
     /** Flush to the database file and close the database.
      *  Also close the environment if no other databases are open in it.
      */
+    void Flush() override {}
     void Close() override {}
+    bool PeriodicFlush() override { return false; }
+    void IncrementUpdateCounter() override {}
 
     /** Return path to main database file for logs and error messages. */
     std::string Filename() override { return fs::PathToString(m_filepath); }
@@ -55,7 +58,7 @@ public:
     std::string Format() override { return "bdb_ro"; }
 
     /** Make a DatabaseBatch connected to this database */
-    std::unique_ptr<DatabaseBatch> MakeBatch() override;
+    std::unique_ptr<DatabaseBatch> MakeBatch(bool flush_on_close = true) override;
 };
 
 class BerkeleyROCursor : public DatabaseCursor
@@ -93,6 +96,7 @@ public:
     BerkeleyROBatch(const BerkeleyROBatch&) = delete;
     BerkeleyROBatch& operator=(const BerkeleyROBatch&) = delete;
 
+    void Flush() override {}
     void Close() override {}
 
     std::unique_ptr<DatabaseCursor> GetNewCursor() override { return std::make_unique<BerkeleyROCursor>(m_database); }

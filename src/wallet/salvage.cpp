@@ -38,6 +38,7 @@ private:
     bool ErasePrefix(std::span<const std::byte> prefix) override { return true; }
 
 public:
+    void Flush() override {}
     void Close() override {}
 
     std::unique_ptr<DatabaseCursor> GetNewCursor() override { return std::make_unique<DummyCursor>(); }
@@ -56,11 +57,14 @@ public:
     void Open() override {};
     bool Rewrite() override { return true; }
     bool Backup(const std::string& strDest) const override { return true; }
+    void Flush() override {}
     void Close() override {}
+    bool PeriodicFlush() override { return true; }
+    void IncrementUpdateCounter() override { ++nUpdateCounter; }
     std::string Filename() override { return "dummy"; }
     std::vector<fs::path> Files() override { return {}; }
     std::string Format() override { return "dummy"; }
-    std::unique_ptr<DatabaseBatch> MakeBatch() override { return std::make_unique<DummyBatch>(); }
+    std::unique_ptr<DatabaseBatch> MakeBatch(bool = true) override { return std::make_unique<DummyBatch>(); }
 };
 
 bool RecoverDatabaseFile(const ArgsManager& args, const fs::path& file_path, bilingual_str& error, std::vector<bilingual_str>& warnings)

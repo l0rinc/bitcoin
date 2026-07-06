@@ -194,6 +194,9 @@ void StartWallets(WalletContext& context)
         pwallet->postInitProcess();
     }
 
+    if (context.args->GetBoolArg("-flushwallet", DEFAULT_FLUSHWALLET)) {
+        context.scheduler->scheduleEvery([&context] { MaybeCompactWalletDB(context); }, 500ms);
+    }
     context.scheduler->scheduleEvery([&context] { MaybeResendWalletTxs(context); }, 1min);
 }
 

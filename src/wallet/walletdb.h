@@ -38,6 +38,8 @@ void LogDBInfo();
  *   batch update as well as methods to act on the database. It should be agnostic to the database implementation.
  */
 
+static const bool DEFAULT_FLUSHWALLET = true;
+
 /** Error statuses for the wallet database.
  * Values are in order of severity. When multiple errors occur, the most severe (highest value) will be returned.
  */
@@ -206,6 +208,10 @@ private:
         if (!m_batch->Write(key, value, fOverwrite)) {
             return false;
         }
+        m_database.IncrementUpdateCounter();
+        if (m_database.nUpdateCounter % 1000 == 0) {
+            m_batch->Flush();
+        }
         return true;
     }
 
@@ -215,11 +221,16 @@ private:
         if (!m_batch->Erase(key)) {
             return false;
         }
+        m_database.IncrementUpdateCounter();
+        if (m_database.nUpdateCounter % 1000 == 0) {
+            m_batch->Flush();
+        }
         return true;
     }
 
 public:
     explicit WalletBatch(WalletDatabase &database) :
+        m_database(database),
         m_batch(database.MakeBatch())
     {
     }
@@ -293,6 +304,7 @@ public:
     void RegisterTxnListener(const DbTxnListener& l);
 
 private:
+    WalletDatabase& m_database;
     std::unique_ptr<DatabaseBatch> m_batch;
 
     // External functions listening to the current db txn outcome.
@@ -313,6 +325,9 @@ private:
  * @return true if the db txn executed successfully, false otherwise.
  */
 bool RunWithinTxn(WalletDatabase& database, std::string_view process_desc, const std::function<bool(WalletBatch&)>& func);
+
+//! Compacts BDB state so that wallet.dat is self-contained (if there are changes).
+void MaybeCompactWalletDB(WalletContext& context);
 
 bool LoadKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr);
 bool LoadCryptedKey(CWallet* pwallet, DataStream& ssKey, DataStream& ssValue, std::string& strErr);

@@ -38,6 +38,7 @@ void DummyWalletInit::AddWalletOptions(ArgsManager& argsman) const
         "-maxapsfee=<n>",
         "-maxtxfee=<amt>",
         "-mintxfee=<amt>",
+        "-paytxfee=<amt>",
         "-signer=<cmd>",
         "-spendzeroconfchange",
         "-txconfirmtarget=<n>",
@@ -47,9 +48,13 @@ void DummyWalletInit::AddWalletOptions(ArgsManager& argsman) const
         "-walletimplicitsegwit",
         "-walletnotify=<cmd>",
         "-walletrbf",
+        "-dblogsize=<n>",
+        "-flushwallet",
+        "-privdb",
         "-walletrejectlongchains",
         "-walletcrosschain",
         "-unsafesqlitesync",
+        "-swapbdbendian",
     });
 }
 

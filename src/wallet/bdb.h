@@ -114,14 +114,16 @@ public:
 
     /** Make sure all changes are flushed to database file.
      */
-    void Flush();
+    void Flush() override;
     /** Flush to the database file and close the database.
      *  Also close the environment if no other databases are open in it.
      */
     void Close() override;
     /* flush the wallet passively (TRY_LOCK)
        ideal to be called periodically */
-    bool PeriodicFlush();
+    bool PeriodicFlush() override;
+
+    void IncrementUpdateCounter() override;
 
     void ReloadDbEnv();
 
@@ -155,7 +157,7 @@ public:
     int64_t m_max_log_mb;
 
     /** Make a BerkeleyBatch connected to this database */
-    std::unique_ptr<DatabaseBatch> MakeBatch() override;
+    std::unique_ptr<DatabaseBatch> MakeBatch(bool flush_on_close = true) override;
 };
 
 class BerkeleyCursor : public DatabaseCursor
@@ -201,7 +203,7 @@ public:
     BerkeleyBatch(const BerkeleyBatch&) = delete;
     BerkeleyBatch& operator=(const BerkeleyBatch&) = delete;
 
-    void Flush();
+    void Flush() override;
     void Close() override;
 
     std::unique_ptr<DatabaseCursor> GetNewCursor() override;

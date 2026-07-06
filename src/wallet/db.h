@@ -62,6 +62,7 @@ public:
     DatabaseBatch(const DatabaseBatch&) = delete;
     DatabaseBatch& operator=(const DatabaseBatch&) = delete;
 
+    virtual void Flush() = 0;
     virtual void Close() = 0;
 
     template <typename K, typename T>
@@ -130,7 +131,7 @@ class WalletDatabase
 {
 public:
     /** Create dummy DB handle */
-    WalletDatabase() = default;
+    WalletDatabase() : nUpdateCounter(0) {}
     virtual ~WalletDatabase() = default;
 
     /** Open the database if it is not already opened. */
@@ -147,10 +148,19 @@ public:
      */
     virtual bool Backup(const std::string& strDest) const = 0;
 
+    /** Make sure all changes are flushed to database file.
+     */
+    virtual void Flush() = 0;
+
     /** Flush to the database file and close the database.
      *  Also close the environment if no other databases are open in it.
      */
     virtual void Close() = 0;
+
+    /* Flush the wallet passively (TRY_LOCK). Ideal to be called periodically. */
+    virtual bool PeriodicFlush() = 0;
+
+    virtual void IncrementUpdateCounter() = 0;
 
     /** Return path to main database file for logs and error messages. */
     virtual std::string Filename() = 0;
@@ -160,8 +170,13 @@ public:
 
     virtual std::string Format() = 0;
 
+    std::atomic<unsigned int> nUpdateCounter;
+    unsigned int nLastSeen{0};
+    unsigned int nLastFlushed{0};
+    int64_t nLastWalletUpdate{0};
+
     /** Make a DatabaseBatch connected to this database */
-    virtual std::unique_ptr<DatabaseBatch> MakeBatch() = 0;
+    virtual std::unique_ptr<DatabaseBatch> MakeBatch(bool flush_on_close = true) = 0;
 };
 
 enum class DatabaseFormat {

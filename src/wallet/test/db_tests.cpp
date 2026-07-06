@@ -4,6 +4,7 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <common/args.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <util/check.h>
@@ -12,6 +13,7 @@
 #include <wallet/sqlite.h>
 #include <wallet/migrate.h>
 #include <wallet/test/util.h>
+#include <wallet/walletdb.h>
 #include <wallet/walletutil.h>
 
 #include <algorithm>
@@ -44,6 +46,44 @@ static SerializeData StringData(std::string_view str)
 {
     auto bytes = StringBytes(str);
     return SerializeData{bytes.begin(), bytes.end()};
+}
+
+BOOST_AUTO_TEST_CASE(database_args_parse_wallet_debug_options)
+{
+    ArgsManager args;
+    args.AddArg("-unsafesqlitesync", "Disable SQLite sync.", ArgsManager::ALLOW_ANY, OptionsCategory::WALLET_DEBUG_TEST);
+    args.AddArg("-privdb", "Use private BDB environment.", ArgsManager::ALLOW_ANY, OptionsCategory::WALLET_DEBUG_TEST);
+    args.AddArg("-dblogsize=<n>", "BDB log size.", ArgsManager::ALLOW_ANY, OptionsCategory::WALLET_DEBUG_TEST);
+
+    DatabaseOptions default_options;
+    ReadDatabaseArgs(args, default_options);
+    BOOST_CHECK(!default_options.use_unsafe_sync);
+    BOOST_CHECK(!default_options.use_shared_memory);
+    BOOST_CHECK_EQUAL(default_options.max_log_mb, 100);
+
+    const char* argv[]{"ignored", "-unsafesqlitesync=1", "-privdb=0", "-dblogsize=7"};
+    std::string error;
+    BOOST_REQUIRE(args.ParseParameters(4, argv, error));
+
+    DatabaseOptions options;
+    ReadDatabaseArgs(args, options);
+    BOOST_CHECK(options.use_unsafe_sync);
+    BOOST_CHECK(options.use_shared_memory);
+    BOOST_CHECK_EQUAL(options.max_log_mb, 7);
+}
+
+BOOST_FIXTURE_TEST_CASE(wallet_batch_updates_database_counter, BasicTestingSetup)
+{
+    MockableSQLiteDatabase database;
+    BOOST_CHECK_EQUAL(database.nUpdateCounter, 0);
+
+    {
+        WalletBatch batch{database};
+        BOOST_CHECK(batch.WriteName("destination", "label"));
+        BOOST_CHECK_EQUAL(database.nUpdateCounter, 1);
+        BOOST_CHECK(batch.EraseName("destination"));
+        BOOST_CHECK_EQUAL(database.nUpdateCounter, 2);
+    }
 }
 
 static constexpr std::string_view BDB_LSN_ERROR{"LSNs are not reset, this database is not completely flushed. Please reopen then close the database with a version that has BDB support"};
