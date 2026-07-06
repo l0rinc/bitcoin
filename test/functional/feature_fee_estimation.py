@@ -28,6 +28,8 @@ from test_framework.wallet import MiniWallet
 
 MAX_FILE_AGE = 60
 SECONDS_PER_HOUR = 60 * 60
+MIN_BUCKET_FEERATE = Decimal(100) / Decimal(COIN)
+TXS_COUNT = 24
 target_success_threshold = 0.8
 
 def small_txpuzzle_randfee(
@@ -163,16 +165,18 @@ def check_fee_estimates_btw_modes(node, expected_conservative, expected_economic
     assert_equal(fee_est_default, rest_getfee(node.url, 'unset', 1)['feerate'])
 
 
-def get_feerate_into_mempool(node, kB):
+def get_feerate_into_mempool(node, kB, multiplier):
+    multiplier_thousandths = int(Decimal(multiplier) * 1000)
     mempool_entries = list(node.getrawmempool(verbose=True).values())
     for entry in mempool_entries:
-        entry['feerate_BTC/vB'] = entry['fees']['modified'] / entry['vsize']
+        entry['feerate_BTC/vB'] = entry['fees']['base'] / entry['vsize']
     mempool_entries.sort(key=lambda entry: entry['feerate_BTC/vB'], reverse=True)
     bytes_remaining = kB * 1000
     for entry in mempool_entries:
         bytes_remaining -= entry['vsize']
         if bytes_remaining <= 0:
-            return satoshi_round(entry['feerate_BTC/vB'] * 1000, rounding=ROUND_DOWN)
+            fee_sat = int(entry['fees']['base'] * COIN)
+            return Decimal(fee_sat * multiplier_thousandths // entry['vsize']) / COIN
     raise AssertionError('Entire mempool is smaller than %s kB' % (kB,))
 
 
@@ -279,12 +283,12 @@ class EstimateFeeTest(BitcoinTestFramework):
         self.log.info("Final estimates after emptying mempools")
         check_estimates(self.nodes[1], self.fees_per_kb)
 
-    def test_feerate_dustrelayfee_common(self, node, multiplier, dust_mode, desc, expected_base):
+    def test_feerate_dustrelayfee_common(self, node, dust_mode, desc, expected_dustrelayfee):
         dust_parameter = f"-dustdynamic={dust_mode}".replace('=3*', '=')
         self.log.info(f"Test dust limit setting {dust_parameter} (fee estimation for {desc})")
         self.restart_node(0, extra_args=[dust_parameter, '-dustrelayfee=0'])
         assert_equal(node.getmempoolinfo()['dustdynamic'], dust_mode)
-        expected_dustrelayfee = satoshi_round(expected_base() * multiplier, rounding=ROUND_DOWN)
+        expected_dustrelayfee = expected_dustrelayfee()
         with node.busy_wait_for_debug_log([b'Updating dust feerate']):
             mempool_info = node.getmempoolinfo()
             assert mempool_info['dustrelayfee'] != expected_dustrelayfee
@@ -296,11 +300,25 @@ class EstimateFeeTest(BitcoinTestFramework):
 
     def test_feerate_dustrelayfee_target(self, node, multiplier, dustfee_target):
         dust_mode = f"{multiplier}*target:{dustfee_target}"
-        self.test_feerate_dustrelayfee_common(node, multiplier, dust_mode, f'{dustfee_target} blocks', lambda: node.estimaterawfee(dustfee_target, target_success_threshold)['long']['feerate'])
+        def expected_dustrelayfee():
+            feerate = node.estimaterawfee(dustfee_target, target_success_threshold)['long']['feerate']
+            return satoshi_round(feerate * multiplier, rounding=ROUND_DOWN)
+
+        self.test_feerate_dustrelayfee_common(
+            node,
+            dust_mode,
+            f'{dustfee_target} blocks',
+            expected_dustrelayfee,
+        )
 
     def test_feerate_dustrelayfee_mempool(self, node, multiplier, dustfee_kB):
         dust_mode = f"{multiplier}*mempool:{dustfee_kB}"
-        self.test_feerate_dustrelayfee_common(node, multiplier, dust_mode, f'{dustfee_kB} kB into mempool', lambda: get_feerate_into_mempool(node, dustfee_kB))
+        self.test_feerate_dustrelayfee_common(
+            node,
+            dust_mode,
+            f'{dustfee_kB} kB into mempool',
+            lambda: get_feerate_into_mempool(node, dustfee_kB, multiplier),
+        )
 
     def test_feerate_dustrelayfee(self):
         node = self.nodes[0]

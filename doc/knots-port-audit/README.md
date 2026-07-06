@@ -2685,6 +2685,30 @@ under different commits. They are not all proven exploitable.
   `policyestimator_tests/read_rejects_fee_estimates_with_oversized_scale`
   coverage.
 
+- REST fee-estimation endpoint:
+  `771a5f439b`
+
+  Knots exposes `estimatesmartfee` through `/rest/fee/<mode>/<target>.json`,
+  and the port carries the same REST handler and `feature_fee_estimation.py`
+  coverage. Current Core master has the RPC fee estimator and the shared
+  functional-test fee-estimation logic, but no matching `src/rest.cpp`
+  endpoint or REST test helper. This is an unauthenticated REST observability
+  surface for nodes started with `-rest`, not consensus behavior and not a
+  covert crash fix.
+
+  Refreshing the test caught two port-side test-integration misses, neither of
+  which reproduced as a node bug in unmodified Knots. First, the port carried
+  current Core's sub-1 sat/vB fee-estimator references to `MIN_BUCKET_FEERATE`
+  and `TXS_COUNT` without preserving the Python constants. Second, the combined
+  current-Core low-fee estimator setup made Knots' dustdynamic mempool-depth
+  assertion hit a one-sat/kvB rounding edge: the node multiplies the selected
+  transaction fee by the dust multiplier before the integer `CFeeRate`
+  division, while the test had rounded the base feerate first. The port test now
+  restores the Core constants and mirrors the node's integer arithmetic for the
+  mempool-depth dustdynamic expectation. Unmodified Knots' native
+  `feature_fee_estimation.py` passed, confirming these were port/test
+  reconciliation issues rather than original Knots consensus or runtime bugs.
+
 - External or Knots-only surfaces:
   `d637873230` fixes `GetBlockFileInfo` bounds handling, but the obvious
   RPC-facing caller is Knots' `getblockfileinfo`. Current Core's corresponding
@@ -6515,6 +6539,17 @@ Functional tests:
   --log_level=error --report_level=short` passed with 26 cases and 881
   assertions. Refreshed `tool_wallet.py` runs also passed on the port and
   unmodified Knots.
+- REST fee-estimation and dustdynamic test reconciliation:
+  `python3 ../knots/test/functional/feature_fee_estimation.py
+  --configfile ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_fee_estimation_knots_rounding_repro
+  --portseed=43342` passed on unmodified Knots. The matching port run
+  `python3 test/functional/feature_fee_estimation.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_fee_estimation_rest_audit_4
+  --portseed=43344` passed after restoring the current-Core test constants and
+  aligning the dustdynamic mempool-depth expectation with the node's integer
+  `CFeeRate` multiplier order.
 - Original Knots expected-failure repro with a temporary
   `/mnt/my_storage/knots-assumeutxo-repro` worktree and the port's added
   post-validation raw-transaction assertion:
