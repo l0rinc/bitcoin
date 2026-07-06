@@ -2233,14 +2233,15 @@ under different commits. They are not all proven exploitable.
 - Legacy-sigop transaction standardness:
   `204b965915`, `538182b27e`
 
-  The port matches Knots' BIP54-style policy limit on potentially executed
-  non-witness sigops per transaction, exposed as `-maxtxlegacysigops`, and uses
-  the specific reject reason `bad-txns-input-sigops-toomany-overall` with debug
-  text `non-witness sigops exceed bip54 limit`. Current Core still has only
-  the existing BIP141 sigop-cost standardness check in this area and no
-  `-maxtxlegacysigops` option. This is relay/mining policy hardening, not a
-  consensus rule: the functional test rejects the over-limit transaction from
-  mempool, then mines the same transaction directly in a block.
+  Current Core now carries the BIP54-style policy limit on potentially
+  executed non-witness sigops per transaction. The remaining Knots/port
+  divergence is the exposed `-maxtxlegacysigops` threshold and the specific
+  reject/ignore surface: `bad-txns-input-sigops-toomany-overall` with debug
+  text `non-witness sigops exceed bip54 limit`, rather than Core's generic
+  `bad-txns-nonstandard-inputs` reason. This is relay/mining policy
+  configurability and diagnostics, not a consensus rule: the functional test
+  rejects the over-limit transaction from mempool, then mines the same
+  transaction directly in a block.
 
 - Descriptor-wallet `importaddress` compatibility:
   `be3ae51ece`
@@ -2595,8 +2596,10 @@ Source/manifest checks:
   538182b27e81556a3c72fbc61be1db60938edda6`, `rg -n
   "maxtxlegacysigops|MAX_TX_LEGACY_SIGOPS|CheckSigopsBIP54|bad-txns-input-sigops-toomany-overall|non-witness sigops exceed"
   src test/functional src/test`, and equivalent `origin/master` checks show the
-  port and actual Knots carry the BIP54-style legacy-sigop standardness limit
-  while current Core lacks the option and policy check. Focused verification:
+  port and actual Knots carry the configurable BIP54-style legacy-sigop
+  standardness limit and specific reject reason, while current Core has the
+  fixed 2,500-sigop policy check but no `-maxtxlegacysigops` option. Focused
+  verification:
   `build/bin/test_bitcoin --run_test=mempool_tests/MempoolMaxTxLegacySigopsParse --catch_system_error=no --log_level=error --report_level=short`,
   `build/bin/test_bitcoin --run_test=transaction_tests/max_standard_legacy_sigops --catch_system_error=no --log_level=error --report_level=short`,
   and `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini --test_methods test_legacy_sigops_stdness --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_legacy_sigops --portseed=7395`
