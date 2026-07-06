@@ -2286,6 +2286,27 @@ under different commits. They are not all proven exploitable.
   `0.00001000`. Existing functional coverage also checks the RPC string and
   scheduler-updated dust feerate for both target- and mempool-based modes.
 
+- Sub-dust effective-fee penalty:
+  Knots' `-subdustfeepenalty` is present in the port and absent from current
+  Core. When enabled, every output below its dust threshold subtracts the
+  missing amount from the transaction's modified fee. This makes sub-dust
+  outputs pay enough extra fee to compensate for their future spend cost when
+  nonstandard relay/mining is otherwise permitted. `OP_RETURN` outputs have a
+  zero dust threshold and are not penalized. This is relay/mining fee policy,
+  not consensus. The strengthened functional test checks the boundary
+  rejection/acceptance behavior and now also admits a transaction to verify
+  `getmempoolentry.fees.modified` is reduced by the sub-dust penalty.
+
+  That strengthened test exposed a port-only invariant bug: the initial port
+  updated the staged `CTxMemPoolEntry` modified fee directly, but current
+  Core's `TxGraph` cache still held the pre-penalty fee. On regtest, where
+  mempool consistency checks run by default, `sendrawtransaction` hit
+  `CTxMemPool::check` with
+  `diagram.back().fee == check_total_modified_fee`. Unmodified Knots passed
+  the same strengthened test, so this was not an actual Knots bug. The port now
+  routes staged modified-fee changes through `ChangeSet::UpdateModifiedFee`,
+  which updates both the staged entry and the graph fee cache.
+
 - ScriptPubKey-reuse mempool policy:
   Knots' `-spkreuse=0` mode is present in the port and absent from current Core.
   The port carries the later Knots pointer-based `mapUsedSPK` representation
@@ -3781,6 +3802,14 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_mempool_ephemeral_perm_full_knots
   --portseed=32853`
 - `python3 test/functional/mempool_subdust_fee_penalty.py --configfile build/test/config.ini`
+- `python3 test/functional/mempool_subdust_fee_penalty.py
+  --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_subdust_modified_port_2
+  --portseed=32862`
+- `python3 test/functional/mempool_subdust_fee_penalty.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_subdust_modified_knots
+  --portseed=32861`
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini
   --test_methods test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize
   --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_maxfeerate_3`
