@@ -1944,7 +1944,20 @@ Other missing/adapted Knots pieces found during this pass:
   options for `blockmaxsize`, `blockmaxweight`, `minfeerate`, and
   `skip_validity_test` (`3ecf882f14`), per-request `blockreserved{size,weight,
   sigops}` (`b12bc1979e`), and the corresponding `mining_basic.py` GBT
-  coverage (`13d2de9996`). The port matches actual Knots' intent under the
+  coverage (`13d2de9996`). The supporting mining-interface lineage is also
+  present: `BlockCreateOptions::Clamped()` (`1d2396ed82`, ported as
+  `6b2c159da5`), `createNewBlock2` for complete, request-local options that do
+  not get overwritten by node mining args (`e6055f83eb`, ported as
+  `02adf441c4`), shared ownership for generated templates (`3bb25a96b0`,
+  ported as `ef7cba6c9c`), the `NewBlockTemplate` validation-interface signal
+  (`03e8bfaa15`, ported as `44fbbc190a`), and the Core-derived
+  wait-for-tip behavior (`3968d7b5b9`, ported as `c8d890526b`, rebased from
+  Core PR #31785). Current Core master already carries the wait-for-tip /
+  shutdown behavior, but not Knots' `createNewBlock2`, shared template signal,
+  or restored `blockmaxsize` GBT surfaces. The port's `miner_tests` coverage
+  now asserts both the complete-options path and the emitted template signal,
+  while `mining_basic.py` exercises the public request-local GBT overrides.
+  The port matches actual Knots' intent under the
   current Core block assembler:
   `-blockmaxsize`/GBT `blockmaxsize` account serialized transaction size only
   when the cap is below `MAX_BLOCK_SERIALIZED_SIZE`; setting only size leaves the
@@ -7422,6 +7435,27 @@ Functional tests:
   `git grep -n "m_background_validation_height\|IsTxAssumed\|confirmations_assumed"
   origin/master -- src/wallet src/rpc test/functional/feature_assumeutxo.py`
   returns no matches on current Core master.
+- Mining-interface and GBT override lineage:
+  `git log --oneline HEAD --grep='createNewBlock.*wait\|wait for a tip\|createNewBlock2\|new block templates\|Return shared_ptr from CreateNewBlock\|BlockCreateOptions::Clamped'`,
+  the same command on `knots/29.x-knots` and `origin/master`, and
+  `git grep -n "createNewBlock2\|WaitAndCreateNewBlock\|NewBlockTemplate\|BlockCreateOptions::Clamped"
+  HEAD origin/master knots/29.x-knots -- src/interfaces/mining.h
+  src/node/interfaces.cpp src/node/miner.cpp src/node/miner.h
+  src/rpc/mining.cpp src/validationinterface.cpp src/validationinterface.h
+  src/test/miner_tests.cpp test/functional/mining_basic.py` show that current
+  Core has the wait-for-tip mining-interface behavior but lacks Knots'
+  `createNewBlock2`, new-template signal, and restored per-request
+  `blockmaxsize`/reserved-size GBT plumbing. `git show --stat --patch --minimal
+  1d2396ed82 e6055f83eb 3bb25a96b0 03e8bfaa15 3968d7b5b9` and the ported
+  commits `6b2c159da5 02adf441c4 ef7cba6c9c 44fbbc190a c8d890526b` show the
+  original Knots lineage and current-base adaptations. Refreshed verification
+  for this pass:
+  `build/bin/test_bitcoin --run_test=miner_tests --catch_system_error=no
+  --log_level=error --report_level=short` passed with 3 cases and 915
+  assertions, and `python3 test/functional/mining_basic.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mining_basic_mining_interface_doc
+  --portseed=43401` passed.
 
 The full `feature_block.py` run reached the large-reorg section but failed
 because `/tmp` was full and the node shut down with `Disk space is too low!`;
