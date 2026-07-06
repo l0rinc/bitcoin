@@ -366,6 +366,9 @@ class InitTest(BitcoinTestFramework):
         node = self.nodes[1]
         threshold_msg = "Flushing caches if available system memory drops below"
 
+        with node.assert_debug_log(expected_msgs=[], unexpected_msgs=[threshold_msg]):
+            self.restart_node(1, [])
+
         with node.assert_debug_log(expected_msgs=[threshold_msg]):
             self.restart_node(1, ["-lowmem=1"])
 

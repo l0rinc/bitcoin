@@ -27,6 +27,7 @@ struct LowMemoryThresholdGuard {
 
 BOOST_AUTO_TEST_CASE(available_memory_below_threshold)
 {
+    BOOST_CHECK_EQUAL(g_low_memory_threshold, 0U);
     BOOST_CHECK(!AvailableMemoryBelowThreshold(/*threshold=*/0, /*free_ram=*/0, /*buffer_ram=*/0));
     BOOST_CHECK(!AvailableMemoryBelowThreshold(/*threshold=*/1_MiB, /*free_ram=*/1_MiB, /*buffer_ram=*/0));
     BOOST_CHECK(!AvailableMemoryBelowThreshold(

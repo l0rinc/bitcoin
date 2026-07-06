@@ -2348,19 +2348,25 @@ under different commits. They are not all proven exploitable.
   passes.
 
 - Low-memory-triggered dbcache flushing:
-  `10e7dc80ee`, `d95f134d11`, `ebf7df30c2`, `da690b5a69`, `f9f7587b59`
+  `10e7dc80ee`, `d95f134d11`, `ebf7df30c2`, `da690b5a69`, `f9f7587b59`,
+  `eaefda3201`, `cbbea61cd1`, `896e9c3d3a`
 
   Current Core still flushes the coins cache during `IF_NEEDED` only when the
   cache itself crosses its size limit. Knots and this port can also flush when
   the host is under memory pressure, using Windows memory status and Linux
-  `sysinfo` data, and expose `-lowmem=<MiB>` so operators can choose the
-  threshold or disable the feature with `0`. This is availability hardening for
-  memory-constrained nodes and avoids keeping dirty UTXO cache entries in RAM
-  while the OS is likely to swap. It is not consensus behavior and not remotely
-  triggerable by itself. This pass verified the behavior against unmodified
-  `29.x-knots`; the port did not invent the feature. The port now also covers
-  the pure threshold decision, overflow-safe `free+buffer` accounting, explicit
-  `-lowmem=0` disable handling, and the validation `IF_NEEDED` flush trigger.
+  `sysinfo` data, and expose `-lowmem=<MiB>` so operators can opt in with a
+  threshold or disable the feature with `0`. Knots briefly raised the compiled
+  default threshold to 64 MiB, then disabled it by default because newer Linux
+  `sysinfo` data and cache-release semantics made automatic activation
+  uncertain; both actual Knots and the port now advertise `default: 0`. This
+  is availability hardening for memory-constrained nodes and avoids keeping
+  dirty UTXO cache entries in RAM while the OS is likely to swap. It is not
+  consensus behavior and not remotely triggerable by itself. This pass verified
+  the behavior against unmodified `29.x-knots`; the port did not invent the
+  feature. The port now also covers the pure threshold decision, the compiled
+  default-off setting, overflow-safe `free+buffer` accounting, default and
+  explicit `-lowmem=0` startup disable handling, and the validation
+  `IF_NEEDED` flush trigger.
 
 - Buffered block-file page-cache advice:
   `97130ac516`
@@ -3635,12 +3641,13 @@ Source/manifest checks:
 - `build/bin/test_bitcoin --run_test=util_tests/ceil_div_test
   --catch_system_error=no --log_level=error --report_level=short`
 - `git show --stat --patch --minimal 10e7dc80ee d95f134d11 ebf7df30c2
-  da690b5a69 f9f7587b59`, the equivalent `../knots 29.x-knots` show, and
-  `git grep -n
+  da690b5a69 f9f7587b59 ad5f9cc37d c8966990da 8f389f5a3f`,
+  the equivalent `../knots 29.x-knots` show for `eaefda3201`, `cbbea61cd1`,
+  and `896e9c3d3a`, and `git grep -n
   "g_low_memory_threshold\\|SystemNeedsMemoryReleased\\|-lowmem\\|mempressure"
   HEAD origin/master -- src test cmake CMakeLists.txt` show that actual Knots
   and the port carry the low-memory dbcache flush series while current Core does
-  not.
+  not, and that the current default threshold is disabled.
 - `cmake --build build --target test_bitcoin -j4`
 - `build/bin/test_bitcoin --run_test=validation_flush_tests
   --catch_system_errors=no`
@@ -4036,6 +4043,7 @@ Source/manifest checks:
   and the port now carries the 64 MiB default at Core's current constant
   location without the stale unused `nDefaultDbBatchSize`.
 - `git -C ../knots show --stat --patch --minimal 10e7dc80ee`,
+  `git show --stat --patch --minimal ad5f9cc37d c8966990da 8f389f5a3f`,
   `git show origin/master:src/init.cpp origin/master:src/validation.cpp
   origin/master:src/common/system.cpp origin/master:src/common/system.h | rg
   -n "lowmem|SystemNeedsMemoryReleased|HAVE_LINUX_SYSINFO|memory pressure|FlushStateToDisk\\(state, FlushStateMode::IF_NEEDED\\)|g_low_memory_threshold"
@@ -4045,6 +4053,13 @@ Source/manifest checks:
   the matching actual-Knots source checks show that Knots and the port carry
   configurable low-memory-triggered dbcache flushing, while current Core lacks
   both the `-lowmem` option and the `SystemNeedsMemoryReleased()` flush hook.
+- `build/bin/bitcoind -regtest -help-debug | sed -n '120,126p'`,
+  `../knots/build-repro/bin/bitcoind -regtest -help-debug | sed -n
+  '120,126p'`, and `git grep -n "size_t g_low_memory_threshold" HEAD
+  knots/29.x-knots origin/master -- src/util/mempressure.cpp
+  src/common/system.cpp` show both actual Knots and the port advertise
+  `-lowmem` as disabled by default (`default: 0`) after the later
+  mempressure-default rollback.
 - `git grep -n -E
   "lowmem|SystemNeedsMemoryReleased|AvailableMemoryBelowThreshold|g_low_memory_threshold|memory pressure"
   HEAD knots/29.x-knots origin/master -- src/init.cpp src/util
@@ -4990,6 +5005,9 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/bitcoind -regtest -help-debug | sed -n '512,516p'`
 - `../knots/build-repro/bin/bitcoind -regtest -help-debug | sed -n '505,509p'`
+- `build/bin/bitcoind -regtest -help-debug | sed -n '120,126p'`
+- `../knots/build-repro/bin/bitcoind -regtest -help-debug | sed -n
+  '120,126p'`
 - `build/bin/test_bitcoin --run_test=getarg_tests/setting_args
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin
@@ -5046,6 +5064,9 @@ Unit tests:
 - `../knots/build-repro/bin/test_bitcoin --run_test=stats_tests
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=validation_flush_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin
+  --run_test=validation_flush_tests/available_memory_below_threshold
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=node_init_tests/init_test
   --catch_system_error=no --log_level=nothing --report_level=no`
@@ -5618,6 +5639,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_interface_rest_spenttxouts_port
   --portseed=42120`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
+- `test/functional/feature_init.py --configfile=build/test/config.ini
+  --cachedir=test/cache`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_init_wait_port --portseed=27522`
 - `python3 test/functional/feature_init.py --configfile=build/test/config.ini
