@@ -3128,9 +3128,10 @@ during combining, monotonic
 `uptime` (`c202961b8e`, Core `e67a676df9`), first-run pruned-disk-space
 warning rounding, Windows exclusive `wbx` opens, oversized `-dbcache` warning
 and unusual 64-bit-size handling (`fc27c2134c`, `5e666b667b`; Core
-`168360f4ae` plus matching current source), LevelDB file-size initialization,
-wallet `sendall` transaction-size error handling, miniscript assert guards,
-and most cpp-subprocess
+`168360f4ae` plus matching current source), LevelDB file-size initialization
+to avoid UB (`1e2eaebd79`, also present in current Core), wallet `sendall`
+transaction-size error handling, miniscript assert guards, and most
+cpp-subprocess
 memory/Windows fixes, witness-stripped SegWit reject-filter handling,
 miniscript `FindChallenges` stack-overflow avoidance in tests, P2P
 `-capturemessages` option caching, single-timepoint inactivity checks, and
