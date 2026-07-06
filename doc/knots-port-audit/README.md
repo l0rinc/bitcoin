@@ -2251,6 +2251,9 @@ under different commits. They are not all proven exploitable.
   transaction larger than the configured limit; the same test passes against
   unmodified Knots. `peerman_tests/peerman_args_block_reconstruction_extra_txn`
   covers the parser conversion for fractional megabytes and negative values.
+  Refreshed source comparison still shows current Core has only the 100-entry
+  count cache, while Knots and the port carry the size cap and per-transaction
+  ceiling.
 
 - Configurable orphan-transaction count cap:
   Knots' `-maxorphantx` option is present in the port and absent from current
@@ -4871,17 +4874,23 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_size_knots
   --portseed=32621`
 - `build/bin/test_bitcoin --run_test=peerman_tests/peerman_args_block_reconstruction_extra_txn
-  --catch_system_errors=no --log_level=error --report_level=short`
-- `build/bin/test_bitcoin --run_test=peerman_tests/peerman_args_block_reconstruction_extra_txn
   --catch_system_error=no --log_level=error --report_level=short`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile
   build/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_port_refresh
   --portseed=42210`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_port_refresh
+  --portseed=42450`
+- `python3 test/functional/p2p_compactblocks_extratxs.py --configfile
   ../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_knots_refresh
   --portseed=42211`
+- `python3 test/functional/p2p_compactblocks_extratxs.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_knots_refresh2
+  --portseed=42451`
 - `python3 test/functional/p2p_maxorphantx.py
   --configfile=build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_port_3
@@ -5250,6 +5259,13 @@ Functional tests:
   `python3 test/functional/p2p_compactblocks_extratxs.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_knots_refresh --portseed=42211`
   passed on unmodified Knots, including rejected-transaction availability in
   the extra pool, count wraparound, and size-cap eviction behavior.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_compactblocks_extratxs.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_knots_refresh2
+  --portseed=42451`
+  passed on unmodified Knots, again covering rejected-transaction availability,
+  count wraparound, fractional parsing, and size-cap eviction behavior.
 - Original Knots cross-check:
   `python3 test/functional/p2p_maxorphantx.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_knots_refresh --portseed=42221`
   passed on unmodified Knots, confirming inherited `-maxorphantx=3` count
