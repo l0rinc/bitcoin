@@ -14,6 +14,9 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <array>
+#include <cstdio>
+
 using namespace std::string_literals;
 using namespace util::hex_literals;
 
@@ -104,6 +107,32 @@ BOOST_AUTO_TEST_CASE(streams_scoped_data_stream_usage)
         BOOST_CHECK_GT(stream.size(), 0U);
     }
     BOOST_CHECK(stream.empty());
+}
+
+BOOST_AUTO_TEST_CASE(fsbridge_fopen_exclusive)
+{
+    const fs::path exclusive_path{m_args.GetDataDirBase() / "exclusive_fopen.bin"};
+    constexpr std::array original{'o', 'r', 'i', 'g', 'i', 'n', 'a', 'l'};
+
+    {
+        FILE* file{fsbridge::fopen(exclusive_path, "wbx")};
+        BOOST_REQUIRE(file != nullptr);
+        BOOST_CHECK_EQUAL(std::fwrite(original.data(), 1, original.size(), file), original.size());
+        BOOST_REQUIRE_EQUAL(std::fclose(file), 0);
+    }
+    {
+        FILE* file{fsbridge::fopen(exclusive_path, "wbx")};
+        BOOST_CHECK(file == nullptr);
+        if (file) std::fclose(file);
+    }
+    {
+        FILE* file{fsbridge::fopen(exclusive_path, "rb")};
+        BOOST_REQUIRE(file != nullptr);
+        std::array<char, original.size()> actual{};
+        BOOST_CHECK_EQUAL(std::fread(actual.data(), 1, actual.size(), file), actual.size());
+        BOOST_CHECK_EQUAL_COLLECTIONS(actual.begin(), actual.end(), original.begin(), original.end());
+        BOOST_REQUIRE_EQUAL(std::fclose(file), 0);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(xor_file)

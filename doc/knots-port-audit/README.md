@@ -540,6 +540,16 @@ Other missing/adapted Knots pieces found during this pass:
   repository being queried. A temporary outer-repository reproduction produced
   `// No build information available` for the port and unmodified Knots script,
   but `#define BUILD_GIT_COMMIT "<outer-commit>"` for current Core.
+- The Windows exclusive-open review confirmed Knots' MSVCRT workaround
+  (`012a5fa384`, ported as `5591d534b3`) is present in the port but still
+  absent from current Core's `fsbridge::fopen`. Knots and the port route
+  `"wbx"` through `_wsopen_s(..., _O_EXCL, ...)` on Windows and restore `"wbx"`
+  use for XOR-key creation and `IsDirWritable`; current Core still routes the
+  same helper through `::fopen(p.utf8string(), mode)` on Windows and keeps
+  `__MINGW64__` fallbacks that avoid exclusive creation. This is local
+  Windows filesystem hardening/compatibility, not consensus or network
+  behavior. `streams_tests/fsbridge_fopen_exclusive` now asserts that `"wbx"`
+  fails without truncating an existing file.
 - The depends review found Knots' `miniupnpc` package bump (`18a8022ef2`) was
   still missing from the port. Current Core master still packages 2.3.3; Knots
   uses the `2.3.4_pre20260407` commit tarball. The port now uses the Knots
@@ -3235,6 +3245,12 @@ Source/manifest checks:
   -ba | sed -n '158,170p'` show the port and Knots print the wallet dump and
   create-from-dump warning strings to `std::cerr`, while current Core still
   prints them to `std::cout`.
+- `nl -ba src/util/fs.cpp | sed -n '30,50p'`,
+  `git -C ../knots show 29.x-knots:src/util/fs.cpp | nl -ba | sed -n
+  '33,53p'`, and `git show origin/master:src/util/fs.cpp | nl -ba | sed -n
+  '23,30p'` show Knots and the port special-case exclusive `"wbx"` opens on
+  Windows with `_wsopen_s(..., _O_EXCL, ...)`, while current Core's helper
+  still calls `::fopen(p.utf8string(), mode)`.
 - `git grep -n -E
   "IsSymlink|Not recursively searching symlink/reparse point|Windows cross compile does not detect symlinks|recursive_directory_iterator|self_walletdat_symlink|directory_symlink|w8_symlink"
   HEAD knots/29.x-knots origin/master -- src/wallet
