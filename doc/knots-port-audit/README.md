@@ -762,7 +762,7 @@ Other missing/adapted Knots pieces found during this pass:
   vs imported or old-seed destinations, not consensus or mempool policy.
 - The BIP322 message-signing review confirmed Knots' signing and verification
   stack (`5689da7144`, `b9c6d98dfe`, `5501bfe28e`, `3d056b0314`,
-  `a6db4bde2f`,
+  `2204612b19`, `a6db4bde2f`,
   `5fa31318bd`, `f32c5267ae`, `fa9048636b`, `b7e42cd6b9`, `ef728f7963`,
   `a5375f9c39`, `d07851730b`, `0e79f97800`) is present in the port and absent
   from current Core's wallet/utility RPC behavior. The port matches actual
@@ -2538,9 +2538,11 @@ under different commits. They are not all proven exploitable.
   `LimitOrphans(...)` after orphan insertion. The new `p2p_maxorphantx.py`
   functional test starts one node with `-maxorphantx=3` and another with
   `-maxorphantx=0`, then verifies the visible orphanage size through
-  `getorphantxs`; the same test passes against unmodified Knots. Existing unit
-  coverage checks parser clamping and the txdownload orphan-count limit. A
-  refreshed source comparison still shows current Core has no
+  `getorphantxs`; the same test passes against unmodified Knots. The port also
+  carries Knots' `getorphantxs` documentation warning (`0f716fe10c`) that an
+  orphan transaction's reported `vsize` can be incorrect because input data is
+  missing. Existing unit coverage checks parser clamping and the txdownload
+  orphan-count limit. A refreshed source comparison still shows current Core has no
   `-maxorphantx`/`max_orphan_txs` path, while Knots and the port wire the
   option through `PeerManager::Options` into `TxDownloadManager`.
 
@@ -4321,6 +4323,13 @@ Builds:
   shows Knots and the port carry the BIP322-only `SIGHASH_ALL` checker flag;
   the port additionally has the focused low-level regression test, while
   current Core has neither the flag nor the test.
+- `git grep -n "DecodeTx(" HEAD knots/29.x-knots origin/master --
+  src/core_io.h src/core_read.cpp` shows Knots and the port export `DecodeTx()`
+  for byte-vector callers, while current Core keeps only the hex-string helper.
+- `git grep -n "Since orphan transactions are missing input data" HEAD
+  knots/29.x-knots origin/master -- src/rpc/mempool.cpp` shows Knots and the
+  port document the potentially incorrect orphan `vsize`, while current Core
+  lacks that result-warning text.
 - `rg -n
   "Unable to bind all endpoints|Unable to bind any endpoint|rpc_bind"
   src/httpserver.cpp test/functional/rpc_bind.py
