@@ -1497,6 +1497,16 @@ Other missing/adapted Knots pieces found during this pass:
   port now pins it in `rpc_getblockfilter.py` by proving `v0` is a known filter
   type but is not enabled by bare `-blockfilterindex`; the same test file also
   passes against unmodified Knots.
+- The compact-filter type review confirmed Knots' BIP157 `v0` filter series
+  (`e2358f135ea`, `bf2306334a`, plus refactor/minimise follow-ups) is present
+  in the port and absent from current Core. The older commits introduced this
+  as a `p2wpkh` filter, but current Knots exposes it as `v0` and includes
+  witness-v0 keyhash and scripthash outputs/spent prevouts while excluding
+  non-witness, OP_RETURN, and non-v0 witness scripts. This is an optional
+  compact-filter/index query surface, not consensus behavior or a remote crash
+  hardening fix. `blockfilter_tests/blockfilter_v0_test` covers the inclusion,
+  exclusion, and serialization behavior, and the same blockfilter unit suite
+  passes against unmodified Knots.
 - The feefilter, local-only bloom, and filtered-witness-block review confirmed
   Knots' restored `-feefilter` option (`8fb8c3a1f7`), localhost-only BIP37
   bloom-filter default (`ae3270624f`), and
@@ -3988,6 +3998,14 @@ Source/manifest checks:
   src/init.cpp test/functional/rpc_getblockfilter.py` show bare
   `-blockfilterindex` still enables all known filter types in current Core, but
   only the selected default set (`basic`) in actual Knots and the port.
+- `git show --stat --patch --minimal 671b2f184a 290030cddd f8bd5924bf
+  8c9142a167 8a3e5df89d -- src/blockfilter.cpp src/blockfilter.h
+  src/test/blockfilter_tests.cpp`, the matching `../knots` source, and
+  `git grep -n "BuildFilterElements\\|BlockFilterType::V0\\|blockfilter_v0_test"
+  HEAD knots/29.x-knots origin/master -- src/blockfilter.cpp src/blockfilter.h
+  src/test/blockfilter_tests.cpp` show actual Knots and the port carry the
+  additional `v0` compact-filter type and test coverage, while current Core has
+  only the `basic` block filter.
 - `git show origin/master:src/init.cpp | rg -n
   "peerbloomfilters|bloomfilter@127|whitelist_opts|NODE_BLOOM" -C 4`,
   `git -C ../knots show 29.x-knots:src/init.cpp | rg -n
@@ -4980,6 +4998,12 @@ Unit tests:
 - `../knots/build-repro/bin/test_bitcoin --run_test=hash_tests/siphash
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=blockencodings_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=blockfilter_tests/blockfilter_v0_test
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=blockfilter_tests --catch_system_error=no
+  --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin --run_test=blockfilter_tests
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=blockfilter_index_tests`
 - `build/bin/test_bitcoin --run_test=txindex_tests,txospenderindex_tests,coinstatsindex_tests`
