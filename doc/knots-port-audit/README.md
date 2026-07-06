@@ -2072,7 +2072,10 @@ under different commits. They are not all proven exploitable.
   forced-disable messages, confirming this is not port-introduced; rerunning
   the port's direct functional method against `../knots` also passes. The port
   now covers the direct explicit-argument case in `feature_config_args.py`, in
-  addition to the existing `-connect=0` / `-noconnect` interaction coverage.
+  addition to the existing `-connect=0` / `-noconnect` interaction coverage. A
+  refreshed source comparison still shows Knots and the port force-set
+  user-enabled `-upnp`/`-natpmp` back to zero when `-listen=0`, while current
+  Core only soft-disables `-natpmp` and can leave an explicit value in place.
 
 - Per-network proxy `tor` alias:
   `77f1a82318`
@@ -3051,6 +3054,13 @@ Source/manifest checks:
   `RunCommandParseJSON` cleanup request; the port now matches those surfaces
   after adapting `RunCommandParseJSON` to current Core's vector argument API,
   while current Core lacks the `close_fds` option/helper and test.
+- `git grep -n -E
+  "upnp|natpmp|listen=0 -> setting|ForceSetArg\\(\\\"-natpmp|SoftSetBoolArg\\(\\\"-natpmp|StartMapPort|test_port_mapping_disabled_when_not_listening"
+  HEAD knots/29.x-knots origin/master -- src/init.cpp src/mapport.cpp
+  src/mapport.h test/functional/feature_config_args.py` shows Knots and the
+  port use `ForceSetArg` after detecting explicit port mapping with
+  `-listen=0`, while current Core still uses `SoftSetBoolArg` for NAT-PMP and
+  lacks the direct functional regression.
 - `git show --stat --patch --minimal dbca0cc4d3e 5689ba8fde b1378e3f48
   24ffe06d2f`, `rg -n
   "SEQ_ID_BEST_CHAIN_FROM_DISK|SEQ_ID_INIT_FROM_DISK|feature_chain_tiebreaks|setBlockIndexCandidates|nSequenceId"
@@ -4477,6 +4487,16 @@ Functional tests:
   --test_methods test_port_mapping_disabled_when_not_listening
   --tmpdir=/mnt/my_storage/tmp_knots_feature_config_port_mapping_direct
   --portseed=26433`
+- `python3 test/functional/feature_config_args.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --test_methods test_port_mapping_disabled_when_not_listening
+  --tmpdir=/mnt/my_storage/tmp_feature_config_args_portmap_port_refresh
+  --portseed=42330`
+- `python3 test/functional/feature_config_args.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --test_methods test_port_mapping_disabled_when_not_listening
+  --tmpdir=/mnt/my_storage/tmp_feature_config_args_portmap_knots_refresh
+  --portseed=42331`
 - `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_config_args_acceptnonstd_main_3`
 - `python3 test/functional/feature_help.py --configfile build/test/config.ini`
