@@ -520,6 +520,9 @@ BOOST_AUTO_TEST_CASE(rolling_bloom)
     BOOST_CHECK(rb1.contains(data[DATASIZE-1]));
     rb1.reset();
     BOOST_CHECK(!rb1.contains(data[DATASIZE-1]));
+    for (const auto& datum : data) {
+        BOOST_CHECK(!rb1.contains(datum));
+    }
 
     CRollingBloomFilter rb_high_fp(1, 0.999);
     BOOST_CHECK(!rb_high_fp.contains(data[0]));
