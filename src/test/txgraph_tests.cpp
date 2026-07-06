@@ -35,6 +35,16 @@ void CheckDiagram(const std::vector<FeeFrac>& actual, const std::vector<FeeFrac>
     }
 }
 
+void CheckTrimmedRefs(TxGraph& graph, const std::vector<TxGraph::Ref*>& refs)
+{
+    std::set<TxGraph::Ref*> unique_refs;
+    for (TxGraph::Ref* ref : refs) {
+        BOOST_REQUIRE(ref != nullptr);
+        BOOST_CHECK(unique_refs.insert(ref).second);
+        BOOST_CHECK(!graph.Exists(*ref, TxGraph::Level::TOP));
+    }
+}
+
 } // namespace
 
 BOOST_AUTO_TEST_CASE(txgraph_trim_zigzag)
@@ -305,6 +315,7 @@ BOOST_AUTO_TEST_CASE(txgraph_trim_big_singletons)
     graph->SanityCheck();
     BOOST_CHECK_EQUAL(graph->GetTransactionCount(TxGraph::Level::TOP), NUM_TOTAL_TX - 6);
     BOOST_CHECK(!graph->IsOversized(TxGraph::Level::TOP));
+    CheckTrimmedRefs(*graph, removed_refs);
 
     // Check that all the oversized transactions were removed.
     for (unsigned int i = 0; i < refs.size(); ++i) {
