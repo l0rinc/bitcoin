@@ -2050,11 +2050,15 @@ under different commits. They are not all proven exploitable.
   `fork()`. This is not port-introduced: unmodified Knots carries the
   `close_fds` option, the Tor subprocess call passes `subprocess::close_fds`
   on `29.x-knots`, and the port's `src/util/subprocess.cpp` matches Knots for
-  the child-side `close_range`/fallback helper. Core master has no
-  `close_fds` option or `src/util/subprocess.cpp`; its current
-  `RunCommandParseJSON` path does not request descriptor cleanup. The port now
-  has a focused `system_tests/subprocess_close_fds` regression that verifies
-  file descriptors are inherited without `close_fds` and closed with it.
+  the child-side `close_range`/fallback helper. A follow-up caught a port-only
+  omission in the rebased vector-argument `RunCommandParseJSON`: Knots passes
+  `subprocess::close_fds{true}`, but the port had lost that argument while
+  adapting to current Core's vector command API. The port now restores
+  `close_fds{true}` there and extends `system_tests/subprocess_close_fds` to
+  verify both direct `Popen` behavior and `RunCommandParseJSON` descriptor
+  cleanup. Current Core has the header-only subprocess wrapper, but still lacks
+  Knots' `close_fds` option/helper and does not request descriptor cleanup in
+  `RunCommandParseJSON`.
 
 - Port mapping disabled when not listening:
   `95c8a63102`
@@ -3039,6 +3043,14 @@ Source/manifest checks:
   src/wallet/test/wallet_tests.cpp` shows the port's helper/test, Knots'
   inline guarded restore/migration cleanup, and current Core's unconditional
   removal after the `Assume(...)` call.
+- `git grep -n -E
+  "struct close_fds|close_fds\\{|subprocess_close_all_fds|close_range|RunCommandParseJSON|subprocess_close_fds"
+  HEAD knots/29.x-knots origin/master -- src/common src/node src/util
+  src/test test/functional/feature_torcontrol.py` shows Knots' `close_fds`
+  option, child-side close helper, Tor subprocess use, and
+  `RunCommandParseJSON` cleanup request; the port now matches those surfaces
+  after adapting `RunCommandParseJSON` to current Core's vector argument API,
+  while current Core lacks the `close_fds` option/helper and test.
 - `git show --stat --patch --minimal dbca0cc4d3e 5689ba8fde b1378e3f48
   24ffe06d2f`, `rg -n
   "SEQ_ID_BEST_CHAIN_FROM_DISK|SEQ_ID_INIT_FROM_DISK|feature_chain_tiebreaks|setBlockIndexCandidates|nSequenceId"
@@ -3973,6 +3985,8 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=system_tests --catch_system_error=no
   --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin --run_test=system_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=i2p_tests/session_create_error_redacts_private_key
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=i2p_tests --catch_system_error=no
