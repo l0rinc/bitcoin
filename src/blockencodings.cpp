@@ -49,14 +49,7 @@ uint64_t CBlockHeaderAndShortTxIDs::GetShortID(const Wtxid& wtxid) const
     return (*Assert(m_hasher))(wtxid.ToUint256()) & 0xffffffffffffL;
 }
 
-/* Reconstructing a compact block is in the hot-path for block relay,
- * so we want to do it as quickly as possible. Because this often
- * involves iterating over the entire mempool, we put all the data we
- * need (ie the wtxid and a reference to the actual transaction data)
- * in a vector and iterate over the vector directly. This allows optimal
- * CPU caching behaviour, at a cost of only 40 bytes per transaction.
- */
-ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, const std::vector<std::pair<Wtxid, CTransactionRef>>& extra_txn)
+ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, const std::vector<CTransactionRef>& extra_txn)
 {
     LogDebug(BCLog::CMPCTBLOCK, "Initializing PartiallyDownloadedBlock for block %s using a cmpctblock of %u bytes\n", cmpctblock.header.GetHash().ToString(), GetSerializeSize(cmpctblock));
     if (cmpctblock.header.IsNull() || (cmpctblock.shorttxids.empty() && cmpctblock.prefilledtxn.empty()))
@@ -143,12 +136,14 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     }
 
     for (size_t i = 0; i < extra_txn.size(); i++) {
-        if (!extra_txn[i].second) continue;
-        uint64_t shortid = cmpctblock.GetShortID(extra_txn[i].first);
+        if (extra_txn[i] == nullptr) {
+            continue;
+        }
+        uint64_t shortid = cmpctblock.GetShortID(extra_txn[i]->GetWitnessHash());
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {
             if (!have_txn[idit->second]) {
-                txn_available[idit->second] = extra_txn[i].second;
+                txn_available[idit->second] = extra_txn[i];
                 have_txn[idit->second]  = true;
                 mempool_count++;
                 extra_count++;
@@ -160,7 +155,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                 // Note that we don't want duplication between extra_txn and mempool to
                 // trigger this case, so we compare witness hashes first
                 if (txn_available[idit->second] &&
-                        txn_available[idit->second]->GetWitnessHash() != extra_txn[i].second->GetWitnessHash()) {
+                        txn_available[idit->second]->GetWitnessHash() != extra_txn[i]->GetWitnessHash()) {
                     txn_available[idit->second].reset();
                     mempool_count--;
                     extra_count--;
