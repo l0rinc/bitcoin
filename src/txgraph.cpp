@@ -3352,6 +3352,7 @@ std::optional<std::pair<std::vector<TxGraph::Ref*>, FeePerWeight>> BlockBuilderI
                 const auto& entry = m_graph->m_entries[TxGraphImpl::GetRefIndex(*ref)];
                 Assume(entry.m_ref == ref);
                 Assume(entry.m_locator[0].IsPresent());
+                Assume(entry.m_locator[0].cluster == chunk_end_entry.m_locator[0].cluster);
                 Assume(entry.m_main_chunk_feerate == ret->second);
                 sum.Add(entry.m_locator[0].cluster->GetIndividualFeerate(entry.m_locator[0].index));
             }
@@ -3424,6 +3425,7 @@ std::unique_ptr<TxGraph::BlockBuilder> TxGraphImpl::GetBlockBuilder() noexcept
 std::pair<std::vector<TxGraph::Ref*>, FeePerWeight> TxGraphImpl::GetWorstMainChunk() noexcept
 {
     std::pair<std::vector<Ref*>, FeePerWeight> ret;
+    const Cluster* ret_cluster{nullptr};
     // Make sure all clusters in main are up to date, and acceptable.
     MakeAllAcceptable(0);
     Assume(m_main_clusterset.m_deps_to_add.empty());
@@ -3432,6 +3434,7 @@ std::pair<std::vector<TxGraph::Ref*>, FeePerWeight> TxGraphImpl::GetWorstMainChu
         const auto& chunk_data = *m_main_chunkindex.rbegin();
         const auto& chunk_end_entry = m_entries[chunk_data.m_graph_index];
         Cluster* cluster = chunk_end_entry.m_locator[0].cluster;
+        ret_cluster = cluster;
         if (chunk_data.m_chunk_count == LinearizationIndex(-1) || chunk_data.m_chunk_count == 1)  {
             // Special case for singletons.
             ret.first.resize(1);
@@ -3456,6 +3459,7 @@ std::pair<std::vector<TxGraph::Ref*>, FeePerWeight> TxGraphImpl::GetWorstMainChu
                 const auto& entry = m_entries[GetRefIndex(*ref)];
                 Assume(entry.m_ref == ref);
                 Assume(entry.m_locator[0].IsPresent());
+                Assume(entry.m_locator[0].cluster == ret_cluster);
                 Assume(entry.m_main_chunk_feerate == ret.second);
                 sum.Add(entry.m_locator[0].cluster->GetIndividualFeerate(entry.m_locator[0].index));
             }
