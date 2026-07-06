@@ -39,8 +39,8 @@ class DataCarrierTest(BitcoinTestFramework):
         self.extra_args = [
             ["-acceptnonstddatacarrier=1", "-datacarrierfullcount"], # default capped at MAX_OP_RETURN_RELAY
             ["-datacarrier=0"], # no relay of datacarrier
-            ["-datacarrier=1", f"-datacarriersize={CUSTOM_DATACARRIER_ARG}"],
-            ["-datacarrier=1", "-datacarriersize=2", "-acceptnonstddatacarrier=1", "-datacarrierfullcount"],
+            ["-corepolicy=0", "-datacarrier=1", f"-datacarriersize={CUSTOM_DATACARRIER_ARG}"],
+            ["-datacarrier=1", "-datacarriersize=2", "-acceptnonstddatacarrier=1", "-datacarrierfullcount", "-permitbaredatacarrier=1"],
         ]
 
     def test_null_data_transaction(self, node: TestNode, data, success: bool) -> None:
@@ -63,7 +63,7 @@ class DataCarrierTest(BitcoinTestFramework):
             else:
                 raise AssertionError(f"{tx_hex} unexpectedly accepted")
 
-    def test_opnet_transaction(self, node: TestNode, success: bool) -> None:
+    def test_opnet_transaction(self, node: TestNode, success: bool, reject_reason="txn-datacarrier-exceeded") -> None:
         minimal_script = CScript([OP_2DROP, OP_DROP, b'op', OP_DROP, OP_1])
         internal_key = b'\x01' * 32
         tap = taproot_construct(internal_key, [("leaf", minimal_script), ("dummy", CScript([OP_1]))])
@@ -100,8 +100,27 @@ class DataCarrierTest(BitcoinTestFramework):
             self.wallet.sendrawtransaction(from_node=node, tx_hex=tx_hex)
             assert spend_tx.rehash() in node.getrawmempool(True)
         else:
-            assert_raises_rpc_error(-26, "txn-datacarrier-exceeded",
+            assert_raises_rpc_error(-26, reject_reason,
                                     self.wallet.sendrawtransaction, from_node=node, tx_hex=tx_hex)
+
+    def create_bare_datacarrier_transaction(self):
+        utxo = self.wallet.get_utxo(mark_as_spent=False)
+        tx = CTransaction()
+        tx.vin = [CTxIn(COutPoint(int(utxo['txid'], 16), utxo['vout']))]
+        tx.vout = [CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN, b"a" * 40]))]
+        tx.version = 2
+        self.wallet.sign_tx(tx)
+        tx.rehash()
+        return tx
+
+    def test_bare_datacarrier_transaction(self):
+        tx = self.create_bare_datacarrier_transaction()
+        tx_hex = tx.serialize().hex()
+
+        assert_raises_rpc_error(-26, "bare-datacarrier",
+                                self.wallet.sendrawtransaction, from_node=self.nodes[2], tx_hex=tx_hex)
+        self.wallet.sendrawtransaction(from_node=self.nodes[0], tx_hex=tx_hex)
+        assert tx.txid_hex in self.nodes[0].getrawmempool(True)
 
     def create_op_return_transaction(self, data):
         tx = self.wallet.create_self_transfer(fee_rate=0)["tx"]
@@ -135,13 +154,18 @@ class DataCarrierTest(BitcoinTestFramework):
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
 
-        # Test that bare multisig is allowed by default. Do it here rather than create a new test for it.
-        assert_equal(self.nodes[0].getmempoolinfo()["permitbaremultisig"], True)
+        mempool_info = [node.getmempoolinfo() for node in self.nodes]
 
-        assert_equal(self.nodes[0].getmempoolinfo()["maxdatacarriersize"], MAX_OP_RETURN_RELAY)
-        assert_equal(self.nodes[1].getmempoolinfo()["maxdatacarriersize"], 0)
-        assert_equal(self.nodes[2].getmempoolinfo()["maxdatacarriersize"], CUSTOM_DATACARRIER_ARG)
-        assert_equal(self.nodes[3].getmempoolinfo()["maxdatacarriersize"], 2)
+        # Test that bare multisig is allowed by default when the current-Core
+        # getmempoolinfo field is available.
+        if "permitbaremultisig" in mempool_info[0]:
+            assert_equal(mempool_info[0]["permitbaremultisig"], True)
+
+        if "maxdatacarriersize" in mempool_info[0]:
+            assert_equal(mempool_info[0]["maxdatacarriersize"], MAX_OP_RETURN_RELAY)
+            assert_equal(mempool_info[1]["maxdatacarriersize"], 0)
+            assert_equal(mempool_info[2]["maxdatacarriersize"], CUSTOM_DATACARRIER_ARG)
+            assert_equal(mempool_info[3]["maxdatacarriersize"], 2)
 
         # By default and when explicitly set to 83,
         # only 80 bytes are used for data (+1 for OP_RETURN, +2 for the pushdata opcodes).
@@ -184,8 +208,14 @@ class DataCarrierTest(BitcoinTestFramework):
         self.log.info("Testing an OPNet transaction (just pushing 'op') with default -datacarriersize.")
         self.test_opnet_transaction(node=self.nodes[0], success=True)
 
+        self.log.info("Testing an OPNet transaction is rejected by default non-standard datacarrier policy.")
+        self.test_opnet_transaction(node=self.nodes[2], success=False, reject_reason="txn-datacarrier-nonstandard")
+
         self.log.info("Testing an OPNet transaction (just pushing 'op') with -datacarriersize=2.")
         self.test_opnet_transaction(node=self.nodes[3], success=False)
+
+        self.log.info("Testing bare datacarrier rejection and -permitbaredatacarrier.")
+        self.test_bare_datacarrier_transaction()
 
         self.test_datacarriercost_adjusted_vsize()
 
