@@ -5432,6 +5432,9 @@ Functional tests:
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_min_conf`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_psbt_minconf_verify
+  --portseed=43992`
+- `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_anti_fee_sniping`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_psbt_anti_fee_sniping_review_port
@@ -5732,6 +5735,10 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_fundrawtransaction_witness_options_review`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_fundrawtransaction_min_conf`
+- `python3 test/functional/wallet_fundrawtransaction.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_wallet_fundrawtransaction_minconf_verify
+  --portseed=43991`
 - `python3 ../knots/test/functional/wallet_fundrawtransaction.py --configfile=../knots/build-repro/test/config.ini
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_wallet_fundrawtransaction_segwit_only_native_knots
