@@ -1260,7 +1260,10 @@ Other missing/adapted Knots pieces found during this pass:
   functional test against unmodified `../knots` passed, confirming the behavior
   is inherited from Knots rather than port-created. Knots' native `net_tests`
   also pass; the port-only `cnode_punish_invalid_blocks` unit case extends the
-  inherited matrix to the port-only private-broadcast connection type.
+  inherited matrix to the port-only private-broadcast connection type. A
+  refreshed pass reran the focused port unit, the port functional test, the port
+  functional test against unmodified Knots, and Knots' native
+  `p2p_invalid_block.py`; all passed.
 - The compact-block duplicate-`blocktxn` review found Knots' empty partial
   header guard (`569ceb0df4`) missing from the port, even though current Core
   master and unmodified Knots both carry it. A failed compact-block
@@ -2216,7 +2219,9 @@ under different commits. They are not all proven exploitable.
   mutated-block pre-check. A refreshed source comparison shows current Core
   still calls `Misbehaving(...)` from `MaybePunishNodeForBlock(...)`, while
   Knots and the port use `HandleDoSPunishment(...)` and
-  `CNode::PunishInvalidBlocks()` for these invalid-block paths.
+  `CNode::PunishInvalidBlocks()` for these invalid-block paths. Refreshed port
+  and Knots functional runs passed, including the current port test against
+  unmodified Knots binaries.
 
 - ForceInbound trusted-inbound eviction:
   `3544a26256`, `711dadb546`, `067f80e1b5`, `3db935abd1`
@@ -5241,6 +5246,18 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_p2p_invalid_block_inbound_punish_refresh
   --portseed=42420`
+- `python3 test/functional/p2p_invalid_block.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_invalid_block_punish_refresh_port2
+  --portseed=42606`
+- `python3 test/functional/p2p_invalid_block.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_invalid_block_punish_porttest_knots2
+  --portseed=42607`
+- `python3 ../knots/test/functional/p2p_invalid_block.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_invalid_block_punish_knots_native2
+  --portseed=42608`
 - `python3 test/functional/interface_zmq.py --configfile
   /mnt/my_storage/build-zmq-audit/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_interface_zmq_audit_rerun`
@@ -5835,6 +5852,15 @@ Functional tests:
   ../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_knots_p2p_invalid_block_inbound_punish_refresh
   --portseed=42421` passed on unmodified Knots with the current port test.
+- Refreshed invalid-block punishment checks:
+  `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks --catch_system_error=no --log_level=error --report_level=short`
+  passed on the port with 14 assertions,
+  `python3 test/functional/p2p_invalid_block.py --configfile=build/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_invalid_block_punish_refresh_port2 --portseed=42606`
+  passed on the port,
+  `python3 test/functional/p2p_invalid_block.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_invalid_block_punish_porttest_knots2 --portseed=42607`
+  passed against unmodified Knots binaries, and
+  `python3 ../knots/test/functional/p2p_invalid_block.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_invalid_block_punish_knots_native2 --portseed=42608`
+  passed as Knots' native coverage.
 - Original Knots cross-check:
   `../knots/build-repro/bin/test_bitcoin --run_test=net_tests
   --catch_system_error=no --log_level=error --report_level=short`
