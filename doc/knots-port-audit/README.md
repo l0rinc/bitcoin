@@ -604,6 +604,7 @@ Other missing/adapted Knots pieces found during this pass:
   vs imported or old-seed destinations, not consensus or mempool policy.
 - The BIP322 message-signing review confirmed Knots' signing and verification
   stack (`5689da7144`, `b9c6d98dfe`, `5501bfe28e`, `3d056b0314`,
+  `a6db4bde2f`,
   `5fa31318bd`, `f32c5267ae`, `fa9048636b`, `b7e42cd6b9`, `ef728f7963`,
   `a5375f9c39`, `d07851730b`, `0e79f97800`) is present in the port and absent
   from current Core's wallet/utility RPC behavior. The port matches actual
@@ -611,9 +612,13 @@ Other missing/adapted Knots pieces found during this pass:
   supporting BIP322 simple signatures for wallet-owned non-P2PKH destinations,
   preferring legacy message signatures for P2PKH `signmessage`, and throwing
   for inconclusive proof-of-funds or unsupported script cases. This is
-  wallet/RPC signature functionality, not transaction or block consensus.
-  `wallet_signmessagewithaddress.py` now covers wallet-created BIP322
-  signatures for native SegWit and Taproot addresses in addition to the
+  wallet/RPC signature functionality, not transaction or block consensus. The
+  signature-checker `require_sighash_all` flag is only enabled by this message
+  verifier path, where it rejects otherwise-valid BIP322 proofs signed with
+  non-`SIGHASH_ALL` hash types. `script_tests/require_sighash_all` covers the
+  low-level ECDSA invariant, and `wallet_signmessagewithaddress.py` covers
+  wallet-created BIP322 signatures for native SegWit and Taproot addresses in
+  addition to the
   existing legacy signing, util-level BIP322 vectors, and
   `rpc_signmessagewithprivkey.py` verification vectors.
 - Wallet sweep coverage passes on the current descriptor-wallet base:
@@ -3119,6 +3124,10 @@ Functional tests:
   (skipped: previous releases not available or disabled)
 - `python3 test/functional/wallet_keypool.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_keypool_isactive_fixed`
+- `build/bin/test_bitcoin --run_test=script_tests/require_sighash_all
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=script_tests --catch_system_error=no
+  --log_level=error --report_level=short`
 - `python3 test/functional/wallet_signmessagewithaddress.py --configfile
   build/test/config.ini --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_signmessage_bip322`
 - `python3 test/functional/rpc_signmessagewithprivkey.py --configfile
