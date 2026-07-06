@@ -1062,16 +1062,17 @@ Other missing/adapted Knots pieces found during this pass:
   `interface_bitcoin_cli.py` also now treats the old `-paytxfee` display line
   as optional when scale-checking `-getinfo` output (`b1c4cd76e5`).
 - The wallet `getbalance` review confirmed Knots' current behavior is present
-  in the port's adapted `RPCMethod` implementation: the no-dummy path rejects
-  `minconf`, legacy `getbalance("*")` still uses the legacy balance path, and
-  an avoid-reuse wallet errors if `getbalance("*")` would ignore the flag.
+  in the port's adapted `RPCMethod` implementation (`d09a74c7e4`, port
+  `f2fc3ac77b`): the no-dummy path rejects `minconf`, legacy
+  `getbalance("*")` still uses the legacy balance path, and an avoid-reuse
+  wallet errors if `getbalance("*")` would ignore the flag.
   The port also carries Knots' legacy-balance conflict and `findBlock`
-  hardening (`14bf4726c4`, `cf5ec99cb0`): conflicting unconfirmed wallet
-  transactions are included in `getbalance("*", 0)` only when they are in the
-  node's mempool, and the legacy locktime/MTP lookup uses `CHECK_NONFATAL`
-  instead of `Assume(...)`. Current Core master removed `GetLegacyBalance`, so
-  these are Knots compatibility fixes rather than remaining Core-missing
-  hardening.
+  hardening (`14bf4726c4` -> `55a3ef3089`, `cf5ec99cb0` -> `3986b2902e`):
+  conflicting unconfirmed wallet transactions are included in
+  `getbalance("*", 0)` only when they are in the node's mempool, and the legacy
+  locktime/MTP lookup uses `CHECK_NONFATAL` instead of `Assume(...)`. Current
+  Core master removed `GetLegacyBalance`, so these are Knots compatibility fixes
+  rather than remaining Core-missing hardening.
   Functional testing also exposed a port omission, not an original Knots bug:
   `getunconfirmedbalance` was implemented but not registered, and the
   deprecated `getwalletinfo` fields `balance`, `unconfirmed_balance`, and
@@ -3635,6 +3636,14 @@ Source/manifest checks:
   src/wallet/wallet.cpp test/functional` show the wallet zero-value/from-me
   accounting area where the port follows current Core's TXO-set lookup while
   actual Knots uses the older `IsMine(prevout)` backport shape.
+- `git show --stat --patch d09a74c7e4 f2fc3ac77b 55a3ef3089
+  3986b2902e -- src/wallet/rpc/coins.cpp src/wallet/receive.cpp
+  test/functional/wallet_balance.py` and `git grep -n -E
+  "getbalance minconf option|GetLegacyBalance|avoid_reuse flag is not supported|include_nonmempool|findBlock"
+  HEAD knots/29.x-knots origin/master -- src/wallet/rpc/coins.cpp src/wallet/receive.cpp
+  test/functional/wallet_balance.py test/functional/wallet_avoidreuse.py` show
+  the Knots/port legacy `getbalance("*")` behavior and the corresponding
+  absence of `GetLegacyBalance` in current Core.
 - `git grep -n -E
   "struct close_fds|close_fds\\{|subprocess_close_all_fds|close_range|RunCommandParseJSON|subprocess_close_fds"
   HEAD knots/29.x-knots origin/master -- src/common src/node src/util
@@ -6082,8 +6091,16 @@ Functional tests:
   --log_level=error --report_level=short`
 - `python3 test/functional/wallet_balance.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_wallet_balance_legacy_conflict_review`
+- `python3 test/functional/wallet_balance.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_balance_getbalance_lineage_refresh
+  --portseed=42758`
 - `python3 test/functional/wallet_avoidreuse.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_avoidreuse_getbalance_4`
+- `python3 test/functional/wallet_avoidreuse.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_avoidreuse_getbalance_lineage_refresh
+  --portseed=42759`
 - `python3 test/functional/wallet_descriptor.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_descriptor_importaddress_4`
 - `python3 test/functional/wallet_descriptor.py --configfile=build/test/config.ini
