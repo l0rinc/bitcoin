@@ -321,6 +321,13 @@ public:
         m_tracker.PostGetRequestableSanityCheck(m_now);
     }
 
+    void GetRequestableAllPeers(bool collect_expired)
+    {
+        for (int peer = 0; peer < MAX_PEERS; ++peer) {
+            GetRequestable(peer, collect_expired);
+        }
+    }
+
     void Check()
     {
         for (int txhash = 0; txhash < MAX_TXHASHES; ++txhash) {
@@ -399,7 +406,7 @@ FUZZ_TARGET(txrequest)
     // Decode the input as a sequence of instructions with parameters
     auto it = buffer.begin();
     for (int command_count{0}; it != buffer.end() && command_count < MAX_COMMANDS; ++command_count) {
-        int cmd = *(it++) % 12;
+        int cmd = *(it++) % 13;
         int peer, txidnum, delaynum;
         switch (cmd) {
         case 0: // Make time jump to the next event (m_time of CANDIDATE or REQUESTED)
@@ -464,6 +471,9 @@ FUZZ_TARGET(txrequest)
                 tester.GetRequestable(peer, /*collect_expired=*/true);
                 tester.ReceivedInv(peer, txhash, !is_wtxid, !preferred, std::chrono::microseconds::min());
             }
+            break;
+        case 12: // Query every peer for requestable txs at the current time.
+            tester.GetRequestableAllPeers(it != buffer.end() && (*(it++) & 1));
             break;
         default:
             assert(false);
