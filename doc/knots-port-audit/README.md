@@ -2007,6 +2007,22 @@ under different commits. They are not all proven exploitable.
   the mempool option and covers both rejection and default acceptance, and the
   same source-level expectation is present in unmodified Knots.
 
+- Minimum relay input age / coin-block policy:
+  `fa0267d631`, `482bd5382e`
+
+  Current Core has no `-minrelaymaturity` or `-minrelaycoinblocks` policy
+  knobs. Knots and this port keep both defaults at zero but let operators
+  reject transactions spending too-recent confirmed outputs, either by block
+  depth or by value-weighted coin-block age. This is relay/mining policy and
+  local spam/rate-limit control, not consensus behavior: a block containing an
+  otherwise-valid transaction that violates these local thresholds remains a
+  valid block. The port's `mempool_minrelay.py` mines a fresh confirmed output,
+  proves `-minrelaymaturity=2` rejects its immediate spend with
+  `bad-txns-input-immature-depth` until one more block is mined, and proves
+  `-minrelaycoinblocks=7500000000` rejects the same one-confirmation shape
+  with `bad-txns-input-immature-coinblocks` until the output has enough
+  coin-block age. The same test passes against unmodified Knots.
+
 - CJDNS addnode duplicate detection:
   `28823f30dc`
 
@@ -2618,6 +2634,17 @@ Source/manifest checks:
   src/test/transaction_tests.cpp` show current Core lacks the option while
   actual Knots and the port expose and test the unknown-witness output policy
   toggle.
+- `git show origin/master:src/validation.cpp origin/master:src/kernel/mempool_options.h
+  origin/master:src/init.cpp origin/master:src/node/mempool_args.cpp | rg -n
+  "minrelaymaturity|minrelaycoinblocks|GetCoinAge|bad-txns-input-immature" -C 4`,
+  `git -C ../knots show 29.x-knots:src/validation.cpp 29.x-knots:src/kernel/mempool_options.h
+  29.x-knots:src/init.cpp 29.x-knots:src/node/mempool_args.cpp | rg -n
+  "minrelaymaturity|minrelaycoinblocks|GetCoinAge|bad-txns-input-immature" -C 4`,
+  and `rg -n "minrelaymaturity|minrelaycoinblocks|GetCoinAge|bad-txns-input-immature"
+  src/validation.cpp src/kernel/mempool_options.h src/init.cpp
+  src/node/mempool_args.cpp test/functional/mempool_minrelay.py` show current
+  Core lacks Knots' minimum relay input-age knobs while actual Knots and the
+  port share the same validation rejection paths and functional coverage.
 - `git show --stat --patch --minimal b85232d7462`, `git show
   origin/master:src/init.cpp | rg -n
   "blockfilterindex_value|AllBlockFilterTypes|BlockFilterType::BASIC|certain indexes|indexes for all known types"
@@ -3369,6 +3396,14 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_p2p_filter_local_bloom_knots
   --portseed=32601`
+- `python3 test/functional/mempool_minrelay.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_port
+  --portseed=32630`
+- `python3 test/functional/mempool_minrelay.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_knots
+  --portseed=32631`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_cjdns_addnode_3`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
@@ -3872,6 +3907,11 @@ Functional tests:
   `python3 test/functional/p2p_compactblocks_extratxs.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_size_knots --portseed=32621`
   passed on unmodified Knots, including `-blockreconstructionextratxnsize`
   zero, fractional, boundary, and eviction behavior.
+- Original Knots cross-check:
+  `python3 test/functional/mempool_minrelay.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_knots --portseed=32631`
+  passed on unmodified Knots, confirming that `-minrelaymaturity=2` and
+  `-minrelaycoinblocks=7500000000` reject fresh confirmed spends until one more
+  block provides enough age.
 - Original Knots source cross-check:
   `git -C ../knots show 29.x-knots:src/test/transaction_tests.cpp | rg -n "acceptunknownwitness|scriptpubkey-unknown-witnessversion" -C 4`
   shows unmodified Knots' unit test has the same unknown-witness output
