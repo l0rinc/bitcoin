@@ -150,13 +150,19 @@ Other missing/adapted Knots pieces found during this pass:
   still asserts that new wallets are descriptor wallets. This was not an
   original Knots crash: an unmodified local Knots build returned RPC `-4`
   (`Compiled without bdb support`) for the same legacy-wallet creation attempt.
-  The crash is fixed as `6cd89c9b09` and covered in
-  `wallet_createwallet.py`, but the later `wallet_undeprecate_legacy-29`
-  source review confirmed a remaining port-completeness gap: actual Knots
-  source permits `descriptors=false` when compiled with BDB, while this
-  current-Core port still forces `WALLET_FLAG_DESCRIPTORS` and rejects legacy
-  creation before any BDB-backed path can run. This is wallet compatibility,
-  not consensus behavior or a remote security issue.
+  The immediate assertion was fixed as `6cd89c9b09`; the later full legacy
+  restore (`ece3ba8d5b`) brings back the LegacyScriptPubKeyMan/BDB create and
+  reload path, makes non-descriptor `createwallet` require Berkeley DB like
+  Knots, and covers the path in `wallet_createwallet.py --legacy-wallet`.
+  This is wallet compatibility, not consensus behavior or a remote security
+  issue.
+- The same BDB legacy restore exposed a second port-introduced authenticated
+  wallet RPC assertion: `importdescriptors` on a restored legacy wallet reached
+  current Core's descriptor-manager assertion instead of rejecting the RPC.
+  Actual Knots already checks
+  `importdescriptors is not available for non-descriptor wallets`; the port now
+  restores that guard and asserts the RPC error in the legacy createwallet
+  functional test. This was not an original Knots crash.
 - `rpc_getblockfrompeer.py` still used Knots' older mutable block-hash helper
   (`CBlock.calc_sha256()`), while the current port framework exposes block
   hashes through properties (`hash`, `hash_int`, and `sha256`). The port removes
@@ -694,17 +700,19 @@ Other missing/adapted Knots pieces found during this pass:
   `66a0e619dd`). This is backup/restore correctness for legacy wallets, not a
   consensus or network issue. On the current Core base the descriptor-wallet
   `wallet_hd.py` path passes and confirms `dumpmasterprivkey` rejects
-  descriptor wallets; the legacy `wallet_dump.py` runtime path still skips
-  because new legacy wallets can no longer be created.
+  descriptor wallets. Earlier descriptor-only runs skipped the legacy
+  `wallet_dump.py` path; after `ece3ba8d5b`, new legacy wallets can be created
+  in BDB-enabled builds and the broader legacy export paths should be rerun.
 - The implicit-SegWit wallet option review confirmed Knots'
   `-walletimplicitsegwit` surface (`9eabba7220`, `2733d2c4ce`) is present in
   the port and absent from current Core. The option controls legacy-wallet
   implicit P2SH-SegWit/P2WPKH script learning and sets `-addresstype=legacy`
   when disabled, so this is legacy wallet recovery/import behavior rather than
   consensus or network security behavior. The direct unit coverage
-  `util_tests/outputtype_implicit_segwit` passes; the functional
-  `wallet_implicitsegwit.py` path still skips on this base because new legacy
-  wallets can no longer be created.
+  `util_tests/outputtype_implicit_segwit` passes. Earlier functional
+  `wallet_implicitsegwit.py` runs skipped on descriptor-only builds; the
+  BDB-enabled legacy create/reload path is now restored and this legacy import
+  surface should be rerun in the next broad legacy-wallet sweep.
 - A later file-presence sweep found the Qt wrapper for the same sweep feature
   was still missing even though the RPC and functional test were already
   ported. The port now restores Knots' `SweepPrivKeyDialog`, wires it through
@@ -744,7 +752,10 @@ Other missing/adapted Knots pieces found during this pass:
   missing tests/helper and adapts `tool_wallet.py` to current Core's
   command-option validation and unnamed-wallet rejection (`91fc10bc4c`).
   `rpc_mempool_info.py` and `tool_wallet.py` pass on the local build, while
-  the restored legacy-wallet tests reach the expected current-Core skip path.
+  the restored legacy-wallet tests initially reached the expected current-Core
+  skip path in descriptor-only builds. After `ece3ba8d5b`, the createwallet
+  legacy path passes in BDB-enabled builds; the broader restored legacy tests
+  still need a BDB-enabled sweep.
 - The `bitcoin-wallet importfromcoldcard` review confirmed the Knots-only
   command (`e3d45ed809`, `0b7664c038`, `f72496a06a`) is present in the port and
   absent from current Core. Malformed Coldcard export files exposed an original
@@ -765,7 +776,10 @@ Other missing/adapted Knots pieces found during this pass:
   `wallet_importmulti.py`, `wallet_inactive_hdchains.py`,
   `wallet_pruning.py`, and `wallet_watchonly.py`, plus the `get_key` and
   `get_multisig` wallet test helpers they need (`9b6cd9284d`). These tests
-  also reach the expected current-Core skip path in this descriptor-only build.
+  previously reached the expected current-Core skip path in descriptor-only
+  builds. After `ece3ba8d5b`, the port can create/reload BDB legacy wallets
+  again, so these broader legacy tests should be included in the next
+  BDB-enabled regression run.
   The remaining Knots-only `mempool_package_onemore.py` test was checked but
   not restored: it asserts the old ancestor/descendant package carve-out
   behavior, while current Core has replaced that policy surface with cluster
@@ -780,16 +794,13 @@ Other missing/adapted Knots pieces found during this pass:
   `bdb.cpp`/`salvage.cpp` had stale current-Core database-interface calls. The
   port now restores `WITH_SQLITE`, conditional SQLite/BDB wallet sources,
   `salvage.h`, and current API adaptations as `90c0118d62`. This was not an
-  original Knots defect or consensus issue. Full legacy wallet loading/creation
-  remains disabled on this current-Core base; the BDB work here restores build
-  coverage and the configured BDB backend objects. A later BDB-enabled probe
-  using the system Berkeley DB 5.3 library, with
-  `-DWARN_INCOMPATIBLE_BDB=OFF`, built `bitcoind`, `bitcoin-cli`,
-  `bitcoin-wallet`, and `test_bitcoin`, confirming the retained BDB objects
-  compile in a wallet-enabled node build. The same probe still rejected
-  `createwallet descriptors=false` before reaching Knots' legacy creation
-  branch, so this remains a behavioral release-parity gap rather than a BDB
-  compile-wiring gap.
+  original Knots defect or consensus issue. A later BDB-enabled probe using the
+  system Berkeley DB 5.3 library, with `-DWARN_INCOMPATIBLE_BDB=OFF`, built
+  `bitcoind`, `bitcoin-cli`, `bitcoin-wallet`, and `test_bitcoin`, confirming
+  the retained BDB objects compile in a wallet-enabled node build. The
+  subsequent legacy restore (`ece3ba8d5b`) removes the behavioral parity gap:
+  `createwallet descriptors=false` now creates a BDB legacy wallet when BDB is
+  compiled and reloads it after restart.
 - A BDB follow-up review confirmed the port also carries Knots' BDB-specific
   wallet hardening around non-writable directories and environment cleanup:
   `MakeBerkeleyDatabase(...)` catches open/verify exceptions, BDB directory
@@ -806,10 +817,9 @@ Other missing/adapted Knots pieces found during this pass:
   `MaybeCompactWalletDB(...)` pass. Current Core master has no matching BDB
   wallet maintenance surface after removing new legacy/BDB wallet creation. The
   port now restores the Knots controls and database-interface hooks needed by
-  the retained BDB backend while keeping the current descriptor-only wallet
-  creation guard documented below: `-swapbdbendian` is registered like Knots in
-  BDB-enabled builds, but this slice does not restore Knots' legacy-wallet create
-  path. This is local wallet database maintenance/config compatibility, not
+  the retained BDB backend; after `ece3ba8d5b`, `-swapbdbendian` is registered
+  like Knots in BDB-enabled builds and the legacy-wallet create path is restored.
+  This is local wallet database maintenance/config compatibility, not
   consensus behavior or network exposure.
 - The wallet-tool dump/createfromdump cleanup review checked Knots'
   `cc324aa2be` failed-restore cleanup and `afd2785f2c` BDB wallet-id warnings.
@@ -5454,32 +5464,34 @@ Functional tests:
 - `python3 test/functional/wallet_sweepprivkeys.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_import_with_label.py --configfile build/test/config.ini --legacy-wallet`
-  (skipped: legacy wallets can no longer be created)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_importmulti.py --configfile build/test/config.ini --legacy-wallet`
-  (skipped: legacy wallets can no longer be created)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_upgradewallet.py --configfile build/test/config.ini --legacy-wallet`
-  (skipped: legacy wallets can no longer be created)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_implicitsegwit.py --configfile build/test/config.ini`
-  (skipped: legacy wallets can no longer be created)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_inactive_hdchains.py --configfile build/test/config.ini --legacy-wallet`
-  (skipped: legacy wallets can no longer be created)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_pruning.py --configfile build/test/config.ini --legacy-wallet`
-  (skipped: legacy wallets can no longer be created)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_watchonly.py --configfile build/test/config.ini --legacy-wallet`
-  (skipped: legacy wallets can no longer be created)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_watchonly.py --configfile build/test/config.ini --usecli --legacy-wallet`
-  (skipped: legacy wallets can no longer be created)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_hd.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_hd_dumpmaster`
 - `python3 test/functional/wallet_dump.py --configfile build/test/config.ini`
-  (skipped: legacy wallets can no longer be created)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_dump.py --configfile build/test/config.ini
   --legacy-wallet --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_dump_hd_metadata_legacy`
-  (skipped: legacy wallets can no longer be created)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_import_rescan.py --configfile build/test/config.ini`
-  (skipped: legacy wallets can no longer be created)
-- `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini --legacy-wallet`
-  (skipped: legacy wallets can no longer be created)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
+- `python3 test/functional/wallet_createwallet.py --legacy-wallet
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_main_legacy_createwallet_func`
+  passed after `ece3ba8d5b`.
 - Original Knots expected-failure repro:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_rdts.py
   --configfile /mnt/my_storage/knots/build-repro/test/config.ini
@@ -5922,26 +5934,33 @@ Functional tests:
   passed on unmodified Knots, including the new in-progress
   `relevant_blocks` status assertion and the existing invalid-action error
   check.
-- Manual port/Knots legacy-wallet cross-check:
-  starting fresh regtest nodes and calling
-  `bitcoin-cli -regtest -named createwallet wallet_name=legacy descriptors=false`
-  returned RPC `-4` with
-  `descriptors argument must be set to "true"; it is no longer possible to
-  create a legacy wallet.` on the port, while unmodified Knots built without
-  BDB returned RPC `-4` with
-  `Compiled without bdb support (required for legacy wallets)`. This confirms
-  the port blocks the request before the Knots BDB-availability branch.
-- Refreshed BDB-enabled port probe:
-  `cmake -S . -B /mnt/my_storage/tmp_bitcoin_bdb_probe -DWITH_BDB=ON -DWITH_SQLITE=ON -DWARN_INCOMPATIBLE_BDB=OFF -DBUILD_GUI=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=RUNTIME_WARN`
-  configured with legacy wallets enabled using the system Berkeley DB 5.3
-  library, and
-  `cmake --build /mnt/my_storage/tmp_bitcoin_bdb_probe --target bitcoind bitcoin-cli bitcoin-wallet test_bitcoin -j4`
-  completed. Starting that BDB-enabled port build and calling
-  `bitcoin-cli -regtest -named createwallet wallet_name=legacy descriptors=false`
-  still returned RPC `-4` with
-  `descriptors argument must be set to "true"; it is no longer possible to
-  create a legacy wallet.`, confirming the gap remains even when BDB is
-  compiled in.
+- Manual Knots legacy-wallet cross-check:
+  unmodified Knots built without BDB returned RPC `-4` with
+  `Compiled without bdb support (required for legacy wallets)` for
+  `bitcoin-cli -regtest -named createwallet wallet_name=legacy descriptors=false`,
+  confirming Knots treats legacy creation as BDB-only when the backend is not
+  compiled.
+- Refreshed BDB-enabled port restore:
+  `cmake -S . -B /mnt/my_storage/tmp_bitcoin_bdb_legacy_build -DWITH_BDB=ON -DWITH_SQLITE=ON -DWARN_INCOMPATIBLE_BDB=OFF -DBUILD_GUI=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=RUNTIME_WARN`
+  configured with both descriptor SQLite and legacy Berkeley DB wallet support
+  enabled using the system Berkeley DB 5.3 library.
+  `cmake --build /mnt/my_storage/tmp_bitcoin_bdb_legacy_build --target bitcoind bitcoin-cli bitcoin-wallet test_bitcoin -j4`
+  completed on the main branch after `ece3ba8d5b`.
+- Focused legacy-wallet verification on the BDB-enabled main build:
+  `/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/bin/test_bitcoin --run_test=walletdb_tests`
+  passed, `test/functional/wallet_createwallet.py --legacy-wallet
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_main_legacy_createwallet_func` passed, and the
+  default descriptor-mode `wallet_createwallet.py` run passed. The legacy-mode
+  test verifies `format == "bdb"`, `descriptors == false`, legacy address
+  generation, unload/restart/load persistence, and the non-descriptor
+  `importdescriptors` RPC error instead of the earlier assertion abort.
+- GUI compile limitation for the same legacy restore:
+  `cmake -S . -B /mnt/my_storage/tmp_legacy_revert_probe_gui_build
+  -DWITH_BDB=ON -DWITH_SQLITE=ON -DWARN_INCOMPATIBLE_BDB=OFF -DBUILD_GUI=ON
+  -DWITH_CCACHE=OFF -DRDTS_CONSENT=RUNTIME_WARN` failed during configure with
+  `Could NOT find Qt (missing: Qt5_DIR Qt5_FOUND)`, so the Qt watch-only signal
+  wiring was source-reviewed and covered only by non-GUI compilation here.
 - Original Knots expected-failure repro:
   foreground `../knots/build-repro/bin/bitcoind -regtest` plus
   `bitcoin-cli -regtest -named addnode node=127.0.0.1:18444 command=onetry connection_type=inbound`
