@@ -2315,7 +2315,9 @@ BaseIndex rewind no-commit state persistence (`16b1710d97`) and stale
 hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, randomized Tor
 stream-isolation credential prefixes, feebumper combined-fee crash, wallet
 coin-selection boolean amount fix, precomputed transaction-data lifetime
-hardening (CVE-2024-52911), Tor-control excessive-line OOM hardening, I2P SAM
+hardening (CVE-2024-52911), the CVE-2025-46598 validation/script-cache and
+transaction-punishment cleanup cluster, Tor-control excessive-line OOM
+hardening, I2P SAM
 `SESSION CREATE` request redaction, BDB overflow data lengths, btree-level
 validation, and final-page LSN validation, PSBT proprietary-field preservation
 during combining, monotonic
@@ -2346,6 +2348,21 @@ it is destructed after queued checks drain. Actual Knots has the equivalent
 29.x backport. The focused
 `txvalidationcache_tests --catch_system_error=no --log_level=error
 --report_level=short` run passed on the port.
+
+The CVE-2025-46598 backport cluster was also rechecked because Knots merged the
+Bitcoin Core PR 33788 fixes through `6e7ea3cf2a` and earlier 29.x merge
+commits: witness-stripping detection (`97088fa75a`, `56626300b8`,
+`020ed613be`), sighash midstate caching and tests, single script-check
+validation (`be0857745a`), and removal of transaction-relay peer punishment
+(`65bcbbc538`). Current Core master, actual Knots, and the port all carry the
+same live behavior: a witness-stripped spend is classified as
+`TX_WITNESS_STRIPPED` without rerunning script checks, `MaybePunishNodeForTx`
+is absent, and the sighash cache tests are present. This is not Core-missing
+hardening. Focused port verification passed with `build/bin/test_bitcoin
+--run_test=sighash_tests/sighash_caching --catch_system_error=no
+--log_level=error --report_level=short` and `build/bin/test_bitcoin
+--run_test=transaction_tests/spends_witness_prog --catch_system_error=no
+--log_level=error --report_level=short`.
 
 The coins-cache fuzz P2SH fixture fix is also already present from current
 Core rather than replayed as the Knots hash. Knots backports it as
