@@ -1175,6 +1175,19 @@ Other missing/adapted Knots pieces found during this pass:
   histogram surface. `policyestimator_tests` and `mempool_fee_histogram.py`
   pass with the ported code; a same-test run against unmodified Knots confirms
   the fee-histogram behavior is inherited rather than port-created.
+- The mempool/orphan IBD performance review checked Knots' `8990a80618`
+  `removeForBlock` empty-map guard and `fc5361a515` orphanage empty-pool
+  guard. Both are present in the port and current Core master, so they are not
+  Core-missing covert DoS hardening. They are local CPU/allocation reductions
+  during block connection and orphan cleanup, not consensus behavior. Focused
+  `mempool_tests` and `orphanage_tests` pass with the port.
+- The wallet best-block persistence review checked Knots' follow-up series
+  `3c20072d93`, `36f643e680`, `5b371fb621`, and `ad19b1efff`. Current Core
+  already carries the same best-block-in-memory/write-through behavior for
+  block connect, block disconnect, wallet loading, and post-rescan state. This
+  is wallet reorg/rescan bookkeeping, not consensus behavior and not a
+  Knots-only hardening gap. Focused `wallet_tests` and
+  `wallet_reorgsrestore.py` pass with the port.
 - The mempool-entry RPC review confirmed Knots' transaction-serialization
   `hash` field in mempool entry output (`2f7b38db86`) is present in the port
   and absent from current Core's `entryToJSON(...)`. This is RPC compatibility
@@ -3178,6 +3191,15 @@ Functional tests:
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_fee_histogram_review_knots
   --portseed=26448`
+- `build/bin/test_bitcoin --run_test=mempool_tests --catch_system_error=no
+  --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=orphanage_tests --catch_system_error=no
+  --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=wallet_tests --catch_system_error=no
+  --log_level=error --report_level=short`
+- `python3 test/functional/wallet_reorgsrestore.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_wallet_reorgsrestore_bestblock --portseed=7396`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_getblockfrompeer_no_header`
