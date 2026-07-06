@@ -243,7 +243,7 @@ RPCMethod addmultisigaddress()
                             {"label", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "A label to assign the address to.", RPCArgOptions{.also_positional = true}},
                             {"sort", RPCArg::Type::BOOL, RPCArg::Default{false}, "Whether to sort public keys according to BIP67."},
                         },
-                        RPCArgOptions{.oneline_description="\"options\""}},
+                        RPCArgOptions{.oneline_description="options"}},
                     {"address_type", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "", RPCArgOptions{.hidden=true}},
                 },
                 RPCResult{

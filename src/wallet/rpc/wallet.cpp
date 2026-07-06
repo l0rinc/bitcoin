@@ -1021,7 +1021,7 @@ static RPCMethod sethdseed()
 {
     return RPCMethod{
         "sethdseed",
-        "\nSet or generate a new HD wallet seed. Non-HD wallets will not be upgraded to being a HD wallet. Wallets that are already\n"
+        "Set or generate a new HD wallet seed. Non-HD wallets will not be upgraded to being a HD wallet. Wallets that are already\n"
         "HD will have a new HD seed set so that new keys added to the keypool will be derived from this new seed.\n"
         "\nNote that you will need to MAKE A NEW BACKUP of your wallet after setting the HD wallet seed." + HELP_REQUIRING_PASSPHRASE +
         "Note: This command is only compatible with legacy wallets.\n",
@@ -1091,7 +1091,7 @@ static RPCMethod sethdseed()
 static RPCMethod upgradewallet()
 {
     return RPCMethod{"upgradewallet",
-        "\nUpgrade the wallet. Upgrades to the latest version if no version number is specified.\n"
+        "Upgrade the wallet. Upgrades to the latest version if no version number is specified.\n"
         "New keys may be generated and a new wallet backup will need to be made.",
         {
             {"version", RPCArg::Type::NUM, RPCArg::Default{int{FEATURE_LATEST}}, "The version number to upgrade to. Default is the latest wallet version."},
