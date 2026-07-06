@@ -41,6 +41,17 @@ std::vector<uint64_t> BuildHashedSet(const std::unordered_set<std::vector<uint8_
     return hashed_elements;
 }
 
+size_t ExpectedGolombRiceByteSize(const std::vector<uint64_t>& values, const uint8_t p)
+{
+    Assert(p <= 64);
+    size_t bit_size{0};
+    for (const uint64_t value : values) {
+        const uint64_t quotient{p == 64 ? 0 : value >> p};
+        bit_size += static_cast<size_t>(quotient) + 1 + p;
+    }
+    return (bit_size + 7) / 8;
+}
+
 void AssertGolombRiceRoundTrip(const std::vector<uint64_t>& values, const uint8_t p)
 {
     std::vector<uint8_t> encoded;
@@ -52,6 +63,7 @@ void AssertGolombRiceRoundTrip(const std::vector<uint64_t>& values, const uint8_
         }
         bitwriter.Flush();
     }
+    Assert(encoded.size() == ExpectedGolombRiceByteSize(values, p));
 
     SpanReader stream{encoded};
     BitStreamReader bitreader{stream};
