@@ -3217,7 +3217,8 @@ BaseIndex rewind no-commit state persistence (`16b1710d97`) and stale
 `SetStdinEcho` UB (`98d9237d3e`, Core `fa692974ac`), fd-limit
 overflow/RLIMIT_INFINITY handling (`0f92fc907f`, `1953393f48`,
 `6c89453ca7`; Core `4afbabdcef`, `8ab4b9fc85`), RPC credentials hashed in
-memory, PSBT bounds asserts,
+memory, the `PSBTInputSignedAndVerified` bounds assert fix (`b2f6128338`,
+also present in current Core),
 v2-to-v1 reconnect UAF, randomized Tor
 stream-isolation credential prefixes, feebumper combined-fee crash, wallet
 coin-selection boolean amount fix (`c0b092936e`, Core `0026b330c4`),
@@ -4622,6 +4623,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=transaction_tests`
 - `build/bin/test_bitcoin --run_test=transaction_tests
   --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=psbt_tests --catch_system_error=no
+  --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests
   --catch_system_error=no --log_level=error --report_level=short`
