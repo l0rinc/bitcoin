@@ -73,6 +73,12 @@ Other missing/adapted Knots pieces found during this pass:
   port now matches Knots and the unit coverage asserts that an unrelated
   cached transaction alone does not make the missing compact-block transaction
   available.
+- The same compact-block review restored Knots' txref-only randomized mempool
+  cache (`a03aef9cec`, ported as `9d68ea0782`). Current Core also added this
+  change and reverted it as `b7b249d3ad`, returning to `<Wtxid, txiter>` pairs.
+  The port now stores `CTransactionRef` in `txns_randomized`, derives shortids
+  from the transaction itself during compact-block reconstruction, and updates
+  the fuzz harness direct cache reads.
 - `feature_init.py` verification exposed a port-side test-framework regression
   in `busy_wait_for_debug_log`: after an early miss, the helper never reset its
   match state and could time out even when the expected log line was present.
@@ -2780,29 +2786,32 @@ under different commits. They are not all proven exploitable.
   count cache, while Knots and the port carry the size cap and per-transaction
   ceiling.
 
-- Compact-block `extra_txn` txref-only lookup:
-  `a8203e9412`, ported as `ab4fd3568f`
+- Compact-block txref-only reconstruction caches:
+  `a03aef9cec`, `a8203e9412`, ported as `9d68ea0782` and `ab4fd3568f`
 
-  Current Core master added Knots' simplification and later reverted it as
-  `b9300d8d0a`, so it again stores compact-block extra transactions as
-  `<Wtxid, CTransactionRef>` pairs and computes the shortid from the stored
-  pair key. Actual Knots and this port store only `CTransactionRef` and compute
-  the shortid from `tx->GetWitnessHash()` at lookup time. This is a
-  consensus-adjacent relay/type-safety hardening difference: it makes a
-  mismatched shortid key and transaction reference impossible in the
-  `extra_txn` API and avoids relying on callers to keep the pair coherent. The
-  normal Core production path currently populates the pair with
-  `tx->GetWitnessHash()` in `AddToCompactExtraTransactions(...)`; this audit
-  records the source-confirmed Core regression and harder-to-misuse Knots
-  shape, not a separately reproduced unauthenticated remote crash.
+  Current Core master added Knots' simplifications and later reverted both of
+  them (`b7b249d3ad` for `txns_randomized`, `b9300d8d0a` for `extra_txn`), so
+  it again stores compact-block reconstruction cache entries as
+  `<Wtxid, txiter>`/`<Wtxid, CTransactionRef>` pairs and computes shortids from
+  the stored pair keys. Actual Knots and this port store only
+  `CTransactionRef` in both caches and compute the shortid from
+  `tx->GetWitnessHash()` at lookup time. This is a consensus-adjacent
+  relay/type-safety hardening difference: it makes a mismatched shortid key and
+  transaction reference impossible in the compact-block reconstruction cache
+  APIs and avoids relying on callers to keep each pair coherent. The normal
+  Core production paths currently populate the pairs from the same transaction;
+  this audit records the source-confirmed Core regressions and harder-to-misuse
+  Knots shape, not a separately reproduced unauthenticated remote crash.
 
-  The port adapts Knots' shape to the rebased memory cap: the ring buffer keeps
-  plain `CTransactionRef` entries, `blockreconstructionextratxn_memusage`
-  subtracts `RecursiveDynamicUsage(*entry)`, null entries are still skipped,
-  the fuzz and benchmark callers pass txrefs directly, and
-  `blockencodings_tests/ReceiveWithExtraTransactions` now also checks that an
-  unrelated extra transaction alone leaves the missing compact-block
-  transaction unavailable.
+  The port adapts Knots' shapes to the rebased code: `txns_randomized` stores
+  `CTransactionRef` and updates the moved transaction's index by looking up the
+  moved txid; the extra-transaction ring buffer keeps plain `CTransactionRef`
+  entries; `blockreconstructionextratxn_memusage` subtracts
+  `RecursiveDynamicUsage(*entry)`; null extra entries are still skipped; the
+  fuzz and benchmark callers pass txrefs directly; and
+  `blockencodings_tests/ReceiveWithExtraTransactions` checks that an unrelated
+  extra transaction alone leaves the missing compact-block transaction
+  unavailable.
 
 - Configurable orphan-transaction count cap:
   Knots' `-maxorphantx` option is present in the port and absent from current
@@ -4146,6 +4155,27 @@ Source/manifest checks:
   --catch_system_error=no --log_level=error --report_level=short`. The local
   build tree does not expose a `bench_bitcoin` target, so the changed benchmark
   source was not compiled separately in this configuration.
+- `git log --oneline HEAD origin/master knots/29.x-knots --grep='rewrite
+  vTxHashes as a vector of CTransactionRef' -- src/txmempool.cpp
+  src/txmempool.h src/blockencodings.cpp src/test/blockencodings_tests.cpp
+  src/test/fuzz/cmpctblock.cpp`, `git log --oneline HEAD origin/master
+  knots/29.x-knots --grep='Revert.*rewrite vTxHashes' -- src/txmempool.cpp
+  src/txmempool.h src/blockencodings.cpp src/test/blockencodings_tests.cpp
+  src/test/fuzz/cmpctblock.cpp`, and `git grep -n -E
+  "std::vector<(std::pair<Wtxid, txiter>|CTransactionRef)> txns_randomized|for \\(const auto& (\\[wtxid, txit\\]|tx) : pool->txns_randomized\\)|txns_randomized\\[.*\\](\\.second->GetSharedTx\\(\\))?"
+  HEAD origin/master knots/29.x-knots -- src/txmempool.cpp src/txmempool.h
+  src/blockencodings.cpp src/test/fuzz/cmpctblock.cpp` show current Core has
+  the reverted pair form while actual Knots and the port now use direct
+  `CTransactionRef` entries. Focused verification passed with `cmake --build
+  build --target test_bitcoin --parallel 4`, `build/bin/test_bitcoin
+  --run_test=blockencodings_tests --catch_system_error=no --log_level=error
+  --report_level=short`, `build/bin/test_bitcoin --run_test=mempool_tests
+  --catch_system_error=no --log_level=error --report_level=short`, `cmake
+  --build build --target bitcoind --parallel 4`, and
+  `../knots/build-repro/bin/test_bitcoin --run_test=blockencodings_tests
+  --catch_system_error=no --log_level=error --report_level=short`. The local
+  build tree does not expose a fuzz target, so the changed `cmpctblock` fuzz
+  harness source was not compiled separately in this configuration.
 - `git show origin/master:src/init.cpp origin/master:src/node/peerman_args.cpp
   2>/dev/null | rg -n "maxorphantx|max_orphan_txs"` returns no matches, while
   `rg -n "maxorphantx|max_orphan_txs|DEFAULT_MAX_ORPHAN_TRANSACTIONS"
