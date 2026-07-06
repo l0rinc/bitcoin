@@ -3,6 +3,7 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Helpful routines for mempool testing."""
+import random
 
 from .blocktools import (
     COINBASE_MATURITY,
@@ -33,6 +34,11 @@ ORPHAN_TX_EXPIRE_TIME = 1200
 DEFAULT_MIN_RELAY_TX_FEE = 100
 # Default for -incrementalrelayfee in sat/kvB
 DEFAULT_INCREMENTAL_RELAY_FEE = 100
+DEFAULT_CLUSTER_LIMIT = 64
+DEFAULT_CLUSTER_SIZE_LIMIT_KVB = 101
+
+TRUC_MAX_VSIZE = 10000
+TRUC_CHILD_MAX_VSIZE = 1000
 
 def assert_mempool_contents(test_framework, node, expected=None, sync=True):
     """Assert that all transactions in expected are in the mempool,

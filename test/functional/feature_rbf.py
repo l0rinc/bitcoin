@@ -35,10 +35,9 @@ class ReplaceByFeeTest(BitcoinTestFramework):
             [
                 "-mempoolfullrbf=0",
                 "-limitancestorcount=50",
-                "-limitancestorsize=101",
                 "-limitdescendantcount=200",
-                "-limitdescendantsize=101",
                 "-mempooltruc=accept",
+                "-acceptnonstdtxn=1",  # MiniWallet target_vsize padding uses multiple OP_RETURN outputs.
                 "-paytxfee=0.00001",  # this test confuses the fee estimator into nearly 1 BTC fees
             ],
             # second node has default mempool parameters, besides mempoolfullrbf being disabled
@@ -167,7 +166,7 @@ class ReplaceByFeeTest(BitcoinTestFramework):
 
         # This will raise an exception due to insufficient fee
         reject_reason = "insufficient fee"
-        reject_details = f"{reject_reason}, rejecting replacement {tx.txid_hex}, not enough additional fees to relay; 0.00 < 0.00000011"
+        reject_details = f"{reject_reason}, rejecting replacement {tx.txid_hex}; new feerate 0.00300000 BTC/kvB <= old feerate 0.00300000 BTC/kvB"
         res = self.nodes[0].testmempoolaccept(rawtxs=[tx_hex])[0]
         assert_equal(res["reject-reason"], reject_reason)
         assert_equal(res["reject-details"], reject_details)
@@ -326,7 +325,7 @@ class ReplaceByFeeTest(BitcoinTestFramework):
         )["hex"]
 
         # This will raise an exception due to insufficient fee
-        assert_raises_rpc_error(-26, "does not improve feerate diagram", self.nodes[0].sendrawtransaction, tx1b_hex, 0)
+        assert_raises_rpc_error(-26, "insufficient fee", self.nodes[0].sendrawtransaction, tx1b_hex, 0)
 
     def test_spends_of_conflicting_outputs(self):
         """Replacements that spend conflicting tx outputs are rejected"""
@@ -673,7 +672,7 @@ class ReplaceByFeeTest(BitcoinTestFramework):
         )["hex"]
 
         # Verify tx1b cannot replace tx1a.
-        assert_raises_rpc_error(-26, "does not improve feerate diagram", self.nodes[0].sendrawtransaction, tx1b_hex, 0)
+        assert_raises_rpc_error(-26, "insufficient fee", self.nodes[0].sendrawtransaction, tx1b_hex, 0)
 
         # Use prioritisetransaction to set tx1a's fee to 0.
         self.nodes[0].prioritisetransaction(txid=tx1a_txid, fee_delta=int(-0.1 * COIN))

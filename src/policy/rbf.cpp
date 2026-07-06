@@ -21,6 +21,7 @@
 #include <vector>
 
 #include <compare>
+#include <tuple>
 
 RBFTransactionState IsRBFOptIn(const CTransaction& tx, const CTxMemPool& pool)
 {
@@ -71,6 +72,18 @@ std::optional<std::string> GetEntriesForConflicts(const CTransaction& tx,
                          tx.GetHash().ToString(),
                          num_clusters,
                          MAX_REPLACEMENT_CANDIDATES);
+    }
+    uint64_t conflicting_count{0};
+    for (const auto& mi : iters_conflicting) {
+        conflicting_count += std::get<0>(pool.CalculateDescendantData(*mi));
+        // Knots keeps the original Rule #5 transaction-count bound in
+        // addition to Core's cluster-count work bound.
+        if (conflicting_count > MAX_REPLACEMENT_CANDIDATES && !ignore_rejects.count("too-many-replacements") && !ignore_rejects.count("too many potential replacements")) {
+            return strprintf("rejecting replacement %s; too many potential replacements (%d > %d)",
+                             tx.GetHash().ToString(),
+                             conflicting_count,
+                             MAX_REPLACEMENT_CANDIDATES);
+        }
     }
     // Calculate the set of all transactions that would have to be evicted.
     for (CTxMemPool::txiter it : iters_conflicting) {

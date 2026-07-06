@@ -23,8 +23,8 @@
 class CFeeRate;
 class uint256;
 
-/** Maximum number of unique clusters that can be affected by an RBF (Rule #5);
- * see GetEntriesForConflicts() */
+/** Maximum number of transactions or unique clusters that can be affected by an RBF
+ * (Rule #5); see GetEntriesForConflicts() */
 static constexpr uint32_t MAX_REPLACEMENT_CANDIDATES{100};
 
 /** The rbf state of unconfirmed transactions */
@@ -59,14 +59,16 @@ RBFTransactionState IsRBFOptIn(const CTransaction& tx, const CTxMemPool& pool) E
 RBFTransactionState IsRBFOptInEmptyMempool(const CTransaction& tx);
 
 /** Get all descendants of iters_conflicting. Checks that there are no more than
- * MAX_REPLACEMENT_CANDIDATES distinct clusters affected.
+ * MAX_REPLACEMENT_CANDIDATES potential entries or distinct clusters affected.
+ * The potential entry count may overestimate if entries in iters_conflicting have
+ * overlapping descendants.
  *
  * @param[in]   iters_conflicting   The set of iterators to mempool entries.
  * @param[out]  all_conflicts       Populated with all the mempool entries that would be replaced,
  *                                  which includes iters_conflicting and all entries' descendants.
  *                                  Not cleared at the start; any existing mempool entries will
  *                                  remain in the set.
- * @returns an error message if the number of affected clusters would exceed MAX_REPLACEMENT_CANDIDATES, std::nullopt otherwise
+ * @returns an error message if MAX_REPLACEMENT_CANDIDATES may be exceeded, std::nullopt otherwise
  */
 std::optional<std::string> GetEntriesForConflicts(const CTransaction& tx, CTxMemPool& pool,
                                                   const CTxMemPool::setEntries& iters_conflicting,

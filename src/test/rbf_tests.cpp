@@ -266,36 +266,44 @@ BOOST_FIXTURE_TEST_CASE(rbf_conflicts_calculator, TestChain100Setup)
     // At this point, we should have 2 clusters in the mempool, each with 52
     // transactions.
 
-    // parent_tx and all children are in one cluster, so we can have as many
-    // conflicts within this cluster as we want without violating the RBF conflicts
-    // limit.
+    // parent_tx and all children are in one cluster, and the transaction count
+    // remains under the RBF conflicts limit.
     const auto parent_entry_1 = pool.GetIter(parent_tx_1->GetHash()).value();
     const auto parent_entry_2 = pool.GetIter(parent_tx_2->GetHash()).value();
     const auto conflicting_transaction = make_tx({parent_tx_1, parent_tx_2}, {50 * CENT});
     CTxMemPool::setEntries all_conflicts, dummy;
     BOOST_CHECK(GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
                                        /*pool=*/ pool,
-                                       /*iters_conflicting=*/ {parent_entry_1, parent_entry_2},
+                                       /*iters_conflicting=*/ {parent_entry_1},
                                        /*all_conflicts=*/ all_conflicts) == std::nullopt);
+    BOOST_CHECK_EQUAL(all_conflicts.size(), NUM_OUTPUTS + 1);
+    all_conflicts.clear();
 
-    dummy.clear();
-    // Conflicting directly with all those conflicts doesn't change anything.
+    // Two such clusters only affect 2 clusters, but would evict 104 potential
+    // entries, so Knots' transaction-count bound rejects the replacement.
+    const auto too_many_entries = GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
+                                                         /*pool=*/ pool,
+                                                         /*iters_conflicting=*/ {parent_entry_1, parent_entry_2},
+                                                         /*all_conflicts=*/ all_conflicts);
+    BOOST_REQUIRE(too_many_entries.has_value());
+    BOOST_CHECK(too_many_entries->find("too many potential replacements") != std::string::npos);
+
+    // Recreate the one-cluster conflict set after the rejected two-cluster case.
     BOOST_CHECK(GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
                                        /*pool=*/ pool,
-                                       /*iters_conflicting=*/ all_conflicts,
-                                       /*all_conflicts=*/ dummy) == std::nullopt);
-    BOOST_CHECK_EQUAL(all_conflicts.size(), dummy.size());
+                                       /*iters_conflicting=*/ {parent_entry_1},
+                                       /*all_conflicts=*/ all_conflicts) == std::nullopt);
+    const auto overlapping_descendants = GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
+                                                                /*pool=*/ pool,
+                                                                /*iters_conflicting=*/ all_conflicts,
+                                                                /*all_conflicts=*/ dummy);
+    BOOST_REQUIRE(overlapping_descendants.has_value());
+    BOOST_CHECK(overlapping_descendants->find("too many potential replacements") != std::string::npos);
     dummy.clear();
 
     // If we mine the parent_tx's, then the clusters split (102 clusters).
     pool.removeForBlock({parent_tx_1, parent_tx_2}, /*nBlockHeight=*/ 1);
 
-    // Add some descendants now to each of the direct children (we can do this now that the clusters have split).
-    for (const auto& child : direct_children) {
-        add_descendants(child, 10, pool);
-    }
-
-    // We can conflict with 100 different clusters, even if they have lots of transactions.
     CTxMemPool::setEntries conflicts;
     for (auto i = 0; i < 100; ++i) {
         conflicts.insert(pool.GetIter(direct_children[i]->GetHash()).value());
@@ -304,13 +312,41 @@ BOOST_FIXTURE_TEST_CASE(rbf_conflicts_calculator, TestChain100Setup)
                                        /*pool=*/ pool,
                                        /*iters_conflicting=*/ conflicts,
                                        /*all_conflicts=*/ dummy) == std::nullopt);
+    dummy.clear();
 
-    // Conflicting with 1 more distinct cluster causes failure, however.
+    // Conflicting with 1 more distinct cluster causes the cluster-count bound to fail.
     conflicts.insert(pool.GetIter(direct_children[100]->GetHash()).value());
+    const auto too_many_clusters = GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
+                                                         /*pool=*/ pool,
+                                                         /*iters_conflicting=*/ conflicts,
+                                                         /*all_conflicts=*/ dummy);
+    BOOST_REQUIRE(too_many_clusters.has_value());
+    BOOST_CHECK(too_many_clusters->find("too many conflicting clusters") != std::string::npos);
+
+    // Add some descendants now to each of the direct children (we can do this now that the clusters have split).
+    for (const auto& child : direct_children) {
+        add_descendants(child, 10, pool);
+    }
+
+    // With descendants, the transaction-count bound still applies before the
+    // cluster-count bound is reached.
+    conflicts.clear();
+    for (auto i = 0; i < 9; ++i) {
+        conflicts.insert(pool.GetIter(direct_children[i]->GetHash()).value());
+    }
     BOOST_CHECK(GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
                                        /*pool=*/ pool,
                                        /*iters_conflicting=*/ conflicts,
-                                       /*all_conflicts=*/ dummy).has_value());
+                                       /*all_conflicts=*/ dummy) == std::nullopt);
+    dummy.clear();
+
+    conflicts.insert(pool.GetIter(direct_children[9]->GetHash()).value());
+    const auto too_many_descendants = GetEntriesForConflicts(/*tx=*/ *conflicting_transaction.get(),
+                                                            /*pool=*/ pool,
+                                                            /*iters_conflicting=*/ conflicts,
+                                                            /*all_conflicts=*/ dummy);
+    BOOST_REQUIRE(too_many_descendants.has_value());
+    BOOST_CHECK(too_many_descendants->find("too many potential replacements") != std::string::npos);
 }
 
 BOOST_FIXTURE_TEST_CASE(improves_feerate, TestChain100Setup)
