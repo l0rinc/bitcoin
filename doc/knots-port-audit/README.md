@@ -3254,8 +3254,9 @@ during combining, monotonic
 `uptime` (`c202961b8e`, Core `e67a676df9`), first-run pruned-disk-space
 warning rounding, Windows exclusive `wbx` opens, oversized `-dbcache` warning
 and unusual 64-bit-size handling (`fc27c2134c`, `5e666b667b`; Core
-`168360f4ae` plus matching current source), LevelDB file-size initialization
-to avoid UB (`1e2eaebd79`, also present in current Core), wallet `sendall`
+`168360f4ae` plus matching current source), the 32-bit `-maxmempool` cap
+(`eafea2393d`, Core `2c43b6adeb`), LevelDB file-size initialization to avoid
+UB (`1e2eaebd79`, also present in current Core), wallet `sendall`
 transaction-size error handling, miniscript assert guards, and most
 cpp-subprocess
 memory/Windows fixes, witness-stripped SegWit reject-filter handling,
@@ -4031,6 +4032,10 @@ Source/manifest checks:
   HEAD knots/29.x-knots origin/master -- src/init.cpp src/httpserver.cpp`
   show the CJDNS/RFC4193 reachable-network setup is before HTTP RPC allow-list
   parsing in Core, Knots, and the port.
+- `git grep -n -E
+  "MAX_32BIT_MEMPOOL_MB|sizeof\\(void\\*\\)|can't be over"
+  HEAD knots/29.x-knots origin/master -- src/node/mempool_args.cpp` shows the
+  same 32-bit `-maxmempool` cap in Core, Knots, and the port.
 - `git show origin/master:src/node/transaction.cpp | sed -n '32,105p'`,
   `git show origin/master:src/rpc/mempool.cpp | sed -n '110,158p'`,
   `git -C ../knots show 29.x-knots:src/node/transaction.cpp | sed -n

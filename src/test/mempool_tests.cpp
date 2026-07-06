@@ -10,6 +10,7 @@
 #include <test/util/time.h>
 #include <test/util/txmempool.h>
 #include <txmempool.h>
+#include <util/result.h>
 #include <util/time.h>
 
 #include <test/util/setup_common.h>
@@ -160,6 +161,30 @@ BOOST_AUTO_TEST_CASE(MempoolMinRelayAgeParse)
     argsman.ForceSetArg("-minrelaycoinblocks", "0");
     argsman.ForceSetArg("-minrelaymaturity", "-1");
     BOOST_CHECK(!ApplyArgsManOptions(argsman, Params(), opts));
+}
+
+BOOST_AUTO_TEST_CASE(MempoolMaxMempoolSizeParse)
+{
+    ArgsManager max_args;
+    max_args.ForceSetArg("-maxmempool", "500");
+
+    kernel::MemPoolOptions max_opts;
+    const auto max_result{ApplyArgsManOptions(max_args, Params(), max_opts)};
+    BOOST_REQUIRE(max_result);
+    BOOST_CHECK_EQUAL(max_opts.max_size_bytes, 500'000'000);
+
+    ArgsManager too_high_args;
+    too_high_args.ForceSetArg("-maxmempool", "501");
+
+    kernel::MemPoolOptions too_high_opts;
+    const auto too_high_result{ApplyArgsManOptions(too_high_args, Params(), too_high_opts)};
+    if constexpr (sizeof(void*) == 4) {
+        BOOST_REQUIRE(!too_high_result);
+        BOOST_CHECK_EQUAL(util::ErrorString(too_high_result).original, "-maxmempool is set to 501 but can't be over 500 MB on 32-bit systems");
+    } else {
+        BOOST_REQUIRE(too_high_result);
+        BOOST_CHECK_EQUAL(too_high_opts.max_size_bytes, 501'000'000);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(MempoolMaxTxLegacySigopsParse)
