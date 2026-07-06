@@ -931,12 +931,14 @@ Other missing/adapted Knots pieces found during this pass:
 - A BDB follow-up review confirmed the port also carries Knots' BDB-specific
   wallet hardening around non-writable directories and environment cleanup:
   `MakeBerkeleyDatabase(...)` catches open/verify exceptions (`a65bce292b`),
-  BDB directory errors report the non-writable path, checkpoint/LSN reset
-  failures do not mark a database as detached, and BDB cleanup avoids deleting
-  the `database` subdirectory on normal shutdown. Current Core master already
-  has the SQLite non-writable-directory guard and tests (`607799b6db`,
-  upstream `bc0090f1d6`), but has no BDB backend. The port's BDB side is
-  covered by `wallet_createwallet.py`, `wallet_startup.py`, and `db_tests`.
+  BDB directory errors report the non-writable path (`0a7953b83d`), the
+  functional non-writable create/load tests are adapted for both backends
+  (`44e9edefc2`, `fde25e03f3`), checkpoint/LSN reset failures do not mark a
+  database as detached, and BDB cleanup avoids deleting the `database`
+  subdirectory on normal shutdown. Current Core master already has the SQLite
+  non-writable-directory guard and tests (`607799b6db`, upstream
+  `bc0090f1d6`), but has no BDB backend. The port's BDB side is covered by
+  `wallet_createwallet.py`, `wallet_startup.py`, and `db_tests`.
 - A wallet database maintenance review found a port-side omission in Knots'
   BDB flush/debug controls (`377772f7e2`). Actual Knots has `-dblogsize`,
   `-flushwallet`, `-privdb`, `-swapbdbendian`, the BDB runtime sanity check,
