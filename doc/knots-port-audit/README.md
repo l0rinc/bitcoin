@@ -1242,7 +1242,9 @@ Other missing/adapted Knots pieces found during this pass:
   Knots and the port still disconnect an ordinary inbound peer before that
   path reaches `MaybePunishNodeForBlock(...)`. A fresh rerun of the same
   functional test against unmodified `../knots` passed, confirming the behavior
-  is inherited from Knots rather than port-created.
+  is inherited from Knots rather than port-created. Knots' native `net_tests`
+  also pass; the port-only `cnode_punish_invalid_blocks` unit case extends the
+  inherited matrix to the port-only private-broadcast connection type.
 - The compact-block duplicate-`blocktxn` review found Knots' empty partial
   header guard (`569ceb0df4`) missing from the port, even though current Core
   master and unmodified Knots both carry it. A failed compact-block
@@ -2164,7 +2166,10 @@ under different commits. They are not all proven exploitable.
   port pins the connection-type decision matrix in
   `net_tests/cnode_punish_invalid_blocks`, and `p2p_invalid_block.py` covers the
   ordinary-inbound non-mutated-invalid-block tolerance plus the still-disconnect
-  mutated-block pre-check.
+  mutated-block pre-check. A refreshed source comparison shows current Core
+  still calls `Misbehaving(...)` from `MaybePunishNodeForBlock(...)`, while
+  Knots and the port use `HandleDoSPunishment(...)` and
+  `CNode::PunishInvalidBlocks()` for these invalid-block paths.
 
 - ForceInbound trusted-inbound eviction:
   `3544a26256`, `711dadb546`, `067f80e1b5`, `3db935abd1`
@@ -3807,6 +3812,16 @@ Builds:
   Core still allows startup if any explicit RPC endpoint binds, while Knots and
   the port abort unless every explicit RPC endpoint binds. The port's
   `rpc_bind.py` additionally covers this with a partial-bind failure case.
+- `rg -n
+  "PunishInvalidBlocks|HandleDoSPunishment|MaybePunishNodeForBlock|Misbehaving"
+  src/net.h src/net_processing.cpp src/test/net_tests.cpp
+  ../knots/src/net.h ../knots/src/net_processing.cpp` and
+  `git grep -n -E
+  "PunishInvalidBlocks|HandleDoSPunishment|MaybePunishNodeForBlock|Misbehaving"
+  origin/master -- src/net.h src/net_processing.cpp` show Knots and the port
+  handle non-mutated invalid-block punishment through
+  `CNode::PunishInvalidBlocks()` while current Core still marks the same peers
+  misbehaving from `MaybePunishNodeForBlock(...)`.
 - `git show origin/master:src/net.cpp | rg -n "peeraddr|LogPeer" -C 3` and
   `rg -n "peeraddr|LogPeer|peer=0, peeraddr" src/net.cpp
   src/net_processing.cpp test/functional/feature_logging.py` show current Core
@@ -3943,8 +3958,6 @@ Unit tests:
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks
   --catch_system_error=no --log_level=error --report_level=short`
-- `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks
-  --catch_system_errors=no`
 - `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_get_block_file_info_empty`
 - `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_readblock_hash_mismatch
   --catch_system_error=no --log_level=nothing --report_level=no`
@@ -4863,6 +4876,10 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_p2p_invalid_block_inbound_punish2`
 - `test/functional/p2p_invalid_block.py --configfile=build/test/config.ini
   --cachedir=test/cache`
+- `python3 test/functional/p2p_invalid_block.py --configfile build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_invalid_block_inbound_punish_refresh
+  --portseed=42420`
 - `python3 test/functional/interface_zmq.py --configfile
   /mnt/my_storage/build-zmq-audit/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_interface_zmq_audit_rerun`
@@ -5202,6 +5219,17 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_knots_p2p_invalid_block_inbound_punish_latest
   --portseed=32210` passed on unmodified Knots with the current port test.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_invalid_block.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_knots_p2p_invalid_block_inbound_punish_refresh
+  --portseed=42421` passed on unmodified Knots with the current port test.
+- Original Knots cross-check:
+  `../knots/build-repro/bin/test_bitcoin --run_test=net_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+  passed on unmodified Knots. Knots does not have the port-only
+  `cnode_punish_invalid_blocks` case because it has no private-broadcast
+  connection type.
 - Original Knots cross-check:
   `test/functional/rpc_scanblocks.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_rpc_scanblocks_invalid_action`
   passed on unmodified Knots, including the new in-progress
