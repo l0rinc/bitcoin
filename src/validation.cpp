@@ -1038,8 +1038,9 @@ bool MemPoolAccept::ReplacementChecks(Workspace& ws)
     }
 
     if (const auto err_string{ImprovesFeerateDiagram(*m_subpackage.m_changeset)}) {
-        // We checked above for the cluster size limits being respected, so a
-        // failure here can only be due to an insufficient fee.
+        if (err_string->first == DiagramCheckError::UNCALCULABLE) {
+            return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "replacement-failed", err_string->second);
+        }
         Assume(err_string->first == DiagramCheckError::FAILURE);
         return state.Invalid(TxValidationResult::TX_RECONSIDERABLE, "replacement-failed", err_string->second);
     }
@@ -1131,7 +1132,7 @@ bool MemPoolAccept::PackageRBFChecks(const std::vector<CTransactionRef>& txns,
 
     // Check if it's economically rational to mine this package rather than the ones it replaces.
     if (const auto err_tup{ImprovesFeerateDiagram(*m_subpackage.m_changeset)}) {
-        Assume(err_tup->first == DiagramCheckError::FAILURE);
+        Assume(err_tup->first == DiagramCheckError::FAILURE || err_tup->first == DiagramCheckError::UNCALCULABLE);
         return package_state.Invalid(PackageValidationResult::PCKG_POLICY,
                                      "package RBF failed: " + err_tup.value().second, "");
     }
