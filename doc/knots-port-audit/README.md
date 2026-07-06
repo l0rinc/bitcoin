@@ -2272,7 +2272,14 @@ under different commits. They are not all proven exploitable.
   watch-only-only migrations (`34ac206b1c`, upstream `b789907346`), and the
   success-only migrated-wallet-name assignment (`432b39cee7`, upstream
   `8a4cfddf23`); its current source also logs reload failures using the wallet
-  being loaded, so `60f529027c` is not a live Core-missing defect. Knots and
+  being loaded, so `60f529027c` is not a live Core-missing defect. Current Core
+  has also inherited the unnamed legacy-wallet migration cleanup fix and
+  default-wallet watchonly/solvables naming fix (`a074d36254`, `5e8ad98163`,
+  upstream `f4c7e28e80`, `82caa8193a`), so those are important data-safety
+  fixes present in the port but not remaining Core gaps. Knots' migration
+  sanity-check adaptation for `-walletimplicitsegwit=0` (`45121aa8b8`) is a
+  Knots-only surface adjustment: the port carries it, while current Core has no
+  `g_implicit_segwit` option to trigger the branch. Knots and
   the port still differ from current Core on `69a6b9b115`: when a legacy
   file-backed wallet is converted into a directory-backed descriptor wallet,
   the backup is moved into that new wallet directory. Current Core still creates
@@ -3448,10 +3455,10 @@ Source/manifest checks:
   removal after the `Assume(...)` call.
 - `git log --oneline origin/master --grep='Fix migration of wallets with
   pathnames\\|avoid creating spendable wallet\\|Set migrated wallet name only on
-  success\\|non-writable db directories' -- src/wallet
+  success\\|unnamed legacy wallet migration\\|watch-only and solvables wallets names\\|non-writable db directories' -- src/wallet
   test/functional/wallet_migration.py`, `git grep -n -E
   "backup_prefix|weakly_canonical\\(GetWalletDir|empty_local_wallet|Failed to
-  load wallet|plainfile_|non-writable directory|MakeBerkeleyDatabase"
+  load wallet|plainfile_|non-writable directory|MakeBerkeleyDatabase|MigrationPrefixName|default_wallet_watchonly|walletimplicitsegwit|g_implicit_segwit"
   HEAD knots/29.x-knots origin/master -- src/wallet test/functional`, and
   `git show origin/master:src/wallet/bdb.cpp 2>&1 || true` show which
   migration and non-writable-directory fixes are now current-Core inherited,
