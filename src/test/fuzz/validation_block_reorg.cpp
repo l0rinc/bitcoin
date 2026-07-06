@@ -125,6 +125,7 @@ struct ValidationEventRecorder final : public CValidationInterface {
     void UpdatedBlockTip(const CBlockIndex* pindexNew, const CBlockIndex* pindexFork, bool fInitialDownload) override
     {
         assert(pindexNew);
+        assert(pindexFork != pindexNew);
         assert(WITH_LOCK(::cs_main, return !(pindexNew->nStatus & BLOCK_FAILED_VALID)));
         if (pindexFork) {
             assert(pindexFork->nHeight <= pindexNew->nHeight);
