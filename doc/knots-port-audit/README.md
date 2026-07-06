@@ -1975,6 +1975,23 @@ under different commits. They are not all proven exploitable.
   `-whitelistforcerelay` implicit cases; unmodified Knots' own
   `p2p_permissions.py` passes with the same expectations.
 
+- Compact-block extra-transaction memory cap:
+  `390d5f80e6`, `43a4bcd7f5`, `9b78a13aea`
+
+  Current Core retains only a count limit for the non-mempool extra
+  transactions used during compact block reconstruction: the default is 100
+  entries, and there is no size-based cap. Knots and this port raise the count
+  default to 32,768 but add `-blockreconstructionextratxnsize`, defaulting to
+  10 MB, plus a 100 KB per-transaction insertion ceiling. This makes the cache
+  more useful for reconstruction without leaving memory use unbounded by large
+  rejected/replaced transactions. This is P2P memory/resource hardening, not
+  consensus behavior. The port's focused functional test covers count
+  disabling, count wraparound, zero size, 1 MB versus 2 MB size-limit eviction,
+  exact-boundary eviction, 0.1 MB fractional parsing, and a single transaction
+  larger than the configured limit; the same test passes against unmodified
+  Knots. `peerman_tests/peerman_args_block_reconstruction_extra_txn` covers the
+  parser conversion for fractional megabytes and negative values.
+
 - CJDNS addnode duplicate detection:
   `28823f30dc`
 
@@ -2567,6 +2584,16 @@ Source/manifest checks:
   `sed -n '588,612p' src/net.cpp` show current Core clears implicit whitelist
   permissions after adding relay/mempool/noban, while actual Knots and the port
   also add `NetPermissionFlags::Addr`.
+- `git show origin/master:src/net_processing.h origin/master:src/node/peerman_args.cpp
+  | rg -n "BLOCK_RECONSTRUCTION_EXTRA_TXN|blockreconstructionextratxnsize|max_extra_txs_size" -C 4`,
+  `git -C ../knots show 29.x-knots:src/net_processing.h 29.x-knots:src/node/peerman_args.cpp
+  | rg -n "BLOCK_RECONSTRUCTION_EXTRA_TXN|blockreconstructionextratxnsize|max_extra_txs_size" -C 4`,
+  and `rg -n "BLOCK_RECONSTRUCTION_EXTRA_TXN|blockreconstructionextratxnsize|max_extra_txs_size"
+  src/net_processing.h src/node/peerman_args.cpp src/test/peerman_tests.cpp
+  test/functional/p2p_compactblocks_extratxs.py` show current Core has only
+  the 100-entry count default, while actual Knots and the port have the
+  32,768-entry default, 10 MB default size cap, fractional-MB parser, and
+  functional coverage.
 - `git show --stat --patch --minimal b85232d7462`, `git show
   origin/master:src/init.cpp | rg -n
   "blockfilterindex_value|AllBlockFilterTypes|BlockFilterType::BASIC|certain indexes|indexes for all known types"
@@ -3590,6 +3617,16 @@ Functional tests:
   --portseed=26455`
 - `python3 test/functional/rpc_mempool_info.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile build/test/config.ini`
+- `python3 test/functional/p2p_compactblocks_extratxs.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_size_port
+  --portseed=32620`
+- `python3 test/functional/p2p_compactblocks_extratxs.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_size_knots
+  --portseed=32621`
+- `build/bin/test_bitcoin --run_test=peerman_tests/peerman_args_block_reconstruction_extra_txn
+  --catch_system_errors=no --log_level=error --report_level=short`
 - `python3 test/functional/p2p_compactblocks.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_compactblocks_header_guard_final`
 - `python3 test/functional/p2p_invalid_block.py --configfile build/test/config.ini
@@ -3805,6 +3842,10 @@ Functional tests:
   passed on unmodified Knots, including the localhost-only BIP37 default,
   explicit `-peerbloomfilters=0` disable path, and filtered-witness block
   assertion.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_compactblocks_extratxs.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_size_knots --portseed=32621`
+  passed on unmodified Knots, including `-blockreconstructionextratxnsize`
+  zero, fractional, boundary, and eviction behavior.
 - Original Knots cross-check:
   `python3 test/functional/p2p_compactblocks.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_compactblocks_header_guard`
   reached and passed the repeated-`blocktxn` section on unmodified Knots,
