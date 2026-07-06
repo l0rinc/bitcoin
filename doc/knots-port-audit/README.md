@@ -2037,7 +2037,10 @@ under different commits. They are not all proven exploitable.
   cleanup code expected. This is local wallet data-safety hardening, not a
   consensus issue. The port factors this into
   `RemoveCreatedWalletDirIfEmpty(...)`; `wallet_tests` now asserts the empty
-  directory removal path and the non-empty sentinel-preservation path.
+  directory removal path and the non-empty sentinel-preservation path. A
+  refreshed source comparison shows unmodified Knots has the same guarded
+  behavior inline in restore and migration cleanup, while current Core still
+  removes after `Assume(fs::is_empty(...))` without checking the result.
 
 - Subprocess fd cleanup before exec:
   `214047ecd3`, `ed5a3b3604`
@@ -3029,6 +3032,13 @@ Source/manifest checks:
   shows the port and actual Knots source carry the wallet directory skip list,
   while the port's current functional test adds the fake `blocks/skipped_wallet`
   regression check.
+- `git grep -n -E
+  "RemoveCreatedWalletDirIfEmpty|Directory .* is not empty; leaving it alone|Assume\\(fs::is_empty|fs::remove\\(wallet_path\\)|wallet_empty_dirs_to_remove|remove_created_wallet_dir_if_empty"
+  HEAD knots/29.x-knots origin/master -- src/wallet/wallet.cpp
+  src/wallet/walletutil.cpp src/wallet/walletutil.h
+  src/wallet/test/wallet_tests.cpp` shows the port's helper/test, Knots'
+  inline guarded restore/migration cleanup, and current Core's unconditional
+  removal after the `Assume(...)` call.
 - `git show --stat --patch --minimal dbca0cc4d3e 5689ba8fde b1378e3f48
   24ffe06d2f`, `rg -n
   "SEQ_ID_BEST_CHAIN_FROM_DISK|SEQ_ID_INIT_FROM_DISK|feature_chain_tiebreaks|setBlockIndexCandidates|nSequenceId"
@@ -3940,6 +3950,8 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty`
 - `build/bin/test_bitcoin --run_test=wallet_tests/remove_created_wallet_dir_if_empty
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin --run_test=wallet_tests
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=wallet_tests/default_confirm_target_is_one_day
   --catch_system_error=no --log_level=error --report_level=short`
