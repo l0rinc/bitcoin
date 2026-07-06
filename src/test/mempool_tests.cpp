@@ -491,6 +491,51 @@ BOOST_AUTO_TEST_CASE(MempoolDumpLoadPrioritisationRoundtrip)
     fs::remove(mempool_path + ".new");
 }
 
+BOOST_AUTO_TEST_CASE(MempoolDumpLoadV1PrioritisationRoundtrip)
+{
+    auto mempool_opts{MemPoolOptionsForTest(m_node)};
+    mempool_opts.persist_v1_dat = true;
+    bilingual_str error;
+    CTxMemPool dump_pool{mempool_opts, error};
+    BOOST_REQUIRE(error.empty());
+
+    const Txid missing_txid{Txid::FromUint256(uint256{3})};
+    constexpr CAmount fee_delta{12345};
+    dump_pool.PrioritiseTransaction(missing_txid, fee_delta);
+    dump_pool.AddUnbroadcastTx(missing_txid);
+    BOOST_CHECK(dump_pool.GetUnbroadcastTxs().empty());
+
+    const fs::path mempool_path{m_args.GetDataDirBase() / "mempool_v1_prioritisation_roundtrip.dat"};
+    fs::remove(mempool_path);
+    fs::remove(mempool_path + ".new");
+    BOOST_REQUIRE(node::DumpMempool(dump_pool, mempool_path));
+
+    {
+        AutoFile file{fsbridge::fopen(mempool_path, "rb")};
+        BOOST_REQUIRE(!file.IsNull());
+        uint64_t version;
+        file >> version;
+        BOOST_CHECK_EQUAL(version, 1U);
+    }
+
+    bilingual_str reload_error;
+    CTxMemPool reload_pool{MemPoolOptionsForTest(m_node), reload_error};
+    BOOST_REQUIRE(reload_error.empty());
+    BOOST_REQUIRE(node::LoadMempool(reload_pool, mempool_path, m_node.chainman->ActiveChainstate(), {}));
+    BOOST_CHECK_EQUAL(reload_pool.size(), 0U);
+    BOOST_CHECK(reload_pool.GetUnbroadcastTxs().empty());
+
+    const auto deltas{reload_pool.GetPrioritisedTransactions()};
+    BOOST_REQUIRE_EQUAL(deltas.size(), 1U);
+    BOOST_CHECK(deltas.front().txid == missing_txid);
+    BOOST_CHECK(!deltas.front().in_mempool);
+    BOOST_CHECK_EQUAL(deltas.front().delta, fee_delta);
+    BOOST_CHECK(!deltas.front().modified_fee.has_value());
+
+    fs::remove(mempool_path);
+    fs::remove(mempool_path + ".new");
+}
+
 BOOST_AUTO_TEST_CASE(MempoolLoadSkipsDisabledPrioritisation)
 {
     CTxMemPool& pool{*Assert(m_node.mempool)};
