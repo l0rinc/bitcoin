@@ -158,7 +158,12 @@ Other missing/adapted Knots pieces found during this pass:
   synced-past-height rejection. `rpc_getblockfrompeer.py` covers the
   same-peer duplicate request, the no-header request, a pruned node fetching a
   block it has not seen, and a pruned node fetching a block it has not synced
-  past.
+  past. The same RPC compatibility pass confirmed Knots' legacy `nodeid`
+  named-argument alias for `peer_id` (`ef1c43e51d`) is present in the port and
+  absent from current Core, including bitcoin-cli's named-argument JSON
+  conversion entry. This is CLI/RPC compatibility for older Knots callers, not
+  consensus behavior or network hardening; `rpc_getblockfrompeer.py` now covers
+  both the server-side `nodeid` alias and the `bitcoin-cli -named` conversion.
 - The script verification thread-control review found a port omission in
   Knots' `scriptthreadsinfo` / `setscriptthreadsenabled` RPC surface
   (`daccde46e4` plus doc/fuzz follow-ups): the RPCs were registered and
@@ -2942,13 +2947,18 @@ Source/manifest checks:
 - `git show origin/master:src/rpc/blockchain.cpp | sed -n '524,585p'`,
   `git -C ../knots show 29.x-knots:src/rpc/blockchain.cpp | sed -n
   '499,545p'`, `sed -n '550,600p' src/rpc/blockchain.cpp`,
+  `git show origin/master:src/rpc/client.cpp | rg -n
+  "getblockfrompeer|peer_id|nodeid" -C 3`,
+  `git -C ../knots show 29.x-knots:src/rpc/client.cpp | rg -n
+  "getblockfrompeer|peer_id|nodeid" -C 3`,
   `git show origin/master:src/net_processing.cpp | sed -n '1987,2010p'`,
   `git -C ../knots show 29.x-knots:src/net_processing.cpp | sed -n
   '1888,1910p'`, and `sed -n '2055,2085p' src/net_processing.cpp` show
   current Core still requires `getblockfrompeer` callers to have the header and
-  drops prior in-flight state before same-peer duplicate detection, while Knots
-  and the port can fetch by hash without a known header and preserve the
-  duplicate same-peer error.
+  drops prior in-flight state before same-peer duplicate detection, and also
+  lacks Knots' `nodeid` named-argument conversion entry, while Knots and the
+  port can fetch by hash without a known header, preserve the duplicate
+  same-peer error, and accept the `nodeid` alias.
 - `git log origin/master --follow --oneline -- <remaining source-looking
   missing path>` for old `core_write`, fee, libevent, orphanage, transaction
   identifier, epochguard, and test-helper paths
@@ -3828,6 +3838,14 @@ Functional tests:
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_review_port
   --portseed=26455`
+- `python3 test/functional/rpc_getblockfrompeer.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_nodeid_alias_port
+  --portseed=32696`
+- `python3 test/functional/rpc_getblockfrompeer.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_nodeid_alias_knots
+  --portseed=32697`
 - `python3 test/functional/rpc_mempool_info.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile=build/test/config.ini
