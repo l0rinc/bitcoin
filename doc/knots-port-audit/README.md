@@ -1044,6 +1044,15 @@ Other missing/adapted Knots pieces found during this pass:
   `-norpcauth` is inherited from actual Knots and was not introduced by the
   port; the test asserts the current Knots behavior around config-file auth
   restoration.
+- The JSON-RPC compatibility review confirmed Knots' nonstandard-version
+  tolerance (`6cada87972`) is present in the port and absent from current Core:
+  only exact string `"2.0"` selects JSON-RPC 2.0 response semantics, while
+  numeric `jsonrpc` values and unknown strings such as `"3.0"` are treated as
+  legacy JSON-RPC 1.x requests. Current Core rejects those malformed markers
+  with HTTP 400 / `RPC_INVALID_REQUEST`. This is RPC client compatibility, not
+  consensus behavior or an auth bypass. `interface_rpc.py` covers numeric
+  `"1.0"` compatibility, unknown-version batch requests, and direct numeric or
+  unknown `jsonrpc` HTTP requests; the same test passes on unmodified Knots.
 - The CJDNS addnode follow-up confirmed current Core already has the
   `GetAddedNodeInfo()` CJDNS conversion from `f8fec8f26d`, while Knots' later
   `AddNode()` duplicate detection for CJDNS addresses with alternate ports
@@ -3652,6 +3661,13 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_signer_warning`
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_users_cookie_replace`
+- `python3 test/functional/interface_rpc.py --configfile=build/test/config.ini
+  --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_interface_rpc_weirdversions_port
+  --portseed=32692`
+- `python3 test/functional/interface_rpc.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_interface_rpc_weirdversions_knots
+  --portseed=32693`
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_users_auth_review`
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini
