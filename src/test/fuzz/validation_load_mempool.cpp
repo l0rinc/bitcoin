@@ -174,6 +174,15 @@ std::vector<std::byte> ReadFileBytes(const fs::path& path)
     return bytes;
 }
 
+uint64_t ReadDumpVersion(const fs::path& path)
+{
+    AutoFile file{fsbridge::fopen(path, "rb")};
+    Assert(!file.IsNull());
+    uint64_t version;
+    file >> version;
+    return version;
+}
+
 void AssertFailedDumpPreservesFile(const CTxMemPool& pool, const fs::path& path, const std::vector<std::byte>& existing_bytes, fsbridge::FopenFn mockable_fopen_function = fsbridge::fopen)
 {
     fs::remove_all(path);
@@ -229,6 +238,30 @@ FUZZ_TARGET(validation_load_mempool, .init = initialize_validation_load_mempool)
     fs::remove(roundtrip_path);
     fs::remove(roundtrip_path + ".new");
     Assert(DumpMempool(pool, roundtrip_path));
+    Assert(ReadDumpVersion(roundtrip_path) == 2);
+
+    const fs::path v1_roundtrip_path{g_setup->m_args.GetDataDirBase() / "validation_load_mempool_roundtrip_v1.dat"};
+    fs::remove(v1_roundtrip_path);
+    fs::remove(v1_roundtrip_path + ".new");
+    auto v1_options{MemPoolOptionsForTest(g_setup->m_node)};
+    v1_options.persist_v1_dat = true;
+    bilingual_str v1_error;
+    CTxMemPool v1_pool{v1_options, v1_error};
+    Assert(v1_error.empty());
+    chainstate.SetMempool(&v1_pool);
+    Assert(LoadMempool(v1_pool, roundtrip_path, chainstate, {}));
+    AssertMempoolPersistContracts(v1_pool, chainstate);
+    AssertSameMempoolSnapshot(pool, v1_pool);
+    Assert(DumpMempool(v1_pool, v1_roundtrip_path));
+    Assert(ReadDumpVersion(v1_roundtrip_path) == 1);
+
+    bilingual_str v1_reload_error;
+    CTxMemPool v1_reload_pool{MemPoolOptionsForTest(g_setup->m_node), v1_reload_error};
+    Assert(v1_reload_error.empty());
+    chainstate.SetMempool(&v1_reload_pool);
+    Assert(LoadMempool(v1_reload_pool, v1_roundtrip_path, chainstate, {}));
+    AssertMempoolPersistContracts(v1_reload_pool, chainstate);
+    AssertSameMempoolSnapshot(pool, v1_reload_pool);
 
     bilingual_str roundtrip_error;
     CTxMemPool roundtrip_pool{MemPoolOptionsForTest(g_setup->m_node), roundtrip_error};
@@ -281,6 +314,8 @@ FUZZ_TARGET(validation_load_mempool, .init = initialize_validation_load_mempool)
 
     fs::remove(roundtrip_path);
     fs::remove(roundtrip_path + ".new");
+    fs::remove(v1_roundtrip_path);
+    fs::remove(v1_roundtrip_path + ".new");
     fs::remove_all(atomic_path);
     fs::remove_all(atomic_path + ".new");
 }
