@@ -1362,8 +1362,9 @@ Other missing/adapted Knots pieces found during this pass:
   histogram surface. `policyestimator_tests` and `mempool_fee_histogram.py`
   pass with the ported code; the functional test now includes the historical
   edge shape where the mempool has a transaction below the only requested
-  histogram floor. A same-test run against unmodified Knots confirms the
-  fee-histogram behavior is inherited rather than port-created.
+  histogram floor. Refreshed paired `mempool_fee_histogram.py` runs passed
+  against both the port and unmodified Knots, confirming the fee-histogram
+  behavior is inherited rather than port-created.
 - The mempool/orphan IBD performance review checked Knots' `8990a80618`
   `removeForBlock` empty-map guard and `fc5361a515` orphanage empty-pool
   guard. Both are present in the port and current Core master, so they are not
@@ -3934,6 +3935,13 @@ Builds:
   ../knots/src/rpc/blockchain.cpp` shows the Knots RPC surface and the port's
   adapted hidden RPC caller both handle `nullptr` by returning RPC
   `block file not found`.
+- `git grep -n -E
+  "with_fee_histogram|fee_histogram|for \\(size_t i = floors.size\\(\\); i > 0;\\)|--i;|info/with_fee_histogram"
+  HEAD knots/29.x-knots origin/master -- src/rpc/mempool.cpp
+  src/rpc/mempool.h src/rpc/client.cpp src/rest.cpp
+  test/functional/mempool_fee_histogram.py` shows the histogram RPC/REST
+  surface and safe descending-loop form in Knots and the port, with no
+  matching `fee_histogram` surface in current Core.
 - `sed -n '20,95p' src/wallet/db.cpp && sed -n '430,452p'
   src/util/fs_helpers.cpp && sed -n '95,116p' src/wallet/test/wallet_tests.cpp`
 - `git show origin/master:src/wallet/db.cpp | sed -n '20,95p' &&
@@ -4997,6 +5005,14 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_mempool_fee_histogram_underflow_knots
   --portseed=32651`
+- `python3 test/functional/mempool_fee_histogram.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_fee_histogram_port_refresh2
+  --portseed=42570`
+- `python3 test/functional/mempool_fee_histogram.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_fee_histogram_knots_refresh2
+  --portseed=42571`
 - `build/bin/test_bitcoin --run_test=mempool_tests --catch_system_error=no
   --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=orphanage_tests --catch_system_error=no
