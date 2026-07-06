@@ -2178,11 +2178,12 @@ under different commits. They are not all proven exploitable.
   more useful for reconstruction without leaving memory use unbounded by large
   rejected/replaced transactions. This is P2P memory/resource hardening, not
   consensus behavior. The port's focused functional test covers count
-  disabling, count wraparound, zero size, 1 MB versus 2 MB size-limit eviction,
-  exact-boundary eviction, 0.1 MB fractional parsing, and a single transaction
-  larger than the configured limit; the same test passes against unmodified
-  Knots. `peerman_tests/peerman_args_block_reconstruction_extra_txn` covers the
-  parser conversion for fractional megabytes and negative values.
+  disabling, count wraparound, policy-rejected transactions being available to
+  compact-block reconstruction, zero size, 1 MB versus 2 MB size-limit
+  eviction, exact-boundary eviction, 0.1 MB fractional parsing, and a single
+  transaction larger than the configured limit; the same test passes against
+  unmodified Knots. `peerman_tests/peerman_args_block_reconstruction_extra_txn`
+  covers the parser conversion for fractional megabytes and negative values.
 
 - Configurable orphan-transaction count cap:
   Knots' `-maxorphantx` option is present in the port and absent from current
@@ -3090,6 +3091,11 @@ Source/manifest checks:
   the 100-entry count default, while actual Knots and the port have the
   32,768-entry default, 10 MB default size cap, fractional-MB parser, and
   functional coverage.
+- `git grep -n
+  "blockreconstructionextratxn|blockreconstructionextratxn_memusage|max_extra_txs_size|DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN"
+  HEAD knots/29.x-knots origin/master -- src/init.cpp src/net_processing.cpp
+  src/net_processing.h src/node/peerman_args.cpp src/test/peerman_tests.cpp
+  test/functional/p2p_compactblocks_extratxs.py`
 - `git show origin/master:src/init.cpp origin/master:src/node/peerman_args.cpp
   2>/dev/null | rg -n "maxorphantx|max_orphan_txs"` returns no matches, while
   `rg -n "maxorphantx|max_orphan_txs|DEFAULT_MAX_ORPHAN_TRANSACTIONS"
@@ -4476,6 +4482,16 @@ Functional tests:
   --portseed=32621`
 - `build/bin/test_bitcoin --run_test=peerman_tests/peerman_args_block_reconstruction_extra_txn
   --catch_system_errors=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=peerman_tests/peerman_args_block_reconstruction_extra_txn
+  --catch_system_error=no --log_level=error --report_level=short`
+- `python3 test/functional/p2p_compactblocks_extratxs.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_port_refresh
+  --portseed=42210`
+- `python3 test/functional/p2p_compactblocks_extratxs.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_knots_refresh
+  --portseed=42211`
 - `python3 test/functional/p2p_maxorphantx.py
   --configfile=build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_port_3
@@ -4753,6 +4769,10 @@ Functional tests:
   `python3 test/functional/p2p_compactblocks_extratxs.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_size_knots --portseed=32621`
   passed on unmodified Knots, including `-blockreconstructionextratxnsize`
   zero, fractional, boundary, and eviction behavior.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_compactblocks_extratxs.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_knots_refresh --portseed=42211`
+  passed on unmodified Knots, including rejected-transaction availability in
+  the extra pool, count wraparound, and size-cap eviction behavior.
 - Original Knots cross-check:
   `python3 test/functional/mempool_minrelay.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_knots --portseed=32631`
   passed on unmodified Knots, confirming that `-minrelaymaturity=2` and
