@@ -166,6 +166,7 @@ public:
     void shrink_to_fit()
     {
         pre_vector.shrink_to_fit();
+        assert(pre_vector.capacity() == std::max<size_t>(static_cast<size_t>(N), pre_vector.size()));
     }
 
     void swap() noexcept
