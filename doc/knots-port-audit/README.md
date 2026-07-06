@@ -2023,7 +2023,9 @@ under different commits. They are not all proven exploitable.
   and actual Knots both carry the skip list in `ListDatabases(...)`, while
   current Core's corresponding scanner still has no node-data skip list. The
   fresh `wallet_multiwallet.py` run covers this by placing a fake wallet marker
-  under `blocks/` and proving `listwalletdir` ignores it.
+  under `blocks/` and proving `listwalletdir` ignores it. A refreshed manual
+  unmodified-Knots check with the same fake SQLite marker shape also returns
+  only the ordinary marker, confirming the skip-list behavior is inherited.
 
 - Wallet failed-cleanup directory hardening:
   `0388bfc6e`
@@ -3021,6 +3023,12 @@ Source/manifest checks:
   `git -C ../knots show 29.x-knots:src/wallet/db.cpp | sed -n '20,75p'`
   show that current Core lacks Knots' `ignore_paths` skip list in
   `ListDatabases(...)`.
+- `rg -n "ignore_paths|blocks|chainstate|walletdir|skipped_wallet|ListDatabases"
+  src/wallet/db.cpp test/functional/wallet_multiwallet.py
+  ../knots/src/wallet/db.cpp ../knots/test/functional/wallet_multiwallet.py`
+  shows the port and actual Knots source carry the wallet directory skip list,
+  while the port's current functional test adds the fake `blocks/skipped_wallet`
+  regression check.
 - `git show --stat --patch --minimal dbca0cc4d3e 5689ba8fde b1378e3f48
   24ffe06d2f`, `rg -n
   "SEQ_ID_BEST_CHAIN_FROM_DISK|SEQ_ID_INIT_FROM_DISK|feature_chain_tiebreaks|setBlockIndexCandidates|nSequenceId"
@@ -4856,6 +4864,16 @@ Functional tests:
   `../knots/build-repro/bin/bitcoin-cli -regtest
   -datadir=/mnt/my_storage/tmp_knots_walletdir_skip_manual_control
   listwalletdir`; actual Knots returned only `ordinary_sqlite_marker`.
+- Refreshed manual Knots walletdir check: start
+  `../knots/build-repro/bin/bitcoind -regtest -daemonwait
+  -datadir=/mnt/my_storage/tmp_knots_walletdir_skip_manual_refresh_42323
+  -walletdir=/mnt/my_storage/tmp_knots_walletdir_skip_manual_refresh_42323/regtest
+  -nowallet`, place SQLite-looking `wallet.dat` markers under
+  `ordinary_sqlite_marker` and `blocks/skipped_wallet`, then
+  `../knots/build-repro/bin/bitcoin-cli -regtest
+  -datadir=/mnt/my_storage/tmp_knots_walletdir_skip_manual_refresh_42323
+  listwalletdir`; actual Knots again returned only
+  `ordinary_sqlite_marker`.
 - `python3 test/functional/wallet_backup.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_send.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_send_fee_mode`
