@@ -1075,6 +1075,13 @@ Other missing/adapted Knots pieces found during this pass:
   it in the peer's `permissions` array. The port now reports the permission as
   `e53bce279f`, with unit coverage for `NetPermissionFlags::All` and
   functional coverage in `p2p_eviction.py` and `p2p_permissions.py`.
+  Follow-up review of the temporary Knots/Core cap
+  (`2b3e19e9e8`) and Knots' later removal (`a2225405a5`) confirmed final
+  Knots intentionally has no 8-peer cap on forced inbound replacements. The
+  port matches that behavior, and `p2p_eviction.py` now includes a dedicated
+  `test_forceinbound_nocap` method that creates nine forced inbound peers
+  while preserving the stronger default permission-reporting assertions for
+  the port.
 - The `getpeerinfo` metadata review confirmed Knots' `last_block_announcement`
   (`a4e4e17feb`) and optional per-peer `cpu_load` (`9084ea96ac`) fields are
   present in the port and absent from current Core. These are diagnostic RPC
@@ -1606,6 +1613,21 @@ Result on original Knots:
 This was not introduced by the port. The port now includes `forceinbound` in
 `NetPermissions::ToStrings(...)`, so RPC output matches the accepted permission
 and help text.
+
+The related no-cap behavior was also confirmed on unmodified Knots with the
+permission assertion disabled:
+
+```text
+python3 /mnt/my_storage/bitcoin/test/functional/p2p_eviction.py \
+  --configfile /mnt/my_storage/knots/build-repro/test/config.ini \
+  --cachedir /mnt/my_storage/bitcoin/test/cache \
+  --test_methods test_forceinbound_nocap \
+  --tmpdir=/mnt/my_storage/tmp_knots_p2p_eviction_forceinbound_nocap_method \
+  --portseed=32663
+```
+
+Result on original Knots: passed; nine ForceInbound peers remained connected,
+so the no-cap behavior was not introduced by the port.
 
 The external signer duplicate-fingerprint enumeration bug was confirmed on an
 unmodified local build of Knots `29.x-knots` with the mock signer returning
@@ -3376,6 +3398,10 @@ Functional tests:
 - `python3 test/functional/p2p_eviction.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_p2p_eviction_forceinbound_review_port
   --portseed=26436`
+- `python3 test/functional/p2p_eviction.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_eviction_forceinbound_nocap_port2
+  --portseed=32662`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_onion_whitelist`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
@@ -3876,6 +3902,10 @@ Functional tests:
   `python3 /mnt/my_storage/bitcoin/test/functional/p2p_eviction.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_eviction_forceinbound_repro`
   (fails on unmodified Knots because the ForceInbound peer's
   `getpeerinfo.permissions` array omits `forceinbound`)
+- Original Knots cross-check:
+  `python3 test/functional/p2p_eviction.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --test_methods test_forceinbound_nocap --tmpdir=/mnt/my_storage/tmp_knots_p2p_eviction_forceinbound_nocap_method --portseed=32663`
+  passed on unmodified Knots, confirming final Knots also allows more than
+  eight forced inbound replacements.
 - Original Knots cross-check:
   `python3 ../knots/test/functional/p2p_permissions.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_permissions_implicit_addr_knots_native --portseed=32612`
   passed on unmodified Knots, including Knots' native expectations that bare
