@@ -299,17 +299,28 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_part_error, TestChain100Setup)
 BOOST_FIXTURE_TEST_CASE(blockmanager_readblock_hash_mismatch, TestingSetup)
 {
     CBlockIndex index;
+    FlatFilePos tip_block_pos;
+    uint256 tip_hash;
     {
         LOCK(cs_main);
         const auto tip{m_node.chainman->ActiveTip()};
         index.nStatus = tip->nStatus;
         index.nDataPos = tip->nDataPos;
         index.phashBlock = &uint256::ONE; // mismatched block hash
+        tip_block_pos = tip->GetBlockPos();
+        tip_hash = tip->GetBlockHash();
     }
 
-    ASSERT_DEBUG_LOG("GetHash() doesn't match index");
     CBlock block;
-    BOOST_CHECK(!m_node.chainman->m_blockman.ReadBlock(block, index));
+    BOOST_CHECK(m_node.chainman->m_blockman.ReadBlock(block, tip_block_pos, tip_hash));
+    {
+        ASSERT_DEBUG_LOG("GetHash() doesn't match index");
+        BOOST_CHECK(!m_node.chainman->m_blockman.ReadBlock(block, tip_block_pos, uint256::ONE));
+    }
+    {
+        ASSERT_DEBUG_LOG("GetHash() doesn't match index");
+        BOOST_CHECK(!m_node.chainman->m_blockman.ReadBlock(block, index));
+    }
 }
 
 BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
