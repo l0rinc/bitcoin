@@ -1544,6 +1544,18 @@ Other missing/adapted Knots pieces found during this pass:
   when `-mempoolreplacement=fee,-optin` makes the local policy full-RBF. Current
   Core master no longer has the service bit at all. This is network-policy
   signaling, not consensus behavior.
+- The RBF policy-option review confirmed Knots' `-mempoolfullrbf` compatibility
+  option and richer `-mempoolreplacement` policy option are present in the port,
+  while current Core master no longer exposes either option in `init.cpp` or
+  `node/mempool_args.cpp`. Knots defaults to full-RBF (`rbf_policy=always`) but
+  preserves operator switches for opt-in-only replacement and for disabling RBF
+  entirely. One surprising compatibility branch is also preserved:
+  `-mempoolreplacement=0 -mempoolfullrbf=1` emits a warning and resolves to
+  `rbf_policy=never`, because the explicit `mempoolreplacement` setting
+  overrides the older full-RBF boolean. `mempool_rbf_options.py` now pins the
+  default, opt-in, never, explicit-optin, and contradictory-option outcomes
+  against both the port and unmodified Knots. This is relay policy/config
+  behavior, not consensus behavior.
 - The same RBF pass found a real port omission in the anti-DoS replacement
   limit. Current Core's cluster-mempool RBF code limits replacements by the
   number of affected clusters; actual Knots `29.x-knots` also keeps the older
@@ -3162,6 +3174,11 @@ Source/manifest checks:
   origin/master:src/bitcoin-cli.cpp | rg -n
   "NODE_REPLACE_BY_FEE|REPLACE_BY_FEE|rbf_policy == RBFPolicy::Always|g_local_services.*REPLACE|expected_services"`
   shows current Core no longer carries the RBF service bit.
+- `git show origin/master:src/kernel/mempool_options.h
+  origin/master:src/node/mempool_args.cpp origin/master:src/init.cpp | rg -n
+  "DEFAULT_MEMPOOL_RBF_POLICY|mempoolfullrbf|mempoolreplacement|rbf_policy|RBFPolicy"`
+  returned no matches, confirming current Core no longer exposes the Knots RBF
+  policy options in those source paths.
 - `git -C ../knots show 29.x-knots:src/init.cpp 29.x-knots:src/protocol.h
   29.x-knots:src/protocol.cpp 29.x-knots:test/functional/feature_rbf.py
   29.x-knots:test/functional/p2p_node_network_limited.py
@@ -4652,6 +4669,13 @@ Functional tests:
   passed on unmodified Knots with the added `-uaspoof=0` and `-uaspoof=1`
   assertions. The corresponding port run
   `python3 test/functional/feature_uacomment.py --configfile=build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_uacomment_port --portseed=32920`
+  also passed.
+- Original Knots cross-check:
+  `python3 test/functional/mempool_rbf_options.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_mempool_rbf_options_knots --portseed=32951`
+  passed on unmodified Knots, including the
+  `-mempoolreplacement=0 -mempoolfullrbf=1` warning/`rbf_policy=never`
+  branch. The corresponding port run
+  `python3 test/functional/mempool_rbf_options.py --configfile=build/test/config.ini --tmpdir=/mnt/my_storage/tmp_mempool_rbf_options_port --portseed=32950`
   also passed.
 - Original Knots cross-check:
   `python3 test/functional/rpc_mempoolstats.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_knots --portseed=32932`
