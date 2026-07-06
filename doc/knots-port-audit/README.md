@@ -1168,6 +1168,16 @@ Other missing/adapted Knots pieces found during this pass:
   duplicate-`blocktxn` functional coverage by removing a stale duplicate test
   definition and dropped a current-Core disconnect expectation that conflicts
   with Knots' invalid-block punishment relaxation.
+- The compact-block witness-mutation review confirmed Knots' `FillBlock`
+  mutation check (`9b95ab5e9d`, from Core PR 32646) is present in the port and
+  already present in current Core, so it is not a Core-missing hardening item.
+  The new `p2p_compactblocks.py` `test_witness_mutated_blocktxn` method covers
+  the consensus-adjacent relay path directly: a compact block omits the
+  coinbase, the peer replies with a `blocktxn` coinbase whose txid merkle root
+  still matches but whose witness commitment is mutated, reconstruction fails
+  with full-block fallback, and the later valid full block is still accepted.
+  The same focused method passes on unmodified Knots, confirming this behavior
+  was not introduced by the port.
 - The v2-transport privacy review confirmed Knots' randomized Tor
   stream-isolation credential prefix (`10397d85ca`) is already present in
   current Core under different commits, so it is not a Core-missing fix. The
@@ -3757,6 +3767,14 @@ Functional tests:
   --catch_system_errors=no --log_level=error --report_level=short`
 - `python3 test/functional/p2p_compactblocks.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_compactblocks_header_guard_final`
+- `python3 test/functional/p2p_compactblocks.py --configfile=build/test/config.ini
+  --cachedir=test/cache --test_methods test_witness_mutated_blocktxn
+  --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_witness_mutation_port3
+  --portseed=32676`
+- `python3 test/functional/p2p_compactblocks.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_witness_mutation_full_port4
+  --portseed=32678`
 - `python3 test/functional/p2p_invalid_block.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_p2p_invalid_block_inbound_punish2`
 - `test/functional/p2p_invalid_block.py --configfile=build/test/config.ini
@@ -3999,6 +4017,11 @@ Functional tests:
   reached and passed the repeated-`blocktxn` section on unmodified Knots,
   logging `previous compact block reconstruction attempt failed`, then failed
   later on an unrelated invalid-`sendcmpct` disconnect expectation.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_compactblocks.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --test_methods test_witness_mutated_blocktxn --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_witness_mutation_knots2 --portseed=32677`
+  passed on unmodified Knots, confirming the witness-mutated `blocktxn`
+  fallback is inherited from Knots/current Core rather than introduced by the
+  port.
 - Original Knots cross-check:
   `python3 test/functional/p2p_invalid_block.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_invalid_block_inbound_punish`
   passed on unmodified Knots after removing the automatic `noban` whitelist,
