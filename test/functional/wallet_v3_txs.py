@@ -35,6 +35,8 @@ from test_framework.mempool_util import (
     TRUC_CHILD_MAX_VSIZE,
 )
 
+TRUC_WEIGHT_TEST_HEADROOM = 70
+
 # sweep alice and bob's wallets and clear the mempool
 def cleanup(func):
     def wrapper(self, *args):
@@ -70,6 +72,7 @@ class WalletV3Test(BitcoinTestFramework):
         getcontext().prec=10
         self.num_nodes = 1
         self.setup_clean_chain = True
+        self.extra_args = [["-mempooltruc=enforce"]]
 
     def send_tx(self, from_wallet, inputs, outputs, version):
         raw_tx = from_wallet.createrawtransaction(inputs=inputs, outputs=outputs, version=version)
@@ -365,7 +368,7 @@ class WalletV3Test(BitcoinTestFramework):
         tx = CTransaction()
         tx.version = 3 # make this a truc tx
         # increase tx weight almost to the max truc size
-        self.bulk_tx(tx, 5, TRUC_MAX_VSIZE - 100)
+        self.bulk_tx(tx, 5, TRUC_MAX_VSIZE - TRUC_WEIGHT_TEST_HEADROOM)
 
         assert_raises_rpc_error(
             -4,
@@ -388,7 +391,7 @@ class WalletV3Test(BitcoinTestFramework):
         tx = CTransaction()
         tx.version = 3
 
-        self.bulk_tx(tx, 5, TRUC_CHILD_MAX_VSIZE - 100)
+        self.bulk_tx(tx, 5, TRUC_CHILD_MAX_VSIZE - TRUC_WEIGHT_TEST_HEADROOM)
 
         assert_raises_rpc_error(
             -4,
