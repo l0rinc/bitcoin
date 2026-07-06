@@ -1117,6 +1117,14 @@ Other missing/adapted Knots pieces found during this pass:
   `wallet_create_tx.py` and `wallet_bumpfee.py` cover successful setting,
   unsetting, rounding, wallet min fee, relay min fee, wallet max fee, and
   replacement-fee interactions.
+- The wallet fee-introspection review confirmed Knots'
+  `getwalletinfo.mintxfee` field (`d7ee746986`) is present in the port and
+  absent from current Core master. Knots also uses the field in
+  `wallet_sweepprivkeys.py` (`d6e91a51e8`) to choose a test feerate above both
+  relay fee and wallet min fee. This is RPC/wallet fee visibility and test
+  robustness, not consensus behavior or remote hardening. `wallet_bumpfee.py`
+  now asserts a configured non-default `-mintxfee` is reported by
+  `getwalletinfo`, and `wallet_sweepprivkeys.py` was rerun against the port.
 - The descriptor-wallet `importaddress` review confirmed Knots'
   descriptor-compatible behavior (`be3ae51ece`) is present in the port. The
   restored `wallet_descriptor.py` coverage needed current-Core test-framework
@@ -5975,6 +5983,10 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_create_tx_setfeerate`
 - `python3 test/functional/wallet_bumpfee.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_bumpfee_setfeerate`
+- `python3 test/functional/wallet_bumpfee.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_bumpfee_mintxfee_refresh
+  --portseed=42742`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_fundrawtransaction_witness_options_review`
@@ -6057,6 +6069,10 @@ Functional tests:
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_wallet_sweepprivkeys_port_witness
   --portseed=43801`
+- `python3 test/functional/wallet_sweepprivkeys.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_sweepprivkeys_mintxfee_refresh
+  --portseed=42743`
 - `python3 ../knots/test/functional/wallet_sweepprivkeys.py --configfile
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_wallet_sweepprivkeys_knots_native

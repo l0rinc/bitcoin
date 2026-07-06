@@ -93,6 +93,10 @@ class BumpFeeTest(BitcoinTestFramework):
         peer_node, rbf_node = self.nodes
         rbf_node_address = rbf_node.getnewaddress()
 
+        self.log.info("Test getwalletinfo reports configured wallet min tx fee")
+        for node in self.nodes:
+            assert_equal(node.getwalletinfo()["mintxfee"], Decimal("0.00002000"))
+
         # fund rbf node with 10 coins of 0.001 btc (100,000 satoshis)
         self.log.info("Mining blocks...")
         self.generate(peer_node, 110)
