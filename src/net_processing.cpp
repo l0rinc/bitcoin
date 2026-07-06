@@ -271,6 +271,9 @@ struct Peer {
     /** Set to true once initial VERSION message was sent (only relevant for outbound peers). */
     bool m_outbound_version_message_sent GUARDED_BY(NetEventsInterface::g_msgproc_mutex){false};
 
+    /** This peer's reported block height when we connected */
+    std::atomic<int> m_starting_height{-1};
+
     /** The pong reply we're expecting, or 0 if no pong expected. */
     std::atomic<uint64_t> m_ping_nonce_sent{0};
     /** When the last ping was sent, or 0 if no ping was ever sent */
@@ -1861,6 +1864,7 @@ bool PeerManagerImpl::GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) c
 
     PeerRef peer = GetPeerRef(nodeid);
     if (peer == nullptr) return false;
+    stats.m_starting_height = peer->m_starting_height.load();
     stats.their_services = peer->m_their_services;
     // It is common for nodes with good ping times to suddenly become lagged,
     // due to a new block arriving or other large transfer.
@@ -3797,6 +3801,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         pfrom.nVersion = nVersion;
 
         pfrom.m_has_all_wanted_services = HasAllDesirableServiceFlags(nServices);
+        peer.m_starting_height = starting_height;
         peer.m_their_services = nServices;
         pfrom.SetAddrLocal(addrMe);
 

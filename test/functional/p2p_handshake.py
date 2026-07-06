@@ -22,6 +22,7 @@ from test_framework.messages import (
 )
 from test_framework.p2p import (
     P2P_SERVICES,
+    P2P_SUBVERSION,
     P2P_VERSION,
     P2P_VERSION_RELAY,
     P2PInterface,
@@ -107,6 +108,22 @@ class P2PHandshakeTest(BitcoinTestFramework):
                 assert_equal((services & desirable_service_flags), desirable_service_flags)
                 self.add_outbound_connection(node, conn_type, services, wait_for_disconnect=False)
 
+    def test_startingheight(self, node):
+        for fake_startheight in [-2**31, -1, 0, 1000000, 2**31 - 1]:
+            peer = node.add_p2p_connection(P2PInterface(), send_version=False, wait_for_verack=False)
+            version = msg_version()
+            version.nVersion = P2P_VERSION
+            version.strSubVer = P2P_SUBVERSION
+            version.nServices = P2P_SERVICES
+            version.nStartingHeight = fake_startheight
+            peer.send_without_ping(version)
+            peer.wait_for_verack()
+            self.wait_until(lambda: len(node.getpeerinfo()) == 1)
+            assert_equal(node.getpeerinfo()[0]["startingheight"], fake_startheight)
+            peer.peer_disconnect()
+            peer.wait_for_disconnect()
+            self.wait_until(lambda: len(node.getpeerinfo()) == 0)
+
     def generate_at_mocktime(self, time):
         self.nodes[0].setmocktime(time)
         self.generate(self.nodes[0], 1, sync_fun=self.no_op)
@@ -136,6 +153,9 @@ class P2PHandshakeTest(BitcoinTestFramework):
             ua_peer.sync_with_ping()
         assert_equal(node.getpeerinfo()[0]["subver"], unsafe_subver)
         node.disconnect_p2ps()
+
+        self.log.info("Check that peer's announced starting height is remembered")
+        self.test_startingheight(node)
 
         self.log.info("Check that peers lacking base service flags are disconnected")
         # These should always be disconnected regardless of BIP-110 counter

@@ -62,6 +62,7 @@ static constexpr int DEFAULT_MAXSTALEOUTBOUND{8};
 struct CNodeStateStats {
     int nSyncHeight = -1;
     int nCommonHeight = -1;
+    int m_starting_height = -1;
     NodeClock::duration m_ping_wait;
     std::vector<int> vHeightInFlight;
     bool m_relay_txs;

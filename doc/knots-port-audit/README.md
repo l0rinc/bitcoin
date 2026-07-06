@@ -700,6 +700,18 @@ Other missing/adapted Knots pieces found during this pass:
   `Create new receiving address` wording while removing the obsolete signing
   sentence. Actual Knots keeps `Request payment`; the port now does too. This
   is GUI text parity, not consensus, network behavior, or security hardening.
+- The peers-tab/RPC exact-patch review found the port had inherited current
+  Core's removal of `getpeerinfo.startingheight` (`b267efcdaf`, after the
+  deprecation in `4ce3f4a265`) even though current Knots still exposes the
+  field and the GUI `Starting Block` peer-detail row. This was a port
+  compatibility miss, not an original Knots defect: unmodified Knots still
+  stores the peer's VERSION `nStartingHeight`, reports it through
+  `getpeerinfo`, and has functional coverage for remembering arbitrary signed
+  32-bit advertised heights. The port now restores the Knots runtime field,
+  GUI row, and focused functional assertions. This is peer-observability
+  compatibility, not consensus behavior or remote hardening; Core removed the
+  field because the peer-reported value is untrusted and no longer used by
+  sync logic.
 - The same Qt source pass found port-introduced GUI compile drift, not original
   Knots defects: `src/qt/transactionfilterproxy.cpp` had duplicated naked
   filter-change fragments after the current-Core Qt 6.10 modernization, and
@@ -4469,12 +4481,15 @@ Builds:
 - `cmake --build build --target bitcoinconsensus -j2`
 - `build/bin/test_bitcoin --run_test=script_tests --catch_system_error=no
   --log_level=warning --report_level=short`
+- `build/bin/test_bitcoin --run_test=rpc_tests --catch_system_error=no
+  --log_level=error --report_level=short`
 - `git diff --check`
 - `cmake -LA -N build | rg -n
   "BUILD_GUI|BUILD_GUI_TESTS|WITH_QT|ENABLE_WALLET"` reported
   `BUILD_GUI=OFF`, `ENABLE_WALLET=ON`, and `WITH_QT_VERSION=5`
 - `build/bin/bitcoind -help | sed -n '147,160p'`
 - `cmake --build build --target test_bitcoin -j2`
+- `cmake --build build --target bitcoind test_bitcoin -j4`
 - `cmake --build build --target bitcoin-qt -j4` failed with
   `ninja: error: unknown target 'bitcoin-qt'`
 - `cmake --build build --target test_bitcoin-qt -j4` failed with
@@ -4493,6 +4508,8 @@ Builds:
   src/qt/forms/receivecoinsdialog.ui` shows the receiving-address explanatory
   text now matches Knots' `Request payment` wording instead of current Core's
   older receive-button name.
+- `python3 -c "import xml.etree.ElementTree as ET;
+  ET.parse('src/qt/forms/debugwindow.ui')"`
 - `rg -n "class PlainCopyTextEdit" src/qt/rpcconsole.h` returned a single
   class definition
 - `nl -ba src/qt/transactionfilterproxy.cpp | sed -n '51,127p'`
@@ -5304,6 +5321,14 @@ Functional tests:
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_p2p_handshake_cleansubver_port
   --portseed=42170`
+- `python3 test/functional/p2p_handshake.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_startingheight2
+  --portseed=44822`
+- `python3 ../knots/test/functional/p2p_handshake.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=../knots/test/cache
+  --tmpdir=/mnt/my_storage/tmp_knots_p2p_handshake_startingheight
+  --portseed=44823`
 - `python3 test/functional/feature_logging.py --configfile
   build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_logging_peeraddr
   --portseed=27501`
@@ -5475,6 +5500,14 @@ Functional tests:
   --portseed=42481`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_cjdns_addnode_3`
+- `python3 test/functional/rpc_net.py --configfile build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_startingheight
+  --portseed=44821`
+- `python3 ../knots/test/functional/rpc_net.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=../knots/test/cache
+  --tmpdir=/mnt/my_storage/tmp_knots_rpc_net_startingheight
+  --portseed=44824`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --test_methods test_addnode_cjdns_duplicate
   --tmpdir=/mnt/my_storage/tmp_rpc_net_cjdns_addnode_review_port

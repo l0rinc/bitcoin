@@ -184,6 +184,7 @@ class NetTest(BitcoinTestFramework):
                 "services": "0000000000000000",
                 "servicesnames": [],
                 "session_id": "" if not self.options.v2transport else no_version_peer.v2_state.peer['session_id'].hex(),
+                "startingheight": -1,
                 "subver": "",
                 "synced_blocks": -1,
                 "synced_headers": -1,
