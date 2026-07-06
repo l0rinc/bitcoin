@@ -47,6 +47,11 @@ static_assert(WALLET_INCREMENTAL_RELAY_FEE >= DEFAULT_INCREMENTAL_RELAY_FEE, "wa
 
 BOOST_FIXTURE_TEST_SUITE(wallet_tests, WalletTestingSetup)
 
+BOOST_AUTO_TEST_CASE(default_confirm_target_is_one_day)
+{
+    BOOST_CHECK_EQUAL(m_wallet.m_confirm_target, 144U);
+}
+
 static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)
 {
     CMutableTransaction mtx;
