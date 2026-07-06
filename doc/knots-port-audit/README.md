@@ -921,6 +921,16 @@ Other missing/adapted Knots pieces found during this pass:
   was not a remaining Core-missing fix, but it is now pinned by
   `db_tests/berkeley_ro_checks_final_page_lsn` with a minimal hand-built BDB
   fixture whose final page has a dirty LSN.
+- The later BDB parser hardening review confirmed Knots' overflow-length and
+  btree-level validation (`885a34eceb`, `4dbbeead9a`) is present in the port
+  and also present in current Core master through `1360001f43`. This is local
+  malformed-wallet/BerkeleyRO parser hardening, not consensus or network
+  behavior. The port now pins the overflow-length runtime checks with
+  `db_tests/berkeley_ro_checks_overflow_lengths`, using the same minimal
+  hand-built Berkeley DB fixture style. Current Core and unmodified Knots both
+  have the runtime checks; the port additionally carries the test-only fuzz
+  allow-list follow-up (`daeaa28b49`) for the two overflow error strings, which
+  is a fuzz-harness false-positive fix rather than a client runtime fix.
 - The high-signal exact-patch review found Knots' wallet symlink/reparse-point
   guard series (`39f48a142f`, `1f118f18c4`, `ee042e9ad6`) was still missing
   from the port. Actual Knots already carries it, while current Core master
@@ -6539,6 +6549,23 @@ Functional tests:
   --log_level=error --report_level=short` passed with 26 cases and 881
   assertions. Refreshed `tool_wallet.py` runs also passed on the port and
   unmodified Knots.
+- BDB parser overflow and btree-level validation checks:
+  `git grep -n
+  "Overflow record has an impossible length\\|Overflow record data is larger than stated size\\|BTree page has an unexpected level\\|BTree Leaf page is not at level 1"
+  HEAD origin/master knots/29.x-knots -- src/wallet/migrate.cpp
+  src/wallet/test/fuzz/wallet_bdb_parser.cpp src/wallet/test/db_tests.cpp`
+  shows the runtime checks in the port, current Core, and unmodified Knots,
+  plus the port's fuzz allow-list follow-up. Port verification passed with
+  `cmake --build build --target test_bitcoin -j4`,
+  `build/bin/test_bitcoin
+  --run_test=db_tests/berkeley_ro_checks_overflow_lengths
+  --catch_system_error=no --log_level=error --report_level=short` (10
+  assertions), and `build/bin/test_bitcoin --run_test=db_tests
+  --catch_system_error=no --log_level=error --report_level=short` (8 cases,
+  628 assertions). Unmodified Knots' native
+  `../knots/build-repro/bin/test_bitcoin --run_test=db_tests
+  --catch_system_error=no --log_level=error --report_level=short` passed with
+  6 cases and 609 assertions.
 - REST fee-estimation and dustdynamic test reconciliation:
   `python3 ../knots/test/functional/feature_fee_estimation.py
   --configfile ../knots/build-repro/test/config.ini

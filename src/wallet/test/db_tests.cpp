@@ -94,7 +94,9 @@ static constexpr uint32_t BDB_TEST_BTREE_VERSION{9};
 static constexpr uint32_t BDB_TEST_BTREE_FLAGS_SUBDB{0x20};
 static constexpr uint8_t BDB_TEST_PAGE_BTREE_META{9};
 static constexpr uint8_t BDB_TEST_PAGE_BTREE_LEAF{5};
+static constexpr uint8_t BDB_TEST_PAGE_OVERFLOW_DATA{7};
 static constexpr uint8_t BDB_TEST_RECORD_KEYDATA{1};
+static constexpr uint8_t BDB_TEST_RECORD_OVERFLOW_DATA{3};
 
 static void WriteByte(std::vector<std::byte>& data, size_t offset, uint8_t value)
 {
@@ -128,7 +130,7 @@ static void WriteBytes(std::vector<std::byte>& data, size_t offset, std::span<co
     std::copy(bytes.begin(), bytes.end(), data.begin() + offset);
 }
 
-static void WriteBdbMetaPage(std::vector<std::byte>& data, uint32_t page_num, uint32_t root_page)
+static void WriteBdbMetaPage(std::vector<std::byte>& data, uint32_t page_num, uint32_t root_page, uint32_t last_page = BDB_TEST_LAST_PAGE)
 {
     const size_t page_offset{page_num * BDB_TEST_PAGE_SIZE};
     WriteLE32(data, page_offset + 4, 1); // clean LSN
@@ -137,7 +139,7 @@ static void WriteBdbMetaPage(std::vector<std::byte>& data, uint32_t page_num, ui
     WriteLE32(data, page_offset + 16, BDB_TEST_BTREE_VERSION);
     WriteLE32(data, page_offset + 20, BDB_TEST_PAGE_SIZE);
     WriteByte(data, page_offset + 25, BDB_TEST_PAGE_BTREE_META);
-    WriteLE32(data, page_offset + 32, BDB_TEST_LAST_PAGE);
+    WriteLE32(data, page_offset + 32, last_page);
     WriteLE32(data, page_offset + 48, BDB_TEST_BTREE_FLAGS_SUBDB);
     WriteLE32(data, page_offset + 88, root_page);
 }
@@ -160,6 +162,15 @@ static void WriteBdbDataRecord(std::vector<std::byte>& data, size_t offset, std:
     WriteBytes(data, offset + 3, value);
 }
 
+static void WriteBdbOverflowRecord(std::vector<std::byte>& data, size_t offset, uint32_t page_num, uint32_t item_len)
+{
+    WriteLE16(data, offset, 0);
+    WriteByte(data, offset + 2, BDB_TEST_RECORD_OVERFLOW_DATA);
+    WriteByte(data, offset + 3, 0);
+    WriteLE32(data, offset + 4, page_num);
+    WriteLE32(data, offset + 8, item_len);
+}
+
 static std::vector<std::byte> MinimalBerkeleyROFile(bool dirty_final_page_lsn)
 {
     std::vector<std::byte> data((BDB_TEST_LAST_PAGE + 1) * BDB_TEST_PAGE_SIZE);
@@ -175,6 +186,36 @@ static std::vector<std::byte> MinimalBerkeleyROFile(bool dirty_final_page_lsn)
 
     WriteBdbMetaPage(data, /*page_num=*/2, /*root_page=*/3);
     WriteBdbPageHeader(data, /*page_num=*/3, /*entries=*/0, /*level=*/1, BDB_TEST_PAGE_BTREE_LEAF, dirty_final_page_lsn);
+
+    return data;
+}
+
+static std::vector<std::byte> BerkeleyROFileWithOverflow(uint32_t item_len, uint16_t overflow_data_len)
+{
+    static constexpr uint32_t overflow_last_page{4};
+    static constexpr uint32_t overflow_page{4};
+    std::vector<std::byte> data((overflow_last_page + 1) * BDB_TEST_PAGE_SIZE);
+
+    WriteBdbMetaPage(data, /*page_num=*/0, /*root_page=*/1, overflow_last_page);
+    WriteBdbPageHeader(data, /*page_num=*/1, /*entries=*/2, /*level=*/1, BDB_TEST_PAGE_BTREE_LEAF);
+    WriteLE16(data, BDB_TEST_PAGE_SIZE + 26, 40);
+    WriteLE16(data, BDB_TEST_PAGE_SIZE + 28, 48);
+    WriteBdbDataRecord(data, BDB_TEST_PAGE_SIZE + 40, StringBytes("main"));
+    std::vector<std::byte> main_page(4);
+    WriteBE32(main_page, 0, 2);
+    WriteBdbDataRecord(data, BDB_TEST_PAGE_SIZE + 48, main_page);
+
+    WriteBdbMetaPage(data, /*page_num=*/2, /*root_page=*/3, overflow_last_page);
+    WriteBdbPageHeader(data, /*page_num=*/3, /*entries=*/2, /*level=*/1, BDB_TEST_PAGE_BTREE_LEAF);
+    WriteLE16(data, 3 * BDB_TEST_PAGE_SIZE + 26, 40);
+    WriteLE16(data, 3 * BDB_TEST_PAGE_SIZE + 28, 48);
+    WriteBdbDataRecord(data, 3 * BDB_TEST_PAGE_SIZE + 40, StringBytes("key"));
+    WriteBdbOverflowRecord(data, 3 * BDB_TEST_PAGE_SIZE + 48, overflow_page, item_len);
+
+    WriteBdbPageHeader(data, overflow_page, /*entries=*/0, /*level=*/0, BDB_TEST_PAGE_OVERFLOW_DATA);
+    WriteLE16(data, overflow_page * BDB_TEST_PAGE_SIZE + 22, overflow_data_len);
+    const std::vector<std::byte> overflow_data(overflow_data_len, std::byte{0x76});
+    WriteBytes(data, overflow_page * BDB_TEST_PAGE_SIZE + 26, overflow_data);
 
     return data;
 }
@@ -200,6 +241,19 @@ static void CheckPrefix(DatabaseBatch& batch, std::span<const std::byte> prefix,
             actual.emplace(SerializeData(key.begin(), key.end()), SerializeData(value.begin(), value.end())).second);
     }
     BOOST_CHECK_EQUAL_COLLECTIONS(actual.begin(), actual.end(), expected.begin(), expected.end());
+}
+
+static void CheckBerkeleyROLoadFailure(const fs::path& wallet_path, std::span<const std::byte> data, std::string_view expected_error)
+{
+    fs::create_directories(wallet_path);
+    WriteBinaryFile(wallet_path / "wallet.dat", data);
+    DatabaseOptions options;
+    DatabaseStatus status;
+    bilingual_str error;
+    auto database{MakeBerkeleyRODatabase(wallet_path, options, status, error)};
+    BOOST_CHECK(!database);
+    BOOST_CHECK(status == DatabaseStatus::FAILED_LOAD);
+    BOOST_CHECK_EQUAL(error.original, expected_error);
 }
 
 BOOST_FIXTURE_TEST_SUITE(db_tests, BasicTestingSetup)
@@ -316,6 +370,19 @@ BOOST_AUTO_TEST_CASE(berkeley_ro_checks_final_page_lsn)
         BOOST_CHECK(status == DatabaseStatus::FAILED_LOAD);
         BOOST_CHECK_EQUAL(error.original, std::string{BDB_LSN_ERROR});
     }
+}
+
+BOOST_AUTO_TEST_CASE(berkeley_ro_checks_overflow_lengths)
+{
+    CheckBerkeleyROLoadFailure(
+        m_path_root / "bdb_overflow_impossible_length",
+        BerkeleyROFileWithOverflow(/*item_len=*/BDB_TEST_PAGE_SIZE * 5, /*overflow_data_len=*/1),
+        "Overflow record has an impossible length");
+
+    CheckBerkeleyROLoadFailure(
+        m_path_root / "bdb_overflow_data_too_large",
+        BerkeleyROFileWithOverflow(/*item_len=*/1, /*overflow_data_len=*/2),
+        "Overflow record data is larger than stated size");
 }
 
 BOOST_AUTO_TEST_CASE(db_availability_after_write_error)
