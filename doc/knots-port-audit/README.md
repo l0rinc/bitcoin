@@ -2351,7 +2351,9 @@ under different commits. They are not all proven exploitable.
   Knots-only operator/network identity surface that can make a Knots node look
   less obviously like Knots unless local config/debug options are inspected.
   `feature_uacomment.py` now pins the boolean modes, and the same strengthened
-  test passes against unmodified Knots.
+  test passes against unmodified Knots. A refreshed source comparison confirms
+  current Core still lacks `-uaappend`, `-uaspoof`, and the `base_name_only`
+  `FormatSubVersion(...)` path.
 
 - Mutable read/write config file:
 
@@ -3308,6 +3310,10 @@ Source/manifest checks:
   "cleanSubVer =|receive version message|getpeerinfo\\(\\)\\[0\\]\\[\\\"subver\\\"\\]|SanitizeString\\(strSubVer|SAFE_CHARS_PRINTABLE|log_subver"
   HEAD knots/29.x-knots origin/master -- src/net_processing.cpp src/rpc/net.cpp
   test/functional/p2p_handshake.py src/util/strencodings.*`
+- `git grep -n -E
+  "uaspoof|uaappend|uacomment|FormatSubVersion|strSubVersion|UA_NAME"
+  HEAD knots/29.x-knots origin/master -- src/init.cpp src/clientversion.cpp
+  src/clientversion.h test/functional/feature_uacomment.py`
 - `git -C ../knots show 29.x-knots:src/node/blockmanager_args.cpp | rg -n
   "pruneduringinit|PRUNE_TARGET_MANUAL"` confirms actual Knots converts
   `-pruneduringinit=0` to manual pruning during init.
@@ -4008,6 +4014,14 @@ Functional tests:
 - `python3 test/functional/feature_logging.py --configfile
   build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_logging_peeraddr
   --portseed=27501`
+- `python3 test/functional/feature_uacomment.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_uacomment_port_refresh
+  --portseed=42280`
+- `python3 test/functional/feature_uacomment.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_uacomment_knots_refresh
+  --portseed=42281`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_rdts_gate_fixed3`
 - `python3 test/functional/p2p_handshake.py --configfile
@@ -5017,7 +5031,9 @@ Functional tests:
   passed on unmodified Knots with the added `-uaspoof=0` and `-uaspoof=1`
   assertions. The corresponding port run
   `python3 test/functional/feature_uacomment.py --configfile=build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_uacomment_port --portseed=32920`
-  also passed.
+  also passed. A refreshed Knots run,
+  `python3 test/functional/feature_uacomment.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_feature_uacomment_knots_refresh --portseed=42281`,
+  also passed with those strengthened boolean-mode assertions.
 - Original Knots cross-check:
   `python3 test/functional/mempool_rbf_options.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_mempool_rbf_options_knots --portseed=32951`
   passed on unmodified Knots, including the
