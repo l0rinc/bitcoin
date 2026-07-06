@@ -1275,6 +1275,18 @@ Other missing/adapted Knots pieces found during this pass:
   not consensus behavior or network hardening; `interface_zmq.py` now reaches
   and passes a native `ipc://` notifier startup check on both the port and
   unmodified Knots ZMQ builds.
+- The same ZMQ review confirmed Knots' wallet-specific publishers
+  (`-zmqpubhashwallettx`, `-zmqpubrawwallettx`, and their HWM options) are
+  present in the port and absent from current Core master. These topics publish
+  only transactions added or updated in an open wallet, with distinct
+  `*-mempool` and `*-block` topics, so they are more privacy-sensitive than
+  Core's generic mempool/block transaction publishers if bound to a reachable
+  endpoint. This is opt-in local/RPC-adjacent notification behavior, not a
+  consensus or unauthenticated remote issue. Current `interface_zmq.py`
+  coverage subscribes to both wallet hash/raw topics, verifies coinbase
+  block-wallet notifications, verifies a wallet mempool notification, and
+  checks `getzmqnotifications` reports the wallet publishers when wallet
+  support is compiled.
 - The fee-estimator follow-up confirmed Knots' `TxConfirmStats::Read`
   pre-multiplication bound check (`163d3e5c13`, ported as `aeaf84b7d5`) is
   present while current Core still multiplies `scale * maxPeriods` before
@@ -4652,6 +4664,13 @@ Functional tests:
   `../knots/build-repro/bin` only contains `bitcoind`, `bitcoin-cli`, and
   `bitcoin-wallet`, so there was no unmodified-Knots `test_bitcoin` binary for
   a C++ unit cross-run.
+- Original Knots cross-check:
+  `python3 test/functional/interface_zmq.py --configfile=../knots/build-zmq-audit/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_interface_zmq_wallet_knots --portseed=32941`
+  passed on the unmodified Knots ZMQ build, including the wallet
+  `hashwallettx`/`rawwallettx` block and mempool topic checks. The
+  corresponding port run
+  `python3 test/functional/interface_zmq.py --configfile=/mnt/my_storage/build-zmq-audit/test/config.ini --tmpdir=/mnt/my_storage/tmp_interface_zmq_wallet_port --portseed=32940`
+  also passed.
 - Original Knots expected-failure repro with a temporary
   `/mnt/my_storage/knots-assumeutxo-repro` worktree and the port's added
   post-validation raw-transaction assertion:
