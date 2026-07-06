@@ -1159,8 +1159,9 @@ Other missing/adapted Knots pieces found during this pass:
   `p2p_v2_encrypted.py` coverage passes for V2 clearnet success, V1 clearnet
   refusal, and V1 onion allowance, and `feature_config_args.py` now covers the
   startup guard that rejects `-v2onlyclearnet=1` when v2 transport is disabled.
-  The same focused startup-guard test passes against unmodified Knots, so this
-  is native Knots behavior rather than a port-introduced validation change.
+  The same focused startup-guard test and the full V2 transport functional test
+  both pass against unmodified Knots, so this is native Knots behavior rather
+  than a port-introduced validation change.
 - Knots' user-agent sanitization hardening (`b9d2634b81`) was mostly present in
   the port as `eacc171127`: received peer user agents kept printable
   punctuation in `cleanSubVer`, and `util_tests` covered
@@ -1953,7 +1954,9 @@ under different commits. They are not all proven exploitable.
   debug-only `-v2onlyclearnet` policy switch. Knots and this port can refuse
   outbound V1 and V2-to-V1 fallback connections on IPv4/IPv6 while still
   allowing V1 on non-clearnet networks such as onion. This is default-off
-  transport-policy hardening, not a consensus change.
+  transport-policy hardening, not a consensus change. The port's focused
+  startup-guard run and full `p2p_v2_encrypted.py` run both pass, and the same
+  tests pass against unmodified Knots.
 
 - Persistent unexpected block-version signalling warnings:
   `78d5cb210b`, `771ee9fbb4`, `e94eba4e03`, `c17e9d41d5`,
@@ -3434,6 +3437,14 @@ Functional tests:
   --portseed=26404`
 - `python3 test/functional/p2p_v2_encrypted.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_port --portseed=26403`
+- `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
+  --cachedir=test/cache --test_methods
+  test_v2onlyclearnet_requires_v2transport
+  --tmpdir=/mnt/my_storage/tmp_feature_config_v2onlyclearnet_port_latest
+  --portseed=32220`
+- `python3 test/functional/p2p_v2_encrypted.py --configfile build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_port_latest --portseed=32221`
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_getblocklocations_review`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
@@ -3676,6 +3687,14 @@ Functional tests:
   `python3 test/functional/feature_config_args.py --configfile ../knots/build-repro/test/config.ini --test_methods test_v2onlyclearnet_requires_v2transport --tmpdir=/mnt/my_storage/tmp_feature_config_v2onlyclearnet_knots --portseed=26402`
   passed on unmodified Knots, confirming the `-v2onlyclearnet=1` plus
   `-v2transport=0` startup guard is inherited Knots behavior.
+- Original Knots cross-check:
+  `python3 test/functional/feature_config_args.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --test_methods test_v2onlyclearnet_requires_v2transport --tmpdir=/mnt/my_storage/tmp_feature_config_v2onlyclearnet_knots_latest --portseed=32222`
+  passed on unmodified Knots, confirming the inherited startup guard with the
+  current test tree.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_v2_encrypted.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_knots_latest --portseed=32223`
+  passed on unmodified Knots, confirming the inherited V2 clearnet success, V1
+  clearnet refusal, and V1 onion allowance behavior.
 - Original Knots cross-check:
   `test/functional/p2p_filter.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_filter_filtered_witness`
   passed on unmodified Knots, including the new
