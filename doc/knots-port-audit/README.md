@@ -318,16 +318,19 @@ Other missing/adapted Knots pieces found during this pass:
   from current Core; this is wallet/RPC script-construction functionality, not
   consensus behavior. The Knots-only `getgeneralinfo` RPC (`12c22b8235`) is
   also present. The `getblocklocations` review confirmed the port carries
-  Knots' locking, help/example,
-  result-schema, and fuzz-registration fixes (`91c9e14639`, `32c2b6e326`,
-  `e56f5e7255`, `e1a10af807`). Current Core master has no
-  `getblocklocations` RPC, so these are Knots-only operator/debugging RPC
-  fixes rather than Core-missing hardening. The port also carries Knots'
-  fuzz-safe registration for the Knots-only `getgeneralinfo` and
-  `getmempoolstats` RPCs (`60f1178c6b`, `d01b85ec43`), preserving fuzz
-  coverage parity but not changing runtime behavior. `rpc_sort_multisig.py`
-  had dropped the original Knots `assert_raises_rpc_error` import during the
-  rebase; the port restores that test helper import as `dcf97bd63b`.
+  Knots' RPC plus locking, help/example, result-schema, fuzz-registration, and
+  blocksxor-test fixes: `620e79b72f` is ported as `038108de47`,
+  `91c9e14639` as `e8db806995`, `32c2b6e326` as `6a8bd622cd`,
+  `e56f5e7255` as `e9321649be`, `e1a10af807` as `0aad120def`, and
+  `099f47c89f` as `884f670c8a`. The `91c9e14639`/`e8db806995` lock fix is
+  race hardening for this Knots-only RPC: current Core master has no
+  `getblocklocations` RPC, so there is no Core runtime surface missing that
+  exact fix. The port also carries Knots' fuzz-safe registration for the
+  Knots-only `getgeneralinfo` and `getmempoolstats` RPCs (`60f1178c6b`,
+  `d01b85ec43`), preserving fuzz coverage parity but not changing runtime
+  behavior. `rpc_sort_multisig.py` had dropped the original Knots
+  `assert_raises_rpc_error` import during the rebase; the port restores that
+  test helper import as `dcf97bd63b`.
 - The `getblock` / `getrawtransaction` fixup review confirmed Knots'
   user-facing RPC help and result-documentation cleanups (`20130089e3`,
   `8765a4ce0e`, `35cdcb3309`) are present after adapting them to the current
@@ -2941,13 +2944,14 @@ under different commits. They are not all proven exploitable.
 
 - External or Knots-only surfaces:
   `d637873230` fixes `GetBlockFileInfo` bounds handling, but the obvious
-  RPC-facing caller is Knots' `getblockfileinfo`. Current Core's corresponding
-  callers are internal/tests, and current Core's helper still returns
-  `&m_blockfile_info.at(n)` without a `nullptr` guard. Actual Knots and the
-  port return `nullptr` when the block-file info vector is empty, letting the
-  RPC surface report "block file not found" instead of depending on `.at(n)`.
-  The port now covers the empty lookup in
-  `blockmanager_tests/blockmanager_get_block_file_info_empty`; refreshed
+  RPC-facing caller is Knots' `getblockfileinfo` (`020f2ab028`, ported as
+  `00fc180643`; the related magic-number test cleanup `b5764509d0` is ported
+  as `7376fede7e`). Current Core's corresponding callers are internal/tests,
+  and current Core's helper still returns `&m_blockfile_info.at(n)` without a
+  `nullptr` guard. Actual Knots and the port return `nullptr` when the
+  block-file info vector is empty, letting the RPC surface report "block file
+  not found" instead of depending on `.at(n)`. The port now covers the empty
+  lookup in `blockmanager_tests/blockmanager_get_block_file_info_empty`; refreshed
   `rpc_getblockfrompeer.py` runs passed on the port and the corrected port test
   passed against unmodified Knots, including the `getblockfileinfo` pruning
   assertions. Knots' native test still has the stale hard-coded pruned-block hash
@@ -4688,6 +4692,13 @@ Builds:
   ../knots/src/rpc/blockchain.cpp` shows the Knots RPC surface and the port's
   adapted hidden RPC caller both handle `nullptr` by returning RPC
   `block file not found`.
+- `git grep -n
+  "getblocklocations\|getblockfileinfo\|GetBlockFileInfo\|RPC_COMMANDS_SAFE_FOR_FUZZING"
+  HEAD origin/master knots/29.x-knots -- src/rpc/blockchain.cpp
+  src/rpc/client.cpp src/test/fuzz/rpc.cpp test/functional/rpc_getblocklocations.py
+  test/functional/rpc_getblockfrompeer.py` shows current Core still lacks both
+  hidden Knots RPCs, while Knots and the port carry the RPCs, fuzz-safe
+  registrations, and functional coverage.
 - `git grep -n -E
   "with_fee_histogram|fee_histogram|for \\(size_t i = floors.size\\(\\); i > 0;\\)|--i;|info/with_fee_histogram"
   HEAD knots/29.x-knots origin/master -- src/rpc/mempool.cpp
@@ -5858,6 +5869,14 @@ Functional tests:
   --portseed=42747`
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_getblocklocations_review`
+- `python3 test/functional/rpc_getblocklocations.py
+  --configfile=build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblocklocations_lineage_port
+  --portseed=42767`
+- `python3 test/functional/rpc_getblocklocations.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblocklocations_lineage_knots
+  --portseed=42768`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile=build/test/config.ini
   --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_getgeneralinfo_refresh
@@ -5999,6 +6018,14 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_blockfile_knots
   --portseed=42561`
+- `python3 test/functional/rpc_getblockfrompeer.py
+  --configfile=build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_blockfile_lineage_port
+  --portseed=42769`
+- `python3 test/functional/rpc_getblockfrompeer.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_blockfile_lineage_knots
+  --portseed=42770`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile=build/test/config.ini
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_refresh_port
