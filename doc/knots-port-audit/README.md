@@ -1353,6 +1353,37 @@ Other missing/adapted Knots pieces found during this pass:
   history, traffic graph tooltips, mempool stats, and the Network Watch GUI
   are all present in the current tree. These were not new omissions or original
   Knots defects from this pass.
+- A focused miner review rechecked Knots' restored serialized-size mining cap
+  and follow-up bugfixes (`b835402650`, `e5bf9721fa`, `b392070a38`,
+  `e2212c8cf8`, `c95d04c8a8`) against this port and current Core. The port
+  matches actual Knots' intent under the current Core block assembler:
+  `-blockmaxsize`/GBT `blockmaxsize` account serialized transaction size only
+  when the cap is below `MAX_BLOCK_SERIALIZED_SIZE`; setting only size leaves the
+  weight cap unbounded at `MAX_BLOCK_WEIGHT`; near-maximum size caps no longer
+  silently disable the size cap or lower the weight cap; and the "full enough"
+  stop heuristic compares against the configured size cap using a fixed
+  `BLOCK_FULL_ENOUGH_SIZE_DELTA`, not the reserved coinbase/header size.
+  Current Core master has no `-blockmaxsize` surface, so this is a restored
+  Knots miner/operator policy difference, not a consensus-rule change. Blocks
+  above a local mining cap remain valid. Coverage added/adapted in
+  `30a6e24931` keeps the restored startup and RPC paths live under current
+  cluster-mempool and data-carrier policy. Proof: `build/bin/test_bitcoin
+  --run_test=miner_tests/blockmaxsize_mining_options --catch_system_error=no
+  --log_level=error --report_level=short`, `python3
+  test/functional/mining_basic.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mining_basic_blockmaxsize_review10
+  --portseed=7419`, and comparison run `python3
+  ../knots/test/functional/mining_basic.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_knots_mining_basic_blockmaxsize_review
+  --portseed=7420` all passed. The functional-test issues found during this
+  pass were port/test adaptation issues: the RPC `minfeerate` helper must not
+  expect `getmininginfo().blockmintxfee` to change, the synthetic large
+  transactions need explicit non-standard relay permission under Knots' stricter
+  data-carrier defaults, and the RPC mempool fixture needs the real
+  `-limitclustersize` knob instead of deprecated ancestor/descendant size
+  options. Actual Knots' mining functional test passed, so this did not expose
+  an original Knots consensus or remote-crash bug.
 - The full non-GUI unit run exposed three integration issues from combining
   Knots behavior with current Core tests/APIs. `node_init_tests/init_test`
   aborted because current Core's init test never initialized Knots'
