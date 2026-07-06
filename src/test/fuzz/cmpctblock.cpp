@@ -215,7 +215,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
         unsigned long mempool_size = mempool.size();
         if (mempool_size != 0 && fuzzed_data_provider.ConsumeBool()) {
             size_t random_idx = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, mempool_size - 1);
-            CTransactionRef tx = WITH_LOCK(mempool.cs, return mempool.txns_randomized[random_idx].second->GetSharedTx(););
+            CTransactionRef tx = WITH_LOCK(mempool.cs, return mempool.txns_randomized[random_idx];);
             outpoint = COutPoint(tx->GetHash(), 0);
             amount_in = tx->vout[0].nValue;
         } else if (info.size() != 0 && fuzzed_data_provider.ConsumeBool()) {
@@ -294,7 +294,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
 
             LOCK(mempool.cs);
             for (size_t i = random_idx; i < random_idx + num_txns; ++i) {
-                CTransactionRef mempool_tx = mempool.txns_randomized[i % mempool_size].second->GetSharedTx();
+                CTransactionRef mempool_tx = mempool.txns_randomized[i % mempool_size];
                 block->vtx.push_back(mempool_tx);
             }
         }

@@ -283,7 +283,7 @@ void CTxMemPool::addNewTransaction(CTxMemPool::txiter newit)
     totalTxSize += entry.GetTxSize();
     m_total_fee += entry.GetFee();
 
-    txns_randomized.emplace_back(tx.GetWitnessHash(), newit);
+    txns_randomized.emplace_back(newit->GetSharedTx());
     newit->idx_randomized = txns_randomized.size() - 1;
 
     for (auto& vSPK : entry.mapSPK) {
@@ -332,9 +332,10 @@ void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
     RemoveUnbroadcastTx(it->GetTx().GetHash(), true /* add logging because unchecked */);
 
     if (txns_randomized.size() > 1) {
+        // Update idx_randomized of the to-be-moved entry.
+        Assert(GetEntry(txns_randomized.back()->GetHash()))->idx_randomized = it->idx_randomized;
         // Remove entry from txns_randomized by replacing it with the back and deleting the back.
         txns_randomized[it->idx_randomized] = std::move(txns_randomized.back());
-        txns_randomized[it->idx_randomized].second->idx_randomized = it->idx_randomized;
         txns_randomized.pop_back();
         if (txns_randomized.size() * 2 < txns_randomized.capacity()) {
             txns_randomized.shrink_to_fit();
