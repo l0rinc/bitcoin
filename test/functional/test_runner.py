@@ -373,6 +373,7 @@ BASE_SCRIPTS = [
     'p2p_message_capture.py',
     'p2p_maxorphantx.py',
     'feature_softwareexpiry.py',
+    'feature_softwareexpiry_lowheight.py',
     'feature_includeconf.py',
     'feature_addrman.py',
     'feature_asmap.py',

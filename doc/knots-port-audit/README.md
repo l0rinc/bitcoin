@@ -750,6 +750,12 @@ Other missing/adapted Knots pieces found during this pass:
   creation after expiry (`d957a02772`, ported as `198a65baa1`), keeps accepting
   blocks for 144 expired-MTP blocks, then rejects new blocks with
   `node-expired`, and refuses startup after expiry unless overridden.
+  Knots also carries a low-height guard for absurd early expiry values:
+  `3468941f51`, cherry-picked as `b098b08bf1`, bounds the 144-block lookback
+  by `pindexPrev->nHeight` so block validation cannot walk before genesis.
+  This is historical Knots hardening for a Knots-only expiry path, not a
+  current Knots bug and not a Core-missing consensus fix. The port now pins it
+  with `feature_softwareexpiry_lowheight.py`.
   `feature_softwareexpiry.py` exposed a port-side no-UI warning regression from
   Core's newer no-caption UI signal API: Knots passed `"Warning"`/`"Error"`
   captions with non-modal icon styles, while the port printed the message
@@ -5906,6 +5912,21 @@ Functional tests:
 - `python3 test/functional/feature_softwareexpiry.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_softwareexpiry_gbt_port
   --portseed=42130`
+- `git show --stat --patch --minimal 3468941f51 b098b08bf1 --
+  src/validation.cpp`
+- `git grep -n
+  "std::min<int>(144, pindexPrev->nHeight)\\|IsThisSoftwareExpired\\|node-expired"
+  HEAD knots/29.x-knots origin/master -- src/validation.cpp
+  src/clientversion.cpp src/clientversion.h
+  test/functional/feature_softwareexpiry.py
+  test/functional/feature_softwareexpiry_lowheight.py`
+- `python3 test/functional/feature_softwareexpiry_lowheight.py --configfile
+  build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_softwareexpiry_lowheight
+  --portseed=42801`
+- `python3 test/functional/feature_softwareexpiry_lowheight.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_knots_feature_softwareexpiry_lowheight
+  --portseed=42803`
 - `python3 test/functional/feature_torcontrol.py --configfile build/test/config.ini`
 - `test/functional/feature_torcontrol.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_torcontrol_audit`
