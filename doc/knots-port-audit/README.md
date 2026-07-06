@@ -2316,7 +2316,10 @@ under different commits. They are not all proven exploitable.
   vulnerability fix or a consensus issue. The port pins this with
   `chainparams_tests/dns_seed_removals`; source comparison shows Core still
   lists `seed.btc.petertodd.net.` and `seed.tbtc.petertodd.net.`, while both
-  Knots and the port omit them.
+  Knots and the port omit them. A refreshed check confirms unmodified Knots
+  does not carry the port's added `chainparams_tests/dns_seed_removals` unit, so
+  the Knots-side proof here is source comparison rather than an upstream unit
+  assertion.
 
 - User-agent sanitization/log escaping:
   `b9d2634b81`
@@ -2868,6 +2871,10 @@ Source/manifest checks:
   "GetWarningsForRpc|all_messages\\.back|util::Join\\(all_messages|warning 1"
   HEAD knots/29.x-knots origin/master -- src/node/warnings.cpp
   src/test/node_warnings_tests.cpp`
+- `git grep -n -E
+  "seed\\.(btc|tbtc)\\.petertodd\\.net|dns_seed_removals"
+  HEAD knots/29.x-knots origin/master -- src/kernel/chainparams.cpp
+  src/test/chainparams_tests.cpp`
 - `git -C ../knots show --stat --patch --minimal 15805060ec`,
   `rg -n "ReadBlock\\(.*inv\\.hash|ReadBlock\\(.*req\\.blockhash"
   src/net_processing.cpp`, `git show origin/master:src/net_processing.cpp |
@@ -4969,6 +4976,10 @@ Functional tests:
   the newline-joined deprecated RPC warning string behavior even though its
   original unit test does not assert `GetWarningsForRpc(...)` directly; the port
   adds those assertions.
+- Original Knots test-coverage check:
+  `../knots/build-repro/bin/test_bitcoin --run_test=chainparams_tests/dns_seed_removals --catch_system_error=no --log_level=error --report_level=short`
+  returned `no test cases matching filter`, confirming the DNS seed removal
+  unit is a port-side regression guard and not present in unmodified Knots.
 - Original Knots cross-check:
   `python3 ../knots/test/functional/wallet_keypool.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_wallet_keypool_isactive_repro`
   (passes on unmodified Knots, confirming the local `wallet_keypool.py`
