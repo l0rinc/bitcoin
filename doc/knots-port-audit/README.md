@@ -2089,6 +2089,8 @@ under different commits. They are not all proven exploitable.
   help text or Knots-compatible config syntax gets a surprising rejection. The
   existing `feature_proxy.py` "Test overriding the Tor proxy" path covers the
   `=tor` spelling and now passes against both the port and unmodified Knots.
+  A refreshed source comparison still shows Core's parser accepting only
+  `onion` while its help advertises `<network>` values including `tor`.
 
 - Tor local-address registration without outbound Tor reachability:
   `eab454304e`
@@ -3029,6 +3031,12 @@ Source/manifest checks:
   src/init.cpp test/functional/feature_proxy.py ../knots/src/init.cpp
   ../knots/test/functional/feature_proxy.py` shows the port and actual Knots
   accept `tor || onion` and cover the `=tor` spelling in the functional test.
+- `git grep -n -E
+  "proxy=.*\\[=<network>|net_str == \\\"tor\\\"|net_str == \\\"onion\\\"|proxy=127\\.2\\.2\\.2:2222=tor|Unrecognized network"
+  HEAD knots/29.x-knots origin/master -- src/init.cpp
+  test/functional/feature_proxy.py` refreshes that comparison: Knots and the
+  port accept `tor || onion` and test `=tor`, while current Core's parser still
+  only matches `onion`.
 - `git show origin/master:src/wallet/db.cpp | sed -n '20,70p'` and
   `git -C ../knots show 29.x-knots:src/wallet/db.cpp | sed -n '20,75p'`
   show that current Core lacks Knots' `ignore_paths` skip list in
@@ -4046,6 +4054,14 @@ Functional tests:
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_proxy_tor_alias_knots_2
   --portseed=27623`
+- `python3 test/functional/feature_proxy.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_proxy_tor_alias_port_refresh
+  --portseed=42340`
+- `python3 test/functional/feature_proxy.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_proxy_tor_alias_knots_refresh
+  --portseed=42341`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini
   --test_methods init_lowmem_test
   --tmpdir=/mnt/my_storage/tmp_feature_init_lowmem_port --portseed=27630`
