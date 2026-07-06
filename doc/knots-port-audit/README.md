@@ -2840,8 +2840,11 @@ under different commits. They are not all proven exploitable.
   zero/invalid multipliers. Runtime checks on both the port and unmodified
   Knots with `-dustdynamic=mempool:250 -dustrelayfee=0.00001000` reported
   `dustdynamic: "3*mempool:250"` and preserved `dustrelayfeefloor` at
-  `0.00001000`. Existing functional coverage also checks the RPC string and
-  scheduler-updated dust feerate for both target- and mempool-based modes.
+  `0.00001000`. The port also carries Knots' help-text multiplier correction
+  (`c4fdb66f1d`), so the default multiplier is documented as
+  `DEFAULT_DUST_RELAY_MULTIPLIER / 1000.` rather than the scaled integer.
+  Existing functional coverage also checks the RPC string and scheduler-updated
+  dust feerate for both target- and mempool-based modes.
 
 - TRUC policy modes:
   Knots' `-mempooltruc` option and TRUC `ignore_rejects` overrides are present
@@ -3952,6 +3955,10 @@ Source/manifest checks:
   command using `../knots/build-repro/bin/bitcoind` returned the same three
   values on unmodified Knots, except for unrelated result fields omitted by the
   older Knots RPC response.
+- `git grep -n "dustdynamic\\|DEFAULT_DUST_RELAY_MULTIPLIER"
+  HEAD knots/29.x-knots origin/master -- src/init.cpp` shows the port and
+  Knots carry the corrected `DEFAULT_DUST_RELAY_MULTIPLIER / 1000.` help text,
+  while current Core has no `-dustdynamic` option.
 - `python3 test/functional/mempool_compatibility.py --configfile=build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_compat_persistv1_port
   --portseed=32870` skipped because previous-release binaries are unavailable
