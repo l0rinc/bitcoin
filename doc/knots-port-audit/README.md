@@ -1119,12 +1119,13 @@ Other missing/adapted Knots pieces found during this pass:
   `AddNode()` duplicate detection for CJDNS addresses with alternate ports
   (`28823f30dc`) remains a port-only network correctness fix. The port carries
   it as `bcd1387ae6`, and `net_peer_connection_tests` covers both connected
-  CJDNS addnode reporting and duplicate CJDNS addnode rejection. The port now
-  also covers the RPC-facing `addnode add` path in `rpc_net.py` by restarting
-  with `-cjdnsreachable`, adding `[fc00:...]:8333`, and rejecting the same
-  CJDNS address on a different port. Refreshed source comparison confirms
-  current Core still lacks the `AddNode()` CJDNS duplicate comparison even
-  though it has the `GetAddedNodeInfo()` conversion.
+  CJDNS addnode reporting and duplicate CJDNS addnode rejection; the same
+  focused unit regression passes on unmodified Knots. The port now also covers
+  the RPC-facing `addnode add` path in `rpc_net.py` by restarting with
+  `-cjdnsreachable`, adding `[fc00:...]:8333`, and rejecting the same CJDNS
+  address on a different port. Refreshed source comparison confirms current
+  Core still lacks the `AddNode()` CJDNS duplicate comparison even though it
+  has the `GetAddedNodeInfo()` conversion.
 - The P2P RPC connection-management follow-up confirmed Knots intentionally
   exposes the hidden `addconnection` RPC outside regtest
   (`2fcf74eb45`, ported as `4feeb3a87b`), while current Core still rejects it
@@ -4408,6 +4409,21 @@ Functional tests:
   test_addnode_cjdns_duplicate
   --tmpdir=/mnt/my_storage/tmp_rpc_net_cjdns_addnode_knots_refresh
   --portseed=42251`
+- `build/bin/test_bitcoin
+  --run_test=net_peer_connection_tests/test_addnode_getaddednodeinfo_and_connection_detection
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin
+  --run_test=net_peer_connection_tests/test_addnode_getaddednodeinfo_and_connection_detection
+  --catch_system_error=no --log_level=error --report_level=short`
+- `python3 test/functional/rpc_net.py --configfile build/test/config.ini
+  --cachedir=test/cache --test_methods test_addnode_cjdns_duplicate
+  --tmpdir=/mnt/my_storage/tmp_rpc_net_cjdns_addnode_port_refresh2
+  --portseed=42490`
+- `python3 test/functional/rpc_net.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache --test_methods
+  test_addnode_cjdns_duplicate
+  --tmpdir=/mnt/my_storage/tmp_rpc_net_cjdns_addnode_knots_refresh2
+  --portseed=42491`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_addconnection`
 - `build/test/functional/rpc_net.py`
@@ -5252,6 +5268,30 @@ Functional tests:
   `python3 test/functional/rpc_net.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --test_methods test_addnode_cjdns_duplicate --tmpdir=/mnt/my_storage/tmp_rpc_net_cjdns_addnode_knots_refresh --portseed=42251`
   passed on unmodified Knots, confirming inherited duplicate rejection for the
   same CJDNS address on a different port.
+- Port cross-check:
+  `build/bin/test_bitcoin
+  --run_test=net_peer_connection_tests/test_addnode_getaddednodeinfo_and_connection_detection
+  --catch_system_error=no --log_level=error --report_level=short`
+  passed, including the connected CJDNS peer reporting and duplicate CJDNS
+  addnode rejection cases.
+- Original Knots cross-check:
+  `../knots/build-repro/bin/test_bitcoin
+  --run_test=net_peer_connection_tests/test_addnode_getaddednodeinfo_and_connection_detection
+  --catch_system_error=no --log_level=error --report_level=short`
+  passed on unmodified Knots with the same unit-level behavior.
+- Port cross-check:
+  `python3 test/functional/rpc_net.py --configfile build/test/config.ini
+  --cachedir=test/cache --test_methods test_addnode_cjdns_duplicate
+  --tmpdir=/mnt/my_storage/tmp_rpc_net_cjdns_addnode_port_refresh2
+  --portseed=42490`
+  passed, confirming the RPC-facing `addnode add` duplicate rejection.
+- Original Knots cross-check:
+  `python3 test/functional/rpc_net.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache --test_methods
+  test_addnode_cjdns_duplicate
+  --tmpdir=/mnt/my_storage/tmp_rpc_net_cjdns_addnode_knots_refresh2
+  --portseed=42491`
+  passed on unmodified Knots with the same RPC-facing behavior.
 - Original Knots cross-check:
   `test/functional/p2p_feefilter.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_feefilter_option`
   passed on unmodified Knots, including the new `-nofeefilter` assertion.
