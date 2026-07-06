@@ -1350,7 +1350,12 @@ Other missing/adapted Knots pieces found during this pass:
   ordering in Knots and the port. The port now adds `policyestimator_tests`
   coverage that serializes a corrupt `fee_estimates.dat`-style record with an
   impossible scale and verifies that `CBlockPolicyEstimator::Read(...)` rejects
-  it cleanly.
+  it cleanly. Refreshed source checks confirmed the guard is present in Knots
+  and the port, while current Core still multiplies first; refreshed unit runs
+  passed the focused port regression test and the full policy estimator suites
+  in both trees. Unmodified Knots does not have the strengthened
+  oversized-scale regression test, so that specific filter returns no matching
+  test case there.
   The same pass classified the fee-histogram unsigned-decrement fix
   (`85c8d477b0`, ported as `759e1d76b3`) as Knots-surface hardening because
   current Core has no `getmempoolinfo(with_fee_histogram=...)` or REST
@@ -3441,6 +3446,14 @@ Source/manifest checks:
   notifications, RBF, reorg, mempool-sync, IPv6, and
   `getzmqnotifications` paths; the failed-notifier retention and raw-block
   read-failure logging deltas are source-confirmed hardening behavior.
+- `git grep -n -E
+  "scale \\* maxPeriods|scale > \\(6 \\* 24 \\* 7\\) / maxPeriods|uint64_t maxConfirms|maxConfirms = scale"
+  HEAD knots/29.x-knots origin/master -- src/policy/fees.cpp
+  src/policy/fees/block_policy_estimator.cpp
+  src/test/policyestimator_tests.cpp` shows Knots and the port test
+  `scale > 1008 / maxPeriods` before multiplying, while current Core still
+  computes `maxConfirms = scale * maxPeriods` first after declaring
+  `uint64_t maxConfirms, maxPeriods`.
 - `git show origin/master:src/init.cpp | rg -n
   "zmqpub|ADDR_PREFIX_UNIX|ipc:" -C 4`,
   `git -C ../knots show 29.x-knots:src/init.cpp | rg -n
@@ -4050,7 +4063,14 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=policyestimator_tests`
 - `build/bin/test_bitcoin --run_test=policyestimator_tests
-  --catch_system_errors=no`
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin
+  --run_test=policyestimator_tests/read_rejects_fee_estimates_with_oversized_scale
+  --catch_system_error=no --log_level=error --report_level=short`
+  returned exit code 200 with `no test cases matching filter`, confirming the
+  strengthened regression test is port-only.
+- `../knots/build-repro/bin/test_bitcoin --run_test=policyestimator_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=codex32_tests`
 - `build/bin/test_bitcoin --run_test=codex32_tests
   --catch_system_error=no --log_level=error --report_level=short`
