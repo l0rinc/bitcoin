@@ -439,8 +439,19 @@ bool HTTPRequest::LoadControlData(LineReader& reader)
 bool HTTPRequest::LoadHeaders(LineReader& reader)
 {
     HTTPHeaders headers;
-    if (!headers.Read(reader)) return false;
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        const std::string headers_before{m_headers.Stringify()};
+        if (!headers.Read(reader)) {
+            Assume(m_headers.Stringify() == headers_before);
+            return false;
+        }
+        const std::string parsed_headers{headers.Stringify()};
+        m_headers = std::move(headers);
+        Assume(m_headers.Stringify() == parsed_headers);
+        return true;
+    }
 
+    if (!headers.Read(reader)) return false;
     m_headers = std::move(headers);
     return true;
 }

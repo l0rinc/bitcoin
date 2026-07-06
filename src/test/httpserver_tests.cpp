@@ -734,9 +734,12 @@ BOOST_AUTO_TEST_CASE(http_request_tests)
         // an error. We return false so the caller can try again later when the
         // buffer has more data.
         HTTPRequest req;
+        req.m_headers.Write("X-Sentinel", "1");
         LineReader reader("GET / HTTP/1.0\r\nHost: ", MAX_HEADERS_SIZE);
         BOOST_CHECK(req.LoadControlData(reader));
+        const RequestFields before{SnapshotRequestFields(req)};
         BOOST_CHECK(!req.LoadHeaders(reader));
+        CheckRequestFieldsEqual(SnapshotRequestFields(req), before);
     }
     {
         // No Content-Length: body is not read
