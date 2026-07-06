@@ -624,7 +624,21 @@ Other missing/adapted Knots pieces found during this pass:
   reproducible build failure or original Knots defect. The port now still
   matches Knots' intended build distinction as `7d4c61ea3a`: system-LevelDB
   builds keep the header/runtime version check, while embedded-LevelDB builds
-  define `EMBEDDED_LEVELDB` and skip the redundant runtime comparison.
+  define `EMBEDDED_LEVELDB` and skip the redundant runtime comparison. The
+  broader Knots build/runtime LevelDB series is present as well:
+  `d469848b6f` is ported as `7ce2520203` for the unsupported
+  `WITH_SYSTEM_LEVELDB` CMake option, `0186d199a3` as `856b4b9cb8` for the
+  build/runtime version sanity check, `f2ac68746b` as `e54ed58bd5` for the
+  embedded LevelDB mmap-limit bump, `d22a914b56` as `9c392f6e8c` for unit
+  coverage, and `80cda0d5d6` as `384921ce87` for `util::Result` error
+  plumbing. The related unsupported system-libsecp256k1 option (`7e75b074b2`)
+  is ported as `8ba6d58228`. Current Core lacks these unsupported system
+  library options and the LevelDB header/runtime version check.
+- Knots' old manual `CDBBatch::size_estimate` header correction and follow-up
+  (`4ab3936c2c`, `e2759984d3`, adapted in history as `6f9e471f32` and
+  `d41688a868`) are structurally obsolete on the current Core base: current
+  Core and this port use LevelDB's native `WriteBatch::ApproximateSize()` and no
+  longer carry manual batch-size accounting. This is not a remaining port gap.
 - The same sanity-check review confirmed Knots' LLVM 96267 compiler
   optimization check (`8fbdf93878`, port `25a78ddab0`) is present in the port
   and absent from current Core. This is a startup/build-environment safety check
@@ -3424,7 +3438,17 @@ Source/manifest checks:
 - `comm -23 <(git ls-tree -r --name-only knots/29.x-knots | sort)
   <(git ls-files | sort)`
 - `rg -n "FindLibevent|libevent|mempool-limits|system_ram\\.h|core_write\\.cpp|policy/fees|fees_args|support/events\\.h|compilerbug_tests|policy_fee_tests|raii_event_tests|test/util/index|test/util/str|txorphanage\\.h|txorphanage\\.cpp|epochguard|transaction_identifier\\.h|mempool_package_onemore|rpcauth-test" . -g '!test/cache/**' -g '!build/**' -g '!depends/work/**' -g '!depends/built/**' -g '!depends/sources/**'`
-- `rg -n "Clang_IndVarSimplify_Bug_SanityCheck|Compiler optimization sanity check|leveldb_major_version|EMBEDDED_LEVELDB" ../knots/src/kernel/checks.cpp ../knots/src/kernel/checks.h ../knots/src/test/sanity_tests.cpp ../knots/src/dbwrapper.cpp ../knots/src/dbwrapper.h ../knots/src/CMakeLists.txt ../knots/cmake -g '!**/build*/**'`
+- `git grep -n
+  "dbwrapper_SanityCheck\|leveldb_major_version\|WITH_SYSTEM_LEVELDB\|WITH_SYSTEM_LIBSECP256K1\|SizeEstimate\|kHeader"
+  HEAD origin/master knots/29.x-knots -- src/dbwrapper.cpp src/dbwrapper.h
+  src/kernel/checks.cpp src/test/sanity_tests.cpp src/CMakeLists.txt
+  CMakeLists.txt cmake`
+- `rg -n
+  "Clang_IndVarSimplify_Bug_SanityCheck|Compiler optimization sanity check|leveldb_major_version|EMBEDDED_LEVELDB"
+  ../knots/src/kernel/checks.cpp ../knots/src/kernel/checks.h
+  ../knots/src/test/sanity_tests.cpp ../knots/src/dbwrapper.cpp
+  ../knots/src/dbwrapper.h ../knots/src/CMakeLists.txt ../knots/cmake -g
+  '!**/build*/**'`
 - `ls -la ../knots/build-repro/bin` showed only `bitcoind` and `bitcoin-cli`,
   so `../knots/build-repro/bin/test_bitcoin --run_test=sanity_tests` was not
   available.
@@ -4845,6 +4869,10 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=caches_tests/default_db_batch_size
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=sanity_tests`
+- `build/bin/test_bitcoin --run_test=sanity_tests --catch_system_error=no
+  --log_level=error --report_level=short`
+- `cmake -LAH build | rg -n
+  "WITH_SYSTEM_LEVELDB|WITH_SYSTEM_LIBSECP256K1|EMBEDDED_LEVELDB|LevelDB|secp256k1"`
 - `build/bin/test_bitcoin --run_test=banman_tests`
 - `build/bin/test_bitcoin --run_test=hash_tests`
 - `build/bin/test_bitcoin --run_test=blockencodings_tests
