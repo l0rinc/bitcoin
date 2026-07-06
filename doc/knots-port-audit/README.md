@@ -2332,7 +2332,10 @@ under different commits. They are not all proven exploitable.
   The strengthened `p2p_handshake.py` user-agent test passes against
   unmodified Knots and the fixed port, confirming the earlier missing log
   escape was port-introduced. The latest rerun used the full handshake test
-  because the user-agent assertion is inline in `run_test`.
+  because the user-agent assertion is inline in `run_test`; a refreshed
+  three-way grep still shows current Core using default `SanitizeString`
+  handling, while Knots and the port use printable preservation plus log-time
+  escaping.
 
 - User-agent append/spoof controls:
 
@@ -3301,6 +3304,10 @@ Source/manifest checks:
   show that current Core strips user-agent printable punctuation before
   storing/logging, while Knots and the port preserve it for RPC display and
   escape it at receive-version log time.
+- `git grep -n -E
+  "cleanSubVer =|receive version message|getpeerinfo\\(\\)\\[0\\]\\[\\\"subver\\\"\\]|SanitizeString\\(strSubVer|SAFE_CHARS_PRINTABLE|log_subver"
+  HEAD knots/29.x-knots origin/master -- src/net_processing.cpp src/rpc/net.cpp
+  test/functional/p2p_handshake.py src/util/strencodings.*`
 - `git -C ../knots show 29.x-knots:src/node/blockmanager_args.cpp | rg -n
   "pruneduringinit|PRUNE_TARGET_MANUAL"` confirms actual Knots converts
   `-pruneduringinit=0` to manual pruning during init.
@@ -3987,6 +3994,14 @@ Functional tests:
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_review_knots2
   --portseed=26445`
+- `python3 test/functional/p2p_handshake.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_port_refresh
+  --portseed=42270`
+- `python3 test/functional/p2p_handshake.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_knots_refresh
+  --portseed=42271`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_p2p_handshake_cleansubver_port
   --portseed=42170`
@@ -4818,6 +4833,11 @@ Functional tests:
   `python3 test/functional/p2p_handshake.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_review_knots2 --portseed=26445`
   (passes on unmodified Knots, confirming the missing user-agent log escape was
   introduced by the port)
+- Original Knots cross-check:
+  `python3 test/functional/p2p_handshake.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_knots_refresh --portseed=42271`
+  passed on unmodified Knots with the strengthened inline user-agent assertion,
+  confirming the printable-preservation and receive-version log escaping
+  behavior is native Knots behavior.
 - Original Knots cross-check:
   `python3 test/functional/mempool_sigoplimit.py --configfile ../knots/build-repro/test/config.ini --test_methods test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_maxfeerate_review_knots --portseed=26450`
   passed on unmodified Knots
