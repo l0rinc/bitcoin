@@ -112,6 +112,10 @@ class VersionBitsWarningTest(BitcoinTestFramework):
         # Check that get*info() shows the 51/100 unknown block version warning
         assert(WARN_UNKNOWN_BIT_MINED in ",".join(node.getmininginfo()["warnings"]))
         assert(WARN_UNKNOWN_BIT_MINED in ",".join(node.getnetworkinfo()["warnings"]))
+        # Knots promotes unknown deployments to a persistent warning as soon as
+        # they are LOCKED_IN, not only once they become ACTIVE.
+        assert WARN_UNKNOWN_RULES_ACTIVE in ",".join(node.getmininginfo()["warnings"])
+        assert WARN_UNKNOWN_RULES_ACTIVE in ",".join(node.getnetworkinfo()["warnings"])
 
         self.log.info("Check that there is a warning if BIP320 is used, and a second persistent warning if >75 blocks in the last 100 were a BIP320 version")
         with node.busy_wait_for_debug_log([WARN_BIP320_BLOCK.encode('ascii')]):

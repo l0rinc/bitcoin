@@ -481,7 +481,14 @@ Other missing/adapted Knots pieces found during this pass:
   Actual Knots `29.x-knots` still scans the historical 29 BIP9 signal bits and
   passes the same functional test. The port now separates the warning scan
   width from the BIP323 deployment width as `dac70fed98`; `versionbits_tests`
-  and `feature_versionbits_warning.py` pass.
+  and `feature_versionbits_warning.py` pass. A later pass found one more
+  port-only omission from Knots' warning semantics: `6f0de8cd27` promotes an
+  unknown deployment to the persistent `UNKNOWN_NEW_RULES_ACTIVATED` warning as
+  soon as it reaches `LOCKED_IN`, while the port was still only persisting that
+  warning once the unknown deployment became `ACTIVE`. This is operator/security
+  visibility around possible soft-fork signalling, not a block-validity rule.
+  The port now matches Knots and the strengthened `feature_versionbits_warning.py`
+  passes against both the port and an unmodified Knots build.
 - The follow-up fuzz-build pass found Knots' `wallet_bdb_parser` deterministic
   seeding fix (`30f578a081`) was missing from the port. Actual Knots
   `29.x-knots` already contains the fix, so this was a port test omission rather
@@ -2841,7 +2848,11 @@ under different commits. They are not all proven exploitable.
   `feature_versionbits_warning.py` run passes against both the port and
   unmodified Knots. A fresh source comparison confirms current Core still has
   no equivalent last-100-block unknown-schema, full warning-bit-range, or
-  BIP320 reserved-bit warning logic.
+  BIP320 reserved-bit warning logic. Knots also promotes unknown deployments to
+  the persistent `UNKNOWN_NEW_RULES_ACTIVATED` warning at `LOCKED_IN`
+  (`6f0de8cd27`), one period earlier than current Core's persistent warning;
+  the port now restores that behavior and pins it in
+  `feature_versionbits_warning.py`.
 
 - RPC multi-warning string-mode visibility:
   `e4e4a81317`
@@ -3572,6 +3583,12 @@ Source/manifest checks:
   "VERSIONBITS_NUM_WARNING_BITS|Miner violated version bit protocol|unexpected version|BIP320|VERSIONBITS_NUM_BITS|UpdateTip"
   HEAD knots/29.x-knots origin/master -- src test/functional/feature_versionbits_warning.py
   src/test`
+- `git -C ../knots show --patch 6f0de8cd27 -- src/validation.cpp` and
+  `git grep -n "CheckUnknownActivations|UNKNOWN_NEW_RULES_ACTIVATED|warningSet"
+  HEAD knots/29.x-knots origin/master -- src/versionbits.cpp src/validation.cpp
+  test/functional/feature_versionbits_warning.py` show Knots' `LOCKED_IN`
+  warning promotion, current Core's `ACTIVE`-only persistent warning, and the
+  port's restored behavior plus functional coverage.
 - `git grep -n -E
   "GetWarningsForRpc|all_messages\\.back|util::Join\\(all_messages|warning 1"
   HEAD knots/29.x-knots origin/master -- src/node/warnings.cpp
