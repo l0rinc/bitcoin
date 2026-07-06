@@ -3037,7 +3037,10 @@ fix as `c0d28c8f5b`. Knots' `get_filesystem_error_message()` simplification
 (`5255e22f31`) is likewise not a Core-missing item on this base: current Core
 removed the helper entirely as `97eaadc3bf` and now uses
 `std::filesystem_error::code().message()` directly at the cookie deletion log
-site, with the failed path included separately. These are not original Knots
+site, with the failed path included separately. Knots' wallet directory
+iteration error handling fix (`453fe4957a`) is also already present in current
+Core as `893e51ffeb`; the port keeps that loop-exit-on-error behavior together
+with Knots' additional wallet scan exclusions. These are not original Knots
 defects and not Core-missing covert hardening items.
 One remaining exact-patch miss is a Core-missing RPC argument-alias hardening
 fix rather than a port miss: Knots commit `0c7ac92072` changes
