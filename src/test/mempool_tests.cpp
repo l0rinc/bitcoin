@@ -119,10 +119,25 @@ BOOST_AUTO_TEST_CASE(MempoolPermitEphemeralParse)
     BOOST_CHECK(!anchor_only.permitephemeral_send);
     BOOST_CHECK(!anchor_only.permitephemeral_dust);
 
+    auto send_zero{parse_options("send,-dust")};
+    BOOST_CHECK(send_zero.permitephemeral_anchor);
+    BOOST_CHECK(send_zero.permitephemeral_send);
+    BOOST_CHECK(!send_zero.permitephemeral_dust);
+
+    auto send_dust{parse_options("send,dust")};
+    BOOST_CHECK(send_dust.permitephemeral_anchor);
+    BOOST_CHECK(send_dust.permitephemeral_send);
+    BOOST_CHECK(send_dust.permitephemeral_dust);
+
     auto dust_without_anchor{parse_options("-anchor,dust")};
     BOOST_CHECK(!dust_without_anchor.permitephemeral_anchor);
     BOOST_CHECK(dust_without_anchor.permitephemeral_send);
     BOOST_CHECK(dust_without_anchor.permitephemeral_dust);
+
+    auto unknown{parse_options("unknown")};
+    BOOST_CHECK(unknown.permitephemeral_anchor);
+    BOOST_CHECK(!unknown.permitephemeral_send);
+    BOOST_CHECK(!unknown.permitephemeral_dust);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolMinRelayAgeParse)

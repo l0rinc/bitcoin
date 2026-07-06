@@ -76,8 +76,55 @@ class EphemeralDustTest(BitcoinTestFramework):
         self.test_nonzero_dust()
         self.test_non_truc()
         self.test_unspent_ephemeral()
+        self.test_permitephemeral_options()
         self.test_reorgs()
         self.test_no_minrelay_fee()
+
+    def restart_with_permitephemeral(self, option):
+        args = ["-acceptnonstdtxn=0", "-persistmempool=0", f"-permitephemeral={option}"]
+        self.restart_node(0, extra_args=args)
+        self.restart_node(1, extra_args=args)
+        self.connect_nodes(0, 1)
+
+    def test_permitephemeral_options(self):
+        self.log.info("Test -permitephemeral option modes for non-anchor ephemeral dust")
+
+        if not hasattr(self, "wallet"):
+            self.wallet = MiniWallet(self.nodes[0])
+
+        self.restart_with_permitephemeral("anchor,-send,-dust")
+        assert_equal(self.nodes[0].getrawmempool(), [])
+        dusty_tx, sweep_tx = self.create_ephemeral_dust_package(tx_version=3)
+        res = self.nodes[0].submitpackage([dusty_tx["hex"], sweep_tx["hex"]])
+        assert_equal(res["package_msg"], "transaction failed")
+        assert_equal(res["tx-results"][dusty_tx["wtxid"]]["error"], "dust-nonanchor")
+        assert_equal(self.nodes[0].getrawmempool(), [])
+
+        self.restart_with_permitephemeral("send,-dust")
+        dusty_tx, sweep_tx = self.create_ephemeral_dust_package(tx_version=3)
+        res = self.nodes[0].submitpackage([dusty_tx["hex"], sweep_tx["hex"]])
+        assert_equal(res["package_msg"], "success")
+        assert_mempool_contents(self, self.nodes[0], expected=[dusty_tx["tx"], sweep_tx["tx"]])
+        self.generate(self.nodes[0], 1)
+        self.wallet.rescan_utxos()
+
+        dusty_tx, sweep_tx = self.create_ephemeral_dust_package(tx_version=3, dust_value=1)
+        res = self.nodes[0].submitpackage([dusty_tx["hex"], sweep_tx["hex"]])
+        assert_equal(res["package_msg"], "transaction failed")
+        assert_equal(res["tx-results"][dusty_tx["wtxid"]]["error"], "dust-nonzero")
+        assert_equal(self.nodes[0].getrawmempool(), [])
+
+        self.restart_with_permitephemeral("send,dust")
+        dusty_tx, sweep_tx = self.create_ephemeral_dust_package(tx_version=3, dust_value=1)
+        res = self.nodes[0].submitpackage([dusty_tx["hex"], sweep_tx["hex"]])
+        assert_equal(res["package_msg"], "success")
+        assert_mempool_contents(self, self.nodes[0], expected=[dusty_tx["tx"], sweep_tx["tx"]])
+        self.generate(self.nodes[0], 1)
+        self.wallet.rescan_utxos()
+
+        self.restart_node(0, extra_args=[])
+        self.restart_node(1, extra_args=[])
+        self.connect_nodes(0, 1)
 
     def test_normal_dust(self):
         self.log.info("Create 0-value dusty output, show that it works inside truc when spent in package")
