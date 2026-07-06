@@ -2234,6 +2234,20 @@ under different commits. They are not all proven exploitable.
   `feature_uacomment.py` now pins the boolean modes, and the same strengthened
   test passes against unmodified Knots.
 
+- Mempool statistics subsystem and RPC:
+
+  Knots adds a `src/stats` subsystem, `-statsenable`,
+  `-statsmaxmemorytarget=<bytes>`, and an authenticated `getmempoolstats` RPC
+  that current Core master does not have. `bitcoind` leaves collection off by
+  default, while the Qt startup path sets `-statsenable=1` unless the operator
+  overrides it. When enabled, validation records memory-capped mempool samples
+  on mempool admission and block connect/disconnect, including an initial
+  zero-mempool sample during startup. This is not consensus behavior and not a
+  remote unauthenticated exposure; it is a Knots-only memory/RPC surface and a
+  GUI-default behavioral difference from Core. `rpc_mempoolstats.py` now covers
+  the default-disabled daemon path and the enabled RPC/sample path, and the
+  same test passes against unmodified Knots.
+
 - ZMQ notification resilience and read-block logging:
   `1c4d2d54d8`, `268fb1e0e3`, `ba28af94bd`
 
@@ -4627,6 +4641,17 @@ Functional tests:
   assertions. The corresponding port run
   `python3 test/functional/feature_uacomment.py --configfile=build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_uacomment_port --portseed=32920`
   also passed.
+- Original Knots cross-check:
+  `python3 test/functional/rpc_mempoolstats.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_knots --portseed=32932`
+  passed on unmodified Knots, confirming the default-disabled daemon path and
+  enabled `getmempoolstats` sampling behavior are inherited from Knots. The
+  corresponding port run
+  `python3 test/functional/rpc_mempoolstats.py --configfile=build/test/config.ini --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_port_2 --portseed=32931`
+  passed, as did
+  `build/bin/test_bitcoin --run_test=stats_tests --catch_system_error=no --log_level=error --report_level=short`.
+  `../knots/build-repro/bin` only contains `bitcoind`, `bitcoin-cli`, and
+  `bitcoin-wallet`, so there was no unmodified-Knots `test_bitcoin` binary for
+  a C++ unit cross-run.
 - Original Knots expected-failure repro with a temporary
   `/mnt/my_storage/knots-assumeutxo-repro` worktree and the port's added
   post-validation raw-transaction assertion:
