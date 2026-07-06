@@ -94,7 +94,9 @@ Other missing/adapted Knots pieces found during this pass:
   port now adds direct unit coverage for the threshold predicate, including
   saturated `free+buffer` accounting, and for `FlushStateToDisk(IF_NEEDED)`
   emptying a small coins cache only when the memory-pressure probe fires
-  (`d2db337c78`).
+  (`d2db337c78`). A refreshed source comparison still shows the option,
+  helper, and validation flush hook in Knots and the port, with current Core
+  retaining only unrelated `IF_NEEDED` flush calls and pool-memory tests.
 - The `GetArg` / `GetBoolArg` numeric settings review confirmed Knots'
   `577c04c80e` is present in the port and still absent from current Core
   master. Core's `SettingToBool(...)` still falls through to `value.get_str()`
@@ -3264,6 +3266,13 @@ Source/manifest checks:
   the matching actual-Knots source checks show that Knots and the port carry
   configurable low-memory-triggered dbcache flushing, while current Core lacks
   both the `-lowmem` option and the `SystemNeedsMemoryReleased()` flush hook.
+- `git grep -n -E
+  "lowmem|SystemNeedsMemoryReleased|AvailableMemoryBelowThreshold|g_low_memory_threshold|memory pressure"
+  HEAD knots/29.x-knots origin/master -- src/init.cpp src/util
+  src/validation.cpp src/test/validation_flush_tests.cpp
+  test/functional/feature_init.py` shows the refreshed port and Knots
+  low-memory option/helper/test surface, while current Core only matches
+  unrelated pool-memory tests and existing non-lowmem `IF_NEEDED` flush calls.
 - `git -C ../knots show --stat --patch --minimal
   97130ac516ffe729153122aacd0b8a23e0650100`,
   `git show origin/master:src/util/fs_helpers.cpp
@@ -3913,6 +3922,8 @@ Unit tests:
   --log_level=error --report_level=short`
 - `../knots/build-repro/bin/test_bitcoin --run_test=stats_tests
   --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=validation_flush_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=node_init_tests/init_test
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=rbf_tests/calc_feerate_diagram_rbf
@@ -3952,6 +3963,14 @@ Functional tests:
 - `python3 test/functional/feature_init.py --configfile
   ../knots/build-repro/test/config.ini --test_methods init_lowmem_test
   --tmpdir=/mnt/my_storage/tmp_feature_init_lowmem_knots --portseed=27631`
+- `python3 test/functional/feature_init.py --configfile
+  build/test/config.ini --test_methods init_lowmem_test
+  --tmpdir=/mnt/my_storage/tmp_feature_init_lowmem_port_refresh
+  --portseed=42300`
+- `python3 test/functional/feature_init.py --configfile
+  ../knots/build-repro/test/config.ini --test_methods init_lowmem_test
+  --tmpdir=/mnt/my_storage/tmp_feature_init_lowmem_knots_refresh
+  --portseed=42301`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --test_methods test_addnode_getaddednodeinfo
   --tmpdir=/mnt/my_storage/tmp_rpc_net_addnode_guard_port
