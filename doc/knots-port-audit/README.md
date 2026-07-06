@@ -1135,7 +1135,12 @@ Other missing/adapted Knots pieces found during this pass:
   `walletcreatefundedpsbt` default at zero. `rpc_psbt.py` covers the ported
   PSBT behavior, and actual Knots' own `rpc_psbt.py` now passes against the
   local unmodified Knots build as a same-repo cross-check. Refreshed full
-  `rpc_psbt.py` runs passed against both the port and unmodified Knots.
+  `rpc_psbt.py` runs passed against both the port and unmodified Knots. The
+  port also carries Knots' later `fd01caa5de` regression coverage for funding a
+  PSBT when the node is started with `-addresstype=legacy` but the descriptor
+  wallet only has taproot internal/change descriptors; this is wallet test
+  coverage for change-address fallback behavior, not a consensus or remote
+  security change.
 - The raw-transaction PSBT review confirmed Knots' user-provided previous
   transaction support for `utxoupdatepsbt` and `descriptorprocesspsbt`
   (`bdb4ca4195`, `eea8588f07`) is present in the port and absent from current
@@ -5681,6 +5686,10 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rpc_psbt_wallet_refresh_port
   --portseed=42592`
+- `python3 test/functional/rpc_psbt.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_psbt_legacy_change_refresh
+  --portseed=42741`
 - `python3 ../knots/test/functional/rpc_psbt.py --configfile=../knots/build-repro/test/config.ini
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rpc_psbt_wallet_refresh_knots
@@ -6319,6 +6328,10 @@ Functional tests:
   `python3 ../knots/test/functional/rpc_psbt.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_psbt_wallet_refresh_knots --portseed=42594`
   both passed, covering provided-previous-transaction PSBT filling/signing,
   funded-PSBT anti-fee-sniping locktimes, and options-object compatibility.
+  A refreshed port run,
+  `python3 test/functional/rpc_psbt.py --configfile=build/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_psbt_legacy_change_refresh --portseed=42741`,
+  also passed Knots' legacy-addresstype/no-legacy-change descriptor-wallet
+  regression.
 - Refreshed descriptor-wallet cross-checks:
   `python3 test/functional/wallet_descriptor.py --configfile=build/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_wallet_descriptor_importaddress_refresh_port --portseed=42593`
   and
