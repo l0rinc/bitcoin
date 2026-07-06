@@ -267,11 +267,15 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
     // The headers/blocks sent in this test should never be stored, as the chains don't have the work required
     // to meet the anti-DoS work threshold. So, if at any point the block index grew in size, then there's a bug
     // in the headers pre-sync logic.
-    assert(WITH_LOCK(cs_main, return chainman.m_blockman.m_block_index.size()) == original_index_size);
     {
         LOCK(cs_main);
+        assert(chainman.m_blockman.m_block_index.size() == original_index_size);
         assert(chainman.m_best_header != nullptr);
         assert(chainman.ActiveChain().Tip() != nullptr);
+        for (const CBlockHeader& header : all_headers) {
+            assert(header.GetHash() != original_best_header_hash);
+            assert(chainman.m_blockman.LookupBlockIndex(header.GetHash()) == nullptr);
+        }
         assert(chainman.m_best_header->GetBlockHash() == original_best_header_hash);
         assert(chainman.ActiveChain().Tip()->GetBlockHash() == original_active_tip_hash);
     }
