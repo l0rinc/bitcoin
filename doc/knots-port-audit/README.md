@@ -1070,8 +1070,9 @@ Other missing/adapted Knots pieces found during this pass:
   still registers and returns these compatibility surfaces. The port restores
   them and updates `wallet_balance.py` / `wallet_avoidreuse.py` coverage.
 - The wallet funding RPC review confirmed Knots' deprecated `min_conf` option
-  for `fundrawtransaction` and `walletcreatefundedpsbt` is present in the port,
-  including the negative-value guard and the conflict check against modern
+  for `fundrawtransaction` and `walletcreatefundedpsbt` (`8070c3feb7`, with
+  coverage from `af7c9d152a`) is present in the port, including the later
+  negative-value guard (`a16d1512f4`) and the conflict check against modern
   `minconf`. This is backwards-compatibility behavior, not a security or
   consensus change. `wallet_fundrawtransaction.py` and `rpc_psbt.py` now cover
   positive selection, negative `min_conf`, and `min_conf`/`minconf` conflicts.
@@ -5931,6 +5932,10 @@ Functional tests:
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_wallet_fundrawtransaction_minconf_verify
   --portseed=43991`
+- `python3 test/functional/wallet_fundrawtransaction.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_fundrawtransaction_min_conf_refresh
+  --portseed=42733`
 - `python3 ../knots/test/functional/wallet_fundrawtransaction.py --configfile=../knots/build-repro/test/config.ini
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_wallet_fundrawtransaction_segwit_only_native_knots
