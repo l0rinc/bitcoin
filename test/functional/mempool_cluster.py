@@ -12,6 +12,14 @@ from test_framework.mempool_util import (
 )
 from test_framework.messages import (
     COIN,
+    CTxOut,
+    MAX_OP_RETURN_RELAY,
+    ser_compact_size,
+)
+from test_framework.script import (
+    CScript,
+    OP_RETURN,
+    OP_TRUE,
 )
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.wallet import (
@@ -28,6 +36,62 @@ def weight_to_vsize(weight):
     # Divide by 4, round up
     return (weight + 3) // 4
 
+class ClusterMiniWallet(MiniWallet):
+    def _bulk_tx(self, tx, target_vsize):
+        """Pad with outputs that stay within Knots' per-output script limits."""
+        if target_vsize < tx.get_vsize():
+            raise RuntimeError(f"target_vsize {target_vsize} is less than transaction virtual size {tx.get_vsize()}")
+
+        dummy_vbytes = target_vsize - tx.get_vsize()
+        if dummy_vbytes == 0:
+            return
+
+        base_outputs = len(tx.vout)
+
+        def split_standard_outputs(total, count):
+            output_sizes = []
+            for i in range(count):
+                remaining_outputs = count - i - 1
+                output_size = min(43, total - 10 * remaining_outputs)
+                assert 10 <= output_size <= 43
+                output_sizes.append(output_size)
+                total -= output_size
+            assert_equal(total, 0)
+            return output_sizes
+
+        padding_plan = None
+        for standard_count in range((dummy_vbytes // 10) + 1):
+            count_size_delta = len(ser_compact_size(base_outputs + standard_count)) - len(ser_compact_size(base_outputs))
+            standard_total = dummy_vbytes - count_size_delta
+            if standard_count > 0 and 10 * standard_count <= standard_total <= 43 * standard_count:
+                padding_plan = (split_standard_outputs(standard_total, standard_count), None)
+                break
+
+            count_size_delta = len(ser_compact_size(base_outputs + standard_count + 1)) - len(ser_compact_size(base_outputs))
+            min_op_return_size = 10
+            max_op_return_size = 9 + MAX_OP_RETURN_RELAY
+            lower = max(min_op_return_size, dummy_vbytes - count_size_delta - 43 * standard_count)
+            upper = min(max_op_return_size, dummy_vbytes - count_size_delta - 10 * standard_count)
+            if lower <= upper:
+                op_return_size = upper
+                standard_total = dummy_vbytes - count_size_delta - op_return_size
+                if standard_count == 0:
+                    assert_equal(standard_total, 0)
+                    padding_plan = ([], op_return_size)
+                    break
+                if 10 * standard_count <= standard_total <= 43 * standard_count:
+                    padding_plan = (split_standard_outputs(standard_total, standard_count), op_return_size)
+                    break
+
+        assert padding_plan is not None
+        standard_output_sizes, op_return_size = padding_plan
+        for output_size in standard_output_sizes:
+            tx.vout.append(CTxOut(nValue=0, scriptPubKey=CScript([OP_TRUE] * (output_size - 9))))
+        if op_return_size is not None:
+            tx.vout.append(CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN] + [OP_TRUE] * (op_return_size - 10))))
+
+        assert_equal(tx.get_vsize(), target_vsize)
+
 def cleanup(func):
     def wrapper(self, *args, **kwargs):
         func(self, *args, **kwargs)
@@ -41,6 +105,8 @@ def cleanup(func):
 class MempoolClusterTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
+        # ClusterMiniWallet padding uses nonstandard anyone-can-spend outputs.
+        self.extra_args = [["-acceptnonstdtxn=1"]]
 
     def add_chain_cluster(self, node, cluster_count, target_vsize=None):
         """Create a cluster of transactions, with the count specified.
@@ -285,6 +351,7 @@ class MempoolClusterTest(BitcoinTestFramework):
         # This transaction would create a cluster of size max_cluster_count
         # Importantly, the node should account for the fact that half of the transactions will be replaced.
         tx_merger_replacer = self.wallet.create_self_transfer_multi(utxos_to_spend=utxos_created_by_parents, fee_per_output=fees_rbf_sats * 2)
+        assert_equal(node.testmempoolaccept([tx_merger_replacer["hex"]], maxfeerate=0)[0]["allowed"], True)
         node.sendrawtransaction(tx_merger_replacer["hex"])
         assert tx_merger_replacer["txid"] in node.getrawmempool()
         assert_equal(node.getmempoolcluster(tx_merger_replacer["txid"])['txcount'], max_cluster_count)
@@ -389,7 +456,7 @@ class MempoolClusterTest(BitcoinTestFramework):
 
     def run_test(self):
         node = self.nodes[0]
-        self.wallet = MiniWallet(node)
+        self.wallet = ClusterMiniWallet(node)
         self.generate(self.wallet, 400)
 
         self.test_getmempoolcluster()
@@ -398,7 +465,7 @@ class MempoolClusterTest(BitcoinTestFramework):
 
         for cluster_size_limit_kvb in [10, 20, 33, 100, DEFAULT_CLUSTER_SIZE_LIMIT_KVB]:
             self.log.info(f"-> Resetting node with -limitclustersize={cluster_size_limit_kvb}")
-            self.restart_node(0, extra_args=[f"-limitclustersize={cluster_size_limit_kvb}"])
+            self.restart_node(0, extra_args=self.extra_args[0] + [f"-limitclustersize={cluster_size_limit_kvb}"])
 
             cluster_size_limit = cluster_size_limit_kvb * 1000
             self.test_cluster_size_limit(cluster_size_limit)
@@ -406,7 +473,7 @@ class MempoolClusterTest(BitcoinTestFramework):
 
         for cluster_count_limit in [4, 10, 16, 32, DEFAULT_CLUSTER_LIMIT]:
             self.log.info(f"-> Resetting node with -limitclustercount={cluster_count_limit}")
-            self.restart_node(0, extra_args=[f"-limitclustercount={cluster_count_limit}"])
+            self.restart_node(0, extra_args=self.extra_args[0] + [f"-limitclustercount={cluster_count_limit}"])
 
             self.test_cluster_count_limit(cluster_count_limit)
             if cluster_count_limit > 10:

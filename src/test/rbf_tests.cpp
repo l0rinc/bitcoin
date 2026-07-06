@@ -228,6 +228,44 @@ BOOST_FIXTURE_TEST_CASE(rbf_helper_functions, TestChain100Setup)
     BOOST_CHECK(PaysForRBF(low_fee, high_fee + 99999999, 99999999, incremental_relay_feerate, unused_txid) == std::nullopt);
 }
 
+BOOST_FIXTURE_TEST_CASE(rbf_changeset_cluster_limits_count_replacements, TestChain100Setup)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    LOCK2(::cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    std::vector<CTransactionRef> parents;
+    std::vector<CTransactionRef> children;
+    parents.reserve(DEFAULT_CLUSTER_LIMIT / 2);
+    children.reserve(DEFAULT_CLUSTER_LIMIT / 2);
+
+    for (size_t i{0}; i < DEFAULT_CLUSTER_LIMIT / 2; ++i) {
+        const auto parent_tx{make_tx(/*inputs=*/{m_coinbase_txns.at(i)}, /*output_values=*/{10 * COIN})};
+        TryAddToMempool(pool, entry.Fee(1000).FromTx(parent_tx));
+        const auto child_tx{make_tx(/*inputs=*/{parent_tx}, /*output_values=*/{9 * COIN})};
+        TryAddToMempool(pool, entry.Fee(1000).FromTx(child_tx));
+        parents.push_back(parent_tx);
+        children.push_back(child_tx);
+    }
+
+    const auto replacement_tx{make_tx(/*inputs=*/parents, /*output_values=*/{9 * COIN})};
+    {
+        auto changeset{pool.GetChangeSet()};
+        (void)RBFTestStageAddition(*changeset, replacement_tx, /*fee=*/1000);
+        BOOST_CHECK(!changeset->CheckMemPoolPolicyLimits());
+    }
+    {
+        auto changeset{pool.GetChangeSet()};
+        (void)RBFTestStageAddition(*changeset, replacement_tx, /*fee=*/1000);
+        for (const auto& child_tx : children) {
+            const auto child_iter{pool.GetIter(child_tx->GetHash())};
+            BOOST_REQUIRE(child_iter.has_value());
+            changeset->StageRemoval(*child_iter);
+        }
+        BOOST_CHECK(changeset->CheckMemPoolPolicyLimits());
+    }
+}
+
 BOOST_FIXTURE_TEST_CASE(rbf_conflicts_calculator, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);

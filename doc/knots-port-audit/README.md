@@ -7765,6 +7765,37 @@ Functional tests:
   --portseed=47140 --loglevel=ERROR`, and
   `build/bin/test_bitcoin --run_test=private_broadcast_tests
   --catch_system_errors=no --log_level=test_suite`.
+- Cluster-mempool RBF validation-order port regression:
+  The base functional sweep caught a port-only regression in
+  `mempool_cluster.py`: single-transaction acceptance was checking cluster
+  limits before `ReplacementChecks()` had staged RBF removals. The result was
+  rejection of a replacement whose final cluster would be within the limit
+  because the pre-replacement graph was oversized. Current Core's
+  `AcceptSingleTransactionInternal` runs replacement checks before the
+  cluster-limit check, so this was not a Knots/Core divergence and not an
+  original Knots bug. The port now restores the Core ordering while preserving
+  the Knots policy-only conflict checks after the final staged graph is known.
+  Coverage now includes
+  `rbf_tests/rbf_changeset_cluster_limits_count_replacements`, which proves
+  the pre-removal ChangeSet is oversized but the staged-replacement ChangeSet
+  passes, and `mempool_cluster.py` now asserts both `testmempoolaccept` and
+  `sendrawtransaction` accept the exact-limit replacement. The same functional
+  test uses a local padding wallet that avoids oversized/multiple data-carrier
+  outputs so Knots' data-output policy does not mask cluster-limit behavior.
+  Verification passed with `cmake --build build --target bitcoind bitcoin-cli
+  test_bitcoin -j4`,
+  `build/bin/test_bitcoin
+  --run_test=rbf_tests/rbf_changeset_cluster_limits_count_replacements
+  --catch_system_errors=no --log_level=test_suite`,
+  `python3 -m py_compile test/functional/mempool_cluster.py`, and
+  `python3 build/test/functional/mempool_cluster.py --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_cluster_rbf_fix3 --portseed=47232
+  --loglevel=ERROR`. Broader replacement-policy checks also passed with
+  `build/bin/test_bitcoin --run_test=rbf_tests --catch_system_errors=no
+  --log_level=error --report_level=short` and
+  `python3 build/test/functional/feature_rbf.py --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_rbf_validation_order --portseed=47233
+  --loglevel=ERROR`.
 
 The full `feature_block.py` run reached the large-reorg section but failed
 because `/tmp` was full and the node shut down with `Disk space is too low!`;
