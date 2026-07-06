@@ -207,6 +207,22 @@ BOOST_AUTO_TEST_CASE(parse_hd_keypath_output_contract)
     BOOST_CHECK(roundtrip == expected_path);
     BOOST_REQUIRE(ParseHDKeypath(WriteHDKeypath(keypath, /*apostrophe=*/true), roundtrip));
     BOOST_CHECK(roundtrip == expected_path);
+    BOOST_REQUIRE(ParseHDKeypath(FormatHDKeypath(keypath).substr(1), roundtrip));
+    BOOST_CHECK(roundtrip == expected_path);
+    BOOST_REQUIRE(ParseHDKeypath(FormatHDKeypath(keypath, /*apostrophe=*/true).substr(1), roundtrip));
+    BOOST_CHECK(roundtrip == expected_path);
+
+    const std::vector<uint32_t> empty_path;
+    BOOST_CHECK_EQUAL(FormatHDKeypath(empty_path), "");
+    BOOST_CHECK_EQUAL(FormatHDKeypath(empty_path, /*apostrophe=*/true), "");
+    BOOST_CHECK_EQUAL(WriteHDKeypath(empty_path), "m");
+    BOOST_CHECK_EQUAL(WriteHDKeypath(empty_path, /*apostrophe=*/true), "m");
+    roundtrip = {0};
+    BOOST_REQUIRE(ParseHDKeypath(FormatHDKeypath(empty_path), roundtrip));
+    BOOST_CHECK(roundtrip.empty());
+    roundtrip = {0};
+    BOOST_REQUIRE(ParseHDKeypath(WriteHDKeypath(empty_path), roundtrip));
+    BOOST_CHECK(roundtrip.empty());
 
     const std::vector<uint32_t> original_path{0x33333333U, 0x80000002U};
     keypath = original_path;
