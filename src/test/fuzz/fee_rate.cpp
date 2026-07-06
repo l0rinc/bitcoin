@@ -15,6 +15,19 @@
 #include <string>
 #include <vector>
 
+namespace {
+void AssertFeeRateStringSign(const std::string& str, const bool negative)
+{
+    const auto first_sign{str.find('-')};
+    if (negative) {
+        Assert(first_sign == 0);
+        Assert(str.find('-', 1) == std::string::npos);
+    } else {
+        Assert(first_sign == std::string::npos);
+    }
+}
+} // namespace
+
 FUZZ_TARGET(fee_rate)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
@@ -27,6 +40,14 @@ FUZZ_TARGET(fee_rate)
         (void)fee_rate.GetFee(bytes);
     }
     (void)fee_rate.ToString();
+
+    {
+        const CAmount signed_satoshis_per_k{fuzzed_data_provider.ConsumeIntegral<CAmount>()};
+        const CFeeRate signed_fee_rate{signed_satoshis_per_k};
+        Assert(signed_fee_rate.GetFeePerK() == signed_satoshis_per_k);
+        AssertFeeRateStringSign(signed_fee_rate.ToString(FeeRateFormat::BTC_KVB), signed_satoshis_per_k < 0);
+        AssertFeeRateStringSign(signed_fee_rate.ToString(FeeRateFormat::SAT_VB), signed_satoshis_per_k < 0);
+    }
 
     {
         const CAmount precise_fee{fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(-MAX_MONEY, MAX_MONEY)};
