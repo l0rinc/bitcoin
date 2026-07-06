@@ -65,7 +65,7 @@ Other missing/adapted Knots pieces found during this pass:
   adds a `script_tests` regression that checks both normal accounting and
   saturation at `int32_t` max.
 - User-directed compact-block review restored Knots' txref-only `extra_txn`
-  reconstruction cache (`a8203e9412`, ported as `ab4fd3568f`). Current Core
+  reconstruction cache (`a8203e9412`, ported as `8ad8b834ed`). Current Core
   added the same change and then explicitly reverted it as `b9300d8d0a`,
   returning to `<Wtxid, CTransactionRef>` pairs. Knots' retained shape removes
   the possibility for the compact-block extra-transaction cache API to carry a
@@ -2808,7 +2808,7 @@ under different commits. They are not all proven exploitable.
   ceiling.
 
 - Compact-block txref-only reconstruction caches:
-  `a03aef9cec`, `a8203e9412`, ported as `9d68ea0782` and `ab4fd3568f`
+  `a03aef9cec`, `a8203e9412`, ported as `51d35506bb` and `8ad8b834ed`
 
   Current Core master added Knots' simplifications and later reverted both of
   them (`b7b249d3ad` for `txns_randomized`, `b9300d8d0a` for `extra_txn`), so
