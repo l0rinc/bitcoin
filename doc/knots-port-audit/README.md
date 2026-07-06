@@ -1642,7 +1642,12 @@ Other missing/adapted Knots pieces found during this pass:
   `3c20072d93`, `36f643e680`, `5b371fb621`, and `ad19b1efff`. Current Core
   already carries the same best-block-in-memory/write-through behavior for
   block connect, block disconnect, wallet loading, and post-rescan state. This
-  is wallet reorg/rescan bookkeeping, not consensus behavior and not a
+  review also confirmed Knots' double block-disconnection crash fix
+  (`a18085a18b`, Core `9ef429b6ae`) and unclean-shutdown regression coverage
+  (`8246c6a65f`, Core `11f8ab140f`) are present in the port: disconnected
+  coinbase transactions are synced as inactive plus abandoned, so a repeated
+  disconnect does not hit the wallet transaction-state equality assertion.
+  This is wallet reorg/rescan crash hardening, not consensus behavior and not a
   Knots-only hardening gap. Focused `wallet_tests` and
   `wallet_reorgsrestore.py` pass with the port.
 - The mempool-entry RPC review confirmed Knots' transaction-serialization
@@ -5756,6 +5761,10 @@ Functional tests:
 - `python3 test/functional/wallet_reorgsrestore.py --configfile
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_wallet_reorgsrestore_bestblock --portseed=7396`
+- `python3 test/functional/wallet_reorgsrestore.py
+  --configfile=build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_reorgsrestore_double_disconnect_refresh
+  --portseed=42746`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getblockfrompeer.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_getblockfrompeer_no_header`
