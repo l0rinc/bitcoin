@@ -1109,7 +1109,9 @@ Other missing/adapted Knots pieces found during this pass:
   while Knots and the port set permissions on `.cookie.tmp` before writing the
   generated credentials and before rename. This is local RPC-auth file
   compatibility and permission control, not consensus behavior or remote
-  network exposure. The lingering test
+  network exposure. Refreshed full `rpc_users.py` coverage passed on the port,
+  with the port test against unmodified Knots, and with Knots' native test
+  against unmodified Knots. The lingering test
   `FIXME` about reviving an earlier command-line `-rpcauth=*` after
   `-norpcauth` is inherited from actual Knots and was not introduced by the
   port; the test asserts the current Knots behavior around config-file auth
@@ -1917,10 +1919,11 @@ under different commits. They are not all proven exploitable.
   is local configuration hardening, not a remote bypass by itself. Source
   comparison confirmed the port carries Knots' `-rpcauthfile` argument,
   wallet-restriction propagation through `JSONRPCRequest`, and blank-token
-  skip behavior. The full `rpc_users.py` auth coverage passes on both the port
-  and unmodified Knots, including auth files with one entry, multiple entries,
-  blank lines, no trailing newline, wallet restrictions, blank direct
-  `-rpcauth`, and `-norpcauth` interactions.
+  skip behavior. The full `rpc_users.py` auth coverage passes on the port, with
+  the port test driving unmodified Knots binaries, and with Knots' native test
+  driving unmodified Knots binaries, including auth files with one entry,
+  multiple entries, blank lines, no trailing newline, wallet restrictions,
+  blank direct `-rpcauth`, and `-norpcauth` interactions.
 
   Knots' follow-up to store cookie and `-rpcuser`/`-rpcpassword` credentials
   hashed in memory (`f06169f019`) was rechecked separately because it looks
@@ -4945,6 +4948,18 @@ Functional tests:
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_users_cookie_auth_knots
   --portseed=42181`
+- `python3 test/functional/rpc_users.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_users_auth_refresh_port2
+  --portseed=42611`
+- `python3 test/functional/rpc_users.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_users_auth_refresh_knots2
+  --portseed=42612`
+- `python3 ../knots/test/functional/rpc_users.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_users_auth_native_knots3
+  --portseed=42613`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_getrpcwhitelist_auth_review_port
@@ -5565,6 +5580,15 @@ Functional tests:
   passed on unmodified Knots, confirming the port's auth-file, wallet-restricted
   auth, blank `-rpcauth`, and `-norpcauth` behavior is inherited Knots
   behavior rather than port-introduced.
+- Refreshed RPC auth/cookie cross-check:
+  `python3 test/functional/rpc_users.py --configfile=build/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_users_auth_refresh_port2 --portseed=42611`
+  passed on the port,
+  `python3 test/functional/rpc_users.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_users_auth_refresh_knots2 --portseed=42612`
+  passed with the port test driving unmodified Knots binaries, and
+  `python3 ../knots/test/functional/rpc_users.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_users_auth_native_knots3 --portseed=42613`
+  passed with Knots' native test driving unmodified Knots binaries. These runs
+  cover rpcauth files, blank `-rpcauth`, `-norpcauth`, wallet restrictions,
+  cookie permissions/replacement, and restricted-wallet method blocking.
 - Original Knots cross-check:
   minimal startup with `../knots/build-repro/bin/bitcoind -regtest`, replacing
   `regtest/.cookie` with `__cookie__:replaced-by-another-process`, then
