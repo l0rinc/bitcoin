@@ -73,6 +73,14 @@ Other missing/adapted Knots pieces found during this pass:
   (`f9f7587b59`, ported as `7985bced24`). Without the clamp, a negative
   user-provided threshold is assigned through the unsigned byte-count path. The
   port adds `feature_init.py` coverage for both `-lowmem=1` and `-lowmem=-1`.
+- The `-minrelaymaturity` / `-minrelaycoinblocks` review found an original
+  Knots local-configuration footgun. Actual Knots `29.x-knots` accepts
+  negative values for both options; the coin-block threshold is stored as
+  `uint64_t`, so `-minrelaycoinblocks=-1` becomes an effectively unreachable
+  relay threshold. This is not consensus behavior or a remote trigger, but it
+  can silently disable local relay/mining acceptance for an operator. The port
+  now rejects negative values as `8c192ed1c8`, with unit and functional
+  startup coverage.
 - The same low-memory review confirmed the underlying Knots dbcache flush
   pressure series is present in the port and absent from current Core:
   `SystemNeedsMemoryReleased()` checks Windows and Linux available-memory
@@ -2021,7 +2029,9 @@ under different commits. They are not all proven exploitable.
   `bad-txns-input-immature-depth` until one more block is mined, and proves
   `-minrelaycoinblocks=7500000000` rejects the same one-confirmation shape
   with `bad-txns-input-immature-coinblocks` until the output has enough
-  coin-block age. The same test passes against unmodified Knots.
+  coin-block age. The same test passes against unmodified Knots. The port also
+  fixes an inherited Knots argument-validation bug by rejecting negative values
+  for both options at startup.
 
 - CJDNS addnode duplicate detection:
   `28823f30dc`
@@ -2645,6 +2655,15 @@ Source/manifest checks:
   src/node/mempool_args.cpp test/functional/mempool_minrelay.py` show current
   Core lacks Knots' minimum relay input-age knobs while actual Knots and the
   port share the same validation rejection paths and functional coverage.
+- `git -C ../knots show 29.x-knots:src/node/mempool_args.cpp
+  29.x-knots:src/kernel/mempool_options.h | rg -n
+  "minrelaycoinblocks|minrelaymaturity|uint64_t|GetIntArg" -C 4`,
+  `sed -n '145,162p' src/node/mempool_args.cpp`, and
+  `rg -n "test_minrelay_age_args|MempoolMinRelayAgeParse"
+  src/test/mempool_tests.cpp test/functional/feature_config_args.py` show
+  actual Knots assigns signed `GetIntArg` values into the unsigned
+  `minrelaycoinblocks` option, while the port now rejects negative values for
+  both minrelay age options.
 - `git show --stat --patch --minimal b85232d7462`, `git show
   origin/master:src/init.cpp | rg -n
   "blockfilterindex_value|AllBlockFilterTypes|BlockFilterType::BASIC|certain indexes|indexes for all known types"
@@ -3247,6 +3266,10 @@ Unit tests:
 - `cmake --build build --target test_bitcoin && build/bin/test_bitcoin
   --run_test=rbf_tests --catch_system_error=no --log_level=error
   --report_level=short`
+- `cmake --build build --target test_bitcoin -j4`
+- `build/bin/test_bitcoin --run_test=mempool_tests/MempoolMinRelayAgeParse
+  --catch_system_errors=no --log_level=error --report_level=short`
+- `cmake --build build --target bitcoind -j4`
 - `build/bin/test_bitcoin --run_test=rpc_tests/rpc_convert_values_dumptxoutset
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --catch_system_error=no --log_level=error
@@ -3400,6 +3423,14 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_port
   --portseed=32630`
+- `python3 test/functional/feature_config_args.py --configfile=build/test/config.ini
+  --cachedir=test/cache --test_methods test_minrelay_age_args
+  --tmpdir=/mnt/my_storage/tmp_feature_config_minrelay_args_port_2
+  --portseed=32641`
+- `python3 test/functional/mempool_minrelay.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_port_after_guard
+  --portseed=32642`
 - `python3 test/functional/mempool_minrelay.py --configfile=../knots/build-repro/test/config.ini
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_knots
@@ -3912,6 +3943,11 @@ Functional tests:
   passed on unmodified Knots, confirming that `-minrelaymaturity=2` and
   `-minrelaycoinblocks=7500000000` reject fresh confirmed spends until one more
   block provides enough age.
+- Original Knots bug cross-check:
+  `timeout 3s ../knots/build-repro/bin/bitcoind -regtest -datadir="$tmpdir" -minrelaycoinblocks=-1 -noconnect -listen=0 -server=0 -printtoconsole=0`
+  and the same command with `-minrelaymaturity=-1` both returned `124`, meaning
+  unmodified Knots stayed running until killed by `timeout` instead of rejecting
+  the invalid negative value during startup.
 - Original Knots source cross-check:
   `git -C ../knots show 29.x-knots:src/test/transaction_tests.cpp | rg -n "acceptunknownwitness|scriptpubkey-unknown-witnessversion" -C 4`
   shows unmodified Knots' unit test has the same unknown-witness output
