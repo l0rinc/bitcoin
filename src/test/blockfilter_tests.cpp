@@ -153,8 +153,15 @@ BOOST_AUTO_TEST_CASE(blockfilter_basic_test)
     BlockFilter block_filter(BlockFilterType::BASIC, block, block_undo);
     const GCSFilter& filter = block_filter.GetFilter();
 
+    GCSFilter::ElementSet included_elements;
     for (const CScript& script : included_scripts) {
-        BOOST_CHECK(filter.Match(GCSFilter::Element(script.begin(), script.end())));
+        included_elements.emplace(script.begin(), script.end());
+    }
+    BOOST_CHECK_EQUAL(filter.GetN(), included_elements.size());
+    BOOST_CHECK(filter.MatchAny(included_elements));
+
+    for (const GCSFilter::Element& element : included_elements) {
+        BOOST_CHECK(filter.Match(element));
     }
     for (const CScript& script : excluded_scripts) {
         BOOST_CHECK(!filter.Match(GCSFilter::Element(script.begin(), script.end())));
