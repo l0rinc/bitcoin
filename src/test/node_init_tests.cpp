@@ -11,6 +11,8 @@
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 
+#include <cstdint>
+
 using node::NodeContext;
 
 //! Like BasicTestingSetup, but using regtest network instead of mainnet.
@@ -36,6 +38,22 @@ public:
     }
     NodeContext& m_node;
 };
+
+BOOST_AUTO_TEST_CASE(block_storage_space_warning_units)
+{
+    constexpr uint64_t GB{1'000'000'000};
+    constexpr uint64_t MIB{1024 * 1024};
+
+    BOOST_CHECK_EQUAL(node::CalculateBlockStorageSpaceRequired(856, std::nullopt), 856 * GB);
+    BOOST_CHECK_EQUAL(node::CalculateBlockStorageSpaceWarningGB(856 * GB), 856);
+
+    const uint64_t prune_target{550 * MIB};
+    BOOST_CHECK_EQUAL(node::CalculateBlockStorageSpaceRequired(856, prune_target), prune_target);
+    BOOST_CHECK_EQUAL(node::CalculateBlockStorageSpaceWarningGB(prune_target), 1);
+
+    BOOST_CHECK_EQUAL(node::CalculateBlockStorageSpaceRequired(1, 2 * GB), GB);
+    BOOST_CHECK_EQUAL(node::CalculateBlockStorageSpaceWarningGB(GB + 1), 2);
+}
 
 BOOST_AUTO_TEST_CASE(init_test)
 {

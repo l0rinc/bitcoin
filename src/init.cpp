@@ -183,6 +183,7 @@ static constexpr bool DEFAULT_PROXYRANDOMIZE{true};
 static constexpr bool DEFAULT_REST_ENABLE{false};
 static constexpr bool DEFAULT_I2P_ACCEPT_INCOMING{true};
 static constexpr bool DEFAULT_STOPAFTERBLOCKIMPORT{false};
+static constexpr uint64_t BLOCK_STORAGE_SPACE_WARNING_GB{1'000'000'000};
 
 //! Check if initial sync is done with no change in block height or queued downloads every 30s
 static constexpr auto SYNC_CHECK_INTERVAL{std::chrono::seconds{30}};
@@ -211,6 +212,17 @@ static bool g_generated_pid{false};
 static fs::path GetPidFile(const ArgsManager& args)
 {
     return AbsPathForConfigVal(args, args.GetPathArg("-pid", BITCOIN_PID_FILENAME));
+}
+
+uint64_t node::CalculateBlockStorageSpaceRequired(const uint64_t assumed_blockchain_size_gb, const std::optional<uint64_t> prune_target)
+{
+    const uint64_t assumed_chain_bytes{assumed_blockchain_size_gb * BLOCK_STORAGE_SPACE_WARNING_GB};
+    return prune_target ? std::min(*prune_target, assumed_chain_bytes) : assumed_chain_bytes;
+}
+
+uint64_t node::CalculateBlockStorageSpaceWarningGB(const uint64_t bytes_required)
+{
+    return CeilDiv(bytes_required, BLOCK_STORAGE_SPACE_WARNING_GB);
 }
 
 [[nodiscard]] static bool CreatePidFile(const ArgsManager& args)
@@ -2361,11 +2373,9 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     // On first startup, warn on low block storage space
     if (!do_reindex && !do_reindex_chainstate && chain_active_height <= 1) {
-        uint64_t assumed_chain_bytes{chainparams.AssumedBlockchainSize() * 1'000'000'000};
-        uint64_t additional_bytes_needed{
-            chainman.m_blockman.IsPruneMode() ?
-                std::min(chainman.m_blockman.GetPruneTarget(), assumed_chain_bytes) :
-                assumed_chain_bytes};
+        uint64_t additional_bytes_needed{node::CalculateBlockStorageSpaceRequired(
+            chainparams.AssumedBlockchainSize(),
+            chainman.m_blockman.IsPruneMode() ? std::make_optional(chainman.m_blockman.GetPruneTarget()) : std::nullopt)};
 
         if (!CheckDiskSpace(args.GetBlocksDirPath(), additional_bytes_needed)) {
             InitWarning(strprintf(_(
@@ -2373,7 +2383,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
                     "Approximately %u GB of data will be stored in this directory."
                 ),
                 fs::quoted(fs::PathToString(args.GetBlocksDirPath())),
-                CeilDiv(additional_bytes_needed, 1'000'000'000)
+                node::CalculateBlockStorageSpaceWarningGB(additional_bytes_needed)
             ));
         }
     }
