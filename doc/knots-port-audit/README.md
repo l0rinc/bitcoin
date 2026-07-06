@@ -5413,6 +5413,9 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_disconnect_ban_ip_subnet`
 - `python3 test/functional/rpc_rawtransaction.py --configfile build/test/config.ini`
 - `build/test/functional/rpc_rawtransaction.py`
+- `python3 test/functional/rpc_uptime.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_uptime_refresh
+  --portseed=44001`
 - `python3 test/functional/rpc_invalid_address_message.py --configfile
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_invalid_address_validateaddress_compat`
