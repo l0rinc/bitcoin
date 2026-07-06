@@ -1057,7 +1057,9 @@ Other missing/adapted Knots pieces found during this pass:
   hardening, not consensus behavior. Existing `p2p_handshake.py` coverage
   checks the visible user-agent preservation path; the ordering itself is
   verified by source comparison because the race is not deterministic enough
-  for a reliable functional assertion.
+  for a reliable functional assertion: current Core still assigns
+  `pfrom.nVersion = nVersion` before `pfrom.cleanSubVer = cleanSubVer`, while
+  Knots and the port do the reverse.
 - The same follow-up confirmed Knots' raw transaction max-feerate accounting
   fix (`4b3cc3d48e`, `1cee5b1ac7`, `335d928d96`) is present in the port:
   `sendrawtransaction` passes a `CFeeRate` into `BroadcastTransaction`, which
@@ -3895,6 +3897,9 @@ Functional tests:
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_review_knots2
   --portseed=26445`
+- `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_p2p_handshake_cleansubver_port
+  --portseed=42170`
 - `python3 test/functional/feature_logging.py --configfile
   build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_logging_peeraddr
   --portseed=27501`
