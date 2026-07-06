@@ -137,6 +137,19 @@ class BIP66Test(BitcoinTestFramework):
             assert_equal(int(self.nodes[0].getbestblockhash(), 16), tip)
             peer.sync_with_ping()
 
+        self.log.info("Test invalid block script error with script check threads disabled")
+        inline_spendtx = self.create_tx(self.coinbase_txids[1])
+        unDERify(inline_spendtx)
+        inline_block = create_block(tip, height=DERSIG_HEIGHT, ntime=block_time + 1, version=4, txlist=[inline_spendtx])
+        inline_block.solve()
+
+        self.nodes[0].setscriptthreadsenabled(False)
+        with self.nodes[0].assert_debug_log(expected_msgs=['Block validation error: block-script-verify-flag-failed (Non-canonical DER signature)']):
+            peer.send_and_ping(msg_block(inline_block))
+            assert_equal(int(self.nodes[0].getbestblockhash(), 16), tip)
+            peer.sync_with_ping()
+        self.nodes[0].setscriptthreadsenabled(True)
+
         self.log.info("Test that a block with a DERSIG-compliant transaction is accepted")
         block.vtx[1] = self.create_tx(self.coinbase_txids[1])
         block.hashMerkleRoot = block.calc_merkle_root()
