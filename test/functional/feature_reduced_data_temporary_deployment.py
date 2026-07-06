@@ -28,24 +28,38 @@ Expected timeline:
 - Block 576+: EXPIRED (rules no longer enforced, nodes converge)
 """
 
+from io import BytesIO
+
 from test_framework.blocktools import (
     create_block,
     create_coinbase,
     add_witness_commitment,
 )
 from test_framework.messages import (
+    COutPoint,
+    CTransaction,
+    CTxIn,
+    CTxInWitness,
     CTxOut,
 )
 from test_framework.script import (
     CScript,
+    OP_DROP,
     OP_RETURN,
+    OP_TRUE,
 )
+from test_framework.script_util import script_to_p2wsh_script
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import assert_equal
 from test_framework.wallet import MiniWallet
 
 REDUCED_DATA_BIT = 4
 VERSIONBITS_TOP_BITS = 0x20000000
+VIOLATION_SIZE = 300
+
+
+def assert_reduced_data_rejected(result):
+    assert result is not None and 'Push value size limit exceeded' in result, f"Expected REDUCED_DATA rejection, got: {result}"
 
 
 class TemporaryDeploymentTest(BitcoinTestFramework):
@@ -93,6 +107,31 @@ class TemporaryDeploymentTest(BitcoinTestFramework):
         tx.vout.append(CTxOut(0, CScript([OP_RETURN, b'x' * 81])))
         tx.rehash()
         return tx
+
+    def create_p2wsh_funding_and_spending_tx(self, wallet, node):
+        """Create a P2WSH output and a spend violating REDUCED_DATA witness limits."""
+        witness_script = CScript([OP_DROP, OP_TRUE])
+        script_pubkey = script_to_p2wsh_script(witness_script)
+
+        funding_txid = wallet.send_to(from_node=node, scriptPubKey=script_pubkey, amount=100000)['txid']
+        funding_tx_hex = node.getrawtransaction(funding_txid)
+        funding_tx = CTransaction()
+        funding_tx.deserialize(BytesIO(bytes.fromhex(funding_tx_hex)))
+        funding_tx.rehash()
+
+        p2wsh_vout = next(i for i, vout in enumerate(funding_tx.vout) if vout.scriptPubKey == script_pubkey)
+
+        spending_tx = CTransaction()
+        spending_tx.vin = [CTxIn(COutPoint(funding_tx.sha256, p2wsh_vout))]
+        spending_tx.vout = [CTxOut(funding_tx.vout[p2wsh_vout].nValue - 1000, CScript([OP_TRUE]))]
+        spending_tx.wit.vtxinwit.append(CTxInWitness())
+        spending_tx.wit.vtxinwit[0].scriptWitness.stack = [
+            b'\x42' * VIOLATION_SIZE,
+            witness_script,
+        ]
+        spending_tx.rehash()
+
+        return funding_tx, spending_tx
 
     def get_deployment_status(self, node):
         """Get reduced_data deployment status."""
@@ -214,6 +253,21 @@ class TemporaryDeploymentTest(BitcoinTestFramework):
         # =====================================================================
         self.log.info("Phase 4: Testing rules enforced until expiry")
 
+        self.log.info("Creating active-period P2WSH UTXO for witness-limit checks...")
+        witness_funding_tx, witness_spending_tx = self.create_p2wsh_funding_and_spending_tx(wallet, node_bip110)
+        block_funding = self.create_block_for_node(node_bip110, [witness_funding_tx])
+        assert_equal(node_bip110.submitblock(block_funding.serialize().hex()), None)
+        self.sync_all()
+        assert_equal(node_bip110.getblockcount(), 438)
+
+        self.log.info("Test: REDUCED_DATA witness script flags are enforced while active")
+        self.disconnect_nodes(0, 1)
+        block_bad_witness = self.create_block_for_node(node_bip110, [witness_spending_tx])
+        assert_reduced_data_rejected(node_bip110.submitblock(block_bad_witness.serialize().hex()))
+        self.connect_nodes(0, 1)
+        self.sync_all()
+        assert_equal(node_bip110.getblockcount(), 438)
+
         # Mine to block 574 (one before last active block)
         # active_duration=144, activation at 432, so last active block is 432+144-1=575
         blocks_to_574 = 574 - node_bip110.getblockcount()
@@ -247,9 +301,9 @@ class TemporaryDeploymentTest(BitcoinTestFramework):
         self.log.info("Phase 5: Testing expiry - rules no longer enforced")
 
         # At block 576, deployment has expired (first expired block = 432 + 144)
-        self.log.info("Test: BIP-110 node accepts 'invalid' block at height 576 (expired)")
+        self.log.info("Test: BIP-110 node accepts output-size and witness-limit violations at height 576 (expired)")
         tx_invalid = self.create_tx_with_large_output(wallet)
-        block_after_expiry = self.create_block_for_node(node_bip110, [tx_invalid])
+        block_after_expiry = self.create_block_for_node(node_bip110, [tx_invalid, witness_spending_tx])
         result = node_bip110.submitblock(block_after_expiry.serialize().hex())
         assert_equal(result, None)
         self.sync_all()
@@ -286,8 +340,8 @@ class TemporaryDeploymentTest(BitcoinTestFramework):
         self.log.info("  - BIP9 state transitions (DEFINED -> STARTED -> LOCKED_IN -> ACTIVE -> EXPIRED)")
         self.log.info("  - Chain split at activation (BIP-110 rejects, Core accepts)")
         self.log.info("  - Reorg to longer valid chain on reconnect")
-        self.log.info("  - Rules enforced during active period (432-575)")
-        self.log.info("  - Rules not enforced after expiry (576+)")
+        self.log.info("  - Output-size and witness script rules enforced during active period (432-575)")
+        self.log.info("  - Output-size and witness script rules not enforced after expiry (576+)")
         self.log.info("  - Post-expiry convergence (both nodes accept same blocks)")
 
 
