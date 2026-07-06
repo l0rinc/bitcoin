@@ -4376,6 +4376,18 @@ Functional tests:
   --portseed=42232`
 - `build/bin/test_bitcoin --run_test=mempool_tests/MempoolMinRelayAgeParse
   --catch_system_error=no --log_level=error --report_level=short`
+- `python3 test/functional/mempool_minrelay.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_port_refresh2
+  --portseed=42480`
+- `python3 test/functional/feature_config_args.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_config_args_minrelay_port_refresh
+  --portseed=42482`
+- `python3 test/functional/mempool_minrelay.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_knots_refresh2
+  --portseed=42481`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_cjdns_addnode_3`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
@@ -5309,6 +5321,30 @@ Functional tests:
   passed on unmodified Knots, confirming that `-minrelaymaturity=2` and
   `-minrelaycoinblocks=7500000000` reject fresh confirmed spends until one more
   block provides enough age.
+- Port cross-check:
+  `build/bin/test_bitcoin --run_test=mempool_tests/MempoolMinRelayAgeParse
+  --catch_system_error=no --log_level=error --report_level=short`
+  passed, confirming positive parsing and negative-value rejection for both
+  minrelay age options in `ApplyArgsManOptions()`.
+- Port cross-check:
+  `python3 test/functional/mempool_minrelay.py --configfile build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_port_refresh2
+  --portseed=42480`
+  passed, confirming the port still rejects too-recent confirmed spends by both
+  block depth and coin-block age until the next block provides enough age.
+- Port startup validation cross-check:
+  `python3 test/functional/feature_config_args.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_config_args_minrelay_port_refresh
+  --portseed=42482`
+  passed and logged the minrelay negative-value startup checks.
+- Original Knots cross-check:
+  `python3 test/functional/mempool_minrelay.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_knots_refresh2
+  --portseed=42481`
+  passed on unmodified Knots with the same relay-policy behavior.
 - Original Knots bug cross-check:
   `timeout 3s ../knots/build-repro/bin/bitcoind -regtest -datadir="$tmpdir" -minrelaycoinblocks=-1 -noconnect -listen=0 -server=0 -printtoconsole=0`
   and the same command with `-minrelaymaturity=-1` both returned `124`, meaning
@@ -5320,6 +5356,14 @@ Functional tests:
   `/mnt/my_storage/tmp_knots_minrelaymaturity_negative_refresh` plus
   `-minrelaymaturity=-1` both printed normal startup logs, loaded regtest
   chainstate, and returned `124` after timeout-driven shutdown.
+- Original Knots bug cross-check:
+  `timeout 3s ../knots/build-repro/bin/bitcoind -regtest
+  -datadir=/mnt/my_storage/tmp_knots_minrelaycoinblocks_negative_refresh2
+  -minrelaycoinblocks=-1 -noconnect -listen=0 -server=0 -printtoconsole=1`
+  and the same command with
+  `/mnt/my_storage/tmp_knots_minrelaymaturity_negative_refresh2` plus
+  `-minrelaymaturity=-1` both printed normal startup logs and returned `124`,
+  confirming unmodified Knots still accepts both negative values.
 - Original Knots source cross-check:
   `git -C ../knots show 29.x-knots:src/test/transaction_tests.cpp | rg -n "acceptunknownwitness|scriptpubkey-unknown-witnessversion" -C 4`
   shows unmodified Knots' unit test has the same unknown-witness output
