@@ -2010,8 +2010,11 @@ initialization. The Knots `getblock_vin` lazy-init follow-up is structurally
 avoided in current Core and this port because `getblock()` is registered as an
 `RPCMethod` factory, rather than by namespace-scope `RPCResult` construction.
 
-The `LoadChainTip` entry above covers Knots `33329f812e`. Current Core carries
-a stronger successor (`854a6d5a9a` plus test extension `20ae9b98ea`): all
+The `LoadChainTip` entry above covers Knots `33329f812e` and its follow-up
+`ee42cf3e`. Knots first mitigated the comparator UB by erasing/reinserting
+candidate entries around `nSequenceId` mutation, then fixed that mitigation to
+erase/reinsert `target` rather than the loop's `tip`. Current Core carries a
+stronger successor (`854a6d5a9a` plus test extension `20ae9b98ea`): all
 chainstates load their tips while `setBlockIndexCandidates` is empty, then
 `PopulateBlockIndexCandidates()` rebuilds the candidate sets after the
 `nSequenceId` mutations are complete. The port matches that source structure
@@ -2112,7 +2115,8 @@ Source/manifest checks:
   reorgs is already carried by current Core, actual Knots, and the port. This
   is a reorg/restart safety check, not a remaining Core shortcoming.
 - `git -C ../knots show --stat --patch --minimal
-  33329f812e1a159d0b6209fc826050e90d2bf4a3`, `git show --stat --patch
+  33329f812e1a159d0b6209fc826050e90d2bf4a3
+  ee42cf3ec5cf97d31836789e778a89cb341af600`, `git show --stat --patch
   --minimal 854a6d5a9a 20ae9b98ea`, `rg -n
   "PopulateBlockIndexCandidates|setBlockIndexCandidates|SEQ_ID_BEST_CHAIN_FROM_DISK|LoadChainTip"
   src/validation.cpp src/validation.h src/node/chainstate.cpp
