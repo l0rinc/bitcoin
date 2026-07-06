@@ -2270,6 +2270,22 @@ under different commits. They are not all proven exploitable.
   strengthened unit and functional tests pass on the port, and the focused
   functional option test passes against unmodified Knots.
 
+- Dynamic dust policy:
+  Knots' `-dustdynamic=off|[<multiplier>*]target:<blocks>|[<multiplier>*]mempool:<kB>`
+  is present in the port and absent from current Core. It keeps
+  `dustrelayfeefloor` as the configured floor, then periodically raises
+  `dustrelayfee` either from fee-estimator targets or from the fee rate found
+  at a configured depth in this node's mempool. The option is a relay/mining
+  standardness policy that can make low-value outputs non-standard when fee
+  pressure is high; it is not a consensus rule, and old blocks/transactions are
+  not made invalid. The parser rejects target values below two blocks, target
+  values above the estimator horizon, mempool positions below one kB, and
+  zero/invalid multipliers. Runtime checks on both the port and unmodified
+  Knots with `-dustdynamic=mempool:250 -dustrelayfee=0.00001000` reported
+  `dustdynamic: "3*mempool:250"` and preserved `dustrelayfeefloor` at
+  `0.00001000`. Existing functional coverage also checks the RPC string and
+  scheduler-updated dust feerate for both target- and mempool-based modes.
+
 - ScriptPubKey-reuse mempool policy:
   Knots' `-spkreuse=0` mode is present in the port and absent from current Core.
   The port carries the later Knots pointer-based `mapUsedSPK` representation
@@ -3034,6 +3050,13 @@ Source/manifest checks:
   `minrelaytxfee=0.00001000`, `incrementalrelayfee=0.00001000`, and
   `blockmintxfee=0.00001000`, while the same check with `-corepolicy=1`
   returned `0.00000100`, `0.00000100`, and `0.00000001`.
+- Manual runtime check: start `build/bin/bitcoind -regtest` in a clean datadir
+  with `-dustdynamic=mempool:250 -dustrelayfee=0.00001000` and query
+  `getmempoolinfo`; the port returned `dustdynamic="3*mempool:250"`,
+  `dustrelayfee=0.00001000`, and `dustrelayfeefloor=0.00001000`. The same
+  command using `../knots/build-repro/bin/bitcoind` returned the same three
+  values on unmodified Knots, except for unrelated result fields omitted by the
+  older Knots RPC response.
 - `git show origin/master:src/policy/rbf.cpp origin/master:src/policy/rbf.h |
   rg -n "GetUniqueClusterCount|too many conflicting clusters|too many potential replacements|MAX_REPLACEMENT_CANDIDATES"`
   and `git -C ../knots show 29.x-knots:src/policy/rbf.cpp
@@ -3392,6 +3415,8 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=mempool_tests`
 - `build/bin/test_bitcoin --run_test=mempool_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=mempool_tests/MempoolDustDynamicParse
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=mempool_tests/MempoolPermitEphemeralParse
   --catch_system_error=no --log_level=error --report_level=short`
