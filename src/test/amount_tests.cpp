@@ -177,6 +177,21 @@ BOOST_AUTO_TEST_CASE(ToStringTest)
     BOOST_CHECK_EQUAL(feeRate.ToString(), "0.00000001 BTC/kvB");
     BOOST_CHECK_EQUAL(feeRate.ToString(FeeRateFormat::BTC_KVB), "0.00000001 BTC/kvB");
     BOOST_CHECK_EQUAL(feeRate.ToString(FeeRateFormat::SAT_VB), "0.001 sat/vB");
+
+    feeRate = CFeeRate(-1);
+    BOOST_CHECK_EQUAL(feeRate.ToString(), "-0.00000001 BTC/kvB");
+    BOOST_CHECK_EQUAL(feeRate.ToString(FeeRateFormat::BTC_KVB), "-0.00000001 BTC/kvB");
+    BOOST_CHECK_EQUAL(feeRate.ToString(FeeRateFormat::SAT_VB), "-0.001 sat/vB");
+
+    feeRate = CFeeRate(-1000);
+    BOOST_CHECK_EQUAL(feeRate.ToString(), "-0.00001000 BTC/kvB");
+    BOOST_CHECK_EQUAL(feeRate.ToString(FeeRateFormat::BTC_KVB), "-0.00001000 BTC/kvB");
+    BOOST_CHECK_EQUAL(feeRate.ToString(FeeRateFormat::SAT_VB), "-1.000 sat/vB");
+
+    feeRate = CFeeRate(std::numeric_limits<CAmount>::min());
+    BOOST_CHECK_EQUAL(feeRate.ToString(), "-92233720368.54775808 BTC/kvB");
+    BOOST_CHECK_EQUAL(feeRate.ToString(FeeRateFormat::BTC_KVB), "-92233720368.54775808 BTC/kvB");
+    BOOST_CHECK_EQUAL(feeRate.ToString(FeeRateFormat::SAT_VB), "-9223372036854775.808 sat/vB");
 }
 
 BOOST_AUTO_TEST_SUITE_END()
