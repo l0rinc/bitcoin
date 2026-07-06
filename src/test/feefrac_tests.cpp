@@ -222,6 +222,24 @@ BOOST_AUTO_TEST_CASE(compare_chunks_zero_fee_tail_identity)
     BOOST_CHECK(CompareChunks(chunks_with_tail, other_with_tail) == original_cmp);
 }
 
+BOOST_AUTO_TEST_CASE(compare_chunks_common_prefix_identity)
+{
+    const std::vector<FeeFrac> prefix{{6, 2}, {-1, 1}};
+    auto with_prefix = [&](const std::vector<FeeFrac>& chunks) {
+        std::vector<FeeFrac> ret{prefix};
+        ret.insert(ret.end(), chunks.begin(), chunks.end());
+        return ret;
+    };
+    auto check_preserved = [&](const std::vector<FeeFrac>& left, const std::vector<FeeFrac>& right) {
+        BOOST_CHECK(CompareChunks(with_prefix(left), with_prefix(right)) == CompareChunks(left, right));
+        BOOST_CHECK(CompareChunks(with_prefix(right), with_prefix(left)) == CompareChunks(right, left));
+    };
+
+    check_preserved({{1, 1}}, {{3, 1}});
+    check_preserved({{12, 6}, {-3, 3}}, {{4, 2}, {4, 2}, {4, 2}, {-1, 1}, {-1, 1}, {-1, 1}});
+    check_preserved({{10, 1}, {0, 9}}, {{20, 10}});
+}
+
 BOOST_AUTO_TEST_CASE(compare_chunks_order_contracts)
 {
     const std::vector<FeeFrac> lower{{1, 1}};
