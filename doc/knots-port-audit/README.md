@@ -81,7 +81,11 @@ Other missing/adapted Knots pieces found during this pass:
   `-lowmem=<MiB>`, and deterministic tests can disable it by setting the
   threshold to zero. This is local availability/resource hardening, not
   consensus behavior or a remote trigger. Focused `feature_init.py`
-  `init_lowmem_test` runs pass against both the port and unmodified Knots.
+  `init_lowmem_test` runs pass against both the port and unmodified Knots. The
+  port now adds direct unit coverage for the threshold predicate, including
+  saturated `free+buffer` accounting, and for `FlushStateToDisk(IF_NEEDED)`
+  emptying a small coins cache only when the memory-pressure probe fires
+  (`d2db337c78`).
 - The `GetArg` / `GetBoolArg` numeric settings review confirmed Knots'
   `577c04c80e` is present in the port and still absent from current Core
   master. Core's `SettingToBool(...)` still falls through to `value.get_str()`
@@ -1735,7 +1739,10 @@ under different commits. They are not all proven exploitable.
   threshold or disable the feature with `0`. This is availability hardening for
   memory-constrained nodes and avoids keeping dirty UTXO cache entries in RAM
   while the OS is likely to swap. It is not consensus behavior and not remotely
-  triggerable by itself.
+  triggerable by itself. This pass verified the behavior against unmodified
+  `29.x-knots`; the port did not invent the feature. The port now also covers
+  the pure threshold decision, overflow-safe `free+buffer` accounting, explicit
+  `-lowmem=0` disable handling, and the validation `IF_NEEDED` flush trigger.
 
 - Buffered block-file page-cache advice:
   `97130ac516`
@@ -2320,6 +2327,20 @@ Source/manifest checks:
   --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=util_tests/ceil_div_test
   --catch_system_error=no --log_level=error --report_level=short`
+- `git show --stat --patch --minimal 10e7dc80ee d95f134d11 ebf7df30c2
+  da690b5a69 f9f7587b59`, the equivalent `../knots 29.x-knots` show, and
+  `git grep -n
+  "g_low_memory_threshold\\|SystemNeedsMemoryReleased\\|-lowmem\\|mempressure"
+  HEAD origin/master -- src test cmake CMakeLists.txt` show that actual Knots
+  and the port carry the low-memory dbcache flush series while current Core does
+  not.
+- `cmake --build build --target test_bitcoin -j4`
+- `build/bin/test_bitcoin --run_test=validation_flush_tests
+  --catch_system_errors=no`
+- `build/bin/test_bitcoin --run_test=validation_chainstate_tests
+  --catch_system_errors=no`
+- `test/functional/feature_init.py --configfile=build/test/config.ini
+  --cachedir=test/cache`
 - `git show --stat --patch --minimal 1ba5009294 8fad5801e0 d2c1bd10db`,
   `git show origin/master:src/init.cpp | rg -n
   "shutdown_request|Interrupt\\(|m_tip_block_cv|notify_all" -C 5`,
