@@ -178,7 +178,7 @@ BOOST_AUTO_TEST_CASE(autofile_tell_after_close)
         BOOST_CHECK_EQUAL(file.tell(), 1);
         BOOST_REQUIRE_EQUAL(file.fclose(), 0);
         BOOST_CHECK(file.IsNull());
-        BOOST_CHECK_EQUAL(file.tell(), 1); // TODO: tell() should reject closed files.
+        BOOST_CHECK_EXCEPTION(file.tell(), std::ios_base::failure, HasReason{"AutoFile::tell: file handle is nullptr"});
     }
 
     {
@@ -187,7 +187,7 @@ BOOST_AUTO_TEST_CASE(autofile_tell_after_close)
         FILE* raw_file{file.release()};
         BOOST_REQUIRE(raw_file != nullptr);
         BOOST_CHECK(file.IsNull());
-        BOOST_CHECK_EQUAL(file.tell(), 0); // TODO: tell() should reject released files.
+        BOOST_CHECK_EXCEPTION(file.tell(), std::ios_base::failure, HasReason{"AutoFile::tell: file handle is nullptr"});
         BOOST_REQUIRE_EQUAL(std::fclose(raw_file), 0);
     }
 
