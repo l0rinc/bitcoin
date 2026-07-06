@@ -1480,7 +1480,13 @@ Other missing/adapted Knots pieces found during this pass:
   port while current Core still scans the rest of the level after finding a
   duplicate pair. This is consensus-adjacent but behavior-equivalent: the root
   and `mutated` result are unchanged, and `merkle_tests` still compares the
-  current implementation against the legacy merkle-tree implementation.
+  current implementation against the legacy merkle-tree implementation. A
+  later review found a port omission in Knots' explicit CVE-2012-2459 return
+  value regression test (`38f3deb2e8`): actual Knots pins that
+  `[1,2,3,4,5,6]` and `[1,2,3,4,5,6,5,6]` produce the same root while the
+  mutation flag differs, but the port had only the older indirect randomized
+  coverage. The port now carries the explicit `merkle_test_mutated_return_value`
+  test; this was a coverage omission, not an original Knots consensus bug.
 - The ZMQ follow-up found the Knots notification-failure hardening
   (`1c4d2d54d8`, `268fb1e0e3`, `ba28af94bd`) is present in the port and still
   missing from current Core. A temporary ZMQ-enabled build exposed
@@ -4303,6 +4309,10 @@ Builds:
   src/rpc/mempool.cpp` shows Knots and the port document the fee-histogram
   `to_feerate` result as `RPCResult::Type::NUM`, while current Core has no
   corresponding fee-histogram result in `getmempoolinfo`.
+- `git grep -n "merkle_test_mutated_return_value" HEAD knots/29.x-knots
+  origin/master -- src/test/merkle_tests.cpp` shows the explicit mutated-root
+  return-value regression test is present in Knots and the port, while current
+  Core still lacks that focused consensus-path test.
 - `rg -n
   "Unable to bind all endpoints|Unable to bind any endpoint|rpc_bind"
   src/httpserver.cpp test/functional/rpc_bind.py
@@ -4562,7 +4572,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=validation_chainstatemanager_tests
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=validation_block_tests`
-- `build/bin/test_bitcoin --run_test=merkle_tests`
+- `build/bin/test_bitcoin --run_test=merkle_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=miner_tests`
 - `build/bin/test_bitcoin --run_test=miniminer_tests
   --catch_system_error=no --log_level=error --report_level=short`
