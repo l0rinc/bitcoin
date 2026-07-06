@@ -772,11 +772,12 @@ Other missing/adapted Knots pieces found during this pass:
   for inconclusive proof-of-funds or unsupported script cases. This is
   wallet/RPC signature functionality, not transaction or block consensus. The
   signature-checker `require_sighash_all` flag is only enabled by this message
-  verifier path, where it rejects otherwise-valid BIP322 proofs signed with
-  non-`SIGHASH_ALL` hash types. `script_tests/require_sighash_all` covers the
-  low-level ECDSA invariant, and `wallet_signmessagewithaddress.py` covers
-  wallet-created BIP322 signatures for native SegWit and Taproot addresses in
-  addition to the
+  verifier path (`a6db4bde2f`, with `5a69971e48` moving the flag out of the
+  constructor to avoid invisible constructor-argument conflicts), where it
+  rejects otherwise-valid BIP322 proofs signed with non-`SIGHASH_ALL` hash
+  types. `script_tests/require_sighash_all` covers the low-level ECDSA
+  invariant, and `wallet_signmessagewithaddress.py` covers wallet-created
+  BIP322 signatures for native SegWit and Taproot addresses in addition to the
   existing legacy signing, util-level BIP322 vectors, and
   `rpc_signmessagewithprivkey.py` verification vectors.
 - Wallet sweep coverage passes on the current descriptor-wallet base:
@@ -4313,6 +4314,13 @@ Builds:
   origin/master -- src/test/merkle_tests.cpp` shows the explicit mutated-root
   return-value regression test is present in Knots and the port, while current
   Core still lacks that focused consensus-path test.
+- `git grep -n
+  "m_require_sighash_all\\|BOOST_AUTO_TEST_CASE(require_sighash_all)"
+  HEAD knots/29.x-knots origin/master -- src/common/signmessage.cpp
+  src/script/interpreter.cpp src/script/interpreter.h src/test/script_tests.cpp`
+  shows Knots and the port carry the BIP322-only `SIGHASH_ALL` checker flag;
+  the port additionally has the focused low-level regression test, while
+  current Core has neither the flag nor the test.
 - `rg -n
   "Unable to bind all endpoints|Unable to bind any endpoint|rpc_bind"
   src/httpserver.cpp test/functional/rpc_bind.py
