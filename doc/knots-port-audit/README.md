@@ -2219,7 +2219,9 @@ under different commits. They are not all proven exploitable.
   future witness output from mempool, but the same transaction is accepted in a
   block relayed from a permissive peer. The same functional test passes against
   unmodified Knots, confirming this is inherited Knots policy rather than a
-  port-only divergence.
+  port-only divergence. A refreshed source comparison shows current Core still
+  recognizes `TxoutType::WITNESS_UNKNOWN` but lacks the
+  `acceptunknownwitness` mempool option and reject branch.
 
 - Minimum relay input age / coin-block policy:
   `fa0267d631`, `482bd5382e`
@@ -3122,6 +3124,9 @@ Source/manifest checks:
   src/test/transaction_tests.cpp` show current Core lacks the option while
   actual Knots and the port expose and test the unknown-witness output policy
   toggle.
+- `git grep -n
+  "acceptunknownwitness|scriptpubkey-unknown-witnessversion|WITNESS_UNKNOWN|m_accept_unknown_witness"
+  HEAD knots/29.x-knots origin/master -- src test/functional src/test`
 - `git show origin/master:src/validation.cpp origin/master:src/kernel/mempool_options.h
   origin/master:src/init.cpp origin/master:src/node/mempool_args.cpp | rg -n
   "minrelaymaturity|minrelaycoinblocks|GetCoinAge|bad-txns-input-immature" -C 4`,
@@ -4551,6 +4556,16 @@ Functional tests:
   --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_mempool_acceptunknownwitness_knots
   --portseed=32901`
+- `build/bin/test_bitcoin --run_test=transaction_tests/test_IsStandard
+  --catch_system_error=no --log_level=error --report_level=short`
+- `python3 test/functional/mempool_acceptunknownwitness.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_acceptunknownwitness_port_refresh
+  --portseed=42240`
+- `python3 test/functional/mempool_acceptunknownwitness.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_acceptunknownwitness_knots_refresh
+  --portseed=42241`
 - `python3 test/functional/p2p_compactblocks.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_compactblocks_header_guard_final`
 - `python3 test/functional/p2p_compactblocks.py --configfile=build/test/config.ini
@@ -4841,6 +4856,10 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_mempool_acceptunknownwitness_knots
   --portseed=32901` run also passed on unmodified Knots, including block
   acceptance after mempool rejection.
+- Original Knots cross-check:
+  `python3 test/functional/mempool_acceptunknownwitness.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_mempool_acceptunknownwitness_knots_refresh --portseed=42241`
+  passed on unmodified Knots with the same default acceptance,
+  `-acceptunknownwitness=0` mempool rejection, and block-validity behavior.
 - Original Knots cross-check:
   `python3 test/functional/p2p_compactblocks.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_compactblocks_header_guard`
   reached and passed the repeated-`blocktxn` section on unmodified Knots,
