@@ -702,7 +702,7 @@ RPCMethod getaddressinfo()
         }
     }
 
-    ret.pushKV("iswatchonly", false);
+    ret.pushKV("iswatchonly", bool(mine & ISMINE_WATCH_ONLY));
 
     UniValue detail = DescribeWalletAddress(*pwallet, dest);
     ret.pushKVs(std::move(detail));

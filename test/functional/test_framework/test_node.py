@@ -114,6 +114,7 @@ class TestNode():
         version=None,
         v2transport=False,
         uses_wallet=False,
+        descriptors=True,
         ipcbind=False,
     ):
         self.index = i
@@ -192,6 +193,7 @@ class TestNode():
 
         self.cli = None
         self.use_cli = use_cli
+        self.descriptors = descriptors
 
         self.running = False
         self.process = None
@@ -248,10 +250,10 @@ class TestNode():
     def __getattr__(self, name):
         """Dispatches any unrecognised messages to the RPC connection or a CLI instance."""
         if self.use_cli:
-            return getattr(self.cli, name)
+            return getattr(RPCOverloadWrapper(self.cli, True, self.descriptors), name)
         else:
             assert self.rpc_connected and self._rpc is not None, self._node_msg("Error: no RPC connection")
-            return getattr(self._rpc, name)
+            return getattr(RPCOverloadWrapper(self._rpc, descriptors=self.descriptors), name)
 
     def start(self, extra_args=None, *, cwd=None, stdout=None, stderr=None, env=None, **kwargs):
         """Start the node."""
@@ -476,11 +478,11 @@ class TestNode():
 
     def get_wallet_rpc(self, wallet_name):
         if self.use_cli:
-            return self.cli("-rpcwallet={}".format(wallet_name))
+            return RPCOverloadWrapper(self.cli("-rpcwallet={}".format(wallet_name)), True, self.descriptors)
         else:
             assert self.rpc_connected and self._rpc, self._node_msg("RPC not connected")
             wallet_path = "wallet/{}".format(urllib.parse.quote(wallet_name))
-            return self._rpc / wallet_path
+            return RPCOverloadWrapper(self._rpc / wallet_path, descriptors=self.descriptors)
 
     def version_is_at_least(self, ver):
         return self.version is None or self.version >= ver

@@ -1056,6 +1056,7 @@ RPCMethod dumpwallet();
 RPCMethod importwallet();
 RPCMethod importprunedfunds();
 RPCMethod removeprunedfunds();
+RPCMethod importmulti();
 RPCMethod importdescriptors();
 RPCMethod listdescriptors();
 RPCMethod backupwallet();
@@ -1136,6 +1137,7 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &getwalletinfo},
         {"wallet", &importaddress},
         {"wallet", &importdescriptors},
+        {"wallet", &importmulti},
         {"wallet", &importprivkey},
         {"wallet", &importprunedfunds},
         {"wallet", &importpubkey},

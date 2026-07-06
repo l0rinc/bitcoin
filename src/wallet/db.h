@@ -144,6 +144,9 @@ public:
      */
     virtual bool Rewrite() = 0;
 
+    /** Reload database environment after rewriting, if the backend has one. */
+    virtual void ReloadDbEnv() {}
+
     /** Back up the entire database to a file.
      */
     virtual bool Backup(const std::string& strDest) const = 0;

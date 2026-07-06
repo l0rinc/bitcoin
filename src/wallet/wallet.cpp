@@ -930,9 +930,6 @@ bool CWallet::FindScriptPubKeyUsed(const std::set<CScript>& keys, const std::var
 
 bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
 {
-    // Only descriptor wallets can be encrypted
-    Assert(IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS));
-
     if (HasEncryptionKeys())
         return false;
 
@@ -974,6 +971,8 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
             }
         }
 
+        SetMinVersion(FEATURE_WALLETCRYPT, encrypted_batch);
+
         if (!encrypted_batch->TxnCommit()) {
             delete encrypted_batch;
             encrypted_batch = nullptr;
@@ -1009,6 +1008,7 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
         // Need to completely rewrite the wallet file; if we don't, the database might keep
         // bits of the unencrypted private key in slack space in the database file.
         GetDatabase().Rewrite();
+        GetDatabase().ReloadDbEnv();
     }
     NotifyStatusChanged(this);
 

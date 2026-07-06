@@ -507,6 +507,7 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
                 use_cli=self.options.usecli,
                 v2transport=self.options.v2transport,
                 uses_wallet=self.uses_wallet,
+                descriptors=self.options.descriptors,
             )
             init.update(extra_init[i])
             test_node_i = TestNode(
@@ -958,6 +959,7 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
                     coverage_dir=None,
                     cwd=self.options.tmpdir,
                     uses_wallet=self.uses_wallet,
+                    descriptors=self.options.descriptors,
                 ))
             self.start_node(CACHE_NODE_ID)
             cache_node = self.nodes[CACHE_NODE_ID]

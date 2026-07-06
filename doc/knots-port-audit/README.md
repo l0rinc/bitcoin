@@ -163,6 +163,27 @@ Other missing/adapted Knots pieces found during this pass:
   `importdescriptors is not available for non-descriptor wallets`; the port now
   restores that guard and asserts the RPC error in the legacy createwallet
   functional test. This was not an original Knots crash.
+- The BDB-enabled legacy import sweep exposed further port omissions in the same
+  restored wallet surface. `getaddressinfo` reported imported legacy watch-only
+  addresses as `iswatchonly=false`, and the port had retained Knots'
+  `ProcessImport(...)` helper but had not registered the public `importmulti`
+  RPC. Both behaviors are present in actual Knots source, so these were
+  transition omissions in the port rather than original Knots bugs. The sweep
+  also found two current-Core-base adaptations needed for the restored Knots
+  behavior: the functional-test RPC wrapper now propagates `--legacy-wallet` to
+  ad-hoc `createwallet` calls, and legacy `importmulti` filters descriptor
+  keypool candidates by expanded P2PKH/P2WPKH scripts so newer Core descriptor
+  expansion does not add multisig member keys to the keypool.
+- The same `wallet_importmulti.py --legacy-wallet` run exposed a
+  port-introduced authenticated RPC abort in encrypted legacy wallet creation:
+  Core master's `CWallet::EncryptWallet` asserted
+  `WALLET_FLAG_DESCRIPTORS`, so `createwallet blank=true passphrase=...` on a
+  restored legacy BDB wallet terminated the process. Actual Knots'
+  `EncryptWallet` has no descriptor-only assertion and still sets
+  `FEATURE_WALLETCRYPT` plus the BDB environment reload after rewrite. The port
+  now restores legacy-compatible encryption and keeps the BDB reload hook. This
+  was a port bug and a useful Core-shortcoming note for the retained BDB legacy
+  wallet surface, not a consensus issue or an original Knots crash.
 - `rpc_getblockfrompeer.py` still used Knots' older mutable block-hash helper
   (`CBlock.calc_sha256()`), while the current port framework exposes block
   hashes through properties (`hash`, `hash_int`, and `sha256`). The port removes
@@ -5464,9 +5485,9 @@ Functional tests:
 - `python3 test/functional/wallet_sweepprivkeys.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_import_with_label.py --configfile build/test/config.ini --legacy-wallet`
-  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB-enabled rerun passed as recorded below)
 - `python3 test/functional/wallet_importmulti.py --configfile build/test/config.ini --legacy-wallet`
-  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB-enabled rerun passed as recorded below)
 - `python3 test/functional/wallet_upgradewallet.py --configfile build/test/config.ini --legacy-wallet`
   (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_implicitsegwit.py --configfile build/test/config.ini`
@@ -5951,10 +5972,27 @@ Functional tests:
   passed, `test/functional/wallet_createwallet.py --legacy-wallet
   --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_main_legacy_createwallet_func` passed, and the
-  default descriptor-mode `wallet_createwallet.py` run passed. The legacy-mode
-  test verifies `format == "bdb"`, `descriptors == false`, legacy address
-  generation, unload/restart/load persistence, and the non-descriptor
-  `importdescriptors` RPC error instead of the earlier assertion abort.
+  default descriptor-mode `wallet_createwallet.py` run passed. After the
+  follow-up legacy import/encryption fixes, the same BDB build was rebuilt with
+  `cmake --build /mnt/my_storage/tmp_bitcoin_bdb_legacy_build --target bitcoind bitcoin-cli test_bitcoin -j4`
+  and the focused tests passed:
+  `/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/bin/test_bitcoin --run_test=walletdb_tests`,
+  `/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/bin/test_bitcoin --run_test=wallet_tests`,
+  `/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/bin/test_bitcoin --run_test=walletload_tests`,
+  `/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/bin/test_bitcoin --run_test=scriptpubkeyman_tests`,
+  `test/functional/wallet_import_with_label.py --legacy-wallet
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bdb_wallet_import_with_label --portseed=45101`,
+  `test/functional/wallet_importmulti.py --legacy-wallet
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bdb_wallet_importmulti --portseed=45102`, and
+  `test/functional/wallet_createwallet.py --legacy-wallet
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_bdb_wallet_createwallet --portseed=45103`.
+  The legacy-mode coverage now verifies BDB format, non-descriptor wallet state,
+  watch-only address reporting, `importmulti` registration/keypool behavior,
+  encrypted legacy wallet creation, unload/restart/load persistence, and the
+  non-descriptor `importdescriptors` RPC error instead of assertion aborts.
 - GUI compile limitation for the same legacy restore:
   `cmake -S . -B /mnt/my_storage/tmp_legacy_revert_probe_gui_build
   -DWITH_BDB=ON -DWITH_SQLITE=ON -DWARN_INCOMPATIBLE_BDB=OFF -DBUILD_GUI=ON

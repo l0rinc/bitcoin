@@ -125,7 +125,7 @@ public:
 
     void IncrementUpdateCounter() override;
 
-    void ReloadDbEnv();
+    void ReloadDbEnv() override;
 
     /** Verifies the environment and database file */
     bool Verify(bilingual_str& error);
