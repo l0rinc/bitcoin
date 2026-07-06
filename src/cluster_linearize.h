@@ -17,6 +17,7 @@
 #include <memusage.h>
 #include <random.h>
 #include <span.h>
+#include <util/check.h>
 #include <util/feefrac.h>
 #include <util/overflow.h>
 #include <util/vecdeque.h>
@@ -281,6 +282,12 @@ public:
         } while (to_add.Any());
         Assume(ret.IsSubsetOf(todo));
         Assume(ret[tx]);
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            for (auto i : ret) {
+                Assume((Ancestors(i) & todo).IsSubsetOf(ret));
+                Assume((Descendants(i) & todo).IsSubsetOf(ret));
+            }
+        }
         return ret;
     }
 
