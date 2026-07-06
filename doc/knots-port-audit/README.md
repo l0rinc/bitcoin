@@ -5271,6 +5271,9 @@ Functional tests:
 - `python3 test/functional/rpc_users.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_users_hashed_auth_review_port
   --portseed=31930`
+- `python3 test/functional/rpc_users.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_users_hashed_auth_refresh2
+  --portseed=44012`
 - `python3 test/functional/rpc_whitelist.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_whitelist_hashed_auth_review_port
   --portseed=31940`
