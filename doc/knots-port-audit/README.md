@@ -3056,7 +3056,8 @@ under different commits. They are not all proven exploitable.
 
 High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
-key handling, `LocalServiceInfo::nScore` saturation, miner `addPackageTxs`
+key handling, `LocalServiceInfo::nScore` saturation (`8caf0836a8`, Core
+`2189a6f5f2`), miner `addPackageTxs`
 overflow (`2e4688618b`, Core `b807dfcdc5`), compact-block witness mutation
 checks and repeated-`blocktxn`
 empty-header guard, `LoadChainTip` UB,
@@ -3070,8 +3071,9 @@ reorgs (`5689ba8fde`, `b1378e3f48`, `dbca0cc4d3`, and `24ffe06d2f`),
 BaseIndex rewind no-commit state persistence (`16b1710d97`) and stale
 `current_tip == m_best_block_index` assert removal (`c4de297c26`),
 `SetStdinEcho` UB (`98d9237d3e`, Core `fa692974ac`), fd-limit
-overflow/RLIMIT_INFINITY handling (`0f92fc907f`, `6c89453ca7`; Core
-`4afbabdcef`), RPC credentials hashed in memory, PSBT bounds asserts,
+overflow/RLIMIT_INFINITY handling (`0f92fc907f`, `1953393f48`,
+`6c89453ca7`; Core `4afbabdcef`, `8ab4b9fc85`), RPC credentials hashed in
+memory, PSBT bounds asserts,
 v2-to-v1 reconnect UAF, randomized Tor
 stream-isolation credential prefixes, feebumper combined-fee crash, wallet
 coin-selection boolean amount fix (`c0b092936e`, Core `0026b330c4`),
@@ -4428,6 +4430,7 @@ Unit tests:
 - `build/bin/test_bitcoin
   --run_test=net_tests/LocalAddress_TorDoesNotRequireOutboundReachability
   --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=net_tests/LocalAddress_nScore_Overflow`
 - `build/bin/test_bitcoin --run_test=net_tests --catch_system_error=no`
 - Port runtime check:
   `build/bin/bitcoind -regtest -datadir=<tmp> -daemonwait -listen=0
@@ -4641,6 +4644,11 @@ Functional tests:
   build/test/config.ini --test_methods init_lowmem_test
   --tmpdir=/mnt/my_storage/tmp_feature_init_lowmem_port_refresh
   --portseed=42300`
+- `python3 test/functional/feature_init.py --configfile build/test/config.ini
+  --test_methods init_rlimit_large_test
+  --tmpdir=/mnt/my_storage/tmp_feature_init_rlimit_large_port
+  --portseed=44021` passed; the host hard limit was below the requested
+  above-`INT_MAX` soft limit, so the method exercised the graceful skip path
 - `python3 test/functional/feature_init.py --configfile
   ../knots/build-repro/test/config.ini --test_methods init_lowmem_test
   --tmpdir=/mnt/my_storage/tmp_feature_init_lowmem_knots_refresh
