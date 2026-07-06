@@ -382,6 +382,12 @@ BOOST_AUTO_TEST_CASE(golomb_rice_roundtrip_valid_p_values)
             }
             bit_writer.Flush();
         }
+        size_t expected_bit_size{0};
+        for (const uint64_t value : values) {
+            const uint64_t quotient{p == 64 ? 0 : value >> p};
+            expected_bit_size += static_cast<size_t>(quotient) + 1 + p;
+        }
+        BOOST_CHECK_EQUAL(encoded.size(), (expected_bit_size + 7) / 8);
 
         SpanReader stream{encoded};
         BitStreamReader bit_reader{stream};
