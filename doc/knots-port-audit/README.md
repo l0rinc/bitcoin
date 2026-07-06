@@ -271,9 +271,11 @@ Other missing/adapted Knots pieces found during this pass:
   Knots defect. Without the return, share derivation could continue after
   setting `MISMATCH_K`, `MISMATCH_ID`, `MISMATCH_LENGTH`, or `DUPLICATE_SHARE`;
   when an earlier share was longer than a later share, the interpolation loop
-  could read past the later share's data. The port now matches Knots as
-  `65c72eb817`, with `codex32_tests` and `wallet_importseed.py` coverage for
-  valid decoded shares with inconsistent lengths.
+  could read past the later share's data. Current Core master has no codex32
+  implementation, so this is Knots-only wallet/import hardening rather than a
+  Core shortcoming. The port now matches Knots as `65c72eb817`, with
+  `codex32_tests` and `wallet_importseed.py` coverage for valid decoded shares
+  with inconsistent lengths.
 - The same exact-patch review checked Knots' `-consensusrules` / RDTS consent
   commits (`fbfa7482c6`, `e60eea4260`). The port carries the behavior in an
   adapted form: unknown rule names fail startup, `rdts` is accepted, and mainnet
@@ -2696,6 +2698,8 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=policyestimator_tests`
 - `build/bin/test_bitcoin --run_test=codex32_tests`
+- `build/bin/test_bitcoin --run_test=codex32_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=caches_tests`
 - `cmake --build build --target test_bitcoin -j4`
 - `build/bin/test_bitcoin --run_test=caches_tests/default_db_batch_size
