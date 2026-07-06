@@ -1261,6 +1261,10 @@ Other missing/adapted Knots pieces found during this pass:
   and actual Knots, while current Core has no matching option. When enabled,
   it skips outbound V1 attempts and V2-to-V1 fallback reconnections only for
   IPv4/IPv6 clearnet peers; V1 onion behavior remains allowed. The existing
+  source comparison maps this through Knots' and the port's
+  `connOptions.disable_v1conn_clearnet` plumbing and `V1ConnDisabled(...)`
+  check; current Core has neither the startup option nor the clearnet-only
+  disable flag.
   `p2p_v2_encrypted.py` coverage passes for V2 clearnet success, V1 clearnet
   refusal, and V1 onion allowance, and `feature_config_args.py` now covers the
   startup guard that rejects `-v2onlyclearnet=1` when v2 transport is disabled.
@@ -2249,9 +2253,11 @@ under different commits. They are not all proven exploitable.
   debug-only `-v2onlyclearnet` policy switch. Knots and this port can refuse
   outbound V1 and V2-to-V1 fallback connections on IPv4/IPv6 while still
   allowing V1 on non-clearnet networks such as onion. This is default-off
-  transport-policy hardening, not a consensus change. The port's focused
-  startup-guard run and full `p2p_v2_encrypted.py` run both pass, and the same
-  tests pass against unmodified Knots.
+  transport-policy hardening, not a consensus change. A refreshed three-way
+  source comparison confirms current Core still lacks the option and
+  `disable_v1conn_clearnet` path; the port's focused startup-guard run and
+  full `p2p_v2_encrypted.py` run both pass, and the same tests pass against
+  unmodified Knots.
 
 - Persistent unexpected block-version signalling warnings:
   `78d5cb210b`, `771ee9fbb4`, `e94eba4e03`, `c17e9d41d5`,
@@ -3542,6 +3548,11 @@ Builds:
   "maxstaleoutbound|consensusrules|privatebroadcast|subdustfeepenalty" -C 2`
 - `rg -n "maxstaleoutbound|consensusrules|privatebroadcast|subdustfeepenalty"
   doc/man/bitcoind.1 doc/man/bitcoin-qt.1 share/examples/bitcoin.conf`
+- `git grep -n
+  "v2onlyclearnet|disable_v1conn_clearnet|V1ConnDisabled"
+  HEAD knots/29.x-knots origin/master -- src/init.cpp src/net.cpp src/net.h
+  test/functional/p2p_v2_encrypted.py
+  test/functional/feature_config_args.py`
 - `rg -n
   "rpcauthfile|rpcauth|wallet_restriction|m_wallet_restriction|Method not available for wallet-restricted"
   src/init.cpp src/httprpc.cpp src/rpc/request.h src/rpc/util.cpp
@@ -4361,6 +4372,15 @@ Functional tests:
 - `python3 test/functional/p2p_v2_encrypted.py --configfile build/test/config.ini
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_port_latest --portseed=32221`
+- `python3 test/functional/feature_config_args.py --configfile
+  build/test/config.ini --cachedir=test/cache --test_methods
+  test_v2onlyclearnet_requires_v2transport
+  --tmpdir=/mnt/my_storage/tmp_feature_config_v2onlyclearnet_port_refresh
+  --portseed=42200`
+- `python3 test/functional/p2p_v2_encrypted.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_port_refresh
+  --portseed=42202`
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_getblocklocations_review`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
@@ -4712,6 +4732,14 @@ Functional tests:
   `python3 test/functional/p2p_v2_encrypted.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_knots_latest --portseed=32223`
   passed on unmodified Knots, confirming the inherited V2 clearnet success, V1
   clearnet refusal, and V1 onion allowance behavior.
+- Original Knots cross-check:
+  `python3 test/functional/feature_config_args.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --test_methods test_v2onlyclearnet_requires_v2transport --tmpdir=/mnt/my_storage/tmp_feature_config_v2onlyclearnet_knots_refresh --portseed=42201`
+  passed on unmodified Knots.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_v2_encrypted.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_knots_refresh --portseed=42203`
+  passed on unmodified Knots, confirming the same V2 clearnet success, V1
+  clearnet refusal, and V1 onion allowance behavior with the refreshed test
+  run.
 - Original Knots cross-check:
   `test/functional/p2p_filter.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_filter_filtered_witness`
   passed on unmodified Knots, including the new
