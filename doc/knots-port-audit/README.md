@@ -1134,7 +1134,9 @@ Other missing/adapted Knots pieces found during this pass:
   inbound peer to prove non-mutated consensus-invalid blocks stay connected.
   The same functional test also documents the separate mutated-block pre-check:
   Knots and the port still disconnect an ordinary inbound peer before that
-  path reaches `MaybePunishNodeForBlock(...)`.
+  path reaches `MaybePunishNodeForBlock(...)`. A fresh rerun of the same
+  functional test against unmodified `../knots` passed, confirming the behavior
+  is inherited from Knots rather than port-created.
 - The compact-block duplicate-`blocktxn` review found Knots' empty partial
   header guard (`569ceb0df4`) missing from the port, even though current Core
   master and unmodified Knots both carry it. A failed compact-block
@@ -1902,7 +1904,11 @@ under different commits. They are not all proven exploitable.
   hardening rather than a consensus-rule change. Current Core already carries
   the related transaction-relay cleanup (`drop MaybePunishNodeForTx`) and the
   single script-check path and onion-inbound whitelist permission suppression;
-  the remaining Core difference is invalid-block peer-punishment behavior.
+  the remaining Core difference is invalid-block peer-punishment behavior. The
+  port pins the connection-type decision matrix in
+  `net_tests/cnode_punish_invalid_blocks`, and `p2p_invalid_block.py` covers the
+  ordinary-inbound non-mutated-invalid-block tolerance plus the still-disconnect
+  mutated-block pre-check.
 
 - ForceInbound trusted-inbound eviction:
   `3544a26256`, `711dadb546`, `067f80e1b5`, `3db935abd1`
@@ -3012,6 +3018,8 @@ Unit tests:
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks
   --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks
+  --catch_system_errors=no`
 - `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_get_block_file_info_empty`
 - `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_readblock_hash_mismatch
   --catch_system_error=no --log_level=nothing --report_level=no`
@@ -3492,6 +3500,8 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_compactblocks_header_guard_final`
 - `python3 test/functional/p2p_invalid_block.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_p2p_invalid_block_inbound_punish2`
+- `test/functional/p2p_invalid_block.py --configfile=build/test/config.ini
+  --cachedir=test/cache`
 - `python3 test/functional/interface_zmq.py --configfile
   /mnt/my_storage/build-zmq-audit/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_interface_zmq_audit_rerun`
@@ -3681,6 +3691,11 @@ Functional tests:
   confirming that ordinary inbound peers are tolerated for non-mutated
   consensus-invalid blocks and disconnected for the separate mutated-block
   pre-check.
+- Original Knots cross-check:
+  `test/functional/p2p_invalid_block.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_knots_p2p_invalid_block_inbound_punish_latest
+  --portseed=32210` passed on unmodified Knots with the current port test.
 - Original Knots cross-check:
   `test/functional/rpc_scanblocks.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_rpc_scanblocks_invalid_action`
   passed on unmodified Knots, including the new in-progress
