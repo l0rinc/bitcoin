@@ -80,7 +80,8 @@ Other missing/adapted Knots pieces found during this pass:
   relay threshold. This is not consensus behavior or a remote trigger, but it
   can silently disable local relay/mining acceptance for an operator. The port
   now rejects negative values as `8c192ed1c8`, with unit and functional
-  startup coverage.
+  startup coverage. A refreshed direct startup check against unmodified Knots
+  again accepted both negative options and ran until killed by `timeout`.
 - The same low-memory review confirmed the underlying Knots dbcache flush
   pressure series is present in the port and absent from current Core:
   `SystemNeedsMemoryReleased()` checks Windows and Linux available-memory
@@ -2236,7 +2237,8 @@ under different commits. They are not all proven exploitable.
   with `bad-txns-input-immature-coinblocks` until the output has enough
   coin-block age. The same test passes against unmodified Knots. The port also
   fixes an inherited Knots argument-validation bug by rejecting negative values
-  for both options at startup.
+  for both options at startup; unmodified Knots still starts with
+  `-minrelaycoinblocks=-1` and `-minrelaymaturity=-1`.
 
 - CJDNS addnode duplicate detection:
   `28823f30dc`
@@ -3140,6 +3142,12 @@ Source/manifest checks:
   actual Knots assigns signed `GetIntArg` values into the unsigned
   `minrelaycoinblocks` option, while the port now rejects negative values for
   both minrelay age options.
+- `git grep -n
+  "minrelaymaturity|minrelaycoinblocks|GetCoinAge|bad-txns-input-immature"
+  HEAD knots/29.x-knots origin/master -- src/validation.cpp
+  src/kernel/mempool_options.h src/init.cpp src/node/mempool_args.cpp
+  src/test/mempool_tests.cpp test/functional/mempool_minrelay.py
+  test/functional/feature_config_args.py`
 - `git show --stat --patch --minimal b85232d7462`, `git show
   origin/master:src/init.cpp | rg -n
   "blockfilterindex_value|AllBlockFilterTypes|BlockFilterType::BASIC|certain indexes|indexes for all known types"
@@ -4019,6 +4027,21 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_knots
   --portseed=32631`
+- `python3 test/functional/mempool_minrelay.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_port_refresh
+  --portseed=42230`
+- `python3 test/functional/mempool_minrelay.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_knots_refresh
+  --portseed=42231`
+- `python3 test/functional/feature_config_args.py --configfile
+  build/test/config.ini --cachedir=test/cache --test_methods
+  test_minrelay_age_args
+  --tmpdir=/mnt/my_storage/tmp_feature_config_minrelay_args_port_refresh
+  --portseed=42232`
+- `build/bin/test_bitcoin --run_test=mempool_tests/MempoolMinRelayAgeParse
+  --catch_system_error=no --log_level=error --report_level=short`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_cjdns_addnode_3`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
@@ -4803,6 +4826,12 @@ Functional tests:
   and the same command with `-minrelaymaturity=-1` both returned `124`, meaning
   unmodified Knots stayed running until killed by `timeout` instead of rejecting
   the invalid negative value during startup.
+- Original Knots bug cross-check:
+  `timeout 3s ../knots/build-repro/bin/bitcoind -regtest -datadir=/mnt/my_storage/tmp_knots_minrelaycoinblocks_negative_refresh -minrelaycoinblocks=-1 -noconnect -listen=0 -server=0 -printtoconsole=1`
+  and the same command with
+  `/mnt/my_storage/tmp_knots_minrelaymaturity_negative_refresh` plus
+  `-minrelaymaturity=-1` both printed normal startup logs, loaded regtest
+  chainstate, and returned `124` after timeout-driven shutdown.
 - Original Knots source cross-check:
   `git -C ../knots show 29.x-knots:src/test/transaction_tests.cpp | rg -n "acceptunknownwitness|scriptpubkey-unknown-witnessversion" -C 4`
   shows unmodified Knots' unit test has the same unknown-witness output
