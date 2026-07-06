@@ -346,6 +346,14 @@ Other missing/adapted Knots pieces found during this pass:
   (`dc0ed81797`). `mining_coin_age_priority.py`,
   `mining_prioritisetransaction.py`, and `feature_maxuploadtarget.py` pass with
   this helper.
+  A follow-up source pass also classified two small mining/fuzz misses from the
+  patch-id queue: Knots' `-blockprioritysize` type/clamp fix (`b5c5195e56`,
+  current port ancestry `275b902eb0`) is present in the port's current
+  `BlockAssembler::addPriorityTxs()` shape by clamping the signed argument to
+  zero before the `uint64_t` size cap, while current Core has no coin-age
+  priority mining path at all; Knots' mini_miner fuzz height sanity fix
+  (`03e9709f84`) is also present in the port, but it is fuzz-harness setup
+  rather than consensus or runtime behavior.
 - Knots' reintroduced checkpoint enforcement (`75b826c729`, port
   `2dd00e5000`) is a Core-missing validation hardening rather than a
   port-introduced behavior: it rejects a header whose height exactly matches a
@@ -4242,6 +4250,17 @@ Builds:
   src/node/mini_miner.cpp src/test/miniminer_tests.cpp` show current Core and
   the port no longer assert ancestor fees are greater than self fees, so Knots'
   negative-fee MiniMiner fix is already present.
+- `rg -n
+  "priority_size_arg|blockprioritysize|MineBlock\\(testing_setup->m_node"
+  src/node/miner.cpp src/test/fuzz/mini_miner.cpp`, `git show
+  knots/29.x-knots:src/policy/coin_age_priority.cpp | rg -n
+  "nBlockPrioritySize|blockprioritysize" -C 4`, `git show
+  origin/master:src/node/miner.cpp | rg -n "blockprioritysize|addPriorityTxs"
+  || true`, and `git show origin/master:src/test/fuzz/mini_miner.cpp | rg -n
+  "MineBlock\\(|initialize_miner" -C 4` show the port carries the
+  `-blockprioritysize` negative/type guard and mini_miner fuzz initial-block
+  setup; current Core lacks the coin-age priority path and still has no
+  mini_miner initializer `MineBlock()` call.
 - `rg -n
   "Unable to bind all endpoints|Unable to bind any endpoint|rpc_bind"
   src/httpserver.cpp test/functional/rpc_bind.py
