@@ -2299,6 +2299,19 @@ under different commits. They are not all proven exploitable.
   default-allowed and flag-rejected cases. The same functional test passes
   against unmodified Knots.
 
+- Strict bytes-per-sigop policy:
+  Knots' `-bytespersigopstrict` (`63934093bc`, side commit `81720c0870`) is
+  present in the port and absent from current Core. Unlike `-bytespersigop`,
+  which can raise a transaction's policy-adjusted vsize, the strict option
+  rejects transactions whose accurate sigop cost is too high for their vsize
+  with `bad-txns-too-many-sigops`. `-acceptnonstdtxn=1` soft-sets the strict
+  threshold to zero unless the operator explicitly overrides it. This is
+  relay/mining DoS-control policy, not consensus: the strengthened
+  `mempool_sigoplimit.py` mines the same signed P2SH `CHECKSIG` transaction
+  directly in a block after proving `-bytespersigopstrict=1000` rejects it from
+  mempool. The focused strict-policy subtest passes against both the port and
+  unmodified Knots.
+
 - Raw transaction max-feerate accounting with policy-adjusted vsize:
   `4b3cc3d48e`, `1cee5b1ac7`, `335d928d96`
 
@@ -3690,6 +3703,20 @@ Functional tests:
   --portseed=26450`
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_full`
+- `python3 test/functional/mempool_sigoplimit.py
+  --configfile=build/test/config.ini --test_methods
+  test_bytespersigopstrict_policy
+  --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_strict_port_2
+  --portseed=32821`
+- `python3 test/functional/mempool_sigoplimit.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --test_methods test_bytespersigopstrict_policy
+  --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_strict_knots
+  --portseed=32822`
+- `python3 test/functional/mempool_sigoplimit.py
+  --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_full_strict_port
+  --portseed=32823`
 - `python3 test/functional/mempool_maxscriptsize.py
   --configfile=build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_maxscriptsize_port_2
