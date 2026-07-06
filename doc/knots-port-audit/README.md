@@ -590,6 +590,14 @@ Other missing/adapted Knots pieces found during this pass:
   resource-selection behavior as `96d1c6c8a9`, with unit coverage for the
   formula/warning thresholds and a shared `libbitcoinkernel` build proving the
   new kernel C API dependency is linked.
+- The same cache review traced Knots' follow-up oversized `-dbcache` warning
+  smoothing (`4613b7d790`). Current Core still warns using the older
+  discontinuous rule based on `DEFAULT_DB_CACHE` below 2 GiB and 75% of total
+  RAM above that point. Knots and the port instead reserve `RESERVED_RAM` and
+  warn above the greater of the dynamic default and 75% of post-reserve
+  headroom. This is operator resource-warning hardening, not consensus or
+  mempool policy. The port has the Knots helper and boundary coverage in
+  `caches_tests`.
 - The UTXO LevelDB batch-size review found a port omission from adapting
   Knots' `2104df3209` onto current Core's later `DEFAULT_DB_CACHE_BATCH`
   location. Actual Knots defaults `-dbbatchsize` to 64 MiB, while current Core
@@ -795,6 +803,16 @@ Other missing/adapted Knots pieces found during this pass:
   `wallet_import_rescan.py` now reach the expected current-Core skip path after
   restoring the ported `AddressType` test helper and current
   `BitcoinTestFramework(__file__)` constructors (`9bfe1fb892`).
+- The GUI wallet-load review confirmed Knots' "start anyway" behavior
+  (`afb41baa06`) is present in the port and absent from current Core. When a
+  configured wallet fails verification or loading for reasons other than
+  missing files or intentionally disabled legacy support, Knots and the port
+  route the error through `interfaces::Chain::initQuestion(...)`, ask whether
+  to continue without that wallet, remove the failed wallet from the persisted
+  wallet setting on confirmation, and force the updated wallet list over
+  command-line settings for the rest of startup. In noninteractive mode the
+  question path falls back to the original hard error, so this is GUI startup
+  recovery and settings hygiene, not a consensus or remote-triggered issue.
 - The wallet backup/export review confirmed Knots' legacy-wallet export
   surfaces are present in the port source: `dumpmasterprivkey` (`e4acb761d4`)
   is registered, and `dumpwallet` writes HD key paths and HD seed ids as
@@ -928,6 +946,13 @@ Other missing/adapted Knots pieces found during this pass:
   subsequent legacy restore (`ece3ba8d5b`) removes the behavioral parity gap:
   `createwallet descriptors=false` now creates a BDB legacy wallet when BDB is
   compiled and reloads it after restart.
+- The BDB build guard also matches Knots' later configure hardening
+  (`3cb8deb755`): when `WITH_BDB` is enabled with a Berkeley DB version other
+  than 4.8, CMake now stops with `FATAL_ERROR` unless the builder explicitly
+  passes `-DWARN_INCOMPATIBLE_BDB=OFF`. That avoids accidentally producing
+  non-portable legacy wallets with a host BDB library. Current Core has no BDB
+  wallet backend, so this is Knots-only build/backup portability hardening
+  rather than a Core runtime behavior.
 - A BDB follow-up review confirmed the port also carries Knots' BDB-specific
   wallet hardening around non-writable directories and environment cleanup:
   `MakeBerkeleyDatabase(...)` catches open/verify exceptions (`a65bce292b`),
@@ -4397,6 +4422,18 @@ Builds:
   src test` show the runtime/system patch-id misses that current Core has
   inherited or independently converged on, rather than remaining Knots-only
   hardening.
+- `git grep -n "HandleWalletLoadError\\|Continue without this wallet\\|ForceSetArgV(\\\"wallet\\\""
+  HEAD knots/29.x-knots origin/master -- src/wallet/load.cpp` shows the
+  GUI wallet-load continuation path in the port and Knots, but not current
+  Core.
+- `git grep -n "WARN_INCOMPATIBLE_BDB\\|BDB (legacy).*portable\\|WARN_INCOMPATIBLE_BDB=OFF"
+  HEAD knots/29.x-knots origin/master -- CMakeLists.txt` shows the
+  incompatible-BDB configure error in the port and Knots; current Core has no
+  BDB wallet backend.
+- `git grep -n "RESERVED_RAM\\|ShouldWarnOversizedDbCache\\|default_dbcache_formula_by_total_ram"
+  HEAD knots/29.x-knots origin/master -- src/node src/test/caches_tests.cpp`
+  shows the port and Knots carrying the dynamic dbcache default and smoothed
+  warning threshold, while current Core only has the older cache warning test.
 - `git -C ../knots show --patch 0c7ac92072 -- src/rpc/util.cpp`,
   `git show origin/master:src/rpc/util.cpp | rg -n
   "GetParamIndex|GetName\\(\\)|GetFirstName\\(\\)" -C 3`, and
