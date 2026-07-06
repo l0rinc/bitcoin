@@ -41,6 +41,7 @@ namespace node {
 
 static const uint64_t MEMPOOL_DUMP_VERSION_NO_XOR_KEY{1};
 static const uint64_t MEMPOOL_DUMP_VERSION{2};
+static_assert(MEMPOOL_DUMP_VERSION_NO_XOR_KEY != MEMPOOL_DUMP_VERSION);
 
 bool LoadMempool(CTxMemPool& pool, const fs::path& load_path, Chainstate& active_chainstate, ImportMempoolOptions&& opts)
 {
