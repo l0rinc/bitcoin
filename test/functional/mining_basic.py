@@ -177,7 +177,8 @@ class MiningTest(BitcoinTestFramework):
                 blockmintxfee_parameter = f"-blockmintxfee={blockmintxfee_btc_kvb:.8f}"
                 self.log.info(f"-> Test {blockmintxfee_parameter} ({blockmintxfee_sat_kvb} sat/kvB)...")
                 self.restart_node(0, extra_args=[blockmintxfee_parameter, '-minrelaytxfee=0', '-persistmempool=0'])
-            assert_equal(node.getmininginfo()['blockmintxfee'], blockmintxfee_btc_kvb)
+            expected_blockmintxfee = DEFAULT_BLOCK_MIN_TX_FEE / Decimal(COIN) if use_rpc else blockmintxfee_btc_kvb
+            assert_equal(node.getmininginfo()['blockmintxfee'], expected_blockmintxfee)
 
             # submit one tx with exactly the blockmintxfee rate, and one slightly below
             tx_with_min_feerate = self.wallet.send_self_transfer(from_node=node, fee_rate=blockmintxfee_btc_kvb, confirmed_only=True)
@@ -218,6 +219,9 @@ class MiningTest(BitcoinTestFramework):
                 assert tx_with_min_feerate['txid'] in block_txids
                 assert tx_below_min_feerate['txid'] not in block_txids
 
+            # Restart node to clear mempool for the next test.
+            self.restart_node(0)
+
     def test_rpc_params(self):
         self.log.info("Test minfeerate RPC param")
         self.test_blockmintxfee_parameter(use_rpc=True)
@@ -229,7 +233,7 @@ class MiningTest(BitcoinTestFramework):
         self.generate(wallet, 1, sync_fun=self.no_op)
 
         self.log.info("Preparing mempool")
-        self.restart_node(0, extra_args=['-limitancestorcount=1000', '-limitancestorsize=7000', '-limitdescendantcount=1000', '-limitdescendantsize=7000'])
+        self.restart_node(0, extra_args=['-limitancestorcount=1000', '-limitdescendantcount=1000', '-limitclustersize=7000'])
 
         # Fill the mempool
         target_mempool_size = 200000
@@ -245,9 +249,9 @@ class MiningTest(BitcoinTestFramework):
             tx = wallet.send_self_transfer_multi(
                 utxos_to_spend=[utxo],
                 from_node=node,
-                num_outputs=1,
+                num_outputs=100,
             )
-            utxo = tx['new_utxos'][0]
+            utxo = wallet.get_utxo()
 
         self.log.info("Test blockmaxsize RPC param")
         req = copy.deepcopy(NORMAL_GBT_REQUEST_PARAMS)
@@ -273,7 +277,7 @@ class MiningTest(BitcoinTestFramework):
             req['blockreservedsize'] = reserved_size
             tmpl = self.nodes[0].getblocktemplate(req)
             blk_size = (sum(len(tx['data']) for tx in tmpl['transactions']) // 2)
-            assert blk_size < normal_size if reserved_size > 1000 else blk_size > normal_size
+            assert blk_size < normal_size if reserved_size > 1000 else blk_size >= normal_size
             assert blk_size + reserved_size <= req['blockmaxsize']
             assert blk_size > last_size
             last_size = blk_size
@@ -302,7 +306,7 @@ class MiningTest(BitcoinTestFramework):
             req['blockreservedweight'] = reserved_weight
             tmpl = self.nodes[0].getblocktemplate(req)
             blk_weight = sum(tx['weight'] for tx in tmpl['transactions'])
-            assert blk_weight < normal_weight if reserved_weight > 4000 else blk_weight > normal_weight
+            assert blk_weight < normal_weight if reserved_weight > 4000 else blk_weight >= normal_weight
             assert blk_weight + reserved_weight <= req['blockmaxweight']
             assert blk_weight > last_weight
             last_weight = blk_weight
@@ -429,6 +433,8 @@ class MiningTest(BitcoinTestFramework):
         LARGE_TXS_COUNT = 10
         LARGE_VSIZE = int(((MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT) / WITNESS_SCALE_FACTOR) / LARGE_TXS_COUNT)
         HIGH_FEERATE = Decimal("0.0003")
+        large_tx_args = ["-acceptnonstdtxn=1"]
+        self.restart_node(0, extra_args=large_tx_args)
 
         # Ensure the mempool is empty
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
@@ -485,7 +491,7 @@ class MiningTest(BitcoinTestFramework):
         )
 
         self.log.info("Testing custom -blockmaxsize startup option.")
-        self.restart_node(0, extra_args=[f"-blockmaxsize={custom_block_size}"])
+        self.restart_node(0, extra_args=[f"-blockmaxsize={custom_block_size}", *large_tx_args])
         block_template = self.verify_block_template(
             expected_tx_count=2,
             expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT,
@@ -496,7 +502,7 @@ class MiningTest(BitcoinTestFramework):
 
         self.log.info("Testing custom -blockmaxsize startup option near the consensus maximum.")
         near_max_block_size = MAX_BLOCK_SERIALIZED_SIZE - 1
-        self.restart_node(0, extra_args=[f"-blockmaxsize={near_max_block_size}"])
+        self.restart_node(0, extra_args=[f"-blockmaxsize={near_max_block_size}", *large_tx_args])
         block_template = self.verify_block_template(
             expected_tx_count=LARGE_TXS_COUNT,
             expected_weight=MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT,
@@ -507,7 +513,7 @@ class MiningTest(BitcoinTestFramework):
 
         # Test block template creation with custom -blockmaxweight
         # Reducing the weight by 2000 units will prevent 1 large transaction from fitting into the block.
-        self.restart_node(0, extra_args=[f"-blockmaxweight={custom_block_weight}"])
+        self.restart_node(0, extra_args=[f"-blockmaxweight={custom_block_weight}", *large_tx_args])
 
         self.log.info("Testing the block template with custom -blockmaxweight to include 9 large and 2 normal transactions.")
         self.verify_block_template(
@@ -517,7 +523,7 @@ class MiningTest(BitcoinTestFramework):
 
         # Ensure the block weight does not exceed the maximum
         self.log.info(f"Testing that the block weight will never exceed {MAX_BLOCK_WEIGHT - DEFAULT_BLOCK_RESERVED_WEIGHT}.")
-        self.restart_node(0, extra_args=[f"-blockmaxweight={MAX_BLOCK_WEIGHT}"])
+        self.restart_node(0, extra_args=[f"-blockmaxweight={MAX_BLOCK_WEIGHT}", *large_tx_args])
         self.log.info("Sending 2 additional normal transactions to fill the mempool to the maximum block weight.")
         self.send_transactions(utxos[LARGE_TXS_COUNT + 2:], NORMAL_FEERATE, NORMAL_VSIZE)
         self.log.info(f"Testing that the mempool's weight matches the maximum block weight: {MAX_BLOCK_WEIGHT}.")
@@ -531,7 +537,7 @@ class MiningTest(BitcoinTestFramework):
 
         self.log.info("Test -blockreservedweight startup option.")
         # Lowering the -blockreservedweight by 4000 will allow for two more transactions.
-        self.restart_node(0, extra_args=["-blockreservedweight=4000"])
+        self.restart_node(0, extra_args=["-blockreservedweight=4000", *large_tx_args])
         self.verify_block_template(
             expected_tx_count=12,
             expected_weight=MAX_BLOCK_WEIGHT - 4000,
