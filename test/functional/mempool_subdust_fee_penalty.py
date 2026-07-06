@@ -4,6 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test sub-dust output fee penalty (-subdustfeepenalty)."""
 
+from decimal import Decimal
 from math import ceil
 
 from test_framework.messages import (
@@ -42,6 +43,7 @@ class SubDustFeePenaltyTest(BitcoinTestFramework):
         self.test_penalty_disabled()
         self.test_op_return_not_penalized()
         self.test_above_dust_not_penalized()
+        self.test_modified_fee_reflects_penalty()
 
     def build_tx_with_dust(self, dust_values, fee):
         utxo = self.wallet.get_utxo()
@@ -162,6 +164,19 @@ class SubDustFeePenaltyTest(BitcoinTestFramework):
         tx = self.build_tx_with_dust([DUST_THRESHOLD + 100], fee=min_fee)
         result = self.nodes[0].testmempoolaccept([tx.serialize().hex()])
         assert_equal(result[0]["allowed"], True)
+
+    def test_modified_fee_reflects_penalty(self):
+        self.log.info("Test: mempool entry modified fee includes sub-dust penalty")
+
+        probe = self.build_tx_with_dust([0], fee=1000)
+        min_fee = self.get_min_relay_fee(probe)
+        fee = DUST_THRESHOLD + min_fee + 5
+        tx = self.build_tx_with_dust([0], fee=fee)
+
+        txid = self.nodes[0].sendrawtransaction(tx.serialize().hex())
+        entry = self.nodes[0].getmempoolentry(txid)
+        assert_equal(entry["fees"]["base"], Decimal(fee) / COIN)
+        assert_equal(entry["fees"]["modified"], Decimal(fee - DUST_THRESHOLD) / COIN)
 
 
 if __name__ == '__main__':

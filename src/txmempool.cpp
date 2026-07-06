@@ -1151,13 +1151,22 @@ CTxMemPool::ChangeSet::TxHandle CTxMemPool::ChangeSet::StageAddition(const CTran
     FeePerWeight feerate(fee, newit->GetAdjustedWeight());
     m_pool->m_txgraph->AddTransaction(const_cast<CTxMemPoolEntry&>(*newit), feerate);
     if (delta) {
-        newit->UpdateModifiedFee(delta);
-        m_pool->m_txgraph->SetTransactionFee(*newit, newit->GetModifiedFee());
+        UpdateModifiedFee(newit, delta);
     }
 
     m_entry_vec.push_back(newit);
 
     return newit;
+}
+
+void CTxMemPool::ChangeSet::UpdateModifiedFee(TxHandle tx, CAmount fee_delta)
+{
+    LOCK(m_pool->cs);
+    if (fee_delta == 0) return;
+    m_to_add.modify(tx, [&](CTxMemPoolEntry& e) {
+        e.UpdateModifiedFee(fee_delta);
+    });
+    m_pool->m_txgraph->SetTransactionFee(*tx, tx->GetModifiedFee());
 }
 
 void CTxMemPool::ChangeSet::StageRemoval(CTxMemPool::txiter it)

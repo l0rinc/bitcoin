@@ -1127,9 +1127,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
             }
         }
         if (dust_penalty > 0) {
-            m_subpackage.m_changeset->m_to_add.modify(ws.m_tx_handle, [&](CTxMemPoolEntry& e) {
-                e.UpdateModifiedFee(-dust_penalty);
-            });
+            m_subpackage.m_changeset->UpdateModifiedFee(ws.m_tx_handle, -dust_penalty);
             ws.m_modified_fees = SaturatingAdd(ws.m_modified_fees, -dust_penalty);
         }
     }
