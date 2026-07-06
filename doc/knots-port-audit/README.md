@@ -687,12 +687,13 @@ Other missing/adapted Knots pieces found during this pass:
   captions with non-modal icon styles, while the port printed the message
   without prefixes. The port now derives no-UI prefixes from warning/error icon
   bits as `0bbf2e8bb3`.
-- Knots' post-IBD chainstate disk-sync hardening (`2f1bf089f7`) is present in
-  the port and absent from current Core: once IBD is over, the scheduler waits
-  for stable height and no validated block downloads, then calls
-  `CoinsTip().Sync()` to reduce data-loss exposure after initial sync. This is
-  not consensus behavior, but it is a storage-safety divergence. The port's
-  adapted `feature_sync_coins_tip_after_chain_sync.py` uses the current
+- Knots' post-IBD chainstate disk-sync hardening (`2f1bf089f7`, with test
+  coverage from `bbcec3aed7`) is present in the port and absent from current
+  Core: once IBD is over, the scheduler waits for stable height and no
+  validated block downloads, then calls `CoinsTip().Sync()` to reduce data-loss
+  exposure after initial sync. This is not consensus behavior, but it is a
+  storage-safety divergence. The port's adapted
+  `feature_sync_coins_tip_after_chain_sync.py` uses the current
   `create_block(..., ntime=...)` and P2P send helpers (`0216a33c43`), and the
   coverage passes against both the port and unmodified Knots.
 - The P2P block-read hash-check audit of Knots `15805060ec` did not reveal a
@@ -5392,6 +5393,11 @@ Functional tests:
   ../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rpc_prunelocks_knots_refresh
   --portseed=42311`
+- `git grep -n
+  "SyncCoinsTipAfterChainSync\|SYNC_CHECK_INTERVAL\|GetNumberOfPeersWithValidatedDownloads\|Finished syncing to tip"
+  HEAD knots/29.x-knots origin/master -- src/init.cpp src/net_processing.cpp
+  src/net_processing.h test/functional/feature_sync_coins_tip_after_chain_sync.py
+  test/functional/test_runner.py`
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_sync_coins_tip_after_chain_sync`
@@ -5399,6 +5405,9 @@ Functional tests:
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_sync_coins_tip_after_chain_sync_port_2
   --portseed=7390`
+- `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_sync_coins_tip_doc_refresh --portseed=42731`
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_knots_sync_coins_tip_after_chain_sync`
 - `python3 test/functional/feature_softwareexpiry.py --configfile build/test/config.ini`
