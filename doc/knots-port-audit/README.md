@@ -1420,8 +1420,9 @@ Other missing/adapted Knots pieces found during this pass:
   mainnet and testnet DNS seed lists. The port now matches Knots as
   `0899f88da9`, with `chainparams_tests` coverage asserting those seed names
   are absent. The focused `chainparams_tests/dns_seed_removals` target passes
-  on the port; the local Knots tree has no matching test file, but source
-  inspection confirms the seed names are absent there too.
+  on the port, including the refreshed two-assertion run; the local Knots tree
+  has no matching test file, but source inspection confirms the seed names are
+  absent there too.
 - The custom signet review confirmed Knots' `-signetblocktime` option
   (`d8434da3c1`) is present in the port and absent from current Core. This
   changes the proof-of-work target spacing only for a custom signet that also
@@ -5581,8 +5582,14 @@ Functional tests:
   deprecated RPC warning string from `GetWarningsForRpc(...)`.
 - Original Knots test-coverage check:
   `../knots/build-repro/bin/test_bitcoin --run_test=chainparams_tests/dns_seed_removals --catch_system_error=no --log_level=error --report_level=short`
-  returned `no test cases matching filter`, confirming the DNS seed removal
-  unit is a port-side regression guard and not present in unmodified Knots.
+  returned `no test cases matching filter` with exit code 200, confirming the
+  DNS seed removal unit is a port-side regression guard and not present in
+  unmodified Knots.
+- Port cross-check:
+  `build/bin/test_bitcoin --run_test=chainparams_tests/dns_seed_removals
+  --catch_system_error=no --log_level=error --report_level=short`
+  passed two assertions, confirming the Peter Todd mainnet and testnet seeds
+  are absent from the port's chain parameters.
 - Original Knots cross-check:
   `python3 ../knots/test/functional/wallet_keypool.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_wallet_keypool_isactive_repro`
   (passes on unmodified Knots, confirming the local `wallet_keypool.py`
