@@ -30,6 +30,7 @@ from test_framework.script import (
     OP_NOT,
     OP_RETURN,
     OP_TRUE,
+    sign_input_legacy,
 )
 from test_framework.script_util import (
     keys_to_multisig_script,
@@ -374,6 +375,35 @@ class BytesPerSigOpTest(BitcoinTestFramework):
         # Make sure the original, non-standard, transaction can be mined.
         self.generateblock(self.nodes[0], output="raw(42)", transactions=[nonstd_tx.serialize().hex()])
 
+    def test_bytespersigopstrict_policy(self):
+        self.log.info("Test -bytespersigopstrict policy is not consensus.")
+        self.init_wallet()
+
+        privkey, pubkey = generate_keypair(compressed=True)
+        redeem_script = CScript([pubkey, OP_CHECKSIG])
+        fund = self.wallet.send_to(
+            from_node=self.nodes[0],
+            scriptPubKey=script_to_p2sh_script(redeem_script),
+            amount=1_000_000,
+        )
+        self.generate(self.nodes[0], 1)
+
+        tx = CTransaction()
+        tx.vin = [CTxIn(COutPoint(int(fund["txid"], 16), fund["sent_vout"]), CScript([redeem_script]))]
+        tx.vout = [CTxOut(999_000, self.wallet.get_output_script())]
+        sign_input_legacy(tx, 0, redeem_script, privkey)
+        tx.rehash()
+
+        res = self.nodes[0].testmempoolaccept([tx.serialize().hex()], maxfeerate=0)[0]
+        assert_equal(res["allowed"], True)
+
+        self.restart_node(0, extra_args=["-bytespersigopstrict=1000"] + self.extra_args[0])
+        res = self.nodes[0].testmempoolaccept([tx.serialize().hex()], maxfeerate=0)[0]
+        assert_equal(res["allowed"], False)
+        assert_equal(res["reject-reason"], "bad-txns-too-many-sigops")
+
+        self.generateblock(self.nodes[0], output="raw(42)", transactions=[tx.serialize().hex()])
+
     def run_test(self):
         self.init_wallet()
 
@@ -393,6 +423,7 @@ class BytesPerSigOpTest(BitcoinTestFramework):
         self.test_sigops_package()
         self.test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize()
         self.test_legacy_sigops_stdness()
+        self.test_bytespersigopstrict_policy()
 
 
 if __name__ == '__main__':
