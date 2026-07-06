@@ -1028,6 +1028,8 @@ FUZZ_TARGET(txgraph)
                         assert(main_sim.graph.Ancestors(simpos).IsSubsetOf(new_included));
                     }
                     sum_feerate.AssertMatches(chunk->second);
+                    assert(current_chunk.Any());
+                    assert(main_sim.graph.IsConnected(current_chunk));
                 } else {
                     // When we reach the end, if nothing was skipped, the entire graph should have
                     // been reported.
@@ -1430,16 +1432,20 @@ FUZZ_TARGET(txgraph)
         FeePerWeight last_chunk_feerate;
         while (auto chunk = builder->GetCurrentChunk()) {
             CheckedFeePerWeightSum sum;
+            SimTxGraph::SetType current_chunk;
             for (TxGraph::Ref* ref : chunk->first) {
                 assert(ref != nullptr);
                 // Chunks must contain transactions that exist in the graph.
                 auto simpos = sims[0].Find(ref);
                 assert(simpos != SimTxGraph::MISSING);
+                current_chunk.Set(simpos);
                 // Verify the chunk feerate matches the sum of the simulated individual feerates.
                 sum.Add(FeePerWeight::FromFeeFrac(sims[0].graph.FeeRate(simpos)));
                 vec_builder.push_back(simpos);
             }
             sum.AssertMatches(chunk->second);
+            assert(current_chunk.Any());
+            assert(sims[0].graph.IsConnected(current_chunk));
             last_chunk = std::move(chunk->first);
             last_chunk_feerate = chunk->second;
             builder->Include();
