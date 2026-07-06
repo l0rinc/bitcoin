@@ -16,6 +16,53 @@
 
 bool CastToBool(const std::vector<unsigned char>& vch);
 
+namespace {
+int32_t CanonicalSigHashCacheAlias(int32_t hash_type)
+{
+    const int32_t any_one_can_pay{hash_type & SIGHASH_ANYONECANPAY};
+    switch (hash_type & 0x1f) {
+    case SIGHASH_NONE:
+        return any_one_can_pay | SIGHASH_NONE;
+    case SIGHASH_SINGLE:
+        return any_one_can_pay | SIGHASH_SINGLE;
+    default:
+        return any_one_can_pay | SIGHASH_ALL;
+    }
+}
+
+void AssertSigHashCacheAliases(const CScript& scriptcode, int32_t hash_type, uint64_t marker)
+{
+    SigHashCache cache;
+    HashWriter stored_writer;
+    stored_writer << marker;
+    HashWriter expected_writer;
+    expected_writer << marker;
+    const uint256 expected_hash{expected_writer.GetHash()};
+
+    cache.Store(hash_type, scriptcode, stored_writer);
+
+    auto assert_loads = [&](int32_t alias) {
+        HashWriter loaded_writer;
+        Assert(cache.Load(alias, scriptcode, loaded_writer));
+        Assert(loaded_writer.GetHash() == expected_hash);
+    };
+
+    const int32_t canonical_alias{CanonicalSigHashCacheAlias(hash_type)};
+    assert_loads(canonical_alias);
+    assert_loads(canonical_alias | (hash_type & ~int32_t{0xff}));
+
+    CScript other_scriptcode{scriptcode};
+    other_scriptcode << OP_CODESEPARATOR;
+    HashWriter missed_writer;
+    Assert(!cache.Load(canonical_alias, other_scriptcode, missed_writer));
+
+    const int32_t any_one_can_pay{canonical_alias & SIGHASH_ANYONECANPAY};
+    const int32_t different_mode{
+        any_one_can_pay | (((canonical_alias & 0x1f) == SIGHASH_NONE) ? SIGHASH_SINGLE : SIGHASH_NONE)};
+    Assert(!cache.Load(different_mode, scriptcode, missed_writer));
+}
+} // namespace
+
 FUZZ_TARGET(script_interpreter)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
@@ -66,6 +113,7 @@ FUZZ_TARGET(sighash_cache)
     SigHashCache sighash_cache{};
     for (int i{0}; i < 100; ++i) {
         const auto hash_type{((i & 2) == 0) ? provider.ConsumeIntegral<int8_t>() : provider.ConsumeIntegral<int32_t>()};
+        AssertSigHashCacheAliases(scriptcode, hash_type, provider.ConsumeIntegral<uint64_t>());
         const auto nocache_res{SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion)};
         const auto cache_res{SignatureHash(scriptcode, tx, in_index, hash_type, amount, sigversion, nullptr, &sighash_cache)};
         Assert(nocache_res == cache_res);
