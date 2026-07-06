@@ -2284,6 +2284,21 @@ under different commits. They are not all proven exploitable.
   Knots, confirming these are inherited Knots semantics rather than a
   port-only behavior.
 
+- Overlay-protocol reject filters:
+  Knots' `-rejectparasites` (`3c732178d0`) and `-rejecttokens`
+  (`2e7ea254c0`) modes are present in the port and absent from current Core.
+  With `-rejectparasites=1`, transactions using locktime 21 are rejected with
+  `parasite-cat21`. With `-rejecttokens=1`, Runes-style
+  `OP_RETURN OP_13 <push>` outputs are rejected with `tokens-runes`, and
+  OLGA-style data hidden behind P2WSH-looking outputs is rejected with
+  `tokens-olga` when enough adjacent outputs are present. This is explicit
+  relay/mining spam-filtering policy rather than consensus, and it should be
+  described as a Knots-vs-Core policy divergence rather than a Core security
+  bug. Existing `transaction_tests` cover the standardness helpers, and the
+  new `mempool_reject_filters.py` functional test covers the RPC-visible
+  default-allowed and flag-rejected cases. The same functional test passes
+  against unmodified Knots.
+
 - Raw transaction max-feerate accounting with policy-adjusted vsize:
   `4b3cc3d48e`, `1cee5b1ac7`, `335d928d96`
 
@@ -3323,6 +3338,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=orphanage_tests
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=transaction_tests`
+- `build/bin/test_bitcoin --run_test=transaction_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests
   --catch_system_error=no --log_level=error --report_level=short`
@@ -3681,6 +3698,14 @@ Functional tests:
   --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_mempool_maxscriptsize_knots
   --portseed=32802`
+- `python3 test/functional/mempool_reject_filters.py
+  --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_reject_filters_port
+  --portseed=32810`
+- `python3 test/functional/mempool_reject_filters.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_reject_filters_knots
+  --portseed=32811`
 - `python3 test/functional/mempool_limit.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_mempool_limit_maxmempool_rpc`
 - `python3 test/functional/mining_coin_age_priority.py --configfile build/test/config.ini`
