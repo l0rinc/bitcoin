@@ -1114,7 +1114,9 @@ Other missing/adapted Knots pieces found during this pass:
   CJDNS addnode reporting and duplicate CJDNS addnode rejection. The port now
   also covers the RPC-facing `addnode add` path in `rpc_net.py` by restarting
   with `-cjdnsreachable`, adding `[fc00:...]:8333`, and rejecting the same
-  CJDNS address on a different port.
+  CJDNS address on a different port. Refreshed source comparison confirms
+  current Core still lacks the `AddNode()` CJDNS duplicate comparison even
+  though it has the `GetAddedNodeInfo()` conversion.
 - The P2P RPC connection-management follow-up confirmed Knots intentionally
   exposes the hidden `addconnection` RPC outside regtest
   (`2fcf74eb45`, ported as `4feeb3a87b`), while current Core still rejects it
@@ -2251,7 +2253,8 @@ under different commits. They are not all proven exploitable.
   comparison and rejects CJDNS duplicates even when the port differs, avoiding
   repeated manual-connection entries to the same CJDNS node. The focused
   `rpc_net.py --test_methods test_addnode_cjdns_duplicate` run passes on the
-  port and as an isolated cross-check against unmodified Knots.
+  port and as an isolated cross-check against unmodified Knots; the unit-level
+  `net_peer_connection_tests` regression also passes on the port.
 
 - V2-only clearnet outbound option:
   `cbfbefd8f3`, `7c06acab77`, `f4fc3f03f4`, `5891703ba0`
@@ -3153,6 +3156,10 @@ Source/manifest checks:
   src/kernel/mempool_options.h src/init.cpp src/node/mempool_args.cpp
   src/test/mempool_tests.cpp test/functional/mempool_minrelay.py
   test/functional/feature_config_args.py`
+- `git grep -n
+  "MaybeFlipIPv6toCJDNS|GetAddedNodeInfo|AddNode|test_addnode_cjdns_duplicate"
+  HEAD knots/29.x-knots origin/master -- src/net.cpp src/net.h
+  src/rpc/net.cpp test/functional/rpc_net.py src/test/net_peer_connection_tests.cpp`
 - `git show --stat --patch --minimal b85232d7462`, `git show
   origin/master:src/init.cpp | rg -n
   "blockfilterindex_value|AllBlockFilterTypes|BlockFilterType::BASIC|certain indexes|indexes for all known types"
@@ -3777,6 +3784,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=netbase_tests/netpermissions_test
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=net_peer_connection_tests`
+- `build/bin/test_bitcoin --run_test=net_peer_connection_tests/*
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=pcp_tests/pcp_not_authorized_explicit_warning`
 - `build/bin/test_bitcoin --run_test=pcp_tests`
 - `build/bin/test_bitcoin --run_test=rest_tests`
@@ -4058,6 +4067,15 @@ Functional tests:
   --test_methods test_addnode_cjdns_duplicate
   --tmpdir=/mnt/my_storage/tmp_rpc_net_cjdns_addnode_review_knots
   --portseed=26441`
+- `python3 test/functional/rpc_net.py --configfile build/test/config.ini
+  --cachedir=test/cache --test_methods test_addnode_cjdns_duplicate
+  --tmpdir=/mnt/my_storage/tmp_rpc_net_cjdns_addnode_port_refresh
+  --portseed=42250`
+- `python3 test/functional/rpc_net.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache --test_methods
+  test_addnode_cjdns_duplicate
+  --tmpdir=/mnt/my_storage/tmp_rpc_net_cjdns_addnode_knots_refresh
+  --portseed=42251`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_addconnection`
 - `build/test/functional/rpc_net.py`
@@ -4787,6 +4805,10 @@ Functional tests:
   `--configfile /mnt/my_storage/knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_knots_rpc_net_cjdns_addnode_only` passed on
   unmodified Knots
+- Original Knots cross-check:
+  `python3 test/functional/rpc_net.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --test_methods test_addnode_cjdns_duplicate --tmpdir=/mnt/my_storage/tmp_rpc_net_cjdns_addnode_knots_refresh --portseed=42251`
+  passed on unmodified Knots, confirming inherited duplicate rejection for the
+  same CJDNS address on a different port.
 - Original Knots cross-check:
   `test/functional/p2p_feefilter.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_feefilter_option`
   passed on unmodified Knots, including the new `-nofeefilter` assertion.
