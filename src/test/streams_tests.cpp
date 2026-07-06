@@ -168,6 +168,32 @@ BOOST_AUTO_TEST_CASE(xor_file)
     }
 }
 
+BOOST_AUTO_TEST_CASE(autofile_tell_after_close)
+{
+    const fs::path path{m_args.GetDataDirBase() / "test_autofile_tell_after_close.bin"};
+
+    {
+        AutoFile file{fsbridge::fopen(path, "w+b")};
+        file << uint8_t{1};
+        BOOST_CHECK_EQUAL(file.tell(), 1);
+        BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+        BOOST_CHECK(file.IsNull());
+        BOOST_CHECK_EQUAL(file.tell(), 1); // TODO: tell() should reject closed files.
+    }
+
+    {
+        AutoFile file{fsbridge::fopen(path, "rb")};
+        BOOST_CHECK_EQUAL(file.tell(), 0);
+        FILE* raw_file{file.release()};
+        BOOST_REQUIRE(raw_file != nullptr);
+        BOOST_CHECK(file.IsNull());
+        BOOST_CHECK_EQUAL(file.tell(), 0); // TODO: tell() should reject released files.
+        BOOST_REQUIRE_EQUAL(std::fclose(raw_file), 0);
+    }
+
+    fs::remove(path);
+}
+
 BOOST_AUTO_TEST_CASE(streams_vector_writer)
 {
     unsigned char a(1);
@@ -539,6 +565,34 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_skip)
     // We can position exactly to the transfer limit.
     bf.SkipTo(13);
     BOOST_CHECK_EQUAL(bf.GetPos(), 13U);
+
+    BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    fs::remove(streams_test_filename);
+}
+
+BOOST_AUTO_TEST_CASE(streams_buffered_file_limit_boundary)
+{
+    const fs::path streams_test_filename{m_args.GetDataDirBase() / "streams_test_tmp"};
+    AutoFile file{fsbridge::fopen(streams_test_filename, "w+b")};
+    for (uint8_t j{0}; j < 40; ++j) {
+        file << j;
+    }
+    file.seek(0, SEEK_SET);
+
+    BufferedFile bf{file, 25, 10};
+    bf.SkipTo(5);
+    BOOST_CHECK_EQUAL(bf.GetPos(), 5U);
+    BOOST_CHECK(bf.SetLimit(5));
+
+    BOOST_CHECK(bf.SetPos(6)); // TODO: SetPos() should stay within the active limit.
+    BOOST_CHECK_EQUAL(bf.GetPos(), 6U);
+
+    BOOST_CHECK(bf.SetLimit());
+    BOOST_CHECK(bf.SetPos(5));
+    BOOST_CHECK(bf.SetLimit(5));
+
+    bf.FindByte(std::byte{6}); // TODO: FindByte() should stay within the active limit.
+    BOOST_CHECK_EQUAL(bf.GetPos(), 6U);
 
     BOOST_REQUIRE_EQUAL(file.fclose(), 0);
     fs::remove(streams_test_filename);
