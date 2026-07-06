@@ -362,6 +362,37 @@ void CheckMempoolBlockBuilder(const CTxMemPool& tx_pool)
 
     Assert(builder_diagram == diagram);
     Assert(seen_entries.size() == tx_pool.mapTx.size());
+
+    tx_pool.StartBlockBuilding();
+    std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> skipped_entries;
+    const FeePerWeight skipped_feerate{tx_pool.GetBlockBuilderChunk(skipped_entries)};
+    if (skipped_feerate != FeePerWeight{}) {
+        Assert(!skipped_entries.empty());
+        std::set<const CTxMemPoolEntry*> skipped_set;
+        for (const auto& entry_ref : skipped_entries) {
+            Assert(skipped_set.insert(&entry_ref.get()).second);
+        }
+
+        tx_pool.SkipBuilderChunk();
+        std::set<const CTxMemPoolEntry*> seen_after_skip;
+        while (true) {
+            std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> entries;
+            const FeePerWeight chunk_feerate{tx_pool.GetBlockBuilderChunk(entries)};
+            if (chunk_feerate == FeePerWeight{}) {
+                Assert(entries.empty());
+                break;
+            }
+
+            Assert(!entries.empty());
+            for (const auto& entry_ref : entries) {
+                const CTxMemPoolEntry& entry{entry_ref.get()};
+                Assert(!skipped_set.contains(&entry));
+                Assert(seen_after_skip.insert(&entry).second);
+            }
+            tx_pool.IncludeBuilderChunk();
+        }
+    }
+    tx_pool.StopBlockBuilding();
 }
 
 void CheckUpdatedBlockDependencies(const CTxMemPool& tx_pool, const std::vector<Txid>& txids)

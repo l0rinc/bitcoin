@@ -238,6 +238,12 @@ BOOST_AUTO_TEST_CASE(MempoolBlockBuilderChunkIdempotent)
     bool first_chunk_empty{true};
     bool same_chunk{false};
     bool same_feerate{false};
+    bool include_diagram_matches{false};
+    bool include_seen_all_entries{false};
+    bool include_duplicate_entries{false};
+    bool skipped_first_chunk_nonempty{false};
+    bool skipped_chunk_reappeared{false};
+    bool skip_duplicate_entries{false};
     {
         LOCK(pool.cs);
         pool.StartBlockBuilding();
@@ -249,11 +255,62 @@ BOOST_AUTO_TEST_CASE(MempoolBlockBuilderChunkIdempotent)
         same_chunk = same_entries(first_entries, second_entries);
         same_feerate = first_feerate == second_feerate;
         pool.StopBlockBuilding();
+
+        const auto diagram{pool.GetFeerateDiagram()};
+        std::vector<FeePerWeight> builder_diagram{FeePerWeight{}};
+        std::set<const CTxMemPoolEntry*> seen_entries;
+        pool.StartBlockBuilding();
+        while (true) {
+            std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> entries;
+            const FeePerWeight chunk_feerate{pool.GetBlockBuilderChunk(entries)};
+            if (chunk_feerate == FeePerWeight{}) break;
+            for (const auto& entry_ref : entries) {
+                include_duplicate_entries |= !seen_entries.insert(&entry_ref.get()).second;
+            }
+            builder_diagram.push_back(FeePerWeight{
+                builder_diagram.back().fee + chunk_feerate.fee,
+                builder_diagram.back().size + chunk_feerate.size,
+            });
+            pool.IncludeBuilderChunk();
+        }
+        pool.StopBlockBuilding();
+        include_diagram_matches = builder_diagram == diagram;
+        include_seen_all_entries = seen_entries.size() == pool.mapTx.size();
+
+        std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> skipped_entries;
+        std::set<const CTxMemPoolEntry*> skipped_set;
+        pool.StartBlockBuilding();
+        const FeePerWeight skipped_feerate{pool.GetBlockBuilderChunk(skipped_entries)};
+        skipped_first_chunk_nonempty = skipped_feerate != FeePerWeight{} && !skipped_entries.empty();
+        for (const auto& entry_ref : skipped_entries) {
+            skip_duplicate_entries |= !skipped_set.insert(&entry_ref.get()).second;
+        }
+        if (skipped_first_chunk_nonempty) {
+            pool.SkipBuilderChunk();
+            std::set<const CTxMemPoolEntry*> seen_after_skip;
+            while (true) {
+                std::vector<CTxMemPoolEntry::CTxMemPoolEntryRef> entries;
+                const FeePerWeight chunk_feerate{pool.GetBlockBuilderChunk(entries)};
+                if (chunk_feerate == FeePerWeight{}) break;
+                for (const auto& entry_ref : entries) {
+                    skipped_chunk_reappeared |= skipped_set.contains(&entry_ref.get());
+                    skip_duplicate_entries |= !seen_after_skip.insert(&entry_ref.get()).second;
+                }
+                pool.IncludeBuilderChunk();
+            }
+        }
+        pool.StopBlockBuilding();
     }
 
     BOOST_CHECK(!first_chunk_empty);
     BOOST_CHECK(same_chunk);
     BOOST_CHECK(same_feerate);
+    BOOST_CHECK(include_diagram_matches);
+    BOOST_CHECK(include_seen_all_entries);
+    BOOST_CHECK(!include_duplicate_entries);
+    BOOST_CHECK(skipped_first_chunk_nonempty);
+    BOOST_CHECK(!skipped_chunk_reappeared);
+    BOOST_CHECK(!skip_duplicate_entries);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
