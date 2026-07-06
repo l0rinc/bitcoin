@@ -2929,7 +2929,8 @@ under different commits. They are not all proven exploitable.
 High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
 key handling, `LocalServiceInfo::nScore` saturation, miner `addPackageTxs`
-overflow, compact-block witness mutation checks and repeated-`blocktxn`
+overflow (`2e4688618b`, Core `b807dfcdc5`), compact-block witness mutation
+checks and repeated-`blocktxn`
 empty-header guard, `LoadChainTip` UB,
 reindex-chainstate periodic dbcache flushes (`ac7c0590ef`, rebased from Core
 `84820561dc`; current Core carries this through `1d4e3d1b18`),
@@ -2940,19 +2941,25 @@ equal-work active-chain tie-break persistence across restart and complex
 reorgs (`5689ba8fde`, `b1378e3f48`, `dbca0cc4d3`, and `24ffe06d2f`),
 BaseIndex rewind no-commit state persistence (`16b1710d97`) and stale
 `current_tip == m_best_block_index` assert removal (`c4de297c26`),
-`SetStdinEcho` UB, fd-limit overflow/RLIMIT_INFINITY handling, RPC credentials
-hashed in memory, PSBT bounds asserts, v2-to-v1 reconnect UAF, randomized Tor
+`SetStdinEcho` UB (`98d9237d3e`, Core `fa692974ac`), fd-limit
+overflow/RLIMIT_INFINITY handling (`0f92fc907f`, `6c89453ca7`; Core
+`4afbabdcef`), RPC credentials hashed in memory, PSBT bounds asserts,
+v2-to-v1 reconnect UAF, randomized Tor
 stream-isolation credential prefixes, feebumper combined-fee crash, wallet
-coin-selection boolean amount fix, precomputed transaction-data lifetime
-hardening (CVE-2024-52911), the CVE-2025-46598 validation/script-cache and
-transaction-punishment cleanup cluster, Tor-control excessive-line OOM
+coin-selection boolean amount fix (`c0b092936e`, Core `0026b330c4`),
+precomputed transaction-data lifetime hardening (CVE-2024-52911), the
+CVE-2025-46598 validation/script-cache and transaction-punishment cleanup
+cluster, Tor-control excessive-line OOM
 hardening, I2P SAM
 `SESSION CREATE` request redaction, BDB overflow data lengths, btree-level
 validation, and final-page LSN validation, PSBT proprietary-field preservation
 during combining, monotonic
-`uptime`, first-run pruned-disk-space warning rounding, Windows exclusive `wbx`
-opens, LevelDB file-size initialization, wallet `sendall` transaction-size
-error handling, miniscript assert guards, and most cpp-subprocess
+`uptime` (`c202961b8e`, Core `e67a676df9`), first-run pruned-disk-space
+warning rounding, Windows exclusive `wbx` opens, oversized `-dbcache` warning
+and unusual 64-bit-size handling (`fc27c2134c`, `5e666b667b`; Core
+`168360f4ae` plus matching current source), LevelDB file-size initialization,
+wallet `sendall` transaction-size error handling, miniscript assert guards,
+and most cpp-subprocess
 memory/Windows fixes, witness-stripped SegWit reject-filter handling,
 miniscript `FindChallenges` stack-overflow avoidance in tests, P2P
 `-capturemessages` option caching, single-timepoint inactivity checks, and
@@ -4098,6 +4105,13 @@ Builds:
   "RANDOMIZER_ID_NETWORKKEY|m_network_key|shutdown_request|IsInitialBlockDownload\\(\\) const noexcept|DecodePSBTInputs|CeilDiv"
   src test` show the reviewed high-signal patch-id misses that are already
   carried by current Core and this port rather than representing missing Knots
+  hardening.
+- `git log --oneline origin/master --grep='uptime RPC\\|SetStdinEcho\\|RLIM_INFINITY\\|oversized -dbcache\\|amount computed as boolean\\|addPackageTxs unsigned'
+  -- src test`, `git grep -n -E "SetStdinEcho|RLIM_INFINITY|ShouldWarnOversizedDbCache|SIZE_MAX > UINT32_MAX|nBlockWeight \\+|uptime should begin|amount computed"
+  HEAD knots/29.x-knots origin/master -- src test`, and `rg -n
+  "ShouldWarnOversizedDbCache|SIZE_MAX > UINT32_MAX|nBlockWeight \\+|SetStdinEcho|RLIM_INFINITY"
+  src test` show the runtime/system patch-id misses that current Core has
+  inherited or independently converged on, rather than remaining Knots-only
   hardening.
 - `git -C ../knots show --patch 0c7ac92072 -- src/rpc/util.cpp`,
   `git show origin/master:src/rpc/util.cpp | rg -n
