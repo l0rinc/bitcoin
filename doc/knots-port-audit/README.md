@@ -1618,16 +1618,20 @@ Other missing/adapted Knots pieces found during this pass:
 ## Original Knots Defects Confirmed
 
 The `addnode` RPC crash was confirmed on an unmodified local build of Knots
-`29.x-knots`:
+`29.x-knots`. This is an RPC-authenticated process abort, not an
+unauthenticated P2P crash:
 
 ```text
-bitcoin-cli -regtest addnode 127.0.0.1:18445 onetry false inbound
+bitcoin-cli -regtest -named addnode node=127.0.0.1:18444 command=onetry connection_type=inbound
 ```
 
 Result on original Knots:
 
 - `bitcoind` aborted with exit code 134.
 - Assertion: `net.cpp:3058: ... OpenNetworkConnection(...): Assertion 'conn_type != ConnectionType::INBOUND' failed.`
+- The older non-named form
+  `bitcoin-cli -regtest addnode 127.0.0.1:18445 onetry false inbound`
+  reaches the same assertion in unmodified Knots.
 - The older positional compatibility form
   `bitcoin-cli -regtest addnode 127.0.0.1:18445 onetry '"inbound"'`
   reaches the same assertion in unmodified Knots.
@@ -4687,13 +4691,19 @@ Functional tests:
   the port blocks the request before the Knots BDB-availability branch.
 - Original Knots expected-failure repro:
   foreground `../knots/build-repro/bin/bitcoind -regtest` plus
-  `bitcoin-cli -regtest addnode 127.0.0.1:<port> onetry false inbound`
-  under `/mnt/my_storage/tmp_knots_addnode_false_inbound.yTqHQn` aborted with
-  exit code 134 and stderr
+  `bitcoin-cli -regtest -named addnode node=127.0.0.1:18444 command=onetry connection_type=inbound`
+  under `/mnt/my_storage/tmp_knots_addnode_fg.cidH79` aborted with exit code
+  134 and stderr
   `Assertion 'conn_type != ConnectionType::INBOUND' failed.`
+  The non-named
+  `bitcoin-cli -regtest addnode 127.0.0.1:<port> onetry false inbound` form
+  also aborted under `/mnt/my_storage/tmp_knots_addnode_false_inbound.yTqHQn`.
   The positional JSON-string compatibility form
   `bitcoin-cli -regtest addnode 127.0.0.1:<port> onetry '"inbound"'` also
   aborted under `/mnt/my_storage/tmp_knots_addnode_crash_fg.TM8tLP`.
+  The port-side
+  `python3 test/functional/rpc_net.py --configfile build/test/config.ini --tmpdir=/mnt/my_storage/tmp_rpc_net_addnode_inbound --portseed=41230`
+  passed and includes both named and compatibility-slot rejection coverage.
 - Original Knots cross-check:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_versionbits_warning.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_versionbits_warning_check`
   (passes on unmodified Knots, confirming the earlier warning-range failure was
