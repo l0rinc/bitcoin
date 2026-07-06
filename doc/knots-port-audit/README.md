@@ -3097,7 +3097,8 @@ under different commits. They are not all proven exploitable.
 
 High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
-key handling, `LocalServiceInfo::nScore` saturation (`8caf0836a8`, Core
+key handling (`fed5dd96cd`, Core source matches), `LocalServiceInfo::nScore`
+saturation (`8caf0836a8`, Core
 `2189a6f5f2`), miner `addPackageTxs`
 overflow (`2e4688618b`, Core `b807dfcdc5`), compact-block witness mutation
 checks and repeated-`blocktxn`
