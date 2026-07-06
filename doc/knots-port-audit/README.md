@@ -2677,6 +2677,8 @@ empty-header guard, `LoadChainTip` UB,
 reindex-chainstate periodic dbcache flushes (`ac7c0590ef`, rebased from Core
 `84820561dc`; current Core carries this through `1d4e3d1b18`),
 requested-block `ReadBlock(..., expected_hash)` checks in net processing,
+REST `/spenttxouts/<blockhash>` undo-data exposure (`f3b3eaa29f`, inherited
+by current Core through `b3bb4031ab` and present in the port as `b879d1f549`),
 equal-work active-chain tie-break persistence across restart and complex
 reorgs (`5689ba8fde`, `b1378e3f48`, `dbca0cc4d3`, and `24ffe06d2f`),
 BaseIndex rewind no-commit state persistence (`16b1710d97`) and stale
@@ -4128,6 +4130,9 @@ Functional tests:
 - `python3 test/functional/interface_rest.py --configfile build/test/config.ini`
 - `python3 test/functional/interface_rest.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_interface_rest_listmempooltransactions`
+- `python3 test/functional/interface_rest.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_interface_rest_spenttxouts_port
+  --portseed=42120`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_init_wait_port --portseed=27522`
