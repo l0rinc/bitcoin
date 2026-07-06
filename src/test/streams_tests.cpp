@@ -591,8 +591,8 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_limit_boundary)
     BOOST_CHECK(bf.SetPos(5));
     BOOST_CHECK(bf.SetLimit(5));
 
-    bf.FindByte(std::byte{6}); // TODO: FindByte() should stay within the active limit.
-    BOOST_CHECK_EQUAL(bf.GetPos(), 6U);
+    BOOST_CHECK_EXCEPTION(bf.FindByte(std::byte{6}), std::ios_base::failure, HasReason{"Attempt to position past buffer limit"});
+    BOOST_CHECK_EQUAL(bf.GetPos(), 5U);
 
     BOOST_REQUIRE_EQUAL(file.fclose(), 0);
     fs::remove(streams_test_filename);
@@ -681,6 +681,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
                 size_t find = currentPos + m_rng.randrange(8);
                 if (find >= fileSize)
                     find = fileSize - 1;
+                bf.SetLimit();
                 bf.FindByte(std::byte(find));
                 // The value at each offset is the offset.
                 BOOST_CHECK_EQUAL(bf.GetPos(), find);
