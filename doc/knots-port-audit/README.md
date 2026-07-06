@@ -102,6 +102,13 @@ Other missing/adapted Knots pieces found during this pass:
   call `getValStr()` for both strings and numbers. This is local configuration
   robustness, not consensus behavior, and is already pinned by
   `getarg_tests/setting_args`.
+- The negated-help review confirmed Knots' `916c1b855e` is present in the port
+  and absent from current Core master. Knots registers `-help`, `-h`, and `-?`
+  with `DISALLOW_NEGATION`, so `-nohelp`, `-noh`, and `-no?` fail with a direct
+  command-line parse error instead of silently behaving like help requests. This
+  is local CLI/config hardening, not consensus behavior or network exposure.
+  `argsman_tests/util_ParseNegatedHelpParameters` and `feature_help.py` cover
+  the behavior, and the same functional test passes against unmodified Knots.
 - Knots' external signer fingerprint hardening (`6d2c2259ee`,
   `12eefda89a`, `ee39394ad3`) is already present in this port via the earlier
   wallet/RPC reconciliation commit `e8c2b257ee`, with invalid-fingerprint
@@ -4769,6 +4776,17 @@ Functional tests:
   `argsman_tests/util_ModifyRWConfigFileOnArgsManager` case, but its native
   `../knots/build-repro/bin/test_bitcoin --run_test=util_tests/test_ModifyRWConfigFile --catch_system_error=no --log_level=error --report_level=short`
   passes with 53 assertions.
+- Original Knots/source cross-check:
+  `git grep -n "void SetupHelpOptions\\|DISALLOW_NEGATION\\|util_ParseNegatedHelpParameters\\|Negating of -help" knots/29.x-knots -- src/common/args.cpp src/common/args.h src/test/argsman_tests.cpp`
+  shows unmodified Knots registers help aliases with negation disabled, and
+  `git grep -n "void SetupHelpOptions\\|DISALLOW_NEGATION\\|util_ParseNegatedHelpParameters\\|Negating of -help" origin/master -- src/common/args.cpp src/common/args.h src/test/argsman_tests.cpp`
+  shows current Core still lacks the help-specific `DISALLOW_NEGATION` wiring
+  and negated-help unit test. Port verification passed with
+  `build/bin/test_bitcoin --run_test=argsman_tests/util_ParseNegatedHelpParameters --catch_system_error=no --log_level=error --report_level=short`
+  (6 assertions) and
+  `python3 test/functional/feature_help.py --configfile build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_help_nohelp --portseed=41240`.
+  The same functional test also passed against unmodified Knots with
+  `--configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_help_nohelp_knots --portseed=41241`.
 - Original Knots/source cross-check:
   `rg -n "dbfilesize|ReadDatabaseArgs|max_file_size|DatabaseOptions" src/node src/init.cpp src/test ../knots/src/node ../knots/src/init.cpp ../knots/src/test -g '*.{cpp,h}'`
   shows both unmodified Knots and the port wire `-dbfilesize` through
