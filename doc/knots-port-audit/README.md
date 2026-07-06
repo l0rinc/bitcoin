@@ -1816,8 +1816,13 @@ Other missing/adapted Knots pieces found during this pass:
 - A focused miner review rechecked Knots' restored serialized-size mining cap
   and follow-up bugfixes (`b835402650`, `e5bf9721fa`, `b392070a38`,
   `e2212c8cf8`, `c95d04c8a8`, `2161037444`) against this port and current
-  Core. The port matches actual Knots' intent under the current Core block
-  assembler:
+  Core. The port also carries Knots' later per-request GBT override series:
+  `TemplateToJSON` extraction (`9546144763`), request-local block assembly
+  options for `blockmaxsize`, `blockmaxweight`, `minfeerate`, and
+  `skip_validity_test` (`3ecf882f14`), per-request `blockreserved{size,weight,
+  sigops}` (`b12bc1979e`), and the corresponding `mining_basic.py` GBT
+  coverage (`13d2de9996`). The port matches actual Knots' intent under the
+  current Core block assembler:
   `-blockmaxsize`/GBT `blockmaxsize` account serialized transaction size only
   when the cap is below `MAX_BLOCK_SERIALIZED_SIZE`; setting only size leaves the
   weight cap unbounded at `MAX_BLOCK_WEIGHT`; near-maximum size caps no longer
@@ -1833,7 +1838,11 @@ Other missing/adapted Knots pieces found during this pass:
   --log_level=error --report_level=short`, `python3
   test/functional/mining_basic.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mining_basic_blockmaxsize_review10
-  --portseed=7419`, and comparison run `python3
+  --portseed=7419`, refreshed port run `python3
+  test/functional/mining_basic.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mining_basic_gbt_overrides_refresh
+  --portseed=42739`, and comparison run `python3
   ../knots/test/functional/mining_basic.py --configfile
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_knots_mining_basic_blockmaxsize_review
