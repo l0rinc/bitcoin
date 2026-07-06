@@ -823,7 +823,9 @@ Other missing/adapted Knots pieces found during this pass:
   files through `GetWalletPath(...)`. This is local wallet-path hardening, not
   a consensus issue. `wallet_multiwallet.py` now asserts the symlink-scan
   warning, and the same run exposed and fixed a stale missing `Decimal` import
-  in that Knots test.
+  in that Knots test. A refreshed source comparison shows current Core already
+  has ordinary symlink tests/rejection, but still lacks the Knots
+  reparse-aware helper and directory-symlink recursion guard.
 - The wallet metadata compatibility review confirmed Knots'
   `5321a6a55a` is present in the port and absent from current Core master:
   version-2 `CKeyMetadata` records contain one unsupported key-origin flag byte
@@ -2004,7 +2006,10 @@ under different commits. They are not all proven exploitable.
   comparison confirmed the port matches Knots' scanner shape while current Core
   lacks the helper call and recursion guard. The full `wallet_multiwallet.py`
   run passes and covers the symlink-recursion warning plus symlinked wallet
-  load rejection on platforms where symlink checks are enabled.
+  load rejection on platforms where symlink checks are enabled. The same test
+  file is not directly reusable against unmodified Knots because Knots'
+  `listwalletdir` result lacks Core's newer empty `warnings` field; Knots'
+  native `wallet_multiwallet.py` still passes with its matching expectations.
 
 - Wallet node-data directory scan skip:
   `283cd1f065`
@@ -2927,6 +2932,13 @@ Source/manifest checks:
   boundary with `height_first <= max_height_first` and assigns
   `max_height_first`, while Knots and the port skip only lower locks and
   decrement matching locks.
+- `git grep -n -E
+  "IsSymlink|Not recursively searching symlink/reparse point|Windows cross compile does not detect symlinks|recursive_directory_iterator|self_walletdat_symlink|directory_symlink|w8_symlink"
+  HEAD knots/29.x-knots origin/master -- src/wallet
+  test/functional/wallet_multiwallet.py` shows Knots and the port have the
+  reparse-aware `IsSymlink(...)` scanner/path checks and directory-symlink
+  recursion warning, while current Core has the ordinary symlinked wallet-file
+  tests but lacks those Knots guard calls.
 - `cmake --build build --target test_bitcoin -j4`
 - `build/bin/test_bitcoin --run_test=streams_tests --catch_system_error=no
   --log_level=error --report_level=short`
@@ -4827,6 +4839,14 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_multiwallet_skip_node_dirs_control`
 - `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_wallet_multiwallet_path_hardening --portseed=26421`
+- `python3 test/functional/wallet_multiwallet.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_multiwallet_symlink_port_refresh
+  --portseed=42320`
+- `python3 ../knots/test/functional/wallet_multiwallet.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_multiwallet_symlink_knots_native_refresh
+  --portseed=42322`
 - Manual Knots walletdir check: start
   `../knots/build-repro/bin/bitcoind -regtest -daemon
   -datadir=/mnt/my_storage/tmp_knots_walletdir_skip_manual_control
