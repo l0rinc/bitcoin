@@ -53,8 +53,16 @@ CCoinsViewCache::CCoinsViewCache(CCoinsView* in_base, bool deterministic) :
     m_sentinel.second.SelfRef(m_sentinel);
 }
 
-size_t CCoinsViewCache::DynamicMemoryUsage() const {
-    return memusage::DynamicUsage(cacheCoins) + cachedCoinsUsage;
+size_t CCoinsViewCache::DynamicMemoryUsage() const
+{
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
+    const size_t ret{memusage::DynamicUsage(cacheCoins) + cachedCoinsUsage};
+    Assume(cacheCoins.size() == cache_size);
+    Assume(cachedCoinsUsage == cache_usage);
+    Assume(m_dirty_count == dirty_count);
+    return ret;
 }
 
 std::optional<Coin> CCoinsViewCache::FetchCoinFromBase(const COutPoint& outpoint) const
@@ -453,8 +461,15 @@ void CCoinsViewCache::Uncache(const COutPoint& hash)
     }
 }
 
-unsigned int CCoinsViewCache::GetCacheSize() const {
-    return cacheCoins.size();
+unsigned int CCoinsViewCache::GetCacheSize() const
+{
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
+    Assume(cacheCoins.size() == cache_size);
+    Assume(cachedCoinsUsage == cache_usage);
+    Assume(m_dirty_count == dirty_count);
+    return cache_size;
 }
 
 bool CCoinsViewCache::HaveInputs(const CTransaction& tx) const
