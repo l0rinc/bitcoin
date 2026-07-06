@@ -1218,8 +1218,10 @@ Other missing/adapted Knots pieces found during this pass:
   (`85c8d477b0`, ported as `759e1d76b3`) as Knots-surface hardening because
   current Core has no `getmempoolinfo(with_fee_histogram=...)` or REST
   histogram surface. `policyestimator_tests` and `mempool_fee_histogram.py`
-  pass with the ported code; a same-test run against unmodified Knots confirms
-  the fee-histogram behavior is inherited rather than port-created.
+  pass with the ported code; the functional test now includes the historical
+  edge shape where the mempool has a transaction below the only requested
+  histogram floor. A same-test run against unmodified Knots confirms the
+  fee-histogram behavior is inherited rather than port-created.
 - The mempool/orphan IBD performance review checked Knots' `8990a80618`
   `removeForBlock` empty-map guard and `fc5361a515` orphanage empty-pool
   guard. Both are present in the port and current Core master, so they are not
@@ -3689,6 +3691,14 @@ Functional tests:
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_fee_histogram_review_knots
   --portseed=26448`
+- `python3 test/functional/mempool_fee_histogram.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_fee_histogram_underflow_port
+  --portseed=32650`
+- `python3 test/functional/mempool_fee_histogram.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_fee_histogram_underflow_knots
+  --portseed=32651`
 - `build/bin/test_bitcoin --run_test=mempool_tests --catch_system_error=no
   --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=orphanage_tests --catch_system_error=no
