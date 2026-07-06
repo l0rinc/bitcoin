@@ -1560,6 +1560,19 @@ Other missing/adapted Knots pieces found during this pass:
   `StateSinceHeight(pindex->pprev, ...)` activation-height query with Core's
   `Info(*pindex, ...).active_since`; the focused RDTS activation tests cover
   that replacement at activation, expiry, and activation-boundary reorg points.
+  The foundational intended-divergence commits are now also mapped explicitly:
+  mandatory `max_activation_height` (`ddf3949d28`), regtest
+  `max_activation_height`/`active_duration` parsing (`70c8b16ddb`),
+  per-deployment activation thresholds (`4390cc0d2d`), mandatory signalling
+  enforcement near `max_activation_height` (`40175c2ec6`), policy use of
+  `SCRIPT_VERIFY_REDUCED_DATA` (`77e290f815`), the unused base script flag and
+  script-element limit (`f299003695`), Taproot annex/`OP_IF`/control-block
+  reductions (`549a83ac7a`, `36f1e68bac`, `e27286be5a`), no-op
+  `CheckTxInputs(...)` flag plumbing (`993ca94c89`), the reduced-data BIP9
+  deployment (`1f0564c9a0`), consolidated reduced-data mandatory flags
+  (`a4eb6835c0`), and service bit 27 as `NODE_REDUCED_DATA`/`REDUCED_DATA?`
+  (`da871c1903`). These are expected BIP-110/RDTS consensus and network-service
+  differences from Core, not newly discovered consensus bugs.
   A later exact-patch audit mapped the current Knots activation-boundary commits
   to adapted port commits: the UTXO-height test (`224af28c3c`) is
   `56b84e44fd`, the per-input old-UTXO exemption and cache-safety changes
@@ -1591,8 +1604,9 @@ Other missing/adapted Knots pieces found during this pass:
   `script_assets_test` when `DIR_UNIT_TEST_DATA` is unset.
 - The RDTS P2P-service review found a port-introduced handshake cleanup issue
   after adapting Knots' preferential RDTS peering and `-maxstaleoutbound`
-  behavior (`7f57236043`, `44d7e88dba`, `c146ef8c7a`) onto current Core's
-  newer VERSION handling. The port had retained Core's earlier
+  behavior (`7f57236043`, `44d7e88dba`, `c146ef8c7a`, later
+  `d8bfc2d888`) onto current Core's newer VERSION handling. The port had
+  retained Core's earlier
   peer-service/tx-relay setup and also inserted Knots' later setup block after
   the RDTS stale-peer gate, so accepted transaction-relay peers called
   `Peer::SetTxRelay()` twice and hit its `Assume(!m_tx_relay)` invariant.
@@ -3097,6 +3111,12 @@ Source/manifest checks:
 - `git show --stat --oneline 56b84e44fd 87c701dc1d 671097f199
   0f63eae265 404e44d108 ba57ec2c31 538f4eda40` maps the current port's
   adapted RDTS activation, service, consent, and bypass-hardening commits.
+- `git -C ../knots show --stat --oneline ddf3949d28 70c8b16ddb 4390cc0d2d
+  40175c2ec6 77e290f815 f299003695 549a83ac7a 36f1e68bac e27286be5a
+  993ca94c89 1f0564c9a0 a4eb6835c0 da871c1903 d8bfc2d888` and `rg -n
+  "max_activation_height|active_duration|SCRIPT_VERIFY_REDUCED_DATA|REDUCED_DATA_MANDATORY_VERIFY_FLAGS|NODE_REDUCED_DATA|maxstaleoutbound|CheckTxInputs"
+  src test/functional` show the foundational BIP-110/RDTS intended
+  divergence commits and their current source/test surfaces.
 - `rg -n
   "reduced_data_start_height|flags_per_input|CheckOutputSizes\\(|generation tx|SCRIPT_VERIFY_REDUCED_DATA|DISCOURAGE_UPGRADABLE|maxstaleoutbound"
   src/validation.cpp src/consensus/tx_verify.cpp
