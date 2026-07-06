@@ -2964,6 +2964,18 @@ under different commits. They are not all proven exploitable.
   Knots has the behavior but not the port's strengthened ArgsManager
   integration test cases.
 
+- Security-reporting policy:
+
+  Knots' `SECURITY.md` (`f7d16e43f8`) intentionally replaces Core's
+  security-reporting route and multi-maintainer OpenPGP key list with a Knots
+  website link, `luke+security+knots@dashjr.org`, and Luke Dashjr's OpenPGP
+  fingerprint. The port carries the same file, while current Core still points
+  reporters to `security@bitcoincore.org` and Core's published key list. This
+  is not runtime client behavior, a consensus rule, or a Core-missing hardening
+  patch, but it is an important security-process divergence for anyone
+  redistributing the rebased Knots tree or expecting Core's vulnerability
+  disclosure path.
+
 - ArgsManager forced non-string settings:
 
   Knots adds `ForceSetArgV(...)` so internal callers can force a full
@@ -4232,6 +4244,10 @@ Source/manifest checks:
   "uaspoof|uaappend|uacomment|FormatSubVersion|strSubVersion|UA_NAME"
   HEAD knots/29.x-knots origin/master -- src/init.cpp src/clientversion.cpp
   src/clientversion.h test/functional/feature_uacomment.py`
+- `git show --stat --patch --minimal f7d16e43f8 -- SECURITY.md` and
+  `git grep -n "security@\\|luke+security\\|OpenPGP\\|fingerprint\\|SECURITY"
+  HEAD knots/29.x-knots origin/master -- SECURITY.md .github/ISSUE_TEMPLATE/config.yml`
+  show Knots' security-reporting route/key-list divergence from current Core.
 - `git grep -n -E
   "confrw|bitcoin_rw\\.conf|RWConfig|ModifyRWConfigFile|EraseRWConfigFile|settings_json|also_settings_json"
   HEAD knots/29.x-knots origin/master -- src/common/args.cpp src/common/args.h
