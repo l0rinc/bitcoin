@@ -2268,7 +2268,10 @@ under different commits. They are not all proven exploitable.
   functional test starts one node with `-maxorphantx=3` and another with
   `-maxorphantx=0`, then verifies the visible orphanage size through
   `getorphantxs`; the same test passes against unmodified Knots. Existing unit
-  coverage checks parser clamping and the txdownload orphan-count limit.
+  coverage checks parser clamping and the txdownload orphan-count limit. A
+  refreshed source comparison still shows current Core has no
+  `-maxorphantx`/`max_orphan_txs` path, while Knots and the port wire the
+  option through `PeerManager::Options` into `TxDownloadManager`.
 
 - Unknown/future witness output policy switch:
   `584798d402`, `82b2c8372e`
@@ -4906,9 +4909,17 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_port_refresh
   --portseed=42220`
 - `python3 test/functional/p2p_maxorphantx.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_port_refresh2
+  --portseed=42460`
+- `python3 test/functional/p2p_maxorphantx.py --configfile
   ../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_knots_refresh
   --portseed=42221`
+- `python3 test/functional/p2p_maxorphantx.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_knots_refresh2
+  --portseed=42461`
 - `build/bin/test_bitcoin --run_test=transaction_tests/test_IsStandard
   --catch_system_errors=no --log_level=error --report_level=short`
 - `python3 test/functional/mempool_acceptunknownwitness.py
@@ -5270,6 +5281,19 @@ Functional tests:
   `python3 test/functional/p2p_maxorphantx.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_knots_refresh --portseed=42221`
   passed on unmodified Knots, confirming inherited `-maxorphantx=3` count
   limiting and `-maxorphantx=0` orphan-storage disable behavior.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_maxorphantx.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_knots_refresh2
+  --portseed=42461`
+  passed on unmodified Knots, confirming inherited `-maxorphantx=3` count
+  limiting and `-maxorphantx=0` orphan-storage disable behavior.
+- Original Knots cross-check:
+  `../knots/build-repro/bin/test_bitcoin --run_test=txdownload_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+  passed on unmodified Knots. Knots does not have the port-only
+  `p2p_maxorphantx.py` script natively, so the functional proof uses the port
+  script against Knots' binaries.
 - Original Knots cross-check:
   `python3 test/functional/mempool_minrelay.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_knots --portseed=32631`
   passed on unmodified Knots, confirming that `-minrelaymaturity=2` and
