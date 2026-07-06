@@ -327,6 +327,14 @@ Other missing/adapted Knots pieces found during this pass:
   `confirmations_assumed` fields. This is RPC documentation and result-shape
   metadata, not consensus behavior; `rpc_blockchain.py` and
   `rpc_rawtransaction.py` pass with the adapted metadata.
+- The RPC example review confirmed Knots' JSON-RPC example cleanups
+  (`599a0811ac`, `2f7f2fae63`) are present in the port and still absent from
+  current Core master. Knots and the port show array/object arguments as JSON
+  values in examples for `lockunspent`, `gettxspendingprevout`,
+  `createrawtransaction`, `signrawtransactionwithkey`, `addmultisigaddress`,
+  and `listunspent`, while current Core still quotes several of those arguments
+  as strings. This is user-facing help/documentation behavior, not runtime,
+  consensus, or security hardening.
 - The `scanblocks` status review confirmed Knots' in-progress
   `relevant_blocks` reporting (`4c9dc4bbe6`) is present in the port and absent
   from current Core master. The review also exposed a port-introduced bug:
@@ -4261,6 +4269,13 @@ Builds:
   `-blockprioritysize` negative/type guard and mini_miner fuzz initial-block
   setup; current Core lacks the coin-age priority path and still has no
   mini_miner initializer `MineBlock()` call.
+- `rg -n
+  "HelpExampleRpc\\(\\\"lockunspent|HelpExampleRpc\\(\\\"gettxspendingprevout|HelpExampleRpc\\(\\\"createrawtransaction|HelpExampleRpc\\(\\\"signrawtransactionwithkey|HelpExampleRpc\\(\\\"addmultisigaddress|HelpExampleRpc\\(\\\"listunspent"
+  src/rpc/mempool.cpp src/rpc/rawtransaction.cpp src/wallet/rpc/addresses.cpp
+  src/wallet/rpc/coins.cpp`, and the matching `git grep -n` checks against
+  `origin/master` and `knots/29.x-knots`, show Knots and the port carry the
+  JSON-RPC example quoting corrections while current Core still shows quoted
+  JSON strings for several array/object arguments.
 - `rg -n
   "Unable to bind all endpoints|Unable to bind any endpoint|rpc_bind"
   src/httpserver.cpp test/functional/rpc_bind.py
