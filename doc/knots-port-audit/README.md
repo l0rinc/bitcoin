@@ -2218,6 +2218,22 @@ under different commits. They are not all proven exploitable.
   escape was port-introduced. The latest rerun used the full handshake test
   because the user-agent assertion is inline in `run_test`.
 
+- User-agent append/spoof controls:
+
+  Knots adds network-visible `-uaappend=<fragment>` and debug-only
+  `-uaspoof=<ua>` startup controls that current Core does not have. By
+  default Knots advertises the normal `/Satoshi:.../` fragment followed by an
+  added `/Knots:.../` fragment. `-uaappend` appends a literal BIP14-style
+  fragment after that formatting. `-uaspoof=<ua>` replaces the entire
+  subversion string, while the boolean form `-uaspoof=1` is a surprising
+  identity-hiding shortcut: it keeps the base `/Satoshi:.../` user agent and
+  comments but suppresses the `/Knots:.../` suffix. This is not consensus or
+  remote-crash exposure, and it is not a Core-missing hardening fix; it is a
+  Knots-only operator/network identity surface that can make a Knots node look
+  less obviously like Knots unless local config/debug options are inspected.
+  `feature_uacomment.py` now pins the boolean modes, and the same strengthened
+  test passes against unmodified Knots.
+
 - ZMQ notification resilience and read-block logging:
   `1c4d2d54d8`, `268fb1e0e3`, `ba28af94bd`
 
@@ -4605,6 +4621,12 @@ Functional tests:
   `vout`. This confirms the port's missing `separator` CLI conversion was
   introduced by rebasing onto current Core's named-argument heuristic, not
   inherited from Knots.
+- Original Knots cross-check:
+  `python3 test/functional/feature_uacomment.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_feature_uacomment_knots --portseed=32921`
+  passed on unmodified Knots with the added `-uaspoof=0` and `-uaspoof=1`
+  assertions. The corresponding port run
+  `python3 test/functional/feature_uacomment.py --configfile=build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_uacomment_port --portseed=32920`
+  also passed.
 - Original Knots expected-failure repro with a temporary
   `/mnt/my_storage/knots-assumeutxo-repro` worktree and the port's added
   post-validation raw-transaction assertion:
