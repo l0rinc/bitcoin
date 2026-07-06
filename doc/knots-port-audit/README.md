@@ -4083,6 +4083,11 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=util_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
+- `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin
+  --run_test=util_tests/test_sanitize_string_printable_chars
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=util_tests/outputtype_implicit_segwit`
 - `build/bin/test_bitcoin --run_test=system_tests/subprocess_close_fds
   --catch_system_error=no --log_level=error --report_level=short`
@@ -4251,6 +4256,14 @@ Functional tests:
   ../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_knots_refresh
   --portseed=42271`
+- `python3 test/functional/p2p_handshake.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_port_refresh2
+  --portseed=42520`
+- `python3 test/functional/p2p_handshake.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_knots_refresh2
+  --portseed=42521`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_p2p_handshake_cleansubver_port
   --portseed=42170`
@@ -5274,6 +5287,30 @@ Functional tests:
   passed on unmodified Knots with the strengthened inline user-agent assertion,
   confirming the printable-preservation and receive-version log escaping
   behavior is native Knots behavior.
+- Port cross-check:
+  `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars
+  --catch_system_error=no --log_level=error --report_level=short`
+  passed three assertions, confirming printable user-agent preservation and
+  percent-escaping support in `SanitizeString(...)`.
+- Original Knots test-coverage check:
+  `../knots/build-repro/bin/test_bitcoin
+  --run_test=util_tests/test_sanitize_string_printable_chars
+  --catch_system_error=no --log_level=error --report_level=short`
+  returned `no test cases matching filter` with exit code 200; the source and
+  functional checks are the Knots-side evidence for the same behavior.
+- Port cross-check:
+  `python3 test/functional/p2p_handshake.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_port_refresh2
+  --portseed=42520`
+  passed, including the inline assertion that RPC preserves printable user-agent
+  punctuation while the receive-version log uses escaped text.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_handshake.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_handshake_ua_escape_knots_refresh2
+  --portseed=42521`
+  passed on unmodified Knots with the same inline user-agent assertion.
 - Original Knots cross-check:
   `python3 test/functional/mempool_sigoplimit.py --configfile ../knots/build-repro/test/config.ini --test_methods test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_maxfeerate_review_knots --portseed=26450`
   passed on unmodified Knots
