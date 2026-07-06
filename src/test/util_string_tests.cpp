@@ -9,10 +9,27 @@
 #include <test/util/common.h>
 #include <tinyformat.h>
 
+#include <algorithm>
+#include <array>
+#include <string>
+#include <string_view>
+
+using namespace std::literals;
 using namespace util;
 using util::detail::CheckNumFormatSpecifiers;
 
 BOOST_AUTO_TEST_SUITE(util_string_tests)
+
+std::string EscapePercentSigns(std::string_view input)
+{
+    std::string escaped;
+    escaped.reserve(input.size() + std::ranges::count(input, '%'));
+    for (const char ch : input) {
+        if (ch == '%') escaped.push_back('%');
+        escaped.push_back(ch);
+    }
+    return escaped;
+}
 
 template <unsigned NumArgs>
 void TfmFormatZeroes(const std::string& fmt)
@@ -146,6 +163,20 @@ BOOST_AUTO_TEST_CASE(ConstevalFormatString_NumSpec)
         HasReason{"tinyformat: Not enough conversion specifiers in format string"});
     BOOST_CHECK_EXCEPTION(TfmFormatZeroes<1>("%s %s"), tfm::format_error,
         HasReason{"tinyformat: Too many conversion specifiers in format string"});
+}
+
+BOOST_AUTO_TEST_CASE(tinyformat_escaped_percent_literals)
+{
+    for (const auto& input : {
+             ""sv,
+             "%"sv,
+             "%%"sv,
+             "%s is literal after escaping"sv,
+             "progress: 100% complete"sv,
+             "%1$s %*.*f %%"sv,
+         }) {
+        BOOST_CHECK_EQUAL(tfm::format(tfm::RuntimeFormat{EscapePercentSigns(input)}), input);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(case_insensitive_equal_test)
