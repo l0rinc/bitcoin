@@ -1319,8 +1319,9 @@ Other missing/adapted Knots pieces found during this pass:
   `ChainstateRole` and transaction-hash APIs. The ZMQ-enabled
   `interface_zmq.py` run now passes, including a fresh rerun from
   `/mnt/my_storage/build-zmq-audit`, a separate tree configured with
-  `-DWITH_ZMQ=ON`; the latest check rebuilt `bitcoind`/`bitcoin-cli` there
-  before rerunning the functional suite. The same pass confirmed Knots'
+  `-DWITH_ZMQ=ON`; refreshed paired runs against the port and unmodified Knots
+  ZMQ builds both passed the full functional suite. The same pass confirmed
+  Knots'
   `ipc://` ZMQ URI compatibility (`be5ba1bc7e`, merged as `9bbe4d26fc`) is
   present in the port and absent from current Core's startup argument
   pre-check, which still accepts only the Core `unix:` alias in
@@ -3432,6 +3433,14 @@ Source/manifest checks:
   "Can't read block|zmqError" src/zmq/zmqpublishnotifier.cpp -C 3` show
   current Core still logs raw-block disk-read failures via `zmqError`, while
   Knots and the port log the failing block hash directly.
+- Refreshed ZMQ functional checks passed on both trees:
+  `python3 test/functional/interface_zmq.py --configfile=/mnt/my_storage/build-zmq-audit/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_interface_zmq_port_refresh2 --portseed=42550`
+  and
+  `python3 test/functional/interface_zmq.py --configfile=../knots/build-zmq-audit/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_interface_zmq_knots_refresh2 --portseed=42551`.
+  These cover the normal hash/raw block and transaction topics, sequence
+  notifications, RBF, reorg, mempool-sync, IPv6, and
+  `getzmqnotifications` paths; the failed-notifier retention and raw-block
+  read-failure logging deltas are source-confirmed hardening behavior.
 - `git show origin/master:src/init.cpp | rg -n
   "zmqpub|ADDR_PREFIX_UNIX|ipc:" -C 4`,
   `git -C ../knots show 29.x-knots:src/init.cpp | rg -n
@@ -5081,6 +5090,14 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_interface_zmq_ipc_knots
   --portseed=32701`
+- `python3 test/functional/interface_zmq.py --configfile=/mnt/my_storage/build-zmq-audit/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_interface_zmq_port_refresh2
+  --portseed=42550`
+- `python3 test/functional/interface_zmq.py --configfile=../knots/build-zmq-audit/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_interface_zmq_knots_refresh2
+  --portseed=42551`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_dos_header_tree_checkpoint`
