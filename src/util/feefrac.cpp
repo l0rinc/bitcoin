@@ -25,7 +25,13 @@ std::partial_ordering CompareChunks(std::span<const FeeFrac> chunks0, std::span<
     /** Get the last processed point in diagram number dia. */
     const auto prev_point = [&](int dia) { return accum[dia]; };
     /** Move to the next point in diagram number dia. */
-    const auto advance = [&](int dia) { accum[dia] += chunk[dia][next_index[dia]++]; };
+    const auto advance = [&](int dia) {
+        const FeeFrac old_accum{accum[dia]};
+        const FeeFrac next_chunk{chunk[dia][next_index[dia]++]};
+        accum[dia] += next_chunk;
+        Assume(accum[dia].size > old_accum.size);
+        Assume(accum[dia] - next_chunk == old_accum);
+    };
 
     do {
         bool done_0 = next_index[0] == chunk[0].size();
