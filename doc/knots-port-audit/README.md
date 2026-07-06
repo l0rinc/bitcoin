@@ -2122,7 +2122,10 @@ under different commits. They are not all proven exploitable.
   instead of being silently downgraded. This is operator visibility rather than
   a consensus or remote crash issue. The port adapts Knots' global flag to the
   current Core `common/pcp.cpp` split and uses an atomic flag because the port
-  mapping code can be toggled from the node interface. The new
+  mapping code can be toggled from the node interface. A refreshed source
+  comparison shows current Core has the repeated-`NOT_AUTHORIZED` downgrade but
+  no `g_pcp_warn_for_unauthorized` override; Knots has the override as a plain
+  global bool, and the port keeps the behavior as an atomic. The new
   `pcp_tests/pcp_not_authorized_explicit_warning` unit test asserts both sides
   of the behavior: one warning by default, and repeated warnings when the
   explicit-warning flag is set.
@@ -3785,7 +3788,8 @@ Builds:
   src/common/pcp.cpp src/common/pcp.h src/init.cpp src/node/interfaces.cpp
   src/test/pcp_tests.cpp` show current Core has the repeated-`NOT_AUTHORIZED`
   downgrade but not Knots' explicit-user warning override, while Knots and the
-  port carry the override.
+  port carry the override. The same refreshed check shows the port adapted the
+  flag to `std::atomic<bool>` while Knots still uses a plain global bool.
 - `git show origin/master:src/node/mini_miner.cpp | rg -n
   "Don't check fees|GetModFeesWithAncestors\\(\\) >=|GetSizeWithAncestors"
   -C 3` and `rg -n
@@ -3944,8 +3948,10 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=net_peer_connection_tests`
 - `build/bin/test_bitcoin --run_test=net_peer_connection_tests/*
   --catch_system_error=no --log_level=error --report_level=short`
-- `build/bin/test_bitcoin --run_test=pcp_tests/pcp_not_authorized_explicit_warning`
-- `build/bin/test_bitcoin --run_test=pcp_tests`
+- `build/bin/test_bitcoin --run_test=pcp_tests/pcp_not_authorized_explicit_warning
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=pcp_tests --catch_system_error=no
+  --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=rest_tests`
 - `build/bin/test_bitcoin --run_test=validation_tests`
 - `build/bin/test_bitcoin --run_test=validation_chainstatemanager_tests,wallet_tests
@@ -5018,6 +5024,11 @@ Functional tests:
   `onion.reachable=false` and still included
   `pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion:42352`
   in `localaddresses`.
+- Original Knots cross-check:
+  `../knots/build-repro/bin/test_bitcoin --run_test=pcp_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+  passed on unmodified Knots, confirming the native PCP/NAT-PMP tests remain
+  green around Knots' explicit-warning behavior.
 - Original Knots expected-failure repro:
   `python3 /mnt/my_storage/bitcoin/test/functional/p2p_eviction.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_eviction_forceinbound_repro`
   (fails on unmodified Knots because the ForceInbound peer's
