@@ -297,7 +297,10 @@ public:
     }
 
     void shrink_to_fit() {
-        change_capacity(size());
+        const size_type cur_size{size()};
+        change_capacity(cur_size);
+        assert(size() == cur_size);
+        assert(capacity() == std::max<size_t>(static_cast<size_t>(N), cur_size));
     }
 
     void clear() {
