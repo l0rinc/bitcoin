@@ -1203,6 +1203,16 @@ Other missing/adapted Knots pieces found during this pass:
   Core-missing covert DoS hardening. They are local CPU/allocation reductions
   during block connection and orphan cleanup, not consensus behavior. Focused
   `mempool_tests` and `orphanage_tests` pass with the port.
+- The block-storage performance review checked Knots' bulk serialization and
+  low-priority I/O stream (`6f9c3445bc`, `6f34614262`, `e55171aa6c`,
+  `a737874af8`, `cc8111592c`). Current Core master already carries the bulk
+  block/undo read-write and expected-hash pieces through different hashes
+  (`520965e293`, `8d801e3efb`, `09ee8b7f27`, `9341b5333a`), but does not
+  carry Knots' `ioprio` layer. The port keeps Knots' lower-priority reads for
+  peer block serving, startup verification, rollback, and external block import
+  while preserving Core's current `ReadRawBlockResult` API. This is local
+  I/O-scheduling hardening/performance behavior, not consensus behavior.
+  Focused `streams_tests` and `blockmanager_tests` pass with the port.
 - The wallet best-block persistence review checked Knots' follow-up series
   `3c20072d93`, `36f643e680`, `5b371fb621`, and `ad19b1efff`. Current Core
   already carries the same best-block-in-memory/write-through behavior for
@@ -2256,6 +2266,25 @@ Source/manifest checks:
   --run_test=blockmanager_tests --catch_system_error=no --log_level=error
   --report_level=short` covers the raw-`FlatFilePos` mismatch path used by
   those call sites.
+- `git log HEAD --oneline --regexp-ignore-case --extended-regexp
+  --grep='bulk serialization|low I/O|IO priority|recomputing block hash|LoadExternalBlockFile'
+  -- src/node/blockstorage.cpp src/node/blockstorage.h src/streams.h
+  src/streams.cpp src/util/ioprio.cpp src/util/ioprio.h src/validation.cpp
+  src/net_processing.cpp src/test/blockmanager_tests.cpp
+  src/test/streams_tests.cpp`, the equivalent `origin/master` and
+  `../knots 29.x-knots` checks, and `git grep -n
+  "ioprio\\|lowprio\\|ReadBlock("` across those source paths map Knots'
+  bulk/read-hash/low-I/O stream to the current port. `origin/master` has the
+  bulk read/write and expected-hash commits but no `ioprio` or `lowprio`
+  matches; actual Knots and the port both lower priority for peer-served block
+  reads, startup verification, rollback, and `LoadExternalBlockFile`.
+- `cmake --build build --target test_bitcoin -j4`
+- `build/bin/test_bitcoin --run_test=streams_tests --catch_system_error=no
+  --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=blockmanager_tests --catch_system_error=no
+  --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_readblock_hash_mismatch
+  --catch_system_error=no --log_level=error --report_level=short`
 - `git show --stat --patch --minimal 1ba5009294 8fad5801e0 d2c1bd10db`,
   `git show origin/master:src/init.cpp | rg -n
   "shutdown_request|Interrupt\\(|m_tip_block_cv|notify_all" -C 5`,
