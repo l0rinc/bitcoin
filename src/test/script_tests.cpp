@@ -1454,6 +1454,36 @@ BOOST_AUTO_TEST_CASE(sign_paytoanchor)
     BOOST_CHECK(SignSignature(keystore, CTransaction(prev), curr, 0, SIGHASH_ALL, sig_data));
 }
 
+BOOST_AUTO_TEST_CASE(require_sighash_all)
+{
+    const CKey key{GenerateRandomKey()};
+    const CPubKey pubkey{key.GetPubKey()};
+    const std::vector<unsigned char> pubkey_bytes{ToByteVector(pubkey)};
+    const CScript script_pubkey{CScript() << pubkey_bytes << OP_CHECKSIG};
+
+    CMutableTransaction tx;
+    tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
+    tx.vout.emplace_back(1, CScript{});
+
+    const auto sign_with_hash_type{[&](const int hash_type) {
+        const uint256 sighash{SignatureHash(script_pubkey, tx, /*nIn=*/0, hash_type, /*amount=*/0, SigVersion::BASE)};
+        std::vector<unsigned char> sig;
+        BOOST_REQUIRE(key.Sign(sighash, sig));
+        sig.push_back(hash_type);
+        return sig;
+    }};
+
+    const std::vector<unsigned char> sig_all{sign_with_hash_type(SIGHASH_ALL)};
+    const std::vector<unsigned char> sig_none{sign_with_hash_type(SIGHASH_NONE)};
+
+    MutableTransactionSignatureChecker checker{&tx, /*nInIn=*/0, /*amountIn=*/0, MissingDataBehavior::ASSERT_FAIL};
+    BOOST_CHECK(checker.CheckECDSASignature(sig_none, pubkey_bytes, script_pubkey, SigVersion::BASE));
+
+    checker.m_require_sighash_all = true;
+    BOOST_CHECK(checker.CheckECDSASignature(sig_all, pubkey_bytes, script_pubkey, SigVersion::BASE));
+    BOOST_CHECK(!checker.CheckECDSASignature(sig_none, pubkey_bytes, script_pubkey, SigVersion::BASE));
+}
+
 BOOST_AUTO_TEST_CASE(script_standard_push)
 {
     ScriptError err;
