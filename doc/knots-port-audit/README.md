@@ -1052,7 +1052,12 @@ Other missing/adapted Knots pieces found during this pass:
   still lacks the `-rpcauthfile` and per-token blank `-rpcauth` behavior. The
   port's `rpc_users.py` coverage exercises multi-entry auth files, blank
   `-rpcauth` around nonblank entries, `-norpcauth`, wallet-restricted auth
-  entries, and cookie permission/replacement behavior. The lingering test
+  entries, and cookie permission/replacement behavior. A later cookie-permission
+  compatibility check confirmed Knots' octal `-rpccookieperms` parser and
+  legacy control values (`0`, empty/`1`, and `-norpccookieperms`) are present in
+  the port and absent from current Core, which still accepts only `owner`,
+  `group`, or `all`. This is local RPC-auth file compatibility and permission
+  control, not consensus behavior or remote network exposure. The lingering test
   `FIXME` about reviving an earlier command-line `-rpcauth=*` after
   `-norpcauth` is inherited from actual Knots and was not introduced by the
   port; the test asserts the current Knots behavior around config-file auth
@@ -3136,6 +3141,16 @@ Builds:
   "rpcauthfile|rpcauth|wallet_restriction|m_wallet_restriction|Method not available for wallet-restricted"
   src/init.cpp src/httprpc.cpp src/rpc/request.h src/rpc/util.cpp
   src/rpc/util.h src/wallet/rpc/util.cpp test/functional/rpc_users.py`
+- `rg -n
+  "rpccookieperms|InterpretPermString|StringToOctal|ConvertPermsToOctal|norpccookieperms"
+  src/httprpc.cpp src/util/fs_helpers.cpp test/functional/rpc_users.py`,
+  `git show origin/master:src/httprpc.cpp origin/master:src/util/fs_helpers.cpp
+  | rg -n
+  "rpccookieperms|InterpretPermString|StringToOctal|ConvertPermsToOctal|norpccookieperms"
+  -C 4`, and `git -C ../knots show 29.x-knots:src/httprpc.cpp
+  29.x-knots:src/util/fs_helpers.cpp | rg -n
+  "rpccookieperms|InterpretPermString|StringToOctal|ConvertPermsToOctal|norpccookieperms"
+  -C 4`
 - `git grep -n
   "rpcauthfile|wallet_restriction|m_wallet_restriction|Method not available for wallet-restricted"
   origin/master -- src/init.cpp src/httprpc.cpp src/rpc/request.h
@@ -3728,6 +3743,14 @@ Functional tests:
 - `python3 test/functional/rpc_users.py --configfile ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_users_wallet_restricted_matrix_knots
   --portseed=31990`
+- `python3 test/functional/rpc_users.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_users_cookieperms_octal_port
+  --portseed=32698`
+- `python3 test/functional/rpc_users.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_users_cookieperms_octal_knots
+  --portseed=32699`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_getrpcwhitelist.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_getrpcwhitelist_auth_review_port
