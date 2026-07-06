@@ -4225,6 +4225,14 @@ Functional tests:
   ../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_knots_refresh
   --portseed=42261`
+- `python3 test/functional/feature_versionbits_warning.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_port_refresh2
+  --portseed=42510`
+- `python3 test/functional/feature_versionbits_warning.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_knots_refresh2
+  --portseed=42511`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_ua_escape_3`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
@@ -5545,6 +5553,21 @@ Functional tests:
   `python3 test/functional/feature_versionbits_warning.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_knots_refresh --portseed=42261`
   passed on unmodified Knots, confirming the refreshed warning-range,
   unknown-schema, and BIP320 reserved-bit behavior is native Knots behavior.
+- Port cross-check:
+  `python3 test/functional/feature_versionbits_warning.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_port_refresh2
+  --portseed=42510`
+  passed, confirming the port reports unknown-schema, last-100 unknown-bit, and
+  BIP320 reserved-bit warning behavior while keeping the standard unknown-rules
+  activation warning.
+- Original Knots cross-check:
+  `python3 test/functional/feature_versionbits_warning.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_knots_refresh2
+  --portseed=42511`
+  passed on unmodified Knots with the same warning-range, unknown-schema, and
+  BIP320 reserved-bit behavior.
 - Original Knots cross-check:
   `../knots/build-repro/bin/test_bitcoin --run_test=node_warnings_tests --catch_system_error=no --log_level=error --report_level=short`
   passed on unmodified Knots. The source comparison above confirms Knots has
