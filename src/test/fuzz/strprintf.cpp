@@ -7,11 +7,13 @@
 #include <test/fuzz/util.h>
 #include <tinyformat.h>
 #include <util/strencodings.h>
+#include <util/string.h>
 #include <util/translation.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 template <typename... Args>
@@ -20,10 +22,25 @@ void fuzz_fmt(const std::string& fmt, const Args&... args)
     (void)tfm::format(tfm::RuntimeFormat{fmt}, args...);
 }
 
+std::string EscapePercentSigns(std::string_view input)
+{
+    std::string escaped;
+    escaped.reserve(input.size() + std::ranges::count(input, '%'));
+    for (const char ch : input) {
+        if (ch == '%') escaped.push_back('%');
+        escaped.push_back(ch);
+    }
+    return escaped;
+}
+
 FUZZ_TARGET(str_printf)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     const std::string format_string = fuzzed_data_provider.ConsumeRandomLengthString(64);
+
+    if (util::ContainsNoNUL(format_string)) {
+        assert(tfm::format(tfm::RuntimeFormat{EscapePercentSigns(format_string)}) == format_string);
+    }
 
     const int digits_in_format_specifier = std::count_if(format_string.begin(), format_string.end(), IsDigit);
 
