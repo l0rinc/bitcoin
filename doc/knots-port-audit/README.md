@@ -859,13 +859,13 @@ Other missing/adapted Knots pieces found during this pass:
   compiled and reloads it after restart.
 - A BDB follow-up review confirmed the port also carries Knots' BDB-specific
   wallet hardening around non-writable directories and environment cleanup:
-  `MakeBerkeleyDatabase(...)` catches open/verify exceptions, BDB directory
-  errors report the non-writable path, checkpoint/LSN reset failures do not mark
-  a database as detached, and BDB cleanup avoids deleting the `database`
-  subdirectory on normal shutdown. Current Core master already has the SQLite
-  non-writable-directory guard and tests, but has no BDB backend. The port's
-  BDB side is covered by `wallet_createwallet.py`, `wallet_startup.py`, and
-  `db_tests`.
+  `MakeBerkeleyDatabase(...)` catches open/verify exceptions (`a65bce292b`),
+  BDB directory errors report the non-writable path, checkpoint/LSN reset
+  failures do not mark a database as detached, and BDB cleanup avoids deleting
+  the `database` subdirectory on normal shutdown. Current Core master already
+  has the SQLite non-writable-directory guard and tests (`607799b6db`,
+  upstream `bc0090f1d6`), but has no BDB backend. The port's BDB side is
+  covered by `wallet_createwallet.py`, `wallet_startup.py`, and `db_tests`.
 - A wallet database maintenance review found a port-side omission in Knots'
   BDB flush/debug controls (`377772f7e2`). Actual Knots has `-dblogsize`,
   `-flushwallet`, `-privdb`, `-swapbdbendian`, the BDB runtime sanity check,
@@ -2166,6 +2166,22 @@ under different commits. They are not all proven exploitable.
   behavior inline in restore and migration cleanup, while current Core still
   removes after `Assume(fs::is_empty(...))` without checking the result.
 
+- Wallet migration path and backup hardening:
+  `fee79e70d9`, `34ac206b1c`, `432b39cee7`, `60f529027c`, `69a6b9b115`
+
+  Current Core master has since inherited the pathname backup-prefix fix
+  (`fee79e70d9`, upstream `70f1c99c90`), the avoid-spendable-wallet result for
+  watch-only-only migrations (`34ac206b1c`, upstream `b789907346`), and the
+  success-only migrated-wallet-name assignment (`432b39cee7`, upstream
+  `8a4cfddf23`); its current source also logs reload failures using the wallet
+  being loaded, so `60f529027c` is not a live Core-missing defect. Knots and
+  the port still differ from current Core on `69a6b9b115`: when a legacy
+  file-backed wallet is converted into a directory-backed descriptor wallet,
+  the backup is moved into that new wallet directory. Current Core still creates
+  the backup under the top wallet directory in the corresponding source path.
+  This is local legacy-migration data placement behavior, not consensus or
+  network security.
+
 - Subprocess fd cleanup before exec:
   `214047ecd3`, `ed5a3b3604`
 
@@ -3244,6 +3260,17 @@ Source/manifest checks:
   src/wallet/test/wallet_tests.cpp` shows the port's helper/test, Knots'
   inline guarded restore/migration cleanup, and current Core's unconditional
   removal after the `Assume(...)` call.
+- `git log --oneline origin/master --grep='Fix migration of wallets with
+  pathnames\\|avoid creating spendable wallet\\|Set migrated wallet name only on
+  success\\|non-writable db directories' -- src/wallet
+  test/functional/wallet_migration.py`, `git grep -n -E
+  "backup_prefix|weakly_canonical\\(GetWalletDir|empty_local_wallet|Failed to
+  load wallet|plainfile_|non-writable directory|MakeBerkeleyDatabase"
+  HEAD knots/29.x-knots origin/master -- src/wallet test/functional`, and
+  `git show origin/master:src/wallet/bdb.cpp 2>&1 || true` show which
+  migration and non-writable-directory fixes are now current-Core inherited,
+  which non-directory backup relocation remains Knots/port-specific, and that
+  current Core no longer has the BDB exception-handling surface.
 - `git grep -n -E
   "struct close_fds|close_fds\\{|subprocess_close_all_fds|close_range|RunCommandParseJSON|subprocess_close_fds"
   HEAD knots/29.x-knots origin/master -- src/common src/node src/util
