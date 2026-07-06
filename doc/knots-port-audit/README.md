@@ -1992,6 +1992,21 @@ under different commits. They are not all proven exploitable.
   Knots. `peerman_tests/peerman_args_block_reconstruction_extra_txn` covers the
   parser conversion for fractional megabytes and negative values.
 
+- Unknown/future witness output policy switch:
+  `584798d402`, `82b2c8372e`
+
+  Current Core relays standard transactions that create unknown/future witness
+  outputs and exposes no policy knob to reject them. Knots and this port keep
+  the permissive default (`-acceptunknownwitness=1`) but add
+  `-acceptunknownwitness=0` and a GUI setting to reject transactions sending to
+  `TxoutType::WITNESS_UNKNOWN` with
+  `scriptpubkey-unknown-witnessversion`. Spending an unknown witness program
+  remains non-standard in both Core and Knots, and consensus behavior is
+  unchanged; this is an operator-controlled relay/mining policy switch for
+  future-version output creation. `transaction_tests/test_IsStandard` toggles
+  the mempool option and covers both rejection and default acceptance, and the
+  same source-level expectation is present in unmodified Knots.
+
 - CJDNS addnode duplicate detection:
   `28823f30dc`
 
@@ -2594,6 +2609,15 @@ Source/manifest checks:
   the 100-entry count default, while actual Knots and the port have the
   32,768-entry default, 10 MB default size cap, fractional-MB parser, and
   functional coverage.
+- `git show origin/master:src/kernel/mempool_options.h origin/master:src/policy/policy.cpp
+  | rg -n "acceptunknownwitness|scriptpubkey-unknown-witnessversion|WITNESS_UNKNOWN" -C 4`,
+  `git -C ../knots show 29.x-knots:src/kernel/mempool_options.h 29.x-knots:src/policy/policy.cpp 29.x-knots:src/test/transaction_tests.cpp
+  | rg -n "acceptunknownwitness|scriptpubkey-unknown-witnessversion|WITNESS_UNKNOWN" -C 4`,
+  and `rg -n "acceptunknownwitness|scriptpubkey-unknown-witnessversion|WITNESS_UNKNOWN"
+  src/kernel/mempool_options.h src/policy/policy.cpp src/node/mempool_args.cpp
+  src/test/transaction_tests.cpp` show current Core lacks the option while
+  actual Knots and the port expose and test the unknown-witness output policy
+  toggle.
 - `git show --stat --patch --minimal b85232d7462`, `git show
   origin/master:src/init.cpp | rg -n
   "blockfilterindex_value|AllBlockFilterTypes|BlockFilterType::BASIC|certain indexes|indexes for all known types"
@@ -3627,6 +3651,8 @@ Functional tests:
   --portseed=32621`
 - `build/bin/test_bitcoin --run_test=peerman_tests/peerman_args_block_reconstruction_extra_txn
   --catch_system_errors=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=transaction_tests/test_IsStandard
+  --catch_system_errors=no --log_level=error --report_level=short`
 - `python3 test/functional/p2p_compactblocks.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_compactblocks_header_guard_final`
 - `python3 test/functional/p2p_invalid_block.py --configfile build/test/config.ini
@@ -3846,6 +3872,12 @@ Functional tests:
   `python3 test/functional/p2p_compactblocks_extratxs.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_size_knots --portseed=32621`
   passed on unmodified Knots, including `-blockreconstructionextratxnsize`
   zero, fractional, boundary, and eviction behavior.
+- Original Knots source cross-check:
+  `git -C ../knots show 29.x-knots:src/test/transaction_tests.cpp | rg -n "acceptunknownwitness|scriptpubkey-unknown-witnessversion" -C 4`
+  shows unmodified Knots' unit test has the same unknown-witness output
+  acceptance/rejection expectation as the port. `../knots/build-repro/bin`
+  does not include `test_bitcoin`, so this item was source-checked rather than
+  unit-run against the unmodified Knots build.
 - Original Knots cross-check:
   `python3 test/functional/p2p_compactblocks.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_compactblocks_header_guard`
   reached and passed the repeated-`blocktxn` section on unmodified Knots,
