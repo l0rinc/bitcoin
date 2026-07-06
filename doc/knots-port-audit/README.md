@@ -837,6 +837,14 @@ Other missing/adapted Knots pieces found during this pass:
   --configfile build/test/config.ini --test_methods test_importfromcoldcard
   --tmpdir=/mnt/my_storage/tmp_tool_wallet_coldcard`, and the default
   `tool_wallet.py` run with `--tmpdir=/mnt/my_storage/tmp_tool_wallet_full`.
+- The wallet-tool warning-stream review confirmed Knots' stdout/stderr cleanup
+  (`3240c3790d`) is present in the port but still absent from current Core's
+  corresponding wallet-tool paths. Knots and the port print the "dumpfile may
+  contain private keys" message and `createfromdump` warnings to stderr, while
+  current Core still prints those warning strings to stdout. This is local
+  scripting/output-channel hardening, not consensus or network behavior.
+  `tool_wallet.py` in the port already asserts the warning stream for dump and
+  create-from-dump paths.
 - A follow-up comparison with final Knots' runner restored additional
   legacy-wallet coverage that current Core had removed:
   `wallet_importmulti.py`, `wallet_inactive_hdchains.py`,
@@ -3221,6 +3229,12 @@ Source/manifest checks:
   `// No build information available`, while `origin/master` wrote
   `#define BUILD_GIT_COMMIT "<outer-repo-short-hash>"`, confirming Core still
   lacks Knots' source-tree ownership check for generated build metadata.
+- `nl -ba src/wallet/wallettool.cpp | sed -n '218,244p'`,
+  `git -C ../knots show 29.x-knots:src/wallet/wallettool.cpp | nl -ba | sed
+  -n '216,238p'`, and `git show origin/master:src/wallet/wallettool.cpp | nl
+  -ba | sed -n '158,170p'` show the port and Knots print the wallet dump and
+  create-from-dump warning strings to `std::cerr`, while current Core still
+  prints them to `std::cout`.
 - `git grep -n -E
   "IsSymlink|Not recursively searching symlink/reparse point|Windows cross compile does not detect symlinks|recursive_directory_iterator|self_walletdat_symlink|directory_symlink|w8_symlink"
   HEAD knots/29.x-knots origin/master -- src/wallet
