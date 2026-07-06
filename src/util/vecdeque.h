@@ -7,6 +7,7 @@
 
 #include <util/check.h>
 
+#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <type_traits>
@@ -210,13 +211,20 @@ public:
     /** Increase the capacity to capacity. Capacity will not shrink. */
     void reserve(size_t capacity)
     {
+        const size_t old_size{m_size};
+        const size_t old_capacity{m_capacity};
         if (capacity > m_capacity) Reallocate(capacity);
+        Assert(m_size == old_size);
+        Assert(m_capacity == std::max(old_capacity, capacity));
     }
 
     /** Make the capacity equal to the size. The contents does not change. */
     void shrink_to_fit()
     {
+        const size_t old_size{m_size};
         if (m_capacity > m_size) Reallocate(m_size);
+        Assert(m_size == old_size);
+        Assert(m_capacity == m_size);
     }
 
     /** Construct a new element at the end of the deque. */
