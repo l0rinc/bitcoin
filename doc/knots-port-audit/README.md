@@ -161,7 +161,13 @@ Other missing/adapted Knots pieces found during this pass:
   (`CBlock.calc_sha256()`), while the current port framework exposes block
   hashes through properties (`hash`, `hash_int`, and `sha256`). The port removes
   the stale call as `1486393769`; the test now passes and covers the
-  `getblockfileinfo` pruning assertions.
+  `getblockfileinfo` pruning assertions. A refreshed unmodified-Knots native
+  test run exposed a separate inherited test fragility: Knots still compares the
+  re-fetched pruned block against one hard-coded hash, but the actual generated
+  block hash differs in the current environment. The corrected port test asserts
+  against the `pruned_block` variable and passes against the same unmodified
+  Knots binaries, so this is a Knots functional-test bug rather than a client
+  behavior bug.
 - The `getblockfrompeer` review confirmed Knots' no-header and pruned-node
   future-block behavior (`6c78d40b89`, `aebfd947d2`) is present in the port and
   absent from current Core master. The same review confirmed Knots' restored
@@ -2518,9 +2524,11 @@ under different commits. They are not all proven exploitable.
   port return `nullptr` when the block-file info vector is empty, letting the
   RPC surface report "block file not found" instead of depending on `.at(n)`.
   The port now covers the empty lookup in
-  `blockmanager_tests/blockmanager_get_block_file_info_empty`; refreshed full
-  `rpc_getblockfrompeer.py` runs also passed on both the port and unmodified
-  Knots, including the `getblockfileinfo` pruning assertions. The
+  `blockmanager_tests/blockmanager_get_block_file_info_empty`; refreshed
+  `rpc_getblockfrompeer.py` runs passed on the port and the corrected port test
+  passed against unmodified Knots, including the `getblockfileinfo` pruning
+  assertions. Knots' native test still has the stale hard-coded pruned-block hash
+  described above. The
   `85c8d477b0` fee-histogram unsigned-decrement fix matters for Knots'
   `getmempoolinfo(with_fee_histogram=...)` and
   `/rest/mempool/info/with_fee_histogram`, but current Core has no
@@ -2816,7 +2824,9 @@ under different commits. They are not all proven exploitable.
   and the port pass the hash and optional block index through to peerman.
   Peerman-side comparison also shows Core calls `RemoveBlockRequest(...)`
   before duplicate detection, while Knots and the port check
-  `IsBlockRequestedFromPeer(...)` first.
+  `IsBlockRequestedFromPeer(...)` first. Refreshed functional coverage passed on
+  the port, and the same corrected test passed against unmodified Knots; Knots'
+  own native test fails only at the stale hard-coded pruned-block hash assertion.
 
 High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
@@ -5081,6 +5091,18 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_blockfile_knots
   --portseed=42561`
+- `python3 test/functional/rpc_getblockfrompeer.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_refresh_port
+  --portseed=42596`
+- `python3 ../knots/test/functional/rpc_getblockfrompeer.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_refresh_knots
+  --portseed=42597`
+- `python3 test/functional/rpc_getblockfrompeer.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_porttest_knots
+  --portseed=42598`
 - `python3 test/functional/rpc_mempool_info.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile build/test/config.ini`
 - `python3 test/functional/p2p_compactblocks_extratxs.py --configfile=build/test/config.ini
@@ -5508,10 +5530,19 @@ Functional tests:
   both passed. This corrected the earlier suspicion around Knots'
   `recv_wrpc.rpc.*` calls: they are valid in Knots' native test framework; only
   the port needed adaptation to the current direct wallet RPC proxy.
-- Original Knots cross-check:
-  `python3 ../knots/test/functional/rpc_getblockfrompeer.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_review_knots --portseed=26456`
-  passed on unmodified Knots, including no-header fetches, duplicate same-peer
-  request errors, and pruned-node refetch coverage.
+- Refreshed `getblockfrompeer` cross-checks:
+  `python3 test/functional/rpc_getblockfrompeer.py --configfile=build/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_refresh_port --portseed=42596`
+  passed on the port, including no-header fetches, duplicate same-peer request
+  errors, and pruned-node refetch coverage. Unmodified Knots' native
+  `python3 ../knots/test/functional/rpc_getblockfrompeer.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_refresh_knots --portseed=42597`
+  failed only at the stale hard-coded pruned-block hash assertion:
+  actual `196ee3a1a6db2353965081c48ef8e6b031cb2115d084bec6fec937e91a2c6277`
+  versus expected
+  `36c56c5b5ebbaf90d76b0d1a074dcb32d42abab75b7ec6fa0ffd9b4fbce8f0f7`.
+  The corrected port test
+  `python3 test/functional/rpc_getblockfrompeer.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_porttest_knots --portseed=42598`
+  passed against the same unmodified Knots binaries, confirming the client
+  behavior is present and the failure is native Knots test brittleness.
 - Original Knots cross-check:
   a one-off subclass of `rpc_net.py` running only
   `test_addnode_cjdns_duplicate` with
