@@ -707,10 +707,13 @@ Other missing/adapted Knots pieces found during this pass:
   the same behavior while adapting the call sites to its low-priority block-file
   read API. `blockmanager_tests` now also asserts the raw-`FlatFilePos`
   `expected_hash` path that these P2P call sites rely on.
-- CLI completion coverage exposed stale generated artifacts: `exportasmap` now
-  completes as a file argument, and the zsh `bitcoin-cli` completion file from
-  Knots had not been carried into the port. The generated bash/zsh completions
-  are now refreshed as `c45749ae43`, and `tool_cli_completion.py` passes.
+- CLI completion coverage (`be15feb951`'s hidden `format` RPC with
+  `args_cli` output, plus the completion-file regression test derived from
+  `7dd6f5b7fc`) exposed stale generated artifacts: `exportasmap` now completes
+  as a file argument, and the zsh `bitcoin-cli` completion file from Knots had
+  not been carried into the port. The generated bash/zsh completions are now
+  refreshed as `c45749ae43`, and `tool_cli_completion.py` passes. This is
+  operator CLI ergonomics/coverage, not consensus or network behavior.
 - A final generated-release-artifact review against Knots' tip update
   (`f41f01e1e6`) found `doc/man/bitcoind.1`,
   `doc/man/bitcoin-qt.1`, and `share/examples/bitcoin.conf` were still stale
@@ -5449,6 +5452,9 @@ Functional tests:
 - `python3 test/functional/interface_bitcoin_cli.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_help.py --configfile build/test/config.ini`
 - `python3 test/functional/tool_cli_completion.py --configfile build/test/config.ini`
+- `python3 test/functional/tool_cli_completion.py --configfile=build/test/config.ini
+  --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_tool_cli_completion_refresh
+  --portseed=42737`
 - `python3 test/functional/rpc_signer.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_signer_fingerprint_2`
 - `python3 test/functional/wallet_signer.py --configfile build/test/config.ini
