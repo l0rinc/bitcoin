@@ -1399,9 +1399,11 @@ Other missing/adapted Knots pieces found during this pass:
   behavior. `p2p_permissions.py` now covers both sides directly: an automatic
   `outbound-full-relay` peer receives `noban`/`download` when the whitelist is
   `noban,out@127.0.0.1`, and receives no such permissions when the whitelist is
-  incoming-only. A refreshed source comparison and focused test run still show
-  the behavior in the port and unmodified Knots, while current Core keeps the
-  manual-only gate.
+  incoming-only. Knots' invalid-header regression coverage (`dbbb11e560`) also
+  exercises this through `p2p_invalid_messages.py`: a `noban,out` automatic
+  outbound peer logs the bad header as misbehaving but is not disconnected. A
+  refreshed source comparison and focused test run still show the behavior in
+  the port and unmodified Knots, while current Core keeps the manual-only gate.
 - The block-filter permission review confirmed Knots' `blockfilters`
   whitebind/whitelist permission (`d153093ba2`, `aa2885797e`) is present in
   the port and absent from current Core. The permission lets an explicitly
@@ -2512,7 +2514,7 @@ under different commits. They are not all proven exploitable.
   the no-cap replacement behavior both work.
 
 - Outgoing whitelist permissions for automatic outbound peers:
-  `a9f6f721aa`
+  `a9f6f721aa`, covered for invalid headers by `dbbb11e560`
 
   Current Core still applies `-whitelist=...,out@...` permissions only when
   `ConnectNode(...)` is opening a manual connection. Knots and this port apply
@@ -2521,7 +2523,10 @@ under different commits. They are not all proven exploitable.
   limited to `addnode`/manual peers. This is local network permission semantics,
   not a consensus change. The isolated
   `p2p_permissions.py --test_methods check_automatic_outbound_permissions`
-  run passes against both the port and unmodified Knots; a refreshed source
+  run passes against both the port and unmodified Knots; the
+  `p2p_invalid_messages.py --test_methods test_invalid_pow_headers_msg` path
+  additionally pins that an automatic outbound peer with `noban` logs invalid
+  proof-of-work headers without being disconnected. A refreshed source
   comparison still shows Core's `ConnectNode(...)` manual-only gate.
 
 - Implicit whitelist `addr` permission:
@@ -5030,6 +5035,11 @@ Functional tests:
   --test_methods check_automatic_outbound_permissions
   --tmpdir=/mnt/my_storage/tmp_p2p_permissions_outbound_auto_refresh_knots
   --portseed=42441`
+- `python3 test/functional/p2p_invalid_messages.py --configfile
+  build/test/config.ini --cachedir=test/cache --test_methods
+  test_invalid_pow_headers_msg
+  --tmpdir=/mnt/my_storage/tmp_p2p_invalid_messages_noban_out_port_refresh
+  --portseed=42732`
 - `python3 test/functional/p2p_blockfilters.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_blockfilters_permission_2`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
