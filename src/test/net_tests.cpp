@@ -844,6 +844,28 @@ BOOST_AUTO_TEST_CASE(LocalAddress_BasicLifecycle)
     BOOST_CHECK(!IsLocal(addr));
 }
 
+BOOST_AUTO_TEST_CASE(LocalAddress_TorDoesNotRequireOutboundReachability)
+{
+    const CService ipv4_addr{UtilBuildAddress(0x002, 0x001, 0x001, 0x001), 1000}; // 2.1.1.1:1000
+
+    CNetAddr onion_net_addr;
+    BOOST_REQUIRE(onion_net_addr.SetSpecial("pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion"));
+    const CService onion_addr{onion_net_addr, 8333};
+
+    g_reachable_nets.Remove(NET_IPV4);
+    g_reachable_nets.Remove(NET_ONION);
+
+    BOOST_CHECK(!AddLocal(ipv4_addr, LOCAL_MANUAL));
+    BOOST_CHECK(!IsLocal(ipv4_addr));
+
+    BOOST_CHECK(AddLocal(onion_addr, LOCAL_MANUAL));
+    BOOST_CHECK(IsLocal(onion_addr));
+
+    RemoveLocal(onion_addr);
+    g_reachable_nets.Add(NET_IPV4);
+    g_reachable_nets.Add(NET_ONION);
+}
+
 BOOST_AUTO_TEST_CASE(LocalAddress_nScore_Overflow)
 {
     g_reachable_nets.Add(NET_IPV4);
