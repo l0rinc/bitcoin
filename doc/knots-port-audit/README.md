@@ -693,6 +693,13 @@ Other missing/adapted Knots pieces found during this pass:
   as `e1445679c3`, the expanded progress bar as `7db09de6d9`, and Qt test
   coverage for the clear-history command as `2e0ff4068b`. The local build still
   has `BUILD_GUI=OFF`, so the Qt test target could not be executed here.
+- A later GUI exact-patch check found a port-introduced address-book wording
+  regression: the initial `3cf4f0e4c7` cherry-pick restored the receive form's
+  `Request payment` wording, but the adapted `befa6e0daf` follow-up
+  accidentally returned the receiving-address explanation to Core's older
+  `Create new receiving address` wording while removing the obsolete signing
+  sentence. Actual Knots keeps `Request payment`; the port now does too. This
+  is GUI text parity, not consensus, network behavior, or security hardening.
 - The same Qt source pass found port-introduced GUI compile drift, not original
   Knots defects: `src/qt/transactionfilterproxy.cpp` had duplicated naked
   filter-change fragments after the current-Core Qt 6.10 modernization, and
@@ -4480,6 +4487,12 @@ Builds:
   src/qt/test/apptests.cpp`
 - `rg -n "progressBar->setSizePolicy|statusBar\\(\\)->addWidget\\(progressBar,
   1\\)" src/qt/bitcoingui.cpp`
+- `git grep -n
+  "Create new receiving address\\|Request payment' button"
+  HEAD knots/29.x-knots origin/master -- src/qt/addressbookpage.cpp
+  src/qt/forms/receivecoinsdialog.ui` shows the receiving-address explanatory
+  text now matches Knots' `Request payment` wording instead of current Core's
+  older receive-button name.
 - `rg -n "class PlainCopyTextEdit" src/qt/rpcconsole.h` returned a single
   class definition
 - `nl -ba src/qt/transactionfilterproxy.cpp | sed -n '51,127p'`
