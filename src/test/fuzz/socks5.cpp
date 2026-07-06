@@ -57,7 +57,15 @@ std::vector<uint8_t> MakeSocks5SuccessReply(bool select_auth)
     return reply;
 }
 
-std::vector<uint8_t> ExpectedSocks5ClientBytes(const std::string& dest, uint16_t port, const ProxyCredentials* auth)
+std::vector<uint8_t> MakeSocks5MethodSelectionFailureReply(const ProxyCredentials* auth, FuzzedDataProvider& provider)
+{
+    if (provider.ConsumeBool()) {
+        return {0x04, 0x00};
+    }
+    return {0x05, static_cast<uint8_t>(auth ? 0xff : 0x02)};
+}
+
+std::vector<uint8_t> ExpectedSocks5MethodSelectionBytes(const ProxyCredentials* auth)
 {
     std::vector<uint8_t> expected{
         0x05,
@@ -65,6 +73,12 @@ std::vector<uint8_t> ExpectedSocks5ClientBytes(const std::string& dest, uint16_t
         0x00,
     };
     if (auth) expected.push_back(0x02);
+    return expected;
+}
+
+std::vector<uint8_t> ExpectedSocks5ClientBytes(const std::string& dest, uint16_t port, const ProxyCredentials* auth)
+{
+    std::vector<uint8_t> expected{ExpectedSocks5MethodSelectionBytes(auth)};
     if (auth) {
         expected.insert(expected.end(), {
             0x01,
@@ -130,6 +144,14 @@ FUZZ_TARGET(socks5, .init = initialize_socks5)
         Assert(!Socks5(str_dest, port, auth, scripted_sock));
         const std::vector<uint8_t> expected_init{0x05, 0x02, 0x00, 0x02};
         Assert(ReadBytes(pipes->send, expected_init.size()) == expected_init);
+        AssertNoBytes(pipes->send);
+        return;
+    }
+    if (fuzzed_data_provider.ConsumeBool()) {
+        PushBytes(pipes->recv, MakeSocks5MethodSelectionFailureReply(auth, fuzzed_data_provider));
+        Assert(!Socks5(str_dest, port, auth, scripted_sock));
+        const auto expected{ExpectedSocks5MethodSelectionBytes(auth)};
+        Assert(ReadBytes(pipes->send, expected.size()) == expected);
         AssertNoBytes(pipes->send);
         return;
     }
