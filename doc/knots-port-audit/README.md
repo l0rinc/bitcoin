@@ -2371,7 +2371,10 @@ under different commits. They are not all proven exploitable.
   surface because GUI/options changes may leave durable settings outside the
   ordinary read-only `bitcoin.conf`. `argsman_tests` now covers the on-disk
   `settings.json` mirror, the rw-only update mode, and the negated-`-settings`
-  path.
+  path. A refreshed source comparison confirms current Core still lacks the
+  `-confrw`/`bitcoin_rw.conf`/`ModifyRWConfigFile(...)` surface; unmodified
+  Knots has the behavior but not the port's strengthened ArgsManager
+  integration test cases.
 
 - Mempool statistics subsystem and RPC:
 
@@ -3314,6 +3317,11 @@ Source/manifest checks:
   "uaspoof|uaappend|uacomment|FormatSubVersion|strSubVersion|UA_NAME"
   HEAD knots/29.x-knots origin/master -- src/init.cpp src/clientversion.cpp
   src/clientversion.h test/functional/feature_uacomment.py`
+- `git grep -n -E
+  "confrw|bitcoin_rw\\.conf|RWConfig|ModifyRWConfigFile|EraseRWConfigFile|settings_json|also_settings_json"
+  HEAD knots/29.x-knots origin/master -- src/common/args.cpp src/common/args.h
+  src/common/config.cpp src/init/common.cpp src/bitcoin-cli.cpp
+  src/test/argsman_tests.cpp`
 - `git -C ../knots show 29.x-knots:src/node/blockmanager_args.cpp | rg -n
   "pruneduringinit|PRUNE_TARGET_MANUAL"` confirms actual Knots converts
   `-pruneduringinit=0` to manual pruning during init.
@@ -3869,6 +3877,13 @@ Unit tests:
 - `build/bin/bitcoind -regtest -help-debug | sed -n '512,516p'`
 - `../knots/build-repro/bin/bitcoind -regtest -help-debug | sed -n '505,509p'`
 - `build/bin/test_bitcoin --run_test=getarg_tests/setting_args
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin
+  --run_test=argsman_tests/util_ModifyRWConfigFileOnArgsManager
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=argsman_tests/util_RWConfigHasPruneOption
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin --run_test=argsman_tests
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=util_tests`
 - `build/bin/test_bitcoin --run_test=util_tests/test_sanitize_string_printable_chars`
@@ -5076,7 +5091,13 @@ Functional tests:
   unmodified Knots unit binary; Knots does not have the strengthened
   `argsman_tests/util_ModifyRWConfigFileOnArgsManager` case, but its native
   `../knots/build-repro/bin/test_bitcoin --run_test=util_tests/test_ModifyRWConfigFile --catch_system_error=no --log_level=error --report_level=short`
-  passes with 53 assertions.
+  passes with 53 assertions. A refreshed check confirmed
+  `../knots/build-repro/bin/test_bitcoin --run_test=argsman_tests/util_ModifyRWConfigFileOnArgsManager --catch_system_error=no --log_level=error --report_level=short`
+  and
+  `../knots/build-repro/bin/test_bitcoin --run_test=argsman_tests/util_RWConfigHasPruneOption --catch_system_error=no --log_level=error --report_level=short`
+  both return `no test cases matching filter`, while Knots' native
+  `../knots/build-repro/bin/test_bitcoin --run_test=argsman_tests --catch_system_error=no --log_level=error --report_level=short`
+  passed.
 - Original Knots/source cross-check:
   `git grep -n "void SetupHelpOptions\\|DISALLOW_NEGATION\\|util_ParseNegatedHelpParameters\\|Negating of -help" knots/29.x-knots -- src/common/args.cpp src/common/args.h src/test/argsman_tests.cpp`
   shows unmodified Knots registers help aliases with negation disabled, and
