@@ -942,9 +942,14 @@ Other missing/adapted Knots pieces found during this pass:
 - `p2p_invalid_tx.py` and `p2p_segwit.py` now match the port's current
   validation surfaces: orphanage overflow is still capped at 100 stored
   orphans, but the Core-current log string is `orphanage count limit`, and
-  Knots-style SegWit block failures use mandatory-script reject reasons. The
-  SegWit test also restores hash refreshes needed by the current mutable
-  transaction helpers.
+  SegWit block failures use current Core's `block-script-verify-flag-failed`
+  reject reasons while mempool failures use `mempool-script-verify-flag-failed`.
+  A follow-up `p2p_segwit.py` run caught stale mandatory-script block-label
+  expectations from the older Knots test baseline; this was a port-side test
+  mismatch, not an original Knots consensus bug. The same check confirmed
+  Knots' witness-stripping retry coverage is already present in current Core,
+  actual Knots, and the port. The SegWit test also restores hash refreshes
+  needed by the current mutable transaction helpers.
 - The follow-up cherry audit found Knots' `BufferedFile` close-on-destruction
   fix (`88fe778d9d`) only half-applied in the port: the fuzz test expected
   `BufferedFile::fclose()`, but `BufferedFile` still lacked the method and
@@ -2012,9 +2017,10 @@ during combining, monotonic
 `uptime`, first-run pruned-disk-space warning rounding, Windows exclusive `wbx`
 opens, LevelDB file-size initialization, wallet `sendall` transaction-size
 error handling, miniscript assert guards, and most cpp-subprocess
-memory/Windows fixes, P2P `-capturemessages` option caching, single-timepoint
-inactivity checks, and clean success exit status for initialization interrupted
-by shutdown. A follow-up patch-id audit also found that current Core already
+memory/Windows fixes, witness-stripped SegWit reject-filter handling, P2P
+`-capturemessages` option caching, single-timepoint inactivity checks, and
+clean success exit status for initialization interrupted by shutdown. A
+follow-up patch-id audit also found that current Core already
 has the MiniMiner negative-fee assumption removal, peer/peeraddr log comma
 restoration through `CNode::LogPeer()`, and lazy `decodepsbt` result-doc
 initialization. The Knots `getblock_vin` lazy-init follow-up is structurally
@@ -2148,6 +2154,17 @@ Source/manifest checks:
   the single mempool script-check path, but only the port's disabled-thread
   inline block path had retained the older Knots `mandatory-script` label before
   `2feca940f4`.
+- `git -C ../knots show --stat --patch --minimal
+  97088fa75aa0af5355587ce3522320f459e35204`, `rg -n
+  "TX_WITNESS_STRIPPED|SpendsNonAnchorWitnessProg|Witness program was passed an empty witness|with_witness=False"
+  src/validation.cpp src/node/txdownloadman_impl.cpp
+  test/functional/p2p_segwit.py`, and equivalent `origin/master` and
+  `../knots` checks show the witness-stripped SegWit retry tests and
+  reject-filter handling are present in current Core, actual Knots, and the
+  port. The focused rerun
+  `python3 test/functional/p2p_segwit.py --configfile build/test/config.ini --tmpdir=/mnt/my_storage/tmp_p2p_segwit_witness_stripping_2 --portseed=7394`
+  passed after updating the port's stale block-failure label expectations to
+  current Core's `block-script-verify-flag-failed`.
 - `git show --stat --patch --minimal 16b1710d97` plus `rg -n
   "BaseIndex::Rewind|committed index state must never be ahead|SetBestBlockIndex\\(new_tip\\)|Commit\\("
   src/index/base.cpp` and equivalent `origin/master` and `../knots` checks
