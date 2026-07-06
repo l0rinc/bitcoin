@@ -400,10 +400,15 @@ BOOST_FIXTURE_TEST_CASE(prune_lock_update_and_delete, TestingSetup)
     auto& blockman{chainman.m_blockman};
 
     // Create a prune lock
-    blockman.UpdatePruneLock("test_lock", node::PruneLockInfo{.height_first = 100});
+    BOOST_CHECK(blockman.UpdatePruneLock("test_lock", node::PruneLockInfo{.height_first = 100, .height_last = 150}));
+    BOOST_REQUIRE(blockman.PruneLockExists("test_lock"));
+    BOOST_CHECK_EQUAL(blockman.m_prune_locks.at("test_lock").height_first, 100);
+    BOOST_CHECK_EQUAL(blockman.m_prune_locks.at("test_lock").height_last, 150);
 
-    // Update it to a new height
-    blockman.UpdatePruneLock("test_lock", node::PruneLockInfo{.height_first = 200});
+    // Update it to a new height range
+    BOOST_CHECK(blockman.UpdatePruneLock("test_lock", node::PruneLockInfo{.height_first = 200, .height_last = 250}));
+    BOOST_CHECK_EQUAL(blockman.m_prune_locks.at("test_lock").height_first, 200);
+    BOOST_CHECK_EQUAL(blockman.m_prune_locks.at("test_lock").height_last, 250);
 
     // Delete existing prune lock
     BOOST_CHECK(blockman.DeletePruneLock("test_lock"));

@@ -57,7 +57,12 @@ class PruneLocksRPCTest(BitcoinTestFramework):
         node = self.nodes[0]
         locks = self.locks_by_id()
         assert_equal(set(locks.keys()), {"persist"})
-        assert_equal(locks["persist"]["temporary"], False)
+        assert_equal(locks["persist"], {
+            "id": "persist",
+            "desc": "Persisted lock",
+            "height": [10, 20],
+            "temporary": False,
+        })
 
         self.log.info("Test changing a persisted prune lock to temporary removes it from disk")
         assert_equal(node.setprunelock("persist", {

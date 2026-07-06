@@ -537,14 +537,17 @@ Other missing/adapted Knots pieces found during this pass:
   asserts the new block-filter and coinstatsindex messages.
 - The prune-lock review confirmed the port has Knots' public prune-lock RPCs
   and persistence support (`0b4bd4e134`, `4822c21812`,
-  `1d1c92d40d`, `162f0dba2f`), adapted to current Core's void-returning
-  `CDBWrapper` write API. Current Core still has only internal index prune
-  locks, no `listprunelocks`/`setprunelock` RPCs, and no persisted
-  `DB_PRUNE_LOCK` entries. The port now has a focused `rpc_prunelocks.py`
-  functional test covering the `temporary` field, restart persistence,
-  temporary non-persistence, persistent-to-temporary disk erasure, delete-all,
-  and invalid wildcard usage. A refreshed run of that port test passes against
-  both the port and unmodified Knots, confirming the behavior is inherited.
+  `1d1c92d40d`, `162f0dba2f`) plus Knots' bounded lock ranges
+  (`f4b3368b13`, ported as `13428002ca`), adapted to current Core's
+  void-returning `CDBWrapper` write API. Current Core still has only internal
+  index prune locks, no `height_last` upper bound, no
+  `listprunelocks`/`setprunelock` RPCs, and no persisted `DB_PRUNE_LOCK`
+  entries. The port now has focused C++ and RPC coverage for updating and
+  persisting `[height_first, height_last]` ranges, and `rpc_prunelocks.py`
+  covers the `temporary` field, restart persistence, temporary
+  non-persistence, persistent-to-temporary disk erasure, delete-all, and
+  invalid wildcard usage. Refreshed runs of that port test pass against both
+  the port and unmodified Knots, confirming the RPC behavior is inherited.
 - A shared `libbitcoinkernel` build exposed rebase-only kernel/CMake omissions:
   the port had Knots' three-argument `Notifications::warningSet(...)` interface
   but Core master's C API adapter still used the old two-argument override; the
@@ -2342,8 +2345,8 @@ under different commits. They are not all proven exploitable.
   asserting the advice helper preserves the current file position and the close
   wrapper still flushes/closes the file (`3e75471507`).
 
-- Prune-lock reorg rollback and persistence:
-  `8ee1214157`, `0b4bd4e134`, `4822c21812`
+- Prune-lock reorg rollback, bounded ranges, and persistence:
+  `8ee1214157`, `f4b3368b13`, `0b4bd4e134`, `4822c21812`
 
   Current Core master still moves internal prune locks backward only when their
   first protected height is above `pindexDelete->nHeight - 1`, setting the lock
@@ -2354,9 +2357,16 @@ under different commits. They are not all proven exploitable.
   prune-lock RPCs or `DB_PRUNE_LOCK` persistence. Current Core does have
   internal prune locks and an internal blockmanager update/delete test, so the
   Core-missing part is the boundary decrement behavior plus the public
-  persisted RPC surface. The port's existing `feature_index_prune.py` asserts
-  the reorg movement log, and the new `rpc_prunelocks.py` covers RPC
-  persistence and temporary-lock semantics.
+  persisted RPC surface. Knots' `f4b3368b13` adds `height_last` so a prune
+  lock can protect a bounded range instead of every later file; the port keeps
+  this as `13428002ca` and uses `SaturatingAdd(height_last,
+  PRUNE_LOCK_BUFFER)` before skipping files whose first height is beyond the
+  protected range. Current Core has no equivalent upper bound on internal
+  prune locks. The port's existing `feature_index_prune.py` asserts the reorg
+  movement log, `feature_pruning.py` covers `setprunelock` preventing manual
+  pruning, and the refreshed `rpc_prunelocks.py` plus
+  `blockmanager_tests/prune_lock_update_and_delete` now cover range update and
+  persistence semantics.
 
 - Wallet symlink/reparse-point path hardening:
   `39f48a142f`, `1f118f18c4`, `ee042e9ad6`
@@ -3469,15 +3479,15 @@ Source/manifest checks:
   fallback in `CTxMemPool::Apply`, while current Core only has the
   `m_to_add.extract(...)` path.
 - `git grep -n -E
-  "listprunelocks|setprunelock|DB_PRUNE_LOCK|UpdatePruneLock|prune lock moved back|prune_lock_update_and_delete|rpc_prunelocks"
+  "height_last|listprunelocks|setprunelock|DB_PRUNE_LOCK|UpdatePruneLock|prune lock moved back|prune_lock_update_and_delete|rpc_prunelocks"
   HEAD knots/29.x-knots origin/master -- src/node src/rpc src/interfaces.cpp
   src/test test/functional` shows current Core has only internal
   `UpdatePruneLock`/`dumptxoutset` usage and its internal blockmanager test,
-  while Knots and the port carry the public prune-lock RPCs, persisted
-  `DB_PRUNE_LOCK` storage, and pruning functional coverage. Direct validation
-  source comparison shows Core still skips locks at the disconnected-tip
-  boundary with `height_first <= max_height_first` and assigns
-  `max_height_first`, while Knots and the port skip only lower locks and
+  while Knots and the port carry the bounded `height_last` range, public
+  prune-lock RPCs, persisted `DB_PRUNE_LOCK` storage, and pruning functional
+  coverage. Direct validation source comparison shows Core still skips locks
+  at the disconnected-tip boundary with `height_first <= max_height_first` and
+  assigns `max_height_first`, while Knots and the port skip only lower locks and
   decrement matching locks.
 - A temporary unrelated-repository build-info check copied each variant's
   `cmake/script/GenerateBuildInfo.cmake` to the exact validated path under a
@@ -5559,6 +5569,20 @@ Functional tests:
   ../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rpc_prunelocks_knots_refresh
   --portseed=42311`
+- `build/bin/test_bitcoin --run_test=blockmanager_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+- `python3 test/functional/rpc_prunelocks.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_prunelocks_height_last_refresh
+  --portseed=42761`
+- `python3 test/functional/rpc_prunelocks.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_prunelocks_height_last_knots_refresh
+  --portseed=42763`
+- `python3 test/functional/feature_pruning.py
+  --configfile=build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_pruning_prunelock_refresh
+  --portseed=42762`
 - `git grep -n
   "SyncCoinsTipAfterChainSync\|SYNC_CHECK_INTERVAL\|GetNumberOfPeersWithValidatedDownloads\|Finished syncing to tip"
   HEAD knots/29.x-knots origin/master -- src/init.cpp src/net_processing.cpp
