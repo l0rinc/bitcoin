@@ -38,6 +38,7 @@ void CachedTxGetAmounts(const CWallet& wallet, const CWalletTx& wtx,
                         std::list<COutputEntry>& listReceived,
                         std::list<COutputEntry>& listSent,
                         CAmount& nFee,
+                        const isminefilter& filter,
                         bool include_change);
 bool CachedTxIsFromMe(const CWallet& wallet, const CWalletTx& wtx);
 bool CachedTxIsTrusted(const CWallet& wallet, const CWalletTx& wtx, std::set<Txid>& trusted_parents) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);

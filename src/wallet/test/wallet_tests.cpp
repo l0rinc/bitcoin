@@ -29,6 +29,7 @@
 #include <wallet/coincontrol.h>
 #include <wallet/context.h>
 #include <wallet/receive.h>
+#include <wallet/scriptpubkeyman.h>
 #include <wallet/spend.h>
 #include <wallet/test/util.h>
 #include <wallet/test/wallet_test_fixture.h>
@@ -554,6 +555,53 @@ BOOST_FIXTURE_TEST_CASE(wallet_disableprivkeys, TestChain100Setup)
     wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
     wallet->SetWalletFlag(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
     BOOST_CHECK(!wallet->GetNewDestination(OutputType::BECH32, ""));
+}
+
+BOOST_FIXTURE_TEST_CASE(cached_tx_get_amounts_watchonly_filter, TestingSetup)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    LOCK(wallet.cs_wallet);
+    wallet.SetupLegacyScriptPubKeyMan();
+    auto* spkm{wallet.GetLegacyScriptPubKeyMan()};
+    BOOST_REQUIRE(spkm);
+
+    const CKey spend_key{GenerateRandomKey()};
+    const CKey watch_key{GenerateRandomKey()};
+    const CScript spend_script{GetScriptForRawPubKey(spend_key.GetPubKey())};
+    const CScript watch_script{GetScriptForRawPubKey(watch_key.GetPubKey())};
+    {
+        LOCK(spkm->cs_KeyStore);
+        BOOST_REQUIRE(spkm->AddKeyPubKey(spend_key, spend_key.GetPubKey()));
+        BOOST_REQUIRE(spkm->AddWatchOnly(watch_script, /*nCreateTime=*/1));
+    }
+
+    CMutableTransaction tx;
+    tx.vout.emplace_back(1 * COIN, spend_script);
+    tx.vout.emplace_back(2 * COIN, watch_script);
+    CWalletTx* wtx{wallet.AddToWallet(MakeTransactionRef(tx), TxStateInactive{})};
+    BOOST_REQUIRE(wtx);
+
+    std::list<COutputEntry> received;
+    std::list<COutputEntry> sent;
+    CAmount fee{0};
+
+    CachedTxGetAmounts(wallet, *wtx, received, sent, fee, ISMINE_SPENDABLE, /*include_change=*/false);
+    BOOST_CHECK_EQUAL(fee, 0);
+    BOOST_CHECK(sent.empty());
+    BOOST_REQUIRE_EQUAL(received.size(), 1U);
+    BOOST_CHECK_EQUAL(received.front().amount, 1 * COIN);
+
+    CachedTxGetAmounts(wallet, *wtx, received, sent, fee, ISMINE_WATCH_ONLY, /*include_change=*/false);
+    BOOST_CHECK_EQUAL(fee, 0);
+    BOOST_CHECK(sent.empty());
+    BOOST_REQUIRE_EQUAL(received.size(), 1U);
+    BOOST_CHECK_EQUAL(received.front().amount, 2 * COIN);
+
+    CachedTxGetAmounts(wallet, *wtx, received, sent, fee, ISMINE_ALL, /*include_change=*/false);
+    BOOST_CHECK_EQUAL(fee, 0);
+    BOOST_CHECK(sent.empty());
+    BOOST_REQUIRE_EQUAL(received.size(), 2U);
+    BOOST_CHECK_EQUAL(received.front().amount + received.back().amount, 3 * COIN);
 }
 
 // Explicit calculation which is used to test the wallet constant

@@ -59,7 +59,11 @@ class CreateWalletTest(BitcoinTestFramework):
         assert_equal(info["format"], "bdb")
         assert info["keypoolsize"] > 0
         assert_raises_rpc_error(-4, "importdescriptors is not available for non-descriptor wallets", legacy_wallet.importdescriptors, [])
-        legacy_wallet.getnewaddress("", "legacy")
+        legacy_addr = legacy_wallet.getnewaddress("", "legacy")
+
+        self.log.info("Test newly created legacy wallet live block notifications")
+        self.generatetoaddress(node, 1, legacy_addr, sync_fun=self.no_op)
+        assert_equal(legacy_wallet.getbalances()["mine"]["immature"], 50)
 
         legacy_wallet.unloadwallet()
         self.restart_node(0)

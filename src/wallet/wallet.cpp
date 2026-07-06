@@ -1001,8 +1001,6 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
             }
         }
 
-        SetupWalletGeneration();
-
         Lock();
 
         // Need to completely rewrite the wallet file; if we don't, the database might keep
@@ -1988,6 +1986,16 @@ void CWallet::MaybeUpdateBirthTime(int64_t time)
     if (time < birthtime) {
         m_birth_time = time;
     }
+}
+
+void CWallet::RefreshBirthTimeFromScriptPubKeyMans()
+{
+    std::optional<int64_t> time_first_key;
+    for (const auto& spk_man : GetAllScriptPubKeyMans()) {
+        const int64_t time{spk_man->GetTimeFirstKey()};
+        if (!time_first_key || time < *time_first_key) time_first_key = time;
+    }
+    if (time_first_key) MaybeUpdateBirthTime(*time_first_key);
 }
 
 bool CWallet::ImportScripts(const std::set<CScript> scripts, int64_t timestamp)
@@ -3475,6 +3483,7 @@ std::shared_ptr<CWallet> CWallet::CreateNew(WalletContext& context, const std::s
 
     // Try to top up keypool. No-op if the wallet is locked.
     walletInstance->TopUpKeyPool();
+    walletInstance->RefreshBirthTimeFromScriptPubKeyMans();
 
     if (chain && !AttachChain(walletInstance, *chain, /*rescan_required=*/false, error, warnings)) {
         walletInstance->DisconnectChainNotifications();
@@ -3516,6 +3525,7 @@ std::shared_ptr<CWallet> CWallet::LoadExisting(WalletContext& context, const std
 
     // Try to top up keypool. No-op if the wallet is locked.
     walletInstance->TopUpKeyPool();
+    walletInstance->RefreshBirthTimeFromScriptPubKeyMans();
 
     if (chain && !AttachChain(walletInstance, *chain, rescan_required, error, warnings)) {
         walletInstance->DisconnectChainNotifications();

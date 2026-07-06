@@ -184,6 +184,29 @@ Other missing/adapted Knots pieces found during this pass:
   now restores legacy-compatible encryption and keeps the BDB reload hook. This
   was a port bug and a useful Core-shortcoming note for the retained BDB legacy
   wallet surface, not a consensus issue or an original Knots crash.
+- A later BDB-enabled legacy wallet sweep found several additional port-only
+  omissions in the same restored surface. Actual Knots passed the corresponding
+  `wallet_pruning.py --legacy-wallet` and `wallet_dump.py --legacy-wallet`
+  runs, while the port initially missed pieces during the current-Core
+  transition: newly created legacy wallets generated keys before SPKM notifier
+  hookup, leaving the wallet birth time too new and causing live block
+  notifications to skip relevant blocks until a rescan; watch-only defaults
+  were missing from `getbalance`, received/transaction listing RPCs,
+  `gettransaction`, and `simulaterawtransaction`; legacy implicit-SegWit
+  script learning lacked Knots' `g_implicit_segwit` guard;
+  `addmultisigaddress` and `newkeypool` were implemented/restored in source
+  but not registered in the port; `importwallet` skipped dump records with the
+  historical `0` timestamp instead of using Knots' `value_or(0)` fallback,
+  dropping `script=1` multisig redeem scripts; and the port briefly made
+  legacy `encryptwallet` call the generation setup path twice. These were not
+  original Knots consensus or remote-crash bugs. The port now refreshes wallet
+  birth time from all SPKMs before attaching the chain, restores the
+  watch-only filters and metadata, restores the implicit-SegWit guard, registers
+  the missing RPCs, accepts zero-timestamp dump records, and covers the paths
+  with `wallet_createwallet.py --legacy-wallet`,
+  `wallet_watchonly.py --legacy-wallet`, `wallet_dump.py --legacy-wallet`,
+  `wallet_keypool.py --legacy-wallet`, `wallet_implicitsegwit.py
+  --legacy-wallet`, and focused wallet/scriptpubkeyman unit tests.
 - `rpc_getblockfrompeer.py` still used Knots' older mutable block-hash helper
   (`CBlock.calc_sha256()`), while the current port framework exposes block
   hashes through properties (`hash`, `hash_int`, and `sha256`). The port removes
@@ -723,7 +746,9 @@ Other missing/adapted Knots pieces found during this pass:
   `wallet_hd.py` path passes and confirms `dumpmasterprivkey` rejects
   descriptor wallets. Earlier descriptor-only runs skipped the legacy
   `wallet_dump.py` path; after `ece3ba8d5b`, new legacy wallets can be created
-  in BDB-enabled builds and the broader legacy export paths should be rerun.
+  in BDB-enabled builds, and the refreshed `wallet_dump.py --legacy-wallet`
+  run now passes after restoring Knots' zero-timestamp dump import behavior and
+  legacy multisig RPC registration.
 - The implicit-SegWit wallet option review confirmed Knots'
   `-walletimplicitsegwit` surface (`9eabba7220`, `2733d2c4ce`) is present in
   the port and absent from current Core. The option controls legacy-wallet
@@ -732,8 +757,9 @@ Other missing/adapted Knots pieces found during this pass:
   consensus or network security behavior. The direct unit coverage
   `util_tests/outputtype_implicit_segwit` passes. Earlier functional
   `wallet_implicitsegwit.py` runs skipped on descriptor-only builds; the
-  BDB-enabled legacy create/reload path is now restored and this legacy import
-  surface should be rerun in the next broad legacy-wallet sweep.
+  BDB-enabled legacy create/reload path is now restored, and the refreshed
+  `wallet_implicitsegwit.py --legacy-wallet` run passes with the Knots
+  `g_implicit_segwit` guard restored in the port.
 - A later file-presence sweep found the Qt wrapper for the same sweep feature
   was still missing even though the RPC and functional test were already
   ported. The port now restores Knots' `SweepPrivKeyDialog`, wires it through
@@ -5474,6 +5500,13 @@ Functional tests:
   (skipped: previous releases not available or disabled)
 - `python3 test/functional/wallet_keypool.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_keypool_isactive_fixed`
+- `python3 test/functional/wallet_keypool.py
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_wallet_keypool_desc_fix1` passed.
+- `python3 test/functional/wallet_keypool.py
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --legacy-wallet --tmpdir=/mnt/my_storage/tmp_wallet_keypool_legacy_fix1`
+  passed, including the restored `newkeypool` coverage.
 - `build/bin/test_bitcoin --run_test=script_tests/require_sighash_all
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=script_tests --catch_system_error=no
@@ -5491,28 +5524,63 @@ Functional tests:
 - `python3 test/functional/wallet_upgradewallet.py --configfile build/test/config.ini --legacy-wallet`
   (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_implicitsegwit.py --configfile build/test/config.ini`
-  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build)
+- `python3 test/functional/wallet_implicitsegwit.py
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --legacy-wallet
+  --tmpdir=/mnt/my_storage/tmp_wallet_implicitsegwit_legacy_verify1` passed.
 - `python3 test/functional/wallet_inactive_hdchains.py --configfile build/test/config.ini --legacy-wallet`
   (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_pruning.py --configfile build/test/config.ini --legacy-wallet`
-  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build)
+- `python3 test/functional/wallet_pruning.py
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --legacy-wallet --tmpdir=/mnt/my_storage/tmp_wallet_pruning_legacy_verify1`
+  passed.
 - `python3 test/functional/wallet_watchonly.py --configfile build/test/config.ini --legacy-wallet`
-  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build)
+- `python3 test/functional/wallet_watchonly.py
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --legacy-wallet --tmpdir=/mnt/my_storage/tmp_wallet_watchonly_legacy_verify1`
+  passed.
 - `python3 test/functional/wallet_watchonly.py --configfile build/test/config.ini --usecli --legacy-wallet`
-  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build)
+- `python3 test/functional/wallet_watchonly.py
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --legacy-wallet --usecli
+  --tmpdir=/mnt/my_storage/tmp_wallet_watchonly_legacy_cli_verify1` passed.
 - `python3 test/functional/wallet_hd.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_hd_dumpmaster`
 - `python3 test/functional/wallet_dump.py --configfile build/test/config.ini`
   (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
 - `python3 test/functional/wallet_dump.py --configfile build/test/config.ini
   --legacy-wallet --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_dump_hd_metadata_legacy`
-  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build)
+- `python3 test/functional/wallet_dump.py
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --legacy-wallet --tmpdir=/mnt/my_storage/tmp_wallet_dump_legacy_verify1`
+  passed.
 - `python3 test/functional/wallet_import_rescan.py --configfile build/test/config.ini`
-  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build)
+- `python3 test/functional/wallet_import_rescan.py
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --legacy-wallet
+  --tmpdir=/mnt/my_storage/tmp_wallet_import_rescan_legacy_fix1` passed.
 - `python3 test/functional/wallet_createwallet.py --legacy-wallet
   --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_main_legacy_createwallet_func`
   passed after `ece3ba8d5b`.
+- `python3 test/functional/wallet_createwallet.py --legacy-wallet
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_wallet_createwallet_legacy_verify1` passed,
+  including the new live-block-notification regression check.
+- `python3 test/functional/wallet_simulaterawtx.py
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_wallet_simulaterawtx_verify1` passed.
+- `/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/bin/test_bitcoin
+  --run_test=scriptpubkeyman_tests` passed.
+- `/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/bin/test_bitcoin
+  --run_test=wallet_tests/cached_tx_get_amounts_watchonly_filter` passed.
 - Original Knots expected-failure repro:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_rdts.py
   --configfile /mnt/my_storage/knots/build-repro/test/config.ini

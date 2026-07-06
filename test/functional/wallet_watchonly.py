@@ -92,6 +92,11 @@ class CreateWalletWatchonlyTest(BitcoinTestFramework):
         result = wo_wallet.gettransaction(txid=txid, include_watchonly=False)
         assert_equal(len(result["details"]), 0)
 
+        self.log.info('Testing simulaterawtransaction watch-only defaults')
+        raw_receive = def_wallet.createrawtransaction(inputs=[], outputs={wo_addr: 0.25})
+        assert_equal(wo_wallet.simulaterawtransaction([raw_receive])["balance_change"], 0.25)
+        assert_equal(wo_wallet.simulaterawtransaction([raw_receive], {"include_watchonly": False})["balance_change"], 0)
+
         self.log.info('Testing walletcreatefundedpsbt watch-only defaults')
         inputs = []
         outputs = [{a1: 0.5}]

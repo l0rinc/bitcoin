@@ -567,7 +567,7 @@ RPCMethod simulaterawtransaction()
             },
             {"options", RPCArg::Type::OBJ_NAMED_PARAMS, RPCArg::Optional::OMITTED, "",
                 {
-                    {"include_watchonly", RPCArg::Type::BOOL, RPCArg::Default{false}, "(DEPRECATED) No longer used"},
+                    {"include_watchonly", RPCArg::Type::BOOL, RPCArg::DefaultHint{"true for watch-only wallets, otherwise false"}, "Whether to include watch-only addresses (see RPC importaddress)"},
                 },
             },
         },
@@ -588,6 +588,23 @@ RPCMethod simulaterawtransaction()
     const CWallet& wallet = *rpc_wallet;
 
     LOCK(wallet.cs_wallet);
+
+    UniValue include_watchonly(UniValue::VNULL);
+    if (request.params[1].isObject()) {
+        UniValue options = request.params[1];
+        RPCTypeCheckObj(options,
+            {
+                {"include_watchonly", UniValueType(UniValue::VBOOL)},
+            },
+            true, true);
+
+        include_watchonly = options["include_watchonly"];
+    }
+
+    isminefilter filter = ISMINE_SPENDABLE;
+    if (ParseIncludeWatchonly(include_watchonly, wallet)) {
+        filter |= ISMINE_WATCH_ONLY;
+    }
 
     const auto& txs = request.params[0].get_array();
     CAmount changes{0};
@@ -621,7 +638,7 @@ RPCMethod simulaterawtransaction()
                 if (coins.at(outpoint).IsSpent()) {
                     throw JSONRPCError(RPC_INVALID_PARAMETER, "One or more transaction inputs are missing or have been spent already");
                 }
-                changes -= wallet.GetDebit(txin);
+                changes -= wallet.GetDebit(txin, filter);
             }
             spent.insert(outpoint);
         }
@@ -634,7 +651,7 @@ RPCMethod simulaterawtransaction()
         const auto& hash = mtx.GetHash();
         for (size_t i = 0; i < mtx.vout.size(); ++i) {
             const auto& txout = mtx.vout[i];
-            bool is_mine = wallet.IsMine(txout);
+            bool is_mine = 0 < (wallet.IsMine(txout) & filter);
             changes += new_utxos[COutPoint(hash, i)] = is_mine ? txout.nValue : 0;
         }
     }
@@ -1039,7 +1056,9 @@ RPCMethod getnewaddress();
 RPCMethod getrawchangeaddress();
 RPCMethod setlabel();
 RPCMethod listaddressgroupings();
+RPCMethod addmultisigaddress();
 RPCMethod keypoolrefill();
+RPCMethod newkeypool();
 RPCMethod getaddressesbylabel();
 RPCMethod listlabels();
 #ifdef ENABLE_EXTERNAL_SIGNER
@@ -1111,6 +1130,7 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"rawtransactions", &fundrawtransaction},
         {"wallet", &abandontransaction},
         {"wallet", &abortrescan},
+        {"wallet", &addmultisigaddress},
         {"wallet", &addhdkey},
         {"wallet", &backupwallet},
         {"wallet", &bumpfee},
@@ -1143,6 +1163,7 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &importpubkey},
         {"wallet", &importwallet},
         {"wallet", &keypoolrefill},
+        {"wallet", &newkeypool},
         {"wallet", &listaddressgroupings},
         {"wallet", &listdescriptors},
         {"wallet", &listlabels},

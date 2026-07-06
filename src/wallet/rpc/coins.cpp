@@ -220,7 +220,7 @@ RPCMethod getbalance()
 
     const auto bal = GetBalance(*pwallet, min_depth, avoid_reuse);
 
-    return ValueFromAmount(bal.m_mine_trusted);
+    return ValueFromAmount(bal.m_mine_trusted + (include_watchonly ? bal.m_watchonly_trusted : 0));
 },
     };
 }

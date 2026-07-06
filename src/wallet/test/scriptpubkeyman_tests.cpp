@@ -77,6 +77,82 @@ BOOST_AUTO_TEST_CASE(desc_spkm_topup_fail)
         std::runtime_error, HasReason("Could not top up scriptPubKeys"));
 }
 
+static void legacy_IsKeyActive(const node::NodeContext& node, bool implicit_segwit)
+{
+    struct ImplicitSegwitRestorer {
+        bool saved;
+        ~ImplicitSegwitRestorer() { g_implicit_segwit = saved; }
+    } restorer{g_implicit_segwit};
+    g_implicit_segwit = implicit_segwit;
+    CWallet wallet(node.chain.get(), "", CreateMockableWalletDatabase());
+    {
+        LOCK(wallet.cs_wallet);
+        wallet.SetMinVersion(FEATURE_LATEST);
+        wallet.m_keypool_size = 10;
+    }
+    LegacyScriptPubKeyMan& spkm = *wallet.GetOrCreateLegacyScriptPubKeyMan();
+
+    BOOST_CHECK(spkm.GetScriptPubKeys().empty());
+
+    {
+        LOCK(wallet.cs_wallet);
+        spkm.SetupGeneration();
+    }
+
+    auto scripts1{spkm.GetScriptPubKeys()};
+    BOOST_CHECK_EQUAL(scripts1.size(), implicit_segwit ? 84 : 42);
+    for (const CScript& script : scripts1) {
+        BOOST_CHECK(spkm.IsKeyActive(script));
+    }
+
+    CTxDestination dest1;
+    {
+        LOCK(wallet.cs_wallet);
+        auto result = spkm.GetNewDestination(OutputType::BECH32);
+        BOOST_REQUIRE(result);
+        dest1 = *result;
+    }
+    CScript script{GetScriptForDestination(dest1)};
+    BOOST_CHECK(spkm.IsKeyActive(script));
+
+    auto scripts2{spkm.GetScriptPubKeys()};
+    BOOST_CHECK_EQUAL(scripts2.size(), implicit_segwit ? 84 : 44);
+
+    {
+        LOCK(wallet.cs_wallet);
+        LOCK(spkm.cs_KeyStore);
+        auto keys = spkm.MarkReserveKeysAsUsed(5);
+        BOOST_CHECK_EQUAL(keys.size(), 4);
+    }
+
+    auto scripts3{spkm.GetScriptPubKeys()};
+    BOOST_CHECK_EQUAL(scripts3.size(), implicit_segwit ? 84 : 44);
+    for (const CScript& script : scripts3) {
+        BOOST_CHECK(spkm.IsKeyActive(script));
+    }
+
+    {
+        LOCK(wallet.cs_wallet);
+        spkm.SetupGeneration(/*force=*/true);
+    }
+
+    auto scripts4{spkm.GetScriptPubKeys()};
+    BOOST_CHECK_EQUAL(scripts4.size(), (implicit_segwit ? 84 : 43) * 2);
+    for (const CScript& script : scripts3) {
+        BOOST_CHECK(!spkm.IsKeyActive(script));
+    }
+}
+
+BOOST_AUTO_TEST_CASE(Legacy_IsKeyActive)
+{
+    legacy_IsKeyActive(m_node, /*implicit_segwit=*/true);
+}
+
+BOOST_AUTO_TEST_CASE(Legacy_IsKeyActive_no_implicit_segwit)
+{
+    legacy_IsKeyActive(m_node, /*implicit_segwit=*/false);
+}
+
 BOOST_AUTO_TEST_CASE(Descriptor_IsKeyActive)
 {
     CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());

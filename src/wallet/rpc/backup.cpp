@@ -599,9 +599,7 @@ RPCMethod importwallet()
                 continue;
             CKey key = DecodeSecret(vstr[0]);
             if (key.IsValid()) {
-                const std::optional<int64_t> parsed_time{ParseISO8601DateTime(vstr[1])};
-                if (!parsed_time) continue;
-                int64_t nTime{*parsed_time};
+                int64_t nTime{ParseISO8601DateTime(vstr[1]).value_or(0)};
                 std::string strLabel;
                 bool fLabel = true;
                 for (unsigned int nStr = 2; nStr < vstr.size(); nStr++) {
@@ -621,9 +619,7 @@ RPCMethod importwallet()
             } else if(IsHex(vstr[0])) {
                 std::vector<unsigned char> vData(ParseHex(vstr[0]));
                 CScript script = CScript(vData.begin(), vData.end());
-                const std::optional<int64_t> parsed_birth_time{ParseISO8601DateTime(vstr[1])};
-                if (!parsed_birth_time) continue;
-                int64_t birth_time{*parsed_birth_time};
+                int64_t birth_time{ParseISO8601DateTime(vstr[1]).value_or(0)};
                 if (birth_time > 0) nTimeBegin = std::min(nTimeBegin, birth_time);
                 scripts.emplace_back(script, birth_time);
             }

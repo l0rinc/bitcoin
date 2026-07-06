@@ -138,7 +138,7 @@ CAmount CachedTxGetChange(const CWallet& wallet, const CWalletTx& wtx)
 
 void CachedTxGetAmounts(const CWallet& wallet, const CWalletTx& wtx,
                   std::list<COutputEntry>& listReceived,
-                  std::list<COutputEntry>& listSent, CAmount& nFee,
+                  std::list<COutputEntry>& listSent, CAmount& nFee, const isminefilter& filter,
                   bool include_change)
 {
     nFee = 0;
@@ -146,7 +146,7 @@ void CachedTxGetAmounts(const CWallet& wallet, const CWalletTx& wtx,
     listSent.clear();
 
     // Compute fee:
-    CAmount nDebit = CachedTxGetDebit(wallet, wtx, /*avoid_reuse=*/false);
+    CAmount nDebit = wallet.GetDebit(*wtx.tx, filter);
     if (nDebit > 0) // debit>0 means we signed/sent this transaction
     {
         CAmount nValueOut = wtx.tx->GetValueOut();
@@ -158,7 +158,7 @@ void CachedTxGetAmounts(const CWallet& wallet, const CWalletTx& wtx,
     for (unsigned int i = 0; i < wtx.tx->vout.size(); ++i)
     {
         const CTxOut& txout = wtx.tx->vout[i];
-        bool ismine = wallet.IsMine(txout);
+        const isminefilter ismine = wallet.IsMine(txout);
         // Only need to handle txouts if AT LEAST one of these is true:
         //   1) they debit from us (sent)
         //   2) the output is to us (received)
@@ -167,7 +167,7 @@ void CachedTxGetAmounts(const CWallet& wallet, const CWalletTx& wtx,
             if (!include_change && OutputIsChange(wallet, txout))
                 continue;
         }
-        else if (!ismine)
+        else if (!(ismine & filter))
             continue;
 
         // In either case, we need to get the destination address
@@ -187,7 +187,7 @@ void CachedTxGetAmounts(const CWallet& wallet, const CWalletTx& wtx,
             listSent.push_back(output);
 
         // If we are receiving the output, add it as a "received" entry
-        if (ismine)
+        if (ismine & filter)
             listReceived.push_back(output);
     }
 
@@ -242,6 +242,47 @@ bool CachedTxIsTrusted(const CWallet& wallet, const CWalletTx& wtx)
     return CachedTxIsTrusted(wallet, wtx, trusted_parents);
 }
 
+static void AddAvailableCredits(const CWallet& wallet, const CWalletTx& wtx, bool allow_used_addresses, bool include_nonmempool, CAmount& mine, CAmount& watchonly, CAmount& mine_used, CAmount& mine_nonmempool)
+    EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
+{
+    const Txid hash{wtx.GetHash()};
+    for (uint32_t i = 0; i < wtx.tx->vout.size(); ++i) {
+        const CTxOut& txout{wtx.tx->vout.at(i)};
+        const COutPoint outpoint{hash, i};
+        bool nonmempool_spent{false};
+        switch (wallet.HowSpent(outpoint)) {
+        case CWallet::SpendType::CONFIRMED:
+        case CWallet::SpendType::MEMPOOL:
+            continue;
+        case CWallet::SpendType::NONMEMPOOL:
+            if (!include_nonmempool) continue;
+            nonmempool_spent = true;
+            [[fallthrough]];
+        case CWallet::SpendType::UNSPENT:
+            break;
+        }
+
+        if (!MoneyRange(txout.nValue)) {
+            throw std::runtime_error(std::string(__func__) + ": value out of range");
+        }
+
+        const isminetype is_mine{wallet.IsMine(txout)};
+        if (is_mine & ISMINE_SPENDABLE) {
+            if (!allow_used_addresses && wallet.IsSpentKey(txout.scriptPubKey)) {
+                mine_used += txout.nValue;
+            } else {
+                mine += txout.nValue;
+            }
+            if (nonmempool_spent) {
+                mine_nonmempool -= txout.nValue;
+            }
+        }
+        if (is_mine & ISMINE_WATCH_ONLY) {
+            watchonly += txout.nValue;
+        }
+    }
+}
+
 Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse, bool include_nonmempool)
 {
     Balance ret;
@@ -249,53 +290,24 @@ Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse,
     {
         LOCK(wallet.cs_wallet);
         std::set<Txid> trusted_parents;
-        for (const auto& [outpoint, txo] : wallet.GetTXOs()) {
-            const CWalletTx& wtx = txo.GetWalletTx();
-
+        for (const auto& [_, wtx] : wallet.mapWallet) {
             const bool is_trusted{CachedTxIsTrusted(wallet, wtx, trusted_parents)};
             const int tx_depth{wallet.GetTxDepthInMainChain(wtx)};
 
-            bool nonmempool_spent = false;
-            switch (wallet.HowSpent(outpoint)) {
-            case CWallet::SpendType::CONFIRMED:
-            case CWallet::SpendType::MEMPOOL:
-                // treat as spent; ignore
-                break;
-            case CWallet::SpendType::NONMEMPOOL:
-                if (!include_nonmempool) break;
-                nonmempool_spent = true;
-                [[fallthrough]];
-            case CWallet::SpendType::UNSPENT:
-                CAmount* bucket = nullptr;
-                CAmount* watchonly_bucket = nullptr;
-                const isminetype mine{wallet.IsMine(txo.GetTxOut())};
-
-                // Set the amounts in the return object
-                if (wallet.IsTxImmatureCoinBase(wtx) && wtx.isConfirmed()) {
-                    bucket = &ret.m_mine_immature;
-                    watchonly_bucket = &ret.m_watchonly_immature;
-                } else if (is_trusted && tx_depth >= min_depth) {
-                    bucket = &ret.m_mine_trusted;
-                    watchonly_bucket = &ret.m_watchonly_trusted;
-                } else if (!is_trusted && wtx.InMempool()) {
-                    bucket = &ret.m_mine_untrusted_pending;
-                    watchonly_bucket = &ret.m_watchonly_untrusted_pending;
-                }
-                if (bucket) {
-                    const CAmount credit{txo.GetTxOut().nValue};
-                    if (mine & ISMINE_SPENDABLE) {
-                        if (!allow_used_addresses && wallet.IsSpentKey(txo.GetTxOut().scriptPubKey)) {
-                            bucket = &ret.m_mine_used;
-                        }
-                        *bucket += credit;
-                        if (nonmempool_spent) {
-                            ret.m_mine_nonmempool -= credit;
-                        }
-                    }
-                    if ((mine & ISMINE_WATCH_ONLY) && watchonly_bucket) {
-                        *watchonly_bucket += credit;
-                    }
-                }
+            CAmount* bucket = nullptr;
+            CAmount* watchonly_bucket = nullptr;
+            if (wallet.IsTxImmatureCoinBase(wtx) && wtx.isConfirmed()) {
+                bucket = &ret.m_mine_immature;
+                watchonly_bucket = &ret.m_watchonly_immature;
+            } else if (is_trusted && tx_depth >= min_depth) {
+                bucket = &ret.m_mine_trusted;
+                watchonly_bucket = &ret.m_watchonly_trusted;
+            } else if (!is_trusted && wtx.InMempool()) {
+                bucket = &ret.m_mine_untrusted_pending;
+                watchonly_bucket = &ret.m_watchonly_untrusted_pending;
+            }
+            if (bucket && watchonly_bucket) {
+                AddAvailableCredits(wallet, wtx, allow_used_addresses, include_nonmempool, *bucket, *watchonly_bucket, ret.m_mine_used, ret.m_mine_nonmempool);
             }
         }
     }
