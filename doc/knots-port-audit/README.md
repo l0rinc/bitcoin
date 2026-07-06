@@ -2139,11 +2139,11 @@ under different commits. They are not all proven exploitable.
   vulnerability. Direct reproduction on unmodified Knots with one occupied
   `-rpcbind` endpoint and one free endpoint returned exit code 1, the generic
   HTTP startup error on stderr, and the specific bind-all-endpoints error in
-  `debug.log`; source comparison still shows current Core logging
+  `debug.log`; a refreshed source comparison still shows current Core logging
   `Unable to bind any endpoint for RPC server` where Knots and the port require
   `Unable to bind all endpoints for RPC server`. Rerunning the port's current
-  `rpc_bind.py` against both the port and `../knots` passes, including the
-  explicit partial-bind failure case.
+  `rpc_bind.py` against both the port and unmodified Knots passes, including
+  the explicit partial-bind failure case.
 
 - Invalid-block peer punishment relaxation:
   `7c7b5839f4`
@@ -3797,6 +3797,16 @@ Builds:
   src/node/mini_miner.cpp src/test/miniminer_tests.cpp` show current Core and
   the port no longer assert ancestor fees are greater than self fees, so Knots'
   negative-fee MiniMiner fix is already present.
+- `rg -n
+  "Unable to bind all endpoints|Unable to bind any endpoint|rpc_bind"
+  src/httpserver.cpp test/functional/rpc_bind.py
+  ../knots/src/httpserver.cpp ../knots/test/functional/rpc_bind.py` and
+  `git grep -n -E
+  "Unable to bind all endpoints|Unable to bind any endpoint|rpc_bind"
+  origin/master -- src/httpserver.cpp test/functional/rpc_bind.py` show current
+  Core still allows startup if any explicit RPC endpoint binds, while Knots and
+  the port abort unless every explicit RPC endpoint binds. The port's
+  `rpc_bind.py` additionally covers this with a partial-bind failure case.
 - `git show origin/master:src/net.cpp | rg -n "peeraddr|LogPeer" -C 3` and
   `rg -n "peeraddr|LogPeer|peer=0, peeraddr" src/net.cpp
   src/net_processing.cpp test/functional/feature_logging.py` show current Core
@@ -4649,6 +4659,14 @@ Functional tests:
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_bind_all_endpoints_knots2
   --portseed=42161`
+- `python3 test/functional/rpc_bind.py --configfile build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_bind_all_endpoints_port_refresh
+  --portseed=42410`
+- `python3 test/functional/rpc_bind.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_bind_all_endpoints_knots_refresh
+  --portseed=42411`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_current_tip`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
