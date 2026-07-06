@@ -3219,7 +3219,8 @@ commits and therefore not counted as missing here: secp256k1 ellswift overflow
 key handling (`fed5dd96cd`, Core source matches), `LocalServiceInfo::nScore`
 saturation (`8caf0836a8`, Core
 `2189a6f5f2`), miner `addPackageTxs`
-overflow (`2e4688618b`, Core `b807dfcdc5`), compact-block witness mutation
+overflow (actual Knots `aff95a8a60`, port adaptation `2e4688618b`, Core
+`b807dfcdc5`), compact-block witness mutation
 checks and repeated-`blocktxn`
 empty-header guard, `LoadChainTip` UB,
 reindex-chainstate periodic dbcache flushes (`ac7c0590ef`, rebased from Core
@@ -4549,7 +4550,9 @@ Builds:
   carried by current Core and this port rather than representing missing Knots
   hardening.
 - `git log --oneline origin/master --grep='uptime RPC\\|SetStdinEcho\\|RLIM_INFINITY\\|oversized -dbcache\\|amount computed as boolean\\|addPackageTxs unsigned'
-  -- src test`, `git grep -n -E "SetStdinEcho|RLIM_INFINITY|ShouldWarnOversizedDbCache|SIZE_MAX > UINT32_MAX|nBlockWeight \\+|uptime should begin|amount computed"
+  -- src test`, `git show --stat --patch aff95a8a60
+  2e4688618b b807dfcdc5 -- src/node/miner.cpp`, `git grep -n -E
+  "SetStdinEcho|RLIM_INFINITY|ShouldWarnOversizedDbCache|SIZE_MAX > UINT32_MAX|nBlockWeight \\+|uptime should begin|amount computed"
   HEAD knots/29.x-knots origin/master -- src test`, and `rg -n
   "ShouldWarnOversizedDbCache|SIZE_MAX > UINT32_MAX|nBlockWeight \\+|SetStdinEcho|RLIM_INFINITY"
   src test` show the runtime/system patch-id misses that current Core has
@@ -4766,6 +4769,12 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=merkle_tests
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=miner_tests`
+- `build/bin/test_bitcoin --run_test=miner_tests --catch_system_error=no
+  --log_level=error --report_level=short`
+- `python3 test/functional/mining_basic.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mining_basic_addpackage_overflow_refresh
+  --portseed=42755`
 - `build/bin/test_bitcoin --run_test=miniminer_tests
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin
