@@ -103,6 +103,20 @@ class MempoolFeeHistogramTest(BitcoinTestFramework):
         assert_equal(0, info['fee_histogram']['10']['fees'])
         assert_equal(10, info['fee_histogram']['10']['from_feerate'])
 
+        self.log.info("Test fee rate histogram when all transactions are below the lowest requested group")
+        info = node.getmempoolinfo([10])
+        (non_empty_groups, empty_groups, total_fees) = self.histogram_stats(info['fee_histogram'])
+        assert_equal(0, non_empty_groups)
+        assert_equal(1, empty_groups)
+        assert_equal(0, total_fees)
+        assert_equal({
+            'from_feerate': 10,
+            'to_feerate': 9223372036854775807,
+            'count': 0,
+            'fees': 0,
+            'sizes': 0,
+        }, info['fee_histogram']['10'])
+
         self.log.info("Send tx2 transaction with 14 sat/vB fee rate (spends tx1 UTXO)")
         tx2_txid = node.sendtoaddress(address=node.getnewaddress(), amount=Decimal("25.0"), fee_rate=14, subtractfeefromamount=True)
         tx2_info = get_tx_details(node, tx2_txid)
