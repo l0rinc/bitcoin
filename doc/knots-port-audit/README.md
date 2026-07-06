@@ -1090,6 +1090,16 @@ Other missing/adapted Knots pieces found during this pass:
   original Knots defect. `wallet_anchor.py`, `wallet_listtransactions.py`, and
   `wallet_tests` pass after the fix; the same `wallet_anchor.py` run passes on
   unmodified Knots.
+- A later wallet `IsFromMe` source audit found another port-side rebase
+  mismatch in the same Core PR 33268 area. Knots backports
+  `bab1ac827b`/`71633a9b5c` from upstream Core `39a7dbdd27`/`e76c2f7a41`,
+  but its older wallet model checks `IsMine(txin.prevout)`. Current Core master
+  checks `GetTXO(txin.prevout)`, because the rebased wallet tracks owned TXOs
+  explicitly and a wallet-tracked zero-value output should be enough to mark a
+  spending transaction as "from me". The port had inherited Knots' older hunk
+  while also carrying Core's `m_txos` model; it now uses `GetTXO(...)` like
+  current Core. This is wallet accounting metadata, not consensus behavior or
+  an original Knots defect.
 - Mempool/TRUC verification exposed a port-introduced validation omission:
   the legacy `AcceptToMemoryPool(..., bypass_limits=true)` wrapper did not
   include Knots' `"truc"` ignore token. As a result, disconnected-block
@@ -3298,6 +3308,14 @@ Source/manifest checks:
   migration and non-writable-directory fixes are now current-Core inherited,
   which non-directory backup relocation remains Knots/port-specific, and that
   current Core no longer has the BDB exception-handling surface.
+- `git -C ../knots show --patch bab1ac827b 71633a9b5c f4b78c42e5 --
+  src/wallet/wallet.cpp test/functional/wallet_listtransactions.py
+  test/functional/wallet_anchor.py`, `git show origin/master:src/wallet/wallet.cpp
+  | rg -n "IsFromMe|GetTXO\\(txin.prevout\\)|IsMine\\(txin.prevout\\)" -C 4`,
+  and `rg -n "IsFromMe|GetTXO\\(txin.prevout\\)|wallet_anchor|test_from_me_status_change"
+  src/wallet/wallet.cpp test/functional` show the wallet zero-value/from-me
+  accounting area where the port follows current Core's TXO-set lookup while
+  actual Knots uses the older `IsMine(prevout)` backport shape.
 - `git grep -n -E
   "struct close_fds|close_fds\\{|subprocess_close_all_fds|close_range|RunCommandParseJSON|subprocess_close_fds"
   HEAD knots/29.x-knots origin/master -- src/common src/node src/util
@@ -5546,6 +5564,13 @@ Functional tests:
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_wallet_listtransactions_isfromme_after_fix
   --portseed=7405`
+- `cmake --build build --target bitcoind test_bitcoin -j4`
+- `python3 test/functional/wallet_anchor.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_wallet_anchor_gettxo_fix2 --portseed=43302`
+- `python3 test/functional/wallet_listtransactions.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_wallet_listtransactions_gettxo_fix2
+  --portseed=43303`
 - `build/bin/test_bitcoin --run_test=wallet_tests --catch_system_error=no
   --log_level=error --report_level=short`
 - `python3 test/functional/wallet_balance.py --configfile build/test/config.ini
