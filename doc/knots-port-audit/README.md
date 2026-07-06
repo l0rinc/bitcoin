@@ -2150,6 +2150,15 @@ it is destructed after queued checks drain. Actual Knots has the equivalent
 `txvalidationcache_tests --catch_system_error=no --log_level=error
 --report_level=short` run passed on the port.
 
+The coins-cache fuzz P2SH fixture fix is also already present from current
+Core rather than replayed as the Knots hash. Knots backports it as
+`aa46f48dae`, while this branch inherits upstream Core `ac58e6c53c`; both
+commits move the generated P2SH script's final `OP_EQUAL` byte to index 22 of
+the 23-byte scriptPubKey. The port, current Core, and unmodified Knots all have
+that final-tree shape. This is fuzz coverage correctness, not a runtime
+consensus or policy behavior change. A throwaway fuzz build compiled
+`coinscache_sim.cpp.o` with `BUILD_FOR_FUZZING=ON`.
+
 The `LoadChainTip` entry above covers Knots `33329f812e` and its follow-up
 `ee42cf3e`. Knots first mitigated the comparator UB by erasing/reinserting
 candidate entries around `nSequenceId` mutation, then fixed that mitigation to
@@ -2602,6 +2611,12 @@ Builds:
   -DBUILD_KERNEL_LIB=OFF`
 - `ninja -C build-fuzz-check
   src/test/fuzz/CMakeFiles/fuzz.dir/__/__/wallet/test/fuzz/wallet_bdb_parser.cpp.o`
+- `cmake -S . -B /tmp/bitcoin-fuzz-coinscache -GNinja
+  -DBUILD_FOR_FUZZING=ON -DBUILD_FUZZ_BINARY=ON -DBUILD_GUI=OFF
+  -DBUILD_BENCH=OFF -DBUILD_KERNEL_LIB=OFF -DENABLE_WALLET=OFF
+  -DWITH_ZMQ=OFF -DWITH_USDT=OFF -DWITH_CCACHE=OFF`
+- `ninja -C /tmp/bitcoin-fuzz-coinscache
+  src/test/fuzz/CMakeFiles/fuzz.dir/coinscache_sim.cpp.o`
 - `cmake --build build --target bitcoind test_bitcoin -j4`
 - `cmake -S . -B /tmp/bitcoin-kernel-after -DBUILD_KERNEL_LIB=ON
   -DBUILD_SHARED_LIBS=ON -DBUILD_DAEMON=OFF -DBUILD_CLI=OFF
