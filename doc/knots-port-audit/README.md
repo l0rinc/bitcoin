@@ -2380,6 +2380,29 @@ under different commits. They are not all proven exploitable.
   default-allowed and flag-rejected cases. The same functional test passes
   against unmodified Knots.
 
+- Data-carrier format and bare-carrier policy:
+  Knots' `-acceptnonstddatacarrier`, `-datacarrierfullcount`, and
+  `-permitbaredatacarrier` switches are present in the port and absent from
+  current Core. They separate ordinary `OP_RETURN` size policy from
+  non-`OP_RETURN` carrier detection and from transactions that contain only
+  data-carrier outputs. The actual Knots default rejects non-standard carrier
+  injection, applies `-datacarriersize` to all detected carrier methods, and
+  rejects bare carrier-only transactions with `bare-datacarrier`.
+  `-corepolicy=1` relaxes all three by soft-setting
+  `-acceptnonstddatacarrier=1`, `-datacarrierfullcount=0`, and
+  `-permitbaredatacarrier=1`; the functional framework starts current binaries
+  with `-corepolicy`, so the strengthened test explicitly uses
+  `-corepolicy=0` when checking the user-facing Knots defaults. This is
+  relay/mining standardness policy, not consensus behavior: blocks can still
+  include otherwise-consensus-valid carrier forms unless RDTS output limits are
+  active. The strengthened `mempool_datacarrier.py` test now covers default
+  non-standard OPNet rejection, full-count size rejection, and bare-carrier
+  rejection/override, and the full test passes against both the port and
+  unmodified Knots. The same cross-run confirmed an RPC-surface difference:
+  the port exposes current-Core `getmempoolinfo` fields such as
+  `maxdatacarriersize` and `permitbaremultisig`, while actual Knots does not,
+  so those field assertions are gated on availability.
+
 - Strict bytes-per-sigop policy:
   Knots' `-bytespersigopstrict` (`63934093bc`, side commit `81720c0870`) is
   present in the port and absent from current Core. Unlike `-bytespersigop`,
@@ -3093,6 +3116,13 @@ Source/manifest checks:
   "corepolicy|incrementalrelayfee|blockmintxfee|minrelaytxfee|acceptnonstddatacarrier|datacarriercost|subdustfeepenalty"
   -C 2` shows the port exposes `-corepolicy` and the stricter default help
   values.
+- `git show origin/master:src/init.cpp | rg -n
+  "acceptnonstddatacarrier|datacarrierfullcount|permitbaredatacarrier|datacarriercost"`
+  and the same search in `origin/master:src/node/mempool_args.cpp` return no
+  matches, while `rg -n
+  "acceptnonstddatacarrier|datacarrierfullcount|permitbaredatacarrier|datacarriercost"
+  src/init.cpp ../knots/src/init.cpp` shows the switches and `-corepolicy`
+  soft-sets in both the port and unmodified Knots.
 - Manual runtime check: start `build/bin/bitcoind -regtest` in a clean datadir
   and query `getmempoolinfo`/`getmininginfo`; the default port returned
   `minrelaytxfee=0.00001000`, `incrementalrelayfee=0.00001000`, and
@@ -3901,6 +3931,21 @@ Functional tests:
   --configfile=build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_datacarrier_cost_port_3
   --portseed=32845`
+- `python3 test/functional/mempool_datacarrier.py
+  --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_datacarrier_policy_port_5
+  --portseed=32896`
+- `python3 test/functional/mempool_datacarrier.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_datacarrier_policy_knots_3
+  --portseed=32897`
+- `build/bin/test_bitcoin --run_test=transaction_tests/test_IsStandard
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=script_tests/script_DataCarrierBytes
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin
+  --run_test=script_tests/calculate_extra_tx_weight_saturates
+  --catch_system_error=no --log_level=error --report_level=short`
 - `python3 test/functional/mempool_maxscriptsize.py
   --configfile=build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_maxscriptsize_port_2
