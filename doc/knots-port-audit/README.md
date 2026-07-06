@@ -2139,6 +2139,17 @@ initialization. The Knots `getblock_vin` lazy-init follow-up is structurally
 avoided in current Core and this port because `getblock()` is registered as an
 `RPCMethod` factory, rather than by namespace-scope `RPCResult` construction.
 
+The precomputed transaction-data lifetime item was rechecked because Knots
+backports it as `29b4e281a7` and its commit message identifies
+CVE-2024-52911: an invalid block could cause queued parallel script checks to
+read freed `PrecomputedTransactionData`. Current Core master already carries
+the upstream fix as `1ed799fb21`, and this port inherits the same shape in
+`ConnectBlock()`: `txsdata` is constructed before the check-queue control, so
+it is destructed after queued checks drain. Actual Knots has the equivalent
+29.x backport. The focused
+`txvalidationcache_tests --catch_system_error=no --log_level=error
+--report_level=short` run passed on the port.
+
 The `LoadChainTip` entry above covers Knots `33329f812e` and its follow-up
 `ee42cf3e`. Knots first mitigated the comparator UB by erasing/reinserting
 candidate entries around `nSequenceId` mutation, then fixed that mitigation to
