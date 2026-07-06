@@ -23,6 +23,9 @@ class BlocksXORTest(BitcoinTestFramework):
         self.extra_args = [[
             '-blocksxor=1',
             '-fastprune=1',             # use smaller block files
+            '-acceptnonstdtxn=1',
+            '-acceptnonstddatacarrier=1',
+            '-datacarrierfullcount=0',
         ]]
 
     def run_test(self):
