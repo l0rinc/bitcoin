@@ -43,6 +43,16 @@ class UacommentTest(BitcoinTestFramework):
         self.restart_node(0, ["-uaappend=foo:9/"])
         assert_equal(self.nodes[0].getnetworkinfo()["subversion"][-7:], '/foo:9/')
 
+        self.log.info("test -uaspoof boolean modes")
+        self.restart_node(0, ["-uaspoof=0"])
+        assert "/Knots:" in self.nodes[0].getnetworkinfo()["subversion"]
+
+        self.restart_node(0, ["-uaspoof=1"])
+        boolean_uaspoof = self.nodes[0].getnetworkinfo()["subversion"]
+        assert boolean_uaspoof.startswith('/Satoshi:')
+        assert "(testnode0)" in boolean_uaspoof
+        assert "/Knots:" not in boolean_uaspoof
+
         self.nodes[0].args.remove("-uacomment=testnode0")
 
         self.log.info("test -uaspoof")
