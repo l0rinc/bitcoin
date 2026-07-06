@@ -2976,6 +2976,10 @@ Functional tests:
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_sync_coins_tip_after_chain_sync`
+- `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_sync_coins_tip_after_chain_sync_port_2
+  --portseed=7390`
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_knots_sync_coins_tip_after_chain_sync`
 - `python3 test/functional/feature_softwareexpiry.py --configfile build/test/config.ini`
