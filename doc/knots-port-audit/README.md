@@ -529,6 +529,13 @@ Other missing/adapted Knots pieces found during this pass:
   adapted `feature_sync_coins_tip_after_chain_sync.py` uses the current
   `create_block(..., ntime=...)` and P2P send helpers (`0216a33c43`), and the
   coverage passes against both the port and unmodified Knots.
+- The P2P block-read hash-check audit of Knots `15805060ec` did not reveal a
+  current Core shortcoming: current Core master, actual Knots, and this port all
+  pass the requested `inv.hash`/`req.blockhash` into `BlockManager::ReadBlock`
+  before serving non-witness blocks or `getblocktxn` responses. The port keeps
+  the same behavior while adapting the call sites to its low-priority block-file
+  read API. `blockmanager_tests` now also asserts the raw-`FlatFilePos`
+  `expected_hash` path that these P2P call sites rely on.
 - CLI completion coverage exposed stale generated artifacts: `exportasmap` now
   completes as a file argument, and the zsh `bitcoin-cli` completion file from
   Knots had not been carried into the port. The generated bash/zsh completions
@@ -2042,6 +2049,16 @@ Source/manifest checks:
   test/functional/feature_reduced_data_utxo_height.py
   test/functional/p2p_handshake.py` shows the current source/test coverage for
   the RDTS activation-boundary and BIP110 service-limit paths.
+- `git -C ../knots show --stat --patch --minimal 15805060ec`,
+  `rg -n "ReadBlock\\(.*inv\\.hash|ReadBlock\\(.*req\\.blockhash"
+  src/net_processing.cpp`, `git show origin/master:src/net_processing.cpp |
+  rg -n "ReadBlock\\(.*inv\\.hash|ReadBlock\\(.*req\\.blockhash"`, and the
+  equivalent `../knots` check show that the P2P block-serving expected-hash
+  guard is present in current Core, actual Knots, and the port rather than
+  being a remaining Core-missing hardening item. `build/bin/test_bitcoin
+  --run_test=blockmanager_tests --catch_system_error=no --log_level=error
+  --report_level=short` covers the raw-`FlatFilePos` mismatch path used by
+  those call sites.
 - `git show --stat --patch --minimal 1ba5009294 8fad5801e0 d2c1bd10db`,
   `git show origin/master:src/init.cpp | rg -n
   "shutdown_request|Interrupt\\(|m_tip_block_cv|notify_all" -C 5`,
