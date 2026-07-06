@@ -236,7 +236,9 @@ BlockFilter::BlockFilter(BlockFilterType filter_type, const CBlock& block, const
     if (!BuildParams(params)) {
         throw std::invalid_argument("unknown filter_type");
     }
-    m_filter = GCSFilter(params, BasicFilterElements(block, block_undo));
+    const auto elements{BasicFilterElements(block, block_undo)};
+    m_filter = GCSFilter(params, elements);
+    Assert(m_filter.GetN() == elements.size());
 }
 
 bool BlockFilter::BuildParams(GCSFilter::Params& params) const
