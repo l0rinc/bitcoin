@@ -2088,6 +2088,19 @@ under different commits. They are not all proven exploitable.
   Knots. `peerman_tests/peerman_args_block_reconstruction_extra_txn` covers the
   parser conversion for fractional megabytes and negative values.
 
+- Configurable orphan-transaction count cap:
+  Knots' `-maxorphantx` option is present in the port and absent from current
+  Core. Current Core has modern orphanage memory/latency limits, but no
+  operator-facing count knob; Knots keeps the historical default of 100 stored
+  orphan transactions and lets operators lower the count to zero or raise it.
+  Negative values are clamped to zero by the shared peerman argument parser.
+  This is P2P memory/resource-control behavior, not consensus behavior or peer
+  punishment policy. The new `p2p_maxorphantx.py` functional test starts one
+  node with `-maxorphantx=3` and another with `-maxorphantx=0`, then verifies
+  the visible orphanage size through `getorphantxs`; the same test passes
+  against unmodified Knots. Existing unit coverage checks parser clamping and
+  the txdownload orphan-count limit.
+
 - Unknown/future witness output policy switch:
   `584798d402`, `82b2c8372e`
 
@@ -2928,6 +2941,13 @@ Source/manifest checks:
   the 100-entry count default, while actual Knots and the port have the
   32,768-entry default, 10 MB default size cap, fractional-MB parser, and
   functional coverage.
+- `git show origin/master:src/init.cpp origin/master:src/node/peerman_args.cpp
+  2>/dev/null | rg -n "maxorphantx|max_orphan_txs"` returns no matches, while
+  `rg -n "maxorphantx|max_orphan_txs|DEFAULT_MAX_ORPHAN_TRANSACTIONS"
+  src/init.cpp src/node/peerman_args.cpp src/net_processing.h
+  ../knots/src/init.cpp ../knots/src/node/peerman_args.cpp
+  ../knots/src/net_processing.h` shows the option, parser, and 100-transaction
+  default in both the port and unmodified Knots.
 - `git show origin/master:src/kernel/mempool_options.h origin/master:src/policy/policy.cpp
   | rg -n "acceptunknownwitness|scriptpubkey-unknown-witnessversion|WITNESS_UNKNOWN" -C 4`,
   `git -C ../knots show 29.x-knots:src/kernel/mempool_options.h 29.x-knots:src/policy/policy.cpp 29.x-knots:src/test/transaction_tests.cpp
@@ -4237,6 +4257,16 @@ Functional tests:
   --portseed=32621`
 - `build/bin/test_bitcoin --run_test=peerman_tests/peerman_args_block_reconstruction_extra_txn
   --catch_system_errors=no --log_level=error --report_level=short`
+- `python3 test/functional/p2p_maxorphantx.py
+  --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_port_3
+  --portseed=32912`
+- `python3 test/functional/p2p_maxorphantx.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_knots
+  --portseed=32913`
+- `build/bin/test_bitcoin --run_test=txdownload_tests/max_orphan_txs_limit
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=transaction_tests/test_IsStandard
   --catch_system_errors=no --log_level=error --report_level=short`
 - `python3 test/functional/mempool_acceptunknownwitness.py
