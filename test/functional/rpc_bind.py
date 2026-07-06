@@ -84,6 +84,7 @@ class RPCBindTest(BitcoinTestFramework):
         a user-visible init warning.
         '''
         self.log.info('Ignored rpcbind emits an init warning')
+        self.nodes[0].rpchost = None
         self.start_node(0, ['-disablewallet', '-nolisten', '-rpcbind=127.0.0.1'])
         self.stop_node(0, expected_stderr='Warning: Option -rpcbind was ignored because -rpcallowip was not specified, refusing to allow everyone to connect')
 
