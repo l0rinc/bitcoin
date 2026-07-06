@@ -12,6 +12,7 @@ from test_framework.util import (
     assert_equal,
 )
 
+import os
 import platform
 import re
 
@@ -29,6 +30,8 @@ class ToolBitcoinTest(BitcoinTestFramework):
         # https://github.com/bitcoin/bitcoin/pull/33229#issuecomment-3265524908
         if platform.system() == "Windows":
             raise SkipTest("Test does not currently work on windows")
+        if not os.path.exists(self.get_binaries().paths.bitcoin_bin):
+            raise SkipTest("bitcoin wrapper binary has not been built")
 
     def setup_network(self):
         """Set up nodes normally, but save a copy of their arguments before starting them."""
