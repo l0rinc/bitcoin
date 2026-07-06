@@ -2968,7 +2968,15 @@ under different commits. They are not all proven exploitable.
   path. A refreshed source comparison confirms current Core still lacks the
   `-confrw`/`bitcoin_rw.conf`/`ModifyRWConfigFile(...)` surface; unmodified
   Knots has the behavior but not the port's strengthened ArgsManager
-  integration test cases.
+  integration test cases. One current-Core persistence hardening fix is also
+  relevant to this Knots mirror path and is missing from current Knots: Core
+  `0654511e1b`, inherited by the port, checks `settings.json` stream write and
+  close failures before `ArgsManager::WriteSettingsFile()` renames the temporary
+  file over the live settings file. Current Knots still returns success after
+  `file.close()` without checking either failure bit, so a write-limit,
+  full-disk, or storage error can be missed before `RenameOver(...)`. This is
+  local configuration durability hardening, not consensus behavior or a remote
+  trigger.
 
 - Security-reporting policy:
 
@@ -4308,6 +4316,18 @@ Source/manifest checks:
   HEAD knots/29.x-knots origin/master -- src/common/args.cpp src/common/args.h
   src/common/config.cpp src/init/common.cpp src/bitcoin-cli.cpp
   src/test/argsman_tests.cpp`
+- `git show --stat --patch --minimal 0654511e1b --
+  src/common/settings.cpp src/test/settings_tests.cpp
+  test/functional/feature_settings.py`, `git log --oneline HEAD
+  knots/29.x-knots origin/master
+  --grep="Check write failures before renaming settings.json"`, and
+  `git grep -n
+  "WriteSettings\\|RenameOver\\|settings.json\\|Unable to write settings file\\|Unable to close settings file"
+  HEAD knots/29.x-knots origin/master -- src/common/args.cpp
+  src/common/settings.cpp src/common/settings.h src/test/settings_tests.cpp
+  test/functional/feature_settings.py` show current Core and the port checking
+  write/close failures before `settings.json` replacement, while current Knots
+  lacks those checks.
 - `git grep -n -E
   "statsenable|statsmaxmemorytarget|getmempoolstats|RegisterStatsRPCCommands|DEFAULT_STATISTICS_ENABLED|mempoolGetValuesInRange|rpc_mempoolstats"
   HEAD knots/29.x-knots origin/master -- src/stats src/init.cpp
@@ -7429,6 +7449,12 @@ Functional tests:
   native
   `../knots/build-repro/bin/test_bitcoin --run_test=argsman_tests --catch_system_error=no --log_level=error --report_level=short`
   passed.
+- Settings write-hardening checks:
+  `build/bin/test_bitcoin --run_test=settings_tests --catch_system_error=no
+  --log_level=error --report_level=short` passed with 20 assertions, and
+  `python3 test/functional/feature_settings.py --configfile
+  build/test/config.ini --tmpdir=/mnt/my_storage/tmp_feature_settings_write_hardening
+  --portseed=42811` passed on the port.
 - Original Knots/source cross-check:
   `git grep -n "void SetupHelpOptions\\|DISALLOW_NEGATION\\|util_ParseNegatedHelpParameters\\|Negating of -help" knots/29.x-knots -- src/common/args.cpp src/common/args.h src/test/argsman_tests.cpp`
   shows unmodified Knots registers help aliases with negation disabled, and
