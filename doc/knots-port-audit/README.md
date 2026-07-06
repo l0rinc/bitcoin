@@ -2017,10 +2017,14 @@ during combining, monotonic
 `uptime`, first-run pruned-disk-space warning rounding, Windows exclusive `wbx`
 opens, LevelDB file-size initialization, wallet `sendall` transaction-size
 error handling, miniscript assert guards, and most cpp-subprocess
-memory/Windows fixes, witness-stripped SegWit reject-filter handling, P2P
+memory/Windows fixes, witness-stripped SegWit reject-filter handling,
+miniscript `FindChallenges` stack-overflow avoidance in tests, P2P
 `-capturemessages` option caching, single-timepoint inactivity checks, and
-clean success exit status for initialization interrupted by shutdown. A
-follow-up patch-id audit also found that current Core already
+clean success exit status for initialization interrupted by shutdown. The old
+Knots/libevent HTTP listen-socket cleanup fix is structurally avoided on this
+current-Core base because the port uses Core's native `HTTPServer` with RAII
+`Sock` ownership rather than `evhttp_accept_socket_with_handle`. A follow-up
+patch-id audit also found that current Core already
 has the MiniMiner negative-fee assumption removal, peer/peeraddr log comma
 restoration through `CNode::LogPeer()`, and lazy `decodepsbt` result-doc
 initialization. The Knots `getblock_vin` lazy-init follow-up is structurally
@@ -2165,6 +2169,23 @@ Source/manifest checks:
   `python3 test/functional/p2p_segwit.py --configfile build/test/config.ini --tmpdir=/mnt/my_storage/tmp_p2p_segwit_witness_stripping_2 --portseed=7394`
   passed after updating the port's stale block-failure label expectations to
   current Core's `block-script-verify-flag-failed`.
+- `git -C ../knots show --stat --patch --minimal
+  fbe185ce7a76e3c8d36042df27f9a34ec9a95cff`,
+  `git show origin/master:src/httpserver.cpp`, and `rg -n
+  "BindAndStartListening|unique_ptr<Sock>|m_listen|evhttp_accept_socket_with_handle"
+  src/httpserver.cpp src/httpserver.h` show Knots' older libevent fix for
+  closing a listen socket when `evhttp_accept_socket_with_handle` fails is not
+  a remaining port gap: current Core and the port hold the socket in a
+  `std::unique_ptr<Sock>` until successful bind/listen registration.
+- `git -C ../knots show --stat --patch --minimal
+  5da98f931d777fa13b3e4804dc01f3e84f1a32c1`, `git show
+  origin/master:src/test/miniscript_tests.cpp`, and `rg -n
+  "FindChallenges|std::vector stack" src/test/miniscript_tests.cpp` show the
+  miniscript challenge traversal stack-overflow avoidance is already present in
+  current Core and the port's test code. Focused verification:
+  `build/bin/test_bitcoin --run_test=httpserver_tests --catch_system_error=no --log_level=error --report_level=short`
+  and `build/bin/test_bitcoin --run_test=miniscript_tests --catch_system_error=no --log_level=error --report_level=short`
+  passed.
 - `git show --stat --patch --minimal 16b1710d97` plus `rg -n
   "BaseIndex::Rewind|committed index state must never be ahead|SetBestBlockIndex\\(new_tip\\)|Commit\\("
   src/index/base.cpp` and equivalent `origin/master` and `../knots` checks
