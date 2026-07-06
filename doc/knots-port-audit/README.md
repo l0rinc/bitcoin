@@ -1276,6 +1276,14 @@ Other missing/adapted Knots pieces found during this pass:
   `ConnectBlock()` coinbase check. The focused UTXO-height test now passes on
   both the port and an unmodified Knots build, including the
   activation-boundary reorg/cache-poisoning scenario.
+- The libbitcoinconsensus review confirmed Knots intentionally restores the
+  shared `libbitcoinconsensus` surface removed from current Core, but keeps
+  `BUILD_BITCOINCONSENSUS_LIB` defaulted to `OFF`. This is compatibility and
+  packaging policy, not an extra consensus rule or Core-missing hardening fix.
+  The local audit build has the option enabled so the target can be checked:
+  `cmake --build build --target bitcoinconsensus -j2` was already up to date,
+  and `script_tests` pass; the only warning is the expected skipped
+  `script_assets_test` when `DIR_UNIT_TEST_DATA` is unset.
 - The RDTS P2P-service review found a port-introduced handshake cleanup issue
   after adapting Knots' preferential RDTS peering and `-maxstaleoutbound`
   behavior (`7f57236043`, `44d7e88dba`, `c146ef8c7a`) onto current Core's
@@ -2550,6 +2558,11 @@ Builds:
   -DENABLE_WALLET=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
 - `TMPDIR=/mnt/my_storage/tmp cmake --build /tmp/bitcoin-asan-consensus-after
   --target bitcoinconsensus -j1`
+- `cmake -LAH build | rg -n
+  "BUILD_BITCOINCONSENSUS_LIB|BUILD_KERNEL_LIB|BUILD_SHARED_LIBS"`
+- `cmake --build build --target bitcoinconsensus -j2`
+- `build/bin/test_bitcoin --run_test=script_tests --catch_system_error=no
+  --log_level=warning --report_level=short`
 - `git diff --check`
 - `cmake -LA -N build | rg -n
   "BUILD_GUI|BUILD_GUI_TESTS|WITH_QT|ENABLE_WALLET"` reported
