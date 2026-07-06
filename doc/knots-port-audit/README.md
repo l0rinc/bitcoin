@@ -516,6 +516,16 @@ Other missing/adapted Knots pieces found during this pass:
   unvalidated snapshot base and extends `feature_assumeutxo.py` to cover
   `getrawtransaction`, `gettxout`, and witness txoutproof before and after
   background validation (`bf459451a2`).
+  The underlying Knots-only surface is also present in the port:
+  background-validation height tracking (`3f3dbb60d1`), wallet transaction
+  assumed-state reporting (`a6c53bb244`), wallet/RPC `confirmations_assumed`
+  output (`c89db663a4`), chain and raw-transaction RPC output
+  (`abdcbf48f4`, `7a832effaa`), witness txoutproof reporting from the
+  segwit-proof port (`23edd3db4f`), and GUI treatment of assumed confirmations
+  as unconfirmed (`ca4a9cfecd`, plus the transaction-description follow-up
+  `c2b631708b`). Current Core master lacks this reporting surface entirely, so
+  this is a Knots/Core UX and RPC semantics divergence around assumeutxo
+  trust state rather than a Core-missing crash or consensus fix.
 - The same RPC test pass exposed a port-introduced regression in
   `waitfornewblock(current_tip)`: the help and test still advertised the
   optional `current_tip` argument, but the port's first adaptation of Core's
@@ -7400,6 +7410,18 @@ Functional tests:
   `python3 test/functional/feature_assumeutxo.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_assumeutxo_rawtx_repro`
   (fails on unmodified Knots with `AssertionError: not(0 == 201)`, confirming
   the inherited stale `confirmations_assumed` reporting bug)
+- `git show --stat --patch --minimal 3f3dbb60d1 a6c53bb244 ca4a9cfecd
+  abdcbf48f4 7a832effaa c89db663a4`, `git -C ../knots log --oneline --
+  src/rpc/txoutproof.cpp`, and
+  `git log --all --oneline --grep='background validation height\|IsTxAssumed\|confirmations_assumed\|assumed-confirmed'`
+  identify the Knots commits behind the assumeutxo confirmation-status surface.
+  `git grep -n "m_background_validation_height\|IsTxAssumed\|confirmations_assumed"
+  HEAD -- src/wallet src/rpc test/functional/feature_assumeutxo.py` and the
+  equivalent `git -C ../knots grep ... 29.x-knots` show the port and actual
+  Knots carry the wallet/RPC state, while
+  `git grep -n "m_background_validation_height\|IsTxAssumed\|confirmations_assumed"
+  origin/master -- src/wallet src/rpc test/functional/feature_assumeutxo.py`
+  returns no matches on current Core master.
 
 The full `feature_block.py` run reached the large-reorg section but failed
 because `/tmp` was full and the node shut down with `Disk space is too low!`;
