@@ -59,6 +59,7 @@ using util::ConstevalHexDigit;
 using util::Join;
 using util::RemovePrefix;
 using util::RemovePrefixView;
+using util::RemoveSuffixView;
 using util::ReplaceAll;
 using util::Split;
 using util::SplitString;
@@ -1796,6 +1797,19 @@ BOOST_AUTO_TEST_CASE(remove_prefix)
     BOOST_CHECK_EQUAL(RemovePrefix("f", "foo"), "f");
     BOOST_CHECK_EQUAL(RemovePrefixView("", "foo"), "");
     BOOST_CHECK_EQUAL(RemovePrefix("", ""), "");
+}
+
+BOOST_AUTO_TEST_CASE(remove_suffix)
+{
+    BOOST_CHECK_EQUAL(RemoveSuffixView("./common/system.h", ".h"), "./common/system");
+    BOOST_CHECK_EQUAL(RemoveSuffixView("foo", "foo"), "");
+    BOOST_CHECK_EQUAL(RemoveSuffixView("foo", "oo"), "f");
+    BOOST_CHECK_EQUAL(RemoveSuffixView("foo", "o"), "fo");
+    BOOST_CHECK_EQUAL(RemoveSuffixView("foo", ""), "foo");
+    BOOST_CHECK_EQUAL(RemoveSuffixView("fo", "foo"), "fo");
+    BOOST_CHECK_EQUAL(RemoveSuffixView("f", "foo"), "f");
+    BOOST_CHECK_EQUAL(RemoveSuffixView("", "foo"), "");
+    BOOST_CHECK_EQUAL(RemoveSuffixView("", ""), "");
 }
 
 BOOST_AUTO_TEST_CASE(util_ParseByteUnits)
