@@ -1697,6 +1697,13 @@ Other missing/adapted Knots pieces found during this pass:
   history, traffic graph tooltips, mempool stats, and the Network Watch GUI
   are all present in the current tree. These were not new omissions or original
   Knots defects from this pass.
+- The `getrpcwhitelist` review confirmed Knots' RPC whitelist introspection
+  surface (`2c172d3a0d` plus JSON/object follow-ups) is present in the port and
+  still absent from current Core. This is authenticated RPC observability and
+  operator debugging for method-level whitelist policy, not a consensus rule or
+  an auth bypass: the RPC returns only the caller's effective whitelist and
+  wallet restrictions, and the port's `rpc_getrpcwhitelist.py` checks allowed
+  users, empty-whitelist users, forbidden users, and cookie/default behavior.
 - A focused miner review rechecked Knots' restored serialized-size mining cap
   and follow-up bugfixes (`b835402650`, `e5bf9721fa`, `b392070a38`,
   `e2212c8cf8`, `c95d04c8a8`) against this port and current Core. The port
