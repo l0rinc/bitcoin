@@ -248,6 +248,7 @@ void CRollingBloomFilter::insert(std::span<const unsigned char> vKey)
         data[pos & ~1U] = (data[pos & ~1U] & ~(uint64_t{1} << bit)) | (uint64_t(nGeneration & 1)) << bit;
         data[pos | 1] = (data[pos | 1] & ~(uint64_t{1} << bit)) | (uint64_t(nGeneration >> 1)) << bit;
     }
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) Assume(contains(vKey));
     SanityCheck();
 }
 
@@ -272,5 +273,8 @@ void CRollingBloomFilter::reset()
     nEntriesThisGeneration = 0;
     nGeneration = 1;
     std::fill(data.begin(), data.end(), 0);
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        Assume(std::all_of(data.begin(), data.end(), [](uint64_t value) { return value == 0; }));
+    }
     SanityCheck();
 }
