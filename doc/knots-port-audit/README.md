@@ -1317,7 +1317,8 @@ Other missing/adapted Knots pieces found during this pass:
   `"1.0"` compatibility, unknown-version batch requests, and direct numeric or
   unknown `jsonrpc` HTTP requests; the same test passes on unmodified Knots.
 - The CJDNS addnode follow-up confirmed current Core already has the
-  `GetAddedNodeInfo()` CJDNS conversion from `f8fec8f26d`, while Knots' later
+  `GetAddedNodeInfo()` CJDNS conversion from `f8fec8f26d` and the later
+  connected-CJDNS peer regression test from `ca1300fbc5`, while Knots' later
   `AddNode()` duplicate detection for CJDNS addresses with alternate ports
   (`28823f30dc`) remains a port-only network correctness fix. The port carries
   it as `bcd1387ae6`, and `net_peer_connection_tests` covers both connected
