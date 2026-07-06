@@ -1465,8 +1465,8 @@ Other missing/adapted Knots pieces found during this pass:
   not STANDARD flags` log path. The port now keeps RDTS flags enforced through
   those legacy bypass names, and `feature_rdts.py` covers both the broad
   PUSHDATA path and grouped unknown-witness path while asserting the consensus
-  fallback log is not hit. A fresh cross-run with the port's strengthened test
-  against unmodified Knots still fails on the broad bypass and prints the
+  fallback log is not hit. A refreshed cross-run with the port's strengthened
+  test against unmodified Knots still fails on the broad bypass and prints the
   internal-bug log, while Knots' own narrower RDTS test passes because it only
   exercises the exact `mempool-script-verify-flag-failed` ignore string.
 - While rerunning focused units, Core's newer
@@ -1502,7 +1502,11 @@ Other missing/adapted Knots pieces found during this pass:
   spend with a 300-byte witness is rejected while RDTS is active, then accepted
   once the test deployment expires at height 576. The strengthened test passes
   against both the port and unmodified Knots, so this confirms native temporary
-  soft-fork behavior rather than a newly found consensus bug.
+  soft-fork behavior rather than a newly found consensus bug. A refreshed
+  consensus-path unit bundle (`script_tests`, `txvalidationcache_tests`,
+  `versionbits_tests`, and `transaction_tests`) passed on the port; the only
+  warning was `script_assets_test` skipping because `DIR_UNIT_TEST_DATA` is
+  unset.
 - The libbitcoinconsensus review confirmed Knots intentionally restores the
   shared `libbitcoinconsensus` surface removed from current Core, but keeps
   `BUILD_BITCOINCONSENSUS_LIB` defaulted to `OFF`. This is compatibility and
@@ -4055,6 +4059,12 @@ Unit tests:
 - `build/bin/test_bitcoin
   --run_test=txvalidationcache_tests/checkinputs_flags_per_input_cache_safety
   --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin
+  --run_test=script_tests,txvalidationcache_tests,versionbits_tests,transaction_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin
+  --run_test=script_tests,txvalidationcache_tests,versionbits_tests,transaction_tests
+  --catch_system_error=no --log_level=warning --report_level=detailed`
 - `build/bin/test_bitcoin --run_test=txvalidation_tests`
 - `build/bin/test_bitcoin --run_test=txvalidation_tests
   --catch_system_error=no --log_level=error --report_level=short`
@@ -4309,6 +4319,18 @@ Functional tests:
 - `python3 test/functional/feature_rdts.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_rdts_ignore_rejects_port2
   --portseed=42141`
+- `python3 test/functional/feature_rdts.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_rdts_refresh_port
+  --portseed=42599`
+- `python3 ../knots/test/functional/feature_rdts.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_rdts_refresh_knots_native
+  --portseed=42602`
+- `python3 test/functional/feature_rdts.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_rdts_refresh_knots_with_port_test
+  --portseed=42605`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile
   build/test/config.ini
@@ -4318,11 +4340,27 @@ Functional tests:
   --configfile ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_reduced_data_utxo_height_knots
   --portseed=27511`
+- `python3 test/functional/feature_reduced_data_utxo_height.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_reduced_data_utxo_height_refresh_port
+  --portseed=42601`
+- `python3 ../knots/test/functional/feature_reduced_data_utxo_height.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_reduced_data_utxo_height_refresh_knots
+  --portseed=42604`
 - `python3 test/functional/feature_reduced_data_temporary_deployment.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_temporary_deployment.py
   --configfile=build/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rdts_temp_deployment_witness_port
   --portseed=32300`
+- `python3 test/functional/feature_reduced_data_temporary_deployment.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_reduced_data_temporary_deployment_refresh_port
+  --portseed=42600`
+- `python3 ../knots/test/functional/feature_reduced_data_temporary_deployment.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_reduced_data_temporary_deployment_refresh_knots
+  --portseed=42603`
 - `python3 test/functional/feature_bip9_max_activation_height.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_versionbits_warning.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_versionbits_warning`
@@ -5391,6 +5429,14 @@ Functional tests:
   --portseed=7424`
   (fails on the inherited RDTS `ignore_rejects` internal-bug log described
   above)
+- Refreshed RDTS expected-failure repro:
+  `python3 test/functional/feature_rdts.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_feature_rdts_refresh_knots_with_port_test --portseed=42605`
+  failed on unmodified Knots at the same strengthened broad
+  `non-mandatory-script-verify-flag` assertion, with
+  `BUG! PLEASE REPORT THIS! CheckInputScripts failed against latest-block but not STANDARD flags`
+  in `debug.log`. The same port test
+  `python3 test/functional/feature_rdts.py --configfile=build/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_feature_rdts_refresh_port --portseed=42599`
+  passed on the port.
 - Original Knots cross-check:
   `python3 ../knots/test/functional/feature_rdts.py --configfile
   ../knots/build-repro/test/config.ini
@@ -5398,10 +5444,30 @@ Functional tests:
   --portseed=7425`
   passed on unmodified Knots, confirming Knots' native test does not cover the
   broader legacy script-flag bypass strings.
+- Refreshed native Knots RDTS check:
+  `python3 ../knots/test/functional/feature_rdts.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_feature_rdts_refresh_knots_native --portseed=42602`
+  passed, again confirming the native test's narrower `ignore_rejects` coverage.
 - Original Knots cross-check:
   `python3 test/functional/feature_reduced_data_temporary_deployment.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rdts_temp_deployment_witness_knots --portseed=32301`
   passed on unmodified Knots, including the strengthened witness-script expiry
   check at the RDTS active-to-expired boundary.
+- Refreshed RDTS activation/expiry checks:
+  `python3 test/functional/feature_reduced_data_temporary_deployment.py --configfile=build/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_feature_reduced_data_temporary_deployment_refresh_port --portseed=42600`
+  and
+  `python3 ../knots/test/functional/feature_reduced_data_temporary_deployment.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_feature_reduced_data_temporary_deployment_refresh_knots --portseed=42603`
+  both passed, covering activation split/reorg behavior, active-period
+  enforcement, expiry at height 576, and post-expiry convergence.
+- Refreshed RDTS UTXO-height checks:
+  `python3 test/functional/feature_reduced_data_utxo_height.py --configfile=build/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_feature_reduced_data_utxo_height_refresh_port --portseed=42601`
+  and
+  `python3 ../knots/test/functional/feature_reduced_data_utxo_height.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_feature_reduced_data_utxo_height_refresh_knots --portseed=42604`
+  both passed, including old-UTXO exemption, activation-height boundary
+  enforcement, mixed-input rejection, and the activation-boundary cache-poisoning
+  reorg scenario.
+- Refreshed RDTS-adjacent unit bundle:
+  `build/bin/test_bitcoin --run_test=script_tests,txvalidationcache_tests,versionbits_tests,transaction_tests --catch_system_error=no --log_level=warning --report_level=detailed`
+  passed with 846580 assertions; the only warning was
+  `script_assets_test` skipping because `DIR_UNIT_TEST_DATA` is unset.
 - Original Knots cross-check:
   `../knots/build-repro/bin/test_bitcoin --run_test=net_tests
   --catch_system_error=no --log_level=error --report_level=short`
