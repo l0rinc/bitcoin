@@ -17,6 +17,8 @@
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
 
+#include <cstdint>
+#include <initializer_list>
 #include <iostream>
 
 #include <boost/test/unit_test.hpp>
@@ -295,6 +297,58 @@ BOOST_AUTO_TEST_CASE(sighash_caching)
             BOOST_CHECK(cache.Load(hash_type, scriptcode, dummy) || expect_one);
         }
     }
+}
+
+BOOST_AUTO_TEST_CASE(sighash_cache_hash_type_aliases)
+{
+    const CScript scriptcode{CScript{} << OP_TRUE};
+    const CScript other_scriptcode{CScript{} << OP_FALSE};
+
+    auto check_aliases = [&](const int32_t hash_type,
+                             const std::initializer_list<int32_t> aliases,
+                             const std::initializer_list<int32_t> misses) {
+        SigHashCache cache;
+        HashWriter stored_writer;
+        stored_writer << uint64_t{0x123456789abcdef};
+        HashWriter expected_writer;
+        expected_writer << uint64_t{0x123456789abcdef};
+        const uint256 expected_hash{expected_writer.GetHash()};
+
+        cache.Store(hash_type, scriptcode, stored_writer);
+        for (const int32_t alias : aliases) {
+            HashWriter loaded_writer;
+            BOOST_CHECK(cache.Load(alias, scriptcode, loaded_writer));
+            BOOST_CHECK_EQUAL(loaded_writer.GetHash(), expected_hash);
+        }
+        for (const int32_t miss : misses) {
+            HashWriter loaded_writer;
+            BOOST_CHECK(!cache.Load(miss, scriptcode, loaded_writer));
+        }
+
+        HashWriter loaded_writer;
+        BOOST_CHECK(!cache.Load(hash_type, other_scriptcode, loaded_writer));
+    };
+
+    constexpr int32_t HIGH_BIT_ALIAS{0x40000000};
+    check_aliases(SIGHASH_ALL,
+                  {SIGHASH_ALL, SIGHASH_DEFAULT, 0x04, SIGHASH_ALL | HIGH_BIT_ALIAS},
+                  {SIGHASH_NONE, SIGHASH_SINGLE, SIGHASH_ALL | SIGHASH_ANYONECANPAY});
+    check_aliases(SIGHASH_NONE,
+                  {SIGHASH_NONE, SIGHASH_NONE | HIGH_BIT_ALIAS},
+                  {SIGHASH_ALL, SIGHASH_SINGLE, SIGHASH_NONE | SIGHASH_ANYONECANPAY});
+    check_aliases(SIGHASH_SINGLE,
+                  {SIGHASH_SINGLE, SIGHASH_SINGLE | HIGH_BIT_ALIAS},
+                  {SIGHASH_ALL, SIGHASH_NONE, SIGHASH_SINGLE | SIGHASH_ANYONECANPAY});
+    check_aliases(SIGHASH_ALL | SIGHASH_ANYONECANPAY,
+                  {SIGHASH_ALL | SIGHASH_ANYONECANPAY, SIGHASH_DEFAULT | SIGHASH_ANYONECANPAY, 0x04 | SIGHASH_ANYONECANPAY,
+                   SIGHASH_ALL | SIGHASH_ANYONECANPAY | HIGH_BIT_ALIAS},
+                  {SIGHASH_ALL, SIGHASH_NONE | SIGHASH_ANYONECANPAY, SIGHASH_SINGLE | SIGHASH_ANYONECANPAY});
+    check_aliases(SIGHASH_NONE | SIGHASH_ANYONECANPAY,
+                  {SIGHASH_NONE | SIGHASH_ANYONECANPAY, SIGHASH_NONE | SIGHASH_ANYONECANPAY | HIGH_BIT_ALIAS},
+                  {SIGHASH_NONE, SIGHASH_ALL | SIGHASH_ANYONECANPAY, SIGHASH_SINGLE | SIGHASH_ANYONECANPAY});
+    check_aliases(SIGHASH_SINGLE | SIGHASH_ANYONECANPAY,
+                  {SIGHASH_SINGLE | SIGHASH_ANYONECANPAY, SIGHASH_SINGLE | SIGHASH_ANYONECANPAY | HIGH_BIT_ALIAS},
+                  {SIGHASH_SINGLE, SIGHASH_ALL | SIGHASH_ANYONECANPAY, SIGHASH_NONE | SIGHASH_ANYONECANPAY});
 }
 
 BOOST_AUTO_TEST_CASE(precomputed_transaction_data_reuse)
