@@ -1754,6 +1754,12 @@ under different commits. They are not all proven exploitable.
   `CloseAndUncache()` so the kernel can avoid retaining large sequentially read
   block-file pages. This is local resource/performance hardening for reindex
   and other sequential reads, not consensus behavior and not a remote trigger.
+  This pass verified the port against unmodified `29.x-knots` and current Core:
+  actual Knots and the port expose `AdviseSequential(...)` and
+  `CloseAndUncache(...)`, while current Core still lacks those hooks. The port
+  now has direct `fs_tests/file_advice_helpers_keep_file_semantics` coverage
+  asserting the advice helper preserves the current file position and the close
+  wrapper still flushes/closes the file (`3e75471507`).
 
 - Prune-lock reorg rollback and persistence:
   `8ee1214157`, `0b4bd4e134`, `4822c21812`
@@ -2341,6 +2347,16 @@ Source/manifest checks:
   --catch_system_errors=no`
 - `test/functional/feature_init.py --configfile=build/test/config.ini
   --cachedir=test/cache`
+- `git show --stat --patch --minimal 97130ac516`,
+  `git -C ../knots show --stat --patch --minimal 97130ac516`, and
+  `git grep -n
+  "AdviseSequential\\|CloseAndUncache\\|BufferedFile\\|posix_fadvise\\|FADV"
+  HEAD origin/master -- src test cmake CMakeLists.txt` show that actual Knots
+  and the port advise/uncache `BufferedFile` block-file reads while current Core
+  has no corresponding helper or hook.
+- `cmake --build build --target test_bitcoin -j4`
+- `build/bin/test_bitcoin --run_test=fs_tests --catch_system_errors=no`
+- `build/bin/test_bitcoin --run_test=streams_tests --catch_system_errors=no`
 - `git show --stat --patch --minimal 1ba5009294 8fad5801e0 d2c1bd10db`,
   `git show origin/master:src/init.cpp | rg -n
   "shutdown_request|Interrupt\\(|m_tip_block_cv|notify_all" -C 5`,
