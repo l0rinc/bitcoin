@@ -47,9 +47,34 @@ using util::ContainsNoNUL;
 using util::Join;
 using util::LineReader;
 using util::RemovePrefix;
+using util::RemovePrefixView;
+using util::RemoveSuffixView;
 using util::Split;
 using util::SplitString;
 using util::TrimString;
+
+namespace {
+void AssertAffixRemovalContracts(std::string_view str, std::string_view affix)
+{
+    const std::string_view removed_prefix_view{RemovePrefixView(str, affix)};
+    const std::string removed_prefix{RemovePrefix(str, affix)};
+    assert(removed_prefix == removed_prefix_view);
+    if (str.starts_with(affix)) {
+        assert(removed_prefix_view == str.substr(affix.size()));
+        assert(affix.size() + removed_prefix_view.size() == str.size());
+    } else {
+        assert(removed_prefix_view == str);
+    }
+
+    const std::string_view removed_suffix_view{RemoveSuffixView(str, affix)};
+    if (str.ends_with(affix)) {
+        assert(removed_suffix_view == str.substr(0, str.size() - affix.size()));
+        assert(removed_suffix_view.size() + affix.size() == str.size());
+    } else {
+        assert(removed_suffix_view == str);
+    }
+}
+} // namespace
 
 FUZZ_TARGET(string)
 {
@@ -81,7 +106,7 @@ FUZZ_TARGET(string)
     (void)OnlyHasDefaultSectionSetting(settings, random_string_1, random_string_2);
     (void)ParseNetwork(random_string_1);
     (void)ParseOutputType(random_string_1);
-    (void)RemovePrefix(random_string_1, random_string_2);
+    AssertAffixRemovalContracts(random_string_1, random_string_2);
     (void)ResolveErrMsg(random_string_1, random_string_2);
     try {
         (void)RPCConvertNamedValues(random_string_1, random_string_vector);
