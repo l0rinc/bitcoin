@@ -2285,7 +2285,9 @@ under different commits. They are not all proven exploitable.
   `VERSIONBITS_NUM_BITS = 5` while scanning the historical 29 BIP9 signal bits
   through `VERSIONBITS_NUM_WARNING_BITS`, and the refreshed
   `feature_versionbits_warning.py` run passes against both the port and
-  unmodified Knots.
+  unmodified Knots. A fresh source comparison confirms current Core still has
+  no equivalent last-100-block unknown-schema, full warning-bit-range, or
+  BIP320 reserved-bit warning logic.
 
 - RPC multi-warning string-mode visibility:
   `e4e4a81317`
@@ -2855,6 +2857,10 @@ Source/manifest checks:
   test/functional/feature_reduced_data_utxo_height.py
   test/functional/p2p_handshake.py` shows the current source/test coverage for
   the RDTS activation-boundary and BIP110 service-limit paths.
+- `git grep -n
+  "VERSIONBITS_NUM_WARNING_BITS|Miner violated version bit protocol|unexpected version|BIP320|VERSIONBITS_NUM_BITS|UpdateTip"
+  HEAD knots/29.x-knots origin/master -- src test/functional/feature_versionbits_warning.py
+  src/test`
 - `git -C ../knots show --stat --patch --minimal 15805060ec`,
   `rg -n "ReadBlock\\(.*inv\\.hash|ReadBlock\\(.*req\\.blockhash"
   src/net_processing.cpp`, `git show origin/master:src/net_processing.cpp |
@@ -3948,6 +3954,14 @@ Functional tests:
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_review_knots
   --portseed=26443`
+- `python3 test/functional/feature_versionbits_warning.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_port_refresh
+  --portseed=42260`
+- `python3 test/functional/feature_versionbits_warning.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_knots_refresh
+  --portseed=42261`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_ua_escape_3`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
@@ -4936,6 +4950,10 @@ Functional tests:
   `python3 /mnt/my_storage/bitcoin/test/functional/feature_versionbits_warning.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_feature_versionbits_warning_check`
   (passes on unmodified Knots, confirming the earlier warning-range failure was
   introduced by the port's current-Core BIP323 adaptation)
+- Original Knots cross-check:
+  `python3 test/functional/feature_versionbits_warning.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_knots_refresh --portseed=42261`
+  passed on unmodified Knots, confirming the refreshed warning-range,
+  unknown-schema, and BIP320 reserved-bit behavior is native Knots behavior.
 - Original Knots cross-check:
   `python3 ../knots/test/functional/wallet_keypool.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_wallet_keypool_isactive_repro`
   (passes on unmodified Knots, confirming the local `wallet_keypool.py`
