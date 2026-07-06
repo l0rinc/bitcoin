@@ -8,6 +8,7 @@
 
 #include <util/byte_units.h>
 #include <util/log.h>
+#include <util/overflow.h>
 
 #ifdef HAVE_LINUX_SYSINFO
 #include <sys/sysinfo.h>
@@ -20,6 +21,12 @@
 #include <cstdint>
 
 size_t g_low_memory_threshold{0};
+
+bool AvailableMemoryBelowThreshold(const size_t threshold, const uint64_t free_ram, const uint64_t buffer_ram)
+{
+    if (threshold == 0) return false;
+    return SaturatingAdd(free_ram, buffer_ram) < threshold;
+}
 
 bool SystemNeedsMemoryReleased()
 {
@@ -45,7 +52,7 @@ bool SystemNeedsMemoryReleased()
         // Explicitly 64-bit in case of 32-bit userspace on 64-bit kernel
         const uint64_t free_ram = uint64_t(sys_info.freeram) * sys_info.mem_unit;
         const uint64_t buffer_ram = uint64_t(sys_info.bufferram) * sys_info.mem_unit;
-        if (free_ram + buffer_ram < g_low_memory_threshold) {
+        if (AvailableMemoryBelowThreshold(g_low_memory_threshold, free_ram, buffer_ram)) {
             LogInfo("SystemNeedsMemoryReleased: YES: %s free RAM + %s buffer RAM", free_ram, buffer_ram);
             return true;
         }

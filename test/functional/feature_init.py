@@ -370,6 +370,9 @@ class InitTest(BitcoinTestFramework):
             self.restart_node(1, ["-lowmem=1"])
 
         with node.assert_debug_log(expected_msgs=[], unexpected_msgs=[threshold_msg]):
+            self.restart_node(1, ["-lowmem=0"])
+
+        with node.assert_debug_log(expected_msgs=[], unexpected_msgs=[threshold_msg]):
             self.restart_node(1, ["-lowmem=-1"])
 
     def restart_node_with_fd_limit(self, limit):
