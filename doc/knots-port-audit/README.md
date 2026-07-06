@@ -1698,15 +1698,20 @@ under different commits. They are not all proven exploitable.
   coverage passes with the port.
 
 - First-startup block-storage size warning units:
-  `4f06564f36`
+  `4f06564f36`, `4c62285bb9`, `58ceddd389`
 
   Current Core master still converts `AssumedBlockchainSize()` to bytes with
-  `1_GiB`, but the chainparam value and warning text are decimal GB. Knots and
-  this port use `1'000'000'000` for both the disk-space threshold and the
-  reported warning size. This avoids a confusing false-positive warning window
-  where Core can say approximately `N GB` will be stored but require enough
-  free space for `N GiB`. This is local operator warning/resource-estimation
-  correctness, not consensus or network security behavior.
+  `1_GiB`, but the chainparam value and warning text are decimal GB; it also
+  still reports the full assumed chain size even when the warning is about a
+  lower prune target. Knots and this port use `1'000'000'000` for the
+  disk-space threshold, report the selected full-chain-or-prune byte count, and
+  round up the displayed decimal GB value. This avoids a confusing
+  false-positive warning window where Core can say approximately `N GB` will be
+  stored but require enough free space for `N GiB`, and avoids under-reporting a
+  fractional pruned target as `0 GB`. This is local operator
+  warning/resource-estimation correctness, not consensus or network security
+  behavior. The port now factors the calculation for
+  `node_init_tests/block_storage_space_warning_units` coverage.
 
 - UTXO LevelDB write-batch default:
   `2104df3209`
@@ -2297,6 +2302,23 @@ Source/manifest checks:
   booleans through `getValStr()`, while current Core still throws on numeric
   values in `SettingToBool(...)` and pins that behavior in `getarg_tests`.
 - `build/bin/test_bitcoin --run_test=getarg_tests/setting_args
+  --catch_system_error=no --log_level=error --report_level=short`
+- `git show --stat --patch --minimal 1f40813aac ceefc86bcf fc538327e0`
+  and `git -C ../knots show --stat --patch --minimal 4f06564f36 4c62285bb9
+  58ceddd389` map the port's first-start block-storage warning series to
+  actual Knots. `git grep -n
+  "AssumedBlockchainSize\\|assumed_chain_bytes\\|additional_bytes_needed\\|may not accommodate"
+  HEAD origin/master -- src/init.cpp src/kernel/chainparams.h` and the
+  equivalent `../knots 29.x-knots` grep show that current Core still uses
+  `1_GiB` for the warning threshold and reports
+  `chainparams.AssumedBlockchainSize()`, while Knots and the port use decimal
+  GB, report the selected full/pruned byte count, and round up.
+- `cmake --build build --target test_bitcoin -j4`
+- `build/bin/test_bitcoin --run_test=node_init_tests/block_storage_space_warning_units
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=node_init_tests --catch_system_error=no
+  --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=util_tests/ceil_div_test
   --catch_system_error=no --log_level=error --report_level=short`
 - `git show --stat --patch --minimal 1ba5009294 8fad5801e0 d2c1bd10db`,
   `git show origin/master:src/init.cpp | rg -n
