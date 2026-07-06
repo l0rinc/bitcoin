@@ -2941,6 +2941,18 @@ restoration through `CNode::LogPeer()`, and lazy `decodepsbt` result-doc
 initialization. The Knots `getblock_vin` lazy-init follow-up is structurally
 avoided in current Core and this port because `getblock()` is registered as an
 `RPCMethod` factory, rather than by namespace-scope `RPCResult` construction.
+A second pass over high-signal patch-id misses confirmed several additional
+runtime-looking Knots commits are inherited from current Core rather than
+remaining Knots-only gaps: network-keyed address-response caches
+(`e949bff636`, Core `94db966a3b`), PCP retry interruption and quiet default
+router-unsupported logging (`5d10d86de1`, `80f9933c7a`; Core `188de70c86`,
+`7a77289695`), lock-free IBD state (`1741f39fcb`, Core `557b41a38c`),
+single-timepoint inactivity checks and cached `-capturemessages`
+(`942cfca027`, `905db18969`; Core `cea443e246`, `5f5c1ea019`), lazy
+`decodepsbt_inputs` initialization (`c3dafb49ca`, Core `d517fa0a94`), clean
+interrupt exit status (`f8f28911e3`, Core `997e7b4d7c`), and the
+overflow-safe `CeilDiv` helper (`8bc1b55baf`, Core `02d047fd5b`). These are
+not original Knots defects and not Core-missing covert hardening items.
 
 The precomputed transaction-data lifetime item was rechecked because Knots
 backports it as `29b4e281a7` and its commit message identifies
@@ -4027,6 +4039,12 @@ Builds:
   port already lazy-initialize the `decodepsbt` result docs and avoid the
   `getblock_vin` namespace-static pattern via the newer `RPCMethod` factory
   registration shape; actual Knots carries the explicit `GetBlockVin()` helper.
+- `git log --oneline origin/master --grep='generic network key\|shutdown during long poll\|IsInitialBlockDownload.*lock-free\|Pass time to InactivityChecks\|Cache -capturemessages\|decodepsbt_inputs\|non-zero code on interrupt\|CeilDiv' -- src test`
+  and `rg -n
+  "RANDOMIZER_ID_NETWORKKEY|m_network_key|shutdown_request|IsInitialBlockDownload\\(\\) const noexcept|DecodePSBTInputs|CeilDiv"
+  src test` show the reviewed high-signal patch-id misses that are already
+  carried by current Core and this port rather than representing missing Knots
+  hardening.
 - `git show origin/master:src/node/warnings.cpp | rg -n
   "all_messages\\.back|Join\\(all_messages" -C 3`
 - `git -C ../knots show 29.x-knots:src/node/warnings.cpp | rg -n
@@ -4199,6 +4217,8 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=net_peer_connection_tests`
 - `build/bin/test_bitcoin --run_test=net_peer_connection_tests/*
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=net_tests/cnode_simple_test
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=pcp_tests/pcp_not_authorized_explicit_warning
   --catch_system_error=no --log_level=error --report_level=short`
@@ -4893,6 +4913,9 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_feature_shutdown_wait_knots --portseed=27521`
 - `python3 test/functional/feature_shutdown.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_shutdown_wait_port2 --portseed=27523`
+- `python3 test/functional/feature_shutdown.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_shutdown_core_inherited_audit
+  --portseed=43120`
 - `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_config_args_port_mapping_2`
 - `python3 test/functional/feature_config_args.py --configfile build/test/config.ini
