@@ -26,6 +26,7 @@ import ipaddress
 from io import BytesIO
 import logging
 import platform
+import socket
 import struct
 import sys
 import threading

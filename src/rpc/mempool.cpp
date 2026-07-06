@@ -15,6 +15,7 @@
 #include <index/txospenderindex.h>
 #include <kernel/mempool_entry.h>
 #include <net_processing.h>
+#include <netbase.h>
 #include <node/context.h>
 #include <node/mempool_persist_args.h>
 #include <node/types.h>
@@ -151,7 +152,19 @@ static RPCMethod sendrawtransaction()
             std::string err_string;
             AssertLockNotHeld(cs_main);
             NodeContext& node = EnsureAnyNodeContext(request.context);
-            const TransactionError err = BroadcastTransaction(node, tx, err_string, max_raw_tx_fee_rate, node::TxBroadcast::MEMPOOL_AND_BROADCAST_TO_ALL, /*wait_callback=*/true, ignore_rejects);
+            const bool private_broadcast_enabled{gArgs.GetBoolArg("-privatebroadcast", DEFAULT_PRIVATE_BROADCAST)};
+            if (private_broadcast_enabled &&
+                !g_reachable_nets.Contains(NET_ONION) &&
+                !g_reachable_nets.Contains(NET_I2P)) {
+                throw JSONRPCError(RPC_MISC_ERROR,
+                                   "-privatebroadcast is enabled, but none of the Tor or I2P networks is "
+                                   "reachable. Maybe the location of the Tor proxy couldn't be retrieved "
+                                   "from the Tor daemon at startup. Check whether the Tor daemon is running "
+                                   "and that -torcontrol, -torpassword and -i2psam are configured properly.");
+            }
+            const auto method = private_broadcast_enabled ? node::TxBroadcast::NO_MEMPOOL_PRIVATE_BROADCAST
+                                                          : node::TxBroadcast::MEMPOOL_AND_BROADCAST_TO_ALL;
+            const TransactionError err = BroadcastTransaction(node, tx, err_string, max_raw_tx_fee_rate, method, /*wait_callback=*/true, ignore_rejects);
             if (TransactionError::OK != err) {
                 throw JSONRPCTransactionError(err, err_string);
             }

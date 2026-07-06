@@ -1415,6 +1415,24 @@ Other missing/adapted Knots pieces found during this pass:
   the subtest assumed `run_test()` had already created `self.wallet`. The port
   now initializes the MiniWallet lazily as `e14bfdfd03`, so the documented
   focused command exercises the intended path directly.
+- The private-broadcast functional sweep found a real port regression in the
+  same `sendrawtransaction` transition area. Current Core routes
+  `sendrawtransaction` through `TxBroadcast::NO_MEMPOOL_PRIVATE_BROADCAST`
+  when `-privatebroadcast` is active, so the transaction is test-accepted but
+  not inserted into the local mempool until it is received back from the
+  network. This is a current-Core base feature, not a Bitcoin Knots `29.x`
+  feature. The port's Knots RPC-compatibility pass had accidentally reverted
+  that call site to unconditional `MEMPOOL_AND_BROADCAST_TO_ALL`, despite the
+  RPC help still promising private broadcast. The same refactor also made the
+  private-broadcast test-accept path compare fees against zero when
+  `maxfeerate=0`, which would reject ordinary private broadcasts with no fee
+  cap. This was a port-only privacy/behavior regression, not an original Knots
+  bug and not a Core-missing fix: source comparison shows current Core still
+  has the private-broadcast method selection and its `check_max_fee` guard.
+  The port now restores both behaviors, restores the dropped `socket` import
+  needed by the reusable P2P listener helper, and adapts the final negative
+  private-broadcast restart to avoid an unrelated common-listen-port stderr
+  warning.
 - The RPC authentication follow-up confirmed Knots' blank `-rpcauth`,
   `-rpcauthfile`, `-norpcauth`, wallet-restricted rpcauth, and cookie
   permission/replacement hardening is present in the port. Current Core master
@@ -7732,6 +7750,21 @@ Functional tests:
   build/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_mining_basic_mining_interface_doc
   --portseed=43401` passed.
+- Private-broadcast port-regression checks:
+  `git show origin/master:src/rpc/mempool.cpp
+  origin/master:src/node/transaction.cpp | rg -n
+  "NO_MEMPOOL_PRIVATE_BROADCAST|MEMPOOL_AND_BROADCAST_TO_ALL|check_max_fee"`
+  confirms current Core still selects the private-broadcast method and only
+  applies the max-fee comparison when a fee cap is set. The focused port
+  checks passed with `cmake --build build --target bitcoind bitcoin-cli
+  test_bitcoin -j4`, `python3 -m py_compile
+  test/functional/p2p_private_broadcast.py test/functional/test_framework/p2p.py`,
+  `python3 build/test/functional/p2p_private_broadcast.py
+  --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_p2p_private_broadcast_rpc_method3
+  --portseed=47140 --loglevel=ERROR`, and
+  `build/bin/test_bitcoin --run_test=private_broadcast_tests
+  --catch_system_errors=no --log_level=test_suite`.
 
 The full `feature_block.py` run reached the large-reorg section but failed
 because `/tmp` was full and the node shut down with `Disk space is too low!`;

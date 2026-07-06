@@ -76,7 +76,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
                 const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, /*test_accept=*/ true, ignore_rejects);
                 if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
                     return HandleATMPError(result.m_state, err_string);
-                } else {
+                } else if (max_tx_fee_set) {
                     CAmount max_tx_fee_abs;
                     if (std::holds_alternative<CFeeRate>(max_tx_fee)) {
                         max_tx_fee_abs = std::get<CFeeRate>(max_tx_fee).GetFee(*Assert(result.m_vsize));
