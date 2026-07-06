@@ -65,6 +65,15 @@ struct FlushNotificationSubscriber final : public CValidationInterface {
     }
 };
 
+struct TipNotificationSubscriber final : public CValidationInterface {
+    int m_updated{0};
+
+    void UpdatedBlockTip(const CBlockIndex*, const CBlockIndex*, bool) override
+    {
+        ++m_updated;
+    }
+};
+
 struct MempoolPayloadSubscriber final : public CValidationInterface {
     const Txid m_txid;
     const CAmount m_fee;
@@ -204,6 +213,28 @@ BOOST_AUTO_TEST_CASE(chainstate_flushed_rejects_null_locator)
     m_node.validation_signals->UnregisterSharedValidationInterface(sub);
 
     BOOST_CHECK_EQUAL(sub->m_flushed, 1);
+}
+
+BOOST_AUTO_TEST_CASE(updated_block_tip_rejects_noop_update)
+{
+    test_only_CheckFailuresAreExceptionsNotAborts failed_assumes_throw{};
+
+    const uint256 tip_hash{uint256::ONE};
+    CBlockIndex tip;
+    tip.phashBlock = &tip_hash;
+    tip.nHeight = 0;
+
+    auto sub{std::make_shared<TipNotificationSubscriber>()};
+    m_node.validation_signals->RegisterSharedValidationInterface(sub);
+
+    BOOST_CHECK_THROW(m_node.validation_signals->UpdatedBlockTip(&tip, &tip, /*fInitialDownload=*/false),
+                      NonFatalCheckError);
+
+    m_node.validation_signals->UpdatedBlockTip(&tip, /*pindexFork=*/nullptr, /*fInitialDownload=*/false);
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    m_node.validation_signals->UnregisterSharedValidationInterface(sub);
+
+    BOOST_CHECK_EQUAL(sub->m_updated, 1);
 }
 
 BOOST_AUTO_TEST_CASE(unregister_validation_interface_race)
