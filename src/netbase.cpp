@@ -437,7 +437,9 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
             LogError("Proxy failed to initialize\n");
             return false;
         }
-        if (pchRet1[1] == SOCKS5Method::USER_PASS && auth) {
+        const bool selected_auth{pchRet1[1] == SOCKS5Method::USER_PASS && auth};
+        const bool selected_no_auth{pchRet1[1] == SOCKS5Method::NOAUTH};
+        if (selected_auth) {
             // Perform username/password authentication (as described in RFC1929)
             std::vector<uint8_t> vAuth;
             vAuth.push_back(0x01); // Current (and only) version of user/pass subnegotiation
@@ -463,12 +465,13 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
                 LogError("Proxy authentication unsuccessful\n");
                 return false;
             }
-        } else if (pchRet1[1] == SOCKS5Method::NOAUTH) {
+        } else if (selected_no_auth) {
             // Perform no authentication
         } else {
             LogError("Proxy requested wrong authentication method %02x\n", pchRet1[1]);
             return false;
         }
+        Assume(selected_auth || selected_no_auth);
         std::vector<uint8_t> vSocks5;
         vSocks5.push_back(SOCKSVersion::SOCKS5);   // VER protocol version
         vSocks5.push_back(SOCKS5Command::CONNECT); // CMD CONNECT
