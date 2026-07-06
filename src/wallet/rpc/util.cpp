@@ -136,9 +136,9 @@ WalletContext& EnsureWalletContext(const std::any& context)
 
 LegacyScriptPubKeyMan& EnsureLegacyScriptPubKeyMan(CWallet& wallet, bool also_create)
 {
-    LegacyScriptPubKeyMan* spk_man{wallet.GetLegacyDataSPKM()};
+    LegacyScriptPubKeyMan* spk_man{wallet.GetLegacyScriptPubKeyMan()};
     if (!spk_man && also_create) {
-        spk_man = wallet.GetOrCreateLegacyDataSPKM();
+        spk_man = wallet.GetOrCreateLegacyScriptPubKeyMan();
     }
     if (!spk_man) {
         throw JSONRPCError(RPC_WALLET_ERROR, "Only legacy wallets are supported by this command");
@@ -148,7 +148,7 @@ LegacyScriptPubKeyMan& EnsureLegacyScriptPubKeyMan(CWallet& wallet, bool also_cr
 
 const LegacyScriptPubKeyMan& EnsureConstLegacyScriptPubKeyMan(const CWallet& wallet)
 {
-    const LegacyScriptPubKeyMan* spk_man{wallet.GetLegacyDataSPKM()};
+    const LegacyScriptPubKeyMan* spk_man{wallet.GetLegacyScriptPubKeyMan()};
     if (!spk_man) {
         throw JSONRPCError(RPC_WALLET_ERROR, "Only legacy wallets are supported by this command");
     }

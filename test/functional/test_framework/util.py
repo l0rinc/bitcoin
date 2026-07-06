@@ -756,6 +756,11 @@ def sync_txindex(test_framework, node):
 
 
 def wallet_importprivkey(wallet_rpc, privkey, timestamp, *, label=""):
+    wallet_info = wallet_rpc.getwalletinfo()
+    if not wallet_info.get("descriptors", False):
+        wallet_rpc.importprivkey(privkey, label, timestamp != "now")
+        return
+
     desc = descsum_create("combo(" + privkey + ")")
     req = [{
         "desc": desc,

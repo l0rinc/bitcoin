@@ -7,6 +7,7 @@
 #include <common/args.h>
 #include <tinyformat.h>
 #include <univalue.h>
+#include <util/check.h>
 #include <util/fs.h>
 #include <util/translation.h>
 #include <wallet/dump.h>
@@ -46,7 +47,8 @@ static void WalletCreate(CWallet* wallet_instance, uint64_t wallet_creation_flag
     }
 
     if (!wallet_instance->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
-        wallet_instance->SetupLegacyScriptPubKeyMan();
+        auto spk_man = wallet_instance->GetOrCreateLegacyScriptPubKeyMan();
+        spk_man->SetupGeneration(false);
     } else {
         wallet_instance->SetupDescriptorScriptPubKeyMans();
     }

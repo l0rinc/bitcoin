@@ -50,6 +50,7 @@ WalletModel::WalletModel(std::unique_ptr<interfaces::Wallet> wallet, ClientModel
     optionsModel(client_model.getOptionsModel()),
     timer(new QTimer(this))
 {
+    fHaveWatchOnly = m_wallet->haveWatchOnly();
     addressTableModel = new AddressTableModel(this);
     transactionTableModel = new TransactionTableModel(platformStyle, this);
     recentRequestsTableModel = new RecentRequestsTableModel(this);
@@ -143,6 +144,12 @@ void WalletModel::updateAddressBook(const QString &address, const QString &label
 {
     if(addressTableModel)
         addressTableModel->updateEntry(address, label, isMine, purpose, status);
+}
+
+void WalletModel::updateWatchOnlyFlag(bool fHaveWatchonly)
+{
+    fHaveWatchOnly = fHaveWatchonly;
+    Q_EMIT notifyWatchonlyChanged(fHaveWatchonly);
 }
 
 bool WalletModel::validateAddress(const QString& address) const
@@ -406,6 +413,12 @@ static void NotifyTransactionChanged(WalletModel *walletmodel, const Txid& hash,
     assert(invoked);
 }
 
+static void NotifyWatchonlyChanged(WalletModel* walletmodel, bool fHaveWatchonly)
+{
+    bool invoked = QMetaObject::invokeMethod(walletmodel, "updateWatchOnlyFlag", Qt::QueuedConnection, Q_ARG(bool, fHaveWatchonly));
+    assert(invoked);
+}
+
 static void ShowProgress(WalletModel *walletmodel, const std::string &title, int nProgress)
 {
     // emits signal "showProgress"
@@ -429,6 +442,7 @@ void WalletModel::subscribeToCoreSignals()
     m_handler_address_book_changed = m_wallet->handleAddressBookChanged(std::bind_front(NotifyAddressBookChanged, this));
     m_handler_transaction_changed = m_wallet->handleTransactionChanged(std::bind_front(NotifyTransactionChanged, this));
     m_handler_show_progress = m_wallet->handleShowProgress(std::bind_front(ShowProgress, this));
+    m_handler_watch_only_changed = m_wallet->handleWatchOnlyChanged(std::bind_front(NotifyWatchonlyChanged, this));
     m_handler_can_get_addrs_changed = m_wallet->handleCanGetAddressesChanged(std::bind_front(NotifyCanGetAddressesChanged, this));
 }
 
@@ -440,6 +454,7 @@ void WalletModel::unsubscribeFromCoreSignals()
     m_handler_address_book_changed->disconnect();
     m_handler_transaction_changed->disconnect();
     m_handler_show_progress->disconnect();
+    m_handler_watch_only_changed->disconnect();
     m_handler_can_get_addrs_changed->disconnect();
 }
 

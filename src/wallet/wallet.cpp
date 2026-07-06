@@ -323,6 +323,9 @@ class FastWalletRescanFilter
 public:
     FastWalletRescanFilter(const CWallet& wallet) : m_wallet(wallet)
     {
+        // fast rescanning via block filters is only supported by descriptor wallets right now
+        assert(!m_wallet.IsLegacy());
+
         // create initial filter with scripts from all ScriptPubKeyMans
         for (auto spkm : m_wallet.GetAllScriptPubKeyMans()) {
             auto desc_spkm{dynamic_cast<DescriptorScriptPubKeyMan*>(spkm)};
@@ -400,10 +403,14 @@ std::shared_ptr<CWallet> CreateWallet(WalletContext& context, const std::string&
     const SecureString& passphrase = options.create_passphrase;
     bool born_encrypted = !passphrase.empty();
 
-    // Only descriptor wallets can be created
-    Assert(wallet_creation_flags & WALLET_FLAG_DESCRIPTORS);
-    options.require_format = DatabaseFormat::SQLITE;
-
+    if (wallet_creation_flags & WALLET_FLAG_DESCRIPTORS) {
+        options.require_format = DatabaseFormat::SQLITE;
+    } else {
+        options.require_format = DatabaseFormat::BERKELEY;
+    }
+    if (!(wallet_creation_flags & WALLET_FLAG_DESCRIPTORS) && gArgs.GetBoolArg("-swapbdbendian", false)) {
+        options.require_format = DatabaseFormat::BERKELEY_SWAP;
+    }
 
     // Private keys must be disabled for an external signer wallet
     if ((wallet_creation_flags & WALLET_FLAG_EXTERNAL_SIGNER) && !(wallet_creation_flags & WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
@@ -551,6 +558,21 @@ const CWalletTx* CWallet::GetWalletTx(const Txid& hash) const
     return &(it->second);
 }
 
+void CWallet::UpgradeKeyMetadata()
+{
+    if (IsLocked() || IsWalletFlagSet(WALLET_FLAG_KEY_ORIGIN_METADATA)) {
+        return;
+    }
+
+    auto spk_man = GetLegacyScriptPubKeyMan();
+    if (!spk_man) {
+        return;
+    }
+
+    spk_man->UpgradeKeyMetadata();
+    SetWalletFlag(WALLET_FLAG_KEY_ORIGIN_METADATA);
+}
+
 void CWallet::UpgradeDescriptorCache()
 {
     if (!IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS) || IsLocked() || IsWalletFlagSet(WALLET_FLAG_LAST_HARDENED_XPUB_CACHED)) {
@@ -628,6 +650,8 @@ bool CWallet::Unlock(const SecureString& strWalletPassphrase)
                 continue; // try another master key
             }
             if (Unlock(plain_master_key)) {
+                // Now that we've unlocked, upgrade the key metadata
+                UpgradeKeyMetadata();
                 // Now that we've unlocked, upgrade the descriptor cache
                 UpgradeDescriptorCache();
                 return true;
@@ -684,6 +708,22 @@ void CWallet::SetLastBlockProcessed(int block_height, uint256 block_hash)
     SetLastBlockProcessedInMem(block_height, block_hash);
     WriteBestBlock();
     GetDatabase().IncrementUpdateCounter();
+}
+
+void CWallet::SetMinVersion(enum WalletFeature nVersion, WalletBatch* batch_in)
+{
+    LOCK(cs_wallet);
+    if (nWalletVersion >= nVersion) return;
+    WalletLogPrintf("Setting minversion to %d\n", nVersion);
+    nWalletVersion = nVersion;
+
+    WalletBatch* batch = batch_in ? batch_in : new WalletBatch(GetDatabase());
+    if (nWalletVersion > 40000) {
+        batch->WriteMinVersion(nWalletVersion);
+    }
+    if (!batch_in) {
+        delete batch;
+    }
 }
 
 std::set<Txid> CWallet::GetConflicts(const Txid& txid) const
@@ -950,6 +990,18 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
             return false;
         }
 
+        // If we are using descriptors, make new descriptors with a new seed
+        if (IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS) && !IsWalletFlagSet(WALLET_FLAG_BLANK_WALLET)) {
+            SetupDescriptorScriptPubKeyMans();
+        } else if (auto spk_man = GetLegacyScriptPubKeyMan()) {
+            // if we are using HD, replace the HD seed with a new one
+            if (spk_man->IsHDEnabled()) {
+                if (!spk_man->SetupGeneration(true)) {
+                    return false;
+                }
+            }
+        }
+
         SetupWalletGeneration();
 
         Lock();
@@ -1101,6 +1153,23 @@ bool CWallet::IsSpentKey(const CScript& scriptPubKey) const
     }
     if (IsAddressPreviouslySpent(dest)) {
         return true;
+    }
+
+    if (LegacyScriptPubKeyMan* spk_man = GetLegacyScriptPubKeyMan()) {
+        for (const auto& keyid : GetAffectedKeys(scriptPubKey, *spk_man)) {
+            WitnessV0KeyHash wpkh_dest(keyid);
+            if (IsAddressPreviouslySpent(wpkh_dest)) {
+                return true;
+            }
+            ScriptHash sh_wpkh_dest(GetScriptForDestination(wpkh_dest));
+            if (IsAddressPreviouslySpent(sh_wpkh_dest)) {
+                return true;
+            }
+            PKHash pkh_dest(keyid);
+            if (IsAddressPreviouslySpent(pkh_dest)) {
+                return true;
+            }
+        }
     }
     return false;
 }
@@ -1765,6 +1834,11 @@ isminetype CWallet::IsMine(const CScript& script) const
         return res;
     }
 
+    // Legacy wallet
+    if (LegacyScriptPubKeyMan* spkm = GetLegacyScriptPubKeyMan()) {
+        return spkm->IsMine(script);
+    }
+
     return ISMINE_NO;
 }
 
@@ -2024,7 +2098,7 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
     ScanResult result;
 
     std::unique_ptr<FastWalletRescanFilter> fast_rescan_filter;
-    if (chain().hasBlockFilterIndex(BlockFilterType::BASIC)) fast_rescan_filter = std::make_unique<FastWalletRescanFilter>(*this);
+    if (!IsLegacy() && chain().hasBlockFilterIndex(BlockFilterType::BASIC)) fast_rescan_filter = std::make_unique<FastWalletRescanFilter>(*this);
 
     WalletLogPrintf("Rescan started from block %s... (%s)\n", start_block.ToString(),
                     fast_rescan_filter ? "fast variant using block filters" : "slow variant inspecting all blocks");
@@ -2305,6 +2379,11 @@ void MaybeResendWalletTxs(WalletContext& context)
     }
 }
 
+
+/** @defgroup Actions
+ *
+ * @{
+ */
 
 bool CWallet::SignTransaction(CMutableTransaction& tx) const
 {
@@ -2743,6 +2822,11 @@ size_t CWallet::KeypoolCountExternalKeys() const
 {
     AssertLockHeld(cs_wallet);
 
+    auto legacy_spk_man = GetLegacyScriptPubKeyMan();
+    if (legacy_spk_man) {
+        return legacy_spk_man->KeypoolCountExternalKeys();
+    }
+
     unsigned int count = 0;
     for (auto spk_man : m_external_spk_managers) {
         count += spk_man.second->GetKeyPoolSize();
@@ -2867,11 +2951,13 @@ util::Result<CTxDestination> ReserveDestination::GetReservedDestination(bool int
     }
 
     if (nIndex == -1) {
+        CKeyPool keypool;
         int64_t index;
-        auto op_address = m_spk_man->GetReservedDestination(type, internal, index);
+        auto op_address = m_spk_man->GetReservedDestination(type, internal, index, keypool);
         if (!op_address) return op_address;
         nIndex = index;
         address = *op_address;
+        fInternal = keypool.fInternal;
     }
     return address;
 }
@@ -3015,6 +3101,8 @@ void CWallet::GetKeyBirthTimes(std::map<CKeyID, int64_t>& mapKeyBirth) const
         mapKeyBirth[entry.first] = block_time - TIMESTAMP_WINDOW;
     }
 }
+
+/** @} */ // end of Actions
 
 /**
  * Compute smart timestamp for a transaction being added to the wallet.
@@ -3368,8 +3456,7 @@ std::shared_ptr<CWallet> CWallet::CreateNew(WalletContext& context, const std::s
         // Always set the cache upgrade flag as this feature is supported from the beginning.
         walletInstance->InitWalletFlags(wallet_creation_flags | WALLET_FLAG_LAST_HARDENED_XPUB_CACHED);
 
-        // Only descriptor wallets can be created
-        assert(walletInstance->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS));
+        walletInstance->SetMinVersion(FEATURE_LATEST);
 
         // Born encrypted wallets will have their keys generated later
         if (!born_encrypted) {
@@ -3587,6 +3674,21 @@ bool CWallet::BackupWallet(const std::string& strDest) const
     return GetDatabase().Backup(strDest);
 }
 
+CKeyPool::CKeyPool()
+{
+    nTime = GetTime();
+    fInternal = false;
+    m_pre_split = false;
+}
+
+CKeyPool::CKeyPool(const CPubKey& vchPubKeyIn, bool internalIn)
+{
+    nTime = GetTime();
+    vchPubKey = vchPubKeyIn;
+    fInternal = internalIn;
+    m_pre_split = false;
+}
+
 int CWallet::GetTxDepthInMainChain(const CWalletTx& wtx) const
 {
     AssertLockHeld(cs_wallet);
@@ -3735,6 +3837,10 @@ std::set<ScriptPubKeyMan*> CWallet::GetScriptPubKeyMans(const CScript& script) c
     SignatureData sigdata;
     Assume(std::all_of(spk_mans.begin(), spk_mans.end(), [&script, &sigdata](ScriptPubKeyMan* spkm) { return spkm->CanProvide(script, sigdata); }));
 
+    // Legacy wallet
+    LegacyScriptPubKeyMan* spkm = GetLegacyScriptPubKeyMan();
+    if (spkm && spkm->CanProvide(script, sigdata)) spk_mans.insert(spkm);
+
     return spk_mans;
 }
 
@@ -3762,6 +3868,10 @@ std::unique_ptr<SigningProvider> CWallet::GetSolvingProvider(const CScript& scri
         return it->second.at(0)->GetSolvingProvider(script);
     }
 
+    // Legacy wallet
+    LegacyScriptPubKeyMan* spkm = GetLegacyScriptPubKeyMan();
+    if (spkm && spkm->CanProvide(script, sigdata)) return spkm->GetSolvingProvider(script);
+
     return nullptr;
 }
 
@@ -3777,6 +3887,18 @@ std::vector<WalletDescriptor> CWallet::GetWalletDescriptors(const CScript& scrip
     return descs;
 }
 
+LegacyScriptPubKeyMan* CWallet::GetLegacyScriptPubKeyMan() const
+{
+    if (IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
+        return nullptr;
+    }
+    // Legacy wallets only have one ScriptPubKeyMan which is a LegacyScriptPubKeyMan.
+    // Everything in m_internal_spk_managers and m_external_spk_managers point to the same legacyScriptPubKeyMan.
+    auto it = m_internal_spk_managers.find(OutputType::LEGACY);
+    if (it == m_internal_spk_managers.end()) return nullptr;
+    return dynamic_cast<LegacyScriptPubKeyMan*>(it->second);
+}
+
 LegacyDataSPKM* CWallet::GetLegacyDataSPKM() const
 {
     if (IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
@@ -3785,6 +3907,12 @@ LegacyDataSPKM* CWallet::GetLegacyDataSPKM() const
     auto it = m_internal_spk_managers.find(OutputType::LEGACY);
     if (it == m_internal_spk_managers.end()) return nullptr;
     return dynamic_cast<LegacyDataSPKM*>(it->second);
+}
+
+LegacyScriptPubKeyMan* CWallet::GetOrCreateLegacyScriptPubKeyMan()
+{
+    SetupLegacyScriptPubKeyMan();
+    return GetLegacyScriptPubKeyMan();
 }
 
 void CWallet::AddScriptPubKeyMan(const uint256& id, std::unique_ptr<ScriptPubKeyMan> spkm_man)
@@ -3809,8 +3937,9 @@ void CWallet::SetupLegacyScriptPubKeyMan()
         return;
     }
 
-    Assert(m_database->Format() == "bdb_ro" || m_database->Format() == "sqlite-mock");
-    std::unique_ptr<ScriptPubKeyMan> spk_manager = std::make_unique<LegacyDataSPKM>(*this);
+    std::unique_ptr<ScriptPubKeyMan> spk_manager = m_database->Format() == "bdb_ro" ?
+        std::make_unique<LegacyDataSPKM>(*this) :
+        std::make_unique<LegacyScriptPubKeyMan>(*this, m_keypool_size);
 
     for (const auto& type : LEGACY_OUTPUT_TYPES) {
         m_internal_spk_managers[type] = spk_manager.get();
@@ -3842,6 +3971,9 @@ bool CWallet::HaveCryptedKeys() const
 void CWallet::ConnectScriptPubKeyManNotifiers()
 {
     for (const auto& spk_man : GetActiveScriptPubKeyMans()) {
+        spk_man->NotifyWatchonlyChanged.connect([this](bool have_watchonly) {
+            NotifyWatchonlyChanged(have_watchonly);
+        });
         spk_man->NotifyCanGetAddressesChanged.connect([this] {
             NotifyCanGetAddressesChanged();
         });
@@ -3960,7 +4092,13 @@ void CWallet::SetupWalletGeneration()
         (IsWalletFlagSet(WALLET_FLAG_BLANK_WALLET) || IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS))) {
         return;
     }
-    SetupDescriptorScriptPubKeyMans();
+    if (IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
+        SetupDescriptorScriptPubKeyMans();
+    } else if (auto spk_man = GetOrCreateLegacyScriptPubKeyMan()) {
+        if (!spk_man->SetupGeneration()) {
+            throw std::runtime_error(std::string(__func__) + ": unable to generate initial keys");
+        }
+    }
 }
 
 void CWallet::AddActiveScriptPubKeyMan(uint256 id, OutputType type, bool internal)
@@ -4014,6 +4152,11 @@ void CWallet::DeactivateScriptPubKeyMan(uint256 id, OutputType type, bool intern
     NotifyCanGetAddressesChanged();
 }
 
+bool CWallet::IsLegacy() const
+{
+    return !IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS);
+}
+
 DescriptorScriptPubKeyMan* CWallet::GetDescriptorScriptPubKeyMan(const WalletDescriptor& desc) const
 {
     auto spk_man_pair = m_spk_managers.find(desc.id);
@@ -4031,6 +4174,11 @@ DescriptorScriptPubKeyMan* CWallet::GetDescriptorScriptPubKeyMan(const WalletDes
 
 std::optional<bool> CWallet::IsInternalScriptPubKeyMan(ScriptPubKeyMan* spk_man) const
 {
+    // Legacy script pubkey man can't be either external or internal
+    if (IsLegacy()) {
+        return std::nullopt;
+    }
+
     // only active ScriptPubKeyMan can be internal
     if (!GetActiveScriptPubKeyMans().contains(spk_man)) {
         return std::nullopt;

@@ -267,25 +267,33 @@ Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse,
                 [[fallthrough]];
             case CWallet::SpendType::UNSPENT:
                 CAmount* bucket = nullptr;
+                CAmount* watchonly_bucket = nullptr;
+                const isminetype mine{wallet.IsMine(txo.GetTxOut())};
 
                 // Set the amounts in the return object
                 if (wallet.IsTxImmatureCoinBase(wtx) && wtx.isConfirmed()) {
                     bucket = &ret.m_mine_immature;
+                    watchonly_bucket = &ret.m_watchonly_immature;
                 } else if (is_trusted && tx_depth >= min_depth) {
                     bucket = &ret.m_mine_trusted;
+                    watchonly_bucket = &ret.m_watchonly_trusted;
                 } else if (!is_trusted && wtx.InMempool()) {
                     bucket = &ret.m_mine_untrusted_pending;
+                    watchonly_bucket = &ret.m_watchonly_untrusted_pending;
                 }
                 if (bucket) {
-                    // Get the amounts for mine
-                    CAmount credit_mine = txo.GetTxOut().nValue;
-
-                    if (!allow_used_addresses && wallet.IsSpentKey(txo.GetTxOut().scriptPubKey)) {
-                        bucket = &ret.m_mine_used;
+                    const CAmount credit{txo.GetTxOut().nValue};
+                    if (mine & ISMINE_SPENDABLE) {
+                        if (!allow_used_addresses && wallet.IsSpentKey(txo.GetTxOut().scriptPubKey)) {
+                            bucket = &ret.m_mine_used;
+                        }
+                        *bucket += credit;
+                        if (nonmempool_spent) {
+                            ret.m_mine_nonmempool -= credit;
+                        }
                     }
-                    *bucket += credit_mine;
-                    if (nonmempool_spent) {
-                        ret.m_mine_nonmempool -= credit_mine;
+                    if ((mine & ISMINE_WATCH_ONLY) && watchonly_bucket) {
+                        *watchonly_bucket += credit;
                     }
                 }
             }

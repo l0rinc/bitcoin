@@ -332,6 +332,9 @@ private:
     std::atomic<double> m_scanning_progress{0};
     friend class WalletRescanReserver;
 
+    //! the current wallet version: clients below this version are not able to load the wallet
+    int nWalletVersion GUARDED_BY(cs_wallet){FEATURE_BASE};
+
     /** The next scheduled rebroadcast of wallet transactions. */
     NodeClock::time_point m_next_resend{GetDefaultNextResend()};
     /** Whether this wallet will submit newly created transactions to the node's mempool and
@@ -576,6 +579,9 @@ public:
     int GetTxBlocksToMaturity(const CWalletTx& wtx) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool IsTxImmatureCoinBase(const CWalletTx& wtx) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
+    //! check whether we support the named feature
+    bool CanSupportFeature(enum WalletFeature wf) const override EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) { AssertLockHeld(cs_wallet); return IsFeatureSupported(nWalletVersion, wf); }
+
     enum class SpendType {
         UNSPENT,
         CONFIRMED,
@@ -612,8 +618,13 @@ public:
     SteadyClock::duration ScanningDuration() const { return fScanningWallet ? SteadyClock::now() - m_scanning_start.load() : SteadyClock::duration{}; }
     double ScanningProgress() const { return fScanningWallet ? (double) m_scanning_progress : 0; }
 
+    //! Upgrade stored CKeyMetadata objects to store key origin info as KeyOriginInfo
+    void UpgradeKeyMetadata() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+
     //! Upgrade DescriptorCaches
     void UpgradeDescriptorCache() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+
+    bool LoadMinVersion(int nVersion) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) { AssertLockHeld(cs_wallet); nWalletVersion = nVersion; return true; }
 
     //! Marks destination as previously spent.
     void LoadAddressPreviouslySpent(const CTxDestination& dest) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
@@ -864,6 +875,12 @@ public:
 
     unsigned int GetKeyPoolSize() const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
+    //! signify that a particular wallet feature is now used.
+    void SetMinVersion(enum WalletFeature, WalletBatch* batch_in = nullptr) override;
+
+    //! get the current wallet format (the oldest client version guaranteed to understand this wallet)
+    int GetVersion() const { LOCK(cs_wallet); return nWalletVersion; }
+
     //! Get wallet transactions that conflict with given transaction (spend same outputs)
     std::set<Txid> GetConflicts(const Txid& txid) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
@@ -896,6 +913,9 @@ public:
 
     /** Show progress e.g. for rescan */
     btcsignals::signal<void (const std::string &title, int nProgress)> ShowProgress;
+
+    /** Watch-only scripts changed */
+    btcsignals::signal<void (bool fHaveWatchOnly)> NotifyWatchonlyChanged;
 
     /** Keypool has new keys */
     btcsignals::signal<void ()> NotifyCanGetAddressesChanged;
@@ -979,6 +999,9 @@ public:
         return name.empty() ? "default wallet" : name;
     };
 
+    /** Determine if we are a legacy wallet */
+    bool IsLegacy() const;
+
     /** Return wallet name for display, like LogName() but translates "default wallet" string. */
     std::string DisplayName() const
     {
@@ -1024,6 +1047,8 @@ public:
     std::vector<WalletDescriptor> GetWalletDescriptors(const CScript& script) const;
 
     //! Get the LegacyScriptPubKeyMan which is used for all types, internal, and external.
+    LegacyScriptPubKeyMan* GetLegacyScriptPubKeyMan() const;
+    LegacyScriptPubKeyMan* GetOrCreateLegacyScriptPubKeyMan();
     LegacyDataSPKM* GetLegacyDataSPKM() const;
     LegacyDataSPKM* GetOrCreateLegacyDataSPKM();
 

@@ -21,8 +21,7 @@ class UniValue;
 struct bilingual_str;
 
 namespace wallet {
-class LegacyDataSPKM;
-using LegacyScriptPubKeyMan = LegacyDataSPKM;
+class LegacyScriptPubKeyMan;
 enum class DatabaseStatus;
 struct WalletContext;
 

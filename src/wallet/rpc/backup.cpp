@@ -1612,6 +1612,10 @@ RPCMethod importdescriptors()
     if (!pwallet) return UniValue::VNULL;
     CWallet& wallet{*pwallet};
 
+    if (!pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "importdescriptors is not available for non-descriptor wallets");
+    }
+
     WalletRescanReserver reserver(*pwallet);
     if (!reserver.reserve(/*with_passphrase=*/true)) {
         throw JSONRPCError(RPC_WALLET_ERROR, "Wallet is currently rescanning. Abort existing rescan or wait.");

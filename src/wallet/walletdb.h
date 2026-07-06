@@ -23,6 +23,7 @@ class uint256;
 struct CBlockLocator;
 
 namespace wallet {
+class CKeyPool;
 class CMasterKey;
 class CWallet;
 class CWalletTx;
@@ -249,9 +250,10 @@ public:
     bool WriteKeyMetadata(const CKeyMetadata& meta, const CPubKey& pubkey, bool overwrite);
     bool WriteKey(const CPubKey& vchPubKey, const CPrivKey& vchPrivKey, const CKeyMetadata &keyMeta);
     bool WriteCryptedKey(const CPubKey& vchPubKey, const std::vector<unsigned char>& vchCryptedSecret, const CKeyMetadata &keyMeta);
-    bool WriteCScript(const uint160& hash, const CScript& script);
     bool WriteMasterKey(unsigned int nID, const CMasterKey& kMasterKey);
     bool EraseMasterKey(unsigned int id);
+
+    bool WriteCScript(const uint160& hash, const CScript& redeemScript);
 
     bool WriteWatchOnly(const CScript &script, const CKeyMetadata &keymeta);
     bool EraseWatchOnly(const CScript &script);
@@ -264,6 +266,11 @@ public:
 
     bool WriteOrderPosNext(int64_t nOrderPosNext);
 
+    bool ReadPool(int64_t nPool, CKeyPool& keypool);
+    bool WritePool(int64_t nPool, const CKeyPool& keypool);
+    bool ErasePool(int64_t nPool);
+
+    bool WriteMinVersion(int nVersion);
     bool WriteDescriptorKey(const uint256& desc_id, const CPubKey& pubkey, const CPrivKey& privkey);
     bool WriteCryptedDescriptorKey(const uint256& desc_id, const CPubKey& pubkey, const std::vector<unsigned char>& secret);
     bool WriteDescriptor(const uint256& desc_id, const WalletDescriptor& descriptor);
@@ -287,6 +294,9 @@ public:
 
     //! Write the given client_version.
     bool WriteVersion(int client_version) { return m_batch->Write(DBKeys::VERSION, CLIENT_VERSION); }
+
+    //! write the hdchain model (external chain child index counter)
+    bool WriteHDChain(const CHDChain& chain);
 
     //! Delete records of the given types
     bool EraseRecords(const std::unordered_set<std::string>& types);

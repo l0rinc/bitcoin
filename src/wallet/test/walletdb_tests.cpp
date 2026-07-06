@@ -53,5 +53,34 @@ BOOST_AUTO_TEST_CASE(key_metadata_preserves_unsupported_flags)
     BOOST_CHECK_EQUAL(HexStr(serialized), HexStr(roundtrip));
 }
 
+BOOST_AUTO_TEST_CASE(walletdb_read_write_deadlock)
+{
+    // Exercises a db read write operation that shouldn't deadlock.
+    for (const DatabaseFormat& db_format : DATABASE_FORMATS) {
+        // Context setup
+        DatabaseOptions options;
+        options.require_format = db_format;
+        DatabaseStatus status;
+        bilingual_str error_string;
+        std::unique_ptr<WalletDatabase> db = MakeDatabase(m_path_root / strprintf("wallet_%d_.dat", static_cast<int>(db_format)).c_str(), options, status, error_string);
+        BOOST_REQUIRE(status == DatabaseStatus::SUCCESS);
+
+        std::shared_ptr<CWallet> wallet(new CWallet(m_node.chain.get(), "", std::move(db)));
+        wallet->m_keypool_size = 4;
+
+        // Create legacy spkm
+        LOCK(wallet->cs_wallet);
+        auto legacy_spkm = wallet->GetOrCreateLegacyScriptPubKeyMan();
+        BOOST_CHECK(!HasLegacyRecords(*wallet));
+        BOOST_CHECK(legacy_spkm->SetupGeneration(true));
+        BOOST_CHECK(HasLegacyRecords(*wallet));
+
+        // Now delete all records, which performs a read write operation.
+        WalletBatch batch(wallet->GetDatabase());
+        BOOST_CHECK(wallet->GetLegacyScriptPubKeyMan()->DeleteRecordsWithDB(batch));
+        BOOST_CHECK(!HasLegacyRecords(*wallet));
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 } // namespace wallet

@@ -108,6 +108,14 @@ static RPCMethod getwalletinfo()
     obj.pushKV("keypoolsize", kpExternalSize);
     obj.pushKV("keypoolsize_hd_internal", pwallet->GetKeyPoolSize() - kpExternalSize);
 
+    LegacyScriptPubKeyMan* spk_man = pwallet->GetLegacyScriptPubKeyMan();
+    if (spk_man) {
+        CKeyID seed_id = spk_man->GetHDChain().seed_id;
+        if (!seed_id.IsNull()) {
+            obj.pushKV("hdseedid", seed_id.GetHex());
+        }
+    }
+
     if (pwallet->HasEncryptionKeys()) {
         obj.pushKV("unlocked_until", pwallet->nRelockTime);
     }
@@ -443,13 +451,13 @@ static RPCMethod createwallet()
     if (!request.params[4].isNull() && request.params[4].get_bool()) {
         flags |= WALLET_FLAG_AVOID_REUSE;
     }
-    flags |= WALLET_FLAG_DESCRIPTORS;
-    if (!self.Arg<bool>("descriptors")) {
-        throw JSONRPCError(RPC_WALLET_ERROR, "descriptors argument must be set to \"true\"; it is no longer possible to create a legacy wallet.");
-    }
+    const bool use_descriptors{self.Arg<bool>("descriptors")};
+    if (use_descriptors) {
+        flags |= WALLET_FLAG_DESCRIPTORS;
 #ifndef USE_SQLITE
-    throw JSONRPCError(RPC_WALLET_ERROR, "Compiled without sqlite support (required for descriptor wallets)");
+        throw JSONRPCError(RPC_WALLET_ERROR, "Compiled without sqlite support (required for descriptor wallets)");
 #endif
+    }
     if (!request.params[7].isNull() && request.params[7].get_bool()) {
 #ifdef ENABLE_EXTERNAL_SIGNER
         flags |= WALLET_FLAG_EXTERNAL_SIGNER;
@@ -457,6 +465,12 @@ static RPCMethod createwallet()
         throw JSONRPCError(RPC_WALLET_ERROR, "Compiled without external signing support (required for external signing)");
 #endif
     }
+
+#ifndef USE_BDB
+    if (!(flags & WALLET_FLAG_DESCRIPTORS)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Compiled without bdb support (required for legacy wallets)");
+    }
+#endif
 
     DatabaseOptions options;
     DatabaseStatus status;

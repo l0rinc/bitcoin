@@ -782,6 +782,9 @@ void SendCoinsDialog::setBalance(const interfaces::WalletBalances& balances)
         CAmount balance = balances.balance;
         if (model->wallet().hasExternalSigner()) {
             ui->labelBalanceName->setText(tr("External balance:"));
+        } else if (model->wallet().isLegacy() && model->wallet().privateKeysDisabled()) {
+            balance = balances.watch_only_balance;
+            ui->labelBalanceName->setText(tr("Watch-only balance:"));
         }
         const BitcoinUnit display_unit = model->getOptionsModel()->getDisplayUnit();
         const QFont font_for_money = model->getOptionsModel()->getFontForMoney(display_unit);

@@ -113,6 +113,9 @@ public:
     //! Return whether wallet has private key.
     virtual bool isSpendable(const CTxDestination& dest) = 0;
 
+    //! Return whether wallet has watch only keys.
+    virtual bool haveWatchOnly() = 0;
+
     //! Add or update address.
     virtual bool setAddressBook(const CTxDestination& dest, const std::string& name, const std::optional<wallet::AddressPurpose>& purpose) = 0;
 
@@ -283,6 +286,9 @@ public:
     // Remove wallet.
     virtual void remove() = 0;
 
+    //! Return whether is a legacy wallet
+    virtual bool isLegacy() = 0;
+
     //! Register handler for unload message.
     using UnloadFn = std::function<void()>;
     virtual std::unique_ptr<Handler> handleUnload(UnloadFn fn) = 0;
@@ -306,6 +312,10 @@ public:
     //! Register handler for transaction changed messages.
     using TransactionChangedFn = std::function<void(const Txid& txid, ChangeType status)>;
     virtual std::unique_ptr<Handler> handleTransactionChanged(TransactionChangedFn fn) = 0;
+
+    //! Register handler for watchonly changed messages.
+    using WatchOnlyChangedFn = std::function<void(bool have_watch_only)>;
+    virtual std::unique_ptr<Handler> handleWatchOnlyChanged(WatchOnlyChangedFn fn) = 0;
 
     //! Register handler for keypool changed messages.
     using CanGetAddressesChangedFn = std::function<void()>;
@@ -377,12 +387,19 @@ struct WalletBalances
     CAmount immature_balance = 0;
     CAmount used_balance = 0;
     CAmount nonmempool_balance = 0;
+    bool have_watch_only = false;
+    CAmount watch_only_balance = 0;
+    CAmount unconfirmed_watch_only_balance = 0;
+    CAmount immature_watch_only_balance = 0;
 
     bool balanceChanged(const WalletBalances& prev) const
     {
         return balance != prev.balance || unconfirmed_balance != prev.unconfirmed_balance ||
                immature_balance != prev.immature_balance ||
-               used_balance != prev.used_balance || nonmempool_balance != prev.nonmempool_balance;
+               used_balance != prev.used_balance || nonmempool_balance != prev.nonmempool_balance ||
+               have_watch_only != prev.have_watch_only || watch_only_balance != prev.watch_only_balance ||
+               unconfirmed_watch_only_balance != prev.unconfirmed_watch_only_balance ||
+               immature_watch_only_balance != prev.immature_watch_only_balance;
     }
 };
 

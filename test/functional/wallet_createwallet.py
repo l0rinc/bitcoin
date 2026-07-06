@@ -23,7 +23,11 @@ EMPTY_PASSPHRASE_MSG = "Empty string given as passphrase, wallet will not be enc
 
 
 class CreateWalletTest(BitcoinTestFramework):
+    def add_options(self, parser):
+        self.add_wallet_options(parser)
+
     def set_test_params(self):
+        self.setup_clean_chain = True
         self.num_nodes = 1
 
     def skip_test_if_missing_module(self):
@@ -44,11 +48,39 @@ class CreateWalletTest(BitcoinTestFramework):
         finally:
             dir_path.chmod(original_dir_perms)
 
+    def test_legacy_bdb_create_reload(self, node):
+        self.log.info("Test legacy BDB wallet creation and reload")
+        result = node.createwallet(wallet_name="legacy_bdb", descriptors=False)
+        assert_equal(result["name"], "legacy_bdb")
+
+        legacy_wallet = node.get_wallet_rpc("legacy_bdb")
+        info = legacy_wallet.getwalletinfo()
+        assert_equal(info["descriptors"], False)
+        assert_equal(info["format"], "bdb")
+        assert info["keypoolsize"] > 0
+        assert_raises_rpc_error(-4, "importdescriptors is not available for non-descriptor wallets", legacy_wallet.importdescriptors, [])
+        legacy_wallet.getnewaddress("", "legacy")
+
+        legacy_wallet.unloadwallet()
+        self.restart_node(0)
+        node = self.nodes[0]
+        node.loadwallet("legacy_bdb")
+
+        legacy_wallet = node.get_wallet_rpc("legacy_bdb")
+        info = legacy_wallet.getwalletinfo()
+        assert_equal(info["descriptors"], False)
+        assert_equal(info["format"], "bdb")
+        legacy_wallet.getnewaddress("", "legacy")
+
 
     def run_test(self):
         node = self.nodes[0]
 
         self.test_bad_dir_permissions(node)
+
+        if not self.options.descriptors:
+            self.test_legacy_bdb_create_reload(node)
+            return
 
         self.log.info("Run createwallet with invalid parameters.")
         # Run createwallet with invalid parameters. This must not prevent a new wallet with the same name from being created with the correct parameters.
@@ -186,8 +218,14 @@ class CreateWalletTest(BitcoinTestFramework):
         self.log.info('Using a passphrase with private keys disabled returns error')
         assert_raises_rpc_error(-4, 'Passphrase provided but private keys are disabled. A passphrase is only used to encrypt private keys, so cannot be used for wallets with private keys disabled.', self.nodes[0].createwallet, wallet_name='w9', disable_private_keys=True, passphrase='thisisapassphrase')
 
-        self.log.info("Test that legacy wallets cannot be created")
-        assert_raises_rpc_error(-4, 'descriptors argument must be set to "true"; it is no longer possible to create a legacy wallet.', self.nodes[0].createwallet, wallet_name="legacy", descriptors=False)
+        self.log.info("Test explicit legacy wallet creation")
+        if self.is_bdb_compiled():
+            self.nodes[0].createwallet(wallet_name="legacy", descriptors=False)
+            legacy_info = node.get_wallet_rpc("legacy").getwalletinfo()
+            assert_equal(legacy_info["descriptors"], False)
+            assert_equal(legacy_info["format"], "bdb")
+        else:
+            assert_raises_rpc_error(-4, "Compiled without bdb support (required for legacy wallets)", self.nodes[0].createwallet, wallet_name="legacy", descriptors=False)
 
 
 if __name__ == '__main__':
