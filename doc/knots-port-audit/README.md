@@ -530,6 +530,16 @@ Other missing/adapted Knots pieces found during this pass:
   `881949b28d`. Actual Knots already carries the relevant Knots CMake fixes;
   the compile failures were introduced by this port's current-Core kernel API
   adaptation.
+- The build-info review confirmed Knots' `GenerateBuildInfo.cmake` repository
+  ownership check (`3eb619f2e3`) is present in the port and still absent from
+  current Core. This is build provenance hardening rather than runtime or
+  consensus behavior: if a source tree is unpacked beneath an unrelated git
+  repository, current Core can stamp the unrelated parent repository's commit
+  into `bitcoin-build-info.h`, while Knots and the port refuse to use that git
+  metadata unless `cmake/script/GenerateBuildInfo.cmake` is tracked by the
+  repository being queried. A temporary outer-repository reproduction produced
+  `// No build information available` for the port and unmodified Knots script,
+  but `#define BUILD_GIT_COMMIT "<outer-commit>"` for current Core.
 - The depends review found Knots' `miniupnpc` package bump (`18a8022ef2`) was
   still missing from the port. Current Core master still packages 2.3.3; Knots
   uses the `2.3.4_pre20260407` commit tarball. The port now uses the Knots
@@ -3195,6 +3205,15 @@ Source/manifest checks:
   boundary with `height_first <= max_height_first` and assigns
   `max_height_first`, while Knots and the port skip only lower locks and
   decrement matching locks.
+- A temporary unrelated-repository build-info check copied each variant's
+  `cmake/script/GenerateBuildInfo.cmake` to the exact validated path under a
+  freshly committed outer git repository and ran
+  `cmake -D GIT_EXECUTABLE=$(command -v git) -D SOURCE_DIR=<outer>
+  -D BUILD_INFO_HEADER_PATH=<out> -P <outer>/cmake/script/GenerateBuildInfo.cmake`.
+  The port and `../knots 29.x-knots` script both wrote
+  `// No build information available`, while `origin/master` wrote
+  `#define BUILD_GIT_COMMIT "<outer-repo-short-hash>"`, confirming Core still
+  lacks Knots' source-tree ownership check for generated build metadata.
 - `git grep -n -E
   "IsSymlink|Not recursively searching symlink/reparse point|Windows cross compile does not detect symlinks|recursive_directory_iterator|self_walletdat_symlink|directory_symlink|w8_symlink"
   HEAD knots/29.x-knots origin/master -- src/wallet
