@@ -1859,10 +1859,11 @@ Other missing/adapted Knots pieces found during this pass:
   `getrpcwhitelist`, script-thread RPCs, BIP322 signing/verification,
   `deriveaddresses(require_checksum)`, wallet implicit-segwit controls,
   restored `-blockmaxsize`, named-pipe/human-readable `dumptxoutset`,
-  AutoFile explicit-close checks, low-memory cache flushing, GUI settings/RPC
-  history, traffic graph tooltips, mempool stats, and the Network Watch GUI
-  are all present in the current tree. These were not new omissions or original
-  Knots defects from this pass.
+  AutoFile explicit-close checks (`80a1947178`, `7b2a513f0e`; ported via
+  `b08cfdce3d`, `373253a63e`, and also present in current Core), low-memory
+  cache flushing, GUI settings/RPC history, traffic graph tooltips, mempool
+  stats, and the Network Watch GUI are all present in the current tree. These
+  were not new omissions or original Knots defects from this pass.
   The fee-histogram review also confirmed Knots' `getmempoolinfo`
   `to_feerate` result-schema fix (`e888c5d1c1`) is present in the port:
   `to_feerate` is documented as an optional numeric result rather than `ANY`.
@@ -4145,6 +4146,12 @@ Source/manifest checks:
   src/rpc/blockchain.h src/test/util/chainstate.h` shows `WriteUTXOSnapshot`
   and `CreateUTXOSnapshot` take ownership of the dump file in Core, Knots, and
   the port.
+- `git grep -n
+  "m_was_written\|Assume(IsNull())\|Failed to close block file\|Failed to close block undo file"
+  HEAD knots/29.x-knots origin/master -- src/streams.h src/streams.cpp
+  src/node/blockstorage.cpp src/test/streams_tests.cpp` shows Knots, current
+  Core, and the port all require explicit close checks after writes and assert
+  if a written `AutoFile` reaches destruction while still open.
 - `git show --stat --patch c40dc822d7 -- src/wallet/rpc/spend.cpp`,
   `git -C ../knots show --stat --patch c6e7765c0a -- src/wallet/rpc/spend.cpp`,
   and `rg -n "Unable to determine the size of the transaction|unsolvable
