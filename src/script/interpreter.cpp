@@ -1412,7 +1412,10 @@ uint256 GetSpentScriptsSHA256(const std::vector<CTxOut>& outputs_spent)
 template <class T>
 void PrecomputedTransactionData::Init(const T& txTo, std::vector<CTxOut>&& spent_outputs, bool force)
 {
-    assert(!m_spent_outputs_ready);
+    // Clear optional readiness flags before recomputing this transaction's state.
+    m_spent_outputs_ready = false;
+    m_bip143_segwit_ready = false;
+    m_bip341_taproot_ready = false;
 
     m_spent_outputs = std::move(spent_outputs);
     if (!m_spent_outputs.empty()) {

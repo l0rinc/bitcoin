@@ -316,10 +316,10 @@ BOOST_AUTO_TEST_CASE(precomputed_transaction_data_reuse)
     tx.vin[0].prevout.n = 1; // stale hashPrevouts
     tx.vout[0].nValue = 2;   // stale hashOutputs
     txdata.Init(tx, /*spent_outputs=*/{}, /*force=*/false);
-    check_ready(/*bip143=*/true, /*bip341=*/false, /*spent_outputs=*/false); // TODO: clear stale BIP143
+    check_ready(/*bip143=*/false, /*bip341=*/false, /*spent_outputs=*/false);
 
     const CScript scriptcode{CScript{} << OP_TRUE};
-    BOOST_CHECK_NE( // TODO: match uncached path
+    BOOST_CHECK_EQUAL(
         SignatureHash(scriptcode, tx, /*nIn=*/0, SIGHASH_ALL, /*amount=*/3, SigVersion::WITNESS_V0),
         SignatureHash(scriptcode, tx, /*nIn=*/0, SIGHASH_ALL, /*amount=*/3, SigVersion::WITNESS_V0, &txdata));
 
@@ -329,7 +329,7 @@ BOOST_AUTO_TEST_CASE(precomputed_transaction_data_reuse)
     // Match the old one-flag guard without clearing the other readiness flags
     txdata.m_spent_outputs_ready = false;
     txdata.Init(tx, /*spent_outputs=*/{}, /*force=*/false);
-    check_ready(/*bip143=*/true, /*bip341=*/true, /*spent_outputs=*/false); // TODO: clear stale readiness
+    check_ready(/*bip143=*/false, /*bip341=*/false, /*spent_outputs=*/false);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
