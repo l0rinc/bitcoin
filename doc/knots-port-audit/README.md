@@ -3220,8 +3220,9 @@ overflow/RLIMIT_INFINITY handling (`0f92fc907f`, `1953393f48`,
 memory, the `PSBTInputSignedAndVerified` bounds assert fix (`b2f6128338`,
 also present in current Core),
 v2-to-v1 reconnect UAF, randomized Tor
-stream-isolation credential prefixes, feebumper combined-fee crash, wallet
-coin-selection boolean amount fix (`c0b092936e`, Core `0026b330c4`),
+stream-isolation credential prefixes, feebumper combined-fee crash
+(`4b202bc91c`, Core `6072a2a6a1`), wallet coin-selection boolean amount fix
+(`c0b092936e`, Core `0026b330c4`),
 precomputed transaction-data lifetime hardening (CVE-2024-52911), the
 CVE-2025-46598 validation/script-cache and transaction-punishment cleanup
 cluster, Tor-control excessive-line OOM
