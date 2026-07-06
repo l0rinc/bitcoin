@@ -1961,6 +1961,20 @@ under different commits. They are not all proven exploitable.
   `p2p_permissions.py --test_methods check_automatic_outbound_permissions`
   run passes against both the port and unmodified Knots.
 
+- Implicit whitelist `addr` permission:
+  `9a79815097`
+
+  Current Core expands bare implicit whitelist entries such as
+  `-whitelist=127.0.0.1` to relay/mempool/noban/download-style permissions but
+  still omits `addr`. Knots and this port include `addr`, so trusted implicit
+  whitelist peers can request uncached, up-to-date address responses and are
+  allowed the corresponding address-relay behavior without requiring the
+  operator to spell `addr@...` explicitly. This is network permission
+  semantics for trusted peers, not consensus behavior or a remote crash. The
+  port's `p2p_permissions.py` covers the default, `-whitelistrelay=0`, and
+  `-whitelistforcerelay` implicit cases; unmodified Knots' own
+  `p2p_permissions.py` passes with the same expectations.
+
 - CJDNS addnode duplicate detection:
   `28823f30dc`
 
@@ -2547,6 +2561,12 @@ Source/manifest checks:
   whitelist permission application on `ConnectionType::MANUAL`, while actual
   Knots and the port pass `vWhitelistedRangeOutgoing` for every outgoing
   connection.
+- `git show origin/master:src/net.cpp | sed -n '580,610p'`,
+  `git -C ../knots show 29.x-knots:src/net.cpp | rg -n
+  "NetPermissionFlags::Implicit|NetPermissionFlags::Addr" -C 6`, and
+  `sed -n '588,612p' src/net.cpp` show current Core clears implicit whitelist
+  permissions after adding relay/mempool/noban, while actual Knots and the port
+  also add `NetPermissionFlags::Addr`.
 - `git show --stat --patch --minimal b85232d7462`, `git show
   origin/master:src/init.cpp | rg -n
   "blockfilterindex_value|AllBlockFilterTypes|BlockFilterType::BASIC|certain indexes|indexes for all known types"
@@ -3273,6 +3293,14 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_blockfilters_permission_2`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_blockfilters`
+- `python3 test/functional/p2p_permissions.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_permissions_implicit_addr_port
+  --portseed=32610`
+- `python3 ../knots/test/functional/p2p_permissions.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_permissions_implicit_addr_knots_native
+  --portseed=32612`
 - `python3 test/functional/rpc_getblockfilter.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_getblockfilter_basic_default_port
   --portseed=27610`
@@ -3709,6 +3737,14 @@ Functional tests:
   `python3 /mnt/my_storage/bitcoin/test/functional/p2p_eviction.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_eviction_forceinbound_repro`
   (fails on unmodified Knots because the ForceInbound peer's
   `getpeerinfo.permissions` array omits `forceinbound`)
+- Original Knots cross-check:
+  `python3 ../knots/test/functional/p2p_permissions.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_permissions_implicit_addr_knots_native --portseed=32612`
+  passed on unmodified Knots, including Knots' native expectations that bare
+  implicit whitelist entries include the `addr` permission.
+- Original Knots expected-failure repro:
+  `python3 test/functional/p2p_permissions.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_permissions_implicit_addr_knots --portseed=32611`
+  reached the implicit whitelist checks but later failed on the separate
+  already documented `forceinbound` `getpeerinfo.permissions` gap.
 - Original Knots expected-failure repro:
   `python3 /mnt/my_storage/bitcoin/test/functional/rpc_signer.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_rpc_signer_fingerprint`
   (the invalid-fingerprint redaction checks pass first, then unmodified Knots
