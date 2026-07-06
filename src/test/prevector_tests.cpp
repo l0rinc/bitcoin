@@ -187,6 +187,7 @@ public:
     void shrink_to_fit()
     {
         pre_vector.shrink_to_fit();
+        local_check_equal(pre_vector.capacity(), std::max<size_t>(static_cast<size_t>(N), pre_vector.size()));
         test();
     }
 
@@ -350,6 +351,39 @@ BOOST_AUTO_TEST_CASE(prevector_lexicographical_order)
                       std::lexicographical_compare(prefix.begin(), prefix.end(), extension.begin(), extension.end()));
     BOOST_CHECK_EQUAL(pre_extension < pre_prefix,
                       std::lexicographical_compare(extension.begin(), extension.end(), prefix.begin(), prefix.end()));
+}
+
+BOOST_AUTO_TEST_CASE(prevector_shrink_to_fit_capacity)
+{
+    using PreVec = prevector<8, int>;
+
+    PreVec direct_sized;
+    direct_sized.reserve(32);
+    for (int i{0}; i < 4; ++i) {
+        direct_sized.push_back(i);
+    }
+    BOOST_CHECK_GT(direct_sized.capacity(), PreVec::STATIC_SIZE);
+    direct_sized.shrink_to_fit();
+    BOOST_CHECK_EQUAL(direct_sized.size(), 4);
+    BOOST_CHECK_EQUAL(direct_sized.capacity(), PreVec::STATIC_SIZE);
+    BOOST_CHECK_EQUAL(direct_sized.allocated_memory(), 0);
+    for (int i{0}; i < 4; ++i) {
+        BOOST_CHECK_EQUAL(direct_sized[i], i);
+    }
+
+    PreVec indirect_sized;
+    indirect_sized.reserve(32);
+    for (int i{0}; i < 10; ++i) {
+        indirect_sized.push_back(i);
+    }
+    BOOST_CHECK_GT(indirect_sized.capacity(), indirect_sized.size());
+    indirect_sized.shrink_to_fit();
+    BOOST_CHECK_EQUAL(indirect_sized.size(), 10);
+    BOOST_CHECK_EQUAL(indirect_sized.capacity(), indirect_sized.size());
+    BOOST_CHECK_EQUAL(indirect_sized.allocated_memory(), indirect_sized.size() * sizeof(int));
+    for (int i{0}; i < 10; ++i) {
+        BOOST_CHECK_EQUAL(indirect_sized[i], i);
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()
