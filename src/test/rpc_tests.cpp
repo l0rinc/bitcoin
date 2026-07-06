@@ -644,7 +644,7 @@ BOOST_AUTO_TEST_CASE(rpc_arg_helper)
         {"req_str", RPCArg::Type::STR, RPCArg::Optional::NO, ""},
         // Default arg
         {"def_uint64_t", RPCArg::Type::NUM, RPCArg::Default{DEFAULT_UINT64_T}, ""},
-        {"def_string", RPCArg::Type::STR, RPCArg::Default{DEFAULT_STRING}, ""},
+        {"def_string|def_string_legacy", RPCArg::Type::STR, RPCArg::Default{DEFAULT_STRING}, ""},
         {"def_bool", RPCArg::Type::BOOL, RPCArg::Default{DEFAULT_BOOL}, ""},
         // Optional arg without default
         {"opt_double", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, ""},

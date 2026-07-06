@@ -2953,6 +2953,14 @@ single-timepoint inactivity checks and cached `-capturemessages`
 interrupt exit status (`f8f28911e3`, Core `997e7b4d7c`), and the
 overflow-safe `CeilDiv` helper (`8bc1b55baf`, Core `02d047fd5b`). These are
 not original Knots defects and not Core-missing covert hardening items.
+One remaining exact-patch miss is a Core-missing RPC argument-alias hardening
+fix rather than a port miss: Knots commit `0c7ac92072` changes
+`RPCMethod::GetParamIndex()`/`RPCHelpMan::GetParamIndex()` to compare against
+`RPCArg::GetFirstName()` instead of `RPCArg::GetName()`. Current Core master
+still calls `GetName()`, which asserts for multi-name RPC parameters, so RPC
+code using `self.Arg<T>()` with the first spelling of an aliased parameter can
+hit an internal check failure. The port carries the Knots behavior and
+`rpc_arg_helper` now covers the first-alias lookup directly.
 
 The precomputed transaction-data lifetime item was rechecked because Knots
 backports it as `29b4e281a7` and its commit message identifies
@@ -4045,6 +4053,13 @@ Builds:
   src test` show the reviewed high-signal patch-id misses that are already
   carried by current Core and this port rather than representing missing Knots
   hardening.
+- `git -C ../knots show --patch 0c7ac92072 -- src/rpc/util.cpp`,
+  `git show origin/master:src/rpc/util.cpp | rg -n
+  "GetParamIndex|GetName\\(\\)|GetFirstName\\(\\)" -C 3`, and
+  `rg -n "GetParamIndex|GetFirstName\\(\\) == key|def_string\\|def_string_legacy"
+  src/rpc/util.cpp src/test/rpc_tests.cpp` show the Knots RPC argument-alias
+  fix that remains absent from current Core but is carried and unit-tested in
+  the port.
 - `git show origin/master:src/node/warnings.cpp | rg -n
   "all_messages\\.back|Join\\(all_messages" -C 3`
 - `git -C ../knots show 29.x-knots:src/node/warnings.cpp | rg -n
@@ -4354,6 +4369,8 @@ Unit tests:
   --catch_system_errors=no --log_level=error --report_level=short`
 - `cmake --build build --target bitcoind -j4`
 - `build/bin/test_bitcoin --run_test=rpc_tests/rpc_convert_values_dumptxoutset
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=rpc_tests/rpc_arg_helper
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --catch_system_error=no --log_level=error
   --report_level=short` passed with all assertions successful
