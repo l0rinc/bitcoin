@@ -1260,7 +1260,10 @@ Other missing/adapted Knots pieces found during this pass:
   not STANDARD flags` log path. The port now keeps RDTS flags enforced through
   those legacy bypass names, and `feature_rdts.py` covers both the broad
   PUSHDATA path and grouped unknown-witness path while asserting the consensus
-  fallback log is not hit.
+  fallback log is not hit. A fresh cross-run with the port's strengthened test
+  against unmodified Knots still fails on the broad bypass and prints the
+  internal-bug log, while Knots' own narrower RDTS test passes because it only
+  exercises the exact `mempool-script-verify-flag-failed` ignore string.
 - While rerunning focused units, Core's newer
   `script_p2sh_tests/ValidateInputsStandardness` expectations were still
   written for Core's generic `bad-txns-nonstandard-inputs` reason. The ported
@@ -1497,7 +1500,10 @@ local build of Knots `29.x-knots` by running the port's strengthened RDTS
 functional test against Knots' binaries:
 
 ```text
-python3 /mnt/my_storage/bitcoin/test/functional/feature_rdts.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini
+python3 /mnt/my_storage/bitcoin/test/functional/feature_rdts.py \
+  --configfile /mnt/my_storage/knots/build-repro/test/config.ini \
+  --tmpdir=/mnt/my_storage/tmp_feature_rdts_knots_with_port_test \
+  --portseed=7424
 ```
 
 Result on original Knots:
@@ -1513,6 +1519,22 @@ Result on original Knots:
 
 The port preserves rejection but rejects during the policy script check, before
 the internal consensus-fallback bug log can be triggered.
+
+The same strengthened test passes on the port:
+
+```text
+python3 test/functional/feature_rdts.py --configfile build/test/config.ini \
+  --tmpdir=/mnt/my_storage/tmp_feature_rdts_port_recheck --portseed=7423
+```
+
+Knots' native test still passes because it does not exercise the broad legacy
+script-flag bypass names:
+
+```text
+python3 ../knots/test/functional/feature_rdts.py \
+  --configfile ../knots/build-repro/test/config.ini \
+  --tmpdir=/mnt/my_storage/tmp_feature_rdts_knots_own_recheck --portseed=7425
+```
 
 The ForceInbound `getpeerinfo.permissions` omission was confirmed on an
 unmodified local build of Knots `29.x-knots` by running the port's strengthened
@@ -2936,6 +2958,8 @@ Functional tests:
   test/functional/wallet_v3_txs.py test/functional/p2p_orphan_handling.py
   test/functional/p2p_opportunistic_1p1c.py`
 - `python3 test/functional/feature_rdts.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_rdts.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_rdts_port_recheck --portseed=7423`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile
   build/test/config.ini
@@ -3393,9 +3417,19 @@ Functional tests:
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini --legacy-wallet`
   (skipped: legacy wallets can no longer be created)
 - Original Knots expected-failure repro:
-  `python3 /mnt/my_storage/bitcoin/test/functional/feature_rdts.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini`
+  `python3 /mnt/my_storage/bitcoin/test/functional/feature_rdts.py
+  --configfile /mnt/my_storage/knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_rdts_knots_with_port_test
+  --portseed=7424`
   (fails on the inherited RDTS `ignore_rejects` internal-bug log described
   above)
+- Original Knots cross-check:
+  `python3 ../knots/test/functional/feature_rdts.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_rdts_knots_own_recheck
+  --portseed=7425`
+  passed on unmodified Knots, confirming Knots' native test does not cover the
+  broader legacy script-flag bypass strings.
 - Original Knots expected-failure repro:
   `python3 /mnt/my_storage/bitcoin/test/functional/p2p_eviction.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_eviction_forceinbound_repro`
   (fails on unmodified Knots because the ForceInbound peer's
