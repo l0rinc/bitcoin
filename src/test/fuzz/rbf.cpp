@@ -21,7 +21,9 @@
 
 #include <cstdint>
 #include <limits>
+#include <numeric>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -48,6 +50,18 @@ CAmount ConsumeModifiedFee(FuzzedDataProvider& fuzzed_data_provider)
     default:
         return fuzzed_data_provider.ConsumeIntegral<CAmount>();
     }
+}
+
+bool DiagramTotalIsRepresentable(std::span<const FeeFrac> chunks)
+{
+    FeeFrac total;
+    for (const FeeFrac& chunk : chunks) {
+        const auto fee{CheckedAdd(total.fee, chunk.fee)};
+        const auto size{CheckedAdd(total.size, chunk.size)};
+        if (!fee || !size) return false;
+        total = FeeFrac{*fee, *size};
+    }
+    return true;
 }
 
 void CheckPaysForRBF(FuzzedDataProvider& fuzzed_data_provider)
@@ -283,31 +297,36 @@ FUZZ_TARGET(package_rbf, .init = initialize_package_rbf)
         // Sanity checks on the chunks.
 
         // Feerates are monotonically decreasing.
-        FeeFrac first_sum;
         for (size_t i = 0; i < calc_results->first.size(); ++i) {
-            first_sum += calc_results->first[i];
             if (i) assert(ByRatio{calc_results->first[i - 1]} >= ByRatio{calc_results->first[i]});
         }
-        FeeFrac second_sum;
         for (size_t i = 0; i < calc_results->second.size(); ++i) {
-            second_sum += calc_results->second[i];
             if (i) assert(ByRatio{calc_results->second[i - 1]} >= ByRatio{calc_results->second[i]});
         }
 
-        FeeFrac replaced;
-        for (auto txiter : all_conflicts) {
-            replaced.fee += txiter->GetModifiedFee();
-            replaced.size += txiter->GetAdjustedWeight();
+        if (DiagramTotalIsRepresentable(calc_results->first) && DiagramTotalIsRepresentable(calc_results->second)) {
+            FeeFrac first_sum;
+            for (const auto& chunk : calc_results->first) first_sum += chunk;
+            FeeFrac second_sum;
+            for (const auto& chunk : calc_results->second) second_sum += chunk;
+
+            FeeFrac replaced;
+            for (auto txiter : all_conflicts) {
+                replaced += FeeFrac{txiter->GetModifiedFee(), txiter->GetAdjustedWeight()};
+            }
+            // The total fee & size of the new diagram minus replaced fee & size should be the total
+            // fee & size of the old diagram minus replacement fee & size.
+            assert((first_sum - replaced) == (second_sum - FeeFrac{replacement_fees, replacement_weight}));
         }
-        // The total fee & size of the new diagram minus replaced fee & size should be the total
-        // fee & size of the old diagram minus replacement fee & size.
-        assert((first_sum - replaced) == (second_sum - FeeFrac{replacement_fees, replacement_weight}));
     }
 
     // If internals report error, wrapper should too
     auto err_tuple{ImprovesFeerateDiagram(*changeset)};
     if (!calc_results.has_value()) {
          assert(err_tuple.value().first == DiagramCheckError::UNCALCULABLE);
+    } else if (!DiagramTotalIsRepresentable(calc_results->first) || !DiagramTotalIsRepresentable(calc_results->second)) {
+        assert(err_tuple.has_value());
+        assert(err_tuple->first == DiagramCheckError::UNCALCULABLE);
     } else {
         // Diagram check succeeded
         auto old_sum = std::accumulate(calc_results->first.begin(), calc_results->first.end(), FeeFrac{});
