@@ -4079,6 +4079,16 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=argsman_tests/util_RWConfigHasPruneOption
   --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=util_tests/test_ModifyRWConfigFile
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin --run_test=util_tests/test_ModifyRWConfigFile
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin
+  --run_test=argsman_tests/util_ModifyRWConfigFileOnArgsManager
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin
+  --run_test=argsman_tests/util_RWConfigHasPruneOption
+  --catch_system_error=no --log_level=error --report_level=short`
 - `../knots/build-repro/bin/test_bitcoin --run_test=argsman_tests
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=util_tests`
@@ -5720,18 +5730,23 @@ Functional tests:
   `../knots/src/common/args.cpp` and `src/common/args.cpp` confirms both write
   `bitcoin_rw.conf`, update `m_settings.rw_config`, and mirror to
   `settings.json` only when `also_settings_json && !IsArgNegated("-settings")`.
-  `cmake --build build --target test_bitcoin -j2` and
-  `build/bin/test_bitcoin --run_test=argsman_tests/util_ModifyRWConfigFileOnArgsManager --catch_system_error=no --log_level=error --report_level=short`
-  pass on the port with the strengthened ArgsManager integration assertions.
+  `cmake --build build --target test_bitcoin -j2` and refreshed port runs of
+  `build/bin/test_bitcoin --run_test=argsman_tests/util_ModifyRWConfigFileOnArgsManager --catch_system_error=no --log_level=error --report_level=short`,
+  `build/bin/test_bitcoin --run_test=argsman_tests/util_RWConfigHasPruneOption --catch_system_error=no --log_level=error --report_level=short`,
+  and
+  `build/bin/test_bitcoin --run_test=util_tests/test_ModifyRWConfigFile --catch_system_error=no --log_level=error --report_level=short`
+  passed with 26, 10, and 53 assertions respectively, covering the strengthened
+  ArgsManager integration assertions and the lower-level stream rewrite helper.
   `cmake --build ../knots/build-repro --target test_bitcoin -j2` built the
   unmodified Knots unit binary; Knots does not have the strengthened
   `argsman_tests/util_ModifyRWConfigFileOnArgsManager` case, but its native
   `../knots/build-repro/bin/test_bitcoin --run_test=util_tests/test_ModifyRWConfigFile --catch_system_error=no --log_level=error --report_level=short`
-  passes with 53 assertions. A refreshed check confirmed
+  passes with 53 assertions. Refreshed checks confirmed
   `../knots/build-repro/bin/test_bitcoin --run_test=argsman_tests/util_ModifyRWConfigFileOnArgsManager --catch_system_error=no --log_level=error --report_level=short`
   and
   `../knots/build-repro/bin/test_bitcoin --run_test=argsman_tests/util_RWConfigHasPruneOption --catch_system_error=no --log_level=error --report_level=short`
-  both return `no test cases matching filter`, while Knots' native
+  both return `no test cases matching filter` with exit code 200, while Knots'
+  native
   `../knots/build-repro/bin/test_bitcoin --run_test=argsman_tests --catch_system_error=no --log_level=error --report_level=short`
   passed.
 - Original Knots/source cross-check:
