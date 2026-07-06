@@ -3560,6 +3560,18 @@ chainstates load their tips while `setBlockIndexCandidates` is empty, then
 and now matches Core's functional regression test after removing the stale
 duplicate method noted above.
 
+Current Core also carries a newer pruned-reorg `FindMostWorkChain()` UB guard
+that current Knots lacks. Core `c787b3b99b` avoids duplicate
+`m_blocks_unlinked` entries when multiple candidate tips traverse the same
+missing-data branch; the commit notes that duplicate processing after the
+missing parent arrives can reinsert a candidate with a modified `nSequenceId`
+and violate `setBlockIndexCandidates` ordering invariants. Core added unit
+coverage in `ca4a380281`; the port inherits the guarded `AddUnlinkedBlock(...)`
+path and the unit test, while current Knots still inserts directly into
+`m_blocks_unlinked` in `FindMostWorkChain()`. This is validation/chain-selection
+runtime hardening for pruned deep-reorg edge cases, not a consensus-rule
+change and not a deterministic Knots crash reproduced in this pass.
+
 ## Open Risks
 
 - Legacy-wallet creation is a non-consensus divergence from Knots on this
@@ -3900,6 +3912,14 @@ Source/manifest checks:
   matching functional regression test. Before `5c6196c636`, a stale duplicate
   Knots method in the port made Python select the older two-block disk test
   instead.
+- `git show --stat --patch --minimal c787b3b99b ca4a380281 --
+  src/validation.cpp src/test/validation_chainstatemanager_tests.cpp` and
+  `git grep -n
+  "AddUnlinkedBlock\\|m_blocks_unlinked.insert\\|No duplicates in m_blocks_unlinked\\|setBlockIndexCandidates"
+  HEAD knots/29.x-knots origin/master -- src/validation.cpp src/validation.h
+  src/test/validation_chainstatemanager_tests.cpp` show the current Core and
+  port duplicate-`m_blocks_unlinked` guard and unit coverage, while current
+  Knots still inserts directly in `FindMostWorkChain()`.
 - `git -C ../knots show --stat --patch --minimal be0857745a5a0154d89a2aa9ddaa2a84e912598a`,
   `git show origin/master:src/validation.cpp | rg -n
   "mempool-script-verify-flag-failed|block-script-verify-flag-failed|mandatory-script-verify-flag-failed"
