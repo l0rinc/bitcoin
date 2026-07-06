@@ -2312,6 +2312,20 @@ under different commits. They are not all proven exploitable.
   mempool. The focused strict-policy subtest passes against both the port and
   unmodified Knots.
 
+- Data-carrier cost accounting:
+  Knots' `-datacarriercost` (`d60de5916f`) is present in the port and absent
+  from current Core. It does not change consensus validity and does not simply
+  reject data outputs; instead it adds policy-only extra weight to mempool
+  entries for bytes classified as embedded data, so fee-rate, ancestor/descendant
+  size, eviction, mining, and PSBT fee sizing see a larger effective vsize.
+  The default cost is one virtual byte per data byte; `-acceptnonstdtxn=1`
+  soft-sets it to `0.25`, matching witness-discounted raw weight unless the
+  operator overrides it. The strengthened `mempool_datacarrier.py` test proves
+  that a standard OP_RETURN transaction has raw `vsize` under the default, but
+  with `-datacarriercost=2` its `getmempoolentry.vsize` increases by one
+  virtual byte per carrier byte. The focused method passes against both the
+  port and unmodified Knots, confirming inherited Knots behavior.
+
 - Bare pubkey relay option shadowed by output-size policy:
   Knots' `-permitbarepubkey` (`bc3479044b`, side commit `9259ac22ef`) is
   present in the port and absent from current Core, but the current Knots
@@ -3733,6 +3747,20 @@ Functional tests:
   --configfile=build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_sigoplimit_full_strict_port
   --portseed=32823`
+- `python3 test/functional/mempool_datacarrier.py
+  --configfile=build/test/config.ini --test_methods
+  test_datacarriercost_adjusted_vsize
+  --tmpdir=/mnt/my_storage/tmp_mempool_datacarrier_cost_method_port
+  --portseed=32843`
+- `python3 test/functional/mempool_datacarrier.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --test_methods test_datacarriercost_adjusted_vsize
+  --tmpdir=/mnt/my_storage/tmp_mempool_datacarrier_cost_method_knots
+  --portseed=32844`
+- `python3 test/functional/mempool_datacarrier.py
+  --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_datacarrier_cost_port_3
+  --portseed=32845`
 - `python3 test/functional/mempool_maxscriptsize.py
   --configfile=build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_maxscriptsize_port_2
