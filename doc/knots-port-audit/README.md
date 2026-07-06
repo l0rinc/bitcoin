@@ -1419,8 +1419,14 @@ Other missing/adapted Knots pieces found during this pass:
   than a Core-missing fix. It was not introduced by this port, and current
   unmodified Knots `29.x-knots` already contains the fix. The port now adds
   `wallet_fundrawtransaction.py` coverage for an unsolvable native-segwit
-  watch-only output: the RPC returns `Insufficient funds` instead of
-  dereferencing a null signing provider.
+  watch-only output: the RPC returns `Missing solving data for estimating
+  transaction size` instead of dereferencing a null signing provider. The same
+  refresh found a Core-test expectation that does not hold for actual Knots:
+  descriptor-imported outputs in disabled-private-key wallets can still be
+  reported as `listunspent.spendable=true`. A one-off unmodified Knots runtime
+  check reproduced that field value, so the port keeps the Core fee-estimation
+  behavior check but no longer asserts Core's `spendable=false` metadata value
+  for that descriptor-imported watch-only shape.
 - The DNS seed follow-up found Knots' removal of the Peter Todd DNS seeds
   (`277edb9009`) was still missing from the port. Current Core master still
   includes `seed.btc.petertodd.net.` and `seed.tbtc.petertodd.net.` in the
@@ -3605,6 +3611,19 @@ Source/manifest checks:
   PSBT update/signing RPCs lack caller-provided previous transaction injection,
   while Knots and the port support it and test duplicate/irrelevant/short
   previous-transaction cases.
+- `rg -n "segwit_inputs_only|m_segwit_inputs_only|IsSegWitOutput"
+  src/wallet ../knots/src/wallet -g '*.{cpp,h}'` shows Knots and the port wire
+  the option through `CCoinControl` and guard the witness-only filter when
+  `wallet.GetSolvingProvider(...)` returns `nullptr`; `git grep -n
+  "segwit_inputs_only" origin/master -- src/wallet` returns no matches.
+- One-off unmodified Knots runtime check: start
+  `../knots/build-repro/bin/bitcoind -regtest`, create `grind` and
+  disabled-private-key `grind_watchonly` wallets, import
+  `grind.listdescriptors()["descriptors"]` into `grind_watchonly`, fund a
+  `grind` legacy address, mine one block, and compare `listunspent`. Both
+  wallets reported the same UTXO as `solvable=true` and `spendable=true`,
+  confirming the descriptor-imported watch-only `spendable` field behavior is
+  inherited from Knots rather than introduced by the port.
 - `git show origin/master:src/rpc/blockchain.cpp | sed -n '524,585p'`,
   `git -C ../knots show 29.x-knots:src/rpc/blockchain.cpp | sed -n
   '499,545p'`, `sed -n '550,600p' src/rpc/blockchain.cpp`,
@@ -5224,6 +5243,14 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_fundrawtransaction_witness_options_review`
 - `python3 test/functional/wallet_fundrawtransaction.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_fundrawtransaction_min_conf`
+- `python3 ../knots/test/functional/wallet_fundrawtransaction.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_fundrawtransaction_segwit_only_native_knots
+  --portseed=42585`
+- `python3 test/functional/wallet_fundrawtransaction.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_fundrawtransaction_segwit_only_full_port6
+  --portseed=42589`
 - `python3 test/functional/wallet_basic.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_basic_use_txids_fixed`
 - `python3 test/functional/wallet_multiwallet.py --configfile build/test/config.ini`

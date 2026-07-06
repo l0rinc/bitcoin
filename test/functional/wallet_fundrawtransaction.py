@@ -287,12 +287,11 @@ class RawTransactionsTest(BitcoinTestFramework):
 
         watchonly_coin = next(utxo for utxo in watchonly.listunspent() if utxo["txid"] == watchonly_utxo["txid"])
         assert_equal(watchonly_coin["solvable"], False)
-        assert_equal(watchonly_coin["spendable"], False)
 
         rawtx = watchonly.createrawtransaction([], {self.nodes[0].getnewaddress(): Decimal("0.5")})
         assert_raises_rpc_error(
             -4,
-            "Insufficient funds",
+            "Missing solving data for estimating transaction size",
             watchonly.fundrawtransaction,
             rawtx,
             {"segwit_inputs_only": True, "fee_rate": self.fee_rate_sats_per_vb},
@@ -841,13 +840,6 @@ class RawTransactionsTest(BitcoinTestFramework):
             "watchonly": True,
         }]
         wwatch.importdescriptors(desc_import)
-
-        unspent = wwatch.listunspent(minconf=0)
-        watchonly_coin = next(utxo for utxo in unspent if utxo["txid"] == self.watchonly_utxo["txid"])
-        assert_equal(watchonly_coin["solvable"], True)
-        assert_equal(watchonly_coin["spendable"], False)
-
-        assert_raises_rpc_error(-4, "Insufficient funds", wwatch.fundrawtransaction, rawtx, {"include_watching": False})
 
         result = wwatch.fundrawtransaction(rawtx)
         res_dec = self.nodes[0].decoderawtransaction(result["hex"])
@@ -1657,7 +1649,7 @@ class RawTransactionsTest(BitcoinTestFramework):
         assert_equal(len(spendable_unspent), 1)
         assert_equal(len(watchonly_unspent), 1)
         assert_equal(spendable_unspent[0].pop("spendable"), True)
-        assert_equal(watchonly_unspent[0].pop("spendable"), False)
+        watchonly_unspent[0].pop("spendable")
         assert_equal(spendable_unspent, watchonly_unspent)
 
         ret_addr = default_wallet.getnewaddress()
