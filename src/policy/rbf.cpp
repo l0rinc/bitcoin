@@ -18,9 +18,24 @@
 #include <util/rbf.h>
 
 #include <limits>
+#include <span>
 #include <vector>
 
 #include <compare>
+
+namespace {
+bool DiagramTotalIsRepresentable(std::span<const FeeFrac> chunks)
+{
+    FeeFrac total;
+    for (const FeeFrac& chunk : chunks) {
+        const auto fee{CheckedAdd(total.fee, chunk.fee)};
+        const auto size{CheckedAdd(total.size, chunk.size)};
+        if (!fee || !size) return false;
+        total = FeeFrac{*fee, *size};
+    }
+    return true;
+}
+} // namespace
 
 RBFTransactionState IsRBFOptIn(const CTransaction& tx, const CTxMemPool& pool)
 {
@@ -137,6 +152,14 @@ std::optional<std::pair<DiagramCheckError, std::string>> ImprovesFeerateDiagram(
     if (!chunk_results.has_value()) {
         return std::make_pair(DiagramCheckError::UNCALCULABLE, util::ErrorString(chunk_results).original);
     }
+
+    const bool old_diagram_total_representable{DiagramTotalIsRepresentable(chunk_results->first)};
+    const bool new_diagram_total_representable{DiagramTotalIsRepresentable(chunk_results->second)};
+    if (!old_diagram_total_representable || !new_diagram_total_representable) {
+        return std::make_pair(DiagramCheckError::UNCALCULABLE, "feerate diagram total overflow");
+    }
+    Assume(old_diagram_total_representable);
+    Assume(new_diagram_total_representable);
 
     if (!std::is_gt(CompareChunks(chunk_results.value().second, chunk_results.value().first))) {
         return std::make_pair(DiagramCheckError::FAILURE, "insufficient feerate: does not improve feerate diagram");
