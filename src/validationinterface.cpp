@@ -196,6 +196,7 @@ void ValidationSignals::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlo
     // the chain actually updates. One way to ensure this is for the caller to invoke this signal
     // in the same critical section where the chain is updated
     Assume(pindexNew);
+    Assume(pindexFork != pindexNew);
     Assume(!pindexFork || pindexNew->GetAncestor(pindexFork->nHeight) == pindexFork);
 
     auto log_msg = LOG_MSG("%s: new block hash=%s fork block hash=%s (in IBD=%s)", __func__,
