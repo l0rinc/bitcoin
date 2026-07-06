@@ -1354,6 +1354,15 @@ Other missing/adapted Knots pieces found during this pass:
   restores the original Knots-style `feature_segwit.py` coverage as
   `6166d553d1`, asserting that `hash` and `wtxid` both match the witness hash
   for witness and non-witness mempool transactions.
+- The witness `txoutproof` review confirmed Knots'
+  `23edd3db4f` / port `d541c0db1c` is present in the port and absent from
+  current Core master. The new proof format verifies transaction witness hashes
+  through the block's coinbase witness commitment and remains an RPC proof
+  format change, not a consensus-rule change. A suspected duplicate-padding
+  proof-soundness issue did not reproduce on unmodified Knots: a crafted
+  four-leaf witness partial-merkle proof for a three-transaction block is
+  rejected by the existing `CPartialMerkleTree` mutation check. The port now
+  pins that edge case in `rpc_txoutproof.py`.
 - The `validateaddress` RPC compatibility review confirmed Knots' hidden
   deprecated `address_type` parameter and deprecated `error_index` result
   (`5ed6ea5f31`, `48c91aabdb`, `7115f632a2`) are present in the port and
@@ -4304,6 +4313,13 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_invalid_address_validateaddress_compat`
 - `python3 test/functional/rpc_txoutproof.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_txoutproof`
+- `python3 test/functional/rpc_txoutproof.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_txoutproof_witness_padding_port3
+  --portseed=42113`
+- `python3 test/functional/rpc_txoutproof.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_rpc_txoutproof_witness_padding_knots2
+  --portseed=42114`
 - `python3 test/functional/rpc_packages.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini

@@ -4,9 +4,17 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test gettxoutproof and verifytxoutproof RPCs."""
 
+from io import BytesIO
+
 from test_framework.messages import (
+    CBlockHeader,
     CMerkleBlock,
+    CPartialMerkleTree,
+    CTransaction,
     from_hex,
+    hash256,
+    ser_uint256,
+    uint256_from_str,
 )
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -15,6 +23,71 @@ from test_framework.util import (
     sync_txindex,
 )
 from test_framework.wallet import MiniWallet
+
+
+def _build_partial_merkle_tree(hashes, matches):
+    """Build a CPartialMerkleTree for crafted proof regression cases."""
+    assert_equal(len(hashes), len(matches))
+    tree = CPartialMerkleTree()
+    tree.nTransactions = len(hashes)
+
+    def calc_tree_width(height):
+        return (tree.nTransactions + (1 << height) - 1) >> height
+
+    def calc_hash(height, pos):
+        if height == 0:
+            return hashes[pos]
+        left = calc_hash(height - 1, pos * 2)
+        if pos * 2 + 1 < calc_tree_width(height - 1):
+            right = calc_hash(height - 1, pos * 2 + 1)
+        else:
+            right = left
+        return uint256_from_str(hash256(ser_uint256(left) + ser_uint256(right)))
+
+    def traverse_and_build(height, pos):
+        parent_of_match = any(
+            matches[p]
+            for p in range(pos << height, min((pos + 1) << height, tree.nTransactions))
+        )
+        tree.vBits.append(parent_of_match)
+        if height == 0 or not parent_of_match:
+            tree.vHash.append(calc_hash(height, pos))
+        else:
+            traverse_and_build(height - 1, pos * 2)
+            if pos * 2 + 1 < calc_tree_width(height - 1):
+                traverse_and_build(height - 1, pos * 2 + 1)
+
+    height = 0
+    while calc_tree_width(height) > 1:
+        height += 1
+    traverse_and_build(height, 0)
+    return tree
+
+
+def _deserialize_witness_txoutproof(proof):
+    proof_stream = BytesIO(bytes.fromhex(proof))
+    version = int.from_bytes(proof_stream.read(4), "little", signed=True)
+    assert_equal(version, -2)
+    header = CBlockHeader()
+    header.deserialize(proof_stream)
+    txid_tree = CPartialMerkleTree()
+    txid_tree.deserialize(proof_stream)
+    gentx = CTransaction()
+    gentx.deserialize(proof_stream)
+    wtxid_tree = CPartialMerkleTree()
+    wtxid_tree.deserialize(proof_stream)
+    assert_equal(proof_stream.read(), b"")
+    return header, txid_tree, gentx, wtxid_tree
+
+
+def _serialize_witness_txoutproof(header, txid_tree, gentx, wtxid_tree):
+    return (
+        (-2).to_bytes(4, "little", signed=True)
+        + header.serialize()
+        + txid_tree.serialize()
+        + gentx.serialize_with_witness()
+        + wtxid_tree.serialize()
+    ).hex()
 
 
 class MerkleBlockTest(BitcoinTestFramework):
@@ -70,6 +143,21 @@ class MerkleBlockTest(BitcoinTestFramework):
         del expected_proven['tx'][0]['txid']
         del expected_proven['tx'][1]['txid']
         assert_equal(self.nodes[0].verifytxoutproof(proofres['proof'], verify_witness=True), expected_proven)
+
+        # A duplicate-padded witness tree can commit to the same root as this
+        # three-transaction block, but must not be accepted with blockindex 3.
+        header, txid_tree, gentx, _ = _deserialize_witness_txoutproof(proofres['proof'])
+        padded_wtxid_tree = _build_partial_merkle_tree(
+            hashes=[
+                0,
+                int(blocktxn[1]['hash'], 16),
+                int(blocktxn[2]['hash'], 16),
+                int(blocktxn[2]['hash'], 16),
+            ],
+            matches=[False, False, False, True],
+        )
+        padded_proof = _serialize_witness_txoutproof(header, txid_tree, gentx, padded_wtxid_tree)
+        assert_equal(self.nodes[0].verifytxoutproof(padded_proof, verify_witness=True), {})
 
         txin_spent = miniwallet.get_utxo(txid=txid2)  # Get the change from txid2
         tx3 = miniwallet.send_self_transfer(from_node=self.nodes[0], utxo_to_spend=txin_spent)
