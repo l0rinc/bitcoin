@@ -2286,6 +2286,18 @@ under different commits. They are not all proven exploitable.
   `0.00001000`. Existing functional coverage also checks the RPC string and
   scheduler-updated dust feerate for both target- and mempool-based modes.
 
+- Legacy mempool.dat compatibility:
+  Knots' temporary `-persistmempoolv1` option is present in the port and absent
+  from current Core. Current mempool.dat version 2 includes an obfuscation key
+  and writes the rest of the file through that obfuscation stream. With
+  `-persistmempoolv1=1`, Knots and the port write version 1 and skip the
+  obfuscation key so older clients can read the file. This is local disk-format
+  compatibility, not network or consensus behavior. The upstream-style
+  `mempool_compatibility.py` test is present but skipped in this checkout
+  because previous-release binaries are not available. Direct runtime checks
+  using `savemempool` on empty mempools showed the first serialized uint64 is
+  `1` for both the port and unmodified Knots when `-persistmempoolv1=1`.
+
 - Sub-dust effective-fee penalty:
   Knots' `-subdustfeepenalty` is present in the port and absent from current
   Core. When enabled, every output below its dust threshold subtracts the
@@ -3078,6 +3090,14 @@ Source/manifest checks:
   command using `../knots/build-repro/bin/bitcoind` returned the same three
   values on unmodified Knots, except for unrelated result fields omitted by the
   older Knots RPC response.
+- `python3 test/functional/mempool_compatibility.py --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_compat_persistv1_port
+  --portseed=32870` skipped because previous-release binaries are unavailable
+  in this checkout.
+- Manual runtime check: start `build/bin/bitcoind -regtest` with
+  `-persistmempoolv1=1`, run `savemempool`, and inspect
+  `od -An -t u8 -N8 regtest/mempool.dat`; the port printed `1`. The same check
+  with `../knots/build-repro/bin/bitcoind` also printed `1`.
 - `git show origin/master:src/policy/rbf.cpp origin/master:src/policy/rbf.h |
   rg -n "GetUniqueClusterCount|too many conflicting clusters|too many potential replacements|MAX_REPLACEMENT_CANDIDATES"`
   and `git -C ../knots show 29.x-knots:src/policy/rbf.cpp
