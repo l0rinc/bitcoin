@@ -1749,6 +1749,11 @@ Other missing/adapted Knots pieces found during this pass:
   history, traffic graph tooltips, mempool stats, and the Network Watch GUI
   are all present in the current tree. These were not new omissions or original
   Knots defects from this pass.
+  The fee-histogram review also confirmed Knots' `getmempoolinfo`
+  `to_feerate` result-schema fix (`e888c5d1c1`) is present in the port:
+  `to_feerate` is documented as an optional numeric result rather than `ANY`.
+  Current Core master has no equivalent `getmempoolinfo` histogram surface, so
+  this is Knots-only RPC metadata correctness.
 - The `getrpcwhitelist` review confirmed Knots' RPC whitelist introspection
   surface (`2c172d3a0d` plus JSON/object follow-ups) is present in the port and
   still absent from current Core. This is authenticated RPC observability and
@@ -4284,6 +4289,10 @@ Builds:
   `origin/master` and `knots/29.x-knots`, show Knots and the port carry the
   JSON-RPC example quoting corrections while current Core still shows quoted
   JSON strings for several array/object arguments.
+- `git grep -n "to_feerate" HEAD knots/29.x-knots origin/master --
+  src/rpc/mempool.cpp` shows Knots and the port document the fee-histogram
+  `to_feerate` result as `RPCResult::Type::NUM`, while current Core has no
+  corresponding fee-histogram result in `getmempoolinfo`.
 - `rg -n
   "Unable to bind all endpoints|Unable to bind any endpoint|rpc_bind"
   src/httpserver.cpp test/functional/rpc_bind.py
