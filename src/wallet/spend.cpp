@@ -467,8 +467,7 @@ CoinsResult AvailableCoins(const CWallet& wallet,
         bool solvable = input_bytes > -1;
         const bool mine_spendable{(mine & ISMINE_SPENDABLE) != ISMINE_NO};
         const bool mine_watch_only{(mine & ISMINE_WATCH_ONLY) != ISMINE_NO};
-        const bool disabled_private_keys{wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)};
-        bool spendable = (!disabled_private_keys && mine_spendable) || ((mine_watch_only || (disabled_private_keys && mine_spendable)) && allow_watch_only && solvable);
+        bool spendable = mine_spendable || (mine_watch_only && allow_watch_only && solvable);
         if (!spendable && params.only_spendable) continue;
 
         // Obtain script type
