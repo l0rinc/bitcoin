@@ -1151,16 +1151,17 @@ Other missing/adapted Knots pieces found during this pass:
   `walletcreatefundedpsbt` (`c5448df366`) is present in the port: when the
   caller omits explicit `locktime`, the funded PSBT uses a height-based
   fallback locktime, including PSBTv0 output. Current Core already carries the
-  related `send` and `sendall` behavior but still leaves this
-  `walletcreatefundedpsbt` default at zero. `rpc_psbt.py` covers the ported
-  PSBT behavior, and actual Knots' own `rpc_psbt.py` now passes against the
-  local unmodified Knots build as a same-repo cross-check. Refreshed full
-  `rpc_psbt.py` runs passed against both the port and unmodified Knots. The
-  port also carries Knots' later `fd01caa5de` regression coverage for funding a
-  PSBT when the node is started with `-addresstype=legacy` but the descriptor
-  wallet only has taproot internal/change descriptors; this is wallet test
-  coverage for change-address fallback behavior, not a consensus or remote
-  security change.
+  related Knots `send`/`sendall` anti-fee-sniping behavior (`6825ae0c78` with
+  `b11d00d54e` test coverage, independently converged upstream) but still
+  leaves this `walletcreatefundedpsbt` default at zero. `rpc_psbt.py` covers
+  the ported PSBT behavior, and actual Knots' own `rpc_psbt.py` now passes
+  against the local unmodified Knots build as a same-repo cross-check.
+  Refreshed full `rpc_psbt.py` runs passed against both the port and
+  unmodified Knots. The port also carries Knots' later `fd01caa5de` regression
+  coverage for funding a PSBT when the node is started with
+  `-addresstype=legacy` but the descriptor wallet only has taproot
+  internal/change descriptors; this is wallet test coverage for change-address
+  fallback behavior, not a consensus or remote security change.
 - The raw-transaction PSBT review confirmed Knots' user-provided previous
   transaction support for `utxoupdatepsbt` and `descriptorprocesspsbt`
   (`bdb4ca4195`, `eea8588f07`) is present in the port and absent from current
@@ -6057,6 +6058,14 @@ Functional tests:
 - `python3 test/functional/wallet_backup.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_send.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_send_fee_mode`
+- `python3 test/functional/wallet_send.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_send_anti_fee_sniping_refresh
+  --portseed=42744`
+- `python3 test/functional/wallet_sendall.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_sendall_anti_fee_sniping_refresh
+  --portseed=42745`
 - `python3 test/functional/wallet_migration.py --configfile build/test/config.ini`
   (skipped: previous releases not available or disabled)
 - `python3 test/functional/wallet_keypool.py --configfile build/test/config.ini
