@@ -3086,6 +3086,20 @@ under different commits. They are not all proven exploitable.
   Knots, confirming these are inherited Knots semantics rather than a
   port-only behavior.
 
+- Specific standardness reject reasons:
+  Knots' `AreInputsStandard` specific reject-reason series (`9bc1218c1f`,
+  ported as `3c8c0d3820` and later adapted through the current
+  `ValidateInputsStandardness` API) is present in the port. Current Core has a
+  related upstream change that returns debug strings from input standardness,
+  but it still reports several witness-standard failures as the generic
+  `bad-witness-nonstandard`; Knots and the port return specific codes such as
+  `bad-witness-nonwitness-input`, `bad-witness-stackitem-count`,
+  `bad-witness-stackitem-size`, and `bad-witness-script-size`. This is
+  relay-policy diagnostics and reject-filter control, not consensus behavior:
+  the non-standard transactions remain valid in blocks where consensus permits
+  them. A refreshed `p2p_segwit.py` run passed and covers the specific witness
+  reject strings.
+
 - Overlay-protocol reject filters:
   Knots' `-rejectparasites` (`3c732178d0`) and `-rejecttokens`
   (`2e7ea254c0`) modes are present in the port and absent from current Core.
@@ -3759,6 +3773,13 @@ Source/manifest checks:
   `python3 test/functional/p2p_segwit.py --configfile build/test/config.ini --tmpdir=/mnt/my_storage/tmp_p2p_segwit_witness_stripping_2 --portseed=7394`
   passed after updating the port's stale block-failure label expectations to
   current Core's `block-script-verify-flag-failed`.
+- `git grep -n
+  "AreInputsStandard\|ValidateInputsStandardness\|bad-witness-nonstandard\|bad-witness-stackitem-count\|bad-witness-stackitem-size\|bad-witness-script-size"
+  HEAD origin/master knots/29.x-knots -- src/policy src/validation.cpp
+  test/functional/p2p_segwit.py` shows current Core has the related input
+  standardness debug-string path but still collapses witness-standardness
+  failures to `bad-witness-nonstandard`, while Knots and the port expose
+  specific witness reject codes.
 - `git -C ../knots show --stat --patch --minimal
   fbe185ce7a76e3c8d36042df27f9a34ec9a95cff`,
   `git show origin/master:src/httpserver.cpp`, and `rg -n
@@ -5489,6 +5510,10 @@ Functional tests:
   --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_mempool_maxscriptsize_knots
   --portseed=32802`
+- `python3 test/functional/p2p_segwit.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_segwit_areinputsstandard_refresh
+  --portseed=42766`
 - `python3 test/functional/mempool_bare_pubkey.py
   --configfile=build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_bare_pubkey_port
