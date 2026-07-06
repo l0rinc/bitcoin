@@ -933,6 +933,19 @@ Other missing/adapted Knots pieces found during this pass:
   `signrawtransactionwithkey` P2SH-P2WSH fee result, and the strengthened test
   passes against unmodified Knots. This is wallet/RPC metadata, not consensus
   behavior.
+- Wallet anchor verification exposed a port-introduced spendability divergence:
+  `wallet_anchor.py` passed on unmodified Knots but failed in the port because
+  `AvailableCoins(...)` treated `ISMINE_SPENDABLE` outputs in
+  disabled-private-key wallets as spendable only when watch-only spending was
+  allowed and the output was solvable. Actual Knots keeps spendable outputs
+  selectable regardless of the disabled-private-key flag, while watch-only
+  outputs still require `fAllowWatchOnly` and solvability. The port now matches
+  Knots, so anchor outputs reach the intended unsolvable-size error path rather
+  than being filtered out as generic insufficient funds. This is wallet/RPC
+  behavior and zero-value/anchor accounting, not consensus behavior or an
+  original Knots defect. `wallet_anchor.py`, `wallet_listtransactions.py`, and
+  `wallet_tests` pass after the fix; the same `wallet_anchor.py` run passes on
+  unmodified Knots.
 - Mempool/TRUC verification exposed a port-introduced validation omission:
   the legacy `AcceptToMemoryPool(..., bypass_limits=true)` wrapper did not
   include Knots' `"truc"` ignore token. As a result, disconnected-block
@@ -3261,6 +3274,18 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_assumeutxo_after_fix`
 - `python3 test/functional/wallet_address_types.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_address_types_change_pref`
+- `cmake --build build --target bitcoind bitcoin-cli test_bitcoin -j4`
+- `python3 ../knots/test/functional/wallet_anchor.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_knots_wallet_anchor_isfromme --portseed=7403`
+- `python3 test/functional/wallet_anchor.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_wallet_anchor_isfromme_after_fix --portseed=7404`
+- `python3 test/functional/wallet_listtransactions.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_wallet_listtransactions_isfromme_after_fix
+  --portseed=7405`
+- `build/bin/test_bitcoin --run_test=wallet_tests --catch_system_error=no
+  --log_level=error --report_level=short`
 - `python3 test/functional/wallet_balance.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_wallet_balance_legacy_conflict_review`
 - `python3 test/functional/wallet_avoidreuse.py --configfile build/test/config.ini
