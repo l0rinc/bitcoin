@@ -923,9 +923,16 @@ Other missing/adapted Knots pieces found during this pass:
   (`70dcdd7aa7`) is present in the port: a wallet does not choose bech32m
   change merely because it is paying a Taproot/bech32m recipient unless the
   wallet's preferred address type is also bech32m. This is wallet privacy and
-  compatibility behavior, not consensus. `wallet_address_types.py` now covers
-  p2sh-segwit-default and bech32-default wallets sending to a bech32m recipient
-  without upgrading change past the user's preferred type.
+  compatibility behavior, not consensus. Current Core master still chooses
+  bech32m change whenever a bech32m internal descriptor exists and any recipient
+  is Taproot, even when the wallet default is only bech32. The new
+  `spend_tests/change_type_avoids_newer_default` unit pins the helper directly:
+  default bech32m selects bech32m change for a Taproot recipient, default bech32
+  keeps bech32 change, and an explicit bech32m change type still overrides. The
+  existing `wallet_address_types.py` coverage also exercises p2sh-segwit-default
+  and bech32-default wallets sending to a bech32m recipient without upgrading
+  change past the user's preferred type, and that functional check passes on
+  unmodified Knots.
 - The wallet/IPC shutdown review confirmed Knots/Core's validation-interface
   drain on wallet notification disconnect (`41d1ce75e3`) and chain-client
   `ipc::Exception` handling for disconnected `bitcoin-wallet` children
@@ -3825,6 +3832,16 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_assumeutxo_after_fix`
 - `python3 test/functional/wallet_address_types.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_address_types_change_pref`
+- `build/bin/test_bitcoin --run_test=spend_tests/change_type_avoids_newer_default
+  --catch_system_error=no --log_level=error --report_level=short`
+- `python3 test/functional/wallet_address_types.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_address_types_change_newer_port
+  --portseed=32690`
+- `python3 test/functional/wallet_address_types.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_address_types_change_newer_knots
+  --portseed=32691`
 - `cmake --build build --target bitcoind bitcoin-cli test_bitcoin -j4`
 - `python3 ../knots/test/functional/wallet_anchor.py --configfile
   ../knots/build-repro/test/config.ini
