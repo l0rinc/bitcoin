@@ -1353,12 +1353,14 @@ Other missing/adapted Knots pieces found during this pass:
   and node-id paths.
 - The ForceInbound eviction review confirmed Knots' trusted-inbound eviction
   behavior (`3544a26256`, `711dadb546`, `067f80e1b5`, `3db935abd1`) is
-  present in the port and absent from current Core. It also found an original
-  Knots RPC reporting gap: `forceinbound` is accepted by the parser and listed
-  in `getpeerinfo` help, but `NetPermissions::ToStrings(...)` did not include
-  it in the peer's `permissions` array. The port now reports the permission as
-  `e53bce279f`, with unit coverage for `NetPermissionFlags::All` and
-  functional coverage in `p2p_eviction.py` and `p2p_permissions.py`. A
+  present in the port and absent from current Core. Knots' `getpeerinfo`
+  `forced_inbound` field (`b0d90d2885`) is also present, so peers that forced
+  an inbound eviction are visible through RPC. The review also found an
+  original Knots RPC reporting gap: `forceinbound` is accepted by the parser
+  and listed in `getpeerinfo` help, but `NetPermissions::ToStrings(...)` did
+  not include it in the peer's `permissions` array. The port now reports the
+  permission as `e53bce279f`, with unit coverage for `NetPermissionFlags::All`
+  and functional coverage in `p2p_eviction.py` and `p2p_permissions.py`. A
   refreshed source comparison still shows current Core has no `ForceInbound`
   permission, unmodified Knots parses and stores it but omits it from
   `NetPermissions::ToStrings(...)`, and the port includes it in RPC-facing
@@ -2500,7 +2502,8 @@ under different commits. They are not all proven exploitable.
   unmodified Knots binaries.
 
 - ForceInbound trusted-inbound eviction:
-  `3544a26256`, `711dadb546`, `067f80e1b5`, `3db935abd1`
+  `3544a26256`, `711dadb546`, `067f80e1b5`, `3db935abd1`, with
+  `forced_inbound` RPC reporting from `b0d90d2885`
 
   Current Core does not expose Knots' `forceinbound` P2P permission. Knots and
   this port can mark selected inbound peers as trusted enough to force an
@@ -5006,6 +5009,10 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_p2p_eviction_forceinbound_refresh_port
   --portseed=42431`
+- `python3 test/functional/p2p_eviction.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_eviction_forced_inbound_field_refresh2
+  --portseed=42735`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_permissions_onion_whitelist`
 - `python3 test/functional/p2p_permissions.py --configfile build/test/config.ini
