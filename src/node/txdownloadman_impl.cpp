@@ -8,6 +8,7 @@
 #include <chain.h>
 #include <consensus/validation.h>
 #include <txmempool.h>
+#include <util/check.h>
 #include <util/log.h>
 #include <validation.h>
 #include <validationinterface.h>
@@ -506,6 +507,11 @@ std::pair<bool, std::optional<PackageToValidate>> TxDownloadManagerImpl::Receive
 {
     const Txid& txid = ptx->GetHash();
     const Wtxid& wtxid = ptx->GetWitnessHash();
+
+    if (!m_peer_info.contains(nodeid)) {
+        Assume(m_txrequest.Count(nodeid) == 0);
+        return {false, std::nullopt};
+    }
 
     // Mark that we have received a response
     m_txrequest.ReceivedResponse(nodeid, txid.ToUint256());

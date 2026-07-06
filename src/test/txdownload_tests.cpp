@@ -184,7 +184,7 @@ BOOST_FIXTURE_TEST_CASE(unregistered_peer_tx_handling, TestingSetup)
         BOOST_CHECK(!package_to_validate);
     }};
 
-    check_tx(/*expected_should_validate=*/true); // TODO: Should not validate txs from unregistered peers
+    check_tx(/*expected_should_validate=*/false);
     txdownload_impl.CheckIsEmpty();
 
     txdownload_impl.ConnectedPeer(peer, node::TxDownloadConnectionInfo{/*m_preferred=*/false, /*m_relay_permissions=*/false, /*m_wtxid_relay=*/true});
@@ -194,7 +194,7 @@ BOOST_FIXTURE_TEST_CASE(unregistered_peer_tx_handling, TestingSetup)
     txdownload_impl.DisconnectedPeer(peer);
     txdownload_impl.CheckIsEmpty(peer);
 
-    check_tx(/*expected_should_validate=*/true); // TODO: Should not validate txs from disconnected peers
+    check_tx(/*expected_should_validate=*/false);
     txdownload_impl.CheckIsEmpty();
 }
 
