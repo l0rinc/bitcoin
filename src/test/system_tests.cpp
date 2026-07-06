@@ -209,6 +209,11 @@ BOOST_AUTO_TEST_CASE(subprocess_close_fds)
     BOOST_CHECK(!fd_is_closed(/*close_fds=*/false));
     BOOST_CHECK(fd_is_closed(/*close_fds=*/true));
 
+#ifdef ENABLE_EXTERNAL_SIGNER
+    const UniValue result = RunCommandParseJSON(mock_executable("fd_status"));
+    BOOST_CHECK(result.find_value("closed").get_bool());
+#endif
+
     unsetenv("BITCOIN_TEST_FD_TO_CHECK");
     BOOST_CHECK_EQUAL(std::fclose(inherited_file), 0);
 }
