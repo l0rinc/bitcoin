@@ -6,6 +6,7 @@
 
 from decimal import Decimal, getcontext
 
+from test_framework.descriptors import descsum_create
 from test_framework.messages import SEQUENCE_FINAL
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -311,6 +312,31 @@ class SendallTest(BitcoinTestFramework):
         assert_equal(decoded["inputs"][0]["previous_vout"], utxo["vout"])
         assert_equal(decoded["outputs"][0]["script"]["address"], self.remainder_target)
 
+    # @cleanup not needed because different wallet used
+    def sendall_fails_on_unsolvable_watchonly_utxo(self):
+        self.log.info("Test sendall fails clearly with unsolvable watchonly UTXOs")
+        unsolvable_address = self.def_wallet.getnewaddress()
+
+        self.nodes[0].createwallet(wallet_name="unsolvable_watching", disable_private_keys=True)
+        watchonly = self.nodes[0].get_wallet_rpc("unsolvable_watching")
+        assert_equal([{"success": True}], watchonly.importdescriptors([{
+            "desc": descsum_create(f"addr({unsolvable_address})"),
+            "timestamp": "now",
+        }]))
+
+        self.def_wallet.sendtoaddress(unsolvable_address, 1)
+        self.generate(self.nodes[0], 1)
+        assert_equal(False, watchonly.listunspent()[0]["solvable"])
+
+        assert_raises_rpc_error(
+            -4,
+            "Unable to determine the size of the transaction, the wallet contains unsolvable descriptors",
+            watchonly.sendall,
+            recipients=[self.remainder_target],
+        )
+
+        watchonly.unloadwallet()
+
     @cleanup
     def sendall_with_minconf(self):
         # utxo of 17 bicoin has 6 confirmations, utxo of 4 has 3
@@ -527,6 +553,9 @@ class SendallTest(BitcoinTestFramework):
 
         # Sendall succeeds with watchonly wallets spending specific UTXOs
         self.sendall_watchonly_specific_inputs()
+
+        # Sendall fails clearly if a watchonly wallet cannot solve its UTXOs
+        self.sendall_fails_on_unsolvable_watchonly_utxo()
 
         # Sendall only uses outputs with at least a give number of confirmations when using minconf
         self.sendall_with_minconf()

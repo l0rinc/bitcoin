@@ -3245,7 +3245,8 @@ stream-isolation credential prefixes, CJDNS/RFC4193 reachable-network setup
 before RPC allow-list parsing (`0ec0da4391`, Core `f728b6b111`), feebumper
 combined-fee crash
 (`4b202bc91c`, Core `6072a2a6a1`), wallet coin-selection boolean amount fix
-(`c0b092936e`, Core `0026b330c4`),
+(`c0b092936e`, Core `0026b330c4`), wallet `sendall`
+transaction-size error handling (`c6e7765c0a`, Core `c40dc822d7`),
 precomputed transaction-data lifetime hardening (CVE-2024-52911), the
 CVE-2025-46598 validation/script-cache and transaction-punishment cleanup
 cluster, Tor-control excessive-line OOM
@@ -3260,7 +3261,7 @@ and unusual 64-bit-size handling (`fc27c2134c`, `5e666b667b`; Core
 (`eafea2393d`, Core `2c43b6adeb`), `WriteUTXOSnapshot` `AutoFile`
 ownership transfer (`a480da233e`, Core `a69c4098b2`), LevelDB file-size
 initialization to avoid UB (`1e2eaebd79`, also present in current Core),
-wallet `sendall` transaction-size error handling, miniscript assert guards, and most
+miniscript assert guards, and most
 cpp-subprocess
 memory/Windows fixes, witness-stripped SegWit reject-filter handling,
 miniscript `FindChallenges` stack-overflow avoidance in tests, P2P
@@ -4044,6 +4045,12 @@ Source/manifest checks:
   src/rpc/blockchain.h src/test/util/chainstate.h` shows `WriteUTXOSnapshot`
   and `CreateUTXOSnapshot` take ownership of the dump file in Core, Knots, and
   the port.
+- `git show --stat --patch c40dc822d7 -- src/wallet/rpc/spend.cpp`,
+  `git -C ../knots show --stat --patch c6e7765c0a -- src/wallet/rpc/spend.cpp`,
+  and `rg -n "Unable to determine the size of the transaction|unsolvable
+  descriptors" src/wallet/rpc/spend.cpp test/functional/wallet_sendall.py`
+  show current Core, actual Knots, and the port all reject `sendall` when a
+  watch-only wallet cannot estimate the input size for unsolvable descriptors.
 - `git show origin/master:src/node/transaction.cpp | sed -n '32,105p'`,
   `git show origin/master:src/rpc/mempool.cpp | sed -n '110,158p'`,
   `git -C ../knots show 29.x-knots:src/node/transaction.cpp | sed -n
@@ -6146,6 +6153,16 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_wallet_sendall_anti_fee_sniping_refresh
   --portseed=42745`
+- `python3 test/functional/wallet_sendall.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_sendall_tx_size_refresh --portseed=42752`
+  passed with the new unsolvable-watch-only `sendall` coverage.
+- Focused unmodified-Knots runtime check for the same unsolvable-watch-only
+  `sendall` path passed against `../knots/build-repro/test/config.ini` with
+  `--tmpdir=/mnt/my_storage/tmp_wallet_sendall_tx_size_knots_focused
+  --portseed=42754`. A full current `wallet_sendall.py` run against that older
+  Knots binary was not used as evidence because it failed earlier on unrelated
+  decoded-PSBT JSON field-name drift.
 - `python3 test/functional/wallet_migration.py --configfile build/test/config.ini`
   (skipped: previous releases not available or disabled)
 - `python3 test/functional/wallet_keypool.py --configfile build/test/config.ini
