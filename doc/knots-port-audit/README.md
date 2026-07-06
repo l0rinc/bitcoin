@@ -670,10 +670,10 @@ Other missing/adapted Knots pieces found during this pass:
   `p2p_block_times.py` pass.
 - Knots' software-expiry behavior is present and should be treated as a
   visible non-Core divergence: by default the client has an expiry timestamp,
-  warns four weeks before expiry, refuses block-template creation after expiry
-  (`d957a02772`, ported as `198a65baa1`), keeps accepting blocks for 144
-  expired-MTP blocks, then rejects new blocks with `node-expired`, and refuses
-  startup after expiry unless overridden.
+  warns four weeks before expiry (`65c95aebfb`), refuses block-template
+  creation after expiry (`d957a02772`, ported as `198a65baa1`), keeps accepting
+  blocks for 144 expired-MTP blocks, then rejects new blocks with
+  `node-expired`, and refuses startup after expiry unless overridden.
   `feature_softwareexpiry.py` exposed a port-side no-UI warning regression from
   Core's newer no-caption UI signal API: Knots passed `"Warning"`/`"Error"`
   captions with non-modal icon styles, while the port printed the message
