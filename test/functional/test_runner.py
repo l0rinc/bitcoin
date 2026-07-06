@@ -369,6 +369,7 @@ BASE_SCRIPTS = [
     'feature_bind_port_discover.py',
     'p2p_unrequested_blocks.py',
     'p2p_message_capture.py',
+    'p2p_maxorphantx.py',
     'feature_softwareexpiry.py',
     'feature_includeconf.py',
     'feature_addrman.py',
