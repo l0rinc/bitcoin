@@ -4639,8 +4639,10 @@ Source/manifest checks:
 - `rg -n
   "GetUniqueClusterCount|CalculateDescendantData|too many conflicting clusters|too many potential replacements|MAX_REPLACEMENT_CANDIDATES"
   src/policy/rbf.cpp src/policy/rbf.h src/test/rbf_tests.cpp
-  test/functional/feature_rbf.py` shows the port now enforces and tests both
-  limits.
+  test/functional/feature_rbf.py test/functional/mempool_package_rbf.py`
+  shows the port now enforces and tests both limits, including package-RBF
+  cases where exactly `MAX_REPLACEMENT_CANDIDATES` clusters can still exceed
+  the potential replacement entry bound.
 - `git show origin/master:src/wallet/rpc/spend.cpp | sed -n '1757,1815p'`,
   `git -C ../knots show 29.x-knots:src/wallet/rpc/spend.cpp | sed -n
   '1901,1940p'`, and `sed -n '1968,2002p' src/wallet/rpc/spend.cpp` show
