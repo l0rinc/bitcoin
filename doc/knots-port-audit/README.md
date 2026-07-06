@@ -771,6 +771,18 @@ Other missing/adapted Knots pieces found during this pass:
   non-writable-directory guard and tests, but has no BDB backend. The port's
   BDB side is covered by `wallet_createwallet.py`, `wallet_startup.py`, and
   `db_tests`.
+- A wallet database maintenance review found a port-side omission in Knots'
+  BDB flush/debug controls (`377772f7e2`). Actual Knots has `-dblogsize`,
+  `-flushwallet`, `-privdb`, `-swapbdbendian`, the BDB runtime sanity check,
+  wallet database update counters, 1000-write batch flushing, and the scheduled
+  `MaybeCompactWalletDB(...)` pass. Current Core master has no matching BDB
+  wallet maintenance surface after removing new legacy/BDB wallet creation. The
+  port now restores the Knots controls and database-interface hooks needed by
+  the retained BDB backend while keeping the current descriptor-only wallet
+  creation guard documented below: `-swapbdbendian` is registered like Knots in
+  BDB-enabled builds, but this slice does not restore Knots' legacy-wallet create
+  path. This is local wallet database maintenance/config compatibility, not
+  consensus behavior or network exposure.
 - The wallet-tool dump/createfromdump cleanup review checked Knots'
   `cc324aa2be` failed-restore cleanup and `afd2785f2c` BDB wallet-id warnings.
   Current Core master already avoids the old `fs::remove_all(wallet_path)`
@@ -4759,6 +4771,27 @@ Functional tests:
   positive-parse test, but
   `../knots/build-repro/bin/test_bitcoin --run_test=dbwrapper_tests --catch_system_error=no --log_level=error --report_level=short`
   passed with 2813 assertions.
+- Original Knots/source cross-check:
+  `rg -n "dblogsize|flushwallet|privdb|swapbdbendian|MaybeCompactWalletDB|PeriodicFlush|IncrementUpdateCounter|nUpdateCounter|MakeBatch\\(bool" ../knots/src/wallet ../knots/src/dummywallet.cpp -g '*.{cpp,h}'`
+  shows unmodified Knots carries the BDB wallet flush/debug options, update
+  counters, batch flushing, and periodic compaction hooks. The matching port
+  check over `src/wallet src/dummywallet.cpp` now finds the same restored
+  surface, while
+  `git grep -n "dblogsize\\|flushwallet\\|privdb\\|swapbdbendian\\|MaybeCompactWalletDB\\|PeriodicFlush\\|IncrementUpdateCounter\\|nUpdateCounter\\|MakeBatch(bool" origin/master -- src/wallet src/dummywallet.cpp`
+  returned no matches for current Core master. In the current BDB-disabled
+  builds, `build/bin/bitcoind -help-debug | rg -n "dblogsize|flushwallet|privdb|swapbdbendian|unsafesqlitesync"`
+  and the same command against `../knots/build-repro/bin/bitcoind` both show
+  only `-unsafesqlitesync`, confirming the BDB-only options are hidden in this
+  build configuration. Port verification passed with
+  `cmake --build build --target test_bitcoin -j2`,
+  `build/bin/test_bitcoin --run_test=database_args_parse_wallet_debug_options --catch_system_error=no --log_level=error --report_level=short`
+  (7 assertions),
+  `build/bin/test_bitcoin --run_test=wallet_batch_updates_database_counter --catch_system_error=no --log_level=error --report_level=short`
+  (5 assertions), and
+  `build/bin/test_bitcoin --run_test=db_tests --catch_system_error=no --log_level=error --report_level=short`
+  (7 cases, 618 assertions). Unmodified Knots' native
+  `../knots/build-repro/bin/test_bitcoin --run_test=db_tests --catch_system_error=no --log_level=error --report_level=short`
+  passed with 6 cases and 609 assertions.
 - Original Knots expected-failure repro with a temporary
   `/mnt/my_storage/knots-assumeutxo-repro` worktree and the port's added
   post-validation raw-transaction assertion:
