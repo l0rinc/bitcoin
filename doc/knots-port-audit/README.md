@@ -1399,8 +1399,9 @@ Other missing/adapted Knots pieces found during this pass:
   `rpc_net.py` also asserts that the port-only `private-broadcast` connection
   type cannot be manually selected through `addnode onetry`. The same
   coverage now exercises Knots' old positional `addnode ... onetry
-  <connection_type>` compatibility slot and confirms the port rejects
-  `inbound` there before reaching `OpenNetworkConnection`.
+  <connection_type>` compatibility slot (`6cef608adf` ported as `dbad7940da`,
+  `a444354c8a` ported as `a1f2d97a60`) and confirms the port rejects
+  `inbound` there before reaching `OpenNetworkConnection` (`56683bf3e9`).
 - The same RPC connection-management review confirmed Knots' `disconnectnode`
   IP-without-port and subnet support (`7e3988fe54`, `6d2bc57f0e`, with
   coverage from `dc36f2b555` and `12a8863b80`) is present in the port. Current
@@ -2037,6 +2038,11 @@ Result on original Knots:
 This was not introduced by the port. The port rejects this input with
 `RPC_INVALID_PARAMETER`, and `rpc_net.py` covers both the named/new argument
 path and the old positional compatibility path.
+
+Lineage: Knots adds the `addnode onetry` connection-type selector in
+`6cef608adf` and the legacy positional compatibility slot in `a444354c8a`; the
+port carries those as `dbad7940da` and `a1f2d97a60`, then adds the inbound
+rejection and regression coverage as `56683bf3e9`.
 
 The REST mempool-transactions route bug was also confirmed on an unmodified
 local build of Knots `29.x-knots`:
@@ -5052,6 +5058,10 @@ Functional tests:
   --test_methods test_addnode_getaddednodeinfo
   --tmpdir=/mnt/my_storage/tmp_rpc_net_addnode_guard_port
   --portseed=31910`
+- `python3 test/functional/rpc_net.py --configfile=build/test/config.ini
+  --cachedir=test/cache --test_methods test_addnode_getaddednodeinfo
+  --tmpdir=/mnt/my_storage/tmp_rpc_net_addnode_guard_lineage_port
+  --portseed=42771`
 - `python3 test/functional/feature_rbf.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_rbf_service_port_7 --portseed=32290`
 - `python3 ../knots/test/functional/feature_rbf.py --configfile
