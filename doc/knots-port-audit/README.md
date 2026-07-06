@@ -2253,6 +2253,23 @@ under different commits. They are not all proven exploitable.
   build before updating the port test. The latest verification reran the full
   functional test because the reorg helper depends on setup from `run_test`.
 
+- Ephemeral-output policy knobs:
+  Current Core has a hard-coded standardness allowance for at most one dust
+  output. Knots adds `-permitbareanchor` and `-permitephemeral=<options>` to
+  split that allowance into P2A-anchor, ordinary-send, and nonzero-dust pieces.
+  The default Knots mode is `anchor,-send,-dust`, so ordinary P2TR zero-value
+  dust is rejected with `dust-nonanchor`; `send,-dust` permits zero-value
+  ordinary dust but still rejects nonzero dust with `dust-nonzero`; and
+  `send,dust` permits nonzero ordinary dust when the package spends it. The
+  `-corepolicy=1` interaction soft-sets the broader `anchor,send,dust` mode.
+  The parser is deliberately permissive like Knots: unknown tokens are ignored
+  and leave the default `anchor,-send,-dust` state. This is relay/mining
+  standardness policy rather than consensus, but the functional test forces
+  `-acceptnonstdtxn=0` so the option bits are actually exercised instead of
+  being masked by regtest's usual nonstandard-transaction allowance. The
+  strengthened unit and functional tests pass on the port, and the focused
+  functional option test passes against unmodified Knots.
+
 - ScriptPubKey-reuse mempool policy:
   Knots' `-spkreuse=0` mode is present in the port and absent from current Core.
   The port carries the later Knots pointer-based `mapUsedSPK` representation
@@ -3376,6 +3393,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=mempool_tests`
 - `build/bin/test_bitcoin --run_test=mempool_tests
   --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=mempool_tests/MempoolPermitEphemeralParse
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=mempool_tests,txrequest_tests,miner_tests
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=orphanage_tests
@@ -3714,10 +3733,28 @@ Functional tests:
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_ephemeral_dust_review_port
   --portseed=26451`
+- `python3 test/functional/mempool_ephemeral_dust.py
+  --configfile=build/test/config.ini --test_methods
+  test_permitephemeral_options
+  --tmpdir=/mnt/my_storage/tmp_mempool_ephemeral_perm_port
+  --portseed=32850`
+- `python3 test/functional/mempool_ephemeral_dust.py
+  --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_ephemeral_perm_full_port
+  --portseed=32852`
 - `python3 test/functional/mempool_ephemeral_dust.py --configfile
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_ephemeral_dust_review_knots
   --portseed=26452`
+- `python3 test/functional/mempool_ephemeral_dust.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --test_methods test_permitephemeral_options
+  --tmpdir=/mnt/my_storage/tmp_mempool_ephemeral_perm_knots
+  --portseed=32851`
+- `python3 test/functional/mempool_ephemeral_dust.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_ephemeral_perm_full_knots
+  --portseed=32853`
 - `python3 test/functional/mempool_subdust_fee_penalty.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_sigoplimit.py --configfile build/test/config.ini
   --test_methods test_sendrawtransaction_maxfeerate_uses_sigop_adjusted_vsize
