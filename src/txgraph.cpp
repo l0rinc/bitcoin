@@ -2439,9 +2439,26 @@ bool GenericClusterImpl::GetClusterRefs(TxGraphImpl& graph, std::span<TxGraph::R
 {
     // Translate the transactions in the Cluster (in linearization order, starting at start_pos in
     // the linearization) to Refs, and fill them in range.
+    SetType done;
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        Assume(start_pos <= m_linearization.size());
+        for (LinearizationIndex pos{0}; pos < start_pos; ++pos) {
+            const auto cluster_idx{m_linearization[pos]};
+            Assume(m_depgraph.Positions()[cluster_idx]);
+            Assume(!done[cluster_idx]);
+            done.Set(cluster_idx);
+        }
+    }
     for (auto& ref : range) {
         Assume(start_pos < m_linearization.size());
-        const auto& entry = graph.m_entries[m_mapping[m_linearization[start_pos++]]];
+        const auto cluster_idx{m_linearization[start_pos++]};
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            Assume(m_depgraph.Positions()[cluster_idx]);
+            Assume(!done[cluster_idx]);
+            Assume((m_depgraph.Ancestors(cluster_idx) - done) == SetType::Singleton(cluster_idx));
+            done.Set(cluster_idx);
+        }
+        const auto& entry = graph.m_entries[m_mapping[cluster_idx]];
         Assume(entry.m_ref != nullptr);
         ref = entry.m_ref;
     }
