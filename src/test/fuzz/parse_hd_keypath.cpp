@@ -30,13 +30,21 @@ FUZZ_TARGET(parse_hd_keypath)
     }
 
     const std::vector<uint32_t> random_keypath = ConsumeRandomLengthIntegralVector<uint32_t>(fuzzed_data_provider);
-    const std::string formatted_h{FormatHDKeypath(random_keypath)};
-    assert(random_keypath.empty() == formatted_h.empty());
-    assert(formatted_h.empty() || formatted_h.front() == '/');
-    assert(WriteHDKeypath(random_keypath) == "m" + formatted_h);
-
     for (const bool apostrophe : {false, true}) {
+        const std::string formatted{FormatHDKeypath(random_keypath, apostrophe)};
+        assert(random_keypath.empty() == formatted.empty());
+        assert(formatted.empty() || formatted.front() == '/');
+        assert(formatted.empty() || formatted.back() != '/');
+        assert(formatted.find("//") == std::string::npos);
+        assert(WriteHDKeypath(random_keypath, apostrophe) == "m" + formatted);
+
+        std::vector<uint32_t> parsed_formatted{ConsumeRandomLengthIntegralVector<uint32_t>(fuzzed_data_provider)};
+        assert(ParseHDKeypath(formatted.empty() ? formatted : formatted.substr(1), parsed_formatted));
+        assert(parsed_formatted == random_keypath);
+
         const std::string written{WriteHDKeypath(random_keypath, apostrophe)};
+        assert(written == "m" || (written.size() > 1 && written[0] == 'm' && written[1] == '/'));
+        assert(written.find("//") == std::string::npos);
         std::vector<uint32_t> parsed_keypath{ConsumeRandomLengthIntegralVector<uint32_t>(fuzzed_data_provider)};
         assert(ParseHDKeypath(written, parsed_keypath));
         assert(parsed_keypath == random_keypath);

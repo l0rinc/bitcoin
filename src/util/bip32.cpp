@@ -71,12 +71,20 @@ std::string FormatHDKeypath(const std::vector<uint32_t>& path, bool apostrophe)
     }
     Assume(path.empty() == ret.empty());
     Assume(ret.empty() || ret.front() == '/');
+    Assume(ret.empty() || ret.back() != '/');
+    Assume(ret.find("//") == std::string::npos);
     return ret;
 }
 
 std::string WriteHDKeypath(const std::vector<uint32_t>& keypath, bool apostrophe)
 {
     const std::string formatted_path{FormatHDKeypath(keypath, apostrophe)};
+    Assume(keypath.empty() == formatted_path.empty());
     Assume(formatted_path.empty() || formatted_path.front() == '/');
-    return "m" + formatted_path;
+    Assume(formatted_path.empty() || formatted_path.back() != '/');
+    Assume(formatted_path.find("//") == std::string::npos);
+    const std::string written_path{"m" + formatted_path};
+    Assume(written_path == "m" || (written_path.size() > 1 && written_path[0] == 'm' && written_path[1] == '/'));
+    Assume(written_path.find("//") == std::string::npos);
+    return written_path;
 }
