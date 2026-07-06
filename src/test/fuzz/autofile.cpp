@@ -7,8 +7,11 @@
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/util.h>
+#include <test/util/setup_common.h>
+#include <util/fs.h>
 #include <util/obfuscation.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdio>
@@ -17,6 +20,14 @@
 #include <vector>
 
 namespace {
+const BasicTestingSetup* g_setup;
+
+void initialize_autofile()
+{
+    static const auto testing_setup{MakeNoLogFileContext<>()};
+    g_setup = testing_setup.get();
+}
+
 std::optional<int64_t> TryTell(AutoFile& auto_file)
 {
     try {
@@ -37,10 +48,66 @@ void AssertTellFails(AutoFile& auto_file)
     }
     assert(threw);
 }
+
+void AssertAutoFileRoundTrip(FuzzedDataProvider& fuzzed_data_provider)
+{
+    const auto key_bytes{ConsumeFixedLengthByteVector<std::byte>(fuzzed_data_provider, Obfuscation::KEY_SIZE)};
+    const Obfuscation obfuscation{std::span{key_bytes}.first<Obfuscation::KEY_SIZE>()};
+    const std::vector<std::byte> file_bytes{ConsumeRandomLengthByteVector<std::byte>(fuzzed_data_provider, 4096)};
+
+    const fs::path data_dir{g_setup->m_args.GetDataDirBase() / "autofile_fuzz"};
+    fs::remove_all(data_dir);
+    fs::create_directories(data_dir);
+    const fs::path path{data_dir / "input"};
+
+    AutoFile auto_file{fsbridge::fopen(path, "w+b"), obfuscation};
+    assert(!auto_file.IsNull());
+    assert(auto_file.tell() == 0);
+
+    auto_file.write(file_bytes);
+    assert(auto_file.tell() == static_cast<int64_t>(file_bytes.size()));
+
+    const int64_t pos_after_write{auto_file.tell()};
+    assert(auto_file.size() == static_cast<int64_t>(file_bytes.size()));
+    assert(auto_file.tell() == pos_after_write);
+
+    std::vector<std::byte> expected_raw{file_bytes};
+    obfuscation(expected_raw);
+
+    std::vector<std::byte> raw(file_bytes.size());
+    auto_file.seek(0, SEEK_SET);
+    auto_file.SetObfuscation({});
+    auto_file.read(raw);
+    assert(raw == expected_raw);
+    assert(auto_file.tell() == static_cast<int64_t>(file_bytes.size()));
+
+    std::vector<std::byte> roundtrip(file_bytes.size());
+    auto_file.seek(0, SEEK_SET);
+    auto_file.SetObfuscation(obfuscation);
+    auto_file.read(roundtrip);
+    assert(roundtrip == file_bytes);
+    assert(auto_file.tell() == static_cast<int64_t>(file_bytes.size()));
+
+    const size_t ignored{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, file_bytes.size())};
+    std::vector<std::byte> suffix(file_bytes.size() - ignored);
+    auto_file.seek(0, SEEK_SET);
+    auto_file.ignore(ignored);
+    assert(auto_file.tell() == static_cast<int64_t>(ignored));
+    auto_file.read(suffix);
+    assert(std::equal(suffix.begin(), suffix.end(), file_bytes.begin() + ignored));
+    assert(auto_file.tell() == static_cast<int64_t>(file_bytes.size()));
+
+    assert(auto_file.fclose() == 0);
+    AssertTellFails(auto_file);
+    fs::remove_all(data_dir);
+}
 } // namespace
 
-FUZZ_TARGET(autofile)
+FUZZ_TARGET(autofile, .init = initialize_autofile)
 {
+    FuzzedDataProvider model_provider{buffer.data(), buffer.size()};
+    AssertAutoFileRoundTrip(model_provider);
+
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     FuzzedFileProvider fuzzed_file_provider{fuzzed_data_provider};
     const auto key_bytes{ConsumeFixedLengthByteVector<std::byte>(fuzzed_data_provider, Obfuscation::KEY_SIZE)};
