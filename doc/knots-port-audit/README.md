@@ -2175,6 +2175,16 @@ that final-tree shape. This is fuzz coverage correctness, not a runtime
 consensus or policy behavior change. A throwaway fuzz build compiled
 `coinscache_sim.cpp.o` with `BUILD_FOR_FUZZING=ON`.
 
+The mempool/orphanage empty-state iteration optimizations are also already
+present in current Core and therefore are not Core-missing hardening. Knots
+backports the `removeForBlock` IBD fast path as `8990a80618` and the orphanage
+empty-check as `fc5361a515`; current Core carries them as `41ad2be434` and
+`249889bee6`. The port has the same behavior and `75027d3139` only tidies the
+rebased `removeForBlock` guard's formatting/comment around Knots'
+priority-update code. This is IBD/performance hardening, not consensus or
+mempool policy semantics. Focused `mempool_tests`, `txvalidation_tests`, and
+`orphanage_tests` passed after the cleanup.
+
 The `LoadChainTip` entry above covers Knots `33329f812e` and its follow-up
 `ee42cf3e`. Knots first mitigated the comparator UB by erasing/reinserting
 candidate entries around `nSequenceId` mutation, then fixed that mitigation to
@@ -2865,8 +2875,12 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=chainparams_tests/dns_seed_removals
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=mempool_tests`
+- `build/bin/test_bitcoin --run_test=mempool_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=mempool_tests,txrequest_tests,miner_tests
   --catch_system_error=no --log_level=nothing --report_level=no`
+- `build/bin/test_bitcoin --run_test=orphanage_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=transaction_tests`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests
@@ -2875,6 +2889,8 @@ Unit tests:
   --run_test=txvalidationcache_tests/checkinputs_flags_per_input_cache_safety
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=txvalidation_tests`
+- `build/bin/test_bitcoin --run_test=txvalidation_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `cmake --build build --target test_bitcoin && build/bin/test_bitcoin
   --run_test=validation_tests/checkpoint_sanity --catch_system_error=no
   --log_level=error --report_level=short`
