@@ -1763,8 +1763,9 @@ Other missing/adapted Knots pieces found during this pass:
   users, empty-whitelist users, forbidden users, and cookie/default behavior.
 - A focused miner review rechecked Knots' restored serialized-size mining cap
   and follow-up bugfixes (`b835402650`, `e5bf9721fa`, `b392070a38`,
-  `e2212c8cf8`, `c95d04c8a8`) against this port and current Core. The port
-  matches actual Knots' intent under the current Core block assembler:
+  `e2212c8cf8`, `c95d04c8a8`, `2161037444`) against this port and current
+  Core. The port matches actual Knots' intent under the current Core block
+  assembler:
   `-blockmaxsize`/GBT `blockmaxsize` account serialized transaction size only
   when the cap is below `MAX_BLOCK_SERIALIZED_SIZE`; setting only size leaves the
   weight cap unbounded at `MAX_BLOCK_WEIGHT`; near-maximum size caps no longer
