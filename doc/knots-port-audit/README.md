@@ -1313,6 +1313,12 @@ Other missing/adapted Knots pieces found during this pass:
   `ConnectBlock()` coinbase check. The focused UTXO-height test now passes on
   both the port and an unmodified Knots build, including the
   activation-boundary reorg/cache-poisoning scenario.
+  `feature_reduced_data_temporary_deployment.py` was later strengthened to
+  cover the script-flag side of temporary expiry too: a post-activation P2WSH
+  spend with a 300-byte witness is rejected while RDTS is active, then accepted
+  once the test deployment expires at height 576. The strengthened test passes
+  against both the port and unmodified Knots, so this confirms native temporary
+  soft-fork behavior rather than a newly found consensus bug.
 - The libbitcoinconsensus review confirmed Knots intentionally restores the
   shared `libbitcoinconsensus` surface removed from current Core, but keeps
   `BUILD_BITCOINCONSENSUS_LIB` defaulted to `OFF`. This is compatibility and
@@ -3166,6 +3172,10 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_feature_reduced_data_utxo_height_knots
   --portseed=27511`
 - `python3 test/functional/feature_reduced_data_temporary_deployment.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_reduced_data_temporary_deployment.py
+  --configfile=build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rdts_temp_deployment_witness_port
+  --portseed=32300`
 - `python3 test/functional/feature_bip9_max_activation_height.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_versionbits_warning.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_versionbits_warning`
@@ -3640,6 +3650,10 @@ Functional tests:
   --portseed=7425`
   passed on unmodified Knots, confirming Knots' native test does not cover the
   broader legacy script-flag bypass strings.
+- Original Knots cross-check:
+  `python3 test/functional/feature_reduced_data_temporary_deployment.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rdts_temp_deployment_witness_knots --portseed=32301`
+  passed on unmodified Knots, including the strengthened witness-script expiry
+  check at the RDTS active-to-expired boundary.
 - Original Knots expected-failure repro:
   `python3 /mnt/my_storage/bitcoin/test/functional/p2p_eviction.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_eviction_forceinbound_repro`
   (fails on unmodified Knots because the ForceInbound peer's
