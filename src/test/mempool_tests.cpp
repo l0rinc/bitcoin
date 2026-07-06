@@ -125,6 +125,28 @@ BOOST_AUTO_TEST_CASE(MempoolPermitEphemeralParse)
     BOOST_CHECK(dust_without_anchor.permitephemeral_dust);
 }
 
+BOOST_AUTO_TEST_CASE(MempoolMinRelayAgeParse)
+{
+    ArgsManager argsman;
+    argsman.ForceSetArg("-minrelaycoinblocks", "123");
+    argsman.ForceSetArg("-minrelaymaturity", "4");
+
+    kernel::MemPoolOptions opts;
+    BOOST_CHECK_EQUAL(opts.minrelaycoinblocks, 0);
+    BOOST_CHECK_EQUAL(opts.minrelaymaturity, 0);
+    const auto result{ApplyArgsManOptions(argsman, Params(), opts)};
+    BOOST_REQUIRE(result);
+    BOOST_CHECK_EQUAL(opts.minrelaycoinblocks, 123);
+    BOOST_CHECK_EQUAL(opts.minrelaymaturity, 4);
+
+    argsman.ForceSetArg("-minrelaycoinblocks", "-1");
+    BOOST_CHECK(!ApplyArgsManOptions(argsman, Params(), opts));
+
+    argsman.ForceSetArg("-minrelaycoinblocks", "0");
+    argsman.ForceSetArg("-minrelaymaturity", "-1");
+    BOOST_CHECK(!ApplyArgsManOptions(argsman, Params(), opts));
+}
+
 BOOST_AUTO_TEST_CASE(MempoolMaxTxLegacySigopsParse)
 {
     ArgsManager argsman;

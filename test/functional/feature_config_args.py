@@ -240,6 +240,17 @@ class ConfArgsTest(BitcoinTestFramework):
             expected_msg='Error: Cannot set -v2onlyclearnet to true when v2transport is disabled.',
         )
 
+    def test_minrelay_age_args(self):
+        self.log.info("Check minrelay input-age options reject negative values")
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=['-minrelaycoinblocks=-1'],
+            expected_msg='Error: -minrelaycoinblocks must be greater than or equal to 0',
+        )
+        self.nodes[0].assert_start_raises_init_error(
+            extra_args=['-minrelaymaturity=-1'],
+            expected_msg='Error: -minrelaymaturity must be greater than or equal to 0',
+        )
+
     def test_consensusrules(self):
         self.log.info('Test -consensusrules option validation')
         self.nodes[0].assert_start_raises_init_error(
@@ -572,6 +583,7 @@ class ConfArgsTest(BitcoinTestFramework):
         self.test_config_file_parser()
         self.test_config_file_log()
         self.test_invalid_command_line_options()
+        self.test_minrelay_age_args()
         self.test_v2onlyclearnet_requires_v2transport()
         self.test_consensusrules()
         self.test_ignored_conf()
