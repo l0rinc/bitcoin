@@ -1111,18 +1111,22 @@ Other missing/adapted Knots pieces found during this pass:
   port now pins it in `rpc_getblockfilter.py` by proving `v0` is a known filter
   type but is not enabled by bare `-blockfilterindex`; the same test file also
   passes against unmodified Knots.
-- The feefilter and filtered-witness-block review confirmed Knots'
-  restored `-feefilter` option (`8fb8c3a1f7`) and
+- The feefilter, local-only bloom, and filtered-witness-block review confirmed
+  Knots' restored `-feefilter` option (`8fb8c3a1f7`), localhost-only BIP37
+  bloom-filter default (`ae3270624f`), and
   `MSG_FILTERED_WITNESS_BLOCK` handling (`9eaa8b5350`) are present in the
   port and absent from current Core master. Current Core has no `-feefilter`
-  argument and still comments `MSG_FILTERED_WITNESS_BLOCK` out as unused. The
-  port now covers `-nofeefilter` in `p2p_feefilter.py`, and `p2p_filter.py`
-  requests a filtered witness block for a block containing a taproot-spending
-  transaction and asserts that the matched transaction is returned with its
-  witness-preserving `wtxid`. Both strengthened tests pass against
-  unmodified Knots, confirming these are native Knots behaviors rather than
-  port-introduced changes. This is P2P relay/service compatibility and
-  operator control, not consensus behavior.
+  argument, keeps BIP37 off by default without Knots' implicit localhost
+  `bloomfilter` permission, and still comments `MSG_FILTERED_WITNESS_BLOCK`
+  out as unused. The port now covers `-nofeefilter` in `p2p_feefilter.py`.
+  `p2p_filter.py` now verifies that a default node does not advertise global
+  `BLOOM`, a localhost peer nevertheless receives the `bloomfilter` permission
+  and can send `filterload`, `-peerbloomfilters=0` disables that exception, and
+  a filtered witness block returns the matched transaction with its
+  witness-preserving `wtxid`. The strengthened tests pass against unmodified
+  Knots, confirming these are native Knots behaviors rather than port-introduced
+  changes. This is P2P relay/service compatibility and operator control, not
+  consensus behavior or a remote crash.
 - The invalid-block peer-punishment review confirmed Knots' relaxation
   (`7c7b5839f4`) is present in the port while current Core still routes the
   same block/header validation failures through `Misbehaving(...)`. The port
@@ -2553,6 +2557,15 @@ Source/manifest checks:
   src/init.cpp test/functional/rpc_getblockfilter.py` show bare
   `-blockfilterindex` still enables all known filter types in current Core, but
   only the selected default set (`basic`) in actual Knots and the port.
+- `git show origin/master:src/init.cpp | rg -n
+  "peerbloomfilters|bloomfilter@127|whitelist_opts|NODE_BLOOM" -C 4`,
+  `git -C ../knots show 29.x-knots:src/init.cpp | rg -n
+  "peerbloomfilters|bloomfilter@127|whitelist_opts|NODE_BLOOM" -C 4`, and
+  `rg -n "peerbloomfilters|bloomfilter@127|whitelist_opts|NODE_BLOOM"
+  src/init.cpp test/functional/p2p_filter.py` show current Core only toggles
+  global `NODE_BLOOM`, while actual Knots and the port add implicit localhost
+  `bloomfilter` permissions when `-peerbloomfilters` is unspecified and global
+  `NODE_BLOOM` is off.
 - `git show origin/master:src/wallet/migrate.cpp | rg -n
   "for \\(uint32_t i = 0; i <= outer_meta.last_page|LSNs are not reset"` and
   `git -C ../knots show 29.x-knots:src/wallet/migrate.cpp | rg -n
@@ -3269,6 +3282,14 @@ Functional tests:
   --portseed=27611`
 - `build/test/functional/p2p_feefilter.py`
 - `build/test/functional/p2p_filter.py`
+- `python3 test/functional/p2p_filter.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_filter_local_bloom_port
+  --portseed=32600`
+- `python3 test/functional/p2p_filter.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_filter_local_bloom_knots
+  --portseed=32601`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_cjdns_addnode_3`
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
@@ -3743,6 +3764,11 @@ Functional tests:
   `test/functional/p2p_filter.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_filter_filtered_witness`
   passed on unmodified Knots, including the new
   `MSG_FILTERED_WITNESS_BLOCK` witness-preservation assertion.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_filter.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_filter_local_bloom_knots --portseed=32601`
+  passed on unmodified Knots, including the localhost-only BIP37 default,
+  explicit `-peerbloomfilters=0` disable path, and filtered-witness block
+  assertion.
 - Original Knots cross-check:
   `python3 test/functional/p2p_compactblocks.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_compactblocks_header_guard`
   reached and passed the repeated-`blocktxn` section on unmodified Knots,
