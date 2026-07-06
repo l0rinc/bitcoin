@@ -5570,10 +5570,15 @@ Functional tests:
   BIP320 reserved-bit behavior.
 - Original Knots cross-check:
   `../knots/build-repro/bin/test_bitcoin --run_test=node_warnings_tests --catch_system_error=no --log_level=error --report_level=short`
-  passed on unmodified Knots. The source comparison above confirms Knots has
-  the newline-joined deprecated RPC warning string behavior even though its
-  original unit test does not assert `GetWarningsForRpc(...)` directly; the port
-  adds those assertions.
+  passed on unmodified Knots. The refreshed run passed 13 assertions. The
+  source comparison above confirms Knots has the newline-joined deprecated RPC
+  warning string behavior even though its original unit test does not assert
+  `GetWarningsForRpc(...)` directly; the port adds those assertions.
+- Port cross-check:
+  `build/bin/test_bitcoin --run_test=node_warnings_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+  passed 20 assertions, including the array-form warnings and the newline-joined
+  deprecated RPC warning string from `GetWarningsForRpc(...)`.
 - Original Knots test-coverage check:
   `../knots/build-repro/bin/test_bitcoin --run_test=chainparams_tests/dns_seed_removals --catch_system_error=no --log_level=error --report_level=short`
   returned `no test cases matching filter`, confirming the DNS seed removal
