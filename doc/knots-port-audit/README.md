@@ -1903,14 +1903,18 @@ under different commits. They are not all proven exploitable.
   transport-policy hardening, not a consensus change.
 
 - Persistent unexpected block-version signalling warnings:
-  `78d5cb210b`, `771ee9fbb4`, `e94eba4e03`, `c17e9d41d5`
+  `78d5cb210b`, `771ee9fbb4`, `e94eba4e03`, `c17e9d41d5`,
+  `9fd3694e76`
 
   Current Core warns on unknown versionbits activation for BIP323-available
   bits, but does not keep Knots' additional persistent last-100-block warnings
   for unknown version schemas, individual unexpected versionbits, or BIP320
-  reserved-bit signalling thresholds. This is operator/security visibility
-  hardening around possible soft-fork signalling, not a consensus-rule change.
-  The port keeps current Core's BIP323 deployment width at
+  reserved-bit signalling thresholds. Knots also logs a per-block
+  `Miner violated version bit protocol` warning for BIP320 reserved-bit abuse
+  without promoting that transient warning into RPC `warnings` output. This is
+  operator/security visibility hardening around possible soft-fork signalling,
+  not a consensus-rule change. The port keeps current Core's BIP323 deployment
+  width at
   `VERSIONBITS_NUM_BITS = 5` while scanning the historical 29 BIP9 signal bits
   through `VERSIONBITS_NUM_WARNING_BITS`, and the refreshed
   `feature_versionbits_warning.py` run passes against both the port and
@@ -3003,6 +3007,10 @@ Functional tests:
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_review_port
   --portseed=26442`
+- `python3 test/functional/feature_versionbits_warning.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_bip320_recheck
+  --portseed=7429`
 - `python3 test/functional/feature_versionbits_warning.py --configfile
   ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_review_knots
