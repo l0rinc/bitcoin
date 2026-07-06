@@ -64,6 +64,15 @@ Other missing/adapted Knots pieces found during this pass:
   datacarrier accounting could overflow the `int32_t` return path. The port
   adds a `script_tests` regression that checks both normal accounting and
   saturation at `int32_t` max.
+- A follow-up compact-block review restored Knots' txref-only `extra_txn`
+  reconstruction cache (`a8203e9412`, ported as `ab4fd3568f`). Current Core
+  added the same change and then reverted it as `b9300d8d0a`, returning to
+  `<Wtxid, CTransactionRef>` pairs. Knots' retained shape removes the
+  possibility for the compact-block extra-transaction cache API to carry a
+  shortid lookup key that disagrees with the transaction reference itself. The
+  port now matches Knots and the unit coverage asserts that an unrelated
+  cached transaction alone does not make the missing compact-block transaction
+  available.
 - `feature_init.py` verification exposed a port-side test-framework regression
   in `busy_wait_for_debug_log`: after an early miss, the helper never reset its
   match state and could time out even when the expected log line was present.
@@ -2771,6 +2780,30 @@ under different commits. They are not all proven exploitable.
   count cache, while Knots and the port carry the size cap and per-transaction
   ceiling.
 
+- Compact-block `extra_txn` txref-only lookup:
+  `a8203e9412`, ported as `ab4fd3568f`
+
+  Current Core master added Knots' simplification and later reverted it as
+  `b9300d8d0a`, so it again stores compact-block extra transactions as
+  `<Wtxid, CTransactionRef>` pairs and computes the shortid from the stored
+  pair key. Actual Knots and this port store only `CTransactionRef` and compute
+  the shortid from `tx->GetWitnessHash()` at lookup time. This is a
+  consensus-adjacent relay/type-safety hardening difference: it makes a
+  mismatched shortid key and transaction reference impossible in the
+  `extra_txn` API and avoids relying on callers to keep the pair coherent. The
+  normal Core production path currently populates the pair with
+  `tx->GetWitnessHash()` in `AddToCompactExtraTransactions(...)`; this audit
+  records the source-confirmed Core regression and harder-to-misuse Knots
+  shape, not a separately reproduced unauthenticated remote crash.
+
+  The port adapts Knots' shape to the rebased memory cap: the ring buffer keeps
+  plain `CTransactionRef` entries, `blockreconstructionextratxn_memusage`
+  subtracts `RecursiveDynamicUsage(*entry)`, null entries are still skipped,
+  the fuzz and benchmark callers pass txrefs directly, and
+  `blockencodings_tests/ReceiveWithExtraTransactions` now also checks that an
+  unrelated extra transaction alone leaves the missing compact-block
+  transaction unavailable.
+
 - Configurable orphan-transaction count cap:
   Knots' `-maxorphantx` option is present in the port and absent from current
   Core. Current Core has modern orphanage memory/latency limits, but no
@@ -4094,6 +4127,25 @@ Source/manifest checks:
   HEAD knots/29.x-knots origin/master -- src/init.cpp src/net_processing.cpp
   src/net_processing.h src/node/peerman_args.cpp src/test/peerman_tests.cpp
   test/functional/p2p_compactblocks_extratxs.py`
+- `git log --oneline HEAD origin/master knots/29.x-knots
+  --grep='Simplify.*extra_txn' -- src/blockencodings.cpp
+  src/blockencodings.h src/net_processing.cpp`, `git log --oneline HEAD
+  origin/master knots/29.x-knots --grep='Revert.*Simplify.*extra_txn' --
+  src/blockencodings.cpp src/blockencodings.h src/net_processing.cpp`, and
+  `git grep -n -E
+  "std::vector<(std::pair<Wtxid, CTransactionRef>|CTransactionRef)> vExtraTxnForCompact|InitData\\(const CBlockHeaderAndShortTxIDs.*extra_txn"
+  HEAD origin/master knots/29.x-knots -- src/blockencodings.cpp
+  src/blockencodings.h src/net_processing.cpp` show current Core has the
+  reverted pair form, actual Knots has the txref-only form, and the port now
+  matches Knots. Focused verification passed with
+  `cmake --build build --target test_bitcoin bitcoin-cli --parallel 4`,
+  `build/bin/test_bitcoin --run_test=blockencodings_tests
+  --catch_system_error=no --log_level=error --report_level=short`,
+  `cmake --build build --target bitcoind --parallel 4`, and
+  `../knots/build-repro/bin/test_bitcoin --run_test=blockencodings_tests
+  --catch_system_error=no --log_level=error --report_level=short`. The local
+  build tree does not expose a `bench_bitcoin` target, so the changed benchmark
+  source was not compiled separately in this configuration.
 - `git show origin/master:src/init.cpp origin/master:src/node/peerman_args.cpp
   2>/dev/null | rg -n "maxorphantx|max_orphan_txs"` returns no matches, while
   `rg -n "maxorphantx|max_orphan_txs|DEFAULT_MAX_ORPHAN_TRANSACTIONS"
