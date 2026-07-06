@@ -65,12 +65,17 @@ class MiningMainnetTest(BitcoinTestFramework):
         block.nBits = DIFF_1_N_BITS if height < 2016 else DIFF_4_N_BITS
         block.nNonce = blocks['nonces'][height - 1]
         block.vtx = [create_coinbase(height=height, script_pubkey=bytes.fromhex(COINBASE_SCRIPT_PUBKEY), halving_period=210000)]
+        # The alternate mainnet chain was mined with non-timelocked coinbase txs.
+        block.vtx[0].nLockTime = 0
+        block.vtx[0].vin[0].nSequence = SEQUENCE_FINAL
+        block.vtx[0].rehash()
         block.hashMerkleRoot = block.calc_merkle_root()
+        block.rehash()
         block_hex = block.serialize(with_witness=False).hex()
         self.log.debug(block_hex)
         assert_equal(node.submitblock(block_hex), None)
         prev_hash = node.getbestblockhash()
-        assert_equal(prev_hash, block.hash_hex)
+        assert_equal(prev_hash, block.hash)
         return prev_hash
 
 
@@ -109,5 +114,15 @@ class MiningMainnetTest(BitcoinTestFramework):
         height = 2016
         prev_hash = self.mine(height, prev_hash, blocks, node)
         assert_equal(node.getblockcount(), height)
+
+        mining_info = node.getmininginfo()
+        assert_equal(mining_info['difficulty'], 4)
+
+        self.log.info("getblock RPC should show historical target")
+        block_info = node.getblock(node.getblockhash(1))
+
+        assert_equal(block_info['difficulty'], 1)
+        assert_equal(block_info['bits'], nbits_str(DIFF_1_N_BITS))
+        assert_equal(block_info['target'], target_str(DIFF_1_TARGET))
 if __name__ == '__main__':
     MiningMainnetTest(__file__).main()
