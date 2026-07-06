@@ -2891,6 +2891,18 @@ under different commits. They are not all proven exploitable.
   Knots has the behavior but not the port's strengthened ArgsManager
   integration test cases.
 
+- ArgsManager forced non-string settings:
+
+  Knots adds `ForceSetArgV(...)` so internal callers can force a full
+  `SettingsValue`, not only a stringified value, and a later helper overload
+  for int64 values. Current Core master still exposes only string
+  `ForceSetArg(...)`, while Knots and this port can preserve forced booleans
+  and numeric JSON values. This is local configuration/test-helper parity, not
+  consensus behavior, remote exposure, or covert hardening. The port now adds
+  direct `argsman_tests/util_ForceSetArgV` coverage for a forced boolean and a
+  forced number; unmodified Knots carries the production helper and its native
+  `argsman_tests` suite passes.
+
 - Mempool statistics subsystem and RPC:
 
   Knots adds a `src/stats` subsystem, `-statsenable`,
@@ -4687,6 +4699,13 @@ Builds:
   HEAD knots/29.x-knots origin/master -- src/node src/test/caches_tests.cpp`
   shows the port and Knots carrying the dynamic dbcache default and smoothed
   warning threshold, while current Core only has the older cache warning test.
+- `git show --patch 9b9b8a52fd 676c45bd3a 830ff36aba -- src/common/args.cpp
+  src/common/args.h src/test/argsman_tests.cpp` and `git grep -n
+  "ForceSetArgV\\|ForceSetArg(const std::string& arg, int64_t"
+  HEAD knots/29.x-knots origin/master -- src/common/args.cpp src/common/args.h
+  src/test/argsman_tests.cpp` show Knots and the port preserving non-string
+  forced settings through `ForceSetArgV(...)`, plus the port's focused bool and
+  number unit coverage; current Core only has string `ForceSetArg(...)`.
 - `git -C ../knots show --patch 0c7ac92072 -- src/rpc/util.cpp`,
   `git show origin/master:src/rpc/util.cpp | rg -n
   "GetParamIndex|GetName\\(\\)|GetFirstName\\(\\)" -C 3`, and
@@ -4978,6 +4997,10 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=argsman_tests/util_RWConfigHasPruneOption
   --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=argsman_tests/util_ForceSetArgV
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=argsman_tests --catch_system_error=no
+  --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=util_tests/test_ModifyRWConfigFile
   --catch_system_error=no --log_level=error --report_level=short`
 - `../knots/build-repro/bin/test_bitcoin --run_test=util_tests/test_ModifyRWConfigFile

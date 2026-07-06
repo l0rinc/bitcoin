@@ -807,6 +807,23 @@ BOOST_AUTO_TEST_CASE(util_ForceSetArgInt64)
     BOOST_CHECK_EQUAL(args.GetIntArg("-value", 0), -123);
 }
 
+BOOST_AUTO_TEST_CASE(util_ForceSetArgV)
+{
+    TestArgsManager args;
+
+    args.ForceSetArgV("-bool", common::SettingsValue{false});
+    BOOST_CHECK_EQUAL(args.GetSetting("-bool").write(), "false");
+    BOOST_CHECK_EQUAL(args.GetArg("-bool", "unset"), "0");
+    BOOST_CHECK(!args.GetBoolArg("-bool", true));
+
+    common::SettingsValue number;
+    number.setInt(int64_t{-456});
+    args.ForceSetArgV("-number", number);
+    BOOST_CHECK_EQUAL(args.GetSetting("-number").write(), "-456");
+    BOOST_CHECK_EQUAL(args.GetArg("-number", "unset"), "-456");
+    BOOST_CHECK_EQUAL(args.GetIntArg("-number", 0), -456);
+}
+
 BOOST_AUTO_TEST_CASE(util_AddCommand)
 {
     enum TestFail { SUCCESS,
