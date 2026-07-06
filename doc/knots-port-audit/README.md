@@ -1841,7 +1841,13 @@ Other missing/adapted Knots pieces found during this pass:
   commit was adapted because current Core's cluster-mempool miner no longer
   has Knots' old `CTxMemPoolModifiedEntry_Indices` container; the live
   `CTxMemPoolEntry` and `Announcement` containers now use the Knots
-  version-gated alias form. The same pass checked Knots'
+  version-gated alias form. A follow-up check also found Knots' older Boost
+  compatibility fallback for `CTxMemPool::Apply` (`7d89cfc5e0`): Knots and the
+  port use node extraction only with Boost 1.74 or newer and otherwise copy the
+  `CTxMemPoolEntry`, while current Core unconditionally calls
+  `m_to_add.extract(...)`. This is build portability/release parity rather than
+  consensus or runtime security behavior on the normal build toolchain. The
+  same pass checked Knots'
   precomputed-transaction-data lifetime fix (`29b4e281a7`, CVE-2024-52911)
   and confirmed the port/current Core source already declares `txsdata` before
   `CCheckQueueControl`, so the check queue is destroyed first.
@@ -3285,6 +3291,11 @@ Source/manifest checks:
   bulk read/write and expected-hash commits but no `ioprio` or `lowprio`
   matches; actual Knots and the port both lower priority for peer-served block
   reads, startup verification, rollback, and `LoadExternalBlockFile`.
+- `git grep -n "BOOST_VERSION >= 107400\\|m_to_add.extract\\|ExplicitCopy"
+  HEAD knots/29.x-knots origin/master -- src/txmempool.cpp src/txmempool.h`
+  shows Knots and the port carry the Boost 1.73 `CTxMemPoolEntry` copy
+  fallback in `CTxMemPool::Apply`, while current Core only has the
+  `m_to_add.extract(...)` path.
 - `git grep -n -E
   "listprunelocks|setprunelock|DB_PRUNE_LOCK|UpdatePruneLock|prune lock moved back|prune_lock_update_and_delete|rpc_prunelocks"
   HEAD knots/29.x-knots origin/master -- src/node src/rpc src/interfaces.cpp
