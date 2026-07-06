@@ -1291,6 +1291,29 @@ Other missing/adapted Knots pieces found during this pass:
   current Core's TxGraph-backed mempool can calculate those diagrams, so the
   port adapts the coverage and fixes the grandchild lookup typo as
   `73e8138d49`.
+- The RBF service-bit review confirmed Knots' `b3b512dc6e` behavior is present:
+  the port keeps the compatibility `NODE_REPLACE_BY_FEE` constant/display name
+  for peers that advertise it, but no longer advertises the bit locally even
+  when `-mempoolreplacement=fee,-optin` makes the local policy full-RBF. Current
+  Core master no longer has the service bit at all. This is network-policy
+  signaling, not consensus behavior.
+- The same RBF pass found a real port omission in the anti-DoS replacement
+  limit. Current Core's cluster-mempool RBF code limits replacements by the
+  number of affected clusters; actual Knots `29.x-knots` also keeps the older
+  BIP125/Rule-5 bound on potential transactions evicted, counted conservatively
+  with descendants. The port had inherited Core's looser cluster-only behavior,
+  so a replacement evicting more than 100 transactions across fewer than 100
+  clusters was accepted. This was not an original Knots bug: unmodified Knots'
+  `feature_rbf.py` rejects the default-mempool case. The port now enforces both
+  bounds and covers the cluster-bound, transaction-bound, and overlapping
+  descendant overcount cases in `rbf_tests`, with functional coverage in
+  `feature_rbf.py`. This is mempool anti-DoS policy hardening missing from
+  current Core, not a consensus rule difference.
+- Exercising that area also exposed port-side test harness drift: the rebased
+  `mempool_util.py` lacked current Core's cluster/TRUC constants and the
+  `random` import used by orphan helpers, and the RBF functional test still had
+  stale current-Core message expectations plus deprecated ancestor/descendant
+  size args. These were port/test issues, not original Knots client defects.
 - A refreshed 2026 exact-patch mismatch pass found four final-tree omissions
   that were not suspicious but should be carried for release parity:
   Knots' pruning help text warning that wallets and indexes must stay active
@@ -2219,6 +2242,40 @@ Source/manifest checks:
   transaction max-fee as a plain-vsize absolute amount, while Knots and the
   port pass `CFeeRate` into `BroadcastTransaction` and convert it with the
   mempool accept result's `m_vsize`.
+- `git -C ../knots show --patch --minimal --no-ext-diff
+  b3b512dc6ee6fc148c4d3255c4cf21de1aefca79 -- src/init.cpp
+  test/functional/feature_rbf.py test/functional/p2p_node_network_limited.py`
+  shows Knots removed local `NODE_REPLACE_BY_FEE` advertisement and changed the
+  functional tests to assert the bit is absent.
+- `git show origin/master:src/init.cpp origin/master:src/protocol.h
+  origin/master:src/protocol.cpp origin/master:test/functional/feature_rbf.py
+  origin/master:test/functional/p2p_node_network_limited.py
+  origin/master:src/bitcoin-cli.cpp | rg -n
+  "NODE_REPLACE_BY_FEE|REPLACE_BY_FEE|rbf_policy == RBFPolicy::Always|g_local_services.*REPLACE|expected_services"`
+  shows current Core no longer carries the RBF service bit.
+- `git -C ../knots show 29.x-knots:src/init.cpp 29.x-knots:src/protocol.h
+  29.x-knots:src/protocol.cpp 29.x-knots:test/functional/feature_rbf.py
+  29.x-knots:test/functional/p2p_node_network_limited.py
+  29.x-knots:src/bitcoin-cli.cpp | rg -n
+  "NODE_REPLACE_BY_FEE|REPLACE_BY_FEE|rbf_policy == RBFPolicy::Always|g_local_services.*REPLACE|expected_services"`
+  and `rg -n
+  "NODE_REPLACE_BY_FEE|REPLACE_BY_FEE|rbf_policy == RBFPolicy::Always|g_local_services.*REPLACE|expected_services"
+  src/init.cpp src/protocol.h src/protocol.cpp test/functional/feature_rbf.py
+  test/functional/p2p_node_network_limited.py src/bitcoin-cli.cpp` show Knots
+  and the port keep the compatibility constant/display name but do not
+  advertise it.
+- `git show origin/master:src/policy/rbf.cpp origin/master:src/policy/rbf.h |
+  rg -n "GetUniqueClusterCount|too many conflicting clusters|too many potential replacements|MAX_REPLACEMENT_CANDIDATES"`
+  and `git -C ../knots show 29.x-knots:src/policy/rbf.cpp
+  29.x-knots:src/policy/rbf.h | rg -n
+  "GetCountWithDescendants|too many potential replacements|MAX_REPLACEMENT_CANDIDATES"`
+  show current Core limits by affected cluster count, while Knots also checks
+  potential replacement entries with descendants.
+- `rg -n
+  "GetUniqueClusterCount|CalculateDescendantData|too many conflicting clusters|too many potential replacements|MAX_REPLACEMENT_CANDIDATES"
+  src/policy/rbf.cpp src/policy/rbf.h src/test/rbf_tests.cpp
+  test/functional/feature_rbf.py` shows the port now enforces and tests both
+  limits.
 - `git show origin/master:src/wallet/rpc/spend.cpp | sed -n '1757,1815p'`,
   `git -C ../knots show 29.x-knots:src/wallet/rpc/spend.cpp | sed -n
   '1901,1940p'`, and `sed -n '1968,2002p' src/wallet/rpc/spend.cpp` show
@@ -2608,6 +2665,10 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=rbf_tests --catch_system_error=no
   --log_level=error --report_level=short`
+- `cmake --build build --target bitcoind test_bitcoin`
+- `cmake --build build --target test_bitcoin && build/bin/test_bitcoin
+  --run_test=rbf_tests --catch_system_error=no --log_level=error
+  --report_level=short`
 - `build/bin/test_bitcoin --run_test=rpc_tests/rpc_convert_values_dumptxoutset
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --catch_system_error=no --log_level=error
@@ -2637,6 +2698,24 @@ Functional tests:
   --test_methods test_addnode_getaddednodeinfo
   --tmpdir=/mnt/my_storage/tmp_rpc_net_addnode_guard_port
   --portseed=31910`
+- `python3 test/functional/feature_rbf.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_rbf_service_port_7 --portseed=32290`
+- `python3 ../knots/test/functional/feature_rbf.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_rbf_service_knots --portseed=32220`
+- `python3 test/functional/p2p_node_network_limited.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_p2p_node_network_limited_service_port_2
+  --portseed=32300`
+- `python3 ../knots/test/functional/p2p_node_network_limited.py
+  --configfile ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_p2p_node_network_limited_service_knots
+  --portseed=32230`
+- `python3 -m py_compile test/functional/test_framework/mempool_util.py
+  test/functional/feature_rbf.py test/functional/mempool_packages.py
+  test/functional/mempool_cluster.py test/functional/mempool_updatefromblock.py
+  test/functional/wallet_v3_txs.py test/functional/p2p_orphan_handling.py
+  test/functional/p2p_opportunistic_1p1c.py`
 - `python3 test/functional/feature_rdts.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile
