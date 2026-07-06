@@ -2388,7 +2388,9 @@ under different commits. They are not all proven exploitable.
   remote unauthenticated exposure; it is a Knots-only memory/RPC surface and a
   GUI-default behavioral difference from Core. `rpc_mempoolstats.py` now covers
   the default-disabled daemon path and the enabled RPC/sample path, and the
-  same test passes against unmodified Knots.
+  same test passes against unmodified Knots. A refreshed source comparison
+  shows the option/RPC/stat-container surface in Knots and the port, with no
+  matching current-Core entries for those specific names.
 
 - ZMQ notification resilience and read-block logging:
   `1c4d2d54d8`, `268fb1e0e3`, `ba28af94bd`
@@ -3322,6 +3324,11 @@ Source/manifest checks:
   HEAD knots/29.x-knots origin/master -- src/common/args.cpp src/common/args.h
   src/common/config.cpp src/init/common.cpp src/bitcoin-cli.cpp
   src/test/argsman_tests.cpp`
+- `git grep -n -E
+  "statsenable|statsmaxmemorytarget|getmempoolstats|RegisterStatsRPCCommands|DEFAULT_STATISTICS_ENABLED|mempoolGetValuesInRange|rpc_mempoolstats"
+  HEAD knots/29.x-knots origin/master -- src/stats src/init.cpp
+  src/rpc/register.h src/test/CMakeLists.txt
+  test/functional/rpc_mempoolstats.py src/qt/bitcoin.cpp`
 - `git -C ../knots show 29.x-knots:src/node/blockmanager_args.cpp | rg -n
   "pruneduringinit|PRUNE_TARGET_MANUAL"` confirms actual Knots converts
   `-pruneduringinit=0` to manual pruning during init.
@@ -3902,6 +3909,10 @@ Unit tests:
   --catch_system_error=no --log_level=error --report_level=short`
 - `../knots/build-repro/bin/test_bitcoin --run_test=node_warnings_tests
   --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=stats_tests --catch_system_error=no
+  --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin --run_test=stats_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=node_init_tests/init_test
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=rbf_tests/calc_feerate_diagram_rbf
@@ -4037,6 +4048,14 @@ Functional tests:
   ../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_feature_uacomment_knots_refresh
   --portseed=42281`
+- `python3 test/functional/rpc_mempoolstats.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_port_refresh
+  --portseed=42290`
+- `python3 test/functional/rpc_mempoolstats.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_knots_refresh
+  --portseed=42291`
 - `python3 test/functional/p2p_handshake.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_handshake_rdts_gate_fixed3`
 - `python3 test/functional/p2p_handshake.py --configfile
@@ -5064,9 +5083,12 @@ Functional tests:
   `python3 test/functional/rpc_mempoolstats.py --configfile=build/test/config.ini --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_port_2 --portseed=32931`
   passed, as did
   `build/bin/test_bitcoin --run_test=stats_tests --catch_system_error=no --log_level=error --report_level=short`.
-  At the time of that stats pass, `../knots/build-repro/bin` only contained
-  `bitcoind`, `bitcoin-cli`, and `bitcoin-wallet`, so there was no
-  unmodified-Knots `test_bitcoin` binary for a C++ unit cross-run.
+  Refreshed port and Knots runs,
+  `python3 test/functional/rpc_mempoolstats.py --configfile build/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_port_refresh --portseed=42290`
+  and
+  `python3 test/functional/rpc_mempoolstats.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_knots_refresh --portseed=42291`,
+  also passed. The now-available unmodified Knots unit binary also passes
+  `../knots/build-repro/bin/test_bitcoin --run_test=stats_tests --catch_system_error=no --log_level=error --report_level=short`.
 - Original Knots cross-check:
   `python3 test/functional/interface_zmq.py --configfile=../knots/build-zmq-audit/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_interface_zmq_wallet_knots --portseed=32941`
   passed on the unmodified Knots ZMQ build, including the wallet
