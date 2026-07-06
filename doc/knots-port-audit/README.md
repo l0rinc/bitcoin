@@ -312,8 +312,12 @@ Other missing/adapted Knots pieces found during this pass:
   `-alertnotify` double-quote substitution for Windows `cmd.exe`, while current
   Core still substitutes the sanitized alert text inside single quotes.
 - Knots-added RPC coverage for `getblocklocations`, `getgeneralinfo`, and
-  BIP67 multisig sorting now passes on the port. The `getblocklocations`
-  review confirmed the port carries Knots' locking, help/example,
+  BIP67 multisig sorting now passes on the port. The multisig sorting RPC
+  surface (`c22a69eed1`, moved to an options object by `88e4bd655a`, with the
+  compressed-key guard from `647fd47dfe`) is present in the port and absent
+  from current Core; this is wallet/RPC script-construction functionality, not
+  consensus behavior. The `getblocklocations` review confirmed the port
+  carries Knots' locking, help/example,
   result-schema, and fuzz-registration fixes (`91c9e14639`, `32c2b6e326`,
   `e56f5e7255`, `e1a10af807`). Current Core master has no
   `getblocklocations` RPC, so these are Knots-only operator/debugging RPC
@@ -5601,6 +5605,9 @@ Functional tests:
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
 - `build/test/functional/rpc_scanblocks.py`
 - `python3 test/functional/rpc_sort_multisig.py --configfile build/test/config.ini`
+- `python3 test/functional/rpc_sort_multisig.py --configfile=build/test/config.ini
+  --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_sort_multisig_refresh
+  --portseed=42736`
 - `python3 test/functional/rpc_deriveaddresses.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_deriveaddresses_checksum`
 - `python3 test/functional/rpc_deriveaddresses.py --usecli --configfile
