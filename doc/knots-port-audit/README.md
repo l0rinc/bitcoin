@@ -1189,12 +1189,16 @@ Other missing/adapted Knots pieces found during this pass:
   `/mnt/my_storage/build-zmq-audit`, a separate tree configured with
   `-DWITH_ZMQ=ON`; the latest check rebuilt `bitcoind`/`bitcoin-cli` there
   before rerunning the functional suite.
-- The fee-estimator follow-up confirmed Knots' `TxConfirmStats::Read` overflow
-  guard (`163d3e5c13`, ported as `aeaf84b7d5`) is present while current Core
-  still multiplies `scale * maxPeriods` before checking the one-week bound.
-  The port now adds `policyestimator_tests` coverage that serializes a
-  corrupt `fee_estimates.dat`-style record with an impossible scale and
-  verifies that `CBlockPolicyEstimator::Read(...)` rejects it cleanly.
+- The fee-estimator follow-up confirmed Knots' `TxConfirmStats::Read`
+  pre-multiplication bound check (`163d3e5c13`, ported as `aeaf84b7d5`) is
+  present while current Core still multiplies `scale * maxPeriods` before
+  checking the one-week bound. Current Core master has independently widened
+  the temporary product to `uint64_t` (`fa1d17d56c`), so this is no longer a
+  demonstrated current-Core overflow; it is stricter corrupt-file validation
+  ordering in Knots and the port. The port now adds `policyestimator_tests`
+  coverage that serializes a corrupt `fee_estimates.dat`-style record with an
+  impossible scale and verifies that `CBlockPolicyEstimator::Read(...)` rejects
+  it cleanly.
   The same pass classified the fee-histogram unsigned-decrement fix
   (`85c8d477b0`, ported as `759e1d76b3`) as Knots-surface hardening because
   current Core has no `getmempoolinfo(with_fee_histogram=...)` or REST
@@ -2013,17 +2017,22 @@ under different commits. They are not all proven exploitable.
   Knots' "call all notifiers and do not erase failed ones" behavior. This is
   notification availability and diagnostics hardening, not a consensus issue.
 
-- Fee-estimator file read overflow guard:
+- Fee-estimator file read bound-ordering guard:
   `163d3e5c13`
 
   Current Core still computes `scale * maxPeriods` before checking whether a
-  serialized fee-estimates file tracks more than one week of confirmations.
-  Knots checks `scale > 1008 / maxPeriods` first and only multiplies after the
-  corrupt-file bound has passed. This is local corrupt-file hardening for
-  `fee_estimates.dat`, not remote network exposure. Source comparison confirmed
-  actual Knots carries the same guard in its older `src/policy/fees.cpp`, while
-  the port carries it in current Core's split
-  `src/policy/fees/block_policy_estimator.cpp`.
+  serialized fee-estimates file tracks more than one week of confirmations, but
+  current Core master uses `uint64_t` temporaries after `fa1d17d56c`, so this is
+  not a confirmed current-Core overflow with the present serialized
+  `unsigned int` scale and vector-size limits. Knots checks
+  `scale > 1008 / maxPeriods` first and only multiplies after the corrupt-file
+  bound has passed. This is local corrupt-file hardening/order-of-validation
+  cleanup for `fee_estimates.dat`, not remote network exposure or consensus
+  behavior. Source comparison confirmed actual Knots carries the same guard in
+  its older `src/policy/fees.cpp`, while the port carries it in current Core's
+  split `src/policy/fees/block_policy_estimator.cpp`; the port also has
+  `policyestimator_tests/read_rejects_fee_estimates_with_oversized_scale`
+  coverage.
 
 - External or Knots-only surfaces:
   `d637873230` fixes `GetBlockFileInfo` bounds handling, but the obvious
@@ -3033,6 +3042,8 @@ Unit tests:
   --run_test=policyestimator_tests/read_rejects_fee_estimates_with_oversized_scale
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=policyestimator_tests`
+- `build/bin/test_bitcoin --run_test=policyestimator_tests
+  --catch_system_errors=no`
 - `build/bin/test_bitcoin --run_test=codex32_tests`
 - `build/bin/test_bitcoin --run_test=codex32_tests
   --catch_system_error=no --log_level=error --report_level=short`
