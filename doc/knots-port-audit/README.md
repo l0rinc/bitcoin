@@ -265,8 +265,17 @@ Other missing/adapted Knots pieces found during this pass:
   subprocess path that uses `subprocess::close_fds`. Knots' build-gated Tor
   subprocess support (`fd3c245878`, `d658901a84`) is ported as `a723751ed1`
   and `bc94bce0cd`, while current Core has no `ENABLE_TOR_SUBPROCESS` option
-  or `-torexecute` argument. The test needed two rebase-only adjustments: use
-  a dedicated onion bind to avoid Knots' common
+  or `-torexecute` argument. The same pass confirmed three additional
+  Core-missing Tor/local-listener hardening fixes are present in the port:
+  bind-any onion-service targets are remapped to loopback before `ADD_ONION`
+  (`85a13e943a`, port `3ed16e1125`), launched Tor subprocesses use an
+  ephemeral config file instead of leaving stdin open (`8546bc08b1`, port
+  `e361ebf45c`), and when Tor is sharing the first normal bind, inbound peers
+  on that listener are treated as onion as appropriate so address-based
+  whitelist permissions are not accidentally applied (`23071773f6`, port
+  `6f2a443f93`). These are local privacy/operational hardening differences,
+  not consensus behavior or unauthenticated remote crash fixes. The test needed
+  two rebase-only adjustments: use a dedicated onion bind to avoid Knots' common
   Tor/local-port warning on stderr, and parse the fake Tor command as
   `LOG -f TORRC`, matching the port's `-torexecute` launch contract
   (`6fe0c50345`). A later source check also confirmed the port has Knots/Core
@@ -3208,6 +3217,16 @@ Source/manifest checks:
   test/functional/feature_proxy.py` refreshes that comparison: Knots and the
   port accept `tor || onion` and test `=tor`, while current Core's parser still
   only matches `onion`.
+- `git -C ../knots show --patch 85a13e943a 8546bc08b1 23071773f6 --
+  src/init.cpp src/torcontrol.cpp src/net.cpp src/net.h
+  test/functional/feature_torcontrol.py`, `git show origin/master:src/init.cpp
+  | rg -n "onion_service_target|IsBindAny|listenonion|Tor and" -C 4`,
+  `git show origin/master:src/net.cpp | rg -n
+  "inbound_onion|m_onion_binds|addr_bind == m_normal_binds" -C 4`, and `rg -n
+  "IsBindAny\\(\\)|generated_config|m_normal_binds|m_listenonion|bind-any onion target"
+  src/init.cpp src/torcontrol.cpp src/net.cpp src/net.h
+  test/functional/feature_torcontrol.py` show the Core-missing Tor-control and
+  common-listener hardening carried by the port and actual Knots.
 - `git show origin/master:src/wallet/db.cpp | sed -n '20,70p'` and
   `git -C ../knots show 29.x-knots:src/wallet/db.cpp | sed -n '20,75p'`
   show that current Core lacks Knots' `ignore_paths` skip list in
