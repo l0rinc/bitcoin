@@ -2062,6 +2062,46 @@ BOOST_AUTO_TEST_CASE(vecdeque_clear_keeps_capacity)
     BOOST_CHECK_EQUAL(queue.back(), 42);
 }
 
+BOOST_AUTO_TEST_CASE(vecdeque_reserve_shrink_preserves_wrapped_contents)
+{
+    VecDeque<int> queue;
+    queue.reserve(8);
+    for (int i{0}; i < 6; ++i) {
+        queue.push_back(i);
+    }
+    queue.pop_front();
+    queue.pop_front();
+    queue.push_back(6);
+    queue.push_back(7);
+    queue.push_back(8);
+
+    const std::vector<int> expected{2, 3, 4, 5, 6, 7, 8};
+    BOOST_CHECK_EQUAL(queue.size(), expected.size());
+    BOOST_CHECK_EQUAL(queue.capacity(), 8U);
+
+    queue.reserve(16);
+    BOOST_CHECK_EQUAL(queue.size(), expected.size());
+    BOOST_CHECK_EQUAL(queue.capacity(), 16U);
+    for (size_t i{0}; i < expected.size(); ++i) {
+        BOOST_CHECK_EQUAL(queue[i], expected[i]);
+    }
+    BOOST_CHECK_EQUAL(queue.front(), expected.front());
+    BOOST_CHECK_EQUAL(queue.back(), expected.back());
+
+    queue.reserve(4);
+    BOOST_CHECK_EQUAL(queue.size(), expected.size());
+    BOOST_CHECK_EQUAL(queue.capacity(), 16U);
+
+    queue.shrink_to_fit();
+    BOOST_CHECK_EQUAL(queue.size(), expected.size());
+    BOOST_CHECK_EQUAL(queue.capacity(), expected.size());
+    for (size_t i{0}; i < expected.size(); ++i) {
+        BOOST_CHECK_EQUAL(queue[i], expected[i]);
+    }
+    BOOST_CHECK_EQUAL(queue.front(), expected.front());
+    BOOST_CHECK_EQUAL(queue.back(), expected.back());
+}
+
 template <typename Set>
 void CheckBitSetFillBoundary()
 {
