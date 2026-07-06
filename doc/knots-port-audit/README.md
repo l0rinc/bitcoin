@@ -2312,6 +2312,22 @@ under different commits. They are not all proven exploitable.
   mempool. The focused strict-policy subtest passes against both the port and
   unmodified Knots.
 
+- Bare pubkey relay option shadowed by output-size policy:
+  Knots' `-permitbarepubkey` (`bc3479044b`, side commit `9259ac22ef`) is
+  present in the port and absent from current Core, but the current Knots
+  output-size mempool check rejects compressed P2PK outputs first. A compressed
+  bare-pubkey script is 35 bytes, while Knots' reduced-data output-size limit
+  is 34 bytes for non-`OP_RETURN` outputs, so `testmempoolaccept` returns
+  `bad-txns-vout-script-toolarge` even with `-permitbarepubkey=1` or
+  `-acceptnonstdtxn=1`. The same transaction can still be mined directly on
+  ordinary regtest before RDTS activation, so this is not a pre-activation
+  consensus rule; after RDTS activation, the output-size limit is consensus and
+  the option cannot make such outputs valid. The new `mempool_bare_pubkey.py`
+  test passes against both the port and unmodified Knots, confirming this is
+  inherited Knots behavior rather than a port-introduced regression. The audit
+  classification is a surprising option interaction / stale policy surface, not
+  a remote crash or Core security fix.
+
 - Raw transaction max-feerate accounting with policy-adjusted vsize:
   `4b3cc3d48e`, `1cee5b1ac7`, `335d928d96`
 
@@ -3725,6 +3741,14 @@ Functional tests:
   --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_mempool_maxscriptsize_knots
   --portseed=32802`
+- `python3 test/functional/mempool_bare_pubkey.py
+  --configfile=build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_bare_pubkey_port
+  --portseed=32830`
+- `python3 test/functional/mempool_bare_pubkey.py
+  --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_bare_pubkey_knots
+  --portseed=32831`
 - `python3 test/functional/mempool_reject_filters.py
   --configfile=build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_reject_filters_port
