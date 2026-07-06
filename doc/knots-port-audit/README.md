@@ -749,6 +749,15 @@ Other missing/adapted Knots pieces found during this pass:
   non-writable-directory guard and tests, but has no BDB backend. The port's
   BDB side is covered by `wallet_createwallet.py`, `wallet_startup.py`, and
   `db_tests`.
+- The wallet-tool dump/createfromdump cleanup review checked Knots'
+  `cc324aa2be` failed-restore cleanup and `afd2785f2c` BDB wallet-id warnings.
+  Current Core master already avoids the old `fs::remove_all(wallet_path)`
+  cleanup by removing only `wallet->GetDatabase().Files()` plus the named
+  wallet path, so this is not Core-missing data-loss hardening. Knots and the
+  port additionally keep unnamed `createfromdump` compatibility and warn that
+  BDB dumps/restores do not preserve the wallet id; that warning is tied to
+  Knots' retained BDB backend. A fresh `tool_wallet.py` run passes with the
+  ported behavior.
 - The BDB read-only parser review confirmed Knots' last-page LSN check
   (`2069130d80`) is present in the port and already present in current Core
   master: the parser scans through `outer_meta.last_page` inclusively before
@@ -3231,6 +3240,8 @@ Functional tests:
 - `python3 test/functional/feature_assumeutxo.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_assumeutxo_after_blockchain`
 - `python3 test/functional/tool_wallet.py --configfile build/test/config.ini`
+- `python3 test/functional/tool_wallet.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_tool_wallet_cleanup_review --portseed=7399`
 - `python3 test/functional/wallet_createwallet.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_startup.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_assumeutxo.py --configfile build/test/config.ini
