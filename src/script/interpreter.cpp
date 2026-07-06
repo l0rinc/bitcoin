@@ -1595,9 +1595,13 @@ int SigHashCache::CacheIndex(int32_t hash_type) const noexcept
 {
     // Note that we do not distinguish between BASE and WITNESS_V0 to determine the cache index,
     // because no input can simultaneously use both.
-    return 3 * !!(hash_type & SIGHASH_ANYONECANPAY) +
-           2 * ((hash_type & 0x1f) == SIGHASH_SINGLE) +
-           1 * ((hash_type & 0x1f) == SIGHASH_NONE);
+    const int cache_index{
+        3 * !!(hash_type & SIGHASH_ANYONECANPAY) +
+        2 * ((hash_type & 0x1f) == SIGHASH_SINGLE) +
+        1 * ((hash_type & 0x1f) == SIGHASH_NONE)};
+    Assume(cache_index >= 0);
+    Assume(cache_index < 6);
+    return cache_index;
 }
 
 bool SigHashCache::Load(int32_t hash_type, const CScript& script_code, HashWriter& writer) const noexcept
