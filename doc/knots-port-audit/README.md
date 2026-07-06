@@ -3223,8 +3223,10 @@ BaseIndex rewind no-commit state persistence (`16b1710d97`) and stale
 overflow/RLIMIT_INFINITY handling (`0f92fc907f`, `1953393f48`,
 `6c89453ca7`; Core `4afbabdcef`, `8ab4b9fc85`), RPC credentials hashed in
 memory, the `PSBTInputSignedAndVerified` bounds assert fix (`b2f6128338`,
-also present in current Core),
-v2-to-v1 reconnect UAF, randomized Tor
+also present in current Core), the v2-to-v1 reconnect UAF fix
+(`f44b206a5e`, Core `167df7a98c`, clearing `m_reconnections` before
+`semOutbound` teardown and present in Knots, Core, and this port), randomized
+Tor
 stream-isolation credential prefixes, feebumper combined-fee crash
 (`4b202bc91c`, Core `6072a2a6a1`), wallet coin-selection boolean amount fix
 (`c0b092936e`, Core `0026b330c4`),
@@ -5657,6 +5659,10 @@ Functional tests:
   ../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_p2p_v2onlyclearnet_knots_refresh2
   --portseed=42503`
+- `python3 test/functional/p2p_v2_encrypted.py
+  --configfile=build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_v2_reconnect_uaf_refresh
+  --portseed=42747`
 - `python3 test/functional/rpc_getblocklocations.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_getblocklocations_review`
 - `python3 test/functional/rpc_getgeneralinfo.py --configfile build/test/config.ini`
