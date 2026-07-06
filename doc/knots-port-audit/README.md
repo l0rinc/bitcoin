@@ -508,11 +508,13 @@ Other missing/adapted Knots pieces found during this pass:
   background validation (`bf459451a2`).
 - The same RPC test pass exposed a port-introduced regression in
   `waitfornewblock(current_tip)`: the help and test still advertised the
-  optional `current_tip` argument, but the port's long-poll shutdown adaptation
-  ignored `request.params[1]` and always waited on the tip observed when the RPC
-  call started. Current Core and actual Knots both retain the `current_tip`
-  logic. The port now restores it and updates `rpc_blockchain.py` for the
-  current no-UI `Error:` stderr prefix (`bf459451a2`).
+  optional `current_tip` argument, but the port's first adaptation of Core's
+  long-poll shutdown fix (`64a2795fd4`, Knots `9eb4ca33ab`, port
+  `512dbe125d`) ignored `request.params[1]` and always waited on the tip
+  observed when the RPC call started. Current Core and actual Knots both retain
+  the `current_tip` logic. The port now restores it and updates
+  `rpc_blockchain.py` for the current no-UI `Error:` stderr prefix
+  (`bf459451a2`).
 - The shutdown/wait RPC review confirmed Knots' retained
   `m_tip_block_cv` wake-up from `node.shutdown_request` (`d2c1bd10db`, ported
   as `1ba5009294`) is present in the port and still absent from current Core's
@@ -3576,6 +3578,15 @@ Source/manifest checks:
   test/functional/test_framework/util.py` show the port and actual Knots retain
   the direct `shutdown_request` wait-wakeup while current Core only wakes these
   long-poll waiters through the later `Interrupt()` path.
+- `git show --stat --patch 64a2795fd4 9eb4ca33ab 512dbe125d --
+  src/interfaces/mining.h src/node/interfaces.cpp src/rpc/blockchain.cpp
+  src/rpc/mining.cpp test/functional/feature_shutdown.py` and `git grep -n -E
+  "std::optional<BlockRef> waitTipChanged|Return current block upon shutdown|Node is shutting down|waitfornewblock\\(current_tip"
+  HEAD knots/29.x-knots origin/master -- src/interfaces/mining.h
+  src/node/interfaces.cpp src/rpc/blockchain.cpp src/rpc/mining.cpp
+  test/functional/feature_shutdown.py test/functional/rpc_blockchain.py` show
+  the shared long-poll shutdown fix and the port-only `current_tip` regression
+  that was later corrected.
 - `git show origin/master:src/init.cpp | rg -n
   "proxy=.*\\[=<network>|net_str == \"tor\"|net_str == \"onion\"" -C 3`
   shows current Core advertises per-network `-proxy` selectors including
@@ -5688,6 +5699,10 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_period_start`
 - `python3 test/functional/rpc_blockchain.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_blockchain_scriptthreads`
+- `python3 test/functional/rpc_blockchain.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_blockchain_wait_tip_lineage_refresh
+  --portseed=42760`
 - `build/test/functional/rpc_blockchain.py`
 - `python3 test/functional/interface_zmq.py --configfile /tmp/bitcoin-zmq-build/test/config.ini`
 - `python3 test/functional/interface_zmq.py --configfile build-zmq/test/config.ini
