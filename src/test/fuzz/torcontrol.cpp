@@ -16,6 +16,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -28,6 +29,12 @@ struct TorProcessBufferModel {
     size_t remaining_handlers{0};
     std::vector<TorControlReply> handled_replies;
 };
+
+bool IsExpectedProcessBufferRuntimeError(std::string_view error)
+{
+    return error == "max_line_length exceeded by LineReader" ||
+           error == "Control port reply exceeded 1000 lines, disconnecting";
+}
 
 TorProcessBufferModel ModelTorProcessBuffer(const std::vector<std::byte>& recv_buffer, size_t handler_count)
 {
@@ -55,6 +62,7 @@ TorProcessBufferModel ModelTorProcessBuffer(const std::vector<std::byte>& recv_b
         }
         model.consumed = reader.Consumed();
     } catch (const std::runtime_error& e) {
+        assert(IsExpectedProcessBufferRuntimeError(e.what()));
         model.error = e.what();
     }
 
@@ -80,6 +88,7 @@ void AssertProcessBufferContracts(const std::vector<std::byte>& recv_buffer, siz
         assert(TorControlConnectionTest::ProcessBuffer(conn));
         assert(!model.error);
     } catch (const std::runtime_error& e) {
+        assert(IsExpectedProcessBufferRuntimeError(e.what()));
         assert(model.error);
         assert(*model.error == e.what());
         assert(TorControlConnectionTest::ReceiveBuffer(conn) == recv_buffer);
