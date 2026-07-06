@@ -2987,7 +2987,7 @@ under different commits. They are not all proven exploitable.
   coverage.
 
 - REST fee-estimation endpoint:
-  `771a5f439b`
+  `771a5f439b`, `27d0afdb46`, `a1800ec1a5`
 
   Knots exposes `estimatesmartfee` through `/rest/fee/<mode>/<target>.json`,
   and the port carries the same REST handler and `feature_fee_estimation.py`
@@ -2996,6 +2996,13 @@ under different commits. They are not all proven exploitable.
   endpoint or REST test helper. This is an unauthenticated REST observability
   surface for nodes started with `-rest`, not consensus behavior and not a
   covert crash fix.
+
+  The port also carries Knots' two later endpoint fixes: parse the confirmation
+  target as `unsigned int` before the range check so oversized values cannot
+  wrap through a signed temporary, and floor the returned estimate at both the
+  mempool minimum feerate and the node's minimum relay feerate. Current Core has
+  the underlying fee-estimation test logic for the RPC path, but still has no
+  REST endpoint where those REST-specific fixes would apply.
 
   Refreshing the test caught two port-side test-integration misses, neither of
   which reproduced as a node bug in unmodified Knots. First, the port carried
