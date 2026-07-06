@@ -1397,7 +1397,9 @@ Other missing/adapted Knots pieces found during this pass:
   600-second signet spacing, a 30-second custom spacing, and the missing
   challenge / non-positive value error paths.
 - The `ignore_rejects` follow-up found an original Knots RDTS policy-bypass
-  edge in `PolicyScriptVerifyFlags()`: the broad
+  edge in `PolicyScriptVerifyFlags()` after replaying Knots' local policy
+  override surface (`388d47e253`, `46bddf8515`, and `65bbb78519`, ported as
+  `7efa9281f5`, `a4f62b6006`, and `315ea689e4`): the broad
   `non-mandatory-script-verify-flag` ignore and the grouped
   `non-mandatory-script-verify-flag-upgradable` ignore could remove
   `REDUCED_DATA_MANDATORY_VERIFY_FLAGS` from the policy script check. The
@@ -2426,8 +2428,9 @@ under different commits. They are not all proven exploitable.
   scheduler-updated dust feerate for both target- and mempool-based modes.
 
 - TRUC policy modes:
-  Knots' `-mempooltruc` option is present in the port and absent from current
-  Core. It lets the operator choose `reject`, `accept`, or `enforce` for
+  Knots' `-mempooltruc` option and TRUC `ignore_rejects` overrides are present
+  in the port and absent from current Core. It lets the operator choose
+  `reject`, `accept`, or `enforce` for
   version-3/TRUC transactions. The actual Knots default is `accept`, so TRUC
   transactions are handled like ordinary transactions unless the operator opts
   into stricter policy. `-mempooltruc=enforce` or `-mempooltruc=1` enforces the
@@ -3845,6 +3848,9 @@ Functional tests:
 - `python3 test/functional/feature_rdts.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_rdts.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_rdts_port_recheck --portseed=7423`
+- `python3 test/functional/feature_rdts.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_rdts_ignore_rejects_port2
+  --portseed=42141`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_reduced_data_utxo_height.py --configfile
   build/test/config.ini
@@ -4003,10 +4009,18 @@ Functional tests:
 - `python3 test/functional/mempool_truc.py --configfile=build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_truc_policy_port
   --portseed=32880 --test_methods test_truc_policy_option`
+- `python3 test/functional/mempool_truc.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_truc_ignore_rejects_full_port
+  --portseed=42142`
+- `build/bin/test_bitcoin --run_test=txvalidation_tests/tx_mempool_ignore_truc
+  --catch_system_error=no --log_level=error --report_level=short`
 - `python3 test/functional/mempool_truc.py
   --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_mempool_truc_policy_knots
   --portseed=32881 --test_methods test_truc_policy_option`
+- `python3 test/functional/mempool_accept.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_mempool_accept_anchor_label_port
+  --portseed=42143`
 - `python3 test/functional/mempool_ephemeral_dust.py --configfile
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_ephemeral_dust_review_port
