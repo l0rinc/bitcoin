@@ -175,18 +175,20 @@ std::vector<T> Split(const std::span<const char>& sp, char sep, bool include_sep
 
 [[nodiscard]] inline std::string_view RemoveSuffixView(std::string_view str, std::string_view suffix)
 {
-    if (str.ends_with(suffix)) {
-        return str.substr(0, str.size() - suffix.size());
-    }
-    return str;
+    const bool has_suffix{str.ends_with(suffix)};
+    const std::string_view ret{has_suffix ? str.substr(0, str.size() - suffix.size()) : str};
+    assert(!has_suffix || ret == str.substr(0, str.size() - suffix.size()));
+    assert(has_suffix || ret == str);
+    return ret;
 }
 
 [[nodiscard]] inline std::string_view RemovePrefixView(std::string_view str, std::string_view prefix)
 {
-    if (str.starts_with(prefix)) {
-        return str.substr(prefix.size());
-    }
-    return str;
+    const bool has_prefix{str.starts_with(prefix)};
+    const std::string_view ret{has_prefix ? str.substr(prefix.size()) : str};
+    assert(!has_prefix || ret == str.substr(prefix.size()));
+    assert(has_prefix || ret == str);
+    return ret;
 }
 
 [[nodiscard]] inline std::string RemovePrefix(std::string_view str, std::string_view prefix)
