@@ -702,8 +702,12 @@ Other missing/adapted Knots pieces found during this pass:
   port now fixes these as `e94cbbbe9c` and `9d032f4b21`.
 - Compact-block extra-transaction coverage now uses the current P2P test
   framework send helper and hash/wtxid properties (`77d2b2c025`).
-  `p2p_compactblocks_extratxs.py`, `p2p_dos_header_tree.py`, and
-  `p2p_block_times.py` pass.
+  `p2p_compactblocks_extratxs.py` and `p2p_dos_header_tree.py` pass.
+- Knots' `p2p_block_times.py` (`01a7caefac`, rebased from Core PR 27052) is
+  extra coverage for `last_block_announcement` peer bookkeeping used by
+  stale-tip outbound eviction. It is not block timestamp consensus logic, and
+  this checkout's Core master does not carry the standalone functional test.
+  The port and unmodified Knots both pass it.
 - Knots' software-expiry behavior is present and should be treated as a
   visible non-Core divergence: by default the client has an expiry timestamp,
   warns four weeks before expiry (`65c95aebfb`), refuses block-template
@@ -6290,7 +6294,15 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_dos_header_tree_checkpoint`
 - `python3 test/functional/p2p_dos_header_tree.py --configfile ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_knots_p2p_dos_header_tree_checkpoint`
-- `python3 test/functional/p2p_block_times.py --configfile build/test/config.ini`
+- `python3 test/functional/p2p_block_times.py --configfile build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_block_times_refresh
+  --portseed=44710`
+- `python3 ../knots/test/functional/p2p_block_times.py --configfile
+  ../knots/build-repro/test/config.ini
+  --cachedir=../knots/test/cache
+  --tmpdir=/mnt/my_storage/tmp_knots_p2p_block_times_refresh
+  --portseed=44711`
 - `python3 test/functional/feature_block.py --configfile build/test/config.ini
   --skipreorg --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_block_skip`
 - `python3 test/functional/feature_assumeutxo.py --configfile build/test/config.ini
