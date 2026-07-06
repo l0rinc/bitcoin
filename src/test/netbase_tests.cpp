@@ -92,15 +92,21 @@ static std::vector<uint8_t> Socks5SuccessReply(bool select_auth)
     return reply;
 }
 
-static std::vector<uint8_t> ExpectedSocks5ClientBytes(const std::string& dest, uint16_t port, const ProxyCredentials* auth)
+static std::vector<uint8_t> ExpectedSocks5MethodSelectionBytes(const ProxyCredentials* auth)
 {
     std::vector<uint8_t> expected{
         0x05,
         static_cast<uint8_t>(auth ? 0x02 : 0x01),
         0x00,
     };
+    if (auth) expected.push_back(0x02);
+    return expected;
+}
+
+static std::vector<uint8_t> ExpectedSocks5ClientBytes(const std::string& dest, uint16_t port, const ProxyCredentials* auth)
+{
+    std::vector<uint8_t> expected{ExpectedSocks5MethodSelectionBytes(auth)};
     if (auth) {
-        expected.push_back(0x02);
         expected.insert(expected.end(), {0x01, static_cast<uint8_t>(auth->username.size())});
         expected.insert(expected.end(), auth->username.begin(), auth->username.end());
         expected.push_back(static_cast<uint8_t>(auth->password.size()));
@@ -122,6 +128,19 @@ static void CheckSocks5Transcript(const std::string& dest, uint16_t port, const 
 
     BOOST_CHECK(Socks5(dest, port, auth, sock));
     const auto expected{ExpectedSocks5ClientBytes(dest, port, auth)};
+    BOOST_CHECK(ReadBytes(pipes->send, expected.size()) == expected);
+    CheckNoBytes(pipes->send);
+}
+
+static void CheckSocks5MethodSelectionFailure(const std::string& dest, uint16_t port, const ProxyCredentials* auth, uint8_t version, uint8_t method)
+{
+    g_socks5_interrupt.reset();
+    auto pipes{std::make_shared<DynSock::Pipes>()};
+    PushBytes(pipes->recv, {version, method});
+    DynSock sock{pipes};
+
+    BOOST_CHECK(!Socks5(dest, port, auth, sock));
+    const auto expected{ExpectedSocks5MethodSelectionBytes(auth)};
     BOOST_CHECK(ReadBytes(pipes->send, expected.size()) == expected);
     CheckNoBytes(pipes->send);
 }
@@ -225,6 +244,18 @@ BOOST_AUTO_TEST_CASE(socks5_client_transcript)
     DynSock sock{pipes};
     BOOST_CHECK(!Socks5(std::string(256, 'x'), 8333, nullptr, sock));
     CheckNoBytes(pipes->send);
+}
+
+BOOST_AUTO_TEST_CASE(socks5_method_selection_failure_stops_handshake)
+{
+    CheckSocks5MethodSelectionFailure("node.example", 8333, nullptr, 0x04, 0x00);
+    CheckSocks5MethodSelectionFailure("node.example", 8333, nullptr, 0x05, 0x02);
+
+    ProxyCredentials credentials;
+    credentials.username = "user";
+    credentials.password = "passphrase";
+    CheckSocks5MethodSelectionFailure("auth.example", 9050, &credentials, 0x04, 0x00);
+    CheckSocks5MethodSelectionFailure("auth.example", 9050, &credentials, 0x05, 0xff);
 }
 
 bool static TestParse(std::string src, std::string canon)
