@@ -203,8 +203,11 @@ Other missing/adapted Knots pieces found during this pass:
 - `feature_torcontrol.py` now passes against the current port, covering Tor
   control partial responses, oversized-line disconnects, excessive-line
   disconnects, bind-any onion target mapping, PoW fallback, and the private Tor
-  subprocess path that uses `subprocess::close_fds`. The test needed two
-  rebase-only adjustments: use a dedicated onion bind to avoid Knots' common
+  subprocess path that uses `subprocess::close_fds`. Knots' build-gated Tor
+  subprocess support (`fd3c245878`, `d658901a84`) is ported as `a723751ed1`
+  and `bc94bce0cd`, while current Core has no `ENABLE_TOR_SUBPROCESS` option
+  or `-torexecute` argument. The test needed two rebase-only adjustments: use
+  a dedicated onion bind to avoid Knots' common
   Tor/local-port warning on stderr, and parse the fake Tor command as
   `LOG -f TORRC`, matching the port's `-torexecute` launch contract
   (`6fe0c50345`). A later source check also confirmed the port has Knots/Core
@@ -4235,6 +4238,12 @@ Functional tests:
 - `python3 test/functional/feature_torcontrol.py --configfile build/test/config.ini`
 - `test/functional/feature_torcontrol.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_torcontrol_audit`
+- `python3 test/functional/feature_torcontrol.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_torcontrol_subprocess_port
+  --portseed=42150`
+- `build/bin/test_bitcoin --run_test=system_tests/subprocess_close_fds
+  --catch_system_error=no --log_level=error --report_level=short`
+- `cmake -LAH build | rg -n "ENABLE_TOR_SUBPROCESS|BUILD_TESTS"`
 - `python3 test/functional/interface_bitcoin_cli.py --configfile build/test/config.ini`
 - `python3 test/functional/rpc_help.py --configfile build/test/config.ini`
 - `python3 test/functional/tool_cli_completion.py --configfile build/test/config.ini`
