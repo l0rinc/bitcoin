@@ -1687,12 +1687,15 @@ under different commits. They are not all proven exploitable.
   `577c04c80e`
 
   Current Core master still implements `SettingToBool(...)` as null/bool/string
-  handling with `value.get_str()` for every non-bool value. Numeric
-  `settings.json` values therefore throw in `GetBoolArg`, even though
-  equivalent string settings are interpreted. Knots and this port treat
-  `UniValue::VNUM` like `UniValue::VSTR` by passing `getValStr()` to
-  `InterpretBool(...)`. This is local configuration robustness and removes a
-  surprising abort-on-access path for numeric settings.
+  handling with `value.get_str()` for every non-bool value, and its
+  `getarg_tests/setting_args` expectations still require numeric boolean
+  settings to throw. Numeric `settings.json` values therefore throw in
+  `GetBoolArg`, even though equivalent string settings are interpreted. Knots
+  and this port treat `UniValue::VNUM` like `UniValue::VSTR` by passing
+  `getValStr()` to `InterpretBool(...)`, so `99` and `3.25` are true while `0`
+  is false. This is local configuration robustness and removes a surprising
+  abort-on-access path for numeric settings; focused `getarg_tests/setting_args`
+  coverage passes with the port.
 
 - First-startup block-storage size warning units:
   `4f06564f36`
@@ -2284,6 +2287,16 @@ Source/manifest checks:
 - `build/bin/test_bitcoin --run_test=blockmanager_tests --catch_system_error=no
   --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=blockmanager_tests/blockmanager_readblock_hash_mismatch
+  --catch_system_error=no --log_level=error --report_level=short`
+- `git show --stat --patch --minimal 577c04c80e`,
+  `git grep -n
+  "SettingToBool\\|GetBoolArg\\|VNUM\\|getValStr\\|setting_args" HEAD
+  origin/master -- src/common/args.cpp src/common/args.h
+  src/test/getarg_tests.cpp`, and the equivalent `../knots 29.x-knots` grep
+  show that actual Knots and the port interpret numeric `settings.json`
+  booleans through `getValStr()`, while current Core still throws on numeric
+  values in `SettingToBool(...)` and pins that behavior in `getarg_tests`.
+- `build/bin/test_bitcoin --run_test=getarg_tests/setting_args
   --catch_system_error=no --log_level=error --report_level=short`
 - `git show --stat --patch --minimal 1ba5009294 8fad5801e0 d2c1bd10db`,
   `git show origin/master:src/init.cpp | rg -n
