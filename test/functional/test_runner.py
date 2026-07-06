@@ -383,6 +383,7 @@ BASE_SCRIPTS = [
     'mempool_dust.py',
     'mempool_subdust_fee_penalty.py',
     'mempool_sigoplimit.py',
+    'mempool_acceptunknownwitness.py',
     'rpc_deriveaddresses.py',
     'rpc_deriveaddresses.py --usecli',
     'p2p_ping.py',
