@@ -156,6 +156,15 @@ Other missing/adapted Knots pieces found during this pass:
   `m_script_check_queue_enabled`; the port now does the same. This is runtime
   operator CPU-control behavior, not a consensus-rule change. `rpc_blockchain.py`
   now covers the enable/disable RPC surface.
+- The same script-thread-control surface exposed a port-only error-reporting
+  mismatch after Knots' `be0857745a` single-script-check backport. Current Core
+  reports block script failures as `block-script-verify-flag-failed`, and the
+  port's parallel script-check path already did the same, but the inline path
+  reached when `setscriptthreadsenabled(false)` was active still returned the
+  older Knots/Core `mandatory-script-verify-flag-failed` label. This was not a
+  consensus-rule difference or an original Knots defect; the port now aligns the
+  inline label with current Core as `2feca940f4`, and `feature_dersig.py`
+  disables script threads to cover the branch.
 - `rpc_bind.py` has port-side coverage for Knots' stricter explicit RPC-bind
   behavior, but the expected message was attached to the wrong output stream.
   An unmodified Knots build exits with `Error: Unable to start HTTP server. See
@@ -2127,6 +2136,16 @@ Source/manifest checks:
   matching functional regression test. Before `5c6196c636`, a stale duplicate
   Knots method in the port made Python select the older two-block disk test
   instead.
+- `git -C ../knots show --stat --patch --minimal be0857745a5a0154d89a2aa9ddaa2a84e912598a`,
+  `git show origin/master:src/validation.cpp | rg -n
+  "mempool-script-verify-flag-failed|block-script-verify-flag-failed|mandatory-script-verify-flag-failed"
+  -C 2`, and `rg -n
+  "mempool-script-verify-flag-failed|block-script-verify-flag-failed|mandatory-script-verify-flag-failed|setscriptthreadsenabled"
+  src/validation.cpp test/functional/feature_dersig.py
+  test/functional/rpc_blockchain.py` show current Core and the port both use
+  the single mempool script-check path, but only the port's disabled-thread
+  inline block path had retained the older Knots `mandatory-script` label before
+  `2feca940f4`.
 - `git show --stat --patch --minimal 16b1710d97` plus `rg -n
   "BaseIndex::Rewind|committed index state must never be ahead|SetBestBlockIndex\\(new_tip\\)|Commit\\("
   src/index/base.cpp` and equivalent `origin/master` and `../knots` checks
@@ -2629,6 +2648,8 @@ Unit tests:
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=transaction_tests`
 - `build/bin/test_bitcoin --run_test=txvalidationcache_tests`
+- `build/bin/test_bitcoin --run_test=txvalidationcache_tests
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin
   --run_test=txvalidationcache_tests/checkinputs_flags_per_input_cache_safety
   --catch_system_error=no --log_level=error --report_level=short`
@@ -2958,6 +2979,9 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_fee_estimates_persist_save_rpc`
 - `python3 test/functional/feature_segwit.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_segwit_mempool_hash`
+- `python3 test/functional/feature_dersig.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_dersig_scriptthreads_inline_3
+  --portseed=7393`
 - `python3 test/functional/rpc_signrawtransactionwithkey.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_signrawtransactionwithkey_fee`
 - `python3 test/functional/rpc_signrawtransactionwithkey.py --configfile ../knots/build-repro/test/config.ini
