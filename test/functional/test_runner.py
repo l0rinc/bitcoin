@@ -309,6 +309,7 @@ BASE_SCRIPTS = [
     'p2p_initial_headers_sync.py',
     'feature_nulldummy.py',
     'mempool_accept.py',
+    'mempool_bare_pubkey.py',
     'mempool_fee_histogram.py',
     'mempool_maxscriptsize.py',
     'mempool_reject_filters.py',
