@@ -761,11 +761,20 @@ Other missing/adapted Knots pieces found during this pass:
   existing legacy signing, util-level BIP322 vectors, and
   `rpc_signmessagewithprivkey.py` verification vectors.
 - Wallet sweep coverage passes on the current descriptor-wallet base:
-  `wallet_sweepprivkeys.py` rejects invalid/unfunded keys and sweeps both
-  unconfirmed and confirmed P2PKH outputs. Legacy-only Knots tests
-  `wallet_dump.py` and `wallet_import_rescan.py` now reach the expected
-  current-Core skip path after restoring the ported `AddressType` test helper
-  and current `BitcoinTestFramework(__file__)` constructors (`9bfe1fb892`).
+  `wallet_sweepprivkeys.py` rejects invalid/unfunded keys and sweeps
+  unconfirmed and confirmed P2PKH outputs. A focused review found the port had
+  missed Knots' later segwit/taproot sweep extension (`124ab5bc68`): actual
+  Knots can scan and sign P2WPKH, P2SH-P2WPKH, and key-path P2TR outputs for a
+  swept WIF key, while the port still only built legacy P2PKH/P2PK needles.
+  The port now restores the `FlatSigningProvider`/redeem-script/taproot-tree
+  handling and precomputed spent-output signing needed for those witness
+  spends, and the functional test covers all three witness forms. Current Core
+  lacks `sweepprivkeys` entirely, so this is a Core-missing/Knots-only wallet
+  recovery feature and a fixed port omission, not an original Knots defect or
+  a consensus/network issue. Legacy-only Knots tests `wallet_dump.py` and
+  `wallet_import_rescan.py` now reach the expected current-Core skip path after
+  restoring the ported `AddressType` test helper and current
+  `BitcoinTestFramework(__file__)` constructors (`9bfe1fb892`).
 - The wallet backup/export review confirmed Knots' legacy-wallet export
   surfaces are present in the port source: `dumpmasterprivkey` (`e4acb761d4`)
   is registered, and `dumpwallet` writes HD key paths and HD seed ids as
@@ -5774,6 +5783,14 @@ Functional tests:
 - `python3 test/functional/rpc_signmessagewithprivkey.py --configfile
   build/test/config.ini --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_signmessage_bip322`
 - `python3 test/functional/wallet_sweepprivkeys.py --configfile build/test/config.ini`
+- `python3 test/functional/wallet_sweepprivkeys.py --configfile
+  build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_wallet_sweepprivkeys_port_witness
+  --portseed=43801`
+- `python3 ../knots/test/functional/wallet_sweepprivkeys.py --configfile
+  ../knots/build-repro/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_wallet_sweepprivkeys_knots_native
+  --portseed=43802`
 - `python3 test/functional/wallet_importseed.py --configfile build/test/config.ini`
 - `python3 test/functional/wallet_import_with_label.py --configfile build/test/config.ini --legacy-wallet`
   (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB-enabled rerun passed as recorded below)

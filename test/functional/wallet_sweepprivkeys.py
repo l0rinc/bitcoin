@@ -7,13 +7,18 @@
 from decimal import Decimal
 
 from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.descriptors import descsum_create
+from test_framework.key import ECKey
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
     assert_greater_than,
     assert_raises_rpc_error,
 )
-from test_framework.wallet_util import get_generate_key
+from test_framework.wallet_util import (
+    bytes_to_wif,
+    get_generate_key,
+)
 
 
 class WalletSweepPrivKeysTest(BitcoinTestFramework):
@@ -72,6 +77,24 @@ class WalletSweepPrivKeysTest(BitcoinTestFramework):
         self.generate(node, 1)
         assert_equal(node.gettransaction(confirmed_sweep_txid)["confirmations"], 1)
         assert_raises_rpc_error(-6, "No value to sweep", node.sweepprivkeys, {"privkeys": [confirmed_key.privkey]})
+
+        self.log.info("Sweep confirmed P2WPKH, P2SH-P2WPKH, and P2TR outputs")
+        for desc_template, label in (
+            ("wpkh({})", "swept P2WPKH"),
+            ("sh(wpkh({}))", "swept P2SH-P2WPKH"),
+            ("tr({})", "swept P2TR"),
+        ):
+            eckey = ECKey()
+            eckey.generate(compressed=True)
+            privkey = bytes_to_wif(eckey.get_bytes(), compressed=True)
+            address = node.deriveaddresses(descsum_create(desc_template.format(privkey)))[0]
+            node.sendtoaddress(address, Decimal("1"))
+            self.generate(node, 1)
+            sweep_txid = node.sweepprivkeys(privkeys=[privkey], label=label)
+            assert_equal(sweep_txid in node.getrawmempool(), True)
+            self.generate(node, 1)
+            assert_equal(node.gettransaction(sweep_txid)["confirmations"], 1)
+            assert_raises_rpc_error(-6, "No value to sweep", node.sweepprivkeys, {"privkeys": [privkey]})
 
 
 if __name__ == '__main__':
