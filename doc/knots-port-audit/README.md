@@ -317,9 +317,12 @@ Other missing/adapted Knots pieces found during this pass:
   result-schema, and fuzz-registration fixes (`91c9e14639`, `32c2b6e326`,
   `e56f5e7255`, `e1a10af807`). Current Core master has no
   `getblocklocations` RPC, so these are Knots-only operator/debugging RPC
-  fixes rather than Core-missing hardening. `rpc_sort_multisig.py` had dropped
-  the original Knots `assert_raises_rpc_error` import during the rebase; the
-  port restores that test helper import as `dcf97bd63b`.
+  fixes rather than Core-missing hardening. The port also carries Knots'
+  fuzz-safe registration for the Knots-only `getgeneralinfo` and
+  `getmempoolstats` RPCs (`60f1178c6b`, `d01b85ec43`), preserving fuzz
+  coverage parity but not changing runtime behavior. `rpc_sort_multisig.py`
+  had dropped the original Knots `assert_raises_rpc_error` import during the
+  rebase; the port restores that test helper import as `dcf97bd63b`.
 - The `getblock` / `getrawtransaction` fixup review confirmed Knots'
   user-facing RPC help and result-documentation cleanups (`20130089e3`,
   `8765a4ce0e`, `35cdcb3309`) are present after adapting them to the current
@@ -3872,6 +3875,11 @@ Source/manifest checks:
   HEAD knots/29.x-knots origin/master -- src/stats src/init.cpp
   src/rpc/register.h src/test/CMakeLists.txt
   test/functional/rpc_mempoolstats.py src/qt/bitcoin.cpp`
+- `git grep -n
+  "getgeneralinfo\\|getmempoolstats\\|RPC_COMMANDS_SAFE_FOR_FUZZING"
+  HEAD knots/29.x-knots origin/master -- src/test/fuzz/rpc.cpp` shows the
+  Knots-only RPCs are classified safe for fuzzing in the port and unmodified
+  Knots, while current Core has no corresponding commands to classify.
 - `git -C ../knots show 29.x-knots:src/node/blockmanager_args.cpp | rg -n
   "pruneduringinit|PRUNE_TARGET_MANUAL"` confirms actual Knots converts
   `-pruneduringinit=0` to manual pruning during init.
