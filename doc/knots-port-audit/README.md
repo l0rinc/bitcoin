@@ -782,11 +782,14 @@ Other missing/adapted Knots pieces found during this pass:
   `salvage.h`, and current API adaptations as `90c0118d62`. This was not an
   original Knots defect or consensus issue. Full legacy wallet loading/creation
   remains disabled on this current-Core base; the BDB work here restores build
-  coverage and the configured BDB backend objects. Refreshed config checks
-  still show the local port build has no `USE_BDB` component line and the
-  unmodified Knots repro build has `#USE_BDB=true`, so the latest runtime
-  checks are BDB-adjacent parser/config coverage rather than live BDB wallet
-  creation coverage.
+  coverage and the configured BDB backend objects. A later BDB-enabled probe
+  using the system Berkeley DB 5.3 library, with
+  `-DWARN_INCOMPATIBLE_BDB=OFF`, built `bitcoind`, `bitcoin-cli`,
+  `bitcoin-wallet`, and `test_bitcoin`, confirming the retained BDB objects
+  compile in a wallet-enabled node build. The same probe still rejected
+  `createwallet descriptors=false` before reaching Knots' legacy creation
+  branch, so this remains a behavioral release-parity gap rather than a BDB
+  compile-wiring gap.
 - A BDB follow-up review confirmed the port also carries Knots' BDB-specific
   wallet hardening around non-writable directories and environment cleanup:
   `MakeBerkeleyDatabase(...)` catches open/verify exceptions, BDB directory
@@ -2943,10 +2946,12 @@ duplicate method noted above.
 - Legacy-wallet creation is a non-consensus divergence from Knots on this
   current-Core base. Knots source still supports new legacy wallet creation
   when compiled with BDB; Core master no longer creates new legacy wallets, and
-  this port now preserves Core's explicit RPC error instead of crashing. Ported
-  legacy-only wallet tests are skipped by the framework when `--legacy-wallet`
-  mode is selected, so BDB-enabled legacy creation remains unverified and
-  unported here.
+  this port now preserves Core's explicit RPC error instead of crashing. A
+  BDB-enabled port probe confirmed this is not just a default-build artifact:
+  even with `USE_BDB`, the port still returns the descriptor-only RPC error.
+  Ported legacy-only wallet tests are skipped by the framework when
+  `--legacy-wallet` mode is selected, so Knots' full legacy wallet creation
+  path remains unported here.
 - BIP-110/RDTS consensus equivalence remains the main consensus-risk area
   because it is an intentional soft-fork divergence from Core. The current pass
   mapped the Knots RDTS subjects to replayed/adapted port commits, compared the
@@ -3833,6 +3838,11 @@ Builds:
   -DWITH_CCACHE=OFF -DRDTS_CONSENT=IMPLICIT`
 - `cmake --build /tmp/bitcoin-bdb-only-tests-probe --target test_util
   bitcoin_wallet -j2`
+- `cmake -S . -B /mnt/my_storage/tmp_bitcoin_bdb_probe -DWITH_BDB=ON
+  -DWITH_SQLITE=ON -DWARN_INCOMPATIBLE_BDB=OFF -DBUILD_GUI=OFF
+  -DWITH_CCACHE=OFF -DRDTS_CONSENT=RUNTIME_WARN`
+- `cmake --build /mnt/my_storage/tmp_bitcoin_bdb_probe --target bitcoind
+  bitcoin-cli bitcoin-wallet test_bitcoin -j4`
 - `cmake --build build --target test_bitcoin -j2`
 - `cmake --build build --target bitcoind -j2`
 - `cmake --build build --target bitcoind test_bitcoin -j4`
@@ -4008,6 +4018,12 @@ Builds:
   -C 3` show the port still follows Core's descriptor-only wallet creation
   guard, while Knots allows legacy creation when BDB is compiled and only
   returns the BDB-disabled error under non-BDB builds.
+- `rg -n "LegacyScriptPubKeyMan|GetLegacyScriptPubKeyMan|SetupGeneration\\("
+  src/wallet src/wallet/rpc src/wallet/test` versus the same search under
+  `../knots/src/wallet` shows why the RPC guard cannot simply be removed: the
+  port retained migration-oriented `LegacyDataSPKM` and compatibility aliases,
+  but final Knots still has the full `LegacyScriptPubKeyMan` class with key
+  generation, keypool, import, signing, and BDB rewrite hooks.
 - `rg -n "DEFAULT_TX_CONFIRM_TARGET|m_confirm_target"
   src/wallet/wallet.h src/wallet/test/wallet_tests.cpp`,
   `git show origin/master:src/wallet/wallet.h | rg -n
@@ -5915,6 +5931,17 @@ Functional tests:
   BDB returned RPC `-4` with
   `Compiled without bdb support (required for legacy wallets)`. This confirms
   the port blocks the request before the Knots BDB-availability branch.
+- Refreshed BDB-enabled port probe:
+  `cmake -S . -B /mnt/my_storage/tmp_bitcoin_bdb_probe -DWITH_BDB=ON -DWITH_SQLITE=ON -DWARN_INCOMPATIBLE_BDB=OFF -DBUILD_GUI=OFF -DWITH_CCACHE=OFF -DRDTS_CONSENT=RUNTIME_WARN`
+  configured with legacy wallets enabled using the system Berkeley DB 5.3
+  library, and
+  `cmake --build /mnt/my_storage/tmp_bitcoin_bdb_probe --target bitcoind bitcoin-cli bitcoin-wallet test_bitcoin -j4`
+  completed. Starting that BDB-enabled port build and calling
+  `bitcoin-cli -regtest -named createwallet wallet_name=legacy descriptors=false`
+  still returned RPC `-4` with
+  `descriptors argument must be set to "true"; it is no longer possible to
+  create a legacy wallet.`, confirming the gap remains even when BDB is
+  compiled in.
 - Original Knots expected-failure repro:
   foreground `../knots/build-repro/bin/bitcoind -regtest` plus
   `bitcoin-cli -regtest -named addnode node=127.0.0.1:18444 command=onetry connection_type=inbound`
