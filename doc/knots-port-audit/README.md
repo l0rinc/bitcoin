@@ -970,8 +970,9 @@ Other missing/adapted Knots pieces found during this pass:
   `rpc_mempool_info.py` and `tool_wallet.py` pass on the local build, while
   the restored legacy-wallet tests initially reached the expected current-Core
   skip path in descriptor-only builds. After `ece3ba8d5b`, the createwallet
-  legacy path passes in BDB-enabled builds; the broader restored legacy tests
-  still need a BDB-enabled sweep.
+  legacy path passes in BDB-enabled builds; later BDB-enabled sweeps exercised
+  the broader restored legacy tests and found additional port-only omissions
+  described below.
 - The `bitcoin-wallet importfromcoldcard` review confirmed the Knots-only
   command (`e3d45ed809`, `0b7664c038`, `f72496a06a`) is present in the port and
   absent from current Core. Malformed Coldcard export files exposed an original
@@ -1002,8 +1003,8 @@ Other missing/adapted Knots pieces found during this pass:
   `get_multisig` wallet test helpers they need (`9b6cd9284d`). These tests
   previously reached the expected current-Core skip path in descriptor-only
   builds. After `ece3ba8d5b`, the port can create/reload BDB legacy wallets
-  again, so these broader legacy tests should be included in the next
-  BDB-enabled regression run.
+  again, so later BDB-enabled regression runs included these broader legacy
+  tests as recorded in the verification evidence below.
   A later previous-release BDB rerun found more port-side legacy-wallet
   omissions rather than actual Knots bugs: current Core's
   `get_previous_releases.py` no longer carried the v0.15.2/v0.16.3/v0.17.2
@@ -3638,17 +3639,26 @@ the `CheckBlockIndex()` invariant that unlinked entries have block data
 available. This is another pruned-node restart/reorg availability hardening
 difference, not a consensus-rule change.
 
+After refreshing `origin/master` on 2026-07-06, the port also picked up Core
+`256482ab56`, which current Knots does not yet carry. `AcceptBlock()` now uses
+a dummy `BlockValidationState` for the final `FlushStateToDisk(NONE)` call and
+intentionally ignores the return value. This prevents a late pruning/flush
+failure from being reported to callers as if block validation itself failed;
+the fatal notification path inside the flush remains responsible for shutdown
+on unrecoverable storage errors. This is local disk/pruning error-path
+hardening, not a consensus-rule difference.
+
+The same refresh picked up Core `c1313b199f`, also absent from current Knots.
+After `ImportBlocks()` returns in the background init thread, the port now
+notifies `kernel_notifications.m_tip_block_cv` so an interrupted reindex or
+initial import that exits before genesis activation can wake the init thread's
+genesis wait and observe the shutdown request. Core added functional coverage
+by terminating startup after the `Reindexing block file blk00000.dat` log line.
+This is startup/shutdown deadlock hardening for local reindex/import
+interruption, not consensus behavior.
+
 ## Open Risks
 
-- Legacy-wallet creation is a non-consensus divergence from Knots on this
-  current-Core base. Knots source still supports new legacy wallet creation
-  when compiled with BDB; Core master no longer creates new legacy wallets, and
-  this port now preserves Core's explicit RPC error instead of crashing. A
-  BDB-enabled port probe confirmed this is not just a default-build artifact:
-  even with `USE_BDB`, the port still returns the descriptor-only RPC error.
-  Ported legacy-only wallet tests are skipped by the framework when
-  `--legacy-wallet` mode is selected, so Knots' full legacy wallet creation
-  path remains unported here.
 - BIP-110/RDTS consensus equivalence remains the main consensus-risk area
   because it is an intentional soft-fork divergence from Core. The current pass
   mapped the Knots RDTS subjects to replayed/adapted port commits, compared the
@@ -3994,6 +4004,26 @@ Source/manifest checks:
   current Core and port startup guard that skips pruned block-index entries,
   while current Knots still inserts into `m_blocks_unlinked` without checking
   `BLOCK_HAVE_DATA` in `BlockManager::LoadBlockIndex()`.
+- `git show --stat --patch --minimal 256482ab56 -- src/validation.cpp`
+  and `git grep -n "flush_state_ignore\\|FlushStateToDisk(state, FlushStateMode::NONE)"
+  HEAD origin/master knots/29.x-knots -- src/validation.cpp` show the current
+  Core and port `AcceptBlock()` final-flush error isolation, while current
+  Knots still passes the caller's validation state into the ignored
+  `FlushStateToDisk(NONE)` call.
+- `git show --stat --patch --minimal c1313b199f -- src/init.cpp
+  test/functional/feature_init.py` and `git grep -n
+  "wake genesis wait\\|m_tip_block_cv.notify_all\\|Reindexing block file"
+  HEAD origin/master knots/29.x-knots -- src/init.cpp
+  test/functional/feature_init.py` show the current Core and port initload
+  wakeup after `ImportBlocks()` returns and the matching functional-test probe,
+  while current Knots still waits for genesis/shutdown without that post-import
+  notification.
+- Focused port verification for the 2026-07-06 Core refresh passed with
+  `cmake --build build --target bitcoind bitcoin-cli test_bitcoin --parallel 4`,
+  `build/bin/test_bitcoin --run_test=validation_tests --catch_system_error=no
+  --log_level=error --report_level=short`, and
+  `python3 test/functional/feature_init.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_init_core_refresh --portseed=45610`.
 - `git -C ../knots show --stat --patch --minimal be0857745a5a0154d89a2aa9ddaa2a84e912598a`,
   `git show origin/master:src/validation.cpp | rg -n
   "mempool-script-verify-flag-failed|block-script-verify-flag-failed|mandatory-script-verify-flag-failed"
