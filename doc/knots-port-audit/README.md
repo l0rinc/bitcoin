@@ -2310,6 +2310,18 @@ under different commits. They are not all proven exploitable.
   the explicit partial-bind failure case; a refreshed full-test run again passed
   on both binaries.
 
+- HTTP RPC ignored-bind warning visibility:
+  `7498da0c2a`, `7bd80ba460`
+
+  Knots promotes the "specified `-rpcbind` without `-rpcallowip`" warning from
+  a debug-log-only warning to an init warning, so GUI/noui users see the
+  configuration warning directly. Current Core master has the same capitalized
+  message text but still emits it through `LogWarning(...)`, while Knots and
+  this port call `InitWarning(...)`. This is operator-visibility hardening, not
+  consensus behavior or a remote crash issue. The port's `rpc_bind.py` now
+  pins the behavior by starting with `-rpcbind` but no `-rpcallowip` and
+  expecting the stderr init warning on shutdown.
+
 - Invalid-block peer punishment relaxation:
   `7c7b5839f4`
 
@@ -3007,8 +3019,12 @@ single-timepoint inactivity checks and cached `-capturemessages`
 (`942cfca027`, `905db18969`; Core `cea443e246`, `5f5c1ea019`), lazy
 `decodepsbt_inputs` initialization (`c3dafb49ca`, Core `d517fa0a94`), clean
 interrupt exit status (`f8f28911e3`, Core `997e7b4d7c`), and the
-overflow-safe `CeilDiv` helper (`8bc1b55baf`, Core `02d047fd5b`). These are
-not original Knots defects and not Core-missing covert hardening items.
+overflow-safe `CeilDiv` helper (`8bc1b55baf`, Core `02d047fd5b`). The
+custom `-debuglogfile` compatibility fixes are also already inherited rather
+than Core-missing: Knots carries the non-GUI backport as `b8c41a468d`, while
+current Core has the non-GUI fix as `ddf2a064de` and the Qt debug-log opener
+fix as `c0d28c8f5b`. These are not original Knots defects and not Core-missing
+covert hardening items.
 One remaining exact-patch miss is a Core-missing RPC argument-alias hardening
 fix rather than a port miss: Knots commit `0c7ac92072` changes
 `RPCMethod::GetParamIndex()`/`RPCHelpMan::GetParamIndex()` to compare against

@@ -78,6 +78,15 @@ class RPCBindTest(BitcoinTestFramework):
                     f'-rpcbind=127.0.0.1:{rpc_port(1)}',
                 ], 'Error: Unable to start HTTP server. See debug log for details.')
 
+    def run_ignored_bind_warning_test(self):
+        '''
+        Verify that -rpcbind without -rpcallowip is ignored and reported through
+        a user-visible init warning.
+        '''
+        self.log.info('Ignored rpcbind emits an init warning')
+        self.start_node(0, ['-disablewallet', '-nolisten', '-rpcbind=127.0.0.1'])
+        self.stop_node(0, expected_stderr='Warning: Option -rpcbind was ignored because -rpcallowip was not specified, refusing to allow everyone to connect')
+
     def run_allowip_test(self, allow_ips, rpchost, rpcport):
         '''
         Start a node with rpcallow IP, and request getnetworkinfo
@@ -141,6 +150,7 @@ class RPCBindTest(BitcoinTestFramework):
         if not self.options.run_nonloopback:
             self._run_loopback_tests()
             if not self.options.run_ipv6:
+                self.run_ignored_bind_warning_test()
                 self.run_partial_bind_failure_test()
             if self.options.run_ipv4:
                 self.run_invalid_bind_test(['127.0.0.1'], ['127.0.0.1:notaport', '127.0.0.1:-18443', '127.0.0.1:0', '127.0.0.1:65536'])
