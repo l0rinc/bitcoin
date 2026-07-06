@@ -593,6 +593,42 @@ FUZZ_TARGET(txorphanage_sim)
         }
         return std::max<ByRatioNegSize<FeeFrac>>(FeeFrac{count, max_count}, FeeFrac{usage, max_usage});
     };
+    auto assert_summary_fn = [&]() {
+        node::TxOrphanage::Usage orphan_usage{0};
+        std::vector<node::TxOrphanage::Usage> usage_by_peer(NUM_PEERS);
+        node::TxOrphanage::Count unique_orphans{0};
+        std::vector<node::TxOrphanage::Count> count_by_peer(NUM_PEERS);
+        std::vector<node::TxOrphanage::Count> latency_by_peer(NUM_PEERS);
+        node::TxOrphanage::Count total_latency_score = sim_announcements.size();
+        for (unsigned tx = 0; tx < NUM_TX; ++tx) {
+            const bool sim_have_tx{have_tx_fn(tx)};
+            if (sim_have_tx) {
+                orphan_usage += GetTransactionWeight(*txn[tx]);
+                total_latency_score += txn[tx]->vin.size() / 10;
+            }
+            unique_orphans += sim_have_tx;
+        }
+        for (const auto& ann : sim_announcements) {
+            usage_by_peer[ann.announcer] += GetTransactionWeight(*txn[ann.tx]);
+            count_by_peer[ann.announcer] += 1;
+            latency_by_peer[ann.announcer] += 1 + (txn[ann.tx]->vin.size() / 10);
+        }
+
+        assert(sim_announcements.size() == real->CountAnnouncements());
+        assert(unique_orphans == real->CountUniqueOrphans());
+        assert(orphan_usage == real->TotalOrphanUsage());
+        assert(total_latency_score == real->TotalLatencyScore());
+        assert(max_global_latency_score == real->MaxGlobalLatencyScore());
+        assert(reserved_peer_usage == real->ReservedPeerUsage());
+        const auto present_peers{count_peers_fn()};
+        assert(max_global_latency_score / std::max<unsigned>(1, present_peers) == real->MaxPeerLatencyScore());
+        assert(reserved_peer_usage * std::max<unsigned>(1, present_peers) == real->MaxGlobalUsage());
+        for (NodeId peer = 0; peer < NUM_PEERS; ++peer) {
+            assert(usage_by_peer[peer] == real->UsageByPeer(peer));
+            assert(count_by_peer[peer] == real->AnnouncementsFromPeer(peer));
+            assert(latency_by_peer[peer] == real->LatencyScoreFromPeer(peer));
+        }
+    };
 
     //
     // 5. Run through a scenario of mutators on both real and simulated orphanage.
@@ -782,6 +818,7 @@ FUZZ_TARGET(txorphanage_sim)
         // We don't check the contents of the orphanage until the end to make fuzz runs faster.
         assert(real->TotalLatencyScore() <= real->MaxGlobalLatencyScore());
         assert(real->TotalOrphanUsage() <= real->MaxGlobalUsage());
+        assert_summary_fn();
     }
 
     //
