@@ -4,6 +4,7 @@
 
 #include <blockfilter.h>
 #include <primitives/block.h>
+#include <script/script.h>
 #include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
@@ -34,6 +35,27 @@ void AssertGCSFilterMatchesElements(const GCSFilter& filter, const GCSFilter::Pa
     for (const auto& element : elements) {
         Assert(filter.Match(element));
     }
+}
+
+GCSFilter::ElementSet ExpectedBasicFilterElements(const CBlock& block, const CBlockUndo& block_undo)
+{
+    GCSFilter::ElementSet elements;
+    for (const auto& tx : block.vtx) {
+        for (const CTxOut& txout : tx->vout) {
+            const CScript& script{txout.scriptPubKey};
+            if (script.empty() || script[0] == OP_RETURN) continue;
+            elements.emplace(script.begin(), script.end());
+        }
+    }
+
+    for (const CTxUndo& tx_undo : block_undo.vtxundo) {
+        for (const Coin& prevout : tx_undo.vprevout) {
+            const CScript& script{prevout.out.scriptPubKey};
+            if (script.empty()) continue;
+            elements.emplace(script.begin(), script.end());
+        }
+    }
+    return elements;
 }
 
 void AssertConstructedGCSFilter(FuzzedDataProvider& fuzzed_data_provider)
@@ -78,9 +100,12 @@ FUZZ_TARGET(blockfilter)
             block_undo = std::move(*opt_block_undo);
         }
         const BlockFilter constructed{BlockFilterType::BASIC, *block, block_undo};
+        const GCSFilter::ElementSet expected_elements{ExpectedBasicFilterElements(*block, block_undo)};
         Assert(constructed.GetFilterType() == BlockFilterType::BASIC);
         Assert(constructed.GetBlockHash() == block->GetHash());
         Assert(!constructed.GetEncodedFilter().empty());
+        Assert(constructed.GetFilter().GetN() == expected_elements.size());
+        Assert(constructed.GetFilter().MatchAny(expected_elements) == !expected_elements.empty());
     }
 
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
