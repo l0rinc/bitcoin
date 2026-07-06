@@ -4088,6 +4088,10 @@ Unit tests:
 - `../knots/build-repro/bin/test_bitcoin
   --run_test=util_tests/test_sanitize_string_printable_chars
   --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=util_tests/test_FormatSubVersion
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin --run_test=util_tests/test_FormatSubVersion
+  --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=util_tests/outputtype_implicit_segwit`
 - `build/bin/test_bitcoin --run_test=system_tests/subprocess_close_fds
   --catch_system_error=no --log_level=error --report_level=short`
@@ -4278,6 +4282,14 @@ Functional tests:
   ../knots/build-repro/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_feature_uacomment_knots_refresh
   --portseed=42281`
+- `python3 test/functional/feature_uacomment.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_uacomment_port_refresh2
+  --portseed=42530`
+- `python3 test/functional/feature_uacomment.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_uacomment_knots_refresh2
+  --portseed=42531`
 - `python3 test/functional/rpc_mempoolstats.py --configfile
   build/test/config.ini --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_port_refresh
@@ -5647,6 +5659,29 @@ Functional tests:
   also passed. A refreshed Knots run,
   `python3 test/functional/feature_uacomment.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_feature_uacomment_knots_refresh --portseed=42281`,
   also passed with those strengthened boolean-mode assertions.
+- Port cross-check:
+  `build/bin/test_bitcoin --run_test=util_tests/test_FormatSubVersion
+  --catch_system_error=no --log_level=error --report_level=short`
+  passed five assertions, including Knots' default `/Knots:.../` suffix and
+  `base_name_only` formatting path.
+- Original Knots cross-check:
+  `../knots/build-repro/bin/test_bitcoin --run_test=util_tests/test_FormatSubVersion
+  --catch_system_error=no --log_level=error --report_level=short`
+  passed three assertions on unmodified Knots, covering the inherited
+  `base_name_only` `FormatSubVersion(...)` overload.
+- Port cross-check:
+  `python3 test/functional/feature_uacomment.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_uacomment_port_refresh2
+  --portseed=42530`
+  passed, including `-uaappend`, `-uaspoof=0`, `-uaspoof=1`, full `-uaspoof`,
+  invalid-format warning, and `-uacomment` interaction coverage.
+- Original Knots cross-check:
+  `python3 test/functional/feature_uacomment.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_uacomment_knots_refresh2
+  --portseed=42531`
+  passed on unmodified Knots with the same user-agent append/spoof behavior.
 - Original Knots cross-check:
   `python3 test/functional/mempool_rbf_options.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_mempool_rbf_options_knots --portseed=32951`
   passed on unmodified Knots, including the
