@@ -1104,6 +1104,14 @@ Other missing/adapted Knots pieces found during this pass:
   fields, not policy or consensus behavior; `rpc_net.py` accounts for both
   fields, including the fact that `cpu_load` is absent before the version
   handshake completes.
+- The `getpeerinfo` misbehavior-score compatibility review confirmed Knots'
+  restored deprecated `misbehavior_score` field is present in the port and
+  absent from current Core. Knots and the port report `0` normally and `100`
+  only when the peer's internal `m_should_discourage` flag is set, and the RPC
+  help marks the field deprecated. This is RPC compatibility/diagnostics, not
+  consensus behavior, peer punishment policy, or a covert hardening change.
+  The existing `rpc_net.py` no-version-peer expectation asserts the field on
+  both the port and unmodified Knots.
 - The onion-inbound whitelist review confirmed Knots' guard against applying
   address-based whitelist permissions to Tor inbound peers (`61cdc04a83`) is
   already present in current Core and in this port, so it is not a
@@ -3523,6 +3531,14 @@ Functional tests:
 - `python3 test/functional/rpc_net.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_net_addconnection`
 - `build/test/functional/rpc_net.py`
+- `python3 test/functional/rpc_net.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_net_misbehavior_score_port
+  --portseed=32694`
+- `python3 ../knots/test/functional/rpc_net.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_net_misbehavior_score_knots
+  --portseed=32695`
 - `python3 test/functional/p2p_add_connections.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_p2p_add_connections_signet`
 - `python3 test/functional/mempool_accept.py --configfile build/test/config.ini`
