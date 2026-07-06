@@ -118,6 +118,13 @@ std::vector<FeeFrac> WithZeroFeeTail(const std::span<const FeeFrac> chunks, cons
     return with_tail;
 }
 
+std::vector<FeeFrac> WithCommonPrefix(const std::span<const FeeFrac> prefix, const std::span<const FeeFrac> chunks)
+{
+    std::vector<FeeFrac> with_prefix{prefix.begin(), prefix.end()};
+    with_prefix.insert(with_prefix.end(), chunks.begin(), chunks.end());
+    return with_prefix;
+}
+
 void CheckZeroFeeTailIdentity(FuzzedDataProvider& fuzzed_data_provider, const std::span<const FeeFrac> chunks)
 {
     const int32_t tail_size{fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, 1'000'000)};
@@ -138,6 +145,20 @@ void CheckZeroFeeTailPreservesOrdering(FuzzedDataProvider& fuzzed_data_provider,
     assert(CompareChunks(with_tail1, chunks2) == original);
     assert(CompareChunks(chunks1, with_tail2) == original);
     assert(CompareChunks(with_tail1, with_tail2) == original);
+}
+
+void CheckCommonPrefixPreservesOrdering(FuzzedDataProvider& fuzzed_data_provider,
+                                        const std::span<const FeeFrac> chunks1,
+                                        const std::span<const FeeFrac> chunks2,
+                                        std::partial_ordering original)
+{
+    std::vector<FeeFrac> prefix;
+    PopulateChunks(fuzzed_data_provider, prefix);
+
+    const auto prefixed1{WithCommonPrefix(prefix, chunks1)};
+    const auto prefixed2{WithCommonPrefix(prefix, chunks2)};
+    assert(CompareChunks(prefixed1, prefixed2) == original);
+    assert(CompareChunks(prefixed2, prefixed1) == CompareChunks(chunks2, chunks1));
 }
 
 void CheckReverseOrdering(std::partial_ordering forward, std::partial_ordering reverse)
@@ -175,6 +196,7 @@ FUZZ_TARGET(build_and_compare_feerate_diagram)
     CheckZeroFeeTailIdentity(fuzzed_data_provider, chunks1);
     CheckZeroFeeTailIdentity(fuzzed_data_provider, chunks2);
     CheckZeroFeeTailPreservesOrdering(fuzzed_data_provider, chunks1, chunks2, real);
+    CheckCommonPrefixPreservesOrdering(fuzzed_data_provider, chunks1, chunks2, real);
 
     CheckEqualRateSplit(fuzzed_data_provider);
 
