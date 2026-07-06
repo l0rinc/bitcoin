@@ -3398,6 +3398,16 @@ under different commits. They are not all proven exploitable.
   `IsBlockRequestedFromPeer(...)` first. Refreshed functional coverage passed on
   the port, and the same corrected test passed against unmodified Knots; Knots'
   own native test fails only at the stale hard-coded pruned-block hash assertion.
+  A later Core authenticated-RPC race hardening commit (`359680b74d`) is also
+  present in the port but absent from current Knots: Core moved the
+  `cs_main` lock in `FetchBlock(...)` before `GetPeerRef(...)` so a peer cannot
+  be finalized between the peer lookup and `BlockRequested(...)`, which the
+  Core commit describes as an assertion-crash race. The port keeps that early
+  lock while preserving Knots' arbitrary-hash `getblockfrompeer` behavior.
+  Current Knots still fetches the peer and checks witness service before taking
+  `cs_main`, so this pass classifies it as source-confirmed missing race
+  hardening in Knots, not a reproduced deterministic crash and not consensus
+  behavior.
 
 High-signal hardening already present in Core under the same or different
 commits and therefore not counted as missing here: secp256k1 ellswift overflow
@@ -4444,6 +4454,16 @@ Source/manifest checks:
   lacks Knots' `nodeid` named-argument conversion entry, while Knots and the
   port can fetch by hash without a known header, preserve the duplicate
   same-peer error, and accept the `nodeid` alias.
+- `git show --stat --patch --minimal 359680b74d -- src/net_processing.cpp`,
+  `git grep -n
+  "FetchBlock\\|GetPeerRef\\|LOCK(cs_main)\\|BlockRequested"
+  HEAD knots/29.x-knots origin/master -- src/net_processing.cpp`, and
+  separate `git log --oneline HEAD --grep="move cs_main up in FetchBlock"`,
+  `git log --oneline origin/master --grep="move cs_main up in FetchBlock"`,
+  and `git log --oneline knots/29.x-knots
+  --grep="move cs_main up in FetchBlock"` checks show the port and current Core
+  have the early-`cs_main` authenticated RPC race hardening while current Knots
+  does not.
 - `git log origin/master --follow --oneline -- <remaining source-looking
   missing path>` for old `core_write`, fee, libevent, orphanage, transaction
   identifier, epochguard, and test-helper paths
