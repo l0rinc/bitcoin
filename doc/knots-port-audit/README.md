@@ -1866,6 +1866,22 @@ under different commits. They are not all proven exploitable.
   location so `CoinsViewOptions`, `bitcoind -help-debug`, and the unit test all
   agree with unmodified Knots.
 
+- LevelDB file-size option:
+
+  Knots adds debug-only `-dbfilesize=<MiB>` and applies it through
+  `node::ReadDatabaseArgs(...)` to the block tree, chainstate/coins, and index
+  LevelDB options. Current Core still has the shared `ReadDatabaseArgs(...)`
+  hook and LevelDB `max_file_size` plumbing, but no user-facing `-dbfilesize`
+  argument. The port follows Knots while adapting the assignment to current
+  Core's unsigned `DBOptions::max_file_size` type. This is local database
+  resource tuning, not consensus behavior or network exposure. Source review
+  also noted that Knots and the port do not enforce the help text's 1-1024 MiB
+  range before handing the value to LevelDB; this looks like local
+  configuration correctness rather than a security issue because LevelDB
+  sanitizes option bounds internally. `dbwrapper_tests` now covers the positive
+  parse path on the port, and unmodified Knots' native dbwrapper suite still
+  passes.
+
 - Low-memory-triggered dbcache flushing:
   `10e7dc80ee`, `d95f134d11`, `ebf7df30c2`, `da690b5a69`, `f9f7587b59`
 
@@ -4731,6 +4747,18 @@ Functional tests:
   `argsman_tests/util_ModifyRWConfigFileOnArgsManager` case, but its native
   `../knots/build-repro/bin/test_bitcoin --run_test=util_tests/test_ModifyRWConfigFile --catch_system_error=no --log_level=error --report_level=short`
   passes with 53 assertions.
+- Original Knots/source cross-check:
+  `rg -n "dbfilesize|ReadDatabaseArgs|max_file_size|DatabaseOptions" src/node src/init.cpp src/test ../knots/src/node ../knots/src/init.cpp ../knots/src/test -g '*.{cpp,h}'`
+  shows both unmodified Knots and the port wire `-dbfilesize` through
+  `node::ReadDatabaseArgs(...)`, while
+  `git grep -n "dbfilesize\\|ReadDatabaseArgs\\|max_file_size" origin/master -- src test`
+  shows current Core has the database argument hook and LevelDB file-size
+  plumbing but no `-dbfilesize` argument. The port's focused
+  `build/bin/test_bitcoin --run_test=dbwrapper_tests/dbwrapper_read_database_args_dbfilesize --catch_system_error=no --log_level=error --report_level=short`
+  passed with four assertions. Unmodified Knots does not have that strengthened
+  positive-parse test, but
+  `../knots/build-repro/bin/test_bitcoin --run_test=dbwrapper_tests --catch_system_error=no --log_level=error --report_level=short`
+  passed with 2813 assertions.
 - Original Knots expected-failure repro with a temporary
   `/mnt/my_storage/knots-assumeutxo-repro` worktree and the port's added
   post-validation raw-transaction assertion:
