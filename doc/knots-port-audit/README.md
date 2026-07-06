@@ -1049,8 +1049,11 @@ Other missing/adapted Knots pieces found during this pass:
   does call `AdviseSequential()` when wrapping the source file and
   `CloseAndUncache()` on close. The port now matches Knots and extends
   `streams_buffered_file_closes_source` to cover both destructor close and
-  explicit close/idempotence. This was a port omission, not an original Knots
-  defect. Current Core lacks this sequential-read/page-cache-drop behavior.
+  explicit close/idempotence. A refreshed Knots check shows unmodified Knots
+  has the production behavior but not the strengthened port-only test case;
+  its native `streams_tests` suite still passes. This was a port omission, not
+  an original Knots defect. Current Core lacks this
+  sequential-read/page-cache-drop behavior.
 - The version-message ordering review confirmed Knots'
   `df874f848a` is present in the port as `9cb0591f30`: the peer's sanitized
   `cleanSubVer` is stored under `m_subver_mutex` before `nVersion` is published
@@ -3287,6 +3290,12 @@ Source/manifest checks:
   src/test/streams_tests.cpp` show actual Knots and the port wire the
   sequential-read and close-and-uncache helpers into `BufferedFile`, while
   current Core lacks those helpers and call sites.
+- `git grep -n -E
+  "AdviseSequential|CloseAndUncache|posix_fadvise|BufferedFile\\(AutoFile|streams_buffered_file_closes_source"
+  HEAD knots/29.x-knots origin/master -- src/streams.h src/util
+  src/test/streams_tests.cpp src/test/fs_tests.cpp` refreshes the same
+  comparison: Knots and the port have the helper/call-site surface, while
+  current Core only matches the bare `BufferedFile` constructor.
 - `git show origin/master:src/zmq/zmqnotificationinterface.cpp | rg -n
   "TryForEachAndRemoveFailed|notifier->Shutdown|notifiers.erase" -C 4`,
   `git -C ../knots show 29.x-knots:src/zmq/zmqnotificationinterface.cpp |
@@ -3776,6 +3785,11 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=streams_tests`
 - `build/bin/test_bitcoin
   --run_test=streams_tests/streams_buffered_file_closes_source
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin
+  --run_test=fs_tests/file_advice_helpers_keep_file_semantics
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin --run_test=streams_tests
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=streams_tests --catch_system_error=no
   --log_level=error --report_level=short`
