@@ -517,8 +517,9 @@ Other missing/adapted Knots pieces found during this pass:
   `m_tip_block_cv` wake-up from `node.shutdown_request` (`d2c1bd10db`, ported
   as `1ba5009294`) is present in the port and still absent from current Core's
   direct `node.shutdown_request` path. Core already wakes waiters from
-  `Interrupt()`, but Knots and the port also cover GUI-triggered shutdowns that
-  call `shutdown_request` directly. This is RPC/shutdown hardening, not
+  `Interrupt()` (`c25a5e670b`, rebased in Knots as `663bc960f5`), but Knots
+  and the port also cover GUI-triggered shutdowns that call `shutdown_request`
+  directly. This is RPC/shutdown hardening, not
   consensus. Rerunning the strengthened port `feature_shutdown.py` exposed a
   port-side test starvation bug: the framework defaults to `rpcthreads=2`, and
   the test occupied both workers with `waitfornewblock` and
@@ -3561,7 +3562,8 @@ Source/manifest checks:
 - `cmake --build build --target test_bitcoin -j4`
 - `build/bin/test_bitcoin --run_test=fs_tests --catch_system_errors=no`
 - `build/bin/test_bitcoin --run_test=streams_tests --catch_system_errors=no`
-- `git show --stat --patch --minimal 1ba5009294 8fad5801e0 d2c1bd10db`,
+- `git show --stat --patch --minimal c25a5e670b 663bc960f5 1ba5009294
+  8fad5801e0 d2c1bd10db`,
   `git show origin/master:src/init.cpp | rg -n
   "shutdown_request|Interrupt\\(|m_tip_block_cv|notify_all" -C 5`,
   `git -C ../knots show 29.x-knots:src/init.cpp | rg -n
@@ -5446,6 +5448,10 @@ Functional tests:
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_init_wait_port --portseed=27522`
+- `python3 test/functional/feature_init.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_init_tip_cv_full_refresh
+  --portseed=42757`
 - `python3 test/functional/feature_init.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_init_reindex_auto_port_5
   --portseed=32100 --test_methods init_auto_reindex_test`
