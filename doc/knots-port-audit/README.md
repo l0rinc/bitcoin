@@ -3659,6 +3659,16 @@ by terminating startup after the `Reindexing block file blk00000.dat` log line.
 This is startup/shutdown deadlock hardening for local reindex/import
 interruption, not consensus behavior.
 
+The branch was then topologically rebased onto current `origin/master`
+(`bc33509ae2`) on 2026-07-06, making Core master an ancestor instead of merely
+carrying the latest Core changes as duplicate cherry-picks. Git dropped the
+four patch-equivalent local Core cherry-picks (`cc610738bd`, `4e00dff7b7`,
+`0a0582c407`, and `92119c2109`) because their contents were already upstream.
+This real rebase necessarily rewrote port-local commit IDs; audit entries that
+mention pre-rebase local hashes can be cross-checked by commit subject or via
+the backup ref
+`backup/codex-knots-current-master-before-core-topology-rebase-20260706205255`.
+
 ## Open Risks
 
 - BIP-110/RDTS consensus equivalence remains the main consensus-risk area
@@ -4026,6 +4036,20 @@ Source/manifest checks:
   --log_level=error --report_level=short`, and
   `python3 test/functional/feature_init.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_feature_init_core_refresh --portseed=45610`.
+- The final topology reconciliation used
+  `git rebase --onto origin/master 2063f02bd5edebe1b5c9635db8850220811ebc90
+  HEAD`; Git reported the four duplicate Core cherry-picks listed above as
+  `patch contents already upstream`, then `git branch -f
+  codex/knots-current-master HEAD` moved the branch from detached `HEAD` to the
+  rebased tip. `git rev-list --count HEAD..origin/master` returned `0`, and
+  `git merge-base --is-ancestor origin/master HEAD` returned success.
+  Rebased-tip verification passed with `cmake --build build --target bitcoind
+  bitcoin-cli test_bitcoin --parallel 4`, `build/bin/test_bitcoin
+  --run_test=validation_tests,blockencodings_tests,mempool_tests
+  --catch_system_error=no --log_level=error --report_level=short`, and
+  `python3 test/functional/feature_init.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_init_core_topology_rebase
+  --portseed=45620`.
 - `git -C ../knots show --stat --patch --minimal be0857745a5a0154d89a2aa9ddaa2a84e912598a`,
   `git show origin/master:src/validation.cpp | rg -n
   "mempool-script-verify-flag-failed|block-script-verify-flag-failed|mandatory-script-verify-flag-failed"
