@@ -2102,8 +2102,12 @@ under different commits. They are not all proven exploitable.
   address networks, so `-onlynet=ipv4 -listenonion=0 -externalip=<onion>` drops
   the explicit onion local address instead of reporting it in
   `getnetworkinfo.localaddresses`. This is operator/network-surface behavior,
-  not consensus or remote crash risk. The port now pins the rule with
-  `net_tests/LocalAddress_TorDoesNotRequireOutboundReachability`; a runtime
+  not consensus or remote crash risk. A refreshed source comparison shows the
+  exact split: Knots and this port accept
+  `g_reachable_nets.Contains(addr) || addr.IsTor()` in `AddLocal()`, while
+  current Core still rejects every address for which
+  `g_reachable_nets.Contains(addr)` is false. The port now pins the rule with
+  `net_tests/LocalAddress_TorDoesNotRequireOutboundReachability`; a refreshed
   startup/RPC check also confirms both the port and unmodified Knots report the
   onion `-externalip` in `localaddresses` while `onion.reachable` is false.
 
@@ -3910,13 +3914,17 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=net_tests`
 - `build/bin/test_bitcoin
   --run_test=net_tests/LocalAddress_TorDoesNotRequireOutboundReachability
-  --catch_system_errors=no`
-- `build/bin/test_bitcoin --run_test=net_tests --catch_system_errors=no`
+  --catch_system_error=no --log_level=error --report_level=short`
+- `build/bin/test_bitcoin --run_test=net_tests --catch_system_error=no`
 - Port runtime check:
-  `bitcoind -regtest -datadir=<tmp> -daemonwait -listen=0 -listenonion=0 -onlynet=ipv4 -externalip=pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion -fallbackfee=0.0001`
-  followed by `bitcoin-cli -regtest -datadir=<tmp> getnetworkinfo`; the result
-  reported `onion.reachable=false` and included the onion address in
-  `localaddresses`.
+  `build/bin/bitcoind -regtest -datadir=<tmp> -daemonwait -listen=0
+  -listenonion=0 -onlynet=ipv4
+  -externalip=pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion
+  -fallbackfee=0.0001 -port=42350 -rpcport=42351` followed by
+  `build/bin/bitcoin-cli -regtest -datadir=<tmp> -rpcport=42351
+  getnetworkinfo`; the result reported `onion.reachable=false` and included
+  `pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion:42350`
+  in `localaddresses`.
 - `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=net_tests/cnode_punish_invalid_blocks
@@ -4999,11 +5007,17 @@ Functional tests:
   passed on unmodified Knots, including the strengthened witness-script expiry
   check at the RDTS active-to-expired boundary.
 - Original Knots cross-check:
+  `../knots/build-repro/bin/test_bitcoin --run_test=net_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+  passed on unmodified Knots, confirming the native net tests remain green
+  with the Tor-local behavior.
+- Original Knots cross-check:
   `../knots/build-repro/bin/bitcoind -regtest -datadir=<tmp> -daemonwait -listen=0 -listenonion=0 -onlynet=ipv4 -externalip=pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion -fallbackfee=0.0001`
   followed by `../knots/build-repro/bin/bitcoin-cli -regtest -datadir=<tmp>
   getnetworkinfo` passed on unmodified Knots; the result reported
-  `onion.reachable=false` and still included the onion address in
-  `localaddresses`.
+  `onion.reachable=false` and still included
+  `pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion:42352`
+  in `localaddresses`.
 - Original Knots expected-failure repro:
   `python3 /mnt/my_storage/bitcoin/test/functional/p2p_eviction.py --configfile /mnt/my_storage/knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_p2p_eviction_forceinbound_repro`
   (fails on unmodified Knots because the ForceInbound peer's
