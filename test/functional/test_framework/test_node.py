@@ -28,6 +28,7 @@ from .authproxy import (
     serialization_fallback,
 )
 from . import coverage
+from .descriptors import descsum_create
 from .messages import (
     MAX_OP_RETURN_RELAY,
     NODE_P2P_V2,
