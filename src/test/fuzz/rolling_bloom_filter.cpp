@@ -64,6 +64,9 @@ FUZZ_TARGET(rolling_bloom_filter)
             },
             [&] {
                 rolling_bloom_filter.reset();
+                for (const auto& key : recent_keys) {
+                    assert(!rolling_bloom_filter.contains(key));
+                }
                 recent_keys.clear();
             });
         assert_recent_keys_present();
