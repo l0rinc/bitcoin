@@ -78,6 +78,27 @@ BOOST_FIXTURE_TEST_CASE(SubtractFee, TestChain100Setup)
     BOOST_CHECK_EQUAL(fee, check_tx(fee + 123));
 }
 
+BOOST_FIXTURE_TEST_CASE(change_type_avoids_newer_default, TestChain100Setup)
+{
+    CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
+    auto wallet = CreateSyncedWallet(*m_node.chain, WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain()), coinbaseKey);
+
+    LOCK(wallet->cs_wallet);
+    BOOST_REQUIRE(wallet->GetScriptPubKeyMan(OutputType::BECH32, /*internal=*/true));
+    BOOST_REQUIRE(wallet->GetScriptPubKeyMan(OutputType::BECH32M, /*internal=*/true));
+
+    const std::vector<CRecipient> taproot_recipients{
+        {WitnessV1Taproot{XOnlyPubKey{coinbaseKey.GetPubKey()}}, COIN, /*fSubtractFeeFromAmount=*/false},
+    };
+
+    wallet->m_default_address_type = OutputType::BECH32M;
+    BOOST_CHECK(wallet->TransactionChangeType(/*change_type=*/std::nullopt, taproot_recipients) == OutputType::BECH32M);
+
+    wallet->m_default_address_type = OutputType::BECH32;
+    BOOST_CHECK(wallet->TransactionChangeType(/*change_type=*/std::nullopt, taproot_recipients) == OutputType::BECH32);
+    BOOST_CHECK(wallet->TransactionChangeType(/*change_type=*/OutputType::BECH32M, taproot_recipients) == OutputType::BECH32M);
+}
+
 BOOST_FIXTURE_TEST_CASE(wallet_duplicated_preset_inputs_test, TestChain100Setup)
 {
     // Verify that the wallet's Coin Selection process does not include pre-selected inputs twice in a transaction.
