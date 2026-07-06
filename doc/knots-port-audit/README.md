@@ -1581,15 +1581,21 @@ Other missing/adapted Knots pieces found during this pass:
   in both trees. Unmodified Knots does not have the strengthened
   oversized-scale regression test, so that specific filter returns no matching
   test case there.
-  The same pass classified the fee-histogram unsigned-decrement fix
-  (`85c8d477b0`, ported as `759e1d76b3`) as Knots-surface hardening because
-  current Core has no `getmempoolinfo(with_fee_histogram=...)` or REST
-  histogram surface. `policyestimator_tests` and `mempool_fee_histogram.py`
-  pass with the ported code; the functional test now includes the historical
-  edge shape where the mempool has a transaction below the only requested
-  histogram floor. Refreshed paired `mempool_fee_histogram.py` runs passed
-  against both the port and unmodified Knots, confirming the fee-histogram
-  behavior is inherited rather than port-created.
+  The same pass classified Knots' fee-histogram RPC lineage as a
+  Knots-surface hardening/observability item rather than a Core-missing
+  consensus fix: base `getmempoolinfo` histograms (`c6c88992ea`) with
+  functional coverage (`029d0411c5`), ancestor/descendant/combined feerate
+  grouping (`0e10d83c99`), boolean `with_fee_histogram` defaults
+  (`824fd5c175`), older-format result compatibility (`ec34e9a424`), dynamic
+  result checking (`1a829d20e1`), and the later unsigned-decrement fix
+  (`85c8d477b0`, ported as `759e1d76b3`). Current Core has no
+  `getmempoolinfo(with_fee_histogram=...)` or REST histogram surface.
+  `policyestimator_tests` and `mempool_fee_histogram.py` pass with the ported
+  code; the functional test now includes the historical edge shape where the
+  mempool has a transaction below the only requested histogram floor. Refreshed
+  paired `mempool_fee_histogram.py` runs passed against both the port and
+  unmodified Knots, confirming the fee-histogram behavior is inherited rather
+  than port-created.
 - The mempool/orphan IBD performance review checked Knots' `8990a80618`
   `removeForBlock` empty-map guard and `fc5361a515` orphanage empty-pool
   guard. Both are present in the port and current Core master, so they are not
@@ -5699,6 +5705,10 @@ Functional tests:
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_mempool_fee_histogram_port_refresh2
   --portseed=42570`
+- `python3 test/functional/mempool_fee_histogram.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_mempool_fee_histogram_lineage_refresh
+  --portseed=42740`
 - `python3 test/functional/mempool_fee_histogram.py --configfile=../knots/build-repro/test/config.ini
   --cachedir=test/cache
   --tmpdir=/mnt/my_storage/tmp_mempool_fee_histogram_knots_refresh2
