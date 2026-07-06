@@ -2302,7 +2302,10 @@ under different commits. They are not all proven exploitable.
   `all_messages.back().original` in deprecated mode, while Knots and this port
   use `util::Join(all_messages, Untranslated("\n")).original`. The port's
   `node_warnings_tests` now asserts both the array form and the newline-joined
-  deprecated string form.
+  deprecated string form. A refreshed three-way source comparison confirms the
+  behavior is native to Knots and still absent from current Core; unmodified
+  Knots' original `node_warnings_tests` passes but does not assert the RPC
+  helper's string-mode behavior.
 
 - DNS seed bootstrap policy:
   `277edb9009`
@@ -2861,6 +2864,10 @@ Source/manifest checks:
   "VERSIONBITS_NUM_WARNING_BITS|Miner violated version bit protocol|unexpected version|BIP320|VERSIONBITS_NUM_BITS|UpdateTip"
   HEAD knots/29.x-knots origin/master -- src test/functional/feature_versionbits_warning.py
   src/test`
+- `git grep -n -E
+  "GetWarningsForRpc|all_messages\\.back|util::Join\\(all_messages|warning 1"
+  HEAD knots/29.x-knots origin/master -- src/node/warnings.cpp
+  src/test/node_warnings_tests.cpp`
 - `git -C ../knots show --stat --patch --minimal 15805060ec`,
   `rg -n "ReadBlock\\(.*inv\\.hash|ReadBlock\\(.*req\\.blockhash"
   src/net_processing.cpp`, `git show origin/master:src/net_processing.cpp |
@@ -3857,6 +3864,8 @@ Unit tests:
 - `build/bin/test_bitcoin --run_test=node_warnings_tests
   --catch_system_error=no --log_level=nothing --report_level=no`
 - `build/bin/test_bitcoin --run_test=node_warnings_tests
+  --catch_system_error=no --log_level=error --report_level=short`
+- `../knots/build-repro/bin/test_bitcoin --run_test=node_warnings_tests
   --catch_system_error=no --log_level=error --report_level=short`
 - `build/bin/test_bitcoin --run_test=node_init_tests/init_test
   --catch_system_error=no --log_level=nothing --report_level=no`
@@ -4954,6 +4963,12 @@ Functional tests:
   `python3 test/functional/feature_versionbits_warning.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_feature_versionbits_warning_knots_refresh --portseed=42261`
   passed on unmodified Knots, confirming the refreshed warning-range,
   unknown-schema, and BIP320 reserved-bit behavior is native Knots behavior.
+- Original Knots cross-check:
+  `../knots/build-repro/bin/test_bitcoin --run_test=node_warnings_tests --catch_system_error=no --log_level=error --report_level=short`
+  passed on unmodified Knots. The source comparison above confirms Knots has
+  the newline-joined deprecated RPC warning string behavior even though its
+  original unit test does not assert `GetWarningsForRpc(...)` directly; the port
+  adds those assertions.
 - Original Knots cross-check:
   `python3 ../knots/test/functional/wallet_keypool.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_knots_wallet_keypool_isactive_repro`
   (passes on unmodified Knots, confirming the local `wallet_keypool.py`
