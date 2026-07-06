@@ -157,6 +157,28 @@ class FilterTest(BitcoinTestFramework):
         self.log.info("We should get it anyway because it was in the mempool on connection to peer")
         filter_peer.wait_for_tx(irr_txid)
 
+    def test_localhost_bloom_default(self):
+        self.log.info("Check that bloom filters default to localhost-only")
+        self.restart_node(0, [])
+        assert "BLOOM" not in self.nodes[0].getnetworkinfo()["localservicesnames"]
+
+        filter_peer = self.nodes[0].add_p2p_connection(P2PBloomFilter())
+        assert_equal(self.nodes[0].getpeerinfo()[0]["permissions"], ["bloomfilter"])
+        with self.nodes[0].assert_debug_log([], unexpected_msgs=["filterload received despite not offering bloom services"]):
+            filter_peer.send_and_ping(filter_peer.watch_filter_init)
+        assert self.nodes[0].getpeerinfo()[0]["relaytxes"]
+        self.nodes[0].disconnect_p2ps()
+
+        self.log.info("Check that -peerbloomfilters=0 disables localhost bloom filters")
+        self.restart_node(0, ["-peerbloomfilters=0"])
+        filter_peer = self.nodes[0].add_p2p_connection(P2PBloomFilter())
+        assert_equal(self.nodes[0].getpeerinfo()[0]["permissions"], [])
+        with self.nodes[0].assert_debug_log(["filterload received despite not offering bloom services"]):
+            filter_peer.send_without_ping(filter_peer.watch_filter_init)
+            filter_peer.wait_for_disconnect()
+
+        self.restart_node(0)
+
     def test_frelay_false(self, filter_peer):
         self.log.info("Check that a node with fRelay set to false does not receive invs until the filter is set")
         filter_peer.tx_received = False
@@ -246,6 +268,8 @@ class FilterTest(BitcoinTestFramework):
 
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
+
+        self.test_localhost_bloom_default()
 
         filter_peer = self.nodes[0].add_p2p_connection(P2PBloomFilter())
         self.log.info('Test filter size limits')
