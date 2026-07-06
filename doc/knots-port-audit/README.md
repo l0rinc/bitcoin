@@ -559,9 +559,10 @@ Other missing/adapted Knots pieces found during this pass:
   `p2p_block_times.py` pass.
 - Knots' software-expiry behavior is present and should be treated as a
   visible non-Core divergence: by default the client has an expiry timestamp,
-  warns four weeks before expiry, refuses block-template creation after expiry,
-  keeps accepting blocks for 144 expired-MTP blocks, then rejects new blocks
-  with `node-expired`, and refuses startup after expiry unless overridden.
+  warns four weeks before expiry, refuses block-template creation after expiry
+  (`d957a02772`, ported as `198a65baa1`), keeps accepting blocks for 144
+  expired-MTP blocks, then rejects new blocks with `node-expired`, and refuses
+  startup after expiry unless overridden.
   `feature_softwareexpiry.py` exposed a port-side no-UI warning regression from
   Core's newer no-caption UI signal API: Knots passed `"Warning"`/`"Error"`
   captions with non-modal icon styles, while the port printed the message
@@ -4214,6 +4215,9 @@ Functional tests:
 - `python3 test/functional/feature_sync_coins_tip_after_chain_sync.py --configfile ../knots/build-repro/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_knots_sync_coins_tip_after_chain_sync`
 - `python3 test/functional/feature_softwareexpiry.py --configfile build/test/config.ini`
+- `python3 test/functional/feature_softwareexpiry.py --configfile build/test/config.ini
+  --tmpdir=/mnt/my_storage/tmp_feature_softwareexpiry_gbt_port
+  --portseed=42130`
 - `python3 test/functional/feature_torcontrol.py --configfile build/test/config.ini`
 - `test/functional/feature_torcontrol.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_feature_torcontrol_audit`
