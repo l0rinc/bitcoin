@@ -803,6 +803,7 @@ public:
 
     size_t KeypoolCountExternalKeys() const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool TopUpKeyPool(unsigned int kpSize = 0);
+    std::optional<int64_t> GetOldestKeyPoolTime() const;
 
     // Filter struct for 'ListAddrBookAddresses'
     struct AddrBookFilter {
@@ -881,6 +882,9 @@ public:
 
     //! get the current wallet format (the oldest client version guaranteed to understand this wallet)
     int GetVersion() const { LOCK(cs_wallet); return nWalletVersion; }
+
+    /** Upgrade the wallet */
+    bool UpgradeWallet(int version, bilingual_str& error);
 
     //! Get wallet transactions that conflict with given transaction (spend same outputs)
     std::set<Txid> GetConflicts(const Txid& txid) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);

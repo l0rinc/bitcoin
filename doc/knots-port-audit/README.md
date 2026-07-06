@@ -873,6 +873,20 @@ Other missing/adapted Knots pieces found during this pass:
   builds. After `ece3ba8d5b`, the port can create/reload BDB legacy wallets
   again, so these broader legacy tests should be included in the next
   BDB-enabled regression run.
+  A later previous-release BDB rerun found more port-side legacy-wallet
+  omissions rather than actual Knots bugs: current Core's
+  `get_previous_releases.py` no longer carried the v0.15.2/v0.16.3/v0.17.2
+  checksums needed by Knots' restored legacy tests; the port had lost
+  Knots' `sethdseed`, `upgradewallet`, real `getwalletinfo.walletversion`,
+  and `keypoololdest` behavior; and the current named-default-wallet test
+  convention required small `wallet_upgradewallet.py` path/reload
+  adaptations. Actual Knots already has the RPCs and passes the legacy
+  behavior these tests exercise. Current Core lacks or de-emphasizes this
+  old legacy-wallet surface, so this is compatibility/test-coverage hardening,
+  not consensus behavior, network behavior, or an original Knots defect. The
+  port now has both focused unit coverage for `CWallet::UpgradeWallet`
+  feature-boundary handling and the BDB previous-release functional coverage
+  for `wallet_upgradewallet.py` and `wallet_inactive_hdchains.py`.
   The remaining Knots-only `mempool_package_onemore.py` test was checked but
   not restored: it asserts the old ancestor/descendant package carve-out
   behavior, while current Core has replaced that policy surface with cluster
@@ -5797,7 +5811,7 @@ Functional tests:
 - `python3 test/functional/wallet_importmulti.py --configfile build/test/config.ini --legacy-wallet`
   (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB-enabled rerun passed as recorded below)
 - `python3 test/functional/wallet_upgradewallet.py --configfile build/test/config.ini --legacy-wallet`
-  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB-enabled previous-release rerun passed as recorded below)
 - `python3 test/functional/wallet_implicitsegwit.py --configfile build/test/config.ini`
   (historical pre-`ece3ba8d5b` skip on a descriptor-only build)
 - `python3 test/functional/wallet_implicitsegwit.py
@@ -5805,7 +5819,29 @@ Functional tests:
   --legacy-wallet
   --tmpdir=/mnt/my_storage/tmp_wallet_implicitsegwit_legacy_verify1` passed.
 - `python3 test/functional/wallet_inactive_hdchains.py --configfile build/test/config.ini --legacy-wallet`
-  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB rerun pending)
+  (historical pre-`ece3ba8d5b` skip on a descriptor-only build; BDB-enabled previous-release rerun passed as recorded below)
+- `python3 test/get_previous_releases.py -t
+  /mnt/my_storage/tmp_previous_releases_knots_port v0.15.2 v0.16.3
+  v0.17.2` downloaded and checksum-verified the old aarch64 release
+  binaries needed by Knots' legacy BDB tests.
+- `cmake --build /mnt/my_storage/tmp_bitcoin_bdb_legacy_build --target
+  bitcoind bitcoin-cli -j4`
+- `PREVIOUS_RELEASES_DIR=/mnt/my_storage/tmp_previous_releases_knots_port
+  python3 test/functional/wallet_inactive_hdchains.py
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --legacy-wallet --previous-releases
+  --tmpdir=/mnt/my_storage/tmp_wallet_inactive_hdchains_legacy_verify7
+  --portseed=43952` passed.
+- `PREVIOUS_RELEASES_DIR=/mnt/my_storage/tmp_previous_releases_knots_port
+  python3 test/functional/wallet_upgradewallet.py
+  --configfile=/mnt/my_storage/tmp_bitcoin_bdb_legacy_build/test/config.ini
+  --legacy-wallet --previous-releases
+  --tmpdir=/mnt/my_storage/tmp_wallet_upgradewallet_legacy_verify9
+  --portseed=43971` passed.
+- `cmake --build build --target bitcoind bitcoin-cli -j4`
+- `cmake --build build --target test_bitcoin -j4`
+- `build/bin/test_bitcoin
+  --run_test=wallet_tests/upgrade_wallet_feature_boundaries`
 - `python3 test/functional/wallet_pruning.py --configfile build/test/config.ini --legacy-wallet`
   (historical pre-`ece3ba8d5b` skip on a descriptor-only build)
 - `python3 test/functional/wallet_pruning.py

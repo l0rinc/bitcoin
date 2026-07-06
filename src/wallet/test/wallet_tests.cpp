@@ -53,6 +53,41 @@ BOOST_AUTO_TEST_CASE(default_confirm_target_is_one_day)
     BOOST_CHECK_EQUAL(m_wallet.m_confirm_target, 144U);
 }
 
+BOOST_AUTO_TEST_CASE(upgrade_wallet_feature_boundaries)
+{
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    {
+        LOCK(wallet.cs_wallet);
+        wallet.SetMinVersion(FEATURE_COMPRPUBKEY);
+    }
+
+    bilingual_str error;
+    BOOST_CHECK(wallet.UpgradeWallet(FEATURE_HD - 1, error));
+    BOOST_CHECK(error.empty());
+    BOOST_CHECK_EQUAL(wallet.GetVersion(), FEATURE_COMPRPUBKEY);
+
+    error = {};
+    BOOST_CHECK(!wallet.UpgradeWallet(FEATURE_WALLETCRYPT, error));
+    BOOST_CHECK(!error.empty());
+    BOOST_CHECK_EQUAL(wallet.GetVersion(), FEATURE_COMPRPUBKEY);
+
+    CWallet hd_wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    {
+        LOCK(hd_wallet.cs_wallet);
+        hd_wallet.SetMinVersion(FEATURE_HD);
+    }
+
+    error = {};
+    BOOST_CHECK(!hd_wallet.UpgradeWallet(FEATURE_HD_SPLIT, error));
+    BOOST_CHECK(!error.empty());
+    BOOST_CHECK_EQUAL(hd_wallet.GetVersion(), FEATURE_HD);
+
+    error = {};
+    BOOST_CHECK(hd_wallet.UpgradeWallet(/*version=*/0, error));
+    BOOST_CHECK(error.empty());
+    BOOST_CHECK_EQUAL(hd_wallet.GetVersion(), FEATURE_LATEST);
+}
+
 static CMutableTransaction TestSimpleSpend(const CTransaction& from, uint32_t index, const CKey& key, const CScript& pubkey)
 {
     CMutableTransaction mtx;
