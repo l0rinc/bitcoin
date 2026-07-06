@@ -926,17 +926,14 @@ Other missing/adapted Knots pieces found during this pass:
   replacement-fee interactions.
 - The descriptor-wallet `importaddress` review confirmed Knots'
   descriptor-compatible behavior (`be3ae51ece`) is present in the port. The
-  existing restored `wallet_descriptor.py` coverage carried an original Knots
-  test bug: actual Knots `29.x-knots` still calls wallet RPCs as
-  `recv_wrpc.rpc.importprivkey`, which targets the nonexistent RPC method
-  `rpc.importprivkey`. A direct Knots runtime reproduction was attempted in a
-  temporary build configured with `RDTS_CONSENT=IMPLICIT`, but the build hit
-  `No space left on device` while archiving `libbitcoin_common.a`; the
-  source/blame proof still shows this is not port-introduced. The port fixes
-  the test calls, adapts removed current-Core wallet methods to
-  `Method not found`, and extends coverage for descriptor wallets with private
-  keys enabled, `addr(...)` imports, `raw(...)` imports, and the descriptor
-  raw-script P2SH rejection (`d208db82c5`).
+  restored `wallet_descriptor.py` coverage needed current-Core test-framework
+  adaptation: Knots' native `recv_wrpc.rpc.importprivkey` wrapper form is valid
+  in Knots' own framework, and a refreshed unmodified-Knots
+  `wallet_descriptor.py` run passes. The port uses the current direct wallet
+  RPC proxy form, adapts wallet RPCs removed on current Core to `Method not
+  found`, and extends coverage for descriptor wallets with private keys
+  enabled, `addr(...)` imports, `raw(...)` imports, and the descriptor raw-script
+  P2SH rejection (`d208db82c5`).
 - The wallet PSBT review confirmed Knots' anti-fee-sniping default for
   `walletcreatefundedpsbt` (`c5448df366`) is present in the port: when the
   caller omits explicit `locktime`, the funded PSBT uses a height-based
@@ -944,7 +941,8 @@ Other missing/adapted Knots pieces found during this pass:
   related `send` and `sendall` behavior but still leaves this
   `walletcreatefundedpsbt` default at zero. `rpc_psbt.py` covers the ported
   PSBT behavior, and actual Knots' own `rpc_psbt.py` now passes against the
-  local unmodified Knots build as a same-repo cross-check.
+  local unmodified Knots build as a same-repo cross-check. Refreshed full
+  `rpc_psbt.py` runs passed against both the port and unmodified Knots.
 - The raw-transaction PSBT review confirmed Knots' user-provided previous
   transaction support for `utxoupdatepsbt` and `descriptorprocesspsbt`
   (`bdb4ca4195`, `eea8588f07`) is present in the port and absent from current
@@ -954,7 +952,8 @@ Other missing/adapted Knots pieces found during this pass:
   child PSBT from provided parent transaction hex, irrelevant prevtxs being a
   no-op, duplicate txid rejection, and too-few-outputs rejection. The latest
   full `rpc_psbt.py` reruns against both the port and actual Knots exercised
-  these assertions before the funded-PSBT locktime checks.
+  these assertions before the funded-PSBT locktime checks, including refreshed
+  runs on the current tree.
 - The same PSBT review confirmed Knots' options-object compatibility for
   `walletprocesspsbt` (`e5160731d2`) and `descriptorprocesspsbt`
   (`a22be508da`) is present in the port and absent from current Core. Both RPCs
@@ -5018,6 +5017,14 @@ Functional tests:
   --portseed=26454`
 - `python3 test/functional/rpc_psbt.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_psbt_prevtxs`
+- `python3 test/functional/rpc_psbt.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_psbt_wallet_refresh_port
+  --portseed=42592`
+- `python3 ../knots/test/functional/rpc_psbt.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_rpc_psbt_wallet_refresh_knots
+  --portseed=42594`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini`
 - `python3 test/functional/mempool_fee_histogram.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_mempool_fee_histogram_review_port
@@ -5252,6 +5259,14 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_avoidreuse_getbalance_4`
 - `python3 test/functional/wallet_descriptor.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_descriptor_importaddress_4`
+- `python3 test/functional/wallet_descriptor.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_descriptor_importaddress_refresh_port
+  --portseed=42593`
+- `python3 ../knots/test/functional/wallet_descriptor.py --configfile=../knots/build-repro/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_wallet_descriptor_refresh_knots
+  --portseed=42595`
 - `python3 test/functional/wallet_create_tx.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_wallet_create_tx_setfeerate`
 - `python3 test/functional/wallet_bumpfee.py --configfile build/test/config.ini
@@ -5480,6 +5495,19 @@ Functional tests:
   `python3 ../knots/test/functional/rpc_psbt.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_rpc_psbt_anti_fee_sniping_review_knots --portseed=26454`
   passed on unmodified Knots, including Knots' native
   `walletcreatefundedpsbt` anti-fee-sniping assertion
+- Refreshed wallet/PSBT cross-checks:
+  `python3 test/functional/rpc_psbt.py --configfile=build/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_psbt_wallet_refresh_port --portseed=42592`
+  and
+  `python3 ../knots/test/functional/rpc_psbt.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_rpc_psbt_wallet_refresh_knots --portseed=42594`
+  both passed, covering provided-previous-transaction PSBT filling/signing,
+  funded-PSBT anti-fee-sniping locktimes, and options-object compatibility.
+- Refreshed descriptor-wallet cross-checks:
+  `python3 test/functional/wallet_descriptor.py --configfile=build/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_wallet_descriptor_importaddress_refresh_port --portseed=42593`
+  and
+  `python3 ../knots/test/functional/wallet_descriptor.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_wallet_descriptor_refresh_knots --portseed=42595`
+  both passed. This corrected the earlier suspicion around Knots'
+  `recv_wrpc.rpc.*` calls: they are valid in Knots' native test framework; only
+  the port needed adaptation to the current direct wallet RPC proxy.
 - Original Knots cross-check:
   `python3 ../knots/test/functional/rpc_getblockfrompeer.py --configfile ../knots/build-repro/test/config.ini --tmpdir=/mnt/my_storage/tmp_rpc_getblockfrompeer_review_knots --portseed=26456`
   passed on unmodified Knots, including no-header fetches, duplicate same-peer
