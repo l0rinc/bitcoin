@@ -2192,11 +2192,13 @@ under different commits. They are not all proven exploitable.
   orphan transactions and lets operators lower the count to zero or raise it.
   Negative values are clamped to zero by the shared peerman argument parser.
   This is P2P memory/resource-control behavior, not consensus behavior or peer
-  punishment policy. The new `p2p_maxorphantx.py` functional test starts one
-  node with `-maxorphantx=3` and another with `-maxorphantx=0`, then verifies
-  the visible orphanage size through `getorphantxs`; the same test passes
-  against unmodified Knots. Existing unit coverage checks parser clamping and
-  the txdownload orphan-count limit.
+  punishment policy. Source comparison maps the setting through
+  `PeerManager::Options::max_orphan_txs` into `TxDownloadManager` and
+  `LimitOrphans(...)` after orphan insertion. The new `p2p_maxorphantx.py`
+  functional test starts one node with `-maxorphantx=3` and another with
+  `-maxorphantx=0`, then verifies the visible orphanage size through
+  `getorphantxs`; the same test passes against unmodified Knots. Existing unit
+  coverage checks parser clamping and the txdownload orphan-count limit.
 
 - Unknown/future witness output policy switch:
   `584798d402`, `82b2c8372e`
@@ -3103,6 +3105,12 @@ Source/manifest checks:
   ../knots/src/init.cpp ../knots/src/node/peerman_args.cpp
   ../knots/src/net_processing.h` shows the option, parser, and 100-transaction
   default in both the port and unmodified Knots.
+- `git grep -n
+  "maxorphantx|max_orphan_txs|DEFAULT_MAX_ORPHAN_TRANSACTIONS|LimitOrphans"
+  HEAD knots/29.x-knots origin/master -- src/init.cpp src/net_processing.cpp
+  src/net_processing.h src/node/peerman_args.cpp src/node/txdownloadman.h
+  src/node/txdownloadman_impl.cpp src/test/peerman_tests.cpp
+  src/test/txdownload_tests.cpp test/functional/p2p_maxorphantx.py`
 - `git show origin/master:src/kernel/mempool_options.h origin/master:src/policy/policy.cpp
   | rg -n "acceptunknownwitness|scriptpubkey-unknown-witnessversion|WITNESS_UNKNOWN" -C 4`,
   `git -C ../knots show 29.x-knots:src/kernel/mempool_options.h 29.x-knots:src/policy/policy.cpp 29.x-knots:src/test/transaction_tests.cpp
@@ -4502,6 +4510,14 @@ Functional tests:
   --portseed=32913`
 - `build/bin/test_bitcoin --run_test=txdownload_tests/max_orphan_txs_limit
   --catch_system_error=no --log_level=error --report_level=short`
+- `python3 test/functional/p2p_maxorphantx.py --configfile
+  build/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_port_refresh
+  --portseed=42220`
+- `python3 test/functional/p2p_maxorphantx.py --configfile
+  ../knots/build-repro/test/config.ini --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_knots_refresh
+  --portseed=42221`
 - `build/bin/test_bitcoin --run_test=transaction_tests/test_IsStandard
   --catch_system_errors=no --log_level=error --report_level=short`
 - `python3 test/functional/mempool_acceptunknownwitness.py
@@ -4773,6 +4789,10 @@ Functional tests:
   `python3 test/functional/p2p_compactblocks_extratxs.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_compactblocks_extratxs_knots_refresh --portseed=42211`
   passed on unmodified Knots, including rejected-transaction availability in
   the extra pool, count wraparound, and size-cap eviction behavior.
+- Original Knots cross-check:
+  `python3 test/functional/p2p_maxorphantx.py --configfile ../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_p2p_maxorphantx_knots_refresh --portseed=42221`
+  passed on unmodified Knots, confirming inherited `-maxorphantx=3` count
+  limiting and `-maxorphantx=0` orphan-storage disable behavior.
 - Original Knots cross-check:
   `python3 test/functional/mempool_minrelay.py --configfile=../knots/build-repro/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_mempool_minrelay_knots --portseed=32631`
   passed on unmodified Knots, confirming that `-minrelaymaturity=2` and
