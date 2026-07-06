@@ -67,6 +67,8 @@ class MempoolTRUC(BitcoinTestFramework):
         self.log.info("Test -mempooltruc option parsing")
         for extra_args, expected_policy in [
             ([], "enforce"),
+            (["-corepolicy=0"], "accept"),
+            (["-corepolicy=1"], "enforce"),
             (["-mempooltruc=reject"], "reject"),
             (["-mempooltruc=0"], "reject"),
             (["-mempooltruc=accept"], "accept"),
