@@ -589,14 +589,15 @@ public:
     //! rewind to a given reading position
     bool SetPos(uint64_t nPos) {
         size_t bufsize = vchBuf.size();
+        const uint64_t max_pos{std::min(nSrcPos, nReadLimit)};
+        if (nPos > max_pos) {
+            // can't go this far forward, go as far as possible
+            m_read_pos = max_pos;
+            return false;
+        }
         if (nPos + bufsize < nSrcPos) {
             // rewinding too far, rewind as far as possible
             m_read_pos = nSrcPos - bufsize;
-            return false;
-        }
-        if (nPos > nSrcPos) {
-            // can't go this far forward, go as far as possible
-            m_read_pos = nSrcPos;
             return false;
         }
         m_read_pos = nPos;

@@ -584,8 +584,8 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_limit_boundary)
     BOOST_CHECK_EQUAL(bf.GetPos(), 5U);
     BOOST_CHECK(bf.SetLimit(5));
 
-    BOOST_CHECK(bf.SetPos(6)); // TODO: SetPos() should stay within the active limit.
-    BOOST_CHECK_EQUAL(bf.GetPos(), 6U);
+    BOOST_CHECK(!bf.SetPos(6));
+    BOOST_CHECK_EQUAL(bf.GetPos(), 5U);
 
     BOOST_CHECK(bf.SetLimit());
     BOOST_CHECK(bf.SetPos(5));
@@ -695,6 +695,7 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_rand)
                 break;
             }
             case 5: {
+                bf.SetLimit();
                 size_t requestPos = m_rng.randrange(maxPos + 4);
                 bool okay = bf.SetPos(requestPos);
                 // The new position may differ from the requested position
