@@ -2170,6 +2170,18 @@ under different commits. They are not all proven exploitable.
   LevelDB file and confirms that `-reindex=auto` automatically reindexes back
   to the same height; the same method passes on unmodified Knots.
 
+- Manual-prune zero-height no-op:
+  `b0c8dfaca2`, ported as `2f5d14ae59`
+
+  Current Core master still has no early return for `pruneblockchain(0)`: on a
+  pruned node below `PruneAfterHeight` it rejects the request as too short, and
+  on a taller pruned node it reaches `PruneBlockFilesManual(...)` with height
+  zero. Knots and the port return `0` immediately. This is authenticated local
+  RPC availability/performance hardening rather than consensus behavior or an
+  unauthenticated remote issue. The strengthened `feature_pruning.py` manual
+  pruning path now asserts both the below-`PruneAfterHeight` no-op result and
+  the later no-op result after the chain is tall enough.
+
 - External signer fingerprint hardening:
   `6d2c2259ee`, `12eefda89a`, `ee39394ad3`
 
@@ -4005,6 +4017,11 @@ Source/manifest checks:
 - `git -C ../knots show 29.x-knots:src/node/blockmanager_args.cpp | rg -n
   "pruneduringinit|PRUNE_TARGET_MANUAL"` confirms actual Knots converts
   `-pruneduringinit=0` to manual pruning during init.
+- `git grep -n
+  "heightParam == 0\\|PruneBlockFilesManual(active_chainstate, height)\\|Blockchain is too short for pruning"
+  HEAD knots/29.x-knots origin/master -- src/rpc/blockchain.cpp` shows the
+  zero-height `pruneblockchain` early return in Knots and the port, while
+  current Core still reaches the too-short-chain error or manual-prune path.
 - `git show origin/master:src/node/transaction.cpp | sed -n '32,105p'`,
   `git show origin/master:src/rpc/mempool.cpp | sed -n '110,158p'`,
   `git -C ../knots show 29.x-knots:src/node/transaction.cpp | sed -n
@@ -5686,6 +5703,10 @@ Functional tests:
 - `python3 test/functional/rpc_uptime.py --configfile build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_rpc_uptime_refresh
   --portseed=44001`
+- `python3 test/functional/feature_pruning.py --configfile=build/test/config.ini
+  --cachedir=test/cache
+  --tmpdir=/mnt/my_storage/tmp_feature_pruning_zero_height_refresh
+  --portseed=42748`
 - `python3 test/functional/rpc_invalid_address_message.py --configfile
   build/test/config.ini
   --tmpdir=/mnt/my_storage/tmp_bitcoin_rpc_invalid_address_validateaddress_compat`

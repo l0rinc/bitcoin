@@ -289,6 +289,10 @@ class PruneTest(BitcoinTestFramework):
         def has_block(index):
             return os.path.isfile(os.path.join(self.nodes[node_number].blocks_path, f"blk{index:05}.dat"))
 
+        # Zero is a no-op, even while the chain is too short for any actual
+        # pruning request.
+        assert_equal(node.pruneblockchain(0), 0)
+
         # should not prune because chain tip of node 3 (995) < PruneAfterHeight (1000)
         assert_raises_rpc_error(-1, "Blockchain is too short for pruning", node.pruneblockchain, height(500))
 
@@ -318,6 +322,7 @@ class PruneTest(BitcoinTestFramework):
         assert has_block(0), "blk00000.dat is missing when should still be there"
 
         # Does nothing
+        assert_equal(node.pruneblockchain(0), 0)
         node.pruneblockchain(height(0))
         assert has_block(0), "blk00000.dat is missing when should still be there"
 
