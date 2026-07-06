@@ -652,6 +652,10 @@ BOOST_AUTO_TEST_CASE(util_ModifyRWConfigFileOnArgsManager)
     BOOST_CHECK_EQUAL(error, "");
 
     const fs::path rw_path{args.GetRWConfigFilePath()};
+    fs::path settings_path;
+    BOOST_REQUIRE(args.GetSettingsPath(&settings_path));
+    BOOST_CHECK_EQUAL(settings_path, args.GetDataDirNet() / BITCOIN_SETTINGS_FILENAME);
+
     args.ModifyRWConfigFile("foo", "bar");
     {
         std::ifstream input{rw_path.std_path()};
@@ -659,6 +663,15 @@ BOOST_AUTO_TEST_CASE(util_ModifyRWConfigFileOnArgsManager)
         std::stringstream buffer;
         buffer << input.rdbuf();
         BOOST_CHECK_EQUAL(buffer.str(), "foo=bar\n");
+    }
+    {
+        TestArgsManager reader;
+        reader.ForceSetArg("-datadir", fs::PathToString(m_path_root));
+        BOOST_REQUIRE(reader.ReadSettingsFile());
+        reader.LockSettings([&](const common::Settings& settings) {
+            BOOST_REQUIRE_EQUAL(settings.rw_settings.count("foo"), 1);
+            BOOST_CHECK_EQUAL(settings.rw_settings.at("foo").get_str(), "bar");
+        });
     }
 
     args.ModifyRWConfigFile("foo", "baz");
@@ -676,12 +689,43 @@ BOOST_AUTO_TEST_CASE(util_ModifyRWConfigFileOnArgsManager)
         BOOST_CHECK_EQUAL(settings.rw_config.at("rwonly").front().get_str(), "1");
         BOOST_CHECK(!settings.rw_settings.contains("rwonly"));
     });
+    {
+        TestArgsManager reader;
+        reader.ForceSetArg("-datadir", fs::PathToString(m_path_root));
+        BOOST_REQUIRE(reader.ReadSettingsFile());
+        reader.LockSettings([&](const common::Settings& settings) {
+            BOOST_REQUIRE_EQUAL(settings.rw_settings.count("foo"), 1);
+            BOOST_CHECK_EQUAL(settings.rw_settings.at("foo").get_str(), "baz");
+            BOOST_CHECK(!settings.rw_settings.contains("rwonly"));
+        });
+    }
 
     args.EraseRWConfigFile();
     fs::path reset_path{rw_path};
     reset_path += ".reset";
     BOOST_CHECK(!fs::exists(rw_path));
     BOOST_CHECK(fs::exists(reset_path));
+
+    TestArgsManager no_settings_args;
+    const fs::path no_settings_datadir{fs::absolute(m_path_root / "no_settings")};
+    fs::create_directories(no_settings_datadir);
+    no_settings_args.ForceSetArg("-datadir", fs::PathToString(no_settings_datadir));
+    no_settings_args.ForceSetArg("-confrw", "test_rw.conf");
+    no_settings_args.ForceSetArgV("-settings", common::SettingsValue{false});
+
+    BOOST_REQUIRE(no_settings_args.ReadConfigFiles(error, /*ignore_invalid_keys=*/true));
+    BOOST_CHECK_EQUAL(error, "");
+    const fs::path no_settings_rw_path{no_settings_args.GetRWConfigFilePath()};
+    BOOST_CHECK(!no_settings_args.GetSettingsPath());
+    no_settings_args.ModifyRWConfigFile("foo", "bar");
+    {
+        std::ifstream input{no_settings_rw_path.std_path()};
+        BOOST_REQUIRE(input.good());
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        BOOST_CHECK_EQUAL(buffer.str(), "foo=bar\n");
+    }
+    BOOST_CHECK(!fs::exists(no_settings_datadir / "settings.json"));
 }
 
 BOOST_AUTO_TEST_CASE(util_RWConfigHasPruneOption)

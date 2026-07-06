@@ -2258,6 +2258,24 @@ under different commits. They are not all proven exploitable.
   `feature_uacomment.py` now pins the boolean modes, and the same strengthened
   test passes against unmodified Knots.
 
+- Mutable read/write config file:
+
+  Knots retains the legacy `bitcoin_rw.conf` mutable configuration file and
+  exposes `-confrw=<file>` in both `bitcoind` and `bitcoin-cli`; current Core
+  master has no matching `-confrw`, `BITCOIN_RW_CONF_FILENAME`, or
+  `ModifyRWConfigFile` surface. Relative `-confrw` paths are resolved under the
+  network-specific datadir. Knots' writer rewrites `bitcoin_rw.conf`, updates
+  the in-memory read/write config map, and by default mirrors changed string
+  settings into Core-style `settings.json` for compatibility. Callers can
+  suppress the settings mirror with `also_settings_json=false`, and a negated
+  `-settings` disables the mirror while still allowing the rw config file to be
+  written. This is persistent local configuration behavior, not consensus or
+  unauthenticated remote exposure, but it is a notable Knots-vs-Core state
+  surface because GUI/options changes may leave durable settings outside the
+  ordinary read-only `bitcoin.conf`. `argsman_tests` now covers the on-disk
+  `settings.json` mirror, the rw-only update mode, and the negated-`-settings`
+  path.
+
 - Mempool statistics subsystem and RPC:
 
   Knots adds a `src/stats` subsystem, `-statsenable`,
@@ -4685,9 +4703,9 @@ Functional tests:
   `python3 test/functional/rpc_mempoolstats.py --configfile=build/test/config.ini --tmpdir=/mnt/my_storage/tmp_rpc_mempoolstats_port_2 --portseed=32931`
   passed, as did
   `build/bin/test_bitcoin --run_test=stats_tests --catch_system_error=no --log_level=error --report_level=short`.
-  `../knots/build-repro/bin` only contains `bitcoind`, `bitcoin-cli`, and
-  `bitcoin-wallet`, so there was no unmodified-Knots `test_bitcoin` binary for
-  a C++ unit cross-run.
+  At the time of that stats pass, `../knots/build-repro/bin` only contained
+  `bitcoind`, `bitcoin-cli`, and `bitcoin-wallet`, so there was no
+  unmodified-Knots `test_bitcoin` binary for a C++ unit cross-run.
 - Original Knots cross-check:
   `python3 test/functional/interface_zmq.py --configfile=../knots/build-zmq-audit/test/config.ini --cachedir=test/cache --tmpdir=/mnt/my_storage/tmp_interface_zmq_wallet_knots --portseed=32941`
   passed on the unmodified Knots ZMQ build, including the wallet
@@ -4695,6 +4713,24 @@ Functional tests:
   corresponding port run
   `python3 test/functional/interface_zmq.py --configfile=/mnt/my_storage/build-zmq-audit/test/config.ini --tmpdir=/mnt/my_storage/tmp_interface_zmq_wallet_port --portseed=32940`
   also passed.
+- Original Knots/source cross-check:
+  `rg -n "confrw|bitcoin_rw\\.conf|RWConfig|ModifyRWConfigFile|EraseRWConfigFile|RWConfigHasPruneOption" ../knots/src/common ../knots/src/init.cpp ../knots/src/bitcoin-cli.cpp ../knots/src/test ../knots/doc -C 2`
+  shows unmodified Knots carries the `-confrw` option, rw-config path
+  resolution, stream rewrite helper, and lower-level stream rewrite unit test.
+  The matching current-Core check
+  `git show origin/master:src/common/args.h origin/master:src/common/args.cpp origin/master:src/common/config.cpp origin/master:src/init.cpp origin/master:src/bitcoin-cli.cpp origin/master:src/test/argsman_tests.cpp 2>/dev/null | rg -n "confrw|bitcoin_rw\\.conf|RWConfig|ModifyRWConfigFile|EraseRWConfigFile|RWConfigHasPruneOption" -C 3`
+  returned no matches. Direct source comparison of
+  `../knots/src/common/args.cpp` and `src/common/args.cpp` confirms both write
+  `bitcoin_rw.conf`, update `m_settings.rw_config`, and mirror to
+  `settings.json` only when `also_settings_json && !IsArgNegated("-settings")`.
+  `cmake --build build --target test_bitcoin -j2` and
+  `build/bin/test_bitcoin --run_test=argsman_tests/util_ModifyRWConfigFileOnArgsManager --catch_system_error=no --log_level=error --report_level=short`
+  pass on the port with the strengthened ArgsManager integration assertions.
+  `cmake --build ../knots/build-repro --target test_bitcoin -j2` built the
+  unmodified Knots unit binary; Knots does not have the strengthened
+  `argsman_tests/util_ModifyRWConfigFileOnArgsManager` case, but its native
+  `../knots/build-repro/bin/test_bitcoin --run_test=util_tests/test_ModifyRWConfigFile --catch_system_error=no --log_level=error --report_level=short`
+  passes with 53 assertions.
 - Original Knots expected-failure repro with a temporary
   `/mnt/my_storage/knots-assumeutxo-repro` worktree and the port's added
   post-validation raw-transaction assertion:
