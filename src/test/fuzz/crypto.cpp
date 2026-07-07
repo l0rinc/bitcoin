@@ -37,6 +37,76 @@ void CheckHashWrapperChunking(const std::vector<uint8_t>& data, const size_t spl
     CHash160().Write(first).Write(second).Finalize(hash160_split);
     assert(hash160_split == Hash160(data));
 }
+
+template <typename Hasher>
+std::vector<uint8_t> FinalizeHasher(Hasher hasher)
+{
+    std::vector<uint8_t> out(Hasher::OUTPUT_SIZE);
+    hasher.Finalize(out.data());
+    return out;
+}
+
+template <typename Hasher>
+void CheckHasherChunking(const std::vector<uint8_t>& data, const size_t split_pos)
+{
+    const auto input{std::span{data}};
+    const auto split{std::min(split_pos, input.size())};
+
+    Hasher whole;
+    whole.Write(input.data(), input.size());
+    const std::vector<uint8_t> whole_out{FinalizeHasher(whole)};
+
+    Hasher chunked;
+    chunked.Write(input.data(), split);
+    Hasher copied{chunked};
+    chunked.Write(input.subspan(split).data(), input.size() - split);
+    copied.Write(input.subspan(split).data(), input.size() - split);
+    assert(FinalizeHasher(chunked) == whole_out);
+    assert(FinalizeHasher(copied) == whole_out);
+}
+
+template <typename Hasher>
+void CheckHmacChunking(const std::vector<uint8_t>& key, const std::vector<uint8_t>& data, const size_t split_pos)
+{
+    const auto input{std::span{data}};
+    const auto split{std::min(split_pos, input.size())};
+
+    Hasher whole{key.data(), key.size()};
+    whole.Write(input.data(), input.size());
+    const std::vector<uint8_t> whole_out{FinalizeHasher(whole)};
+
+    Hasher chunked{key.data(), key.size()};
+    chunked.Write(input.data(), split);
+    Hasher copied{chunked};
+    chunked.Write(input.subspan(split).data(), input.size() - split);
+    copied.Write(input.subspan(split).data(), input.size() - split);
+    assert(FinalizeHasher(chunked) == whole_out);
+    assert(FinalizeHasher(copied) == whole_out);
+}
+
+void CheckSHA3Chunking(const std::vector<uint8_t>& data, const size_t split_pos)
+{
+    const auto input{std::span{data}};
+    const auto split{std::min(split_pos, input.size())};
+
+    std::vector<uint8_t> whole_out(SHA3_256::OUTPUT_SIZE);
+    SHA3_256{}.Write(input).Finalize(whole_out);
+
+    std::vector<uint8_t> split_out(SHA3_256::OUTPUT_SIZE);
+    SHA3_256{}.Write(input.first(split)).Write(input.subspan(split)).Finalize(split_out);
+    assert(split_out == whole_out);
+}
+
+void CheckCryptoHasherChunking(const std::vector<uint8_t>& data, const size_t split_pos)
+{
+    CheckHasherChunking<CRIPEMD160>(data, split_pos);
+    CheckHasherChunking<CSHA1>(data, split_pos);
+    CheckHasherChunking<CSHA256>(data, split_pos);
+    CheckHasherChunking<CSHA512>(data, split_pos);
+    CheckHmacChunking<CHMAC_SHA256>(data, data, split_pos);
+    CheckHmacChunking<CHMAC_SHA512>(data, data, split_pos);
+    CheckSHA3Chunking(data, split_pos);
+}
 } // namespace
 
 FUZZ_TARGET(crypto)
@@ -48,7 +118,9 @@ FUZZ_TARGET(crypto)
         auto x = fuzzed_data_provider.ConsumeIntegral<uint8_t>();
         data.resize(new_size, x);
     }
-    CheckHashWrapperChunking(data, fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, data.size()));
+    size_t split_pos{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, data.size())};
+    CheckHashWrapperChunking(data, split_pos);
+    CheckCryptoHasherChunking(data, split_pos);
 
     CHash160 hash160;
     CHash256 hash256;
@@ -72,7 +144,9 @@ FUZZ_TARGET(crypto)
                         auto x = fuzzed_data_provider.ConsumeIntegral<uint8_t>();
                         data.resize(new_size, x);
                     }
-                    CheckHashWrapperChunking(data, fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, data.size()));
+                    split_pos = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, data.size());
+                    CheckHashWrapperChunking(data, split_pos);
+                    CheckCryptoHasherChunking(data, split_pos);
                 }
 
                 (void)hash160.Write(data);
