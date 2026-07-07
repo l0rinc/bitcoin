@@ -180,7 +180,13 @@ FUZZ_TARGET(script_sign, .init = initialize_script_sign)
             }
             std::map<COutPoint, Coin> coins{ConsumeCoins(fuzzed_data_provider)};
             std::map<int, bilingual_str> input_errors;
-            (void)SignTransaction(sign_transaction_tx_to, &provider, coins, {.sighash_type = fuzzed_data_provider.ConsumeIntegral<int>()}, input_errors);
+            const bool signed_transaction{SignTransaction(sign_transaction_tx_to, &provider, coins, {.sighash_type = fuzzed_data_provider.ConsumeIntegral<int>()}, input_errors)};
+            assert(signed_transaction == input_errors.empty());
+            for (const auto& [input_index, error] : input_errors) {
+                assert(input_index >= 0);
+                assert(static_cast<unsigned int>(input_index) < sign_transaction_tx_to.vin.size());
+                assert(!error.empty());
+            }
         }
     }
 
