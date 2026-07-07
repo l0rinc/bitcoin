@@ -1022,6 +1022,29 @@ BOOST_AUTO_TEST_CASE(script_PushData)
     BOOST_CHECK_EQUAL(err, SCRIPT_ERR_BAD_OPCODE);
 }
 
+BOOST_AUTO_TEST_CASE(script_GetOp_failure_clears_outputs)
+{
+    auto check_failed_getop = [](const CScript& script) {
+        auto pc{script.begin()};
+        opcodetype opcode{OP_16};
+        std::vector<unsigned char> data{0x42};
+
+        BOOST_CHECK(!script.GetOp(pc, opcode, data));
+        BOOST_CHECK_EQUAL(opcode, OP_INVALIDOPCODE);
+        BOOST_CHECK(data.empty());
+    };
+
+    check_failed_getop(CScript{});
+
+    const std::vector<unsigned char> pushdata1_trunc{OP_PUSHDATA1, 1};
+    const std::vector<unsigned char> pushdata2_trunc{OP_PUSHDATA2, 1, 0};
+    const std::vector<unsigned char> pushdata4_trunc{OP_PUSHDATA4, 1, 0, 0, 0};
+
+    check_failed_getop(CScript(pushdata1_trunc.begin(), pushdata1_trunc.end()));
+    check_failed_getop(CScript(pushdata2_trunc.begin(), pushdata2_trunc.end()));
+    check_failed_getop(CScript(pushdata4_trunc.begin(), pushdata4_trunc.end()));
+}
+
 BOOST_AUTO_TEST_CASE(script_cltv_truncated)
 {
     const auto script_cltv_trunc = CScript() << OP_CHECKLOCKTIMEVERIFY;
