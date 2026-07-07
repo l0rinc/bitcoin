@@ -13,6 +13,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
+#include <cstdint>
 #include <deque>
 #include <mutex>
 #include <shared_mutex>
@@ -27,6 +28,15 @@ void CheckSignatureCacheEntry(SignatureCache& cache, const uint256& entry)
     BOOST_REQUIRE(cache.Get(entry, /*erase=*/true));
     BOOST_CHECK(cache.Get(entry, /*erase=*/false));
 }
+
+struct RefreshCollisionHasher {
+    template <uint8_t hash_select>
+    uint32_t operator()(const uint8_t& element) const
+    {
+        if (element == 2 && hash_select > 0) return uint32_t{1} << 30;
+        return 0;
+    }
+};
 } // namespace
 
 /** Test Suite for CuckooCache
@@ -126,6 +136,20 @@ BOOST_AUTO_TEST_CASE(cuckoocache_contains_erase_is_deferred)
     BOOST_REQUIRE(cc.contains(uint256::ONE, /*erase=*/false));
     BOOST_REQUIRE(cc.contains(uint256::ONE, /*erase=*/true));
     BOOST_CHECK(cc.contains(uint256::ONE, /*erase=*/false));
+}
+
+BOOST_AUTO_TEST_CASE(cuckoocache_duplicate_insert_refreshes_erased_entry)
+{
+    CuckooCache::cache<uint8_t, RefreshCollisionHasher> cc{};
+    cc.setup(4);
+    cc.insert(1);
+
+    BOOST_REQUIRE(cc.contains(1, /*erase=*/true));
+    cc.insert(1);
+    cc.insert(2);
+
+    BOOST_CHECK(cc.contains(1, /*erase=*/false));
+    BOOST_CHECK(cc.contains(2, /*erase=*/false));
 }
 
 BOOST_AUTO_TEST_CASE(signature_cache_entry_contracts)
