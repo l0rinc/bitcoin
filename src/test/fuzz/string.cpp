@@ -29,6 +29,7 @@
 #include <util/translation.h>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -54,6 +55,13 @@ using util::SplitString;
 using util::TrimString;
 
 namespace {
+constexpr std::array<std::string_view, 4> SAFE_CHARS_BY_RULE{
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,;-_/:?@()",
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,;-_?@",
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_",
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!*'();:@&=+$,/?#[]-_.~%",
+};
+
 void AssertAffixRemovalContracts(std::string_view str, std::string_view affix)
 {
     const std::string_view removed_prefix_view{RemovePrefixView(str, affix)};
@@ -72,6 +80,33 @@ void AssertAffixRemovalContracts(std::string_view str, std::string_view affix)
         assert(removed_suffix_view.size() + affix.size() == str.size());
     } else {
         assert(removed_suffix_view == str);
+    }
+}
+
+void AssertSanitizeStringContracts(std::string_view str, int rule)
+{
+    assert(rule >= SAFE_CHARS_DEFAULT);
+    assert(static_cast<size_t>(rule) < SAFE_CHARS_BY_RULE.size());
+
+    const std::string_view allowed_chars{SAFE_CHARS_BY_RULE.at(rule)};
+    std::string expected;
+    for (const char c : str) {
+        if (allowed_chars.find(c) != std::string_view::npos) {
+            expected.push_back(c);
+        }
+    }
+
+    const std::string sanitized{SanitizeString(str, rule)};
+    assert(sanitized == expected);
+    assert(sanitized.size() <= str.size());
+    assert(SanitizeString(sanitized, rule) == sanitized);
+
+    auto next_char{str.begin()};
+    for (const char c : sanitized) {
+        assert(allowed_chars.find(c) != std::string_view::npos);
+        next_char = std::find(next_char, str.end(), c);
+        assert(next_char != str.end());
+        ++next_char;
     }
 }
 } // namespace
@@ -116,8 +151,8 @@ FUZZ_TARGET(string)
         (void)RPCConvertValues(random_string_1, random_string_vector);
     } catch (const RPCConvertError&) {
     }
-    (void)SanitizeString(random_string_1);
-    (void)SanitizeString(random_string_1, fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 3));
+    AssertSanitizeStringContracts(random_string_1, SAFE_CHARS_DEFAULT);
+    AssertSanitizeStringContracts(random_string_1, fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 3));
 #ifndef WIN32
     (void)ShellEscape(random_string_1);
 #endif // WIN32
