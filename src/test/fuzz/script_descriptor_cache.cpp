@@ -11,6 +11,7 @@
 #include <cassert>
 #include <cstdint>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -104,6 +105,32 @@ FUZZ_TARGET(script_descriptor_cache)
                     AssertDerivedCacheEntry(descriptor_cache, key_exp_pos, der_index, xpub_fetched);
                     assert(other_cache.GetCachedLastHardenedExtPubKey(key_exp_pos, xpub_fetched));
                     AssertLastHardenedCacheEntry(descriptor_cache, key_exp_pos, xpub_fetched);
+                },
+                [&] {
+                    DescriptorCache conflict_cache;
+                    conflict_cache.CacheDerivedExtPubKey(key_exp_pos, der_index, xpub);
+
+                    CExtPubKey conflicting_xpub{xpub};
+                    conflicting_xpub.nChild ^= 1;
+
+                    DescriptorCache other_cache;
+                    other_cache.CacheParentExtPubKey(key_exp_pos, xpub);
+                    other_cache.CacheDerivedExtPubKey(key_exp_pos, der_index, conflicting_xpub);
+
+                    const auto parent_xpubs_before{conflict_cache.GetCachedParentExtPubKeys()};
+                    const auto derived_xpubs_before{conflict_cache.GetCachedDerivedExtPubKeys()};
+                    const auto last_hardened_xpubs_before{conflict_cache.GetCachedLastHardenedExtPubKeys()};
+
+                    bool threw_expected{false};
+                    try {
+                        (void)conflict_cache.MergeAndDiff(other_cache);
+                    } catch (const std::runtime_error& e) {
+                        threw_expected = std::string{e.what()}.find("New cached derived xpub") != std::string::npos;
+                    }
+                    assert(threw_expected);
+                    assert(conflict_cache.GetCachedParentExtPubKeys() == parent_xpubs_before);
+                    assert(conflict_cache.GetCachedDerivedExtPubKeys() == derived_xpubs_before);
+                    assert(conflict_cache.GetCachedLastHardenedExtPubKeys() == last_hardened_xpubs_before);
                 });
         }
         (void)descriptor_cache.GetCachedParentExtPubKeys();
