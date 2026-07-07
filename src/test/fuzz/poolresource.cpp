@@ -11,7 +11,10 @@
 #include <test/util/poolresourcetester.h>
 #include <util/byte_units.h>
 
+#include <algorithm>
+#include <cassert>
 #include <cstdint>
+#include <span>
 #include <tuple>
 #include <vector>
 
@@ -45,6 +48,56 @@ class PoolResourceFuzzer
         PoolResourceTester::CheckLiveSpansDisjoint(live_spans);
     }
 
+    void AssertAllocationTransition(size_t size,
+                                    size_t alignment,
+                                    const std::vector<size_t>& free_lists_before,
+                                    size_t available_before,
+                                    size_t chunks_before) const
+    {
+        const auto free_lists_after{PoolResourceTester::FreeListSizes(m_test_resource)};
+        const size_t available_after{PoolResourceTester::AvailableMemoryFromChunk(m_test_resource)};
+        const size_t chunks_after{m_test_resource.NumAllocatedChunks()};
+        const bool uses_pool{PoolResourceTester::IsFreeListUsable<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>(size, alignment)};
+
+        if (!uses_pool) {
+            assert(free_lists_after == free_lists_before);
+            assert(available_after == available_before);
+            assert(chunks_after == chunks_before);
+            return;
+        }
+
+        const size_t free_list_index{PoolResourceTester::FreeListIndex<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>(size)};
+        const size_t rounded_size{PoolResourceTester::RoundedBytes<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>(size)};
+        const size_t elem_align{PoolResourceTester::ElemAlignBytes<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>()};
+        assert(free_list_index > 0);
+        assert(free_list_index < free_lists_before.size());
+        assert(rounded_size >= std::max(size, elem_align));
+
+        if (free_lists_before[free_list_index] > 0) {
+            auto expected{free_lists_before};
+            --expected[free_list_index];
+            assert(free_lists_after == expected);
+            assert(available_after == available_before);
+            assert(chunks_after == chunks_before);
+        } else if (rounded_size <= available_before) {
+            assert(free_lists_after == free_lists_before);
+            assert(available_after + rounded_size == available_before);
+            assert(chunks_after == chunks_before);
+        } else {
+            auto expected{free_lists_before};
+            assert((available_before % elem_align) == 0);
+            if (available_before > 0) {
+                const size_t leftover_index{available_before / elem_align};
+                assert(leftover_index > 0);
+                assert(leftover_index < expected.size());
+                ++expected[leftover_index];
+            }
+            assert(free_lists_after == expected);
+            assert(available_after + rounded_size == m_test_resource.ChunkSizeBytes());
+            assert(chunks_after == chunks_before + 1);
+        }
+    }
+
 public:
     PoolResourceFuzzer(FuzzedDataProvider& provider)
         : m_provider{provider},
@@ -57,10 +110,13 @@ public:
     {
         assert(alignment > 0);                      // Alignment must be at least 1.
         assert((alignment & (alignment - 1)) == 0); // Alignment must be power of 2.
-        assert((size & (alignment - 1)) == 0);      // Size must be a multiple of alignment.
 
+        const auto free_lists_before{PoolResourceTester::FreeListSizes(m_test_resource)};
+        const size_t available_before{PoolResourceTester::AvailableMemoryFromChunk(m_test_resource)};
+        const size_t chunks_before{m_test_resource.NumAllocatedChunks()};
         auto span = std::span(static_cast<std::byte*>(m_test_resource.Allocate(size, alignment)), size);
         PoolResourceTester::CheckResourceInvariants(m_test_resource);
+        AssertAllocationTransition(size, alignment, free_lists_before, available_before, chunks_before);
         m_total_allocated += size;
 
         auto ptr_val = reinterpret_cast<std::uintptr_t>(span.data());
@@ -79,8 +135,9 @@ public:
         size_t alignment = size_t{1} << alignment_bits;
         size_t size{0};
         if (!m_provider.ConsumeBool()) {
-            size_t size_bits = m_provider.ConsumeIntegralInRange<size_t>(0, 16 - alignment_bits);
-            size = m_provider.ConsumeIntegralInRange<size_t>(size_t{1} << size_bits, (size_t{1} << (size_bits + 1)) - 1U) << alignment_bits;
+            size_t size_bits = m_provider.ConsumeIntegralInRange<size_t>(0, 16);
+            size = m_provider.ConsumeIntegralInRange<size_t>(size_t{1} << size_bits,
+                                                             (size_t{1} << (size_bits + 1)) - 1U);
         }
         Allocate(size, alignment);
     }
