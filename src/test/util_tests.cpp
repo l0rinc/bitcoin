@@ -1049,6 +1049,19 @@ BOOST_AUTO_TEST_CASE(test_FormatSubVersion)
     BOOST_CHECK_EQUAL(FormatSubVersion("Test", 99900, comments2),std::string("/Test:9.99.0(comment1; Comment2; .,_?@-; )/"));
 }
 
+BOOST_AUTO_TEST_CASE(test_SanitizeString)
+{
+    const std::string punctuation{"AZaz09 .,;-_/:?@()!*'[]~%<>&=+$#\n"};
+    BOOST_CHECK_EQUAL(SanitizeString(punctuation, SAFE_CHARS_DEFAULT), "AZaz09 .,;-_/:?@()");
+    BOOST_CHECK_EQUAL(SanitizeString(punctuation, SAFE_CHARS_UA_COMMENT), "AZaz09 .,;-_?@");
+    BOOST_CHECK_EQUAL(SanitizeString(punctuation, SAFE_CHARS_FILENAME), "AZaz09.-_");
+    BOOST_CHECK_EQUAL(SanitizeString(punctuation, SAFE_CHARS_URI), "AZaz09.,;-_/:?@()!*'[]~%&=+$#");
+
+    const std::string embedded_nul{"safe\0unsafe<>", 13};
+    BOOST_CHECK_EQUAL(SanitizeString(embedded_nul), "safeunsafe");
+    BOOST_CHECK_EQUAL(SanitizeString(SanitizeString(punctuation, SAFE_CHARS_URI), SAFE_CHARS_URI), SanitizeString(punctuation, SAFE_CHARS_URI));
+}
+
 BOOST_AUTO_TEST_CASE(test_ParseFixedPoint)
 {
     int64_t amount = 0;
