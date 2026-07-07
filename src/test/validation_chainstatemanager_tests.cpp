@@ -1058,6 +1058,31 @@ BOOST_FIXTURE_TEST_CASE(invalidate_block_removes_out_of_chain_descendant_during_
     chainman.CheckBlockIndex();
 }
 
+BOOST_FIXTURE_TEST_CASE(recalculate_best_header_skips_failed_headers, TestChain100Setup)
+{
+    ChainstateManager& chainman{*Assert(m_node.chainman)};
+
+    {
+        LOCK(chainman.GetMutex());
+        CBlockIndex* tip{Assert(chainman.ActiveChain().Tip())};
+        CBlockIndex* parent{chainman.m_blockman.AddToBlockIndex(ChildHeader(*tip, /*nonce=*/7), chainman.m_best_header)};
+        CBlockIndex* child{chainman.m_blockman.AddToBlockIndex(ChildHeader(*parent, /*nonce=*/8), chainman.m_best_header)};
+        BOOST_REQUIRE_GT(child->nChainWork, tip->nChainWork);
+        BOOST_REQUIRE_EQUAL(chainman.m_best_header, child);
+
+        parent->nStatus |= BLOCK_FAILED_VALID;
+        child->nStatus |= BLOCK_FAILED_VALID;
+        chainman.RecalculateBestHeader();
+
+        BOOST_CHECK_EQUAL(chainman.m_best_header, tip);
+        BOOST_CHECK(!(chainman.m_best_header->nStatus & BLOCK_FAILED_VALID));
+        for (const auto& [_, block_index] : chainman.BlockIndex()) {
+            BOOST_CHECK((block_index.nStatus & BLOCK_FAILED_VALID) || block_index.nChainWork <= chainman.m_best_header->nChainWork);
+        }
+    }
+    chainman.CheckBlockIndex();
+}
+
 //! Verify that ReconsiderBlock clears failure flags for the target block, its ancestors, and descendants,
 //! but not for sibling forks that diverge from a shared ancestor.
 BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
