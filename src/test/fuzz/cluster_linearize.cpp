@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <utility>
@@ -385,6 +386,80 @@ void CheckEqualRateChunkBoundaries(FuzzedDataProvider& fuzzed_data_provider)
     assert(chunking_info[1].feerate == depgraph.FeeRate(second));
     assert(chunking_info[0].transactions == TestBitSet::Singleton(first));
     assert(chunking_info[1].transactions == TestBitSet::Singleton(second));
+}
+
+int64_t ConsumeExtremeFee(FuzzedDataProvider& fuzzed_data_provider)
+{
+    switch (fuzzed_data_provider.ConsumeIntegralInRange<uint8_t>(0, 4)) {
+    case 0:
+        return fuzzed_data_provider.ConsumeIntegral<int64_t>();
+    case 1:
+        return std::numeric_limits<int64_t>::max() - fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(0, 4096);
+    case 2:
+        return std::numeric_limits<int64_t>::min() + fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(0, 4096);
+    case 3:
+        return fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(-4096, 4096);
+    default:
+        return 0;
+    }
+}
+
+int32_t ConsumePositiveExtremeSize(FuzzedDataProvider& fuzzed_data_provider)
+{
+    switch (fuzzed_data_provider.ConsumeIntegralInRange<uint8_t>(0, 3)) {
+    case 0:
+        return fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, std::numeric_limits<int32_t>::max());
+    case 1:
+        return std::numeric_limits<int32_t>::max() - fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(0, 4096);
+    case 2:
+        return fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, 4096);
+    default:
+        return 1;
+    }
+}
+
+std::optional<std::vector<FeeFrac>> CheckedComparableChunkLinearization(const DepGraph<TestBitSet>& depgraph, std::span<const DepGraphIndex> linearization)
+{
+    std::vector<FeeFrac> ret;
+    for (DepGraphIndex i : linearization) {
+        auto new_chunk = depgraph.FeeRate(i);
+        while (!ret.empty() && ByRatio{new_chunk} > ByRatio{ret.back()}) {
+            if (AdditionOverflow(new_chunk.fee, ret.back().fee)) return std::nullopt;
+            if (AdditionOverflow(new_chunk.size, ret.back().size)) return std::nullopt;
+            new_chunk.fee += ret.back().fee;
+            new_chunk.size += ret.back().size;
+            ret.pop_back();
+        }
+        ret.push_back(std::move(new_chunk));
+    }
+    if (!CanCompareChunks(ret)) return std::nullopt;
+    return ret;
+}
+
+void CheckComparableChunkLinearizationOverflow(FuzzedDataProvider& fuzzed_data_provider)
+{
+    DepGraph<TestBitSet> depgraph;
+    std::vector<DepGraphIndex> linearization;
+    const auto tx_count{fuzzed_data_provider.ConsumeIntegralInRange<uint8_t>(1, 8)};
+    linearization.reserve(tx_count);
+    for (uint8_t idx{0}; idx < tx_count; ++idx) {
+        linearization.push_back(depgraph.AddTransaction(FeeFrac{
+            ConsumeExtremeFee(fuzzed_data_provider),
+            ConsumePositiveExtremeSize(fuzzed_data_provider)}));
+    }
+    for (size_t idx{0}; idx < linearization.size(); ++idx) {
+        const auto swap_idx{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(idx, linearization.size() - 1)};
+        std::swap(linearization[idx], linearization[swap_idx]);
+    }
+
+    const auto expected{CheckedComparableChunkLinearization(depgraph, linearization)};
+    const auto actual{ComparableChunkLinearization(depgraph, linearization)};
+    assert(actual.has_value() == expected.has_value());
+    if (actual) {
+        assert(*actual == *expected);
+        assert(CanCompareChunks(*actual));
+        assert(*actual == ChunkLinearization(depgraph, linearization));
+    }
 }
 
 /** Given a dependency graph, construct a tree-structured graph.
@@ -991,6 +1066,10 @@ FUZZ_TARGET(clusterlin_chunking)
 
     // Adjacent chunks with equal fee rate are already monotonic, and must stay separate.
     CheckEqualRateChunkBoundaries(fuzzed_data_provider);
+
+    // Serialized depgraphs clamp fees and sizes below the overflow boundaries that
+    // ComparableChunkLinearization is guarding. Exercise those guards directly.
+    CheckComparableChunkLinearizationOverflow(fuzzed_data_provider);
 }
 
 static constexpr auto MAX_SIMPLE_ITERATIONS = 300000;
