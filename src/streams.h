@@ -643,6 +643,7 @@ public:
         size_t buf_offset{size_t(m_read_pos % uint64_t(vchBuf.size()))};
         while (true) {
             if (m_read_pos >= nReadLimit) {
+                Assume(m_read_pos == nReadLimit);
                 throw std::ios_base::failure("Attempt to position past buffer limit");
             }
             if (m_read_pos == nSrcPos) {
