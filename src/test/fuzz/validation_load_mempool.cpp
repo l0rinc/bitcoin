@@ -23,7 +23,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
+#include <set>
 #include <vector>
 
 using node::DumpMempool;
@@ -56,6 +58,8 @@ struct PrioritisationSnapshot {
     bool in_mempool;
     CAmount delta;
     std::optional<CAmount> modified_fee;
+
+    bool operator==(const PrioritisationSnapshot&) const = default;
 };
 
 std::vector<MempoolEntrySnapshot> SnapshotEntries(const CTxMemPool& pool)
@@ -183,6 +187,18 @@ uint64_t ReadDumpVersion(const fs::path& path)
     return version;
 }
 
+void WriteLegacyMempoolMetadataDump(const fs::path& path, const std::map<Txid, CAmount>& map_deltas, const std::set<Txid>& unbroadcast_txids)
+{
+    AutoFile file{fsbridge::fopen(path, "wb")};
+    Assert(!file.IsNull());
+    file << uint64_t{1}; // Legacy v1 mempool dump version, without an obfuscation key.
+    file.SetObfuscation({});
+    file << uint64_t{0}; // No transactions to load.
+    file << map_deltas;
+    file << unbroadcast_txids;
+    Assert(file.fclose() == 0);
+}
+
 void AssertFailedDumpPreservesFile(const CTxMemPool& pool, const fs::path& path, const std::vector<std::byte>& existing_bytes, fsbridge::FopenFn mockable_fopen_function = fsbridge::fopen)
 {
     fs::remove_all(path);
@@ -293,6 +309,35 @@ FUZZ_TARGET(validation_load_mempool, .init = initialize_validation_load_mempool)
                        }));
     AssertMempoolPersistContracts(options_pool, chainstate);
     AssertMempoolSnapshotMatchesImportOptions(pool, options_pool, use_current_time, apply_fee_delta_priority, apply_unbroadcast_set);
+    chainstate.SetMempool(&pool);
+
+    const fs::path disabled_metadata_path{g_setup->m_args.GetDataDirBase() / "validation_load_mempool_disabled_metadata.dat"};
+    fs::remove(disabled_metadata_path);
+    fs::remove(disabled_metadata_path + ".new");
+    const Txid preserved_priority_txid{Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider))};
+    CAmount preserved_priority_delta{fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(-MAX_MONEY, MAX_MONEY)};
+    if (preserved_priority_delta == 0) preserved_priority_delta = 1;
+    const Txid imported_priority_txid{Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider))};
+    CAmount imported_priority_delta{fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(-MAX_MONEY, MAX_MONEY)};
+    if (imported_priority_delta == 0) imported_priority_delta = -1;
+    const Txid imported_unbroadcast_txid{Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider))};
+    WriteLegacyMempoolMetadataDump(disabled_metadata_path,
+                                   {{imported_priority_txid, imported_priority_delta}},
+                                   {imported_unbroadcast_txid});
+    bilingual_str disabled_metadata_error;
+    CTxMemPool disabled_metadata_pool{MemPoolOptionsForTest(g_setup->m_node), disabled_metadata_error};
+    Assert(disabled_metadata_error.empty());
+    disabled_metadata_pool.PrioritiseTransaction(preserved_priority_txid, preserved_priority_delta);
+    const auto preserved_prioritisations{SnapshotPrioritisations(disabled_metadata_pool)};
+    chainstate.SetMempool(&disabled_metadata_pool);
+    Assert(LoadMempool(disabled_metadata_pool, disabled_metadata_path, chainstate,
+                       {
+                           .apply_fee_delta_priority = false,
+                           .apply_unbroadcast_set = false,
+                       }));
+    AssertMempoolPersistContracts(disabled_metadata_pool, chainstate);
+    Assert(SnapshotPrioritisations(disabled_metadata_pool) == preserved_prioritisations);
+    Assert(disabled_metadata_pool.GetUnbroadcastTxs().empty());
     chainstate.SetMempool(&pool);
 
     const std::vector<std::byte> existing_dump{ConsumeRandomLengthByteVector<std::byte>(fuzzed_data_provider, 128)};
