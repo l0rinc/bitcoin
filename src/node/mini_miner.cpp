@@ -347,6 +347,20 @@ void MiniMiner::BuildMockTemplate(std::optional<CFeeRate> target_feerate)
                 }
             }
         }
+        if (target_feerate.has_value()) {
+            CAmount exact_package_fee{0};
+            int64_t exact_package_vsize{0};
+            bool package_fee_overflowed{false};
+            for (const auto& ancestor : ancestors) {
+                const auto add_fee{CheckedAdd(exact_package_fee, ancestor->second.GetModifiedFee())};
+                package_fee_overflowed |= !add_fee.has_value();
+                exact_package_fee = add_fee.value_or(SaturatingAdd(exact_package_fee, ancestor->second.GetModifiedFee()));
+                exact_package_vsize += ancestor->second.GetTxSize();
+            }
+            if (package_fee_overflowed || exact_package_fee < target_feerate->GetFee(exact_package_vsize)) {
+                m_selected_packages_meet_target = false;
+            }
+        }
         // Track the order in which transactions were selected.
         for (const auto& ancestor : ancestors) {
             const auto [_, inserted]{m_inclusion_order.emplace(ancestor->first, sequence_num)};
@@ -361,8 +375,10 @@ void MiniMiner::BuildMockTemplate(std::optional<CFeeRate> target_feerate)
     } else {
         // Signed saturating modified-fee sums are order-dependent once they overflow.
         // Only compare the aggregate block total to the target while the selected
-        // individual-fee sum is still the exact mathematical sum.
-        if (!m_total_fees_overflowed) {
+        // individual-fee sum is still the exact mathematical sum and every selected
+        // package has an exact target-fee proof. Saturated package scores can drive
+        // selection even when the exact package sum is below the target.
+        if (!m_total_fees_overflowed && m_selected_packages_meet_target) {
             Assume(m_in_block.empty() || m_total_fees >= target_feerate->GetFee(m_total_vsize));
         }
     }
