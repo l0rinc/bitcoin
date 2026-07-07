@@ -561,6 +561,30 @@ BOOST_AUTO_TEST_CASE(test_Get)
     BOOST_CHECK(ValidateInputsStandardness(CTransaction(t1), coins).IsValid());
 }
 
+BOOST_AUTO_TEST_CASE(policy_coinbase_and_no_witness_shortcuts)
+{
+    CCoinsViewCache coins{&CoinsViewEmpty::Get()};
+
+    CMutableTransaction coinbase;
+    coinbase.vin.emplace_back();
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vin[0].scriptWitness.stack.emplace_back(1, 0x01);
+    coinbase.vout.emplace_back(0, CScript{} << OP_TRUE);
+    const CTransaction coinbase_tx{coinbase};
+    BOOST_CHECK(coinbase_tx.IsCoinBase());
+    BOOST_CHECK(coinbase_tx.HasWitness());
+    BOOST_CHECK(ValidateInputsStandardness(coinbase_tx, coins).IsValid());
+    BOOST_CHECK(IsWitnessStandard(coinbase_tx, coins));
+
+    CMutableTransaction no_witness;
+    no_witness.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
+    no_witness.vout.emplace_back(0, CScript{} << OP_TRUE);
+    const CTransaction no_witness_tx{no_witness};
+    BOOST_CHECK(!no_witness_tx.IsCoinBase());
+    BOOST_CHECK(!no_witness_tx.HasWitness());
+    BOOST_CHECK(IsWitnessStandard(no_witness_tx, coins));
+}
+
 static void CreateCreditAndSpend(const FillableSigningProvider& keystore, const CScript& outscript, CTransactionRef& output, CMutableTransaction& input, bool success = true)
 {
     CMutableTransaction outputm;
