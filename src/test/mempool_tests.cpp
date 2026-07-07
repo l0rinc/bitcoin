@@ -626,6 +626,50 @@ BOOST_AUTO_TEST_CASE(MempoolLoadSkipsDisabledPrioritisation)
     fs::remove(mempool_path + ".new");
 }
 
+BOOST_AUTO_TEST_CASE(MempoolLoadDisabledMetadataPreservesMissingPrioritisation)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    BOOST_REQUIRE_EQUAL(pool.size(), 0U);
+    BOOST_REQUIRE(pool.GetPrioritisedTransactions().empty());
+    BOOST_REQUIRE(pool.GetUnbroadcastTxs().empty());
+
+    const Txid preserved_txid{Txid::FromUint256(uint256{4})};
+    const Txid imported_txid{Txid::FromUint256(uint256{5})};
+    const Txid unbroadcast_txid{Txid::FromUint256(uint256{6})};
+    constexpr CAmount preserved_delta{12345};
+    constexpr CAmount imported_delta{-6789};
+    pool.PrioritiseTransaction(preserved_txid, preserved_delta);
+
+    const fs::path mempool_path{m_args.GetDataDirBase() / "mempool_disabled_metadata_preserves_missing_prioritisation.dat"};
+    {
+        AutoFile file{fsbridge::fopen(mempool_path, "wb")};
+        BOOST_REQUIRE(!file.IsNull());
+        file << uint64_t{1}; // Legacy v1 mempool dump version, without an obfuscation key.
+        file.SetObfuscation({});
+        file << uint64_t{0}; // No transactions to load.
+        file << std::map<Txid, CAmount>{{imported_txid, imported_delta}};
+        file << std::set<Txid>{unbroadcast_txid};
+        BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    }
+
+    BOOST_REQUIRE(node::LoadMempool(pool, mempool_path, m_node.chainman->ActiveChainstate(),
+                                    {
+                                        .apply_fee_delta_priority = false,
+                                        .apply_unbroadcast_set = false,
+                                    }));
+    BOOST_CHECK(pool.GetUnbroadcastTxs().empty());
+
+    const auto deltas{pool.GetPrioritisedTransactions()};
+    BOOST_REQUIRE_EQUAL(deltas.size(), 1U);
+    BOOST_CHECK(deltas.front().txid == preserved_txid);
+    BOOST_CHECK(!deltas.front().in_mempool);
+    BOOST_CHECK_EQUAL(deltas.front().delta, preserved_delta);
+    BOOST_CHECK(!deltas.front().modified_fee.has_value());
+
+    fs::remove(mempool_path);
+    fs::remove(mempool_path + ".new");
+}
+
 BOOST_AUTO_TEST_CASE(MempoolLoadDisabledMetadataPreservesExistingEntry)
 {
     CTxMemPool& pool{*Assert(m_node.mempool)};
