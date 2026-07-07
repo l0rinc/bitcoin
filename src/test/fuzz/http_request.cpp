@@ -229,7 +229,7 @@ void AssertHeaderParseRoundTrip(const std::vector<std::byte>& http_buffer)
     assert(reparsed.Stringify() == serialized);
 }
 
-void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDataProvider& fuzzed_data_provider)
+void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDataProvider& fuzzed_data_provider, FakeSteadyClock& clock)
 {
     using http_bitcoin::HTTPRemoteClient;
 
@@ -269,7 +269,7 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
         pipes = std::make_shared<DynSock::Pipes>();
         sock = std::make_unique<DynSock>(pipes);
     } else {
-        sock = std::make_unique<FuzzedSock>(fuzzed_data_provider);
+        sock = std::make_unique<FuzzedSock>(fuzzed_data_provider, clock);
     }
     auto client{std::make_shared<HTTPRemoteClient>(
         /*id=*/0,
@@ -325,7 +325,7 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
     if (optimistic_send) {
         const std::vector<std::byte> buffered{WITH_LOCK(client->m_send_mutex, return client->m_send_buffer)};
         assert(buffered.empty());
-        assert(!client->m_send_ready.load());
+        assert(WITH_LOCK(client->m_send_mutex, return !client->m_send_ready));
         assert(!client->m_connection_busy.load());
         assert(client->m_disconnect.load() == !expected_keep_alive);
 
@@ -338,7 +338,7 @@ void AssertWriteReplyContracts(http_bitcoin::HTTPRequest& http_request, FuzzedDa
         const std::vector<std::byte> sent{WITH_LOCK(client->m_send_mutex, return client->m_send_buffer)};
         assert(sent.size() > 1);
         assert(sent.front() == queued_byte);
-        assert(client->m_send_ready.load());
+        assert(WITH_LOCK(client->m_send_mutex, return client->m_send_ready));
         assert(client->m_connection_busy.load());
         assert(!client->m_disconnect.load());
 
@@ -607,7 +607,10 @@ void AssertSendBufferContracts(FuzzedDataProvider& fuzzed_data_provider)
 
     const bool initial_send_ready{fuzzed_data_provider.ConsumeBool()};
     const bool initial_connection_busy{fuzzed_data_provider.ConsumeBool()};
-    client->m_send_ready = initial_send_ready;
+    {
+        LOCK(client->m_send_mutex);
+        client->m_send_ready = initial_send_ready;
+    }
     client->m_connection_busy = initial_connection_busy;
     client->m_disconnect = false;
 
@@ -618,7 +621,7 @@ void AssertSendBufferContracts(FuzzedDataProvider& fuzzed_data_provider)
         assert(ret);
         assert(!scripted_sock->m_send_called);
         assert(remaining.empty());
-        assert(!client->m_send_ready.load());
+        assert(WITH_LOCK(client->m_send_mutex, return !client->m_send_ready));
         assert(client->m_connection_busy.load() == initial_connection_busy);
         assert(!client->m_disconnect.load());
         assert(client->m_idle_since.load() == idle_before);
@@ -638,11 +641,11 @@ void AssertSendBufferContracts(FuzzedDataProvider& fuzzed_data_provider)
         assert(client->m_idle_since.load() == idle_before);
         if (IOErrorIsPermanent(send_errno)) {
             assert(!ret);
-            assert(!client->m_send_ready.load());
+            assert(WITH_LOCK(client->m_send_mutex, return !client->m_send_ready));
             assert(client->m_disconnect.load());
         } else {
             assert(ret);
-            assert(client->m_send_ready.load());
+            assert(WITH_LOCK(client->m_send_mutex, return client->m_send_ready));
             assert(client->m_connection_busy.load());
             assert(!client->m_disconnect.load());
         }
@@ -655,13 +658,13 @@ void AssertSendBufferContracts(FuzzedDataProvider& fuzzed_data_provider)
     const bool expected_idle_refreshed{!remaining.empty() || keep_alive};
     assert((client->m_idle_since.load() != idle_before) == expected_idle_refreshed);
     if (remaining.empty()) {
-        assert(!client->m_send_ready.load());
+        assert(WITH_LOCK(client->m_send_mutex, return !client->m_send_ready));
         assert(!client->m_connection_busy.load());
         assert(client->m_disconnect.load() == !keep_alive);
         assert(ret == keep_alive);
     } else {
         assert(ret);
-        assert(client->m_send_ready.load());
+        assert(WITH_LOCK(client->m_send_mutex, return client->m_send_ready));
         assert(client->m_connection_busy.load());
         assert(!client->m_disconnect.load());
     }
@@ -707,7 +710,7 @@ FUZZ_TARGET(http_request)
     for (const std::string& key : QueryKeysForOracle(http_request.GetURI(), fuzzed_data_provider)) {
         assert(http_request.GetQueryParameter(key) == ReferenceQueryParameterFromUri(http_request.GetURI(), key));
     }
-    AssertWriteReplyContracts(http_request, fuzzed_data_provider);
+    AssertWriteReplyContracts(http_request, fuzzed_data_provider, steady_clock);
     std::string header = fuzzed_data_provider.ConsumeRandomLengthString(16);
     const auto request_header_before{http_request.GetHeader(header)};
     (void)http_request.WriteHeader(std::string(header), fuzzed_data_provider.ConsumeRandomLengthString(16));
