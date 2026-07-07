@@ -13,14 +13,53 @@
 #include <txmempool.h>
 #include <uint256.h>
 #include <util/check.h>
+#include <util/overflow.h>
 
 #include <algorithm>
+#include <limits>
 #include <map>
 #include <numeric>
 #include <ranges>
 #include <utility>
 
 namespace node {
+namespace {
+
+bool SubtractionOverflow(const CAmount left, const CAmount right) noexcept
+{
+    return (right > 0 && left < std::numeric_limits<CAmount>::min() + right) ||
+           (right < 0 && left > std::numeric_limits<CAmount>::max() + right);
+}
+
+CAmount SaturatingSubtract(const CAmount left, const CAmount right) noexcept
+{
+    if (SubtractionOverflow(left, right)) {
+        return right > 0 ? std::numeric_limits<CAmount>::min() : std::numeric_limits<CAmount>::max();
+    }
+    return left - right;
+}
+
+CAmount CalculateBumpFeeShortfall(const CAmount target_fee, const CAmount current_fee) noexcept
+{
+    const CAmount shortfall{SaturatingSubtract(target_fee, current_fee)};
+    return std::max<CAmount>(0, shortfall);
+}
+
+} // namespace
+
+void MiniMinerMempoolEntry::UpdateAncestorState(const int64_t vsize_change, const CAmount fee_change)
+{
+    vsize_with_ancestors += vsize_change;
+    fee_with_ancestors = SaturatingAdd(fee_with_ancestors, fee_change);
+}
+
+void MiniMinerMempoolEntry::RemoveAncestorState(const int64_t vsize, const CAmount fee)
+{
+    Assume(vsize >= 0);
+    Assume(vsize_with_ancestors >= vsize);
+    vsize_with_ancestors -= vsize;
+    fee_with_ancestors = SaturatingSubtract(fee_with_ancestors, fee);
+}
 
 MiniMiner::MiniMiner(const CTxMemPool& mempool, const std::vector<COutPoint>& outpoints)
 {
@@ -207,7 +246,7 @@ void MiniMiner::DeleteAncestorPackage(const std::set<MockEntryMap::iterator, Ite
     for (auto& anc : ancestors) {
         Assume(!m_in_block.contains(anc->first));
         m_in_block.insert(anc->first);
-        m_total_fees += anc->second.GetModifiedFee();
+        m_total_fees = SaturatingAdd(m_total_fees, anc->second.GetModifiedFee());
         m_total_vsize += anc->second.GetTxSize();
         auto it = m_descendant_set_by_txid.find(anc->first);
         // Each entry’s descendant set includes itself
@@ -215,15 +254,14 @@ void MiniMiner::DeleteAncestorPackage(const std::set<MockEntryMap::iterator, Ite
         for (auto& descendant : it->second) {
             // If this fails, we must be double-deducting. Don't check fees because negative is possible.
             Assume(descendant->second.GetSizeWithAncestors() >= anc->second.GetTxSize());
-            descendant->second.UpdateAncestorState(-anc->second.GetTxSize(), -anc->second.GetModifiedFee());
+            descendant->second.RemoveAncestorState(anc->second.GetTxSize(), anc->second.GetModifiedFee());
         }
     }
     // Delete these entries.
     for (const auto& anc : ancestors) {
         m_descendant_set_by_txid.erase(anc->first);
-        // The above loop should have deducted each ancestor's size and fees from each of their
-        // respective descendants exactly once.
-        Assume(anc->second.GetModFeesWithAncestors() == 0);
+        // The above loop should have deducted each ancestor's size from each of their respective
+        // descendants exactly once. Fee aggregates are saturating and not reversible.
         Assume(anc->second.GetSizeWithAncestors() == 0);
         auto vec_it = std::find(m_entries.begin(), m_entries.end(), anc);
         Assume(vec_it != m_entries.end());
@@ -408,8 +446,8 @@ std::map<COutPoint, CAmount> MiniMiner::CalculateBumpFees(const CFeeRate& target
         Assume(it != m_entries_by_txid.end());
         if (it != m_entries_by_txid.end()) {
             Assume(target_feerate.GetFee(it->second.GetSizeWithAncestors()) > std::min(it->second.GetModifiedFee(), it->second.GetModFeesWithAncestors()));
-            CAmount bump_fee_with_ancestors = target_feerate.GetFee(it->second.GetSizeWithAncestors()) - it->second.GetModFeesWithAncestors();
-            CAmount bump_fee_individual = target_feerate.GetFee(it->second.GetTxSize()) - it->second.GetModifiedFee();
+            CAmount bump_fee_with_ancestors = CalculateBumpFeeShortfall(target_feerate.GetFee(it->second.GetSizeWithAncestors()), it->second.GetModFeesWithAncestors());
+            CAmount bump_fee_individual = CalculateBumpFeeShortfall(target_feerate.GetFee(it->second.GetTxSize()), it->second.GetModifiedFee());
             const CAmount bump_fee{std::max(bump_fee_with_ancestors, bump_fee_individual)};
             Assume(bump_fee >= bump_fee_with_ancestors);
             Assume(bump_fee >= bump_fee_individual);
@@ -479,9 +517,8 @@ std::optional<CAmount> MiniMiner::CalculateTotalBumpFees(const CFeeRate& target_
     const auto ancestor_package_size = std::accumulate(ancestors.cbegin(), ancestors.cend(), int64_t{0},
         [](int64_t sum, const auto it) {return sum + it->second.GetTxSize();});
     const auto ancestor_package_fee = std::accumulate(ancestors.cbegin(), ancestors.cend(), CAmount{0},
-        [](CAmount sum, const auto it) {return sum + it->second.GetModifiedFee();});
-    const CAmount raw_total_bump_fee{target_feerate.GetFee(ancestor_package_size) - ancestor_package_fee};
-    const CAmount total_bump_fee{std::max<CAmount>(0, raw_total_bump_fee)};
+        [](CAmount sum, const auto it) {return SaturatingAdd(sum, it->second.GetModifiedFee());});
+    const CAmount total_bump_fee{CalculateBumpFeeShortfall(target_feerate.GetFee(ancestor_package_size), ancestor_package_fee)};
     Assume(total_bump_fee >= 0);
     return total_bump_fee;
 }
