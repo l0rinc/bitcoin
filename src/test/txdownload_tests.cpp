@@ -123,6 +123,13 @@ static void CheckWtxidPeerCount(const node::TxDownloadManagerImpl& txdownload_im
     BOOST_CHECK_EQUAL(actual_count, expected_count);
 }
 
+static void CheckConnectionInfo(const node::TxDownloadConnectionInfo& actual, const node::TxDownloadConnectionInfo& expected)
+{
+    BOOST_CHECK_EQUAL(actual.m_preferred, expected.m_preferred);
+    BOOST_CHECK_EQUAL(actual.m_relay_permissions, expected.m_relay_permissions);
+    BOOST_CHECK_EQUAL(actual.m_wtxid_relay, expected.m_wtxid_relay);
+}
+
 static void CheckTxRequestPeers(const node::TxDownloadManagerImpl& txdownload_impl,
                                 const uint256& txhash,
                                 std::vector<NodeId> expected_peers)
@@ -180,6 +187,76 @@ BOOST_FIXTURE_TEST_CASE(wtxid_peer_accounting, TestingSetup)
     txdownload_impl.DisconnectedPeer(2);
     txdownload_impl.DisconnectedPeer(3);
     CheckWtxidPeerCount(txdownload_impl, 0);
+    txdownload_impl.CheckIsEmpty();
+}
+
+BOOST_FIXTURE_TEST_CASE(duplicate_connected_peer_preserves_state, TestingSetup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    FastRandomContext det_rand{true};
+    node::TxDownloadManagerImpl txdownload_impl{node::TxDownloadOptions{pool, det_rand, true}};
+    const node::TxDownloadConnectionInfo original_info{/*m_preferred=*/true,
+                                                       /*m_relay_permissions=*/false,
+                                                       /*m_wtxid_relay=*/true};
+    const node::TxDownloadConnectionInfo duplicate_info{/*m_preferred=*/false,
+                                                        /*m_relay_permissions=*/true,
+                                                        /*m_wtxid_relay=*/true};
+    constexpr NodeId peer{0};
+    const std::chrono::microseconds now{0};
+
+    txdownload_impl.ConnectedPeer(peer, original_info);
+    BOOST_REQUIRE(txdownload_impl.m_peer_info.contains(peer));
+
+    const CTransactionRef requested_tx{CreatePlaceholderTx(/*segwit=*/true)};
+    const Wtxid& requested_wtxid{requested_tx->GetWitnessHash()};
+    BOOST_CHECK(!txdownload_impl.AddTxAnnouncement(peer, requested_wtxid, now));
+    CheckTxRequestPeers(txdownload_impl, requested_wtxid.ToUint256(), {peer});
+
+    const CTransactionRef parent{CreatePlaceholderTx(/*segwit=*/true)};
+    const CTransactionRef child{CreatePlaceholderTx(/*segwit=*/true)};
+    BOOST_REQUIRE(IsChildWithParents(Package{parent, child}));
+
+    TxValidationState missing_inputs;
+    missing_inputs.Invalid(TxValidationResult::TX_MISSING_INPUTS, "");
+    const auto orphan_ret{txdownload_impl.MempoolRejectedTx(child, missing_inputs, peer, /*first_time_failure=*/true)};
+    std::string err_msg;
+    BOOST_REQUIRE_MESSAGE(CheckOrphanBehavior(txdownload_impl, child, orphan_ret, err_msg,
+                                              /*expect_orphan=*/true, /*expect_keep=*/true, /*expected_parents=*/1),
+                          err_msg);
+
+    const auto peer_count{txdownload_impl.m_peer_info.size()};
+    const auto wtxid_peer_count{txdownload_impl.m_num_wtxid_peers};
+    const auto txrequest_size{txdownload_impl.m_txrequest.Size()};
+    const auto txrequest_count{txdownload_impl.m_txrequest.Count(peer)};
+    const auto txrequest_candidates{txdownload_impl.m_txrequest.CountCandidates(peer)};
+    const auto txrequest_inflight{txdownload_impl.m_txrequest.CountInFlight(peer)};
+    const auto orphan_count{txdownload_impl.m_orphanage->CountUniqueOrphans()};
+    const auto orphan_announcements{txdownload_impl.m_orphanage->CountAnnouncements()};
+    const auto orphan_usage{txdownload_impl.m_orphanage->TotalOrphanUsage()};
+    const auto orphan_peer_usage{txdownload_impl.m_orphanage->UsageByPeer(peer)};
+    const auto orphan_peer_announcements{txdownload_impl.m_orphanage->AnnouncementsFromPeer(peer)};
+    const auto orphan_peer_work{txdownload_impl.m_orphanage->HaveTxToReconsider(peer)};
+
+    txdownload_impl.ConnectedPeer(peer, duplicate_info);
+
+    BOOST_REQUIRE(txdownload_impl.m_peer_info.contains(peer));
+    CheckConnectionInfo(txdownload_impl.m_peer_info.at(peer).m_connection_info, original_info);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_peer_info.size(), peer_count);
+    CheckWtxidPeerCount(txdownload_impl, wtxid_peer_count);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_txrequest.Size(), txrequest_size);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_txrequest.Count(peer), txrequest_count);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_txrequest.CountCandidates(peer), txrequest_candidates);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_txrequest.CountInFlight(peer), txrequest_inflight);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_orphanage->CountUniqueOrphans(), orphan_count);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_orphanage->CountAnnouncements(), orphan_announcements);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_orphanage->TotalOrphanUsage(), orphan_usage);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_orphanage->UsageByPeer(peer), orphan_peer_usage);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_orphanage->AnnouncementsFromPeer(peer), orphan_peer_announcements);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_orphanage->HaveTxToReconsider(peer), orphan_peer_work);
+    CheckTxRequestPeers(txdownload_impl, requested_wtxid.ToUint256(), {peer});
+    BOOST_CHECK(txdownload_impl.m_orphanage->HaveTx(child->GetWitnessHash()));
+
+    txdownload_impl.DisconnectedPeer(peer);
     txdownload_impl.CheckIsEmpty();
 }
 
