@@ -8,10 +8,26 @@
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util/net.h>
 
+#include <cassert>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
+
+namespace {
+
+void AssertSubNetCanonicalRoundTrip(const CSubNet& subnet)
+{
+    if (!subnet.IsValid()) return;
+
+    const std::string canonical{subnet.ToString()};
+    const CSubNet reparsed{LookupSubNet(canonical)};
+    assert(reparsed.IsValid());
+    assert(reparsed == subnet);
+    assert(reparsed.ToString() == canonical);
+}
+
+} // namespace
 
 FUZZ_TARGET(netbase_dns_lookup)
 {
@@ -100,6 +116,10 @@ FUZZ_TARGET(netbase_dns_lookup)
         assert(optional_service && *optional_service == explicit_port_service);
     }
     {
-        (void)LookupSubNet(name);
+        const CSubNet subnet{LookupSubNet(name)};
+        if (name.find('\0') != std::string::npos) {
+            assert(!subnet.IsValid());
+        }
+        AssertSubNetCanonicalRoundTrip(subnet);
     }
 }
