@@ -71,6 +71,8 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 /* Default construct. */
                 real.emplace_back();
                 sim.emplace_back();
+                assert(real.back().empty());
+                assert(real.back().capacity() == 0);
                 break;
             }
             if (non_empty && command-- == 0) {
@@ -98,6 +100,7 @@ void TestType(std::span<const uint8_t> buffer, uint64_t rng_tweak)
                 real[idx] = VecDeque<T>();
                 sim[idx].clear();
                 assert(real[idx].size() == 0);
+                assert(real[idx].capacity() == 0);
                 break;
             }
             if (non_empty && command-- == 0) {

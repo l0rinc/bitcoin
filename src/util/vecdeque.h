@@ -41,6 +41,7 @@ class VecDeque
     {
         Assume(capacity >= m_size);
         Assume((m_offset == 0 && m_capacity == 0) || m_offset < m_capacity);
+        Assume((m_buffer == nullptr) == (m_capacity == 0));
         // Allocate new buffer.
         T* new_buffer = capacity ? std::allocator<T>().allocate(capacity) : nullptr;
         if (capacity) {
@@ -65,11 +66,15 @@ class VecDeque
             }
         }
         // Deallocate old buffer and update housekeeping.
-        std::allocator<T>().deallocate(m_buffer, m_capacity);
+        if (m_capacity) {
+            Assume(m_buffer != nullptr);
+            std::allocator<T>().deallocate(m_buffer, m_capacity);
+        }
         m_buffer = new_buffer;
         m_offset = 0;
         m_capacity = capacity;
         Assume((m_offset == 0 && m_capacity == 0) || m_offset < m_capacity);
+        Assume((m_buffer == nullptr) == (m_capacity == 0));
     }
 
     /** What index in the buffer does logical entry number pos have? */
