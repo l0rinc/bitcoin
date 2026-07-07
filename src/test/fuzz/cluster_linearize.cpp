@@ -1582,10 +1582,13 @@ FUZZ_TARGET(clusterlin_postlinearize)
         assert(cmp >= 0);
     }
 
-    // The chunks that come out of postlinearizing are always connected.
-    auto linchunking = ChunkLinearizationInfo(depgraph, post_linearization);
-    for (const auto& [chunk_set, _chunk_feerate] : linchunking) {
-        assert(depgraph.IsConnected(chunk_set));
+    // The chunks that come out of postlinearizing are connected when their diagram can be
+    // represented without saturated chunk sums.
+    if (post_chunking) {
+        auto linchunking = ChunkLinearizationInfo(depgraph, post_linearization);
+        for (const auto& [chunk_set, _chunk_feerate] : linchunking) {
+            assert(depgraph.IsConnected(chunk_set));
+        }
     }
 }
 

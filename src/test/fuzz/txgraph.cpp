@@ -472,6 +472,7 @@ FUZZ_TARGET(txgraph)
             assert(!left[pos]);
             left.Set(pos);
         }
+        const auto all{left};
 
         std::vector<SetInfo<SimTxGraph::SetType>> ret;
         for (auto pos : linearization) {
@@ -486,6 +487,12 @@ FUZZ_TARGET(txgraph)
             ret.push_back(std::move(new_chunk));
         }
         assert(left.None());
+        if (!sim.graph.IsConnected(all)) return ret;
+        for (const auto& chunk : ret) {
+            if (!sim.graph.IsConnected(chunk.transactions)) {
+                return std::vector<SetInfo<SimTxGraph::SetType>>{SetInfo<SimTxGraph::SetType>{sim.graph, all}};
+            }
+        }
         return ret;
     };
     auto chunk_linearization_fn = [&](const SimTxGraph& sim, std::span<const SimTxGraph::Pos> linearization) noexcept {
