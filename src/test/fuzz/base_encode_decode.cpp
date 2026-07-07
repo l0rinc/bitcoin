@@ -67,8 +67,13 @@ FUZZ_TARGET(base32_encode_decode)
     }
     // Encode/Decode roundtrip
     const auto encoded{EncodeBase32(buffer)};
+    const auto encoded_no_padding{EncodeBase32(buffer, /*pad=*/false)};
+    assert(encoded.compare(0, encoded_no_padding.size(), encoded_no_padding) == 0);
+    assert(encoded.find_first_not_of('=', encoded_no_padding.size()) == std::string::npos);
     const auto decoded{DecodeBase32(encoded)};
     assert(decoded && std::ranges::equal(*decoded, buffer));
+    const auto decoded_upper{DecodeBase32(ToUpper(encoded))};
+    assert(decoded_upper && std::ranges::equal(*decoded_upper, buffer));
 }
 
 FUZZ_TARGET(base64_encode_decode)
