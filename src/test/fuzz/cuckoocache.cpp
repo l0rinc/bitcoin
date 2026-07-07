@@ -27,6 +27,29 @@ struct RandomHasher {
         return fuzzed_data_provider_ptr->ConsumeIntegral<uint32_t>();
     }
 };
+
+struct RefreshCollisionHasher {
+    template <uint8_t hash_select>
+    uint32_t operator()(const uint8_t& element) const
+    {
+        if (element == 2 && hash_select > 0) return uint32_t{1} << 30;
+        return 0;
+    }
+};
+
+void AssertDuplicateInsertRefreshesErasedEntry()
+{
+    CuckooCache::cache<uint8_t, RefreshCollisionHasher> cache{};
+    cache.setup(4);
+    cache.insert(1);
+
+    assert(cache.contains(1, /*erase=*/true));
+    cache.insert(1);
+    cache.insert(2);
+
+    assert(cache.contains(1, /*erase=*/false));
+    assert(cache.contains(2, /*erase=*/false));
+}
 } // namespace
 
 FUZZ_TARGET(cuckoocache)
@@ -58,6 +81,7 @@ FUZZ_TARGET(cuckoocache)
             [&] {});
         assert(flags.bit_is_set(idx) == expected_flags[idx]);
     }
+    AssertDuplicateInsertRefreshesErasedEntry();
     CuckooCache::cache<int, RandomHasher> cuckoo_cache{};
     CuckooCache::cache<uint256, SignatureCacheHasher> deterministic_cache{};
     if (fuzzed_data_provider.ConsumeBool()) {
