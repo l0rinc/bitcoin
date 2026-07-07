@@ -29,6 +29,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <limits>
 #include <map>
 #include <optional>
 #include <set>
@@ -258,6 +259,7 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
     const std::set<COutPoint> unique_outpoints{outpoints.begin(), outpoints.end()};
     std::optional<CAmount> total_bumpfee;
     CAmount sum_fees = 0;
+    bool sum_fees_saturated{false};
     {
         const auto linearize = [&](const std::vector<COutPoint>& requested_outpoints) EXCLUSIVE_LOCKS_REQUIRED(pool.cs) {
             node::MiniMiner mini_miner{pool, requested_outpoints};
@@ -299,7 +301,9 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
             auto it = bump_fees.find(outpoint);
             assert(it != bump_fees.end());
             assert(it->second >= 0);
-            sum_fees = SaturatingAdd(sum_fees, it->second);
+            const auto new_sum_fees{CheckedAdd(sum_fees, it->second)};
+            sum_fees_saturated |= !new_sum_fees.has_value();
+            sum_fees = new_sum_fees.value_or(SaturatingAdd(sum_fees, it->second));
         }
         assert(!mini_miner.IsReadyToCalculate());
         assert(mini_miner.Linearize().empty());
@@ -350,7 +354,9 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         assert(higher_total_bumpfee.has_value());
         assert(*higher_total_bumpfee >= *lower_total_bumpfee);
     }
-    // Overlapping ancestry across multiple outpoints can only reduce the total bump fee.
-    assert (sum_fees >= *total_bumpfee);
+    if (!sum_fees_saturated && *total_bumpfee != std::numeric_limits<CAmount>::max()) {
+        // Overlapping ancestry across multiple outpoints can only reduce the total bump fee.
+        assert(sum_fees >= *total_bumpfee);
+    }
 }
 } // namespace
