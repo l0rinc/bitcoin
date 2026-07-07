@@ -85,6 +85,26 @@ bool IsSaneEstimatorVector(const std::vector<double>& values)
     });
 }
 
+bool IsDefaultEstimatorBucket(const EstimatorBucket& bucket)
+{
+    const EstimatorBucket empty;
+    return bucket.start == empty.start &&
+           bucket.end == empty.end &&
+           bucket.withinTarget == empty.withinTarget &&
+           bucket.totalConfirmed == empty.totalConfirmed &&
+           bucket.inMempool == empty.inMempool &&
+           bucket.leftMempool == empty.leftMempool;
+}
+
+bool IsDefaultEstimationResult(const EstimationResult& result)
+{
+    const EstimationResult empty;
+    return IsDefaultEstimatorBucket(result.pass) &&
+           IsDefaultEstimatorBucket(result.fail) &&
+           result.decay == empty.decay &&
+           result.scale == empty.scale;
+}
+
 } // namespace
 
 /**
@@ -916,17 +936,31 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
 {
     LOCK(m_cs_fee_estimator);
 
+    const int requested_target{confTarget};
+    const unsigned int best_seen_height{nBestSeenHeight};
     if (feeCalc) {
-        feeCalc->desiredTarget = confTarget;
-        feeCalc->returnedTarget = confTarget;
-        feeCalc->best_height = nBestSeenHeight;
+        *feeCalc = FeeCalculation{};
+        feeCalc->desiredTarget = requested_target;
+        feeCalc->returnedTarget = requested_target;
+        feeCalc->best_height = best_seen_height;
     }
+
+    const auto check_no_estimate{[&]() {
+        if (feeCalc) {
+            Assume(feeCalc->desiredTarget == requested_target);
+            Assume(feeCalc->returnedTarget == confTarget);
+            Assume(feeCalc->best_height == best_seen_height);
+            Assume(feeCalc->reason == FeeReason::NONE);
+            Assume(IsDefaultEstimationResult(feeCalc->est));
+        }
+    }};
 
     double median = -1;
     EstimationResult tempResult;
 
     // Return failure if trying to analyze a target we're not tracking
     if (confTarget <= 0 || (unsigned int)confTarget > longStats->GetMaxConfirms()) {
+        check_no_estimate();
         return CFeeRate(0);  // error condition
     }
 
@@ -939,7 +973,10 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
     }
     if (feeCalc) feeCalc->returnedTarget = confTarget;
 
-    if (confTarget <= 1) return CFeeRate(0); // error condition
+    if (confTarget <= 1) {
+        check_no_estimate();
+        return CFeeRate(0); // error condition
+    }
 
     assert(confTarget > 0); //estimateCombinedFee and estimateConservativeFee take unsigned ints
     /** true is passed to estimateCombined fee for target/2 and target so
