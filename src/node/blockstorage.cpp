@@ -289,7 +289,7 @@ void BlockManager::AddUnlinkedBlock(CBlockIndex* block)
     AssertLockHeld(cs_main);
     Assume(block != nullptr);
     Assume(block->pprev != nullptr);
-    Assume(block->nStatus & BLOCK_HAVE_DATA);
+    Assume(block->nTx > 0);
     auto range = m_blocks_unlinked.equal_range(block->pprev);
     for (auto it = range.first; it != range.second; ++it) {
         if (it->second == block) return;  // don't insert duplicates
@@ -311,15 +311,16 @@ void BlockManager::PruneOneBlockFile(const int fileNumber)
             pindex->nUndoPos = 0;
             m_dirty_blockindex.insert(pindex);
 
-            // Prune from m_blocks_unlinked -- any block we prune would have
-            // to be downloaded again in order to consider its chain, at which
-            // point it would be considered as a candidate for
-            // m_blocks_unlinked or setBlockIndexCandidates.
+            // Prune from m_blocks_unlinked unless this block is still waiting
+            // for ancestor transaction counts. A pruned block with a known
+            // transaction count still needs to be linked when its parent count
+            // becomes known, even though it will need to be downloaded again
+            // before its chain can be considered.
             auto range = m_blocks_unlinked.equal_range(pindex->pprev);
             while (range.first != range.second) {
                 std::multimap<CBlockIndex*, CBlockIndex*>::iterator _it = range.first;
                 range.first++;
-                if (_it->second == pindex) {
+                if (_it->second == pindex && pindex->HaveNumChainTxs()) {
                     m_blocks_unlinked.erase(_it);
                 }
             }
@@ -528,9 +529,7 @@ bool BlockManager::LoadBlockIndex(const std::optional<uint256>& snapshot_blockha
                     pindex->m_chain_tx_count = pindex->pprev->m_chain_tx_count + pindex->nTx;
                 } else {
                     pindex->m_chain_tx_count = 0;
-                    if (pindex->nStatus & BLOCK_HAVE_DATA) {
-                        AddUnlinkedBlock(pindex);
-                    }
+                    AddUnlinkedBlock(pindex);
                 }
             } else {
                 pindex->m_chain_tx_count = pindex->nTx;
