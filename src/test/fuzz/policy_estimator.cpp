@@ -154,10 +154,31 @@ FUZZ_TARGET(policy_estimator, .init = initialize_policy_estimator)
         }
 
         FeeCalculation fee_calculation;
+        fee_calculation.est.pass.start = 73;
+        fee_calculation.est.fail.start = 79;
+        fee_calculation.est.decay = 83;
+        fee_calculation.est.scale = 89;
+        fee_calculation.reason = FeeReason::REQUIRED;
+        fee_calculation.desiredTarget = 97;
+        fee_calculation.returnedTarget = 101;
+        fee_calculation.best_height = std::numeric_limits<unsigned int>::max();
         conf_target = fuzzed_data_provider.ConsumeIntegral<int>();
+        const int smart_conf_target{conf_target};
         auto* fee_calc_ptr = fuzzed_data_provider.ConsumeBool() ? &fee_calculation : nullptr;
         auto conservative = fuzzed_data_provider.ConsumeBool();
-        (void)block_policy_estimator.estimateSmartFee(conf_target, fee_calc_ptr, conservative);
+        const CFeeRate smart_fee{block_policy_estimator.estimateSmartFee(conf_target, fee_calc_ptr, conservative)};
+        assert(smart_fee.GetFeePerK() >= 0);
+        if (fee_calc_ptr) {
+            assert(fee_calculation.desiredTarget == smart_conf_target);
+            assert(fee_calculation.best_height != std::numeric_limits<unsigned int>::max());
+            const auto highest_target{block_policy_estimator.HighestTargetTracked(FeeEstimateHorizon::LONG_HALFLIFE)};
+            if (smart_conf_target <= 0 || smart_conf_target > static_cast<int>(highest_target)) {
+                assert(smart_fee == CFeeRate(0));
+                assert(fee_calculation.returnedTarget == smart_conf_target);
+                assert(fee_calculation.reason == FeeReason::NONE);
+                assert(EqualResults(fee_calculation.est, EstimationResult{}));
+            }
+        }
 
         (void)block_policy_estimator.HighestTargetTracked(fuzzed_data_provider.PickValueInArray(ALL_FEE_ESTIMATE_HORIZONS));
     }
