@@ -9,8 +9,9 @@
 #include <util/strencodings.h>
 #include <util/string.h>
 
-#include <cassert>
+#include <algorithm>
 #include <array>
+#include <cassert>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -152,9 +153,13 @@ FUZZ_TARGET(parse_numbers)
         assert(parsed_fixed_point == *parsed_money);
     }
 
-    (void)LocaleIndependentAtoi<int>(random_string);
+    const int atoi_int{LocaleIndependentAtoi<int>(random_string)};
+    const int64_t atoi_int64{LocaleIndependentAtoi<int64_t>(random_string)};
+    assert(atoi_int == std::clamp(
+        atoi_int64,
+        static_cast<int64_t>(std::numeric_limits<int>::min()),
+        static_cast<int64_t>(std::numeric_limits<int>::max())));
 
-    (void)LocaleIndependentAtoi<int64_t>(random_string);
     int64_t parsed_fixed_point_3{0};
     const bool parsed_3{ParseFixedPoint(random_string, 3, &parsed_fixed_point_3)};
     int64_t parsed_fixed_point_4{0};
