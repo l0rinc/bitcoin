@@ -109,12 +109,19 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possi
         return;
     }
     Assume(!unspendable);
+    [[maybe_unused]] const size_t cache_size_before{!possible_overwrite ? cacheCoins.size() : 0};
+    [[maybe_unused]] const size_t cache_usage_before{!possible_overwrite ? cachedCoinsUsage : 0};
+    [[maybe_unused]] const size_t dirty_count_before{!possible_overwrite ? m_dirty_count : 0};
     CCoinsMap::iterator it;
     bool inserted;
     std::tie(it, inserted) = cacheCoins.emplace(std::piecewise_construct, std::forward_as_tuple(outpoint), std::tuple<>());
     bool fresh = false;
     if (!possible_overwrite) {
         if (!it->second.coin.IsSpent()) {
+            Assume(!inserted);
+            Assume(cacheCoins.size() == cache_size_before);
+            Assume(cachedCoinsUsage == cache_usage_before);
+            Assume(m_dirty_count == dirty_count_before);
             throw std::logic_error("Attempted to overwrite an unspent coin (when possible_overwrite is false)");
         }
         // If the coin exists in this cache as a spent coin and is DIRTY, then
