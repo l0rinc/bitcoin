@@ -77,6 +77,15 @@ std::optional<BlockFilterType> ExpectedBlockFilterType(std::string_view name)
     return std::nullopt;
 }
 
+std::optional<OutputType> ExpectedOutputType(std::string_view type)
+{
+    if (type == "legacy") return OutputType::LEGACY;
+    if (type == "p2sh-segwit") return OutputType::P2SH_SEGWIT;
+    if (type == "bech32") return OutputType::BECH32;
+    if (type == "bech32m") return OutputType::BECH32M;
+    return std::nullopt;
+}
+
 Network ExpectedNetwork(std::string_view name)
 {
     const std::string lower_name{ToLower(name)};
@@ -202,6 +211,26 @@ void AssertParseNetworkContracts(const std::string& name)
     assert(parsed_network == NET_UNROUTABLE || ParseNetwork(GetNetworkName(parsed_network)) == parsed_network);
 }
 
+void AssertOutputTypeContracts(std::string_view type)
+{
+    const std::optional<OutputType> parsed_type{ParseOutputType(type)};
+    const std::optional<OutputType> expected_type{ExpectedOutputType(type)};
+
+    assert(parsed_type == expected_type);
+    if (parsed_type) {
+        assert(std::find(OUTPUT_TYPES.begin(), OUTPUT_TYPES.end(), *parsed_type) != OUTPUT_TYPES.end());
+        assert(std::string_view{FormatOutputType(*parsed_type)} == type);
+    }
+
+    for (const OutputType output_type : OUTPUT_TYPES) {
+        const std::optional<OutputType> reparsed_type{ParseOutputType(FormatOutputType(output_type))};
+        assert(reparsed_type);
+        assert(*reparsed_type == output_type);
+    }
+    assert(!ParseOutputType(FormatOutputType(OutputType::UNKNOWN)));
+    assert(FormatAllOutputTypes().find(FormatOutputType(OutputType::UNKNOWN)) == std::string::npos);
+}
+
 void AssertUrlDecodeContracts(std::string_view encoded)
 {
     const std::string decoded{UrlDecode(encoded)};
@@ -242,7 +271,7 @@ FUZZ_TARGET(string)
     const common::Settings settings;
     (void)OnlyHasDefaultSectionSetting(settings, random_string_1, random_string_2);
     AssertParseNetworkContracts(random_string_1);
-    (void)ParseOutputType(random_string_1);
+    AssertOutputTypeContracts(random_string_1);
     AssertAffixRemovalContracts(random_string_1, random_string_2);
     (void)ResolveErrMsg(random_string_1, random_string_2);
     try {
