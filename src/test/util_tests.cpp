@@ -31,6 +31,7 @@
 #include <util/vecdeque.h>
 #include <util/vector.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -893,6 +894,15 @@ int64_t atoi64_legacy(const std::string& str)
 
 BOOST_AUTO_TEST_CASE(test_LocaleIndependentAtoi)
 {
+    const auto check_int_clamps_int64{[](const std::string& str) {
+        const int64_t parsed_i64{LocaleIndependentAtoi<int64_t>(str)};
+        const int64_t expected_i{std::clamp(
+            parsed_i64,
+            static_cast<int64_t>(std::numeric_limits<int>::min()),
+            static_cast<int64_t>(std::numeric_limits<int>::max()))};
+        BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int>(str), expected_i);
+    }};
+
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("1234"), 1'234);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("0"), 0);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("01234"), 1'234);
@@ -980,6 +990,18 @@ BOOST_AUTO_TEST_CASE(test_LocaleIndependentAtoi)
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("0"), 0U);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("255"), 255U);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("256"), 255U);
+
+    for (const std::string& str : {
+             "2147483648ignored",
+             "-2147483649ignored",
+             "9223372036854775808ignored",
+             "-9223372036854775809ignored",
+             " +1 ",
+             "+-1",
+             "0x1",
+         }) {
+        check_int_clamps_int64(str);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(test_ToIntegralHex)
