@@ -7,7 +7,9 @@
 
 #include <mp/util.h>
 
+#include <cassert>
 #include <concepts>
+#include <cstring>
 #include <span>
 
 namespace mp {
@@ -33,7 +35,11 @@ requires (std::is_same_v<decltype(output.get()), ::capnp::Data::Builder> && IsBy
 {
     auto data = std::span{value};
     auto result = output.init(data.size());
-    memcpy(result.begin(), data.data(), data.size());
+    if (!data.empty()) {
+        assert(data.data() != nullptr);
+        assert(result.begin() != nullptr);
+        std::memcpy(result.begin(), data.data(), data.size());
+    }
 }
 
 template <typename LocalType, typename Input, typename ReadDest>
