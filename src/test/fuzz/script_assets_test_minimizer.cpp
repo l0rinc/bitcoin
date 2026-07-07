@@ -13,6 +13,7 @@
 #include <util/strencodings.h>
 #include <util/string.h>
 
+#include <cassert>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -208,7 +209,8 @@ void Test(const std::string& str)
             // "final": true tests are valid for all flags. Others are only valid with flags that are
             // a subset of test_flags.
             if (final || ((flags & test_flags) == flags)) {
-                (void)VerifyScript(tx.vin[idx].scriptSig, prevouts[idx].scriptPubKey, &tx.vin[idx].scriptWitness, flags, txcheck, nullptr);
+                const bool ret{VerifyScript(tx.vin[idx].scriptSig, prevouts[idx].scriptPubKey, &tx.vin[idx].scriptWitness, flags, txcheck, nullptr)};
+                assert(ret);
             }
         }
     }
@@ -222,7 +224,8 @@ void Test(const std::string& str)
         for (const auto flags : ALL_FLAGS) {
             // If a test is supposed to fail with test_flags, it should also fail with any superset thereof.
             if ((flags & test_flags) == test_flags) {
-                (void)VerifyScript(tx.vin[idx].scriptSig, prevouts[idx].scriptPubKey, &tx.vin[idx].scriptWitness, flags, txcheck, nullptr);
+                const bool ret{VerifyScript(tx.vin[idx].scriptSig, prevouts[idx].scriptPubKey, &tx.vin[idx].scriptWitness, flags, txcheck, nullptr)};
+                assert(!ret);
             }
         }
     }
