@@ -13,6 +13,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <array>
+#include <atomic>
 #include <functional>
 #include <latch>
 #include <ranges>
@@ -117,6 +118,47 @@ BOOST_AUTO_TEST_CASE(submit_fails_with_correct_error)
     const auto range_res{threadPool.Submit(std::move(tasks))};
     BOOST_CHECK(!range_res);
     BOOST_CHECK_EQUAL(SubmitErrorString(range_res.error()), "No active workers");
+}
+
+BOOST_AUTO_TEST_CASE(rejected_submissions_do_not_queue_tasks)
+{
+    ThreadPool threadPool{POOL_NAME};
+    std::atomic<int> counter{0};
+
+    auto submit_rejected_tasks = [&](ThreadPool::SubmitError expected_error) {
+        auto single_res{threadPool.Submit([&counter] {
+            counter.fetch_add(1, std::memory_order_relaxed);
+        })};
+        BOOST_REQUIRE(!single_res);
+        BOOST_CHECK(single_res.error() == expected_error);
+        BOOST_CHECK_EQUAL(threadPool.WorkQueueSize(), 0);
+
+        std::vector<std::function<void()>> tasks;
+        tasks.emplace_back([&counter] {
+            counter.fetch_add(1, std::memory_order_relaxed);
+        });
+        tasks.emplace_back([&counter] {
+            counter.fetch_add(1, std::memory_order_relaxed);
+        });
+        auto range_res{threadPool.Submit(std::move(tasks))};
+        BOOST_REQUIRE(!range_res);
+        BOOST_CHECK(range_res.error() == expected_error);
+        BOOST_CHECK_EQUAL(threadPool.WorkQueueSize(), 0);
+    };
+
+    submit_rejected_tasks(ThreadPool::SubmitError::Inactive);
+    BOOST_CHECK_EQUAL(counter.load(), 0);
+
+    threadPool.Start(NUM_WORKERS_DEFAULT);
+    Submit(threadPool, [] {}).get();
+    threadPool.Stop();
+    BOOST_CHECK_EQUAL(counter.load(), 0);
+
+    threadPool.Start(NUM_WORKERS_DEFAULT);
+    threadPool.Interrupt();
+    submit_rejected_tasks(ThreadPool::SubmitError::Interrupted);
+    threadPool.Stop();
+    BOOST_CHECK_EQUAL(counter.load(), 0);
 }
 
 // Test 1, submit tasks and verify completion
