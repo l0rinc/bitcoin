@@ -195,6 +195,7 @@ void CheckTransactionSerializationContracts(const CTransaction& tx)
     DataStream with_witness_stream;
     with_witness_stream << TX_WITH_WITNESS(tx);
     BOOST_CHECK_EQUAL(with_witness_stream.size(), GetSerializeSize(TX_WITH_WITNESS(tx)));
+    BOOST_CHECK_EQUAL(tx.ComputeTotalSize(), with_witness_stream.size());
     SpanReader with_witness_reader{std::span<const std::byte>{with_witness_stream.data(), with_witness_stream.size()}};
     const CTransaction with_witness_roundtrip{deserialize, TX_WITH_WITNESS, with_witness_reader};
     BOOST_CHECK(with_witness_reader.empty());
@@ -205,6 +206,12 @@ void CheckTransactionSerializationContracts(const CTransaction& tx)
     DataStream no_witness_stream;
     no_witness_stream << TX_NO_WITNESS(tx);
     BOOST_CHECK_EQUAL(no_witness_stream.size(), GetSerializeSize(TX_NO_WITNESS(tx)));
+    const int64_t expected_weight{
+        static_cast<int64_t>(no_witness_stream.size()) * (WITNESS_SCALE_FACTOR - 1) +
+        static_cast<int64_t>(with_witness_stream.size())};
+    BOOST_CHECK_EQUAL(GetTransactionWeight(tx), expected_weight);
+    BOOST_CHECK_EQUAL(GetVirtualTransactionSize(tx), GetVirtualTransactionSize(expected_weight, /*nSigOpCost=*/0, /*bytes_per_sigop=*/0));
+    BOOST_CHECK_EQUAL(GetVirtualTransactionSize(tx), (expected_weight + WITNESS_SCALE_FACTOR - 1) / WITNESS_SCALE_FACTOR);
     SpanReader no_witness_reader{std::span<const std::byte>{no_witness_stream.data(), no_witness_stream.size()}};
     const CTransaction no_witness_roundtrip{deserialize, TX_NO_WITNESS, no_witness_reader};
     BOOST_CHECK(no_witness_reader.empty());
