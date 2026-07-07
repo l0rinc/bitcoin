@@ -16,6 +16,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <stdexcept>
 
@@ -705,6 +706,68 @@ BOOST_AUTO_TEST_CASE(streams_buffered_file_findbyte_exact_match)
     BOOST_CHECK_EQUAL(bf.GetPos(), 4U);
 
     BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    fs::remove(streams_test_filename);
+}
+
+BOOST_AUTO_TEST_CASE(streams_buffered_file_failure_positions)
+{
+    const fs::path streams_test_filename{m_args.GetDataDirBase() / "streams_test_failure_positions"};
+    const std::array<std::byte, 5> bytes{
+        std::byte{0x00},
+        std::byte{0x01},
+        std::byte{0x02},
+        std::byte{0x03},
+        std::byte{0x04},
+    };
+    {
+        AutoFile write_file{fsbridge::fopen(streams_test_filename, "w+b")};
+        write_file.write(bytes);
+        BOOST_REQUIRE_EQUAL(write_file.fclose(), 0);
+    }
+
+    {
+        AutoFile file{fsbridge::fopen(streams_test_filename, "rb")};
+        BufferedFile bf{file, 3, 1};
+        BOOST_REQUIRE(bf.SetLimit(2));
+
+        std::array<std::byte, 3> out{std::byte{0xa5}, std::byte{0xa5}, std::byte{0xa5}};
+        BOOST_CHECK_EXCEPTION(bf.read(out), std::ios_base::failure,
+                              HasReason{"Attempt to position past buffer limit"});
+        BOOST_CHECK_EQUAL(bf.GetPos(), 0U);
+        BOOST_CHECK(std::all_of(out.begin(), out.end(), [](std::byte byte) { return byte == std::byte{0xa5}; }));
+
+        BOOST_CHECK_EXCEPTION(bf.SkipTo(3), std::ios_base::failure,
+                              HasReason{"Attempt to position past buffer limit"});
+        BOOST_CHECK_EQUAL(bf.GetPos(), 0U);
+
+        BOOST_CHECK_EXCEPTION(bf.FindByte(std::byte{0xff}), std::ios_base::failure,
+                              HasReason{"Attempt to position past buffer limit"});
+        BOOST_CHECK_EQUAL(bf.GetPos(), 2U);
+        BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    }
+
+    {
+        AutoFile file{fsbridge::fopen(streams_test_filename, "rb")};
+        BufferedFile bf{file, 3, 1};
+        std::array<std::byte, 8> out;
+        out.fill(std::byte{0xa5});
+        BOOST_CHECK_EXCEPTION(bf.read(out), std::ios_base::failure,
+                              HasReason{"BufferedFile::Fill: end of file"});
+        BOOST_CHECK_EQUAL(bf.GetPos(), bytes.size());
+        BOOST_CHECK(std::equal(out.begin(), out.begin() + bytes.size(), bytes.begin()));
+        BOOST_CHECK(std::all_of(out.begin() + bytes.size(), out.end(), [](std::byte byte) { return byte == std::byte{0xa5}; }));
+        BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    }
+
+    {
+        AutoFile file{fsbridge::fopen(streams_test_filename, "rb")};
+        BufferedFile bf{file, 3, 1};
+        BOOST_CHECK_EXCEPTION(bf.FindByte(std::byte{0xff}), std::ios_base::failure,
+                              HasReason{"BufferedFile::Fill: end of file"});
+        BOOST_CHECK_EQUAL(bf.GetPos(), bytes.size());
+        BOOST_REQUIRE_EQUAL(file.fclose(), 0);
+    }
+
     fs::remove(streams_test_filename);
 }
 
