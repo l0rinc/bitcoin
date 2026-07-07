@@ -21,6 +21,7 @@
 #include <txmempool.h>
 #include <uint256.h>
 #include <util/check.h>
+#include <util/overflow.h>
 #include <util/translation.h>
 
 #include <algorithm>
@@ -202,8 +203,14 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         if (pool.exists(tx->GetHash())) {
             mempool_txids.push_back(tx->GetHash());
             if (fuzzed_data_provider.ConsumeBool()) {
-                const CAmount fee_delta{ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY / 100000)};
-                pool.PrioritiseTransaction(tx->GetHash(), fuzzed_data_provider.ConsumeBool() ? fee_delta : -fee_delta);
+                CAmount fee_delta;
+                if (fuzzed_data_provider.ConsumeBool()) {
+                    fee_delta = fuzzed_data_provider.ConsumeIntegral<CAmount>();
+                } else {
+                    fee_delta = ConsumeMoney(fuzzed_data_provider, /*max=*/MAX_MONEY / 100000);
+                    if (fuzzed_data_provider.ConsumeBool()) fee_delta = -fee_delta;
+                }
+                pool.PrioritiseTransaction(tx->GetHash(), fee_delta);
             }
         }
 
@@ -292,7 +299,7 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
             auto it = bump_fees.find(outpoint);
             assert(it != bump_fees.end());
             assert(it->second >= 0);
-            sum_fees += it->second;
+            sum_fees = SaturatingAdd(sum_fees, it->second);
         }
         assert(!mini_miner.IsReadyToCalculate());
         assert(mini_miner.Linearize().empty());
