@@ -255,7 +255,9 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_add_unlinked_block, TestingSetup)
 
     LOCK(::cs_main);
     child.nStatus = BLOCK_HAVE_DATA;
+    child.nTx = 1;
     child_2.nStatus = BLOCK_HAVE_DATA;
+    child_2.nTx = 1;
     blockman.m_blocks_unlinked.clear();
 
     const auto count_entry{[&](CBlockIndex* parent, CBlockIndex* child) {
