@@ -217,8 +217,13 @@ bool SigHasLowR(const secp256k1_ecdsa_signature* sig)
 }
 
 bool CKey::Sign(const uint256 &hash, std::vector<unsigned char>& vchSig, bool grind, uint32_t test_case) const {
-    if (!keydata)
+    const auto fail = [&] {
+        vchSig.clear();
+        Assume(vchSig.empty());
         return false;
+    };
+    if (!keydata)
+        return fail();
     vchSig.resize(CPubKey::SIGNATURE_SIZE);
     size_t nSigLen = CPubKey::SIGNATURE_SIZE;
     unsigned char extra_entropy[32] = {0};
@@ -241,6 +246,8 @@ bool CKey::Sign(const uint256 &hash, std::vector<unsigned char>& vchSig, bool gr
     assert(ret);
     ret = secp256k1_ecdsa_verify(secp256k1_context_static, &sig, hash.begin(), &pk);
     assert(ret);
+    Assume(!vchSig.empty());
+    Assume(vchSig.size() <= CPubKey::SIGNATURE_SIZE);
     return true;
 }
 
@@ -258,8 +265,13 @@ bool CKey::VerifyPubKey(const CPubKey& pubkey) const {
 }
 
 bool CKey::SignCompact(const uint256 &hash, std::vector<unsigned char>& vchSig) const {
-    if (!keydata)
+    const auto fail = [&] {
+        vchSig.clear();
+        Assume(vchSig.empty());
         return false;
+    };
+    if (!keydata)
+        return fail();
     vchSig.resize(CPubKey::COMPACT_SIGNATURE_SIZE);
     int rec = -1;
     secp256k1_ecdsa_recoverable_signature rsig;
@@ -277,6 +289,7 @@ bool CKey::SignCompact(const uint256 &hash, std::vector<unsigned char>& vchSig) 
     assert(ret);
     ret = secp256k1_ec_pubkey_cmp(secp256k1_context_static, &epk, &rpk);
     assert(ret == 0);
+    Assume(vchSig.size() == CPubKey::COMPACT_SIGNATURE_SIZE);
     return true;
 }
 
