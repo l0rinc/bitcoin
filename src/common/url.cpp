@@ -4,6 +4,8 @@
 
 #include <common/url.h>
 
+#include <util/check.h>
+
 #include <charconv>
 #include <string>
 #include <string_view>
@@ -25,6 +27,7 @@ std::string UrlDecode(std::string_view url_encoded)
             // Only if there is no error and the pointer is set to the end of
             // the string, we can be sure both characters were valid hex
             if (ec == std::errc{} && p == url_encoded.data() + i + 3) {
+                Assume(decoded_value <= 0xFF);
                 res += static_cast<char>(decoded_value);
                 // Next two characters are part of the percent encoding
                 i += 2;
