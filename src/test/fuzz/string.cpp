@@ -71,6 +71,12 @@ std::optional<FeeEstimateMode> ExpectedFeeEstimateMode(std::string_view mode)
     return std::nullopt;
 }
 
+std::optional<BlockFilterType> ExpectedBlockFilterType(std::string_view name)
+{
+    if (name == "basic") return BlockFilterType::BASIC;
+    return std::nullopt;
+}
+
 void AssertAffixRemovalContracts(std::string_view str, std::string_view affix)
 {
     const std::string_view removed_prefix_view{RemovePrefixView(str, affix)};
@@ -132,6 +138,22 @@ void AssertFeeModeFromStringContracts(std::string_view mode)
         assert(parsed_mode == FeeEstimateMode::CONSERVATIVE);
     }
 }
+
+void AssertBlockFilterTypeByNameContracts(std::string_view name)
+{
+    const BlockFilterType sentinel{static_cast<BlockFilterType>(42)};
+    BlockFilterType parsed_type{sentinel};
+    const bool parsed{BlockFilterTypeByName(name, parsed_type)};
+    const std::optional<BlockFilterType> expected_type{ExpectedBlockFilterType(name)};
+
+    assert(parsed == expected_type.has_value());
+    if (expected_type) {
+        assert(parsed_type == *expected_type);
+        assert(BlockFilterTypeName(parsed_type) == name);
+    } else {
+        assert(parsed_type == sentinel);
+    }
+}
 } // namespace
 
 FUZZ_TARGET(string)
@@ -143,8 +165,7 @@ FUZZ_TARGET(string)
 
     (void)AmountErrMsg(random_string_1, random_string_2);
     (void)AmountHighWarn(random_string_1);
-    BlockFilterType block_filter_type;
-    (void)BlockFilterTypeByName(random_string_1, block_filter_type);
+    AssertBlockFilterTypeByNameContracts(random_string_1);
     (void)Capitalize(random_string_1);
     (void)CopyrightHolders(random_string_1);
     AssertFeeModeFromStringContracts(random_string_1);
