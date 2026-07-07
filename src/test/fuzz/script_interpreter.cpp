@@ -61,6 +61,16 @@ void AssertSigHashCacheAliases(const CScript& scriptcode, int32_t hash_type, uin
         any_one_can_pay | (((canonical_alias & 0x1f) == SIGHASH_NONE) ? SIGHASH_SINGLE : SIGHASH_NONE)};
     Assert(!cache.Load(different_mode, scriptcode, missed_writer));
 }
+
+bool ReferenceCastToBool(const std::vector<unsigned char>& bytes)
+{
+    for (size_t i{0}; i < bytes.size(); ++i) {
+        if (bytes[i] != 0) {
+            return !(i == bytes.size() - 1 && bytes[i] == 0x80);
+        }
+    }
+    return false;
+}
 } // namespace
 
 FUZZ_TARGET(script_interpreter)
@@ -90,7 +100,8 @@ FUZZ_TARGET(script_interpreter)
         }
     }
     {
-        (void)CastToBool(ConsumeRandomLengthByteVector(fuzzed_data_provider));
+        const auto bytes{ConsumeRandomLengthByteVector(fuzzed_data_provider)};
+        assert(CastToBool(bytes) == ReferenceCastToBool(bytes));
     }
 }
 
