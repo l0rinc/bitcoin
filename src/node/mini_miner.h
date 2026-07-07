@@ -104,6 +104,7 @@ class MiniMiner
     CAmount m_total_fees{0};
     int32_t m_total_vsize{0};
     bool m_total_fees_overflowed{false};
+    bool m_selected_packages_meet_target{true};
 
     /** Main data structure holding the entries, can be indexed by txid */
     std::map<Txid, MiniMinerMempoolEntry> m_entries_by_txid;
