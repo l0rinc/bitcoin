@@ -613,6 +613,31 @@ BOOST_AUTO_TEST_CASE(postlinearization_output_is_topological)
     BOOST_CHECK(CompareChunks(ChunkLinearization(depgraph, post_post_linearization), post_chunking) >= 0);
 }
 
+BOOST_AUTO_TEST_CASE(postlinearize_moved_leaf_after_fee_increase)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto parent{depgraph.AddTransaction(FeeFrac{1, 10})};
+    const auto leaf{depgraph.AddTransaction(FeeFrac{2, 10})};
+    const auto independent{depgraph.AddTransaction(FeeFrac{1, 1})};
+    depgraph.AddDependencies(TestBitSet::Singleton(parent), leaf);
+    SanityCheck(depgraph);
+
+    const std::vector<DepGraphIndex> original{parent, leaf, independent};
+    SanityCheck(depgraph, original);
+    const auto old_chunking{ChunkLinearization(depgraph, original)};
+
+    std::vector<DepGraphIndex> moved{parent, independent, leaf};
+    depgraph.FeeRate(leaf).fee += 100;
+    PostLinearize(depgraph, moved);
+    SanityCheck(depgraph, moved);
+
+    const auto moved_chunking_info{ChunkLinearizationInfo(depgraph, moved)};
+    for (const auto& chunk : moved_chunking_info) {
+        BOOST_CHECK(depgraph.IsConnected(chunk.transactions));
+    }
+    BOOST_CHECK(CompareChunks(ChunkLinearization(depgraph, moved), old_chunking) >= 0);
+}
+
 BOOST_AUTO_TEST_CASE(postlinearize_skips_diagram_compare_when_chunk_sums_overflow)
 {
     DepGraph<TestBitSet> depgraph;
