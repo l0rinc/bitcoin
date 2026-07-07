@@ -7,6 +7,9 @@
 #include <addresstype.h>
 #include <key.h>
 #include <key_io.h>
+#include <policy/policy.h>
+#include <pubkey.h>
+#include <script/interpreter.h>
 #include <script/script.h>
 #include <script/signingprovider.h>
 #include <script/solver.h>
@@ -22,10 +25,55 @@ using namespace util::hex_literals;
 
 BOOST_FIXTURE_TEST_SUITE(script_standard_tests, BasicTestingSetup)
 
+namespace {
+
+void CheckSolverPolicyContract(const CScript& script, const TxoutType expected_type, const bool expected_standard)
+{
+    std::vector<std::vector<unsigned char>> solutions;
+    const TxoutType solver_type{Solver(script, solutions)};
+    BOOST_CHECK_EQUAL(solver_type, expected_type);
+
+    TxoutType policy_type;
+    const bool standard{IsStandard(script, policy_type)};
+    BOOST_CHECK_EQUAL(policy_type, solver_type);
+    BOOST_CHECK_EQUAL(standard, expected_standard);
+}
+
+} // namespace
+
 BOOST_AUTO_TEST_CASE(dest_default_is_no_dest)
 {
     CTxDestination dest;
     BOOST_CHECK(!IsValidDestination(dest));
+}
+
+BOOST_AUTO_TEST_CASE(script_standard_solver_policy_contract)
+{
+    CKey keys[4];
+    CPubKey pubkeys[4];
+    for (int i = 0; i < 4; ++i) {
+        keys[i].MakeNewKey(true);
+        pubkeys[i] = keys[i].GetPubKey();
+    }
+
+    CScript script;
+    script << OP_DUP << OP_HASH160 << ToByteVector(pubkeys[0].GetID()) << OP_EQUALVERIFY << OP_CHECKSIG;
+    CheckSolverPolicyContract(script, TxoutType::PUBKEYHASH, /*expected_standard=*/true);
+
+    script.clear();
+    script << OP_RETURN << std::vector<unsigned char>{0x01, 0x02};
+    CheckSolverPolicyContract(script, TxoutType::NULL_DATA, /*expected_standard=*/true);
+
+    script.clear();
+    script << OP_2 << std::vector<unsigned char>(WITNESS_V1_TAPROOT_SIZE, 0x01);
+    CheckSolverPolicyContract(script, TxoutType::WITNESS_UNKNOWN, /*expected_standard=*/true);
+
+    script.clear();
+    script << OP_9 << OP_ADD << OP_11 << OP_EQUAL;
+    CheckSolverPolicyContract(script, TxoutType::NONSTANDARD, /*expected_standard=*/false);
+
+    script = GetScriptForMultisig(1, {pubkeys[0], pubkeys[1], pubkeys[2], pubkeys[3]});
+    CheckSolverPolicyContract(script, TxoutType::MULTISIG, /*expected_standard=*/false);
 }
 
 BOOST_AUTO_TEST_CASE(script_standard_Solver_success)
