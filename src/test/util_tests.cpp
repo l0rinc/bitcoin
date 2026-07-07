@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <clientversion.h>
+#include <common/messages.h>
 #include <common/signmessage.h>
 #include <compat/compat.h>
 #include <hash.h>
@@ -19,6 +20,7 @@
 #include <util/bitdeque.h>
 #include <util/bitset.h>
 #include <util/byte_units.h>
+#include <util/fees.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
 #include <util/moneystr.h>
@@ -1062,6 +1064,26 @@ BOOST_AUTO_TEST_CASE(test_SanitizeString)
     const std::string embedded_nul{"safe\0unsafe<>", 13};
     BOOST_CHECK_EQUAL(SanitizeString(embedded_nul), "safeunsafe");
     BOOST_CHECK_EQUAL(SanitizeString(SanitizeString(punctuation, SAFE_CHARS_URI), SAFE_CHARS_URI), SanitizeString(punctuation, SAFE_CHARS_URI));
+}
+
+BOOST_AUTO_TEST_CASE(test_FeeModeFromString)
+{
+    FeeEstimateMode mode{FeeEstimateMode::UNSET};
+
+    BOOST_CHECK(common::FeeModeFromString("unset", mode));
+    BOOST_CHECK(mode == FeeEstimateMode::UNSET);
+    BOOST_CHECK(common::FeeModeFromString("ECONOMICAL", mode));
+    BOOST_CHECK(mode == FeeEstimateMode::ECONOMICAL);
+    BOOST_CHECK(common::FeeModeFromString("Conservative", mode));
+    BOOST_CHECK(mode == FeeEstimateMode::CONSERVATIVE);
+
+    mode = FeeEstimateMode::ECONOMICAL;
+    BOOST_CHECK(!common::FeeModeFromString(" economical", mode));
+    BOOST_CHECK(mode == FeeEstimateMode::ECONOMICAL);
+    BOOST_CHECK(!common::FeeModeFromString("conservative ", mode));
+    BOOST_CHECK(mode == FeeEstimateMode::ECONOMICAL);
+    BOOST_CHECK(!common::FeeModeFromString("unset\0"sv, mode));
+    BOOST_CHECK(mode == FeeEstimateMode::ECONOMICAL);
 }
 
 BOOST_AUTO_TEST_CASE(test_ParseFixedPoint)
