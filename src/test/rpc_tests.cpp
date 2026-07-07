@@ -2,9 +2,11 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <common/messages.h>
 #include <core_io.h>
 #include <interfaces/chain.h>
 #include <node/context.h>
+#include <node/types.h>
 #include <primitives/block.h>
 #include <rpc/blockchain.h>
 #include <rpc/client.h>
@@ -23,6 +25,7 @@
 #include <util/time.h>
 
 #include <any>
+#include <array>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -65,6 +68,26 @@ static bool HasJSONRPCErrorShape(const UniValue& error, int expected_code, std::
     if (!error["code"].isNum()) return false;
     if (!error["message"].isStr()) return false;
     return error["code"].getInt<int>() == expected_code && error["message"].get_str() == expected_message;
+}
+
+static RPCErrorCode ExpectedRPCErrorCode(const node::TransactionError error)
+{
+    switch (error) {
+    case node::TransactionError::MEMPOOL_REJECTED:
+        return RPC_TRANSACTION_REJECTED;
+    case node::TransactionError::ALREADY_IN_UTXO_SET:
+        return RPC_VERIFY_ALREADY_IN_UTXO_SET;
+    case node::TransactionError::MISSING_INPUTS:
+    case node::TransactionError::MEMPOOL_ERROR:
+    case node::TransactionError::MAX_FEE_EXCEEDED:
+    case node::TransactionError::MAX_BURN_EXCEEDED:
+    case node::TransactionError::INVALID_PACKAGE:
+        return RPC_TRANSACTION_ERROR;
+    case node::TransactionError::OK:
+        break;
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
+    return RPC_TRANSACTION_ERROR;
 }
 
 class RPCTestingSetup : public TestingSetup
@@ -114,6 +137,27 @@ BOOST_AUTO_TEST_CASE(jsonrpc_error_shape)
 {
     const UniValue error{JSONRPCError(-8, "bad parameter")};
     BOOST_CHECK(HasJSONRPCErrorShape(error, -8, "bad parameter"));
+}
+
+BOOST_AUTO_TEST_CASE(transaction_error_rpc_error_shape)
+{
+    static constexpr std::array errors{
+        node::TransactionError::MISSING_INPUTS,
+        node::TransactionError::ALREADY_IN_UTXO_SET,
+        node::TransactionError::MEMPOOL_REJECTED,
+        node::TransactionError::MEMPOOL_ERROR,
+        node::TransactionError::MAX_FEE_EXCEEDED,
+        node::TransactionError::MAX_BURN_EXCEEDED,
+        node::TransactionError::INVALID_PACKAGE,
+    };
+    for (const auto error : errors) {
+        const RPCErrorCode expected_code{ExpectedRPCErrorCode(error)};
+        const std::string expected_message{common::TransactionErrorString(error).original};
+        BOOST_CHECK(!expected_message.empty());
+        BOOST_CHECK_EQUAL(RPCErrorFromTransactionError(error), expected_code);
+        BOOST_CHECK(HasJSONRPCErrorShape(JSONRPCTransactionError(error), expected_code, expected_message));
+        BOOST_CHECK(HasJSONRPCErrorShape(JSONRPCTransactionError(error, "custom transaction error"), expected_code, "custom transaction error"));
+    }
 }
 
 BOOST_AUTO_TEST_CASE(hex_to_pubkey_error_shape)
