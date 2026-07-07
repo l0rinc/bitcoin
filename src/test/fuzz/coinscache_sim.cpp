@@ -17,6 +17,8 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <stdexcept>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -686,6 +688,29 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 entry.entrytype = EntryType::UNSPENT;
                 entry.coinidx = coinidx;
                 entry.height = current_height;
+            },
+
+            [&]() { // AddCoin with disallowed local overwrite
+                const uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
+                const uint32_t coinidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_COINS - 1);
+                if (sim_caches[caches.size()].entry[outpointidx].entrytype != EntryType::UNSPENT) return;
+
+                const auto sim_before{lookup(outpointidx)};
+                const auto cache_stats{get_all_cache_stats()};
+                Coin coin = data.coins[coinidx];
+                coin.nHeight = current_height;
+
+                bool threw{false};
+                try {
+                    caches.back()->AddCoin(data.outpoints[outpointidx], std::move(coin), /*possible_overwrite=*/false);
+                } catch (const std::logic_error& e) {
+                    assert(std::string_view{e.what()} == "Attempted to overwrite an unspent coin (when possible_overwrite is false)");
+                    threw = true;
+                }
+                assert(threw);
+                assert(lookup(outpointidx) == sim_before);
+                assert_cache_stats(cache_stats);
+                assert_read_apis_match_sim(outpointidx);
             },
 
             [&]() { // AddCoin with unspendable output
