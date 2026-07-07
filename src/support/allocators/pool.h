@@ -255,6 +255,8 @@ public:
             const std::size_t num_alignments = NumElemAlignBytes(bytes);
             Assume(num_alignments > 0);
             Assume(num_alignments < m_free_lists.size());
+            const std::size_t round_bytes = num_alignments * ELEM_ALIGN_BYTES;
+            Assume(round_bytes >= std::max(bytes, sizeof(ListNode)));
             if (nullptr != m_free_lists[num_alignments]) {
                 // we've already got data in the pool's freelist, unlink one element and return the pointer
                 // to the unlinked memory. Since FreeList is trivially destructible we can just treat it as
@@ -269,13 +271,11 @@ public:
             }
 
             // freelist is empty: get one allocation from allocated chunk memory.
-            const std::ptrdiff_t round_bytes = static_cast<std::ptrdiff_t>(num_alignments * ELEM_ALIGN_BYTES);
-            Assume(round_bytes > 0);
-            if (round_bytes > m_available_memory_end - m_available_memory_it) {
+            if (round_bytes > static_cast<std::size_t>(m_available_memory_end - m_available_memory_it)) {
                 // slow path, only happens when a new chunk needs to be allocated
                 AllocateChunk();
             }
-            Assume(round_bytes <= m_available_memory_end - m_available_memory_it);
+            Assume(round_bytes <= static_cast<std::size_t>(m_available_memory_end - m_available_memory_it));
 
             // Make sure we use the right amount of bytes for that freelist (might be rounded up),
             ASAN_UNPOISON_MEMORY_REGION(m_available_memory_it, round_bytes);
@@ -304,6 +304,8 @@ public:
             const std::size_t num_alignments = NumElemAlignBytes(bytes);
             Assume(num_alignments > 0);
             Assume(num_alignments < m_free_lists.size());
+            const std::size_t round_bytes = num_alignments * ELEM_ALIGN_BYTES;
+            Assume(round_bytes >= std::max(bytes, sizeof(ListNode)));
             // put the memory block into the linked list. We can placement construct the FreeList
             // into the memory since we can be sure the alignment is correct.
             ASAN_UNPOISON_MEMORY_REGION(p, sizeof(ListNode));

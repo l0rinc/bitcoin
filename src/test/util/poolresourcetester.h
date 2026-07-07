@@ -56,6 +56,31 @@ public:
         assert((reinterpret_cast<uintptr_t>(resource.m_available_memory_it) & (resource.ELEM_ALIGN_BYTES - 1)) == 0);
     }
 
+    template <std::size_t MAX_BLOCK_SIZE_BYTES, std::size_t ALIGN_BYTES>
+    static constexpr std::size_t ElemAlignBytes()
+    {
+        return PoolResource<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>::ELEM_ALIGN_BYTES;
+    }
+
+    template <std::size_t MAX_BLOCK_SIZE_BYTES, std::size_t ALIGN_BYTES>
+    static constexpr bool IsFreeListUsable(std::size_t bytes, std::size_t alignment)
+    {
+        return PoolResource<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>::IsFreeListUsable(bytes, alignment);
+    }
+
+    template <std::size_t MAX_BLOCK_SIZE_BYTES, std::size_t ALIGN_BYTES>
+    static constexpr std::size_t FreeListIndex(std::size_t bytes)
+    {
+        return PoolResource<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>::NumElemAlignBytes(bytes);
+    }
+
+    template <std::size_t MAX_BLOCK_SIZE_BYTES, std::size_t ALIGN_BYTES>
+    static constexpr std::size_t RoundedBytes(std::size_t bytes)
+    {
+        return FreeListIndex<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>(bytes) *
+               ElemAlignBytes<MAX_BLOCK_SIZE_BYTES, ALIGN_BYTES>();
+    }
+
     /**
      * Extracts the number of elements per freelist
      */
