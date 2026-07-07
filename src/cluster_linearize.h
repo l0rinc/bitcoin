@@ -2191,6 +2191,9 @@ void PostLinearize(const DepGraph<SetType>& depgraph, std::span<DepGraphIndex> l
     }
     Assume(done == depgraph.Positions());
     if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        for (const auto& chunk : ChunkLinearizationInfo(depgraph, linearization)) {
+            Assume(depgraph.IsConnected(chunk.transactions));
+        }
         if (input_chunking) {
             if (const auto output_chunking{ComparableChunkLinearization(depgraph, linearization)}) {
                 Assume(CompareChunks(*output_chunking, *input_chunking) >= 0);
