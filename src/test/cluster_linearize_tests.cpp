@@ -8,6 +8,7 @@
 #include <util/bitset.h>
 #include <util/strencodings.h>
 
+#include <limits>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -808,6 +809,19 @@ BOOST_AUTO_TEST_CASE(chunk_linearization_keeps_equal_rate_boundaries)
     BOOST_CHECK(chunking_info[0].transactions == TestBitSet::Singleton(first));
     BOOST_CHECK(chunking_info[1].transactions == TestBitSet::Singleton(second));
     BOOST_CHECK(chunking_info[2].transactions == TestBitSet::Singleton(third));
+}
+
+BOOST_AUTO_TEST_CASE(comparable_chunk_linearization_rejects_merge_overflow)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto low{depgraph.AddTransaction(FeeFrac{std::numeric_limits<int64_t>::max() - 2, 2})};
+    const auto high{depgraph.AddTransaction(FeeFrac{std::numeric_limits<int64_t>::max() - 2, 1})};
+    BOOST_CHECK(depgraph.IsAcyclic());
+
+    const std::vector<DepGraphIndex> linearization{low, high};
+    SanityCheck(depgraph, linearization);
+
+    BOOST_CHECK(!ComparableChunkLinearization(depgraph, linearization));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
