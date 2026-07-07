@@ -221,6 +221,7 @@ const Coin& CCoinsViewCache::AccessCoin(const COutPoint &outpoint) const {
     const size_t dirty_count{m_dirty_count};
     CCoinsMap::const_iterator it = FetchCoin(outpoint);
     Assume(m_dirty_count == dirty_count);
+    Assume((it != cacheCoins.end() && !it->second.coin.IsSpent()) == HaveCoinInCache(outpoint));
     if (it == cacheCoins.end()) {
         return coinEmpty;
     } else {
