@@ -5,6 +5,7 @@
 #include <pubkey.h>
 #include <script/descriptor.h>
 #include <script/sign.h>
+#include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <util/check.h>
 #include <util/strencodings.h>
@@ -14,6 +15,7 @@
 
 #include <optional>
 #include <regex>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -670,6 +672,32 @@ BOOST_AUTO_TEST_CASE(descriptor_cache_merge_and_diff)
     BOOST_CHECK(fetched == derived);
     BOOST_CHECK(diff.GetCachedLastHardenedExtPubKey(4, fetched));
     BOOST_CHECK(fetched == last_hardened);
+}
+
+BOOST_AUTO_TEST_CASE(descriptor_cache_merge_conflict_is_atomic)
+{
+    const CExtPubKey existing{TestExtPubKey(1, 0x01)};
+    const CExtPubKey parent{TestExtPubKey(2, 0x02)};
+    const CExtPubKey conflicting{TestExtPubKey(3, 0x03)};
+
+    DescriptorCache cache;
+    cache.CacheDerivedExtPubKey(2, 3, existing);
+
+    DescriptorCache other;
+    other.CacheParentExtPubKey(1, parent);
+    other.CacheDerivedExtPubKey(2, 3, conflicting);
+
+    const auto parent_xpubs_before{cache.GetCachedParentExtPubKeys()};
+    const auto derived_xpubs_before{cache.GetCachedDerivedExtPubKeys()};
+    const auto last_hardened_xpubs_before{cache.GetCachedLastHardenedExtPubKeys()};
+
+    BOOST_CHECK_EXCEPTION(
+        (void)cache.MergeAndDiff(other),
+        std::runtime_error,
+        HasReason{"New cached derived xpub does not match already cached derived xpub"});
+    BOOST_CHECK(cache.GetCachedParentExtPubKeys() == parent_xpubs_before);
+    BOOST_CHECK(cache.GetCachedDerivedExtPubKeys() == derived_xpubs_before);
+    BOOST_CHECK(cache.GetCachedLastHardenedExtPubKeys() == last_hardened_xpubs_before);
 }
 
 BOOST_AUTO_TEST_CASE(descriptor_test)
