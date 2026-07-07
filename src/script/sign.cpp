@@ -1024,6 +1024,9 @@ bool IsSegWitOutput(const SigningProvider& provider, const CScript& script)
 
 bool SignTransaction(CMutableTransaction& mtx, const SigningProvider* keystore, const std::map<COutPoint, Coin>& coins, const SignOptions& options, std::map<int, bilingual_str>& input_errors)
 {
+    input_errors.clear();
+    Assume(input_errors.empty());
+
     bool fHashSingle = ((options.sighash_type & ~SIGHASH_ANYONECANPAY) == SIGHASH_SINGLE);
 
     // Use CTransaction for the constant parts of the
@@ -1086,6 +1089,11 @@ bool SignTransaction(CMutableTransaction& mtx, const SigningProvider* keystore, 
             // If this input succeeds, make sure there is no error set for it
             input_errors.erase(i);
         }
+    }
+    for (const auto& [input_index, error] : input_errors) {
+        Assume(input_index >= 0);
+        Assume(static_cast<size_t>(input_index) < mtx.vin.size());
+        Assume(!error.empty());
     }
     return input_errors.empty();
 }
