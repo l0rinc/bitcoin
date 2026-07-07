@@ -28,6 +28,7 @@ static const std::string SAFE_CHARS[] =
 
 std::string SanitizeString(std::string_view str, int rule)
 {
+    Assert(rule >= SAFE_CHARS_DEFAULT && rule <= SAFE_CHARS_URI);
     std::string result;
     for (char c : str) {
         if (SAFE_CHARS[rule].find(c) != std::string::npos) {
