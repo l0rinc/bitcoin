@@ -971,6 +971,46 @@ BOOST_FIXTURE_TEST_CASE(received_block_transactions_skips_failed_unlinked_child,
     chainman.CheckBlockIndex();
 }
 
+BOOST_FIXTURE_TEST_CASE(received_block_transactions_links_pruned_unlinked_child, TestChain100Setup)
+{
+    ChainstateManager& chainman{*Assert(m_node.chainman)};
+    Chainstate& chainstate{chainman.ActiveChainstate()};
+    auto& blockman{chainman.m_blockman};
+
+    LOCK(chainman.GetMutex());
+    CBlockIndex* tip{chainman.ActiveChain().Tip()};
+    CBlockIndex* parent{blockman.AddToBlockIndex(ChildHeader(*tip, /*nonce=*/9), chainman.m_best_header)};
+    CBlockIndex* child{blockman.AddToBlockIndex(ChildHeader(*parent, /*nonce=*/10), chainman.m_best_header)};
+
+    CBlock child_block{DummyBlockWithTransactions(/*tx_count=*/2)};
+    const FlatFilePos child_pos{1, 1};
+    blockman.UpdateBlockInfo(child_block, child->nHeight, child_pos);
+    chainman.ReceivedBlockTransactions(child_block, child, child_pos);
+    BOOST_REQUIRE(child->nStatus & BLOCK_HAVE_DATA);
+    BOOST_REQUIRE(!child->HaveNumChainTxs());
+    BOOST_CHECK_EQUAL(blockman.m_blocks_unlinked.count(parent), 1U);
+
+    blockman.m_have_pruned = true;
+    blockman.PruneOneBlockFile(child_pos.nFile);
+    BOOST_CHECK(!(child->nStatus & BLOCK_HAVE_DATA));
+    BOOST_CHECK(!child->HaveNumChainTxs());
+    BOOST_CHECK_EQUAL(blockman.m_blocks_unlinked.count(parent), 1U);
+    chainman.CheckBlockIndex();
+
+    CBlock parent_block{DummyBlockWithTransactions(/*tx_count=*/3)};
+    const FlatFilePos parent_pos{2, 1};
+    blockman.UpdateBlockInfo(parent_block, parent->nHeight, parent_pos);
+    chainman.ReceivedBlockTransactions(parent_block, parent, parent_pos);
+
+    BOOST_CHECK(parent->HaveNumChainTxs());
+    BOOST_CHECK(child->HaveNumChainTxs());
+    BOOST_CHECK_EQUAL(child->m_chain_tx_count, parent->m_chain_tx_count + child->nTx);
+    BOOST_CHECK(!(child->nStatus & BLOCK_HAVE_DATA));
+    BOOST_CHECK_EQUAL(blockman.m_blocks_unlinked.count(parent), 0U);
+    BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(parent), 1U);
+    chainman.CheckBlockIndex();
+}
+
 BOOST_FIXTURE_TEST_CASE(received_block_transactions_readds_pruned_candidate, TestChain100Setup)
 {
     ChainstateManager& chainman{*Assert(m_node.chainman)};
