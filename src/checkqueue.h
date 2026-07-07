@@ -246,7 +246,14 @@ public:
 
     void Add(std::vector<T>&& vChecks)
     {
+        const bool added_work{!vChecks.empty()};
+        if (added_work) {
+            fDone = false;
+        }
         m_queue.Add(std::move(vChecks));
+        if (added_work) {
+            Assume(!fDone);
+        }
     }
 
     ~CCheckQueueControl() UNLOCK_FUNCTION()
