@@ -1986,7 +1986,8 @@ std::tuple<std::vector<DepGraphIndex>, bool, uint64_t> Linearize(
  *                               potentially better linearization for the same graph.
  *
  * Postlinearization guarantees:
- * - The resulting chunks are connected.
+ * - When the resulting chunk feerates are representable without saturation, the resulting chunks
+ *   are connected.
  * - If the input has a tree shape (either all transactions have at most one child, or all
  *   transactions have at most one parent), the result is optimal.
  * - Given a linearization L1 and a leaf transaction T in it. Let L2 be L1 with T moved to the end,
@@ -2006,7 +2007,8 @@ void PostLinearize(const DepGraph<SetType>& depgraph, std::span<DepGraphIndex> l
     // This algorithm performs a number of passes (currently 2); the even ones operate from back to
     // front, the odd ones from front to back. Each results in an equal-or-better linearization
     // than the one started from.
-    // - One pass in either direction guarantees that the resulting chunks are connected.
+    // - One pass in either direction guarantees that the resulting chunks are connected when chunk
+    //   feerates are representable without saturation.
     // - Each direction corresponds to one shape of tree being linearized optimally (forward passes
     //   guarantee this for graphs where each transaction has at most one child; backward passes
     //   guarantee this for graphs where each transaction has at most one parent).
@@ -2191,8 +2193,10 @@ void PostLinearize(const DepGraph<SetType>& depgraph, std::span<DepGraphIndex> l
     }
     Assume(done == depgraph.Positions());
     if constexpr (G_ABORT_ON_FAILED_ASSUME) {
-        for (const auto& chunk : ChunkLinearizationInfo(depgraph, linearization)) {
-            Assume(depgraph.IsConnected(chunk.transactions));
+        if (ComparableChunkLinearization(depgraph, linearization)) {
+            for (const auto& chunk : ChunkLinearizationInfo(depgraph, linearization)) {
+                Assume(depgraph.IsConnected(chunk.transactions));
+            }
         }
         if (input_chunking) {
             if (const auto output_chunking{ComparableChunkLinearization(depgraph, linearization)}) {
