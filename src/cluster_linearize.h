@@ -173,6 +173,14 @@ public:
             entry.ancestors &= m_used;
             entry.descendants &= m_used;
         }
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            Assume(m_used.None() == entries.empty());
+            Assume(m_used.None() || m_used.Last() + 1 == entries.size());
+            for (const auto idx : m_used) {
+                Assume(entries[idx].ancestors.IsSubsetOf(m_used));
+                Assume(entries[idx].descendants.IsSubsetOf(m_used));
+            }
+        }
     }
 
     /** Modify this transaction graph, adding multiple parents to a specified child.
