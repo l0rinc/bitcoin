@@ -971,6 +971,39 @@ BOOST_FIXTURE_TEST_CASE(received_block_transactions_skips_failed_unlinked_child,
     chainman.CheckBlockIndex();
 }
 
+BOOST_FIXTURE_TEST_CASE(received_block_transactions_readds_pruned_candidate, TestChain100Setup)
+{
+    ChainstateManager& chainman{*Assert(m_node.chainman)};
+    Chainstate& chainstate{chainman.ActiveChainstate()};
+    auto& blockman{chainman.m_blockman};
+
+    LOCK(chainman.GetMutex());
+    CBlockIndex* tip{chainman.ActiveChain().Tip()};
+    CBlockIndex* child{blockman.AddToBlockIndex(ChildHeader(*tip, /*nonce=*/11), chainman.m_best_header)};
+
+    CBlock block{DummyBlockWithTransactions(/*tx_count=*/2)};
+    const FlatFilePos first_pos{1, 1};
+    blockman.UpdateBlockInfo(block, child->nHeight, first_pos);
+    chainman.ReceivedBlockTransactions(block, child, first_pos);
+    BOOST_REQUIRE(child->HaveNumChainTxs());
+    BOOST_REQUIRE(child->nStatus & BLOCK_HAVE_DATA);
+    BOOST_REQUIRE_EQUAL(chainstate.setBlockIndexCandidates.count(child), 1U);
+
+    blockman.m_have_pruned = true;
+    blockman.PruneOneBlockFile(first_pos.nFile);
+    BOOST_REQUIRE(!(child->nStatus & BLOCK_HAVE_DATA));
+    BOOST_REQUIRE_EQUAL(chainstate.setBlockIndexCandidates.count(child), 1U);
+
+    const FlatFilePos second_pos{2, 1};
+    blockman.UpdateBlockInfo(block, child->nHeight, second_pos);
+    chainman.ReceivedBlockTransactions(block, child, second_pos);
+
+    BOOST_CHECK(child->nStatus & BLOCK_HAVE_DATA);
+    BOOST_CHECK(child->HaveNumChainTxs());
+    BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(child), 1U);
+    chainman.CheckBlockIndex();
+}
+
 BOOST_FIXTURE_TEST_CASE(received_block_transactions_records_block_metadata, TestChain100Setup)
 {
     ChainstateManager& chainman{*Assert(m_node.chainman)};
