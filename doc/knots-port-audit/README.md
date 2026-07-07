@@ -7799,7 +7799,21 @@ Functional tests:
   --tmpdir=/mnt/my_storage/tmp_feature_rbf_validation_order --portseed=47233
   --loglevel=ERROR`.
 
-The full `feature_block.py` run reached the large-reorg section but failed
-because `/tmp` was full and the node shut down with `Disk space is too low!`;
-the `--skipreorg` rerun above passed on a temp directory under
-`/mnt/my_storage`.
+Final verification after the last port/test fixes:
+- `cmake --build build --target bitcoind bitcoin-cli test_bitcoin -j4`
+  passed after the final RPC metadata rebuild.
+- `build/bin/test_bitcoin --catch_system_errors=no --log_level=error
+  --report_level=short` exited 0 with all 27,178,697 assertions passing; 7
+  cases were skipped and 2 warning-level cases were reported by Boost.
+- `python3 build/test/functional/test_runner.py --extended --jobs=4
+  --failfast --tmpdirprefix=/mnt/my_storage/tmp_knots_functional_extended
+  --resultsfile=/mnt/my_storage/tmp_knots_functional_results/extended-20260707-0000.csv`
+  passed. The results CSV ends with `ALL,Passed,1872`; the run covered all
+  343 functional entries including extended `feature_dbcrash.py`,
+  `feature_index_prune.py`, `feature_pruning.py`, `feature_rbf.py`, and
+  `mempool_package_rbf.py`. Skips were limited to unavailable build/runtime
+  features in this configuration: BDB legacy-wallet variants, IPC, ZMQ, USDT,
+  `bitcoin-chainstate`/`bitcoin-tx`/`bitcoin-util`/wrapper/bench binaries,
+  previous-release compatibility tests, and routable-address bind tests.
+  The runner warned that an unrelated `bitcoind` was already running on the
+  host; the suite still passed using isolated datadirs and ports.
