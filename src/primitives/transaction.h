@@ -24,9 +24,15 @@
 #include <utility>
 #include <vector>
 
+class CCoinsCacheHasher;
+
 /** An outpoint - a combination of a transaction hash and an index n into its vout */
 class COutPoint
 {
+    //! CCoinsMap hash cache, filled atomically by CCoinsCacheHasher.
+    mutable size_t m_cached_salted_hash{0};
+    friend class CCoinsCacheHasher;
+
 public:
     Txid hash;
     uint32_t n;
