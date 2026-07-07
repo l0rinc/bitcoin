@@ -139,6 +139,20 @@ BOOST_FIXTURE_TEST_CASE(rbf_helper_functions, TestChain100Setup)
     BOOST_CHECK_EQUAL(pool.GetUniqueClusterCount(set_78_high), 2U);
     BOOST_CHECK_EQUAL(pool.GetUniqueClusterCount(all_entries), 5U);
 
+    CTxMemPool::setEntries descendants_from_entry1;
+    pool.CalculateDescendants(entry1_normal, descendants_from_entry1);
+    BOOST_CHECK(descendants_from_entry1 == set_12_normal);
+    BOOST_CHECK_EQUAL(pool.GetUniqueClusterCount({entry1_normal}), pool.GetUniqueClusterCount(descendants_from_entry1));
+
+    const CTxMemPool::setEntries direct_conflicts{entry1_normal, entry7_high};
+    CTxMemPool::setEntries expanded_conflicts;
+    for (const auto& direct_conflict : direct_conflicts) {
+        pool.CalculateDescendants(direct_conflict, expanded_conflicts);
+    }
+    const CTxMemPool::setEntries expected_expanded_conflicts{entry1_normal, entry2_normal, entry7_high};
+    BOOST_CHECK(expanded_conflicts == expected_expanded_conflicts);
+    BOOST_CHECK_EQUAL(pool.GetUniqueClusterCount(direct_conflicts), pool.GetUniqueClusterCount(expanded_conflicts));
+
     // Tests for EntriesAndTxidsDisjoint
     BOOST_CHECK(EntriesAndTxidsDisjoint(empty_set, {tx1->GetHash()}, unused_txid) == std::nullopt);
     BOOST_CHECK(EntriesAndTxidsDisjoint(set_12_normal, {tx3->GetHash()}, unused_txid) == std::nullopt);
