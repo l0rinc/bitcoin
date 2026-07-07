@@ -6,6 +6,7 @@
 #include <common/args.h>
 #include <rpc/client.h>
 #include <tinyformat.h>
+#include <util/check.h>
 
 #include <cstdint>
 #include <set>
@@ -446,6 +447,8 @@ UniValue RPCConvertValues(const std::string &strMethod, const std::vector<std::s
         params.push_back(ParseParam(rpc_convert::FromPosition(strMethod, params.size()), s));
     }
 
+    Assume(params.isArray());
+    Assume(params.size() == strParams.size());
     return params;
 }
 
@@ -519,5 +522,6 @@ UniValue RPCConvertNamedValues(const std::string &strMethod, const std::vector<s
         params.pushKVEnd("args", std::move(positional_args));
     }
 
+    Assume(params.isObject());
     return params;
 }
