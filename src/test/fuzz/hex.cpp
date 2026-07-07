@@ -25,6 +25,21 @@ FUZZ_TARGET(hex)
     const std::vector<std::byte> bytes{ParseHex<std::byte>(random_hex_string)};
     assert(std::ranges::equal(std::as_bytes(std::span{data}), bytes));
     const std::string hex_data = HexStr(data);
+    assert(hex_data.size() == data.size() * 2);
+    const auto reparsed_hex_data{TryParseHex<uint8_t>(hex_data)};
+    assert(reparsed_hex_data && std::ranges::equal(*reparsed_hex_data, data));
+    std::string spaced_hex;
+    for (size_t i{0}; i < hex_data.size(); i += 2) {
+        if (!spaced_hex.empty()) {
+            spaced_hex += ' ';
+        }
+        spaced_hex.append(hex_data, i, 2);
+    }
+    const auto wrapped_spaced_hex{" \t\n" + spaced_hex + " \r\n"};
+    const auto parsed_spaced_hex{ParseHex(wrapped_spaced_hex)};
+    assert(std::ranges::equal(parsed_spaced_hex, data));
+    const auto reparsed_spaced_hex{TryParseHex<uint8_t>(wrapped_spaced_hex)};
+    assert(reparsed_spaced_hex && std::ranges::equal(*reparsed_spaced_hex, data));
     if (IsHex(random_hex_string)) {
         assert(ToLower(random_hex_string) == hex_data);
     }
