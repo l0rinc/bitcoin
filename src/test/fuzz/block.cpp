@@ -60,9 +60,19 @@ FUZZ_TARGET(block, .init = initialize_block)
 
     DataStream serialized_block;
     serialized_block << TX_WITH_WITNESS(block);
+    const size_t with_witness_size{serialized_block.size()};
+    assert(with_witness_size == GetSerializeSize(TX_WITH_WITNESS(block)));
     CBlock deserialized_block;
     serialized_block >> TX_WITH_WITNESS(deserialized_block);
     assert_block_unchanged(deserialized_block);
+
+    DataStream no_witness_serialized_block;
+    no_witness_serialized_block << TX_NO_WITNESS(block);
+    assert(no_witness_serialized_block.size() == GetSerializeSize(TX_NO_WITNESS(block)));
+    const int64_t expected_block_weight{
+        static_cast<int64_t>(no_witness_serialized_block.size()) * (WITNESS_SCALE_FACTOR - 1) +
+        static_cast<int64_t>(with_witness_size)};
+    assert(GetBlockWeight(block) == expected_block_weight);
 
     if (!buffer.empty() && (buffer.back() & 1U)) {
         CBlock resized_block{block};
@@ -117,7 +127,6 @@ FUZZ_TARGET(block, .init = initialize_block)
     if (!block.vtx.empty()) {
         (void)BlockWitnessMerkleRoot(block);
     }
-    (void)GetBlockWeight(block);
     (void)GetWitnessCommitmentIndex(block);
     const size_t raw_memory_size = RecursiveDynamicUsage(block);
     const size_t raw_memory_size_as_shared_ptr = RecursiveDynamicUsage(std::make_shared<CBlock>(block));
