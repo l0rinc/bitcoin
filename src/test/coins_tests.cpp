@@ -1600,6 +1600,26 @@ BOOST_AUTO_TEST_CASE(ccoins_emplace_duplicate_keeps_usage_balanced)
     BOOST_CHECK(cache.AccessCoin(outpoint) == coin1);
 }
 
+BOOST_AUTO_TEST_CASE(ccoins_emplace_internal_marks_dirty_not_fresh)
+{
+    CCoinsViewCacheTest cache{&CoinsViewEmpty::Get()};
+
+    const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), m_rng.rand32()};
+    const Coin coin{CTxOut{VALUE1, CScript{} << OP_TRUE}, 1, false};
+
+    cache.EmplaceCoinInternalDANGER(COutPoint{outpoint}, Coin{coin});
+    BOOST_CHECK_EQUAL(GetCoinsMapEntry(cache.map(), outpoint), VALUE1_DIRTY);
+    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), 1U);
+    BOOST_CHECK(cache.AccessCoin(outpoint) == coin);
+    cache.SelfTest();
+
+    Coin spent;
+    BOOST_REQUIRE(cache.SpendCoin(outpoint, &spent));
+    BOOST_CHECK(spent == coin);
+    BOOST_CHECK_EQUAL(GetCoinsMapEntry(cache.map(), outpoint), SPENT_DIRTY);
+    cache.SelfTest();
+}
+
 BOOST_AUTO_TEST_CASE(ccoins_uncache_cache_entry_contracts)
 {
     CCoinsViewTest base{m_rng};
