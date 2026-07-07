@@ -9,6 +9,7 @@
 #include <script/interpreter.h>
 #include <script/solver.h>
 #include <tinyformat.h>
+#include <util/check.h>
 #include <util/overflow.h>
 #include <util/strencodings.h>
 
@@ -87,6 +88,7 @@ CTxDestination DecodeDestination(const std::string& str, const CChainParams& par
     std::vector<unsigned char> data;
     uint160 hash;
     error_str = "";
+    if (error_locations) error_locations->clear();
 
     // Note this will be false if it is a valid Bech32 address for a different network
     bool is_bech32 = (ToLower(str.substr(0, params.Bech32HRP().size())) == params.Bech32HRP());
@@ -308,6 +310,7 @@ CTxDestination DecodeDestination(const std::string& str, std::string& error_msg,
 {
     CTxDestination dest{DecodeDestination(str, Params(), error_msg, error_locations)};
     ValidDestinationMatchesError(dest, error_msg);
+    if (error_locations && IsValidDestination(dest)) Assert(error_locations->empty());
     return dest;
 }
 
