@@ -1673,22 +1673,34 @@ FUZZ_TARGET(clusterlin_postlinearize_moved_leaf)
 
     // Construct a linearization identical to lin, but with the tail end of lin_leaf moved to the
     // back.
+    const auto leaf{lin_leaf.back()};
     std::vector<DepGraphIndex> lin_moved;
     for (auto i : lin) {
-        if (i != lin_leaf.back()) lin_moved.push_back(i);
+        if (i != leaf) lin_moved.push_back(i);
     }
-    lin_moved.push_back(lin_leaf.back());
+    lin_moved.push_back(leaf);
 
-    // Postlinearize lin_moved.
-    PostLinearize(depgraph, lin_moved);
-    SanityCheck(depgraph, lin_moved);
-
-    // Compare diagrams (applying the fee delta after computing the old one).
+    // Compare diagrams when postlinearizing before and after the fee increase.
     auto old_chunking = ComparableChunkLinearization(depgraph, lin);
-    depgraph.FeeRate(lin_leaf.back()).fee += fee_inc;
-    auto new_chunking = ComparableChunkLinearization(depgraph, lin_moved);
-    if (old_chunking && new_chunking) {
-        auto cmp = CompareChunks(*new_chunking, *old_chunking);
+    auto pre_fee_post_linearization{lin_moved};
+    PostLinearize(depgraph, pre_fee_post_linearization);
+    SanityCheck(depgraph, pre_fee_post_linearization);
+
+    depgraph.FeeRate(leaf).fee += fee_inc;
+
+    auto direct_post_linearization{lin_moved};
+    PostLinearize(depgraph, direct_post_linearization);
+    SanityCheck(depgraph, direct_post_linearization);
+
+    auto pre_fee_post_chunking = ComparableChunkLinearization(depgraph, pre_fee_post_linearization);
+    if (old_chunking && pre_fee_post_chunking) {
+        auto cmp = CompareChunks(*pre_fee_post_chunking, *old_chunking);
+        assert(cmp >= 0);
+    }
+
+    auto direct_post_chunking = ComparableChunkLinearization(depgraph, direct_post_linearization);
+    if (old_chunking && direct_post_chunking) {
+        auto cmp = CompareChunks(*direct_post_chunking, *old_chunking);
         assert(cmp >= 0);
     }
 }
