@@ -355,7 +355,7 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
     BOOST_CHECK(response.find("Content-Type: text/html; charset=ISO-8859-1\r\n") != std::string::npos);
     BOOST_CHECK(response.ends_with("\r\n\r\nabc"));
     BOOST_CHECK(client->m_keep_alive);
-    BOOST_CHECK(client->m_send_ready);
+    BOOST_CHECK(WITH_LOCK(client->m_send_mutex, return client->m_send_ready));
     BOOST_CHECK(!client->m_req_busy);
 
     auto optimistic_pipes{std::make_shared<DynSock::Pipes>()};
@@ -374,7 +374,7 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
     optimistic_req.WriteReply(HTTP_OK, "abc");
 
     BOOST_CHECK(WITH_LOCK(optimistic_client->m_send_mutex, return optimistic_client->m_send_buffer.empty()));
-    BOOST_CHECK(!optimistic_client->m_send_ready.load());
+    BOOST_CHECK(WITH_LOCK(optimistic_client->m_send_mutex, return !optimistic_client->m_send_ready));
     BOOST_CHECK(!optimistic_client->m_connection_busy.load());
     BOOST_CHECK(optimistic_client->m_disconnect.load());
     BOOST_CHECK(!optimistic_client->m_keep_alive.load());
@@ -426,7 +426,7 @@ BOOST_AUTO_TEST_CASE(http_response_tests)
     BOOST_CHECK(response_close_response.find("Content-Length: 4\r\n") != std::string::npos);
     BOOST_CHECK(response_close_response.ends_with("\r\n\r\nboom"));
     BOOST_CHECK(!response_close_client->m_keep_alive.load());
-    BOOST_CHECK(response_close_client->m_send_ready.load());
+    BOOST_CHECK(WITH_LOCK(response_close_client->m_send_mutex, return response_close_client->m_send_ready));
     BOOST_CHECK(!response_close_client->m_req_busy.load());
 
     auto head_pipes{std::make_shared<DynSock::Pipes>()};
@@ -503,7 +503,10 @@ BOOST_AUTO_TEST_CASE(http_send_buffer_tests)
             std::move(sock))};
         const auto idle_before{SteadySeconds::min()};
         client->m_idle_since = idle_before;
-        client->m_send_ready = true;
+        {
+            LOCK(client->m_send_mutex);
+            client->m_send_ready = true;
+        }
         client->m_connection_busy = false;
         client->m_disconnect = false;
 
@@ -511,7 +514,7 @@ BOOST_AUTO_TEST_CASE(http_send_buffer_tests)
 
         BOOST_CHECK(!scripted_sock->m_send_called);
         BOOST_CHECK(WITH_LOCK(client->m_send_mutex, return client->m_send_buffer.empty()));
-        BOOST_CHECK(!client->m_send_ready.load());
+        BOOST_CHECK(WITH_LOCK(client->m_send_mutex, return !client->m_send_ready));
         BOOST_CHECK(!client->m_connection_busy.load());
         BOOST_CHECK(!client->m_disconnect.load());
         BOOST_CHECK_EQUAL(client->m_idle_since.load(), idle_before);
@@ -540,7 +543,10 @@ BOOST_AUTO_TEST_CASE(http_send_buffer_tests)
             client->m_send_buffer = initial_bytes;
         }
         client->m_keep_alive = keep_alive;
-        client->m_send_ready = false;
+        {
+            LOCK(client->m_send_mutex);
+            client->m_send_ready = false;
+        }
         client->m_connection_busy = true;
         client->m_disconnect = false;
 
@@ -556,7 +562,7 @@ BOOST_AUTO_TEST_CASE(http_send_buffer_tests)
 
         const std::vector<std::byte> remaining{WITH_LOCK(client->m_send_mutex, return client->m_send_buffer)};
         BOOST_CHECK(remaining == ToBytes(expected_remaining));
-        BOOST_CHECK_EQUAL(client->m_send_ready.load(), expected_send_ready);
+        BOOST_CHECK_EQUAL(WITH_LOCK(client->m_send_mutex, return client->m_send_ready), expected_send_ready);
         if (expected_connection_busy) {
             BOOST_CHECK_EQUAL(client->m_connection_busy.load(), *expected_connection_busy);
         }
