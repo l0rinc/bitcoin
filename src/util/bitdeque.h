@@ -442,9 +442,12 @@ public:
     }
     reference emplace_back(bool val)
     {
+        const size_type old_size{size()};
         extend_back(1);
+        Assume(size() == old_size + 1);
         auto ref = back();
         ref = val;
+        Assume(back() == val);
         SanityCheck();
         return ref;
     }
@@ -458,9 +461,12 @@ public:
     }
     reference emplace_front(bool val)
     {
+        const size_type old_size{size()};
         extend_front(1);
+        Assume(size() == old_size + 1);
         auto ref = front();
         ref = val;
+        Assume(front() == val);
         SanityCheck();
         return ref;
     }
