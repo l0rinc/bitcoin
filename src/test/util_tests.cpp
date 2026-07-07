@@ -2128,6 +2128,31 @@ BOOST_AUTO_TEST_CASE(vecdeque_clear_keeps_capacity)
     BOOST_CHECK_EQUAL(queue.back(), 42);
 }
 
+BOOST_AUTO_TEST_CASE(vecdeque_empty_reallocation_paths_keep_zero_capacity)
+{
+    VecDeque<int> queue;
+    BOOST_CHECK(queue.empty());
+    BOOST_CHECK_EQUAL(queue.size(), 0U);
+    BOOST_CHECK_EQUAL(queue.capacity(), 0U);
+
+    queue.reserve(0);
+    BOOST_CHECK(queue.empty());
+    BOOST_CHECK_EQUAL(queue.capacity(), 0U);
+
+    queue.shrink_to_fit();
+    BOOST_CHECK(queue.empty());
+    BOOST_CHECK_EQUAL(queue.capacity(), 0U);
+
+    queue = VecDeque<int>{};
+    BOOST_CHECK(queue.empty());
+    BOOST_CHECK_EQUAL(queue.capacity(), 0U);
+
+    VecDeque<int> source;
+    queue = std::move(source);
+    BOOST_CHECK(queue.empty());
+    BOOST_CHECK_EQUAL(queue.capacity(), 0U);
+}
+
 BOOST_AUTO_TEST_CASE(vecdeque_reserve_shrink_preserves_wrapped_contents)
 {
     VecDeque<int> queue;
