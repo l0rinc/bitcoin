@@ -163,7 +163,22 @@ FUZZ_TARGET(script, .init = initialize_script)
     if (other_script) {
         {
             CScript script_mut{script};
-            (void)FindAndDelete(script_mut, *other_script);
+            const size_t original_size{script_mut.size()};
+            const int found{FindAndDelete(script_mut, *other_script)};
+            assert(found >= 0);
+            assert(script_mut.size() + static_cast<size_t>(found) * other_script->size() == original_size);
+            if (found == 0) {
+                assert(script_mut == script);
+            }
+
+            CScript second_pass{script_mut};
+            const size_t second_pass_size{second_pass.size()};
+            const int found_second_pass{FindAndDelete(second_pass, *other_script)};
+            assert(found_second_pass >= 0);
+            assert(second_pass.size() + static_cast<size_t>(found_second_pass) * other_script->size() == second_pass_size);
+            if (found_second_pass == 0) {
+                assert(second_pass == script_mut);
+            }
         }
         const std::vector<std::string> random_string_vector = ConsumeRandomLengthStringVector(fuzzed_data_provider);
         const auto flags_rand{fuzzed_data_provider.ConsumeIntegral<script_verify_flags::value_type>()};
