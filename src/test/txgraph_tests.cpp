@@ -853,6 +853,34 @@ BOOST_AUTO_TEST_CASE(txgraph_main_memory_usage_after_staged_unlink_clears_oversi
     graph->SanityCheck();
 }
 
+BOOST_AUTO_TEST_CASE(txgraph_set_transaction_fee_updates_staged_copy)
+{
+    auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
+
+    std::vector<TxGraph::Ref> refs;
+    refs.reserve(3);
+
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{10, 11});
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{1, 10});
+    graph->AddDependency(/*parent=*/refs[0], /*child=*/refs[1]);
+
+    graph->StartStaging();
+    graph->AddTransaction(refs.emplace_back(), FeePerWeight{2, 10});
+    graph->AddDependency(/*parent=*/refs[1], /*child=*/refs[2]);
+    BOOST_REQUIRE_EQUAL(graph->GetCluster(refs[0], TxGraph::Level::TOP).size(), 3U);
+
+    graph->SetTransactionFee(refs[0], /*fee=*/30);
+    BOOST_CHECK((graph->GetIndividualFeerate(refs[0]) == FeePerWeight{30, 11}));
+
+    const auto [main_diagram, staging_diagram] = graph->GetMainStagingDiagrams();
+    CheckDiagram(main_diagram, {{30, 11}, {1, 10}});
+    CheckDiagram(staging_diagram, {{30, 11}, {3, 20}});
+
+    graph->CommitStaging();
+    BOOST_CHECK((graph->GetIndividualFeerate(refs[0]) == FeePerWeight{30, 11}));
+    graph->SanityCheck();
+}
+
 BOOST_AUTO_TEST_CASE(txgraph_staging_diagrams_sort_equal_feerate_chunks)
 {
     auto graph = MakeTxGraph(10, 1000, HIGH_ACCEPTABLE_COST, PointerComparator);
