@@ -127,8 +127,35 @@ BOOST_AUTO_TEST_CASE(listen_ok_accept_fail)
         ASSERT_DEBUG_LOG("Error accepting");
         ASSERT_DEBUG_LOG("Destroying I2P SAM session");
         BOOST_REQUIRE(session.Listen(conn));
+        BOOST_CHECK(conn.sock != nullptr);
+        BOOST_CHECK(conn.me.IsI2P());
+        BOOST_CHECK_EQUAL(conn.me.GetPort(), I2P_SAM31_PORT);
         BOOST_REQUIRE(!session.Accept(conn));
     }
+}
+
+BOOST_AUTO_TEST_CASE(connect_rejects_arbitrary_port_without_proxy_error)
+{
+    size_t num_sockets{0};
+    CreateSock = [&num_sockets](int, int, int) {
+        ++num_sockets;
+        return std::make_unique<StaticContentsSock>("");
+    };
+
+    auto interrupt{std::make_shared<CThreadInterrupt>()};
+    const CService sam_addr{in6_addr(COMPAT_IN6ADDR_LOOPBACK_INIT), /*port=*/7656};
+    const Proxy sam_proxy{sam_addr, /*tor_stream_isolation=*/false};
+    i2p::sam::Session session(gArgs.GetDataDirNet() / "test_i2p_private_key_reject_port",
+                              sam_proxy,
+                              interrupt);
+
+    i2p::Connection conn;
+    bool proxy_error{true};
+    const CService to{in6_addr(COMPAT_IN6ADDR_LOOPBACK_INIT), /*port=*/1};
+    BOOST_CHECK(!session.Connect(to, conn, proxy_error));
+    BOOST_CHECK(!proxy_error);
+    BOOST_CHECK(conn.sock == nullptr);
+    BOOST_CHECK_EQUAL(num_sockets, 0);
 }
 
 BOOST_AUTO_TEST_CASE(damaged_private_key)
