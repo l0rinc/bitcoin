@@ -39,6 +39,46 @@ static void GetFuture(std::future<void>& future, uint32_t& fail_counter)
     }
 }
 
+static void AssertRejectedSubmissionsDoNotQueueTasks(FuzzedDataProvider& fuzzed_data_provider)
+{
+    ThreadPool pool{"fuzzrej"};
+    std::atomic_uint32_t rejected_counter{0};
+
+    auto submit_rejected_tasks = [&](ThreadPool::SubmitError expected_error) {
+        auto single_result{pool.Submit(CounterTask{rejected_counter})};
+        assert(!single_result);
+        assert(single_result.error() == expected_error);
+        assert(pool.WorkQueueSize() == 0);
+
+        const uint32_t range_size{fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(0, 8)};
+        std::vector<std::function<void()>> tasks;
+        tasks.reserve(range_size);
+        for (uint32_t idx{0}; idx < range_size; ++idx) {
+            tasks.emplace_back(CounterTask{rejected_counter});
+        }
+        auto range_result{pool.Submit(std::move(tasks))};
+        assert(!range_result);
+        assert(range_result.error() == expected_error);
+        assert(pool.WorkQueueSize() == 0);
+    };
+
+    submit_rejected_tasks(ThreadPool::SubmitError::Inactive);
+    assert(rejected_counter.load(std::memory_order_relaxed) == 0);
+    if (fuzzed_data_provider.ConsumeBool()) {
+        pool.Start(1);
+        auto future{*Assert(pool.Submit([] {}))};
+        future.get();
+        pool.Stop();
+        assert(rejected_counter.load(std::memory_order_relaxed) == 0);
+    }
+
+    pool.Start(1);
+    pool.Interrupt();
+    submit_rejected_tasks(ThreadPool::SubmitError::Interrupted);
+    pool.Stop();
+    assert(rejected_counter.load(std::memory_order_relaxed) == 0);
+}
+
 // Global thread pool for fuzzing. Persisting it across iterations prevents
 // the excessive thread creation/destruction overhead that can lead to
 // instability in the fuzzing environment.
@@ -67,6 +107,9 @@ FUZZ_TARGET(threadpool, .init = setup_threadpool_test)
     StartPoolIfNeeded();
 
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
+    if (fuzzed_data_provider.ConsumeBool()) {
+        AssertRejectedSubmissionsDoNotQueueTasks(fuzzed_data_provider);
+    }
 
     const uint32_t num_tasks = fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(0, 1024);
     assert(g_pool.WorkersCount() == g_num_workers);
