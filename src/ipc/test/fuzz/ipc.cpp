@@ -91,7 +91,10 @@ FUZZ_TARGET(ipc, .init = initialize_ipc)
 {
     auto& ipc = *g_ipc;
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
-    LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 64) {
+    assert(ipc.m_client->passVectorUint8({}).empty());
+
+    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 64)
+    {
         CallOneOf(
             fuzzed_data_provider,
             [&] {
