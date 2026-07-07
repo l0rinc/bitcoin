@@ -6484,6 +6484,13 @@ void ChainstateManager::RecalculateBestHeader()
             m_best_header = &entry.second;
         }
     }
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        Assume(m_best_header);
+        Assume(!(m_best_header->nStatus & BLOCK_FAILED_VALID));
+        for (const auto& [_, block_index] : m_blockman.m_block_index) {
+            Assume((block_index.nStatus & BLOCK_FAILED_VALID) || block_index.nChainWork <= m_best_header->nChainWork);
+        }
+    }
 }
 
 std::optional<int> ChainstateManager::BlocksAheadOfTip() const
