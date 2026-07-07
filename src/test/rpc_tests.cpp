@@ -77,6 +77,8 @@ static RPCErrorCode ExpectedRPCErrorCode(const node::TransactionError error)
         return RPC_TRANSACTION_REJECTED;
     case node::TransactionError::ALREADY_IN_UTXO_SET:
         return RPC_VERIFY_ALREADY_IN_UTXO_SET;
+    case node::TransactionError::PRIVATE_BROADCAST_FULL:
+        return RPC_LIMIT_EXCEEDED;
     case node::TransactionError::MISSING_INPUTS:
     case node::TransactionError::MEMPOOL_ERROR:
     case node::TransactionError::MAX_FEE_EXCEEDED:
@@ -149,6 +151,7 @@ BOOST_AUTO_TEST_CASE(transaction_error_rpc_error_shape)
         node::TransactionError::MAX_FEE_EXCEEDED,
         node::TransactionError::MAX_BURN_EXCEEDED,
         node::TransactionError::INVALID_PACKAGE,
+        node::TransactionError::PRIVATE_BROADCAST_FULL,
     };
     for (const auto error : errors) {
         const RPCErrorCode expected_code{ExpectedRPCErrorCode(error)};
