@@ -94,8 +94,22 @@ std::vector<TxOrphanage::OrphanInfo> TxDownloadManager::GetOrphanTransactions() 
 // TxDownloadManagerImpl
 void TxDownloadManagerImpl::ActiveTipChange()
 {
+    const auto peer_info_size{m_peer_info.size()};
+    const auto num_wtxid_peers{m_num_wtxid_peers};
+    const auto txrequest_size{m_txrequest.Size()};
+    const auto orphan_count{m_orphanage->CountUniqueOrphans()};
+    const auto orphan_announcements{m_orphanage->CountAnnouncements()};
+    const auto orphan_usage{m_orphanage->TotalOrphanUsage()};
+
     RecentRejectsFilter().reset();
     RecentRejectsReconsiderableFilter().reset();
+
+    Assume(m_peer_info.size() == peer_info_size);
+    Assume(m_num_wtxid_peers == num_wtxid_peers);
+    Assume(m_txrequest.Size() == txrequest_size);
+    Assume(m_orphanage->CountUniqueOrphans() == orphan_count);
+    Assume(m_orphanage->CountAnnouncements() == orphan_announcements);
+    Assume(m_orphanage->TotalOrphanUsage() == orphan_usage);
 }
 
 void TxDownloadManagerImpl::BlockConnected(const std::shared_ptr<const CBlock>& pblock)
