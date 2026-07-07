@@ -64,6 +64,32 @@ bool DiagramTotalIsRepresentable(std::span<const FeeFrac> chunks)
     return true;
 }
 
+CTxMemPool::setEntries CalculateDescendantsByInputIndex(const CTxMemPool& pool,
+                                                        const CTxMemPool::setEntries& roots)
+    EXCLUSIVE_LOCKS_REQUIRED(pool.cs)
+{
+    CTxMemPool::setEntries descendants;
+    std::vector<CTxMemPool::txiter> queue;
+    for (const auto& root : roots) {
+        assert(root != pool.mapTx.end());
+        if (descendants.insert(root).second) queue.push_back(root);
+    }
+
+    while (!queue.empty()) {
+        const auto parent{queue.back()};
+        queue.pop_back();
+        const Txid parent_txid{parent->GetTx().GetHash()};
+        auto child_it{pool.mapNextTx.lower_bound(COutPoint{parent_txid, 0})};
+        for (; child_it != pool.mapNextTx.end() && child_it->first->hash == parent_txid; ++child_it) {
+            const auto child{child_it->second};
+            assert(child != pool.mapTx.end());
+            if (child == parent) continue;
+            if (descendants.insert(child).second) queue.push_back(child);
+        }
+    }
+    return descendants;
+}
+
 void CheckPaysForRBF(FuzzedDataProvider& fuzzed_data_provider)
 {
     const CAmount original_fees{ConsumeModifiedFee(fuzzed_data_provider)};
@@ -280,6 +306,8 @@ FUZZ_TARGET(package_rbf, .init = initialize_package_rbf)
 
     CheckUniqueClusterCount(pool, direct_conflicts);
     CheckUniqueClusterCount(pool, all_conflicts);
+    assert(all_conflicts == CalculateDescendantsByInputIndex(pool, direct_conflicts));
+    assert(pool.GetUniqueClusterCount(direct_conflicts) == pool.GetUniqueClusterCount(all_conflicts));
 
     CAmount replacement_fees = ConsumeMoney(fuzzed_data_provider);
     auto changeset = pool.GetChangeSet();
