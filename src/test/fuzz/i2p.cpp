@@ -17,6 +17,8 @@
 #include <util/fs_helpers.h>
 #include <util/threadinterrupt.h>
 
+#include <cassert>
+#include <cstdint>
 #include <stdexcept>
 #include <string_view>
 
@@ -68,7 +70,12 @@ FUZZ_TARGET(i2p, .init = initialize_i2p)
     i2p::Connection conn;
 
     if (session.Listen(conn)) {
+        assert(conn.sock != nullptr);
+        assert(conn.me.IsI2P());
+        assert(conn.me.GetPort() == I2P_SAM31_PORT);
         if (session.Accept(conn)) {
+            assert(conn.peer.IsI2P());
+            assert(conn.peer.GetPort() == I2P_SAM31_PORT);
             try {
                 (void)conn.sock->RecvUntilTerminator('\n', 10ms, *interrupt, i2p::sam::MAX_MSG_SIZE);
             } catch (const std::runtime_error& e) {
@@ -79,12 +86,23 @@ FUZZ_TARGET(i2p, .init = initialize_i2p)
 
     bool proxy_error;
 
-    if (session.Connect(CService{}, conn, proxy_error)) {
+    i2p::Connection outbound_conn;
+    const uint16_t port{fuzzed_data_provider.ConsumeBool() ? I2P_SAM31_PORT : fuzzed_data_provider.ConsumeIntegral<uint16_t>()};
+    const CService to{ConsumeNetAddr(fuzzed_data_provider), port};
+    if (session.Connect(to, outbound_conn, proxy_error)) {
+        assert(port == I2P_SAM31_PORT);
+        assert(outbound_conn.sock != nullptr);
+        assert(outbound_conn.peer == to);
+        assert(outbound_conn.me.IsI2P());
+        assert(outbound_conn.me.GetPort() == I2P_SAM31_PORT);
         try {
-            conn.sock->SendComplete("verack\n", 10ms, *interrupt);
+            outbound_conn.sock->SendComplete("verack\n", 10ms, *interrupt);
         } catch (const std::runtime_error& e) {
             assert(IsExpectedSocketSendError(e.what()));
         }
+    } else if (port != I2P_SAM31_PORT) {
+        assert(!proxy_error);
+        assert(outbound_conn.sock == nullptr);
     }
 
     fs::remove(private_key_path);
