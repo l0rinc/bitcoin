@@ -558,6 +558,10 @@ std::optional<std::vector<FeeFrac>> ComparableChunkLinearization(const DepGraph<
         ret.push_back(std::move(new_chunk));
     }
     if (!CanCompareChunks(ret)) return std::nullopt;
+    Assume(CanCompareChunks(ret));
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        Assume(ret == ChunkLinearization(depgraph, linearization));
+    }
     return ret;
 }
 
