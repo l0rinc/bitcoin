@@ -1489,6 +1489,9 @@ BOOST_AUTO_TEST_CASE(sign_transaction_input_errors)
     std::map<int, bilingual_str> no_input_errors;
     BOOST_CHECK(SignTransaction(no_inputs, &keystore, {}, {.sighash_type = SIGHASH_ALL}, no_input_errors));
     BOOST_CHECK(no_input_errors.empty());
+    no_input_errors.emplace(-1, Untranslated("stale error"));
+    BOOST_CHECK(SignTransaction(no_inputs, &keystore, {}, {.sighash_type = SIGHASH_ALL}, no_input_errors));
+    BOOST_CHECK(no_input_errors.empty());
 
     CMutableTransaction missing_coin;
     missing_coin.vin.emplace_back();
