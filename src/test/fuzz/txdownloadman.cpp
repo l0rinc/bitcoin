@@ -380,7 +380,54 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                     .m_relay_permissions = HasRelayPermissions(rand_peer),
                     .m_wtxid_relay = fuzzed_data_provider.ConsumeBool()
                 };
+                const bool was_connected{txdownload_impl.m_peer_info.contains(rand_peer)};
+                bool preferred_before{false};
+                bool relay_permissions_before{false};
+                bool wtxid_relay_before{false};
+                if (was_connected) {
+                    const auto& existing_info{txdownload_impl.m_peer_info.at(rand_peer).m_connection_info};
+                    preferred_before = existing_info.m_preferred;
+                    relay_permissions_before = existing_info.m_relay_permissions;
+                    wtxid_relay_before = existing_info.m_wtxid_relay;
+                }
+                const auto peer_count_before{txdownload_impl.m_peer_info.size()};
+                const auto wtxid_peers_before{txdownload_impl.m_num_wtxid_peers};
+                const auto txrequest_size_before{txdownload_impl.m_txrequest.Size()};
+                const auto txrequest_count_before{txdownload_impl.m_txrequest.Count(rand_peer)};
+                const auto txrequest_candidates_before{txdownload_impl.m_txrequest.CountCandidates(rand_peer)};
+                const auto txrequest_inflight_before{txdownload_impl.m_txrequest.CountInFlight(rand_peer)};
+                const auto orphan_count_before{txdownload_impl.m_orphanage->CountUniqueOrphans()};
+                const auto orphan_announcements_total_before{txdownload_impl.m_orphanage->CountAnnouncements()};
+                const auto orphan_usage_total_before{txdownload_impl.m_orphanage->TotalOrphanUsage()};
+                const auto orphan_usage_before{txdownload_impl.m_orphanage->UsageByPeer(rand_peer)};
+                const auto orphan_announcements_before{txdownload_impl.m_orphanage->AnnouncementsFromPeer(rand_peer)};
+                const auto orphan_work_before{txdownload_impl.m_orphanage->HaveTxToReconsider(rand_peer)};
                 txdownload_impl.ConnectedPeer(rand_peer, info);
+                Assert(txdownload_impl.m_txrequest.Size() == txrequest_size_before);
+                Assert(txdownload_impl.m_txrequest.Count(rand_peer) == txrequest_count_before);
+                Assert(txdownload_impl.m_txrequest.CountCandidates(rand_peer) == txrequest_candidates_before);
+                Assert(txdownload_impl.m_txrequest.CountInFlight(rand_peer) == txrequest_inflight_before);
+                Assert(txdownload_impl.m_orphanage->CountUniqueOrphans() == orphan_count_before);
+                Assert(txdownload_impl.m_orphanage->CountAnnouncements() == orphan_announcements_total_before);
+                Assert(txdownload_impl.m_orphanage->TotalOrphanUsage() == orphan_usage_total_before);
+                Assert(txdownload_impl.m_orphanage->UsageByPeer(rand_peer) == orphan_usage_before);
+                Assert(txdownload_impl.m_orphanage->AnnouncementsFromPeer(rand_peer) == orphan_announcements_before);
+                Assert(txdownload_impl.m_orphanage->HaveTxToReconsider(rand_peer) == orphan_work_before);
+                const auto it{txdownload_impl.m_peer_info.find(rand_peer)};
+                Assert(it != txdownload_impl.m_peer_info.end());
+                if (was_connected) {
+                    Assert(txdownload_impl.m_peer_info.size() == peer_count_before);
+                    Assert(txdownload_impl.m_num_wtxid_peers == wtxid_peers_before);
+                    Assert(it->second.m_connection_info.m_preferred == preferred_before);
+                    Assert(it->second.m_connection_info.m_relay_permissions == relay_permissions_before);
+                    Assert(it->second.m_connection_info.m_wtxid_relay == wtxid_relay_before);
+                } else {
+                    Assert(txdownload_impl.m_peer_info.size() == peer_count_before + 1);
+                    Assert(txdownload_impl.m_num_wtxid_peers == wtxid_peers_before + (info.m_wtxid_relay ? 1 : 0));
+                    Assert(it->second.m_connection_info.m_preferred == info.m_preferred);
+                    Assert(it->second.m_connection_info.m_relay_permissions == info.m_relay_permissions);
+                    Assert(it->second.m_connection_info.m_wtxid_relay == info.m_wtxid_relay);
+                }
             },
             [&] {
                 txdownload_impl.DisconnectedPeer(rand_peer);
