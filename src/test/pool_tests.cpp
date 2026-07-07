@@ -105,6 +105,46 @@ BOOST_AUTO_TEST_CASE(zero_sized_overaligned_allocation_uses_fallback)
     BOOST_CHECK(PoolResourceTester::FreeListSizes(resource) == free_lists_before);
 }
 
+BOOST_AUTO_TEST_CASE(non_multiple_size_allocations_use_rounded_pool_blocks)
+{
+    auto resource = PoolResource<16, 8>(16);
+
+    auto* first{static_cast<std::byte*>(resource.Allocate(3, 2))};
+    BOOST_REQUIRE(first != nullptr);
+    BOOST_CHECK_EQUAL(reinterpret_cast<uintptr_t>(first) & uintptr_t{1}, uintptr_t{0});
+    BOOST_CHECK_EQUAL(PoolResourceTester::AvailableMemoryFromChunk(resource), 8U);
+    BOOST_CHECK_EQUAL(resource.NumAllocatedChunks(), 1U);
+    first[0] = std::byte{0x11};
+    first[1] = std::byte{0x12};
+    first[2] = std::byte{0x13};
+
+    auto* second{static_cast<std::byte*>(resource.Allocate(5, 4))};
+    BOOST_REQUIRE(second != nullptr);
+    BOOST_CHECK_EQUAL(reinterpret_cast<uintptr_t>(second) & uintptr_t{3}, uintptr_t{0});
+    BOOST_CHECK_EQUAL(PoolResourceTester::AvailableMemoryFromChunk(resource), 0U);
+    BOOST_CHECK_EQUAL(resource.NumAllocatedChunks(), 1U);
+    BOOST_CHECK_NE(first, second);
+    second[0] = std::byte{0x21};
+    second[4] = std::byte{0x25};
+    BOOST_CHECK(first[0] == std::byte{0x11});
+    BOOST_CHECK(first[1] == std::byte{0x12});
+    BOOST_CHECK(first[2] == std::byte{0x13});
+
+    resource.Deallocate(first, 3, 2);
+    BOOST_CHECK_EQUAL(PoolResourceTester::FreeListSizes(resource)[1], 1U);
+
+    auto* reused{static_cast<std::byte*>(resource.Allocate(7, 1))};
+    BOOST_CHECK_EQUAL(reused, first);
+    BOOST_CHECK_EQUAL(PoolResourceTester::FreeListSizes(resource)[1], 0U);
+    reused[6] = std::byte{0x37};
+    BOOST_CHECK(second[0] == std::byte{0x21});
+    BOOST_CHECK(second[4] == std::byte{0x25});
+
+    resource.Deallocate(second, 5, 4);
+    resource.Deallocate(reused, 7, 1);
+    PoolResourceTester::CheckAllDataAccountedFor(resource);
+}
+
 BOOST_AUTO_TEST_CASE(chunk_rollover_preserves_leftover_freelist)
 {
     auto resource = PoolResource<16, 8>(16);
