@@ -177,8 +177,43 @@ bool TxDownloadManagerImpl::AlreadyHaveTx(const GenTxid& gtxid, bool include_rec
 void TxDownloadManagerImpl::ConnectedPeer(NodeId nodeid, const TxDownloadConnectionInfo& info)
 {
     // If already connected (shouldn't happen in practice), exit early.
-    if (m_peer_info.contains(nodeid)) {
+    if (const auto it{m_peer_info.find(nodeid)}; it != m_peer_info.end()) {
+        const auto peer_count{m_peer_info.size()};
+        const auto wtxid_peer_count{m_num_wtxid_peers};
+        const auto txrequest_size{m_txrequest.Size()};
+        const auto txrequest_count{m_txrequest.Count(nodeid)};
+        const auto txrequest_candidates{m_txrequest.CountCandidates(nodeid)};
+        const auto txrequest_inflight{m_txrequest.CountInFlight(nodeid)};
+        const auto orphan_count{m_orphanage->CountUniqueOrphans()};
+        const auto orphan_announcements{m_orphanage->CountAnnouncements()};
+        const auto orphan_usage{m_orphanage->TotalOrphanUsage()};
+        const auto orphan_peer_usage{m_orphanage->UsageByPeer(nodeid)};
+        const auto orphan_peer_announcements{m_orphanage->AnnouncementsFromPeer(nodeid)};
+        const auto orphan_peer_work{m_orphanage->HaveTxToReconsider(nodeid)};
+        const bool preferred{it->second.m_connection_info.m_preferred};
+        const bool relay_permissions{it->second.m_connection_info.m_relay_permissions};
+        const bool wtxid_relay{it->second.m_connection_info.m_wtxid_relay};
+
         AssertWtxidPeerCount();
+        const auto existing_it{m_peer_info.find(nodeid)};
+        Assume(existing_it != m_peer_info.end());
+        Assume(m_peer_info.size() == peer_count);
+        Assume(m_num_wtxid_peers == wtxid_peer_count);
+        Assume(m_txrequest.Size() == txrequest_size);
+        Assume(m_txrequest.Count(nodeid) == txrequest_count);
+        Assume(m_txrequest.CountCandidates(nodeid) == txrequest_candidates);
+        Assume(m_txrequest.CountInFlight(nodeid) == txrequest_inflight);
+        Assume(m_orphanage->CountUniqueOrphans() == orphan_count);
+        Assume(m_orphanage->CountAnnouncements() == orphan_announcements);
+        Assume(m_orphanage->TotalOrphanUsage() == orphan_usage);
+        Assume(m_orphanage->UsageByPeer(nodeid) == orphan_peer_usage);
+        Assume(m_orphanage->AnnouncementsFromPeer(nodeid) == orphan_peer_announcements);
+        Assume(m_orphanage->HaveTxToReconsider(nodeid) == orphan_peer_work);
+        if (existing_it != m_peer_info.end()) {
+            Assume(existing_it->second.m_connection_info.m_preferred == preferred);
+            Assume(existing_it->second.m_connection_info.m_relay_permissions == relay_permissions);
+            Assume(existing_it->second.m_connection_info.m_wtxid_relay == wtxid_relay);
+        }
         return;
     }
 
