@@ -422,6 +422,11 @@ public:
             if (table[loc] == e) {
                 please_keep(loc);
                 epoch_flags[loc] = last_epoch;
+                if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+                    Assume(table[loc] == e);
+                    Assume(!collection_flags.bit_is_set(loc));
+                    Assume(epoch_flags[loc] == last_epoch);
+                }
                 return;
             }
         for (uint8_t depth = 0; depth < depth_limit; ++depth) {
@@ -432,6 +437,10 @@ public:
                 table[loc] = std::move(e);
                 please_keep(loc);
                 epoch_flags[loc] = last_epoch;
+                if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+                    Assume(!collection_flags.bit_is_set(loc));
+                    Assume(epoch_flags[loc] == last_epoch);
+                }
                 return;
             }
             /** Swap with the element at the location that was
