@@ -194,6 +194,20 @@ BOOST_AUTO_TEST_CASE(key_load_mismatched_pubkey_clears_key)
     BOOST_CHECK(!loaded_key.IsValid());
 }
 
+BOOST_AUTO_TEST_CASE(key_invalid_sign_clears_signature_outputs)
+{
+    const CKey invalid_key;
+    const uint256 msg_hash{Hash(std::string{"invalid sign clears outputs"})};
+
+    std::vector<unsigned char> sig{0x30, 0x01, 0xa5};
+    BOOST_CHECK(!invalid_key.Sign(msg_hash, sig));
+    BOOST_CHECK(sig.empty());
+
+    std::vector<unsigned char> compact_sig{0x1b, 0xa5};
+    BOOST_CHECK(!invalid_key.SignCompact(msg_hash, compact_sig));
+    BOOST_CHECK(compact_sig.empty());
+}
+
 BOOST_AUTO_TEST_CASE(key_der_import_export_contracts)
 {
     std::array<unsigned char, 32> out32;
