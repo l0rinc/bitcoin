@@ -444,6 +444,38 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         assert_cache_stats(cache_stats);
     };
 
+    auto assert_read_apis_match_sim = [&](uint32_t outpointidx) {
+        const auto& outpoint{data.outpoints[outpointidx]};
+        const auto sim{lookup(outpointidx)};
+        const auto peek_stats{get_all_cache_stats()};
+        const auto peek_coin{caches.back()->PeekCoin(outpoint)};
+        assert_coin_matches_sim(peek_coin, sim);
+        assert_cache_stats(peek_stats);
+
+        const auto dirty_counts{get_dirty_counts()};
+        const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
+        const auto get_coin{caches.back()->GetCoin(outpoint)};
+        assert_coin_matches_sim(get_coin, sim);
+        assert_dirty_counts(dirty_counts);
+        assert_cache_stats_if_present(parent_cache_stats);
+
+        const auto stats_after_get{get_all_cache_stats()};
+        assert(caches.back()->HaveCoin(outpoint) == get_coin.has_value());
+        assert_cache_stats(stats_after_get);
+        assert_dirty_counts(dirty_counts);
+        assert(caches.back()->HaveCoinInCache(outpoint) == get_coin.has_value());
+        assert_cache_stats(stats_after_get);
+
+        const Coin access_coin{caches.back()->AccessCoin(outpoint)};
+        if (get_coin) {
+            assert(coins_equal(access_coin, *get_coin));
+        } else {
+            assert(access_coin.IsSpent());
+        }
+        assert_cache_stats(stats_after_get);
+        assert_dirty_counts(dirty_counts);
+    };
+
     auto assert_stack_peek_matches_sim = [&]() {
         for (unsigned sim_idx = 1; sim_idx <= caches.size(); ++sim_idx) {
             assert_cache_peek_matches_sim(sim_idx);
@@ -619,6 +651,11 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 assert(simcoin.out == realcoin.out);
                 assert(simcoin.fCoinBase == realcoin.fCoinBase);
                 assert(realcoin.nHeight == sim->second);
+            },
+
+            [&]() { // Read API consistency
+                const uint32_t outpointidx{provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1)};
+                assert_read_apis_match_sim(outpointidx);
             },
 
             [&]() { // AddCoin (only possible_overwrite if necessary)
