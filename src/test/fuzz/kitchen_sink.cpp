@@ -6,16 +6,21 @@
 #include <merkleblock.h>
 #include <node/types.h>
 #include <policy/fees/block_policy_estimator.h>
+#include <rpc/protocol.h>
 #include <rpc/util.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <util/translation.h>
+#include <univalue.h>
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cstdint>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 using common::TransactionErrorString;
@@ -28,7 +33,55 @@ constexpr TransactionError ALL_TRANSACTION_ERROR[] = {
     TransactionError::MEMPOOL_REJECTED,
     TransactionError::MEMPOOL_ERROR,
     TransactionError::MAX_FEE_EXCEEDED,
+    TransactionError::MAX_BURN_EXCEEDED,
+    TransactionError::INVALID_PACKAGE,
 };
+
+RPCErrorCode ExpectedRPCErrorCode(const TransactionError error)
+{
+    switch (error) {
+    case TransactionError::MEMPOOL_REJECTED:
+        return RPC_TRANSACTION_REJECTED;
+    case TransactionError::ALREADY_IN_UTXO_SET:
+        return RPC_VERIFY_ALREADY_IN_UTXO_SET;
+    case TransactionError::MISSING_INPUTS:
+    case TransactionError::MEMPOOL_ERROR:
+    case TransactionError::MAX_FEE_EXCEEDED:
+    case TransactionError::MAX_BURN_EXCEEDED:
+    case TransactionError::INVALID_PACKAGE:
+        return RPC_TRANSACTION_ERROR;
+    case TransactionError::OK:
+        break;
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
+    return RPC_TRANSACTION_ERROR;
+}
+
+void AssertJSONRPCError(const UniValue& error, const RPCErrorCode expected_code, const std::string_view expected_message)
+{
+    assert(error.isObject());
+    assert(error.size() == 2);
+    assert(error.exists("code"));
+    assert(error.exists("message"));
+    assert(error["code"].isNum());
+    assert(error["message"].isStr());
+    assert(error["code"].getInt<int>() == expected_code);
+    assert(error["message"].get_str() == expected_message);
+}
+
+void AssertTransactionErrorContracts(const TransactionError error, const std::string& custom_message)
+{
+    const bilingual_str message{TransactionErrorString(error)};
+    assert(!message.original.empty());
+
+    const RPCErrorCode expected_code{ExpectedRPCErrorCode(error)};
+    assert(RPCErrorFromTransactionError(error) == expected_code);
+    AssertJSONRPCError(JSONRPCTransactionError(error), expected_code, message.original);
+    AssertJSONRPCError(
+        JSONRPCTransactionError(error, custom_message),
+        expected_code,
+        custom_message.empty() ? std::string_view{message.original} : std::string_view{custom_message});
+}
 }; // namespace
 
 // The fuzzing kitchen sink: Fuzzing harness for functions that need to be
@@ -39,9 +92,9 @@ FUZZ_TARGET(kitchen_sink)
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
 
     const TransactionError transaction_error = fuzzed_data_provider.PickValueInArray(ALL_TRANSACTION_ERROR);
-    (void)JSONRPCTransactionError(transaction_error);
-    (void)RPCErrorFromTransactionError(transaction_error);
-    (void)TransactionErrorString(transaction_error);
+    AssertTransactionErrorContracts(
+        transaction_error,
+        fuzzed_data_provider.ConsumeRandomLengthString(64));
 
     (void)StringForFeeEstimateHorizon(fuzzed_data_provider.PickValueInArray(ALL_FEE_ESTIMATE_HORIZONS));
 
