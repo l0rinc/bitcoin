@@ -4,10 +4,13 @@
 //
 #include <chainparams.h>
 #include <consensus/validation.h>
+#include <flatfile.h>
 #include <kernel/disconnected_transactions.h>
 #include <node/chainstatemanager_args.h>
 #include <node/kernel_notifications.h>
 #include <node/utxo_snapshot.h>
+#include <primitives/block.h>
+#include <primitives/transaction.h>
 #include <random.h>
 #include <rpc/blockchain.h>
 #include <sync.h>
@@ -17,6 +20,7 @@
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <test/util/validation.h>
+#include <tinyformat.h>
 #include <uint256.h>
 #include <util/byte_units.h>
 #include <util/result.h>
@@ -24,15 +28,36 @@
 #include <validation.h>
 #include <validationinterface.h>
 
-#include <tinyformat.h>
-
-#include <vector>
-
 #include <boost/test/unit_test.hpp>
+
+#include <algorithm>
+#include <cstddef>
+#include <vector>
 
 using node::BlockManager;
 using node::KernelNotifications;
 using node::SnapshotMetadata;
+
+namespace {
+CBlockHeader ChildHeader(const CBlockIndex& parent, uint32_t nonce)
+{
+    CBlockHeader header;
+    header.nVersion = 4;
+    header.hashPrevBlock = parent.GetBlockHash();
+    header.hashMerkleRoot = uint256{static_cast<uint8_t>(nonce)};
+    header.nTime = parent.GetBlockTime() + 1;
+    header.nBits = Params().GenesisBlock().nBits;
+    header.nNonce = nonce;
+    return header;
+}
+
+CBlock DummyBlockWithTransactions(size_t tx_count)
+{
+    CBlock block;
+    block.vtx.assign(tx_count, MakeTransactionRef(CMutableTransaction{}));
+    return block;
+}
+} // namespace
 
 BOOST_FIXTURE_TEST_SUITE(validation_chainstatemanager_tests, TestingSetup)
 
@@ -619,6 +644,51 @@ BOOST_FIXTURE_TEST_CASE(loadblockindex_invalid_descendants, TestChain100Setup)
     BOOST_CHECK(child->nStatus & BLOCK_FAILED_VALID);
 }
 
+BOOST_FIXTURE_TEST_CASE(received_block_transactions_readds_pruned_candidate, TestChain100Setup)
+{
+    ChainstateManager& chainman{*Assert(m_node.chainman)};
+    Chainstate& chainstate{chainman.ActiveChainstate()};
+    auto& blockman{chainman.m_blockman};
+
+    LOCK(chainman.GetMutex());
+    CBlockIndex* tip{chainman.ActiveChain().Tip()};
+    CBlockIndex* first{blockman.AddToBlockIndex(ChildHeader(*tip, /*nonce=*/11), chainman.m_best_header)};
+    CBlockIndex* second{blockman.AddToBlockIndex(ChildHeader(*tip, /*nonce=*/12), chainman.m_best_header)};
+    auto candidates_sorted{[&] {
+        return std::ranges::is_sorted(chainstate.setBlockIndexCandidates, chainstate.setBlockIndexCandidates.value_comp());
+    }};
+
+    CBlock block{DummyBlockWithTransactions(/*tx_count=*/2)};
+    const FlatFilePos first_pos{1, 1};
+    blockman.UpdateBlockInfo(block, first->nHeight, first_pos);
+    chainman.ReceivedBlockTransactions(block, first, first_pos);
+    const FlatFilePos second_pos{2, 1};
+    blockman.UpdateBlockInfo(block, second->nHeight, second_pos);
+    chainman.ReceivedBlockTransactions(block, second, second_pos);
+    BOOST_REQUIRE(first->HaveNumChainTxs());
+    BOOST_REQUIRE(second->HaveNumChainTxs());
+    BOOST_REQUIRE(first->nStatus & BLOCK_HAVE_DATA);
+    BOOST_REQUIRE(second->nStatus & BLOCK_HAVE_DATA);
+    BOOST_REQUIRE_EQUAL(chainstate.setBlockIndexCandidates.count(first), 1U);
+    BOOST_REQUIRE_EQUAL(chainstate.setBlockIndexCandidates.count(second), 1U);
+    BOOST_REQUIRE(candidates_sorted());
+
+    blockman.m_have_pruned = true;
+    blockman.PruneOneBlockFile(first_pos.nFile);
+    BOOST_REQUIRE(!(first->nStatus & BLOCK_HAVE_DATA));
+    BOOST_REQUIRE_EQUAL(chainstate.setBlockIndexCandidates.count(first), 1U);
+
+    const FlatFilePos redownloaded_pos{3, 1};
+    blockman.UpdateBlockInfo(block, first->nHeight, redownloaded_pos);
+    chainman.ReceivedBlockTransactions(block, first, redownloaded_pos);
+
+    BOOST_CHECK(first->nStatus & BLOCK_HAVE_DATA);
+    BOOST_CHECK(first->HaveNumChainTxs());
+    BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(first), 1U);
+    BOOST_CHECK_EQUAL(chainstate.setBlockIndexCandidates.count(second), 1U);
+    BOOST_CHECK(candidates_sorted());
+    chainman.CheckBlockIndex();
+}
 //! Verify that ReconsiderBlock clears failure flags for the target block, its ancestors, and descendants,
 //! but not for sibling forks that diverge from a shared ancestor.
 BOOST_FIXTURE_TEST_CASE(invalidate_block_and_reconsider_fork, TestChain100Setup)
