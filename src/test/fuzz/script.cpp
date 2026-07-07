@@ -36,6 +36,53 @@ void initialize_script()
     SelectParams(ChainType::REGTEST);
 }
 
+void AssertSolverSolutionsContract(const TxoutType solver_type, const std::vector<std::vector<unsigned char>>& solutions)
+{
+    switch (solver_type) {
+    case TxoutType::NONSTANDARD:
+    case TxoutType::NULL_DATA:
+    case TxoutType::ANCHOR:
+        assert(solutions.empty());
+        break;
+    case TxoutType::PUBKEY:
+        assert(solutions.size() == 1);
+        assert(CPubKey::ValidSize(solutions[0]));
+        break;
+    case TxoutType::PUBKEYHASH:
+    case TxoutType::SCRIPTHASH:
+    case TxoutType::WITNESS_V0_KEYHASH:
+        assert(solutions.size() == 1);
+        assert(solutions[0].size() == WITNESS_V0_KEYHASH_SIZE);
+        break;
+    case TxoutType::WITNESS_V0_SCRIPTHASH:
+        assert(solutions.size() == 1);
+        assert(solutions[0].size() == WITNESS_V0_SCRIPTHASH_SIZE);
+        break;
+    case TxoutType::WITNESS_V1_TAPROOT:
+        assert(solutions.size() == 1);
+        assert(solutions[0].size() == WITNESS_V1_TAPROOT_SIZE);
+        break;
+    case TxoutType::WITNESS_UNKNOWN:
+        assert(solutions.size() == 2);
+        assert(solutions[0].size() == 1);
+        assert(solutions[0][0] >= 1 && solutions[0][0] <= 16);
+        assert(solutions[1].size() >= 2 && solutions[1].size() <= 40);
+        break;
+    case TxoutType::MULTISIG:
+        assert(solutions.size() >= 3);
+        assert(solutions.front().size() == 1);
+        assert(solutions.back().size() == 1);
+        assert(solutions.front()[0] >= 1);
+        assert(solutions.back()[0] >= solutions.front()[0]);
+        assert(solutions.back()[0] <= MAX_PUBKEYS_PER_MULTISIG);
+        assert(solutions.size() == static_cast<size_t>(solutions.back()[0]) + 2);
+        for (size_t i{1}; i + 1 < solutions.size(); ++i) {
+            assert(CPubKey::ValidSize(solutions[i]));
+        }
+        break;
+    }
+}
+
 FUZZ_TARGET(script, .init = initialize_script)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
@@ -95,7 +142,9 @@ FUZZ_TARGET(script, .init = initialize_script)
     (void)RecursiveDynamicUsage(script);
 
     std::vector<std::vector<unsigned char>> solutions;
-    (void)Solver(script, solutions);
+    const TxoutType solver_type{Solver(script, solutions)};
+    assert(solver_type == which_type);
+    AssertSolverSolutionsContract(solver_type, solutions);
 
     {
         const std::vector<uint8_t> bytes = ConsumeRandomLengthByteVector(fuzzed_data_provider);
