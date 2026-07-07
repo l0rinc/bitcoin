@@ -246,7 +246,9 @@ void MiniMiner::DeleteAncestorPackage(const std::set<MockEntryMap::iterator, Ite
     for (auto& anc : ancestors) {
         Assume(!m_in_block.contains(anc->first));
         m_in_block.insert(anc->first);
-        m_total_fees = SaturatingAdd(m_total_fees, anc->second.GetModifiedFee());
+        const auto total_fees{CheckedAdd(m_total_fees, anc->second.GetModifiedFee())};
+        m_total_fees_overflowed |= !total_fees.has_value();
+        m_total_fees = total_fees.value_or(SaturatingAdd(m_total_fees, anc->second.GetModifiedFee()));
         m_total_vsize += anc->second.GetTxSize();
         auto it = m_descendant_set_by_txid.find(anc->first);
         // Each entry’s descendant set includes itself
@@ -357,7 +359,12 @@ void MiniMiner::BuildMockTemplate(std::optional<CFeeRate> target_feerate)
     if (!target_feerate.has_value()) {
         Assume(m_in_block.size() == num_txns);
     } else {
-        Assume(m_in_block.empty() || m_total_fees >= target_feerate->GetFee(m_total_vsize));
+        // Signed saturating modified-fee sums are order-dependent once they overflow.
+        // Only compare the aggregate block total to the target while the selected
+        // individual-fee sum is still the exact mathematical sum.
+        if (!m_total_fees_overflowed) {
+            Assume(m_in_block.empty() || m_total_fees >= target_feerate->GetFee(m_total_vsize));
+        }
     }
     Assume(m_in_block.empty() || sequence_num > 0);
     Assume(m_in_block.size() == m_inclusion_order.size());
