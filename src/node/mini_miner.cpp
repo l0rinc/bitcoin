@@ -309,7 +309,8 @@ void MiniMiner::BuildMockTemplate(std::optional<CFeeRate> target_feerate)
         }
         // Track the order in which transactions were selected.
         for (const auto& ancestor : ancestors) {
-            m_inclusion_order.emplace(ancestor->first, sequence_num);
+            const auto [_, inserted]{m_inclusion_order.emplace(ancestor->first, sequence_num)};
+            Assume(inserted);
         }
         DeleteAncestorPackage(ancestors);
         SanityCheck();
