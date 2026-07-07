@@ -288,16 +288,23 @@ bool CKey::SignSchnorr(const uint256& hash, std::span<unsigned char> sig, const 
 
 bool CKey::Load(const CPrivKey &seckey, const CPubKey &vchPubKey, bool fSkipCheck=false) {
     MakeKeyData();
-    if (!ec_seckey_import_der(secp256k1_context_static, (unsigned char*)begin(), seckey.data(), seckey.size())) {
+    const auto fail = [&] {
         ClearKeyData();
+        Assume(!IsValid());
         return false;
+    };
+    if (!ec_seckey_import_der(secp256k1_context_static, (unsigned char*)begin(), seckey.data(), seckey.size())) {
+        return fail();
     }
     fCompressed = vchPubKey.IsCompressed();
 
     if (fSkipCheck)
         return true;
 
-    return VerifyPubKey(vchPubKey);
+    if (!VerifyPubKey(vchPubKey)) {
+        return fail();
+    }
+    return true;
 }
 
 bool CKey::Derive(CKey& keyChild, ChainCode &ccChild, unsigned int nChild, const ChainCode& cc) const {
