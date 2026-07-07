@@ -95,6 +95,11 @@ std::optional<std::string> GetEntriesForConflicts(const CTransaction& tx,
         // single invocation of this function.
         pool.CalculateDescendants(it, all_conflicts);
     }
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        for (CTxMemPool::txiter it : iters_conflicting) {
+            Assume(all_conflicts.contains(it));
+        }
+    }
     return std::nullopt;
 }
 
