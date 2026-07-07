@@ -163,6 +163,12 @@ void CCoinsViewCache::EmplaceCoinInternalDANGER(COutPoint&& outpoint, Coin&& coi
         CCoinsCacheEntry::SetDirty(*it, m_sentinel);
         ++m_dirty_count;
         cachedCoinsUsage += mem_usage;
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            Assume(it->second.IsDirty());
+            Assume(!it->second.IsFresh());
+            if (!it->second.coin.IsSpent()) Assume(HaveCoinInCache(it->first));
+            Assume(m_dirty_count <= cacheCoins.size());
+        }
     }
 }
 
