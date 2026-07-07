@@ -78,6 +78,14 @@ FUZZ_TARGET(key, .init = initialize_key)
         assert(!invalid_key.SignSchnorr(random_uint256, schnorr_sig, nullptr, uint256::ZERO));
         assert(schnorr_sig == sig_before);
         assert(!invalid_key.ComputeKeyPair(nullptr).IsValid());
+
+        std::vector<unsigned char> ecdsa_sig{0x30, 0x01, 0xa5};
+        assert(!invalid_key.Sign(random_uint256, ecdsa_sig));
+        assert(ecdsa_sig.empty());
+
+        std::vector<unsigned char> compact_sig{0x1b, 0xa5};
+        assert(!invalid_key.SignCompact(random_uint256, compact_sig));
+        assert(compact_sig.empty());
     }
 
     {
