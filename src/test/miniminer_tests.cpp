@@ -11,6 +11,7 @@
 #include <test/util/txmempool.h>
 
 #include <boost/test/unit_test.hpp>
+#include <limits>
 #include <optional>
 #include <set>
 #include <vector>
@@ -252,6 +253,53 @@ BOOST_FIXTURE_TEST_CASE(miniminer_total_bumpfee_clamps_overfunded_package, TestC
     const auto total_fee{total.CalculateTotalBumpFees(target_feerate)};
     BOOST_REQUIRE(total_fee.has_value());
     BOOST_CHECK_EQUAL(*total_fee, 0);
+}
+
+BOOST_FIXTURE_TEST_CASE(miniminer_saturates_extreme_modified_fee_arithmetic, TestChain100Setup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    LOCK2(::cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    const CAmount positive_base_fee{1000};
+    std::vector<CTransactionRef> txs;
+    std::vector<COutPoint> outpoints;
+    for (size_t i{0}; i < 2; ++i) {
+        txs.push_back(make_tx({COutPoint{m_coinbase_txns[i]->GetHash(), 0}}, /*num_outputs=*/1));
+        TryAddToMempool(pool, entry.Fee(positive_base_fee).FromTx(txs.back()));
+        pool.PrioritiseTransaction(txs.back()->GetHash(), std::numeric_limits<CAmount>::min());
+        outpoints.emplace_back(txs.back()->GetHash(), 0);
+    }
+    const CFeeRate target_feerate{COIN};
+
+    for (const auto& tx : txs) {
+        const auto tx_entry{Assert(pool.GetEntry(tx->GetHash()))};
+        BOOST_REQUIRE_LT(tx_entry->GetModifiedFee(), 0);
+        BOOST_REQUIRE_GT(target_feerate.GetFee(tx_entry->GetTxSize()), positive_base_fee);
+    }
+
+    node::MiniMiner linearize{pool, outpoints};
+    BOOST_REQUIRE(linearize.IsReadyToCalculate());
+    const auto inclusion_order{linearize.Linearize()};
+    BOOST_CHECK_EQUAL(inclusion_order.size(), txs.size());
+    BOOST_CHECK_EQUAL(linearize.GetMockTemplateTxids().size(), txs.size());
+    for (const auto& tx : txs) {
+        BOOST_CHECK(inclusion_order.contains(tx->GetHash()));
+        BOOST_CHECK(linearize.GetMockTemplateTxids().contains(tx->GetHash()));
+    }
+
+    node::MiniMiner bumpfees{pool, outpoints};
+    BOOST_REQUIRE(bumpfees.IsReadyToCalculate());
+    const auto fees{bumpfees.CalculateBumpFees(target_feerate)};
+    for (const auto& outpoint : outpoints) {
+        BOOST_CHECK_EQUAL(Find(fees, outpoint), std::numeric_limits<CAmount>::max());
+    }
+
+    node::MiniMiner total{pool, outpoints};
+    BOOST_REQUIRE(total.IsReadyToCalculate());
+    const auto total_fee{total.CalculateTotalBumpFees(target_feerate)};
+    BOOST_REQUIRE(total_fee.has_value());
+    BOOST_CHECK_EQUAL(*total_fee, std::numeric_limits<CAmount>::max());
 }
 
 BOOST_FIXTURE_TEST_CASE(miniminer_same_tx_outputs_share_bumpfee, TestChain100Setup)
