@@ -45,18 +45,41 @@ static_assert(MEMPOOL_DUMP_VERSION_NO_XOR_KEY != MEMPOOL_DUMP_VERSION);
 
 bool LoadMempool(CTxMemPool& pool, const fs::path& load_path, Chainstate& active_chainstate, ImportMempoolOptions&& opts)
 {
-    if (load_path.empty()) return false;
-
+    std::map<Txid, CAmount> priority_deltas_before;
     std::set<Txid> unbroadcast_before;
     if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (!opts.apply_fee_delta_priority) {
+            LOCK(pool.cs);
+            priority_deltas_before = pool.mapDeltas;
+        }
         if (!opts.apply_unbroadcast_set) {
             unbroadcast_before = pool.GetUnbroadcastTxs();
         }
+    }
+    const auto check_disabled_metadata_unchanged = [&] {
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            for (const auto& txid : pool.GetUnbroadcastTxs()) {
+                Assume(pool.exists(txid));
+            }
+            if (!opts.apply_fee_delta_priority) {
+                LOCK(pool.cs);
+                Assume(pool.mapDeltas == priority_deltas_before);
+            }
+            if (!opts.apply_unbroadcast_set) {
+                Assume(pool.GetUnbroadcastTxs() == unbroadcast_before);
+            }
+        }
+    };
+
+    if (load_path.empty()) {
+        check_disabled_metadata_unchanged();
+        return false;
     }
 
     AutoFile file{opts.mockable_fopen_function(load_path, "rb")};
     if (file.IsNull()) {
         LogInfo("Failed to open mempool file. Continuing anyway.\n");
+        check_disabled_metadata_unchanged();
         return false;
     }
 
@@ -78,6 +101,7 @@ bool LoadMempool(CTxMemPool& pool, const fs::path& load_path, Chainstate& active
             file >> obfuscation;
             file.SetObfuscation(obfuscation);
         } else {
+            check_disabled_metadata_unchanged();
             return false;
         }
 
@@ -129,8 +153,10 @@ bool LoadMempool(CTxMemPool& pool, const fs::path& load_path, Chainstate& active
             } else {
                 ++expired;
             }
-            if (active_chainstate.m_chainman.m_interrupt)
+            if (active_chainstate.m_chainman.m_interrupt) {
+                check_disabled_metadata_unchanged();
                 return false;
+            }
         }
         std::map<Txid, CAmount> mapDeltas;
         file >> mapDeltas;
@@ -153,18 +179,12 @@ bool LoadMempool(CTxMemPool& pool, const fs::path& load_path, Chainstate& active
         }
     } catch (const std::ios_base::failure& e) {
         LogInfo("Failed to deserialize mempool data on file: %s. Continuing anyway.\n", e.what());
+        check_disabled_metadata_unchanged();
         return false;
     }
 
     LogInfo("Imported mempool transactions from file: %i succeeded, %i failed, %i expired, %i already there, %i waiting for initial broadcast\n", count, failed, expired, already_there, unbroadcast);
-    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
-        for (const auto& txid : pool.GetUnbroadcastTxs()) {
-            Assume(pool.exists(txid));
-        }
-        if (!opts.apply_unbroadcast_set) {
-            Assume(pool.GetUnbroadcastTxs() == unbroadcast_before);
-        }
-    }
+    check_disabled_metadata_unchanged();
     return true;
 }
 
