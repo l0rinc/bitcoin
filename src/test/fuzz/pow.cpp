@@ -16,6 +16,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -55,6 +56,37 @@ void AssertPowTargetContracts(uint32_t nbits, const Consensus::Params& params)
     assert(CheckProofOfWorkImpl(uint256::ZERO, nbits, params));
     assert(CheckProofOfWorkImpl(ArithToUint256(compact_target), nbits, params));
     assert(!CheckProofOfWorkImpl(ArithToUint256(compact_target + 1), nbits, params));
+}
+
+void AssertEquivalentTimeContracts(const CBlockIndex& to, const CBlockIndex& from, const CBlockIndex& tip, const Consensus::Params& params)
+{
+    const arith_uint256 tip_proof{GetBlockProof(tip)};
+    if (tip_proof == 0) {
+        try {
+            (void)GetBlockProofEquivalentTime(to, from, tip, params);
+        } catch (const uint_error&) {
+            return;
+        }
+        assert(false);
+    }
+
+    const bool to_has_more_work{to.nChainWork > from.nChainWork};
+    const bool from_has_more_work{from.nChainWork > to.nChainWork};
+    const arith_uint256 work_delta{
+        to_has_more_work ? to.nChainWork - from.nChainWork : from.nChainWork - to.nChainWork};
+    const arith_uint256 scaled_delta{
+        work_delta * arith_uint256(params.nPowTargetSpacing) / tip_proof};
+    const int64_t magnitude{
+        scaled_delta.bits() > 63 ? std::numeric_limits<int64_t>::max() : int64_t(scaled_delta.GetLow64())};
+    const int64_t expected{from_has_more_work ? -magnitude : magnitude};
+
+    const int64_t equivalent_time{GetBlockProofEquivalentTime(to, from, tip, params)};
+    assert(equivalent_time == expected);
+    assert(GetBlockProofEquivalentTime(from, to, tip, params) == -expected);
+    assert(GetBlockProofEquivalentTime(to, to, tip, params) == 0);
+    assert((equivalent_time == 0) == (scaled_delta == 0));
+    if (to_has_more_work) assert(equivalent_time >= 0);
+    if (from_has_more_work) assert(equivalent_time <= 0);
 }
 
 } // namespace
@@ -113,10 +145,7 @@ FUZZ_TARGET(pow, .init = initialize_pow)
             const auto& to = PickValue(fuzzed_data_provider, blocks);
             const auto& from = PickValue(fuzzed_data_provider, blocks);
             const auto& tip = PickValue(fuzzed_data_provider, blocks);
-            try {
-                (void)GetBlockProofEquivalentTime(*to, *from, *tip, consensus_params);
-            } catch (const uint_error&) {
-            }
+            AssertEquivalentTimeContracts(*to, *from, *tip, consensus_params);
         }
         {
             const std::optional<uint256> hash = ConsumeDeserializable<uint256>(fuzzed_data_provider);
