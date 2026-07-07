@@ -9,6 +9,7 @@
 #include <script/script.h>
 #include <script/sign.h>
 #include <script/signingprovider.h>
+#include <util/check.h>
 
 #include <cassert>
 #include <optional>
@@ -48,7 +49,11 @@ const std::string& FormatOutputType(OutputType type)
 
 std::string FormatAllOutputTypes()
 {
-    return util::Join(OUTPUT_TYPES, ", ", [](const auto& i) { return "\"" + FormatOutputType(i) + "\""; });
+    return util::Join(OUTPUT_TYPES, ", ", [](const auto& i) {
+        const std::string& formatted{FormatOutputType(i)};
+        Assume(ParseOutputType(formatted) == i);
+        return "\"" + formatted + "\"";
+    });
 }
 
 CTxDestination AddAndGetDestinationForScript(FlatSigningProvider& keystore, const CScript& script, OutputType type)
