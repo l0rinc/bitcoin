@@ -23,7 +23,7 @@ FUZZ_TARGET(key_io, .init = initialize_key_io)
     const std::string random_string(buffer.begin(), buffer.end());
 
     std::string error_msg;
-    std::vector<int> error_locations;
+    std::vector<int> error_locations{0, 1, 2};
     const CTxDestination destination{DecodeDestination(random_string, error_msg, &error_locations)};
     const bool valid_destination{IsValidDestination(destination)};
     assert(valid_destination == error_msg.empty());
@@ -37,6 +37,10 @@ FUZZ_TARGET(key_io, .init = initialize_key_io)
         assert(encoded_error_msg.empty());
     } else {
         assert(!error_msg.empty());
+    }
+    for (const int location : error_locations) {
+        assert(location >= 0);
+        assert(static_cast<size_t>(location) < random_string.size());
     }
 
     const CKey key = DecodeSecret(random_string);
