@@ -351,6 +351,9 @@ FUZZ_TARGET(key, .init = initialize_key)
             assert(ok);
             assert(key == loaded_key);
         }
+        CKey mismatched_loaded_key{key};
+        assert(!mismatched_loaded_key.Load(priv_key, CPubKey{}, /*fSkipCheck=*/false));
+        assert(!mismatched_loaded_key.IsValid());
     }
 }
 
