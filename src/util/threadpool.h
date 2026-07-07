@@ -187,9 +187,15 @@ public:
         auto future{task.get_future()};
         {
             LOCK(m_mutex);
-            if (m_workers.empty()) return util::Unexpected{SubmitError::Inactive};
-            if (m_interrupt) return util::Unexpected{SubmitError::Interrupted};
             const size_t queue_size{m_work_queue.size()};
+            if (m_workers.empty()) {
+                Assume(m_work_queue.size() == queue_size);
+                return util::Unexpected{SubmitError::Inactive};
+            }
+            if (m_interrupt) {
+                Assume(m_work_queue.size() == queue_size);
+                return util::Unexpected{SubmitError::Interrupted};
+            }
 
             m_work_queue.emplace(std::move(task));
             Assume(m_work_queue.size() == queue_size + 1);
@@ -227,9 +233,15 @@ public:
 
         {
             LOCK(m_mutex);
-            if (m_workers.empty()) return util::Unexpected{SubmitError::Inactive};
-            if (m_interrupt) return util::Unexpected{SubmitError::Interrupted};
             const size_t queue_size{m_work_queue.size()};
+            if (m_workers.empty()) {
+                Assume(m_work_queue.size() == queue_size);
+                return util::Unexpected{SubmitError::Inactive};
+            }
+            if (m_interrupt) {
+                Assume(m_work_queue.size() == queue_size);
+                return util::Unexpected{SubmitError::Interrupted};
+            }
             for (auto&& fn : fns) {
                 PackagedTask<std::ranges::range_reference_t<R>> task{std::move(fn)};
                 futures.emplace_back(task.get_future());
