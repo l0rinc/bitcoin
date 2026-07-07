@@ -45,6 +45,7 @@ using namespace util::hex_literals;
 static const script_verify_flags gFlags = SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_STRICTENC;
 
 script_verify_flags ParseScriptFlags(std::string strFlags);
+bool CastToBool(const std::vector<unsigned char>& vch);
 
 struct ScriptErrorDesc
 {
@@ -1476,6 +1477,19 @@ BOOST_AUTO_TEST_CASE(sign_transaction_input_errors)
     BOOST_REQUIRE_EQUAL(missing_coin_errors.size(), 1);
     BOOST_CHECK_EQUAL(missing_coin_errors.begin()->first, 0);
     BOOST_CHECK(!missing_coin_errors.begin()->second.empty());
+}
+
+BOOST_AUTO_TEST_CASE(cast_to_bool)
+{
+    BOOST_CHECK(!CastToBool({}));
+    BOOST_CHECK(!CastToBool({0x00}));
+    BOOST_CHECK(!CastToBool({0x00, 0x00}));
+    BOOST_CHECK(!CastToBool({0x80}));
+    BOOST_CHECK(!CastToBool({0x00, 0x80}));
+
+    BOOST_CHECK(CastToBool({0x01}));
+    BOOST_CHECK(CastToBool({0x80, 0x00}));
+    BOOST_CHECK(CastToBool({0x01, 0x80}));
 }
 
 BOOST_AUTO_TEST_CASE(script_standard_push)
