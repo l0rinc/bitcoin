@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <crypto/hex_base.h>
 #include <primitives/transaction.h>
 #include <script/interpreter.h>
 #include <script/script.h>
@@ -18,6 +19,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -69,6 +71,43 @@ static CScriptWitness ScriptWitnessFromJSON(const UniValue& univalue)
         scriptwitness.stack.push_back(std::move(bytes));
     }
     return scriptwitness;
+}
+
+template <typename T>
+static std::string SerializeHex(const T& obj)
+{
+    DataStream stream;
+    stream << obj;
+    return HexStr(MakeByteSpan(stream));
+}
+
+static std::string SerializeTxNoWitnessHex(const CMutableTransaction& tx)
+{
+    DataStream stream;
+    stream << TX_NO_WITNESS(tx);
+    return HexStr(MakeByteSpan(stream));
+}
+
+static UniValue InlineScriptAsset(const CScript& prevout_script, const char* outcome_key)
+{
+    CMutableTransaction tx;
+    tx.vin.emplace_back();
+    tx.vout.emplace_back(0, CScript{});
+
+    UniValue prevouts{UniValue::VARR};
+    prevouts.push_back(SerializeHex(CTxOut{0, prevout_script}));
+
+    UniValue spend{UniValue::VOBJ};
+    spend.pushKV("scriptSig", "");
+    spend.pushKV("witness", UniValue{UniValue::VARR});
+
+    UniValue test{UniValue::VOBJ};
+    test.pushKV("tx", SerializeTxNoWitnessHex(tx));
+    test.pushKV("prevouts", std::move(prevouts));
+    test.pushKV("index", 0);
+    test.pushKV("flags", "");
+    test.pushKV(outcome_key, std::move(spend));
+    return test;
 }
 
 static std::vector<script_verify_flags> AllConsensusFlags()
@@ -144,6 +183,14 @@ static void AssetTest(const UniValue& test, SignatureCache& signature_cache)
             }
         }
     }
+}
+
+BOOST_AUTO_TEST_CASE(script_assets_inline_outcomes)
+{
+    SignatureCache signature_cache{DEFAULT_SIGNATURE_CACHE_BYTES};
+
+    AssetTest(InlineScriptAsset(CScript{} << OP_TRUE, "success"), signature_cache);
+    AssetTest(InlineScriptAsset(CScript{} << OP_FALSE, "failure"), signature_cache);
 }
 
 BOOST_AUTO_TEST_CASE(script_assets_test)
