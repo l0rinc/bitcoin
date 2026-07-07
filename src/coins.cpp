@@ -10,6 +10,8 @@
 #include <util/log.h>
 #include <util/trace.h>
 
+#include <vector>
+
 TRACEPOINT_SEMAPHORE(utxocache, add);
 TRACEPOINT_SEMAPHORE(utxocache, spent);
 TRACEPOINT_SEMAPHORE(utxocache, uncache);
@@ -377,9 +379,14 @@ void CCoinsViewCache::Flush(bool reallocate_cache)
 void CCoinsViewCache::Sync()
 {
     size_t unspent_count{0};
+    std::vector<COutPoint> unspent_keys;
     if constexpr (G_ABORT_ON_FAILED_ASSUME) {
-        for (const auto& [_, entry] : cacheCoins) {
-            unspent_count += !entry.coin.IsSpent();
+        unspent_keys.reserve(cacheCoins.size());
+        for (const auto& [outpoint, entry] : cacheCoins) {
+            if (!entry.coin.IsSpent()) {
+                ++unspent_count;
+                unspent_keys.push_back(outpoint);
+            }
         }
     }
     auto cursor{CoinsViewCacheCursor(m_dirty_count, m_sentinel, cacheCoins, /*will_erase=*/false)};
@@ -397,6 +404,9 @@ void CCoinsViewCache::Sync()
             Assume(!entry.IsDirty());
             Assume(!entry.IsFresh());
             recomputed_usage += entry.coin.DynamicMemoryUsage();
+        }
+        for (const auto& outpoint : unspent_keys) {
+            Assume(HaveCoinInCache(outpoint));
         }
         Assume(cacheCoins.size() == unspent_count);
         Assume(cachedCoinsUsage == recomputed_usage);
