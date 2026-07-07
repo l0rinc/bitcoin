@@ -284,6 +284,24 @@ BOOST_AUTO_TEST_CASE(test_CheckQueueControl_Destructor_Completes)
     BOOST_CHECK(!queue.Complete().has_value());
 }
 
+BOOST_AUTO_TEST_CASE(test_CheckQueueControl_Add_After_Complete)
+{
+    DestructorCompleteCheck::n_calls = 0;
+    DestructorComplete_Queue queue{/*batch_size=*/0, /*worker_threads_num=*/0};
+    {
+        CCheckQueueControl<DestructorCompleteCheck> control{queue};
+        std::vector<DestructorCompleteCheck> first_checks(1);
+        control.Add(std::move(first_checks));
+        BOOST_CHECK(!control.Complete().has_value());
+        BOOST_CHECK_EQUAL(DestructorCompleteCheck::n_calls.load(std::memory_order_relaxed), 1U);
+
+        std::vector<DestructorCompleteCheck> second_checks(2);
+        control.Add(std::move(second_checks));
+    }
+    BOOST_CHECK_EQUAL(DestructorCompleteCheck::n_calls.load(std::memory_order_relaxed), 3U);
+    BOOST_CHECK(!queue.Complete().has_value());
+}
+
 BOOST_AUTO_TEST_CASE(test_CheckQueueControl_Destructor_Failure_Resets)
 {
     Fixed_Queue queue{/*batch_size=*/0, /*worker_threads_num=*/0};
