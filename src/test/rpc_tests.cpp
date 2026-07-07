@@ -558,6 +558,35 @@ BOOST_AUTO_TEST_CASE(rpc_convert_values_generatetoaddress)
         HasReason{"Error parsing JSON: not-json"});
 }
 
+BOOST_AUTO_TEST_CASE(rpc_convert_values_shape_contracts)
+{
+    const UniValue unknown_positional{RPCConvertValues("unknown", {"raw", "name=value"})};
+    BOOST_CHECK(unknown_positional.isArray());
+    BOOST_CHECK_EQUAL(unknown_positional.size(), 2);
+    BOOST_CHECK_EQUAL(unknown_positional[0].get_str(), "raw");
+    BOOST_CHECK_EQUAL(unknown_positional[1].get_str(), "name=value");
+
+    const UniValue converted_positional{RPCConvertValues("generatetoaddress", {"101", "mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a", "9"})};
+    BOOST_CHECK(converted_positional.isArray());
+    BOOST_CHECK_EQUAL(converted_positional.size(), 3);
+    BOOST_CHECK_EQUAL(converted_positional[0].getInt<int>(), 101);
+    BOOST_CHECK_EQUAL(converted_positional[1].get_str(), "mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a");
+    BOOST_CHECK_EQUAL(converted_positional[2].getInt<int>(), 9);
+
+    const UniValue named_with_positional{RPCConvertNamedValues("generatetoaddress", {"101", "address=mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a", "maxtries=9"})};
+    BOOST_CHECK(named_with_positional.isObject());
+    BOOST_CHECK(named_with_positional.exists("args"));
+    BOOST_CHECK(named_with_positional["args"].isArray());
+    BOOST_CHECK_EQUAL(named_with_positional["args"].size(), 1);
+    BOOST_CHECK_EQUAL(named_with_positional["args"][0].getInt<int>(), 101);
+    BOOST_CHECK_EQUAL(named_with_positional["address"].get_str(), "mkESjLZW66TmHhiFX8MCaBjrhZ543PPh9a");
+    BOOST_CHECK_EQUAL(named_with_positional["maxtries"].getInt<int>(), 9);
+
+    const UniValue explicit_args{RPCConvertNamedValues("unknown", {"args=not-array"})};
+    BOOST_CHECK(explicit_args.isObject());
+    BOOST_CHECK_EQUAL(explicit_args["args"].get_str(), "not-array");
+}
+
 BOOST_AUTO_TEST_CASE(rpc_getblockstats_calculate_percentiles_by_weight)
 {
     int64_t total_weight = 200;
