@@ -25,6 +25,7 @@
 #include <validationinterface.h>
 
 #include <algorithm>
+#include <array>
 
 namespace {
 
@@ -386,7 +387,61 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
                 txdownload_impl.CheckIsEmpty(rand_peer);
             },
             [&] {
+                struct PeerInfoSnapshot {
+                    bool present{false};
+                    bool preferred{false};
+                    bool relay_permissions{false};
+                    bool wtxid_relay{false};
+                };
+                std::array<PeerInfoSnapshot, NUM_PEERS> peer_info_before;
+                std::array<size_t, NUM_PEERS> txrequest_count_before;
+                std::array<size_t, NUM_PEERS> txrequest_candidates_before;
+                std::array<size_t, NUM_PEERS> txrequest_inflight_before;
+                std::array<node::TxOrphanage::Usage, NUM_PEERS> orphan_usage_before;
+                std::array<node::TxOrphanage::Count, NUM_PEERS> orphan_announcements_before;
+                std::array<bool, NUM_PEERS> orphan_work_before;
+                for (NodeId peer = 0; peer < NUM_PEERS; ++peer) {
+                    if (const auto it{txdownload_impl.m_peer_info.find(peer)}; it != txdownload_impl.m_peer_info.end()) {
+                        peer_info_before[peer] = {
+                            .present = true,
+                            .preferred = it->second.m_connection_info.m_preferred,
+                            .relay_permissions = it->second.m_connection_info.m_relay_permissions,
+                            .wtxid_relay = it->second.m_connection_info.m_wtxid_relay,
+                        };
+                    }
+                    txrequest_count_before[peer] = txdownload_impl.m_txrequest.Count(peer);
+                    txrequest_candidates_before[peer] = txdownload_impl.m_txrequest.CountCandidates(peer);
+                    txrequest_inflight_before[peer] = txdownload_impl.m_txrequest.CountInFlight(peer);
+                    orphan_usage_before[peer] = txdownload_impl.m_orphanage->UsageByPeer(peer);
+                    orphan_announcements_before[peer] = txdownload_impl.m_orphanage->AnnouncementsFromPeer(peer);
+                    orphan_work_before[peer] = txdownload_impl.m_orphanage->HaveTxToReconsider(peer);
+                }
+                const auto txrequest_size_before{txdownload_impl.m_txrequest.Size()};
+                const auto orphan_count_before{txdownload_impl.m_orphanage->CountUniqueOrphans()};
+                const auto orphan_announcements_total_before{txdownload_impl.m_orphanage->CountAnnouncements()};
+                const auto orphan_usage_total_before{txdownload_impl.m_orphanage->TotalOrphanUsage()};
+                const auto wtxid_peers_before{txdownload_impl.m_num_wtxid_peers};
                 txdownload_impl.ActiveTipChange();
+                Assert(txdownload_impl.m_num_wtxid_peers == wtxid_peers_before);
+                Assert(txdownload_impl.m_txrequest.Size() == txrequest_size_before);
+                Assert(txdownload_impl.m_orphanage->CountUniqueOrphans() == orphan_count_before);
+                Assert(txdownload_impl.m_orphanage->CountAnnouncements() == orphan_announcements_total_before);
+                Assert(txdownload_impl.m_orphanage->TotalOrphanUsage() == orphan_usage_total_before);
+                for (NodeId peer = 0; peer < NUM_PEERS; ++peer) {
+                    const auto it{txdownload_impl.m_peer_info.find(peer)};
+                    Assert((it != txdownload_impl.m_peer_info.end()) == peer_info_before[peer].present);
+                    if (it != txdownload_impl.m_peer_info.end()) {
+                        Assert(it->second.m_connection_info.m_preferred == peer_info_before[peer].preferred);
+                        Assert(it->second.m_connection_info.m_relay_permissions == peer_info_before[peer].relay_permissions);
+                        Assert(it->second.m_connection_info.m_wtxid_relay == peer_info_before[peer].wtxid_relay);
+                    }
+                    Assert(txdownload_impl.m_txrequest.Count(peer) == txrequest_count_before[peer]);
+                    Assert(txdownload_impl.m_txrequest.CountCandidates(peer) == txrequest_candidates_before[peer]);
+                    Assert(txdownload_impl.m_txrequest.CountInFlight(peer) == txrequest_inflight_before[peer]);
+                    Assert(txdownload_impl.m_orphanage->UsageByPeer(peer) == orphan_usage_before[peer]);
+                    Assert(txdownload_impl.m_orphanage->AnnouncementsFromPeer(peer) == orphan_announcements_before[peer]);
+                    Assert(txdownload_impl.m_orphanage->HaveTxToReconsider(peer) == orphan_work_before[peer]);
+                }
                 // After a block update, nothing should be in the rejection caches
                 for (const auto& tx : TRANSACTIONS) {
                     Assert(!txdownload_impl.RecentRejectsFilter().contains(tx->GetWitnessHash().ToUint256()));
