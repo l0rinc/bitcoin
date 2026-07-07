@@ -428,6 +428,7 @@ void CCoinsViewCache::Reset() noexcept
 
 void CCoinsViewCache::Uncache(const COutPoint& hash)
 {
+    const size_t dirty_count{m_dirty_count};
     const CCoinsViewCache* base_cache{nullptr};
     unsigned int base_cache_size{0};
     size_t base_dirty_count{0};
@@ -460,6 +461,7 @@ void CCoinsViewCache::Uncache(const COutPoint& hash)
             Assume(base_cache->DynamicMemoryUsage() == base_memory_usage);
         }
     }
+    Assume(m_dirty_count == dirty_count);
 }
 
 unsigned int CCoinsViewCache::GetCacheSize() const
