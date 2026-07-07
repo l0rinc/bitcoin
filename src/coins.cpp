@@ -4,6 +4,7 @@
 
 #include <coins.h>
 
+#include <consensus/amount.h>
 #include <consensus/consensus.h>
 #include <primitives/block.h>
 #include <random.h>
@@ -158,11 +159,18 @@ void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possi
 
 void CCoinsViewCache::EmplaceCoinInternalDANGER(const COutPoint& outpoint, Coin&& coin) {
     const auto mem_usage{coin.DynamicMemoryUsage()};
+    assert(coin.IsSpent() || MoneyRange(coin.out.nValue));
     auto [it, inserted] = cacheCoins.try_emplace(outpoint, std::move(coin));
     if (inserted) {
         CCoinsCacheEntry::SetDirty(*it, m_sentinel);
         ++m_dirty_count;
         cachedCoinsUsage += mem_usage;
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            Assume(it->second.IsDirty());
+            Assume(!it->second.IsFresh());
+            Assume(HaveCoinInCache(it->first) == !it->second.coin.IsSpent());
+            Assume(m_dirty_count <= cacheCoins.size());
+        }
     }
 }
 
