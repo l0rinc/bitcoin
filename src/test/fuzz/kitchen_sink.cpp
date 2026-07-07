@@ -35,6 +35,7 @@ constexpr TransactionError ALL_TRANSACTION_ERROR[] = {
     TransactionError::MAX_FEE_EXCEEDED,
     TransactionError::MAX_BURN_EXCEEDED,
     TransactionError::INVALID_PACKAGE,
+    TransactionError::PRIVATE_BROADCAST_FULL,
 };
 
 RPCErrorCode ExpectedRPCErrorCode(const TransactionError error)
@@ -44,6 +45,8 @@ RPCErrorCode ExpectedRPCErrorCode(const TransactionError error)
         return RPC_TRANSACTION_REJECTED;
     case TransactionError::ALREADY_IN_UTXO_SET:
         return RPC_VERIFY_ALREADY_IN_UTXO_SET;
+    case TransactionError::PRIVATE_BROADCAST_FULL:
+        return RPC_LIMIT_EXCEEDED;
     case TransactionError::MISSING_INPUTS:
     case TransactionError::MEMPOOL_ERROR:
     case TransactionError::MAX_FEE_EXCEEDED:
