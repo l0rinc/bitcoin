@@ -90,6 +90,7 @@ public:
     const MessageStartChars& MessageStart() const { return pchMessageStart; }
     uint16_t GetDefaultPort() const { return nDefaultPort; }
     std::vector<int> GetAvailableSnapshotHeights() const;
+    std::optional<int> MinAssumeutxoSnapshotHeight() const { if (m_assumeutxo_data.empty()) return std::nullopt; return m_assumeutxo_data.front().height; }
 
     const CBlock& GenesisBlock() const { return genesis; }
     /** Default value for -checkmempool and -checkblockindex argument */

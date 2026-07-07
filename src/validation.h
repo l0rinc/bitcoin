@@ -957,6 +957,12 @@ private:
         AutoFile& coins_file,
         const node::SnapshotMetadata& metadata);
 
+    //! Check that the fully validated UTXO set matches hardcoded assumeutxo data.
+    void VerifyAssumeutxoData(
+        Chainstate& chainstate,
+        const CBlockIndex& tip,
+        const AssumeutxoData& au_data) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
     /**
      * If a block header hasn't already been seen, call CheckBlockHeader on it, ensure
      * that it doesn't descend from an invalid block, and then add it to m_block_index.
