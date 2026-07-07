@@ -88,6 +88,34 @@ Network ExpectedNetwork(std::string_view name)
     return NET_UNROUTABLE;
 }
 
+std::optional<unsigned char> HexValue(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return std::nullopt;
+}
+
+std::string ExpectedUrlDecode(std::string_view encoded)
+{
+    std::string decoded;
+    decoded.reserve(encoded.size());
+
+    for (size_t i{0}; i < encoded.size(); ++i) {
+        if (encoded[i] == '%' && i + 2 < encoded.size()) {
+            const std::optional<unsigned char> high{HexValue(encoded[i + 1])};
+            const std::optional<unsigned char> low{HexValue(encoded[i + 2])};
+            if (high && low) {
+                decoded.push_back(static_cast<char>((*high << 4) | *low));
+                i += 2;
+                continue;
+            }
+        }
+        decoded.push_back(encoded[i]);
+    }
+    return decoded;
+}
+
 void AssertAffixRemovalContracts(std::string_view str, std::string_view affix)
 {
     const std::string_view removed_prefix_view{RemovePrefixView(str, affix)};
@@ -173,6 +201,18 @@ void AssertParseNetworkContracts(const std::string& name)
     assert(parsed_network == NET_UNROUTABLE || GetNetworkName(parsed_network) == ToLower(name));
     assert(parsed_network == NET_UNROUTABLE || ParseNetwork(GetNetworkName(parsed_network)) == parsed_network);
 }
+
+void AssertUrlDecodeContracts(std::string_view encoded)
+{
+    const std::string decoded{UrlDecode(encoded)};
+    assert(decoded == ExpectedUrlDecode(encoded));
+    assert(decoded.size() <= encoded.size());
+    assert(UrlDecode(UrlEncode(decoded)) == decoded);
+
+    if (encoded.find('%') == std::string_view::npos) {
+        assert(decoded == encoded);
+    }
+}
 } // namespace
 
 FUZZ_TARGET(string)
@@ -226,7 +266,7 @@ FUZZ_TARGET(string)
     (void)ToUpper(random_string_1);
     (void)TrimString(random_string_1);
     (void)TrimString(random_string_1, random_string_2);
-    (void)UrlDecode(random_string_1);
+    AssertUrlDecodeContracts(random_string_1);
     (void)ContainsNoNUL(random_string_1);
     try {
         throw scriptnum_error{random_string_1};
