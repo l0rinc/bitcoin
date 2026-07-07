@@ -228,7 +228,7 @@ BOOST_AUTO_TEST_CASE(reject_null_transaction_ref)
 
     PrivateBroadcast pb;
     CTransactionRef null_tx;
-    BOOST_CHECK_THROW(pb.Add(null_tx), NonFatalCheckError);
+    BOOST_CHECK_THROW([&] { (void)pb.Add(null_tx); }(), NonFatalCheckError);
     BOOST_CHECK_THROW(pb.Remove(null_tx), NonFatalCheckError);
 }
 
@@ -307,7 +307,7 @@ BOOST_AUTO_TEST_CASE(confirmation_after_disconnect_is_ignored)
 
     PrivateBroadcast pb;
     const auto tx{MakeDummyTx(/*id=*/1, /*num_witness=*/0)};
-    BOOST_REQUIRE(pb.Add(tx));
+    BOOST_REQUIRE(pb.Add(tx) == PrivateBroadcast::AddResult::Added);
 
     const NodeId recipient{1};
     in_addr ipv4Addr;
