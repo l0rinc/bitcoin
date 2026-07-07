@@ -26,6 +26,10 @@ FUZZ_TARGET(bech32_random_decode)
         assert(decoded.encoding != bech32::Encoding::INVALID);
         auto reencoded = bech32::Encode(decoded.encoding, decoded.hrp, decoded.data);
         assert(CaseInsensitiveEqual(random_string, reencoded));
+        auto decoded_upper = bech32::Decode(ToUpper(reencoded), limit);
+        assert(decoded_upper.encoding == decoded.encoding);
+        assert(decoded_upper.hrp == decoded.hrp);
+        assert(decoded_upper.data == decoded.data);
     }
 }
 
@@ -63,6 +67,11 @@ FUZZ_TARGET(bech32_roundtrip)
             assert(decoded.encoding == encoding);
             assert(decoded.hrp == hrp);
             assert(decoded.data == converted_input);
+
+            const auto decoded_upper = bech32::Decode(ToUpper(encoded));
+            assert(decoded_upper.encoding == encoding);
+            assert(decoded_upper.hrp == hrp);
+            assert(decoded_upper.data == converted_input);
         }
     }
 }
