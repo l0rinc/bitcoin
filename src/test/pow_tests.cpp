@@ -10,6 +10,8 @@
 #include <test/util/setup_common.h>
 #include <util/chaintype.h>
 
+#include <cassert>
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -50,6 +52,34 @@ static void CheckPowTargetContracts(uint32_t nbits, const Consensus::Params& con
     BOOST_CHECK(CheckProofOfWorkImpl(uint256::ZERO, nbits, consensus));
     BOOST_CHECK(CheckProofOfWorkImpl(ArithToUint256(compact_target), nbits, consensus));
     BOOST_CHECK(!CheckProofOfWorkImpl(ArithToUint256(compact_target + 1), nbits, consensus));
+}
+
+static int64_t ExpectedEquivalentTime(const CBlockIndex& to, const CBlockIndex& from, const CBlockIndex& tip, const Consensus::Params& consensus)
+{
+    const arith_uint256 tip_proof{GetBlockProof(tip)};
+    assert(tip_proof != 0);
+
+    const bool to_has_more_work{to.nChainWork > from.nChainWork};
+    const bool from_has_more_work{from.nChainWork > to.nChainWork};
+    const arith_uint256 work_delta{
+        to_has_more_work ? to.nChainWork - from.nChainWork : from.nChainWork - to.nChainWork};
+    const arith_uint256 scaled_delta{
+        work_delta * arith_uint256(consensus.nPowTargetSpacing) / tip_proof};
+    const int64_t magnitude{
+        scaled_delta.bits() > 63 ? std::numeric_limits<int64_t>::max() : int64_t(scaled_delta.GetLow64())};
+    return from_has_more_work ? -magnitude : magnitude;
+}
+
+static void CheckEquivalentTimeContracts(const CBlockIndex& to, const CBlockIndex& from, const CBlockIndex& tip, const Consensus::Params& consensus)
+{
+    BOOST_REQUIRE(GetBlockProof(tip) != 0);
+    const int64_t expected{ExpectedEquivalentTime(to, from, tip, consensus)};
+    const int64_t equivalent_time{GetBlockProofEquivalentTime(to, from, tip, consensus)};
+    BOOST_CHECK_EQUAL(equivalent_time, expected);
+    BOOST_CHECK_EQUAL(GetBlockProofEquivalentTime(from, to, tip, consensus), -expected);
+    BOOST_CHECK_EQUAL(GetBlockProofEquivalentTime(to, to, tip, consensus), 0);
+    if (to.nChainWork > from.nChainWork) BOOST_CHECK_GE(equivalent_time, 0);
+    if (from.nChainWork > to.nChainWork) BOOST_CHECK_LE(equivalent_time, 0);
 }
 
 /* Test calculation of next difficulty target with no constraints applying */
@@ -208,6 +238,38 @@ BOOST_AUTO_TEST_CASE(GetBlockProofEquivalentTime_test)
         int64_t tdiff = GetBlockProofEquivalentTime(*p1, *p2, *p3, chainParams->GetConsensus());
         BOOST_CHECK_EQUAL(tdiff, p1->GetBlockTime() - p2->GetBlockTime());
     }
+}
+
+BOOST_AUTO_TEST_CASE(GetBlockProofEquivalentTime_contracts)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
+    const auto& consensus{chainParams->GetConsensus()};
+
+    CBlockIndex tip;
+    tip.nBits = 0x1d00ffff;
+    const arith_uint256 tip_proof{GetBlockProof(tip)};
+    BOOST_REQUIRE(tip_proof != 0);
+
+    CBlockIndex lower_work;
+    lower_work.nChainWork = arith_uint256{7};
+    CBlockIndex higher_work;
+    higher_work.nChainWork = lower_work.nChainWork + tip_proof * arith_uint256{3};
+    CheckEquivalentTimeContracts(higher_work, lower_work, tip, consensus);
+
+    CBlockIndex same_work;
+    same_work.nChainWork = lower_work.nChainWork;
+    CheckEquivalentTimeContracts(same_work, lower_work, tip, consensus);
+
+    CBlockIndex maximum_work;
+    maximum_work.nChainWork = ~arith_uint256{0};
+    CBlockIndex no_work;
+    no_work.nChainWork = arith_uint256{0};
+    CheckEquivalentTimeContracts(maximum_work, no_work, tip, consensus);
+    BOOST_CHECK_EQUAL(GetBlockProofEquivalentTime(maximum_work, no_work, tip, consensus), std::numeric_limits<int64_t>::max());
+
+    CBlockIndex invalid_tip;
+    invalid_tip.nBits = 0;
+    BOOST_CHECK_THROW(GetBlockProofEquivalentTime(higher_work, lower_work, invalid_tip, consensus), uint_error);
 }
 
 void sanity_check_chainparams(const ArgsManager& args, ChainType chain_type)
