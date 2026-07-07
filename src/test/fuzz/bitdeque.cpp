@@ -395,6 +395,21 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                 }
             },
             [&] {
+                // emplace_back()
+                if (cdeq.size() < limitlen) {
+                    bool val = ctx.randbool();
+                    auto& ref = deq.emplace_back(val);
+                    auto bitref = bitdeq.emplace_back(val);
+                    assert(ref == bitref);
+                    assert(cdeq.back() == cbitdeq.back());
+                    if (ctx.randbool()) {
+                        ref = !ref;
+                        bitref.flip();
+                    }
+                    assert(cdeq.back() == cbitdeq.back());
+                }
+            },
+            [&] {
                 // push_front()
                 if (cdeq.size() < limitlen) {
                     bool val = ctx.randbool();
@@ -410,6 +425,21 @@ FUZZ_TARGET(bitdeque, .init = InitRandData)
                         bitdeq.push_front(val);
                         assert(ref == bitref); // references are not invalidated
                     }
+                }
+            },
+            [&] {
+                // emplace_front()
+                if (cdeq.size() < limitlen) {
+                    bool val = ctx.randbool();
+                    auto& ref = deq.emplace_front(val);
+                    auto bitref = bitdeq.emplace_front(val);
+                    assert(ref == bitref);
+                    assert(cdeq.front() == cbitdeq.front());
+                    if (ctx.randbool()) {
+                        ref = !ref;
+                        bitref.flip();
+                    }
+                    assert(cdeq.front() == cbitdeq.front());
                 }
             },
             [&] {
