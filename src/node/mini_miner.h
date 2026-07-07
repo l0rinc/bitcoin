@@ -50,10 +50,8 @@ public:
     int64_t GetTxSize() const { return vsize_individual; }
     int64_t GetSizeWithAncestors() const { return vsize_with_ancestors; }
     const CTransaction& GetTx() const LIFETIMEBOUND { return *tx; }
-    void UpdateAncestorState(int64_t vsize_change, CAmount fee_change) {
-        vsize_with_ancestors += vsize_change;
-        fee_with_ancestors += fee_change;
-    }
+    void UpdateAncestorState(int64_t vsize_change, CAmount fee_change);
+    void RemoveAncestorState(int64_t vsize, CAmount fee);
 };
 
 // Comparator needed for std::set<MockEntryMap::iterator>
