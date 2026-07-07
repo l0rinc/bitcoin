@@ -15,7 +15,79 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
+
+namespace {
+constexpr std::array BYTE_UNITS{
+    std::pair{'\0', ByteUnit::NOOP},
+    std::pair{'k', ByteUnit::k},
+    std::pair{'K', ByteUnit::K},
+    std::pair{'m', ByteUnit::m},
+    std::pair{'M', ByteUnit::M},
+    std::pair{'g', ByteUnit::g},
+    std::pair{'G', ByteUnit::G},
+    std::pair{'t', ByteUnit::t},
+    std::pair{'T', ByteUnit::T},
+};
+
+std::optional<ByteUnit> ByteUnitFromSuffix(char suffix)
+{
+    switch (suffix) {
+    case 'k': return ByteUnit::k;
+    case 'K': return ByteUnit::K;
+    case 'm': return ByteUnit::m;
+    case 'M': return ByteUnit::M;
+    case 'g': return ByteUnit::g;
+    case 'G': return ByteUnit::G;
+    case 't': return ByteUnit::t;
+    case 'T': return ByteUnit::T;
+    }
+    return std::nullopt;
+}
+
+std::optional<uint64_t> ParseDecimalUInt64(std::string_view digits)
+{
+    if (digits.empty()) return std::nullopt;
+
+    uint64_t value{0};
+    for (const char digit : digits) {
+        if (digit < '0' || digit > '9') return std::nullopt;
+        const uint64_t increment{static_cast<uint64_t>(digit - '0')};
+        if (value > (std::numeric_limits<uint64_t>::max() - increment) / 10) {
+            return std::nullopt;
+        }
+        value = value * 10 + increment;
+    }
+    return value;
+}
+
+std::optional<uint64_t> ExpectedParseByteUnits(std::string_view input, ByteUnit default_multiplier)
+{
+    if (input.empty()) return std::nullopt;
+
+    ByteUnit multiplier{default_multiplier};
+    if (const std::optional<ByteUnit> suffix_multiplier{ByteUnitFromSuffix(input.back())}) {
+        multiplier = *suffix_multiplier;
+        input.remove_suffix(1);
+    }
+
+    const std::optional<uint64_t> parsed_num{ParseDecimalUInt64(input)};
+    if (!parsed_num) return std::nullopt;
+
+    const uint64_t unit_amount{static_cast<uint64_t>(multiplier)};
+    if (*parsed_num > std::numeric_limits<uint64_t>::max() / unit_amount) {
+        return std::nullopt;
+    }
+    return *parsed_num * unit_amount;
+}
+
+void AssertParseByteUnitsContracts(std::string_view input, ByteUnit default_multiplier)
+{
+    const std::optional<uint64_t> parsed{ParseByteUnits(input, default_multiplier)};
+    assert(parsed == ExpectedParseByteUnits(input, default_multiplier));
+}
+} // namespace
 
 FUZZ_TARGET(parse_numbers)
 {
@@ -92,20 +164,11 @@ FUZZ_TARGET(parse_numbers)
         assert(parsed_fixed_point_4 / 10 == parsed_fixed_point_3);
     }
 
-    constexpr std::array byte_units{
-        std::pair{'\0', ByteUnit::NOOP},
-        std::pair{'k', ByteUnit::k},
-        std::pair{'K', ByteUnit::K},
-        std::pair{'m', ByteUnit::m},
-        std::pair{'M', ByteUnit::M},
-        std::pair{'g', ByteUnit::g},
-        std::pair{'G', ByteUnit::G},
-        std::pair{'t', ByteUnit::t},
-        std::pair{'T', ByteUnit::T},
-    };
+    AssertParseByteUnitsContracts(random_string, provider.PickValueInArray(BYTE_UNITS).second);
+
     const uint64_t byte_unit_amount{provider.ConsumeIntegral<uint64_t>()};
-    const auto [suffix, suffix_multiplier]{provider.PickValueInArray(byte_units)};
-    const auto default_multiplier{provider.PickValueInArray(byte_units).second};
+    const auto [suffix, suffix_multiplier]{provider.PickValueInArray(BYTE_UNITS)};
+    const auto default_multiplier{provider.PickValueInArray(BYTE_UNITS).second};
     std::string byte_units_input{std::to_string(byte_unit_amount)};
     if (suffix != '\0') byte_units_input.push_back(suffix);
     const uint64_t multiplier{static_cast<uint64_t>(suffix == '\0' ? default_multiplier : suffix_multiplier)};
