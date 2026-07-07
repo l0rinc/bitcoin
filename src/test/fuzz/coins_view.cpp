@@ -455,7 +455,9 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 AddCoins(coins_view_cache, transaction, height, check_for_overwrite);
             },
             [&] {
-                (void)ValidateInputsStandardness(CTransaction{random_mutable_transaction}, coins_view_cache);
+                const CTransaction transaction{random_mutable_transaction};
+                const auto state{ValidateInputsStandardness(transaction, coins_view_cache)};
+                if (transaction.IsCoinBase()) assert(state.IsValid());
             },
             [&] {
                 TxValidationState state;
@@ -500,7 +502,9 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 (void)GetTransactionSigOpCost(transaction, coins_view_cache, flags);
             },
             [&] {
-                (void)IsWitnessStandard(CTransaction{random_mutable_transaction}, coins_view_cache);
+                const CTransaction transaction{random_mutable_transaction};
+                const bool witness_standard{IsWitnessStandard(transaction, coins_view_cache)};
+                if (transaction.IsCoinBase() || !transaction.HasWitness()) assert(witness_standard);
             });
     }
 
