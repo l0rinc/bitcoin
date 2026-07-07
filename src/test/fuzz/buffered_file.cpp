@@ -77,7 +77,8 @@ void AssertBufferedFileModel(FuzzedDataProvider& fuzzed_data_provider)
             [&] {
                 const size_t read_size{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, 512)};
                 const uint64_t before{buffered_file.GetPos()};
-                std::vector<std::byte> actual(read_size);
+                const std::byte sentinel{std::byte{0xa5}};
+                std::vector<std::byte> actual(read_size, sentinel);
                 try {
                     buffered_file.read(actual);
                     assert(before + read_size <= effective_end());
@@ -85,7 +86,15 @@ void AssertBufferedFileModel(FuzzedDataProvider& fuzzed_data_provider)
                     assert(std::equal(actual.begin(), actual.end(), file_bytes.begin() + before));
                 } catch (const std::ios_base::failure&) {
                     assert(before + read_size > effective_end());
-                    assert(buffered_file.GetPos() <= effective_end());
+                    if (before + read_size > read_limit) {
+                        assert(buffered_file.GetPos() == before);
+                        assert(std::all_of(actual.begin(), actual.end(), [&](std::byte byte) { return byte == sentinel; }));
+                    } else {
+                        assert(buffered_file.GetPos() == file_bytes.size());
+                        const size_t copied{file_bytes.size() - before};
+                        assert(std::equal(actual.begin(), actual.begin() + copied, file_bytes.begin() + before));
+                        assert(std::all_of(actual.begin() + copied, actual.end(), [&](std::byte byte) { return byte == sentinel; }));
+                    }
                 }
             },
             [&] {
@@ -97,7 +106,8 @@ void AssertBufferedFileModel(FuzzedDataProvider& fuzzed_data_provider)
                     assert(buffered_file.GetPos() == before + skip);
                 } catch (const std::ios_base::failure&) {
                     assert(before + skip > effective_end());
-                    assert(buffered_file.GetPos() <= effective_end());
+                    const uint64_t expected_pos{before + skip > read_limit ? before : static_cast<uint64_t>(file_bytes.size())};
+                    assert(buffered_file.GetPos() == expected_pos);
                 }
             },
             [&] {
@@ -135,7 +145,7 @@ void AssertBufferedFileModel(FuzzedDataProvider& fuzzed_data_provider)
                     assert(buffered_file.SetPos(*expected));
                 } catch (const std::ios_base::failure&) {
                     assert(!expected);
-                    assert(buffered_file.GetPos() <= effective_end());
+                    assert(buffered_file.GetPos() == effective_end());
                 }
             });
     }
