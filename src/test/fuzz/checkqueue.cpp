@@ -78,6 +78,8 @@ FUZZ_TARGET(checkqueue)
     const bool complete_checks{fuzzed_data_provider.ConsumeBool()};
     const std::optional<int> expected_result{add_checks ? ExpectedResult(check_results) : std::nullopt};
     const bool expect_all_checks_run{add_checks && complete_checks && !expected_result.has_value()};
+    const bool add_after_control_complete{complete_checks && fuzzed_data_provider.ConsumeBool()};
+    const int post_complete_size{add_after_control_complete ? fuzzed_data_provider.ConsumeIntegralInRange<int>(0, max_checks) : 0};
 
     std::atomic<size_t> direct_calls{0};
     if (add_checks) {
@@ -93,6 +95,7 @@ FUZZ_TARGET(checkqueue)
     }
 
     std::atomic<size_t> control_calls{0};
+    size_t control_calls_after_complete{0};
     {
         CCheckQueueControl<DumbCheck> check_queue_control{check_queue_2};
         if (add_checks) {
@@ -105,10 +108,17 @@ FUZZ_TARGET(checkqueue)
             if (expect_all_checks_run) {
                 assert(control_calls.load(std::memory_order_relaxed) == check_results.size());
             }
+            control_calls_after_complete = control_calls.load(std::memory_order_relaxed);
+            if (add_after_control_complete) {
+                check_queue_control.Add(MakeChecks(std::vector<bool>(post_complete_size, true), &control_calls));
+            }
         }
+    }
+    if (add_after_control_complete) {
+        assert(control_calls.load(std::memory_order_relaxed) == control_calls_after_complete + post_complete_size);
     }
     AssertResult(check_queue_2.Complete(), std::nullopt);
     if (add_checks && !expected_result.has_value()) {
-        assert(control_calls.load(std::memory_order_relaxed) == check_results.size());
+        assert(control_calls.load(std::memory_order_relaxed) == check_results.size() + post_complete_size);
     }
 }
