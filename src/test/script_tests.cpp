@@ -1569,11 +1569,44 @@ CScript ToScript(const T& byte_container)
     return {span.begin(), span.end()};
 }
 
+static int FindAndDeleteWithAccounting(CScript& script, const CScript& delete_script)
+{
+    const CScript original{script};
+    const size_t original_size{script.size()};
+    const int found{FindAndDelete(script, delete_script)};
+    BOOST_REQUIRE_GE(found, 0);
+    BOOST_CHECK_EQUAL(script.size() + static_cast<size_t>(found) * delete_script.size(), original_size);
+    if (found == 0) {
+        BOOST_CHECK(script == original);
+    }
+    return found;
+}
+
 BOOST_AUTO_TEST_CASE(script_byte_array_u8_vector_equivalence)
 {
     const CScript scriptPubKey1 = CScript() << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f"_hex_v_u8 << OP_CHECKSIG;
     const CScript scriptPubKey2 = CScript() << "04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f"_hex << OP_CHECKSIG;
     BOOST_CHECK(scriptPubKey1 == scriptPubKey2);
+}
+
+BOOST_AUTO_TEST_CASE(script_FindAndDelete_accounting)
+{
+    CScript script{CScript{} << OP_1 << OP_2};
+    BOOST_CHECK_EQUAL(FindAndDeleteWithAccounting(script, CScript{}), 0);
+
+    script = CScript{} << OP_1 << OP_2 << OP_3;
+    BOOST_CHECK_EQUAL(FindAndDeleteWithAccounting(script, CScript{} << OP_2), 1);
+    BOOST_CHECK(script == (CScript{} << OP_1 << OP_3));
+
+    script = CScript{} << OP_0 << OP_0 << OP_1 << OP_1;
+    BOOST_CHECK_EQUAL(FindAndDeleteWithAccounting(script, CScript{} << OP_0 << OP_1), 1);
+    BOOST_CHECK(script == (CScript{} << OP_0 << OP_1));
+    BOOST_CHECK_EQUAL(FindAndDeleteWithAccounting(script, CScript{} << OP_0 << OP_1), 1);
+    BOOST_CHECK(script.empty());
+
+    script = ToScript("0003feed"_hex);
+    BOOST_CHECK_EQUAL(FindAndDeleteWithAccounting(script, ToScript("03feed"_hex)), 1);
+    BOOST_CHECK(script == ToScript("00"_hex));
 }
 
 BOOST_AUTO_TEST_CASE(script_FindAndDelete)
