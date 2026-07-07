@@ -77,8 +77,10 @@ FUZZ_TARGET(psbt)
     (void)psbt.IsNull();
     (void)psbt.GetUnsignedTx();
 
+    size_t unsigned_inputs{0};
     for (const PSBTInput& input : psbt.inputs) {
-        (void)PSBTInputSigned(input);
+        const bool input_signed{PSBTInputSigned(input)};
+        if (!input_signed) ++unsigned_inputs;
         (void)input.IsNull();
         PSBTInput input_mod = input;
         CTxOut tx_out;
@@ -113,7 +115,7 @@ FUZZ_TARGET(psbt)
             Assert(input_mod == input_fill);
         }
     }
-    (void)CountPSBTUnsignedInputs(psbt);
+    Assert(CountPSBTUnsignedInputs(psbt) == unsigned_inputs);
 
     for (const PSBTOutput& output : psbt.outputs) {
         (void)output.IsNull();
