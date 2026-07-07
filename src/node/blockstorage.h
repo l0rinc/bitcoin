@@ -351,10 +351,16 @@ public:
     std::vector<CBlockIndex*> GetAllBlockIndices() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /**
-     * All pairs A->B, where A (or one of its ancestors) misses transactions, but B has transactions.
+     * All pairs A->B, where A == B->pprev and B has a transaction count (nTx > 0).
+     * Either B lacks a chain transaction count and waits for A to acquire one so
+     * B can be linked (B's own block data may have been pruned in the meantime),
+     * or B has a chain transaction count and block data but was removed from
+     * setBlockIndexCandidates because block data of A or one of A's ancestors was
+     * pruned and must be downloaded again.
      */
     std::multimap<CBlockIndex*, CBlockIndex*> m_blocks_unlinked;
     void AddUnlinkedBlock(CBlockIndex* block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void RemoveUnlinkedBlock(CBlockIndex* block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     std::unique_ptr<BlockTreeDB> m_block_tree_db GUARDED_BY(::cs_main);
 

@@ -170,7 +170,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                     while (range.first != range.second) {
                         std::multimap<CBlockIndex*, CBlockIndex*>::iterator _it = range.first;
                         range.first++;
-                        if (_it->second == prune_block) {
+                        if (_it->second == prune_block && prune_block->HaveNumChainTxs()) {
                             blockman.m_blocks_unlinked.erase(_it);
                         }
                     }
