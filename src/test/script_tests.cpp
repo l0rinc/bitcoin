@@ -4,6 +4,7 @@
 
 #include <common/system.h>
 #include <compressor.h>
+#include <coins.h>
 #include <core_io.h>
 #include <key.h>
 #include <rpc/util.h>
@@ -27,10 +28,12 @@
 #include <util/fs.h>
 #include <util/strencodings.h>
 #include <util/string.h>
+#include <util/translation.h>
 
 #include <boost/test/unit_test.hpp>
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -1453,6 +1456,26 @@ BOOST_AUTO_TEST_CASE(sign_paytoanchor)
     curr.vin.emplace_back(COutPoint{prev.GetHash(), 0});
 
     BOOST_CHECK(SignSignature(keystore, CTransaction(prev), curr, 0, SIGHASH_ALL, sig_data));
+}
+
+BOOST_AUTO_TEST_CASE(sign_transaction_input_errors)
+{
+    FillableSigningProvider keystore;
+    CMutableTransaction no_inputs;
+    std::map<int, bilingual_str> no_input_errors;
+    BOOST_CHECK(SignTransaction(no_inputs, &keystore, {}, {.sighash_type = SIGHASH_ALL}, no_input_errors));
+    BOOST_CHECK(no_input_errors.empty());
+
+    CMutableTransaction missing_coin;
+    missing_coin.vin.emplace_back();
+    missing_coin.vout.emplace_back(0, CScript{} << OP_TRUE);
+    std::map<int, bilingual_str> missing_coin_errors;
+    const bool complete{SignTransaction(missing_coin, &keystore, {}, {.sighash_type = SIGHASH_ALL}, missing_coin_errors)};
+    BOOST_CHECK_EQUAL(complete, missing_coin_errors.empty());
+    BOOST_CHECK(!complete);
+    BOOST_REQUIRE_EQUAL(missing_coin_errors.size(), 1);
+    BOOST_CHECK_EQUAL(missing_coin_errors.begin()->first, 0);
+    BOOST_CHECK(!missing_coin_errors.begin()->second.empty());
 }
 
 BOOST_AUTO_TEST_CASE(script_standard_push)
