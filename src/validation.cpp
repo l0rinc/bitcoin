@@ -4607,6 +4607,12 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
             LogError("%s: AcceptBlock FAILED (%s)\n", __func__, state.ToString());
             return false;
         }
+        if (force_processing) {
+            Assert(pindex);
+            Assert(pindex->nStatus & BLOCK_HAVE_DATA);
+            Assert(pindex->IsValid(BLOCK_VALID_TRANSACTIONS));
+            Assert(pindex->nTx == block->vtx.size());
+        }
         if (new_block && *new_block) {
             Assert(pindex);
             Assert(pindex->nStatus & BLOCK_HAVE_DATA);
