@@ -878,16 +878,28 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
 
             [&]() { // Sync.
                 if (overlay_fetch_scope) return; // CoinsViewOverlay::Sync() is never called in production
-                size_t expected_cached_unspent{0};
-                for (const auto& entry : sim_caches[caches.size()].entry) {
-                    expected_cached_unspent += entry.entrytype == EntryType::UNSPENT;
+                std::vector<uint32_t> expected_cached_unspent;
+                std::vector<uint32_t> expected_uncached_spent;
+                for (uint32_t outpointidx = 0; outpointidx < NUM_OUTPOINTS; ++outpointidx) {
+                    const auto& entry{sim_caches[caches.size()].entry[outpointidx]};
+                    if (entry.entrytype == EntryType::UNSPENT) {
+                        expected_cached_unspent.push_back(outpointidx);
+                    } else if (entry.entrytype == EntryType::SPENT) {
+                        expected_uncached_spent.push_back(outpointidx);
+                    }
                 }
                 // Apply to simulation data (note that in our simulation, syncing and flushing is the same thing).
                 flush();
                 // Apply to real caches.
                 caches.back()->Sync();
                 assert_cache_clean(*caches.back());
-                assert(caches.back()->GetCacheSize() >= expected_cached_unspent);
+                assert(caches.back()->GetCacheSize() >= expected_cached_unspent.size());
+                for (const uint32_t outpointidx : expected_cached_unspent) {
+                    assert(caches.back()->HaveCoinInCache(data.outpoints[outpointidx]));
+                }
+                for (const uint32_t outpointidx : expected_uncached_spent) {
+                    assert(!caches.back()->HaveCoinInCache(data.outpoints[outpointidx]));
+                }
                 assert_stack_peek_matches_sim();
             },
 
