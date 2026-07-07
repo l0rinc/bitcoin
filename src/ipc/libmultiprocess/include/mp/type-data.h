@@ -33,7 +33,7 @@ requires (std::is_same_v<decltype(output.get()), ::capnp::Data::Builder> && IsBy
 {
     auto data = std::span{value};
     auto result = output.init(data.size());
-    memcpy(result.begin(), data.data(), data.size());
+    if (data.size()) memcpy(result.begin(), data.data(), data.size());
 }
 
 template <typename LocalType, typename Input, typename ReadDest>
