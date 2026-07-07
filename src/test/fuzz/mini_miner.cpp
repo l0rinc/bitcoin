@@ -117,6 +117,7 @@ void CheckManualMiniMinerLinearize(const CTxMemPool& pool, const std::vector<Txi
     std::vector<node::MiniMinerMempoolEntry> manual_entries;
     manual_entries.reserve(cluster.size());
     std::map<Txid, std::set<Txid>> descendant_caches;
+    std::vector<COutPoint> unspent_outpoints;
 
     for (const auto& txiter : cluster) {
         const auto [_, ancestor_size, ancestor_fee]{pool.CalculateAncestorData(*txiter)};
@@ -125,7 +126,15 @@ void CheckManualMiniMinerLinearize(const CTxMemPool& pool, const std::vector<Txi
                                     static_cast<int64_t>(ancestor_size),
                                     txiter->GetModifiedFee(),
                                     ancestor_fee);
+        const auto& tx{txiter->GetTx()};
+        for (uint32_t n{0}; n < tx.vout.size(); ++n) {
+            COutPoint outpoint{tx.GetHash(), n};
+            if (!pool.GetConflictTx(outpoint)) {
+                unspent_outpoints.push_back(outpoint);
+            }
+        }
     }
+    Assert(!unspent_outpoints.empty());
 
     for (const auto& txiter : cluster) {
         CTxMemPool::setEntries descendants;
@@ -142,14 +151,21 @@ void CheckManualMiniMinerLinearize(const CTxMemPool& pool, const std::vector<Txi
     node::MiniMiner manual_mini_miner{manual_entries, descendant_caches};
     assert(manual_mini_miner.IsReadyToCalculate());
     const auto inclusion_order{manual_mini_miner.Linearize()};
+    const auto template_txids{manual_mini_miner.GetMockTemplateTxids()};
     assert(inclusion_order.size() == cluster.size());
-    assert(manual_mini_miner.GetMockTemplateTxids().size() == cluster.size());
+    assert(template_txids.size() == cluster.size());
     for (const auto& txiter : cluster) {
         const auto txid{txiter->GetTx().GetHash()};
         assert(inclusion_order.contains(txid));
-        assert(manual_mini_miner.GetMockTemplateTxids().contains(txid));
+        assert(template_txids.contains(txid));
     }
     CheckTopologicalInclusionOrder(pool, inclusion_order);
+
+    node::MiniMiner pool_mini_miner{pool, unspent_outpoints};
+    assert(pool_mini_miner.IsReadyToCalculate());
+    const auto pool_inclusion_order{pool_mini_miner.Linearize()};
+    assert(pool_inclusion_order == inclusion_order);
+    assert(pool_mini_miner.GetMockTemplateTxids() == template_txids);
 }
 
 // Test that the MiniMiner can run with various outpoints and feerates.
