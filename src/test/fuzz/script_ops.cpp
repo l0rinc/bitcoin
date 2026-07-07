@@ -68,16 +68,20 @@ FUZZ_TARGET(script_ops)
     (void)script.IsUnspendable();
     {
         CScript::const_iterator pc = script.begin();
-        opcodetype opcode;
+        opcodetype opcode{OP_16};
         const bool getop_without_data{script.GetOp(pc, opcode)};
-        std::vector<uint8_t> data;
+        if (!getop_without_data) assert(opcode == OP_INVALIDOPCODE);
+        std::vector<uint8_t> data{0x42};
         CScript::const_iterator pc_data = script.begin();
-        opcodetype opcode_data;
+        opcodetype opcode_data{OP_16};
         const bool getop_with_data{script.GetOp(pc_data, opcode_data, data)};
         assert(getop_without_data == getop_with_data);
         if (getop_without_data) {
             assert(pc == pc_data);
             assert(opcode == opcode_data);
+        } else {
+            assert(opcode_data == OP_INVALIDOPCODE);
+            assert(data.empty());
         }
         (void)script.IsPushOnly(pc);
     }
