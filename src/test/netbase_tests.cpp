@@ -24,6 +24,7 @@
 #include <numeric>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -662,14 +663,24 @@ BOOST_AUTO_TEST_CASE(netbase_getgroup)
 
 BOOST_AUTO_TEST_CASE(netbase_parsenetwork)
 {
-    BOOST_CHECK_EQUAL(ParseNetwork("ipv4"), NET_IPV4);
-    BOOST_CHECK_EQUAL(ParseNetwork("ipv6"), NET_IPV6);
-    BOOST_CHECK_EQUAL(ParseNetwork("onion"), NET_ONION);
-    BOOST_CHECK_EQUAL(ParseNetwork("cjdns"), NET_CJDNS);
+    const std::pair<Network, std::string> public_networks[]{
+        {NET_IPV4, "ipv4"},
+        {NET_IPV6, "ipv6"},
+        {NET_ONION, "onion"},
+        {NET_I2P, "i2p"},
+        {NET_CJDNS, "cjdns"},
+    };
+    for (const auto& [network, name] : public_networks) {
+        BOOST_CHECK_EQUAL(ParseNetwork(name), network);
+        BOOST_CHECK_EQUAL(ParseNetwork(ToUpper(name)), network);
+        BOOST_CHECK_EQUAL(GetNetworkName(network), name);
+        BOOST_CHECK_EQUAL(ParseNetwork(GetNetworkName(network)), network);
+    }
 
     BOOST_CHECK_EQUAL(ParseNetwork("IPv4"), NET_IPV4);
     BOOST_CHECK_EQUAL(ParseNetwork("IPv6"), NET_IPV6);
     BOOST_CHECK_EQUAL(ParseNetwork("ONION"), NET_ONION);
+    BOOST_CHECK_EQUAL(ParseNetwork("I2P"), NET_I2P);
     BOOST_CHECK_EQUAL(ParseNetwork("CJDNS"), NET_CJDNS);
 
     // "tor" as a network specification was deprecated in 60dc8e4208 in favor of
@@ -677,6 +688,9 @@ BOOST_AUTO_TEST_CASE(netbase_parsenetwork)
     BOOST_CHECK_EQUAL(ParseNetwork("tor"), NET_UNROUTABLE);
     BOOST_CHECK_EQUAL(ParseNetwork("TOR"), NET_UNROUTABLE);
 
+    BOOST_CHECK_EQUAL(ParseNetwork(GetNetworkName(NET_UNROUTABLE)), NET_UNROUTABLE);
+    BOOST_CHECK_EQUAL(ParseNetwork(GetNetworkName(NET_INTERNAL)), NET_UNROUTABLE);
+    BOOST_CHECK_EQUAL(ParseNetwork(std::string{"ipv4\0", 5}), NET_UNROUTABLE);
     BOOST_CHECK_EQUAL(ParseNetwork(":)"), NET_UNROUTABLE);
     BOOST_CHECK_EQUAL(ParseNetwork("oniÖn"), NET_UNROUTABLE);
     BOOST_CHECK_EQUAL(ParseNetwork("\xfe\xff"), NET_UNROUTABLE);

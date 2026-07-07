@@ -77,6 +77,17 @@ std::optional<BlockFilterType> ExpectedBlockFilterType(std::string_view name)
     return std::nullopt;
 }
 
+Network ExpectedNetwork(std::string_view name)
+{
+    const std::string lower_name{ToLower(name)};
+    if (lower_name == "ipv4") return NET_IPV4;
+    if (lower_name == "ipv6") return NET_IPV6;
+    if (lower_name == "onion") return NET_ONION;
+    if (lower_name == "i2p") return NET_I2P;
+    if (lower_name == "cjdns") return NET_CJDNS;
+    return NET_UNROUTABLE;
+}
+
 void AssertAffixRemovalContracts(std::string_view str, std::string_view affix)
 {
     const std::string_view removed_prefix_view{RemovePrefixView(str, affix)};
@@ -154,6 +165,14 @@ void AssertBlockFilterTypeByNameContracts(std::string_view name)
         assert(parsed_type == sentinel);
     }
 }
+
+void AssertParseNetworkContracts(const std::string& name)
+{
+    const Network parsed_network{ParseNetwork(name)};
+    assert(parsed_network == ExpectedNetwork(name));
+    assert(parsed_network == NET_UNROUTABLE || GetNetworkName(parsed_network) == ToLower(name));
+    assert(parsed_network == NET_UNROUTABLE || ParseNetwork(GetNetworkName(parsed_network)) == parsed_network);
+}
 } // namespace
 
 FUZZ_TARGET(string)
@@ -182,7 +201,7 @@ FUZZ_TARGET(string)
     (void)JSONRPCError(fuzzed_data_provider.ConsumeIntegral<int>(), random_string_1);
     const common::Settings settings;
     (void)OnlyHasDefaultSectionSetting(settings, random_string_1, random_string_2);
-    (void)ParseNetwork(random_string_1);
+    AssertParseNetworkContracts(random_string_1);
     (void)ParseOutputType(random_string_1);
     AssertAffixRemovalContracts(random_string_1, random_string_2);
     (void)ResolveErrMsg(random_string_1, random_string_2);
