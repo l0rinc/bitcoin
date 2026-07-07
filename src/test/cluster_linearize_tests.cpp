@@ -684,6 +684,33 @@ BOOST_AUTO_TEST_CASE(depgraph_count_dependencies_uses_reduced_edges)
     BOOST_CHECK_EQUAL(depgraph.CountDependencies(), 1U);
 }
 
+BOOST_AUTO_TEST_CASE(depgraph_remove_transactions_prunes_deleted_positions)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto grandparent{depgraph.AddTransaction(FeeFrac{1, 10})};
+    const auto parent{depgraph.AddTransaction(FeeFrac{2, 10})};
+    const auto child{depgraph.AddTransaction(FeeFrac{3, 10})};
+    const auto trailing{depgraph.AddTransaction(FeeFrac{4, 10})};
+
+    depgraph.AddDependencies(TestBitSet::Singleton(grandparent), parent);
+    depgraph.AddDependencies(TestBitSet::Singleton(parent), child);
+    depgraph.AddDependencies(TestBitSet::Singleton(child), trailing);
+    SanityCheck(depgraph);
+
+    depgraph.RemoveTransactions(TestBitSet::Singleton(parent) | TestBitSet::Singleton(trailing));
+    SanityCheck(depgraph);
+
+    const auto expected_positions{TestBitSet::Singleton(grandparent) | TestBitSet::Singleton(child)};
+    BOOST_CHECK(depgraph.Positions() == expected_positions);
+    BOOST_CHECK_EQUAL(depgraph.PositionRange(), child + 1);
+    BOOST_CHECK(depgraph.Ancestors(child) == expected_positions);
+    BOOST_CHECK(depgraph.Descendants(grandparent) == expected_positions);
+    for (DepGraphIndex idx : depgraph.Positions()) {
+        BOOST_CHECK(depgraph.Ancestors(idx).IsSubsetOf(depgraph.Positions()));
+        BOOST_CHECK(depgraph.Descendants(idx).IsSubsetOf(depgraph.Positions()));
+    }
+}
+
 BOOST_AUTO_TEST_CASE(depgraph_compact_has_no_observable_effect)
 {
     DepGraph<TestBitSet> depgraph;
