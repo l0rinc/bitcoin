@@ -46,13 +46,20 @@ struct RPCFuzzTestingSetup : public TestingSetup {
     {
     }
 
-    void CallRPC(const std::string& rpc_method, const std::vector<std::string>& arguments)
+    void CallRPC(const std::string& rpc_method, const std::vector<std::string>& arguments, bool use_named_arguments)
     {
         JSONRPCRequest request;
         request.context = &m_node;
         request.strMethod = rpc_method;
         try {
-            request.params = RPCConvertValues(rpc_method, arguments);
+            if (use_named_arguments) {
+                request.params = RPCConvertNamedValues(rpc_method, arguments);
+                assert(request.params.isObject());
+            } else {
+                request.params = RPCConvertValues(rpc_method, arguments);
+                assert(request.params.isArray());
+                assert(request.params.size() == arguments.size());
+            }
         } catch (const RPCConvertError&) {
             return;
         }
@@ -391,7 +398,7 @@ FUZZ_TARGET(rpc, .init = initialize_rpc)
             // intentional trigger_internal_bug
             maybe_mock.emplace();
         }
-        rpc_testing_setup->CallRPC(rpc_command, arguments);
+        rpc_testing_setup->CallRPC(rpc_command, arguments, fuzzed_data_provider.ConsumeBool());
     } catch (const UniValue& json_rpc_error) {
         AssertJSONRPCError(json_rpc_error);
         const std::string error_msg{json_rpc_error.find_value("message").get_str()};
