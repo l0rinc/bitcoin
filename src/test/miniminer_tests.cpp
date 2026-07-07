@@ -352,6 +352,37 @@ BOOST_FIXTURE_TEST_CASE(miniminer_zero_target_allows_order_dependent_saturated_t
     BOOST_CHECK(template_txids.contains(low_grandchild->GetHash()));
 }
 
+BOOST_FIXTURE_TEST_CASE(miniminer_saturated_package_score_allows_exact_total_below_target, TestChain100Setup)
+{
+    const auto negative_parent{make_tx({COutPoint{m_coinbase_txns[0]->GetHash(), 0}}, /*num_outputs=*/1)};
+    const auto high_child{make_tx({COutPoint{negative_parent->GetHash(), 0}}, /*num_outputs=*/1)};
+
+    const CAmount min_fee{std::numeric_limits<CAmount>::min()};
+    const CAmount max_fee{std::numeric_limits<CAmount>::max()};
+    const int64_t parent_vsize{GetVirtualTransactionSize(*negative_parent)};
+    const int64_t child_vsize{GetVirtualTransactionSize(*high_child)};
+    const CFeeRate target_feerate{1};
+
+    BOOST_REQUIRE_EQUAL(min_fee + max_fee, -1);
+    BOOST_REQUIRE_GT(target_feerate.GetFee(parent_vsize + child_vsize), 0);
+
+    std::vector<node::MiniMinerMempoolEntry> entries;
+    entries.emplace_back(negative_parent, parent_vsize, parent_vsize, min_fee, min_fee);
+    entries.emplace_back(high_child, child_vsize, parent_vsize + child_vsize, max_fee, max_fee);
+
+    std::map<Txid, std::set<Txid>> descendant_caches;
+    descendant_caches.emplace(negative_parent->GetHash(), std::set<Txid>{negative_parent->GetHash(), high_child->GetHash()});
+    descendant_caches.emplace(high_child->GetHash(), std::set<Txid>{high_child->GetHash()});
+
+    node::MiniMiner mini_miner{entries, descendant_caches};
+    BOOST_REQUIRE(mini_miner.IsReadyToCalculate());
+    mini_miner.BuildMockTemplate(target_feerate);
+    const auto template_txids{mini_miner.GetMockTemplateTxids()};
+    BOOST_CHECK_EQUAL(template_txids.size(), entries.size());
+    BOOST_CHECK(template_txids.contains(negative_parent->GetHash()));
+    BOOST_CHECK(template_txids.contains(high_child->GetHash()));
+}
+
 BOOST_FIXTURE_TEST_CASE(miniminer_same_tx_outputs_share_bumpfee, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
