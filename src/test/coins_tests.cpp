@@ -1564,7 +1564,20 @@ BOOST_AUTO_TEST_CASE(ccoins_addcoin_exception_keeps_usage_balanced)
     cache.SelfTest();
 
     const Coin coin2{CTxOut{m_rng.randrange(20), CScript{} << m_rng.randbytes(CScriptBase::STATIC_SIZE + 2)}, 2, false};
-    BOOST_CHECK_THROW(cache.AddCoin(outpoint, Coin{coin2}, /*possible_overwrite=*/false), std::logic_error);
+    const auto cache_size{cache.GetCacheSize()};
+    const auto dirty_count{cache.GetDirtyCount()};
+    const auto memory_usage{cache.DynamicMemoryUsage()};
+    bool threw{false};
+    try {
+        cache.AddCoin(outpoint, Coin{coin2}, /*possible_overwrite=*/false);
+    } catch (const std::logic_error& e) {
+        BOOST_CHECK_EQUAL(std::string{e.what()}, "Attempted to overwrite an unspent coin (when possible_overwrite is false)");
+        threw = true;
+    }
+    BOOST_CHECK(threw);
+    BOOST_CHECK_EQUAL(cache.GetCacheSize(), cache_size);
+    BOOST_CHECK_EQUAL(cache.GetDirtyCount(), dirty_count);
+    BOOST_CHECK_EQUAL(cache.DynamicMemoryUsage(), memory_usage);
     cache.SelfTest();
 
     BOOST_CHECK(cache.AccessCoin(outpoint) == coin1);
