@@ -9,6 +9,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 
@@ -51,6 +52,27 @@ FUZZ_TARGET(parse_numbers)
         if (u64) {
             assert(random_string.find_first_not_of(digits) == std::string::npos);
         }
+
+        uint64_t generated{0};
+        for (const auto byte : buffer) {
+            generated = (generated << 8) | byte;
+        }
+        const std::string canonical_u64{std::to_string(generated)};
+        assert(ToIntegral<uint64_t>(canonical_u64) == generated);
+        assert(!ToIntegral<uint64_t>("+" + canonical_u64));
+        assert(!ToIntegral<uint64_t>(" " + canonical_u64));
+        assert(!ToIntegral<uint64_t>(canonical_u64 + " "));
+        assert(!ToIntegral<uint64_t>(canonical_u64 + "a"));
+
+        const uint64_t signed_mask{static_cast<uint64_t>(std::numeric_limits<int64_t>::max())};
+        const int64_t signed_magnitude{static_cast<int64_t>(generated & signed_mask)};
+        const int64_t generated_signed{(generated & (uint64_t{1} << 63)) != 0 ? -signed_magnitude : signed_magnitude};
+        const std::string canonical_i64{std::to_string(generated_signed)};
+        assert(ToIntegral<int64_t>(canonical_i64) == generated_signed);
+        assert(!ToIntegral<int64_t>("+" + canonical_i64));
+        assert(!ToIntegral<int64_t>(" " + canonical_i64));
+        assert(!ToIntegral<int64_t>(canonical_i64 + " "));
+        assert(!ToIntegral<int64_t>(canonical_i64 + "a"));
     }
 
     (void)ParseMoney(random_string);
