@@ -292,6 +292,10 @@ FUZZ_TARGET(key, .init = initialize_key)
         const bool ok_recover_compact = recover_pubkey.RecoverCompact(random_uint256, vch_compact_sig);
         assert(ok_recover_compact);
         assert(recover_pubkey == pubkey);
+
+        const std::vector<unsigned char> truncated_compact_sig{vch_compact_sig.begin(), vch_compact_sig.end() - 1};
+        assert(!recover_pubkey.RecoverCompact(random_uint256, truncated_compact_sig));
+        assert(!recover_pubkey.IsValid());
     }
 
     {
