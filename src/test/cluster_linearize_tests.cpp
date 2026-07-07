@@ -660,6 +660,22 @@ BOOST_AUTO_TEST_CASE(postlinearize_skips_diagram_compare_when_chunk_sums_overflo
     SanityCheck(depgraph, linearization);
 }
 
+BOOST_AUTO_TEST_CASE(postlinearize_handles_minimum_fee_reverse_pass)
+{
+    DepGraph<TestBitSet> depgraph;
+    const auto min_fee{depgraph.AddTransaction(FeeFrac{std::numeric_limits<int64_t>::min(), 1})};
+    const auto positive_fee{depgraph.AddTransaction(FeeFrac{1, 1})};
+    BOOST_REQUIRE(depgraph.IsAcyclic());
+
+    std::vector<DepGraphIndex> linearization{min_fee, positive_fee};
+
+    PostLinearize(depgraph, linearization);
+    BOOST_CHECK_EQUAL(linearization.size(), 2U);
+    BOOST_CHECK(depgraph.Positions()[linearization[0]]);
+    BOOST_CHECK(depgraph.Positions()[linearization[1]]);
+    BOOST_CHECK_NE(linearization[0], linearization[1]);
+}
+
 BOOST_AUTO_TEST_CASE(append_topo_preserves_prefix_and_orders_subset)
 {
     DepGraph<TestBitSet> depgraph;
