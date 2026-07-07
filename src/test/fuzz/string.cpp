@@ -62,6 +62,15 @@ constexpr std::array<std::string_view, 4> SAFE_CHARS_BY_RULE{
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!*'();:@&=+$,/?#[]-_.~%",
 };
 
+std::optional<FeeEstimateMode> ExpectedFeeEstimateMode(std::string_view mode)
+{
+    const std::string upper_mode{ToUpper(mode)};
+    if (upper_mode == "UNSET") return FeeEstimateMode::UNSET;
+    if (upper_mode == "ECONOMICAL") return FeeEstimateMode::ECONOMICAL;
+    if (upper_mode == "CONSERVATIVE") return FeeEstimateMode::CONSERVATIVE;
+    return std::nullopt;
+}
+
 void AssertAffixRemovalContracts(std::string_view str, std::string_view affix)
 {
     const std::string_view removed_prefix_view{RemovePrefixView(str, affix)};
@@ -109,6 +118,20 @@ void AssertSanitizeStringContracts(std::string_view str, int rule)
         ++next_char;
     }
 }
+
+void AssertFeeModeFromStringContracts(std::string_view mode)
+{
+    FeeEstimateMode parsed_mode{FeeEstimateMode::CONSERVATIVE};
+    const bool parsed{FeeModeFromString(mode, parsed_mode)};
+    const std::optional<FeeEstimateMode> expected_mode{ExpectedFeeEstimateMode(mode)};
+
+    assert(parsed == expected_mode.has_value());
+    if (expected_mode) {
+        assert(parsed_mode == *expected_mode);
+    } else {
+        assert(parsed_mode == FeeEstimateMode::CONSERVATIVE);
+    }
+}
 } // namespace
 
 FUZZ_TARGET(string)
@@ -124,8 +147,7 @@ FUZZ_TARGET(string)
     (void)BlockFilterTypeByName(random_string_1, block_filter_type);
     (void)Capitalize(random_string_1);
     (void)CopyrightHolders(random_string_1);
-    FeeEstimateMode fee_estimate_mode;
-    (void)FeeModeFromString(random_string_1, fee_estimate_mode);
+    AssertFeeModeFromStringContracts(random_string_1);
     const auto width{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, 1000)};
     (void)FormatParagraph(random_string_1, width, fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, width));
     (void)FormatSubVersion(random_string_1, fuzzed_data_provider.ConsumeIntegral<int>(), random_string_vector);
