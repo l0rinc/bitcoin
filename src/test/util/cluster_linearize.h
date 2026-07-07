@@ -312,8 +312,11 @@ void SanityCheck(const DepGraph<SetType>& depgraph)
     assert(position_range == depgraph.PositionRange());
     assert(position_range >= num_positions);
     assert(position_range <= SetType::Size());
+    assert(depgraph.Positions().IsSubsetOf(SetType::Fill(position_range)));
     // Consistency check between ancestors internally.
     for (DepGraphIndex i : depgraph.Positions()) {
+        assert(depgraph.Ancestors(i).IsSubsetOf(depgraph.Positions()));
+        assert(depgraph.Descendants(i).IsSubsetOf(depgraph.Positions()));
         // Transactions include themselves as ancestors.
         assert(depgraph.Ancestors(i)[i]);
         // If a is an ancestor of b, then b's ancestors must include all of a's ancestors.
