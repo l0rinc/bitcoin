@@ -14,6 +14,7 @@
 #include <script/parsing.h>
 #include <sync.h>
 #include <tinyformat.h>
+#include <util/check.h>
 #include <util/fs.h>
 #include <util/log.h>
 #include <util/readwritefile.h>
@@ -147,6 +148,9 @@ bool Session::Listen(Connection& conn)
         CreateIfNotCreatedAlready();
         conn.me = m_my_addr;
         conn.sock = StreamAccept();
+        Assume(conn.sock != nullptr);
+        Assume(conn.me.IsI2P());
+        Assume(conn.me.GetPort() == I2P_SAM31_PORT);
         return true;
     } catch (const std::runtime_error& e) {
         LogError("Couldn't listen: %s\n", e.what());
@@ -201,6 +205,8 @@ bool Session::Accept(Connection& conn)
         }
 
         conn.peer = CService(peer_addr, I2P_SAM31_PORT);
+        Assume(conn.peer.IsI2P());
+        Assume(conn.peer.GetPort() == I2P_SAM31_PORT);
 
         return true;
     }
@@ -226,6 +232,7 @@ bool Session::Connect(const CService& to, Connection& conn, bool& proxy_error)
     if (to.GetPort() != I2P_SAM31_PORT) {
         LogDebug(BCLog::I2P, "Error connecting to %s, connection refused due to arbitrary port %s\n", to.ToStringAddrPort(), to.GetPort());
         proxy_error = false;
+        Assume(!proxy_error);
         return false;
     }
 
@@ -257,6 +264,10 @@ bool Session::Connect(const CService& to, Connection& conn, bool& proxy_error)
 
         if (result == "OK") {
             conn.sock = std::move(sock);
+            Assume(conn.sock != nullptr);
+            Assume(conn.peer == to);
+            Assume(conn.me.IsI2P());
+            Assume(conn.me.GetPort() == I2P_SAM31_PORT);
             return true;
         }
 
