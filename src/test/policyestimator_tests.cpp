@@ -162,6 +162,30 @@ bool EqualFeeCalculations(const FeeCalculation& a, const FeeCalculation& b)
            a.best_height == b.best_height;
 }
 
+FeeCalculation StaleFeeCalculation()
+{
+    FeeCalculation calc;
+    calc.est.pass.start = 17;
+    calc.est.pass.end = 19;
+    calc.est.pass.withinTarget = 23;
+    calc.est.pass.totalConfirmed = 29;
+    calc.est.pass.inMempool = 31;
+    calc.est.pass.leftMempool = 37;
+    calc.est.fail.start = 41;
+    calc.est.fail.end = 43;
+    calc.est.fail.withinTarget = 47;
+    calc.est.fail.totalConfirmed = 53;
+    calc.est.fail.inMempool = 59;
+    calc.est.fail.leftMempool = 61;
+    calc.est.decay = 67;
+    calc.est.scale = 71;
+    calc.reason = FeeReason::REQUIRED;
+    calc.desiredTarget = 73;
+    calc.returnedTarget = 79;
+    calc.best_height = 83;
+    return calc;
+}
+
 } // namespace
 
 BOOST_AUTO_TEST_CASE(BlockPolicyEstimates)
@@ -548,6 +572,33 @@ BOOST_AUTO_TEST_CASE(estimate_fee_matches_medium_double_success_raw_fee)
     BOOST_CHECK(fee_estimator.estimateFee(1) == CFeeRate(0));
 
     fs::remove(estimator_data_path);
+    fs::remove(estimator_path);
+}
+
+BOOST_AUTO_TEST_CASE(estimate_smart_fee_clears_failed_calculation)
+{
+    const fs::path estimator_path{m_args.GetDataDirBase() / "fee_estimator_unused.dat"};
+    fs::remove(estimator_path);
+    CBlockPolicyEstimator fee_estimator{estimator_path, DEFAULT_ACCEPT_STALE_FEE_ESTIMATES};
+
+    const auto check_no_estimate{[&](const int conf_target, const int returned_target) {
+        FeeCalculation calc{StaleFeeCalculation()};
+        FeeCalculation expected;
+        expected.desiredTarget = conf_target;
+        expected.returnedTarget = returned_target;
+        expected.best_height = 0;
+        BOOST_CHECK(fee_estimator.estimateSmartFee(conf_target, &calc, /*conservative=*/false) == CFeeRate(0));
+        BOOST_CHECK(EqualFeeCalculations(calc, expected));
+    }};
+
+    check_no_estimate(0, 0);
+    check_no_estimate(-1, -1);
+
+    const int too_high_target{static_cast<int>(fee_estimator.HighestTargetTracked(FeeEstimateHorizon::LONG_HALFLIFE)) + 1};
+    check_no_estimate(too_high_target, too_high_target);
+
+    check_no_estimate(1, 0);
+
     fs::remove(estimator_path);
 }
 
