@@ -86,7 +86,8 @@ void AssertBlockIndexTreeState(const TestBlockManager& blockman, const Chainstat
         assert(block);
         assert(block->pprev == parent);
         assert(block->nHeight > 0);
-        assert(block->nStatus & BLOCK_HAVE_DATA);
+        assert(block->nTx > 0);
+        assert((block->nStatus & BLOCK_VALID_MASK) >= BLOCK_VALID_TRANSACTIONS);
         assert(unlinked_blocks.emplace(parent, block).second);
     }
 
@@ -298,14 +299,11 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                 assert(chain.Tip()->nChainWork >= old_tip->nChainWork);
             },
             [&] {
-                // Prune chain - dealing with block files is beyond the scope of this test, so just prune random blocks, making no assumptions
+                // Prune blocks - dealing with block files is beyond the scope of this test, so just prune random blocks, making no assumptions
                 // about what blocks are pruned together because they are in the same block file.
-                // Also don't prune blocks outside of the chain for now - this would make the fuzzer crash because of the problem described in
-                // https://github.com/bitcoin/bitcoin/issues/31512
                 LOCK(cs_main);
                 auto& chain = chainman.ActiveChain();
-                int prune_height = fuzzed_data_provider.ConsumeIntegralInRange<int>(0, chain.Height());
-                CBlockIndex* prune_block{chain[prune_height]};
+                CBlockIndex* prune_block{PickValue(fuzzed_data_provider, blocks)};
                 if (prune_block != chain.Tip() && (prune_block->nStatus & BLOCK_HAVE_DATA)) {
                     blockman.m_have_pruned = true;
                     prune_block->nStatus &= ~BLOCK_HAVE_DATA;
@@ -317,7 +315,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                     while (range.first != range.second) {
                         std::multimap<CBlockIndex*, CBlockIndex*>::iterator _it = range.first;
                         range.first++;
-                        if (_it->second == prune_block) {
+                        if (_it->second == prune_block && prune_block->HaveNumChainTxs()) {
                             blockman.m_blocks_unlinked.erase(_it);
                         }
                     }
@@ -332,6 +330,8 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                 size_t i = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, num_pruned - 1);
                 CBlockIndex* index = pruned_blocks[i];
                 assert(!(index->nStatus & BLOCK_HAVE_DATA));
+                // Production callers reject duplicate-invalid headers before storing block data again.
+                if (index->nStatus & BLOCK_FAILED_VALID) return;
                 CBlock block{DummyBlockWithTransactions(index->nTx)}; // Set the number of tx to the prior value.
                 FlatFilePos pos(
                     fuzzed_data_provider.ConsumeIntegralInRange<int>(0, 1000),
