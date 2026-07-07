@@ -351,7 +351,8 @@ public:
     std::vector<CBlockIndex*> GetAllBlockIndices() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /**
-     * All pairs A->B, where A (or one of its ancestors) misses transactions, but B has transactions.
+     * All pairs A->B, where B has a known transaction count but is waiting for
+     * A (or one of A's ancestors) to have block data or a chain transaction count.
      */
     std::multimap<CBlockIndex*, CBlockIndex*> m_blocks_unlinked;
     void AddUnlinkedBlock(CBlockIndex* block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
