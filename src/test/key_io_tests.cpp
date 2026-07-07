@@ -161,4 +161,23 @@ BOOST_AUTO_TEST_CASE(key_io_invalid)
     }
 }
 
+BOOST_AUTO_TEST_CASE(key_io_error_locations_are_call_local)
+{
+    SelectParams(ChainType::MAIN);
+
+    std::string error_msg{"stale error"};
+    std::vector<int> error_locations{1, 2, 3};
+    const CTxDestination valid_dest{DecodeDestination("1FsSia9rv4NeEwvJ2GvXrX7LyxYspbN2mo", error_msg, &error_locations)};
+    BOOST_CHECK(IsValidDestination(valid_dest));
+    BOOST_CHECK(error_msg.empty());
+    BOOST_CHECK(error_locations.empty());
+
+    error_msg = "stale error";
+    error_locations = {1, 2, 3};
+    const CTxDestination invalid_dest{DecodeDestination("bad0IOl", error_msg, &error_locations)};
+    BOOST_CHECK(!IsValidDestination(invalid_dest));
+    BOOST_CHECK(!error_msg.empty());
+    BOOST_CHECK(error_locations.empty());
+}
+
 BOOST_AUTO_TEST_SUITE_END()
