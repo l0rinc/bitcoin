@@ -685,8 +685,32 @@ FUZZ_TARGET(txgraph)
                 }
                 auto ref = pick_fn();
                 real->SetTransactionFee(*ref, fee);
+                std::optional<FeePerWeight> expected_feerate;
                 for (auto& sim : sims) {
                     sim.SetTransactionFee(ref, fee);
+                    const auto simpos{sim.Find(ref)};
+                    if (simpos != SimTxGraph::MISSING) {
+                        const auto sim_feerate{FeePerWeight::FromFeeFrac(sim.graph.FeeRate(simpos))};
+                        if (expected_feerate.has_value()) {
+                            assert(*expected_feerate == sim_feerate);
+                        } else {
+                            expected_feerate = sim_feerate;
+                        }
+                    }
+                }
+                const auto real_feerate{real->GetIndividualFeerate(*ref)};
+                if (expected_feerate.has_value()) {
+                    assert(real_feerate == *expected_feerate);
+                } else {
+                    assert(real_feerate.IsEmpty());
+                }
+                if (sims.size() == 2 && !sims[0].IsOversized() && !sims[1].IsOversized()) {
+                    const auto [real_main_diagram, real_staged_diagram] = real->GetMainStagingDiagrams();
+                    const auto real_sum_main = std::accumulate(real_main_diagram.begin(), real_main_diagram.end(), FeeFrac{});
+                    const auto real_sum_staged = std::accumulate(real_staged_diagram.begin(), real_staged_diagram.end(), FeeFrac{});
+                    assert(real_sum_staged - real_sum_main == sims[1].SumAll() - sims[0].SumAll());
+                    assert_diagram_sorted(real_main_diagram);
+                    assert_diagram_sorted(real_staged_diagram);
                 }
                 break;
             } else if (command-- == 0) {
