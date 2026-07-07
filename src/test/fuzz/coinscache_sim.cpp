@@ -690,6 +690,32 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 entry.height = current_height;
             },
 
+            [&]() { // EmplaceCoinInternalDANGER.
+                uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
+                uint32_t coinidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_COINS - 1);
+                const bool emplace_spent{provider.ConsumeBool()};
+                if (sim_caches[caches.size()].entry[outpointidx].entrytype != EntryType::NONE) return;
+                if (caches.back()->HaveCoinInCache(data.outpoints[outpointidx])) return;
+
+                // Invoke on real caches.
+                Coin coin;
+                if (!emplace_spent) {
+                    coin = data.coins[coinidx];
+                    coin.nHeight = current_height;
+                }
+                caches.back()->EmplaceCoinInternalDANGER(COutPoint{data.outpoints[outpointidx]}, std::move(coin));
+                // Apply to simulation data.
+                auto& entry = sim_caches[caches.size()].entry[outpointidx];
+                if (emplace_spent) {
+                    entry.entrytype = EntryType::SPENT;
+                } else {
+                    entry.entrytype = EntryType::UNSPENT;
+                    entry.coinidx = coinidx;
+                    entry.height = current_height;
+                }
+                assert_read_apis_match_sim(outpointidx);
+            },
+
             [&]() { // AddCoin with disallowed local overwrite
                 const uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
                 const uint32_t coinidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_COINS - 1);
