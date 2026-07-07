@@ -165,8 +165,10 @@ FUZZ_TARGET(transaction, .init = initialize_transaction)
     (void)SignalsOptInRBF(tx);
 
     const CCoinsViewCache coins_view_cache{&CoinsViewEmpty::Get()};
-    (void)ValidateInputsStandardness(tx, coins_view_cache);
-    (void)IsWitnessStandard(tx, coins_view_cache);
+    const auto inputs_standardness{ValidateInputsStandardness(tx, coins_view_cache)};
+    if (tx.IsCoinBase()) assert(inputs_standardness.IsValid());
+    const bool witness_standard{IsWitnessStandard(tx, coins_view_cache)};
+    if (tx.IsCoinBase() || !tx.HasWitness()) assert(witness_standard);
 
     if (tx.ComputeTotalSize() < 250'000) { // Avoid high memory usage (with msan) due to json encoding
         {
