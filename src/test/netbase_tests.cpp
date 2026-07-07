@@ -38,6 +38,18 @@ static CNetAddr ResolveIP(const std::string& ip)
     return LookupHost(ip, false).value_or(CNetAddr{});
 }
 
+static void CheckSubNetCanonicalRoundTrip(const std::string& subnet_str)
+{
+    const CSubNet subnet{LookupSubNet(subnet_str)};
+    BOOST_REQUIRE(subnet.IsValid());
+
+    const std::string canonical{subnet.ToString()};
+    const CSubNet reparsed{LookupSubNet(canonical)};
+    BOOST_CHECK(reparsed.IsValid());
+    BOOST_CHECK(reparsed == subnet);
+    BOOST_CHECK_EQUAL(reparsed.ToString(), canonical);
+}
+
 static CNetAddr CreateInternal(const std::string& host)
 {
     CNetAddr addr;
@@ -440,6 +452,12 @@ BOOST_AUTO_TEST_CASE(netbase_set_sock_addr)
 
 BOOST_AUTO_TEST_CASE(subnet_test)
 {
+    CheckSubNetCanonicalRoundTrip("1.2.3.4/255.255.255.0");
+    CheckSubNetCanonicalRoundTrip("1:2:3:4:5:6:7:8/ffff:ffff:ffff:ffff::");
+    CheckSubNetCanonicalRoundTrip("pg6mmjiyjmcrsslvykfwnntlaru7p5svn6y2ymmju6nubxndf4pscryd.onion");
+    CheckSubNetCanonicalRoundTrip(std::string(52, 'a') + ".b32.i2p");
+    CheckSubNetCanonicalRoundTrip("fc00::1");
+
     BOOST_CHECK(LookupSubNet("1.2.3.0/24") == LookupSubNet("1.2.3.0/255.255.255.0"));
     BOOST_CHECK(LookupSubNet("1.2.3.0/24") != LookupSubNet("1.2.4.0/255.255.255.0"));
     BOOST_CHECK(LookupSubNet("1.2.3.0/24").Match(ResolveIP("1.2.3.4")));
