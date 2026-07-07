@@ -15,6 +15,7 @@
 #include <test/util/setup_common.h>
 #include <util/asmap.h>
 #include <util/strencodings.h>
+#include <util/string.h>
 #include <util/translation.h>
 
 #include <algorithm>
@@ -814,15 +815,23 @@ BOOST_AUTO_TEST_CASE(netpermissions_test)
     BOOST_CHECK(NetWhitelistPermissions::TryParse("in,out,bloom@1.2.3.4", whitelistPermissions, connection_direction, error));
     BOOST_CHECK_EQUAL(connection_direction, ConnectionDirection::Both);
 
-    const auto strings = NetPermissions::ToStrings(NetPermissionFlags::All);
-    BOOST_CHECK_EQUAL(strings.size(), 7U);
-    BOOST_CHECK(std::find(strings.begin(), strings.end(), "bloomfilter") != strings.end());
-    BOOST_CHECK(std::find(strings.begin(), strings.end(), "forcerelay") != strings.end());
-    BOOST_CHECK(std::find(strings.begin(), strings.end(), "relay") != strings.end());
-    BOOST_CHECK(std::find(strings.begin(), strings.end(), "noban") != strings.end());
-    BOOST_CHECK(std::find(strings.begin(), strings.end(), "mempool") != strings.end());
-    BOOST_CHECK(std::find(strings.begin(), strings.end(), "download") != strings.end());
-    BOOST_CHECK(std::find(strings.begin(), strings.end(), "addr") != strings.end());
+    const auto check_permission_strings = [](NetPermissionFlags flags, const std::vector<std::string>& expected) {
+        const auto strings{NetPermissions::ToStrings(flags)};
+        BOOST_CHECK_EQUAL_COLLECTIONS(strings.begin(), strings.end(), expected.begin(), expected.end());
+
+        NetWhitebindPermissions parsed;
+        bilingual_str error;
+        BOOST_REQUIRE(NetWhitebindPermissions::TryParse(util::Join(strings, ",") + "@1.2.3.4:32", parsed, error));
+        BOOST_CHECK(error.empty());
+        BOOST_CHECK_EQUAL(parsed.m_flags, flags);
+    };
+    check_permission_strings(NetPermissionFlags::None, {});
+    check_permission_strings(NetPermissionFlags::BloomFilter, {"bloomfilter"});
+    check_permission_strings(NetPermissionFlags::ForceRelay, {"forcerelay", "relay"});
+    check_permission_strings(NetPermissionFlags::NoBan, {"noban", "download"});
+    const std::vector<std::string> all_permissions{
+        "bloomfilter", "noban", "forcerelay", "relay", "mempool", "download", "addr"};
+    check_permission_strings(NetPermissionFlags::All, all_permissions);
 }
 
 BOOST_AUTO_TEST_CASE(netbase_dont_resolve_strings_with_embedded_nul_characters)
