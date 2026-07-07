@@ -3955,6 +3955,12 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
                 LogWarning("Internal bug detected: block %d has unexpected m_chain_tx_count %i that should be %i (%s %s). Please report this issue here: %s\n",
                    pindex->nHeight, pindex->m_chain_tx_count, prev_tx_sum(*pindex), CLIENT_NAME, FormatFullVersion(), CLIENT_BUGREPORT);
             }
+            // nSequenceId participates in setBlockIndexCandidates ordering. Remove
+            // the block before mutating it, then add it back below if it is still a
+            // candidate.
+            for (const auto& c : m_chainstates) {
+                c->setBlockIndexCandidates.erase(pindex);
+            }
             pindex->m_chain_tx_count = prev_tx_sum(*pindex);
             pindex->nSequenceId = nBlockSequenceId++;
             // A descendant can be invalidated while waiting for an unlinked
