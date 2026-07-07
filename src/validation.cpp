@@ -3909,6 +3909,7 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
 {
     AssertLockHeld(cs_main);
     Assert(std::ranges::all_of(block.vtx, [](const auto& tx) { return tx != nullptr; }));
+    Assert(!(pindexNew->nStatus & BLOCK_FAILED_VALID));
     pindexNew->nTx = block.vtx.size();
     // Typically m_chain_tx_count will be 0 at this point, but it can be nonzero if this
     // is a pruned block which is being downloaded again, or if this is an
@@ -5378,7 +5379,8 @@ void ChainstateManager::CheckBlockIndex() const
         assert(parent);
         assert(block);
         assert(block->pprev == parent);
-        assert(block->nStatus & BLOCK_HAVE_DATA);
+        assert(block->nTx > 0);
+        assert((block->nStatus & BLOCK_VALID_MASK) >= BLOCK_VALID_TRANSACTIONS);
         assert(m_blockman.LookupBlockIndex(parent->GetBlockHash()) == parent);
         assert(m_blockman.LookupBlockIndex(block->GetBlockHash()) == block);
     }
@@ -5570,11 +5572,14 @@ void ChainstateManager::CheckBlockIndex() const
                 foundInUnlinked = true;
             }
         }
-        if (pindex->pprev && (pindex->nStatus & BLOCK_HAVE_DATA) && pindexFirstNeverProcessed != nullptr && pindexFirstInvalid == nullptr) {
-            // If this block has block data available, some parent was never received, and has no invalid parents, it must be in m_blocks_unlinked.
+        if (pindex->pprev && pindex->nTx > 0 && !pindex->HaveNumChainTxs() && pindexFirstInvalid == nullptr) {
+            // If this block has a transaction count, some parent was never received, and has no invalid parents,
+            // it must be in m_blocks_unlinked so it can be linked when the parent arrives. The block itself may
+            // have been pruned after its transaction count was recorded.
             assert(foundInUnlinked);
         }
-        if (!(pindex->nStatus & BLOCK_HAVE_DATA)) assert(!foundInUnlinked); // Can't be in m_blocks_unlinked if we don't HAVE_DATA
+        // A pruned block can only remain in m_blocks_unlinked while it still needs chain transaction counts.
+        if (!(pindex->nStatus & BLOCK_HAVE_DATA) && pindex->HaveNumChainTxs()) assert(!foundInUnlinked);
         if (pindexFirstMissing == nullptr) assert(!foundInUnlinked); // We aren't missing data for any parent -- cannot be in m_blocks_unlinked.
         if (pindex->pprev && (pindex->nStatus & BLOCK_HAVE_DATA) && pindexFirstNeverProcessed == nullptr && pindexFirstMissing != nullptr) {
             // We HAVE_DATA for this block, have received data for all parents at some point, but we're currently missing data for some parent.
