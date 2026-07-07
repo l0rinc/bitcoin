@@ -7,6 +7,7 @@
 
 #include <mp/util.h>
 
+#include <cassert>
 #include <concepts>
 #include <span>
 #include <ranges>
@@ -34,7 +35,11 @@ requires (std::is_same_v<decltype(output.get()), ::capnp::Data::Builder> && IsBy
 {
     auto data = std::span{value};
     auto result = output.init(data.size());
-    std::ranges::copy(data, result.begin());
+    if (!data.empty()) {
+        assert(data.data() != nullptr);
+        assert(result.begin() != nullptr);
+        std::ranges::copy(data, result.begin());
+    }
 }
 
 template <typename LocalType, typename Input, typename ReadDest>
