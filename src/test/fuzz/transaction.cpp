@@ -60,6 +60,7 @@ void AssertTransactionSerializationRoundTrip(const CTransaction& tx)
     DataStream with_witness_stream;
     with_witness_stream << TX_WITH_WITNESS(tx);
     assert(with_witness_stream.size() == GetSerializeSize(TX_WITH_WITNESS(tx)));
+    assert(tx.ComputeTotalSize() == with_witness_stream.size());
     SpanReader with_witness_reader{std::span<const std::byte>{with_witness_stream.data(), with_witness_stream.size()}};
     const CTransaction with_witness_roundtrip{deserialize, TX_WITH_WITNESS, with_witness_reader};
     assert(with_witness_reader.empty());
@@ -70,6 +71,12 @@ void AssertTransactionSerializationRoundTrip(const CTransaction& tx)
     DataStream no_witness_stream;
     no_witness_stream << TX_NO_WITNESS(tx);
     assert(no_witness_stream.size() == GetSerializeSize(TX_NO_WITNESS(tx)));
+    const int64_t expected_weight{
+        static_cast<int64_t>(no_witness_stream.size()) * (WITNESS_SCALE_FACTOR - 1) +
+        static_cast<int64_t>(with_witness_stream.size())};
+    assert(GetTransactionWeight(tx) == expected_weight);
+    assert(GetVirtualTransactionSize(tx) == GetVirtualTransactionSize(expected_weight, /*nSigOpCost=*/0, /*bytes_per_sigop=*/0));
+    assert(GetVirtualTransactionSize(tx) == (expected_weight + WITNESS_SCALE_FACTOR - 1) / WITNESS_SCALE_FACTOR);
     SpanReader no_witness_reader{std::span<const std::byte>{no_witness_stream.data(), no_witness_stream.size()}};
     const CTransaction no_witness_roundtrip{deserialize, TX_NO_WITNESS, no_witness_reader};
     assert(no_witness_reader.empty());
@@ -158,8 +165,6 @@ FUZZ_TARGET(transaction, .init = initialize_transaction)
 
     (void)EncodeHexTx(tx);
     (void)GetLegacySigOpCount(tx);
-    (void)GetTransactionWeight(tx);
-    (void)GetVirtualTransactionSize(tx);
     (void)IsFinalTx(tx, /* nBlockHeight= */ 1024, /* nBlockTime= */ 1024);
     (void)RecursiveDynamicUsage(tx);
     (void)SignalsOptInRBF(tx);
