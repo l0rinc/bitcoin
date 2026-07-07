@@ -3037,13 +3037,36 @@ bool DescriptorCache::GetCachedLastHardenedExtPubKey(uint32_t key_exp_pos, CExtP
 
 DescriptorCache DescriptorCache::MergeAndDiff(const DescriptorCache& other)
 {
+    const auto other_parent_xpubs{other.GetCachedParentExtPubKeys()};
+    const auto other_derived_xpubs{other.GetCachedDerivedExtPubKeys()};
+    const auto other_last_hardened_xpubs{other.GetCachedLastHardenedExtPubKeys()};
+
+    for (const auto& parent_xpub_pair : other_parent_xpubs) {
+        CExtPubKey xpub;
+        if (GetCachedParentExtPubKey(parent_xpub_pair.first, xpub) && xpub != parent_xpub_pair.second) {
+            throw std::runtime_error(std::string(__func__) + ": New cached parent xpub does not match already cached parent xpub");
+        }
+    }
+    for (const auto& derived_xpub_map_pair : other_derived_xpubs) {
+        for (const auto& derived_xpub_pair : derived_xpub_map_pair.second) {
+            CExtPubKey xpub;
+            if (GetCachedDerivedExtPubKey(derived_xpub_map_pair.first, derived_xpub_pair.first, xpub) && xpub != derived_xpub_pair.second) {
+                throw std::runtime_error(std::string(__func__) + ": New cached derived xpub does not match already cached derived xpub");
+            }
+        }
+    }
+    for (const auto& lh_xpub_pair : other_last_hardened_xpubs) {
+        CExtPubKey xpub;
+        if (GetCachedLastHardenedExtPubKey(lh_xpub_pair.first, xpub) && xpub != lh_xpub_pair.second) {
+            throw std::runtime_error(std::string(__func__) + ": New cached last hardened xpub does not match already cached last hardened xpub");
+        }
+    }
+
     DescriptorCache diff;
-    for (const auto& parent_xpub_pair : other.GetCachedParentExtPubKeys()) {
+    for (const auto& parent_xpub_pair : other_parent_xpubs) {
         CExtPubKey xpub;
         if (GetCachedParentExtPubKey(parent_xpub_pair.first, xpub)) {
-            if (xpub != parent_xpub_pair.second) {
-                throw std::runtime_error(std::string(__func__) + ": New cached parent xpub does not match already cached parent xpub");
-            }
+            Assume(xpub == parent_xpub_pair.second);
             continue;
         }
         CacheParentExtPubKey(parent_xpub_pair.first, parent_xpub_pair.second);
@@ -3053,13 +3076,11 @@ DescriptorCache DescriptorCache::MergeAndDiff(const DescriptorCache& other)
         Assume(diff.GetCachedParentExtPubKey(parent_xpub_pair.first, xpub));
         Assume(xpub == parent_xpub_pair.second);
     }
-    for (const auto& derived_xpub_map_pair : other.GetCachedDerivedExtPubKeys()) {
+    for (const auto& derived_xpub_map_pair : other_derived_xpubs) {
         for (const auto& derived_xpub_pair : derived_xpub_map_pair.second) {
             CExtPubKey xpub;
             if (GetCachedDerivedExtPubKey(derived_xpub_map_pair.first, derived_xpub_pair.first, xpub)) {
-                if (xpub != derived_xpub_pair.second) {
-                    throw std::runtime_error(std::string(__func__) + ": New cached derived xpub does not match already cached derived xpub");
-                }
+                Assume(xpub == derived_xpub_pair.second);
                 continue;
             }
             CacheDerivedExtPubKey(derived_xpub_map_pair.first, derived_xpub_pair.first, derived_xpub_pair.second);
@@ -3070,12 +3091,10 @@ DescriptorCache DescriptorCache::MergeAndDiff(const DescriptorCache& other)
             Assume(xpub == derived_xpub_pair.second);
         }
     }
-    for (const auto& lh_xpub_pair : other.GetCachedLastHardenedExtPubKeys()) {
+    for (const auto& lh_xpub_pair : other_last_hardened_xpubs) {
         CExtPubKey xpub;
         if (GetCachedLastHardenedExtPubKey(lh_xpub_pair.first, xpub)) {
-            if (xpub != lh_xpub_pair.second) {
-                throw std::runtime_error(std::string(__func__) + ": New cached last hardened xpub does not match already cached last hardened xpub");
-            }
+            Assume(xpub == lh_xpub_pair.second);
             continue;
         }
         CacheLastHardenedExtPubKey(lh_xpub_pair.first, lh_xpub_pair.second);
