@@ -2875,6 +2875,21 @@ void TxGraphImpl::SetTransactionFee(const Ref& ref, int64_t fee) noexcept
             locator.cluster->SetFee(*this, level, locator.index, fee);
         }
     }
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        std::optional<int32_t> size;
+        for (int level = 0; level < MAX_LEVELS; ++level) {
+            const auto& locator = entry.m_locator[level];
+            if (locator.IsPresent()) {
+                const auto feerate{locator.cluster->GetIndividualFeerate(locator.index)};
+                Assume(feerate.fee == fee);
+                if (size.has_value()) {
+                    Assume(feerate.size == *size);
+                } else {
+                    size = feerate.size;
+                }
+            }
+        }
+    }
 }
 
 std::strong_ordering TxGraphImpl::CompareMainOrder(const Ref& a, const Ref& b) noexcept
