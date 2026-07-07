@@ -79,6 +79,27 @@ uint32_t ConsumeBlockStatus(FuzzedDataProvider& provider, const bool have_data)
     return status;
 }
 
+void AssertBlockPositionAccessors(const CBlockIndex& index) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+{
+    AssertLockHeld(::cs_main);
+    const FlatFilePos block_pos{index.GetBlockPos()};
+    if (index.nStatus & BLOCK_HAVE_DATA) {
+        assert(block_pos.nFile == index.nFile);
+        assert(block_pos.nPos == index.nDataPos);
+    } else {
+        assert(block_pos.IsNull());
+    }
+
+    const FlatFilePos undo_pos{index.GetUndoPos()};
+    if (index.nStatus & BLOCK_HAVE_UNDO) {
+        assert(index.nStatus & BLOCK_HAVE_DATA);
+        assert(undo_pos.nFile == index.nFile);
+        assert(undo_pos.nPos == index.nUndoPos);
+    } else {
+        assert(undo_pos.IsNull());
+    }
+}
+
 } // namespace
 
 void init_block_index()
@@ -153,6 +174,7 @@ FUZZ_TARGET(block_index, .init = init_block_index)
             blocks.back()->nFile = file_num;
             blocks.back()->nDataPos = data_pos;
             blocks.back()->nUndoPos = undo_pos;
+            AssertBlockPositionAccessors(*blocks.back());
         });
         blocks_info.push_back(blocks.back().get());
     }
@@ -233,6 +255,7 @@ FUZZ_TARGET(block_index, .init = init_block_index)
             assert(loaded.nStatus == original.nStatus);
             assert(loaded.nTx == original.nTx);
             assert(loaded.GetBlockHeader().GetHash() == block_hashes[i]);
+            AssertBlockPositionAccessors(loaded);
         }
     });
 }
