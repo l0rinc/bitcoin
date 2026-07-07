@@ -388,6 +388,17 @@ void AssertBlockIndexLineage(const CBlockIndex& index)
     }
 }
 
+void AssertDagBlockIndexMetadata(ChainstateManager& chainman, const DagBlock& dag_block)
+{
+    LOCK(chainman.GetMutex());
+    const CBlockIndex* index{chainman.m_blockman.LookupBlockIndex(dag_block.block->GetHash())};
+    assert(index);
+    AssertBlockIndexLineage(*index);
+    assert(index->nStatus & BLOCK_HAVE_DATA);
+    assert(index->IsValid(BLOCK_VALID_TRANSACTIONS));
+    assert(index->nTx == dag_block.block->vtx.size());
+}
+
 std::vector<CBlockIndex*> KnownBlockIndexes(ChainstateManager& chainman)
 {
     std::vector<CBlockIndex*> indexes;
@@ -439,6 +450,7 @@ bool ProcessDagBlock(ChainstateManager& chainman, const DagBlock& dag_block)
     g_setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
 
     if (dag_block.valid) assert(accepted);
+    if (accepted && dag_block.valid) AssertDagBlockIndexMetadata(chainman, dag_block);
     return accepted;
 }
 
@@ -543,12 +555,17 @@ FUZZ_TARGET(validation_block_reorg, .init = initialize_validation_block_reorg)
                 const bool had_data{HasBlockData(chainman, dag_block.block->GetHash())};
                 bool new_block{true};
                 const bool pass_new_block_out{fuzzed_data_provider.ConsumeBool()};
+                const bool force_processing{fuzzed_data_provider.ConsumeBool()};
                 const bool accepted{chainman.ProcessNewBlock(
                     dag_block.block,
-                    /*force_processing=*/fuzzed_data_provider.ConsumeBool(),
+                    force_processing,
                     /*min_pow_checked=*/fuzzed_data_provider.ConsumeBool(),
                     pass_new_block_out ? &new_block : nullptr)};
                 node.validation_signals->SyncWithValidationInterfaceQueue();
+
+                if (accepted && force_processing && dag_block.valid) {
+                    AssertDagBlockIndexMetadata(chainman, dag_block);
+                }
 
                 if (pass_new_block_out) {
                     const bool has_data{HasBlockData(chainman, dag_block.block->GetHash())};
