@@ -358,12 +358,17 @@ bool GetScriptOp(CScriptBase::const_iterator& pc, CScriptBase::const_iterator en
     opcodeRet = OP_INVALIDOPCODE;
     if (pvchRet)
         pvchRet->clear();
-    if (pc >= end)
+    auto fail = [&]() {
+        Assume(opcodeRet == OP_INVALIDOPCODE);
+        if (pvchRet) Assume(pvchRet->empty());
         return false;
+    };
+    if (pc >= end)
+        return fail();
 
     // Read instruction
     if (end - pc < 1)
-        return false;
+        return fail();
     unsigned int opcode = *pc++;
 
     // Immediate operand
@@ -377,25 +382,25 @@ bool GetScriptOp(CScriptBase::const_iterator& pc, CScriptBase::const_iterator en
         else if (opcode == OP_PUSHDATA1)
         {
             if (end - pc < 1)
-                return false;
+                return fail();
             nSize = *pc++;
         }
         else if (opcode == OP_PUSHDATA2)
         {
             if (end - pc < 2)
-                return false;
+                return fail();
             nSize = ReadLE16(&pc[0]);
             pc += 2;
         }
         else if (opcode == OP_PUSHDATA4)
         {
             if (end - pc < 4)
-                return false;
+                return fail();
             nSize = ReadLE32(&pc[0]);
             pc += 4;
         }
         if (end - pc < 0 || (unsigned int)(end - pc) < nSize)
-            return false;
+            return fail();
         if (pvchRet)
             pvchRet->assign(pc, pc + nSize);
         pc += nSize;
