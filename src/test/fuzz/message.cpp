@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <variant>
 #include <vector>
 
 void initialize_message()
@@ -51,7 +52,28 @@ FUZZ_TARGET(message, .init = initialize_message)
         (void)MessageHash(random_message);
         auto address = fuzzed_data_provider.ConsumeRandomLengthString(1024);
         auto signature = fuzzed_data_provider.ConsumeRandomLengthString(1024);
-        (void)MessageVerify(address, signature, random_message);
-        (void)SigningResultString(fuzzed_data_provider.PickValueInArray({SigningResult::OK, SigningResult::PRIVATE_KEY_NOT_AVAILABLE, SigningResult::SIGNING_FAILED}));
+        const MessageVerificationResult verification_result{MessageVerify(address, signature, random_message)};
+        const CTxDestination destination{DecodeDestination(address)};
+        if (!IsValidDestination(destination)) {
+            assert(verification_result == MessageVerificationResult::ERR_INVALID_ADDRESS);
+        } else if (!std::get_if<PKHash>(&destination)) {
+            assert(verification_result == MessageVerificationResult::ERR_ADDRESS_NO_KEY);
+        } else if (!DecodeBase64(signature)) {
+            assert(verification_result == MessageVerificationResult::ERR_MALFORMED_SIGNATURE);
+        }
+
+        const SigningResult signing_result{fuzzed_data_provider.PickValueInArray({SigningResult::OK, SigningResult::PRIVATE_KEY_NOT_AVAILABLE, SigningResult::SIGNING_FAILED})};
+        const std::string signing_result_string{SigningResultString(signing_result)};
+        switch (signing_result) {
+        case SigningResult::OK:
+            assert(signing_result_string == "No error");
+            break;
+        case SigningResult::PRIVATE_KEY_NOT_AVAILABLE:
+            assert(signing_result_string == "Private key not available");
+            break;
+        case SigningResult::SIGNING_FAILED:
+            assert(signing_result_string == "Sign failed");
+            break;
+        }
     }
 }
