@@ -136,6 +136,32 @@ BOOST_AUTO_TEST_CASE(analyzepsbt_invalid_result_contract)
     BOOST_CHECK(analysis.next == PSBTRole::CREATOR);
 }
 
+BOOST_AUTO_TEST_CASE(count_unsigned_inputs)
+{
+    CMutableTransaction mtx;
+    for (uint32_t i{0}; i < 3; ++i) {
+        mtx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), i});
+    }
+    mtx.vout.emplace_back(1, CScript{} << OP_TRUE);
+
+    PartiallySignedTransaction psbt{mtx};
+    BOOST_REQUIRE_EQUAL(psbt.inputs.size(), 3);
+    BOOST_CHECK_EQUAL(CountPSBTUnsignedInputs(psbt), 3);
+    BOOST_CHECK(!PSBTInputSigned(psbt.inputs[0]));
+
+    psbt.inputs[1].final_script_sig = CScript{} << OP_TRUE;
+    BOOST_CHECK(PSBTInputSigned(psbt.inputs[1]));
+    BOOST_CHECK_EQUAL(CountPSBTUnsignedInputs(psbt), 2);
+
+    psbt.inputs[2].final_script_witness.stack.emplace_back(std::vector<unsigned char>{0x01});
+    BOOST_CHECK(PSBTInputSigned(psbt.inputs[2]));
+    BOOST_CHECK_EQUAL(CountPSBTUnsignedInputs(psbt), 1);
+
+    psbt.inputs[1].final_script_sig.clear();
+    psbt.inputs[2].final_script_witness.SetNull();
+    BOOST_CHECK_EQUAL(CountPSBTUnsignedInputs(psbt), 3);
+}
+
 BOOST_AUTO_TEST_CASE(psbt2_addinput)
 {
     FastRandomContext rng(/*fDeterministic=*/true);
