@@ -767,6 +767,11 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 // Apply to real caches (there is no equivalent in our simulation).
                 caches.back()->Uncache(data.outpoints[outpointidx]);
                 assert_cache_stats(parent_cache_stats);
+                const auto cache_stats_after_uncache{get_all_cache_stats()};
+                const auto dirty_counts_after_uncache{get_dirty_counts()};
+                caches.back()->Uncache(data.outpoints[outpointidx]);
+                assert_cache_stats(cache_stats_after_uncache);
+                assert_dirty_counts(dirty_counts_after_uncache);
                 auto realcoin = caches.back()->PeekCoin(data.outpoints[outpointidx]);
                 if (!sim.has_value()) {
                     assert(!realcoin);
@@ -777,6 +782,7 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                     assert(realcoin->fCoinBase == simcoin.fCoinBase);
                     assert(realcoin->nHeight == sim->second);
                 }
+                assert_read_apis_match_sim(outpointidx);
             },
 
             [&]() { // Add a cache level (if not already at the max).
