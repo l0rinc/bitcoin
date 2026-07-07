@@ -5,11 +5,13 @@
 #include <chainparams.h>
 #include <consensus/amount.h>
 #include <consensus/merkle.h>
+#include <consensus/validation.h>
 #include <core_io.h>
 #include <hash.h>
 #include <net.h>
 #include <script/script.h>
 #include <signet.h>
+#include <streams.h>
 #include <uint256.h>
 #include <util/chaintype.h>
 #include <util/check.h>
@@ -89,6 +91,22 @@ static void CheckSignetCreateSucceeds(const CBlock& block, const CScript& challe
     CheckSignetTxContracts(*signet_txs, challenge);
 }
 
+static void CheckBlockWeightContract(const CBlock& block)
+{
+    DataStream with_witness_stream;
+    with_witness_stream << TX_WITH_WITNESS(block);
+    BOOST_CHECK_EQUAL(with_witness_stream.size(), GetSerializeSize(TX_WITH_WITNESS(block)));
+
+    DataStream no_witness_stream;
+    no_witness_stream << TX_NO_WITNESS(block);
+    BOOST_CHECK_EQUAL(no_witness_stream.size(), GetSerializeSize(TX_NO_WITNESS(block)));
+
+    const int64_t expected_weight{
+        static_cast<int64_t>(no_witness_stream.size()) * (WITNESS_SCALE_FACTOR - 1) +
+        static_cast<int64_t>(with_witness_stream.size())};
+    BOOST_CHECK_EQUAL(GetBlockWeight(block), expected_weight);
+}
+
 BOOST_AUTO_TEST_CASE(block_subsidy_test)
 {
     const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
@@ -148,6 +166,27 @@ BOOST_AUTO_TEST_CASE(validation_rejects_null_block_tx_refs)
     BOOST_CHECK_THROW((void)CheckBlock(resized_block, state, consensus_params,
                           /*fCheckPOW=*/false, /*fCheckMerkleRoot=*/false),
                       NonFatalCheckError);
+}
+
+BOOST_AUTO_TEST_CASE(block_weight_helper)
+{
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vout.emplace_back(0, CScript{} << OP_TRUE);
+
+    CMutableTransaction spend;
+    spend.vin.resize(1);
+    spend.vin[0].prevout.n = 0;
+    spend.vout.emplace_back(0, CScript{} << OP_TRUE);
+
+    CBlock block;
+    block.vtx.push_back(MakeTransactionRef(coinbase));
+    block.vtx.push_back(MakeTransactionRef(spend));
+    CheckBlockWeightContract(block);
+
+    spend.vin[0].scriptWitness.stack.push_back({0x01, 0x02, 0x03});
+    block.vtx[1] = MakeTransactionRef(spend);
+    CheckBlockWeightContract(block);
 }
 
 BOOST_AUTO_TEST_CASE(signet_parse_tests)
