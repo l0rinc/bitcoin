@@ -208,6 +208,24 @@ BOOST_AUTO_TEST_CASE(key_invalid_sign_clears_signature_outputs)
     BOOST_CHECK(compact_sig.empty());
 }
 
+BOOST_AUTO_TEST_CASE(key_recover_compact_failure_invalidates_pubkey)
+{
+    const CKey key{DecodeSecret(strSecret1C)};
+    BOOST_REQUIRE(key.IsValid());
+    const uint256 msg_hash{Hash(std::string{"recover failure invalidates pubkey"})};
+
+    std::vector<unsigned char> compact_sig;
+    BOOST_REQUIRE(key.SignCompact(msg_hash, compact_sig));
+
+    CPubKey recovered;
+    BOOST_REQUIRE(recovered.RecoverCompact(msg_hash, compact_sig));
+    BOOST_REQUIRE(recovered.IsValid());
+
+    compact_sig.pop_back();
+    BOOST_CHECK(!recovered.RecoverCompact(msg_hash, compact_sig));
+    BOOST_CHECK(!recovered.IsValid());
+}
+
 BOOST_AUTO_TEST_CASE(key_der_import_export_contracts)
 {
     std::array<unsigned char, 32> out32;
