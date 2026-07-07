@@ -23,13 +23,14 @@ const CAmount med_fee{CENT/200}; // 5000 ṩ
 const CAmount high_fee{CENT/10}; // 100_000 ṩ
 
 
-static inline CTransactionRef make_tx(const std::vector<COutPoint>& inputs, size_t num_outputs)
+static inline CTransactionRef make_tx(const std::vector<COutPoint>& inputs, size_t num_outputs, uint32_t sequence = CTxIn::SEQUENCE_FINAL)
 {
     CMutableTransaction tx = CMutableTransaction();
     tx.vin.resize(inputs.size());
     tx.vout.resize(num_outputs);
     for (size_t i = 0; i < inputs.size(); ++i) {
         tx.vin[i].prevout = inputs[i];
+        tx.vin[i].nSequence = sequence;
     }
     for (size_t i = 0; i < num_outputs; ++i) {
         tx.vout[i].scriptPubKey = CScript() << OP_11 << OP_EQUAL;
@@ -300,6 +301,55 @@ BOOST_FIXTURE_TEST_CASE(miniminer_saturates_extreme_modified_fee_arithmetic, Tes
     const auto total_fee{total.CalculateTotalBumpFees(target_feerate)};
     BOOST_REQUIRE(total_fee.has_value());
     BOOST_CHECK_EQUAL(*total_fee, std::numeric_limits<CAmount>::max());
+}
+
+BOOST_FIXTURE_TEST_CASE(miniminer_zero_target_allows_order_dependent_saturated_total, TestChain100Setup)
+{
+    CTransactionRef negative_parent;
+    CTransactionRef high_child;
+    CTransactionRef low_grandchild;
+    for (uint32_t sequence{0}; sequence < 10'000; ++sequence) {
+        auto parent{make_tx({COutPoint{m_coinbase_txns[0]->GetHash(), 0}}, /*num_outputs=*/1, sequence)};
+        auto child{make_tx({COutPoint{parent->GetHash(), 0}}, /*num_outputs=*/1)};
+        auto grandchild{make_tx({COutPoint{child->GetHash(), 0}}, /*num_outputs=*/1)};
+        if (parent->GetHash() > child->GetHash() && parent->GetHash() > grandchild->GetHash()) {
+            negative_parent = std::move(parent);
+            high_child = std::move(child);
+            low_grandchild = std::move(grandchild);
+            break;
+        }
+    }
+    BOOST_REQUIRE(negative_parent);
+    BOOST_REQUIRE(high_child);
+    BOOST_REQUIRE(low_grandchild);
+    BOOST_REQUIRE(negative_parent->GetHash() > high_child->GetHash());
+    BOOST_REQUIRE(negative_parent->GetHash() > low_grandchild->GetHash());
+
+    const CAmount min_fee{std::numeric_limits<CAmount>::min()};
+    const CAmount max_fee{std::numeric_limits<CAmount>::max()};
+    const CAmount low_fee{1};
+    const int64_t parent_vsize{GetVirtualTransactionSize(*negative_parent)};
+    const int64_t child_vsize{GetVirtualTransactionSize(*high_child)};
+    const int64_t grandchild_vsize{GetVirtualTransactionSize(*low_grandchild)};
+
+    std::vector<node::MiniMinerMempoolEntry> entries;
+    entries.emplace_back(negative_parent, parent_vsize, parent_vsize, min_fee, min_fee);
+    entries.emplace_back(high_child, child_vsize, parent_vsize + child_vsize, max_fee, CAmount{-1});
+    entries.emplace_back(low_grandchild, grandchild_vsize, parent_vsize + child_vsize + grandchild_vsize, low_fee, CAmount{0});
+
+    std::map<Txid, std::set<Txid>> descendant_caches;
+    descendant_caches.emplace(negative_parent->GetHash(), std::set<Txid>{negative_parent->GetHash(), high_child->GetHash(), low_grandchild->GetHash()});
+    descendant_caches.emplace(high_child->GetHash(), std::set<Txid>{high_child->GetHash(), low_grandchild->GetHash()});
+    descendant_caches.emplace(low_grandchild->GetHash(), std::set<Txid>{low_grandchild->GetHash()});
+
+    node::MiniMiner mini_miner{entries, descendant_caches};
+    BOOST_REQUIRE(mini_miner.IsReadyToCalculate());
+    mini_miner.BuildMockTemplate(CFeeRate{0});
+    const auto template_txids{mini_miner.GetMockTemplateTxids()};
+    BOOST_CHECK_EQUAL(template_txids.size(), entries.size());
+    BOOST_CHECK(template_txids.contains(negative_parent->GetHash()));
+    BOOST_CHECK(template_txids.contains(high_child->GetHash()));
+    BOOST_CHECK(template_txids.contains(low_grandchild->GetHash()));
 }
 
 BOOST_FIXTURE_TEST_CASE(miniminer_same_tx_outputs_share_bumpfee, TestChain100Setup)
