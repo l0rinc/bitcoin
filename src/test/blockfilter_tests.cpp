@@ -17,6 +17,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <string>
+
 BOOST_AUTO_TEST_SUITE(blockfilter_tests)
 
 BOOST_AUTO_TEST_CASE(gcsfilter_test)
@@ -254,7 +256,15 @@ BOOST_AUTO_TEST_CASE(blockfilter_type_names)
     BOOST_CHECK(BlockFilterTypeByName("basic", filter_type));
     BOOST_CHECK_EQUAL(filter_type, BlockFilterType::BASIC);
 
+    filter_type = static_cast<BlockFilterType>(42);
+    BOOST_CHECK(!BlockFilterTypeByName("Basic", filter_type));
+    BOOST_CHECK_EQUAL(filter_type, static_cast<BlockFilterType>(42));
+    BOOST_CHECK(!BlockFilterTypeByName("basic ", filter_type));
+    BOOST_CHECK_EQUAL(filter_type, static_cast<BlockFilterType>(42));
+    BOOST_CHECK(!BlockFilterTypeByName(std::string{"basic\0", 6}, filter_type));
+    BOOST_CHECK_EQUAL(filter_type, static_cast<BlockFilterType>(42));
     BOOST_CHECK(!BlockFilterTypeByName("unknown", filter_type));
+    BOOST_CHECK_EQUAL(filter_type, static_cast<BlockFilterType>(42));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
