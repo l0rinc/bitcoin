@@ -16,6 +16,7 @@
 #include <test/fuzz/util.h>
 #include <test/util/versionbits.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -39,6 +40,34 @@ public:
     ThresholdState GetStateFor(const CBlockIndex* pindexPrev) const { return AbstractThresholdConditionChecker::GetStateFor(pindexPrev, m_cache); }
     int GetStateSinceHeightFor(const CBlockIndex* pindexPrev) const { return AbstractThresholdConditionChecker::GetStateSinceHeightFor(pindexPrev, m_cache); }
 };
+
+void AssertStatisticsContracts(const TestConditionChecker& checker, const CBlockIndex* pindex)
+{
+    std::vector<bool> signals{true};
+    const BIP9Stats stats{checker.GetStateStatisticsFor(pindex, &signals)};
+    const BIP9Stats stats_no_signals{checker.GetStateStatisticsFor(pindex)};
+
+    assert(stats.period == stats_no_signals.period);
+    assert(stats.threshold == stats_no_signals.threshold);
+    assert(stats.elapsed == stats_no_signals.elapsed);
+    assert(stats.count == stats_no_signals.count);
+    assert(stats.possible == stats_no_signals.possible);
+    assert(stats.count <= stats.elapsed);
+    assert(stats.elapsed <= stats.period);
+
+    if (pindex == nullptr) {
+        assert(stats.elapsed == 0);
+        assert(stats.count == 0);
+        assert(!stats.possible);
+        assert(signals.empty());
+        return;
+    }
+
+    assert(stats.elapsed == 1U + static_cast<uint32_t>(pindex->nHeight % stats.period));
+    assert(signals.size() == stats.elapsed);
+    assert(static_cast<uint32_t>(std::ranges::count(signals, true)) == stats.count);
+    assert(stats.possible == (stats.count + stats.period >= stats.elapsed + stats.threshold));
+}
 
 /** Track blocks mined for test */
 class Blocks
@@ -350,6 +379,7 @@ FUZZ_TARGET(versionbits, .init = initialize)
     const auto check_cache_query_consistency = [&](const CBlockIndex* pindex_prev) {
         const ThresholdState cached_state = checker.GetStateFor(pindex_prev);
         const int cached_since = checker.GetStateSinceHeightFor(pindex_prev);
+        AssertStatisticsContracts(checker, pindex_prev);
 
         TestConditionChecker fresh_state_checker(dep);
         assert(cached_state == fresh_state_checker.GetStateFor(pindex_prev));
