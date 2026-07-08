@@ -1136,6 +1136,7 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
     LOCK(m_send_mutex);
     if (!m_send_buffer.empty()) {
         auto& front{m_send_buffer.front()};
+        Assume(m_send_offset < front.size());
 
         // Socket flags (See kernel docs for send(2) and tcp(7) for more details).
         // MSG_NOSIGNAL: If the remote end of the connection is closed,
@@ -1151,7 +1152,7 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
         ssize_t bytes_sent;
         {
             LOCK(m_sock_mutex);
-            bytes_sent = m_sock->Send(front.data(), front.size(), flags);
+            bytes_sent = m_sock->Send(front.data() + m_send_offset, front.size() - m_send_offset, flags);
         }
 
         if (bytes_sent < 0) {
@@ -1178,11 +1179,14 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
             }
         }
 
-        // Successful send, remove sent bytes from our local buffer.
+        // Successful send, skip sent bytes in our local buffer.
         const size_t sent{static_cast<size_t>(bytes_sent)};
-        Assume(sent <= front.size());
-        front.erase(0, sent);
-        if (front.empty()) m_send_buffer.pop_front();
+        Assume(sent <= front.size() - m_send_offset);
+        m_send_offset += sent;
+        if (m_send_offset == front.size()) {
+            m_send_buffer.pop_front();
+            m_send_offset = 0;
+        }
 
         LogDebug(
             BCLog::HTTP,

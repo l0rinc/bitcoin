@@ -475,11 +475,13 @@ public:
 
     /**
      * Response data destined for this client.
-     * Written to by http worker threads, read and erased by HTTPServer I/O thread
+     * Written to by http worker threads, read by HTTPServer I/O thread
      */
     /// @{
     Mutex m_send_mutex;
     std::deque<std::string> m_send_buffer GUARDED_BY(m_send_mutex);
+    //! Bytes of m_send_buffer.front() already sent
+    size_t m_send_offset GUARDED_BY(m_send_mutex){0};
     /// @}
 
     /**
