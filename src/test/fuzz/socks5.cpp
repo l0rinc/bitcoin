@@ -41,20 +41,60 @@ void AssertNoBytes(DynSock::Pipe& pipe)
     Assert(pipe.GetBytes(&byte, 1) == -1);
 }
 
-std::vector<uint8_t> MakeSocks5SuccessReply(bool select_auth)
+std::vector<uint8_t> MakeSocks5MethodSelectionReply(bool select_auth)
 {
-    std::vector<uint8_t> reply{
+    return {
         0x05, static_cast<uint8_t>(select_auth ? 0x02 : 0x00),
     };
-    if (select_auth) {
-        reply.insert(reply.end(), {0x01, 0x00});
+}
+
+std::vector<uint8_t> MakeSocks5AuthSuccessReply()
+{
+    return {0x01, 0x00};
+}
+
+std::vector<uint8_t> MakeSocks5AuthFailureReply(FuzzedDataProvider& provider)
+{
+    if (provider.ConsumeBool()) {
+        return {0x00, 0x00};
     }
-    reply.insert(reply.end(), {
+    return {0x01, static_cast<uint8_t>(provider.ConsumeIntegralInRange<uint8_t>(1, 0xff))};
+}
+
+std::vector<uint8_t> MakeSocks5ConnectSuccessReply()
+{
+    return {
         0x05, 0x00, 0x00, 0x03, // VER, REP=success, RSV, ATYP=domain
         0x00,                   // zero-length bind address
         0x00, 0x00,             // bind port
-    });
+    };
+}
+
+std::vector<uint8_t> MakeSocks5SuccessReply(bool select_auth)
+{
+    std::vector<uint8_t> reply{MakeSocks5MethodSelectionReply(select_auth)};
+    if (select_auth) {
+        const auto auth_success{MakeSocks5AuthSuccessReply()};
+        reply.insert(reply.end(), auth_success.begin(), auth_success.end());
+    }
+    const auto connect_success{MakeSocks5ConnectSuccessReply()};
+    reply.insert(reply.end(), connect_success.begin(), connect_success.end());
     return reply;
+}
+
+std::vector<uint8_t> MakeSocks5ConnectFailureReply(FuzzedDataProvider& provider)
+{
+    const uint8_t failure_reason{provider.ConsumeIntegralInRange<uint8_t>(1, 0xff)};
+    switch (provider.ConsumeIntegralInRange<uint8_t>(0, 3)) {
+    case 0:
+        return {0x04, 0x00, 0x00, 0x03}; // bad version
+    case 1:
+        return {0x05, failure_reason, 0x00, 0x03}; // non-success reply
+    case 2:
+        return {0x05, 0x00, 0xff, 0x03}; // bad reserved byte
+    default:
+        return {0x05, 0x00, 0x00, 0xff}; // unsupported address type
+    }
 }
 
 std::vector<uint8_t> MakeSocks5MethodSelectionFailureReply(const ProxyCredentials* auth, FuzzedDataProvider& provider)
@@ -153,6 +193,38 @@ FUZZ_TARGET(socks5, .init = initialize_socks5)
         const auto expected{ExpectedSocks5MethodSelectionBytes(auth)};
         Assert(ReadBytes(pipes->send, expected.size()) == expected);
         AssertNoBytes(pipes->send);
+        return;
+    }
+    const std::vector<uint8_t> sentinel{0x99, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33};
+    if (auth && fuzzed_data_provider.ConsumeBool()) {
+        PushBytes(pipes->recv, MakeSocks5MethodSelectionReply(/*select_auth=*/true));
+        PushBytes(pipes->recv, MakeSocks5AuthFailureReply(fuzzed_data_provider));
+        PushBytes(pipes->recv, sentinel);
+        Assert(!Socks5(str_dest, port, auth, scripted_sock));
+        const auto expected_method{ExpectedSocks5MethodSelectionBytes(auth)};
+        Assert(ReadBytes(pipes->send, expected_method.size()) == expected_method);
+        std::vector<uint8_t> expected_auth{
+            0x01,
+            static_cast<uint8_t>(auth->username.size()),
+        };
+        expected_auth.insert(expected_auth.end(), auth->username.begin(), auth->username.end());
+        expected_auth.push_back(static_cast<uint8_t>(auth->password.size()));
+        expected_auth.insert(expected_auth.end(), auth->password.begin(), auth->password.end());
+        Assert(ReadBytes(pipes->send, expected_auth.size()) == expected_auth);
+        AssertNoBytes(pipes->send);
+        Assert(ReadBytes(pipes->recv, sentinel.size()) == sentinel);
+        return;
+    }
+    if (fuzzed_data_provider.ConsumeBool()) {
+        PushBytes(pipes->recv, MakeSocks5MethodSelectionReply(auth != nullptr));
+        if (auth) PushBytes(pipes->recv, MakeSocks5AuthSuccessReply());
+        PushBytes(pipes->recv, MakeSocks5ConnectFailureReply(fuzzed_data_provider));
+        PushBytes(pipes->recv, sentinel);
+        Assert(!Socks5(str_dest, port, auth, scripted_sock));
+        const auto expected{ExpectedSocks5ClientBytes(str_dest, port, auth)};
+        Assert(ReadBytes(pipes->send, expected.size()) == expected);
+        AssertNoBytes(pipes->send);
+        Assert(ReadBytes(pipes->recv, sentinel.size()) == sentinel);
         return;
     }
     PushBytes(pipes->recv, MakeSocks5SuccessReply(auth != nullptr));

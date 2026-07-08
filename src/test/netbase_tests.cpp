@@ -96,13 +96,32 @@ static std::vector<std::byte> AsmapLookupBytes(const CNetAddr& address)
     return ip_bytes;
 }
 
-static std::vector<uint8_t> Socks5SuccessReply(bool select_auth)
+static std::vector<uint8_t> Socks5MethodSelectionReply(bool select_auth)
 {
-    std::vector<uint8_t> reply{
+    return {
         0x05, static_cast<uint8_t>(select_auth ? 0x02 : 0x00),
     };
-    if (select_auth) reply.insert(reply.end(), {0x01, 0x00});
-    reply.insert(reply.end(), {0x05, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00});
+}
+
+static std::vector<uint8_t> Socks5AuthSuccessReply()
+{
+    return {0x01, 0x00};
+}
+
+static std::vector<uint8_t> Socks5ConnectSuccessReply()
+{
+    return {0x05, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00};
+}
+
+static std::vector<uint8_t> Socks5SuccessReply(bool select_auth)
+{
+    std::vector<uint8_t> reply{Socks5MethodSelectionReply(select_auth)};
+    if (select_auth) {
+        const auto auth_success{Socks5AuthSuccessReply()};
+        reply.insert(reply.end(), auth_success.begin(), auth_success.end());
+    }
+    const auto connect_success{Socks5ConnectSuccessReply()};
+    reply.insert(reply.end(), connect_success.begin(), connect_success.end());
     return reply;
 }
 
@@ -117,14 +136,21 @@ static std::vector<uint8_t> ExpectedSocks5MethodSelectionBytes(const ProxyCreden
     return expected;
 }
 
+static std::vector<uint8_t> ExpectedSocks5AuthBytes(const ProxyCredentials& auth)
+{
+    std::vector<uint8_t> expected{0x01, static_cast<uint8_t>(auth.username.size())};
+    expected.insert(expected.end(), auth.username.begin(), auth.username.end());
+    expected.push_back(static_cast<uint8_t>(auth.password.size()));
+    expected.insert(expected.end(), auth.password.begin(), auth.password.end());
+    return expected;
+}
+
 static std::vector<uint8_t> ExpectedSocks5ClientBytes(const std::string& dest, uint16_t port, const ProxyCredentials* auth)
 {
     std::vector<uint8_t> expected{ExpectedSocks5MethodSelectionBytes(auth)};
     if (auth) {
-        expected.insert(expected.end(), {0x01, static_cast<uint8_t>(auth->username.size())});
-        expected.insert(expected.end(), auth->username.begin(), auth->username.end());
-        expected.push_back(static_cast<uint8_t>(auth->password.size()));
-        expected.insert(expected.end(), auth->password.begin(), auth->password.end());
+        const auto expected_auth{ExpectedSocks5AuthBytes(*auth)};
+        expected.insert(expected.end(), expected_auth.begin(), expected_auth.end());
     }
     expected.insert(expected.end(), {0x05, 0x01, 0x00, 0x03, static_cast<uint8_t>(dest.size())});
     expected.insert(expected.end(), dest.begin(), dest.end());
@@ -157,6 +183,43 @@ static void CheckSocks5MethodSelectionFailure(const std::string& dest, uint16_t 
     const auto expected{ExpectedSocks5MethodSelectionBytes(auth)};
     BOOST_CHECK(ReadBytes(pipes->send, expected.size()) == expected);
     CheckNoBytes(pipes->send);
+}
+
+static void CheckSocks5AuthFailure(const std::string& dest, uint16_t port, const ProxyCredentials& auth, std::vector<uint8_t> auth_reply)
+{
+    g_socks5_interrupt.reset();
+    auto pipes{std::make_shared<DynSock::Pipes>()};
+    const std::vector<uint8_t> sentinel{0x99, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33};
+    PushBytes(pipes->recv, Socks5MethodSelectionReply(/*select_auth=*/true));
+    PushBytes(pipes->recv, auth_reply);
+    PushBytes(pipes->recv, sentinel);
+    DynSock sock{pipes};
+
+    BOOST_REQUIRE(!Socks5(dest, port, &auth, sock));
+    const auto expected_method{ExpectedSocks5MethodSelectionBytes(&auth)};
+    BOOST_REQUIRE(ReadBytes(pipes->send, expected_method.size()) == expected_method);
+    const auto expected_auth{ExpectedSocks5AuthBytes(auth)};
+    BOOST_REQUIRE(ReadBytes(pipes->send, expected_auth.size()) == expected_auth);
+    CheckNoBytes(pipes->send);
+    BOOST_REQUIRE(ReadBytes(pipes->recv, sentinel.size()) == sentinel);
+}
+
+static void CheckSocks5ConnectFailure(const std::string& dest, uint16_t port, const ProxyCredentials* auth, std::vector<uint8_t> connect_reply)
+{
+    g_socks5_interrupt.reset();
+    auto pipes{std::make_shared<DynSock::Pipes>()};
+    const std::vector<uint8_t> sentinel{0x99, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33};
+    PushBytes(pipes->recv, Socks5MethodSelectionReply(auth != nullptr));
+    if (auth) PushBytes(pipes->recv, Socks5AuthSuccessReply());
+    PushBytes(pipes->recv, connect_reply);
+    PushBytes(pipes->recv, sentinel);
+    DynSock sock{pipes};
+
+    BOOST_REQUIRE(!Socks5(dest, port, auth, sock));
+    const auto expected{ExpectedSocks5ClientBytes(dest, port, auth)};
+    BOOST_REQUIRE(ReadBytes(pipes->send, expected.size()) == expected);
+    CheckNoBytes(pipes->send);
+    BOOST_REQUIRE(ReadBytes(pipes->recv, sentinel.size()) == sentinel);
 }
 
 BOOST_AUTO_TEST_CASE(netbase_networks)
@@ -270,6 +333,37 @@ BOOST_AUTO_TEST_CASE(socks5_method_selection_failure_stops_handshake)
     credentials.password = "passphrase";
     CheckSocks5MethodSelectionFailure("auth.example", 9050, &credentials, 0x04, 0x00);
     CheckSocks5MethodSelectionFailure("auth.example", 9050, &credentials, 0x05, 0xff);
+}
+
+BOOST_AUTO_TEST_CASE(socks5_auth_failure_stops_before_connect)
+{
+    ProxyCredentials credentials;
+    credentials.username = "user";
+    credentials.password = "passphrase";
+
+    CheckSocks5AuthFailure("auth.example", 9050, credentials, {0x00, 0x00});
+    CheckSocks5AuthFailure("auth.example", 9050, credentials, {0x01, 0x01});
+}
+
+BOOST_AUTO_TEST_CASE(socks5_connect_failure_stops_after_connect)
+{
+    const std::vector<std::vector<uint8_t>> failure_replies{
+        {0x04, 0x00, 0x00, 0x03}, // bad version
+        {0x05, 0x01, 0x00, 0x03}, // non-success reply
+        {0x05, 0x00, 0xff, 0x03}, // bad reserved byte
+        {0x05, 0x00, 0x00, 0xff}, // unsupported address type
+    };
+
+    for (const auto& failure_reply : failure_replies) {
+        CheckSocks5ConnectFailure("node.example", 8333, nullptr, failure_reply);
+    }
+
+    ProxyCredentials credentials;
+    credentials.username = "user";
+    credentials.password = "passphrase";
+    for (const auto& failure_reply : failure_replies) {
+        CheckSocks5ConnectFailure("auth.example", 9050, &credentials, failure_reply);
+    }
 }
 
 bool static TestParse(std::string src, std::string canon)
