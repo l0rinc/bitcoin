@@ -139,6 +139,10 @@ BIP9Stats AbstractThresholdConditionChecker::GetStateStatisticsFor(const CBlockI
     stats.period = Period();
     stats.threshold = Threshold();
 
+    if (signalling_blocks) {
+        signalling_blocks->clear();
+    }
+
     if (pindex == nullptr) return stats;
 
     // Find how many blocks are in the current period
