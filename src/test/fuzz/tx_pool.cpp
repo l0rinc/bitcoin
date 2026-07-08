@@ -281,7 +281,12 @@ void CheckMempoolInfoViews(const CTxMemPool& tx_pool)
 
             const Txid txid{info.tx->GetHash()};
             const Wtxid wtxid{info.tx->GetWitnessHash()};
-            Assert(tx_pool.mapTx.find(txid) != tx_pool.mapTx.end());
+            const auto txid_iter{tx_pool.GetIter(txid)};
+            const auto wtxid_iter{tx_pool.GetIter(wtxid)};
+            Assert(txid_iter);
+            Assert(wtxid_iter);
+            Assert(*txid_iter == *wtxid_iter);
+            Assert(tx_pool.mapTx.find(txid) == *txid_iter);
             Assert(tx_pool.mapTx.get<index_by_wtxid>().find(wtxid) != tx_pool.mapTx.get<index_by_wtxid>().end());
             Assert(seen_txids.insert(txid).second);
             Assert(seen_wtxids.insert(wtxid).second);
