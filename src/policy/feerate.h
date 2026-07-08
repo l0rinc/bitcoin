@@ -12,8 +12,10 @@
 #include <util/fees.h>
 #include <util/overflow.h>
 
-
 #include <cstdint>
+#include <limits>
+#include <numeric>
+#include <optional>
 #include <string>
 #include <type_traits>
 
@@ -40,6 +42,29 @@ private:
         if (feerate.IsEmpty()) return FeePerVSize{0, 1};
         Assume(feerate.size > 0);
         return feerate;
+    }
+
+    static std::optional<FeePerVSize> ExactFeeRateSum(const FeePerVSize& lhs, const FeePerVSize& rhs) noexcept
+    {
+        Assume(lhs.size > 0);
+        Assume(rhs.size > 0);
+
+        const int32_t common_divisor{std::gcd(lhs.size, rhs.size)};
+        Assume(common_divisor > 0);
+        const int64_t lhs_scale{rhs.size / common_divisor};
+        const int64_t rhs_scale{lhs.size / common_divisor};
+
+        const auto sum_size{CheckedMul<int64_t>(lhs.size, lhs_scale)};
+        if (!sum_size || *sum_size > std::numeric_limits<int32_t>::max()) return std::nullopt;
+        const auto lhs_fee{CheckedMul(lhs.fee, lhs_scale)};
+        if (!lhs_fee) return std::nullopt;
+        const auto rhs_fee{CheckedMul(rhs.fee, rhs_scale)};
+        if (!rhs_fee) return std::nullopt;
+        const auto sum_fee{CheckedAdd(*lhs_fee, *rhs_fee)};
+        if (!sum_fee) return std::nullopt;
+
+        Assume(*sum_size > 0);
+        return FeePerVSize{*sum_fee, static_cast<int32_t>(*sum_size)};
     }
 
 public:
@@ -84,6 +109,10 @@ public:
         if (a.m_feerate.fee == 0) return *this;
         if (m_feerate.fee == 0) {
             m_feerate = a.m_feerate;
+            return *this;
+        }
+        if (const auto sum{ExactFeeRateSum(m_feerate, a.m_feerate)}) {
+            m_feerate = *sum;
             return *this;
         }
         m_feerate = FeePerVSize(SaturatingAdd(GetFeePerK(), a.GetFeePerK()), 1000);
