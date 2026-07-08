@@ -88,6 +88,17 @@ void AssertParseByteUnitsContracts(std::string_view input, ByteUnit default_mult
     const std::optional<uint64_t> parsed{ParseByteUnits(input, default_multiplier)};
     assert(parsed == ExpectedParseByteUnits(input, default_multiplier));
 }
+
+void AssertParseFixedPointOutputContracts(std::string_view input, int decimals)
+{
+    static constexpr int64_t SENTINEL{0x123456789abcLL};
+    int64_t parsed{SENTINEL};
+    const bool success{ParseFixedPoint(input, decimals, &parsed)};
+    assert(success == ParseFixedPoint(input, decimals, nullptr));
+    if (!success) {
+        assert(parsed == SENTINEL);
+    }
+}
 } // namespace
 
 FUZZ_TARGET(parse_numbers)
@@ -159,6 +170,9 @@ FUZZ_TARGET(parse_numbers)
         atoi_int64,
         static_cast<int64_t>(std::numeric_limits<int>::min()),
         static_cast<int64_t>(std::numeric_limits<int>::max())));
+
+    AssertParseFixedPointOutputContracts(random_string, 3);
+    AssertParseFixedPointOutputContracts(random_string, 4);
 
     int64_t parsed_fixed_point_3{0};
     const bool parsed_3{ParseFixedPoint(random_string, 3, &parsed_fixed_point_3)};
