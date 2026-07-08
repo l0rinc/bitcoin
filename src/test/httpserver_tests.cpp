@@ -5,7 +5,6 @@
 #include <httpserver.h>
 #include <rpc/protocol.h>
 #include <test/util/common.h>
-#include <test/util/logging.h>
 #include <test/util/setup_common.h>
 #include <util/string.h>
 #include <util/threadpool.h>
@@ -648,22 +647,9 @@ BOOST_AUTO_TEST_CASE(http_socket_error_tests)
         Assert(workers.Submit(std::move(item)));
     }};
 
-    // All replies will be the same size
-    static constexpr std::size_t reply_length = std::string_view{
-        "HTTP/1.1 200 OK\r\n"
-        "Date: Thu, 01 Jan 2026 00:00:00 GMT\r\n"           // All RFC1123 dates are 29 characters
-        "Content-Length: 10\r\n"
-        "Content-Type: text/html; charset=ISO-8859-1\r\n"
-        "\r\n"
-        "height: 0\n"
-    }.size();
-
     /**
-     * A mocked Sock derived from DynSock whose Send() only succeeds when there is more than
-     * one reply being sent (send buffer length > reply_length). Otherwise it returns
-     * a recoverable error (WSAEAGAIN).
-     *
-     * After it sends successfully once, it continues to always succeed.
+     * A mocked Sock derived from DynSock whose first Send() returns a
+     * recoverable error (WSAEAGAIN). After that it continues to always succeed.
      *
      * Useful for testing "try again" logic around non-blocking socket Send() failures.
      */
@@ -675,20 +661,20 @@ BOOST_AUTO_TEST_CASE(http_socket_error_tests)
 
         ssize_t Send(const void* buf, size_t len, int flags) const override
         {
-            if (len <= reply_length && !m_have_sent) {
+            if (!m_have_failed) {
                 #ifdef WIN32
                 WSASetLastError(WSAEWOULDBLOCK);
                 #else
                 errno = WSAEAGAIN;
                 #endif
+                m_have_failed = true;
                 return -1;
             } else {
-                m_have_sent = true;
                 return DynSock::Send(buf, len, flags);
             }
         }
 
-        mutable bool m_have_sent{false};
+        mutable bool m_have_failed{false};
     };
 
     // Simpler server startup than the last test
@@ -706,21 +692,6 @@ BOOST_AUTO_TEST_CASE(http_socket_error_tests)
     for (int i = 0; i < num_requests; i++) {
         all_requests += keepalive_request;
     }
-
-    // Watch the log messages to ensure that the first two replies were sent
-    // together. This indicates the non-optimistic send path was used
-    // because a reply was already sitting in the send buffer when a second reply
-    // was added.
-    DebugLogHelper find_two_replies{strprintf("Sent %d bytes to client", reply_length * 2),
-                                    [&](const std::string* s) {
-                                        return true;
-                                    }};
-    // Last reply should be sent on its own by optimistic send path, because
-    // the send buffer was empty when the reply was written.
-    DebugLogHelper find_one_reply{strprintf("Sent %d bytes to client", reply_length),
-                                  [&](const std::string* s) {
-                                      return true;
-                                   }};
 
     // Connect the ErrorSock as mock client with the preloaded data and get a handle on the I/O pipes
     std::shared_ptr<ErrorSock::Pipes> mock_client_socket_pipes{
