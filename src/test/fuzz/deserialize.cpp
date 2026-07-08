@@ -175,6 +175,11 @@ FUZZ_TARGET_DESERIALIZE(block_header_and_short_txids_deserialize, {
 FUZZ_TARGET_DESERIALIZE(fee_rate_deserialize, {
     CFeeRate fee_rate;
     DeserializeFromFuzzingInput(buffer, fee_rate);
+    const FeePerVSize fee_per_vsize{fee_rate.GetFeePerVSize()};
+    // Deserialization can produce bit patterns outside FeeFrac's size invariant.
+    if (fee_per_vsize.size < 0 || (fee_per_vsize.size == 0 && fee_per_vsize.fee != 0)) {
+        throw invalid_fuzzing_input_exception();
+    }
     AssertEqualAfterSerializeDeserialize(fee_rate);
 })
 FUZZ_TARGET_DESERIALIZE(merkle_block_deserialize, {
