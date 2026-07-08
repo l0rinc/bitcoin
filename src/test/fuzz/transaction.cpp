@@ -108,17 +108,22 @@ FUZZ_TARGET(transaction, .init = initialize_transaction)
             return CTransaction{CMutableTransaction{}};
         }
     }();
+    const size_t consumed_tx_bytes{buffer.size() - ds.size()};
     bool valid_mutable_tx = true;
     CMutableTransaction mutable_tx;
+    SpanReader mutable_reader{buffer};
     try {
-        SpanReader{buffer} >> TX_WITH_WITNESS(mutable_tx);
+        mutable_reader >> TX_WITH_WITNESS(mutable_tx);
     } catch (const std::ios_base::failure&) {
         valid_mutable_tx = false;
     }
+    const size_t consumed_mutable_tx_bytes{buffer.size() - mutable_reader.size()};
     assert(valid_tx == valid_mutable_tx);
+    assert(consumed_tx_bytes == consumed_mutable_tx_bytes);
     if (!valid_tx) {
         return;
     }
+    assert(consumed_tx_bytes == GetSerializeSize(TX_WITH_WITNESS(tx)));
 
     AssertCachedTransactionState(tx);
     AssertTransactionSerializationRoundTrip(tx);
