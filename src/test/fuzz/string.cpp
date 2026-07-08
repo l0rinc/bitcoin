@@ -242,6 +242,28 @@ void AssertUrlDecodeContracts(std::string_view encoded)
         assert(decoded == encoded);
     }
 }
+
+void AssertSplitStringContracts(std::string_view str, std::string_view separators)
+{
+    const auto split{SplitString(str, separators)};
+    const size_t separator_count{static_cast<size_t>(std::count_if(str.begin(), str.end(), [&](char c) {
+        return separators.find(c) != std::string_view::npos;
+    }))};
+
+    assert(split.size() >= 1);
+    assert(split.size() == separator_count + 1);
+    for (const auto& part : split) {
+        assert(part.find_first_of(separators) == std::string::npos);
+    }
+
+    const auto included_separator_split{Split<std::string>(str, separators, /*include_sep=*/true)};
+    assert(included_separator_split.size() == split.size());
+    assert(Join(included_separator_split, std::string{}) == str);
+    for (size_t i{0}; i + 1 < included_separator_split.size(); ++i) {
+        assert(!included_separator_split.at(i).empty());
+        assert(separators.find(included_separator_split.at(i).back()) != std::string_view::npos);
+    }
+}
 } // namespace
 
 FUZZ_TARGET(string)
@@ -350,6 +372,7 @@ FUZZ_TARGET(string)
 
         const auto any_split{SplitString(random_string_1, random_string_2)};
         assert(any_split.size() >= 1);
+        AssertSplitStringContracts(random_string_1, random_string_2);
     }
     {
         const std::string line_buffer{fuzzed_data_provider.ConsumeRandomLengthString(128)};
