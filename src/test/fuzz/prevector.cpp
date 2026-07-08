@@ -66,6 +66,15 @@ public:
         for (Size s = 0; s < ss1.size(); s++) {
             assert(ss1[s] == ss2[s]);
         }
+        realtype deserialized_real_vector;
+        pretype deserialized_pre_vector;
+        ss1 >> deserialized_real_vector;
+        ss2 >> deserialized_pre_vector;
+        assert(ss1.empty());
+        assert(ss2.empty());
+        assert(deserialized_real_vector == real_vector);
+        assert(deserialized_pre_vector == pre_vector);
+        assert(pretype(deserialized_real_vector.begin(), deserialized_real_vector.end()) == deserialized_pre_vector);
         const bool real_less{std::lexicographical_compare(real_vector.begin(), real_vector.end(),
                                                           real_vector_alt.begin(), real_vector_alt.end())};
         const bool real_alt_less{std::lexicographical_compare(real_vector_alt.begin(), real_vector_alt.end(),
