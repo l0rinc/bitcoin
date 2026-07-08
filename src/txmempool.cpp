@@ -835,8 +835,13 @@ std::optional<CTxMemPool::txiter> CTxMemPool::GetIter(const Txid& txid) const
 std::optional<CTxMemPool::txiter> CTxMemPool::GetIter(const Wtxid& wtxid) const
 {
     AssertLockHeld(cs);
-    auto it{mapTx.project<0>(mapTx.get<index_by_wtxid>().find(wtxid))};
-    return it != mapTx.end() ? std::make_optional(it) : std::nullopt;
+    const auto& wtxid_map{mapTx.get<index_by_wtxid>()};
+    const auto wtxid_it{wtxid_map.find(wtxid)};
+    if (wtxid_it == wtxid_map.end()) return std::nullopt;
+    auto it{mapTx.project<0>(wtxid_it)};
+    Assume(it != mapTx.end());
+    Assume(it->GetTx().GetWitnessHash() == wtxid);
+    return it;
 }
 
 CTxMemPool::setEntries CTxMemPool::GetIterSet(const std::set<Txid>& hashes) const
