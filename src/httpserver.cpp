@@ -641,6 +641,17 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
     WriteReplyImpl(status, reply_body);
 }
 
+void HTTPRequest::WriteReply(HTTPStatusCode status, std::string&& reply_body)
+{
+    // Keep small replies coalesced in one send chunk.
+    if (reply_body.size() < LARGE_HTTP_REPLY_BYTES) {
+        WriteReply(status, std::string_view{reply_body});
+        return;
+    }
+
+    WriteReplyImpl(status, {}, &reply_body);
+}
+
 CService HTTPRequest::GetPeer() const
 {
     return m_client->m_addr;

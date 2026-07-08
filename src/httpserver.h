@@ -181,10 +181,16 @@ public:
     /// @}
 
     void WriteReply(HTTPStatusCode status, std::span<const std::byte> reply_body = {});
+    //! Keeps string literals from becoming ambiguous after adding the std::string&& overload
+    void WriteReply(HTTPStatusCode status, const char* reply_body)
+    {
+        WriteReply(status, std::string_view{reply_body});
+    }
     void WriteReply(HTTPStatusCode status, std::string_view reply_body_view)
     {
         WriteReply(status, std::as_bytes(std::span{reply_body_view}));
     }
+    void WriteReply(HTTPStatusCode status, std::string&& reply_body);
 
     // These methods reimplement the API from http_libevent::HTTPRequest
     // for downstream JSONRPC and REST modules.
