@@ -987,7 +987,10 @@ HTTPResponse HTTPClient::ReadResponse()
     if (space1 == std::string::npos || space1 + 4 > status_str.size()) {
         throw HTTPError{"Invalid status line format"};
     }
-
+    const size_t status_code_end{space1 + 4};
+    if (status_code_end < status_str.size() && status_str[status_code_end] != ' ') {
+        throw HTTPError{"Invalid status line format"};
+    }
     const std::string_view status_code_str = status_str.substr(space1 + 1, 3);
     auto status_code = ToIntegral<int>(status_code_str);
     if (!status_code) {
