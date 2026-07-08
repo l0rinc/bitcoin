@@ -1065,6 +1065,10 @@ HTTPResponse HTTPClient::ReadResponse()
                 size_t chunk_end = chunk_start + *chunk_size + 2; // +2 for trailing CRLF
 
                 if (buffer.size() >= chunk_end) {
+                    if (std::string_view{buffer}.substr(chunk_start + *chunk_size, 2) != "\r\n") {
+                        throw HTTPError{"Improperly terminated chunk"};
+                    }
+
                     // Extract chunk data
                     body.append(buffer, chunk_start, *chunk_size);
 
