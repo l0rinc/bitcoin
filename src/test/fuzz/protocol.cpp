@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <protocol.h>
+#include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
@@ -13,6 +14,21 @@
 #include <string>
 #include <vector>
 
+namespace {
+void AssertInvSerializationRoundTrip(const CInv& inv)
+{
+    DataStream serialized;
+    serialized << inv;
+    assert(serialized.size() == sizeof(inv.type) + decltype(inv.hash)::size());
+
+    CInv roundtrip;
+    serialized >> roundtrip;
+    assert(serialized.empty());
+    assert(roundtrip.type == inv.type);
+    assert(roundtrip.hash == inv.hash);
+}
+} // namespace
+
 FUZZ_TARGET(protocol)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
@@ -20,6 +36,7 @@ FUZZ_TARGET(protocol)
     if (!inv) {
         return;
     }
+    AssertInvSerializationRoundTrip(*inv);
     assert(inv->IsMsgTx() == (inv->type == MSG_TX));
     assert(inv->IsMsgBlk() == (inv->type == MSG_BLOCK));
     assert(inv->IsMsgWtx() == (inv->type == MSG_WTX));
