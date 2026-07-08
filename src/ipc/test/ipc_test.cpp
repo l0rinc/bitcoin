@@ -16,13 +16,29 @@
 #include <validation.h>
 
 #include <future>
-#include <thread>
+#include <cstring>
 #include <kj/common.h>
 #include <kj/memory.h>
 #include <kj/test.h>
 #include <stdexcept>
+#include <string_view>
+#include <thread>
 
 #include <boost/test/unit_test.hpp>
+
+namespace {
+class RawIpcError : public std::runtime_error
+{
+    using std::runtime_error::runtime_error;
+};
+
+constexpr std::string_view INVALID_UNIVALUE_JSON_ERROR{"Invalid UniValue JSON received over IPC"};
+
+bool HasInvalidUniValueJsonError(const RawIpcError& e)
+{
+    return std::string_view{e.what()}.find(INVALID_UNIVALUE_JSON_ERROR) != std::string_view::npos;
+}
+} // namespace
 
 static_assert(ipc::capnp::messages::MAX_MONEY == MAX_MONEY);
 static_assert(ipc::capnp::messages::MAX_DOUBLE == std::numeric_limits<double>::max());
@@ -93,6 +109,27 @@ void IpcPipeTest()
     uni1.pushKV("s", "two");
     UniValue uni2{foo->passUniValue(uni1)};
     BOOST_CHECK_EQUAL(uni1.write(), uni2.write());
+
+    auto raw_pass_univalue = [&](std::string_view arg) {
+        std::promise<std::string> result_promise;
+        auto result_future{result_promise.get_future()};
+        foo->m_context.loop->sync([&] {
+            auto request{foo->m_client.passUniValueRequest()};
+            auto arg_builder{request.initArg(arg.size())};
+            std::memcpy(arg_builder.begin(), arg.data(), arg.size());
+            foo->m_context.loop->m_task_set->add(request.send().then(
+                [&result_promise](::capnp::Response<gen::FooInterface::PassUniValueResults>&& response) {
+                    const auto result{response.getResult()};
+                    result_promise.set_value(std::string{result.cStr(), result.size()});
+                },
+                [&result_promise](const ::kj::Exception& e) {
+                    result_promise.set_exception(std::make_exception_ptr(RawIpcError{std::string{e.getDescription().cStr()}}));
+                }));
+        });
+        return result_future.get();
+    };
+    BOOST_CHECK_EQUAL(raw_pass_univalue("{\"ok\":true}"), "{\"ok\":true}");
+    BOOST_CHECK_EXCEPTION(raw_pass_univalue("not-json"), RawIpcError, HasInvalidUniValueJsonError);
 
     CMutableTransaction mtx;
     mtx.version = 2;
