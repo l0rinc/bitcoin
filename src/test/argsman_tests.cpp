@@ -711,6 +711,60 @@ BOOST_AUTO_TEST_CASE(util_AddCommand_clearargs_replaces_command_options)
     BOOST_CHECK(details.empty());
 }
 
+BOOST_AUTO_TEST_CASE(util_ParseParameters_replaces_command_state)
+{
+    TestArgsManager test_args;
+    test_args.AddArg("-known", "known", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    test_args.AddCommand("first", "first");
+    test_args.AddCommand("second", "second");
+
+    std::string error{"stale error"};
+    std::array first_argv{"prog", "-known=1", "first", "old-arg"};
+    BOOST_REQUIRE(test_args.ParseParameters(first_argv.size(), first_argv.data(), error));
+    BOOST_CHECK_EQUAL(error, "");
+    BOOST_REQUIRE(test_args.GetCommand().has_value());
+    BOOST_CHECK_EQUAL(test_args.GetCommand()->command, "first");
+    BOOST_REQUIRE_EQUAL(test_args.GetCommand()->args.size(), 1U);
+    BOOST_CHECK_EQUAL(test_args.GetCommand()->args[0], "old-arg");
+    BOOST_CHECK_EQUAL(test_args.GetArg("-known", ""), "1");
+
+    std::array second_argv{"prog", "second"};
+    BOOST_REQUIRE(test_args.ParseParameters(second_argv.size(), second_argv.data(), error));
+    BOOST_CHECK_EQUAL(error, "");
+    BOOST_REQUIRE(test_args.GetCommand().has_value());
+    BOOST_CHECK_EQUAL(test_args.GetCommand()->command, "second");
+    BOOST_CHECK(test_args.GetCommand()->args.empty());
+    BOOST_CHECK(!test_args.IsArgSet("-known"));
+
+    std::array invalid_argv{"prog", "-unknown"};
+    BOOST_CHECK(!test_args.ParseParameters(invalid_argv.size(), invalid_argv.data(), error));
+    BOOST_CHECK_EQUAL(error, "Invalid parameter -unknown");
+
+    std::array no_command_argv{"prog"};
+    BOOST_REQUIRE(test_args.ParseParameters(no_command_argv.size(), no_command_argv.data(), error));
+    BOOST_CHECK_EQUAL(error, "");
+    BOOST_CHECK(!test_args.GetCommand().has_value());
+
+    TestArgsManager clear_args;
+    clear_args.AddCommand("first", "first");
+    std::array first_command_argv{"prog", "first", "old-arg"};
+    BOOST_REQUIRE(clear_args.ParseParameters(first_command_argv.size(), first_command_argv.data(), error));
+    BOOST_REQUIRE(clear_args.GetCommand().has_value());
+    BOOST_CHECK_EQUAL(clear_args.GetCommand()->command, "first");
+
+    clear_args.ClearArgs();
+    BOOST_CHECK(!clear_args.GetCommand().has_value());
+
+    std::array free_command_argv{"prog", "free-command", "free-arg"};
+    BOOST_REQUIRE(clear_args.ParseParameters(free_command_argv.size(), free_command_argv.data(), error));
+    BOOST_CHECK_EQUAL(error, "");
+    BOOST_REQUIRE(clear_args.GetCommand().has_value());
+    BOOST_CHECK_EQUAL(clear_args.GetCommand()->command, "");
+    BOOST_REQUIRE_EQUAL(clear_args.GetCommand()->args.size(), 2U);
+    BOOST_CHECK_EQUAL(clear_args.GetCommand()->args[0], "free-command");
+    BOOST_CHECK_EQUAL(clear_args.GetCommand()->args[1], "free-arg");
+}
+
 BOOST_AUTO_TEST_CASE(util_GetChainTypeString)
 {
     TestArgsManager test_args;
