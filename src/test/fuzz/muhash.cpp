@@ -243,6 +243,36 @@ FUZZ_TARGET(muhash)
     assert(FinalizeCopy(inserted_removed) == FinalizeCopy(muhash));
     AssertMuHashSerializationRoundTrip(inserted_removed);
 
+    MuHash3072 singleton3;
+    singleton3.Insert(data3);
+
+    MuHash3072 combined_with_singleton{muhash};
+    combined_with_singleton *= singleton3;
+    MuHash3072 inserted_with_api{muhash};
+    inserted_with_api.Insert(data3);
+    assert(FinalizeCopy(combined_with_singleton) == FinalizeCopy(inserted_with_api));
+
+    MuHash3072 divided_by_singleton{muhash};
+    divided_by_singleton /= singleton3;
+    MuHash3072 removed_with_api{muhash};
+    removed_with_api.Remove(data3);
+    assert(FinalizeCopy(divided_by_singleton) == FinalizeCopy(removed_with_api));
+
+    MuHash3072 remove_singleton3;
+    remove_singleton3.Remove(data3);
+
+    MuHash3072 combined_with_remove_singleton{muhash};
+    combined_with_remove_singleton *= remove_singleton3;
+    assert(FinalizeCopy(combined_with_remove_singleton) == FinalizeCopy(removed_with_api));
+
+    MuHash3072 divided_by_remove_singleton{muhash};
+    divided_by_remove_singleton /= remove_singleton3;
+    assert(FinalizeCopy(divided_by_remove_singleton) == FinalizeCopy(inserted_with_api));
+
+    combined_with_singleton /= singleton3;
+    assert(FinalizeCopy(combined_with_singleton) == FinalizeCopy(muhash));
+    AssertMuHashSerializationRoundTrip(combined_with_singleton);
+
     // Finalize folds the denominator into the numerator but must not change the
     // represented value or make later operations observe stale denominator state.
     uint256 out3;
