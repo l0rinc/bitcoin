@@ -195,6 +195,9 @@ public:
     std::pair<bool, std::string> GetHeader(std::string_view hdr) const;
     std::string ReadBody() const { return m_body; }
     void WriteHeader(std::string&& hdr, std::string&& value);
+
+private:
+    void WriteReplyImpl(HTTPStatusCode status, std::span<const std::byte> reply_body);
 };
 
 class HTTPServer

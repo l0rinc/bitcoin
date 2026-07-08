@@ -514,7 +514,7 @@ bool HTTPRequest::LoadBody(LineReader& reader)
     }
 }
 
-void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> reply_body)
+void HTTPRequest::WriteReplyImpl(HTTPStatusCode status, std::span<const std::byte> reply_body)
 {
     HTTPResponse res;
 
@@ -631,6 +631,11 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
 
     // Signal to the I/O loop that we are ready to handle the next request.
     m_client->m_req_busy = false;
+}
+
+void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> reply_body)
+{
+    WriteReplyImpl(status, reply_body);
 }
 
 CService HTTPRequest::GetPeer() const
