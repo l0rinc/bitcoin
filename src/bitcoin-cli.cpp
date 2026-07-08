@@ -993,6 +993,9 @@ HTTPResponse HTTPClient::ReadResponse()
     if (!status_code) {
         throw HTTPError{"Invalid status code"};
     }
+    if (*status_code < 100) {
+        throw HTTPError{"Invalid status code"};
+    }
     response.status = *status_code;
 
     HTTPResponseHeaders headers;
