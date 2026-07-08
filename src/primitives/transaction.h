@@ -171,6 +171,7 @@ public:
     std::string ToString() const;
 };
 
+class CTransaction;
 struct CMutableTransaction;
 
 struct TransactionSerParams {
@@ -179,6 +180,21 @@ struct TransactionSerParams {
 };
 static constexpr TransactionSerParams TX_WITH_WITNESS{.allow_witness = true};
 static constexpr TransactionSerParams TX_NO_WITNESS{.allow_witness = false};
+
+namespace tx_detail {
+// Field access for code templated over CTransaction and CMutableTransaction.
+inline uint32_t version(const CTransaction& tx);
+inline uint32_t version(const CMutableTransaction& tx);
+
+inline const std::vector<CTxIn>& vin(const CTransaction& tx);
+inline const std::vector<CTxIn>& vin(const CMutableTransaction& tx);
+
+inline const std::vector<CTxOut>& vout(const CTransaction& tx);
+inline const std::vector<CTxOut>& vout(const CMutableTransaction& tx);
+
+inline uint32_t nLockTime(const CTransaction& tx);
+inline uint32_t nLockTime(const CMutableTransaction& tx);
+} // namespace tx_detail
 
 /**
  * Basic transaction serialization format:
@@ -242,7 +258,7 @@ void SerializeTransaction(const TxType& tx, Stream& s, const TransactionSerParam
 {
     const bool fAllowWitness = params.allow_witness;
 
-    s << tx.version;
+    s << tx_detail::version(tx);
     unsigned char flags = 0;
     // Consistency check
     if (fAllowWitness) {
@@ -257,14 +273,14 @@ void SerializeTransaction(const TxType& tx, Stream& s, const TransactionSerParam
         s << vinDummy;
         s << flags;
     }
-    s << tx.vin;
-    s << tx.vout;
+    s << tx_detail::vin(tx);
+    s << tx_detail::vout(tx);
     if (flags & 1) {
-        for (size_t i = 0; i < tx.vin.size(); i++) {
-            s << tx.vin[i].scriptWitness.stack;
+        for (size_t i = 0; i < tx_detail::vin(tx).size(); i++) {
+            s << tx_detail::vin(tx)[i].scriptWitness.stack;
         }
     }
-    s << tx.nLockTime;
+    s << tx_detail::nLockTime(tx);
 }
 
 template<typename TxType>
@@ -279,21 +295,14 @@ inline CAmount CalculateOutputValue(const TxType& tx)
  */
 class CTransaction
 {
-public:
-    // Default transaction version.
-    static const uint32_t CURRENT_VERSION{2};
-
-    // The local variables are made const to prevent unintended modification
-    // without updating the cached hash value. However, CTransaction is not
-    // actually immutable; deserialization and assignment are implemented,
-    // and bypass the constness. This is safe, as they update the entire
-    // structure, including the hash.
-    const std::vector<CTxIn> vin;
-    const std::vector<CTxOut> vout;
-    const uint32_t version;
-    const uint32_t nLockTime;
-
 private:
+    // Transaction data is const to prevent unintended modification without
+    // updating the cached hash values.
+    const std::vector<CTxIn> m_vin;
+    const std::vector<CTxOut> m_vout;
+    const uint32_t m_version;
+    const uint32_t m_nLockTime;
+
     /** Memory only. */
     const bool m_has_witness;
     const Txid hash;
@@ -305,9 +314,20 @@ private:
     bool ComputeHasWitness() const;
 
 public:
+    // Default transaction version.
+    static const uint32_t CURRENT_VERSION{2};
+
     /** Convert a CMutableTransaction into a CTransaction. */
     explicit CTransaction(const CMutableTransaction& tx);
     explicit CTransaction(CMutableTransaction&& tx);
+
+    CTransaction(const CTransaction&) = default;
+    CTransaction& operator=(const CTransaction&) = delete;
+
+    const std::vector<CTxIn>& vin() const LIFETIMEBOUND { return m_vin; }
+    const std::vector<CTxOut>& vout() const LIFETIMEBOUND { return m_vout; }
+    uint32_t version() const { return m_version; }
+    uint32_t nLockTime() const { return m_nLockTime; }
 
     template <typename Stream>
     inline void Serialize(Stream& s) const {
@@ -322,7 +342,7 @@ public:
     CTransaction(deserialize_type, Stream& s) : CTransaction(CMutableTransaction(deserialize, s)) {}
 
     bool IsNull() const {
-        return vin.empty() && vout.empty();
+        return m_vin.empty() && m_vout.empty();
     }
 
     const Txid& GetHash() const LIFETIMEBOUND { return hash; }
@@ -340,7 +360,7 @@ public:
 
     bool IsCoinBase() const
     {
-        return (vin.size() == 1 && vin[0].prevout.IsNull());
+        return (m_vin.size() == 1 && m_vin[0].prevout.IsNull());
     }
 
     friend bool operator==(const CTransaction& a, const CTransaction& b)
@@ -399,6 +419,21 @@ struct CMutableTransaction
         return false;
     }
 };
+
+namespace tx_detail {
+// Field access for code templated over CTransaction and CMutableTransaction.
+inline uint32_t version(const CTransaction& tx) { return tx.version(); }
+inline uint32_t version(const CMutableTransaction& tx) { return tx.version; }
+
+inline const std::vector<CTxIn>& vin(const CTransaction& tx) { return tx.vin(); }
+inline const std::vector<CTxIn>& vin(const CMutableTransaction& tx) { return tx.vin; }
+
+inline const std::vector<CTxOut>& vout(const CTransaction& tx) { return tx.vout(); }
+inline const std::vector<CTxOut>& vout(const CMutableTransaction& tx) { return tx.vout; }
+
+inline uint32_t nLockTime(const CTransaction& tx) { return tx.nLockTime(); }
+inline uint32_t nLockTime(const CMutableTransaction& tx) { return tx.nLockTime; }
+} // namespace tx_detail
 
 typedef std::shared_ptr<const CTransaction> CTransactionRef;
 template <typename Tx> static inline CTransactionRef MakeTransactionRef(Tx&& txIn) { return std::make_shared<const CTransaction>(std::forward<Tx>(txIn)); }

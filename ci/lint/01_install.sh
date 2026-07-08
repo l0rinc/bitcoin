@@ -20,7 +20,12 @@ ${CI_RETRY_EXE} apt-get update
 # - git (used in many lint scripts)
 # - gpg (used by verify-commits)
 # - moreutils (used by scripted-diff)
-${CI_RETRY_EXE} apt-get install -y cargo curl xz-utils git gpg moreutils
+# - clang/clang-tidy/cmake packages (used by clang-tidy scripted-diff)
+${CI_RETRY_EXE} apt-get install -y cargo curl xz-utils git gpg moreutils \
+    cmake build-essential ccache pkgconf python3 \
+    clang clang-tidy libclang-dev llvm-dev \
+    libboost-dev libsqlite3-dev \
+    qt6-base-dev qt6-tools-dev qt6-l10n-tools
 
 # Install Python and create venv using uv (reads version from .python-version)
 uv venv /python_env
