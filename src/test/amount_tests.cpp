@@ -179,6 +179,24 @@ BOOST_AUTO_TEST_CASE(FeeRateAdditionZeroIdentity)
     BOOST_CHECK(integer_zero == fractional_rate);
 }
 
+BOOST_AUTO_TEST_CASE(FeeRateAdditionPreservesExactRates)
+{
+    const CFeeRate fractional_rate{CAmount(1), 1001};
+
+    CFeeRate doubled_rate{fractional_rate};
+    doubled_rate += fractional_rate;
+    BOOST_CHECK(doubled_rate == CFeeRate(CAmount(2), 1001));
+    BOOST_CHECK(doubled_rate > fractional_rate);
+    BOOST_CHECK_EQUAL(doubled_rate.GetFee(1001), CAmount(2));
+    BOOST_CHECK_EQUAL(doubled_rate.GetFeePerK(), CAmount(1));
+
+    CFeeRate bumped_rate{fractional_rate};
+    bumped_rate += CFeeRate{1};
+    BOOST_CHECK(bumped_rate == CFeeRate(CAmount(2001), 1001000));
+    BOOST_CHECK(bumped_rate > CFeeRate{1});
+    BOOST_CHECK_EQUAL(bumped_rate.GetFee(1001000), CAmount(2001));
+}
+
 BOOST_AUTO_TEST_CASE(ToStringTest)
 {
     CFeeRate feeRate;
