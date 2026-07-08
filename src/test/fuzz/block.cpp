@@ -28,11 +28,13 @@ void initialize_block()
 FUZZ_TARGET(block, .init = initialize_block)
 {
     CBlock block;
+    SpanReader block_reader{buffer};
     try {
-        SpanReader{buffer} >> TX_WITH_WITNESS(block);
+        block_reader >> TX_WITH_WITNESS(block);
     } catch (const std::ios_base::failure&) {
         return;
     }
+    const size_t consumed_block_bytes{buffer.size() - block_reader.size()};
     for (const auto& tx : block.vtx) {
         Assert(tx != nullptr);
     }
@@ -62,6 +64,7 @@ FUZZ_TARGET(block, .init = initialize_block)
     serialized_block << TX_WITH_WITNESS(block);
     const size_t with_witness_size{serialized_block.size()};
     assert(with_witness_size == GetSerializeSize(TX_WITH_WITNESS(block)));
+    assert(consumed_block_bytes == with_witness_size);
     CBlock deserialized_block;
     serialized_block >> TX_WITH_WITNESS(deserialized_block);
     assert_block_unchanged(deserialized_block);
