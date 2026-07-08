@@ -58,9 +58,64 @@ void AssertChainSelectionContracts(const ArgsManager& args_manager)
     }
 }
 
+void AssertParseParametersReplacementContracts()
+{
+    ArgsManager args_manager{};
+    args_manager.AddArg("-known", "known", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    args_manager.AddCommand("first", "first");
+    args_manager.AddCommand("second", "second");
+
+    std::string error{"stale error"};
+    std::array first_argv{"prog", "-known=1", "first", "old-arg"};
+    assert(args_manager.ParseParameters(first_argv.size(), first_argv.data(), error));
+    assert(error.empty());
+    const auto first_command{args_manager.GetCommand()};
+    assert(first_command.has_value());
+    assert(first_command->command == "first");
+    assert((first_command->args == std::vector<std::string>{"old-arg"}));
+    assert(args_manager.GetArg("-known", "") == "1");
+
+    std::array second_argv{"prog", "second"};
+    assert(args_manager.ParseParameters(second_argv.size(), second_argv.data(), error));
+    assert(error.empty());
+    const auto second_command{args_manager.GetCommand()};
+    assert(second_command.has_value());
+    assert(second_command->command == "second");
+    assert(second_command->args.empty());
+    assert(!args_manager.IsArgSet("-known"));
+
+    std::array invalid_argv{"prog", "-unknown"};
+    assert(!args_manager.ParseParameters(invalid_argv.size(), invalid_argv.data(), error));
+    assert(error == "Invalid parameter -unknown");
+
+    std::array no_command_argv{"prog"};
+    assert(args_manager.ParseParameters(no_command_argv.size(), no_command_argv.data(), error));
+    assert(error.empty());
+    assert(!args_manager.GetCommand().has_value());
+
+    ArgsManager clear_args{};
+    clear_args.AddCommand("first", "first");
+    std::array first_command_argv{"prog", "first", "old-arg"};
+    assert(clear_args.ParseParameters(first_command_argv.size(), first_command_argv.data(), error));
+    assert(clear_args.GetCommand().has_value());
+    assert(clear_args.GetCommand()->command == "first");
+
+    clear_args.ClearArgs();
+    assert(!clear_args.GetCommand().has_value());
+
+    std::array free_command_argv{"prog", "free-command", "free-arg"};
+    assert(clear_args.ParseParameters(free_command_argv.size(), free_command_argv.data(), error));
+    assert(error.empty());
+    const auto free_command{clear_args.GetCommand()};
+    assert(free_command.has_value());
+    assert(free_command->command.empty());
+    assert((free_command->args == std::vector<std::string>{"free-command", "free-arg"}));
+}
+
 FUZZ_TARGET(system, .init = initialize_system)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
+    AssertParseParametersReplacementContracts();
     ArgsManager args_manager{};
     std::vector<std::string> command_option_names;
 
