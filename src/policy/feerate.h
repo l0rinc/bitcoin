@@ -35,6 +35,13 @@ private:
     /** Fee rate in sats/vB (satoshis per N virtualbytes) */
     FeePerVSize m_feerate;
 
+    static FeePerVSize ComparableFeeRate(const FeePerVSize& feerate) noexcept
+    {
+        if (feerate.IsEmpty()) return FeePerVSize{0, 1};
+        Assume(feerate.size > 0);
+        return feerate;
+    }
+
 public:
     /** Fee rate of 0 satoshis per 0 vB */
     CFeeRate() = default;
@@ -63,11 +70,15 @@ public:
     CAmount GetFeePerK() const { return CAmount(m_feerate.EvaluateFeeDown(1000)); }
     friend std::strong_ordering operator<=>(const CFeeRate& a, const CFeeRate& b) noexcept
     {
-        return ByRatio{a.m_feerate} <=> ByRatio{b.m_feerate};
+        const FeePerVSize lhs{ComparableFeeRate(a.m_feerate)};
+        const FeePerVSize rhs{ComparableFeeRate(b.m_feerate)};
+        return ByRatio{lhs} <=> ByRatio{rhs};
     }
     friend bool operator==(const CFeeRate& a, const CFeeRate& b) noexcept
     {
-        return ByRatio{a.m_feerate} == ByRatio{b.m_feerate};
+        const FeePerVSize lhs{ComparableFeeRate(a.m_feerate)};
+        const FeePerVSize rhs{ComparableFeeRate(b.m_feerate)};
+        return ByRatio{lhs} == ByRatio{rhs};
     }
     CFeeRate& operator+=(const CFeeRate& a) {
         if (a.m_feerate.fee == 0) return *this;

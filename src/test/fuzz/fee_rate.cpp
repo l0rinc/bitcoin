@@ -50,6 +50,17 @@ FUZZ_TARGET(fee_rate)
     }
 
     {
+        const CFeeRate default_zero;
+        Assert(default_zero == CFeeRate{0});
+        Assert(default_zero < CFeeRate{1});
+        Assert(default_zero > CFeeRate{-1});
+        Assert(CFeeRate{1} > default_zero);
+        Assert(CFeeRate{-1} < default_zero);
+        Assert(default_zero != CFeeRate{1});
+        Assert(default_zero != CFeeRate{-1});
+    }
+
+    {
         const CAmount precise_fee{fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(-MAX_MONEY, MAX_MONEY)};
         const int32_t precise_vsize{fuzzed_data_provider.ConsumeIntegralInRange<int32_t>(1, std::numeric_limits<int32_t>::max())};
         const CFeeRate precise_rate{precise_fee, precise_vsize};
