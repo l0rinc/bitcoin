@@ -16,12 +16,23 @@
 #include <test/fuzz/util.h>
 #include <test/util/setup_common.h>
 
+#include <algorithm>
+#include <cstring>
 #include <future>
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <thread>
 
 namespace {
+class RawIpcError : public std::runtime_error
+{
+    using std::runtime_error::runtime_error;
+};
+
+constexpr std::string_view INVALID_UNIVALUE_JSON_ERROR{"Invalid UniValue JSON received over IPC"};
+
 class IpcFuzzSetup
 {
 public:
@@ -63,6 +74,26 @@ public:
     {
         m_client.reset();
         if (m_loop_thread.joinable()) m_loop_thread.join();
+    }
+
+    std::string RawPassUniValue(std::string_view arg)
+    {
+        std::promise<std::string> result_promise;
+        auto result_future{result_promise.get_future()};
+        m_client->m_context.loop->sync([&] {
+            auto request{m_client->m_client.passUniValueRequest()};
+            auto arg_builder{request.initArg(arg.size())};
+            std::memcpy(arg_builder.begin(), arg.data(), arg.size());
+            m_client->m_context.loop->m_task_set->add(request.send().then(
+                [&result_promise](::capnp::Response<test::fuzz::messages::IpcFuzzInterface::PassUniValueResults>&& response) {
+                    const auto result{response.getResult()};
+                    result_promise.set_value(std::string{result.cStr(), result.size()});
+                },
+                [&result_promise](const ::kj::Exception& e) {
+                    result_promise.set_exception(std::make_exception_ptr(RawIpcError{std::string{e.getDescription().cStr()}}));
+                }));
+        });
+        return result_future.get();
     }
 
     std::unique_ptr<mp::ProxyClient<test::fuzz::messages::IpcFuzzInterface>> m_client;
@@ -123,8 +154,24 @@ FUZZ_TARGET(ipc, .init = initialize_ipc)
             },
             [&] {
                 UniValue value;
-                if (!value.read(fuzzed_data_provider.ConsumeRandomLengthString(512))) return;
-                assert(ipc.m_client->passUniValue(value).write() == value.write());
+                const std::string json{fuzzed_data_provider.ConsumeRandomLengthString(512)};
+                const bool valid_text{std::ranges::all_of(json, [](const unsigned char c) {
+                    return c == '\t' || c == '\n' || c == '\r' || (c >= 0x20 && c <= 0x7e);
+                })};
+                if (!valid_text) return;
+                const bool valid_json{value.read(json)};
+                if (valid_json) {
+                    assert(ipc.m_client->passUniValue(value).write() == value.write());
+                    assert(ipc.RawPassUniValue(json) == value.write());
+                } else {
+                    try {
+                        (void)ipc.RawPassUniValue(json);
+                    } catch (const RawIpcError& e) {
+                        assert(std::string_view{e.what()}.find(INVALID_UNIVALUE_JSON_ERROR) != std::string_view::npos);
+                        return;
+                    }
+                    assert(false);
+                }
             },
             [&] {
                 const CMutableTransaction mutable_tx = ConsumeTransaction(fuzzed_data_provider, std::nullopt);
