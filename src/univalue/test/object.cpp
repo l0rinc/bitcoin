@@ -477,20 +477,27 @@ void univalue_write_escaped_key_roundtrip()
 
 void univalue_read_clears_previous_state()
 {
-    UniValue fresh;
-    UniValue preloaded(UniValue::VOBJ);
-    preloaded.pushKV("sentinel", UniValue("before"));
-    preloaded.pushKV("array", UniValue(UniValue::VARR));
+    auto assert_invalid_read_clears = [](std::string_view json) {
+        UniValue fresh;
+        UniValue preloaded(UniValue::VOBJ);
+        preloaded.pushKV("sentinel", UniValue("before"));
+        preloaded.pushKV("array", UniValue(UniValue::VARR));
 
-    BOOST_CHECK(!fresh.read(":"));
-    BOOST_CHECK(!preloaded.read(":"));
+        BOOST_CHECK(!fresh.read(json));
+        BOOST_CHECK(!preloaded.read(json));
 
-    BOOST_CHECK(fresh.isNull());
-    BOOST_CHECK(preloaded.isNull());
-    BOOST_CHECK_EQUAL(fresh.getValStr(), preloaded.getValStr());
-    BOOST_CHECK_EQUAL(fresh.size(), preloaded.size());
-    BOOST_CHECK(fresh.empty());
-    BOOST_CHECK(preloaded.empty());
+        BOOST_CHECK(fresh.isNull());
+        BOOST_CHECK(preloaded.isNull());
+        BOOST_CHECK_EQUAL(fresh.getValStr(), preloaded.getValStr());
+        BOOST_CHECK_EQUAL(fresh.size(), preloaded.size());
+        BOOST_CHECK(fresh.empty());
+        BOOST_CHECK(preloaded.empty());
+    };
+
+    assert_invalid_read_clears(":");
+    assert_invalid_read_clears("{} garbage");
+    assert_invalid_read_clears("[]{}");
+    assert_invalid_read_clears("{} 42");
 }
 
 int main(int argc, char* argv[])
