@@ -4603,6 +4603,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             LogDebug(BCLog::CMPCTBLOCK, "%s sent us a compact block even though we are blocksonly!", pfrom.LogPeer());
             return;
         }
+        Assume(!m_opts.ignore_incoming_txs);
 
         {
             LOCK(cs_main);
@@ -4611,6 +4612,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                 LogDebug(BCLog::CMPCTBLOCK, "%s sent us a compact block despite never having sent us a SENDCMPCT!", pfrom.LogPeer());
                 return;
             }
+            Assume(nodestate->m_provides_cmpctblocks);
         }
 
         CBlockHeaderAndShortTxIDs cmpctblock;
@@ -4700,6 +4702,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             LogDebug(BCLog::CMPCTBLOCK, "%s, not marked as high-bandwidth, sent us an unsolicited compact block!", pfrom.LogPeer());
             return;
         }
+        Assume(requested_block_from_this_peer || pfrom.m_bip152_highbandwidth_to);
 
         if (pindex->nChainWork <= m_chainman.ActiveChain().Tip()->nChainWork || // We know something better
                 pindex->nTx != 0) { // We had this block at some point, but pruned it
