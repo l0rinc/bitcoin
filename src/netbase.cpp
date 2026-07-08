@@ -465,6 +465,8 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
                 LogError("Proxy authentication unsuccessful\n");
                 return false;
             }
+            Assume(pchRetA[0] == 0x01);
+            Assume(pchRetA[1] == 0x00);
         } else if (selected_no_auth) {
             // Perform no authentication
         } else {
@@ -502,16 +504,19 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
             LogError("Proxy failed to accept request\n");
             return false;
         }
+        Assume(pchRet2[0] == SOCKSVersion::SOCKS5);
         if (pchRet2[1] != SOCKS5Reply::SUCCEEDED) {
             // Failures to connect to a peer that are not proxy errors
             LogDebug(BCLog::NET,
                           "Socks5() connect to %s:%d failed: %s\n", strDest, port, Socks5ErrorString(pchRet2[1]));
             return false;
         }
+        Assume(pchRet2[1] == SOCKS5Reply::SUCCEEDED);
         if (pchRet2[2] != 0x00) { // Reserved field must be 0
             LogError("Error: malformed proxy response\n");
             return false;
         }
+        Assume(pchRet2[2] == 0x00);
         uint8_t pchRet3[256];
         switch (pchRet2[3]) {
         case SOCKS5Atyp::IPV4: recvr = InterruptibleRecv(pchRet3, 4, g_socks5_recv_timeout, sock); break;
