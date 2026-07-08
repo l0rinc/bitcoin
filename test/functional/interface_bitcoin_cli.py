@@ -238,6 +238,20 @@ class TestBitcoinCli(BitcoinTestFramework):
             invalid_status_response,
         )
 
+        malformed_status_response = (
+            b"HTTP/1.1 2000 Invalid\r\n"
+            b"Connection: close\r\n"
+            b"Content-Length: " + str(len(body)).encode() + b"\r\n"
+            b"\r\n" +
+            body
+        )
+        assert_raises_process_error(
+            1,
+            "HTTP error: Invalid status line format",
+            self.send_fake_rpc_response,
+            malformed_status_response,
+        )
+
     def run_test(self):
         """Main test logic"""
         self.test_echojson_positional_equals()
