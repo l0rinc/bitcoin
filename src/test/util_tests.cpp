@@ -1182,6 +1182,25 @@ BOOST_AUTO_TEST_CASE(test_ParseFixedPoint)
     BOOST_CHECK(!ParseFixedPoint("31.999999999999999999999", 3, &amount));
 }
 
+BOOST_AUTO_TEST_CASE(parse_fixed_point_failure_preserves_output)
+{
+    static constexpr int64_t SENTINEL{0x123456789abcLL};
+
+    auto expect_failure_preserves_output = [](std::string_view input, int decimals) {
+        int64_t amount{SENTINEL};
+        BOOST_CHECK(!ParseFixedPoint(input, decimals, &amount));
+        BOOST_CHECK_EQUAL(amount, SENTINEL);
+        BOOST_CHECK(!ParseFixedPoint(input, decimals, nullptr));
+    };
+
+    expect_failure_preserves_output("", 8);                         // Empty input.
+    expect_failure_preserves_output("-1000a", 8);                   // Trailing garbage after a valid prefix.
+    expect_failure_preserves_output("0.000000001", 8);              // Too many fractional digits.
+    expect_failure_preserves_output("10000000000.00000000", 8);     // Out of range after exponent finalization.
+    expect_failure_preserves_output("1.1e", 8);                     // Incomplete exponent.
+    expect_failure_preserves_output("31.0011", 3);                  // Fee-rate precision overflow.
+}
+
 #ifndef WIN32 // Cannot do this test on WIN32 due to lack of fork()
 static constexpr char LockCommand = 'L';
 static constexpr char UnlockCommand = 'U';
