@@ -5,13 +5,16 @@
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <tinyformat.h>
+#include <util/moneystr.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 
+#include <algorithm>
 #include <cassert>
 #include <clocale>
 #include <cstdint>
 #include <locale>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -69,11 +72,20 @@ FUZZ_TARGET(locale)
     const std::string random_string = fuzzed_data_provider.ConsumeRandomLengthString(5);
     const int64_t random_int64 = fuzzed_data_provider.ConsumeIntegral<int64_t>();
     const double random_double = fuzzed_data_provider.ConsumeFloatingPoint<double>();
+    const CAmount random_money = fuzzed_data_provider.ConsumeIntegral<CAmount>();
     const std::string tostring_without_locale = util::ToString(random_int64);
     const std::string tostring_double_without_locale = util::ToString(random_double);
     const std::string strprintf_int_without_locale = strprintf("%d", random_int64);
     const std::string strprintf_double_without_locale = strprintf("%f", random_double);
     const std::string strprintf_space_double_without_locale = strprintf("% f", random_double);
+    const std::string format_money_without_locale = FormatMoney(random_money);
+    const std::optional<CAmount> parsed_money_without_locale = ParseMoney(random_string);
+    assert(std::ranges::all_of(format_money_without_locale, [](const char ch) {
+        return IsDigit(ch) || ch == '.' || ch == '-';
+    }));
+    if (MoneyRange(random_money)) {
+        assert(ParseMoney(format_money_without_locale) == random_money);
+    }
 
     const char* new_locale = std::setlocale(LC_ALL, locale_identifier.c_str());
     assert(new_locale != nullptr);
@@ -88,6 +100,8 @@ FUZZ_TARGET(locale)
     assert(strprintf_double_without_locale == strprintf_double_with_locale);
     const std::string strprintf_space_double_with_locale = strprintf("% f", random_double);
     assert(strprintf_space_double_without_locale == strprintf_space_double_with_locale);
+    assert(FormatMoney(random_money) == format_money_without_locale);
+    assert(ParseMoney(random_string) == parsed_money_without_locale);
 
     {
         const ScopedGlobalLocale scoped_locale{DecimalCommaLocale()};
@@ -97,6 +111,8 @@ FUZZ_TARGET(locale)
         assert(strprintf("%d", random_int64) == strprintf_int_without_locale);
         assert(strprintf("%f", random_double) == strprintf_double_without_locale);
         assert(strprintf("% f", random_double) == strprintf_space_double_without_locale);
+        assert(FormatMoney(random_money) == format_money_without_locale);
+        assert(ParseMoney(random_string) == parsed_money_without_locale);
     }
 
     const std::locale current_cpp_locale;
