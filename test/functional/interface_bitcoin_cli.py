@@ -6,7 +6,10 @@
 
 from decimal import Decimal
 import re
+import socket
 import subprocess
+import threading
+import time
 
 from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.netutil import test_ipv6_local
@@ -19,7 +22,6 @@ from test_framework.util import (
     get_auth_cookie,
     rpc_port,
 )
-import time
 
 # The block reward of coinbaseoutput.nValue (50) BTC/block matures after
 # COINBASE_MATURITY (100) blocks. Therefore, after mining 101 blocks we expect
@@ -115,9 +117,83 @@ class TestBitcoinCli(BitcoinTestFramework):
         expected = [["data=test"], 42]
         assert_equal(result, expected)
 
+    def send_fake_rpc_response(self, response):
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        server.settimeout(5)
+        port = server.getsockname()[1]
+        server_errors = []
+
+        def handle_request():
+            try:
+                conn, _ = server.accept()
+                with conn:
+                    conn.settimeout(5)
+                    data = b""
+                    while b"\r\n\r\n" not in data:
+                        chunk = conn.recv(4096)
+                        if not chunk:
+                            return
+                        data += chunk
+                    headers, _, body = data.partition(b"\r\n\r\n")
+                    match = re.search(br"(?im)^Content-Length: ([0-9]+)\r?$", headers)
+                    if match:
+                        expected_body_len = int(match.group(1))
+                        while len(body) < expected_body_len:
+                            chunk = conn.recv(4096)
+                            if not chunk:
+                                return
+                            body += chunk
+                    conn.sendall(response)
+            except Exception as e:
+                server_errors.append(e)
+            finally:
+                server.close()
+
+        thread = threading.Thread(target=handle_request)
+        thread.start()
+        try:
+            return self.nodes[0].cli(
+                "-norpccookiefile",
+                "-rpcuser=user",
+                "-rpcpassword=pass",
+                "-rpcconnect=127.0.0.1",
+                f"-rpcport={port}",
+                "-rpcclienttimeout=5",
+            ).send_cli("echo")
+        finally:
+            thread.join(timeout=10)
+            assert not thread.is_alive()
+            assert not server_errors
+
+    def test_cli_http_chunked_response_parsing(self):
+        self.log.info("Test bitcoin-cli rejects malformed chunked HTTP responses")
+
+        body = b'{"result":"ok","error":null,"id":1}\n'
+        chunk_header = f"{len(body):x}\r\n".encode()
+        response_prefix = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Transfer-Encoding: chunked\r\n"
+            b"Connection: close\r\n"
+            b"\r\n"
+        )
+        good_response = response_prefix + chunk_header + body + b"\r\n0\r\n\r\n"
+        assert_equal(self.send_fake_rpc_response(good_response), "ok")
+
+        malformed_response = response_prefix + chunk_header + body + b"XX0\r\n\r\n"
+        assert_raises_process_error(
+            1,
+            "HTTP error: Improperly terminated chunk",
+            self.send_fake_rpc_response,
+            malformed_response,
+        )
+
     def run_test(self):
         """Main test logic"""
         self.test_echojson_positional_equals()
+        self.test_cli_http_chunked_response_parsing()
 
         self.generate(self.nodes[0], BLOCKS)
 
