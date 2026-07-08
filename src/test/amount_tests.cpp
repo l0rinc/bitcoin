@@ -145,6 +145,15 @@ BOOST_AUTO_TEST_CASE(BinaryOperatorTest)
     // a should be 0.00000002 BTC/kvB now
     a += a;
     BOOST_CHECK(a == b);
+
+    const CFeeRate default_zero;
+    BOOST_CHECK(default_zero == CFeeRate(0));
+    BOOST_CHECK(default_zero < CFeeRate(1));
+    BOOST_CHECK(default_zero > CFeeRate(-1));
+    BOOST_CHECK(CFeeRate(1) > default_zero);
+    BOOST_CHECK(CFeeRate(-1) < default_zero);
+    BOOST_CHECK(default_zero != CFeeRate(1));
+    BOOST_CHECK(default_zero != CFeeRate(-1));
 }
 
 BOOST_AUTO_TEST_CASE(FeeRateAdditionZeroIdentity)
