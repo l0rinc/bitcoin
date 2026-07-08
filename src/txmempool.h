@@ -524,7 +524,11 @@ public:
     bool exists(const Wtxid& wtxid) const
     {
         LOCK(cs);
-        return (mapTx.get<index_by_wtxid>().count(wtxid) != 0);
+        const auto& wtxid_map{mapTx.get<index_by_wtxid>()};
+        const auto it{wtxid_map.find(wtxid)};
+        if (it == wtxid_map.end()) return false;
+        Assume(it->GetTx().GetWitnessHash() == wtxid);
+        return true;
     }
 
     const CTxMemPoolEntry* GetEntry(const Txid& txid) const LIFETIMEBOUND EXCLUSIVE_LOCKS_REQUIRED(cs);
