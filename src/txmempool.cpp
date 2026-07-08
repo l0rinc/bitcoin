@@ -714,6 +714,7 @@ CTransactionRef CTxMemPool::get(const Txid& hash) const
     indexed_transaction_set::const_iterator i = mapTx.find(hash);
     if (i == mapTx.end())
         return nullptr;
+    Assume(i->GetTx().GetHash() == hash);
     return i->GetSharedTx();
 }
 
@@ -723,6 +724,7 @@ CTransactionRef CTxMemPool::get(const Wtxid& hash) const
     const auto& wtxid_map{mapTx.get<index_by_wtxid>()};
     const auto it{wtxid_map.find(hash)};
     if (it == wtxid_map.end()) return nullptr;
+    Assume(it->GetTx().GetWitnessHash() == hash);
     return it->GetSharedTx();
 }
 
