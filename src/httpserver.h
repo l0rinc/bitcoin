@@ -197,7 +197,7 @@ public:
     void WriteHeader(std::string&& hdr, std::string&& value);
 
 private:
-    void WriteReplyImpl(HTTPStatusCode status, std::span<const std::byte> reply_body);
+    void WriteReplyImpl(HTTPStatusCode status, std::span<const std::byte> reply_body, std::string* moved_body = nullptr);
 };
 
 class HTTPServer

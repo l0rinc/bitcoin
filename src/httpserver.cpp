@@ -514,7 +514,7 @@ bool HTTPRequest::LoadBody(LineReader& reader)
     }
 }
 
-void HTTPRequest::WriteReplyImpl(HTTPStatusCode status, std::span<const std::byte> reply_body)
+void HTTPRequest::WriteReplyImpl(HTTPStatusCode status, std::span<const std::byte> reply_body, std::string* moved_body)
 {
     HTTPResponse res;
 
@@ -562,9 +562,9 @@ void HTTPRequest::WriteReplyImpl(HTTPStatusCode status, std::span<const std::byt
         }
     }
 
-    if (needs_content_length) {
-        res.m_headers.Write("Content-Length", util::ToString(reply_body.size()));
-    }
+    const bool moving_body{moved_body != nullptr};
+    const size_t body_size{moving_body ? moved_body->size() : reply_body.size()};
+    if (needs_content_length) res.m_headers.Write("Content-Length", util::ToString(body_size));
 
     if (needs_body && !res.m_headers.FindFirst("Content-Type")) {
         // Default type from libevent evhttp_new_object()
@@ -584,23 +584,26 @@ void HTTPRequest::WriteReplyImpl(HTTPStatusCode status, std::span<const std::byt
 
     // Serialize the response headers
     std::string response{res.StringifyHeaders()};
-    const size_t response_size{response.size() + reply_body.size()};
+    const size_t response_size{response.size() + body_size};
 
-    if (reply_body.size() >= LARGE_HTTP_REPLY_BYTES) {
-        LogDebug(BCLog::HTTP, "Large HTTP reply body copied: status=%d bytes=%d", status, reply_body.size());
+    if (body_size >= LARGE_HTTP_REPLY_BYTES) {
+        LogDebug(BCLog::HTTP, "Large HTTP reply body %s: status=%d bytes=%d", moving_body ? "moved" : "copied", status, body_size);
     }
 
-    // We've been using std::span up until now but it is finally time to copy
-    // data. The original data will go out of scope when WriteReply() returns.
-    // This is analogous to the memcpy() in libevent's evbuffer_add()
-    if (!reply_body.empty()) response.append(reinterpret_cast<const char*>(reply_body.data()), reply_body.size());
+    if (!moving_body) {
+        // We've been using std::span up until now but it is finally time to copy
+        // data. The original data will go out of scope when WriteReply() returns.
+        // This is analogous to the memcpy() in libevent's evbuffer_add()
+        if (!reply_body.empty()) response.append(reinterpret_cast<const char*>(reply_body.data()), reply_body.size());
+    }
 
     bool send_buffer_was_empty{false};
-    // Fill the send buffer with the complete serialized response headers + body
+    // Queue the serialized response headers and body.
     {
         LOCK(m_client->m_send_mutex);
         send_buffer_was_empty = m_client->m_send_buffer.empty();
         m_client->m_send_buffer.emplace_back(std::move(response));
+        if (moving_body && !moved_body->empty()) m_client->m_send_buffer.emplace_back(std::move(*moved_body));
 
         // If the buffer already held data, the I/O thread is (or soon will be)
         // draining it, so flag that there is more data to send. This must happen
