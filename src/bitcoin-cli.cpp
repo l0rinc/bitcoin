@@ -96,6 +96,7 @@ class HTTPResponseHeaders
 public:
     void Read(util::LineReader& reader);
     std::optional<std::string> FindFirst(std::string_view key) const;
+    std::vector<std::string> FindAll(std::string_view key) const;
 };
 
 // Named Read() in HTTPHeaders (see PR #35182).
@@ -136,6 +137,17 @@ std::optional<std::string> HTTPResponseHeaders::FindFirst(std::string_view key) 
         }
     }
     return std::nullopt;
+}
+
+std::vector<std::string> HTTPResponseHeaders::FindAll(std::string_view key) const
+{
+    std::vector<std::string> values;
+    for (const auto& item : m_headers) {
+        if (CaseInsensitiveEqual(key, item.first)) {
+            values.push_back(item.second);
+        }
+    }
+    return values;
 }
 
 static void SetupCliArgs(ArgsManager& argsman)
@@ -997,9 +1009,15 @@ HTTPResponse HTTPClient::ReadResponse()
     if (transfer_encoding && ToLower(*transfer_encoding).find("chunked") != std::string::npos) {
         chunked = true;
     } else {
-        auto content_length_header = headers.FindFirst("content-length");
-        if (content_length_header) {
-            auto maybe_len = ToIntegral<size_t>(*content_length_header);
+        const auto content_length_headers{headers.FindAll("content-length")};
+        if (!content_length_headers.empty()) {
+            const auto& first_content_length_header{content_length_headers.front()};
+            for (const auto& content_length_header : content_length_headers) {
+                if (content_length_header != first_content_length_header) {
+                    throw HTTPError{"Differing Content-Length values"};
+                }
+            }
+            auto maybe_len = ToIntegral<size_t>(first_content_length_header);
             if (!maybe_len) {
                 throw HTTPError{"Invalid Content-Length"};
             }
