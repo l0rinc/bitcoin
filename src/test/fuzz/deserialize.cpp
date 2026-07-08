@@ -11,6 +11,7 @@
 #include <coins.h>
 #include <common/args.h>
 #include <compressor.h>
+#include <consensus/amount.h>
 #include <consensus/merkle.h>
 #include <key.h>
 #include <merkleblock.h>
@@ -331,6 +332,7 @@ FUZZ_TARGET_DESERIALIZE(txoutcompressor_deserialize, {
     CTxOut to;
     auto toc = Using<TxOutCompression>(to);
     DeserializeFromFuzzingInput(buffer, toc);
+    assert(MoneyRange(to.nValue));
 })
 FUZZ_TARGET_DESERIALIZE(blocktransactions_deserialize, {
     BlockTransactions bt;
