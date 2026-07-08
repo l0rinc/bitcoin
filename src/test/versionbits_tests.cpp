@@ -30,6 +30,10 @@ public:
 
     ThresholdState StateFor(const CBlockIndex* pindexPrev) const { return AbstractThresholdConditionChecker::GetStateFor(pindexPrev, cache); }
     int StateSinceHeightFor(const CBlockIndex* pindexPrev) const { return AbstractThresholdConditionChecker::GetStateSinceHeightFor(pindexPrev, cache); }
+    BIP9Stats StateStatisticsFor(const CBlockIndex* pindex, std::vector<bool>* signalling_blocks = nullptr) const
+    {
+        return AbstractThresholdConditionChecker::GetStateStatisticsFor(pindex, signalling_blocks);
+    }
     void clear() { cache.clear(); }
 };
 
@@ -186,6 +190,21 @@ public:
 };
 
 BOOST_FIXTURE_TEST_SUITE(versionbits_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(versionbits_null_statistics_clear_signals)
+{
+    const Deployments deployments;
+    const TestConditionChecker checker{deployments.normal};
+    std::vector<bool> signals{true, false, true};
+
+    const BIP9Stats stats{checker.StateStatisticsFor(nullptr, &signals)};
+    BOOST_CHECK_EQUAL(stats.period, deployments.normal.period);
+    BOOST_CHECK_EQUAL(stats.threshold, deployments.normal.threshold);
+    BOOST_CHECK_EQUAL(stats.elapsed, 0);
+    BOOST_CHECK_EQUAL(stats.count, 0);
+    BOOST_CHECK(!stats.possible);
+    BOOST_CHECK(signals.empty());
+}
 
 BOOST_AUTO_TEST_CASE(versionbits_test)
 {
