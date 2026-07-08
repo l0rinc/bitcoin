@@ -91,6 +91,11 @@ void AssertWriteRoundTrip(const UniValue& value)
     assert(reparsed.read(encoded));
     assert(EqualUniValueState(value, reparsed));
     assert(reparsed.write() == encoded);
+
+    UniValue invalid_with_trailing_token{UniValue::VOBJ};
+    invalid_with_trailing_token.pushKV("sentinel", UniValue{"before"});
+    assert(!invalid_with_trailing_token.read(encoded + " null"));
+    assert(EqualUniValueState(invalid_with_trailing_token, UniValue{}));
 }
 } // namespace
 
@@ -114,6 +119,7 @@ FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
 
     const UniValue& univalue{fresh};
     if (!valid) {
+        assert(EqualUniValueState(univalue, UniValue{}));
         return;
     }
     AssertWriteRoundTrip(univalue);
