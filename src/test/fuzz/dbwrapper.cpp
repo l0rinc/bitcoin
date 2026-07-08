@@ -201,6 +201,27 @@ void VerifyIterator(CDBWrapper& dbw, const Oracle& oracle,
     AssertExhaustedIterator(*it);
 }
 
+void VerifyIteratorRange(CDBIterator& it, const Oracle& oracle, bool obfuscate, uint16_t seek_key, size_t max_steps)
+{
+    auto oracle_it{oracle.lower_bound(seek_key)};
+    it.Seek(seek_key);
+    for (size_t steps{0}; it.Valid() && steps < max_steps; ++steps, it.Next()) {
+        uint16_t db_key;
+        assert(it.GetKey(db_key));
+        if (oracle_it != oracle.end() && db_key == oracle_it->first) {
+            std::vector<uint8_t> db_value;
+            assert(it.GetValue(db_value));
+            assert(db_value == oracle_it->second);
+            ++oracle_it;
+        } else {
+            assert(obfuscate);
+            std::string key_str;
+            assert(it.GetKey(key_str));
+            assert(key_str == OBFUSCATION_KEY);
+        }
+    }
+}
+
 /** Maximum number of concurrent reader threads in dbwrapper_concurrent_reads. */
 constexpr size_t MAX_READ_WORKERS{8};
 
@@ -461,15 +482,15 @@ FUZZ_TARGET(dbwrapper_concurrent_reads, .init = [] { static auto setup{MakeNoLog
 
     // Build query list from seeded and random keys.
     const size_t num_queries{provider.ConsumeIntegralInRange<size_t>(1, 2'000)};
-    enum class ReadOp { Read, Exists, IteratorSeek };
-    std::vector<std::tuple<ReadOp, uint16_t>> queries;
+    enum class ReadOp { Read, Exists, IteratorSeek, IteratorRange };
+    std::vector<std::tuple<ReadOp, uint16_t, uint8_t>> queries;
     queries.reserve(num_queries);
     for (size_t i{0}; i < num_queries; ++i) {
-        const auto op{provider.PickValueInArray({ReadOp::Read, ReadOp::Exists, ReadOp::IteratorSeek})};
+        const auto op{provider.PickValueInArray({ReadOp::Read, ReadOp::Exists, ReadOp::IteratorSeek, ReadOp::IteratorRange})};
         const uint16_t key{provider.ConsumeBool()
                                ? keys[provider.ConsumeIntegralInRange<size_t>(0, keys.size() - 1)]
                                : ConsumeKey(provider)};
-        queries.emplace_back(op, key);
+        queries.emplace_back(op, key, provider.ConsumeIntegralInRange<uint8_t>(1, 16));
     }
 
 
@@ -489,7 +510,7 @@ FUZZ_TARGET(dbwrapper_concurrent_reads, .init = [] { static auto setup{MakeNoLog
             const std::unique_ptr<CDBIterator> it{db.NewIterator()};
             // Every read must agree with the oracle, the source of truth.
             for (const auto i : std::span{order}.first(queries_to_run)) {
-                const auto& [op, key] = queries[i];
+                const auto& [op, key, max_steps] = queries[i];
                 switch (op) {
                 case ReadOp::Read:
                     VerifyRead(db, oracle, key);
@@ -511,6 +532,9 @@ FUZZ_TARGET(dbwrapper_concurrent_reads, .init = [] { static auto setup{MakeNoLog
                     } else {
                         AssertExhaustedIterator(*it);
                     }
+                    break;
+                case ReadOp::IteratorRange:
+                    VerifyIteratorRange(*it, oracle, obfuscate, key, max_steps);
                     break;
                 }
             }
