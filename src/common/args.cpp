@@ -177,7 +177,10 @@ void ArgsManager::SelectConfigNetwork(const std::string& network)
 bool ArgsManager::ParseParameters(int argc, const char* const argv[], std::string& error)
 {
     LOCK(cs_args);
+    error.clear();
     m_settings.command_line_options.clear();
+    m_command.clear();
+    Assume(m_command.empty());
 
     for (int i = 1; i < argc; i++) {
         std::string key(argv[i]);
@@ -204,6 +207,7 @@ bool ArgsManager::ParseParameters(int argc, const char* const argv[], std::strin
 #endif
 
         if (key[0] != '-') {
+            Assume(m_command.empty());
             if (!m_accept_any_command && m_command.empty()) {
                 // The first non-dash arg is a registered command
                 std::optional<unsigned int> flags = GetArgFlags_(key);
@@ -696,10 +700,14 @@ void ArgsManager::ClearArgs()
 {
     LOCK(cs_args);
     m_settings = {};
+    m_command.clear();
     m_available_args.clear();
     m_command_args.clear();
+    m_accept_any_command = true;
     m_network_only_args.clear();
     m_config_sections.clear();
+    Assume(m_command.empty());
+    Assume(m_accept_any_command);
 }
 
 void ArgsManager::CheckMultipleCLIArgs() const
