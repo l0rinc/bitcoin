@@ -20,6 +20,7 @@
 #include <util/strencodings.h>
 
 #include <algorithm>
+#include <limits>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -33,6 +34,16 @@ struct BloomTest : public BasicTestingSetup {
 } // namespace bloom_tests
 
 BOOST_FIXTURE_TEST_SUITE(bloom_tests, BloomTest)
+
+BOOST_AUTO_TEST_CASE(bloom_constructor_size_constraints)
+{
+    for (const unsigned int n_elements : {1U, 100U, 10'000U, 10'000'000U}) {
+        for (const double fp_rate : {1.0, 0.999, 0.1, 0.001, 1.0 / std::numeric_limits<unsigned int>::max()}) {
+            CBloomFilter filter{n_elements, fp_rate, 0, BLOOM_UPDATE_ALL};
+            BOOST_CHECK(filter.IsWithinSizeConstraints());
+        }
+    }
+}
 
 BOOST_AUTO_TEST_CASE(bloom_create_insert_serialize)
 {
