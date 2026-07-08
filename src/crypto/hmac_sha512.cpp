@@ -13,7 +13,7 @@ CHMAC_SHA512::CHMAC_SHA512(const unsigned char* key, size_t keylen)
 {
     unsigned char rkey[128];
     if (keylen <= 128) {
-        memcpy(rkey, key, keylen);
+        if (keylen) memcpy(rkey, key, keylen);
         memset(rkey + keylen, 0, 128 - keylen);
     } else {
         CSHA512().Write(key, keylen).Finalize(rkey);
