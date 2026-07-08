@@ -117,6 +117,15 @@ void AssertEqualAfterSerializeDeserialize(const T& obj)
     assert(Deserialize<T>(Serialize(obj)) == obj);
 }
 
+template <typename T>
+void AssertSerializeDeserializeStable(const T& obj)
+{
+    const DataStream serialized{Serialize(obj)};
+    const DataStream reserialized{Serialize(Deserialize<T>(serialized))};
+    assert(serialized.size() == reserialized.size());
+    assert(std::equal(serialized.begin(), serialized.end(), reserialized.begin(), reserialized.end()));
+}
+
 bool ExpectedMessageTypeValid(const CMessageHeader& mh)
 {
     bool zero_seen{false};
@@ -312,6 +321,7 @@ FUZZ_TARGET_DESERIALIZE(inv_deserialize, {
 FUZZ_TARGET_DESERIALIZE(bloomfilter_deserialize, {
     CBloomFilter bf;
     DeserializeFromFuzzingInput(buffer, bf);
+    AssertSerializeDeserializeStable(bf);
 })
 FUZZ_TARGET_DESERIALIZE(diskblockindex_deserialize, {
     CDiskBlockIndex dbi;

@@ -41,6 +41,7 @@ CBloomFilter::CBloomFilter(const unsigned int nElements, const double nFPRate, c
     nTweak(nTweakIn),
     nFlags(nFlagsIn)
 {
+    Assume(IsWithinSizeConstraints());
 }
 
 inline unsigned int CBloomFilter::Hash(unsigned int nHashNum, std::span<const unsigned char> vDataToHash) const
