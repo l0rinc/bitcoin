@@ -583,24 +583,24 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
     m_client->m_keep_alive = keep_alive;
 
     // Serialize the response headers
-    const std::string headers{res.StringifyHeaders()};
-    const auto headers_bytes{std::as_bytes(std::span{headers})};
+    std::string response{res.StringifyHeaders()};
+    const size_t response_size{response.size() + reply_body.size()};
 
     if (reply_body.size() >= LARGE_HTTP_REPLY_BYTES) {
         LogDebug(BCLog::HTTP, "Large HTTP reply body copied: status=%d bytes=%d", status, reply_body.size());
     }
+
+    // We've been using std::span up until now but it is finally time to copy
+    // data. The original data will go out of scope when WriteReply() returns.
+    // This is analogous to the memcpy() in libevent's evbuffer_add()
+    if (!reply_body.empty()) response.append(reinterpret_cast<const char*>(reply_body.data()), reply_body.size());
 
     bool send_buffer_was_empty{false};
     // Fill the send buffer with the complete serialized response headers + body
     {
         LOCK(m_client->m_send_mutex);
         send_buffer_was_empty = m_client->m_send_buffer.empty();
-        m_client->m_send_buffer.insert(m_client->m_send_buffer.end(), headers_bytes.begin(), headers_bytes.end());
-
-        // We've been using std::span up until now but it is finally time to copy
-        // data. The original data will go out of scope when WriteReply() returns.
-        // This is analogous to the memcpy() in libevent's evbuffer_add()
-        m_client->m_send_buffer.insert(m_client->m_send_buffer.end(), reply_body.begin(), reply_body.end());
+        m_client->m_send_buffer.emplace_back(std::move(response));
 
         // If the buffer already held data, the I/O thread is (or soon will be)
         // draining it, so flag that there is more data to send. This must happen
@@ -617,7 +617,7 @@ void HTTPRequest::WriteReply(HTTPStatusCode status, std::span<const std::byte> r
         BCLog::HTTP,
         "HTTPResponse (status code: %d size: %lld) added to send buffer for client %s (id=%llu)",
         status,
-        headers_bytes.size() + reply_body.size(),
+        response_size,
         m_client->m_origin,
         m_client->m_id);
 
@@ -1135,6 +1135,8 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
     // Send as much data from this client's buffer as we can
     LOCK(m_send_mutex);
     if (!m_send_buffer.empty()) {
+        auto& front{m_send_buffer.front()};
+
         // Socket flags (See kernel docs for send(2) and tcp(7) for more details).
         // MSG_NOSIGNAL: If the remote end of the connection is closed,
         //               fail with EPIPE (an error) as opposed to triggering
@@ -1149,9 +1151,7 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
         ssize_t bytes_sent;
         {
             LOCK(m_sock_mutex);
-            bytes_sent = m_sock->Send(m_send_buffer.data(),
-                                      m_send_buffer.size(),
-                                      flags);
+            bytes_sent = m_sock->Send(front.data(), front.size(), flags);
         }
 
         if (bytes_sent < 0) {
@@ -1179,14 +1179,15 @@ bool HTTPRemoteClient::MaybeSendBytesFromBuffer()
         }
 
         // Successful send, remove sent bytes from our local buffer.
-        Assume(static_cast<size_t>(bytes_sent) <= m_send_buffer.size());
-        m_send_buffer.erase(m_send_buffer.begin(),
-                            m_send_buffer.begin() + bytes_sent);
+        const size_t sent{static_cast<size_t>(bytes_sent)};
+        Assume(sent <= front.size());
+        front.erase(0, sent);
+        if (front.empty()) m_send_buffer.pop_front();
 
         LogDebug(
             BCLog::HTTP,
             "Sent %d bytes to client %s (id=%llu)",
-            bytes_sent,
+            sent,
             m_origin,
             m_id);
 

@@ -479,7 +479,7 @@ public:
      */
     /// @{
     Mutex m_send_mutex;
-    std::vector<std::byte> m_send_buffer GUARDED_BY(m_send_mutex);
+    std::deque<std::string> m_send_buffer GUARDED_BY(m_send_mutex);
     /// @}
 
     /**
