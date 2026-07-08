@@ -3,11 +3,15 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <compressor.h>
+#include <consensus/amount.h>
 #include <script/script.h>
+#include <streams.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 
 #include <cstdint>
+#include <ios>
+#include <limits>
 
 #include <boost/test/unit_test.hpp>
 
@@ -61,6 +65,23 @@ BOOST_AUTO_TEST_CASE(compress_amounts)
 
     for (uint64_t i = 0; i < 100000; i++)
         BOOST_CHECK(TestDecode(i));
+}
+
+BOOST_AUTO_TEST_CASE(compress_amount_deserialize_range)
+{
+    CAmount amount;
+    {
+        DataStream stream{};
+        stream << VARINT(CompressAmount(MAX_MONEY));
+        stream >> Using<AmountCompression>(amount);
+        BOOST_CHECK_EQUAL(amount, MAX_MONEY);
+    }
+
+    for (const uint64_t encoded : {CompressAmount(MAX_MONEY + 1), std::numeric_limits<uint64_t>::max()}) {
+        DataStream stream{};
+        stream << VARINT(encoded);
+        BOOST_CHECK_THROW(stream >> Using<AmountCompression>(amount), std::ios_base::failure);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(compress_script_to_ckey_id)
