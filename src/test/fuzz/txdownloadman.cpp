@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <array>
+#include <set>
 
 namespace {
 
@@ -327,6 +328,63 @@ FUZZ_TARGET(txdownloadman, .init = initialize)
 // peer without tracking anything (this is only for the txdownload_impl target).
 static bool HasRelayPermissions(NodeId peer) { return peer == 0; }
 
+static void CheckOrphanagePublicView(const node::TxDownloadManagerImpl& txdownload_impl)
+{
+    const auto orphan_infos{txdownload_impl.m_orphanage->GetOrphanTransactions()};
+    Assert(orphan_infos.size() == txdownload_impl.m_orphanage->CountUniqueOrphans());
+
+    std::set<Wtxid> seen_wtxids;
+    node::TxOrphanage::Count announcements{0};
+    node::TxOrphanage::Count latency_score{0};
+    node::TxOrphanage::Usage total_usage{0};
+    std::array<node::TxOrphanage::Count, NUM_PEERS> announcements_by_peer{};
+    std::array<node::TxOrphanage::Count, NUM_PEERS> latency_by_peer{};
+    std::array<node::TxOrphanage::Usage, NUM_PEERS> usage_by_peer{};
+
+    for (const auto& orphan_info : orphan_infos) {
+        Assert(orphan_info.tx);
+        const auto& tx{*orphan_info.tx};
+        const auto wtxid{tx.GetWitnessHash()};
+        Assert(seen_wtxids.insert(wtxid).second);
+        Assert(txdownload_impl.m_orphanage->HaveTx(wtxid));
+        const auto tx_from_orphanage{txdownload_impl.m_orphanage->GetTx(wtxid)};
+        Assert(tx_from_orphanage);
+        Assert(tx_from_orphanage->GetHash() == tx.GetHash());
+        Assert(tx_from_orphanage->GetWitnessHash() == wtxid);
+        Assert(!orphan_info.announcers.empty());
+
+        const auto tx_weight{GetTransactionWeight(tx)};
+        const auto tx_latency{static_cast<node::TxOrphanage::Count>(1 + tx.vin.size() / 10)};
+        total_usage += tx_weight;
+        latency_score += tx_latency - 1;
+        announcements += static_cast<node::TxOrphanage::Count>(orphan_info.announcers.size());
+
+        for (const auto peer : orphan_info.announcers) {
+            Assert(peer >= 0 && peer < NUM_PEERS);
+            Assert(txdownload_impl.m_orphanage->HaveTxFromPeer(wtxid, peer));
+            Assert(txdownload_impl.m_peer_info.contains(peer));
+            const auto peer_index{static_cast<size_t>(peer)};
+            announcements_by_peer.at(peer_index) += 1;
+            latency_by_peer.at(peer_index) += tx_latency;
+            usage_by_peer.at(peer_index) += tx_weight;
+        }
+    }
+
+    latency_score += announcements;
+    Assert(announcements == txdownload_impl.m_orphanage->CountAnnouncements());
+    Assert(total_usage == txdownload_impl.m_orphanage->TotalOrphanUsage());
+    Assert(latency_score == txdownload_impl.m_orphanage->TotalLatencyScore());
+    Assert(total_usage <= txdownload_impl.m_orphanage->MaxGlobalUsage());
+    Assert(latency_score <= txdownload_impl.m_orphanage->MaxGlobalLatencyScore());
+
+    for (NodeId peer = 0; peer < NUM_PEERS; ++peer) {
+        const auto peer_index{static_cast<size_t>(peer)};
+        Assert(announcements_by_peer.at(peer_index) == txdownload_impl.m_orphanage->AnnouncementsFromPeer(peer));
+        Assert(latency_by_peer.at(peer_index) == txdownload_impl.m_orphanage->LatencyScoreFromPeer(peer));
+        Assert(usage_by_peer.at(peer_index) == txdownload_impl.m_orphanage->UsageByPeer(peer));
+    }
+}
+
 static void CheckInvariants(const node::TxDownloadManagerImpl& txdownload_impl)
 {
     txdownload_impl.m_orphanage->SanityCheck();
@@ -622,11 +680,15 @@ FUZZ_TARGET(txdownloadman_impl, .init = initialize)
             });
 
         CheckInvariants(txdownload_impl);
+        if (txdownload_impl.m_orphanage->CountAnnouncements() <= 64) {
+            CheckOrphanagePublicView(txdownload_impl);
+        }
         auto time_skip = fuzzed_data_provider.PickValueInArray(TIME_SKIPS);
         if (fuzzed_data_provider.ConsumeBool()) time_skip *= -1;
         time += time_skip;
     }
     CheckInvariants(txdownload_impl);
+    CheckOrphanagePublicView(txdownload_impl);
     // Disconnect everybody, check that all data structures are empty.
     for (NodeId nodeid = 0; nodeid < NUM_PEERS; ++nodeid) {
         txdownload_impl.DisconnectedPeer(nodeid);
