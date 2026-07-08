@@ -9,6 +9,7 @@
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 /*
@@ -262,6 +263,7 @@ enum expect_bits : unsigned {
 bool UniValue::read(std::string_view str_in)
 {
     clear();
+    UniValue parsed;
 
     uint32_t expectMask = 0;
     std::vector<UniValue*> stack;
@@ -322,10 +324,10 @@ bool UniValue::read(std::string_view str_in)
             VType utyp = (tok == JTOK_OBJ_OPEN ? VOBJ : VARR);
             if (!stack.size()) {
                 if (utyp == VOBJ)
-                    setObject();
+                    parsed.setObject();
                 else
-                    setArray();
-                stack.push_back(this);
+                    parsed.setArray();
+                stack.push_back(&parsed);
             } else {
                 UniValue tmpVal(utyp);
                 UniValue *top = stack.back();
@@ -404,7 +406,7 @@ bool UniValue::read(std::string_view str_in)
             }
 
             if (!stack.size()) {
-                *this = tmpVal;
+                parsed = std::move(tmpVal);
                 break;
             }
 
@@ -418,7 +420,7 @@ bool UniValue::read(std::string_view str_in)
         case JTOK_NUMBER: {
             UniValue tmpVal(VNUM, tokenVal);
             if (!stack.size()) {
-                *this = tmpVal;
+                parsed = std::move(tmpVal);
                 break;
             }
 
@@ -438,7 +440,7 @@ bool UniValue::read(std::string_view str_in)
             } else {
                 UniValue tmpVal(VSTR, tokenVal);
                 if (!stack.size()) {
-                    *this = tmpVal;
+                    parsed = std::move(tmpVal);
                     break;
                 }
                 UniValue *top = stack.back();
@@ -459,6 +461,6 @@ bool UniValue::read(std::string_view str_in)
     if (tok != JTOK_NONE)
         return false;
 
+    *this = std::move(parsed);
     return true;
 }
-
