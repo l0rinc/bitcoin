@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <netaddress.h>
+#include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util/net.h>
@@ -12,6 +13,19 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+
+namespace {
+template <typename T, typename Params>
+void AssertAddressSerializationRoundTrip(const T& value, const Params& params)
+{
+    DataStream stream;
+    stream << params(value);
+    T decoded;
+    stream >> params(decoded);
+    assert(stream.empty());
+    assert(decoded == value);
+}
+} // namespace
 
 FUZZ_TARGET(netaddress)
 {
@@ -91,6 +105,10 @@ FUZZ_TARGET(netaddress)
     }
     (void)net_addr.IsValid();
     (void)net_addr.ToStringAddr();
+    AssertAddressSerializationRoundTrip(net_addr, CNetAddr::V2);
+    if (net_addr.IsAddrV1Compatible()) {
+        AssertAddressSerializationRoundTrip(net_addr, CNetAddr::V1);
+    }
 
     struct in_addr ipv4_addr;
     const bool has_ipv4_addr{net_addr.GetInAddr(&ipv4_addr)};
@@ -126,6 +144,10 @@ FUZZ_TARGET(netaddress)
     (void)service.ToStringAddrPort();
     (void)CServiceHash()(service);
     (void)CServiceHash(0, 0)(service);
+    AssertAddressSerializationRoundTrip(service, CNetAddr::V2);
+    if (service.IsAddrV1Compatible()) {
+        AssertAddressSerializationRoundTrip(service, CNetAddr::V1);
+    }
 
     const bool service_has_sockaddr{service.IsIPv4() || service.IsIPv6() || service.IsCJDNS()};
     struct sockaddr_storage sock_addr;
