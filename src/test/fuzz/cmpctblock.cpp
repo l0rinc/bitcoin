@@ -166,6 +166,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
 
     FakeNodeClock clock{1610000000s};
     FakeSteadyClock steady_clock;
+    const bool ignore_incoming_txs{!buffer.empty() && (buffer.back() & 1U)};
 
     auto setup = g_setup;
     auto& mempool = *setup->m_node.mempool;
@@ -180,6 +181,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
                                      /*banman=*/nullptr, chainman,
                                      mempool, *setup->m_node.warnings,
                                      PeerManager::Options{
+                                         .ignore_incoming_txs = ignore_incoming_txs,
                                          .deterministic_rng = true,
                                      });
     connman.SetMsgProc(peerman.get());
@@ -343,6 +345,17 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
         return stats;
     };
 
+    auto block_index_size = [&]() {
+        return WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size());
+    };
+
+    auto has_queued_message = [](CNode& node, const std::string& msg_type) {
+        LOCK(node.cs_vSend);
+        return std::any_of(node.vSendMsg.cbegin(), node.vSendMsg.cend(), [&](const auto& msg) {
+            return msg.m_type == msg_type;
+        });
+    };
+
     auto process_net_msg = [&](CNode& random_node, CSerializedNetMsg&& net_msg) NO_THREAD_SAFETY_ANALYSIS {
         connman.FlushSendBuffer(random_node);
         (void)connman.ReceiveMsgFrom(random_node, std::move(net_msg));
@@ -381,6 +394,17 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
     check_sendcmpct_state(*peers[0], /*hb=*/1, /*version=*/CMPCTBLOCKS_VERSION);
     check_sendcmpct_state(*peers[0], /*hb=*/0, /*version=*/CMPCTBLOCKS_VERSION + 1);
     check_sendcmpct_state(*peers[1], /*hb=*/2, /*version=*/CMPCTBLOCKS_VERSION);
+
+    if (ignore_incoming_txs && !peers[0]->fDisconnect) {
+        BlockInfo block_info{create_block()};
+        FuzzedCBlockHeaderAndShortTxIDs cmpctblock{*block_info.block, /*nonce=*/0};
+        CBlockHeaderAndShortTxIDs base_cmpctblock{cmpctblock};
+        const size_t index_size_before{block_index_size()};
+        (void)process_net_msg(*peers[0], NetMsg::Make(NetMsgType::CMPCTBLOCK, base_cmpctblock));
+        assert(!has_queued_message(*peers[0], NetMsgType::GETBLOCKTXN));
+        assert(block_index_size() == index_size_before);
+        info.push_back(std::move(block_info));
+    }
 
     LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 1000)
     {
@@ -537,7 +561,13 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
         if (sent_sendcmpct) {
             check_sendcmpct_state(random_node, sendcmpct_hb, sendcmpct_version);
         } else {
+            const bool sent_cmpctblock{net_msg.m_type == NetMsgType::CMPCTBLOCK};
+            const size_t index_size_before{sent_cmpctblock ? block_index_size() : 0};
             (void)process_net_msg(random_node, std::move(net_msg));
+            if (ignore_incoming_txs && sent_cmpctblock && !random_node.fDisconnect) {
+                assert(!has_queued_message(random_node, NetMsgType::GETBLOCKTXN));
+                assert(block_index_size() == index_size_before);
+            }
         }
     }
 
