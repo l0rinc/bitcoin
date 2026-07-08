@@ -220,11 +220,30 @@ class TestBitcoinCli(BitcoinTestFramework):
             differing_duplicate_response,
         )
 
+    def test_cli_http_status_response_parsing(self):
+        self.log.info("Test bitcoin-cli rejects invalid HTTP status codes")
+
+        body = b'{"result":"ok","error":null,"id":1}\n'
+        invalid_status_response = (
+            b"HTTP/1.1 099 Invalid\r\n"
+            b"Connection: close\r\n"
+            b"Content-Length: " + str(len(body)).encode() + b"\r\n"
+            b"\r\n" +
+            body
+        )
+        assert_raises_process_error(
+            1,
+            "HTTP error: Invalid status code",
+            self.send_fake_rpc_response,
+            invalid_status_response,
+        )
+
     def run_test(self):
         """Main test logic"""
         self.test_echojson_positional_equals()
         self.test_cli_http_chunked_response_parsing()
         self.test_cli_http_content_length_response_parsing()
+        self.test_cli_http_status_response_parsing()
 
         self.generate(self.nodes[0], BLOCKS)
 
