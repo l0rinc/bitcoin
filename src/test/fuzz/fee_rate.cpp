@@ -10,12 +10,26 @@
 #include <util/check.h>
 #include <util/overflow.h>
 
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <string>
 #include <vector>
 
 namespace {
+void AssertGetFeeRoundsUp(const CFeeRate& fee_rate, const CAmount satoshis_per_k, const int32_t bytes)
+{
+    Assert(satoshis_per_k >= 0);
+    Assert(bytes >= 0);
+
+    const uint64_t fee_per_k{static_cast<uint64_t>(satoshis_per_k)};
+    const uint64_t vbytes{static_cast<uint64_t>(bytes)};
+    if (MultiplicationOverflow(fee_per_k, vbytes)) return;
+
+    const CAmount expected_fee{static_cast<CAmount>(CeilDiv(fee_per_k * vbytes, uint64_t{1000}))};
+    Assert(fee_rate.GetFee(bytes) == expected_fee);
+}
+
 void AssertFeeRateStringSign(const std::string& str, const bool negative)
 {
     const auto first_sign{str.find('-')};
@@ -39,7 +53,28 @@ FUZZ_TARGET(fee_rate)
     if (!MultiplicationOverflow(int64_t{bytes}, satoshis_per_k)) {
         (void)fee_rate.GetFee(bytes);
     }
+    AssertGetFeeRoundsUp(fee_rate, satoshis_per_k, bytes);
     (void)fee_rate.ToString();
+
+    {
+        constexpr std::array<CAmount, 6> fee_rate_boundaries{0, 1, 999, 1000, 1001, MAX_MONEY};
+        constexpr std::array<int32_t, 8> byte_boundaries{
+            0,
+            1,
+            2,
+            999,
+            1000,
+            1001,
+            std::numeric_limits<int32_t>::max() / 1000,
+            std::numeric_limits<int32_t>::max(),
+        };
+        for (const CAmount boundary_rate : fee_rate_boundaries) {
+            const CFeeRate boundary_fee_rate{boundary_rate};
+            for (const int32_t boundary_bytes : byte_boundaries) {
+                AssertGetFeeRoundsUp(boundary_fee_rate, boundary_rate, boundary_bytes);
+            }
+        }
+    }
 
     {
         const CAmount signed_satoshis_per_k{fuzzed_data_provider.ConsumeIntegral<CAmount>()};
