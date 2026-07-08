@@ -64,7 +64,19 @@ BOOST_AUTO_TEST_CASE(MempoolLookupTest)
         BOOST_CHECK(!pool.get(tx.GetWitnessHash()));
     }
 
-    auto check_lookup = [&](const CTransaction& tx) {
+    auto check_lookup = [&](const CTransaction& tx) EXCLUSIVE_LOCKS_REQUIRED(pool.cs) {
+        BOOST_CHECK(pool.exists(tx.GetHash()));
+        BOOST_CHECK(pool.exists(tx.GetWitnessHash()));
+
+        const auto by_txid_iter{pool.GetIter(tx.GetHash())};
+        BOOST_REQUIRE(by_txid_iter);
+        BOOST_CHECK((*by_txid_iter)->GetTx().GetHash() == tx.GetHash());
+        BOOST_CHECK((*by_txid_iter)->GetTx().GetWitnessHash() == tx.GetWitnessHash());
+
+        const auto by_wtxid_iter{pool.GetIter(tx.GetWitnessHash())};
+        BOOST_REQUIRE(by_wtxid_iter);
+        BOOST_CHECK(&**by_wtxid_iter == &**by_txid_iter);
+
         const auto by_txid{pool.get(tx.GetHash())};
         BOOST_REQUIRE(by_txid);
         BOOST_CHECK(by_txid->GetHash() == tx.GetHash());
