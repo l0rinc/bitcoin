@@ -77,6 +77,14 @@ FUZZ_TARGET(fee_rate)
         CFeeRate integer_zero{0};
         integer_zero += precise_rate;
         Assert(integer_zero == precise_rate);
+
+        CFeeRate doubled_precise_rate{precise_rate};
+        doubled_precise_rate += precise_rate;
+        const CAmount doubled_precise_fee{SaturatingMul(precise_fee, CAmount{2})};
+        Assert((doubled_precise_rate == CFeeRate{doubled_precise_fee, precise_vsize}));
+        Assert(doubled_precise_rate.GetFee(precise_vsize) == doubled_precise_fee);
+        if (precise_fee > 0) Assert(doubled_precise_rate > precise_rate);
+        if (precise_fee < 0) Assert(doubled_precise_rate < precise_rate);
     }
 
     {
