@@ -449,15 +449,15 @@ void univalue_readwrite()
 
     BOOST_CHECK(!v.read("@{}"));
     BOOST_CHECK(!v.read("{} garbage"));
-    BOOST_CHECK(v.isObject()); // TODO: Failed reads should clear parsed prefixes.
+    BOOST_CHECK(v.isNull());
     BOOST_CHECK(!v.read("[]{}"));
-    BOOST_CHECK(v.isArray()); // TODO: Failed reads should clear parsed prefixes.
+    BOOST_CHECK(v.isNull());
     BOOST_CHECK(!v.read("{}[]"));
-    BOOST_CHECK(v.isObject()); // TODO: Failed reads should clear parsed prefixes.
+    BOOST_CHECK(v.isNull());
     BOOST_CHECK(!v.read("{} 42"));
-    BOOST_CHECK(v.isObject()); // TODO: Failed reads should clear parsed prefixes.
+    BOOST_CHECK(v.isNull());
     BOOST_CHECK(!v.read("42 garbage"));
-    BOOST_CHECK(v.isNum()); // TODO: Failed reads should clear parsed prefixes.
+    BOOST_CHECK(v.isNull());
 }
 
 int main(int argc, char* argv[])
