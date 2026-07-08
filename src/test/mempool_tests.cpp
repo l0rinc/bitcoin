@@ -40,24 +40,46 @@ BOOST_AUTO_TEST_CASE(MempoolLookupTest)
     LOCK2(cs_main, pool.cs);
     TestMemPoolEntryHelper entry;
 
-    CMutableTransaction tx = CMutableTransaction();
-    tx.vin.resize(1);
-    tx.vin[0].scriptSig = CScript() << OP_1;
-    tx.vout.resize(1);
-    tx.vout[0].scriptPubKey = CScript() << OP_1 << OP_EQUAL;
-    tx.vout[0].nValue = 10 * COIN;
+    auto make_tx = [](const uint64_t prevout_hash, const bool witness) {
+        CMutableTransaction tx;
+        tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256{static_cast<uint8_t>(prevout_hash)}), 0});
+        tx.vin[0].scriptSig = CScript() << OP_1;
+        if (witness) tx.vin[0].scriptWitness.stack.push_back({0x01});
+        tx.vout.resize(1);
+        tx.vout[0].scriptPubKey = CScript() << OP_1 << OP_EQUAL;
+        tx.vout[0].nValue = 10 * COIN;
+        return tx;
+    };
 
-    // Not in the mempool, so can't find it by txid or wtxid
-    BOOST_CHECK(!pool.get(tx.GetHash()));
-    BOOST_CHECK(!pool.get(CTransaction(tx).GetWitnessHash()));
+    const CMutableTransaction no_witness_mut{make_tx(1, /*witness=*/false)};
+    const CTransaction no_witness_tx{no_witness_mut};
+    BOOST_CHECK(no_witness_tx.GetHash().ToUint256() == no_witness_tx.GetWitnessHash().ToUint256());
 
-    TryAddToMempool(pool, entry.Fee(1000LL).FromTx(tx));
+    const CMutableTransaction witness_mut{make_tx(2, /*witness=*/true)};
+    const CTransaction witness_tx{witness_mut};
+    BOOST_CHECK(witness_tx.GetHash().ToUint256() != witness_tx.GetWitnessHash().ToUint256());
 
-    // Lookup by Txid
-    BOOST_CHECK(pool.get(tx.GetHash()));
+    for (const CTransaction& tx : {no_witness_tx, witness_tx}) {
+        BOOST_CHECK(!pool.get(tx.GetHash()));
+        BOOST_CHECK(!pool.get(tx.GetWitnessHash()));
+    }
 
-    // Lookup by Wtxid
-    BOOST_CHECK(pool.get(CTransaction(tx).GetWitnessHash()));
+    auto check_lookup = [&](const CTransaction& tx) {
+        const auto by_txid{pool.get(tx.GetHash())};
+        BOOST_REQUIRE(by_txid);
+        BOOST_CHECK(by_txid->GetHash() == tx.GetHash());
+        BOOST_CHECK(by_txid->GetWitnessHash() == tx.GetWitnessHash());
+
+        const auto by_wtxid{pool.get(tx.GetWitnessHash())};
+        BOOST_REQUIRE(by_wtxid);
+        BOOST_CHECK(by_wtxid == by_txid);
+    };
+
+    TryAddToMempool(pool, entry.Fee(1000LL).FromTx(no_witness_mut));
+    check_lookup(no_witness_tx);
+
+    TryAddToMempool(pool, entry.Fee(1000LL).FromTx(witness_mut));
+    check_lookup(witness_tx);
 }
 
 static void CheckMempoolInputIndexCount(const CTxMemPool& pool)
