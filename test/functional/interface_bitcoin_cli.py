@@ -190,10 +190,41 @@ class TestBitcoinCli(BitcoinTestFramework):
             malformed_response,
         )
 
+    def test_cli_http_content_length_response_parsing(self):
+        self.log.info("Test bitcoin-cli rejects differing duplicate Content-Length headers")
+
+        body = b'{"result":"ok","error":null,"id":1}\n'
+        response_prefix = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Connection: close\r\n"
+            b"Content-Length: " + str(len(body)).encode() + b"\r\n"
+        )
+        matching_duplicate_response = (
+            response_prefix +
+            b"Content-Length: " + str(len(body)).encode() + b"\r\n"
+            b"\r\n" +
+            body
+        )
+        assert_equal(self.send_fake_rpc_response(matching_duplicate_response), "ok")
+
+        differing_duplicate_response = (
+            response_prefix +
+            b"Content-Length: " + str(len(body) + 1).encode() + b"\r\n"
+            b"\r\n" +
+            body
+        )
+        assert_raises_process_error(
+            1,
+            "HTTP error: Differing Content-Length values",
+            self.send_fake_rpc_response,
+            differing_duplicate_response,
+        )
+
     def run_test(self):
         """Main test logic"""
         self.test_echojson_positional_equals()
         self.test_cli_http_chunked_response_parsing()
+        self.test_cli_http_content_length_response_parsing()
 
         self.generate(self.nodes[0], BLOCKS)
 
