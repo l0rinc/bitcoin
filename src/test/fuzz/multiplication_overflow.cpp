@@ -6,6 +6,7 @@
 #include <test/fuzz/fuzz.h>
 #include <util/overflow.h>
 
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <string>
@@ -13,10 +14,8 @@
 
 namespace {
 template <typename T>
-void TestMultiplicationOverflow(FuzzedDataProvider& fuzzed_data_provider)
+void TestMultiplicationPair(const T i, const T j)
 {
-    const T i = fuzzed_data_provider.ConsumeIntegral<T>();
-    const T j = fuzzed_data_provider.ConsumeIntegral<T>();
     const bool is_multiplication_overflow_custom = MultiplicationOverflow(i, j);
     const auto checked_mul{CheckedMul(i, j)};
     const auto saturating_mul{SaturatingMul(i, j)};
@@ -47,6 +46,44 @@ void TestMultiplicationOverflow(FuzzedDataProvider& fuzzed_data_provider)
             assert(saturating_mul == saturation_value);
         } else {
             assert(saturating_mul == std::numeric_limits<T>::max());
+        }
+    }
+}
+
+template <typename T>
+constexpr auto BoundaryValues()
+{
+    if constexpr (std::numeric_limits<T>::is_signed) {
+        return std::array{
+            std::numeric_limits<T>::min(),
+            static_cast<T>(std::numeric_limits<T>::min() + T{1}),
+            T{-2},
+            T{-1},
+            T{0},
+            T{1},
+            T{2},
+            static_cast<T>(std::numeric_limits<T>::max() - T{1}),
+            std::numeric_limits<T>::max(),
+        };
+    } else {
+        return std::array{
+            std::numeric_limits<T>::min(),
+            T{1},
+            T{2},
+            static_cast<T>(std::numeric_limits<T>::max() / T{2}),
+            static_cast<T>(std::numeric_limits<T>::max() - T{1}),
+            std::numeric_limits<T>::max(),
+        };
+    }
+}
+
+template <typename T>
+void TestMultiplicationOverflow(FuzzedDataProvider& fuzzed_data_provider)
+{
+    TestMultiplicationPair<T>(fuzzed_data_provider.ConsumeIntegral<T>(), fuzzed_data_provider.ConsumeIntegral<T>());
+    for (const T i : BoundaryValues<T>()) {
+        for (const T j : BoundaryValues<T>()) {
+            TestMultiplicationPair<T>(i, j);
         }
     }
 }
