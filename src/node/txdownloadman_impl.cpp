@@ -234,6 +234,9 @@ void TxDownloadManagerImpl::DisconnectedPeer(NodeId nodeid)
 
     Assume(m_txrequest.Count(nodeid) == 0);
     Assume(m_orphanage->UsageByPeer(nodeid) == 0);
+    Assume(m_orphanage->AnnouncementsFromPeer(nodeid) == 0);
+    Assume(m_orphanage->LatencyScoreFromPeer(nodeid) == 0);
+    Assume(!m_orphanage->HaveTxToReconsider(nodeid));
     AssertWtxidPeerCount();
 }
 
@@ -695,11 +698,16 @@ void TxDownloadManagerImpl::CheckIsEmpty(NodeId nodeid)
 {
     assert(m_txrequest.Count(nodeid) == 0);
     assert(m_orphanage->UsageByPeer(nodeid) == 0);
+    assert(m_orphanage->AnnouncementsFromPeer(nodeid) == 0);
+    assert(m_orphanage->LatencyScoreFromPeer(nodeid) == 0);
+    assert(!m_orphanage->HaveTxToReconsider(nodeid));
     assert(!m_peer_info.contains(nodeid));
 }
 void TxDownloadManagerImpl::CheckIsEmpty()
 {
     assert(m_orphanage->TotalOrphanUsage() == 0);
+    assert(m_orphanage->TotalLatencyScore() == 0);
+    assert(m_orphanage->CountAnnouncements() == 0);
     assert(m_orphanage->CountUniqueOrphans() == 0);
     assert(m_txrequest.Size() == 0);
     assert(m_peer_info.empty());
