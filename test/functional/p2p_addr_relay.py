@@ -284,6 +284,10 @@ class AddrTest(BitcoinTestFramework):
         block_relay_peer = self.nodes[0].add_outbound_p2p_connection(AddrReceiver(), p2p_idx=1, connection_type="block-relay-only")
         block_relay_peer.sync_with_ping()
         assert_equal(block_relay_peer.getaddr_received(), False)
+        block_relay_info = next(
+            peer for peer in self.nodes[0].getpeerinfo() if peer["connection_type"] == "block-relay-only"
+        )
+        assert_equal(block_relay_info["addr_relay_enabled"], False)
         block_relay_peer.send_and_ping(msg_headers([tip_header]))
 
         feeler_peer = self.nodes[0].add_outbound_p2p_connection(AddrReceiver(), p2p_idx=2, connection_type="feeler")
