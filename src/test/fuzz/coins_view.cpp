@@ -160,7 +160,8 @@ CBlock BuildRandomBlock(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& vi
                                 ? Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider))
                                 : prevhash};
             const COutPoint outpoint{txid, fuzzed_data_provider.ConsumeIntegral<uint32_t>()};
-            if (auto coin{ConsumeDeserializable<Coin>(fuzzed_data_provider)}; coin && !coin->IsSpent()) {
+            if (auto coin{ConsumeDeserializable<Coin>(fuzzed_data_provider)};
+                coin && !coin->IsSpent() && MoneyRange(coin->out.nValue)) {
                 seed_cache.AddCoin(outpoint, std::move(*coin), /*possible_overwrite=*/true);
             }
             tx.vin.emplace_back(outpoint);
@@ -171,6 +172,11 @@ CBlock BuildRandomBlock(FuzzedDataProvider& fuzzed_data_provider, CCoinsView& vi
 
     seed_cache.Flush();
     return block;
+}
+
+bool ValidFuzzCoin(const Coin& coin)
+{
+    return coin.IsSpent() || MoneyRange(coin.out.nValue);
 }
 
 } // namespace
@@ -233,6 +239,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 if (random_coin.IsSpent()) {
                     return;
                 }
+                assert(MoneyRange(random_coin.out.nValue));
                 COutPoint outpoint{random_out_point};
                 Coin coin{random_coin};
                 if (fuzzed_data_provider.ConsumeBool()) {
@@ -329,6 +336,10 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                     good_data = false;
                     return;
                 }
+                if (!ValidFuzzCoin(*opt_coin)) {
+                    good_data = false;
+                    return;
+                }
                 random_coin = *opt_coin;
             },
             [&] {
@@ -352,6 +363,10 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                     } else {
                         const std::optional<Coin> opt_coin = ConsumeDeserializable<Coin>(fuzzed_data_provider);
                         if (!opt_coin) {
+                            good_data = false;
+                            return;
+                        }
+                        if (!ValidFuzzCoin(*opt_coin)) {
                             good_data = false;
                             return;
                         }
@@ -435,14 +450,18 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
             [&] {
                 const CTransaction transaction{random_mutable_transaction};
                 bool is_spent = false;
+                bool invalid_amount = false;
                 for (const CTxOut& tx_out : transaction.vout) {
                     if (Coin{tx_out, 0, transaction.IsCoinBase()}.IsSpent()) {
                         is_spent = true;
                     }
+                    if (!MoneyRange(tx_out.nValue)) {
+                        invalid_amount = true;
+                    }
                 }
-                if (is_spent) {
+                if (is_spent || invalid_amount) {
                     // Avoid:
-                    // coins.cpp:69: void CCoinsViewCache::AddCoin(const COutPoint &, Coin &&, bool): Assertion `!coin.IsSpent()' failed.
+                    // CCoinsViewCache::AddCoin() asserts that inserted coins are unspent and in MoneyRange().
                     return;
                 }
                 const int height{int(fuzzed_data_provider.ConsumeIntegral<uint32_t>() >> 1)};
