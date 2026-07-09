@@ -188,6 +188,28 @@ BOOST_AUTO_TEST_CASE(fetch_no_inputs)
     BOOST_CHECK_EQUAL(view.GetCacheSize(), 0);
 }
 
+BOOST_AUTO_TEST_CASE(fetch_coinbase_spend)
+{
+    CBlock block;
+    CMutableTransaction coinbase;
+    coinbase.vin.emplace_back();
+    coinbase.vout.emplace_back(1, CScript{});
+    const auto coinbase_tx{MakeTransactionRef(coinbase)};
+    const COutPoint coinbase_outpoint{coinbase_tx->GetHash(), 0};
+    block.vtx.push_back(coinbase_tx);
+
+    CMutableTransaction spend;
+    spend.vin.emplace_back(coinbase_outpoint);
+    block.vtx.push_back(MakeTransactionRef(spend));
+
+    CCoinsViewCache main_cache{&CoinsViewEmpty::Get()};
+    CoinsViewOverlay view{&main_cache, MakeStartedThreadPool()};
+    const auto reset_guard{view.StartFetching(block)};
+    AddCoins(view, *coinbase_tx, /*nHeight=*/1);
+    BOOST_REQUIRE(view.SpendCoin(coinbase_outpoint));
+    BOOST_CHECK(!view.AllInputsConsumed()); // TODO: Coinbase spends should not desynchronize prefetch.
+}
+
 // Access coins that are not block inputs
 BOOST_AUTO_TEST_CASE(access_non_input_coins)
 {
