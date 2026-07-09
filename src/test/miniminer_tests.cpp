@@ -137,6 +137,47 @@ BOOST_FIXTURE_TEST_CASE(miniminer_linearize_orders_ancestors_first, TestChain100
     BOOST_CHECK_LE(inclusion_order.at(parent->GetHash()), inclusion_order.at(child->GetHash()));
 }
 
+BOOST_FIXTURE_TEST_CASE(miniminer_target_template_is_monotonic, TestChain100Setup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    LOCK2(::cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    const auto low_tx{make_tx({COutPoint{m_coinbase_txns[0]->GetHash(), 0}}, /*num_outputs=*/1)};
+    const auto high_tx{make_tx({COutPoint{m_coinbase_txns[1]->GetHash(), 0}}, /*num_outputs=*/1)};
+    TryAddToMempool(pool, entry.Fee(low_fee).FromTx(low_tx));
+    TryAddToMempool(pool, entry.Fee(high_fee).FromTx(high_tx));
+
+    const auto& low_entry{*Assert(pool.GetEntry(low_tx->GetHash()))};
+    const auto& high_entry{*Assert(pool.GetEntry(high_tx->GetHash()))};
+    const CFeeRate lower_feerate{0};
+    const CFeeRate higher_feerate{high_entry.GetModifiedFee(), high_entry.GetTxSize()};
+    BOOST_REQUIRE(lower_feerate < higher_feerate);
+    BOOST_REQUIRE((CFeeRate{low_entry.GetModifiedFee(), low_entry.GetTxSize()} < higher_feerate));
+
+    const std::vector<COutPoint> outpoints{
+        COutPoint{low_tx->GetHash(), 0},
+        COutPoint{high_tx->GetHash(), 0},
+    };
+
+    node::MiniMiner lower_miner{pool, outpoints};
+    BOOST_REQUIRE(lower_miner.IsReadyToCalculate());
+    lower_miner.BuildMockTemplate(lower_feerate);
+    const auto lower_template{lower_miner.GetMockTemplateTxids()};
+    BOOST_CHECK(lower_template.contains(low_tx->GetHash()));
+    BOOST_CHECK(lower_template.contains(high_tx->GetHash()));
+
+    node::MiniMiner higher_miner{pool, outpoints};
+    BOOST_REQUIRE(higher_miner.IsReadyToCalculate());
+    higher_miner.BuildMockTemplate(higher_feerate);
+    const auto higher_template{higher_miner.GetMockTemplateTxids()};
+    BOOST_CHECK(!higher_template.contains(low_tx->GetHash()));
+    BOOST_CHECK(higher_template.contains(high_tx->GetHash()));
+    for (const auto& txid : higher_template) {
+        BOOST_CHECK(lower_template.contains(txid));
+    }
+}
+
 BOOST_FIXTURE_TEST_CASE(miniminer_bumpfee_covers_individual_shortfall, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
