@@ -315,9 +315,12 @@ void MiniMiner::BuildMockTemplate(std::optional<CFeeRate> target_feerate)
         const auto ancestor_package_size = (*best_iter)->second.GetSizeWithAncestors();
         const auto ancestor_package_fee = (*best_iter)->second.GetModFeesWithAncestors();
         // Stop here. Everything that didn't "make it into the block" has bumpfee.
-        if (target_feerate.has_value() &&
-            ancestor_package_fee < target_feerate->GetFee(ancestor_package_size)) {
-            break;
+        if (target_feerate.has_value()) {
+            const auto target_package_fee{target_feerate->GetFee(ancestor_package_size)};
+            if (ancestor_package_fee < target_package_fee) {
+                break;
+            }
+            Assume(ancestor_package_fee >= target_package_fee);
         }
 
         // Calculate ancestors on the fly. This lookup should be fairly cheap, and ancestor sets
