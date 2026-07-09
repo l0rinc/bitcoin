@@ -182,10 +182,11 @@ void initialize_coins_view()
     static const auto testing_setup = MakeNoLogFileContext<>();
 }
 
-void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& coins_view_cache, CCoinsView* backend_coins_view)
+void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& coins_view_cache, CCoinsView* backend_coins_view, bool prefetch_active)
 {
     auto* const db{dynamic_cast<CCoinsViewDB*>(backend_coins_view)};
     auto* const overlay{dynamic_cast<CoinsViewOverlay*>(&coins_view_cache)};
+    assert(!prefetch_active || overlay);
     const bool is_db{db != nullptr};
     bool good_data{true};
     auto* original_backend{backend_coins_view};
@@ -239,7 +240,7 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                 }
             },
             [&] {
-                if (overlay && !overlay->AllInputsConsumed()) return; // CoinsViewOverlay::Flush() must have all inputs consumed before being called
+                if (prefetch_active && !overlay->AllInputsConsumed()) return; // CoinsViewOverlay::Flush() must have all inputs consumed before being called
                 coins_view_cache.Flush(/*reallocate_cache=*/fuzzed_data_provider.ConsumeBool());
                 assert_cache_empty();
                 assert_db_best_block();
@@ -539,7 +540,7 @@ FUZZ_TARGET(coins_view, .init = initialize_coins_view)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     CCoinsViewCache coins_view_cache{&CoinsViewEmpty::Get(), /*deterministic=*/true};
-    TestCoinsView(fuzzed_data_provider, coins_view_cache, &CoinsViewEmpty::Get());
+    TestCoinsView(fuzzed_data_provider, coins_view_cache, &CoinsViewEmpty::Get(), /*prefetch_active=*/false);
 }
 
 FUZZ_TARGET(coins_view_db, .init = initialize_coins_view)
@@ -552,7 +553,7 @@ FUZZ_TARGET(coins_view_db, .init = initialize_coins_view)
     };
     CCoinsViewDB backend_coins_view{std::move(db_params), CoinsViewOptions{}};
     CCoinsViewCache coins_view_cache{&backend_coins_view, /*deterministic=*/true};
-    TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_coins_view);
+    TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_coins_view, /*prefetch_active=*/false);
 }
 
 // Creates a CoinsViewOverlay and a MutationGuardCoinsViewCache as the base.
@@ -567,8 +568,12 @@ FUZZ_TARGET(coins_view_overlay, .init = initialize_coins_view) EXCLUSIVE_LOCKS_R
     MutationGuardCoinsViewCache backend_cache{&CoinsViewEmpty::Get(), /*deterministic=*/true};
     CoinsViewOverlay coins_view_cache{&backend_cache, g_thread_pool, /*deterministic=*/true};
     CBlock block{BuildRandomBlock(fuzzed_data_provider, backend_cache)};
-    const auto reset_guard{coins_view_cache.StartFetching(block)};
-    TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_cache);
+    if (fuzzed_data_provider.ConsumeBool()) {
+        const auto reset_guard{coins_view_cache.StartFetching(block)};
+        TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_cache, /*prefetch_active=*/true);
+    } else {
+        TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_cache, /*prefetch_active=*/false);
+    }
 }
 
 FUZZ_TARGET(coins_view_stacked, .init = initialize_coins_view) EXCLUSIVE_LOCKS_REQUIRED(!g_thread_pool_mutex)
@@ -583,12 +588,12 @@ FUZZ_TARGET(coins_view_stacked, .init = initialize_coins_view) EXCLUSIVE_LOCKS_R
     };
     CCoinsViewDB backend_base_coins_view{std::move(db_params), CoinsViewOptions{}};
     CCoinsViewCache backend_cache{&backend_base_coins_view, /*deterministic=*/true};
-    TestCoinsView(fuzzed_data_provider, backend_cache, &backend_base_coins_view);
+    TestCoinsView(fuzzed_data_provider, backend_cache, &backend_base_coins_view, /*prefetch_active=*/false);
     CoinsViewOverlay coins_view_cache{&backend_cache, g_thread_pool, /*deterministic=*/true};
     CBlock block{BuildRandomBlock(fuzzed_data_provider, backend_base_coins_view)};
     {
         const auto reset_guard{coins_view_cache.StartFetching(block)};
-        TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_cache);
+        TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_cache, /*prefetch_active=*/true);
     }
-    TestCoinsView(fuzzed_data_provider, backend_cache, &backend_base_coins_view);
+    TestCoinsView(fuzzed_data_provider, backend_cache, &backend_base_coins_view, /*prefetch_active=*/false);
 }
