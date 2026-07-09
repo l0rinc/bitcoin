@@ -372,6 +372,7 @@ BASE_SCRIPTS = [
     'wallet_timelock.py',
     'p2p_permissions.py',
     'feature_blocksdir.py',
+    'feature_undo_flush.py',
     'wallet_startup.py',
     'p2p_private_broadcast_retry_v1.py',
     'feature_remove_pruned_files_on_startup.py',
