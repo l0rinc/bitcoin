@@ -23,6 +23,7 @@
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <test/util/validation.h>
+#include <util/check.h>
 #include <util/time.h>
 #include <validation.h>
 #include <validationinterface.h>
@@ -53,6 +54,16 @@ void AssertSendQueueMemoryUsage(CNode& node)
 {
     LOCK(node.cs_vSend);
     node.AssertSendQueueMemoryUsage();
+}
+
+void AssertSpecialPeerAddressRelayDisabled(const PeerManager& peerman, const CNode& node)
+{
+    if (!node.IsBlockOnlyConn() && !node.IsFeelerConn()) return;
+
+    CNodeStateStats stats;
+    if (peerman.GetNodeStateStats(node.GetId(), stats)) {
+        Assert(!stats.m_addr_relay_enabled);
+    }
 }
 } // namespace
 
@@ -139,6 +150,7 @@ FUZZ_TARGET(process_messages, .init = initialize_process_messages)
     }
     for (CNode* peer : peers) {
         AssertSendQueueMemoryUsage(*peer);
+        AssertSpecialPeerAddressRelayDisabled(*node.peerman, *peer);
     }
     node.validation_signals->SyncWithValidationInterfaceQueue();
     node.validation_signals->UnregisterValidationInterface(node.peerman.get());
