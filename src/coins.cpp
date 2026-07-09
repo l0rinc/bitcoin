@@ -12,6 +12,7 @@
 #include <util/threadpool.h>
 #include <util/trace.h>
 
+#include <algorithm>
 #include <ranges>
 #include <unordered_set>
 #include <vector>
@@ -598,8 +599,10 @@ CCoinsViewCache::ResetGuard CoinsViewOverlay::StartFetching(const CBlock& block 
         }
         // Only submit tasks if we have something to fetch.
         if (m_inputs.size()) {
-            std::vector<std::function<void()>> tasks(workers_count, [this] {
-                while (ProcessInput()) {}
+            const auto task_count{std::min(workers_count, m_inputs.size())};
+            std::vector<std::function<void()>> tasks(task_count, [this] {
+                while (ProcessInput()) {
+                }
             });
             if (auto futures{m_thread_pool->Submit(std::move(tasks))}) {
                 m_futures = std::move(*futures);
