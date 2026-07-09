@@ -54,6 +54,7 @@
 class Chainstate;
 class CTxMemPool;
 class ChainstateManager;
+class ThreadPool;
 struct ChainTxData;
 class DisconnectedBlockTransactions;
 struct PrecomputedTransactionData;
@@ -506,7 +507,7 @@ public:
     CoinsViews(DBParams db_params, CoinsViewOptions options);
 
     //! Initialize the CCoinsViewCache member.
-    void InitCache(int32_t prevoutfetch_threads) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    void InitCache(std::shared_ptr<ThreadPool> prevout_fetch_pool) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 enum class CoinsCacheSizeState
@@ -981,6 +982,11 @@ private:
 
     //! A queue for script verifications that have to be performed by worker threads.
     CCheckQueue<CScriptCheck> m_script_check_queue;
+
+    //! Worker threads for prefetching block input prevouts, shared by every chainstate's
+    //! CoinsViewOverlay since only one chainstate connects blocks at a time (under cs_main).
+    //! Never null; has zero workers when prefetching is disabled.
+    const std::shared_ptr<ThreadPool> m_prevout_fetch_pool;
 
     //! Timers and counters used for benchmarking validation in both background
     //! and active chainstates.
