@@ -3,11 +3,15 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <index/txospenderindex.h>
+#include <script/interpreter.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
+
+#include <cstdint>
+#include <utility>
 
 BOOST_AUTO_TEST_SUITE(txospenderindex_tests)
 
@@ -72,6 +76,91 @@ BOOST_FIXTURE_TEST_CASE(txospenderindex_initial_sync, TestChain100Setup)
 
     // Shutdown sequence (c.f. Shutdown() in init.cpp)
     txospenderindex.Stop();
+}
+
+BOOST_FIXTURE_TEST_CASE(txospenderindex_reorg_recovery, TestChain100Setup)
+{
+    auto& chainman{*Assert(m_node.chainman)};
+    auto& chainstate{chainman.ActiveChainstate()};
+    const CScript& coinbase_script{m_coinbase_txns.front()->vout.front().scriptPubKey};
+    const CTransactionRef& coinbase_tx{m_coinbase_txns.front()};
+    const COutPoint spent{coinbase_tx->GetHash(), 0};
+
+    auto current_tip{[&] { return Assert(WITH_LOCK(::cs_main, return chainstate.m_chain.Tip())); }};
+    auto make_index{[&](bool wipe) { return TxoSpenderIndex{interfaces::MakeChain(m_node), 1_MiB, false, wipe}; }};
+    auto sync_callbacks{[&] { m_node.validation_signals->SyncWithValidationInterfaceQueue(); }};
+    auto find_spender{[&](TxoSpenderIndex& index) {
+        auto result{index.FindSpender(spent)};
+        BOOST_REQUIRE(result.has_value());
+        BOOST_REQUIRE(result->has_value());
+        return (*result)->tx->GetHash();
+    }};
+    auto invalidate{[&](CBlockIndex* block) {
+        BlockValidationState state{};
+        BOOST_REQUIRE(chainstate.InvalidateBlock(state, block) && state.IsValid());
+    }};
+    auto make_spender{[&](int32_t version) {
+        CMutableTransaction tx;
+        tx.version = version;
+        tx.vin.resize(1);
+        tx.vin.front().prevout = spent;
+        tx.vout.resize(1);
+        tx.vout.front().nValue = coinbase_tx->GetValueOut();
+        tx.vout.front().scriptPubKey = coinbase_script;
+
+        std::vector<unsigned char> signature;
+        BOOST_REQUIRE(coinbaseKey.Sign(SignatureHash(coinbase_script, tx, 0, SIGHASH_ALL, 0, SigVersion::BASE), signature));
+        signature.push_back(static_cast<unsigned char>(SIGHASH_ALL));
+        tx.vin.front().scriptSig << signature;
+        return tx;
+    }};
+
+    auto spender_a{make_spender(/*version=*/1)};
+    auto spender_b{make_spender(/*version=*/2)};
+    auto* fork_parent{current_tip()};
+
+    // Store B before A so its key sorts first; keep B invalid until A is durable.
+    auto block_b{std::make_shared<const CBlock>(CreateBlock(fork_parent, {spender_b}, coinbase_script))};
+    BOOST_REQUIRE(chainman.ProcessNewBlock(block_b, /*force_processing=*/true, /*min_pow_checked=*/true, nullptr));
+    auto* block_b_index{Assert(WITH_LOCK(::cs_main, return chainstate.m_blockman.LookupBlockIndex(block_b->GetHash())))};
+    invalidate(block_b_index);
+
+    CreateAndProcessBlock({spender_a}, coinbase_script);
+    sync_callbacks();
+    auto* old_tip{current_tip()};
+
+    // Commit A, reorg the live index to B without flushing, then restore A.
+    {
+        auto index{make_index(/*wipe=*/true)};
+        BOOST_REQUIRE(index.Init());
+        index.Sync();
+        chainstate.ForceFlushStateToDisk();
+        sync_callbacks();
+        BOOST_CHECK_EQUAL(find_spender(index), spender_a.GetHash());
+
+        {
+            LOCK(::cs_main);
+            chainstate.ResetBlockFailureFlags(block_b_index);
+            chainman.RecalculateBestHeader();
+        }
+        auto block_c{std::make_shared<const CBlock>(CreateBlock(block_b_index, {}, coinbase_script))};
+        BOOST_REQUIRE(chainman.ProcessNewBlock(block_c, /*force_processing=*/true, /*min_pow_checked=*/true, nullptr));
+        sync_callbacks();
+        BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return chainstate.GetLastFlushedBlock()), old_tip);
+        BOOST_CHECK_EQUAL(find_spender(index), spender_b.GetHash());
+        index.Stop();
+
+        invalidate(block_b_index);
+        BlockValidationState state{};
+        BOOST_REQUIRE(chainstate.ActivateBestChain(state, nullptr) && state.IsValid());
+        sync_callbacks();
+        BOOST_REQUIRE_EQUAL(current_tip(), old_tip);
+    }
+
+    auto index{make_index(/*wipe=*/false)};
+    BOOST_REQUIRE(index.Init());
+    BOOST_CHECK_EQUAL(find_spender(index), spender_b.GetHash()); // TODO: Preserve the restored active-chain spender record.
+    index.Stop();
 }
 
 BOOST_AUTO_TEST_SUITE_END()
