@@ -6,6 +6,7 @@
 #include <txdb.h>
 
 #include <coins.h>
+#include <consensus/amount.h>
 #include <dbwrapper.h>
 #include <logging/timer.h>
 #include <primitives/transaction.h>
@@ -156,6 +157,7 @@ void CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block
             if (it->second.coin.IsSpent()) {
                 batch.Erase(entry);
             } else {
+                Assume(MoneyRange(it->second.coin.out.nValue));
                 batch.Write(entry, it->second.coin);
             }
         }
