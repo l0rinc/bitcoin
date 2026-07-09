@@ -9,7 +9,7 @@ order. Undo data can therefore be added to an older rev file after the block
 cursor has advanced to a newer blk file.
 
 Replace the older rev file with a directory and force a chainstate flush. The
-current behavior succeeds because it does not try to flush that older file.
+node must try to flush the older file and abort when that operation fails.
 """
 
 from test_framework.blocktools import (
@@ -83,9 +83,15 @@ class UndoFlushTest(BitcoinTestFramework):
         rev0.unlink()
         rev0.mkdir()
 
-        # TODO: The old dirty undo file must be flushed and abort this node.
-        node.gettxoutsetinfo("none")
-        assert_equal(node.getblockcount(), 5)
+        expected_stderr = (
+            "Error: A fatal internal error occurred, see debug.log for details: "
+            "Flushing undo file to disk failed. This is likely the result of an I/O error."
+        )
+        try:
+            node.gettxoutsetinfo("none")
+        except Exception:
+            pass
+        node.wait_until_stopped(timeout=5, expect_error=True, expected_stderr=expected_stderr)
 
 
 if __name__ == "__main__":

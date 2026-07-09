@@ -376,14 +376,12 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_chainstate_block_file_dirty_undo_file)
     BOOST_REQUIRE(fs::remove(undo_path));
     BOOST_REQUIRE(fs::create_directory(undo_path));
 
-    // Current behavior only flushes the cursor file, leaving older dirty undo files unflushed.
+    // The chainstate flush must also attempt to flush the older dirty undo file.
     {
         LOCK(::cs_main);
-        // TODO: Flush every dirty undo file during the chainstate flush.
-        BOOST_CHECK(node::BlockManagerTestAccess::FlushChainstateBlockFile(blockman, /*tip_height=*/2));
+        BOOST_CHECK(!node::BlockManagerTestAccess::FlushChainstateBlockFile(blockman, /*tip_height=*/2));
     }
-    // TODO: Flushing the replaced old undo file should report an I/O error.
-    BOOST_CHECK_EQUAL(notifications.flush_errors, 0);
+    BOOST_CHECK_EQUAL(notifications.flush_errors, 1);
 }
 
 BOOST_FIXTURE_TEST_CASE(prune_lock_update_and_delete, TestingSetup)
