@@ -207,7 +207,7 @@ BOOST_AUTO_TEST_CASE(fetch_coinbase_spend)
     const auto reset_guard{view.StartFetching(block)};
     AddCoins(view, *coinbase_tx, /*nHeight=*/1);
     BOOST_REQUIRE(view.SpendCoin(coinbase_outpoint));
-    BOOST_CHECK(!view.AllInputsConsumed()); // TODO: Coinbase spends should not desynchronize prefetch.
+    BOOST_CHECK(view.AllInputsConsumed());
 }
 
 // Access coins that are not block inputs
