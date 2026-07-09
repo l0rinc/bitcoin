@@ -401,6 +401,9 @@ static void CheckInvariants(const node::TxDownloadManagerImpl& txdownload_impl)
         if (!txdownload_impl.m_peer_info.contains(peer)) {
             Assert(txdownload_impl.m_txrequest.Count(peer) == 0);
             Assert(txdownload_impl.m_orphanage->UsageByPeer(peer) == 0);
+            Assert(txdownload_impl.m_orphanage->AnnouncementsFromPeer(peer) == 0);
+            Assert(txdownload_impl.m_orphanage->LatencyScoreFromPeer(peer) == 0);
+            Assert(!txdownload_impl.m_orphanage->HaveTxToReconsider(peer));
         }
     }
     txdownload_impl.m_txrequest.SanityCheck();

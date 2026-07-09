@@ -148,6 +148,14 @@ static void CheckNoTxRequestsForTx(const node::TxDownloadManagerImpl& txdownload
     CheckTxRequestPeers(txdownload_impl, tx->GetWitnessHash().ToUint256(), {});
 }
 
+static void CheckNoPeerOrphanState(node::TxDownloadManagerImpl& txdownload_impl, NodeId peer)
+{
+    BOOST_CHECK_EQUAL(txdownload_impl.m_orphanage->UsageByPeer(peer), 0);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_orphanage->AnnouncementsFromPeer(peer), 0);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_orphanage->LatencyScoreFromPeer(peer), 0);
+    BOOST_CHECK(!txdownload_impl.m_orphanage->HaveTxToReconsider(peer));
+}
+
 BOOST_FIXTURE_TEST_CASE(wtxid_peer_accounting, TestingSetup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
@@ -275,6 +283,59 @@ BOOST_FIXTURE_TEST_CASE(check_empty_tracks_peer_registry, TestingSetup)
 
     txdownload_impl.DisconnectedPeer(peer);
     txdownload_impl.CheckIsEmpty(peer);
+    txdownload_impl.CheckIsEmpty();
+}
+
+BOOST_FIXTURE_TEST_CASE(disconnect_clears_peer_orphan_state, TestingSetup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    FastRandomContext det_rand{true};
+    node::TxDownloadManagerImpl txdownload_impl{node::TxDownloadOptions{pool, det_rand, true}};
+    const node::TxDownloadConnectionInfo connection_info{/*m_preferred=*/true,
+                                                         /*m_relay_permissions=*/false,
+                                                         /*m_wtxid_relay=*/true};
+    constexpr NodeId peer_0{0};
+    constexpr NodeId peer_1{1};
+    const std::chrono::microseconds now{0};
+
+    txdownload_impl.ConnectedPeer(peer_0, connection_info);
+    txdownload_impl.ConnectedPeer(peer_1, connection_info);
+
+    const CTransactionRef parent{CreatePlaceholderTx(/*segwit=*/true)};
+    const CTransactionRef child{CreatePlaceholderTx(/*segwit=*/true)};
+    BOOST_REQUIRE(IsChildWithParents(Package{parent, child}));
+
+    TxValidationState missing_inputs;
+    missing_inputs.Invalid(TxValidationResult::TX_MISSING_INPUTS, "");
+    const auto orphan_ret{txdownload_impl.MempoolRejectedTx(child, missing_inputs, peer_0, /*first_time_failure=*/true)};
+    std::string err_msg;
+    BOOST_REQUIRE_MESSAGE(CheckOrphanBehavior(txdownload_impl, child, orphan_ret, err_msg,
+                                              /*expect_orphan=*/true, /*expect_keep=*/true, /*expected_parents=*/1),
+                          err_msg);
+
+    BOOST_CHECK(txdownload_impl.AddTxAnnouncement(peer_1, child->GetWitnessHash(), now));
+    BOOST_CHECK(txdownload_impl.m_orphanage->HaveTxFromPeer(child->GetWitnessHash(), peer_0));
+    BOOST_CHECK(txdownload_impl.m_orphanage->HaveTxFromPeer(child->GetWitnessHash(), peer_1));
+    BOOST_CHECK_EQUAL(txdownload_impl.m_orphanage->AnnouncementsFromPeer(peer_0), 1);
+    BOOST_CHECK_EQUAL(txdownload_impl.m_orphanage->AnnouncementsFromPeer(peer_1), 1);
+
+    const auto workset{txdownload_impl.m_orphanage->AddChildrenToWorkSet(*parent, det_rand)};
+    BOOST_REQUIRE_EQUAL(workset.size(), 1);
+    BOOST_CHECK(workset.front().first == child->GetWitnessHash());
+    const NodeId assigned_peer{workset.front().second};
+    BOOST_REQUIRE(assigned_peer == peer_0 || assigned_peer == peer_1);
+    BOOST_CHECK(txdownload_impl.m_orphanage->HaveTxToReconsider(assigned_peer));
+
+    txdownload_impl.DisconnectedPeer(assigned_peer);
+    txdownload_impl.CheckIsEmpty(assigned_peer);
+    CheckNoPeerOrphanState(txdownload_impl, assigned_peer);
+
+    const NodeId remaining_peer{assigned_peer == peer_0 ? peer_1 : peer_0};
+    BOOST_CHECK(txdownload_impl.m_peer_info.contains(remaining_peer));
+    BOOST_CHECK(txdownload_impl.m_orphanage->HaveTxFromPeer(child->GetWitnessHash(), remaining_peer));
+    BOOST_CHECK_EQUAL(txdownload_impl.m_orphanage->AnnouncementsFromPeer(remaining_peer), 1);
+
+    txdownload_impl.DisconnectedPeer(remaining_peer);
     txdownload_impl.CheckIsEmpty();
 }
 
