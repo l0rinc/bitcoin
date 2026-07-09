@@ -61,6 +61,16 @@ void AssertSendQueueMemoryUsage(CNode& node)
     LOCK(node.cs_vSend);
     node.AssertSendQueueMemoryUsage();
 }
+
+void AssertSpecialPeerAddressRelayDisabled(const PeerManager& peerman, const CNode& node)
+{
+    if (!node.IsBlockOnlyConn() && !node.IsFeelerConn()) return;
+
+    CNodeStateStats stats;
+    if (peerman.GetNodeStateStats(node.GetId(), stats)) {
+        Assert(!stats.m_addr_relay_enabled);
+    }
+}
 } // namespace
 
 void initialize_process_message()
@@ -142,6 +152,7 @@ FUZZ_TARGET(process_message, .init = initialize_process_message)
         AssertSendQueueMemoryUsage(p2p_node);
     }
     AssertSendQueueMemoryUsage(p2p_node);
+    AssertSpecialPeerAddressRelayDisabled(*node.peerman, p2p_node);
     node.validation_signals->SyncWithValidationInterfaceQueue();
     node.validation_signals->UnregisterValidationInterface(node.peerman.get());
     node.connman->StopNodes();
