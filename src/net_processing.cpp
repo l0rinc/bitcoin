@@ -5767,12 +5767,20 @@ bool PeerManagerImpl::SetupAddressRelay(const CNode& node, Peer& peer)
     // We don't participate in addr relay with outbound block-relay-only
     // connections to prevent providing adversaries with the additional
     // information of addr traffic to infer the link.
-    if (node.IsBlockOnlyConn()) return false;
+    if (node.IsBlockOnlyConn()) {
+        Assume(!peer.m_addr_relay_enabled);
+        Assume(!peer.m_addr_known);
+        return false;
+    }
 
     // We don't participate in addr relay with feeler connections because
     // they are disconnected shortly after the handshake completes,
     // before the node will receive the addr response.
-    if (node.IsFeelerConn()) return false;
+    if (node.IsFeelerConn()) {
+        Assume(!peer.m_addr_relay_enabled);
+        Assume(!peer.m_addr_known);
+        return false;
+    }
 
     if (!peer.m_addr_relay_enabled.exchange(true)) {
         // During version message processing (non-block-relay-only outbound peers)
@@ -5781,6 +5789,8 @@ bool PeerManagerImpl::SetupAddressRelay(const CNode& node, Peer& peer)
         peer.m_addr_known = std::make_unique<CRollingBloomFilter>(5000, 0.001);
     }
 
+    Assume(peer.m_addr_relay_enabled);
+    Assume(peer.m_addr_known);
     return true;
 }
 
