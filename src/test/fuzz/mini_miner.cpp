@@ -353,6 +353,26 @@ FUZZ_TARGET(mini_miner, .init = initialize_miner)
         assert(lower_total_bumpfee.has_value());
         assert(higher_total_bumpfee.has_value());
         assert(*higher_total_bumpfee >= *lower_total_bumpfee);
+
+        const auto build_template = [&](const CFeeRate& feerate, const std::vector<COutPoint>& requested_outpoints) EXCLUSIVE_LOCKS_REQUIRED(pool.cs) {
+            node::MiniMiner mini_miner{pool, requested_outpoints};
+            assert(mini_miner.IsReadyToCalculate());
+            mini_miner.BuildMockTemplate(feerate);
+            assert(!mini_miner.IsReadyToCalculate());
+            assert(mini_miner.Linearize().empty());
+            assert(mini_miner.CalculateBumpFees(feerate).empty());
+            assert(!mini_miner.CalculateTotalBumpFees(feerate).has_value());
+            return mini_miner.GetMockTemplateTxids();
+        };
+        const auto lower_template{build_template(lower_target_feerate, outpoints)};
+        const auto higher_template{build_template(higher_target_feerate, outpoints)};
+        for (const auto& txid : higher_template) {
+            assert(lower_template.contains(txid));
+        }
+        if (lower_target_feerate == higher_target_feerate) {
+            assert(lower_template == higher_template);
+        }
+        assert(lower_template == build_template(lower_target_feerate, duplicated_outpoints));
     }
     if (!sum_fees_saturated && *total_bumpfee != std::numeric_limits<CAmount>::max()) {
         // Overlapping ancestry across multiple outpoints can only reduce the total bump fee.
