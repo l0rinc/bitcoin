@@ -100,6 +100,7 @@ std::optional<Coin> CCoinsViewCache::GetCoin(const COutPoint& outpoint) const
 
 void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possible_overwrite) {
     assert(!coin.IsSpent());
+    assert(MoneyRange(coin.out.nValue));
     const bool unspendable{coin.out.scriptPubKey.IsUnspendable()};
     [[maybe_unused]] const size_t cache_size{unspendable ? cacheCoins.size() : 0};
     [[maybe_unused]] const size_t cache_usage{unspendable ? cachedCoinsUsage : 0};
@@ -297,6 +298,7 @@ void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& in
         if (!it->second.IsDirty()) { // TODO a cursor can only contain dirty entries
             continue;
         }
+        Assume(it->second.coin.IsSpent() || MoneyRange(it->second.coin.out.nValue));
         auto [itUs, inserted]{cacheCoins.try_emplace(it->first)};
         if (inserted) {
             if (it->second.IsFresh() && it->second.coin.IsSpent()) {
