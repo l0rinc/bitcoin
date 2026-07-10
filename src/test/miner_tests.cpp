@@ -95,6 +95,31 @@ BOOST_FIXTURE_TEST_SUITE(miner_tests, MinerTestingSetup)
 
 static CFeeRate blockMinFeeRate = CFeeRate(DEFAULT_BLOCK_MIN_TX_FEE);
 
+BOOST_AUTO_TEST_CASE(transaction_lookups_without_mempool)
+{
+    node::NodeContext node;
+    const auto mining{interfaces::MakeMining(node, /*wait_loaded=*/false)};
+    BOOST_REQUIRE(mining);
+
+    const std::vector<Txid> txids{
+        Txid::FromUint256(uint256::ZERO),
+        Txid::FromUint256(uint256::ONE),
+    };
+    const auto tx_results{mining->getTransactionsByTxID(txids)};
+    BOOST_REQUIRE_EQUAL(tx_results.size(), txids.size());
+    BOOST_CHECK(!tx_results[0]);
+    BOOST_CHECK(!tx_results[1]);
+
+    const std::vector<Wtxid> wtxids{
+        Wtxid::FromUint256(uint256::ZERO),
+        Wtxid::FromUint256(uint256::ONE),
+    };
+    const auto wtx_results{mining->getTransactionsByWitnessID(wtxids)};
+    BOOST_REQUIRE_EQUAL(wtx_results.size(), wtxids.size());
+    BOOST_CHECK(!wtx_results[0]);
+    BOOST_CHECK(!wtx_results[1]);
+}
+
 constexpr static struct {
     unsigned int extranonce;
     unsigned int nonce;
