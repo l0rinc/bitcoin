@@ -3231,7 +3231,6 @@ UniValue CreateRolledBackUTXOSnapshot(
     // Create temporary database
     DBParams db_params{
         .path = temp_db_path,
-        .cache_bytes = 0,
         .memory_only = in_memory,
         .wipe_data = true,
         .obfuscate = false,

@@ -1930,7 +1930,6 @@ void Chainstate::InitCoinsDB(
     m_coins_views = std::make_unique<CoinsViews>(
         DBParams{
             .path = StoragePath(),
-            .cache_bytes = cache_size_bytes,
             .memory_only = in_memory,
             .wipe_data = should_wipe,
             .obfuscate = true,
@@ -5493,8 +5492,6 @@ bool Chainstate::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
     size_t old_coinstip_size = m_coinstip_cache_size_bytes;
     m_coinstip_cache_size_bytes = coinstip_size;
     m_coinsdb_cache_size_bytes = coinsdb_size;
-    CoinsDB().ResizeCache(coinsdb_size);
-
     LogInfo("[%s] resized coinsdb cache to %.1f MiB",
         this->ToString(), coinsdb_size / double(1_MiB));
     LogInfo("[%s] resized coinstip cache to %.1f MiB",

@@ -320,7 +320,6 @@ ChainTestingSetup::ChainTestingSetup(const ChainType chainType, TestOpts opts)
             .notifications = chainman_opts.notifications,
             .block_tree_db_params = DBParams{
                 .path = m_args.GetDataDirNet() / "blocks" / "index",
-                .cache_bytes = m_kernel_cache_sizes.block_tree_db,
                 .memory_only = opts.block_tree_db_in_memory,
                 .wipe_data = m_args.GetBoolArg("-reindex", false),
             },

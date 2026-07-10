@@ -104,7 +104,7 @@ BOOST_AUTO_TEST_SUITE(coinsviewoverlay_tests)
 BOOST_AUTO_TEST_CASE(fetch_inputs_from_db)
 {
     const auto block{CreateBlock()};
-    CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
+    CCoinsViewDB db{{.path = "", .memory_only = true}, {}};
     PopulateView(block, db);
     CCoinsViewCache main_cache{&db};
     CoinsViewOverlay view{&main_cache, MakeStartedThreadPool()};
@@ -132,7 +132,7 @@ BOOST_AUTO_TEST_CASE(fetch_inputs_from_db)
 BOOST_AUTO_TEST_CASE(fetch_inputs_from_cache)
 {
     const auto block{CreateBlock()};
-    CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
+    CCoinsViewDB db{{.path = "", .memory_only = true}, {}};
     CCoinsViewCache main_cache{&db};
     PopulateView(block, main_cache);
     CoinsViewOverlay view{&main_cache, MakeStartedThreadPool()};
@@ -151,7 +151,7 @@ BOOST_AUTO_TEST_CASE(fetch_inputs_from_cache)
 BOOST_AUTO_TEST_CASE(fetch_no_double_spend)
 {
     const auto block{CreateBlock()};
-    CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
+    CCoinsViewDB db{{.path = "", .memory_only = true}, {}};
     PopulateView(block, db);
     CCoinsViewCache main_cache{&db};
     // Add all inputs as spent already in cache
@@ -173,7 +173,7 @@ BOOST_AUTO_TEST_CASE(fetch_no_double_spend)
 BOOST_AUTO_TEST_CASE(fetch_no_inputs)
 {
     const auto block{CreateBlock()};
-    CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
+    CCoinsViewDB db{{.path = "", .memory_only = true}, {}};
     CCoinsViewCache main_cache{&db};
     CoinsViewOverlay view{&main_cache, MakeStartedThreadPool()};
     const auto reset_guard{view.StartFetching(block)};
@@ -195,7 +195,7 @@ BOOST_AUTO_TEST_CASE(access_non_input_coins)
     CMutableTransaction coinbase;
     coinbase.vin.emplace_back();
     block.vtx.push_back(MakeTransactionRef(coinbase));
-    CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
+    CCoinsViewDB db{{.path = "", .memory_only = true}, {}};
     CCoinsViewCache main_cache{&db};
     Coin coin{};
     coin.out.nValue = 1;
@@ -220,7 +220,7 @@ BOOST_AUTO_TEST_CASE(access_non_input_coins)
 BOOST_AUTO_TEST_CASE(fetch_out_of_order_input_uses_normal_lookup)
 {
     const auto block{CreateBlock()};
-    CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
+    CCoinsViewDB db{{.path = "", .memory_only = true}, {}};
     CCoinsViewCache main_cache{&db};
     PopulateView(block, main_cache);
 
@@ -252,7 +252,7 @@ BOOST_AUTO_TEST_CASE(fetch_out_of_order_input_uses_normal_lookup)
 BOOST_AUTO_TEST_CASE(fetch_state_is_reusable_after_teardown)
 {
     const auto block{CreateBlock()};
-    CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
+    CCoinsViewDB db{{.path = "", .memory_only = true}, {}};
     CCoinsViewCache main_cache{&db};
     PopulateView(block, main_cache);
     CoinsViewOverlay view{&main_cache, MakeStartedThreadPool()};
@@ -279,7 +279,7 @@ BOOST_AUTO_TEST_SUITE(coinsviewoverlay_tests_noworkers)
 BOOST_AUTO_TEST_CASE(fetch_unstarted_thread_pool)
 {
     const auto block{CreateBlock()};
-    CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
+    CCoinsViewDB db{{.path = "", .memory_only = true}, {}};
     CCoinsViewCache main_cache{&db};
     PopulateView(block, main_cache);
     auto thread_pool{std::make_shared<ThreadPool>("fetch_none")};
@@ -292,7 +292,7 @@ BOOST_AUTO_TEST_CASE(fetch_unstarted_thread_pool)
 BOOST_AUTO_TEST_CASE(fetch_interrupted_thread_pool_uses_normal_lookup)
 {
     const auto block{CreateBlock()};
-    CCoinsViewDB db{{.path = "", .cache_bytes = 1_MiB, .memory_only = true}, {}};
+    CCoinsViewDB db{{.path = "", .memory_only = true}, {}};
     CCoinsViewCache main_cache{&db};
     PopulateView(block, main_cache);
 

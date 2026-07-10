@@ -468,7 +468,6 @@ struct ChainstateManagerOptions {
               .notifications = *context->m_notifications,
               .block_tree_db_params = DBParams{
                   .path = data_dir / "blocks" / "index",
-                  .cache_bytes = kernel::CacheSizes{DEFAULT_KERNEL_CACHE}.block_tree_db,
               }}},
           m_context{context}, m_chainstate_load_options{node::ChainstateLoadOptions{}}
     {

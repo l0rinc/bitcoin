@@ -41,8 +41,6 @@ struct DBOptions {
 struct DBParams {
     //! Location in the filesystem where leveldb data will be stored.
     fs::path path;
-    //! Configures various leveldb cache settings.
-    uint64_t cache_bytes;
     //! If true, use leveldb's memory environment.
     bool memory_only = false;
     //! If true, remove all existing data.

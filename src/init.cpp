@@ -1157,7 +1157,6 @@ bool AppInitParameterInteraction(const ArgsManager& args)
             .notifications = chainman_opts_dummy.notifications,
             .block_tree_db_params = DBParams{
                 .path = args.GetDataDirNet() / "blocks" / "index",
-                .cache_bytes = 0,
             },
         };
         auto blockman_result{ApplyArgsManOptions(args, blockman_opts_dummy)};
@@ -1362,7 +1361,6 @@ static ChainstateLoadResult InitAndLoadChainstate(
         .notifications = chainman_opts.notifications,
         .block_tree_db_params = DBParams{
             .path = args.GetDataDirNet() / "blocks" / "index",
-            .cache_bytes = cache_sizes.block_tree_db,
             .wipe_data = do_reindex,
         },
     };
