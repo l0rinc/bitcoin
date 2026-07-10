@@ -159,7 +159,7 @@ BOOST_FIXTURE_TEST_CASE(txospenderindex_reorg_recovery, TestChain100Setup)
 
     auto index{make_index(/*wipe=*/false)};
     BOOST_REQUIRE(index.Init());
-    BOOST_CHECK_EQUAL(find_spender(index), spender_b.GetHash()); // TODO: Preserve the restored active-chain spender record.
+    BOOST_CHECK_EQUAL(find_spender(index), spender_a.GetHash());
     index.Stop();
 }
 

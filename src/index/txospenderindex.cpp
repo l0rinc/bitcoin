@@ -23,6 +23,7 @@
 #include <util/fs.h>
 #include <validation.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdio>
 #include <exception>
@@ -71,13 +72,6 @@ TxoSpenderIndex::TxoSpenderIndex(std::unique_ptr<interfaces::Chain> chain, size_
     }
 }
 
-interfaces::Chain::NotifyOptions TxoSpenderIndex::CustomOptions()
-{
-    interfaces::Chain::NotifyOptions options;
-    options.disconnect_data = true;
-    return options;
-}
-
 static uint64_t CreateKeyPrefix(std::pair<uint64_t, uint64_t> siphash_key, const COutPoint& vout)
 {
     return PresaltedSipHasher(siphash_key.first, siphash_key.second)(vout.hash.ToUint256(), vout.n);
@@ -101,15 +95,6 @@ void TxoSpenderIndex::WriteSpenderInfos(const std::vector<std::pair<COutPoint, C
 }
 
 
-void TxoSpenderIndex::EraseSpenderInfos(const std::vector<std::pair<COutPoint, CDiskTxPos>>& items)
-{
-    CDBBatch batch(*m_db);
-    for (const auto& [outpoint, pos] : items) {
-        batch.Erase(CreateKey(m_siphash_key, outpoint, pos));
-    }
-    m_db->WriteBatch(batch);
-}
-
 static std::vector<std::pair<COutPoint, CDiskTxPos>> BuildSpenderPositions(const interfaces::BlockInfo& block)
 {
     std::vector<std::pair<COutPoint, CDiskTxPos>> items;
@@ -132,12 +117,6 @@ static std::vector<std::pair<COutPoint, CDiskTxPos>> BuildSpenderPositions(const
 bool TxoSpenderIndex::CustomAppend(const interfaces::BlockInfo& block)
 {
     WriteSpenderInfos(BuildSpenderPositions(block));
-    return true;
-}
-
-bool TxoSpenderIndex::CustomRemove(const interfaces::BlockInfo& block)
-{
-    EraseSpenderInfos(BuildSpenderPositions(block));
     return true;
 }
 
@@ -165,16 +144,19 @@ util::Expected<std::optional<TxoSpender>, std::string> TxoSpenderIndex::FindSpen
     const uint64_t prefix{CreateKeyPrefix(m_siphash_key, txo)};
     std::unique_ptr<CDBIterator> it(m_db->NewIterator());
     DBKey key(prefix, CDiskTxPos());
+    auto in_active_chain{[&](const uint256& block_hash) {
+        bool active{false};
+        return m_chain->findBlock(block_hash, interfaces::FoundBlock().inActiveChain(active)) && active;
+    }};
 
     // find all keys that start with the outpoint hash, load the transaction at the location specified in the key
     // and return it if it does spend the provided outpoint
     for (it->Seek(std::pair{DB_TXOSPENDERINDEX, prefix}); it->Valid() && it->GetKey(key) && key.hash == prefix; it->Next()) {
         if (const auto spender{ReadTransaction(key.pos)}) {
-            for (const auto& input : spender->tx->vin) {
-                if (input.prevout == txo) {
-                    return std::optional{*spender};
-                }
-            }
+            if (!std::ranges::any_of(spender->tx->vin, [&](const auto& input) { return input.prevout == txo; })) continue;
+            if (!in_active_chain(spender->block_hash)) continue;
+
+            return std::optional{*spender};
         } else {
             LogError("Deserialize or I/O error - %s", spender.error());
             return util::Unexpected{strprintf("IO error finding spending tx for outpoint %s:%d.", txo.hash.GetHex(), txo.n)};

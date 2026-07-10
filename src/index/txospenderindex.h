@@ -6,7 +6,6 @@
 #define BITCOIN_INDEX_TXOSPENDERINDEX_H
 
 #include <index/base.h>
-#include <interfaces/chain.h>
 #include <primitives/transaction.h>
 #include <uint256.h>
 #include <util/expected.h>
@@ -20,6 +19,9 @@
 #include <vector>
 
 struct CDiskTxPos;
+namespace interfaces {
+class Chain;
+} // namespace interfaces
 
 static constexpr bool DEFAULT_TXOSPENDERINDEX{false};
 
@@ -40,15 +42,10 @@ private:
     std::pair<uint64_t, uint64_t> m_siphash_key;
     bool AllowPrune() const override { return false; }
     void WriteSpenderInfos(const std::vector<std::pair<COutPoint, CDiskTxPos>>& items);
-    void EraseSpenderInfos(const std::vector<std::pair<COutPoint, CDiskTxPos>>& items);
     util::Expected<TxoSpender, std::string> ReadTransaction(const CDiskTxPos& pos) const;
 
 protected:
-    interfaces::Chain::NotifyOptions CustomOptions() override;
-
     bool CustomAppend(const interfaces::BlockInfo& block) override;
-
-    bool CustomRemove(const interfaces::BlockInfo& block) override;
 
     BaseIndex::DB& GetDB() const override;
 
