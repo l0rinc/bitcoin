@@ -9,7 +9,6 @@
 #include <primitives/transaction_identifier.h>
 #include <txdb.h>
 #include <uint256.h>
-#include <util/byte_units.h>
 #include <util/hasher.h>
 #include <util/threadpool.h>
 

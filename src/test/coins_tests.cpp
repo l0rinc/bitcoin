@@ -13,7 +13,6 @@
 #include <txdb.h>
 #include <uint256.h>
 #include <undo.h>
-#include <util/byte_units.h>
 #include <util/check.h>
 #include <util/strencodings.h>
 
