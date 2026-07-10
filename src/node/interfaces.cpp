@@ -1039,27 +1039,31 @@ public:
 
     std::vector<CTransactionRef> getTransactionsByTxID(const std::vector<Txid>& txids) override
     {
-        if (!m_node.mempool) return {};
-
-        std::vector<CTransactionRef> results;
-        results.reserve(txids.size());
-        LOCK(m_node.mempool->cs);
-        for (const auto& txid : txids) {
-            results.emplace_back(m_node.mempool->get(txid));
+        std::vector<CTransactionRef> results(txids.size());
+        if (!m_node.mempool) {
+            Assume(results.size() == txids.size());
+            return results;
         }
+        LOCK(m_node.mempool->cs);
+        for (size_t i{0}; i < txids.size(); ++i) {
+            results[i] = m_node.mempool->get(txids[i]);
+        }
+        Assume(results.size() == txids.size());
         return results;
     }
 
     std::vector<CTransactionRef> getTransactionsByWitnessID(const std::vector<Wtxid>& wtxids) override
     {
-        if (!m_node.mempool) return {};
-
-        std::vector<CTransactionRef> results;
-        results.reserve(wtxids.size());
-        LOCK(m_node.mempool->cs);
-        for (const auto& wtxid : wtxids) {
-            results.emplace_back(m_node.mempool->get(wtxid));
+        std::vector<CTransactionRef> results(wtxids.size());
+        if (!m_node.mempool) {
+            Assume(results.size() == wtxids.size());
+            return results;
         }
+        LOCK(m_node.mempool->cs);
+        for (size_t i{0}; i < wtxids.size(); ++i) {
+            results[i] = m_node.mempool->get(wtxids[i]);
+        }
+        Assume(results.size() == wtxids.size());
         return results;
     }
 
