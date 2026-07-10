@@ -1850,10 +1850,6 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     node::LogOversizedDbCache(args);
     const auto [kernel_cache_sizes] = CalculateCacheSizes(args);
 
-    LogInfo("Cache configuration:");
-    LogInfo("* Using %.1f MiB for block index database", kernel_cache_sizes.block_tree_db / double(1_MiB));
-    LogInfo("* Using %.1f MiB for chain state database", kernel_cache_sizes.coins_db / double(1_MiB));
-
     assert(!node.mempool);
     assert(!node.chainman);
 

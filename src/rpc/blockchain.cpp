@@ -3571,7 +3571,6 @@ const std::vector<RPCResult> RPCHelpForChainstate{
     {RPCResult::Type::NUM, "difficulty", "difficulty of the tip"},
     {RPCResult::Type::NUM, "verificationprogress", "progress towards the network tip"},
     {RPCResult::Type::STR_HEX, "snapshot_blockhash", /*optional=*/true, "the base block of the snapshot this chainstate is based on, if any"},
-    {RPCResult::Type::NUM, "coins_db_cache_bytes", "size of the coinsdb cache"},
     {RPCResult::Type::NUM, "coins_tip_cache_bytes", "size of the coinstip cache"},
     {RPCResult::Type::BOOL, "validated", "whether the chainstate is fully validated. True if all blocks in the chainstate were validated, false if the chain is based on a snapshot and the snapshot has not yet been validated."},
 };
@@ -3614,7 +3613,6 @@ return RPCMethod{
         data.pushKV("target", GetTarget(*tip, chainman.GetConsensus().powLimit).GetHex());
         data.pushKV("difficulty", GetDifficulty(*tip));
         data.pushKV("verificationprogress", chainman.GuessVerificationProgress(tip));
-        data.pushKV("coins_db_cache_bytes",  cs.m_coinsdb_cache_size_bytes);
         data.pushKV("coins_tip_cache_bytes", cs.m_coinstip_cache_size_bytes);
         if (cs.m_from_snapshot_blockhash) {
             data.pushKV("snapshot_blockhash", cs.m_from_snapshot_blockhash->ToString());

@@ -71,7 +71,6 @@ static ChainstateLoadResult CompleteChainstateInitialization(
     };
 
     assert(chainman.m_total_coinstip_cache > 0);
-    assert(chainman.m_total_coinsdb_cache > 0);
 
     // If running with multiple chainstates, limit the cache sizes with a
     // discount factor. If discounted the actual cache size will be
@@ -88,7 +87,6 @@ static ChainstateLoadResult CompleteChainstateInitialization(
 
         try {
             chainstate->InitCoinsDB(
-                /*cache_size_bytes=*/chainman.m_total_coinsdb_cache * init_cache_fraction,
                 /*in_memory=*/options.coins_db_in_memory,
                 /*should_wipe=*/options.wipe_chainstate_db);
         } catch (dbwrapper_error& err) {
@@ -170,7 +168,6 @@ ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSize
     LOCK(cs_main);
 
     chainman.m_total_coinstip_cache = cache_sizes.coins;
-    chainman.m_total_coinsdb_cache = cache_sizes.coins_db;
 
     // Load the fully validated chainstate.
     Chainstate& validated_cs{chainman.InitializeChainstate(options.mempool)};

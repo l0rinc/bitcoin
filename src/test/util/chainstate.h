@@ -82,7 +82,7 @@ CreateAndActivateUTXOSnapshot(
             Chainstate& chain = node.chainman->ActiveChainstate();
             Assert(node.chainman->LoadGenesisBlock());
             // These cache values will be corrected shortly in `MaybeRebalanceCaches`.
-            chain.InitCoinsDB(1_MiB, /*in_memory=*/true, /*should_wipe=*/false);
+            chain.InitCoinsDB(/*in_memory=*/true, /*should_wipe=*/false);
             chain.InitCoinsCache(1_MiB);
             chain.CoinsTip().SetBestBlock(gen_hash);
             chain.LoadChainTip();

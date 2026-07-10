@@ -40,8 +40,7 @@ BOOST_AUTO_TEST_CASE(validation_chainstate_resize_caches)
     ChainstateManager& manager = *Assert(m_node.chainman);
     CTxMemPool& mempool = *Assert(m_node.mempool);
     Chainstate& c1 = WITH_LOCK(cs_main, return manager.InitializeChainstate(&mempool));
-    c1.InitCoinsDB(
-        /*cache_size_bytes=*/8_MiB, /*in_memory=*/true, /*should_wipe=*/false);
+    c1.InitCoinsDB(/*in_memory=*/true, /*should_wipe=*/false);
     WITH_LOCK(::cs_main, c1.InitCoinsCache(8_MiB));
     BOOST_REQUIRE(manager.LoadGenesisBlock()); // Need at least one block loaded to be able to flush caches
 
@@ -56,18 +55,12 @@ BOOST_AUTO_TEST_CASE(validation_chainstate_resize_caches)
 
         BOOST_CHECK(c1.CoinsTip().HaveCoinInCache(outpoint));
 
-        c1.ResizeCoinsCaches(
-            16_MiB, // upsizing the coinsview cache
-            4_MiB // downsizing the coinsdb cache
-        );
+        c1.ResizeCoinsCaches(16_MiB); // upsizing the coinsview cache
 
         // View should still have the coin cached, since we haven't destructed the cache on upsize.
         BOOST_CHECK(c1.CoinsTip().HaveCoinInCache(outpoint));
 
-        c1.ResizeCoinsCaches(
-            4_MiB, // downsizing the coinsview cache
-            8_MiB // upsizing the coinsdb cache
-        );
+        c1.ResizeCoinsCaches(4_MiB); // downsizing the coinsview cache
 
         // The view cache should be empty since we had to destruct to downsize.
         BOOST_CHECK(!c1.CoinsTip().HaveCoinInCache(outpoint));
