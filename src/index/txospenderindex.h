@@ -53,7 +53,7 @@ protected:
     BaseIndex::DB& GetDB() const override;
 
 public:
-    explicit TxoSpenderIndex(std::unique_ptr<interfaces::Chain> chain, size_t n_cache_size, bool f_memory = false, bool f_wipe = false);
+    explicit TxoSpenderIndex(std::unique_ptr<interfaces::Chain> chain, bool f_memory = false, bool f_wipe = false);
 
     /**
      * Search the index for a transaction that spends the given outpoint.
