@@ -1848,7 +1848,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     // cache size calculations
     node::LogOversizedDbCache(args);
-    const auto [kernel_cache_sizes] = CalculateCacheSizes(args);
+    const auto kernel_cache_sizes = CalculateCacheSizes(args);
 
     assert(!node.mempool);
     assert(!node.chainman);

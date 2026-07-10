@@ -48,9 +48,9 @@ uint64_t CalculateDbCacheBytes(const ArgsManager& args)
     return GetDefaultDBCache();
 }
 
-CacheSizes CalculateCacheSizes(const ArgsManager& args)
+kernel::CacheSizes CalculateCacheSizes(const ArgsManager& args)
 {
-    return {kernel::CacheSizes{CalculateDbCacheBytes(args)}};
+    return kernel::CacheSizes{CalculateDbCacheBytes(args)};
 }
 
 void LogOversizedDbCache(const ArgsManager& args) noexcept
