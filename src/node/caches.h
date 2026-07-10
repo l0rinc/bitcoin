@@ -8,7 +8,6 @@
 #include <kernel/caches.h>
 #include <util/byte_units.h>
 
-#include <cstddef>
 #include <cstdint>
 
 class ArgsManager;
@@ -20,16 +19,10 @@ static constexpr uint64_t DEFAULT_DB_CACHE{DEFAULT_KERNEL_CACHE};
 
 namespace node {
 uint64_t GetDefaultDBCache();
-struct IndexCacheSizes {
-    uint64_t tx_index{0};
-    uint64_t filter_index{0};
-    uint64_t txospender_index{0};
-};
 struct CacheSizes {
-    IndexCacheSizes index;
     kernel::CacheSizes kernel;
 };
-CacheSizes CalculateCacheSizes(const ArgsManager& args, size_t n_indexes = 0);
+CacheSizes CalculateCacheSizes(const ArgsManager& args);
 constexpr bool ShouldWarnOversizedDbCache(uint64_t dbcache, uint64_t total_ram) noexcept
 {
     const uint64_t cap{(total_ram < 2_GiB) ? DEFAULT_DB_CACHE : (total_ram / 100) * 75};

@@ -6,8 +6,6 @@
 
 #include <common/args.h>
 #include <common/system.h>
-#include <index/txindex.h>
-#include <index/txospenderindex.h>
 #include <kernel/caches.h>
 #include <node/interface_ui.h>
 #include <tinyformat.h>
@@ -21,14 +19,6 @@
 #include <limits>
 #include <string>
 
-// Unlike for the UTXO database, for the txindex scenario the leveldb cache make
-// a meaningful difference: https://github.com/bitcoin/bitcoin/pull/8273#issuecomment-229601991
-//! Max memory allocated to tx index DB specific cache in bytes.
-static constexpr uint64_t MAX_TX_INDEX_CACHE{1_GiB};
-//! Max memory allocated to all block filter index caches combined in bytes.
-static constexpr uint64_t MAX_FILTER_INDEX_CACHE{1_GiB};
-//! Max memory allocated to tx spenderindex DB specific cache in bytes.
-static constexpr uint64_t MAX_TXOSPENDER_INDEX_CACHE{1_GiB};
 //! Maximum dbcache size on 32-bit systems.
 static constexpr uint64_t MAX_32BIT_DBCACHE{1_GiB};
 //! Larger default dbcache on 64-bit systems with enough RAM.
@@ -58,21 +48,9 @@ uint64_t CalculateDbCacheBytes(const ArgsManager& args)
     return GetDefaultDBCache();
 }
 
-CacheSizes CalculateCacheSizes(const ArgsManager& args, size_t n_indexes)
+CacheSizes CalculateCacheSizes(const ArgsManager& args)
 {
-    uint64_t total_cache{CalculateDbCacheBytes(args)};
-
-    IndexCacheSizes index_sizes;
-    index_sizes.tx_index = std::min(total_cache / 8, args.GetBoolArg("-txindex", DEFAULT_TXINDEX) ? MAX_TX_INDEX_CACHE : 0);
-    total_cache -= index_sizes.tx_index;
-    index_sizes.txospender_index = std::min(total_cache / 8, args.GetBoolArg("-txospenderindex", DEFAULT_TXOSPENDERINDEX) ? MAX_TXOSPENDER_INDEX_CACHE : 0);
-    total_cache -= index_sizes.txospender_index;
-    if (n_indexes > 0) {
-        uint64_t max_cache = std::min(total_cache / 8, MAX_FILTER_INDEX_CACHE);
-        index_sizes.filter_index = max_cache / n_indexes;
-        total_cache -= index_sizes.filter_index * n_indexes;
-    }
-    return {index_sizes, kernel::CacheSizes{total_cache}};
+    return {kernel::CacheSizes{CalculateDbCacheBytes(args)}};
 }
 
 void LogOversizedDbCache(const ArgsManager& args) noexcept

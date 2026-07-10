@@ -1850,20 +1850,10 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     // cache size calculations
     node::LogOversizedDbCache(args);
-    const auto [index_cache_sizes, kernel_cache_sizes] = CalculateCacheSizes(args, g_enabled_filter_types.size());
+    const auto [kernel_cache_sizes] = CalculateCacheSizes(args);
 
     LogInfo("Cache configuration:");
     LogInfo("* Using %.1f MiB for block index database", kernel_cache_sizes.block_tree_db / double(1_MiB));
-    if (args.GetBoolArg("-txindex", DEFAULT_TXINDEX)) {
-        LogInfo("* Using %.1f MiB for transaction index database", index_cache_sizes.tx_index / double(1_MiB));
-    }
-    if (args.GetBoolArg("-txospenderindex", DEFAULT_TXOSPENDERINDEX)) {
-        LogInfo("* Using %.1f MiB for transaction output spender index database", index_cache_sizes.txospender_index / double(1_MiB));
-    }
-    for (BlockFilterType filter_type : g_enabled_filter_types) {
-        LogInfo("* Using %.1f MiB for %s block filter index database",
-                  index_cache_sizes.filter_index / double(1_MiB), BlockFilterTypeName(filter_type));
-    }
     LogInfo("* Using %.1f MiB for chain state database", kernel_cache_sizes.coins_db / double(1_MiB));
 
     assert(!node.mempool);
