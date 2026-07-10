@@ -12,6 +12,7 @@
 #include <node/interface_ui.h>
 #include <tinyformat.h>
 #include <util/byte_units.h>
+#include <util/check.h>
 #include <util/log.h>
 #include <util/overflow.h>
 #include <util/translation.h>
@@ -61,6 +62,7 @@ uint64_t CalculateDbCacheBytes(const ArgsManager& args)
 CacheSizes CalculateCacheSizes(const ArgsManager& args, size_t n_indexes)
 {
     uint64_t total_cache{CalculateDbCacheBytes(args)};
+    const uint64_t initial_total_cache{total_cache};
 
     // Allocate proportional to usage pattern benefit:
     // - txindex (10%): serves getrawtransaction RPCs with mostly unique,
@@ -73,17 +75,30 @@ CacheSizes CalculateCacheSizes(const ArgsManager& args, size_t n_indexes)
     //   specific, rarely repeated outpoint queries.
     // - coinstatsindex: intentionally not included here, since usage pattern
     //   does not seem to suggest it would be necessary to cache.
+    const uint64_t tx_index_budget{total_cache / 10};
+    const uint64_t secondary_index_budget{total_cache / 20};
     IndexCacheSizes index_sizes;
-    index_sizes.tx_index = std::min(total_cache * 10 / 100, args.GetBoolArg("-txindex", DEFAULT_TXINDEX) ? MAX_TX_INDEX_CACHE : 0);
-    index_sizes.txospender_index = std::min(total_cache * 5 / 100, args.GetBoolArg("-txospenderindex", DEFAULT_TXOSPENDERINDEX) ? MAX_TXOSPENDER_INDEX_CACHE : 0);
+    index_sizes.tx_index = std::min(
+        tx_index_budget, args.GetBoolArg("-txindex", DEFAULT_TXINDEX) ? MAX_TX_INDEX_CACHE : 0);
+    index_sizes.txospender_index = std::min(
+        secondary_index_budget, args.GetBoolArg("-txospenderindex", DEFAULT_TXOSPENDERINDEX) ? MAX_TXOSPENDER_INDEX_CACHE : 0);
+    uint64_t filter_cache{0};
     if (n_indexes > 0) {
-        uint64_t max_cache = std::min(total_cache * 5 / 100, MAX_FILTER_INDEX_CACHE);
+        const uint64_t max_cache{std::min(secondary_index_budget, MAX_FILTER_INDEX_CACHE)};
         index_sizes.filter_index = max_cache / n_indexes;
-        total_cache -= index_sizes.filter_index * n_indexes;
+        filter_cache = index_sizes.filter_index * n_indexes;
+        total_cache -= filter_cache;
     }
     total_cache -= index_sizes.tx_index;
     total_cache -= index_sizes.txospender_index;
-    return {index_sizes, kernel::CacheSizes{total_cache}};
+    const kernel::CacheSizes kernel_sizes{total_cache};
+
+    Assume(index_sizes.tx_index <= tx_index_budget);
+    Assume(index_sizes.txospender_index <= secondary_index_budget);
+    Assume(filter_cache <= secondary_index_budget);
+    Assume(total_cache == initial_total_cache - filter_cache - index_sizes.tx_index - index_sizes.txospender_index);
+    Assume(kernel_sizes.block_tree_db + kernel_sizes.coins_db + kernel_sizes.coins == total_cache);
+    return {index_sizes, kernel_sizes};
 }
 
 void LogOversizedDbCache(const ArgsManager& args) noexcept
