@@ -221,6 +221,7 @@ CDBWrapper::CDBWrapper(const DBParams& params)
 {
     DBContext().penv = nullptr;
     DBContext().readoptions.verify_checksums = true;
+    DBContext().readoptions.fill_cache = false; // Skip insertions into the zero-capacity block cache
     DBContext().iteroptions.verify_checksums = true;
     DBContext().iteroptions.fill_cache = false;
     DBContext().syncoptions.sync = true;
