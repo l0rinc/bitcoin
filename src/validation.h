@@ -721,7 +721,7 @@ public:
 
     //! Resize the in-memory coins cache dynamically and flush state to disk.
     //! @returns true unless an error occurred during the flush.
-    bool ResizeCoinsCaches(size_t coinstip_size)
+    bool ResizeCoinsCache(size_t coinstip_size)
         EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /**
@@ -1310,7 +1310,7 @@ public:
     bool LoadBlockIndex() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     //! Check to see if caches are out of balance and if so, call
-    //! ResizeCoinsCaches() as needed.
+    //! ResizeCoinsCache() as needed.
     void MaybeRebalanceCaches() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /**

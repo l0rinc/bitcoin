@@ -35,7 +35,7 @@ BOOST_FIXTURE_TEST_SUITE(validation_chainstate_tests, ChainTestingSetup)
 
 //! Test resizing coins-related Chainstate caches during runtime.
 //!
-BOOST_AUTO_TEST_CASE(validation_chainstate_resize_caches)
+BOOST_AUTO_TEST_CASE(validation_chainstate_resize_cache)
 {
     ChainstateManager& manager = *Assert(m_node.chainman);
     CTxMemPool& mempool = *Assert(m_node.mempool);
@@ -50,17 +50,17 @@ BOOST_AUTO_TEST_CASE(validation_chainstate_resize_caches)
         const auto outpoint = AddTestCoin(m_rng, c1.CoinsTip());
 
         // Set a meaningless bestblock value in the coinsview cache - otherwise we won't
-        // flush during ResizecoinsCaches() and will subsequently hit an assertion.
+        // flush during ResizeCoinsCache() and will subsequently hit an assertion.
         c1.CoinsTip().SetBestBlock(m_rng.rand256());
 
         BOOST_CHECK(c1.CoinsTip().HaveCoinInCache(outpoint));
 
-        c1.ResizeCoinsCaches(16_MiB); // upsizing the coinsview cache
+        c1.ResizeCoinsCache(16_MiB); // upsizing the coinsview cache
 
         // View should still have the coin cached, since we haven't destructed the cache on upsize.
         BOOST_CHECK(c1.CoinsTip().HaveCoinInCache(outpoint));
 
-        c1.ResizeCoinsCaches(4_MiB); // downsizing the coinsview cache
+        c1.ResizeCoinsCache(4_MiB); // downsizing the coinsview cache
 
         // The view cache should be empty since we had to destruct to downsize.
         BOOST_CHECK(!c1.CoinsTip().HaveCoinInCache(outpoint));
