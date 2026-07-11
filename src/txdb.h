@@ -36,7 +36,7 @@ struct CoinsViewOptions {
 class CCoinsViewDB final : public CCoinsView
 {
 protected:
-    DBParams m_db_params;
+    const fs::path m_db_path;
     CoinsViewOptions m_options;
     std::unique_ptr<CDBWrapper> m_db;
     std::shared_future<void> m_compaction;

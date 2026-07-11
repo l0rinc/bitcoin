@@ -56,15 +56,15 @@ struct CoinEntry {
 } // namespace
 
 CCoinsViewDB::CCoinsViewDB(DBParams db_params, CoinsViewOptions options) :
-    m_db_params{std::move(db_params)},
+    m_db_path{db_params.path},
     m_options{std::move(options)},
-    m_db{std::make_unique<CDBWrapper>(m_db_params)} { }
+    m_db{std::make_unique<CDBWrapper>(db_params)} { }
 
 CCoinsViewDB::~CCoinsViewDB()
 {
     if (m_compaction.valid()) {
         if (m_compaction.wait_for(std::chrono::seconds{0}) != std::future_status::ready) {
-            LogInfo("Waiting for background chainstate compaction of %s", fs::PathToString(m_db_params.path));
+            LogInfo("Waiting for background chainstate compaction of %s", fs::PathToString(m_db_path));
         }
         m_compaction.wait();
     }
@@ -187,9 +187,9 @@ std::shared_future<void> CCoinsViewDB::CompactFullAsync()
     m_compaction = std::async(std::launch::async, [this] {
         try {
             util::ThreadRename("utxocompact");
-            LogDebug(BCLog::COINDB, "Starting chainstate compaction of %s", fs::PathToString(m_db_params.path));
+            LogDebug(BCLog::COINDB, "Starting chainstate compaction of %s", fs::PathToString(m_db_path));
             m_db->CompactFull();
-            LogDebug(BCLog::COINDB, "Finished chainstate compaction of %s", fs::PathToString(m_db_params.path));
+            LogDebug(BCLog::COINDB, "Finished chainstate compaction of %s", fs::PathToString(m_db_path));
         } catch (const std::exception& e) {
             LogWarning("Failed chainstate compaction (%s)", e.what());
         }
