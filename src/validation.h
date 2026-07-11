@@ -48,6 +48,7 @@
 #include <span>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -97,6 +98,12 @@ enum class SynchronizationState {
     INIT_REINDEX,
     INIT_DOWNLOAD,
     POST_INIT
+};
+
+enum class ReplayBlocksResult {
+    SUCCESS,
+    FAILURE,
+    PRUNE_ASSUMEVALID_DATA_MISSING,
 };
 
 /** Documentation for argument 'checklevel'. */
@@ -422,6 +429,9 @@ bool HasValidProofOfWork(std::span<const CBlockHeader> headers, const Consensus:
 
 /** Check if a block has been mutated (with respect to its merkle root and witness commitments). */
 bool IsBlockMutated(const CBlock& block, bool check_witness_root);
+
+/** Check if any of the block's transactions carry witness data. */
+bool BlockHasWitness(const CBlock& block);
 
 /** Return the sum of the claimed work on a given set of headers. No verification of PoW is done. */
 arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers);
@@ -782,7 +792,7 @@ public:
     DisconnectResult DisconnectBlock(const CBlock& block, const CBlockIndex* pindex, CCoinsViewCache& view)
         EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     bool ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
-                      CCoinsViewCache& view, bool fJustCheck = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+                      CCoinsViewCache& view, bool fJustCheck = false, bool prune_assumevalid = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     // Apply the effects of a block disconnection on the UTXO set.
     bool DisconnectTip(BlockValidationState& state, DisconnectedBlockTransactions* disconnectpool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
@@ -808,10 +818,12 @@ public:
     void ResetBlockFailureFlags(CBlockIndex* pindex) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /** Replay blocks that aren't fully applied to the database. */
-    bool ReplayBlocks();
+    ReplayBlocksResult ReplayBlocks();
 
     /** Whether the chain state needs to be redownloaded due to lack of witness data */
     [[nodiscard]] bool NeedsRedownload() const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    /** Whether the chain state contains blocks pruned by -pruneassumevalid */
+    [[nodiscard]] bool HasBlocksPrunedByPruneAssumeValid() const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /** Add a block to the candidate set if it has as much work as the current tip. */
     void TryAddBlockIndexCandidate(CBlockIndex* pindex) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
@@ -974,6 +986,8 @@ private:
         BlockValidationState& state,
         CBlockIndex** ppindex,
         bool min_pow_checked) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool IsAncestorOfAssumedValidBlock(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    void EraseCachedPruneAssumeValidBlock(const CBlockIndex& block) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     friend Chainstate;
 
     /** Most recent headers presync progress update, for rate-limiting. */
@@ -981,6 +995,20 @@ private:
 
     //! A queue for script verifications that have to be performed by worker threads.
     CCheckQueue<CScriptCheck> m_script_check_queue;
+
+    //! A stripped prune-assumevalid block that is connectable without being written to disk,
+    //! with its dynamic memory usage measured once at insertion time.
+    struct CachedPruneAssumeValidBlock {
+        std::shared_ptr<const CBlock> block;
+        size_t memory_usage;
+    };
+    //! Stripped prune-assumevalid blocks that are connectable without being written to disk.
+    std::unordered_map<const CBlockIndex*, CachedPruneAssumeValidBlock> m_prune_assumevalid_blocks GUARDED_BY(::cs_main);
+    //! Approximate dynamic memory usage of m_prune_assumevalid_blocks values.
+    size_t m_prune_assumevalid_block_cache_bytes GUARDED_BY(::cs_main){0};
+    //! Highest block eligible for -pruneassumevalid under the current best header.
+    mutable const CBlockIndex* m_prune_assumevalid_eligibility_header GUARDED_BY(::cs_main){nullptr};
+    mutable const CBlockIndex* m_prune_assumevalid_eligibility_tip GUARDED_BY(::cs_main){nullptr};
 
     //! Timers and counters used for benchmarking validation in both background
     //! and active chainstates.
@@ -1014,6 +1042,12 @@ public:
     bool ShouldCheckBlockIndex() const;
     const arith_uint256& MinimumChainWork() const { return *Assert(m_options.minimum_chain_work); }
     const uint256& AssumedValidBlock() const { return *Assert(m_options.assumed_valid_block); }
+    bool CanUsePruneAssumeValid(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    bool IsBlockPrunedByPruneAssumeValid(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    bool HasCachedPruneAssumeValidBlock(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    size_t CachedPruneAssumeValidBlockCount() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    size_t CachedPruneAssumeValidBlockBytes() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    bool ShouldRequestStrippedPruneAssumeValidBlock(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     kernel::Notifications& GetNotifications() const { return m_options.notifications; };
 
     /**
@@ -1263,10 +1297,13 @@ public:
      *                               (note: only affects headers acceptance; if
      *                               block header is already present in block
      *                               index then this parameter has no effect)
+     * @param[in]   requested_without_witness Whether the network request for
+     *                               this block intentionally omitted witness
+     *                               data for -pruneassumevalid.
      * @param[out]  new_block A boolean which is set to indicate if the block was first received via this call
      * @returns     If the block was processed, independently of block validity
      */
-    bool ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block) LOCKS_EXCLUDED(cs_main);
+    bool ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block, bool requested_without_witness = false) LOCKS_EXCLUDED(cs_main);
 
     /**
      * Process incoming block headers.
@@ -1292,6 +1329,8 @@ public:
      *                              this block from prior storage.
      * @param[in]   min_pow_checked True if proof-of-work anti-DoS checks have
      *                              been done by caller for headers chain
+     * @param[in]   requested_without_witness Whether the matching network
+     *                              request intentionally omitted witness data.
      *
      * @param[out]  state       The state of the block validation.
      * @param[out]  ppindex     Optional return parameter to get the
@@ -1301,9 +1340,11 @@ public:
      *
      * @returns   False if the block or header is invalid, or if saving to disk fails (likely a fatal error); true otherwise.
      */
-    bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked, bool requested_without_witness = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
-    void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    /** Mark a block as having its data received and checked (up to BLOCK_VALID_TRANSACTIONS).
+     *  A null pos means the block data was intentionally not written to disk (-pruneassumevalid). */
+    void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos* pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /**
      * Try to add a transaction to the memory pool.

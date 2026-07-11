@@ -16,7 +16,7 @@
 
 class SaltedUint256Hasher
 {
-    const PresaltedSipHasher m_hasher;
+    const PresaltedSipHasher13Jumbo m_hasher;
 
 public:
     SaltedUint256Hasher();
@@ -29,7 +29,7 @@ public:
 
 class SaltedTxidHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const PresaltedSipHasher13Jumbo m_hasher;
 
 public:
     SaltedTxidHasher();
@@ -42,7 +42,7 @@ public:
 
 class SaltedWtxidHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const PresaltedSipHasher13Jumbo m_hasher;
 
 public:
     SaltedWtxidHasher();
@@ -55,7 +55,7 @@ public:
 
 class SaltedOutpointHasher
 {
-    const PresaltedSipHasher m_hasher;
+    const PresaltedSipHasher13Jumbo m_hasher;
 
 public:
     SaltedOutpointHasher(bool deterministic = false);

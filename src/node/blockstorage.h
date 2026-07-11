@@ -452,6 +452,9 @@ public:
     /** True if any block files have ever been pruned. */
     bool m_have_pruned = false;
 
+    //! Persistently mark this node as having pruned block files, setting m_have_pruned.
+    void MarkBlockFilesPruned() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
     //! Check whether the block associated with this index entry is pruned or not.
     bool IsBlockPruned(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 

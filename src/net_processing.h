@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -51,6 +52,9 @@ static const unsigned int MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK = 3;
 static const unsigned int MAX_HEADERS_RESULTS = 2000;
 /** The compactblocks version we support. See BIP 152. */
 static constexpr uint64_t CMPCTBLOCKS_VERSION{2};
+
+/** Calculate the prune-assumevalid block download window. Exposed for unit testing. */
+unsigned int PruneAssumeValidDownloadWindow(size_t cached_blocks, size_t cached_bytes, unsigned int block_limit, size_t byte_limit);
 
 struct CNodeStateStats {
     int nSyncHeight = -1;
