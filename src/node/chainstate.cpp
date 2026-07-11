@@ -8,7 +8,6 @@
 #include <chain.h>
 #include <coins.h>
 #include <consensus/params.h>
-#include <kernel/caches.h>
 #include <node/blockstorage.h>
 #include <sync.h>
 #include <tinyformat.h>
@@ -25,8 +24,6 @@
 #include <algorithm>
 #include <cassert>
 #include <vector>
-
-using kernel::CacheSizes;
 
 namespace node {
 // Complete initialization of chainstates after the initial call has been made
@@ -71,7 +68,6 @@ static ChainstateLoadResult CompleteChainstateInitialization(
     };
 
     assert(chainman.m_total_coinstip_cache > 0);
-    assert(chainman.m_total_coinsdb_cache > 0);
 
     // If running with multiple chainstates, limit the cache sizes with a
     // discount factor. If discounted the actual cache size will be
@@ -88,7 +84,6 @@ static ChainstateLoadResult CompleteChainstateInitialization(
 
         try {
             chainstate->InitCoinsDB(
-                /*cache_size_bytes=*/chainman.m_total_coinsdb_cache * init_cache_fraction,
                 /*in_memory=*/options.coins_db_in_memory,
                 /*should_wipe=*/options.wipe_chainstate_db);
         } catch (dbwrapper_error& err) {
@@ -148,7 +143,7 @@ static ChainstateLoadResult CompleteChainstateInitialization(
     return {ChainstateLoadStatus::SUCCESS, {}};
 }
 
-ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSizes& cache_sizes,
+ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, uint64_t coins_cache_bytes,
                                     const ChainstateLoadOptions& options)
 {
     if (!chainman.AssumedValidBlock().IsNull()) {
@@ -169,8 +164,7 @@ ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSize
 
     LOCK(cs_main);
 
-    chainman.m_total_coinstip_cache = cache_sizes.coins;
-    chainman.m_total_coinsdb_cache = cache_sizes.coins_db;
+    chainman.m_total_coinstip_cache = coins_cache_bytes;
 
     // Load the fully validated chainstate.
     Chainstate& validated_cs{chainman.InitializeChainstate(options.mempool)};

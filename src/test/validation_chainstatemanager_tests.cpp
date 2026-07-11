@@ -72,8 +72,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager, TestChain100Setup)
     //
     const uint256 snapshot_blockhash = active_tip->GetBlockHash();
     Chainstate& c2{WITH_LOCK(::cs_main, return manager.AddChainstate(std::make_unique<Chainstate>(nullptr, manager.m_blockman, manager, snapshot_blockhash)))};
-    c2.InitCoinsDB(
-        /*cache_size_bytes=*/8_MiB, /*in_memory=*/true, /*should_wipe=*/false);
+    c2.InitCoinsDB(/*in_memory=*/true, /*should_wipe=*/false);
     {
         LOCK(::cs_main);
         c2.InitCoinsCache(8_MiB);
@@ -123,7 +122,6 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_rebalance_caches, TestChain100Setup)
     ChainstateManager& manager = *m_node.chainman;
 
     size_t max_cache = 10000;
-    manager.m_total_coinsdb_cache = max_cache;
     manager.m_total_coinstip_cache = max_cache;
 
     std::vector<Chainstate*> chainstates;
@@ -139,15 +137,13 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_rebalance_caches, TestChain100Setup)
     }
 
     BOOST_CHECK_EQUAL(c1.m_coinstip_cache_size_bytes, max_cache);
-    BOOST_CHECK_EQUAL(c1.m_coinsdb_cache_size_bytes, max_cache);
 
     // Create a snapshot-based chainstate.
     //
     CBlockIndex* snapshot_base{WITH_LOCK(manager.GetMutex(), return manager.ActiveChain()[manager.ActiveChain().Height() / 2])};
     Chainstate& c2{WITH_LOCK(::cs_main, return manager.AddChainstate(std::make_unique<Chainstate>(nullptr, manager.m_blockman, manager, *snapshot_base->phashBlock)))};
     chainstates.push_back(&c2);
-    c2.InitCoinsDB(
-        /*cache_size_bytes=*/8_MiB, /*in_memory=*/true, /*should_wipe=*/false);
+    c2.InitCoinsDB(/*in_memory=*/true, /*should_wipe=*/false);
 
     // Reset IBD state so IsInitialBlockDownload() returns true and causes
     // MaybeRebalanceCaches() to prioritize the snapshot chainstate, giving it
@@ -165,9 +161,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_rebalance_caches, TestChain100Setup)
     }
 
     BOOST_CHECK_CLOSE(double(c1.m_coinstip_cache_size_bytes), max_cache * 0.05, 1);
-    BOOST_CHECK_CLOSE(double(c1.m_coinsdb_cache_size_bytes), max_cache * 0.05, 1);
     BOOST_CHECK_CLOSE(double(c2.m_coinstip_cache_size_bytes), max_cache * 0.95, 1);
-    BOOST_CHECK_CLOSE(double(c2.m_coinsdb_cache_size_bytes), max_cache * 0.95, 1);
 }
 
 BOOST_FIXTURE_TEST_CASE(chainstatemanager_ibd_exit_after_loading_blocks, ChainTestingSetup)
@@ -438,7 +432,6 @@ struct SnapshotTestSetup : TestChain100Setup {
                 .notifications = chainman_opts.notifications,
                 .block_tree_db_params = DBParams{
                     .path = chainman.m_options.datadir / "blocks" / "index",
-                    .cache_bytes = m_kernel_cache_sizes.block_tree_db,
                     .memory_only = m_block_tree_db_in_memory,
                 },
             };
@@ -791,7 +784,6 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion, SnapshotTestSetup
     Chainstate& active_cs = chainman.ActiveChainstate();
     Chainstate& validated_cs{*Assert(WITH_LOCK(cs_main, return chainman.HistoricalChainstate()))};
     auto tip_cache_before_complete = active_cs.m_coinstip_cache_size_bytes;
-    auto db_cache_before_complete = active_cs.m_coinsdb_cache_size_bytes;
 
     SnapshotCompletionResult res;
     m_node.notifications->m_shutdown_on_fatal_error = false;
@@ -814,7 +806,6 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion, SnapshotTestSetup
     // Cache should have been rebalanced and reallocated to the "only" remaining
     // chainstate.
     BOOST_CHECK(active_cs.m_coinstip_cache_size_bytes > tip_cache_before_complete);
-    BOOST_CHECK(active_cs.m_coinsdb_cache_size_bytes > db_cache_before_complete);
 
     // Trying completion again should return false.
     res = WITH_LOCK(::cs_main, return chainman.MaybeValidateSnapshot(validated_cs, active_cs));
@@ -848,7 +839,6 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion, SnapshotTestSetup
         BOOST_CHECK_EQUAL(chainman_restarted.m_chainstates.size(), 1);
         BOOST_CHECK(!chainman_restarted.CurrentChainstate().m_from_snapshot_blockhash);
         BOOST_CHECK(active_cs2.m_coinstip_cache_size_bytes > tip_cache_before_complete);
-        BOOST_CHECK(active_cs2.m_coinsdb_cache_size_bytes > db_cache_before_complete);
 
         BOOST_CHECK_EQUAL(chainman_restarted.ActiveTip()->GetBlockHash(), snapshot_tip_hash);
         BOOST_CHECK_EQUAL(chainman_restarted.ActiveHeight(), 210);

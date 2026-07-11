@@ -13,7 +13,6 @@
 #include <txdb.h>
 #include <uint256.h>
 #include <undo.h>
-#include <util/byte_units.h>
 #include <util/check.h>
 #include <util/strencodings.h>
 
@@ -298,7 +297,7 @@ BOOST_FIXTURE_TEST_SUITE(coins_tests_dbbase, BasicTestingSetup)
 
 BOOST_FIXTURE_TEST_CASE(coins_cache_dbbase_simulation_test, CacheTest)
 {
-    CCoinsViewDB db_base{{.path = "test", .cache_bytes = 8_MiB, .memory_only = true}, {}};
+    CCoinsViewDB db_base{{.path = "test", .memory_only = true}, {}};
     SimulationTest(&db_base, true);
 }
 
@@ -1050,7 +1049,7 @@ void TestFlushBehavior(
 BOOST_FIXTURE_TEST_CASE(ccoins_flush_behavior, FlushTest)
 {
     // Create two in-memory caches atop a leveldb view.
-    CCoinsViewDB base{{.path = "test", .cache_bytes = 8_MiB, .memory_only = true}, {}};
+    CCoinsViewDB base{{.path = "test", .memory_only = true}, {}};
     std::vector<std::unique_ptr<CCoinsViewCacheTest>> caches;
     caches.push_back(std::make_unique<CCoinsViewCacheTest>(&base));
     caches.push_back(std::make_unique<CCoinsViewCacheTest>(caches.back().get()));
@@ -1070,7 +1069,7 @@ BOOST_FIXTURE_TEST_CASE(coins_db_leveldb_layout, FlushTest)
     const Coin coin{MakeCoin()};
     const uint256 block_hash{m_rng.rand256()};
 
-    CCoinsViewDB base{{.path = m_args.GetDataDirBase() / "coins_db_leveldb_layout", .cache_bytes = 1_MiB, .wipe_data = true}, {}};
+    CCoinsViewDB base{{.path = m_args.GetDataDirBase() / "coins_db_leveldb_layout", .wipe_data = true}, {}};
     CCoinsViewCache cache{&base};
 
     cache.EmplaceCoinInternalDANGER(COutPoint{outpoint}, Coin{coin});

@@ -151,7 +151,7 @@ using http_bitcoin::StartHTTPServer;
 using http_bitcoin::StopHTTPServer;
 using node::ApplyArgsManOptions;
 using node::BlockManager;
-using node::CalculateCacheSizes;
+using node::CalculateDbCacheBytes;
 using node::ChainstateLoadResult;
 using node::ChainstateLoadStatus;
 using node::DEFAULT_PERSIST_MEMPOOL;
@@ -1157,7 +1157,6 @@ bool AppInitParameterInteraction(const ArgsManager& args)
             .notifications = chainman_opts_dummy.notifications,
             .block_tree_db_params = DBParams{
                 .path = args.GetDataDirNet() / "blocks" / "index",
-                .cache_bytes = 0,
             },
         };
         auto blockman_result{ApplyArgsManOptions(args, blockman_opts_dummy)};
@@ -1321,7 +1320,7 @@ static ChainstateLoadResult InitAndLoadChainstate(
     NodeContext& node,
     bool do_reindex,
     const bool do_reindex_chainstate,
-    const kernel::CacheSizes& cache_sizes,
+    const uint64_t coins_cache_bytes,
     const ArgsManager& args)
 {
     // This function may be called twice, so any dirty state must be reset.
@@ -1345,8 +1344,8 @@ static ChainstateLoadResult InitAndLoadChainstate(
     auto mining_args{node::ReadMiningArgs(args)};
     Assert(mining_args); // no error can happen, already checked in AppInitParameterInteraction
     node.mining_args = std::move(*mining_args);
-    LogInfo("* Using %.1f MiB for in-memory UTXO set (plus up to %.1f MiB of unused mempool space)",
-            cache_sizes.coins / double(1_MiB),
+    LogInfo("Using %.1f MiB for in-memory UTXO set (plus up to %.1f MiB of unused mempool space)",
+            coins_cache_bytes / double(1_MiB),
             mempool_opts.max_size_bytes / double(1_MiB));
     ChainstateManager::Options chainman_opts{
         .chainparams = chainparams,
@@ -1362,7 +1361,6 @@ static ChainstateLoadResult InitAndLoadChainstate(
         .notifications = chainman_opts.notifications,
         .block_tree_db_params = DBParams{
             .path = args.GetDataDirNet() / "blocks" / "index",
-            .cache_bytes = cache_sizes.block_tree_db,
             .wipe_data = do_reindex,
         },
     };
@@ -1424,7 +1422,7 @@ static ChainstateLoadResult InitAndLoadChainstate(
             return std::make_tuple(node::ChainstateLoadStatus::FAILURE, _("Error loading databases"));
         }
     };
-    auto [status, error] = catch_exceptions([&] { return LoadChainstate(chainman, cache_sizes, options); });
+    auto [status, error] = catch_exceptions([&] { return LoadChainstate(chainman, coins_cache_bytes, options); });
     if (status == node::ChainstateLoadStatus::SUCCESS) {
         uiInterface.InitMessage(_("Verifying blocks…"));
         if (chainman.m_blockman.m_have_pruned && options.check_blocks > MIN_BLOCKS_TO_KEEP) {
@@ -1850,21 +1848,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     // cache size calculations
     node::LogOversizedDbCache(args);
-    const auto [index_cache_sizes, kernel_cache_sizes] = CalculateCacheSizes(args, g_enabled_filter_types.size());
-
-    LogInfo("Cache configuration:");
-    LogInfo("* Using %.1f MiB for block index database", kernel_cache_sizes.block_tree_db / double(1_MiB));
-    if (args.GetBoolArg("-txindex", DEFAULT_TXINDEX)) {
-        LogInfo("* Using %.1f MiB for transaction index database", index_cache_sizes.tx_index / double(1_MiB));
-    }
-    if (args.GetBoolArg("-txospenderindex", DEFAULT_TXOSPENDERINDEX)) {
-        LogInfo("* Using %.1f MiB for transaction output spender index database", index_cache_sizes.txospender_index / double(1_MiB));
-    }
-    for (BlockFilterType filter_type : g_enabled_filter_types) {
-        LogInfo("* Using %.1f MiB for %s block filter index database",
-                  index_cache_sizes.filter_index / double(1_MiB), BlockFilterTypeName(filter_type));
-    }
-    LogInfo("* Using %.1f MiB for chain state database", kernel_cache_sizes.coins_db / double(1_MiB));
+    const uint64_t coins_cache_bytes{CalculateDbCacheBytes(args)};
 
     assert(!node.mempool);
     assert(!node.chainman);
@@ -1877,7 +1861,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         node,
         do_reindex,
         do_reindex_chainstate,
-        kernel_cache_sizes,
+        coins_cache_bytes,
         args);
     if (status == ChainstateLoadStatus::FAILURE && !do_reindex && !ShutdownRequested(node)) {
         // suggest a reindex
@@ -1897,7 +1881,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
             node,
             do_reindex,
             do_reindex_chainstate,
-            kernel_cache_sizes,
+            coins_cache_bytes,
             args);
     }
     if (status != ChainstateLoadStatus::SUCCESS && status != ChainstateLoadStatus::INTERRUPTED) {
@@ -1924,22 +1908,22 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     // ********************************************************* Step 8: start indexers
 
     if (args.GetBoolArg("-txindex", DEFAULT_TXINDEX)) {
-        g_txindex = std::make_unique<TxIndex>(interfaces::MakeChain(node), index_cache_sizes.tx_index, false, do_reindex);
+        g_txindex = std::make_unique<TxIndex>(interfaces::MakeChain(node), false, do_reindex);
         node.indexes.emplace_back(g_txindex.get());
     }
 
     if (args.GetBoolArg("-txospenderindex", DEFAULT_TXOSPENDERINDEX)) {
-        g_txospenderindex = std::make_unique<TxoSpenderIndex>(interfaces::MakeChain(node), index_cache_sizes.txospender_index, false, do_reindex);
+        g_txospenderindex = std::make_unique<TxoSpenderIndex>(interfaces::MakeChain(node), false, do_reindex);
         node.indexes.emplace_back(g_txospenderindex.get());
     }
 
     for (const auto& filter_type : g_enabled_filter_types) {
-        InitBlockFilterIndex([&]{ return interfaces::MakeChain(node); }, filter_type, index_cache_sizes.filter_index, false, do_reindex);
+        InitBlockFilterIndex([&]{ return interfaces::MakeChain(node); }, filter_type, false, do_reindex);
         node.indexes.emplace_back(GetBlockFilterIndex(filter_type));
     }
 
     if (args.GetBoolArg("-coinstatsindex", DEFAULT_COINSTATSINDEX)) {
-        g_coin_stats_index = std::make_unique<CoinStatsIndex>(interfaces::MakeChain(node), /*cache_size=*/0, false, do_reindex);
+        g_coin_stats_index = std::make_unique<CoinStatsIndex>(interfaces::MakeChain(node), false, do_reindex);
         node.indexes.emplace_back(g_coin_stats_index.get());
     }
 

@@ -64,7 +64,7 @@ protected:
 
 public:
     // Constructs the index, which becomes available to be queried.
-    explicit CoinStatsIndex(std::unique_ptr<interfaces::Chain> chain, size_t n_cache_size, bool f_memory = false, bool f_wipe = false);
+    explicit CoinStatsIndex(std::unique_ptr<interfaces::Chain> chain, bool f_memory = false, bool f_wipe = false);
 
     interfaces::Chain::NotifyOptions CustomOptions() override;
 

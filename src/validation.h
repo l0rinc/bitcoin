@@ -607,7 +607,6 @@ public:
      * All parameters forwarded to CoinsViews.
      */
     void InitCoinsDB(
-        size_t cache_size_bytes,
         bool in_memory,
         bool should_wipe);
 
@@ -717,15 +716,12 @@ public:
     //! Destructs all objects related to accessing the UTXO set.
     void ResetCoinsViews() { m_coins_views.reset(); }
 
-    //! The cache size of the on-disk coins view.
-    size_t m_coinsdb_cache_size_bytes{0};
-
     //! The cache size of the in-memory coins view.
     size_t m_coinstip_cache_size_bytes{0};
 
-    //! Resize the CoinsViews caches dynamically and flush state to disk.
+    //! Resize the in-memory coins cache dynamically and flush state to disk.
     //! @returns true unless an error occurred during the flush.
-    bool ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
+    bool ResizeCoinsCache(size_t coinstip_size)
         EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /**
@@ -1085,10 +1081,6 @@ public:
     //! The total number of bytes available for us to use across all in-memory
     //! coins caches. This will be split somehow across chainstates.
     size_t m_total_coinstip_cache{0};
-    //
-    //! The total number of bytes available for us to use across all leveldb
-    //! coins databases. This will be split somehow across chainstates.
-    size_t m_total_coinsdb_cache{0};
 
     /// Ensures a genesis block is in the block tree, possibly writing one to disk.
     [[nodiscard]] bool LoadGenesisBlock();
@@ -1318,7 +1310,7 @@ public:
     bool LoadBlockIndex() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     //! Check to see if caches are out of balance and if so, call
-    //! ResizeCoinsCaches() as needed.
+    //! ResizeCoinsCache() as needed.
     void MaybeRebalanceCaches() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /**

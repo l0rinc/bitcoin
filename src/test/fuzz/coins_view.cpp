@@ -426,7 +426,6 @@ FUZZ_TARGET(coins_view_db, .init = initialize_coins_view)
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     auto db_params = DBParams{
         .path = "",
-        .cache_bytes = 1_MiB,
         .memory_only = true,
     };
     CCoinsViewDB backend_coins_view{std::move(db_params), CoinsViewOptions{}};
@@ -457,7 +456,6 @@ FUZZ_TARGET(coins_view_stacked, .init = initialize_coins_view) EXCLUSIVE_LOCKS_R
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     auto db_params = DBParams{
         .path = "",
-        .cache_bytes = 1_MiB,
         .memory_only = true,
     };
     CCoinsViewDB backend_base_coins_view{std::move(db_params), CoinsViewOptions{}};

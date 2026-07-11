@@ -37,7 +37,6 @@ BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
         .notifications = notifications,
         .block_tree_db_params = DBParams{
             .path = m_args.GetDataDirNet() / "blocks" / "index",
-            .cache_bytes = 0,
         },
     };
     BlockManager blockman{*Assert(m_node.shutdown_signal), blockman_opts};
@@ -241,7 +240,6 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
         .notifications = notifications,
         .block_tree_db_params = DBParams{
             .path = m_args.GetDataDirNet() / "blocks" / "index",
-            .cache_bytes = 0,
         },
     };
     BlockManager blockman{*Assert(m_node.shutdown_signal), blockman_opts};

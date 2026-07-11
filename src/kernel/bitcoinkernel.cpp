@@ -468,7 +468,6 @@ struct ChainstateManagerOptions {
               .notifications = *context->m_notifications,
               .block_tree_db_params = DBParams{
                   .path = data_dir / "blocks" / "index",
-                  .cache_bytes = kernel::CacheSizes{DEFAULT_KERNEL_CACHE}.block_tree_db,
               }}},
           m_context{context}, m_chainstate_load_options{node::ChainstateLoadOptions{}}
     {
@@ -1049,8 +1048,7 @@ btck_ChainstateManager* btck_chainstate_manager_create(
     try {
         const auto chainstate_load_opts{WITH_LOCK(opts.m_mutex, return opts.m_chainstate_load_options)};
 
-        kernel::CacheSizes cache_sizes{DEFAULT_KERNEL_CACHE};
-        auto [status, chainstate_err]{node::LoadChainstate(*chainman, cache_sizes, chainstate_load_opts)};
+        auto [status, chainstate_err]{node::LoadChainstate(*chainman, DEFAULT_KERNEL_CACHE, chainstate_load_opts)};
         if (status != node::ChainstateLoadStatus::SUCCESS) {
             LogError("Failed to load chain state from your data directory: %s", chainstate_err.original);
             return nullptr;

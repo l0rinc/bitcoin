@@ -6,7 +6,6 @@
 #include <interfaces/chain.h>
 #include <script/script.h>
 #include <test/util/setup_common.h>
-#include <util/byte_units.h>
 #include <util/check.h>
 #include <validation.h>
 
@@ -25,7 +24,7 @@ BOOST_FIXTURE_TEST_CASE(baseindex_no_commit_ahead_of_flush, TestChain100Setup)
 {
     Chainstate& chainstate = Assert(m_node.chainman)->ActiveChainstate();
     auto sync_index = [&](bool do_flush, int expected_sync_height, int expected_commit_height) {
-        CoinStatsIndex index{interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB};
+        CoinStatsIndex index{interfaces::MakeChain(m_node)};
         BOOST_REQUIRE(index.Init());
         index.Sync();
         if (do_flush) {

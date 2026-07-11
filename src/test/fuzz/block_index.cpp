@@ -10,7 +10,6 @@
 #include <test/fuzz/util.h>
 #include <test/util/setup_common.h>
 #include <txdb.h>
-#include <util/byte_units.h>
 #include <validation.h>
 
 using kernel::CBlockFileInfo;
@@ -59,7 +58,6 @@ FUZZ_TARGET(block_index, .init = init_block_index)
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
     auto block_index = kernel::BlockTreeDB(DBParams{
         .path = "", // Memory only.
-        .cache_bytes = 1_MiB,
         .memory_only = true,
     });
 
