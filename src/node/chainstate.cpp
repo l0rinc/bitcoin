@@ -8,7 +8,6 @@
 #include <chain.h>
 #include <coins.h>
 #include <consensus/params.h>
-#include <kernel/caches.h>
 #include <node/blockstorage.h>
 #include <sync.h>
 #include <tinyformat.h>
@@ -25,8 +24,6 @@
 #include <algorithm>
 #include <cassert>
 #include <vector>
-
-using kernel::CacheSizes;
 
 namespace node {
 // Complete initialization of chainstates after the initial call has been made
@@ -146,7 +143,7 @@ static ChainstateLoadResult CompleteChainstateInitialization(
     return {ChainstateLoadStatus::SUCCESS, {}};
 }
 
-ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSizes& cache_sizes,
+ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, uint64_t coins_cache_bytes,
                                     const ChainstateLoadOptions& options)
 {
     if (!chainman.AssumedValidBlock().IsNull()) {
@@ -167,7 +164,7 @@ ChainstateLoadResult LoadChainstate(ChainstateManager& chainman, const CacheSize
 
     LOCK(cs_main);
 
-    chainman.m_total_coinstip_cache = cache_sizes.coins;
+    chainman.m_total_coinstip_cache = coins_cache_bytes;
 
     // Load the fully validated chainstate.
     Chainstate& validated_cs{chainman.InitializeChainstate(options.mempool)};

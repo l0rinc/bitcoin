@@ -19,7 +19,7 @@ static constexpr uint64_t DEFAULT_DB_CACHE{DEFAULT_KERNEL_CACHE};
 
 namespace node {
 uint64_t GetDefaultDBCache();
-kernel::CacheSizes CalculateCacheSizes(const ArgsManager& args);
+uint64_t CalculateDbCacheBytes(const ArgsManager& args);
 constexpr bool ShouldWarnOversizedDbCache(uint64_t dbcache, uint64_t total_ram) noexcept
 {
     const uint64_t cap{(total_ram < 2_GiB) ? DEFAULT_DB_CACHE : (total_ram / 100) * 75};

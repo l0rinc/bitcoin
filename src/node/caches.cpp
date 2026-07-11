@@ -6,7 +6,6 @@
 
 #include <common/args.h>
 #include <common/system.h>
-#include <kernel/caches.h>
 #include <node/interface_ui.h>
 #include <tinyformat.h>
 #include <util/byte_units.h>
@@ -46,11 +45,6 @@ uint64_t CalculateDbCacheBytes(const ArgsManager& args)
         return std::max<uint64_t>(MIN_DB_CACHE, std::min<uint64_t>(db_cache_bytes, max_db_cache));
     }
     return GetDefaultDBCache();
-}
-
-kernel::CacheSizes CalculateCacheSizes(const ArgsManager& args)
-{
-    return kernel::CacheSizes{CalculateDbCacheBytes(args)};
 }
 
 void LogOversizedDbCache(const ArgsManager& args) noexcept

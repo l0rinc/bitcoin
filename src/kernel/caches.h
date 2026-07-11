@@ -14,12 +14,4 @@ static constexpr uint64_t DEFAULT_KERNEL_CACHE{450_MiB};
 //! Default LevelDB write batch size
 static constexpr uint64_t DEFAULT_DB_CACHE_BATCH{32_MiB};
 
-namespace kernel {
-struct CacheSizes {
-    uint64_t coins;
-
-    CacheSizes(uint64_t total_cache) : coins{total_cache} {}
-};
-} // namespace kernel
-
 #endif // BITCOIN_KERNEL_CACHES_H
