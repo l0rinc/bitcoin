@@ -2391,7 +2391,7 @@ bool ChainstateManager::IsBlockPrunedByPruneAssumeValid(const CBlockIndex& block
 bool ChainstateManager::HasCachedPruneAssumeValidBlock(const CBlockIndex& block) const
 {
     AssertLockHeld(cs_main);
-    return m_prune_assumevalid_block_index.contains(&block);
+    return m_prune_assumevalid_blocks.contains(&block);
 }
 
 size_t ChainstateManager::CachedPruneAssumeValidBlockCount() const
@@ -2406,16 +2406,14 @@ size_t ChainstateManager::CachedPruneAssumeValidBlockBytes() const
     return m_prune_assumevalid_block_cache_bytes;
 }
 
-void ChainstateManager::EraseCachedPruneAssumeValidBlock(const uint256& block_hash, const CBlockIndex& block)
+void ChainstateManager::EraseCachedPruneAssumeValidBlock(const CBlockIndex& block)
 {
     AssertLockHeld(cs_main);
-    if (auto it{m_prune_assumevalid_blocks.find(block_hash)}; it != m_prune_assumevalid_blocks.end()) {
-        const size_t block_bytes{RecursiveDynamicUsage(it->second)};
-        Assume(m_prune_assumevalid_block_cache_bytes >= block_bytes);
-        m_prune_assumevalid_block_cache_bytes -= block_bytes;
+    if (auto it{m_prune_assumevalid_blocks.find(&block)}; it != m_prune_assumevalid_blocks.end()) {
+        Assume(m_prune_assumevalid_block_cache_bytes >= it->second.memory_usage);
+        m_prune_assumevalid_block_cache_bytes -= it->second.memory_usage;
         m_prune_assumevalid_blocks.erase(it);
     }
-    m_prune_assumevalid_block_index.erase(&block);
 }
 
 bool ChainstateManager::ShouldRequestStrippedPruneAssumeValidBlock(const CBlockIndex& block) const
@@ -2865,10 +2863,7 @@ bool Chainstate::FlushStateToDisk(
             }
             if (!setFilesToPrune.empty()) {
                 fFlushForPrune = true;
-                if (!m_blockman.m_have_pruned) {
-                    m_blockman.m_block_tree_db->WriteFlag("prunedblockfiles", true);
-                    m_blockman.m_have_pruned = true;
-                }
+                m_blockman.MarkBlockFilesPruned();
             }
         }
         const auto nNow{NodeClock::now()};
@@ -3144,11 +3139,10 @@ bool Chainstate::ConnectTip(
     assert(pindexNew->pprev == m_chain.Tip());
     // Read block from disk.
     const auto time_1{SteadyClock::now()};
-    const uint256 block_hash{pindexNew->GetBlockHash()};
     if (!block_to_connect) {
-        if (auto it{m_chainman.m_prune_assumevalid_blocks.find(block_hash)};
+        if (auto it{m_chainman.m_prune_assumevalid_blocks.find(pindexNew)};
             it != m_chainman.m_prune_assumevalid_blocks.end() && m_chainman.CanUsePruneAssumeValid(*pindexNew)) {
-            block_to_connect = it->second;
+            block_to_connect = it->second.block;
             LogDebug(BCLog::BENCH, "  - Using cached stripped prune-assumevalid block (cache=%u, %.1fMiB)\n",
                      static_cast<unsigned>(m_chainman.CachedPruneAssumeValidBlockCount()),
                      m_chainman.CachedPruneAssumeValidBlockBytes() / double(1_MiB));
@@ -3182,7 +3176,7 @@ bool Chainstate::ConnectTip(
         }
         if (!rv) {
             if (prune_assumevalid) {
-                m_chainman.EraseCachedPruneAssumeValidBlock(block_hash, *pindexNew);
+                m_chainman.EraseCachedPruneAssumeValidBlock(*pindexNew);
             }
             if (state.IsInvalid())
                 InvalidBlockFound(pindexNew, state);
@@ -3222,7 +3216,7 @@ bool Chainstate::ConnectTip(
     // Update m_chain & related variables.
     m_chain.SetTip(*pindexNew);
     if (prune_assumevalid) {
-        m_chainman.EraseCachedPruneAssumeValidBlock(block_hash, *pindexNew);
+        m_chainman.EraseCachedPruneAssumeValidBlock(*pindexNew);
         LogDebug(BCLog::BENCH, "  - Prune-assumevalid block cache: blocks=%u, %.1fMiB\n",
                  static_cast<unsigned>(m_chainman.CachedPruneAssumeValidBlockCount()),
                  m_chainman.CachedPruneAssumeValidBlockBytes() / double(1_MiB));
@@ -3914,8 +3908,7 @@ void Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
     }
 }
 
-void ChainstateManager::ReceivedBlockTransactionsCommon(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos* pos)
-    EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos* pos)
 {
     AssertLockHeld(cs_main);
     pindexNew->nTx = block.vtx.size();
@@ -3947,7 +3940,7 @@ void ChainstateManager::ReceivedBlockTransactionsCommon(const CBlock& block, CBl
     m_blockman.m_dirty_blockindex.insert(pindexNew);
 
     auto queue_prune_assumevalid_children = [&](const CBlockIndex& parent, std::deque<CBlockIndex*>& queue) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
-        for (const CBlockIndex* child : m_prune_assumevalid_block_index) {
+        for (const auto& [child, _] : m_prune_assumevalid_blocks) {
             if (child->pprev == &parent && child->nTx > 0 && !child->HaveNumChainTxs()) {
                 queue.push_back(const_cast<CBlockIndex*>(child));
             }
@@ -3990,17 +3983,6 @@ void ChainstateManager::ReceivedBlockTransactionsCommon(const CBlock& block, CBl
             m_blockman.AddUnlinkedBlock(pindexNew);
         }
     }
-}
-
-/** Mark a block as having its data received and checked (up to BLOCK_VALID_TRANSACTIONS). */
-void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos)
-{
-    ReceivedBlockTransactionsCommon(block, pindexNew, &pos);
-}
-
-void ChainstateManager::ReceivedPruneAssumeValidBlockTransactions(const CBlock& block, CBlockIndex* pindexNew)
-{
-    ReceivedBlockTransactionsCommon(block, pindexNew, nullptr);
 }
 
 static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
@@ -4496,7 +4478,8 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     // measure, unless the blocks have more work than the active chain tip, and
     // aren't too far ahead of it, so are likely to be attached soon.
     bool fAlreadyHave = pindex->nStatus & BLOCK_HAVE_DATA;
-    const bool prune_assumevalid{requested_without_witness && fRequested && !dbp && CanUsePruneAssumeValid(*pindex) && !BlockHasWitness(block)};
+    const bool received_stripped{requested_without_witness && !BlockHasWitness(block)};
+    const bool prune_assumevalid{received_stripped && fRequested && !dbp && CanUsePruneAssumeValid(*pindex)};
     bool fHasMoreOrSameWork = (ActiveTip() ? pindex->nChainWork >= ActiveTip()->nChainWork : true);
     // Blocks that are too out-of-order needlessly limit the effectiveness of
     // pruning, because pruning will not delete block files that contain any
@@ -4514,7 +4497,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     // TODO: deal better with return value and error conditions for duplicate
     // and unrequested blocks.
     if (fAlreadyHave) return true;
-    if (requested_without_witness && !BlockHasWitness(block) && !prune_assumevalid) {
+    if (received_stripped && !prune_assumevalid) {
         LogDebug(BCLog::NET, "Ignoring stripped block %s because it is no longer eligible for -pruneassumevalid\n", block.GetHash().ToString());
         return true;
     }
@@ -4551,23 +4534,12 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     if (fNewBlock) *fNewBlock = true;
     try {
         if (prune_assumevalid) {
-            if (!m_blockman.m_have_pruned) {
-                m_blockman.m_block_tree_db->WriteFlag("prunedblockfiles", true);
-                m_blockman.m_have_pruned = true;
-            }
-            ReceivedPruneAssumeValidBlockTransactions(block, pindex);
-            const uint256 block_hash{block.GetHash()};
+            m_blockman.MarkBlockFilesPruned();
+            ReceivedBlockTransactions(block, pindex, /*pos=*/nullptr);
             const size_t block_bytes{RecursiveDynamicUsage(pblock)};
-            if (auto it{m_prune_assumevalid_blocks.find(block_hash)}; it != m_prune_assumevalid_blocks.end()) {
-                const size_t old_block_bytes{RecursiveDynamicUsage(it->second)};
-                Assume(m_prune_assumevalid_block_cache_bytes >= old_block_bytes);
-                m_prune_assumevalid_block_cache_bytes -= old_block_bytes;
-                it->second = pblock;
-            } else {
-                m_prune_assumevalid_blocks.emplace(block_hash, pblock);
-            }
+            EraseCachedPruneAssumeValidBlock(*pindex);
+            m_prune_assumevalid_blocks.emplace(pindex, CachedPruneAssumeValidBlock{pblock, block_bytes});
             m_prune_assumevalid_block_cache_bytes += block_bytes;
-            m_prune_assumevalid_block_index.insert(pindex);
             LogDebug(BCLog::BENCH, "  - Prune-assumevalid block cache: blocks=%u, %.1fMiB accepted_height=%d\n",
                      static_cast<unsigned>(CachedPruneAssumeValidBlockCount()),
                      CachedPruneAssumeValidBlockBytes() / double(1_MiB),
@@ -4586,7 +4558,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
                     return false;
                 }
             }
-            ReceivedBlockTransactions(block, pindex, blockPos);
+            ReceivedBlockTransactions(block, pindex, &blockPos);
         }
     } catch (const std::runtime_error& e) {
         return FatalError(GetNotifications(), state, strprintf(_("System error while saving block to disk: %s"), e.what()));
@@ -5200,7 +5172,7 @@ bool ChainstateManager::LoadGenesisBlock()
             return false;
         }
         CBlockIndex* pindex{m_blockman.AddToBlockIndex(genesis_block, m_best_header)};
-        ReceivedBlockTransactions(genesis_block, pindex, blockPos);
+        ReceivedBlockTransactions(genesis_block, pindex, &blockPos);
     } catch (const std::runtime_error& e) {
         LogError("Failed to write genesis block: %s", e.what());
         return false;

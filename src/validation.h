@@ -49,7 +49,6 @@
 #include <string>
 #include <type_traits>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -988,7 +987,7 @@ private:
         CBlockIndex** ppindex,
         bool min_pow_checked) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     bool IsAncestorOfAssumedValidBlock(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
-    void EraseCachedPruneAssumeValidBlock(const uint256& block_hash, const CBlockIndex& block) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    void EraseCachedPruneAssumeValidBlock(const CBlockIndex& block) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     friend Chainstate;
 
     /** Most recent headers presync progress update, for rate-limiting. */
@@ -997,12 +996,16 @@ private:
     //! A queue for script verifications that have to be performed by worker threads.
     CCheckQueue<CScriptCheck> m_script_check_queue;
 
+    //! A stripped prune-assumevalid block that is connectable without being written to disk,
+    //! with its dynamic memory usage measured once at insertion time.
+    struct CachedPruneAssumeValidBlock {
+        std::shared_ptr<const CBlock> block;
+        size_t memory_usage;
+    };
     //! Stripped prune-assumevalid blocks that are connectable without being written to disk.
-    std::unordered_map<uint256, std::shared_ptr<const CBlock>, SaltedUint256Hasher> m_prune_assumevalid_blocks GUARDED_BY(::cs_main);
+    std::unordered_map<const CBlockIndex*, CachedPruneAssumeValidBlock> m_prune_assumevalid_blocks GUARDED_BY(::cs_main);
     //! Approximate dynamic memory usage of m_prune_assumevalid_blocks values.
     size_t m_prune_assumevalid_block_cache_bytes GUARDED_BY(::cs_main){0};
-    //! CBlockIndex-pointer index for fast membership checks of m_prune_assumevalid_blocks.
-    std::unordered_set<const CBlockIndex*> m_prune_assumevalid_block_index GUARDED_BY(::cs_main);
     //! Highest block eligible for -pruneassumevalid under the current best header.
     mutable const CBlockIndex* m_prune_assumevalid_eligibility_header GUARDED_BY(::cs_main){nullptr};
     mutable const CBlockIndex* m_prune_assumevalid_eligibility_tip GUARDED_BY(::cs_main){nullptr};
@@ -1339,9 +1342,9 @@ public:
      */
     bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked, bool requested_without_witness = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
-    void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-    void ReceivedPruneAssumeValidBlockTransactions(const CBlock& block, CBlockIndex* pindexNew) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-    void ReceivedBlockTransactionsCommon(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos* pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    /** Mark a block as having its data received and checked (up to BLOCK_VALID_TRANSACTIONS).
+     *  A null pos means the block data was intentionally not written to disk (-pruneassumevalid). */
+    void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos* pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /**
      * Try to add a transaction to the memory pool.
