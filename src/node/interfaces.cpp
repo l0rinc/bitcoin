@@ -33,6 +33,7 @@
 #include <net_types.h>
 #include <netaddress.h>
 #include <netbase.h>
+#include <node/blockfetch.h>
 #include <node/blockstorage.h>
 #include <node/coin.h>
 #include <node/context.h>
@@ -444,7 +445,7 @@ public:
 };
 
 // NOLINTNEXTLINE(misc-no-recursion)
-bool FillBlock(const CBlockIndex* index, const FoundBlock& block, UniqueLock<RecursiveMutex>& lock, const CChain& active, const BlockManager& blockman) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+bool FillBlock(const CBlockIndex* index, const FoundBlock& block, UniqueLock<RecursiveMutex>& lock, const CChain& active, const NodeContext& node) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     if (!index) return false;
     if (block.m_hash) *block.m_hash = index->GetBlockHash();
@@ -454,10 +455,17 @@ bool FillBlock(const CBlockIndex* index, const FoundBlock& block, UniqueLock<Rec
     if (block.m_mtp_time) *block.m_mtp_time = index->GetMedianTimePast();
     if (block.m_in_active_chain) *block.m_in_active_chain = active[index->nHeight] == index;
     if (block.m_locator) { *block.m_locator = GetLocator(index); }
-    if (block.m_next_block) FillBlock(active[index->nHeight] == index ? active[index->nHeight + 1] : nullptr, *block.m_next_block, lock, active, blockman);
+    if (block.m_next_block) FillBlock(active[index->nHeight] == index ? active[index->nHeight + 1] : nullptr, *block.m_next_block, lock, active, node);
     if (block.m_data) {
         REVERSE_LOCK(lock, cs_main);
-        if (!blockman.ReadBlock(*block.m_data, *index)) block.m_data->SetNull();
+        const bool allow_fetch{node.peerman && node.peerman->BlockFetchProxyEnabled()};
+        auto block_data{ReadBlockForLocalUse(node, *index, allow_fetch)};
+        if (block_data) {
+            *block.m_data = **block_data;
+        } else {
+            if (allow_fetch) LogWarning("Unable to read block %s for local use: %s", index->GetBlockHash().ToString(), block_data.error());
+            block.m_data->SetNull();
+        }
     }
     block.found = true;
     return true;
@@ -600,13 +608,13 @@ public:
     bool findBlock(const uint256& hash, const FoundBlock& block) override
     {
         WAIT_LOCK(cs_main, lock);
-        return FillBlock(chainman().m_blockman.LookupBlockIndex(hash), block, lock, chainman().ActiveChain(), chainman().m_blockman);
+        return FillBlock(chainman().m_blockman.LookupBlockIndex(hash), block, lock, chainman().ActiveChain(), m_node);
     }
     bool findFirstBlockWithTimeAndHeight(int64_t min_time, int min_height, const FoundBlock& block) override
     {
         WAIT_LOCK(cs_main, lock);
         const CChain& active = chainman().ActiveChain();
-        return FillBlock(active.FindEarliestAtLeast(min_time, min_height), block, lock, active, chainman().m_blockman);
+        return FillBlock(active.FindEarliestAtLeast(min_time, min_height), block, lock, active, m_node);
     }
     bool findAncestorByHeight(const uint256& block_hash, int ancestor_height, const FoundBlock& ancestor_out) override
     {
@@ -614,10 +622,10 @@ public:
         const CChain& active = chainman().ActiveChain();
         if (const CBlockIndex* block = chainman().m_blockman.LookupBlockIndex(block_hash)) {
             if (const CBlockIndex* ancestor = block->GetAncestor(ancestor_height)) {
-                return FillBlock(ancestor, ancestor_out, lock, active, chainman().m_blockman);
+                return FillBlock(ancestor, ancestor_out, lock, active, m_node);
             }
         }
-        return FillBlock(nullptr, ancestor_out, lock, active, chainman().m_blockman);
+        return FillBlock(nullptr, ancestor_out, lock, active, m_node);
     }
     bool findAncestorByHash(const uint256& block_hash, const uint256& ancestor_hash, const FoundBlock& ancestor_out) override
     {
@@ -625,7 +633,7 @@ public:
         const CBlockIndex* block = chainman().m_blockman.LookupBlockIndex(block_hash);
         const CBlockIndex* ancestor = chainman().m_blockman.LookupBlockIndex(ancestor_hash);
         if (block && ancestor && block->GetAncestor(ancestor->nHeight) != ancestor) ancestor = nullptr;
-        return FillBlock(ancestor, ancestor_out, lock, chainman().ActiveChain(), chainman().m_blockman);
+        return FillBlock(ancestor, ancestor_out, lock, chainman().ActiveChain(), m_node);
     }
     bool findCommonAncestor(const uint256& block_hash1, const uint256& block_hash2, const FoundBlock& ancestor_out, const FoundBlock& block1_out, const FoundBlock& block2_out) override
     {
@@ -637,9 +645,9 @@ public:
         // Using & instead of && below to avoid short circuiting and leaving
         // output uninitialized. Cast bool to int to avoid -Wbitwise-instead-of-logical
         // compiler warnings.
-        return int{FillBlock(ancestor, ancestor_out, lock, active, chainman().m_blockman)} &
-               int{FillBlock(block1, block1_out, lock, active, chainman().m_blockman)} &
-               int{FillBlock(block2, block2_out, lock, active, chainman().m_blockman)};
+        return int{FillBlock(ancestor, ancestor_out, lock, active, m_node)} &
+               int{FillBlock(block1, block1_out, lock, active, m_node)} &
+               int{FillBlock(block2, block2_out, lock, active, m_node)};
     }
     void findCoins(std::map<COutPoint, Coin>& coins) override { return FindCoins(m_node, coins); }
     double guessVerificationProgress(const uint256& block_hash) override
@@ -647,19 +655,20 @@ public:
         LOCK(chainman().GetMutex());
         return chainman().GuessVerificationProgress(chainman().m_blockman.LookupBlockIndex(block_hash));
     }
-    bool hasBlocks(const uint256& block_hash, int min_height, std::optional<int> max_height) override
+    bool hasBlocks(const uint256& block_hash, int min_height, std::optional<int> max_height, bool allow_fetch) override
     {
-        // hasBlocks returns true if all ancestors of block_hash in specified
-        // range have block data (are not pruned), false if any ancestors in
-        // specified range are missing data.
+        // hasBlocks returns true if all ancestors of block_hash in the
+        // specified range can be read from disk or, when enabled, fetched for
+        // local use.
         //
         // For simplicity and robustness, min_height and max_height are only
         // used to limit the range, and passing min_height that's too low or
         // max_height that's too high will not crash or change the result.
+        const bool can_fetch{allow_fetch && m_node.peerman && m_node.peerman->BlockFetchProxyEnabled()};
         LOCK(::cs_main);
         if (const CBlockIndex* block = chainman().m_blockman.LookupBlockIndex(block_hash)) {
             if (max_height && block->nHeight >= *max_height) block = block->GetAncestor(*max_height);
-            for (; block->nStatus & BLOCK_HAVE_DATA; block = block->pprev) {
+            for (; (block->nStatus & BLOCK_HAVE_DATA) || (can_fetch && block->nTx > 0 && chainman().ActiveChain().Contains(*block)); block = block->pprev) {
                 // Check pprev to not segfault if min_height is too low
                 if (block->nHeight <= min_height || !block->pprev) return true;
             }
