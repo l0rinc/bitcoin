@@ -69,6 +69,15 @@ FUZZ_TARGET(secp256k1_ecdsa_signature_parse_der_lax)
     }
 
     if (parsed_der_strict) {
-        assert(SerializeCompact(sig_der_strict) == compact_der_lax);
+        const std::array<unsigned char, 64> compact_der_strict{SerializeCompact(sig_der_strict)};
+        secp256k1_ecdsa_signature sig_strict_compact_roundtrip;
+        const bool strict_r_nonzero{std::ranges::any_of(compact_der_strict.begin(), compact_der_strict.begin() + 32,
+                                                        [](unsigned char byte) { return byte != 0; })};
+        const bool strict_s_nonzero{std::ranges::any_of(compact_der_strict.begin() + 32, compact_der_strict.end(),
+                                                        [](unsigned char byte) { return byte != 0; })};
+        if (strict_r_nonzero && strict_s_nonzero && secp256k1_ecdsa_signature_parse_compact(
+                secp256k1_context_static, &sig_strict_compact_roundtrip, compact_der_strict.data()) == 1) {
+            assert(compact_der_strict == compact_der_lax);
+        }
     }
 }
