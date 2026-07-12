@@ -288,6 +288,36 @@ BOOST_AUTO_TEST_CASE(key_ecdsa_der_lax_parse_contracts)
     BOOST_CHECK(SerializeCompactSignature(lax_sig) == SerializeCompactSignature(strict_sig));
 }
 
+BOOST_AUTO_TEST_CASE(key_ecdsa_der_lax_parse_negative_integer_difference)
+{
+    const std::vector<unsigned char> negative_integer_sig{0x30, 0x08, 0x02, 0x02, 0xa2, 0x08, 0x02, 0x02, 0x04, 0xff};
+    secp256k1_ecdsa_signature strict_sig;
+    secp256k1_ecdsa_signature lax_sig;
+    BOOST_REQUIRE_EQUAL(secp256k1_ecdsa_signature_parse_der(
+                            secp256k1_context_static,
+                            &strict_sig,
+                            negative_integer_sig.data(),
+                            negative_integer_sig.size()),
+                        1);
+    BOOST_REQUIRE_EQUAL(ecdsa_signature_parse_der_lax(
+                            &lax_sig,
+                            negative_integer_sig.data(),
+                            negative_integer_sig.size()),
+                        1);
+
+    std::array<unsigned char, 64> strict_expected{};
+    strict_expected[62] = 0x04;
+    strict_expected[63] = 0xff;
+    BOOST_CHECK(SerializeCompactSignature(strict_sig) == strict_expected);
+
+    std::array<unsigned char, 64> lax_expected{};
+    lax_expected[30] = 0xa2;
+    lax_expected[31] = 0x08;
+    lax_expected[62] = 0x04;
+    lax_expected[63] = 0xff;
+    BOOST_CHECK(SerializeCompactSignature(lax_sig) == lax_expected);
+}
+
 BOOST_AUTO_TEST_CASE(key_signature_tests)
 {
     // When entropy is specified, we should see at least one high R signature within 20 signatures
