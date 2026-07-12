@@ -21,8 +21,8 @@ static constexpr bool DEFAULT_TXINDEX{false};
 
 /**
  * TxIndex is used to look up transactions included in the blockchain by hash.
- * The index is written to a LevelDB database and records the filesystem
- * location of each transaction by transaction hash.
+ * The index is written to a LevelDB database and records the block height and
+ * serialized block offset of each transaction by transaction hash.
  */
 class TxIndex final : public BaseIndex
 {
