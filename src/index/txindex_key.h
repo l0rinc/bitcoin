@@ -85,6 +85,7 @@ struct DBKey {
     {
         if (ser_readdata8(s) != DB_TXINDEX_HASHED) throw std::ios_base::failure("Invalid format for txindex DB key");
         s >> hash_prefix >> pos;
+        if (!s.empty()) throw std::ios_base::failure("Invalid size for txindex DB key");
     }
 };
 } // namespace txindex

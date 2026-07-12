@@ -24,12 +24,14 @@
 #include <util/byte_units.h>
 #include <validation.h>
 
+#include <boost/test/unit_test.hpp>
+
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <boost/test/unit_test.hpp>
 
 BOOST_AUTO_TEST_SUITE(txindex_tests)
 
@@ -203,6 +205,23 @@ BOOST_FIXTURE_TEST_CASE(txindex_legacy_fallback, TestChain100Setup)
 
     CTransactionRef tx_disk;
     uint256 block_hash;
+
+    // A malformed hashed row in this bucket must fail closed instead of
+    // falling through to the valid legacy row.
+    const auto malformed_key{std::pair{txindex::DB_TXINDEX_HASHED, prefix}};
+    db.Write(malformed_key, std::array<std::byte, 0>{});
+    BOOST_CHECK(!txindex.FindTx(legacy_txid, block_hash, tx_disk));
+    BOOST_CHECK(!tx_disk);
+    db.Erase(malformed_key);
+
+    // CDBIterator accepts trailing bytes after a deserialized key, so also
+    // cover an overlong hashed row before falling back to the legacy entry.
+    const auto overlong_key{std::pair{txindex::DBKey{prefix, bucket.front()}, uint8_t{0}}};
+    db.Write(overlong_key, std::array<std::byte, 0>{});
+    BOOST_CHECK(!txindex.FindTx(legacy_txid, block_hash, tx_disk));
+    BOOST_CHECK(!tx_disk);
+    db.Erase(overlong_key);
+
     BOOST_REQUIRE(txindex.FindTx(legacy_txid, block_hash, tx_disk));
     BOOST_REQUIRE(tx_disk);
     BOOST_CHECK(tx_disk->GetHash() == legacy_txid);

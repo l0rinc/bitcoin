@@ -165,7 +165,9 @@ bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& 
     std::unique_ptr<CDBIterator> it{m_db->NewIterator()};
     it->Seek(std::pair{txindex::DB_TXINDEX_HASHED, prefix});
     txindex::DBKey key{prefix, {}};
-    for (; it->Valid() && it->GetKey(key) && key.hash_prefix == prefix; it->Next()) {
+    for (; it->Valid(); it->Next()) {
+        if (!it->GetKey(key)) return false;
+        if (key.hash_prefix != prefix) break;
         FlatFilePos tx_pos;
         const CBlockIndex* block_index;
         {
