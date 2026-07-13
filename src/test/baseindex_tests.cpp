@@ -75,7 +75,7 @@ BOOST_FIXTURE_TEST_CASE(baseindex_restart_after_pure_disconnect, TestChain100Set
         index.Stop();
         return summary;
     }};
-    auto synced_at{[](const CBlockIndex& tip, bool synced = true) { return IndexSummary{"coinstatsindex", synced, tip.nHeight, tip.GetBlockHash()}; }};
+    auto synced_at{[](const CBlockIndex& tip) { return IndexSummary{"coinstatsindex", /*synced=*/true, tip.nHeight, tip.GetBlockHash()}; }};
     auto* old_tip{current_tip()};
 
     // Persist the chainstate and index at the old child.
@@ -90,8 +90,8 @@ BOOST_FIXTURE_TEST_CASE(baseindex_restart_after_pure_disconnect, TestChain100Set
     BOOST_REQUIRE_EQUAL(new_tip, old_tip->pprev);
     persist_chainstate();
 
-    BOOST_CHECK(restart_index() == synced_at(*old_tip)); // TODO: Rewind to new_tip.
-    BOOST_CHECK(restart_index(/*do_sync=*/false) == synced_at(*old_tip, /*synced=*/false)); // TODO: Persist new_tip and mark it synced.
+    BOOST_CHECK(restart_index() == synced_at(*new_tip));
+    BOOST_CHECK(restart_index(/*do_sync=*/false) == synced_at(*new_tip));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

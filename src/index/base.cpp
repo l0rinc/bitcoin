@@ -226,6 +226,16 @@ void BaseIndex::Sync()
 
             auto next_sync{WITH_LOCK(::cs_main, return NextSyncBlock(pindex, m_chainstate->m_chain))};
             auto& [pindex_next, rewind_to]{next_sync};
+            // A pure disconnect has no next block but still needs a rewind to the chain tip.
+            if (!pindex_next && pindex != rewind_to) {
+                if (!Rewind(pindex, rewind_to)) {
+                    FatalErrorf("Failed to rewind %s to the current chain tip", GetName());
+                    return;
+                }
+                pindex = rewind_to;
+                continue;
+            }
+
             // If next is null, commit data indexed so far.
             if (!pindex_next) {
                 SetBestBlockIndex(pindex);
@@ -240,6 +250,7 @@ void BaseIndex::Sync()
                 LOCK(::cs_main);
                 next_sync = NextSyncBlock(pindex, m_chainstate->m_chain);
                 if (!pindex_next) {
+                    if (pindex != rewind_to) continue;
                     m_synced = true;
                     break;
                 }
