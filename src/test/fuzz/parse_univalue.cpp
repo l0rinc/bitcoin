@@ -8,6 +8,7 @@
 #include <test/fuzz/fuzz.h>
 #include <util/chaintype.h>
 
+#include <cassert>
 #include <limits>
 #include <string>
 
@@ -19,13 +20,9 @@ void initialize_parse_univalue()
 FUZZ_TARGET(parse_univalue, .init = initialize_parse_univalue)
 {
     const std::string random_string(buffer.begin(), buffer.end());
-    bool valid = true;
-    const UniValue univalue = [&] {
-        UniValue uv;
-        if (!uv.read(random_string)) valid = false;
-        return valid ? uv : UniValue{};
-    }();
-    if (!valid) {
+    UniValue univalue;
+    if (!univalue.read(random_string)) {
+        assert(univalue.isNull());
         return;
     }
     try {
