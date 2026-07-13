@@ -524,7 +524,9 @@ class AssumeutxoTest(BitcoinTestFramework):
         self.log.info(f"Loading snapshot into second node from {dump_output['path']}")
         # This node's tip is on an ancestor block of the snapshot, which should
         # be the normal case
-        loaded = n1.loadtxoutset(dump_output['path'])
+        prevout_pool_log = "Block input prevout fetching uses 1 additional threads"
+        with n1.assert_debug_log([], unexpected_msgs=[prevout_pool_log]):
+            loaded = n1.loadtxoutset(dump_output['path'])
         assert_equal(loaded['coins_loaded'], SNAPSHOT_BASE_HEIGHT)
         assert_equal(loaded['base_height'], SNAPSHOT_BASE_HEIGHT)
 

@@ -175,6 +175,7 @@ void CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block
             }
         }
     }
+    Assume(cursor.GetDirtyCount() == 0);
 
     // In the last batch, mark the database as consistent with block_hash again.
     batch.Erase(DB_HEAD_BLOCKS);
@@ -182,6 +183,7 @@ void CCoinsViewDB::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block
 
     LogDebug(BCLog::COINDB, "Writing final batch of %.2f MiB\n", batch.ApproximateSize() / double(1_MiB));
     m_db->WriteBatch(batch);
+    Assume(GetBestBlock() == block_hash);
     LogDebug(BCLog::COINDB, "Committed %u changed transaction outputs (out of %u) to coin database...", (unsigned int)dirty_count, (unsigned int)count);
 }
 
@@ -198,7 +200,10 @@ std::optional<std::string> CCoinsViewDB::GetDBProperty(const std::string& proper
 std::shared_future<void> CCoinsViewDB::CompactFullAsync()
 {
     AssertLockHeld(::cs_main);
-    if (m_compaction.valid() && m_compaction.wait_for(std::chrono::seconds{0}) != std::future_status::ready) return m_compaction;
+    if (m_compaction.valid() && m_compaction.wait_for(std::chrono::seconds{0}) != std::future_status::ready) {
+        Assume(m_compaction.valid());
+        return m_compaction;
+    }
     m_compaction = std::async(std::launch::async, [this] {
         try {
             util::ThreadRename("utxocompact");
@@ -211,6 +216,7 @@ std::shared_future<void> CCoinsViewDB::CompactFullAsync()
             LogWarning("Failed chainstate compaction (%s)", e.what());
         }
     }).share();
+    Assume(m_compaction.valid());
     return m_compaction;
 }
 
@@ -268,7 +274,10 @@ bool CCoinsViewDBCursor::GetKey(COutPoint &key) const
 
 bool CCoinsViewDBCursor::GetValue(Coin &coin) const
 {
-    return pcursor->GetValue(coin);
+    if (!Valid()) return false;
+    const bool found{pcursor->GetValue(coin)};
+    Assume(!found || !coin.IsSpent());
+    return found;
 }
 
 bool CCoinsViewDBCursor::Valid() const

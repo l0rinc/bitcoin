@@ -17,6 +17,8 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <stdexcept>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -25,6 +27,8 @@ namespace {
 constexpr uint32_t NUM_OUTPOINTS = 256;
 /** Number of distinct Coin values used in this test (ignoring nHeight). */
 constexpr uint32_t NUM_COINS = 256;
+/** Number of distinct best block hashes used in this test. */
+constexpr uint32_t NUM_BLOCK_HASHES = 256;
 /** Maximum number CCoinsViewCache objects used in this test. */
 constexpr uint32_t MAX_CACHES = 4;
 /** Data type large enough to hold NUM_COINS-1. */
@@ -41,11 +45,15 @@ struct PrecomputedData
     //! Block with a tx containing as inputs the above outpoints.
     CBlock block;
 
+    //! Randomly generated best block hashes.
+    uint256 block_hashes[NUM_BLOCK_HASHES];
+
     PrecomputedData()
     {
         static const uint8_t PREFIX_O[1] = {'o'}; /** Hash prefix for outpoint hashes. */
         static const uint8_t PREFIX_S[1] = {'s'}; /** Hash prefix for coins scriptPubKeys. */
         static const uint8_t PREFIX_M[1] = {'m'}; /** Hash prefix for coins nValue/fCoinBase. */
+        static const uint8_t PREFIX_B[1] = {'b'}; /** Hash prefix for best block hashes. */
 
         CMutableTransaction coinbase;
         coinbase.vin.emplace_back();
@@ -111,6 +119,11 @@ struct PrecomputedData
             coins[i].fCoinBase = (hash.GetUint64(1) & 7) == 0;
             coins[i].nHeight = 0; /* Real nHeight used in simulation is set dynamically. */
         }
+
+        for (uint32_t i = 0; i < NUM_BLOCK_HASHES; ++i) {
+            const uint8_t ser[4] = {uint8_t(i), uint8_t(i >> 8), uint8_t(i >> 16), uint8_t(i >> 24)};
+            CSHA256().Write(PREFIX_B, 1).Write(ser, sizeof(ser)).Finalize(block_hashes[i].begin());
+        }
     }
 };
 
@@ -156,6 +169,7 @@ struct CacheLevel
 class CoinsViewBottom final : public CoinsViewEmpty
 {
     std::map<COutPoint, Coin> m_data;
+    uint256 m_best_block;
 
 public:
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const final
@@ -167,7 +181,9 @@ public:
         return std::nullopt;
     }
 
-    void BatchWrite(CoinsViewCacheCursor& cursor, const uint256&) final
+    uint256 GetBestBlock() const final { return m_best_block; }
+
+    void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) final
     {
         for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)) {
             if (it->second.IsDirty()) {
@@ -193,6 +209,8 @@ public:
                 }
             }
         }
+        m_best_block = block_hash;
+        assert(GetBestBlock() == block_hash);
     }
 };
 
@@ -230,8 +248,12 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
     std::vector<std::unique_ptr<CCoinsViewCache>> caches;
     /** Long-lived StartFetching guard (nullptr unless corresponding level is a CoinsViewOverlay). */
     std::unique_ptr<OverlayFetchScope> overlay_fetch_scope;
+    /** Whether each corresponding cache entry is a CoinsViewOverlay. */
+    std::vector<bool> cache_is_overlay;
     /** Simulated cache data (sim_caches[0] matches bottom, sim_caches[i+1] matches caches[i]). */
     CacheLevel sim_caches[MAX_CACHES + 1];
+    /** Simulated local best block hash for each layer; null means inherit from the layer below. */
+    uint256 sim_best_blocks[MAX_CACHES + 1]{};
     /** Current height in the simulation. */
     uint32_t current_height = 1U;
 
@@ -254,6 +276,26 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         return std::nullopt;
     };
 
+    auto effective_best_block = [&](uint32_t sim_idx) -> uint256 {
+        while (sim_idx > 0 && sim_best_blocks[sim_idx].IsNull()) {
+            --sim_idx;
+        }
+        return sim_best_blocks[sim_idx];
+    };
+
+    auto assert_best_block = [&](uint32_t sim_idx) {
+        assert(sim_idx > 0);
+        assert(sim_idx <= caches.size());
+        const auto expected{effective_best_block(sim_idx)};
+        const auto real{caches[sim_idx - 1]->GetBestBlock()};
+        assert(real == expected);
+        // GetBestBlock caches inherited values in every null cache layer it descends through.
+        while (sim_idx > 0 && sim_best_blocks[sim_idx].IsNull()) {
+            sim_best_blocks[sim_idx] = expected;
+            --sim_idx;
+        }
+    };
+
     /** Flush changes in top cache to the one below. */
     auto flush = [&]() {
         assert(caches.size() >= 1);
@@ -264,6 +306,189 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 prev_cache.entry[outpointidx] = cache.entry[outpointidx];
                 cache.entry[outpointidx].entrytype = EntryType::NONE;
             }
+        }
+        sim_best_blocks[caches.size() - 1] = sim_best_blocks[caches.size()];
+    };
+
+    auto assert_cache_clean = [](const CCoinsViewCache& cache) {
+        assert(cache.GetDirtyCount() == 0);
+        cache.SanityCheck();
+    };
+
+    auto assert_cache_empty = [&](const CCoinsViewCache& cache) {
+        assert(cache.GetCacheSize() == 0);
+        assert_cache_clean(cache);
+    };
+
+    auto assert_cache_stack_sane = [&]() {
+        assert(cache_is_overlay.size() == caches.size());
+        for (const auto& cache : caches) {
+            assert(cache->GetDirtyCount() <= cache->GetCacheSize());
+            cache->SanityCheck();
+        }
+    };
+
+    struct CacheStats {
+        size_t cache_size;
+        size_t dirty_count;
+        size_t memory_usage;
+    };
+
+    auto get_cache_stats = [&](size_t cache_count) {
+        assert(cache_count <= caches.size());
+        std::vector<CacheStats> stats;
+        stats.reserve(cache_count);
+        for (size_t idx{0}; idx < cache_count; ++idx) {
+            const auto& cache{caches[idx]};
+            stats.push_back({
+                cache->GetCacheSize(),
+                cache->GetDirtyCount(),
+                cache->DynamicMemoryUsage(),
+            });
+        }
+        return stats;
+    };
+
+    auto get_all_cache_stats = [&]() {
+        return get_cache_stats(caches.size());
+    };
+
+    auto get_dirty_counts = [&]() {
+        std::vector<size_t> dirty_counts;
+        dirty_counts.reserve(caches.size());
+        for (const auto& cache : caches) {
+            dirty_counts.push_back(cache->GetDirtyCount());
+        }
+        return dirty_counts;
+    };
+
+    auto get_cache_sizes = [&]() {
+        std::vector<size_t> cache_sizes;
+        cache_sizes.reserve(caches.size());
+        for (const auto& cache : caches) {
+            cache_sizes.push_back(cache->GetCacheSize());
+        }
+        return cache_sizes;
+    };
+
+    auto assert_cache_stats = [&](const std::vector<CacheStats>& expected) {
+        assert(expected.size() <= caches.size());
+        for (size_t idx{0}; idx < expected.size(); ++idx) {
+            assert(caches[idx]->GetCacheSize() == expected[idx].cache_size);
+            assert(caches[idx]->GetDirtyCount() == expected[idx].dirty_count);
+            assert(caches[idx]->DynamicMemoryUsage() == expected[idx].memory_usage);
+        }
+    };
+
+    auto assert_dirty_counts = [&](const std::vector<size_t>& expected) {
+        assert(expected.size() == caches.size());
+        for (size_t idx{0}; idx < expected.size(); ++idx) {
+            assert(caches[idx]->GetDirtyCount() == expected[idx]);
+        }
+    };
+
+    auto assert_cache_sizes = [&](const std::vector<size_t>& expected) {
+        assert(expected.size() == caches.size());
+        for (size_t idx{0}; idx < expected.size(); ++idx) {
+            assert(caches[idx]->GetCacheSize() == expected[idx]);
+        }
+    };
+
+    auto assert_best_block_preserves_cache_stats = [&](uint32_t sim_idx) {
+        const auto cache_stats{get_cache_stats(sim_idx)};
+        assert_best_block(sim_idx);
+        assert_cache_stats(cache_stats);
+    };
+
+    auto get_parent_cache_stats_if_top_overlay = [&]() -> std::optional<std::vector<CacheStats>> {
+        assert(cache_is_overlay.size() == caches.size());
+        if (!cache_is_overlay.empty() && cache_is_overlay.back()) {
+            return get_cache_stats(caches.size() - 1);
+        }
+        return std::nullopt;
+    };
+
+    auto assert_cache_stats_if_present = [&](const std::optional<std::vector<CacheStats>>& expected) {
+        if (expected) assert_cache_stats(*expected);
+    };
+
+    auto assert_spent_public = [&](uint32_t outpointidx) {
+        const auto& outpoint{data.outpoints[outpointidx]};
+        assert(!caches.back()->HaveCoin(outpoint));
+        assert(!caches.back()->GetCoin(outpoint));
+        assert(caches.back()->AccessCoin(outpoint).IsSpent());
+    };
+
+    auto coins_equal = [](const Coin& a, const Coin& b) {
+        if (a.IsSpent() || b.IsSpent()) return a.IsSpent() && b.IsSpent();
+        return a.out == b.out && a.fCoinBase == b.fCoinBase && a.nHeight == b.nHeight;
+    };
+
+    auto assert_coin_matches_sim = [&](const std::optional<Coin>& realcoin, std::optional<std::pair<coinidx_type, uint32_t>> sim) {
+        if (!sim.has_value()) {
+            assert(!realcoin);
+        } else {
+            assert(realcoin && !realcoin->IsSpent());
+            const auto& simcoin = data.coins[sim->first];
+            assert(realcoin->out == simcoin.out);
+            assert(realcoin->fCoinBase == simcoin.fCoinBase);
+            assert(realcoin->nHeight == sim->second);
+        }
+    };
+
+    auto assert_cache_peek_matches_sim = [&](unsigned sim_idx) {
+        assert(sim_idx > 0);
+        assert(sim_idx <= caches.size());
+        const auto cache_stats{get_cache_stats(sim_idx)};
+        const auto& cache{*caches[sim_idx - 1]};
+        for (uint32_t outpointidx = 0; outpointidx < NUM_OUTPOINTS; ++outpointidx) {
+            assert_coin_matches_sim(cache.PeekCoin(data.outpoints[outpointidx]), lookup(outpointidx, sim_idx));
+        }
+        assert_cache_stats(cache_stats);
+    };
+
+    auto assert_read_apis_match_sim = [&](uint32_t outpointidx) {
+        const auto& outpoint{data.outpoints[outpointidx]};
+        const auto sim{lookup(outpointidx)};
+        const auto peek_stats{get_all_cache_stats()};
+        const auto peek_coin{caches.back()->PeekCoin(outpoint)};
+        assert_coin_matches_sim(peek_coin, sim);
+        assert_cache_stats(peek_stats);
+
+        const auto dirty_counts{get_dirty_counts()};
+        const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
+        const auto get_coin{caches.back()->GetCoin(outpoint)};
+        assert_coin_matches_sim(get_coin, sim);
+        assert_dirty_counts(dirty_counts);
+        assert_cache_stats_if_present(parent_cache_stats);
+
+        const auto stats_after_get{get_all_cache_stats()};
+        assert(caches.back()->HaveCoin(outpoint) == get_coin.has_value());
+        assert_cache_stats(stats_after_get);
+        assert_dirty_counts(dirty_counts);
+        assert(caches.back()->HaveCoinInCache(outpoint) == get_coin.has_value());
+        assert_cache_stats(stats_after_get);
+
+        const Coin access_coin{caches.back()->AccessCoin(outpoint)};
+        if (get_coin) {
+            assert(coins_equal(access_coin, *get_coin));
+        } else {
+            assert(access_coin.IsSpent());
+        }
+        assert_cache_stats(stats_after_get);
+        assert_dirty_counts(dirty_counts);
+    };
+
+    auto assert_stack_peek_matches_sim = [&]() {
+        for (unsigned sim_idx = 1; sim_idx <= caches.size(); ++sim_idx) {
+            assert_cache_peek_matches_sim(sim_idx);
+        }
+    };
+
+    auto assert_bottom_matches_sim = [&]() {
+        assert(bottom.GetBestBlock() == sim_best_blocks[0]);
+        for (uint32_t outpointidx = 0; outpointidx < NUM_OUTPOINTS; ++outpointidx) {
+            assert_coin_matches_sim(bottom.GetCoin(data.outpoints[outpointidx]), lookup(outpointidx, 0));
         }
     };
 
@@ -277,7 +502,9 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
         // Make sure there is always at least one CCoinsViewCache.
         if (caches.empty()) {
             caches.emplace_back(new CCoinsViewCache(&bottom, /*deterministic=*/true));
+            cache_is_overlay.push_back(false);
             sim_caches[caches.size()].Wipe();
+            sim_best_blocks[caches.size()] = uint256::ZERO;
         }
 
         // Execute command.
@@ -289,9 +516,17 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 // Look up in simulation data.
                 auto sim = lookup(outpointidx);
                 // Look up in real caches.
-                auto realcoin = provider.ConsumeBool() ?
+                const bool use_peek{provider.ConsumeBool()};
+                const auto cache_stats{use_peek ? get_all_cache_stats() : std::vector<CacheStats>{}};
+                const auto dirty_counts{get_dirty_counts()};
+                const auto parent_cache_stats{use_peek ? std::optional<std::vector<CacheStats>>{} : get_parent_cache_stats_if_top_overlay()};
+                auto realcoin = use_peek ?
                     caches.back()->PeekCoin(data.outpoints[outpointidx]) :
                     caches.back()->GetCoin(data.outpoints[outpointidx]);
+                if (use_peek) assert_cache_stats(cache_stats);
+                if (!use_peek) assert(caches.back()->HaveCoinInCache(data.outpoints[outpointidx]) == realcoin.has_value());
+                assert_dirty_counts(dirty_counts);
+                assert_cache_stats_if_present(parent_cache_stats);
                 // Compare results.
                 if (!sim.has_value()) {
                     assert(!realcoin);
@@ -309,15 +544,54 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 // Look up in simulation data.
                 auto sim = lookup(outpointidx);
                 // Look up in real caches.
+                const auto dirty_counts{get_dirty_counts()};
+                const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
                 auto real = caches.back()->HaveCoin(data.outpoints[outpointidx]);
+                assert(caches.back()->HaveCoinInCache(data.outpoints[outpointidx]) == real);
+                assert_dirty_counts(dirty_counts);
+                assert_cache_stats_if_present(parent_cache_stats);
                 // Compare results.
                 assert(sim.has_value() == real);
             },
 
+            [&]() { // HaveInputs
+                CMutableTransaction tx;
+                bool expected{true};
+                const bool is_coinbase{provider.ConsumeBool()};
+                if (is_coinbase) {
+                    tx.vin.emplace_back(COutPoint{});
+                } else {
+                    const auto input_count{provider.ConsumeIntegralInRange<uint32_t>(0, 8)};
+                    for (uint32_t i{0}; i < input_count; ++i) {
+                        const auto outpointidx{provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1)};
+                        tx.vin.emplace_back(data.outpoints[outpointidx]);
+                        expected &= lookup(outpointidx).has_value();
+                    }
+                }
+
+                const auto cache_stats{get_all_cache_stats()};
+                const auto dirty_counts{get_dirty_counts()};
+                const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
+                const bool real{caches.back()->HaveInputs(CTransaction{tx})};
+                assert(real == expected);
+                assert_dirty_counts(dirty_counts);
+                assert_cache_stats_if_present(parent_cache_stats);
+                if (is_coinbase || tx.vin.empty()) {
+                    assert_cache_stats(cache_stats);
+                }
+            },
+
             [&]() { // HaveCoinInCache
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
-                // Invoke on real cache (there is no equivalent in simulation, so nothing to compare result with).
-                (void)caches.back()->HaveCoinInCache(data.outpoints[outpointidx]);
+                const auto cache_size{caches.back()->GetCacheSize()};
+                const auto dirty_count{caches.back()->GetDirtyCount()};
+                const auto cache_usage{caches.back()->DynamicMemoryUsage()};
+                // This is only a current-cache check. It must not fetch from the backing view.
+                const bool has_coin{caches.back()->HaveCoinInCache(data.outpoints[outpointidx])};
+                assert(caches.back()->HaveCoinInCache(data.outpoints[outpointidx]) == has_coin);
+                assert(caches.back()->GetCacheSize() == cache_size);
+                assert(caches.back()->GetDirtyCount() == dirty_count);
+                assert(caches.back()->DynamicMemoryUsage() == cache_usage);
             },
 
             [&]() { // AccessCoin
@@ -325,7 +599,16 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 // Look up in simulation data.
                 auto sim = lookup(outpointidx);
                 // Look up in real caches.
+                const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
                 const auto& realcoin = caches.back()->AccessCoin(data.outpoints[outpointidx]);
+                assert_cache_stats_if_present(parent_cache_stats);
+                const Coin realcoin_copy{realcoin};
+                const auto cache_stats_after_first{get_all_cache_stats()};
+                const auto parent_cache_stats_after_first{get_parent_cache_stats_if_top_overlay()};
+                const auto& realcoin_again = caches.back()->AccessCoin(data.outpoints[outpointidx]);
+                assert(coins_equal(realcoin_again, realcoin_copy));
+                assert_cache_stats(cache_stats_after_first);
+                assert_cache_stats_if_present(parent_cache_stats_after_first);
                 // Compare results.
                 if (!sim.has_value()) {
                     assert(realcoin.IsSpent());
@@ -336,6 +619,46 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                     assert(simcoin.fCoinBase == realcoin.fCoinBase);
                     assert(realcoin.nHeight == sim->second);
                 }
+            },
+
+            [&]() { // AccessByTxid
+                uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
+                const auto& txid{data.outpoints[outpointidx].hash};
+                std::optional<uint32_t> first_unspent_idx;
+                for (uint32_t idx = 0; idx < NUM_OUTPOINTS; ++idx) {
+                    if (data.outpoints[idx].hash != txid || !lookup(idx)) continue;
+                    if (!first_unspent_idx || data.outpoints[idx].n < data.outpoints[*first_unspent_idx].n) {
+                        first_unspent_idx = idx;
+                    }
+                }
+                if (!first_unspent_idx) return;
+
+                const auto dirty_counts{get_dirty_counts()};
+                const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
+                const auto& realcoin = AccessByTxid(*caches.back(), txid);
+                assert_dirty_counts(dirty_counts);
+                assert_cache_stats_if_present(parent_cache_stats);
+                const Coin realcoin_copy{realcoin};
+                const auto cache_sizes_after_first{get_cache_sizes()};
+                const auto dirty_counts_after_first{get_dirty_counts()};
+                const auto parent_cache_stats_after_first{get_parent_cache_stats_if_top_overlay()};
+                const auto& realcoin_again = AccessByTxid(*caches.back(), txid);
+                assert(coins_equal(realcoin_again, realcoin_copy));
+                assert_cache_sizes(cache_sizes_after_first);
+                assert_dirty_counts(dirty_counts_after_first);
+                assert_cache_stats_if_present(parent_cache_stats_after_first);
+                const auto sim = lookup(*first_unspent_idx);
+                assert(sim);
+                assert(!realcoin.IsSpent());
+                const auto& simcoin = data.coins[sim->first];
+                assert(simcoin.out == realcoin.out);
+                assert(simcoin.fCoinBase == realcoin.fCoinBase);
+                assert(realcoin.nHeight == sim->second);
+            },
+
+            [&]() { // Read API consistency
+                const uint32_t outpointidx{provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1)};
+                assert_read_apis_match_sim(outpointidx);
             },
 
             [&]() { // AddCoin (only possible_overwrite if necessary)
@@ -368,26 +691,108 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 entry.height = current_height;
             },
 
+            [&]() { // EmplaceCoinInternalDANGER.
+                uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
+                uint32_t coinidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_COINS - 1);
+                if (sim_caches[caches.size()].entry[outpointidx].entrytype != EntryType::NONE) return;
+                if (caches.back()->HaveCoinInCache(data.outpoints[outpointidx])) return;
+
+                // Invoke on real caches.
+                Coin coin = data.coins[coinidx];
+                coin.nHeight = current_height;
+                caches.back()->EmplaceCoinInternalDANGER(COutPoint{data.outpoints[outpointidx]}, std::move(coin));
+                // Apply to simulation data.
+                auto& entry = sim_caches[caches.size()].entry[outpointidx];
+                entry.entrytype = EntryType::UNSPENT;
+                entry.coinidx = coinidx;
+                entry.height = current_height;
+                assert_read_apis_match_sim(outpointidx);
+            },
+
+            [&]() { // AddCoin with disallowed local overwrite
+                const uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
+                const uint32_t coinidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_COINS - 1);
+                if (sim_caches[caches.size()].entry[outpointidx].entrytype != EntryType::UNSPENT) return;
+
+                const auto sim_before{lookup(outpointidx)};
+                const auto cache_stats{get_all_cache_stats()};
+                Coin coin = data.coins[coinidx];
+                coin.nHeight = current_height;
+
+                bool threw{false};
+                try {
+                    caches.back()->AddCoin(data.outpoints[outpointidx], std::move(coin), /*possible_overwrite=*/false);
+                } catch (const std::logic_error& e) {
+                    assert(std::string_view{e.what()} == "Attempted to overwrite an unspent coin (when possible_overwrite is false)");
+                    threw = true;
+                }
+                assert(threw);
+                assert(lookup(outpointidx) == sim_before);
+                assert_cache_stats(cache_stats);
+                assert_read_apis_match_sim(outpointidx);
+            },
+
+            [&]() { // AddCoin with unspendable output
+                uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
+                uint32_t coinidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_COINS - 1);
+                const auto sim_before{lookup(outpointidx)};
+                const auto cache_stats{get_all_cache_stats()};
+
+                Coin coin = data.coins[coinidx];
+                coin.nHeight = current_height;
+                coin.out.scriptPubKey = CScript{} << OP_RETURN;
+                assert(coin.out.scriptPubKey.IsUnspendable());
+                caches.back()->AddCoin(data.outpoints[outpointidx], std::move(coin), provider.ConsumeBool());
+
+                assert(lookup(outpointidx) == sim_before);
+                assert_cache_stats(cache_stats);
+            },
+
             [&]() { // SpendCoin (moveto = nullptr)
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
+                // Look up in simulation data (to compare with the returned bool).
+                auto sim = lookup(outpointidx);
+                const auto failed_spend_cache_sizes{
+                    sim ? std::optional<std::vector<size_t>>{} : std::optional{get_cache_sizes()}};
+                const auto failed_spend_dirty_counts{
+                    sim ? std::optional<std::vector<size_t>>{} : std::optional{get_dirty_counts()}};
                 // Invoke on real caches.
-                caches.back()->SpendCoin(data.outpoints[outpointidx], nullptr);
+                const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
+                const bool real = caches.back()->SpendCoin(data.outpoints[outpointidx], nullptr);
+                if (failed_spend_cache_sizes) assert_cache_sizes(*failed_spend_cache_sizes);
+                if (failed_spend_dirty_counts) assert_dirty_counts(*failed_spend_dirty_counts);
+                assert_cache_stats_if_present(parent_cache_stats);
                 // Apply to simulation data.
                 sim_caches[caches.size()].entry[outpointidx].entrytype = EntryType::SPENT;
+                // Compare return value with whether there was an unspent coin to delete.
+                assert(real == sim.has_value());
+                assert_spent_public(outpointidx);
             },
 
             [&]() { // SpendCoin (with moveto)
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
                 // Look up in simulation data (to compare the returned *moveto with).
                 auto sim = lookup(outpointidx);
+                const auto failed_spend_cache_sizes{
+                    sim ? std::optional<std::vector<size_t>>{} : std::optional{get_cache_sizes()}};
+                const auto failed_spend_dirty_counts{
+                    sim ? std::optional<std::vector<size_t>>{} : std::optional{get_dirty_counts()}};
                 // Invoke on real caches.
-                Coin realcoin;
-                caches.back()->SpendCoin(data.outpoints[outpointidx], &realcoin);
+                Coin realcoin = data.coins[provider.ConsumeIntegralInRange<uint32_t>(0, NUM_COINS - 1)];
+                realcoin.nHeight = current_height;
+                const Coin realcoin_before{realcoin};
+                const auto parent_cache_stats{get_parent_cache_stats_if_top_overlay()};
+                const bool real = caches.back()->SpendCoin(data.outpoints[outpointidx], &realcoin);
+                if (failed_spend_cache_sizes) assert_cache_sizes(*failed_spend_cache_sizes);
+                if (failed_spend_dirty_counts) assert_dirty_counts(*failed_spend_dirty_counts);
+                assert_cache_stats_if_present(parent_cache_stats);
                 // Apply to simulation data.
                 sim_caches[caches.size()].entry[outpointidx].entrytype = EntryType::SPENT;
+                // Compare return value with whether there was an unspent coin to delete.
+                assert(real == sim.has_value());
                 // Compare *moveto with the value expected based on simulation data.
                 if (!sim.has_value()) {
-                    assert(realcoin.IsSpent());
+                    assert(coins_equal(realcoin, realcoin_before));
                 } else {
                     assert(!realcoin.IsSpent());
                     const auto& simcoin = data.coins[sim->first];
@@ -395,12 +800,32 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                     assert(simcoin.fCoinBase == realcoin.fCoinBase);
                     assert(realcoin.nHeight == sim->second);
                 }
+                assert_spent_public(outpointidx);
             },
 
             [&]() { // Uncache
                 uint32_t outpointidx = provider.ConsumeIntegralInRange<uint32_t>(0, NUM_OUTPOINTS - 1);
+                auto sim = lookup(outpointidx);
+                const auto parent_cache_stats{get_cache_stats(caches.size() - 1)};
                 // Apply to real caches (there is no equivalent in our simulation).
                 caches.back()->Uncache(data.outpoints[outpointidx]);
+                assert_cache_stats(parent_cache_stats);
+                const auto cache_stats_after_uncache{get_all_cache_stats()};
+                const auto dirty_counts_after_uncache{get_dirty_counts()};
+                caches.back()->Uncache(data.outpoints[outpointidx]);
+                assert_cache_stats(cache_stats_after_uncache);
+                assert_dirty_counts(dirty_counts_after_uncache);
+                auto realcoin = caches.back()->PeekCoin(data.outpoints[outpointidx]);
+                if (!sim.has_value()) {
+                    assert(!realcoin);
+                } else {
+                    assert(realcoin && !realcoin->IsSpent());
+                    const auto& simcoin = data.coins[sim->first];
+                    assert(realcoin->out == simcoin.out);
+                    assert(realcoin->fCoinBase == simcoin.fCoinBase);
+                    assert(realcoin->nHeight == sim->second);
+                }
+                assert_read_apis_match_sim(outpointidx);
             },
 
             [&]() { // Add a cache level (if not already at the max).
@@ -408,25 +833,40 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                     if (overlay_fetch_scope) {
                         overlay_fetch_scope.reset();
                         sim_caches[caches.size()].Wipe();
+                        sim_best_blocks[caches.size()] = uint256::ZERO;
                     }
                     // Apply to real caches.
                     if (provider.ConsumeBool()) {
                         caches.emplace_back(new CCoinsViewCache(&*caches.back(), /*deterministic=*/true));
+                        cache_is_overlay.push_back(false);
                     } else {
                         caches.emplace_back(new CoinsViewOverlay(&*caches.back(), g_thread_pool, /*deterministic=*/true));
+                        cache_is_overlay.push_back(true);
                         auto& overlay{static_cast<CoinsViewOverlay&>(*caches.back())};
                         overlay_fetch_scope = std::make_unique<OverlayFetchScope>(overlay, data.block);
                     }
                     // Apply to simulation data.
                     sim_caches[caches.size()].Wipe();
+                    sim_best_blocks[caches.size()] = uint256::ZERO;
+                    if (overlay_fetch_scope && provider.ConsumeBool()) {
+                        for (uint32_t outpointidx{0}; outpointidx < NUM_OUTPOINTS; ++outpointidx) {
+                            assert_read_apis_match_sim(outpointidx);
+                        }
+                        assert(static_cast<CoinsViewOverlay&>(*caches.back()).AllInputsConsumed());
+                    }
                 }
             },
 
             [&]() { // Remove a cache level.
                 // Apply to real caches (this reduces caches.size(), implicitly doing the same on the simulation data).
                 caches.back()->SanityCheck();
+                const auto parent_cache_stats{get_cache_stats(caches.size() - 1)};
+                const auto removed_idx{caches.size()};
                 overlay_fetch_scope.reset();
                 caches.pop_back();
+                cache_is_overlay.pop_back();
+                assert_cache_stats(parent_cache_stats);
+                sim_best_blocks[removed_idx] = uint256::ZERO;
             },
 
             [&]() { // Flush.
@@ -439,48 +879,119 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
                 flush();
                 // Apply to real caches.
                 caches.back()->Flush(/*reallocate_cache=*/provider.ConsumeBool());
+                assert_cache_empty(*caches.back());
+                assert_stack_peek_matches_sim();
             },
 
             [&]() { // Sync.
-                if (overlay_fetch_scope) return; // CoinsViewOverlay::Sync() is never called in production
+                // CoinsViewOverlay::Sync() is never called in production.
+                if (cache_is_overlay.back()) return;
+                std::vector<uint32_t> expected_cached_unspent;
+                std::vector<uint32_t> expected_uncached_spent;
+                for (uint32_t outpointidx = 0; outpointidx < NUM_OUTPOINTS; ++outpointidx) {
+                    const auto& entry{sim_caches[caches.size()].entry[outpointidx]};
+                    if (entry.entrytype == EntryType::UNSPENT) {
+                        expected_cached_unspent.push_back(outpointidx);
+                    } else if (entry.entrytype == EntryType::SPENT) {
+                        expected_uncached_spent.push_back(outpointidx);
+                    }
+                }
                 // Apply to simulation data (note that in our simulation, syncing and flushing is the same thing).
                 flush();
                 // Apply to real caches.
                 caches.back()->Sync();
+                assert_cache_clean(*caches.back());
+                assert(caches.back()->GetCacheSize() >= expected_cached_unspent.size());
+                for (const uint32_t outpointidx : expected_cached_unspent) {
+                    assert(caches.back()->HaveCoinInCache(data.outpoints[outpointidx]));
+                }
+                for (const uint32_t outpointidx : expected_uncached_spent) {
+                    assert(!caches.back()->HaveCoinInCache(data.outpoints[outpointidx]));
+                }
+                assert_stack_peek_matches_sim();
             },
 
             [&]() { // Reset.
                 sim_caches[caches.size()].Wipe();
+                sim_best_blocks[caches.size()] = uint256::ZERO;
+                const auto parent_cache_stats{get_cache_stats(caches.size() - 1)};
                 // Apply to real caches. Optionally start fetching again.
-                if (overlay_fetch_scope && provider.ConsumeBool()) {
+                if (overlay_fetch_scope) {
+                    const bool restart_fetching{provider.ConsumeBool()};
                     overlay_fetch_scope.reset();
-                    auto& overlay{static_cast<CoinsViewOverlay&>(*caches.back())};
-                    overlay_fetch_scope = std::make_unique<OverlayFetchScope>(overlay, data.block);
+                    if (restart_fetching) {
+                        auto& overlay{static_cast<CoinsViewOverlay&>(*caches.back())};
+                        overlay_fetch_scope = std::make_unique<OverlayFetchScope>(overlay, data.block);
+                    }
                 } else {
                     (void)caches.back()->CreateResetGuard();
                 }
+                assert_cache_stats(parent_cache_stats);
+                assert_cache_empty(*caches.back());
+                assert_cache_peek_matches_sim(caches.size());
+            },
+
+            [&]() { // ReallocateCache on an already-empty cache.
+                if (caches.back()->GetCacheSize() != 0) return;
+                assert(caches.back()->GetDirtyCount() == 0);
+                assert_best_block_preserves_cache_stats(caches.size());
+                const auto best_block{effective_best_block(caches.size())};
+                const auto parent_cache_stats{get_cache_stats(caches.size() - 1)};
+
+                caches.back()->ReallocateCache();
+
+                assert_cache_stats(parent_cache_stats);
+                assert_cache_empty(*caches.back());
+                assert(caches.back()->GetBestBlock() == best_block);
+            },
+
+            [&]() { // GetBestBlock
+                assert_best_block_preserves_cache_stats(caches.size());
+            },
+
+            [&]() { // SetBestBlock
+                const auto block_hash{provider.ConsumeBool() ?
+                    uint256::ZERO :
+                    data.block_hashes[provider.ConsumeIntegralInRange<uint32_t>(0, NUM_BLOCK_HASHES - 1)]};
+                const auto cache_stats{get_all_cache_stats()};
+                caches.back()->SetBestBlock(block_hash);
+                assert_cache_stats(cache_stats);
+                sim_best_blocks[caches.size()] = block_hash;
             },
 
             [&]() { // GetCacheSize
-                (void)caches.back()->GetCacheSize();
+                const auto cache_stats{get_all_cache_stats()};
+                const auto dirty_counts{get_dirty_counts()};
+                const unsigned int size{caches.back()->GetCacheSize()};
+                assert(caches.back()->GetCacheSize() == size);
+                assert(size == cache_stats.back().cache_size);
+                assert_cache_stats(cache_stats);
+                assert_dirty_counts(dirty_counts);
             },
 
             [&]() { // DynamicMemoryUsage
-                (void)caches.back()->DynamicMemoryUsage();
+                const auto cache_stats{get_all_cache_stats()};
+                const auto dirty_counts{get_dirty_counts()};
+                const size_t usage{caches.back()->DynamicMemoryUsage()};
+                assert(caches.back()->DynamicMemoryUsage() == usage);
+                assert(usage == cache_stats.back().memory_usage);
+                assert_cache_stats(cache_stats);
+                assert_dirty_counts(dirty_counts);
             },
 
             [&]() { // Change height
                 current_height = provider.ConsumeIntegralInRange<uint32_t>(1, current_height - 1);
-            }
-        );
+            });
+
+        assert_cache_stack_sane();
     }
 
     // Sanity check all the remaining caches
-    for (const auto& cache : caches) {
-        cache->SanityCheck();
-    }
+    assert_cache_stack_sane();
+    assert_stack_peek_matches_sim();
 
-    // Full comparison between caches and simulation data, from bottom to top,
+    // Keep this bottom-to-top comparison read-only while overlay workers may still access lower caches.
+    const auto cache_stats{get_all_cache_stats()};
     for (unsigned sim_idx = 1; sim_idx <= caches.size(); ++sim_idx) {
         auto& cache = *caches[sim_idx - 1];
         size_t cache_size = 0;
@@ -501,19 +1012,10 @@ FUZZ_TARGET(coinscache_sim, .init = [] { static auto setup{MakeNoLogFileContext<
 
         // HaveCoinInCache ignores spent coins, so GetCacheSize() may exceed it.
         assert(cache.GetCacheSize() >= cache_size);
+        assert_best_block_preserves_cache_stats(sim_idx);
     }
+    assert_cache_stats(cache_stats);
 
     // Compare the bottom coinsview (not a CCoinsViewCache) with sim_cache[0].
-    for (uint32_t outpointidx = 0; outpointidx < NUM_OUTPOINTS; ++outpointidx) {
-        auto realcoin = bottom.GetCoin(data.outpoints[outpointidx]);
-        auto sim = lookup(outpointidx, 0);
-        if (!sim.has_value()) {
-            assert(!realcoin);
-        } else {
-            assert(realcoin && !realcoin->IsSpent());
-            assert(realcoin->out == data.coins[sim->first].out);
-            assert(realcoin->fCoinBase == data.coins[sim->first].fCoinBase);
-            assert(realcoin->nHeight == sim->second);
-        }
-    }
+    assert_bottom_matches_sim();
 }

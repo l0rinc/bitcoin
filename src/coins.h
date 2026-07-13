@@ -28,6 +28,7 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -255,6 +256,12 @@ private:
     uint256 block_hash;
 };
 
+class CoinsViewCursorUnsupportedError : public std::logic_error
+{
+public:
+    using std::logic_error::logic_error;
+};
+
 /**
  * Cursor for iterating over the linked list of flagged entries in CCoinsViewCache.
  *
@@ -281,7 +288,23 @@ struct CoinsViewCacheCursor
                          CoinsCachePair& sentinel LIFETIMEBOUND,
                          CCoinsMap& map LIFETIMEBOUND,
                          bool will_erase) noexcept
-        : m_dirty_count(dirty_count), m_sentinel(sentinel), m_map(map), m_will_erase(will_erase) {}
+        : m_dirty_count(dirty_count), m_sentinel(sentinel), m_map(map), m_will_erase(will_erase)
+    {
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            size_t recomputed_dirty{0};
+            for (const auto& [_, entry] : m_map) {
+                recomputed_dirty += entry.IsDirty();
+            }
+
+            size_t linked_dirty{0};
+            for (auto* it{m_sentinel.second.Next()}; it != &m_sentinel; it = it->second.Next()) {
+                linked_dirty += it->second.IsDirty();
+            }
+
+            Assume(m_dirty_count == recomputed_dirty);
+            Assume(m_dirty_count == linked_dirty);
+        }
+    }
 
     inline CoinsCachePair* Begin() const noexcept { return m_sentinel.second.Next(); }
     inline CoinsCachePair* End() const noexcept { return &m_sentinel; }
@@ -289,17 +312,34 @@ struct CoinsViewCacheCursor
     //! Return the next entry after current, possibly erasing current
     inline CoinsCachePair* NextAndMaybeErase(CoinsCachePair& current) noexcept
     {
+        const size_t dirty_count{m_dirty_count};
+        const size_t total_count{m_map.size()};
+        const bool is_dirty{current.second.IsDirty()};
+        const bool is_spent{current.second.coin.IsSpent()};
+        const COutPoint current_key{current.first};
         const auto next_entry{current.second.Next()};
-        Assume(TrySub(m_dirty_count, current.second.IsDirty()));
+        Assume(&current != &m_sentinel);
+        Assume(current.second.Prev()->second.Next() == &current);
+        Assume(next_entry->second.Prev() == &current);
+
+        Assume(TrySub(m_dirty_count, is_dirty));
+        Assume(m_dirty_count + is_dirty == dirty_count);
         // If we are not going to erase the cache, we must still erase spent entries.
         // Otherwise, clear the state of the entry.
         if (!m_will_erase) {
-            if (current.second.coin.IsSpent()) {
+            if (is_spent) {
                 assert(current.second.coin.DynamicMemoryUsage() == 0); // scriptPubKey was already cleared in SpendCoin
                 m_map.erase(current.first);
+                Assume(!m_map.contains(current_key));
+                Assume(m_map.size() + 1 == total_count);
             } else {
                 current.second.SetClean();
+                Assume(!current.second.IsDirty());
+                Assume(!current.second.IsFresh());
+                Assume(m_map.size() == total_count);
             }
+        } else {
+            Assume(m_map.size() == total_count);
         }
         return next_entry;
     }
@@ -373,6 +413,7 @@ public:
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256&) override
     {
         for (auto it{cursor.Begin()}; it != cursor.End(); it = cursor.NextAndMaybeErase(*it)) { }
+        Assume(cursor.GetDirtyCount() == 0);
     }
     std::unique_ptr<CCoinsViewCursor> Cursor() const override { return {}; }
     size_t EstimateSize() const override { return 0; }
@@ -387,7 +428,11 @@ protected:
 public:
     explicit CCoinsViewBacked(CCoinsView* in_view) : base{Assert(in_view)} {}
 
-    void SetBackend(CCoinsView& in_view) { base = &in_view; }
+    void SetBackend(CCoinsView& in_view)
+    {
+        base = &in_view;
+        Assume(base == &in_view);
+    }
 
     std::optional<Coin> GetCoin(const COutPoint& outpoint) const override { return base->GetCoin(outpoint); }
     std::optional<Coin> PeekCoin(const COutPoint& outpoint) const override { return base->PeekCoin(outpoint); }
@@ -447,7 +492,7 @@ public:
     void SetBestBlock(const uint256& block_hash);
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) override;
     std::unique_ptr<CCoinsViewCursor> Cursor() const override {
-        throw std::logic_error("CCoinsViewCache cursor iteration not supported.");
+        throw CoinsViewCursorUnsupportedError{"CCoinsViewCache cursor iteration not supported."};
     }
 
     /**
@@ -518,7 +563,11 @@ public:
     unsigned int GetCacheSize() const;
 
     //! Number of dirty cache entries (transaction outputs)
-    size_t GetDirtyCount() const noexcept { return m_dirty_count; }
+    size_t GetDirtyCount() const noexcept
+    {
+        Assume(m_dirty_count <= cacheCoins.size());
+        return m_dirty_count;
+    }
 
     //! Calculate the size of the cache (in bytes)
     size_t DynamicMemoryUsage() const;
@@ -705,6 +754,18 @@ private:
         }
 
         // We will only get here for BIP30 checks, an invalid block, or if the threadpool has not been started.
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            if (const auto* cache{dynamic_cast<const CCoinsViewCache*>(base)}) {
+                const size_t cache_size{cache->GetCacheSize()};
+                const size_t dirty_count{cache->GetDirtyCount()};
+                const size_t memory_usage{cache->DynamicMemoryUsage()};
+                auto coin{base->PeekCoin(outpoint)};
+                Assume(cache->GetCacheSize() == cache_size);
+                Assume(cache->GetDirtyCount() == dirty_count);
+                Assume(cache->DynamicMemoryUsage() == memory_usage);
+                return coin;
+            }
+        }
         return base->PeekCoin(outpoint);
     }
 

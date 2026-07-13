@@ -1860,16 +1860,11 @@ CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
     : m_dbview{std::move(db_params), std::move(options)},
       m_catcherview(&m_dbview) {}
 
-void CoinsViews::InitCache(int32_t prevoutfetch_threads)
+void CoinsViews::InitCache(std::shared_ptr<ThreadPool> prevout_fetch_pool)
 {
     AssertLockHeld(::cs_main);
     m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview);
-    auto thread_pool{std::make_shared<ThreadPool>("prevout")};
-    if (prevoutfetch_threads > 0) {
-        thread_pool->Start(prevoutfetch_threads);
-        LogInfo("Block input prevout fetching uses %d additional threads", prevoutfetch_threads);
-    }
-    m_connect_block_view = std::make_unique<CoinsViewOverlay>(&*m_cacheview, std::move(thread_pool));
+    m_connect_block_view = std::make_unique<CoinsViewOverlay>(&*m_cacheview, std::move(prevout_fetch_pool));
 }
 
 Chainstate::Chainstate(
@@ -1945,7 +1940,7 @@ void Chainstate::InitCoinsCache(size_t cache_size_bytes)
     AssertLockHeld(::cs_main);
     assert(m_coins_views != nullptr);
     m_coinstip_cache_size_bytes = cache_size_bytes;
-    m_coins_views->InitCache(m_chainman.m_options.prevoutfetch_threads_num);
+    m_coins_views->InitCache(m_chainman.m_prevout_fetch_pool);
 }
 
 // Lock-free: depends on `m_cached_is_ibd`, which is latched by `UpdateIBDStatus()`.
@@ -6158,8 +6153,20 @@ static ChainstateManager::Options&& Flatten(ChainstateManager::Options&& opts)
     return std::move(opts);
 }
 
+//! Create the thread pool for prefetching block input prevouts.
+static std::shared_ptr<ThreadPool> MakePrevoutFetchPool(int32_t num_threads)
+{
+    auto pool{std::make_shared<ThreadPool>("prevout")};
+    if (num_threads > 0) {
+        pool->Start(num_threads);
+        LogInfo("Block input prevout fetching uses %d additional threads", num_threads);
+    }
+    return pool;
+}
+
 ChainstateManager::ChainstateManager(const util::SignalInterrupt& interrupt, Options options, node::BlockManager::Options blockman_options)
     : m_script_check_queue{/*batch_size=*/128, std::clamp(options.worker_threads_num, 0, MAX_SCRIPTCHECK_THREADS)},
+      m_prevout_fetch_pool{MakePrevoutFetchPool(options.prevoutfetch_threads_num)},
       m_interrupt{interrupt},
       m_options{Flatten(std::move(options))},
       m_blockman{interrupt, std::move(blockman_options)},

@@ -12,8 +12,10 @@
 #include <util/threadpool.h>
 #include <util/trace.h>
 
+#include <algorithm>
 #include <ranges>
 #include <unordered_set>
+#include <vector>
 
 TRACEPOINT_SEMAPHORE(utxocache, add);
 TRACEPOINT_SEMAPHORE(utxocache, spent);
@@ -27,10 +29,23 @@ CoinsViewEmpty& CoinsViewEmpty::Get()
 
 std::optional<Coin> CCoinsViewCache::PeekCoin(const COutPoint& outpoint) const
 {
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
     if (auto it{cacheCoins.find(outpoint)}; it != cacheCoins.end()) {
-        return it->second.coin.IsSpent() ? std::nullopt : std::optional{it->second.coin};
+        auto ret{it->second.coin.IsSpent() ? std::nullopt : std::optional{it->second.coin}};
+        Assume(!ret || !ret->IsSpent());
+        Assume(cacheCoins.size() == cache_size);
+        Assume(cachedCoinsUsage == cache_usage);
+        Assume(m_dirty_count == dirty_count);
+        return ret;
     }
-    return base->PeekCoin(outpoint);
+    auto ret{base->PeekCoin(outpoint)};
+    Assume(!ret || !ret->IsSpent());
+    Assume(cacheCoins.size() == cache_size);
+    Assume(cachedCoinsUsage == cache_usage);
+    Assume(m_dirty_count == dirty_count);
+    return ret;
 }
 
 CCoinsViewCache::CCoinsViewCache(CCoinsView* in_base, bool deterministic) :
@@ -40,8 +55,16 @@ CCoinsViewCache::CCoinsViewCache(CCoinsView* in_base, bool deterministic) :
     m_sentinel.second.SelfRef(m_sentinel);
 }
 
-size_t CCoinsViewCache::DynamicMemoryUsage() const {
-    return memusage::DynamicUsage(cacheCoins) + cachedCoinsUsage;
+size_t CCoinsViewCache::DynamicMemoryUsage() const
+{
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
+    const size_t ret{memusage::DynamicUsage(cacheCoins) + cachedCoinsUsage};
+    Assume(cacheCoins.size() == cache_size);
+    Assume(cachedCoinsUsage == cache_usage);
+    Assume(m_dirty_count == dirty_count);
+    return ret;
 }
 
 std::optional<Coin> CCoinsViewCache::FetchCoinFromBase(const COutPoint& outpoint) const
@@ -66,19 +89,41 @@ CCoinsMap::iterator CCoinsViewCache::FetchCoin(const COutPoint &outpoint) const 
 
 std::optional<Coin> CCoinsViewCache::GetCoin(const COutPoint& outpoint) const
 {
-    if (auto it{FetchCoin(outpoint)}; it != cacheCoins.end() && !it->second.coin.IsSpent()) return it->second.coin;
-    return std::nullopt;
+    const size_t dirty_count{m_dirty_count};
+    CCoinsMap::const_iterator it = FetchCoin(outpoint);
+    Assume(m_dirty_count == dirty_count);
+    auto ret{it != cacheCoins.end() && !it->second.coin.IsSpent() ? std::optional{it->second.coin} : std::nullopt};
+    Assume(!ret || !ret->IsSpent());
+    Assume(ret.has_value() == HaveCoinInCache(outpoint));
+    return ret;
 }
 
 void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possible_overwrite) {
     assert(!coin.IsSpent());
-    if (coin.out.scriptPubKey.IsUnspendable()) return;
+    const bool unspendable{coin.out.scriptPubKey.IsUnspendable()};
+    [[maybe_unused]] const size_t cache_size{unspendable ? cacheCoins.size() : 0};
+    [[maybe_unused]] const size_t cache_usage{unspendable ? cachedCoinsUsage : 0};
+    [[maybe_unused]] const size_t dirty_count{unspendable ? m_dirty_count : 0};
+    if (unspendable) {
+        Assume(cacheCoins.size() == cache_size);
+        Assume(cachedCoinsUsage == cache_usage);
+        Assume(m_dirty_count == dirty_count);
+        return;
+    }
+    Assume(!unspendable);
+    [[maybe_unused]] const size_t cache_size_before{!possible_overwrite ? cacheCoins.size() : 0};
+    [[maybe_unused]] const size_t cache_usage_before{!possible_overwrite ? cachedCoinsUsage : 0};
+    [[maybe_unused]] const size_t dirty_count_before{!possible_overwrite ? m_dirty_count : 0};
     CCoinsMap::iterator it;
     bool inserted;
     std::tie(it, inserted) = cacheCoins.emplace(std::piecewise_construct, std::forward_as_tuple(outpoint), std::tuple<>());
     bool fresh = false;
     if (!possible_overwrite) {
         if (!it->second.coin.IsSpent()) {
+            Assume(!inserted);
+            Assume(cacheCoins.size() == cache_size_before);
+            Assume(cachedCoinsUsage == cache_usage_before);
+            Assume(m_dirty_count == dirty_count_before);
             throw std::logic_error("Attempted to overwrite an unspent coin (when possible_overwrite is false)");
         }
         // If the coin exists in this cache as a spent coin and is DIRTY, then
@@ -120,6 +165,12 @@ void CCoinsViewCache::EmplaceCoinInternalDANGER(COutPoint&& outpoint, Coin&& coi
         CCoinsCacheEntry::SetDirty(*it, m_sentinel);
         ++m_dirty_count;
         cachedCoinsUsage += mem_usage;
+        if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+            Assume(it->second.IsDirty());
+            Assume(!it->second.IsFresh());
+            if (!it->second.coin.IsSpent()) Assume(HaveCoinInCache(it->first));
+            Assume(m_dirty_count <= cacheCoins.size());
+        }
     }
 }
 
@@ -135,8 +186,24 @@ void AddCoins(CCoinsViewCache& cache, const CTransaction &tx, int nHeight, bool 
 }
 
 bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
+    const auto assume_failed_spend_noop = [&] {
+        Assume(cacheCoins.size() == cache_size);
+        Assume(cachedCoinsUsage == cache_usage);
+        Assume(m_dirty_count == dirty_count);
+    };
     CCoinsMap::iterator it = FetchCoin(outpoint);
-    if (it == cacheCoins.end()) return false;
+    if (it == cacheCoins.end()) {
+        assume_failed_spend_noop();
+        return false;
+    }
+    if (it->second.coin.IsSpent()) {
+        assume_failed_spend_noop();
+        return false;
+    }
+    Assume(!it->second.coin.IsSpent());
     Assume(TrySub(m_dirty_count, it->second.IsDirty()));
     Assume(TrySub(cachedCoinsUsage, it->second.coin.DynamicMemoryUsage()));
     TRACEPOINT(utxocache, spent,
@@ -147,13 +214,18 @@ bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {
            (bool)it->second.coin.IsCoinBase());
     if (moveout) {
         *moveout = std::move(it->second.coin);
+        Assume(!moveout->IsSpent());
     }
     if (it->second.IsFresh()) {
         cacheCoins.erase(it);
+        Assume(!cacheCoins.contains(outpoint));
     } else {
         CCoinsCacheEntry::SetDirty(*it, m_sentinel);
         ++m_dirty_count;
         it->second.coin.Clear();
+        Assume(it->second.coin.IsSpent());
+        Assume(it->second.IsDirty());
+        Assume(!it->second.IsFresh());
     }
     return true;
 }
@@ -161,7 +233,10 @@ bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {
 static const Coin coinEmpty;
 
 const Coin& CCoinsViewCache::AccessCoin(const COutPoint &outpoint) const {
+    const size_t dirty_count{m_dirty_count};
     CCoinsMap::const_iterator it = FetchCoin(outpoint);
+    Assume(m_dirty_count == dirty_count);
+    Assume((it != cacheCoins.end() && !it->second.coin.IsSpent()) == HaveCoinInCache(outpoint));
     if (it == cacheCoins.end()) {
         return coinEmpty;
     } else {
@@ -171,24 +246,48 @@ const Coin& CCoinsViewCache::AccessCoin(const COutPoint &outpoint) const {
 
 bool CCoinsViewCache::HaveCoin(const COutPoint& outpoint) const
 {
+    const size_t dirty_count{m_dirty_count};
     CCoinsMap::const_iterator it = FetchCoin(outpoint);
-    return (it != cacheCoins.end() && !it->second.coin.IsSpent());
+    Assume(m_dirty_count == dirty_count);
+    const bool ret{it != cacheCoins.end() && !it->second.coin.IsSpent()};
+    Assume(ret == HaveCoinInCache(outpoint));
+    return ret;
 }
 
 bool CCoinsViewCache::HaveCoinInCache(const COutPoint &outpoint) const {
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
     CCoinsMap::const_iterator it = cacheCoins.find(outpoint);
-    return (it != cacheCoins.end() && !it->second.coin.IsSpent());
+    const bool has_coin{it != cacheCoins.end() && !it->second.coin.IsSpent()};
+    Assume(cacheCoins.size() == cache_size);
+    Assume(cachedCoinsUsage == cache_usage);
+    Assume(m_dirty_count == dirty_count);
+    return has_coin;
 }
 
 uint256 CCoinsViewCache::GetBestBlock() const {
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
     if (m_block_hash.IsNull())
         m_block_hash = base->GetBestBlock();
+    Assume(cacheCoins.size() == cache_size);
+    Assume(cachedCoinsUsage == cache_usage);
+    Assume(m_dirty_count == dirty_count);
     return m_block_hash;
 }
 
 void CCoinsViewCache::SetBestBlock(const uint256& in_block_hash)
 {
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
     m_block_hash = in_block_hash;
+    Assume(cacheCoins.size() == cache_size);
+    Assume(cachedCoinsUsage == cache_usage);
+    Assume(m_dirty_count == dirty_count);
+    Assume(m_block_hash == in_block_hash);
 }
 
 void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& in_block_hash)
@@ -259,7 +358,9 @@ void CCoinsViewCache::BatchWrite(CoinsViewCacheCursor& cursor, const uint256& in
             }
         }
     }
+    Assume(cursor.GetDirtyCount() == 0);
     SetBestBlock(in_block_hash);
+    Assume(m_block_hash == in_block_hash);
 }
 
 void CCoinsViewCache::Flush(bool reallocate_cache)
@@ -268,14 +369,30 @@ void CCoinsViewCache::Flush(bool reallocate_cache)
     base->BatchWrite(cursor, m_block_hash);
     Assume(m_dirty_count == 0);
     cacheCoins.clear();
+    Assume(cacheCoins.empty());
+    Assume(m_sentinel.second.Next() == &m_sentinel);
+    Assume(m_sentinel.second.Prev() == &m_sentinel);
+    cachedCoinsUsage = 0;
+    Assume(cachedCoinsUsage == 0);
     if (reallocate_cache) {
         ReallocateCache();
     }
-    cachedCoinsUsage = 0;
+    Assume(cachedCoinsUsage == 0);
 }
 
 void CCoinsViewCache::Sync()
 {
+    size_t unspent_count{0};
+    std::vector<COutPoint> unspent_keys;
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        unspent_keys.reserve(cacheCoins.size());
+        for (const auto& [outpoint, entry] : cacheCoins) {
+            if (!entry.coin.IsSpent()) {
+                ++unspent_count;
+                unspent_keys.push_back(outpoint);
+            }
+        }
+    }
     auto cursor{CoinsViewCacheCursor(m_dirty_count, m_sentinel, cacheCoins, /*will_erase=*/false)};
     base->BatchWrite(cursor, m_block_hash);
     Assume(m_dirty_count == 0);
@@ -283,20 +400,73 @@ void CCoinsViewCache::Sync()
         /* BatchWrite must clear flags of all entries */
         throw std::logic_error("Not all unspent flagged entries were cleared");
     }
+    Assume(m_sentinel.second.Prev() == &m_sentinel);
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        size_t recomputed_usage{0};
+        for (const auto& [_, entry] : cacheCoins) {
+            Assume(!entry.coin.IsSpent());
+            Assume(!entry.IsDirty());
+            Assume(!entry.IsFresh());
+            recomputed_usage += entry.coin.DynamicMemoryUsage();
+        }
+        for (const auto& outpoint : unspent_keys) {
+            Assume(HaveCoinInCache(outpoint));
+        }
+        Assume(cacheCoins.size() == unspent_count);
+        Assume(cachedCoinsUsage == recomputed_usage);
+    }
 }
 
 void CCoinsViewCache::Reset() noexcept
 {
+    const CCoinsViewCache* base_cache{nullptr};
+    unsigned int base_cache_size{0};
+    size_t base_dirty_count{0};
+    size_t base_memory_usage{0};
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        base_cache = dynamic_cast<const CCoinsViewCache*>(base);
+        if (base_cache) {
+            base_cache_size = base_cache->GetCacheSize();
+            base_dirty_count = base_cache->GetDirtyCount();
+            base_memory_usage = base_cache->DynamicMemoryUsage();
+        }
+    }
     cacheCoins.clear();
     cachedCoinsUsage = 0;
     m_dirty_count = 0;
     SetBestBlock(uint256::ZERO);
+    Assume(cacheCoins.empty());
+    Assume(cachedCoinsUsage == 0);
+    Assume(m_dirty_count == 0);
+    Assume(m_sentinel.second.Next() == &m_sentinel);
+    Assume(m_sentinel.second.Prev() == &m_sentinel);
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (base_cache) {
+            Assume(base_cache->GetCacheSize() == base_cache_size);
+            Assume(base_cache->GetDirtyCount() == base_dirty_count);
+            Assume(base_cache->DynamicMemoryUsage() == base_memory_usage);
+        }
+    }
 }
 
 void CCoinsViewCache::Uncache(const COutPoint& hash)
 {
+    const size_t dirty_count{m_dirty_count};
+    const CCoinsViewCache* base_cache{nullptr};
+    unsigned int base_cache_size{0};
+    size_t base_dirty_count{0};
+    size_t base_memory_usage{0};
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        base_cache = dynamic_cast<const CCoinsViewCache*>(base);
+        if (base_cache) {
+            base_cache_size = base_cache->GetCacheSize();
+            base_dirty_count = base_cache->GetDirtyCount();
+            base_memory_usage = base_cache->DynamicMemoryUsage();
+        }
+    }
     CCoinsMap::iterator it = cacheCoins.find(hash);
     if (it != cacheCoins.end() && !it->second.IsDirty()) {
+        Assume(!it->second.IsFresh());
         Assume(TrySub(cachedCoinsUsage, it->second.coin.DynamicMemoryUsage()));
         TRACEPOINT(utxocache, uncache,
                hash.hash.data(),
@@ -305,21 +475,53 @@ void CCoinsViewCache::Uncache(const COutPoint& hash)
                (int64_t)it->second.coin.out.nValue,
                (bool)it->second.coin.IsCoinBase());
         cacheCoins.erase(it);
+        Assume(!cacheCoins.contains(hash));
     }
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        if (base_cache) {
+            Assume(base_cache->GetCacheSize() == base_cache_size);
+            Assume(base_cache->GetDirtyCount() == base_dirty_count);
+            Assume(base_cache->DynamicMemoryUsage() == base_memory_usage);
+        }
+    }
+    Assume(m_dirty_count == dirty_count);
 }
 
-unsigned int CCoinsViewCache::GetCacheSize() const {
-    return cacheCoins.size();
+unsigned int CCoinsViewCache::GetCacheSize() const
+{
+    const size_t cache_size{cacheCoins.size()};
+    const size_t cache_usage{cachedCoinsUsage};
+    const size_t dirty_count{m_dirty_count};
+    Assume(cacheCoins.size() == cache_size);
+    Assume(cachedCoinsUsage == cache_usage);
+    Assume(m_dirty_count == dirty_count);
+    return cache_size;
 }
 
 bool CCoinsViewCache::HaveInputs(const CTransaction& tx) const
 {
-    if (!tx.IsCoinBase()) {
-        for (unsigned int i = 0; i < tx.vin.size(); i++) {
-            if (!HaveCoin(tx.vin[i].prevout)) {
+    const bool is_coinbase{tx.IsCoinBase()};
+    const bool skips_input_lookup{is_coinbase || tx.vin.empty()};
+    const size_t cache_size{skips_input_lookup ? cacheCoins.size() : 0};
+    const size_t cache_usage{skips_input_lookup ? cachedCoinsUsage : 0};
+    const size_t dirty_count{m_dirty_count};
+
+    if (!is_coinbase) {
+        for (const auto& txin : tx.vin) {
+            if (!HaveCoin(txin.prevout)) {
+                Assume(m_dirty_count == dirty_count);
                 return false;
             }
+            Assume(!AccessCoin(txin.prevout).IsSpent());
         }
+    } else {
+        Assume(tx.vin.size() == 1);
+        Assume(tx.vin.front().prevout.IsNull());
+    }
+    Assume(m_dirty_count == dirty_count);
+    if (skips_input_lookup) {
+        Assume(cacheCoins.size() == cache_size);
+        Assume(cachedCoinsUsage == cache_usage);
     }
     return true;
 }
@@ -328,10 +530,20 @@ void CCoinsViewCache::ReallocateCache()
 {
     // Cache should be empty when we're calling this.
     assert(cacheCoins.size() == 0);
+    Assume(cacheCoins.empty());
+    Assume(cachedCoinsUsage == 0);
+    Assume(m_dirty_count == 0);
+    Assume(m_sentinel.second.Next() == &m_sentinel);
+    Assume(m_sentinel.second.Prev() == &m_sentinel);
     cacheCoins.~CCoinsMap();
     m_cache_coins_memory_resource.~CCoinsMapMemoryResource();
     ::new (&m_cache_coins_memory_resource) CCoinsMapMemoryResource{};
     ::new (&cacheCoins) CCoinsMap{0, SaltedOutpointHasher{/*deterministic=*/m_deterministic}, CCoinsMap::key_equal{}, &m_cache_coins_memory_resource};
+    Assume(cacheCoins.empty());
+    Assume(cachedCoinsUsage == 0);
+    Assume(m_dirty_count == 0);
+    Assume(m_sentinel.second.Next() == &m_sentinel);
+    Assume(m_sentinel.second.Prev() == &m_sentinel);
 }
 
 void CCoinsViewCache::SanityCheck() const
@@ -378,6 +590,7 @@ CCoinsViewCache::ResetGuard CoinsViewOverlay::StartFetching(const CBlock& block 
         // directly in the cache from the tx that creates them, so they will not be requested from a base view.
         std::unordered_set<Txid, SaltedTxidHasher> earlier_txids;
         earlier_txids.reserve(block.vtx.size());
+        if (!block.vtx.empty()) earlier_txids.emplace(block.vtx.front()->GetHash());
         for (const auto& tx : block.vtx | std::views::drop(1)) {
             for (const auto& input : tx->vin) {
                 if (!earlier_txids.contains(input.prevout.hash)) m_inputs.emplace_back(input.prevout);
@@ -386,8 +599,10 @@ CCoinsViewCache::ResetGuard CoinsViewOverlay::StartFetching(const CBlock& block 
         }
         // Only submit tasks if we have something to fetch.
         if (m_inputs.size()) {
-            std::vector<std::function<void()>> tasks(workers_count, [this] {
-                while (ProcessInput()) {}
+            const auto task_count{std::min(workers_count, m_inputs.size())};
+            std::vector<std::function<void()>> tasks(task_count, [this] {
+                while (ProcessInput()) {
+                }
             });
             if (auto futures{m_thread_pool->Submit(std::move(tasks))}) {
                 m_futures = std::move(*futures);
@@ -409,12 +624,18 @@ static const uint64_t MAX_OUTPUTS_PER_BLOCK{MAX_BLOCK_WEIGHT / MIN_TRANSACTION_O
 
 const Coin& AccessByTxid(const CCoinsViewCache& view, const Txid& txid)
 {
+    const size_t dirty_count{view.GetDirtyCount()};
     COutPoint iter(txid, 0);
     while (iter.n < MAX_OUTPUTS_PER_BLOCK) {
         const Coin& alternate = view.AccessCoin(iter);
-        if (!alternate.IsSpent()) return alternate;
+        if (!alternate.IsSpent()) {
+            Assume(view.HaveCoin(iter));
+            Assume(view.GetDirtyCount() == dirty_count);
+            return alternate;
+        }
         ++iter.n;
     }
+    Assume(view.GetDirtyCount() == dirty_count);
     return coinEmpty;
 }
 
