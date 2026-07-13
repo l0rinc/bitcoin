@@ -7,6 +7,7 @@
 #include <chainparams.h>
 #include <common/args.h>
 #include <consensus/amount.h>
+#include <consensus/consensus.h>
 #include <consensus/validation.h>
 #include <dbwrapper.h>
 #include <flatfile.h>
@@ -149,13 +150,20 @@ BOOST_FIXTURE_TEST_CASE(txindex_collision_scan_path, TestChain100Setup)
     BOOST_REQUIRE_EQUAL(fake_bucket.size(), 1U);
     const txindex::BlockTxPosition fake_pos{fake_bucket.front()};
 
+    // Model the short window during a reorg where an old-branch position is
+    // resolved through the new active block at the same height. This offset is
+    // within the serialized format but beyond the test block file.
+    const txindex::BlockTxPosition stale_pos{0, MAX_BLOCK_SERIALIZED_SIZE - 1};
+    db.Write(txindex::DBKey{target_prefix, stale_pos}, "");
     db.Write(txindex::DBKey{target_prefix, fake_pos}, "");
 
-    // The target's bucket now holds the forged false positive first, then the real target.
+    // The target's bucket now holds the stale position and forged false positive
+    // before the real target.
     const auto target_bucket{BucketPositions(db, target_prefix)};
-    BOOST_REQUIRE_EQUAL(target_bucket.size(), 2U);
-    BOOST_CHECK(target_bucket[0] == fake_pos);
-    BOOST_CHECK(target_bucket[1] != fake_pos);
+    BOOST_REQUIRE_EQUAL(target_bucket.size(), 3U);
+    BOOST_CHECK(target_bucket[0] == stale_pos);
+    BOOST_CHECK(target_bucket[1] == fake_pos);
+    BOOST_CHECK(target_bucket[2] != fake_pos);
 
     CTransactionRef tx_disk;
     uint256 block_hash;

@@ -181,16 +181,20 @@ bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& 
             LogError("OpenBlockFile failed");
             return false;
         }
+        CTransactionRef candidate_tx;
         try {
-            file >> TX_WITH_WITNESS(tx);
+            file >> TX_WITH_WITNESS(candidate_tx);
         } catch (const std::exception& e) {
-            LogError("Deserialize or I/O error - %s", e.what());
-            return false;
+            // A reorg may temporarily leave an old-branch position
+            // resolving through the new active block at this height.
+            LogDebug(BCLog::VALIDATION, "Skipping unreadable txindex candidate at height %d, offset %u: %s", key.pos.block_height, key.pos.tx_offset_in_block, e.what());
+            continue;
         }
-        if (tx->GetHash() == tx_hash) {
+        if (candidate_tx->GetHash() == tx_hash) {
             // For BIP30 duplicate txs, this returns the earliest block.
             // The legacy index returned the latest one instead,
             // as each write overwrote the position under the same txid key.
+            tx = std::move(candidate_tx);
             block_hash = block_index->GetBlockHash();
             return true;
         }
