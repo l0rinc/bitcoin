@@ -154,7 +154,7 @@ public:
 
     /** Marks a tx as ReceivedResponse in txrequest and checks whether AlreadyHaveTx.
      * Return a bool indicating whether this tx should be validated. If false, optionally, a
-     * PackageToValidate. */
+     * PackageToValidate. For unregistered peers, returns {false, std::nullopt}. */
     std::pair<bool, std::optional<PackageToValidate>> ReceivedTx(NodeId nodeid, const CTransactionRef& ptx);
 
     /** Whether there are any orphans to reconsider for this peer. */
