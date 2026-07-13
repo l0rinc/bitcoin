@@ -421,13 +421,14 @@ void BaseIndex::ChainStateFlushed(const ChainstateRole& role, const CBlockLocato
     // immediately after the sync thread catches up and sets m_synced. Consider the case where
     // there is a reorg and the blocks on the stale branch are in the ValidationInterface queue
     // backlog even after the sync thread has caught up to the new chain tip. In this unlikely
-    // event, log a warning and let the queue clear.
+    // event, log a warning and let the queue clear. The index may also have no best block at all
+    // yet if it became synced before genesis was connected.
     const CBlockIndex* best_block_index = m_best_block_index.load();
-    if (best_block_index->GetAncestor(locator_tip_index->nHeight) != locator_tip_index) {
+    if (!best_block_index || best_block_index->GetAncestor(locator_tip_index->nHeight) != locator_tip_index) {
         LogWarning("Locator contains block (hash=%s) not on known best "
                   "chain (tip=%s); not writing index locator",
                   locator_tip_hash.ToString(),
-                  best_block_index->GetBlockHash().ToString());
+                  best_block_index ? best_block_index->GetBlockHash().ToString() : "null");
         return;
     }
 
@@ -451,7 +452,11 @@ bool BaseIndex::BlockUntilSyncedToCurrentChain() const
         LOCK(cs_main);
         const CBlockIndex* chain_tip = m_chainstate->m_chain.Tip();
         const CBlockIndex* best_block_index = m_best_block_index.load();
-        if (best_block_index->GetAncestor(chain_tip->nHeight) == chain_tip) {
+        if (!chain_tip) {
+            Assume(!best_block_index);
+            return true;
+        }
+        if (best_block_index && best_block_index->GetAncestor(chain_tip->nHeight) == chain_tip) {
             return true;
         }
     }

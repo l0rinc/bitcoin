@@ -108,6 +108,8 @@ struct ChainTestingSetup : public BasicTestingSetup {
 
     // Supplies a chainstate, if one is needed
     void LoadVerifyActivateChainstate();
+    // Same, but stops before activating the best chain, leaving the active chain without a tip.
+    void LoadVerifyChainstate();
 };
 
 /** Testing setup that configures a complete environment.
