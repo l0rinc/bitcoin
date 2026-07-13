@@ -123,12 +123,12 @@ bool BlockFilterIndex::CustomInit(const std::optional<interfaces::BlockRef>& blo
     }
 
     if (block) {
-        auto op_last_header = ReadFilterHeader(block->height, block->hash);
-        if (!op_last_header) {
+        DBVal entry;
+        if (!index_util::LookUpOne(*m_db, *block, entry)) {
             LogError("Cannot read last block filter header; index may be corrupted");
             return false;
         }
-        m_last_header = *op_last_header;
+        m_last_header = entry.header;
     }
 
     return true;
@@ -241,22 +241,6 @@ uint64_t BlockFilterIndex::WriteFilterToDisk(FlatFilePos& pos, const BlockFilter
     return data_size;
 }
 
-std::optional<uint256> BlockFilterIndex::ReadFilterHeader(int height, const uint256& expected_block_hash)
-{
-    std::pair<uint256, DBVal> read_out;
-    if (!m_db->Read(index_util::DBHeightKey(height), read_out)) {
-        return std::nullopt;
-    }
-
-    if (read_out.first != expected_block_hash) {
-        LogError("previous block header belongs to unexpected block %s; expected %s",
-                 read_out.first.ToString(), expected_block_hash.ToString());
-        return std::nullopt;
-    }
-
-    return read_out.second.header;
-}
-
 bool BlockFilterIndex::CustomAppend(const interfaces::BlockInfo& block)
 {
     BlockFilter filter(m_filter_type, *Assert(block.data), *Assert(block.undo_data));
@@ -301,8 +285,13 @@ bool BlockFilterIndex::CustomRemove(const interfaces::BlockInfo& block)
     batch.Write(DB_FILTER_POS, m_next_filter_pos);
     m_db->WriteBatch(batch);
 
-    // Update cached header to the previous block hash
-    m_last_header = *Assert(ReadFilterHeader(block.height - 1, *Assert(block.prev_hash)));
+    const interfaces::BlockRef previous{*Assert(block.prev_hash), block.height - 1};
+    DBVal entry;
+    if (!index_util::LookUpOne(*m_db, previous, entry)) {
+        LogError("Cannot read %s entry of previous block %s", GetName(), previous.hash.ToString());
+        return false;
+    }
+    m_last_header = entry.header;
     return true;
 }
 

@@ -4,6 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the getblockfilter RPC."""
 
+from test_framework.messages import hash256
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal, assert_is_hex_string, assert_raises_rpc_error,
@@ -30,6 +31,9 @@ class GetBlockFilterTest(BitcoinTestFramework):
         node = self.nodes[0]
         # Commit chain 0's index locator before chain 1 replaces its height entries
         node.wait_for_index_sync()
+        old_parent, old_tip = chain0_hashes[-2:]
+        parent_header = node.getblockfilter(old_parent)["header"]
+        tip_header = node.getblockfilter(old_tip)["header"]
         self.restart_node(0)
 
         # Reorg node 0 to a new chain
@@ -86,10 +90,20 @@ class GetBlockFilterTest(BitcoinTestFramework):
 
         # Restore the committed branch while the index is offline
         node.invalidateblock(chain1_hashes[1])
-        assert_equal(node.getbestblockhash(), chain0_hashes[-1])
-        self.stop_node(0)
-        with node.assert_debug_log(["Cannot read last block filter header"]):
-            node.assert_start_raises_init_error()  # TODO: recover the committed tip by hash
+        assert_equal(node.getbestblockhash(), old_tip)
+        self.restart_node(0)
+
+        def check_child_header(previous_header):
+            child = self.generatetodescriptor(node, 1, "raw(51)", sync_fun=self.no_op)[0]
+            result = node.getblockfilter(child)
+            filter_hash = hash256(bytes.fromhex(result["filter"]))
+            expected = hash256(filter_hash + bytes.fromhex(previous_header)[::-1])
+            assert_equal(result["header"], expected[::-1].hex())
+
+        check_child_header(tip_header)
+        node.invalidateblock(old_tip)
+        assert_equal(node.getbestblockhash(), old_parent)
+        check_child_header(parent_header)
 
 if __name__ == '__main__':
     GetBlockFilterTest(__file__).main()

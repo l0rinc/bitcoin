@@ -17,7 +17,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -59,8 +58,6 @@ private:
     bool AllowPrune() const override { return true; }
 
     bool Write(const BlockFilter& filter, uint32_t block_height, const uint256& filter_header);
-
-    std::optional<uint256> ReadFilterHeader(int height, const uint256& expected_block_hash);
 
 protected:
     bool CustomInit(const std::optional<interfaces::BlockRef>& block) override;
