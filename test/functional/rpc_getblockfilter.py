@@ -27,6 +27,11 @@ class GetBlockFilterTest(BitcoinTestFramework):
         assert_equal(self.nodes[0].getblockcount(), 3)
         chain0_hashes = [self.nodes[0].getblockhash(block_height) for block_height in range(4)]
 
+        node = self.nodes[0]
+        # Commit chain 0's index locator before chain 1 replaces its height entries
+        node.wait_for_index_sync()
+        self.restart_node(0)
+
         # Reorg node 0 to a new chain
         self.connect_nodes(0, 1)
         self.sync_blocks()
@@ -69,11 +74,22 @@ class GetBlockFilterTest(BitcoinTestFramework):
         genesis_hash = self.nodes[0].getblockhash(0)
         assert_raises_rpc_error(-5, "Unknown filtertype", self.nodes[0].getblockfilter, genesis_hash, "unknown")
 
+        # Leave the index ahead of the chain so shutdown skips its commit
+        node.wait_for_index_sync()
+        node.invalidateblock(block_hash)
+
         # Test getblockfilter fails on node without compact block filter index
         self.restart_node(0, extra_args=["-blockfilterindex=0"])
         for filter_type in FILTER_TYPES:
             assert_raises_rpc_error(-1, "Index is not enabled for filtertype {}".format(filter_type),
                                     self.nodes[0].getblockfilter, genesis_hash, filter_type)
+
+        # Restore the committed branch while the index is offline
+        node.invalidateblock(chain1_hashes[1])
+        assert_equal(node.getbestblockhash(), chain0_hashes[-1])
+        self.stop_node(0)
+        with node.assert_debug_log(["Cannot read last block filter header"]):
+            node.assert_start_raises_init_error()  # TODO: recover the committed tip by hash
 
 if __name__ == '__main__':
     GetBlockFilterTest(__file__).main()
