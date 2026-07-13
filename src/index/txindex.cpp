@@ -65,19 +65,19 @@ public:
     void WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator) override;
 
 private:
-    DB(size_t n_cache_size, bool f_memory, bool f_wipe, bool f_obfuscate, bool f_bloom);
+    DB(size_t n_cache_size, bool f_memory, bool f_wipe, bool has_legacy);
 };
 
 static fs::path TxIndexDBPath() { return gArgs.GetDataDirNet() / "indexes" / "txindex"; }
 
 TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe) :
     // Enable bloom filters only if legacy entries are present (they are point lookups)
-    DB(n_cache_size, f_memory, f_wipe, /*f_obfuscate=*/false,
-       /*f_bloom=*/!f_memory && !f_wipe && CDBWrapper::HasKeyStartingWith(TxIndexDBPath(), DB_TXINDEX))
+    DB(n_cache_size, f_memory, f_wipe,
+       /*has_legacy=*/!f_memory && !f_wipe && CDBWrapper::HasKeyStartingWith(TxIndexDBPath(), DB_TXINDEX))
 {}
 
-TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe, bool f_obfuscate, bool f_bloom) :
-    BaseIndex::DB(TxIndexDBPath(), n_cache_size, f_memory, f_wipe, f_obfuscate, f_bloom),
+TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe, bool has_legacy) :
+    BaseIndex::DB(TxIndexDBPath(), n_cache_size, f_memory, f_wipe, /*f_obfuscate=*/false, /*f_bloom=*/has_legacy),
     m_hasher{[](CDBWrapper& db) {
         std::pair<uint64_t, uint64_t> salt;
         if (!db.Read(DB_TXID_HASH_SALT, salt)) {
@@ -87,7 +87,7 @@ TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe, bool f_obfuscat
         }
         return PresaltedSipHasher{salt.first, salt.second};
     }(*this)},
-    m_has_legacy{f_bloom}
+    m_has_legacy{has_legacy}
 {}
 
 bool TxIndex::DB::ReadTxPos(const Txid& txid, CDiskTxPos& pos) const
