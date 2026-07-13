@@ -242,18 +242,11 @@ size_t BlockFilterIndex::WriteFilterToDisk(FlatFilePos& pos, const BlockFilter& 
 
 std::optional<uint256> BlockFilterIndex::ReadFilterHeader(int height, const uint256& expected_block_hash)
 {
-    std::pair<uint256, DBVal> read_out;
-    if (!m_db->Read(index_util::DBHeightKey(height), read_out)) {
+    DBVal entry;
+    if (!index_util::LookUpOne(*m_db, {expected_block_hash, height}, entry)) {
         return std::nullopt;
     }
-
-    if (read_out.first != expected_block_hash) {
-        LogError("previous block header belongs to unexpected block %s; expected %s",
-                 read_out.first.ToString(), expected_block_hash.ToString());
-        return std::nullopt;
-    }
-
-    return read_out.second.header;
+    return entry.header;
 }
 
 bool BlockFilterIndex::CustomAppend(const interfaces::BlockInfo& block)
@@ -301,7 +294,13 @@ bool BlockFilterIndex::CustomRemove(const interfaces::BlockInfo& block)
     m_db->WriteBatch(batch);
 
     // Update cached header to the previous block hash
-    m_last_header = *Assert(ReadFilterHeader(block.height - 1, *Assert(block.prev_hash)));
+    const uint256& previous_hash{*Assert(block.prev_hash)};
+    const auto last_header{ReadFilterHeader(block.height - 1, previous_hash)};
+    if (!last_header) {
+        LogError("previous block filter header not found; expected %s", previous_hash.ToString());
+        return false;
+    }
+    m_last_header = *last_header;
     return true;
 }
 

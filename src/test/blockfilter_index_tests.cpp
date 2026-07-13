@@ -338,7 +338,7 @@ BOOST_FIXTURE_TEST_CASE(blockfilter_index_reorg_restart, BuildChainTestingSetup)
         m_node.validation_signals->SyncWithValidationInterfaceQueue();
         return index.GetSummary();
     }};
-    auto summary_at{[](const CBlockIndex& tip, bool synced) { return IndexSummary{"basic block filter index", synced, tip.nHeight, tip.GetBlockHash()}; }};
+    auto summary_at{[](const CBlockIndex& tip) { return IndexSummary{"basic block filter index", /*synced=*/true, tip.nHeight, tip.GetBlockHash()}; }};
     const auto* old_tip{current_tip()};
 
     std::vector<std::shared_ptr<CBlock>> fork;
@@ -350,12 +350,12 @@ BOOST_FIXTURE_TEST_CASE(blockfilter_index_reorg_restart, BuildChainTestingSetup)
         BOOST_REQUIRE(index.Init());
         index.Sync();
         chainstate.ForceFlushStateToDisk();
-        BOOST_CHECK(summary_after_callbacks(index) == summary_at(*old_tip, /*synced=*/true));
+        BOOST_CHECK(summary_after_callbacks(index) == summary_at(*old_tip));
 
         for (const auto& block : fork) {
             BOOST_REQUIRE(chainman.ProcessNewBlock(block, /*force_processing=*/true, /*min_pow_checked=*/true, nullptr));
         }
-        BOOST_CHECK(summary_after_callbacks(index) == summary_at(*current_tip(), /*synced=*/true));
+        BOOST_CHECK(summary_after_callbacks(index) == summary_at(*current_tip()));
         BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return chainstate.GetLastFlushedBlock()), old_tip);
     }
 
@@ -368,8 +368,8 @@ BOOST_FIXTURE_TEST_CASE(blockfilter_index_reorg_restart, BuildChainTestingSetup)
     BOOST_REQUIRE_EQUAL(current_tip(), old_tip);
 
     BlockFilterIndex index{interfaces::MakeChain(m_node), BlockFilterType::BASIC, /*n_cache_size=*/1_MiB, /*f_memory=*/false, /*f_wipe=*/false};
-    BOOST_CHECK(!index.Init()); // TODO: Initialize from old_tip's hash entry.
-    BOOST_CHECK(summary_after_callbacks(index) == summary_at(*old_tip, /*synced=*/false)); // TODO: Mark the recovered index as synced.
+    BOOST_REQUIRE(index.Init());
+    BOOST_CHECK(summary_after_callbacks(index) == summary_at(*old_tip));
 }
 
 class IndexReorgCrash : public BaseIndex
