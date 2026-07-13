@@ -59,4 +59,39 @@ BOOST_FIXTURE_TEST_CASE(baseindex_no_commit_ahead_of_flush, TestChain100Setup)
     sync_index(false, 101, 100);
 }
 
+BOOST_FIXTURE_TEST_CASE(baseindex_restart_after_pure_disconnect, TestChain100Setup)
+{
+    auto& chainstate{Assert(m_node.chainman)->ActiveChainstate()};
+    auto current_tip{[&] { return Assert(WITH_LOCK(::cs_main, return chainstate.m_chain.Tip())); }};
+    auto persist_chainstate{[&] {
+        chainstate.ForceFlushStateToDisk();
+        m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    }};
+    auto restart_index{[&](bool do_sync = true) {
+        CoinStatsIndex index{interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB};
+        BOOST_REQUIRE(index.Init());
+        if (do_sync) index.Sync();
+        auto summary{index.GetSummary()};
+        index.Stop();
+        return summary;
+    }};
+    auto synced_at{[](const CBlockIndex& tip, bool synced = true) { return IndexSummary{"coinstatsindex", synced, tip.nHeight, tip.GetBlockHash()}; }};
+    auto* old_tip{current_tip()};
+
+    // Persist the chainstate and index at the old child.
+    persist_chainstate();
+    BOOST_CHECK(restart_index() == synced_at(*old_tip));
+
+    // Persist a pure disconnect to the parent while leaving the index locator
+    // at the old child, modeling a crash before the index sees the notification.
+    BlockValidationState state{};
+    BOOST_REQUIRE(chainstate.InvalidateBlock(state, old_tip) && state.IsValid());
+    auto* new_tip{current_tip()};
+    BOOST_REQUIRE_EQUAL(new_tip, old_tip->pprev);
+    persist_chainstate();
+
+    BOOST_CHECK(restart_index() == synced_at(*old_tip)); // TODO: Rewind to new_tip.
+    BOOST_CHECK(restart_index(/*do_sync=*/false) == synced_at(*old_tip, /*synced=*/false)); // TODO: Persist new_tip and mark it synced.
+}
+
 BOOST_AUTO_TEST_SUITE_END()
