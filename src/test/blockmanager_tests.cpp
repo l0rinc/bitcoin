@@ -8,21 +8,32 @@
 #include <node/blockstorage.h>
 #include <node/context.h>
 #include <node/kernel_notifications.h>
-#include <script/solver.h>
 #include <primitives/block.h>
-#include <util/chaintype.h>
-#include <validation.h>
-
-#include <boost/test/unit_test.hpp>
+#include <script/solver.h>
 #include <test/util/common.h>
 #include <test/util/logging.h>
 #include <test/util/setup_common.h>
+#include <undo.h>
+#include <util/chaintype.h>
+#include <util/translation.h>
+#include <validation.h>
+
+#include <boost/test/unit_test.hpp>
 
 using kernel::CBlockFileInfo;
 using node::STORAGE_HEADER_BYTES;
 using node::BlockManager;
 using node::KernelNotifications;
 using node::MAX_BLOCKFILE_SIZE;
+
+namespace node {
+struct BlockManagerTestAccess {
+    static bool FlushChainstateBlockFile(BlockManager& blockman, int tip_height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        return blockman.FlushChainstateBlockFile(tip_height);
+    }
+};
+} // namespace node
 
 // use BasicTestingSetup here for the data directory configuration, setup, and cleanup
 BOOST_FIXTURE_TEST_SUITE(blockmanager_tests, BasicTestingSetup)
@@ -300,6 +311,77 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
     // Block 2 was not overwritten:
     BOOST_CHECK(!blockman.ReadBlock(read_block, pos2, {}));
     BOOST_CHECK_EQUAL(read_block.nVersion, 2);
+}
+
+BOOST_AUTO_TEST_CASE(blockmanager_flush_chainstate_block_file_dirty_undo_file)
+{
+    const auto params{CreateChainParams(ArgsManager{}, ChainType::MAIN)};
+
+    struct TestNotifications final : kernel::Notifications {
+        int flush_errors{0};
+        void flushError(const bilingual_str&) override { ++flush_errors; }
+    } notifications;
+
+    const BlockManager::Options blockman_opts{
+        .chainparams = *params,
+        .fast_prune = true,
+        .blocks_dir = m_args.GetBlocksDirPath(),
+        .notifications = notifications,
+        .block_tree_db_params = DBParams{
+            .path = m_args.GetDataDirNet() / "blocks" / "index",
+            .cache_bytes = 0,
+        },
+    };
+    BlockManager blockman{*Assert(m_node.shutdown_signal), blockman_opts};
+
+    const auto make_big_block{[](int version) {
+        CBlock block;
+        block.nVersion = version;
+
+        CMutableTransaction tx;
+        tx.vin.resize(1);
+        tx.vout.resize(1);
+        tx.vin[0].scriptSig.resize(40'000);
+        block.vtx.push_back(MakeTransactionRef(std::move(tx)));
+
+        return block;
+    }};
+
+    const FlatFilePos pos1{WITH_LOCK(::cs_main, return blockman.WriteBlock(make_big_block(1), /*nHeight=*/1))};
+    const FlatFilePos pos2{WITH_LOCK(::cs_main, return blockman.WriteBlock(make_big_block(2), /*nHeight=*/2))};
+    BOOST_CHECK_EQUAL(pos1.nFile, 0);
+    BOOST_CHECK_EQUAL(pos2.nFile, 1);
+
+    // Write undo for a block stored in file 0 after file 1 is already in use.
+    const uint256 prev_hash{uint8_t{1}};
+    CBlockIndex prev_index{CBlockHeader{}};
+    prev_index.phashBlock = &prev_hash;
+
+    const uint256 block_hash{uint8_t{2}};
+    CBlockIndex index{CBlockHeader{}};
+    index.phashBlock = &block_hash;
+    index.pprev = &prev_index;
+    index.nHeight = 1;
+
+    BlockValidationState state{};
+    {
+        LOCK(::cs_main);
+        index.nFile = pos1.nFile;
+        BOOST_REQUIRE(blockman.WriteBlockUndo(CBlockUndo{}, state, index));
+    }
+
+    // Replacing the older rev file with a directory makes an attempted flush fail.
+    const fs::path undo_path{blockman_opts.blocks_dir / "rev00000.dat"};
+    BOOST_REQUIRE(fs::exists(undo_path));
+    BOOST_REQUIRE(fs::remove(undo_path));
+    BOOST_REQUIRE(fs::create_directory(undo_path));
+
+    // The chainstate flush must also attempt to flush the older dirty undo file.
+    {
+        LOCK(::cs_main);
+        BOOST_CHECK(!node::BlockManagerTestAccess::FlushChainstateBlockFile(blockman, /*tip_height=*/2));
+    }
+    BOOST_CHECK_EQUAL(notifications.flush_errors, 1);
 }
 
 BOOST_FIXTURE_TEST_CASE(prune_lock_update_and_delete, TestingSetup)
