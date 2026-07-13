@@ -46,7 +46,7 @@ public:
 
 
     //! The number of coins in the UTXO set contained in this snapshot. Used
-    //! during snapshot load to estimate progress of UTXO set reconstruction.
+    //! during snapshot load to estimate progress and validate the loaded set.
     uint64_t m_coins_count = 0;
 
     SnapshotMetadata(

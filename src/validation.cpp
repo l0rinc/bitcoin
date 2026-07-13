@@ -5934,6 +5934,11 @@ util::Result<void> ChainstateManager::PopulateAndValidateSnapshot(
         return util::Error{Untranslated("Failed to generate coins stats")};
     }
 
+    if (maybe_stats->coins_count != coins_count) {
+        return util::Error{Untranslated(strprintf("Bad snapshot coins count: expected %d, got %d",
+            coins_count, maybe_stats->coins_count))};
+    }
+
     // Assert that the deserialized chainstate contents match the expected assumeutxo value.
     if (AssumeutxoHash{maybe_stats->hashSerialized} != au_data.hash_serialized) {
         return util::Error{Untranslated(strprintf("Bad snapshot content hash: expected %s, got %s",
