@@ -148,28 +148,29 @@ bool BaseIndex::Init()
     return true;
 }
 
-static const CBlockIndex* NextSyncBlock(const CBlockIndex* const pindex_prev, CChain& chain) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+// Returns the next block to sync and the block to rewind to first.
+static std::pair<const CBlockIndex*, const CBlockIndex*> NextSyncBlock(const CBlockIndex* const pindex_prev, CChain& chain) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     AssertLockHeld(cs_main);
 
     if (!pindex_prev) {
-        return chain.Genesis();
+        return {chain.Genesis(), nullptr};
     }
 
     if (const auto* pindex{chain.Next(*pindex_prev)}) {
-        return pindex;
+        return {pindex, pindex_prev};
     }
 
     // If there is no next block, we might be synced
     if (pindex_prev == chain.Tip()) {
-        return nullptr;
+        return {nullptr, pindex_prev};
     }
 
     // Since block is not in the chain, return the next block in the chain AFTER the last common ancestor.
     // Caller will be responsible for rewinding back to the common ancestor.
     const auto* fork{chain.FindFork(*pindex_prev)};
     // Common ancestor must exist (genesis).
-    return chain.Next(*Assert(fork));
+    return {chain.Next(*Assert(fork)), fork};
 }
 
 bool BaseIndex::ProcessBlock(const CBlockIndex* pindex, const CBlock* block_data)
@@ -223,9 +224,9 @@ void BaseIndex::Sync()
                 return;
             }
 
-            const CBlockIndex* pindex_next = WITH_LOCK(cs_main, return NextSyncBlock(pindex, m_chainstate->m_chain));
-            // If pindex_next is null, it means pindex is the chain tip, so
-            // commit data indexed so far.
+            auto next_sync{WITH_LOCK(::cs_main, return NextSyncBlock(pindex, m_chainstate->m_chain))};
+            auto& [pindex_next, rewind_to]{next_sync};
+            // If next is null, commit data indexed so far.
             if (!pindex_next) {
                 SetBestBlockIndex(pindex);
                 // No need to handle errors in Commit. See rationale above.
@@ -237,13 +238,13 @@ void BaseIndex::Sync()
                 // attached while m_synced is still false, and it would not be
                 // indexed.
                 LOCK(::cs_main);
-                pindex_next = NextSyncBlock(pindex, m_chainstate->m_chain);
+                next_sync = NextSyncBlock(pindex, m_chainstate->m_chain);
                 if (!pindex_next) {
                     m_synced = true;
                     break;
                 }
             }
-            if (pindex_next->pprev != pindex && !Rewind(pindex, pindex_next->pprev)) {
+            if (rewind_to != pindex && !Rewind(pindex, rewind_to)) {
                 FatalErrorf("Failed to rewind %s to a previous chain tip", GetName());
                 return;
             }
