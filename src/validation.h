@@ -680,8 +680,8 @@ public:
      * The set of all CBlockIndex entries that have as much work as our current
      * tip or more, and transaction data needed to be validated (with
      * BLOCK_VALID_TRANSACTIONS for each block and its parents back to the
-     * genesis block or an assumeutxo snapshot block). Entries may be failed,
-     * though, and pruning nodes may be missing the data for the block.
+     * genesis block or an assumeutxo snapshot block). Entries must not be
+     * failed, though pruning nodes may be missing the data for the block.
      */
     std::set<CBlockIndex*, node::CBlockIndexWorkComparator> setBlockIndexCandidates;
 
