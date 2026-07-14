@@ -82,19 +82,6 @@ static DBKey CreateKey(std::pair<uint64_t, uint64_t> siphash_key, const COutPoin
     return DBKey(CreateKeyPrefix(siphash_key, vout), pos);
 }
 
-void TxoSpenderIndex::WriteSpenderInfos(const std::vector<std::pair<COutPoint, CDiskTxPos>>& items)
-{
-    CDBBatch batch(*m_db);
-    for (const auto& [outpoint, pos] : items) {
-        DBKey key(CreateKey(m_siphash_key, outpoint, pos));
-        // The key encodes the spent outpoint hash and disk position. The value is only a marker.
-        // Older entries may contain serialized empty strings; FindSpender() reads only keys.
-        batch.Write(key, std::span<const std::byte>{});
-    }
-    m_db->WriteBatch(batch);
-}
-
-
 static std::vector<std::pair<COutPoint, CDiskTxPos>> BuildSpenderPositions(const interfaces::BlockInfo& block)
 {
     std::vector<std::pair<COutPoint, CDiskTxPos>> items;
@@ -116,7 +103,12 @@ static std::vector<std::pair<COutPoint, CDiskTxPos>> BuildSpenderPositions(const
 
 bool TxoSpenderIndex::CustomAppend(const interfaces::BlockInfo& block)
 {
-    WriteSpenderInfos(BuildSpenderPositions(block));
+    CDBBatch batch(*m_db);
+    // The values are only markers; older entries may contain serialized empty strings, so FindSpender() reads only keys.
+    for (const auto& [outpoint, pos] : BuildSpenderPositions(block)) {
+        batch.Write(CreateKey(m_siphash_key, outpoint, pos), std::span<const std::byte>{});
+    }
+    m_db->WriteBatch(batch);
     return true;
 }
 
