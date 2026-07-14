@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <dbwrapper.h>
 #include <index/txospenderindex.h>
 #include <script/interpreter.h>
 #include <test/util/common.h>
@@ -160,6 +161,16 @@ BOOST_FIXTURE_TEST_CASE(txospenderindex_reorg_recovery, TestChain100Setup)
     }
 
     auto block_b_pos{WITH_LOCK(::cs_main, return block_b_index->GetBlockPos())};
+    auto erase_block_mapping{[&] {
+        auto block_b_key{std::pair{uint8_t{'b'}, block_b_pos}}; // Matches DB_TXOSPENDER_BLOCK
+        CDBWrapper db{{
+            .path = gArgs.GetDataDirNet() / "indexes" / "txospenderindex" / "db",
+            .cache_bytes = 1_MiB,
+        }};
+        BOOST_REQUIRE(db.Exists(block_b_key));
+        db.Erase(block_b_key);
+        BOOST_CHECK(!db.Exists(block_b_key));
+    }};
     auto corrupt_spender_b{[&] {
         auto corrupt_pos{block_b_pos};
         corrupt_pos.nPos += static_cast<unsigned>(::GetSerializeSize(static_cast<const CBlockHeader&>(*block_b))) + GetSizeOfCompactSize(block_b->vtx.size()) +
@@ -170,12 +181,21 @@ BOOST_FIXTURE_TEST_CASE(txospenderindex_reorg_recovery, TestChain100Setup)
         file.write(invalid_compact_size);
         BOOST_REQUIRE_EQUAL(file.fclose(), 0);
     }};
+    auto restart_index{[&] {
+        auto index{make_index(/*wipe=*/false)};
+        BOOST_REQUIRE(index.Init());
+        auto spender_hash{find_spender(index)};
+        index.Stop();
+        return spender_hash;
+    }};
     corrupt_spender_b();
 
-    auto index{make_index(/*wipe=*/false)};
-    BOOST_REQUIRE(index.Init());
-    BOOST_CHECK(!index.FindSpender(spent).has_value()); // TODO: Skip inactive records before reading their block data.
-    index.Stop();
+    // The block mapping rejects inactive B before reading its corrupt transaction.
+    BOOST_CHECK_EQUAL(restart_index(), spender_a.GetHash());
+
+    // Without the mapping, model legacy data and continue from unreadable B to active A.
+    erase_block_mapping();
+    BOOST_CHECK_EQUAL(restart_index(), spender_a.GetHash());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

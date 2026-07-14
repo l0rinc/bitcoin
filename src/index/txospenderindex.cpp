@@ -35,12 +35,14 @@
 
 /* The database is used to find the spending transaction of a given utxo.
  * For every input of every transaction it stores a key that is a pair(siphash(input outpoint), transaction location on disk) and a zero-byte value.
+ * For every block with spender records it also stores one (block location on disk, block hash) entry, so lookups can reject records of inactive blocks without reading their transactions.
  * To find the spending transaction of an outpoint, we perform a range query on siphash(outpoint), and for each returned key load the transaction
  * and return it if it does spend the provided outpoint.
  */
 
 // LevelDB key prefix. We only have one key for now but it will make it easier to add others if needed.
 constexpr uint8_t DB_TXOSPENDERINDEX{'s'};
+constexpr uint8_t DB_TXOSPENDER_BLOCK{'b'};
 
 std::unique_ptr<TxoSpenderIndex> g_txospenderindex;
 
@@ -82,6 +84,12 @@ static DBKey CreateKey(std::pair<uint64_t, uint64_t> siphash_key, const COutPoin
     return DBKey(CreateKeyPrefix(siphash_key, vout), pos);
 }
 
+// Copy only the FlatFilePos base so every spender in a block uses the same mapping key.
+static auto CreateBlockKey(const FlatFilePos& pos)
+{
+    return std::pair{DB_TXOSPENDER_BLOCK, pos};
+}
+
 static std::vector<std::pair<COutPoint, CDiskTxPos>> BuildSpenderPositions(const interfaces::BlockInfo& block)
 {
     std::vector<std::pair<COutPoint, CDiskTxPos>> items;
@@ -103,9 +111,13 @@ static std::vector<std::pair<COutPoint, CDiskTxPos>> BuildSpenderPositions(const
 
 bool TxoSpenderIndex::CustomAppend(const interfaces::BlockInfo& block)
 {
+    auto items{BuildSpenderPositions(block)};
+    if (items.empty()) return true;
+
     CDBBatch batch(*m_db);
+    batch.Write(CreateBlockKey({block.file_number, block.data_pos}), block.hash);
     // The values are only markers; older entries may contain serialized empty strings, so FindSpender() reads only keys.
-    for (const auto& [outpoint, pos] : BuildSpenderPositions(block)) {
+    for (const auto& [outpoint, pos] : items) {
         batch.Write(CreateKey(m_siphash_key, outpoint, pos), std::span<const std::byte>{});
     }
     m_db->WriteBatch(batch);
@@ -136,24 +148,45 @@ util::Expected<std::optional<TxoSpender>, std::string> TxoSpenderIndex::FindSpen
     const uint64_t prefix{CreateKeyPrefix(m_siphash_key, txo)};
     std::unique_ptr<CDBIterator> it(m_db->NewIterator());
     DBKey key(prefix, CDiskTxPos());
+    std::optional<std::string> legacy_read_error;
     auto in_active_chain{[&](const uint256& block_hash) {
         bool active{false};
         return m_chain->findBlock(block_hash, interfaces::FoundBlock().inActiveChain(active)) && active;
+    }};
+    auto io_error{[&](const std::string& err) {
+        LogError("Deserialize or I/O error - %s", err);
+        return util::Unexpected{strprintf("IO error finding spending tx for outpoint %s:%d.", txo.hash.GetHex(), txo.n)};
     }};
 
     // find all keys that start with the outpoint hash, load the transaction at the location specified in the key
     // and return it if it does spend the provided outpoint
     for (it->Seek(std::pair{DB_TXOSPENDERINDEX, prefix}); it->Valid() && it->GetKey(key) && key.hash == prefix; it->Next()) {
-        if (const auto spender{ReadTransaction(key.pos)}) {
-            if (!std::ranges::any_of(spender->tx->vin, [&](const auto& input) { return input.prevout == txo; })) continue;
-            if (!in_active_chain(spender->block_hash)) continue;
+        uint256 stored_block_hash;
+        const bool has_stored_block_hash{m_db->Read(CreateBlockKey(key.pos), stored_block_hash)};
+        if (has_stored_block_hash && !in_active_chain(stored_block_hash)) continue;
 
-            return std::optional{*spender};
-        } else {
-            LogError("Deserialize or I/O error - %s", spender.error());
-            return util::Unexpected{strprintf("IO error finding spending tx for outpoint %s:%d.", txo.hash.GetHex(), txo.n)};
+        const auto spender{ReadTransaction(key.pos)};
+        if (!spender) {
+            if (has_stored_block_hash) return io_error(spender.error());
+            if (!legacy_read_error) legacy_read_error = spender.error();
+            continue;
         }
+
+        if (has_stored_block_hash && spender->block_hash != stored_block_hash) {
+            return util::Unexpected{strprintf("Block hash mismatch finding spending tx for outpoint %s:%d.", txo.hash.GetHex(), txo.n)};
+        }
+
+        if (!std::ranges::any_of(spender->tx->vin, [&](const auto& input) { return input.prevout == txo; })) continue;
+
+        if (!has_stored_block_hash) {
+            // Entries written by older versions have no block mapping, so
+            // their block identity is only available after reading them.
+            if (!in_active_chain(spender->block_hash)) continue;
+        }
+
+        return std::optional{*spender};
     }
+    if (legacy_read_error) return io_error(*legacy_read_error);
     return util::Expected<std::optional<TxoSpender>, std::string>(std::nullopt);
 }
 
