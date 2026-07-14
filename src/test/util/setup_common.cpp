@@ -464,6 +464,36 @@ CBlock TestChain100Setup::CreateBlock(
     return block;
 }
 
+CBlock TestChain100Setup::CreateBlock(
+    const CBlockIndex* prev,
+    const std::vector<CMutableTransaction>& txns,
+    const CScript& scriptPubKey)
+{
+    auto mining{interfaces::MakeMining(m_node)};
+    auto block_template{mining->createNewBlock({
+        .use_mempool = false,
+        .coinbase_output_script = scriptPubKey,
+    }, /*cooldown=*/false)};
+    Assert(block_template);
+    CBlock block{block_template->getBlock()};
+    block.hashPrevBlock = prev->GetBlockHash();
+    block.nTime = prev->nTime + 1;
+
+    Assert(block.vtx.size() == 1);
+    for (const CMutableTransaction& tx : txns) {
+        block.vtx.push_back(MakeTransactionRef(tx));
+    }
+    CMutableTransaction tx_coinbase{*block.vtx.at(0)};
+    tx_coinbase.nLockTime = static_cast<uint32_t>(prev->nHeight);
+    tx_coinbase.vin.at(0).scriptSig = CScript{} << prev->nHeight + 1;
+    block.vtx.at(0) = MakeTransactionRef(std::move(tx_coinbase));
+    RegenerateCommitments(block, *Assert(m_node.chainman));
+
+    while (!CheckProofOfWork(block.GetHash(), block.nBits, m_node.chainman->GetConsensus())) ++block.nNonce;
+
+    return block;
+}
+
 CBlock TestChain100Setup::CreateAndProcessBlock(
     const std::vector<CMutableTransaction>& txns,
     const CScript& scriptPubKey)
