@@ -13,6 +13,7 @@
 #include <util/chaintype.h>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <limits>
@@ -355,8 +356,7 @@ std::unique_ptr<Transport> MakeV2Transport(NodeId nodeid, bool initiator, RNG& r
         garb = rng.randbytes(garb_len);
     }
     // Retrieve entropy
-    auto ent = provider.ConsumeBytes<std::byte>(32);
-    ent.resize(32);
+    auto ent{ConsumeFixedLengthByteArray<32, std::byte>(provider)};
     // Use as entropy SHA256(ent || garbage). This prevents a situation where the fuzzer manages to
     // include the garbage terminator (which is a function of both ellswift keys) in the garbage.
     // This is extremely unlikely (~2^-116) with random keys/garbage, but the fuzzer can choose

@@ -285,6 +285,19 @@ template<typename B = uint8_t>
     return random_bytes;
 }
 
+/**
+ * Returns a byte array of fixed size regardless of the number of remaining bytes available
+ * from the fuzzer. Pads with zero value bytes if needed to achieve the specified size.
+ */
+template<size_t N, typename B = uint8_t>
+[[nodiscard]] inline std::array<B, N> ConsumeFixedLengthByteArray(FuzzedDataProvider& fuzzed_data_provider) noexcept
+{
+    static_assert(sizeof(B) == 1);
+    std::array<B, N> random_bytes{};
+    fuzzed_data_provider.ConsumeData(random_bytes.data(), random_bytes.size());
+    return random_bytes;
+}
+
 class FuzzedFileProvider
 {
     FuzzedDataProvider& m_fuzzed_data_provider;

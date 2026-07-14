@@ -23,6 +23,7 @@
 #include <util/strencodings.h>
 
 #include <algorithm>
+#include <array>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
@@ -231,7 +232,7 @@ void TestPoly1305(const std::string &hexmessage, const std::string &hexkey, cons
 {
     auto key = ParseHex<std::byte>(hexkey);
     auto m = ParseHex<std::byte>(hexmessage);
-    std::vector<std::byte> tagres(Poly1305::TAGLEN);
+    std::array<std::byte, Poly1305::TAGLEN> tagres{};
     Poly1305{key}.Update(m).Finalize(tagres);
     BOOST_CHECK_EQUAL(HexStr(tagres), hextag);
 
@@ -245,7 +246,7 @@ void TestPoly1305(const std::string &hexmessage, const std::string &hexkey, cons
                 poly1305.Update(data.first(now));
                 data = data.subspan(now);
             }
-            tagres.assign(Poly1305::TAGLEN, std::byte{});
+            tagres.fill(std::byte{});
             poly1305.Update(data).Finalize(tagres);
             BOOST_CHECK_EQUAL(HexStr(tagres), hextag);
         }
@@ -932,13 +933,14 @@ BOOST_AUTO_TEST_CASE(poly1305_testvector)
         auto total_key = "01020304050607fffefdfcfbfaf9ffffffffffffffffffffffffffff00000000"_hex;
         Poly1305 total_ctx(total_key);
         for (unsigned i = 0; i < 256; ++i) {
-            std::vector<std::byte> key(32, std::byte{uint8_t(i)});
+            std::array<std::byte, Poly1305::KEYLEN> key{};
+            key.fill(std::byte{uint8_t(i)});
             std::vector<std::byte> msg(i, std::byte{uint8_t(i)});
             std::array<std::byte, Poly1305::TAGLEN> tag;
             Poly1305{key}.Update(msg).Finalize(tag);
             total_ctx.Update(tag);
         }
-        std::vector<std::byte> total_tag(Poly1305::TAGLEN);
+        std::array<std::byte, Poly1305::TAGLEN> total_tag{};
         total_ctx.Finalize(total_tag);
         BOOST_CHECK_EQUAL(HexStr(total_tag), "64afe2e8d6ad7bbdd287f97c44623d39");
     }

@@ -11,6 +11,7 @@
 #include <util/rbf.h>
 #include <util/time.h>
 
+#include <array>
 #include <memory>
 
 std::vector<uint8_t> ConstructPubKeyBytes(FuzzedDataProvider& fuzzed_data_provider, std::span<const uint8_t> byte_data, const bool compressed) noexcept
@@ -229,8 +230,7 @@ CTxDestination ConsumeTxDestination(FuzzedDataProvider& fuzzed_data_provider) no
 
 CKey ConsumePrivateKey(FuzzedDataProvider& fuzzed_data_provider, std::optional<bool> compressed) noexcept
 {
-    auto key_data = fuzzed_data_provider.ConsumeBytes<uint8_t>(32);
-    key_data.resize(32);
+    const auto key_data{ConsumeFixedLengthByteArray<32>(fuzzed_data_provider)};
     CKey key;
     bool compressed_value = compressed ? *compressed : fuzzed_data_provider.ConsumeBool();
     key.Set(key_data.begin(), key_data.end(), compressed_value);

@@ -8,6 +8,7 @@
 #include <crypto/aes.h>
 #include <crypto/sha512.h>
 
+#include <array>
 #include <type_traits>
 #include <vector>
 
@@ -111,7 +112,7 @@ bool CCrypter::Decrypt(const std::span<const unsigned char> ciphertext, CKeyingM
 bool EncryptSecret(const CKeyingMaterial& vMasterKey, const CKeyingMaterial &vchPlaintext, const uint256& nIV, std::vector<unsigned char> &vchCiphertext)
 {
     CCrypter cKeyCrypter;
-    std::vector<unsigned char> chIV(WALLET_CRYPTO_IV_SIZE);
+    std::array<unsigned char, WALLET_CRYPTO_IV_SIZE> chIV{};
     memcpy(chIV.data(), &nIV, WALLET_CRYPTO_IV_SIZE);
     if(!cKeyCrypter.SetKey(vMasterKey, chIV))
         return false;

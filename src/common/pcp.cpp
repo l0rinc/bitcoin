@@ -18,6 +18,8 @@
 #include <util/strencodings.h>
 #include <util/threadinterrupt.h>
 
+#include <array>
+
 namespace {
 
 // RFC6886 NAT-PMP and RFC6887 Port Control Protocol (PCP) implementation.
@@ -312,11 +314,11 @@ std::variant<MappingResult, MappingError> NATPMPRequestPortMap(const CNetAddr &g
     }
 
     // Request external IP address (RFC6886 section 3.2).
-    std::vector<uint8_t> request(NATPMP_GETEXTERNAL_REQUEST_SIZE);
-    request[NATPMP_HDR_VERSION_OFS] = NATPMP_VERSION;
-    request[NATPMP_HDR_OP_OFS] = NATPMP_REQUEST | NATPMP_OP_GETEXTERNAL;
+    std::array<uint8_t, NATPMP_GETEXTERNAL_REQUEST_SIZE> external_request{};
+    external_request[NATPMP_HDR_VERSION_OFS] = NATPMP_VERSION;
+    external_request[NATPMP_HDR_OP_OFS] = NATPMP_REQUEST | NATPMP_OP_GETEXTERNAL;
 
-    auto recv_res = PCPSendRecv(*sock, "natpmp", request, num_tries, timeout_per_try,
+    auto recv_res = PCPSendRecv(*sock, "natpmp", external_request, num_tries, timeout_per_try,
         [&](const std::span<const uint8_t> response) -> bool {
             if (response.size() < NATPMP_GETEXTERNAL_RESPONSE_SIZE) {
                 LogWarning("natpmp: Response too small\n");
@@ -347,14 +349,14 @@ std::variant<MappingResult, MappingError> NATPMPRequestPortMap(const CNetAddr &g
     }
 
     // Create TCP mapping request (RFC6886 section 3.3).
-    request = std::vector<uint8_t>(NATPMP_MAP_REQUEST_SIZE);
-    request[NATPMP_HDR_VERSION_OFS] = NATPMP_VERSION;
-    request[NATPMP_HDR_OP_OFS] = NATPMP_REQUEST | NATPMP_OP_MAP_TCP;
-    WriteBE16(request.data() + NATPMP_MAP_REQUEST_INTERNAL_PORT_OFS, port);
-    WriteBE16(request.data() + NATPMP_MAP_REQUEST_EXTERNAL_PORT_OFS, port);
-    WriteBE32(request.data() + NATPMP_MAP_REQUEST_LIFETIME_OFS, lifetime);
+    std::array<uint8_t, NATPMP_MAP_REQUEST_SIZE> map_request{};
+    map_request[NATPMP_HDR_VERSION_OFS] = NATPMP_VERSION;
+    map_request[NATPMP_HDR_OP_OFS] = NATPMP_REQUEST | NATPMP_OP_MAP_TCP;
+    WriteBE16(map_request.data() + NATPMP_MAP_REQUEST_INTERNAL_PORT_OFS, port);
+    WriteBE16(map_request.data() + NATPMP_MAP_REQUEST_EXTERNAL_PORT_OFS, port);
+    WriteBE32(map_request.data() + NATPMP_MAP_REQUEST_LIFETIME_OFS, lifetime);
 
-    recv_res = PCPSendRecv(*sock, "natpmp", request, num_tries, timeout_per_try,
+    recv_res = PCPSendRecv(*sock, "natpmp", map_request, num_tries, timeout_per_try,
         [&](const std::span<const uint8_t> response) -> bool {
             if (response.size() < NATPMP_MAP_RESPONSE_SIZE) {
                 LogWarning("natpmp: Response too small\n");
@@ -451,13 +453,13 @@ std::variant<MappingResult, MappingError> PCPRequestPortMap(const PCPMappingNonc
     // Build request packet. Make sure the packet is zeroed so that reserved fields are zero
     // as required by the spec (and not potentially leak data).
     // Make sure there's space for the request header and MAP specific request data.
-    std::vector<uint8_t> request(PCP_HDR_SIZE + PCP_MAP_SIZE);
+    std::array<uint8_t, PCP_HDR_SIZE + PCP_MAP_SIZE> request{};
     // Fill in request header, See RFC6887 Figure 2.
     size_t ofs = 0;
     request[ofs + PCP_HDR_VERSION_OFS] = PCP_VERSION;
     request[ofs + PCP_HDR_OP_OFS] = PCP_REQUEST | PCP_OP_MAP;
     WriteBE32(request.data() + ofs + PCP_HDR_LIFETIME_OFS, lifetime);
-    if (!PCPWrapAddress(std::span(request).subspan(ofs + PCP_REQUEST_HDR_IP_OFS, ADDR_IPV6_SIZE), internal)) return MappingError::NETWORK_ERROR;
+    if (!PCPWrapAddress(std::span{request}.subspan(ofs + PCP_REQUEST_HDR_IP_OFS, ADDR_IPV6_SIZE), internal)) return MappingError::NETWORK_ERROR;
 
     ofs += PCP_HDR_SIZE;
 
@@ -468,7 +470,7 @@ std::variant<MappingResult, MappingError> PCPRequestPortMap(const PCPMappingNonc
     request[ofs + PCP_MAP_PROTOCOL_OFS] = PCP_PROTOCOL_TCP;
     WriteBE16(request.data() + ofs + PCP_MAP_INTERNAL_PORT_OFS, port);
     WriteBE16(request.data() + ofs + PCP_MAP_EXTERNAL_PORT_OFS, port);
-    if (!PCPWrapAddress(std::span(request).subspan(ofs + PCP_MAP_EXTERNAL_IP_OFS, ADDR_IPV6_SIZE), bind)) return MappingError::NETWORK_ERROR;
+    if (!PCPWrapAddress(std::span{request}.subspan(ofs + PCP_MAP_EXTERNAL_IP_OFS, ADDR_IPV6_SIZE), bind)) return MappingError::NETWORK_ERROR;
 
     ofs += PCP_MAP_SIZE;
     Assume(ofs == request.size());

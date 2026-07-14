@@ -11,6 +11,7 @@
 #include <test/fuzz/util.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -34,14 +35,12 @@ FUZZ_TARGET(bip324_cipher_roundtrip, .init=Initialize)
     CKey init_key = ConsumePrivateKey(provider, /*compressed=*/true);
     if (!init_key.IsValid()) return;
     // Initiator entropy
-    auto init_ent = provider.ConsumeBytes<std::byte>(32);
-    init_ent.resize(32);
+    const auto init_ent{ConsumeFixedLengthByteArray<32, std::byte>(provider)};
     // Responder key
     CKey resp_key = ConsumePrivateKey(provider, /*compressed=*/true);
     if (!resp_key.IsValid()) return;
     // Responder entropy
-    auto resp_ent = provider.ConsumeBytes<std::byte>(32);
-    resp_ent.resize(32);
+    const auto resp_ent{ConsumeFixedLengthByteArray<32, std::byte>(provider)};
 
     // Initialize ciphers by exchanging public keys.
     BIP324Cipher initiator(init_key, init_ent);
