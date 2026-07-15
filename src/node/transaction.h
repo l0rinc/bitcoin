@@ -10,14 +10,16 @@
 #include <policy/feerate.h>
 #include <primitives/transaction.h>
 
+#include <memory>
+
 class CBlockIndex;
+class CBlock;
 class CTxMemPool;
 namespace Consensus {
 struct Params;
 }
 
 namespace node {
-class BlockManager;
 struct NodeContext;
 
 /** Maximum fee rate for sendrawtransaction and testmempoolaccept RPC calls.
@@ -63,14 +65,17 @@ static const CAmount DEFAULT_MAX_BURN_AMOUNT{0};
  * If -txindex is available, check it next for the tx.
  * Finally, if block_index is provided, check for tx by reading entire block from disk.
  *
- * @param[in]  block_index     The block to read from disk, or nullptr
+ * @param[in]  block_index     The block to read, or nullptr
  * @param[in]  mempool         If provided, check mempool for tx
  * @param[in]  hash            The txid
- * @param[in]  blockman        Used to access and read blocks from disk
+ * @param[in]  node            Node context used to access blocks
  * @param[out] hashBlock       The block hash, if the tx was found via -txindex or block_index
+ * @param[in]  allow_block_fetch  Whether a pruned block may be fetched from a peer
+ * @param[out] block_data      The full block, if it was needed and the transaction was found
+ * @param[in]  allow_local_only  Whether blocks retained for trusted local callers may be read
  * @returns                    The tx if found, otherwise nullptr
  */
-CTransactionRef GetTransaction(const CBlockIndex* block_index, const CTxMemPool* mempool, const Txid& hash, const BlockManager& blockman, uint256& hashBlock);
+CTransactionRef GetTransaction(const CBlockIndex* block_index, const CTxMemPool* mempool, const Txid& hash, const NodeContext& node, uint256& hashBlock, bool allow_block_fetch = false, std::shared_ptr<const CBlock>* block_data = nullptr, bool allow_local_only = true);
 } // namespace node
 
 #endif // BITCOIN_NODE_TRANSACTION_H

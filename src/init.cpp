@@ -301,6 +301,8 @@ void Interrupt(NodeContext& node)
         node.tor_controller->Interrupt();
     }
     InterruptMapPort();
+    if (node.peerman)
+        node.peerman->InterruptLocalBlockFetches();
     if (node.connman)
         node.connman->Interrupt();
     for (auto* index : node.indexes) {
@@ -524,6 +526,7 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
     argsman.AddArg("-blocknotify=<cmd>", "Execute command when the best block changes (%s in cmd is replaced by block hash)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #endif
     argsman.AddArg("-blockreconstructionextratxn=<n>", strprintf("Extra transactions to keep in memory for compact block reconstructions (default: %u)", DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-blockfetchproxy", strprintf("Fetch pruned blocks from outbound full-history peers for local RPC and wallet reads, and retain them as local-only block data. Peers can observe the requested block hashes. Requires -prune. (default: %u)", DEFAULT_BLOCK_FETCH_PROXY), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-blocksonly", strprintf("Whether to reject transactions from network peers. Disables automatic broadcast and rebroadcast of transactions, unless the source peer has the 'forcerelay' permission. RPC transactions are not affected. (default: %u)", DEFAULT_BLOCKSONLY), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-coinstatsindex", strprintf("Maintain coinstats index used by the gettxoutsetinfo RPC (default: %u)", DEFAULT_COINSTATSINDEX), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-conf=<file>", strprintf("Specify path to read-only configuration file. Relative paths will be prefixed by datadir location (only useable from command line, not configuration file) (default: %s)", BITCOIN_CONF_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -546,9 +549,11 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
                              DEFAULT_PERSIST_V1_DAT),
                    ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-pid=<file>", strprintf("Specify pid file. Relative paths will be prefixed by a net-specific datadir location. (default: %s)", BITCOIN_PID_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
-    argsman.AddArg("-prune=<n>", strprintf("Reduce storage requirements by enabling pruning (deleting) of old blocks. This allows the pruneblockchain RPC to be called to delete specific blocks and enables automatic pruning of old blocks if a target size in MiB is provided. This mode is incompatible with -txindex. "
-            "Warning: Reverting this setting requires re-downloading the entire blockchain. "
-            "(default: 0 = disable pruning blocks, 1 = allow manual pruning via RPC, >=%u = automatically prune block files to stay under the specified target size in MiB)", MIN_DISK_SPACE_FOR_BLOCK_FILES / 1_MiB), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-prune=<n>", strprintf("Reduce storage requirements by enabling pruning (deleting) of old blocks. This allows the pruneblockchain RPC to be called to delete specific blocks and enables automatic pruning of old blocks if a target size in MiB is provided. Using -txindex additionally requires -blockfetchproxy. "
+                                           "Warning: Reverting this setting requires re-downloading the entire blockchain. "
+                                           "(default: 0 = disable pruning blocks, 1 = allow manual pruning via RPC, >=%u = automatically prune block files to stay under the specified target size in MiB)",
+                                           MIN_DISK_SPACE_FOR_BLOCK_FILES / 1_MiB),
+                   ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-reindex", "If enabled, wipe chain state and block index, and rebuild them from blk*.dat files on disk. Also wipe and rebuild other optional indexes that are active. If an assumeutxo snapshot was loaded, its chainstate will be wiped as well. The snapshot can then be reloaded via RPC.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-reindex-chainstate", "If enabled, wipe chain state, and rebuild it from blk*.dat files on disk. If an assumeutxo snapshot was loaded, its chainstate will be wiped as well. The snapshot can then be reloaded via RPC.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-settings=<file>", strprintf("Specify path to dynamic settings data file. Can be disabled with -nosettings. File is written at runtime and not meant to be edited by users (use %s instead for custom settings). Relative paths will be prefixed by datadir location. (default: %s)", BITCOIN_CONF_FILENAME, BITCOIN_SETTINGS_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -1026,13 +1031,16 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     }
 
     if (args.GetIntArg("-prune", 0)) {
-        if (args.GetBoolArg("-txindex", DEFAULT_TXINDEX))
-            return InitError(_("Prune mode is incompatible with -txindex."));
+        if (args.GetBoolArg("-txindex", DEFAULT_TXINDEX) && !args.GetBoolArg("-blockfetchproxy", DEFAULT_BLOCK_FETCH_PROXY))
+            return InitError(_("Prune mode with -txindex requires -blockfetchproxy."));
         if (args.GetBoolArg("-txospenderindex", DEFAULT_TXOSPENDERINDEX))
             return InitError(_("Prune mode is incompatible with -txospenderindex."));
         if (args.GetBoolArg("-reindex-chainstate", false)) {
             return InitError(_("Prune mode is incompatible with -reindex-chainstate. Use full -reindex instead."));
         }
+    }
+    if (args.GetBoolArg("-blockfetchproxy", DEFAULT_BLOCK_FETCH_PROXY) && !args.GetIntArg("-prune", 0)) {
+        return InitError(_("-blockfetchproxy requires prune mode."));
     }
 
     // If -forcednsseed is set to true, ensure -dnsseed has not been set to false

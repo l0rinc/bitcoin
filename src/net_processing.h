@@ -28,6 +28,7 @@ class AddrMan;
 class CTxMemPool;
 class ChainstateManager;
 class BanMan;
+class CBlock;
 class CBlockIndex;
 class CScheduler;
 class DataStream;
@@ -44,6 +45,8 @@ static constexpr bool DEFAULT_TXRECONCILIATION_ENABLE{false};
 static const uint32_t DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN{100};
 static const bool DEFAULT_PEERBLOOMFILTERS = false;
 static const bool DEFAULT_PEERBLOCKFILTERS = false;
+/** Whether missing historical blocks may be fetched for local callers. */
+static constexpr bool DEFAULT_BLOCK_FETCH_PROXY{false};
 /** Maximum number of outstanding CMPCTBLOCK requests for the same block. */
 static const unsigned int MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK = 3;
 /** Number of headers sent in one getheaders result. We rely on the assumption that if a peer sends
@@ -96,6 +99,8 @@ public:
         uint32_t max_headers_result{MAX_HEADERS_RESULTS};
         //! Whether private broadcast is used for sending transactions.
         bool private_broadcast{DEFAULT_PRIVATE_BROADCAST};
+        //! Whether missing historical blocks may be fetched for local callers.
+        bool block_fetch_proxy{DEFAULT_BLOCK_FETCH_PROXY};
     };
 
     static std::unique_ptr<PeerManager> make(CConnman& connman, AddrMan& addrman,
@@ -110,6 +115,18 @@ public:
      * @param[in]  block_index  The blockindex
      */
     virtual util::Expected<void, std::string> FetchBlock(NodeId peer_id, const CBlockIndex& block_index) = 0;
+
+    /**
+     * Fetch and retain a previously processed block for local use.
+     * The block is stored in the normal block files, but not served to peers.
+     */
+    virtual util::Expected<std::shared_ptr<const CBlock>, std::string> FetchBlockForLocalUse(const CBlockIndex& block_index) = 0;
+
+    /** Whether missing historical blocks may be fetched for local callers. */
+    virtual bool BlockFetchProxyEnabled() const = 0;
+
+    /** Interrupt local historical block fetches during shutdown. */
+    virtual void InterruptLocalBlockFetches() = 0;
 
     /** Begin running background tasks, should only be called once */
     virtual void StartScheduledTasks(CScheduler& scheduler) = 0;

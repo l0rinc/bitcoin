@@ -276,6 +276,7 @@ void BlockManager::PruneOneBlockFile(const int fileNumber)
         if (pindex->nFile == fileNumber) {
             pindex->nStatus &= ~BLOCK_HAVE_DATA;
             pindex->nStatus &= ~BLOCK_HAVE_UNDO;
+            pindex->nStatus &= ~BLOCK_LOCAL_ONLY;
             pindex->nFile = 0;
             pindex->nDataPos = 0;
             pindex->nUndoPos = 0;
@@ -316,6 +317,7 @@ void BlockManager::FindFilesToPruneManual(
 
     int count = 0;
     for (int fileNumber = 0; fileNumber < this->MaxBlockfileNum(); fileNumber++) {
+        if (IsCurrentBlockfile(fileNumber)) continue;
         const auto& fileinfo = m_blockfile_info[fileNumber];
         if (fileinfo.nSize == 0 || fileinfo.nHeightLast > (unsigned)last_block_can_prune || fileinfo.nHeightFirst < (unsigned)min_block_to_prune) {
             continue;
@@ -379,6 +381,7 @@ void BlockManager::FindFilesToPrune(
         }
 
         for (int fileNumber = 0; fileNumber < this->MaxBlockfileNum(); fileNumber++) {
+            if (IsCurrentBlockfile(fileNumber)) continue;
             const auto& fileinfo = m_blockfile_info[fileNumber];
             nBytesToPrune = fileinfo.nSize + fileinfo.nUndoSize;
 

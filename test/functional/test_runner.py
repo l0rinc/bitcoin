@@ -88,6 +88,7 @@ EXTENDED_SCRIPTS = [
     # These tests are not run by default.
     # Longest test should go first, to favor running tests in parallel
     'feature_pruning.py',
+    'feature_blockfetchproxy.py',
     'feature_dbcrash.py',
     'feature_index_prune.py',
 ]
@@ -171,6 +172,7 @@ BASE_SCRIPTS = [
     'p2p_compactblocks_blocksonly.py',
     'wallet_hd.py',
     'wallet_blank.py',
+    'wallet_blockfetchproxy.py',
     'wallet_keypool_topup.py',
     'wallet_fast_rescan.py',
     'wallet_gethdkeys.py',

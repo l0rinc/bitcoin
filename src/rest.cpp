@@ -416,8 +416,8 @@ static bool rest_block(const std::any& context,
         if (!pblockindex) {
             return RESTERR(req, HTTP_NOT_FOUND, hashStr + " not found");
         }
-        if (!(pblockindex->nStatus & BLOCK_HAVE_DATA)) {
-            if (chainman.m_blockman.IsBlockPruned(*pblockindex)) {
+        if (!(pblockindex->nStatus & BLOCK_HAVE_DATA) || (pblockindex->nStatus & BLOCK_LOCAL_ONLY)) {
+            if (chainman.m_blockman.IsBlockPruned(*pblockindex) || (pblockindex->nStatus & BLOCK_LOCAL_ONLY)) {
                 return RESTERR(req, HTTP_NOT_FOUND, hashStr + " not available (pruned data)");
             }
             return RESTERR(req, HTTP_NOT_FOUND, hashStr + " not available (not fully downloaded)");
@@ -855,7 +855,9 @@ static bool rest_tx(const std::any& context, HTTPRequest* req, const std::string
     const NodeContext* const node = GetNodeContext(context, req);
     if (!node) return false;
     uint256 hashBlock = uint256();
-    const CTransactionRef tx{GetTransaction(/*block_index=*/nullptr, node->mempool.get(), *hash,  node->chainman->m_blockman, hashBlock)};
+    const CTransactionRef tx{GetTransaction(/*block_index=*/nullptr, node->mempool.get(), *hash, *node, hashBlock,
+                                            /*allow_block_fetch=*/false, /*block_data=*/nullptr,
+                                            /*allow_local_only=*/false)};
     if (!tx) {
         return RESTERR(req, HTTP_NOT_FOUND, hashStr + " not found");
     }

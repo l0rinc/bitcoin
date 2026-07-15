@@ -3778,7 +3778,7 @@ void Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
 }
 
 /** Mark a block as having its data received and checked (up to BLOCK_VALID_TRANSACTIONS). */
-void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos)
+void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos, bool local_only)
 {
     AssertLockHeld(cs_main);
     pindexNew->nTx = block.vtx.size();
@@ -3798,6 +3798,11 @@ void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockInd
     pindexNew->nDataPos = pos.nPos;
     pindexNew->nUndoPos = 0;
     pindexNew->nStatus |= BLOCK_HAVE_DATA;
+    if (local_only) {
+        pindexNew->nStatus |= BLOCK_LOCAL_ONLY;
+    } else {
+        pindexNew->nStatus &= ~BLOCK_LOCAL_ONLY;
+    }
     if (DeploymentActiveAt(*pindexNew, *this, Consensus::DEPLOYMENT_SEGWIT)) {
         pindexNew->nStatus |= BLOCK_OPT_WITNESS;
     }
@@ -4311,7 +4316,7 @@ void ChainstateManager::ReportHeadersPresync(int64_t height, int64_t timestamp)
 }
 
 /** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
-bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked)
+bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked, bool local_only)
 {
     const CBlock& block = *pblock;
 
@@ -4374,7 +4379,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
 
     // Header is valid/has work, merkle tree and segwit merkle tree are good...RELAY NOW
     // (but if it does not build on our best tip, let the SendMessages loop relay it)
-    if (!IsInitialBlockDownload() && ActiveTip() == pindex->pprev && m_options.signals) {
+    if (!local_only && !IsInitialBlockDownload() && ActiveTip() == pindex->pprev && m_options.signals) {
         m_options.signals->NewPoWValidBlock(pindex, pblock);
     }
 
@@ -4392,7 +4397,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
                 return false;
             }
         }
-        ReceivedBlockTransactions(block, pindex, blockPos);
+        ReceivedBlockTransactions(block, pindex, blockPos, local_only);
     } catch (const std::runtime_error& e) {
         return FatalError(GetNotifications(), state, strprintf(_("System error while saving block to disk: %s"), e.what()));
     }
@@ -4418,7 +4423,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     return true;
 }
 
-bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block)
+bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block, bool local_only)
 {
     AssertLockNotHeld(cs_main);
 
@@ -4439,7 +4444,7 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
         bool ret = CheckBlock(*block, state, GetConsensus());
         if (ret) {
             // Store to disk
-            ret = AcceptBlock(block, state, &pindex, force_processing, nullptr, new_block, min_pow_checked);
+            ret = AcceptBlock(block, state, &pindex, force_processing, nullptr, new_block, min_pow_checked, local_only);
         }
         if (!ret) {
             if (m_options.signals) {

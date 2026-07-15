@@ -132,6 +132,7 @@ add_executable(fuzz
   tx_out.cpp
   tx_pool.cpp
   txgraph.cpp
+  txindex.cpp
   txorphan.cpp
   txrequest.cpp
   utxo_snapshot.cpp

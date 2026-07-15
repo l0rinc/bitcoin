@@ -1266,7 +1266,7 @@ public:
      * @param[out]  new_block A boolean which is set to indicate if the block was first received via this call
      * @returns     If the block was processed, independently of block validity
      */
-    bool ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block) LOCKS_EXCLUDED(cs_main);
+    bool ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block, bool local_only = false) LOCKS_EXCLUDED(cs_main);
 
     /**
      * Process incoming block headers.
@@ -1301,9 +1301,9 @@ public:
      *
      * @returns   False if the block or header is invalid, or if saving to disk fails (likely a fatal error); true otherwise.
      */
-    bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked, bool local_only = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
-    void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos, bool local_only = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /**
      * Try to add a transaction to the memory pool.

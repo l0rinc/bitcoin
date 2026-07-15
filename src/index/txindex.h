@@ -6,22 +6,25 @@
 #define BITCOIN_INDEX_TXINDEX_H
 
 #include <index/base.h>
+#include <interfaces/chain.h>
 #include <primitives/transaction.h>
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 
+class CBlock;
 class uint256;
-namespace interfaces {
-class Chain;
+namespace txindex_tests {
+class TxIndexTest;
 }
 
 static constexpr bool DEFAULT_TXINDEX{false};
 
 /**
  * TxIndex is used to look up transactions included in the blockchain by hash.
- * The index is written to a LevelDB database and records the filesystem
- * location of each transaction by transaction hash.
+ * The index is written to a LevelDB database and records the block height and
+ * serialized block offset of each transaction by transaction hash.
  */
 class TxIndex final : public BaseIndex
 {
@@ -29,12 +32,19 @@ protected:
     class DB;
 
 private:
+    friend class txindex_tests::TxIndexTest;
     const std::unique_ptr<DB> m_db;
 
-    bool AllowPrune() const override { return false; }
+    bool AllowPrune() const override { return true; }
 
 protected:
+    bool CustomInit(const std::optional<interfaces::BlockRef>& block) override;
+
     bool CustomAppend(const interfaces::BlockInfo& block) override;
+
+    bool CustomRemove(const interfaces::BlockInfo& block) override;
+
+    interfaces::Chain::NotifyOptions CustomOptions() override;
 
     BaseIndex::DB& GetDB() const override;
 
@@ -48,10 +58,13 @@ public:
     /// Look up a transaction by hash.
     ///
     /// @param[in]   tx_hash  The hash of the transaction to be returned.
-    /// @param[out]  block_hash  The hash of the block the transaction is found in.
-    /// @param[out]  tx  The transaction itself.
+    /// @param[out]  block_hash  The hash of the block the transaction is found in. Undefined if false is returned.
+    /// @param[out]  tx  The transaction itself. Undefined if false is returned.
+    /// @param[in]   allow_block_fetch  Whether a pruned block may be fetched from a peer.
+    /// @param[out]  block_data  The full block, if it was needed and the transaction was found.
+    /// @param[in]   allow_local_only  Whether blocks retained for trusted local callers may be read.
     /// @return  true if transaction is found, false otherwise
-    bool FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx) const;
+    [[nodiscard]] bool FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx, bool allow_block_fetch = false, std::shared_ptr<const CBlock>* block_data = nullptr, bool allow_local_only = true) const;
 };
 
 /// The global transaction index, used in GetTransaction. May be null.

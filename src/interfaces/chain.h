@@ -180,10 +180,10 @@ public:
     //! the specified block hash are verified.
     virtual double guessVerificationProgress(const uint256& block_hash) = 0;
 
-    //! Return true if data is available for all blocks in the specified range
-    //! of blocks. This checks all blocks that are ancestors of block_hash in
-    //! the height range from min_height to max_height, inclusive.
-    virtual bool hasBlocks(const uint256& block_hash, int min_height = 0, std::optional<int> max_height = {}) = 0;
+    //! Return true if data is available for all blocks in the specified range,
+    //! optionally including blocks fetchable for local use. This checks all
+    //! ancestors of block_hash from min_height to max_height, inclusive.
+    virtual bool hasBlocks(const uint256& block_hash, int min_height = 0, std::optional<int> max_height = {}, bool allow_fetch = true) = 0;
 
     //! Check if transaction is RBF opt in.
     virtual RBFTransactionState isRBFOptIn(const CTransaction& tx) = 0;

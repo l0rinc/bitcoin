@@ -153,7 +153,7 @@ PartiallySignedTransaction ProcessPSBT(const std::string& psbt_string, const std
         // Look in the txindex
         if (g_txindex) {
             uint256 block_hash;
-            g_txindex->FindTx(psbt_input.prev_txid, block_hash, tx);
+            if (!g_txindex->FindTx(psbt_input.prev_txid, block_hash, tx, /*allow_block_fetch=*/true)) tx.reset();
         }
         // If we still don't have it look in the mempool
         if (!tx) {
@@ -300,7 +300,7 @@ static RPCMethod getrawtransaction()
     }
 
     uint256 hash_block;
-    const CTransactionRef tx = GetTransaction(blockindex, node.mempool.get(), txid, chainman.m_blockman, hash_block);
+    const CTransactionRef tx = GetTransaction(blockindex, node.mempool.get(), txid, node, hash_block, /*allow_block_fetch=*/true);
     if (!tx) {
         std::string errmsg;
         if (blockindex) {

@@ -14,6 +14,7 @@ namespace node {
 
 void ApplyArgsManOptions(const ArgsManager& argsman, PeerManager::Options& options)
 {
+    if (auto value{argsman.GetBoolArg("-blockfetchproxy")}) options.block_fetch_proxy = *value;
     if (auto value{argsman.GetBoolArg("-txreconciliation")}) options.reconcile_txs = *value;
 
     if (auto value{argsman.GetIntArg("-blockreconstructionextratxn")}) {
@@ -28,4 +29,3 @@ void ApplyArgsManOptions(const ArgsManager& argsman, PeerManager::Options& optio
 }
 
 } // namespace node
-

@@ -1894,11 +1894,20 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
     std::unique_ptr<FastWalletRescanFilter> fast_rescan_filter;
     if (chain().hasBlockFilterIndex(BlockFilterType::BASIC)) fast_rescan_filter = std::make_unique<FastWalletRescanFilter>(*this);
 
+    uint256 tip_hash{WITH_LOCK(cs_wallet, return GetLastBlockHash())};
+    const bool fetch_required{!chain().hasBlocks(tip_hash, start_height, max_height, /*allow_fetch=*/false) &&
+                              chain().hasBlocks(tip_hash, start_height, max_height, /*allow_fetch=*/true)};
+    if (fetch_required && !fast_rescan_filter) {
+        WalletLogPrintf("Block fetch proxy wallet rescans require -blockfilterindex=1\n");
+        result.last_failed_block = start_block;
+        result.status = ScanResult::FAILURE;
+        return result;
+    }
+
     WalletLogPrintf("Rescan started from block %s... (%s)\n", start_block.ToString(),
                     fast_rescan_filter ? "fast variant using block filters" : "slow variant inspecting all blocks");
 
     ShowProgress(strprintf("[%s] %s", DisplayName(), _("Rescanning…")), 0); // show rescan progress in GUI as dialog or on splashscreen, if rescan required on startup (e.g. due to corruption)
-    uint256 tip_hash = WITH_LOCK(cs_wallet, return GetLastBlockHash());
     uint256 end_hash = tip_hash;
     if (max_height) chain().findAncestorByHeight(tip_hash, *max_height, FoundBlock().hash(end_hash));
     double progress_begin = chain().guessVerificationProgress(block_hash);
@@ -1935,6 +1944,11 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
                 }
             } else {
                 LogDebug(BCLog::SCAN, "Fast rescan: inspect block %d [%s] (WARNING: block filter not found!)\n", block_height, block_hash.ToString());
+                if (!chain().hasBlocks(block_hash, block_height, block_height, /*allow_fetch=*/false)) {
+                    result.last_failed_block = block_hash;
+                    result.status = ScanResult::FAILURE;
+                    break;
+                }
             }
         }
 
@@ -3277,34 +3291,36 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
             }
         }
 
-        // Technically we could execute the code below in any case, but performing the
-        // `while` loop below can make startup very slow, so only check blocks on disk
-        // if necessary.
+        // Technically we could execute the code below in any case, but checking
+        // block availability can make startup slow, so only do it if necessary.
         if (chain.havePruned() || chain.hasAssumedValidChain()) {
-            int block_height = *tip_height;
-            while (block_height > 0 && chain.haveBlockOnDisk(block_height - 1) && rescan_height != block_height) {
-                --block_height;
-            }
+            // Wallet loading runs before peers are available, so remote
+            // fetchability cannot satisfy this startup rescan.
+            if (!chain.hasBlocks(chain.getBlockHash(*tip_height), rescan_height, *tip_height, /*allow_fetch=*/false)) {
+                int block_height = *tip_height;
+                while (block_height > 0 && chain.haveBlockOnDisk(block_height - 1) && rescan_height != block_height) {
+                    --block_height;
+                }
+                if (rescan_height != block_height) {
+                    // We can't rescan beyond blocks we don't have data for, stop and throw an error.
+                    // This might happen if a user uses an old wallet within a pruned node
+                    // or if they ran -disablewallet for a longer time, then decided to re-enable
+                    // Exit early and print an error.
+                    // It also may happen if an assumed-valid chain is in use and therefore not
+                    // all block data is available.
+                    // If a block is pruned after this check, we will load the wallet,
+                    // but fail the rescan with a generic error.
 
-            if (rescan_height != block_height) {
-                // We can't rescan beyond blocks we don't have data for, stop and throw an error.
-                // This might happen if a user uses an old wallet within a pruned node
-                // or if they ran -disablewallet for a longer time, then decided to re-enable
-                // Exit early and print an error.
-                // It also may happen if an assumed-valid chain is in use and therefore not
-                // all block data is available.
-                // If a block is pruned after this check, we will load the wallet,
-                // but fail the rescan with a generic error.
-
-                error = chain.havePruned() ?
-                     _("Prune: last wallet synchronisation goes beyond pruned data. You need to -reindex (download the whole blockchain again in case of a pruned node)") :
-                     strprintf(_(
-                        "Error loading wallet. Wallet requires blocks to be downloaded, "
-                        "and software does not currently support loading wallets while "
-                        "blocks are being downloaded out of order when using assumeutxo "
-                        "snapshots. Wallet should be able to load successfully after "
-                        "node sync reaches height %s"), block_height);
-                return false;
+                    error = chain.havePruned() ?
+                         _("Prune: last wallet synchronisation goes beyond pruned data. You need to -reindex (download the whole blockchain again in case of a pruned node)") :
+                         strprintf(_(
+                            "Error loading wallet. Wallet requires blocks to be downloaded, "
+                            "and software does not currently support loading wallets while "
+                            "blocks are being downloaded out of order when using assumeutxo "
+                            "snapshots. Wallet should be able to load successfully after "
+                            "node sync reaches height %s"), block_height);
+                    return false;
+                }
             }
         }
 

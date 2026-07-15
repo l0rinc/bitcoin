@@ -66,6 +66,7 @@
 #include <array>
 #include <atomic>
 #include <compare>
+#include <condition_variable>
 #include <cstddef>
 #include <deque>
 #include <exception>
@@ -108,6 +109,9 @@ static constexpr auto CHAIN_SYNC_TIMEOUT{20min};
 static constexpr auto STALE_CHECK_INTERVAL{10min};
 /** How frequently to check for extra outbound peers and disconnect */
 static constexpr auto EXTRA_PEER_CHECK_INTERVAL{45s};
+/** Bound local historical reads so RPC and wallet callers cannot occupy all block download slots. */
+static constexpr uint32_t MAX_LOCAL_BLOCK_REQUESTS{4};
+static constexpr auto LOCAL_BLOCK_REQUEST_TIMEOUT{30s};
 /** Minimum time an outbound-peer-eviction candidate must be connected for, in order to evict */
 static constexpr auto MINIMUM_CONNECT_TIME{30s};
 /** SHA256("main address relay")[0:8] */
@@ -245,6 +249,8 @@ struct Peer {
 
     //! Whether this peer is an inbound connection
     const bool m_is_inbound;
+    //! Whether this is an outbound block-relay-only connection
+    const bool m_is_block_relay;
 
     /** Protects misbehavior data members */
     Mutex m_misbehavior_mutex;
@@ -413,10 +419,8 @@ struct Peer {
      * timestamp the peer sent in the version message. */
     std::atomic<std::chrono::seconds> m_time_offset{0s};
 
-    explicit Peer(NodeId id, ServiceFlags our_services, bool is_inbound)
-        : m_id{id}
-        , m_our_services{our_services}
-        , m_is_inbound{is_inbound}
+    explicit Peer(NodeId id, ServiceFlags our_services, bool is_inbound, bool is_block_relay)
+        : m_id{id}, m_our_services{our_services}, m_is_inbound{is_inbound}, m_is_block_relay{is_block_relay}
     {}
 
 private:
@@ -521,10 +525,10 @@ public:
 
     /** Implement NetEventsInterface */
     void InitializeNode(const CNode& node, ServiceFlags our_services) override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_tx_download_mutex);
-    void FinalizeNode(const CNode& node) override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_headers_presync_mutex, !m_tx_download_mutex);
+    void FinalizeNode(const CNode& node) override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_headers_presync_mutex, !m_tx_download_mutex, !m_local_block_requests_mutex);
     bool HasAllDesirableServiceFlags(ServiceFlags services) const override;
     bool ProcessMessages(CNode& node, std::atomic<bool>& interrupt) override
-        EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_most_recent_block_mutex, !m_headers_presync_mutex, g_msgproc_mutex, !m_tx_download_mutex);
+        EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_most_recent_block_mutex, !m_headers_presync_mutex, g_msgproc_mutex, !m_tx_download_mutex, !m_local_block_requests_mutex);
     bool SendMessages(CNode& node) override
         EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_most_recent_block_mutex, g_msgproc_mutex, !m_tx_download_mutex);
 
@@ -532,7 +536,11 @@ public:
     void StartScheduledTasks(CScheduler& scheduler) override;
     void CheckForStaleTipAndEvictPeers() override;
     util::Expected<void, std::string> FetchBlock(NodeId peer_id, const CBlockIndex& block_index) override
-        EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
+        EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_local_block_requests_mutex);
+    util::Expected<std::shared_ptr<const CBlock>, std::string> FetchBlockForLocalUse(const CBlockIndex& block_index) override
+        EXCLUSIVE_LOCKS_REQUIRED(!cs_main, !m_peer_mutex, !m_local_block_requests_mutex);
+    bool BlockFetchProxyEnabled() const override { return m_opts.block_fetch_proxy; }
+    void InterruptLocalBlockFetches() override EXCLUSIVE_LOCKS_REQUIRED(!m_local_block_requests_mutex);
     bool GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) const override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
     std::vector<node::TxOrphanage::OrphanInfo> GetOrphanTransactions() override EXCLUSIVE_LOCKS_REQUIRED(!m_tx_download_mutex);
     PeerManagerInfo GetInfo() const override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
@@ -553,7 +561,7 @@ public:
 private:
     void ProcessMessage(Peer& peer, CNode& pfrom, const std::string& msg_type, DataStream& vRecv, NodeClock::time_point time_received,
                         const std::atomic<bool>& interruptMsgProc)
-        EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_most_recent_block_mutex, !m_headers_presync_mutex, g_msgproc_mutex, !m_tx_download_mutex);
+        EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex, !m_most_recent_block_mutex, !m_headers_presync_mutex, g_msgproc_mutex, !m_tx_download_mutex, !m_local_block_requests_mutex);
 
     /** Consider evicting an outbound peer based on the amount of time they've been behind our tip */
     void ConsiderEviction(CNode& pto, Peer& peer, std::chrono::seconds time_in_seconds) EXCLUSIVE_LOCKS_REQUIRED(cs_main, g_msgproc_mutex);
@@ -799,7 +807,21 @@ private:
     TimeOffsets m_outbound_time_offsets{m_warnings};
 
     const Options m_opts;
+    // All fields other than cv are guarded by m_local_block_requests_mutex.
+    struct LocalBlockRequest {
+        std::condition_variable cv;
+        std::shared_ptr<const CBlock> block;
+        std::string error;
+        NodeId peer_id{-1};
+        bool done{false};
+    };
+    Mutex m_local_block_requests_mutex;
+    std::map<uint256, std::shared_ptr<LocalBlockRequest>> m_local_block_requests GUARDED_BY(m_local_block_requests_mutex);
+    bool m_local_block_fetches_interrupted GUARDED_BY(m_local_block_requests_mutex){false};
 
+    bool SendBlockRequest(NodeId peer_id, const uint256& hash);
+    bool CompleteLocalBlockRequest(const uint256& hash, NodeId peer_id, const std::shared_ptr<const CBlock>& block, const std::string& error)
+        EXCLUSIVE_LOCKS_REQUIRED(!m_local_block_requests_mutex);
     bool RejectIncomingTxs(const CNode& peer) const;
 
     /** Whether we've completed initial sync yet, for determining when to turn
@@ -1626,7 +1648,7 @@ void PeerManagerImpl::InitializeNode(const CNode& node, ServiceFlags our_service
         our_services = static_cast<ServiceFlags>(our_services | NODE_BLOOM);
     }
 
-    PeerRef peer = std::make_shared<Peer>(nodeid, our_services, node.IsInboundConn());
+    PeerRef peer = std::make_shared<Peer>(nodeid, our_services, node.IsInboundConn(), node.IsBlockOnlyConn());
     {
         LOCK(m_peer_mutex);
         m_peer_map.emplace_hint(m_peer_map.end(), nodeid, peer);
@@ -1741,6 +1763,23 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         WITH_LOCK(m_tx_download_mutex, m_txdownloadman.CheckIsEmpty());
     }
     } // cs_main
+    std::vector<std::shared_ptr<LocalBlockRequest>> canceled_requests;
+    {
+        LOCK(m_local_block_requests_mutex);
+        for (auto it{m_local_block_requests.begin()}; it != m_local_block_requests.end();) {
+            const auto& request{it->second};
+            if (request->peer_id != nodeid) {
+                ++it;
+                continue;
+            }
+            request->error = "Peer disconnected while fetching historical block";
+            request->done = true;
+            canceled_requests.push_back(request);
+            it = m_local_block_requests.erase(it);
+        }
+    }
+    for (const auto& request : canceled_requests)
+        request->cv.notify_all();
     if (node.fSuccessfullyConnected &&
         !node.IsBlockOnlyConn() && !node.IsPrivateBroadcastConn() && !node.IsInboundConn()) {
         // Only change visible addrman state for full outbound peers.  We don't
@@ -1989,11 +2028,14 @@ util::Expected<void, std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, co
 {
     if (m_chainman.m_blockman.LoadingBlocks()) return util::Unexpected{"Loading blocks ..."};
 
+    const uint256& hash{block_index.GetBlockHash()};
     // The lock must be taken here before fetching Peer so another thread does
     // not delete the CNodeState from under the current thread, causing an
     // assertion failure in BlockRequested. This lock can be replaced with a
     // net-specific lock when more of CNodeState is moved into Peer.
+    LOCK(m_local_block_requests_mutex);
     LOCK(cs_main);
+    if (m_local_block_requests.contains(hash)) return util::Unexpected{"Block is already requested for local use"};
 
     // Ensure this peer exists and hasn't been disconnected
     PeerRef peer = GetPeerRef(peer_id);
@@ -2003,26 +2045,192 @@ util::Expected<void, std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, co
     if (!CanServeWitnesses(*peer)) return util::Unexpected{"Pre-SegWit peer"};
 
     // Forget about all prior requests
-    RemoveBlockRequest(block_index.GetBlockHash(), std::nullopt);
+    RemoveBlockRequest(hash, std::nullopt);
 
     // Mark block as in-flight
     if (!BlockRequested(peer_id, block_index)) return util::Unexpected{"Already requested from this peer"};
 
-    // Construct message to request the block
-    const uint256& hash{block_index.GetBlockHash()};
-    std::vector<CInv> invs{CInv(MSG_BLOCK | MSG_WITNESS_FLAG, hash)};
-
-    // Send block request message to the peer
-    bool success = m_connman.ForNode(peer_id, [this, &invs](CNode* node) {
-        this->MakeAndPushMessage(*node, NetMsgType::GETDATA, invs);
-        return true;
-    });
-
-    if (!success) return util::Unexpected{"Peer not fully connected"};
+    if (!SendBlockRequest(peer_id, hash)) return util::Unexpected{"Peer not fully connected"};
 
     LogDebug(BCLog::NET, "Requesting block %s from peer=%d\n",
-                 hash.ToString(), peer_id);
+             hash.ToString(), peer_id);
     return {};
+}
+
+bool PeerManagerImpl::SendBlockRequest(NodeId peer_id, const uint256& hash)
+{
+    const std::vector<CInv> invs{CInv(MSG_BLOCK | MSG_WITNESS_FLAG, hash)};
+    return m_connman.ForNode(peer_id, [this, &invs](CNode* node) {
+        MakeAndPushMessage(*node, NetMsgType::GETDATA, invs);
+        return true;
+    });
+}
+
+bool PeerManagerImpl::CompleteLocalBlockRequest(const uint256& hash, NodeId peer_id, const std::shared_ptr<const CBlock>& block, const std::string& error)
+{
+    std::shared_ptr<LocalBlockRequest> request;
+    {
+        LOCK(m_local_block_requests_mutex);
+        const auto it{m_local_block_requests.find(hash)};
+        if (it == m_local_block_requests.end() || it->second->peer_id != peer_id) return false;
+        WITH_LOCK(cs_main, RemoveBlockRequest(hash, peer_id));
+        request = it->second;
+        request->block = block;
+        request->error = error;
+        request->done = true;
+        m_local_block_requests.erase(it);
+    }
+    request->cv.notify_all();
+    return true;
+}
+
+util::Expected<std::shared_ptr<const CBlock>, std::string> PeerManagerImpl::FetchBlockForLocalUse(const CBlockIndex& block_index)
+{
+    AssertLockNotHeld(cs_main);
+    if (!m_opts.block_fetch_proxy) return util::Unexpected{"Block fetch proxy is disabled"};
+
+    const uint256& hash{block_index.GetBlockHash()};
+    {
+        LOCK(cs_main);
+        if (!m_chainman.ActiveChain().Contains(block_index) || block_index.nTx == 0) {
+            return util::Unexpected{"Block is not a previously processed active-chain block"};
+        }
+    }
+
+    std::shared_ptr<LocalBlockRequest> request;
+    bool make_request{false};
+    {
+        LOCK(m_local_block_requests_mutex);
+        if (m_local_block_fetches_interrupted) {
+            return util::Unexpected{"Interrupted while fetching historical block"};
+        }
+        if (const auto it{m_local_block_requests.find(hash)}; it != m_local_block_requests.end()) {
+            request = it->second;
+        } else {
+            if (m_local_block_requests.size() >= MAX_LOCAL_BLOCK_REQUESTS) {
+                return util::Unexpected{"Too many local block fetches in progress"};
+            }
+            request = std::make_shared<LocalBlockRequest>();
+            m_local_block_requests.emplace(hash, request);
+            make_request = true;
+        }
+    }
+
+    if (make_request) {
+        PeerRef selected_peer;
+        bool request_failed{false};
+        {
+            LOCK(m_local_block_requests_mutex);
+            LOCK(cs_main);
+            const auto it{m_local_block_requests.find(hash)};
+            if (it == m_local_block_requests.end() || it->second != request || request->done) {
+                request_failed = true;
+            } else if (!m_chainman.ActiveChain().Contains(block_index) || block_index.nTx == 0) {
+                request->error = "Block is not a previously processed active-chain block";
+                request->done = true;
+                m_local_block_requests.erase(it);
+                request_failed = true;
+            } else {
+                std::vector<PeerRef> candidates;
+                for (const PeerRef& peer : GetAllPeers()) {
+                    CNodeState* state{State(peer->m_id)};
+                    if (!state || peer->m_is_inbound || peer->m_is_block_relay || !(peer->m_their_services & NODE_NETWORK) || !CanServeWitnesses(*peer)) continue;
+                    ProcessBlockAvailability(peer->m_id);
+                    if (!PeerHasHeader(state, &block_index) || state->vBlocksInFlight.size() >= MAX_BLOCKS_IN_TRANSIT_PER_PEER) continue;
+                    candidates.push_back(peer);
+                }
+                if (candidates.empty()) {
+                    request->error = "No outbound full-history peer has the requested block";
+                    request->done = true;
+                    m_local_block_requests.erase(it);
+                    request_failed = true;
+                } else {
+                    FastRandomContext rng{};
+                    selected_peer = candidates[rng.randrange(candidates.size())];
+                    if (IsBlockRequested(hash) || !BlockRequested(selected_peer->m_id, block_index)) {
+                        request->error = "Block is already being requested";
+                        request->done = true;
+                        m_local_block_requests.erase(it);
+                        request_failed = true;
+                    } else {
+                        request->peer_id = selected_peer->m_id;
+                    }
+                }
+            }
+        }
+
+        if (request_failed) {
+            request->cv.notify_all();
+        } else {
+            const bool sent{SendBlockRequest(selected_peer->m_id, hash)};
+            if (!sent) {
+                bool notify{false};
+                {
+                    LOCK(m_local_block_requests_mutex);
+                    LOCK(cs_main);
+                    if (const auto it{m_local_block_requests.find(hash)};
+                        it != m_local_block_requests.end() && it->second == request && !request->done) {
+                        RemoveBlockRequest(hash, selected_peer->m_id);
+                        request->error = "Peer disconnected before the block request was sent";
+                        request->done = true;
+                        m_local_block_requests.erase(it);
+                        notify = true;
+                    }
+                }
+                if (notify) request->cv.notify_all();
+            } else {
+                LogDebug(BCLog::NET, "Requesting block %s from peer=%d for local use", hash.ToString(), selected_peer->m_id);
+            }
+        }
+    }
+
+    std::shared_ptr<const CBlock> block;
+    std::string error;
+    bool timed_out{false};
+    {
+        WAIT_LOCK(m_local_block_requests_mutex, lock);
+        if (!request->cv.wait_for(lock, LOCAL_BLOCK_REQUEST_TIMEOUT, [&] { return request->done; })) {
+            request->error = "Timed out waiting for historical block";
+            request->done = true;
+            {
+                LOCK(cs_main);
+                if (request->peer_id != -1) RemoveBlockRequest(hash, request->peer_id);
+            }
+            if (const auto it{m_local_block_requests.find(hash)}; it != m_local_block_requests.end() && it->second == request) {
+                m_local_block_requests.erase(it);
+            }
+            error = request->error;
+            timed_out = true;
+        } else {
+            if (!request->block) return util::Unexpected{request->error};
+            block = request->block;
+        }
+    }
+    if (timed_out) {
+        request->cv.notify_all();
+        return util::Unexpected{std::move(error)};
+    }
+    return block;
+}
+
+void PeerManagerImpl::InterruptLocalBlockFetches()
+{
+    std::vector<std::shared_ptr<LocalBlockRequest>> requests;
+    {
+        LOCK(m_local_block_requests_mutex);
+        LOCK(cs_main);
+        m_local_block_fetches_interrupted = true;
+        for (const auto& [hash, request] : m_local_block_requests) {
+            if (request->done) continue;
+            if (request->peer_id != -1) RemoveBlockRequest(hash, request->peer_id);
+            request->error = "Interrupted while fetching historical block";
+            request->done = true;
+            requests.push_back(request);
+        }
+        m_local_block_requests.clear();
+    }
+    for (const auto& request : requests)
+        request->cv.notify_all();
 }
 
 std::unique_ptr<PeerManager> PeerManager::make(CConnman& connman, AddrMan& addrman,
@@ -2432,6 +2640,9 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         // Pruned nodes may have deleted the block, so check whether
         // it's available before trying to send.
         if (!(pindex->nStatus & BLOCK_HAVE_DATA)) {
+            return;
+        }
+        if (pindex->nStatus & BLOCK_LOCAL_ONLY) {
             return;
         }
         can_direct_fetch = CanDirectFetch();
@@ -4318,7 +4529,9 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             // If pruning, don't inv blocks unless we have on disk and are likely to still have
             // for some reasonable time window (1 hour) that block relay might require.
             const int nPrunedBlocksLikelyToHave = MIN_BLOCKS_TO_KEEP - 3600 / m_chainparams.GetConsensus().nPowTargetSpacing;
-            if (m_chainman.m_blockman.IsPruneMode() && (!(pindex->nStatus & BLOCK_HAVE_DATA) || pindex->nHeight <= m_chainman.ActiveChain().Tip()->nHeight - nPrunedBlocksLikelyToHave)) {
+            if (m_chainman.m_blockman.IsPruneMode() &&
+                (!(pindex->nStatus & BLOCK_HAVE_DATA) || (pindex->nStatus & BLOCK_LOCAL_ONLY) ||
+                 pindex->nHeight <= m_chainman.ActiveChain().Tip()->nHeight - nPrunedBlocksLikelyToHave)) {
                 LogDebug(BCLog::NET, " getblocks stopping, pruned or too old block at %d %s\n", pindex->nHeight, pindex->GetBlockHash().ToString());
                 break;
             }
@@ -4350,24 +4563,24 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                 recent_block = m_most_recent_block;
             // Unlock m_most_recent_block_mutex to avoid cs_main lock inversion
         }
-        if (recent_block) {
-            SendBlockTransactions(pfrom, peer, *recent_block, req);
-            return;
-        }
-
         FlatFilePos block_pos{};
         {
             LOCK(cs_main);
 
             const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(req.blockhash);
-            if (!pindex || !(pindex->nStatus & BLOCK_HAVE_DATA)) {
+            if (!pindex || !(pindex->nStatus & BLOCK_HAVE_DATA) || (pindex->nStatus & BLOCK_LOCAL_ONLY)) {
                 LogDebug(BCLog::NET, "Peer %d sent us a getblocktxn for a block we don't have\n", pfrom.GetId());
                 return;
             }
 
-            if (pindex->nHeight >= m_chainman.ActiveChain().Height() - MAX_BLOCKTXN_DEPTH) {
+            if (!recent_block && pindex->nHeight >= m_chainman.ActiveChain().Height() - MAX_BLOCKTXN_DEPTH) {
                 block_pos = pindex->GetBlockPos();
             }
+        }
+
+        if (recent_block) {
+            SendBlockTransactions(pfrom, peer, *recent_block, req);
+            return;
         }
 
         if (!block_pos.IsNull()) {
@@ -4886,27 +5099,54 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
         vRecv >> TX_WITH_WITNESS(*pblock);
 
-        LogDebug(BCLog::NET, "received block %s peer=%d\n", pblock->GetHash().ToString(), pfrom.GetId());
+        const uint256 hash{pblock->GetHash()};
+        LogDebug(BCLog::NET, "received block %s peer=%d\n", hash.ToString(), pfrom.GetId());
 
         const CBlockIndex* prev_block{WITH_LOCK(m_chainman.GetMutex(), return m_chainman.m_blockman.LookupBlockIndex(pblock->hashPrevBlock))};
 
-        // Check for possible mutation if it connects to something we know so we can check for DEPLOYMENT_SEGWIT being active
-        if (prev_block && IsBlockMutated(/*block=*/*pblock,
-                           /*check_witness_root=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT))) {
+        bool has_local_request{false};
+        bool matches_local_request{false};
+        {
+            LOCK(m_local_block_requests_mutex);
+            const auto it{m_local_block_requests.find(hash)};
+            has_local_request = it != m_local_block_requests.end();
+            matches_local_request = has_local_request && it->second->peer_id == peer.m_id;
+        }
+
+        // Preserve the existing behavior for blocks with unknown parents. A
+        // local request is always for a known active-chain block, except genesis.
+        if ((prev_block || matches_local_request) &&
+            IsBlockMutated(/*block=*/*pblock,
+                           /*check_witness_root=*/prev_block && DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT))) {
             LogDebug(BCLog::NET, "Received mutated block from peer=%d\n", peer.m_id);
             Misbehaving(peer, "mutated block");
-            WITH_LOCK(cs_main, RemoveBlockRequest(pblock->GetHash(), peer.m_id));
+            WITH_LOCK(cs_main, RemoveBlockRequest(hash, peer.m_id));
+            CompleteLocalBlockRequest(hash, peer.m_id, /*block=*/nullptr, "Peer returned a mutated historical block");
+            return;
+        }
+
+        if (matches_local_request) {
+            WITH_LOCK(cs_main, RemoveBlockRequest(hash, peer.m_id));
+            const bool stored{m_chainman.ProcessNewBlock(pblock, /*force_processing=*/true,
+                                                         /*min_pow_checked=*/true, /*new_block=*/nullptr,
+                                                         /*local_only=*/true)};
+            if (stored) {
+                CompleteLocalBlockRequest(hash, peer.m_id, pblock, /*error=*/{});
+            } else {
+                CompleteLocalBlockRequest(hash, peer.m_id, /*block=*/nullptr, "Failed to store historical block");
+            }
             return;
         }
 
         bool forceProcessing = false;
-        const uint256 hash(pblock->GetHash());
         bool min_pow_checked = false;
         {
             LOCK(cs_main);
             // Always process the block if we requested it, since we may
             // need it even when it's not a candidate for a new best tip.
-            forceProcessing = IsBlockRequested(hash);
+            // A response from another peer must not turn a local-only fetch
+            // into normally servable block data.
+            forceProcessing = IsBlockRequested(hash) && !has_local_request;
             RemoveBlockRequest(hash, pfrom.GetId());
             // mapBlockSource is only used for punishing peers and setting
             // which peers send us compact blocks, so the race between here and
@@ -5120,6 +5360,8 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
             for (CInv &inv : vInv) {
                 if (inv.IsGenTxMsg()) {
                     tx_invs.emplace_back(ToGenTxid(inv));
+                } else if (inv.IsGenBlkMsg()) {
+                    CompleteLocalBlockRequest(inv.hash, pfrom.GetId(), /*block=*/nullptr, "Peer does not have the requested historical block");
                 }
             }
         }

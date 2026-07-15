@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <blockfilter.h>
 #include <core_io.h>
 #include <key_io.h>
 #include <policy/rbf.h>
@@ -896,7 +897,14 @@ RPCMethod rescanblockchain()
             }
         }
 
-        // We can't rescan unavailable blocks, stop and throw an error
+        // We can't rescan unavailable blocks, stop and throw an error. Fetching
+        // pruned blocks is only practical when compact filters select them.
+        const bool blocks_on_disk{pwallet->chain().hasBlocks(pwallet->GetLastBlockHash(), start_height, stop_height, /*allow_fetch=*/false)};
+        if (!blocks_on_disk &&
+            pwallet->chain().hasBlocks(pwallet->GetLastBlockHash(), start_height, stop_height, /*allow_fetch=*/true) &&
+            !pwallet->chain().hasBlockFilterIndex(BlockFilterType::BASIC)) {
+            throw JSONRPCError(RPC_MISC_ERROR, "Block fetch proxy wallet rescans require -blockfilterindex=1");
+        }
         if (!pwallet->chain().hasBlocks(pwallet->GetLastBlockHash(), start_height, stop_height)) {
             if (pwallet->chain().havePruned() && pwallet->chain().getPruneHeight() >= start_height) {
                 throw JSONRPCError(RPC_MISC_ERROR, "Can't rescan beyond pruned data. Use RPC call getblockchaininfo to determine your pruned height.");
