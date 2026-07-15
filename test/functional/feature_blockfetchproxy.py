@@ -23,6 +23,7 @@ from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
+    sync_txindex,
 )
 
 
@@ -30,7 +31,7 @@ class BlockFetchProxyTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
         self.extra_args = [
-            ["-fastprune", "-prune=1", "-blockfetchproxy", "-rest", "-whitelist=noban@127.0.0.1"],
+            ["-fastprune", "-prune=1", "-blockfetchproxy", "-rest", "-txindex", "-whitelist=noban@127.0.0.1"],
             [],
         ]
 
@@ -50,8 +51,11 @@ class BlockFetchProxyTest(BitcoinTestFramework):
 
         self.log.info("Build enough history to prune an old block")
         self.generate(self.nodes[1], 400)
-        block_hashes = [self.nodes[1].getblockhash(height) for height in range(2, 4)]
+        block_hashes = [self.nodes[1].getblockhash(height) for height in range(2, 5)]
         raw_blocks = [self.nodes[1].getblock(block_hash, 0) for block_hash in block_hashes]
+        txids = [self.nodes[1].getblock(block_hash)["tx"][0] for block_hash in block_hashes]
+        raw_txs = [self.nodes[1].getrawtransaction(txid, 0, block_hash) for txid, block_hash in zip(txids, block_hashes)]
+        sync_txindex(self, self.nodes[0])
         assert_equal(self.nodes[0].pruneblockchain(300), 249)
 
         self.log.info("Do not fetch when requested verbosity requires undo data")
@@ -65,11 +69,16 @@ class BlockFetchProxyTest(BitcoinTestFramework):
         with self.nodes[0].assert_debug_log(expected_msgs=[], unexpected_msgs=[f"Requesting block {block_hashes[0]} from peer="]):
             assert_equal(self.nodes[0].getblock(block_hashes[0], 0), raw_blocks[0])
 
+        self.log.info("Use txindex to locate and read a transaction in a pruned block")
+        with self.nodes[0].assert_debug_log([f"Requesting block {block_hashes[1]} from peer="]):
+            assert_equal(self.nodes[0].getrawtransaction(txids[1]), raw_txs[1])
+
         self.log.info("Do not serve retained local-only blocks to peers")
         peer = self.nodes[0].add_p2p_connection(P2PInterface())
         peer.send_and_ping(msg_getdata([CInv(MSG_BLOCK, int(block_hashes[0], 16))]))
         assert "block" not in peer.last_message
         assert_equal(rest_status(f"/rest/block/{block_hashes[0]}.bin"), 404)
+        assert_equal(rest_status(f"/rest/tx/{txids[1]}.bin"), 404)
 
         self.log.info("Read the retained block without a peer and after restart")
         self.disconnect_nodes(0, 1)
@@ -79,13 +88,17 @@ class BlockFetchProxyTest(BitcoinTestFramework):
         peer = self.nodes[0].add_p2p_connection(P2PInterface())
         peer.send_and_ping(msg_getdata([CInv(MSG_BLOCK, int(block_hashes[0], 16))]))
         assert "block" not in peer.last_message
-        assert_raises_rpc_error(-1, "No outbound full-history peer has the requested block", self.nodes[0].getblock, block_hashes[1], 0)
+        assert_raises_rpc_error(-1, "No outbound full-history peer has the requested block", self.nodes[0].getblock, block_hashes[2], 0)
 
         self.log.info("Require prune mode for the opt-in proxy")
         self.stop_node(1)
         self.nodes[1].assert_start_raises_init_error(
             extra_args=["-blockfetchproxy"],
             expected_msg="Error: -blockfetchproxy requires prune mode.",
+        )
+        self.nodes[1].assert_start_raises_init_error(
+            extra_args=["-prune=1", "-txindex"],
+            expected_msg="Error: Prune mode with -txindex requires -blockfetchproxy.",
         )
         self.log.info("Interrupt a stalled local fetch promptly during shutdown")
         staller = self.nodes[0].add_outbound_p2p_connection(P2PInterface(), p2p_idx=0)

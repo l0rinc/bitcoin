@@ -13,7 +13,9 @@
 #include <index/disktxpos.h>
 #include <index/txindex_key.h>
 #include <interfaces/chain.h>
+#include <node/blockfetch.h>
 #include <node/blockstorage.h>
+#include <node/interface_ui.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -23,6 +25,7 @@
 #include <uint256.h>
 #include <util/fs.h>
 #include <util/log.h>
+#include <util/translation.h>
 #include <validation.h>
 
 #include <array>
@@ -136,6 +139,14 @@ TxIndex::TxIndex(std::unique_ptr<interfaces::Chain> chain, size_t n_cache_size, 
 
 TxIndex::~TxIndex() = default;
 
+bool TxIndex::CustomInit(const std::optional<interfaces::BlockRef>&)
+{
+    if (m_chainstate->m_blockman.IsPruneMode() && m_db->m_has_legacy) {
+        return InitError(Untranslated("Pruned txindex requires a recreated database without legacy entries. Delete indexes/txindex and restart to rebuild it."));
+    }
+    return true;
+}
+
 interfaces::Chain::NotifyOptions TxIndex::CustomOptions()
 {
     return {.disconnect_data = true};
@@ -159,27 +170,46 @@ bool TxIndex::CustomRemove(const interfaces::BlockInfo& block)
 
 BaseIndex::DB& TxIndex::GetDB() const { return *m_db; }
 
-bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx) const
+bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx, bool allow_block_fetch, bool allow_local_only) const
 {
+    tx.reset();
     const txindex::TxHashKeyPrefix prefix{txindex::CreateKeyPrefix(m_db->m_hasher, tx_hash)};
     std::unique_ptr<CDBIterator> it{m_db->NewIterator()};
     it->Seek(prefix);
     txindex::DBKey key{prefix, {}};
+    std::vector<const CBlockIndex*> missing_blocks;
     for (; it->Valid(); it->Next()) {
         if (!it->GetKey(key)) return false;
         if (key.hash_prefix != prefix) break;
         FlatFilePos tx_pos;
         const CBlockIndex* block_index;
+        bool have_data;
         {
             LOCK(cs_main);
             block_index = m_chainstate->m_chain[key.pos.block_height];
             if (!block_index) continue;
-            tx_pos = FlatFilePos{block_index->nFile, block_index->nDataPos + key.pos.tx_offset_in_block};
+            have_data = (block_index->nStatus & BLOCK_HAVE_DATA) != 0 &&
+                        (allow_local_only || !(block_index->nStatus & BLOCK_LOCAL_ONLY));
+            if (have_data) tx_pos = FlatFilePos{block_index->nFile, block_index->nDataPos + key.pos.tx_offset_in_block};
+        }
+        if (!have_data) {
+            if (allow_block_fetch && (missing_blocks.empty() || missing_blocks.back() != block_index)) {
+                missing_blocks.push_back(block_index);
+            }
+            continue;
         }
         AutoFile file{m_chainstate->m_blockman.OpenBlockFile(tx_pos, /*fReadOnly=*/true)};
         if (file.IsNull()) {
-            LogError("OpenBlockFile failed");
-            return false;
+            // Pruning may have raced the file open. Treat a still-present
+            // block as an I/O failure rather than hiding corruption behind a fetch.
+            if (WITH_LOCK(cs_main, return (block_index->nStatus & BLOCK_HAVE_DATA) != 0)) {
+                LogError("OpenBlockFile failed");
+                return false;
+            }
+            if (allow_block_fetch && (missing_blocks.empty() || missing_blocks.back() != block_index)) {
+                missing_blocks.push_back(block_index);
+            }
+            continue;
         }
         bool deserialized{false};
         std::string deserialize_error;
@@ -197,7 +227,7 @@ bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& 
                 continue;
             }
             if (candidate_tx->GetHash() == tx_hash) {
-                // For BIP30 duplicate txs, this returns the earliest block.
+                // Within this local-data pass, BIP30 duplicates return the earliest block.
                 // The legacy index returned the latest one instead,
                 // as each write overwrote the position under the same txid key.
                 tx = std::move(candidate_tx);
@@ -207,7 +237,20 @@ bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& 
         }
         if (!deserialized) LogDebug(BCLog::VALIDATION, "Skipping unreadable txindex candidate at height %d, offset %u: %s", key.pos.block_height, key.pos.tx_offset_in_block, deserialize_error);
     }
-    tx.reset();
+
+    // Avoid fetching a false-positive collision when another candidate can be
+    // resolved locally. Only fetch unavailable blocks after the local pass.
+    for (const CBlockIndex* block_index : missing_blocks) {
+        auto block{node::ReadBlockForLocalUse(*m_chain->context(), *block_index)};
+        if (!block) continue;
+        for (const auto& candidate_tx : (*block)->vtx) {
+            if (candidate_tx->GetHash() != tx_hash) continue;
+            tx = candidate_tx;
+            block_hash = block_index->GetBlockHash();
+            return true;
+        }
+    }
+
     if (!m_db->m_has_legacy) return false;
     // Fall back to legacy if no hashed entry matched. This makes misses pay an
     // extra lookup, but keeps existing full-txid entries readable after upgrade.
@@ -235,5 +278,13 @@ bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& 
         return false;
     }
     block_hash = header.GetHash();
+    if (!allow_local_only) {
+        LOCK(cs_main);
+        const CBlockIndex* index{m_chainstate->m_blockman.LookupBlockIndex(block_hash)};
+        if (index && (index->nStatus & BLOCK_LOCAL_ONLY)) {
+            tx.reset();
+            return false;
+        }
+    }
     return true;
 }

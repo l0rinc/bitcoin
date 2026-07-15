@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 
 class uint256;
 namespace txindex_tests {
@@ -33,9 +34,11 @@ private:
     friend class txindex_tests::TxIndexTest;
     const std::unique_ptr<DB> m_db;
 
-    bool AllowPrune() const override { return false; }
+    bool AllowPrune() const override { return true; }
 
 protected:
+    bool CustomInit(const std::optional<interfaces::BlockRef>& block) override;
+
     bool CustomAppend(const interfaces::BlockInfo& block) override;
 
     bool CustomRemove(const interfaces::BlockInfo& block) override;
@@ -56,8 +59,10 @@ public:
     /// @param[in]   tx_hash  The hash of the transaction to be returned.
     /// @param[out]  block_hash  The hash of the block the transaction is found in. Undefined if false is returned.
     /// @param[out]  tx  The transaction itself. Undefined if false is returned.
+    /// @param[in]   allow_block_fetch  Whether a pruned block may be fetched from a peer.
+    /// @param[in]   allow_local_only  Whether blocks retained for trusted local callers may be read.
     /// @return  true if transaction is found, false otherwise
-    [[nodiscard]] bool FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx) const;
+    [[nodiscard]] bool FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx, bool allow_block_fetch = false, bool allow_local_only = true) const;
 };
 
 /// The global transaction index, used in GetTransaction. May be null.

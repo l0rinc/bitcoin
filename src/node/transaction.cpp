@@ -3,17 +3,19 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <node/transaction.h>
+
 #include <consensus/validation.h>
 #include <index/txindex.h>
 #include <net.h>
 #include <net_processing.h>
+#include <node/blockfetch.h>
 #include <node/blockstorage.h>
 #include <node/context.h>
 #include <node/types.h>
 #include <txmempool.h>
 #include <validation.h>
 #include <validationinterface.h>
-#include <node/transaction.h>
 
 namespace node {
 static TransactionError HandleATMPError(const TxValidationState& state, std::string& err_string_out)
@@ -139,7 +141,7 @@ TransactionError BroadcastTransaction(NodeContext& node,
     return TransactionError::OK;
 }
 
-CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMemPool* const mempool, const Txid& hash, const BlockManager& blockman, uint256& hashBlock)
+CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMemPool* const mempool, const Txid& hash, const NodeContext& node, uint256& hashBlock, bool allow_block_fetch, bool allow_local_only)
 {
     if (mempool && !block_index) {
         CTransactionRef ptx = mempool->get(hash);
@@ -148,7 +150,7 @@ CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMe
     if (g_txindex) {
         CTransactionRef tx;
         uint256 block_hash;
-        if (g_txindex->FindTx(hash, block_hash, tx)) {
+        if (g_txindex->FindTx(hash, block_hash, tx, allow_block_fetch, allow_local_only)) {
             if (!block_index || block_index->GetBlockHash() == block_hash) {
                 // Don't return the transaction if the provided block hash doesn't match.
                 // The case where a transaction appears in multiple blocks (e.g. reorgs or
@@ -159,13 +161,12 @@ CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMe
         }
     }
     if (block_index) {
-        CBlock block;
-        if (blockman.ReadBlock(block, *block_index)) {
-            for (const auto& tx : block.vtx) {
-                if (tx->GetHash() == hash) {
-                    hashBlock = block_index->GetBlockHash();
-                    return tx;
-                }
+        auto block{ReadBlockForLocalUse(node, *block_index, allow_block_fetch)};
+        if (!block) return nullptr;
+        for (const auto& tx : (*block)->vtx) {
+            if (tx->GetHash() == hash) {
+                hashBlock = block_index->GetBlockHash();
+                return tx;
             }
         }
     }
