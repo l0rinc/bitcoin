@@ -20,6 +20,7 @@
 #include <kj/common.h>
 #include <kj/memory.h>
 #include <kj/test.h>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
@@ -33,6 +34,11 @@ class RawIpcError : public std::runtime_error
 };
 
 constexpr std::string_view INVALID_UNIVALUE_JSON_ERROR{"Invalid UniValue JSON received over IPC"};
+
+struct RawIpcResult {
+    std::string value;
+    std::optional<std::string> error;
+};
 
 bool HasInvalidUniValueJsonError(const RawIpcError& e)
 {
@@ -111,7 +117,7 @@ void IpcPipeTest()
     BOOST_CHECK_EQUAL(uni1.write(), uni2.write());
 
     auto raw_pass_univalue = [&](std::string_view arg) {
-        std::promise<std::string> result_promise;
+        std::promise<RawIpcResult> result_promise;
         auto result_future{result_promise.get_future()};
         foo->m_context.loop->sync([&] {
             auto request{foo->m_client.passUniValueRequest()};
@@ -120,13 +126,15 @@ void IpcPipeTest()
             foo->m_context.loop->m_task_set->add(request.send().then(
                 [&result_promise](::capnp::Response<gen::FooInterface::PassUniValueResults>&& response) {
                     const auto result{response.getResult()};
-                    result_promise.set_value(std::string{result.cStr(), result.size()});
+                    result_promise.set_value(RawIpcResult{.value = std::string{result.cStr(), result.size()}, .error = std::nullopt});
                 },
                 [&result_promise](const ::kj::Exception& e) {
-                    result_promise.set_exception(std::make_exception_ptr(RawIpcError{std::string{e.getDescription().cStr()}}));
+                    result_promise.set_value(RawIpcResult{.value = {}, .error = std::string{e.getDescription().cStr()}});
                 }));
         });
-        return result_future.get();
+        RawIpcResult result{result_future.get()};
+        if (result.error) throw RawIpcError{*result.error};
+        return result.value;
     };
     BOOST_CHECK_EQUAL(raw_pass_univalue("{\"ok\":true}"), "{\"ok\":true}");
     BOOST_CHECK_EXCEPTION(raw_pass_univalue("not-json"), RawIpcError, HasInvalidUniValueJsonError);
