@@ -18,6 +18,7 @@
 #include <random.h>
 #include <span.h>
 #include <util/feefrac.h>
+#include <util/overflow.h>
 #include <util/vecdeque.h>
 
 namespace cluster_linearize {
@@ -249,7 +250,7 @@ public:
     FeeFrac FeeRate(const SetType& elems) const noexcept
     {
         FeeFrac ret;
-        for (auto pos : elems) ret += entries[pos].feerate;
+        for (auto pos : elems) ret = FeeFrac::SaturatingAdd(ret, entries[pos].feerate);
         return ret;
     }
 
@@ -385,7 +386,7 @@ struct SetInfo
     {
         Assume(!transactions[pos]);
         transactions.Set(pos);
-        feerate += depgraph.FeeRate(pos);
+        feerate = FeeFrac::SaturatingAdd(feerate, depgraph.FeeRate(pos));
     }
 
     /** Add the transactions of other to this SetInfo (no overlap allowed). */
@@ -393,7 +394,7 @@ struct SetInfo
     {
         Assume(!transactions.Overlaps(other.transactions));
         transactions |= other.transactions;
-        feerate += other.feerate;
+        feerate = FeeFrac::SaturatingAdd(feerate, other.feerate);
         return *this;
     }
 
@@ -402,7 +403,7 @@ struct SetInfo
     {
         Assume(other.transactions.IsSubsetOf(transactions));
         transactions -= other.transactions;
-        feerate -= other.feerate;
+        feerate = FeeFrac::SaturatingSubtract(feerate, other.feerate);
         return *this;
     }
 
@@ -410,7 +411,7 @@ struct SetInfo
     SetInfo operator-(const SetInfo& other) const noexcept
     {
         Assume(other.transactions.IsSubsetOf(transactions));
-        return {transactions - other.transactions, feerate - other.feerate};
+        return {transactions - other.transactions, FeeFrac::SaturatingSubtract(feerate, other.feerate)};
     }
 
     /** Swap two SetInfo objects. */
@@ -454,7 +455,7 @@ std::vector<FeeFrac> ChunkLinearization(const DepGraph<SetType>& depgraph, std::
         auto new_chunk = depgraph.FeeRate(i);
         // As long as the new chunk has a higher feerate than the last chunk so far, absorb it.
         while (!ret.empty() && ByRatio{new_chunk} > ByRatio{ret.back()}) {
-            new_chunk += ret.back();
+            new_chunk = FeeFrac::SaturatingAdd(new_chunk, ret.back());
             ret.pop_back();
         }
         // Actually move that new chunk into the chunking.
@@ -1847,7 +1848,7 @@ std::tuple<std::vector<DepGraphIndex>, bool, uint64_t> Linearize(
  *                               potentially better linearization for the same graph.
  *
  * Postlinearization guarantees:
- * - The resulting chunks are connected.
+ * - The resulting chunks are connected as long as their fee sums do not saturate.
  * - If the input has a tree shape (either all transactions have at most one child, or all
  *   transactions have at most one parent), the result is optimal.
  * - Given a linearization L1 and a leaf transaction T in it. Let L2 be L1 with T moved to the end,
@@ -1862,7 +1863,8 @@ void PostLinearize(const DepGraph<SetType>& depgraph, std::span<DepGraphIndex> l
     // This algorithm performs a number of passes (currently 2); the even ones operate from back to
     // front, the odd ones from front to back. Each results in an equal-or-better linearization
     // than the one started from.
-    // - One pass in either direction guarantees that the resulting chunks are connected.
+    // - One pass in either direction guarantees that the resulting chunks are connected as long as
+    //   their fee sums do not saturate.
     // - Each direction corresponds to one shape of tree being linearized optimally (forward passes
     //   guarantee this for graphs where each transaction has at most one child; backward passes
     //   guarantee this for graphs where each transaction has at most one parent).
@@ -1966,7 +1968,7 @@ void PostLinearize(const DepGraph<SetType>& depgraph, std::span<DepGraphIndex> l
             entries[cur_group].group = SetType::Singleton(idx);
             entries[cur_group].deps = rev ? depgraph.Descendants(idx): depgraph.Ancestors(idx);
             entries[cur_group].feerate = depgraph.FeeRate(idx);
-            if (rev) entries[cur_group].feerate.fee = -entries[cur_group].feerate.fee;
+            if (rev) entries[cur_group].feerate.fee = SaturatingNegate(entries[cur_group].feerate.fee);
             entries[cur_group].prev_tx = NO_PREV_TX; // No previous transaction in group.
             entries[cur_group].first_tx = cur_group; // Transaction itself is first of group.
             // Insert the new group at the back of the groups linked list.
@@ -1993,7 +1995,7 @@ void PostLinearize(const DepGraph<SetType>& depgraph, std::span<DepGraphIndex> l
                     // but become unused.
                     entries[cur_group].group |= entries[prev_group].group;
                     entries[cur_group].deps |= entries[prev_group].deps;
-                    entries[cur_group].feerate += entries[prev_group].feerate;
+                    entries[cur_group].feerate = FeeFrac::SaturatingAdd(entries[cur_group].feerate, entries[prev_group].feerate);
                     // Make the first of the current group point to the tail of the previous group.
                     entries[entries[cur_group].first_tx].prev_tx = prev_group;
                     // The first of the previous group becomes the first of the newly-merged group.
