@@ -27,6 +27,44 @@ using node::MAX_BLOCKFILE_SIZE;
 // use BasicTestingSetup here for the data directory configuration, setup, and cleanup
 BOOST_FIXTURE_TEST_SUITE(blockmanager_tests, BasicTestingSetup)
 
+class BlockManagerTest
+{
+public:
+    static void SetBlockfileCursors(BlockManager& blockman, int normal, int assumed) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+    {
+        AssertLockHeld(cs_main);
+        blockman.m_blockfile_cursors[node::BlockfileType::NORMAL] = node::BlockfileCursor{normal};
+        blockman.m_blockfile_cursors[node::BlockfileType::ASSUMED] = node::BlockfileCursor{assumed};
+    }
+
+    static bool IsCurrentBlockfile(const BlockManager& blockman, int file_num) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+    {
+        AssertLockHeld(cs_main);
+        return blockman.IsCurrentBlockfile(file_num);
+    }
+};
+
+BOOST_AUTO_TEST_CASE(blockmanager_current_blockfiles)
+{
+    KernelNotifications notifications{Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings)};
+    const BlockManager::Options blockman_opts{
+        .chainparams = Params(),
+        .blocks_dir = m_args.GetBlocksDirPath(),
+        .notifications = notifications,
+        .block_tree_db_params = DBParams{
+            .path = m_args.GetDataDirNet() / "blocks" / "index",
+            .cache_bytes = 0,
+        },
+    };
+    BlockManager blockman{*Assert(m_node.shutdown_signal), blockman_opts};
+
+    LOCK(cs_main);
+    BlockManagerTest::SetBlockfileCursors(blockman, /*normal=*/2, /*assumed=*/5);
+    BOOST_CHECK(BlockManagerTest::IsCurrentBlockfile(blockman, 2));
+    BOOST_CHECK(BlockManagerTest::IsCurrentBlockfile(blockman, 5));
+    BOOST_CHECK(!BlockManagerTest::IsCurrentBlockfile(blockman, 1));
+}
+
 BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
 {
     const auto params {CreateChainParams(ArgsManager{}, ChainType::MAIN)};

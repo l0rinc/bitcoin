@@ -48,6 +48,9 @@ class BlockValidationState;
 class CBlockUndo;
 class Chainstate;
 class ChainstateManager;
+namespace blockmanager_tests {
+class BlockManagerTest;
+}
 namespace Consensus {
 struct Params;
 }
@@ -194,6 +197,7 @@ enum class ReadRawError {
  */
 class BlockManager
 {
+    friend class ::blockmanager_tests::BlockManagerTest;
     friend Chainstate;
     friend ChainstateManager;
 
@@ -279,6 +283,14 @@ private:
         const auto& normal = m_blockfile_cursors[BlockfileType::NORMAL].value_or(empty_cursor);
         const auto& assumed = m_blockfile_cursors[BlockfileType::ASSUMED].value_or(empty_cursor);
         return std::max(normal.file_num, assumed.file_num);
+    }
+    bool IsCurrentBlockfile(int file_num) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        AssertLockHeld(::cs_main);
+        for (const auto& cursor : m_blockfile_cursors) {
+            if (cursor && cursor->file_num == file_num) return true;
+        }
+        return false;
     }
 
     /** Global flag to indicate we should check to see if there are
