@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 
+class CBlock;
 class uint256;
 namespace txindex_tests {
 class TxIndexTest;
@@ -60,9 +61,10 @@ public:
     /// @param[out]  block_hash  The hash of the block the transaction is found in. Undefined if false is returned.
     /// @param[out]  tx  The transaction itself. Undefined if false is returned.
     /// @param[in]   allow_block_fetch  Whether a pruned block may be fetched from a peer.
+    /// @param[out]  block_data  The full block, if it was needed and the transaction was found.
     /// @param[in]   allow_local_only  Whether blocks retained for trusted local callers may be read.
     /// @return  true if transaction is found, false otherwise
-    [[nodiscard]] bool FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx, bool allow_block_fetch = false, bool allow_local_only = true) const;
+    [[nodiscard]] bool FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx, bool allow_block_fetch = false, std::shared_ptr<const CBlock>* block_data = nullptr, bool allow_local_only = true) const;
 };
 
 /// The global transaction index, used in GetTransaction. May be null.

@@ -10,7 +10,10 @@
 #include <policy/feerate.h>
 #include <primitives/transaction.h>
 
+#include <memory>
+
 class CBlockIndex;
+class CBlock;
 class CTxMemPool;
 namespace Consensus {
 struct Params;
@@ -68,10 +71,11 @@ static const CAmount DEFAULT_MAX_BURN_AMOUNT{0};
  * @param[in]  node            Node context used to access blocks
  * @param[out] hashBlock       The block hash, if the tx was found via -txindex or block_index
  * @param[in]  allow_block_fetch  Whether a pruned block may be fetched from a peer
+ * @param[out] block_data      The full block, if it was needed and the transaction was found
  * @param[in]  allow_local_only  Whether blocks retained for trusted local callers may be read
  * @returns                    The tx if found, otherwise nullptr
  */
-CTransactionRef GetTransaction(const CBlockIndex* block_index, const CTxMemPool* mempool, const Txid& hash, const NodeContext& node, uint256& hashBlock, bool allow_block_fetch = false, bool allow_local_only = true);
+CTransactionRef GetTransaction(const CBlockIndex* block_index, const CTxMemPool* mempool, const Txid& hash, const NodeContext& node, uint256& hashBlock, bool allow_block_fetch = false, std::shared_ptr<const CBlock>* block_data = nullptr, bool allow_local_only = true);
 } // namespace node
 
 #endif // BITCOIN_NODE_TRANSACTION_H

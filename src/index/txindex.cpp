@@ -170,9 +170,10 @@ bool TxIndex::CustomRemove(const interfaces::BlockInfo& block)
 
 BaseIndex::DB& TxIndex::GetDB() const { return *m_db; }
 
-bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx, bool allow_block_fetch, bool allow_local_only) const
+bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx, bool allow_block_fetch, std::shared_ptr<const CBlock>* block_data, bool allow_local_only) const
 {
     tx.reset();
+    if (block_data) block_data->reset();
     const txindex::TxHashKeyPrefix prefix{txindex::CreateKeyPrefix(m_db->m_hasher, tx_hash)};
     std::unique_ptr<CDBIterator> it{m_db->NewIterator()};
     it->Seek(prefix);
@@ -247,6 +248,7 @@ bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& 
             if (candidate_tx->GetHash() != tx_hash) continue;
             tx = candidate_tx;
             block_hash = block_index->GetBlockHash();
+            if (block_data) *block_data = *block;
             return true;
         }
     }

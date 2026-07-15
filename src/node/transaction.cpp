@@ -141,8 +141,9 @@ TransactionError BroadcastTransaction(NodeContext& node,
     return TransactionError::OK;
 }
 
-CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMemPool* const mempool, const Txid& hash, const NodeContext& node, uint256& hashBlock, bool allow_block_fetch, bool allow_local_only)
+CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMemPool* const mempool, const Txid& hash, const NodeContext& node, uint256& hashBlock, bool allow_block_fetch, std::shared_ptr<const CBlock>* block_data, bool allow_local_only)
 {
+    if (block_data) block_data->reset();
     if (mempool && !block_index) {
         CTransactionRef ptx = mempool->get(hash);
         if (ptx) return ptx;
@@ -150,7 +151,7 @@ CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMe
     if (g_txindex) {
         CTransactionRef tx;
         uint256 block_hash;
-        if (g_txindex->FindTx(hash, block_hash, tx, allow_block_fetch, allow_local_only)) {
+        if (g_txindex->FindTx(hash, block_hash, tx, allow_block_fetch, block_data, allow_local_only)) {
             if (!block_index || block_index->GetBlockHash() == block_hash) {
                 // Don't return the transaction if the provided block hash doesn't match.
                 // The case where a transaction appears in multiple blocks (e.g. reorgs or
@@ -166,6 +167,7 @@ CTransactionRef GetTransaction(const CBlockIndex* const block_index, const CTxMe
         for (const auto& tx : (*block)->vtx) {
             if (tx->GetHash() == hash) {
                 hashBlock = block_index->GetBlockHash();
+                if (block_data) *block_data = *block;
                 return tx;
             }
         }

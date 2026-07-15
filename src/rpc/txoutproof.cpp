@@ -8,6 +8,8 @@
 #include <coins.h>
 #include <index/txindex.h>
 #include <merkleblock.h>
+#include <net_processing.h>
+#include <node/blockfetch.h>
 #include <node/blockstorage.h>
 #include <node/context.h>
 #include <node/transaction.h>
@@ -19,6 +21,9 @@
 #include <univalue.h>
 #include <util/strencodings.h>
 #include <validation.h>
+
+#include <memory>
+#include <utility>
 
 using node::GetTransaction;
 
@@ -59,6 +64,7 @@ static RPCMethod gettxoutproof()
 
             const CBlockIndex* pblockindex = nullptr;
             uint256 hashBlock;
+            std::shared_ptr<const CBlock> block_data;
             const node::NodeContext& node{EnsureAnyNodeContext(request.context)};
             ChainstateManager& chainman{*Assert(node.chainman)};
             if (!request.params[1].isNull()) {
@@ -89,7 +95,7 @@ static RPCMethod gettxoutproof()
             }
 
             if (pblockindex == nullptr) {
-                const CTransactionRef tx = GetTransaction(/*block_index=*/nullptr, /*mempool=*/nullptr, *setTxids.begin(), node, hashBlock, /*allow_block_fetch=*/true);
+                const CTransactionRef tx = GetTransaction(/*block_index=*/nullptr, /*mempool=*/nullptr, *setTxids.begin(), node, hashBlock, /*allow_block_fetch=*/true, &block_data);
                 if (!tx || hashBlock.IsNull()) {
                     throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Transaction not yet in block");
                 }
@@ -101,17 +107,24 @@ static RPCMethod gettxoutproof()
                 }
             }
 
-            {
-                LOCK(cs_main);
-                CheckBlockDataAvailability(chainman.m_blockman, *pblockindex, /*check_for_undo=*/false);
-            }
-            CBlock block;
-            if (!chainman.m_blockman.ReadBlock(block, *pblockindex)) {
-                throw JSONRPCError(RPC_INTERNAL_ERROR, "Can't read block from disk");
+            if (!block_data && node.peerman && node.peerman->BlockFetchProxyEnabled()) {
+                auto fetched_block{node::ReadBlockForLocalUse(node, *pblockindex)};
+                if (!fetched_block) throw JSONRPCError(RPC_MISC_ERROR, fetched_block.error());
+                block_data = *fetched_block;
+            } else if (!block_data) {
+                {
+                    LOCK(cs_main);
+                    CheckBlockDataAvailability(chainman.m_blockman, *pblockindex, /*check_for_undo=*/false);
+                }
+                auto block{std::make_shared<CBlock>()};
+                if (!chainman.m_blockman.ReadBlock(*block, *pblockindex)) {
+                    throw JSONRPCError(RPC_INTERNAL_ERROR, "Can't read block from disk");
+                }
+                block_data = std::move(block);
             }
 
             unsigned int ntxFound = 0;
-            for (const auto& tx : block.vtx) {
+            for (const auto& tx : block_data->vtx) {
                 if (setTxids.contains(tx->GetHash())) {
                     ntxFound++;
                 }
@@ -121,7 +134,7 @@ static RPCMethod gettxoutproof()
             }
 
             DataStream ssMB{};
-            CMerkleBlock mb(block, setTxids);
+            CMerkleBlock mb(*block_data, setTxids);
             ssMB << mb;
             std::string strHex = HexStr(ssMB);
             return strHex;

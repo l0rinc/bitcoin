@@ -51,7 +51,7 @@ class BlockFetchProxyTest(BitcoinTestFramework):
 
         self.log.info("Build enough history to prune an old block")
         self.generate(self.nodes[1], 400)
-        block_hashes = [self.nodes[1].getblockhash(height) for height in range(2, 5)]
+        block_hashes = [self.nodes[1].getblockhash(height) for height in range(2, 6)]
         raw_blocks = [self.nodes[1].getblock(block_hash, 0) for block_hash in block_hashes]
         txids = [self.nodes[1].getblock(block_hash)["tx"][0] for block_hash in block_hashes]
         raw_txs = [self.nodes[1].getrawtransaction(txid, 0, block_hash) for txid, block_hash in zip(txids, block_hashes)]
@@ -73,6 +73,14 @@ class BlockFetchProxyTest(BitcoinTestFramework):
         with self.nodes[0].assert_debug_log([f"Requesting block {block_hashes[1]} from peer="]):
             assert_equal(self.nodes[0].getrawtransaction(txids[1]), raw_txs[1])
 
+        self.log.info("Build a transaction proof without fetching its block twice")
+        request_log = f"Requesting block {block_hashes[2]} from peer="
+        requests_before = self.nodes[0].debug_log_path.read_text(encoding="utf-8").count(request_log)
+        with self.nodes[0].assert_debug_log([request_log]):
+            assert_equal(self.nodes[0].gettxoutproof([txids[2]]), self.nodes[1].gettxoutproof([txids[2]], block_hashes[2]))
+        requests_after = self.nodes[0].debug_log_path.read_text(encoding="utf-8").count(request_log)
+        assert_equal(requests_after - requests_before, 1)
+
         self.log.info("Do not serve retained local-only blocks to peers")
         peer = self.nodes[0].add_p2p_connection(P2PInterface())
         peer.send_and_ping(msg_getdata([CInv(MSG_BLOCK, int(block_hashes[0], 16))]))
@@ -88,7 +96,7 @@ class BlockFetchProxyTest(BitcoinTestFramework):
         peer = self.nodes[0].add_p2p_connection(P2PInterface())
         peer.send_and_ping(msg_getdata([CInv(MSG_BLOCK, int(block_hashes[0], 16))]))
         assert "block" not in peer.last_message
-        assert_raises_rpc_error(-1, "No outbound full-history peer has the requested block", self.nodes[0].getblock, block_hashes[2], 0)
+        assert_raises_rpc_error(-1, "No outbound full-history peer has the requested block", self.nodes[0].getblock, block_hashes[3], 0)
 
         self.log.info("Require prune mode for the opt-in proxy")
         self.stop_node(1)
