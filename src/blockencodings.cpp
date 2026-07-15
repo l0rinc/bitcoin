@@ -113,16 +113,17 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     if (shorttxids.size() != cmpctblock.shorttxids.size())
         return READ_STATUS_FAILED; // Short ID collision
 
-    std::vector<bool> have_txn(txn_available.size());
+    enum class TxSource : uint8_t { NONE, MEMPOOL, EXTRA, COLLIDED };
+    std::vector tx_source(txn_available.size(), TxSource::NONE);
     {
     LOCK(pool->cs);
     for (const auto& [wtxid, txit] : pool->txns_randomized) {
         uint64_t shortid = cmpctblock.GetShortID(wtxid);
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {
-            if (!have_txn[idit->second]) {
+            if (tx_source[idit->second] == TxSource::NONE) {
                 txn_available[idit->second] = txit->GetSharedTx();
-                have_txn[idit->second]  = true;
+                tx_source[idit->second] = TxSource::MEMPOOL;
                 mempool_count++;
             } else {
                 // If we find two mempool txn that match the short id, just request it.
@@ -130,6 +131,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                 // but eating a round-trip due to FillBlock failure would be annoying
                 if (txn_available[idit->second]) {
                     txn_available[idit->second].reset();
+                    tx_source[idit->second] = TxSource::COLLIDED;
                     mempool_count--;
                 }
             }
@@ -146,9 +148,9 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         uint64_t shortid = cmpctblock.GetShortID(extra_txn[i].first);
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {
-            if (!have_txn[idit->second]) {
+            if (tx_source[idit->second] == TxSource::NONE) {
                 txn_available[idit->second] = extra_txn[i].second;
-                have_txn[idit->second]  = true;
+                tx_source[idit->second] = TxSource::EXTRA;
                 mempool_count++;
                 extra_count++;
             } else {
@@ -162,7 +164,8 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                         txn_available[idit->second]->GetWitnessHash() != extra_txn[i].second->GetWitnessHash()) {
                     txn_available[idit->second].reset();
                     mempool_count--;
-                    extra_count--;
+                    extra_count -= (tx_source[idit->second] == TxSource::EXTRA);
+                    tx_source[idit->second] = TxSource::COLLIDED;
                 }
             }
         }
