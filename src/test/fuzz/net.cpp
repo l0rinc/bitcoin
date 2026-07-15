@@ -106,7 +106,9 @@ FUZZ_TARGET(local_address, .init = initialize_net)
                 service = ConsumeService(fuzzed_data_provider);
             },
             [&] {
-                const bool added{AddLocal(service, fuzzed_data_provider.ConsumeIntegralInRange<int>(0, LOCAL_MAX - 1))};
+                const bool added{AddLocal(service,
+                                          fuzzed_data_provider.ConsumeIntegralInRange<int>(0, LOCAL_MAX - 1),
+                                          fuzzed_data_provider.ConsumeBool())};
                 if (!added) return;
                 assert(service.IsRoutable());
                 assert(IsLocal(service));
