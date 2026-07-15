@@ -78,7 +78,7 @@ BOOST_AUTO_TEST_CASE(MempoolPrioritisationSaturationTest)
     BOOST_REQUIRE_EQUAL(prioritised.size(), 1U);
     BOOST_CHECK_EQUAL(prioritised.front().delta, min_delta);
     BOOST_REQUIRE(prioritised.front().modified_fee.has_value());
-    BOOST_CHECK_EQUAL(*prioritised.front().modified_fee, min_delta); // TODO: derive the modified fee from the cumulative delta
+    BOOST_CHECK_EQUAL(*prioritised.front().modified_fee, min_delta + base_fee);
 }
 
 BOOST_AUTO_TEST_CASE(MempoolRemoveTest)

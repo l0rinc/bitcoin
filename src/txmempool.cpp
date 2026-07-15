@@ -644,9 +644,8 @@ void CTxMemPool::PrioritiseTransaction(const Txid& hash, const CAmount& nFeeDelt
         delta = SaturatingAdd(delta, nFeeDelta);
         txiter it = mapTx.find(hash);
         if (it != mapTx.end()) {
-            // PrioritiseTransaction calls stack on previous ones. Set the new
-            // transaction fee to be current modified fee + feedelta.
-            it->UpdateModifiedFee(nFeeDelta);
+            // Keep the modified fee consistent with the saturated delta.
+            it->SetModifiedFee(SaturatingAdd(it->GetFee(), delta));
             m_txgraph->SetTransactionFee(*it, it->GetModifiedFee());
             ++nTransactionsUpdated;
         }
