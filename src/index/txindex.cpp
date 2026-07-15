@@ -61,12 +61,27 @@ public:
     /// Used to hash the txid to compute the prefix.
     const SipHasher13UJ m_hasher;
 
+    /// Whether the database contains any legacy ('t' + txid) entries.
+    const bool m_has_legacy;
+
     void WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator) override;
+
+private:
+    DB(size_t n_cache_size, bool f_memory, bool f_wipe, bool has_legacy);
 };
 
+static fs::path TxIndexDBPath() { return gArgs.GetDataDirNet() / "indexes" / "txindex"; }
+
 TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe) :
-    BaseIndex::DB(gArgs.GetDataDirNet() / "indexes" / "txindex", n_cache_size, f_memory, f_wipe),
-    m_hasher{ReadOrCreateTxidHasher(*this)}
+    // Enable bloom filters only if legacy entries are present (they are point lookups)
+    DB(n_cache_size, f_memory, f_wipe,
+       /*has_legacy=*/!f_memory && !f_wipe && CDBWrapper::HasKeyStartingWith(TxIndexDBPath(), txindex::DB_TXINDEX))
+{}
+
+TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe, bool has_legacy) :
+    BaseIndex::DB(TxIndexDBPath(), n_cache_size, f_memory, f_wipe, /*f_obfuscate=*/false, /*f_bloom=*/has_legacy),
+    m_hasher{ReadOrCreateTxidHasher(*this)},
+    m_has_legacy{has_legacy}
 {}
 
 void TxIndex::DB::WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator)
@@ -212,5 +227,5 @@ bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& 
 
     // Fall back to legacy if no hashed entry matched. This makes misses pay an
     // extra lookup, but keeps existing full-txid entries readable after upgrade.
-    return FindLegacyTx(tx_hash, block_hash, tx);
+    return m_db->m_has_legacy && FindLegacyTx(tx_hash, block_hash, tx);
 }
