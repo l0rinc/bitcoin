@@ -219,6 +219,31 @@ public:
     }
 };
 
+class SaltedCoinsCacheHasher
+{
+    const SipHasher13UJ m_hasher;
+
+public:
+    explicit SaltedCoinsCacheHasher(bool deterministic = false);
+
+    /**
+     * Retained entries identify real transaction outputs, so their keys contain computed txids.
+     * Missing-input lookups may contain arbitrary claimed prevouts, but FetchCoin() immediately
+     * erases their temporary entries when the backend lookup fails, so non-hash keys cannot
+     * accumulate.
+     *
+     * Hash values are process-local and must not be persisted, serialized, or compared across
+     * processes.
+     *
+     * Having the hash noexcept lets libstdc++ recalculate it during rehash instead of storing it in
+     * each node.
+     */
+    size_t operator()(const COutPoint& id) const noexcept
+    {
+        return m_hasher.Hash(id.hash.ToUint256(), uint64_t{id.n});
+    }
+};
+
 /**
  * PoolAllocator's MAX_BLOCK_SIZE_BYTES parameter here uses sizeof the data, and adds the size
  * of 4 pointers. We do not know the exact node size used in the std::unordered_node implementation
@@ -229,7 +254,7 @@ public:
  */
 using CCoinsMap = std::unordered_map<COutPoint,
                                      CCoinsCacheEntry,
-                                     SaltedOutpointHasher,
+                                     SaltedCoinsCacheHasher,
                                      std::equal_to<COutPoint>,
                                      PoolAllocator<CoinsCachePair,
                                                    sizeof(CoinsCachePair) + sizeof(void*) * 4>>;
