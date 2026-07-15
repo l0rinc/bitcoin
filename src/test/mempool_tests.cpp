@@ -12,6 +12,7 @@
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
+#include <limits>
 #include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(mempool_tests, TestingSetup)
@@ -48,6 +49,36 @@ BOOST_AUTO_TEST_CASE(MempoolLookupTest)
 
     // Lookup by Wtxid
     BOOST_CHECK(pool.get(CTransaction(tx).GetWitnessHash()));
+}
+
+BOOST_AUTO_TEST_CASE(MempoolPrioritisationSaturationTest)
+{
+    CTxMemPool& pool{*Assert(m_node.mempool)};
+    TestMemPoolEntryHelper entry;
+
+    CMutableTransaction tx;
+    tx.vin.resize(1);
+    tx.vin[0].scriptSig = CScript() << OP_1;
+    tx.vout.resize(1);
+    tx.vout[0].scriptPubKey = CScript() << OP_1 << OP_EQUAL;
+    tx.vout[0].nValue = 10 * COIN;
+
+    constexpr CAmount base_fee{10'000};
+    const Txid txid{tx.GetHash()};
+    {
+        LOCK2(cs_main, pool.cs);
+        TryAddToMempool(pool, entry.Fee(base_fee).FromTx(tx));
+    }
+
+    const CAmount min_delta{std::numeric_limits<CAmount>::min()};
+    pool.PrioritiseTransaction(txid, min_delta);
+    pool.PrioritiseTransaction(txid, -base_fee);
+
+    const auto prioritised{pool.GetPrioritisedTransactions()};
+    BOOST_REQUIRE_EQUAL(prioritised.size(), 1U);
+    BOOST_CHECK_EQUAL(prioritised.front().delta, min_delta);
+    BOOST_REQUIRE(prioritised.front().modified_fee.has_value());
+    BOOST_CHECK_EQUAL(*prioritised.front().modified_fee, min_delta); // TODO: derive the modified fee from the cumulative delta
 }
 
 BOOST_AUTO_TEST_CASE(MempoolRemoveTest)
