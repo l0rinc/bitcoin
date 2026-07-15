@@ -26,12 +26,15 @@
 #include <validation.h>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
 #include <exception>
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -62,13 +65,32 @@ public:
     /// Used to hash the txid to compute the prefix.
     const SipHasher13UJ m_hasher;
 
+    /// Whether the database contains any legacy ('t' + txid) entries.
+    const bool m_has_legacy;
+
     CBlockLocator ReadBestBlock() const override;
     void WriteBestBlock(CDBBatch& batch, const CBlockLocator& locator) override;
+
+private:
+    DB(size_t n_cache_size, bool f_memory, bool f_wipe, bool has_legacy);
 };
 
+static fs::path TxIndexDBPath() { return gArgs.GetDataDirNet() / "indexes" / "txindex"; }
+
 TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe) :
-    BaseIndex::DB(gArgs.GetDataDirNet() / "indexes" / "txindex", n_cache_size, f_memory, f_wipe),
-    m_hasher{ReadOrCreateTxidHasher(*this)}
+    // Bloom filters are built for every key but only consulted by point reads,
+    // which iterators bypass: the per-tx hashed ('x') lookups seek with an
+    // iterator, and the 's'/'h' point reads are at most one per block against a
+    // tiny keyspace. Only the legacy entries' per-tx point lookups benefit, so
+    // enable the filters only for databases still containing them.
+    DB(n_cache_size, f_memory, f_wipe,
+       /*has_legacy=*/!f_memory && !f_wipe && CDBWrapper::HasKeyStartingWith(TxIndexDBPath(), txindex::DB_TXINDEX))
+{}
+
+TxIndex::DB::DB(size_t n_cache_size, bool f_memory, bool f_wipe, bool has_legacy) :
+    BaseIndex::DB(TxIndexDBPath(), n_cache_size, f_memory, f_wipe, /*f_obfuscate=*/false, /*f_bloom=*/has_legacy),
+    m_hasher{ReadOrCreateTxidHasher(*this)},
+    m_has_legacy{has_legacy}
 {}
 
 CBlockLocator TxIndex::DB::ReadBestBlock() const
@@ -111,7 +133,15 @@ void TxIndex::DB::WriteTxs(const interfaces::BlockInfo& block)
 
 TxIndex::TxIndex(std::unique_ptr<interfaces::Chain> chain, size_t n_cache_size, bool f_memory, bool f_wipe)
     : BaseIndex(std::move(chain), "txindex", "txidx"), m_db(std::make_unique<TxIndex::DB>(n_cache_size, f_memory, f_wipe))
-{}
+{
+    if (m_db->m_has_legacy) {
+        LogInfo("txindex contains entries in the pre-hashing format; lookups will check both formats. "
+                "To reclaim disk space, stop the node, delete %s and restart to rebuild the index. "
+                "Skip this if you might downgrade: previous releases cannot use the rebuilt index "
+                "and would rebuild it again in the old format.",
+                fs::PathToString(TxIndexDBPath()));
+    }
+}
 
 TxIndex::~TxIndex() = default;
 
@@ -127,7 +157,7 @@ bool TxIndex::CustomAppend(const interfaces::BlockInfo& block)
 
 BaseIndex::DB& TxIndex::GetDB() const { return *m_db; }
 
-bool TxIndex::FindHashedTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx) const
+std::optional<TxIndex::TxIndexResult> TxIndex::FindHashedTx(const Txid& tx_hash) const
 {
     struct Candidate {
         FlatFilePos tx_position;
@@ -169,58 +199,58 @@ bool TxIndex::FindHashedTx(const Txid& tx_hash, uint256& block_hash, CTransactio
             LogError("OpenBlockFile failed for txid %s", tx_hash.ToString());
             continue;
         }
-        CTransactionRef candidate_tx;
+        CTransactionRef tx;
         try {
-            file >> TX_WITH_WITNESS(candidate_tx);
+            file >> TX_WITH_WITNESS(tx);
         } catch (const std::exception& e) {
             LogError("Deserialize or I/O error - %s", e.what());
             continue;
         }
-        if (candidate_tx->GetHash() == tx_hash) {
-            tx = std::move(candidate_tx);
-            block_hash = candidate.block_hash;
-            return true;
+        if (tx->GetHash() == tx_hash) {
+            return TxIndexResult{candidate.block_hash, std::move(tx)};
         }
     }
-    return false;
+    return std::nullopt;
 }
 
-bool TxIndex::FindLegacyTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx) const
+std::optional<TxIndex::TxIndexResult> TxIndex::FindLegacyTx(const Txid& tx_hash) const
 {
     CDiskTxPos postx;
     if (!m_db->Read(txindex::LegacyTxKey(tx_hash), postx)) {
-        return false;
+        return std::nullopt;
     }
 
     AutoFile file{m_chainstate->m_blockman.OpenBlockFile(postx, /*fReadOnly=*/true)};
     if (file.IsNull()) {
         LogError("OpenBlockFile failed");
-        return false;
+        return std::nullopt;
     }
     CBlockHeader header;
-    CTransactionRef candidate_tx;
+    CTransactionRef tx;
     try {
         file >> header;
         file.seek(postx.nTxOffset, SEEK_CUR);
-        file >> TX_WITH_WITNESS(candidate_tx);
+        file >> TX_WITH_WITNESS(tx);
     } catch (const std::exception& e) {
         LogError("Deserialize or I/O error - %s", e.what());
-        return false;
+        return std::nullopt;
     }
-    if (candidate_tx->GetHash() != tx_hash) {
+    if (tx->GetHash() != tx_hash) {
         LogError("txid mismatch");
-        return false;
+        return std::nullopt;
     }
-    tx = std::move(candidate_tx);
-    block_hash = header.GetHash();
-    return true;
+    return TxIndexResult{header.GetHash(), std::move(tx)};
 }
 
 bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& tx) const
 {
-    if (FindHashedTx(tx_hash, block_hash, tx)) return true;
-
+    auto result{FindHashedTx(tx_hash)};
     // Fall back to legacy if no hashed entry matched. This makes misses pay an
     // extra lookup, but keeps existing full-txid entries readable after upgrade.
-    return FindLegacyTx(tx_hash, block_hash, tx);
+    if (!result && m_db->m_has_legacy) result = FindLegacyTx(tx_hash);
+    if (!result) return false;
+
+    block_hash = result->block_hash;
+    tx = std::move(result->tx);
+    return true;
 }
