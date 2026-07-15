@@ -20,6 +20,7 @@
 #include <cstring>
 #include <future>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -32,6 +33,11 @@ class RawIpcError : public std::runtime_error
 };
 
 constexpr std::string_view INVALID_UNIVALUE_JSON_ERROR{"Invalid UniValue JSON received over IPC"};
+
+struct RawIpcResult {
+    std::string value;
+    std::optional<std::string> error;
+};
 
 class IpcFuzzSetup
 {
@@ -78,7 +84,7 @@ public:
 
     std::string RawPassUniValue(std::string_view arg)
     {
-        std::promise<std::string> result_promise;
+        std::promise<RawIpcResult> result_promise;
         auto result_future{result_promise.get_future()};
         m_client->m_context.loop->sync([&] {
             auto request{m_client->m_client.passUniValueRequest()};
@@ -87,13 +93,15 @@ public:
             m_client->m_context.loop->m_task_set->add(request.send().then(
                 [&result_promise](::capnp::Response<test::fuzz::messages::IpcFuzzInterface::PassUniValueResults>&& response) {
                     const auto result{response.getResult()};
-                    result_promise.set_value(std::string{result.cStr(), result.size()});
+                    result_promise.set_value(RawIpcResult{.value = std::string{result.cStr(), result.size()}, .error = std::nullopt});
                 },
                 [&result_promise](const ::kj::Exception& e) {
-                    result_promise.set_exception(std::make_exception_ptr(RawIpcError{std::string{e.getDescription().cStr()}}));
+                    result_promise.set_value(RawIpcResult{.value = {}, .error = std::string{e.getDescription().cStr()}});
                 }));
         });
-        return result_future.get();
+        RawIpcResult result{result_future.get()};
+        if (result.error) throw RawIpcError{*result.error};
+        return result.value;
     }
 
     std::unique_ptr<mp::ProxyClient<test::fuzz::messages::IpcFuzzInterface>> m_client;
