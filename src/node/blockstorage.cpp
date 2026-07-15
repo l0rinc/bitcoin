@@ -276,6 +276,7 @@ void BlockManager::PruneOneBlockFile(const int fileNumber)
         if (pindex->nFile == fileNumber) {
             pindex->nStatus &= ~BLOCK_HAVE_DATA;
             pindex->nStatus &= ~BLOCK_HAVE_UNDO;
+            pindex->nStatus &= ~BLOCK_LOCAL_ONLY;
             pindex->nFile = 0;
             pindex->nDataPos = 0;
             pindex->nUndoPos = 0;

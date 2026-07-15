@@ -301,6 +301,8 @@ void Interrupt(NodeContext& node)
         node.tor_controller->Interrupt();
     }
     InterruptMapPort();
+    if (node.peerman)
+        node.peerman->InterruptLocalBlockFetches();
     if (node.connman)
         node.connman->Interrupt();
     for (auto* index : node.indexes) {
@@ -524,6 +526,7 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
     argsman.AddArg("-blocknotify=<cmd>", "Execute command when the best block changes (%s in cmd is replaced by block hash)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #endif
     argsman.AddArg("-blockreconstructionextratxn=<n>", strprintf("Extra transactions to keep in memory for compact block reconstructions (default: %u)", DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-blockfetchproxy", strprintf("Fetch pruned blocks from outbound full-history peers for local RPC and wallet reads, and retain them as local-only block data. Peers can observe the requested block hashes. Requires -prune. (default: %u)", DEFAULT_BLOCK_FETCH_PROXY), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-blocksonly", strprintf("Whether to reject transactions from network peers. Disables automatic broadcast and rebroadcast of transactions, unless the source peer has the 'forcerelay' permission. RPC transactions are not affected. (default: %u)", DEFAULT_BLOCKSONLY), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-coinstatsindex", strprintf("Maintain coinstats index used by the gettxoutsetinfo RPC (default: %u)", DEFAULT_COINSTATSINDEX), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-conf=<file>", strprintf("Specify path to read-only configuration file. Relative paths will be prefixed by datadir location (only useable from command line, not configuration file) (default: %s)", BITCOIN_CONF_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -1033,6 +1036,9 @@ bool AppInitParameterInteraction(const ArgsManager& args)
         if (args.GetBoolArg("-reindex-chainstate", false)) {
             return InitError(_("Prune mode is incompatible with -reindex-chainstate. Use full -reindex instead."));
         }
+    }
+    if (args.GetBoolArg("-blockfetchproxy", DEFAULT_BLOCK_FETCH_PROXY) && !args.GetIntArg("-prune", 0)) {
+        return InitError(_("-blockfetchproxy requires prune mode."));
     }
 
     // If -forcednsseed is set to true, ensure -dnsseed has not been set to false

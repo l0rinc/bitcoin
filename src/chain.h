@@ -83,6 +83,8 @@ enum BlockStatus : uint32_t {
 
     BLOCK_STATUS_RESERVED    =   256, //!< Unused flag that was previously set on assumeutxo snapshot blocks and their
                                       //!< ancestors before they were validated, and unset when they were validated.
+
+    BLOCK_LOCAL_ONLY         =   512, //!< block data was fetched for local use and must not be served to peers
 };
 
 /** The block chain is a tree shaped structure starting with the

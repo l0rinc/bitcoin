@@ -27,6 +27,7 @@
 #include <logging/timer.h>
 #include <net.h>
 #include <net_processing.h>
+#include <node/blockfetch.h>
 #include <node/blockstorage.h>
 #include <node/context.h>
 #include <node/transaction.h>
@@ -55,9 +56,8 @@
 #include <validationinterface.h>
 #include <versionbits.h>
 
-#include <cstdint>
-
 #include <condition_variable>
+#include <cstdint>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -710,19 +710,29 @@ static CBlock GetBlockChecked(BlockManager& blockman, const CBlockIndex& blockin
     return block;
 }
 
-static std::vector<std::byte> GetRawBlockChecked(BlockManager& blockman, const CBlockIndex& blockindex)
+static std::vector<std::byte> GetRawBlockChecked(NodeContext& node, const CBlockIndex& blockindex)
 {
+    const bool allow_fetch{node.peerman && node.peerman->BlockFetchProxyEnabled()};
     FlatFilePos pos{};
     {
         LOCK(cs_main);
-        CheckBlockDataAvailability(blockman, blockindex, /*check_for_undo=*/false);
-        pos = blockindex.GetBlockPos();
+        if (blockindex.nStatus & BLOCK_HAVE_DATA) {
+            pos = blockindex.GetBlockPos();
+        } else if (blockindex.nTx == 0 || !allow_fetch) {
+            CheckBlockDataAvailability(Assert(node.chainman)->m_blockman, blockindex, /*check_for_undo=*/false);
+        }
     }
 
-    if (auto data{blockman.ReadRawBlock(pos)}) return std::move(*data);
-    // Block not found on disk. This shouldn't normally happen unless the block was
-    // pruned right after we released the lock above.
-    throw JSONRPCError(RPC_MISC_ERROR, "Block not found on disk");
+    if (!pos.IsNull()) {
+        if (auto data{Assert(node.chainman)->m_blockman.ReadRawBlock(pos)}) return std::move(*data);
+    }
+
+    auto block{node::ReadBlockForLocalUse(node, blockindex, allow_fetch)};
+    if (!block) throw JSONRPCError(RPC_MISC_ERROR, block.error());
+
+    DataStream stream;
+    stream << TX_WITH_WITNESS(**block);
+    return {stream.begin(), stream.end()};
 }
 
 static CBlockUndo GetUndoChecked(BlockManager& blockman, const CBlockIndex& blockindex)
@@ -855,7 +865,8 @@ static RPCMethod getblock()
 
     const CBlockIndex* pblockindex;
     const CBlockIndex* tip;
-    ChainstateManager& chainman = EnsureAnyChainman(request.context);
+    NodeContext& node{EnsureAnyNodeContext(request.context)};
+    ChainstateManager& chainman{*Assert(node.chainman)};
     {
         LOCK(cs_main);
         pblockindex = chainman.m_blockman.LookupBlockIndex(hash);
@@ -864,9 +875,14 @@ static RPCMethod getblock()
         if (!pblockindex) {
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block not found");
         }
+        // Verbosity 3 requires undo data, which the proxy cannot fetch. Check
+        // before downloading and retaining block data that cannot satisfy it.
+        if (verbosity >= 3 && pblockindex->nHeight > 0) {
+            CheckBlockDataAvailability(chainman.m_blockman, *pblockindex, /*check_for_undo=*/true);
+        }
     }
 
-    const std::vector<std::byte> block_data{GetRawBlockChecked(chainman.m_blockman, *pblockindex)};
+    const std::vector<std::byte> block_data{GetRawBlockChecked(node, *pblockindex)};
 
     if (verbosity <= 0) {
         return HexStr(block_data);
