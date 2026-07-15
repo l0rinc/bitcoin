@@ -300,6 +300,7 @@ bool AddLocal(const CService& addr_, int nScore, bool add_even_if_unreachable)
             info.nScore = SaturatingAdd(nScore, is_newly_added ? 0 : 1);
             info.nPort = addr.GetPort();
         }
+        assert(mapLocalHost.contains(addr));
     }
 
     return true;
