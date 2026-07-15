@@ -163,7 +163,7 @@ bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& 
 {
     const txindex::TxHashKeyPrefix prefix{txindex::CreateKeyPrefix(m_db->m_hasher, tx_hash)};
     std::unique_ptr<CDBIterator> it{m_db->NewIterator()};
-    it->Seek(std::pair{txindex::DB_TXINDEX_HASHED, prefix});
+    it->Seek(prefix);
     txindex::DBKey key{prefix, {}};
     for (; it->Valid(); it->Next()) {
         if (!it->GetKey(key)) return false;
@@ -181,23 +181,31 @@ bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& 
             LogError("OpenBlockFile failed");
             return false;
         }
-        CTransactionRef candidate_tx;
-        try {
-            file >> TX_WITH_WITNESS(candidate_tx);
-        } catch (const std::exception& e) {
-            // A reorg may temporarily leave an old-branch position
-            // resolving through the new active block at this height.
-            LogDebug(BCLog::VALIDATION, "Skipping unreadable txindex candidate at height %d, offset %u: %s", key.pos.block_height, key.pos.tx_offset_in_block, e.what());
-            continue;
+        bool deserialized{false};
+        std::string deserialize_error;
+        for (uint32_t offset{0}; offset < txindex::BLOCK_TX_OFFSET_GRANULARITY; ++offset) {
+            CTransactionRef candidate_tx;
+            try {
+                file.seek(tx_pos.nPos + offset, SEEK_SET);
+                file >> TX_WITH_WITNESS(candidate_tx);
+                deserialized = true;
+            } catch (const std::exception& e) {
+                // A reorg may temporarily leave an old-branch position
+                // resolving through the new active block at this height, or
+                // this may not be the transaction's exact byte offset.
+                deserialize_error = e.what();
+                continue;
+            }
+            if (candidate_tx->GetHash() == tx_hash) {
+                // For BIP30 duplicate txs, this returns the earliest block.
+                // The legacy index returned the latest one instead,
+                // as each write overwrote the position under the same txid key.
+                tx = std::move(candidate_tx);
+                block_hash = block_index->GetBlockHash();
+                return true;
+            }
         }
-        if (candidate_tx->GetHash() == tx_hash) {
-            // For BIP30 duplicate txs, this returns the earliest block.
-            // The legacy index returned the latest one instead,
-            // as each write overwrote the position under the same txid key.
-            tx = std::move(candidate_tx);
-            block_hash = block_index->GetBlockHash();
-            return true;
-        }
+        if (!deserialized) LogDebug(BCLog::VALIDATION, "Skipping unreadable txindex candidate at height %d, offset %u: %s", key.pos.block_height, key.pos.tx_offset_in_block, deserialize_error);
     }
     tx.reset();
     if (!m_db->m_has_legacy) return false;

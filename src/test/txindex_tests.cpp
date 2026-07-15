@@ -9,6 +9,7 @@
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
+#include <crypto/siphash.h>
 #include <dbwrapper.h>
 #include <flatfile.h>
 #include <index/disktxpos.h>
@@ -18,18 +19,25 @@
 #include <key.h>
 #include <node/blockstorage.h>
 #include <primitives/block.h>
+#include <primitives/transaction.h>
+#include <random.h>
 #include <script/script.h>
+#include <serialize.h>
 #include <streams.h>
 #include <sync.h>
 #include <test/util/setup_common.h>
+#include <uint256.h>
 #include <util/byte_units.h>
 #include <validation.h>
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -57,7 +65,7 @@ std::vector<txindex::BlockTxPosition> BucketPositions(CDBWrapper& db, const txin
     std::vector<txindex::BlockTxPosition> positions;
     std::unique_ptr<CDBIterator> it{db.NewIterator()};
     txindex::DBKey key{prefix, {}};
-    for (it->Seek(std::pair{txindex::DB_TXINDEX_HASHED, prefix}); it->Valid() && it->GetKey(key) && key.hash_prefix == prefix; it->Next()) {
+    for (it->Seek(prefix); it->Valid() && it->GetKey(key) && key.hash_prefix == prefix; it->Next()) {
         positions.push_back(key.pos);
     }
     return positions;
@@ -71,7 +79,81 @@ FlatFilePos BlockFilePos(const ChainstateManager& chainman, uint32_t height)
     return {block_index->nFile, block_index->nDataPos};
 }
 
+void CheckPositionEncoding(const std::vector<uint32_t>& tx_sizes, uint32_t height, const txindex::TxHashKeyPrefix& prefix)
+{
+    std::vector<uint32_t> tx_offsets;
+    uint32_t tx_offset{static_cast<uint32_t>(GetSerializeSize(CBlockHeader{})) + GetSizeOfCompactSize(tx_sizes.size())};
+    for (const uint32_t tx_size : tx_sizes) {
+        tx_offsets.push_back(tx_offset);
+        tx_offset += tx_size;
+    }
+    BOOST_REQUIRE_LE(tx_offset, MAX_BLOCK_SERIALIZED_SIZE);
+
+    DataStream prefix_stream;
+    prefix_stream << prefix;
+    BOOST_CHECK_EQUAL(prefix_stream.size(), txindex::TxHashKeyPrefix::SERIALIZED_SIZE);
+
+    for (const uint32_t expected_offset : tx_offsets) {
+        DataStream stream;
+        stream << txindex::DBKey{prefix, txindex::BlockTxPosition{height, expected_offset}};
+        BOOST_CHECK_EQUAL(stream.size(), txindex::DBKey::SERIALIZED_SIZE);
+
+        txindex::DBKey decoded{prefix, {}};
+        stream >> decoded;
+        BOOST_CHECK(stream.empty());
+        BOOST_CHECK(decoded.hash_prefix == prefix);
+        BOOST_CHECK_EQUAL(decoded.pos.block_height, height);
+
+        const auto match{std::lower_bound(tx_offsets.begin(), tx_offsets.end(), decoded.pos.tx_offset_in_block)};
+        BOOST_REQUIRE(match != tx_offsets.end());
+        BOOST_CHECK(decoded.pos.ContainsOffset(*match));
+        BOOST_CHECK_EQUAL(*match, expected_offset);
+        BOOST_CHECK(std::next(match) == tx_offsets.end() || !decoded.pos.ContainsOffset(*std::next(match)));
+    }
+}
+
+void CheckRandomPositionEncoding(uint32_t generate_attempts, uint32_t shuffle_attempts)
+{
+    FastRandomContext rng{/*fDeterministic=*/true};
+    const PresaltedSipHasher hasher{rng.rand64(), rng.rand64()};
+    constexpr uint32_t min_tx_size{MIN_TRANSACTION_WEIGHT / WITNESS_SCALE_FACTOR};
+    constexpr uint32_t typical_max_tx_size{10'000};
+
+    for (uint32_t generate{0}; generate < generate_attempts; ++generate) {
+        std::vector<uint32_t> tx_sizes;
+        uint32_t remaining{MAX_BLOCK_SERIALIZED_SIZE - static_cast<uint32_t>(GetSerializeSize(CBlockHeader{})) - 9};
+        const uint32_t generated_max_tx_size{rng.randbool() ? typical_max_tx_size : remaining};
+        while (remaining >= min_tx_size) {
+            const uint32_t max_tx_size{std::min(remaining, generated_max_tx_size)};
+            const uint32_t tx_size{min_tx_size + rng.randrange(max_tx_size - min_tx_size + 1)};
+            tx_sizes.push_back(tx_size);
+            remaining -= tx_size;
+        }
+
+        for (uint32_t shuffle{0}; shuffle <= shuffle_attempts; ++shuffle) {
+            const auto prefix{txindex::CreateKeyPrefix(hasher, Txid::FromUint256(rng.rand256()))};
+            CheckPositionEncoding(tx_sizes, rng.randrange(txindex::MAX_TXINDEX_BLOCK_HEIGHT + 1), prefix);
+            if (shuffle < shuffle_attempts) std::shuffle(tx_sizes.begin(), tx_sizes.end(), rng);
+        }
+    }
+}
+
 } // namespace
+
+BOOST_AUTO_TEST_CASE(txindex_position_encoding)
+{
+    CheckRandomPositionEncoding(/*generate_attempts=*/10, /*shuffle_attempts=*/4);
+
+    constexpr uint32_t min_tx_size{MIN_TRANSACTION_WEIGHT / WITNESS_SCALE_FACTOR};
+    const uint32_t first_tx_size{MAX_BLOCK_SERIALIZED_SIZE - static_cast<uint32_t>(GetSerializeSize(CBlockHeader{})) - GetSizeOfCompactSize(2) - min_tx_size};
+    for (uint8_t tag{txindex::DB_TXINDEX_HASHED}; tag < txindex::DB_TXINDEX_HASHED + txindex::DB_TXINDEX_HASHED_COUNT; ++tag) {
+        CheckPositionEncoding({first_tx_size, min_tx_size}, txindex::MAX_TXINDEX_BLOCK_HEIGHT, txindex::TxHashKeyPrefix{tag});
+    }
+
+    DataStream stream;
+    const txindex::DBKey overflow_key{txindex::TxHashKeyPrefix{}, txindex::BlockTxPosition{txindex::MAX_TXINDEX_BLOCK_HEIGHT + 1, 0}};
+    BOOST_CHECK_THROW(stream << overflow_key, std::ios_base::failure);
+}
 
 BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup)
 {
@@ -177,7 +259,7 @@ BOOST_FIXTURE_TEST_CASE(txindex_collision_scan_path, TestChain100Setup)
     // confirm the lookup misses even though the legacy row exists.
     // BlockTxPosition offsets are from the block start (header included), while
     // the legacy CDiskTxPos.nTxOffset is measured after the header.
-    const CDiskTxPos fake_physical{BlockFilePos(*m_node.chainman, fake_pos.block_height), fake_pos.tx_offset_in_block - static_cast<uint32_t>(GetSerializeSize(CBlockHeader{}))};
+    const CDiskTxPos fake_physical{BlockFilePos(*m_node.chainman, fake_pos.block_height), static_cast<uint32_t>(GetSizeOfCompactSize(1))};
     db.Erase(txindex::DBKey{fake_prefix, fake_pos});
     db.Write(std::make_pair(static_cast<uint8_t>('t'), fake_txid.ToUint256()), fake_physical);
     CTransactionRef legacy_tx;
@@ -216,7 +298,7 @@ BOOST_FIXTURE_TEST_CASE(txindex_legacy_fallback, TestChain100Setup)
 
     // A malformed hashed row in this bucket must fail closed instead of
     // falling through to the valid legacy row.
-    const auto malformed_key{std::pair{txindex::DB_TXINDEX_HASHED, prefix}};
+    const auto malformed_key{prefix};
     db.Write(malformed_key, std::array<std::byte, 0>{});
     BOOST_CHECK(!txindex.FindTx(legacy_txid, block_hash, tx_disk));
     BOOST_CHECK(!tx_disk);
