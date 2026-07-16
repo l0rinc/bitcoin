@@ -443,6 +443,10 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
     uint64_t checkTotal = 0;
     CAmount check_total_fee{0};
     CAmount check_total_modified_fee{0};
+    // Saturating addition is order-dependent after overflow, so fee diagram
+    // points can only be compared with the transaction-order prefix while the
+    // prefix sum remains representable.
+    bool check_total_modified_fee_overflowed{false};
     int64_t check_total_adjusted_weight{0};
     uint64_t innerUsage = 0;
 
@@ -469,14 +473,18 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
         // The feerate diagram should never get behind the current transaction
         // size totals.
         assert(diagram_iter->size >= check_total_adjusted_weight);
-        if (diagram_iter->fee == check_total_modified_fee &&
-                diagram_iter->size == check_total_adjusted_weight) {
+        if (diagram_iter->size == check_total_adjusted_weight) {
+            if (!check_total_modified_fee_overflowed) {
+                assert(diagram_iter->fee == check_total_modified_fee);
+            }
             ++diagram_iter;
         }
         checkTotal += it->GetTxSize();
         check_total_adjusted_weight += it->GetAdjustedWeight();
         check_total_fee += it->GetFee();
-        check_total_modified_fee += it->GetModifiedFee();
+        const auto new_check_total_modified_fee{CheckedAdd(check_total_modified_fee, it->GetModifiedFee())};
+        check_total_modified_fee_overflowed |= !new_check_total_modified_fee.has_value();
+        check_total_modified_fee = new_check_total_modified_fee.value_or(SaturatingAdd(check_total_modified_fee, it->GetModifiedFee()));
         innerUsage += it->DynamicMemoryUsage();
         const CTransaction& tx = it->GetTx();
 
@@ -548,7 +556,9 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
 
     assert(totalTxSize == checkTotal);
     assert(m_total_fee == check_total_fee);
-    assert(diagram.back().fee == check_total_modified_fee);
+    if (!check_total_modified_fee_overflowed) {
+        assert(diagram.back().fee == check_total_modified_fee);
+    }
     assert(diagram.back().size == check_total_adjusted_weight);
     assert(innerUsage == cachedInnerUsage);
 }
@@ -1101,7 +1111,10 @@ std::vector<FeePerWeight> CTxMemPool::GetFeerateDiagram() const
 
     FeePerWeight last_selection = GetBlockBuilderChunk(dummy);
     while (last_selection != FeePerWeight{}) {
-        last_selection += ret.back();
+        last_selection = FeePerWeight{
+            SaturatingAdd(last_selection.fee, ret.back().fee),
+            SaturatingAdd(last_selection.size, ret.back().size),
+        };
         ret.emplace_back(last_selection);
         IncludeBuilderChunk();
         last_selection = GetBlockBuilderChunk(dummy);

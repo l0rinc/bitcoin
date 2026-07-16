@@ -336,6 +336,50 @@ BOOST_FIXTURE_TEST_CASE(improves_feerate, TestChain100Setup)
     BOOST_CHECK(res3 == std::nullopt);
 }
 
+BOOST_FIXTURE_TEST_CASE(improves_feerate_diagram_rejects_overflowing_totals, TestChain100Setup)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    LOCK2(::cs_main, pool.cs);
+    TestMemPoolEntryHelper entry;
+
+    constexpr CAmount fee{10'000};
+    const CAmount max_delta{std::numeric_limits<CAmount>::max() - fee};
+
+    const auto old_tx_1 = make_tx(/*inputs=*/{m_coinbase_txns[0]}, /*output_values=*/{10 * COIN});
+    const auto old_tx_2 = make_tx(/*inputs=*/{m_coinbase_txns[1]}, /*output_values=*/{10 * COIN});
+    TryAddToMempool(pool, entry.Fee(fee).FromTx(old_tx_1));
+    TryAddToMempool(pool, entry.Fee(fee).FromTx(old_tx_2));
+    pool.PrioritiseTransaction(old_tx_1->GetHash(), max_delta);
+    pool.PrioritiseTransaction(old_tx_2->GetHash(), max_delta);
+
+    const auto old_entry_1 = pool.GetIter(old_tx_1->GetHash()).value();
+    const auto old_entry_2 = pool.GetIter(old_tx_2->GetHash()).value();
+    BOOST_CHECK_EQUAL(old_entry_1->GetModifiedFee(), std::numeric_limits<CAmount>::max());
+    BOOST_CHECK_EQUAL(old_entry_2->GetModifiedFee(), std::numeric_limits<CAmount>::max());
+
+    const auto replacement_tx = make_tx(/*inputs=*/{m_coinbase_txns[2]}, /*output_values=*/{9 * COIN});
+    auto changeset = pool.GetChangeSet();
+    changeset->StageRemoval(old_entry_1);
+    changeset->StageRemoval(old_entry_2);
+    changeset->StageAddition(replacement_tx,
+                             std::numeric_limits<CAmount>::max(),
+                             /*time=*/0,
+                             /*entry_height=*/1,
+                             /*entry_sequence=*/0,
+                             /*spends_coinbase=*/false,
+                             /*sigops_cost=*/4,
+                             LockPoints());
+
+    const auto chunks{changeset->CalculateChunksForRBF()};
+    BOOST_REQUIRE(chunks.has_value());
+    BOOST_REQUIRE_GE(chunks->first.size(), 2U);
+
+    const auto result{ImprovesFeerateDiagram(*changeset)};
+    BOOST_REQUIRE(result.has_value());
+    BOOST_CHECK(result->first == DiagramCheckError::UNCALCULABLE);
+    BOOST_CHECK_EQUAL(result->second, "feerate diagram total overflow");
+}
+
 BOOST_FIXTURE_TEST_CASE(calc_feerate_diagram_rbf, TestChain100Setup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
