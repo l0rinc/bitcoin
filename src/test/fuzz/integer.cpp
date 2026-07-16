@@ -129,6 +129,14 @@ FUZZ_TARGET(integer, .init = initialize_integer)
         hasher.Write(extra);
         assert(presalted_hasher(u256, u32) == hasher.Finalize());
     }
+    {
+        SipHasher13UJ hasher{u64, u64_2};
+        const PresaltedSipHasher13UJ presalted_hasher{u64, u64_2};
+        hasher.WriteJumbo(u256);
+        assert(presalted_hasher(u256) == hasher.Finalize());
+        hasher.Write(u64);
+        assert(presalted_hasher(u256, u64) == hasher.Finalize());
+    }
     (void)ToLower(ch);
     (void)ToUpper(ch);
     {
