@@ -32,6 +32,8 @@ struct IndexSummary {
     bool synced{false};
     int best_block_height{0};
     uint256 best_block_hash;
+
+    bool operator==(const IndexSummary&) const = default;
 };
 namespace interfaces {
 struct BlockRef;
