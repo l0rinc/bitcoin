@@ -223,6 +223,22 @@ void CheckTransactionSerializationContracts(const CTransaction& tx)
     }
 }
 
+class InvalidCoinView final : public CoinsViewEmpty
+{
+public:
+    InvalidCoinView(const COutPoint& outpoint, const Coin& coin) : m_outpoint{outpoint}, m_coin{coin} {}
+
+    std::optional<Coin> GetCoin(const COutPoint& outpoint) const override
+    {
+        if (outpoint == m_outpoint) return m_coin;
+        return {};
+    }
+
+private:
+    const COutPoint m_outpoint;
+    const Coin m_coin;
+};
+
 } // namespace
 
 BOOST_AUTO_TEST_CASE(transaction_cached_hash_contracts)
@@ -1337,10 +1353,9 @@ BOOST_AUTO_TEST_CASE(max_standard_legacy_sigops)
 BOOST_AUTO_TEST_CASE(checktxinputs_invalid_transactions_test)
 {
     auto check_invalid{[](CAmount input_value, CAmount output_value, bool coinbase, int spend_height, TxValidationResult expected_result, std::string_view expected_reason) {
-        CCoinsViewCache inputs{&CoinsViewEmpty::Get()};
-
         const COutPoint prevout{Txid::FromUint256(uint256::ONE), 0};
-        inputs.AddCoin(prevout, Coin{{input_value, CScript() << OP_TRUE}, /*nHeightIn=*/1, coinbase}, /*possible_overwrite=*/false);
+        InvalidCoinView invalid_coin_view{prevout, Coin{{input_value, CScript() << OP_TRUE}, /*nHeightIn=*/1, coinbase}};
+        CCoinsViewCache inputs{&invalid_coin_view};
 
         CMutableTransaction mtx;
         mtx.vin.emplace_back(prevout);
