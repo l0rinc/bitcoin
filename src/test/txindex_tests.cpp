@@ -16,6 +16,10 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <atomic>
+#include <future>
+#include <thread>
+
 BOOST_AUTO_TEST_SUITE(txindex_tests)
 
 BOOST_FIXTURE_TEST_CASE(txindex_block_until_synced_before_genesis_activation, ChainTestingSetup)
@@ -107,6 +111,42 @@ BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup)
 
     // shutdown sequence (c.f. Shutdown() in init.cpp)
     txindex.Stop();
+}
+
+BOOST_FIXTURE_TEST_CASE(txindex_reinit_reader_race, TestChain100Setup)
+{
+    TxIndex txindex(interfaces::MakeChain(m_node), 1_MiB, true);
+    BOOST_REQUIRE(txindex.Init());
+    txindex.Sync();
+
+    const Txid txid{m_coinbase_txns[1]->GetHash()};
+    std::promise<void> reader_started_promise;
+    auto reader_started{reader_started_promise.get_future()};
+    std::atomic<bool> run{true};
+    std::thread reader{[&] {
+        reader_started_promise.set_value();
+        while (run.load(std::memory_order_relaxed)) {
+            CTransactionRef tx;
+            uint256 block_hash;
+            (void)txindex.FindTx(txid, block_hash, tx);
+        }
+    }};
+    reader_started.wait();
+
+    bool init_ok{true};
+    for (int i{0}; i < 1000; ++i) {
+        txindex.Stop();
+        if (!txindex.Init()) {
+            init_ok = false;
+            break;
+        }
+        std::this_thread::yield();
+    }
+
+    run.store(false, std::memory_order_relaxed);
+    reader.join();
+    txindex.Stop();
+    BOOST_REQUIRE(init_ok);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
