@@ -10,7 +10,6 @@ the index.
 """
 
 from decimal import Decimal
-import re
 
 from test_framework.blocktools import (
     COINBASE_MATURITY,
@@ -334,12 +333,11 @@ class CoinStatsIndexTest(BitcoinTestFramework):
 
         # Replacing the committed tip requires its parent's stats from the hash index
         index_node.invalidateblock(committed_tip)
-        self.generate(index_node, 1, sync_fun=self.no_op)
-        # TODO: recover the parent's stats when its height entry has been replaced
-        index_node.wait_until_stopped(
-            expect_error=True,
-            expected_stderr=re.compile("Failed to rewind coinstatsindex to a previous chain tip"),
-        )
+        child = self.generate(index_node, 1, sync_fun=self.no_op)[0]
+        indexed = index_node.gettxoutsetinfo("muhash", child)
+        scanned = index_node.gettxoutsetinfo("muhash", use_index=False)
+        for field in ("muhash", "txouts", "bogosize", "total_amount"):
+            assert_equal(indexed[field], scanned[field])
 
 
 if __name__ == '__main__':
