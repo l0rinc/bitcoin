@@ -329,6 +329,49 @@ BOOST_FIXTURE_TEST_CASE(blockfilter_index_init_destroy, BasicTestingSetup)
     BOOST_CHECK(filter_index == nullptr);
 }
 
+BOOST_FIXTURE_TEST_CASE(blockfilter_index_reorg_restart, BuildChainTestingSetup)
+{
+    auto& chainman{*Assert(m_node.chainman)};
+    auto& chainstate{chainman.ActiveChainstate()};
+    auto current_tip{[&] { return Assert(WITH_LOCK(::cs_main, return chainman.ActiveTip())); }};
+    auto summary_after_callbacks{[&](BlockFilterIndex& index) {
+        m_node.validation_signals->SyncWithValidationInterfaceQueue();
+        return index.GetSummary();
+    }};
+    auto summary_at{[](const CBlockIndex& tip) { return IndexSummary{"basic block filter index", /*synced=*/true, tip.nHeight, tip.GetBlockHash()}; }};
+    const auto* old_tip{current_tip()};
+
+    std::vector<std::shared_ptr<CBlock>> fork;
+    BOOST_REQUIRE(BuildChain(old_tip->pprev, CScript{} << OP_FALSE, /*length=*/2, fork));
+
+    // Keep the locator at old_tip while the replacement fork overwrites its height entry.
+    {
+        BlockFilterIndex index{interfaces::MakeChain(m_node), BlockFilterType::BASIC, /*n_cache_size=*/1_MiB, /*f_memory=*/false, /*f_wipe=*/true};
+        BOOST_REQUIRE(index.Init());
+        index.Sync();
+        chainstate.ForceFlushStateToDisk();
+        BOOST_CHECK(summary_after_callbacks(index) == summary_at(*old_tip));
+
+        for (const auto& block : fork) {
+            BOOST_REQUIRE(chainman.ProcessNewBlock(block, /*force_processing=*/true, /*min_pow_checked=*/true, nullptr));
+        }
+        BOOST_CHECK(summary_after_callbacks(index) == summary_at(*current_tip()));
+        BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return chainstate.GetLastFlushedBlock()), old_tip);
+    }
+
+    // After a crash, chainstate may restart at the flushed tip while the replacement fork's eager index writes remain.
+    auto* fork_first{Assert(current_tip()->pprev)};
+    BOOST_REQUIRE_EQUAL(fork_first->nHeight, old_tip->nHeight);
+    BlockValidationState state{};
+    BOOST_REQUIRE(chainstate.InvalidateBlock(state, fork_first));
+    BOOST_REQUIRE(chainstate.ActivateBestChain(state, nullptr));
+    BOOST_REQUIRE_EQUAL(current_tip(), old_tip);
+
+    BlockFilterIndex index{interfaces::MakeChain(m_node), BlockFilterType::BASIC, /*n_cache_size=*/1_MiB, /*f_memory=*/false, /*f_wipe=*/false};
+    BOOST_REQUIRE(index.Init());
+    BOOST_CHECK(summary_after_callbacks(index) == summary_at(*old_tip));
+}
+
 class IndexReorgCrash : public BaseIndex
 {
 private:

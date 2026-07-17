@@ -123,4 +123,72 @@ BOOST_FIXTURE_TEST_CASE(coinstatsindex_unclean_shutdown, TestChain100Setup)
     }
 }
 
+BOOST_FIXTURE_TEST_CASE(coinstatsindex_reorg_restart, TestChain100Setup)
+{
+    auto& chainman{*Assert(m_node.chainman)};
+    auto& chainstate{chainman.ActiveChainstate()};
+    auto current_tip{[&] { return Assert(WITH_LOCK(::cs_main, return chainman.ActiveTip())); }};
+    auto summary_after_callbacks{[&](CoinStatsIndex& index) {
+        m_node.validation_signals->SyncWithValidationInterfaceQueue();
+        return index.GetSummary();
+    }};
+    auto summary_at{[](const CBlockIndex& tip) { return IndexSummary{"coinstatsindex", /*synced=*/true, tip.nHeight, tip.GetBlockHash()}; }};
+    auto reconsider{[&](CBlockIndex& block) {
+        {
+            LOCK(::cs_main);
+            chainstate.ResetBlockFailureFlags(&block);
+            chainman.RecalculateBestHeader();
+        }
+        BlockValidationState state{};
+        BOOST_REQUIRE(chainstate.ActivateBestChain(state));
+    }};
+    auto* old_tip{current_tip()};
+    auto* old_first{Assert(old_tip->pprev)};
+    auto* fork_point{Assert(old_first->pprev)};
+
+    // Keep the locator at old_tip while a deeper replacement fork overwrites
+    // its last two height entries.
+    {
+        CoinStatsIndex index{interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB, /*f_memory=*/false, /*f_wipe=*/true};
+        BOOST_REQUIRE(index.Init());
+        index.Sync();
+        chainstate.ForceFlushStateToDisk();
+        BOOST_CHECK(summary_after_callbacks(index) == summary_at(*old_tip));
+
+        BlockValidationState state{};
+        BOOST_REQUIRE(chainstate.InvalidateBlock(state, old_first));
+        BOOST_REQUIRE(chainstate.ActivateBestChain(state));
+        BOOST_REQUIRE_EQUAL(current_tip(), fork_point);
+        for (int i{0}; i < 3; ++i) {
+            CreateAndProcessBlock({}, CScript{} << OP_FALSE);
+        }
+        BOOST_CHECK(summary_after_callbacks(index) == summary_at(*current_tip()));
+        BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return chainstate.GetLastFlushedBlock()), old_tip);
+    }
+    auto* replacement_tip{current_tip()};
+    auto* replacement_first{Assert(replacement_tip->GetAncestor(old_first->nHeight))};
+
+    // Restore chainstate to the flushed branch without changing the index DB.
+    BlockValidationState state{};
+    BOOST_REQUIRE(chainstate.InvalidateBlock(state, replacement_first));
+    BOOST_REQUIRE(chainstate.ActivateBestChain(state));
+    reconsider(*old_first);
+    BOOST_REQUIRE_EQUAL(current_tip(), old_tip);
+
+    // Drain callbacks queued while the index was stopped before registering the restarted instance.
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    CoinStatsIndex index{interfaces::MakeChain(m_node), /*n_cache_size=*/1_MiB, /*f_memory=*/false, /*f_wipe=*/false};
+    BOOST_REQUIRE(index.Init());
+    BOOST_CHECK(index.GetSummary() == summary_at(*old_tip));
+
+    // Reverting old_tip requires its parent from the hash index because the
+    // replacement fork already occupies that height entry.
+    reconsider(*replacement_first);
+    BOOST_REQUIRE_EQUAL(current_tip(), replacement_tip);
+    const auto summary{summary_after_callbacks(index)};
+    // FatalErrorf requests shutdown, distinguishing a failed revert from a lagging index.
+    BOOST_CHECK(!m_interrupt);
+    BOOST_CHECK(summary == summary_at(*replacement_tip));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
