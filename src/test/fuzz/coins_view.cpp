@@ -614,6 +614,8 @@ FUZZ_TARGET(coins_view_db_resize_cursor, .init = initialize_coins_view)
         if (!coin || coin->IsSpent() || !MoneyRange(coin->out.nValue)) {
             coin = Coin{CTxOut{CAmount{1 + static_cast<CAmount>(i)}, CScript{} << OP_TRUE}, static_cast<int>(i + 1), false};
         }
+        // CCoinsViewCache::AddCoin intentionally ignores unspendable outputs.
+        if (coin->out.scriptPubKey.IsUnspendable()) continue;
         expected[outpoint] = *coin;
         cache.AddCoin(outpoint, std::move(*coin), /*possible_overwrite=*/true);
     }
