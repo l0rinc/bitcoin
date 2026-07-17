@@ -228,8 +228,8 @@ class CCoinsViewDBCursor: public CCoinsViewCursor
 public:
     // Prefer using CCoinsViewDB::Cursor() since we want to perform some
     // cache warmup on instantiation.
-    CCoinsViewDBCursor(CDBIterator* pcursorIn, const uint256& in_block_hash):
-        CCoinsViewCursor(in_block_hash), pcursor(pcursorIn) {}
+    CCoinsViewDBCursor(std::unique_ptr<UniqueLock<Mutex>> db_lock, CDBIterator* pcursorIn, const uint256& in_block_hash):
+        CCoinsViewCursor(in_block_hash), m_db_lock(std::move(db_lock)), pcursor(pcursorIn) {}
     ~CCoinsViewDBCursor() = default;
 
     bool GetKey(COutPoint &key) const override;
@@ -239,6 +239,8 @@ public:
     void Next() override;
 
 private:
+    // Keep the database alive until the LevelDB iterator is destroyed.
+    std::unique_ptr<UniqueLock<Mutex>> m_db_lock;
     std::unique_ptr<CDBIterator> pcursor;
     std::pair<char, COutPoint> keyTmp;
 
@@ -247,8 +249,9 @@ private:
 
 std::unique_ptr<CCoinsViewCursor> CCoinsViewDB::Cursor() const
 {
+    auto db_lock = std::make_unique<UniqueLock<Mutex>>(m_db_mutex, "m_db_mutex", __FILE__, __LINE__);
     auto i = std::make_unique<CCoinsViewDBCursor>(
-        const_cast<CDBWrapper&>(*m_db).NewIterator(), GetBestBlock());
+        std::move(db_lock), const_cast<CDBWrapper&>(*m_db).NewIterator(), GetBestBlock());
     /* It seems that there are no "const iterators" for LevelDB.  Since we
        only need read operations on it, use a const-cast to get around
        that restriction.  */
