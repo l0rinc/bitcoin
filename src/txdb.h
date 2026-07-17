@@ -38,8 +38,8 @@ class CCoinsViewDB final : public CCoinsView
 protected:
     DBParams m_db_params;
     CoinsViewOptions m_options;
-    //! Prevents CompactFull() from using m_db while ResizeCache() replaces it.
-    Mutex m_db_mutex;
+    //! Prevents CompactFull() and cursors from using m_db while ResizeCache() replaces it.
+    mutable Mutex m_db_mutex;
     std::unique_ptr<CDBWrapper> m_db;
     std::shared_future<void> m_compaction;
 public:
@@ -53,7 +53,7 @@ public:
     std::vector<uint256> GetHeadBlocks() const override;
     void BatchWrite(CoinsViewCacheCursor& cursor, const uint256& block_hash) override;
     //! Get a cursor to iterate over the whole state.
-    std::unique_ptr<CCoinsViewCursor> Cursor() const;
+    std::unique_ptr<CCoinsViewCursor> Cursor() const EXCLUSIVE_LOCKS_REQUIRED(!m_db_mutex);
 
     //! Whether an unsupported database format is used.
     bool NeedsUpgrade();
