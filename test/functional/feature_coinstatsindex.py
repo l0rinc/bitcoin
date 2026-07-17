@@ -10,6 +10,7 @@ the index.
 """
 
 from decimal import Decimal
+import re
 
 from test_framework.blocktools import (
     COINBASE_MATURITY,
@@ -320,16 +321,25 @@ class CoinStatsIndexTest(BitcoinTestFramework):
         self.log.info("Test index with an unclean restart after a reorg")
         self.restart_node(1, extra_args=self.extra_args[1])
         committed_height = index_node.getblockcount()
-        self.generate(index_node, 2, sync_fun=self.no_op)
-        self.sync_index_node()
-        block2 = index_node.getbestblockhash()
-        index_node.invalidateblock(block2)
-        self.generatetoaddress(index_node, 1, getnewdestination()[2], sync_fun=self.no_op)
+        committed_tip = index_node.getbestblockhash()
+        index_node.invalidateblock(index_node.getblockhash(committed_height - 1))
+        self.generatetoaddress(index_node, 3, getnewdestination()[2], sync_fun=self.no_op)
         self.sync_index_node()
         index_node.kill_process()
         self.start_node(1, extra_args=self.extra_args[1])
         # Because of the unclean shutdown above, indexes reset to the point we last committed them to disk.
         assert_equal(index_node.getindexinfo()['coinstatsindex']['best_block_height'], committed_height)
+        assert_equal(index_node.getbestblockhash(), committed_tip)
+        self.sync_index_node()
+
+        # Replacing the committed tip requires its parent's stats from the hash index
+        index_node.invalidateblock(committed_tip)
+        self.generate(index_node, 1, sync_fun=self.no_op)
+        # TODO: recover the parent's stats when its height entry has been replaced
+        index_node.wait_until_stopped(
+            expect_error=True,
+            expected_stderr=re.compile("Failed to rewind coinstatsindex to a previous chain tip"),
+        )
 
 
 if __name__ == '__main__':
