@@ -97,7 +97,7 @@ bool TxIndex::FindTx(const Txid& tx_hash, uint256& block_hash, CTransactionRef& 
         return false;
     }
 
-    AutoFile file{m_chainstate->m_blockman.OpenBlockFile(postx, true)};
+    AutoFile file{WITH_LOCK(::cs_main, return m_chainstate->m_blockman.OpenBlockFile(postx, true))};
     if (file.IsNull()) {
         LogError("OpenBlockFile failed");
         return false;
