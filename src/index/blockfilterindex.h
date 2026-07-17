@@ -60,7 +60,7 @@ private:
 
     bool Write(const BlockFilter& filter, uint32_t block_height, const uint256& filter_header);
 
-    std::optional<uint256> ReadFilterHeader(int height, const uint256& expected_block_hash);
+    std::optional<uint256> ReadFilterHeader(const interfaces::BlockRef& block);
 
 protected:
     bool CustomInit(const std::optional<interfaces::BlockRef>& block) override;

@@ -122,7 +122,7 @@ bool BlockFilterIndex::CustomInit(const std::optional<interfaces::BlockRef>& blo
     }
 
     if (block) {
-        auto op_last_header = ReadFilterHeader(block->height, block->hash);
+        auto op_last_header = ReadFilterHeader(*block);
         if (!op_last_header) {
             LogError("Cannot read last block filter header; index may be corrupted");
             return false;
@@ -240,10 +240,10 @@ size_t BlockFilterIndex::WriteFilterToDisk(FlatFilePos& pos, const BlockFilter& 
     return data_size;
 }
 
-std::optional<uint256> BlockFilterIndex::ReadFilterHeader(int height, const uint256& expected_block_hash)
+std::optional<uint256> BlockFilterIndex::ReadFilterHeader(const interfaces::BlockRef& block)
 {
     DBVal entry;
-    if (!index_util::LookUpOne(*m_db, {expected_block_hash, height}, entry)) {
+    if (!index_util::LookUpOne(*m_db, block, entry)) {
         return std::nullopt;
     }
     return entry.header;
@@ -294,10 +294,10 @@ bool BlockFilterIndex::CustomRemove(const interfaces::BlockInfo& block)
     m_db->WriteBatch(batch);
 
     // Update cached header to the previous block hash
-    const uint256& previous_hash{*Assert(block.prev_hash)};
-    const auto last_header{ReadFilterHeader(block.height - 1, previous_hash)};
+    const interfaces::BlockRef previous{*Assert(block.prev_hash), block.height - 1};
+    const auto last_header{ReadFilterHeader(previous)};
     if (!last_header) {
-        LogError("previous block filter header not found; expected %s", previous_hash.ToString());
+        LogError("previous block filter header not found; expected %s", previous.hash.ToString());
         return false;
     }
     m_last_header = *last_header;
