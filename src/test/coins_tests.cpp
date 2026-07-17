@@ -19,9 +19,11 @@
 #include <util/strencodings.h>
 #include <util/threadpool.h>
 
+#include <future>
 #include <map>
 #include <memory>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <variant>
@@ -1526,6 +1528,51 @@ BOOST_FIXTURE_TEST_CASE(coins_db_leveldb_layout, FlushTest)
 
     BOOST_CHECK(*Assert(base.GetCoin(outpoint_0)) == coin_0);
     BOOST_CHECK(*Assert(base.GetCoin(outpoint_1)) == coin_1);
+}
+
+BOOST_FIXTURE_TEST_CASE(coins_db_resize_cursor, FlushTest)
+{
+    const COutPoint outpoint{Txid::FromUint256(uint256::ONE), 0};
+    const Coin coin{CTxOut{1, CScript{} << OP_TRUE}, 1, false};
+    CCoinsViewDB base{{.path = m_args.GetDataDirBase() / "coins_db_resize_cursor", .cache_bytes = 1_MiB, .wipe_data = true}, {}};
+    CCoinsViewCache cache{&base};
+    cache.SetBestBlock(uint256::ONE);
+    cache.AddCoin(outpoint, Coin{coin}, /*possible_overwrite=*/false);
+    cache.Flush();
+
+    auto cursor{base.Cursor()};
+    std::promise<void> resize_ready;
+    auto resize_ready_future{resize_ready.get_future()};
+    std::thread resize_thread{[&] {
+        LOCK(::cs_main);
+        resize_ready.set_value();
+        base.ResizeCache(2_MiB);
+    }};
+    resize_ready_future.wait();
+
+    COutPoint read_outpoint;
+    Coin read_coin;
+    const bool cursor_valid{cursor->Valid()};
+    const bool got_key{cursor->GetKey(read_outpoint)};
+    const bool got_value{cursor->GetValue(read_coin)};
+    cursor->Next();
+    const bool cursor_exhausted{!cursor->Valid()};
+    cursor.reset();
+    resize_thread.join();
+
+    BOOST_REQUIRE(cursor_valid);
+    BOOST_REQUIRE(got_key);
+    BOOST_REQUIRE(got_value);
+    BOOST_CHECK(read_outpoint == outpoint);
+    BOOST_CHECK(read_coin == coin);
+    BOOST_CHECK(cursor_exhausted);
+
+    auto resized_cursor{base.Cursor()};
+    BOOST_REQUIRE(resized_cursor->Valid());
+    BOOST_REQUIRE(resized_cursor->GetKey(read_outpoint));
+    BOOST_REQUIRE(resized_cursor->GetValue(read_coin));
+    BOOST_CHECK(read_outpoint == outpoint);
+    BOOST_CHECK(read_coin == coin);
 }
 
 BOOST_AUTO_TEST_CASE(coins_resource_is_used)

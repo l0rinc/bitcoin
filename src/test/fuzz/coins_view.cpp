@@ -9,6 +9,8 @@
 #include <consensus/validation.h>
 #include <kernel/chainstatemanager_opts.h>
 #include <kernel/cs_main.h>
+#include <leveldb/env.h>
+#include <leveldb/helpers/memenv/memenv.h>
 #include <policy/policy.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
@@ -26,13 +28,16 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <future>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -582,6 +587,83 @@ FUZZ_TARGET(coins_view_db, .init = initialize_coins_view)
     CCoinsViewDB backend_coins_view{std::move(db_params), CoinsViewOptions{}};
     CCoinsViewCache coins_view_cache{&backend_coins_view, /*deterministic=*/true};
     TestCoinsView(fuzzed_data_provider, coins_view_cache, &backend_coins_view);
+}
+
+FUZZ_TARGET(coins_view_db_resize_cursor, .init = initialize_coins_view)
+{
+    FuzzedDataProvider provider{buffer.data(), buffer.size()};
+    const auto memenv{std::unique_ptr<leveldb::Env>{leveldb::NewMemEnv(leveldb::Env::Default())}};
+    CCoinsViewDB db{
+        DBParams{
+            .path = "",
+            .cache_bytes = provider.ConsumeIntegralInRange<size_t>(1_MiB, 4_MiB),
+            .memory_only = false,
+            .wipe_data = true,
+            .testing_env = memenv.get(),
+        },
+        CoinsViewOptions{},
+    };
+    CCoinsViewCache cache{&db, /*deterministic=*/true};
+    cache.SetBestBlock(uint256::ONE);
+
+    std::map<COutPoint, Coin> expected;
+    const size_t num_coins{provider.ConsumeIntegralInRange<size_t>(1, 16)};
+    for (size_t i{0}; i < num_coins; ++i) {
+        const COutPoint outpoint{Txid::FromUint256(ConsumeUInt256(provider)), provider.ConsumeIntegral<uint32_t>()};
+        auto coin{ConsumeDeserializable<Coin>(provider)};
+        if (!coin || coin->IsSpent() || !MoneyRange(coin->out.nValue)) {
+            coin = Coin{CTxOut{CAmount{1 + static_cast<CAmount>(i)}, CScript{} << OP_TRUE}, static_cast<int>(i + 1), false};
+        }
+        expected[outpoint] = *coin;
+        cache.AddCoin(outpoint, std::move(*coin), /*possible_overwrite=*/true);
+    }
+    cache.Flush();
+
+    const size_t resized_cache_size{provider.ConsumeIntegralInRange<size_t>(1_MiB, 4_MiB)};
+    auto cursor{db.Cursor()};
+    std::promise<void> resize_ready;
+    auto resize_ready_future{resize_ready.get_future()};
+    std::thread resize_thread{[&] {
+        LOCK(::cs_main);
+        resize_ready.set_value();
+        db.ResizeCache(resized_cache_size);
+    }};
+    resize_ready_future.wait();
+
+    std::map<COutPoint, Coin> observed;
+    while (cursor->Valid()) {
+        COutPoint outpoint;
+        Coin coin;
+        assert(cursor->GetKey(outpoint));
+        assert(cursor->GetValue(coin));
+        observed.emplace(outpoint, std::move(coin));
+        cursor->Next();
+    }
+    cursor.reset();
+    resize_thread.join();
+    assert(observed.size() == expected.size());
+    for (const auto& [outpoint, coin] : expected) {
+        const auto it{observed.find(outpoint)};
+        assert(it != observed.end());
+        assert(it->second == coin);
+    }
+
+    observed.clear();
+    auto resized_cursor{db.Cursor()};
+    while (resized_cursor->Valid()) {
+        COutPoint outpoint;
+        Coin coin;
+        assert(resized_cursor->GetKey(outpoint));
+        assert(resized_cursor->GetValue(coin));
+        observed.emplace(outpoint, std::move(coin));
+        resized_cursor->Next();
+    }
+    assert(observed.size() == expected.size());
+    for (const auto& [outpoint, coin] : expected) {
+        const auto it{observed.find(outpoint)};
+        assert(it != observed.end());
+        assert(it->second == coin);
+    }
 }
 
 // Creates a CoinsViewOverlay and a MutationGuardCoinsViewCache as the base.
