@@ -325,24 +325,14 @@ interfaces::Chain::NotifyOptions CoinStatsIndex::CustomOptions()
 // Revert a single block as part of a reorg
 bool CoinStatsIndex::RevertBlock(const interfaces::BlockInfo& block)
 {
-    std::pair<uint256, DBVal> read_out;
+    DBVal entry;
 
     // Ignore genesis block
     if (block.height > 0) {
-        if (!m_db->Read(index_util::DBHeightKey(block.height - 1), read_out)) {
+        const interfaces::BlockRef previous{*Assert(block.prev_hash), block.height - 1};
+        if (!index_util::LookUpOne(*m_db, previous, entry)) {
+            LogError("previous block entry not found; expected %s", previous.hash.ToString());
             return false;
-        }
-
-        uint256 expected_block_hash{*block.prev_hash};
-        if (read_out.first != expected_block_hash) {
-            LogWarning("previous block header belongs to unexpected block %s; expected %s",
-                      read_out.first.ToString(), expected_block_hash.ToString());
-
-            if (!m_db->Read(index_util::DBHashKey(expected_block_hash), read_out)) {
-                LogError("previous block header not found; expected %s",
-                          expected_block_hash.ToString());
-                return false;
-            }
         }
     }
 
@@ -383,20 +373,20 @@ bool CoinStatsIndex::RevertBlock(const interfaces::BlockInfo& block)
     // Check that the rolled back muhash is consistent with the DB read out
     uint256 out;
     m_muhash.Finalize(out);
-    Assert(read_out.second.muhash == out);
+    Assert(entry.muhash == out);
 
     // Apply the other values from the DB to the member variables
-    m_transaction_output_count = read_out.second.transaction_output_count;
-    m_total_amount = read_out.second.total_amount;
-    m_bogo_size = read_out.second.bogo_size;
-    m_total_subsidy = read_out.second.total_subsidy;
-    m_total_prevout_spent_amount = read_out.second.total_prevout_spent_amount;
-    m_total_new_outputs_ex_coinbase_amount = read_out.second.total_new_outputs_ex_coinbase_amount;
-    m_total_coinbase_amount = read_out.second.total_coinbase_amount;
-    m_total_unspendables_genesis_block = read_out.second.total_unspendables_genesis_block;
-    m_total_unspendables_bip30 = read_out.second.total_unspendables_bip30;
-    m_total_unspendables_scripts = read_out.second.total_unspendables_scripts;
-    m_total_unspendables_unclaimed_rewards = read_out.second.total_unspendables_unclaimed_rewards;
+    m_transaction_output_count = entry.transaction_output_count;
+    m_bogo_size = entry.bogo_size;
+    m_total_amount = entry.total_amount;
+    m_total_subsidy = entry.total_subsidy;
+    m_total_prevout_spent_amount = entry.total_prevout_spent_amount;
+    m_total_new_outputs_ex_coinbase_amount = entry.total_new_outputs_ex_coinbase_amount;
+    m_total_coinbase_amount = entry.total_coinbase_amount;
+    m_total_unspendables_genesis_block = entry.total_unspendables_genesis_block;
+    m_total_unspendables_bip30 = entry.total_unspendables_bip30;
+    m_total_unspendables_scripts = entry.total_unspendables_scripts;
+    m_total_unspendables_unclaimed_rewards = entry.total_unspendables_unclaimed_rewards;
     m_current_block_hash = *block.prev_hash;
 
     return true;

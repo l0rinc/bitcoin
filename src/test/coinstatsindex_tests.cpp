@@ -187,8 +187,8 @@ BOOST_FIXTURE_TEST_CASE(coinstatsindex_reorg_restart, TestChain100Setup)
     BOOST_REQUIRE_EQUAL(current_tip(), replacement_tip);
     const auto summary{summary_after_callbacks(index)};
     // FatalErrorf requests shutdown, distinguishing a failed revert from a lagging index.
-    BOOST_CHECK(m_interrupt);                     // TODO: Recover the old parent from its hash entry.
-    BOOST_CHECK(summary == summary_at(*old_tip)); // TODO: Advance to replacement_tip.
+    BOOST_CHECK(!m_interrupt);
+    BOOST_CHECK(summary == summary_at(*replacement_tip));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
