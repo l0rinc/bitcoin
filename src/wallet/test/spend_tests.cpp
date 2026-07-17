@@ -78,6 +78,70 @@ BOOST_FIXTURE_TEST_CASE(SubtractFee, TestChain100Setup)
     BOOST_CHECK_EQUAL(fee, check_tx(fee + 123));
 }
 
+BOOST_FIXTURE_TEST_CASE(wallet_spends_unconfirmed_parent_outputs, TestChain100Setup)
+{
+    // Keep the confirmed wallet outputs out of coin selection so this test exercises
+    // the shared ancestry fee calculation for the in-mempool transaction below.
+    CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
+    auto wallet = CreateSyncedWallet(*m_node.chain, WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain()), coinbaseKey);
+    {
+        LOCK(wallet->cs_wallet);
+        for (const auto& [outpoint, _] : wallet->GetTXOs()) {
+            wallet->LockCoin(outpoint, /*persist=*/false);
+        }
+    }
+
+    CTxDestination wallet_destination;
+    {
+        LOCK(wallet->cs_wallet);
+        wallet_destination = *Assert(wallet->GetNewDestination(OutputType::BECH32, ""));
+    }
+    const CScript wallet_script{GetScriptForDestination(wallet_destination)};
+    constexpr CAmount parent_fee{1000};
+    const CAmount parent_output_value{(50 * COIN - parent_fee) / 2};
+    const auto parent_mtx = CreateValidMempoolTransaction(
+        /*input_transactions=*/{m_coinbase_txns[0]},
+        /*inputs=*/{COutPoint{m_coinbase_txns[0]->GetHash(), 0}},
+        /*input_height=*/0,
+        /*input_signing_keys=*/{coinbaseKey},
+        /*outputs=*/{CTxOut{parent_output_value, wallet_script}, CTxOut{parent_output_value, wallet_script}});
+    const auto parent = MakeTransactionRef(parent_mtx);
+    BOOST_REQUIRE(wallet->AddToWallet(parent, TxStateInMempool{}) != nullptr);
+
+    const COutPoint first_output{parent->GetHash(), 0};
+    const COutPoint second_output{parent->GetHash(), 1};
+    std::vector<COutput> available;
+    {
+        LOCK(wallet->cs_wallet);
+        available = AvailableCoins(*wallet, /*coinControl=*/nullptr, CFeeRate{10000}, {}).All();
+        BOOST_REQUIRE_EQUAL(available.size(), 2);
+        BOOST_CHECK_GT(available[0].ancestor_bump_fees, 0);
+        BOOST_CHECK_EQUAL(available[0].ancestor_bump_fees, available[1].ancestor_bump_fees);
+    }
+
+    CTxDestination recipient_destination;
+    {
+        LOCK(wallet->cs_wallet);
+        recipient_destination = *Assert(wallet->GetNewDestination(OutputType::BECH32, ""));
+    }
+    CRecipient recipient{recipient_destination, /*nAmount=*/26 * COIN, /*fSubtractFeeFromAmount=*/false};
+    CCoinControl coin_control;
+    coin_control.m_feerate = CFeeRate{10000};
+    coin_control.fOverrideFeeRate = true;
+    coin_control.m_change_type = OutputType::BECH32;
+    const auto result = CreateTransaction(*wallet, {recipient}, /*change_pos=*/std::nullopt, coin_control);
+    BOOST_REQUIRE(result);
+
+    bool selected_first{false};
+    bool selected_second{false};
+    for (const auto& txin : result->tx->vin) {
+        selected_first |= txin.prevout == first_output;
+        selected_second |= txin.prevout == second_output;
+    }
+    BOOST_CHECK(selected_first);
+    BOOST_CHECK(selected_second);
+}
+
 BOOST_FIXTURE_TEST_CASE(wallet_duplicated_preset_inputs_test, TestChain100Setup)
 {
     // Verify that the wallet's Coin Selection process does not include pre-selected inputs twice in a transaction.
