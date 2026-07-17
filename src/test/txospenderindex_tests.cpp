@@ -9,6 +9,10 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <atomic>
+#include <future>
+#include <thread>
+
 BOOST_AUTO_TEST_SUITE(txospenderindex_tests)
 
 BOOST_FIXTURE_TEST_CASE(txospenderindex_initial_sync, TestChain100Setup)
@@ -72,6 +76,60 @@ BOOST_FIXTURE_TEST_CASE(txospenderindex_initial_sync, TestChain100Setup)
 
     // Shutdown sequence (c.f. Shutdown() in init.cpp)
     txospenderindex.Stop();
+}
+
+BOOST_FIXTURE_TEST_CASE(txospenderindex_reinit_reader_race, TestChain100Setup)
+{
+    const CScript& coinbase_script = m_coinbase_txns[0]->vout[0].scriptPubKey;
+    for (int i = 0; i < 10; i++) CreateAndProcessBlock({}, coinbase_script);
+
+    CMutableTransaction spender;
+    spender.version = 1;
+    spender.vin.resize(1);
+    spender.vin[0].prevout = COutPoint(m_coinbase_txns[0]->GetHash(), 0);
+    spender.vout.resize(1);
+    spender.vout[0].nValue = m_coinbase_txns[0]->GetValueOut();
+    spender.vout[0].scriptPubKey = coinbase_script;
+
+    std::vector<unsigned char> vchSig;
+    const uint256 hash = SignatureHash(coinbase_script, spender, 0, SIGHASH_ALL, 0, SigVersion::BASE);
+    BOOST_REQUIRE(coinbaseKey.Sign(hash, vchSig));
+    vchSig.push_back((unsigned char)SIGHASH_ALL);
+    spender.vin[0].scriptSig << vchSig;
+
+    CreateAndProcessBlock({spender}, coinbase_script);
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+
+    TxoSpenderIndex txospenderindex(interfaces::MakeChain(m_node), 1 << 20, true);
+    BOOST_REQUIRE(txospenderindex.Init());
+    txospenderindex.Sync();
+    const COutPoint outpoint{spender.vin[0].prevout};
+
+    std::promise<void> reader_started_promise;
+    auto reader_started{reader_started_promise.get_future()};
+    std::atomic<bool> run{true};
+    std::thread reader{[&] {
+        reader_started_promise.set_value();
+        while (run.load(std::memory_order_relaxed)) {
+            (void)txospenderindex.FindSpender(outpoint);
+        }
+    }};
+    reader_started.wait();
+
+    bool init_ok{true};
+    for (int i{0}; i < 1000; ++i) {
+        txospenderindex.Stop();
+        if (!txospenderindex.Init()) {
+            init_ok = false;
+            break;
+        }
+        std::this_thread::yield();
+    }
+
+    run.store(false, std::memory_order_relaxed);
+    reader.join();
+    txospenderindex.Stop();
+    BOOST_REQUIRE(init_ok);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

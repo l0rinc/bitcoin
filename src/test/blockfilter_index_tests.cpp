@@ -33,6 +33,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <compare>
 #include <cstddef>
 #include <cstdint>
@@ -439,6 +440,39 @@ BOOST_FIXTURE_TEST_CASE(index_rejects_null_block_tx_refs, BuildChainTestingSetup
     BOOST_CHECK(!index.SawInvalidBlock());
 
     index.Stop();
+}
+
+BOOST_FIXTURE_TEST_CASE(index_reinit_reader_race, BuildChainTestingSetup)
+{
+    IndexTxRefCheck index{interfaces::MakeChain(m_node)};
+    BOOST_REQUIRE(index.Init());
+    index.Sync();
+
+    std::promise<void> reader_started_promise;
+    auto reader_started{reader_started_promise.get_future()};
+    std::atomic<bool> run{true};
+    std::thread reader{[&] {
+        reader_started_promise.set_value();
+        while (run.load(std::memory_order_relaxed)) {
+            (void)index.BlockUntilSyncedToCurrentChain();
+        }
+    }};
+    reader_started.wait();
+
+    bool init_ok{true};
+    for (int i{0}; i < 1000; ++i) {
+        index.Stop();
+        if (!index.Init()) {
+            init_ok = false;
+            break;
+        }
+        std::this_thread::yield();
+    }
+
+    run.store(false, std::memory_order_relaxed);
+    reader.join();
+    index.Stop();
+    BOOST_REQUIRE(init_ok);
 }
 
 BOOST_FIXTURE_TEST_CASE(index_reorg_crash, BuildChainTestingSetup)
