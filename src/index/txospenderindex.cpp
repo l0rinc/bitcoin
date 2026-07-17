@@ -143,7 +143,7 @@ bool TxoSpenderIndex::CustomRemove(const interfaces::BlockInfo& block)
 
 util::Expected<TxoSpender, std::string> TxoSpenderIndex::ReadTransaction(const CDiskTxPos& tx_pos) const
 {
-    AutoFile file{m_chainstate->m_blockman.OpenBlockFile(tx_pos, /*fReadOnly=*/true)};
+    AutoFile file{WITH_LOCK(::cs_main, return m_chainstate->m_blockman.OpenBlockFile(tx_pos, /*fReadOnly=*/true))};
     if (file.IsNull()) {
         return util::Unexpected("cannot open block");
     }
