@@ -179,6 +179,49 @@ snapshots, and other full-key cursor users keep their existing behavior. Cold
 HDD scans remain I/O-bound, so the wall-time improvement can be smaller even
 though the CPU work is removed.
 
+### `scantxoutset`: reject impossible first script bytes before hashing
+
+The existing `scantxoutset` fast path first rejects output scripts whose size
+does not occur in the expanded descriptors, then hashes every remaining script
+for the salted `unordered_set` lookup. This change also records the first byte
+of each nonempty expanded descriptor script (and separately records whether an
+empty script is a needle). After the size test, a script whose first byte is
+absent cannot be an exact match and skips the hash/table lookup. Empty scripts
+retain their old exact-match behavior, and `needles.contains(script)` remains
+the final equality oracle. GitHub PR searches for `FindScriptPubKey`,
+`scantxoutset`, `first byte`, and `scriptPubKey[0]` found no matching
+already-pushed bitcoin/bitcoin change.
+
+Full local chainstate at height 957779, 166,350,731 UTXOs, a raw 34-byte
+P2TR script descriptor, 11 matching UTXOs, wallet/network disabled, daemon
+pinned to CPU 3, and five warm runs per version:
+
+| version | median wall | range | median daemon task time | median instructions | median branches |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| base | 66.75 s | 66.62-67.33 s | 66.627 s | 654.000 B | 132.892 B |
+| candidate | 64.47 s | 64.32-65.18 s | 64.355 s | 623.213 B | 127.158 B |
+
+The median wall time improved 3.42%, daemon task time 3.41%, instructions
+4.71%, and branches 4.31%. All ten RPC responses were byte-identical
+(SHA-256 `58a893f83cf7619dca19bf7c8f2585cb2fce11f2aeedbe2db77c0385760d2b2a`),
+reported the same 166,350,731 scanned UTXOs, and returned the same 11
+unspents. Raw command output and `perf stat` files are under
+`/mnt/my_storage/bitcoin-perf-scratch/scantxoutset-first-byte.{candidate1.P2GVdm,base1.fTl41H}/`.
+
+Validation:
+
+```text
+ninja -C build bitcoind -j4
+build/test/functional/test_runner.py rpc_scantxoutset.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/functional-scantxoutset-first-byte-final --timeout-factor=2
+```
+
+Reach: `scantxoutset start` scans whose requested scripts use few first bytes
+relative to same-length UTXOs. The benefit is largest for a narrow template
+such as P2TR; broad descriptor sets such as `combo` can pass more entries to
+the existing lookup. `gettxoutsetinfo`, `dumptxoutset`, reindex, snapshots,
+and all matching semantics are unchanged. Cold HDD scans can remain
+storage-bound and see a smaller wall-time gain.
+
 ### `736f48b4da` coinstats: stream ordered cursor entries while hashing
 
 The coins DB cursor already returns a transaction's outputs consecutively in
