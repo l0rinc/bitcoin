@@ -22,6 +22,7 @@
 namespace {
 constexpr size_t MAX_CONSTRUCTED_GCS_ELEMENTS{64};
 constexpr size_t MAX_CONSTRUCTED_GCS_ELEMENT_SIZE{128};
+constexpr size_t MAX_MATCH_ANY_EQUIVALENCE_ELEMENTS{1024};
 
 void AssertGCSFilterMatchesElements(const GCSFilter& filter, const GCSFilter::Params& params, const GCSFilter::ElementSet& elements)
 {
@@ -179,8 +180,15 @@ FUZZ_TARGET(blockfilter)
         LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 30000) {
             element_set.insert(ConsumeRandomLengthByteVector(fuzzed_data_provider));
         }
-        const bool match_any{gcs_filter.MatchAny(element_set)};
-        const bool any_match{std::ranges::any_of(element_set, [&](const auto& element) {
+        (void)gcs_filter.MatchAny(element_set);
+
+        GCSFilter::ElementSet equivalence_set;
+        for (const auto& element : element_set) {
+            if (equivalence_set.size() >= MAX_MATCH_ANY_EQUIVALENCE_ELEMENTS) break;
+            equivalence_set.insert(element);
+        }
+        const bool match_any{gcs_filter.MatchAny(equivalence_set)};
+        const bool any_match{std::ranges::any_of(equivalence_set, [&](const auto& element) {
             return gcs_filter.Match(element);
         })};
         Assert(match_any == any_match);
