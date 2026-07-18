@@ -8,6 +8,8 @@
 #include <test/util/setup_common.h>
 #include <wallet/crypter.h>
 
+#include <cassert>
+
 namespace wallet {
 namespace {
 
@@ -57,7 +59,12 @@ FUZZ_TARGET(crypter, .init = initialize_crypter)
                 cipher_text_ed = ConsumeRandomLengthByteVector(fuzzed_data_provider, 64);
             },
             [&] {
-                (void)crypt.Encrypt(plain_text_ed, cipher_text_ed);
+                // Decrypt() cannot distinguish empty plaintext from bad padding, so only check the round trip for non-empty plaintext.
+                if (!plain_text_ed.empty() && crypt.Encrypt(plain_text_ed, cipher_text_ed)) {
+                    CKeyingMaterial decrypted;
+                    assert(crypt.Decrypt(cipher_text_ed, decrypted));
+                    assert(decrypted == plain_text_ed);
+                }
             },
             [&] {
                 (void)crypt.Decrypt(cipher_text_ed, plain_text_ed);
