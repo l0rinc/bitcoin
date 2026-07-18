@@ -666,6 +666,34 @@ an HDD reindex, RPC, or snapshot benefit. The temporary option line was
 removed. Raw commands, logs, reports, and OverlayFS layers are under
 `/mnt/my_storage/bitcoin-perf-scratch/bloom-bits-{16.run1.*,16.run2.*,10.postcontrol.*}`.
 
+### `ConnectBlock` next-transaction CPU prefetch ([PR #68](https://github.com/l0rinc/bitcoin/pull/68))
+
+The broad async prevout-fetching part of #68 is obsolete: current master uses
+`CoinsViewOverlay`, `StartFetching`, and configurable `-prevoutfetchthreads`
+to collect and fetch block inputs in parallel before `ConnectBlock`. The
+remaining simple, independently testable idea prefetches the next transaction
+object plus its nonempty input and output buffers at the beginning of the
+`ConnectBlock` transaction loop. A temporary compiler-gated
+`__builtin_prefetch(ptr, read, no-temporal-locality)` helper and seven-line
+call site were built; unsupported compilers would retain a no-op helper. The
+candidate did not alter transaction order, validation, ownership, or memory
+contents.
+
+Five CPU-3-pinned GCC Release runs timed the existing representative
+`ConnectBlockMixedEcdsaSchnorr` benchmark for at least five seconds each:
+
+| version | median | range | median instructions/block | median branch misses/block |
+| --- | ---: | ---: | ---: | ---: |
+| base | 218.108 ms | 217.664-218.912 ms | 807.299 M | 342,196 |
+| next-transaction prefetch | 218.758 ms | 217.941-218.917 ms | 808.047 M | 344,624 |
+
+The annotation regressed the focused median 0.30%, increased instructions
+0.09%, and increased branch misses 0.71%. It offers no evidence of an
+end-to-end HDD improvement and would add a cross-compiler utility solely for a
+regressing hot path. Decision: reject the standalone prefetch. The temporary
+header and `ConnectBlock` calls were removed. Raw nanobench JSON is retained
+under `/mnt/my_storage/bitcoin-perf-scratch/connectblock-prefetch/{baseline,candidate}/`.
+
 ### `dumptxoutset` caller-owned stdio buffer
 
 Hypothesis: the snapshot writer's small stdio writes cause avoidable syscall
@@ -878,9 +906,12 @@ full metrics are under
 The following seeds were screened but have not yet produced an accepted or
 fully rejected independent change:
 
-- [#48](https://github.com/l0rinc/bitcoin/pull/48)/[#68](https://github.com/l0rinc/bitcoin/pull/68): input/prevout prefetch variants. Current master already has eight
-  prevout-fetch workers; only a measured change in ordering, batching, or HDD
-  reads merits another commit.
+- [#48](https://github.com/l0rinc/bitcoin/pull/48): old LevelDB block-size
+  tuning. The branch's input-prefetch commits predate master’s current
+  `CoinsViewOverlay`; #68's independent manual `ConnectBlock` prefetch is
+  rejected above. Revisit table-block sizing only with a current LevelDB trace
+  that demonstrates a block-size, rather than mmap locality or compaction,
+  bottleneck.
 - [#34](https://github.com/l0rinc/bitcoin/pull/34): repeated coins-cache lookup/hash and short-lived reallocation. The
   `SpendCoin` subcandidate is rejected above; other subpatterns remain open.
 - [#140](https://github.com/l0rinc/bitcoin/pull/140)/[#59](https://github.com/l0rinc/bitcoin/pull/59): the pool-chunk and
