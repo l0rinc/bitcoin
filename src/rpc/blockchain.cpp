@@ -2242,6 +2242,7 @@ bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& 
 {
     scan_progress = 0;
     count = 0;
+    const CScript* single_needle{needles.size() == 1 ? &*needles.begin() : nullptr};
     while (cursor->Valid()) {
         Coin coin;
         if (!cursor->GetValue(coin)) return false;
@@ -2258,7 +2259,7 @@ bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& 
             scan_progress = (int)(high * 100.0 / 65536.0 + 0.5);
         }
         const CScript& script = coin.out.scriptPubKey;
-        if (ContainsScriptSize(needle_sizes, script.size()) && (script.empty() ? needle_has_empty_script : needle_first_bytes[script.front()]) && needles.contains(script)) {
+        if (ContainsScriptSize(needle_sizes, script.size()) && (script.empty() ? needle_has_empty_script : needle_first_bytes[script.front()]) && (single_needle ? script == *single_needle : needles.contains(script))) {
             COutPoint key;
             if (!cursor->GetKey(key)) return false;
             out_results.emplace(key, coin);

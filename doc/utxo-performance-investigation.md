@@ -222,6 +222,49 @@ the existing lookup. `gettxoutsetinfo`, `dumptxoutset`, reindex, snapshots,
 and all matching semantics are unchanged. Cold HDD scans can remain
 storage-bound and see a smaller wall-time gain.
 
+### `scantxoutset`: compare a single requested script directly
+
+The first-byte prefilter still sends every feasible candidate to a salted
+`unordered_set` lookup. When descriptor expansion produces exactly one
+script, the set has one immutable element for the entire scan, so hashing and
+bucket lookup are unnecessary: compare the candidate `CScript` directly to
+that element. Multi-script scans retain the first-byte-filtered set lookup.
+The exact `CScript` comparison is the same equality relation the set used.
+GitHub PR searches for `FindScriptPubKey`, `needles.size()`, `needles.contains`,
+and singleton `scantxoutset` performance found no matching already-pushed
+bitcoin/bitcoin change.
+
+The same full local height-957779 P2TR workload used above was run after the
+first-byte commit: 166,350,731 UTXOs, 11 matches, wallet/network disabled,
+daemon pinned to CPU 3. Five singleton-candidate runs were followed by three
+fresh controls with only the first-byte prefilter restored:
+
+| version | median wall | range | median daemon task time | median instructions | median branches |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| first-byte-only base | 62.82 s | 62.70-63.39 s | 62.692 s | 594.322 B | 121.525 B |
+| singleton candidate | 56.70 s | 56.48-57.39 s | 56.590 s | 525.473 B | 111.689 B |
+
+The singleton path improved median wall time 9.74%, daemon task time 9.73%,
+instructions 11.59%, and branches 8.09%. All eight RPC responses were
+byte-identical (SHA-256
+`58a893f83cf7619dca19bf7c8f2585cb2fce11f2aeedbe2db77c0385760d2b2a`),
+with the same scan count and 11 unspents. Raw evidence is under
+`/mnt/my_storage/bitcoin-perf-scratch/scantxoutset-single-needle.{candidate1.RLp2o6,base2.yisobo}/`.
+
+Validation:
+
+```text
+ninja -C build bitcoind -j4
+build/test/functional/test_runner.py rpc_scantxoutset.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/functional-scantxoutset-single-needle-final --timeout-factor=2
+```
+
+Reach: `scantxoutset start` calls whose descriptor expansion contains one
+unique script, such as a single fixed address or `raw()` descriptor. Ranged or
+multi-address descriptors retain the established set path, apart from one
+well-predicted selection branch. The change does not affect
+`gettxoutsetinfo`, `dumptxoutset`, reindex, snapshots, or matching semantics;
+cold HDD scans can remain I/O-bound.
+
 ### `736f48b4da` coinstats: stream ordered cursor entries while hashing
 
 The coins DB cursor already returns a transaction's outputs consecutively in
