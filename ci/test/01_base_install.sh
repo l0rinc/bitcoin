@@ -116,6 +116,7 @@ if [ -n "$XCODE_VERSION" ] && [ ! -d "${DEPENDS_DIR}/SDKs/${OSX_SDK_BASENAME}" ]
   if [ ! -f "$OSX_SDK_PATH" ]; then
     ${CI_RETRY_EXE} curl --location --fail "${SDK_URL}/${OSX_SDK_FILENAME}" -o "$OSX_SDK_PATH"
   fi
+  sha256sum -c <<<"9600fa93644df674ee916b5e2c8a6ba8dacf631996a65dc922d003b98b5ea3b1 ${OSX_SDK_PATH}"
   tar -C "${DEPENDS_DIR}/SDKs" -xf "$OSX_SDK_PATH"
 fi
 
@@ -136,6 +137,7 @@ if [ -n "$FREEBSD_VERSION" ] && [ ! -d "${DEPENDS_DIR}/SDKs/${FREEBSD_SDK_BASENA
   if [ ! -f "$FREEBSD_SDK_PATH" ]; then
     ${CI_RETRY_EXE} curl --location --fail "https://download.freebsd.org/releases/amd64/${FREEBSD_VERSION}-RELEASE/base.txz" -o "$FREEBSD_SDK_PATH"
   fi
+  sha256sum -c <<<"3768988b151c20f965679062b065c63a977d6bbb9f47fd83695ec2c40790c18f ${FREEBSD_SDK_PATH}"
   mkdir -p "${DEPENDS_DIR}/SDKs/${FREEBSD_SDK_BASENAME}"
   tar -C "${DEPENDS_DIR}/SDKs/${FREEBSD_SDK_BASENAME}" -xf "$FREEBSD_SDK_PATH"
 fi
