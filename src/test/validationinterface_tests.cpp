@@ -218,8 +218,6 @@ BOOST_AUTO_TEST_CASE(chainstate_flushed_rejects_null_locator)
 
 BOOST_AUTO_TEST_CASE(updated_block_tip_rejects_noop_update)
 {
-    test_only_CheckFailuresAreExceptionsNotAborts failed_assumes_throw{};
-
     const uint256 tip_hash{uint256::ONE};
     CBlockIndex tip;
     tip.phashBlock = &tip_hash;
@@ -228,8 +226,11 @@ BOOST_AUTO_TEST_CASE(updated_block_tip_rejects_noop_update)
     auto sub{std::make_shared<TipNotificationSubscriber>()};
     m_node.validation_signals->RegisterSharedValidationInterface(sub);
 
-    BOOST_CHECK_THROW(m_node.validation_signals->UpdatedBlockTip(&tip, &tip, /*fInitialDownload=*/false),
-                      NonFatalCheckError);
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        test_only_CheckFailuresAreExceptionsNotAborts failed_assumes_throw{};
+        BOOST_CHECK_THROW(m_node.validation_signals->UpdatedBlockTip(&tip, &tip, /*fInitialDownload=*/false),
+                          NonFatalCheckError);
+    }
 
     m_node.validation_signals->UpdatedBlockTip(&tip, /*pindexFork=*/nullptr, /*fInitialDownload=*/false);
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
