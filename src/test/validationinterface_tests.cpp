@@ -200,13 +200,17 @@ BOOST_AUTO_TEST_CASE(block_signal_rejects_invalid_block_payloads)
 
 BOOST_AUTO_TEST_CASE(chainstate_flushed_rejects_null_locator)
 {
-    test_only_CheckFailuresAreExceptionsNotAborts failed_assumes_throw{};
-
     auto sub{std::make_shared<FlushNotificationSubscriber>()};
     m_node.validation_signals->RegisterSharedValidationInterface(sub);
 
-    BOOST_CHECK_THROW(m_node.validation_signals->ChainStateFlushed(kernel::ChainstateRole{}, CBlockLocator{}),
-                      NonFatalCheckError);
+    // The null locator is rejected by Assume(), which only throws where
+    // G_ABORT_ON_FAILED_ASSUME holds; in other builds the rejection is
+    // compiled out, so only the delivery contract can be checked there.
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        test_only_CheckFailuresAreExceptionsNotAborts failed_assumes_throw{};
+        BOOST_CHECK_THROW(m_node.validation_signals->ChainStateFlushed(kernel::ChainstateRole{}, CBlockLocator{}),
+                          NonFatalCheckError);
+    }
 
     m_node.validation_signals->ChainStateFlushed(kernel::ChainstateRole{}, CBlockLocator{std::vector<uint256>{uint256::ONE}});
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
@@ -217,8 +221,6 @@ BOOST_AUTO_TEST_CASE(chainstate_flushed_rejects_null_locator)
 
 BOOST_AUTO_TEST_CASE(updated_block_tip_rejects_noop_update)
 {
-    test_only_CheckFailuresAreExceptionsNotAborts failed_assumes_throw{};
-
     const uint256 tip_hash{uint256::ONE};
     CBlockIndex tip;
     tip.phashBlock = &tip_hash;
@@ -227,8 +229,14 @@ BOOST_AUTO_TEST_CASE(updated_block_tip_rejects_noop_update)
     auto sub{std::make_shared<TipNotificationSubscriber>()};
     m_node.validation_signals->RegisterSharedValidationInterface(sub);
 
-    BOOST_CHECK_THROW(m_node.validation_signals->UpdatedBlockTip(&tip, &tip, /*fInitialDownload=*/false),
-                      NonFatalCheckError);
+    // The no-op update is rejected by Assume(), which only throws where
+    // G_ABORT_ON_FAILED_ASSUME holds; in other builds the rejection is
+    // compiled out, so only the delivery contract can be checked there.
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        test_only_CheckFailuresAreExceptionsNotAborts failed_assumes_throw{};
+        BOOST_CHECK_THROW(m_node.validation_signals->UpdatedBlockTip(&tip, &tip, /*fInitialDownload=*/false),
+                          NonFatalCheckError);
+    }
 
     m_node.validation_signals->UpdatedBlockTip(&tip, /*pindexFork=*/nullptr, /*fInitialDownload=*/false);
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
