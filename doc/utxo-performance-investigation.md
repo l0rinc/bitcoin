@@ -1408,3 +1408,46 @@ contextual-sigops block only beneath the assumed-valid block, then verifies
 that an equivalent height-103 child is rejected as `bad-blk-sigops` when
 script checks resume. Raw results are under
 `/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/sigops170-{candidate1,baseline1,candidate2}/metrics/`.
+### Skip `txsdata` allocation while assumevalid skips scripts ([PR #207](https://github.com/l0rinc/bitcoin/pull/207), [upstream PR #35663](https://github.com/bitcoin/bitcoin/pull/35663))
+
+Both PRs were checked on 2026-07-19 and are closed with `merged_at: null`, so
+this was not an already-pushed upstream fix. The candidate replaced the
+unconditional
+`std::vector<PrecomputedTransactionData> txsdata(block.vtx.size())` in
+`Chainstate::ConnectBlock()` with an empty vector followed by
+`if (fScriptChecks) txsdata.resize(block.vtx.size())`. This is locally safe:
+the only indexed `txsdata[i]` uses are inside the same `fScriptChecks` branch,
+and, when checks are enabled, the resize completes before any check queue can
+retain pointers into the vector. When assumevalid disables scripts, the old
+vector is otherwise unused.
+
+The exact cold-HDD reindex-chainstate control used a fresh OverlayFS upperdir
+over `/mnt/my_storage/BitcoinData`, `sync; echo 3 > /proc/sys/vm/drop_caches`,
+`-stopatheight=287000 -dbcache=450 -blocksonly -networkactive=0 -listen=0
+-dnsseed=0 -fixedseeds=0 -discover=0 -disablewallet -printtoconsole=0`, and
+`perf stat` for task-clock, cycles, instructions, branches, and faults. Every
+run logged `Disabling script verification at block #1`, reached height 287000,
+and logged `Shutdown done`:
+
+| version/run | daemon wall | user | system | task-clock | instructions | major faults | input / output KiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| candidate 1 (before base) | 588.145 s | 468.626 s | 61.251 s | 526.443 s | 2.634476 T | 886 | 31,021,824 / 9,456,360 |
+| baseline | 582.938 s | 468.960 s | 62.305 s | 527.794 s | 2.636277 T | 888 | 31,022,832 / 9,450,832 |
+| candidate 2 (after base) | 578.531 s | 466.913 s | 62.171 s | 525.621 s | 2.634045 T | 889 | 31,022,736 / 9,438,080 |
+
+The candidate wall-time range straddles the baseline: -0.76% and +0.89%; its
+two-run median is 583.338 seconds, 0.07% slower than baseline. It did lower
+median task-clock by about 0.34% and median instructions by about 0.08%, but
+the HDD reindex wall-time effect is not distinguishable from normal variation.
+The peak RSS did not improve consistently (1,536,648 and 1,631,840 KiB for
+candidates versus 1,537,056 KiB baseline), because the workload is dominated
+by the chainstate cache and LevelDB activity rather than this short-lived
+per-block vector.
+
+Decision: reject the source change for this goal. It has a valid local
+allocation-saving rationale and may be useful to revisit for deliberately
+large assumed-valid blocks or a memory-constrained workload, but it does not
+provide the required measurable HDD reindex speedup. The candidate diff was
+fully reverted. Raw command harness and outputs are in
+`/mnt/my_storage/bitcoin-perf-scratch/run_reindex_writebuf_trial.sh` and
+`/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/txdata207-{candidate1,baseline1,candidate2}/metrics/`.
