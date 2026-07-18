@@ -22,9 +22,12 @@
 #include <validation.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 
 namespace kernel {
+
+static constexpr uint64_t INTERRUPT_CHECK_INTERVAL{8192};
 
 CCoinsStats::CCoinsStats(int block_height, const uint256& block_hash)
     : nHeight(block_height),
@@ -108,7 +111,8 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, CCoinsView* view,
     Txid prevkey;
     bool have_prevkey{false};
     while (pcursor->Valid()) {
-        if (interruption_point) interruption_point();
+        // Bound interruption latency without dispatching std::function for every coin.
+        if (interruption_point && stats.coins_count % INTERRUPT_CHECK_INTERVAL == 0) interruption_point();
         COutPoint key;
         Coin coin;
         if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
@@ -151,7 +155,8 @@ static std::optional<CCoinsStats> ComputeUTXOStats(std::nullptr_t, CCoinsView* v
     Txid prevkey;
     bool have_prevkey{false};
     while (pcursor->Valid()) {
-        if (interruption_point) interruption_point();
+        // Bound interruption latency without dispatching std::function for every coin.
+        if (interruption_point && stats.coins_count % INTERRUPT_CHECK_INTERVAL == 0) interruption_point();
         COutPoint key;
         Coin coin;
         if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {

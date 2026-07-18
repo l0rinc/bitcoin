@@ -56,6 +56,55 @@ Reach: all live `gettxoutsetinfo hash_type=none` scans. Hash-producing modes,
 indexes, and snapshot commitments are unchanged. The measured percentage is a
 warm-scan CPU result; cold HDD latency can reduce its wall-time share.
 
+### `coinstats`: batch bounded interruption checks
+
+`ComputeUTXOStats` accepts a shutdown/interruption callback. Its RPC callback
+only observes whether RPC is still running, but the old loop dispatched it
+through `std::function` before every UTXO. The stats already maintain a
+monotonic coin count, so check before the first entry and after every 8,192
+successfully processed entries. This is the existing `scantxoutset`
+interruption cadence: it preserves immediate initial shutdown detection and
+bounds later detection to 8,192 UTXOs, while eliminating nearly all indirect
+callback calls. The callback can still throw exactly as before. GitHub PR
+searches for `ComputeUTXOStats`/interruption, `gettxoutsetinfo` interruption
+performance, `SnapshotUTXOHashBreakpoint`, and an 8,192 UTXO-stats cadence
+found no matching already-pushed bitcoin/bitcoin change.
+
+Five warm, sequential full-chain `gettxoutsetinfo none` scans were run against
+the explicitly permitted `/mnt/my_storage/BitcoinData` at height 957779,
+with wallet/network activity disabled and the daemon pinned to CPU 3. The
+candidate was measured first, then the exact source was restored, rebuilt, and
+measured with five fresh controls:
+
+| version | median wall | range | median daemon task time | median instructions | median branches |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| per-UTXO base | 65.54 s | 65.47-66.24 s | 65.453 s | 636.253 B | 132.435 B |
+| 8,192-entry candidate | 62.57 s | 62.45-63.14 s | 62.471 s | 600.341 B | 125.524 B |
+
+The median wall time improved 4.53%, daemon task time 4.56%, instructions
+5.64%, and branches 5.22%. Both series had zero major faults; their median
+minor-fault counts were 21 and 20 respectively. Every one of the ten full RPC
+responses had SHA-256
+`4b96d583ae030f7391f6b960ee9c738360da5ea27532da61c7057cc206dccfa0`,
+including height, best block, counts, amount, and disk-size fields. Raw
+commands, JSON, affinity, `time`, and `perf stat` output are under
+`/mnt/my_storage/bitcoin-perf-scratch/gettxoutsetinfo-interrupt-batch.{candidate5.fUKNEq,base1.Ex0sdR}/`.
+
+Validation:
+
+```text
+ninja -C build bitcoind bitcoin-cli -j4
+build/test/functional/test_runner.py rpc_blockchain.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/functional-coinstats-interrupt-batch --timeout-factor=2
+```
+
+Reach: all direct `ComputeUTXOStats` callers, including non-indexed
+`gettxoutsetinfo` for every hash type, the statistics pass before a latest or
+rolled-back `dumptxoutset`, and snapshot background validation. The measured
+workload isolates `hash_type=none`, where callback dispatch is a larger share;
+hashing and cold-HDD I/O reduce the percentage. Normal reindex-chainstate and
+coinstats-index maintenance do not call this function. The only behavioral
+tradeoff is the documented bounded shutdown/interrupt observation delay.
+
 ### `20e73d97fb` rpc: speed up scantxoutset script lookups
 
 `scantxoutset` tested every UTXO script against a descriptor-derived
