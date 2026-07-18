@@ -141,10 +141,13 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
 
     std::vector<bool> have_txn(txn_available.size());
     std::vector<bool> have_extra_txn(txn_available.size());
+    const auto get_short_id = [this, &cmpctblock](const Wtxid& wtxid) {
+        return m_get_short_id_mock ? m_get_short_id_mock(cmpctblock, wtxid) : cmpctblock.GetShortID(wtxid);
+    };
     {
     LOCK(pool->cs);
     for (const auto& [wtxid, txit] : pool->txns_randomized) {
-        uint64_t shortid = cmpctblock.GetShortID(wtxid);
+        uint64_t shortid = get_short_id(wtxid);
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {
             if (!have_txn[idit->second]) {
@@ -174,7 +177,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         if (!tx) continue;
         Assume(wtxid == tx->GetWitnessHash());
 
-        uint64_t shortid = cmpctblock.GetShortID(wtxid);
+        uint64_t shortid = get_short_id(wtxid);
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {
             if (!have_txn[idit->second]) {
@@ -216,9 +219,11 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     assert(extra_count <= mempool_count);
     if constexpr (G_ABORT_ON_FAILED_ASSUME) {
         for (size_t i{0}; i < txn_available.size(); ++i) {
-            if (!have_txn[i]) continue;
+            // A collided slot is deliberately marked as seen but left empty so later candidates
+            // cannot refill it.
+            if (!have_txn[i] || !txn_available[i]) continue;
             Assert(txn_available[i] != nullptr);
-            const auto idit{shorttxids.find(cmpctblock.GetShortID(txn_available[i]->GetWitnessHash()))};
+            const auto idit{shorttxids.find(get_short_id(txn_available[i]->GetWitnessHash()))};
             Assert(idit != shorttxids.end());
             Assert(idit->second == i);
         }
