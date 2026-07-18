@@ -186,8 +186,11 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     const bool force_message_short_id_collision{!force_invalid_init && !force_short_id_index_overflow && cmpctblock.ShortTxIDCount() >= 2 && fuzzed_data_provider.ConsumeBool()};
     const bool force_short_id_collision{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
     const bool force_mempool_collision{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_null_extra_collision{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && block->vtx.size() >= 2 && fuzzed_data_provider.ConsumeBool()};
-    const bool force_duplicate_extra_txn{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_null_extra_collision && block->vtx.size() >= 2 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_mempool_extra_sequence{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_null_extra_collision{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && block->vtx.size() >= 2 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_duplicate_extra_collision{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && block->vtx.size() >= 2 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_mempool_duplicate_then_collision{!force_invalid_init && !force_valid_prefilled_tx && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_duplicate_extra_txn{!force_invalid_init && !force_short_id_index_overflow && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_mempool_extra_sequence && !force_null_extra_collision && !force_duplicate_extra_collision && !force_mempool_duplicate_then_collision && block->vtx.size() >= 2 && fuzzed_data_provider.ConsumeBool()};
 
     bilingual_str error;
     CTxMemPool pool{MemPoolOptionsForTest(g_setup->m_node), error};
@@ -201,9 +204,11 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         bool add_to_extra_txn{fuzzed_data_provider.ConsumeBool()};
         bool add_to_mempool{fuzzed_data_provider.ConsumeBool()};
 
-        if ((force_short_id_index_overflow && i == 1) ||
+        if (force_mempool_extra_sequence ||
+            (force_short_id_index_overflow && i == 1) ||
             ((force_short_id_collision || force_mempool_collision) && (i == 1 || i == 2)) ||
-            ((force_null_extra_collision || force_duplicate_extra_txn) && i == 1)) continue;
+            ((force_null_extra_collision || force_duplicate_extra_collision || force_duplicate_extra_txn) && i == 1) ||
+            (force_mempool_duplicate_then_collision && (i == 1 || i == 2))) continue;
 
         if (add_to_extra_txn) {
             extra_txn.emplace_back(tx->GetWitnessHash(), tx);
@@ -215,6 +220,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         }
     }
 
+    bool mempool_duplicate_then_collision_applied{false};
     if (force_short_id_index_overflow) {
         const CTransactionRef& target_tx{block->vtx[1]};
         const Wtxid target_wtxid{target_tx->GetWitnessHash()};
@@ -225,6 +231,61 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         };
     } else if (force_message_short_id_collision) {
         cmpctblock.ReplaceShortTxID(1, cmpctblock.ShortTxID(0));
+    } else if (force_duplicate_extra_collision) {
+        CMutableTransaction first_extra_tx_mutable{*block->vtx[1]};
+        first_extra_tx_mutable.nLockTime ^= 1U;
+        const CTransactionRef first_extra_tx{MakeTransactionRef(std::move(first_extra_tx_mutable))};
+        CMutableTransaction collision_extra_tx_mutable{*block->vtx[1]};
+        collision_extra_tx_mutable.nLockTime ^= 2U;
+        const CTransactionRef collision_extra_tx{MakeTransactionRef(std::move(collision_extra_tx_mutable))};
+        const Wtxid first_extra_wtxid{first_extra_tx->GetWitnessHash()};
+        const Wtxid collision_extra_wtxid{collision_extra_tx->GetWitnessHash()};
+        if (first_extra_wtxid != collision_extra_wtxid) {
+            const uint64_t collision_shortid{cmpctblock.GetShortID(block->vtx[1]->GetWitnessHash())};
+            cmpctblock.ReplaceShortTxID(0, collision_shortid);
+            extra_txn.emplace_back(first_extra_wtxid, first_extra_tx);
+            extra_txn.emplace_back(first_extra_wtxid, first_extra_tx);
+            extra_txn.emplace_back(collision_extra_wtxid, collision_extra_tx);
+            pdb.m_get_short_id_mock = [first_extra_wtxid, collision_extra_wtxid, collision_shortid](const CBlockHeaderAndShortTxIDs& cmpctblock, const Wtxid& wtxid) {
+                if (wtxid == first_extra_wtxid || wtxid == collision_extra_wtxid) return collision_shortid;
+                return cmpctblock.GetShortID(wtxid);
+            };
+        }
+    } else if (force_mempool_duplicate_then_collision) {
+        CMutableTransaction mempool_tx_mutable{*block->vtx[2]};
+        mempool_tx_mutable.nLockTime ^= 1U;
+        const CTransactionRef mempool_tx{MakeTransactionRef(std::move(mempool_tx_mutable))};
+        CMutableTransaction extra_a_mutable{*block->vtx[1]};
+        extra_a_mutable.nLockTime ^= 2U;
+        const CTransactionRef extra_a{MakeTransactionRef(std::move(extra_a_mutable))};
+        CMutableTransaction extra_b_mutable{*block->vtx[1]};
+        extra_b_mutable.nLockTime ^= 4U;
+        const CTransactionRef extra_b{MakeTransactionRef(std::move(extra_b_mutable))};
+
+        if (mempool_tx->GetWitnessHash() != extra_a->GetWitnessHash() &&
+            mempool_tx->GetWitnessHash() != extra_b->GetWitnessHash() &&
+            extra_a->GetWitnessHash() != extra_b->GetWitnessHash()) {
+            if (!pool.exists(mempool_tx->GetHash())) {
+                TestMemPoolEntryHelper entry;
+                LOCK2(cs_main, pool.cs);
+                TryAddToMempool(pool, entry.FromTx(mempool_tx));
+            }
+            if (pool.exists(mempool_tx->GetHash())) {
+                const uint64_t collision_shortid{cmpctblock.GetShortID(block->vtx[2]->GetWitnessHash())};
+                cmpctblock.ReplaceShortTxID(1, collision_shortid);
+                const Wtxid mempool_wtxid{mempool_tx->GetWitnessHash()};
+                const Wtxid extra_a_wtxid{extra_a->GetWitnessHash()};
+                const Wtxid extra_b_wtxid{extra_b->GetWitnessHash()};
+                extra_txn.emplace_back(extra_a_wtxid, extra_a);
+                extra_txn.emplace_back(extra_a_wtxid, extra_a);
+                extra_txn.emplace_back(extra_b_wtxid, extra_b);
+                pdb.m_get_short_id_mock = [mempool_wtxid, extra_a_wtxid, extra_b_wtxid, collision_shortid](const CBlockHeaderAndShortTxIDs& cmpctblock, const Wtxid& wtxid) {
+                    if (wtxid == mempool_wtxid || wtxid == extra_a_wtxid || wtxid == extra_b_wtxid) return collision_shortid;
+                    return cmpctblock.GetShortID(wtxid);
+                };
+                mempool_duplicate_then_collision_applied = true;
+            }
+        }
     } else if (force_duplicate_extra_txn) {
         const CTransactionRef& target_tx{block->vtx[1]};
         const Wtxid target_wtxid{target_tx->GetWitnessHash()};
@@ -281,6 +342,31 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
                 };
             }
         }
+    } else if (force_mempool_extra_sequence) {
+        CMutableTransaction mempool_tx_mutable{*block->vtx[1]};
+        mempool_tx_mutable.nLockTime ^= 1U;
+        const CTransactionRef mempool_tx{MakeTransactionRef(std::move(mempool_tx_mutable))};
+        CMutableTransaction extra_tx_mutable{*block->vtx[1]};
+        extra_tx_mutable.nLockTime ^= 2U;
+        const CTransactionRef extra_tx{MakeTransactionRef(std::move(extra_tx_mutable))};
+
+        if (!pool.exists(mempool_tx->GetHash())) {
+            TestMemPoolEntryHelper entry;
+            LOCK2(cs_main, pool.cs);
+            TryAddToMempool(pool, entry.FromTx(mempool_tx));
+        }
+        if (pool.exists(mempool_tx->GetHash())) {
+            const uint64_t collision_shortid{cmpctblock.GetShortID(mempool_tx->GetWitnessHash())};
+            cmpctblock.ReplaceShortTxID(0, collision_shortid);
+            const Wtxid mempool_wtxid{mempool_tx->GetWitnessHash()};
+            const Wtxid extra_wtxid{extra_tx->GetWitnessHash()};
+            extra_txn.emplace_back(mempool_wtxid, mempool_tx);
+            extra_txn.emplace_back(extra_wtxid, extra_tx);
+            pdb.m_get_short_id_mock = [mempool_wtxid, extra_wtxid, collision_shortid](const CBlockHeaderAndShortTxIDs& cmpctblock, const Wtxid& wtxid) {
+                if (wtxid == mempool_wtxid || wtxid == extra_wtxid) return collision_shortid;
+                return cmpctblock.GetShortID(wtxid);
+            };
+        }
     } else if (force_short_id_collision) {
         CMutableTransaction mempool_tx_mutable{*block->vtx[1]};
         mempool_tx_mutable.nLockTime ^= 1U;
@@ -316,6 +402,9 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         }
     }
 
+    const auto get_short_id = [&pdb, &cmpctblock](const Wtxid& wtxid) {
+        return pdb.m_get_short_id_mock ? pdb.m_get_short_id_mock(cmpctblock, wtxid) : cmpctblock.GetShortID(wtxid);
+    };
     auto init_status{pdb.InitData(cmpctblock, extra_txn)};
     if (init_status != READ_STATUS_OK) {
         assert(pdb.header.IsNull());
@@ -330,6 +419,11 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
     }
     assert(pdb.AvailableTxCount() == pdb.PrefilledCount() + pdb.MempoolCount());
     assert(pdb.ExtraCount() <= pdb.MempoolCount());
+    if (mempool_duplicate_then_collision_applied) {
+        assert(!pdb.IsTxAvailable(2));
+        assert(pdb.MempoolCount() == 0);
+        assert(pdb.ExtraCount() == 0);
+    }
 
     const auto prefilled_by_position{cmpctblock.PrefilledTxsByPosition()};
     const auto shorttxids_by_position{cmpctblock.ShortTxIDsByPosition()};
@@ -348,7 +442,7 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
                 assert(available_tx == *prefilled_by_position[i]);
             } else {
                 assert(shorttxids_by_position[i]);
-                assert(cmpctblock.GetShortID(available_tx->GetWitnessHash()) == *shorttxids_by_position[i]);
+                assert(get_short_id(available_tx->GetWitnessHash()) == *shorttxids_by_position[i]);
             }
         }
 
