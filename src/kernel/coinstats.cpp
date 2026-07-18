@@ -69,8 +69,6 @@ void RemoveCoinHash(MuHash3072& muhash, const COutPoint& outpoint, const Coin& c
     muhash.Remove(MakeUCharSpan(ss));
 }
 
-static void ApplyCoinHash(std::nullptr_t, const COutPoint& outpoint, const Coin& coin) {}
-
 //! Warning: be very careful when changing this! assumeutxo and UTXO snapshot
 //! validation commitments are reliant on the hash constructed by this
 //! function.
@@ -152,6 +150,47 @@ static std::optional<CCoinsStats> ComputeUTXOStats(T hash_obj, CCoinsView* view,
     return stats;
 }
 
+static std::optional<CCoinsStats> ComputeUTXOStats(std::nullptr_t, CCoinsView* view, node::BlockManager& blockman, const std::function<void()>& interruption_point)
+{
+    std::unique_ptr<CCoinsViewCursor> pcursor;
+    CBlockIndex* pindex;
+    {
+        LOCK(::cs_main);
+        pcursor = view->Cursor();
+        pindex = blockman.LookupBlockIndex(pcursor->GetBestBlock());
+    }
+    assert(pcursor);
+    CCoinsStats stats{Assert(pindex)->nHeight, pindex->GetBlockHash()};
+
+    Txid prevkey;
+    bool have_prevkey{false};
+    while (pcursor->Valid()) {
+        if (interruption_point) interruption_point();
+        COutPoint key;
+        Coin coin;
+        if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
+            if (!have_prevkey || key.hash != prevkey) {
+                stats.nTransactions++;
+                prevkey = key.hash;
+                have_prevkey = true;
+            }
+            stats.nTransactionOutputs++;
+            if (stats.total_amount.has_value()) {
+                stats.total_amount = CheckedAdd(*stats.total_amount, coin.out.nValue);
+            }
+            stats.nBogoSize += GetBogoSize(coin.out.scriptPubKey);
+            stats.coins_count++;
+        } else {
+            LogError("%s: unable to read value\n", __func__);
+            return std::nullopt;
+        }
+        pcursor->Next();
+    }
+
+    stats.nDiskSize = view->EstimateSize();
+    return stats;
+}
+
 std::optional<CCoinsStats> ComputeUTXOStats(CoinStatsHashType hash_type, CCoinsView* view, node::BlockManager& blockman, const std::function<void()>& interruption_point)
 {
     return [&]() -> std::optional<CCoinsStats> {
@@ -182,6 +221,5 @@ static void FinalizeHash(MuHash3072& muhash, CCoinsStats& stats)
     muhash.Finalize(out);
     stats.hashSerialized = out;
 }
-static void FinalizeHash(std::nullptr_t, CCoinsStats& stats) {}
 
 } // namespace kernel
