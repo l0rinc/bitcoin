@@ -49,10 +49,22 @@ public:
 
     size_t ShortTxIDCount() const { return shorttxids.size(); }
 
+    uint64_t ShortTxID(size_t index) const
+    {
+        assert(index < shorttxids.size());
+        return shorttxids[index];
+    }
+
     void ReplaceShortTxID(size_t index, uint64_t shortid)
     {
         assert(index < shorttxids.size());
         shorttxids[index] = shortid;
+    }
+
+    void EraseShortTxID(size_t index)
+    {
+        assert(index < shorttxids.size());
+        shorttxids.erase(shorttxids.begin() + index);
     }
 
     std::vector<std::optional<CTransactionRef>> PrefilledTxsByPosition() const
@@ -153,6 +165,18 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
                 cmpctblock.AddPrefilledTx(static_cast<uint16_t>(block->vtx.size()), block->vtx.front());
             });
     }
+    const bool force_valid_prefilled_tx{!force_invalid_init && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    if (force_valid_prefilled_tx) {
+        const size_t prefilled_position{fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, block->vtx.size() - 1)};
+        cmpctblock.AddPrefilledTx(static_cast<uint16_t>(prefilled_position - 1), block->vtx[prefilled_position]);
+        cmpctblock.EraseShortTxID(prefilled_position - 1);
+    }
+
+    const bool force_message_short_id_collision{!force_invalid_init && cmpctblock.ShortTxIDCount() >= 2 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_short_id_collision{!force_invalid_init && !force_message_short_id_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_mempool_collision{!force_invalid_init && !force_message_short_id_collision && !force_short_id_collision && block->vtx.size() >= 3 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_null_extra_collision{!force_invalid_init && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && block->vtx.size() >= 2 && fuzzed_data_provider.ConsumeBool()};
+    const bool force_duplicate_extra_txn{!force_invalid_init && !force_message_short_id_collision && !force_short_id_collision && !force_mempool_collision && !force_null_extra_collision && block->vtx.size() >= 2 && fuzzed_data_provider.ConsumeBool()};
 
     bilingual_str error;
     CTxMemPool pool{MemPoolOptionsForTest(g_setup->m_node), error};
@@ -166,6 +190,9 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         bool add_to_extra_txn{fuzzed_data_provider.ConsumeBool()};
         bool add_to_mempool{fuzzed_data_provider.ConsumeBool()};
 
+        if (((force_short_id_collision || force_mempool_collision) && (i == 1 || i == 2)) ||
+            ((force_null_extra_collision || force_duplicate_extra_txn) && i == 1)) continue;
+
         if (add_to_extra_txn) {
             extra_txn.emplace_back(tx->GetWitnessHash(), tx);
         }
@@ -176,12 +203,97 @@ FUZZ_TARGET(partially_downloaded_block, .init = initialize_pdb)
         }
     }
 
-    if (cmpctblock.ShortTxIDCount() > 0 && fuzzed_data_provider.ConsumeBool()) {
-        const Wtxid empty_wtxid{Wtxid::FromUint256(uint256::ZERO)};
-        extra_txn.emplace_back(empty_wtxid, CTransactionRef{});
-        cmpctblock.ReplaceShortTxID(
-            fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, cmpctblock.ShortTxIDCount() - 1),
-            cmpctblock.GetShortID(empty_wtxid));
+    if (force_message_short_id_collision) {
+        cmpctblock.ReplaceShortTxID(1, cmpctblock.ShortTxID(0));
+    } else if (force_duplicate_extra_txn) {
+        const CTransactionRef& target_tx{block->vtx[1]};
+        const Wtxid target_wtxid{target_tx->GetWitnessHash()};
+        extra_txn.emplace_back(target_wtxid, target_tx);
+        extra_txn.emplace_back(target_wtxid, target_tx);
+        cmpctblock.ReplaceShortTxID(0, cmpctblock.GetShortID(target_wtxid));
+    } else if (cmpctblock.ShortTxIDCount() > 0 && !force_short_id_collision && !force_mempool_collision &&
+        (force_null_extra_collision || fuzzed_data_provider.ConsumeBool())) {
+        if (force_null_extra_collision) {
+            const CTransactionRef& target_tx{block->vtx[1]};
+            if (!pool.exists(target_tx->GetHash())) {
+                TestMemPoolEntryHelper entry;
+                LOCK2(cs_main, pool.cs);
+                TryAddToMempool(pool, entry.FromTx(target_tx));
+            }
+            if (pool.exists(target_tx->GetHash())) {
+                const Wtxid target_wtxid{target_tx->GetWitnessHash()};
+                extra_txn.emplace_back(target_wtxid, CTransactionRef{});
+                cmpctblock.ReplaceShortTxID(0, cmpctblock.GetShortID(target_wtxid));
+            }
+        } else {
+            const Wtxid empty_wtxid{Wtxid::FromUint256(uint256::ZERO)};
+            extra_txn.emplace_back(empty_wtxid, CTransactionRef{});
+            cmpctblock.ReplaceShortTxID(
+                fuzzed_data_provider.ConsumeIntegralInRange<size_t>(0, cmpctblock.ShortTxIDCount() - 1),
+                cmpctblock.GetShortID(empty_wtxid));
+        }
+    }
+
+    if (force_mempool_collision) {
+        CMutableTransaction first_mempool_tx_mutable{*block->vtx[1]};
+        first_mempool_tx_mutable.nLockTime ^= 1U;
+        const CTransactionRef first_mempool_tx{MakeTransactionRef(std::move(first_mempool_tx_mutable))};
+        CMutableTransaction second_mempool_tx_mutable{*block->vtx[2]};
+        second_mempool_tx_mutable.nLockTime ^= 2U;
+        const CTransactionRef second_mempool_tx{MakeTransactionRef(std::move(second_mempool_tx_mutable))};
+
+        if (first_mempool_tx->GetWitnessHash() != second_mempool_tx->GetWitnessHash()) {
+            for (const CTransactionRef& tx : {first_mempool_tx, second_mempool_tx}) {
+                if (!pool.exists(tx->GetHash())) {
+                    TestMemPoolEntryHelper entry;
+                    LOCK2(cs_main, pool.cs);
+                    TryAddToMempool(pool, entry.FromTx(tx));
+                }
+            }
+            if (pool.exists(first_mempool_tx->GetHash()) && pool.exists(second_mempool_tx->GetHash())) {
+                const uint64_t collision_shortid{cmpctblock.GetShortID(block->vtx[1]->GetWitnessHash())};
+                cmpctblock.ReplaceShortTxID(0, collision_shortid);
+                const Wtxid first_wtxid{first_mempool_tx->GetWitnessHash()};
+                const Wtxid second_wtxid{second_mempool_tx->GetWitnessHash()};
+                pdb.m_get_short_id_mock = [first_wtxid, second_wtxid, collision_shortid](const CBlockHeaderAndShortTxIDs& cmpctblock, const Wtxid& wtxid) {
+                    if (wtxid == first_wtxid || wtxid == second_wtxid) return collision_shortid;
+                    return cmpctblock.GetShortID(wtxid);
+                };
+            }
+        }
+    } else if (force_short_id_collision) {
+        CMutableTransaction mempool_tx_mutable{*block->vtx[1]};
+        mempool_tx_mutable.nLockTime ^= 1U;
+        const CTransactionRef collision_mempool_tx{MakeTransactionRef(std::move(mempool_tx_mutable))};
+        CMutableTransaction extra_tx_mutable{*block->vtx[2]};
+        extra_tx_mutable.nLockTime ^= 2U;
+        const CTransactionRef collision_extra_tx{MakeTransactionRef(std::move(extra_tx_mutable))};
+        CMutableTransaction extra_followup_tx_mutable{*block->vtx[1]};
+        extra_followup_tx_mutable.nLockTime ^= 4U;
+        const CTransactionRef extra_followup_tx{MakeTransactionRef(std::move(extra_followup_tx_mutable))};
+
+        if (collision_mempool_tx->GetWitnessHash() != collision_extra_tx->GetWitnessHash() &&
+            collision_mempool_tx->GetWitnessHash() != extra_followup_tx->GetWitnessHash() &&
+            collision_extra_tx->GetWitnessHash() != extra_followup_tx->GetWitnessHash()) {
+            if (!pool.exists(collision_mempool_tx->GetHash())) {
+                TestMemPoolEntryHelper entry;
+                LOCK2(cs_main, pool.cs);
+                TryAddToMempool(pool, entry.FromTx(collision_mempool_tx));
+            }
+            if (pool.exists(collision_mempool_tx->GetHash())) {
+                const uint64_t collision_shortid{cmpctblock.GetShortID(block->vtx[1]->GetWitnessHash())};
+                cmpctblock.ReplaceShortTxID(0, collision_shortid);
+                extra_txn.emplace_back(collision_extra_tx->GetWitnessHash(), collision_extra_tx);
+                extra_txn.emplace_back(extra_followup_tx->GetWitnessHash(), extra_followup_tx);
+                const Wtxid mempool_wtxid{collision_mempool_tx->GetWitnessHash()};
+                const Wtxid extra_wtxid{collision_extra_tx->GetWitnessHash()};
+                const Wtxid followup_wtxid{extra_followup_tx->GetWitnessHash()};
+                pdb.m_get_short_id_mock = [mempool_wtxid, extra_wtxid, followup_wtxid, collision_shortid](const CBlockHeaderAndShortTxIDs& cmpctblock, const Wtxid& wtxid) {
+                    if (wtxid == mempool_wtxid || wtxid == extra_wtxid || wtxid == followup_wtxid) return collision_shortid;
+                    return cmpctblock.GetShortID(wtxid);
+                };
+            }
+        }
     }
 
     auto init_status{pdb.InitData(cmpctblock, extra_txn)};
