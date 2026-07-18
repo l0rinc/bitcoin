@@ -486,6 +486,9 @@ class ReplaceByFeeTest(BitcoinTestFramework):
         assert tx3b_txid in mempool
 
         # 4. Check summing multiple extreme negative conflict fees does not overflow.
+        # The conflict-fee aggregate saturates, but the old mempool feerate
+        # diagram total underflows CAmount, so the replacement fails closed as
+        # uncalculable instead of crashing or deciding on saturated coordinates.
         tx4_outpoints = [self.make_utxo(self.nodes[0], int(1.1 * COIN)) for _ in range(2)]
         tx4a_txids = []
         for outpoint in tx4_outpoints:
@@ -503,11 +506,21 @@ class ReplaceByFeeTest(BitcoinTestFramework):
             sequence=0,
             fee_per_output=10000,
         )
-        tx4b_txid = self.nodes[0].sendrawtransaction(tx4b["hex"], 0)
+        assert_raises_rpc_error(-26, "feerate diagram total overflow", self.nodes[0].sendrawtransaction, tx4b["hex"], 0)
+        mempool = self.nodes[0].getrawmempool()
+        for txid in tx4a_txids:
+            assert txid in mempool
+        assert tx4b["txid"] not in mempool
+
+        # Prioritisation deltas stack and saturate, so adding fee_delta=2**63-1
+        # brings each -2**63 delta back to -1, restoring normal modified fees.
+        # The conflicts can then be mined out, leaving a clean mempool.
+        for txid in tx4a_txids:
+            self.nodes[0].prioritisetransaction(txid=txid, fee_delta=2**63 - 1)
+        self.generate(self.nodes[0], 1)
         mempool = self.nodes[0].getrawmempool()
         for txid in tx4a_txids:
             assert txid not in mempool
-        assert tx4b_txid in mempool
 
     def test_rpc(self):
         us0 = self.wallet.get_utxo()
