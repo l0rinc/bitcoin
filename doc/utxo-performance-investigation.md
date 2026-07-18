@@ -637,6 +637,50 @@ revert the one-line change. Raw output is under
 the paired base control is
 `/mnt/my_storage/bitcoin-perf-scratch/dumptxoutset-hash-stream.base1.pmlQgU/`.
 
+### Cursor key view instead of per-UTXO `COutPoint` copies
+
+The only concrete `CCoinsViewCursor` implementation is the coins-DB cursor,
+which already holds its decoded current `COutPoint` in `keyTmp`. The stats and
+snapshot loops nevertheless ask it to copy that 36-byte outpoint into a local
+on every UTXO. A temporary shared-interface candidate added
+`GetKeyPtr() -> const COutPoint*`, retaining `GetKey(COutPoint&)` and the
+existing null/failure behavior for malformed keys. It used the view in both
+`ComputeUTXOStats` variants, snapshot writing, and rollback copying. The view
+was documented as valid only until the next cursor operation. Searches for
+`CCoinsViewCursor`, `CCoinsViewDBCursor`, `GetKeyPtr`, and `GetKeyView` found
+no matching already-pushed bitcoin/bitcoin PR; PR #35191 is an unrelated
+malformed-first-key fix already present in the current cursor behavior.
+
+The temporary change built and passed the focused cursor and relevant RPC
+tests:
+
+```text
+ninja -C build bitcoind test_bitcoin -j4
+build/bin/test_bitcoin --run_test=coins_tests_dbbase --log_level=message
+build/test/functional/test_runner.py rpc_blockchain.py rpc_dumptxoutset.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/functional-cursor-keyptr --timeout-factor=2
+```
+
+All five `gettxoutsetinfo none` results on the local height-957779 chainstate
+were byte-identical (SHA-256
+`4b96d583ae030f7391f6b960ee9c738360da5ea27532da61c7057cc206dccfa0`).
+The first candidate run was cold (127.73 s and 8,196 major faults) and is not
+used below. The four subsequent candidate runs and three fresh, reverted base
+controls were all warm, network/wallet disabled, and pinned to CPU 3:
+
+| version | median wall | range | median daemon task time | median instructions | median branches |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| base | 59.10 s | 59.01-59.76 s | 59.016 s | 549.626 B | 115.548 B |
+| key-view candidate | 65.96 s | 65.88-65.97 s | 65.845 s | 635.646 B | 132.260 B |
+
+The candidate regressed wall time 11.61%, daemon task time 11.57%,
+instructions 15.65%, and branches 14.46%. Eliminating the visible outpoint
+copy does not overcome the cost of this wider cursor-view shape in the actual
+scan. Decision: reject and fully revert it rather than expose a new shared
+cursor API. Raw candidate results are under
+`/mnt/my_storage/bitcoin-perf-scratch/gettxoutsetinfo-keyptr.candidate1.1O8X4Q/`;
+the fresh control is
+`/mnt/my_storage/bitcoin-perf-scratch/gettxoutsetinfo-keyptr.base1.r3TjeJ/`.
+
 ### Coins DB iterator value-copy variants
 
 A high-rate `perf record` of a warm `gettxoutsetinfo none` against the user's
