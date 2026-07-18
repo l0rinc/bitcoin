@@ -10,9 +10,12 @@ Unless stated otherwise, the end-to-end measurements used a GCC Release build
 on an Intel Core i7-7700 (8 logical CPUs), 62 GiB RAM, Linux, ext4, and
 rotational storage. Daemons ran with networking and wallet activity disabled
 against an explicit copy-on-write OverlayFS scratch datadir over the mainnet
-data. The source datadir was not modified. Short benchmarks require at least
-five runs; expensive full-chain runs are paired with a repeatable focused
-benchmark when possible.
+data. The source datadir was not modified. The user later explicitly permitted
+read-only RPC profiling against `/mnt/my_storage/BitcoinData`; those entries
+name that datadir and start a network-disabled, wallet-disabled daemon which is
+cleanly stopped after each series. Short benchmarks require at least five runs;
+expensive full-chain runs are paired with a repeatable focused benchmark when
+possible.
 
 ## Accepted changes
 
@@ -323,6 +326,91 @@ Decision: no commit; syscall-count movement did not produce an outside-noise
 HDD speedup. Raw logs and the focused fixture remain under
 `/mnt/my_storage/bitcoin-perf-scratch/dumptxoutset-buffer-*`.
 
+### Coins DB iterator value-copy variants
+
+A high-rate `perf record` of a warm `gettxoutsetinfo none` against the user's
+local chainstate at height 957779 attributed 5.64% of samples to
+`std::vector<std::byte, zero_after_free_allocator>::_M_range_insert` beneath
+`CDBIterator::GetValue`, and another 2.82% to `Obfuscation::operator()`. The
+current code copies every LevelDB value into a reusable `DataStream`, XORs the
+whole value in place, then deserializes the result. Five no-sampling baseline
+passes took 54.480-54.696 seconds of daemon task time (median 54.582 seconds),
+with 508.73-508.75 billion retired instructions and no major faults. Raw
+profile and baseline files are in
+`/mnt/my_storage/bitcoin-perf-scratch/current-utxo-profile/none-profile-99hz.*`
+and `warm-baseline/`.
+
+The first temporary variant copied values at or below the existing 1 KiB DB
+preallocation size into a stack array, XORed that span, and used `SpanReader`;
+larger generic values retained the old reusable buffer. It kept output exactly
+the same for all six live scans. After excluding one run whose counters had
+been attached to a stale shell process (the JSON output was valid, but the
+counters were not), five clean runs took 54.446-54.638 seconds of daemon task
+time (median 54.520 seconds) and 501.57-501.66 billion instructions. The
+1.4% instruction decrease did not become a wall-clock win: branches fell from
+about 107.79 to 106.05 billion but branch misses rose from 533-550 million to
+614-622 million; median client wall time was 54.58 seconds. This is at most a
+0.1% CPU-time movement and inside the end-to-end noise. The threshold branch
+and 1 KiB stack use do not justify a commit. Raw valid runs are in
+`warm-candidate-stack-v2/run-{2..6}.*`; the invalid first run is retained for
+audit but excluded from all comparisons.
+
+The second temporary variant changed `DataStream::write` to use
+`std::vector::assign` when its backing vector was empty, hoping to remove the
+profiled `insert` machinery while retaining its capacity. It was decisively
+worse: five warm passes took 56.914-57.047 seconds of daemon task time (median
+56.956 seconds), 4.35% above the baseline, and retired 550.52-550.68 billion
+instructions, 8.24% above baseline. Client wall times were 56.99-57.07
+seconds. This confirms that the current `insert` path is preferable for a
+cleared reusable `DataStream`; neither temporary diff was committed. Raw
+results are in `warm-stream-assign/`.
+
+Both variants were fully reverted before continuing. The current profile still
+establishes the copy/deobfuscate path as a legitimate CPU consumer, but a
+future candidate must remove a memory pass without adding an unpredictable
+per-value branch or a less efficient vector operation.
+
+### Contiguous-stream zero-fill avoidance ([PR #77](https://github.com/l0rinc/bitcoin/pull/77))
+
+PR #77 changes deserialization of contiguous `SpanReader`/`DataStream` byte
+vectors and strings to avoid an initial zero fill. It is not a direct seed for
+the named reindex or snapshot-file workload: block and snapshot file reads use
+file-backed stream types (`CBufferedFile`/`AutoFile`), not this contiguous
+stream path. The proposal's own full-reindex measurements also regressed: SSD
+30382.664 to 30743.562 seconds (about 1% slower) and the i7 HDD run
+48171.076 to 49655.945 seconds (about 3% slower). The direct live profile
+above identified a different cursor-value copy path, and its two safe
+specializations were neutral or worse. Decision: reject #77 for this goal;
+do not repeat a multi-hour reindex unless a future profile points specifically
+to contiguous vector/string deserialization.
+
+### Larger coins-cache pool chunks ([PR #140](https://github.com/l0rinc/bitcoin/pull/140))
+
+PR #140 changes the coins-cache pool chunk from 256 KiB to 1 MiB. A temporary
+exact benchmark populated 100,000 deterministic `Coin` entries in a fresh
+`CCoinsViewCache` and timed pool growth plus cache destruction; it was pinned
+to CPU 3 and run five times. The baseline median was 372.684 ns/coin
+(371.978-373.989), while the 1 MiB candidate median was 375.049 ns/coin
+(374.486-375.700), 0.63% slower. Instructions were effectively unchanged
+(1378.01 versus 1377.57 per coin) and faults were slightly higher (0.03504
+versus 0.03598 per coin). The narrower allocator operation is therefore not a
+speedup, and there is no justification to consume more cache memory in an HDD
+reindex. No source diff was retained. Raw results and both benchmark binaries
+are in `/mnt/my_storage/bitcoin-perf-scratch/coins-pool-chunks/`.
+
+### Skip cache reallocation during IBD flush ([PR #59](https://github.com/l0rinc/bitcoin/pull/59))
+
+The one-line-looking part of #59 suppresses cache reallocation after an IBD
+flush, but it is not independent on current master. `DynamicMemoryUsage()`
+counts allocated pool capacity, so an emptied cache whose pool is retained can
+still appear over its target and immediately cause another flush. The PR's
+claimed benefit relies on its earlier, broader `ActiveMemoryUsage` accounting
+change, together with changes to flush behavior and cache reservation. Its
+reported one-run roughly 4% improvement is not sufficient evidence for that
+interdependent stack. Decision: do not cherry-pick or benchmark the isolated
+line; revisit only if a current profile demonstrates repeated empty-cache
+flushes and a minimal accounting invariant can be proven.
+
 ### Cached hash inside mutable `COutPoint` ([PR #162](https://github.com/l0rinc/bitcoin/pull/162))
 
 Hypothesis: store the outpoint hash to avoid repeated SipHash work in coins
@@ -388,12 +476,11 @@ fully rejected independent change:
   reads merits another commit.
 - [#34](https://github.com/l0rinc/bitcoin/pull/34): repeated coins-cache lookup/hash and short-lived reallocation. The
   `SpendCoin` subcandidate is rejected above; other subpatterns remain open.
-- [#77](https://github.com/l0rinc/bitcoin/pull/77): contiguous-deserialization zero-fill avoidance. It needs a production
-  profile and a faithful snapshot/reindex confirmation before reconsideration.
 - [#132](https://github.com/l0rinc/bitcoin/pull/132)/[#136](https://github.com/l0rinc/bitcoin/pull/136): Bloom-filter and restart-interval tuning. Point reads and ordered
   scans have opposing tradeoffs; test both before changing defaults.
-- [#140](https://github.com/l0rinc/bitcoin/pull/140)/[#59](https://github.com/l0rinc/bitcoin/pull/59): UTXO allocation/layout/reservation variants. Confirm cache memory,
-  allocator, and reindex effects independently.
+- [#140](https://github.com/l0rinc/bitcoin/pull/140)/[#59](https://github.com/l0rinc/bitcoin/pull/59): the pool-chunk and
+  isolated no-reallocation variants are rejected above. Other allocation or
+  accounting shapes still need a current profile and an independent invariant.
 - [#180](https://github.com/l0rinc/bitcoin/pull/180): input fetching, no-seek compaction, and flush timing. Split into minimal
   hypotheses; do not carry experimental logging or policy changes into a
   performance commit.
