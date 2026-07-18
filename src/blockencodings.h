@@ -150,6 +150,10 @@ public:
     using IsBlockMutatedFn = std::function<bool(const CBlock&, bool)>;
     IsBlockMutatedFn m_check_block_mutated_mock{nullptr};
 
+    // Test hook for constructing deterministic short-ID collision cases.
+    using GetShortIDFn = std::function<uint64_t(const CBlockHeaderAndShortTxIDs&, const Wtxid&)>;
+    GetShortIDFn m_get_short_id_mock{nullptr};
+
     explicit PartiallyDownloadedBlock(CTxMemPool* poolIn) : pool(poolIn) {}
 
     // extra_txn is a list of extra transactions to look at, in <witness hash, reference> form
