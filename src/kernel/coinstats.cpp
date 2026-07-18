@@ -11,6 +11,7 @@
 #include <node/blockstorage.h>
 #include <primitives/transaction.h>
 #include <script/script.h>
+#include <serialize.h>
 #include <span.h>
 #include <streams.h>
 #include <sync.h>
@@ -48,6 +49,15 @@ static void TxOutSer(T& ss, const COutPoint& outpoint, const Coin& coin)
     ss << coin.out;
 }
 
+static size_t TxOutSerSize(const Coin& coin)
+{
+    return Txid::size() + sizeof(uint32_t) +
+           sizeof(uint32_t) +
+           sizeof(coin.out.nValue) +
+           GetSizeOfCompactSize(coin.out.scriptPubKey.size()) +
+           coin.out.scriptPubKey.size();
+}
+
 static void ApplyCoinHash(HashWriter& ss, const COutPoint& outpoint, const Coin& coin)
 {
     TxOutSer(ss, outpoint, coin);
@@ -56,6 +66,7 @@ static void ApplyCoinHash(HashWriter& ss, const COutPoint& outpoint, const Coin&
 void ApplyCoinHash(MuHash3072& muhash, const COutPoint& outpoint, const Coin& coin)
 {
     DataStream ss{};
+    ss.reserve(TxOutSerSize(coin));
     TxOutSer(ss, outpoint, coin);
     muhash.Insert(MakeUCharSpan(ss));
 }
@@ -63,6 +74,7 @@ void ApplyCoinHash(MuHash3072& muhash, const COutPoint& outpoint, const Coin& co
 void RemoveCoinHash(MuHash3072& muhash, const COutPoint& outpoint, const Coin& coin)
 {
     DataStream ss{};
+    ss.reserve(TxOutSerSize(coin));
     TxOutSer(ss, outpoint, coin);
     muhash.Remove(MakeUCharSpan(ss));
 }
