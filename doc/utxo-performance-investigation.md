@@ -598,6 +598,45 @@ change. Raw commands, time reports, `perf stat` output, RPC results, and
 byte-identical snapshots are retained in
 `/mnt/my_storage/bitcoin-perf-scratch/dumptxoutset-hash-stream.{candidate1.VivC7o,base1.pmlQgU,candidate2.E9OThK}/`.
 
+### `dumptxoutset`: move decoded coins into the output group
+
+The snapshot writer decodes a `Coin` into a reusable loop local and then
+copies it into `std::vector<std::pair<uint32_t, Coin>>` until the transaction
+group is emitted. A one-line candidate changed that insertion to
+`emplace_back(key.n, std::move(coin))`. The next cursor decode overwrites the
+moved-from local, while moving a `Coin` can transfer a dynamically allocated
+script rather than copying it. GitHub PR searches for `WriteUTXOSnapshot`,
+`dumptxoutset`, `coins.emplace_back`, and `std::move` found no already-pushed
+bitcoin/bitcoin proposal for this exact change; the related historical
+snapshot-format PR #26045 uses the existing copying insertion.
+
+The candidate built and passed the deterministic snapshot test:
+
+```text
+ninja -C build bitcoind test_bitcoin -j8
+build/test/functional/test_runner.py rpc_dumptxoutset.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/functional-dumptxoutset-move-coin --timeout-factor=2
+```
+
+Its full local height-957779 result returned the same 166,350,731 coins,
+base/serialized hashes, and a byte-identical 8.9 GiB snapshot (SHA-256
+`f85de775f38c3aea3d07e7d210181b836e189f3d04a6af6e74a721946fd3d3d4`) as
+the preceding current-tree control. Both daemons were network/wallet disabled
+and pinned to CPU 3:
+
+| version | wall | daemon task time | instructions | branches |
+| --- | ---: | ---: | ---: | ---: |
+| base | 233.56 s | 221.855 s | 2.050 T | 328.342 B |
+| move candidate | 233.62 s | 227.415 s | 2.138 T | 345.867 B |
+
+Wall time is unchanged within 0.03%, but the candidate used 2.51% more daemon
+CPU time, 4.31% more instructions, and 5.34% more branches. Any saving for
+dynamically allocated scripts is dominated on this corpus by the changed
+move/lifetime work; the aggregate CPU work is worse. Decision: reject and
+revert the one-line change. Raw output is under
+`/mnt/my_storage/bitcoin-perf-scratch/dumptxoutset-move-coin.candidate1.KS1d9a/`;
+the paired base control is
+`/mnt/my_storage/bitcoin-perf-scratch/dumptxoutset-hash-stream.base1.pmlQgU/`.
+
 ### Coins DB iterator value-copy variants
 
 A high-rate `perf record` of a warm `gettxoutsetinfo none` against the user's
