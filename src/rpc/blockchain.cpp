@@ -58,6 +58,7 @@
 
 #include <cstdint>
 
+#include <array>
 #include <condition_variable>
 #include <iterator>
 #include <memory>
@@ -2237,7 +2238,7 @@ bool ContainsScriptSize(const std::vector<size_t>& sizes, size_t size)
 }
 
 //! Search for a given set of pubkey scripts
-bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& should_abort, int64_t& count, CCoinsViewCursor* cursor, const std::unordered_set<CScript, SaltedSipHasher>& needles, const std::vector<size_t>& needle_sizes, std::map<COutPoint, Coin>& out_results, std::function<void()>& interruption_point)
+bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& should_abort, int64_t& count, CCoinsViewCursor* cursor, const std::unordered_set<CScript, SaltedSipHasher>& needles, const std::vector<size_t>& needle_sizes, const std::array<bool, 256>& needle_first_bytes, const bool needle_has_empty_script, std::map<COutPoint, Coin>& out_results, std::function<void()>& interruption_point)
 {
     scan_progress = 0;
     count = 0;
@@ -2256,7 +2257,8 @@ bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& 
             uint32_t high = 0x100 * *UCharCast(key.hash.begin()) + *(UCharCast(key.hash.begin()) + 1);
             scan_progress = (int)(high * 100.0 / 65536.0 + 0.5);
         }
-        if (ContainsScriptSize(needle_sizes, coin.out.scriptPubKey.size()) && needles.contains(coin.out.scriptPubKey)) {
+        const CScript& script = coin.out.scriptPubKey;
+        if (ContainsScriptSize(needle_sizes, script.size()) && (script.empty() ? needle_has_empty_script : needle_first_bytes[script.front()]) && needles.contains(script)) {
             COutPoint key;
             if (!cursor->GetKey(key)) return false;
             out_results.emplace(key, coin);
@@ -2432,6 +2434,8 @@ static RPCMethod scantxoutset()
 
         std::unordered_set<CScript, SaltedSipHasher> needles;
         std::vector<size_t> needle_sizes;
+        std::array<bool, 256> needle_first_bytes{};
+        bool needle_has_empty_script{false};
         std::map<CScript, std::string> descriptors;
         CAmount total_in = 0;
 
@@ -2443,6 +2447,11 @@ static RPCMethod scantxoutset()
                 std::string inferred = InferDescriptor(script, provider)->ToString();
                 needles.emplace(script);
                 if (!ContainsScriptSize(needle_sizes, script.size())) needle_sizes.push_back(script.size());
+                if (script.empty()) {
+                    needle_has_empty_script = true;
+                } else {
+                    needle_first_bytes[script.front()] = true;
+                }
                 descriptors.emplace(std::move(script), std::move(inferred));
             }
         }
@@ -2464,7 +2473,7 @@ static RPCMethod scantxoutset()
             pcursor = CHECK_NONFATAL(active_chainstate.CoinsDB().Cursor());
             tip = CHECK_NONFATAL(active_chainstate.m_chain.Tip());
         }
-        bool res = FindScriptPubKey(g_scan_progress, g_should_abort_scan, count, pcursor.get(), needles, needle_sizes, coins, node.rpc_interruption_point);
+        bool res = FindScriptPubKey(g_scan_progress, g_should_abort_scan, count, pcursor.get(), needles, needle_sizes, needle_first_bytes, needle_has_empty_script, coins, node.rpc_interruption_point);
         result.pushKV("success", res);
         result.pushKV("txouts", count);
         result.pushKV("height", tip->nHeight);
