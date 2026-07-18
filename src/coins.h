@@ -250,6 +250,10 @@ public:
     virtual bool Valid() const = 0;
     virtual void Next() = 0;
 
+    //! Advance without requiring the next entry's key. Implementations may
+    //! avoid eagerly decoding it, while still validating the cursor entry.
+    virtual void NextNoKey() { Next(); }
+
     //! Get best block at the time this cursor was created
     const uint256& GetBestBlock() const { return block_hash; }
 private:

@@ -2260,8 +2260,10 @@ bool FindScriptPubKey(std::atomic<int>& scan_progress, const std::atomic<bool>& 
             COutPoint key;
             if (!cursor->GetKey(key)) return false;
             out_results.emplace(key, coin);
+            cursor->Next();
+        } else {
+            cursor->NextNoKey();
         }
-        cursor->Next();
     }
     scan_progress = 100;
     return true;

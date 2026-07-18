@@ -327,7 +327,7 @@ BOOST_FIXTURE_TEST_CASE(coins_db_cursor_order, BasicTestingSetup)
         BOOST_REQUIRE(cursor->GetKey(outpoint));
         BOOST_CHECK_EQUAL(outpoint.hash, txid);
         cursor_indices.push_back(outpoint.n);
-        cursor->Next();
+        cursor->NextNoKey();
     }
     BOOST_CHECK_EQUAL_COLLECTIONS(
         cursor_indices.begin(), cursor_indices.end(), output_indices.begin(), output_indices.end());
