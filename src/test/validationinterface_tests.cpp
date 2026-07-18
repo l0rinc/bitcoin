@@ -200,13 +200,14 @@ BOOST_AUTO_TEST_CASE(block_signal_rejects_invalid_block_payloads)
 
 BOOST_AUTO_TEST_CASE(chainstate_flushed_rejects_null_locator)
 {
-    test_only_CheckFailuresAreExceptionsNotAborts failed_assumes_throw{};
-
     auto sub{std::make_shared<FlushNotificationSubscriber>()};
     m_node.validation_signals->RegisterSharedValidationInterface(sub);
 
-    BOOST_CHECK_THROW(m_node.validation_signals->ChainStateFlushed(kernel::ChainstateRole{}, CBlockLocator{}),
-                      NonFatalCheckError);
+    if constexpr (G_ABORT_ON_FAILED_ASSUME) {
+        test_only_CheckFailuresAreExceptionsNotAborts failed_assumes_throw{};
+        BOOST_CHECK_THROW(m_node.validation_signals->ChainStateFlushed(kernel::ChainstateRole{}, CBlockLocator{}),
+                          NonFatalCheckError);
+    }
 
     m_node.validation_signals->ChainStateFlushed(kernel::ChainstateRole{}, CBlockLocator{std::vector<uint256>{uint256::ONE}});
     m_node.validation_signals->SyncWithValidationInterfaceQueue();
