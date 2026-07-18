@@ -453,6 +453,52 @@ interdependent stack. Decision: do not cherry-pick or benchmark the isolated
 line; revisit only if a current profile demonstrates repeated empty-cache
 flushes and a minimal accounting invariant can be proven.
 
+### `CheckTransaction` duplicate/null fast path ([PR #180](https://github.com/l0rinc/bitcoin/pull/180))
+
+The final direct-Core part of #180 special-cases one- and two-input
+transactions, replacing the current `std::set<COutPoint>` duplicate check with
+direct comparisons, and uses a sorted `std::vector<COutPoint>` plus adjacent
+comparison for three or more inputs. It also finds null prevouts in the sorted
+prefix. This is semantically plausible: `IsCoinBase()` is exactly the
+one-input/null-prevout case, duplicate failure retains precedence over null
+failure, and sorting groups every zero hash before a nonzero hash. A temporary
+focused test covered the one-, two-, and 3+-input duplicate/null paths plus the
+coinbase script-size error; it passed with the candidate. A temporary mutation
+that skipped the sorted null check failed that test. The existing full
+`transaction_tests` suite also passed.
+
+Five CPU-3-pinned Release runs of the existing benchmarks gave substantial
+micro improvements:
+
+| benchmark | base median (range) | candidate median (range) | change |
+| --- | ---: | ---: | ---: |
+| `CheckBlockTest` | 951.706 us (949.010-955.274) | 735.652 us (733.909-738.256) | -22.7% |
+| `DuplicateInputs` | 7.10255 ms (7.09917-7.16278) | 3.43159 ms (3.40617-3.46340) | -51.7% |
+
+`CheckBlockTest` instructions fell from 7,629,967 to 6,265,108 per block;
+the duplicate-input worst case fell from a median 20.55 million to 14.00
+million instructions. Those results alone are insufficient for a consensus
+performance commit, so the exact HDD reindex-chainstate control used a fresh
+OverlayFS upperdir over `BitcoinData`, a dropped page cache before every run,
+height 287000, `-dbcache=450`, and the same network-disabled command for
+independently copied candidate and baseline binaries:
+
+| version/run | wall | user | system | major faults | input blocks | output blocks |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| base 1 | 574.61 s | 468.18 s | 41.73 s | 890 | 30,990,304 | 9,456,240 |
+| candidate 1 | 571.83 s | 464.00 s | 42.18 s | 894 | 30,989,416 | 9,424,936 |
+| base 2 | 573.49 s | 467.92 s | 42.18 s | 892 | 30,989,392 | 9,451,520 |
+| candidate 2 | 574.65 s | 463.05 s | 42.09 s | 893 | 30,990,800 | 9,431,888 |
+
+The paired wall changes are -0.48% then +0.20%; medians are 574.05 seconds
+base and 573.24 seconds candidate, only 0.14% apart and inside this workload's
+HDD variation. User CPU time consistently fell 0.97% (median 468.05 to 463.53
+seconds), with effectively identical I/O and faults, but that CPU movement did
+not prove an end-to-end HDD speedup. Decision: do not commit a consensus-path
+change for this goal. Raw benchmark JSON/text, copied binary hashes,
+`/usr/bin/time -v` reports, and logs are under
+`/mnt/my_storage/bitcoin-perf-scratch/checktransaction-pr180/`.
+
 ### Cached hash inside mutable `COutPoint` ([PR #162](https://github.com/l0rinc/bitcoin/pull/162))
 
 Hypothesis: store the outpoint hash to avoid repeated SipHash work in coins
@@ -523,9 +569,10 @@ fully rejected independent change:
 - [#140](https://github.com/l0rinc/bitcoin/pull/140)/[#59](https://github.com/l0rinc/bitcoin/pull/59): the pool-chunk and
   isolated no-reallocation variants are rejected above. Other allocation or
   accounting shapes still need a current profile and an independent invariant.
-- [#180](https://github.com/l0rinc/bitcoin/pull/180): input fetching, no-seek compaction, and flush timing. Split into minimal
-  hypotheses; do not carry experimental logging or policy changes into a
-  performance commit.
+- [#180](https://github.com/l0rinc/bitcoin/pull/180): the direct
+  `CheckTransaction` change is rejected above for insufficient HDD reach. Its
+  LevelDB seek-compaction and flush ideas remain separate, high-risk hypotheses
+  that require a current compaction/write-amplification profile before review.
 - [#195](https://github.com/l0rinc/bitcoin/pull/195)/[#152](https://github.com/l0rinc/bitcoin/pull/152): cursor/coinstats ideas. Their proven portions are represented by
   the accepted direct-streaming and hashing commits above; remaining layering
   changes need independent evidence.
