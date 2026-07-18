@@ -161,6 +161,48 @@ Reach: every `scantxoutset` UTXO lookup. The size prefilter helps most when the
 descriptor expansion produces relatively few script lengths; cold scans can
 remain storage-bound.
 
+### `scantxoutset`: avoid unnecessary cached-key copies
+
+`CCoinsViewDB::Cursor()` and the resulting cursor's `Next()` already
+deserialize each coins DB key into its internal `keyTmp` cache before reporting
+the cursor as valid.
+`FindScriptPubKey` then copied that cached `COutPoint` into a local variable
+for every UTXO, even though it only needs a key to update the advisory progress
+field or to return an actual script match. The change reads the value first,
+copies the cached key only at the existing 8192-entry interruption cadence to
+update progress, and copies it for a matching result. A valid DB cursor
+therefore preserves the previous key-validation invariant; the scan still
+fails if a required cached key cannot be read.
+
+Full local chainstate at height 957779, 166,350,731 UTXOs, one `combo`
+descriptor with range 1000 and no matches, warm cache, five runs:
+
+| version | median wall | range | median daemon task time | median instructions | median branches |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| base | 70.35 s | 70.24-70.40 s | 70.286 s | 649.061 B | 130.590 B |
+| candidate | 65.20 s | 65.14-65.42 s | 65.182 s | 587.216 B | 118.604 B |
+
+The median wall time improved 7.32%, daemon task time 7.26%, instructions
+9.53%, and branches 9.18%. Both versions had 549-550 minor faults and zero
+major faults per run, so this is a warm CPU-side benefit. All ten response
+JSON files have SHA-256
+`62539678afd6931c917d0135fedcc12d3f11e9e40958fe4983e461a5f0d0891a`.
+The 8192-entry progress cadence is about 3.2 ms on this workload, far below
+human or RPC polling resolution, and matches the pre-existing interruption
+cadence. Raw command outputs and `perf stat` files are under
+`/mnt/my_storage/bitcoin-perf-scratch/scantxoutset-key-copy/{baseline,candidate}/`.
+
+Validation:
+
+```text
+build/test/functional/test_runner.py rpc_scantxoutset.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/functional-scantxoutset-key-copy --timeout-factor=2
+```
+
+Reach: every `scantxoutset start` UTXO. The largest gain is for sparse or
+negative descriptor matches, where nearly every cached key copy disappears.
+Denser matches retain one key copy per returned UTXO; cold scans remain
+storage-bound.
+
 ### `736f48b4da` coinstats: stream ordered cursor entries while hashing
 
 The coins DB cursor already returns a transaction's outputs consecutively in
