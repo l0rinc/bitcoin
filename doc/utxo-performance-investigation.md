@@ -105,6 +105,88 @@ hashing and cold-HDD I/O reduce the percentage. Normal reindex-chainstate and
 coinstats-index maintenance do not call this function. The only behavioral
 tradeoff is the documented bounded shutdown/interrupt observation delay.
 
+### `dbwrapper`: decode unobfuscated iterator values directly
+
+`CDBIterator::GetValue` used the reusable `DataStream` for every value: it
+copied the LevelDB value, applied the database obfuscation transform in place,
+then deserialized it. That work is required for normal chainstate, which has a
+non-empty obfuscation key. It is needless for a database whose key is empty:
+the iterator's stable value span can instead be deserialized directly through
+`SpanReader`. The existing scratch-buffer path remains exactly in place for
+obfuscated databases, including normal chainstate and every caller that
+requires de-obfuscation.
+
+This is related to [bitcoin/bitcoin#35247](https://github.com/bitcoin/bitcoin/pull/35247),
+but it is not an already-pushed upstream fix: GitHub API check on 2026-07-19
+reported that PR as `state=closed`, `closed_at=2026-05-08T22:18:26Z`, and
+`merged_at=null`. The local implementation and current tests were revalidated
+against this tree rather than cherry-picking it. This satisfies the branch rule
+to ignore already-pushed bitcoin/bitcoin fixes.
+
+The concrete important caller is rollback-mode `dumptxoutset`. It creates an
+explicitly non-obfuscated temporary UTXO database, then scans it once to
+compute stats and once to serialize the snapshot. A cold-cache full control
+pair used the permitted `/mnt/my_storage/BitcoinData` at height 957779;
+`rollback=957778`, `in_memory=true`, network and wallet disabled, CPU 3,
+`sync; echo 3 > /proc/sys/vm/drop_caches` before each daemon, and a FIFO
+consumed by `cat` so snapshot output did not reach disk. The daemon's
+`perf stat` began immediately before the RPC and stopped after its response.
+Both complete RPC responses agreed on `coins_written=166350403`, height
+957778, base hash
+`0000000000000000000087c7fed547001e850e5b350110fc2c82ca19cc4bdb6d`,
+`nchaintx=1395785816`, and txoutset hash
+`8b503452cc691d72837c5580f0c6140b833acb855a15c1ae576f61bfdf0c55ca`.
+
+| phase or counter | reusable-stream base | direct-span candidate | change |
+| --- | ---: | ---: | ---: |
+| RPC wall time | 718.28 s | 704.01 s | -1.99% |
+| daemon task time | 706.874 s | 692.783 s | -1.99% |
+| daemon instructions | 5.866 T | 5.758 T | -1.83% |
+| daemon branches | 1.074 T | 1.052 T | -2.11% |
+| current-chainstate copy | 510 s | 515 s | +0.98% |
+| temporary-DB statistics scan | 113 s | 94 s | -16.8% |
+| temporary-DB snapshot scan | 95.17 s | 94.29 s | -0.92% |
+
+The unchanged, intentionally obfuscated chainstate copy is the dominant
+portion and varies by five seconds in this pair. The direct non-obfuscated
+statistics scan nevertheless removes 19 seconds, and total daemon work falls
+by 14.091 seconds with the expected instruction/branch direction. The snapshot
+scan is near run-to-run noise, so the documented claim is the robust stats-pass
+improvement and the measured 1.99% full-RPC result, not a broad LevelDB or HDD
+claim. Raw candidate artifacts (including the temporary source diff) are
+`/mnt/my_storage/bitcoin-perf-scratch/dumptxoutset-getvalue-noobf.candidate-full2.iBqI3n/`;
+raw reverted-base artifacts are
+`/mnt/my_storage/bitcoin-perf-scratch/dumptxoutset-getvalue-noobf.base-full1.M6iidb/`.
+The candidate source-diff, result, debug-log, time, and perf SHA-256 values are
+respectively
+`6708dadd0b253dff0161e060266a3d716351c22db2a3d76e0fc92a5c87277614`,
+`10e25384cfee02bd898042ff5d9bd5f29f00a35880c032829aa0f73a507943f3`,
+`b82f4711514e4b8877eaa0dee303e8e3051b0e589f2abfcf8f4d64ad6fc408cd`,
+`e161b82c3347f9daa0f623cae6f00b89461a8e6c7460c8b9782764d786fd9bdb`, and
+`5e3e870fe6ccb44cbf18a3d9403b5f965976b3823ebed283c5a24e41eb83e38c`.
+
+Correctness is covered by `dbwrapper_tests`: it runs both obfuscated and
+non-obfuscated databases, attempts an oversized value decode, then decodes
+the same iterator value successfully. That proves a failed direct
+`SpanReader` decode leaves the iterator usable and preserves the existing
+failure contract. Validation:
+
+```text
+ninja -C build bitcoind bitcoin-cli test_bitcoin -j4
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=test_suite
+build/test/functional/test_runner.py rpc_dumptxoutset.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/functional-getvalue-unobfuscated --timeout-factor=2
+```
+
+Reach: only iterator reads from a deliberately unobfuscated `CDBWrapper`.
+The measured path is the temporary in-memory DB used by `dumptxoutset
+rollback`. The default block-tree DB and `BaseIndex` databases are also
+unobfuscated and have iterator callers, so startup, reindex block-index work,
+and index scans may benefit; this commit makes no unmeasured percentage claim
+for them. `gettxoutsetinfo`, `scantxoutset`, regular `dumptxoutset`, and the
+chainstate portion of reindex-chainstate keep their obfuscation key and
+therefore their exact existing copy/de-obfuscate path. This is a direct Core
+wrapper specialization, not a LevelDB change.
+
 ### `20e73d97fb` rpc: speed up scantxoutset script lookups
 
 `scantxoutset` tested every UTXO script against a descriptor-derived
