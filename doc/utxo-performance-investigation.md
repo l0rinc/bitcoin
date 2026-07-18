@@ -570,6 +570,49 @@ retried without a profile showing a changed non-mmap or write-stall bottleneck.
 Local raw logs remain under
 `/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/`.
 
+### Lower LevelDB block restart interval ([PR #132](https://github.com/l0rinc/bitcoin/pull/132))
+
+PR #132 sets `leveldb::Options::block_restart_interval` from the documented
+default of 16 to 8. A table block stores a complete key at every restart point;
+the proposed layout therefore halves the worst-case linear key reconstruction
+after `Block::Iter::Seek`, while adding restart-array entries and more
+unshared key bytes to every newly written SSTable. It is dynamically
+compatible with existing tables, but cannot affect the already-written local
+chainstate, so a warm RPC scan would be a false test. The direct UTXO profile
+did show `Block::Iter`, key comparison, and iterator methods, which justified
+a fresh, fixed-height rebuild test but not acceptance on profile evidence
+alone.
+
+The exact fresh OverlayFS `-reindex-chainstate` control already used for the
+`CheckTransaction` experiment was repeated with only the one temporary option
+line changed: source lowerdir `/mnt/my_storage/BitcoinData`, a distinct empty
+upper/work directory for every run, page cache dropped before launch,
+`-stopatheight=287000`, `-dbcache=450`, no networking or wallet, GCC Release,
+and clean daemon shutdown/log assertions. The controls were the immediately
+preceding current-tree runs; all candidates were rebuilt from the same source
+plus the option. The smaller restart interval increased the retained upper
+layer from 718 and 715 MiB in the controls to 740 and 735 MiB in the candidates
+(about 3%), as its less-compressed keys predict.
+
+| version/run | wall | user | system | peak RSS | major faults | input blocks | output blocks |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| default interval 16, control 1 | 574.61 s | 468.18 s | 41.73 s | 1,604,372 KiB | 890 | 30,990,304 | 9,456,240 |
+| interval 8, candidate 1 | 571.59 s | 466.96 s | 42.00 s | 1,556,840 KiB | 890 | 30,989,504 | 9,914,000 |
+| default interval 16, control 2 | 573.49 s | 467.92 s | 42.18 s | 1,634,192 KiB | 892 | 30,989,392 | 9,451,520 |
+| interval 8, candidate 2 | 577.04 s | 467.27 s | 42.03 s | 1,556,800 KiB | 893 | 30,990,112 | 9,903,432 |
+
+The two-run medians are 574.05 seconds with the default and 574.315 seconds
+with interval 8: a 0.05% candidate regression. The first apparent 0.53%
+speedup did not repeat; paired changes are -0.53% then +0.62%. Candidate user
+CPU fell only 0.20% at a cost of slightly higher first-run output, while wall
+time, input, faults, and the larger resulting chainstate showed no durable
+gain.
+Decision: reject #132. A persistent table-layout choice needs a clearly
+reproducible end-to-end win, especially on the HDD workload it targets. The
+temporary source edit was removed. Raw commands, logs, time reports, and upper
+layers are retained under
+`/mnt/my_storage/bitcoin-perf-scratch/restart-interval-8.run{1,2}.*`.
+
 ### `dumptxoutset` caller-owned stdio buffer
 
 Hypothesis: the snapshot writer's small stdio writes cause avoidable syscall
@@ -787,8 +830,10 @@ fully rejected independent change:
   reads merits another commit.
 - [#34](https://github.com/l0rinc/bitcoin/pull/34): repeated coins-cache lookup/hash and short-lived reallocation. The
   `SpendCoin` subcandidate is rejected above; other subpatterns remain open.
-- [#132](https://github.com/l0rinc/bitcoin/pull/132)/[#136](https://github.com/l0rinc/bitcoin/pull/136): Bloom-filter and restart-interval tuning. Point reads and ordered
-  scans have opposing tradeoffs; test both before changing defaults.
+- [#136](https://github.com/l0rinc/bitcoin/pull/136): Bloom-filter tuning.
+  The restart-interval half of this seed is rejected above. More bits can only
+  benefit negative point lookups in newly written SSTables; test that cost and
+  the corresponding larger filters independently before changing defaults.
 - [#140](https://github.com/l0rinc/bitcoin/pull/140)/[#59](https://github.com/l0rinc/bitcoin/pull/59): the pool-chunk and
   isolated no-reallocation variants are rejected above. Other allocation or
   accounting shapes still need a current profile and an independent invariant.
