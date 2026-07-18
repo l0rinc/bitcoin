@@ -71,7 +71,9 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     LogDebug(BCLog::CMPCTBLOCK, "Initializing PartiallyDownloadedBlock for block %s\n", cmpctblock.header.GetHash().ToString());
     if (cmpctblock.header.IsNull() || (cmpctblock.shorttxids.empty() && cmpctblock.prefilledtxn.empty()))
         return READ_STATUS_INVALID;
-    if (cmpctblock.shorttxids.size() + cmpctblock.prefilledtxn.size() > MAX_BLOCK_WEIGHT / MIN_SERIALIZABLE_TRANSACTION_WEIGHT)
+    const size_t block_tx_count{cmpctblock.BlockTxCount()};
+    if (block_tx_count > std::numeric_limits<uint16_t>::max() ||
+        block_tx_count > MAX_BLOCK_WEIGHT / MIN_SERIALIZABLE_TRANSACTION_WEIGHT)
         return READ_STATUS_INVALID;
 
     if (!header.IsNull() || !txn_available.empty()) return READ_STATUS_INVALID;
@@ -80,7 +82,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     Assume(extra_count == 0);
 
     header = cmpctblock.header;
-    txn_available.resize(cmpctblock.BlockTxCount());
+    txn_available.resize(block_tx_count);
     auto fail_init = [&](ReadStatus status) {
         header.SetNull();
         txn_available.clear();
