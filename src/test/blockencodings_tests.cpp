@@ -618,6 +618,181 @@ BOOST_AUTO_TEST_CASE(EmptyExtraTransactionsDoNotSatisfyShortIds)
     BOOST_CHECK_EQUAL(block.GetHash().ToString(), reconstructed_block.GetHash().ToString());
 }
 
+BOOST_AUTO_TEST_CASE(PartiallyDownloadedBlockRejectsDuplicateShortIDs)
+{
+    CTxMemPool& pool = *Assert(m_node.mempool);
+    auto rand_ctx(FastRandomContext(uint256{42}));
+    CBlock block(BuildBlockTestCase(rand_ctx));
+    block.vtx.push_back(MakeTransactionRef(BuildTransactionTestCase()));
+    TestHeaderAndShortIDs short_ids(block, rand_ctx);
+    // Keep the coinbase and transaction 2 prefilled, leaving two short-ID slots
+    // on either side of the intermediate prefilled position.
+    short_ids.prefilledtxn.emplace_back(/*index=*/1, block.vtx[2]);
+    short_ids.shorttxids.erase(short_ids.shorttxids.begin() + 1);
+    BOOST_REQUIRE_EQUAL(short_ids.shorttxids.size(), 2U);
+    short_ids.shorttxids[1] = short_ids.shorttxids[0];
+
+    DataStream stream{};
+    stream << short_ids;
+
+    CBlockHeaderAndShortTxIDs decoded_short_ids;
+    stream >> decoded_short_ids;
+
+    TestPartiallyDownloadedBlock partial_block(&pool);
+    BOOST_CHECK_EQUAL(partial_block.InitData(decoded_short_ids, {}), READ_STATUS_FAILED);
+    BOOST_CHECK(partial_block.header.IsNull());
+    BOOST_CHECK_EQUAL(partial_block.AvailableTxCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.PrefilledCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 0U);
+
+    CBlock rejected_block;
+    BOOST_CHECK_EQUAL(partial_block.FillBlock(rejected_block, {}, /*segwit_active=*/true), READ_STATUS_INVALID);
+}
+
+BOOST_AUTO_TEST_CASE(ShortIDCollisionTracksSourceCounts)
+{
+    bilingual_str error;
+    CTxMemPool pool{MemPoolOptionsForTest(m_node), error};
+    BOOST_REQUIRE(error.empty());
+    TestMemPoolEntryHelper entry;
+    auto rand_ctx(FastRandomContext(*Assert(uint256::FromHex("000000000000000000000000000000000000000000000000000000005eedc0de"))));
+    CBlock block(BuildBlockTestCase(rand_ctx));
+    CMutableTransaction extra_block_tx{BuildTransactionTestCase()};
+    extra_block_tx.vin[0].prevout.hash = Txid::FromUint256(rand_ctx.rand256());
+    block.vtx.push_back(MakeTransactionRef(std::move(extra_block_tx)));
+    bool mutated;
+    block.hashMerkleRoot = BlockMerkleRoot(block, &mutated);
+    BOOST_REQUIRE(!mutated);
+    while (!CheckProofOfWork(block.GetHash(), block.nBits, Params().GetConsensus())) ++block.nNonce;
+
+    {
+        LOCK2(cs_main, pool.cs);
+        TryAddToMempool(pool, entry.FromTx(block.vtx[2]));
+    }
+    BOOST_CHECK_EQUAL(pool.size(), 1U);
+
+    auto make_variant = [](const CTransactionRef& tx, uint32_t mask) {
+        CMutableTransaction mutable_tx{*tx};
+        mutable_tx.nLockTime ^= mask;
+        return MakeTransactionRef(std::move(mutable_tx));
+    };
+
+    const CTransactionRef extra_collision_tx{make_variant(block.vtx[1], 1)};
+    const CTransactionRef extra_collision_followup_tx{make_variant(block.vtx[1], 8)};
+    CBlockHeaderAndShortTxIDs cmpctblock{block, rand_ctx.rand64()};
+    BOOST_CHECK_EQUAL(block.vtx.size(), 4U);
+    BOOST_CHECK_EQUAL(cmpctblock.BlockTxCount(), 4U);
+    const uint64_t mempool_target_shortid{cmpctblock.GetShortID(block.vtx[2]->GetWitnessHash())};
+
+    const std::vector<std::pair<Wtxid, CTransactionRef>> null_extra_txn{
+        {block.vtx[2]->GetWitnessHash(), CTransactionRef{}},
+    };
+    TestPartiallyDownloadedBlock null_extra_block{&pool};
+    BOOST_CHECK_EQUAL(null_extra_block.InitData(cmpctblock, null_extra_txn), READ_STATUS_OK);
+    BOOST_CHECK(null_extra_block.IsTxAvailable(0));
+    BOOST_CHECK(!null_extra_block.IsTxAvailable(1));
+    BOOST_CHECK(null_extra_block.IsTxAvailable(2));
+    BOOST_CHECK(!null_extra_block.IsTxAvailable(3));
+    BOOST_CHECK_EQUAL(null_extra_block.MempoolCount(), 1U);
+    BOOST_CHECK_EQUAL(null_extra_block.ExtraCount(), 0U);
+
+    const std::vector<std::pair<Wtxid, CTransactionRef>> duplicate_extra_txn{
+        {block.vtx[1]->GetWitnessHash(), block.vtx[1]},
+        {block.vtx[1]->GetWitnessHash(), block.vtx[1]},
+    };
+    TestPartiallyDownloadedBlock duplicate_extra_block{&pool};
+    BOOST_CHECK_EQUAL(duplicate_extra_block.InitData(cmpctblock, duplicate_extra_txn), READ_STATUS_OK);
+    BOOST_CHECK(duplicate_extra_block.IsTxAvailable(0));
+    BOOST_CHECK(duplicate_extra_block.IsTxAvailable(1));
+    BOOST_CHECK(duplicate_extra_block.IsTxAvailable(2));
+    BOOST_CHECK(!duplicate_extra_block.IsTxAvailable(3));
+    BOOST_CHECK_EQUAL(duplicate_extra_block.MempoolCount(), 2U);
+    BOOST_CHECK_EQUAL(duplicate_extra_block.ExtraCount(), 1U);
+
+    std::vector<std::pair<Wtxid, CTransactionRef>> extra_txn{
+        {extra_collision_tx->GetWitnessHash(), extra_collision_tx},
+        {extra_collision_followup_tx->GetWitnessHash(), extra_collision_followup_tx},
+    };
+    TestPartiallyDownloadedBlock partial_block{&pool};
+    const Wtxid extra_collision_wtxid{extra_collision_tx->GetWitnessHash()};
+    const Wtxid extra_collision_followup_wtxid{extra_collision_followup_tx->GetWitnessHash()};
+    bool short_id_called{false};
+    bool extra_collision_short_id_called{false};
+    partial_block.m_get_short_id_mock = [mempool_target_shortid, extra_collision_wtxid, extra_collision_followup_wtxid, &short_id_called, &extra_collision_short_id_called](const CBlockHeaderAndShortTxIDs& ids, const Wtxid& wtxid) {
+        short_id_called = true;
+        if (wtxid == extra_collision_wtxid || wtxid == extra_collision_followup_wtxid) extra_collision_short_id_called = true;
+        if (wtxid == extra_collision_wtxid || wtxid == extra_collision_followup_wtxid) return mempool_target_shortid;
+        return ids.GetShortID(wtxid);
+    };
+    BOOST_CHECK_EQUAL(partial_block.InitData(cmpctblock, extra_txn), READ_STATUS_OK);
+    BOOST_CHECK(short_id_called);
+    BOOST_CHECK(extra_collision_short_id_called);
+    BOOST_CHECK(partial_block.IsTxAvailable(0));
+    BOOST_CHECK(!partial_block.IsTxAvailable(1));
+    BOOST_CHECK(!partial_block.IsTxAvailable(2));
+    BOOST_CHECK(!partial_block.IsTxAvailable(3));
+    BOOST_CHECK_EQUAL(partial_block.MempoolCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block.ExtraCount(), 0U);
+
+    CBlock reconstructed_block;
+    BOOST_CHECK_EQUAL(partial_block.FillBlock(reconstructed_block, {block.vtx[1], block.vtx[2], block.vtx[3]}, /*segwit_active=*/true), READ_STATUS_OK);
+    BOOST_CHECK_EQUAL(reconstructed_block.GetHash().ToString(), block.GetHash().ToString());
+
+    const CTransactionRef extra_collision_a{make_variant(block.vtx[1], 2)};
+    const CTransactionRef extra_collision_b{make_variant(block.vtx[1], 4)};
+    const CTransactionRef extra_collision_c{make_variant(block.vtx[1], 8)};
+    const uint64_t extra_target_shortid{cmpctblock.GetShortID(block.vtx[1]->GetWitnessHash())};
+    std::vector<std::pair<Wtxid, CTransactionRef>> extra_source_collision_txn{
+        {extra_collision_a->GetWitnessHash(), extra_collision_a},
+        {extra_collision_b->GetWitnessHash(), extra_collision_b},
+        {extra_collision_c->GetWitnessHash(), extra_collision_c},
+        {block.vtx[1]->GetWitnessHash(), block.vtx[1]},
+    };
+    TestPartiallyDownloadedBlock partial_block_with_extra_collision{&pool};
+    const Wtxid extra_collision_a_wtxid{extra_collision_a->GetWitnessHash()};
+    const Wtxid extra_collision_b_wtxid{extra_collision_b->GetWitnessHash()};
+    const Wtxid extra_collision_c_wtxid{extra_collision_c->GetWitnessHash()};
+    partial_block_with_extra_collision.m_get_short_id_mock = [extra_target_shortid, extra_collision_a_wtxid, extra_collision_b_wtxid, extra_collision_c_wtxid](const CBlockHeaderAndShortTxIDs& ids, const Wtxid& wtxid) {
+        if (wtxid == extra_collision_a_wtxid || wtxid == extra_collision_b_wtxid || wtxid == extra_collision_c_wtxid) return extra_target_shortid;
+        return ids.GetShortID(wtxid);
+    };
+    BOOST_CHECK_EQUAL(partial_block_with_extra_collision.InitData(cmpctblock, extra_source_collision_txn), READ_STATUS_OK);
+    BOOST_CHECK(partial_block_with_extra_collision.IsTxAvailable(0));
+    BOOST_CHECK(!partial_block_with_extra_collision.IsTxAvailable(1));
+    BOOST_CHECK(partial_block_with_extra_collision.IsTxAvailable(2));
+    BOOST_CHECK(!partial_block_with_extra_collision.IsTxAvailable(3));
+    BOOST_CHECK_EQUAL(partial_block_with_extra_collision.MempoolCount(), 1U);
+    BOOST_CHECK_EQUAL(partial_block_with_extra_collision.ExtraCount(), 0U);
+
+    bilingual_str mempool_collision_error;
+    CTxMemPool mempool_collision_pool{MemPoolOptionsForTest(m_node), mempool_collision_error};
+    BOOST_REQUIRE(mempool_collision_error.empty());
+    const CTransactionRef mempool_collision_a{make_variant(block.vtx[1], 16)};
+    const CTransactionRef mempool_collision_b{make_variant(block.vtx[2], 32)};
+    {
+        LOCK2(cs_main, mempool_collision_pool.cs);
+        TryAddToMempool(mempool_collision_pool, entry.FromTx(mempool_collision_a));
+        TryAddToMempool(mempool_collision_pool, entry.FromTx(mempool_collision_b));
+    }
+    BOOST_REQUIRE_EQUAL(mempool_collision_pool.size(), 2U);
+
+    const Wtxid mempool_collision_a_wtxid{mempool_collision_a->GetWitnessHash()};
+    const Wtxid mempool_collision_b_wtxid{mempool_collision_b->GetWitnessHash()};
+    TestPartiallyDownloadedBlock partial_block_with_mempool_collision{&mempool_collision_pool};
+    partial_block_with_mempool_collision.m_get_short_id_mock = [mempool_target_shortid, mempool_collision_a_wtxid, mempool_collision_b_wtxid](const CBlockHeaderAndShortTxIDs& ids, const Wtxid& wtxid) {
+        if (wtxid == mempool_collision_a_wtxid || wtxid == mempool_collision_b_wtxid) return mempool_target_shortid;
+        return ids.GetShortID(wtxid);
+    };
+    BOOST_CHECK_EQUAL(partial_block_with_mempool_collision.InitData(cmpctblock, empty_extra_txn), READ_STATUS_OK);
+    BOOST_CHECK(partial_block_with_mempool_collision.IsTxAvailable(0));
+    BOOST_CHECK(!partial_block_with_mempool_collision.IsTxAvailable(1));
+    BOOST_CHECK(!partial_block_with_mempool_collision.IsTxAvailable(2));
+    BOOST_CHECK(!partial_block_with_mempool_collision.IsTxAvailable(3));
+    BOOST_CHECK_EQUAL(partial_block_with_mempool_collision.MempoolCount(), 0U);
+    BOOST_CHECK_EQUAL(partial_block_with_mempool_collision.ExtraCount(), 0U);
+}
+
 BOOST_AUTO_TEST_CASE(TransactionsRequestSerializationTest) {
     BlockTransactionsRequest req1;
     req1.blockhash = m_rng.rand256();
