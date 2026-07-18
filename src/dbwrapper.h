@@ -175,10 +175,15 @@ public:
 
     template<typename V> bool GetValue(V& value) {
         try {
-            ScopedDataStreamUsage scoped_scratch{m_scratch};
-            m_scratch.write(GetValueImpl());
-            dbwrapper_private::GetObfuscation(parent)(m_scratch);
-            m_scratch >> value;
+            const auto& obfuscation{dbwrapper_private::GetObfuscation(parent)};
+            if (!obfuscation) {
+                SpanReader{GetValueImpl()} >> value;
+            } else {
+                ScopedDataStreamUsage scoped_scratch{m_scratch};
+                m_scratch.write(GetValueImpl());
+                obfuscation(m_scratch);
+                m_scratch >> value;
+            }
         } catch (const std::exception&) {
             return false;
         }
