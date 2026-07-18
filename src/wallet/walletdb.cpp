@@ -797,7 +797,7 @@ static DBErrors LoadDescriptorWalletRecords(CWallet* pwallet, DatabaseBatch& bat
                 key >> der_index;
                 parent = false;
             }
-            catch (...) {}
+            catch (const std::ios_base::failure&) {}
 
             std::vector<unsigned char> ser_xpub(BIP32_EXTKEY_SIZE);
             value >> ser_xpub;
