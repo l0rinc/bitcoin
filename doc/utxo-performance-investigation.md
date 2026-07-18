@@ -333,6 +333,23 @@ byte-identical (SHA-256
 with the same scan count and 11 unspents. Raw evidence is under
 `/mnt/my_storage/bitcoin-perf-scratch/scantxoutset-single-needle.{candidate1.RLp2o6,base2.yisobo}/`.
 
+A secondary no-match `combo` scan, whose expansion uses multiple scripts,
+checks the non-singleton path. Five singleton-enabled runs were followed by
+three fresh first-byte-only controls; every response had SHA-256
+`62539678afd6931c917d0135fedcc12d3f11e9e40958fe4983e461a5f0d0891a` and
+reported 166,350,731 scanned UTXOs with no unspents:
+
+| version | median wall | range | median daemon task time | median instructions | median branches |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| first-byte-only base | 70.33 s | 70.31-70.81 s | 70.204 s | 675.427 B | 136.050 B |
+| singleton-enabled path | 67.80 s | 67.68-68.56 s | 67.671 s | 646.419 B | 130.519 B |
+
+This secondary measurement is favorable (3.60% wall and 4.30% instructions),
+but the primary claim remains the direct one-script comparison. It establishes
+that the predictable singleton selection does not impose an observed
+multi-script regression on this machine. Raw evidence is under
+`/mnt/my_storage/bitcoin-perf-scratch/scantxoutset-single-needle-multi.{candidate1.cOHjy1,base1.8TLvtQ}/`.
+
 Validation:
 
 ```text
