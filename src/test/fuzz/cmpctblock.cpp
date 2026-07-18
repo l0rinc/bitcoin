@@ -99,6 +99,12 @@ public:
         shorttxids.erase(shorttxids.begin() + index);
     }
 
+    void ForceShortTxIDCollision()
+    {
+        if (shorttxids.size() < 2) return;
+        shorttxids[1] = shorttxids[0];
+    }
+
     size_t PrefilledTxCount() {
         return prefilledtxn.size();
     }
@@ -436,8 +442,10 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
                     Assert(tx != nullptr);
                 }
                 FuzzedCBlockHeaderAndShortTxIDs cmpctblock(*cblock, nonce);
+                const bool force_short_id_collision{fuzzed_data_provider.ConsumeBool()};
 
                 if (fuzzed_data_provider.ConsumeBool()) {
+                    if (force_short_id_collision) cmpctblock.ForceShortTxIDCollision();
                     CBlockHeaderAndShortTxIDs base_cmpctblock = cmpctblock;
                     net_msg = NetMsg::Make(NetMsgType::CMPCTBLOCK, base_cmpctblock);
                     return;
@@ -474,6 +482,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
                 }
 
                 assert(cmpctblock.PrefilledTxCount() + cmpctblock.ShortTxIDCount() == num_txs);
+                if (force_short_id_collision) cmpctblock.ForceShortTxIDCollision();
 
                 CBlockHeaderAndShortTxIDs base_cmpctblock = cmpctblock;
                 net_msg = NetMsg::Make(NetMsgType::CMPCTBLOCK, base_cmpctblock);
