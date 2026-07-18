@@ -155,6 +155,114 @@ commitment generation/validation. It does not affect `hash_serialized_3` or
 `hash_type=none`. Only one full scan was practical; the five-run focused test
 supplies repeatability.
 
+### LevelDB: recover readahead for contiguous mmap reads
+
+Master commit `e3ec270a39` applies `MADV_RANDOM` to every successful read-only
+table mmap. It fixed a resumed prune-assumevalid workload whose old-chainstate
+point reads took 771 s without the hint and 177 s with it while avoiding
+hundreds of MiB of swap. The user's full HDD reindex-chainstate benchmark at
+height 957759 and `-dbcache=2000` exposed the opposing access pattern:
+
+| commit | mean | range | user | system |
+| --- | ---: | ---: | ---: | ---: |
+| `cf0368fb76` before annotation | 27,110.965 s | 26,768.769-27,453.162 s | 40,276.824 s | 1,380.273 s |
+| `e3ec270a39` annotated | 48,554.901 s | 47,760.373-49,349.430 s | 39,968.920 s | 1,912.711 s |
+
+The global annotation made that reindex 1.79 times slower with similar user
+CPU, implicating lost HDD readahead rather than additional validation work.
+It could not simply be reverted without restoring the much larger random-read
+regression.
+
+Temporary offset instrumentation in `PosixMmapReadableFile::Read` established
+that the same mmap abstraction serves two different workloads:
+
+| workload | mapped files | reads | far | forward-near | exactly contiguous |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| established SSTs, normal compaction | 547 | 528,063 | mixed | 89.825% | 89.445% |
+| established SST point-read control, compaction suppressed | 480 | 55,869 | 74.937% | 3.257% | 0.465% |
+| fresh reindex to height 287000 | 129 | 5,073,115 | 80.507% | 15.415% | 14.064% |
+
+The first row was dominated by automatic compaction. Suppressing it only in a
+temporary benchmark binary proved old-table point reads are genuinely random.
+The fresh rebuild remained mostly random but contained millions of contiguous
+reads from scans and compaction. The instrumentation and the temporary
+compaction gate were fully removed; raw traces remain in
+`/mnt/my_storage/bitcoin-perf-scratch/mmap-trace-established/`,
+`mmap-trace-established-noauto/`, and
+`reindex-writebuf/mmap-fresh-1/metrics/mmap-trace.tsv`.
+
+The change retains `MADV_RANDOM`, atomically recognizes adjacent reads within
+each mapped table, and issues a best-effort `MADV_WILLNEED` only when the reads
+cross into a new 128 KiB window. This matches the test HDD's kernel readahead
+unit, avoids changing persistent advice on a mapping shared by concurrent
+readers, and bounds damage from coincidental adjacency. Platforms without
+both advice constants compile the behavior out.
+
+Current RocksDB was inspected only after the traces proved that Core cannot
+see the per-SST offset locality. Its design supports the same conclusion:
+[`advise_random_on_open`](https://github.com/facebook/rocksdb/blob/2809ce9d0f391c1c6499cb16e0740b37922e0af0/include/rocksdb/options.h)
+remains enabled, while
+[`BlockPrefetcher`](https://github.com/facebook/rocksdb/blob/2809ce9d0f391c1c6499cb16e0740b37922e0af0/table/block_based/block_prefetcher.cc)
+starts iterator readahead only after sequential block reads and uses a separate
+2 MiB compaction setting recommended for spinning disks. RocksDB's
+[`FilePrefetchBuffer`](https://github.com/facebook/rocksdb/blob/2809ce9d0f391c1c6499cb16e0740b37922e0af0/file/file_prefetch_buffer.h)
+explicitly does not support mmap readers, so importing that substantially
+larger buffering subsystem was rejected. The bounded mmap hint is the
+applicable subset, and 128 KiB remains conservative because this layer cannot
+label a read as compaction.
+
+Cold-HDD reindex to height 287000, `-dbcache=450`, fresh OverlayFS upperdir and
+dropped page cache for every run:
+
+| version/run | wall | user | system | peak RSS | major faults |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| base 1 | 586.56 s | 468.87 s | 62.22 s | 1,538,628 KiB | 33,736 |
+| candidate 1 | 578.11 s | 469.54 s | 61.37 s | 1,610,768 KiB | 1,006 |
+| candidate 2 | 581.00 s | 468.48 s | 61.79 s | 1,605,760 KiB | 1,003 |
+| base 2 | 590.85 s | 470.34 s | 62.31 s | 1,602,960 KiB | 33,732 |
+
+The base median was 588.705 s and candidate median 579.555 s, a 1.55%
+improvement; paired changes were -1.44% and -1.67%. Major faults fell by about
+97% while total filesystem input remained unchanged, demonstrating readahead
+fault clustering rather than skipped work. All runs reached height 287000 and
+shut down cleanly. Raw results are under
+`/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/madv-{baseline,candidate}-{1,2}/metrics/`.
+
+An established-SST control processed the same 20 blocks from height 957759
+with automatic compaction suppressed in both temporary binaries. This isolates
+the random point-read case that motivated `MADV_RANDOM`:
+
+| version | wall times | median | median major faults | median input blocks |
+| --- | --- | ---: | ---: | ---: |
+| base | 142.38, 143.65, 143.38, 143.31, 143.83 s | 143.38 s | 184,709 | 1,751,848 |
+| candidate | 137.67, 139.10, 138.80, 140.36, 138.96 s | 138.96 s | 151,914 | 1,751,504 |
+
+The candidate improved the five-run median by 3.08% and reduced major faults
+17.75%, with unchanged I/O, RSS, and output. Thus it preserves the random hint
+instead of trading the old regression for the reindex improvement. Raw results
+are under
+`/mnt/my_storage/bitcoin-perf-scratch/madv-point-control/{baseline,candidate}-{1..5}/metrics/`.
+
+Validation:
+
+```text
+ninja -C build bitcoind test_bitcoin -j1
+ctest --test-dir build --output-on-failure -R '^(dbwrapper_tests|coinsviewoverlay_tests|coinsviewoverlay_tests_noworkers)$'
+cmake -S src/leveldb -B <scratch> -G Ninja -DCMAKE_BUILD_TYPE=Release -DLEVELDB_BUILD_TESTS=ON -DLEVELDB_BUILD_BENCHMARKS=OFF
+env_posix_test  # with the test shell's fd limit set to 1024: 7/7 passed
+env_test        # 7/7 passed
+build/test/functional/feature_reindex.py --tmpdir=<nonexistent-scratch-path> --nocleanup
+```
+
+Reach: every 64-bit POSIX LevelDB mmap user can benefit when reads within an
+SST become contiguous, including reindex-chainstate, compaction, ordered UTXO
+scans (`gettxoutsetinfo`, `scantxoutset`, and `dumptxoutset`), and index builds.
+Pure random reads retain the global random advice and normally only pay one
+relaxed atomic exchange. The measured gains are specific to this rotational
+device. A repeat of the user's height-957759 benchmark is still needed to
+quantify full-chain reach; the shorter end-to-end result and five-run old-SST
+control establish direction and protect the original workload.
+
 ## Rejected changes
 
 ### LevelDB block cache and write-buffer allocation ([PR #194](https://github.com/l0rinc/bitcoin/pull/194), [PR #203](https://github.com/l0rinc/bitcoin/pull/203))
@@ -269,39 +377,6 @@ full metrics are under
 `/mnt/my_storage/bitcoin-perf-scratch/reindex-writebuf/spend-{baseline,candidate}-{1,2}/metrics/`.
 
 ## Open investigation
-
-### Global `MADV_RANDOM` on LevelDB table mmaps
-
-Master commit `e3ec270a39` applies `MADV_RANDOM` to every successful read-only
-table mmap. It was motivated by a resumed prune-assumevalid workload whose
-eight parallel prevout-fetch workers performed old-chainstate point reads. In
-that saved 1000-block segment, the annotation reduced wall time from a warm
-unpatched 771 s to 177 s and eliminated hundreds of MiB of swap.
-
-The user's full HDD reindex-chainstate result shows the opposite effect at
-height 957759 with `-dbcache=2000`:
-
-| commit | mean | range | user | system |
-| --- | ---: | ---: | ---: | ---: |
-| `cf0368fb76` before annotation | 27,110.965 s | 26,768.769-27,453.162 s | 40,276.824 s | 1,380.273 s |
-| `e3ec270a39` annotated | 48,554.901 s | 47,760.373-49,349.430 s | 39,968.920 s | 1,912.711 s |
-
-The annotation makes this workload 1.79 times slower while user CPU remains
-similar, strongly implicating lost HDD readahead and additional I/O wait.
-LevelDB uses the same mmap-backed `RandomAccessFile` for `DB::Get`, ordered DB
-iterators, table building, repair, and compaction. Both resumed IBD and reindex
-also use eight prevout-fetch workers, so the API name "random access" and
-thread count do not distinguish their actual locality. Old established SST
-point reads can be random, while a freshly rebuilt and evolving chainstate can
-retain substantial spatial/temporal locality.
-
-Do not simply revert the hint: that would restore the severe
-prune-assumevalid/swap regression. Do not add a static iterator-versus-get hint
-and assume it covers reindex: the measured reindex regression occurs through
-point reads as well. The next proof step is offset-locality and page-fault/read
-amplification instrumentation that distinguishes old established SSTs from
-newly generated tables and measures memory pressure. Any fix must preserve the
-177 s resumed-IBD result while recovering reindex locality.
 
 ### Remaining PR seeds
 
