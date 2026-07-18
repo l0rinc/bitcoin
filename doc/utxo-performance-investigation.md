@@ -390,6 +390,59 @@ temporary source edit was removed. Raw commands, logs, time reports, and upper
 layers are retained under
 `/mnt/my_storage/bitcoin-perf-scratch/restart-interval-8.run{1,2}.*`.
 
+### Higher LevelDB Bloom-filter density ([PR #136](https://github.com/l0rinc/bitcoin/pull/136))
+
+PR #136 raises the `NewBloomFilterPolicy` density from 10 to 16 bits per key.
+This is a plausible negative-point-read optimization: LevelDB's documented
+10-bit filter has about a 1% false-positive rate, while a denser filter can
+avoid more unnecessary table-block probes. It does not change stored keys or
+values. The policy name remains `leveldb.BuiltinBloomFilter2`, and
+`BloomFilterPolicy::KeyMayMatch` reads the encoded probe count from each
+filter, so existing 10-bit and newly written 16-bit filters coexist safely.
+Only future table creation or compaction can benefit; ordered cursor scans such
+as `gettxoutsetinfo`, `scantxoutset`, and `dumptxoutset` do not use a Bloom
+filter to advance through every key.
+
+Because reindex-chainstate does issue coins-DB point lookups while building
+new tables, the exact fresh OverlayFS HDD rebuild protocol was used. Every run
+used a distinct empty upper/work directory over `/mnt/my_storage/BitcoinData`,
+dropped page cache, `-stopatheight=287000`, `-dbcache=450`, GCC Release, no
+wallet/network activity, and clean height/version log checks. The two early
+10-bit controls were followed by two 16-bit candidates. Their apparent result
+looked promising and initially justified focused correctness checks:
+
+```text
+ninja -C build bitcoind test_bitcoin -j8
+build/bin/test_bitcoin --run_test=dbwrapper_tests --log_level=test_suite
+build/bin/test_bitcoin --run_test=coins_tests_dbbase --log_level=test_suite
+build/bin/test_bitcoin --run_test=coins_tests/coins_db_leveldb_layout --log_level=test_suite
+```
+
+All tests passed, including DB-wrapper existing-data/reindex and coins cursor
+coverage. However, the filter change is database-wide, and the 16-bit runs did
+not reduce filesystem input or CPU time. A post-candidate 10-bit control was
+therefore required before accepting the sub-percent result:
+
+| policy/run order | wall | user | system | peak RSS | major faults | input blocks | output blocks | upper layer |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10 bits, initial control 1 | 574.61 s | 468.18 s | 41.73 s | 1,604,372 KiB | 890 | 30,990,304 | 9,456,240 | 718 MiB |
+| 10 bits, initial control 2 | 573.49 s | 467.92 s | 42.18 s | 1,634,192 KiB | 892 | 30,989,392 | 9,451,520 | 715 MiB |
+| 16 bits, candidate 1 | 567.89 s | 468.34 s | 41.64 s | 1,549,872 KiB | 891 | 30,989,336 | 9,544,832 | 716 MiB |
+| 16 bits, candidate 2 | 570.60 s | 469.28 s | 42.04 s | 1,610,808 KiB | 891 | 30,989,280 | 9,547,304 | 718 MiB |
+| 10 bits, post-candidate control | 565.01 s | 467.71 s | 41.44 s | 1,610,224 KiB | 896 | 30,989,256 | 9,179,656 | 784 MiB |
+
+The first two candidates had a superficially favorable 569.245-second median
+versus 574.05 seconds for the initial controls (0.84%), but the later default
+policy control beat both candidates by 2.88 and 5.59 seconds. Input blocks
+were identical to rounding across all five runs, candidate user CPU was not
+lower, and candidate output blocks were about 1% higher. The final control's
+different retained upper-layer/output size further demonstrates that unrelated
+LevelDB compaction and filesystem variation exceeds this option's observable
+effect here. Decision: reject #136; retain the 10-bit default and do not claim
+an HDD reindex, RPC, or snapshot benefit. The temporary option line was
+removed. Raw commands, logs, reports, and OverlayFS layers are under
+`/mnt/my_storage/bitcoin-perf-scratch/bloom-bits-{16.run1.*,16.run2.*,10.postcontrol.*}`.
+
 ### `dumptxoutset` caller-owned stdio buffer
 
 Hypothesis: the snapshot writer's small stdio writes cause avoidable syscall
@@ -607,10 +660,6 @@ fully rejected independent change:
   reads merits another commit.
 - [#34](https://github.com/l0rinc/bitcoin/pull/34): repeated coins-cache lookup/hash and short-lived reallocation. The
   `SpendCoin` subcandidate is rejected above; other subpatterns remain open.
-- [#136](https://github.com/l0rinc/bitcoin/pull/136): Bloom-filter tuning.
-  The restart-interval half of this seed is rejected above. More bits can only
-  benefit negative point lookups in newly written SSTables; test that cost and
-  the corresponding larger filters independently before changing defaults.
 - [#140](https://github.com/l0rinc/bitcoin/pull/140)/[#59](https://github.com/l0rinc/bitcoin/pull/59): the pool-chunk and
   isolated no-reallocation variants are rejected above. Other allocation or
   accounting shapes still need a current profile and an independent invariant.
