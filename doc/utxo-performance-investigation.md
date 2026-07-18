@@ -715,6 +715,57 @@ Decision: no commit; syscall-count movement did not produce an outside-noise
 HDD speedup. Raw logs and the focused fixture remain under
 `/mnt/my_storage/bitcoin-perf-scratch/dumptxoutset-buffer-*`.
 
+### `dumptxoutset`: calculate the serialized UTXO hash while writing
+
+`dumptxoutset` first calls `GetUTXOStats(..., HASH_SERIALIZED)` to obtain the
+header count and commitment, then walks the complete coins cursor again to
+write the snapshot. The snapshot writer already has every `COutPoint` and
+`Coin`, so a tempting candidate changed both live and rolled-back preparation
+to `CoinStatsHashType::NONE` and used the writer loop to call the same
+`ApplyCoinHash(HashWriter&, ...)` before emitting each coin. It then assigned
+the writer's final hash to the returned statistics. This is a distinct local
+hypothesis, not an upstream patch: GitHub PR searches for
+`PrepareUTXOSnapshot`, `WriteUTXOSnapshot`, and serialized-hash calculation
+while writing found no equivalent already-pushed bitcoin/bitcoin change.
+
+The candidate was semantically sound in the relevant tests:
+
+```text
+ninja -C build bitcoind test_bitcoin -j8
+build/test/functional/test_runner.py rpc_dumptxoutset.py feature_utxo_set_hash.py --jobs=1 --tmpdirprefix=/mnt/my_storage/bitcoin-perf-scratch/functional-dumptxoutset-hash-stream --timeout-factor=2
+```
+
+Both functional tests passed. In particular, `rpc_dumptxoutset.py` checks the
+snapshot bytes and the reported `txoutset_hash`. Each full manual run also
+returned 166,350,731 coins, height 957779, base hash
+`00000000000000000001b39b8e83075ff0f0f4eafab2eed20906496c13728881`, and
+serialized hash
+`ed1ed399ab6c15d571999b81cdabe07de50e7b1b58f5e07ab29c2770fbf1d2b3`.
+The three 8.9 GiB output files were byte-identical (SHA-256
+`f85de775f38c3aea3d07e7d210181b836e189f3d04a6af6e74a721946fd3d3d4`).
+
+Nevertheless, it is a clear end-to-end regression. A normal current-tree
+daemon was started with wallet and network activity disabled, all daemon
+threads were pinned to CPU 3, and the RPC wrote its output to a separate
+scratch directory on the same HDD. The second candidate was deliberately run
+after the baseline, so the result cannot be explained by the first
+candidate's colder ordering:
+
+| version/run | wall | daemon task time | instructions | branches |
+| --- | ---: | ---: | ---: | ---: |
+| candidate 1 (before control) | 249.68 s | 241.945 s | 2.227 T | 363.148 B |
+| base control | 233.56 s | 221.855 s | 2.050 T | 328.342 B |
+| candidate 2 (after control) | 247.37 s | 232.473 s | 2.112 T | 340.667 B |
+
+Relative to the interleaved control, the candidate regressed wall time 5.91%,
+daemon task time 4.79%, instructions 3.01%, and branches 3.75%. Moving the
+hash into the output loop avoids a cursor pass but combines independent
+serialization/hashing work with the already write-heavy loop; that loses on
+this HDD workload. Decision: reject and fully revert the temporary source
+change. Raw commands, time reports, `perf stat` output, RPC results, and
+byte-identical snapshots are retained in
+`/mnt/my_storage/bitcoin-perf-scratch/dumptxoutset-hash-stream.{candidate1.VivC7o,base1.pmlQgU,candidate2.E9OThK}/`.
+
 ### Coins DB iterator value-copy variants
 
 A high-rate `perf record` of a warm `gettxoutsetinfo none` against the user's
