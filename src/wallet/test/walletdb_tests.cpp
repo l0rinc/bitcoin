@@ -25,8 +25,17 @@ BOOST_AUTO_TEST_CASE(walletdb_readkeyvalue)
      * matches the type we expect, otherwise we need to update the "key"/"wkey" exception type caught.
      */
     DataStream ssValue{};
-    uint256 dummy;
-    BOOST_CHECK_THROW(ssValue >> dummy, std::ios_base::failure);
+    uint256 dummy_hash;
+    BOOST_CHECK_THROW(ssValue >> dummy_hash, std::ios_base::failure);
+
+    /**
+     * Descriptor parent xpub cache records are serialized without a child derivation index. Loading descriptor
+     * cache records probes for the optional child index and treats this exception as the parent-cache case.
+     * Make sure the probe throws the narrow type caught by the wallet loader.
+     */
+    DataStream ssKey{};
+    uint32_t dummy_index;
+    BOOST_CHECK_THROW(ssKey >> dummy_index, std::ios_base::failure);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
