@@ -14,6 +14,8 @@
 #include <wallet/test/util.h>
 #include <wallet/wallet.h>
 
+#include <cassert>
+
 namespace wallet {
 namespace {
 
@@ -108,6 +110,7 @@ FUZZ_TARGET(wallet_fees, .init = initialize_setup)
     CCoinControl coin_control;
     if (fuzzed_data_provider.ConsumeBool()) {
         coin_control.m_feerate = CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/COIN)};
+        coin_control.fOverrideFeeRate = fuzzed_data_provider.ConsumeBool();
     }
     if (fuzzed_data_provider.ConsumeBool()) {
         coin_control.m_confirm_target = fuzzed_data_provider.ConsumeIntegralInRange<unsigned int>(0, 999'000);
@@ -118,7 +121,17 @@ FUZZ_TARGET(wallet_fees, .init = initialize_setup)
 
     FeeCalculation fee_calculation;
     FeeCalculation* maybe_fee_calculation{fuzzed_data_provider.ConsumeBool() ? nullptr : &fee_calculation};
-    (void)GetMinimumFeeRate(wallet, coin_control, maybe_fee_calculation);
+    const CFeeRate min_fee_rate{GetMinimumFeeRate(wallet, coin_control, maybe_fee_calculation)};
+    if (coin_control.m_feerate && coin_control.fOverrideFeeRate) {
+        // fOverrideFeeRate bypasses all floor checks
+        assert(min_fee_rate == *coin_control.m_feerate);
+    } else if (min_fee_rate != CFeeRate(0)) {
+        // A disabled fallback fee is the only way to get a zero rate; every
+        // non-zero result obeys the required-feerate floor ...
+        assert(min_fee_rate >= GetRequiredFeeRate(wallet));
+        // ... and never undercuts an explicit coin-control feerate
+        if (coin_control.m_feerate) assert(min_fee_rate >= *coin_control.m_feerate);
+    }
     (void)GetMinimumFee(wallet, tx_bytes, coin_control, maybe_fee_calculation);
 }
 } // namespace
