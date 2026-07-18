@@ -236,7 +236,8 @@ using CCoinsMap = std::unordered_map<COutPoint,
 
 using CCoinsMapMemoryResource = CCoinsMap::allocator_type::ResourceType;
 
-/** Cursor for iterating over CoinsView state */
+/** Cursor for iterating over CoinsView state. Entries for a transaction are
+ * consecutive and ordered by output index. */
 class CCoinsViewCursor
 {
 public:
