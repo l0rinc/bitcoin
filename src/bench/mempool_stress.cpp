@@ -13,6 +13,7 @@
 #include <txmempool.h>
 #include <validation.h>
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -116,6 +117,8 @@ static void MemPoolAddTransactions(benchmark::Bench& bench)
         for (auto& tx : transactions) {
             AddTx(tx, pool, det_rand);
         }
+        // The timings only stay comparable if the pool actually received the full generated history
+        assert(pool.size() == transactions.size());
         pool.TrimToSize(0, nullptr);
     });
 }
@@ -135,8 +138,10 @@ static void ComplexMemPool(benchmark::Bench& bench)
 
     LOCK2(cs_main, pool.cs);
 
+    size_t total_txs{0};
     for (int i=0; i<1000; i++) {
         std::vector<CTransactionRef> transactions = CreateCoinCluster(det_rand, childTxs, /*min_ancestors=*/1);
+        total_txs += transactions.size();
 
         // Add all transactions to the mempool.
         // Also store the first 10 transactions from each cluster as the
@@ -151,6 +156,8 @@ static void ComplexMemPool(benchmark::Bench& bench)
             AddTx(tx, pool, det_rand);
         }
     }
+    // The timings only stay comparable if the pool actually received the full generated history
+    assert(pool.size() == total_txs);
 
     // Since the benchmark will be run repeatedly, we have to leave the mempool
     // in the same state at the end of the function, so we benchmark both
