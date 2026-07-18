@@ -472,8 +472,7 @@ bool BaseIndex::BlockUntilSyncedToCurrentChain() const
             Assume(!best_block_index);
             return true;
         }
-        if (!best_block_index) return false;
-        if (best_block_index->GetAncestor(chain_tip->nHeight) == chain_tip) {
+        if (best_block_index && best_block_index->GetAncestor(chain_tip->nHeight) == chain_tip) {
             return true;
         }
     }
