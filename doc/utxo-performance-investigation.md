@@ -822,6 +822,40 @@ revert the one-line change. Raw output is under
 the paired base control is
 `/mnt/my_storage/bitcoin-perf-scratch/dumptxoutset-hash-stream.base1.pmlQgU/`.
 
+### `dumptxoutset` rollback callback batching
+
+`CreateRolledBackUTXOSnapshot` copies every current UTXO into a temporary
+database before disconnecting the requested blocks. Like the accepted
+`ComputeUTXOStats` optimization, its loop called the RPC shutdown callback
+through `std::function` for every coin. A temporary candidate kept the first
+call immediate and checked every 8,192 processed coins instead. Searches for
+`Copying UTXO set`/interruption, `CreateRolledBackUTXOSnapshot` performance,
+`dumptxoutset`/`rpc_interruption_point`, and rollback `temp_cache.Flush` found
+no matching already-pushed bitcoin/bitcoin change.
+
+The superficially similar change does not transfer to this write-heavy loop.
+One controlled base/candidate pair used the permitted height-957779 mainnet
+chainstate, an in-memory temporary DB, rollback only to height 957778, CPU 3,
+wallet/network disabled, and a FIFO consumed by `cat` so snapshot output did
+not reach disk. Each trial was stopped immediately after the logged copy
+completion boundary, before the subsequent hash and snapshot-write stages.
+Both copied 166,350,731 UTXOs:
+
+| version | copy start to completion | daemon task time through stop | instructions | branches |
+| --- | ---: | ---: | ---: | ---: |
+| per-coin base | 495 s | 527.469 s | 4.252 T | 812.882 B |
+| 8,192-entry candidate | 497 s | 530.969 s | 4.321 T | 822.235 B |
+
+The candidate regressed the directly logged copy phase by 0.40%, overall
+daemon task time by 0.66%, instructions by 1.61%, and branches by 1.15%.
+The base had 6,450 major faults while the later candidate had none, which
+would favor the candidate rather than explain its regression. The change is
+therefore rejected and fully reverted. This experiment does not claim a full
+`dumptxoutset` timing because it intentionally terminated after the only code
+region changed. Raw logs, FIFO harnesses, `time`, affinity, and `perf stat`
+files are under
+`/mnt/my_storage/bitcoin-perf-scratch/dumptxoutset-rollback-interrupt.{base1.xykOaf,candidate1.PtpTin}/`.
+
 ### Cursor key view instead of per-UTXO `COutPoint` copies
 
 The only concrete `CCoinsViewCursor` implementation is the coins-DB cursor,
